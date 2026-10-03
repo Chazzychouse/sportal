@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "electron-vite dev",
     "build": "electron-vite build",
-    "start": "electron-vite preview"
+    "start": "electron-vite build && electron .",
+    "start:x11": "electron-vite build && electron . --ozone-platform=x11"
   },
   "dependencies": {
     "@sportal/api": "workspace:*",

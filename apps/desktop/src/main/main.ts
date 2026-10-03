@@ -6,9 +6,6 @@ import * as TileViews from "./TileViews.ts"
 
 const hubUrl = process.env.SPORTAL_HUB_URL ?? "http://127.0.0.1:4400"
 
-// Native Wayland rendering fails on some GPU setups (see docs/adr/0002); XWayland is reliable.
-if (process.platform === "linux") app.commandLine.appendSwitch("ozone-platform", "x11")
-
 app.whenReady().then(async () => {
   // Widevine is delivered as a component of the castlabs Electron build; wait for it before any playback.
   await components.whenReady()
