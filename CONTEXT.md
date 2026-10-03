@@ -34,6 +34,7 @@ Every exported type name must be a term here.
 | Term | Meaning | Not |
 | --- | --- | --- |
 | **Provider** | An adapter that supplies **game data** (ESPN, CollegeFootballData). | source, feed |
+| **Provider error** | A provider could not supply data for a league: unreachable, rate-limited, or unreadable. | fetch error |
 | **Source** | A way you obtain **video** (YouTube TV). | provider, service |
 | **Broadcast** | The fact that a network is airing a game. | channel, stream |
 | **Channel** | A network as carried by a specific source. | |
@@ -59,6 +60,8 @@ Provider and Source are the two words most likely to be swapped. Provider is alw
 | Term | Meaning | Not |
 | --- | --- | --- |
 | **Stage** | A Display's multi-view surface and its state. | grid, multiview, wall |
+| **Stage command** | An instruction to change a Stage: assign, clear, or focus audio. Issued by people and by the Director alike. | action, event |
+| **Stage rejection** | The reason a stage command was refused. | error |
 | **Layout** | A named arrangement of tile slots. | grid, template |
 | **Tile** | One slot's content: a **stream tile**, a **data tile**, or empty. | pane, cell, window |
 | **Main tile** | The largest slot of a layout. | hero, primary |
