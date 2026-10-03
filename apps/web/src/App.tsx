@@ -87,8 +87,15 @@ export function App() {
         selected={selected}
         onFullScreen={fullScreen.toggle}
       />
-      {/* Top center, over the top bar: a toast never covers a video. */}
-      <Toaster position="top-center" />
+      {/* Top center, inside the 44px top bar strip, so a toast never covers a video: a 5px offset, a compact
+          one-line toast, and one toast at a time so none stacks below the bar. */}
+      <Toaster
+        position="top-center"
+        offset={{ top: 5 }}
+        mobileOffset={{ top: 5 }}
+        visibleToasts={1}
+        toastOptions={{ style: { paddingBlock: 6, paddingInline: 12 } }}
+      />
     </OverlayHost>
   )
 }
