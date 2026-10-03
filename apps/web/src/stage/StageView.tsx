@@ -55,7 +55,6 @@ export function StageView(props: {
             >
               <TileBody tile={tile} />
             </div>
-            {notice === undefined ? null : <p className="px-2 pt-1 text-sm text-amber-400">{notice}</p>}
             <footer className="flex items-center gap-2 px-2 py-1 text-sm tabular-nums">
               <button type="button" className="flex-1 text-left" onClick={() => props.onSelect(index)}>
                 {tile._tag === "PickingChannel"
@@ -64,6 +63,13 @@ export function StageView(props: {
                     ? `Tile ${index + 1}`
                     : `${game.away.team.abbreviation} ${game.away.score} – ${game.home.score} ${game.home.team.abbreviation}`}
               </button>
+              {/* In the footer, on the row's one line: the provider view always draws over the video area, and a
+                  notice that changed the area's height would leave the view the wrong size. */}
+              {notice === undefined ? null : (
+                <p className="min-w-0 flex-1 truncate text-amber-400" title={notice}>
+                  {notice}
+                </p>
+              )}
               {tile._tag === "PickingChannel" ? (
                 <button
                   type="button"
