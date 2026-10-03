@@ -1,0 +1,12 @@
+node_modules/
+dist/
+out/
+*.tsbuildinfo
+.env
+.env.*
+!.env.example
+*.sqlite
+*.sqlite-*
+
+# Raw feed recordings (large, uncurated); curated fixtures live beside their adapter
+fixtures/espn-recordings/*/
