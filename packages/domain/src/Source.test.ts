@@ -1,4 +1,5 @@
 import { assert, describe, it } from "@effect/vitest"
+import { Option } from "effect"
 import { Network } from "./Game.ts"
 import { ChannelAvailability, type ChannelCarriage, ChannelLineup } from "./Source.ts"
 import { broadcast, snapshot } from "./TestGame.ts"
@@ -8,11 +9,11 @@ const disney = Network.make("Disney+")
 const espnPlus = Network.make("ESPN+")
 const guide = { _tag: "WebView" as const, url: "https://tv.youtube.com/live" }
 const espnChannel = {
-  network: espn,
+  name: "ESPN",
   source: "YouTube TV" as const,
   locator: { _tag: "WebView" as const, url: "https://tv.youtube.com/watch/espn" }
 }
-const carried = { _tag: "Carried" as const, channel: espnChannel }
+const carried = { _tag: "Carried" as const, network: espn, channel: espnChannel }
 const notCarried = (network: Network) => ({
   _tag: "NotCarried" as const,
   network,
@@ -23,7 +24,7 @@ describe("ChannelLineup#availabilityOf", () => {
   it("is carried when the network has a channel", () => {
     assert.deepStrictEqual(
       lineup([carried]).availabilityOf(on(espn)),
-      ChannelAvailability.Carried({ channel: espnChannel })
+      ChannelAvailability.Carried({ channel: espnChannel, learnedFor: Option.some(espn) })
     )
   })
 

@@ -12,7 +12,7 @@ import { StageSessions } from "./StageSessions.ts"
 const espn = Network.make("ESPN")
 const espnPlus = Network.make("ESPN+")
 const espnChannel = {
-  network: espn,
+  name: espn,
   source: "YouTube TV" as const,
   locator: { _tag: "WebView" as const, url: "https://tv.youtube.com/watch/espn?vp=0gEEEgIwAQ%3D%3D" }
 }
@@ -64,7 +64,8 @@ describe("StageSessions", () => {
       assert.deepStrictEqual(stage.tiles[0], {
         _tag: "StreamTile",
         game: GameId.make("1"),
-        channel: espnChannel
+        channel: espnChannel,
+        learnedFor: espn
       })
       assert.deepStrictEqual(stage.tiles[1], { _tag: "DataTile", game: GameId.make("4") })
     }).pipe(Effect.provide(TestSessions))
@@ -85,7 +86,7 @@ describe("StageSessions", () => {
         Effect.timeout("2 seconds")
       )
       const tile = Option.getOrThrow(stage).tiles[0]
-      assert.deepStrictEqual(tile?._tag === "StreamTile" ? tile.channel.network : tile, fox)
+      assert.deepStrictEqual(tile?._tag === "StreamTile" ? tile.learnedFor : tile, fox)
       assert.deepStrictEqual(tile?._tag === "StreamTile" ? tile.game : tile, GameId.make("5"))
     }).pipe(Effect.provide(TestSessions))
   )
@@ -200,7 +201,12 @@ describe("StageSessions", () => {
           Effect.timeout("2 seconds")
         )
         const tiles = Option.getOrThrow(stage).tiles
-        assert.deepStrictEqual(tiles[0], { _tag: "StreamTile", game: GameId.make("1"), channel: espnChannel })
+        assert.deepStrictEqual(tiles[0], {
+          _tag: "StreamTile",
+          game: GameId.make("1"),
+          channel: espnChannel,
+          learnedFor: espn
+        })
       }).pipe(
         Effect.provide(
           StageSessions.layer.pipe(

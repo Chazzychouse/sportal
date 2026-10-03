@@ -35,7 +35,8 @@ const picking = {
 const streaming = {
   _tag: "StreamTile",
   game: game.id,
-  channel: { network: espn, source: "YouTube TV", locator: { _tag: "WebView", url: espnLive } }
+  channel: { name: espn, source: "YouTube TV", locator: { _tag: "WebView", url: espnLive } },
+  learnedFor: espn
 } as const
 
 const makeClient = HttpApiTest.groups(SportalApi, ["slate", "stage", "channels"])

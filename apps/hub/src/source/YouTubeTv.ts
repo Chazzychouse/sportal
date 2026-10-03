@@ -28,7 +28,8 @@ export const layer = Layer.effect(
           Effect.flatMap((live) =>
             record({
               _tag: "Carried",
-              channel: { network, source: "YouTube TV", locator: { _tag: "WebView", url: live } }
+              network,
+              channel: { name: network, source: "YouTube TV", locator: { _tag: "WebView", url: live } }
             })
           )
         ),

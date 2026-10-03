@@ -1,4 +1,4 @@
-import { Data, Schema } from "effect"
+import { Data, Option, Schema } from "effect"
 import { type GameSnapshot, Network } from "./Game.ts"
 import { StreamLocator } from "./Stream.ts"
 
@@ -6,13 +6,13 @@ import { StreamLocator } from "./Stream.ts"
 export const SourceName = Schema.Literals(["YouTube TV"])
 export type SourceName = typeof SourceName.Type
 
-/** A network as carried by a specific source. */
-export const Channel = Schema.Struct({ network: Network, source: SourceName, locator: StreamLocator })
+/** A channel as a source names it ("News 3", "ESPN2"), and the address that plays it live. */
+export const Channel = Schema.Struct({ name: Schema.String, source: SourceName, locator: StreamLocator })
 export type Channel = typeof Channel.Type
 
 /** Whether a source carries a network: on a channel, or not at all. */
 export const ChannelCarriage = Schema.Union([
-  Schema.TaggedStruct("Carried", { channel: Channel }),
+  Schema.TaggedStruct("Carried", { network: Network, channel: Channel }),
   Schema.TaggedStruct("NotCarried", { network: Network, source: SourceName })
 ])
 export type ChannelCarriage = typeof ChannelCarriage.Type
@@ -33,7 +33,8 @@ export class ChannelLineup extends Schema.Class<ChannelLineup>("sportal/ChannelL
   availabilityOf(game: GameSnapshot): ChannelAvailability {
     for (const { network } of game.broadcasts) {
       const carriage = this.carriageOf(network)
-      if (carriage?._tag === "Carried") return ChannelAvailability.Carried({ channel: carriage.channel })
+      if (carriage?._tag === "Carried")
+        return ChannelAvailability.Carried({ channel: carriage.channel, learnedFor: Option.some(network) })
     }
     const unlearned = game.broadcasts.find(({ network }) => this.carriageOf(network) === undefined)
     return unlearned === undefined
@@ -46,7 +47,7 @@ export class ChannelLineup extends Schema.Class<ChannelLineup>("sportal/ChannelL
     return new ChannelLineup({
       source: this.source,
       guide: this.guide,
-      carriages: [...this.forget(networkOf(carriage)).carriages, carriage]
+      carriages: [...this.forget(carriage.network).carriages, carriage]
     })
   }
 
@@ -54,18 +55,18 @@ export class ChannelLineup extends Schema.Class<ChannelLineup>("sportal/ChannelL
     return new ChannelLineup({
       source: this.source,
       guide: this.guide,
-      carriages: this.carriages.filter((carriage) => networkOf(carriage) !== network)
+      carriages: this.carriages.filter((carriage) => carriage.network !== network)
     })
   }
 
   private carriageOf(network: Network): ChannelCarriage | undefined {
-    return this.carriages.find((carriage) => networkOf(carriage) === network)
+    return this.carriages.find((carriage) => carriage.network === network)
   }
 }
 
 /** Whether and where a source can show one game: carried, unlearned (its network still to be picked), or not carried. */
 export type ChannelAvailability = Data.TaggedEnum<{
-  Carried: { readonly channel: Channel }
+  Carried: { readonly channel: Channel; readonly learnedFor: Option.Option<Network> }
   Unlearned: { readonly network: Network; readonly source: SourceName; readonly guide: StreamLocator }
   // biome-ignore lint/complexity/noBannedTypes: the not-carried case carries nothing
   NotCarried: {}
@@ -78,7 +79,3 @@ export class ChannelUrlRefused extends Schema.TaggedError<ChannelUrlRefused>()(
   {},
   { httpApiStatus: 422 }
 ) {}
-
-function networkOf(carriage: ChannelCarriage): Network {
-  return carriage._tag === "Carried" ? carriage.channel.network : carriage.network
-}

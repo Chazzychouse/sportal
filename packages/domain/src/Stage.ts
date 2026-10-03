@@ -5,7 +5,8 @@ import { StreamLocator } from "./Stream.ts"
 
 export const Tile = Schema.Union([
   Schema.TaggedStruct("Empty", {}),
-  Schema.TaggedStruct("StreamTile", { game: GameId, channel: Channel }),
+  /** `learnedFor` is the network a hand-picked channel was learned for; **wrong channel** forgets it. */
+  Schema.TaggedStruct("StreamTile", { game: GameId, channel: Channel, learnedFor: Schema.optional(Network) }),
   /** The game's network has no channel yet: the tile shows the source's guide until one is picked. */
   Schema.TaggedStruct("PickingChannel", {
     game: GameId,
@@ -100,7 +101,12 @@ const empty: Tile = { _tag: "Empty" }
 function tileFor(game: GameId, availability: ChannelAvailability): Tile {
   switch (availability._tag) {
     case "Carried":
-      return { _tag: "StreamTile", game, channel: availability.channel }
+      return {
+        _tag: "StreamTile",
+        game,
+        channel: availability.channel,
+        ...(Option.isSome(availability.learnedFor) ? { learnedFor: availability.learnedFor.value } : {})
+      }
     case "Unlearned":
       return {
         _tag: "PickingChannel",

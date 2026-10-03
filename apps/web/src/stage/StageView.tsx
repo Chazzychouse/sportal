@@ -81,15 +81,15 @@ export function StageView(props: {
                   Not on {tile.source}
                 </button>
               ) : null}
-              {tile._tag === "StreamTile" ? (
+              {tile._tag === "StreamTile" && tile.learnedFor !== undefined ? (
                 <button
                   type="button"
                   className="text-neutral-500"
-                  onClick={() =>
-                    void forgetChannel(tile.channel.network).then((failure) =>
-                      setNotices(noticed(index, failure))
-                    )
-                  }
+                  onClick={() => {
+                    const network = tile.learnedFor
+                    if (network !== undefined)
+                      void forgetChannel(network).then((failure) => setNotices(noticed(index, failure)))
+                  }}
                 >
                   wrong channel
                 </button>

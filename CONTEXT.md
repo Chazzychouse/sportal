@@ -42,7 +42,7 @@ Every exported type name must be a term here.
 | **Source name** | A source as people know it ("YouTube TV"); how code and the UI name a source. | source id |
 | **Broadcast** | The fact that a network is airing a game, on television or streaming only. | channel, stream |
 | **Network** | A network's name as a provider reports it ("CBS", "ESPN"). | channel, station |
-| **Channel** | A network as carried by a specific source. | |
+| **Channel** | A station as a source names it ("News 3", "ESPN2"), with the address that plays it live. | network |
 | **Channel carriage** | Whether a source carries a network: on a channel, or not at all. | answer, mapping |
 | **Channel lineup** | The channel carriages one source has learned, and the guide where the rest are picked. | channel map |
 | **Channel availability** | Whether and where a source can show a game: carried, unlearned (its network still to be picked), or not carried. | availability |

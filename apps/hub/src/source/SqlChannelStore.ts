@@ -28,7 +28,12 @@ export const layer = Layer.effect(
         found.map(
           ({ network, source, carried, url }): ChannelCarriage =>
             carried === 1 && url !== null
-              ? { _tag: "Carried", channel: { network, source, locator: { _tag: "WebView", url } } }
+              ? {
+                  _tag: "Carried",
+                  network,
+                  // A hand-learned channel has no name of its own; it is known by the network it was picked for.
+                  channel: { name: network, source, locator: { _tag: "WebView", url } }
+                }
               : { _tag: "NotCarried", network, source }
         )
       ),
@@ -39,7 +44,7 @@ export const layer = Layer.effect(
       const row =
         carriage._tag === "Carried"
           ? {
-              network: carriage.channel.network,
+              network: carriage.network,
               source: carriage.channel.source,
               carried: 1,
               url: carriage.channel.locator.url

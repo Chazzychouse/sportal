@@ -8,19 +8,24 @@ const bama = GameId.make("401856707")
 const irish = GameId.make("401858250")
 const fox = Network.make("FOX")
 const foxChannel = {
-  network: fox,
+  name: "FOX",
   source: "YouTube TV" as const,
   locator: { _tag: "WebView" as const, url: "https://tv.youtube.com/watch/fox" }
 }
 const guide = { _tag: "WebView" as const, url: "https://tv.youtube.com/live" }
-const onFox = () => ChannelAvailability.Carried({ channel: foxChannel })
+const onFox = () => ChannelAvailability.Carried({ channel: foxChannel, learnedFor: Option.some(fox) })
 const foxUnlearned = () => ChannelAvailability.Unlearned({ network: fox, source: "YouTube TV", guide })
 const nowhere = () => ChannelAvailability.NotCarried()
 
 describe("Stage#apply", () => {
   it("assigns a carried game as a stream tile", () => {
     const stage = assign(Stage.initial, 1, bama, onFox)
-    assert.deepStrictEqual(stage.tiles[1], { _tag: "StreamTile", game: bama, channel: foxChannel })
+    assert.deepStrictEqual(stage.tiles[1], {
+      _tag: "StreamTile",
+      game: bama,
+      channel: foxChannel,
+      learnedFor: fox
+    })
   })
 
   it("assigns a game on an unlearned network as a picking tile", () => {
@@ -91,8 +96,18 @@ describe("Stage#refresh", () => {
   it("turns every picking tile for a network into a stream once its channel is learned", () => {
     const picking = assign(assign(Stage.initial, 0, bama, foxUnlearned), 1, irish, foxUnlearned)
     const refreshed = picking.refresh(some(onFox))
-    assert.deepStrictEqual(refreshed.tiles[0], { _tag: "StreamTile", game: bama, channel: foxChannel })
-    assert.deepStrictEqual(refreshed.tiles[1], { _tag: "StreamTile", game: irish, channel: foxChannel })
+    assert.deepStrictEqual(refreshed.tiles[0], {
+      _tag: "StreamTile",
+      game: bama,
+      channel: foxChannel,
+      learnedFor: fox
+    })
+    assert.deepStrictEqual(refreshed.tiles[1], {
+      _tag: "StreamTile",
+      game: irish,
+      channel: foxChannel,
+      learnedFor: fox
+    })
   })
 
   it("moves a picking tile to the game's next unlearned network when one is not carried", () => {
@@ -119,7 +134,12 @@ describe("Stage#refresh", () => {
     const streaming = assign(assign(Stage.initial, 0, bama, onFox), 1, irish, foxUnlearned)
     const refreshed = streaming.refresh((game) => (game === irish ? Option.some(onFox()) : Option.none()))
     assert.deepStrictEqual(refreshed.tiles[0], streaming.tiles[0])
-    assert.deepStrictEqual(refreshed.tiles[1], { _tag: "StreamTile", game: irish, channel: foxChannel })
+    assert.deepStrictEqual(refreshed.tiles[1], {
+      _tag: "StreamTile",
+      game: irish,
+      channel: foxChannel,
+      learnedFor: fox
+    })
   })
 
   it("leaves empty tiles empty and audio focus where it was", () => {

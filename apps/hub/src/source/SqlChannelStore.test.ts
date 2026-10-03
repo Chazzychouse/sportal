@@ -11,7 +11,8 @@ const espn = Network.make("ESPN")
 const espnPlus = Network.make("ESPN+")
 const carried = (url: string) => ({
   _tag: "Carried" as const,
-  channel: { network: espn, source: "YouTube TV" as const, locator: { _tag: "WebView" as const, url } }
+  network: espn,
+  channel: { name: espn, source: "YouTube TV" as const, locator: { _tag: "WebView" as const, url } }
 })
 const notCarried = { _tag: "NotCarried" as const, network: espnPlus, source: "YouTube TV" as const }
 

@@ -62,7 +62,8 @@ describe("YouTubeTv source", () => {
       assert.deepStrictEqual(
         (yield* source.lineup).availabilityOf(onEspn),
         ChannelAvailability.Carried({
-          channel: { network: espn, source: "YouTube TV", locator: { _tag: "WebView", url: foxLive } }
+          channel: { name: espn, source: "YouTube TV", locator: { _tag: "WebView", url: foxLive } },
+          learnedFor: Option.some(espn)
         })
       )
     }).pipe(Effect.provide(testSource()))
@@ -128,7 +129,8 @@ function storeKnowingEspn() {
       const store = yield* ChannelStore
       yield* store.record({
         _tag: "Carried",
-        channel: { network: espn, source: "YouTube TV", locator: { _tag: "WebView", url: cbsLive } }
+        network: espn,
+        channel: { name: espn, source: "YouTube TV", locator: { _tag: "WebView", url: cbsLive } }
       })
       return store
     })
