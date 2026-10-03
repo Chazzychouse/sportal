@@ -2888,3 +2888,10 @@ Recorded by the final whole-branch review on 2026-10-03. Each belongs to the pla
 - Decode the channel map at boot.
 - Web: name the source in a stream tile's link instead of hard-coding YouTube TV.
 - Desktop: guard subframe navigations (`will-frame-navigate`).
+
+**Desktop shell** (from the review of the Effect-native restructure; take with learned channels, which reworks these files)
+- `main.ts`: the program is launched at module top level above a class and a const it uses; it works only because the first step is asynchronous. Move the launch last or into a function.
+- `main.ts`: each sync message forks its own fiber over a shared map; serialise them or state the no-async-step assumption.
+- A window closed while the Hub page is loading is logged as "the Hub could not be reached"; a view removed mid-load may log a load error.
+- `WidevineUnavailable` drops the underlying error; carry its code.
+- The two navigation guards (shell window, provider views) share a shape and could be one.
