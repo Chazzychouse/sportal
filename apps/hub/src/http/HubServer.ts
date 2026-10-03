@@ -4,10 +4,11 @@ import { Effect, Layer, Schema, Stream } from "effect"
 import { HttpRouter, HttpServerResponse } from "effect/http"
 import { HttpApiBuilder } from "effect/http-api"
 import { Ingest } from "../ingest/Ingest.ts"
+import { Source } from "../source/Source.ts"
 import { StageSessions } from "../stage/StageSessions.ts"
 
 /** The handlers for every endpoint group in SportalApi. Exported so tests can drive them without a socket. */
-export const ApiHandlers = Layer.mergeAll(slateHandlers(), stageHandlers())
+export const ApiHandlers = Layer.mergeAll(slateHandlers(), stageHandlers(), channelHandlers())
 
 /** Every route the Hub serves: the API, and the live stream. */
 export const layer = Layer.mergeAll(
@@ -35,6 +36,25 @@ function stageHandlers() {
       return handlers.handleAll({
         current: () => sessions.stage,
         dispatch: ({ payload }) => sessions.dispatch(payload.command)
+      })
+    })
+  )
+}
+
+function channelHandlers() {
+  return HttpApiBuilder.group(
+    SportalApi,
+    "channels",
+    Effect.fn(function* (handlers) {
+      const source = yield* Source
+      // A channel store that cannot be written is not something a client can fix: it is a server error.
+      return handlers.handleAll({
+        learn: ({ payload }) =>
+          source.learn(payload.network, payload.url).pipe(Effect.catchTag("ChannelStoreError", Effect.die)),
+        notCarried: ({ payload }) =>
+          source.markNotCarried(payload.network).pipe(Effect.catchTag("ChannelStoreError", Effect.die)),
+        forget: ({ payload }) =>
+          source.forget(payload.network).pipe(Effect.catchTag("ChannelStoreError", Effect.die))
       })
     })
   )

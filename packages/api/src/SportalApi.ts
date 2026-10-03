@@ -1,7 +1,8 @@
-import { GameSnapshot } from "@sportal/domain/Game"
+import { GameSnapshot, Network } from "@sportal/domain/Game"
+import { ChannelUrlRefused } from "@sportal/domain/Source"
 import { Stage, StageCommand, StageRejection } from "@sportal/domain/Stage"
 import { Schema } from "effect"
-import { HttpApi, HttpApiEndpoint, HttpApiGroup } from "effect/http-api"
+import { HttpApi, HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "effect/http-api"
 
 export class SportalApi extends HttpApi.make("sportal")
   .add(
@@ -16,6 +17,25 @@ export class SportalApi extends HttpApi.make("sportal")
         payload: Schema.Struct({ command: StageCommand }),
         success: Stage,
         error: StageRejection
+      })
+    )
+  )
+  .add(
+    // What the source knows about each network. These change every Display and every later game, so
+    // they are not stage commands; the Stage follows through the live stream.
+    HttpApiGroup.make("channels").add(
+      HttpApiEndpoint.post("learn", "/channels/learn", {
+        payload: Schema.Struct({ network: Network, url: Schema.String }),
+        success: HttpApiSchema.NoContent,
+        error: ChannelUrlRefused
+      }),
+      HttpApiEndpoint.post("notCarried", "/channels/not-carried", {
+        payload: Schema.Struct({ network: Network }),
+        success: HttpApiSchema.NoContent
+      }),
+      HttpApiEndpoint.post("forget", "/channels/forget", {
+        payload: Schema.Struct({ network: Network }),
+        success: HttpApiSchema.NoContent
       })
     )
   )

@@ -1,7 +1,7 @@
 import type { GameId } from "@sportal/domain/Game"
 import { ChannelAvailability } from "@sportal/domain/Source"
 import { Stage, type StageCommand, type StageRejection } from "@sportal/domain/Stage"
-import { Context, Effect, Layer, Result, type Stream, SubscriptionRef } from "effect"
+import { Context, Effect, Layer, Result, Stream, SubscriptionRef } from "effect"
 import { Ingest } from "../ingest/Ingest.ts"
 import { Source } from "../source/Source.ts"
 
@@ -29,6 +29,15 @@ export class StageSessions extends Context.Service<
             ? Effect.fail(result.failure)
             : Effect.succeed([result.success, result.success] as const)
         })
+      })
+
+      // When the source learns or forgets a channel, every tile it affects changes on every Display.
+      const refresh = Effect.gen(function* () {
+        const availabilityOf = yield* availabilityOnSlate(ingest, source)
+        yield* SubscriptionRef.update(current, (stage) => stage.refresh(availabilityOf))
+      })
+      yield* Effect.forkScoped(source.changes.pipe(Stream.runForEach(() => refresh)), {
+        startImmediately: true
       })
 
       return StageSessions.of({

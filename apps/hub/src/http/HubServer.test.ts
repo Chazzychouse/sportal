@@ -1,42 +1,49 @@
-import { assert, layer } from "@effect/vitest"
+import { NodeHttpServer } from "@effect/platform-node"
+import { assert, describe, it } from "@effect/vitest"
+import { LiveMessageJson } from "@sportal/api/LiveMessage"
 import { SportalApi } from "@sportal/api/SportalApi"
 import { GameId, Network } from "@sportal/domain/Game"
 import { snapshot, team } from "@sportal/domain/TestGame"
-import { DateTime, Effect, Layer } from "effect"
-import { HttpServer } from "effect/http"
-import { HttpApiTest } from "effect/http-api"
+import { DateTime, Effect, Fiber, Layer, Schema, Stream } from "effect"
+import { HttpClient, HttpRouter, HttpServer } from "effect/http"
+import { HttpApiClient, HttpApiTest } from "effect/http-api"
 import * as Database from "../database/Database.ts"
 import { Ingest } from "../ingest/Ingest.ts"
 import { Provider } from "../provider/Provider.ts"
 import * as SqlChannelStore from "../source/SqlChannelStore.ts"
 import * as YouTubeTv from "../source/YouTubeTv.ts"
 import { StageSessions } from "../stage/StageSessions.ts"
-import { ApiHandlers } from "./HubServer.ts"
+import * as HubServer from "./HubServer.ts"
 
+const espn = Network.make("ESPN")
+const espnLive = "https://tv.youtube.com/watch/espn?vp=0gEEEgIwAQ%3D%3D"
 const game = snapshot({
   id: GameId.make("401856707"),
+  status: "live",
   home: { team: team("MSST"), score: 0 },
   away: { team: team("ALA"), score: 0 },
-  broadcasts: [Network.make("ESPN")]
+  broadcasts: [espn]
 })
+const picking = {
+  _tag: "PickingChannel",
+  game: game.id,
+  network: espn,
+  source: "YouTube TV",
+  guide: { _tag: "WebView", url: "https://tv.youtube.com/live" }
+} as const
+const streaming = {
+  _tag: "StreamTile",
+  game: game.id,
+  channel: { network: espn, source: "YouTube TV", locator: { _tag: "WebView", url: espnLive } }
+} as const
 
-const TestHub = ApiHandlers.pipe(
-  Layer.provide(StageSessions.layer),
-  Layer.provide(YouTubeTv.layer),
-  Layer.provide(SqlChannelStore.layer),
-  Layer.provide(Database.layer(":memory:")),
-  Layer.provide(Ingest.layer(["fbs"])),
-  Layer.provide(Layer.succeed(Provider, Provider.of({ slate: () => Effect.succeed([game]) })))
-)
+const makeClient = HttpApiTest.groups(SportalApi, ["slate", "stage", "channels"])
 
-const makeClient = HttpApiTest.groups(SportalApi, ["slate", "stage"])
-
-layer(Layer.mergeAll(TestHub, HttpServer.layerServices))("Hub API", (it) => {
+describe("Hub API", () => {
   it.effect("serves the slate and turns an assignment on an unlearned network into a picking tile", () =>
     Effect.gen(function* () {
       const client = yield* makeClient
-      // Let the ingest loop's first poll run.
-      yield* Effect.yieldNow
+      yield* firstSlate()
 
       const slate = yield* client.slate.current()
       assert.strictEqual(slate[0]?.away.team.abbreviation, "ALA")
@@ -45,18 +52,107 @@ layer(Layer.mergeAll(TestHub, HttpServer.layerServices))("Hub API", (it) => {
       const stage = yield* client.stage.dispatch({
         payload: { command: { _tag: "Assign", tile: 0, game: game.id } }
       })
-      assert.deepStrictEqual(stage.tiles[0], {
-        _tag: "PickingChannel",
-        game: game.id,
-        network: Network.make("ESPN"),
-        source: "YouTube TV",
-        guide: { _tag: "WebView", url: "https://tv.youtube.com/live" }
-      })
+      assert.deepStrictEqual(stage.tiles[0], picking)
 
       const rejected = yield* client.stage
         .dispatch({ payload: { command: { _tag: "Clear", tile: 9 } } })
         .pipe(Effect.flip)
       assert.strictEqual(rejected._tag, "StageRejection")
-    })
+    }).pipe(Effect.provide(apiUnderTest()))
+  )
+
+  it.effect("learns a channel, and the picking tile becomes a stream tile", () =>
+    Effect.gen(function* () {
+      const client = yield* makeClient
+      yield* firstSlate()
+      yield* client.stage.dispatch({ payload: { command: { _tag: "Assign", tile: 0, game: game.id } } })
+
+      yield* client.channels.learn({ payload: { network: espn, url: "https://tv.youtube.com/watch/espn" } })
+      assert.deepStrictEqual((yield* client.stage.current()).tiles[0], streaming)
+
+      yield* client.channels.forget({ payload: { network: espn } })
+      assert.deepStrictEqual((yield* client.stage.current()).tiles[0], picking)
+
+      yield* client.channels.notCarried({ payload: { network: espn } })
+      assert.deepStrictEqual((yield* client.stage.current()).tiles[0], { _tag: "DataTile", game: game.id })
+    }).pipe(Effect.provide(apiUnderTest()))
+  )
+
+  it.effect("refuses to learn an address that is not a channel", () =>
+    Effect.gen(function* () {
+      const client = yield* makeClient
+      const error = yield* client.channels
+        .learn({ payload: { network: espn, url: "https://tv.youtube.com/live" } })
+        .pipe(Effect.flip)
+      assert.strictEqual(error._tag, "ChannelUrlRefused")
+    }).pipe(Effect.provide(apiUnderTest()))
   )
 })
+
+describe("GET /api/live", () => {
+  it.effect("streams the current slate and stage first, then each change, as server-sent events", () =>
+    Effect.gen(function* () {
+      const http = yield* HttpClient.HttpClient
+      const api = yield* HttpApiClient.make(SportalApi)
+      yield* firstSlate()
+
+      const response = yield* http.get("/api/live")
+      assert.strictEqual(response.headers["content-type"], "text/event-stream")
+      const messages = response.stream.pipe(
+        Stream.decodeText,
+        Stream.splitLines,
+        Stream.filter((line) => line !== ""),
+        Stream.map((line) => {
+          // Each event is one line, `data: <json>`, followed by a blank line.
+          assert.isTrue(line.startsWith("data: "))
+          return Schema.decodeUnknownSync(LiveMessageJson)(line.slice("data: ".length))
+        })
+      )
+
+      const pulled = yield* messages.pipe(Stream.take(3), Stream.runCollect, Effect.forkScoped)
+      yield* api.stage.dispatch({ payload: { command: { _tag: "Assign", tile: 0, game: game.id } } })
+      const [first, second, third] = yield* Fiber.join(pulled)
+
+      assert.sameMembers([first?._tag, second?._tag], ["SlateChanged", "StageChanged"])
+      assert.deepStrictEqual(third?._tag === "StageChanged" ? third.stage.tiles[0] : third, picking)
+    }).pipe(Effect.scoped, Effect.provide(serverUnderTest()))
+  )
+})
+
+/** Waits until the ingest loop has published its first slate. */
+function firstSlate() {
+  return Effect.gen(function* () {
+    const ingest = yield* Ingest
+    yield* ingest.changes.pipe(
+      Stream.filter((slate) => slate.length > 0),
+      Stream.take(1),
+      Stream.runDrain
+    )
+  })
+}
+
+function apiUnderTest() {
+  return HubServer.ApiHandlers.pipe(
+    Layer.provideMerge(hubUnderTest()),
+    Layer.provideMerge(HttpServer.layerServices)
+  )
+}
+
+/** Everything behind the API, over a fresh in-memory database and a provider that always returns `game`. */
+function hubUnderTest() {
+  return StageSessions.layer.pipe(
+    Layer.provideMerge(YouTubeTv.layer),
+    Layer.provide(SqlChannelStore.layer),
+    Layer.provide(Database.layer(":memory:")),
+    Layer.provideMerge(Ingest.layer(["fbs"])),
+    Layer.provide(Layer.succeed(Provider, Provider.of({ slate: () => Effect.succeed([game]) })))
+  )
+}
+
+/** The Hub's routes served on an ephemeral port, with an HTTP client pointed at them. */
+function serverUnderTest() {
+  return HttpRouter.serve(HubServer.layer, { disableLogger: true }).pipe(
+    Layer.provideMerge(hubUnderTest()),
+    Layer.provideMerge(NodeHttpServer.layerTest)
+  )
+}

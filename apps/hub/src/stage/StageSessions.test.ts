@@ -1,7 +1,7 @@
 import { assert, describe, it } from "@effect/vitest"
 import { GameId, Network } from "@sportal/domain/Game"
 import { snapshot } from "@sportal/domain/TestGame"
-import { Effect, Layer, Stream } from "effect"
+import { Effect, Layer, Option, Stream } from "effect"
 import * as Database from "../database/Database.ts"
 import { Ingest } from "../ingest/Ingest.ts"
 import { Source } from "../source/Source.ts"
@@ -16,11 +16,18 @@ const espnChannel = {
   source: "YouTube TV" as const,
   locator: { _tag: "WebView" as const, url: "https://tv.youtube.com/watch/espn?vp=0gEEEgIwAQ%3D%3D" }
 }
-const slate = [game("1", [espn]), game("2", [espn]), game("3", [espn]), game("4", [espnPlus])]
+const fox = Network.make("FOX")
+const slate = [
+  game("1", [espn]),
+  game("2", [espn]),
+  game("3", [espn]),
+  game("4", [espnPlus]),
+  game("5", [fox])
+]
 
 const TestSessions = StageSessions.layer.pipe(
   Layer.provide(Layer.succeed(Ingest, Ingest.of({ slate: Effect.succeed(slate), changes: Stream.empty }))),
-  Layer.provide(sourceKnowingEspn())
+  Layer.provideMerge(sourceKnowingEspn())
 )
 
 describe("StageSessions", () => {
@@ -28,7 +35,9 @@ describe("StageSessions", () => {
     Effect.gen(function* () {
       const sessions = yield* StageSessions
       yield* Effect.all(
-        slate.map((snapshot, tile) => sessions.dispatch({ _tag: "Assign", tile, game: snapshot.id })),
+        slate
+          .slice(0, 4)
+          .map((snapshot, tile) => sessions.dispatch({ _tag: "Assign", tile, game: snapshot.id })),
         { concurrency: "unbounded" }
       )
       const stage = yield* sessions.stage
@@ -60,6 +69,53 @@ describe("StageSessions", () => {
       assert.deepStrictEqual(stage.tiles[1], { _tag: "DataTile", game: GameId.make("4") })
     }).pipe(Effect.provide(TestSessions))
   )
+
+  it.effect("refreshes the stage when the source learns a channel", () =>
+    Effect.gen(function* () {
+      const sessions = yield* StageSessions
+      const picking = yield* sessions.dispatch({ _tag: "Assign", tile: 0, game: GameId.make("5") })
+      assert.strictEqual(picking.tiles[0]?._tag, "PickingChannel")
+
+      yield* (yield* Source).learn(fox, "https://tv.youtube.com/watch/fox")
+      const stage = yield* sessions.changes.pipe(
+        Stream.filter((stage) => stage.tiles[0]?._tag === "StreamTile"),
+        Stream.take(1),
+        Stream.runHead
+      )
+      assert.isTrue(Option.isSome(stage))
+    }).pipe(Effect.provide(TestSessions))
+  )
+
+  it.effect("does not miss a change made the moment the layer has built", () => {
+    const refreshes = { count: 0 }
+    // Reading the slate is the first step of every refresh, so it counts them.
+    const ingest = Ingest.of({
+      slate: Effect.sync(() => {
+        refreshes.count += 1
+        return slate
+      }),
+      changes: Stream.empty
+    })
+    // Depending on StageSessions orders this after the layer has built.
+    const learnAtOnce = Layer.effectDiscard(
+      Effect.gen(function* () {
+        yield* StageSessions
+        yield* (yield* Source).learn(fox, "https://tv.youtube.com/watch/fox")
+      })
+    )
+    return Effect.gen(function* () {
+      yield* Effect.repeat(Effect.yieldNow, { until: () => refreshes.count > 0 })
+      assert.strictEqual(refreshes.count, 1)
+    }).pipe(
+      Effect.provide(
+        learnAtOnce.pipe(
+          Layer.provideMerge(StageSessions.layer),
+          Layer.provide(Layer.succeed(Ingest, ingest)),
+          Layer.provide(sourceKnowingEspn())
+        )
+      )
+    )
+  })
 
   it.effect("assigns a game missing from the slate as a data tile", () =>
     Effect.gen(function* () {
