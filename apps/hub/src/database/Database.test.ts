@@ -1,0 +1,37 @@
+import { assert, describe, it } from "@effect/vitest"
+import { Effect } from "effect"
+import { SqlClient } from "effect/sql"
+import * as Database from "./Database.ts"
+
+describe("Database.migrate", () => {
+  it.effect("keeps each store's migrations in its own table, so stores number them independently", () =>
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient
+      const first = yield* Database.migrate("first", { "1_create": createTable("first_thing") })
+      const second = yield* Database.migrate("second", { "1_create": createTable("second_thing") })
+      assert.deepStrictEqual(first, [[1, "create"]])
+      assert.deepStrictEqual(second, [[1, "create"]])
+
+      const tables = yield* sql<{ name: string }>`SELECT name FROM sqlite_master WHERE type = 'table'`
+      assert.includeMembers(
+        tables.map((table) => table.name),
+        ["first_migrations", "second_migrations", "first_thing", "second_thing"]
+      )
+    }).pipe(Effect.provide(Database.layer(":memory:")))
+  )
+
+  it.effect("runs a migration once", () =>
+    Effect.gen(function* () {
+      const migrations = { "1_create": createTable("thing") }
+      yield* Database.migrate("store", migrations)
+      assert.deepStrictEqual(yield* Database.migrate("store", migrations), [])
+    }).pipe(Effect.provide(Database.layer(":memory:")))
+  )
+})
+
+function createTable(name: string) {
+  return Effect.gen(function* () {
+    const sql = yield* SqlClient.SqlClient
+    yield* sql`CREATE TABLE ${sql(name)} (id INTEGER)`
+  })
+}

@@ -34,9 +34,12 @@ module.exports = {
       severity: "error",
       from: {
         path: "^apps/hub/src/",
-        pathNot: "(^apps/hub/src/main\\.ts$|\\.test\\.ts$|^apps/hub/src/provider/[^/]+/)"
+        pathNot:
+          "(^apps/hub/src/main\\.ts$|\\.test\\.ts$|^apps/hub/src/provider/[^/]+/|^apps/hub/src/source/Sql[^/]+\\.ts$)"
       },
-      to: { path: "^apps/hub/src/(provider/[^/]+/|source/YouTubeTv\\.ts$)" }
+      to: {
+        path: "^apps/hub/src/(provider/[^/]+/|source/YouTubeTv\\.ts$|source/Sql[^/]+\\.ts$|database/)"
+      }
     },
     {
       name: "test-game-is-for-tests",

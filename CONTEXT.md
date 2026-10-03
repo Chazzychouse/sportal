@@ -47,6 +47,9 @@ Every exported type name must be a term here.
 | **Channel lineup** | The channel carriages one source has learned, and the guide where the rest are picked. | channel map |
 | **Channel availability** | Whether and where a source can show a game: carried, unlearned (its network still to be picked), or not carried. | availability |
 | **Channel URL refused** | An address a source would not learn, because it is not one of its live channels. | not a channel |
+| **Channel store** | Where the Hub keeps the channel carriages it has learned. | channel repository |
+| **Channel store error** | The channel store could not read or write. | database error |
+| **Database** | The Hub's SQLite database. Each store migrates its own tables in it. | store, persistence |
 | **Stream** | One playing instance of a game from a source. | feed, video |
 | **StreamLocator** | What a Display must load to play a stream. | URL, link |
 | **StreamBudget** | How many concurrent streams a source allows. | limit, cap |

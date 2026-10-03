@@ -12,3 +12,6 @@ out/
 fixtures/espn-recordings/*/
 
 spikes/
+
+# The Hub's local data directory (SPORTAL_DATA_DIR)
+.sportal/
