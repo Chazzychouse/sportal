@@ -66,6 +66,8 @@ function openWindow(hubUrl: string) {
 function serveHub(window: BrowserWindow, hubUrl: string) {
   return Effect.gen(function* () {
     const tiles = yield* TileViews
+    // Electron's IPC callbacks decide synchronously; the work they start runs as an Effect.
+    const run = yield* FiberSet.makeRuntime()
     const providers = yield* ProviderSession
 
     // Placements are applied one at a time, and only the newest waiting set matters: each replaces all before it.
@@ -96,9 +98,8 @@ function serveHub(window: BrowserWindow, hubUrl: string) {
       () => Effect.sync(() => ipcMain.removeListener("sportal:sync-tiles", syncTiles))
     )
 
-    const runtime = yield* FiberSet.makeRuntime()
     const openSignIn = (event: IpcMainEvent) => {
-      if (event.sender === window.webContents) runtime(providers.openSignIn)
+      if (event.sender === window.webContents) run(providers.openSignIn(window))
     }
     yield* Effect.acquireRelease(
       Effect.sync(() => ipcMain.on("sportal:open-sign-in", openSignIn)),

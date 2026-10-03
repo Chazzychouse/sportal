@@ -12,9 +12,10 @@ export class ProviderSession extends Context.Service<
     readonly createView: Effect.Effect<WebContentsView>
     /**
      * Opens a normal-sized window on the provider session at YouTube TV, so the user can sign in once for
-     * every tile. An open window is focused instead of a second being opened.
+     * every tile. It is a child of `parent`, so it closes with it. An open window is focused instead of a
+     * second being opened.
      */
-    readonly openSignIn: Effect.Effect<void>
+    readonly openSignIn: (parent: BrowserWindow) => Effect.Effect<void>
   }
 >()("sportal/desktop/ProviderSession") {
   static readonly layer = Layer.effect(
@@ -53,31 +54,33 @@ export class ProviderSession extends Context.Service<
           confine(view.webContents, allows, warn, { subframes: false })
           return view
         }),
-        openSignIn: Effect.sync(() => {
-          if (signIn && !signIn.isDestroyed()) {
-            signIn.focus()
-            return
-          }
-          const window = new BrowserWindow({
-            width: 1000,
-            height: 800,
-            webPreferences: {
-              session: providers,
-              contextIsolation: true,
-              nodeIntegration: false,
-              sandbox: true
+        openSignIn: (parent) =>
+          Effect.sync(() => {
+            if (signIn && !signIn.isDestroyed()) {
+              signIn.focus()
+              return
             }
-          })
-          signIn = window
-          confine(window.webContents, allows, warn, { subframes: false })
-          log(
-            load(window.webContents, signInUrl).pipe(
-              Effect.catchTag("LoadFailed", (failure) =>
-                Effect.logWarning(`ProviderSession: the sign-in window did not load: ${failure.code}`)
+            const window = new BrowserWindow({
+              width: 1000,
+              height: 800,
+              parent,
+              webPreferences: {
+                session: providers,
+                contextIsolation: true,
+                nodeIntegration: false,
+                sandbox: true
+              }
+            })
+            signIn = window
+            confine(window.webContents, allows, warn, { subframes: false })
+            log(
+              load(window.webContents, signInUrl).pipe(
+                Effect.catchTag("LoadFailed", (failure) =>
+                  Effect.logWarning(`ProviderSession: the sign-in window did not load: ${failure.code}`)
+                )
               )
             )
-          )
-        })
+          })
       })
     })
   )
