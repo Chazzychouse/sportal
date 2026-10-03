@@ -26,18 +26,31 @@ export function allows(url: string): boolean {
 
 const allowedHosts = ["tv.youtube.com", "www.youtube.com", "accounts.youtube.com", "accounts.google.com"]
 
+/** Playback needs DRM key systems, fullscreen, and a screen that stays awake; nothing else is granted. */
+export function grantsPermission(permission: string): boolean {
+  return ["mediaKeySystem", "fullscreen", "screen-wake-lock"].includes(permission)
+}
+
 function refuseUnlessAllowed(event: { preventDefault(): void }, url: string) {
   if (allows(url)) return
   event.preventDefault()
-  // Hostname only: the full URL can carry tokens.
-  const host = URL.canParse(url) ? new URL(url).hostname : "(unparseable address)"
-  console.warn(`ProviderSession: blocked navigation to ${host}`)
+  console.warn(`ProviderSession: blocked navigation to ${hostOf(url)}`)
 }
 
+let configured: Electron.Session | undefined
+
 function providerSession() {
-  const providers = session.fromPartition("persist:providers")
-  providers.setPermissionRequestHandler((_webContents, permission, callback) => {
-    callback(permission === "fullscreen")
+  if (configured !== undefined) return configured
+  configured = session.fromPartition("persist:providers")
+  configured.setPermissionRequestHandler((_webContents, permission, callback, details) => {
+    const granted = grantsPermission(permission)
+    if (!granted) console.warn(`ProviderSession: denied ${permission} for ${hostOf(details.requestingUrl)}`)
+    callback(granted)
   })
-  return providers
+  return configured
+}
+
+// Hostname only: a full URL can carry tokens.
+function hostOf(url: string) {
+  return URL.canParse(url) ? new URL(url).hostname : "(unparseable address)"
 }

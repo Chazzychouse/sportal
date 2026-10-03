@@ -6,7 +6,7 @@ vi.mock("electron", () => ({
   WebContentsView: vi.fn()
 }))
 
-const { allows } = await import("./ProviderSession.ts")
+const { allows, grantsPermission } = await import("./ProviderSession.ts")
 
 describe("allows", () => {
   it.each([
@@ -29,4 +29,17 @@ describe("allows", () => {
   ])("refuses %s", (url) => {
     expect(allows(url)).toBe(false)
   })
+})
+
+describe("grantsPermission", () => {
+  it.each(["mediaKeySystem", "fullscreen", "screen-wake-lock"])("grants %s", (permission) => {
+    expect(grantsPermission(permission)).toBe(true)
+  })
+
+  it.each(["media", "geolocation", "notifications", "clipboard-read", "openExternal", "unknown"])(
+    "denies %s",
+    (permission) => {
+      expect(grantsPermission(permission)).toBe(false)
+    }
+  )
 })
