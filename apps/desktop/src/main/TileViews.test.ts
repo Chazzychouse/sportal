@@ -1,14 +1,16 @@
 import { describe, expect, it } from "@effect/vitest"
 import { GameId } from "@sportal/domain/Game"
 import { Context, Effect, Exit, Fiber, Layer, Scope, Stream } from "effect"
+import { TestClock } from "effect/testing"
 import { type Mock, vi } from "vitest"
 
-const created: Array<{ setBounds: Mock; webContents: ReturnType<typeof fakeContents> }> = []
+const created: Array<{ setBounds: Mock; setVisible: Mock; webContents: ReturnType<typeof fakeContents> }> = []
 
 vi.mock("electron", () => ({
   session: { fromPartition: () => ({ setPermissionRequestHandler: vi.fn() }) },
   WebContentsView: class {
     readonly setBounds = vi.fn()
+    readonly setVisible = vi.fn()
     readonly webContents = fakeContents()
     constructor() {
       created.push(this)
@@ -229,6 +231,77 @@ describe("TileViews.channelPicks", () => {
       created[0]?.webContents.emit("did-navigate-in-page", {}, espn, true)
       created[1]?.webContents.emit("did-navigate-in-page", {}, fox, true)
       expect(yield* Fiber.join(picks)).toEqual([{ game: two, url: fox }])
+    }).pipe(Effect.scoped)
+  )
+})
+
+describe("TileViews transitions", () => {
+  const transition = { durationMs: 160, easing: [0, 0, 1, 1] as const }
+  const target = { x: 110, y: 20, width: 640, height: 360 }
+
+  it.effect("moves a view to its new bounds over the duration, landing exactly", () =>
+    Effect.gen(function* () {
+      const { tiles } = yield* attached()
+      yield* tiles.sync([placement])
+      yield* tiles.sync([{ ...placement, bounds: target }], transition)
+      yield* TestClock.adjust("80 millis")
+      expect(created[0]?.setBounds).toHaveBeenLastCalledWith({ x: 60, y: 20, width: 640, height: 360 })
+      yield* TestClock.adjust("100 millis")
+      expect(created[0]?.setBounds).toHaveBeenLastCalledWith(target)
+    }).pipe(Effect.scoped)
+  )
+
+  it.effect("starts a new transition from where the views are", () =>
+    Effect.gen(function* () {
+      const { tiles } = yield* attached()
+      yield* tiles.sync([placement])
+      yield* tiles.sync([{ ...placement, bounds: target }], transition)
+      yield* TestClock.adjust("80 millis")
+      yield* tiles.sync([placement], transition)
+      yield* TestClock.adjust("16 millis")
+      expect(created[0]?.setBounds).toHaveBeenLastCalledWith({ x: 55, y: 20, width: 640, height: 360 })
+    }).pipe(Effect.scoped)
+  )
+
+  it.effect("sets bounds at once without a transition, ending one under way", () =>
+    Effect.gen(function* () {
+      const { tiles } = yield* attached()
+      yield* tiles.sync([placement])
+      yield* tiles.sync([{ ...placement, bounds: target }], transition)
+      yield* TestClock.adjust("32 millis")
+      yield* tiles.sync([placement])
+      yield* TestClock.adjust("200 millis")
+      expect(created[0]?.setBounds).toHaveBeenLastCalledWith(placement.bounds)
+    }).pipe(Effect.scoped)
+  )
+
+  it.effect("shows a view new in a transition at its target once the transition ends", () =>
+    Effect.gen(function* () {
+      const { tiles } = yield* attached()
+      yield* tiles.sync([placement])
+      const arriving = { ...placement, game: two, url: "https://tv.youtube.com/watch/two", bounds: target }
+      yield* tiles.sync([placement, arriving], transition)
+      expect(created[1]?.setBounds).toHaveBeenLastCalledWith(target)
+      expect(created[1]?.setVisible).toHaveBeenLastCalledWith(false)
+      yield* TestClock.adjust("200 millis")
+      expect(created[1]?.setVisible).toHaveBeenLastCalledWith(true)
+    }).pipe(Effect.scoped)
+  )
+})
+
+describe("TileViews.hide", () => {
+  it.effect("hides exactly the named games, and keeps them hidden through syncs", () =>
+    Effect.gen(function* () {
+      const { tiles } = yield* attached()
+      const other = { ...placement, game: two, url: "https://tv.youtube.com/watch/two" }
+      yield* tiles.sync([placement, other])
+      yield* tiles.hide([two])
+      expect(created[0]?.setVisible).toHaveBeenLastCalledWith(true)
+      expect(created[1]?.setVisible).toHaveBeenLastCalledWith(false)
+      yield* tiles.sync([placement, other])
+      expect(created[1]?.setVisible).toHaveBeenLastCalledWith(false)
+      yield* tiles.hide([])
+      expect(created[1]?.setVisible).toHaveBeenLastCalledWith(true)
     }).pipe(Effect.scoped)
   )
 })
