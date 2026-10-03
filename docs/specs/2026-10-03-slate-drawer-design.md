@@ -21,10 +21,10 @@ on the Stage) from what does not (finals, empty scores).
 
 | Question | Decision |
 | --- | --- |
-| Presence | A drawer (`Sheet` from shadcn, side `left`, about 24rem, full height under the top bar). The `aside` in `App.tsx` is removed; the Stage spans the window |
+| Presence | A non-modal drawer (`Sheet` from shadcn, side `left`, about 24rem, full height under the top bar; full height in full screen). Non-modal, so a bench game can still be dragged onto a visible tile. The `aside` in `App.tsx` is removed; the Stage spans the window |
 | Overlay over native video | The drawer registers with `useCovering`, so only the videos it overlaps hide while it is open. In most layouts the main tile stays visible |
 | Opening | Hotkey `S` (a new `ToggleSlate` case in `packages/api/src/Hotkey.ts`, so it works while a stream view has focus), and a Slate button in the top bar left of the layout toggles that shows the live count |
-| Closing | `S` again, `Esc`, a click outside, or picking a game. While the drawer is open, `Esc` closes it and does not also unsolo |
+| Closing | `S` again, `Esc`, a click outside, or picking a game. While the drawer is open, `Esc` closes it and does not also unsolo; `App.tsx` decides this in its hotkey handler, so an `Esc` forwarded from a focused stream view behaves the same |
 | Where a pick goes | The existing `selected` cursor. The drawer header reads "Slate · to tile N" |
 | Bench | A section at the top of the drawer, shown only when non-empty. Clicking swaps into the selected tile; dragging onto a visible tile still works, and the drawer stays open during a drag |
 | Sections | Bench, Live (watch order), Upcoming (by kickoff), Final (collapsed to one "Final · N" line, expands on click). Postponed and canceled games sit in Final and show their status |
@@ -45,7 +45,7 @@ Every game row — slate and bench — is one grid with fixed column widths; emp
 | Column | Width | Content |
 | --- | --- | --- |
 | Rank | 2ch, right-aligned, muted | Ranking, blank when unranked |
-| Team | 4ch, left-aligned, semibold | Abbreviation |
+| Team | 5ch, left-aligned, semibold | Abbreviation (most are 2–4 characters; a few FBS ones are 5) |
 | Score | 3ch, right-aligned | Hidden for upcoming games. In live and final games the leading side is full strength, the trailing side muted |
 | Status | fixed, two lines | Top: `statusText` (clock, kickoff, or status), live color when live. Bottom: networks, truncated with an ellipsis, full list in `title` |
 | Stage | fixed | "T*n*" or "Bench" chip, or empty |
@@ -69,5 +69,5 @@ Numbers use `font-mono` with `tabular-nums`. Final rows are muted; the winner ke
 
 | Risk | Check |
 | --- | --- |
-| `S` pressed while a stream view has focus opens the drawer, but key focus stays in the stream view, so `Esc` goes to the shell as `Unsolo` | When the drawer opens, focus moves to the web contents; verify in the shell, run by the user |
+| `S` pressed while a stream view has focus opens the drawer, but key focus stays in the stream view | `Esc` is forwarded as a hotkey and handled in `App.tsx`, so it still closes the drawer. Clicking a row works regardless of focus. Verified in the shell, run by the user |
 | A drawer over the left tile hides that video for as long as it is open | Accepted: the drawer is short-lived and closes on pick |
