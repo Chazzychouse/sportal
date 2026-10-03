@@ -1,0 +1,3131 @@
+{
+  "contents": {
+    "epgRenderer": {
+      "paginationRenderer": {
+        "epgPaginationRenderer": {
+          "contents": [
+            {
+              "epgRowRenderer": {
+                "station": {
+                  "epgStationRenderer": {
+                    "stationId": "UCPc5PkgTSfcJCi3-dJyg3Tg",
+                    "icon": {
+                      "accessibility": {
+                        "accessibilityData": {
+                          "label": "News 3"
+                        }
+                      }
+                    }
+                  }
+                },
+                "navigationEndpoint": {
+                  "watchEndpoint": {
+                    "videoId": "y6zFA17zDsw"
+                  }
+                },
+                "airings": [
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791056100000",
+                      "endTimeMs": "1791068400000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "Ohio State at Iowa"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791068400000",
+                      "endTimeMs": "1791070200000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "Postgame Show"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791070200000",
+                      "endTimeMs": "1791082800000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "UFC 332: Silva vs. Wang"
+                          }
+                        ]
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "epgRowRenderer": {
+                "station": {
+                  "epgStationRenderer": {
+                    "stationId": "UCmL7vxVB_XPErlsuEf1-6Mw",
+                    "icon": {
+                      "accessibility": {
+                        "accessibilityData": {
+                          "label": "WAVY 10"
+                        }
+                      }
+                    }
+                  }
+                },
+                "navigationEndpoint": {
+                  "watchEndpoint": {
+                    "videoId": "pLd4jKUA6ok"
+                  }
+                },
+                "airings": [
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791054000000",
+                      "endTimeMs": "1791064800000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "Breeders Cup Challenge Series: Fall Stars Saturday"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791064800000",
+                      "endTimeMs": "1791066600000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "WAVY News 10"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791066600000",
+                      "endTimeMs": "1791068400000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "NBC Nightly News With Tom Llamas"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791068400000",
+                      "endTimeMs": "1791070200000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "Big Ten Countdown"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791070200000",
+                      "endTimeMs": "1791082800000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "Washington at USC"
+                          }
+                        ]
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "epgRowRenderer": {
+                "station": {
+                  "epgStationRenderer": {
+                    "stationId": "UCTmlvooJJXQtAMVKowcFrVw",
+                    "icon": {
+                      "accessibility": {
+                        "accessibilityData": {
+                          "label": "ABC 13"
+                        }
+                      }
+                    }
+                  }
+                },
+                "navigationEndpoint": {
+                  "watchEndpoint": {
+                    "videoId": "UKln3cYV9-8"
+                  }
+                },
+                "airings": [
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791056820000",
+                      "endTimeMs": "1791066600000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "Florida at Missouri"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791066600000",
+                      "endTimeMs": "1791068400000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "College Football Scoreboard"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791068400000",
+                      "endTimeMs": "1791070200000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "College Football Scoreboard"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791070200000",
+                      "endTimeMs": "1791082800000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "Miami at Clemson"
+                          }
+                        ]
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "epgRowRenderer": {
+                "station": {
+                  "epgStationRenderer": {
+                    "stationId": "UC7QBWMQ18XbbwVKIPBy0XRw",
+                    "icon": {
+                      "accessibility": {
+                        "accessibilityData": {
+                          "label": "FOX 43"
+                        }
+                      }
+                    }
+                  }
+                },
+                "navigationEndpoint": {
+                  "watchEndpoint": {
+                    "videoId": "_MpmFlh-Wzc"
+                  }
+                },
+                "airings": [
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791057600000",
+                      "endTimeMs": "1791068400000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "Atlanta Braves at Los Angeles Dodgers"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791068400000",
+                      "endTimeMs": "1791070200000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "MLB on FOX Post Game"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791070200000",
+                      "endTimeMs": "1791082800000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "Texas Tech at Colorado"
+                          }
+                        ]
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "epgRowRenderer": {
+                "station": {
+                  "epgStationRenderer": {
+                    "stationId": "UCsdXh24n1GL_PnpuGHynJjw",
+                    "icon": {
+                      "accessibility": {
+                        "accessibilityData": {
+                          "label": "WVBTDT2"
+                        }
+                      }
+                    }
+                  }
+                },
+                "navigationEndpoint": {
+                  "watchEndpoint": {
+                    "videoId": "wFr3IpHzIco"
+                  }
+                },
+                "airings": [
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791055831000",
+                      "endTimeMs": "1791068400000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "Wyoming at North Dakota State"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791068400000",
+                      "endTimeMs": "1791070200000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "NASCAR Countdown Live"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791070200000",
+                      "endTimeMs": "1791081000000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "Focused Health 302"
+                          }
+                        ]
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "epgRowRenderer": {
+                "station": {
+                  "epgStationRenderer": {
+                    "stationId": "UC6ZNfQ40Y8xkZijlXw6WorA",
+                    "icon": {
+                      "accessibility": {
+                        "accessibilityData": {
+                          "label": "WHRO"
+                        }
+                      }
+                    }
+                  }
+                },
+                "navigationEndpoint": {
+                  "watchEndpoint": {
+                    "videoId": "qHU5VkAXW9c"
+                  }
+                },
+                "airings": [
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791057600000",
+                      "endTimeMs": "1791061200000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "Celebrity Antiques Road Trip"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791061200000",
+                      "endTimeMs": "1791064800000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "Austin City Limits"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791064800000",
+                      "endTimeMs": "1791066600000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "Horizons From PBS News"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791066600000",
+                      "endTimeMs": "1791068400000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "Laura Flanders & Friends"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791068400000",
+                      "endTimeMs": "1791072000000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "Antiques Roadshow"
+                          }
+                        ]
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "epgRowRenderer": {
+                "station": {
+                  "epgStationRenderer": {
+                    "stationId": "UCNxU8g3rqnOFT32l40SeHcg",
+                    "icon": {
+                      "accessibility": {
+                        "accessibilityData": {
+                          "label": "PBS NC"
+                        }
+                      }
+                    }
+                  }
+                },
+                "navigationEndpoint": {
+                  "watchEndpoint": {
+                    "videoId": "iojjxLLBYuM"
+                  }
+                },
+                "airings": [
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791057600000",
+                      "endTimeMs": "1791059400000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "This Old House"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791059400000",
+                      "endTimeMs": "1791061200000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "Ask This Old House"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791061200000",
+                      "endTimeMs": "1791063000000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "Carolina Outdoor Journal"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791063000000",
+                      "endTimeMs": "1791064800000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "North Carolina Weekend"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791064800000",
+                      "endTimeMs": "1791068400000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "Secrets of Great British Castles"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791068400000",
+                      "endTimeMs": "1791072000000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "Under the Vines"
+                          }
+                        ]
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "epgRowRenderer": {
+                "station": {
+                  "epgStationRenderer": {
+                    "stationId": "UCjkZit5yL9Eaa7VnAx4hJpw",
+                    "icon": {
+                      "accessibility": {
+                        "accessibilityData": {
+                          "label": "Telemundo"
+                        }
+                      }
+                    }
+                  }
+                },
+                "navigationEndpoint": {
+                  "watchEndpoint": {
+                    "videoId": "k0pc2D7Q1QQ"
+                  }
+                },
+                "airings": [
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791057600000",
+                      "endTimeMs": "1791064800000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "How to Be a Latin Lover"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791064800000",
+                      "endTimeMs": "1791066600000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "Caso cerrado"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791066600000",
+                      "endTimeMs": "1791068400000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "Noticias Telemundo fin de semana"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791068400000",
+                      "endTimeMs": "1791072000000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "Dateline"
+                          }
+                        ]
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "epgRowRenderer": {
+                "station": {
+                  "epgStationRenderer": {
+                    "stationId": "UCJc8oTwG4BuXZhkYSimpXNw",
+                    "icon": {
+                      "accessibility": {
+                        "accessibilityData": {
+                          "label": "Univision"
+                        }
+                      }
+                    }
+                  }
+                },
+                "navigationEndpoint": {
+                  "watchEndpoint": {
+                    "videoId": "x3u0Su54i8I"
+                  }
+                },
+                "airings": [
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791057600000",
+                      "endTimeMs": "1791061200000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "El chal con Pao Sasso"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791061200000",
+                      "endTimeMs": "1791064800000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "Lo tomas o lo dejas"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791064800000",
+                      "endTimeMs": "1791066600000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "Nosotros los guapos"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791066600000",
+                      "endTimeMs": "1791068400000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "Noticiero N+ Univision: Fin de semana"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791068400000",
+                      "endTimeMs": "1791072000000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "Piensa rápido VIP"
+                          }
+                        ]
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "epgRowRenderer": {
+                "station": {
+                  "epgStationRenderer": {
+                    "stationId": "UCL56IuYSxfOp1I__FBFtM7w",
+                    "icon": {
+                      "accessibility": {
+                        "accessibilityData": {
+                          "label": "UniMas"
+                        }
+                      }
+                    }
+                  }
+                },
+                "navigationEndpoint": {
+                  "watchEndpoint": {
+                    "videoId": "yq7slI2kJsQ"
+                  }
+                },
+                "airings": [
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791046800000",
+                      "endTimeMs": "1791059400000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "Chicago White Sox vs. Cleveland Guardians"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791059400000",
+                      "endTimeMs": "1791063000000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "MLB esta semana"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791063000000",
+                      "endTimeMs": "1791066600000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "Béisbol Central"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791066600000",
+                      "endTimeMs": "1791077400000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "New York Yankees vs. Tampa Bay Rays"
+                          }
+                        ]
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "epgRowRenderer": {
+                "station": {
+                  "epgStationRenderer": {
+                    "stationId": "UCNfUuHSWBcaZ_qz1v-E2Jlg",
+                    "icon": {
+                      "accessibility": {
+                        "accessibilityData": {
+                          "label": "NFL ST - FOX"
+                        }
+                      }
+                    }
+                  }
+                },
+                "navigationEndpoint": {},
+                "airings": [
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791133200000",
+                      "endTimeMs": "1791144000000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "New York Jets at Chicago Bears"
+                          }
+                        ]
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "epgRowRenderer": {
+                "station": {
+                  "epgStationRenderer": {
+                    "stationId": "UCqYjz1ylKY6C9ycHaOsVigA",
+                    "icon": {
+                      "accessibility": {
+                        "accessibilityData": {
+                          "label": "NFL ST - FOX"
+                        }
+                      }
+                    }
+                  }
+                },
+                "navigationEndpoint": {},
+                "airings": [
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791133200000",
+                      "endTimeMs": "1791144000000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "Dallas Cowboys at Houston Texans"
+                          }
+                        ]
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "epgRowRenderer": {
+                "station": {
+                  "epgStationRenderer": {
+                    "stationId": "UC-GUAFqNiSCAMh5xrHnH2pA",
+                    "icon": {
+                      "accessibility": {
+                        "accessibilityData": {
+                          "label": "NFL ST - FOX"
+                        }
+                      }
+                    }
+                  }
+                },
+                "navigationEndpoint": {},
+                "airings": [
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791133200000",
+                      "endTimeMs": "1791144000000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "Los Angeles Rams at Philadelphia Eagles"
+                          }
+                        ]
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "epgRowRenderer": {
+                "station": {
+                  "epgStationRenderer": {
+                    "stationId": "UCQ7xrr_hilON4yXPhwHaheg",
+                    "icon": {
+                      "accessibility": {
+                        "accessibilityData": {
+                          "label": "NFL ST - FOX"
+                        }
+                      }
+                    }
+                  }
+                },
+                "navigationEndpoint": {},
+                "airings": [
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791133200000",
+                      "endTimeMs": "1791144000000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "Green Bay Packers at Tampa Bay Buccaneers"
+                          }
+                        ]
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "epgRowRenderer": {
+                "station": {
+                  "epgStationRenderer": {
+                    "stationId": "UCML7-74jlnw815NMxZWSGpg",
+                    "icon": {
+                      "accessibility": {
+                        "accessibilityData": {
+                          "label": "NFL ST - FOX"
+                        }
+                      }
+                    }
+                  }
+                },
+                "navigationEndpoint": {},
+                "airings": [
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791144300000",
+                      "endTimeMs": "1791155100000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "Miami Dolphins at Minnesota Vikings"
+                          }
+                        ]
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "epgRowRenderer": {
+                "station": {
+                  "epgStationRenderer": {
+                    "stationId": "UCquxTSBuMAzHJT_n09tNU6Q",
+                    "icon": {
+                      "accessibility": {
+                        "accessibilityData": {
+                          "label": "NFL ST - CBS"
+                        }
+                      }
+                    }
+                  }
+                },
+                "navigationEndpoint": {},
+                "airings": [
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791133200000",
+                      "endTimeMs": "1791144000000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "Tennessee Titans at Baltimore Ravens"
+                          }
+                        ]
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "epgRowRenderer": {
+                "station": {
+                  "epgStationRenderer": {
+                    "stationId": "UCqIassGhNdIv5Bf6giTu6AQ",
+                    "icon": {
+                      "accessibility": {
+                        "accessibilityData": {
+                          "label": "NFL ST - CBS"
+                        }
+                      }
+                    }
+                  }
+                },
+                "navigationEndpoint": {},
+                "airings": [
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791133200000",
+                      "endTimeMs": "1791144000000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "New England Patriots at Buffalo Bills"
+                          }
+                        ]
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "epgRowRenderer": {
+                "station": {
+                  "epgStationRenderer": {
+                    "stationId": "UCgmvjGfEnjC7nHiHk2qqY3w",
+                    "icon": {
+                      "accessibility": {
+                        "accessibilityData": {
+                          "label": "NFL ST - CBS"
+                        }
+                      }
+                    }
+                  }
+                },
+                "navigationEndpoint": {},
+                "airings": [
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791133200000",
+                      "endTimeMs": "1791144000000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "Jacksonville Jaguars at Cincinnati Bengals"
+                          }
+                        ]
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "epgRowRenderer": {
+                "station": {
+                  "epgStationRenderer": {
+                    "stationId": "UCqMR2sySVw94zZHaNqLXsfg",
+                    "icon": {
+                      "accessibility": {
+                        "accessibilityData": {
+                          "label": "NFL ST - CBS"
+                        }
+                      }
+                    }
+                  }
+                },
+                "navigationEndpoint": {},
+                "airings": [
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791133200000",
+                      "endTimeMs": "1791144000000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "Arizona Cardinals at New York Giants"
+                          }
+                        ]
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "epgRowRenderer": {
+                "station": {
+                  "epgStationRenderer": {
+                    "stationId": "UC50J_pyw4NDuXoq7o7_m6Hw",
+                    "icon": {
+                      "accessibility": {
+                        "accessibilityData": {
+                          "label": "NFL ST - CBS"
+                        }
+                      }
+                    }
+                  }
+                },
+                "navigationEndpoint": {},
+                "airings": [
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791145500000",
+                      "endTimeMs": "1791156300000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "Kansas City Chiefs at Las Vegas Raiders"
+                          }
+                        ]
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "epgRowRenderer": {
+                "station": {
+                  "epgStationRenderer": {
+                    "stationId": "UC-WzeEGMf7BdZjdTqPQ9_yA",
+                    "icon": {
+                      "accessibility": {
+                        "accessibilityData": {
+                          "label": "NFL ST - CBS"
+                        }
+                      }
+                    }
+                  }
+                },
+                "navigationEndpoint": {},
+                "airings": [
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791145500000",
+                      "endTimeMs": "1791156300000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "Los Angeles Chargers at Seattle Seahawks"
+                          }
+                        ]
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "epgRowRenderer": {
+                "station": {
+                  "epgStationRenderer": {
+                    "stationId": "UCguO7qrMe7M5NuXCcMmkGSg",
+                    "icon": {
+                      "accessibility": {
+                        "accessibilityData": {
+                          "label": "NFL ST - CBS"
+                        }
+                      }
+                    }
+                  }
+                },
+                "navigationEndpoint": {},
+                "airings": [
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791145500000",
+                      "endTimeMs": "1791156300000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "Denver Broncos at San Francisco 49ers"
+                          }
+                        ]
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "epgRowRenderer": {
+                "station": {
+                  "epgStationRenderer": {
+                    "stationId": "UCYrezOPHVcHP74I3-OEQ3TQ",
+                    "icon": {
+                      "accessibility": {
+                        "accessibilityData": {
+                          "label": "MyTVZ"
+                        }
+                      }
+                    }
+                  }
+                },
+                "navigationEndpoint": {
+                  "watchEndpoint": {
+                    "videoId": "4vviZoWyFBc"
+                  }
+                },
+                "airings": [
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791057600000",
+                      "endTimeMs": "1791059400000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "The Big Bang Theory"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791059400000",
+                      "endTimeMs": "1791061200000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "The Big Bang Theory"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791061200000",
+                      "endTimeMs": "1791063000000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "Two and a Half Men"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791063000000",
+                      "endTimeMs": "1791064800000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "Two and a Half Men"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791064800000",
+                      "endTimeMs": "1791066600000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "Seinfeld"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791066600000",
+                      "endTimeMs": "1791068400000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "Seinfeld"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791068400000",
+                      "endTimeMs": "1791070200000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "Family Feud"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791070200000",
+                      "endTimeMs": "1791072000000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "Family Feud"
+                          }
+                        ]
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "epgRowRenderer": {
+                "station": {
+                  "epgStationRenderer": {
+                    "stationId": "UCD9-oAYJYLAX5GAKCz_48SA",
+                    "icon": {
+                      "accessibility": {
+                        "accessibilityData": {
+                          "label": "TBS"
+                        }
+                      }
+                    }
+                  }
+                },
+                "navigationEndpoint": {
+                  "watchEndpoint": {
+                    "videoId": "_GRYlu_xpSE"
+                  }
+                },
+                "airings": [
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791046800000",
+                      "endTimeMs": "1791059400000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "Chicago White Sox at Cleveland Guardians"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791059400000",
+                      "endTimeMs": "1791066600000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "Twister"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791066600000",
+                      "endTimeMs": "1791079200000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "New York Yankees at Tampa Bay Rays"
+                          }
+                        ]
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "epgRowRenderer": {
+                "station": {
+                  "epgStationRenderer": {
+                    "stationId": "UCMrLeKNQLIcj2l1k4yqkILQ",
+                    "icon": {
+                      "accessibility": {
+                        "accessibilityData": {
+                          "label": "TNT"
+                        }
+                      }
+                    }
+                  }
+                },
+                "navigationEndpoint": {
+                  "watchEndpoint": {
+                    "videoId": "K3F9ZXlDx34"
+                  }
+                },
+                "airings": [
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791057600000",
+                      "endTimeMs": "1791061200000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "FBI"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791061200000",
+                      "endTimeMs": "1791072000000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "Aquaman"
+                          }
+                        ]
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "epgRowRenderer": {
+                "station": {
+                  "epgStationRenderer": {
+                    "stationId": "UCW7W_WAogi3qWDbO9PqOmZQ",
+                    "icon": {
+                      "accessibility": {
+                        "accessibilityData": {
+                          "label": "ESPN"
+                        }
+                      }
+                    }
+                  }
+                },
+                "navigationEndpoint": {
+                  "watchEndpoint": {
+                    "videoId": "PFuNFGzJDE4"
+                  }
+                },
+                "airings": [
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791055800000",
+                      "endTimeMs": "1791066600000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "Auburn at Tennessee"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791066600000",
+                      "endTimeMs": "1791068400000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "College Football Scoreboard"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791068400000",
+                      "endTimeMs": "1791079200000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "BYU at TCU"
+                          }
+                        ]
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "epgRowRenderer": {
+                "station": {
+                  "epgStationRenderer": {
+                    "stationId": "UCOtYFLYvZEiaZw4YpSjOndw",
+                    "icon": {
+                      "accessibility": {
+                        "accessibilityData": {
+                          "label": "ESPN2"
+                        }
+                      }
+                    }
+                  }
+                },
+                "navigationEndpoint": {
+                  "watchEndpoint": {
+                    "videoId": "nIaQPNyNo34"
+                  }
+                },
+                "airings": [
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791056076000",
+                      "endTimeMs": "1791066600000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "Virginia at Florida State"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791066600000",
+                      "endTimeMs": "1791068400000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "College Football Scoreboard"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791068400000",
+                      "endTimeMs": "1791079200000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "Arkansas at Texas A&M"
+                          }
+                        ]
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "epgRowRenderer": {
+                "station": {
+                  "epgStationRenderer": {
+                    "stationId": "UCpj5ieQ9I6GFSsRnON4AOBQ",
+                    "icon": {
+                      "accessibility": {
+                        "accessibilityData": {
+                          "label": "SEC Network"
+                        }
+                      }
+                    }
+                  }
+                },
+                "navigationEndpoint": {
+                  "watchEndpoint": {
+                    "videoId": "iuDz6UdSjMo"
+                  }
+                },
+                "airings": [
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791058622000",
+                      "endTimeMs": "1791069300000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "Kentucky at South Carolina"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791069300000",
+                      "endTimeMs": "1791071100000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "SEC Now"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791071100000",
+                      "endTimeMs": "1791082800000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "McNeese State at LSU"
+                          }
+                        ]
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "epgRowRenderer": {
+                "station": {
+                  "epgStationRenderer": {
+                    "stationId": "UCdj7clRJstl32igUku_7Jaw",
+                    "icon": {
+                      "accessibility": {
+                        "accessibilityData": {
+                          "label": "ACC Network"
+                        }
+                      }
+                    }
+                  }
+                },
+                "navigationEndpoint": {
+                  "watchEndpoint": {
+                    "videoId": "VasWEa--oME"
+                  }
+                },
+                "airings": [
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791055803000",
+                      "endTimeMs": "1791066600000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "Louisville at NC State"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791066600000",
+                      "endTimeMs": "1791070200000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "ACC Huddle Scoreboard"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791070200000",
+                      "endTimeMs": "1791081000000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "Miami at Clemson"
+                          }
+                        ]
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "epgRowRenderer": {
+                "station": {
+                  "epgStationRenderer": {
+                    "stationId": "UCtGP7XtIzd3bwARBmJNcZYA",
+                    "icon": {
+                      "accessibility": {
+                        "accessibilityData": {
+                          "label": "ESPNU"
+                        }
+                      }
+                    }
+                  }
+                },
+                "navigationEndpoint": {
+                  "watchEndpoint": {
+                    "videoId": "p0TOraK6Img"
+                  }
+                },
+                "airings": [
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791056700000",
+                      "endTimeMs": "1791067500000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "Marshall at James Madison"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791067500000",
+                      "endTimeMs": "1791070200000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "College Football 150: The Greatest"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791070200000",
+                      "endTimeMs": "1791081000000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "Temple at South Florida"
+                          }
+                        ]
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "epgRowRenderer": {
+                "station": {
+                  "epgStationRenderer": {
+                    "stationId": "UChukTzuQDPENsI9IYCvDEaA",
+                    "icon": {
+                      "accessibility": {
+                        "accessibilityData": {
+                          "label": "ESPNews"
+                        }
+                      }
+                    }
+                  }
+                },
+                "navigationEndpoint": {
+                  "watchEndpoint": {
+                    "videoId": "hbYvuCKXj0Y"
+                  }
+                },
+                "airings": [
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791054000000",
+                      "endTimeMs": "1791059400000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "Pillow Fight Championship"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791059400000",
+                      "endTimeMs": "1791061200000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "2025 T-Rex World Championship Races"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791061200000",
+                      "endTimeMs": "1791064800000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "The Popdarts Championship Presented by APL"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791064800000",
+                      "endTimeMs": "1791068400000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "Pop-A-Shot 2025 National Championship"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791068400000",
+                      "endTimeMs": "1791072000000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "WJF 20: The Ultimate Overall Championship"
+                          }
+                        ]
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "epgRowRenderer": {
+                "station": {
+                  "epgStationRenderer": {
+                    "stationId": "UCXdcrbLOtq8H5oYzzxpHEKg",
+                    "icon": {
+                      "accessibility": {
+                        "accessibilityData": {
+                          "label": "ESPN"
+                        }
+                      }
+                    }
+                  }
+                },
+                "navigationEndpoint": {
+                  "watchEndpoint": {
+                    "videoId": "r7RIc6VcjFI"
+                  }
+                },
+                "airings": [
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791056840000",
+                      "endTimeMs": "1791066600000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "Florida at Missouri"
+                          }
+                        ]
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "epgRowRenderer": {
+                "station": {
+                  "epgStationRenderer": {
+                    "stationId": "UC711Eoj34sO2a63Qc5Uy1VA",
+                    "icon": {
+                      "accessibility": {
+                        "accessibilityData": {
+                          "label": "ESPN"
+                        }
+                      }
+                    }
+                  }
+                },
+                "navigationEndpoint": {
+                  "watchEndpoint": {
+                    "videoId": "vfxvMu6sIQY"
+                  }
+                },
+                "airings": [
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791055801000",
+                      "endTimeMs": "1791066600000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "Auburn at Tennessee"
+                          }
+                        ]
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "epgRowRenderer": {
+                "station": {
+                  "epgStationRenderer": {
+                    "stationId": "UCPFuy7q8zlfqwUo3H7FTDKw",
+                    "icon": {
+                      "accessibility": {
+                        "accessibilityData": {
+                          "label": "ESPN"
+                        }
+                      }
+                    }
+                  }
+                },
+                "navigationEndpoint": {
+                  "watchEndpoint": {
+                    "videoId": "V5oGFI2Gaoc"
+                  }
+                },
+                "airings": [
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791055800000",
+                      "endTimeMs": "1791066600000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "Old Dominion vs. Georgia State"
+                          }
+                        ]
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "epgRowRenderer": {
+                "station": {
+                  "epgStationRenderer": {
+                    "stationId": null,
+                    "icon": {
+                      "accessibility": {
+                        "accessibilityData": {
+                          "label": "ESPN"
+                        }
+                      }
+                    }
+                  }
+                },
+                "navigationEndpoint": {},
+                "airings": [
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "-9223372036854775808",
+                      "endTimeMs": "9223372036854775807",
+                      "title": null
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "epgRowRenderer": {
+                "station": {
+                  "epgStationRenderer": {
+                    "stationId": "UC8f_6NxAk-x_HqzrIHTem9w",
+                    "icon": {
+                      "accessibility": {
+                        "accessibilityData": {
+                          "label": "FS1"
+                        }
+                      }
+                    }
+                  }
+                },
+                "navigationEndpoint": {
+                  "watchEndpoint": {
+                    "videoId": "PIJjfw43Rao"
+                  }
+                },
+                "airings": [
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791057602000",
+                      "endTimeMs": "1791070200000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "Maryland at Nebraska"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791070200000",
+                      "endTimeMs": "1791072000000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "FS1 College Football Extra"
+                          }
+                        ]
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "epgRowRenderer": {
+                "station": {
+                  "epgStationRenderer": {
+                    "stationId": "UCFsj5mvKOU6gEkbaptDHc3w",
+                    "icon": {
+                      "accessibility": {
+                        "accessibilityData": {
+                          "label": "FS2"
+                        }
+                      }
+                    }
+                  }
+                },
+                "navigationEndpoint": {
+                  "watchEndpoint": {
+                    "videoId": "lc06tgwYNZs"
+                  }
+                },
+                "airings": [
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791052500000",
+                      "endTimeMs": "1791059734000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "Spain vs. Czechia"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791059734000",
+                      "endTimeMs": "1791064800000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "America's Day At the Races"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791064800000",
+                      "endTimeMs": "1791072000000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "France vs. Italy"
+                          }
+                        ]
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "epgRowRenderer": {
+                "station": {
+                  "epgStationRenderer": {
+                    "stationId": "UC2tza2d01CFaPEYsFxYoqvQ",
+                    "icon": {
+                      "accessibility": {
+                        "accessibilityData": {
+                          "label": "NBC Sports Network"
+                        }
+                      }
+                    }
+                  }
+                },
+                "navigationEndpoint": {
+                  "watchEndpoint": {
+                    "videoId": "vfybTeytliY"
+                  }
+                },
+                "airings": [
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791054000000",
+                      "endTimeMs": "1791081000000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "Motul Petit Le Mans"
+                          }
+                        ]
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "epgRowRenderer": {
+                "station": {
+                  "epgStationRenderer": {
+                    "stationId": "UCtZliRrQHs5BP_TFbZ9iXHA",
+                    "icon": {
+                      "accessibility": {
+                        "accessibilityData": {
+                          "label": "NBCSN Extra"
+                        }
+                      }
+                    }
+                  }
+                },
+                "navigationEndpoint": {},
+                "airings": [
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791640200000",
+                      "endTimeMs": "1791648000000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "Ipswich Town vs. Fulham"
+                          }
+                        ]
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "epgRowRenderer": {
+                "station": {
+                  "epgStationRenderer": {
+                    "stationId": "UCUNWnw2MB07Bfc3BcevmZVA",
+                    "icon": {
+                      "accessibility": {
+                        "accessibilityData": {
+                          "label": "NBCSN Extra"
+                        }
+                      }
+                    }
+                  }
+                },
+                "navigationEndpoint": {},
+                "airings": [
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791640200000",
+                      "endTimeMs": "1791648000000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "Sunderland vs. Brighton & Hove Albion"
+                          }
+                        ]
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "epgRowRenderer": {
+                "station": {
+                  "epgStationRenderer": {
+                    "stationId": "UCjeeSYEak0yoYOPXtKlLjOQ",
+                    "icon": {
+                      "accessibility": {
+                        "accessibilityData": {
+                          "label": "NBA TV"
+                        }
+                      }
+                    }
+                  }
+                },
+                "navigationEndpoint": {
+                  "watchEndpoint": {
+                    "videoId": "F3wVB3UuZGo"
+                  }
+                },
+                "airings": [
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791054000000",
+                      "endTimeMs": "1791059400000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "WNBA Playback"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791059400000",
+                      "endTimeMs": "1791066600000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "WNBA Shot Clock: Games of the Month"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791066600000",
+                      "endTimeMs": "1791068400000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "Top Plays of the 2025-26 Season"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791068400000",
+                      "endTimeMs": "1791077400000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "Miami Heat vs. Toronto Raptors"
+                          }
+                        ]
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "epgRowRenderer": {
+                "station": {
+                  "epgStationRenderer": {
+                    "stationId": "UCNp8TLrPZ6VB52E6tjqgu7w",
+                    "icon": {
+                      "accessibility": {
+                        "accessibilityData": {
+                          "label": "NFL Network"
+                        }
+                      }
+                    }
+                  }
+                },
+                "navigationEndpoint": {
+                  "watchEndpoint": {
+                    "videoId": "WPuH0gnV73o"
+                  }
+                },
+                "airings": [
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791054000000",
+                      "endTimeMs": "1791064800000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "Baltimore Ravens vs. Dallas Cowboys"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791064800000",
+                      "endTimeMs": "1791073800000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "2025: Buffalo Bills at New England Patriots"
+                          }
+                        ]
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "epgRowRenderer": {
+                "station": {
+                  "epgStationRenderer": {
+                    "stationId": "UCM_xfbqClkDqG1NvTbsLFqg",
+                    "icon": {
+                      "accessibility": {
+                        "accessibilityData": {
+                          "label": "NFL RedZone"
+                        }
+                      }
+                    }
+                  }
+                },
+                "navigationEndpoint": {},
+                "airings": [
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791132300000",
+                      "endTimeMs": "1791133200000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "NFL RedZone Countdown"
+                          }
+                        ]
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "epgRowRenderer": {
+                "station": {
+                  "epgStationRenderer": {
+                    "stationId": "UCmBskGxtl-7At_lMzyLJYKA",
+                    "icon": {
+                      "accessibility": {
+                        "accessibilityData": {
+                          "label": "BTN"
+                        }
+                      }
+                    }
+                  }
+                },
+                "navigationEndpoint": {
+                  "watchEndpoint": {
+                    "videoId": "tUwIbNAQ6yU"
+                  }
+                },
+                "airings": [
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791058500000",
+                      "endTimeMs": "1791069300000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "Purdue at Illinois"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791069300000",
+                      "endTimeMs": "1791072000000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "B1G Live: Football Game Break"
+                          }
+                        ]
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "epgRowRenderer": {
+                "station": {
+                  "epgStationRenderer": {
+                    "stationId": "UCJCcn5FyhJeu718vX-7jnJQ",
+                    "icon": {
+                      "accessibility": {
+                        "accessibilityData": {
+                          "label": "CBS Sports Network"
+                        }
+                      }
+                    }
+                  }
+                },
+                "navigationEndpoint": {
+                  "watchEndpoint": {
+                    "videoId": "fGRTFzKDNAc"
+                  }
+                },
+                "airings": [
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791057932000",
+                      "endTimeMs": "1791068400000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "California at UNLV"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791068400000",
+                      "endTimeMs": "1791070200000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "Inside College Football"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791070200000",
+                      "endTimeMs": "1791082800000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "Utah State at Boise State"
+                          }
+                        ]
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "epgRowRenderer": {
+                "station": {
+                  "epgStationRenderer": {
+                    "stationId": "UCWBR8qGJOBAe5PJXOeMLB0w",
+                    "icon": {
+                      "accessibility": {
+                        "accessibilityData": {
+                          "label": "T2"
+                        }
+                      }
+                    }
+                  }
+                },
+                "navigationEndpoint": {
+                  "watchEndpoint": {
+                    "videoId": "Kln08tZecgI"
+                  }
+                },
+                "airings": [
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791057600000",
+                      "endTimeMs": "1791064800000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "Day 2"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791064800000",
+                      "endTimeMs": "1791082800000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "Tennis Today"
+                          }
+                        ]
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "epgRowRenderer": {
+                "station": {
+                  "epgStationRenderer": {
+                    "stationId": "UCChSzsVWe1H3Kc2Fqn4atEQ",
+                    "icon": {
+                      "accessibility": {
+                        "accessibilityData": {
+                          "label": "Golf Channel"
+                        }
+                      }
+                    }
+                  }
+                },
+                "navigationEndpoint": {
+                  "watchEndpoint": {
+                    "videoId": "f4VYXRthuQI"
+                  }
+                },
+                "airings": [
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791054000000",
+                      "endTimeMs": "1791061200000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "Compliance Solutions Championship, Third Round"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791061200000",
+                      "endTimeMs": "1791072000000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "Bank of Utah Championship, Third Round"
+                          }
+                        ]
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "epgRowRenderer": {
+                "station": {
+                  "epgStationRenderer": {
+                    "stationId": "UCQRRBYgUQJ_EhwqS_dAy33w",
+                    "icon": {
+                      "accessibility": {
+                        "accessibilityData": {
+                          "label": "Pickleball TV"
+                        }
+                      }
+                    }
+                  }
+                },
+                "navigationEndpoint": {
+                  "watchEndpoint": {
+                    "videoId": "k16VMpoZDk0"
+                  }
+                },
+                "airings": [
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791054000000",
+                      "endTimeMs": "1791082800000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "PPA Tour: Las Vegas Open"
+                          }
+                        ]
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "epgRowRenderer": {
+                "station": {
+                  "epgStationRenderer": {
+                    "stationId": "UCp9TSEVSOM5TrZR1xyftSDQ",
+                    "icon": {
+                      "accessibility": {
+                        "accessibilityData": {
+                          "label": "truTV"
+                        }
+                      }
+                    }
+                  }
+                },
+                "navigationEndpoint": {
+                  "watchEndpoint": {
+                    "videoId": "LH84hSCuuBQ"
+                  }
+                },
+                "airings": [
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791046800000",
+                      "endTimeMs": "1791059400000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "Chicago White Sox at Cleveland Guardians"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791059400000",
+                      "endTimeMs": "1791066600000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "South Point 400, Qualifying"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791066600000",
+                      "endTimeMs": "1791079200000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "New York Yankees at Tampa Bay Rays"
+                          }
+                        ]
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "epgRowRenderer": {
+                "station": {
+                  "epgStationRenderer": {
+                    "stationId": "UCxXjdrevcsy6xh0_O3KhokA",
+                    "icon": {
+                      "accessibility": {
+                        "accessibilityData": {
+                          "label": "USA"
+                        }
+                      }
+                    }
+                  }
+                },
+                "navigationEndpoint": {
+                  "watchEndpoint": {
+                    "videoId": "Qi_C4zyXBIg"
+                  }
+                },
+                "airings": [
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791057600000",
+                      "endTimeMs": "1791061200000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "Chicago Fire"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791061200000",
+                      "endTimeMs": "1791064800000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "Chicago Fire"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791064800000",
+                      "endTimeMs": "1791077400000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "Oregon State at Colorado State"
+                          }
+                        ]
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "epgRowRenderer": {
+                "station": {
+                  "epgStationRenderer": {
+                    "stationId": "UCI-EfxFyywB_IrXCyUgLYow",
+                    "icon": {
+                      "accessibility": {
+                        "accessibilityData": {
+                          "label": "Dabl"
+                        }
+                      }
+                    }
+                  }
+                },
+                "navigationEndpoint": {
+                  "watchEndpoint": {
+                    "videoId": "NK8ygXPeGvw"
+                  }
+                },
+                "airings": [
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791057600000",
+                      "endTimeMs": "1791059400000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "Girlfriends"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791059400000",
+                      "endTimeMs": "1791061200000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "Girlfriends"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791061200000",
+                      "endTimeMs": "1791063000000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "The Parkers"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791063000000",
+                      "endTimeMs": "1791064800000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "The Parkers"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791064800000",
+                      "endTimeMs": "1791066600000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "The Wayans Bros."
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791066600000",
+                      "endTimeMs": "1791068400000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "The Wayans Bros."
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791068400000",
+                      "endTimeMs": "1791070200000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "The Jamie Foxx Show"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791070200000",
+                      "endTimeMs": "1791072000000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "The Jamie Foxx Show"
+                          }
+                        ]
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "epgRowRenderer": {
+                "station": {
+                  "epgStationRenderer": {
+                    "stationId": "UCbji8ZLXWwsBOrw6VQB7IgQ",
+                    "icon": {
+                      "accessibility": {
+                        "accessibilityData": {
+                          "label": "ION"
+                        }
+                      }
+                    }
+                  }
+                },
+                "navigationEndpoint": {
+                  "watchEndpoint": {
+                    "videoId": "Jn4FT03UmDE"
+                  }
+                },
+                "airings": [
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791057600000",
+                      "endTimeMs": "1791064800000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "Utah Royals FC at Racing Louisville FC"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791064800000",
+                      "endTimeMs": "1791066600000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "NWSL On ION Match Break Show"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791066600000",
+                      "endTimeMs": "1791073800000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "Bay FC at Kansas City Current"
+                          }
+                        ]
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "epgRowRenderer": {
+                "station": {
+                  "epgStationRenderer": {
+                    "stationId": "UCNd6UJFGnUUjllgfXMz_Y7A",
+                    "icon": {
+                      "accessibility": {
+                        "accessibilityData": {
+                          "label": "TUDN"
+                        }
+                      }
+                    }
+                  }
+                },
+                "navigationEndpoint": {
+                  "watchEndpoint": {
+                    "videoId": "JWo0oBKgjfI"
+                  }
+                },
+                "airings": [
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791057600000",
+                      "endTimeMs": "1791061200000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "Liga MX Femenil en 60"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791061200000",
+                      "endTimeMs": "1791064800000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "Liga MX Femenil en 60"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791064800000",
+                      "endTimeMs": "1791068400000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "Cruz Azul vs. Toluca"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791068400000",
+                      "endTimeMs": "1791072000000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "Fútbol central"
+                          }
+                        ]
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "epgRowRenderer": {
+                "station": {
+                  "epgStationRenderer": {
+                    "stationId": "UCJ1bMGjLxUVz_uQL-3UyvlA",
+                    "icon": {
+                      "accessibility": {
+                        "accessibilityData": {
+                          "label": "Start TV"
+                        }
+                      }
+                    }
+                  }
+                },
+                "navigationEndpoint": {
+                  "watchEndpoint": {
+                    "videoId": "cQo4nBFLA_4"
+                  }
+                },
+                "airings": [
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791057600000",
+                      "endTimeMs": "1791061200000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "Charmed"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791061200000",
+                      "endTimeMs": "1791064800000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "Charmed"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791064800000",
+                      "endTimeMs": "1791068400000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "Charmed"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791068400000",
+                      "endTimeMs": "1791072000000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "Charmed"
+                          }
+                        ]
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "epgRowRenderer": {
+                "station": {
+                  "epgStationRenderer": {
+                    "stationId": "UC9oV5ZyHOEfA93G7y-vsnVA",
+                    "icon": {
+                      "accessibility": {
+                        "accessibilityData": {
+                          "label": "Cozi"
+                        }
+                      }
+                    }
+                  }
+                },
+                "navigationEndpoint": {
+                  "watchEndpoint": {
+                    "videoId": "bl_11YF98ZA"
+                  }
+                },
+                "airings": [
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791054000000",
+                      "endTimeMs": "1791061200000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "Columbo"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791061200000",
+                      "endTimeMs": "1791063000000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "The Munsters"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791063000000",
+                      "endTimeMs": "1791064800000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "The Munsters"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791064800000",
+                      "endTimeMs": "1791066600000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "The Munsters"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791066600000",
+                      "endTimeMs": "1791068400000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "The Munsters"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791068400000",
+                      "endTimeMs": "1791070200000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "The Munsters"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "epgAiringRenderer": {
+                      "beginTimeMs": "1791070200000",
+                      "endTimeMs": "1791072000000",
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "The Munsters"
+                          }
+                        ]
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+}

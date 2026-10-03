@@ -23,10 +23,10 @@ module.exports = {
     },
     {
       name: "provider-payloads-are-private",
-      comment: "A provider's wire vocabulary stays inside its folder.",
+      comment: "A provider's or source's wire vocabulary stays inside its folder.",
       severity: "error",
-      from: { pathNot: "^apps/hub/src/provider/([^/]+)/" },
-      to: { path: "^apps/hub/src/provider/[^/]+/[^/]*Payload\\.ts$" }
+      from: { pathNot: "^apps/hub/src/(provider|source)/([^/]+)/" },
+      to: { path: "^apps/hub/src/(provider|source)/[^/]+/[^/]*Payload\\.ts$" }
     },
     {
       name: "only-main-names-adapters",
@@ -35,10 +35,10 @@ module.exports = {
       from: {
         path: "^apps/hub/src/",
         pathNot:
-          "(^apps/hub/src/main\\.ts$|\\.test\\.ts$|^apps/hub/src/provider/[^/]+/|^apps/hub/src/source/Sql[^/]+\\.ts$)"
+          "(^apps/hub/src/main\\.ts$|\\.test\\.ts$|^apps/hub/src/provider/[^/]+/|^apps/hub/src/source/youtube-tv/|^apps/hub/src/source/Sql[^/]+\\.ts$)"
       },
       to: {
-        path: "^apps/hub/src/(provider/[^/]+/|source/YouTubeTv\\.ts$|source/Sql[^/]+\\.ts$|database/)"
+        path: "^apps/hub/src/(provider/[^/]+/|source/youtube-tv/|source/Sql[^/]+\\.ts$|database/)"
       }
     },
     {

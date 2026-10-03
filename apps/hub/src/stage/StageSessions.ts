@@ -60,10 +60,8 @@ export class StageSessions extends Context.Service<
 function availabilityOnSlate(ingest: typeof Ingest.Service, source: typeof Source.Service) {
   return Effect.gen(function* () {
     const slate = yield* ingest.slate
-    const lineup = yield* source.lineup
+    const availabilityOf = yield* source.availability
     return (id: GameId): Option.Option<ChannelAvailability> =>
-      Option.fromNullishOr(slate.find((candidate) => candidate.id === id)).pipe(
-        Option.map((game) => lineup.availabilityOf(game))
-      )
+      Option.fromNullishOr(slate.find((candidate) => candidate.id === id)).pipe(Option.map(availabilityOf))
   })
 }

@@ -8,7 +8,7 @@ import * as HubServer from "./http/HubServer.ts"
 import { Ingest } from "./ingest/Ingest.ts"
 import * as EspnProvider from "./provider/espn/EspnProvider.ts"
 import * as SqlChannelStore from "./source/SqlChannelStore.ts"
-import * as YouTubeTv from "./source/YouTubeTv.ts"
+import * as YouTubeTv from "./source/youtube-tv/YouTubeTv.ts"
 import { StageSessions } from "./stage/StageSessions.ts"
 
 const Hub = Layer.unwrap(

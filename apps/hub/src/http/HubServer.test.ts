@@ -12,7 +12,7 @@ import * as Database from "../database/Database.ts"
 import { Ingest } from "../ingest/Ingest.ts"
 import { Provider } from "../provider/Provider.ts"
 import * as SqlChannelStore from "../source/SqlChannelStore.ts"
-import * as YouTubeTv from "../source/YouTubeTv.ts"
+import * as YouTubeTv from "../source/youtube-tv/YouTubeTv.ts"
 import { StageSessions } from "../stage/StageSessions.ts"
 import * as HubServer from "./HubServer.ts"
 

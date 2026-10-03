@@ -6,7 +6,7 @@ import * as Database from "../database/Database.ts"
 import { Ingest } from "../ingest/Ingest.ts"
 import { Source } from "../source/Source.ts"
 import * as SqlChannelStore from "../source/SqlChannelStore.ts"
-import * as YouTubeTv from "../source/YouTubeTv.ts"
+import * as YouTubeTv from "../source/youtube-tv/YouTubeTv.ts"
 import { StageSessions } from "./StageSessions.ts"
 
 const espn = Network.make("ESPN")
@@ -131,7 +131,7 @@ describe("StageSessions", () => {
     })
   )
 
-  it.live("applies a command with the lineup as it is when the command lands, not as it was read", () =>
+  it.live("applies a command with availability as it is when the command lands, not as it was read", () =>
     Effect.gen(function* () {
       const reading = yield* Deferred.make<void>()
       const release = yield* Deferred.make<void>()
@@ -140,9 +140,9 @@ describe("StageSessions", () => {
         Effect.gen(function* () {
           const source = yield* Source
           let gate = true
-          // The first lineup read returns what it saw, then waits to be released: a stale read.
-          const lineup = Effect.gen(function* () {
-            const seen = yield* source.lineup
+          // The first availability read returns what it saw, then waits to be released: a stale read.
+          const availability = Effect.gen(function* () {
+            const seen = yield* source.availability
             if (gate) {
               gate = false
               yield* Deferred.succeed(reading, undefined)
@@ -150,7 +150,7 @@ describe("StageSessions", () => {
             }
             return seen
           })
-          return Source.of({ ...source, lineup })
+          return Source.of({ ...source, availability })
         })
       ).pipe(Layer.provide(sourceKnowingEspn()))
       yield* Effect.gen(function* () {
