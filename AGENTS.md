@@ -37,7 +37,7 @@ A reader opens a file to see the thing it is named for. Keep it that way.
 2. Private helpers go **below** the code that uses them, as hoisted `function` declarations, in the
    order they are first used.
 3. A helper used once and a few lines long is inlined. A helper that is really an operation on another
-   concept lives in that concept's module.
+   concept is a method or static of that concept's type.
 4. Do not declare an interface or type alias for an options bag, a return shape, a callback, or
    component props used in one place. Write the shape inline in the signature.
 5. A service file reads: service declaration, its layer, then private helpers.
@@ -49,6 +49,12 @@ A reader opens a file to see the thing it is named for. Keep it that way.
 
 - Logic is a pure function or an `Effect`. No bare promises or `async` outside framework edges (React
   handlers, Electron callbacks).
+- An operation on a domain type lives on the type: a method or static of its class (`Schema.Class`,
+  `Schema.TaggedClass`), or, for a union that never crosses the wire, the constructors and `$match` of
+  its `Data.taggedEnum`. Write `stage.apply(command, …)` and `GameSnapshot.watchOrder`, never an
+  exported `apply(stage, …)`. A domain module exports no loose functions over its types; a private
+  helper below the class that only the class uses is fine. A schema a class reads when it is defined
+  (a field's type) goes above the class, because the class evaluates it then.
 - Expected failures are tagged errors in the error channel. Nothing is caught and ignored.
 - Time comes from Effect's `Clock`. No `Date.now()` in `packages/domain` or the Hub.
 - No `any`, no non-null assertions, no enums, no default exports, no casts outside decoding.

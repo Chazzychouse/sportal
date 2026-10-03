@@ -1,4 +1,4 @@
-import { Schema } from "effect"
+import { DateTime, Order, Schema } from "effect"
 import { LeagueId } from "./League.ts"
 import { Situation } from "./Situation.ts"
 import { Team } from "./Team.ts"
@@ -30,8 +30,16 @@ export class GameSnapshot extends Schema.Class<GameSnapshot>("sportal/GameSnapsh
   away: Side,
   broadcasts: Schema.Array(Schema.String),
   situation: Schema.optional(Situation)
-}) {}
+}) {
+  /** Live games first, then upcoming by kickoff, then everything that is over. */
+  static readonly watchOrder: Order.Order<GameSnapshot> = Order.combine(
+    Order.mapInput(Order.Number, (game: GameSnapshot) =>
+      game.isLive() ? 0 : game.status === "scheduled" || game.status === "delayed" ? 1 : 2
+    ),
+    Order.mapInput(DateTime.Order, (game: GameSnapshot) => game.kickoff)
+  )
 
-export function isLive(game: GameSnapshot): boolean {
-  return game.status === "live" || game.status === "halftime"
+  isLive(): boolean {
+    return this.status === "live" || this.status === "halftime"
+  }
 }

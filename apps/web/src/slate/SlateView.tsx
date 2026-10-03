@@ -1,5 +1,4 @@
-import { type GameSnapshot, isLive } from "@sportal/domain/Game"
-import * as Slate from "@sportal/domain/Slate"
+import { GameSnapshot } from "@sportal/domain/Game"
 import { DateTime } from "effect"
 
 export function SlateView(props: {
@@ -16,7 +15,7 @@ export function SlateView(props: {
         </span>
       </header>
       <ul className="min-h-0 flex-1 overflow-y-auto">
-        {Slate.inWatchOrder(props.slate).map((game) => (
+        {[...props.slate].sort(GameSnapshot.watchOrder).map((game) => (
           <li key={game.id}>
             <button
               type="button"
@@ -25,7 +24,7 @@ export function SlateView(props: {
             >
               <SideLine side={game.away} />
               <span className="row-span-2 self-center text-right text-neutral-400 text-xs">
-                <span className={isLive(game) ? "block text-emerald-400" : "block"}>{statusText(game)}</span>
+                <span className={game.isLive() ? "block text-emerald-400" : "block"}>{statusText(game)}</span>
                 {game.broadcasts.join(" · ")}
               </span>
               <SideLine side={game.home} />

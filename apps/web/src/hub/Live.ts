@@ -1,6 +1,6 @@
 import { type LiveMessage, LiveMessageJson } from "@sportal/api/LiveMessage"
 import type { GameSnapshot } from "@sportal/domain/Game"
-import * as Stage from "@sportal/domain/Stage"
+import { Stage } from "@sportal/domain/Stage"
 import { Schema } from "effect"
 import { useSyncExternalStore } from "react"
 

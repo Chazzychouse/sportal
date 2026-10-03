@@ -1,4 +1,4 @@
-import { type GameSnapshot, isLive } from "@sportal/domain/Game"
+import type { GameSnapshot } from "@sportal/domain/Game"
 import { DateTime, Duration } from "effect"
 
 /**
@@ -16,7 +16,7 @@ export function interval(
 }
 
 function normalInterval(slate: ReadonlyArray<GameSnapshot>, now: DateTime.Utc): Duration.Duration {
-  if (slate.some(isLive)) return Duration.seconds(10)
+  if (slate.some((game) => game.isLive())) return Duration.seconds(10)
   const soon = DateTime.add(now, { minutes: 30 })
   const kickoffSoon = slate.some(
     (game) => game.status === "scheduled" && DateTime.isLessThanOrEqualTo(game.kickoff, soon)
