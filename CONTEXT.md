@@ -78,7 +78,8 @@ Provider and Source are the two words most likely to be swapped. Provider is alw
 | **Stage command** | An instruction to change a Stage: assign, clear, or focus audio. Issued by people and by the Director alike. | action, event |
 | **Stage rejection** | The reason a stage command was refused. | error |
 | **Layout** | A named arrangement of tile slots. | grid, template |
-| **Tile** | One slot's content: a **stream tile**, a **data tile**, or empty. | pane, cell, window |
+| **Tile** | One slot's content: a **stream tile**, a **picking tile**, a **data tile**, or empty. | pane, cell, window |
+| **Picking tile** | A tile showing a source's guide until its game's network has a channel; `PickingChannel` in code. | setup tile |
 | **Main tile** | The largest slot of a layout. | hero, primary |
 | **Audio focus** | The single tile whose sound is on. | active, unmuted |
 | **Promote** | Move a game into the main tile. | feature |

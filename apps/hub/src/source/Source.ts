@@ -1,10 +1,10 @@
-import type { GameSnapshot } from "@sportal/domain/Game"
-import type { StreamLocator } from "@sportal/domain/Stream"
-import { Context, type Option } from "effect"
+import type { ChannelLineup } from "@sportal/domain/Source"
+import { Context, type Effect } from "effect"
 
 export class Source extends Context.Service<
   Source,
   {
-    locate(game: GameSnapshot): Option.Option<StreamLocator>
+    /** The channels this source has learned so far. */
+    readonly lineup: Effect.Effect<ChannelLineup>
   }
 >()("sportal/hub/Source") {}

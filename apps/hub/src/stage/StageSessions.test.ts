@@ -1,30 +1,27 @@
 import { assert, describe, it } from "@effect/vitest"
 import { GameId, Network } from "@sportal/domain/Game"
 import { snapshot } from "@sportal/domain/TestGame"
-import { Effect, Layer, Option, Stream } from "effect"
+import { Effect, Layer, Stream } from "effect"
 import { Ingest } from "../ingest/Ingest.ts"
-import { Source } from "../source/Source.ts"
+import * as YouTubeTv from "../source/YouTubeTv.ts"
 import { StageSessions } from "./StageSessions.ts"
 
-function game(id: string, broadcasts: ReadonlyArray<Network>) {
-  return snapshot({ id: GameId.make(id), status: "live", period: 1, clock: "10:00", broadcasts })
-}
-
 const espn = Network.make("ESPN")
-const slate = [game("1", [espn]), game("2", [espn]), game("3", [espn]), game("4", [Network.make("Local")])]
+const espnPlus = Network.make("ESPN+")
+const espnChannel = {
+  network: espn,
+  source: "YouTube TV" as const,
+  locator: { _tag: "WebView" as const, url: "https://tv.youtube.com/watch/espn" }
+}
+const slate = [game("1", [espn]), game("2", [espn]), game("3", [espn]), game("4", [espnPlus])]
 
 const TestSessions = StageSessions.layer.pipe(
   Layer.provide(Layer.succeed(Ingest, Ingest.of({ slate: Effect.succeed(slate), changes: Stream.empty }))),
   Layer.provide(
-    Layer.succeed(
-      Source,
-      Source.of({
-        locate: (snapshot) =>
-          snapshot.broadcasts.includes(espn)
-            ? Option.some({ _tag: "WebView", url: `https://tv.example/${snapshot.id}` })
-            : Option.none()
-      })
-    )
+    YouTubeTv.layer([
+      { _tag: "Carried", channel: espnChannel },
+      { _tag: "NotCarried", network: espnPlus, source: "YouTube TV" }
+    ])
   )
 )
 
@@ -47,12 +44,12 @@ describe("StageSessions", () => {
       yield* sessions.dispatch({ _tag: "Assign", tile: 0, game: GameId.make("1") })
       const before = yield* sessions.stage
       const rejection = yield* sessions.dispatch({ _tag: "FocusAudio", tile: 9 }).pipe(Effect.flip)
-      assert.strictEqual(rejection._tag, "StageRejection")
+      assert.strictEqual(rejection.reason, "no-such-tile")
       assert.deepStrictEqual(yield* sessions.stage, before)
     }).pipe(Effect.provide(TestSessions))
   )
 
-  it.effect("assigns a locatable game as a stream tile and any other as a data tile", () =>
+  it.effect("assigns a carried game as a stream tile and any other as a data tile", () =>
     Effect.gen(function* () {
       const sessions = yield* StageSessions
       yield* sessions.dispatch({ _tag: "Assign", tile: 0, game: GameId.make("1") })
@@ -60,9 +57,21 @@ describe("StageSessions", () => {
       assert.deepStrictEqual(stage.tiles[0], {
         _tag: "StreamTile",
         game: GameId.make("1"),
-        locator: { _tag: "WebView", url: "https://tv.example/1" }
+        channel: espnChannel
       })
       assert.deepStrictEqual(stage.tiles[1], { _tag: "DataTile", game: GameId.make("4") })
     }).pipe(Effect.provide(TestSessions))
   )
+
+  it.effect("assigns a game missing from the slate as a data tile", () =>
+    Effect.gen(function* () {
+      const sessions = yield* StageSessions
+      const stage = yield* sessions.dispatch({ _tag: "Assign", tile: 0, game: GameId.make("gone") })
+      assert.deepStrictEqual(stage.tiles[0], { _tag: "DataTile", game: GameId.make("gone") })
+    }).pipe(Effect.provide(TestSessions))
+  )
 })
+
+function game(id: string, broadcasts: ReadonlyArray<Network>) {
+  return snapshot({ id: GameId.make(id), status: "live", period: 1, clock: "10:00", broadcasts })
+}

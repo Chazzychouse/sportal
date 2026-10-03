@@ -11,6 +11,12 @@ import * as YouTubeTv from "../source/YouTubeTv.ts"
 import { StageSessions } from "../stage/StageSessions.ts"
 import { ApiHandlers } from "./HubServer.ts"
 
+const espnChannel = {
+  network: Network.make("ESPN"),
+  source: "YouTube TV" as const,
+  locator: { _tag: "WebView" as const, url: "https://tv.youtube.com/watch/espn" }
+}
+
 const game = snapshot({
   id: GameId.make("401856707"),
   home: { team: team("MSST"), score: 0 },
@@ -20,7 +26,7 @@ const game = snapshot({
 
 const TestHub = ApiHandlers.pipe(
   Layer.provide(StageSessions.layer),
-  Layer.provide(YouTubeTv.layer({ ESPN: "https://tv.youtube.com/watch/espn" })),
+  Layer.provide(YouTubeTv.layer([{ _tag: "Carried", channel: espnChannel }])),
   Layer.provide(Ingest.layer(["fbs"])),
   Layer.provide(Layer.succeed(Provider, Provider.of({ slate: () => Effect.succeed([game]) })))
 )
@@ -44,7 +50,7 @@ layer(Layer.mergeAll(TestHub, HttpServer.layerServices))("Hub API", (it) => {
       assert.deepStrictEqual(stage.tiles[0], {
         _tag: "StreamTile",
         game: game.id,
-        locator: { _tag: "WebView", url: "https://tv.youtube.com/watch/espn" }
+        channel: espnChannel
       })
 
       const rejected = yield* client.stage

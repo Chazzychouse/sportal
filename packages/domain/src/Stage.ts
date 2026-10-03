@@ -1,10 +1,18 @@
-import { Option, Result, Schema } from "effect"
-import { GameId } from "./Game.ts"
+import { Result, Schema } from "effect"
+import { GameId, Network } from "./Game.ts"
+import { Channel, type ChannelAvailability, SourceName } from "./Source.ts"
 import { StreamLocator } from "./Stream.ts"
 
 export const Tile = Schema.Union([
   Schema.TaggedStruct("Empty", {}),
-  Schema.TaggedStruct("StreamTile", { game: GameId, locator: StreamLocator }),
+  Schema.TaggedStruct("StreamTile", { game: GameId, channel: Channel }),
+  /** The game's network has no channel yet: the tile shows the source's guide until one is picked. */
+  Schema.TaggedStruct("PickingChannel", {
+    game: GameId,
+    network: Network,
+    source: SourceName,
+    guide: StreamLocator
+  }),
   Schema.TaggedStruct("DataTile", { game: GameId })
 ])
 export type Tile = typeof Tile.Type
@@ -20,22 +28,19 @@ export class Stage extends Schema.Class<Stage>("sportal/Stage")({
   })
 
   /**
-   * Applies a command. `locate` says where a game can be streamed from, if anywhere;
-   * a game with no stream becomes a data tile.
+   * Applies a command. `availabilityOf` says whether and where a game can be streamed: a carried game
+   * becomes a stream tile, a game on an unlearned network a picking tile, and any other a data tile.
    */
   apply(
     command: StageCommand,
-    locate: (game: GameId) => Option.Option<StreamLocator>
+    availabilityOf: (game: GameId) => ChannelAvailability
   ): Result.Result<Stage, StageRejection> {
     if (command.tile < 0 || command.tile >= this.tiles.length) {
       return Result.fail(new StageRejection({ reason: "no-such-tile" }))
     }
     switch (command._tag) {
       case "Assign": {
-        const tile: Tile = Option.match(locate(command.game), {
-          onNone: () => ({ _tag: "DataTile", game: command.game }),
-          onSome: (locator) => ({ _tag: "StreamTile", game: command.game, locator })
-        })
+        const tile = tileFor(command.game, availabilityOf(command.game))
         // A game appears in at most one tile: assigning it elsewhere moves it.
         const tiles = this.tiles.map((existing, index) =>
           index === command.tile
@@ -57,6 +62,16 @@ export class Stage extends Schema.Class<Stage>("sportal/Stage")({
         return Result.succeed(new Stage({ tiles: this.tiles, audioFocus: command.tile }))
     }
   }
+
+  /** Re-resolves every occupied tile after what a source knows has changed. */
+  refresh(availabilityOf: (game: GameId) => ChannelAvailability): Stage {
+    return new Stage({
+      tiles: this.tiles.map((tile) =>
+        tile._tag === "Empty" ? tile : tileFor(tile.game, availabilityOf(tile.game))
+      ),
+      audioFocus: this.audioFocus
+    })
+  }
 }
 
 export const StageCommand = Schema.Union([
@@ -73,3 +88,20 @@ export class StageRejection extends Schema.TaggedError<StageRejection>()(
 ) {}
 
 const empty: Tile = { _tag: "Empty" }
+
+function tileFor(game: GameId, availability: ChannelAvailability): Tile {
+  switch (availability._tag) {
+    case "Carried":
+      return { _tag: "StreamTile", game, channel: availability.channel }
+    case "Unlearned":
+      return {
+        _tag: "PickingChannel",
+        game,
+        network: availability.network,
+        source: availability.source,
+        guide: availability.guide
+      }
+    case "NotCarried":
+      return { _tag: "DataTile", game }
+  }
+}

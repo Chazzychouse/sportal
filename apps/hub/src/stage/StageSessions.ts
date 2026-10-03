@@ -1,6 +1,7 @@
 import type { GameId } from "@sportal/domain/Game"
+import { ChannelAvailability } from "@sportal/domain/Source"
 import { Stage, type StageCommand, type StageRejection } from "@sportal/domain/Stage"
-import { Context, Effect, Layer, Option, Result, type Stream, SubscriptionRef } from "effect"
+import { Context, Effect, Layer, Result, type Stream, SubscriptionRef } from "effect"
 import { Ingest } from "../ingest/Ingest.ts"
 import { Source } from "../source/Source.ts"
 
@@ -20,12 +21,10 @@ export class StageSessions extends Context.Service<
       const current = yield* SubscriptionRef.make(Stage.initial)
 
       const dispatch = Effect.fn("StageSessions.dispatch")(function* (command: StageCommand) {
-        const slate = yield* ingest.slate
-        const locate = (id: GameId) =>
-          Option.fromNullishOr(slate.find((game) => game.id === id)).pipe(Option.flatMap(source.locate))
+        const availabilityOf = yield* availabilityOnSlate(ingest, source)
         // One atomic step: concurrent dispatches queue up, and a rejection leaves the Stage as it was.
         return yield* SubscriptionRef.modifyEffect(current, (stage) => {
-          const result = stage.apply(command, locate)
+          const result = stage.apply(command, availabilityOf)
           return Result.isFailure(result)
             ? Effect.fail(result.failure)
             : Effect.succeed([result.success, result.success] as const)
@@ -39,4 +38,16 @@ export class StageSessions extends Context.Service<
       })
     })
   )
+}
+
+/** Where each game on the current slate can be streamed; a game no longer on the slate is not carried. */
+function availabilityOnSlate(ingest: typeof Ingest.Service, source: typeof Source.Service) {
+  return Effect.gen(function* () {
+    const slate = yield* ingest.slate
+    const lineup = yield* source.lineup
+    return (id: GameId): ChannelAvailability => {
+      const game = slate.find((candidate) => candidate.id === id)
+      return game === undefined ? ChannelAvailability.NotCarried() : lineup.availabilityOf(game)
+    }
+  })
 }

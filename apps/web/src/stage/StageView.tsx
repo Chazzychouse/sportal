@@ -73,12 +73,14 @@ function TileBody(props: { tile: Tile }) {
   switch (props.tile._tag) {
     case "Empty":
       return <span>Pick a game from the slate</span>
+    case "PickingChannel":
+      return <span>No {props.tile.network} channel known yet</span>
     case "DataTile":
       return <span>No stream for this game on your sources</span>
     case "StreamTile":
       // Inside the shell this is covered by the provider view. In a plain browser it is the way to watch.
       return (
-        <a className="underline" href={props.tile.locator.url} target="_blank" rel="noreferrer">
+        <a className="underline" href={props.tile.channel.locator.url} target="_blank" rel="noreferrer">
           Open in YouTube TV
         </a>
       )
@@ -93,7 +95,7 @@ function placements(stage: Stage, videoAreas: ReadonlyArray<HTMLDivElement | nul
     return [
       {
         tile: index,
-        url: tile.locator.url,
+        url: tile.channel.locator.url,
         bounds: {
           x: Math.round(rect.x),
           y: Math.round(rect.y),

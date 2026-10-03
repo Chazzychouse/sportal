@@ -9,7 +9,6 @@ import { Ingest } from "./ingest/Ingest.ts"
 import * as EspnProvider from "./provider/espn/EspnProvider.ts"
 import * as SqlChannelStore from "./source/SqlChannelStore.ts"
 import * as YouTubeTv from "./source/YouTubeTv.ts"
-import channels from "./source/youtube-tv-channels.json" with { type: "json" }
 import { StageSessions } from "./stage/StageSessions.ts"
 
 const Hub = Layer.unwrap(
@@ -29,7 +28,7 @@ const Hub = Layer.unwrap(
 
     return HttpRouter.serve(routes).pipe(
       Layer.provide(StageSessions.layer),
-      Layer.provide(YouTubeTv.layer(channels)),
+      Layer.provide(YouTubeTv.layer([])),
       Layer.provide(SqlChannelStore.layer),
       Layer.provide(Ingest.layer(["nfl", "fbs"])),
       Layer.provide(EspnProvider.layer),

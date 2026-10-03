@@ -1,14 +1,12 @@
-import { Layer, Option } from "effect"
+import { type ChannelCarriage, ChannelLineup } from "@sportal/domain/Source"
+import { Effect, Layer } from "effect"
 import { Source } from "./Source.ts"
 
-/** `channels` maps a broadcast network name, as the provider reports it, to that channel's YouTube TV address. */
-export const layer = (channels: Readonly<Record<string, string>>) =>
+/** YouTube TV as a source that knows a fixed list of carriages. */
+export const layer = (carriages: ReadonlyArray<ChannelCarriage>) =>
   Layer.succeed(
     Source,
-    Source.of({
-      locate: (game) => {
-        const url = game.broadcasts.map((network) => channels[network]).find((found) => found !== undefined)
-        return url === undefined ? Option.none() : Option.some({ _tag: "WebView", url })
-      }
-    })
+    Source.of({ lineup: Effect.succeed(new ChannelLineup({ source: "YouTube TV", guide, carriages })) })
   )
+
+const guide = { _tag: "WebView", url: "https://tv.youtube.com/live" } as const
