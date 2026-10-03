@@ -33,17 +33,9 @@ Run by hand on 2026-10-03 during live college games, in YouTube TV's live guide:
   continuous stream rather than one programme. This is not yet confirmed: it is confirmed when the same
   address, opened after the programme on that channel changes, plays the new programme live.
 
-:::question
-After the programme on a channel changes, what does the earlier `/watch/<id>` address for that channel play?
-
-This decides whether a Channel is remembered per network (pick once, ever) or per game (pick once per game).
-
-- [ ] The channel, live, now showing the new programme — remember per network
-- [ ] The old programme, or an error — remember per game
-- [ ] Not checked yet — build per network; switch the key if the check later fails
-
-Recommended: Not checked yet — build per network; switch the key if the check later fails
-:::
+**Decided (2026-10-03): build per network.** A Channel is remembered per network and source. The check
+above has not been run yet; if it shows the address names a programme, the key changes to game,
+network, and source.
 
 Only one thing changes between the two answers: the key of a remembered Channel (network and source,
 or game, network, and source) and the lookup in `availability`. Everything else in this design is the
