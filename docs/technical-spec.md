@@ -318,11 +318,13 @@ A source's channels are found in its own guide, read by the shell (`docs/specs/2
 
 ### 5.3 Stage
 
-`Stage.apply(state, command)` is a pure function returning the new state or a typed rejection.
+`stage.apply(command, availabilityOf)` is a pure method returning the new Stage or a typed rejection.
 
-- State: layout, tiles (each empty, stream, or data), main tile, audio focus.
-- Commands: `Assign`, `Clear`, `Swap`, `Promote`, `SetLayout`, `FocusAudio`, `LoadPreset`.
-- Invariants, enforced only here: at most one tile holds audio focus; a game appears in at most one tile of a Stage; stream tiles per source across **all** Displays never exceed that source's budget, and an assignment beyond it becomes a data tile.
+- State: a layout (`Single`, `Pair`, `Quad`, `MainThree`, `MainFive`), each layout's split, the tiles (each empty, stream, picking, or data), audio focus, and solo. The first `Layout.slotCount(layout)` tiles are on stage, main tile first; the rest are the **bench**, kept in order and not played. Audio focus and solo name a game, so they follow it when tiles move.
+- Commands: `Assign`, `Clear`, `Swap`, `Promote`, `SetLayout`, `SetSplit`, `Solo`, `Unsolo`, `FocusAudio`. `LoadPreset` comes with presets.
+- Invariants, enforced only here: a game appears in at most one tile, on stage or benched; audio focus is an on-stage game (the focused one while it is on stage, else the first), or none on an empty stage; solo is an on-stage game; dividers stay within 0.2–0.8. Still to come: stream tiles per source across **all** Displays never exceed that source's budget, and an assignment beyond it becomes a data tile.
+- Geometry: `Layout#slots` gives each slot as fractions of the Stage area. The web UI turns them into pixels once and uses the same numbers for its tile chrome and the shell's tile placements, so the two move together along one **Stage transition** (280 ms, `cubic-bezier(0.2, 0, 0, 1)`), which the shell follows by moving each view's bounds.
+- Full screen is the Display's window, local to it, and is not Stage state.
 
 `StageSessions` in the Hub holds the current state per Display, applies commands from any origin, persists, and broadcasts.
 

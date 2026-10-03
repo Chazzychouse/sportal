@@ -33,5 +33,13 @@ Setup: Hub serving the built web UI, desktop shell running, signed in to YouTube
 | 24 | During a read, look for a window or sound | None: a read opens no view |
 | 25 | During a game that runs past its listed time (overtime, a long review), wait through the guide reads after its airing ends | The tile keeps playing; it never turns into a data tile while the game is on |
 | 26 | In YouTube TV, set the live guide's sort to Custom, then wait 5 minutes for a read | The Hub logs fewer channels; games on hidden channels are "Not in your YouTube TV guide". Set the sort back to Default |
+| 27 | Fill four tiles with live streams, then promote tile 4 (`Shift`+`4`) | Tile 4's video slides into the main tile while it plays and takes the sound; neither player reloads or goes black |
+| 28 | Press `L` through every layout and back to Quad | Tiles move with their video; shrinking benches games (listed under the slate) and growing restores each to its place |
+| 29 | Click into a playing stream, then press `2`, `F`, `Esc` | Sound moves to tile 2; the selected tile solos and unsolos; YouTube TV does not seek |
+| 30 | Type in a picking tile's guide search box | Every key reaches the guide; none acts as a hotkey |
+| 31 | Drag a divider across a playing video | The video tracks the divider live; on release the split holds and survives a reload |
+| 32 | Press `F11`, then solo a tile | Top bar and slate hide; the soloed game fills the screen; `Esc` and `F11` undo each in turn |
+| 33 | Open the command palette (`Ctrl`+`K`) | Only the videos under the palette blank, with sound still on; they return when it closes |
+| 34 | Drag a benched game onto a tile's header | The two swap; the benched game's player starts, the other's closes |
 
 Record the date, the build, and any row that failed.

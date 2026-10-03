@@ -25,6 +25,8 @@ easiest to break.
   by name. Organize by concept, never by kind: no `components/`, `hooks/`, `services/`, `schemas/`.
 - Banned file and folder names: `utils`, `helpers`, `common`, `shared`, `misc`, `lib`, `types`,
   `constants`, `models`, `interfaces`, and `index.ts` barrels.
+- `apps/web/src/design/` holds the vendored shadcn primitives under the CLI's own lowercase file names, so
+  `shadcn add` and `shadcn diff` keep working. Nothing else goes there.
 - No mirror types. There is no `GameDto`, `GameRow`, `GameResponse`, or `GameProps`. The domain schema is
   the wire format. Derive a variant at the point of use; do not name it.
 - In the Hub, only `main.ts` and tests name concrete adapters. Everything else depends on the port.
