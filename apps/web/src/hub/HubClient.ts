@@ -39,25 +39,18 @@ export function forgetChannel(network: Network): Promise<Option.Option<string>> 
 function outcome(command: Effect.Effect<void, unknown, HubClient>) {
   return runtime.runPromise(
     command.pipe(
-      Effect.catchCause((cause) => {
-        // Extract error or defect from cause
-        let error: unknown
-        for (const reason of cause.reasons) {
-          if (Cause.isFailReason(reason)) {
-            error = reason.error
-            break
-          } else if (Cause.isDieReason(reason)) {
-            error = reason.defect
-            break
-          }
-        }
-
-        const message = Predicate.isTagged(error, "ChannelUrlRefused")
-          ? "That is not a live channel. Pick one from the live guide."
-          : "The Hub did not take that. Try again."
-        return Effect.succeed(Option.some(message))
-      }),
-      Effect.map(() => Option.none())
+      // Any failure, expected or not, becomes a notice on the tile; only a refused channel gets its own words.
+      Effect.matchCause({
+        onSuccess: () => Option.none(),
+        onFailure: (cause) =>
+          Option.some(
+            Option.exists(Cause.findErrorOption(cause), (error) =>
+              Predicate.isTagged(error, "ChannelUrlRefused")
+            )
+              ? "That is not a live channel. Pick one from the live guide."
+              : "The Hub did not take that. Try again."
+          )
+      })
     )
   )
 }
