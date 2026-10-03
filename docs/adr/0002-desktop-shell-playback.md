@@ -49,9 +49,21 @@ per network or per game depends on the address-stability observation above.
 
 ## Consequences
 
-- Until learned channels exist, every assignment in the shell is a data tile.
 - The provider allowlist is four exact hosts (`tv.youtube.com`, `www.youtube.com`,
   `accounts.youtube.com`, `accounts.google.com`). Sign-in was proven in the spike without an
   allowlist; if it stalls in the shell, the terminal names the blocked host.
 - The stream budget is unknown and is not enforced.
 - The display backend may need to differ per machine; both start scripts are kept.
+
+## Follow-up: learned channels (2026-10-03)
+
+Built as designed in `docs/specs/2026-10-03-learned-channels-design.md`. What changed in the shell:
+
+- A guide view reads only the address its page lands on (`did-navigate`, `did-navigate-in-page`);
+  nothing is injected. The Hub keeps the channel's live address (`/watch/<id>?vp=0gEEEgIwAQ%3D%3D`).
+- Observed in the live guide: one channel picked twice gives the same id; different channels give
+  different ids; "from the beginning" adds an absolute start time to the address. Whether an old
+  address still plays the channel live after its programme changes is game-day checklist row 17.
+- Subframe navigations are held to the Hub's origin in the shell window only. Provider views do not
+  guard subframes: their pages embed frames from hosts the four-host allowlist does not name, and
+  refusing them could break sign-in or playback in ways only a game day would show.

@@ -2856,9 +2856,9 @@ git commit -m "docs: decision records and game-day checklist"
 
 In the order the product plan's phases call for them:
 
-0. **Learned channels** (decided 2026-10-03, see `docs/adr/0002-desktop-shell-playback.md`) — an unknown network opens YouTube TV's live guide in the tile; the shell reports the address the view lands on; the Hub remembers it. Replaces the hand-filled channel map. First confirm whether an address identifies a channel or a programme.
+0. **Learned channels** (decided 2026-10-03, see `docs/adr/0002-desktop-shell-playback.md`) — an unknown network opens YouTube TV's live guide in the tile; the shell reports the address the view lands on; the Hub remembers it. Replaces the hand-filled channel map. First confirm whether an address identifies a channel or a programme. **Planned in `docs/plans/2026-10-03-learned-channels.md`.**
 0. **shadcn/ui** (decided 2026-10-03) — adopt it as the web UI's component base as the first UI task: design tokens in `theme.css`, components under `apps/web/src/ui/` with the class-merging helper as its own named file (shadcn's default `lib/utils.ts` and `components/ui/` paths break the layout rules).
-1. **Tracker** — `Store` port with SQL, `GameEvent` and `diff`, game detail, standings, follows, watchability, availability, CollegeFootballData for FBS gaps, the access token and network binding so other devices can connect, couch mode.
+1. **Tracker** — SQL stores per concept on the `Database` module (each owns its migrations, as the channel store does), `GameEvent` and `diff`, game detail, standings, follows, watchability, availability, CollegeFootballData for FBS gaps, the access token and network binding so other devices can connect, couch mode.
 2. **Stage** — layouts beyond 2×2, presets, hotkeys, stream budget enforcement, data tiles with real content, more than one Display.
 3. **Director** — triggers, rules, alerts, auto-promote, auto-fill, tile delay and the spoiler shield.
 4. **Reach** — phone remote, further sources, betting lens, Hub container image.
@@ -2868,7 +2868,7 @@ In the order the product plan's phases call for them:
 Recorded by the final whole-branch review on 2026-10-03. Each belongs to the plan named.
 
 **Tracker**
-- Test `GET /api/live` end to end (framing, content type, current state first) — first task.
+- Test `GET /api/live` end to end (framing, content type, current state first) — first task. **Done in learned channels.**
 - Ingest: add a request timeout mapped to `ProviderError`, and catch and log a defect inside a poll so the loop cannot die silently.
 - Ingest: publish only when the slate changed.
 - Ingest: test the per-league fallback with two leagues.
@@ -2876,22 +2876,22 @@ Recorded by the final whole-branch review on 2026-10-03. Each belongs to the pla
 - dependency-cruiser: make `provider-payloads-are-private` per-provider with a backreference, when a second provider folder exists.
 - `delayed` games: decide whether they count as live for ordering and cadence; pin the ordering of delayed, postponed, and canceled games with tests.
 - Web: decode live messages with a non-throwing decoder and warn on failure; show `OT` instead of `Q5`.
-- `HubServer.test.ts`: wait for the first non-empty slate instead of a single yield.
+- `HubServer.test.ts`: wait for the first non-empty slate instead of a single yield. **Done in learned channels.**
 
 **Stage**
-- Stage tests: assert the rejection reason; cover assign over an occupied tile, audio focus unchanged by assign and clear, and a move that becomes a data tile.
+- Stage tests: assert the rejection reason; cover assign over an occupied tile, audio focus unchanged by assign and clear, and a move that becomes a data tile. **Done in learned channels.**
 - Web: re-sync tile placements with a `ResizeObserver` on the video areas.
-- Web: surface a rejected or failed stage command to the user.
+- Web: surface a rejected or failed stage command to the user. Done for channel commands only in learned channels; stage commands remain.
 
 **Reach**
 - Hub: refuse non-loopback binds until the access token exists; check `Host` and `Origin`.
-- Decode the channel map at boot.
-- Web: name the source in a stream tile's link instead of hard-coding YouTube TV.
-- Desktop: guard subframe navigations (`will-frame-navigate`).
+- Decode the channel map at boot. Settled in learned channels: the map is gone.
+- Web: name the source in a stream tile's link instead of hard-coding YouTube TV. **Done in learned channels.**
+- Desktop: guard subframe navigations (`will-frame-navigate`). Done for the shell window in learned channels; provider views deliberately not (see ADR 0002 follow-up).
 
 **Desktop shell** (from the review of the Effect-native restructure; take with learned channels, which reworks these files)
-- `main.ts`: the program is launched at module top level above a class and a const it uses; it works only because the first step is asynchronous. Move the launch last or into a function.
-- `main.ts`: each sync message forks its own fiber over a shared map; serialise them or state the no-async-step assumption.
-- A window closed while the Hub page is loading is logged as "the Hub could not be reached"; a view removed mid-load may log a load error.
-- `WidevineUnavailable` drops the underlying error; carry its code.
-- The two navigation guards (shell window, provider views) share a shape and could be one.
+- `main.ts`: the program is launched at module top level above a class and a const it uses; it works only because the first step is asynchronous. Move the launch last or into a function. **Done in learned channels.**
+- `main.ts`: each sync message forks its own fiber over a shared map; serialise them or state the no-async-step assumption. **Done in learned channels.**
+- A window closed while the Hub page is loading is logged as "the Hub could not be reached"; a view removed mid-load may log a load error. **Done in learned channels.**
+- `WidevineUnavailable` drops the underlying error; carry its code. **Done in learned channels** (it carries the error as its cause).
+- The two navigation guards (shell window, provider views) share a shape and could be one. **Done in learned channels.**
