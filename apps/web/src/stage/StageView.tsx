@@ -47,7 +47,7 @@ export function StageView(props: {
     <main className="grid min-h-0 grid-cols-2 grid-rows-2 gap-1 p-1">
       {props.stage.tiles.map((tile, index) => {
         const game = tile._tag === "Empty" ? undefined : props.slate.find((g) => g.id === tile.game)
-        const hasAudio = props.stage.audioFocus === index
+        const hasAudio = tile._tag !== "Empty" && props.stage.audioFocus === tile.game
         const notice = notices.get(index)
         return (
           <section
@@ -173,7 +173,7 @@ function placements(stage: Stage, videoAreas: ReadonlyArray<HTMLDivElement | nul
     if (area === null || area === undefined) return []
     const view =
       tile._tag === "StreamTile"
-        ? { url: tile.channel.locator.url, role: "stream" as const, muted: stage.audioFocus !== index }
+        ? { url: tile.channel.locator.url, role: "stream" as const, muted: stage.audioFocus !== tile.game }
         : tile._tag === "PickingChannel"
           ? // A guide can preview what is on; it never takes the sound.
             { url: tile.guide.url, role: "guide" as const, muted: true }

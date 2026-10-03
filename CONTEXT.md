@@ -82,14 +82,17 @@ Provider and Source are the two words most likely to be swapped. Provider is alw
 | Term | Meaning | Not |
 | --- | --- | --- |
 | **Stage** | A Display's multi-view surface and its state. | grid, multiview, wall |
-| **Stage command** | An instruction to change a Stage: assign, clear, or focus audio. Issued by people and by the Director alike. | action, event |
+| **Stage command** | An instruction to change a Stage: assign, clear, swap, promote, solo, change layout or split, or focus audio. Issued by people and by the Director alike. | action, event |
 | **Stage rejection** | The reason a stage command was refused. | error |
 | **Layout** | A named arrangement of tile slots whose dividers can be moved. | grid, template |
 | **Split** | Where a layout's dividers sit, as fractions of the Stage area. | ratio, sizes |
 | **Tile** | One slot's content: a **stream tile**, a **picking tile**, a **data tile**, or empty. | pane, cell, window |
 | **Picking tile** | A tile showing a source's guide until its game's network has a channel; `PickingChannel` in code. | setup tile |
 | **Main tile** | The largest slot of a layout. | hero, primary |
-| **Audio focus** | The single tile whose sound is on. | active, unmuted |
+| **Bench** | The tiles a layout has no slot for, kept in order and not played. | queue, reserve |
+| **Solo** | One on-stage game filling the whole Stage. | fullscreen, maximize |
+| **Swap** | Exchange two tiles, on stage or benched. | move |
+| **Audio focus** | The single game whose sound is on; it follows the game when tiles move. | active, unmuted |
 | **Promote** | Move a game into the main tile. | feature |
 | **Preset** | A saved layout with tile assignments. | |
 | **Tile placement** | Where a stream or picking tile sits in a Display's window, what it loads, and whether it is a stream or a guide, as told to the shell. | bounds, rect |

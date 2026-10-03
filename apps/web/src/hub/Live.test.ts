@@ -4,9 +4,9 @@ import { disconnected, reduce } from "./Live.ts"
 
 describe("Live.reduce", () => {
   it("replaces the stage and keeps the slate", () => {
-    const stage = new Stage({ tiles: Stage.initial.tiles, audioFocus: 2 })
+    const stage = new Stage({ ...Stage.initial, layout: "Pair" })
     const next = reduce(disconnected, { _tag: "StageChanged", stage })
-    assert.strictEqual(next.stage.audioFocus, 2)
+    assert.strictEqual(next.stage.layout, "Pair")
     assert.strictEqual(next.slate, disconnected.slate)
   })
 
