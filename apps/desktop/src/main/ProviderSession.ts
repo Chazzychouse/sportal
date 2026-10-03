@@ -1,4 +1,4 @@
-import { session, WebContentsView } from "electron"
+import { type Session, session, WebContentsView } from "electron"
 
 /** A view on the shared, persistent provider session, so one sign-in covers every tile and survives restarts. */
 export function createView(): WebContentsView {
@@ -31,13 +31,17 @@ export function grantsPermission(permission: string): boolean {
   return ["mediaKeySystem", "fullscreen", "screen-wake-lock"].includes(permission)
 }
 
-function refuseUnlessAllowed(event: { preventDefault(): void }, url: string) {
-  if (allows(url)) return
-  event.preventDefault()
-  console.warn(`ProviderSession: blocked navigation to ${hostOf(url)}`)
+/** The hostname alone, for logging: a full URL can carry tokens. */
+export function hostOf(url: string) {
+  return URL.canParse(url) ? new URL(url).hostname : "(unparseable address)"
 }
 
-let configured: Electron.Session | undefined
+/** The code Electron attaches to a failed load (such as `ERR_ABORTED`); the message would carry the full URL. */
+export function loadErrorCode(error: unknown) {
+  return error instanceof Error && "code" in error && typeof error.code === "string" ? error.code : "unknown"
+}
+
+let configured: Session | undefined
 
 function providerSession() {
   if (configured !== undefined) return configured
@@ -50,7 +54,8 @@ function providerSession() {
   return configured
 }
 
-// Hostname only: a full URL can carry tokens.
-function hostOf(url: string) {
-  return URL.canParse(url) ? new URL(url).hostname : "(unparseable address)"
+function refuseUnlessAllowed(event: { preventDefault(): void }, url: string) {
+  if (allows(url)) return
+  event.preventDefault()
+  console.warn(`ProviderSession: blocked navigation to ${hostOf(url)}`)
 }

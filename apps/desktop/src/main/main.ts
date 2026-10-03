@@ -2,6 +2,7 @@ import { join } from "node:path"
 import { TilePlacement } from "@sportal/api/ShellBridge"
 import { Schema } from "effect"
 import { app, BrowserWindow, components, ipcMain } from "electron"
+import * as ProviderSession from "./ProviderSession.ts"
 import * as TileViews from "./TileViews.ts"
 
 const hubUrl = process.env.SPORTAL_HUB_URL ?? "http://127.0.0.1:4400"
@@ -22,6 +23,17 @@ app.whenReady().then(async () => {
     }
   })
 
+  // The shell window holds the privileged preload, so it never leaves the Hub.
+  const hubOrigin = new URL(hubUrl).origin
+  const refuseOffHub = (event: { preventDefault(): void }, url: string) => {
+    if (URL.canParse(url) && new URL(url).origin === hubOrigin) return
+    event.preventDefault()
+    console.warn(`Sportal: refused shell navigation to ${ProviderSession.hostOf(url)}`)
+  }
+  window.webContents.on("will-navigate", (event) => refuseOffHub(event, event.url))
+  window.webContents.on("will-redirect", (event) => refuseOffHub(event, event.url))
+  window.webContents.setWindowOpenHandler(() => ({ action: "deny" }))
+
   const tiles = TileViews.attach(window)
   ipcMain.on("sportal:sync-tiles", (event, placements: unknown) => {
     if (event.sender !== window.webContents) return
@@ -30,8 +42,8 @@ app.whenReady().then(async () => {
   })
 
   await window.loadURL(hubUrl).catch((error: unknown) => {
-    const reason = error instanceof Error ? error.message : String(error)
-    console.error(`Sportal: the Hub could not be reached at ${hubUrl}: ${reason}`)
+    const code = ProviderSession.loadErrorCode(error)
+    console.error(`Sportal: the Hub could not be reached at ${ProviderSession.hostOf(hubUrl)}: ${code}`)
   })
 })
 

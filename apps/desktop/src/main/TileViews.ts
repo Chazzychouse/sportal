@@ -11,15 +11,23 @@ export function attach(window: BrowserWindow) {
 
   return {
     sync(placements: ReadonlyArray<TilePlacement>) {
+      const permitted = placements.filter((placement) => {
+        const allowed = ProviderSession.allows(placement.url)
+        if (!allowed)
+          console.warn(
+            `TileViews: refused tile ${placement.tile} address on ${ProviderSession.hostOf(placement.url)}`
+          )
+        return allowed
+      })
+
       for (const [tile, entry] of views) {
-        if (placements.some((placement) => placement.tile === tile)) continue
+        if (permitted.some((placement) => placement.tile === tile)) continue
         window.contentView.removeChildView(entry.view)
         entry.view.webContents.close()
         views.delete(tile)
       }
 
-      for (const placement of placements) {
-        if (!ProviderSession.allows(placement.url)) continue
+      for (const placement of permitted) {
         let entry = views.get(placement.tile)
         if (entry === undefined) {
           entry = { view: ProviderSession.createView(), url: "" }
@@ -39,13 +47,9 @@ export function attach(window: BrowserWindow) {
 
 function loadTile(view: WebContentsView, url: string) {
   view.webContents.loadURL(url).catch((error: unknown) => {
+    const code = ProviderSession.loadErrorCode(error)
     // A newer placement superseding this load aborts it; that is routine.
-    if (error instanceof Error && error.message.includes("ERR_ABORTED")) return
-    const host = URL.canParse(url) ? new URL(url).hostname : "(unparseable address)"
-    console.error(`TileViews: could not load a tile from ${host}: ${errorMessage(error)}`)
+    if (code === "ERR_ABORTED") return
+    console.error(`TileViews: could not load a tile from ${ProviderSession.hostOf(url)}: ${code}`)
   })
-}
-
-function errorMessage(error: unknown) {
-  return error instanceof Error ? error.message : String(error)
 }
