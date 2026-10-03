@@ -1,21 +1,20 @@
 import type { GameId, GameSnapshot } from "@sportal/domain/Game"
 import { Fragment, useEffect, useRef } from "react"
-import { dispatch } from "../hub/HubClient.ts"
 import { tileDrag } from "../stage/TileChrome.tsx"
 import { statusText } from "./StatusText.ts"
-import { dropCommand, type stripCards } from "./StripCards.ts"
+import type { stripCards } from "./StripCards.ts"
 import { TeamLogo } from "./TeamLogo.tsx"
 
 /**
  * The slate as a strip under the Stage: the bench, then live, upcoming, and final games, scrolling sideways. It
- * takes its own room, so it never covers a video. Clicking a card, or `Enter` on the pick, puts it in the selected
- * tile; a bench card can also be dragged onto a tile.
+ * takes its own room, so it never covers a video. Clicking a card drops it in the selected tile, as `Enter` does
+ * the pick; a bench card can also be dragged onto a tile.
  */
 export function SlateView(props: {
   cards: ReturnType<typeof stripCards>
   selected: number
   pick: GameId | undefined
-  onPick: (game: GameId) => void
+  onDrop: (card: ReturnType<typeof stripCards>[number]) => void
 }) {
   const rowRef = useRef<HTMLOListElement | null>(null)
 
@@ -60,16 +59,7 @@ export function SlateView(props: {
                   </li>
                 )}
                 <li data-game={card.id} className="shrink-0">
-                  <Card
-                    card={card}
-                    picked={props.pick === card.id}
-                    onDrop={() => {
-                      const command = dropCommand(card, props.selected)
-                      if (command === undefined) return
-                      props.onPick(card.id)
-                      dispatch(command)
-                    }}
-                  />
+                  <Card card={card} picked={props.pick === card.id} onDrop={() => props.onDrop(card)} />
                 </li>
               </Fragment>
             )

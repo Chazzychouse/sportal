@@ -80,6 +80,16 @@ export class Stage extends Schema.Class<Stage>("sportal/Stage")({
     return slot === -1 ? undefined : slot
   }
 
+  /** The first empty on-stage slot after `slot`, wrapping round; never `slot` itself. */
+  nextEmptySlot(slot: number): number | undefined {
+    const slots = this.onStage()
+    for (let offset = 1; offset < slots.length; offset++) {
+      const next = (slot + offset) % slots.length
+      if (slots[next]?._tag === "Empty") return next
+    }
+    return undefined
+  }
+
   /**
    * Applies a command. `availabilityOf` says whether and where a game can be streamed: a carried game
    * becomes a stream tile, a game on an unlearned network a picking tile, and any other a data tile.

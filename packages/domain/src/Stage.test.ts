@@ -336,6 +336,21 @@ describe("Stage#benched", () => {
   })
 })
 
+describe("Stage#nextEmptySlot", () => {
+  it("is the first empty slot after the given one, wrapping, never the slot itself", () => {
+    const holes = fill([undefined, bama, undefined, irish])
+    assert.strictEqual(holes.nextEmptySlot(0), 2)
+    assert.strictEqual(holes.nextEmptySlot(2), 0)
+    assert.strictEqual(holes.nextEmptySlot(3), 0)
+  })
+
+  it("is none when every other slot is filled, and ignores the bench", () => {
+    assert.isUndefined(fill([undefined, bama, irish, usc]).nextEmptySlot(0))
+    const pair = run(fill([bama, irish, undefined, undefined]), { _tag: "SetLayout", layout: "Pair" })
+    assert.isUndefined(pair.nextEmptySlot(0))
+  })
+})
+
 describe("Stage swap and promote", () => {
   it("swaps two tiles, on stage or benched", () => {
     const three = fill([bama, irish, usc])

@@ -5,6 +5,8 @@ export const Hotkey = Object.assign(
   Schema.Union([
     Schema.TaggedStruct("FocusAudio", { slot: Schema.Int }),
     Schema.TaggedStruct("Promote", { slot: Schema.Int }),
+    /** Make a tile the one the next dropped game goes to. */
+    Schema.TaggedStruct("SelectTile", { slot: Schema.Int }),
     Schema.TaggedStruct("ToggleSolo", {}),
     Schema.TaggedStruct("Unsolo", {}),
     Schema.TaggedStruct("FullScreen", {}),
@@ -23,11 +25,12 @@ export const Hotkey = Object.assign(
      * hotkey only when pressed in the page: in a stream view it stays the player's.
      */
     of(
-      key: { code: string; shift: boolean; control: boolean; meta: boolean },
+      key: { code: string; shift: boolean; alt: boolean; control: boolean; meta: boolean },
       from: "page" | "stream"
     ): Hotkey | undefined {
       if (key.control || key.meta) return key.code === "KeyK" ? { _tag: "CommandPalette" } : undefined
       const digit = /^Digit([1-9])$/.exec(key.code)?.[1]
+      if (key.alt) return digit === undefined ? undefined : { _tag: "SelectTile", slot: Number(digit) - 1 }
       if (digit !== undefined) return { _tag: key.shift ? "Promote" : "FocusAudio", slot: Number(digit) - 1 }
       switch (key.code) {
         case "KeyF":
@@ -79,6 +82,13 @@ export const Hotkey = Object.assign(
         does: "Put the picked game in the selected tile",
         press: { code: "Enter", from: "page" },
         hotkey: { _tag: "DropPick" }
+      },
+      {
+        group: "Tiles",
+        keys: ["Alt", "1–9"],
+        does: "Select that tile, for the next game (a drop selects the next empty one)",
+        press: { code: "Digit3", alt: true, from: "stream" },
+        hotkey: { _tag: "SelectTile", slot: 2 }
       },
       {
         group: "Tiles",

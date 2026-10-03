@@ -17,6 +17,11 @@ describe("Hotkey.of", () => {
     assert.deepStrictEqual(key("KeyK", { meta: true }), { _tag: "CommandPalette" })
   })
 
+  it("reads Alt with a digit as selecting that tile, 0-based", () => {
+    assert.deepStrictEqual(key("Digit3", { alt: true }), { _tag: "SelectTile", slot: 2 })
+    assert.isUndefined(key("KeyF", { alt: true }))
+  })
+
   it("reads the brackets as stepping the pick and Shift+Slash as the key help", () => {
     assert.deepStrictEqual(key("BracketLeft"), { _tag: "StepPick", step: -1 })
     assert.deepStrictEqual(key("BracketRight"), { _tag: "StepPick", step: 1 })
@@ -43,7 +48,10 @@ describe("Hotkey.keys", () => {
   it("lists bindings that each read back to the hotkey they describe", () => {
     for (const binding of Hotkey.keys)
       assert.deepStrictEqual(
-        Hotkey.of({ shift: false, control: false, meta: false, ...binding.press }, binding.press.from),
+        Hotkey.of(
+          { shift: false, alt: false, control: false, meta: false, ...binding.press },
+          binding.press.from
+        ),
         binding.hotkey,
         binding.does
       )
@@ -60,8 +68,8 @@ describe("Hotkey.keys", () => {
 
 function key(
   code: string,
-  modifiers: Partial<{ shift: boolean; control: boolean; meta: boolean }> = {},
+  modifiers: Partial<{ shift: boolean; alt: boolean; control: boolean; meta: boolean }> = {},
   from: "page" | "stream" = "stream"
 ) {
-  return Hotkey.of({ code, shift: false, control: false, meta: false, ...modifiers }, from)
+  return Hotkey.of({ code, shift: false, alt: false, control: false, meta: false, ...modifiers }, from)
 }

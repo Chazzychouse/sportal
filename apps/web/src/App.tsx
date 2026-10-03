@@ -28,6 +28,14 @@ export function App() {
   const [pick, setPick] = useState<GameId | undefined>(undefined)
   const fullScreen = useFullScreen()
   const cards = stripCards(live.stage, live.slate)
+  // Puts a card in the selected tile, then selects the next empty tile, so the next drop fills it.
+  const drop = (card: (typeof cards)[number]) => {
+    const command = dropCommand(card, selected)
+    if (command === undefined) return
+    dispatch(command)
+    setPick(card.id)
+    setSelected(live.stage.nextEmptySlot(selected) ?? selected)
+  }
 
   useEffect(() => onStageRejected((reason) => toast.warning(rejectionText(reason))), [])
 
@@ -49,9 +57,10 @@ export function App() {
         return setPick(nextPick(cards, pick, hotkey.step))
       case "DropPick": {
         const card = cards.find((card) => card.id === pick)
-        const command = card === undefined ? undefined : dropCommand(card, selected)
-        return command === undefined ? undefined : dispatch(command)
+        return card === undefined ? undefined : drop(card)
       }
+      case "SelectTile":
+        return hotkey.slot < live.stage.onStage().length ? setSelected(hotkey.slot) : undefined
       case "ShowKeys":
         return setKeys((open) => !open)
       case "FullScreen":
@@ -88,7 +97,7 @@ export function App() {
           onSelect={setSelected}
         />
         {fullScreen.on || !slateOpen ? null : (
-          <SlateView cards={cards} selected={selected} pick={pick} onPick={setPick} />
+          <SlateView cards={cards} selected={selected} pick={pick} onDrop={drop} />
         )}
       </div>
       <KeysDialog open={keys} onOpenChange={setKeys} />

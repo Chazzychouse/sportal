@@ -42,6 +42,8 @@ export function TileChrome(props: {
       <button
         type="button"
         onClick={props.onSelect}
+        aria-keyshortcuts={`Alt+${slot + 1}`}
+        title={`Select tile ${slot + 1} · Alt ${slot + 1}`}
         className={`flex min-w-0 flex-1 items-center gap-2 text-left ${props.selected ? "" : "opacity-90"}`}
       >
         <span

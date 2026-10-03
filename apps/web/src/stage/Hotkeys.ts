@@ -15,6 +15,7 @@ export function useHotkeys(handle: (hotkey: Hotkey) => void) {
         {
           code: event.code,
           shift: event.shiftKey,
+          alt: event.altKey,
           control: event.ctrlKey,
           meta: event.metaKey
         },
