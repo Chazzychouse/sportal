@@ -41,13 +41,19 @@ export class GameSnapshot extends Schema.Class<GameSnapshot>("sportal/GameSnapsh
 }) {
   /** Live games first, then upcoming by kickoff, then everything that is over. */
   static readonly watchOrder: Order.Order<GameSnapshot> = Order.combine(
-    Order.mapInput(Order.Number, (game: GameSnapshot) =>
-      game.isLive() ? 0 : game.status === "scheduled" || game.status === "delayed" ? 1 : 2
-    ),
+    Order.mapInput(Order.Number, (game: GameSnapshot) => progressRank[game.progress()]),
     Order.mapInput(DateTime.Order, (game: GameSnapshot) => game.kickoff)
   )
 
   isLive(): boolean {
     return this.status === "live" || this.status === "halftime"
   }
+
+  /** Where the game is in its day: not started (or delayed), being played, or done with (final, postponed, canceled). */
+  progress(): "upcoming" | "live" | "over" {
+    if (this.isLive()) return "live"
+    return this.status === "scheduled" || this.status === "delayed" ? "upcoming" : "over"
+  }
 }
+
+const progressRank = { live: 0, upcoming: 1, over: 2 } as const

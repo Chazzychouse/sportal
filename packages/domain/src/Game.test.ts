@@ -16,6 +16,20 @@ describe("GameSnapshot.isLive", () => {
   )
 })
 
+describe("GameSnapshot.progress", () => {
+  it.each([
+    ["scheduled", "upcoming"],
+    ["delayed", "upcoming"],
+    ["live", "live"],
+    ["halftime", "live"],
+    ["final", "over"],
+    ["postponed", "over"],
+    ["canceled", "over"]
+  ] as const)("is %s → %s", (status, progress) => {
+    assert.strictEqual(snapshot({ status }).progress(), progress)
+  })
+})
+
 describe("GameSnapshot.watchOrder", () => {
   it("puts live games first, then upcoming by kickoff, then finished", () => {
     const ordered = [
