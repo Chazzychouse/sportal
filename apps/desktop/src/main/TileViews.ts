@@ -28,11 +28,24 @@ export function attach(window: BrowserWindow) {
         }
         if (entry.url !== placement.url) {
           entry.url = placement.url
-          void entry.view.webContents.loadURL(placement.url)
+          loadTile(entry.view, placement.url)
         }
         entry.view.setBounds(placement.bounds)
         entry.view.webContents.setAudioMuted(placement.muted)
       }
     }
   }
+}
+
+function loadTile(view: WebContentsView, url: string) {
+  view.webContents.loadURL(url).catch((error: unknown) => {
+    // A newer placement superseding this load aborts it; that is routine.
+    if (error instanceof Error && error.message.includes("ERR_ABORTED")) return
+    const host = URL.canParse(url) ? new URL(url).hostname : "(unparseable address)"
+    console.error(`TileViews: could not load a tile from ${host}: ${errorMessage(error)}`)
+  })
+}
+
+function errorMessage(error: unknown) {
+  return error instanceof Error ? error.message : String(error)
 }

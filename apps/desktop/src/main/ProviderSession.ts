@@ -10,9 +10,9 @@ export function createView(): WebContentsView {
       sandbox: true
     }
   })
-  view.webContents.on("will-navigate", (event, url) => {
-    if (!allows(url)) event.preventDefault()
-  })
+  // will-navigate does not fire for server redirects, so guard both.
+  view.webContents.on("will-navigate", (event) => refuseUnlessAllowed(event, event.url))
+  view.webContents.on("will-redirect", (event) => refuseUnlessAllowed(event, event.url))
   view.webContents.setWindowOpenHandler(() => ({ action: "deny" }))
   return view
 }
@@ -21,12 +21,18 @@ export function createView(): WebContentsView {
 export function allows(url: string): boolean {
   if (!URL.canParse(url)) return false
   const { protocol, hostname } = new URL(url)
-  return (
-    protocol === "https:" && allowedHosts.some((host) => hostname === host || hostname.endsWith(`.${host}`))
-  )
+  return protocol === "https:" && allowedHosts.includes(hostname)
 }
 
-const allowedHosts = ["youtube.com", "google.com"]
+const allowedHosts = ["tv.youtube.com", "www.youtube.com", "accounts.youtube.com", "accounts.google.com"]
+
+function refuseUnlessAllowed(event: { preventDefault(): void }, url: string) {
+  if (allows(url)) return
+  event.preventDefault()
+  // Hostname only: the full URL can carry tokens.
+  const host = URL.canParse(url) ? new URL(url).hostname : "(unparseable address)"
+  console.warn(`ProviderSession: blocked navigation to ${host}`)
+}
 
 function providerSession() {
   const providers = session.fromPartition("persist:providers")

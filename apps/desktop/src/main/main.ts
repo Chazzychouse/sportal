@@ -32,7 +32,10 @@ app.whenReady().then(async () => {
     if (decoded._tag === "Some") tiles.sync(decoded.value)
   })
 
-  await window.loadURL(hubUrl)
+  await window.loadURL(hubUrl).catch((error: unknown) => {
+    const reason = error instanceof Error ? error.message : String(error)
+    console.error(`Sportal: the Hub could not be reached at ${hubUrl}: ${reason}`)
+  })
 })
 
 app.on("window-all-closed", () => app.quit())
