@@ -32,6 +32,8 @@ export function SlateView(props: {
   const live = inProgress("live")
   const upcoming = inProgress("upcoming")
   const finals = inProgress("over")
+  // With nothing live or to come, the finals are all there is, so they show without a click.
+  const finalsExpanded = finalsOpen || (live.length === 0 && upcoming.length === 0)
   const close = () => props.onOpenChange(false)
   const row = (game: GameSnapshot) => {
     const place = placeOf(game)
@@ -76,6 +78,9 @@ export function SlateView(props: {
           </SheetDescription>
         </header>
         <div className="min-h-0 flex-1 overflow-y-auto">
+          {props.slate.length === 0 && (
+            <p className="px-3 py-2.5 text-xs text-muted-foreground">No games in the slate.</p>
+          )}
           {benched.length > 0 && (
             <Section title="Bench" count={benched.length}>
               {benched.map(({ tile, game: id }) => {
@@ -116,13 +121,15 @@ export function SlateView(props: {
               <button
                 type="button"
                 onClick={() => setFinalsOpen((open) => !open)}
-                aria-expanded={finalsOpen}
+                aria-expanded={finalsExpanded}
                 className="label-caps flex w-full items-center gap-1 px-3 pt-2.5 pb-1 text-left text-[11px] text-muted-foreground hover:text-foreground"
               >
-                <ChevronRight className={`size-3 transition-transform ${finalsOpen ? "rotate-90" : ""}`} />
+                <ChevronRight
+                  className={`size-3 transition-transform ${finalsExpanded ? "rotate-90" : ""}`}
+                />
                 Final <span className="font-mono">{finals.length}</span>
               </button>
-              {finalsOpen && <ul className="pb-1.5">{finals.map(row)}</ul>}
+              {finalsExpanded && <ul className="pb-1.5">{finals.map(row)}</ul>}
             </section>
           )}
         </div>

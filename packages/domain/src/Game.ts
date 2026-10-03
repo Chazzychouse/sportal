@@ -51,8 +51,18 @@ export class GameSnapshot extends Schema.Class<GameSnapshot>("sportal/GameSnapsh
 
   /** Where the game is in its day: not started (or delayed), being played, or done with (final, postponed, canceled). */
   progress(): "upcoming" | "live" | "over" {
-    if (this.isLive()) return "live"
-    return this.status === "scheduled" || this.status === "delayed" ? "upcoming" : "over"
+    switch (this.status) {
+      case "scheduled":
+      case "delayed":
+        return "upcoming"
+      case "live":
+      case "halftime":
+        return "live"
+      case "final":
+      case "postponed":
+      case "canceled":
+        return "over"
+    }
   }
 }
 
