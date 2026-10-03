@@ -9,7 +9,7 @@ Setup: Hub serving the built web UI, desktop shell running, signed in to YouTube
 | --- | --- | --- |
 | 1 | Open the shell | Slate lists today's NFL and FBS games, live first; header reads `live` |
 | 2 | Watch a live game's row for a minute | Score and clock update without a reload |
-| 3 | With a fresh `.sportal/` data directory, open the shell and watch its terminal | Within a minute of the Hub page showing, a game live on a TV network in your guide plays when clicked (as row 4); no `GuideReader:` warning in the shell, no `could not be read` warning in the Hub log |
+| 3 | With a fresh `.sportal/` data directory, open the shell and watch its terminal | Once the Hub page shows, a game live on a TV network in your guide plays when clicked (as row 4); no `GuideReader:` warning in the shell, no `could not be read` warning in the Hub log |
 | 4 | Click a live game on a TV network in your YouTube TV guide | It plays within a few seconds; no guide and no channel picking appear in the tile |
 | 5 | Click another game on the same network | It plays at once, with no guide |
 | 6 | Fill all four tiles with games on TV networks in your guide | Tiles up to the stream limit play; note what the provider does past it |
@@ -29,8 +29,9 @@ Setup: Hub serving the built web UI, desktop shell running, signed in to YouTube
 | 20 | Click a game kicking off in more than half an hour | The tile reads "On <channel> at <time>"; it plays on its own within two minutes of that time |
 | 21 | On an NFL Sunday, click two CBS games at 1:00 PM | Each plays its own game, each on its own "NFL ST - CBS" station |
 | 22 | Click an ESPN+ game | "Streaming only: not on YouTube TV", with no picking tile |
-| 23 | With three tiles playing, wait for a guide read (or reopen the shell) | All three keep playing through the read; record anything the provider shows about the stream limit |
-| 24 | During a read, look for a window or sound | None: the guide view is never shown and is muted |
+| 23 | With three tiles playing, wait 5 minutes for a guide read | All three keep playing; the read plays nothing and the Hub logs `YouTubeTv: read a guide of …` |
+| 24 | During a read, look for a window or sound | None: a read opens no view |
 | 25 | During a game that runs past its listed time (overtime, a long review), wait through the guide reads after its airing ends | The tile keeps playing; it never turns into a data tile while the game is on |
+| 26 | In YouTube TV, set the live guide's sort to Custom, then wait 5 minutes for a read | The Hub logs fewer channels; games on hidden channels are "Not in your YouTube TV guide". Set the sort back to Default |
 
 Record the date, the build, and any row that failed.

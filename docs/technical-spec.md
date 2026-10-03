@@ -238,7 +238,7 @@ sportal/
             ├── main/
             │   ├── main.ts             App lifecycle; optional local Hub start
             │   ├── TileViews.ts        Creates, positions, tunes, and mutes provider views
-            │   ├── GuideReader.ts      Reads the source's guide from its own page
+            │   ├── GuideReader.ts      Reads the source's guide with its own request
             │   └── ProviderSession.ts  The persistent session and navigation allowlist
             └── preload/
                 └── ShellBridge.ts      Implements the shell bridge declared in packages/api
@@ -393,7 +393,7 @@ One word per concept, used identically in code, UI, documents, and conversation.
 | **Guide** | One reading of a source's listing of the channels this account gets, with their live addresses, and what each airs. | schedule, EPG |
 | **Airing** | One programme on a channel, with its begin and end. | listing, show |
 | **Guide unreadable** | A guide response the source could not read. | |
-| **Guide reader** | The shell component that opens a source's guide in a hidden view, reads the guide page's own response, and closes the view. | scraper, EPG fetcher |
+| **Guide reader** | The shell component that reads a source's guide with the source's own guide request, sent on the provider session. | scraper, EPG fetcher |
 | **Stream** | One playing instance of a game from a source. | feed, video |
 | **StreamLocator** | What a Display must load to play a stream. | URL, link |
 | **StreamBudget** | How many concurrent streams a source allows. | limit, cap |

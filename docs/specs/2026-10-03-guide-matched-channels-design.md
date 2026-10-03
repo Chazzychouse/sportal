@@ -1,7 +1,7 @@
 # Guide-Matched Channels — Design
 
 Date: 2026-10-03
-Status: Approved 2026-10-03 with its plan (`docs/plans/2026-10-03-guide-matched-channels.md`), which records where it differs
+Status: Approved 2026-10-03 with its plan (`docs/plans/2026-10-03-guide-matched-channels.md`), which records where it differs; how the guide is read is replaced by `docs/specs/2026-10-03-guide-direct-read-design.md`
 Follows: `docs/specs/2026-10-03-learned-channels-design.md` (learned channels; this replaces how channels
 are found), `docs/adr/0002-desktop-shell-playback.md` (amended by this design, see section 6)
 

@@ -74,9 +74,12 @@ Built as designed in `docs/specs/2026-10-03-learned-channels-design.md`. What ch
 ## Amendment: the guide reader (2026-10-03)
 
 Channels are found in YouTube TV's own guide instead of being picked per network
-(`docs/specs/2026-10-03-guide-matched-channels-design.md`). "Provider pages are loaded unmodified" stands.
-Added: the shell may open a hidden, muted guide view on the provider session and attach the debugger to that
-view alone, to read the body of the guide page's own `browse` response for `FEunplugged_epg`. It injects
-nothing, changes and makes no requests, never reads another view, and closes the guide view after each read
-because the guide plays a preview while open. Reads begin after the web UI first asks, then happen every 15 minutes,
-at least two minutes apart; a read gives up after 30 seconds.
+(`docs/specs/2026-10-03-guide-matched-channels-design.md`). The guide is read with one request
+(`docs/specs/2026-10-03-guide-direct-read-design.md`), replacing a first version that opened a hidden guide
+view and read its response through the debugger.
+
+Provider pages are still loaded unmodified, and nothing is injected into any view. Added: the shell may send
+one kind of request on the provider session, YouTube TV's guide `browse` for `FEunplugged_epg`, read-only, and
+the `GET` of the guide page that gives its config, at most every 5 minutes plus once per Hub reconnect. It
+sends no other request a provider page did not send itself, and never a sort request: a sort request changes
+the account's guide sort.
