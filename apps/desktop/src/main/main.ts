@@ -1,6 +1,6 @@
 import { join } from "node:path"
 import { TilePlacement } from "@sportal/api/ShellBridge"
-import { Cause, Config, Effect, FiberSet, Layer, Option, Queue, Schema, Stream } from "effect"
+import { Cause, Config, Effect, FiberSet, Layer, Option, Queue, Schedule, Schema, Stream } from "effect"
 import { app, BrowserWindow, components, type IpcMainEvent, ipcMain } from "electron"
 import { confine, hostOf, load, ProviderSession } from "./ProviderSession.ts"
 import { TileViews } from "./TileViews.ts"
@@ -117,7 +117,17 @@ function serveHub(window: BrowserWindow, hubUrl: string) {
       { startImmediately: true }
     )
 
+    // The Hub may still be starting; wait for it rather than leave the window blank.
     yield* load(window.webContents, hubUrl).pipe(
+      Effect.tapError((failure) =>
+        failure.code === "ERR_CONNECTION_REFUSED"
+          ? Effect.logInfo(`Sportal: waiting for the Hub at ${hostOf(hubUrl)}`)
+          : Effect.void
+      ),
+      Effect.retry({
+        schedule: Schedule.spaced("1 second"),
+        while: (failure) => failure.code === "ERR_CONNECTION_REFUSED" && !window.isDestroyed()
+      }),
       Effect.catchTag("LoadFailed", (failure) =>
         // Closing the window while the Hub page loads fails the load; that is the user leaving, not an outage.
         window.isDestroyed()

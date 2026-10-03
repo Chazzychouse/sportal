@@ -4,7 +4,8 @@
   "type": "module",
   "main": "out/main/main.js",
   "scripts": {
-    "dev": "electron-vite dev",
+    "postinstall": "install-electron",
+    "dev": "SPORTAL_HUB_URL=${SPORTAL_HUB_URL:-http://127.0.0.1:4401} electron-vite dev --watch",
     "build": "electron-vite build",
     "start": "electron-vite build && electron .",
     "start:x11": "electron-vite build && electron . --ozone-platform=x11"

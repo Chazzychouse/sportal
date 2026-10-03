@@ -66,15 +66,16 @@ A reader opens a file to see the thing it is named for. Keep it that way.
 - `pnpm check` — format check, lint, typecheck, import boundaries, unused code, tests. Must pass before
   every commit; the push hook runs it.
 - `pnpm format` — apply formatting and safe lint fixes.
-- `pnpm --filter @sportal/hub dev` — run the Hub on http://127.0.0.1:4400 (API and live stream only). It
-  keeps its SQLite database in `SPORTAL_DATA_DIR`, by default `.sportal/` in the directory it runs from.
-- `pnpm --filter @sportal/web dev` — run the web UI on http://127.0.0.1:4401, proxying `/api` to the Hub.
-- `SPORTAL_HUB_URL=http://127.0.0.1:4401 pnpm --filter @sportal/desktop start` — build and run the desktop
-  shell against the web dev server. Use `start:x11` instead of `start` to run through XWayland.
+- `pnpm dev` — run the Hub, the web dev server, and the desktop shell together, each reloading on change.
+  The shell waits for the UI to come up. Use `pnpm dev:x11` to run the shell through XWayland.
+- `pnpm --filter @sportal/hub dev` — run only the Hub on http://127.0.0.1:4400 (API and live stream). In
+  dev it keeps its SQLite database in `.sportal/` at the repo root; set `SPORTAL_DATA_DIR` to move it.
+- `pnpm --filter @sportal/web dev` — run only the web UI on http://127.0.0.1:4401, proxying `/api` to the
+  Hub.
+- `pnpm --filter @sportal/desktop dev` — run only the desktop shell against the web dev server
+  (`SPORTAL_HUB_URL` overrides the address).
 - To run without the dev server: `pnpm --filter @sportal/web build`, start the Hub with
-  `SPORTAL_WEB_ROOT=$PWD/apps/web/dist`, then `pnpm --filter @sportal/desktop start`.
-- Electron's install script is not run by pnpm for this build. After a fresh install, run
-  `node apps/desktop/node_modules/electron/install.js` once.
+  `SPORTAL_WEB_ROOT=$PWD/apps/web/dist`, then `pnpm --filter @sportal/desktop start` (or `start:x11`).
 
 ## Limits that are deliberate
 

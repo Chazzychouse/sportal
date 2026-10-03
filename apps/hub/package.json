@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "node --watch src/main.ts",
+    "dev": "SPORTAL_DATA_DIR=${SPORTAL_DATA_DIR:-../../.sportal} node --watch src/main.ts",
     "start": "node src/main.ts"
   },
   "dependencies": {
