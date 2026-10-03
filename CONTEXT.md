@@ -84,7 +84,8 @@ Provider and Source are the two words most likely to be swapped. Provider is alw
 | **Stage** | A Display's multi-view surface and its state. | grid, multiview, wall |
 | **Stage command** | An instruction to change a Stage: assign, clear, or focus audio. Issued by people and by the Director alike. | action, event |
 | **Stage rejection** | The reason a stage command was refused. | error |
-| **Layout** | A named arrangement of tile slots. | grid, template |
+| **Layout** | A named arrangement of tile slots whose dividers can be moved. | grid, template |
+| **Split** | Where a layout's dividers sit, as fractions of the Stage area. | ratio, sizes |
 | **Tile** | One slot's content: a **stream tile**, a **picking tile**, a **data tile**, or empty. | pane, cell, window |
 | **Picking tile** | A tile showing a source's guide until its game's network has a channel; `PickingChannel` in code. | setup tile |
 | **Main tile** | The largest slot of a layout. | hero, primary |
