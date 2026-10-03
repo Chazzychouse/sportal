@@ -386,11 +386,13 @@ One word per concept, used identically in code, UI, documents, and conversation.
 | --- | --- | --- |
 | **Provider** | An adapter that supplies **game data** (ESPN, CollegeFootballData). | source, feed |
 | **Source** | A way you obtain **video** (YouTube TV). | provider, service |
-| **Broadcast** | The fact that a network is airing a game. | channel, stream |
-| **Channel** | A network as carried by a specific source. | |
-| **Channel availability** | Whether and where a source can show a game: carried, upcoming, unlearned, or not carried, with why. | availability |
+| **Broadcast** | The fact that a network is airing a game, on television or streaming only. | channel, stream |
+| **Channel** | A station as a source names it ("News 3", "ESPN2"), with the address that plays it live. | network |
+| **Channel id** | A source's own id for one of its channels (YouTube TV's station id); `ChannelId` in code. | station id |
+| **Channel availability** | Whether and where a source can show a game: carried, upcoming, unlearned (its network still to be picked), or not carried, with why. | availability |
 | **Guide** | One reading of a source's listing of the channels this account gets, with their live addresses, and what each airs. | schedule, EPG |
 | **Airing** | One programme on a channel, with its begin and end. | listing, show |
+| **Guide unreadable** | A guide response the source could not read. | |
 | **Guide reader** | The shell component that opens a source's guide in a hidden view, reads the guide page's own response, and closes the view. | scraper, EPG fetcher |
 | **Stream** | One playing instance of a game from a source. | feed, video |
 | **StreamLocator** | What a Display must load to play a stream. | URL, link |

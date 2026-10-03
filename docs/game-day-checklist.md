@@ -19,7 +19,7 @@ Setup: Hub serving the built web UI, desktop shell running, signed in to YouTube
 | 10 | Fallback (plain browser, or no guide read yet): on a tile whose channel was picked by hand, press **wrong channel** | The tile returns to the guide for that network; the button never appears on a guide-matched tile |
 | 11 | Press `clear` on a playing tile | Video and sound stop for that tile only |
 | 12 | Resize and maximize the window | Every video and guide stays inside its tile; score strips stay visible |
-| 13 | Open the web UI in a normal browser on the same machine | Same slate and Stage; a stream tile shows an "Open in YouTube TV" link instead of video; with no guide reader there, a game's tile is a picking tile with an "Open the guide" link (hand-picked fallback); a change there changes the shell |
+| 13 | Open the web UI in a normal browser on the same machine | Same slate and Stage; a stream tile shows an "Open in YouTube TV" link instead of video; while the shell has read a guide in the last 45 minutes, tiles there are guide-matched as in the shell; only with no guide read (or the last one stale) is a game's tile a picking tile with an "Open the guide" link (hand-picked fallback); a change there changes the shell |
 | 14 | Stop the Hub, wait, start it | Header shows `reconnecting…` then `live`; video keeps playing while the Hub is down; when the Hub returns the Stage is empty again, because the Stage is not saved yet |
 | 15 | After the Hub restart, click a game on a network | It plays once the shell's next guide read lands (the guide is kept in memory only); until then a hand-picked channel, if one was picked earlier, plays at once: hand-picked channels are saved |
 | 16 | Quit and reopen the shell | Still signed in to the provider |
@@ -31,5 +31,6 @@ Setup: Hub serving the built web UI, desktop shell running, signed in to YouTube
 | 22 | Click an ESPN+ game | "Streaming only: not on YouTube TV", with no picking tile |
 | 23 | With three tiles playing, wait for a guide read (or reopen the shell) | All three keep playing through the read; record anything the provider shows about the stream limit |
 | 24 | During a read, look for a window or sound | None: the guide view is never shown and is muted |
+| 25 | During a game that runs past its listed time (overtime, a long review), wait through the guide reads after its airing ends | The tile keeps playing; it never turns into a data tile while the game is on |
 
 Record the date, the build, and any row that failed.

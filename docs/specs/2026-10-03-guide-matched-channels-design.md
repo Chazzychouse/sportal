@@ -84,9 +84,9 @@ ChannelAvailability: Carried | Upcoming | NotCarried (with reason) | Unlearned (
 | Where a channel's address comes from | The **Join live** endpoint of the station's airing on now. No pick |
 | Streaming-only broadcasts | Not carried without asking, from ESPN's broadcast type, when no airing matches |
 | Keeping the guide open | Never: the reader opens the guide, takes its first guide response, and closes it, because the guide plays a preview |
-| How fresh | Read once the web UI first asks, then every 15 minutes while the shell runs, and at once when a tile waits on an airing that should now be live |
+| How fresh | Read once the web UI first asks, again whenever the web UI's live connection to the Hub comes back, then every 15 minutes while the shell runs, and a minute after a waiting tile's airing is listed to begin (only for a begin still to come). A guide answers for 45 minutes after its reading (three missed reads); after that the lineup answers until the next read |
 | Manual pick and **wrong channel** | Kept as overrides that beat the matcher, and as the whole answer while no guide has been read |
-| If the guide response changes shape | `GuideUnreadable`; the Hub keeps the last guide it read and the picking tile is the fallback. A listings service stays the named fallback (approved 2026-10-03), not designed here |
+| If the guide response changes shape | `GuideUnreadable`, with the schema issue in the Hub log; the Hub keeps the last guide it read until it is stale, and the picking tile is the fallback. A listings service stays the named fallback (approved 2026-10-03), not designed here |
 
 ## Design
 
@@ -118,8 +118,8 @@ ChannelAvailability: Carried | Upcoming | NotCarried (with reason) | Unlearned (
     4. The guide does not cover the kickoff: `Upcoming` with no channel yet.
     5. No guide read yet: the lineup's own answer, which is today's behaviour (`Unlearned` opens the
        picking tile).
-  - **An airing matches a game** when it begins within 45 minutes of kickoff, or is on now while the
-    game is live, and its title names both teams. A team is named by its location, short name, or
+  - **An airing matches a game** when it has not ended at the reading, begins within 45 minutes of
+    kickoff or is on now while the game is live, and its title names both teams. A team is named by its location, short name, or
     display name, compared as whole words, case-folded, with punctuation removed and "&" read as "and".
 - `ChannelAvailability` gains `Upcoming { channel: Option<Channel>, begin: Option<DateTime.Utc> }`;
   `Carried` carries `{ channel, locator }`; `NotCarried` gains `reason: "NotInGuide" | "StreamingOnly"
@@ -132,6 +132,9 @@ ChannelAvailability: Carried | Upcoming | NotCarried (with reason) | Unlearned (
 - A stream tile keeps its `Channel` and locator. An `Upcoming` game is a data tile that names where and
   when it will play ("On NFL ST - CBS at 1:00 PM"); `stage.refresh` turns it into a stream tile when a
   later guide shows the airing on now.
+- A guide read never stops a game being watched: `stage.refresh` keeps a stream tile playing when a later
+  guide has its game not in the guide (its airing ended while the game runs long) or upcoming. Carried on
+  another channel, unlearned, no stream, or streaming only replace it.
 
 ### 2. Desktop shell (`apps/desktop`)
 
@@ -159,7 +162,7 @@ ChannelAvailability: Carried | Upcoming | NotCarried (with reason) | Unlearned (
   re-resolves every tile on a change, so an upcoming tile starts playing when the guide read after
   kickoff shows its airing live.
 - **API:** `POST /api/guide` with the raw payload; `GuideUnreadable` (422) when it does not decode,
-  logged with the payload's size only.
+  logged with the schema issue, never the payload.
 - **Live message:** the Hub tells clients when a tile waits on an upcoming airing whose begin has
   passed, so the web UI asks the shell to read the guide again.
 - **ESPN adapter:** decodes `geoBroadcasts` into `Broadcast` (`TV` → `tv`, `Streaming` → `streaming`,
