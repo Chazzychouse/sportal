@@ -1,0 +1,14 @@
+{
+  "name": "@sportal/hub",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node --watch src/main.ts",
+    "start": "node src/main.ts"
+  },
+  "dependencies": {
+    "@effect/platform-node": "4.0.0",
+    "@sportal/domain": "workspace:*",
+    "effect": "4.0.0"
+  }
+}
