@@ -20,6 +20,11 @@ export function dispatch(command: StageCommand): void {
   runtime.runFork(HubClient.use((hub) => hub.stage.dispatch({ payload: { command } })))
 }
 
+/** Passes a guide the shell read to the Hub. The tiles it changes arrive on the live stream. */
+export function sendGuide(guide: string): void {
+  runtime.runFork(HubClient.use((hub) => hub.guide.read({ payload: { guide } })))
+}
+
 /**
  * Tells the Hub the channel the user picked for `network`. Like the other channel commands, it resolves to
  * the message to show the user if the Hub did not take it; the Stage change arrives on the live stream.

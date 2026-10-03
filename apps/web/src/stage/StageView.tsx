@@ -1,9 +1,10 @@
 import type { TilePlacement } from "@sportal/api/ShellBridge"
 import type { GameSnapshot } from "@sportal/domain/Game"
 import type { Stage, Tile } from "@sportal/domain/Stage"
-import { Option } from "effect"
+import { DateTime, Option } from "effect"
 import { useEffect, useLayoutEffect, useRef, useState } from "react"
-import { dispatch, forgetChannel, learnChannel, markNotCarried } from "../hub/HubClient.ts"
+import { dispatch, forgetChannel, learnChannel, markNotCarried, sendGuide } from "../hub/HubClient.ts"
+import { localTime } from "../LocalTime.ts"
 
 export function StageView(props: {
   stage: Stage
@@ -31,6 +32,28 @@ export function StageView(props: {
       if (tile?._tag === "PickingChannel")
         void learnChannel(tile.network, pick.url).then((failure) => setNotices(noticed(pick.tile, failure)))
     })
+  }, [props.stage])
+
+  useEffect(() => {
+    // Listening first, then asking: the shell reads the guide when the web UI asks for it.
+    const stop = window.sportalShell?.onGuideRead(sendGuide)
+    window.sportalShell?.readGuide()
+    return stop
+  }, [])
+
+  useEffect(() => {
+    // A game waiting for its airing plays once a guide read after its begin shows the channel on the air.
+    const due = props.stage.tiles.flatMap((tile) =>
+      tile._tag === "DataTile" && tile.why._tag === "NotYet" && tile.why.begin !== undefined
+        ? [DateTime.toEpochMillis(tile.why.begin)]
+        : []
+    )
+    if (due.length === 0) return
+    const timer = setTimeout(
+      () => window.sportalShell?.readGuide(),
+      Math.max(0, Math.min(...due) - Date.now()) + 60_000
+    )
+    return () => clearTimeout(timer)
   }, [props.stage])
 
   return (
@@ -121,7 +144,7 @@ function TileBody(props: { tile: Tile }) {
     case "Empty":
       return <span>Pick a game from the slate</span>
     case "DataTile":
-      return <span>No stream for this game on your sources</span>
+      return <span>{noStream(props.tile.why)}</span>
     case "PickingChannel":
       // Inside the shell the guide covers this. In a plain browser there is no view to watch for the pick.
       return (
@@ -139,6 +162,21 @@ function TileBody(props: { tile: Tile }) {
           Open in {props.tile.channel.source}
         </a>
       )
+  }
+}
+
+function noStream(why: Extract<Tile, { _tag: "DataTile" }>["why"]): string {
+  switch (why._tag) {
+    case "NoStream":
+      return "No stream for this game on your sources"
+    case "StreamingOnly":
+      return "Streaming only: not on YouTube TV"
+    case "NotInGuide":
+      return "Not in your YouTube TV guide"
+    case "NotYet":
+      return why.channel === undefined
+        ? "Not in your YouTube TV guide yet"
+        : `On ${why.channel}${why.begin === undefined ? "" : ` at ${localTime(why.begin)}`}`
   }
 }
 

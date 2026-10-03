@@ -1,5 +1,5 @@
 import { GameSnapshot } from "@sportal/domain/Game"
-import { DateTime } from "effect"
+import { localTime } from "../LocalTime.ts"
 
 export function SlateView(props: {
   slate: ReadonlyArray<GameSnapshot>
@@ -64,7 +64,7 @@ function statusText(game: GameSnapshot): string {
     case "live":
       return `Q${game.period} ${game.clock}`
     case "scheduled":
-      return DateTime.toDateUtc(game.kickoff).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
+      return localTime(game.kickoff)
     default:
       return game.status
   }
