@@ -1,5 +1,6 @@
 import { Data, DateTime, Duration, Option, Schema } from "effect"
 import { type GameSnapshot, Network } from "./Game.ts"
+import type { LeagueId } from "./League.ts"
 import { StreamLocator } from "./Stream.ts"
 import type { Team } from "./Team.ts"
 
@@ -137,8 +138,8 @@ export class Guide extends Schema.Class<Guide>("sportal/Guide")({
     return (
       (nearKickoff || onNow) &&
       DateTime.isGreaterThan(airing.end, this.readAt) &&
-      namesTeam(airing.title, game.home.team) &&
-      namesTeam(airing.title, game.away.team)
+      namesTeam(airing.title, game.home.team, game.league) &&
+      namesTeam(airing.title, game.away.team, game.league)
     )
   }
 
@@ -184,10 +185,14 @@ function namesNetwork(channel: string, network: Network): boolean {
   return ` ${normalized(channel)} `.includes(` ${normalized(network)} `)
 }
 
-/** Whether a title names a team by its location, short name, or full name, as whole words. */
-function namesTeam(title: string, team: Team): boolean {
+/**
+ * Whether a title names a team by its full name or short name, as whole words. Its location alone names it
+ * only in a college game: NFL titles use full names, and "Chicago" alone is the Cubs as much as the Bears.
+ */
+function namesTeam(title: string, team: Team, league: LeagueId): boolean {
   const words = ` ${normalized(title)} `
-  return [team.location, team.shortName, team.name].some((name) => words.includes(` ${normalized(name)} `))
+  const names = league === "nfl" ? [team.shortName, team.name] : [team.location, team.shortName, team.name]
+  return names.some((name) => words.includes(` ${normalized(name)} `))
 }
 
 /** Lower case, "&" read as "and", every run of punctuation and space a single space. */

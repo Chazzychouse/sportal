@@ -9,6 +9,7 @@ import {
   ChannelLineup,
   Guide
 } from "./Source.ts"
+import type { Team } from "./Team.ts"
 import { broadcast, snapshot, team } from "./TestGame.ts"
 
 const espn = Network.make("ESPN")
@@ -145,6 +146,15 @@ describe("Guide#availabilityOf", () => {
       ],
       airings
     })
+  const nfl = (away: Team, home: Team) =>
+    snapshot({
+      league: "nfl",
+      status: "live",
+      kickoff: readAt,
+      away: { team: away, score: 0 },
+      home: { team: home, score: 0 },
+      broadcasts: [broadcast("FOX")]
+    })
   const miamiAtClemson = (broadcasts: Array<Broadcast>) =>
     snapshot({
       kickoff: DateTime.makeUnsafe("2026-10-03T23:30:00Z"),
@@ -259,6 +269,29 @@ describe("Guide#availabilityOf", () => {
   it("is not carried, not in the guide, for a television game within reach that no airing matches", () => {
     const onCw = snapshot({ kickoff: readAt, broadcasts: [broadcast("CW")] })
     assert.deepStrictEqual(guide.availabilityOf(onCw), ChannelAvailability.NotCarried({ why: "NotInGuide" }))
+  })
+
+  it("does not match a title naming other teams from the same places", () => {
+    const cardinalsAtBears = nfl(
+      team("ARI", "nfl", { name: "Arizona Cardinals", location: "Arizona", shortName: "Cardinals" }),
+      team("CHI", "nfl", { name: "Chicago Bears", location: "Chicago", shortName: "Bears" })
+    )
+    const jetsAtBuccaneers = nfl(
+      team("NYJ", "nfl", { name: "New York Jets", location: "New York", shortName: "Jets" }),
+      team("TB", "nfl", { name: "Tampa Bay Buccaneers", location: "Tampa Bay", shortName: "Buccaneers" })
+    )
+    const baseball = onLiveChannel([
+      airing(live, "St. Louis Cardinals at Chicago Cubs", "2026-10-03T20:30:00Z", "2026-10-03T23:30:00Z"),
+      airing(live, "New York Yankees vs. Tampa Bay Rays", "2026-10-03T20:30:00Z", "2026-10-03T23:30:00Z")
+    ])
+    assert.deepStrictEqual(
+      baseball.availabilityOf(cardinalsAtBears),
+      ChannelAvailability.NotCarried({ why: "NotInGuide" })
+    )
+    assert.deepStrictEqual(
+      baseball.availabilityOf(jetsAtBuccaneers),
+      ChannelAvailability.NotCarried({ why: "NotInGuide" })
+    )
   })
 
   it("does not match an airing that has ended", () => {
