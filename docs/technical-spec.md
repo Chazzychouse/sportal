@@ -167,11 +167,11 @@ sportal/
 │   │   └── src/
 │   │       ├── League.ts       Sport, League, Season, SeasonPhase, Conference
 │   │       ├── Team.ts         Team, Ranking
-│   │       ├── Game.ts         Game, GameStatus, Period, GameSnapshot
+│   │       ├── Game.ts         Game, GameStatus, Period, GameSnapshot, Network
 │   │       ├── Situation.ts    Possession, down, distance, field position, red zone
 │   │       ├── GameEvent.ts    The event union and diff(previous, next)
 │   │       ├── Slate.ts        SlateWindow; grouping and ordering of games
-│   │       ├── Broadcast.ts    Broadcast, Channel, Availability
+│   │       ├── Source.ts       SourceName, Channel, ChannelAnswer, Availability
 │   │       ├── Stream.ts       StreamLocator, StreamBudget
 │   │       ├── Follow.ts
 │   │       ├── Watchability.ts The scoring function

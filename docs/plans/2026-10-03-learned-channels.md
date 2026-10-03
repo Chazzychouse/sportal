@@ -10,7 +10,7 @@
 
 **Spec:** `docs/specs/2026-10-03-learned-channels-design.md` (approved 2026-10-03).
 
-**Provenance of the code in this plan:** Every code block and diff in Tasks 1–9 was produced by building this plan task by task in a scratch worktree on 2026-10-03, and each task's code is exactly what passed `pnpm check` (format, lint, typecheck, import boundaries, unused-code check, tests) at that task's commit. The one exception is three glossary rows (**Store**, **Store error** in Task 2; the reworded **Tile placement** in Task 6), which the plan's self-review found missing and which were added in a final documentation commit; `pnpm check` passed with them. The suite went from 57 tests to 104, all passing; the Hub tests passed five runs in a row. The Hub was run against the live ESPN feed: assigning an ESPN game gave a picking tile, `POST /api/channels/learn` with a recorded "from the beginning" address returned 204 and turned the tile into a stream tile on the canonical live address, a guide address was refused with 422 `NotAChannel`, and after a restart on the same data directory another ESPN game was a stream tile at once. The web UI and the desktop shell typecheck and build. **The shell was not run**: whether a guide view inside the shell reports the channel the user picks in real YouTube TV is exactly what the game-day checklist rows added in Task 9 find out.
+**Status of the code in this plan:** proposed, not yet built. Every code block is written against the code on `main` at `f229b74` and has not been compiled or run. Expected test counts and command outputs are what each step should produce; if a step's output differs, stop and reconcile before moving on. The desktop shell's guide reporting can only be proven against real YouTube TV, which the game-day checklist rows added in Task 9 do.
 
 ## Global Constraints
 
@@ -28,9 +28,10 @@
 
 ## Where this plan differs from the spec
 
-Each of these came out of building it; none changes what the user sees.
+Refinements made while planning, for review with the plan. None changes what the user sees.
 
-- **The SQLite risk did not exist.** `@effect/sql-sqlite-node` 4.0.0 runs on `node:sqlite`, not `better-sqlite3`; nothing native is installed (Task 2).
+- **The SQLite risk does not exist.** `@effect/sql-sqlite-node` 4.0.0 runs on `node:sqlite`, not `better-sqlite3`; nothing native is installed (Task 2).
+- **`Network` lives in `Game.ts`, and the source concepts in a new domain `Source.ts`.** There is no `Broadcast.ts`: no type here is a Broadcast. Decided in review of this plan (Task 1).
 - **`Store` takes an answer, not three verbs.** The port is `channelAnswers`, `answer(ChannelAnswer)`, and `forget(network, source)`; the `Source` port keeps `learn`, `markNotCarried`, and `forget` (Tasks 2 and 4).
 - **`Source.availability` is an effect that returns a lookup** (`Effect<(game) => Availability>`), because what the source knows lives in a ref (Task 3).
 - **A stream tile carries its whole `Channel`**, and a picking tile and `Unlearned` availability carry the `SourceName`. The UI needs the channel's network for **wrong channel** and the source's name for its labels. `SourceName` (`"YouTube TV"`) is a new glossary term (Tasks 1 and 3).
@@ -55,9 +56,9 @@ sportal/
 ├── docs/game-day-checklist.md, docs/adr/0002-…, docs/plans/…slice.md  Task 9
 ├── packages/
 │   ├── domain/src/
-│   │   ├── Broadcast.ts (+ test)        Network, SourceName, Channel, ChannelAnswer,
+│   │   ├── Source.ts (+ test)           SourceName, Channel, ChannelAnswer,
 │   │   │                                Availability, NotAChannel, availability()   Task 1
-│   │   ├── Game.ts                      broadcasts: Array<Network>                   Task 1
+│   │   ├── Game.ts                      Network; broadcasts: Array<Network>          Task 1
 │   │   └── Stage.ts (+ test)            PickingChannel tile, apply(availability), refresh   Task 3
 │   └── api/src/
 │       ├── SportalApi.ts                channels group                               Task 5
@@ -87,17 +88,18 @@ sportal/
 ### Task 1: Domain — networks, channels, and availability
 
 **Files:**
-- Create: `packages/domain/src/Broadcast.ts`
-- Test: `packages/domain/src/Broadcast.test.ts`
-- Modify: `packages/domain/src/Game.ts` (`broadcasts` becomes `Array<Network>`)
+- Create: `packages/domain/src/Source.ts`
+- Test: `packages/domain/src/Source.test.ts`
+- Modify: `packages/domain/src/Game.ts` (adds `Network`; `broadcasts` becomes `Array<Network>`)
 - Modify: `apps/hub/src/provider/espn/EspnProvider.ts` (brands network names)
 - Modify: tests that build snapshots with networks: `apps/hub/src/http/HubServer.test.ts`, `apps/hub/src/ingest/Cadence.test.ts`, `apps/hub/src/ingest/Ingest.test.ts`, `apps/hub/src/provider/espn/EspnProvider.test.ts`, `apps/hub/src/stage/StageSessions.test.ts`
 - Modify: `CONTEXT.md`
 
 **Interfaces:**
 - Consumes: `Stream.StreamLocator` (`{ _tag: "WebView", url }`), `Game.GameSnapshot`.
-- Produces, importable as `@sportal/domain/Broadcast`:
+- Produces, importable as `@sportal/domain/Game`:
   - `Network` — branded string schema and type; `Network.make("ESPN")`.
+- Produces, importable as `@sportal/domain/Source` (the pure concepts of a video source; the Hub's `Source` port wraps them and imports them by name):
   - `SourceName` — `Schema.Literals(["YouTube TV"])`.
   - `Channel` — `{ network: Network, source: SourceName, locator: StreamLocator }`.
   - `ChannelAnswer` — `{ _tag: "Carried", channel: Channel } | { _tag: "NotCarried", network, source }`.
@@ -107,12 +109,12 @@ sportal/
 
 - [ ] **Step 1: Write the failing test**
 
-Create `packages/domain/src/Broadcast.test.ts`:
+Create `packages/domain/src/Source.test.ts`:
 
 ```ts
 import { assert, describe, it } from "@effect/vitest"
-import * as Broadcast from "./Broadcast.ts"
-import { Network } from "./Broadcast.ts"
+import { Network } from "./Game.ts"
+import * as Source from "./Source.ts"
 
 const espn = Network.make("ESPN")
 const disney = Network.make("Disney+")
@@ -133,16 +135,16 @@ const notCarried = (network: Network) => ({
   source: "YouTube TV" as const
 })
 
-describe("Broadcast.availability", () => {
+describe("Source.availability", () => {
   it("is carried when the network has a channel", () => {
-    assert.deepStrictEqual(Broadcast.availability([espn], [carried], guide), {
+    assert.deepStrictEqual(Source.availability([espn], [carried], guide), {
       _tag: "Carried",
       channel: espnChannel
     })
   })
 
   it("is unlearned when nothing is known about the network", () => {
-    assert.deepStrictEqual(Broadcast.availability([espn], [], guide), {
+    assert.deepStrictEqual(Source.availability([espn], [], guide), {
       _tag: "Unlearned",
       network: espn,
       source: "YouTube TV",
@@ -151,11 +153,11 @@ describe("Broadcast.availability", () => {
   })
 
   it("prefers a carried network over an earlier unlearned one", () => {
-    assert.strictEqual(Broadcast.availability([disney, espn], [carried], guide)._tag, "Carried")
+    assert.strictEqual(Source.availability([disney, espn], [carried], guide)._tag, "Carried")
   })
 
   it("asks about the first network with no answer, skipping ones not carried", () => {
-    assert.deepStrictEqual(Broadcast.availability([espnPlus, disney, espn], [notCarried(espnPlus)], guide), {
+    assert.deepStrictEqual(Source.availability([espnPlus, disney, espn], [notCarried(espnPlus)], guide), {
       _tag: "Unlearned",
       network: disney,
       source: "YouTube TV",
@@ -164,34 +166,57 @@ describe("Broadcast.availability", () => {
   })
 
   it("is not carried when every network is not carried", () => {
-    assert.deepStrictEqual(Broadcast.availability([espnPlus], [notCarried(espnPlus)], guide), {
+    assert.deepStrictEqual(Source.availability([espnPlus], [notCarried(espnPlus)], guide), {
       _tag: "NotCarried"
     })
   })
 
   it("is not carried when the game lists no networks", () => {
-    assert.deepStrictEqual(Broadcast.availability([], [carried], guide), { _tag: "NotCarried" })
+    assert.deepStrictEqual(Source.availability([], [carried], guide), { _tag: "NotCarried" })
   })
 })
 ```
 
 - [ ] **Step 2: Run it to see it fail**
 
-Run: `pnpm vitest run packages/domain/src/Broadcast.test.ts`
-Expected: FAIL — `./Broadcast.ts` does not exist (`Test Files  1 failed`, `Tests  no tests`).
+Run: `pnpm vitest run packages/domain/src/Source.test.ts`
+Expected: FAIL — `./Source.ts` does not exist (`Test Files  1 failed`, `Tests  no tests`).
 
 
-- [ ] **Step 3: Write the module**
+- [ ] **Step 3: Write the modules**
 
-Create `packages/domain/src/Broadcast.ts`:
+Add `Network` to `packages/domain/src/Game.ts`, and make it the type of `broadcasts`. It sits with the other schemas above `GameSnapshot`, because the class reads it when it is defined:
+
+```diff
+--- a/packages/domain/src/Game.ts
++++ b/packages/domain/src/Game.ts
+@@ -17,6 +17,10 @@ export const GameStatus = Schema.Literals([
+ ])
+ export type GameStatus = typeof GameStatus.Type
+ 
++/** A network's name as the provider reports it ("CBS", "ESPN"). */
++export const Network = Schema.String.pipe(Schema.brand("Network"))
++export type Network = typeof Network.Type
++
+ const Side = Schema.Struct({ team: Team, score: Schema.Int, ranking: Schema.optional(Schema.Int) })
+ 
+ export class GameSnapshot extends Schema.Class<GameSnapshot>("sportal/GameSnapshot")({
+@@ -28,7 +32,7 @@ export class GameSnapshot extends Schema.Class<GameSnapshot>("sportal/GameSnapsh
+   clock: Schema.String,
+   home: Side,
+   away: Side,
+-  broadcasts: Schema.Array(Schema.String),
++  broadcasts: Schema.Array(Network),
+   situation: Schema.optional(Situation)
+ }) {}
+```
+
+Create `packages/domain/src/Source.ts`:
 
 ```ts
 import { Schema } from "effect"
+import { Network } from "./Game.ts"
 import { StreamLocator } from "./Stream.ts"
-
-/** A network's name as the provider reports it ("CBS", "ESPN"). */
-export const Network = Schema.String.pipe(Schema.brand("Network"))
-export type Network = typeof Network.Type
 
 /** The sources Sportal can play video from, by the name people know them by. */
 export const SourceName = Schema.Literals(["YouTube TV"])
@@ -254,41 +279,20 @@ export function availability(
 
 - [ ] **Step 4: Run it to see it pass**
 
-Run: `pnpm vitest run packages/domain/src/Broadcast.test.ts`
+Run: `pnpm vitest run packages/domain/src/Source.test.ts`
 Expected: `Tests  6 passed (6)`.
 
 
-- [ ] **Step 5: Brand the game's networks**
+- [ ] **Step 5: Brand the game's networks in the provider and tests**
 
-Apply this change to `packages/domain/src/Game.ts`:
-
-```diff
---- a/packages/domain/src/Game.ts
-+++ b/packages/domain/src/Game.ts
-@@ -1,4 +1,5 @@
- import { Schema } from "effect"
-+import { Network } from "./Broadcast.ts"
- import { LeagueId } from "./League.ts"
- import { Situation } from "./Situation.ts"
- import { Team } from "./Team.ts"
-@@ -28,7 +29,7 @@ export class GameSnapshot extends Schema.Class<GameSnapshot>("sportal/GameSnapsh
-   clock: Schema.String,
-   home: Side,
-   away: Side,
--  broadcasts: Schema.Array(Schema.String),
-+  broadcasts: Schema.Array(Network),
-   situation: Schema.optional(Situation)
- }) {}
- 
-```
 Apply this change to `apps/hub/src/provider/espn/EspnProvider.ts`:
 
 ```diff
 --- a/apps/hub/src/provider/espn/EspnProvider.ts
 +++ b/apps/hub/src/provider/espn/EspnProvider.ts
-@@ -1,3 +1,4 @@
-+import { Network } from "@sportal/domain/Broadcast"
- import { GameId, GameSnapshot, type GameStatus } from "@sportal/domain/Game"
+@@ -1,3 +1,3 @@
+-import { GameId, GameSnapshot, type GameStatus } from "@sportal/domain/Game"
++import { GameId, GameSnapshot, type GameStatus, Network } from "@sportal/domain/Game"
  import type { LeagueId } from "@sportal/domain/League"
  import { Situation } from "@sportal/domain/Situation"
 @@ -75,7 +76,7 @@ function toSnapshot(league: LeagueId, event: typeof EspnPayload.Event.Type): Opt
@@ -344,7 +348,7 @@ Apply this change to `apps/hub/src/provider/espn/EspnProvider.test.ts`:
 @@ -1,5 +1,6 @@
  import { readFileSync } from "node:fs"
  import { assert, describe, it } from "@effect/vitest"
-+import { Network } from "@sportal/domain/Broadcast"
++import { Network } from "@sportal/domain/Game"
  import { Effect, Layer } from "effect"
  import { HttpClient, HttpClientResponse } from "effect/http"
  import { Provider } from "../Provider.ts"
@@ -363,11 +367,11 @@ Apply this change to `apps/hub/src/http/HubServer.test.ts`:
 ```diff
 --- a/apps/hub/src/http/HubServer.test.ts
 +++ b/apps/hub/src/http/HubServer.test.ts
-@@ -1,5 +1,6 @@
+@@ -1,5 +1,5 @@
  import { assert, layer } from "@effect/vitest"
  import { SportalApi } from "@sportal/api/SportalApi"
-+import { Network } from "@sportal/domain/Broadcast"
- import { GameId } from "@sportal/domain/Game"
+-import { GameId } from "@sportal/domain/Game"
++import { GameId, Network } from "@sportal/domain/Game"
  import { snapshot, team } from "@sportal/domain/TestGame"
  import { DateTime, Effect, Layer } from "effect"
 @@ -15,7 +16,7 @@ const game = snapshot({
@@ -385,10 +389,10 @@ Apply this change to `apps/hub/src/stage/StageSessions.test.ts`:
 ```diff
 --- a/apps/hub/src/stage/StageSessions.test.ts
 +++ b/apps/hub/src/stage/StageSessions.test.ts
-@@ -1,4 +1,5 @@
+@@ -1,4 +1,4 @@
  import { assert, describe, it } from "@effect/vitest"
-+import { Network } from "@sportal/domain/Broadcast"
- import { GameId } from "@sportal/domain/Game"
+-import { GameId } from "@sportal/domain/Game"
++import { GameId, Network } from "@sportal/domain/Game"
  import { snapshot } from "@sportal/domain/TestGame"
  import { Effect, Layer, Option, Stream } from "effect"
 @@ -6,11 +7,12 @@ import { Ingest } from "../ingest/Ingest.ts"
@@ -485,7 +489,8 @@ Expected: `Done`; `apps/hub/package.json` lists `"@effect/sql-sqlite-node": "4.0
 Create `apps/hub/src/store/Store.ts`:
 
 ```ts
-import type { ChannelAnswer, Network, SourceName } from "@sportal/domain/Broadcast"
+import type { Network } from "@sportal/domain/Game"
+import type { ChannelAnswer, SourceName } from "@sportal/domain/Source"
 import { Context, type Effect, Schema } from "effect"
 
 /** The Hub's persistence. It holds only what cannot be fetched again: today, the channel answers. */
@@ -512,7 +517,7 @@ Create `apps/hub/src/store/SqlStore.test.ts`:
 import { join } from "node:path"
 import { NodeServices } from "@effect/platform-node"
 import { assert, describe, it } from "@effect/vitest"
-import { Network } from "@sportal/domain/Broadcast"
+import { Network } from "@sportal/domain/Game"
 import { Effect, FileSystem } from "effect"
 import * as SqlStore from "./SqlStore.ts"
 import { Store } from "./Store.ts"
@@ -607,7 +612,8 @@ Create `apps/hub/src/store/SqlStore.ts`:
 
 ```ts
 import { SqliteClient, SqliteMigrator } from "@effect/sql-sqlite-node"
-import { type ChannelAnswer, Network, SourceName } from "@sportal/domain/Broadcast"
+import { Network } from "@sportal/domain/Game"
+import { type ChannelAnswer, SourceName } from "@sportal/domain/Source"
 import { DateTime, Effect, Layer, Schema } from "effect"
 import { SqlClient, SqlSchema } from "effect/sql"
 import { Store, StoreError } from "./Store.ts"
@@ -840,8 +846,8 @@ Replace `packages/domain/src/Stage.test.ts`:
 ```ts
 import { assert, describe, it } from "@effect/vitest"
 import { Result } from "effect"
-import { type Availability, Network } from "./Broadcast.ts"
-import { GameId } from "./Game.ts"
+import { GameId, Network } from "./Game.ts"
+import type { Availability } from "./Source.ts"
 import * as Stage from "./Stage.ts"
 
 const bama = GameId.make("401856707")
@@ -986,8 +992,8 @@ Replace `packages/domain/src/Stage.ts`:
 
 ```ts
 import { Result, Schema } from "effect"
-import { type Availability, Channel, Network, SourceName } from "./Broadcast.ts"
-import { GameId } from "./Game.ts"
+import { GameId, Network } from "./Game.ts"
+import { type Availability, Channel, SourceName } from "./Source.ts"
 import { StreamLocator } from "./Stream.ts"
 
 export const Tile = Schema.Union([
@@ -1102,8 +1108,8 @@ Expected: `Tests  14 passed (14)`.
 Replace `apps/hub/src/source/Source.ts`:
 
 ```ts
-import type { Availability } from "@sportal/domain/Broadcast"
 import type { GameSnapshot } from "@sportal/domain/Game"
+import type { Availability } from "@sportal/domain/Source"
 import { Context, type Effect } from "effect"
 
 export class Source extends Context.Service<
@@ -1117,15 +1123,15 @@ export class Source extends Context.Service<
 Replace `apps/hub/src/source/YouTubeTv.ts`:
 
 ```ts
-import * as Broadcast from "@sportal/domain/Broadcast"
+import { availability, type ChannelAnswer } from "@sportal/domain/Source"
 import { Effect, Layer } from "effect"
 import { Source } from "./Source.ts"
 
-export const layer = (answers: ReadonlyArray<Broadcast.ChannelAnswer>) =>
+export const layer = (answers: ReadonlyArray<ChannelAnswer>) =>
   Layer.succeed(
     Source,
     Source.of({
-      availability: Effect.succeed((game) => Broadcast.availability(game.broadcasts, answers, guide))
+      availability: Effect.succeed((game) => availability(game.broadcasts, answers, guide))
     })
   )
 
@@ -1169,8 +1175,8 @@ Apply this change to `apps/hub/src/main.ts`:
 Replace `apps/hub/src/stage/StageSessions.ts`:
 
 ```ts
-import type { Availability } from "@sportal/domain/Broadcast"
 import type { GameId } from "@sportal/domain/Game"
+import type { Availability } from "@sportal/domain/Source"
 import * as Stage from "@sportal/domain/Stage"
 import { Context, Effect, Layer, Result, type Stream, SubscriptionRef } from "effect"
 import { Ingest } from "../ingest/Ingest.ts"
@@ -1227,8 +1233,7 @@ Replace `apps/hub/src/stage/StageSessions.test.ts`:
 
 ```ts
 import { assert, describe, it } from "@effect/vitest"
-import { Network } from "@sportal/domain/Broadcast"
-import { GameId } from "@sportal/domain/Game"
+import { GameId, Network } from "@sportal/domain/Game"
 import { snapshot } from "@sportal/domain/TestGame"
 import { Effect, Layer, Stream } from "effect"
 import { Ingest } from "../ingest/Ingest.ts"
@@ -1422,7 +1427,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Modify: `apps/hub/src/main.ts`, `apps/hub/src/stage/StageSessions.test.ts`, `apps/hub/src/http/HubServer.test.ts`
 
 **Interfaces:**
-- Consumes: `Store` from Task 2; `Broadcast.availability`, `NotAChannel` from Task 1.
+- Consumes: `Store` from Task 2; `availability`, `NotAChannel` from `@sportal/domain/Source` (Task 1).
 - Produces:
   - `Source` port: `availability`; `changes: Stream<void>` (once after every change, never the current value); `learn(network, url): Effect<void, NotAChannel | StoreError>`; `markNotCarried(network)`, `forget(network)`: `Effect<void, StoreError>`.
   - `YouTubeTv.layer: Layer<Source, StoreError, Store>` — loads the store's answers at start; each write goes to the store first, then to memory, one at a time.
@@ -1436,7 +1441,7 @@ Create `apps/hub/src/source/YouTubeTv.test.ts`:
 
 ```ts
 import { assert, describe, it } from "@effect/vitest"
-import { Network } from "@sportal/domain/Broadcast"
+import { Network } from "@sportal/domain/Game"
 import { snapshot } from "@sportal/domain/TestGame"
 import { Effect, Fiber, Layer, Result, Stream } from "effect"
 import * as SqlStore from "../store/SqlStore.ts"
@@ -1586,8 +1591,8 @@ Expected: FAIL — `YouTubeTv.canonical` is not a function, and `YouTubeTv.layer
 Replace `apps/hub/src/source/Source.ts`:
 
 ```ts
-import type { Availability, Network, NotAChannel } from "@sportal/domain/Broadcast"
-import type { GameSnapshot } from "@sportal/domain/Game"
+import type { GameSnapshot, Network } from "@sportal/domain/Game"
+import type { Availability, NotAChannel } from "@sportal/domain/Source"
 import { Context, type Effect, type Stream } from "effect"
 import type { StoreError } from "../store/Store.ts"
 
@@ -1611,7 +1616,7 @@ export class Source extends Context.Service<
 Replace `apps/hub/src/source/YouTubeTv.ts`:
 
 ```ts
-import * as Broadcast from "@sportal/domain/Broadcast"
+import { availability, type ChannelAnswer, NotAChannel } from "@sportal/domain/Source"
 import { Effect, Layer, Result, Stream, SubscriptionRef } from "effect"
 import { Store } from "../store/Store.ts"
 import { Source } from "./Source.ts"
@@ -1624,7 +1629,7 @@ export const layer = Layer.effect(
     const answers = yield* SubscriptionRef.make(yield* store.channelAnswers)
 
     // Store first, then memory, one write at a time: a failed write changes nothing.
-    const record = (answer: Broadcast.ChannelAnswer) =>
+    const record = (answer: ChannelAnswer) =>
       SubscriptionRef.updateEffect(answers, (known) =>
         store
           .answer(answer)
@@ -1633,7 +1638,7 @@ export const layer = Layer.effect(
 
     return Source.of({
       availability: SubscriptionRef.get(answers).pipe(
-        Effect.map((known) => (game) => Broadcast.availability(game.broadcasts, known, guide))
+        Effect.map((known) => (game) => availability(game.broadcasts, known, guide))
       ),
       // The ref's current value comes first on every subscription; only later values are changes.
       changes: SubscriptionRef.changes(answers).pipe(Stream.drop(1), Stream.as(undefined)),
@@ -1661,13 +1666,13 @@ export const layer = Layer.effect(
  * The address that plays a channel live. A guide pick can carry a start point ("from the beginning");
  * storing that would replay every later game on the channel from that moment, so only the live flag is kept.
  */
-export function canonical(url: string): Result.Result<string, Broadcast.NotAChannel> {
-  if (!URL.canParse(url)) return Result.fail(new Broadcast.NotAChannel())
+export function canonical(url: string): Result.Result<string, NotAChannel> {
+  if (!URL.canParse(url)) return Result.fail(new NotAChannel())
   const { protocol, hostname, pathname } = new URL(url)
   const id = /^\/watch\/([A-Za-z0-9_-]+)$/.exec(pathname)?.[1]
   return protocol === "https:" && hostname === "tv.youtube.com" && id !== undefined
     ? Result.succeed(`https://tv.youtube.com/watch/${id}?vp=${live}`)
-    : Result.fail(new Broadcast.NotAChannel())
+    : Result.fail(new NotAChannel())
 }
 
 const live = "0gEEEgIwAQ%3D%3D"
@@ -1677,7 +1682,7 @@ const guide = {
   locator: { _tag: "WebView", url: "https://tv.youtube.com/live" }
 } as const
 
-function networkOf(answer: Broadcast.ChannelAnswer) {
+function networkOf(answer: ChannelAnswer) {
   return answer._tag === "Carried" ? answer.channel.network : answer.network
 }
 ```
@@ -1711,8 +1716,7 @@ Replace `apps/hub/src/stage/StageSessions.test.ts`:
 
 ```ts
 import { assert, describe, it } from "@effect/vitest"
-import { Network } from "@sportal/domain/Broadcast"
-import { GameId } from "@sportal/domain/Game"
+import { GameId, Network } from "@sportal/domain/Game"
 import { snapshot } from "@sportal/domain/TestGame"
 import { Effect, Layer, Stream } from "effect"
 import { Ingest } from "../ingest/Ingest.ts"
@@ -1894,8 +1898,7 @@ import { NodeHttpServer } from "@effect/platform-node"
 import { assert, describe, it } from "@effect/vitest"
 import { LiveMessageJson } from "@sportal/api/LiveMessage"
 import { SportalApi } from "@sportal/api/SportalApi"
-import { Network } from "@sportal/domain/Broadcast"
-import { GameId } from "@sportal/domain/Game"
+import { GameId, Network } from "@sportal/domain/Game"
 import { snapshot, team } from "@sportal/domain/TestGame"
 import { DateTime, Effect, Fiber, Layer, Schema, Stream } from "effect"
 import { HttpClient, HttpRouter, HttpServer } from "effect/http"
@@ -2057,8 +2060,7 @@ Apply this change to `apps/hub/src/stage/StageSessions.test.ts`:
 --- a/apps/hub/src/stage/StageSessions.test.ts
 +++ b/apps/hub/src/stage/StageSessions.test.ts
 @@ -2,7 +2,7 @@ import { assert, describe, it } from "@effect/vitest"
- import { Network } from "@sportal/domain/Broadcast"
- import { GameId } from "@sportal/domain/Game"
+ import { GameId, Network } from "@sportal/domain/Game"
  import { snapshot } from "@sportal/domain/TestGame"
 -import { Effect, Layer, Stream } from "effect"
 +import { Effect, Layer, Option, Stream } from "effect"
@@ -2133,8 +2135,8 @@ Expected: FAIL — the typecheck in the editor flags `client.channels`; at run t
 Replace `packages/api/src/SportalApi.ts`:
 
 ```ts
-import { Network, NotAChannel } from "@sportal/domain/Broadcast"
-import { GameSnapshot } from "@sportal/domain/Game"
+import { GameSnapshot, Network } from "@sportal/domain/Game"
+import { NotAChannel } from "@sportal/domain/Source"
 import { Stage, StageCommand, StageRejection } from "@sportal/domain/Stage"
 import { Schema } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "effect/http-api"
@@ -2230,8 +2232,8 @@ Apply this change to `apps/hub/src/stage/StageSessions.ts`:
 --- a/apps/hub/src/stage/StageSessions.ts
 +++ b/apps/hub/src/stage/StageSessions.ts
 @@ -1,7 +1,7 @@
- import type { Availability } from "@sportal/domain/Broadcast"
  import type { GameId } from "@sportal/domain/Game"
+ import type { Availability } from "@sportal/domain/Source"
  import * as Stage from "@sportal/domain/Stage"
 -import { Context, Effect, Layer, Result, type Stream, SubscriptionRef } from "effect"
 +import { Context, Effect, Layer, Result, Stream, SubscriptionRef } from "effect"
@@ -2261,7 +2263,7 @@ Apply this change to `apps/hub/src/stage/StageSessions.ts`:
 - [ ] **Step 5: Run them to see them pass**
 
 Run: `pnpm vitest run apps/hub`
-Expected: `Tests  40 passed (40)`. Run it a few times: it was stable over five runs.
+Expected: `Tests  40 passed (40)`. Run it a few times: it must be stable, since it waits on a live stream.
 
 
 - [ ] **Step 6: Check**
@@ -3152,7 +3154,7 @@ Replace `apps/web/src/hub/HubClient.ts`:
 
 ```ts
 import { SportalApi } from "@sportal/api/SportalApi"
-import type { Network } from "@sportal/domain/Broadcast"
+import type { Network } from "@sportal/domain/Game"
 import type { StageCommand } from "@sportal/domain/Stage"
 import { Context, Effect, Layer, ManagedRuntime, Option, Predicate } from "effect"
 import { FetchHttpClient } from "effect/http"

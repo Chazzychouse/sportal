@@ -58,10 +58,13 @@ same either way.
 
 ### 1. Domain (`packages/domain`)
 
-**`Broadcast.ts`** (new; the technical spec's tree already places Broadcast, Channel, and Availability
-here):
+**`Game.ts`** — gains `Network`, a branded string: a network's name as the provider reports it (`"CBS"`,
+`"ESPN"`). `GameSnapshot.broadcasts` becomes `Array<Network>`. The ESPN adapter already produces these
+names.
 
-- `Network` — a branded string: a network's name as the provider reports it (`"CBS"`, `"ESPN"`).
+**`Source.ts`** (new) — the pure concepts of a video source. The Hub's `Source` port wraps them, as
+`StageSessions` wraps `Stage`. There is no `Broadcast.ts`: no type in this design is a Broadcast.
+
 - `Channel` — `{ network, source, locator }`: a network as carried by a source.
 - `Availability` — whether and where a source can show one game:
   - `Carried { network, locator }` — one of the game's networks has a Channel.
@@ -71,9 +74,6 @@ here):
 
 A network with a Channel wins over an earlier network that is unlearned: a game on `ESPN` and
 `Disney+` plays on ESPN as soon as ESPN is known, whatever is known about Disney+.
-
-**`Game.ts`** — `GameSnapshot.broadcasts` becomes `Array<Network>`. The ESPN adapter already produces
-these names.
 
 **`Stage.ts`**:
 
