@@ -1,5 +1,6 @@
 import { join } from "node:path"
-import { TilePlacement } from "@sportal/api/ShellBridge"
+import { StageTransition, TilePlacement } from "@sportal/api/ShellBridge"
+import { GameId } from "@sportal/domain/Game"
 import { Cause, Config, Effect, FiberSet, Layer, Option, Queue, Schedule, Schema, Stream } from "effect"
 import { app, BrowserWindow, components, type IpcMainEvent, ipcMain } from "electron"
 import { GuideReader } from "./GuideReader.ts"
@@ -72,12 +73,15 @@ function serveHub(window: BrowserWindow, hubUrl: string) {
     const providers = yield* ProviderSession
 
     // Placements are applied one at a time, and only the newest waiting set matters: each replaces all before it.
-    const pending = yield* Queue.sliding<ReadonlyArray<TilePlacement>>(1)
+    const pending = yield* Queue.sliding<{
+      placements: ReadonlyArray<TilePlacement>
+      transition: StageTransition | undefined
+    }>(1)
     yield* Effect.forkScoped(
       Effect.forever(
         Queue.take(pending).pipe(
-          Effect.flatMap((placements) =>
-            tiles.sync(placements).pipe(
+          Effect.flatMap(({ placements, transition }) =>
+            tiles.sync(placements, transition).pipe(
               Effect.catchCause((cause) => {
                 if (Cause.hasInterrupts(cause)) {
                   return Effect.failCause(cause)
@@ -89,14 +93,60 @@ function serveHub(window: BrowserWindow, hubUrl: string) {
         )
       )
     )
-    const syncTiles = (event: IpcMainEvent, placements: unknown) => {
+    const syncTiles = (event: IpcMainEvent, placements: unknown, transition: unknown) => {
       if (event.sender !== window.webContents) return
       const decoded = decodePlacements(placements)
-      if (Option.isSome(decoded)) Queue.offerUnsafe(pending, decoded.value)
+      const along = decodeTransition(transition)
+      if (Option.isSome(decoded) && Option.isSome(along))
+        Queue.offerUnsafe(pending, { placements: decoded.value, transition: along.value })
     }
     yield* Effect.acquireRelease(
       Effect.sync(() => ipcMain.on("sportal:sync-tiles", syncTiles)),
       () => Effect.sync(() => ipcMain.removeListener("sportal:sync-tiles", syncTiles))
+    )
+
+    const setHidden = (event: IpcMainEvent, games: unknown) => {
+      if (event.sender !== window.webContents) return
+      const decoded = decodeGames(games)
+      if (Option.isSome(decoded)) run(tiles.hide(decoded.value))
+    }
+    yield* Effect.acquireRelease(
+      Effect.sync(() => ipcMain.on("sportal:set-hidden", setHidden)),
+      () => Effect.sync(() => ipcMain.removeListener("sportal:set-hidden", setHidden))
+    )
+
+    const setFullScreen = (event: IpcMainEvent, on: unknown) => {
+      if (event.sender === window.webContents && typeof on === "boolean") window.setFullScreen(on)
+    }
+    yield* Effect.acquireRelease(
+      Effect.sync(() => ipcMain.on("sportal:set-full-screen", setFullScreen)),
+      () => Effect.sync(() => ipcMain.removeListener("sportal:set-full-screen", setFullScreen))
+    )
+    // The window manager or the OS may change full screen too; the web UI hears every change from here.
+    const enteredFullScreen = () => window.webContents.send("sportal:full-screen-changed", true)
+    const leftFullScreen = () => window.webContents.send("sportal:full-screen-changed", false)
+    yield* Effect.acquireRelease(
+      Effect.sync(() => {
+        window.on("enter-full-screen", enteredFullScreen)
+        window.on("leave-full-screen", leftFullScreen)
+      }),
+      () =>
+        Effect.sync(() => {
+          if (window.isDestroyed()) return
+          window.removeListener("enter-full-screen", enteredFullScreen)
+          window.removeListener("leave-full-screen", leftFullScreen)
+        })
+    )
+
+    yield* Effect.forkScoped(
+      tiles.hotkeys.pipe(
+        Stream.runForEach((hotkey) =>
+          Effect.sync(() => {
+            if (!window.isDestroyed()) window.webContents.send("sportal:hotkey", hotkey)
+          })
+        )
+      ),
+      { startImmediately: true }
     )
 
     const openSignIn = (event: IpcMainEvent) => {
@@ -159,6 +209,8 @@ function serveHub(window: BrowserWindow, hubUrl: string) {
 }
 
 const decodePlacements = Schema.decodeUnknownOption(Schema.Array(TilePlacement))
+const decodeTransition = Schema.decodeUnknownOption(Schema.UndefinedOr(StageTransition))
+const decodeGames = Schema.decodeUnknownOption(Schema.Array(GameId))
 
 function allWindowsClosed() {
   return Effect.callback<void>((resume) => {

@@ -306,6 +306,35 @@ describe("TileViews.hide", () => {
   )
 })
 
+describe("TileViews.hotkeys", () => {
+  it.effect(
+    "forwards hotkeys from stream views and keeps them from the page; guide views get every key",
+    () =>
+      Effect.gen(function* () {
+        const { tiles } = yield* attached()
+        const guide = { ...placement, game: two, role: "guide" as const, url: "https://tv.youtube.com/live" }
+        yield* tiles.sync([placement, guide])
+        const hotkeys = yield* collect(tiles.hotkeys, 1)
+        const press = (view: number, code: string, type = "keyDown") => {
+          const event = { preventDefault: vi.fn() }
+          created[view]?.webContents.emit("before-input-event", event, {
+            type,
+            code,
+            shift: false,
+            control: false,
+            meta: false
+          })
+          return event.preventDefault
+        }
+        expect(press(1, "Digit2")).not.toHaveBeenCalled()
+        expect(press(0, "KeyA")).not.toHaveBeenCalled()
+        expect(press(0, "Digit2", "keyUp")).not.toHaveBeenCalled()
+        expect(press(0, "Digit2")).toHaveBeenCalled()
+        expect(yield* Fiber.join(hotkeys)).toEqual([{ _tag: "FocusAudio", slot: 1 }])
+      }).pipe(Effect.scoped)
+  )
+})
+
 /** Starts collecting the first `count` picks, subscribed before this returns. */
 function collect<A>(picks: Stream.Stream<A>, count: number) {
   return Effect.gen(function* () {

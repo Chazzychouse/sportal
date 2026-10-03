@@ -1,3 +1,4 @@
+import { Hotkey } from "@sportal/api/Hotkey"
 import type { ChannelPick, StageTransition, TilePlacement } from "@sportal/api/ShellBridge"
 import type { GameId } from "@sportal/domain/Game"
 import { Clock, Context, Effect, FiberHandle, Layer, PubSub, Stream } from "effect"
@@ -8,8 +9,8 @@ import { Transition } from "./Transition.ts"
 /**
  * Keeps one provider web view per game in a stream or guide tile, laid over the web UI at the rectangle the UI
  * reports. A view belongs to its game, so a game that changes tiles keeps its player.
- * The shell only ever sets a view's address, bounds, visibility, and mute flag, and reads the address a guide
- * view lands on; the provider's page is never modified.
+ * The shell only ever sets a view's address, bounds, visibility, and mute flag, reads the address a guide
+ * view lands on, and reads the keys pressed in a stream view; the provider's page is never modified.
  */
 export class TileViews extends Context.Service<
   TileViews,
@@ -23,6 +24,8 @@ export class TileViews extends Context.Service<
     hide(games: ReadonlyArray<GameId>): Effect.Effect<void>
     /** Each channel a guide view lands on, as the user picks it. */
     readonly channelPicks: Stream.Stream<ChannelPick>
+    /** Each hotkey pressed while a stream view had keyboard focus. The page never receives it. */
+    readonly hotkeys: Stream.Stream<Hotkey>
   }
 >()("sportal/desktop/TileViews") {
   // Only the window's own view tree is touched, so that is all the layer asks for.
@@ -36,6 +39,7 @@ export class TileViews extends Context.Service<
         const providers = yield* ProviderSession
         const scope = yield* Effect.scope
         const picks = yield* PubSub.unbounded<ChannelPick>()
+        const hotkeys = yield* PubSub.unbounded<Hotkey>()
         const views = new Map<GameId, Entry>()
         let hidden: ReadonlySet<GameId> = new Set()
         // Views created during a transition, kept out of sight until it ends.
@@ -87,6 +91,14 @@ export class TileViews extends Context.Service<
           entry.view.webContents.on("did-navigate", (_event, url) => landed(url))
           entry.view.webContents.on("did-navigate-in-page", (_event, url, isMainFrame) => {
             if (isMainFrame) landed(url)
+          })
+          // A guide view gets every key, so its search box keeps working.
+          entry.view.webContents.on("before-input-event", (event, input) => {
+            if (views.get(game) !== entry || entry.role !== "stream" || input.type !== "keyDown") return
+            const hotkey = Hotkey.of(input)
+            if (hotkey === undefined) return
+            event.preventDefault()
+            PubSub.publishUnsafe(hotkeys, hotkey)
           })
           window.contentView.addChildView(entry.view)
           return entry
@@ -169,7 +181,12 @@ export class TileViews extends Context.Service<
             showWhereDue()
           })
 
-        return TileViews.of({ sync, hide, channelPicks: Stream.fromPubSub(picks) })
+        return TileViews.of({
+          sync,
+          hide,
+          channelPicks: Stream.fromPubSub(picks),
+          hotkeys: Stream.fromPubSub(hotkeys)
+        })
       })
     )
 }
