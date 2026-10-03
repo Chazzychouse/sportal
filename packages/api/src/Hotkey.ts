@@ -9,6 +9,7 @@ export const Hotkey = Object.assign(
     Schema.TaggedStruct("Unsolo", {}),
     Schema.TaggedStruct("FullScreen", {}),
     Schema.TaggedStruct("NextLayout", {}),
+    Schema.TaggedStruct("ToggleSlate", {}),
     Schema.TaggedStruct("CommandPalette", {})
   ]),
   {
@@ -26,6 +27,8 @@ export const Hotkey = Object.assign(
           return { _tag: "FullScreen" }
         case "KeyL":
           return { _tag: "NextLayout" }
+        case "KeyS":
+          return { _tag: "ToggleSlate" }
         default:
           return undefined
       }

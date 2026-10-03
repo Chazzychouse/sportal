@@ -12,6 +12,7 @@ describe("Hotkey.of", () => {
     assert.deepStrictEqual(key("Escape"), { _tag: "Unsolo" })
     assert.deepStrictEqual(key("F11"), { _tag: "FullScreen" })
     assert.deepStrictEqual(key("KeyL"), { _tag: "NextLayout" })
+    assert.deepStrictEqual(key("KeyS"), { _tag: "ToggleSlate" })
     assert.deepStrictEqual(key("KeyK", { control: true }), { _tag: "CommandPalette" })
     assert.deepStrictEqual(key("KeyK", { meta: true }), { _tag: "CommandPalette" })
   })
@@ -21,6 +22,7 @@ describe("Hotkey.of", () => {
     assert.isUndefined(key("Digit0"))
     assert.isUndefined(key("Digit1", { control: true }))
     assert.isUndefined(key("KeyF", { meta: true }))
+    assert.isUndefined(key("KeyS", { control: true }))
   })
 })
 
