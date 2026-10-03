@@ -1,0 +1,81 @@
+import type { GameSnapshot } from "@sportal/domain/Game"
+import type { Tile } from "@sportal/domain/Stage"
+import { localTime } from "../LocalTime.ts"
+import { statusText } from "../slate/StatusText.ts"
+
+/**
+ * What a tile's well shows from the web UI. In the shell a provider view covers a stream or picking tile's
+ * well; in a plain browser this is what is seen, with a link to watch.
+ */
+export function TileBody(props: { tile: Tile; game: GameSnapshot | undefined }) {
+  const { tile } = props
+  switch (tile._tag) {
+    case "Empty":
+      return <p className="label-caps text-muted-foreground/60 text-sm tracking-[0.2em]">No signal</p>
+    case "DataTile":
+      return (
+        <div className="flex flex-col items-center gap-3">
+          {props.game !== undefined && <Scoreboard game={props.game} />}
+          <p className="text-muted-foreground text-sm">{noStream(tile.why)}</p>
+        </div>
+      )
+    case "PickingChannel":
+      return (
+        <span className="flex flex-col items-center gap-1 text-muted-foreground text-sm">
+          <a className="underline underline-offset-4" href={tile.guide.url} target="_blank" rel="noreferrer">
+            Open the guide
+          </a>
+          <span>Picking a channel works in the desktop app</span>
+        </span>
+      )
+    case "StreamTile":
+      return (
+        <a
+          className="text-muted-foreground text-sm underline underline-offset-4"
+          href={tile.channel.locator.url}
+          target="_blank"
+          rel="noreferrer"
+        >
+          Open in {tile.channel.source}
+        </a>
+      )
+  }
+}
+
+/** A game's score, large, for a tile with no video. */
+function Scoreboard(props: { game: GameSnapshot }) {
+  const { game } = props
+  return (
+    <div className="grid grid-cols-[auto_auto_auto] items-baseline gap-x-5 gap-y-1">
+      {[game.away, game.home].map((side) => (
+        <div key={side.team.abbreviation} className="contents">
+          <span className="label-caps text-right text-3xl">{side.team.abbreviation}</span>
+          <span className="font-mono font-semibold text-4xl">{side.score}</span>
+          <span className="text-muted-foreground text-xs">
+            {side.ranking === undefined ? "" : `#${side.ranking}`}
+          </span>
+        </div>
+      ))}
+      <span
+        className={`label-caps col-span-3 text-center text-xs ${game.isLive() ? "text-live" : "text-muted-foreground"}`}
+      >
+        {statusText(game)}
+      </span>
+    </div>
+  )
+}
+
+function noStream(why: Extract<Tile, { _tag: "DataTile" }>["why"]): string {
+  switch (why._tag) {
+    case "NoStream":
+      return "No stream for this game on your sources"
+    case "StreamingOnly":
+      return "Streaming only: not on YouTube TV"
+    case "NotInGuide":
+      return "Not in your YouTube TV guide"
+    case "NotYet":
+      return why.channel === undefined
+        ? "Not in your YouTube TV guide yet"
+        : `On ${why.channel}${why.begin === undefined ? "" : ` at ${localTime(why.begin)}`}`
+  }
+}

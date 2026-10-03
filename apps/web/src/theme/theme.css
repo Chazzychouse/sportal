@@ -1,1 +1,99 @@
 @import "tailwindcss";
+@import "tw-animate-css";
+@import "@fontsource/barlow/400.css";
+@import "@fontsource/barlow/500.css";
+@import "@fontsource/barlow/600.css";
+@import "@fontsource/barlow-condensed/500.css";
+@import "@fontsource/barlow-condensed/600.css";
+@import "@fontsource/barlow-condensed/700.css";
+@import "@fontsource-variable/jetbrains-mono";
+
+/*
+ * A broadcast truck's multiviewer: graphite panels, hairline rules, condensed labels, mono numerals, and tally
+ * lights. The on-air tally (red-orange) marks the game you hear; the live tally (green) marks games in play.
+ * Dark only: a Display sits in front of a TV or a monitor wall.
+ */
+:root {
+  --radius: 0.25rem;
+
+  --background: oklch(0.155 0.004 260);
+  --foreground: oklch(0.93 0.004 260);
+  --card: oklch(0.19 0.005 260);
+  --card-foreground: var(--foreground);
+  --popover: oklch(0.205 0.006 260);
+  --popover-foreground: var(--foreground);
+  --primary: oklch(0.93 0.004 260);
+  --primary-foreground: oklch(0.17 0.004 260);
+  --secondary: oklch(0.245 0.006 260);
+  --secondary-foreground: var(--foreground);
+  --muted: oklch(0.225 0.005 260);
+  --muted-foreground: oklch(0.64 0.01 260);
+  --accent: oklch(0.27 0.007 260);
+  --accent-foreground: var(--foreground);
+  --destructive: oklch(0.64 0.21 25);
+  --border: oklch(0.29 0.006 260);
+  --input: oklch(0.3 0.006 260);
+  --ring: oklch(0.72 0.17 45);
+
+  /* Tally lights. */
+  --on-air: oklch(0.68 0.2 38);
+  --live: oklch(0.78 0.17 150);
+  --warn: oklch(0.82 0.15 80);
+  /* The well a video sits in. */
+  --well: oklch(0.08 0.003 260);
+}
+
+@theme inline {
+  --font-sans: "Barlow", ui-sans-serif, sans-serif;
+  --font-display: "Barlow Condensed", "Barlow", ui-sans-serif, sans-serif;
+  --font-mono: "JetBrains Mono Variable", ui-monospace, monospace;
+
+  --radius-sm: calc(var(--radius) - 1px);
+  --radius-md: var(--radius);
+  --radius-lg: calc(var(--radius) + 2px);
+  --radius-xl: calc(var(--radius) + 4px);
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-on-air: var(--on-air);
+  --color-live: var(--live);
+  --color-warn: var(--warn);
+  --color-well: var(--well);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    color-scheme: dark;
+  }
+  body {
+    @apply bg-background font-sans text-foreground antialiased;
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/* A label in the style of a broadcast lower third: condensed, tracked, upper case. */
+@utility label-caps {
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}

@@ -1,11 +1,20 @@
-import type { TilePlacement } from "@sportal/api/ShellBridge"
+import type { StageTransition } from "@sportal/api/ShellBridge"
 import type { GameSnapshot } from "@sportal/domain/Game"
-import type { Stage, Tile } from "@sportal/domain/Stage"
+import type { Split } from "@sportal/domain/Layout"
+import { Stage } from "@sportal/domain/Stage"
 import { Option } from "effect"
 import { useEffect, useLayoutEffect, useRef, useState } from "react"
 import { dispatch, forgetChannel, learnChannel, markNotCarried, sendGuide } from "../hub/HubClient.ts"
-import { localTime } from "../LocalTime.ts"
+import { useVideoAreas } from "../OverlayHost.tsx"
+import { Dividers } from "./Dividers.tsx"
+import { TileBody } from "./TileBody.tsx"
+import { TileChrome } from "./TileChrome.tsx"
+import { placements, tileRects } from "./TileRects.ts"
 
+/**
+ * The Stage: each on-stage tile positioned from the layout, with the shell's provider views laid over their
+ * wells at the same pixels. When tiles move, the chrome and the video move together along one transition.
+ */
 export function StageView(props: {
   stage: Stage
   slate: ReadonlyArray<GameSnapshot>
@@ -13,17 +22,34 @@ export function StageView(props: {
   selected: number
   onSelect: (tile: number) => void
 }) {
-  // One element per tile marking where its video goes; the shell lays a provider view over each.
-  const videoAreas = useRef<Array<HTMLDivElement | null>>([])
+  const areaRef = useRef<HTMLDivElement | null>(null)
+  const area = useArea(areaRef)
+  // The split being dragged, shown in place of the Stage's until the drag is committed.
+  const [dragged, setDragged] = useState<Split | undefined>(undefined)
   // What went wrong with the last channel command on a tile, until the Stage next changes.
   const [notices, setNotices] = useState<ReadonlyMap<number, string>>(new Map())
 
+  const shown =
+    dragged === undefined
+      ? props.stage
+      : new Stage({ ...props.stage, splits: { ...props.stage.splits, [props.stage.layout]: dragged } })
+  const rects = tileRects(shown, area)
+  const placed = placements(shown, rects, area)
+  useVideoAreas(placed)
+
+  // The shell hears only placements that changed, so a re-render never cuts a transition short. A change of
+  // arrangement moves the views along the transition; a resize or a drag moves them at once.
+  const synced = useRef({ placements: "", arrangement: "" })
   useLayoutEffect(() => {
-    const sync = () => window.sportalShell?.syncTiles(placements(props.stage, videoAreas.current))
-    sync()
-    window.addEventListener("resize", sync)
-    return () => window.removeEventListener("resize", sync)
-  }, [props.stage])
+    if (area.width === 0) return
+    const key = JSON.stringify(placed)
+    if (key === synced.current.placements) return
+    const arrangement = arrangementOf(props.stage)
+    const moved =
+      synced.current.arrangement !== "" && synced.current.arrangement !== arrangement && dragged === undefined
+    synced.current = { placements: key, arrangement }
+    window.sportalShell?.syncTiles(placed, moved ? stageTransition : undefined)
+  })
 
   useEffect(() => {
     setNotices(new Map())
@@ -47,46 +73,46 @@ export function StageView(props: {
   }, [props.connected])
 
   return (
-    <main className="grid min-h-0 grid-cols-2 grid-rows-2 gap-1 p-1">
-      {props.stage.onStage().map((tile, index) => {
+    <main ref={areaRef} className="relative min-h-0 overflow-hidden bg-background">
+      {shown.onStage().map((tile, index) => {
+        const rect = rects[index]
+        if (rect === undefined) return null
         const game = tile._tag === "Empty" ? undefined : props.slate.find((g) => g.id === tile.game)
-        const hasAudio = tile._tag !== "Empty" && props.stage.audioFocus === tile.game
         const notice = notices.get(index)
+        const hidden = rect.width === 0
         return (
           <section
-            // biome-ignore lint/suspicious/noArrayIndexKey: a tile is identified by its slot.
-            key={index}
-            className={`flex min-h-0 flex-col rounded border ${
-              props.selected === index ? "border-sky-500" : "border-neutral-800"
-            }`}
+            key={tile._tag === "Empty" ? `slot-${index}` : tile.game}
+            aria-hidden={hidden}
+            className={`absolute flex flex-col overflow-hidden rounded-sm border ${
+              props.selected === index ? "border-foreground/60" : "border-border"
+            } ${hidden ? "pointer-events-none opacity-0" : ""}`}
+            style={{
+              left: rect.x,
+              top: rect.y,
+              width: rect.width,
+              height: rect.height,
+              transition: dragged === undefined ? cssTransition : undefined
+            }}
           >
-            <div
-              ref={(element) => {
-                videoAreas.current[index] = element
-              }}
-              className="flex min-h-0 flex-1 items-center justify-center bg-black text-neutral-500"
+            <TileChrome
+              stage={props.stage}
+              slot={index}
+              tile={tile}
+              game={game}
+              selected={props.selected === index}
+              onSelect={() => props.onSelect(index)}
             >
-              <TileBody tile={tile} />
-            </div>
-            <footer className="flex items-center gap-2 px-2 py-1 text-sm tabular-nums">
-              <button type="button" className="flex-1 text-left" onClick={() => props.onSelect(index)}>
-                {tile._tag === "PickingChannel"
-                  ? `Pick the ${tile.network} channel`
-                  : game === undefined
-                    ? `Tile ${index + 1}`
-                    : `${game.away.team.abbreviation} ${game.away.score} – ${game.home.score} ${game.home.team.abbreviation}`}
-              </button>
-              {/* In the footer, on the row's one line: the provider view always draws over the video area, and a
-                  notice that changed the area's height would leave the view the wrong size. */}
+              {/* In the header, on its one line: the provider view always draws over the well. */}
               {notice === undefined ? null : (
-                <p className="min-w-0 flex-1 truncate text-amber-400" title={notice}>
+                <p className="min-w-0 max-w-[40%] truncate text-warn" title={notice}>
                   {notice}
                 </p>
               )}
               {tile._tag === "PickingChannel" ? (
                 <button
                   type="button"
-                  className="text-neutral-500"
+                  className="shrink-0 text-muted-foreground hover:text-foreground"
                   onClick={() =>
                     void markNotCarried(tile.network).then((failure) => setNotices(noticed(index, failure)))
                   }
@@ -97,7 +123,7 @@ export function StageView(props: {
               {tile._tag === "StreamTile" && tile.learnedFor !== undefined ? (
                 <button
                   type="button"
-                  className="text-neutral-500"
+                  className="shrink-0 text-muted-foreground hover:text-foreground"
                   onClick={() => {
                     const network = tile.learnedFor
                     if (network !== undefined)
@@ -107,95 +133,73 @@ export function StageView(props: {
                   wrong channel
                 </button>
               ) : null}
-              <button
-                type="button"
-                className={hasAudio ? "text-emerald-400" : "text-neutral-500"}
-                onClick={() => dispatch({ _tag: "FocusAudio", tile: index })}
-              >
-                {hasAudio ? "audio on" : "audio"}
-              </button>
-              <button
-                type="button"
-                className="text-neutral-500"
-                onClick={() => dispatch({ _tag: "Clear", tile: index })}
-              >
-                clear
-              </button>
-            </footer>
+            </TileChrome>
+            <div className="flex min-h-0 flex-1 items-center justify-center bg-well">
+              <TileBody tile={tile} game={game} />
+            </div>
           </section>
         )
       })}
+      {shown.solo === undefined && (
+        <Dividers
+          layout={shown.layout}
+          split={shown.splits[shown.layout]}
+          area={area}
+          onDrag={setDragged}
+          onDrop={(split) => {
+            setDragged(undefined)
+            dispatch({ _tag: "SetSplit", split })
+          }}
+        />
+      )}
     </main>
   )
 }
 
-function TileBody(props: { tile: Tile }) {
-  switch (props.tile._tag) {
-    case "Empty":
-      return <span>Pick a game from the slate</span>
-    case "DataTile":
-      return <span>{noStream(props.tile.why)}</span>
-    case "PickingChannel":
-      // Inside the shell the guide covers this. In a plain browser there is no view to watch for the pick.
-      return (
-        <span className="flex flex-col items-center gap-1">
-          <a className="underline" href={props.tile.guide.url} target="_blank" rel="noreferrer">
-            Open the guide
-          </a>
-          <span>Picking a channel works in the desktop app</span>
-        </span>
+/** How tiles move when the Stage's arrangement changes; the shell moves the video along the same curve. */
+const stageTransition: StageTransition = { durationMs: 280, easing: [0.2, 0, 0, 1] }
+
+const cssTransition = ["left", "top", "width", "height", "opacity"]
+  .map(
+    (property) =>
+      `${property} ${stageTransition.durationMs}ms cubic-bezier(${stageTransition.easing.join(",")})`
+  )
+  .join(", ")
+
+/** The Stage area's size and its position in the window, kept current as it resizes. */
+function useArea(ref: { current: HTMLElement | null }) {
+  const [area, setArea] = useState({ x: 0, y: 0, width: 0, height: 0 })
+  useLayoutEffect(() => {
+    const element = ref.current
+    if (element === null) return
+    const measure = () => {
+      const { x, y, width, height } = element.getBoundingClientRect()
+      setArea((last) =>
+        last.x === x && last.y === y && last.width === width && last.height === height
+          ? last
+          : { x, y, width, height }
       )
-    case "StreamTile":
-      // Inside the shell this is covered by the provider view. In a plain browser it is the way to watch.
-      return (
-        <a className="underline" href={props.tile.channel.locator.url} target="_blank" rel="noreferrer">
-          Open in {props.tile.channel.source}
-        </a>
-      )
-  }
+    }
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(element)
+    window.addEventListener("resize", measure)
+    return () => {
+      observer.disconnect()
+      window.removeEventListener("resize", measure)
+    }
+  }, [ref])
+  return area
 }
 
-function noStream(why: Extract<Tile, { _tag: "DataTile" }>["why"]): string {
-  switch (why._tag) {
-    case "NoStream":
-      return "No stream for this game on your sources"
-    case "StreamingOnly":
-      return "Streaming only: not on YouTube TV"
-    case "NotInGuide":
-      return "Not in your YouTube TV guide"
-    case "NotYet":
-      return why.channel === undefined
-        ? "Not in your YouTube TV guide yet"
-        : `On ${why.channel}${why.begin === undefined ? "" : ` at ${localTime(why.begin)}`}`
-  }
-}
-
-function placements(stage: Stage, videoAreas: ReadonlyArray<HTMLDivElement | null>): Array<TilePlacement> {
-  return stage.onStage().flatMap((tile, index) => {
-    const area = videoAreas[index]
-    if (area === null || area === undefined) return []
-    const view =
-      tile._tag === "StreamTile"
-        ? { url: tile.channel.locator.url, role: "stream" as const, muted: stage.audioFocus !== tile.game }
-        : tile._tag === "PickingChannel"
-          ? // A guide can preview what is on; it never takes the sound.
-            { url: tile.guide.url, role: "guide" as const, muted: true }
-          : undefined
-    if (view === undefined || tile._tag === "Empty") return []
-    const rect = area.getBoundingClientRect()
-    return [
-      {
-        game: tile.game,
-        ...view,
-        bounds: {
-          x: Math.round(rect.x),
-          y: Math.round(rect.y),
-          width: Math.round(rect.width),
-          height: Math.round(rect.height)
-        }
-      }
-    ]
-  })
+/** What decides where tiles are: the layout, its split, solo, and which game is in which slot. */
+function arrangementOf(stage: Stage) {
+  return JSON.stringify([
+    stage.layout,
+    stage.splits[stage.layout],
+    stage.solo,
+    stage.onStage().map((tile) => (tile._tag === "Empty" ? null : tile.game))
+  ])
 }
 
 /** The notices with `failure`, if there was one, shown on `tile`. */

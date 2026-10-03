@@ -1,6 +1,6 @@
 import { SportalApi } from "@sportal/api/SportalApi"
 import type { Network } from "@sportal/domain/Game"
-import type { StageCommand } from "@sportal/domain/Stage"
+import type { StageCommand, StageRejection } from "@sportal/domain/Stage"
 import { Cause, Context, Effect, Layer, ManagedRuntime, Option, Predicate } from "effect"
 import { FetchHttpClient } from "effect/http"
 import { HttpApiClient } from "effect/http-api"
@@ -15,10 +15,31 @@ class HubClient extends Context.Service<HubClient, HttpApiClient.ForApi<typeof S
 
 const runtime = ManagedRuntime.make(HubClient.layer)
 
-/** Sends a stage command. The resulting stage arrives on the live stream, not from this call. */
+/**
+ * Sends a stage command. The resulting stage arrives on the live stream, not from this call; a command the Hub
+ * refuses reaches every `onStageRejected` listener.
+ */
 export function dispatch(command: StageCommand): void {
-  runtime.runFork(HubClient.use((hub) => hub.stage.dispatch({ payload: { command } })))
+  runtime.runFork(
+    HubClient.use((hub) => hub.stage.dispatch({ payload: { command } })).pipe(
+      Effect.catchTag("StageRejection", (rejection) =>
+        Effect.sync(() => {
+          for (const listener of rejectionListeners) listener(rejection.reason)
+        })
+      )
+    )
+  )
 }
+
+/** Calls `listener` with the reason for each stage command the Hub refuses. Returns a function that stops the calls. */
+export function onStageRejected(listener: (reason: StageRejection["reason"]) => void): () => void {
+  rejectionListeners.add(listener)
+  return () => {
+    rejectionListeners.delete(listener)
+  }
+}
+
+const rejectionListeners = new Set<(reason: StageRejection["reason"]) => void>()
 
 /** Passes a guide the shell read to the Hub. The tiles it changes arrive on the live stream. */
 export function sendGuide(guide: string): void {
