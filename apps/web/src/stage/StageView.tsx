@@ -1,14 +1,8 @@
-import type { ShellBridge, TilePlacement } from "@sportal/api/ShellBridge"
+import type { TilePlacement } from "@sportal/api/ShellBridge"
 import type { GameSnapshot } from "@sportal/domain/Game"
 import type { Stage, Tile } from "@sportal/domain/Stage"
 import { useLayoutEffect, useRef } from "react"
 import { dispatch } from "../hub/HubClient.ts"
-
-declare global {
-  interface Window {
-    sportalShell?: ShellBridge
-  }
-}
 
 export function StageView(props: {
   stage: Stage

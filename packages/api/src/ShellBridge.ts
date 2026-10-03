@@ -14,3 +14,9 @@ export interface ShellBridge {
   /** Replaces the full set of provider views: views not listed are closed. */
   syncTiles(placements: ReadonlyArray<TilePlacement>): void
 }
+
+declare global {
+  interface Window {
+    sportalShell?: ShellBridge
+  }
+}
