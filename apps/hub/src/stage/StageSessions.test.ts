@@ -2,7 +2,10 @@ import { assert, describe, it } from "@effect/vitest"
 import { GameId, Network } from "@sportal/domain/Game"
 import { snapshot } from "@sportal/domain/TestGame"
 import { Effect, Layer, Stream } from "effect"
+import * as Database from "../database/Database.ts"
 import { Ingest } from "../ingest/Ingest.ts"
+import { Source } from "../source/Source.ts"
+import * as SqlChannelStore from "../source/SqlChannelStore.ts"
 import * as YouTubeTv from "../source/YouTubeTv.ts"
 import { StageSessions } from "./StageSessions.ts"
 
@@ -11,18 +14,13 @@ const espnPlus = Network.make("ESPN+")
 const espnChannel = {
   network: espn,
   source: "YouTube TV" as const,
-  locator: { _tag: "WebView" as const, url: "https://tv.youtube.com/watch/espn" }
+  locator: { _tag: "WebView" as const, url: "https://tv.youtube.com/watch/espn?vp=0gEEEgIwAQ%3D%3D" }
 }
 const slate = [game("1", [espn]), game("2", [espn]), game("3", [espn]), game("4", [espnPlus])]
 
 const TestSessions = StageSessions.layer.pipe(
   Layer.provide(Layer.succeed(Ingest, Ingest.of({ slate: Effect.succeed(slate), changes: Stream.empty }))),
-  Layer.provide(
-    YouTubeTv.layer([
-      { _tag: "Carried", channel: espnChannel },
-      { _tag: "NotCarried", network: espnPlus, source: "YouTube TV" }
-    ])
-  )
+  Layer.provide(sourceKnowingEspn())
 )
 
 describe("StageSessions", () => {
@@ -74,4 +72,19 @@ describe("StageSessions", () => {
 
 function game(id: string, broadcasts: ReadonlyArray<Network>) {
   return snapshot({ id: GameId.make(id), status: "live", period: 1, clock: "10:00", broadcasts })
+}
+
+/** YouTube TV over an in-memory database, already knowing ESPN's channel and that ESPN+ is not carried. */
+function sourceKnowingEspn() {
+  return Layer.effectDiscard(
+    Effect.gen(function* () {
+      const source = yield* Source
+      yield* source.learn(espn, "https://tv.youtube.com/watch/espn")
+      yield* source.markNotCarried(espnPlus)
+    })
+  ).pipe(
+    Layer.provideMerge(YouTubeTv.layer),
+    Layer.provide(SqlChannelStore.layer),
+    Layer.provide(Database.layer(":memory:"))
+  )
 }

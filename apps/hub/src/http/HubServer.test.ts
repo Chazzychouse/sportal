@@ -5,17 +5,13 @@ import { snapshot, team } from "@sportal/domain/TestGame"
 import { DateTime, Effect, Layer } from "effect"
 import { HttpServer } from "effect/http"
 import { HttpApiTest } from "effect/http-api"
+import * as Database from "../database/Database.ts"
 import { Ingest } from "../ingest/Ingest.ts"
 import { Provider } from "../provider/Provider.ts"
+import * as SqlChannelStore from "../source/SqlChannelStore.ts"
 import * as YouTubeTv from "../source/YouTubeTv.ts"
 import { StageSessions } from "../stage/StageSessions.ts"
 import { ApiHandlers } from "./HubServer.ts"
-
-const espnChannel = {
-  network: Network.make("ESPN"),
-  source: "YouTube TV" as const,
-  locator: { _tag: "WebView" as const, url: "https://tv.youtube.com/watch/espn" }
-}
 
 const game = snapshot({
   id: GameId.make("401856707"),
@@ -26,7 +22,9 @@ const game = snapshot({
 
 const TestHub = ApiHandlers.pipe(
   Layer.provide(StageSessions.layer),
-  Layer.provide(YouTubeTv.layer([{ _tag: "Carried", channel: espnChannel }])),
+  Layer.provide(YouTubeTv.layer),
+  Layer.provide(SqlChannelStore.layer),
+  Layer.provide(Database.layer(":memory:")),
   Layer.provide(Ingest.layer(["fbs"])),
   Layer.provide(Layer.succeed(Provider, Provider.of({ slate: () => Effect.succeed([game]) })))
 )
@@ -34,7 +32,7 @@ const TestHub = ApiHandlers.pipe(
 const makeClient = HttpApiTest.groups(SportalApi, ["slate", "stage"])
 
 layer(Layer.mergeAll(TestHub, HttpServer.layerServices))("Hub API", (it) => {
-  it.effect("serves the slate and turns an assignment into a stream tile", () =>
+  it.effect("serves the slate and turns an assignment on an unlearned network into a picking tile", () =>
     Effect.gen(function* () {
       const client = yield* makeClient
       // Let the ingest loop's first poll run.
@@ -48,9 +46,11 @@ layer(Layer.mergeAll(TestHub, HttpServer.layerServices))("Hub API", (it) => {
         payload: { command: { _tag: "Assign", tile: 0, game: game.id } }
       })
       assert.deepStrictEqual(stage.tiles[0], {
-        _tag: "StreamTile",
+        _tag: "PickingChannel",
         game: game.id,
-        channel: espnChannel
+        network: Network.make("ESPN"),
+        source: "YouTube TV",
+        guide: { _tag: "WebView", url: "https://tv.youtube.com/live" }
       })
 
       const rejected = yield* client.stage

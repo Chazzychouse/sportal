@@ -28,7 +28,7 @@ const Hub = Layer.unwrap(
 
     return HttpRouter.serve(routes).pipe(
       Layer.provide(StageSessions.layer),
-      Layer.provide(YouTubeTv.layer([])),
+      Layer.provide(YouTubeTv.layer),
       Layer.provide(SqlChannelStore.layer),
       Layer.provide(Ingest.layer(["nfl", "fbs"])),
       Layer.provide(EspnProvider.layer),
