@@ -75,6 +75,7 @@ Provider and Source are the two words most likely to be swapped. Provider is alw
 | **Provider session** | The shell's single persistent browser session shared by every provider view, with its navigation allowlist and permissions. | partition, profile |
 | **Tile views** | The shell component that keeps one provider web view per stream or picking tile, placed where the web UI says. | view manager |
 | **Channel pick** | The shell's report that a picking tile's guide view landed on a channel's address. | selection |
+| **Guide reader** | The shell component that opens a source's guide in a hidden view, reads the guide page's own response, and closes the view. | scraper, EPG fetcher |
 
 ### Viewing
 

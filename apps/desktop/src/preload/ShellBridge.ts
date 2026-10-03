@@ -11,7 +11,16 @@ const bridge: ShellBridge = {
     return () => {
       ipcRenderer.removeListener("sportal:channel-picked", forward)
     }
-  }
+  },
+  onGuideRead: (listener) => {
+    // The page gets the guide alone, never the IPC event.
+    const forward = (_event: IpcRendererEvent, guide: string) => listener(guide)
+    ipcRenderer.on("sportal:guide-read", forward)
+    return () => {
+      ipcRenderer.removeListener("sportal:guide-read", forward)
+    }
+  },
+  readGuide: () => ipcRenderer.send("sportal:read-guide")
 }
 
 contextBridge.exposeInMainWorld("sportalShell", bridge)

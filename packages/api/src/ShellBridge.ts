@@ -25,6 +25,10 @@ export interface ShellBridge {
   openSignIn(): void
   /** Calls `listener` for every channel picked in a guide view. Returns a function that stops the calls. */
   onChannelPicked(listener: (pick: ChannelPick) => void): () => void
+  /** Calls `listener` with each guide the shell reads from the source's guide page, unchanged. Returns a function that stops the calls. */
+  onGuideRead(listener: (guide: string) => void): () => void
+  /** Asks the shell to read the guide soon: at start, and when a game waiting for its airing should be on. */
+  readGuide(): void
 }
 
 declare global {

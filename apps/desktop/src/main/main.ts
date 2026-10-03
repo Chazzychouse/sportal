@@ -2,6 +2,7 @@ import { join } from "node:path"
 import { TilePlacement } from "@sportal/api/ShellBridge"
 import { Cause, Config, Effect, FiberSet, Layer, Option, Queue, Schedule, Schema, Stream } from "effect"
 import { app, BrowserWindow, components, type IpcMainEvent, ipcMain } from "electron"
+import { GuideReader } from "./GuideReader.ts"
 import { confine, hostOf, load, ProviderSession } from "./ProviderSession.ts"
 import { TileViews } from "./TileViews.ts"
 
@@ -17,7 +18,7 @@ const Shell = Layer.unwrap(
     const window = yield* openWindow(hubUrl)
 
     return Layer.effectDiscard(serveHub(window, hubUrl)).pipe(
-      Layer.provide(TileViews.layer(window)),
+      Layer.provide(Layer.mergeAll(TileViews.layer(window), GuideReader.layer)),
       Layer.provide(ProviderSession.layer)
     )
   })
@@ -115,6 +116,25 @@ function serveHub(window: BrowserWindow, hubUrl: string) {
         )
       ),
       { startImmediately: true }
+    )
+
+    const reader = yield* GuideReader
+    yield* Effect.forkScoped(
+      reader.guides.pipe(
+        Stream.runForEach((guide) =>
+          Effect.sync(() => {
+            if (!window.isDestroyed()) window.webContents.send("sportal:guide-read", guide)
+          })
+        )
+      ),
+      { startImmediately: true }
+    )
+    const readGuide = (event: IpcMainEvent) => {
+      if (event.sender === window.webContents) run(reader.readSoon)
+    }
+    yield* Effect.acquireRelease(
+      Effect.sync(() => ipcMain.on("sportal:read-guide", readGuide)),
+      () => Effect.sync(() => ipcMain.removeListener("sportal:read-guide", readGuide))
     )
 
     // The Hub may still be starting; wait for it rather than leave the window blank.
