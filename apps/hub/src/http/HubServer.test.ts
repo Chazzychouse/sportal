@@ -39,7 +39,7 @@ const streaming = {
   learnedFor: espn
 } as const
 
-const makeClient = HttpApiTest.groups(SportalApi, ["slate", "stage", "channels"])
+const makeClient = HttpApiTest.groups(SportalApi, ["slate", "stage", "channels", "guide"])
 
 describe("Hub API", () => {
   it.effect("serves the slate and turns an assignment on an unlearned network into a picking tile", () =>
@@ -93,6 +93,71 @@ describe("Hub API", () => {
         .learn({ payload: { network: espn, url: "https://tv.youtube.com/live" } })
         .pipe(Effect.flip)
       assert.strictEqual(error._tag, "ChannelUrlRefused")
+    }).pipe(Effect.provide(apiUnderTest()))
+  )
+
+  it.live("reads a guide the size of a real one, and a waiting tile plays once its airing is on", () =>
+    Effect.gen(function* () {
+      const client = yield* makeClient
+      const sessions = yield* StageSessions
+      yield* firstSlate()
+      yield* client.stage.dispatch({ payload: { command: { _tag: "Assign", tile: 0, game: game.id } } })
+
+      // The game's teams and network are on ESPN, on now, in this guide; padding brings it to a real response's size.
+      const now = DateTime.toEpochMillis(yield* DateTime.now)
+      const guide = JSON.stringify({
+        contents: {
+          epgRenderer: {
+            paginationRenderer: {
+              epgPaginationRenderer: {
+                contents: [
+                  {
+                    epgRowRenderer: {
+                      station: {
+                        epgStationRenderer: {
+                          stationId: "UCW7W_WAogi3qWDbO9PqOmZQ",
+                          icon: { accessibility: { accessibilityData: { label: "ESPN" } } }
+                        }
+                      },
+                      navigationEndpoint: { watchEndpoint: { videoId: "PFuNFGzJDE4" } },
+                      airings: [
+                        {
+                          epgAiringRenderer: {
+                            beginTimeMs: String(now - 3_600_000),
+                            endTimeMs: String(now + 3_600_000),
+                            title: { runs: [{ text: "ALA at MSST" }] }
+                          }
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        padding: "x".repeat(700_000)
+      })
+      yield* client.guide.read({ payload: { guide } })
+
+      const tile = yield* tileOnceItIs(sessions, "StreamTile")
+      assert.deepStrictEqual(tile, {
+        _tag: "StreamTile",
+        game: game.id,
+        channel: {
+          name: "ESPN",
+          source: "YouTube TV",
+          locator: { _tag: "WebView", url: "https://tv.youtube.com/watch/PFuNFGzJDE4?vp=0gEEEgIwAQ%3D%3D" }
+        }
+      })
+    }).pipe(Effect.provide(apiUnderTest()))
+  )
+
+  it.effect("refuses a guide it cannot read", () =>
+    Effect.gen(function* () {
+      const client = yield* makeClient
+      const error = yield* client.guide.read({ payload: { guide: "{}" } }).pipe(Effect.flip)
+      assert.strictEqual(error._tag, "GuideUnreadable")
     }).pipe(Effect.provide(apiUnderTest()))
   )
 })

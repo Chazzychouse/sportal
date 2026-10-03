@@ -8,7 +8,12 @@ import { Source } from "../source/Source.ts"
 import { StageSessions } from "../stage/StageSessions.ts"
 
 /** The handlers for every endpoint group in SportalApi. Exported so tests can drive them without a socket. */
-export const ApiHandlers = Layer.mergeAll(slateHandlers(), stageHandlers(), channelHandlers())
+export const ApiHandlers = Layer.mergeAll(
+  slateHandlers(),
+  stageHandlers(),
+  channelHandlers(),
+  guideHandlers()
+)
 
 /** Every route the Hub serves: the API, and the live stream. */
 export const layer = Layer.mergeAll(
@@ -55,6 +60,28 @@ function channelHandlers() {
           source.markNotCarried(payload.network).pipe(Effect.catchTag("ChannelStoreError", Effect.die)),
         forget: ({ payload }) =>
           source.forget(payload.network).pipe(Effect.catchTag("ChannelStoreError", Effect.die))
+      })
+    })
+  )
+}
+
+function guideHandlers() {
+  return HttpApiBuilder.group(
+    SportalApi,
+    "guide",
+    Effect.fn(function* (handlers) {
+      const source = yield* Source
+      return handlers.handleAll({
+        read: ({ payload }) =>
+          source
+            .readGuide(payload.guide)
+            .pipe(
+              Effect.tapError(() =>
+                Effect.logWarning(
+                  `HubServer: a guide of ${payload.guide.length} characters could not be read`
+                )
+              )
+            )
       })
     })
   )

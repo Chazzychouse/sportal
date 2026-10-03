@@ -1,5 +1,5 @@
 import { GameSnapshot, Network } from "@sportal/domain/Game"
-import { ChannelUrlRefused } from "@sportal/domain/Source"
+import { ChannelUrlRefused, GuideUnreadable } from "@sportal/domain/Source"
 import { Stage, StageCommand, StageRejection } from "@sportal/domain/Stage"
 import { Schema } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "effect/http-api"
@@ -36,6 +36,16 @@ export class SportalApi extends HttpApi.make("sportal")
       HttpApiEndpoint.post("forget", "/channels/forget", {
         payload: Schema.Struct({ network: Network }),
         success: HttpApiSchema.NoContent
+      })
+    )
+  )
+  .add(
+    // A guide the shell read from the source's guide page, passed on unchanged; the Hub decodes it.
+    HttpApiGroup.make("guide").add(
+      HttpApiEndpoint.post("read", "/guide", {
+        payload: Schema.Struct({ guide: Schema.String }),
+        success: HttpApiSchema.NoContent,
+        error: GuideUnreadable
       })
     )
   )
