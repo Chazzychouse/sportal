@@ -1,7 +1,10 @@
 # Slate Drawer — Design
 
 Date: 2026-10-03
-Status: Approved 2026-10-03
+Status: Approved 2026-10-03; superseded
+
+> Superseded by [the slate strip design](2026-10-03-slate-strip-design.md): the slate is a strip under the
+> Stage, not a drawer over it.
 
 ## Goal
 
