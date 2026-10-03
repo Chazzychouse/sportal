@@ -201,7 +201,10 @@ sportal/
     │       │   └── cfbd/                 Same shape, college supplement
     │       ├── source/
     │       │   ├── Source.ts       The port
-    │       │   ├── YouTubeTv.ts    Learned channel lineup and live channel URLs
+    │       │   ├── youtube-tv/
+│       │   │   ├── YouTubeTv.ts         Guide reading, availability, learned channels
+│       │   │   ├── YouTubeTvPayload.ts  The guide response's wire shape
+│       │   │   └── fixtures/            Recorded real payloads
     │       │   ├── ChannelStore.ts The port for learned channel carriages
     │       │   └── SqlChannelStore.ts  Over the Database; owns its migrations
     │       ├── ingest/
@@ -235,6 +238,7 @@ sportal/
             ├── main/
             │   ├── main.ts             App lifecycle; optional local Hub start
             │   ├── TileViews.ts        Creates, positions, tunes, and mutes provider views
+            │   ├── GuideReader.ts      Reads the source's guide from its own page
             │   └── ProviderSession.ts  The persistent session and navigation allowlist
             └── preload/
                 └── ShellBridge.ts      Implements the shell bridge declared in packages/api
@@ -289,15 +293,16 @@ class Provider extends Context.Service<Provider, {
 ```ts
 class Source extends Context.Service<Source, {
   readonly budget: StreamBudget
-  readonly lineup: Effect<ChannelLineup>   // lineup.availabilityOf(game): ChannelAvailability
+  readonly availability: Effect<(game: GameSnapshot) => ChannelAvailability>
   readonly changes: Stream<void>
+  readGuide(guide: string): Effect<void, GuideUnreadable>
   learn(network: Network, url: string): Effect<void, ChannelUrlRefused | ChannelStoreError>
   markNotCarried(network: Network): Effect<void, ChannelStoreError>
   forget(network: Network): Effect<void, ChannelStoreError>
 }>()("sportal/hub/Source") {}
 ```
 
-A source's channels are learned from the user, not mapped by hand (`docs/specs/2026-10-03-learned-channels-design.md`).
+A source's channels are found in its own guide, read by the shell (`docs/specs/2026-10-03-guide-matched-channels-design.md`); channels picked by hand answer only until a guide is read.
 
 `StreamLocator` is a tagged union. Today it has one member, a web-view address; a new kind is added only when a source needs it.
 
@@ -384,6 +389,9 @@ One word per concept, used identically in code, UI, documents, and conversation.
 | **Broadcast** | The fact that a network is airing a game. | channel, stream |
 | **Channel** | A network as carried by a specific source. | |
 | **Channel availability** | Whether and where a source can show a game: carried, unlearned, or not carried. | availability |
+| **Guide** | One reading of a source's listing of the channels this account gets, with their live addresses, and what each airs. | schedule, EPG |
+| **Airing** | One programme on a channel, with its begin and end. | listing, show |
+| **Guide reader** | The shell component that opens a source's guide in a hidden view, reads the guide page's own response, and closes the view. | scraper, EPG fetcher |
 | **Stream** | One playing instance of a game from a source. | feed, video |
 | **StreamLocator** | What a Display must load to play a stream. | URL, link |
 | **StreamBudget** | How many concurrent streams a source allows. | limit, cap |

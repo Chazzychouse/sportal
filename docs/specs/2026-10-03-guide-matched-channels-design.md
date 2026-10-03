@@ -1,7 +1,7 @@
 # Guide-Matched Channels — Design
 
 Date: 2026-10-03
-Status: Draft for review. The spike in section 0 has been run; nothing else is built
+Status: Approved 2026-10-03 with its plan (`docs/plans/2026-10-03-guide-matched-channels.md`), which records where it differs
 Follows: `docs/specs/2026-10-03-learned-channels-design.md` (learned channels; this replaces how channels
 are found), `docs/adr/0002-desktop-shell-playback.md` (amended by this design, see section 6)
 
@@ -84,7 +84,7 @@ ChannelAvailability: Carried | Upcoming | NotCarried (with reason) | Unlearned (
 | Where a channel's address comes from | The **Join live** endpoint of the station's airing on now. No pick |
 | Streaming-only broadcasts | Not carried without asking, from ESPN's broadcast type, when no airing matches |
 | Keeping the guide open | Never: the reader opens the guide, takes its first guide response, and closes it, because the guide plays a preview |
-| How fresh | Re-read every 15 minutes while the shell runs, and at once when a tile waits on an airing that should now be live |
+| How fresh | Read once the web UI first asks, then every 15 minutes while the shell runs, and at once when a tile waits on an airing that should now be live |
 | Manual pick and **wrong channel** | Kept as overrides that beat the matcher, and as the whole answer while no guide has been read |
 | If the guide response changes shape | `GuideUnreadable`; the Hub keeps the last guide it read and the picking tile is the fallback. A listings service stays the named fallback (approved 2026-10-03), not designed here |
 
@@ -142,7 +142,7 @@ ChannelAvailability: Carried | Upcoming | NotCarried (with reason) | Unlearned (
 - It sends no debugger command other than enabling network events and reading that one response's
   body, never reads another view, and never touches stream tiles. The shell does not decode or judge
   the payload.
-- It reads on start, every 15 minutes, and when the web UI asks.
+- It reads when the web UI asks, then every 15 minutes, at least two minutes apart.
 - **Bridge:** `ShellBridge.onGuideRead(listener: (payload: string) => void): () => void` and
   `ShellBridge.readGuide(): void`. The web UI forwards payloads to the Hub, as it does with channel
   picks; the shell never calls the Hub.

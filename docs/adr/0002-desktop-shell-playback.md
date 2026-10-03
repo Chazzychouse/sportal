@@ -68,3 +68,13 @@ Built as designed in `docs/specs/2026-10-03-learned-channels-design.md`. What ch
 - Subframe navigations are held to the Hub's origin in the shell window only. Provider views do not
   guard subframes: their pages embed frames from hosts the four-host allowlist does not name, and
   refusing them could break sign-in or playback in ways only a game day would show.
+
+## Amendment: the guide reader (2026-10-03)
+
+Channels are found in YouTube TV's own guide instead of being picked per network
+(`docs/specs/2026-10-03-guide-matched-channels-design.md`). "Provider pages are loaded unmodified" stands.
+Added: the shell may open a hidden, muted guide view on the provider session and attach the debugger to that
+view alone, to read the body of the guide page's own `browse` response for `FEunplugged_epg`. It injects
+nothing, changes and makes no requests, never reads another view, and closes the guide view after each read
+because the guide plays a preview while open. Reads happen when the web UI asks, then every 15 minutes,
+at least two minutes apart.

@@ -9,8 +9,8 @@ Setup: Hub serving the built web UI, desktop shell running, signed in to YouTube
 | --- | --- | --- |
 | 1 | Open the shell | Slate lists today's NFL and FBS games, live first; header reads `live` |
 | 2 | Watch a live game's row for a minute | Score and clock update without a reload |
-| 3 | Click a live game on a network never seen before | The tile shows YouTube TV's live guide, muted; its footer reads "Pick the <network> channel". The guide must stay on the guide until the user picks; if it jumps to a channel on its own (e.g. /live redirecting to the last-watched channel), record it, because the shell would learn that channel without a pick |
-| 4 | In that tile's guide, pick the channel airing the game | The tile plays it live within a few seconds, inside the tile |
+| 3 | With a fresh `.sportal/` data directory, open the shell and watch its terminal | No `GuideReader:` warning; within a minute the Hub log shows no `could not be read` |
+| 4 | Click a live game on a network never used before | It plays within a few seconds, with no guide shown in the tile |
 | 5 | Click another game on the same network | It plays at once, with no guide |
 | 6 | Fill all four tiles with games on learned networks | Tiles up to the stream limit play; note what the provider does past it |
 | 7 | Press `audio` on each tile in turn | Exactly one tile is audible each time |
@@ -26,5 +26,10 @@ Setup: Hub serving the built web UI, desktop shell running, signed in to YouTube
 | 17 | Once, after a channel's programme changes, click a game on that network | It plays the channel live, showing the new programme (first passed 2026-10-03). If it plays the old programme or fails, record it: a Channel is kept per network on the strength of this row (see ADR 0002) |
 | 18 | Open the shell and watch its terminal while the Hub page loads | No `refused shell navigation` warning for the Hub's own frames (the subframe guard could refuse an `about:blank` frame) |
 | 19 | Press **Sign in to YouTube TV**, sign in, close the window | Every tile plays without signing in again; the sign-in survives a shell restart |
+| 20 | Click a game kicking off in more than half an hour | The tile reads "On <channel> at <time>"; it plays on its own within two minutes of that time |
+| 21 | On an NFL Sunday, click two CBS games at 1:00 PM | Each plays its own game, each on its own "NFL ST - CBS" station |
+| 22 | Click an ESPN+ game | "Streaming only: not on YouTube TV", with no picking tile |
+| 23 | With three tiles playing, wait for a guide read (or reopen the shell) | All three keep playing through the read; record anything the provider shows about the stream limit |
+| 24 | During a read, look for a window or sound | None: the guide view is never shown and is muted |
 
 Record the date, the build, and any row that failed.
