@@ -16,8 +16,8 @@ Setup: Hub serving the built web UI, desktop shell running, signed in to YouTube
 | 7 | Click a game on an unmapped network | Data-tile message, no video, nothing else disturbed |
 | 8 | Press `clear` on a playing tile | Video and sound stop for that tile only |
 | 9 | Resize and maximize the window | Every video stays inside its tile; score strips stay visible |
-| 10 | Open the web UI in a normal browser on the same machine | Same slate and Stage; a change there changes the shell |
-| 11 | Stop the Hub, wait, start it | Header shows `reconnecting…` then `live`; playing video is not interrupted |
+| 10 | Open the web UI in a normal browser on the same machine | Same slate and Stage; a stream tile shows an "Open in YouTube TV" link instead of video; a change there changes the shell |
+| 11 | Stop the Hub, wait, start it | Header shows `reconnecting…` then `live`; video keeps playing while the Hub is down; when the Hub returns the Stage is empty again, because nothing is saved yet |
 | 12 | Quit and reopen the shell | Still signed in to the provider |
 
 Record the date, the build, and any row that failed.
