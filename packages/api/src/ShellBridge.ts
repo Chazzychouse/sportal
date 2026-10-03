@@ -1,11 +1,14 @@
+import { GameId } from "@sportal/domain/Game"
 import { Schema } from "effect"
+import type { Hotkey } from "./Hotkey.ts"
 
 /**
- * Where one provider view sits in the Display's window, in CSS pixels, and what it loads. A `stream` view
+ * Where a game's provider view sits in the Display's window, in CSS pixels, and what it loads. A `stream` view
  * plays a channel; a `guide` view shows the source's guide so the user can pick the channel for a network.
+ * A view belongs to its game, so a game that changes tiles keeps its player.
  */
 export const TilePlacement = Schema.Struct({
-  tile: Schema.Int,
+  game: GameId,
   url: Schema.String,
   role: Schema.Literals(["stream", "guide"]),
   bounds: Schema.Struct({ x: Schema.Int, y: Schema.Int, width: Schema.Int, height: Schema.Int }),
@@ -13,14 +16,32 @@ export const TilePlacement = Schema.Struct({
 })
 export type TilePlacement = typeof TilePlacement.Type
 
-/** A guide view landed on a channel's address: the user picked that channel in the tile's guide. */
-export const ChannelPick = Schema.Struct({ tile: Schema.Int, url: Schema.String })
+/** A guide view landed on a channel's address: the user picked that channel in the game's guide. */
+export const ChannelPick = Schema.Struct({ game: GameId, url: Schema.String })
 export type ChannelPick = typeof ChannelPick.Type
+
+/** How the shell moves provider views to new bounds: over `durationMs`, along a CSS cubic-bezier. */
+export const StageTransition = Schema.Struct({
+  durationMs: Schema.Int,
+  easing: Schema.Tuple([Schema.Finite, Schema.Finite, Schema.Finite, Schema.Finite])
+})
+export type StageTransition = typeof StageTransition.Type
 
 /** What the desktop shell exposes to the web UI as `window.sportalShell`. Absent in a plain browser. */
 export interface ShellBridge {
-  /** Replaces the full set of provider views: views not listed are closed. */
-  syncTiles(placements: ReadonlyArray<TilePlacement>): void
+  /**
+   * Replaces the full set of provider views: views not listed are closed. With a transition, views move to
+   * their new bounds over its duration; without one, at once.
+   */
+  syncTiles(placements: ReadonlyArray<TilePlacement>, transition?: StageTransition): void
+  /** Hides exactly these games' views, without unloading or muting them, and shows the rest. */
+  setHidden(games: ReadonlyArray<GameId>): void
+  /** Puts the shell window in or out of full screen. */
+  setFullScreen(on: boolean): void
+  /** Calls `listener` whenever the window enters or leaves full screen, however it happened. Returns a function that stops the calls. */
+  onFullScreenChanged(listener: (on: boolean) => void): () => void
+  /** Calls `listener` for each hotkey pressed while a stream view had keyboard focus. Returns a function that stops the calls. */
+  onHotkey(listener: (hotkey: Hotkey) => void): () => void
   /** Opens the sign-in window for YouTube TV, or focuses it if open. Its sign-in is shared by every tile. */
   openSignIn(): void
   /** Calls `listener` for every channel picked in a guide view. Returns a function that stops the calls. */

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "@effect/vitest"
+import { GameId } from "@sportal/domain/Game"
 import { Context, Effect, Exit, Fiber, Layer, Scope, Stream } from "effect"
 import { type Mock, vi } from "vitest"
 
@@ -18,8 +19,10 @@ vi.mock("electron", () => ({
 const { ProviderSession } = await import("./ProviderSession.ts")
 const { TileViews } = await import("./TileViews.ts")
 
+const one = GameId.make("one")
+const two = GameId.make("two")
 const placement = {
-  tile: 0,
+  game: one,
   url: "https://tv.youtube.com/watch/one",
   role: "stream" as const,
   bounds: { x: 10, y: 20, width: 640, height: 360 },
@@ -71,6 +74,23 @@ describe("TileViews.sync", () => {
     }).pipe(Effect.scoped)
   )
 
+  it.effect("moves a game's view without reloading it when the game changes tiles", () =>
+    Effect.gen(function* () {
+      const { tiles } = yield* attached()
+      const other = { ...placement, game: two, url: "https://tv.youtube.com/watch/two" }
+      yield* tiles.sync([placement, other])
+      const moved = { x: 700, y: 20, width: 640, height: 360 }
+      yield* tiles.sync([
+        { ...other, bounds: placement.bounds },
+        { ...placement, bounds: moved }
+      ])
+      expect(created).toHaveLength(2)
+      expect(created[0]?.webContents.loadURL).toHaveBeenCalledTimes(1)
+      expect(created[1]?.webContents.loadURL).toHaveBeenCalledTimes(1)
+      expect(created[0]?.setBounds).toHaveBeenLastCalledWith(moved)
+    }).pipe(Effect.scoped)
+  )
+
   it.effect("creates no view for a refused address", () =>
     Effect.gen(function* () {
       const { window, tiles } = yield* attached()
@@ -96,7 +116,7 @@ describe("TileViews.sync", () => {
     Effect.gen(function* () {
       const scope = yield* Scope.make()
       const { window, tiles } = yield* attached().pipe(Scope.provide(scope))
-      yield* tiles.sync([placement, { ...placement, tile: 1 }])
+      yield* tiles.sync([placement, { ...placement, game: two }])
       yield* Scope.close(scope, Exit.void)
       expect(created).toHaveLength(2)
       for (const view of created) {
@@ -118,7 +138,7 @@ describe("TileViews.channelPicks", () => {
       yield* tiles.sync([guide])
       const picks = yield* collect(tiles.channelPicks, 1)
       created[0]?.webContents.emit("did-navigate-in-page", {}, espn, true)
-      expect(yield* Fiber.join(picks)).toEqual([{ tile: 0, url: espn }])
+      expect(yield* Fiber.join(picks)).toEqual([{ game: one, url: espn }])
     }).pipe(Effect.scoped)
   )
 
@@ -134,8 +154,8 @@ describe("TileViews.channelPicks", () => {
       contents?.emit("did-navigate", {}, espn)
       contents?.emit("did-navigate-in-page", {}, fox, true)
       expect(yield* Fiber.join(picks)).toEqual([
-        { tile: 0, url: espn },
-        { tile: 0, url: fox }
+        { game: one, url: espn },
+        { game: one, url: fox }
       ])
     }).pipe(Effect.scoped)
   )
@@ -150,8 +170,8 @@ describe("TileViews.channelPicks", () => {
       contents?.emit("did-navigate-in-page", {}, "https://tv.youtube.com/live", true)
       contents?.emit("did-navigate-in-page", {}, espn, true)
       expect(yield* Fiber.join(picks)).toEqual([
-        { tile: 0, url: espn },
-        { tile: 0, url: espn }
+        { game: one, url: espn },
+        { game: one, url: espn }
       ])
     }).pipe(Effect.scoped)
   )
@@ -166,8 +186,8 @@ describe("TileViews.channelPicks", () => {
       contents?.emit("did-navigate-in-page", {}, espn, true)
       contents?.emit("did-navigate-in-page", {}, fox, true)
       expect(yield* Fiber.join(picks)).toEqual([
-        { tile: 0, url: espn },
-        { tile: 0, url: fox }
+        { game: one, url: espn },
+        { game: one, url: fox }
       ])
     }).pipe(Effect.scoped)
   )
@@ -182,8 +202,8 @@ describe("TileViews.channelPicks", () => {
       yield* tiles.sync([{ ...guide, url: "https://tv.youtube.com/live?again" }])
       contents?.emit("did-navigate-in-page", {}, espn, true)
       expect(yield* Fiber.join(picks)).toEqual([
-        { tile: 0, url: espn },
-        { tile: 0, url: espn }
+        { game: one, url: espn },
+        { game: one, url: espn }
       ])
     }).pipe(Effect.scoped)
   )
@@ -195,20 +215,20 @@ describe("TileViews.channelPicks", () => {
       yield* tiles.sync([])
       const picks = yield* collect(tiles.channelPicks, 1)
       created[0]?.webContents.emit("did-navigate-in-page", {}, espn, true)
-      yield* tiles.sync([{ ...guide, tile: 1 }])
+      yield* tiles.sync([{ ...guide, game: two }])
       created[1]?.webContents.emit("did-navigate-in-page", {}, fox, true)
-      expect(yield* Fiber.join(picks)).toEqual([{ tile: 1, url: fox }])
+      expect(yield* Fiber.join(picks)).toEqual([{ game: two, url: fox }])
     }).pipe(Effect.scoped)
   )
 
   it.effect("never reports for a stream view", () =>
     Effect.gen(function* () {
       const { tiles } = yield* attached()
-      yield* tiles.sync([placement, { ...guide, tile: 1 }])
+      yield* tiles.sync([placement, { ...guide, game: two }])
       const picks = yield* collect(tiles.channelPicks, 1)
       created[0]?.webContents.emit("did-navigate-in-page", {}, espn, true)
       created[1]?.webContents.emit("did-navigate-in-page", {}, fox, true)
-      expect(yield* Fiber.join(picks)).toEqual([{ tile: 1, url: fox }])
+      expect(yield* Fiber.join(picks)).toEqual([{ game: two, url: fox }])
     }).pipe(Effect.scoped)
   )
 })

@@ -29,9 +29,12 @@ export function StageView(props: {
     setNotices(new Map())
     // A channel picked in a picking tile's guide teaches the Hub that network's channel.
     return window.sportalShell?.onChannelPicked((pick) => {
-      const tile = props.stage.tiles[pick.tile]
+      const index = props.stage.tiles.findIndex(
+        (tile) => tile._tag === "PickingChannel" && tile.game === pick.game
+      )
+      const tile = props.stage.tiles[index]
       if (tile?._tag === "PickingChannel")
-        void learnChannel(tile.network, pick.url).then((failure) => setNotices(noticed(pick.tile, failure)))
+        void learnChannel(tile.network, pick.url).then((failure) => setNotices(noticed(index, failure)))
     })
   }, [props.stage])
 
@@ -45,7 +48,7 @@ export function StageView(props: {
 
   return (
     <main className="grid min-h-0 grid-cols-2 grid-rows-2 gap-1 p-1">
-      {props.stage.tiles.map((tile, index) => {
+      {props.stage.onStage().map((tile, index) => {
         const game = tile._tag === "Empty" ? undefined : props.slate.find((g) => g.id === tile.game)
         const hasAudio = tile._tag !== "Empty" && props.stage.audioFocus === tile.game
         const notice = notices.get(index)
@@ -168,7 +171,7 @@ function noStream(why: Extract<Tile, { _tag: "DataTile" }>["why"]): string {
 }
 
 function placements(stage: Stage, videoAreas: ReadonlyArray<HTMLDivElement | null>): Array<TilePlacement> {
-  return stage.tiles.flatMap((tile, index) => {
+  return stage.onStage().flatMap((tile, index) => {
     const area = videoAreas[index]
     if (area === null || area === undefined) return []
     const view =
@@ -178,11 +181,11 @@ function placements(stage: Stage, videoAreas: ReadonlyArray<HTMLDivElement | nul
           ? // A guide can preview what is on; it never takes the sound.
             { url: tile.guide.url, role: "guide" as const, muted: true }
           : undefined
-    if (view === undefined) return []
+    if (view === undefined || tile._tag === "Empty") return []
     const rect = area.getBoundingClientRect()
     return [
       {
-        tile: index,
+        game: tile.game,
         ...view,
         bounds: {
           x: Math.round(rect.x),

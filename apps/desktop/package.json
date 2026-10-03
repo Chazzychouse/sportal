@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@sportal/api": "workspace:*",
+    "@sportal/domain": "workspace:*",
     "effect": "4.0.0"
   },
   "devDependencies": {
