@@ -132,9 +132,10 @@ ChannelAvailability: Carried | Upcoming | NotCarried (with reason) | Unlearned (
 - A stream tile keeps its `Channel` and locator. An `Upcoming` game is a data tile that names where and
   when it will play ("On NFL ST - CBS at 1:00 PM"); `stage.refresh` turns it into a stream tile when a
   later guide shows the airing on now.
-- A guide read never stops a game being watched: `stage.refresh` keeps a stream tile playing when a later
-  guide has its game not in the guide (its airing ended while the game runs long) or upcoming. Carried on
-  another channel, unlearned, no stream, or streaming only replace it.
+- A stream tile follows its origin on `stage.refresh`. A guide-matched tile keeps playing on any answer
+  but a channel (its airing ended while the game runs long, or a failed or stale read left the lineup
+  answering); carried on another channel moves it. A hand-picked tile follows the answer, so **wrong
+  channel** returns it to the guide.
 
 ### 2. Desktop shell (`apps/desktop`)
 

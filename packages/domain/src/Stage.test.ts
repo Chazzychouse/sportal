@@ -16,6 +16,7 @@ const guide = { _tag: "WebView" as const, url: "https://tv.youtube.com/live" }
 const onFox = () => ChannelAvailability.Carried({ channel: foxChannel, learnedFor: Option.some(fox) })
 const foxUnlearned = () => ChannelAvailability.Unlearned({ network: fox, source: "YouTube TV", guide })
 const nowhere = () => ChannelAvailability.NotCarried({ why: "NoStream" })
+const onGuide = () => ChannelAvailability.Carried({ channel: foxChannel, learnedFor: Option.none() })
 
 describe("Stage#apply", () => {
   it("assigns a carried game as a stream tile", () => {
@@ -178,32 +179,47 @@ describe("Stage#refresh", () => {
     assert.strictEqual(refreshed.audioFocus, 3)
   })
 
-  it("keeps a stream tile playing when its game has left the guide or is listed as still to come", () => {
-    const streaming = assign(Stage.initial, 0, bama, onFox)
+  it("keeps a guide-matched stream tile playing on any answer but a channel", () => {
+    const streaming = assign(Stage.initial, 0, bama, onGuide)
     const begin = DateTime.makeUnsafe("2026-10-04T17:00:00Z")
-    const notInGuide = streaming.refresh(some(() => ChannelAvailability.NotCarried({ why: "NotInGuide" })))
-    const upcoming = streaming.refresh(
-      some(() => ChannelAvailability.Upcoming({ channel: Option.some("FOX 43"), begin: Option.some(begin) }))
-    )
-    assert.deepStrictEqual(notInGuide.tiles[0], streaming.tiles[0])
-    assert.deepStrictEqual(upcoming.tiles[0], streaming.tiles[0])
+    for (const answer of [
+      foxUnlearned(),
+      nowhere(),
+      ChannelAvailability.NotCarried({ why: "StreamingOnly" }),
+      ChannelAvailability.NotCarried({ why: "NotInGuide" }),
+      ChannelAvailability.Upcoming({ channel: Option.some("FOX 43"), begin: Option.some(begin) })
+    ])
+      assert.deepStrictEqual(streaming.refresh(() => Option.some(answer)).tiles[0], streaming.tiles[0])
   })
 
-  it("replaces a stream tile when its game is carried elsewhere or has no stream", () => {
-    const streaming = assign(Stage.initial, 0, bama, onFox)
+  it("moves a guide-matched stream tile to the channel a later guide carries it on", () => {
+    const streaming = assign(Stage.initial, 0, bama, onGuide)
     const elsewhere = { ...foxChannel, name: "FOX 43" }
     const moved = streaming.refresh(
       some(() => ChannelAvailability.Carried({ channel: elsewhere, learnedFor: Option.none() }))
     )
     assert.deepStrictEqual(moved.tiles[0], { _tag: "StreamTile", game: bama, channel: elsewhere })
-    assert.deepStrictEqual(streaming.refresh(some(nowhere)).tiles[0], {
-      _tag: "DataTile",
+    assert.deepStrictEqual(streaming.refresh(some(onGuide)).tiles[0], streaming.tiles[0])
+  })
+
+  it("makes a hand-picked stream tile follow its channel, so wrong channel returns it to the guide", () => {
+    const picked = assign(Stage.initial, 0, bama, onFox)
+    assert.deepStrictEqual(picked.refresh(some(foxUnlearned)).tiles[0], {
+      _tag: "PickingChannel",
       game: bama,
-      why: { _tag: "NoStream" }
+      network: fox,
+      source: "YouTube TV",
+      guide
     })
     assert.deepStrictEqual(
-      streaming.refresh(some(() => ChannelAvailability.NotCarried({ why: "StreamingOnly" }))).tiles[0],
-      { _tag: "DataTile", game: bama, why: { _tag: "StreamingOnly" } }
+      picked.refresh(some(() => ChannelAvailability.NotCarried({ why: "NotInGuide" }))).tiles[0],
+      { _tag: "DataTile", game: bama, why: { _tag: "NotInGuide" } }
+    )
+    assert.deepStrictEqual(
+      picked.refresh(
+        some(() => ChannelAvailability.Upcoming({ channel: Option.none(), begin: Option.none() }))
+      ).tiles[0],
+      { _tag: "DataTile", game: bama, why: { _tag: "NotYet" } }
     )
   })
 

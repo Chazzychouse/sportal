@@ -1,7 +1,9 @@
+import { readFileSync } from "node:fs"
 import { assert, describe, it } from "@effect/vitest"
 import { GameId, Network } from "@sportal/domain/Game"
-import { broadcast, snapshot } from "@sportal/domain/TestGame"
-import { Deferred, Effect, Fiber, Layer, Option, Ref, Stream } from "effect"
+import { broadcast, snapshot, team } from "@sportal/domain/TestGame"
+import { DateTime, Deferred, Effect, Fiber, Layer, Option, Ref, Stream } from "effect"
+import { TestClock } from "effect/testing"
 import * as Database from "../database/Database.ts"
 import { Ingest } from "../ingest/Ingest.ts"
 import { Source } from "../source/Source.ts"
@@ -24,6 +26,15 @@ const slate = [
   game("4", [espnPlus]),
   game("5", [fox])
 ]
+
+const ohioStateAtIowa = snapshot({
+  id: GameId.make("401858473"),
+  status: "live",
+  kickoff: DateTime.makeUnsafe("2026-10-03T19:30:00Z"),
+  away: { team: team("OSU", "fbs", { name: "Ohio State Buckeyes", location: "Ohio State" }), score: 0 },
+  home: { team: team("IOWA", "fbs", { name: "Iowa Hawkeyes", location: "Iowa" }), score: 0 },
+  broadcasts: [broadcast("CBS")]
+})
 
 const TestSessions = StageSessions.layer.pipe(
   Layer.provide(Layer.succeed(Ingest, Ingest.of({ slate: Effect.succeed(slate), changes: Stream.empty }))),
@@ -220,6 +231,40 @@ describe("StageSessions", () => {
         )
       )
     })
+  )
+
+  it.effect("keeps a guide-matched tile playing when its guide goes stale and the lineup answers", () =>
+    Effect.gen(function* () {
+      yield* TestClock.setTime(DateTime.toEpochMillis(DateTime.makeUnsafe("2026-10-03T20:24:45Z")))
+      const source = yield* Source
+      yield* source.readGuide(
+        readFileSync(
+          new URL("../source/youtube-tv/fixtures/guide-2026-10-03T2024Z.json", import.meta.url),
+          "utf8"
+        )
+      )
+      const sessions = yield* StageSessions
+      const playing = yield* sessions.dispatch({ _tag: "Assign", tile: 0, game: ohioStateAtIowa.id })
+      assert.strictEqual(playing.tiles[0]?._tag, "StreamTile")
+
+      yield* TestClock.adjust("45 minutes")
+      for (let turn = 0; turn < 10; turn++) yield* Effect.yieldNow
+      // The lineup answers now, and has never heard of CBS.
+      assert.strictEqual((yield* source.availability)(ohioStateAtIowa)._tag, "Unlearned")
+      assert.deepStrictEqual((yield* sessions.stage).tiles[0], playing.tiles[0])
+    }).pipe(
+      Effect.provide(
+        StageSessions.layer.pipe(
+          Layer.provide(
+            Layer.succeed(
+              Ingest,
+              Ingest.of({ slate: Effect.succeed([ohioStateAtIowa]), changes: Stream.empty })
+            )
+          ),
+          Layer.provideMerge(sourceKnowingEspn())
+        )
+      )
+    )
   )
 
   it.effect("assigns a game missing from the slate as a data tile", () =>
