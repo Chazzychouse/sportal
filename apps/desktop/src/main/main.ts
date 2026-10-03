@@ -1,6 +1,6 @@
 import { join } from "node:path"
 import { TilePlacement } from "@sportal/api/ShellBridge"
-import { Config, Effect, FiberSet, Layer, Option, Queue, Schema, Stream } from "effect"
+import { Cause, Config, Effect, FiberSet, Layer, Option, Queue, Schema, Stream } from "effect"
 import { app, BrowserWindow, components, type IpcMainEvent, ipcMain } from "electron"
 import { confine, hostOf, load, ProviderSession } from "./ProviderSession.ts"
 import { TileViews } from "./TileViews.ts"
@@ -69,7 +69,22 @@ function serveHub(window: BrowserWindow, hubUrl: string) {
 
     // Placements are applied one at a time, and only the newest waiting set matters: each replaces all before it.
     const pending = yield* Queue.sliding<ReadonlyArray<TilePlacement>>(1)
-    yield* Effect.forkScoped(Effect.forever(Queue.take(pending).pipe(Effect.flatMap(tiles.sync))))
+    yield* Effect.forkScoped(
+      Effect.forever(
+        Queue.take(pending).pipe(
+          Effect.flatMap((placements) =>
+            tiles.sync(placements).pipe(
+              Effect.catchCause((cause) => {
+                if (Cause.hasInterrupts(cause)) {
+                  return Effect.failCause(cause)
+                }
+                return Effect.logError("Sportal: a tile sync failed", cause)
+              })
+            )
+          )
+        )
+      )
+    )
     const syncTiles = (event: IpcMainEvent, placements: unknown) => {
       if (event.sender !== window.webContents) return
       const decoded = decodePlacements(placements)
@@ -112,8 +127,9 @@ function allWindowsClosed() {
   })
 }
 
-// Launched last, once everything above is defined. Electron owns the process, so the shell is not run with NodeRuntime.runMain: it runs until its last window
-// closes, releases what it holds, and then asks Electron to quit.
+// Launched last, once everything above is defined. Electron owns the process, so the shell is not
+// run with NodeRuntime.runMain: it runs until its last window closes, releases what it holds, and
+// then asks Electron to quit.
 Layer.launch(Shell).pipe(
   Effect.raceFirst(allWindowsClosed()),
   Effect.tapCause((cause) => Effect.logError("Sportal: the shell stopped", cause)),
