@@ -1,6 +1,6 @@
 import { Layout, LayoutName } from "@sportal/domain/Layout"
 import type { Stage } from "@sportal/domain/Stage"
-import { Expand, List, LogIn, Minimize2, Shrink, SquareDashed } from "lucide-react"
+import { Expand, Keyboard, List, LogIn, Minimize2, Shrink, SquareDashed } from "lucide-react"
 import { Button } from "@/design/button"
 import { ToggleGroup, ToggleGroupItem } from "@/design/toggle-group"
 import { dispatch } from "../hub/HubClient.ts"
@@ -13,6 +13,7 @@ export function TopBar(props: {
   selected: number
   fullScreen: { on: boolean; toggle: () => void }
   slate: { open: boolean; live: number; toggle: () => void }
+  onKeys: () => void
 }) {
   const selectedTile = props.stage.onStage()[props.selected]
   const canSolo = selectedTile !== undefined && selectedTile._tag !== "Empty"
@@ -26,7 +27,7 @@ export function TopBar(props: {
       <Button
         variant="ghost"
         size="sm"
-        data-slate-toggle
+        aria-keyshortcuts="S"
         aria-pressed={props.slate.open}
         className={`label-caps text-xs ${props.slate.open ? "bg-accent" : ""}`}
         onClick={props.slate.toggle}
@@ -70,6 +71,7 @@ export function TopBar(props: {
         variant="ghost"
         size="sm"
         className="label-caps text-xs"
+        aria-keyshortcuts="F"
         disabled={props.stage.solo === undefined && !canSolo}
         onClick={() =>
           dispatch(
@@ -104,7 +106,25 @@ export function TopBar(props: {
           />
           {props.connected ? "Hub live" : "Reconnecting"}
         </span>
-        <Button variant="ghost" size="icon-sm" aria-label="Full screen" onClick={props.fullScreen.toggle}>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          aria-label="Keys"
+          aria-keyshortcuts="?"
+          title="Keys · ?"
+          className="text-muted-foreground"
+          onClick={props.onKeys}
+        >
+          <Keyboard />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          aria-label="Full screen"
+          aria-keyshortcuts="F11"
+          title="Full screen · F11"
+          onClick={props.fullScreen.toggle}
+        >
           {props.fullScreen.on ? <Minimize2 /> : <Expand />}
         </Button>
       </div>

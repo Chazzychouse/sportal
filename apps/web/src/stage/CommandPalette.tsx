@@ -13,6 +13,7 @@ import {
 import { LayoutGlyph, layoutLabel } from "../frame/LayoutGlyph.tsx"
 import { dispatch } from "../hub/HubClient.ts"
 import { statusText } from "../slate/StatusText.ts"
+import { TeamLogo } from "../slate/TeamLogo.tsx"
 
 /** Every Stage command by name: watch a game, act on a tile, change layout, go full screen. */
 export function CommandPalette(props: {
@@ -22,6 +23,7 @@ export function CommandPalette(props: {
   slate: ReadonlyArray<GameSnapshot>
   selected: number
   onFullScreen: () => void
+  onKeys: () => void
 }) {
   const run = (command: StageCommand) => {
     dispatch(command)
@@ -55,7 +57,9 @@ export function CommandPalette(props: {
                 .join(" ")} ${game.id}`}
               onSelect={() => run({ _tag: "Assign", tile: props.selected, game: game.id })}
             >
+              <TeamLogo team={game.away.team} size={16} />
               <span className="font-mono">{matchup(game)}</span>
+              <TeamLogo team={game.home.team} size={16} />
               <span
                 className={`label-caps text-[11px] ${game.isLive() ? "text-live" : "text-muted-foreground"}`}
               >
@@ -94,6 +98,7 @@ export function CommandPalette(props: {
                 onSelect={() => run({ _tag: "Solo", tile: slot })}
               >
                 Solo {name}
+                {slot === props.selected && <CommandShortcut>F</CommandShortcut>}
               </CommandItem>,
               <CommandItem
                 key={`clear-${slot}`}
@@ -134,6 +139,16 @@ export function CommandPalette(props: {
           >
             Full screen
             <CommandShortcut>F11</CommandShortcut>
+          </CommandItem>
+          <CommandItem
+            value="keys keyboard shortcuts help"
+            onSelect={() => {
+              props.onOpenChange(false)
+              props.onKeys()
+            }}
+          >
+            Keys
+            <CommandShortcut>?</CommandShortcut>
           </CommandItem>
         </CommandGroup>
       </CommandList>

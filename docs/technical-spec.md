@@ -228,7 +228,7 @@ sportal/
     │       ├── hub/                Typed client derived from SportalApi; live-stream subscription; the store
     │       ├── slate/              Slate view and its parts
     │       ├── game/               Game detail
-    │       ├── stage/              Stage view, tiles, score strips, hotkeys
+    │       ├── stage/              Stage view, tiles, hotkeys
     │       ├── remote/             Phone remote view
     │       ├── settings/           Follows, presets, rules, sources
     │       └── theme/              Desk and couch density themes

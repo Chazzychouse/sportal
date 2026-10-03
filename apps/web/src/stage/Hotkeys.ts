@@ -11,12 +11,15 @@ export function useHotkeys(handle: (hotkey: Hotkey) => void) {
 
   useEffect(() => {
     const pressed = (event: KeyboardEvent) => {
-      const hotkey = Hotkey.of({
-        code: event.code,
-        shift: event.shiftKey,
-        control: event.ctrlKey,
-        meta: event.metaKey
-      })
+      const hotkey = Hotkey.of(
+        {
+          code: event.code,
+          shift: event.shiftKey,
+          control: event.ctrlKey,
+          meta: event.metaKey
+        },
+        "page"
+      )
       if (hotkey === undefined || event.repeat) return
       if (hotkey._tag !== "CommandPalette" && isTyping(event.target)) return
       event.preventDefault()

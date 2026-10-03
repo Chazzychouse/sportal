@@ -2,6 +2,7 @@ import type { GameSnapshot } from "@sportal/domain/Game"
 import type { Tile } from "@sportal/domain/Stage"
 import { localTime } from "../LocalTime.ts"
 import { statusText } from "../slate/StatusText.ts"
+import { TeamLogo } from "../slate/TeamLogo.tsx"
 
 /**
  * What a tile's well shows from the web UI. In the shell a provider view covers a stream or picking tile's
@@ -46,9 +47,10 @@ export function TileBody(props: { tile: Tile; game: GameSnapshot | undefined }) 
 function Scoreboard(props: { game: GameSnapshot }) {
   const { game } = props
   return (
-    <div className="grid grid-cols-[auto_auto_auto] items-baseline gap-x-5 gap-y-1">
+    <div className="grid grid-cols-[auto_auto_auto_auto] items-center gap-x-5 gap-y-1">
       {[game.away, game.home].map((side) => (
         <div key={side.team.abbreviation} className="contents">
+          <TeamLogo team={side.team} size={40} />
           <span className="label-caps text-right text-3xl">{side.team.abbreviation}</span>
           <span className="font-mono font-semibold text-4xl">{side.score}</span>
           <span className="text-muted-foreground text-xs">
@@ -57,7 +59,7 @@ function Scoreboard(props: { game: GameSnapshot }) {
         </div>
       ))}
       <span
-        className={`label-caps col-span-3 text-center text-xs ${game.isLive() ? "text-live" : "text-muted-foreground"}`}
+        className={`label-caps col-span-4 text-center text-xs ${game.isLive() ? "text-live" : "text-muted-foreground"}`}
       >
         {statusText(game)}
       </span>

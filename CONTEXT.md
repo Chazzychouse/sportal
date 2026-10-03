@@ -14,7 +14,7 @@ Every exported type name must be a term here.
 | **Team** | A league member. | club, competitor, franchise |
 | **Ranking** | A team's position in a poll (college). | seed |
 | **Game** | One scheduled contest between two teams. | event, match, competition, fixture |
-| **Slate** | The games in a time window (a Saturday, an NFL week). | schedule, scoreboard |
+| **Slate** | The games in a time window (a Saturday, an NFL week). Shown as a strip under the Stage. | schedule, scoreboard |
 | **Kickoff** | A game's scheduled start instant. | start time, date |
 
 ### Game state
@@ -92,6 +92,7 @@ Provider and Source are the two words most likely to be swapped. Provider is alw
 | **Picking tile** | A tile showing a source's guide until its game's network has a channel; `PickingChannel` in code. | setup tile |
 | **Main tile** | The largest slot of a layout. | hero, primary |
 | **Bench** | The tiles a layout has no slot for, kept in order and not played. | queue, reserve |
+| **Pick** | The slate game a Display has stepped to with `[` `]`, ready to drop into the selected tile with Enter. Local to the Display, like the selected tile. | highlight, cursor |
 | **Solo** | One on-stage game filling the whole Stage. | fullscreen, maximize |
 | **Swap** | Exchange two tiles, on stage or benched. | move |
 | **Audio focus** | The single game whose sound is on; it follows the game when tiles move. | active, unmuted |

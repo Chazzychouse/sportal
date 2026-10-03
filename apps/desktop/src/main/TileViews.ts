@@ -95,7 +95,7 @@ export class TileViews extends Context.Service<
           // A guide view gets every key, so its search box keeps working.
           entry.view.webContents.on("before-input-event", (event, input) => {
             if (views.get(game) !== entry || entry.role !== "stream" || input.type !== "keyDown") return
-            const hotkey = Hotkey.of(input)
+            const hotkey = Hotkey.of(input, "stream")
             if (hotkey === undefined) return
             event.preventDefault()
             PubSub.publishUnsafe(hotkeys, hotkey)

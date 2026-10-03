@@ -1,227 +1,166 @@
-import { GameSnapshot } from "@sportal/domain/Game"
-import type { Stage } from "@sportal/domain/Stage"
-import { ChevronRight } from "lucide-react"
-import { type ReactNode, useState } from "react"
-import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/design/sheet"
+import type { GameId, GameSnapshot } from "@sportal/domain/Game"
+import { Fragment, useEffect, useRef } from "react"
 import { dispatch } from "../hub/HubClient.ts"
 import { tileDrag } from "../stage/TileChrome.tsx"
 import { statusText } from "./StatusText.ts"
+import { dropCommand, type stripCards } from "./StripCards.ts"
+import { TeamLogo } from "./TeamLogo.tsx"
 
 /**
- * The slate as a drawer over the Stage's left edge: the bench, then live, upcoming, and final games. Picking a
- * game puts it in the selected tile and closes the drawer. Non-modal, so a bench game can be dragged onto a tile.
+ * The slate as a strip under the Stage: the bench, then live, upcoming, and final games, scrolling sideways. It
+ * takes its own room, so it never covers a video. Clicking a card, or `Enter` on the pick, puts it in the selected
+ * tile; a bench card can also be dragged onto a tile.
  */
 export function SlateView(props: {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  stage: Stage
-  slate: ReadonlyArray<GameSnapshot>
+  cards: ReturnType<typeof stripCards>
   selected: number
-  fullScreen: boolean
+  pick: GameId | undefined
+  onPick: (game: GameId) => void
 }) {
-  const [finalsOpen, setFinalsOpen] = useState(false)
-  const benched = props.stage.benched()
-  const placeOf = (game: GameSnapshot) => {
-    const slot = props.stage.slotOf(game.id)
-    if (slot !== undefined) return `T${slot + 1}`
-    return benched.some((bench) => bench.game === game.id) ? "Bench" : undefined
-  }
-  const ordered = [...props.slate].sort(GameSnapshot.watchOrder)
-  const inProgress = (progress: ReturnType<GameSnapshot["progress"]>) =>
-    ordered.filter((game) => game.progress() === progress)
-  const live = inProgress("live")
-  const upcoming = inProgress("upcoming")
-  const finals = inProgress("over")
-  // With nothing live or to come, the finals are all there is, so they show as a plain section.
-  const onlyFinals = live.length === 0 && upcoming.length === 0
-  const close = () => props.onOpenChange(false)
-  const row = (game: GameSnapshot) => {
-    const place = placeOf(game)
-    return (
-      <li key={game.id}>
-        <Matchup
-          game={game}
-          place={place}
-          onClick={
-            place === undefined
-              ? () => {
-                  dispatch({ _tag: "Assign", tile: props.selected, game: game.id })
-                  close()
-                }
-              : undefined
-          }
-        />
-      </li>
-    )
-  }
+  const rowRef = useRef<HTMLOListElement | null>(null)
+
+  // The pick stays in view as it steps along.
+  useEffect(() => {
+    if (props.pick === undefined) return
+    rowRef.current
+      ?.querySelector(`[data-game="${CSS.escape(props.pick)}"]`)
+      ?.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "smooth" })
+  }, [props.pick])
 
   return (
-    <Sheet open={props.open} onOpenChange={props.onOpenChange} modal={false}>
-      <SheetContent
-        side="left"
-        showCloseButton={false}
-        // App's hotkey handler closes the drawer on Esc, so a forwarded Esc from a stream view and a local one behave the same.
-        onEscapeKeyDown={(event) => event.preventDefault()}
-        // The top bar's Slate button toggles the drawer itself; a press on it is not a click outside.
-        onInteractOutside={(event) => {
-          if (event.target instanceof Element && event.target.closest("[data-slate-toggle]") !== null)
-            event.preventDefault()
-        }}
-        className={`gap-0 bg-card p-0 sm:max-w-none ${props.fullScreen ? "" : "top-11 h-[calc(100%-2.75rem)]"} w-96`}
-      >
-        <header className="flex items-baseline justify-between border-b px-3 pt-2.5 pb-1.5">
-          <SheetTitle className="label-caps text-[11px] text-muted-foreground">
-            Slate <span className="font-mono">{props.slate.length}</span>
-          </SheetTitle>
-          <SheetDescription className="label-caps text-[11px] text-muted-foreground">
-            to tile <span className="font-mono text-foreground">{props.selected + 1}</span>
-          </SheetDescription>
-        </header>
-        <div className="min-h-0 flex-1 overflow-y-auto">
-          {props.slate.length === 0 && (
-            <p className="px-3 py-2.5 text-xs text-muted-foreground">No games in the slate.</p>
-          )}
-          {benched.length > 0 && (
-            <Section title="Bench" count={benched.length}>
-              {benched.map(({ tile, game: id }) => {
-                const game = props.slate.find((g) => g.id === id)
-                const swap = () => {
-                  dispatch({ _tag: "Swap", a: tile, b: props.selected })
-                  close()
-                }
-                return (
-                  <li key={tile}>
-                    {game === undefined ? (
-                      <button
-                        type="button"
-                        draggable
-                        onClick={swap}
-                        onDragStart={(event) => event.dataTransfer.setData(tileDrag, String(tile))}
-                        title={`Swap into tile ${props.selected + 1}`}
-                        className="block w-full px-3 py-1.5 text-left font-mono text-xs text-muted-foreground transition-colors hover:bg-accent"
-                      >
-                        Off the slate
-                      </button>
-                    ) : (
-                      <Matchup game={game} place="Bench" dragTile={tile} onClick={swap} />
-                    )}
+    <section aria-label="Slate" className="flex h-16 min-w-0 items-stretch border-t bg-card/60">
+      <div className="flex w-16 shrink-0 flex-col justify-center gap-1 border-r px-3">
+        <span className="label-caps text-[10px] text-muted-foreground">to tile</span>
+        <span className="font-mono text-lg leading-none">{props.selected + 1}</span>
+      </div>
+      {props.cards.length === 0 ? (
+        <p className="self-center px-3 text-xs text-muted-foreground">No games in the slate.</p>
+      ) : (
+        <ol
+          ref={rowRef}
+          // A plain mouse wheel scrolls the strip sideways.
+          onWheel={(event) => {
+            if (rowRef.current !== null && event.deltaX === 0) rowRef.current.scrollLeft += event.deltaY
+          }}
+          className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto overflow-y-hidden px-2 [scrollbar-width:thin]"
+        >
+          {props.cards.map((card, index) => {
+            const section = sectionOf(card)
+            const starts = index === 0 || sectionOf(props.cards[index - 1]) !== section
+            return (
+              <Fragment key={card.id}>
+                {starts && (
+                  <li
+                    aria-hidden
+                    className={`label-caps flex h-11 shrink-0 rotate-180 items-center pr-1 text-[9px] text-muted-foreground [writing-mode:vertical-rl] ${
+                      index === 0 ? "" : "ml-1 border-r"
+                    }`}
+                  >
+                    {section}
                   </li>
-                )
-              })}
-            </Section>
-          )}
-          <Section title="Live" count={live.length}>
-            {live.map(row)}
-          </Section>
-          <Section title="Upcoming" count={upcoming.length}>
-            {upcoming.map(row)}
-          </Section>
-          {onlyFinals ? (
-            <Section title="Final" count={finals.length}>
-              {finals.map(row)}
-            </Section>
-          ) : (
-            finals.length > 0 && (
-              <section className="border-t">
-                <button
-                  type="button"
-                  onClick={() => setFinalsOpen((open) => !open)}
-                  aria-expanded={finalsOpen}
-                  className="label-caps flex w-full items-center gap-1 px-3 pt-2.5 pb-1 text-left text-[11px] text-muted-foreground hover:text-foreground"
-                >
-                  <ChevronRight className={`size-3 transition-transform ${finalsOpen ? "rotate-90" : ""}`} />
-                  Final <span className="font-mono">{finals.length}</span>
-                </button>
-                {finalsOpen && <ul className="pb-1.5">{finals.map(row)}</ul>}
-              </section>
+                )}
+                <li data-game={card.id} className="shrink-0">
+                  <Card
+                    card={card}
+                    picked={props.pick === card.id}
+                    onDrop={() => {
+                      const command = dropCommand(card, props.selected)
+                      if (command === undefined) return
+                      props.onPick(card.id)
+                      dispatch(command)
+                    }}
+                  />
+                </li>
+              </Fragment>
             )
-          )}
-        </div>
-      </SheetContent>
-    </Sheet>
-  )
-}
-
-function Section(props: { title: string; count: number; children: ReactNode }) {
-  if (props.count === 0) return null
-  return (
-    <section className="border-t first:border-t-0">
-      <h2 className="label-caps px-3 pt-2.5 pb-1 text-[11px] text-muted-foreground">
-        {props.title} <span className="font-mono">{props.count}</span>
-      </h2>
-      <ul className="pb-1.5">{props.children}</ul>
+          })}
+        </ol>
+      )}
     </section>
   )
 }
 
+function sectionOf(card: ReturnType<typeof stripCards>[number] | undefined) {
+  if (card?.place?._tag === "Bench") return "Bench"
+  switch (card?.game?.progress()) {
+    case "live":
+      return "Live"
+    case "upcoming":
+      return "Next"
+    default:
+      return "Final"
+  }
+}
+
 /**
- * One game in fixed columns — rank, team, score, status, place — so nothing shifts as names, scores, and
- * clocks change length. A game already on the Stage or the Bench shows where, and is not pickable.
+ * One game in fixed columns — logo, team, score, then status and networks — so nothing shifts as names, scores,
+ * and clocks change length. A game on stage shows its tile and cannot be picked.
  */
-function Matchup(props: {
-  game: GameSnapshot
-  place: string | undefined
-  onClick?: (() => void) | undefined
-  dragTile?: number
-}) {
-  const { game, dragTile } = props
-  const scored = game.isLive() || game.status === "final"
-  const networks = game.broadcasts.map(({ network }) => network).join(" · ")
+function Card(props: { card: ReturnType<typeof stripCards>[number]; picked: boolean; onDrop: () => void }) {
+  const { game, place } = props.card
+  const bench = place?._tag === "Bench" ? place.tile : undefined
+  const onStage = place?._tag === "Slot"
+  const networks = game?.broadcasts.map(({ network }) => network).join(" · ")
   return (
     <button
       type="button"
-      disabled={props.onClick === undefined}
-      onClick={props.onClick}
-      draggable={dragTile !== undefined}
+      // The keyboard picks with [ ] and Enter, so the cards stay out of the tab order.
+      tabIndex={-1}
+      disabled={onStage}
+      onClick={props.onDrop}
+      draggable={bench !== undefined}
       onDragStart={
-        dragTile === undefined ? undefined : (event) => event.dataTransfer.setData(tileDrag, String(dragTile))
+        bench === undefined ? undefined : (event) => event.dataTransfer.setData(tileDrag, String(bench))
       }
-      className="grid w-full grid-cols-[2ch_5ch_3ch_minmax(0,1fr)_3.25rem] items-baseline gap-x-2 px-3 py-1.5 text-left font-mono text-[13px] tabular-nums transition-colors enabled:hover:bg-accent disabled:cursor-default"
+      title={game === undefined ? "Off the slate" : `${game.away.team.name} at ${game.home.team.name}`}
+      className={`grid h-12 w-52 grid-cols-[16px_7ch_3ch_minmax(0,1fr)] items-center gap-x-1.5 rounded-sm border px-2 text-left font-mono text-[12px] tabular-nums transition-colors enabled:hover:bg-accent disabled:cursor-default ${
+        props.picked ? "border-foreground/70 bg-accent" : "border-transparent"
+      } ${game?.progress() === "over" ? "opacity-60" : ""}`}
     >
-      <Side side={game.away} other={game.home} scored={scored} row="row-start-1" />
-      <span
-        className={`label-caps col-start-4 row-start-1 truncate text-right text-[11px] ${game.isLive() ? "text-live" : "text-muted-foreground"}`}
-      >
-        {statusText(game)}
-      </span>
-      <span className="col-start-5 row-span-2 row-start-1 self-center justify-self-end">
-        {props.place !== undefined && (
+      {game === undefined ? (
+        <span className="col-span-4 text-muted-foreground">Off the slate</span>
+      ) : (
+        <>
+          <Side side={game.away} other={game.home} game={game} />
           <span
-            className={`label-caps rounded-sm border px-1 py-px text-[10px] ${props.place === "Bench" ? "text-muted-foreground" : "border-on-air/50 text-on-air"}`}
+            className={`label-caps truncate text-right text-[10px] ${game.isLive() ? "text-live" : "text-muted-foreground"}`}
           >
-            {props.place}
+            {statusText(game)}
           </span>
-        )}
-      </span>
-      <Side side={game.home} other={game.away} scored={scored} row="row-start-2" />
-      <span
-        className="col-start-4 row-start-2 truncate text-right font-sans text-[11px] text-muted-foreground"
-        title={networks}
-      >
-        {networks}
-      </span>
+          <Side side={game.home} other={game.away} game={game} />
+          <span className="flex min-w-0 items-center justify-end gap-1">
+            <span className="truncate font-sans text-[10px] text-muted-foreground" title={networks}>
+              {networks}
+            </span>
+            {place !== undefined && (
+              <span
+                className={`label-caps shrink-0 rounded-sm border px-1 text-[9px] ${onStage ? "border-on-air/50 text-on-air" : "text-muted-foreground"}`}
+              >
+                {place._tag === "Slot" ? `T${place.slot + 1}` : "Bench"}
+              </span>
+            )}
+          </span>
+        </>
+      )}
     </button>
   )
 }
 
-/** One team's cells: rank, abbreviation, and score. Once scores mean something, the trailing side is muted. */
-function Side(props: {
-  side: GameSnapshot["home"]
-  other: GameSnapshot["home"]
-  scored: boolean
-  row: "row-start-1" | "row-start-2"
-}) {
-  const trailing = props.scored && props.side.score < props.other.score
+/** One team's cells: logo, rank and abbreviation, and score. Once scores mean something, the trailing side is muted. */
+function Side(props: { side: GameSnapshot["home"]; other: GameSnapshot["home"]; game: GameSnapshot }) {
+  const scored = props.game.isLive() || props.game.status === "final"
+  const trailing = scored && props.side.score < props.other.score
   return (
     <>
-      <span className={`col-start-1 ${props.row} text-right text-[10px] text-muted-foreground`}>
-        {props.side.ranking}
-      </span>
-      <span className={`col-start-2 ${props.row} font-semibold ${trailing ? "text-muted-foreground" : ""}`}>
+      <TeamLogo team={props.side.team} size={16} />
+      <span className={`truncate font-semibold ${trailing ? "text-muted-foreground" : ""}`}>
+        {props.side.ranking !== undefined && (
+          <span className="mr-0.5 font-normal text-[9px] text-muted-foreground">{props.side.ranking}</span>
+        )}
         {props.side.team.abbreviation}
       </span>
-      <span className={`col-start-3 ${props.row} text-right ${trailing ? "text-muted-foreground" : ""}`}>
-        {props.scored ? props.side.score : null}
+      <span className={`text-right ${trailing ? "text-muted-foreground" : ""}`}>
+        {scored ? props.side.score : null}
       </span>
     </>
   )

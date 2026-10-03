@@ -5,6 +5,7 @@ import type { ReactNode } from "react"
 import { Button } from "@/design/button"
 import { dispatch } from "../hub/HubClient.ts"
 import { statusText } from "../slate/StatusText.ts"
+import { TeamLogo } from "../slate/TeamLogo.tsx"
 
 /**
  * A tile's header strip: its slot, its game and score, the on-air tally when its sound is on, and its controls.
@@ -53,20 +54,22 @@ export function TileChrome(props: {
         {onAir && (
           <span className="label-caps rounded-[2px] bg-on-air px-1 text-[10px] text-background">On air</span>
         )}
-        <span className="truncate font-mono">
+        <span className="flex min-w-0 items-center gap-1.5 truncate font-mono">
           {props.game === undefined ? (
             <span className="font-sans text-muted-foreground">
               {tile._tag === "Empty" ? "Empty — pick a game" : "Loading…"}
             </span>
           ) : (
             <>
-              <span className="font-semibold">{props.game.away.team.abbreviation}</span>{" "}
+              <TeamLogo team={props.game.away.team} size={14} />
+              <span className="font-semibold">{props.game.away.team.abbreviation}</span>
               {props.game.away.score}
-              <span className="px-1 text-muted-foreground">–</span>
-              {props.game.home.score}{" "}
+              <span className="text-muted-foreground">–</span>
+              {props.game.home.score}
               <span className="font-semibold">{props.game.home.team.abbreviation}</span>
+              <TeamLogo team={props.game.home.team} size={14} />
               <span
-                className={`label-caps ml-2 text-[11px] ${props.game.isLive() ? "text-live" : "text-muted-foreground"}`}
+                className={`label-caps ml-1.5 truncate text-[11px] ${props.game.isLive() ? "text-live" : "text-muted-foreground"}`}
               >
                 {statusText(props.game)}
               </span>
@@ -81,6 +84,8 @@ export function TileChrome(props: {
             variant="ghost"
             size="icon-xs"
             aria-label={onAir ? "Sound on" : "Hear this game"}
+            aria-keyshortcuts={String(slot + 1)}
+            title={`${onAir ? "Sound on" : "Hear this game"} · ${slot + 1}`}
             className={onAir ? "text-on-air" : "text-muted-foreground"}
             onClick={() => dispatch({ _tag: "FocusAudio", tile: slot })}
           >
@@ -91,6 +96,8 @@ export function TileChrome(props: {
               variant="ghost"
               size="icon-xs"
               aria-label="Promote to the main tile"
+              aria-keyshortcuts={`Shift+${slot + 1}`}
+              title={`Promote to the main tile · Shift ${slot + 1}`}
               className="text-muted-foreground"
               onClick={() => dispatch({ _tag: "Promote", tile: slot })}
             >
@@ -101,6 +108,7 @@ export function TileChrome(props: {
             variant="ghost"
             size="icon-xs"
             aria-label={soloed ? "Unsolo" : "Solo"}
+            title={soloed ? "Unsolo · Esc" : "Solo · select, then F"}
             className="text-muted-foreground"
             onClick={() => dispatch(soloed ? { _tag: "Unsolo" } : { _tag: "Solo", tile: slot })}
           >
@@ -110,6 +118,7 @@ export function TileChrome(props: {
             variant="ghost"
             size="icon-xs"
             aria-label="Clear"
+            title="Clear"
             className="text-muted-foreground hover:text-destructive"
             onClick={() => dispatch({ _tag: "Clear", tile: slot })}
           >

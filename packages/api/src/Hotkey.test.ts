@@ -17,6 +17,19 @@ describe("Hotkey.of", () => {
     assert.deepStrictEqual(key("KeyK", { meta: true }), { _tag: "CommandPalette" })
   })
 
+  it("reads the brackets as stepping the pick and Shift+Slash as the key help", () => {
+    assert.deepStrictEqual(key("BracketLeft"), { _tag: "StepPick", step: -1 })
+    assert.deepStrictEqual(key("BracketRight"), { _tag: "StepPick", step: 1 })
+    assert.deepStrictEqual(key("Slash", { shift: true }), { _tag: "ShowKeys" })
+    assert.isUndefined(key("Slash"))
+  })
+
+  it("reads Enter as dropping the pick only in the page, so a stream view keeps its Enter", () => {
+    assert.deepStrictEqual(key("Enter", {}, "page"), { _tag: "DropPick" })
+    assert.deepStrictEqual(key("NumpadEnter", {}, "page"), { _tag: "DropPick" })
+    assert.isUndefined(key("Enter", {}, "stream"))
+  })
+
   it("leaves every other key, and Sportal's keys with Ctrl or Cmd, to the page", () => {
     assert.isUndefined(key("KeyA"))
     assert.isUndefined(key("Digit0"))
@@ -26,6 +39,29 @@ describe("Hotkey.of", () => {
   })
 })
 
-function key(code: string, modifiers: Partial<{ shift: boolean; control: boolean; meta: boolean }> = {}) {
-  return Hotkey.of({ code, shift: false, control: false, meta: false, ...modifiers })
+describe("Hotkey.keys", () => {
+  it("lists bindings that each read back to the hotkey they describe", () => {
+    for (const binding of Hotkey.keys)
+      assert.deepStrictEqual(
+        Hotkey.of({ shift: false, control: false, meta: false, ...binding.press }, binding.press.from),
+        binding.hotkey,
+        binding.does
+      )
+  })
+
+  it("lists every hotkey", () => {
+    const listed = new Set<unknown>(Hotkey.keys.map((binding) => binding.hotkey._tag))
+    for (const member of Hotkey.members) {
+      const tag = member.fields._tag.ast.literal
+      assert.isTrue(listed.has(tag), String(tag))
+    }
+  })
+})
+
+function key(
+  code: string,
+  modifiers: Partial<{ shift: boolean; control: boolean; meta: boolean }> = {},
+  from: "page" | "stream" = "stream"
+) {
+  return Hotkey.of({ code, shift: false, control: false, meta: false, ...modifiers }, from)
 }
