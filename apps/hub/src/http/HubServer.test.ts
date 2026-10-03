@@ -1,10 +1,10 @@
 import { NodeHttpServer } from "@effect/platform-node"
 import { assert, describe, it } from "@effect/vitest"
-import { LiveMessageJson } from "@sportal/api/LiveMessage"
+import { type LiveMessage, LiveMessageJson } from "@sportal/api/LiveMessage"
 import { SportalApi } from "@sportal/api/SportalApi"
 import { GameId, Network } from "@sportal/domain/Game"
 import { snapshot, team } from "@sportal/domain/TestGame"
-import { DateTime, Effect, Fiber, Layer, Schema, Stream } from "effect"
+import { DateTime, Effect, Layer, Queue, Schema, Stream } from "effect"
 import { HttpClient, HttpRouter, HttpServer } from "effect/http"
 import { HttpApiClient, HttpApiTest } from "effect/http-api"
 import * as Database from "../database/Database.ts"
@@ -109,12 +109,19 @@ describe("GET /api/live", () => {
         })
       )
 
-      const pulled = yield* messages.pipe(Stream.take(3), Stream.runCollect, Effect.forkScoped)
-      yield* api.stage.dispatch({ payload: { command: { _tag: "Assign", tile: 0, game: game.id } } })
-      const [first, second, third] = yield* Fiber.join(pulled)
+      const received = yield* Queue.unbounded<LiveMessage>()
+      yield* messages.pipe(
+        Stream.runForEach((message) => Queue.offer(received, message)),
+        Effect.forkScoped
+      )
+      // The server subscribes as the body is pulled; once both initial messages are here, it is subscribed.
+      const first = yield* Queue.take(received)
+      const second = yield* Queue.take(received)
+      assert.sameMembers([first._tag, second._tag], ["SlateChanged", "StageChanged"])
 
-      assert.sameMembers([first?._tag, second?._tag], ["SlateChanged", "StageChanged"])
-      assert.deepStrictEqual(third?._tag === "StageChanged" ? third.stage.tiles[0] : third, picking)
+      yield* api.stage.dispatch({ payload: { command: { _tag: "Assign", tile: 0, game: game.id } } })
+      const third = yield* Queue.take(received)
+      assert.deepStrictEqual(third._tag === "StageChanged" ? third.stage.tiles[0] : third, picking)
     }).pipe(Effect.scoped, Effect.provide(serverUnderTest()))
   )
 })

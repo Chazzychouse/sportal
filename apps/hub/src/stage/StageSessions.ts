@@ -21,21 +21,25 @@ export class StageSessions extends Context.Service<
       const current = yield* SubscriptionRef.make(Stage.initial)
 
       const dispatch = Effect.fn("StageSessions.dispatch")(function* (command: StageCommand) {
-        const availabilityOf = yield* availabilityOnSlate(ingest, source)
         // One atomic step: concurrent dispatches queue up, and a rejection leaves the Stage as it was.
-        return yield* SubscriptionRef.modifyEffect(current, (stage) => {
-          const result = stage.apply(command, availabilityOf)
-          return Result.isFailure(result)
-            ? Effect.fail(result.failure)
-            : Effect.succeed([result.success, result.success] as const)
-        })
+        // Availability is read inside it, so a refresh that lands first is never overwritten with a stale read.
+        return yield* SubscriptionRef.modifyEffect(current, (stage) =>
+          Effect.gen(function* () {
+            const availabilityOf = yield* availabilityOnSlate(ingest, source)
+            const result = stage.apply(command, availabilityOf)
+            return yield* Result.isFailure(result)
+              ? Effect.fail(result.failure)
+              : Effect.succeed([result.success, result.success] as const)
+          })
+        )
       })
 
       // When the source learns or forgets a channel, every tile it affects changes on every Display.
-      const refresh = Effect.gen(function* () {
-        const availabilityOf = yield* availabilityOnSlate(ingest, source)
-        yield* SubscriptionRef.update(current, (stage) => stage.refresh(availabilityOf))
-      })
+      const refresh = SubscriptionRef.updateEffect(current, (stage) =>
+        availabilityOnSlate(ingest, source).pipe(
+          Effect.map((availabilityOf) => stage.refresh(availabilityOf))
+        )
+      )
       yield* Effect.forkScoped(source.changes.pipe(Stream.runForEach(() => refresh)), {
         startImmediately: true
       })
