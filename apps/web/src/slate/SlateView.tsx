@@ -1,0 +1,63 @@
+import { type GameSnapshot, isLive } from "@sportal/domain/Game"
+import * as Slate from "@sportal/domain/Slate"
+import { DateTime } from "effect"
+
+export function SlateView(props: {
+  slate: ReadonlyArray<GameSnapshot>
+  connected: boolean
+  onPick: (game: GameSnapshot) => void
+}) {
+  return (
+    <aside className="flex min-h-0 flex-col border-neutral-800 border-r">
+      <header className="flex items-baseline justify-between px-3 py-2">
+        <h1 className="font-semibold text-lg">Slate</h1>
+        <span className={props.connected ? "text-emerald-400 text-xs" : "text-amber-400 text-xs"}>
+          {props.connected ? "live" : "reconnecting…"}
+        </span>
+      </header>
+      <ul className="min-h-0 flex-1 overflow-y-auto">
+        {Slate.inWatchOrder(props.slate).map((game) => (
+          <li key={game.id}>
+            <button
+              type="button"
+              onClick={() => props.onPick(game)}
+              className="grid w-full grid-cols-[1fr_auto] gap-x-3 px-3 py-2 text-left hover:bg-neutral-900"
+            >
+              <SideLine side={game.away} />
+              <span className="row-span-2 self-center text-right text-neutral-400 text-xs">
+                <span className={isLive(game) ? "block text-emerald-400" : "block"}>{statusText(game)}</span>
+                {game.broadcasts.join(" · ")}
+              </span>
+              <SideLine side={game.home} />
+            </button>
+          </li>
+        ))}
+      </ul>
+    </aside>
+  )
+}
+
+function SideLine(props: { side: GameSnapshot["home"] }) {
+  return (
+    <span className="flex justify-between tabular-nums">
+      <span>
+        {props.side.ranking !== undefined && (
+          <span className="mr-1 text-neutral-500 text-xs">{props.side.ranking}</span>
+        )}
+        {props.side.team.abbreviation}
+      </span>
+      <span>{props.side.score}</span>
+    </span>
+  )
+}
+
+function statusText(game: GameSnapshot): string {
+  switch (game.status) {
+    case "live":
+      return `Q${game.period} ${game.clock}`
+    case "scheduled":
+      return DateTime.toDateUtc(game.kickoff).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
+    default:
+      return game.status
+  }
+}
