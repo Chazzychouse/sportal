@@ -1,7 +1,7 @@
 import type { TilePlacement } from "@sportal/api/ShellBridge"
 import type { GameSnapshot } from "@sportal/domain/Game"
 import type { Stage, Tile } from "@sportal/domain/Stage"
-import { DateTime, Option } from "effect"
+import { Option } from "effect"
 import { useEffect, useLayoutEffect, useRef, useState } from "react"
 import { dispatch, forgetChannel, learnChannel, markNotCarried, sendGuide } from "../hub/HubClient.ts"
 import { localTime } from "../LocalTime.ts"
@@ -35,24 +35,13 @@ export function StageView(props: {
     })
   }, [props.stage])
 
-  // Listening first, then asking: the shell reads the guide when the web UI asks for it.
+  // Listening first, then asking: the shell's first read waits for the web UI to ask.
   useEffect(() => window.sportalShell?.onGuideRead(sendGuide), [])
 
   useEffect(() => {
     // Asked again whenever the Hub comes back, since a guide read while it was away was lost.
     if (props.connected) window.sportalShell?.readGuide()
   }, [props.connected])
-
-  // A game waiting for its airing plays once a guide read after its begin shows the channel on the air. Only
-  // a begin still to come arms the timer, and only a change to it re-arms the timer.
-  const nextBegin = Option.getOrUndefined(
-    Option.map(props.stage.nextBegin(DateTime.nowUnsafe()), DateTime.toEpochMillis)
-  )
-  useEffect(() => {
-    if (nextBegin === undefined) return
-    const timer = setTimeout(() => window.sportalShell?.readGuide(), nextBegin - Date.now() + 60_000)
-    return () => clearTimeout(timer)
-  }, [nextBegin])
 
   return (
     <main className="grid min-h-0 grid-cols-2 grid-rows-2 gap-1 p-1">

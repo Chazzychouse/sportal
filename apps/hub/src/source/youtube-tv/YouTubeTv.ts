@@ -75,6 +75,9 @@ export const layer = Layer.effect(
             yield* Effect.logWarning("YouTubeTv: a guide response listed no channels")
             return yield* Effect.fail(new GuideUnreadable())
           }
+          yield* Effect.logInfo(
+            `YouTubeTv: read a guide of ${read.channels.length} channels and ${read.airings.length} airings`
+          )
           yield* SubscriptionRef.update(state, (current) => ({ ...current, read: Option.some(read) }))
           // Retire this guide once it is stale, unless a newer one has replaced it, so tiles fall back too.
           yield* FiberHandle.run(
