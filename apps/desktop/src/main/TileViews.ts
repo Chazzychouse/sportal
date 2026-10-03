@@ -47,7 +47,14 @@ export class TileViews extends Context.Service<
           const landed = (url: string) => {
             // A view removed in a sync stays silent, even if its page navigates before it closes.
             if (views.get(tile) !== entry) return
-            if (entry.role !== "guide" || url === entry.reported || !isChannelAddress(url)) return
+            if (entry.role !== "guide") return
+            // Leaving a channel address forgets it, so a refused pick can be retried with the same channel.
+            // Only the same address arriving twice in a row (did-navigate, then did-navigate-in-page) is a repeat.
+            if (!isChannelAddress(url)) {
+              entry.reported = ""
+              return
+            }
+            if (url === entry.reported) return
             entry.reported = url
             PubSub.publishUnsafe(picks, { tile, url })
           }

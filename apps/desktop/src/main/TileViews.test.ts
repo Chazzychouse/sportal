@@ -140,6 +140,54 @@ describe("TileViews.channelPicks", () => {
     }).pipe(Effect.scoped)
   )
 
+  it.effect("reports a channel again once the guide has been back on a non-channel address", () =>
+    Effect.gen(function* () {
+      const { tiles } = yield* attached()
+      yield* tiles.sync([guide])
+      const picks = yield* collect(tiles.channelPicks, 2)
+      const contents = created[0]?.webContents
+      contents?.emit("did-navigate-in-page", {}, espn, true)
+      contents?.emit("did-navigate-in-page", {}, "https://tv.youtube.com/live", true)
+      contents?.emit("did-navigate-in-page", {}, espn, true)
+      expect(yield* Fiber.join(picks)).toEqual([
+        { tile: 0, url: espn },
+        { tile: 0, url: espn }
+      ])
+    }).pipe(Effect.scoped)
+  )
+
+  it.effect("reports an address once when it arrives as did-navigate and then did-navigate-in-page", () =>
+    Effect.gen(function* () {
+      const { tiles } = yield* attached()
+      yield* tiles.sync([guide])
+      const picks = yield* collect(tiles.channelPicks, 2)
+      const contents = created[0]?.webContents
+      contents?.emit("did-navigate", {}, espn)
+      contents?.emit("did-navigate-in-page", {}, espn, true)
+      contents?.emit("did-navigate-in-page", {}, fox, true)
+      expect(yield* Fiber.join(picks)).toEqual([
+        { tile: 0, url: espn },
+        { tile: 0, url: fox }
+      ])
+    }).pipe(Effect.scoped)
+  )
+
+  it.effect("reports the same channel again once the Hub places a new address in the tile", () =>
+    Effect.gen(function* () {
+      const { tiles } = yield* attached()
+      yield* tiles.sync([guide])
+      const picks = yield* collect(tiles.channelPicks, 2)
+      const contents = created[0]?.webContents
+      contents?.emit("did-navigate-in-page", {}, espn, true)
+      yield* tiles.sync([{ ...guide, url: "https://tv.youtube.com/live?again" }])
+      contents?.emit("did-navigate-in-page", {}, espn, true)
+      expect(yield* Fiber.join(picks)).toEqual([
+        { tile: 0, url: espn },
+        { tile: 0, url: espn }
+      ])
+    }).pipe(Effect.scoped)
+  )
+
   it.effect("does not report for a view removed in a sync", () =>
     Effect.gen(function* () {
       const { tiles } = yield* attached()
