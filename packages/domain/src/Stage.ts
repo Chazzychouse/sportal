@@ -1,4 +1,4 @@
-import { Result, Schema } from "effect"
+import { Option, Result, Schema } from "effect"
 import { GameId, Network } from "./Game.ts"
 import { Channel, type ChannelAvailability, SourceName } from "./Source.ts"
 import { StreamLocator } from "./Stream.ts"
@@ -63,11 +63,19 @@ export class Stage extends Schema.Class<Stage>("sportal/Stage")({
     }
   }
 
-  /** Re-resolves every occupied tile after what a source knows has changed. */
-  refresh(availabilityOf: (game: GameId) => ChannelAvailability): Stage {
+  /**
+   * Re-resolves every occupied tile after what a source knows has changed. A game `availabilityOf` knows
+   * nothing about keeps its tile as it was: the change did not concern it.
+   */
+  refresh(availabilityOf: (game: GameId) => Option.Option<ChannelAvailability>): Stage {
     return new Stage({
       tiles: this.tiles.map((tile) =>
-        tile._tag === "Empty" ? tile : tileFor(tile.game, availabilityOf(tile.game))
+        tile._tag === "Empty"
+          ? tile
+          : Option.match(availabilityOf(tile.game), {
+              onNone: () => tile,
+              onSome: (availability) => tileFor(tile.game, availability)
+            })
       ),
       audioFocus: this.audioFocus
     })

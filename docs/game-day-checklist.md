@@ -9,7 +9,7 @@ Setup: Hub serving the built web UI, desktop shell running, signed in to YouTube
 | --- | --- | --- |
 | 1 | Open the shell | Slate lists today's NFL and FBS games, live first; header reads `live` |
 | 2 | Watch a live game's row for a minute | Score and clock update without a reload |
-| 3 | Click a live game on a network never seen before | The tile shows YouTube TV's live guide, muted; its footer reads "Pick the <network> channel" |
+| 3 | Click a live game on a network never seen before | The tile shows YouTube TV's live guide, muted; its footer reads "Pick the <network> channel". The guide must stay on the guide until the user picks; if it jumps to a channel on its own (e.g. /live redirecting to the last-watched channel), record it, because the shell would learn that channel without a pick |
 | 4 | In that tile's guide, pick the channel airing the game | The tile plays it live within a few seconds, inside the tile |
 | 5 | Click another game on the same network | It plays at once, with no guide |
 | 6 | Fill all four tiles with games on learned networks | Tiles up to the stream limit play; note what the provider does past it |

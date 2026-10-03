@@ -1,7 +1,7 @@
 import type { GameId } from "@sportal/domain/Game"
 import { ChannelAvailability } from "@sportal/domain/Source"
 import { Stage, type StageCommand, type StageRejection } from "@sportal/domain/Stage"
-import { Context, Effect, Layer, Result, Stream, SubscriptionRef } from "effect"
+import { Context, Effect, Layer, Option, Result, Stream, SubscriptionRef } from "effect"
 import { Ingest } from "../ingest/Ingest.ts"
 import { Source } from "../source/Source.ts"
 
@@ -26,7 +26,10 @@ export class StageSessions extends Context.Service<
         return yield* SubscriptionRef.modifyEffect(current, (stage) =>
           Effect.gen(function* () {
             const availabilityOf = yield* availabilityOnSlate(ingest, source)
-            const result = stage.apply(command, availabilityOf)
+            // Assigning a game that is not on the slate gives a data tile.
+            const result = stage.apply(command, (id) =>
+              Option.getOrElse(availabilityOf(id), () => ChannelAvailability.NotCarried())
+            )
             return yield* Result.isFailure(result)
               ? Effect.fail(result.failure)
               : Effect.succeed([result.success, result.success] as const)
@@ -53,14 +56,14 @@ export class StageSessions extends Context.Service<
   )
 }
 
-/** Where each game on the current slate can be streamed; a game no longer on the slate is not carried. */
+/** Where each game on the current slate can be streamed; a game no longer on the slate has no answer. */
 function availabilityOnSlate(ingest: typeof Ingest.Service, source: typeof Source.Service) {
   return Effect.gen(function* () {
     const slate = yield* ingest.slate
     const lineup = yield* source.lineup
-    return (id: GameId): ChannelAvailability => {
-      const game = slate.find((candidate) => candidate.id === id)
-      return game === undefined ? ChannelAvailability.NotCarried() : lineup.availabilityOf(game)
-    }
+    return (id: GameId): Option.Option<ChannelAvailability> =>
+      Option.fromNullishOr(slate.find((candidate) => candidate.id === id)).pipe(
+        Option.map((game) => lineup.availabilityOf(game))
+      )
   })
 }

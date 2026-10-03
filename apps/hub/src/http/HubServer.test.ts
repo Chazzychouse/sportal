@@ -3,8 +3,9 @@ import { assert, describe, it } from "@effect/vitest"
 import { type LiveMessage, LiveMessageJson } from "@sportal/api/LiveMessage"
 import { SportalApi } from "@sportal/api/SportalApi"
 import { GameId, Network } from "@sportal/domain/Game"
+import type { Tile } from "@sportal/domain/Stage"
 import { snapshot, team } from "@sportal/domain/TestGame"
-import { DateTime, Effect, Layer, Queue, Schema, Stream } from "effect"
+import { DateTime, Effect, Layer, Option, Queue, Result, Schema, Stream } from "effect"
 import { HttpClient, HttpRouter, HttpServer } from "effect/http"
 import { HttpApiClient, HttpApiTest } from "effect/http-api"
 import * as Database from "../database/Database.ts"
@@ -61,20 +62,22 @@ describe("Hub API", () => {
     }).pipe(Effect.provide(apiUnderTest()))
   )
 
-  it.effect("learns a channel, and the picking tile becomes a stream tile", () =>
+  it.live("learns a channel, and the picking tile becomes a stream tile", () =>
     Effect.gen(function* () {
       const client = yield* makeClient
+      const sessions = yield* StageSessions
       yield* firstSlate()
       yield* client.stage.dispatch({ payload: { command: { _tag: "Assign", tile: 0, game: game.id } } })
 
+      // The Stage refreshes on its own fiber after each change, so wait for the tile rather than assume timing.
       yield* client.channels.learn({ payload: { network: espn, url: "https://tv.youtube.com/watch/espn" } })
-      assert.deepStrictEqual((yield* client.stage.current()).tiles[0], streaming)
+      assert.deepStrictEqual(yield* tileOnceItIs(sessions, "StreamTile"), streaming)
 
       yield* client.channels.forget({ payload: { network: espn } })
-      assert.deepStrictEqual((yield* client.stage.current()).tiles[0], picking)
+      assert.deepStrictEqual(yield* tileOnceItIs(sessions, "PickingChannel"), picking)
 
       yield* client.channels.notCarried({ payload: { network: espn } })
-      assert.deepStrictEqual((yield* client.stage.current()).tiles[0], { _tag: "DataTile", game: game.id })
+      assert.deepStrictEqual(yield* tileOnceItIs(sessions, "DataTile"), { _tag: "DataTile", game: game.id })
     }).pipe(Effect.provide(apiUnderTest()))
   )
 
@@ -136,6 +139,20 @@ function firstSlate() {
       Stream.runDrain
     )
   })
+}
+
+/** The first tile 0 the Stage shows that has the given kind; the current Stage is replayed, so this may not wait. */
+function tileOnceItIs(sessions: typeof StageSessions.Service, tag: Tile["_tag"]) {
+  return sessions.changes.pipe(
+    Stream.filterMap((stage) => {
+      const tile = stage.tiles[0]
+      return tile?._tag === tag ? Result.succeed(tile) : Result.failVoid
+    }),
+    Stream.take(1),
+    Stream.runHead,
+    Effect.timeout("2 seconds"),
+    Effect.map(Option.getOrThrow)
+  )
 }
 
 function apiUnderTest() {

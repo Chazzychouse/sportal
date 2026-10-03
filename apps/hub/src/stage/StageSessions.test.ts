@@ -179,6 +179,39 @@ describe("StageSessions", () => {
     })
   )
 
+  it.live("keeps a playing tile whose game has left the slate when another network is learned", () =>
+    Effect.gen(function* () {
+      const onSlate = yield* Ref.make(slate)
+      const ingest = Ingest.of({ slate: Ref.get(onSlate), changes: Stream.empty })
+      yield* Effect.gen(function* () {
+        const sessions = yield* StageSessions
+        yield* sessions.dispatch({ _tag: "Assign", tile: 0, game: GameId.make("1") })
+        yield* sessions.dispatch({ _tag: "Assign", tile: 1, game: GameId.make("5") })
+        yield* Ref.set(
+          onSlate,
+          slate.filter((snapshot) => snapshot.id !== GameId.make("1"))
+        )
+
+        yield* (yield* Source).learn(fox, "https://tv.youtube.com/watch/fox")
+        const stage = yield* sessions.changes.pipe(
+          Stream.filter((stage) => stage.tiles[1]?._tag === "StreamTile"),
+          Stream.take(1),
+          Stream.runHead,
+          Effect.timeout("2 seconds")
+        )
+        const tiles = Option.getOrThrow(stage).tiles
+        assert.deepStrictEqual(tiles[0], { _tag: "StreamTile", game: GameId.make("1"), channel: espnChannel })
+      }).pipe(
+        Effect.provide(
+          StageSessions.layer.pipe(
+            Layer.provide(Layer.succeed(Ingest, ingest)),
+            Layer.provideMerge(sourceKnowingEspn())
+          )
+        )
+      )
+    })
+  )
+
   it.effect("assigns a game missing from the slate as a data tile", () =>
     Effect.gen(function* () {
       const sessions = yield* StageSessions

@@ -1,5 +1,5 @@
 import { assert, describe, it } from "@effect/vitest"
-import { Result } from "effect"
+import { Option, Result } from "effect"
 import { GameId, Network } from "./Game.ts"
 import { ChannelAvailability } from "./Source.ts"
 import { Stage } from "./Stage.ts"
@@ -90,7 +90,7 @@ describe("Stage#apply", () => {
 describe("Stage#refresh", () => {
   it("turns every picking tile for a network into a stream once its channel is learned", () => {
     const picking = assign(assign(Stage.initial, 0, bama, foxUnlearned), 1, irish, foxUnlearned)
-    const refreshed = picking.refresh(onFox)
+    const refreshed = picking.refresh(some(onFox))
     assert.deepStrictEqual(refreshed.tiles[0], { _tag: "StreamTile", game: bama, channel: foxChannel })
     assert.deepStrictEqual(refreshed.tiles[1], { _tag: "StreamTile", game: irish, channel: foxChannel })
   })
@@ -99,7 +99,7 @@ describe("Stage#refresh", () => {
     const espn = Network.make("ESPN")
     const picking = assign(Stage.initial, 0, bama, foxUnlearned)
     const refreshed = picking.refresh(() =>
-      ChannelAvailability.Unlearned({ network: espn, source: "YouTube TV", guide })
+      Option.some(ChannelAvailability.Unlearned({ network: espn, source: "YouTube TV", guide }))
     )
     assert.deepStrictEqual(refreshed.tiles[0], {
       _tag: "PickingChannel",
@@ -112,12 +112,19 @@ describe("Stage#refresh", () => {
 
   it("turns a stream tile back into a picking tile when its channel is forgotten", () => {
     const streaming = assign(Stage.initial, 0, bama, onFox)
-    assert.strictEqual(streaming.refresh(foxUnlearned).tiles[0]?._tag, "PickingChannel")
+    assert.strictEqual(streaming.refresh(some(foxUnlearned)).tiles[0]?._tag, "PickingChannel")
+  })
+
+  it("leaves a tile whose game has no availability to report as it was", () => {
+    const streaming = assign(assign(Stage.initial, 0, bama, onFox), 1, irish, foxUnlearned)
+    const refreshed = streaming.refresh((game) => (game === irish ? Option.some(onFox()) : Option.none()))
+    assert.deepStrictEqual(refreshed.tiles[0], streaming.tiles[0])
+    assert.deepStrictEqual(refreshed.tiles[1], { _tag: "StreamTile", game: irish, channel: foxChannel })
   })
 
   it("leaves empty tiles empty and audio focus where it was", () => {
     const focused = Result.getOrThrow(Stage.initial.apply({ _tag: "FocusAudio", tile: 3 }, nowhere))
-    const refreshed = assign(focused, 0, bama, foxUnlearned).refresh(onFox)
+    const refreshed = assign(focused, 0, bama, foxUnlearned).refresh(some(onFox))
     assert.deepStrictEqual(
       refreshed.tiles.map((tile) => tile._tag),
       ["StreamTile", "Empty", "Empty", "Empty"]
@@ -125,6 +132,10 @@ describe("Stage#refresh", () => {
     assert.strictEqual(refreshed.audioFocus, 3)
   })
 })
+
+function some(availability: () => ChannelAvailability) {
+  return () => Option.some(availability())
+}
 
 function assign(stage: Stage, tile: number, game: GameId, availabilityOf: () => ChannelAvailability) {
   return Result.getOrThrow(stage.apply({ _tag: "Assign", tile, game }, availabilityOf))
