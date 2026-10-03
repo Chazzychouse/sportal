@@ -1,6 +1,6 @@
 import { assert, layer } from "@effect/vitest"
 import { SportalApi } from "@sportal/api/SportalApi"
-import { GameId } from "@sportal/domain/Game"
+import { GameId, Network } from "@sportal/domain/Game"
 import { snapshot, team } from "@sportal/domain/TestGame"
 import { DateTime, Effect, Layer } from "effect"
 import { HttpServer } from "effect/http"
@@ -15,7 +15,7 @@ const game = snapshot({
   id: GameId.make("401856707"),
   home: { team: team("MSST"), score: 0 },
   away: { team: team("ALA"), score: 0 },
-  broadcasts: ["ESPN"]
+  broadcasts: [Network.make("ESPN")]
 })
 
 const TestHub = ApiHandlers.pipe(

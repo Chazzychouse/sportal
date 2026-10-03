@@ -39,9 +39,14 @@ Every exported type name must be a term here.
 | **Ingest** | The Hub's loop that polls providers and keeps the current slate. | poller, sync, fetcher |
 | **Cadence** | How long Ingest waits between polls, given what the last poll saw. | interval, rate |
 | **Source** | A way you obtain **video** (YouTube TV). | provider, service |
+| **Source name** | A source as people know it ("YouTube TV"); how code and the UI name a source. | source id |
 | **Broadcast** | The fact that a network is airing a game. | channel, stream |
+| **Network** | A network's name as a provider reports it ("CBS", "ESPN"). | channel, station |
 | **Channel** | A network as carried by a specific source. | |
-| **Availability** | Whether and where a source can show a game. | |
+| **Channel carriage** | Whether a source carries a network: on a channel, or not at all. | answer, mapping |
+| **Channel lineup** | The channel carriages one source has learned, and the guide where the rest are picked. | channel map |
+| **Channel availability** | Whether and where a source can show a game: carried, unlearned (its network still to be picked), or not carried. | availability |
+| **Channel URL refused** | An address a source would not learn, because it is not one of its live channels. | not a channel |
 | **Stream** | One playing instance of a game from a source. | feed, video |
 | **StreamLocator** | What a Display must load to play a stream. | URL, link |
 | **StreamBudget** | How many concurrent streams a source allows. | limit, cap |

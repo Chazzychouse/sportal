@@ -12,8 +12,7 @@ function liveGame(homeScore: number) {
     period: 1,
     clock: "10:00",
     home: { team: team("MSST"), score: homeScore },
-    away: { team: team("ALA"), score: 0 },
-    broadcasts: ["ESPN"]
+    away: { team: team("ALA"), score: 0 }
   })
 }
 

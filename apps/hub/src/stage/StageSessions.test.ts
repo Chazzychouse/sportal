@@ -1,16 +1,17 @@
 import { assert, describe, it } from "@effect/vitest"
-import { GameId } from "@sportal/domain/Game"
+import { GameId, Network } from "@sportal/domain/Game"
 import { snapshot } from "@sportal/domain/TestGame"
 import { Effect, Layer, Option, Stream } from "effect"
 import { Ingest } from "../ingest/Ingest.ts"
 import { Source } from "../source/Source.ts"
 import { StageSessions } from "./StageSessions.ts"
 
-function game(id: string, broadcasts: ReadonlyArray<string>) {
+function game(id: string, broadcasts: ReadonlyArray<Network>) {
   return snapshot({ id: GameId.make(id), status: "live", period: 1, clock: "10:00", broadcasts })
 }
 
-const slate = [game("1", ["ESPN"]), game("2", ["ESPN"]), game("3", ["ESPN"]), game("4", ["Local"])]
+const espn = Network.make("ESPN")
+const slate = [game("1", [espn]), game("2", [espn]), game("3", [espn]), game("4", [Network.make("Local")])]
 
 const TestSessions = StageSessions.layer.pipe(
   Layer.provide(Layer.succeed(Ingest, Ingest.of({ slate: Effect.succeed(slate), changes: Stream.empty }))),
@@ -19,7 +20,7 @@ const TestSessions = StageSessions.layer.pipe(
       Source,
       Source.of({
         locate: (snapshot) =>
-          snapshot.broadcasts.includes("ESPN")
+          snapshot.broadcasts.includes(espn)
             ? Option.some({ _tag: "WebView", url: `https://tv.example/${snapshot.id}` })
             : Option.none()
       })

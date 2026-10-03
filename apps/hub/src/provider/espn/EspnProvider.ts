@@ -1,4 +1,4 @@
-import { GameId, GameSnapshot, type GameStatus } from "@sportal/domain/Game"
+import { GameId, GameSnapshot, type GameStatus, Network } from "@sportal/domain/Game"
 import type { LeagueId } from "@sportal/domain/League"
 import { Situation } from "@sportal/domain/Situation"
 import { Team, TeamId } from "@sportal/domain/Team"
@@ -75,7 +75,7 @@ function toSnapshot(league: LeagueId, event: typeof EspnPayload.Event.Type): Opt
       clock: event.status.displayClock,
       home: side(home),
       away: side(away),
-      broadcasts: (competition.broadcasts ?? []).flatMap((b) => b.names),
+      broadcasts: (competition.broadcasts ?? []).flatMap((b) => b.names.map((name) => Network.make(name))),
       ...(s === undefined
         ? {}
         : {

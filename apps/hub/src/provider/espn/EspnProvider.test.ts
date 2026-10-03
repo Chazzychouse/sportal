@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs"
 import { assert, describe, it } from "@effect/vitest"
+import { Network } from "@sportal/domain/Game"
 import { Effect, Layer } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/http"
 import { Provider } from "../Provider.ts"
@@ -33,7 +34,7 @@ describe("EspnProvider", () => {
       assert.strictEqual(game?.away.team.abbreviation, "MEM")
       assert.strictEqual(game?.away.team.id, "fbs:235")
       assert.strictEqual(game?.away.score, 27)
-      assert.deepStrictEqual(game?.broadcasts, ["ESPN+"])
+      assert.deepStrictEqual(game?.broadcasts, [Network.make("ESPN+")])
       assert.strictEqual(game?.situation?.isRedZone, true)
     }).pipe(Effect.provide(TestLayer))
   )

@@ -11,8 +11,7 @@ function game(status: "live" | "scheduled", kickoff: string) {
     kickoff: DateTime.makeUnsafe(kickoff),
     clock: "",
     home: { team: team("MSST"), score: 0 },
-    away: { team: team("ALA"), score: 0 },
-    broadcasts: ["ESPN"]
+    away: { team: team("ALA"), score: 0 }
   })
 }
 

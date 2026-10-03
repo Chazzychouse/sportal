@@ -17,6 +17,10 @@ export const GameStatus = Schema.Literals([
 ])
 export type GameStatus = typeof GameStatus.Type
 
+/** A network's name as the provider reports it ("CBS", "ESPN"). */
+export const Network = Schema.String.pipe(Schema.brand("Network"))
+export type Network = typeof Network.Type
+
 const Side = Schema.Struct({ team: Team, score: Schema.Int, ranking: Schema.optional(Schema.Int) })
 
 export class GameSnapshot extends Schema.Class<GameSnapshot>("sportal/GameSnapshot")({
@@ -28,7 +32,7 @@ export class GameSnapshot extends Schema.Class<GameSnapshot>("sportal/GameSnapsh
   clock: Schema.String,
   home: Side,
   away: Side,
-  broadcasts: Schema.Array(Schema.String),
+  broadcasts: Schema.Array(Network),
   situation: Schema.optional(Situation)
 }) {
   /** Live games first, then upcoming by kickoff, then everything that is over. */
