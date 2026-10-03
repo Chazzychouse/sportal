@@ -132,7 +132,7 @@ This section is binding in the same way the type checker is. It will also be wri
 
 1. **A boundary must earn its place.** A workspace package exists only when two or more apps need the same code. A folder exists only when a concept has several files that belong to it and nothing else. Nothing is created for symmetry, for future use, or to look like an architecture.
 2. **One concept, one home.** Every type, schema, and function has exactly one obvious file. If you cannot say which concept a file owns in one noun, the file is wrong.
-3. **Name files for what they own.** A module is a file named for its concept — `Game.ts`, `Stage.ts`, `Ingest.ts` — exporting that concept's schema and the functions on it, used as a namespace (`Game.isLive(game)`). This is the Effect convention and it makes the tree read as a table of contents of the domain.
+3. **Name files for what they own.** A module is a file named for its concept — `Game.ts`, `Stage.ts`, `Ingest.ts` — exporting that concept's schema or class. Operations on a domain type are methods and statics of its class (`game.isLive()`, `GameSnapshot.watchOrder`, `stage.apply(command, …)`), not loose functions beside it. The tree reads as a table of contents of the domain, and each type reads as the list of what it can do.
 4. **No junk drawers.** These file and folder names are banned by lint: `utils`, `helpers`, `common`, `shared`, `misc`, `lib`, `types`, `constants`, `models`, `interfaces`. A function that seems to belong in one belongs with the concept it operates on; if it operates on none, it is probably already in Effect.
 5. **No barrels.** No `index.ts` re-export files. Packages expose modules through `package.json` `exports`; inside an app, import the module file directly.
 6. **No mirror types.** There is no `GameDto`, `GameRow`, `GameResponse`, `GameProps`. The domain schema is the wire format and the stored format. A variant is derived from the original (`pick`, `omit`, `extend`) at the point of use and is not given a name unless it is itself a domain concept with a glossary entry.
@@ -170,8 +170,8 @@ sportal/
 │   │       ├── Game.ts         Game, GameStatus, Period, GameSnapshot, Network
 │   │       ├── Situation.ts    Possession, down, distance, field position, red zone
 │   │       ├── GameEvent.ts    The event union and diff(previous, next)
-│   │       ├── Slate.ts        SlateWindow; grouping and ordering of games
-│   │       ├── Source.ts       SourceName, Channel, ChannelAnswer, Availability
+│   │       ├── Slate.ts        SlateWindow and grouping (Tracker); watch order is GameSnapshot.watchOrder
+│   │       ├── Source.ts       SourceName, Channel, ChannelCarriage, ChannelLineup, ChannelAvailability
 │   │       ├── Stream.ts       StreamLocator, StreamBudget
 │   │       ├── Follow.ts
 │   │       ├── Watchability.ts The scoring function
@@ -201,7 +201,9 @@ sportal/
     │       │   └── cfbd/                 Same shape, college supplement
     │       ├── source/
     │       │   ├── Source.ts       The port
-    │       │   └── YouTubeTv.ts    Channel mapping and stream locators
+    │       │   ├── YouTubeTv.ts    Learned channel lineup and live channel URLs
+    │       │   ├── ChannelStore.ts The port for learned channel carriages
+    │       │   └── SqlChannelStore.ts  Over the Database; owns its migrations
     │       ├── ingest/
     │       │   ├── Ingest.ts       The poll, decode, diff, publish loop
     │       │   └── Cadence.ts      How often to poll, given game status
@@ -209,10 +211,10 @@ sportal/
     │       │   └── Director.ts     Events in, stage commands and alerts out
     │       ├── stage/
     │       │   └── StageSessions.ts  One authoritative Stage per Display
-    │       ├── store/
-    │       │   ├── Store.ts        The port: games, follows, presets, rules, stages
-    │       │   ├── SqlStore.ts     Implementation over Effect SQL
-    │       │   └── migrations/
+    │       ├── database/
+    │       │   └── Database.ts     SQLite client; migrate(store, migrations) into <store>_migrations.
+    │       │                       Each concept's SQL store (games, follows, presets, rules, stages)
+    │       │                       sits beside its concept and owns its migrations
     │       └── http/
     │           ├── HubServer.ts    Serves the API, the live stream, and the web UI's files
     │           └── handlers/       One file per endpoint group in SportalApi
@@ -246,7 +248,7 @@ The same standard applies within a file as across the tree: a file is not a junk
 
 1. **The main thing comes first.** A file leads with the concept it is named for — the schema, the service, the component. A reader should reach the main behaviour without scrolling past anything.
 2. **Supporting code goes below, not above.** Private helpers are written as hoisted `function` declarations beneath the code that uses them, in the order they are first used. No stack of small helpers piled on top of the thing the file exists for.
-3. **A helper must earn a name.** If it is used once and is a few lines, inline it. If it is really an operation on another concept, it belongs in that concept's module (`Game.isLive`, not a local `isGameLive`). If Effect already has it, use Effect's.
+3. **A helper must earn a name.** If it is used once and is a few lines, inline it. If it is really an operation on another concept, it belongs on that concept's type (`game.isLive()`, not a local `isGameLive`). If Effect already has it, use Effect's.
 4. **No incidental types.** Do not declare an interface or type alias for an options bag, a return shape, a callback, or a component's props that is used in one place — write the shape inline in the signature. A named type appears in a file only when it is that file's concept or a glossary term that lives there.
 5. **A service reads as its behaviour.** A service file is: the service declaration (its interface is the one type in the file), then the Layer that implements it, then private helpers. Not a preamble of types and constants followed, eventually, by the logic.
 6. **Constants live with their only user.** A value used by one function is declared in or directly beneath that function, not gathered at the top of the file.
@@ -287,14 +289,19 @@ class Provider extends Context.Service<Provider, {
 ```ts
 class Source extends Context.Service<Source, {
   readonly budget: StreamBudget
-  availability(game: GameSnapshot): Availability
-  locate(game: GameSnapshot): Option<StreamLocator>
+  readonly lineup: Effect<ChannelLineup>   // lineup.availabilityOf(game): ChannelAvailability
+  readonly changes: Stream<void>
+  learn(network: Network, url: string): Effect<void, ChannelUrlRefused | ChannelStoreError>
+  markNotCarried(network: Network): Effect<void, ChannelStoreError>
+  forget(network: Network): Effect<void, ChannelStoreError>
 }>()("sportal/hub/Source") {}
 ```
 
+A source's channels are learned from the user, not mapped by hand (`docs/specs/2026-10-03-learned-channels-design.md`).
+
 `StreamLocator` is a tagged union. Today it has one member, a web-view address; a new kind is added only when a source needs it.
 
-**Store** — persistence. One port, one SQL implementation that runs on SQLite or Postgres.
+**Stores** — persistence. One port per concept (`ChannelStore` first; games, follows, presets, rules, and stages in the Tracker), each with one SQL implementation over the `Database` module that runs on SQLite or Postgres. Each SQL store owns its migrations and records them in its own table.
 
 ### 5.2 Ingest: snapshots and events
 
@@ -376,7 +383,7 @@ One word per concept, used identically in code, UI, documents, and conversation.
 | **Source** | A way you obtain **video** (YouTube TV). | provider, service |
 | **Broadcast** | The fact that a network is airing a game. | channel, stream |
 | **Channel** | A network as carried by a specific source. | |
-| **Availability** | Whether and where a source can show a game. | |
+| **Channel availability** | Whether and where a source can show a game: carried, unlearned, or not carried. | availability |
 | **Stream** | One playing instance of a game from a source. | feed, video |
 | **StreamLocator** | What a Display must load to play a stream. | URL, link |
 | **StreamBudget** | How many concurrent streams a source allows. | limit, cap |

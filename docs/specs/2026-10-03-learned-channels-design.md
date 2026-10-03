@@ -1,7 +1,7 @@
 # Learned Channels — Design
 
 Date: 2026-10-03
-Status: Draft for review
+Status: Approved 2026-10-03; revised the same day after review of its plan (naming, co-located domain logic, per-store migrations)
 Follows: `docs/adr/0002-desktop-shell-playback.md` (decision: channels are learned, not mapped by hand)
 
 ## Goal
@@ -37,8 +37,8 @@ Run by hand on 2026-10-03 during live college games, in YouTube TV's live guide:
 above has not been run yet; if it shows the address names a programme, the key changes to game,
 network, and source.
 
-Only one thing changes between the two answers: the key of a remembered Channel (network and source,
-or game, network, and source) and the lookup in `availability`. Everything else in this design is the
+Only one thing changes between the two outcomes: the key of a remembered Channel (network and source,
+or game, network, and source) and the lookup in `ChannelLineup.availabilityOf`. Everything else in this design is the
 same either way.
 
 ## Decisions
@@ -46,17 +46,29 @@ same either way.
 | Question | Decision |
 | --- | --- |
 | Scope of this round | Learned channels only, with the deferred desktop-shell findings, because it reworks those files |
-| Persistence | Introduce the `Store` port with SQLite now, holding only Channels; Tracker adds tables to it |
+| Persistence | Introduce SQLite now: a `Database` module, and a `ChannelStore` that owns its own migrations. Tracker adds its own stores the same way |
+| Where domain logic lives | On the domain types, as methods and statics of their classes. Existing logic (`Stage.apply`, `Game.isLive`, the slate's watch order) is converted first, and the rule goes into `AGENTS.md` |
 | A game whose networks are all unknown | Its tile opens the live guide. Picking a channel teaches it; **Not on YouTube TV** records the network as not carried |
 | A game with several networks | The tile works on one network at a time, in broadcast order, and names it. Not carried moves to the next unknown network; when none remain it is a data tile |
 | Picked the wrong channel | A stream tile's **wrong channel** action forgets that network's Channel and reopens the guide |
 | How a pick reaches the Hub | The shell reports the address a guide view lands on; the web UI turns it into a typed Hub command. The shell never talks to the Hub API |
 | Learning in a plain browser | Not supported. The tile links to the guide and says picking works in the desktop app |
-| Address stored | The canonical live address: `https://tv.youtube.com/watch/<id>?vp=0gEEEgIwAQ%3D%3D`. A stored "from the beginning" address would replay every later game from its kickoff |
+| Address stored | The channel's live address: `https://tv.youtube.com/watch/<id>?vp=0gEEEgIwAQ%3D%3D`. A stored "from the beginning" address would replay every later game from its kickoff |
 
 ## Design
 
 ### 1. Domain (`packages/domain`)
+
+**Rule: operations on a domain type live on the type.** A method or static of its class
+(`Schema.Class`, `Schema.TaggedClass`), or, for a union that never crosses the wire, the constructors of
+its `Data.taggedEnum`. A domain module exports no loose functions over its types. This round writes the
+rule into `AGENTS.md` and converts the existing logic before adding any:
+
+- `Stage.apply(stage, …)` becomes `stage.apply(…)`, and `Stage.initial` a static of `Stage`.
+- `Game.isLive(game)` becomes `game.isLive()`.
+- `Slate.inWatchOrder` becomes the static `GameSnapshot.watchOrder`, an `Order<GameSnapshot>`. A slate
+  is still a glossary term, but in code it is an array of snapshots, so `Slate.ts` is removed until it
+  has a type to own (`SlateWindow`, in the Tracker).
 
 **`Game.ts`** — gains `Network`, a branded string: a network's name as the provider reports it (`"CBS"`,
 `"ESPN"`). `GameSnapshot.broadcasts` becomes `Array<Network>`. The ESPN adapter already produces these
@@ -65,66 +77,76 @@ names.
 **`Source.ts`** (new) — the pure concepts of a video source. The Hub's `Source` port wraps them, as
 `StageSessions` wraps `Stage`. There is no `Broadcast.ts`: no type in this design is a Broadcast.
 
+- `SourceName` — a source as people know it (`"YouTube TV"`).
 - `Channel` — `{ network, source, locator }`: a network as carried by a source.
-- `Availability` — whether and where a source can show one game:
-  - `Carried { network, locator }` — one of the game's networks has a Channel.
-  - `Unlearned { network, guide }` — no network is carried, and this is the first of the game's
-    networks with no answer yet. `guide` is the source's live-guide locator.
+- `ChannelCarriage` — whether a source carries a network: `Carried { channel }`, or
+  `NotCarried { network, source }`.
+- `ChannelLineup` — the carriages one source has learned, with its source name and its guide locator.
+  - `availabilityOf(game)` — the game's `ChannelAvailability`.
+  - `record(carriage)` — a new lineup, replacing any earlier carriage for the same network.
+  - `forget(network)` — a new lineup without that network's carriage.
+- `ChannelAvailability` — whether and where a source can show one game:
+  - `Carried { channel }` — one of the game's networks has a Channel.
+  - `Unlearned { network, source, guide }` — no network is carried, and this is the first of the game's
+    networks with no carriage recorded. `guide` is the source's live-guide locator.
   - `NotCarried` — every one of the game's networks is recorded as not carried, or the game lists none.
+- `ChannelUrlRefused` — an address a source would not learn, because it is not one of its live
+  channels (HTTP 422).
 
 A network with a Channel wins over an earlier network that is unlearned: a game on `ESPN` and
 `Disney+` plays on ESPN as soon as ESPN is known, whatever is known about Disney+.
 
 **`Stage.ts`**:
 
-- `Tile` gains `PickingChannel { game, network, guide }`.
-- `apply(stage, command, availability)` replaces the `locate` parameter with
-  `availability: (game: GameId) => Availability`. `Assign` produces a `StreamTile` for `Carried`, a
-  `PickingChannel` tile for `Unlearned`, and a `DataTile` for `NotCarried`. A game missing from the slate
-  is `NotCarried`.
-- `refresh(stage, availability)` — pure; re-resolves every non-empty tile. It runs whenever what the
+- `Tile` gains `PickingChannel { game, network, source, guide }`, and a `StreamTile` carries its whole
+  `Channel`.
+- `stage.apply(command, availabilityOf)` takes `availabilityOf: (game: GameId) => ChannelAvailability`
+  instead of `locate`. `Assign` produces a `StreamTile` for `Carried`, a `PickingChannel` tile for
+  `Unlearned`, and a `DataTile` for `NotCarried`. A game missing from the slate is `NotCarried`.
+- `stage.refresh(availabilityOf)` — pure; re-resolves every non-empty tile. It runs whenever what the
   source knows changes, so learning ESPN turns every ESPN tile on every Display into a stream, marking a
   network not carried moves its tiles to their next network, and forgetting a Channel turns its stream
   tiles back into picking tiles. Audio focus is untouched.
 
-### 2. Store (`apps/hub/src/store/`)
+### 2. Database and the channel store (`apps/hub/src`)
 
-- **`Store.ts`** — the port. For now it covers Channel answers only:
-  - `channelAnswers: Effect<ReadonlyArray<ChannelAnswer>, StoreError>`
-  - `learn(network, source, locator)`, `markNotCarried(network, source)`, `forget(network, source)`,
-    each `Effect<void, StoreError>`.
-  - `ChannelAnswer` is a `Channel`, or a record that a network is not carried by a source.
-- **`SqlStore.ts`** — the port over `effect/sql`, driven by `@effect/sql-sqlite-node` 4.0.0 with its
-  `Migrator`. Migration 1 creates one table:
-  `channel(network TEXT, source TEXT, carried INTEGER, url TEXT NULL, answered_at TEXT, PRIMARY KEY (network, source))`.
-  Every write is an upsert, so answering twice replaces the earlier answer.
-- The database file is `<SPORTAL_DATA_DIR>/sportal.sqlite`. `SPORTAL_DATA_DIR` defaults to `.sportal/` in
-  the working directory. `*.sqlite` is already gitignored; `.sportal/` is added.
-- **Risk, checked first in the plan:** `@effect/sql-sqlite-node` uses `better-sqlite3`, a native module,
-  and pnpm 12 does not run install scripts for this workspace (the same problem Electron has). If its
-  prebuilt binary does not load, the fallback is an `effect/sql` client over Node 24's built-in
-  `node:sqlite`. The `Store` port does not change either way.
+- **`database/Database.ts`** — the Hub's SQLite database: the client layer for
+  `<SPORTAL_DATA_DIR>/sportal.sqlite`, and `migrate(store, migrations)`, which runs one store's
+  migrations with Effect's `Migrator` and records them in that store's own table, `<store>_migrations`.
+  Stores never share a migration numbering.
+- **`source/ChannelStore.ts`** — the port, beside its only consumer:
+  - `carriages: Effect<ReadonlyArray<ChannelCarriage>, ChannelStoreError>`
+  - `record(carriage)`, `forget(network, source)`, each `Effect<void, ChannelStoreError>`.
+- **`source/SqlChannelStore.ts`** — the port over `effect/sql`, driven by `@effect/sql-sqlite-node`
+  4.0.0. It owns its migration (recorded in `channel_migrations`), which creates one table:
+  `channel_carriage(network TEXT, source TEXT, carried INTEGER, url TEXT NULL, recorded_at TEXT, PRIMARY KEY (network, source))`.
+  Every write is an upsert, so recording twice replaces the earlier carriage.
+- `SPORTAL_DATA_DIR` defaults to `.sportal/` in the working directory. `*.sqlite` is already gitignored;
+  `.sportal/` is added.
+- **The driver risk is settled:** `@effect/sql-sqlite-node` 4.0.0 depends only on `effect` and runs on
+  Node 24's built-in `node:sqlite`, so nothing native is installed.
 
 ### 3. Hub
 
-- **`source/Source.ts`** — the port grows to match the technical spec:
-  - `availability(game: GameSnapshot): Availability`
-  - `changes: Stream<void>` — emits after every change to what the source knows.
-  - `learn(network, url): Effect<void, NotAChannel | StoreError>`
-  - `markNotCarried(network)`, `forget(network)`: `Effect<void, StoreError>`
+- **`source/Source.ts`** — the port:
+  - `lineup: Effect<ChannelLineup>` — what the source has learned so far.
+  - `changes: Stream<void>` — emits after every change to the lineup.
+  - `learn(network, url): Effect<void, ChannelUrlRefused | ChannelStoreError>`
+  - `markNotCarried(network)`, `forget(network)`: `Effect<void, ChannelStoreError>`
 - **`source/YouTubeTv.ts`**:
-  - On start, it loads its Channel answers from the `Store` into a `SubscriptionRef`.
-  - Writes go to the `Store` first and then to the ref, so a failed write changes nothing.
-  - `canonical(url)` — pure and exported for tests. It accepts `https://tv.youtube.com/watch/<id>` with
-    any query, and returns the address with only the live `vp`. Anything else fails with
-    `NotAChannel`.
+  - On start, it loads its carriages from the `ChannelStore` into a `SubscriptionRef<ChannelLineup>`.
+  - Writes go to the store first and then to the ref, so a failed write changes nothing.
+  - `LiveChannelUrl` — a schema that decodes `https://tv.youtube.com/watch/<id>` with any query into the
+    address with only the live `vp`, and fails on anything else. `learn` decodes with it and maps a
+    failure to `ChannelUrlRefused`.
   - The guide locator is `https://tv.youtube.com/live`.
   - `youtube-tv-channels.json` is deleted, which also settles the deferred "decode the channel map at
     boot" finding.
-- **`stage/StageSessions.ts`** — builds `availability` from the current slate and `Source`, and
-  subscribes to `Source.changes`. On each change it applies `Stage.refresh` and publishes the new Stage
-  through the existing live stream.
-- **`main.ts`** — provides `SqlStore.layer` with the configured data directory.
+- **`stage/StageSessions.ts`** — builds `availabilityOf` from the current slate and the source's lineup,
+  and subscribes to `Source.changes`. On each change it applies `stage.refresh` and publishes the new
+  Stage through the existing live stream.
+- **`main.ts`** — provides `Database.layer` with the configured data directory, and
+  `SqlChannelStore.layer`.
 
 ### 4. API (`packages/api`)
 
@@ -133,7 +155,7 @@ commands: they affect every Display and every later game.
 
 | Endpoint | Payload | Errors |
 | --- | --- | --- |
-| `POST /api/channels/learn` | `{ network, url }` | `NotAChannel` (422) |
+| `POST /api/channels/learn` | `{ network, url }` | `ChannelUrlRefused` (422) |
 | `POST /api/channels/not-carried` | `{ network }` | |
 | `POST /api/channels/forget` | `{ network }` | |
 
@@ -152,14 +174,14 @@ arrives.
 **`TileViews`**
 
 - A view placed with `role: "guide"` listens to `did-navigate` and `did-navigate-in-page`. YouTube TV
-  changes its address with `pushState`, so `will-navigate` does not fire. When the address first becomes
-  `https://tv.youtube.com/watch/…`, the shell sends one `channel-picked` message for that tile and stops
-  reporting for that view.
-- The shell does not canonicalise or judge the address; the Hub does. The shell still only sets each
+  changes its address with `pushState`, so `will-navigate` does not fire. Each time the address becomes
+  a new `https://tv.youtube.com/watch/…` address, the shell sends one `channel-picked` message for that
+  tile, so a pick the Hub refused can be retried.
+- The shell does not decode or judge the address; the Hub does. The shell still only sets each
   view's address, bounds, and mute flag. It reads the address the page navigated to and nothing else,
   which keeps ADR 0002's rule that provider pages are loaded unmodified.
 - The guide view stays in place while the Hub decides. When the Hub accepts, the Stage changes, the tile
-  becomes a stream tile, and the next placement replaces the guide with the canonical address.
+  becomes a stream tile, and the next placement replaces the guide with the channel's live address.
 
 **Deferred findings taken here** (from the review of the Effect-native restructure)
 
@@ -168,9 +190,10 @@ arrives.
   over a shared map.
 - A window closed while the Hub page is loading is routine, not "the Hub could not be reached"; a view
   removed mid-load does not log a load error.
-- `WidevineUnavailable` carries the underlying error code.
+- `WidevineUnavailable` carries the underlying error as its cause.
 - The shell window's and the provider views' navigation guards become one guard.
-- Guard subframe navigations with `will-frame-navigate`.
+- Guard subframe navigations with `will-frame-navigate` in the shell window. Provider views do not
+  guard subframes: their pages embed frames from hosts the allowlist does not name.
 
 ### 6. Web UI (`apps/web`)
 
@@ -183,40 +206,44 @@ arrives.
   is no optimistic state: the tile changes when the Hub's Stage does.
 - **Stream tile:** gains a **wrong channel** action that calls `channels.forget`. Its browser link names
   the source instead of hard-coding YouTube TV (a deferred Reach finding).
-- **Failures:** a failed learn (for example `NotAChannel` after the user opened a recording instead of a
+- **Failures:** a failed learn (for example `ChannelUrlRefused` after the user opened a recording instead of a
   live channel) shows a short message on that tile and leaves the guide open. This covers the deferred
   "surface a rejected command" finding for this path only.
 
 ### 7. Language (`CONTEXT.md`)
 
-New rows: **Network** (a network's name as a provider reports it), **Picking tile** (a tile showing the
-source's guide until its network's Channel is known; `PickingChannel` in code), **Store** (the Hub's
-persistence port), **Store error** (the store could not read or write), **Channel answer** (what is
-known about a network on a source: carried with a Channel, or not carried), and **Not a channel** (an
-address a source refused to learn because it is not one of its live channels). The **Tile** row lists the picking tile. The existing **Channel**,
-**Availability**, and **Broadcast** rows already fit.
+New rows: **Network**, **Source name**, **Channel carriage**, **Channel lineup**, **Channel
+availability** (replacing **Availability**), **Channel URL refused**, **Channel store**, **Channel store
+error**, **Database**, **Live channel URL**, **Picking tile** (a tile showing the source's guide until
+its network's Channel is known; `PickingChannel` in code), and **Channel pick**. The **Tile** row lists
+the picking tile. The existing **Channel**, **Broadcast**, and **Slate** rows already fit. "Answer" is
+not domain language.
 
 ## Testing
 
 - **Domain, test-first.**
-  - `Availability` resolution: one network; several networks with each mix of carried, not carried, and
-    unknown; all not carried; none listed.
-  - `Stage.apply` for each availability.
-  - `Stage.refresh`: learning upgrades every matching tile; not carried advances to the next network;
+  - `GameSnapshot#isLive` and `GameSnapshot.watchOrder` (the watch-order test moves from `Slate.test.ts`).
+  - `ChannelLineup#availabilityOf`: one network; several networks with each mix of carried, not carried,
+    and unknown; all not carried; none listed. `record` replaces a network's carriage; `forget` keeps the
+    others.
+  - `stage.apply` for each availability.
+  - `stage.refresh`: learning upgrades every matching tile; not carried advances to the next network;
     forgetting reverts stream tiles; empty tiles and audio focus are untouched.
   - The deferred Stage test gaps: the rejection reason, assign over an occupied tile, audio focus
     unchanged by assign and clear.
-- **`YouTubeTv.canonical`:** the four recorded addresses above are the fixtures. The live and
-  "from the beginning" FOX addresses give the same canonical address; `https://tv.youtube.com/live` and
+- **`YouTubeTv.LiveChannelUrl`:** the four recorded addresses above are the fixtures. The live and
+  "from the beginning" FOX addresses decode to the same live address; `https://tv.youtube.com/live` and
   addresses on other hosts are refused.
-- **`SqlStore`:** runs against a temporary SQLite file with migrations applied. Each write is visible on
-  read; a second answer replaces the first; answers survive a new layer over the same file.
+- **`Database.migrate`:** two stores each run a migration numbered 1, each recorded in its own table;
+  a migration runs once.
+- **`SqlChannelStore`:** runs against a temporary SQLite file. Each write is visible on read; a second
+  carriage for a network replaces the first; carriages survive a new layer over the same file.
 - **`HubServer`:** assign a game on an unlearned network, then learn its channel, and see the Stage change
   on `GET /api/live`. This is also the deferred end-to-end live-stream test (framing, content type,
   current state first).
 - **`TileViews`:** with the existing Electron mocks. A guide view reports once on an in-page navigation
-  to `/watch/…`, does not report for the guide itself or a second navigation, and a stream view never
-  reports.
+  to `/watch/…`, does not report for the guide itself or a repeat of the address it just reported, and a
+  stream view never reports.
 - **By hand:** the game-day checklist's row 7 ("unmapped network") is replaced, and rows are added:
 
   | Do | Expect |

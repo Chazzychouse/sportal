@@ -4,108 +4,599 @@
 
 **Goal:** Clicking a game on any network YouTube TV carries plays it in the desktop shell, without a hand-filled channel map: the first time a network is seen its tile opens YouTube TV's live guide, the user picks the channel once, and the Hub remembers it across restarts.
 
-**Architecture:** The Hub gains a `Store` port (SQLite through `effect/sql`) that holds channel answers. The YouTube TV source reads them into memory, resolves each game's `Availability` (carried, unlearned, or not carried), and learns new channels through a `channels` API group. `Stage.apply` turns availability into stream, picking, or data tiles, and `Stage.refresh` re-resolves every Display's tiles whenever the source learns or forgets something. The shell lays a guide view over each picking tile, reports the address the view lands on through the shell bridge, and the web UI turns that report into `POST /api/channels/learn`.
+**Architecture:** Domain logic moves onto the domain types (`stage.apply`, `GameSnapshot.watchOrder`), and that becomes a rule. A new `ChannelLineup` holds the channel carriages one source has learned and resolves each game's `ChannelAvailability` (carried, unlearned, or not carried). The Hub gains a `Database` module (SQLite through `effect/sql`) whose stores each own their migrations; the first is the `ChannelStore`. The YouTube TV source keeps its lineup in a ref backed by that store and learns channels through a `channels` API group, decoding each picked address with a `LiveChannelUrl` schema. `stage.apply` turns availability into stream, picking, or data tiles, and `stage.refresh` re-resolves every Display's tiles whenever the lineup changes. The shell lays a guide view over each picking tile and reports the address the view lands on through the shell bridge; the web UI turns that report into `POST /api/channels/learn`.
 
 **Tech Stack:** TypeScript 6, Effect 4.0.0 (`effect`, `effect/sql`, `effect/http-api`), `@effect/sql-sqlite-node` 4.0.0 on Node 24's `node:sqlite`, `@effect/platform-node` 4.0.0, React 19, Electron 44 (castlabs Widevine build), Vitest 5, Biome 2.5, dependency-cruiser 18, knip 6.
 
-**Spec:** `docs/specs/2026-10-03-learned-channels-design.md` (approved 2026-10-03).
+**Spec:** `docs/specs/2026-10-03-learned-channels-design.md` (approved 2026-10-03; revised with this plan's review).
 
-**Status of the code in this plan:** proposed, not yet built. Every code block is written against the code on `main` at `f229b74` and has not been compiled or run. Expected test counts and command outputs are what each step should produce; if a step's output differs, stop and reconcile before moving on. The desktop shell's guide reporting can only be proven against real YouTube TV, which the game-day checklist rows added in Task 9 do.
+**Status of the code in this plan:** proposed, not yet built. Every code block is written against the code on `main` at `c360d68` and has not been compiled or run. Per-file test counts are what each step should produce; if a step's output differs, stop and reconcile before moving on. The desktop shell's guide reporting can only be proven against real YouTube TV, which the game-day checklist rows added in Task 10 do.
 
 ## Global Constraints
 
 - Read `AGENTS.md` before every task. Its rules on file layout and in-file order are requirements, not style.
-- Effect is pinned to exactly `4.0.0`, and `@effect/sql-sqlite-node` to exactly `4.0.0`. Do not write Effect code from memory; consult `node_modules/effect/ai-docs/src/` (SQL: `40_sql`, HTTP: `51_http-server`).
+- Effect is pinned to exactly `4.0.0`, and `@effect/sql-sqlite-node` to exactly `4.0.0`. Do not write Effect code from memory; consult `node_modules/effect/ai-docs/src/` (SQL: `40_sql`, HTTP: `51_http-server`) and the sources under `node_modules/effect/src/`.
 - TypeScript stays on `^6`. Node 24 via `mise` (`mise exec -- <command>` if your shell has not activated mise).
 - `pnpm check` must pass before every commit.
-- Domain vocabulary is binding: every exported type name is a term in `CONTEXT.md`. A new term gets its row in the same commit.
+- Domain vocabulary is binding: every exported type name is a term in `CONTEXT.md`. A new term gets its row in the same commit. Channel concepts are named Channel-first (`ChannelCarriage`, `ChannelLineup`, `ChannelAvailability`, `ChannelUrlRefused`, `ChannelStore`). The word "answer" is not domain language.
+- An operation on a domain type lives on the type, as a method or static of its class (from Task 1, an `AGENTS.md` rule). No exported loose functions over a domain type.
 - Banned file and folder names: `utils`, `helpers`, `common`, `shared`, `misc`, `lib`, `types`, `constants`, `models`, `interfaces`, `index.ts`.
-- In the Hub, only `main.ts` and tests name concrete adapters (`EspnProvider`, `YouTubeTv`, and from Task 2 `SqlStore`).
+- In the Hub, only `main.ts` and tests name concrete adapters (`EspnProvider`, `YouTubeTv`, and from Task 3 `SqlChannelStore` and `Database`).
+- Each SQL store owns its migrations and records them in its own table (`<store>_migrations`) through `Database.migrate`.
 - Provider web players are loaded unmodified: no script injection, no request rewriting, no capture. The shell sets a view's address, bounds, and mute flag, and reads the address it navigated to; nothing else.
-- The address stored for a channel is the canonical live address, `https://tv.youtube.com/watch/<id>?vp=0gEEEgIwAQ%3D%3D`. A stored "from the beginning" address would replay every later game from its kickoff.
-- A channel is remembered per network and source. If game-day checklist row 17 shows an old address plays the old programme, the key becomes game, network, and source; only the store's key and the `availability` lookup change.
+- The address stored for a channel is its live address, `https://tv.youtube.com/watch/<id>?vp=0gEEEgIwAQ%3D%3D`. A stored "from the beginning" address would replay every later game from its kickoff.
+- A channel is remembered per network and source. If game-day checklist row 17 shows an old address plays the old programme, the key becomes game, network, and source; only the store's key and `ChannelLineup.availabilityOf` change.
 - The Hub binds to `127.0.0.1`. Poll ESPN no faster than `Cadence` allows.
 
 ## Where this plan differs from the spec
 
 Refinements made while planning, for review with the plan. None changes what the user sees.
 
-- **The SQLite risk does not exist.** `@effect/sql-sqlite-node` 4.0.0 runs on `node:sqlite`, not `better-sqlite3`; nothing native is installed (Task 2).
-- **`Network` lives in `Game.ts`, and the source concepts in a new domain `Source.ts`.** There is no `Broadcast.ts`: no type here is a Broadcast. Decided in review of this plan (Task 1).
-- **`Store` takes an answer, not three verbs.** The port is `channelAnswers`, `answer(ChannelAnswer)`, and `forget(network, source)`; the `Source` port keeps `learn`, `markNotCarried`, and `forget` (Tasks 2 and 4).
-- **`Source.availability` is an effect that returns a lookup** (`Effect<(game) => Availability>`), because what the source knows lives in a ref (Task 3).
-- **A stream tile carries its whole `Channel`**, and a picking tile and `Unlearned` availability carry the `SourceName`. The UI needs the channel's network for **wrong channel** and the source's name for its labels. `SourceName` (`"YouTube TV"`) is a new glossary term (Tasks 1 and 3).
-- **A guide view reports each distinct channel address**, not only the first, so a pick the Hub refused can be retried (Task 6).
-- **Subframe guarding applies to the shell window only**, not provider views (Task 7, recorded in ADR 0002).
-- **`WidevineUnavailable` carries the underlying error as its `cause`** rather than a code (Task 7).
-- **`ChannelPick`** (`{ tile, url }`) is a named schema in the bridge contract, with a glossary row, because the preload, the shell, and the web UI all use it (Task 6).
+- **Domain logic lives on the domain types, and existing logic is converted first** (Task 1). `Stage.apply(stage, …)` becomes `stage.apply(…)`, `Stage.initial` a static, `Game.isLive(game)` the method `game.isLive()`. Decided in review of this plan.
+- **There is no `Slate.ts`.** Its only content, the watch order, compares two games, so it becomes the static `GameSnapshot.watchOrder: Order<GameSnapshot>`, used as `[...slate].sort(GameSnapshot.watchOrder)`. A slate is still a glossary term, but in code it is an array of snapshots, not a type, so there is nothing for a `Slate` class to own yet. `SlateWindow` (Tracker) is where a `Slate.ts` returns (Task 1).
+- **`Network` lives in `Game.ts`, and the source concepts in a new domain `Source.ts`.** There is no `Broadcast.ts`: no type here is a Broadcast (Task 2).
+- **Channel-first names.** The spec's channel answer is a `ChannelCarriage`, `Availability` is `ChannelAvailability`, and `NotAChannel` is `ChannelUrlRefused` (Task 2).
+- **`ChannelLineup` resolves availability.** The carriages one source has learned, with its source name and guide, as a `Schema.Class` with `availabilityOf(game)`, `record(carriage)`, and `forget(network)`. The source keeps a `SubscriptionRef<ChannelLineup>`, and the Hub's `Source` port exposes `lineup: Effect<ChannelLineup>` rather than a lookup function (Tasks 2, 4, 5).
+- **`ChannelAvailability` is a `Data.taggedEnum`**, not a schema: it never crosses the wire (tiles do), and the tagged enum gives it constructors on the type (Task 2).
+- **One store per concept instead of one `Store` port.** A `Database` module owns the SQLite client and `migrate(store, migrations)`; the `ChannelStore` port (`carriages`, `record`, `forget`) sits in `apps/hub/src/source/` beside its only consumer, and its adapter `SqlChannelStore` owns its migration (Task 3).
+- **The SQLite risk does not exist.** `@effect/sql-sqlite-node` 4.0.0 depends only on `effect` and runs on `node:sqlite`; nothing native is installed (Task 3).
+- **`canonical(url)` is replaced by the `LiveChannelUrl` schema in `YouTubeTv.ts`**, which decodes any channel address to its live address; `learn` maps a decode failure to `ChannelUrlRefused` (Task 5).
+- **A stream tile carries its whole `Channel`**, and a picking tile carries the `SourceName`. The UI needs the channel's network for **wrong channel** and the source's name for its labels. Tile variants stay `TaggedStruct`s: nothing operates on a single tile apart from the `Stage` that holds it (Task 4).
+- **A guide view reports each distinct channel address**, not only the first, so a pick the Hub refused can be retried (Task 7).
+- **Subframe guarding applies to the shell window only**, not provider views (Task 8, recorded in ADR 0002).
+- **`WidevineUnavailable` carries the underlying error as its `cause`** rather than a code (Task 8).
+- **`ChannelPick`** (`{ tile, url }`) is a named schema in the bridge contract, with a glossary row, because the preload, the shell, and the web UI all use it (Task 7).
 
 ## Out of scope
 
 - The stream budget and what happens at the provider's concurrent-stream limit.
 - Regional feeds: a learned CBS channel is the user's local CBS, which may be showing a different regional game from the one clicked. A known limitation; the Tracker's availability work handles it.
 - Learning a channel in a plain browser.
-- Saving the Stage across Hub restarts (only channel answers are stored).
+- Saving the Stage across Hub restarts (only channel carriages are stored).
+- Converting non-domain modules (Hub services, the ESPN adapter's payload helpers, web components) to the new rule: it governs domain types only.
 - Every Tracker, Stage, Director, and Reach item in `docs/plans/2026-10-03-thin-vertical-slice.md`, other than the deferred findings this plan names.
 
 ## File map
 
 ```
 sportal/
-├── AGENTS.md, CONTEXT.md, .gitignore, .dependency-cruiser.cjs           Tasks 1–3, 6, 9
-├── docs/game-day-checklist.md, docs/adr/0002-…, docs/plans/…slice.md  Task 9
+├── AGENTS.md, CONTEXT.md, .gitignore, .dependency-cruiser.cjs           Tasks 1–4, 7, 10
+├── docs/game-day-checklist.md, docs/adr/0002-…, docs/plans/…slice.md  Task 10
 ├── packages/
 │   ├── domain/src/
-│   │   ├── Source.ts (+ test)           SourceName, Channel, ChannelAnswer,
-│   │   │                                Availability, NotAChannel, availability()   Task 1
-│   │   ├── Game.ts                      Network; broadcasts: Array<Network>          Task 1
-│   │   └── Stage.ts (+ test)            PickingChannel tile, apply(availability), refresh   Task 3
+│   │   ├── Game.ts (+ test)             isLive(), watchOrder                         Task 1
+│   │   │                                Network; broadcasts: Array<Network>          Task 2
+│   │   ├── Slate.ts (+ test)            deleted (watch order moves to GameSnapshot)  Task 1
+│   │   ├── Source.ts (+ test)           SourceName, Channel, ChannelCarriage,
+│   │   │                                ChannelLineup, ChannelAvailability,
+│   │   │                                ChannelUrlRefused                            Task 2
+│   │   └── Stage.ts (+ test)            apply/initial on the class                   Task 1
+│   │                                    PickingChannel tile, availability, refresh  Task 4
 │   └── api/src/
-│       ├── SportalApi.ts                channels group                               Task 5
-│       └── ShellBridge.ts               role, ChannelPick, onChannelPicked           Task 6
+│       ├── SportalApi.ts                channels group                               Task 6
+│       └── ShellBridge.ts               role, ChannelPick, onChannelPicked           Task 7
 └── apps/
     ├── hub/
-    │   ├── package.json                 @effect/sql-sqlite-node 4.0.0                Task 2
+    │   ├── package.json                 @effect/sql-sqlite-node 4.0.0                Task 3
     │   └── src/
-    │       ├── store/Store.ts, SqlStore.ts (+ test)                                  Task 2
-    │       ├── source/Source.ts, YouTubeTv.ts (+ test)                               Tasks 3–4
-    │       ├── source/youtube-tv-channels.json   deleted                             Task 3
-    │       ├── stage/StageSessions.ts (+ test)   availability, refresh               Tasks 3–5
-    │       ├── http/HubServer.ts (+ test)        channel handlers, /api/live test    Task 5
-    │       └── main.ts                           data dir, store, source             Tasks 2–4
+    │       ├── database/Database.ts (+ test)   SQLite client, migrate()              Task 3
+    │       ├── source/ChannelStore.ts          the port                              Task 3
+    │       ├── source/SqlChannelStore.ts (+ test)  adapter; owns its migration       Task 3
+    │       ├── source/Source.ts, YouTubeTv.ts (+ test)   lineup, LiveChannelUrl      Tasks 4–5
+    │       ├── source/youtube-tv-channels.json   deleted                             Task 4
+    │       ├── ingest/Cadence.ts                 game.isLive()                       Task 1
+    │       ├── stage/StageSessions.ts (+ test)   stage.apply, availability, refresh  Tasks 1, 4–6
+    │       ├── http/HubServer.ts (+ test)        channel handlers, /api/live test    Task 6
+    │       └── main.ts                           data dir, database, store, source   Tasks 3–5
     ├── desktop/src/
-    │   ├── preload/ShellBridge.ts                onChannelPicked                     Task 6
-    │   └── main/TileViews.ts (+ test)            guide views report picks            Tasks 6–7
-    │       ProviderSession.ts (+ test)           confine                             Task 7
-    │       main.ts                               picks to the window; findings       Tasks 6–7
+    │   ├── preload/ShellBridge.ts                onChannelPicked                     Task 7
+    │   └── main/TileViews.ts (+ test)            guide views report picks            Tasks 7–8
+    │       ProviderSession.ts (+ test)           confine                             Task 8
+    │       main.ts                               picks to the window; findings       Tasks 7–8
     └── web/src/
-        ├── hub/HubClient.ts                      channel commands                    Task 8
-        └── stage/StageView.tsx                   picking tiles, wrong channel        Tasks 3, 6, 8
+        ├── slate/SlateView.tsx                   watchOrder, isLive()                Task 1
+        ├── hub/Live.ts (+ test)                  Stage.initial                       Task 1
+        ├── hub/HubClient.ts                      channel commands                    Task 9
+        └── stage/StageView.tsx                   picking tiles, wrong channel        Tasks 4, 7, 9
 ```
 
 ---
 
-### Task 1: Domain — networks, channels, and availability
+### Task 1: Domain logic lives on the domain types
+
+This task changes no behaviour. It moves the existing domain functions onto the types they operate on, writes the rule into `AGENTS.md`, and updates every caller, so the reviewer can judge the convention on its own before any channel code uses it.
 
 **Files:**
+- Modify: `AGENTS.md` (the rule)
+- Modify: `packages/domain/src/Game.ts` (`isLive()` method, `watchOrder` static)
+- Test: `packages/domain/src/Game.test.ts` (new)
+- Delete: `packages/domain/src/Slate.ts`, `packages/domain/src/Slate.test.ts`
+- Modify: `packages/domain/src/Stage.ts` (`initial` static, `apply` method)
+- Test: `packages/domain/src/Stage.test.ts`
+- Modify: `apps/hub/src/ingest/Cadence.ts`, `apps/hub/src/stage/StageSessions.ts`, `apps/web/src/slate/SlateView.tsx`, `apps/web/src/hub/Live.ts`, `apps/web/src/hub/Live.test.ts`
+
+**Interfaces:**
+- Produces:
+  - `GameSnapshot#isLive(): boolean` — live or at halftime.
+  - `GameSnapshot.watchOrder: Order.Order<GameSnapshot>` — live first, then upcoming (scheduled or delayed) by kickoff, then everything over.
+  - `Stage.initial: Stage` — four empty tiles, audio focus on the first.
+  - `Stage#apply(command: StageCommand, locate: (game: GameId) => Option<StreamLocator>): Result<Stage, StageRejection>` — same behaviour as today's `Stage.apply(stage, command, locate)`. Task 4 replaces `locate` with availability.
+- Removed: `Game.isLive`, `Slate.inWatchOrder`, `Stage.apply` (the function), `Stage.initial` (the module constant).
+
+- [ ] **Step 1: Write the rule**
+
+Apply this change to `AGENTS.md`:
+
+```diff
+--- a/AGENTS.md
++++ b/AGENTS.md
+@@ -36,8 +36,8 @@ A reader opens a file to see the thing it is named for. Keep it that way.
+ 1. The main export comes first. No preamble of types, constants, and small helpers above it.
+ 2. Private helpers go **below** the code that uses them, as hoisted `function` declarations, in the
+    order they are first used.
+-3. A helper used once and a few lines long is inlined. A helper that is really an operation on another
+-   concept lives in that concept's module.
++3. A helper used once and a few lines long is inlined. A helper that is really an operation on another
++   concept is a method or static of that concept's type.
+ 4. Do not declare an interface or type alias for an options bag, a return shape, a callback, or
+    component props used in one place. Write the shape inline in the signature.
+ 5. A service file reads: service declaration, its layer, then private helpers.
+@@ -48,6 +48,12 @@ A reader opens a file to see the thing it is named for. Keep it that way.
+ ## How code is written
+ 
+ - Logic is a pure function or an `Effect`. No bare promises or `async` outside framework edges (React
+   handlers, Electron callbacks).
++- An operation on a domain type lives on the type: a method or static of its class (`Schema.Class`,
++  `Schema.TaggedClass`), or, for a union that never crosses the wire, the constructors and `$match` of
++  its `Data.taggedEnum`. Write `stage.apply(command, …)` and `GameSnapshot.watchOrder`, never an
++  exported `apply(stage, …)`. A domain module exports no loose functions over its types; a private
++  helper below the class that only the class uses is fine. A schema a class reads when it is defined
++  (a field's type) goes above the class, because the class evaluates it then.
+ - Expected failures are tagged errors in the error channel. Nothing is caught and ignored.
+```
+
+The technical spec's matching principles were updated together with this plan; no other document changes in this task.
+
+- [ ] **Step 2: Write the failing game test**
+
+Create `packages/domain/src/Game.test.ts`:
+
+```ts
+import { assert, describe, it } from "@effect/vitest"
+import { DateTime } from "effect"
+import { GameId, GameSnapshot, type GameStatus } from "./Game.ts"
+import { snapshot } from "./TestGame.ts"
+
+describe("GameSnapshot.isLive", () => {
+  it.each(["live", "halftime"] as const)("is live when %s", (status) => {
+    assert.isTrue(snapshot({ status }).isLive())
+  })
+
+  it.each(["scheduled", "delayed", "final", "postponed", "canceled"] as const)(
+    "is not live when %s",
+    (status) => {
+      assert.isFalse(snapshot({ status }).isLive())
+    }
+  )
+})
+
+describe("GameSnapshot.watchOrder", () => {
+  it("puts live games first, then upcoming by kickoff, then finished", () => {
+    const ordered = [
+      game("final", "final", "2026-10-03T16:00:00Z"),
+      game("late", "scheduled", "2026-10-03T23:30:00Z"),
+      game("halftime", "halftime", "2026-10-03T19:30:00Z"),
+      game("early", "scheduled", "2026-10-03T20:00:00Z"),
+      game("live", "live", "2026-10-03T16:00:00Z")
+    ].sort(GameSnapshot.watchOrder)
+    assert.deepStrictEqual(
+      ordered.map((g) => g.id),
+      ["live", "halftime", "early", "late", "final"]
+    )
+  })
+})
+
+function game(id: string, status: GameStatus, kickoff: string) {
+  return snapshot({ id: GameId.make(id), status, kickoff: DateTime.makeUnsafe(kickoff) })
+}
+```
+
+The watch-order case is `Slate.test.ts`'s one test, moved.
+
+- [ ] **Step 3: Run it to see it fail**
+
+Run: `pnpm vitest run packages/domain/src/Game.test.ts`
+Expected: FAIL — `isLive is not a function`, and `GameSnapshot.watchOrder` is undefined.
+
+- [ ] **Step 4: Put the operations on `GameSnapshot`**
+
+Replace `packages/domain/src/Game.ts`:
+
+```ts
+import { DateTime, Order, Schema } from "effect"
+import { LeagueId } from "./League.ts"
+import { Situation } from "./Situation.ts"
+import { Team } from "./Team.ts"
+
+export const GameId = Schema.String.pipe(Schema.brand("GameId"))
+export type GameId = typeof GameId.Type
+
+export const GameStatus = Schema.Literals([
+  "scheduled",
+  "live",
+  "halftime",
+  "delayed",
+  "final",
+  "postponed",
+  "canceled"
+])
+export type GameStatus = typeof GameStatus.Type
+
+const Side = Schema.Struct({ team: Team, score: Schema.Int, ranking: Schema.optional(Schema.Int) })
+
+export class GameSnapshot extends Schema.Class<GameSnapshot>("sportal/GameSnapshot")({
+  id: GameId,
+  league: LeagueId,
+  kickoff: Schema.DateTimeUtcFromString,
+  status: GameStatus,
+  period: Schema.Int,
+  clock: Schema.String,
+  home: Side,
+  away: Side,
+  broadcasts: Schema.Array(Schema.String),
+  situation: Schema.optional(Situation)
+}) {
+  /** Live games first, then upcoming by kickoff, then everything that is over. */
+  static readonly watchOrder: Order.Order<GameSnapshot> = Order.combine(
+    Order.mapInput(Order.Number, (game: GameSnapshot) =>
+      game.isLive() ? 0 : game.status === "scheduled" || game.status === "delayed" ? 1 : 2
+    ),
+    Order.mapInput(DateTime.Order, (game: GameSnapshot) => game.kickoff)
+  )
+
+  isLive(): boolean {
+    return this.status === "live" || this.status === "halftime"
+  }
+}
+```
+
+Run: `git rm packages/domain/src/Slate.ts packages/domain/src/Slate.test.ts`
+Expected: both files staged for deletion.
+
+- [ ] **Step 5: Run it to see it pass**
+
+Run: `pnpm vitest run packages/domain/src/Game.test.ts`
+Expected: `Tests  8 passed (8)`.
+
+- [ ] **Step 6: Rewrite the Stage test in method form**
+
+Replace `packages/domain/src/Stage.test.ts`:
+
+```ts
+import { assert, describe, it } from "@effect/vitest"
+import { Option, Result } from "effect"
+import { GameId } from "./Game.ts"
+import { Stage } from "./Stage.ts"
+
+const bama = GameId.make("401856707")
+const irish = GameId.make("401858250")
+const onFox = () => Option.some({ _tag: "WebView" as const, url: "https://tv.youtube.com/watch/fox" })
+const nowhere = () => Option.none()
+
+describe("Stage#apply", () => {
+  it("assigns a streamable game as a stream tile", () => {
+    const stage = Result.getOrThrow(Stage.initial.apply({ _tag: "Assign", tile: 1, game: bama }, onFox))
+    assert.deepStrictEqual(stage.tiles[1], {
+      _tag: "StreamTile",
+      game: bama,
+      locator: { _tag: "WebView", url: "https://tv.youtube.com/watch/fox" }
+    })
+  })
+
+  it("assigns a game with no stream as a data tile", () => {
+    const stage = Result.getOrThrow(Stage.initial.apply({ _tag: "Assign", tile: 0, game: bama }, nowhere))
+    assert.deepStrictEqual(stage.tiles[0], { _tag: "DataTile", game: bama })
+  })
+
+  it("moves a game rather than showing it twice", () => {
+    const first = Result.getOrThrow(Stage.initial.apply({ _tag: "Assign", tile: 0, game: bama }, onFox))
+    const second = Result.getOrThrow(first.apply({ _tag: "Assign", tile: 2, game: bama }, onFox))
+    assert.strictEqual(second.tiles[0]?._tag, "Empty")
+    assert.strictEqual(second.tiles[2]?._tag, "StreamTile")
+  })
+
+  it("clears a tile and leaves the others", () => {
+    const a = Result.getOrThrow(Stage.initial.apply({ _tag: "Assign", tile: 0, game: bama }, onFox))
+    const b = Result.getOrThrow(a.apply({ _tag: "Assign", tile: 1, game: irish }, onFox))
+    const c = Result.getOrThrow(b.apply({ _tag: "Clear", tile: 0 }, onFox))
+    assert.strictEqual(c.tiles[0]?._tag, "Empty")
+    assert.strictEqual(c.tiles[1]?._tag, "StreamTile")
+  })
+
+  it("moves audio focus", () => {
+    const stage = Result.getOrThrow(Stage.initial.apply({ _tag: "FocusAudio", tile: 3 }, nowhere))
+    assert.strictEqual(stage.audioFocus, 3)
+  })
+
+  it("rejects a tile that does not exist", () => {
+    const result = Stage.initial.apply({ _tag: "FocusAudio", tile: 4 }, nowhere)
+    assert.isTrue(Result.isFailure(result))
+  })
+})
+```
+
+- [ ] **Step 7: Run it to see it fail**
+
+Run: `pnpm vitest run packages/domain/src/Stage.test.ts`
+Expected: FAIL — `Stage.initial` is undefined (it is still a module constant, not a static).
+
+- [ ] **Step 8: Put `initial` and `apply` on `Stage`**
+
+Replace `packages/domain/src/Stage.ts`:
+
+```ts
+import { Option, Result, Schema } from "effect"
+import { GameId } from "./Game.ts"
+import { StreamLocator } from "./Stream.ts"
+
+export const Tile = Schema.Union([
+  Schema.TaggedStruct("Empty", {}),
+  Schema.TaggedStruct("StreamTile", { game: GameId, locator: StreamLocator }),
+  Schema.TaggedStruct("DataTile", { game: GameId })
+])
+export type Tile = typeof Tile.Type
+
+export class Stage extends Schema.Class<Stage>("sportal/Stage")({
+  tiles: Schema.Array(Tile),
+  audioFocus: Schema.Int
+}) {
+  /** Four empty tiles, with audio focus on the first. */
+  static readonly initial = new Stage({
+    tiles: [{ _tag: "Empty" }, { _tag: "Empty" }, { _tag: "Empty" }, { _tag: "Empty" }],
+    audioFocus: 0
+  })
+
+  /**
+   * Applies a command. `locate` says where a game can be streamed from, if anywhere;
+   * a game with no stream becomes a data tile.
+   */
+  apply(
+    command: StageCommand,
+    locate: (game: GameId) => Option.Option<StreamLocator>
+  ): Result.Result<Stage, StageRejection> {
+    if (command.tile < 0 || command.tile >= this.tiles.length) {
+      return Result.fail(new StageRejection({ reason: "no-such-tile" }))
+    }
+    switch (command._tag) {
+      case "Assign": {
+        const tile: Tile = Option.match(locate(command.game), {
+          onNone: () => ({ _tag: "DataTile", game: command.game }),
+          onSome: (locator) => ({ _tag: "StreamTile", game: command.game, locator })
+        })
+        // A game appears in at most one tile: assigning it elsewhere moves it.
+        const tiles = this.tiles.map((existing, index) =>
+          index === command.tile
+            ? tile
+            : existing._tag !== "Empty" && existing.game === command.game
+              ? empty
+              : existing
+        )
+        return Result.succeed(new Stage({ tiles, audioFocus: this.audioFocus }))
+      }
+      case "Clear":
+        return Result.succeed(
+          new Stage({
+            tiles: this.tiles.map((existing, index) => (index === command.tile ? empty : existing)),
+            audioFocus: this.audioFocus
+          })
+        )
+      case "FocusAudio":
+        return Result.succeed(new Stage({ tiles: this.tiles, audioFocus: command.tile }))
+    }
+  }
+}
+
+export const StageCommand = Schema.Union([
+  Schema.TaggedStruct("Assign", { tile: Schema.Int, game: GameId }),
+  Schema.TaggedStruct("Clear", { tile: Schema.Int }),
+  Schema.TaggedStruct("FocusAudio", { tile: Schema.Int })
+])
+export type StageCommand = typeof StageCommand.Type
+
+export class StageRejection extends Schema.TaggedError<StageRejection>()(
+  "StageRejection",
+  { reason: Schema.Literals(["no-such-tile"]) },
+  { httpApiStatus: 422 }
+) {}
+
+const empty: Tile = { _tag: "Empty" }
+```
+
+`initial` spells out its four empty tiles because a static is evaluated when the class is defined, before `empty` below it exists. `apply` reads `empty`, `StageCommand`, and `StageRejection` only when it runs, so they can stay below the class.
+
+- [ ] **Step 9: Run it to see it pass**
+
+Run: `pnpm vitest run packages/domain/src/Stage.test.ts`
+Expected: `Tests  6 passed (6)`.
+
+- [ ] **Step 10: Update the callers**
+
+Apply this change to `apps/hub/src/ingest/Cadence.ts`:
+
+```diff
+--- a/apps/hub/src/ingest/Cadence.ts
++++ b/apps/hub/src/ingest/Cadence.ts
+@@ -1,4 +1,4 @@
+-import { type GameSnapshot, isLive } from "@sportal/domain/Game"
++import type { GameSnapshot } from "@sportal/domain/Game"
+ import { DateTime, Duration } from "effect"
+ 
+ /**
+@@ -16,7 +16,7 @@ export function interval(
+ }
+ 
+ function normalInterval(slate: ReadonlyArray<GameSnapshot>, now: DateTime.Utc): Duration.Duration {
+-  if (slate.some(isLive)) return Duration.seconds(10)
++  if (slate.some((game) => game.isLive())) return Duration.seconds(10)
+   const soon = DateTime.add(now, { minutes: 30 })
+   const kickoffSoon = slate.some(
+     (game) => game.status === "scheduled" && DateTime.isLessThanOrEqualTo(game.kickoff, soon)
+```
+
+Replace `apps/hub/src/stage/StageSessions.ts`:
+
+```ts
+import type { GameId } from "@sportal/domain/Game"
+import { Stage, type StageCommand, type StageRejection } from "@sportal/domain/Stage"
+import { Context, Effect, Layer, Option, Result, type Stream, SubscriptionRef } from "effect"
+import { Ingest } from "../ingest/Ingest.ts"
+import { Source } from "../source/Source.ts"
+
+export class StageSessions extends Context.Service<
+  StageSessions,
+  {
+    readonly stage: Effect.Effect<Stage>
+    readonly changes: Stream.Stream<Stage>
+    dispatch(command: StageCommand): Effect.Effect<Stage, StageRejection>
+  }
+>()("sportal/hub/StageSessions") {
+  static readonly layer = Layer.effect(
+    StageSessions,
+    Effect.gen(function* () {
+      const ingest = yield* Ingest
+      const source = yield* Source
+      const current = yield* SubscriptionRef.make(Stage.initial)
+
+      const dispatch = Effect.fn("StageSessions.dispatch")(function* (command: StageCommand) {
+        const slate = yield* ingest.slate
+        const locate = (id: GameId) =>
+          Option.fromNullishOr(slate.find((game) => game.id === id)).pipe(Option.flatMap(source.locate))
+        // One atomic step: concurrent dispatches queue up, and a rejection leaves the Stage as it was.
+        return yield* SubscriptionRef.modifyEffect(current, (stage) => {
+          const result = stage.apply(command, locate)
+          return Result.isFailure(result)
+            ? Effect.fail(result.failure)
+            : Effect.succeed([result.success, result.success] as const)
+        })
+      })
+
+      return StageSessions.of({
+        stage: SubscriptionRef.get(current),
+        changes: SubscriptionRef.changes(current),
+        dispatch
+      })
+    })
+  )
+}
+```
+
+Apply this change to `apps/web/src/slate/SlateView.tsx`:
+
+```diff
+--- a/apps/web/src/slate/SlateView.tsx
++++ b/apps/web/src/slate/SlateView.tsx
+@@ -1,5 +1,4 @@
+-import { type GameSnapshot, isLive } from "@sportal/domain/Game"
+-import * as Slate from "@sportal/domain/Slate"
++import { GameSnapshot } from "@sportal/domain/Game"
+ import { DateTime } from "effect"
+ 
+ export function SlateView(props: {
+@@ -16,7 +15,7 @@ export function SlateView(props: {
+         </span>
+       </header>
+       <ul className="min-h-0 flex-1 overflow-y-auto">
+-        {Slate.inWatchOrder(props.slate).map((game) => (
++        {[...props.slate].sort(GameSnapshot.watchOrder).map((game) => (
+           <li key={game.id}>
+             <button
+               type="button"
+@@ -25,7 +24,7 @@ export function SlateView(props: {
+             >
+               <SideLine side={game.away} />
+               <span className="row-span-2 self-center text-right text-neutral-400 text-xs">
+-                <span className={isLive(game) ? "block text-emerald-400" : "block"}>{statusText(game)}</span>
++                <span className={game.isLive() ? "block text-emerald-400" : "block"}>{statusText(game)}</span>
+                 {game.broadcasts.join(" · ")}
+               </span>
+               <SideLine side={game.home} />
+```
+
+Apply this change to `apps/web/src/hub/Live.ts`:
+
+```diff
+--- a/apps/web/src/hub/Live.ts
++++ b/apps/web/src/hub/Live.ts
+@@ -1,6 +1,6 @@
+ import { type LiveMessage, LiveMessageJson } from "@sportal/api/LiveMessage"
+ import type { GameSnapshot } from "@sportal/domain/Game"
+-import * as Stage from "@sportal/domain/Stage"
++import { Stage } from "@sportal/domain/Stage"
+ import { Schema } from "effect"
+ import { useSyncExternalStore } from "react"
+ 
+```
+
+Apply this change to `apps/web/src/hub/Live.test.ts`:
+
+```diff
+--- a/apps/web/src/hub/Live.test.ts
++++ b/apps/web/src/hub/Live.test.ts
+@@ -1,10 +1,10 @@
+ import { assert, describe, it } from "@effect/vitest"
+-import * as Stage from "@sportal/domain/Stage"
++import { Stage } from "@sportal/domain/Stage"
+ import { disconnected, reduce } from "./Live.ts"
+ 
+ describe("Live.reduce", () => {
+   it("replaces the stage and keeps the slate", () => {
+-    const stage = new Stage.Stage({ tiles: Stage.initial.tiles, audioFocus: 2 })
++    const stage = new Stage({ tiles: Stage.initial.tiles, audioFocus: 2 })
+     const next = reduce(disconnected, { _tag: "StageChanged", stage })
+     assert.strictEqual(next.stage.audioFocus, 2)
+     assert.strictEqual(next.slate, disconnected.slate)
+```
+
+The web UI receives snapshots and stages by decoding live messages with their schemas, so they arrive as class instances and `game.isLive()` works on them.
+
+- [ ] **Step 11: Check**
+
+Run: `pnpm check`
+Expected: format, lint, typecheck, `✔ no dependency violations found`, knip clean (no unused `Slate` exports remain), and every test passes.
+
+- [ ] **Step 12: Commit**
+
+```bash
+git add AGENTS.md packages/domain/src apps/hub/src apps/web/src
+git commit -m "refactor(domain): operations on domain types live on the types
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
+
+### Task 2: Domain — networks, channel carriages, and the channel lineup
+
+**Files:**
+- Modify: `packages/domain/src/Game.ts` (adds `Network`; `broadcasts` becomes `Array<Network>`)
 - Create: `packages/domain/src/Source.ts`
 - Test: `packages/domain/src/Source.test.ts`
-- Modify: `packages/domain/src/Game.ts` (adds `Network`; `broadcasts` becomes `Array<Network>`)
 - Modify: `apps/hub/src/provider/espn/EspnProvider.ts` (brands network names)
 - Modify: tests that build snapshots with networks: `apps/hub/src/http/HubServer.test.ts`, `apps/hub/src/ingest/Cadence.test.ts`, `apps/hub/src/ingest/Ingest.test.ts`, `apps/hub/src/provider/espn/EspnProvider.test.ts`, `apps/hub/src/stage/StageSessions.test.ts`
 - Modify: `CONTEXT.md`
 
 **Interfaces:**
-- Consumes: `Stream.StreamLocator` (`{ _tag: "WebView", url }`), `Game.GameSnapshot`.
+- Consumes: `Stream.StreamLocator` (`{ _tag: "WebView", url }`), `GameSnapshot` from Task 1.
 - Produces, importable as `@sportal/domain/Game`:
   - `Network` — branded string schema and type; `Network.make("ESPN")`.
 - Produces, importable as `@sportal/domain/Source` (the pure concepts of a video source; the Hub's `Source` port wraps them and imports them by name):
   - `SourceName` — `Schema.Literals(["YouTube TV"])`.
   - `Channel` — `{ network: Network, source: SourceName, locator: StreamLocator }`.
-  - `ChannelAnswer` — `{ _tag: "Carried", channel: Channel } | { _tag: "NotCarried", network, source }`.
-  - `Availability` (type only) — `{ _tag: "Carried", channel } | { _tag: "Unlearned", network, source, guide: StreamLocator } | { _tag: "NotCarried" }`.
-  - `NotAChannel` — tagged error, no fields, HTTP 422.
-  - `availability(networks, answers, guide: { source, locator }): Availability` — a carried network wins; otherwise the first network with no answer is `Unlearned`; otherwise `NotCarried`.
+  - `ChannelCarriage` — `{ _tag: "Carried", channel: Channel } | { _tag: "NotCarried", network, source }`.
+  - `ChannelLineup` — `Schema.Class` `{ source: SourceName, guide: StreamLocator, carriages: ReadonlyArray<ChannelCarriage> }` with:
+    - `availabilityOf(game: GameSnapshot): ChannelAvailability` — a carried network wins; otherwise the first of the game's networks with no carriage is `Unlearned`; otherwise `NotCarried`.
+    - `record(carriage): ChannelLineup` — replaces any carriage for the same network.
+    - `forget(network): ChannelLineup`.
+  - `ChannelAvailability` — `Data.TaggedEnum` with constructors `ChannelAvailability.Carried({ channel })`, `ChannelAvailability.Unlearned({ network, source, guide })`, `ChannelAvailability.NotCarried()`.
+  - `ChannelUrlRefused` — tagged error, no fields, HTTP 422.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -114,15 +605,13 @@ Create `packages/domain/src/Source.test.ts`:
 ```ts
 import { assert, describe, it } from "@effect/vitest"
 import { Network } from "./Game.ts"
-import * as Source from "./Source.ts"
+import { ChannelAvailability, type ChannelCarriage, ChannelLineup } from "./Source.ts"
+import { snapshot } from "./TestGame.ts"
 
 const espn = Network.make("ESPN")
 const disney = Network.make("Disney+")
 const espnPlus = Network.make("ESPN+")
-const guide = {
-  source: "YouTube TV" as const,
-  locator: { _tag: "WebView" as const, url: "https://tv.youtube.com/live" }
-}
+const guide = { _tag: "WebView" as const, url: "https://tv.youtube.com/live" }
 const espnChannel = {
   network: espn,
   source: "YouTube TV" as const,
@@ -135,53 +624,69 @@ const notCarried = (network: Network) => ({
   source: "YouTube TV" as const
 })
 
-describe("Source.availability", () => {
+describe("ChannelLineup#availabilityOf", () => {
   it("is carried when the network has a channel", () => {
-    assert.deepStrictEqual(Source.availability([espn], [carried], guide), {
-      _tag: "Carried",
-      channel: espnChannel
-    })
+    assert.deepStrictEqual(
+      lineup([carried]).availabilityOf(on(espn)),
+      ChannelAvailability.Carried({ channel: espnChannel })
+    )
   })
 
-  it("is unlearned when nothing is known about the network", () => {
-    assert.deepStrictEqual(Source.availability([espn], [], guide), {
-      _tag: "Unlearned",
-      network: espn,
-      source: "YouTube TV",
-      guide: guide.locator
-    })
+  it("is unlearned when nothing is recorded for the network", () => {
+    assert.deepStrictEqual(
+      lineup([]).availabilityOf(on(espn)),
+      ChannelAvailability.Unlearned({ network: espn, source: "YouTube TV", guide })
+    )
   })
 
   it("prefers a carried network over an earlier unlearned one", () => {
-    assert.strictEqual(Source.availability([disney, espn], [carried], guide)._tag, "Carried")
+    assert.strictEqual(lineup([carried]).availabilityOf(on(disney, espn))._tag, "Carried")
   })
 
-  it("asks about the first network with no answer, skipping ones not carried", () => {
-    assert.deepStrictEqual(Source.availability([espnPlus, disney, espn], [notCarried(espnPlus)], guide), {
-      _tag: "Unlearned",
-      network: disney,
-      source: "YouTube TV",
-      guide: guide.locator
-    })
+  it("asks about the first network with nothing recorded, skipping ones not carried", () => {
+    assert.deepStrictEqual(
+      lineup([notCarried(espnPlus)]).availabilityOf(on(espnPlus, disney, espn)),
+      ChannelAvailability.Unlearned({ network: disney, source: "YouTube TV", guide })
+    )
   })
 
   it("is not carried when every network is not carried", () => {
-    assert.deepStrictEqual(Source.availability([espnPlus], [notCarried(espnPlus)], guide), {
-      _tag: "NotCarried"
-    })
+    assert.deepStrictEqual(
+      lineup([notCarried(espnPlus)]).availabilityOf(on(espnPlus)),
+      ChannelAvailability.NotCarried()
+    )
   })
 
   it("is not carried when the game lists no networks", () => {
-    assert.deepStrictEqual(Source.availability([], [carried], guide), { _tag: "NotCarried" })
+    assert.deepStrictEqual(lineup([carried]).availabilityOf(on()), ChannelAvailability.NotCarried())
   })
 })
+
+describe("ChannelLineup#record and #forget", () => {
+  it("replaces an earlier carriage for the same network", () => {
+    assert.deepStrictEqual(lineup([carried]).record(notCarried(espn)).carriages, [notCarried(espn)])
+  })
+
+  it("forgets one network's carriage and keeps the others", () => {
+    assert.deepStrictEqual(lineup([carried, notCarried(espnPlus)]).forget(espn).carriages, [
+      notCarried(espnPlus)
+    ])
+  })
+})
+
+function lineup(carriages: ReadonlyArray<ChannelCarriage>) {
+  return new ChannelLineup({ source: "YouTube TV", guide, carriages })
+}
+
+function on(...networks: Array<Network>) {
+  return snapshot({ broadcasts: networks })
+}
 ```
 
 - [ ] **Step 2: Run it to see it fail**
 
 Run: `pnpm vitest run packages/domain/src/Source.test.ts`
-Expected: FAIL — `./Source.ts` does not exist (`Test Files  1 failed`, `Tests  no tests`).
-
+Expected: FAIL — `./Source.ts` does not exist, and `Network` is not exported from `./Game.ts`.
 
 - [ ] **Step 3: Write the modules**
 
@@ -208,14 +713,14 @@ Add `Network` to `packages/domain/src/Game.ts`, and make it the type of `broadca
 -  broadcasts: Schema.Array(Schema.String),
 +  broadcasts: Schema.Array(Network),
    situation: Schema.optional(Situation)
- }) {}
+ }) {
 ```
 
 Create `packages/domain/src/Source.ts`:
 
 ```ts
-import { Schema } from "effect"
-import { Network } from "./Game.ts"
+import { Data, Schema } from "effect"
+import { type GameSnapshot, Network } from "./Game.ts"
 import { StreamLocator } from "./Stream.ts"
 
 /** The sources Sportal can play video from, by the name people know them by. */
@@ -226,62 +731,86 @@ export type SourceName = typeof SourceName.Type
 export const Channel = Schema.Struct({ network: Network, source: SourceName, locator: StreamLocator })
 export type Channel = typeof Channel.Type
 
-/** What is known about a network on a source: carried on a channel, or not carried at all. */
-export const ChannelAnswer = Schema.Union([
+/** Whether a source carries a network: on a channel, or not at all. */
+export const ChannelCarriage = Schema.Union([
   Schema.TaggedStruct("Carried", { channel: Channel }),
   Schema.TaggedStruct("NotCarried", { network: Network, source: SourceName })
 ])
-export type ChannelAnswer = typeof ChannelAnswer.Type
+export type ChannelCarriage = typeof ChannelCarriage.Type
 
-/** Whether and where a source can show one game. */
-export type Availability =
-  | { readonly _tag: "Carried"; readonly channel: Channel }
-  | {
-      readonly _tag: "Unlearned"
-      readonly network: Network
-      readonly source: SourceName
-      readonly guide: StreamLocator
+/**
+ * The channel carriages one source has learned, and the guide where the rest are picked. Recording or
+ * forgetting a carriage returns a new lineup.
+ */
+export class ChannelLineup extends Schema.Class<ChannelLineup>("sportal/ChannelLineup")({
+  source: SourceName,
+  guide: StreamLocator,
+  carriages: Schema.Array(ChannelCarriage)
+}) {
+  /**
+   * Where this source can show a game, given its networks in broadcast order. A carried network wins;
+   * otherwise the first network with no carriage recorded is the one to pick next.
+   */
+  availabilityOf(game: GameSnapshot): ChannelAvailability {
+    for (const network of game.broadcasts) {
+      const carriage = this.carriageOf(network)
+      if (carriage?._tag === "Carried") return ChannelAvailability.Carried({ channel: carriage.channel })
     }
-  | { readonly _tag: "NotCarried" }
+    const unlearned = game.broadcasts.find((network) => this.carriageOf(network) === undefined)
+    return unlearned === undefined
+      ? ChannelAvailability.NotCarried()
+      : ChannelAvailability.Unlearned({ network: unlearned, source: this.source, guide: this.guide })
+  }
+
+  /** Records a carriage, replacing any earlier one for the same network. */
+  record(carriage: ChannelCarriage): ChannelLineup {
+    return new ChannelLineup({
+      source: this.source,
+      guide: this.guide,
+      carriages: [...this.forget(networkOf(carriage)).carriages, carriage]
+    })
+  }
+
+  forget(network: Network): ChannelLineup {
+    return new ChannelLineup({
+      source: this.source,
+      guide: this.guide,
+      carriages: this.carriages.filter((carriage) => networkOf(carriage) !== network)
+    })
+  }
+
+  private carriageOf(network: Network): ChannelCarriage | undefined {
+    return this.carriages.find((carriage) => networkOf(carriage) === network)
+  }
+}
+
+/** Whether and where a source can show one game: carried, unlearned (its network still to be picked), or not carried. */
+export type ChannelAvailability = Data.TaggedEnum<{
+  Carried: { readonly channel: Channel }
+  Unlearned: { readonly network: Network; readonly source: SourceName; readonly guide: StreamLocator }
+  // biome-ignore lint/complexity/noBannedTypes: the not-carried case carries nothing
+  NotCarried: {}
+}>
+export const ChannelAvailability = Data.taggedEnum<ChannelAvailability>()
 
 /** An address a source refused to learn, because it is not one of the source's live channels. */
-export class NotAChannel extends Schema.TaggedError<NotAChannel>()(
-  "NotAChannel",
+export class ChannelUrlRefused extends Schema.TaggedError<ChannelUrlRefused>()(
+  "ChannelUrlRefused",
   {},
   { httpApiStatus: 422 }
 ) {}
 
-/**
- * Where a source can show a game, given the game's networks in broadcast order and the source's answers.
- * A carried network wins; otherwise the first network with no answer is the one to learn next.
- */
-export function availability(
-  networks: ReadonlyArray<Network>,
-  answers: ReadonlyArray<ChannelAnswer>,
-  guide: { source: SourceName; locator: StreamLocator }
-): Availability {
-  const answerFor = (network: Network) =>
-    answers.find((answer) =>
-      answer._tag === "Carried" ? answer.channel.network === network : answer.network === network
-    )
-  for (const network of networks) {
-    const answer = answerFor(network)
-    if (answer?._tag === "Carried") return answer
-  }
-  const unlearned = networks.find((network) => answerFor(network) === undefined)
-  return unlearned === undefined
-    ? { _tag: "NotCarried" }
-    : { _tag: "Unlearned", network: unlearned, source: guide.source, guide: guide.locator }
+function networkOf(carriage: ChannelCarriage): Network {
+  return carriage._tag === "Carried" ? carriage.channel.network : carriage.network
 }
 ```
 
-`Availability` is a plain type, not a schema: it never crosses the wire (tiles do). `ChannelAnswer` is a schema because the store decodes it.
+`ChannelLineup` is a schema class even though this plan never sends it over the wire: its fields are schemas already, and the class is where its operations live. `ChannelAvailability` never crosses the wire (tiles do), so it is a `Data.taggedEnum`: plain tagged objects with constructors on the type. `networkOf` is private to the file; it reads one carriage and is used only by the lineup.
 
 - [ ] **Step 4: Run it to see it pass**
 
 Run: `pnpm vitest run packages/domain/src/Source.test.ts`
-Expected: `Tests  6 passed (6)`.
-
+Expected: `Tests  8 passed (8)`.
 
 - [ ] **Step 5: Brand the game's networks in the provider and tests**
 
@@ -295,7 +824,7 @@ Apply this change to `apps/hub/src/provider/espn/EspnProvider.ts`:
 +import { GameId, GameSnapshot, type GameStatus, Network } from "@sportal/domain/Game"
  import type { LeagueId } from "@sportal/domain/League"
  import { Situation } from "@sportal/domain/Situation"
-@@ -75,7 +76,7 @@ function toSnapshot(league: LeagueId, event: typeof EspnPayload.Event.Type): Opt
+@@ -75,7 +75,7 @@ function toSnapshot(league: LeagueId, event: typeof EspnPayload.Event.Type): Opt
        clock: event.status.displayClock,
        home: side(home),
        away: side(away),
@@ -324,6 +853,7 @@ Apply this change to `apps/hub/src/ingest/Cadence.test.ts`:
  }
  
 ```
+
 Apply this change to `apps/hub/src/ingest/Ingest.test.ts`:
 
 ```diff
@@ -340,6 +870,7 @@ Apply this change to `apps/hub/src/ingest/Ingest.test.ts`:
  }
  
 ```
+
 Apply this change to `apps/hub/src/provider/espn/EspnProvider.test.ts`:
 
 ```diff
@@ -362,6 +893,7 @@ Apply this change to `apps/hub/src/provider/espn/EspnProvider.test.ts`:
      }).pipe(Effect.provide(TestLayer))
    )
 ```
+
 Apply this change to `apps/hub/src/http/HubServer.test.ts`:
 
 ```diff
@@ -374,7 +906,7 @@ Apply this change to `apps/hub/src/http/HubServer.test.ts`:
 +import { GameId, Network } from "@sportal/domain/Game"
  import { snapshot, team } from "@sportal/domain/TestGame"
  import { DateTime, Effect, Layer } from "effect"
-@@ -15,7 +16,7 @@ const game = snapshot({
+@@ -15,7 +15,7 @@ const game = snapshot({
    id: GameId.make("401856707"),
    home: { team: team("MSST"), score: 0 },
    away: { team: team("ALA"), score: 0 },
@@ -384,6 +916,7 @@ Apply this change to `apps/hub/src/http/HubServer.test.ts`:
  
  const TestHub = ApiHandlers.pipe(
 ```
+
 Apply this change to `apps/hub/src/stage/StageSessions.test.ts`:
 
 ```diff
@@ -395,7 +928,7 @@ Apply this change to `apps/hub/src/stage/StageSessions.test.ts`:
 +import { GameId, Network } from "@sportal/domain/Game"
  import { snapshot } from "@sportal/domain/TestGame"
  import { Effect, Layer, Option, Stream } from "effect"
-@@ -6,11 +7,12 @@ import { Ingest } from "../ingest/Ingest.ts"
+@@ -6,11 +6,12 @@ import { Ingest } from "../ingest/Ingest.ts"
  import { Source } from "../source/Source.ts"
  import { StageSessions } from "./StageSessions.ts"
  
@@ -410,7 +943,7 @@ Apply this change to `apps/hub/src/stage/StageSessions.test.ts`:
  
  const TestSessions = StageSessions.layer.pipe(
    Layer.provide(Layer.succeed(Ingest, Ingest.of({ slate: Effect.succeed(slate), changes: Stream.empty }))),
-@@ -19,7 +21,7 @@ const TestSessions = StageSessions.layer.pipe(
+@@ -19,7 +20,7 @@ const TestSessions = StageSessions.layer.pipe(
        Source,
        Source.of({
          locate: (snapshot) =>
@@ -421,6 +954,8 @@ Apply this change to `apps/hub/src/stage/StageSessions.test.ts`:
        })
 ```
 
+`YouTubeTv.ts` still looks networks up by name in its record of addresses (`channels[network]`); a branded string indexes it the same way, so it needs no change until Task 4 replaces it.
+
 - [ ] **Step 6: Add the words**
 
 Apply this change to `CONTEXT.md`:
@@ -428,7 +963,7 @@ Apply this change to `CONTEXT.md`:
 ```diff
 --- a/CONTEXT.md
 +++ b/CONTEXT.md
-@@ -39,9 +39,13 @@ Every exported type name must be a term here.
+@@ -39,9 +39,15 @@ Every exported type name must be a term here.
  | **Ingest** | The Hub's loop that polls providers and keeps the current slate. | poller, sync, fetcher |
  | **Cadence** | How long Ingest waits between polls, given what the last poll saw. | interval, rate |
  | **Source** | A way you obtain **video** (YouTube TV). | provider, service |
@@ -437,9 +972,10 @@ Apply this change to `CONTEXT.md`:
 +| **Network** | A network's name as a provider reports it ("CBS", "ESPN"). | channel, station |
  | **Channel** | A network as carried by a specific source. | |
 -| **Availability** | Whether and where a source can show a game. | |
-+| **Channel answer** | What is known about a network on a source: carried on a channel, or not carried. | mapping |
-+| **Not a channel** | An address a source refused to learn, because it is not one of its live channels. | |
-+| **Availability** | Whether and where a source can show a game: carried, unlearned (its network still to be picked), or not carried. | |
++| **Channel carriage** | Whether a source carries a network: on a channel, or not at all. | answer, mapping |
++| **Channel lineup** | The channel carriages one source has learned, and the guide where the rest are picked. | channel map |
++| **Channel availability** | Whether and where a source can show a game: carried, unlearned (its network still to be picked), or not carried. | availability |
++| **Channel URL refused** | An address a source would not learn, because it is not one of its live channels. | not a channel |
  | **Stream** | One playing instance of a game from a source. | feed, video |
  | **StreamLocator** | What a Display must load to play a stream. | URL, link |
  | **StreamBudget** | How many concurrent streams a source allows. | limit, cap |
@@ -448,79 +984,168 @@ Apply this change to `CONTEXT.md`:
 - [ ] **Step 7: Check**
 
 Run: `pnpm check`
-Expected: format, lint, typecheck, `✔ no dependency violations found`, knip clean, and `Tests  63 passed (63)`.
-
+Expected: format, lint, typecheck, `✔ no dependency violations found`, knip clean, and every test passes.
 
 - [ ] **Step 8: Commit**
 
 ```bash
 git add CONTEXT.md packages/domain/src apps/hub/src
-git commit -m "feat(domain): networks, channels, and availability
+git commit -m "feat(domain): networks, channel carriages, and the channel lineup
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
 
-### Task 2: Store port and its SQLite implementation
+### Task 3: The Hub's database, and the channel store
 
 **Files:**
 - Modify: `apps/hub/package.json` (adds `@effect/sql-sqlite-node` 4.0.0, exact)
-- Create: `apps/hub/src/store/Store.ts`, `apps/hub/src/store/SqlStore.ts`
-- Test: `apps/hub/src/store/SqlStore.test.ts`
-- Modify: `apps/hub/src/main.ts` (data directory, store layer)
-- Modify: `.dependency-cruiser.cjs` (`SqlStore.ts` is an adapter only `main.ts` and tests may name), `.gitignore` (`.sportal/`), `CONTEXT.md`
+- Create: `apps/hub/src/database/Database.ts`
+- Test: `apps/hub/src/database/Database.test.ts`
+- Create: `apps/hub/src/source/ChannelStore.ts` (the port), `apps/hub/src/source/SqlChannelStore.ts` (the adapter, with its migration)
+- Test: `apps/hub/src/source/SqlChannelStore.test.ts`
+- Modify: `apps/hub/src/main.ts` (data directory, database, channel store)
+- Modify: `.dependency-cruiser.cjs` (`database/` and `SqlChannelStore.ts` are adapters only `main.ts`, tests, and other adapters may name), `.gitignore` (`.sportal/`), `CONTEXT.md`
+
+**Where these live.** `Database.ts` gets its own folder with its test, like `http/` and `ingest/`: it is the one concept every SQL store shares, and it is concrete (SQLite), so it is an adapter. `ChannelStore.ts` and `SqlChannelStore.ts` sit in `source/` because the YouTube TV source is their only user; a store for games or follows will sit beside its own concept in the Tracker.
 
 **Interfaces:**
-- Consumes: `ChannelAnswer`, `Network`, `SourceName` from Task 1.
+- Consumes: `ChannelCarriage`, `Network`, `SourceName` from Task 2.
 - Produces:
-  - `Store` (service `sportal/hub/Store`): `channelAnswers: Effect<ReadonlyArray<ChannelAnswer>, StoreError>`; `answer(answer: ChannelAnswer): Effect<void, StoreError>` (replaces any earlier answer for the same network and source); `forget(network, source): Effect<void, StoreError>`.
-  - `StoreError` — tagged error with `cause: Schema.Defect()`.
-  - `SqlStore.layer(filename: string): Layer<Store, SqlError | MigrationError>` — opens the SQLite file (or `":memory:"`), runs migrations, provides `Store`.
+  - `Database.layer(filename: string)` — the SQLite client for the file (or `":memory:"`); provides `SqlClient`.
+  - `Database.migrate(store: string, migrations: Record<string, Effect<void, unknown, SqlClient>>): Effect<ReadonlyArray<readonly [id: number, name: string]>, MigrationError | SqlError, SqlClient>` — runs the store's pending migrations (keys `<id>_<name>`) and records them in the store's own table, `<store>_migrations`.
+  - `ChannelStore` (service `sportal/hub/ChannelStore`): `carriages: Effect<ReadonlyArray<ChannelCarriage>, ChannelStoreError>`; `record(carriage: ChannelCarriage): Effect<void, ChannelStoreError>` (replaces any earlier carriage for the same network and source); `forget(network, source): Effect<void, ChannelStoreError>`.
+  - `ChannelStoreError` — tagged error with `cause: Schema.Defect()`.
+  - `SqlChannelStore.layer: Layer<ChannelStore, MigrationError | SqlError, SqlClient>` — migrates the `channel` store's tables, then provides `ChannelStore`.
 
-**The driver risk is settled.** The spec feared `@effect/sql-sqlite-node` would need `better-sqlite3`, a native module pnpm 12 will not build. Version 4.0.0 is built on Node 24's own `node:sqlite` (`import { DatabaseSync } from "node:sqlite"` in its `SqliteClient.js`), and its only dependency is `effect`. Nothing native is installed, so the fallback is not needed.
+**The driver risk is settled.** The spec feared `@effect/sql-sqlite-node` would need `better-sqlite3`, a native module pnpm 12 will not build. Version 4.0.0 depends only on `effect` (checked in the registry) and runs on Node 24's own `node:sqlite`. Nothing native is installed.
 
 - [ ] **Step 1: Add the driver**
 
 Run: `pnpm --filter @sportal/hub add @effect/sql-sqlite-node@4.0.0 --save-exact`
 Expected: `Done`; `apps/hub/package.json` lists `"@effect/sql-sqlite-node": "4.0.0"`.
 
+Before writing code, read `node_modules/@effect/sql-sqlite-node/dist/SqliteClient.d.ts` and confirm `SqliteClient.layer({ filename })` is the constructor and what its layer provides. The rest of this task assumes it provides `SqlClient.SqlClient`.
 
-- [ ] **Step 2: Write the port**
+- [ ] **Step 2: Write the failing database test**
 
-Create `apps/hub/src/store/Store.ts`:
+Create `apps/hub/src/database/Database.test.ts`:
+
+```ts
+import { assert, describe, it } from "@effect/vitest"
+import { Effect } from "effect"
+import { SqlClient } from "effect/sql"
+import * as Database from "./Database.ts"
+
+describe("Database.migrate", () => {
+  it.effect("keeps each store's migrations in its own table, so stores number them independently", () =>
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient
+      const first = yield* Database.migrate("first", { "1_create": createTable("first_thing") })
+      const second = yield* Database.migrate("second", { "1_create": createTable("second_thing") })
+      assert.deepStrictEqual(first, [[1, "create"]])
+      assert.deepStrictEqual(second, [[1, "create"]])
+
+      const tables = yield* sql<{ name: string }>`SELECT name FROM sqlite_master WHERE type = 'table'`
+      assert.includeMembers(
+        tables.map((table) => table.name),
+        ["first_migrations", "second_migrations", "first_thing", "second_thing"]
+      )
+    }).pipe(Effect.provide(Database.layer(":memory:")))
+  )
+
+  it.effect("runs a migration once", () =>
+    Effect.gen(function* () {
+      const migrations = { "1_create": createTable("thing") }
+      yield* Database.migrate("store", migrations)
+      assert.deepStrictEqual(yield* Database.migrate("store", migrations), [])
+    }).pipe(Effect.provide(Database.layer(":memory:")))
+  )
+})
+
+function createTable(name: string) {
+  return Effect.gen(function* () {
+    const sql = yield* SqlClient.SqlClient
+    yield* sql`CREATE TABLE ${sql(name)} (id INTEGER)`
+  })
+}
+```
+
+- [ ] **Step 3: Run it to see it fail**
+
+Run: `pnpm vitest run apps/hub/src/database`
+Expected: FAIL — `./Database.ts` does not exist.
+
+- [ ] **Step 4: Write the database module**
+
+Create `apps/hub/src/database/Database.ts`:
+
+```ts
+import { SqliteClient } from "@effect/sql-sqlite-node"
+import type { Effect } from "effect"
+import { Migrator, type SqlClient } from "effect/sql"
+
+/** The Hub's SQLite database, in `filename` (or `":memory:"`). Each store migrates its own tables. */
+export const layer = (filename: string) => SqliteClient.layer({ filename })
+
+/**
+ * Runs one store's pending migrations, keyed `<id>_<name>`, and records them in that store's own table,
+ * `<store>_migrations`, so two stores never share a numbering. Returns the migrations it ran.
+ */
+export function migrate(
+  store: string,
+  migrations: Record<string, Effect.Effect<void, unknown, SqlClient.SqlClient>>
+) {
+  return run({ loader: Migrator.fromRecord(migrations), table: `${store}_migrations` })
+}
+
+const run = Migrator.make({})
+```
+
+`Migrator.make` comes from `effect/sql` itself (`src/sql/Migrator.ts`); its `table` option names the migrations table, and `fromRecord` sorts the record by id. The SQLite package's own migrator only adds a schema dump, which the Hub does not use.
+
+- [ ] **Step 5: Run it to see it pass**
+
+Run: `pnpm vitest run apps/hub/src/database`
+Expected: `Tests  2 passed (2)`.
+
+- [ ] **Step 6: Write the port**
+
+Create `apps/hub/src/source/ChannelStore.ts`:
 
 ```ts
 import type { Network } from "@sportal/domain/Game"
-import type { ChannelAnswer, SourceName } from "@sportal/domain/Source"
+import type { ChannelCarriage, SourceName } from "@sportal/domain/Source"
 import { Context, type Effect, Schema } from "effect"
 
-/** The Hub's persistence. It holds only what cannot be fetched again: today, the channel answers. */
-export class Store extends Context.Service<
-  Store,
+/** Where the Hub keeps the channel carriages it learned from the user: they cannot be fetched again. */
+export class ChannelStore extends Context.Service<
+  ChannelStore,
   {
-    readonly channelAnswers: Effect.Effect<ReadonlyArray<ChannelAnswer>, StoreError>
-    /** Records an answer, replacing any earlier answer for the same network and source. */
-    answer(answer: ChannelAnswer): Effect.Effect<void, StoreError>
-    forget(network: Network, source: SourceName): Effect.Effect<void, StoreError>
+    readonly carriages: Effect.Effect<ReadonlyArray<ChannelCarriage>, ChannelStoreError>
+    /** Records a carriage, replacing any earlier one for the same network and source. */
+    record(carriage: ChannelCarriage): Effect.Effect<void, ChannelStoreError>
+    forget(network: Network, source: SourceName): Effect.Effect<void, ChannelStoreError>
   }
->()("sportal/hub/Store") {}
+>()("sportal/hub/ChannelStore") {}
 
-export class StoreError extends Schema.TaggedError<StoreError>()("StoreError", { cause: Schema.Defect() }) {}
+export class ChannelStoreError extends Schema.TaggedError<ChannelStoreError>()("ChannelStoreError", {
+  cause: Schema.Defect()
+}) {}
 ```
 
-The spec named the writes `learn`, `markNotCarried`, and `forget`. Since a channel answer is already a union of the two cases, the port takes the answer itself: `answer` and `forget`. The source (Task 4) keeps the three verbs.
+- [ ] **Step 7: Write the failing store test**
 
-- [ ] **Step 3: Write the failing test**
-
-Create `apps/hub/src/store/SqlStore.test.ts`:
+Create `apps/hub/src/source/SqlChannelStore.test.ts`:
 
 ```ts
 import { join } from "node:path"
 import { NodeServices } from "@effect/platform-node"
 import { assert, describe, it } from "@effect/vitest"
 import { Network } from "@sportal/domain/Game"
-import { Effect, FileSystem } from "effect"
-import * as SqlStore from "./SqlStore.ts"
-import { Store } from "./Store.ts"
+import { Effect, FileSystem, Layer } from "effect"
+import * as Database from "../database/Database.ts"
+import { ChannelStore } from "./ChannelStore.ts"
+import * as SqlChannelStore from "./SqlChannelStore.ts"
 
 const espn = Network.make("ESPN")
 const espnPlus = Network.make("ESPN+")
@@ -530,56 +1155,56 @@ const carried = (url: string) => ({
 })
 const notCarried = { _tag: "NotCarried" as const, network: espnPlus, source: "YouTube TV" as const }
 
-describe("SqlStore", () => {
-  it.effect("starts with no answers and returns each answer recorded", () =>
+describe("SqlChannelStore", () => {
+  it.effect("starts empty and returns each carriage recorded", () =>
     Effect.gen(function* () {
       const filename = yield* tempDatabase()
-      const answers = yield* withStore(filename, (store) =>
+      const carriages = yield* withStore(filename, (store) =>
         Effect.gen(function* () {
-          assert.deepStrictEqual(yield* store.channelAnswers, [])
-          yield* store.answer(carried("https://tv.youtube.com/watch/espn"))
-          yield* store.answer(notCarried)
-          return yield* store.channelAnswers
+          assert.deepStrictEqual(yield* store.carriages, [])
+          yield* store.record(carried("https://tv.youtube.com/watch/espn"))
+          yield* store.record(notCarried)
+          return yield* store.carriages
         })
       )
-      assert.sameDeepMembers([...answers], [carried("https://tv.youtube.com/watch/espn"), notCarried])
+      assert.sameDeepMembers([...carriages], [carried("https://tv.youtube.com/watch/espn"), notCarried])
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer))
   )
 
-  it.effect("replaces an earlier answer for the same network", () =>
+  it.effect("replaces an earlier carriage for the same network", () =>
     Effect.gen(function* () {
       const filename = yield* tempDatabase()
-      const answers = yield* withStore(filename, (store) =>
+      const carriages = yield* withStore(filename, (store) =>
         Effect.gen(function* () {
-          yield* store.answer(carried("https://tv.youtube.com/watch/first"))
-          yield* store.answer(carried("https://tv.youtube.com/watch/second"))
-          return yield* store.channelAnswers
+          yield* store.record(carried("https://tv.youtube.com/watch/first"))
+          yield* store.record(carried("https://tv.youtube.com/watch/second"))
+          return yield* store.carriages
         })
       )
-      assert.deepStrictEqual(answers, [carried("https://tv.youtube.com/watch/second")])
+      assert.deepStrictEqual(carriages, [carried("https://tv.youtube.com/watch/second")])
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer))
   )
 
-  it.effect("forgets an answer", () =>
+  it.effect("forgets a carriage", () =>
     Effect.gen(function* () {
       const filename = yield* tempDatabase()
-      const answers = yield* withStore(filename, (store) =>
+      const carriages = yield* withStore(filename, (store) =>
         Effect.gen(function* () {
-          yield* store.answer(carried("https://tv.youtube.com/watch/espn"))
+          yield* store.record(carried("https://tv.youtube.com/watch/espn"))
           yield* store.forget(espn, "YouTube TV")
-          return yield* store.channelAnswers
+          return yield* store.carriages
         })
       )
-      assert.deepStrictEqual(answers, [])
+      assert.deepStrictEqual(carriages, [])
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer))
   )
 
-  it.effect("keeps answers when the store is opened again", () =>
+  it.effect("keeps carriages when the database is opened again", () =>
     Effect.gen(function* () {
       const filename = yield* tempDatabase()
-      yield* withStore(filename, (store) => store.answer(notCarried))
-      const answers = yield* withStore(filename, (store) => store.channelAnswers)
-      assert.deepStrictEqual(answers, [notCarried])
+      yield* withStore(filename, (store) => store.record(notCarried))
+      const carriages = yield* withStore(filename, (store) => store.carriages)
+      assert.deepStrictEqual(carriages, [notCarried])
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer))
   )
 })
@@ -592,119 +1217,116 @@ function tempDatabase() {
   })
 }
 
-/** Runs `use` against a store over the given database file, opened fresh. */
-function withStore<A, E>(filename: string, use: (store: typeof Store.Service) => Effect.Effect<A, E>) {
+/** Runs `use` against the channel store over the given database file, opened fresh. */
+function withStore<A, E>(filename: string, use: (store: typeof ChannelStore.Service) => Effect.Effect<A, E>) {
   return Effect.gen(function* () {
-    return yield* use(yield* Store)
-  }).pipe(Effect.provide(SqlStore.layer(filename)))
+    return yield* use(yield* ChannelStore)
+  }).pipe(Effect.provide(SqlChannelStore.layer.pipe(Layer.provide(Database.layer(filename)))))
 }
 ```
 
-- [ ] **Step 4: Run it to see it fail**
+- [ ] **Step 8: Run it to see it fail**
 
-Run: `pnpm vitest run apps/hub/src/store`
-Expected: FAIL — `./SqlStore.ts` does not exist.
+Run: `pnpm vitest run apps/hub/src/source/SqlChannelStore.test.ts`
+Expected: FAIL — `./SqlChannelStore.ts` does not exist.
 
+- [ ] **Step 9: Write the adapter**
 
-- [ ] **Step 5: Write the implementation**
-
-Create `apps/hub/src/store/SqlStore.ts`:
+Create `apps/hub/src/source/SqlChannelStore.ts`:
 
 ```ts
-import { SqliteClient, SqliteMigrator } from "@effect/sql-sqlite-node"
 import { Network } from "@sportal/domain/Game"
-import { type ChannelAnswer, SourceName } from "@sportal/domain/Source"
+import { type ChannelCarriage, SourceName } from "@sportal/domain/Source"
 import { DateTime, Effect, Layer, Schema } from "effect"
 import { SqlClient, SqlSchema } from "effect/sql"
-import { Store, StoreError } from "./Store.ts"
+import * as Database from "../database/Database.ts"
+import { ChannelStore, ChannelStoreError } from "./ChannelStore.ts"
 
-/** The store over a SQLite database file, migrated to the current schema before first use. */
-export const layer = (filename: string) =>
-  Layer.effect(
-    Store,
-    Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient
+/** Channel carriages in the Hub's database, in a table this store creates and migrates itself. */
+export const layer = Layer.effect(
+  ChannelStore,
+  Effect.gen(function* () {
+    yield* Database.migrate("channel", migrations)
+    const sql = yield* SqlClient.SqlClient
 
-      const channelRows = SqlSchema.findAll({
-        Request: Schema.Void,
-        Result: Schema.Struct({
-          network: Network,
-          source: SourceName,
-          carried: Schema.Literals([0, 1]),
-          url: Schema.NullOr(Schema.String)
-        }),
-        execute: () => sql`SELECT network, source, carried, url FROM channel`
-      })
-
-      const channelAnswers = channelRows().pipe(
-        Effect.map((rows) =>
-          rows.map(
-            ({ network, source, carried, url }): ChannelAnswer =>
-              carried === 1 && url !== null
-                ? { _tag: "Carried", channel: { network, source, locator: { _tag: "WebView", url } } }
-                : { _tag: "NotCarried", network, source }
-          )
-        ),
-        Effect.mapError((cause) => new StoreError({ cause }))
-      )
-
-      const answer = Effect.fn("SqlStore.answer")(function* (answer: ChannelAnswer) {
-        const row =
-          answer._tag === "Carried"
-            ? {
-                network: answer.channel.network,
-                source: answer.channel.source,
-                carried: 1,
-                url: answer.channel.locator.url
-              }
-            : { network: answer.network, source: answer.source, carried: 0, url: null }
-        const answeredAt = DateTime.formatIso(yield* DateTime.now)
-        yield* sql`
-          INSERT INTO channel ${sql.insert({ ...row, answered_at: answeredAt })}
-          ON CONFLICT (network, source) DO UPDATE SET
-            carried = excluded.carried, url = excluded.url, answered_at = excluded.answered_at
-        `.pipe(Effect.mapError((cause) => new StoreError({ cause })))
-      })
-
-      const forget = Effect.fn("SqlStore.forget")((network: Network, source: SourceName) =>
-        sql`DELETE FROM channel WHERE network = ${network} AND source = ${source}`.pipe(
-          Effect.asVoid,
-          Effect.mapError((cause) => new StoreError({ cause }))
-        )
-      )
-
-      return Store.of({ channelAnswers, answer, forget })
+    const rows = SqlSchema.findAll({
+      Request: Schema.Void,
+      Result: Schema.Struct({
+        network: Network,
+        source: SourceName,
+        carried: Schema.Literals([0, 1]),
+        url: Schema.NullOr(Schema.String)
+      }),
+      execute: () => sql`SELECT network, source, carried, url FROM channel_carriage`
     })
-  ).pipe(Layer.provide(migrations), Layer.provide(SqliteClient.layer({ filename })))
 
-const migrations = SqliteMigrator.layer({
-  loader: SqliteMigrator.fromRecord({
-    "0001_create_channel": Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient
+    const carriages = rows().pipe(
+      Effect.map((found) =>
+        found.map(
+          ({ network, source, carried, url }): ChannelCarriage =>
+            carried === 1 && url !== null
+              ? { _tag: "Carried", channel: { network, source, locator: { _tag: "WebView", url } } }
+              : { _tag: "NotCarried", network, source }
+        )
+      ),
+      Effect.mapError((cause) => new ChannelStoreError({ cause }))
+    )
+
+    const record = Effect.fn("SqlChannelStore.record")(function* (carriage: ChannelCarriage) {
+      const row =
+        carriage._tag === "Carried"
+          ? {
+              network: carriage.channel.network,
+              source: carriage.channel.source,
+              carried: 1,
+              url: carriage.channel.locator.url
+            }
+          : { network: carriage.network, source: carriage.source, carried: 0, url: null }
+      const recordedAt = DateTime.formatIso(yield* DateTime.now)
       yield* sql`
-        CREATE TABLE channel (
-          network TEXT NOT NULL,
-          source TEXT NOT NULL,
-          carried INTEGER NOT NULL,
-          url TEXT,
-          answered_at TEXT NOT NULL,
-          PRIMARY KEY (network, source)
-        )
-      `
+        INSERT INTO channel_carriage ${sql.insert({ ...row, recorded_at: recordedAt })}
+        ON CONFLICT (network, source) DO UPDATE SET
+          carried = excluded.carried, url = excluded.url, recorded_at = excluded.recorded_at
+      `.pipe(Effect.mapError((cause) => new ChannelStoreError({ cause })))
     })
+
+    const forget = Effect.fn("SqlChannelStore.forget")((network: Network, source: SourceName) =>
+      sql`DELETE FROM channel_carriage WHERE network = ${network} AND source = ${source}`.pipe(
+        Effect.asVoid,
+        Effect.mapError((cause) => new ChannelStoreError({ cause }))
+      )
+    )
+
+    return ChannelStore.of({ carriages, record, forget })
   })
-})
+)
+
+/** This store's migrations, recorded in `channel_migrations`. */
+const migrations = {
+  "1_create_channel_carriage": Effect.gen(function* () {
+    const sql = yield* SqlClient.SqlClient
+    yield* sql`
+      CREATE TABLE channel_carriage (
+        network TEXT NOT NULL,
+        source TEXT NOT NULL,
+        carried INTEGER NOT NULL,
+        url TEXT,
+        recorded_at TEXT NOT NULL,
+        PRIMARY KEY (network, source)
+      )
+    `
+  })
+}
 ```
 
-Rows are decoded with a struct written at the point of use, not a named row type: `ChannelAnswer` stays the only type. `answered_at` comes from Effect's `Clock`.
+Rows are decoded with a struct written at the point of use, not a named row type: `ChannelCarriage` stays the only type. `recorded_at` comes from Effect's `Clock`. `migrations` is read only when the layer is built, so it can sit below the layer.
 
-- [ ] **Step 6: Run it to see it pass**
+- [ ] **Step 10: Run it to see it pass**
 
-Run: `pnpm vitest run apps/hub/src/store`
+Run: `pnpm vitest run apps/hub/src/source/SqlChannelStore.test.ts`
 Expected: `Tests  4 passed (4)`.
 
-
-- [ ] **Step 7: Give the Hub a data directory**
+- [ ] **Step 11: Give the Hub a data directory**
 
 Replace `apps/hub/src/main.ts`:
 
@@ -714,13 +1336,14 @@ import { join } from "node:path"
 import { NodeHttpServer, NodeRuntime, NodeServices } from "@effect/platform-node"
 import { Config, Effect, FileSystem, Layer, Option } from "effect"
 import { FetchHttpClient, HttpRouter, HttpStaticServer } from "effect/http"
+import * as Database from "./database/Database.ts"
 import * as HubServer from "./http/HubServer.ts"
 import { Ingest } from "./ingest/Ingest.ts"
 import * as EspnProvider from "./provider/espn/EspnProvider.ts"
+import * as SqlChannelStore from "./source/SqlChannelStore.ts"
 import * as YouTubeTv from "./source/YouTubeTv.ts"
 import channels from "./source/youtube-tv-channels.json" with { type: "json" }
 import { StageSessions } from "./stage/StageSessions.ts"
-import * as SqlStore from "./store/SqlStore.ts"
 
 const Hub = Layer.unwrap(
   Effect.gen(function* () {
@@ -740,9 +1363,10 @@ const Hub = Layer.unwrap(
     return HttpRouter.serve(routes).pipe(
       Layer.provide(StageSessions.layer),
       Layer.provide(YouTubeTv.layer(channels)),
+      Layer.provide(SqlChannelStore.layer),
       Layer.provide(Ingest.layer(["nfl", "fbs"])),
       Layer.provide(EspnProvider.layer),
-      Layer.provide(SqlStore.layer(join(dataDir, "sportal.sqlite"))),
+      Layer.provide(Database.layer(join(dataDir, "sportal.sqlite"))),
       Layer.provide(FetchHttpClient.layer),
       Layer.provide(NodeHttpServer.layer(createServer, { port, host })),
       Layer.provide(NodeServices.layer)
@@ -753,23 +1377,32 @@ const Hub = Layer.unwrap(
 Layer.launch(Hub).pipe(Effect.provide(NodeServices.layer), NodeRuntime.runMain)
 ```
 
-Nothing depends on `Store` yet; providing it here creates and migrates the database at boot, which proves the wiring before Task 4 uses it. `Effect.provide(NodeServices.layer)` on the launch gives the boot step its `FileSystem`.
+Nothing depends on `ChannelStore` yet; providing it here creates and migrates the database at boot, which proves the wiring before Task 5 uses it. `Effect.provide(NodeServices.layer)` on the launch gives the boot step its `FileSystem`.
 
 Apply this change to `.dependency-cruiser.cjs`:
 
 ```diff
 --- a/.dependency-cruiser.cjs
 +++ b/.dependency-cruiser.cjs
-@@ -36,7 +36,7 @@ module.exports = {
+@@ -34,9 +34,11 @@ module.exports = {
+       severity: "error",
+       from: {
          path: "^apps/hub/src/",
-         pathNot: "(^apps/hub/src/main\\.ts$|\\.test\\.ts$|^apps/hub/src/provider/[^/]+/)"
+-        pathNot: "(^apps/hub/src/main\\.ts$|\\.test\\.ts$|^apps/hub/src/provider/[^/]+/)"
++        pathNot:
++          "(^apps/hub/src/main\\.ts$|\\.test\\.ts$|^apps/hub/src/provider/[^/]+/|^apps/hub/src/source/Sql[^/]+\\.ts$)"
        },
 -      to: { path: "^apps/hub/src/(provider/[^/]+/|source/YouTubeTv\\.ts$)" }
-+      to: { path: "^apps/hub/src/(provider/[^/]+/|source/YouTubeTv\\.ts$|store/SqlStore\\.ts$)" }
++      to: {
++        path: "^apps/hub/src/(provider/[^/]+/|source/YouTubeTv\\.ts$|source/Sql[^/]+\\.ts$|database/)"
++      }
      },
      {
        name: "test-game-is-for-tests",
 ```
+
+An SQL adapter may name `Database`; nothing else outside `main.ts` and tests may name either.
+
 Apply this change to `.gitignore`:
 
 ```diff
@@ -784,60 +1417,58 @@ Apply this change to `.gitignore`:
 +.sportal/
 ```
 
-- [ ] **Step 8: Add the words**
+- [ ] **Step 12: Add the words**
 
 Apply this change to `CONTEXT.md`:
 
 ```diff
 --- a/CONTEXT.md
 +++ b/CONTEXT.md
-@@ -59,6 +59,8 @@ Provider and Source are the two words most likely to be swapped. Provider is alw
- | **Hub** | The server process that owns all shared state. | backend, server |
- | **Live message** | One update the Hub pushes to clients on the live stream: the slate changed, or the Stage changed. | event, notification |
- | **Stage sessions** | The Hub component holding the authoritative Stage for each Display and applying stage commands to it. | stage store, stage manager |
-+| **Store** | The Hub's persistence: what it cannot fetch again. Today, channel answers. | database, repository |
-+| **Store error** | The store could not read or write. | database error |
- | **Display** | A device running the shell and presenting a Stage. | screen, client, player |
- | **Remote** | A client controlling a Display's Stage without presenting it. | controller |
- | **Desk mode** / **Couch mode** | The two presentation densities. | desktop/TV layout |
+@@ -48,6 +48,9 @@ Every exported type name must be a term here.
+ | **Channel availability** | Whether and where a source can show a game: carried, unlearned (its network still to be picked), or not carried. | availability |
+ | **Channel URL refused** | An address a source would not learn, because it is not one of its live channels. | not a channel |
++| **Channel store** | Where the Hub keeps the channel carriages it has learned. | channel repository |
++| **Channel store error** | The channel store could not read or write. | database error |
++| **Database** | The Hub's SQLite database. Each store migrates its own tables in it. | store, persistence |
+ | **Stream** | One playing instance of a game from a source. | feed, video |
+ | **StreamLocator** | What a Display must load to play a stream. | URL, link |
 ```
 
-- [ ] **Step 9: Check, and see the database appear**
+- [ ] **Step 13: Check, and see the database appear**
 
 Run: `pnpm check`
-Expected: format, lint, typecheck, `✔ no dependency violations found`, knip clean, and `Tests  67 passed (67)`.
+Expected: format, lint, typecheck, `✔ no dependency violations found`, knip clean, and every test passes.
 
 Run: `cd apps/hub && SPORTAL_PORT=4490 timeout 8 node src/main.ts; ls .sportal; rm -rf .sportal`
 Expected: the Hub logs `Listening on http://127.0.0.1:4490`; `.sportal/` holds `sportal.sqlite`.
 
-
-- [ ] **Step 10: Commit**
+- [ ] **Step 14: Commit**
 
 ```bash
-git add CONTEXT.md .dependency-cruiser.cjs .gitignore apps/hub/package.json pnpm-lock.yaml apps/hub/src/main.ts apps/hub/src/store
-git commit -m "feat(hub): Store port with a SQLite implementation for channel answers
+git add CONTEXT.md .dependency-cruiser.cjs .gitignore apps/hub/package.json pnpm-lock.yaml apps/hub/src
+git commit -m "feat(hub): database module with per-store migrations, and the channel store
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
 
-### Task 3: Stage — tiles resolve by availability, picking tiles, and refresh
+### Task 4: Stage — tiles resolve by channel availability, picking tiles, and refresh
 
 **Files:**
 - Modify: `packages/domain/src/Stage.ts`
 - Test: `packages/domain/src/Stage.test.ts` (rewritten; also covers the deferred Stage test gaps)
-- Modify: `apps/hub/src/source/Source.ts`, `apps/hub/src/source/YouTubeTv.ts` (port speaks availability; still a fixed list of answers until Task 4)
+- Modify: `apps/hub/src/source/Source.ts`, `apps/hub/src/source/YouTubeTv.ts` (port exposes the lineup; still a fixed list of carriages until Task 5)
 - Delete: `apps/hub/src/source/youtube-tv-channels.json`
 - Modify: `apps/hub/src/stage/StageSessions.ts`, `apps/hub/src/stage/StageSessions.test.ts`, `apps/hub/src/http/HubServer.test.ts`, `apps/hub/src/main.ts`
 - Modify: `apps/web/src/stage/StageView.tsx` (stream tiles carry a channel; a picking tile has a body)
 - Modify: `CONTEXT.md`
 
 **Interfaces:**
-- Consumes: `Availability`, `Channel`, `Network`, `SourceName` from Task 1.
+- Consumes: `ChannelAvailability`, `ChannelLineup`, `Channel`, `SourceName` from Task 2; `Network` from `@sportal/domain/Game`.
 - Produces:
-  - `Stage.Tile` — `Empty | StreamTile { game, channel: Channel } | PickingChannel { game, network, source, guide: StreamLocator } | DataTile { game }`. A stream tile now carries its whole channel, not just a locator, so the UI can forget the channel's network and name its source.
-  - `Stage.apply(stage, command, availability: (game: GameId) => Availability)`.
-  - `Stage.refresh(stage, availability): Stage` — re-resolves every occupied tile; empty tiles and audio focus are untouched.
-  - `Source` port: `availability: Effect<(game: GameSnapshot) => Availability>` replaces `locate`. It is an effect because, from Task 4, what the source knows lives in a ref.
+  - `Tile` — `Empty | StreamTile { game, channel: Channel } | PickingChannel { game, network, source, guide: StreamLocator } | DataTile { game }`. A stream tile now carries its whole channel, not just a locator, so the UI can forget the channel's network and name its source.
+  - `Stage#apply(command, availabilityOf: (game: GameId) => ChannelAvailability)`.
+  - `Stage#refresh(availabilityOf): Stage` — re-resolves every occupied tile; empty tiles and audio focus are untouched.
+  - `Source` port: `lineup: Effect<ChannelLineup>` replaces `locate`. It is an effect because, from Task 5, the lineup lives in a ref.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -847,8 +1478,8 @@ Replace `packages/domain/src/Stage.test.ts`:
 import { assert, describe, it } from "@effect/vitest"
 import { Result } from "effect"
 import { GameId, Network } from "./Game.ts"
-import type { Availability } from "./Source.ts"
-import * as Stage from "./Stage.ts"
+import { ChannelAvailability } from "./Source.ts"
+import { Stage } from "./Stage.ts"
 
 const bama = GameId.make("401856707")
 const irish = GameId.make("401858250")
@@ -859,11 +1490,11 @@ const foxChannel = {
   locator: { _tag: "WebView" as const, url: "https://tv.youtube.com/watch/fox" }
 }
 const guide = { _tag: "WebView" as const, url: "https://tv.youtube.com/live" }
-const onFox = (): Availability => ({ _tag: "Carried", channel: foxChannel })
-const foxUnlearned = (): Availability => ({ _tag: "Unlearned", network: fox, source: "YouTube TV", guide })
-const nowhere = (): Availability => ({ _tag: "NotCarried" })
+const onFox = () => ChannelAvailability.Carried({ channel: foxChannel })
+const foxUnlearned = () => ChannelAvailability.Unlearned({ network: fox, source: "YouTube TV", guide })
+const nowhere = () => ChannelAvailability.NotCarried()
 
-describe("Stage.apply", () => {
+describe("Stage#apply", () => {
   it("assigns a carried game as a stream tile", () => {
     const stage = assign(Stage.initial, 1, bama, onFox)
     assert.deepStrictEqual(stage.tiles[1], { _tag: "StreamTile", game: bama, channel: foxChannel })
@@ -908,35 +1539,35 @@ describe("Stage.apply", () => {
   it("clears a tile and leaves the others", () => {
     const a = assign(Stage.initial, 0, bama, onFox)
     const b = assign(a, 1, irish, onFox)
-    const c = Result.getOrThrow(Stage.apply(b, { _tag: "Clear", tile: 0 }, onFox))
+    const c = Result.getOrThrow(b.apply({ _tag: "Clear", tile: 0 }, onFox))
     assert.strictEqual(c.tiles[0]?._tag, "Empty")
     assert.strictEqual(c.tiles[1]?._tag, "StreamTile")
   })
 
   it("moves audio focus", () => {
-    const stage = Result.getOrThrow(Stage.apply(Stage.initial, { _tag: "FocusAudio", tile: 3 }, nowhere))
+    const stage = Result.getOrThrow(Stage.initial.apply({ _tag: "FocusAudio", tile: 3 }, nowhere))
     assert.strictEqual(stage.audioFocus, 3)
   })
 
   it("leaves audio focus where it was on assign and clear", () => {
-    const focused = Result.getOrThrow(Stage.apply(Stage.initial, { _tag: "FocusAudio", tile: 2 }, nowhere))
+    const focused = Result.getOrThrow(Stage.initial.apply({ _tag: "FocusAudio", tile: 2 }, nowhere))
     const assigned = assign(focused, 0, bama, onFox)
-    const cleared = Result.getOrThrow(Stage.apply(assigned, { _tag: "Clear", tile: 2 }, onFox))
+    const cleared = Result.getOrThrow(assigned.apply({ _tag: "Clear", tile: 2 }, onFox))
     assert.strictEqual(assigned.audioFocus, 2)
     assert.strictEqual(cleared.audioFocus, 2)
   })
 
   it("rejects a tile that does not exist, saying why", () => {
-    const result = Stage.apply(Stage.initial, { _tag: "FocusAudio", tile: 4 }, nowhere)
+    const result = Stage.initial.apply({ _tag: "FocusAudio", tile: 4 }, nowhere)
     assert.isTrue(Result.isFailure(result))
     if (Result.isFailure(result)) assert.strictEqual(result.failure.reason, "no-such-tile")
   })
 })
 
-describe("Stage.refresh", () => {
+describe("Stage#refresh", () => {
   it("turns every picking tile for a network into a stream once its channel is learned", () => {
     const picking = assign(assign(Stage.initial, 0, bama, foxUnlearned), 1, irish, foxUnlearned)
-    const refreshed = Stage.refresh(picking, onFox)
+    const refreshed = picking.refresh(onFox)
     assert.deepStrictEqual(refreshed.tiles[0], { _tag: "StreamTile", game: bama, channel: foxChannel })
     assert.deepStrictEqual(refreshed.tiles[1], { _tag: "StreamTile", game: irish, channel: foxChannel })
   })
@@ -944,12 +1575,9 @@ describe("Stage.refresh", () => {
   it("moves a picking tile to the game's next unlearned network when one is not carried", () => {
     const espn = Network.make("ESPN")
     const picking = assign(Stage.initial, 0, bama, foxUnlearned)
-    const refreshed = Stage.refresh(picking, () => ({
-      _tag: "Unlearned",
-      network: espn,
-      source: "YouTube TV",
-      guide
-    }))
+    const refreshed = picking.refresh(() =>
+      ChannelAvailability.Unlearned({ network: espn, source: "YouTube TV", guide })
+    )
     assert.deepStrictEqual(refreshed.tiles[0], {
       _tag: "PickingChannel",
       game: bama,
@@ -961,12 +1589,12 @@ describe("Stage.refresh", () => {
 
   it("turns a stream tile back into a picking tile when its channel is forgotten", () => {
     const streaming = assign(Stage.initial, 0, bama, onFox)
-    assert.strictEqual(Stage.refresh(streaming, foxUnlearned).tiles[0]?._tag, "PickingChannel")
+    assert.strictEqual(streaming.refresh(foxUnlearned).tiles[0]?._tag, "PickingChannel")
   })
 
   it("leaves empty tiles empty and audio focus where it was", () => {
-    const focused = Result.getOrThrow(Stage.apply(Stage.initial, { _tag: "FocusAudio", tile: 3 }, nowhere))
-    const refreshed = Stage.refresh(assign(focused, 0, bama, foxUnlearned), onFox)
+    const focused = Result.getOrThrow(Stage.initial.apply({ _tag: "FocusAudio", tile: 3 }, nowhere))
+    const refreshed = assign(focused, 0, bama, foxUnlearned).refresh(onFox)
     assert.deepStrictEqual(
       refreshed.tiles.map((tile) => tile._tag),
       ["StreamTile", "Empty", "Empty", "Empty"]
@@ -975,16 +1603,15 @@ describe("Stage.refresh", () => {
   })
 })
 
-function assign(stage: Stage.Stage, tile: number, game: GameId, availability: () => Availability) {
-  return Result.getOrThrow(Stage.apply(stage, { _tag: "Assign", tile, game }, availability))
+function assign(stage: Stage, tile: number, game: GameId, availabilityOf: () => ChannelAvailability) {
+  return Result.getOrThrow(stage.apply({ _tag: "Assign", tile, game }, availabilityOf))
 }
 ```
 
 - [ ] **Step 2: Run it to see it fail**
 
 Run: `pnpm vitest run packages/domain/src/Stage.test.ts`
-Expected: FAIL — `Tests  12 failed | 2 passed (14)`.
-
+Expected: FAIL — `refresh` is not a function, and assignments still produce `locator` stream tiles.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -993,7 +1620,7 @@ Replace `packages/domain/src/Stage.ts`:
 ```ts
 import { Result, Schema } from "effect"
 import { GameId, Network } from "./Game.ts"
-import { type Availability, Channel, SourceName } from "./Source.ts"
+import { Channel, type ChannelAvailability, SourceName } from "./Source.ts"
 import { StreamLocator } from "./Stream.ts"
 
 export const Tile = Schema.Union([
@@ -1013,7 +1640,59 @@ export type Tile = typeof Tile.Type
 export class Stage extends Schema.Class<Stage>("sportal/Stage")({
   tiles: Schema.Array(Tile),
   audioFocus: Schema.Int
-}) {}
+}) {
+  /** Four empty tiles, with audio focus on the first. */
+  static readonly initial = new Stage({
+    tiles: [{ _tag: "Empty" }, { _tag: "Empty" }, { _tag: "Empty" }, { _tag: "Empty" }],
+    audioFocus: 0
+  })
+
+  /**
+   * Applies a command. `availabilityOf` says whether and where a game can be streamed: a carried game
+   * becomes a stream tile, a game on an unlearned network a picking tile, and any other a data tile.
+   */
+  apply(
+    command: StageCommand,
+    availabilityOf: (game: GameId) => ChannelAvailability
+  ): Result.Result<Stage, StageRejection> {
+    if (command.tile < 0 || command.tile >= this.tiles.length) {
+      return Result.fail(new StageRejection({ reason: "no-such-tile" }))
+    }
+    switch (command._tag) {
+      case "Assign": {
+        const tile = tileFor(command.game, availabilityOf(command.game))
+        // A game appears in at most one tile: assigning it elsewhere moves it.
+        const tiles = this.tiles.map((existing, index) =>
+          index === command.tile
+            ? tile
+            : existing._tag !== "Empty" && existing.game === command.game
+              ? empty
+              : existing
+        )
+        return Result.succeed(new Stage({ tiles, audioFocus: this.audioFocus }))
+      }
+      case "Clear":
+        return Result.succeed(
+          new Stage({
+            tiles: this.tiles.map((existing, index) => (index === command.tile ? empty : existing)),
+            audioFocus: this.audioFocus
+          })
+        )
+      case "FocusAudio":
+        return Result.succeed(new Stage({ tiles: this.tiles, audioFocus: command.tile }))
+    }
+  }
+
+  /** Re-resolves every occupied tile after what a source knows has changed. */
+  refresh(availabilityOf: (game: GameId) => ChannelAvailability): Stage {
+    return new Stage({
+      tiles: this.tiles.map((tile) =>
+        tile._tag === "Empty" ? tile : tileFor(tile.game, availabilityOf(tile.game))
+      ),
+      audioFocus: this.audioFocus
+    })
+  }
+}
 
 export const StageCommand = Schema.Union([
   Schema.TaggedStruct("Assign", { tile: Schema.Int, game: GameId }),
@@ -1030,56 +1709,7 @@ export class StageRejection extends Schema.TaggedError<StageRejection>()(
 
 const empty: Tile = { _tag: "Empty" }
 
-export const initial = new Stage({ tiles: [empty, empty, empty, empty], audioFocus: 0 })
-
-/**
- * Applies a command. `availability` says whether and where a game can be streamed: a carried game
- * becomes a stream tile, a game on an unlearned network a picking tile, and any other a data tile.
- */
-export function apply(
-  stage: Stage,
-  command: StageCommand,
-  availability: (game: GameId) => Availability
-): Result.Result<Stage, StageRejection> {
-  if (command.tile < 0 || command.tile >= stage.tiles.length) {
-    return Result.fail(new StageRejection({ reason: "no-such-tile" }))
-  }
-  switch (command._tag) {
-    case "Assign": {
-      const tile = tileFor(command.game, availability(command.game))
-      // A game appears in at most one tile: assigning it elsewhere moves it.
-      const tiles = stage.tiles.map((existing, index) =>
-        index === command.tile
-          ? tile
-          : existing._tag !== "Empty" && existing.game === command.game
-            ? empty
-            : existing
-      )
-      return Result.succeed(new Stage({ tiles, audioFocus: stage.audioFocus }))
-    }
-    case "Clear":
-      return Result.succeed(
-        new Stage({
-          tiles: stage.tiles.map((existing, index) => (index === command.tile ? empty : existing)),
-          audioFocus: stage.audioFocus
-        })
-      )
-    case "FocusAudio":
-      return Result.succeed(new Stage({ tiles: stage.tiles, audioFocus: command.tile }))
-  }
-}
-
-/** Re-resolves every occupied tile after what a source knows has changed. */
-export function refresh(stage: Stage, availability: (game: GameId) => Availability): Stage {
-  return new Stage({
-    tiles: stage.tiles.map((tile) =>
-      tile._tag === "Empty" ? tile : tileFor(tile.game, availability(tile.game))
-    ),
-    audioFocus: stage.audioFocus
-  })
-}
-
-function tileFor(game: GameId, availability: Availability): Tile {
+function tileFor(game: GameId, availability: ChannelAvailability): Tile {
   switch (availability._tag) {
     case "Carried":
       return { _tag: "StreamTile", game, channel: availability.channel }
@@ -1097,51 +1727,48 @@ function tileFor(game: GameId, availability: Availability): Tile {
 }
 ```
 
+`tileFor` is a private helper of `Stage`: it builds one tile for `apply` and `refresh` and is not exported.
+
 - [ ] **Step 4: Run it to see it pass**
 
 Run: `pnpm vitest run packages/domain/src/Stage.test.ts`
 Expected: `Tests  14 passed (14)`.
 
-
-- [ ] **Step 5: Switch the source port to availability and drop the hand-filled map**
+- [ ] **Step 5: Switch the source port to the lineup and drop the hand-filled map**
 
 Replace `apps/hub/src/source/Source.ts`:
 
 ```ts
-import type { GameSnapshot } from "@sportal/domain/Game"
-import type { Availability } from "@sportal/domain/Source"
+import type { ChannelLineup } from "@sportal/domain/Source"
 import { Context, type Effect } from "effect"
 
 export class Source extends Context.Service<
   Source,
   {
-    /** What the source knows right now, as a lookup from a game to where it can be streamed. */
-    readonly availability: Effect.Effect<(game: GameSnapshot) => Availability>
+    /** The channels this source has learned so far. */
+    readonly lineup: Effect.Effect<ChannelLineup>
   }
 >()("sportal/hub/Source") {}
 ```
+
 Replace `apps/hub/src/source/YouTubeTv.ts`:
 
 ```ts
-import { availability, type ChannelAnswer } from "@sportal/domain/Source"
+import { type ChannelCarriage, ChannelLineup } from "@sportal/domain/Source"
 import { Effect, Layer } from "effect"
 import { Source } from "./Source.ts"
 
-export const layer = (answers: ReadonlyArray<ChannelAnswer>) =>
+/** YouTube TV as a source that knows a fixed list of carriages. */
+export const layer = (carriages: ReadonlyArray<ChannelCarriage>) =>
   Layer.succeed(
     Source,
-    Source.of({
-      availability: Effect.succeed((game) => availability(game.broadcasts, answers, guide))
-    })
+    Source.of({ lineup: Effect.succeed(new ChannelLineup({ source: "YouTube TV", guide, carriages })) })
   )
 
-const guide = {
-  source: "YouTube TV",
-  locator: { _tag: "WebView", url: "https://tv.youtube.com/live" }
-} as const
+const guide = { _tag: "WebView", url: "https://tv.youtube.com/live" } as const
 ```
 
-This version takes a fixed list of answers; Task 4 replaces it with one backed by the store.
+This version takes a fixed list of carriages; Task 5 replaces it with one backed by the channel store.
 
 Run: `git rm apps/hub/src/source/youtube-tv-channels.json`
 Expected: the file is staged for deletion.
@@ -1151,23 +1778,23 @@ Apply this change to `apps/hub/src/main.ts`:
 ```diff
 --- a/apps/hub/src/main.ts
 +++ b/apps/hub/src/main.ts
-@@ -7,7 +7,6 @@ import * as HubServer from "./http/HubServer.ts"
- import { Ingest } from "./ingest/Ingest.ts"
+@@ -9,7 +9,6 @@ import { Ingest } from "./ingest/Ingest.ts"
  import * as EspnProvider from "./provider/espn/EspnProvider.ts"
+ import * as SqlChannelStore from "./source/SqlChannelStore.ts"
  import * as YouTubeTv from "./source/YouTubeTv.ts"
 -import channels from "./source/youtube-tv-channels.json" with { type: "json" }
  import { StageSessions } from "./stage/StageSessions.ts"
- import * as SqlStore from "./store/SqlStore.ts"
  
-@@ -28,7 +27,7 @@ const Hub = Layer.unwrap(
+ const Hub = Layer.unwrap(
+@@ -29,7 +28,7 @@ const Hub = Layer.unwrap(
  
      return HttpRouter.serve(routes).pipe(
        Layer.provide(StageSessions.layer),
 -      Layer.provide(YouTubeTv.layer(channels)),
 +      Layer.provide(YouTubeTv.layer([])),
+       Layer.provide(SqlChannelStore.layer),
        Layer.provide(Ingest.layer(["nfl", "fbs"])),
        Layer.provide(EspnProvider.layer),
-       Layer.provide(SqlStore.layer(join(dataDir, "sportal.sqlite"))),
 ```
 
 - [ ] **Step 6: Resolve tiles in Stage sessions by availability**
@@ -1176,8 +1803,8 @@ Replace `apps/hub/src/stage/StageSessions.ts`:
 
 ```ts
 import type { GameId } from "@sportal/domain/Game"
-import type { Availability } from "@sportal/domain/Source"
-import * as Stage from "@sportal/domain/Stage"
+import { ChannelAvailability } from "@sportal/domain/Source"
+import { Stage, type StageCommand, type StageRejection } from "@sportal/domain/Stage"
 import { Context, Effect, Layer, Result, type Stream, SubscriptionRef } from "effect"
 import { Ingest } from "../ingest/Ingest.ts"
 import { Source } from "../source/Source.ts"
@@ -1185,9 +1812,9 @@ import { Source } from "../source/Source.ts"
 export class StageSessions extends Context.Service<
   StageSessions,
   {
-    readonly stage: Effect.Effect<Stage.Stage>
-    readonly changes: Stream.Stream<Stage.Stage>
-    dispatch(command: Stage.StageCommand): Effect.Effect<Stage.Stage, Stage.StageRejection>
+    readonly stage: Effect.Effect<Stage>
+    readonly changes: Stream.Stream<Stage>
+    dispatch(command: StageCommand): Effect.Effect<Stage, StageRejection>
   }
 >()("sportal/hub/StageSessions") {
   static readonly layer = Layer.effect(
@@ -1197,11 +1824,11 @@ export class StageSessions extends Context.Service<
       const source = yield* Source
       const current = yield* SubscriptionRef.make(Stage.initial)
 
-      const dispatch = Effect.fn("StageSessions.dispatch")(function* (command: Stage.StageCommand) {
-        const availability = yield* availabilityOnSlate(ingest, source)
+      const dispatch = Effect.fn("StageSessions.dispatch")(function* (command: StageCommand) {
+        const availabilityOf = yield* availabilityOnSlate(ingest, source)
         // One atomic step: concurrent dispatches queue up, and a rejection leaves the Stage as it was.
         return yield* SubscriptionRef.modifyEffect(current, (stage) => {
-          const result = Stage.apply(stage, command, availability)
+          const result = stage.apply(command, availabilityOf)
           return Result.isFailure(result)
             ? Effect.fail(result.failure)
             : Effect.succeed([result.success, result.success] as const)
@@ -1221,14 +1848,15 @@ export class StageSessions extends Context.Service<
 function availabilityOnSlate(ingest: typeof Ingest.Service, source: typeof Source.Service) {
   return Effect.gen(function* () {
     const slate = yield* ingest.slate
-    const lookup = yield* source.availability
-    return (id: GameId): Availability => {
+    const lineup = yield* source.lineup
+    return (id: GameId): ChannelAvailability => {
       const game = slate.find((candidate) => candidate.id === id)
-      return game === undefined ? { _tag: "NotCarried" } : lookup(game)
+      return game === undefined ? ChannelAvailability.NotCarried() : lineup.availabilityOf(game)
     }
   })
 }
 ```
+
 Replace `apps/hub/src/stage/StageSessions.test.ts`:
 
 ```ts
@@ -1310,6 +1938,7 @@ function game(id: string, broadcasts: ReadonlyArray<Network>) {
   return snapshot({ id: GameId.make(id), status: "live", period: 1, clock: "10:00", broadcasts })
 }
 ```
+
 Apply this change to `apps/hub/src/http/HubServer.test.ts`:
 
 ```diff
@@ -1382,7 +2011,7 @@ Apply this change to `apps/web/src/stage/StageView.tsx`:
            y: Math.round(rect.y),
 ```
 
-This picking-tile body is temporary; Task 8 gives the tile its real UI.
+This picking-tile body is temporary; Task 9 gives the tile its real UI.
 
 - [ ] **Step 8: Add the words**
 
@@ -1391,7 +2020,7 @@ Apply this change to `CONTEXT.md`:
 ```diff
 --- a/CONTEXT.md
 +++ b/CONTEXT.md
-@@ -74,7 +74,8 @@ Provider and Source are the two words most likely to be swapped. Provider is alw
+@@ -77,7 +77,8 @@ Provider and Source are the two words most likely to be swapped. Provider is alw
  | **Stage command** | An instruction to change a Stage: assign, clear, or focus audio. Issued by people and by the Director alike. | action, event |
  | **Stage rejection** | The reason a stage command was refused. | error |
  | **Layout** | A named arrangement of tile slots. | grid, template |
@@ -1406,32 +2035,32 @@ Apply this change to `CONTEXT.md`:
 - [ ] **Step 9: Check**
 
 Run: `pnpm check`
-Expected: format, lint, typecheck, `✔ no dependency violations found`, knip clean, and `Tests  76 passed (76)`.
-
+Expected: format, lint, typecheck, `✔ no dependency violations found`, knip clean, and every test passes.
 
 - [ ] **Step 10: Commit**
 
 ```bash
 git add CONTEXT.md packages/domain/src apps/hub/src apps/web/src/stage/StageView.tsx
-git commit -m "feat(domain): tiles resolve by availability, picking tiles, and refresh
+git commit -m "feat(domain): tiles resolve by channel availability, picking tiles, and refresh
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
 
-### Task 4: YouTube TV learns channels and keeps them in the store
+### Task 5: YouTube TV learns channels and keeps them in the channel store
 
 **Files:**
 - Modify: `apps/hub/src/source/Source.ts` (port grows `changes`, `learn`, `markNotCarried`, `forget`)
-- Modify: `apps/hub/src/source/YouTubeTv.ts` (store-backed; `canonical`)
+- Modify: `apps/hub/src/source/YouTubeTv.ts` (lineup in a ref backed by the channel store; `LiveChannelUrl`)
 - Test: `apps/hub/src/source/YouTubeTv.test.ts`
 - Modify: `apps/hub/src/main.ts`, `apps/hub/src/stage/StageSessions.test.ts`, `apps/hub/src/http/HubServer.test.ts`
+- Modify: `CONTEXT.md`
 
 **Interfaces:**
-- Consumes: `Store` from Task 2; `availability`, `NotAChannel` from `@sportal/domain/Source` (Task 1).
+- Consumes: `ChannelStore`, `ChannelStoreError` from Task 3; `ChannelLineup`, `ChannelUrlRefused` from `@sportal/domain/Source` (Task 2).
 - Produces:
-  - `Source` port: `availability`; `changes: Stream<void>` (once after every change, never the current value); `learn(network, url): Effect<void, NotAChannel | StoreError>`; `markNotCarried(network)`, `forget(network)`: `Effect<void, StoreError>`.
-  - `YouTubeTv.layer: Layer<Source, StoreError, Store>` — loads the store's answers at start; each write goes to the store first, then to memory, one at a time.
-  - `YouTubeTv.canonical(url): Result<string, NotAChannel>` — `https://tv.youtube.com/watch/<id>` with any query becomes `https://tv.youtube.com/watch/<id>?vp=0gEEEgIwAQ%3D%3D`; anything else is refused.
+  - `Source` port: `lineup`; `changes: Stream<void>` (once after every change, never the current value); `learn(network, url): Effect<void, ChannelUrlRefused | ChannelStoreError>`; `markNotCarried(network)`, `forget(network)`: `Effect<void, ChannelStoreError>`.
+  - `YouTubeTv.layer: Layer<Source, ChannelStoreError, ChannelStore>` — loads the store's carriages into its lineup at start; each write goes to the store first, then to the lineup, one at a time.
+  - `YouTubeTv.LiveChannelUrl` — a schema from `string` to `string`. It decodes `https://tv.youtube.com/watch/<id>` with any query to `https://tv.youtube.com/watch/<id>?vp=0gEEEgIwAQ%3D%3D` and fails on anything else.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1442,11 +2071,13 @@ Create `apps/hub/src/source/YouTubeTv.test.ts`:
 ```ts
 import { assert, describe, it } from "@effect/vitest"
 import { Network } from "@sportal/domain/Game"
+import { ChannelAvailability } from "@sportal/domain/Source"
 import { snapshot } from "@sportal/domain/TestGame"
-import { Effect, Fiber, Layer, Result, Stream } from "effect"
-import * as SqlStore from "../store/SqlStore.ts"
-import { Store } from "../store/Store.ts"
+import { Effect, Fiber, Layer, Option, Schema, Stream } from "effect"
+import * as Database from "../database/Database.ts"
+import { ChannelStore } from "./ChannelStore.ts"
 import { Source } from "./Source.ts"
+import * as SqlChannelStore from "./SqlChannelStore.ts"
 import * as YouTubeTv from "./YouTubeTv.ts"
 
 // Addresses recorded from YouTube TV's live guide on 2026-10-03.
@@ -1459,14 +2090,16 @@ const espn = Network.make("ESPN")
 const disney = Network.make("Disney+")
 const onEspn = snapshot({ broadcasts: [espn] })
 const onEspnAndDisney = snapshot({ broadcasts: [disney, espn] })
+const guide = { _tag: "WebView" as const, url: "https://tv.youtube.com/live" }
+const decodeLive = Schema.decodeUnknownOption(YouTubeTv.LiveChannelUrl)
 
-describe("YouTubeTv.canonical", () => {
+describe("YouTubeTv.LiveChannelUrl", () => {
   it("keeps a live channel address as it is", () => {
-    assert.deepStrictEqual(YouTubeTv.canonical(cbsLive), Result.succeed(cbsLive))
+    assert.deepStrictEqual(decodeLive(cbsLive), Option.some(cbsLive))
   })
 
-  it("turns a from-the-beginning address into the live address for the same channel", () => {
-    assert.deepStrictEqual(YouTubeTv.canonical(foxFromTheBeginning), Result.succeed(foxLive))
+  it("decodes a from-the-beginning address to the live address for the same channel", () => {
+    assert.deepStrictEqual(decodeLive(foxFromTheBeginning), Option.some(foxLive))
   })
 
   it.each([
@@ -1478,33 +2111,31 @@ describe("YouTubeTv.canonical", () => {
     "https://tv.youtube.com.evil.example/watch/abc",
     "not a url"
   ])("refuses %s", (url) => {
-    assert.isTrue(Result.isFailure(YouTubeTv.canonical(url)))
+    assert.isTrue(Option.isNone(decodeLive(url)))
   })
 })
 
 describe("YouTubeTv source", () => {
   it.effect("starts with every network unlearned, pointing at the live guide", () =>
     Effect.gen(function* () {
-      const source = yield* Source
-      const availability = yield* source.availability
-      assert.deepStrictEqual(availability(onEspn), {
-        _tag: "Unlearned",
-        network: espn,
-        source: "YouTube TV",
-        guide: { _tag: "WebView", url: "https://tv.youtube.com/live" }
-      })
+      const lineup = yield* (yield* Source).lineup
+      assert.deepStrictEqual(
+        lineup.availabilityOf(onEspn),
+        ChannelAvailability.Unlearned({ network: espn, source: "YouTube TV", guide })
+      )
     }).pipe(Effect.provide(testSource()))
   )
 
-  it.effect("learns a channel from a guide address and stores it as the live address", () =>
+  it.effect("learns a channel from a guide address and keeps its live address", () =>
     Effect.gen(function* () {
       const source = yield* Source
       yield* source.learn(espn, foxFromTheBeginning)
-      const availability = yield* source.availability
-      assert.deepStrictEqual(availability(onEspn), {
-        _tag: "Carried",
-        channel: { network: espn, source: "YouTube TV", locator: { _tag: "WebView", url: foxLive } }
-      })
+      assert.deepStrictEqual(
+        (yield* source.lineup).availabilityOf(onEspn),
+        ChannelAvailability.Carried({
+          channel: { network: espn, source: "YouTube TV", locator: { _tag: "WebView", url: foxLive } }
+        })
+      )
     }).pipe(Effect.provide(testSource()))
   )
 
@@ -1512,8 +2143,8 @@ describe("YouTubeTv source", () => {
     Effect.gen(function* () {
       const source = yield* Source
       const error = yield* source.learn(espn, "https://tv.youtube.com/live").pipe(Effect.flip)
-      assert.strictEqual(error._tag, "NotAChannel")
-      assert.strictEqual((yield* source.availability)(onEspn)._tag, "Unlearned")
+      assert.strictEqual(error._tag, "ChannelUrlRefused")
+      assert.strictEqual((yield* source.lineup).availabilityOf(onEspn)._tag, "Unlearned")
     }).pipe(Effect.provide(testSource()))
   )
 
@@ -1521,13 +2152,10 @@ describe("YouTubeTv source", () => {
     Effect.gen(function* () {
       const source = yield* Source
       yield* source.markNotCarried(disney)
-      const availability = yield* source.availability
-      assert.deepStrictEqual(availability(onEspnAndDisney), {
-        _tag: "Unlearned",
-        network: espn,
-        source: "YouTube TV",
-        guide: { _tag: "WebView", url: "https://tv.youtube.com/live" }
-      })
+      assert.deepStrictEqual(
+        (yield* source.lineup).availabilityOf(onEspnAndDisney),
+        ChannelAvailability.Unlearned({ network: espn, source: "YouTube TV", guide })
+      )
     }).pipe(Effect.provide(testSource()))
   )
 
@@ -1536,11 +2164,11 @@ describe("YouTubeTv source", () => {
       const source = yield* Source
       yield* source.learn(espn, cbsLive)
       yield* source.forget(espn)
-      assert.strictEqual((yield* source.availability)(onEspn)._tag, "Unlearned")
+      assert.strictEqual((yield* source.lineup).availabilityOf(onEspn)._tag, "Unlearned")
     }).pipe(Effect.provide(testSource()))
   )
 
-  it.effect("signals a change after each answer, not before", () =>
+  it.effect("signals a change after each write, not before", () =>
     Effect.gen(function* () {
       const source = yield* Source
       const signals = yield* source.changes.pipe(Stream.take(2), Stream.runCount, Effect.forkChild)
@@ -1551,62 +2179,60 @@ describe("YouTubeTv source", () => {
     }).pipe(Effect.provide(testSource()))
   )
 
-  it.effect("loads what the store already knows", () =>
+  it.effect("loads what the channel store already holds", () =>
     Effect.gen(function* () {
-      const source = yield* Source
-      assert.strictEqual((yield* source.availability)(onEspn)._tag, "Carried")
+      assert.strictEqual((yield* (yield* Source).lineup).availabilityOf(onEspn)._tag, "Carried")
     }).pipe(Effect.provide(YouTubeTv.layer.pipe(Layer.provide(storeKnowingEspn()))))
   )
 })
 
-/** The source over a fresh in-memory store. */
+/** The source over a fresh in-memory database. */
 function testSource() {
-  return YouTubeTv.layer.pipe(Layer.provide(SqlStore.layer(":memory:")))
+  return YouTubeTv.layer.pipe(Layer.provide(SqlChannelStore.layer), Layer.provide(Database.layer(":memory:")))
 }
 
-/** An in-memory store that already holds a channel for ESPN when the source starts. */
+/** An in-memory channel store that already holds ESPN's channel when the source starts. */
 function storeKnowingEspn() {
   return Layer.effect(
-    Store,
+    ChannelStore,
     Effect.gen(function* () {
-      const store = yield* Store
-      yield* store.answer({
+      const store = yield* ChannelStore
+      yield* store.record({
         _tag: "Carried",
         channel: { network: espn, source: "YouTube TV", locator: { _tag: "WebView", url: cbsLive } }
       })
       return store
     })
-  ).pipe(Layer.provide(SqlStore.layer(":memory:")))
+  ).pipe(Layer.provide(SqlChannelStore.layer), Layer.provide(Database.layer(":memory:")))
 }
 ```
 
 - [ ] **Step 2: Run it to see it fail**
 
 Run: `pnpm vitest run apps/hub/src/source/YouTubeTv.test.ts`
-Expected: FAIL — `YouTubeTv.canonical` is not a function, and `YouTubeTv.layer` is still a function of a list.
-
+Expected: FAIL — `YouTubeTv.LiveChannelUrl` is undefined, and `YouTubeTv.layer` is still a function of a list.
 
 - [ ] **Step 3: Grow the port**
 
 Replace `apps/hub/src/source/Source.ts`:
 
 ```ts
-import type { GameSnapshot, Network } from "@sportal/domain/Game"
-import type { Availability, NotAChannel } from "@sportal/domain/Source"
+import type { Network } from "@sportal/domain/Game"
+import type { ChannelLineup, ChannelUrlRefused } from "@sportal/domain/Source"
 import { Context, type Effect, type Stream } from "effect"
-import type { StoreError } from "../store/Store.ts"
+import type { ChannelStoreError } from "./ChannelStore.ts"
 
 export class Source extends Context.Service<
   Source,
   {
-    /** What the source knows right now, as a lookup from a game to where it can be streamed. */
-    readonly availability: Effect.Effect<(game: GameSnapshot) => Availability>
-    /** Emits once after every change to what the source knows. */
+    /** The channels this source has learned so far. */
+    readonly lineup: Effect.Effect<ChannelLineup>
+    /** Emits once after every change to the lineup. */
     readonly changes: Stream.Stream<void>
     /** Remembers the channel at `url` as where this source carries `network`. */
-    learn(network: Network, url: string): Effect.Effect<void, NotAChannel | StoreError>
-    markNotCarried(network: Network): Effect.Effect<void, StoreError>
-    forget(network: Network): Effect.Effect<void, StoreError>
+    learn(network: Network, url: string): Effect.Effect<void, ChannelUrlRefused | ChannelStoreError>
+    markNotCarried(network: Network): Effect.Effect<void, ChannelStoreError>
+    forget(network: Network): Effect.Effect<void, ChannelStoreError>
   }
 >()("sportal/hub/Source") {}
 ```
@@ -1616,84 +2242,78 @@ export class Source extends Context.Service<
 Replace `apps/hub/src/source/YouTubeTv.ts`:
 
 ```ts
-import { availability, type ChannelAnswer, NotAChannel } from "@sportal/domain/Source"
-import { Effect, Layer, Result, Stream, SubscriptionRef } from "effect"
-import { Store } from "../store/Store.ts"
+import { type ChannelCarriage, ChannelLineup, ChannelUrlRefused } from "@sportal/domain/Source"
+import { Effect, Layer, Schema, SchemaTransformation, Stream, SubscriptionRef } from "effect"
+import { ChannelStore } from "./ChannelStore.ts"
 import { Source } from "./Source.ts"
 
-/** YouTube TV as a source. Its channels are learned from the live guide and kept in the store. */
+/** YouTube TV as a source. Its channels are learned from the live guide and kept in the channel store. */
 export const layer = Layer.effect(
   Source,
   Effect.gen(function* () {
-    const store = yield* Store
-    const answers = yield* SubscriptionRef.make(yield* store.channelAnswers)
+    const store = yield* ChannelStore
+    const lineup = yield* SubscriptionRef.make(
+      new ChannelLineup({ source: "YouTube TV", guide, carriages: yield* store.carriages })
+    )
 
     // Store first, then memory, one write at a time: a failed write changes nothing.
-    const record = (answer: ChannelAnswer) =>
-      SubscriptionRef.updateEffect(answers, (known) =>
-        store
-          .answer(answer)
-          .pipe(Effect.as([...known.filter((other) => networkOf(other) !== networkOf(answer)), answer]))
+    const record = (carriage: ChannelCarriage) =>
+      SubscriptionRef.updateEffect(lineup, (current) =>
+        store.record(carriage).pipe(Effect.as(current.record(carriage)))
       )
 
     return Source.of({
-      availability: SubscriptionRef.get(answers).pipe(
-        Effect.map((known) => (game) => availability(game.broadcasts, known, guide))
-      ),
+      lineup: SubscriptionRef.get(lineup),
       // The ref's current value comes first on every subscription; only later values are changes.
-      changes: SubscriptionRef.changes(answers).pipe(Stream.drop(1), Stream.as(undefined)),
+      changes: SubscriptionRef.changes(lineup).pipe(Stream.drop(1), Stream.as(undefined)),
       learn: (network, url) =>
-        Effect.fromResult(canonical(url)).pipe(
-          Effect.flatMap((address) =>
+        decodeLiveChannelUrl(url).pipe(
+          Effect.mapError(() => new ChannelUrlRefused()),
+          Effect.flatMap((live) =>
             record({
               _tag: "Carried",
-              channel: { network, source: guide.source, locator: { _tag: "WebView", url: address } }
+              channel: { network, source: "YouTube TV", locator: { _tag: "WebView", url: live } }
             })
           )
         ),
-      markNotCarried: (network) => record({ _tag: "NotCarried", network, source: guide.source }),
+      markNotCarried: (network) => record({ _tag: "NotCarried", network, source: "YouTube TV" }),
       forget: (network) =>
-        SubscriptionRef.updateEffect(answers, (known) =>
-          store
-            .forget(network, guide.source)
-            .pipe(Effect.as(known.filter((answer) => networkOf(answer) !== network)))
+        SubscriptionRef.updateEffect(lineup, (current) =>
+          store.forget(network, "YouTube TV").pipe(Effect.as(current.forget(network)))
         )
     })
   })
 )
 
 /**
- * The address that plays a channel live. A guide pick can carry a start point ("from the beginning");
- * storing that would replay every later game on the channel from that moment, so only the live flag is kept.
+ * A YouTube TV channel address, decoded to the address that plays the channel live. A guide pick can
+ * carry a start point ("from the beginning"); keeping it would replay every later game on the channel
+ * from that moment, so decoding keeps only the channel's id and the live flag.
  */
-export function canonical(url: string): Result.Result<string, NotAChannel> {
-  if (!URL.canParse(url)) return Result.fail(new NotAChannel())
-  const { protocol, hostname, pathname } = new URL(url)
-  const id = /^\/watch\/([A-Za-z0-9_-]+)$/.exec(pathname)?.[1]
-  return protocol === "https:" && hostname === "tv.youtube.com" && id !== undefined
-    ? Result.succeed(`https://tv.youtube.com/watch/${id}?vp=${live}`)
-    : Result.fail(new NotAChannel())
-}
+export const LiveChannelUrl = Schema.String.pipe(
+  Schema.check(Schema.isPattern(/^https:\/\/tv\.youtube\.com\/watch\/[A-Za-z0-9_-]+(\?.*)?$/)),
+  Schema.decodeTo(
+    Schema.String,
+    SchemaTransformation.transform({
+      decode: (url) => `https://tv.youtube.com${new URL(url).pathname}?vp=${live}`,
+      encode: (url) => url
+    })
+  )
+)
+
+const decodeLiveChannelUrl = Schema.decodeEffect(LiveChannelUrl)
 
 const live = "0gEEEgIwAQ%3D%3D"
 
-const guide = {
-  source: "YouTube TV",
-  locator: { _tag: "WebView", url: "https://tv.youtube.com/live" }
-} as const
-
-function networkOf(answer: ChannelAnswer) {
-  return answer._tag === "Carried" ? answer.channel.network : answer.network
-}
+const guide = { _tag: "WebView", url: "https://tv.youtube.com/live" } as const
 ```
 
-`SubscriptionRef.updateEffect` makes each write one step: concurrent writes queue, and a store failure leaves memory unchanged. `SubscriptionRef.changes` replays the current value to each new subscriber, so `changes` drops that first element.
+The pattern is the whole rule: `https`, exactly `tv.youtube.com`, `/watch/` and one id segment, then any query. `decode` only runs on an address that passed it, so `new URL(url)` cannot throw. `SubscriptionRef.updateEffect` makes each write one step: concurrent writes queue, and a store failure leaves the lineup unchanged. `SubscriptionRef.changes` replays the current value to each new subscriber, so `changes` drops that first element.
 
 - [ ] **Step 5: Run it to see it pass**
 
 Run: `pnpm vitest run apps/hub/src/source/YouTubeTv.test.ts`
 Expected: `Tests  16 passed (16)`.
-
 
 - [ ] **Step 6: Wire it**
 
@@ -1702,16 +2322,17 @@ Apply this change to `apps/hub/src/main.ts`:
 ```diff
 --- a/apps/hub/src/main.ts
 +++ b/apps/hub/src/main.ts
-@@ -27,7 +27,7 @@ const Hub = Layer.unwrap(
+@@ -28,7 +28,7 @@ const Hub = Layer.unwrap(
  
      return HttpRouter.serve(routes).pipe(
        Layer.provide(StageSessions.layer),
 -      Layer.provide(YouTubeTv.layer([])),
 +      Layer.provide(YouTubeTv.layer),
+       Layer.provide(SqlChannelStore.layer),
        Layer.provide(Ingest.layer(["nfl", "fbs"])),
        Layer.provide(EspnProvider.layer),
-       Layer.provide(SqlStore.layer(join(dataDir, "sportal.sqlite"))),
 ```
+
 Replace `apps/hub/src/stage/StageSessions.test.ts`:
 
 ```ts
@@ -1719,10 +2340,11 @@ import { assert, describe, it } from "@effect/vitest"
 import { GameId, Network } from "@sportal/domain/Game"
 import { snapshot } from "@sportal/domain/TestGame"
 import { Effect, Layer, Stream } from "effect"
+import * as Database from "../database/Database.ts"
 import { Ingest } from "../ingest/Ingest.ts"
 import { Source } from "../source/Source.ts"
+import * as SqlChannelStore from "../source/SqlChannelStore.ts"
 import * as YouTubeTv from "../source/YouTubeTv.ts"
-import * as SqlStore from "../store/SqlStore.ts"
 import { StageSessions } from "./StageSessions.ts"
 
 const espn = Network.make("ESPN")
@@ -1790,7 +2412,7 @@ function game(id: string, broadcasts: ReadonlyArray<Network>) {
   return snapshot({ id: GameId.make(id), status: "live", period: 1, clock: "10:00", broadcasts })
 }
 
-/** YouTube TV over an in-memory store, already knowing ESPN's channel and that ESPN+ is not carried. */
+/** YouTube TV over an in-memory database, already knowing ESPN's channel and that ESPN+ is not carried. */
 function sourceKnowingEspn() {
   return Layer.effectDiscard(
     Effect.gen(function* () {
@@ -1798,19 +2420,28 @@ function sourceKnowingEspn() {
       yield* source.learn(espn, "https://tv.youtube.com/watch/espn")
       yield* source.markNotCarried(espnPlus)
     })
-  ).pipe(Layer.provideMerge(YouTubeTv.layer), Layer.provide(SqlStore.layer(":memory:")))
+  ).pipe(
+    Layer.provideMerge(YouTubeTv.layer),
+    Layer.provide(SqlChannelStore.layer),
+    Layer.provide(Database.layer(":memory:"))
+  )
 }
 ```
+
 Apply this change to `apps/hub/src/http/HubServer.test.ts`:
 
 ```diff
 --- a/apps/hub/src/http/HubServer.test.ts
 +++ b/apps/hub/src/http/HubServer.test.ts
-@@ -10,14 +10,9 @@ import { Ingest } from "../ingest/Ingest.ts"
+@@ -7,17 +7,13 @@ import { DateTime, Effect, Layer } from "effect"
+ import { HttpServer } from "effect/http"
+ import { HttpApiTest } from "effect/http-api"
++import * as Database from "../database/Database.ts"
+ import { Ingest } from "../ingest/Ingest.ts"
  import { Provider } from "../provider/Provider.ts"
++import * as SqlChannelStore from "../source/SqlChannelStore.ts"
  import * as YouTubeTv from "../source/YouTubeTv.ts"
  import { StageSessions } from "../stage/StageSessions.ts"
-+import * as SqlStore from "../store/SqlStore.ts"
  import { ApiHandlers } from "./HubServer.ts"
  
 -const espnChannel = {
@@ -1822,17 +2453,18 @@ Apply this change to `apps/hub/src/http/HubServer.test.ts`:
  const game = snapshot({
    id: GameId.make("401856707"),
    home: { team: team("MSST"), score: 0 },
-@@ -27,7 +22,8 @@ const game = snapshot({
+@@ -27,7 +23,9 @@ const game = snapshot({
  
  const TestHub = ApiHandlers.pipe(
    Layer.provide(StageSessions.layer),
 -  Layer.provide(YouTubeTv.layer([{ _tag: "Carried", channel: espnChannel }])),
 +  Layer.provide(YouTubeTv.layer),
-+  Layer.provide(SqlStore.layer(":memory:")),
++  Layer.provide(SqlChannelStore.layer),
++  Layer.provide(Database.layer(":memory:")),
    Layer.provide(Ingest.layer(["fbs"])),
    Layer.provide(Layer.succeed(Provider, Provider.of({ slate: () => Effect.succeed([game]) })))
  )
-@@ -35,7 +31,7 @@ const TestHub = ApiHandlers.pipe(
+@@ -35,7 +33,7 @@ const TestHub = ApiHandlers.pipe(
  const makeClient = HttpApiTest.groups(SportalApi, ["slate", "stage"])
  
  layer(Layer.mergeAll(TestHub, HttpServer.layerServices))("Hub API", (it) => {
@@ -1841,7 +2473,7 @@ Apply this change to `apps/hub/src/http/HubServer.test.ts`:
      Effect.gen(function* () {
        const client = yield* makeClient
        // Let the ingest loop's first poll run.
-@@ -49,9 +45,11 @@ layer(Layer.mergeAll(TestHub, HttpServer.layerServices))("Hub API", (it) => {
+@@ -49,9 +47,11 @@ layer(Layer.mergeAll(TestHub, HttpServer.layerServices))("Hub API", (it) => {
          payload: { command: { _tag: "Assign", tile: 0, game: game.id } }
        })
        assert.deepStrictEqual(stage.tiles[0], {
@@ -1857,24 +2489,39 @@ Apply this change to `apps/hub/src/http/HubServer.test.ts`:
        const rejected = yield* client.stage
 ```
 
-With an empty store, an ESPN game is now a picking tile; Task 5 rewrites this test around the channels API.
+With an empty store, an ESPN game is now a picking tile; Task 6 rewrites this test around the channels API.
 
-- [ ] **Step 7: Check**
+- [ ] **Step 7: Add the word**
+
+Apply this change to `CONTEXT.md`:
+
+```diff
+--- a/CONTEXT.md
++++ b/CONTEXT.md
+@@ -51,6 +51,7 @@ Every exported type name must be a term here.
+ | **Channel store** | Where the Hub keeps the channel carriages it has learned. | channel repository |
+ | **Channel store error** | The channel store could not read or write. | database error |
+ | **Database** | The Hub's SQLite database. Each store migrates its own tables in it. | store, persistence |
++| **Live channel URL** | A source's address for a channel, reduced to the one that plays it live. | canonical URL |
+ | **Stream** | One playing instance of a game from a source. | feed, video |
+ | **StreamLocator** | What a Display must load to play a stream. | URL, link |
+```
+
+- [ ] **Step 8: Check**
 
 Run: `pnpm check`
-Expected: format, lint, typecheck, `✔ no dependency violations found`, knip clean, and `Tests  92 passed (92)`.
+Expected: format, lint, typecheck, `✔ no dependency violations found`, knip clean, and every test passes.
 
-
-- [ ] **Step 8: Commit**
+- [ ] **Step 9: Commit**
 
 ```bash
-git add apps/hub/src
-git commit -m "feat(hub): YouTube TV learns channels and keeps them in the store
+git add CONTEXT.md apps/hub/src
+git commit -m "feat(hub): YouTube TV learns channels and keeps them in the channel store
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
 
-### Task 5: Channels API, and the Stage follows what the source learns
+### Task 6: Channels API, and the Stage follows what the source learns
 
 **Files:**
 - Modify: `packages/api/src/SportalApi.ts` (the `channels` group)
@@ -1883,11 +2530,11 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Test: `apps/hub/src/http/HubServer.test.ts` (rewritten; includes the deferred `/api/live` end-to-end test and waits for the first non-empty slate instead of a single yield), `apps/hub/src/stage/StageSessions.test.ts`
 
 **Interfaces:**
-- Consumes: the `Source` port from Task 4; `Stage.refresh` from Task 3.
+- Consumes: the `Source` port from Task 5; `Stage#refresh` from Task 4.
 - Produces:
-  - `SportalApi` group `channels`: `learn` `POST /api/channels/learn` `{ network, url }` → 204, or 422 `NotAChannel`; `notCarried` `POST /api/channels/not-carried` `{ network }` → 204; `forget` `POST /api/channels/forget` `{ network }` → 204. A typed client calls them as `client.channels.learn({ payload })` and so on.
-  - A store failure in these handlers is a defect (HTTP 500): the client cannot fix it.
-  - `StageSessions` applies `Stage.refresh` after every source change and publishes the new Stage through the existing live stream.
+  - `SportalApi` group `channels`: `learn` `POST /api/channels/learn` `{ network, url }` → 204, or 422 `ChannelUrlRefused`; `notCarried` `POST /api/channels/not-carried` `{ network }` → 204; `forget` `POST /api/channels/forget` `{ network }` → 204. A typed client calls them as `client.channels.learn({ payload })` and so on.
+  - A channel store failure in these handlers is a defect (HTTP 500): the client cannot fix it.
+  - `StageSessions` applies `stage.refresh` after every source change and publishes the new Stage through the existing live stream.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -1903,11 +2550,12 @@ import { snapshot, team } from "@sportal/domain/TestGame"
 import { DateTime, Effect, Fiber, Layer, Schema, Stream } from "effect"
 import { HttpClient, HttpRouter, HttpServer } from "effect/http"
 import { HttpApiClient, HttpApiTest } from "effect/http-api"
+import * as Database from "../database/Database.ts"
 import { Ingest } from "../ingest/Ingest.ts"
 import { Provider } from "../provider/Provider.ts"
+import * as SqlChannelStore from "../source/SqlChannelStore.ts"
 import * as YouTubeTv from "../source/YouTubeTv.ts"
 import { StageSessions } from "../stage/StageSessions.ts"
-import * as SqlStore from "../store/SqlStore.ts"
 import * as HubServer from "./HubServer.ts"
 
 const espn = Network.make("ESPN")
@@ -1979,7 +2627,7 @@ describe("Hub API", () => {
       const error = yield* client.channels
         .learn({ payload: { network: espn, url: "https://tv.youtube.com/live" } })
         .pipe(Effect.flip)
-      assert.strictEqual(error._tag, "NotAChannel")
+      assert.strictEqual(error._tag, "ChannelUrlRefused")
     }).pipe(Effect.provide(apiUnderTest()))
   )
 })
@@ -2033,11 +2681,12 @@ function apiUnderTest() {
   )
 }
 
-/** Everything behind the API, over a fresh in-memory store and a provider that always returns `game`. */
+/** Everything behind the API, over a fresh in-memory database and a provider that always returns `game`. */
 function hubUnderTest() {
   return StageSessions.layer.pipe(
     Layer.provideMerge(YouTubeTv.layer),
-    Layer.provide(SqlStore.layer(":memory:")),
+    Layer.provide(SqlChannelStore.layer),
+    Layer.provide(Database.layer(":memory:")),
     Layer.provideMerge(Ingest.layer(["fbs"])),
     Layer.provide(Layer.succeed(Provider, Provider.of({ slate: () => Effect.succeed([game]) })))
   )
@@ -2064,10 +2713,10 @@ Apply this change to `apps/hub/src/stage/StageSessions.test.ts`:
  import { snapshot } from "@sportal/domain/TestGame"
 -import { Effect, Layer, Stream } from "effect"
 +import { Effect, Layer, Option, Stream } from "effect"
+ import * as Database from "../database/Database.ts"
  import { Ingest } from "../ingest/Ingest.ts"
  import { Source } from "../source/Source.ts"
- import * as YouTubeTv from "../source/YouTubeTv.ts"
-@@ -16,11 +16,18 @@ const espnChannel = {
+@@ -18,11 +18,18 @@ const espnChannel = {
    source: "YouTube TV" as const,
    locator: { _tag: "WebView" as const, url: "https://tv.youtube.com/watch/espn?vp=0gEEEgIwAQ%3D%3D" }
  }
@@ -2088,7 +2737,7 @@ Apply this change to `apps/hub/src/stage/StageSessions.test.ts`:
  )
  
  describe("StageSessions", () => {
-@@ -28,7 +35,9 @@ describe("StageSessions", () => {
+@@ -30,7 +37,9 @@ describe("StageSessions", () => {
      Effect.gen(function* () {
        const sessions = yield* StageSessions
        yield* Effect.all(
@@ -2099,7 +2748,7 @@ Apply this change to `apps/hub/src/stage/StageSessions.test.ts`:
          { concurrency: "unbounded" }
        )
        const stage = yield* sessions.stage
-@@ -61,6 +70,22 @@ describe("StageSessions", () => {
+@@ -63,6 +72,22 @@ describe("StageSessions", () => {
      }).pipe(Effect.provide(TestSessions))
    )
  
@@ -2129,14 +2778,13 @@ Apply this change to `apps/hub/src/stage/StageSessions.test.ts`:
 Run: `pnpm vitest run apps/hub`
 Expected: FAIL — the typecheck in the editor flags `client.channels`; at run time the channel tests fail and the refresh test times out.
 
-
 - [ ] **Step 3: Add the endpoints**
 
 Replace `packages/api/src/SportalApi.ts`:
 
 ```ts
 import { GameSnapshot, Network } from "@sportal/domain/Game"
-import { NotAChannel } from "@sportal/domain/Source"
+import { ChannelUrlRefused } from "@sportal/domain/Source"
 import { Stage, StageCommand, StageRejection } from "@sportal/domain/Stage"
 import { Schema } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "effect/http-api"
@@ -2164,7 +2812,7 @@ export class SportalApi extends HttpApi.make("sportal")
       HttpApiEndpoint.post("learn", "/channels/learn", {
         payload: Schema.Struct({ network: Network, url: Schema.String }),
         success: HttpApiSchema.NoContent,
-        error: NotAChannel
+        error: ChannelUrlRefused
       }),
       HttpApiEndpoint.post("notCarried", "/channels/not-carried", {
         payload: Schema.Struct({ network: Network }),
@@ -2178,6 +2826,7 @@ export class SportalApi extends HttpApi.make("sportal")
   )
   .prefix("/api") {}
 ```
+
 Apply this change to `apps/hub/src/http/HubServer.ts`:
 
 ```diff
@@ -2206,14 +2855,14 @@ Apply this change to `apps/hub/src/http/HubServer.ts`:
 +    "channels",
 +    Effect.fn(function* (handlers) {
 +      const source = yield* Source
-+      // A store that cannot be written is not something a client can fix: it is a server error.
++      // A channel store that cannot be written is not something a client can fix: it is a server error.
 +      return handlers.handleAll({
 +        learn: ({ payload }) =>
-+          source.learn(payload.network, payload.url).pipe(Effect.catchTag("StoreError", Effect.die)),
++          source.learn(payload.network, payload.url).pipe(Effect.catchTag("ChannelStoreError", Effect.die)),
 +        notCarried: ({ payload }) =>
-+          source.markNotCarried(payload.network).pipe(Effect.catchTag("StoreError", Effect.die)),
++          source.markNotCarried(payload.network).pipe(Effect.catchTag("ChannelStoreError", Effect.die)),
 +        forget: ({ payload }) =>
-+          source.forget(payload.network).pipe(Effect.catchTag("StoreError", Effect.die))
++          source.forget(payload.network).pipe(Effect.catchTag("ChannelStoreError", Effect.die))
 +      })
 +    })
 +  )
@@ -2233,21 +2882,21 @@ Apply this change to `apps/hub/src/stage/StageSessions.ts`:
 +++ b/apps/hub/src/stage/StageSessions.ts
 @@ -1,7 +1,7 @@
  import type { GameId } from "@sportal/domain/Game"
- import type { Availability } from "@sportal/domain/Source"
- import * as Stage from "@sportal/domain/Stage"
+ import { ChannelAvailability } from "@sportal/domain/Source"
+ import { Stage, type StageCommand, type StageRejection } from "@sportal/domain/Stage"
 -import { Context, Effect, Layer, Result, type Stream, SubscriptionRef } from "effect"
 +import { Context, Effect, Layer, Result, Stream, SubscriptionRef } from "effect"
  import { Ingest } from "../ingest/Ingest.ts"
  import { Source } from "../source/Source.ts"
  
-@@ -31,6 +31,15 @@ export class StageSessions extends Context.Service<
+@@ -32,6 +32,15 @@ export class StageSessions extends Context.Service<
          })
        })
  
 +      // When the source learns or forgets a channel, every tile it affects changes on every Display.
 +      const refresh = Effect.gen(function* () {
-+        const availability = yield* availabilityOnSlate(ingest, source)
-+        yield* SubscriptionRef.update(current, (stage) => Stage.refresh(stage, availability))
++        const availabilityOf = yield* availabilityOnSlate(ingest, source)
++        yield* SubscriptionRef.update(current, (stage) => stage.refresh(availabilityOf))
 +      })
 +      yield* Effect.forkScoped(source.changes.pipe(Stream.runForEach(() => refresh)), {
 +        startImmediately: true
@@ -2263,14 +2912,12 @@ Apply this change to `apps/hub/src/stage/StageSessions.ts`:
 - [ ] **Step 5: Run them to see them pass**
 
 Run: `pnpm vitest run apps/hub`
-Expected: `Tests  40 passed (40)`. Run it a few times: it must be stable, since it waits on a live stream.
-
+Expected: every test passes. Run it a few times: it must be stable, since it waits on a live stream.
 
 - [ ] **Step 6: Check**
 
 Run: `pnpm check`
-Expected: format, lint, typecheck, `✔ no dependency violations found`, knip clean, and `Tests  96 passed (96)`.
-
+Expected: format, lint, typecheck, `✔ no dependency violations found`, knip clean, and every test passes.
 
 - [ ] **Step 7: Drive it against the live feed**
 
@@ -2298,7 +2945,7 @@ git commit -m "feat(hub): channels API, and the stage follows what the source le
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
 
-### Task 6: Shell bridge and guide reporting
+### Task 7: Shell bridge and guide reporting
 
 **Files:**
 - Modify: `packages/api/src/ShellBridge.ts` (`role`, `ChannelPick`, `onChannelPicked`)
@@ -2704,7 +3351,7 @@ Apply this change to `CONTEXT.md`:
 - [ ] **Step 7: Check and build**
 
 Run: `pnpm check`
-Expected: format, lint, typecheck, `✔ no dependency violations found`, knip clean, and `Tests  99 passed (99)`.
+Expected: format, lint, typecheck, `✔ no dependency violations found`, knip clean, and every test passes.
 
 Run: `pnpm --filter @sportal/desktop exec electron-vite build`
 Expected: both builds end `✓ built`.
@@ -2719,7 +3366,7 @@ git commit -m "feat(desktop): guide views report the channel the user picks
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
 
-### Task 7: Desktop findings from the restructure review
+### Task 8: Desktop findings from the restructure review
 
 **Files:**
 - Modify: `apps/desktop/src/main/ProviderSession.ts` (one navigation guard, `confine`)
@@ -2739,7 +3386,7 @@ Each finding, and what this task does:
 | A window closed while the Hub page loads is logged as "the Hub could not be reached"; a removed view may log a load error | Both are ignored when the window or view is already destroyed |
 | `WidevineUnavailable` drops the underlying error | It carries the error as `cause` (a `Schema.Defect`), which keeps more than a code |
 | The two navigation guards share a shape | Both use `confine` |
-| Guard subframe navigations (`will-frame-navigate`) | Done for the shell window, which holds the privileged preload. Not done for provider views: their pages embed frames from hosts the four-host allowlist does not name, and refusing them could break sign-in or playback in a way only a game day would show. Recorded in ADR 0002 (Task 9) |
+| Guard subframe navigations (`will-frame-navigate`) | Done for the shell window, which holds the privileged preload. Not done for provider views: their pages embed frames from hosts the four-host allowlist does not name, and refusing them could break sign-in or playback in a way only a game day would show. Recorded in ADR 0002 (Task 10) |
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -3114,7 +3761,7 @@ Apply this change to `apps/desktop/src/main/TileViews.ts`:
 - [ ] **Step 6: Check and build**
 
 Run: `pnpm check`
-Expected: format, lint, typecheck, `✔ no dependency violations found`, knip clean, and `Tests  104 passed (104)`.
+Expected: format, lint, typecheck, `✔ no dependency violations found`, knip clean, and every test passes.
 
 Run: `pnpm --filter @sportal/desktop exec electron-vite build`
 Expected: both builds end `✓ built`.
@@ -3129,14 +3776,14 @@ git commit -m "fix(desktop): one navigation guard, serial tile syncs, quieter sh
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
 
-### Task 8: Web UI — picking tiles, picks, not carried, and wrong channel
+### Task 9: Web UI — picking tiles, picks, not carried, and wrong channel
 
 **Files:**
 - Modify: `apps/web/src/hub/HubClient.ts`
 - Modify: `apps/web/src/stage/StageView.tsx`
 
 **Interfaces:**
-- Consumes: the `channels` API group (Task 5), `ShellBridge.onChannelPicked` (Task 6), the tile shapes (Task 3).
+- Consumes: the `channels` API group (Task 6), `ShellBridge.onChannelPicked` (Task 7), the tile shapes (Task 4).
 - Produces, from `HubClient.ts`: `learnChannel(network, url)`, `markNotCarried(network)`, `forgetChannel(network)`, each `Promise<Option<string>>` — the message to show if the Hub did not take the command, or none. The Stage change itself arrives on the live stream; there is no optimistic state.
 
 The tile's behaviour:
@@ -3198,7 +3845,7 @@ function outcome(command: Effect.Effect<void, unknown, HubClient>) {
         onSuccess: () => Option.none(),
         onFailure: (error) =>
           Option.some(
-            Predicate.isTagged(error, "NotAChannel")
+            Predicate.isTagged(error, "ChannelUrlRefused")
               ? "That is not a live channel. Pick one from the live guide."
               : "The Hub did not take that. Try again."
           )
@@ -3391,7 +4038,7 @@ function noticed(tile: number, failure: Option.Option<string>) {
 - [ ] **Step 3: Check and build**
 
 Run: `pnpm check`
-Expected: format, lint, typecheck, `✔ no dependency violations found`, knip clean, and `Tests  104 passed (104)`.
+Expected: format, lint, typecheck, `✔ no dependency violations found`, knip clean, and every test passes.
 
 Run: `pnpm --filter @sportal/web build`
 Expected: `✓ built`.
@@ -3406,7 +4053,7 @@ git commit -m "feat(web): picking tiles, channel picks, not carried, and wrong c
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
 
-### Task 9: Docs — game-day rows, ADR follow-up, deferred findings
+### Task 10: Docs — game-day rows, ADR follow-up, deferred findings
 
 **Files:**
 - Modify: `docs/game-day-checklist.md`, `docs/adr/0002-desktop-shell-playback.md`, `docs/plans/2026-10-03-thin-vertical-slice.md`, `AGENTS.md`
@@ -3476,7 +4123,7 @@ Apply this change to `docs/adr/0002-desktop-shell-playback.md`:
 +Built as designed in `docs/specs/2026-10-03-learned-channels-design.md`. What changed in the shell:
 +
 +- A guide view reads only the address its page lands on (`did-navigate`, `did-navigate-in-page`);
-+  nothing is injected. The Hub keeps the canonical live address (`/watch/<id>?vp=0gEEEgIwAQ%3D%3D`).
++  nothing is injected. The Hub keeps the channel's live address (`/watch/<id>?vp=0gEEEgIwAQ%3D%3D`).
 +- Observed in the live guide: one channel picked twice gives the same id; different channels give
 +  different ids; "from the beginning" adds an absolute start time to the address. Whether an old
 +  address still plays the channel live after its programme changes is game-day checklist row 17.
@@ -3499,7 +4146,8 @@ Apply this change to `docs/plans/2026-10-03-thin-vertical-slice.md`:
 -0. **Learned channels** (decided 2026-10-03, see `docs/adr/0002-desktop-shell-playback.md`) — an unknown network opens YouTube TV's live guide in the tile; the shell reports the address the view lands on; the Hub remembers it. Replaces the hand-filled channel map. First confirm whether an address identifies a channel or a programme.
 +0. **Learned channels** (decided 2026-10-03, see `docs/adr/0002-desktop-shell-playback.md`) — an unknown network opens YouTube TV's live guide in the tile; the shell reports the address the view lands on; the Hub remembers it. Replaces the hand-filled channel map. First confirm whether an address identifies a channel or a programme. **Planned in `docs/plans/2026-10-03-learned-channels.md`.**
  0. **shadcn/ui** (decided 2026-10-03) — adopt it as the web UI's component base as the first UI task: design tokens in `theme.css`, components under `apps/web/src/ui/` with the class-merging helper as its own named file (shadcn's default `lib/utils.ts` and `components/ui/` paths break the layout rules).
- 1. **Tracker** — `Store` port with SQL, `GameEvent` and `diff`, game detail, standings, follows, watchability, availability, CollegeFootballData for FBS gaps, the access token and network binding so other devices can connect, couch mode.
+-1. **Tracker** — `Store` port with SQL, `GameEvent` and `diff`, game detail, standings, follows, watchability, availability, CollegeFootballData for FBS gaps, the access token and network binding so other devices can connect, couch mode.
++1. **Tracker** — SQL stores per concept on the `Database` module (each owns its migrations, as the channel store does), `GameEvent` and `diff`, game detail, standings, follows, watchability, availability, CollegeFootballData for FBS gaps, the access token and network binding so other devices can connect, couch mode.
  2. **Stage** — layouts beyond 2×2, presets, hotkeys, stream budget enforcement, data tiles with real content, more than one Display.
 @@ -2868,7 +2868,7 @@ In the order the product plan's phases call for them:
  Recorded by the final whole-branch review on 2026-10-03. Each belongs to the plan named.
@@ -3568,7 +4216,7 @@ Apply this change to `AGENTS.md`:
 - [ ] **Step 5: Check and commit**
 
 Run: `pnpm check`
-Expected: format, lint, typecheck, `✔ no dependency violations found`, knip clean, and `Tests  104 passed (104)`.
+Expected: format, lint, typecheck, `✔ no dependency violations found`, knip clean, and every test passes.
 
 ```bash
 git add AGENTS.md docs
