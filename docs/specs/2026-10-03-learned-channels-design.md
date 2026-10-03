@@ -30,12 +30,11 @@ Run by hand on 2026-10-03 during live college games, in YouTube TV's live guide:
   protobuf varint holding the Unix time `1791043200` (2026-10-03 16:00 UTC, the noon kickoff slot), in
   both `vpp` and inside `vp`.
 - Because "from the beginning" names an absolute start time, the id most likely identifies the channel's
-  continuous stream rather than one programme. This is not yet confirmed: it is confirmed when the same
-  address, opened after the programme on that channel changes, plays the new programme live.
+  continuous stream rather than one programme. Confirmed 2026-10-03: an address learned earlier,
+  opened after the programme on that channel changed, played the channel (CBS) live.
 
 **Decided (2026-10-03): build per network.** A Channel is remembered per network and source. The check
-above has not been run yet; if it shows the address names a programme, the key changes to game,
-network, and source.
+above confirmed this key.
 
 Only one thing changes between the two outcomes: the key of a remembered Channel (network and source,
 or game, network, and source) and the lookup in `ChannelLineup.availabilityOf`. Everything else in this design is the
