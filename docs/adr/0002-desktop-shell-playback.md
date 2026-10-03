@@ -56,6 +56,8 @@ per network or per game depends on the address-stability observation above.
 
 ## Follow-up: learned channels (2026-10-03)
 
+See "Amendment: the guide reader" below: picking a channel is now the fallback.
+
 Built as designed in `docs/specs/2026-10-03-learned-channels-design.md`. What changed in the shell:
 
 - A guide view reads only the address its page lands on (`did-navigate`, `did-navigate-in-page`);
@@ -76,5 +78,5 @@ Channels are found in YouTube TV's own guide instead of being picked per network
 Added: the shell may open a hidden, muted guide view on the provider session and attach the debugger to that
 view alone, to read the body of the guide page's own `browse` response for `FEunplugged_epg`. It injects
 nothing, changes and makes no requests, never reads another view, and closes the guide view after each read
-because the guide plays a preview while open. Reads happen when the web UI asks, then every 15 minutes,
-at least two minutes apart.
+because the guide plays a preview while open. Reads begin after the web UI first asks, then happen every 15 minutes,
+at least two minutes apart; a read gives up after 30 seconds.

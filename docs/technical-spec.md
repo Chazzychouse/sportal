@@ -202,9 +202,9 @@ sportal/
     │       ├── source/
     │       │   ├── Source.ts       The port
     │       │   ├── youtube-tv/
-│       │   │   ├── YouTubeTv.ts         Guide reading, availability, learned channels
-│       │   │   ├── YouTubeTvPayload.ts  The guide response's wire shape
-│       │   │   └── fixtures/            Recorded real payloads
+    │       │   │   ├── YouTubeTv.ts         Guide reading, availability, learned channels
+    │       │   │   ├── YouTubeTvPayload.ts  The guide response's wire shape
+    │       │   │   └── fixtures/            Recorded real payloads
     │       │   ├── ChannelStore.ts The port for learned channel carriages
     │       │   └── SqlChannelStore.ts  Over the Database; owns its migrations
     │       ├── ingest/
@@ -388,7 +388,7 @@ One word per concept, used identically in code, UI, documents, and conversation.
 | **Source** | A way you obtain **video** (YouTube TV). | provider, service |
 | **Broadcast** | The fact that a network is airing a game. | channel, stream |
 | **Channel** | A network as carried by a specific source. | |
-| **Channel availability** | Whether and where a source can show a game: carried, unlearned, or not carried. | availability |
+| **Channel availability** | Whether and where a source can show a game: carried, upcoming, unlearned, or not carried, with why. | availability |
 | **Guide** | One reading of a source's listing of the channels this account gets, with their live addresses, and what each airs. | schedule, EPG |
 | **Airing** | One programme on a channel, with its begin and end. | listing, show |
 | **Guide reader** | The shell component that opens a source's guide in a hidden view, reads the guide page's own response, and closes the view. | scraper, EPG fetcher |
