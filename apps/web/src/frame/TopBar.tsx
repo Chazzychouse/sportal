@@ -1,17 +1,18 @@
 import { Layout, LayoutName } from "@sportal/domain/Layout"
 import type { Stage } from "@sportal/domain/Stage"
-import { Expand, LogIn, Minimize2, Shrink, SquareDashed } from "lucide-react"
+import { Expand, List, LogIn, Minimize2, Shrink, SquareDashed } from "lucide-react"
 import { Button } from "@/design/button"
 import { ToggleGroup, ToggleGroupItem } from "@/design/toggle-group"
 import { dispatch } from "../hub/HubClient.ts"
 import { LayoutGlyph, layoutLabel } from "./LayoutGlyph.tsx"
 
-/** The strip across the top of a Display: layout, solo, full screen, and whether the Hub is live. */
+/** The strip across the top of a Display: the slate, layout, solo, full screen, and whether the Hub is live. */
 export function TopBar(props: {
   stage: Stage
   connected: boolean
   selected: number
   fullScreen: { on: boolean; toggle: () => void }
+  slate: { open: boolean; live: number; toggle: () => void }
 }) {
   const selectedTile = props.stage.onStage()[props.selected]
   const canSolo = selectedTile !== undefined && selectedTile._tag !== "Empty"
@@ -21,6 +22,25 @@ export function TopBar(props: {
         <span className="size-2 rounded-full bg-on-air shadow-[0_0_8px_var(--on-air)]" />
         Sportal
       </span>
+      <span className="h-5 w-px bg-border" />
+      <Button
+        variant="ghost"
+        size="sm"
+        data-slate-toggle
+        aria-pressed={props.slate.open}
+        className={`label-caps text-xs ${props.slate.open ? "bg-accent" : ""}`}
+        onClick={props.slate.toggle}
+      >
+        <List />
+        Slate
+        {props.slate.live > 0 && (
+          <span className="flex items-center gap-1 font-mono text-live">
+            <span className="size-1.5 rounded-full bg-live" />
+            {props.slate.live}
+          </span>
+        )}
+        <kbd className="ml-1 font-mono text-[10px] text-muted-foreground">S</kbd>
+      </Button>
       <span className="h-5 w-px bg-border" />
 
       <ToggleGroup

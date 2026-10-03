@@ -10,7 +10,6 @@ import { dispatch, onStageRejected } from "./hub/HubClient.ts"
 import { useLive } from "./hub/Live.ts"
 import { OverlayHost } from "./OverlayHost.tsx"
 import { SlateView } from "./slate/SlateView.tsx"
-import { Bench } from "./stage/Bench.tsx"
 import { CommandPalette } from "./stage/CommandPalette.tsx"
 import { useHotkeys } from "./stage/Hotkeys.ts"
 import { StageView } from "./stage/StageView.tsx"
@@ -20,6 +19,7 @@ export function App() {
   // The tile the next picked game goes to. Local to this client: it is a cursor, not shared state.
   const [selected, setSelected] = useState(0)
   const [palette, setPalette] = useState(false)
+  const [slateOpen, setSlateOpen] = useState(false)
   const fullScreen = useFullScreen()
 
   useEffect(() => onStageRejected((reason) => toast.warning(rejectionText(reason))), [])
@@ -33,7 +33,11 @@ export function App() {
       case "ToggleSolo":
         return dispatch(live.stage.solo === undefined ? { _tag: "Solo", tile: selected } : { _tag: "Unsolo" })
       case "Unsolo":
+        // Esc closes the open slate first, whether pressed here or in a stream view.
+        if (slateOpen) return setSlateOpen(false)
         return live.stage.solo === undefined ? undefined : dispatch({ _tag: "Unsolo" })
+      case "ToggleSlate":
+        return setSlateOpen((open) => !open)
       case "FullScreen":
         return fullScreen.toggle()
       case "NextLayout":
@@ -47,28 +51,34 @@ export function App() {
     <OverlayHost>
       <div className={`grid h-screen ${fullScreen.on ? "grid-rows-[1fr]" : "grid-rows-[auto_1fr]"}`}>
         {fullScreen.on ? null : (
-          <TopBar stage={live.stage} connected={live.connected} selected={selected} fullScreen={fullScreen} />
-        )}
-        <div className={`grid min-h-0 ${fullScreen.on ? "grid-cols-[1fr]" : "grid-cols-[20rem_1fr]"}`}>
-          {fullScreen.on ? null : (
-            <aside className="flex min-h-0 flex-col border-r bg-card/40">
-              <SlateView
-                slate={live.slate}
-                selected={selected}
-                onPick={(game) => dispatch({ _tag: "Assign", tile: selected, game: game.id })}
-              />
-              <Bench stage={live.stage} slate={live.slate} selected={selected} />
-            </aside>
-          )}
-          <StageView
+          <TopBar
             stage={live.stage}
-            slate={live.slate}
             connected={live.connected}
             selected={selected}
-            onSelect={setSelected}
+            fullScreen={fullScreen}
+            slate={{
+              open: slateOpen,
+              live: live.slate.filter((game) => game.isLive()).length,
+              toggle: () => setSlateOpen((open) => !open)
+            }}
           />
-        </div>
+        )}
+        <StageView
+          stage={live.stage}
+          slate={live.slate}
+          connected={live.connected}
+          selected={selected}
+          onSelect={setSelected}
+        />
       </div>
+      <SlateView
+        open={slateOpen}
+        onOpenChange={setSlateOpen}
+        stage={live.stage}
+        slate={live.slate}
+        selected={selected}
+        fullScreen={fullScreen.on}
+      />
       <CommandPalette
         open={palette}
         onOpenChange={setPalette}
@@ -77,8 +87,8 @@ export function App() {
         selected={selected}
         onFullScreen={fullScreen.toggle}
       />
-      {/* Bottom left, over the sidebar: a toast never covers a video. */}
-      <Toaster position="bottom-left" />
+      {/* Top center, over the top bar: a toast never covers a video. */}
+      <Toaster position="top-center" />
     </OverlayHost>
   )
 }
