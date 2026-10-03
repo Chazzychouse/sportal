@@ -140,6 +140,19 @@ describe("TileViews.channelPicks", () => {
     }).pipe(Effect.scoped)
   )
 
+  it.effect("does not report for a view removed in a sync", () =>
+    Effect.gen(function* () {
+      const { tiles } = yield* attached()
+      yield* tiles.sync([guide])
+      yield* tiles.sync([])
+      const picks = yield* collect(tiles.channelPicks, 1)
+      created[0]?.webContents.emit("did-navigate-in-page", {}, espn, true)
+      yield* tiles.sync([{ ...guide, tile: 1 }])
+      created[1]?.webContents.emit("did-navigate-in-page", {}, fox, true)
+      expect(yield* Fiber.join(picks)).toEqual([{ tile: 1, url: fox }])
+    }).pipe(Effect.scoped)
+  )
+
   it.effect("never reports for a stream view", () =>
     Effect.gen(function* () {
       const { tiles } = yield* attached()

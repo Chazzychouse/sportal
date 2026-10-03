@@ -45,6 +45,8 @@ export class TileViews extends Context.Service<
           const entry: Entry = { view: yield* providers.createView, url: "", role: "stream", reported: "" }
           // YouTube TV moves between pages with pushState, which fires did-navigate-in-page, not will-navigate.
           const landed = (url: string) => {
+            // A view removed in a sync stays silent, even if its page navigates before it closes.
+            if (views.get(tile) !== entry) return
             if (entry.role !== "guide" || url === entry.reported || !isChannelAddress(url)) return
             entry.reported = url
             PubSub.publishUnsafe(picks, { tile, url })
@@ -108,8 +110,8 @@ function isChannelAddress(url: string) {
 function loadTile(view: WebContentsView, url: string) {
   return load(view.webContents, url).pipe(
     Effect.catchTag("LoadFailed", (failure) =>
-      // A newer placement superseding this load aborts it; that is routine.
-      failure.code === "ERR_ABORTED"
+      // A newer placement superseding this load aborts it, and a removed view's load fails; both are routine.
+      failure.code === "ERR_ABORTED" || view.webContents.isDestroyed()
         ? Effect.void
         : Effect.logError(`TileViews: could not load a tile from ${hostOf(url)}: ${failure.code}`)
     )

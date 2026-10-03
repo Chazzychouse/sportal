@@ -25,11 +25,7 @@ export class ProviderSession extends Context.Service<
         callback(granted)
       })
 
-      const refuseUnlessAllowed = (event: { preventDefault(): void }, url: string) => {
-        if (allows(url)) return
-        event.preventDefault()
-        log(Effect.logWarning(`ProviderSession: blocked navigation to ${hostOf(url)}`))
-      }
+      const warn = (message: string) => log(Effect.logWarning(`ProviderSession: ${message}`))
 
       return ProviderSession.of({
         createView: Effect.sync(() => {
@@ -41,10 +37,8 @@ export class ProviderSession extends Context.Service<
               sandbox: true
             }
           })
-          // will-navigate does not fire for server redirects, so guard both.
-          view.webContents.on("will-navigate", (event) => refuseUnlessAllowed(event, event.url))
-          view.webContents.on("will-redirect", (event) => refuseUnlessAllowed(event, event.url))
-          view.webContents.setWindowOpenHandler(() => ({ action: "deny" }))
+          // Subframes are left alone: provider pages embed frames from hosts the allowlist does not name.
+          confine(view.webContents, allows, warn, { subframes: false })
           return view
         })
       })
@@ -60,6 +54,38 @@ export function allows(url: string): boolean {
 }
 
 const allowedHosts = ["tv.youtube.com", "www.youtube.com", "accounts.youtube.com", "accounts.google.com"]
+
+/**
+ * Keeps a page on the addresses `permits` allows: a navigation or server redirect elsewhere is refused and
+ * reported to `warn` by hostname only, and the page never opens a window. With `subframes`, navigations
+ * inside the page's frames are held to the same addresses.
+ */
+export function confine(
+  contents: {
+    on(
+      event: "will-navigate" | "will-redirect" | "will-frame-navigate",
+      listener: (details: { url: string; isMainFrame: boolean; preventDefault(): void }) => void
+    ): unknown
+    setWindowOpenHandler(handler: () => { action: "deny" }): void
+  },
+  permits: (url: string) => boolean,
+  warn: (message: string) => void,
+  options: { subframes: boolean }
+) {
+  const refuseUnlessPermitted = (details: { url: string; preventDefault(): void }) => {
+    if (permits(details.url)) return
+    details.preventDefault()
+    warn(`refused navigation to ${hostOf(details.url)}`)
+  }
+  // will-navigate does not fire for server redirects, so both are guarded.
+  contents.on("will-navigate", refuseUnlessPermitted)
+  contents.on("will-redirect", refuseUnlessPermitted)
+  if (options.subframes)
+    contents.on("will-frame-navigate", (details) => {
+      if (!details.isMainFrame) refuseUnlessPermitted(details)
+    })
+  contents.setWindowOpenHandler(() => ({ action: "deny" }))
+}
 
 /** Playback needs DRM key systems, fullscreen, and a screen that stays awake; nothing else is granted. */
 export function grantsPermission(permission: string): boolean {

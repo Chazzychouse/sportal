@@ -1,8 +1,8 @@
 import { join } from "node:path"
 import { TilePlacement } from "@sportal/api/ShellBridge"
-import { Config, Effect, FiberSet, Layer, Option, Schema, Stream } from "effect"
+import { Config, Effect, FiberSet, Layer, Option, Queue, Schema, Stream } from "effect"
 import { app, BrowserWindow, components, type IpcMainEvent, ipcMain } from "electron"
-import { hostOf, load, ProviderSession } from "./ProviderSession.ts"
+import { confine, hostOf, load, ProviderSession } from "./ProviderSession.ts"
 import { TileViews } from "./TileViews.ts"
 
 const Shell = Layer.unwrap(
@@ -10,7 +10,10 @@ const Shell = Layer.unwrap(
     const hubUrl = yield* Config.String("SPORTAL_HUB_URL").pipe(Config.withDefault("http://127.0.0.1:4400"))
     yield* Effect.promise(() => app.whenReady())
     // Widevine is delivered as a component of the castlabs Electron build; wait for it before any playback.
-    yield* Effect.tryPromise({ try: () => components.whenReady(), catch: () => new WidevineUnavailable() })
+    yield* Effect.tryPromise({
+      try: () => components.whenReady(),
+      catch: (cause) => new WidevineUnavailable({ cause })
+    })
     const window = yield* openWindow(hubUrl)
 
     return Layer.effectDiscard(serveHub(window, hubUrl)).pipe(
@@ -20,16 +23,9 @@ const Shell = Layer.unwrap(
   })
 )
 
-// Electron owns the process, so the shell is not run with NodeRuntime.runMain: it runs until its last window
-// closes, releases what it holds, and then asks Electron to quit.
-Layer.launch(Shell).pipe(
-  Effect.raceFirst(allWindowsClosed()),
-  Effect.tapCause((cause) => Effect.logError("Sportal: the shell stopped", cause)),
-  Effect.ensuring(Effect.sync(() => app.quit())),
-  Effect.runFork
-)
-
-class WidevineUnavailable extends Schema.TaggedError<WidevineUnavailable>()("WidevineUnavailable", {}) {}
+class WidevineUnavailable extends Schema.TaggedError<WidevineUnavailable>()("WidevineUnavailable", {
+  cause: Schema.Defect()
+}) {}
 
 function openWindow(hubUrl: string) {
   return Effect.gen(function* () {
@@ -55,16 +51,14 @@ function openWindow(hubUrl: string) {
         })
     )
 
-    // The shell window holds the privileged preload, so it never leaves the Hub.
+    // The shell window holds the privileged preload, so neither it nor any frame in it leaves the Hub.
     const hubOrigin = new URL(hubUrl).origin
-    const refuseOffHub = (event: { preventDefault(): void }, url: string) => {
-      if (URL.canParse(url) && new URL(url).origin === hubOrigin) return
-      event.preventDefault()
-      log(Effect.logWarning(`Sportal: refused shell navigation to ${hostOf(url)}`))
-    }
-    window.webContents.on("will-navigate", (event) => refuseOffHub(event, event.url))
-    window.webContents.on("will-redirect", (event) => refuseOffHub(event, event.url))
-    window.webContents.setWindowOpenHandler(() => ({ action: "deny" }))
+    confine(
+      window.webContents,
+      (url) => URL.canParse(url) && new URL(url).origin === hubOrigin,
+      (message) => log(Effect.logWarning(`Sportal: ${message}`)),
+      { subframes: true }
+    )
     return window
   })
 }
@@ -72,11 +66,14 @@ function openWindow(hubUrl: string) {
 function serveHub(window: BrowserWindow, hubUrl: string) {
   return Effect.gen(function* () {
     const tiles = yield* TileViews
-    const run = yield* FiberSet.makeRuntime()
+
+    // Placements are applied one at a time, and only the newest waiting set matters: each replaces all before it.
+    const pending = yield* Queue.sliding<ReadonlyArray<TilePlacement>>(1)
+    yield* Effect.forkScoped(Effect.forever(Queue.take(pending).pipe(Effect.flatMap(tiles.sync))))
     const syncTiles = (event: IpcMainEvent, placements: unknown) => {
       if (event.sender !== window.webContents) return
       const decoded = decodePlacements(placements)
-      if (Option.isSome(decoded)) run(tiles.sync(decoded.value))
+      if (Option.isSome(decoded)) Queue.offerUnsafe(pending, decoded.value)
     }
     yield* Effect.acquireRelease(
       Effect.sync(() => ipcMain.on("sportal:sync-tiles", syncTiles)),
@@ -96,7 +93,10 @@ function serveHub(window: BrowserWindow, hubUrl: string) {
 
     yield* load(window.webContents, hubUrl).pipe(
       Effect.catchTag("LoadFailed", (failure) =>
-        Effect.logError(`Sportal: the Hub could not be reached at ${hostOf(hubUrl)}: ${failure.code}`)
+        // Closing the window while the Hub page loads fails the load; that is the user leaving, not an outage.
+        window.isDestroyed()
+          ? Effect.void
+          : Effect.logError(`Sportal: the Hub could not be reached at ${hostOf(hubUrl)}: ${failure.code}`)
       )
     )
   })
@@ -111,3 +111,12 @@ function allWindowsClosed() {
     return Effect.sync(() => app.removeListener("window-all-closed", closed))
   })
 }
+
+// Launched last, once everything above is defined. Electron owns the process, so the shell is not run with NodeRuntime.runMain: it runs until its last window
+// closes, releases what it holds, and then asks Electron to quit.
+Layer.launch(Shell).pipe(
+  Effect.raceFirst(allWindowsClosed()),
+  Effect.tapCause((cause) => Effect.logError("Sportal: the shell stopped", cause)),
+  Effect.ensuring(Effect.sync(() => app.quit())),
+  Effect.runFork
+)
