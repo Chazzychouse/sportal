@@ -1,8 +1,9 @@
-import type { TilePlacement } from "@sportal/api/ShellBridge"
+import { ChannelPick, type TilePlacement } from "@sportal/api/ShellBridge"
 import type { GameSnapshot } from "@sportal/domain/Game"
 import type { Stage, Tile } from "@sportal/domain/Stage"
-import { useLayoutEffect, useRef } from "react"
-import { dispatch } from "../hub/HubClient.ts"
+import { Option, Schema } from "effect"
+import { useEffect, useLayoutEffect, useRef, useState } from "react"
+import { dispatch, forgetChannel, learnChannel, markNotCarried } from "../hub/HubClient.ts"
 
 export function StageView(props: {
   stage: Stage
@@ -12,6 +13,8 @@ export function StageView(props: {
 }) {
   // One element per tile marking where its video goes; the shell lays a provider view over each.
   const videoAreas = useRef<Array<HTMLDivElement | null>>([])
+  // What went wrong with the last channel command on a tile, until the Stage next changes.
+  const [notices, setNotices] = useState<ReadonlyMap<number, string>>(new Map())
 
   useLayoutEffect(() => {
     const sync = () => window.sportalShell?.syncTiles(placements(props.stage, videoAreas.current))
@@ -20,11 +23,27 @@ export function StageView(props: {
     return () => window.removeEventListener("resize", sync)
   }, [props.stage])
 
+  useEffect(() => {
+    setNotices(new Map())
+    // A channel picked in a picking tile's guide teaches the Hub that network's channel.
+    return window.sportalShell?.onChannelPicked((message) => {
+      // The preload passes picks through undecoded, so check the shape before using it.
+      const pick = Schema.decodeUnknownOption(ChannelPick)(message)
+      if (Option.isNone(pick)) return
+      const tile = props.stage.tiles[pick.value.tile]
+      if (tile?._tag === "PickingChannel")
+        void learnChannel(tile.network, pick.value.url).then((failure) =>
+          setNotices(noticed(pick.value.tile, failure))
+        )
+    })
+  }, [props.stage])
+
   return (
     <main className="grid min-h-0 grid-cols-2 grid-rows-2 gap-1 p-1">
       {props.stage.tiles.map((tile, index) => {
         const game = tile._tag === "Empty" ? undefined : props.slate.find((g) => g.id === tile.game)
         const hasAudio = props.stage.audioFocus === index
+        const notice = notices.get(index)
         return (
           <section
             // biome-ignore lint/suspicious/noArrayIndexKey: a tile is identified by its slot.
@@ -41,12 +60,39 @@ export function StageView(props: {
             >
               <TileBody tile={tile} />
             </div>
+            {notice === undefined ? null : <p className="px-2 pt-1 text-sm text-amber-400">{notice}</p>}
             <footer className="flex items-center gap-2 px-2 py-1 text-sm tabular-nums">
               <button type="button" className="flex-1 text-left" onClick={() => props.onSelect(index)}>
-                {game === undefined
-                  ? `Tile ${index + 1}`
-                  : `${game.away.team.abbreviation} ${game.away.score} – ${game.home.score} ${game.home.team.abbreviation}`}
+                {tile._tag === "PickingChannel"
+                  ? `Pick the ${tile.network} channel`
+                  : game === undefined
+                    ? `Tile ${index + 1}`
+                    : `${game.away.team.abbreviation} ${game.away.score} – ${game.home.score} ${game.home.team.abbreviation}`}
               </button>
+              {tile._tag === "PickingChannel" ? (
+                <button
+                  type="button"
+                  className="text-neutral-500"
+                  onClick={() =>
+                    void markNotCarried(tile.network).then((failure) => setNotices(noticed(index, failure)))
+                  }
+                >
+                  Not on {tile.source}
+                </button>
+              ) : null}
+              {tile._tag === "StreamTile" ? (
+                <button
+                  type="button"
+                  className="text-neutral-500"
+                  onClick={() =>
+                    void forgetChannel(tile.channel.network).then((failure) =>
+                      setNotices(noticed(index, failure))
+                    )
+                  }
+                >
+                  wrong channel
+                </button>
+              ) : null}
               <button
                 type="button"
                 className={hasAudio ? "text-emerald-400" : "text-neutral-500"}
@@ -73,15 +119,23 @@ function TileBody(props: { tile: Tile }) {
   switch (props.tile._tag) {
     case "Empty":
       return <span>Pick a game from the slate</span>
-    case "PickingChannel":
-      return <span>No {props.tile.network} channel known yet</span>
     case "DataTile":
       return <span>No stream for this game on your sources</span>
+    case "PickingChannel":
+      // Inside the shell the guide covers this. In a plain browser there is no view to watch for the pick.
+      return (
+        <span className="flex flex-col items-center gap-1">
+          <a className="underline" href={props.tile.guide.url} target="_blank" rel="noreferrer">
+            Open the guide
+          </a>
+          <span>Picking a channel works in the desktop app</span>
+        </span>
+      )
     case "StreamTile":
       // Inside the shell this is covered by the provider view. In a plain browser it is the way to watch.
       return (
         <a className="underline" href={props.tile.channel.locator.url} target="_blank" rel="noreferrer">
-          Open in YouTube TV
+          Open in {props.tile.channel.source}
         </a>
       )
   }
@@ -90,21 +144,33 @@ function TileBody(props: { tile: Tile }) {
 function placements(stage: Stage, videoAreas: ReadonlyArray<HTMLDivElement | null>): Array<TilePlacement> {
   return stage.tiles.flatMap((tile, index) => {
     const area = videoAreas[index]
-    if (tile._tag !== "StreamTile" || area === null || area === undefined) return []
+    if (area === null || area === undefined) return []
+    const view =
+      tile._tag === "StreamTile"
+        ? { url: tile.channel.locator.url, role: "stream" as const, muted: stage.audioFocus !== index }
+        : tile._tag === "PickingChannel"
+          ? // A guide can preview what is on; it never takes the sound.
+            { url: tile.guide.url, role: "guide" as const, muted: true }
+          : undefined
+    if (view === undefined) return []
     const rect = area.getBoundingClientRect()
     return [
       {
         tile: index,
-        url: tile.channel.locator.url,
-        role: "stream",
+        ...view,
         bounds: {
           x: Math.round(rect.x),
           y: Math.round(rect.y),
           width: Math.round(rect.width),
           height: Math.round(rect.height)
-        },
-        muted: stage.audioFocus !== index
+        }
       }
     ]
   })
+}
+
+/** The notices with `failure`, if there was one, shown on `tile`. */
+function noticed(tile: number, failure: Option.Option<string>) {
+  return (notices: ReadonlyMap<number, string>) =>
+    Option.isSome(failure) ? new Map(notices).set(tile, failure.value) : notices
 }
