@@ -2857,6 +2857,7 @@ git commit -m "docs: decision records and game-day checklist"
 In the order the product plan's phases call for them:
 
 0. **Learned channels** (decided 2026-10-03, see `docs/adr/0002-desktop-shell-playback.md`) — an unknown network opens YouTube TV's live guide in the tile; the shell reports the address the view lands on; the Hub remembers it. Replaces the hand-filled channel map. First confirm whether an address identifies a channel or a programme.
+0. **shadcn/ui** (decided 2026-10-03) — adopt it as the web UI's component base as the first UI task: design tokens in `theme.css`, components under `apps/web/src/ui/` with the class-merging helper as its own named file (shadcn's default `lib/utils.ts` and `components/ui/` paths break the layout rules).
 1. **Tracker** — `Store` port with SQL, `GameEvent` and `diff`, game detail, standings, follows, watchability, availability, CollegeFootballData for FBS gaps, the access token and network binding so other devices can connect, couch mode.
 2. **Stage** — layouts beyond 2×2, presets, hotkeys, stream budget enforcement, data tiles with real content, more than one Display.
 3. **Director** — triggers, rules, alerts, auto-promote, auto-fill, tile delay and the spoiler shield.

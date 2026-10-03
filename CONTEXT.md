@@ -59,6 +59,8 @@ Provider and Source are the two words most likely to be swapped. Provider is alw
 | **Remote** | A client controlling a Display's Stage without presenting it. | controller |
 | **Desk mode** / **Couch mode** | The two presentation densities. | desktop/TV layout |
 | **Shell bridge** | The small interface the desktop shell exposes to the web UI. | IPC, native API |
+| **Provider session** | The shell's single persistent browser session shared by every provider view, with its navigation allowlist and permissions. | partition, profile |
+| **Tile views** | The shell component that keeps one provider web view per stream tile, placed where the web UI says. | view manager |
 
 ### Viewing
 
