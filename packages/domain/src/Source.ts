@@ -97,8 +97,8 @@ export class Guide extends Schema.Class<Guide>("sportal/Guide")({
   static readonly reach = Duration.hours(3)
 
   /**
-   * Where this source shows a game, from the airing that names both its teams and begins near kickoff, or is
-   * on now while the game is under way. Of several, the one on a channel named for one of the game's
+   * Where this source shows a game, from the airing that names both its teams, has not ended, and begins near
+   * kickoff or is on now while the game is under way. Of several, the one on a channel named for one of the game's
    * networks wins, then the first in the guide. It is carried once its channel is on the air and the airing
    * is at most half an hour off; until then it is upcoming. With no match, a kickoff past the guide's reach
    * is upcoming, and any other game is not carried.
@@ -136,6 +136,7 @@ export class Guide extends Schema.Class<Guide>("sportal/Guide")({
       game.isLive() && DateTime.between(this.readAt, { minimum: airing.begin, maximum: airing.end })
     return (
       (nearKickoff || onNow) &&
+      DateTime.isGreaterThan(airing.end, this.readAt) &&
       namesTeam(airing.title, game.home.team) &&
       namesTeam(airing.title, game.away.team)
     )

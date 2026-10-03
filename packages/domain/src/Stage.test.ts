@@ -177,6 +177,43 @@ describe("Stage#refresh", () => {
     )
     assert.strictEqual(refreshed.audioFocus, 3)
   })
+
+  it("keeps a stream tile playing when its game has left the guide or is listed as still to come", () => {
+    const streaming = assign(Stage.initial, 0, bama, onFox)
+    const begin = DateTime.makeUnsafe("2026-10-04T17:00:00Z")
+    const notInGuide = streaming.refresh(some(() => ChannelAvailability.NotCarried({ why: "NotInGuide" })))
+    const upcoming = streaming.refresh(
+      some(() => ChannelAvailability.Upcoming({ channel: Option.some("FOX 43"), begin: Option.some(begin) }))
+    )
+    assert.deepStrictEqual(notInGuide.tiles[0], streaming.tiles[0])
+    assert.deepStrictEqual(upcoming.tiles[0], streaming.tiles[0])
+  })
+
+  it("replaces a stream tile when its game is carried elsewhere or has no stream", () => {
+    const streaming = assign(Stage.initial, 0, bama, onFox)
+    const elsewhere = { ...foxChannel, name: "FOX 43" }
+    const moved = streaming.refresh(
+      some(() => ChannelAvailability.Carried({ channel: elsewhere, learnedFor: Option.none() }))
+    )
+    assert.deepStrictEqual(moved.tiles[0], { _tag: "StreamTile", game: bama, channel: elsewhere })
+    assert.deepStrictEqual(streaming.refresh(some(nowhere)).tiles[0], {
+      _tag: "DataTile",
+      game: bama,
+      why: { _tag: "NoStream" }
+    })
+    assert.deepStrictEqual(
+      streaming.refresh(some(() => ChannelAvailability.NotCarried({ why: "StreamingOnly" }))).tiles[0],
+      { _tag: "DataTile", game: bama, why: { _tag: "StreamingOnly" } }
+    )
+  })
+
+  it("re-resolves a data tile whose game has left the guide", () => {
+    const waiting = assign(Stage.initial, 0, bama, () =>
+      ChannelAvailability.Upcoming({ channel: Option.none(), begin: Option.none() })
+    )
+    const refreshed = waiting.refresh(some(() => ChannelAvailability.NotCarried({ why: "NotInGuide" })))
+    assert.deepStrictEqual(refreshed.tiles[0], { _tag: "DataTile", game: bama, why: { _tag: "NotInGuide" } })
+  })
 })
 
 function some(availability: () => ChannelAvailability) {

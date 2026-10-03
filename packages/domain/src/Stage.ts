@@ -79,6 +79,10 @@ export class Stage extends Schema.Class<Stage>("sportal/Stage")({
   /**
    * Re-resolves every occupied tile after what a source knows has changed. A game `availabilityOf` knows
    * nothing about keeps its tile as it was: the change did not concern it.
+   *
+   * A guide read never stops a game being watched: a stream tile keeps playing when its game is now not in
+   * the guide (its airing ended while the game runs long) or listed as still to come. Any other answer —
+   * carried on another channel, unlearned, no stream, streaming only — replaces it.
    */
   refresh(availabilityOf: (game: GameId) => Option.Option<ChannelAvailability>): Stage {
     return new Stage({
@@ -87,7 +91,10 @@ export class Stage extends Schema.Class<Stage>("sportal/Stage")({
           ? tile
           : Option.match(availabilityOf(tile.game), {
               onNone: () => tile,
-              onSome: (availability) => tileFor(tile.game, availability)
+              onSome: (availability) =>
+                tile._tag === "StreamTile" && keepsPlaying(availability)
+                  ? tile
+                  : tileFor(tile.game, availability)
             })
       ),
       audioFocus: this.audioFocus
@@ -140,4 +147,11 @@ function tileFor(game: GameId, availability: ChannelAvailability): Tile {
     case "NotCarried":
       return { _tag: "DataTile", game, why: { _tag: availability.why } }
   }
+}
+
+function keepsPlaying(availability: ChannelAvailability): boolean {
+  return (
+    availability._tag === "Upcoming" ||
+    (availability._tag === "NotCarried" && availability.why === "NotInGuide")
+  )
 }
