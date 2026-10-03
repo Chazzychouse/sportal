@@ -1,5 +1,5 @@
 import { Context, Effect, FiberSet, Layer, Schema } from "effect"
-import { BrowserWindow, session, type WebContents, WebContentsView } from "electron"
+import { BrowserWindow, type Session, session, type WebContents, WebContentsView } from "electron"
 
 /**
  * The one persistent session every provider view shares, so one sign-in covers every tile and survives
@@ -8,6 +8,8 @@ import { BrowserWindow, session, type WebContents, WebContentsView } from "elect
 export class ProviderSession extends Context.Service<
   ProviderSession,
   {
+    /** The provider session itself, for the requests the shell sends as the signed-in account. */
+    readonly session: Session
     /** A new view on the provider session, guarded so it can only visit addresses `allows` permits. */
     readonly createView: Effect.Effect<WebContentsView>
     /**
@@ -41,6 +43,7 @@ export class ProviderSession extends Context.Service<
       )
 
       return ProviderSession.of({
+        session: providers,
         createView: Effect.sync(() => {
           const view = new WebContentsView({
             webPreferences: {

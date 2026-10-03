@@ -1,154 +1,131 @@
+import { createHash } from "node:crypto"
 import { describe, expect, it } from "@effect/vitest"
-import { Context, Effect, Fiber, Layer, Stream } from "effect"
+import { Context, Effect, Fiber, Layer, Logger, Stream } from "effect"
 import { TestClock } from "effect/testing"
 import { vi } from "vitest"
 
-const created: Array<{ webContents: ReturnType<typeof fakeContents> }> = []
-/** What the next views' fakes do wrong, set by a test before it asks for a read. */
-const faults: { attachThrowsOnce: boolean; loadError: Error | undefined } = {
-  attachThrowsOnce: false,
-  loadError: undefined
+/** What the provider session answers; each test sets what it needs before it asks for a read. */
+const answers = {
+  page: "",
+  guide: { status: 200, body: "" },
+  cookies: [] as Array<{ name: string; value: string }>
 }
+const sent = vi.fn((url: string, _init?: RequestInit) =>
+  Promise.resolve(
+    url === "https://tv.youtube.com/live"
+      ? new Response(answers.page)
+      : new Response(answers.guide.body, { status: answers.guide.status })
+  )
+)
 
 vi.mock("electron", () => ({
-  session: { fromPartition: () => ({ setPermissionRequestHandler: vi.fn() }) },
-  WebContentsView: class {
-    readonly setBounds = vi.fn()
-    readonly webContents = fakeContents()
-    constructor() {
-      created.push(this)
-    }
-  }
+  session: {
+    fromPartition: () => ({
+      setPermissionRequestHandler: vi.fn(),
+      fetch: sent,
+      cookies: { get: () => Promise.resolve(answers.cookies) }
+    })
+  },
+  WebContentsView: vi.fn()
 }))
 
 const { ProviderSession } = await import("./ProviderSession.ts")
 const { GuideReader } = await import("./GuideReader.ts")
 
-const guideRequest = {
-  url: "https://tv.youtube.com/youtubei/v1/browse?prettyPrint=false",
-  postData: JSON.stringify({ browseId: "FEunplugged_epg" })
-}
-const overlaysRequest = {
-  url: "https://tv.youtube.com/youtubei/v1/browse?prettyPrint=false",
-  postData: JSON.stringify({ browseId: "FEunplugged_overlays" })
-}
+// The second config holds the context, and the first has a brace inside a string, as real pages do.
+const guidePage = [
+  '<script>ytcfg.set({"EXPERIMENT_FLAGS":{"note":"a } in a string"}});</script>',
+  '<script>ytcfg.set({"INNERTUBE_CONTEXT":{"client":{"clientName":"WEB_UNPLUGGED","clientVersion":"1.20260930.04.00"}}});</script>'
+].join("")
 
 describe("GuideReader", () => {
-  it.effect("opens the guide when asked, publishes the guide response, and closes the view", () =>
+  it.effect("reads when asked: the guide request the page would send, signed as the account", () =>
     Effect.gen(function* () {
       const reader = yield* attached()
       const guides = yield* collect(reader.guides, 1)
       yield* reader.readSoon
       yield* settle
-      const contents = created[0]?.webContents
-      expect(contents?.loadURL).toHaveBeenCalledWith("https://tv.youtube.com/live")
-      expect(contents?.setAudioMuted).toHaveBeenCalledWith(true)
-
-      contents?.inspector.respond("1", "the guide")
-      contents?.inspector.respond("2", "the overlays")
-      contents?.inspector.emit("Network.requestWillBeSent", { requestId: "2", request: overlaysRequest })
-      contents?.inspector.emit("Network.requestWillBeSent", { requestId: "1", request: guideRequest })
-      contents?.inspector.emit("Network.loadingFinished", { requestId: "2" })
-      contents?.inspector.emit("Network.loadingFinished", { requestId: "1" })
 
       expect(yield* Fiber.join(guides)).toEqual(["the guide"])
-      yield* settle
-      expect(contents?.close).toHaveBeenCalled()
-      expect(contents?.inspector.detach).toHaveBeenCalled()
-      expect(contents?.inspector.removeListener).toHaveBeenCalled()
+      expect(sent.mock.calls.map(([url]) => url)).toEqual([
+        "https://tv.youtube.com/live",
+        "https://tv.youtube.com/youtubei/v1/browse?prettyPrint=false"
+      ])
+      const init = sent.mock.calls[1]?.[1]
+      const hash = createHash("sha1").update("0 the-sapisid https://tv.youtube.com").digest("hex")
+      expect(init).toMatchObject({
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          origin: "https://tv.youtube.com",
+          "x-origin": "https://tv.youtube.com",
+          authorization: `SAPISIDHASH 0_${hash}`
+        }
+      })
+      expect(JSON.parse(String(init?.body))).toEqual({
+        context: { client: { clientName: "WEB_UNPLUGGED", clientVersion: "1.20260930.04.00" } },
+        browseId: "FEunplugged_epg"
+      })
     }).pipe(Effect.scoped)
   )
 
-  it.effect("does not open the guide until asked, then reads it every 15 minutes", () =>
+  it.effect("does not read until asked, then reads every 5 minutes", () =>
     Effect.gen(function* () {
       const reader = yield* attached()
       yield* settle
       yield* TestClock.adjust("20 minutes") // the web UI has not asked, so nothing is read
       yield* settle
-      expect(created).toHaveLength(0)
+      expect(sent).not.toHaveBeenCalled()
       yield* reader.readSoon
       yield* settle
-      expect(created).toHaveLength(1)
-      yield* TestClock.adjust("31 seconds") // the first read gives up
-      yield* TestClock.adjust("15 minutes")
+      expect(sent).toHaveBeenCalledTimes(2)
+      yield* TestClock.adjust("5 minutes")
       yield* settle
-      expect(created).toHaveLength(2)
+      expect(sent).toHaveBeenCalledTimes(4)
     }).pipe(Effect.scoped)
   )
 
-  it.effect("gives up after 30 seconds without a guide response, closing the view", () =>
+  it.effect("logs a refused guide request as a likely sign-out, and reads again later", () =>
     Effect.gen(function* () {
-      const reader = yield* attached()
+      const logs: Array<string> = []
+      const reader = yield* attached(logs)
       const guides = yield* collect(reader.guides, 1)
+      answers.guide = { status: 401, body: "" }
       yield* reader.readSoon
       yield* settle
-      yield* TestClock.adjust("30 seconds")
+      expect(logs).toEqual([
+        "GuideReader: the guide could not be read: /youtubei/v1/browse answered 401 (signed out of YouTube TV?)"
+      ])
+      answers.guide = { status: 200, body: "the guide" }
+      yield* TestClock.adjust("5 minutes")
       yield* settle
-      expect(created[0]?.webContents.close).toHaveBeenCalled()
-      expect(created[0]?.webContents.inspector.detach).toHaveBeenCalled()
-      expect(created[0]?.webContents.inspector.removeListener).toHaveBeenCalled()
-      expect(guides.pollUnsafe()).toBeUndefined()
-    }).pipe(Effect.scoped)
-  )
-
-  it.effect("ends the read at once when the page fails to load, closing the view", () =>
-    Effect.gen(function* () {
-      const reader = yield* attached()
-      faults.loadError = Object.assign(new Error("net::ERR_NAME_NOT_RESOLVED"), {
-        code: "ERR_NAME_NOT_RESOLVED"
-      })
-      yield* reader.readSoon
-      yield* settle // no clock adjustment: the 30 seconds never pass
-      const contents = created[0]?.webContents
-      expect(contents?.close).toHaveBeenCalled()
-      expect(contents?.inspector.detach).toHaveBeenCalled()
-      expect(contents?.inspector.removeListener).toHaveBeenCalled()
-    }).pipe(Effect.scoped)
-  )
-
-  it.effect("keeps waiting when the page navigates on by itself (ERR_ABORTED)", () =>
-    Effect.gen(function* () {
-      const reader = yield* attached()
-      faults.loadError = Object.assign(new Error("ERR_ABORTED (-3)"), { code: "ERR_ABORTED" })
-      yield* reader.readSoon
-      yield* settle
-      expect(created[0]?.webContents.close).not.toHaveBeenCalled()
-    }).pipe(Effect.scoped)
-  )
-
-  it.effect("keeps reading after a read fails", () =>
-    Effect.gen(function* () {
-      const reader = yield* attached()
-      const guides = yield* collect(reader.guides, 1)
-      faults.attachThrowsOnce = true
-      yield* reader.readSoon
-      yield* settle
-      expect(created[0]?.webContents.close).toHaveBeenCalled()
-      yield* TestClock.adjust("2 minutes")
-      yield* reader.readSoon
-      yield* settle
-      const contents = created[1]?.webContents
-      contents?.inspector.respond("1", "the guide")
-      contents?.inspector.emit("Network.requestWillBeSent", { requestId: "1", request: guideRequest })
-      contents?.inspector.emit("Network.loadingFinished", { requestId: "1" })
       expect(yield* Fiber.join(guides)).toEqual(["the guide"])
     }).pipe(Effect.scoped)
   )
 
-  it.effect("reads at most once in two minutes however often it is asked", () =>
+  it.effect("sends no guide request when the guide page has no client config", () =>
     Effect.gen(function* () {
-      const reader = yield* attached()
+      const logs: Array<string> = []
+      const reader = yield* attached(logs)
+      answers.page = "<html></html>"
       yield* reader.readSoon
       yield* settle
-      yield* TestClock.adjust("30 seconds")
-      yield* reader.readSoon
+      expect(sent).toHaveBeenCalledTimes(1)
+      expect(logs).toEqual(["GuideReader: the guide could not be read: the guide page has no client config"])
+    }).pipe(Effect.scoped)
+  )
+
+  it.effect("sends no guide request when the session is not signed in", () =>
+    Effect.gen(function* () {
+      const logs: Array<string> = []
+      const reader = yield* attached(logs)
+      answers.cookies = []
       yield* reader.readSoon
       yield* settle
-      expect(created).toHaveLength(1)
-      // The first read ended at 30 seconds; the next may start two minutes after that.
-      yield* TestClock.adjust("2 minutes")
-      yield* settle
-      expect(created).toHaveLength(2)
+      expect(sent).toHaveBeenCalledTimes(1)
+      expect(logs).toEqual([
+        "GuideReader: the guide could not be read: the session has no YouTube sign-in (SAPISID)"
+      ])
     }).pipe(Effect.scoped)
   )
 })
@@ -166,58 +143,15 @@ function collect<A>(stream: Stream.Stream<A>, count: number) {
   })
 }
 
-function attached() {
-  created.length = 0
-  faults.attachThrowsOnce = false
-  faults.loadError = undefined
-  return Layer.build(GuideReader.layer.pipe(Layer.provide(ProviderSession.layer))).pipe(
-    Effect.map((context) => Context.get(context, GuideReader))
-  )
-}
-
-/** A debugger that records its listener, so a test can emit protocol events and set response bodies. */
-function fakeInspector() {
-  const bodies = new Map<string, string>()
-  let attached = false
-  let listener: ((event: unknown, method: string, params: unknown) => void) | undefined
-  return {
-    attach: vi.fn(() => {
-      if (faults.attachThrowsOnce) {
-        faults.attachThrowsOnce = false
-        throw new Error("Another debugger is already attached")
-      }
-      attached = true
-    }),
-    detach: vi.fn(() => {
-      attached = false
-    }),
-    isAttached: () => attached,
-    on: vi.fn((_event: "message", next: typeof listener) => {
-      listener = next
-    }),
-    removeListener: vi.fn(),
-    sendCommand: vi.fn((method: string, params?: { requestId?: string }) =>
-      Promise.resolve(
-        method === "Network.getResponseBody"
-          ? { body: bodies.get(params?.requestId ?? "") ?? "", base64Encoded: false }
-          : {}
-      )
-    ),
-    respond: (requestId: string, body: string) => bodies.set(requestId, body),
-    emit: (method: string, params: unknown) => listener?.({}, method, params)
-  }
-}
-
-function fakeContents() {
-  const inspector = fakeInspector()
-  return {
-    loadURL: vi.fn(() => (faults.loadError ? Promise.reject(faults.loadError) : Promise.resolve())),
-    setAudioMuted: vi.fn(),
-    close: vi.fn(),
-    isDestroyed: () => false,
-    on: vi.fn(),
-    setWindowOpenHandler: vi.fn(),
-    debugger: inspector,
-    inspector
-  }
+function attached(logs: Array<string> = []) {
+  sent.mockClear()
+  answers.page = guidePage
+  answers.guide = { status: 200, body: "the guide" }
+  answers.cookies = [{ name: "SAPISID", value: "the-sapisid" }]
+  const capture = Logger.make<unknown, void>(({ message }) => {
+    logs.push(String(Array.isArray(message) ? message[0] : message))
+  })
+  return Layer.build(
+    GuideReader.layer.pipe(Layer.provide(ProviderSession.layer), Layer.provide(Logger.layer([capture])))
+  ).pipe(Effect.map((context) => Context.get(context, GuideReader)))
 }
