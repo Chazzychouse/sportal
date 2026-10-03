@@ -1,5 +1,4 @@
 import { GameSnapshot } from "@sportal/domain/Game"
-import { Layout } from "@sportal/domain/Layout"
 import type { Stage } from "@sportal/domain/Stage"
 import { ChevronRight } from "lucide-react"
 import { type ReactNode, useState } from "react"
@@ -21,14 +20,11 @@ export function SlateView(props: {
   fullScreen: boolean
 }) {
   const [finalsOpen, setFinalsOpen] = useState(false)
-  const first = Layout.slotCount(props.stage.layout)
-  const benched = props.stage.tiles.flatMap((tile, index) =>
-    index < first || tile._tag === "Empty" ? [] : [{ index, id: tile.game }]
-  )
+  const benched = props.stage.benched()
   const placeOf = (game: GameSnapshot) => {
     const slot = props.stage.slotOf(game.id)
     if (slot !== undefined) return `T${slot + 1}`
-    return benched.some(({ id }) => id === game.id) ? "Bench" : undefined
+    return benched.some((bench) => bench.game === game.id) ? "Bench" : undefined
   }
   const ordered = [...props.slate].sort(GameSnapshot.watchOrder)
   const inProgress = (progress: ReturnType<GameSnapshot["progress"]>) =>
@@ -82,27 +78,27 @@ export function SlateView(props: {
         <div className="min-h-0 flex-1 overflow-y-auto">
           {benched.length > 0 && (
             <Section title="Bench" count={benched.length}>
-              {benched.map(({ index, id }) => {
+              {benched.map(({ tile, game: id }) => {
                 const game = props.slate.find((g) => g.id === id)
                 const swap = () => {
-                  dispatch({ _tag: "Swap", a: index, b: props.selected })
+                  dispatch({ _tag: "Swap", a: tile, b: props.selected })
                   close()
                 }
                 return (
-                  <li key={index}>
+                  <li key={tile}>
                     {game === undefined ? (
                       <button
                         type="button"
                         draggable
                         onClick={swap}
-                        onDragStart={(event) => event.dataTransfer.setData(tileDrag, String(index))}
+                        onDragStart={(event) => event.dataTransfer.setData(tileDrag, String(tile))}
                         title={`Swap into tile ${props.selected + 1}`}
                         className="block w-full px-3 py-1.5 text-left font-mono text-xs text-muted-foreground transition-colors hover:bg-accent"
                       >
                         Off the slate
                       </button>
                     ) : (
-                      <Matchup game={game} place="Bench" dragTile={index} onClick={swap} />
+                      <Matchup game={game} place="Bench" dragTile={tile} onClick={swap} />
                     )}
                   </li>
                 )

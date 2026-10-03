@@ -313,6 +313,29 @@ describe("Stage layouts and the bench", () => {
   })
 })
 
+describe("Stage#benched", () => {
+  it("is empty when every game fits the layout", () => {
+    assert.deepStrictEqual(Stage.initial.benched(), [])
+    assert.deepStrictEqual(fill([bama, irish, usc, ohio]).benched(), [])
+  })
+
+  it("lists the games a shrunk layout benched, with their tiles", () => {
+    const pair = run(fill([bama, irish, usc, ohio]), { _tag: "SetLayout", layout: "Pair" })
+    assert.deepStrictEqual(pair.benched(), [
+      { tile: 2, game: usc },
+      { tile: 3, game: ohio }
+    ])
+  })
+
+  it("skips the empty tiles past the slots", () => {
+    const single = run(fill([bama, irish, undefined, ohio]), { _tag: "SetLayout", layout: "Single" })
+    assert.deepStrictEqual(single.benched(), [
+      { tile: 1, game: irish },
+      { tile: 3, game: ohio }
+    ])
+  })
+})
+
 describe("Stage swap and promote", () => {
   it("swaps two tiles, on stage or benched", () => {
     const three = fill([bama, irish, usc])

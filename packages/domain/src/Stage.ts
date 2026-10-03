@@ -66,6 +66,14 @@ export class Stage extends Schema.Class<Stage>("sportal/Stage")({
     return this.tiles.slice(0, Layout.slotCount(this.layout))
   }
 
+  /** The games on the bench, in order, each with its tile. Empty tiles past the slots are skipped. */
+  benched(): ReadonlyArray<{ tile: number; game: GameId }> {
+    const first = Layout.slotCount(this.layout)
+    return this.tiles.flatMap((tile, index) =>
+      index < first || tile._tag === "Empty" ? [] : [{ tile: index, game: tile.game }]
+    )
+  }
+
   /** The slot a game is in, if it is on stage. */
   slotOf(game: GameId): number | undefined {
     const slot = this.onStage().findIndex((tile) => tile._tag !== "Empty" && tile.game === game)
