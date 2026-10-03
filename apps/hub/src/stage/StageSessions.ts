@@ -56,7 +56,7 @@ export class StageSessions extends Context.Service<
   )
 }
 
-/** Where each game on the current slate can be streamed; a game no longer on the slate has no answer. */
+/** Where each game on the current slate can be streamed; a game no longer on the slate has no availability. */
 function availabilityOnSlate(ingest: typeof Ingest.Service, source: typeof Source.Service) {
   return Effect.gen(function* () {
     const slate = yield* ingest.slate
