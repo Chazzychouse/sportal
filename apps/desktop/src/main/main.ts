@@ -66,6 +66,7 @@ function openWindow(hubUrl: string) {
 function serveHub(window: BrowserWindow, hubUrl: string) {
   return Effect.gen(function* () {
     const tiles = yield* TileViews
+    const providers = yield* ProviderSession
 
     // Placements are applied one at a time, and only the newest waiting set matters: each replaces all before it.
     const pending = yield* Queue.sliding<ReadonlyArray<TilePlacement>>(1)
@@ -93,6 +94,15 @@ function serveHub(window: BrowserWindow, hubUrl: string) {
     yield* Effect.acquireRelease(
       Effect.sync(() => ipcMain.on("sportal:sync-tiles", syncTiles)),
       () => Effect.sync(() => ipcMain.removeListener("sportal:sync-tiles", syncTiles))
+    )
+
+    const runtime = yield* FiberSet.makeRuntime()
+    const openSignIn = (event: IpcMainEvent) => {
+      if (event.sender === window.webContents) runtime(providers.openSignIn)
+    }
+    yield* Effect.acquireRelease(
+      Effect.sync(() => ipcMain.on("sportal:open-sign-in", openSignIn)),
+      () => Effect.sync(() => ipcMain.removeListener("sportal:open-sign-in", openSignIn))
     )
 
     yield* Effect.forkScoped(

@@ -25,5 +25,6 @@ Setup: Hub serving the built web UI, desktop shell running, signed in to YouTube
 | 16 | Quit and reopen the shell | Still signed in to the provider |
 | 17 | Once, after a channel's programme changes, click a game on that network | It plays the channel live, showing the new programme. If it plays the old programme or fails, record it: channels must then be learned per game (see `docs/specs/2026-10-03-learned-channels-design.md`) |
 | 18 | Open the shell and watch its terminal while the Hub page loads | No `refused shell navigation` warning for the Hub's own frames (the subframe guard could refuse an `about:blank` frame) |
+| 19 | Press **Sign in to YouTube TV**, sign in, close the window | Every tile plays without signing in again; the sign-in survives a shell restart |
 
 Record the date, the build, and any row that failed.

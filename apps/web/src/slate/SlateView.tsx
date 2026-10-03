@@ -10,6 +10,15 @@ export function SlateView(props: {
     <aside className="flex min-h-0 flex-col border-neutral-800 border-r">
       <header className="flex items-baseline justify-between px-3 py-2">
         <h1 className="font-semibold text-lg">Slate</h1>
+        {window.sportalShell && (
+          <button
+            type="button"
+            onClick={() => window.sportalShell?.openSignIn()}
+            className="text-neutral-400 text-xs hover:text-neutral-100"
+          >
+            Sign in to YouTube TV
+          </button>
+        )}
         <span className={props.connected ? "text-emerald-400 text-xs" : "text-amber-400 text-xs"}>
           {props.connected ? "live" : "reconnecting…"}
         </span>

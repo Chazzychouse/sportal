@@ -21,6 +21,8 @@ export type ChannelPick = typeof ChannelPick.Type
 export interface ShellBridge {
   /** Replaces the full set of provider views: views not listed are closed. */
   syncTiles(placements: ReadonlyArray<TilePlacement>): void
+  /** Opens the sign-in window for YouTube TV, or focuses it if open. Its sign-in is shared by every tile. */
+  openSignIn(): void
   /** Calls `listener` for every channel picked in a guide view. Returns a function that stops the calls. */
   onChannelPicked(listener: (pick: ChannelPick) => void): () => void
 }

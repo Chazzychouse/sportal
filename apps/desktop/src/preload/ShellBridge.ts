@@ -3,6 +3,7 @@ import { contextBridge, type IpcRendererEvent, ipcRenderer } from "electron"
 
 const bridge: ShellBridge = {
   syncTiles: (placements) => ipcRenderer.send("sportal:sync-tiles", placements),
+  openSignIn: () => ipcRenderer.send("sportal:open-sign-in"),
   onChannelPicked: (listener) => {
     // The page gets the pick alone, never the IPC event, which would expose the renderer's IPC handle.
     const forward = (_event: IpcRendererEvent, pick: ChannelPick) => listener(pick)
