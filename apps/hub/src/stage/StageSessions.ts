@@ -1,3 +1,4 @@
+import type { GameId } from "@sportal/domain/Game"
 import * as Stage from "@sportal/domain/Stage"
 import { Context, Effect, Layer, Option, Result, type Stream, SubscriptionRef } from "effect"
 import { Ingest } from "../ingest/Ingest.ts"
@@ -20,12 +21,15 @@ export class StageSessions extends Context.Service<
 
       const dispatch = Effect.fn("StageSessions.dispatch")(function* (command: Stage.StageCommand) {
         const slate = yield* ingest.slate
-        const result = Stage.apply(yield* SubscriptionRef.get(current), command, (id) =>
+        const locate = (id: GameId) =>
           Option.fromNullishOr(slate.find((game) => game.id === id)).pipe(Option.flatMap(source.locate))
-        )
-        if (Result.isFailure(result)) return yield* result.failure
-        yield* SubscriptionRef.set(current, result.success)
-        return result.success
+        // One atomic step: concurrent dispatches queue up, and a rejection leaves the Stage as it was.
+        return yield* SubscriptionRef.modifyEffect(current, (stage) => {
+          const result = Stage.apply(stage, command, locate)
+          return Result.isFailure(result)
+            ? Effect.fail(result.failure)
+            : Effect.succeed([result.success, result.success] as const)
+        })
       })
 
       return StageSessions.of({
