@@ -1,7 +1,7 @@
 import { assert, layer } from "@effect/vitest"
 import { SportalApi } from "@sportal/api/SportalApi"
-import { GameId, GameSnapshot } from "@sportal/domain/Game"
-import { Team, TeamId } from "@sportal/domain/Team"
+import { GameId } from "@sportal/domain/Game"
+import { snapshot, team } from "@sportal/domain/TestGame"
 import { DateTime, Effect, Layer } from "effect"
 import { HttpServer } from "effect/http"
 import { HttpApiTest } from "effect/http-api"
@@ -11,18 +11,10 @@ import * as YouTubeTv from "../source/YouTubeTv.ts"
 import { StageSessions } from "../stage/StageSessions.ts"
 import { ApiHandlers } from "./HubServer.ts"
 
-const game = new GameSnapshot({
+const game = snapshot({
   id: GameId.make("401856707"),
-  league: "fbs",
-  kickoff: DateTime.makeUnsafe("2026-10-03T16:00:00Z"),
-  status: "scheduled",
-  period: 0,
-  clock: "0:00",
-  home: {
-    team: new Team({ id: TeamId.make("fbs:344"), abbreviation: "MSST", name: "Mississippi State" }),
-    score: 0
-  },
-  away: { team: new Team({ id: TeamId.make("fbs:333"), abbreviation: "ALA", name: "Alabama" }), score: 0 },
+  home: { team: team("MSST"), score: 0 },
+  away: { team: team("ALA"), score: 0 },
   broadcasts: ["ESPN"]
 })
 

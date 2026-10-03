@@ -1,25 +1,13 @@
 import { assert, describe, it } from "@effect/vitest"
-import { GameId, GameSnapshot } from "@sportal/domain/Game"
-import { Team, TeamId } from "@sportal/domain/Team"
-import { DateTime, Effect, Layer, Option, Stream } from "effect"
+import { GameId } from "@sportal/domain/Game"
+import { snapshot } from "@sportal/domain/TestGame"
+import { Effect, Layer, Option, Stream } from "effect"
 import { Ingest } from "../ingest/Ingest.ts"
 import { Source } from "../source/Source.ts"
 import { StageSessions } from "./StageSessions.ts"
 
 function game(id: string, broadcasts: ReadonlyArray<string>) {
-  const team = (abbreviation: string) =>
-    new Team({ id: TeamId.make(`fbs:${abbreviation}${id}`), abbreviation, name: abbreviation })
-  return new GameSnapshot({
-    id: GameId.make(id),
-    league: "fbs",
-    kickoff: DateTime.makeUnsafe("2026-10-03T16:00:00Z"),
-    status: "live",
-    period: 1,
-    clock: "10:00",
-    home: { team: team("HOME"), score: 0 },
-    away: { team: team("AWAY"), score: 0 },
-    broadcasts
-  })
+  return snapshot({ id: GameId.make(id), status: "live", period: 1, clock: "10:00", broadcasts })
 }
 
 const slate = [game("1", ["ESPN"]), game("2", ["ESPN"]), game("3", ["ESPN"]), game("4", ["Local"])]

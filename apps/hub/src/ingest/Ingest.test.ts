@@ -1,18 +1,13 @@
 import { assert, describe, it } from "@effect/vitest"
-import { GameId, GameSnapshot } from "@sportal/domain/Game"
-import { Team, TeamId } from "@sportal/domain/Team"
-import { DateTime, Effect, Layer } from "effect"
+import type { GameSnapshot } from "@sportal/domain/Game"
+import { snapshot, team } from "@sportal/domain/TestGame"
+import { Effect, Layer } from "effect"
 import { TestClock } from "effect/testing"
 import { Provider, ProviderError } from "../provider/Provider.ts"
 import { Ingest } from "./Ingest.ts"
 
 function liveGame(homeScore: number) {
-  const team = (abbreviation: string) =>
-    new Team({ id: TeamId.make(`fbs:${abbreviation}`), abbreviation, name: abbreviation })
-  return new GameSnapshot({
-    id: GameId.make("1"),
-    league: "fbs",
-    kickoff: DateTime.makeUnsafe("2026-10-03T16:00:00Z"),
+  return snapshot({
     status: "live",
     period: 1,
     clock: "10:00",

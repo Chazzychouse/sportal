@@ -1,20 +1,14 @@
 import { assert, describe, it } from "@effect/vitest"
-import { GameId, GameSnapshot } from "@sportal/domain/Game"
-import { Team, TeamId } from "@sportal/domain/Team"
+import { snapshot, team } from "@sportal/domain/TestGame"
 import { DateTime, Duration } from "effect"
 import * as Cadence from "./Cadence.ts"
 
 const now = DateTime.makeUnsafe("2026-10-03T12:00:00Z")
 
 function game(status: "live" | "scheduled", kickoff: string) {
-  const team = (abbreviation: string) =>
-    new Team({ id: TeamId.make(`fbs:${abbreviation}`), abbreviation, name: abbreviation })
-  return new GameSnapshot({
-    id: GameId.make("1"),
-    league: "fbs",
-    kickoff: DateTime.makeUnsafe(kickoff),
+  return snapshot({
     status,
-    period: 0,
+    kickoff: DateTime.makeUnsafe(kickoff),
     clock: "",
     home: { team: team("MSST"), score: 0 },
     away: { team: team("ALA"), score: 0 },

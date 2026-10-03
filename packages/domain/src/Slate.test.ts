@@ -1,23 +1,11 @@
 import { assert, describe, it } from "@effect/vitest"
 import { DateTime } from "effect"
-import { GameId, GameSnapshot, type GameStatus } from "./Game.ts"
+import { GameId, type GameStatus } from "./Game.ts"
 import * as Slate from "./Slate.ts"
-import { Team, TeamId } from "./Team.ts"
+import { snapshot } from "./TestGame.ts"
 
 function game(id: string, status: GameStatus, kickoff: string) {
-  const team = (abbreviation: string) =>
-    new Team({ id: TeamId.make(`fbs:${abbreviation}`), abbreviation, name: abbreviation })
-  return new GameSnapshot({
-    id: GameId.make(id),
-    league: "fbs",
-    kickoff: DateTime.makeUnsafe(kickoff),
-    status,
-    period: 0,
-    clock: "0:00",
-    home: { team: team("HOME"), score: 0 },
-    away: { team: team("AWAY"), score: 0 },
-    broadcasts: []
-  })
+  return snapshot({ id: GameId.make(id), status, kickoff: DateTime.makeUnsafe(kickoff) })
 }
 
 describe("Slate.inWatchOrder", () => {

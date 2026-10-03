@@ -39,6 +39,13 @@ module.exports = {
       to: { path: "^apps/hub/src/(provider/[^/]+/|source/YouTubeTv\\.ts$)" }
     },
     {
+      name: "test-game-is-for-tests",
+      comment: "The test snapshot builder is imported by test files only.",
+      severity: "error",
+      from: { pathNot: "\\.test\\.tsx?$" },
+      to: { path: "^packages/domain/src/TestGame\\.ts$" }
+    },
+    {
       name: "no-junk-drawers",
       comment: "Name a file for the concept it owns.",
       severity: "error",

@@ -23,6 +23,7 @@ Every exported type name must be a term here.
 | --- | --- | --- |
 | **GameStatus** | `scheduled`, `live`, `halftime`, `delayed`, `final`, `postponed`, `canceled`. | state, phase |
 | **GameSnapshot** | The complete normalized state of a game at an instant. | update, payload |
+| **Test game** | A game snapshot built for a test, with defaults for everything the test does not care about. | fixture, mock |
 | **GameDetail** | A snapshot plus drives, plays, and statistics. | summary |
 | **Situation** | Live football state: possession, down, distance, field position, red zone, timeouts. | context |
 | **Period** | A quarter or an overtime. | quarter (in code) |
@@ -87,4 +88,3 @@ Provider and Source are the two words most likely to be swapped. Provider is alw
 | **Director** | The Hub component that evaluates rules and issues stage commands. | autopilot |
 | **Alert** | A user-facing notification produced by a rule. | event |
 | **Ticket** | A bet you have placed, tracked by the betting lens (later). | bet, wager |
-

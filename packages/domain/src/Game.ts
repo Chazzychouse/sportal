@@ -17,6 +17,8 @@ export const GameStatus = Schema.Literals([
 ])
 export type GameStatus = typeof GameStatus.Type
 
+const Side = Schema.Struct({ team: Team, score: Schema.Int, ranking: Schema.optional(Schema.Int) })
+
 export class GameSnapshot extends Schema.Class<GameSnapshot>("sportal/GameSnapshot")({
   id: GameId,
   league: LeagueId,
@@ -24,8 +26,8 @@ export class GameSnapshot extends Schema.Class<GameSnapshot>("sportal/GameSnapsh
   status: GameStatus,
   period: Schema.Int,
   clock: Schema.String,
-  home: Schema.Struct({ team: Team, score: Schema.Int, ranking: Schema.optional(Schema.Int) }),
-  away: Schema.Struct({ team: Team, score: Schema.Int, ranking: Schema.optional(Schema.Int) }),
+  home: Side,
+  away: Side,
   broadcasts: Schema.Array(Schema.String),
   situation: Schema.optional(Situation)
 }) {}
