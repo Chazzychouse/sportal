@@ -60,4 +60,15 @@ describe("Ingest", () => {
       assert.strictEqual((yield* ingest.slate)[0]?.home.score, 7)
     }).pipe(Effect.provide(Ingest.layer(["fbs"]).pipe(Layer.provide(scripted([[liveGame(7)], "fail"])))))
   )
+
+  it.effect("retries after 30 seconds when the first poll fails", () =>
+    Effect.gen(function* () {
+      const ingest = yield* Ingest
+      yield* TestClock.adjust(0)
+      assert.strictEqual((yield* ingest.slate).length, 0)
+
+      yield* TestClock.adjust("30 seconds")
+      assert.strictEqual((yield* ingest.slate)[0]?.home.score, 3)
+    }).pipe(Effect.provide(Ingest.layer(["fbs"]).pipe(Layer.provide(scripted(["fail", [liveGame(3)]])))))
+  )
 })

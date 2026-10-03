@@ -21,17 +21,22 @@ export class Ingest extends Context.Service<
         const byLeague = new Map<LeagueId, ReadonlyArray<GameSnapshot>>()
 
         const poll = Effect.gen(function* () {
+          let anyFailed = false
           for (const league of leagues) {
             yield* provider.slate(league).pipe(
               Effect.map((slate) => byLeague.set(league, slate)),
-              Effect.catchTag("ProviderError", (error) =>
-                Effect.logWarning("Ingest: keeping the last slate after a provider failure", error)
-              )
+              Effect.catchTag("ProviderError", (error) => {
+                anyFailed = true
+                return Effect.logWarning(
+                  "Ingest: provider failed; keeping the last good slate for this league, if any",
+                  error
+                )
+              })
             )
           }
           const slate = leagues.flatMap((league) => byLeague.get(league) ?? [])
           yield* SubscriptionRef.set(current, slate)
-          yield* Effect.sleep(Cadence.interval(slate, yield* DateTime.now))
+          yield* Effect.sleep(Cadence.interval(slate, yield* DateTime.now, anyFailed))
         })
 
         yield* Effect.forkScoped(Effect.forever(poll))
