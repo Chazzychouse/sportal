@@ -1,7 +1,7 @@
-import { ChannelPick, type TilePlacement } from "@sportal/api/ShellBridge"
+import type { TilePlacement } from "@sportal/api/ShellBridge"
 import type { GameSnapshot } from "@sportal/domain/Game"
 import type { Stage, Tile } from "@sportal/domain/Stage"
-import { Option, Schema } from "effect"
+import { Option } from "effect"
 import { useEffect, useLayoutEffect, useRef, useState } from "react"
 import { dispatch, forgetChannel, learnChannel, markNotCarried } from "../hub/HubClient.ts"
 
@@ -26,15 +26,10 @@ export function StageView(props: {
   useEffect(() => {
     setNotices(new Map())
     // A channel picked in a picking tile's guide teaches the Hub that network's channel.
-    return window.sportalShell?.onChannelPicked((message) => {
-      // The preload passes picks through undecoded, so check the shape before using it.
-      const pick = Schema.decodeUnknownOption(ChannelPick)(message)
-      if (Option.isNone(pick)) return
-      const tile = props.stage.tiles[pick.value.tile]
+    return window.sportalShell?.onChannelPicked((pick) => {
+      const tile = props.stage.tiles[pick.tile]
       if (tile?._tag === "PickingChannel")
-        void learnChannel(tile.network, pick.value.url).then((failure) =>
-          setNotices(noticed(pick.value.tile, failure))
-        )
+        void learnChannel(tile.network, pick.url).then((failure) => setNotices(noticed(pick.tile, failure)))
     })
   }, [props.stage])
 

@@ -1,7 +1,7 @@
 import { SportalApi } from "@sportal/api/SportalApi"
 import type { Network } from "@sportal/domain/Game"
 import type { StageCommand } from "@sportal/domain/Stage"
-import { Context, Effect, Layer, ManagedRuntime, Option, Predicate } from "effect"
+import { Cause, Context, Effect, Layer, ManagedRuntime, Option, Predicate } from "effect"
 import { FetchHttpClient } from "effect/http"
 import { HttpApiClient } from "effect/http-api"
 
@@ -39,15 +39,25 @@ export function forgetChannel(network: Network): Promise<Option.Option<string>> 
 function outcome(command: Effect.Effect<void, unknown, HubClient>) {
   return runtime.runPromise(
     command.pipe(
-      Effect.match({
-        onSuccess: () => Option.none(),
-        onFailure: (error) =>
-          Option.some(
-            Predicate.isTagged(error, "ChannelUrlRefused")
-              ? "That is not a live channel. Pick one from the live guide."
-              : "The Hub did not take that. Try again."
-          )
-      })
+      Effect.catchCause((cause) => {
+        // Extract error or defect from cause
+        let error: unknown
+        for (const reason of cause.reasons) {
+          if (Cause.isFailReason(reason)) {
+            error = reason.error
+            break
+          } else if (Cause.isDieReason(reason)) {
+            error = reason.defect
+            break
+          }
+        }
+
+        const message = Predicate.isTagged(error, "ChannelUrlRefused")
+          ? "That is not a live channel. Pick one from the live guide."
+          : "The Hub did not take that. Try again."
+        return Effect.succeed(Option.some(message))
+      }),
+      Effect.map(() => Option.none())
     )
   )
 }
