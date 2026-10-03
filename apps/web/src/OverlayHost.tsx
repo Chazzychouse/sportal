@@ -1,5 +1,5 @@
 import type { GameId } from "@sportal/domain/Game"
-import { createContext, type ReactNode, type RefObject, useContext, useLayoutEffect, useRef } from "react"
+import { createContext, type ReactNode, useCallback, useContext, useLayoutEffect, useRef } from "react"
 
 /**
  * Where overlays meet native video. Provider views draw above the web UI, so an overlay (a dialog, the command
@@ -12,14 +12,18 @@ export function OverlayHost(props: { children: ReactNode }) {
   return <HostContext.Provider value={host.current}>{props.children}</HostContext.Provider>
 }
 
-/** Registers an open overlay's element, so the videos it covers hide while it is mounted. */
-export function useCovering(ref: RefObject<HTMLElement | null>) {
+/**
+ * A ref for an overlay's element: while the element is mounted, the videos it covers hide. Pass it as the
+ * overlay content's `ref`, which mounts only while the overlay is open; React runs the returned cleanup when
+ * the element unmounts.
+ */
+export function useCovering() {
   const host = useContext(HostContext)
-  useLayoutEffect(() => {
-    const element = ref.current
-    if (host === undefined || element === null) return
-    return host.cover(element)
-  }, [host, ref])
+  return useCallback(
+    (element: HTMLElement | null) =>
+      element === null || host === undefined ? undefined : host.cover(element),
+    [host]
+  )
 }
 
 /** Tells the host where each game's video is, in window pixels. */

@@ -1,7 +1,6 @@
 import { XIcon } from "lucide-react"
 import { Dialog as SheetPrimitive } from "radix-ui"
 import type * as React from "react"
-import { useRef } from "react"
 import { cn } from "@/design/ClassName"
 import { useCovering } from "@/OverlayHost"
 
@@ -45,8 +44,7 @@ function SheetContent({
   showCloseButton?: boolean
 }) {
   // Sportal: the sheet hides the provider videos it covers while it is open.
-  const covering = useRef<HTMLDivElement>(null)
-  useCovering(covering)
+  const covering = useCovering()
   return (
     <SheetPortal>
       <SheetOverlay />

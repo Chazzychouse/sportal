@@ -1,7 +1,6 @@
 import { XIcon } from "lucide-react"
 import { Dialog as DialogPrimitive } from "radix-ui"
 import type * as React from "react"
-import { useRef } from "react"
 import { Button } from "@/design/button"
 import { cn } from "@/design/ClassName"
 import { useCovering } from "@/OverlayHost"
@@ -44,8 +43,7 @@ function DialogContent({
   showCloseButton?: boolean
 }) {
   // Sportal: the dialog hides the provider videos it covers while it is open.
-  const covering = useRef<HTMLDivElement>(null)
-  useCovering(covering)
+  const covering = useCovering()
   return (
     <DialogPortal data-slot="dialog-portal">
       <DialogOverlay />
