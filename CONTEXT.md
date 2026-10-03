@@ -35,6 +35,8 @@ Every exported type name must be a term here.
 | --- | --- | --- |
 | **Provider** | An adapter that supplies **game data** (ESPN, CollegeFootballData). | source, feed |
 | **Provider error** | A provider could not supply data for a league: unreachable, rate-limited, or unreadable. | fetch error |
+| **Ingest** | The Hub's loop that polls providers and keeps the current slate. | poller, sync, fetcher |
+| **Cadence** | How long Ingest waits between polls, given what the last poll saw. | interval, rate |
 | **Source** | A way you obtain **video** (YouTube TV). | provider, service |
 | **Broadcast** | The fact that a network is airing a game. | channel, stream |
 | **Channel** | A network as carried by a specific source. | |
