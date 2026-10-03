@@ -32,8 +32,8 @@ export function SlateView(props: {
   const live = inProgress("live")
   const upcoming = inProgress("upcoming")
   const finals = inProgress("over")
-  // With nothing live or to come, the finals are all there is, so they show without a click.
-  const finalsExpanded = finalsOpen || (live.length === 0 && upcoming.length === 0)
+  // With nothing live or to come, the finals are all there is, so they show as a plain section.
+  const onlyFinals = live.length === 0 && upcoming.length === 0
   const close = () => props.onOpenChange(false)
   const row = (game: GameSnapshot) => {
     const place = placeOf(game)
@@ -116,21 +116,25 @@ export function SlateView(props: {
           <Section title="Upcoming" count={upcoming.length}>
             {upcoming.map(row)}
           </Section>
-          {finals.length > 0 && (
-            <section className="border-t">
-              <button
-                type="button"
-                onClick={() => setFinalsOpen((open) => !open)}
-                aria-expanded={finalsExpanded}
-                className="label-caps flex w-full items-center gap-1 px-3 pt-2.5 pb-1 text-left text-[11px] text-muted-foreground hover:text-foreground"
-              >
-                <ChevronRight
-                  className={`size-3 transition-transform ${finalsExpanded ? "rotate-90" : ""}`}
-                />
-                Final <span className="font-mono">{finals.length}</span>
-              </button>
-              {finalsExpanded && <ul className="pb-1.5">{finals.map(row)}</ul>}
-            </section>
+          {onlyFinals ? (
+            <Section title="Final" count={finals.length}>
+              {finals.map(row)}
+            </Section>
+          ) : (
+            finals.length > 0 && (
+              <section className="border-t">
+                <button
+                  type="button"
+                  onClick={() => setFinalsOpen((open) => !open)}
+                  aria-expanded={finalsOpen}
+                  className="label-caps flex w-full items-center gap-1 px-3 pt-2.5 pb-1 text-left text-[11px] text-muted-foreground hover:text-foreground"
+                >
+                  <ChevronRight className={`size-3 transition-transform ${finalsOpen ? "rotate-90" : ""}`} />
+                  Final <span className="font-mono">{finals.length}</span>
+                </button>
+                {finalsOpen && <ul className="pb-1.5">{finals.map(row)}</ul>}
+              </section>
+            )
           )}
         </div>
       </SheetContent>
