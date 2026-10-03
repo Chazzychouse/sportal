@@ -45,7 +45,10 @@ Every exported type name must be a term here.
 | **Channel** | A station as a source names it ("News 3", "ESPN2"), with the address that plays it live. | network |
 | **Channel carriage** | Whether a source carries a network: on a channel, or not at all. | answer, mapping |
 | **Channel lineup** | The channel carriages one source has learned, and the guide where the rest are picked. | channel map |
-| **Channel availability** | Whether and where a source can show a game: carried, unlearned (its network still to be picked), or not carried. | availability |
+| **Channel availability** | Whether and where a source can show a game: carried, upcoming, unlearned (its network still to be picked), or not carried, with why. | availability |
+| **Guide** | One reading of a source's listing of the channels this account gets, with their live addresses, and what each airs. | schedule, EPG |
+| **Airing** | One programme on a channel, with its begin and end. | listing, show |
+| **Guide unreadable** | A guide response the source could not read. | |
 | **Channel URL refused** | An address a source would not learn, because it is not one of its live channels. | not a channel |
 | **Channel store** | Where the Hub keeps the channel carriages it has learned. | channel repository |
 | **Channel store error** | The channel store could not read or write. | database error |

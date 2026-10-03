@@ -28,7 +28,7 @@ export class StageSessions extends Context.Service<
             const availabilityOf = yield* availabilityOnSlate(ingest, source)
             // Assigning a game that is not on the slate gives a data tile.
             const result = stage.apply(command, (id) =>
-              Option.getOrElse(availabilityOf(id), () => ChannelAvailability.NotCarried())
+              Option.getOrElse(availabilityOf(id), () => ChannelAvailability.NotCarried({ why: "NoStream" }))
             )
             return yield* Result.isFailure(result)
               ? Effect.fail(result.failure)

@@ -1,5 +1,5 @@
 import { assert, describe, it } from "@effect/vitest"
-import { Option, Result } from "effect"
+import { DateTime, Option, Result } from "effect"
 import { GameId, Network } from "./Game.ts"
 import { ChannelAvailability } from "./Source.ts"
 import { Stage } from "./Stage.ts"
@@ -15,7 +15,7 @@ const foxChannel = {
 const guide = { _tag: "WebView" as const, url: "https://tv.youtube.com/live" }
 const onFox = () => ChannelAvailability.Carried({ channel: foxChannel, learnedFor: Option.some(fox) })
 const foxUnlearned = () => ChannelAvailability.Unlearned({ network: fox, source: "YouTube TV", guide })
-const nowhere = () => ChannelAvailability.NotCarried()
+const nowhere = () => ChannelAvailability.NotCarried({ why: "NoStream" })
 
 describe("Stage#apply", () => {
   it("assigns a carried game as a stream tile", () => {
@@ -41,13 +41,13 @@ describe("Stage#apply", () => {
 
   it("assigns a game that is not carried as a data tile", () => {
     const stage = assign(Stage.initial, 0, bama, nowhere)
-    assert.deepStrictEqual(stage.tiles[0], { _tag: "DataTile", game: bama })
+    assert.deepStrictEqual(stage.tiles[0], { _tag: "DataTile", game: bama, why: { _tag: "NoStream" } })
   })
 
   it("replaces whatever an occupied tile held", () => {
     const first = assign(Stage.initial, 0, bama, onFox)
     const second = assign(first, 0, irish, nowhere)
-    assert.deepStrictEqual(second.tiles[0], { _tag: "DataTile", game: irish })
+    assert.deepStrictEqual(second.tiles[0], { _tag: "DataTile", game: irish, why: { _tag: "NoStream" } })
   })
 
   it("moves a game rather than showing it twice", () => {
@@ -61,7 +61,7 @@ describe("Stage#apply", () => {
     const first = assign(Stage.initial, 0, bama, onFox)
     const second = assign(first, 1, bama, nowhere)
     assert.strictEqual(second.tiles[0]?._tag, "Empty")
-    assert.deepStrictEqual(second.tiles[1], { _tag: "DataTile", game: bama })
+    assert.deepStrictEqual(second.tiles[1], { _tag: "DataTile", game: bama, why: { _tag: "NoStream" } })
   })
 
   it("clears a tile and leaves the others", () => {
@@ -89,6 +89,32 @@ describe("Stage#apply", () => {
     const result = Stage.initial.apply({ _tag: "FocusAudio", tile: 4 }, nowhere)
     assert.isTrue(Result.isFailure(result))
     if (Result.isFailure(result)) assert.strictEqual(result.failure.reason, "no-such-tile")
+  })
+
+  it("assigns a game still to come as a data tile saying where and when", () => {
+    const begin = DateTime.makeUnsafe("2026-10-04T17:00:00Z")
+    const stage = assign(Stage.initial, 0, bama, () =>
+      ChannelAvailability.Upcoming({ channel: Option.some("NFL ST - CBS"), begin: Option.some(begin) })
+    )
+    assert.deepStrictEqual(stage.tiles[0], {
+      _tag: "DataTile",
+      game: bama,
+      why: { _tag: "NotYet", channel: "NFL ST - CBS", begin }
+    })
+  })
+
+  it("assigns a game whose time and channel are unknown as a data tile with neither", () => {
+    const stage = assign(Stage.initial, 0, bama, () =>
+      ChannelAvailability.Upcoming({ channel: Option.none(), begin: Option.none() })
+    )
+    assert.deepStrictEqual(stage.tiles[0], { _tag: "DataTile", game: bama, why: { _tag: "NotYet" } })
+  })
+
+  it("says why a game is not carried", () => {
+    const stage = assign(Stage.initial, 0, bama, () =>
+      ChannelAvailability.NotCarried({ why: "StreamingOnly" })
+    )
+    assert.deepStrictEqual(stage.tiles[0], { _tag: "DataTile", game: bama, why: { _tag: "StreamingOnly" } })
   })
 })
 

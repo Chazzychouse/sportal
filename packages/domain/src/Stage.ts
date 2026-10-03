@@ -14,7 +14,19 @@ export const Tile = Schema.Union([
     source: SourceName,
     guide: StreamLocator
   }),
-  Schema.TaggedStruct("DataTile", { game: GameId })
+  /** No stream, and why: none on any source, streaming only, not in the guide, or not on yet. */
+  Schema.TaggedStruct("DataTile", {
+    game: GameId,
+    why: Schema.Union([
+      Schema.TaggedStruct("NoStream", {}),
+      Schema.TaggedStruct("StreamingOnly", {}),
+      Schema.TaggedStruct("NotInGuide", {}),
+      Schema.TaggedStruct("NotYet", {
+        channel: Schema.optional(Schema.String),
+        begin: Schema.optional(Schema.DateTimeUtcFromString)
+      })
+    ])
+  })
 ])
 export type Tile = typeof Tile.Type
 
@@ -115,7 +127,17 @@ function tileFor(game: GameId, availability: ChannelAvailability): Tile {
         source: availability.source,
         guide: availability.guide
       }
+    case "Upcoming":
+      return {
+        _tag: "DataTile",
+        game,
+        why: {
+          _tag: "NotYet",
+          ...(Option.isSome(availability.channel) ? { channel: availability.channel.value } : {}),
+          ...(Option.isSome(availability.begin) ? { begin: availability.begin.value } : {})
+        }
+      }
     case "NotCarried":
-      return { _tag: "DataTile", game }
+      return { _tag: "DataTile", game, why: { _tag: availability.why } }
   }
 }

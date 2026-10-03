@@ -67,7 +67,11 @@ describe("StageSessions", () => {
         channel: espnChannel,
         learnedFor: espn
       })
-      assert.deepStrictEqual(stage.tiles[1], { _tag: "DataTile", game: GameId.make("4") })
+      assert.deepStrictEqual(stage.tiles[1], {
+        _tag: "DataTile",
+        game: GameId.make("4"),
+        why: { _tag: "NoStream" }
+      })
     }).pipe(Effect.provide(TestSessions))
   )
 
@@ -222,7 +226,11 @@ describe("StageSessions", () => {
     Effect.gen(function* () {
       const sessions = yield* StageSessions
       const stage = yield* sessions.dispatch({ _tag: "Assign", tile: 0, game: GameId.make("gone") })
-      assert.deepStrictEqual(stage.tiles[0], { _tag: "DataTile", game: GameId.make("gone") })
+      assert.deepStrictEqual(stage.tiles[0], {
+        _tag: "DataTile",
+        game: GameId.make("gone"),
+        why: { _tag: "NoStream" }
+      })
     }).pipe(Effect.provide(TestSessions))
   )
 })

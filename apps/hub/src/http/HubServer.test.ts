@@ -78,7 +78,11 @@ describe("Hub API", () => {
       assert.deepStrictEqual(yield* tileOnceItIs(sessions, "PickingChannel"), picking)
 
       yield* client.channels.notCarried({ payload: { network: espn } })
-      assert.deepStrictEqual(yield* tileOnceItIs(sessions, "DataTile"), { _tag: "DataTile", game: game.id })
+      assert.deepStrictEqual(yield* tileOnceItIs(sessions, "DataTile"), {
+        _tag: "DataTile",
+        game: game.id,
+        why: { _tag: "NoStream" }
+      })
     }).pipe(Effect.provide(apiUnderTest()))
   )
 
