@@ -52,6 +52,8 @@ Provider and Source are the two words most likely to be swapped. Provider is alw
 | Term | Meaning | Not |
 | --- | --- | --- |
 | **Hub** | The server process that owns all shared state. | backend, server |
+| **Live message** | One update the Hub pushes to clients on the live stream: the slate changed, or the Stage changed. | event, notification |
+| **Stage sessions** | The Hub component holding the authoritative Stage for each Display and applying stage commands to it. | stage store, stage manager |
 | **Display** | A device running the shell and presenting a Stage. | screen, client, player |
 | **Remote** | A client controlling a Display's Stage without presenting it. | controller |
 | **Desk mode** / **Couch mode** | The two presentation densities. | desktop/TV layout |

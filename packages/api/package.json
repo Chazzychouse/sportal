@@ -1,0 +1,12 @@
+{
+  "name": "@sportal/api",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./*": "./src/*.ts"
+  },
+  "dependencies": {
+    "@sportal/domain": "workspace:*",
+    "effect": "4.0.0"
+  }
+}

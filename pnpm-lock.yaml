@@ -38,9 +38,21 @@ importers:
       '@effect/platform-node':
         specifier: 4.0.0
         version: 4.0.0(effect@4.0.0)(redis@6.3.0)
+      '@sportal/api':
+        specifier: workspace:*
+        version: link:../../packages/api
       '@sportal/domain':
         specifier: workspace:*
         version: link:../../packages/domain
+      effect:
+        specifier: 4.0.0
+        version: 4.0.0
+
+  packages/api:
+    dependencies:
+      '@sportal/domain':
+        specifier: workspace:*
+        version: link:../domain
       effect:
         specifier: 4.0.0
         version: 4.0.0
