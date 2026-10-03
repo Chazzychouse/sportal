@@ -69,7 +69,8 @@ Provider and Source are the two words most likely to be swapped. Provider is alw
 | **Desk mode** / **Couch mode** | The two presentation densities. | desktop/TV layout |
 | **Shell bridge** | The small interface the desktop shell exposes to the web UI. | IPC, native API |
 | **Provider session** | The shell's single persistent browser session shared by every provider view, with its navigation allowlist and permissions. | partition, profile |
-| **Tile views** | The shell component that keeps one provider web view per stream tile, placed where the web UI says. | view manager |
+| **Tile views** | The shell component that keeps one provider web view per stream or picking tile, placed where the web UI says. | view manager |
+| **Channel pick** | The shell's report that a picking tile's guide view landed on a channel's address. | selection |
 
 ### Viewing
 
@@ -85,7 +86,7 @@ Provider and Source are the two words most likely to be swapped. Provider is alw
 | **Audio focus** | The single tile whose sound is on. | active, unmuted |
 | **Promote** | Move a game into the main tile. | feature |
 | **Preset** | A saved layout with tile assignments. | |
-| **Tile placement** | Where a stream tile sits in a Display's window and what it plays, as told to the shell. | bounds, rect |
+| **Tile placement** | Where a stream or picking tile sits in a Display's window, what it loads, and whether it is a stream or a guide, as told to the shell. | bounds, rect |
 | **Tile delay** | Seconds that data is held back for a tile to match its video. | offset, latency |
 | **Spoiler shield** | Hiding or delaying scores for chosen games. | |
 

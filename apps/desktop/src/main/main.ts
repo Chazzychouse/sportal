@@ -1,6 +1,6 @@
 import { join } from "node:path"
 import { TilePlacement } from "@sportal/api/ShellBridge"
-import { Config, Effect, FiberSet, Layer, Option, Schema } from "effect"
+import { Config, Effect, FiberSet, Layer, Option, Schema, Stream } from "effect"
 import { app, BrowserWindow, components, type IpcMainEvent, ipcMain } from "electron"
 import { hostOf, load, ProviderSession } from "./ProviderSession.ts"
 import { TileViews } from "./TileViews.ts"
@@ -81,6 +81,17 @@ function serveHub(window: BrowserWindow, hubUrl: string) {
     yield* Effect.acquireRelease(
       Effect.sync(() => ipcMain.on("sportal:sync-tiles", syncTiles)),
       () => Effect.sync(() => ipcMain.removeListener("sportal:sync-tiles", syncTiles))
+    )
+
+    yield* Effect.forkScoped(
+      tiles.channelPicks.pipe(
+        Stream.runForEach((pick) =>
+          Effect.sync(() => {
+            if (!window.isDestroyed()) window.webContents.send("sportal:channel-picked", pick)
+          })
+        )
+      ),
+      { startImmediately: true }
     )
 
     yield* load(window.webContents, hubUrl).pipe(

@@ -96,6 +96,7 @@ function placements(stage: Stage, videoAreas: ReadonlyArray<HTMLDivElement | nul
       {
         tile: index,
         url: tile.channel.locator.url,
+        role: "stream",
         bounds: {
           x: Math.round(rect.x),
           y: Math.round(rect.y),
