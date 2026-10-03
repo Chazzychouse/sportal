@@ -4,6 +4,11 @@ import { TestClock } from "effect/testing"
 import { vi } from "vitest"
 
 const created: Array<{ webContents: ReturnType<typeof fakeContents> }> = []
+/** What the next views' fakes do wrong, set by a test before it asks for a read. */
+const faults: { attachThrowsOnce: boolean; loadError: Error | undefined } = {
+  attachThrowsOnce: false,
+  loadError: undefined
+}
 
 vi.mock("electron", () => ({
   session: { fromPartition: () => ({ setPermissionRequestHandler: vi.fn() }) },
@@ -49,12 +54,16 @@ describe("GuideReader", () => {
       expect(yield* Fiber.join(guides)).toEqual(["the guide"])
       yield* settle
       expect(contents?.close).toHaveBeenCalled()
+      expect(contents?.inspector.detach).toHaveBeenCalled()
+      expect(contents?.inspector.removeListener).toHaveBeenCalled()
     }).pipe(Effect.scoped)
   )
 
   it.effect("does not open the guide until asked, then reads it every 15 minutes", () =>
     Effect.gen(function* () {
       const reader = yield* attached()
+      yield* settle
+      yield* TestClock.adjust("20 minutes") // the web UI has not asked, so nothing is read
       yield* settle
       expect(created).toHaveLength(0)
       yield* reader.readSoon
@@ -76,7 +85,53 @@ describe("GuideReader", () => {
       yield* TestClock.adjust("30 seconds")
       yield* settle
       expect(created[0]?.webContents.close).toHaveBeenCalled()
+      expect(created[0]?.webContents.inspector.detach).toHaveBeenCalled()
+      expect(created[0]?.webContents.inspector.removeListener).toHaveBeenCalled()
       expect(guides.pollUnsafe()).toBeUndefined()
+    }).pipe(Effect.scoped)
+  )
+
+  it.effect("ends the read at once when the page fails to load, closing the view", () =>
+    Effect.gen(function* () {
+      const reader = yield* attached()
+      faults.loadError = Object.assign(new Error("net::ERR_NAME_NOT_RESOLVED"), {
+        code: "ERR_NAME_NOT_RESOLVED"
+      })
+      yield* reader.readSoon
+      yield* settle // no clock adjustment: the 30 seconds never pass
+      const contents = created[0]?.webContents
+      expect(contents?.close).toHaveBeenCalled()
+      expect(contents?.inspector.detach).toHaveBeenCalled()
+      expect(contents?.inspector.removeListener).toHaveBeenCalled()
+    }).pipe(Effect.scoped)
+  )
+
+  it.effect("keeps waiting when the page navigates on by itself (ERR_ABORTED)", () =>
+    Effect.gen(function* () {
+      const reader = yield* attached()
+      faults.loadError = Object.assign(new Error("ERR_ABORTED (-3)"), { code: "ERR_ABORTED" })
+      yield* reader.readSoon
+      yield* settle
+      expect(created[0]?.webContents.close).not.toHaveBeenCalled()
+    }).pipe(Effect.scoped)
+  )
+
+  it.effect("keeps reading after a read fails", () =>
+    Effect.gen(function* () {
+      const reader = yield* attached()
+      const guides = yield* collect(reader.guides, 1)
+      faults.attachThrowsOnce = true
+      yield* reader.readSoon
+      yield* settle
+      expect(created[0]?.webContents.close).toHaveBeenCalled()
+      yield* TestClock.adjust("2 minutes")
+      yield* reader.readSoon
+      yield* settle
+      const contents = created[1]?.webContents
+      contents?.inspector.respond("1", "the guide")
+      contents?.inspector.emit("Network.requestWillBeSent", { requestId: "1", request: guideRequest })
+      contents?.inspector.emit("Network.loadingFinished", { requestId: "1" })
+      expect(yield* Fiber.join(guides)).toEqual(["the guide"])
     }).pipe(Effect.scoped)
   )
 
@@ -113,6 +168,8 @@ function collect<A>(stream: Stream.Stream<A>, count: number) {
 
 function attached() {
   created.length = 0
+  faults.attachThrowsOnce = false
+  faults.loadError = undefined
   return Layer.build(GuideReader.layer.pipe(Layer.provide(ProviderSession.layer))).pipe(
     Effect.map((context) => Context.get(context, GuideReader))
   )
@@ -121,11 +178,20 @@ function attached() {
 /** A debugger that records its listener, so a test can emit protocol events and set response bodies. */
 function fakeInspector() {
   const bodies = new Map<string, string>()
+  let attached = false
   let listener: ((event: unknown, method: string, params: unknown) => void) | undefined
   return {
-    attach: vi.fn(),
-    detach: vi.fn(),
-    isAttached: () => true,
+    attach: vi.fn(() => {
+      if (faults.attachThrowsOnce) {
+        faults.attachThrowsOnce = false
+        throw new Error("Another debugger is already attached")
+      }
+      attached = true
+    }),
+    detach: vi.fn(() => {
+      attached = false
+    }),
+    isAttached: () => attached,
     on: vi.fn((_event: "message", next: typeof listener) => {
       listener = next
     }),
@@ -145,7 +211,7 @@ function fakeInspector() {
 function fakeContents() {
   const inspector = fakeInspector()
   return {
-    loadURL: vi.fn(() => Promise.resolve()),
+    loadURL: vi.fn(() => (faults.loadError ? Promise.reject(faults.loadError) : Promise.resolve())),
     setAudioMuted: vi.fn(),
     close: vi.fn(),
     isDestroyed: () => false,

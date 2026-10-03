@@ -1,6 +1,6 @@
-import { Context, Effect, Layer, Option, PubSub, Queue, Schema, Stream } from "effect"
+import { Cause, Context, Deferred, Effect, Layer, Option, PubSub, Queue, Schema, Stream } from "effect"
 import type { WebContentsView } from "electron"
-import { ProviderSession } from "./ProviderSession.ts"
+import { load, ProviderSession } from "./ProviderSession.ts"
 
 /**
  * Reads YouTube TV's live guide the way its own page loads it. A hidden, muted view on the provider session
@@ -42,22 +42,37 @@ export class GuideReader extends Context.Service<
         ),
         Effect.catchTag("GuideNotRead", (failure) =>
           Effect.logWarning("GuideReader: the guide could not be read", failure.cause)
+        ),
+        // A read that goes wrong any other way must not end the loop; only interruption does.
+        Effect.catchCause((cause) =>
+          Cause.hasInterrupts(cause)
+            ? Effect.failCause(cause)
+            : Effect.logError("GuideReader: a read failed", cause)
         )
       )
 
       // The first read waits to be asked, so the web UI is listening before a guide arrives.
+      const asked = yield* Deferred.make<void>()
       yield* Effect.forkScoped(
         Effect.forever(
           Queue.take(requests).pipe(Effect.andThen(read), Effect.andThen(Effect.sleep("2 minutes")))
         )
       )
+      // Periodic reads begin with the first ask.
       yield* Effect.forkScoped(
-        Effect.forever(Effect.sleep("15 minutes").pipe(Effect.andThen(Queue.offer(requests, undefined))))
+        Deferred.await(asked).pipe(
+          Effect.andThen(
+            Effect.forever(Effect.sleep("15 minutes").pipe(Effect.andThen(Queue.offer(requests, undefined))))
+          )
+        )
       )
 
       return GuideReader.of({
         guides: Stream.fromPubSub(guides),
-        readSoon: Queue.offer(requests, undefined).pipe(Effect.asVoid)
+        readSoon: Deferred.succeed(asked, undefined).pipe(
+          Effect.andThen(Queue.offer(requests, undefined)),
+          Effect.asVoid
+        )
       })
     })
   )
@@ -65,48 +80,71 @@ export class GuideReader extends Context.Service<
 
 class GuideNotRead extends Schema.TaggedError<GuideNotRead>()("GuideNotRead", { cause: Schema.Defect() }) {}
 
-/** Opens the guide in `view` and resumes with the body of its guide response. */
+/**
+ * Opens the guide in `view` and waits for the body of its guide response. The debugger attaches for as long as
+ * the surrounding scope lives, and detaches, with its listener removed, however the read ends.
+ */
 function guideResponse(view: WebContentsView) {
-  return Effect.callback<string, GuideNotRead>((resume) => {
-    const inspector = view.webContents.debugger
-    const guideRequests = new Set<string>()
-    const failed = (cause: unknown) => resume(Effect.fail(new GuideNotRead({ cause })))
-
-    const onMessage = (_event: unknown, method: string, params: unknown) => {
-      if (method === "Network.requestWillBeSent") {
-        const sent = decodeRequestWillBeSent(params)
-        if (Option.isSome(sent) && isGuideRequest(sent.value.request)) guideRequests.add(sent.value.requestId)
-      }
-      if (method === "Network.loadingFinished") {
-        const finished = decodeLoadingFinished(params)
-        if (Option.isNone(finished) || !guideRequests.has(finished.value.requestId)) return
-        inspector
-          .sendCommand("Network.getResponseBody", { requestId: finished.value.requestId })
-          .then((raw: unknown) => {
-            const body = decodeResponseBody(raw)
-            if (Option.isNone(body)) return failed("the response body had an unexpected shape")
-            const { body: text, base64Encoded } = body.value
-            resume(Effect.succeed(base64Encoded ? Buffer.from(text, "base64").toString("utf8") : text))
-          }, failed)
-      }
-    }
-
-    try {
-      inspector.attach("1.3")
-    } catch (cause) {
-      failed(cause)
-      return
-    }
-    inspector.on("message", onMessage)
-    // A load that fails or is cut short shows up as the 30-second timeout; its rejection carries nothing more.
-    inspector
-      .sendCommand("Network.enable")
-      .then(() => view.webContents.loadURL(guideUrl).catch(() => undefined), failed)
-    return Effect.sync(() => {
-      inspector.removeListener("message", onMessage)
-      if (inspector.isAttached()) inspector.detach()
-    })
+  return Effect.gen(function* () {
+    const outcome = yield* Deferred.make<string, GuideNotRead>()
+    yield* Effect.acquireRelease(
+      Effect.try({
+        try: () => listen(view, outcome),
+        catch: (cause) => new GuideNotRead({ cause })
+      }),
+      (stop) => Effect.sync(stop)
+    )
+    yield* Effect.forkScoped(
+      Effect.tryPromise({
+        try: () => view.webContents.debugger.sendCommand("Network.enable"),
+        catch: (cause) => new GuideNotRead({ cause })
+      }).pipe(
+        Effect.andThen(load(view.webContents, guideUrl)),
+        // A page navigating on by itself aborts its load; the guide response is still on its way.
+        Effect.catchTag("LoadFailed", (failure) =>
+          failure.code === "ERR_ABORTED" ? Effect.void : Effect.fail(new GuideNotRead({ cause: failure }))
+        ),
+        Effect.catchTag("GuideNotRead", (failure) => Deferred.fail(outcome, failure))
+      )
+    )
+    return yield* Deferred.await(outcome)
   })
+}
+
+/** Attaches the debugger and completes `outcome` with the guide response's body; returns the way to detach. */
+function listen(view: WebContentsView, outcome: Deferred.Deferred<string, GuideNotRead>) {
+  const inspector = view.webContents.debugger
+  const guideRequests = new Set<string>()
+  const fail = (cause: unknown) => Deferred.doneUnsafe(outcome, Effect.fail(new GuideNotRead({ cause })))
+
+  const onMessage = (_event: unknown, method: string, params: unknown) => {
+    if (method === "Network.requestWillBeSent") {
+      const sent = decodeRequestWillBeSent(params)
+      if (Option.isSome(sent) && isGuideRequest(sent.value.request)) guideRequests.add(sent.value.requestId)
+    }
+    if (method === "Network.loadingFinished") {
+      const finished = decodeLoadingFinished(params)
+      if (Option.isNone(finished) || !guideRequests.has(finished.value.requestId)) return
+      inspector
+        .sendCommand("Network.getResponseBody", { requestId: finished.value.requestId })
+        .then((raw: unknown) => {
+          const body = decodeResponseBody(raw)
+          if (Option.isNone(body)) return fail("the response body had an unexpected shape")
+          const { body: text, base64Encoded } = body.value
+          Deferred.doneUnsafe(
+            outcome,
+            Effect.succeed(base64Encoded ? Buffer.from(text, "base64").toString("utf8") : text)
+          )
+        }, fail)
+    }
+  }
+
+  inspector.attach("1.3")
+  inspector.on("message", onMessage)
+  return () => {
+    inspector.removeListener("message", onMessage)
+    if (inspector.isAttached()) inspector.detach()
+  }
 }
 
 const guideUrl = "https://tv.youtube.com/live"
