@@ -33,6 +33,8 @@ export function SlateView(props: {
   const ordered = [...props.slate].sort(GameSnapshot.watchOrder)
   const inProgress = (progress: ReturnType<GameSnapshot["progress"]>) =>
     ordered.filter((game) => game.progress() === progress)
+  const live = inProgress("live")
+  const upcoming = inProgress("upcoming")
   const finals = inProgress("over")
   const close = () => props.onOpenChange(false)
   const row = (game: GameSnapshot) => {
@@ -60,6 +62,8 @@ export function SlateView(props: {
       <SheetContent
         side="left"
         showCloseButton={false}
+        // App's hotkey handler closes the drawer on Esc, so a forwarded Esc from a stream view and a local one behave the same.
+        onEscapeKeyDown={(event) => event.preventDefault()}
         // The top bar's Slate button toggles the drawer itself; a press on it is not a click outside.
         onInteractOutside={(event) => {
           if (event.target instanceof Element && event.target.closest("[data-slate-toggle]") !== null)
@@ -80,33 +84,36 @@ export function SlateView(props: {
             <Section title="Bench" count={benched.length}>
               {benched.map(({ index, id }) => {
                 const game = props.slate.find((g) => g.id === id)
+                const swap = () => {
+                  dispatch({ _tag: "Swap", a: index, b: props.selected })
+                  close()
+                }
                 return (
                   <li key={index}>
                     {game === undefined ? (
-                      <span className="block px-3 py-1.5 font-mono text-xs text-muted-foreground">
+                      <button
+                        type="button"
+                        draggable
+                        onClick={swap}
+                        onDragStart={(event) => event.dataTransfer.setData(tileDrag, String(index))}
+                        title={`Swap into tile ${props.selected + 1}`}
+                        className="block w-full px-3 py-1.5 text-left font-mono text-xs text-muted-foreground transition-colors hover:bg-accent"
+                      >
                         Off the slate
-                      </span>
+                      </button>
                     ) : (
-                      <Matchup
-                        game={game}
-                        place="Bench"
-                        dragTile={index}
-                        onClick={() => {
-                          dispatch({ _tag: "Swap", a: index, b: props.selected })
-                          close()
-                        }}
-                      />
+                      <Matchup game={game} place="Bench" dragTile={index} onClick={swap} />
                     )}
                   </li>
                 )
               })}
             </Section>
           )}
-          <Section title="Live" count={inProgress("live").length}>
-            {inProgress("live").map(row)}
+          <Section title="Live" count={live.length}>
+            {live.map(row)}
           </Section>
-          <Section title="Upcoming" count={inProgress("upcoming").length}>
-            {inProgress("upcoming").map(row)}
+          <Section title="Upcoming" count={upcoming.length}>
+            {upcoming.map(row)}
           </Section>
           {finals.length > 0 && (
             <section className="border-t">
@@ -150,7 +157,7 @@ function Matchup(props: {
   onClick?: (() => void) | undefined
   dragTile?: number
 }) {
-  const { game } = props
+  const { game, dragTile } = props
   const scored = game.isLive() || game.status === "final"
   const networks = game.broadcasts.map(({ network }) => network).join(" · ")
   return (
@@ -158,8 +165,10 @@ function Matchup(props: {
       type="button"
       disabled={props.onClick === undefined}
       onClick={props.onClick}
-      draggable={props.dragTile !== undefined}
-      onDragStart={(event) => event.dataTransfer.setData(tileDrag, String(props.dragTile))}
+      draggable={dragTile !== undefined}
+      onDragStart={
+        dragTile === undefined ? undefined : (event) => event.dataTransfer.setData(tileDrag, String(dragTile))
+      }
       className="grid w-full grid-cols-[2ch_5ch_3ch_minmax(0,1fr)_3.25rem] items-baseline gap-x-2 px-3 py-1.5 text-left font-mono text-[13px] tabular-nums transition-colors enabled:hover:bg-accent disabled:cursor-default"
     >
       <Side side={game.away} other={game.home} scored={scored} row="row-start-1" />
