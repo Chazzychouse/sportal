@@ -8,6 +8,8 @@ const Competitor = Schema.Struct({
     id: Schema.String,
     abbreviation: Schema.String,
     displayName: Schema.String,
+    location: Schema.optional(Schema.String),
+    shortDisplayName: Schema.optional(Schema.String),
     logo: Schema.optional(Schema.String)
   })
 })
@@ -36,7 +38,14 @@ export const Event = Schema.Struct({
   }),
   competitions: Schema.NonEmptyArray(
     Schema.Struct({
-      broadcasts: Schema.optional(Schema.Array(Schema.Struct({ names: Schema.Array(Schema.String) }))),
+      geoBroadcasts: Schema.optional(
+        Schema.Array(
+          Schema.Struct({
+            type: Schema.Struct({ shortName: Schema.String }),
+            media: Schema.Struct({ shortName: Schema.String })
+          })
+        )
+      ),
       situation: Schema.optional(Situation),
       competitors: Schema.Array(Competitor)
     })

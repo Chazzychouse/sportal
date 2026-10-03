@@ -1,7 +1,7 @@
 import { assert, describe, it } from "@effect/vitest"
 import { Network } from "./Game.ts"
 import { ChannelAvailability, type ChannelCarriage, ChannelLineup } from "./Source.ts"
-import { snapshot } from "./TestGame.ts"
+import { broadcast, snapshot } from "./TestGame.ts"
 
 const espn = Network.make("ESPN")
 const disney = Network.make("Disney+")
@@ -74,5 +74,5 @@ function lineup(carriages: ReadonlyArray<ChannelCarriage>) {
 }
 
 function on(...networks: Array<Network>) {
-  return snapshot({ broadcasts: networks })
+  return snapshot({ broadcasts: networks.map((network) => broadcast(network)) })
 }

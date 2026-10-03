@@ -40,7 +40,7 @@ Every exported type name must be a term here.
 | **Cadence** | How long Ingest waits between polls, given what the last poll saw. | interval, rate |
 | **Source** | A way you obtain **video** (YouTube TV). | provider, service |
 | **Source name** | A source as people know it ("YouTube TV"); how code and the UI name a source. | source id |
-| **Broadcast** | The fact that a network is airing a game. | channel, stream |
+| **Broadcast** | The fact that a network is airing a game, on television or streaming only. | channel, stream |
 | **Network** | A network's name as a provider reports it ("CBS", "ESPN"). | channel, station |
 | **Channel** | A network as carried by a specific source. | |
 | **Channel carriage** | Whether a source carries a network: on a channel, or not at all. | answer, mapping |

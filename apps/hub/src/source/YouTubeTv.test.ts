@@ -1,7 +1,7 @@
 import { assert, describe, it } from "@effect/vitest"
 import { Network } from "@sportal/domain/Game"
 import { ChannelAvailability } from "@sportal/domain/Source"
-import { snapshot } from "@sportal/domain/TestGame"
+import { broadcast, snapshot } from "@sportal/domain/TestGame"
 import { Effect, Fiber, Layer, Option, Schema, Stream } from "effect"
 import * as Database from "../database/Database.ts"
 import { ChannelStore } from "./ChannelStore.ts"
@@ -17,8 +17,8 @@ const foxFromTheBeginning =
 
 const espn = Network.make("ESPN")
 const disney = Network.make("Disney+")
-const onEspn = snapshot({ broadcasts: [espn] })
-const onEspnAndDisney = snapshot({ broadcasts: [disney, espn] })
+const onEspn = snapshot({ broadcasts: [broadcast(espn)] })
+const onEspnAndDisney = snapshot({ broadcasts: [broadcast(disney), broadcast(espn)] })
 const guide = { _tag: "WebView" as const, url: "https://tv.youtube.com/live" }
 const decodeLive = Schema.decodeUnknownOption(YouTubeTv.LiveChannelUrl)
 

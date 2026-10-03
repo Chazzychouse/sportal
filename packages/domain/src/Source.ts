@@ -31,14 +31,14 @@ export class ChannelLineup extends Schema.Class<ChannelLineup>("sportal/ChannelL
    * otherwise the first network with no carriage recorded is the one to pick next.
    */
   availabilityOf(game: GameSnapshot): ChannelAvailability {
-    for (const network of game.broadcasts) {
+    for (const { network } of game.broadcasts) {
       const carriage = this.carriageOf(network)
       if (carriage?._tag === "Carried") return ChannelAvailability.Carried({ channel: carriage.channel })
     }
-    const unlearned = game.broadcasts.find((network) => this.carriageOf(network) === undefined)
+    const unlearned = game.broadcasts.find(({ network }) => this.carriageOf(network) === undefined)
     return unlearned === undefined
       ? ChannelAvailability.NotCarried()
-      : ChannelAvailability.Unlearned({ network: unlearned, source: this.source, guide: this.guide })
+      : ChannelAvailability.Unlearned({ network: unlearned.network, source: this.source, guide: this.guide })
   }
 
   /** Records a carriage, replacing any earlier one for the same network. */

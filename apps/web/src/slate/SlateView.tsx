@@ -34,7 +34,7 @@ export function SlateView(props: {
               <SideLine side={game.away} />
               <span className="row-span-2 self-center text-right text-neutral-400 text-xs">
                 <span className={game.isLive() ? "block text-emerald-400" : "block"}>{statusText(game)}</span>
-                {game.broadcasts.join(" · ")}
+                {game.broadcasts.map(({ network }) => network).join(" · ")}
               </span>
               <SideLine side={game.home} />
             </button>

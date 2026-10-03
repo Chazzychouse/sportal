@@ -1,4 +1,4 @@
-import { GameId, GameSnapshot, type GameStatus, Network } from "@sportal/domain/Game"
+import { type Broadcast, GameId, GameSnapshot, type GameStatus, Network } from "@sportal/domain/Game"
 import type { LeagueId } from "@sportal/domain/League"
 import { Situation } from "@sportal/domain/Situation"
 import { Team, TeamId } from "@sportal/domain/Team"
@@ -55,6 +55,8 @@ function toSnapshot(league: LeagueId, event: typeof EspnPayload.Event.Type): Opt
       id: TeamId.make(`${league}:${competitor.team.id}`),
       abbreviation: competitor.team.abbreviation,
       name: competitor.team.displayName,
+      location: competitor.team.location ?? competitor.team.displayName,
+      shortName: competitor.team.shortDisplayName ?? competitor.team.displayName,
       ...(competitor.team.logo === undefined ? {} : { logo: competitor.team.logo })
     }),
     score: Number.parseInt(competitor.score ?? "0", 10) || 0,
@@ -75,7 +77,7 @@ function toSnapshot(league: LeagueId, event: typeof EspnPayload.Event.Type): Opt
       clock: event.status.displayClock,
       home: side(home),
       away: side(away),
-      broadcasts: (competition.broadcasts ?? []).flatMap((b) => b.names.map((name) => Network.make(name))),
+      broadcasts: (competition.geoBroadcasts ?? []).flatMap(toBroadcast),
       ...(s === undefined
         ? {}
         : {
@@ -93,6 +95,20 @@ function toSnapshot(league: LeagueId, event: typeof EspnPayload.Event.Type): Opt
           })
     })
   )
+}
+
+/** A TV or streaming broadcast; ESPN also lists radio, which no source plays. */
+function toBroadcast(broadcast: {
+  readonly type: { readonly shortName: string }
+  readonly media: { readonly shortName: string }
+}): Array<Broadcast> {
+  const medium =
+    broadcast.type.shortName === "TV"
+      ? "tv"
+      : broadcast.type.shortName === "Streaming"
+        ? "streaming"
+        : undefined
+  return medium === undefined ? [] : [{ network: Network.make(broadcast.media.shortName), medium }]
 }
 
 function toStatus(type: { readonly name: string; readonly state: "pre" | "in" | "post" }): GameStatus {

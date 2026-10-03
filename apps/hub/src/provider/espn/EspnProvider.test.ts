@@ -34,8 +34,28 @@ describe("EspnProvider", () => {
       assert.strictEqual(game?.away.team.abbreviation, "MEM")
       assert.strictEqual(game?.away.team.id, "fbs:235")
       assert.strictEqual(game?.away.score, 27)
-      assert.deepStrictEqual(game?.broadcasts, [Network.make("ESPN+")])
+      assert.deepStrictEqual(game?.broadcasts, [{ network: Network.make("ESPN+"), medium: "streaming" }])
       assert.strictEqual(game?.situation?.isRedZone, true)
+    }).pipe(Effect.provide(TestLayer))
+  )
+
+  it.effect("keeps television and streaming broadcasts and drops radio", () =>
+    Effect.gen(function* () {
+      const provider = yield* Provider
+      const game = (yield* provider.slate("fbs")).find((g) => g.id === "401856710")
+
+      assert.deepStrictEqual(game?.broadcasts, [{ network: Network.make("ESPN"), medium: "tv" }])
+    }).pipe(Effect.provide(TestLayer))
+  )
+
+  it.effect("keeps each team's location and short name", () =>
+    Effect.gen(function* () {
+      const provider = yield* Provider
+      const game = (yield* provider.slate("fbs")).find((g) => g.id === "401862787")
+
+      assert.strictEqual(game?.home.team.location, "Charlotte")
+      assert.strictEqual(game?.home.team.shortName, "Charlotte")
+      assert.strictEqual(game?.home.team.name, "Charlotte 49ers")
     }).pipe(Effect.provide(TestLayer))
   )
 

@@ -1,6 +1,6 @@
 import { assert, describe, it } from "@effect/vitest"
 import { GameId, Network } from "@sportal/domain/Game"
-import { snapshot } from "@sportal/domain/TestGame"
+import { broadcast, snapshot } from "@sportal/domain/TestGame"
 import { Deferred, Effect, Fiber, Layer, Option, Ref, Stream } from "effect"
 import * as Database from "../database/Database.ts"
 import { Ingest } from "../ingest/Ingest.ts"
@@ -222,7 +222,13 @@ describe("StageSessions", () => {
 })
 
 function game(id: string, broadcasts: ReadonlyArray<Network>) {
-  return snapshot({ id: GameId.make(id), status: "live", period: 1, clock: "10:00", broadcasts })
+  return snapshot({
+    id: GameId.make(id),
+    status: "live",
+    period: 1,
+    clock: "10:00",
+    broadcasts: broadcasts.map((network) => broadcast(network))
+  })
 }
 
 /** YouTube TV over an in-memory database, already knowing ESPN's channel and that ESPN+ is not carried. */

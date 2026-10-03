@@ -4,7 +4,7 @@ import { type LiveMessage, LiveMessageJson } from "@sportal/api/LiveMessage"
 import { SportalApi } from "@sportal/api/SportalApi"
 import { GameId, Network } from "@sportal/domain/Game"
 import type { Tile } from "@sportal/domain/Stage"
-import { snapshot, team } from "@sportal/domain/TestGame"
+import { broadcast, snapshot, team } from "@sportal/domain/TestGame"
 import { DateTime, Effect, Layer, Option, Queue, Result, Schema, Stream } from "effect"
 import { HttpClient, HttpRouter, HttpServer } from "effect/http"
 import { HttpApiClient, HttpApiTest } from "effect/http-api"
@@ -23,7 +23,7 @@ const game = snapshot({
   status: "live",
   home: { team: team("MSST"), score: 0 },
   away: { team: team("ALA"), score: 0 },
-  broadcasts: [espn]
+  broadcasts: [broadcast(espn)]
 })
 const picking = {
   _tag: "PickingChannel",

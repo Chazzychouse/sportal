@@ -21,6 +21,10 @@ export type GameStatus = typeof GameStatus.Type
 export const Network = Schema.String.pipe(Schema.brand("Network"))
 export type Network = typeof Network.Type
 
+/** The fact that a network is airing a game, on television or streaming only. */
+export const Broadcast = Schema.Struct({ network: Network, medium: Schema.Literals(["tv", "streaming"]) })
+export type Broadcast = typeof Broadcast.Type
+
 const Side = Schema.Struct({ team: Team, score: Schema.Int, ranking: Schema.optional(Schema.Int) })
 
 export class GameSnapshot extends Schema.Class<GameSnapshot>("sportal/GameSnapshot")({
@@ -32,7 +36,7 @@ export class GameSnapshot extends Schema.Class<GameSnapshot>("sportal/GameSnapsh
   clock: Schema.String,
   home: Side,
   away: Side,
-  broadcasts: Schema.Array(Network),
+  broadcasts: Schema.Array(Broadcast),
   situation: Schema.optional(Situation)
 }) {
   /** Live games first, then upcoming by kickoff, then everything that is over. */
