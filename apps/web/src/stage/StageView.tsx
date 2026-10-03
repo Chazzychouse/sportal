@@ -9,6 +9,7 @@ import { localTime } from "../LocalTime.ts"
 export function StageView(props: {
   stage: Stage
   slate: ReadonlyArray<GameSnapshot>
+  connected: boolean
   selected: number
   onSelect: (tile: number) => void
 }) {
@@ -34,27 +35,24 @@ export function StageView(props: {
     })
   }, [props.stage])
 
-  useEffect(() => {
-    // Listening first, then asking: the shell reads the guide when the web UI asks for it.
-    const stop = window.sportalShell?.onGuideRead(sendGuide)
-    window.sportalShell?.readGuide()
-    return stop
-  }, [])
+  // Listening first, then asking: the shell reads the guide when the web UI asks for it.
+  useEffect(() => window.sportalShell?.onGuideRead(sendGuide), [])
 
   useEffect(() => {
-    // A game waiting for its airing plays once a guide read after its begin shows the channel on the air.
-    const due = props.stage.tiles.flatMap((tile) =>
-      tile._tag === "DataTile" && tile.why._tag === "NotYet" && tile.why.begin !== undefined
-        ? [DateTime.toEpochMillis(tile.why.begin)]
-        : []
-    )
-    if (due.length === 0) return
-    const timer = setTimeout(
-      () => window.sportalShell?.readGuide(),
-      Math.max(0, Math.min(...due) - Date.now()) + 60_000
-    )
+    // Asked again whenever the Hub comes back, since a guide read while it was away was lost.
+    if (props.connected) window.sportalShell?.readGuide()
+  }, [props.connected])
+
+  // A game waiting for its airing plays once a guide read after its begin shows the channel on the air. Only
+  // a begin still to come arms the timer, and only a change to it re-arms the timer.
+  const nextBegin = Option.getOrUndefined(
+    Option.map(props.stage.nextBegin(DateTime.nowUnsafe()), DateTime.toEpochMillis)
+  )
+  useEffect(() => {
+    if (nextBegin === undefined) return
+    const timer = setTimeout(() => window.sportalShell?.readGuide(), nextBegin - Date.now() + 60_000)
     return () => clearTimeout(timer)
-  }, [props.stage])
+  }, [nextBegin])
 
   return (
     <main className="grid min-h-0 grid-cols-2 grid-rows-2 gap-1 p-1">

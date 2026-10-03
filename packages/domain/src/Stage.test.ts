@@ -216,6 +216,47 @@ describe("Stage#refresh", () => {
   })
 })
 
+describe("Stage#nextBegin", () => {
+  const now = DateTime.makeUnsafe("2026-10-03T20:00:00Z")
+  const waiting = (begin: string) => () =>
+    ChannelAvailability.Upcoming({
+      channel: Option.some("FOX 43"),
+      begin: Option.some(DateTime.makeUnsafe(begin))
+    })
+
+  it("is the earliest begin still to come among the games waiting for their airing", () => {
+    const stage = assign(
+      assign(
+        assign(Stage.initial, 0, bama, waiting("2026-10-03T23:30:00Z")),
+        1,
+        irish,
+        waiting("2026-10-03T21:00:00Z")
+      ),
+      2,
+      GameId.make("401858251"),
+      onFox
+    )
+    assert.deepStrictEqual(stage.nextBegin(now), Option.some(DateTime.makeUnsafe("2026-10-03T21:00:00Z")))
+  })
+
+  it("passes over a begin that has come, so a game whose airing is late is not chased", () => {
+    const stage = assign(
+      assign(Stage.initial, 0, bama, waiting("2026-10-03T20:00:00Z")),
+      1,
+      irish,
+      waiting("2026-10-03T19:00:00Z")
+    )
+    assert.deepStrictEqual(stage.nextBegin(now), Option.none())
+  })
+
+  it("is none when no game is waiting with a begin", () => {
+    const stage = assign(Stage.initial, 0, bama, () =>
+      ChannelAvailability.Upcoming({ channel: Option.none(), begin: Option.none() })
+    )
+    assert.deepStrictEqual(stage.nextBegin(now), Option.none())
+  })
+})
+
 function some(availability: () => ChannelAvailability) {
   return () => Option.some(availability())
 }

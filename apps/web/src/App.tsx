@@ -16,7 +16,13 @@ export function App() {
         connected={live.connected}
         onPick={(game) => dispatch({ _tag: "Assign", tile: selected, game: game.id })}
       />
-      <StageView stage={live.stage} slate={live.slate} selected={selected} onSelect={setSelected} />
+      <StageView
+        stage={live.stage}
+        slate={live.slate}
+        connected={live.connected}
+        selected={selected}
+        onSelect={setSelected}
+      />
     </div>
   )
 }

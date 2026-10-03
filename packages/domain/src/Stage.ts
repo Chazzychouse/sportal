@@ -1,4 +1,4 @@
-import { Option, Result, Schema } from "effect"
+import { Array as Arr, DateTime, Option, Result, Schema } from "effect"
 import { GameId, Network } from "./Game.ts"
 import { Channel, type ChannelAvailability, SourceName } from "./Source.ts"
 import { StreamLocator } from "./Stream.ts"
@@ -99,6 +99,22 @@ export class Stage extends Schema.Class<Stage>("sportal/Stage")({
       ),
       audioFocus: this.audioFocus
     })
+  }
+
+  /**
+   * When the next game waiting for its airing is listed to begin, of the begins still after `now`. A begin
+   * that has come is passed over: the shell's own reads find an airing that starts late.
+   */
+  nextBegin(now: DateTime.Utc): Option.Option<DateTime.Utc> {
+    const begins = this.tiles.flatMap((tile) =>
+      tile._tag === "DataTile" &&
+      tile.why._tag === "NotYet" &&
+      tile.why.begin !== undefined &&
+      DateTime.isGreaterThan(tile.why.begin, now)
+        ? [tile.why.begin]
+        : []
+    )
+    return Arr.head(Arr.sort(begins, DateTime.Order))
   }
 }
 
