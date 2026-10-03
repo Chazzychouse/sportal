@@ -71,4 +71,5 @@ Numbers use `font-mono` with `tabular-nums`. Final rows are muted; the winner ke
 | --- | --- |
 | `S` pressed while a stream view has focus opens the drawer, but key focus stays in the stream view | `Esc` is forwarded as a hotkey and handled in `App.tsx`, so it still closes the drawer. Clicking a row works regardless of focus. Verified in the shell, run by the user |
 | A drawer over the left tile hides that video for as long as it is open | Accepted: the drawer is short-lived and closes on pick |
+| A click on a visible video does not reach the page, so it does not close the drawer | Accepted: `S`, `Esc`, the button, a pick, or a click on the top bar or tile chrome close it |
 | In full screen there is no top bar, so a toast sits over the video | Accepted for now |

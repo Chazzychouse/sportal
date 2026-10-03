@@ -3,6 +3,10 @@
 Date: 2026-10-03
 Status: Approved 2026-10-03; spike pending (section 0)
 
+> The slate sidebar, the bottom-left toasts, and the hotkey table here are superseded by
+> [the slate drawer design](2026-10-03-slate-drawer-design.md): the slate is a drawer, `S` toggles it, and toasts
+> sit top center in the top bar.
+
 ## Goal
 
 Make the Stage a real multiview: named layouts with adjustable dividers, swap and promote, a bench for games
