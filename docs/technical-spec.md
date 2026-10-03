@@ -340,7 +340,7 @@ Expected failures are typed errors in the Effect error channel, each handled whe
 
 ## 6. Domain language
 
-One word per concept, used identically in code, UI, documents, and conversation. This section becomes `CONTEXT.md`. Every exported type name must be a term here.
+One word per concept, used identically in code, UI, documents, and conversation. `CONTEXT.md` is the living copy of this section; when they differ, `CONTEXT.md` is right. Every exported type name must be a term here.
 
 ### Competition
 

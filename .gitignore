@@ -10,3 +10,5 @@ out/
 
 # Raw feed recordings (large, uncurated); curated fixtures live beside their adapter
 fixtures/espn-recordings/*/
+
+spikes/

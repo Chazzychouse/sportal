@@ -1,0 +1,8 @@
+pre-commit:
+  commands:
+    lint:
+      run: pnpm exec biome check --staged --no-errors-on-unmatched
+pre-push:
+  commands:
+    check:
+      run: pnpm check

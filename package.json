@@ -1,0 +1,22 @@
+{
+  "name": "sportal",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "biome check . && pnpm typecheck && pnpm structure && vitest run",
+    "typecheck": "pnpm -r --parallel exec tsc --noEmit",
+    "structure": "depcruise apps packages && knip",
+    "test": "vitest run",
+    "format": "biome check --write ."
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.15",
+    "@effect/vitest": "4.0.0",
+    "@types/node": "^24",
+    "dependency-cruiser": "^18.5.0",
+    "knip": "^6.39.0",
+    "lefthook": "^2.1.16",
+    "typescript": "^6.0.3",
+    "vitest": "^5.0.3"
+  }
+}
