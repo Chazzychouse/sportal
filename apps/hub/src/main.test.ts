@@ -48,8 +48,7 @@ describe("the Hub process", () => {
         const code = yield* hub.exitCode
         const took = (yield* Clock.currentTimeMillis) - stopping
 
-        // NodeRuntime.runMain exits 130 when a signal interrupts the program and its finalizers then finish.
-        assert.strictEqual(code, ChildProcessSpawner.ExitCode(130))
+        assert.strictEqual(code, ChildProcessSpawner.ExitCode(0))
         assert.isBelow(took, 5_000)
         assert.isTrue(yield* fs.exists(path.join(dataDir, "sportal.sqlite")))
         assert.isFalse(yield* fs.exists(path.join(dataDir, "sportal.sqlite-wal")))

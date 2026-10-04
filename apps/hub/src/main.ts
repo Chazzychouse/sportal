@@ -1,5 +1,5 @@
 import { NodeRuntime, NodeServices } from "@effect/platform-node"
-import { Layer } from "effect"
+import { Cause, Exit, Layer, Runtime } from "effect"
 import { FetchHttpClient } from "effect/http"
 import * as Database from "./database/Database.ts"
 import { HubConfig } from "./HubConfig.ts"
@@ -17,4 +17,12 @@ const Hub = HubServer.serve.pipe(
   Layer.provide(NodeServices.layer)
 )
 
-Layer.launch(Hub).pipe(NodeRuntime.runMain)
+Layer.launch(Hub).pipe(
+  NodeRuntime.runMain({
+    // The Hub runs until a signal stops it, so being interrupted is a clean stop.
+    teardown: (exit, onExit) =>
+      Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)
+        ? onExit(0)
+        : Runtime.defaultTeardown(exit, onExit)
+  })
+)
