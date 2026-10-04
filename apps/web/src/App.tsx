@@ -21,6 +21,12 @@ export function App() {
   const live = useLive()
   // The tile the next picked game goes to. Local to this client: it is a cursor, not shared state.
   const [selected, setSelected] = useState(0)
+  // The game whose player gets the mouse, after `I`. Local, like `selected`, and ended by selecting another tile.
+  const [interacting, setInteracting] = useState<GameId | undefined>(undefined)
+  const select = (tile: number) => {
+    setSelected(tile)
+    if (tile !== selected) setInteracting(undefined)
+  }
   const [palette, setPalette] = useState(false)
   const [keys, setKeys] = useState(false)
   const [joinRemote, setJoinRemote] = useState(false)
@@ -35,7 +41,7 @@ export function App() {
     if (dropped === undefined) return
     dispatch(dropped.command)
     setPick(card.id)
-    setSelected(dropped.select)
+    select(dropped.select)
   }
   useRejectionToasts()
 
@@ -60,7 +66,12 @@ export function App() {
         return card === undefined ? undefined : dropCard(card)
       }
       case "SelectTile":
-        return hotkey.slot < live.stage.onStage().length ? setSelected(hotkey.slot) : undefined
+        return hotkey.slot < live.stage.onStage().length ? select(hotkey.slot) : undefined
+      case "Interact": {
+        const tile = live.stage.onStage()[selected]
+        if (tile?._tag !== "StreamTile") return
+        return setInteracting((game) => (game === tile.game ? undefined : tile.game))
+      }
       case "ShowKeys":
         return setKeys((open) => !open)
       case "FullScreen":
@@ -95,7 +106,8 @@ export function App() {
           slate={live.slate}
           connected={live.connected}
           selected={selected}
-          onSelect={setSelected}
+          interacting={interacting}
+          onSelect={select}
         />
         {fullScreen.on || !slateOpen ? null : (
           <SlateView

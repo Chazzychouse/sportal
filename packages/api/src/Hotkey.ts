@@ -7,6 +7,8 @@ export const Hotkey = Object.assign(
     Schema.TaggedStruct("Promote", { slot: Schema.Int }),
     /** Make a tile the one the next dropped game goes to. */
     Schema.TaggedStruct("SelectTile", { slot: Schema.Int }),
+    /** Give the selected tile's player the mouse, or take it back. */
+    Schema.TaggedStruct("Interact", {}),
     Schema.TaggedStruct("ToggleSolo", {}),
     Schema.TaggedStruct("Unsolo", {}),
     Schema.TaggedStruct("FullScreen", {}),
@@ -41,6 +43,8 @@ export const Hotkey = Object.assign(
           return { _tag: "FullScreen" }
         case "KeyL":
           return { _tag: "NextLayout" }
+        case "KeyI":
+          return { _tag: "Interact" }
         case "KeyS":
           return { _tag: "ToggleSlate" }
         case "BracketLeft":
@@ -110,6 +114,13 @@ export const Hotkey = Object.assign(
         does: "Solo the selected tile, or unsolo",
         press: { code: "KeyF", from: "stream" },
         hotkey: { _tag: "ToggleSolo" }
+      },
+      {
+        group: "Tiles",
+        keys: ["I"],
+        does: "Use the selected tile's player with the mouse, or stop",
+        press: { code: "KeyI", from: "stream" },
+        hotkey: { _tag: "Interact" }
       },
       {
         group: "Tiles",

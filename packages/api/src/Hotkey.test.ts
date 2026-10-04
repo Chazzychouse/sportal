@@ -12,6 +12,8 @@ describe("Hotkey.of", () => {
     assert.deepStrictEqual(key("Escape"), { _tag: "Unsolo" })
     assert.deepStrictEqual(key("F11"), { _tag: "FullScreen" })
     assert.deepStrictEqual(key("KeyL"), { _tag: "NextLayout" })
+    assert.deepStrictEqual(key("KeyI"), { _tag: "Interact" })
+    assert.deepStrictEqual(key("KeyI", {}, "stream"), { _tag: "Interact" })
     assert.deepStrictEqual(key("KeyS"), { _tag: "ToggleSlate" })
     assert.deepStrictEqual(key("KeyK", { control: true }), { _tag: "CommandPalette" })
     assert.deepStrictEqual(key("KeyK", { meta: true }), { _tag: "CommandPalette" })

@@ -100,6 +100,7 @@ Provider and Source are the two words most likely to be swapped. Provider is alw
 | **Solo** | One on-stage game filling the whole Stage. | fullscreen, maximize |
 | **Swap** | Exchange two tiles, on stage or benched. | move |
 | **Audio focus** | The single game whose sound is on; it follows the game when tiles move. | active, unmuted |
+| **Interacting tile** | The one stream tile whose player gets the mouse, after `I`; every other stream tile's player never sees the pointer. Local to the Display, like the selected tile. | active, unlocked |
 | **Promote** | Move a game into the main tile. | feature |
 | **Preset** | A saved layout with tile assignments. | |
 | **Tile placement** | Where a game's stream or picking tile sits in a Display's window, what it loads, and whether it is a stream or a guide, as told to the shell. | bounds, rect |

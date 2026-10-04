@@ -1,5 +1,5 @@
 import type { StageTransition } from "@sportal/api/ShellBridge"
-import type { GameSnapshot } from "@sportal/domain/Game"
+import type { GameId, GameSnapshot } from "@sportal/domain/Game"
 import type { Split } from "@sportal/domain/Layout"
 import { Stage } from "@sportal/domain/Stage"
 import { Option } from "effect"
@@ -20,6 +20,7 @@ export function StageView(props: {
   slate: ReadonlyArray<GameSnapshot>
   connected: boolean
   selected: number
+  interacting: GameId | undefined
   onSelect: (tile: number) => void
 }) {
   const areaRef = useRef<HTMLDivElement | null>(null)
@@ -34,7 +35,7 @@ export function StageView(props: {
       ? props.stage
       : new Stage({ ...props.stage, splits: { ...props.stage.splits, [props.stage.layout]: dragged } })
   const rects = tileRects(shown, area)
-  const placed = placements(shown, rects, area, window.location.origin)
+  const placed = placements(shown, rects, area, window.location.origin, props.interacting)
   useVideoAreas(placed)
 
   // The shell hears only placements that changed, so a re-render never cuts a transition short. A change of
@@ -63,6 +64,16 @@ export function StageView(props: {
         void learnChannel(tile.network, pick.url).then((failure) => setNotices(noticed(index, failure)))
     })
   }, [props.stage])
+
+  // A click on a video reaches the shell, not this page: the shell reports which game's view it was.
+  useEffect(
+    () =>
+      window.sportalShell?.onTilePressed((game) => {
+        const slot = props.stage.slotOf(game)
+        if (slot !== undefined) props.onSelect(slot)
+      }),
+    [props.stage, props.onSelect]
+  )
 
   // Listening first, then asking: the shell's first read waits for the web UI to ask.
   useEffect(() => window.sportalShell?.onGuideRead(sendGuide), [])

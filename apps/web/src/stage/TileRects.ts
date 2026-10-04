@@ -1,4 +1,5 @@
 import type { TilePlacement } from "@sportal/api/ShellBridge"
+import type { GameId } from "@sportal/domain/Game"
 import type { Stage } from "@sportal/domain/Stage"
 
 /**
@@ -37,13 +38,14 @@ function videoBounds(rect: { x: number; y: number; width: number; height: number
 /**
  * What the shell must show for each stream and picking tile with a size: its game's view, in window pixels.
  * `origin` is where the Stage area sits in the window; `page` is the web UI's own address, which a source's path
- * (a scenario's synthetic stream) is resolved against.
+ * (a scenario's synthetic stream) is resolved against. Only `interacting`'s stream gets the mouse.
  */
 export function placements(
   stage: Stage,
   rects: ReturnType<typeof tileRects>,
   origin: { x: number; y: number },
-  page: string
+  page: string,
+  interacting: GameId | undefined
 ): Array<TilePlacement> {
   return stage.onStage().flatMap((tile, index) => {
     const rect = rects[index]
@@ -56,7 +58,7 @@ export function placements(
               : tile.channel.locator.url,
             role: "stream" as const,
             muted: stage.audioFocus !== tile.game,
-            interactive: false
+            interactive: tile.game === interacting
           }
         : tile._tag === "PickingChannel"
           ? // A guide can preview what is on; it never takes the sound.
