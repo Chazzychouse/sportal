@@ -1,5 +1,4 @@
 import { Effect, Layer, Option } from "effect"
-import { MessageStorage } from "effect/cluster"
 import * as Cluster from "./Cluster.ts"
 import { GameActors } from "./GameActors.ts"
 import { HubConfig } from "./HubConfig.ts"
@@ -51,10 +50,5 @@ function scripted(name: string, speed: number) {
 }
 
 function gameActors() {
-  return GameActors.layer.pipe(
-    Layer.provide(Cluster.layer),
-    // Keep-alive's message is persisted; memory storage is the smallest that carries it, with nothing on disk.
-    Layer.provide(MessageStorage.layerMemory),
-    Layer.provide(Cluster.config())
-  )
+  return GameActors.layer.pipe(Layer.provide(Cluster.inMemory))
 }

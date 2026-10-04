@@ -121,7 +121,7 @@ describe("GameActors", () => {
       const next = snapshot({ id: one, status: "live", period: 1, clock: "8:00" })
       yield* actors.receive(next)
       assert.strictEqual((yield* actors.liveGames).get(one)?.snapshot, next)
-    }).pipe(Effect.provide(GameActors.layer.pipe(Layer.provideMerge(TestCluster.cluster))))
+    }).pipe(Effect.provide(GameActors.layer.pipe(Layer.provideMerge(Cluster.inMemory))))
   )
 
   it.effect("after the layer is rebuilt a game is current on its next snapshot", () =>
@@ -319,7 +319,7 @@ describe("GameActors", () => {
         assert.strictEqual(errors[0]?.annotations.game, "1")
         assert.strictEqual(yield* counted("sportal_game_defects"), 1)
       }).pipe(
-        Effect.provide(GameActors.layer.pipe(Layer.provideMerge(TestCluster.cluster))),
+        Effect.provide(GameActors.layer.pipe(Layer.provideMerge(Cluster.inMemory))),
         Effect.provide(layer),
         withMetrics
       )
@@ -414,8 +414,8 @@ describe("GameActors", () => {
       return Effect.gen(function* () {
         const actors = yield* GameActors
         yield* actors.receive(live("10:00"))
-        // Sent straight after the entity registers, this snapshot starts its actor a tick later than one sent after a
-        // yield, so the timer would begin its sleep after time moves.
+        // The actor replies before the stale timer's `changes` subscriber fiber has run; one yield lets the scheduler
+        // run it, so the timer begins its sleep before time moves.
         yield* TestClock.adjust(0)
         yield* TestClock.adjust("10 seconds")
         const errors = logs.filter(({ level }) => level === "Error")
