@@ -110,7 +110,8 @@ Provider and Source are the two words most likely to be swapped. Provider is alw
 | Term | Meaning | Not |
 | --- | --- | --- |
 | **Follow** | Your declared interest in a team, conference, league, or game. | favourite, subscription |
-| **Watchability** | A 0–100 score of how worth watching a live game is right now. | excitement, heat |
+| **Watchability** | A 0–100 score of how worth watching a live game is right now, whether it is in a lull, and why; folded forward one snapshot at a time. | excitement, heat |
+| **Lull** | A live game with nothing happening: halftime, a delay, between periods, a TV break after a timeout, score, or change of possession, or no play for a minute. | break, stoppage |
 | **Trigger** | A condition over events and snapshots. | |
 | **Rule** | A trigger bound to a stage command and a revert condition. | automation |
 | **Director** | The Hub component that evaluates rules and issues stage commands. | autopilot |
