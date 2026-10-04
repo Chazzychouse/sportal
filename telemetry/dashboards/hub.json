@@ -14,6 +14,14 @@
         "query": "label_values(target_info{service_name=\"sportal-hub\"}, sportal_mode)",
         "refresh": 2,
         "sort": 1
+      },
+      {
+        "name": "game",
+        "label": "Game",
+        "type": "textbox",
+        "query": ".+",
+        "current": { "text": ".+", "value": ".+" },
+        "description": "A game id, or a pattern of them. Loki keeps game as structured metadata, not a label, so it has no list of values."
       }
     ]
   },
@@ -103,6 +111,106 @@
           "queryType": "traceql",
           "query": "{resource.service.name=\"sportal-hub\" && resource.sportal.mode=\"$mode\" && name=\"Ingest.poll\"}",
           "limit": 20
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "row",
+      "title": "Game actors",
+      "collapsed": false,
+      "gridPos": { "x": 0, "y": 24, "w": 24, "h": 1 },
+      "panels": []
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Live games by state",
+      "gridPos": { "x": 0, "y": 25, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": { "custom": { "fillOpacity": 30, "stacking": { "mode": "normal" } } },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (state) (sportal_live_games_ratio * on (job, instance) group_left target_info{sportal_mode=\"$mode\"})",
+          "legendFormat": "{{state}}"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Snapshots taken and behind",
+      "gridPos": { "x": 12, "y": 25, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "drawStyle": "bars", "fillOpacity": 80, "stacking": { "mode": "normal" } }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (outcome) (increase(sportal_snapshots_total[$__rate_interval]) * on (job, instance) group_left target_info{sportal_mode=\"$mode\"})",
+          "legendFormat": "{{outcome}}"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "Game actor defects",
+      "gridPos": { "x": 0, "y": 33, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "drawStyle": "bars", "fillOpacity": 80, "stacking": { "mode": "normal" } }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum (increase(sportal_game_defects_total[$__rate_interval]) * on (job, instance) group_left target_info{sportal_mode=\"$mode\"}) or vector(0)",
+          "legendFormat": "defects"
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "Receive latency",
+      "gridPos": { "x": 12, "y": 33, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "ms" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.5, sum by (le) (rate(sportal_receive_duration_milliseconds_bucket[$__rate_interval]) * on (job, instance) group_left target_info{sportal_mode=\"$mode\"}))",
+          "legendFormat": "p50"
+        },
+        {
+          "refId": "B",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(sportal_receive_duration_milliseconds_bucket[$__rate_interval]) * on (job, instance) group_left target_info{sportal_mode=\"$mode\"}))",
+          "legendFormat": "p95"
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "type": "logs",
+      "title": "Transitions of $game",
+      "gridPos": { "x": 0, "y": 41, "w": 24, "h": 10 },
+      "datasource": { "type": "loki", "uid": "loki" },
+      "options": { "sortOrder": "Ascending", "showTime": true },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "{service_name=\"sportal-hub\"} | sportal_mode=\"$mode\" | game=~\"$game\" |= \"→\""
         }
       ]
     }
