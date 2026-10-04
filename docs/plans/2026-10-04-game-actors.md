@@ -8,8 +8,8 @@ what they hold. Nothing a person sees changes.
 
 **Architecture:** Two pure domain additions, both written test-first: `GameSnapshot.gameTime`, an `Order`, and
 `LiveGame`, a `Data.Class` with a `Data.taggedEnum` state. In the Hub, `game/GameActors.ts` holds the `Game` entity
-(one volatile `Receive` RPC), a single-process cluster composed from cluster's public layers with no-op message
-storage, a private `LiveGames` registry, and the `GameActors` service that Ingest calls. Each entity keeps its live
+(one volatile `Receive` RPC), a single-process cluster composed from cluster's public layers with in-memory message
+storage (needed by keep-alive; nothing is written to disk), a private `LiveGames` registry, and the `GameActors` service that Ingest calls. Each entity keeps its live
 game in a `SubscriptionRef` and runs three reactions to its changes: the staleness timer, keep-alive, and the registry
 write.
 
@@ -62,8 +62,8 @@ Reading `effect/cluster`, `Cadence`, and the shutdown bound changed these detail
 | An actor "goes away 5 minutes after it stops being current" | `maxIdleTime` counts from an entity's last message, and Ingest sends every game on the slate on every poll. On a live slate (10 s polls) no actor idles out, final games included. On a quiet slate (15 min polls) every actor idles out between polls and starts again on the next one | Accepted as the lifecycle: an actor runs while its game is polled often or while it is current. Entity start and stop log at **Debug** for a game that is not current, and at **Info** for one that is, so a quiet slate does not fill the logs. **Open question for the user (below).** |
 | Entity state is a `Ref<Option<LiveGame>>`; the timer restarts on every transition | Three things react to every change: the timer, keep-alive, and the registry | A `SubscriptionRef<Option<LiveGame>>`. The timer is `changes` through `Stream.switchMap` (a new change cancels the old sleep); keep-alive is `changes` mapped to `isCurrent`, deduplicated, each value sent to `Entity.keepAlive`; the registry write is `changes` too. Each is a stream forked in the entity's scope |
 | Keep-alive while `isCurrent` | `isCurrent` depends on the time (kickoff within 30 minutes), and nothing changes when time passes | Re-evaluated on every change, which includes every snapshot taken. An upcoming game is polled at least every minute once a kickoff is within 30 minutes (`Cadence`), so it becomes current within a minute of the window opening |
-| `Entity.keepAlive` with `MessageStorage.layerNoop` | Proved in Task 1: it does not work. `keepAlive(true)` sends `KeepAliveRpc`, which is `Persisted`, and `Sharding.sendOutgoing` dies with "Persisted messages require MessageStorage" when storage is the no-op one (`Sharding.ts` 1172). The handler dies: by default the entity restarts and the caller waits forever; with `disableFatalDefects` the caller gets the defect. Either way the entity idles out at 5 minutes. With `MessageStorage.layerMemory` it works: the entity outlives 10 idle minutes and stops 5 minutes after `keepAlive(false)`. Volatile messages never touch memory storage (50 pings left it unchanged); each `keepAlive(true)` adds one stored request that is never cleared | **Blocked on the user.** The smallest fix is `MessageStorage.layerMemory` in place of `layerNoop`. It grows by one small entry each time a game becomes current, since keep-alive is sent only on a change of `isCurrent` |
-| Composition: `ShardingConfig.layer({…})` with explicit values | `entityTerminationTimeout` defaults to 15 s, which alone would break the Hub's 3 s shutdown bound | `entityTerminationTimeout: "1 second"`, and `simulateRemoteSerialization: false` (one process, so snapshots pass as they are). Proved in Task 1: with a handler that never finishes, closing the cluster's scope takes exactly 1 s of `TestClock` time. A volatile request with the no-op runners and storage replies. Task 6 proves the Hub still stops within the bound |
+| `Entity.keepAlive` with `MessageStorage.layerNoop` | Proved in Task 1: it does not work. `keepAlive(true)` sends `KeepAliveRpc`, which is `Persisted`, and `Sharding.sendOutgoing` dies with "Persisted messages require MessageStorage" when storage is the no-op one (`Sharding.ts` 1172). The handler dies: by default the entity restarts and the caller waits forever; with `disableFatalDefects` the caller gets the defect. Either way the entity idles out at 5 minutes. With `MessageStorage.layerMemory` it works: the entity outlives 10 idle minutes and stops 5 minutes after `keepAlive(false)`. Volatile messages never touch memory storage (50 pings left it unchanged); each `keepAlive(true)` adds one stored request that is never cleared | **Decided by the user, 2026-10-04: `MessageStorage.layerMemory`** in place of `layerNoop`. It grows by one small entry each time a game becomes current, since keep-alive is sent only on a change of `isCurrent`, and is gone on restart. Nothing is written to disk. The spec and ADR say "in-memory message storage" where they said "no-op" |
+| Composition: `ShardingConfig.layer({…})` with explicit values | `entityTerminationTimeout` defaults to 15 s, which alone would break the Hub's 3 s shutdown bound | `entityTerminationTimeout: "1 second"`, and `simulateRemoteSerialization: false` (one process, so snapshots pass as they are). Proved in Task 1: with a handler that never finishes, closing the cluster's scope takes exactly 1 s of `TestClock` time. A volatile request replies with 0 ms of `TestClock` time, the first one included, so tests need no clock adjustment per request. Task 6 proves the Hub still stops within the bound |
 | (Not in the spec) Time per request on the `TestClock` | Proved in Task 1: a volatile request replies with no `TestClock` time passing, the first one that starts the entity included. The spike's 100 ms per request came from persisted messages, which wait on storage polling | Tests send a snapshot and assert at once, with no `TestClock.adjust` to let delivery happen |
 | (Not in the spec) Scenario time drives idling | Proved in Task 1: with `ScenarioClock.layer(10)` provided to the composition, an entity idles out after 30 s of `TestClock` time (5 scenario minutes). The reaper checks every `min(30 s, maxIdleTime)`, at least 5 s, on the clock it was built with. So an entity stops at the first check after 5 idle minutes: between 5:00 and 5:30 | `HubMode` provides the scenario clock to `GameActors.layer`, as planned. Lifecycle tests allow the 30 s check interval: not stopped at 4:59, stopped by 5:30 |
 | `GameActors.receive(snapshot): Effect<void>` | A client call can fail with cluster errors (`MailboxFull`, `EntityNotAssignedToRunner`, and others) | `receive` logs a cluster error at Error with the game's annotations, counts it in `sportal_game_defects`, and succeeds. The game keeps its last good live game and the next poll sends again. An error from one game never fails Ingest's poll |
@@ -294,7 +294,8 @@ GameActors (service class, static layer)
 Game         = Entity.make("Game", [Receive])          Receive = Rpc.make("Receive", { payload: { snapshot: GameSnapshot } })
 gameEntity   = Game.toLayer(<activate>, { maxIdleTime: "5 minutes", disableFatalDefects: true })
 LiveGames    private Context.Service: a SubscriptionRef<ReadonlyMap<GameId, LiveGame>>, with set(id, liveGame) and remove(id)
-cluster      the Task 1 composition
+cluster      Sharding.layer with Runners.layerNoop, MessageStorage.layerMemory, RunnerStorage.layerMemory, RunnerHealth.layerNoop,
+             ShardingConfig.layer({ entityTerminationTimeout: 1 second, simulateRemoteSerialization: false })
 ```
 
 Entity activation (one per game id, from `Entity.CurrentAddress`):
@@ -314,8 +315,8 @@ Receive({ snapshot }):
 cluster error to the logged, counted, succeeding path in "Spec refinements".
 
 - [ ] **Step 1: Write the failing tests** in `GameActors.test.ts`. Every case provides `GameActors.layer` and runs
-  under `it.effect` on the `TestClock`. If Task 1 found a request needs `TestClock` time to reply, a private
-  `send(snapshot)` helper in the test file forks `receive`, adjusts the clock by that amount, and joins. Snapshots
+  under `it.effect` on the `TestClock`. A request replies with no `TestClock` time (Task 1), so tests call `receive`
+  directly. Snapshots
   come from `snapshot()` in `TestGame.ts`, with distinct ids per game.
   - "a game's snapshots reach its live game": receive an upcoming then a live snapshot of game `1`; `liveGames` has
     game `1` in `Live`, with the live snapshot's score.
@@ -331,8 +332,9 @@ cluster error to the logged, counted, succeeding path in "Spec refinements".
     game `1` is taken.
   - "after the layer is rebuilt a game is current on its next snapshot": receive in one `Effect.provide(GameActors.layer)`,
     then in a fresh one; the second starts with an empty `liveGames` and has the game after one snapshot.
-  - Pin, "requests are volatile": receive 100 snapshots; this needs no `MessageStorage` beyond the no-op one (the
-    layer has no other), so it passes only while `Receive` is not persisted.
+  - Pin, "requests are volatile": `Receive`'s annotations do not carry `ClusterSchema.Persisted` (read it with
+    `Context.get(Receive.annotations, ClusterSchema.Persisted)`, exporting `Receive` only if the test cannot reach it
+    through `Game.protocol`), so snapshots never enter message storage.
 - [ ] **Step 2: Run** `pnpm vitest run apps/hub/src/game/GameActors.test.ts`. Expected: FAIL (module does not exist).
 - [ ] **Step 3: Implement** to the shape above. Reuse nothing from the spike.
 - [ ] **Step 4: Run** the file. Expected: PASS.
@@ -372,7 +374,7 @@ Effect 4, use that.
   - Pin, "a live game outlasts 5 idle minutes": receive a live snapshot, then adjust 10 minutes; it is still in
     `liveGames` (as `Stale`).
   - Pin, "a final game is gone 5 minutes after its last snapshot": receive a final snapshot; at 4:59 it is in
-    `liveGames`; at 5:00 (plus any time Task 1 found idling needs) it is not.
+    `liveGames`; by 5:30 it is not (the reaper checks every 30 s, Task 1).
   - Pin, "an upcoming game kicking off within 30 minutes is kept alive; one hours away is not": two games, kickoffs
     at +20 minutes and +3 hours, each sent one snapshot; after 10 minutes only the first is in `liveGames`.
 - [ ] **Step 2: Run** the file. Expected: the new cases FAIL; Task 4's PASS.
