@@ -96,7 +96,7 @@ export function App() {
             fullScreen={fullScreen}
             slate={{
               open: slateOpen,
-              live: live.slate.filter((game) => game.isLive()).length,
+              live: live.slate.filter((game) => game.progress() === "live").length,
               toggle: () => setSlateOpen((open) => !open)
             }}
             onKeys={() => setKeys(true)}

@@ -76,7 +76,7 @@ flowchart LR
 | Question | Decision |
 | --- | --- |
 | The order | `GameSnapshot.gameTime: Order.Order<GameSnapshot>`, a static beside `watchOrder`: by `progress()` (upcoming, live, over), then period, then seconds left descending (the existing `secondsLeft()`). Two snapshots of one game compare by how far the game has got. ESPN gives no version to order by, and none is invented |
-| Delayed mid-game | `progress()` counts a `delayed` game that has started (period 1 or later) as live, not upcoming. Otherwise a weather delay would rank behind the snapshots before it and every snapshot during it would be ignored. This also fixes the stage map hiding a delayed game's score. Fixed in `progress()` itself, for every caller, so "has the game started" has one meaning |
+| Delayed mid-game | `progress()` counts a `delayed` game that has started (period 1 or later) as live, not upcoming. Otherwise a weather delay would rank behind the snapshots before it and every snapshot during it would be ignored. This also fixes the stage map hiding a delayed game's score. Fixed in `progress()` itself, for every caller, so "has the game started" has one meaning. Polling uses the same meaning: `Cadence` polls every 10 seconds while any game's `progress()` is live, so a weather delay does not slow the poll and flap its actor between Live and Stale |
 | Equal game time | Not behind, so taken. The clock stops between plays while the situation and last play move on, and an identical snapshot still says a feed is delivering |
 
 ### Domain: `LiveGame`, `packages/domain/src/LiveGame.ts`

@@ -134,7 +134,8 @@ export class Guide extends Schema.Class<Guide>("sportal/Guide")({
       Math.abs(DateTime.toEpochMillis(airing.begin) - DateTime.toEpochMillis(game.kickoff)) <=
       Duration.toMillis(kickoffTolerance)
     const onNow =
-      game.isLive() && DateTime.between(this.readAt, { minimum: airing.begin, maximum: airing.end })
+      game.progress() === "live" &&
+      DateTime.between(this.readAt, { minimum: airing.begin, maximum: airing.end })
     return (
       (nearKickoff || onNow) &&
       DateTime.isGreaterThan(airing.end, this.readAt) &&

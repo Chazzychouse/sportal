@@ -233,6 +233,16 @@ describe("Guide#availabilityOf", () => {
     assert.strictEqual(guide.availabilityOf(delayed)._tag, "Carried")
   })
 
+  it("matches an airing on now for a game delayed mid-game", () => {
+    const delayed = snapshot({
+      ...ohioStateAtIowa,
+      status: "delayed",
+      period: 3,
+      kickoff: DateTime.makeUnsafe("2026-10-03T17:00:00Z")
+    })
+    assert.strictEqual(guide.availabilityOf(delayed)._tag, "Carried")
+  })
+
   it("does not match a replay hours from kickoff", () => {
     const scheduled = snapshot({
       ...ohioStateAtIowa,
