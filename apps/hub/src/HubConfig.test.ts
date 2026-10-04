@@ -1,11 +1,10 @@
 import { NodePath } from "@effect/platform-node"
 import { assert, describe, it } from "@effect/vitest"
-import { ConfigProvider, Effect, Layer, Option } from "effect"
+import { Effect, Option } from "effect"
 import { HubConfig } from "./HubConfig.ts"
+import { home, inEnv, withEnv } from "./TestHubConfig.ts"
 
 describe("HubConfig", () => {
-  const home = { HOME: "/home/fan", USERPROFILE: "C:\\Users\\fan" }
-
   it.effect("has a default for every setting", () =>
     Effect.gen(function* () {
       const config = yield* HubConfig
@@ -22,7 +21,7 @@ describe("HubConfig", () => {
       assert.strictEqual(config.logFormat, "pretty")
       assert.strictEqual(config.version, "dev")
       assert.isTrue(Option.isNone(config.otlpUrl))
-    }).pipe(Effect.provide(withEnv(home)))
+    }).pipe(Effect.provide(withEnv({})))
   )
 
   it.effect("reads each setting", () =>
@@ -72,7 +71,7 @@ describe("HubConfig", () => {
       Effect.gen(function* () {
         const error = yield* Effect.gen(function* () {
           return yield* HubConfig
-        }).pipe(Effect.provide(withEnv({ ...home, [name]: value })), Effect.flip)
+        }).pipe(Effect.provide(withEnv({ [name]: value })), Effect.flip)
         assert.include(error.message, name)
       })
     )
@@ -127,12 +126,3 @@ describe("HubConfig.defaultDataDir", () => {
     })
   )
 })
-
-/** HubConfig read from exactly these variables, and nothing from the machine running the test. */
-function withEnv(env: Record<string, string>) {
-  return HubConfig.layer.pipe(Layer.provide(inEnv(env, NodePath.layer)))
-}
-
-function inEnv(env: Record<string, string>, path: typeof NodePath.layer) {
-  return Layer.mergeAll(ConfigProvider.layer(ConfigProvider.fromEnv({ env })), path)
-}

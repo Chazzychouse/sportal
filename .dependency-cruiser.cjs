@@ -64,6 +64,13 @@ module.exports = {
       to: { path: "^packages/domain/src/TestGame\\.ts$" }
     },
     {
+      name: "test-hub-config-is-for-tests",
+      comment: "HubConfig read from a test's own variables is imported only by test files.",
+      severity: "error",
+      from: { pathNot: "\\.test\\.ts$" },
+      to: { path: "^apps/hub/src/TestHubConfig\\.ts$" }
+    },
+    {
       name: "no-junk-drawers",
       comment: "Name a file for the concept it owns.",
       severity: "error",

@@ -1,10 +1,9 @@
-import { NodePath } from "@effect/platform-node"
 import { assert, describe, it } from "@effect/vitest"
-import { Array as Arr, ConfigProvider, Effect, Layer, Logger, Metric, Ref, References, Schema } from "effect"
+import { Array as Arr, Effect, Layer, Logger, Metric, Ref, References, Schema } from "effect"
 import { HttpClient, HttpClientError, HttpClientResponse } from "effect/http"
 import { TestClock } from "effect/testing"
-import { HubConfig } from "./HubConfig.ts"
 import * as Telemetry from "./Telemetry.ts"
+import { withEnv } from "./TestHubConfig.ts"
 
 describe("Telemetry", () => {
   it.effect("exports nothing without SPORTAL_OTLP_URL", () =>
@@ -196,15 +195,3 @@ const LogBody = Schema.Struct({
     })
   )
 })
-
-/** HubConfig read from exactly these variables and a HOME, and nothing from the machine running the test. */
-function withEnv(env: Record<string, string>) {
-  return HubConfig.layer.pipe(
-    Layer.provide(
-      Layer.mergeAll(
-        ConfigProvider.layer(ConfigProvider.fromEnv({ env: { HOME: "/home/fan", ...env } })),
-        NodePath.layer
-      )
-    )
-  )
-}
