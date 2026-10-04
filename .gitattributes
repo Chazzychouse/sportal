@@ -1,0 +1,4 @@
+* text=auto eol=lf
+
+fixtures/** -diff
+apps/hub/src/**/fixtures/** -diff
