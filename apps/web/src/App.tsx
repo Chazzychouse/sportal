@@ -27,10 +27,10 @@ export function App() {
     setSelected(tile)
     if (tile !== selected) setInteracting(undefined)
   }
-  // `interacting` only counts while its stream is still the selected tile: a Promote, Swap, Clear, layout change or Remote command can move it.
-  const shownTile = live.stage.onStage()[selected]
+  // It counts only while it is still the selected tile's stream: a promote, swap, clear, or Remote can move it.
+  const selectedTile = live.stage.onStage()[selected]
   const interactive =
-    shownTile?._tag === "StreamTile" && shownTile.game === interacting ? interacting : undefined
+    selectedTile?._tag === "StreamTile" && selectedTile.game === interacting ? interacting : undefined
   const [palette, setPalette] = useState(false)
   const [keys, setKeys] = useState(false)
   const [joinRemote, setJoinRemote] = useState(false)
@@ -71,11 +71,9 @@ export function App() {
       }
       case "SelectTile":
         return hotkey.slot < live.stage.onStage().length ? select(hotkey.slot) : undefined
-      case "Interact": {
-        const tile = live.stage.onStage()[selected]
-        if (tile?._tag !== "StreamTile") return
-        return setInteracting(interactive === tile.game ? undefined : tile.game)
-      }
+      case "Interact":
+        if (selectedTile?._tag !== "StreamTile") return
+        return setInteracting(interactive === undefined ? selectedTile.game : undefined)
       case "ShowKeys":
         return setKeys((open) => !open)
       case "FullScreen":
