@@ -35,6 +35,14 @@ describe("Watchability.initial", () => {
     assert.strictEqual(score(game({ status: "final" })), 0)
   })
 
+  it("scores a game delayed mid-game as live, in a lull", () => {
+    const delayed = Watchability.initial(game({ status: "delayed" }), now)
+    assert.isTrue(delayed.lull)
+    assert.isAbove(delayed.score, 0)
+    assert.strictEqual(delayed.reasons[0], "tied Q4, 2:10")
+    assert.strictEqual(score(game({ status: "delayed", period: 0, clock: "" })), 0)
+  })
+
   it("ranks late and close first", () => {
     assert.isAbove(score(game()), score(game({ period: 2, clock: "8:00" })))
     assert.isAbove(score(game()), score(game({ home: { team: team("UGA"), score: 45 } })))

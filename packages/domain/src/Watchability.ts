@@ -100,9 +100,10 @@ function judged(
     game.status === "halftime" ||
     game.status === "delayed" ||
     (game.status === "live" && (game.secondsLeft() === 0 || breakUntil !== undefined || stopped))
-  const parts = game.isLive()
-    ? [closeness(game), situation(game), stakes(game), ...(boostUntil === undefined ? [] : [boost])]
-    : []
+  const parts =
+    game.progress() === "live"
+      ? [closeness(game), situation(game), stakes(game), ...(boostUntil === undefined ? [] : [boost])]
+      : []
   return new Watchability({
     game: game.id,
     score: Math.min(100, Math.round(parts.reduce((total, part) => total + part.points, 0))),
