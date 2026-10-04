@@ -2,6 +2,7 @@ import { describe, expect, it } from "@effect/vitest"
 import { Context, Effect, Layer, Logger } from "effect"
 import { afterEach, vi } from "vitest"
 
+const ui = "http://127.0.0.1:4401"
 const providerSession = { setPermissionRequestHandler: vi.fn() }
 const windows: Array<{
   options: { width: number; height: number; parent?: unknown; webPreferences: Record<string, unknown> }
@@ -141,7 +142,7 @@ describe("ProviderSession.openSignIn", () => {
     const capture = Logger.make<unknown, void>(({ message }) => {
       logs.push(String(Array.isArray(message) ? message[0] : message))
     })
-    return Layer.build(ProviderSession.layer.pipe(Layer.provide(Logger.layer([capture])))).pipe(
+    return Layer.build(ProviderSession.layer(ui).pipe(Layer.provide(Logger.layer([capture])))).pipe(
       Effect.map((context) => Context.get(context, ProviderSession))
     )
   }
@@ -154,7 +155,7 @@ describe("allows", () => {
     "https://accounts.youtube.com/",
     "https://accounts.google.com/signin"
   ])("allows %s", (url) => {
-    expect(allows(url)).toBe(true)
+    expect(allows(url, ui)).toBe(true)
   })
 
   it.each([
@@ -166,7 +167,24 @@ describe("allows", () => {
     "https://tv.youtube.com@evil.com/",
     "not a url"
   ])("refuses %s", (url) => {
-    expect(allows(url)).toBe(false)
+    expect(allows(url, ui)).toBe(false)
+  })
+
+  it.each([
+    "http://127.0.0.1:4401/scenario-stream/401856707",
+    "http://127.0.0.1:4401/scenario-stream/tie-uga-ala"
+  ])("allows the UI's own scenario stream %s", (url) => {
+    expect(allows(url, ui)).toBe(true)
+  })
+
+  it.each([
+    "http://127.0.0.1:4401/",
+    "http://127.0.0.1:4401/remote",
+    "http://127.0.0.1:4402/scenario-stream/1",
+    "http://localhost:4401/scenario-stream/1",
+    "https://evil.example/scenario-stream/1"
+  ])("refuses %s, which is not the UI's scenario stream", (url) => {
+    expect(allows(url, ui)).toBe(false)
   })
 })
 

@@ -20,7 +20,7 @@ const Shell = Layer.unwrap(
 
     return Layer.effectDiscard(serveHub(window, hubUrl)).pipe(
       Layer.provide(Layer.mergeAll(TileViews.layer(window), GuideReader.layer)),
-      Layer.provide(ProviderSession.layer)
+      Layer.provide(ProviderSession.layer(hubUrl))
     )
   })
 )

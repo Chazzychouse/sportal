@@ -152,6 +152,9 @@ function attached(logs: Array<string> = []) {
     logs.push(String(Array.isArray(message) ? message[0] : message))
   })
   return Layer.build(
-    GuideReader.layer.pipe(Layer.provide(ProviderSession.layer), Layer.provide(Logger.layer([capture])))
+    GuideReader.layer.pipe(
+      Layer.provide(ProviderSession.layer("http://127.0.0.1:4401")),
+      Layer.provide(Logger.layer([capture]))
+    )
   ).pipe(Effect.map((context) => Context.get(context, GuideReader)))
 }

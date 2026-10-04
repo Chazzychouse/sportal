@@ -3,7 +3,7 @@ import type { ChannelPick, StageTransition, TilePlacement } from "@sportal/api/S
 import type { GameId } from "@sportal/domain/Game"
 import { Clock, Context, Effect, FiberHandle, Layer, PubSub, Stream } from "effect"
 import type { View, WebContentsView } from "electron"
-import { allows, hostOf, load, ProviderSession } from "./ProviderSession.ts"
+import { hostOf, load, ProviderSession } from "./ProviderSession.ts"
 import { Transition } from "./Transition.ts"
 
 /**
@@ -110,7 +110,7 @@ export class TileViews extends Context.Service<
         ) {
           const permitted: Array<TilePlacement> = []
           for (const placement of placements) {
-            if (allows(placement.url)) permitted.push(placement)
+            if (providers.allows(placement.url)) permitted.push(placement)
             else
               yield* Effect.logWarning(
                 `TileViews: refused the address for game ${placement.game} on ${hostOf(placement.url)}`

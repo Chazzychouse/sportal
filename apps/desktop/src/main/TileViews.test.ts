@@ -348,7 +348,7 @@ function collect<A>(picks: Stream.Stream<A>, count: number) {
 function attached() {
   created.length = 0
   const window = fakeWindow()
-  const layer = TileViews.layer(window).pipe(Layer.provide(ProviderSession.layer))
+  const layer = TileViews.layer(window).pipe(Layer.provide(ProviderSession.layer("http://127.0.0.1:4401")))
   return Layer.build(layer).pipe(
     Effect.map((context) => ({ window, tiles: Context.get(context, TileViews) }))
   )
