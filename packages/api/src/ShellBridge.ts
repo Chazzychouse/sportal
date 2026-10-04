@@ -44,7 +44,7 @@ export interface ShellBridge {
   onFullScreenChanged(listener: (on: boolean) => void): () => void
   /** Calls `listener` for each hotkey pressed while a stream view had keyboard focus. Returns a function that stops the calls. */
   onHotkey(listener: (hotkey: Hotkey) => void): () => void
-  /** Calls `listener` with the game whose stream view was clicked while its player had no mouse. Returns a function that stops the calls. */
+  /** Calls `listener` with the game whose stream view was clicked while it was not interactive. Returns a function that stops the calls. */
   onTilePressed(listener: (game: GameId) => void): () => void
   /** Opens the sign-in window for YouTube TV, or focuses it if open. Its sign-in is shared by every tile. */
   openSignIn(): void

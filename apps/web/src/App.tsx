@@ -27,6 +27,10 @@ export function App() {
     setSelected(tile)
     if (tile !== selected) setInteracting(undefined)
   }
+  // `interacting` only counts while its stream is still the selected tile: a Promote, Swap, Clear, layout change or Remote command can move it.
+  const shownTile = live.stage.onStage()[selected]
+  const interactive =
+    shownTile?._tag === "StreamTile" && shownTile.game === interacting ? interacting : undefined
   const [palette, setPalette] = useState(false)
   const [keys, setKeys] = useState(false)
   const [joinRemote, setJoinRemote] = useState(false)
@@ -70,7 +74,7 @@ export function App() {
       case "Interact": {
         const tile = live.stage.onStage()[selected]
         if (tile?._tag !== "StreamTile") return
-        return setInteracting((game) => (game === tile.game ? undefined : tile.game))
+        return setInteracting(interactive === tile.game ? undefined : tile.game)
       }
       case "ShowKeys":
         return setKeys((open) => !open)
@@ -106,7 +110,7 @@ export function App() {
           slate={live.slate}
           connected={live.connected}
           selected={selected}
-          interacting={interacting}
+          interacting={interactive}
           onSelect={select}
         />
         {fullScreen.on || !slateOpen ? null : (

@@ -138,27 +138,9 @@ function serveHub(window: BrowserWindow, hubUrl: string) {
         })
     )
 
-    yield* Effect.forkScoped(
-      tiles.hotkeys.pipe(
-        Stream.runForEach((hotkey) =>
-          Effect.sync(() => {
-            if (!window.isDestroyed()) window.webContents.send("sportal:hotkey", hotkey)
-          })
-        )
-      ),
-      { startImmediately: true }
-    )
+    yield* forward(window, "sportal:hotkey", tiles.hotkeys)
 
-    yield* Effect.forkScoped(
-      tiles.tilePresses.pipe(
-        Stream.runForEach((game) =>
-          Effect.sync(() => {
-            if (!window.isDestroyed()) window.webContents.send("sportal:tile-pressed", game)
-          })
-        )
-      ),
-      { startImmediately: true }
-    )
+    yield* forward(window, "sportal:tile-pressed", tiles.tilePresses)
 
     const openSignIn = (event: IpcMainEvent) => {
       if (event.sender === window.webContents) run(providers.openSignIn(window))
@@ -168,28 +150,10 @@ function serveHub(window: BrowserWindow, hubUrl: string) {
       () => Effect.sync(() => ipcMain.removeListener("sportal:open-sign-in", openSignIn))
     )
 
-    yield* Effect.forkScoped(
-      tiles.channelPicks.pipe(
-        Stream.runForEach((pick) =>
-          Effect.sync(() => {
-            if (!window.isDestroyed()) window.webContents.send("sportal:channel-picked", pick)
-          })
-        )
-      ),
-      { startImmediately: true }
-    )
+    yield* forward(window, "sportal:channel-picked", tiles.channelPicks)
 
     const reader = yield* GuideReader
-    yield* Effect.forkScoped(
-      reader.guides.pipe(
-        Stream.runForEach((guide) =>
-          Effect.sync(() => {
-            if (!window.isDestroyed()) window.webContents.send("sportal:guide-read", guide)
-          })
-        )
-      ),
-      { startImmediately: true }
-    )
+    yield* forward(window, "sportal:guide-read", reader.guides)
     const readGuide = (event: IpcMainEvent) => {
       if (event.sender === window.webContents) run(reader.readSoon)
     }
@@ -217,6 +181,19 @@ function serveHub(window: BrowserWindow, hubUrl: string) {
       )
     )
   })
+}
+
+function forward(window: BrowserWindow, channel: string, stream: Stream.Stream<unknown>) {
+  return Effect.forkScoped(
+    stream.pipe(
+      Stream.runForEach((value) =>
+        Effect.sync(() => {
+          if (!window.isDestroyed()) window.webContents.send(channel, value)
+        })
+      )
+    ),
+    { startImmediately: true }
+  )
 }
 
 const decodePlacements = Schema.decodeUnknownOption(Schema.Array(TilePlacement))

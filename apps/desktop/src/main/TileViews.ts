@@ -27,7 +27,7 @@ export class TileViews extends Context.Service<
     readonly channelPicks: Stream.Stream<ChannelPick>
     /** Each hotkey pressed while a stream view had keyboard focus. The page never receives it. */
     readonly hotkeys: Stream.Stream<Hotkey>
-    /** Each game whose stream view was pressed with the left button while its player had no mouse. The page never receives it. */
+    /** Each game whose stream view was pressed with the left button while it was not interactive. The page never receives it. */
     readonly tilePresses: Stream.Stream<GameId>
   }
 >()("sportal/desktop/TileViews") {
