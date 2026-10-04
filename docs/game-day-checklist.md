@@ -48,5 +48,6 @@ Setup: Hub serving the built web UI, desktop shell running, signed in to YouTube
 | 39 | Select a playing tile and press `I`, then use the player's controls with the mouse | The controls appear and work on that tile only; the other tiles still show no controls |
 | 40 | Press `I` again, or select another tile | The player stops getting the mouse; hovering it shows nothing again |
 | 41 | With Docker running, run `pnpm telemetry`, then a scenario at 10× with `SPORTAL_OTLP_URL=http://localhost:4318`, and open the Hub dashboard (`localhost:3000`, folder Sportal) | The dashboard fills; a poll's trace shows its provider calls; logs filter by mode |
+| 42 | With a game live, run `pnpm telemetry` and the Hub with `SPORTAL_OTLP_URL=http://localhost:4318`, and open the Game actors row of the Hub dashboard (mode `live`). Then check staleness: cut the network for two minutes (Wi-Fi off or cable out), then restore it. A scenario cannot do this, since it keeps answering with its last frame | Live games by state fill; a game that stops updating turns stale about 90 seconds later and live again on its next snapshot (`Live → Stale` about 90 s after the cut, `Stale → Live` on the first poll after the network returns); one game's transitions read in order in its logs panel (type its id into **Game**) |
 
 Record the date, the build, and any row that failed.

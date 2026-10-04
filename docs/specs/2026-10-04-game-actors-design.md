@@ -1,7 +1,7 @@
 # Game Actors — Design
 
 Date: 2026-10-04
-Status: Approved 2026-10-04
+Status: Approved 2026-10-04; refined while planning
 
 Each game the Hub follows gets an actor: an `effect/cluster` entity holding the game's live state in memory, its
 staleness timer, and its lifecycle. Ingest's polled snapshots go through the actors, and the slate is published from
@@ -16,7 +16,7 @@ The first of three pieces, in order:
 3. The Director's watchability and lull work, which can move per-game detection into the actors (see
    [How later pieces fit](#how-later-pieces-fit)).
 
-Depends on [Hub telemetry](./2026-10-04-telemetry-design.md), built first: the actors store nothing, so their logs,
+Depends on [Hub telemetry](./2026-10-04-telemetry-design.md), built first: the actors keep no game state, so their logs,
 spans, and metrics are the record of a game day. Decision: [ADR 0006](../adr/0006-live-games-are-actors.md).
 
 ## Goal
@@ -26,8 +26,8 @@ spans, and metrics are the record of a game day. Decision: [ADR 0006](../adr/000
 - A live game nobody has updated for 90 seconds is **stale**, and recovers on its next snapshot.
 - A snapshot that is behind the game the actor already has is ignored, whichever feed sent it, so a second feed can
   be added in piece 2 without the actors knowing feeds exist.
-- An actor runs while its game is current (live, or kicking off within 30 minutes) and goes away 5 minutes after it
-  stops being current.
+- An actor runs while its game is polled often or is current (live, stale, or kicking off within 30 minutes). Once
+  neither holds, it stops 5 to 5½ minutes after its last snapshot. See [Lifecycle](#lifecycle).
 - After a Hub restart, a game is current again on its next snapshot. Nothing is stored.
 - One game's life can be read back from Grafana: every transition, every ignored snapshot, every defect.
 
@@ -41,12 +41,13 @@ spans, and metrics are the record of a game day. Decision: [ADR 0006](../adr/000
 
 ## Glossary
 
-New rows in `CONTEXT.md`, each in the commit that introduces its type.
+New rows in `CONTEXT.md`, each in the commit that introduces its type. `LiveGameState` is exported too; the **Live
+game** row names it, so it needs no row of its own.
 
 | Term | Meaning | Not |
 | --- | --- | --- |
 | **Game time** | How far a game has got: before kickoff, in play, or over; then the period; then the clock running down. Orders two snapshots of one game. | timestamp, version |
-| **Live game** | One game as the Hub follows it: its latest snapshot and its state, upcoming, live, stale, or over. | game state, entity |
+| **Live game** | One game as the Hub follows it: its latest snapshot and its state (`LiveGameState`): upcoming, live, stale, or over. | game state, entity |
 | **Stale** | A live game no snapshot has reached for 90 seconds. | |
 | **Game actor** | The cluster entity that follows one game: its live game in memory, its staleness timer, its lifecycle. | durable object, worker |
 
@@ -56,7 +57,7 @@ New rows in `CONTEXT.md`, each in the commit that introduces its type.
 flowchart LR
   prov[Provider] -- slate --> ingest[Ingest]
   ingest -- "Receive(snapshot), every game, awaited" --> ga["Game actors (cluster entities)"]
-  ga -- every transition --> lg[LiveGames registry]
+  ga -- every change --> lg[LiveGames registry]
   lg -- live games --> ingest
   ingest -- slate --> watch[Watch] --> api[Live stream]
 ```
@@ -106,21 +107,37 @@ Transitions (rows: current state; columns: what arrives):
 | --- | --- |
 | The entity | `Game`, from `Entity.make`, keyed by game id, with one RPC, `Receive { snapshot: GameSnapshot }`, replying with nothing. Pattern: `node_modules/effect/ai-docs/src/80_cluster/10_entities.ts` |
 | Messages | Volatile: not annotated `ClusterSchema.Persisted`. Nothing about a game is stored and every snapshot is whole, so a message lost to a restart is replaced by the next poll. This removes what the spike found costly in persisted delivery: three SQL writes per message, tables that grow without bound, and a poisoned message replayed on every start |
-| Entity state | A `Ref<Option<LiveGame>>`, none until the first snapshot. The handler is one `Ref` update through `start` or `receive`; handlers for one entity run one at a time. A snapshot whose id is not the entity's is a defect (`Effect.die`): `GameActors.receive` routes by the snapshot's id, so it can only be a bug |
-| Timer | A fiber in the entity's scope: while the state is `Live`, it sleeps until `staleAt` and applies `tick`. It restarts on every transition, so a refreshed game's timer moves with it. The timer and the handler each change state in one `Ref` update |
-| Lifecycle | `maxIdleTime` 5 minutes. The entity holds `Entity.keepAlive` while its live game `isCurrent` and releases it when it is not |
-| Defects | `disableFatalDefects: true`, and the handler runs its step under `Effect.catchDefect`: the defect is logged with the snapshot that raised it, the entity keeps its last good live game, and the reply succeeds. A defect never reaches the sender or another game |
+| Entity state | A `SubscriptionRef<Option<LiveGame>>`, none until the first snapshot. Every change goes through one private step, `change`: given the live game it has, the step returns the new one, or none when nothing changes (a behind snapshot, a tick before the stale time). A change writes the registry and logs its transition under the state's lock; when nothing changes, nothing is written, logged, or published. Handlers for one entity run one at a time. A snapshot whose id is not the entity's is a defect (`Effect.die`): `GameActors.receive` routes by the snapshot's id, so it can only be a bug |
+| Reactions to a change | Two streams over the state's `changes`, forked in the entity's scope. The timer: a live game's `staleAt`, through `Stream.switchMap`, so a new change cancels the old sleep and a refreshed game's timer moves with it; it sleeps until `staleAt` and ticks through `change`. If the sleep ends a moment early, the tick changes nothing and it sleeps the rest of the way. Keep-alive: each live game mapped to `isCurrent`, deduplicated, each value sent to `Entity.keepAlive`. The registry is not a stream: it is written in the same step as the change, so `liveGames` has a snapshot's live game as soon as `receive` returns |
+| Lifecycle | `maxIdleTime` 5 minutes, counted from the entity's last message. The entity holds `Entity.keepAlive` while its live game `isCurrent` and releases it when it is not. See [Lifecycle](#lifecycle) |
+| Defects | `disableFatalDefects: true`, and the handler and each stream's step run under `Effect.catchDefect`: the defect is logged with the game's annotations and the snapshot at hand, counted, and the entity keeps its last good live game. The reply succeeds. A stream carries on to its next change rather than restarting, so a defect that recurs on the same live game is logged once, not in a loop; a live game's timer is set again by its next snapshot. A defect never reaches the sender or another game |
 | Registry | `LiveGames`, a `SubscriptionRef` of live games by game id, inside `GameActors`. An entity writes its live game on every change, timer included, and removes it in its finalizer. A reply cannot carry a timer's change, so the registry is how state leaves an actor |
-| The service | `GameActors`, a `Context.Service`: `receive(snapshot): Effect<void>` (sends to the snapshot's game and awaits the reply), `liveGames: Effect<ReadonlyMap<GameId, LiveGame>>`, `changes: Stream<ReadonlyMap<GameId, LiveGame>>` |
+| The service | `GameActors`, a `Context.Service`: `receive(snapshot): Effect<void>` (sends to the snapshot's game and awaits the reply), `liveGames: Effect<ReadonlyMap<GameId, LiveGame>>`, `changes: Stream<ReadonlyMap<GameId, LiveGame>>`. A send can fail with a cluster error (`MailboxFull`, `EntityNotAssignedToRunner`, and others): `receive` logs it at Error with the game's annotations, counts it in `sportal_game_defects`, and succeeds. The game keeps its last good live game and the next poll sends again, so one game never fails Ingest's poll |
 | Order | Ingest sends a poll's games concurrently and awaits every reply before the next poll, so a game never has two of one feed's snapshots in flight. Cluster serves an entity's requests one at a time but does not order requests in flight together (found in the spike); game time makes that harmless anyway |
+
+### Lifecycle
+
+`maxIdleTime` counts from an entity's last message, and Ingest sends every game on the slate on every poll. Cluster's
+reaper checks every 30 seconds, so an idle actor stops between 5:00 and 5:30 after its last message. On a live slate
+(10-second polls) no actor idles out, final games included. On a quiet slate (15-minute polls) every actor idles out
+between polls and starts again on the next one. With the user's approval, that is the lifecycle: an actor lives while
+its game is polled often or is current. Start and stop log at Debug for a game that is not current and at Info for one
+that is, so a quiet slate does not fill the logs.
+
+`isCurrent` depends on the time, and nothing changes when only time passes, so keep-alive is re-evaluated on every
+change, which includes every snapshot taken. Once a kickoff is within 30 minutes, `Cadence` polls at least every
+minute, so an upcoming game becomes current within a minute of its window opening.
 
 ### The cluster, single-process
 
 | Question | Decision |
 | --- | --- |
-| Composition | In `GameActors.ts`, from cluster's public layers: `Sharding.layer` with `Runners.layerNoop`, `MessageStorage.layerNoop`, `RunnerStorage.layerMemory`, `RunnerHealth.layerNoop`, and `ShardingConfig.layer({…})` with explicit values. This is `TestRunner.layer`'s recipe with no-op storage. No SQL, and cluster reads no environment variables (`SingleRunner.layer` would read `HOST` and `PORT`) |
+| Composition | In `GameActors.ts`, from cluster's public layers: `Sharding.layer` with `Runners.layerNoop`, `MessageStorage.layerMemory`, `RunnerStorage.layerMemory`, `RunnerHealth.layerNoop`, and `ShardingConfig.layer({ entityTerminationTimeout: "1 second", simulateRemoteSerialization: false })`. This is `TestRunner.layer`'s recipe with those two settings. No SQL, nothing written to disk, and cluster reads no environment variables (`SingleRunner.layer` would read `HOST` and `PORT`) |
+| In-memory message storage | Decided by the user, 2026-10-04, in place of no-op storage: `Entity.keepAlive(true)` sends a persisted RPC, and with no-op storage that send dies ("Persisted messages require MessageStorage"). Volatile `Receive` never touches the storage. Each `keepAlive(true)` adds one stored entry that is never removed, one each time a game becomes current, and it is gone on restart |
+| The two settings | `entityTerminationTimeout` defaults to 15 seconds, which alone would break the Hub's 3-second shutdown bound; at 1 second, closing the cluster with a handler that never finishes takes exactly 1 second. `simulateRemoteSerialization: false`: one process, so snapshots pass as they are |
+| The layers | Three statics on `GameActors`: `onCluster`, the actors on a cluster provided by the caller; `cluster`, the composition; and `layer`, the two together. `onCluster` waits, using no clock time, until Sharding has acquired its shards, because a send before then pays cluster's 100 ms retry. It assumes a single runner that owns every shard |
 | Tests | Use the same composition, so tests run the cluster the Hub runs |
-| First task of the plan | Prove the composition: volatile `Receive` with no-op storage delivers, replies, passivates, and keeps alive, and how much test-clock time a request costs (the spike saw about 100 ms per persisted request) |
+| First task of the plan | Proved the composition. A volatile request replies with no test-clock time passing, the first one that starts the entity included (the spike's 100 ms per request came from persisted messages, which wait on storage polling). Idling works on the clock the cluster is built with, so with the scenario clock an actor idles out in scenario time. Keep-alive does not work with no-op storage, which led to in-memory storage |
 | Unstable API | `effect/cluster` is marked unstable. The settings the Hub relies on (volatile delivery, defects not fatal, idle time, keep-alive) are each pinned by a test, so an upgrade that changes one fails a test, not a game day |
 
 ### Ingest
@@ -139,12 +156,12 @@ query in Loki.
 | Signal | What |
 | --- | --- |
 | Log, Info | Each transition: `Upcoming → Live`, `Live → Stale`, `Stale → Live`, `→ Over`, with game time and seconds since the last update |
-| Log, Info | Entity started; entity stopped (idle, or the Hub stopping) |
+| Log, Info or Debug | Actor started (on its first snapshot); actor stopped (idle, or the Hub stopping). Info for a game that is current, Debug otherwise (see [Lifecycle](#lifecycle)) |
 | Log, Debug | Each snapshot: taken, or ignored as behind, with both game times |
-| Log, Error | A defect, with its cause and the encoded snapshot that raised it, so it can be reproduced from the log alone |
-| Span | `GameActors.receive` (sender side) and the entity's handler, annotated with the game; nested under `Ingest.poll` |
+| Log, Error | A defect in the handler, the timer, or keep-alive, with its cause and the encoded snapshot at hand, so it can be reproduced from the log alone; a cluster error from `receive` |
+| Span | `GameActors.receive` (sender side), with `sportal.game`, nested under `Ingest.poll`. Cluster already makes a span per request, `Game(<id>).Receive` under its client's `Game.client.Receive`; the handler annotates that one with `sportal.game` and `sportal.league` instead of adding a second |
 | Metric | `sportal_game_actors` gauge (running entities); `sportal_live_games` gauge by state; `sportal_snapshots` counter by outcome (taken, behind); `sportal_transitions` counter by from and to; `sportal_game_defects` counter; `sportal_receive_duration` histogram. Cluster's own `ClusterMetrics` come along |
-| Dashboard | A "Game actors" row on the Hub dashboard: live games by state over time, snapshots taken and behind, defects, receive latency, and the transition log for a chosen game |
+| Dashboard | A "Game actors" row on the Hub dashboard: live games by state over time, snapshots taken and behind, defects, receive latency, and the transition log for a chosen game. Loki keeps `game` as structured metadata, not a stream label, so it has no list of values: the `game` variable is a text box, a game id or a pattern (`.+`, every game, by default) |
 
 ### Hub mode
 
@@ -159,6 +176,8 @@ query in Loki.
 | Hub stops cleanly | Entities stop; each logs its stop. Nothing to save |
 | Hub is killed | Nothing is lost that matters: the first poll after start gives every game its snapshot, and its actor is current |
 | A snapshot raises a defect | Logged with the snapshot; that game keeps its last good live game; every other game and the poll carry on |
+| The timer or keep-alive raises a defect | Logged with the live game's snapshot and counted; the stream carries on to the next change. A live game whose timer failed goes stale 90 seconds after its next snapshot |
+| A postponed game is rescheduled | A postponed game is over. If ESPN later lists it as scheduled, that snapshot is behind and ignored; the game comes back as upcoming once its actor has idled out |
 | A poll fails for a league | As today: the last good slate is kept. Its live games go stale 90 s later, which is now visible in logs and Grafana |
 | Events across a restart | An actor starts empty, so it has no "before" to compare with. Nothing consumes events yet; the Director must not assume it sees every one |
 
@@ -168,9 +187,9 @@ query in Loki.
 | --- | --- |
 | Game time, test-first | Upcoming before live before over; later period ahead; less time left ahead within a period; equal is equal; a delayed game in the second quarter is live and ahead of the first quarter |
 | `LiveGame`, test-first | Every cell of the transition table; stale exactly at 90 s and not before; a behind snapshot does not refresh `updatedAt`; an identical snapshot does; `isCurrent` at the 30-minute edge |
-| `GameActors`, on the test clock and the Hub's own cluster composition | A game's snapshots reach its live game; behind snapshots are ignored; stale at 90 s and live on the next snapshot; a defect in one game (a snapshot of another game sent straight to its entity) leaves the others, the sender, and that game's last good state alone; a live game outlasts 5 idle minutes and a final one does not, leaving the registry; after the layer is rebuilt a game is current on its next snapshot; a transition is logged with the game's annotations (a test logger) |
+| `GameActors`, on the test clock and the Hub's own cluster composition | A game's snapshots reach its live game; behind snapshots are ignored; stale at 90 s and live on the next snapshot; a defect in one game (a snapshot of another game sent straight to its entity) leaves the others, the sender, and that game's last good state alone; a live game outlasts 5 idle minutes and a final one does not, leaving the registry; after the layer is rebuilt a game is current on its next snapshot; a transition is logged with the game's annotations (a test logger); each metric and the `GameActors.receive` span; a defect in the timer or keep-alive is logged and counted and the stream carries on; a timer that wakes early publishes no change until the stale time |
 | Ingest | The existing tests pass unchanged: the slate is what it was. New: the slate keeps the poll's order and takes each game's snapshot from its live game |
-| By hand | A recorded scenario at 10× with telemetry on: transitions appear in the Game actors row; stopping the scenario's provider for two minutes turns its live games stale. A row in `docs/game-day-checklist.md` |
+| By hand | A scenario at 10× with telemetry on: transitions appear in the Game actors row. A scenario cannot show staleness: after its timeline ends it keeps returning its last frame, so every game is refreshed on every poll. Staleness is checked on a live day instead, by cutting the network for two minutes. A row in `docs/game-day-checklist.md` |
 
 ## How later pieces fit
 
@@ -191,7 +210,7 @@ query in Loki.
 - Showing staleness to people (tiles, the Remote).
 - Moving watchability or lulls into the actors.
 - Game events from actors.
-- Persisted messages or stored game state.
+- Persisted snapshots or stored game state. (Keep-alive's own entries sit in memory storage; see the cluster table.)
 - More than one Hub process.
 
 ## Documents that change

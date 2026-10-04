@@ -1,7 +1,7 @@
 # 6. Live games are volatile `effect/cluster` entities
 
 Date: 2026-10-04
-Status: Proposed
+Status: Accepted
 
 ## Context
 
@@ -24,7 +24,11 @@ against a plain fold. Both were correct. What it found about cluster:
 
 Each game is an `effect/cluster` entity, `Game`, keyed by game id, with one volatile RPC carrying a whole
 `GameSnapshot`. The entity holds a `LiveGame` in memory and stores nothing. The cluster is single-process, composed
-from cluster's public layers with no-op message storage, so it uses no SQL and reads no environment.
+from cluster's public layers with in-memory message storage, so it writes nothing to disk and reads no environment.
+In-memory storage, not no-op storage, because `Entity.keepAlive` sends a persisted message, and with no-op storage that
+send dies. Volatile snapshots never touch the storage; each keep-alive adds one small entry, gone on restart. The
+composition sets two things explicitly: `entityTerminationTimeout` to 1 second, since the 15-second default alone would
+break the Hub's 3-second shutdown bound, and `simulateRemoteSerialization` off, since snapshots never leave the process.
 
 Snapshots are ordered by game time (how far the game has got), not by arrival or by feed, so actors never know which
 feed sent a snapshot. Design: `docs/specs/2026-10-04-game-actors-design.md`.

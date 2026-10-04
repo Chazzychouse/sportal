@@ -64,6 +64,7 @@ flowchart LR
   subgraph hub[Hub — one server process]
     prov[Providers]
     ingest[Ingest: poll, decode, diff]
+    actors[Game actors: one per game]
     director[Director: watchability, rules]
     stages[Stage sessions: one per Display]
     store[(SQL store)]
@@ -83,12 +84,14 @@ flowchart LR
   espn --> prov
   cfbd --> prov
   prov --> ingest --> store
+  ingest -- snapshots --> actors
+  actors -- live games --> ingest
   ingest -- game events --> director
   director -- stage commands --> stages
   stages --> store
   api <--> ui1
   api <--> ui2
-  ingest --> api
+  ingest -- slate --> api
   stages --> api
   ui1 -- tile rectangles --> main --> views
   yttv --> views
@@ -169,6 +172,7 @@ sportal/
 │   │       ├── League.ts       Sport, League, Season, SeasonPhase, Conference
 │   │       ├── Team.ts         Team, Ranking
 │   │       ├── Game.ts         Game, GameStatus, Period, GameSnapshot, Network
+│   │       ├── LiveGame.ts     One game as the Hub follows it: LiveGame and LiveGameState
 │   │       ├── Situation.ts    Possession, down, distance, field position, red zone
 │   │       ├── GameEvent.ts    The event union
 │   │       ├── Slate.ts        SlateWindow and grouping (Tracker); watch order is GameSnapshot.watchOrder
@@ -213,6 +217,8 @@ sportal/
     │       ├── ingest/
     │       │   ├── Ingest.ts       The poll, decode, diff, publish loop
     │       │   └── Cadence.ts      How often to poll, given game status
+    │       ├── game/
+    │       │   └── GameActors.ts   The game actors: one cluster entity per game
     │       ├── director/
     │       │   └── Director.ts     Events in, stage commands and alerts out
     │       ├── stage/
@@ -290,6 +296,23 @@ class Provider extends Context.Service<Provider, {
 - Provider vocabulary stops at the folder edge. ESPN's "event", "competition", and "competitor" exist only in `EspnPayload.ts`.
 - The Hub composes providers per league: ESPN for NFL; ESPN with CollegeFootballData filling gaps for FBS. The composition is itself a `Provider`, so Ingest sees one.
 - Each adapter's tests are "this recorded payload decodes to this snapshot".
+
+**GameActors** — between Ingest and the slate. Not a port: one implementation, a single-process `effect/cluster`
+with one entity per game (`docs/adr/0006-live-games-are-actors.md`):
+
+```ts
+class GameActors extends Context.Service<GameActors, {
+  receive(snapshot: GameSnapshot): Effect<void>
+  readonly liveGames: Effect<ReadonlyMap<GameId, LiveGame>>
+  readonly changes: Stream<ReadonlyMap<GameId, LiveGame>>
+}>()("sportal/hub/GameActors") {}
+```
+
+- Ingest sends every polled snapshot to its game's actor, awaits them all, and publishes the slate with each game as
+  its actor has it. A game's actor alone decides its state (upcoming, live, stale, or over) and ignores a snapshot that
+  is behind in game time, so a second feed can send to the same actors.
+- `HubMode` provides it in both modes; in a scenario it runs on the scenario clock, so staleness and idling happen in
+  scenario time.
 
 **Source** — video out:
 
