@@ -6,10 +6,11 @@ import {
   DateTime,
   Duration,
   Effect,
+  Filter,
   Layer,
   Option,
   Schema,
-  type Stream,
+  Stream,
   SubscriptionRef
 } from "effect"
 import {
@@ -32,10 +33,14 @@ export class GameActors extends Context.Service<
     readonly receive: (snapshot: GameSnapshot) => Effect.Effect<void>
     /** Every running actor's live game, by game id. */
     readonly liveGames: Effect.Effect<ReadonlyMap<GameId, LiveGame>>
+    /** Every running actor's live game, by game id, on each change. */
     readonly changes: Stream.Stream<ReadonlyMap<GameId, LiveGame>>
   }
 >()("sportal/hub/GameActors") {
-  /** The service, its entity, and its registry, on a cluster provided by the caller. */
+  /**
+   * The service, its entity, and its registry, on a cluster provided by the caller. It assumes a single runner that
+   * owns every shard: it waits for shard 1 of `"default"`.
+   */
   static readonly onCluster: Layer.Layer<GameActors, never, Sharding.Sharding> = Layer.suspend(() =>
     // Suspended because the entity and the registry are declared below this class.
     Layer.effect(
@@ -109,6 +114,28 @@ const gameEntity = Game.toLayer(
           onSome: (liveGame) => liveGames.set(id, liveGame)
         }).pipe(Effect.as(next))
       })
+    yield* Effect.forkScoped(
+      SubscriptionRef.changes(state).pipe(
+        Stream.filterMap(
+          Filter.fromPredicateOption(Option.flatMap((liveGame: LiveGame) => liveGame.staleAt()))
+        ),
+        Stream.switchMap((staleAt) => Stream.fromEffect(staleOn(staleAt))),
+        Stream.runDrain
+      ),
+      { startImmediately: true }
+    )
+    yield* Effect.forkScoped(
+      SubscriptionRef.changes(state).pipe(
+        Stream.mapEffect((current) =>
+          DateTime.now.pipe(
+            Effect.map((now) => Option.exists(current, (liveGame) => liveGame.isCurrent(now)))
+          )
+        ),
+        Stream.changes,
+        Stream.runForEach(Entity.keepAlive)
+      ),
+      { startImmediately: true }
+    )
     return Game.of({
       Receive: ({ payload: { snapshot } }) =>
         Effect.gen(function* () {
@@ -131,6 +158,14 @@ const gameEntity = Game.toLayer(
           )
         )
     })
+
+    function staleOn(staleAt: DateTime.Utc): Effect.Effect<void> {
+      return Effect.gen(function* () {
+        yield* Effect.sleep(Duration.max(DateTime.distance(yield* DateTime.now, staleAt), Duration.zero))
+        const now = yield* DateTime.now
+        yield* change(Option.map((liveGame) => liveGame.tick(now).pipe(Option.getOrElse(() => liveGame))))
+      })
+    }
   }),
   { maxIdleTime: "5 minutes", disableFatalDefects: true }
 )

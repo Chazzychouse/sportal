@@ -2,8 +2,9 @@ import { assert, describe, it } from "@effect/vitest"
 import { GameId } from "@sportal/domain/Game"
 import { LiveGameState } from "@sportal/domain/LiveGame"
 import { snapshot, team } from "@sportal/domain/TestGame"
-import { Context, Effect, Exit, Fiber, Layer, Stream } from "effect"
+import { Context, DateTime, Effect, Exit, Fiber, Layer, Ref, Stream } from "effect"
 import { ClusterSchema } from "effect/cluster"
+import { TestClock } from "effect/testing"
 import { Game, GameActors } from "./GameActors.ts"
 
 const one = GameId.make("1")
@@ -118,9 +119,122 @@ describe("GameActors", () => {
     })
   )
 
+  describe("over time", () => {
+    const live = (clock: string) => snapshot({ id: one, status: "live", period: 1, clock })
+
+    it.effect("a live game nobody updates is stale at 90 seconds", () =>
+      Effect.gen(function* () {
+        const actors = yield* GameActors
+        const receivedAt = yield* DateTime.now
+        yield* actors.receive(live("10:00"))
+        yield* TestClock.adjust("89 seconds")
+        assert.isTrue(LiveGameState.$is("Live")(yield* stateOf(one)))
+        yield* TestClock.adjust("1 second")
+        const state = yield* stateOf(one)
+        assert.isTrue(LiveGameState.$is("Stale")(state))
+        assert.isTrue(
+          LiveGameState.$is("Stale")(state) && DateTime.Equivalence(state.lastUpdatedAt, receivedAt)
+        )
+      }).pipe(Effect.provide(GameActors.layer))
+    )
+
+    it.effect("a refreshed game's timer moves with it", () =>
+      Effect.gen(function* () {
+        const actors = yield* GameActors
+        yield* actors.receive(live("10:00"))
+        yield* TestClock.adjust("60 seconds")
+        yield* actors.receive(live("9:00"))
+        yield* TestClock.adjust("60 seconds")
+        assert.isTrue(LiveGameState.$is("Live")(yield* stateOf(one)))
+        yield* TestClock.adjust("30 seconds")
+        assert.isTrue(LiveGameState.$is("Stale")(yield* stateOf(one)))
+      }).pipe(Effect.provide(GameActors.layer))
+    )
+
+    it.effect("a stale game is live again on its next snapshot", () =>
+      Effect.gen(function* () {
+        const actors = yield* GameActors
+        yield* actors.receive(live("10:00"))
+        yield* TestClock.adjust("90 seconds")
+        assert.isTrue(LiveGameState.$is("Stale")(yield* stateOf(one)))
+        yield* TestClock.adjust("10 seconds")
+        const receivedAt = yield* DateTime.now
+        yield* actors.receive(live("9:00"))
+        const state = yield* stateOf(one)
+        assert.isTrue(LiveGameState.$is("Live")(state) && DateTime.Equivalence(state.updatedAt, receivedAt))
+      }).pipe(Effect.provide(GameActors.layer))
+    )
+
+    it.effect("an upcoming or over game never goes stale", () =>
+      Effect.gen(function* () {
+        const actors = yield* GameActors
+        const seen = yield* Ref.make<ReadonlyArray<LiveGameState>>([])
+        yield* actors.changes.pipe(
+          Stream.runForEach((liveGames) =>
+            Ref.update(seen, (states) => [
+              ...states,
+              ...[...liveGames.values()].map((liveGame) => liveGame.state)
+            ])
+          ),
+          Effect.forkChild({ startImmediately: true })
+        )
+        yield* actors.receive(snapshot({ id: one }))
+        yield* actors.receive(snapshot({ id: two, status: "final", period: 4, clock: "0:00" }))
+        yield* TestClock.adjust("10 minutes")
+        const states = yield* Ref.get(seen)
+        assert.isTrue(states.some(LiveGameState.$is("Upcoming")))
+        assert.isTrue(states.some(LiveGameState.$is("Over")))
+        assert.isTrue(
+          states.every((state) => LiveGameState.$is("Upcoming")(state) || LiveGameState.$is("Over")(state))
+        )
+      }).pipe(Effect.provide(GameActors.layer))
+    )
+
+    it.effect("a live game outlasts 5 idle minutes", () =>
+      Effect.gen(function* () {
+        const actors = yield* GameActors
+        yield* actors.receive(live("10:00"))
+        yield* TestClock.adjust("10 minutes")
+        assert.isTrue(LiveGameState.$is("Stale")(yield* stateOf(one)))
+      }).pipe(Effect.provide(GameActors.layer))
+    )
+
+    it.effect("a final game is gone 5 minutes after its last snapshot", () =>
+      Effect.gen(function* () {
+        const actors = yield* GameActors
+        yield* actors.receive(snapshot({ id: one, status: "final", period: 4, clock: "0:00" }))
+        yield* TestClock.adjust("299 seconds")
+        assert.isTrue((yield* actors.liveGames).has(one))
+        yield* TestClock.adjust("31 seconds")
+        assert.isFalse((yield* actors.liveGames).has(one))
+      }).pipe(Effect.provide(GameActors.layer))
+    )
+
+    it.effect("an upcoming game kicking off within 30 minutes is kept alive; one hours away is not", () =>
+      Effect.gen(function* () {
+        const actors = yield* GameActors
+        const now = yield* DateTime.now
+        yield* actors.receive(snapshot({ id: one, kickoff: DateTime.add(now, { minutes: 20 }) }))
+        yield* actors.receive(snapshot({ id: two, kickoff: DateTime.add(now, { hours: 3 }) }))
+        yield* TestClock.adjust("10 minutes")
+        const liveGames = yield* actors.liveGames
+        assert.isTrue(liveGames.has(one))
+        assert.isFalse(liveGames.has(two))
+      }).pipe(Effect.provide(GameActors.layer))
+    )
+  })
+
   it("requests are volatile", () => {
     const receive = Game.protocol.requests.get("Receive")
     assert.isDefined(receive)
     assert.isFalse(receive !== undefined && Context.get(receive.annotations, ClusterSchema.Persisted))
   })
 })
+
+function stateOf(id: GameId) {
+  return GameActors.use((actors) => actors.liveGames).pipe(
+    Effect.flatMap((liveGames) => Effect.fromNullishOr(liveGames.get(id))),
+    Effect.orDie,
+    Effect.map((liveGame) => liveGame.state)
+  )
+}
