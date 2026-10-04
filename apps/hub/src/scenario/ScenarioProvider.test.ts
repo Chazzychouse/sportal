@@ -51,6 +51,34 @@ describe("ScenarioProvider", () => {
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer))
   )
 
+  it.effect("plays every slice committed in the folder", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem
+      const names = (yield* fs.readDirectory(ScenarioProvider.folder))
+        .filter((file) => file.endsWith(".json"))
+        .map((file) => file.slice(0, -".json".length))
+      assert.isAbove(names.length, 0)
+      for (const name of names) {
+        const provider = yield* Provider.pipe(Effect.provide(ScenarioProvider.layer(name)))
+        const slate = [...(yield* provider.slate("fbs")), ...(yield* provider.slate("nfl"))]
+        assert.isAbove(slate.length, 0, `${name} has games at its start`)
+      }
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer))
+  )
+
+  it.effect("fails to load a slice that no longer decodes", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem
+      const dir = yield* fs.makeTempDirectoryScoped()
+      yield* fs.writeFileString(
+        join(dir, "stale.json"),
+        JSON.stringify({ name: "stale", origin: 7, frames: [] })
+      )
+      const exit = yield* Layer.build(ScenarioProvider.layer("stale", dir)).pipe(Effect.exit)
+      assert.isTrue(exit._tag === "Failure")
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer))
+  )
+
   it.effect("refuses a name it does not know, listing the names it does", () =>
     Effect.gen(function* () {
       const dir = yield* (yield* FileSystem.FileSystem).makeTempDirectoryScoped()
