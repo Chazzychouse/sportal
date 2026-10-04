@@ -1,9 +1,10 @@
 import { createServer } from "node:http"
 import { join } from "node:path"
 import { NodeHttpServer, NodeRuntime, NodeServices } from "@effect/platform-node"
-import { Config, Effect, FileSystem, Layer, Option, Schema } from "effect"
+import { Effect, FileSystem, Layer, Option } from "effect"
 import { FetchHttpClient, HttpRouter, HttpStaticServer } from "effect/http"
 import * as Database from "./database/Database.ts"
+import { HubConfig } from "./HubConfig.ts"
 import * as HubServer from "./http/HubServer.ts"
 import { Ingest } from "./ingest/Ingest.ts"
 import * as EspnProvider from "./provider/espn/EspnProvider.ts"
@@ -17,28 +18,16 @@ import { Watch } from "./watch/Watch.ts"
 
 const Hub = Layer.unwrap(
   Effect.gen(function* () {
-    const port = yield* Config.Port("SPORTAL_PORT").pipe(Config.withDefault(4400))
-    // Every interface, so a Remote on the home network can reach the Hub.
-    const host = yield* Config.String("SPORTAL_HOST").pipe(Config.withDefault("0.0.0.0"))
-    // The built web UI, served by the Hub outside development.
-    const webRoot = yield* Config.String("SPORTAL_WEB_ROOT").pipe(Config.option)
-    // Where the Hub keeps its database.
-    const dataDir = yield* Config.String("SPORTAL_DATA_DIR").pipe(Config.withDefault(".sportal"))
-    yield* (yield* FileSystem.FileSystem).makeDirectory(dataDir, { recursive: true })
+    const config = yield* HubConfig
+    yield* (yield* FileSystem.FileSystem).makeDirectory(config.dataDir, { recursive: true })
 
-    const routes = Option.match(webRoot, {
+    const routes = Option.match(config.webRoot, {
       onNone: () => HubServer.layer,
       onSome: (root) => Layer.mergeAll(HubServer.layer, HttpStaticServer.layer({ root, spa: true }))
     })
 
     // A scenario plays a game day in place of ESPN and YouTube TV. Only Ingest, Watch, and the scenario run on scenario
     // time; the rest of the Hub keeps the real clock.
-    const scenario = yield* Config.String("SPORTAL_SCENARIO").pipe(Config.option)
-    // A speed of zero, a negative one, or NaN would stall or break the scenario clock, so the Hub refuses it.
-    const speed = yield* Config.schema(
-      Schema.Finite.check(Schema.isGreaterThan(0)),
-      "SPORTAL_SCENARIO_SPEED"
-    ).pipe(Config.withDefault(1))
     const leagues = ["nfl", "fbs"] as const
     const live = Layer.mergeAll(
       Watch.layer.pipe(Layer.provideMerge(Ingest.layer(leagues).pipe(Layer.provide(EspnProvider.layer)))),
@@ -49,7 +38,7 @@ const Hub = Layer.unwrap(
         // One clock for Ingest, the scenario, and Watch, so they share scenario time.
         Watch.layer.pipe(
           Layer.provideMerge(Ingest.layer(leagues).pipe(Layer.provide(ScenarioProvider.layer(name)))),
-          Layer.provide(ScenarioClock.layer(speed))
+          Layer.provide(ScenarioClock.layer(config.scenarioSpeed))
         ),
         ScenarioSource.layer
       )
@@ -59,17 +48,17 @@ const Hub = Layer.unwrap(
       Layer.Success<typeof live>,
       Layer.Error<typeof live> | Layer.Error<Scripted>,
       Layer.Services<typeof live> | Layer.Services<Scripted>
-    > = Option.match(scenario, { onNone: () => live, onSome: scripted })
+    > = Option.match(config.scenario, { onNone: () => live, onSome: scripted })
 
     return HttpRouter.serve(routes).pipe(
       Layer.provide(StageSessions.layer),
       Layer.provide(games),
-      Layer.provide(Database.layer(join(dataDir, "sportal.sqlite"))),
+      Layer.provide(Database.layer(join(config.dataDir, "sportal.sqlite"))),
       Layer.provide(FetchHttpClient.layer),
-      Layer.provide(NodeHttpServer.layer(createServer, { port, host })),
+      Layer.provide(NodeHttpServer.layer(createServer, { port: config.port, host: config.host })),
       Layer.provide(NodeServices.layer)
     )
   })
-)
+).pipe(Layer.provide(HubConfig.layer))
 
 Layer.launch(Hub).pipe(Effect.provide(NodeServices.layer), NodeRuntime.runMain)
