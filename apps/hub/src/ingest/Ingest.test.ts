@@ -6,6 +6,7 @@ import { Effect, Layer, Metric, Option, type Tracer } from "effect"
 import { TestClock } from "effect/testing"
 import { GameActors } from "../GameActors.ts"
 import { Provider, ProviderError } from "../provider/Provider.ts"
+import * as TestCluster from "../TestCluster.ts"
 import { recordingSpans, withMetrics } from "../TestTelemetry.ts"
 import { Ingest } from "./Ingest.ts"
 
@@ -25,7 +26,7 @@ function game(id: string, period = 1) {
 
 /** Ingest of the fbs league over `provider`, with the game actors it sends to also provided to the test. */
 function withActors(provider: Layer.Layer<Provider>) {
-  return Ingest.layer(["fbs"]).pipe(Layer.provideMerge(GameActors.layer), Layer.provide(provider))
+  return Ingest.layer(["fbs"]).pipe(Layer.provideMerge(TestCluster.gameActors), Layer.provide(provider))
 }
 
 /** A provider that answers each poll with the next scripted response. */
@@ -58,7 +59,7 @@ describe("Ingest", () => {
     }).pipe(
       Effect.provide(
         Ingest.layer(["fbs"]).pipe(
-          Layer.provide([scripted([[liveGame(0)], [liveGame(7)]]), GameActors.layer])
+          Layer.provide([scripted([[liveGame(0)], [liveGame(7)]]), TestCluster.gameActors])
         )
       )
     )
@@ -72,7 +73,7 @@ describe("Ingest", () => {
       assert.strictEqual((yield* ingest.slate)[0]?.home.score, 7)
     }).pipe(
       Effect.provide(
-        Ingest.layer(["fbs"]).pipe(Layer.provide([scripted([[liveGame(7)], "fail"]), GameActors.layer]))
+        Ingest.layer(["fbs"]).pipe(Layer.provide([scripted([[liveGame(7)], "fail"]), TestCluster.gameActors]))
       )
     )
   )
@@ -87,7 +88,7 @@ describe("Ingest", () => {
       assert.strictEqual((yield* ingest.slate)[0]?.home.score, 3)
     }).pipe(
       Effect.provide(
-        Ingest.layer(["fbs"]).pipe(Layer.provide([scripted(["fail", [liveGame(3)]]), GameActors.layer]))
+        Ingest.layer(["fbs"]).pipe(Layer.provide([scripted(["fail", [liveGame(3)]]), TestCluster.gameActors]))
       )
     )
   )
@@ -184,7 +185,7 @@ describe("Ingest", () => {
 /** Ingest of the fbs league over `provider`, with each span that ends recorded in `ended`. */
 function polling(provider: Layer.Layer<Provider>, ended: Array<Tracer.Span>) {
   return Ingest.layer(["fbs"]).pipe(
-    Layer.provide([provider, GameActors.layer]),
+    Layer.provide([provider, TestCluster.gameActors]),
     Layer.provideMerge(recordingSpans(ended))
   )
 }

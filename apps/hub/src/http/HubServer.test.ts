@@ -10,13 +10,13 @@ import { HttpClient, HttpRouter, HttpServer } from "effect/http"
 import { HttpApiClient, HttpApiTest } from "effect/http-api"
 import { TestClock } from "effect/testing"
 import * as Database from "../database/Database.ts"
-import { GameActors } from "../GameActors.ts"
 import { HubConfig } from "../HubConfig.ts"
 import { Ingest } from "../ingest/Ingest.ts"
 import { Provider } from "../provider/Provider.ts"
 import * as SqlChannelStore from "../source/SqlChannelStore.ts"
 import * as YouTubeTv from "../source/youtube-tv/YouTubeTv.ts"
 import { StageSessions } from "../stage/StageSessions.ts"
+import * as TestCluster from "../TestCluster.ts"
 import { Watch } from "../watch/Watch.ts"
 import * as HubServer from "./HubServer.ts"
 
@@ -296,7 +296,7 @@ function hubUnderTest() {
     Layer.provideMerge(Ingest.layer(["fbs"])),
     Layer.provide([
       Layer.succeed(Provider, Provider.of({ slate: () => Effect.succeed([game]) })),
-      GameActors.layer
+      TestCluster.gameActors
     ]),
     Layer.provideMerge(testConfig())
   )

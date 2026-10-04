@@ -200,6 +200,7 @@ sportal/
     │       ├── Telemetry.ts        Log level and format; OTLP export when configured
     │       ├── HubConfig.ts        Every environment setting, in one place
     │       ├── GameActors.ts       The game actors: one cluster entity per game
+    │       ├── Cluster.ts          The single-process cluster the game actors run on
     │       ├── provider/
     │       │   ├── Provider.ts     The port
     │       │   ├── espn/

@@ -4,9 +4,9 @@ import { assert, describe, it } from "@effect/vitest"
 import { Scenario } from "@sportal/domain/Scenario"
 import { Context, DateTime, Effect, FileSystem, Layer, Schema } from "effect"
 import { TestClock } from "effect/testing"
-import { GameActors } from "../GameActors.ts"
 import { Ingest } from "../ingest/Ingest.ts"
 import { Provider } from "../provider/Provider.ts"
+import * as TestCluster from "../TestCluster.ts"
 import * as ScenarioClock from "./ScenarioClock.ts"
 import * as ScenarioProvider from "./ScenarioProvider.ts"
 
@@ -93,7 +93,7 @@ describe("ScenarioProvider", () => {
     Effect.gen(function* () {
       const context = yield* Layer.build(
         Ingest.layer(["fbs"]).pipe(
-          Layer.provide([ScenarioProvider.layer("two-minute-drill-tie"), GameActors.layer]),
+          Layer.provide([ScenarioProvider.layer("two-minute-drill-tie"), TestCluster.gameActors]),
           Layer.provide(ScenarioClock.layer(10)),
           Layer.provide(NodeServices.layer)
         )

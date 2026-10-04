@@ -1,4 +1,6 @@
 import { Effect, Layer, Option } from "effect"
+import { MessageStorage } from "effect/cluster"
+import * as Cluster from "./Cluster.ts"
 import { GameActors } from "./GameActors.ts"
 import { HubConfig } from "./HubConfig.ts"
 import { Ingest } from "./ingest/Ingest.ts"
@@ -29,7 +31,7 @@ const leagues = ["nfl", "fbs"] as const
 function live() {
   return Layer.mergeAll(
     Watch.layer.pipe(
-      Layer.provideMerge(Ingest.layer(leagues).pipe(Layer.provide([EspnProvider.layer, GameActors.layer])))
+      Layer.provideMerge(Ingest.layer(leagues).pipe(Layer.provide([EspnProvider.layer, gameActors()])))
     ),
     YouTubeTv.layer.pipe(Layer.provide(SqlChannelStore.layer))
   )
@@ -40,10 +42,19 @@ function scripted(name: string, speed: number) {
   return Layer.mergeAll(
     Watch.layer.pipe(
       Layer.provideMerge(
-        Ingest.layer(leagues).pipe(Layer.provide([ScenarioProvider.layer(name), GameActors.layer]))
+        Ingest.layer(leagues).pipe(Layer.provide([ScenarioProvider.layer(name), gameActors()]))
       ),
       Layer.provide(ScenarioClock.layer(speed))
     ),
     ScenarioSource.layer
+  )
+}
+
+function gameActors() {
+  return GameActors.layer.pipe(
+    Layer.provide(Cluster.layer),
+    // Keep-alive's message is persisted; memory storage is the smallest that carries it, with nothing on disk.
+    Layer.provide(MessageStorage.layerMemory),
+    Layer.provide(Cluster.config())
   )
 }

@@ -15,16 +15,7 @@ import {
   Stream,
   SubscriptionRef
 } from "effect"
-import {
-  Entity,
-  MessageStorage,
-  RunnerHealth,
-  RunnerStorage,
-  Runners,
-  ShardId,
-  Sharding,
-  ShardingConfig
-} from "effect/cluster"
+import { Entity, type Sharding } from "effect/cluster"
 import { Rpc } from "effect/rpc"
 
 /** The game actors: one cluster entity per game, each deciding its game's live state from the snapshots sent to it. */
@@ -39,22 +30,12 @@ export class GameActors extends Context.Service<
     readonly changes: Stream.Stream<ReadonlyMap<GameId, LiveGame>>
   }
 >()("sportal/hub/GameActors") {
-  /**
-   * The service, its entity, and its registry, on a cluster provided by the caller. It assumes a single runner that
-   * owns every shard: it waits for shard 1 of `"default"`.
-   */
-  static readonly onCluster: Layer.Layer<GameActors, never, Sharding.Sharding> = Layer.suspend(() =>
+  /** The service, its entity, and its registry, on the cluster provided by the caller. */
+  static readonly layer: Layer.Layer<GameActors, never, Sharding.Sharding> = Layer.suspend(() =>
     // Suspended because the entity and the registry are declared below this class.
     Layer.effect(
       GameActors,
       Effect.gen(function* () {
-        const sharding = yield* Sharding.Sharding
-        // Sharding acquires its shards on a fiber of its own, all in one batch. Until it has, a send is retried
-        // after `sendRetryInterval`, so the first poll would wait for nothing.
-        yield* Effect.yieldNow.pipe(
-          Effect.map(() => sharding.hasShardId(ShardId.make("default", 1))),
-          Effect.repeat({ until: (acquired) => acquired })
-        )
         const clientFor = yield* Game.client
         const liveGames = yield* LiveGames
         return GameActors.of({
@@ -69,40 +50,11 @@ export class GameActors extends Context.Service<
                 )
               )
           }, Effect.trackDuration(receiveDuration)),
-          liveGames: SubscriptionRef.get(liveGames.all),
-          changes: SubscriptionRef.changes(liveGames.all)
+          liveGames: liveGames.get,
+          changes: liveGames.changes
         })
       })
     ).pipe(Layer.provide(gameEntity), Layer.provide(LiveGames.layer))
-  )
-
-  /**
-   * A single-process cluster with no runners to talk to, keeping its messages in `storage`. Storage is a parameter
-   * because the Hub needs memory storage for keep-alive, whose message is persisted, and a test removes it to make
-   * keep-alive fail.
-   */
-  static readonly clusterStoring = (
-    storage: Layer.Layer<MessageStorage.MessageStorage, never, ShardingConfig.ShardingConfig>
-  ): Layer.Layer<Sharding.Sharding> =>
-    Sharding.layer.pipe(
-      Layer.provide(Runners.layerNoop),
-      Layer.provide([storage, RunnerStorage.layerMemory, RunnerHealth.layerNoop]),
-      Layer.provide(
-        ShardingConfig.layer({
-          entityTerminationTimeout: Duration.seconds(1),
-          simulateRemoteSerialization: false
-        })
-      )
-    )
-
-  /** The Hub's cluster: single-process, nothing on disk, keep-alive's messages kept in memory. */
-  static readonly cluster: Layer.Layer<Sharding.Sharding> = GameActors.clusterStoring(
-    MessageStorage.layerMemory
-  )
-
-  /** The actors on the Hub's cluster, which keeps only keep-alive's entries, in memory. */
-  static readonly layer: Layer.Layer<GameActors> = GameActors.onCluster.pipe(
-    Layer.provide(GameActors.cluster)
   )
 }
 
@@ -347,7 +299,8 @@ function sleepUntil(at: DateTime.Utc): Effect.Effect<void> {
 class LiveGames extends Context.Service<
   LiveGames,
   {
-    readonly all: SubscriptionRef.SubscriptionRef<ReadonlyMap<GameId, LiveGame>>
+    readonly get: Effect.Effect<ReadonlyMap<GameId, LiveGame>>
+    readonly changes: Stream.Stream<ReadonlyMap<GameId, LiveGame>>
     readonly set: (id: GameId, liveGame: LiveGame) => Effect.Effect<void>
     readonly remove: (id: GameId) => Effect.Effect<void>
   }
@@ -362,7 +315,8 @@ class LiveGames extends Context.Service<
           return countByState(next).pipe(Effect.as(next))
         })
       return LiveGames.of({
-        all,
+        get: SubscriptionRef.get(all),
+        changes: SubscriptionRef.changes(all),
         set: (id, liveGame) => update((games) => new Map(games).set(id, liveGame)),
         remove: (id) => update((games) => new Map([...games].filter(([game]) => game !== id)))
       })

@@ -20,7 +20,9 @@ import {
 } from "effect"
 import { ClusterSchema, MessageStorage } from "effect/cluster"
 import { TestClock } from "effect/testing"
+import * as Cluster from "./Cluster.ts"
 import { Game, GameActors } from "./GameActors.ts"
+import * as TestCluster from "./TestCluster.ts"
 import { recordingLogs, recordingSpans, withMetrics } from "./TestTelemetry.ts"
 
 const one = GameId.make("1")
@@ -42,7 +44,7 @@ describe("GameActors", () => {
       const game = (yield* actors.liveGames).get(one)
       assert.isTrue(game !== undefined && LiveGameState.$is("Live")(game.state))
       assert.strictEqual(game?.snapshot.home.score, 7)
-    }).pipe(Effect.provide(GameActors.layer))
+    }).pipe(Effect.provide(TestCluster.gameActors))
   )
 
   it.effect("a behind snapshot is ignored", () =>
@@ -51,7 +53,7 @@ describe("GameActors", () => {
       yield* actors.receive(snapshot({ id: one, status: "live", period: 2, clock: "5:00" }))
       yield* actors.receive(snapshot({ id: one, status: "live", period: 1, clock: "5:00" }))
       assert.strictEqual((yield* actors.liveGames).get(one)?.snapshot.period, 2)
-    }).pipe(Effect.provide(GameActors.layer))
+    }).pipe(Effect.provide(TestCluster.gameActors))
   )
 
   it.effect("each game has its own live game", () =>
@@ -64,7 +66,7 @@ describe("GameActors", () => {
       const liveGames = yield* actors.liveGames
       assert.strictEqual(liveGames.get(one)?.snapshot, first)
       assert.strictEqual(liveGames.get(two)?.snapshot, second)
-    }).pipe(Effect.provide(GameActors.layer))
+    }).pipe(Effect.provide(TestCluster.gameActors))
   )
 
   it.effect("changes publishes each new live game", () =>
@@ -82,7 +84,7 @@ describe("GameActors", () => {
       const values = yield* Fiber.join(collecting)
       assert.isTrue(values.some((liveGames) => liveGames.get(one)?.snapshot === first))
       assert.strictEqual(values.at(-1)?.get(one)?.snapshot, second)
-    }).pipe(Effect.provide(GameActors.layer))
+    }).pipe(Effect.provide(TestCluster.gameActors))
   )
 
   it.effect("the registry has a game's live game as soon as its actor replies", () =>
@@ -100,7 +102,7 @@ describe("GameActors", () => {
           assert.strictEqual((yield* actors.liveGames).get(one)?.snapshot, sent)
         })
       )
-    }).pipe(Effect.provide(GameActors.layer))
+    }).pipe(Effect.provide(TestCluster.gameActors))
   )
 
   it.effect("a defect in one game leaves the others, the sender, and its last good live game alone", () =>
@@ -119,19 +121,19 @@ describe("GameActors", () => {
       const next = snapshot({ id: one, status: "live", period: 1, clock: "8:00" })
       yield* actors.receive(next)
       assert.strictEqual((yield* actors.liveGames).get(one)?.snapshot, next)
-    }).pipe(Effect.provide(GameActors.onCluster.pipe(Layer.provideMerge(GameActors.cluster))))
+    }).pipe(Effect.provide(GameActors.layer.pipe(Layer.provideMerge(TestCluster.cluster))))
   )
 
   it.effect("after the layer is rebuilt a game is current on its next snapshot", () =>
     Effect.gen(function* () {
       const live = snapshot({ id: one, status: "live", period: 2, clock: "5:00" })
-      yield* GameActors.use((actors) => actors.receive(live)).pipe(Effect.provide(GameActors.layer))
+      yield* GameActors.use((actors) => actors.receive(live)).pipe(Effect.provide(TestCluster.gameActors))
       yield* Effect.gen(function* () {
         const actors = yield* GameActors
         assert.strictEqual((yield* actors.liveGames).size, 0)
         yield* actors.receive(live)
         assert.strictEqual((yield* actors.liveGames).get(one)?.snapshot, live)
-      }).pipe(Effect.provide(GameActors.layer))
+      }).pipe(Effect.provide(TestCluster.gameActors))
     })
   )
 
@@ -151,7 +153,7 @@ describe("GameActors", () => {
         assert.isTrue(
           LiveGameState.$is("Stale")(state) && DateTime.Equivalence(state.lastUpdatedAt, receivedAt)
         )
-      }).pipe(Effect.provide(GameActors.layer))
+      }).pipe(Effect.provide(TestCluster.gameActors))
     )
 
     it.effect("a refreshed game's timer moves with it", () =>
@@ -164,7 +166,7 @@ describe("GameActors", () => {
         assert.isTrue(LiveGameState.$is("Live")(yield* stateOf(one)))
         yield* TestClock.adjust("30 seconds")
         assert.isTrue(LiveGameState.$is("Stale")(yield* stateOf(one)))
-      }).pipe(Effect.provide(GameActors.layer))
+      }).pipe(Effect.provide(TestCluster.gameActors))
     )
 
     it.effect("a stale game is live again on its next snapshot", () =>
@@ -178,7 +180,7 @@ describe("GameActors", () => {
         yield* actors.receive(live("9:00"))
         const state = yield* stateOf(one)
         assert.isTrue(LiveGameState.$is("Live")(state) && DateTime.Equivalence(state.updatedAt, receivedAt))
-      }).pipe(Effect.provide(GameActors.layer))
+      }).pipe(Effect.provide(TestCluster.gameActors))
     )
 
     it.effect("an upcoming or over game never goes stale", () =>
@@ -203,7 +205,7 @@ describe("GameActors", () => {
         assert.isTrue(
           states.every((state) => LiveGameState.$is("Upcoming")(state) || LiveGameState.$is("Over")(state))
         )
-      }).pipe(Effect.provide(GameActors.layer))
+      }).pipe(Effect.provide(TestCluster.gameActors))
     )
 
     it.effect("a live game outlasts 5 idle minutes", () =>
@@ -212,7 +214,7 @@ describe("GameActors", () => {
         yield* actors.receive(live("10:00"))
         yield* TestClock.adjust("10 minutes")
         assert.isTrue(LiveGameState.$is("Stale")(yield* stateOf(one)))
-      }).pipe(Effect.provide(GameActors.layer))
+      }).pipe(Effect.provide(TestCluster.gameActors))
     )
 
     it.effect("a stale game is kept alive for 30 minutes after its last snapshot, then idles out", () =>
@@ -229,7 +231,7 @@ describe("GameActors", () => {
         // next reaper check, within 30 seconds.
         yield* TestClock.adjust("40 seconds")
         assert.isFalse((yield* actors.liveGames).has(one))
-      }).pipe(Effect.provide(GameActors.layer))
+      }).pipe(Effect.provide(TestCluster.gameActors))
     )
 
     it.effect("a final game is gone 5 minutes after its last snapshot", () =>
@@ -240,7 +242,7 @@ describe("GameActors", () => {
         assert.isTrue((yield* actors.liveGames).has(one))
         yield* TestClock.adjust("31 seconds")
         assert.isFalse((yield* actors.liveGames).has(one))
-      }).pipe(Effect.provide(GameActors.layer))
+      }).pipe(Effect.provide(TestCluster.gameActors))
     )
 
     it.effect("an upcoming game kicking off within 30 minutes is kept alive; one hours away is not", () =>
@@ -253,7 +255,7 @@ describe("GameActors", () => {
         const liveGames = yield* actors.liveGames
         assert.isTrue(liveGames.has(one))
         assert.isFalse(liveGames.has(two))
-      }).pipe(Effect.provide(GameActors.layer))
+      }).pipe(Effect.provide(TestCluster.gameActors))
     )
   })
 
@@ -272,7 +274,7 @@ describe("GameActors", () => {
         assert.strictEqual(transitions[0]?.level, "Info")
         assert.include(transitions[0]?.annotations, { game: "1", league: "fbs", matchup: "AWAY at HOME" })
         assert.strictEqual(yield* counted("sportal_transitions", { from: "Upcoming", to: "Live" }), 1)
-      }).pipe(Effect.provide(GameActors.layer), Effect.provide(layer), withMetrics)
+      }).pipe(Effect.provide(TestCluster.gameActors), Effect.provide(layer), withMetrics)
     })
 
     it.effect("going stale is logged", () => {
@@ -285,7 +287,7 @@ describe("GameActors", () => {
         assert.strictEqual(stale.length, 1)
         assert.strictEqual(stale[0]?.level, "Info")
         assert.include(stale[0]?.annotations, { game: "1", league: "fbs", matchup: "AWAY at HOME" })
-      }).pipe(Effect.provide(GameActors.layer), Effect.provide(layer))
+      }).pipe(Effect.provide(TestCluster.gameActors), Effect.provide(layer))
     })
 
     it.effect("a behind snapshot is logged at Debug and counted", () => {
@@ -299,7 +301,7 @@ describe("GameActors", () => {
         assert.strictEqual(behind[0]?.level, "Debug")
         assert.strictEqual(yield* counted("sportal_snapshots", { outcome: "behind" }), 1)
         assert.strictEqual(yield* counted("sportal_snapshots", { outcome: "taken" }), 1)
-      }).pipe(Effect.provide(GameActors.layer), Effect.provide(layer), withMetrics)
+      }).pipe(Effect.provide(TestCluster.gameActors), Effect.provide(layer), withMetrics)
     })
 
     it.effect("a defect is logged with the snapshot that raised it", () => {
@@ -317,7 +319,7 @@ describe("GameActors", () => {
         assert.strictEqual(errors[0]?.annotations.game, "1")
         assert.strictEqual(yield* counted("sportal_game_defects"), 1)
       }).pipe(
-        Effect.provide(GameActors.onCluster.pipe(Layer.provideMerge(GameActors.cluster))),
+        Effect.provide(GameActors.layer.pipe(Layer.provideMerge(TestCluster.cluster))),
         Effect.provide(layer),
         withMetrics
       )
@@ -341,7 +343,7 @@ describe("GameActors", () => {
         assert.strictEqual(receive?.attributes.get("sportal.game"), "1")
         const duration = (yield* Metric.snapshot).find((metric) => metric.id === "sportal_receive_duration")
         assert.strictEqual(duration?.type === "Histogram" ? duration.state.count : undefined, 1)
-      }).pipe(Effect.provide(GameActors.layer), Effect.provide(recordingSpans(ended)), withMetrics)
+      }).pipe(Effect.provide(TestCluster.gameActors), Effect.provide(recordingSpans(ended)), withMetrics)
     })
 
     it.effect("live games are counted by state", () =>
@@ -353,7 +355,7 @@ describe("GameActors", () => {
         assert.strictEqual(yield* gauged("sportal_live_games", { state: "Live" }), 2)
         assert.strictEqual(yield* gauged("sportal_live_games", { state: "Upcoming" }), 1)
         assert.strictEqual(yield* gauged("sportal_live_games", { state: "Stale" }), 0)
-      }).pipe(Effect.provide(GameActors.layer), withMetrics)
+      }).pipe(Effect.provide(TestCluster.gameActors), withMetrics)
     )
 
     it.effect(
@@ -375,7 +377,7 @@ describe("GameActors", () => {
             ]
           )
           assert.include(lifecycle[1]?.annotations, { game: "1", league: "fbs", matchup: "AWAY at HOME" })
-        }).pipe(Effect.provide(GameActors.layer), Effect.provide(layer), withMetrics)
+        }).pipe(Effect.provide(TestCluster.gameActors), Effect.provide(layer), withMetrics)
       }
     )
 
@@ -389,14 +391,14 @@ describe("GameActors", () => {
           started.map(({ level }) => level),
           ["Info"]
         )
-      }).pipe(Effect.provide(GameActors.layer), Effect.provide(layer))
+      }).pipe(Effect.provide(TestCluster.gameActors), Effect.provide(layer))
     })
 
     it.effect("a current game's actor logs its stop at Info when the layer closes", () => {
       const { logs, layer } = recording()
       return Effect.gen(function* () {
         yield* GameActors.use((actors) => actors.receive(live("10:00"))).pipe(
-          Effect.provide(GameActors.layer)
+          Effect.provide(TestCluster.gameActors)
         )
         const stopped = logs.filter(({ message }) => message.includes("stopped"))
         assert.deepStrictEqual(
@@ -412,6 +414,9 @@ describe("GameActors", () => {
       return Effect.gen(function* () {
         const actors = yield* GameActors
         yield* actors.receive(live("10:00"))
+        // Sent straight after the entity registers, this snapshot starts its actor a tick later than one sent after a
+        // yield, so the timer would begin its sleep after time moves.
+        yield* TestClock.adjust(0)
         yield* TestClock.adjust("10 seconds")
         const errors = logs.filter(({ level }) => level === "Error")
         assert.strictEqual(errors.length, 1)
@@ -424,7 +429,7 @@ describe("GameActors", () => {
         assert.isTrue(LiveGameState.$is("Stale")(yield* stateOf(one)))
       }).pipe(
         Effect.provide(
-          GameActors.layer.pipe(
+          TestCluster.gameActors.pipe(
             Layer.provide(
               sleeping((duration, clock, earlier) =>
                 earlier === 0 && Duration.equals(duration, LiveGame.staleAfter)
@@ -460,7 +465,7 @@ describe("GameActors", () => {
       }).pipe(
         // Keep-alive sends a persisted message, which dies on a cluster that stores none.
         Effect.provide(
-          GameActors.onCluster.pipe(Layer.provide(GameActors.clusterStoring(MessageStorage.layerNoop)))
+          GameActors.layer.pipe(Layer.provide(Cluster.layer), Layer.provide(MessageStorage.layerNoop))
         ),
         Effect.provide(layer),
         withMetrics
@@ -488,7 +493,7 @@ describe("GameActors", () => {
         )
       }).pipe(
         Effect.provide(
-          GameActors.layer.pipe(
+          TestCluster.gameActors.pipe(
             Layer.provide(
               sleeping((duration, clock) =>
                 clock.sleep(

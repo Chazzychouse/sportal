@@ -78,6 +78,14 @@ module.exports = {
       to: { path: "^apps/hub/src/TestTelemetry\\.ts$" }
     },
     {
+      name: "test-cluster-is-for-tests",
+      comment:
+        "The game actors on an in-memory cluster, as a test runs them, are imported only by test files.",
+      severity: "error",
+      from: { pathNot: "\\.test\\.ts$" },
+      to: { path: "^apps/hub/src/TestCluster\\.ts$" }
+    },
+    {
       name: "no-junk-drawers",
       comment: "Name a file for the concept it owns.",
       severity: "error",
