@@ -18,6 +18,8 @@ import * as Cadence from "./Cadence.ts"
 export class Ingest extends Context.Service<
   Ingest,
   {
+    /** What the leagues last listed, in poll order, on every poll even when nothing changed. */
+    readonly listed: Stream.Stream<ReadonlyArray<GameSnapshot>>
     readonly slate: Effect.Effect<ReadonlyArray<GameSnapshot>>
     readonly changes: Stream.Stream<ReadonlyArray<GameSnapshot>>
   }
@@ -28,6 +30,7 @@ export class Ingest extends Context.Service<
       Effect.gen(function* () {
         const provider = yield* Provider
         const gameActors = yield* GameActors
+        const listed = yield* SubscriptionRef.make<ReadonlyArray<GameSnapshot>>([])
         const current = yield* SubscriptionRef.make<ReadonlyArray<GameSnapshot>>([])
         // The last good slate per league, so one league failing does not blank the other.
         const byLeague = new Map<LeagueId, ReadonlyArray<GameSnapshot>>()
@@ -53,6 +56,7 @@ export class Ingest extends Context.Service<
             gameActors.receive,
             { concurrency: "unbounded", discard: true }
           )
+          yield* SubscriptionRef.set(listed, games)
           const live = yield* gameActors.liveGames
           const slate = games.map((game) =>
             Option.fromNullishOr(live.get(game.id)).pipe(
@@ -74,6 +78,7 @@ export class Ingest extends Context.Service<
         )
 
         return Ingest.of({
+          listed: SubscriptionRef.changes(listed),
           slate: SubscriptionRef.get(current),
           changes: SubscriptionRef.changes(current)
         })

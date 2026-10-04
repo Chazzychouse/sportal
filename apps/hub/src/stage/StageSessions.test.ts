@@ -37,7 +37,12 @@ const ohioStateAtIowa = snapshot({
 })
 
 const TestSessions = StageSessions.layer.pipe(
-  Layer.provide(Layer.succeed(Ingest, Ingest.of({ slate: Effect.succeed(slate), changes: Stream.empty }))),
+  Layer.provide(
+    Layer.succeed(
+      Ingest,
+      Ingest.of({ slate: Effect.succeed(slate), changes: Stream.empty, listed: Stream.empty })
+    )
+  ),
   Layer.provideMerge(sourceKnowingEspn())
 )
 
@@ -116,7 +121,8 @@ describe("StageSessions", () => {
           Effect.andThen(Deferred.succeed(refreshed, undefined)),
           Effect.as(slate)
         ),
-        changes: Stream.empty
+        changes: Stream.empty,
+        listed: Stream.empty
       })
       // Depending on StageSessions orders this after the layer has built.
       const learnAtOnce = Layer.effectDiscard(
@@ -186,7 +192,10 @@ describe("StageSessions", () => {
         Effect.provide(
           StageSessions.layer.pipe(
             Layer.provide(
-              Layer.succeed(Ingest, Ingest.of({ slate: Effect.succeed(slate), changes: Stream.empty }))
+              Layer.succeed(
+                Ingest,
+                Ingest.of({ slate: Effect.succeed(slate), changes: Stream.empty, listed: Stream.empty })
+              )
             ),
             Layer.provideMerge(gated)
           )
@@ -198,7 +207,7 @@ describe("StageSessions", () => {
   it.live("keeps a playing tile whose game has left the slate when another network is learned", () =>
     Effect.gen(function* () {
       const onSlate = yield* Ref.make(slate)
-      const ingest = Ingest.of({ slate: Ref.get(onSlate), changes: Stream.empty })
+      const ingest = Ingest.of({ slate: Ref.get(onSlate), changes: Stream.empty, listed: Stream.empty })
       yield* Effect.gen(function* () {
         const sessions = yield* StageSessions
         yield* sessions.dispatch({ _tag: "Assign", tile: 0, game: GameId.make("1") })
@@ -258,7 +267,11 @@ describe("StageSessions", () => {
           Layer.provide(
             Layer.succeed(
               Ingest,
-              Ingest.of({ slate: Effect.succeed([ohioStateAtIowa]), changes: Stream.empty })
+              Ingest.of({
+                slate: Effect.succeed([ohioStateAtIowa]),
+                changes: Stream.empty,
+                listed: Stream.empty
+              })
             )
           ),
           Layer.provideMerge(sourceKnowingEspn())

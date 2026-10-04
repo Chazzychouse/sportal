@@ -2,7 +2,7 @@ import { assert, describe, it } from "@effect/vitest"
 import { GameId, type GameSnapshot } from "@sportal/domain/Game"
 import { LiveGameState } from "@sportal/domain/LiveGame"
 import { snapshot, team } from "@sportal/domain/TestGame"
-import { Effect, Layer, Metric, Option, type Tracer } from "effect"
+import { DateTime, Effect, Layer, Metric, Option, Ref, Stream, type Tracer } from "effect"
 import { TestClock } from "effect/testing"
 import { GameActors } from "../GameActors.ts"
 import { Provider, ProviderError } from "../provider/Provider.ts"
@@ -48,6 +48,71 @@ function scripted(responses: ReadonlyArray<ReadonlyArray<GameSnapshot> | "fail">
 }
 
 describe("Ingest", () => {
+  it.effect("lists the provider's games in poll order, as the provider sent them", () =>
+    Effect.gen(function* () {
+      const ingest = yield* Ingest
+      const actors = yield* GameActors
+      yield* TestClock.adjust(0)
+      yield* actors.receive(game("1", 2))
+      assert.deepStrictEqual(
+        (yield* listing(ingest)).map((listed) => [listed.id, listed.period]),
+        [
+          ["3", 1],
+          ["1", 1],
+          ["2", 1]
+        ]
+      )
+    }).pipe(Effect.provide(withActors(scripted([[game("3"), game("1"), game("2")]]))))
+  )
+
+  it.effect("lists on every poll, even one that changes nothing", () =>
+    Effect.gen(function* () {
+      const ingest = yield* Ingest
+      const seen = yield* Ref.make<ReadonlyArray<number>>([])
+      yield* ingest.listed.pipe(
+        Stream.runForEach((games) => Ref.update(seen, (all) => [...all, games.length])),
+        Effect.forkScoped
+      )
+      yield* TestClock.adjust(0)
+      yield* TestClock.adjust("10 seconds")
+      yield* TestClock.adjust("10 seconds")
+      assert.deepStrictEqual(yield* Ref.get(seen), [1, 1, 1])
+    }).pipe(Effect.provide(withActors(scripted([[game("1")], [game("1")]]))))
+  )
+
+  it.effect("polls at the live cadence once an actor holds the game live", () =>
+    Effect.gen(function* () {
+      const calls = yield* Ref.make(0)
+      const actors = yield* GameActors
+      const now = yield* DateTime.now
+      const scheduled = snapshot({
+        id: GameId.make("1"),
+        status: "scheduled",
+        kickoff: DateTime.add(now, { hours: 2 })
+      })
+      yield* Effect.provide(
+        Effect.gen(function* () {
+          yield* Ingest
+          yield* TestClock.adjust(0)
+          yield* actors.receive(game("1"))
+          yield* TestClock.adjust("15 minutes")
+          assert.strictEqual(yield* Ref.get(calls), 2)
+          yield* TestClock.adjust("10 seconds")
+          assert.strictEqual(yield* Ref.get(calls), 3)
+        }),
+        Ingest.layer(["fbs"]).pipe(
+          Layer.provide(
+            Layer.succeed(
+              Provider,
+              Provider.of({ slate: () => Ref.update(calls, (n) => n + 1).pipe(Effect.as([scheduled])) })
+            )
+          ),
+          Layer.provide(Layer.succeed(GameActors, actors))
+        )
+      )
+    }).pipe(Effect.provide(TestCluster.gameActors))
+  )
+
   it.effect("polls again after the live cadence and publishes the new slate", () =>
     Effect.gen(function* () {
       const ingest = yield* Ingest
@@ -187,5 +252,12 @@ function polling(provider: Layer.Layer<Provider>, ended: Array<Tracer.Span>) {
   return Ingest.layer(["fbs"]).pipe(
     Layer.provide([provider, TestCluster.gameActors]),
     Layer.provideMerge(recordingSpans(ended))
+  )
+}
+
+/** The listing Ingest has published most recently. */
+function listing(ingest: Ingest["Service"]) {
+  return Stream.runHead(ingest.listed).pipe(
+    Effect.map(Option.getOrElse((): ReadonlyArray<GameSnapshot> => []))
   )
 }
