@@ -84,7 +84,9 @@ function Scorebug(props: { game: GameSnapshot }) {
       {situation?.isRedZone && (
         <p className="rounded bg-red-600 px-[3vmin] py-[1vmin] font-semibold text-[5vmin]">RED ZONE</p>
       )}
-      {situation?.lastPlay !== undefined && <p className="text-[3.5vmin] opacity-80">{situation.lastPlay}</p>}
+      {situation?.lastPlay !== undefined && (
+        <p className="px-[4vmin] text-center text-[3.5vmin] opacity-80">{situation.lastPlay}</p>
+      )}
     </div>
   )
 }
