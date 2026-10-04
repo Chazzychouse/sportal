@@ -23,6 +23,7 @@ Every exported type name must be a term here.
 | --- | --- | --- |
 | **GameStatus** | `scheduled`, `live`, `halftime`, `delayed`, `final`, `postponed`, `canceled`. | state, phase |
 | **GameSnapshot** | The complete normalized state of a game at an instant. | update, payload |
+| **Game time** | How far a game has got: before kickoff, in play, or over; then the period; then the clock running down. Orders two snapshots of one game. | timestamp, version |
 | **Test game** | A game snapshot built for a test, with defaults for everything the test does not care about. | fixture, mock |
 | **Scenario** | A timeline of game snapshots for several games, written or cut from a recording, that a Hub can play instead of a provider. | fixture, simulation |
 | **Scenario time** | The clock a scenario plays on: from the Hub's start, at the scenario's speed. | |

@@ -1,7 +1,7 @@
 import { assert, describe, it } from "@effect/vitest"
 import { DateTime } from "effect"
 import { GameId, GameSnapshot, type GameStatus } from "./Game.ts"
-import { snapshot } from "./TestGame.ts"
+import { snapshot, team } from "./TestGame.ts"
 
 describe("GameSnapshot.isLive", () => {
   it.each(["live", "halftime"] as const)("is live when %s", (status) => {
@@ -27,6 +27,65 @@ describe("GameSnapshot.progress", () => {
     ["canceled", "over"]
   ] as const)("is %s → %s", (status, progress) => {
     assert.strictEqual(snapshot({ status }).progress(), progress)
+  })
+
+  it("reads a delay before kickoff as upcoming and a delay during the game as live", () => {
+    assert.strictEqual(snapshot({ status: "delayed", period: 0 }).progress(), "upcoming")
+    assert.strictEqual(snapshot({ status: "delayed", period: 2 }).progress(), "live")
+  })
+})
+
+describe("GameSnapshot.matchup", () => {
+  it("names the away team at the home team", () => {
+    const game = snapshot({ away: { team: team("UGA"), score: 0 }, home: { team: team("BAMA"), score: 0 } })
+    assert.strictEqual(game.matchup(), "UGA at BAMA")
+  })
+})
+
+describe("GameSnapshot.gameTime", () => {
+  const compare = GameSnapshot.gameTime
+
+  it("puts upcoming behind live and live behind over", () => {
+    const upcoming = snapshot({ status: "scheduled" })
+    const live = snapshot({ status: "live", period: 1, clock: "10:00" })
+    const over = snapshot({ status: "final", period: 4, clock: "0:00" })
+    assert.strictEqual(compare(upcoming, live), -1)
+    assert.strictEqual(compare(live, over), -1)
+    assert.strictEqual(compare(over, upcoming), 1)
+  })
+
+  it("puts a later period ahead of an earlier one whatever the clock", () => {
+    const later = snapshot({ status: "live", period: 2, clock: "14:00" })
+    const earlier = snapshot({ status: "live", period: 1, clock: "0:30" })
+    assert.strictEqual(compare(later, earlier), 1)
+  })
+
+  it("puts less time left ahead within a period", () => {
+    const later = snapshot({ status: "live", period: 3, clock: "2:00" })
+    const earlier = snapshot({ status: "live", period: 3, clock: "9:00" })
+    assert.strictEqual(compare(later, earlier), 1)
+    assert.strictEqual(compare(earlier, later), -1)
+  })
+
+  it("ignores the score", () => {
+    const a = snapshot({ status: "live", period: 2, clock: "5:00", home: { team: team("HOME"), score: 7 } })
+    const b = snapshot({ status: "live", period: 2, clock: "5:00" })
+    assert.strictEqual(compare(a, b), 0)
+  })
+
+  it("puts halftime between the end of period 2 and the start of period 3", () => {
+    const halftime = snapshot({ status: "halftime", period: 2, clock: "0:00" })
+    assert.strictEqual(compare(halftime, snapshot({ status: "live", period: 2, clock: "0:10" })), 1)
+    assert.strictEqual(compare(halftime, snapshot({ status: "live", period: 3, clock: "15:00" })), -1)
+  })
+
+  it("reads a delay during the game as live and a delay before kickoff as upcoming", () => {
+    const delayed = snapshot({ status: "delayed", period: 2, clock: "5:00" })
+    assert.strictEqual(compare(delayed, snapshot({ status: "live", period: 1, clock: "1:00" })), 1)
+    assert.strictEqual(
+      compare(snapshot({ status: "delayed", period: 0 }), snapshot({ status: "live", period: 1 })),
+      -1
+    )
   })
 })
 

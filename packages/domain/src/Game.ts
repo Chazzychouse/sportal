@@ -46,16 +46,32 @@ export class GameSnapshot extends Schema.Class<GameSnapshot>("sportal/GameSnapsh
     Order.mapInput(DateTime.Order, (game: GameSnapshot) => game.kickoff)
   )
 
+  /**
+   * How far a game has got: before kickoff, in play, or over; then the period; then less time left on the clock.
+   * Orders two snapshots of one game.
+   */
+  static readonly gameTime: Order.Order<GameSnapshot> = Order.combine(
+    Order.mapInput(Order.Number, (game: GameSnapshot) => gameProgressRank[game.progress()]),
+    Order.combine(
+      Order.mapInput(Order.Number, (game: GameSnapshot) => game.period),
+      Order.mapInput(Order.flip(Order.Number), (game: GameSnapshot) => game.secondsLeft())
+    )
+  )
+
   isLive(): boolean {
     return this.status === "live" || this.status === "halftime"
   }
 
-  /** Where the game is in its day: not started (or delayed), being played, or done with (final, postponed, canceled). */
+  /**
+   * Where the game is in its day: not started, being played, or done with (final, postponed, canceled). A delay
+   * before kickoff is upcoming and a delay during the game is live.
+   */
   progress(): "upcoming" | "live" | "over" {
     switch (this.status) {
       case "scheduled":
-      case "delayed":
         return "upcoming"
+      case "delayed":
+        return this.period >= 1 ? "live" : "upcoming"
       case "live":
       case "halftime":
         return "live"
@@ -64,6 +80,11 @@ export class GameSnapshot extends Schema.Class<GameSnapshot>("sportal/GameSnapsh
       case "canceled":
         return "over"
     }
+  }
+
+  /** "<away abbreviation> at <home abbreviation>", for a title or a log line. */
+  matchup(): string {
+    return `${this.away.team.abbreviation} at ${this.home.team.abbreviation}`
   }
 
   /** Seconds left in the period, from the clock ("2:10"). An unreadable clock reads as a full quarter. */
@@ -136,6 +157,8 @@ export class GameSnapshot extends Schema.Class<GameSnapshot>("sportal/GameSnapsh
 }
 
 const progressRank = { live: 0, upcoming: 1, over: 2 } as const
+
+const gameProgressRank = { upcoming: 0, live: 1, over: 2 } as const
 
 /** Seconds in a quarter, college and NFL alike. */
 const quarterSeconds = 15 * 60
