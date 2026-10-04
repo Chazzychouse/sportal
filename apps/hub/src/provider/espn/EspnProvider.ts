@@ -17,22 +17,30 @@ export const layer = Layer.effect(
         Effect.flatMap(HttpClientResponse.schemaBodyJson(EspnPayload.Scoreboard)),
         Effect.mapError((cause) => new ProviderError({ league, cause }))
       )
-      const snapshots: Array<GameSnapshot> = []
-      for (const raw of scoreboard.events) {
-        const event = decodeEvent(raw)
-        if (Option.isNone(event)) {
-          yield* Effect.logWarning("EspnProvider: skipped an event that failed to decode", raw)
-          continue
-        }
-        const snapshot = toSnapshot(league, event.value)
-        if (Option.isSome(snapshot)) snapshots.push(snapshot.value)
-      }
-      return snapshots
+      return yield* slateOf(league, scoreboard)
     })
 
     return Provider.of({ slate })
   })
 )
+
+/** The snapshots in one ESPN scoreboard; an event that does not decode is skipped and logged. */
+export const slateOf = Effect.fn("EspnProvider.slateOf")(function* (
+  league: LeagueId,
+  scoreboard: typeof EspnPayload.Scoreboard.Type
+) {
+  const snapshots: Array<GameSnapshot> = []
+  for (const raw of scoreboard.events) {
+    const event = decodeEvent(raw)
+    if (Option.isNone(event)) {
+      yield* Effect.logWarning("EspnProvider: skipped an event that failed to decode", raw)
+      continue
+    }
+    const snapshot = toSnapshot(league, event.value)
+    if (Option.isSome(snapshot)) snapshots.push(snapshot.value)
+  }
+  return snapshots
+})
 
 const decodeEvent = Schema.decodeUnknownOption(EspnPayload.Event)
 
