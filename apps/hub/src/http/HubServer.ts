@@ -1,9 +1,12 @@
+import { createServer } from "node:http"
 import { networkInterfaces } from "node:os"
+import { NodeHttpServer } from "@effect/platform-node"
 import { type LiveMessage, LiveMessageJson } from "@sportal/api/LiveMessage"
 import { SportalApi } from "@sportal/api/SportalApi"
-import { Effect, Layer, Schema, Stream } from "effect"
-import { HttpRouter, HttpServerResponse } from "effect/http"
+import { Effect, Layer, Option, Schema, Stream } from "effect"
+import { HttpRouter, HttpServerResponse, HttpStaticServer } from "effect/http"
 import { HttpApiBuilder } from "effect/http-api"
+import { HubConfig } from "../HubConfig.ts"
 import { Ingest } from "../ingest/Ingest.ts"
 import { Source } from "../source/Source.ts"
 import { StageSessions } from "../stage/StageSessions.ts"
@@ -23,6 +26,18 @@ export const ApiHandlers = Layer.mergeAll(
 export const layer = Layer.mergeAll(
   HttpApiBuilder.layer(SportalApi).pipe(Layer.provide(ApiHandlers)),
   liveRoute()
+)
+
+/** The Hub on its configured address: every route, and the built web UI when there is one. */
+export const serve = Layer.unwrap(
+  Effect.gen(function* () {
+    const { webRoot, port, host } = yield* HubConfig
+    const routes = Option.match(webRoot, {
+      onNone: () => layer,
+      onSome: (root) => Layer.mergeAll(layer, HttpStaticServer.layer({ root, spa: true }))
+    })
+    return HttpRouter.serve(routes).pipe(Layer.provide(NodeHttpServer.layer(createServer, { port, host })))
+  })
 )
 
 function slateHandlers() {

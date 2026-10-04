@@ -1,6 +1,8 @@
+import { NodeServices } from "@effect/platform-node"
 import { assert, describe, it } from "@effect/vitest"
-import { Effect } from "effect"
+import { ConfigProvider, Effect, FileSystem, Layer, Path } from "effect"
 import { SqlClient } from "effect/sql"
+import { HubConfig } from "../HubConfig.ts"
 import * as Database from "./Database.ts"
 
 describe("Database.migrate", () => {
@@ -26,6 +28,26 @@ describe("Database.migrate", () => {
       yield* Database.migrate("store", migrations)
       assert.deepStrictEqual(yield* Database.migrate("store", migrations), [])
     }).pipe(Effect.provide(Database.layer(":memory:")))
+  )
+})
+
+describe("Database.inDataDir", () => {
+  it.effect("keeps the database in the Hub's data directory, creating the directory if it is missing", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem
+      const path = yield* Path.Path
+      const dataDir = path.join(yield* fs.makeTempDirectoryScoped(), "nested", "sportal")
+      const config = HubConfig.layer.pipe(
+        Layer.provide(ConfigProvider.layer(ConfigProvider.fromEnv({ env: { SPORTAL_DATA_DIR: dataDir } })))
+      )
+
+      yield* Effect.gen(function* () {
+        const sql = yield* SqlClient.SqlClient
+        yield* sql`SELECT 1`
+      }).pipe(Effect.provide(Database.inDataDir.pipe(Layer.provide(config))))
+
+      assert.isTrue(yield* fs.exists(path.join(dataDir, "sportal.sqlite")))
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer))
   )
 })
 

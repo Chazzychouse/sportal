@@ -29,17 +29,29 @@ module.exports = {
       to: { path: "^apps/hub/src/(provider|source)/[^/]+/[^/]*Payload\\.ts$" }
     },
     {
-      name: "only-main-names-adapters",
-      comment: "Only the composition root and tests know which concrete adapters exist.",
+      name: "only-hub-mode-names-adapters",
+      comment:
+        "Only HubMode and tests know which concrete providers and sources exist; main.ts names only the database.",
       severity: "error",
       from: {
         path: "^apps/hub/src/",
         pathNot:
-          "(^apps/hub/src/main\\.ts$|\\.test\\.ts$|^apps/hub/src/provider/[^/]+/|^apps/hub/src/source/youtube-tv/|^apps/hub/src/source/Sql[^/]+\\.ts$)"
+          "(^apps/hub/src/HubMode\\.ts$|\\.test\\.ts$|^apps/hub/src/provider/[^/]+/|^apps/hub/src/source/youtube-tv/|^apps/hub/src/source/Sql[^/]+\\.ts$)"
       },
       to: {
-        path: "^apps/hub/src/(provider/[^/]+/|source/youtube-tv/|source/Sql[^/]+\\.ts$|database/)"
+        path: "^apps/hub/src/(provider/[^/]+/|source/youtube-tv/|source/Sql[^/]+\\.ts$)"
       }
+    },
+    {
+      name: "only-main-opens-the-database",
+      comment: "The composition root provides the database; stores reach it through SqlClient.",
+      severity: "error",
+      from: {
+        path: "^apps/hub/src/",
+        pathNot:
+          "(^apps/hub/src/main\\.ts$|\\.test\\.ts$|^apps/hub/src/source/Sql[^/]+\\.ts$|^apps/hub/src/database/)"
+      },
+      to: { path: "^apps/hub/src/database/" }
     },
     {
       name: "test-game-is-for-tests",
