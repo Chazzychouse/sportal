@@ -73,7 +73,8 @@ A reader opens a file to see the thing it is named for. Keep it that way.
 - `pnpm --filter @sportal/hub dev` — run only the Hub on port 4400 (API and live stream), on every interface so a phone Remote can reach it (`SPORTAL_HOST` narrows it). In
   dev it keeps its SQLite database in `.sportal/` at the repo root; set `SPORTAL_DATA_DIR` to move it.
 - `pnpm --filter @sportal/web dev` — run only the web UI on port 4401, also on the home network (a phone opens `/remote`), proxying `/api` to the
-  Hub.
+  Hub. A firewall must let the home network reach both ports, or a phone loads nothing: on Omarchy,
+  `sudo ufw allow from 192.168.0.0/24 to any port 4400:4401 proto tcp`.
 - `pnpm --filter @sportal/desktop dev` — run only the desktop shell against the web dev server
   (`SPORTAL_HUB_URL` overrides the address).
 - To run without the dev server: `pnpm --filter @sportal/web build`, start the Hub with

@@ -48,6 +48,10 @@ export function JoinRemote(props: { open: boolean; onOpenChange: (open: boolean)
         ) : (
           <>
             <QrCode text={url(shown)} />
+            <p className="text-muted-foreground text-xs">
+              Phone stuck loading? This machine's firewall must let the home network reach port{" "}
+              <span className="font-mono">{window.location.port || "80"}</span>.
+            </p>
             <ul className="flex flex-col gap-1">
               {listed.map((address, index) => (
                 <li key={address}>
