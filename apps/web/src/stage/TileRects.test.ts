@@ -37,9 +37,28 @@ describe("tileRects", () => {
 })
 
 describe("placements", () => {
+  it("resolves a scenario stream's path against the page's origin and leaves full addresses alone", () => {
+    const scenario = {
+      name: "CBS",
+      source: "Scenario" as const,
+      locator: { _tag: "WebView" as const, url: "/scenario-stream/401856707" }
+    }
+    const carriedOnScenario = () =>
+      ChannelAvailability.Carried({ channel: scenario, learnedFor: Option.none() })
+    const stage = Result.getOrThrow(
+      Result.getOrThrow(
+        Stage.initial.apply({ _tag: "Assign", tile: 0, game: bama }, carriedOnScenario)
+      ).apply({ _tag: "Assign", tile: 1, game: irish }, carriedOnFox)
+    )
+    assert.deepStrictEqual(
+      placements(stage, tileRects(stage, area), { x: 0, y: 0 }, "http://127.0.0.1:4401").map((p) => p.url),
+      ["http://127.0.0.1:4401/scenario-stream/401856707", "https://tv.youtube.com/watch/fox"]
+    )
+  })
+
   it("places a stream tile's video below its header, offset by the Stage area's position", () => {
     const stage = streaming()
-    const [placement] = placements(stage, tileRects(stage, area), { x: 352, y: 48 })
+    const [placement] = placements(stage, tileRects(stage, area), { x: 352, y: 48 }, "http://127.0.0.1:4401")
     assert.deepStrictEqual(placement?.bounds, { x: 355, y: 79, width: 794, height: 416 })
     assert.strictEqual(placement?.game, bama)
     assert.isFalse(placement?.muted)
@@ -48,7 +67,9 @@ describe("placements", () => {
   it("mutes every stream but the one with audio focus", () => {
     const stage = streaming()
     assert.deepStrictEqual(
-      placements(stage, tileRects(stage, area), { x: 0, y: 0 }).map((placement) => placement.muted),
+      placements(stage, tileRects(stage, area), { x: 0, y: 0 }, "http://127.0.0.1:4401").map(
+        (placement) => placement.muted
+      ),
       [false, true]
     )
   })
@@ -56,7 +77,9 @@ describe("placements", () => {
   it("places nothing for a tile with no size", () => {
     const stage = soloed()
     assert.deepStrictEqual(
-      placements(stage, tileRects(stage, area), { x: 0, y: 0 }).map((placement) => placement.game),
+      placements(stage, tileRects(stage, area), { x: 0, y: 0 }, "http://127.0.0.1:4401").map(
+        (placement) => placement.game
+      ),
       [irish]
     )
   })

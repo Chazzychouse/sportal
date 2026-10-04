@@ -34,7 +34,7 @@ export function StageView(props: {
       ? props.stage
       : new Stage({ ...props.stage, splits: { ...props.stage.splits, [props.stage.layout]: dragged } })
   const rects = tileRects(shown, area)
-  const placed = placements(shown, rects, area)
+  const placed = placements(shown, rects, area, window.location.origin)
   useVideoAreas(placed)
 
   // The shell hears only placements that changed, so a re-render never cuts a transition short. A change of

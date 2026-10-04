@@ -36,19 +36,27 @@ function videoBounds(rect: { x: number; y: number; width: number; height: number
 
 /**
  * What the shell must show for each stream and picking tile with a size: its game's view, in window pixels.
- * `origin` is where the Stage area sits in the window.
+ * `origin` is where the Stage area sits in the window; `page` is the web UI's own address, which a source's path
+ * (a scenario's synthetic stream) is resolved against.
  */
 export function placements(
   stage: Stage,
   rects: ReturnType<typeof tileRects>,
-  origin: { x: number; y: number }
+  origin: { x: number; y: number },
+  page: string
 ): Array<TilePlacement> {
   return stage.onStage().flatMap((tile, index) => {
     const rect = rects[index]
     if (rect === undefined || rect.width === 0 || tile._tag === "Empty") return []
     const view =
       tile._tag === "StreamTile"
-        ? { url: tile.channel.locator.url, role: "stream" as const, muted: stage.audioFocus !== tile.game }
+        ? {
+            url: tile.channel.locator.url.startsWith("/")
+              ? new URL(tile.channel.locator.url, page).href
+              : tile.channel.locator.url,
+            role: "stream" as const,
+            muted: stage.audioFocus !== tile.game
+          }
         : tile._tag === "PickingChannel"
           ? // A guide can preview what is on; it never takes the sound.
             { url: tile.guide.url, role: "guide" as const, muted: true }
