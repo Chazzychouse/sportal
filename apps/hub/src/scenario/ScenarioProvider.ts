@@ -1,5 +1,6 @@
 import { join } from "node:path"
 import { fileURLToPath } from "node:url"
+import type { LeagueId } from "@sportal/domain/League"
 import { Scenario } from "@sportal/domain/Scenario"
 import { scenarios } from "@sportal/domain/scenarios/Scenarios"
 import { DateTime, Duration, Effect, FileSystem, Layer, Schema } from "effect"
@@ -18,14 +19,12 @@ export const layer = (name: string, from: string = folder) =>
       const start = yield* DateTime.now
       yield* Effect.logInfo(`ScenarioProvider: playing ${scenario.name}, ${scenario.frames.length} frames`)
       return Provider.of({
-        slate: (league) =>
-          DateTime.now.pipe(
-            Effect.map((now) =>
-              scenario
-                .slateAt(start, Duration.millis(DateTime.toEpochMillis(now) - DateTime.toEpochMillis(start)))
-                .filter((game) => game.league === league)
-            )
-          )
+        slate: Effect.fn("ScenarioProvider.slate")(function* (league: LeagueId) {
+          const now = yield* DateTime.now
+          return scenario
+            .slateAt(start, Duration.millis(DateTime.toEpochMillis(now) - DateTime.toEpochMillis(start)))
+            .filter((game) => game.league === league)
+        })
       })
     })
   )
