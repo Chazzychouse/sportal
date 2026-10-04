@@ -41,5 +41,6 @@ Setup: Hub serving the built web UI, desktop shell running, signed in to YouTube
 | 32 | Press `F11`, then solo a tile | Top bar and slate hide; the soloed game fills the screen; `Esc` and `F11` undo each in turn |
 | 33 | Open the command palette (`Ctrl`+`K`) | Only the videos under the palette blank, with sound still on; they return when it closes |
 | 34 | Drag a benched game onto a tile's header | The two swap; the benched game's player starts, the other's closes |
+| 35 | Run `SPORTAL_SCENARIO=two-minute-drill-tie SPORTAL_SCENARIO_SPEED=10 pnpm dev`, fill four tiles from the strip | Each tile plays a synthetic stream: colour bars moving, its game's score and clock ticking; no sign-in, no picking tile. Moving audio focus (`1`–`4`) moves the tone you hear. `tie-uga-ala` shows RED ZONE about 12 seconds in and goes final about 22 seconds in |
 
 Record the date, the build, and any row that failed.
