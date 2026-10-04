@@ -19,13 +19,22 @@ export class StageSessions extends Context.Service<
       const ingest = yield* Ingest
       const source = yield* Source
       const current = yield* SubscriptionRef.make(Stage.initial)
+      // Where each game on the current slate can be streamed; a game no longer on the slate has none.
+      const availabilityOnSlate = Effect.gen(function* () {
+        const slate = yield* ingest.slate
+        const availabilityOf = yield* source.availability
+        return (id: GameId): Option.Option<ChannelAvailability> =>
+          Option.fromNullishOr(slate.find((candidate) => candidate.id === id)).pipe(
+            Option.map(availabilityOf)
+          )
+      })
 
       const dispatch = Effect.fn("StageSessions.dispatch")(function* (command: StageCommand) {
         // One atomic step: concurrent dispatches queue up, and a rejection leaves the Stage as it was.
         // Availability is read inside it, so a refresh that lands first is never overwritten with a stale read.
         return yield* SubscriptionRef.modifyEffect(current, (stage) =>
           Effect.gen(function* () {
-            const availabilityOf = yield* availabilityOnSlate(ingest, source)
+            const availabilityOf = yield* availabilityOnSlate
             // Assigning a game that is not on the slate gives a data tile.
             const result = stage.apply(command, (id) =>
               Option.getOrElse(availabilityOf(id), () => ChannelAvailability.NotCarried({ why: "NoStream" }))
@@ -39,9 +48,7 @@ export class StageSessions extends Context.Service<
 
       // When the source learns or forgets a channel, every tile it affects changes on every Display.
       const refresh = SubscriptionRef.updateEffect(current, (stage) =>
-        availabilityOnSlate(ingest, source).pipe(
-          Effect.map((availabilityOf) => stage.refresh(availabilityOf))
-        )
+        availabilityOnSlate.pipe(Effect.map((availabilityOf) => stage.refresh(availabilityOf)))
       )
       yield* Effect.forkScoped(source.changes.pipe(Stream.runForEach(() => refresh)), {
         startImmediately: true
@@ -54,14 +61,4 @@ export class StageSessions extends Context.Service<
       })
     })
   )
-}
-
-/** Where each game on the current slate can be streamed; a game no longer on the slate has no availability. */
-function availabilityOnSlate(ingest: typeof Ingest.Service, source: typeof Source.Service) {
-  return Effect.gen(function* () {
-    const slate = yield* ingest.slate
-    const availabilityOf = yield* source.availability
-    return (id: GameId): Option.Option<ChannelAvailability> =>
-      Option.fromNullishOr(slate.find((candidate) => candidate.id === id)).pipe(Option.map(availabilityOf))
-  })
 }
