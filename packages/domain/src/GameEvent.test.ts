@@ -80,6 +80,20 @@ describe("GameSnapshot#eventsSince", () => {
     assert.deepStrictEqual(tags(before, after), ["TimeoutTaken"])
   })
 
+  it("reports a timeout only as one fewer within the same period", () => {
+    const at = (period: number, home: number, away: number) =>
+      live({ period, situation: ball("ALA", 45, 1, 10, { homeTimeouts: home, awayTimeouts: away }) })
+    assert.deepStrictEqual(tags(at(4, 3, 3), at(5, 1, 1)), ["Overtime", "PeriodEnded"])
+    assert.deepStrictEqual(tags(at(4, 3, 3), at(4, 0, 0)), [])
+    assert.deepStrictEqual(tags(at(4, 3, 3), at(4, 3, 2)), ["TimeoutTaken"])
+  })
+
+  it("reports a new drive starting inside the 40 as reaching scoring range", () => {
+    const before = live({ situation: ball("ALA", 45) })
+    const picked = live({ situation: ball("UGA", 30, 1, 10, { lastPlay: "Pass INTERCEPTED by K.Smith" }) })
+    assert.deepStrictEqual(tags(before, picked), ["Turnover", "ReachedScoringRange"])
+  })
+
   it("reports the clock and status: two-minute drill, end of a period, halftime, overtime, final", () => {
     assert.deepStrictEqual(tags(live({ clock: "2:05" }), live({ clock: "1:58" })), ["TwoMinuteDrill"])
     assert.deepStrictEqual(tags(live({ period: 1, clock: "0:00" }), live({ period: 2, clock: "15:00" })), [

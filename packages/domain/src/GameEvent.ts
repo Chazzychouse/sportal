@@ -2,7 +2,7 @@ import { Data } from "effect"
 import type { TeamId } from "./Team.ts"
 
 /**
- * Something that happened in a game between two snapshots of it (the game is the snapshot's), derived by `GameSnapshot#eventsSince` and never
+ * Something that happened in a game between two snapshots of it, derived by `GameSnapshot#eventsSince` and never
  * stored as truth. `team` is the team that scored, has the ball, gained it, or called the timeout.
  */
 export type GameEvent = Data.TaggedEnum<{

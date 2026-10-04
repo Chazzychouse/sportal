@@ -101,7 +101,8 @@ export class GameSnapshot extends Schema.Class<GameSnapshot>("sportal/GameSnapsh
           : GameEvent.PossessionChanged({ team })
       )
     if (team !== undefined && after !== undefined) {
-      // Only a change on the same team's drive is news; a new drive starting deep is not.
+      // Only a change on the same team's drive is news, except that a new drive starting inside the 40 (a turnover
+      // on a short field) is reported: a short field is what the Director should anticipate.
       const already = (test: (situation: Situation) => boolean) =>
         before !== undefined && before.possession === team && test(before)
       if (after.inScoringRange() && !already((s) => s.inScoringRange()))
@@ -112,9 +113,11 @@ export class GameSnapshot extends Schema.Class<GameSnapshot>("sportal/GameSnapsh
         events.push(GameEvent.FourthDown({ team }))
     }
     if (before !== undefined && after !== undefined) {
-      if (after.homeTimeouts < before.homeTimeouts)
+      // One fewer in the same period only: a new period resets counts, and a poll without counts reads as zero.
+      const tookOne = (was: number, now: number) => this.period === previous.period && was - now === 1
+      if (tookOne(before.homeTimeouts, after.homeTimeouts))
         events.push(GameEvent.TimeoutTaken({ team: this.home.team.id }))
-      if (after.awayTimeouts < before.awayTimeouts)
+      if (tookOne(before.awayTimeouts, after.awayTimeouts))
         events.push(GameEvent.TimeoutTaken({ team: this.away.team.id }))
     }
     if (this.inTwoMinuteDrill() && !previous.inTwoMinuteDrill()) events.push(GameEvent.TwoMinuteDrill())
