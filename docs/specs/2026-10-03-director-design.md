@@ -1,7 +1,7 @@
 # Director ("Chris Hansen Mode") — Design
 
 Date: 2026-10-03
-Status: Draft
+Status: Approved 2026-10-03
 
 Replaces the Launchpad as the next feature. Builds on the Director outline in `docs/technical-spec.md` §5.4.
 

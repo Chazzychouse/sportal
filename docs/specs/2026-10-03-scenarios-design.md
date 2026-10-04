@@ -1,7 +1,7 @@
 # Scenarios and Synthetic Streams — Design
 
 Date: 2026-10-03
-Status: Draft
+Status: Approved 2026-10-03
 
 Piece 1 of [the Director design](2026-10-03-director-design.md).
 
