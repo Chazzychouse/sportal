@@ -2,10 +2,10 @@ import { basename, join, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 import { gunzipSync } from "node:zlib"
 import { NodeRuntime, NodeServices } from "@effect/platform-node"
-import type { GameSnapshot } from "@sportal/domain/Game"
 import type { LeagueId } from "@sportal/domain/League"
 import { Scenario } from "@sportal/domain/Scenario"
 import { DateTime, Effect, FileSystem, Option, Schema } from "effect"
+// A script entry point, like main.ts, so it may name the scenario adapter's folder.
 import { folder } from "../../scenario/ScenarioProvider.ts"
 import * as EspnPayload from "./EspnPayload.ts"
 import * as EspnProvider from "./EspnProvider.ts"
@@ -39,7 +39,7 @@ export const cut = Effect.fn("CutScenario.cut")(function* (options: {
       new CutFailed({ reason: `no scoreboard poll in ${scoreboards} falls in the window` })
     )
 
-  const frames: Array<{ at: number; slate: ReadonlyArray<GameSnapshot> }> = []
+  const frames: Array<Scenario["frames"][number]> = []
   for (const { file, instant } of polls) {
     const bytes = yield* fs.readFile(join(scoreboards, file))
     const scoreboard = yield* Effect.try({
