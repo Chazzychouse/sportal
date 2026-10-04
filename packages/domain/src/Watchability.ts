@@ -18,12 +18,14 @@ export class Watchability extends Schema.Class<Watchability>("sportal/Watchabili
   /** Until when a score or a turnover still adds to the score. */
   boostUntil: Schema.optional(Schema.DateTimeUtcFromString)
 }) {
-  /** A game first seen at `now`. With no history, a lull shows only from its status, its clock, or a timeout as its last play. */
+  /**
+   * A game first seen at `now`. With no history, a lull shows only from its status, its clock, or a break its last
+   * play announces (the end of a quarter, a timeout).
+   */
   static initial(game: GameSnapshot, now: DateTime.Utc): Watchability {
-    const timeout = /timeout/i.test(game.situation?.lastPlay ?? "") && !lateInHalf(game)
     return judged(game, now, {
       activeAt: now,
-      breakUntil: timeout ? DateTime.addDuration(now, breakLength) : undefined,
+      breakUntil: announcesBreak(game) ? DateTime.addDuration(now, breakLength) : undefined,
       boostUntil: undefined
     })
   }
@@ -36,17 +38,21 @@ export class Watchability extends Schema.Class<Watchability>("sportal/Watchabili
       before.period !== after.period ||
       before.status !== after.status ||
       before.situation?.lastPlay !== after.situation?.lastPlay
-    const breaks = events.some(
-      (event) =>
-        event._tag === "ScoreChanged" ||
-        event._tag === "PossessionChanged" ||
-        (event._tag === "TimeoutTaken" && !lateInHalf(after))
-    )
-    const boosts = events.some((event) => event._tag === "ScoreChanged" || event._tag === "Turnover")
     const newPlay = before.situation?.lastPlay !== after.situation?.lastPlay
+    const breaks =
+      (newPlay && announcesBreak(after)) ||
+      events.some(
+        (event) =>
+          event._tag === "ScoreChanged" ||
+          event._tag === "PossessionChanged" ||
+          (event._tag === "TimeoutTaken" && !lateInHalf(after))
+      )
+    const boosts = events.some((event) => event._tag === "ScoreChanged" || event._tag === "Turnover")
+    // The try after a touchdown ("(B. Baird KICK)", "(Two-Point Conversion failed)") is not play resuming.
+    const resumes = newPlay && !/^\(.*(kick|conversion)/i.test(after.situation?.lastPlay ?? "")
     return judged(after, now, {
       activeAt: played ? now : this.activeAt,
-      breakUntil: breaks ? DateTime.addDuration(now, breakLength) : newPlay ? undefined : this.breakUntil,
+      breakUntil: breaks ? DateTime.addDuration(now, breakLength) : resumes ? undefined : this.breakUntil,
       boostUntil: boosts ? DateTime.addDuration(now, boostLength) : this.boostUntil
     })
   }
@@ -95,6 +101,15 @@ function judged(
 
 function stillOn(until: DateTime.Utc | undefined, now: DateTime.Utc): DateTime.Utc | undefined {
   return until !== undefined && DateTime.isGreaterThan(until, now) ? until : undefined
+}
+
+/**
+ * A last play that announces a TV break: the end of a quarter (ESPN resets the clock to 15:00 before the period
+ * changes), or a timeout outside the last two minutes of a half and overtime.
+ */
+function announcesBreak(game: GameSnapshot): boolean {
+  const lastPlay = game.situation?.lastPlay ?? ""
+  return /^End of/i.test(lastPlay) || (/timeout/i.test(lastPlay) && !lateInHalf(game))
 }
 
 /** The last two minutes of a half or overtime: timeouts there are short, not TV breaks. */

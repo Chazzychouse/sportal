@@ -124,6 +124,57 @@ describe("Watchability#next", () => {
     assert.isFalse(afterScore.next(scored, kickoff, later(40)).lull)
   })
 
+  it("keeps the break through the try after a touchdown", () => {
+    const before = game({ clock: "8:00", situation: ball(3, 1, 3) })
+    const touchdown = game({
+      clock: "7:52",
+      home: { team: team("UGA"), score: 30 },
+      situation: ball(75, 1, 10, { lastPlay: "K. Bowen 3 Yd Run" })
+    })
+    const afterScore = Watchability.initial(before, now).next(before, touchdown, later(10))
+    for (const lastPlay of ["(B. Baird KICK)", "(Two-Point Conversion failed)"]) {
+      const tried = game({
+        clock: "7:52",
+        home: { team: team("UGA"), score: 30 },
+        situation: ball(75, 1, 10, { lastPlay })
+      })
+      assert.isTrue(afterScore.next(touchdown, tried, later(30)).lull, lastPlay)
+    }
+  })
+
+  it("takes a 90-second break at the end of a quarter and after a timeout shown as the last play", () => {
+    const before = game({ period: 3, clock: "0:04", situation: ball(60, 2, 7) })
+    const ended = game({
+      period: 3,
+      clock: "15:00",
+      situation: ball(60, 2, 7, { lastPlay: "End of 3rd quarter" })
+    })
+    const quarterBreak = Watchability.initial(before, now).next(before, ended, later(10))
+    assert.isTrue(quarterBreak.lull)
+    // The next quarter's clock runs before a new play shows: the break holds until it runs out.
+    const ticking = game({
+      period: 4,
+      clock: "14:52",
+      situation: ball(60, 2, 7, { lastPlay: "End of 3rd quarter" })
+    })
+    assert.isTrue(quarterBreak.next(ended, ticking, later(99)).lull)
+    assert.isFalse(quarterBreak.next(ended, ticking, later(101)).lull)
+
+    const playing = game({ clock: "8:00", situation: ball(60, 2, 7, { lastPlay: "Pass complete" }) })
+    const called = game({
+      clock: "7:51",
+      situation: ball(60, 3, 2, { lastPlay: "Timeout Georgia, clock 07:51" })
+    })
+    assert.isTrue(Watchability.initial(playing, now).next(playing, called, later(10)).lull)
+
+    const late = game({ clock: "1:30", situation: ball(30, 2, 7, { lastPlay: "Pass complete" }) })
+    const lateTimeout = game({
+      clock: "1:24",
+      situation: ball(30, 3, 2, { lastPlay: "Timeout Georgia, clock 01:24" })
+    })
+    assert.isFalse(Watchability.initial(late, now).next(late, lateTimeout, later(10)).lull)
+  })
+
   it("takes no break for a timeout in the two-minute drill", () => {
     const before = game({ clock: "1:30", situation: ball(30) })
     const timeout = game({ clock: "1:24", situation: ball(26, 2, 6, { homeTimeouts: 2 }) })
