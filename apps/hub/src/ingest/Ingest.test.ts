@@ -2,10 +2,11 @@ import { assert, describe, it } from "@effect/vitest"
 import { GameId, type GameSnapshot } from "@sportal/domain/Game"
 import { LiveGameState } from "@sportal/domain/LiveGame"
 import { snapshot, team } from "@sportal/domain/TestGame"
-import { Effect, type Exit, Layer, Metric, Option, Tracer } from "effect"
+import { Effect, Layer, Metric, Option, type Tracer } from "effect"
 import { TestClock } from "effect/testing"
 import { GameActors } from "../GameActors.ts"
 import { Provider, ProviderError } from "../provider/Provider.ts"
+import { recordingSpans, withMetrics } from "../TestTelemetry.ts"
 import { Ingest } from "./Ingest.ts"
 
 function liveGame(homeScore: number) {
@@ -166,10 +167,7 @@ describe("Ingest", () => {
         (metric) => metric.id === "sportal_provider_errors" && metric.attributes?.league === "fbs"
       )
       assert.deepStrictEqual(errors?.type === "Counter" ? errors.state.count : undefined, 1)
-    }).pipe(
-      Effect.provide(polling(scripted(["fail"]), ended)),
-      Effect.provideService(Metric.MetricRegistry, new Map())
-    )
+    }).pipe(Effect.provide(polling(scripted(["fail"]), ended)), withMetrics)
   })
 
   it.effect("each poll records its duration", () =>
@@ -179,25 +177,14 @@ describe("Ingest", () => {
       yield* TestClock.adjust("10 seconds")
       const duration = (yield* Metric.snapshot).find((metric) => metric.id === "sportal_poll_duration")
       assert.strictEqual(duration?.type === "Histogram" ? duration.state.count : undefined, 2)
-    }).pipe(
-      Effect.provide(polling(scripted([[liveGame(0)], [liveGame(7)]]), [])),
-      Effect.provideService(Metric.MetricRegistry, new Map())
-    )
+    }).pipe(Effect.provide(polling(scripted([[liveGame(0)], [liveGame(7)]]), [])), withMetrics)
   )
 })
 
 /** Ingest of the fbs league over `provider`, with each span that ends recorded in `ended`. */
 function polling(provider: Layer.Layer<Provider>, ended: Array<Tracer.Span>) {
-  class RecordedSpan extends Tracer.NativeSpan {
-    override end(endTime: bigint, exit: Exit.Exit<unknown, unknown>) {
-      super.end(endTime, exit)
-      ended.push(this)
-    }
-  }
   return Ingest.layer(["fbs"]).pipe(
     Layer.provide([provider, GameActors.layer]),
-    Layer.provideMerge(
-      Layer.succeed(Tracer.Tracer, Tracer.make({ span: (options) => new RecordedSpan(options) }))
-    )
+    Layer.provideMerge(recordingSpans(ended))
   )
 }

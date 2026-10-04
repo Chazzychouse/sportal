@@ -71,6 +71,13 @@ module.exports = {
       to: { path: "^apps/hub/src/TestHubConfig\\.ts$" }
     },
     {
+      name: "test-telemetry-is-for-tests",
+      comment: "Logs, spans, and metrics recorded for a test are imported only by test files.",
+      severity: "error",
+      from: { pathNot: "\\.test\\.ts$" },
+      to: { path: "^apps/hub/src/TestTelemetry\\.ts$" }
+    },
+    {
       name: "no-junk-drawers",
       comment: "Name a file for the concept it owns.",
       severity: "error",

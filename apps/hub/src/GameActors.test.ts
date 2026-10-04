@@ -11,17 +11,17 @@ import {
   Exit,
   Fiber,
   Layer,
-  Logger,
   Metric,
   Option,
   Ref,
   References,
   Stream,
-  Tracer
+  type Tracer
 } from "effect"
 import { ClusterSchema, MessageStorage } from "effect/cluster"
 import { TestClock } from "effect/testing"
 import { Game, GameActors } from "./GameActors.ts"
+import { recordingLogs, recordingSpans, withMetrics } from "./TestTelemetry.ts"
 
 const one = GameId.make("1")
 const two = GameId.make("2")
@@ -337,7 +337,7 @@ describe("GameActors", () => {
         assert.strictEqual(receive?.attributes.get("sportal.game"), "1")
         const duration = (yield* Metric.snapshot).find((metric) => metric.id === "sportal_receive_duration")
         assert.strictEqual(duration?.type === "Histogram" ? duration.state.count : undefined, 1)
-      }).pipe(Effect.provide(GameActors.layer), Effect.provide(tracing(ended)), withMetrics)
+      }).pipe(Effect.provide(GameActors.layer), Effect.provide(recordingSpans(ended)), withMetrics)
     })
 
     it.effect("live games are counted by state", () =>
@@ -515,43 +515,10 @@ function stateOf(id: GameId) {
   )
 }
 
-/** A logger that records every message at Debug and above, beside the default one. */
+/** The test's logs at Debug and above, recorded. */
 function recording() {
-  const logs: Array<{
-    readonly level: string
-    readonly message: string
-    readonly annotations: Readonly<Record<string, unknown>>
-  }> = []
-  const recorder = Logger.make(({ logLevel, message, fiber }) => {
-    logs.push({
-      level: logLevel,
-      message: JSON.stringify(message),
-      annotations: fiber.getRef(References.CurrentLogAnnotations)
-    })
-  })
-  return {
-    logs,
-    layer: Layer.mergeAll(
-      Logger.layer([recorder], { mergeWithExisting: true }),
-      Layer.succeed(References.MinimumLogLevel, "Debug")
-    )
-  }
-}
-
-/** A tracer that records each span that ends in `ended`. */
-function tracing(ended: Array<Tracer.Span>) {
-  class RecordedSpan extends Tracer.NativeSpan {
-    override end(endTime: bigint, exit: Exit.Exit<unknown, unknown>) {
-      super.end(endTime, exit)
-      ended.push(this)
-    }
-  }
-  return Layer.succeed(Tracer.Tracer, Tracer.make({ span: (options) => new RecordedSpan(options) }))
-}
-
-/** Runs `effect` with metrics of its own. */
-function withMetrics<A, E, R>(effect: Effect.Effect<A, E, R>) {
-  return Effect.provideService(effect, Metric.MetricRegistry, new Map())
+  const { logs, layer } = recordingLogs()
+  return { logs, layer: Layer.merge(layer, Layer.succeed(References.MinimumLogLevel, "Debug")) }
 }
 
 function counted(id: string, attributes: Record<string, string> = {}) {

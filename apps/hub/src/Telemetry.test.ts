@@ -1,10 +1,11 @@
 import { NodeCrypto } from "@effect/platform-node"
 import { assert, describe, it } from "@effect/vitest"
-import { Array as Arr, Effect, Layer, Logger, Metric, Ref, References, Schema } from "effect"
+import { Array as Arr, Effect, Layer, Metric, Ref, References, Schema } from "effect"
 import { HttpClient, HttpClientError, HttpClientResponse } from "effect/http"
 import { TestClock, TestConsole } from "effect/testing"
 import * as Telemetry from "./Telemetry.ts"
 import { withEnv } from "./TestHubConfig.ts"
+import { recordingLogs } from "./TestTelemetry.ts"
 
 describe("Telemetry", () => {
   it.effect("exports nothing without SPORTAL_OTLP_URL", () =>
@@ -116,10 +117,7 @@ describe("Telemetry", () => {
 
   it.effect("warns once when the collector cannot be reached", () =>
     Effect.gen(function* () {
-      const logged: Array<{ readonly level: string; readonly message: string }> = []
-      const recorder = Logger.make(({ logLevel, message }) => {
-        logged.push({ level: logLevel, message: JSON.stringify(message) })
-      })
+      const { logs, layer } = recordingLogs()
       const unreachable = Layer.succeed(
         HttpClient.HttpClient,
         HttpClient.make((request) =>
@@ -135,7 +133,7 @@ describe("Telemetry", () => {
           withEnv({ SPORTAL_OTLP_URL: "http://collector:4318" }),
           unreachable,
           NodeCrypto.layer,
-          Logger.layer([recorder], { mergeWithExisting: true })
+          layer
         ])
       )
 
@@ -145,7 +143,7 @@ describe("Telemetry", () => {
         { discard: true }
       ).pipe(Effect.provide(telemetry))
 
-      const warnings = logged.filter(({ level }) => level === "Warn")
+      const warnings = logs.filter(({ level }) => level === "Warn")
       assert.strictEqual(warnings.length, 1)
       assert.include(warnings[0]?.message, "http://collector:4318/")
     })
