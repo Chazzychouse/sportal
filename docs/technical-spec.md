@@ -199,6 +199,7 @@ sportal/
     │       ├── HubMode.ts          What the Hub plays: the live day or a scenario; the only file that names providers and sources
     │       ├── Telemetry.ts        Log level and format; OTLP export when configured
     │       ├── HubConfig.ts        Every environment setting, in one place
+    │       ├── GameActors.ts       The game actors: one cluster entity per game
     │       ├── provider/
     │       │   ├── Provider.ts     The port
     │       │   ├── espn/
@@ -217,8 +218,6 @@ sportal/
     │       ├── ingest/
     │       │   ├── Ingest.ts       The poll, decode, diff, publish loop
     │       │   └── Cadence.ts      How often to poll, given game status
-    │       ├── game/
-    │       │   └── GameActors.ts   The game actors: one cluster entity per game
     │       ├── director/
     │       │   └── Director.ts     Events in, stage commands and alerts out
     │       ├── stage/

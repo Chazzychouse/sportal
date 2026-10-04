@@ -101,7 +101,7 @@ Transitions (rows: current state; columns: what arrives):
 | `Stale` | ignored | (behind) | `Live` (recovered) | `Over` | — |
 | `Over` | ignored | (behind) | (behind) | `Over`, refreshed | — |
 
-### Game actors: `apps/hub/src/game/GameActors.ts`
+### Game actors: `apps/hub/src/GameActors.ts`
 
 | Question | Decision |
 | --- | --- |
@@ -217,6 +217,6 @@ query in Loki.
 
 - `CONTEXT.md`: the four rows above.
 - `docs/technical-spec.md`: §3 and §5.1 gain `GameActors` between Ingest and the slate; §4.2's tree gains
-  `game/GameActors.ts` and `LiveGame.ts`.
+  `GameActors.ts` and `LiveGame.ts`.
 - `docs/adr/0006-live-games-are-actors.md`: new.
 - `docs/game-day-checklist.md`: the row above.

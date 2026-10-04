@@ -11,7 +11,7 @@ import {
   type Stream,
   SubscriptionRef
 } from "effect"
-import { GameActors } from "../game/GameActors.ts"
+import { GameActors } from "../GameActors.ts"
 import { Provider } from "../provider/Provider.ts"
 import * as Cadence from "./Cadence.ts"
 

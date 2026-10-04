@@ -1,5 +1,5 @@
 import { Effect, Layer, Option } from "effect"
-import { GameActors } from "./game/GameActors.ts"
+import { GameActors } from "./GameActors.ts"
 import { HubConfig } from "./HubConfig.ts"
 import { Ingest } from "./ingest/Ingest.ts"
 import * as EspnProvider from "./provider/espn/EspnProvider.ts"

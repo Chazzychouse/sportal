@@ -4,7 +4,7 @@ import { LiveGameState } from "@sportal/domain/LiveGame"
 import { snapshot, team } from "@sportal/domain/TestGame"
 import { Effect, type Exit, Layer, Metric, Option, Tracer } from "effect"
 import { TestClock } from "effect/testing"
-import { GameActors } from "../game/GameActors.ts"
+import { GameActors } from "../GameActors.ts"
 import { Provider, ProviderError } from "../provider/Provider.ts"
 import { Ingest } from "./Ingest.ts"
 
