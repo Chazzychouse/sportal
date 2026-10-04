@@ -28,7 +28,8 @@ const placement = {
   url: "https://tv.youtube.com/watch/one",
   role: "stream" as const,
   bounds: { x: 10, y: 20, width: 640, height: 360 },
-  muted: true
+  muted: true,
+  interactive: false
 }
 
 describe("TileViews.sync", () => {
@@ -335,6 +336,73 @@ describe("TileViews.hotkeys", () => {
   )
 })
 
+describe("TileViews mouse filter", () => {
+  const guide = { ...placement, game: two, role: "guide" as const, url: "https://tv.youtube.com/live" }
+  const mouse = (view: number, type: string, button?: string) => {
+    const event = { preventDefault: vi.fn() }
+    created[view]?.webContents.emit("before-mouse-event", event, { type, button, x: 5, y: 5 })
+    return event.preventDefault
+  }
+
+  it.effect("keeps every mouse event from a stream view's page; a guide view gets them all", () =>
+    Effect.gen(function* () {
+      const { tiles } = yield* attached()
+      yield* tiles.sync([placement, guide])
+      for (const type of ["mouseMove", "mouseEnter", "mouseDown", "mouseUp", "mouseWheel", "contextMenu"])
+        expect(mouse(0, type)).toHaveBeenCalled()
+      expect(mouse(1, "mouseMove")).not.toHaveBeenCalled()
+      expect(mouse(1, "mouseDown", "left")).not.toHaveBeenCalled()
+    }).pipe(Effect.scoped)
+  )
+
+  it.effect("lets the mouse reach an interactive stream view, and filters it again once it is not", () =>
+    Effect.gen(function* () {
+      const { tiles } = yield* attached()
+      yield* tiles.sync([{ ...placement, interactive: true }])
+      expect(mouse(0, "mouseMove")).not.toHaveBeenCalled()
+      yield* tiles.sync([placement])
+      expect(mouse(0, "mouseMove")).toHaveBeenCalled()
+    }).pipe(Effect.scoped)
+  )
+
+  it.effect("focuses a view when it becomes interactive, and only then", () =>
+    Effect.gen(function* () {
+      const { tiles } = yield* attached()
+      yield* tiles.sync([placement])
+      expect(created[0]?.webContents.focus).not.toHaveBeenCalled()
+      yield* tiles.sync([{ ...placement, interactive: true }])
+      yield* tiles.sync([{ ...placement, interactive: true, muted: false }])
+      expect(created[0]?.webContents.focus).toHaveBeenCalledTimes(1)
+    }).pipe(Effect.scoped)
+  )
+
+  it.effect("reports a left press on a filtered stream view as its game", () =>
+    Effect.gen(function* () {
+      const { tiles } = yield* attached()
+      yield* tiles.sync([placement, guide])
+      const presses = yield* collect(tiles.tilePresses, 1)
+      mouse(1, "mouseDown", "left")
+      mouse(0, "mouseDown", "right")
+      mouse(0, "mouseUp", "left")
+      mouse(0, "mouseDown", "left")
+      expect(yield* Fiber.join(presses)).toEqual([one])
+    }).pipe(Effect.scoped)
+  )
+
+  it.effect("does not report a press on an interactive view, or on a view removed in a sync", () =>
+    Effect.gen(function* () {
+      const { tiles } = yield* attached()
+      yield* tiles.sync([{ ...placement, interactive: true }])
+      const presses = yield* collect(tiles.tilePresses, 1)
+      mouse(0, "mouseDown", "left")
+      yield* tiles.sync([{ ...placement, game: two }])
+      mouse(0, "mouseDown", "left")
+      mouse(1, "mouseDown", "left")
+      expect(yield* Fiber.join(presses)).toEqual([two])
+    }).pipe(Effect.scoped)
+  )
+})
+
 /** Starts collecting the first `count` picks, subscribed before this returns. */
 function collect<A>(picks: Stream.Stream<A>, count: number) {
   return Effect.gen(function* () {
@@ -361,6 +429,7 @@ function fakeContents() {
     loadURL: vi.fn(() => Promise.resolve()),
     setAudioMuted: vi.fn(),
     close: vi.fn(),
+    focus: vi.fn(),
     isDestroyed: () => false,
     on: vi.fn((event: string, listener: (...args: Array<unknown>) => void) => {
       listeners.set(event, [...(listeners.get(event) ?? []), listener])

@@ -55,11 +55,12 @@ export function placements(
               ? new URL(tile.channel.locator.url, page).href
               : tile.channel.locator.url,
             role: "stream" as const,
-            muted: stage.audioFocus !== tile.game
+            muted: stage.audioFocus !== tile.game,
+            interactive: false
           }
         : tile._tag === "PickingChannel"
           ? // A guide can preview what is on; it never takes the sound.
-            { url: tile.guide.url, role: "guide" as const, muted: true }
+            { url: tile.guide.url, role: "guide" as const, muted: true, interactive: false }
           : undefined
     if (view === undefined) return []
     const video = videoBounds(rect)

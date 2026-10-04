@@ -1,5 +1,6 @@
 import type { Hotkey } from "@sportal/api/Hotkey"
 import type { ChannelPick, ShellBridge } from "@sportal/api/ShellBridge"
+import type { GameId } from "@sportal/domain/Game"
 import { contextBridge, type IpcRendererEvent, ipcRenderer } from "electron"
 
 const bridge: ShellBridge = {
@@ -20,6 +21,14 @@ const bridge: ShellBridge = {
     ipcRenderer.on("sportal:hotkey", forward)
     return () => {
       ipcRenderer.removeListener("sportal:hotkey", forward)
+    }
+  },
+  onTilePressed: (listener) => {
+    // The page gets the game alone, never the IPC event.
+    const forward = (_event: IpcRendererEvent, game: GameId) => listener(game)
+    ipcRenderer.on("sportal:tile-pressed", forward)
+    return () => {
+      ipcRenderer.removeListener("sportal:tile-pressed", forward)
     }
   },
   openSignIn: () => ipcRenderer.send("sportal:open-sign-in"),

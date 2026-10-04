@@ -149,6 +149,17 @@ function serveHub(window: BrowserWindow, hubUrl: string) {
       { startImmediately: true }
     )
 
+    yield* Effect.forkScoped(
+      tiles.tilePresses.pipe(
+        Stream.runForEach((game) =>
+          Effect.sync(() => {
+            if (!window.isDestroyed()) window.webContents.send("sportal:tile-pressed", game)
+          })
+        )
+      ),
+      { startImmediately: true }
+    )
+
     const openSignIn = (event: IpcMainEvent) => {
       if (event.sender === window.webContents) run(providers.openSignIn(window))
     }

@@ -9,8 +9,9 @@ import { Transition } from "./Transition.ts"
 /**
  * Keeps one provider web view per game in a stream or guide tile, laid over the web UI at the rectangle the UI
  * reports. A view belongs to its game, so a game that changes tiles keeps its player.
- * The shell only ever sets a view's address, bounds, visibility, and mute flag, reads the address a guide
- * view lands on, and reads the keys pressed in a stream view; the provider's page is never modified.
+ * The shell only ever sets a view's address, bounds, visibility, mute flag, and focus, reads the address a guide
+ * view lands on, reads the keys pressed in a stream view, and keeps the mouse from a stream view's player unless
+ * it is interactive; the provider's page is never modified.
  */
 export class TileViews extends Context.Service<
   TileViews,
@@ -26,6 +27,8 @@ export class TileViews extends Context.Service<
     readonly channelPicks: Stream.Stream<ChannelPick>
     /** Each hotkey pressed while a stream view had keyboard focus. The page never receives it. */
     readonly hotkeys: Stream.Stream<Hotkey>
+    /** Each game whose stream view was pressed with the left button while its player had no mouse. The page never receives it. */
+    readonly tilePresses: Stream.Stream<GameId>
   }
 >()("sportal/desktop/TileViews") {
   // Only the window's own view tree is touched, so that is all the layer asks for.
@@ -40,6 +43,7 @@ export class TileViews extends Context.Service<
         const scope = yield* Effect.scope
         const picks = yield* PubSub.unbounded<ChannelPick>()
         const hotkeys = yield* PubSub.unbounded<Hotkey>()
+        const presses = yield* PubSub.unbounded<GameId>()
         const views = new Map<GameId, Entry>()
         let hidden: ReadonlySet<GameId> = new Set()
         // Views created during a transition, kept out of sight until it ends.
@@ -70,6 +74,7 @@ export class TileViews extends Context.Service<
             view: yield* providers.createView,
             url: "",
             role: "stream",
+            interactive: false,
             reported: "",
             bounds: { x: 0, y: 0, width: 0, height: 0 }
           }
@@ -99,6 +104,12 @@ export class TileViews extends Context.Service<
             if (hotkey === undefined) return
             event.preventDefault()
             PubSub.publishUnsafe(hotkeys, hotkey)
+          })
+          // YouTube TV shows its title and controls whenever the pointer moves over a player.
+          entry.view.webContents.on("before-mouse-event", (event, mouse) => {
+            if (views.get(game) !== entry || entry.role !== "stream" || entry.interactive) return
+            event.preventDefault()
+            if (mouse.type === "mouseDown" && mouse.button === "left") PubSub.publishUnsafe(presses, game)
           })
           window.contentView.addChildView(entry.view)
           return entry
@@ -141,6 +152,8 @@ export class TileViews extends Context.Service<
               yield* Effect.forkIn(loadTile(entry.view, placement.url), scope, { startImmediately: true })
             }
             entry.role = placement.role
+            if (placement.interactive && !entry.interactive) entry.view.webContents.focus()
+            entry.interactive = placement.interactive
             entry.view.webContents.setAudioMuted(placement.muted)
             moves.push({ entry, from: entry.bounds, to: placement.bounds })
           }
@@ -185,7 +198,8 @@ export class TileViews extends Context.Service<
           sync,
           hide,
           channelPicks: Stream.fromPubSub(picks),
-          hotkeys: Stream.fromPubSub(hotkeys)
+          hotkeys: Stream.fromPubSub(hotkeys),
+          tilePresses: Stream.fromPubSub(presses)
         })
       })
     )
@@ -195,13 +209,14 @@ export class TileViews extends Context.Service<
 const frame = "16 millis"
 
 /**
- * One game's view, the address last placed in it, its role, the last channel address it reported, and where
- * it is now.
+ * One game's view, the address last placed in it, its role, whether its player gets the mouse, the last channel
+ * address it reported, and where it is now.
  */
 type Entry = {
   view: WebContentsView
   url: string
   role: TilePlacement["role"]
+  interactive: boolean
   reported: string
   bounds: Bounds
 }

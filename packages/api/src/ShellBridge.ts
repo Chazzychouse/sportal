@@ -5,6 +5,7 @@ import type { Hotkey } from "./Hotkey.ts"
 /**
  * Where a game's provider view sits in the Display's window, in CSS pixels, and what it loads. A `stream` view
  * plays a channel; a `guide` view shows the source's guide so the user can pick the channel for a network.
+ * An `interactive` stream's player gets the mouse; every other stream's player never sees it.
  * A view belongs to its game, so a game that changes tiles keeps its player.
  */
 export const TilePlacement = Schema.Struct({
@@ -12,7 +13,8 @@ export const TilePlacement = Schema.Struct({
   url: Schema.String,
   role: Schema.Literals(["stream", "guide"]),
   bounds: Schema.Struct({ x: Schema.Int, y: Schema.Int, width: Schema.Int, height: Schema.Int }),
-  muted: Schema.Boolean
+  muted: Schema.Boolean,
+  interactive: Schema.Boolean
 })
 export type TilePlacement = typeof TilePlacement.Type
 
@@ -42,6 +44,8 @@ export interface ShellBridge {
   onFullScreenChanged(listener: (on: boolean) => void): () => void
   /** Calls `listener` for each hotkey pressed while a stream view had keyboard focus. Returns a function that stops the calls. */
   onHotkey(listener: (hotkey: Hotkey) => void): () => void
+  /** Calls `listener` with the game whose stream view was clicked while its player had no mouse. Returns a function that stops the calls. */
+  onTilePressed(listener: (game: GameId) => void): () => void
   /** Opens the sign-in window for YouTube TV, or focuses it if open. Its sign-in is shared by every tile. */
   openSignIn(): void
   /** Calls `listener` for every channel picked in a guide view. Returns a function that stops the calls. */
