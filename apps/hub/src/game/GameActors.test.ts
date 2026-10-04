@@ -19,15 +19,7 @@ import {
   Stream,
   Tracer
 } from "effect"
-import {
-  ClusterSchema,
-  MessageStorage,
-  RunnerHealth,
-  RunnerStorage,
-  Runners,
-  Sharding,
-  ShardingConfig
-} from "effect/cluster"
+import { ClusterSchema, MessageStorage } from "effect/cluster"
 import { TestClock } from "effect/testing"
 import { Game, GameActors } from "./GameActors.ts"
 
@@ -382,6 +374,21 @@ describe("GameActors", () => {
       }).pipe(Effect.provide(GameActors.layer), Effect.provide(layer))
     })
 
+    it.effect("a current game's actor logs its stop at Info when the layer closes", () => {
+      const { logs, layer } = recording()
+      return Effect.gen(function* () {
+        yield* GameActors.use((actors) => actors.receive(live("10:00"))).pipe(
+          Effect.provide(GameActors.layer)
+        )
+        const stopped = logs.filter(({ message }) => message.includes("stopped"))
+        assert.deepStrictEqual(
+          stopped.map(({ level }) => level),
+          ["Info"]
+        )
+        assert.include(stopped[0]?.annotations, { game: "1", league: "fbs", matchup: "AWAY at HOME" })
+      }).pipe(Effect.provide(layer))
+    })
+
     it.effect("a defect in the stale timer is logged and counted, and the timer carries on", () => {
       const { logs, layer } = recording()
       return Effect.gen(function* () {
@@ -429,7 +436,9 @@ describe("GameActors", () => {
         assert.strictEqual(yield* counted("sportal_game_defects"), 2)
       }).pipe(
         // Keep-alive sends a persisted message, which dies on a cluster that stores none.
-        Effect.provide(GameActors.onCluster.pipe(Layer.provide(storingNothing))),
+        Effect.provide(
+          GameActors.onCluster.pipe(Layer.provide(GameActors.clusterStoring(MessageStorage.layerNoop)))
+        ),
         Effect.provide(layer),
         withMetrics
       )
@@ -576,15 +585,3 @@ function sleeping(
     })
   )
 }
-
-/** The Hub's cluster with no message storage, where a persisted message dies. */
-const storingNothing = Sharding.layer.pipe(
-  Layer.provide(Runners.layerNoop),
-  Layer.provide([MessageStorage.layerNoop, RunnerStorage.layerMemory, RunnerHealth.layerNoop]),
-  Layer.provide(
-    ShardingConfig.layer({
-      entityTerminationTimeout: Duration.seconds(1),
-      simulateRemoteSerialization: false
-    })
-  )
-)

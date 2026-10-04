@@ -62,8 +62,10 @@ export class GameActors extends Context.Service<
             yield* clientFor(snapshot.id)
               .Receive({ snapshot })
               .pipe(
-                Effect.catch((error) => logUndelivered(snapshot, Cause.fail(error))),
-                Effect.catchDefect((defect) => logUndelivered(snapshot, Cause.die(defect)))
+                Effect.catch((error) => logDefect(undelivered, Cause.fail(error), snapshot.id, snapshot)),
+                Effect.catchDefect((defect) =>
+                  logDefect(undelivered, Cause.die(defect), snapshot.id, snapshot)
+                )
               )
           }, Effect.trackDuration(receiveDuration)),
           liveGames: SubscriptionRef.get(liveGames.all),
@@ -73,28 +75,51 @@ export class GameActors extends Context.Service<
     ).pipe(Layer.provide(gameEntity), Layer.provide(LiveGames.layer))
   )
 
-  /** A single-process cluster that stores nothing on disk: no runners to talk to, messages kept in memory. */
-  static readonly cluster: Layer.Layer<Sharding.Sharding> = Sharding.layer.pipe(
-    Layer.provide(Runners.layerNoop),
-    Layer.provide([MessageStorage.layerMemory, RunnerStorage.layerMemory, RunnerHealth.layerNoop]),
-    Layer.provide(
-      ShardingConfig.layer({
-        entityTerminationTimeout: Duration.seconds(1),
-        simulateRemoteSerialization: false
-      })
+  /**
+   * A single-process cluster with no runners to talk to, keeping its messages in `storage`. Storage is a parameter
+   * because the Hub needs memory storage for keep-alive, whose message is persisted, and a test removes it to make
+   * keep-alive fail.
+   */
+  static readonly clusterStoring = (
+    storage: Layer.Layer<MessageStorage.MessageStorage, never, ShardingConfig.ShardingConfig>
+  ): Layer.Layer<Sharding.Sharding> =>
+    Sharding.layer.pipe(
+      Layer.provide(Runners.layerNoop),
+      Layer.provide([storage, RunnerStorage.layerMemory, RunnerHealth.layerNoop]),
+      Layer.provide(
+        ShardingConfig.layer({
+          entityTerminationTimeout: Duration.seconds(1),
+          simulateRemoteSerialization: false
+        })
+      )
     )
+
+  /** The Hub's cluster: single-process, nothing on disk, keep-alive's messages kept in memory. */
+  static readonly cluster: Layer.Layer<Sharding.Sharding> = GameActors.clusterStoring(
+    MessageStorage.layerMemory
   )
 
-  /** The actors on a single-process cluster that stores nothing. */
+  /** The actors on the Hub's cluster, which keeps only keep-alive's entries, in memory. */
   static readonly layer: Layer.Layer<GameActors> = GameActors.onCluster.pipe(
     Layer.provide(GameActors.cluster)
   )
 }
 
-function logUndelivered(snapshot: GameSnapshot, cause: Cause.Cause<unknown>): Effect.Effect<void> {
-  return Effect.logError("GameActors: a game actor did not take a snapshot", cause).pipe(
+const undelivered = "GameActors: a game actor did not take a snapshot"
+
+/** Logs a defect or a cluster error at Error with game `game`'s annotations and `snapshot` encoded, and counts it. */
+function logDefect(
+  message: string,
+  cause: Cause.Cause<unknown>,
+  game: GameId,
+  snapshot: GameSnapshot
+): Effect.Effect<void> {
+  return Effect.logError(message, cause).pipe(
     Effect.andThen(Metric.update(gameDefects, 1)),
-    Effect.annotateLogs(annotationsOf(snapshot.id, snapshot))
+    Effect.annotateLogs({
+      ...annotationsOf(game, snapshot),
+      snapshot: Schema.encodeSync(GameSnapshot)(snapshot)
+    })
   )
 }
 
@@ -122,7 +147,7 @@ const gameEntity = Game.toLayer(
         yield* Option.match(yield* SubscriptionRef.get(state), {
           onNone: () => Effect.void,
           onSome: (liveGame) =>
-            logLifecycle("stopped", liveGame, now).pipe(asGame(liveGame.snapshot, "stopping"))
+            logLifecycle("stopped", liveGame, now).pipe(asGame(liveGame.snapshot, "stopping"), Effect.asVoid)
         })
       })
     )
@@ -145,17 +170,13 @@ const gameEntity = Game.toLayer(
             )
         }).pipe(Effect.as([[current, next], Option.map(next, Option.some)] as const))
       })
+    // Each stream guards all of its work on a live game with `asGame`, so a defect is logged and the stream carries on
+    // to the next change. Restarting would run the same step on the same live game again, in a loop.
     yield* Effect.forkScoped(
       SubscriptionRef.changes(state).pipe(
-        Stream.filterMap(
-          Filter.fromPredicateOption(
-            Option.flatMap((liveGame: LiveGame) =>
-              Option.map(liveGame.staleAt(), (staleAt) => ({ liveGame, staleAt }))
-            )
-          )
-        ),
-        Stream.switchMap(({ liveGame, staleAt }) =>
-          Stream.fromEffect(staleOn(staleAt).pipe(asGame(liveGame.snapshot, "the stale timer")))
+        Stream.filterMap(Filter.fromPredicateOption((current) => current)),
+        Stream.switchMap((liveGame) =>
+          Stream.fromEffect(staleOn(liveGame).pipe(asGame(liveGame.snapshot, "the stale timer")))
         ),
         Stream.runDrain
       ),
@@ -163,10 +184,14 @@ const gameEntity = Game.toLayer(
     )
     yield* Effect.forkScoped(
       SubscriptionRef.changes(state).pipe(
-        Stream.filterMap(Filter.fromPredicateOption((current: Option.Option<LiveGame>) => current)),
+        Stream.filterMap(Filter.fromPredicateOption((current) => current)),
         Stream.mapEffect((liveGame) =>
-          DateTime.now.pipe(Effect.map((now) => ({ liveGame, current: liveGame.isCurrent(now) })))
+          DateTime.now.pipe(
+            Effect.map((now) => ({ liveGame, current: liveGame.isCurrent(now) })),
+            asGame(liveGame.snapshot, "keep-alive")
+          )
         ),
+        Stream.filterMap(Filter.fromPredicateOption((guarded) => guarded)),
         Stream.changesWith((before, after) => before.current === after.current),
         Stream.runForEach(({ liveGame, current }) =>
           Entity.keepAlive(current).pipe(asGame(liveGame.snapshot, "keep-alive"))
@@ -197,43 +222,51 @@ const gameEntity = Game.toLayer(
             })}`
           )
           yield* Metric.update(Metric.withAttributes(snapshots, { outcome }), 1)
-        }).pipe(asGame(snapshot, "a snapshot"))
+        }).pipe(asGame(snapshot, "a snapshot"), Effect.asVoid)
     })
 
     /**
-     * Sleeps until `staleAt`, then ticks. A sleep can end a moment early on a real clock, where the tick changes
-     * nothing; it then sleeps the rest of the way.
-     */
-    function staleOn(staleAt: DateTime.Utc): Effect.Effect<void> {
-      return Effect.gen(function* () {
-        yield* Effect.sleep(Duration.max(DateTime.distance(yield* DateTime.now, staleAt), Duration.zero))
-        const now = yield* DateTime.now
-        yield* change(
-          now,
-          Option.flatMap((liveGame) => liveGame.tick(now))
-        )
-        return now
-      }).pipe(Effect.repeat({ while: (now) => DateTime.isLessThan(now, staleAt) }))
-    }
-
-    /**
-     * Runs `effect` with the game's log annotations. A defect is logged with the snapshot at hand and counted, and
-     * the game keeps its last good live game.
+     * Runs `effect` with the game's log annotations, giving its value, or none after a defect. A defect is logged
+     * with the snapshot at hand and counted, and the game keeps its last good live game.
      */
     function asGame(snapshot: GameSnapshot, raisedBy: string) {
-      return <R>(effect: Effect.Effect<void, never, R>): Effect.Effect<void, never, R> =>
+      return <A, R>(effect: Effect.Effect<A, never, R>): Effect.Effect<Option.Option<A>, never, R> =>
         effect.pipe(
+          Effect.asSome,
           Effect.catchDefect((defect) =>
-            Effect.logError(
+            logDefect(
               `GameActors: ${raisedBy} raised a defect; keeping the last good live game`,
-              Cause.die(defect)
-            ).pipe(
-              Effect.annotateLogs({ snapshot: Schema.encodeSync(GameSnapshot)(snapshot) }),
-              Effect.andThen(Metric.update(gameDefects, 1))
-            )
+              Cause.die(defect),
+              id,
+              snapshot
+            ).pipe(Effect.as(Option.none<A>()))
           ),
           Effect.annotateLogs(annotationsOf(id, snapshot))
         )
+    }
+
+    /**
+     * For a live game that has a stale time, sleeps until then and ticks. A sleep can end a moment early on a real
+     * clock, where the tick changes nothing; it then sleeps the rest of the way.
+     */
+    function staleOn(liveGame: LiveGame): Effect.Effect<void> {
+      return Effect.suspend(() =>
+        Option.match(liveGame.staleAt(), {
+          onNone: () => Effect.void,
+          onSome: (staleAt) =>
+            Effect.gen(function* () {
+              yield* Effect.sleep(
+                Duration.max(DateTime.distance(yield* DateTime.now, staleAt), Duration.zero)
+              )
+              const now = yield* DateTime.now
+              yield* change(
+                now,
+                Option.flatMap((current) => current.tick(now))
+              )
+              return now
+            }).pipe(Effect.repeat({ while: (now) => DateTime.isLessThan(now, staleAt) }), Effect.asVoid)
+        })
+      )
     }
   }),
   { maxIdleTime: "5 minutes", disableFatalDefects: true }
