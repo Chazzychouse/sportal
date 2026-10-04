@@ -43,5 +43,9 @@ Setup: Hub serving the built web UI, desktop shell running, signed in to YouTube
 | 34 | Drag a benched game onto a tile's header | The two swap; the benched game's player starts, the other's closes |
 | 35 | Run `SPORTAL_SCENARIO=two-minute-drill-tie SPORTAL_SCENARIO_SPEED=10 pnpm dev`, fill four tiles from the strip | Each tile plays a synthetic stream: colour bars moving, its game's score and clock ticking; no sign-in, no picking tile. Moving audio focus (`1`–`4`) moves the tone you hear. `tie-uga-ala` shows RED ZONE about 12 seconds in and goes final about 22 seconds in |
 | 36 | During a live window, hover the score badges on the strip | Live games carry a score; the closest late game is highest; a game at halftime or in a TV break shows its badge dimmed; the tooltip gives reasons that match the game |
+| 37 | With two games playing, rest and move the pointer over each video | No YouTube TV title or controls appear on either |
+| 38 | Click a video that is not the selected tile | That tile becomes selected; playback does not pause or change |
+| 39 | Select a playing tile and press `I`, then use the player's controls with the mouse | The controls appear and work on that tile only; the other tiles still show no controls |
+| 40 | Press `I` again, or select another tile | The player stops getting the mouse; hovering it shows nothing again |
 
 Record the date, the build, and any row that failed.
