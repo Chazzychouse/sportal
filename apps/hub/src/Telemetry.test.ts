@@ -2,7 +2,7 @@ import { NodeCrypto } from "@effect/platform-node"
 import { assert, describe, it } from "@effect/vitest"
 import { Array as Arr, Effect, Layer, Logger, Metric, Ref, References, Schema } from "effect"
 import { HttpClient, HttpClientError, HttpClientResponse } from "effect/http"
-import { TestClock } from "effect/testing"
+import { TestClock, TestConsole } from "effect/testing"
 import * as Telemetry from "./Telemetry.ts"
 import { withEnv } from "./TestHubConfig.ts"
 
@@ -57,14 +57,28 @@ describe("Telemetry", () => {
         ),
         "test.span"
       )
-      const logs = yield* bodiesTo(requests, "/v1/logs", LogBody)
-      assert.include(
-        logs.flatMap(({ resourceLogs }) =>
-          resourceLogs.flatMap(({ scopeLogs }) =>
-            scopeLogs.flatMap(({ logRecords }) => logRecords.map(({ body }) => body.stringValue))
-          )
-        ),
-        "hello"
+      assert.include(yield* loggedMessages(requests), "hello")
+    })
+  )
+
+  it.effect("writes JSON lines to the console while it exports logs", () =>
+    Effect.gen(function* () {
+      const lines = yield* Ref.make<ReadonlyArray<unknown>>([])
+      const requests = yield* exported(
+        { SPORTAL_OTLP_URL: "http://collector:4318", SPORTAL_LOG_FORMAT: "json" },
+        Effect.gen(function* () {
+          yield* Effect.logInfo("hello")
+          yield* Ref.set(lines, yield* TestConsole.logLines)
+        }).pipe(Effect.provide(TestConsole.layer))
+      )
+
+      assert.include(yield* loggedMessages(requests), "hello")
+      const written = yield* Effect.forEach(yield* Ref.get(lines), (line) =>
+        Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Struct({ message: Schema.Unknown })))(line)
+      )
+      assert.deepStrictEqual(
+        written.map(({ message }) => message),
+        ["hello"]
       )
     })
   )
@@ -175,6 +189,17 @@ function bodiesTo<A>(
   return Effect.forEach(
     requests.filter(({ url }) => url.endsWith(path)),
     ({ body }) => Schema.decodeUnknownEffect(schema)(body)
+  )
+}
+
+/** The message of each log record sent to the collector. */
+function loggedMessages(requests: ReadonlyArray<{ readonly url: string; readonly body: unknown }>) {
+  return Effect.map(bodiesTo(requests, "/v1/logs", LogBody), (logs) =>
+    logs.flatMap(({ resourceLogs }) =>
+      resourceLogs.flatMap(({ scopeLogs }) =>
+        scopeLogs.flatMap(({ logRecords }) => logRecords.map(({ body }) => body.stringValue))
+      )
+    )
   )
 }
 
