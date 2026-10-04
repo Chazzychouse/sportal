@@ -1,4 +1,5 @@
 import type { GameId, GameSnapshot } from "@sportal/domain/Game"
+import type { Watchability } from "@sportal/domain/Watchability"
 import { Fragment, useEffect, useRef } from "react"
 import { tileDrag } from "../stage/TileChrome.tsx"
 import { statusText } from "./StatusText.ts"
@@ -14,6 +15,7 @@ export function SlateView(props: {
   cards: ReturnType<typeof stripCards>
   selected: number
   pick: GameId | undefined
+  watchability: ReadonlyArray<Watchability>
   onDrop: (card: ReturnType<typeof stripCards>[number]) => void
 }) {
   const rowRef = useRef<HTMLOListElement | null>(null)
@@ -59,7 +61,12 @@ export function SlateView(props: {
                   </li>
                 )}
                 <li data-game={card.id} className="shrink-0">
-                  <Card card={card} picked={props.pick === card.id} onDrop={() => props.onDrop(card)} />
+                  <Card
+                    card={card}
+                    picked={props.pick === card.id}
+                    watch={props.watchability.find((w) => w.game === card.id)}
+                    onDrop={() => props.onDrop(card)}
+                  />
                 </li>
               </Fragment>
             )
@@ -74,7 +81,12 @@ export function SlateView(props: {
  * One game in fixed columns — logo, team, score, then status and networks — so nothing shifts as names, scores,
  * and clocks change length. A game on stage shows its tile and cannot be picked.
  */
-function Card(props: { card: ReturnType<typeof stripCards>[number]; picked: boolean; onDrop: () => void }) {
+function Card(props: {
+  card: ReturnType<typeof stripCards>[number]
+  picked: boolean
+  watch: Watchability | undefined
+  onDrop: () => void
+}) {
   const { game, place } = props.card
   const bench = place?._tag === "Bench" ? place.tile : undefined
   const onStage = place?._tag === "Slot"
@@ -110,6 +122,14 @@ function Card(props: { card: ReturnType<typeof stripCards>[number]; picked: bool
             <span className="truncate font-sans text-[10px] text-muted-foreground" title={networks}>
               {networks}
             </span>
+            {game.isLive() && props.watch !== undefined && (
+              <span
+                title={props.watch.reasons.join(" · ") || "Nothing happening"}
+                className={`shrink-0 rounded-sm px-1 text-[9px] tabular-nums ${props.watch.lull ? "text-muted-foreground opacity-60" : "bg-live/15 text-live"}`}
+              >
+                {props.watch.score}
+              </span>
+            )}
             {place !== undefined && (
               <span
                 className={`label-caps shrink-0 rounded-sm border px-1 text-[9px] ${onStage ? "border-on-air/50 text-on-air" : "text-muted-foreground"}`}

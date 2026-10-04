@@ -98,7 +98,13 @@ export function App() {
           onSelect={setSelected}
         />
         {fullScreen.on || !slateOpen ? null : (
-          <SlateView cards={cards} selected={selected} pick={pick} onDrop={dropCard} />
+          <SlateView
+            cards={cards}
+            selected={selected}
+            pick={pick}
+            watchability={live.watchability}
+            onDrop={dropCard}
+          />
         )}
       </div>
       <KeysDialog open={keys} onOpenChange={setKeys} />
