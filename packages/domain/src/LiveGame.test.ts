@@ -47,6 +47,7 @@ describe("LiveGame#receive", () => {
     )
   })
   it("Upcoming + behind snapshot: none", () => {
+    // Unreachable through start and receive; kept so every cell of the transition table is covered.
     const ahead = new LiveGame({ snapshot: live, state: LiveGameState.Upcoming() })
     expect(ahead.receive(upcoming, later)).toEqual(Option.none())
   })
@@ -125,6 +126,20 @@ describe("LiveGame#tick", () => {
     expect(liveGame.tick(staleTime).pipe(Option.map((game) => game.state))).toEqual(
       Option.some(LiveGameState.Stale({ lastUpdatedAt: t0 }))
     )
+  })
+  it("after a refresh at 60 s, none at 140 s and Stale at 150 s", () => {
+    const refreshedAt = DateTime.addDuration(t0, Duration.seconds(60))
+    const next = snapshot({ status: "live", period: 2, clock: "9:00" })
+    const refreshed = liveGame.receive(next, refreshedAt)
+    expect(
+      refreshed.pipe(Option.flatMap((game) => game.tick(DateTime.addDuration(t0, Duration.seconds(140)))))
+    ).toEqual(Option.none())
+    expect(
+      refreshed.pipe(
+        Option.flatMap((game) => game.tick(DateTime.addDuration(t0, Duration.seconds(150)))),
+        Option.map((game) => game.state)
+      )
+    ).toEqual(Option.some(LiveGameState.Stale({ lastUpdatedAt: refreshedAt })))
   })
   it("Stale: none", () => {
     expect(staleGame.tick(staleTime)).toEqual(Option.none())

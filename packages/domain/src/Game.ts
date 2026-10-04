@@ -42,7 +42,7 @@ export class GameSnapshot extends Schema.Class<GameSnapshot>("sportal/GameSnapsh
 }) {
   /** Live games first, then upcoming by kickoff, then everything that is over. */
   static readonly watchOrder: Order.Order<GameSnapshot> = Order.combine(
-    Order.mapInput(Order.Number, (game: GameSnapshot) => progressRank[game.progress()]),
+    Order.mapInput(Order.Number, (game: GameSnapshot) => watchRank[game.progress()]),
     Order.mapInput(DateTime.Order, (game: GameSnapshot) => game.kickoff)
   )
 
@@ -51,7 +51,7 @@ export class GameSnapshot extends Schema.Class<GameSnapshot>("sportal/GameSnapsh
    * Orders two snapshots of one game.
    */
   static readonly gameTime: Order.Order<GameSnapshot> = Order.combine(
-    Order.mapInput(Order.Number, (game: GameSnapshot) => gameProgressRank[game.progress()]),
+    Order.mapInput(Order.Number, (game: GameSnapshot) => gameTimeRank[game.progress()]),
     Order.combine(
       Order.mapInput(Order.Number, (game: GameSnapshot) => game.period),
       Order.mapInput(Order.flip(Order.Number), (game: GameSnapshot) => game.secondsLeft())
@@ -156,9 +156,9 @@ export class GameSnapshot extends Schema.Class<GameSnapshot>("sportal/GameSnapsh
   }
 }
 
-const progressRank = { live: 0, upcoming: 1, over: 2 } as const
+const watchRank = { live: 0, upcoming: 1, over: 2 } as const
 
-const gameProgressRank = { upcoming: 0, live: 1, over: 2 } as const
+const gameTimeRank = { upcoming: 0, live: 1, over: 2 } as const
 
 /** Seconds in a quarter, college and NFL alike. */
 const quarterSeconds = 15 * 60
