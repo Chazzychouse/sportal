@@ -10,6 +10,7 @@ import { HttpClient, HttpRouter, HttpServer } from "effect/http"
 import { HttpApiClient, HttpApiTest } from "effect/http-api"
 import { TestClock } from "effect/testing"
 import * as Database from "../database/Database.ts"
+import { GameActors } from "../game/GameActors.ts"
 import { HubConfig } from "../HubConfig.ts"
 import { Ingest } from "../ingest/Ingest.ts"
 import { Provider } from "../provider/Provider.ts"
@@ -293,7 +294,10 @@ function hubUnderTest() {
     Layer.provide(Database.layer(":memory:")),
     Layer.provideMerge(Watch.layer),
     Layer.provideMerge(Ingest.layer(["fbs"])),
-    Layer.provide(Layer.succeed(Provider, Provider.of({ slate: () => Effect.succeed([game]) }))),
+    Layer.provide([
+      Layer.succeed(Provider, Provider.of({ slate: () => Effect.succeed([game]) })),
+      GameActors.layer
+    ]),
     Layer.provideMerge(testConfig())
   )
 }

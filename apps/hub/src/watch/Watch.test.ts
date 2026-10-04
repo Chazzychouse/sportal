@@ -2,6 +2,7 @@ import { NodeServices } from "@effect/platform-node"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Layer } from "effect"
 import { TestClock } from "effect/testing"
+import { GameActors } from "../game/GameActors.ts"
 import { Ingest } from "../ingest/Ingest.ts"
 import * as ScenarioProvider from "../scenario/ScenarioProvider.ts"
 import { Watch } from "./Watch.ts"
@@ -9,7 +10,7 @@ import { Watch } from "./Watch.ts"
 const playing = (name: string) =>
   Watch.layer.pipe(
     Layer.provideMerge(Ingest.layer(["fbs", "nfl"])),
-    Layer.provide(ScenarioProvider.layer(name)),
+    Layer.provide([ScenarioProvider.layer(name), GameActors.layer]),
     Layer.provide(NodeServices.layer)
   )
 

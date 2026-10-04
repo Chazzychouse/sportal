@@ -1,6 +1,17 @@
 import type { GameSnapshot } from "@sportal/domain/Game"
 import type { LeagueId } from "@sportal/domain/League"
-import { Context, DateTime, Effect, Layer, Metric, Result, type Stream, SubscriptionRef } from "effect"
+import {
+  Context,
+  DateTime,
+  Effect,
+  Layer,
+  Metric,
+  Option,
+  Result,
+  type Stream,
+  SubscriptionRef
+} from "effect"
+import { GameActors } from "../game/GameActors.ts"
 import { Provider } from "../provider/Provider.ts"
 import * as Cadence from "./Cadence.ts"
 
@@ -16,6 +27,7 @@ export class Ingest extends Context.Service<
       Ingest,
       Effect.gen(function* () {
         const provider = yield* Provider
+        const gameActors = yield* GameActors
         const current = yield* SubscriptionRef.make<ReadonlyArray<GameSnapshot>>([])
         // The last good slate per league, so one league failing does not blank the other.
         const byLeague = new Map<LeagueId, ReadonlyArray<GameSnapshot>>()
@@ -34,7 +46,19 @@ export class Ingest extends Context.Service<
             )
           )
           const failed = results.filter(Result.isFailure).map((result) => result.failure.league)
-          const slate = leagues.flatMap((league) => byLeague.get(league) ?? [])
+          const games = leagues.flatMap((league) => byLeague.get(league) ?? [])
+          // Only this poll's games: a failed league's kept games are not resent, so their actors go stale.
+          yield* Effect.forEach(
+            results.filter(Result.isSuccess).flatMap((result) => result.success),
+            gameActors.receive,
+            { concurrency: "unbounded", discard: true }
+          )
+          const live = yield* gameActors.liveGames
+          const slate = games.map((game) =>
+            Option.fromNullishOr(live.get(game.id)).pipe(
+              Option.match({ onNone: () => game, onSome: (liveGame) => liveGame.snapshot })
+            )
+          )
           yield* SubscriptionRef.set(current, slate)
           yield* Effect.annotateCurrentSpan({ "sportal.leagues": leagues, "sportal.failed_leagues": failed })
           return { slate, failed }

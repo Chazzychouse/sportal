@@ -1,8 +1,10 @@
 import { assert, describe, it } from "@effect/vitest"
-import type { GameSnapshot } from "@sportal/domain/Game"
+import { GameId, type GameSnapshot } from "@sportal/domain/Game"
+import { LiveGameState } from "@sportal/domain/LiveGame"
 import { snapshot, team } from "@sportal/domain/TestGame"
 import { Effect, type Exit, Layer, Metric, Option, Tracer } from "effect"
 import { TestClock } from "effect/testing"
+import { GameActors } from "../game/GameActors.ts"
 import { Provider, ProviderError } from "../provider/Provider.ts"
 import { Ingest } from "./Ingest.ts"
 
@@ -14,6 +16,15 @@ function liveGame(homeScore: number) {
     home: { team: team("MSST"), score: homeScore },
     away: { team: team("ALA"), score: 0 }
   })
+}
+
+function game(id: string, period = 1) {
+  return snapshot({ id: GameId.make(id), status: "live", period, clock: "10:00" })
+}
+
+/** Ingest of the fbs league over `provider`, with the game actors it sends to also provided to the test. */
+function withActors(provider: Layer.Layer<Provider>) {
+  return Ingest.layer(["fbs"]).pipe(Layer.provideMerge(GameActors.layer), Layer.provide(provider))
 }
 
 /** A provider that answers each poll with the next scripted response. */
@@ -44,7 +55,11 @@ describe("Ingest", () => {
       yield* TestClock.adjust("10 seconds")
       assert.strictEqual((yield* ingest.slate)[0]?.home.score, 7)
     }).pipe(
-      Effect.provide(Ingest.layer(["fbs"]).pipe(Layer.provide(scripted([[liveGame(0)], [liveGame(7)]]))))
+      Effect.provide(
+        Ingest.layer(["fbs"]).pipe(
+          Layer.provide([scripted([[liveGame(0)], [liveGame(7)]]), GameActors.layer])
+        )
+      )
     )
   )
 
@@ -54,7 +69,11 @@ describe("Ingest", () => {
       yield* TestClock.adjust(0)
       yield* TestClock.adjust("10 seconds")
       assert.strictEqual((yield* ingest.slate)[0]?.home.score, 7)
-    }).pipe(Effect.provide(Ingest.layer(["fbs"]).pipe(Layer.provide(scripted([[liveGame(7)], "fail"])))))
+    }).pipe(
+      Effect.provide(
+        Ingest.layer(["fbs"]).pipe(Layer.provide([scripted([[liveGame(7)], "fail"]), GameActors.layer]))
+      )
+    )
   )
 
   it.effect("retries after 30 seconds when the first poll fails", () =>
@@ -65,7 +84,54 @@ describe("Ingest", () => {
 
       yield* TestClock.adjust("30 seconds")
       assert.strictEqual((yield* ingest.slate)[0]?.home.score, 3)
-    }).pipe(Effect.provide(Ingest.layer(["fbs"]).pipe(Layer.provide(scripted(["fail", [liveGame(3)]])))))
+    }).pipe(
+      Effect.provide(
+        Ingest.layer(["fbs"]).pipe(Layer.provide([scripted(["fail", [liveGame(3)]]), GameActors.layer]))
+      )
+    )
+  )
+
+  it.effect("the slate keeps the poll's order", () =>
+    Effect.gen(function* () {
+      const ingest = yield* Ingest
+      yield* TestClock.adjust(0)
+      assert.deepStrictEqual(
+        (yield* ingest.slate).map((game) => game.id),
+        ["3", "1", "2"]
+      )
+    }).pipe(Effect.provide(withActors(scripted([[game("3"), game("1"), game("2")]]))))
+  )
+
+  it.effect("the slate takes each game's snapshot from its live game", () =>
+    Effect.gen(function* () {
+      const ingest = yield* Ingest
+      yield* TestClock.adjust(0)
+      yield* TestClock.adjust("10 seconds")
+      assert.strictEqual((yield* ingest.slate)[0]?.period, 2)
+    }).pipe(Effect.provide(withActors(scripted([[game("1", 2)], [game("1", 1)]]))))
+  )
+
+  it.effect("a poll's snapshots reach the actors", () =>
+    Effect.gen(function* () {
+      const actors = yield* GameActors
+      yield* TestClock.adjust(0)
+      assert.deepStrictEqual([...(yield* actors.liveGames).keys()].sort(), ["1", "2", "3"])
+    }).pipe(Effect.provide(withActors(scripted([[game("3"), game("1"), game("2")]]))))
+  )
+
+  it.effect("a failed league's games are not resent", () =>
+    Effect.gen(function* () {
+      const actors = yield* GameActors
+      const ingest = yield* Ingest
+      yield* TestClock.adjust(0)
+      yield* TestClock.adjust("90 seconds")
+      assert.isTrue(
+        Option.exists(Option.fromNullishOr((yield* actors.liveGames).get(GameId.make("1"))), (liveGame) =>
+          LiveGameState.$is("Stale")(liveGame.state)
+        )
+      )
+      assert.strictEqual((yield* ingest.slate)[0]?.period, 2)
+    }).pipe(Effect.provide(withActors(scripted([[game("1", 2)], "fail"]))))
   )
 
   it.effect("a poll is one span, ended before the poll sleeps, with the provider's span inside it", () => {
@@ -129,7 +195,7 @@ function polling(provider: Layer.Layer<Provider>, ended: Array<Tracer.Span>) {
     }
   }
   return Ingest.layer(["fbs"]).pipe(
-    Layer.provide(provider),
+    Layer.provide([provider, GameActors.layer]),
     Layer.provideMerge(
       Layer.succeed(Tracer.Tracer, Tracer.make({ span: (options) => new RecordedSpan(options) }))
     )

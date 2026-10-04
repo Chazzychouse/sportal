@@ -1,4 +1,5 @@
 import { Effect, Layer, Option } from "effect"
+import { GameActors } from "./game/GameActors.ts"
 import { HubConfig } from "./HubConfig.ts"
 import { Ingest } from "./ingest/Ingest.ts"
 import * as EspnProvider from "./provider/espn/EspnProvider.ts"
@@ -27,16 +28,20 @@ const leagues = ["nfl", "fbs"] as const
 
 function live() {
   return Layer.mergeAll(
-    Watch.layer.pipe(Layer.provideMerge(Ingest.layer(leagues).pipe(Layer.provide(EspnProvider.layer)))),
+    Watch.layer.pipe(
+      Layer.provideMerge(Ingest.layer(leagues).pipe(Layer.provide([EspnProvider.layer, GameActors.layer])))
+    ),
     YouTubeTv.layer.pipe(Layer.provide(SqlChannelStore.layer))
   )
 }
 
-// Ingest, the scenario, and Watch share one clock; the rest of the Hub keeps the real one.
+// Ingest, the game actors, the scenario, and Watch share one clock; the rest of the Hub keeps the real one.
 function scripted(name: string, speed: number) {
   return Layer.mergeAll(
     Watch.layer.pipe(
-      Layer.provideMerge(Ingest.layer(leagues).pipe(Layer.provide(ScenarioProvider.layer(name)))),
+      Layer.provideMerge(
+        Ingest.layer(leagues).pipe(Layer.provide([ScenarioProvider.layer(name), GameActors.layer]))
+      ),
       Layer.provide(ScenarioClock.layer(speed))
     ),
     ScenarioSource.layer
