@@ -121,7 +121,10 @@ function hostHandlers() {
   )
 }
 
-/** GET /api/live — the current slate with its watchability and the stage, then every change, as server-sent events. */
+/**
+ * GET /api/live — the current slate with its watchability and the stage, then every change, as server-sent events,
+ * with a comment every 20 seconds so proxies that close idle connections leave a quiet stream open.
+ */
 function liveRoute() {
   return HttpRouter.add(
     "GET",
@@ -136,13 +139,16 @@ function liveRoute() {
         sessions.changes.pipe(Stream.map((stage) => ({ _tag: "StageChanged" as const, stage })))
       )
       const encode = Schema.encodeSync(LiveMessageJson)
-      return HttpServerResponse.stream(
-        messages.pipe(
-          Stream.map((message) => `data: ${encode(message)}\n\n`),
-          Stream.encodeText
-        ),
-        { contentType: "text/event-stream", headers: { "cache-control": "no-cache" } }
+      const events = messages.pipe(Stream.map((message) => `data: ${encode(message)}\n\n`))
+      // `tick` emits once at the start; only the later ticks are wanted.
+      const keepAlive = Stream.tick("20 seconds").pipe(
+        Stream.drop(1),
+        Stream.map(() => ": keep-alive\n\n")
       )
+      return HttpServerResponse.stream(Stream.merge(events, keepAlive).pipe(Stream.encodeText), {
+        contentType: "text/event-stream",
+        headers: { "cache-control": "no-cache" }
+      })
     })
   )
 }

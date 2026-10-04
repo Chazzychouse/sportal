@@ -8,6 +8,7 @@ import { broadcast, snapshot, team } from "@sportal/domain/TestGame"
 import { ConfigProvider, DateTime, Effect, Layer, Option, Queue, Result, Schema, Stream } from "effect"
 import { HttpClient, HttpRouter, HttpServer } from "effect/http"
 import { HttpApiClient, HttpApiTest } from "effect/http-api"
+import { TestClock } from "effect/testing"
 import * as Database from "../database/Database.ts"
 import { HubConfig } from "../HubConfig.ts"
 import { Ingest } from "../ingest/Ingest.ts"
@@ -214,6 +215,39 @@ describe("GET /api/live", () => {
       yield* api.stage.dispatch({ payload: { command: { _tag: "Assign", tile: 0, game: game.id } } })
       const third = yield* Queue.take(received)
       assert.deepStrictEqual(third._tag === "StageChanged" ? third.stage.tiles[0] : third, picking)
+    }).pipe(Effect.scoped, Effect.provide(serverUnderTest()))
+  )
+
+  it.effect("sends a comment every 20 seconds, so a proxy does not close a quiet stream", () =>
+    Effect.gen(function* () {
+      const http = yield* HttpClient.HttpClient
+      const api = yield* HttpApiClient.make(SportalApi)
+      yield* firstSlate()
+
+      const response = yield* http.get("/api/live")
+      const lines = yield* Queue.unbounded<string>()
+      yield* response.stream.pipe(
+        Stream.decodeText,
+        Stream.splitLines,
+        Stream.filter((line) => line !== ""),
+        Stream.runForEach((line) => Queue.offer(lines, line)),
+        Effect.forkScoped
+      )
+      yield* Queue.take(lines)
+      yield* Queue.take(lines)
+
+      // Ingest polls during these 20 seconds too; skip the data lines that causes.
+      yield* TestClock.adjust("20 seconds")
+      const comment = yield* Queue.take(lines).pipe(
+        Effect.repeat({ until: (line) => !line.startsWith("data: ") })
+      )
+      assert.strictEqual(comment, ": keep-alive")
+
+      yield* api.stage.dispatch({ payload: { command: { _tag: "Assign", tile: 0, game: game.id } } })
+      const change = yield* Queue.take(lines).pipe(
+        Effect.repeat({ until: (line) => line.includes("StageChanged") })
+      )
+      assert.isTrue(change.startsWith("data: "))
     }).pipe(Effect.scoped, Effect.provide(serverUnderTest()))
   )
 })
