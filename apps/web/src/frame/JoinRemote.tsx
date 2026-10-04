@@ -1,3 +1,4 @@
+import { Option } from "effect"
 import { useEffect, useState } from "react"
 import { encode } from "uqr"
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/design/dialog"
@@ -8,18 +9,21 @@ import { hostAddresses } from "../hub/HubClient.ts"
  * and the address as text. With several addresses (a VPN, a second network), each is listed to switch to.
  */
 export function JoinRemote(props: { open: boolean; onOpenChange: (open: boolean) => void }) {
-  const [addresses, setAddresses] = useState<ReadonlyArray<string> | undefined>(undefined)
+  // Undefined while asking; none when the Hub could not be asked.
+  const [addresses, setAddresses] = useState<Option.Option<ReadonlyArray<string>> | undefined>(undefined)
   const [chosen, setChosen] = useState(0)
 
   useEffect(() => {
     if (!props.open) return
     setChosen(0)
+    setAddresses(undefined)
     void hostAddresses().then(setAddresses)
   }, [props.open])
 
   const port = window.location.port === "" ? "" : `:${window.location.port}`
   const url = (address: string) => `${window.location.protocol}//${address}${port}/remote`
-  const shown = addresses?.[chosen]
+  const listed = addresses === undefined ? [] : Option.getOrElse(addresses, (): ReadonlyArray<string> => [])
+  const shown = listed[chosen]
 
   return (
     <Dialog open={props.open} onOpenChange={props.onOpenChange}>
@@ -32,6 +36,11 @@ export function JoinRemote(props: { open: boolean; onOpenChange: (open: boolean)
         </div>
         {addresses === undefined ? (
           <p className="text-muted-foreground text-sm">Asking the Hub…</p>
+        ) : Option.isNone(addresses) ? (
+          <p className="text-muted-foreground text-sm">
+            The Hub did not answer. Restart it (<code className="font-mono">pnpm dev</code>) so it runs this
+            version.
+          </p>
         ) : shown === undefined ? (
           <p className="text-muted-foreground text-sm">
             The Hub found no home-network address. Is this machine on Wi-Fi or Ethernet?
@@ -40,7 +49,7 @@ export function JoinRemote(props: { open: boolean; onOpenChange: (open: boolean)
           <>
             <QrCode text={url(shown)} />
             <ul className="flex flex-col gap-1">
-              {addresses.map((address, index) => (
+              {listed.map((address, index) => (
                 <li key={address}>
                   <button
                     type="button"
