@@ -73,6 +73,7 @@ describe("Watchability.initial", () => {
 
   it("leads its reasons with the largest part", () => {
     assert.strictEqual(Watchability.initial(game(), now).reasons[0], "tied Q4, 2:10")
+    assert.strictEqual(Watchability.initial(game({ period: 5, clock: "" }), now).reasons[0], "tied OT")
   })
 
   it("is in a lull at halftime, in a delay, at 0:00 between periods, and after a timeout called as the last play", () => {

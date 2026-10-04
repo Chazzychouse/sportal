@@ -142,13 +142,16 @@ function closeness(game: GameSnapshot) {
     game.period >= 5
       ? 1
       : game.period === 4
-        ? 0.6 + 0.4 * (1 - game.secondsLeft() / (15 * 60))
+        ? 0.6 + 0.4 * (1 - game.quarterLeft())
         : (earlyLateness[game.period] ?? 0)
   const close = margin <= 3 ? 1 : margin <= oneScore ? 0.8 : margin <= 16 ? 0.35 : 0.05
   const how =
     margin === 0 ? "tied" : margin <= oneScore ? "one-score" : margin <= 16 ? "two-score" : `${margin}-point`
   const period = game.period >= 5 ? "OT" : `Q${game.period}`
-  return { points: closenessPoints * lateness * close, reason: `${how} ${period}, ${game.clock}` }
+  return {
+    points: closenessPoints * lateness * close,
+    reason: game.clock === "" ? `${how} ${period}` : `${how} ${period}, ${game.clock}`
+  }
 }
 
 const closenessPoints = 50

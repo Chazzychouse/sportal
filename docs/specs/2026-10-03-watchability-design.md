@@ -24,9 +24,9 @@ on signals that a big moment is coming, not only after it happens.
 | Events | `next.eventsSince(previous)` (events carry no game id): `ScoreChanged`, `EnteredRedZone`, `Turnover` (see the next row), `PeriodEnded`, `WentFinal`, `ReachedScoringRange`, `GoalToGo`, `FourthDown`, `TwoMinuteDrill`, `Overtime`, `TimeoutTaken`, `PossessionChanged`, `WentToHalftime` |
 | Turnover | Possession changes with no score and the previous play was not a fourth down or a punt/kick (from `lastPlay` text); a change after a score or a punt is a change of possession, not a turnover. Unreadable cases count as a change of possession |
 | Follows | Not in this piece; they do not exist yet. The score has no follow term until they do |
-| Clock | The Hub folds on Ingest's clock: real time on a game day, scenario time in a scenario, so the 90 s and 45 s windows scale with the speed |
+| Clock | The Hub folds on Ingest's clock: real time on a game day, scenario time in a scenario, so the 90 s and 60 s windows scale with the speed |
 | Hub | A `Watch` service follows Ingest's slate changes, diffs each game's previous and new snapshot, folds its watchability, keeps the latest per game, and publishes them. The Director reads it in piece 3 |
-| Wire | `SlateChanged` carries `watchability` beside `slate`: the domain `Watchability` as is, one per live game. No copy type |
+| Wire | `SlateChanged` carries `watchability` beside `slate`: the domain `Watchability` as is, one per game on the slate (a game that is not live scores 0). No copy type |
 | Web | Each live strip card shows a small score badge, dimmed in a lull, with the reasons as its tooltip. The synthetic stream page shows the score and reasons under the scorebug. The strip's order does not change |
 | Tuning | Every weight and window is a named constant beside the code that uses it. Scenario tests pin orderings, not exact numbers, so tuning does not churn them |
 | Not in scope | Follows, alerts, the Director, the decision advisor, re-sorting the strip, win probability (not in the scoreboard feed) |
@@ -59,6 +59,6 @@ on signals that a big moment is coming, not only after it happens.
 
 | Risk | Check |
 | --- | --- |
-| ESPN's `clock` does not change between polls during live play (stale feed), so everything looks like a lull | Measure on the recorded slice: share of live frames flagged as lull. If it is high, the 45 s window grows or the rule needs a second signal |
+| ESPN's `clock` does not change between polls during live play (stale feed), so everything looks like a lull | Measure on the recorded slice: share of live frames flagged as lull. If it is high, the 60 s window grows or the rule needs a second signal |
 | `lastPlay` text varies, so turnover vs change of possession is misread | Unreadable cases fall to change of possession (the quieter reading); recorded-slice tests sample real texts |
 | Scores cluster, so ties are common | Scenario tests check orderings that matter; ties are left to the Director (which may show both, per piece 3) |

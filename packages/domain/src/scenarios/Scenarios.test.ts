@@ -89,36 +89,46 @@ describe("watchability through the scenarios", () => {
     const at = watched(twoMinuteDrillTie, 240)
     for (let second = 0; second < 220; second += 10) {
       const tie = at("tie-uga-ala", second)
-      for (const other of ["tie-osu-mich", "tie-tex-ou", "tie-lsu-miss"])
-        assert.isAbove(tie?.score ?? 0, at(other, second)?.score ?? 0, `at ${second}s vs ${other}`)
+      for (const id of ["tie-osu-mich", "tie-tex-ou", "tie-lsu-miss"]) {
+        const other = at(id, second)
+        assert.isDefined(other, `${id} at ${second}s`)
+        assert.isAbove(tie?.score ?? 0, other.score, `at ${second}s vs ${id}`)
+      }
       if (second < 180) assert.isFalse(tie?.lull, `lull at ${second}s`)
     }
   })
 
   it("three-red-zones-at-once: at 1:00 the one-score fourth beats the tied third beats the blowout", () => {
     const at = watched(threeRedZonesAtOnce, 60)
-    const psu = at("rz-psu-iowa", 60)?.score ?? 0
-    const fsu = at("rz-fsu-clem", 60)?.score ?? 0
-    const ore = at("rz-ore-wash", 60)?.score ?? 0
-    assert.isAbove(psu, fsu)
-    assert.isAbove(fsu, ore)
+    const psu = at("rz-psu-iowa", 60)
+    const fsu = at("rz-fsu-clem", 60)
+    const ore = at("rz-ore-wash", 60)
+    assert.isDefined(fsu)
+    assert.isDefined(ore)
+    assert.isAbove(psu?.score ?? 0, fsu.score)
+    assert.isAbove(fsu.score, ore.score)
   })
 
   it("all-lulls-but-one: for two minutes every game but AUB–ARK is in a lull, and AUB–ARK ranks first", () => {
     const at = watched(allLullsButOne, 120)
     for (let second = 0; second <= 120; second += 10) {
       assert.isFalse(at("lull-aub-ark", second)?.lull, `AUB–ARK at ${second}s`)
-      for (const other of ["lull-tenn-uk", "lull-wisc-minn", "lull-unc-duke", "lull-hou-rice"]) {
-        assert.isTrue(at(other, second)?.lull, `${other} at ${second}s`)
-        assert.isAbove(at("lull-aub-ark", second)?.score ?? 0, at(other, second)?.score ?? 0)
+      for (const id of ["lull-tenn-uk", "lull-wisc-minn", "lull-unc-duke", "lull-hou-rice"]) {
+        const other = at(id, second)
+        assert.isDefined(other, `${id} at ${second}s`)
+        assert.isTrue(other.lull, `${id} at ${second}s`)
+        assert.isAbove(at("lull-aub-ark", second)?.score ?? 0, other.score)
       }
     }
   })
 
   it("blowout-and-upset-brewing: the upset outranks the blowout and says so", () => {
     const at = watched(blowoutAndUpsetBrewing, 330)
-    for (let second = 0; second <= 330; second += 10)
-      assert.isAbove(at("upset-ala-van", second)?.score ?? 0, at("upset-osu-akr", second)?.score ?? 0)
+    for (let second = 0; second <= 330; second += 10) {
+      const blowout = at("upset-osu-akr", second)
+      assert.isDefined(blowout, `blowout at ${second}s`)
+      assert.isAbove(at("upset-ala-van", second)?.score ?? 0, blowout.score)
+    }
     assert.include(at("upset-ala-van", 0)?.reasons.join(" | ") ?? "", "upset brewing: VAN leads #3 ALA")
   })
 

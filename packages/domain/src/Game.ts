@@ -73,6 +73,11 @@ export class GameSnapshot extends Schema.Class<GameSnapshot>("sportal/GameSnapsh
     return Number.isFinite(total) ? total : quarterSeconds
   }
 
+  /** The share of the period left on the clock, 0–1. */
+  quarterLeft(): number {
+    return this.secondsLeft() / quarterSeconds
+  }
+
   /** Live in the last two minutes of the first or second half, with time still on the clock. */
   inTwoMinuteDrill(): boolean {
     const left = this.secondsLeft()

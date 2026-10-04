@@ -56,8 +56,6 @@ describe("Watch", () => {
         }
         const live = seen.filter((s) => s.live)
         const lullShare = live.filter((s) => s.lull).length / live.length
-        // Logged so the 60-second window can be tuned against real data; a game day is mostly play.
-        yield* Effect.logInfo(`recorded-red-zones: ${Math.round(lullShare * 100)}% of live polls in a lull`)
         assert.isBelow(lullShare, 0.5)
         for (const game of new Set(seen.map((s) => s.game))) {
           const mean = (rows: typeof seen) => rows.reduce((t, r) => t + r.score, 0) / Math.max(1, rows.length)

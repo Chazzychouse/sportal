@@ -118,3 +118,11 @@ describe("GameSnapshot#secondsLeft", () => {
     assert.strictEqual(live({ clock: "" }).secondsLeft(), 900)
   })
 })
+
+describe("GameSnapshot#quarterLeft", () => {
+  it("is the share of the quarter left on the clock", () => {
+    assert.strictEqual(live({ clock: "7:30" }).quarterLeft(), 0.5)
+    assert.strictEqual(live({ clock: "0:00" }).quarterLeft(), 0)
+    assert.strictEqual(live({ clock: "" }).quarterLeft(), 1)
+  })
+})
