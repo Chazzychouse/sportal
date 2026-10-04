@@ -83,3 +83,29 @@ one kind of request on the provider session, YouTube TV's guide `browse` for `FE
 the `GET` of the guide page that gives its config, at most every 5 minutes plus once per Hub reconnect. It
 sends no other request a provider page did not send itself, and never a sort request: a sort request changes
 the account's guide sort.
+
+## Amendment: the mouse filter (2026-10-04)
+
+YouTube TV shows its title and controls over the picture whenever the mouse moves over a player, and they
+are slow to leave. Two throwaway spikes in `spikes/shell-playback/`, each with two views on the spike session,
+were run by hand on the development machine:
+
+- `shield.cjs` put a fully transparent view over the players. Under `--ozone-platform=x11` it kept the
+  pointer from the players, and the shield, the window, and a focused provider view all received keys.
+- `filter.cjs` put nothing over the players: each view's `before-mouse-event` is prevented. Under
+  `--ozone-platform=x11` the players never saw a move or a click, the picture stayed, and a focused view still
+  forwarded keys. One GPU process restart was logged at launch (`nullptr returned from gbm_bo_import`), after
+  which the run was clean.
+- On native Wayland both spikes broke as soon as the pointer moved over the video: the window turned
+  see-through to the desktop, or both views died when the window moved to another workspace.
+  `eglCreateImage failed with 0x00003009` flooded the log, as in the first spike with plain views.
+  `--disable-features=WaylandOverlayDelegation` did not prevent it: one run looked fine for a while, and a
+  longer one failed the same way.
+
+So the overlay is fixed by filtering input, and the native Wayland failure is the one already recorded above,
+independent of either approach. The filter changes nothing in the provider's page; it withholds input, as
+`before-input-event` already does for hotkeys, so it is within "provider pages are loaded unmodified". Its
+design is `docs/specs/2026-10-04-mouse-filter-design.md`.
+
+Consequence: on this machine the shell should run through XWayland (`pnpm dev:x11`, `start:x11`) until native
+Wayland is shown to play video reliably. Making that the default is a separate change.
