@@ -150,6 +150,10 @@ describe("LiveGame#isCurrent", () => {
     expect(liveGame.isCurrent(later)).toBe(true)
     expect(staleGame.isCurrent(later)).toBe(true)
   })
+  it("Stale at lastUpdatedAt + 29:59 is current, and at + 30:00 is not", () => {
+    expect(staleGame.isCurrent(DateTime.addDuration(t0, Duration.seconds(30 * 60 - 1)))).toBe(true)
+    expect(staleGame.isCurrent(DateTime.addDuration(t0, Duration.minutes(30)))).toBe(false)
+  })
   it("Over is not current", () => {
     expect(overGame.isCurrent(later)).toBe(false)
   })
@@ -162,5 +166,24 @@ describe("LiveGame#isCurrent", () => {
     expect(
       upcomingGame.isCurrent(DateTime.subtractDuration(upcoming.kickoff, Duration.seconds(30 * 60 + 1)))
     ).toBe(false)
+  })
+})
+
+describe("LiveGame#currencyChangesAt", () => {
+  it("Stale: lastUpdatedAt + 30 minutes, until then", () => {
+    const end = DateTime.addDuration(t0, Duration.minutes(30))
+    expect(staleGame.currencyChangesAt(later)).toEqual(Option.some(end))
+    expect(staleGame.currencyChangesAt(end)).toEqual(Option.none())
+  })
+  it("Upcoming: kickoff - 30 minutes, until then", () => {
+    const opens = DateTime.subtractDuration(upcoming.kickoff, Duration.minutes(30))
+    expect(upcomingGame.currencyChangesAt(DateTime.subtractDuration(opens, Duration.seconds(1)))).toEqual(
+      Option.some(opens)
+    )
+    expect(upcomingGame.currencyChangesAt(opens)).toEqual(Option.none())
+  })
+  it("Live and Over: none", () => {
+    expect(liveGame.currencyChangesAt(later)).toEqual(Option.none())
+    expect(overGame.currencyChangesAt(later)).toEqual(Option.none())
   })
 })

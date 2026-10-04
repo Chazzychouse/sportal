@@ -185,13 +185,7 @@ const gameEntity = Game.toLayer(
     yield* Effect.forkScoped(
       SubscriptionRef.changes(state).pipe(
         Stream.filterMap(Filter.fromPredicateOption((current) => current)),
-        Stream.mapEffect((liveGame) =>
-          DateTime.now.pipe(
-            Effect.map((now) => ({ liveGame, current: liveGame.isCurrent(now) })),
-            asGame(liveGame.snapshot, "keep-alive")
-          )
-        ),
-        Stream.filterMap(Filter.fromPredicateOption((guarded) => guarded)),
+        Stream.switchMap(currentOn),
         Stream.changesWith((before, after) => before.current === after.current),
         Stream.runForEach(({ liveGame, current }) =>
           Entity.keepAlive(current).pipe(asGame(liveGame.snapshot, "keep-alive"))
@@ -255,9 +249,7 @@ const gameEntity = Game.toLayer(
           onNone: () => Effect.void,
           onSome: (staleAt) =>
             Effect.gen(function* () {
-              yield* Effect.sleep(
-                Duration.max(DateTime.distance(yield* DateTime.now, staleAt), Duration.zero)
-              )
+              yield* sleepUntil(staleAt)
               const now = yield* DateTime.now
               yield* change(
                 now,
@@ -266,6 +258,38 @@ const gameEntity = Game.toLayer(
               return now
             }).pipe(Effect.repeat({ while: (now) => DateTime.isLessThan(now, staleAt) }), Effect.asVoid)
         })
+      )
+    }
+
+    /**
+     * Whether a live game is current: now, and again each time that changes with no snapshot. A sleep that ends a
+     * moment early finds the same value, which keep-alive drops, and sleeps the rest of the way.
+     */
+    function currentOn(liveGame: LiveGame): Stream.Stream<{ liveGame: LiveGame; current: boolean }> {
+      return Stream.fromEffect(
+        DateTime.now.pipe(
+          Effect.map((now) => ({
+            current: liveGame.isCurrent(now),
+            changesAt: liveGame.currencyChangesAt(now)
+          })),
+          asGame(liveGame.snapshot, "keep-alive")
+        )
+      ).pipe(
+        Stream.filterMap(Filter.fromPredicateOption((guarded) => guarded)),
+        Stream.flatMap(({ current, changesAt }) =>
+          Stream.make({ liveGame, current }).pipe(
+            Stream.concat(
+              Option.match(changesAt, {
+                onNone: () => Stream.empty,
+                onSome: (at) =>
+                  Stream.fromEffect(sleepUntil(at).pipe(asGame(liveGame.snapshot, "keep-alive"))).pipe(
+                    Stream.filterMap(Filter.fromPredicateOption((slept) => slept)),
+                    Stream.flatMap(() => currentOn(liveGame))
+                  )
+              })
+            )
+          )
+        )
       )
     }
   }),
@@ -304,6 +328,12 @@ function logTransition(before: LiveGame, after: LiveGame, now: DateTime.Utc): Ef
 
 function gameTimeOf(snapshot: GameSnapshot): string {
   return `${snapshot.status}, period ${snapshot.period}, ${snapshot.clock}`
+}
+
+function sleepUntil(at: DateTime.Utc): Effect.Effect<void> {
+  return DateTime.now.pipe(
+    Effect.flatMap((now) => Effect.sleep(Duration.max(DateTime.distance(now, at), Duration.zero)))
+  )
 }
 
 /** Every running actor's live game. An actor writes its own on every change and removes it when it stops. */

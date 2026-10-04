@@ -26,8 +26,9 @@ spans, and metrics are the record of a game day. Decision: [ADR 0006](../adr/000
 - A live game nobody has updated for 90 seconds is **stale**, and recovers on its next snapshot.
 - A snapshot that is behind the game the actor already has is ignored, whichever feed sent it, so a second feed can
   be added in piece 2 without the actors knowing feeds exist.
-- An actor runs while its game is polled often or is current (live, stale, or kicking off within 30 minutes). Once
-  neither holds, it stops 5 to 5½ minutes after its last snapshot. See [Lifecycle](#lifecycle).
+- An actor runs while its game is polled often or is current (live, stale for less than 30 minutes since its last
+  update, or kicking off within 30 minutes). Once neither holds, it stops 5 to 5½ minutes after its last snapshot,
+  or after the game stops being current if that is later. See [Lifecycle](#lifecycle).
 - After a Hub restart, a game is current again on its next snapshot. Nothing is stored.
 - One game's life can be read back from Grafana: every transition, every ignored snapshot, every defect.
 
@@ -48,7 +49,7 @@ game** row names it, so it needs no row of its own.
 | --- | --- | --- |
 | **Game time** | How far a game has got: before kickoff, in play, or over; then the period; then the clock running down. Orders two snapshots of one game. | timestamp, version |
 | **Live game** | One game as the Hub follows it: its latest snapshot and its state (`LiveGameState`): upcoming, live, stale, or over. | game state, entity |
-| **Stale** | A live game no snapshot has reached for 90 seconds. | |
+| **Stale** | A live game no snapshot has reached for 90 seconds. It stays current for 30 minutes after its last update, then its actor may stop. | |
 | **Game actor** | The cluster entity that follows one game: its live game in memory, its staleness timer, its lifecycle. | durable object, worker |
 
 ## Shape
@@ -89,8 +90,9 @@ flowchart LR
 | Start | `LiveGame.start(snapshot, now)`: a game's first snapshot, always taken |
 | Receive | `liveGame.receive(snapshot, now): Option<LiveGame>`. None when the snapshot is behind in game time: ignored, and it does not refresh `updatedAt`. Otherwise the new live game. Pure, and it assumes the snapshot is of its game: the actor guarantees that |
 | Tick | `liveGame.tick(now): Option<LiveGame>`. Some `Stale` when `Live` and `now` is at or past `updatedAt + 90 s`; none in every other case |
-| Queries | `liveGame.staleAt(): Option<DateTime.Utc>` (only `Live` has one); `liveGame.isCurrent(now)` (`Live`, `Stale`, or `Upcoming` kicking off within 30 minutes) |
-| Constants | 90 s and 30 minutes are named constants on `LiveGame` |
+| Queries | `liveGame.staleAt(): Option<DateTime.Utc>` (only `Live` has one); `liveGame.isCurrent(now)` (`Live`, `Stale` until 30 minutes after `lastUpdatedAt`, or `Upcoming` kicking off within 30 minutes); `liveGame.currencyChangesAt(now): Option<DateTime.Utc>`, when `isCurrent` next changes with no snapshot: `kickoff - 30 min` for an `Upcoming` game not yet current, `lastUpdatedAt + 30 min` for a `Stale` game still current, none otherwise |
+| Stale and current | Decided by the user, 2026-10-04: a stale game is current only for 30 minutes after its last update. Current forever, keep-alive would hold a stale game's actor until the Hub restarts |
+| Constants | 90 s, and the two 30 minutes (`currentBefore`, `staleCurrentFor`), are named constants on `LiveGame` |
 
 Transitions (rows: current state; columns: what arrives):
 
@@ -108,7 +110,7 @@ Transitions (rows: current state; columns: what arrives):
 | The entity | `Game`, from `Entity.make`, keyed by game id, with one RPC, `Receive { snapshot: GameSnapshot }`, replying with nothing. Pattern: `node_modules/effect/ai-docs/src/80_cluster/10_entities.ts` |
 | Messages | Volatile: not annotated `ClusterSchema.Persisted`. Nothing about a game is stored and every snapshot is whole, so a message lost to a restart is replaced by the next poll. This removes what the spike found costly in persisted delivery: three SQL writes per message, tables that grow without bound, and a poisoned message replayed on every start |
 | Entity state | A `SubscriptionRef<Option<LiveGame>>`, none until the first snapshot. Every change goes through one private step, `change`: given the live game it has, the step returns the new one, or none when nothing changes (a behind snapshot, a tick before the stale time). A change writes the registry and logs its transition under the state's lock; when nothing changes, nothing is written, logged, or published. Handlers for one entity run one at a time. A snapshot whose id is not the entity's is a defect (`Effect.die`): `GameActors.receive` routes by the snapshot's id, so it can only be a bug |
-| Reactions to a change | Two streams over the state's `changes`, forked in the entity's scope. The timer: each live game through `Stream.switchMap`, so every change cancels the old sleep; a live game with a stale time (only `Live` has one) starts a new sleep until `staleAt` and ticks through `change`, so a refreshed game's timer moves with it and a game that goes over or stale leaves no sleep behind. If the sleep ends a moment early, the tick changes nothing and it sleeps the rest of the way. Keep-alive: each live game mapped to `isCurrent`, deduplicated, each value sent to `Entity.keepAlive`. Each stream runs all its work on a live game (`staleAt`, the clock, `isCurrent`, the tick, the keep-alive send) under the defect guard below. The registry is not a stream: it is written in the same step as the change, so `liveGames` has a snapshot's live game as soon as `receive` returns |
+| Reactions to a change | Two streams over the state's `changes`, forked in the entity's scope. The timer: each live game through `Stream.switchMap`, so every change cancels the old sleep; a live game with a stale time (only `Live` has one) starts a new sleep until `staleAt` and ticks through `change`, so a refreshed game's timer moves with it and a game that goes over or stale leaves no sleep behind. If the sleep ends a moment early, the tick changes nothing and it sleeps the rest of the way. Keep-alive: each live game through `Stream.switchMap` to its `isCurrent` now and again at each `currencyChangesAt`, deduplicated, each value sent to `Entity.keepAlive`; only the latest value matters, so one replaced at once by the next change may never be sent. Each stream runs all its work on a live game (`staleAt`, the clock, `isCurrent`, `currencyChangesAt`, the sleeps, the tick, the keep-alive send) under the defect guard below. The registry is not a stream: it is written in the same step as the change, so `liveGames` has a snapshot's live game as soon as `receive` returns |
 | Lifecycle | `maxIdleTime` 5 minutes, counted from the entity's last message. The entity holds `Entity.keepAlive` while its live game `isCurrent` and releases it when it is not. See [Lifecycle](#lifecycle) |
 | Defects | `disableFatalDefects: true`, and the handler and all of each stream's work on a live game run under `Effect.catchDefect`: the defect is logged with the game's annotations and the snapshot at hand, counted, and the entity keeps its last good live game. The reply succeeds. A stream carries on to its next change rather than restarting, so a defect that recurs on the same live game is logged once, not in a loop; a live game's timer is set again by its next snapshot. A defect never reaches the sender or another game |
 | Registry | `LiveGames`, a `SubscriptionRef` of live games by game id, inside `GameActors`. An entity writes its live game on every change, timer included, and removes it in its finalizer. A reply cannot carry a timer's change, so the registry is how state leaves an actor |
@@ -124,9 +126,10 @@ between polls and starts again on the next one. With the user's approval, that i
 its game is polled often or is current. Start and stop log at Debug for a game that is not current and at Info for one
 that is, so a quiet slate does not fill the logs.
 
-`isCurrent` depends on the time, and nothing changes when only time passes, so keep-alive is re-evaluated on every
-change, which includes every snapshot taken. Once a kickoff is within 30 minutes, `Cadence` polls at least every
-minute, so an upcoming game becomes current within a minute of its window opening.
+`isCurrent` depends on the time, so keep-alive is re-evaluated on every change, which includes every snapshot taken,
+and again when `currencyChangesAt` says it changes with no snapshot: an upcoming game's window opening, and a stale
+game's closing 30 minutes after its last update. A stale game gets no snapshot, so without that it would be current
+until the Hub restarts.
 
 ### The cluster, single-process
 
@@ -179,6 +182,7 @@ query in Loki.
 | The timer or keep-alive raises a defect | Logged with the live game's snapshot and counted; the stream carries on to the next change. A live game whose timer failed goes stale 90 seconds after its next snapshot |
 | A postponed game is rescheduled | A postponed game is over. If ESPN later lists it as scheduled, that snapshot is behind and ignored; the game comes back as upcoming once its actor has idled out |
 | A poll fails for a league | As today: the last good slate is kept. Its live games go stale 90 s later, which is now visible in logs and Grafana |
+| ESPN is out for more than 30 minutes | A stale game stops being current 30 minutes after its last update, and its actor idles out. Until the next good poll its game has no live game, so the stale marker is lost; the slate still shows the kept snapshot |
 | Events across a restart | An actor starts empty, so it has no "before" to compare with. Nothing consumes events yet; the Director must not assume it sees every one |
 
 ## Testing

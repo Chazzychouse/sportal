@@ -18,6 +18,9 @@ export class LiveGame extends Data.Class<{ readonly snapshot: GameSnapshot; read
   /** An upcoming game is current from this long before kickoff. */
   static readonly currentBefore = Duration.minutes(30)
 
+  /** How long a stale game stays current, from its last update, before its actor may stop. */
+  static readonly staleCurrentFor = Duration.minutes(30)
+
   /** A game's first snapshot, always taken. */
   static start(snapshot: GameSnapshot, now: DateTime.Utc): LiveGame {
     return new LiveGame({ snapshot, state: stateOf(snapshot, now) })
@@ -58,7 +61,7 @@ export class LiveGame extends Data.Class<{ readonly snapshot: GameSnapshot; read
     })
   }
 
-  /** Live, stale, or upcoming with kickoff within `currentBefore` of `now`. */
+  /** Live, stale for less than `staleCurrentFor`, or upcoming with kickoff within `currentBefore` of `now`. */
   isCurrent(now: DateTime.Utc): boolean {
     return LiveGameState.$match(this.state, {
       Upcoming: () =>
@@ -67,9 +70,24 @@ export class LiveGame extends Data.Class<{ readonly snapshot: GameSnapshot; read
           DateTime.addDuration(now, LiveGame.currentBefore)
         ),
       Live: () => true,
-      Stale: () => true,
+      Stale: ({ lastUpdatedAt }) =>
+        DateTime.isLessThan(now, DateTime.addDuration(lastUpdatedAt, LiveGame.staleCurrentFor)),
       Over: () => false
     })
+  }
+
+  /**
+   * When `isCurrent` next changes with no snapshot, after `now`: an upcoming game's window opening or a stale game's
+   * closing. None when only a snapshot can change it.
+   */
+  currencyChangesAt(now: DateTime.Utc): Option.Option<DateTime.Utc> {
+    return LiveGameState.$match(this.state, {
+      Upcoming: () => Option.some(DateTime.subtractDuration(this.snapshot.kickoff, LiveGame.currentBefore)),
+      Live: () => Option.none(),
+      Stale: ({ lastUpdatedAt }) =>
+        Option.some(DateTime.addDuration(lastUpdatedAt, LiveGame.staleCurrentFor)),
+      Over: () => Option.none()
+    }).pipe(Option.filter((at) => DateTime.isLessThan(now, at)))
   }
 }
 

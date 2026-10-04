@@ -215,6 +215,20 @@ describe("GameActors", () => {
       }).pipe(Effect.provide(GameActors.layer))
     )
 
+    it.effect("a stale game is kept alive for 30 minutes after its last snapshot, then idles out", () =>
+      Effect.gen(function* () {
+        const actors = yield* GameActors
+        yield* actors.receive(live("10:00"))
+        yield* TestClock.adjust("90 seconds")
+        assert.isTrue(LiveGameState.$is("Stale")(yield* stateOf(one)))
+        yield* TestClock.adjust("20 minutes")
+        assert.isTrue((yield* actors.liveGames).has(one))
+        // 35:30 after the last snapshot: current for 30 minutes, then idle for up to 5:30.
+        yield* TestClock.adjust("14 minutes")
+        assert.isFalse((yield* actors.liveGames).has(one))
+      }).pipe(Effect.provide(GameActors.layer))
+    )
+
     it.effect("a final game is gone 5 minutes after its last snapshot", () =>
       Effect.gen(function* () {
         const actors = yield* GameActors
@@ -427,9 +441,14 @@ describe("GameActors", () => {
         const actors = yield* GameActors
         const now = yield* DateTime.now
         const kickingOff = (minutes: number) => snapshot({ id: one, kickoff: DateTime.add(now, { minutes }) })
+        // Ten seconds apart, as polls are: keep-alive follows each change's latest value, so one replaced at once
+        // would never be sent.
         yield* actors.receive(kickingOff(20))
+        yield* TestClock.adjust("10 seconds")
         yield* actors.receive(kickingOff(180))
+        yield* TestClock.adjust("10 seconds")
         yield* actors.receive(kickingOff(20))
+        yield* TestClock.adjust("10 seconds")
         const errors = logs.filter(({ level }) => level === "Error")
         assert.strictEqual(errors.length, 2)
         assert.include(errors[1]?.annotations, { game: "1", league: "fbs", matchup: "AWAY at HOME" })
