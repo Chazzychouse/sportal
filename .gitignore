@@ -15,3 +15,6 @@ spikes/
 
 # The Hub's local data directory (SPORTAL_DATA_DIR)
 .sportal/
+
+# Git worktrees for isolated work
+.worktrees/
