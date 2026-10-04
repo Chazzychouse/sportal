@@ -330,6 +330,8 @@ A source's channels are found in its own guide, read by the shell (`docs/specs/2
 
 ### 5.4 Director
 
+Designed in full in `docs/specs/2026-10-03-director-design.md`.
+
 - `Watchability.score(snapshot, follows)` is pure and tuned against recorded games.
 - A **Trigger** is a condition over events and snapshots; a **Rule** binds a trigger to a stage command and a revert condition.
 - The Director runs in the Hub, so it works with no client focused and affects every Display consistently.
