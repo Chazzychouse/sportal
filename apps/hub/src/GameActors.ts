@@ -6,6 +6,7 @@ import {
   DateTime,
   Duration,
   Effect,
+  Exit,
   Filter,
   Layer,
   Metric,
@@ -107,7 +108,10 @@ export class GameActors extends Context.Service<
 
 const undelivered = "GameActors: a game actor did not take a snapshot"
 
-/** Logs a defect or a cluster error at Error with game `game`'s annotations and `snapshot` encoded, and counts it. */
+/**
+ * Logs a defect or a cluster error at Error with game `game`'s annotations and `snapshot` encoded, and counts it. A
+ * snapshot that cannot be encoded is logged by its id, so the log itself never raises a defect.
+ */
 function logDefect(
   message: string,
   cause: Cause.Cause<unknown>,
@@ -118,7 +122,10 @@ function logDefect(
     Effect.andThen(Metric.update(gameDefects, 1)),
     Effect.annotateLogs({
       ...annotationsOf(game, snapshot),
-      snapshot: Schema.encodeSync(GameSnapshot)(snapshot)
+      snapshot: Exit.match(Schema.encodeExit(GameSnapshot)(snapshot), {
+        onSuccess: (encoded) => encoded,
+        onFailure: () => snapshot.id
+      })
     })
   )
 }
