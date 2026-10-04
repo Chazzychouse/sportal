@@ -13,7 +13,9 @@
     "typecheck": "pnpm -r --parallel exec tsc --noEmit",
     "structure": "depcruise apps packages && knip",
     "test": "vitest run",
-    "format": "biome check --write ."
+    "format": "biome check --write .",
+    "telemetry": "docker compose -f telemetry/compose.yaml up -d",
+    "telemetry:down": "docker compose -f telemetry/compose.yaml down"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.15",

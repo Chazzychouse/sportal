@@ -86,6 +86,8 @@ A reader opens a file to see the thing it is named for. Keep it that way.
   `SPORTAL_SCENARIO`, `SPORTAL_SCENARIO_SPEED`, `SPORTAL_LOG_LEVEL` (an Effect level, default `Info`),
   `SPORTAL_LOG_FORMAT` (`pretty` or `json`), `SPORTAL_OTLP_URL` (the collector's OTLP/HTTP base URL; unset exports nothing), `SPORTAL_VERSION`. A bad value stops the Hub at startup. `GET /api/health`
   answers while it is up.
+- `pnpm telemetry` / `pnpm telemetry:down` — start or stop a local Grafana (`localhost:3000`) with OTLP on `localhost:4318`
+  and the Hub dashboard; needs Docker. Run the Hub with `SPORTAL_OTLP_URL=http://localhost:4318` to send to it.
 - Scripts run through pnpm's own shell (`shellEmulator`), so `VAR=x cmd` in a `package.json` script works on every OS.
   Keep scripts to what that shell understands: no bash-only syntax.
 - `pnpm --filter @sportal/web dev` — run only the web UI on port 4401, also on the home network (a phone opens `/remote`), proxying `/api` to the

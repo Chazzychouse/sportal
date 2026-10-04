@@ -1,0 +1,110 @@
+{
+  "uid": "sportal-hub",
+  "title": "Hub",
+  "schemaVersion": 41,
+  "time": { "from": "now-30m", "to": "now" },
+  "refresh": "30s",
+  "templating": {
+    "list": [
+      {
+        "name": "mode",
+        "label": "Mode",
+        "type": "query",
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "query": "label_values(target_info{service_name=\"sportal-hub\"}, sportal_mode)",
+        "refresh": 2,
+        "sort": 1
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "Hub log volume by level",
+      "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+      "datasource": { "type": "loki", "uid": "loki" },
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "drawStyle": "bars", "fillOpacity": 80, "stacking": { "mode": "normal" } }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (detected_level) (count_over_time({service_name=\"sportal-hub\"} | sportal_mode=\"$mode\" [$__interval]))",
+          "legendFormat": "{{detected_level}}"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "logs",
+      "title": "Recent warnings and errors",
+      "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
+      "datasource": { "type": "loki", "uid": "loki" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "{service_name=\"sportal-hub\"} | sportal_mode=\"$mode\" | detected_level=~\"warn|error|fatal|critical\""
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Poll duration",
+      "gridPos": { "x": 0, "y": 8, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "ms" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.5, sum by (le) (rate(sportal_poll_duration_milliseconds_bucket[$__rate_interval]) * on (job, instance) group_left target_info{sportal_mode=\"$mode\"}))",
+          "legendFormat": "p50"
+        },
+        {
+          "refId": "B",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(sportal_poll_duration_milliseconds_bucket[$__rate_interval]) * on (job, instance) group_left target_info{sportal_mode=\"$mode\"}))",
+          "legendFormat": "p95"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Provider errors by league",
+      "gridPos": { "x": 12, "y": 8, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "drawStyle": "bars", "fillOpacity": 80, "stacking": { "mode": "normal" } }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (league) (increase(sportal_provider_errors_total[$__rate_interval]) * on (job, instance) group_left target_info{sportal_mode=\"$mode\"})",
+          "legendFormat": "{{league}}"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "table",
+      "title": "Poll traces",
+      "gridPos": { "x": 0, "y": 16, "w": 24, "h": 8 },
+      "datasource": { "type": "tempo", "uid": "tempo" },
+      "targets": [
+        {
+          "refId": "A",
+          "queryType": "traceql",
+          "query": "{resource.service.name=\"sportal-hub\" && resource.sportal.mode=\"$mode\" && name=\"Ingest.poll\"}",
+          "limit": 20
+        }
+      ]
+    }
+  ]
+}

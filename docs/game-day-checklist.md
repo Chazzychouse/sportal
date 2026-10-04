@@ -47,5 +47,6 @@ Setup: Hub serving the built web UI, desktop shell running, signed in to YouTube
 | 38 | Click a video that is not the selected tile | That tile becomes selected; playback does not pause or change |
 | 39 | Select a playing tile and press `I`, then use the player's controls with the mouse | The controls appear and work on that tile only; the other tiles still show no controls |
 | 40 | Press `I` again, or select another tile | The player stops getting the mouse; hovering it shows nothing again |
+| 41 | With Docker running, run `pnpm telemetry`, then a scenario at 10× with `SPORTAL_OTLP_URL=http://localhost:4318`, and open the Hub dashboard (`localhost:3000`, folder Sportal) | The dashboard fills; a poll's trace shows its provider calls; logs filter by mode |
 
 Record the date, the build, and any row that failed.
