@@ -1,14 +1,15 @@
-import { NodeHttpServer } from "@effect/platform-node"
+import { NodeHttpServer, NodePath } from "@effect/platform-node"
 import { assert, describe, it } from "@effect/vitest"
 import { type LiveMessage, LiveMessageJson } from "@sportal/api/LiveMessage"
 import { SportalApi } from "@sportal/api/SportalApi"
 import { GameId, Network } from "@sportal/domain/Game"
 import type { Tile } from "@sportal/domain/Stage"
 import { broadcast, snapshot, team } from "@sportal/domain/TestGame"
-import { DateTime, Effect, Layer, Option, Queue, Result, Schema, Stream } from "effect"
+import { ConfigProvider, DateTime, Effect, Layer, Option, Queue, Result, Schema, Stream } from "effect"
 import { HttpClient, HttpRouter, HttpServer } from "effect/http"
 import { HttpApiClient, HttpApiTest } from "effect/http-api"
 import * as Database from "../database/Database.ts"
+import { HubConfig } from "../HubConfig.ts"
 import { Ingest } from "../ingest/Ingest.ts"
 import { Provider } from "../provider/Provider.ts"
 import * as SqlChannelStore from "../source/SqlChannelStore.ts"
@@ -92,6 +93,15 @@ describe("Hub API", () => {
       const client = yield* makeClient
       const addresses = yield* client.host.addresses()
       assert.isFalse(addresses.includes("127.0.0.1"))
+    }).pipe(Effect.provide(apiUnderTest()))
+  )
+
+  it.effect("says it is up, with its version and when it started", () =>
+    Effect.gen(function* () {
+      const client = yield* makeClient
+      const health = yield* client.host.health()
+      assert.strictEqual(health.version, "1.2.3")
+      assert.strictEqual(DateTime.toEpochMillis(health.startedAt), 0)
     }).pipe(Effect.provide(apiUnderTest()))
   )
 
@@ -249,7 +259,19 @@ function hubUnderTest() {
     Layer.provide(Database.layer(":memory:")),
     Layer.provideMerge(Watch.layer),
     Layer.provideMerge(Ingest.layer(["fbs"])),
-    Layer.provide(Layer.succeed(Provider, Provider.of({ slate: () => Effect.succeed([game]) })))
+    Layer.provide(Layer.succeed(Provider, Provider.of({ slate: () => Effect.succeed([game]) }))),
+    Layer.provideMerge(testConfig())
+  )
+}
+
+function testConfig() {
+  return HubConfig.layer.pipe(
+    Layer.provide([
+      ConfigProvider.layer(
+        ConfigProvider.fromEnv({ env: { SPORTAL_VERSION: "1.2.3", SPORTAL_DATA_DIR: "unused" } })
+      ),
+      NodePath.layer
+    ])
   )
 }
 

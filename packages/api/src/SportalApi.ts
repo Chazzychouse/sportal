@@ -50,9 +50,12 @@ export class SportalApi extends HttpApi.make("sportal")
     )
   )
   .add(
-    // Where a Remote on the home network can reach this machine, for the desk's join code.
+    // Where a Remote on the home network can reach this machine, and whether the Hub is up.
     HttpApiGroup.make("host").add(
-      HttpApiEndpoint.get("addresses", "/addresses", { success: Schema.Array(Schema.String) })
+      HttpApiEndpoint.get("addresses", "/addresses", { success: Schema.Array(Schema.String) }),
+      HttpApiEndpoint.get("health", "/health", {
+        success: Schema.Struct({ version: Schema.String, startedAt: Schema.DateTimeUtcFromString })
+      })
     )
   )
   .prefix("/api") {}

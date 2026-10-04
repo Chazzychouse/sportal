@@ -3,7 +3,7 @@ import { networkInterfaces } from "node:os"
 import { NodeHttpServer } from "@effect/platform-node"
 import { type LiveMessage, LiveMessageJson } from "@sportal/api/LiveMessage"
 import { SportalApi } from "@sportal/api/SportalApi"
-import { Effect, Layer, Option, Schema, Stream } from "effect"
+import { DateTime, Effect, Layer, Option, Schema, Stream } from "effect"
 import { HttpRouter, HttpServerResponse, HttpStaticServer } from "effect/http"
 import { HttpApiBuilder } from "effect/http-api"
 import { HubConfig } from "../HubConfig.ts"
@@ -107,10 +107,17 @@ function guideHandlers() {
 }
 
 function hostHandlers() {
-  return HttpApiBuilder.group(SportalApi, "host", (handlers) =>
-    Effect.succeed(
-      handlers.handleAll({ addresses: () => Effect.sync(() => lanAddresses(networkInterfaces())) })
-    )
+  return HttpApiBuilder.group(
+    SportalApi,
+    "host",
+    Effect.fn(function* (handlers) {
+      const config = yield* HubConfig
+      const startedAt = yield* DateTime.now
+      return handlers.handleAll({
+        addresses: () => Effect.sync(() => lanAddresses(networkInterfaces())),
+        health: () => Effect.succeed({ version: config.version, startedAt })
+      })
+    })
   )
 }
 
