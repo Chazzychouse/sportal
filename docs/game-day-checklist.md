@@ -42,5 +42,6 @@ Setup: Hub serving the built web UI, desktop shell running, signed in to YouTube
 | 33 | Open the command palette (`Ctrl`+`K`) | Only the videos under the palette blank, with sound still on; they return when it closes |
 | 34 | Drag a benched game onto a tile's header | The two swap; the benched game's player starts, the other's closes |
 | 35 | Run `SPORTAL_SCENARIO=two-minute-drill-tie SPORTAL_SCENARIO_SPEED=10 pnpm dev`, fill four tiles from the strip | Each tile plays a synthetic stream: colour bars moving, its game's score and clock ticking; no sign-in, no picking tile. Moving audio focus (`1`–`4`) moves the tone you hear. `tie-uga-ala` shows RED ZONE about 12 seconds in and goes final about 22 seconds in |
+| 36 | During a live window, hover the score badges on the strip | Live games carry a score; the closest late game is highest; a game at halftime or in a TV break shows its badge dimmed; the tooltip gives reasons that match the game |
 
 Record the date, the build, and any row that failed.
