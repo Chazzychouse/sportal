@@ -30,7 +30,7 @@ Four specs, plans, and builds, in this order. Each one is usable on its own.
 
 | Question | Decision |
 | --- | --- |
-| What the Director may do | Promote to the main tile and move audio with it; solo and unsolo; pull a slate game onto the Stage, benching the weakest. It never changes the layout or the split |
+| What the Director may do | Promote to the main tile and move audio with it; solo and unsolo; pull a slate game onto the Stage, benching the weakest. Revised 2026-10-03: when two games tie at the top, it may show both side by side (a two-up layout), to be designed in piece 3; otherwise it never changes the layout or the split |
 | Solo | When the top game reaches 75 and leads the next by 25, or every other on-stage game is in a lull. Ends when the moment resolves (score, turnover, change of possession, period end), the soloed game goes into a lull, another game comes within 10, or after 3 minutes |
 | Anticipation | Inside `Watchability`: leading signals (crossing midfield in a one-score fourth quarter, goal to go, fourth and short, two-minute drill, overtime) raise a game's score before the payoff |
 | Lull | Inferred: clock stopped with no new play for a while, a timeout just taken, end of a period, halftime, `delayed`. ESPN does not report commercials |
