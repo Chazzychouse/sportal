@@ -11,8 +11,9 @@ describe("Live.reduce", () => {
   })
 
   it("replaces the slate and keeps the stage", () => {
-    const next = reduce(disconnected, { _tag: "SlateChanged", slate: [] })
+    const next = reduce(disconnected, { _tag: "SlateChanged", slate: [], watchability: [] })
     assert.deepStrictEqual(next.slate, [])
+    assert.deepStrictEqual(next.watchability, [])
     assert.strictEqual(next.stage, disconnected.stage)
   })
 })

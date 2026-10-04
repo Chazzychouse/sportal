@@ -14,6 +14,7 @@ import { Provider } from "../provider/Provider.ts"
 import * as SqlChannelStore from "../source/SqlChannelStore.ts"
 import * as YouTubeTv from "../source/youtube-tv/YouTubeTv.ts"
 import { StageSessions } from "../stage/StageSessions.ts"
+import { Watch } from "../watch/Watch.ts"
 import * as HubServer from "./HubServer.ts"
 
 const espn = Network.make("ESPN")
@@ -246,6 +247,7 @@ function hubUnderTest() {
     Layer.provideMerge(YouTubeTv.layer),
     Layer.provide(SqlChannelStore.layer),
     Layer.provide(Database.layer(":memory:")),
+    Layer.provideMerge(Watch.layer),
     Layer.provideMerge(Ingest.layer(["fbs"])),
     Layer.provide(Layer.succeed(Provider, Provider.of({ slate: () => Effect.succeed([game]) })))
   )

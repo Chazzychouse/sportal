@@ -7,6 +7,7 @@ import { HttpApiBuilder } from "effect/http-api"
 import { Ingest } from "../ingest/Ingest.ts"
 import { Source } from "../source/Source.ts"
 import { StageSessions } from "../stage/StageSessions.ts"
+import { Watch } from "../watch/Watch.ts"
 import { lanAddresses } from "./LanAddresses.ts"
 
 /** The handlers for every endpoint group in SportalApi. Exported so tests can drive them without a socket. */
@@ -98,16 +99,18 @@ function hostHandlers() {
   )
 }
 
-/** GET /api/live — the current slate and stage, then every change, as server-sent events. */
+/** GET /api/live — the current slate with its watchability and the stage, then every change, as server-sent events. */
 function liveRoute() {
   return HttpRouter.add(
     "GET",
     "/api/live",
     Effect.gen(function* () {
-      const ingest = yield* Ingest
+      const watch = yield* Watch
       const sessions = yield* StageSessions
       const messages: Stream.Stream<LiveMessage> = Stream.merge(
-        ingest.changes.pipe(Stream.map((slate) => ({ _tag: "SlateChanged" as const, slate }))),
+        watch.changes.pipe(
+          Stream.map(({ slate, watchability }) => ({ _tag: "SlateChanged" as const, slate, watchability }))
+        ),
         sessions.changes.pipe(Stream.map((stage) => ({ _tag: "StageChanged" as const, stage })))
       )
       const encode = Schema.encodeSync(LiveMessageJson)

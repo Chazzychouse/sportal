@@ -13,6 +13,7 @@ import * as ScenarioSource from "./scenario/ScenarioSource.ts"
 import * as SqlChannelStore from "./source/SqlChannelStore.ts"
 import * as YouTubeTv from "./source/youtube-tv/YouTubeTv.ts"
 import { StageSessions } from "./stage/StageSessions.ts"
+import { Watch } from "./watch/Watch.ts"
 
 const Hub = Layer.unwrap(
   Effect.gen(function* () {
@@ -30,7 +31,7 @@ const Hub = Layer.unwrap(
       onSome: (root) => Layer.mergeAll(HubServer.layer, HttpStaticServer.layer({ root, spa: true }))
     })
 
-    // A scenario plays a game day in place of ESPN and YouTube TV. Only Ingest and the scenario run on scenario
+    // A scenario plays a game day in place of ESPN and YouTube TV. Only Ingest, Watch, and the scenario run on scenario
     // time; the rest of the Hub keeps the real clock.
     const scenario = yield* Config.String("SPORTAL_SCENARIO").pipe(Config.option)
     // A speed of zero, a negative one, or NaN would stall or break the scenario clock, so the Hub refuses it.
@@ -40,13 +41,14 @@ const Hub = Layer.unwrap(
     ).pipe(Config.withDefault(1))
     const leagues = ["nfl", "fbs"] as const
     const live = Layer.mergeAll(
-      Ingest.layer(leagues).pipe(Layer.provide(EspnProvider.layer)),
+      Watch.layer.pipe(Layer.provideMerge(Ingest.layer(leagues).pipe(Layer.provide(EspnProvider.layer)))),
       YouTubeTv.layer.pipe(Layer.provide(SqlChannelStore.layer))
     )
     const scripted = (name: string) =>
       Layer.mergeAll(
-        Ingest.layer(leagues).pipe(
-          Layer.provide(ScenarioProvider.layer(name)),
+        // One clock for Ingest, the scenario, and Watch, so they share scenario time.
+        Watch.layer.pipe(
+          Layer.provideMerge(Ingest.layer(leagues).pipe(Layer.provide(ScenarioProvider.layer(name)))),
           Layer.provide(ScenarioClock.layer(speed))
         ),
         ScenarioSource.layer
