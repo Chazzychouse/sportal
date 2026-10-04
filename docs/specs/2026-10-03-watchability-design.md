@@ -1,7 +1,7 @@
 # Game Events and Watchability — Design
 
 Date: 2026-10-03
-Status: Draft
+Status: Approved 2026-10-03
 
 Piece 2 of [the Director design](2026-10-03-director-design.md). Builds on [scenarios](2026-10-03-scenarios-design.md).
 
