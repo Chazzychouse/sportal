@@ -1,7 +1,10 @@
 import { assert, describe, it } from "@effect/vitest"
-import { Duration } from "effect"
+import { DateTime, Duration } from "effect"
+import type { GameSnapshot } from "../Game.ts"
 import type { Scenario } from "../Scenario.ts"
+import { Watchability } from "../Watchability.ts"
 import { allLullsButOne } from "./AllLullsButOne.ts"
+import { blowoutAndUpsetBrewing } from "./BlowoutAndUpsetBrewing.ts"
 import { kickoffWindow } from "./KickoffWindow.ts"
 import { scenarios } from "./Scenarios.ts"
 import { threeRedZonesAtOnce } from "./ThreeRedZonesAtOnce.ts"
@@ -57,5 +60,74 @@ describe("scenarios", () => {
     assert.strictEqual(game(kickoffWindow, "ko-mia-unc", 60)?.status, "scheduled")
     assert.strictEqual(game(kickoffWindow, "ko-mia-unc", 120)?.status, "live")
     assert.strictEqual(game(kickoffWindow, "ko-kc-buf", 0)?.league, "nfl")
+  })
+})
+
+/**
+ * Each game's watchability at every 10 seconds of scenario time, folded as the Hub folds it each poll. Keys are game
+ * ids; values are [second, watchability] pairs.
+ */
+function watched(scenario: Scenario, seconds: number) {
+  const history = new Map<string, Array<readonly [number, Watchability]>>()
+  let previous: ReadonlyArray<GameSnapshot> = []
+  for (let second = 0; second <= seconds; second += 10) {
+    const now = DateTime.makeUnsafe(DateTime.toEpochMillis(scenario.origin) + second * 1000)
+    const slate = scenario.slateAt(scenario.origin, Duration.seconds(second))
+    for (const game of slate) {
+      const before = previous.find((candidate) => candidate.id === game.id)
+      const last = history.get(game.id)?.at(-1)?.[1]
+      const next =
+        before === undefined || last === undefined
+          ? Watchability.initial(game, now)
+          : last.next(before, game, now)
+      history.set(game.id, [...(history.get(game.id) ?? []), [second, next] as const])
+    }
+    previous = slate
+  }
+  return (id: string, second: number) => history.get(id)?.find(([at]) => at === second)?.[1]
+}
+
+describe("watchability through the scenarios", () => {
+  it("two-minute-drill-tie: the tied game ranks first until it is final, with no lull before 3:00", () => {
+    const at = watched(twoMinuteDrillTie, 240)
+    for (let second = 0; second < 220; second += 10) {
+      const tie = at("tie-uga-ala", second)
+      for (const other of ["tie-osu-mich", "tie-tex-ou", "tie-lsu-miss"])
+        assert.isAbove(tie?.score ?? 0, at(other, second)?.score ?? 0, `at ${second}s vs ${other}`)
+      if (second < 180) assert.isFalse(tie?.lull, `lull at ${second}s`)
+    }
+  })
+
+  it("three-red-zones-at-once: at 1:00 the one-score fourth beats the tied third beats the blowout", () => {
+    const at = watched(threeRedZonesAtOnce, 60)
+    const psu = at("rz-psu-iowa", 60)?.score ?? 0
+    const fsu = at("rz-fsu-clem", 60)?.score ?? 0
+    const ore = at("rz-ore-wash", 60)?.score ?? 0
+    assert.isAbove(psu, fsu)
+    assert.isAbove(fsu, ore)
+  })
+
+  it("all-lulls-but-one: for two minutes every game but AUB–ARK is in a lull, and AUB–ARK ranks first", () => {
+    const at = watched(allLullsButOne, 120)
+    for (let second = 0; second <= 120; second += 10) {
+      assert.isFalse(at("lull-aub-ark", second)?.lull, `AUB–ARK at ${second}s`)
+      for (const other of ["lull-tenn-uk", "lull-wisc-minn", "lull-unc-duke", "lull-hou-rice"]) {
+        assert.isTrue(at(other, second)?.lull, `${other} at ${second}s`)
+        assert.isAbove(at("lull-aub-ark", second)?.score ?? 0, at(other, second)?.score ?? 0)
+      }
+    }
+  })
+
+  it("blowout-and-upset-brewing: the upset outranks the blowout and says so", () => {
+    const at = watched(blowoutAndUpsetBrewing, 330)
+    for (let second = 0; second <= 330; second += 10)
+      assert.isAbove(at("upset-ala-van", second)?.score ?? 0, at("upset-osu-akr", second)?.score ?? 0)
+    assert.include(at("upset-ala-van", 0)?.reasons.join(" | ") ?? "", "upset brewing: VAN leads #3 ALA")
+  })
+
+  it("kickoff-window: a game scores 0 until it kicks off", () => {
+    const at = watched(kickoffWindow, 130)
+    assert.strictEqual(at("ko-mia-unc", 110)?.score, 0)
+    assert.isAbove(at("ko-mia-unc", 130)?.score ?? 0, 0)
   })
 })
