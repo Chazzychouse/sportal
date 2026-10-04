@@ -58,10 +58,6 @@ export class GameSnapshot extends Schema.Class<GameSnapshot>("sportal/GameSnapsh
     )
   )
 
-  isLive(): boolean {
-    return this.status === "live" || this.status === "halftime"
-  }
-
   /**
    * Where the game is in its day: not started, being played, or done with (final, postponed, canceled). A delay
    * before kickoff is upcoming and a delay during the game is live.

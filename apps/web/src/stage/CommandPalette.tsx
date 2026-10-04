@@ -61,7 +61,7 @@ export function CommandPalette(props: {
               <span className="font-mono">{matchup(game)}</span>
               <TeamLogo team={game.home.team} size={16} />
               <span
-                className={`label-caps text-[11px] ${game.isLive() ? "text-live" : "text-muted-foreground"}`}
+                className={`label-caps text-[11px] ${game.progress() === "live" ? "text-live" : "text-muted-foreground"}`}
               >
                 {statusText(game)}
               </span>

@@ -104,7 +104,7 @@ export function StageMap(props: {
                         </span>
                       ))}
                       <span
-                        className={`label-caps truncate text-[9px] ${game.isLive() ? "text-live" : "text-muted-foreground"}`}
+                        className={`label-caps truncate text-[9px] ${game.progress() === "live" ? "text-live" : "text-muted-foreground"}`}
                       >
                         {statusText(game)}
                       </span>

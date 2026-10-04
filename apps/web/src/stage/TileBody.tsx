@@ -59,7 +59,7 @@ function Scoreboard(props: { game: GameSnapshot }) {
         </div>
       ))}
       <span
-        className={`label-caps col-span-4 text-center text-xs ${game.isLive() ? "text-live" : "text-muted-foreground"}`}
+        className={`label-caps col-span-4 text-center text-xs ${game.progress() === "live" ? "text-live" : "text-muted-foreground"}`}
       >
         {statusText(game)}
       </span>

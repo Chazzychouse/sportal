@@ -3,19 +3,6 @@ import { DateTime } from "effect"
 import { GameId, GameSnapshot, type GameStatus } from "./Game.ts"
 import { snapshot, team } from "./TestGame.ts"
 
-describe("GameSnapshot.isLive", () => {
-  it.each(["live", "halftime"] as const)("is live when %s", (status) => {
-    assert.isTrue(snapshot({ status }).isLive())
-  })
-
-  it.each(["scheduled", "delayed", "final", "postponed", "canceled"] as const)(
-    "is not live when %s",
-    (status) => {
-      assert.isFalse(snapshot({ status }).isLive())
-    }
-  )
-})
-
 describe("GameSnapshot.progress", () => {
   it.each([
     ["scheduled", "upcoming"],

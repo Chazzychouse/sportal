@@ -50,7 +50,8 @@ export function nextPick(
   const from = cards.findIndex((card) => card.id === pick)
   if (from === -1)
     return (
-      cards.find((card) => card.place === undefined && card.game?.isLive() === true) ?? cards.find(pickable)
+      cards.find((card) => card.place === undefined && card.game?.progress() === "live") ??
+      cards.find(pickable)
     )?.id
   for (let offset = 1; offset <= cards.length; offset++) {
     const card = cards[(from + step * offset + cards.length * offset) % cards.length]

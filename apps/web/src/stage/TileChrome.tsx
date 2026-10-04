@@ -71,7 +71,7 @@ export function TileChrome(props: {
               <span className="font-semibold">{props.game.home.team.abbreviation}</span>
               <TeamLogo team={props.game.home.team} size={14} />
               <span
-                className={`label-caps ml-1.5 truncate text-[11px] ${props.game.isLive() ? "text-live" : "text-muted-foreground"}`}
+                className={`label-caps ml-1.5 truncate text-[11px] ${props.game.progress() === "live" ? "text-live" : "text-muted-foreground"}`}
               >
                 {statusText(props.game)}
               </span>

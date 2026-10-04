@@ -99,7 +99,7 @@ export function RemoteView() {
             const { game, place } = card
             const dropped = drop(card, live.stage, selected)
             const networks = game?.broadcasts.map(({ network }) => network).join(" · ")
-            const scored = game !== undefined && (game.isLive() || game.status === "final")
+            const scored = game !== undefined && (game.progress() === "live" || game.status === "final")
             return (
               <li key={card.id}>
                 <button
@@ -137,7 +137,7 @@ export function RemoteView() {
                           </span>
                           {row === 0 ? (
                             <span
-                              className={`label-caps text-right text-[11px] ${game.isLive() ? "text-live" : "text-muted-foreground"}`}
+                              className={`label-caps text-right text-[11px] ${game.progress() === "live" ? "text-live" : "text-muted-foreground"}`}
                             >
                               {statusText(game)}
                             </span>

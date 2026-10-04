@@ -113,7 +113,7 @@ function Card(props: {
         <>
           <Side side={game.away} other={game.home} game={game} />
           <span
-            className={`label-caps truncate text-right text-[10px] ${game.isLive() ? "text-live" : "text-muted-foreground"}`}
+            className={`label-caps truncate text-right text-[10px] ${game.progress() === "live" ? "text-live" : "text-muted-foreground"}`}
           >
             {statusText(game)}
           </span>
@@ -122,7 +122,7 @@ function Card(props: {
             <span className="truncate font-sans text-[10px] text-muted-foreground" title={networks}>
               {networks}
             </span>
-            {game.isLive() && props.watch !== undefined && (
+            {game.progress() === "live" && props.watch !== undefined && (
               <span
                 title={props.watch.reasons.join(" · ") || "Nothing happening"}
                 className={`shrink-0 rounded-sm px-1 text-[9px] tabular-nums ${props.watch.lull ? "text-muted-foreground opacity-60" : "bg-live/15 text-live"}`}
@@ -146,7 +146,7 @@ function Card(props: {
 
 /** One team's cells: logo, rank and abbreviation, and score. Once scores mean something, the trailing side is muted. */
 function Side(props: { side: GameSnapshot["home"]; other: GameSnapshot["home"]; game: GameSnapshot }) {
-  const scored = props.game.isLive() || props.game.status === "final"
+  const scored = props.game.progress() === "live" || props.game.status === "final"
   const trailing = scored && props.side.score < props.other.score
   return (
     <>
