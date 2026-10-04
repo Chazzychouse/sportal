@@ -72,6 +72,7 @@ Provider and Source are the two words most likely to be swapped. Provider is alw
 | **Hub mode** | What a Hub plays: the live day from its providers and sources, or a scenario in their place. | scenario mode, profile |
 | **Live message** | One update the Hub pushes to clients on the live stream: the slate changed, or the Stage changed. | event, notification |
 | **Stage sessions** | The Hub component holding the authoritative Stage for each Display and applying stage commands to it. | stage store, stage manager |
+| **Telemetry** | The traces, logs, and metrics the Hub exports for people to read in Grafana. | monitoring, observability stack |
 | **Display** | A device running the shell and presenting a Stage. | screen, client, player |
 | **Remote** | A client controlling a Display's Stage without presenting it. | controller |
 | **Desk mode** / **Couch mode** | The two presentation densities. | desktop/TV layout |

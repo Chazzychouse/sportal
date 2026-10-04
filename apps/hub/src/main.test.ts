@@ -8,35 +8,14 @@ describe("the Hub process", () => {
   // Windows cannot send a child SIGTERM. Ctrl-C there is SIGINT, which NodeRuntime.runMain handles the same way.
   it.live.skipIf(process.platform === "win32")(
     "stops within seconds of SIGTERM with a Display connected, and exits 0",
+    () => stopsOnSigterm(Effect.succeed({})),
+    30_000
+  )
+
+  it.live.skipIf(process.platform === "win32")(
+    "stops as quickly when the telemetry collector cannot be reached",
     () =>
-      Effect.gen(function* () {
-        const fs = yield* FileSystem.FileSystem
-        const path = yield* Path.Path
-        const http = yield* HttpClient.HttpClient
-        const dataDir = yield* fs.makeTempDirectoryScoped()
-        const port = yield* freePort()
-        const base = `http://127.0.0.1:${port}`
-
-        const hub = yield* spawnHub({ SPORTAL_PORT: String(port), SPORTAL_DATA_DIR: dataDir })
-        // Unread output would fill the pipe and block the Hub.
-        yield* hub.all.pipe(Stream.runDrain, Effect.exit, Effect.forkScoped)
-
-        yield* http
-          .get(`${base}/api/health`)
-          .pipe(Effect.retry({ schedule: Schedule.spaced("100 millis"), times: 100 }))
-        // The stream fails when the Hub goes away; its exit is kept, not raised.
-        const live = yield* http.get(`${base}/api/live`)
-        yield* live.stream.pipe(Stream.runDrain, Effect.exit, Effect.forkScoped)
-
-        const stopping = yield* Clock.currentTimeMillis
-        yield* hub.kill({ killSignal: "SIGTERM" })
-        const code = yield* hub.exitCode
-        const took = (yield* Clock.currentTimeMillis) - stopping
-
-        assert.strictEqual(code, ChildProcessSpawner.ExitCode(0))
-        assert.isBelow(took, 5_000)
-        assert.isTrue(yield* fs.exists(path.join(dataDir, "sportal.sqlite")))
-      }).pipe(Effect.scoped, Effect.provide([NodeServices.layer, FetchHttpClient.layer])),
+      stopsOnSigterm(Effect.map(freePort(), (port) => ({ SPORTAL_OTLP_URL: `http://127.0.0.1:${port}` }))),
     30_000
   )
 
@@ -57,6 +36,45 @@ describe("the Hub process", () => {
     30_000
   )
 })
+
+/**
+ * Starts the Hub with `settings`, connects a Display, and checks that SIGTERM stops it within seconds with exit
+ * code 0, its database written.
+ */
+function stopsOnSigterm<E, R>(settings: Effect.Effect<Record<string, string>, E, R>) {
+  return Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem
+    const path = yield* Path.Path
+    const http = yield* HttpClient.HttpClient
+    const dataDir = yield* fs.makeTempDirectoryScoped()
+    const port = yield* freePort()
+    const base = `http://127.0.0.1:${port}`
+
+    const hub = yield* spawnHub({
+      ...(yield* settings),
+      SPORTAL_PORT: String(port),
+      SPORTAL_DATA_DIR: dataDir
+    })
+    // Unread output would fill the pipe and block the Hub.
+    yield* hub.all.pipe(Stream.runDrain, Effect.exit, Effect.forkScoped)
+
+    yield* http
+      .get(`${base}/api/health`)
+      .pipe(Effect.retry({ schedule: Schedule.spaced("100 millis"), times: 100 }))
+    // The stream fails when the Hub goes away; its exit is kept, not raised.
+    const live = yield* http.get(`${base}/api/live`)
+    yield* live.stream.pipe(Stream.runDrain, Effect.exit, Effect.forkScoped)
+
+    const stopping = yield* Clock.currentTimeMillis
+    yield* hub.kill({ killSignal: "SIGTERM" })
+    const code = yield* hub.exitCode
+    const took = (yield* Clock.currentTimeMillis) - stopping
+
+    assert.strictEqual(code, ChildProcessSpawner.ExitCode(0))
+    assert.isBelow(took, 5_000)
+    assert.isTrue(yield* fs.exists(path.join(dataDir, "sportal.sqlite")))
+  }).pipe(Effect.scoped, Effect.provide([NodeServices.layer, FetchHttpClient.layer]))
+}
 
 /**
  * Starts the Hub in a child process on a scenario, on loopback, with `settings` on top of the developer's

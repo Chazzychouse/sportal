@@ -5,15 +5,15 @@ import * as Database from "./database/Database.ts"
 import { HubConfig } from "./HubConfig.ts"
 import * as HubMode from "./HubMode.ts"
 import * as HubServer from "./http/HubServer.ts"
-import * as Logging from "./Logging.ts"
 import { StageSessions } from "./stage/StageSessions.ts"
+import * as Telemetry from "./Telemetry.ts"
 
 const Hub = HubServer.serve.pipe(
   Layer.provide(StageSessions.layer),
   Layer.provide(HubMode.layer),
-  Layer.provide([Database.inDataDir, FetchHttpClient.layer]),
-  Layer.provide(Logging.layer),
-  Layer.provide(HubConfig.layer),
+  Layer.provide(Database.inDataDir),
+  Layer.provide(Telemetry.layer),
+  Layer.provide([HubConfig.layer, FetchHttpClient.layer]),
   Layer.provide(NodeServices.layer)
 )
 

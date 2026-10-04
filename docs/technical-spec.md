@@ -42,6 +42,7 @@ Versions were checked against the registry on 2026-10-03. Effect is at 4.0, whic
 | UI state | Server state mirrored from the Hub's live stream into one store; local-only state in component state | The Hub owns shared state, so the client has little of its own |
 | Styling | Tailwind CSS with two density themes (desk, couch) | Same components, two presentation modes |
 | Desktop shell | Electron (castlabs Widevine build), one `WebContentsView` per stream tile, electron-vite | The only dependable way to play Widevine content in several independent views |
+| Telemetry | Effect's own OTLP exporters (`effect/observability`), over OTLP/HTTP to a collector named by `SPORTAL_OTLP_URL`; without it the Hub only logs to the console | Spans, logs, and metrics with no OpenTelemetry SDK and no new dependency |
 | Tests | Vitest with `@effect/vitest`; Playwright for the web UI | Effect-aware tests with a controllable clock |
 | Lint and format | Biome | One fast tool |
 | Structure enforcement | dependency-cruiser (import boundaries), knip (unused files, exports, dependencies) | The layout rules in section 4 are checked by machine, not by memory |
@@ -192,7 +193,7 @@ sportal/
     │   └── src/
     │       ├── main.ts             Composition root: the Hub's layer pipe, run until a signal stops it
     │       ├── HubMode.ts          What the Hub plays: the live day or a scenario; the only file that names providers and sources
-    │       ├── Logging.ts          Log level and format
+    │       ├── Telemetry.ts        Log level and format; OTLP export when configured
     │       ├── HubConfig.ts        Every environment setting, in one place
     │       ├── provider/
     │       │   ├── Provider.ts     The port
@@ -355,6 +356,7 @@ Expected failures are typed errors in the Effect error channel, each handled whe
 | Stream view fails to load | Tile becomes a data tile with a retry action |
 | Over budget | Assignment becomes a data tile; the UI says why |
 | Client loses the Hub | UI shows disconnected and reconnects; provider views keep playing |
+| Telemetry collector unreachable | One warning naming its URL; the exporters drop what they cannot send and the Hub carries on, and still stops within its shutdown bound |
 
 ## 6. Domain language
 
