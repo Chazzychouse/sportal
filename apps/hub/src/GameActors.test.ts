@@ -268,7 +268,8 @@ describe("GameActors", () => {
         assert.strictEqual(transitions.length, 1)
         assert.strictEqual(transitions[0]?.level, "Info")
         assert.include(transitions[0]?.annotations, { game: "1", league: "fbs", matchup: "AWAY at HOME" })
-      }).pipe(Effect.provide(GameActors.layer), Effect.provide(layer))
+        assert.strictEqual(yield* counted("sportal_transitions", { from: "Upcoming", to: "Live" }), 1)
+      }).pipe(Effect.provide(GameActors.layer), Effect.provide(layer), withMetrics)
     })
 
     it.effect("going stale is logged", () => {
