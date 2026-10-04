@@ -70,6 +70,10 @@ A reader opens a file to see the thing it is named for. Keep it that way.
 - `pnpm format` — apply formatting and safe lint fixes.
 - `pnpm dev` — run the Hub, the web dev server, and the desktop shell together, each reloading on change.
   The shell waits for the UI to come up. Use `pnpm dev:x11` to run the shell through XWayland.
+- `SPORTAL_SCENARIO=<name> SPORTAL_SCENARIO_SPEED=10 pnpm dev` — play a scenario instead of ESPN and YouTube TV, ten
+  times faster: a written one (`packages/domain/src/scenarios/Scenarios.ts`) or a recorded slice in
+  `fixtures/scenarios/`. Every game plays as a synthetic stream page. Cut a slice from a recording with
+  `pnpm --filter @sportal/hub scenario:cut <name> <recording-dir> <from> <to> [game ids…]`.
 - `pnpm --filter @sportal/hub dev` — run only the Hub on port 4400 (API and live stream), on every interface so a phone Remote can reach it (`SPORTAL_HOST` narrows it). In
   dev it keeps its SQLite database in `.sportal/` at the repo root; set `SPORTAL_DATA_DIR` to move it.
 - `pnpm --filter @sportal/web dev` — run only the web UI on port 4401, also on the home network (a phone opens `/remote`), proxying `/api` to the

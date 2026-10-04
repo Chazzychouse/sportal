@@ -1,12 +1,15 @@
 import { createServer } from "node:http"
 import { join } from "node:path"
 import { NodeHttpServer, NodeRuntime, NodeServices } from "@effect/platform-node"
-import { Config, Effect, FileSystem, Layer, Option } from "effect"
+import { Config, Effect, FileSystem, Layer, Option, Schema } from "effect"
 import { FetchHttpClient, HttpRouter, HttpStaticServer } from "effect/http"
 import * as Database from "./database/Database.ts"
 import * as HubServer from "./http/HubServer.ts"
 import { Ingest } from "./ingest/Ingest.ts"
 import * as EspnProvider from "./provider/espn/EspnProvider.ts"
+import * as ScenarioClock from "./scenario/ScenarioClock.ts"
+import * as ScenarioProvider from "./scenario/ScenarioProvider.ts"
+import * as ScenarioSource from "./scenario/ScenarioSource.ts"
 import * as SqlChannelStore from "./source/SqlChannelStore.ts"
 import * as YouTubeTv from "./source/youtube-tv/YouTubeTv.ts"
 import { StageSessions } from "./stage/StageSessions.ts"
@@ -27,12 +30,37 @@ const Hub = Layer.unwrap(
       onSome: (root) => Layer.mergeAll(HubServer.layer, HttpStaticServer.layer({ root, spa: true }))
     })
 
+    // A scenario plays a game day in place of ESPN and YouTube TV. Only Ingest and the scenario run on scenario
+    // time; the rest of the Hub keeps the real clock.
+    const scenario = yield* Config.String("SPORTAL_SCENARIO").pipe(Config.option)
+    // A speed of zero, a negative one, or NaN would stall or break the scenario clock, so the Hub refuses it.
+    const speed = yield* Config.schema(
+      Schema.Finite.check(Schema.isGreaterThan(0)),
+      "SPORTAL_SCENARIO_SPEED"
+    ).pipe(Config.withDefault(1))
+    const leagues = ["nfl", "fbs"] as const
+    const live = Layer.mergeAll(
+      Ingest.layer(leagues).pipe(Layer.provide(EspnProvider.layer)),
+      YouTubeTv.layer.pipe(Layer.provide(SqlChannelStore.layer))
+    )
+    const scripted = (name: string) =>
+      Layer.mergeAll(
+        Ingest.layer(leagues).pipe(
+          Layer.provide(ScenarioProvider.layer(name)),
+          Layer.provide(ScenarioClock.layer(speed))
+        ),
+        ScenarioSource.layer
+      )
+    type Scripted = ReturnType<typeof scripted>
+    const games: Layer.Layer<
+      Layer.Success<typeof live>,
+      Layer.Error<typeof live> | Layer.Error<Scripted>,
+      Layer.Services<typeof live> | Layer.Services<Scripted>
+    > = Option.match(scenario, { onNone: () => live, onSome: scripted })
+
     return HttpRouter.serve(routes).pipe(
       Layer.provide(StageSessions.layer),
-      Layer.provide(YouTubeTv.layer),
-      Layer.provide(SqlChannelStore.layer),
-      Layer.provide(Ingest.layer(["nfl", "fbs"])),
-      Layer.provide(EspnProvider.layer),
+      Layer.provide(games),
       Layer.provide(Database.layer(join(dataDir, "sportal.sqlite"))),
       Layer.provide(FetchHttpClient.layer),
       Layer.provide(NodeHttpServer.layer(createServer, { port, host })),
