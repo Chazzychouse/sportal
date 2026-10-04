@@ -7,32 +7,17 @@ import { ChildProcess, ChildProcessSpawner } from "effect/process"
 describe("the Hub process", () => {
   // Windows cannot send a child SIGTERM. Ctrl-C there is SIGINT, which NodeRuntime.runMain handles the same way.
   it.live.skipIf(process.platform === "win32")(
-    "stops within seconds of SIGTERM with a Display connected, and leaves the database checkpointed",
+    "stops within seconds of SIGTERM with a Display connected, and exits 0",
     () =>
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem
         const path = yield* Path.Path
         const http = yield* HttpClient.HttpClient
-        const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
         const dataDir = yield* fs.makeTempDirectoryScoped()
         const port = yield* freePort()
         const base = `http://127.0.0.1:${port}`
 
-        const hub = yield* spawner.spawn(
-          ChildProcess.make(
-            process.execPath,
-            [yield* path.fromFileUrl(new URL("./main.ts", import.meta.url))],
-            {
-              env: {
-                SPORTAL_PORT: String(port),
-                SPORTAL_HOST: "127.0.0.1",
-                SPORTAL_DATA_DIR: dataDir,
-                SPORTAL_SCENARIO: "two-minute-drill-tie"
-              },
-              extendEnv: true
-            }
-          )
-        )
+        const hub = yield* spawnHub({ SPORTAL_PORT: String(port), SPORTAL_DATA_DIR: dataDir })
         // Unread output would fill the pipe and block the Hub.
         yield* hub.all.pipe(Stream.runDrain, Effect.exit, Effect.forkScoped)
 
@@ -51,12 +36,52 @@ describe("the Hub process", () => {
         assert.strictEqual(code, ChildProcessSpawner.ExitCode(0))
         assert.isBelow(took, 5_000)
         assert.isTrue(yield* fs.exists(path.join(dataDir, "sportal.sqlite")))
-        assert.isFalse(yield* fs.exists(path.join(dataDir, "sportal.sqlite-wal")))
-        assert.isFalse(yield* fs.exists(path.join(dataDir, "sportal.sqlite-shm")))
+      }).pipe(Effect.scoped, Effect.provide([NodeServices.layer, FetchHttpClient.layer])),
+    30_000
+  )
+
+  it.live(
+    "exits non-zero and names the setting when one is invalid",
+    () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem
+        const dataDir = yield* fs.makeTempDirectoryScoped()
+
+        const hub = yield* spawnHub({ SPORTAL_PORT: "eighty", SPORTAL_DATA_DIR: dataDir })
+        const output = yield* hub.all.pipe(Stream.decodeText(), Stream.mkString)
+        const code = yield* hub.exitCode
+
+        assert.notStrictEqual(code, ChildProcessSpawner.ExitCode(0))
+        assert.include(output, "SPORTAL_PORT")
       }).pipe(Effect.scoped, Effect.provide([NodeServices.layer, FetchHttpClient.layer])),
     30_000
   )
 })
+
+/**
+ * Starts the Hub in a child process on a scenario, on loopback, with `settings` on top of the developer's
+ * environment minus any `SPORTAL_*` of their own.
+ */
+function spawnHub(settings: Record<string, string>) {
+  return Effect.gen(function* () {
+    const path = yield* Path.Path
+    const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
+    const inherited = Object.entries(process.env).filter(
+      (entry): entry is [string, string] => entry[1] !== undefined && !entry[0].startsWith("SPORTAL_")
+    )
+    return yield* spawner.spawn(
+      ChildProcess.make(process.execPath, [yield* path.fromFileUrl(new URL("./main.ts", import.meta.url))], {
+        env: {
+          ...Object.fromEntries(inherited),
+          SPORTAL_HOST: "127.0.0.1",
+          SPORTAL_SCENARIO: "two-minute-drill-tie",
+          ...settings
+        },
+        extendEnv: false
+      })
+    )
+  })
+}
 
 /** A port nothing is listening on: a test server takes one from the OS and releases it for the Hub. */
 function freePort() {

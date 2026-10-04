@@ -31,7 +31,7 @@ easiest to break.
   the wire format. Derive a variant at the point of use; do not name it.
 - In the Hub, only `HubMode.ts` and tests name concrete providers and sources, and `main.ts` is only the layer pipe and how the process runs it.
   Everything else depends on the port.
-- In the Hub, only `HubConfig.ts` reads the environment. A new setting is a field there, with its default.
+- In the Hub, only `HubConfig.ts` reads the environment (the `scenario:cut` dev tool keeps its `INIT_CWD`). A new setting is a field there, with its default.
 - A service is yielded where it is used, never passed as an argument. A layer that needs a setting yields `HubConfig`;
   a choice between layers at startup is a `Layer.unwrap` that yields it.
 

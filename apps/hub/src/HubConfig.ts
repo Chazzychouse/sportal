@@ -21,6 +21,7 @@ export class HubConfig extends Context.Service<
       const dataDir = yield* Config.String("SPORTAL_DATA_DIR").pipe(Config.option)
       return HubConfig.of({
         port: yield* Config.Port("SPORTAL_PORT").pipe(Config.withDefault(4400)),
+        // Every interface, so a Remote on the home network can reach the Hub.
         host: yield* Config.String("SPORTAL_HOST").pipe(Config.withDefault("0.0.0.0")),
         webRoot: yield* Config.String("SPORTAL_WEB_ROOT").pipe(Config.option),
         dataDir: Option.isSome(dataDir) ? dataDir.value : yield* HubConfig.defaultDataDir(process.platform),
@@ -45,7 +46,7 @@ export class HubConfig extends Context.Service<
       const path = yield* Path.Path
       switch (platform) {
         case "win32": {
-          const local = yield* nonEmpty("LOCALAPPDATA")
+          const local = yield* Config.String("LOCALAPPDATA").pipe(Config.option)
           const base = Option.isSome(local)
             ? local.value
             : path.join(yield* Config.String("USERPROFILE"), "AppData", "Local")
@@ -54,7 +55,7 @@ export class HubConfig extends Context.Service<
         case "darwin":
           return path.join(yield* Config.String("HOME"), "Library", "Application Support", "Sportal")
         default: {
-          const xdg = yield* nonEmpty("XDG_DATA_HOME")
+          const xdg = yield* Config.String("XDG_DATA_HOME").pipe(Config.option)
           const base = Option.isSome(xdg)
             ? xdg.value
             : path.join(yield* Config.String("HOME"), ".local", "share")
@@ -63,8 +64,4 @@ export class HubConfig extends Context.Service<
       }
     })
   }
-}
-
-function nonEmpty(name: string) {
-  return Config.String(name).pipe(Config.option, Config.map(Option.filter((value) => value !== "")))
 }

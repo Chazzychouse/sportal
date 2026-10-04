@@ -39,7 +39,7 @@ module.exports = {
           "(^apps/hub/src/HubMode\\.ts$|\\.test\\.ts$|^apps/hub/src/provider/[^/]+/|^apps/hub/src/source/youtube-tv/|^apps/hub/src/source/Sql[^/]+\\.ts$)"
       },
       to: {
-        path: "^apps/hub/src/(provider/[^/]+/|source/youtube-tv/|source/Sql[^/]+\\.ts$)"
+        path: "^apps/hub/src/(provider/[^/]+/|source/youtube-tv/|source/Sql[^/]+\\.ts$|scenario/Scenario(Provider|Source|Clock)\\.ts$)"
       }
     },
     {

@@ -69,7 +69,7 @@ Provider and Source are the two words most likely to be swapped. Provider is alw
 | --- | --- | --- |
 | **Hub** | The server process that owns all shared state. | backend, server |
 | **Hub config** | Every setting a Hub reads from its environment, decoded once at startup; `HubConfig` in code. | settings, env |
-| **Hub mode** | What a Hub plays: the live day from its providers and sources, or a scenario in their place. | |
+| **Hub mode** | What a Hub plays: the live day from its providers and sources, or a scenario in their place. | scenario mode, profile |
 | **Live message** | One update the Hub pushes to clients on the live stream: the slate changed, or the Stage changed. | event, notification |
 | **Stage sessions** | The Hub component holding the authoritative Stage for each Display and applying stage commands to it. | stage store, stage manager |
 | **Display** | A device running the shell and presenting a Stage. | screen, client, player |

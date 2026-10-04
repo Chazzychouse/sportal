@@ -51,6 +51,27 @@ describe("Database.inDataDir", () => {
   )
 })
 
+describe("Database.layer", () => {
+  it.effect("closing the database checkpoints it, so only the database file remains", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem
+      const path = yield* Path.Path
+      const file = path.join(yield* fs.makeTempDirectoryScoped(), "x.sqlite")
+
+      yield* Effect.gen(function* () {
+        const sql = yield* SqlClient.SqlClient
+        yield* sql`CREATE TABLE thing (id INTEGER)`
+        yield* sql`INSERT INTO thing (id) VALUES (1)`
+        assert.isTrue(yield* fs.exists(`${file}-wal`))
+      }).pipe(Effect.provide(Database.layer(file)))
+
+      assert.isFalse(yield* fs.exists(`${file}-wal`))
+      assert.isFalse(yield* fs.exists(`${file}-shm`))
+      assert.isTrue(yield* fs.exists(file))
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer))
+  )
+})
+
 function createTable(name: string) {
   return Effect.gen(function* () {
     const sql = yield* SqlClient.SqlClient
