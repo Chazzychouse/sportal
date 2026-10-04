@@ -29,7 +29,11 @@ easiest to break.
   `shadcn add` and `shadcn diff` keep working. Nothing else goes there.
 - No mirror types. There is no `GameDto`, `GameRow`, `GameResponse`, or `GameProps`. The domain schema is
   the wire format. Derive a variant at the point of use; do not name it.
-- In the Hub, only `main.ts` and tests name concrete adapters. Everything else depends on the port.
+- In the Hub, only `HubMode.ts` and tests name concrete providers and sources, and `main.ts` is only the layer pipe and how the process runs it.
+  Everything else depends on the port.
+- In the Hub, only `HubConfig.ts` reads the environment. A new setting is a field there, with its default.
+- A service is yielded where it is used, never passed as an argument. A layer that needs a setting yields `HubConfig`;
+  a choice between layers at startup is a `Layer.unwrap` that yields it.
 
 ## Inside a file
 
@@ -75,7 +79,15 @@ A reader opens a file to see the thing it is named for. Keep it that way.
   `fixtures/scenarios/`. Every game plays as a synthetic stream page. Cut a slice from a recording with
   `pnpm --filter @sportal/hub scenario:cut <name> <recording-dir> <from> <to> [game ids…]`.
 - `pnpm --filter @sportal/hub dev` — run only the Hub on port 4400 (API and live stream), on every interface so a phone Remote can reach it (`SPORTAL_HOST` narrows it). In
-  dev it keeps its SQLite database in `.sportal/` at the repo root; set `SPORTAL_DATA_DIR` to move it.
+  dev it keeps its SQLite database in `.sportal/` at the repo root; set `SPORTAL_DATA_DIR` to move it. Started any other
+  way, it keeps it where the OS keeps app data: `$XDG_DATA_HOME/sportal` or `~/.local/share/sportal` on Linux,
+  `~/Library/Application Support/Sportal` on macOS, `%LOCALAPPDATA%\Sportal` on Windows.
+- Hub settings (all in `apps/hub/src/HubConfig.ts`): `SPORTAL_PORT`, `SPORTAL_HOST`, `SPORTAL_WEB_ROOT`, `SPORTAL_DATA_DIR`,
+  `SPORTAL_SCENARIO`, `SPORTAL_SCENARIO_SPEED`, `SPORTAL_LOG_LEVEL` (an Effect level, default `Info`),
+  `SPORTAL_LOG_FORMAT` (`pretty` or `json`), `SPORTAL_VERSION`. A bad value stops the Hub at startup. `GET /api/health`
+  answers while it is up.
+- Scripts run through pnpm's own shell (`shellEmulator`), so `VAR=x cmd` in a `package.json` script works on every OS.
+  Keep scripts to what that shell understands: no bash-only syntax.
 - `pnpm --filter @sportal/web dev` — run only the web UI on port 4401, also on the home network (a phone opens `/remote`), proxying `/api` to the
   Hub. A firewall must let the home network reach both ports, or a phone loads nothing: on Omarchy,
   `sudo ufw allow from 192.168.0.0/24 to any port 4400:4401 proto tcp`.

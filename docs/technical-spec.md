@@ -138,7 +138,7 @@ This section is binding in the same way the type checker is. It will also be wri
 6. **No mirror types.** There is no `GameDto`, `GameRow`, `GameResponse`, `GameProps`. The domain schema is the wire format and the stored format. A variant is derived from the original (`pick`, `omit`, `extend`) at the point of use and is not given a name unless it is itself a domain concept with a glossary entry.
 7. **Search before you write.** Before adding a function, type, or file, look for the existing one. Duplicating logic that already exists is a defect even when the code works.
 8. **Organize by concept, not by kind.** No top-level `components/`, `hooks/`, `services/`, `schemas/` folders. Code for the slate lives under `slate/`, whatever kind of code it is.
-9. **Dependencies point one way.** `domain` imports only Effect. `api` imports `domain`. Apps import packages. Nothing imports an app. Within the Hub, only `main.ts` knows which concrete adapters exist.
+9. **Dependencies point one way.** `domain` imports only Effect. `api` imports `domain`. Apps import packages. Nothing imports an app. Within the Hub, only `HubMode.ts` knows which concrete providers and sources exist.
 
 ### 4.2 The tree
 
@@ -190,7 +190,9 @@ sportal/
     ├── hub/
     │   ├── Dockerfile
     │   └── src/
-    │       ├── main.ts             Composition root: the only file that names concrete adapters
+    │       ├── main.ts             Composition root: the Hub's layer pipe, run until a signal stops it
+    │       ├── HubMode.ts          What the Hub plays: the live day or a scenario; the only file that names providers and sources
+    │       ├── Logging.ts          Log level and format
     │       ├── HubConfig.ts        Every environment setting, in one place
     │       ├── provider/
     │       │   ├── Provider.ts     The port
@@ -273,7 +275,7 @@ Rules 2, 6, and 7 of section 4.1 and all of section 4.3 need judgement and are r
 
 ### 5.1 Ports
 
-Ports are Effect services; implementations are Layers; `main.ts` chooses them. Signatures are indicative.
+Ports are Effect services; implementations are Layers; `HubMode` chooses them. Signatures are indicative.
 
 **Provider** — game data in:
 
