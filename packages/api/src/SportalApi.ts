@@ -49,4 +49,10 @@ export class SportalApi extends HttpApi.make("sportal")
       })
     )
   )
+  .add(
+    // Where a Remote on the home network can reach this machine, for the desk's join code.
+    HttpApiGroup.make("host").add(
+      HttpApiEndpoint.get("addresses", "/addresses", { success: Schema.Array(Schema.String) })
+    )
+  )
   .prefix("/api") {}

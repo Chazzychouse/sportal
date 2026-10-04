@@ -9,6 +9,8 @@ export default defineConfig({
   resolve: { alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) } },
   server: {
     port: 4401,
+    // On the home network too, so a phone can open the Remote.
+    host: true,
     // In development the Hub runs separately; in production it serves this app itself.
     proxy: { "/api": "http://127.0.0.1:4400" }
   }

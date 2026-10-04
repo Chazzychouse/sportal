@@ -1,3 +1,4 @@
+import { networkInterfaces } from "node:os"
 import { type LiveMessage, LiveMessageJson } from "@sportal/api/LiveMessage"
 import { SportalApi } from "@sportal/api/SportalApi"
 import { Effect, Layer, Schema, Stream } from "effect"
@@ -6,13 +7,15 @@ import { HttpApiBuilder } from "effect/http-api"
 import { Ingest } from "../ingest/Ingest.ts"
 import { Source } from "../source/Source.ts"
 import { StageSessions } from "../stage/StageSessions.ts"
+import { lanAddresses } from "./LanAddresses.ts"
 
 /** The handlers for every endpoint group in SportalApi. Exported so tests can drive them without a socket. */
 export const ApiHandlers = Layer.mergeAll(
   slateHandlers(),
   stageHandlers(),
   channelHandlers(),
-  guideHandlers()
+  guideHandlers(),
+  hostHandlers()
 )
 
 /** Every route the Hub serves: the API, and the live stream. */
@@ -84,6 +87,14 @@ function guideHandlers() {
             )
       })
     })
+  )
+}
+
+function hostHandlers() {
+  return HttpApiBuilder.group(SportalApi, "host", (handlers) =>
+    Effect.succeed(
+      handlers.handleAll({ addresses: () => Effect.sync(() => lanAddresses(networkInterfaces())) })
+    )
   )
 }
 

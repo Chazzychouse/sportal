@@ -3,7 +3,7 @@ import { GameId } from "@sportal/domain/Game"
 import { Stage } from "@sportal/domain/Stage"
 import { snapshot } from "@sportal/domain/TestGame"
 import { DateTime } from "effect"
-import { dropCommand, nextPick, stripCards } from "./StripCards.ts"
+import { drop, nextPick, stripCards } from "./StripCards.ts"
 
 const live = snapshot({ id: GameId.make("live"), status: "live" })
 const later = snapshot({
@@ -26,6 +26,10 @@ describe("stripCards", () => {
     assert.deepStrictEqual(cards[0]?.place, { _tag: "Bench", tile: 4 })
     assert.deepStrictEqual(cards[2]?.place, { _tag: "Slot", slot: 0 })
     assert.isUndefined(cards[1]?.place)
+    assert.deepStrictEqual(
+      cards.map((card) => card.section),
+      ["Bench", "Live", "Next", "Next"]
+    )
   })
 
   it("keeps a benched game that left the slate, with no snapshot", () => {
@@ -69,19 +73,26 @@ describe("nextPick", () => {
   })
 })
 
-describe("dropCommand", () => {
+describe("drop", () => {
   it("assigns a free game, swaps a benched one in, and does nothing with a game on stage", () => {
-    const [bench, free, onStage] = stripCards(
-      withTiles(["soon", undefined, undefined, undefined, "done"]),
-      slate
-    )
-    assert.deepStrictEqual(free && dropCommand(free, 2), {
+    const stage = withTiles(["soon", undefined, undefined, undefined, "done"])
+    const [bench, free, onStage] = stripCards(stage, slate)
+    assert.deepStrictEqual(free && drop(free, stage, 2)?.command, {
       _tag: "Assign",
       tile: 2,
       game: GameId.make("live")
     })
-    assert.deepStrictEqual(bench && dropCommand(bench, 2), { _tag: "Swap", a: 4, b: 2 })
-    assert.isUndefined(onStage && dropCommand(onStage, 2))
+    assert.deepStrictEqual(bench && drop(bench, stage, 2)?.command, { _tag: "Swap", a: 4, b: 2 })
+    assert.isUndefined(onStage && drop(onStage, stage, 2))
+  })
+
+  it("selects the next empty tile after the drop, or keeps the selection when none is left", () => {
+    const stage = withTiles(["soon", undefined, undefined, undefined])
+    const [free] = stripCards(stage, slate)
+    assert.strictEqual(free && drop(free, stage, 1)?.select, 2)
+    const full = withTiles(["soon", "later", undefined, "done"])
+    const [left] = stripCards(full, slate)
+    assert.strictEqual(left && drop(left, full, 2)?.select, 2)
   })
 })
 

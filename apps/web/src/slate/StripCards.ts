@@ -12,19 +12,26 @@ export function stripCards(
   id: GameId
   game: GameSnapshot | undefined
   place: { _tag: "Slot"; slot: number } | { _tag: "Bench"; tile: number } | undefined
+  section: "Bench" | "Live" | "Next" | "Final"
 }> {
   const benched = stage.benched()
   const bench = benched.map(({ tile, game }) => ({
     id: game,
     game: slate.find((snapshot) => snapshot.id === game),
-    place: { _tag: "Bench" as const, tile }
+    place: { _tag: "Bench" as const, tile },
+    section: "Bench" as const
   }))
   const rest = [...slate]
     .filter((game) => !benched.some((bench) => bench.game === game.id))
     .sort(GameSnapshot.watchOrder)
     .map((game) => {
       const slot = stage.slotOf(game.id)
-      return { id: game.id, game, place: slot === undefined ? undefined : { _tag: "Slot" as const, slot } }
+      return {
+        id: game.id,
+        game,
+        place: slot === undefined ? undefined : { _tag: "Slot" as const, slot },
+        section: sections[game.progress()]
+      }
     })
   return [...bench, ...rest]
 }
@@ -52,17 +59,25 @@ export function nextPick(
   return undefined
 }
 
-/** What dropping a card into tile `selected` does: a free game is assigned, a benched one swapped in. */
-export function dropCommand(
+/**
+ * Dropping a card into tile `selected`: a free game is assigned, a benched one swapped in, and a game on stage is
+ * not droppable. `select` is the tile to select next — the next empty one, so the next drop fills it — or
+ * `selected` when none is left.
+ */
+export function drop(
   card: ReturnType<typeof stripCards>[number],
+  stage: Stage,
   selected: number
-): StageCommand | undefined {
+): { command: StageCommand; select: number } | undefined {
+  const select = stage.nextEmptySlot(selected) ?? selected
   switch (card.place?._tag) {
     case undefined:
-      return { _tag: "Assign", tile: selected, game: card.id }
+      return { command: { _tag: "Assign", tile: selected, game: card.id }, select }
     case "Bench":
-      return { _tag: "Swap", a: card.place.tile, b: selected }
+      return { command: { _tag: "Swap", a: card.place.tile, b: selected }, select }
     case "Slot":
       return undefined
   }
 }
+
+const sections = { live: "Live", upcoming: "Next", over: "Final" } as const

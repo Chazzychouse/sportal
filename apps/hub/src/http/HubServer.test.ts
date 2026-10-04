@@ -39,7 +39,7 @@ const streaming = {
   learnedFor: espn
 } as const
 
-const makeClient = HttpApiTest.groups(SportalApi, ["slate", "stage", "channels", "guide"])
+const makeClient = HttpApiTest.groups(SportalApi, ["slate", "stage", "channels", "guide", "host"])
 
 describe("Hub API", () => {
   it.effect("serves the slate and turns an assignment on an unlearned network into a picking tile", () =>
@@ -83,6 +83,14 @@ describe("Hub API", () => {
         game: game.id,
         why: { _tag: "NoStream" }
       })
+    }).pipe(Effect.provide(apiUnderTest()))
+  )
+
+  it.effect("lists the addresses a Remote can reach the Hub at, none of them loopback", () =>
+    Effect.gen(function* () {
+      const client = yield* makeClient
+      const addresses = yield* client.host.addresses()
+      assert.isFalse(addresses.includes("127.0.0.1"))
     }).pipe(Effect.provide(apiUnderTest()))
   )
 

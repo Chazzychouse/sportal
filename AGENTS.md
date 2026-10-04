@@ -70,9 +70,9 @@ A reader opens a file to see the thing it is named for. Keep it that way.
 - `pnpm format` — apply formatting and safe lint fixes.
 - `pnpm dev` — run the Hub, the web dev server, and the desktop shell together, each reloading on change.
   The shell waits for the UI to come up. Use `pnpm dev:x11` to run the shell through XWayland.
-- `pnpm --filter @sportal/hub dev` — run only the Hub on http://127.0.0.1:4400 (API and live stream). In
+- `pnpm --filter @sportal/hub dev` — run only the Hub on port 4400 (API and live stream), on every interface so a phone Remote can reach it (`SPORTAL_HOST` narrows it). In
   dev it keeps its SQLite database in `.sportal/` at the repo root; set `SPORTAL_DATA_DIR` to move it.
-- `pnpm --filter @sportal/web dev` — run only the web UI on http://127.0.0.1:4401, proxying `/api` to the
+- `pnpm --filter @sportal/web dev` — run only the web UI on port 4401, also on the home network (a phone opens `/remote`), proxying `/api` to the
   Hub.
 - `pnpm --filter @sportal/desktop dev` — run only the desktop shell against the web dev server
   (`SPORTAL_HUB_URL` overrides the address).

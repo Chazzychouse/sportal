@@ -62,6 +62,13 @@ export function forgetChannel(network: Network): Promise<Option.Option<string>> 
   return outcome(HubClient.use((hub) => hub.channels.forget({ payload: { network } })))
 }
 
+/** The addresses a Remote on the home network can reach the Hub's machine at; none if the Hub cannot be asked. */
+export function hostAddresses(): Promise<ReadonlyArray<string>> {
+  return runtime.runPromise(
+    HubClient.use((hub) => hub.host.addresses()).pipe(Effect.orElseSucceed((): ReadonlyArray<string> => []))
+  )
+}
+
 function outcome(command: Effect.Effect<void, unknown, HubClient>) {
   return runtime.runPromise(
     command.pipe(

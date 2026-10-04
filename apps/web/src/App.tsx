@@ -1,20 +1,20 @@
 import type { Hotkey } from "@sportal/api/Hotkey"
 import type { GameId } from "@sportal/domain/Game"
 import { Layout } from "@sportal/domain/Layout"
-import type { StageRejection } from "@sportal/domain/Stage"
-import { useEffect, useState } from "react"
-import { toast } from "sonner"
+import { useState } from "react"
 import { Toaster } from "@/design/sonner"
 import { useFullScreen } from "./frame/FullScreen.ts"
+import { JoinRemote } from "./frame/JoinRemote.tsx"
 import { KeysDialog } from "./frame/KeysDialog.tsx"
 import { TopBar } from "./frame/TopBar.tsx"
-import { dispatch, onStageRejected } from "./hub/HubClient.ts"
+import { dispatch } from "./hub/HubClient.ts"
 import { useLive } from "./hub/Live.ts"
 import { OverlayHost } from "./OverlayHost.tsx"
 import { SlateView } from "./slate/SlateView.tsx"
-import { dropCommand, nextPick, stripCards } from "./slate/StripCards.ts"
+import { drop, nextPick, stripCards } from "./slate/StripCards.ts"
 import { CommandPalette } from "./stage/CommandPalette.tsx"
 import { useHotkeys } from "./stage/Hotkeys.ts"
+import { useRejectionToasts } from "./stage/Rejections.ts"
 import { StageView } from "./stage/StageView.tsx"
 
 export function App() {
@@ -23,21 +23,21 @@ export function App() {
   const [selected, setSelected] = useState(0)
   const [palette, setPalette] = useState(false)
   const [keys, setKeys] = useState(false)
+  const [joinRemote, setJoinRemote] = useState(false)
   const [slateOpen, setSlateOpen] = useState(true)
   // The slate card `[` `]` step to and Enter drops. Local, like `selected`.
   const [pick, setPick] = useState<GameId | undefined>(undefined)
   const fullScreen = useFullScreen()
   const cards = stripCards(live.stage, live.slate)
   // Puts a card in the selected tile, then selects the next empty tile, so the next drop fills it.
-  const drop = (card: (typeof cards)[number]) => {
-    const command = dropCommand(card, selected)
-    if (command === undefined) return
-    dispatch(command)
+  const dropCard = (card: (typeof cards)[number]) => {
+    const dropped = drop(card, live.stage, selected)
+    if (dropped === undefined) return
+    dispatch(dropped.command)
     setPick(card.id)
-    setSelected(live.stage.nextEmptySlot(selected) ?? selected)
+    setSelected(dropped.select)
   }
-
-  useEffect(() => onStageRejected((reason) => toast.warning(rejectionText(reason))), [])
+  useRejectionToasts()
 
   useHotkeys((hotkey: Hotkey) => {
     switch (hotkey._tag) {
@@ -57,7 +57,7 @@ export function App() {
         return setPick(nextPick(cards, pick, hotkey.step))
       case "DropPick": {
         const card = cards.find((card) => card.id === pick)
-        return card === undefined ? undefined : drop(card)
+        return card === undefined ? undefined : dropCard(card)
       }
       case "SelectTile":
         return hotkey.slot < live.stage.onStage().length ? setSelected(hotkey.slot) : undefined
@@ -87,6 +87,7 @@ export function App() {
               toggle: () => setSlateOpen((open) => !open)
             }}
             onKeys={() => setKeys(true)}
+            onRemote={() => setJoinRemote(true)}
           />
         )}
         <StageView
@@ -97,10 +98,11 @@ export function App() {
           onSelect={setSelected}
         />
         {fullScreen.on || !slateOpen ? null : (
-          <SlateView cards={cards} selected={selected} pick={pick} onDrop={drop} />
+          <SlateView cards={cards} selected={selected} pick={pick} onDrop={dropCard} />
         )}
       </div>
       <KeysDialog open={keys} onOpenChange={setKeys} />
+      <JoinRemote open={joinRemote} onOpenChange={setJoinRemote} />
       <CommandPalette
         open={palette}
         onOpenChange={setPalette}
@@ -121,17 +123,4 @@ export function App() {
       />
     </OverlayHost>
   )
-}
-
-function rejectionText(reason: StageRejection["reason"]): string {
-  switch (reason) {
-    case "no-such-tile":
-      return "There is no tile there."
-    case "empty-tile":
-      return "That tile is empty."
-    case "offstage-tile":
-      return "That game is on the bench. Swap it in first."
-    case "split-out-of-range":
-      return "Every tile needs some room."
-  }
 }

@@ -1,6 +1,6 @@
 import { Layout, LayoutName } from "@sportal/domain/Layout"
 import type { Stage } from "@sportal/domain/Stage"
-import { Expand, Keyboard, List, LogIn, Minimize2, Shrink, SquareDashed } from "lucide-react"
+import { Expand, Keyboard, List, LogIn, Minimize2, Shrink, Smartphone, SquareDashed } from "lucide-react"
 import { Button } from "@/design/button"
 import { ToggleGroup, ToggleGroupItem } from "@/design/toggle-group"
 import { dispatch } from "../hub/HubClient.ts"
@@ -14,6 +14,7 @@ export function TopBar(props: {
   fullScreen: { on: boolean; toggle: () => void }
   slate: { open: boolean; live: number; toggle: () => void }
   onKeys: () => void
+  onRemote: () => void
 }) {
   const selectedTile = props.stage.onStage()[props.selected]
   const canSolo = selectedTile !== undefined && selectedTile._tag !== "Empty"
@@ -106,6 +107,16 @@ export function TopBar(props: {
           />
           {props.connected ? "Hub live" : "Reconnecting"}
         </span>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          aria-label="Remote"
+          title="Control from a phone"
+          className="text-muted-foreground"
+          onClick={props.onRemote}
+        >
+          <Smartphone />
+        </Button>
         <Button
           variant="ghost"
           size="icon-sm"

@@ -44,8 +44,8 @@ export function SlateView(props: {
           className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto overflow-y-hidden px-2 [scrollbar-width:thin]"
         >
           {props.cards.map((card, index) => {
-            const section = sectionOf(card)
-            const starts = index === 0 || sectionOf(props.cards[index - 1]) !== section
+            const section = card.section
+            const starts = index === 0 || props.cards[index - 1]?.section !== section
             return (
               <Fragment key={card.id}>
                 {starts && (
@@ -68,18 +68,6 @@ export function SlateView(props: {
       )}
     </section>
   )
-}
-
-function sectionOf(card: ReturnType<typeof stripCards>[number] | undefined) {
-  if (card?.place?._tag === "Bench") return "Bench"
-  switch (card?.game?.progress()) {
-    case "live":
-      return "Live"
-    case "upcoming":
-      return "Next"
-    default:
-      return "Final"
-  }
 }
 
 /**

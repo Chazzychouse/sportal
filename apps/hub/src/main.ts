@@ -14,7 +14,8 @@ import { StageSessions } from "./stage/StageSessions.ts"
 const Hub = Layer.unwrap(
   Effect.gen(function* () {
     const port = yield* Config.Port("SPORTAL_PORT").pipe(Config.withDefault(4400))
-    const host = yield* Config.String("SPORTAL_HOST").pipe(Config.withDefault("127.0.0.1"))
+    // Every interface, so a Remote on the home network can reach the Hub.
+    const host = yield* Config.String("SPORTAL_HOST").pipe(Config.withDefault("0.0.0.0"))
     // The built web UI, served by the Hub outside development.
     const webRoot = yield* Config.String("SPORTAL_WEB_ROOT").pipe(Config.option)
     // Where the Hub keeps its database.
