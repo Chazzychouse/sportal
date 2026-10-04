@@ -25,10 +25,10 @@ export class Watch extends Context.Service<
     Watch,
     Effect.gen(function* () {
       const ingest = yield* Ingest
-      const state = yield* SubscriptionRef.make({
-        slate: [] as ReadonlyArray<GameSnapshot>,
-        watchability: [] as ReadonlyArray<Watchability>
-      })
+      const state = yield* SubscriptionRef.make<{
+        readonly slate: ReadonlyArray<GameSnapshot>
+        readonly watchability: ReadonlyArray<Watchability>
+      }>({ slate: [], watchability: [] })
       yield* Effect.forkScoped(
         ingest.changes.pipe(
           Stream.runForEach((slate) =>
@@ -36,7 +36,7 @@ export class Watch extends Context.Service<
               Effect.flatMap((now) =>
                 SubscriptionRef.update(state, (current) => ({
                   slate,
-                  watchability: folded(current, slate, now)
+                  watchability: Watchability.fold(current, slate, now)
                 }))
               )
             )
@@ -47,22 +47,4 @@ export class Watch extends Context.Service<
       return Watch.of({ latest: SubscriptionRef.get(state), changes: SubscriptionRef.changes(state) })
     })
   )
-}
-
-/** Each game on the new slate, its watchability carried on from the last slate, or first seen now. */
-function folded(
-  current: {
-    readonly slate: ReadonlyArray<GameSnapshot>
-    readonly watchability: ReadonlyArray<Watchability>
-  },
-  slate: ReadonlyArray<GameSnapshot>,
-  now: DateTime.Utc
-): ReadonlyArray<Watchability> {
-  return slate.map((game) => {
-    const before = current.slate.find((candidate) => candidate.id === game.id)
-    const last = current.watchability.find((candidate) => candidate.game === game.id)
-    return before === undefined || last === undefined
-      ? Watchability.initial(game, now)
-      : last.next(before, game, now)
-  })
 }

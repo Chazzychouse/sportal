@@ -69,20 +69,17 @@ describe("scenarios", () => {
  */
 function watched(scenario: Scenario, seconds: number) {
   const history = new Map<string, Array<readonly [number, Watchability]>>()
-  let previous: ReadonlyArray<GameSnapshot> = []
+  let previous: { slate: ReadonlyArray<GameSnapshot>; watchability: ReadonlyArray<Watchability> } = {
+    slate: [],
+    watchability: []
+  }
   for (let second = 0; second <= seconds; second += 10) {
     const now = DateTime.makeUnsafe(DateTime.toEpochMillis(scenario.origin) + second * 1000)
     const slate = scenario.slateAt(scenario.origin, Duration.seconds(second))
-    for (const game of slate) {
-      const before = previous.find((candidate) => candidate.id === game.id)
-      const last = history.get(game.id)?.at(-1)?.[1]
-      const next =
-        before === undefined || last === undefined
-          ? Watchability.initial(game, now)
-          : last.next(before, game, now)
-      history.set(game.id, [...(history.get(game.id) ?? []), [second, next] as const])
-    }
-    previous = slate
+    const watchability = Watchability.fold(previous, slate, now)
+    for (const next of watchability)
+      history.set(next.game, [...(history.get(next.game) ?? []), [second, next] as const])
+    previous = { slate, watchability }
   }
   return (id: string, second: number) => history.get(id)?.find(([at]) => at === second)?.[1]
 }

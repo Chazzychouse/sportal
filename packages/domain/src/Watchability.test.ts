@@ -1,6 +1,6 @@
 import { assert, describe, it } from "@effect/vitest"
 import { DateTime, Duration } from "effect"
-import type { GameSnapshot } from "./Game.ts"
+import { GameId, type GameSnapshot } from "./Game.ts"
 import { Situation } from "./Situation.ts"
 import { snapshot, team } from "./TestGame.ts"
 import { Watchability } from "./Watchability.ts"
@@ -192,5 +192,26 @@ describe("Watchability#next", () => {
     assert.isFalse(turned.lull)
     assert.isAbove(turned.score, Watchability.initial(picked, now).score)
     assert.strictEqual(turned.next(picked, picked, later(71)).score, Watchability.initial(picked, now).score)
+  })
+})
+
+describe("Watchability.fold", () => {
+  it("carries each game on from the last slate, judges a game first seen fresh, and drops a game that left", () => {
+    const g = game({ clock: "8:00", situation: ball(60) })
+    const other = game({ id: GameId.make("other"), clock: "3:00" })
+    const gone = game({ id: GameId.make("gone") })
+    const first = Watchability.fold({ slate: [], watchability: [] }, [g, gone], now)
+    assert.deepStrictEqual(
+      first.map((w) => w.game),
+      [g.id, "gone"]
+    )
+    const second = Watchability.fold({ slate: [g, gone], watchability: first }, [g, other], later(60))
+    assert.deepStrictEqual(
+      second.map((w) => w.game),
+      [g.id, "other"]
+    )
+    // The carried game remembers it has not moved in 60 s; the new one has no history to tell a lull from.
+    assert.isTrue(second[0]?.lull)
+    assert.isFalse(second[1]?.lull)
   })
 })
