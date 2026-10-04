@@ -5,8 +5,8 @@ Status: Approved 2026-10-04; refined while planning
 
 Each game the Hub follows gets an actor: an `effect/cluster` entity holding the game's live state in memory, its
 staleness timer, and its lifecycle. Ingest's polled snapshots go through the actors, and the slate is published from
-what they hold. Nothing a person sees changes; what changes is that each game's state, freshness, and failures are its
-own.
+what they hold. Little a person sees changes: a game delayed mid-game now shows in the strip's live section, counts in
+the top bar's live games, and keeps its score on the Remote's stage map. What changes is that each game's state, freshness, and failures are its own.
 
 The first of three pieces, in order:
 
@@ -38,7 +38,7 @@ spans, and metrics are the record of a game day. Decision: [ADR 0006](../adr/000
 | --- | --- |
 | Ingest polls every league, keeps the last good slate per league, and publishes the slate as a `SubscriptionRef` | `ingest/Ingest.ts` |
 | Nothing per game but the snapshot; no notion of freshness | — |
-| `GameSnapshot#progress()` counts a `delayed` game as upcoming, even one delayed mid-game, so the Remote's stage map hides its score | `packages/domain/src/Game.ts` |
+| `GameSnapshot#progress()` counts a `delayed` game as upcoming, even one delayed mid-game, so the strip shows it among upcoming games and the Remote's stage map hides its score. This piece changes both | `packages/domain/src/Game.ts` |
 
 ## Glossary
 
@@ -148,7 +148,7 @@ until the Hub restarts.
 | Question | Decision |
 | --- | --- |
 | What stays | The poll loop, `Cadence`, and the last good slate per league, which says which games are on the slate and in what order |
-| What changes | After a poll, every snapshot it returned goes to `GameActors.receive`, concurrently, all awaited. Then Ingest publishes the slate: the poll's games in the poll's order, each replaced by its live game's snapshot (the poll's own snapshot if the actor has none, which happens only if its step was a defect) |
+| What changes | After a poll, every snapshot it returned goes to `GameActors.receive`, concurrently, all awaited. Then Ingest publishes the slate: the poll's games in the poll's order, each replaced by its live game's snapshot (the poll's own snapshot if the actor has none, which happens after a step that was a defect, or when a failed league's kept game's actor has idled out) |
 | Between polls | A timer moving a game to `Stale` does not republish the slate in this piece: the slate carries snapshots, and a stale game's snapshot has not changed. Showing staleness to people is a follow-up |
 
 ### Telemetry
@@ -193,7 +193,7 @@ query in Loki.
 | `LiveGame`, test-first | Every cell of the transition table; stale exactly at 90 s and not before; a behind snapshot does not refresh `updatedAt`; an identical snapshot does; `isCurrent` at the 30-minute edge |
 | `GameActors`, on the test clock and the Hub's own cluster composition | A game's snapshots reach its live game; behind snapshots are ignored; stale at 90 s and live on the next snapshot; a defect in one game (a snapshot of another game sent straight to its entity) leaves the others, the sender, and that game's last good state alone; a live game outlasts 5 idle minutes and a final one does not, leaving the registry; after the layer is rebuilt a game is current on its next snapshot; a transition is logged with the game's annotations (a test logger); each metric and the `GameActors.receive` span; a defect in the timer or keep-alive is logged and counted and the stream carries on; a timer that wakes early publishes no change until the stale time |
 | Ingest | The existing tests pass unchanged: the slate is what it was. New: the slate keeps the poll's order and takes each game's snapshot from its live game |
-| By hand | A scenario at 10× with telemetry on: transitions appear in the Game actors row. A scenario cannot show staleness: after its timeline ends it keeps returning its last frame, so every game is refreshed on every poll. Staleness is checked on a live day instead, by cutting the network for two minutes. A row in `docs/game-day-checklist.md` |
+| By hand | A scenario at 10× with telemetry on: transitions appear in the Game actors row. A scenario cannot show staleness: after its timeline ends it keeps returning its last frame, so every game is refreshed on every poll. Staleness is checked on a live day instead, by cutting the network for two minutes. A row in `docs/game-day-checklist.md`. `sportal_receive_duration` is measured on the scenario clock, so in a scenario at 10× it reads ten times too long |
 
 ## How later pieces fit
 
