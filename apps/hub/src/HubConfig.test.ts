@@ -21,6 +21,7 @@ describe("HubConfig", () => {
       assert.strictEqual(config.logLevel, "Info")
       assert.strictEqual(config.logFormat, "pretty")
       assert.strictEqual(config.version, "dev")
+      assert.isTrue(Option.isNone(config.otlpUrl))
     }).pipe(Effect.provide(withEnv(home)))
   )
 
@@ -36,6 +37,10 @@ describe("HubConfig", () => {
       assert.strictEqual(config.logLevel, "Debug")
       assert.strictEqual(config.logFormat, "json")
       assert.strictEqual(config.version, "1.2.3")
+      assert.deepStrictEqual(
+        Option.map(config.otlpUrl, (url) => url.href),
+        Option.some("http://localhost:4318/")
+      )
     }).pipe(
       Effect.provide(
         withEnv({
@@ -47,7 +52,8 @@ describe("HubConfig", () => {
           SPORTAL_SCENARIO_SPEED: "10",
           SPORTAL_LOG_LEVEL: "Debug",
           SPORTAL_LOG_FORMAT: "json",
-          SPORTAL_VERSION: "1.2.3"
+          SPORTAL_VERSION: "1.2.3",
+          SPORTAL_OTLP_URL: "http://localhost:4318"
         })
       )
     )
@@ -58,7 +64,9 @@ describe("HubConfig", () => {
     ["SPORTAL_SCENARIO_SPEED", "0"],
     ["SPORTAL_SCENARIO_SPEED", "NaN"],
     ["SPORTAL_LOG_LEVEL", "Loud"],
-    ["SPORTAL_LOG_FORMAT", "xml"]
+    ["SPORTAL_LOG_FORMAT", "xml"],
+    ["SPORTAL_OTLP_URL", "not a url"],
+    ["SPORTAL_OTLP_URL", "localhost:4318"]
   ] as const) {
     it.effect(`refuses ${name}=${value}, naming the setting`, () =>
       Effect.gen(function* () {

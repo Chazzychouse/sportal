@@ -84,7 +84,7 @@ A reader opens a file to see the thing it is named for. Keep it that way.
   `~/Library/Application Support/Sportal` on macOS, `%LOCALAPPDATA%\Sportal` on Windows.
 - Hub settings (all in `apps/hub/src/HubConfig.ts`): `SPORTAL_PORT`, `SPORTAL_HOST`, `SPORTAL_WEB_ROOT`, `SPORTAL_DATA_DIR`,
   `SPORTAL_SCENARIO`, `SPORTAL_SCENARIO_SPEED`, `SPORTAL_LOG_LEVEL` (an Effect level, default `Info`),
-  `SPORTAL_LOG_FORMAT` (`pretty` or `json`), `SPORTAL_VERSION`. A bad value stops the Hub at startup. `GET /api/health`
+  `SPORTAL_LOG_FORMAT` (`pretty` or `json`), `SPORTAL_OTLP_URL` (the collector's OTLP/HTTP base URL; unset exports nothing), `SPORTAL_VERSION`. A bad value stops the Hub at startup. `GET /api/health`
   answers while it is up.
 - Scripts run through pnpm's own shell (`shellEmulator`), so `VAR=x cmd` in a `package.json` script works on every OS.
   Keep scripts to what that shell understands: no bash-only syntax.

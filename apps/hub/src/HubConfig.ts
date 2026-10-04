@@ -13,6 +13,7 @@ export class HubConfig extends Context.Service<
     readonly logLevel: LogLevel.LogLevel
     readonly logFormat: "pretty" | "json"
     readonly version: string
+    readonly otlpUrl: Option.Option<URL>
   }
 >()("sportal/hub/HubConfig") {
   static readonly layer = Layer.effect(
@@ -35,7 +36,16 @@ export class HubConfig extends Context.Service<
         logFormat: yield* Config.Literals(["pretty", "json"], "SPORTAL_LOG_FORMAT").pipe(
           Config.withDefault("pretty")
         ),
-        version: yield* Config.String("SPORTAL_VERSION").pipe(Config.withDefault("dev"))
+        version: yield* Config.String("SPORTAL_VERSION").pipe(Config.withDefault("dev")),
+        // "localhost:4318" parses as a URL with scheme "localhost:", so the scheme is checked.
+        otlpUrl: yield* Config.schema(
+          Schema.URLFromString.check(
+            Schema.makeFilter((url) => url.protocol === "http:" || url.protocol === "https:", {
+              expected: "an http: or https: URL"
+            })
+          ),
+          "SPORTAL_OTLP_URL"
+        ).pipe(Config.option)
       })
     })
   )
