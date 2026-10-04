@@ -180,6 +180,8 @@ describe("allows", () => {
   it.each([
     "http://127.0.0.1:4401/",
     "http://127.0.0.1:4401/remote",
+    "http://127.0.0.1:4401/scenario-stream/../remote",
+    "http://127.0.0.1:4401/scenario-stream",
     "http://127.0.0.1:4402/scenario-stream/1",
     "http://localhost:4401/scenario-stream/1",
     "https://evil.example/scenario-stream/1"
