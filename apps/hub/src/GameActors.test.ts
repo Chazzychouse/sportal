@@ -223,8 +223,11 @@ describe("GameActors", () => {
         assert.isTrue(LiveGameState.$is("Stale")(yield* stateOf(one)))
         yield* TestClock.adjust("20 minutes")
         assert.isTrue((yield* actors.liveGames).has(one))
-        // 35:30 after the last snapshot: current for 30 minutes, then idle for up to 5:30.
-        yield* TestClock.adjust("14 minutes")
+        yield* TestClock.adjust("500 seconds")
+        assert.isTrue((yield* actors.liveGames).has(one))
+        // Idle time counts from the last message, so once keep-alive is released at 30:00 the actor idles out at the
+        // next reaper check, within 30 seconds.
+        yield* TestClock.adjust("40 seconds")
         assert.isFalse((yield* actors.liveGames).has(one))
       }).pipe(Effect.provide(GameActors.layer))
     )

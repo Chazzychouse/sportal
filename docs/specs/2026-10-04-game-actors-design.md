@@ -6,7 +6,7 @@ Status: Approved 2026-10-04; refined while planning
 Each game the Hub follows gets an actor: an `effect/cluster` entity holding the game's live state in memory, its
 staleness timer, and its lifecycle. Ingest's polled snapshots go through the actors, and the slate is published from
 what they hold. Little a person sees changes: a game delayed mid-game now shows in the strip's live section, counts in
-the top bar's live games, and keeps its score on the Remote's stage map. What changes is that each game's state, freshness, and failures are its own.
+the top bar's live games, keeps its score on the Remote's stage map, and keeps its channel while its airing is on. What changes is that each game's state, freshness, and failures are its own.
 
 The first of three pieces, in order:
 
