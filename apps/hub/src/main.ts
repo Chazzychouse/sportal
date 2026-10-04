@@ -52,6 +52,7 @@ const Hub = Layer.unwrap(
         ScenarioSource.layer
       )
     type Scripted = ReturnType<typeof scripted>
+    // Typed so the compiler checks that the scenario layers provide everything the live ones do.
     const games: Layer.Layer<
       Layer.Success<typeof live>,
       Layer.Error<typeof live> | Layer.Error<Scripted>,
