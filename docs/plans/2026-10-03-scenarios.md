@@ -18,7 +18,7 @@
 - In the Hub, only `main.ts` and tests name concrete adapters.
 - Time comes from Effect's `Clock`; no `Date.now()` in `packages/domain` or the Hub.
 - Expected failures are tagged errors; nothing is caught and ignored.
-- ESPN's `situation.yardLine` is yards to the goal the team with the ball attacks (checked against the 2026-10-03 recordings: "ALA 31" with ALA's ball is `69`). A team is in the red zone at 20 or fewer.
+- `Situation.yardLine` is yards to the goal the team with the ball attacks. ESPN's `situation.yardLine` is not: it counts from the home team's goal line, so the ESPN adapter takes `100 - yardLine` when the home team has the ball and leaves the yard line out when no team does (checked against the 2026-10-03 recordings: away AUB "at TENN 12" is `12`; home UNM "at UTEP 8" is `92`). A team is in the red zone at 20 or fewer.
 - Tests sit beside their file as `Name.test.ts`. Run one file with `pnpm vitest run <path>`. `pnpm check` must pass before every commit.
 - Commit messages end with `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`.
 
@@ -212,7 +212,7 @@ export class Scenario extends Schema.Class<Scenario>("sportal/Scenario")({
             readonly clock?: string
             readonly score?: readonly [home: number, away: number]
             /**
-             * Who has the ball and where, `yardLine` being yards to the goal they attack, as ESPN reports it;
+             * Who has the ball and where, `yardLine` being yards to the goal they attack (the ESPN adapter orients ESPN's yard line this way);
              * `null` while the ball is dead (after a score, at a break).
              */
             readonly ball?: {

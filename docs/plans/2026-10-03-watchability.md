@@ -17,7 +17,7 @@
 - An operation on a domain type lives on the type (method or static). Main export first; private helpers below as hoisted `function` declarations; a constant beside its only user; no options-bag type aliases; no `any`, casts outside decoding, non-null assertions, enums, default exports, or barrels.
 - Time comes from Effect's `Clock` (`DateTime.now`) in the Hub; domain code takes `now` as a parameter.
 - Ranking: late and close first, then field position, then stakes. Field-position credit counts fully only in a one-score game (margin ≤ 8); otherwise 20% of it.
-- Anticipation starts at the opponent's 40 (`yardLine` ≤ 40). ESPN's `yardLine` is yards to the goal the team with the ball attacks; the red zone is ≤ 20.
+- Anticipation starts at the opponent's 40 (`yardLine` ≤ 40). `Situation.yardLine` is yards to the goal the team with the ball attacks (ESPN counts from the home goal line; the ESPN adapter orients it); the red zone is ≤ 20.
 - Lull: halftime, `delayed`, or a live game whose clock reads 0:00; a 90 s break after a timeout (not in the last two minutes of a half or in overtime), a score, or a change of possession that is not a turnover, ended early by a new last play; or no change in clock or last play for **60 s** (measured on the 2026-10-03 recordings: with 30 s polls, 25% of live poll pairs sat unchanged for 60 s or more, 38% for 30 s, so 45 s would flag ordinary play).
 - Every weight and window is a named constant beside the code that uses it. Scenario tests pin orderings, not exact scores.
 - Tests sit beside their file as `Name.test.ts`; run one with `pnpm vitest run <path>`. `pnpm check` must pass before every commit.

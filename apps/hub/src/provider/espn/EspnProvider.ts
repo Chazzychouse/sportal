@@ -97,7 +97,11 @@ function toSnapshot(league: LeagueId, event: typeof EspnPayload.Event.Type): Opt
               // ESPN reports down -1 between plays (after a score, before a kickoff).
               ...(s.down === undefined || s.down < 1 ? {} : { down: s.down }),
               ...(s.distance === undefined ? {} : { distance: s.distance }),
-              ...(s.yardLine === undefined ? {} : { yardLine: s.yardLine }),
+              // ESPN counts the yard line from the home goal line; the domain counts it to the goal the team with
+              // the ball attacks. Without a team on the ball it cannot be oriented.
+              ...(s.yardLine === undefined || s.possession === undefined
+                ? {}
+                : { yardLine: s.possession === home.team.id ? 100 - s.yardLine : s.yardLine }),
               ...(s.lastPlay?.text === undefined ? {} : { lastPlay: s.lastPlay.text })
             })
           })

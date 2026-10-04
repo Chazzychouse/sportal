@@ -5,6 +5,7 @@ export class Situation extends Schema.Class<Situation>("sportal/Situation")({
   possession: Schema.optional(TeamId),
   down: Schema.optional(Schema.Int),
   distance: Schema.optional(Schema.Int),
+  /** Yards to the goal the team with the ball attacks; absent when no team has the ball. */
   yardLine: Schema.optional(Schema.Int),
   isRedZone: Schema.Boolean,
   homeTimeouts: Schema.Int,

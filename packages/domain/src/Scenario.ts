@@ -43,7 +43,7 @@ export class Scenario extends Schema.Class<Scenario>("sportal/Scenario")({
             readonly clock?: string
             readonly score?: readonly [home: number, away: number]
             /**
-             * Who has the ball and where, `yardLine` being yards to the goal they attack, as ESPN reports it;
+             * Who has the ball and where, `yardLine` being yards to the goal they attack (the ESPN adapter orients ESPN's yard line this way);
              * `null` while the ball is dead (after a score, at a break).
              */
             readonly ball?: {
