@@ -36,7 +36,9 @@ export const serve = Layer.unwrap(
       onNone: () => layer,
       onSome: (root) => Layer.mergeAll(layer, HttpStaticServer.layer({ root, spa: true }))
     })
-    return HttpRouter.serve(routes).pipe(Layer.provide(NodeHttpServer.layer(createServer, { port, host })))
+    // Connected Displays hold live streams open. Unbounded, shutdown waits 20 seconds for them, and Docker kills at 10.
+    const server = NodeHttpServer.layer(createServer, { port, host, gracefulShutdownTimeout: "3 seconds" })
+    return HttpRouter.serve(routes).pipe(Layer.provide(server))
   })
 )
 
