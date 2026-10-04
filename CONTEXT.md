@@ -30,7 +30,7 @@ Every exported type name must be a term here.
 | **Situation** | Live football state: possession, down, distance, field position, red zone, timeouts. | context |
 | **Period** | A quarter or an overtime. | quarter (in code) |
 | **Drive** / **Play** | A possession sequence / a single snap. | |
-| **GameEvent** | Something that happened, derived by diffing snapshots. | alert, update |
+| **GameEvent** | Something that happened in a game between two snapshots of it: a score, the ball changing hands, a drive reaching the 40, the red zone, goal to go, fourth down, a timeout, a period or the game ending. Derived, never stored. | alert, update |
 
 ### Data and video
 

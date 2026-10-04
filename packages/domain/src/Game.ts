@@ -1,4 +1,5 @@
 import { DateTime, Order, Schema } from "effect"
+import { GameEvent } from "./GameEvent.ts"
 import { LeagueId } from "./League.ts"
 import { Situation } from "./Situation.ts"
 import { Team } from "./Team.ts"
@@ -64,6 +65,69 @@ export class GameSnapshot extends Schema.Class<GameSnapshot>("sportal/GameSnapsh
         return "over"
     }
   }
+
+  /** Seconds left in the period, from the clock ("2:10"). An unreadable clock reads as a full quarter. */
+  secondsLeft(): number {
+    const [minutes, seconds] = this.clock.split(":").map((part) => Number.parseInt(part, 10))
+    const total = (minutes ?? Number.NaN) * 60 + (seconds ?? 0)
+    return Number.isFinite(total) ? total : quarterSeconds
+  }
+
+  /** Live in the last two minutes of the first or second half, with time still on the clock. */
+  inTwoMinuteDrill(): boolean {
+    const left = this.secondsLeft()
+    return this.status === "live" && (this.period === 2 || this.period === 4) && left > 0 && left <= 120
+  }
+
+  /**
+   * What happened in this game since `previous`, an earlier snapshot of it: points, the ball changing hands, a
+   * drive reaching the 40, the red zone, goal to go, or fourth down, a timeout, and the clock and status. A change
+   * of possession is a turnover only when the last play names an interception or a fumble and nobody scored.
+   */
+  eventsSince(previous: GameSnapshot): ReadonlyArray<GameEvent> {
+    const events: Array<GameEvent> = []
+    for (const side of ["home", "away"] as const) {
+      const points = this[side].score - previous[side].score
+      if (points > 0) events.push(GameEvent.ScoreChanged({ team: this[side].team.id, points }))
+    }
+    const scored = events.length > 0
+    const before = previous.situation
+    const after = this.situation
+    const team = after?.possession
+    if (team !== undefined && before?.possession !== undefined && team !== before.possession)
+      events.push(
+        !scored && /intercept|fumble/i.test(after?.lastPlay ?? "")
+          ? GameEvent.Turnover({ team })
+          : GameEvent.PossessionChanged({ team })
+      )
+    if (team !== undefined && after !== undefined) {
+      // Only a change on the same team's drive is news; a new drive starting deep is not.
+      const already = (test: (situation: Situation) => boolean) =>
+        before !== undefined && before.possession === team && test(before)
+      if (after.inScoringRange() && !already((s) => s.inScoringRange()))
+        events.push(GameEvent.ReachedScoringRange({ team }))
+      if (after.isRedZone && !already((s) => s.isRedZone)) events.push(GameEvent.EnteredRedZone({ team }))
+      if (after.goalToGo() && !already((s) => s.goalToGo())) events.push(GameEvent.GoalToGo({ team }))
+      if (after.down === 4 && !already((s) => s.down === 4 && s.yardLine === after.yardLine))
+        events.push(GameEvent.FourthDown({ team }))
+    }
+    if (before !== undefined && after !== undefined) {
+      if (after.homeTimeouts < before.homeTimeouts)
+        events.push(GameEvent.TimeoutTaken({ team: this.home.team.id }))
+      if (after.awayTimeouts < before.awayTimeouts)
+        events.push(GameEvent.TimeoutTaken({ team: this.away.team.id }))
+    }
+    if (this.inTwoMinuteDrill() && !previous.inTwoMinuteDrill()) events.push(GameEvent.TwoMinuteDrill())
+    if (this.period >= 5 && previous.period < 5) events.push(GameEvent.Overtime())
+    if (this.period > previous.period && previous.period >= 1)
+      events.push(GameEvent.PeriodEnded({ period: previous.period }))
+    if (this.status === "halftime" && previous.status !== "halftime") events.push(GameEvent.WentToHalftime())
+    if (this.status === "final" && previous.status !== "final") events.push(GameEvent.WentFinal())
+    return events
+  }
 }
 
 const progressRank = { live: 0, upcoming: 1, over: 2 } as const
+
+/** Seconds in a quarter, college and NFL alike. */
+const quarterSeconds = 15 * 60

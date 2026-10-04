@@ -169,7 +169,7 @@ sportal/
 │   │       ├── Team.ts         Team, Ranking
 │   │       ├── Game.ts         Game, GameStatus, Period, GameSnapshot, Network
 │   │       ├── Situation.ts    Possession, down, distance, field position, red zone
-│   │       ├── GameEvent.ts    The event union and diff(previous, next)
+│   │       ├── GameEvent.ts    The event union
 │   │       ├── Slate.ts        SlateWindow and grouping (Tracker); watch order is GameSnapshot.watchOrder
 │   │       ├── Source.ts       SourceName, Channel, ChannelCarriage, ChannelLineup, ChannelAvailability
 │   │       ├── Stream.ts       StreamLocator, StreamBudget
@@ -312,7 +312,7 @@ A source's channels are found in its own guide, read by the shell (`docs/specs/2
 
 - Polling cadence is an Effect `Schedule` chosen by `Cadence`: about every 10 seconds while any game is live, every minute near kickoff, every 15 minutes otherwise. One slate request per league covers every game; detail is fetched only for games someone has open or on a Stage.
 - A college Saturday is one request for 50+ games, not 50 requests.
-- Each poll yields snapshots. The pure function `GameEvent.diff(previous, next)` derives events: `ScoreChanged`, `EnteredRedZone`, `Turnover`, `PeriodEnded`, `WentFinal`.
+- Each poll yields snapshots. `snapshot.eventsSince(previous)` derives events (see `GameEvent`), including the leading signals the Director anticipates with.
 - Snapshots are the truth; events are derived and never stored as truth. A restart or a missed poll cannot corrupt anything.
 - Snapshots and events are published on an in-process hub; the Director, the store, and client live streams each subscribe.
 

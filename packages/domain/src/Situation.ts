@@ -10,4 +10,17 @@ export class Situation extends Schema.Class<Situation>("sportal/Situation")({
   homeTimeouts: Schema.Int,
   awayTimeouts: Schema.Int,
   lastPlay: Schema.optional(Schema.String)
-}) {}
+}) {
+  /** The ball is at the opponent's 40 or closer: about field-goal range, where a drive starts to matter. */
+  inScoringRange(): boolean {
+    return this.yardLine !== undefined && this.yardLine <= scoringRange
+  }
+
+  /** The line to gain is the goal line. */
+  goalToGo(): boolean {
+    return this.yardLine !== undefined && this.distance !== undefined && this.distance >= this.yardLine
+  }
+}
+
+/** Yards to the goal at which a drive is in scoring range. */
+const scoringRange = 40
