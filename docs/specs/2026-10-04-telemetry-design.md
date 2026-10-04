@@ -39,7 +39,7 @@ no stored messages and rely on telemetry as their record.
 | Where | `Logging.ts` becomes `Telemetry.ts`: one layer owning the log level, the console format, and, when the setting is present, the OTLP exporters. One concept, one file; `main.ts` provides it where it provides `Logging.layer` today |
 | Exporters | Effect's own: `OtlpTracer`, `OtlpLogger`, and `OtlpMetrics` from `effect/observability`, over the `HttpClient` `main.ts` already provides. Pattern: `node_modules/effect/ai-docs/src/08_observability/20_otlp-tracing.ts`. No OpenTelemetry SDK |
 | Console | Kept alongside the export, at the same level and format, so a terminal still shows what the Hub is doing |
-| Resource | `service.name` `sportal-hub`; `service.version` from `HubConfig.version`; `sportal.mode` `live` or `scenario:<name>`, so a scenario run never mixes with a real one in Grafana |
+| Resource | `service.name` `sportal-hub`; `service.version` from `HubConfig.version`; `service.instance.id` a UUID per process; `sportal.mode` `live` or `scenario:<name>`, so a scenario run never mixes with a real one in Grafana |
 | Polls as traces | Each poll in `Ingest` is a span, `Ingest.poll`, annotated with the leagues and whether any failed, so the existing `EspnProvider.slate` spans nest under it |
 | Metrics now | `sportal_poll_duration` (histogram), `sportal_provider_errors` (counter, by league). Game actors add theirs in their own piece |
 | Local backend | `telemetry/compose.yaml` runs `grafana/otel-lgtm` at a pinned tag, with Grafana on `localhost:3000` and OTLP/HTTP on `localhost:4318`, data in a named volume so it survives a restart. `pnpm telemetry` starts it detached; `pnpm telemetry:down` stops it |

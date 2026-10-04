@@ -1,3 +1,4 @@
+import { NodeCrypto } from "@effect/platform-node"
 import { assert, describe, it } from "@effect/vitest"
 import { Array as Arr, Effect, Layer, Logger, Metric, Ref, References, Schema } from "effect"
 import { HttpClient, HttpClientError, HttpClientResponse } from "effect/http"
@@ -21,7 +22,11 @@ describe("Telemetry", () => {
     return Effect.gen(function* () {
       assert.strictEqual(yield* References.MinimumLogLevel, "Warn")
     }).pipe(
-      Effect.provide(Telemetry.layer.pipe(Layer.provide([withEnv({ SPORTAL_LOG_LEVEL: "Warn" }), unused])))
+      Effect.provide(
+        Telemetry.layer.pipe(
+          Layer.provide([withEnv({ SPORTAL_LOG_LEVEL: "Warn" }), unused, NodeCrypto.layer])
+        )
+      )
     )
   })
 
@@ -64,7 +69,7 @@ describe("Telemetry", () => {
     })
   )
 
-  it.effect("names the Hub and its mode in the resource", () =>
+  it.effect("names the Hub, its mode, and this process in the resource", () =>
     Effect.gen(function* () {
       const resource = (env: Record<string, string>) =>
         Effect.gen(function* () {
@@ -88,6 +93,10 @@ describe("Telemetry", () => {
 
       const scenario = yield* resource({ SPORTAL_SCENARIO: "two-minute-drill-tie" })
       assert.strictEqual(scenario.get("sportal.mode"), "scenario:two-minute-drill-tie")
+
+      const instance = live.get("service.instance.id")
+      assert.isNotEmpty(instance)
+      assert.notStrictEqual(scenario.get("service.instance.id"), instance)
     })
   )
 
@@ -111,6 +120,7 @@ describe("Telemetry", () => {
         Layer.provide([
           withEnv({ SPORTAL_OTLP_URL: "http://collector:4318" }),
           unreachable,
+          NodeCrypto.layer,
           Logger.layer([recorder], { mergeWithExisting: true })
         ])
       )
@@ -147,7 +157,9 @@ function exported<A, E>(env: Record<string, string>, work: Effect.Effect<A, E>) 
       )
     )
     yield* Effect.gen(function* () {
-      const context = yield* Layer.build(Telemetry.layer.pipe(Layer.provide([withEnv(env), collector])))
+      const context = yield* Layer.build(
+        Telemetry.layer.pipe(Layer.provide([withEnv(env), collector, NodeCrypto.layer]))
+      )
       yield* work.pipe(Effect.provideContext(context))
     }).pipe(Effect.scoped)
     return yield* Ref.get(requests)

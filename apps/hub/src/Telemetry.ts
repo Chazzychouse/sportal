@@ -1,13 +1,18 @@
-import { Effect, Layer, Logger, Option, References } from "effect"
+import { Crypto, Effect, Layer, Logger, Option, type PlatformError, References } from "effect"
 import { HttpClient } from "effect/http"
 import { Otlp } from "effect/observability"
 import { HubConfig } from "./HubConfig.ts"
 
 /**
  * The Hub's minimum log level and console format (Effect's console logger, or one JSON object per line), and,
- * when `SPORTAL_OTLP_URL` is set, its spans, logs, and metrics exported over OTLP.
+ * when `SPORTAL_OTLP_URL` is set, its spans, logs, and metrics exported over OTLP under a `service.instance.id` of
+ * its own.
  */
-export const layer: Layer.Layer<never, never, HubConfig | HttpClient.HttpClient> = Layer.unwrap(
+export const layer: Layer.Layer<
+  never,
+  PlatformError.PlatformError,
+  HubConfig | HttpClient.HttpClient | Crypto.Crypto
+> = Layer.unwrap(
   Effect.gen(function* () {
     const { logLevel, logFormat, otlpUrl, version, scenario } = yield* HubConfig
     const console = Layer.mergeAll(
@@ -21,12 +26,15 @@ export const layer: Layer.Layer<never, never, HubConfig | HttpClient.HttpClient>
       Effect.logWarning(`Telemetry cannot reach the collector at ${otlpUrl.value.href}`)
     )
     const client = HttpClient.tapError(yield* HttpClient.HttpClient, () => warnOnce)
+    // Prometheus keys series by instance, so two Hubs at once (a live one and a scenario) stay apart.
+    const instanceId = yield* (yield* Crypto.Crypto).randomUUIDv4
     return Otlp.layerJson({
       baseUrl: otlpUrl.value.href,
       resource: {
         serviceName: "sportal-hub",
         serviceVersion: version,
         attributes: {
+          "service.instance.id": instanceId,
           "sportal.mode": Option.match(scenario, {
             onNone: () => "live",
             onSome: (name) => `scenario:${name}`
