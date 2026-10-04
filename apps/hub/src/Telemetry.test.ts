@@ -14,7 +14,7 @@ describe("Telemetry", () => {
     })
   )
 
-  it.effect("keeps the level as today", () => {
+  it.effect("SPORTAL_LOG_LEVEL sets the minimum level", () => {
     const unused = Layer.succeed(
       HttpClient.HttpClient,
       HttpClient.make(() => Effect.die("Telemetry made a request with no SPORTAL_OTLP_URL"))

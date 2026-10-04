@@ -68,7 +68,7 @@ describe("Ingest", () => {
     }).pipe(Effect.provide(Ingest.layer(["fbs"]).pipe(Layer.provide(scripted(["fail", [liveGame(3)]])))))
   )
 
-  it.effect("a poll is one span with the provider's span inside it", () => {
+  it.effect("a poll is one span, ended before the poll sleeps, with the provider's span inside it", () => {
     const ended: Array<Tracer.Span> = []
     return Effect.gen(function* () {
       yield* Ingest
@@ -86,15 +86,6 @@ describe("Ingest", () => {
       )
       assert.deepStrictEqual(poll?.attributes.get("sportal.leagues"), ["fbs"])
       assert.deepStrictEqual(poll?.attributes.get("sportal.failed_leagues"), [])
-    }).pipe(Effect.provide(polling(scripted([[liveGame(0)]]), ended)))
-  })
-
-  it.effect("the span ends before the poll sleeps", () => {
-    const ended: Array<Tracer.Span> = []
-    return Effect.gen(function* () {
-      yield* Ingest
-      yield* TestClock.adjust(0)
-      assert.isTrue(ended.some((span) => span.name === "Ingest.poll"))
     }).pipe(Effect.provide(polling(scripted([[liveGame(0)]]), ended)))
   })
 
