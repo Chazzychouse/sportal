@@ -1,6 +1,7 @@
 import type { GameSnapshot } from "@sportal/domain/Game"
+import { LiveGame } from "@sportal/domain/LiveGame"
 import { Watchability } from "@sportal/domain/Watchability"
-import { Context, DateTime, Effect, Layer, Option, Stream, SubscriptionRef } from "effect"
+import { Context, DateTime, Effect, Layer, Stream, SubscriptionRef } from "effect"
 import { GameActors } from "./GameActors.ts"
 import { Ingest } from "./ingest/Ingest.ts"
 
@@ -33,13 +34,7 @@ export class Slate extends Context.Service<
         readonly watchability: ReadonlyArray<Watchability>
       }>({ slate: [], watchability: [] })
       yield* Effect.forkScoped(
-        Stream.zipLatestWith(ingest.listed, gameActors.changes, (listed, live) =>
-          listed.map((game) =>
-            Option.fromNullishOr(live.get(game.id)).pipe(
-              Option.match({ onNone: () => game, onSome: (liveGame) => liveGame.snapshot })
-            )
-          )
-        ).pipe(
+        Stream.zipLatestWith(ingest.listed, gameActors.changes, LiveGame.followed).pipe(
           Stream.debounce("250 millis"),
           Stream.runForEach((slate) =>
             DateTime.now.pipe(

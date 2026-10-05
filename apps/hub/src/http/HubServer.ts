@@ -7,10 +7,9 @@ import { DateTime, Effect, Layer, Option, Schema, Stream } from "effect"
 import { HttpRouter, HttpServerResponse, HttpStaticServer } from "effect/http"
 import { HttpApiBuilder } from "effect/http-api"
 import { HubConfig } from "../HubConfig.ts"
-import { Ingest } from "../ingest/Ingest.ts"
+import { Slate } from "../Slate.ts"
 import { Source } from "../source/Source.ts"
 import { StageSessions } from "../stage/StageSessions.ts"
-import { Watch } from "../watch/Watch.ts"
 import { lanAddresses } from "./LanAddresses.ts"
 
 /** The handlers for every endpoint group in SportalApi. Exported so tests can drive them without a socket. */
@@ -47,8 +46,8 @@ function slateHandlers() {
     SportalApi,
     "slate",
     Effect.fn(function* (handlers) {
-      const ingest = yield* Ingest
-      return handlers.handleAll({ current: () => ingest.slate })
+      const slate = yield* Slate
+      return handlers.handleAll({ current: () => Effect.map(slate.latest, (latest) => latest.slate) })
     })
   )
 }
@@ -132,10 +131,10 @@ function liveRoute() {
     "GET",
     "/api/live",
     Effect.gen(function* () {
-      const watch = yield* Watch
+      const slate = yield* Slate
       const sessions = yield* StageSessions
       const messages: Stream.Stream<LiveMessage> = Stream.merge(
-        watch.changes.pipe(
+        slate.changes.pipe(
           Stream.map(({ slate, watchability }) => ({ _tag: "SlateChanged" as const, slate, watchability }))
         ),
         sessions.changes.pipe(Stream.map((stage) => ({ _tag: "StageChanged" as const, stage })))

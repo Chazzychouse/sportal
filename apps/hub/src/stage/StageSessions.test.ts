@@ -5,7 +5,7 @@ import { broadcast, snapshot, team } from "@sportal/domain/TestGame"
 import { DateTime, Deferred, Effect, Fiber, Layer, Option, Ref, Stream } from "effect"
 import { TestClock } from "effect/testing"
 import * as Database from "../database/Database.ts"
-import { Ingest } from "../ingest/Ingest.ts"
+import { Slate } from "../Slate.ts"
 import { Source } from "../source/Source.ts"
 import * as SqlChannelStore from "../source/SqlChannelStore.ts"
 import * as YouTubeTv from "../source/youtube-tv/YouTubeTv.ts"
@@ -39,8 +39,8 @@ const ohioStateAtIowa = snapshot({
 const TestSessions = StageSessions.layer.pipe(
   Layer.provide(
     Layer.succeed(
-      Ingest,
-      Ingest.of({ slate: Effect.succeed(slate), changes: Stream.empty, listed: Stream.empty })
+      Slate,
+      Slate.of({ latest: Effect.succeed({ slate, watchability: [] }), changes: Stream.empty })
     )
   ),
   Layer.provideMerge(sourceKnowingEspn())
@@ -116,13 +116,12 @@ describe("StageSessions", () => {
       const refreshed = yield* Deferred.make<void>()
       const refreshes = yield* Ref.make(0)
       // Reading the slate is the first step of every refresh, so it counts them.
-      const ingest = Ingest.of({
-        slate: Ref.update(refreshes, (count) => count + 1).pipe(
+      const fakeSlate = Slate.of({
+        latest: Ref.update(refreshes, (count) => count + 1).pipe(
           Effect.andThen(Deferred.succeed(refreshed, undefined)),
-          Effect.as(slate)
+          Effect.as({ slate, watchability: [] })
         ),
-        changes: Stream.empty,
-        listed: Stream.empty
+        changes: Stream.empty
       })
       // Depending on StageSessions orders this after the layer has built.
       const learnAtOnce = Layer.effectDiscard(
@@ -140,7 +139,7 @@ describe("StageSessions", () => {
         Effect.provide(
           learnAtOnce.pipe(
             Layer.provideMerge(StageSessions.layer),
-            Layer.provide(Layer.succeed(Ingest, ingest)),
+            Layer.provide(Layer.succeed(Slate, fakeSlate)),
             Layer.provide(sourceKnowingEspn())
           )
         )
@@ -193,8 +192,8 @@ describe("StageSessions", () => {
           StageSessions.layer.pipe(
             Layer.provide(
               Layer.succeed(
-                Ingest,
-                Ingest.of({ slate: Effect.succeed(slate), changes: Stream.empty, listed: Stream.empty })
+                Slate,
+                Slate.of({ latest: Effect.succeed({ slate, watchability: [] }), changes: Stream.empty })
               )
             ),
             Layer.provideMerge(gated)
@@ -207,7 +206,10 @@ describe("StageSessions", () => {
   it.live("keeps a playing tile whose game has left the slate when another network is learned", () =>
     Effect.gen(function* () {
       const onSlate = yield* Ref.make(slate)
-      const ingest = Ingest.of({ slate: Ref.get(onSlate), changes: Stream.empty, listed: Stream.empty })
+      const fakeSlate = Slate.of({
+        latest: Effect.map(Ref.get(onSlate), (current) => ({ slate: current, watchability: [] })),
+        changes: Stream.empty
+      })
       yield* Effect.gen(function* () {
         const sessions = yield* StageSessions
         yield* sessions.dispatch({ _tag: "Assign", tile: 0, game: GameId.make("1") })
@@ -234,7 +236,7 @@ describe("StageSessions", () => {
       }).pipe(
         Effect.provide(
           StageSessions.layer.pipe(
-            Layer.provide(Layer.succeed(Ingest, ingest)),
+            Layer.provide(Layer.succeed(Slate, fakeSlate)),
             Layer.provideMerge(sourceKnowingEspn())
           )
         )
@@ -266,11 +268,10 @@ describe("StageSessions", () => {
         StageSessions.layer.pipe(
           Layer.provide(
             Layer.succeed(
-              Ingest,
-              Ingest.of({
-                slate: Effect.succeed([ohioStateAtIowa]),
-                changes: Stream.empty,
-                listed: Stream.empty
+              Slate,
+              Slate.of({
+                latest: Effect.succeed({ slate: [ohioStateAtIowa], watchability: [] }),
+                changes: Stream.empty
               })
             )
           ),

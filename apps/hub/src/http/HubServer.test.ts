@@ -13,11 +13,11 @@ import * as Database from "../database/Database.ts"
 import { HubConfig } from "../HubConfig.ts"
 import { Ingest } from "../ingest/Ingest.ts"
 import { Provider } from "../provider/Provider.ts"
+import { Slate } from "../Slate.ts"
 import * as SqlChannelStore from "../source/SqlChannelStore.ts"
 import * as YouTubeTv from "../source/youtube-tv/YouTubeTv.ts"
 import { StageSessions } from "../stage/StageSessions.ts"
 import * as TestCluster from "../TestCluster.ts"
-import { Watch } from "../watch/Watch.ts"
 import * as HubServer from "./HubServer.ts"
 
 const espn = Network.make("ESPN")
@@ -49,7 +49,7 @@ describe("Hub API", () => {
   it.effect("serves the slate and turns an assignment on an unlearned network into a picking tile", () =>
     Effect.gen(function* () {
       const client = yield* makeClient
-      yield* firstSlate()
+      yield* firstSlateOnTestClock()
 
       const slate = yield* client.slate.current()
       assert.strictEqual(slate[0]?.away.team.abbreviation, "ALA")
@@ -188,7 +188,7 @@ describe("GET /api/live", () => {
     Effect.gen(function* () {
       const http = yield* HttpClient.HttpClient
       const api = yield* HttpApiClient.make(SportalApi)
-      yield* firstSlate()
+      yield* firstSlateOnTestClock()
 
       const response = yield* http.get("/api/live")
       assert.strictEqual(response.headers["content-type"], "text/event-stream")
@@ -223,7 +223,7 @@ describe("GET /api/live", () => {
     Effect.gen(function* () {
       const http = yield* HttpClient.HttpClient
       const api = yield* HttpApiClient.make(SportalApi)
-      yield* firstSlate()
+      yield* firstSlateOnTestClock()
 
       const response = yield* http.get("/api/live")
       const lines = yield* Queue.unbounded<string>()
@@ -253,16 +253,24 @@ describe("GET /api/live", () => {
   )
 })
 
-/** Waits until the ingest loop has published its first slate. */
+/** Waits until the Slate has published its first games. */
 function firstSlate() {
   return Effect.gen(function* () {
-    const ingest = yield* Ingest
-    yield* ingest.changes.pipe(
-      Stream.filter((slate) => slate.length > 0),
+    const slate = yield* Slate
+    yield* slate.changes.pipe(
+      Stream.filter((latest) => latest.slate.length > 0),
       Stream.take(1),
       Stream.runDrain
     )
   })
+}
+
+/** `firstSlate` on the test clock, moved on through the first poll and the Slate's 250 ms to settle. */
+function firstSlateOnTestClock() {
+  return TestClock.adjust(0).pipe(
+    Effect.andThen(TestClock.adjust("250 millis")),
+    Effect.andThen(firstSlate())
+  )
 }
 
 /** The first tile 0 the Stage shows that has the given kind; the current Stage is replayed, so this may not wait. */
@@ -292,7 +300,7 @@ function hubUnderTest() {
     Layer.provideMerge(YouTubeTv.layer),
     Layer.provide(SqlChannelStore.layer),
     Layer.provide(Database.layer(":memory:")),
-    Layer.provideMerge(Watch.layer),
+    Layer.provideMerge(Slate.layer),
     Layer.provideMerge(Ingest.layer(["fbs"])),
     Layer.provide([
       Layer.succeed(Provider, Provider.of({ slate: () => Effect.succeed([game]) })),

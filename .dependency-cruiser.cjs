@@ -56,10 +56,11 @@ module.exports = {
     {
       name: "test-game-is-for-tests",
       comment:
-        "The test snapshot builder is imported by test files and scenarios, which are test data by nature.",
+        "The test snapshot builder is imported by test files, the Hub's test provider, and scenarios, which are test data by nature.",
       severity: "error",
       from: {
-        pathNot: "(\\.test\\.tsx?$|^packages/domain/src/Scenario\\.ts$|^packages/domain/src/scenarios/)"
+        pathNot:
+          "(\\.test\\.tsx?$|^apps/hub/src/TestProvider\\.ts$|^packages/domain/src/Scenario\\.ts$|^packages/domain/src/scenarios/)"
       },
       to: { path: "^packages/domain/src/TestGame\\.ts$" }
     },
@@ -84,6 +85,13 @@ module.exports = {
       severity: "error",
       from: { pathNot: "\\.test\\.ts$" },
       to: { path: "^apps/hub/src/TestCluster\\.ts$" }
+    },
+    {
+      name: "test-provider-is-for-tests",
+      comment: "A provider scripted for a test, and the games it lists, are imported only by test files.",
+      severity: "error",
+      from: { pathNot: "\\.test\\.ts$" },
+      to: { path: "^apps/hub/src/TestProvider\\.ts$" }
     },
     {
       name: "no-junk-drawers",

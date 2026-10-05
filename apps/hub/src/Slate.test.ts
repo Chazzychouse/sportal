@@ -1,7 +1,5 @@
 import { NodeServices } from "@effect/platform-node"
 import { assert, describe, it } from "@effect/vitest"
-import { GameId, type GameSnapshot } from "@sportal/domain/Game"
-import { snapshot } from "@sportal/domain/TestGame"
 import { Effect, Layer, Ref, Stream } from "effect"
 import { TestClock } from "effect/testing"
 import { GameActors } from "./GameActors.ts"
@@ -10,6 +8,7 @@ import { Provider } from "./provider/Provider.ts"
 import { Slate } from "./Slate.ts"
 import * as ScenarioProvider from "./scenario/ScenarioProvider.ts"
 import * as TestCluster from "./TestCluster.ts"
+import { game, scripted } from "./TestProvider.ts"
 
 describe("Slate", () => {
   it.effect("keeps the listing's order", () =>
@@ -157,25 +156,12 @@ describe("Slate", () => {
   )
 })
 
-function game(id: string, period = 1) {
-  return snapshot({ id: GameId.make(id), status: "live", period, clock: "10:00" })
-}
-
 /** The Slate over Ingest of the fbs league over `provider`, with Ingest and the game actors also provided to the test. */
 function slateOver(provider: Layer.Layer<Provider>) {
   return Slate.layer.pipe(
     Layer.provideMerge(Ingest.layer(["fbs"])),
     Layer.provideMerge(TestCluster.gameActors),
     Layer.provide(provider)
-  )
-}
-
-/** A provider that answers each poll with the next scripted listing, and the last one after that. */
-function scripted(responses: ReadonlyArray<ReadonlyArray<GameSnapshot>>) {
-  let call = 0
-  return Layer.succeed(
-    Provider,
-    Provider.of({ slate: () => Effect.succeed(responses[Math.min(call++, responses.length - 1)] ?? []) })
   )
 }
 

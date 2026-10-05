@@ -1,27 +1,17 @@
 import type { GameSnapshot } from "@sportal/domain/Game"
 import type { LeagueId } from "@sportal/domain/League"
-import {
-  Context,
-  DateTime,
-  Effect,
-  Layer,
-  Metric,
-  Option,
-  Result,
-  type Stream,
-  SubscriptionRef
-} from "effect"
+import { LiveGame } from "@sportal/domain/LiveGame"
+import { Context, DateTime, Effect, Layer, Metric, Result, type Stream, SubscriptionRef } from "effect"
 import { GameActors } from "../GameActors.ts"
 import { Provider } from "../provider/Provider.ts"
 import * as Cadence from "./Cadence.ts"
 
+/** Polls each league at the Cadence, keeping its last good listing, and sends what it got to the game actors. */
 export class Ingest extends Context.Service<
   Ingest,
   {
     /** What the leagues last listed, in poll order, on every poll even when nothing changed. */
     readonly listed: Stream.Stream<ReadonlyArray<GameSnapshot>>
-    readonly slate: Effect.Effect<ReadonlyArray<GameSnapshot>>
-    readonly changes: Stream.Stream<ReadonlyArray<GameSnapshot>>
   }
 >()("sportal/hub/Ingest") {
   static readonly layer = (leagues: ReadonlyArray<LeagueId>) =>
@@ -31,7 +21,6 @@ export class Ingest extends Context.Service<
         const provider = yield* Provider
         const gameActors = yield* GameActors
         const listed = yield* SubscriptionRef.make<ReadonlyArray<GameSnapshot>>([])
-        const current = yield* SubscriptionRef.make<ReadonlyArray<GameSnapshot>>([])
         // The last good slate per league, so one league failing does not blank the other.
         const byLeague = new Map<LeagueId, ReadonlyArray<GameSnapshot>>()
 
@@ -57,31 +46,20 @@ export class Ingest extends Context.Service<
             { concurrency: "unbounded", discard: true }
           )
           yield* SubscriptionRef.set(listed, games)
-          const live = yield* gameActors.liveGames
-          const slate = games.map((game) =>
-            Option.fromNullishOr(live.get(game.id)).pipe(
-              Option.match({ onNone: () => game, onSome: (liveGame) => liveGame.snapshot })
-            )
-          )
-          yield* SubscriptionRef.set(current, slate)
           yield* Effect.annotateCurrentSpan({ "sportal.leagues": leagues, "sportal.failed_leagues": failed })
-          return { slate, failed }
+          return { followed: LiveGame.followed(games, yield* gameActors.liveGames), failed }
         }, Effect.trackDuration(pollDuration))
 
         yield* Effect.forkScoped(
           Effect.forever(
             Effect.gen(function* () {
-              const { slate, failed } = yield* poll()
-              yield* Effect.sleep(Cadence.interval(slate, yield* DateTime.now, failed.length > 0))
+              const { followed, failed } = yield* poll()
+              yield* Effect.sleep(Cadence.interval(followed, yield* DateTime.now, failed.length > 0))
             })
           )
         )
 
-        return Ingest.of({
-          listed: SubscriptionRef.changes(listed),
-          slate: SubscriptionRef.get(current),
-          changes: SubscriptionRef.changes(current)
-        })
+        return Ingest.of({ listed: SubscriptionRef.changes(listed) })
       })
     )
 }

@@ -1,5 +1,5 @@
 import { Data, DateTime, Duration, Option } from "effect"
-import { GameSnapshot } from "./Game.ts"
+import { type GameId, GameSnapshot } from "./Game.ts"
 
 /** Where a live game is: upcoming, live (last updated at), stale (last updated at), or over. */
 export type LiveGameState = Data.TaggedEnum<{
@@ -24,6 +24,18 @@ export class LiveGame extends Data.Class<{ readonly snapshot: GameSnapshot; read
   /** A game's first snapshot, always taken. */
   static start(snapshot: GameSnapshot, now: DateTime.Utc): LiveGame {
     return new LiveGame({ snapshot, state: stateOf(snapshot, now) })
+  }
+
+  /** Each listed game, in listed order, as its live game has it, or as listed when it has none. */
+  static followed(
+    listed: ReadonlyArray<GameSnapshot>,
+    live: ReadonlyMap<GameId, LiveGame>
+  ): ReadonlyArray<GameSnapshot> {
+    return listed.map((game) =>
+      Option.fromNullishOr(live.get(game.id)).pipe(
+        Option.match({ onNone: () => game, onSome: (liveGame) => liveGame.snapshot })
+      )
+    )
   }
 
   /** The live game after `snapshot` arrives at `now`, or none when it is behind in game time. */

@@ -2,7 +2,7 @@ import { join } from "node:path"
 import { NodeServices } from "@effect/platform-node"
 import { assert, describe, it } from "@effect/vitest"
 import { Scenario } from "@sportal/domain/Scenario"
-import { Context, DateTime, Effect, FileSystem, Layer, Schema } from "effect"
+import { Context, DateTime, Effect, FileSystem, Layer, Option, Schema, Stream } from "effect"
 import { TestClock } from "effect/testing"
 import { Ingest } from "../ingest/Ingest.ts"
 import { Provider } from "../provider/Provider.ts"
@@ -100,8 +100,9 @@ describe("ScenarioProvider", () => {
       )
       // 13 real seconds are 130 scenario seconds: the drive is at the 17, in the red zone, since 2:00.
       yield* TestClock.adjust("13 seconds")
-      const tie = (yield* Context.get(context, Ingest).slate).find((game) => game.id === "tie-uga-ala")
-      assert.isTrue(tie?.situation?.isRedZone)
+      const listing = yield* Stream.runHead(Context.get(context, Ingest).listed)
+      const tie = Option.flatMapNullishOr(listing, (games) => games.find((game) => game.id === "tie-uga-ala"))
+      assert.isTrue(Option.exists(tie, (game) => game.situation?.isRedZone === true))
       assert.strictEqual(DateTime.toEpochMillis(yield* DateTime.now), 13_000)
     }).pipe(Effect.scoped)
   )

@@ -1,5 +1,6 @@
 import { DateTime, Duration, Option } from "effect"
 import { describe, expect, it } from "vitest"
+import { GameId } from "./Game.ts"
 import { LiveGame, LiveGameState } from "./LiveGame.ts"
 import { snapshot } from "./TestGame.ts"
 
@@ -200,5 +201,26 @@ describe("LiveGame#currencyChangesAt", () => {
   it("Live and Over: none", () => {
     expect(liveGame.currencyChangesAt(later)).toEqual(Option.none())
     expect(overGame.currencyChangesAt(later)).toEqual(Option.none())
+  })
+})
+
+describe("LiveGame.followed", () => {
+  const listed = [snapshot({ id: GameId.make("2") }), snapshot({ id: GameId.make("1") })]
+
+  it("each listed game in listed order, as its live game has it, or as listed when it has none", () => {
+    const followed = LiveGame.followed(
+      listed,
+      new Map([
+        [GameId.make("1"), LiveGame.start(snapshot({ id: GameId.make("1"), status: "live", period: 2 }), t0)]
+      ])
+    )
+    expect(followed.map((game) => [game.id, game.status])).toEqual([
+      ["2", "scheduled"],
+      ["1", "live"]
+    ])
+  })
+  it("leaves off a live game no listing has", () => {
+    const followed = LiveGame.followed(listed, new Map([[GameId.make("9"), liveGame]]))
+    expect(followed.map((game) => game.id)).toEqual(["2", "1"])
   })
 })

@@ -4,12 +4,12 @@ import { GameActors } from "./GameActors.ts"
 import { HubConfig } from "./HubConfig.ts"
 import { Ingest } from "./ingest/Ingest.ts"
 import * as EspnProvider from "./provider/espn/EspnProvider.ts"
+import { Slate } from "./Slate.ts"
 import * as ScenarioClock from "./scenario/ScenarioClock.ts"
 import * as ScenarioProvider from "./scenario/ScenarioProvider.ts"
 import * as ScenarioSource from "./scenario/ScenarioSource.ts"
 import * as SqlChannelStore from "./source/SqlChannelStore.ts"
 import * as YouTubeTv from "./source/youtube-tv/YouTubeTv.ts"
-import { Watch } from "./watch/Watch.ts"
 
 /** What the Hub plays: the live day from ESPN and YouTube TV, or a scenario in their place, on scenario time. */
 export const layer = Layer.unwrap(
@@ -29,20 +29,20 @@ const leagues = ["nfl", "fbs"] as const
 
 function live() {
   return Layer.mergeAll(
-    Watch.layer.pipe(
-      Layer.provideMerge(Ingest.layer(leagues).pipe(Layer.provide([EspnProvider.layer, gameActors()])))
+    Slate.layer.pipe(
+      Layer.provide(Ingest.layer(leagues).pipe(Layer.provide(EspnProvider.layer))),
+      Layer.provide(gameActors())
     ),
     YouTubeTv.layer.pipe(Layer.provide(SqlChannelStore.layer))
   )
 }
 
-// Ingest, the game actors, the scenario, and Watch share one clock; the rest of the Hub keeps the real one.
+// Ingest, the game actors, the scenario, and the Slate share one clock; the rest of the Hub keeps the real one.
 function scripted(name: string, speed: number) {
   return Layer.mergeAll(
-    Watch.layer.pipe(
-      Layer.provideMerge(
-        Ingest.layer(leagues).pipe(Layer.provide([ScenarioProvider.layer(name), gameActors()]))
-      ),
+    Slate.layer.pipe(
+      Layer.provide(Ingest.layer(leagues).pipe(Layer.provide(ScenarioProvider.layer(name)))),
+      Layer.provide(gameActors()),
       Layer.provide(ScenarioClock.layer(speed))
     ),
     ScenarioSource.layer
