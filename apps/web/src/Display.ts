@@ -58,7 +58,7 @@ export class Display extends Data.Class<{
           ]
         }
       case "Unsolo":
-        if (this.overlay._tag !== "None") return { display: this.close(), commands: [] }
+        if (!Overlay.$is("None")(this.overlay)) return { display: this.close(), commands: [] }
         return { display: this, commands: stage.solo === undefined ? [] : [{ _tag: "Unsolo" }] }
       case "Interact": {
         const tile = stage.onStage()[this.selectedOn(stage)]
@@ -83,10 +83,10 @@ export class Display extends Data.Class<{
       case "ToggleSlate":
         return { display: this.toggleSlate(), commands: [] }
       case "ShowKeys":
-        return { display: this.overlay._tag === "Keys" ? this.close() : this.open("Keys"), commands: [] }
+        return { display: Overlay.$is("Keys")(this.overlay) ? this.close() : this.open("Keys"), commands: [] }
       case "CommandPalette":
         return {
-          display: this.overlay._tag === "Palette" ? this.close() : this.open("Palette"),
+          display: Overlay.$is("Palette")(this.overlay) ? this.close() : this.open("Palette"),
           commands: []
         }
       case "FocusAudio":
@@ -124,16 +124,17 @@ export class Display extends Data.Class<{
   ): { display: Display; commands: ReadonlyArray<StageCommand> } {
     const slot = this.selectedOn(stage)
     if (card.place?._tag === "Slot") return { display: this, commands: [] }
-    const { display } = new Display({ ...this, pick: card.id }).select(
+    const { display, commands } = new Display({ ...this, pick: card.id }).select(
       stage.nextEmptySlot(slot) ?? slot,
       stage
     )
     return {
-      display: display,
+      display,
       commands: [
         card.place === undefined
           ? { _tag: "Assign", tile: slot, game: card.id }
-          : { _tag: "Swap", a: card.place.tile, b: slot }
+          : { _tag: "Swap", a: card.place.tile, b: slot },
+        ...commands
       ]
     }
   }

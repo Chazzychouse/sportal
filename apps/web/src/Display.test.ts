@@ -61,6 +61,14 @@ describe("Display", () => {
       ])
     })
 
+    it("keeps interacting when the slot selected is the one the clamped selection already reads", () => {
+      const quad = withTiles(["live"])
+      const selected = Display.initial.select(3, quad).display
+      const single = new Stage({ ...quad, layout: "Single" })
+      const interacting = press(selected, { _tag: "Interact" }, single).display
+      assert.strictEqual(interacting.select(0, single).display.interactingOn(single), "live")
+    })
+
     it("reads interacting as none once a swap moves another game into the selected slot", () => {
       const before = withTiles(["live", "soon"])
       const display = press(Display.initial, { _tag: "Interact" }, before).display
@@ -166,6 +174,16 @@ describe("Display", () => {
       assert.deepStrictEqual(commands, [])
     })
 
+    it("Esc with the palette or the join-Remote dialog open closes it and sends nothing", () => {
+      const stage = withTiles([])
+      const palette = press(Display.initial.open("Palette"), { _tag: "Unsolo" }, stage)
+      assert.strictEqual(palette.display.overlay._tag, "None")
+      assert.deepStrictEqual(palette.commands, [])
+      const join = press(Display.initial.open("JoinRemote"), { _tag: "Unsolo" }, stage)
+      assert.strictEqual(join.display.overlay._tag, "None")
+      assert.deepStrictEqual(join.commands, [])
+    })
+
     it("Esc with no overlay unsolos while soloed, and otherwise does nothing", () => {
       const stage = withTiles(["live"])
       const soloed = new Stage({ ...stage, solo: GameId.make("live") })
@@ -231,6 +249,16 @@ describe("Display", () => {
       assert.strictEqual(open.display.overlay._tag, "Keys")
       assert.deepStrictEqual(open.commands, [])
       assert.strictEqual(press(open.display, { _tag: "ShowKeys" }, stage).display.overlay._tag, "None")
+    })
+
+    it("ShowKeys with the palette open replaces it with the key help", () => {
+      const { display, commands } = press(
+        Display.initial.open("Palette"),
+        { _tag: "ShowKeys" },
+        withTiles([])
+      )
+      assert.strictEqual(display.overlay._tag, "Keys")
+      assert.deepStrictEqual(commands, [])
     })
 
     it("CommandPalette opens the palette, replacing the key help, or closes it when it was open", () => {
