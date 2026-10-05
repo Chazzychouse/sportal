@@ -3,7 +3,7 @@ import { GameId } from "@sportal/domain/Game"
 import { Stage } from "@sportal/domain/Stage"
 import { snapshot } from "@sportal/domain/TestGame"
 import { DateTime } from "effect"
-import { drop, nextPick, stripCards } from "./StripCards.ts"
+import { nextPick, stripCards } from "./StripCards.ts"
 
 const live = snapshot({ id: GameId.make("live"), status: "live" })
 const later = snapshot({
@@ -70,29 +70,6 @@ describe("nextPick", () => {
     assert.isUndefined(
       nextPick(stripCards(withTiles(["live", "soon", "later", "done"]), slate), undefined, 1)
     )
-  })
-})
-
-describe("drop", () => {
-  it("assigns a free game, swaps a benched one in, and does nothing with a game on stage", () => {
-    const stage = withTiles(["soon", undefined, undefined, undefined, "done"])
-    const [bench, free, onStage] = stripCards(stage, slate)
-    assert.deepStrictEqual(free && drop(free, stage, 2)?.command, {
-      _tag: "Assign",
-      tile: 2,
-      game: GameId.make("live")
-    })
-    assert.deepStrictEqual(bench && drop(bench, stage, 2)?.command, { _tag: "Swap", a: 4, b: 2 })
-    assert.isUndefined(onStage && drop(onStage, stage, 2))
-  })
-
-  it("selects the next empty tile after the drop, or keeps the selection when none is left", () => {
-    const stage = withTiles(["soon", undefined, undefined, undefined])
-    const [free] = stripCards(stage, slate)
-    assert.strictEqual(free && drop(free, stage, 1)?.select, 2)
-    const full = withTiles(["soon", "later", undefined, "done"])
-    const [left] = stripCards(full, slate)
-    assert.strictEqual(left && drop(left, full, 2)?.select, 2)
   })
 })
 

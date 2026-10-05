@@ -1,12 +1,14 @@
 import { LayoutName } from "@sportal/domain/Layout"
+import type { StageCommand } from "@sportal/domain/Stage"
 import { Shrink } from "lucide-react"
 import { useState } from "react"
 import { Toaster } from "@/design/sonner"
+import { Display } from "../Display.ts"
 import { LayoutGlyph, layoutLabel } from "../frame/LayoutGlyph.tsx"
 import { dispatch } from "../hub/HubClient.ts"
 import { useLive } from "../hub/Live.ts"
 import { statusText } from "../slate/StatusText.ts"
-import { drop, stripCards } from "../slate/StripCards.ts"
+import { stripCards } from "../slate/StripCards.ts"
 import { TeamLogo } from "../slate/TeamLogo.tsx"
 import { useRejectionToasts } from "../stage/Rejections.ts"
 import { StageMap } from "./StageMap.tsx"
@@ -17,8 +19,13 @@ import { StageMap } from "./StageMap.tsx"
  */
 export function RemoteView() {
   const live = useLive()
-  // The tile the next game goes to. The phone's own, like each desk's.
-  const [selected, setSelected] = useState(0)
+  // The phone's own, like each desk's. Its inputs are taps, which React renders before the next one, so each
+  // handler's `display` is current.
+  const [display, setDisplay] = useState(Display.initial)
+  const apply = (next: { display: Display; commands: ReadonlyArray<StageCommand> }) => {
+    setDisplay(next.display)
+    for (const command of next.commands) dispatch(command)
+  }
   const [tab, setTab] = useState<(typeof sections)[number]>("Live")
   useRejectionToasts()
 
@@ -70,7 +77,12 @@ export function RemoteView() {
             </button>
           ))}
         </fieldset>
-        <StageMap stage={live.stage} slate={live.slate} selected={selected} onSelect={setSelected} />
+        <StageMap
+          stage={live.stage}
+          slate={live.slate}
+          selected={display.selectedOn(live.stage)}
+          onSelect={(slot) => apply(display.select(slot, live.stage))}
+        />
       </div>
 
       <nav className="flex gap-1 px-3 pt-3" aria-label="Slate">
@@ -97,19 +109,15 @@ export function RemoteView() {
           .filter((card) => card.section === open)
           .map((card) => {
             const { game, place } = card
-            const dropped = drop(card, live.stage, selected)
+            const dropped = display.drop(card, live.stage)
             const networks = game?.broadcasts.map(({ network }) => network).join(" · ")
             const scored = game !== undefined && (game.progress() === "live" || game.status === "final")
             return (
               <li key={card.id}>
                 <button
                   type="button"
-                  disabled={dropped === undefined}
-                  onClick={() => {
-                    if (dropped === undefined) return
-                    dispatch(dropped.command)
-                    setSelected(dropped.select)
-                  }}
+                  disabled={dropped.commands.length === 0}
+                  onClick={() => apply(dropped)}
                   className={`grid min-h-14 w-full grid-cols-[20px_1fr_2.5rem_7.5rem] items-center gap-x-2 rounded-sm px-1.5 py-1.5 text-left font-mono text-sm tabular-nums active:bg-accent disabled:opacity-60 ${
                     game?.progress() === "over" ? "opacity-70" : ""
                   }`}

@@ -1,5 +1,5 @@
 import { type GameId, GameSnapshot } from "@sportal/domain/Game"
-import type { Stage, StageCommand } from "@sportal/domain/Stage"
+import type { Stage } from "@sportal/domain/Stage"
 
 /**
  * The strip's cards, in order: the bench, then the slate live, upcoming, and over. A benched game shows once, on
@@ -58,27 +58,6 @@ export function nextPick(
     if (card !== undefined && pickable(card)) return card.id
   }
   return undefined
-}
-
-/**
- * Dropping a card into tile `selected`: a free game is assigned, a benched one swapped in, and a game on stage is
- * not droppable. `select` is the tile to select next — the next empty one, so the next drop fills it — or
- * `selected` when none is left.
- */
-export function drop(
-  card: ReturnType<typeof stripCards>[number],
-  stage: Stage,
-  selected: number
-): { command: StageCommand; select: number } | undefined {
-  const select = stage.nextEmptySlot(selected) ?? selected
-  switch (card.place?._tag) {
-    case undefined:
-      return { command: { _tag: "Assign", tile: selected, game: card.id }, select }
-    case "Bench":
-      return { command: { _tag: "Swap", a: card.place.tile, b: selected }, select }
-    case "Slot":
-      return undefined
-  }
 }
 
 const sections = { live: "Live", upcoming: "Next", over: "Final" } as const

@@ -1,8 +1,8 @@
 import type { Hotkey } from "@sportal/api/Hotkey"
-import type { GameId } from "@sportal/domain/Game"
-import { Layout } from "@sportal/domain/Layout"
-import { useState } from "react"
+import type { StageCommand } from "@sportal/domain/Stage"
+import { useRef, useState } from "react"
 import { Toaster } from "@/design/sonner"
+import { Display } from "./Display.ts"
 import { useFullScreen } from "./frame/FullScreen.ts"
 import { JoinRemote } from "./frame/JoinRemote.tsx"
 import { KeysDialog } from "./frame/KeysDialog.tsx"
@@ -11,7 +11,7 @@ import { dispatch } from "./hub/HubClient.ts"
 import { useLive } from "./hub/Live.ts"
 import { OverlayHost } from "./OverlayHost.tsx"
 import { SlateView } from "./slate/SlateView.tsx"
-import { drop, nextPick, stripCards } from "./slate/StripCards.ts"
+import { stripCards } from "./slate/StripCards.ts"
 import { CommandPalette } from "./stage/CommandPalette.tsx"
 import { useHotkeys } from "./stage/Hotkeys.ts"
 import { useRejectionToasts } from "./stage/Rejections.ts"
@@ -19,71 +19,32 @@ import { StageView } from "./stage/StageView.tsx"
 
 export function App() {
   const live = useLive()
-  // The tile the next picked game goes to. Local to this client: it is a cursor, not shared state.
-  const [selected, setSelected] = useState(0)
-  // The game whose player gets the mouse, after `I`. Local, like `selected`, and ended by selecting another tile.
-  const [interacting, setInteracting] = useState<GameId | undefined>(undefined)
-  const select = (tile: number) => {
-    setSelected(tile)
-    if (tile !== selected) setInteracting(undefined)
+  const [display, setDisplay] = useState(Display.initial)
+  // The display as of the last input. Two inputs can arrive before React renders, so each one steps from this, not
+  // from the `display` its callback closed over.
+  const latest = useRef(display)
+  const apply = (
+    step: (display: Display) => Display | { display: Display; commands: ReadonlyArray<StageCommand> }
+  ) => {
+    const next = step(latest.current)
+    const { display, commands } = next instanceof Display ? { display: next, commands: [] } : next
+    latest.current = display
+    setDisplay(display)
+    for (const command of commands) dispatch(command)
   }
-  // It counts only while it is still the selected tile's stream: a promote, swap, clear, or Remote can move it.
-  const selectedTile = live.stage.onStage()[selected]
-  const interactive =
-    selectedTile?._tag === "StreamTile" && selectedTile.game === interacting ? interacting : undefined
-  const [palette, setPalette] = useState(false)
-  const [keys, setKeys] = useState(false)
-  const [joinRemote, setJoinRemote] = useState(false)
-  const [slateOpen, setSlateOpen] = useState(true)
-  // The slate card `[` `]` step to and Enter drops. Local, like `selected`.
-  const [pick, setPick] = useState<GameId | undefined>(undefined)
+  const closeOverlay = (open: boolean) => {
+    if (!open) apply((display) => display.close())
+  }
   const fullScreen = useFullScreen()
   const cards = stripCards(live.stage, live.slate)
-  // Puts a card in the selected tile, then selects the next empty tile, so the next drop fills it.
-  const dropCard = (card: (typeof cards)[number]) => {
-    const dropped = drop(card, live.stage, selected)
-    if (dropped === undefined) return
-    dispatch(dropped.command)
-    setPick(card.id)
-    select(dropped.select)
-  }
+  const selected = display.selectedOn(live.stage)
   useRejectionToasts()
 
-  useHotkeys((hotkey: Hotkey) => {
-    switch (hotkey._tag) {
-      case "FocusAudio":
-        return dispatch({ _tag: "FocusAudio", tile: hotkey.slot })
-      case "Promote":
-        return dispatch({ _tag: "Promote", tile: hotkey.slot })
-      case "ToggleSolo":
-        return dispatch(live.stage.solo === undefined ? { _tag: "Solo", tile: selected } : { _tag: "Unsolo" })
-      case "Unsolo":
-        // Esc closes the key help first, whether pressed here or in a stream view.
-        if (keys) return setKeys(false)
-        return live.stage.solo === undefined ? undefined : dispatch({ _tag: "Unsolo" })
-      case "ToggleSlate":
-        return setSlateOpen((open) => !open)
-      case "StepPick":
-        return setPick(nextPick(cards, pick, hotkey.step))
-      case "DropPick": {
-        const card = cards.find((card) => card.id === pick)
-        return card === undefined ? undefined : dropCard(card)
-      }
-      case "SelectTile":
-        return hotkey.slot < live.stage.onStage().length ? select(hotkey.slot) : undefined
-      case "Interact":
-        if (selectedTile?._tag !== "StreamTile") return
-        return setInteracting(interactive === undefined ? selectedTile.game : undefined)
-      case "ShowKeys":
-        return setKeys((open) => !open)
-      case "FullScreen":
-        return fullScreen.toggle()
-      case "NextLayout":
-        return dispatch({ _tag: "SetLayout", layout: Layout.next(live.stage.layout) })
-      case "CommandPalette":
-        return setPalette((open) => !open)
-    }
-  })
+  useHotkeys((hotkey: Hotkey) =>
+    hotkey._tag === "FullScreen"
+      ? fullScreen.toggle()
+      : apply((display) => display.press(hotkey, live.stage, cards))
+  )
 
   return (
     <OverlayHost>
@@ -95,12 +56,13 @@ export function App() {
             selected={selected}
             fullScreen={fullScreen}
             slate={{
-              open: slateOpen,
+              open: display.slateOpen,
               live: live.slate.filter((game) => game.progress() === "live").length,
-              toggle: () => setSlateOpen((open) => !open)
+              toggle: () => apply((display) => display.toggleSlate())
             }}
-            onKeys={() => setKeys(true)}
-            onRemote={() => setJoinRemote(true)}
+            onToggleSolo={() => apply((display) => display.press({ _tag: "ToggleSolo" }, live.stage, cards))}
+            onKeys={() => apply((display) => display.open("Keys"))}
+            onRemote={() => apply((display) => display.open("JoinRemote"))}
           />
         )}
         <StageView
@@ -108,29 +70,29 @@ export function App() {
           slate={live.slate}
           connected={live.connected}
           selected={selected}
-          interacting={interactive}
-          onSelect={select}
+          interacting={display.interactingOn(live.stage)}
+          onSelect={(slot) => apply((display) => display.select(slot, live.stage))}
         />
-        {fullScreen.on || !slateOpen ? null : (
+        {fullScreen.on || !display.slateOpen ? null : (
           <SlateView
             cards={cards}
             selected={selected}
-            pick={pick}
+            pick={display.pick}
             watchability={live.watchability}
-            onDrop={dropCard}
+            onDrop={(card) => apply((display) => display.drop(card, live.stage))}
           />
         )}
       </div>
-      <KeysDialog open={keys} onOpenChange={setKeys} />
-      <JoinRemote open={joinRemote} onOpenChange={setJoinRemote} />
+      <KeysDialog open={display.overlay._tag === "Keys"} onOpenChange={closeOverlay} />
+      <JoinRemote open={display.overlay._tag === "JoinRemote"} onOpenChange={closeOverlay} />
       <CommandPalette
-        open={palette}
-        onOpenChange={setPalette}
+        open={display.overlay._tag === "Palette"}
+        onOpenChange={closeOverlay}
         stage={live.stage}
         slate={live.slate}
         selected={selected}
         onFullScreen={fullScreen.toggle}
-        onKeys={() => setKeys(true)}
+        onKeys={() => apply((display) => display.open("Keys"))}
       />
       {/* Top center, inside the 44px top bar strip, so a toast never covers a video: a 5px offset, a compact
           one-line toast, and one toast at a time so none stacks below the bar. */}

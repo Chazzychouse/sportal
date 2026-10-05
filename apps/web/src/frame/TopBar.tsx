@@ -13,6 +13,7 @@ export function TopBar(props: {
   selected: number
   fullScreen: { on: boolean; toggle: () => void }
   slate: { open: boolean; live: number; toggle: () => void }
+  onToggleSolo: () => void
   onKeys: () => void
   onRemote: () => void
 }) {
@@ -74,11 +75,7 @@ export function TopBar(props: {
         className="label-caps text-xs"
         aria-keyshortcuts="F"
         disabled={props.stage.solo === undefined && !canSolo}
-        onClick={() =>
-          dispatch(
-            props.stage.solo === undefined ? { _tag: "Solo", tile: props.selected } : { _tag: "Unsolo" }
-          )
-        }
+        onClick={props.onToggleSolo}
       >
         {props.stage.solo === undefined ? <SquareDashed /> : <Shrink />}
         {props.stage.solo === undefined ? "Solo" : "Unsolo"}
