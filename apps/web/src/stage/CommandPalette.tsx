@@ -140,13 +140,7 @@ export function CommandPalette(props: {
             Full screen
             <CommandShortcut>F11</CommandShortcut>
           </CommandItem>
-          <CommandItem
-            value="keys keyboard shortcuts help"
-            onSelect={() => {
-              props.onOpenChange(false)
-              props.onKeys()
-            }}
-          >
+          <CommandItem value="keys keyboard shortcuts help" onSelect={props.onKeys}>
             Keys
             <CommandShortcut>?</CommandShortcut>
           </CommandItem>

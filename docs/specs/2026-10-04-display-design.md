@@ -107,7 +107,7 @@ class Display extends Data.Class<{
 | `drop(card)`, card free or benched | pick = card; selected = the next empty slot after the selected one, or the same slot; interacting ends if that changed | `Assign` or `Swap` into `selectedOn(stage)`, as `StripCards.drop` decides today |
 | `drop(card)`, card on stage | unchanged | none |
 | `press(SelectTile n)` | as `select(n)` | none |
-| `press(ToggleSolo)` | unchanged | `Solo selectedOn(stage)`, or `Unsolo` while soloed |
+| `press(ToggleSolo)` | unchanged | `Unsolo` while soloed; otherwise `Solo selectedOn(stage)`, or nothing when that tile is Empty |
 | `press(Unsolo)` (Esc) | an open overlay closes, and nothing else happens | none |
 | `press(Unsolo)` (Esc), no overlay | unchanged | `Unsolo` while soloed, otherwise none |
 | `press(Interact)` | interacting = the selected slot's stream game, or ends if it was on; nothing happens on a non-stream tile | none |
@@ -132,7 +132,8 @@ class Display extends Data.Class<{
   `StageView.onSelect`, including the shell's tile press, calls `display.select`. Dialog `onOpenChange(false)`
   calls `display.close()`, and the top bar's buttons call `open` or `toggleSlate`.
 - **TopBar** no longer decides solo or unsolo. Its button calls the `ToggleSolo` path through a callback from App,
-  and it receives `selectedOn(stage)` for its `disabled` check.
+  and is disabled exactly when that path would send nothing: App passes
+  `display.press({ _tag: "ToggleSolo" }, stage, cards).commands.length > 0`, as SlateView asks which cards drop.
 - **Remote** keeps a `useState(Display.initial)`. Its rows call `display.drop`, and its stage map calls
   `display.select`. It never opens an overlay or interacts.
 - **SlateView** also asks Display which cards drop (`display.drop(...).commands`).
@@ -156,6 +157,8 @@ was a bug or is easy to break:
 
 - Selecting another slot ends interacting. Selecting the same slot keeps it.
 - Interacting reads as none once a Remote's swap moves another game into the selected slot.
+- Interacting returns when its game is back in the selected slot, by a swap back, a clear and reassign, or the layout
+  shrinking and growing. This is deliberate: the stored game is kept, not cleared, so the tile reads as interacting again.
 - `selectedOn` after the layout shrinks from Quad to Single is 0, and a drop then assigns into slot 0.
 - Esc with the key help open closes it and sends no `Unsolo`, even while soloed.
 - Opening the palette while the key help is open leaves only the palette open.

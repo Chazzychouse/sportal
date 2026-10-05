@@ -46,7 +46,6 @@ export function nextPick(
   pick: GameId | undefined,
   step: -1 | 1
 ): GameId | undefined {
-  const pickable = (card: (typeof cards)[number]) => card.place?._tag !== "Slot"
   const from = cards.findIndex((card) => card.id === pick)
   if (from === -1)
     return (
@@ -58,6 +57,13 @@ export function nextPick(
     if (card !== undefined && pickable(card)) return card.id
   }
   return undefined
+}
+
+/** A card not on stage can be picked and dropped. */
+export function pickable(
+  card: ReturnType<typeof stripCards>[number]
+): card is ReturnType<typeof stripCards>[number] & { place: { _tag: "Bench"; tile: number } | undefined } {
+  return card.place?._tag !== "Slot"
 }
 
 const sections = { live: "Live", upcoming: "Next", over: "Final" } as const

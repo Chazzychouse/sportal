@@ -3,7 +3,7 @@ import type { GameId } from "@sportal/domain/Game"
 import { Layout } from "@sportal/domain/Layout"
 import type { Stage, StageCommand } from "@sportal/domain/Stage"
 import { Data } from "effect"
-import { nextPick, type stripCards } from "./slate/StripCards.ts"
+import { nextPick, pickable, type stripCards } from "./slate/StripCards.ts"
 
 type Overlay = Data.TaggedEnum<{ None: object; Keys: object; Palette: object; JoinRemote: object }>
 const Overlay = Data.taggedEnum<Overlay>()
@@ -35,7 +35,10 @@ export class Display extends Data.Class<{
     return Math.min(this.selected, stage.onStage().length - 1)
   }
 
-  /** The interacting game, while the selected slot still holds its stream; otherwise none. */
+  /**
+   * The interacting game, while the selected slot still holds its stream; otherwise none. It returns when its game is
+   * back in the selected slot.
+   */
   interactingOn(stage: Stage): GameId | undefined {
     const tile = stage.onStage()[this.selectedOn(stage)]
     return tile?._tag === "StreamTile" && tile.game === this.interacting ? this.interacting : undefined
@@ -50,13 +53,14 @@ export class Display extends Data.Class<{
     switch (hotkey._tag) {
       case "SelectTile":
         return this.select(hotkey.slot, stage)
-      case "ToggleSolo":
+      case "ToggleSolo": {
+        if (stage.solo !== undefined) return { display: this, commands: [{ _tag: "Unsolo" }] }
+        const slot = this.selectedOn(stage)
         return {
           display: this,
-          commands: [
-            stage.solo === undefined ? { _tag: "Solo", tile: this.selectedOn(stage) } : { _tag: "Unsolo" }
-          ]
+          commands: stage.onStage()[slot]?._tag === "Empty" ? [] : [{ _tag: "Solo", tile: slot }]
         }
+      }
       case "Unsolo":
         if (!Overlay.$is("None")(this.overlay)) return { display: this.close(), commands: [] }
         return { display: this, commands: stage.solo === undefined ? [] : [{ _tag: "Unsolo" }] }
@@ -123,7 +127,7 @@ export class Display extends Data.Class<{
     stage: Stage
   ): { display: Display; commands: ReadonlyArray<StageCommand> } {
     const slot = this.selectedOn(stage)
-    if (card.place?._tag === "Slot") return { display: this, commands: [] }
+    if (!pickable(card)) return { display: this, commands: [] }
     const { display, commands } = new Display({ ...this, pick: card.id }).select(
       stage.nextEmptySlot(slot) ?? slot,
       stage

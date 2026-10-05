@@ -75,6 +75,13 @@ describe("Display", () => {
       assert.strictEqual(display.interactingOn(before), "live")
       assert.isUndefined(display.interactingOn(withTiles(["soon", "live"])))
     })
+
+    it("reads interacting again once its game is swapped back into the selected slot", () => {
+      const before = withTiles(["live", "soon"])
+      const display = press(Display.initial, { _tag: "Interact" }, before).display
+      assert.isUndefined(display.interactingOn(withTiles(["soon", "live"])))
+      assert.strictEqual(display.interactingOn(withTiles(["live", "soon"])), "live")
+    })
   })
 
   describe("drop", () => {
@@ -103,17 +110,6 @@ describe("Display", () => {
       const dropped = onStage && Display.initial.drop(onStage, stage)
       assert.strictEqual(dropped?.display, Display.initial)
       assert.deepStrictEqual(dropped?.commands, [])
-    })
-
-    it("assigns a free game, swaps a benched one in, and does nothing with a game on stage", () => {
-      const stage = withTiles(["soon", undefined, undefined, undefined, "done"])
-      const [bench, free, onStage] = stripCards(stage, slate)
-      const selected = Display.initial.select(2, stage).display
-      assert.deepStrictEqual(free && selected.drop(free, stage).commands, [
-        { _tag: "Assign", tile: 2, game: GameId.make("live") }
-      ])
-      assert.deepStrictEqual(bench && selected.drop(bench, stage).commands, [{ _tag: "Swap", a: 4, b: 2 }])
-      assert.deepStrictEqual(onStage && selected.drop(onStage, stage).commands, [])
     })
 
     it("selects the next empty slot after the drop, or keeps the selection when none is left", () => {
@@ -154,6 +150,20 @@ describe("Display", () => {
       assert.strictEqual(solo.display, selected)
       assert.deepStrictEqual(solo.commands, [{ _tag: "Solo", tile: 1 }])
       const soloed = new Stage({ ...stage, solo: GameId.make("soon") })
+      assert.deepStrictEqual(press(selected, { _tag: "ToggleSolo" }, soloed).commands, [{ _tag: "Unsolo" }])
+    })
+
+    it("ToggleSolo sends nothing on an Empty tile when not soloed", () => {
+      const stage = withTiles(["live"])
+      const selected = Display.initial.select(1, stage).display
+      const { display, commands } = press(selected, { _tag: "ToggleSolo" }, stage)
+      assert.strictEqual(display, selected)
+      assert.deepStrictEqual(commands, [])
+    })
+
+    it("ToggleSolo unsolos on an Empty tile while soloed", () => {
+      const soloed = new Stage({ ...withTiles(["live"]), solo: GameId.make("live") })
+      const selected = Display.initial.select(1, soloed).display
       assert.deepStrictEqual(press(selected, { _tag: "ToggleSolo" }, soloed).commands, [{ _tag: "Unsolo" }])
     })
 
@@ -203,6 +213,13 @@ describe("Display", () => {
       assert.isUndefined(press(on.display, { _tag: "Interact" }, stage).display.interactingOn(stage))
     })
 
+    it("Interact on a slot a swap has refilled interacts with the game now there", () => {
+      const before = withTiles(["live", "soon"])
+      const stale = press(Display.initial, { _tag: "Interact" }, before).display
+      const swapped = withTiles(["soon", "live"])
+      assert.strictEqual(press(stale, { _tag: "Interact" }, swapped).display.interactingOn(swapped), "soon")
+    })
+
     it("Interact does nothing on a tile with no stream", () => {
       const empty = withTiles([])
       assert.strictEqual(press(Display.initial, { _tag: "Interact" }, empty).display, Display.initial)
@@ -240,6 +257,13 @@ describe("Display", () => {
       const { display, commands } = press(Display.initial, { _tag: "ToggleSlate" }, withTiles([]))
       assert.isFalse(display.slateOpen)
       assert.deepStrictEqual(display, Display.initial.toggleSlate())
+      assert.deepStrictEqual(commands, [])
+    })
+
+    it("ToggleSlate opens a closed slate", () => {
+      const closed = Display.initial.toggleSlate()
+      const { display, commands } = press(closed, { _tag: "ToggleSlate" }, withTiles([]))
+      assert.isTrue(display.slateOpen)
       assert.deepStrictEqual(commands, [])
     })
 

@@ -30,6 +30,7 @@ export function App() {
   const fullScreen = useFullScreen()
   const cards = stripCards(live.stage, live.slate)
   const selected = display.selectedOn(live.stage)
+  const toggleSolo = display.press({ _tag: "ToggleSolo" }, live.stage, cards)
   useRejectionToasts()
 
   useHotkeys((hotkey: Hotkey) =>
@@ -43,14 +44,16 @@ export function App() {
           <TopBar
             stage={live.stage}
             connected={live.connected}
-            selected={selected}
             fullScreen={fullScreen}
             slate={{
               open: display.slateOpen,
               live: live.slate.filter((game) => game.progress() === "live").length,
               toggle: () => setDisplay(display.toggleSlate())
             }}
-            onToggleSolo={() => apply(display.press({ _tag: "ToggleSolo" }, live.stage, cards))}
+            solo={{
+              enabled: toggleSolo.commands.length > 0,
+              toggle: () => apply(toggleSolo)
+            }}
             onKeys={() => setDisplay(display.open("Keys"))}
             onRemote={() => setDisplay(display.open("JoinRemote"))}
           />

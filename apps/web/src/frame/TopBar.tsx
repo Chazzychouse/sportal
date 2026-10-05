@@ -10,15 +10,12 @@ import { LayoutGlyph, layoutLabel } from "./LayoutGlyph.tsx"
 export function TopBar(props: {
   stage: Stage
   connected: boolean
-  selected: number
   fullScreen: { on: boolean; toggle: () => void }
   slate: { open: boolean; live: number; toggle: () => void }
-  onToggleSolo: () => void
+  solo: { enabled: boolean; toggle: () => void }
   onKeys: () => void
   onRemote: () => void
 }) {
-  const selectedTile = props.stage.onStage()[props.selected]
-  const canSolo = selectedTile !== undefined && selectedTile._tag !== "Empty"
   return (
     <header className="flex h-11 items-center gap-4 border-b bg-card/60 px-3">
       <span className="label-caps flex items-center gap-2 text-[15px] tracking-[0.22em]">
@@ -74,8 +71,8 @@ export function TopBar(props: {
         size="sm"
         className="label-caps text-xs"
         aria-keyshortcuts="F"
-        disabled={props.stage.solo === undefined && !canSolo}
-        onClick={props.onToggleSolo}
+        disabled={!props.solo.enabled}
+        onClick={props.solo.toggle}
       >
         {props.stage.solo === undefined ? <SquareDashed /> : <Shrink />}
         {props.stage.solo === undefined ? "Solo" : "Unsolo"}
