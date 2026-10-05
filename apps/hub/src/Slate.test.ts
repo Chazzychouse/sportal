@@ -14,6 +14,7 @@ describe("Slate", () => {
   it.effect("keeps the listing's order", () =>
     Effect.gen(function* () {
       const slate = yield* Slate
+      // Lets the first poll run before the 250 ms window starts settling the burst.
       yield* TestClock.adjust(0)
       yield* TestClock.adjust("250 millis")
       assert.deepStrictEqual(
@@ -86,6 +87,17 @@ describe("Slate", () => {
         )
       )
     )
+  )
+
+  it.effect("refolds on every poll, so an unchanged live game becomes a lull", () =>
+    Effect.gen(function* () {
+      const slate = yield* Slate
+      for (let poll = 0; poll < 7; poll++) {
+        yield* TestClock.adjust("10 seconds")
+        yield* TestClock.adjust("250 millis")
+      }
+      assert.isTrue((yield* slate.latest).watchability[0]?.lull)
+    }).pipe(Effect.provide(slateOver(scripted([[game("1")]]))))
   )
 
   it.effect("leaves off a game no listing has", () =>

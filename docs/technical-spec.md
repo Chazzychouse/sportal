@@ -66,7 +66,7 @@ flowchart LR
     ingest[Ingest: poll, decode]
     slate[Slate: listed games as their actors have them, watchability]
     actors[Game actors: one per game]
-    director[Director: watchability, rules]
+    director[Director: rules over watchability]
     stages[Stage sessions: one per Display]
     store[(SQL store)]
     api[HTTP API + live stream]

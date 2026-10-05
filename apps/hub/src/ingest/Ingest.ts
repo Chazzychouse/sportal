@@ -48,14 +48,14 @@ export class Ingest extends Context.Service<
           yield* SubscriptionRef.set(listed, games)
           yield* Effect.annotateCurrentSpan({ "sportal.leagues": leagues, "sportal.failed_leagues": failed })
           const live = yield* gameActors.liveGames
-          return { asActorsHaveThem: LiveGame.asActorsHaveThem(games, live), failed }
+          return { slate: LiveGame.asActorsHaveThem(games, live), failed }
         }, Effect.trackDuration(pollDuration))
 
         yield* Effect.forkScoped(
           Effect.forever(
             Effect.gen(function* () {
-              const { asActorsHaveThem, failed } = yield* poll()
-              yield* Effect.sleep(Cadence.interval(asActorsHaveThem, yield* DateTime.now, failed.length > 0))
+              const { slate, failed } = yield* poll()
+              yield* Effect.sleep(Cadence.interval(slate, yield* DateTime.now, failed.length > 0))
             })
           )
         )

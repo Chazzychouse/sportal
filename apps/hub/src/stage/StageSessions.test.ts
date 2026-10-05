@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs"
 import { assert, describe, it } from "@effect/vitest"
-import { GameId, Network } from "@sportal/domain/Game"
+import { GameId, type GameSnapshot, Network } from "@sportal/domain/Game"
 import { broadcast, snapshot, team } from "@sportal/domain/TestGame"
 import { DateTime, Deferred, Effect, Fiber, Layer, Option, Ref, Stream } from "effect"
 import { TestClock } from "effect/testing"
@@ -37,12 +37,7 @@ const ohioStateAtIowa = snapshot({
 })
 
 const TestSessions = StageSessions.layer.pipe(
-  Layer.provide(
-    Layer.succeed(
-      Slate,
-      Slate.of({ latest: Effect.succeed({ slate, watchability: [] }), changes: Stream.empty })
-    )
-  ),
+  Layer.provide(Layer.succeed(Slate, slateOf(slate))),
   Layer.provideMerge(sourceKnowingEspn())
 )
 
@@ -190,12 +185,7 @@ describe("StageSessions", () => {
       }).pipe(
         Effect.provide(
           StageSessions.layer.pipe(
-            Layer.provide(
-              Layer.succeed(
-                Slate,
-                Slate.of({ latest: Effect.succeed({ slate, watchability: [] }), changes: Stream.empty })
-              )
-            ),
+            Layer.provide(Layer.succeed(Slate, slateOf(slate))),
             Layer.provideMerge(gated)
           )
         )
@@ -266,15 +256,7 @@ describe("StageSessions", () => {
     }).pipe(
       Effect.provide(
         StageSessions.layer.pipe(
-          Layer.provide(
-            Layer.succeed(
-              Slate,
-              Slate.of({
-                latest: Effect.succeed({ slate: [ohioStateAtIowa], watchability: [] }),
-                changes: Stream.empty
-              })
-            )
-          ),
+          Layer.provide(Layer.succeed(Slate, slateOf([ohioStateAtIowa]))),
           Layer.provideMerge(sourceKnowingEspn())
         )
       )
@@ -293,6 +275,11 @@ describe("StageSessions", () => {
     }).pipe(Effect.provide(TestSessions))
   )
 })
+
+/** A Slate that lists `games`, with no watchability and no changes. */
+function slateOf(games: ReadonlyArray<GameSnapshot>) {
+  return Slate.of({ latest: Effect.succeed({ slate: games, watchability: [] }), changes: Stream.empty })
+}
 
 function game(id: string, broadcasts: ReadonlyArray<Network>) {
   return snapshot({

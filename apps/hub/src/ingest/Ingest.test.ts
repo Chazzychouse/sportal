@@ -74,6 +74,7 @@ describe("Ingest", () => {
           yield* Ingest
           yield* TestClock.adjust(0)
           yield* actors.receive(game("1"))
+          // The scheduled cadence the listing alone would give.
           yield* TestClock.adjust("15 minutes")
           assert.strictEqual(yield* Ref.get(calls), 2)
           yield* TestClock.adjust("10 seconds")
