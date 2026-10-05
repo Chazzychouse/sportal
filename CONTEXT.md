@@ -14,7 +14,7 @@ Every exported type name must be a term here.
 | **Team** | A league member. | club, competitor, franchise |
 | **Ranking** | A team's position in a poll (college). | seed |
 | **Game** | One scheduled contest between two teams. | event, match, competition, fixture |
-| **Slate** | The games in a time window (a Saturday, an NFL week). Shown as a strip under the Stage. | schedule, scoreboard |
+| **Slate** | The games in a time window (a Saturday, an NFL week). Shown as a strip under the Stage. The Hub's `Slate` publishes it: each listed game as its game actor has it, with its watchability. | schedule, scoreboard |
 | **Kickoff** | A game's scheduled start instant. | start time, date |
 
 ### Game state
@@ -42,7 +42,7 @@ Every exported type name must be a term here.
 | --- | --- | --- |
 | **Provider** | An adapter that supplies **game data** (ESPN, CollegeFootballData). | source, feed |
 | **Provider error** | A provider could not supply data for a league: unreachable, rate-limited, or unreadable. | fetch error |
-| **Ingest** | The Hub's loop that polls providers and keeps the current slate. | poller, sync, fetcher |
+| **Ingest** | The Hub's loop that polls providers, keeps each league's last good listing, and sends what it polled to the game actors. | poller, sync, fetcher |
 | **Cadence** | How long Ingest waits between polls, given what the last poll saw. | interval, rate |
 | **Source** | A way you obtain **video** (YouTube TV). | provider, service |
 | **Source name** | A source as people know it ("YouTube TV"); how code and the UI name a source. | source id |

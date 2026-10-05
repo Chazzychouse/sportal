@@ -201,6 +201,7 @@ sportal/
     │       ├── HubConfig.ts        Every environment setting, in one place
     │       ├── GameActors.ts       The game actors: one cluster entity per game
     │       ├── Cluster.ts          The single-process cluster the game actors run on
+    │       ├── Slate.ts            Each listed game as its actor has it, and its watchability
     │       ├── provider/
     │       │   ├── Provider.ts     The port
     │       │   ├── espn/
@@ -217,7 +218,7 @@ sportal/
     │       │   ├── ChannelStore.ts The port for learned channel carriages
     │       │   └── SqlChannelStore.ts  Over the Database; owns its migrations
     │       ├── ingest/
-    │       │   ├── Ingest.ts       The poll, decode, diff, publish loop
+    │       │   ├── Ingest.ts       The poll loop: listings to the slate, snapshots to the actors
     │       │   └── Cadence.ts      How often to poll, given game status
     │       ├── director/
     │       │   └── Director.ts     Events in, stage commands and alerts out
@@ -308,8 +309,8 @@ class GameActors extends Context.Service<GameActors, {
 }>()("sportal/hub/GameActors") {}
 ```
 
-- Ingest sends every polled snapshot to its game's actor, awaits them all, and publishes the slate with each game as
-  its actor has it. A game's actor alone decides its state (upcoming, live, stale, or over) and ignores a snapshot that
+- Ingest sends every polled snapshot to its game's actor and awaits them all; Slate publishes each listed game as its
+  actor has it, within 250 ms of a change. A game's actor alone decides its state (upcoming, live, stale, or over) and ignores a snapshot that
   is behind in game time, so a second feed can send to the same actors.
 - `HubMode` provides it in both modes; in a scenario it runs on the scenario clock, so staleness and idling happen in
   scenario time.

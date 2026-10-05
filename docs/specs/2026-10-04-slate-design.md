@@ -112,7 +112,7 @@ class Slate extends Context.Service<Slate, {
   the layer's clock. Refolding an unchanged snapshot is safe: `next` keeps `activeAt` when nothing was played. Because
   Ingest publishes its listing on every poll, the "no play for a minute" lull keeps appearing on the poll's cadence,
   as it does today. That coupling is deliberate. A tick of Slate's own is a later change if it ever matters.
-- Only `Slate.ts` combines the listing with the actors. Nothing else merges snapshots.
+- Only `Slate.ts` publishes the listing combined with the actors. Cadence reads the same `LiveGame.asActorsHaveThem` once per poll and keeps nothing.
 
 ### GameActors: unchanged
 
@@ -148,7 +148,8 @@ TestClock throughout, through each module's own interface.
 - It polls again after the live cadence and lists the new games.
 - It keeps the last listing when the provider fails.
 - It retries after 30 s when the first poll fails.
-- It lists on every poll, even one that changes nothing.
+- It lists on every poll, even one that changes nothing. The first poll runs before a subscriber attaches, so the test
+  sees that listing and then one per poll, never the initial `[]`.
 - A poll's snapshots reach the actors.
 - A failed league's games are not resent, so its actor goes stale.
 - Cadence follows the actors: the provider lists a game as scheduled, the test sends a live snapshot of it to its
