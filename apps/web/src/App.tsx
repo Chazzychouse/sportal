@@ -1,6 +1,6 @@
 import type { Hotkey } from "@sportal/api/Hotkey"
 import type { StageCommand } from "@sportal/domain/Stage"
-import { useRef, useState } from "react"
+import { useState } from "react"
 import { Toaster } from "@/design/sonner"
 import { Display } from "./Display.ts"
 import { useFullScreen } from "./frame/FullScreen.ts"
@@ -20,20 +20,12 @@ import { StageView } from "./stage/StageView.tsx"
 export function App() {
   const live = useLive()
   const [display, setDisplay] = useState(Display.initial)
-  // The display as of the last input. Two inputs can arrive before React renders, so each one steps from this, not
-  // from the `display` its callback closed over.
-  const latest = useRef(display)
-  const apply = (
-    step: (display: Display) => Display | { display: Display; commands: ReadonlyArray<StageCommand> }
-  ) => {
-    const next = step(latest.current)
-    const { display, commands } = next instanceof Display ? { display: next, commands: [] } : next
-    latest.current = display
-    setDisplay(display)
-    for (const command of commands) dispatch(command)
+  const apply = (next: { display: Display; commands: ReadonlyArray<StageCommand> }) => {
+    setDisplay(next.display)
+    for (const command of next.commands) dispatch(command)
   }
   const closeOverlay = (open: boolean) => {
-    if (!open) apply((display) => display.close())
+    if (!open) setDisplay(display.close())
   }
   const fullScreen = useFullScreen()
   const cards = stripCards(live.stage, live.slate)
@@ -41,9 +33,7 @@ export function App() {
   useRejectionToasts()
 
   useHotkeys((hotkey: Hotkey) =>
-    hotkey._tag === "FullScreen"
-      ? fullScreen.toggle()
-      : apply((display) => display.press(hotkey, live.stage, cards))
+    hotkey._tag === "FullScreen" ? fullScreen.toggle() : apply(display.press(hotkey, live.stage, cards))
   )
 
   return (
@@ -58,11 +48,11 @@ export function App() {
             slate={{
               open: display.slateOpen,
               live: live.slate.filter((game) => game.progress() === "live").length,
-              toggle: () => apply((display) => display.toggleSlate())
+              toggle: () => setDisplay(display.toggleSlate())
             }}
-            onToggleSolo={() => apply((display) => display.press({ _tag: "ToggleSolo" }, live.stage, cards))}
-            onKeys={() => apply((display) => display.open("Keys"))}
-            onRemote={() => apply((display) => display.open("JoinRemote"))}
+            onToggleSolo={() => apply(display.press({ _tag: "ToggleSolo" }, live.stage, cards))}
+            onKeys={() => setDisplay(display.open("Keys"))}
+            onRemote={() => setDisplay(display.open("JoinRemote"))}
           />
         )}
         <StageView
@@ -71,15 +61,15 @@ export function App() {
           connected={live.connected}
           selected={selected}
           interacting={display.interactingOn(live.stage)}
-          onSelect={(slot) => apply((display) => display.select(slot, live.stage))}
+          onSelect={(slot) => apply(display.select(slot, live.stage))}
         />
         {fullScreen.on || !display.slateOpen ? null : (
           <SlateView
             cards={cards}
-            selected={selected}
-            pick={display.pick}
+            display={display}
+            stage={live.stage}
             watchability={live.watchability}
-            onDrop={(card) => apply((display) => display.drop(card, live.stage))}
+            onDrop={apply}
           />
         )}
       </div>
@@ -92,7 +82,7 @@ export function App() {
         slate={live.slate}
         selected={selected}
         onFullScreen={fullScreen.toggle}
-        onKeys={() => apply((display) => display.open("Keys"))}
+        onKeys={() => setDisplay(display.open("Keys"))}
       />
       {/* Top center, inside the 44px top bar strip, so a toast never covers a video: a 5px offset, a compact
           one-line toast, and one toast at a time so none stacks below the bar. */}

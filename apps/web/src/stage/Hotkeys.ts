@@ -3,8 +3,7 @@ import { useEffect, useRef } from "react"
 
 /**
  * Calls `handle` for each hotkey, pressed in the web UI or in a stream view that had focus (the shell forwards
- * those). Keys typed into a text field are the field's, except the command palette's, and a key already handled is
- * not one.
+ * those). Keys typed into a text field are the field's, except the command palette's.
  */
 export function useHotkeys(handle: (hotkey: Hotkey) => void) {
   const latest = useRef(handle)
@@ -22,8 +21,7 @@ export function useHotkeys(handle: (hotkey: Hotkey) => void) {
         },
         "page"
       )
-      // An open dialog dismisses itself on Esc first and marks the key handled; it must not also unsolo.
-      if (hotkey === undefined || event.repeat || event.defaultPrevented) return
+      if (hotkey === undefined || event.repeat) return
       if (hotkey._tag !== "CommandPalette" && isTyping(event.target)) return
       event.preventDefault()
       latest.current(hotkey)

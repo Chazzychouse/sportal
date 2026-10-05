@@ -1,6 +1,8 @@
-import type { GameId, GameSnapshot } from "@sportal/domain/Game"
+import type { GameSnapshot } from "@sportal/domain/Game"
+import type { Stage, StageCommand } from "@sportal/domain/Stage"
 import type { Watchability } from "@sportal/domain/Watchability"
 import { Fragment, useEffect, useRef } from "react"
+import type { Display } from "../Display.ts"
 import { tileDrag } from "../stage/TileChrome.tsx"
 import { statusText } from "./StatusText.ts"
 import type { stripCards } from "./StripCards.ts"
@@ -13,26 +15,27 @@ import { TeamLogo } from "./TeamLogo.tsx"
  */
 export function SlateView(props: {
   cards: ReturnType<typeof stripCards>
-  selected: number
-  pick: GameId | undefined
+  display: Display
+  stage: Stage
   watchability: ReadonlyArray<Watchability>
-  onDrop: (card: ReturnType<typeof stripCards>[number]) => void
+  onDrop: (dropped: { display: Display; commands: ReadonlyArray<StageCommand> }) => void
 }) {
+  const pick = props.display.pick
   const rowRef = useRef<HTMLOListElement | null>(null)
 
   // The pick stays in view as it steps along.
   useEffect(() => {
-    if (props.pick === undefined) return
+    if (pick === undefined) return
     rowRef.current
-      ?.querySelector(`[data-game="${CSS.escape(props.pick)}"]`)
+      ?.querySelector(`[data-game="${CSS.escape(pick)}"]`)
       ?.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "smooth" })
-  }, [props.pick])
+  }, [pick])
 
   return (
     <section aria-label="Slate" className="flex h-16 min-w-0 items-stretch border-t bg-card/60">
       <div className="flex w-16 shrink-0 flex-col justify-center gap-1 border-r px-3">
         <span className="label-caps text-[10px] text-muted-foreground">to tile</span>
-        <span className="font-mono text-lg leading-none">{props.selected + 1}</span>
+        <span className="font-mono text-lg leading-none">{props.display.selectedOn(props.stage) + 1}</span>
       </div>
       {props.cards.length === 0 ? (
         <p className="self-center px-3 text-xs text-muted-foreground">No games in the slate.</p>
@@ -48,6 +51,7 @@ export function SlateView(props: {
           {props.cards.map((card, index) => {
             const section = card.section
             const starts = index === 0 || props.cards[index - 1]?.section !== section
+            const dropped = props.display.drop(card, props.stage)
             return (
               <Fragment key={card.id}>
                 {starts && (
@@ -63,9 +67,10 @@ export function SlateView(props: {
                 <li data-game={card.id} className="shrink-0">
                   <Card
                     card={card}
-                    picked={props.pick === card.id}
+                    picked={pick === card.id}
+                    droppable={dropped.commands.length > 0}
                     watch={props.watchability.find((w) => w.game === card.id)}
-                    onDrop={() => props.onDrop(card)}
+                    onDrop={() => props.onDrop(dropped)}
                   />
                 </li>
               </Fragment>
@@ -84,6 +89,7 @@ export function SlateView(props: {
 function Card(props: {
   card: ReturnType<typeof stripCards>[number]
   picked: boolean
+  droppable: boolean
   watch: Watchability | undefined
   onDrop: () => void
 }) {
@@ -96,7 +102,7 @@ function Card(props: {
       type="button"
       // The keyboard picks with [ ] and Enter, so the cards stay out of the tab order.
       tabIndex={-1}
-      disabled={onStage}
+      disabled={!props.droppable}
       onClick={props.onDrop}
       draggable={bench !== undefined}
       onDragStart={
