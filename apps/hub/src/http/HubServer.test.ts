@@ -301,7 +301,7 @@ function hubUnderTest() {
     Layer.provide(SqlChannelStore.layer),
     Layer.provide(Database.layer(":memory:")),
     Layer.provideMerge(Slate.layer),
-    Layer.provideMerge(Ingest.layer(["fbs"])),
+    Layer.provide(Ingest.layer(["fbs"])),
     Layer.provide([
       Layer.succeed(Provider, Provider.of({ slate: () => Effect.succeed([game]) })),
       TestCluster.gameActors

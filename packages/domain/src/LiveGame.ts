@@ -26,8 +26,8 @@ export class LiveGame extends Data.Class<{ readonly snapshot: GameSnapshot; read
     return new LiveGame({ snapshot, state: stateOf(snapshot, now) })
   }
 
-  /** Each listed game, in listed order, as its live game has it, or as listed when it has none. */
-  static followed(
+  /** Each listed game, in listed order, as its game's actor has it, or as listed when its actor has none. */
+  static asActorsHaveThem(
     listed: ReadonlyArray<GameSnapshot>,
     live: ReadonlyMap<GameId, LiveGame>
   ): ReadonlyArray<GameSnapshot> {

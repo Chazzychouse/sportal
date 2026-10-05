@@ -10,7 +10,7 @@ export function game(id: string, period = 1) {
 
 /**
  * A provider that answers each poll with the next scripted response, and the last one after that, inside a
- * `provider.slate` span. A `"fail"` response fails the poll.
+ * `provider.slate` span. A `"fail"` response fails the poll, and an empty script fails every poll.
  */
 export function scripted(responses: ReadonlyArray<ReadonlyArray<GameSnapshot> | "fail">) {
   let call = 0

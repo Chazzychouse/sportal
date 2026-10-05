@@ -204,23 +204,23 @@ describe("LiveGame#currencyChangesAt", () => {
   })
 })
 
-describe("LiveGame.followed", () => {
+describe("LiveGame.asActorsHaveThem", () => {
   const listed = [snapshot({ id: GameId.make("2") }), snapshot({ id: GameId.make("1") })]
 
   it("each listed game in listed order, as its live game has it, or as listed when it has none", () => {
-    const followed = LiveGame.followed(
+    const games = LiveGame.asActorsHaveThem(
       listed,
       new Map([
         [GameId.make("1"), LiveGame.start(snapshot({ id: GameId.make("1"), status: "live", period: 2 }), t0)]
       ])
     )
-    expect(followed.map((game) => [game.id, game.status])).toEqual([
+    expect(games.map((game) => [game.id, game.status])).toEqual([
       ["2", "scheduled"],
       ["1", "live"]
     ])
   })
   it("leaves off a live game no listing has", () => {
-    const followed = LiveGame.followed(listed, new Map([[GameId.make("9"), liveGame]]))
-    expect(followed.map((game) => game.id)).toEqual(["2", "1"])
+    const games = LiveGame.asActorsHaveThem(listed, new Map([[GameId.make("9"), liveGame]]))
+    expect(games.map((game) => game.id)).toEqual(["2", "1"])
   })
 })
