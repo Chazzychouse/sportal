@@ -238,6 +238,7 @@ sportal/
     ├── web/
     │   └── src/
     │       ├── main.tsx
+│       ├── Display.ts          A Display's local state and its rules
     │       ├── hub/                Typed client derived from SportalApi; live-stream subscription; the store
     │       ├── slate/              Slate view and its parts
     │       ├── game/               Game detail

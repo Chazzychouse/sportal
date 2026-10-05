@@ -77,7 +77,7 @@ Provider and Source are the two words most likely to be swapped. Provider is alw
 | **Live message** | One update the Hub pushes to clients on the live stream: the slate changed, or the Stage changed. | event, notification |
 | **Stage sessions** | The Hub component holding the authoritative Stage for each Display and applying stage commands to it. | stage store, stage manager |
 | **Telemetry** | The traces, logs, and metrics the Hub exports for people to read in Grafana. | monitoring, observability stack |
-| **Display** | A device running the shell and presenting a Stage. | screen, client, player |
+| **Display** | A device running the shell and presenting a Stage. Its local state (selected tile, interacting tile, pick, slate drawer, and the one open overlay) is the web UI's `Display`. | screen, client, player |
 | **Remote** | A client controlling a Display's Stage without presenting it. | controller |
 | **Desk mode** / **Couch mode** | The two presentation densities. | desktop/TV layout |
 | **Shell bridge** | The small interface the desktop shell exposes to the web UI. | IPC, native API |

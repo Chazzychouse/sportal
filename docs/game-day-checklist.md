@@ -49,5 +49,8 @@ Setup: Hub serving the built web UI, desktop shell running, signed in to YouTube
 | 40 | Press `I` again, or select another tile | The player stops getting the mouse; hovering it shows nothing again |
 | 41 | With Docker running, run `pnpm telemetry`, then a scenario at 10× with `SPORTAL_OTLP_URL=http://localhost:4318`, and open the Hub dashboard (`localhost:3000`, folder Sportal) | The dashboard fills; a poll's trace shows its provider calls; logs filter by mode |
 | 42 | With a game live, run `pnpm telemetry` and the Hub with `SPORTAL_OTLP_URL=http://localhost:4318`, and open the Game actors row of the Hub dashboard (mode `live`). Then check staleness: cut the network for two minutes (Wi-Fi off or cable out), then restore it. A scenario cannot do this, since it keeps answering with its last frame | Live games by state fill; a game that stops updating turns stale about 90 seconds later and live again on its next snapshot (`Live → Stale` about 90 s after the cut, `Stale → Live` on the first poll after the network returns); one game's transitions read in order in its logs panel (type its id into **Game**) |
+| 43 | With the key help open, press `Ctrl`+`K` | Only the palette is open. `Esc` closes it; a second `Esc` unsolos |
+| 44 | Select tile 4 in Quad, switch to Single from the Remote | The one tile is selected, and a drop goes into it |
+| 45 | Solo a tile, press `?`, then `Esc` | The key help closes and the tile stays soloed |
 
 Record the date, the build, and any row that failed.

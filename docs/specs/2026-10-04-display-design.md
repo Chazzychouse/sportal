@@ -135,6 +135,8 @@ class Display extends Data.Class<{
   and it receives `selectedOn(stage)` for its `disabled` check.
 - **Remote** keeps a `useState(Display.initial)`. Its rows call `display.drop`, and its stage map calls
   `display.select`. It never opens an overlay or interacts.
+- **SlateView** also asks Display which cards drop (`display.drop(...).commands`).
+- **`useHotkeys`** ignores a key a dialog already handled (`defaultPrevented`), except Ctrl+K. Otherwise Esc on a dialog would also unsolo, because React renders the dialog's close before the window's hotkey listener runs.
 - **CommandPalette** is unchanged in this piece. Its "Watch in tile n" still assigns to the selected slot it is given,
   and App now passes it `selectedOn(stage)`.
 
