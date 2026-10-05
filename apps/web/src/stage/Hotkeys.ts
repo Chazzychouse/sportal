@@ -3,7 +3,8 @@ import { useEffect, useRef } from "react"
 
 /**
  * Calls `handle` for each hotkey, pressed in the web UI or in a stream view that had focus (the shell forwards
- * those). Keys typed into a text field are the field's, except the command palette's.
+ * those). Keys typed into a text field are the field's, except the command palette's. A key a dialog or list already
+ * handled is ignored, except Ctrl+K, which also closes the palette.
  */
 export function useHotkeys(handle: (hotkey: Hotkey) => void) {
   const latest = useRef(handle)
@@ -22,7 +23,7 @@ export function useHotkeys(handle: (hotkey: Hotkey) => void) {
         "page"
       )
       if (hotkey === undefined || event.repeat) return
-      if (hotkey._tag !== "CommandPalette" && isTyping(event.target)) return
+      if (hotkey._tag !== "CommandPalette" && (isTyping(event.target) || event.defaultPrevented)) return
       event.preventDefault()
       latest.current(hotkey)
     }
