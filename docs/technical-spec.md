@@ -63,7 +63,8 @@ flowchart LR
 
   subgraph hub[Hub — one server process]
     prov[Providers]
-    ingest[Ingest: poll, decode, diff]
+    ingest[Ingest: poll, decode]
+    slate[Slate: listed games as their actors have them, watchability]
     actors[Game actors: one per game]
     director[Director: watchability, rules]
     stages[Stage sessions: one per Display]
@@ -85,13 +86,15 @@ flowchart LR
   cfbd --> prov
   prov --> ingest --> store
   ingest -- snapshots --> actors
-  actors -- live games --> ingest
+  actors -- live games, for Cadence --> ingest
+  ingest -- listings --> slate
+  actors -- live games --> slate
   ingest -- game events --> director
   director -- stage commands --> stages
   stages --> store
   api <--> ui1
   api <--> ui2
-  ingest -- slate --> api
+  slate --> api
   stages --> api
   ui1 -- tile rectangles --> main --> views
   yttv --> views
@@ -310,8 +313,8 @@ class GameActors extends Context.Service<GameActors, {
 ```
 
 - Ingest sends every polled snapshot to its game's actor and awaits them all; Slate publishes each listed game as its
-  actor has it, within 250 ms of a change. A game's actor alone decides its state (upcoming, live, stale, or over) and ignores a snapshot that
-  is behind in game time, so a second feed can send to the same actors.
+  actor has it, within 250 ms of a change. A game's actor alone decides its state (upcoming, live, stale, or over) and
+  ignores a snapshot that is behind in game time, so a second feed can send to the same actors.
 - `HubMode` provides it in both modes; in a scenario it runs on the scenario clock, so staleness and idling happen in
   scenario time.
 
