@@ -48,6 +48,12 @@ describe("tileActions", () => {
     assert.strictEqual(soloKey(1, false), undefined)
   })
 
+  it("shows unsolo's key on the soloed tile whether or not it is selected", () => {
+    const stage = Result.getOrThrow(streaming().apply({ _tag: "Solo", tile: 1 }, none))
+    const key = tileActions(stage, 1, false).find((action) => action.id === "unsolo")?.key
+    assert.strictEqual(key, "Escape")
+  })
+
   it("words hear by whether the tile's sound is already on", () => {
     const stage = streaming()
     const labels = (slot: number) =>
