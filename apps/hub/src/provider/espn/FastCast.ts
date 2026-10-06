@@ -18,7 +18,7 @@ import {
 } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/http"
 import * as Socket from "effect/socket/Socket"
-import type { Frame } from "../../feed-log/Frame.ts"
+import type { FeedFrame } from "../../feed-log/Frame.ts"
 import { LiveFeed, LiveFeedError } from "../LiveFeed.ts"
 import * as FastCastMessage from "./FastCastMessage.ts"
 
@@ -44,7 +44,7 @@ function frames(
   leagues: ReadonlyArray<LeagueId>,
   wanted: Stream.Stream<ReadonlyArray<GameSnapshot>>,
   resync: Stream.Stream<string>
-): Stream.Stream<Omit<Frame, "seq">, LiveFeedError, HttpClient.HttpClient | Socket.WebSocketConstructor> {
+): Stream.Stream<FeedFrame, LiveFeedError, HttpClient.HttpClient | Socket.WebSocketConstructor> {
   return Stream.unwrap(connect(leagues, wanted, resync)).pipe(
     Stream.concat(Stream.fail(new LiveFeedError({ reason: "Closed", cause: "FastCast ended the stream" }))),
     Stream.timeoutOrElse({ duration: silence, orElse: () => Stream.fail(silent()) })
@@ -170,7 +170,7 @@ function framed(
   inbound: Inbound,
   subscribe: (tc: string) => Effect.Effect<boolean>,
   subscribeLater: (tc: string) => Effect.Effect<void>
-): Effect.Effect<readonly [Followed, ReadonlyArray<Omit<Frame, "seq">>], never, HttpClient.HttpClient> {
+): Effect.Effect<readonly [Followed, ReadonlyArray<FeedFrame>], never, HttpClient.HttpClient> {
   if (inbound._tag === "Resync") {
     const { tc } = inbound
     // A topic waiting for its checkpoint already has one coming, or has been given up on.
@@ -183,7 +183,7 @@ function framed(
   }
   const { text, receivedAt } = inbound
   const envelope = Option.getOrUndefined(decodeEnvelope(text))
-  const frame: Omit<Frame, "seq"> = {
+  const frame: FeedFrame = {
     receivedAt,
     feed: "fastcast",
     channel: envelope?.channel ?? "socket",
