@@ -4,6 +4,7 @@ import { Effect, Layer, Ref, Stream } from "effect"
 import { TestClock } from "effect/testing"
 import { GameActors } from "./GameActors.ts"
 import { Ingest } from "./ingest/Ingest.ts"
+import { LiveFeed } from "./provider/LiveFeed.ts"
 import { Provider } from "./provider/Provider.ts"
 import { Slate } from "./Slate.ts"
 import * as ScenarioProvider from "./scenario/ScenarioProvider.ts"
@@ -173,7 +174,7 @@ function slateOver(provider: Layer.Layer<Provider>) {
   return Slate.layer.pipe(
     Layer.provideMerge(Ingest.layer(["fbs"])),
     Layer.provideMerge(TestCluster.gameActors),
-    Layer.provide(provider)
+    Layer.provide([provider, LiveFeed.none])
   )
 }
 
@@ -181,7 +182,7 @@ function slateOver(provider: Layer.Layer<Provider>) {
 function playing(name: string) {
   return Slate.layer.pipe(
     Layer.provideMerge(Ingest.layer(["fbs", "nfl"])),
-    Layer.provide([ScenarioProvider.layer(name), TestCluster.gameActors]),
+    Layer.provide([ScenarioProvider.layer(name), TestCluster.gameActors, LiveFeed.none]),
     Layer.provide(NodeServices.layer)
   )
 }

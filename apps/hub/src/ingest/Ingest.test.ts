@@ -2,9 +2,10 @@ import { assert, describe, it } from "@effect/vitest"
 import { GameId, type GameSnapshot } from "@sportal/domain/Game"
 import { LiveGameState } from "@sportal/domain/LiveGame"
 import { snapshot, team } from "@sportal/domain/TestGame"
-import { DateTime, Effect, Layer, Metric, Option, Ref, Stream, type Tracer } from "effect"
+import { DateTime, Effect, Layer, Metric, Option, Queue, Ref, Stream, type Tracer } from "effect"
 import { TestClock } from "effect/testing"
 import { GameActors } from "../GameActors.ts"
+import { LiveFeed, LiveFeedError } from "../provider/LiveFeed.ts"
 import { Provider } from "../provider/Provider.ts"
 import * as TestCluster from "../TestCluster.ts"
 import { game, scripted } from "../TestProvider.ts"
@@ -23,7 +24,10 @@ function liveGame(homeScore: number) {
 
 /** Ingest of the fbs league over `provider`, with the game actors it sends to also provided to the test. */
 function withActors(provider: Layer.Layer<Provider>) {
-  return Ingest.layer(["fbs"]).pipe(Layer.provideMerge(TestCluster.gameActors), Layer.provide(provider))
+  return Ingest.layer(["fbs"]).pipe(
+    Layer.provideMerge(TestCluster.gameActors),
+    Layer.provide([provider, LiveFeed.none])
+  )
 }
 
 describe("Ingest", () => {
@@ -87,7 +91,8 @@ describe("Ingest", () => {
               Provider.of({ slate: () => Ref.update(calls, (n) => n + 1).pipe(Effect.as([scheduled])) })
             )
           ),
-          Layer.provide(Layer.succeed(GameActors, actors))
+          Layer.provide(Layer.succeed(GameActors, actors)),
+          Layer.provide(LiveFeed.none)
         )
       )
     }).pipe(Effect.provide(TestCluster.gameActors))
@@ -191,13 +196,180 @@ describe("Ingest", () => {
       assert.strictEqual(duration?.type === "Histogram" ? duration.state.count : undefined, 2)
     }).pipe(Effect.provide(polling(scripted([[liveGame(0)], [liveGame(7)]]), [])), withMetrics)
   )
+
+  it.effect(
+    "a pushed game reaches its actor between polls, named as the poll names it, at the push's clock",
+    () =>
+      Effect.gen(function* () {
+        const feed = yield* Queue.unbounded<Delivery>()
+        const subscriptions = yield* Ref.make(0)
+        yield* Effect.provide(
+          Effect.gen(function* () {
+            const actors = yield* GameActors
+            yield* TestClock.adjust(0)
+            yield* Queue.offer(feed, [pushed("4:12", 7)])
+            yield* TestClock.adjust("1 second")
+            const live = (yield* actors.liveGames).get(GameId.make("1"))
+            assert.strictEqual(live?.snapshot.clock, "4:12")
+            assert.strictEqual(live?.snapshot.home.score, 7)
+            assert.strictEqual(live?.snapshot.home.team.shortName, "MSST")
+            assert.strictEqual(live?.snapshot.away.team.shortName, "ALA")
+          }),
+          feeding(scripted([[liveGame(0)]]), feed, subscriptions, [])
+        )
+      })
+  )
+
+  it.effect("a pushed game no listing has is not sent, and is counted", () =>
+    Effect.gen(function* () {
+      const feed = yield* Queue.unbounded<Delivery>()
+      const subscriptions = yield* Ref.make(0)
+      yield* Effect.provide(
+        Effect.gen(function* () {
+          const actors = yield* GameActors
+          yield* TestClock.adjust(0)
+          yield* Queue.offer(feed, [snapshot({ ...pushed("4:12", 7), id: GameId.make("9") })])
+          yield* TestClock.adjust("1 second")
+          assert.isFalse((yield* actors.liveGames).has(GameId.make("9")))
+          assert.strictEqual(yield* counted("sportal_live_feed_unlisted", { league: "fbs" }), 1)
+        }),
+        feeding(scripted([[liveGame(0)]]), feed, subscriptions, [])
+      )
+    }).pipe(withMetrics)
+  )
+
+  it.effect(
+    "a closed feed is subscribed again after about 1 s, then about 2 s, while the poll carries on",
+    () =>
+      Effect.gen(function* () {
+        const feed = yield* Queue.unbounded<Delivery>()
+        const subscriptions = yield* Ref.make(0)
+        const polls = yield* Ref.make(0)
+        const provider = Layer.succeed(
+          Provider,
+          Provider.of({ slate: () => Ref.update(polls, (n) => n + 1).pipe(Effect.as([liveGame(0)])) })
+        )
+        const closed = new LiveFeedError({ reason: "Closed", cause: "socket closed" })
+        yield* Effect.provide(
+          Effect.gen(function* () {
+            yield* TestClock.adjust(0)
+            assert.strictEqual(yield* Ref.get(subscriptions), 1)
+            // Jitter scales each delay by 0.8 to 1.2: the first is within 0.8 s to 1.2 s, the second 1.6 s to 2.4 s.
+            yield* Queue.offer(feed, closed)
+            yield* TestClock.adjust("700 millis")
+            assert.strictEqual(yield* Ref.get(subscriptions), 1)
+            yield* TestClock.adjust("600 millis")
+            assert.strictEqual(yield* Ref.get(subscriptions), 2)
+            yield* Queue.offer(feed, closed)
+            yield* TestClock.adjust("1500 millis")
+            assert.strictEqual(yield* Ref.get(subscriptions), 2)
+            yield* TestClock.adjust("1 second")
+            assert.strictEqual(yield* Ref.get(subscriptions), 3)
+            yield* TestClock.adjust("20 seconds")
+            assert.isAtLeast(yield* Ref.get(polls), 3)
+            assert.strictEqual(yield* counted("sportal_live_feed_errors", { reason: "Closed" }), 2)
+          }),
+          feeding(provider, feed, subscriptions, [])
+        )
+      }).pipe(withMetrics)
+  )
+
+  it.effect("a push is one span, the parent of the receives it causes", () => {
+    const ended: Array<Tracer.Span> = []
+    return Effect.gen(function* () {
+      const feed = yield* Queue.unbounded<Delivery>()
+      const subscriptions = yield* Ref.make(0)
+      yield* Effect.provide(
+        Effect.gen(function* () {
+          yield* TestClock.adjust(0)
+          yield* Queue.offer(feed, [
+            pushed("4:12", 7),
+            snapshot({ ...pushed("4:12", 7), id: GameId.make("9") })
+          ])
+          yield* TestClock.adjust("1 second")
+        }),
+        feeding(scripted([[liveGame(0)]]), feed, subscriptions, ended)
+      )
+      const pushes = ended.filter((span) => span.name === "Ingest.push")
+      assert.strictEqual(pushes.length, 1)
+      const push = pushes[0]
+      const receives = ended.filter(
+        (span) =>
+          span.name === "GameActors.receive" &&
+          Option.exists(span.parent, (parent) => parent.spanId === push?.spanId)
+      )
+      assert.strictEqual(receives.length, 1)
+      assert.deepStrictEqual(push?.attributes.get("sportal.leagues"), ["fbs"])
+      assert.strictEqual(push?.attributes.get("sportal.games"), 2)
+      assert.strictEqual(push?.attributes.get("sportal.unlisted"), 1)
+    })
+  })
 })
 
 /** Ingest of the fbs league over `provider`, with each span that ends recorded in `ended`. */
 function polling(provider: Layer.Layer<Provider>, ended: Array<Tracer.Span>) {
   return Ingest.layer(["fbs"]).pipe(
-    Layer.provide([provider, TestCluster.gameActors]),
+    Layer.provide([provider, TestCluster.gameActors, LiveFeed.none]),
     Layer.provideMerge(recordingSpans(ended))
+  )
+}
+
+/** What a test offers its live feed: a pushed batch, or the error that ends the feed's stream. */
+type Delivery = ReadonlyArray<GameSnapshot> | LiveFeedError
+
+/**
+ * Ingest of the fbs league over `provider` and a live feed reading `feed`, counting each subscription to it in
+ * `subscriptions`, with the game actors also provided to the test and each span that ends recorded in `ended`.
+ */
+function feeding(
+  provider: Layer.Layer<Provider>,
+  feed: Queue.Queue<Delivery>,
+  subscriptions: Ref.Ref<number>,
+  ended: Array<Tracer.Span>
+) {
+  const liveFeed = LiveFeed.of({
+    games: () =>
+      Stream.unwrap(
+        Ref.update(subscriptions, (n) => n + 1).pipe(
+          Effect.as(
+            Stream.fromQueue(feed).pipe(
+              Stream.mapEffect((delivery) =>
+                delivery instanceof LiveFeedError ? Effect.fail(delivery) : Effect.succeed(delivery)
+              )
+            )
+          )
+        )
+      )
+  })
+  return Ingest.layer(["fbs"]).pipe(
+    Layer.provideMerge(TestCluster.gameActors),
+    Layer.provide([provider, Layer.succeed(LiveFeed, liveFeed)]),
+    Layer.provideMerge(recordingSpans(ended))
+  )
+}
+
+/** A push of game "1", as FastCast names it, at `clock` with the home side on `homeScore`. */
+function pushed(clock: string, homeScore: number) {
+  return snapshot({
+    status: "live",
+    period: 1,
+    clock,
+    home: { team: team("MSST", "fbs", { shortName: "Pushed name" }), score: homeScore },
+    away: { team: team("ALA", "fbs", { shortName: "Pushed name" }), score: 0 }
+  })
+}
+
+/** The count of counter `id` with `attributes`, if it has counted. */
+function counted(id: string, attributes: Readonly<Record<string, string>>) {
+  return Metric.snapshot.pipe(
+    Effect.map((metrics) => {
+      const metric = metrics.find(
+        (each) =>
+          each.id === id &&
+          Object.entries(attributes).every(([key, value]) => each.attributes?.[key] === value)
+      )
+      return metric?.type === "Counter" ? metric.state.count : undefined
+    })
   )
 }
 

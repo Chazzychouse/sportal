@@ -12,6 +12,7 @@ import { TestClock } from "effect/testing"
 import * as Database from "../database/Database.ts"
 import { HubConfig } from "../HubConfig.ts"
 import { Ingest } from "../ingest/Ingest.ts"
+import { LiveFeed } from "../provider/LiveFeed.ts"
 import { Provider } from "../provider/Provider.ts"
 import { Slate } from "../Slate.ts"
 import * as SqlChannelStore from "../source/SqlChannelStore.ts"
@@ -304,7 +305,8 @@ function hubUnderTest() {
     Layer.provide(Ingest.layer(["fbs"])),
     Layer.provide([
       Layer.succeed(Provider, Provider.of({ slate: () => Effect.succeed([game]) })),
-      TestCluster.gameActors
+      TestCluster.gameActors,
+      LiveFeed.none
     ]),
     Layer.provideMerge(testConfig())
   )

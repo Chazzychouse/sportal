@@ -4,6 +4,7 @@ import { GameActors } from "./GameActors.ts"
 import { HubConfig } from "./HubConfig.ts"
 import { Ingest } from "./ingest/Ingest.ts"
 import * as EspnProvider from "./provider/espn/EspnProvider.ts"
+import { LiveFeed } from "./provider/LiveFeed.ts"
 import { Slate } from "./Slate.ts"
 import * as ScenarioClock from "./scenario/ScenarioClock.ts"
 import * as ScenarioProvider from "./scenario/ScenarioProvider.ts"
@@ -30,7 +31,7 @@ const leagues = ["nfl", "fbs"] as const
 function live() {
   return Layer.mergeAll(
     Slate.layer.pipe(
-      Layer.provide(Ingest.layer(leagues).pipe(Layer.provide(EspnProvider.layer))),
+      Layer.provide(Ingest.layer(leagues).pipe(Layer.provide([EspnProvider.layer, LiveFeed.none]))),
       Layer.provide(gameActors())
     ),
     YouTubeTv.layer.pipe(Layer.provide(SqlChannelStore.layer))
@@ -41,7 +42,7 @@ function live() {
 function scripted(name: string, speed: number) {
   return Layer.mergeAll(
     Slate.layer.pipe(
-      Layer.provide(Ingest.layer(leagues).pipe(Layer.provide(ScenarioProvider.layer(name)))),
+      Layer.provide(Ingest.layer(leagues).pipe(Layer.provide([ScenarioProvider.layer(name), LiveFeed.none]))),
       Layer.provide(gameActors()),
       Layer.provide(ScenarioClock.layer(speed))
     ),
