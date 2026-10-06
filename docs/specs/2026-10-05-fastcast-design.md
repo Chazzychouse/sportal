@@ -94,7 +94,22 @@ Unchanged from the live-feed design, which was checked against the 2026-10-04 re
 
 | Question | Decision |
 | --- | --- |
-| The one change | `receive(snapshot, source: DeliverySource)`. The actor adds `source` to the `sportal.source` span attribute, the `sportal_snapshots` counter, and its Debug log. Nothing else about the actor changes; `LiveGame` does not know the source |
+| The one change | `receive(snapshot, source: DeliverySource)`. The actor adds `source` to the `sportal.source` span attribute, the `sportal_snapshots` counter, and its Debug log, and passes it to `LiveGame` (see ties, below) |
+
+### Ties between the feeds (added 2026-10-05, from the branch review)
+
+Many changes do not move the clock: a try after a touchdown, a timeout, a touchback, a pre-snap penalty. The push
+brings them first; the poll arrives 10–30 s later at the same game time with the old score or down. Taking every
+snapshot that is not behind made a game flicker back for up to one poll (13 → 14 → 13 → 14 after each try), and
+Watchability saw the score change twice.
+
+| Question | Decision |
+| --- | --- |
+| Who wins a tie | The push. `LiveGame` records which feed gave its snapshot (`from: DeliverySource`, which moves to the domain). A **polled** snapshot at the **same game time** as a **live** game whose snapshot was **pushed** is not taken: the live game keeps the pushed snapshot |
+| Staleness on a tie | The tied poll still refreshes `updatedAt`: it shows the game is being reported, and a game's push is silent for 150–240 s at every TV break, so without this every break would turn the game stale |
+| Everything else | Unchanged. A snapshot ahead in game time is taken from either feed; a pushed snapshot at the same game time is taken (an overturned score comes this way); a stale game takes the poll; a game only ever polled behaves exactly as today |
+| Known limit | If the push dies just after a change that does not move the clock, the poll's version of a *later* such change waits until the clock moves or the game goes stale. Accepted |
+| Telemetry | `sportal_snapshots` gains the outcome `kept` (a tied poll that refreshed a pushed snapshot), beside `taken` and `behind` |
 
 ### Scenarios and Hub mode
 
