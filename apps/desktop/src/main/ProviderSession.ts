@@ -1,6 +1,7 @@
 import { Context, Effect, FiberSet, Layer } from "effect"
 import { BrowserWindow, type Session, session, WebContentsView } from "electron"
 import { confine, hostOf, load } from "./Navigation.ts"
+import { allowedHosts, signInUrl } from "./YouTubeTv.ts"
 
 /**
  * The one persistent session every provider view shares, so one sign-in covers every tile and survives
@@ -97,8 +98,6 @@ export class ProviderSession extends Context.Service<
     )
 }
 
-const signInUrl = "https://tv.youtube.com/"
-
 /**
  * Provider views may visit the provider and its sign-in pages, and the web UI's own synthetic stream pages for a
  * scenario (`ui` is the address the shell loads the UI from).
@@ -111,8 +110,6 @@ export function allows(url: string, ui: string): boolean {
     return true
   return protocol === "https:" && allowedHosts.includes(hostname)
 }
-
-const allowedHosts = ["tv.youtube.com", "www.youtube.com", "accounts.youtube.com", "accounts.google.com"]
 
 /**
  * Playback needs DRM key systems, fullscreen, and a screen that stays awake; nothing else is granted.

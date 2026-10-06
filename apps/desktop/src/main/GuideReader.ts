@@ -15,6 +15,7 @@ import {
 } from "effect"
 import type { Session } from "electron"
 import { ProviderSession } from "./ProviderSession.ts"
+import { guideBrowseId, guideOrigin } from "./YouTubeTv.ts"
 
 /**
  * Reads YouTube TV's live guide with the guide's own request, sent as the signed-in account on the provider
@@ -77,11 +78,11 @@ class GuideNotRead extends Schema.TaggedError<GuideNotRead>()("GuideNotRead", { 
 /** Reads the guide page's client config, then sends the guide request it describes, signed as the account. */
 function readGuide(session: Session) {
   return Effect.gen(function* () {
-    const context = clientContext(yield* send(session, `${origin}/live`, {}))
+    const context = clientContext(yield* send(session, `${guideOrigin}/live`, {}))
     if (Option.isNone(context))
       return yield* Effect.fail(new GuideNotRead({ reason: "the guide page has no client config" }))
     const cookies = yield* Effect.tryPromise({
-      try: () => session.cookies.get({ url: origin, name: "SAPISID" }),
+      try: () => session.cookies.get({ url: guideOrigin, name: "SAPISID" }),
       catch: (cause) =>
         new GuideNotRead({ reason: `the session's cookies could not be read: ${String(cause)}` })
     })
@@ -90,21 +91,21 @@ function readGuide(session: Session) {
       return yield* Effect.fail(new GuideNotRead({ reason: "the session has no YouTube sign-in (SAPISID)" }))
     // YouTube's web clients sign each request with the time and the session's SAPISID, as the guide page does.
     const seconds = Math.floor((yield* Clock.currentTimeMillis) / 1000)
-    const signature = createHash("sha1").update(`${seconds} ${sapisid.value.value} ${origin}`).digest("hex")
-    return yield* send(session, `${origin}/youtubei/v1/browse?prettyPrint=false`, {
+    const signature = createHash("sha1")
+      .update(`${seconds} ${sapisid.value.value} ${guideOrigin}`)
+      .digest("hex")
+    return yield* send(session, `${guideOrigin}/youtubei/v1/browse?prettyPrint=false`, {
       method: "POST",
       headers: {
         "content-type": "application/json",
-        origin,
-        "x-origin": origin,
+        origin: guideOrigin,
+        "x-origin": guideOrigin,
         authorization: `SAPISIDHASH ${seconds}_${signature}`
       },
-      body: JSON.stringify({ context: context.value, browseId: "FEunplugged_epg" })
+      body: JSON.stringify({ context: context.value, browseId: guideBrowseId })
     })
   })
 }
-
-const origin = "https://tv.youtube.com"
 
 /** Sends one request on the session and reads its body. A failed request or a status outside 2xx is `GuideNotRead`. */
 function send(session: Session, url: string, init: RequestInit) {

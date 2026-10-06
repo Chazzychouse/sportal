@@ -6,6 +6,7 @@ import type { View, WebContentsView } from "electron"
 import { hostOf, load } from "./Navigation.ts"
 import { ProviderSession } from "./ProviderSession.ts"
 import { Transition } from "./Transition.ts"
+import { isChannelAddress } from "./YouTubeTv.ts"
 
 /**
  * Keeps one provider web view per game in a stream or guide tile, laid over the web UI at the rectangle the UI
@@ -222,12 +223,6 @@ type Entry = {
   bounds: Bounds
 }
 type Bounds = TilePlacement["bounds"]
-
-function isChannelAddress(url: string) {
-  if (!URL.canParse(url)) return false
-  const { protocol, hostname, pathname } = new URL(url)
-  return protocol === "https:" && hostname === "tv.youtube.com" && pathname.startsWith("/watch/")
-}
 
 function loadTile(view: WebContentsView, url: string) {
   return load(view.webContents, url).pipe(
