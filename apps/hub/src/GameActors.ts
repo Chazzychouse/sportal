@@ -1,4 +1,4 @@
-import { DeliverySource } from "@sportal/domain/Delivery"
+import { Delivery, DeliverySource } from "@sportal/domain/Delivery"
 import { GameId, GameSnapshot } from "@sportal/domain/Game"
 import type { GameEvent } from "@sportal/domain/GameEvent"
 import { LiveGame, LiveGameState } from "@sportal/domain/LiveGame"
@@ -198,7 +198,7 @@ const gameEntity = Game.toLayer(
             now,
             Option.match({
               onNone: () => Option.some(LiveGame.start(snapshot, source, now)),
-              onSome: (liveGame) => liveGame.receive(snapshot, source, now)
+              onSome: (liveGame) => liveGame.take(Delivery.Snapshot({ snapshot, from: source }), now).liveGame
             })
           )
           const outcome = Option.match(next, {
@@ -260,7 +260,7 @@ const gameEntity = Game.toLayer(
               const now = yield* DateTime.now
               yield* change(
                 now,
-                Option.flatMap((current) => current.tick(now))
+                Option.flatMap((current) => current.tick(now).liveGame)
               )
               return now
             }).pipe(Effect.repeat({ while: (now) => DateTime.isLessThan(now, staleAt) }), Effect.asVoid)

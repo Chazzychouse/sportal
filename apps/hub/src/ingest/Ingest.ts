@@ -70,7 +70,7 @@ export class Ingest extends Context.Service<
           yield* SubscriptionRef.set(listed, games)
           yield* Effect.annotateCurrentSpan({ "sportal.leagues": leagues, "sportal.failed_leagues": failed })
           const live = yield* gameActors.liveGames
-          return { slate: LiveGame.asActorsHaveThem(games, live), failed }
+          return { slate: LiveGame.asFolded(games, live), failed }
         }, Effect.trackDuration(pollDuration))
 
         yield* Effect.forkScoped(

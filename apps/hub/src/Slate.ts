@@ -34,7 +34,7 @@ export class Slate extends Context.Service<
         readonly watchability: ReadonlyArray<Watchability>
       }>({ slate: [], watchability: [] })
       yield* Effect.forkScoped(
-        Stream.zipLatestWith(ingest.listed, gameActors.changes, LiveGame.asActorsHaveThem).pipe(
+        Stream.zipLatestWith(ingest.listed, gameActors.changes, LiveGame.asFolded).pipe(
           Stream.debounce("250 millis"),
           Stream.runForEach((slate) =>
             DateTime.now.pipe(
