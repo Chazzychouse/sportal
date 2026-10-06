@@ -64,6 +64,8 @@ Every exported type name must be a term here.
 | **Channel store** | Where the Hub keeps the channel carriages it has learned. | channel repository |
 | **Channel store error** | The channel store could not read or write. | database error |
 | **Database** | The Hub's SQLite database. Each store migrates its own tables in it. | store, persistence |
+| **Feed log** | Every frame the feeds delivered, raw, in the order the Hub received it. The truth the Hub's game state is folded from. | event store, journal, recording |
+| **Frame** | One thing a feed delivered: a poll response, a FastCast message, or a FastCast checkpoint. | message, payload |
 | **Live channel URL** | A source's address for a channel, reduced to the one that plays it live. | canonical URL |
 | **Stream** | One playing instance of a game from a source. | feed, video |
 | **StreamLocator** | What a Display must load to play a stream. | URL, link |

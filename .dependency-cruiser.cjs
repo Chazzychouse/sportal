@@ -44,12 +44,13 @@ module.exports = {
     },
     {
       name: "only-main-opens-the-database",
-      comment: "The composition root provides the database; stores reach it through SqlClient.",
+      comment:
+        "The composition root provides the database; stores reach it through SqlClient. The feed log opens its own file.",
       severity: "error",
       from: {
         path: "^apps/hub/src/",
         pathNot:
-          "(^apps/hub/src/main\\.ts$|\\.test\\.ts$|^apps/hub/src/source/Sql[^/]+\\.ts$|^apps/hub/src/database/)"
+          "(^apps/hub/src/main\\.ts$|\\.test\\.ts$|^apps/hub/src/source/Sql[^/]+\\.ts$|^apps/hub/src/database/|^apps/hub/src/feed/FeedLog\\.ts$)"
       },
       to: { path: "^apps/hub/src/database/" }
     },
