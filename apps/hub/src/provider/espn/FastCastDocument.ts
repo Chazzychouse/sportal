@@ -55,10 +55,10 @@ export function batches(
 
 /** The scoreboard topic carrying `league`'s games. */
 export function topic(league: LeagueId): string {
-  return topics[league]
+  return topicByLeague[league]
 }
 
-const topics: { readonly [League in LeagueId]: string } = {
+const topicByLeague: { readonly [League in LeagueId]: string } = {
   nfl: "event-football-nfl",
   fbs: "event-football-college-football"
 }
