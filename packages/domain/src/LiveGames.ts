@@ -99,7 +99,7 @@ export type FoldReport = Data.TaggedEnum<{
   Changed: { readonly before: LiveGame; readonly after: LiveGame; readonly at: DateTime.Utc }
   Stopped: { readonly liveGame: LiveGame; readonly at: DateTime.Utc }
   Happened: { readonly snapshot: GameSnapshot; readonly event: GameEvent }
-  Dropped: { readonly game: GameId; readonly reason: "no game" }
+  Dropped: { readonly game: GameId }
   /** A step raised a defect; the game kept its last good live game. `snapshot` is the one at hand. */
   Raised: { readonly snapshot: GameSnapshot; readonly cause: Cause.Cause<never>; readonly by: string }
 }>
@@ -171,7 +171,7 @@ function applied(
           Effect.succeed({
             ...stepped,
             listed,
-            reports: [...stepped.reports, FoldReport.Dropped({ game: plays.game, reason: "no game" })]
+            reports: [...stepped.reports, FoldReport.Dropped({ game: plays.game })]
           }),
         onSome: (liveGame) =>
           guarded(stepped, liveGame.snapshot, "a delivery", () =>

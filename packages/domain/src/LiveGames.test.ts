@@ -84,7 +84,7 @@ describe("LiveGames", () => {
       )
       assert.strictEqual(next.live, LiveGames.empty.live)
       assert.strictEqual(next.listed, LiveGames.empty.listed)
-      assert.deepStrictEqual(reports, [FoldReport.Dropped({ game: one, reason: "no game" })])
+      assert.deepStrictEqual(reports, [FoldReport.Dropped({ game: one })])
     })
   )
 

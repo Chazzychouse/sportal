@@ -810,11 +810,11 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by (reason) (increase(sportal_deliveries_dropped_total[$__rate_interval]) * on (job, instance) group_left target_info{sportal_mode=\"$mode\"})",
-          "legendFormat": "{{reason}}"
+          "expr": "sum (increase(sportal_deliveries_dropped_total[$__rate_interval]) * on (job, instance) group_left target_info{sportal_mode=\"$mode\"})",
+          "legendFormat": "dropped"
         }
       ],
-      "description": "Deliveries the fold could not apply, by reason."
+      "description": "Plays the fold dropped, since no live game held their game."
     },
     {
       "id": 25,

@@ -99,7 +99,7 @@ export class GameSnapshot extends Schema.Class<GameSnapshot>("sportal/GameSnapsh
   }
 
   /** The status, period, and clock as one line, for a log. */
-  gameTime(): string {
+  statusLine(): string {
     return `${this.status}, period ${this.period}, ${this.clock}`
   }
 

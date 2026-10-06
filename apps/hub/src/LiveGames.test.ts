@@ -129,7 +129,7 @@ describe("LiveGames", () => {
     Effect.gen(function* () {
       yield* taken(Delivery.Plays({ game: one, plays: [play()] }))
       assert.strictEqual((yield* LiveGames.use((liveGames) => liveGames.latest)).live.size, 0)
-      assert.strictEqual(yield* counted("sportal_deliveries_dropped", { reason: "no game" }), 1)
+      assert.strictEqual(yield* counted("sportal_deliveries_dropped"), 1)
     }).pipe(Effect.provide(LiveGames.layer), withMetrics)
   )
 

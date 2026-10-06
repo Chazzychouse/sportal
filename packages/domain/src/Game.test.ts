@@ -74,10 +74,10 @@ describe("GameSnapshot.networks", () => {
   })
 })
 
-describe("GameSnapshot#gameTime", () => {
+describe("GameSnapshot#statusLine", () => {
   it("reads status, period, and clock", () => {
     assert.strictEqual(
-      snapshot({ status: "live", period: 3, clock: "4:12" }).gameTime(),
+      snapshot({ status: "live", period: 3, clock: "4:12" }).statusLine(),
       "live, period 3, 4:12"
     )
   })

@@ -29,14 +29,6 @@ export const decode: Provider["Service"]["decode"] = (frames) =>
     )
   )
 
-/** The snapshots in one ESPN scoreboard; an event that does not decode is skipped, logged, and counted. */
-function slateOf(
-  league: LeagueId,
-  scoreboard: typeof Scoreboard.Type
-): Effect.Effect<ReadonlyArray<GameSnapshot>> {
-  return gamesOf(league, scoreboard.events).pipe(Effect.withSpan("EspnDecode.slateOf"))
-}
-
 /** The site scoreboard as polled: its events, each read by `EspnEvent`. */
 const Scoreboard = Schema.Struct({ events: Schema.Array(Schema.Unknown) })
 
@@ -57,7 +49,7 @@ type Said = ReadonlyArray<Decoded>
 function listed(state: State, frame: Frame): Effect.Effect<readonly [State, Said]> {
   return Effect.all({ league: decodeLeague(frame.channel), scoreboard: decodeScoreboard(frame.body) }).pipe(
     Effect.flatMap(({ league, scoreboard }) =>
-      slateOf(league, scoreboard).pipe(
+      gamesOf(league, scoreboard.events).pipe(
         Effect.map(
           (games) =>
             [

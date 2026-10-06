@@ -25,9 +25,9 @@ export function reported(
   return FoldReport.$match(report, {
     Took: ({ snapshot, from, outcome, had }) =>
       Effect.logDebug(
-        `LiveGames: ${snapshot.matchup()}: ${outcome} ${from} ${snapshot.gameTime()}${Option.match(had, {
+        `LiveGames: ${snapshot.matchup()}: ${outcome} ${from} ${snapshot.statusLine()}${Option.match(had, {
           onNone: () => "",
-          onSome: (had) => ` (had ${had.gameTime()})`
+          onSome: (had) => ` (had ${had.statusLine()})`
         })}`
       ).pipe(
         Effect.andThen(
@@ -64,9 +64,9 @@ export function reported(
         Effect.andThen(PubSub.publish(events, happened)),
         Effect.annotateLogs(annotationsOf(happened.snapshot))
       ),
-    Dropped: ({ game, reason }) =>
-      Effect.logDebug(`LiveGames: plays for game ${game} dropped: ${reason}`).pipe(
-        Effect.andThen(Metric.update(Metric.withAttributes(deliveriesDropped, { reason }), 1))
+    Dropped: ({ game }) =>
+      Effect.logDebug(`LiveGames: plays for game ${game} dropped: no live game holds it`).pipe(
+        Effect.andThen(Metric.update(deliveriesDropped, 1))
       ),
     Raised: ({ snapshot, cause, by }) =>
       logDefect(`LiveGames: ${by} raised a defect; keeping the last good live game`, cause, snapshot, seq)
@@ -137,7 +137,7 @@ function logLifecycle(
   now: DateTime.Utc
 ): Effect.Effect<void> {
   return Effect.logWithLevel(liveGame.isCurrent(now) ? "Info" : "Debug")(
-    `LiveGames: ${liveGame.snapshot.matchup()}: ${what}, ${liveGame.state._tag} at ${liveGame.snapshot.gameTime()}`
+    `LiveGames: ${liveGame.snapshot.matchup()}: ${what}, ${liveGame.state._tag} at ${liveGame.snapshot.statusLine()}`
   )
 }
 
@@ -167,7 +167,7 @@ function logTransition(before: LiveGame, after: LiveGame, now: DateTime.Utc): Ef
     onSome: (duration) => `, ${Math.round(Duration.toSeconds(duration))} s since the last update`
   })
   return Effect.logInfo(
-    `LiveGames: ${after.snapshot.matchup()}: ${from} → ${to} at ${after.snapshot.gameTime()}${since}`
+    `LiveGames: ${after.snapshot.matchup()}: ${from} → ${to} at ${after.snapshot.statusLine()}${since}`
   ).pipe(
     Effect.andThen(Metric.update(Metric.withAttributes(transitions, { from, to }), 1)),
     Effect.andThen(
@@ -196,7 +196,7 @@ function logLull(liveGame: LiveGame): Effect.Effect<void> {
 function logEvent(event: GameEvent, snapshot: GameSnapshot): Effect.Effect<void> {
   const { _tag, ...fields } = event
   const team = "team" in event ? ` ${snapshot.abbreviationOf(event.team)}` : ""
-  return Effect.logInfo(`LiveGames: ${snapshot.matchup()}: ${_tag}${team} at ${snapshot.gameTime()}`).pipe(
+  return Effect.logInfo(`LiveGames: ${snapshot.matchup()}: ${_tag}${team} at ${snapshot.statusLine()}`).pipe(
     Effect.andThen(
       Metric.update(Metric.withAttributes(gameEvents, { ...annotationsOf(snapshot), event: _tag }), 1)
     ),
@@ -246,7 +246,7 @@ const snapshots = Metric.counter("sportal_snapshots", {
 const plays = Metric.counter("sportal_plays", { description: "New plays, by league", incremental: true })
 
 const deliveriesDropped = Metric.counter("sportal_deliveries_dropped", {
-  description: "Deliveries the fold could not apply, by reason",
+  description: "Plays the fold dropped, since no live game held their game",
   incremental: true
 })
 
