@@ -29,11 +29,11 @@ export class LiveGames extends Context.Service<
     take(delivery: Delivery, at: DateTime.Utc, seq: Option.Option<number>): Effect.Effect<void>
     /**
      * Runs `deliveries` through `take` with no per-game telemetry and no `events`, then sets each held game's gauges
-     * once and logs one summary line.
+     * once and logs one summary line. Returns how many deliveries it took.
      */
     replay(
       deliveries: Stream.Stream<{ delivery: Delivery; at: DateTime.Utc; seq: number }>
-    ): Effect.Effect<void>
+    ): Effect.Effect<number>
     readonly latest: Effect.Effect<Fold.LiveGames>
     /** The latest first, then each change. `reached` alone changing is not a change. */
     readonly changes: Stream.Stream<Fold.LiveGames>
@@ -137,6 +137,7 @@ export class LiveGames extends Context.Service<
           yield* Effect.logInfo(
             `LiveGames: replayed ${taken} deliveries, ${yield* Ref.get(plays)} plays; ${held.size} live games, in ${Duration.format(duration)}`
           )
+          return taken
         }, Semaphore.withPermit(replaying)),
         latest: SubscriptionRef.get(state),
         changes: SubscriptionRef.changes(state).pipe(Stream.changesWith((a, b) => a.publishesSameAs(b))),

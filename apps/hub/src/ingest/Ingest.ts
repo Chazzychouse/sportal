@@ -91,13 +91,10 @@ export const layer = (leagues: ReadonlyArray<LeagueId>) =>
         )
 
       const replay = Effect.fn("Ingest.replay")(function* () {
-        const deliveries = yield* Ref.make(0)
-        yield* liveGames.replay(
-          Stream.fromQueue(replayed).pipe(Stream.tap(() => Ref.update(deliveries, (count) => count + 1)))
-        )
+        const deliveries = yield* liveGames.replay(Stream.fromQueue(replayed))
         yield* Effect.annotateCurrentSpan({
           "sportal.frames": yield* Ref.get(frames),
-          "sportal.deliveries": yield* Ref.get(deliveries)
+          "sportal.deliveries": deliveries
         })
       })
       // Decoding that dies during the replay fails the layer, rather than leaving the replay waiting.

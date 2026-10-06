@@ -405,6 +405,26 @@ describe("Ingest", () => {
     }
   )
 
+  it.effect("replayed deliveries are counted once, on the Ingest.replay span", () => {
+    const ended: Array<Tracer.Span> = []
+    return Effect.gen(function* () {
+      yield* loggedBefore([
+        pollOf([liveSnapshot({ id: GameId.make("1") }), liveSnapshot({ id: GameId.make("2") })]),
+        pollOf([liveSnapshot({ id: GameId.make("1"), period: 2 })]),
+        pollOf([liveSnapshot({ id: GameId.make("1"), period: 3 })])
+      ])
+
+      yield* Effect.void.pipe(Effect.provide(over(scripted([]), { ended })))
+
+      const replay = ended.find((span) => span.name === "Ingest.replay")
+      assert.strictEqual(replay?.attributes.get("sportal.frames"), 3)
+      assert.strictEqual(replay?.attributes.get("sportal.deliveries"), 3)
+      const folded = ended.find((span) => span.name === "LiveGames.replay")
+      assert.isDefined(folded)
+      assert.isFalse(folded?.attributes.has("sportal.deliveries"))
+    }).pipe(Effect.provide([TestDatabase.layer(":memory:"), NodeCrypto.layer]))
+  })
+
   it.effect("a frame appended the moment the replay ends, before anything else runs, reaches the fold", () =>
     Effect.gen(function* () {
       yield* loggedBefore([pollOf([liveSnapshot({ id: GameId.make("1"), period: 2 })])])

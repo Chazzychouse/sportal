@@ -641,6 +641,25 @@ describe("LiveGames", () => {
       }
     )
 
+    it.effect("replay returns the number of deliveries it took", () =>
+      Effect.gen(function* () {
+        const start = yield* DateTime.now
+        const taken = yield* LiveGames.use((liveGames) =>
+          liveGames.replay(
+            Stream.make(
+              {
+                delivery: Delivery.Snapshot({ snapshot: liveSnapshot({ id: one }), from: "poll" }),
+                at: start,
+                seq: 1
+              },
+              { delivery: Delivery.Plays({ game: one, plays: [play()] }), at: start, seq: 2 }
+            )
+          )
+        )
+        assert.strictEqual(taken, 2)
+      }).pipe(Effect.provide(LiveGames.layer))
+    )
+
     it.effect("replay applies recorded times, and the timer waits until it ends", () =>
       Effect.gen(function* () {
         const liveGames = yield* LiveGames
