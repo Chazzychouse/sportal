@@ -14,6 +14,7 @@ import { GameStatus } from "../game/GameStatus.tsx"
 import { scoreline } from "../game/Score.tsx"
 import { TeamLogo } from "../game/TeamLogo.tsx"
 import { dispatch } from "../hub/HubClient.ts"
+import { runtime } from "../hub/HubRuntime.ts"
 import { LayoutGlyph, layoutLabel } from "../layout/LayoutGlyph.tsx"
 import { tileActions } from "../stage/TileActions.tsx"
 
@@ -28,7 +29,7 @@ export function CommandPalette(props: {
   onKeys: () => void
 }) {
   const run = (command: StageCommand) => {
-    dispatch(command)
+    runtime.runFork(dispatch(command))
     props.onOpenChange(false)
   }
   const gameOn = (id: GameId) => props.slate.find((game) => game.id === id)

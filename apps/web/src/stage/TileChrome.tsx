@@ -6,6 +6,7 @@ import { cn } from "@/design/ClassName"
 import { GameStatus } from "../game/GameStatus.tsx"
 import { Score } from "../game/Score.tsx"
 import { dispatch } from "../hub/HubClient.ts"
+import { runtime } from "../hub/HubRuntime.ts"
 import { tileActions } from "./TileActions.tsx"
 import { tileHeader } from "./TileRects.ts"
 
@@ -34,7 +35,8 @@ export function TileChrome(props: {
       }}
       onDrop={(event) => {
         const from = Number(event.dataTransfer.getData(tileDrag))
-        if (Number.isInteger(from) && from !== slot) dispatch({ _tag: "Swap", a: from, b: slot })
+        if (Number.isInteger(from) && from !== slot)
+          runtime.runFork(dispatch({ _tag: "Swap", a: from, b: slot }))
       }}
       style={{ height: tileHeader }}
       className={`flex shrink-0 items-center gap-2 border-b px-1.5 text-xs ${
@@ -88,7 +90,7 @@ export function TileChrome(props: {
               action.id === "hear" && onAir && "text-on-air",
               action.id === "clear" && "hover:text-destructive"
             )}
-            onClick={() => dispatch(action.command)}
+            onClick={() => runtime.runFork(dispatch(action.command))}
           >
             {action.icon}
           </Button>

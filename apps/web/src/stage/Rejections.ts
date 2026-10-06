@@ -1,11 +1,22 @@
 import type { StageRejection } from "@sportal/domain/Stage"
+import { Effect, Fiber, Stream } from "effect"
 import { useEffect } from "react"
 import { toast } from "sonner"
-import { onStageRejected } from "../hub/HubClient.ts"
+import { stageRejections } from "../hub/HubClient.ts"
+import { runtime } from "../hub/HubRuntime.ts"
 
 /** Shows each stage command the Hub refuses as a warning toast, saying why. */
 export function useRejectionToasts() {
-  useEffect(() => onStageRejected((reason) => toast.warning(rejectionText(reason))), [])
+  useEffect(() => {
+    const fiber = runtime.runFork(
+      stageRejections.pipe(
+        Stream.runForEach((rejection) => Effect.sync(() => toast.warning(rejectionText(rejection.reason))))
+      )
+    )
+    return () => {
+      runtime.runFork(Fiber.interrupt(fiber))
+    }
+  }, [])
 }
 
 function rejectionText(reason: StageRejection["reason"]): string {

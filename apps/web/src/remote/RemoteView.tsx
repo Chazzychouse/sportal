@@ -7,7 +7,7 @@ import { BrandMark, ConnectionPill } from "../display/Masthead.tsx"
 import { GameStatus } from "../game/GameStatus.tsx"
 import { Score } from "../game/Score.tsx"
 import { dispatch } from "../hub/HubClient.ts"
-import { useLive } from "../hub/LiveStream.ts"
+import { runtime, useLive } from "../hub/HubRuntime.ts"
 import { LayoutPicker } from "../layout/LayoutPicker.tsx"
 import { PlaceBadge } from "../slate/PlaceBadge.tsx"
 import { StripCard } from "../slate/StripCards.ts"
@@ -36,11 +36,11 @@ export function RemoteView() {
       <div className="sticky top-0 z-10 flex flex-col gap-2 border-b bg-background/95 px-3 pt-[max(0.75rem,env(safe-area-inset-top))] pb-3 backdrop-blur">
         <header className="flex items-center gap-2">
           <BrandMark />
-          <ConnectionPill connected={live.connected} />
+          <ConnectionPill connection={live.connection} />
           {live.stage.solo !== undefined && (
             <button
               type="button"
-              onClick={() => dispatch({ _tag: "Unsolo" })}
+              onClick={() => runtime.runFork(dispatch({ _tag: "Unsolo" }))}
               className="label-caps ml-auto flex min-h-9 items-center gap-1 rounded-sm border px-2 text-[11px]"
             >
               <Shrink className="size-3.5" />

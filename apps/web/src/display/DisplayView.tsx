@@ -2,7 +2,7 @@ import type { Hotkey } from "@sportal/api/Hotkey"
 import { useState } from "react"
 import { Toaster } from "@/design/sonner"
 import { dispatch } from "../hub/HubClient.ts"
-import { useLive } from "../hub/LiveStream.ts"
+import { runtime, useLive } from "../hub/HubRuntime.ts"
 import { JoinRemote } from "../remote/JoinRemote.tsx"
 import { SlateView } from "../slate/SlateView.tsx"
 import { StripCard } from "../slate/StripCards.ts"
@@ -21,7 +21,7 @@ export function useDisplay() {
   const [display, set] = useState(Display.initial)
   const run = (step: DisplayStep) => {
     set(step.display)
-    for (const command of step.commands) dispatch(command)
+    for (const command of step.commands) runtime.runFork(dispatch(command))
   }
   return { display, run, set }
 }
@@ -48,7 +48,7 @@ export function DisplayView() {
         {fullScreen.on ? null : (
           <TopBar
             stage={live.stage}
-            connected={live.connected}
+            connection={live.connection}
             fullScreen={fullScreen}
             slate={{
               open: display.slateOpen,
@@ -66,7 +66,7 @@ export function DisplayView() {
         <StageView
           stage={live.stage}
           slate={live.slate}
-          connected={live.connected}
+          connection={live.connection}
           selected={selected}
           interacting={display.interactingOn(live.stage)}
           onSelect={(slot) => run(display.select(slot, live.stage))}

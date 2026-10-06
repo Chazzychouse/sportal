@@ -1,9 +1,10 @@
+import type { LiveMessage } from "@sportal/api/LiveMessage"
+import type { GameId } from "@sportal/domain/Game"
 import type { Stage } from "@sportal/domain/Stage"
 import { Fragment, useEffect, useRef } from "react"
 import type { Display, DisplayStep } from "../display/Display.ts"
 import { GameStatus } from "../game/GameStatus.tsx"
 import { Score } from "../game/Score.tsx"
-import type { useLive } from "../hub/LiveStream.ts"
 import { tileDrag } from "../stage/TileChrome.tsx"
 import { PlaceBadge } from "./PlaceBadge.tsx"
 import type { StripCard } from "./StripCards.ts"
@@ -17,7 +18,10 @@ export function SlateView(props: {
   cards: ReadonlyArray<StripCard>
   display: Display
   stage: Stage
-  watchability: ReturnType<typeof useLive>["watchability"]
+  watchability: ReadonlyMap<
+    GameId,
+    Extract<LiveMessage, { _tag: "SlateChanged" }>["slate"][number]["watchability"]
+  >
   onDrop: (dropped: DisplayStep) => void
 }) {
   const pick = props.display.pick
@@ -90,7 +94,7 @@ function Card(props: {
   card: StripCard
   picked: boolean
   droppable: boolean
-  watch: ReturnType<ReturnType<typeof useLive>["watchability"]["get"]>
+  watch: Extract<LiveMessage, { _tag: "SlateChanged" }>["slate"][number]["watchability"] | undefined
   onDrop: () => void
 }) {
   const { game, place } = props.card

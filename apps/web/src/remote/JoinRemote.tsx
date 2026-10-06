@@ -3,6 +3,7 @@ import { useEffect, useState } from "react"
 import { encode } from "uqr"
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/design/dialog"
 import { hostAddresses } from "../hub/HubClient.ts"
+import { runtime } from "../hub/HubRuntime.ts"
 
 /**
  * How a phone joins as a Remote: a QR code for this page's port on one of the machine's home-network addresses,
@@ -17,7 +18,7 @@ export function JoinRemote(props: { open: boolean; onOpenChange: (open: boolean)
     if (!props.open) return
     setChosen(0)
     setAddresses(undefined)
-    void hostAddresses().then(setAddresses)
+    void runtime.runPromise(hostAddresses).then(setAddresses)
   }, [props.open])
 
   const port = window.location.port === "" ? "" : `:${window.location.port}`

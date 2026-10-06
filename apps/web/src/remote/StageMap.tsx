@@ -6,6 +6,7 @@ import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/design/shee
 import { GameStatus } from "../game/GameStatus.tsx"
 import { Score, scoreline } from "../game/Score.tsx"
 import { dispatch } from "../hub/HubClient.ts"
+import { runtime } from "../hub/HubRuntime.ts"
 import { tileActions } from "../stage/TileActions.tsx"
 
 /**
@@ -29,12 +30,12 @@ export function StageMap(props: {
   }
   const selectedGame = gameIn(props.selected)
   const run = (command: StageCommand) => {
-    dispatch(command)
+    runtime.runFork(dispatch(command))
     setActions(false)
   }
   const tap = (slot: number) => {
     if (swapFrom !== undefined) {
-      if (slot !== swapFrom) dispatch({ _tag: "Swap", a: swapFrom, b: slot })
+      if (slot !== swapFrom) runtime.runFork(dispatch({ _tag: "Swap", a: swapFrom, b: slot }))
       setSwapFrom(undefined)
       return props.onSelect(slot)
     }

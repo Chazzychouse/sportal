@@ -1,19 +1,116 @@
-import { assert, describe, it } from "@effect/vitest"
+import { afterEach, assert, beforeEach, describe, it } from "@effect/vitest"
+import { LiveMessageJson } from "@sportal/api/LiveMessage"
 import { Stage } from "@sportal/domain/Stage"
-import { disconnected, reduce } from "./LiveStream.ts"
+import { Effect, Schema, Stream, SubscriptionRef } from "effect"
+import { vi } from "vitest"
+import { LiveStream } from "./LiveStream.ts"
 
-describe("Live.reduce", () => {
-  it("replaces the stage and keeps the slate", () => {
-    const stage = new Stage({ ...Stage.initial, layout: "Pair" })
-    const next = reduce(disconnected, { _tag: "StageChanged", stage })
-    assert.strictEqual(next.stage.layout, "Pair")
-    assert.strictEqual(next.slate, disconnected.slate)
+describe("LiveStream", () => {
+  beforeEach(() => {
+    FakeEventSource.opened = []
+    vi.stubGlobal("EventSource", FakeEventSource)
+  })
+  afterEach(() => {
+    vi.unstubAllGlobals()
   })
 
-  it("replaces the slate and keeps the stage", () => {
-    const next = reduce(disconnected, { _tag: "SlateChanged", slate: [] })
-    assert.deepStrictEqual(next.slate, [])
-    assert.strictEqual(next.watchability.size, 0)
-    assert.strictEqual(next.stage, disconnected.stage)
-  })
+  it.effect("is connecting before the stream first opens, even after an error", () =>
+    Effect.gen(function* () {
+      const live = yield* LiveStream
+      const source = yield* opened()
+      assert.strictEqual((yield* SubscriptionRef.get(live)).connection._tag, "Connecting")
+      source.onerror?.()
+      source.onmessage?.({ data: message({ _tag: "StageChanged", stage: pair }) })
+      const after = yield* until(live, (state) => state.stage.layout === "Pair")
+      assert.strictEqual(after.connection._tag, "Connecting")
+    }).pipe(Effect.provide(LiveStream.layer))
+  )
+
+  it.effect("is connected once open, lost after an error, and connected again when it reopens", () =>
+    Effect.gen(function* () {
+      const live = yield* LiveStream
+      const source = yield* opened()
+      source.onopen?.()
+      yield* until(live, (state) => state.connection._tag === "Connected")
+      source.onerror?.()
+      yield* until(live, (state) => state.connection._tag === "Lost")
+      source.onerror?.()
+      source.onopen?.()
+      yield* until(live, (state) => state.connection._tag === "Connected")
+    }).pipe(Effect.provide(LiveStream.layer))
+  )
+
+  it.effect("replaces the stage and the slate from their messages", () =>
+    Effect.gen(function* () {
+      const live = yield* LiveStream
+      const source = yield* opened()
+      source.onmessage?.({ data: message({ _tag: "StageChanged", stage: pair }) })
+      source.onmessage?.({ data: message({ _tag: "SlateChanged", slate: [] }) })
+      const state = yield* until(live, (current) => current.stage.layout === "Pair")
+      assert.deepStrictEqual(state.slate, [])
+      assert.strictEqual(state.watchability.size, 0)
+    }).pipe(Effect.provide(LiveStream.layer))
+  )
+
+  it.effect("skips a malformed message and keeps reading", () =>
+    Effect.gen(function* () {
+      const live = yield* LiveStream
+      const source = yield* opened()
+      source.onopen?.()
+      const before = yield* until(live, (state) => state.connection._tag === "Connected")
+      source.onmessage?.({ data: "{not json" })
+      source.onmessage?.({ data: JSON.stringify({ _tag: "StageChanged", stage: "nope" }) })
+      source.onmessage?.({ data: message({ _tag: "StageChanged", stage: pair }) })
+      const after = yield* until(live, (state) => state.stage.layout === "Pair")
+      assert.strictEqual(after.connection, before.connection)
+      assert.strictEqual(after.slate, before.slate)
+      assert.strictEqual(after.watchability, before.watchability)
+    }).pipe(Effect.provide(LiveStream.layer))
+  )
+
+  it.effect("opens /api/live and closes it when the runtime goes", () =>
+    Effect.gen(function* () {
+      const source = yield* Effect.scoped(Effect.provide(opened(), LiveStream.layer))
+      assert.strictEqual(source.url, "/api/live")
+      assert.isTrue(source.closed)
+    })
+  )
 })
+
+const pair = new Stage({ ...Stage.initial, layout: "Pair" })
+const message = Schema.encodeSync(LiveMessageJson)
+
+function until<A>(live: SubscriptionRef.SubscriptionRef<A>, predicate: (state: A) => boolean) {
+  return SubscriptionRef.changes(live).pipe(
+    Stream.filter(predicate),
+    Stream.runHead,
+    Effect.flatMap(Effect.fromOption)
+  )
+}
+
+/** The EventSource the live stream opened, once its fiber has started. */
+function opened(): Effect.Effect<FakeEventSource> {
+  return Effect.suspend(() => {
+    const last = FakeEventSource.opened.at(-1)
+    return last === undefined ? Effect.yieldNow.pipe(Effect.flatMap(opened)) : Effect.succeed(last)
+  })
+}
+
+class FakeEventSource {
+  static opened: Array<FakeEventSource> = []
+  onopen: (() => void) | null = null
+  onerror: (() => void) | null = null
+  onmessage: ((event: { data: unknown }) => void) | null = null
+  closed = false
+
+  readonly url: string
+
+  constructor(url: string) {
+    this.url = url
+    FakeEventSource.opened.push(this)
+  }
+
+  close() {
+    this.closed = true
+  }
+}

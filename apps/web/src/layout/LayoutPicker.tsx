@@ -2,6 +2,7 @@ import { Layout, LayoutName } from "@sportal/domain/Layout"
 import { cn } from "@/design/ClassName"
 import { ToggleGroup, ToggleGroupItem } from "@/design/toggle-group"
 import { dispatch } from "../hub/HubClient.ts"
+import { runtime } from "../hub/HubRuntime.ts"
 import { LayoutGlyph, layoutLabel } from "./LayoutGlyph.tsx"
 
 /**
@@ -16,7 +17,7 @@ export function LayoutPicker(props: { current: LayoutName; fill?: boolean }) {
       value={props.current}
       onValueChange={(value) => {
         const layout = LayoutName.literals.find((name) => name === value)
-        if (layout !== undefined) dispatch({ _tag: "SetLayout", layout })
+        if (layout !== undefined) runtime.runFork(dispatch({ _tag: "SetLayout", layout }))
       }}
       aria-label="Layout"
       className={props.fill === true ? "w-full justify-between" : undefined}

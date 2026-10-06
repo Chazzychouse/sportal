@@ -6,6 +6,8 @@ import { Option } from "effect"
 import { useEffect, useLayoutEffect, useRef, useState } from "react"
 import { useVideoAreas } from "../display/OverlayHost.tsx"
 import { dispatch, forgetChannel, learnChannel, markNotCarried, sendGuide } from "../hub/HubClient.ts"
+import { runtime } from "../hub/HubRuntime.ts"
+import type { Connection } from "../hub/LiveStream.ts"
 import { Dividers } from "./Dividers.tsx"
 import { TileBody } from "./TileBody.tsx"
 import { TileChrome } from "./TileChrome.tsx"
@@ -18,7 +20,7 @@ import { placements, tileRects } from "./TileRects.ts"
 export function StageView(props: {
   stage: Stage
   slate: ReadonlyArray<GameSnapshot>
-  connected: boolean
+  connection: Connection
   selected: number
   interacting: GameId | undefined
   onSelect: (tile: number) => void
@@ -58,7 +60,9 @@ export function StageView(props: {
       )
       const tile = props.stage.tiles[index]
       if (tile?._tag === "PickingChannel")
-        void learnChannel(tile.network, pick.url).then((failure) => setNotices(noticed(index, failure)))
+        void runtime
+          .runPromise(learnChannel(tile.network, pick.url))
+          .then((failure) => setNotices(noticed(index, failure)))
     })
   }, [props.stage])
 
@@ -72,13 +76,20 @@ export function StageView(props: {
     [props.stage, props.onSelect]
   )
 
+  const connected = props.connection._tag === "Connected"
   // Listening first, then asking: the shell's first read waits for the web UI to ask.
-  useEffect(() => window.sportalShell?.onGuideRead(sendGuide), [])
+  useEffect(
+    () =>
+      window.sportalShell?.onGuideRead((guide) => {
+        runtime.runFork(sendGuide(guide))
+      }),
+    []
+  )
 
   useEffect(() => {
     // Asked again whenever the Hub comes back, since a guide read while it was away was lost.
-    if (props.connected) window.sportalShell?.readGuide()
-  }, [props.connected])
+    if (connected) window.sportalShell?.readGuide()
+  }, [connected])
 
   return (
     <main ref={areaRef} className="relative min-h-0 overflow-hidden bg-background">
@@ -122,7 +133,9 @@ export function StageView(props: {
                   type="button"
                   className="shrink-0 text-muted-foreground hover:text-foreground"
                   onClick={() =>
-                    void markNotCarried(tile.network).then((failure) => setNotices(noticed(index, failure)))
+                    void runtime
+                      .runPromise(markNotCarried(tile.network))
+                      .then((failure) => setNotices(noticed(index, failure)))
                   }
                 >
                   Not on {tile.source}
@@ -135,7 +148,9 @@ export function StageView(props: {
                   onClick={() => {
                     const network = tile.learnedFor
                     if (network !== undefined)
-                      void forgetChannel(network).then((failure) => setNotices(noticed(index, failure)))
+                      void runtime
+                        .runPromise(forgetChannel(network))
+                        .then((failure) => setNotices(noticed(index, failure)))
                   }}
                 >
                   wrong channel
@@ -156,7 +171,7 @@ export function StageView(props: {
           onDrag={setDragged}
           onDrop={(split) => {
             setDragged(undefined)
-            dispatch({ _tag: "SetSplit", split })
+            runtime.runFork(dispatch({ _tag: "SetSplit", split }))
           }}
         />
       )}

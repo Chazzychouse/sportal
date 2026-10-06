@@ -1,8 +1,9 @@
+import type { LiveMessage } from "@sportal/api/LiveMessage"
 import type { GameId, GameSnapshot } from "@sportal/domain/Game"
 import { useEffect } from "react"
 import { statusText } from "./game/GameStatus.tsx"
 import { TeamLogo } from "./game/TeamLogo.tsx"
-import { useLive } from "./hub/LiveStream.ts"
+import { useLive } from "./hub/HubRuntime.ts"
 
 /**
  * A scenario's stream of one game, in place of a provider's player: the game's live state from the Hub over a
@@ -10,7 +11,7 @@ import { useLive } from "./hub/LiveStream.ts"
  * heard moving. The shell mutes it like any stream.
  */
 export function ScenarioStream(props: { game: GameId }) {
-  const { slate, watchability, connected } = useLive()
+  const { slate, watchability, connection } = useLive()
   const game = slate.find((candidate) => candidate.id === props.game)
   useTone(props.game)
   return (
@@ -26,7 +27,7 @@ export function ScenarioStream(props: { game: GameId }) {
       />
       {game === undefined ? (
         <p className="relative grid h-full place-items-center font-mono text-[4vmin]">
-          {connected ? `No game ${props.game} in this scenario` : "Waiting for the Hub"}
+          {connection._tag === "Connected" ? `No game ${props.game} in this scenario` : "Waiting for the Hub"}
         </p>
       ) : (
         <Scorebug game={game} watch={watchability.get(game.id)} />
@@ -57,7 +58,7 @@ function useTone(game: GameId) {
 
 function Scorebug(props: {
   game: GameSnapshot
-  watch: ReturnType<ReturnType<typeof useLive>["watchability"]["get"]>
+  watch: Extract<LiveMessage, { _tag: "SlateChanged" }>["slate"][number]["watchability"] | undefined
 }) {
   const { game } = props
   const situation = game.situation

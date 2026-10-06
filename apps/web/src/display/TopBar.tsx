@@ -1,13 +1,14 @@
 import type { Stage } from "@sportal/domain/Stage"
 import { Expand, Keyboard, List, LogIn, Minimize2, Shrink, Smartphone, SquareDashed } from "lucide-react"
 import { Button } from "@/design/button"
+import type { Connection } from "../hub/LiveStream.ts"
 import { LayoutPicker } from "../layout/LayoutPicker.tsx"
 import { BrandMark, ConnectionPill } from "./Masthead.tsx"
 
 /** The strip across the top of a Display: the slate, layout, solo, full screen, and whether the Hub is live. */
 export function TopBar(props: {
   stage: Stage
-  connected: boolean
+  connection: Connection
   fullScreen: { on: boolean; toggle: () => void }
   slate: { open: boolean; live: number; toggle: () => void }
   solo: { enabled: boolean; toggle: () => void }
@@ -65,7 +66,7 @@ export function TopBar(props: {
             YouTube TV
           </Button>
         )}
-        <ConnectionPill connected={props.connected} />
+        <ConnectionPill connection={props.connection} />
         <Button
           variant="ghost"
           size="icon-sm"
