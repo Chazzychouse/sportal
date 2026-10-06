@@ -1,7 +1,8 @@
 import { assert, describe, it } from "@effect/vitest"
 import { DateTime } from "effect"
 import { GameId, GameSnapshot, type GameStatus } from "./Game.ts"
-import { snapshot, team } from "./TestGame.ts"
+import { Situation } from "./Situation.ts"
+import { broadcast, snapshot, team } from "./TestGame.ts"
 
 describe("GameSnapshot.progress", () => {
   it.each([
@@ -103,3 +104,53 @@ describe("GameSnapshot.watchOrder", () => {
 function game(id: string, status: GameStatus, kickoff: string) {
   return snapshot({ id: GameId.make(id), status, kickoff: DateTime.makeUnsafe(kickoff) })
 }
+
+describe("GameSnapshot#advancedTo", () => {
+  const situation = new Situation({
+    isRedZone: true,
+    homeTimeouts: 2,
+    awayTimeouts: 3,
+    lastPlay: "Pass complete"
+  })
+  const polled = snapshot({
+    home: { team: team("HOME", "fbs", { shortName: "Home" }), score: 0, ranking: 5 },
+    away: { team: team("AWAY", "fbs", { shortName: "Away" }), score: 0, ranking: 12 },
+    broadcasts: [broadcast("CBS")]
+  })
+  const pushed = snapshot({
+    status: "live",
+    period: 3,
+    clock: "7:45",
+    home: { team: team("HOME", "fbs", { shortName: "Pushed Home" }), score: 14 },
+    away: { team: team("AWAY", "fbs", { shortName: "Pushed Away" }), score: 10 },
+    situation
+  })
+  const advanced = polled.advancedTo(pushed)
+
+  it("takes the later status, period, clock, scores, and situation", () => {
+    assert.strictEqual(advanced.status, "live")
+    assert.strictEqual(advanced.period, 3)
+    assert.strictEqual(advanced.clock, "7:45")
+    assert.strictEqual(advanced.home.score, 14)
+    assert.strictEqual(advanced.away.score, 10)
+    assert.deepStrictEqual(advanced.situation, situation)
+  })
+
+  it("keeps its own teams, rankings, kickoff, and broadcasts", () => {
+    assert.strictEqual(advanced.home.team.shortName, "Home")
+    assert.strictEqual(advanced.away.team.shortName, "Away")
+    assert.strictEqual(advanced.home.ranking, 5)
+    assert.strictEqual(advanced.away.ranking, 12)
+    assert.isTrue(DateTime.Equivalence(advanced.kickoff, polled.kickoff))
+    assert.deepStrictEqual(advanced.broadcasts, polled.broadcasts)
+  })
+
+  it("has no situation when the later snapshot has none", () => {
+    const result = polled.advancedTo(snapshot({ status: "final", period: 4 }))
+    assert.isFalse("situation" in result)
+  })
+
+  it("is at the later snapshot's game time", () => {
+    assert.strictEqual(GameSnapshot.gameTime(advanced, pushed), 0)
+  })
+})

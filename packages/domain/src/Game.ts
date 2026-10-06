@@ -83,6 +83,22 @@ export class GameSnapshot extends Schema.Class<GameSnapshot>("sportal/GameSnapsh
     return `${this.away.team.abbreviation} at ${this.home.team.abbreviation}`
   }
 
+  /**
+   * This game moved on to `later`'s status, period, clock, scores, and situation, keeping its own teams, rankings,
+   * kickoff, and broadcasts.
+   */
+  advancedTo(later: GameSnapshot): GameSnapshot {
+    return new GameSnapshot({
+      ...later,
+      id: this.id,
+      league: this.league,
+      kickoff: this.kickoff,
+      broadcasts: this.broadcasts,
+      home: { ...this.home, score: later.home.score },
+      away: { ...this.away, score: later.away.score }
+    })
+  }
+
   /** Seconds left in the period, from the clock ("2:10"). An unreadable clock reads as a full quarter. */
   secondsLeft(): number {
     const [minutes, seconds] = this.clock.split(":").map((part) => Number.parseInt(part, 10))
