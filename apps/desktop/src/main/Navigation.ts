@@ -39,7 +39,7 @@ export function hostOf(url: string) {
 }
 
 /** Loads an address into a page; a failed load fails with Electron's error code, never its message. */
-export function load(contents: WebContents, url: string) {
+export function load(contents: Pick<WebContents, "loadURL">, url: string) {
   return Effect.tryPromise({
     try: () => contents.loadURL(url),
     catch: (error) => new LoadFailed({ code: loadErrorCode(error) })
@@ -48,9 +48,8 @@ export function load(contents: WebContents, url: string) {
 
 /**
  * The code Electron attaches to a failed load (such as `ERR_ABORTED`); the message would carry the full URL.
- * @testonly
  */
-export function loadErrorCode(error: unknown) {
+function loadErrorCode(error: unknown) {
   return error instanceof Error && "code" in error && typeof error.code === "string" ? error.code : "unknown"
 }
 

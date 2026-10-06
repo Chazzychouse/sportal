@@ -1,7 +1,7 @@
 import { Hotkey } from "@sportal/api/Hotkey"
-import type { ChannelPick, StageTransition, TilePlacement } from "@sportal/api/ShellBridge"
+import type { ChannelPick, StageTransition, TileBounds, TilePlacement } from "@sportal/api/ShellBridge"
 import type { GameId } from "@sportal/domain/Game"
-import { Clock, Context, Effect, FiberHandle, Layer, PubSub, Stream } from "effect"
+import { Clock, Context, Data, Effect, FiberHandle, Layer, Option, PubSub, Stream } from "effect"
 import type { View, WebContentsView } from "electron"
 import { hostOf, load } from "./Navigation.ts"
 import { ProviderSession } from "./ProviderSession.ts"
@@ -55,7 +55,7 @@ export class TileViews extends Context.Service<
         const showWhereDue = () => {
           for (const [game, { view }] of views) view.setVisible(!hidden.has(game) && !arriving.has(game))
         }
-        const place = (entry: Entry, bounds: Bounds) => {
+        const place = (entry: Entry, bounds: TileBounds) => {
           entry.bounds = bounds
           entry.view.setBounds(bounds)
         }
@@ -74,25 +74,24 @@ export class TileViews extends Context.Service<
         const create = Effect.fn("TileViews.create")(function* (game: GameId) {
           const entry: Entry = {
             view: yield* providers.createView,
-            url: "",
-            role: "stream",
-            interactive: false,
-            reported: "",
+            url: Option.none(),
+            role: Role.Stream({ interactive: false }),
             bounds: { x: 0, y: 0, width: 0, height: 0 }
           }
           // YouTube TV moves between pages with pushState, which fires did-navigate-in-page, not will-navigate.
           const landed = (url: string) => {
             // A view removed in a sync stays silent, even if its page navigates before it closes.
             if (views.get(game) !== entry) return
-            if (entry.role !== "guide") return
+            const role = entry.role
+            if (role._tag !== "Guide") return
             // Leaving a channel address forgets it, so a refused pick can be retried with the same channel.
             // Only the same address arriving twice in a row (did-navigate, then did-navigate-in-page) is a repeat.
             if (!isChannelAddress(url)) {
-              entry.reported = ""
+              entry.role = Role.Guide({ reported: Option.none() })
               return
             }
-            if (url === entry.reported) return
-            entry.reported = url
+            if (Option.contains(role.reported, url)) return
+            entry.role = Role.Guide({ reported: Option.some(url) })
             PubSub.publishUnsafe(picks, { game, url })
           }
           entry.view.webContents.on("did-navigate", (_event, url) => landed(url))
@@ -101,7 +100,7 @@ export class TileViews extends Context.Service<
           })
           // A guide view gets every key, so its search box keeps working.
           entry.view.webContents.on("before-input-event", (event, input) => {
-            if (views.get(game) !== entry || entry.role !== "stream" || input.type !== "keyDown") return
+            if (views.get(game) !== entry || entry.role._tag !== "Stream" || input.type !== "keyDown") return
             const hotkey = Hotkey.of(input, "stream")
             if (hotkey === undefined) return
             event.preventDefault()
@@ -109,7 +108,7 @@ export class TileViews extends Context.Service<
           })
           // YouTube TV shows its title and controls whenever the pointer moves over a player.
           entry.view.webContents.on("before-mouse-event", (event, mouse) => {
-            if (views.get(game) !== entry || entry.role !== "stream" || entry.interactive) return
+            if (views.get(game) !== entry || entry.role._tag !== "Stream" || entry.role.interactive) return
             event.preventDefault()
             if (mouse.type === "mouseDown" && mouse.button === "left") PubSub.publishUnsafe(presses, game)
           })
@@ -137,7 +136,7 @@ export class TileViews extends Context.Service<
             arriving.delete(game)
           }
 
-          const moves: Array<{ entry: Entry; from: Bounds; to: Bounds }> = []
+          const moves: Array<{ entry: Entry; from: TileBounds; to: TileBounds }> = []
           for (const placement of permitted) {
             let entry = views.get(placement.game)
             if (entry === undefined) {
@@ -147,15 +146,20 @@ export class TileViews extends Context.Service<
               place(entry, placement.bounds)
               if (transition !== undefined) arriving.add(placement.game)
             }
-            if (entry.url !== placement.url) {
-              entry.url = placement.url
-              entry.reported = ""
+            const moved = !Option.contains(entry.url, placement.url)
+            if (moved) {
+              entry.url = Option.some(placement.url)
               // The load starts now, as Electron issues it; only its outcome is awaited in the background.
               yield* Effect.forkIn(loadTile(entry.view, placement.url), scope, { startImmediately: true })
             }
-            entry.role = placement.role
-            if (placement.interactive && !entry.interactive) entry.view.webContents.focus()
-            entry.interactive = placement.interactive
+            const wasInteractive = entry.role._tag === "Stream" && entry.role.interactive
+            const reported =
+              entry.role._tag === "Guide" && !moved ? entry.role.reported : Option.none<string>()
+            entry.role =
+              placement.role === "guide"
+                ? Role.Guide({ reported })
+                : Role.Stream({ interactive: placement.interactive })
+            if (placement.interactive && !wasInteractive) entry.view.webContents.focus()
             entry.view.webContents.setAudioMuted(placement.muted)
             moves.push({ entry, from: entry.bounds, to: placement.bounds })
           }
@@ -173,7 +177,7 @@ export class TileViews extends Context.Service<
         })
 
         const animate = (
-          moves: ReadonlyArray<{ entry: Entry; from: Bounds; to: Bounds }>,
+          moves: ReadonlyArray<{ entry: Entry; from: TileBounds; to: TileBounds }>,
           transition: StageTransition
         ) =>
           Effect.gen(function* () {
@@ -211,18 +215,21 @@ export class TileViews extends Context.Service<
 const frame = "16 millis"
 
 /**
- * One game's view, the address last placed in it, its role, whether its player gets the mouse, the last channel
- * address it reported, and where it is now.
+ * One game's view, the address last placed in it, what it shows, and where it is now. A guide view remembers the
+ * channel address it last reported; a stream view, whether its player gets the mouse.
  */
 type Entry = {
   view: WebContentsView
-  url: string
-  role: TilePlacement["role"]
-  interactive: boolean
-  reported: string
-  bounds: Bounds
+  url: Option.Option<string>
+  role: Role
+  bounds: TileBounds
 }
-type Bounds = TilePlacement["bounds"]
+
+type Role = Data.TaggedEnum<{
+  Guide: { reported: Option.Option<string> }
+  Stream: { interactive: boolean }
+}>
+const Role = Data.taggedEnum<Role>()
 
 function loadTile(view: WebContentsView, url: string) {
   return load(view.webContents, url).pipe(

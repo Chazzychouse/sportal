@@ -43,7 +43,7 @@ vi.mock("electron", () => ({
   }
 }))
 
-const { ProviderSession, allows, grantsPermission } = await import("./ProviderSession.ts")
+const { ProviderSession } = await import("./ProviderSession.ts")
 
 describe("ProviderSession.openSignIn", () => {
   it.effect("opens a window on the shared provider session at YouTube TV, without a preload", () =>
@@ -134,26 +134,16 @@ describe("ProviderSession.openSignIn", () => {
   afterEach(() => {
     loadFailure = undefined
   })
-
-  function built(logs: Array<string> = []) {
-    windows.length = 0
-    const capture = Logger.make<unknown, void>(({ message }) => {
-      logs.push(String(Array.isArray(message) ? message[0] : message))
-    })
-    return Layer.build(ProviderSession.layer(ui).pipe(Layer.provide(Logger.layer([capture])))).pipe(
-      Effect.map((context) => Context.get(context, ProviderSession))
-    )
-  }
 })
 
-describe("allows", () => {
+describe("ProviderSession.allows", () => {
   it.each([
     "https://tv.youtube.com/watch",
     "https://www.youtube.com/",
     "https://accounts.youtube.com/",
     "https://accounts.google.com/signin"
   ])("allows %s", (url) => {
-    expect(allows(url, ui)).toBe(true)
+    expect(allowed(url)).toBe(true)
   })
 
   it.each([
@@ -165,14 +155,14 @@ describe("allows", () => {
     "https://tv.youtube.com@evil.com/",
     "not a url"
   ])("refuses %s", (url) => {
-    expect(allows(url, ui)).toBe(false)
+    expect(allowed(url)).toBe(false)
   })
 
   it.each([
     "http://127.0.0.1:4401/scenario-stream/401856707",
     "http://127.0.0.1:4401/scenario-stream/tie-uga-ala"
   ])("allows the UI's own scenario stream %s", (url) => {
-    expect(allows(url, ui)).toBe(true)
+    expect(allowed(url)).toBe(true)
   })
 
   it.each([
@@ -184,24 +174,52 @@ describe("allows", () => {
     "http://localhost:4401/scenario-stream/1",
     "https://evil.example/scenario-stream/1"
   ])("refuses %s, which is not the UI's scenario stream", (url) => {
-    expect(allows(url, ui)).toBe(false)
+    expect(allowed(url)).toBe(false)
   })
 })
 
-describe("grantsPermission", () => {
+describe("ProviderSession permission requests", () => {
   it.each(["mediaKeySystem", "fullscreen", "screen-wake-lock"])("grants %s", (permission) => {
-    expect(grantsPermission(permission)).toBe(true)
+    expect(granted(permission)).toBe(true)
   })
 
   it.each(["media", "geolocation", "notifications", "clipboard-read", "openExternal", "unknown"])(
     "denies %s",
     (permission) => {
-      expect(grantsPermission(permission)).toBe(false)
+      expect(granted(permission)).toBe(false)
     }
   )
 })
 
 let loadFailure: Error | undefined
+
+function allowed(url: string) {
+  return Effect.runSync(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const providers = yield* built()
+        return providers.allows(url)
+      })
+    )
+  )
+}
+
+/** Asks the provider session's permission handler, as Electron would, and returns what it answered. */
+function granted(permission: string) {
+  const answers: Array<boolean> = []
+  Effect.runSync(
+    Effect.scoped(
+      Effect.gen(function* () {
+        yield* built()
+        const handler = providerSession.setPermissionRequestHandler.mock.lastCall?.[0]
+        handler?.(undefined, permission, (answer: boolean) => answers.push(answer), {
+          requestingUrl: "https://tv.youtube.com/"
+        })
+      })
+    )
+  )
+  return answers[0]
+}
 
 const { BrowserWindow } = await import("electron")
 const shell = new BrowserWindow()
@@ -227,4 +245,14 @@ function fakeContents() {
     },
     openWindow: () => openHandler()
   }
+}
+
+function built(logs: Array<string> = []) {
+  windows.length = 0
+  const capture = Logger.make<unknown, void>(({ message }) => {
+    logs.push(String(Array.isArray(message) ? message[0] : message))
+  })
+  return Layer.build(ProviderSession.layer(ui).pipe(Layer.provide(Logger.layer([capture])))).pipe(
+    Effect.map((context) => Context.get(context, ProviderSession))
+  )
 }

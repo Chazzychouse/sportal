@@ -92,9 +92,8 @@ export class ProviderSession extends Context.Service<
 /**
  * Provider views may visit the provider and its sign-in pages, and the web UI's own synthetic stream pages for a
  * scenario (`ui` is the address the shell loads the UI from).
- * @testonly
  */
-export function allows(url: string, ui: string): boolean {
+function allows(url: string, ui: string): boolean {
   if (!URL.canParse(url)) return false
   const { protocol, hostname, origin, pathname } = new URL(url)
   if (URL.canParse(ui) && origin === new URL(ui).origin && pathname.startsWith("/scenario-stream/"))
@@ -104,8 +103,7 @@ export function allows(url: string, ui: string): boolean {
 
 /**
  * Playback needs DRM key systems, fullscreen, and a screen that stays awake; nothing else is granted.
- * @testonly
  */
-export function grantsPermission(permission: string): boolean {
+function grantsPermission(permission: string): boolean {
   return ["mediaKeySystem", "fullscreen", "screen-wake-lock"].includes(permission)
 }

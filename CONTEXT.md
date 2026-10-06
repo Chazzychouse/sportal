@@ -103,6 +103,7 @@ Provider and Source are the two words most likely to be swapped. Provider is alw
 | **Hotkey** | A key Sportal acts on, wherever it was pressed: in the web UI or in a stream view with focus. | shortcut, keybind |
 | **Provider session** | The shell's single persistent browser session shared by every provider view, with its navigation allowlist and permissions. | partition, profile |
 | **Tile views** | The shell component that keeps one provider web view per stream or picking tile, placed where the web UI says. | view manager |
+| **Tile bounds** | A tile view's rectangle in the web UI's window, in whole CSS pixels; `TileBounds` in code. | rect, frame |
 | **Channel pick** | The shell's report that a picking tile's guide view landed on a channel's address, for its game. | selection |
 | **Guide reader** | The shell component that reads a source's guide with the source's own guide request, sent on the provider session. | scraper, EPG fetcher |
 

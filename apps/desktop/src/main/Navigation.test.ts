@@ -1,6 +1,7 @@
 import { describe, expect, it } from "@effect/vitest"
+import { Effect } from "effect"
 import { vi } from "vitest"
-import { confine, hostOf, loadErrorCode } from "./Navigation.ts"
+import { confine, hostOf, load } from "./Navigation.ts"
 
 describe("hostOf", () => {
   it("keeps only the hostname, dropping any path or query that could carry a token", () => {
@@ -12,18 +13,33 @@ describe("hostOf", () => {
   })
 })
 
-describe("loadErrorCode", () => {
-  it("reads the code Electron attaches to a failed load", () => {
-    expect(
-      loadErrorCode(
-        Object.assign(new Error("ERR_ABORTED (-3) loading 'https://x/?t=1'"), { code: "ERR_ABORTED" })
-      )
-    ).toBe("ERR_ABORTED")
-  })
+describe("load", () => {
+  it.effect("fails with the code Electron attaches to a failed load, never its message", () =>
+    Effect.gen(function* () {
+      const failure = yield* load(
+        failing(
+          Object.assign(new Error("ERR_ABORTED (-3) loading 'https://x/?t=1'"), { code: "ERR_ABORTED" })
+        ),
+        "https://x/?t=1"
+      ).pipe(Effect.flip)
+      expect(failure.code).toBe("ERR_ABORTED")
+    })
+  )
 
-  it.each([new Error("no code"), "a string", undefined])("is unknown for %s", (error) => {
-    expect(loadErrorCode(error)).toBe("unknown")
-  })
+  it.effect.each([new Error("no code"), "a string", undefined])(
+    "fails with an unknown code for %s",
+    (error) =>
+      Effect.gen(function* () {
+        const failure = yield* load(failing(error), "https://x/").pipe(Effect.flip)
+        expect(failure.code).toBe("unknown")
+      })
+  )
+
+  it.effect("succeeds when the page loads", () => load({ loadURL: () => Promise.resolve() }, "https://x/"))
+
+  function failing(error: unknown) {
+    return { loadURL: () => Promise.reject(error) }
+  }
 })
 
 describe("confine", () => {
