@@ -16,6 +16,7 @@ import {
   Struct
 } from "effect"
 import { Frame } from "../../feed/Frame.ts"
+import * as Gzip from "../../feed/Gzip.ts"
 import * as CutScenario from "./CutScenario.ts"
 import * as FastCastDocument from "./FastCastDocument.ts"
 
@@ -60,7 +61,7 @@ export const importRecording = (options: {
       const response = (poll: (typeof polls)[number]) =>
         fs.readFile(poll.path).pipe(
           Effect.mapError(failed(poll.path)),
-          Effect.flatMap(gunzip),
+          Effect.flatMap(Gzip.decompress),
           Effect.flatMap((body) =>
             options.games.length === 0 ? Effect.succeed(body) : trimmed(body, options.games)
           ),
@@ -100,7 +101,7 @@ export function readFrames(
 ): Stream.Stream<Omit<Frame, "seq">, ImportFailed, FileSystem.FileSystem> {
   return Stream.unwrap(
     Effect.gen(function* () {
-      const text = yield* (yield* FileSystem.FileSystem).readFile(path).pipe(Effect.flatMap(gunzip))
+      const text = yield* (yield* FileSystem.FileSystem).readFile(path).pipe(Effect.flatMap(Gzip.decompress))
       return Stream.fromIterable(text.split("\n").filter((line) => line.length > 0))
     }).pipe(Effect.mapError(failed(path)))
   ).pipe(Stream.mapEffect((line) => decodeReceived(line).pipe(Effect.mapError(failed(path)))))
@@ -116,7 +117,9 @@ export function writeFrames<R>(
       Stream.mapEffect((frame) => encodeReceived(frame).pipe(Effect.mapError(failed(path)))),
       Stream.runCollect
     )
-    const bytes = yield* gzip(lines.map((line) => `${line}\n`).join("")).pipe(Effect.mapError(failed(path)))
+    const bytes = yield* Gzip.compress(lines.map((line) => `${line}\n`).join("")).pipe(
+      Effect.mapError(failed(path))
+    )
     yield* (yield* FileSystem.FileSystem).writeFile(path, bytes).pipe(Effect.mapError(failed(path)))
     return lines.length
   })
@@ -258,21 +261,6 @@ function trimmed(body: string, games: ReadonlyArray<string>) {
 const Received = Schema.fromJsonString(Schema.Struct(Struct.omit(Frame.fields, ["seq"])))
 const decodeReceived = Schema.decodeEffect(Received)
 const encodeReceived = Schema.encodeEffect(Received)
-
-function gzip(text: string) {
-  return Stream.mkUint8Array(through(new TextEncoder().encode(text), () => new CompressionStream("gzip")))
-}
-
-function gunzip(bytes: Uint8Array) {
-  return through(bytes, () => new DecompressionStream("gzip")).pipe(Stream.decodeText, Stream.mkString)
-}
-
-function through(bytes: Uint8Array, transform: () => CompressionStream | DecompressionStream) {
-  return Stream.fromReadableStream({
-    evaluate: () => Stream.toReadableStream(Stream.make(bytes)).pipeThrough(transform()),
-    onError: (cause) => new ImportFailed({ reason: "not gzip", cause })
-  })
-}
 
 // As a script: pnpm --filter @sportal/hub feed:import --recording <dir> [--games id,…] --out <file.jsonl.gz>
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

@@ -3,6 +3,7 @@ import { NodeServices } from "@effect/platform-node"
 import { assert, describe, it } from "@effect/vitest"
 import { DateTime, Effect, FileSystem, Option, Schema, Stream } from "effect"
 import type { Frame } from "../../feed/Frame.ts"
+import * as Gzip from "../../feed/Gzip.ts"
 import * as ImportRecording from "./ImportRecording.ts"
 
 const neAtBuf = "gp-football-nfl-401872971"
@@ -10,63 +11,65 @@ const checkpointUrl = (topic: string, mid: number) =>
   `https://fcast.espncdn.com/FastcastService/pubsub/profiles/12000/topic/${topic}/message/${mid}/checkpoint`
 
 describe("ImportRecording.importRecording", () => {
-  it.effect("a three-line recording becomes a checkpoint, a message, and a response frame, in order", () =>
-    Effect.gen(function* () {
-      const recording = yield* recordingOf(
-        [
-          { at: 1791132295165, op: "H", tc: neAtBuf, pl: checkpointUrl(neAtBuf, 99) },
-          { at: 1791132689529, op: "P", tc: neAtBuf, mid: 100, ts: 1791132689001, pl: "[]" }
-        ],
-        [{ stem: "1791132300.250", body: '{"events":[]}' }]
-      )
+  it.effect(
+    "a recording of an H, a P, and a poll becomes four frames, in the order message, checkpoint, response, message",
+    () =>
+      Effect.gen(function* () {
+        const recording = yield* recordingOf(
+          [
+            { at: 1791132295165, op: "H", tc: neAtBuf, pl: checkpointUrl(neAtBuf, 99) },
+            { at: 1791132689529, op: "P", tc: neAtBuf, mid: 100, ts: 1791132689001, pl: "[]" }
+          ],
+          [{ stem: "1791132300.250", body: '{"events":[]}' }]
+        )
 
-      const frames = yield* Stream.runCollect(ImportRecording.importRecording({ recording, games: [] }))
+        const frames = yield* Stream.runCollect(ImportRecording.importRecording({ recording, games: [] }))
 
-      // A live socket logs the `H` itself before the checkpoint it points to, so the `H` is a frame too.
-      assert.deepStrictEqual(frames.map(described), [
-        {
-          receivedAt: 1791132295165,
-          sentAt: undefined,
-          sourceId: 99,
-          feed: "fastcast",
-          channel: neAtBuf,
-          kind: "message",
-          body: JSON.stringify({ op: "H", tc: neAtBuf, mid: 99, pl: checkpointUrl(neAtBuf, 99) })
-        },
-        {
-          receivedAt: 1791132295165,
-          sentAt: undefined,
-          sourceId: 99,
-          feed: "fastcast",
-          channel: neAtBuf,
-          kind: "checkpoint",
-          body: '{"entities":{}}'
-        },
-        {
-          receivedAt: 1791132300250,
-          sentAt: undefined,
-          sourceId: undefined,
-          feed: "poll",
-          channel: "nfl",
-          kind: "response",
-          body: '{"events":[]}'
-        },
-        {
-          receivedAt: 1791132689529,
-          sentAt: 1791132689001,
-          sourceId: 100,
-          feed: "fastcast",
-          channel: neAtBuf,
-          kind: "message",
-          body: JSON.stringify({
-            op: "P",
-            tc: neAtBuf,
-            mid: 100,
-            pl: JSON.stringify({ ts: 1791132689001, pl: "[]" })
-          })
-        }
-      ])
-    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer))
+        // A live socket logs the `H` itself before the checkpoint it points to, so the `H` is a frame too.
+        assert.deepStrictEqual(frames.map(described), [
+          {
+            receivedAt: 1791132295165,
+            sentAt: undefined,
+            sourceId: 99,
+            feed: "fastcast",
+            channel: neAtBuf,
+            kind: "message",
+            body: JSON.stringify({ op: "H", tc: neAtBuf, mid: 99, pl: checkpointUrl(neAtBuf, 99) })
+          },
+          {
+            receivedAt: 1791132295165,
+            sentAt: undefined,
+            sourceId: 99,
+            feed: "fastcast",
+            channel: neAtBuf,
+            kind: "checkpoint",
+            body: '{"entities":{}}'
+          },
+          {
+            receivedAt: 1791132300250,
+            sentAt: undefined,
+            sourceId: undefined,
+            feed: "poll",
+            channel: "nfl",
+            kind: "response",
+            body: '{"events":[]}'
+          },
+          {
+            receivedAt: 1791132689529,
+            sentAt: 1791132689001,
+            sourceId: 100,
+            feed: "fastcast",
+            channel: neAtBuf,
+            kind: "message",
+            body: JSON.stringify({
+              op: "P",
+              tc: neAtBuf,
+              mid: 100,
+              pl: JSON.stringify({ ts: 1791132689001, pl: "[]" })
+            })
+          }
+        ])
+      }).pipe(Effect.scoped, Effect.provide(NodeServices.layer))
   )
 
   it.effect(
@@ -205,23 +208,11 @@ function recordingOf(
     yield* Effect.forEach(
       polls,
       ({ stem, body }) =>
-        Effect.flatMap(gzipped(body), (bytes) =>
+        Effect.flatMap(Gzip.compress(body), (bytes) =>
           fs.writeFile(join(recording, "scoreboard", `${stem}.json.gz`), bytes)
         ),
       { discard: true }
     )
     return recording
   })
-}
-
-function gzipped(text: string) {
-  return Stream.mkUint8Array(
-    Stream.fromReadableStream({
-      evaluate: () =>
-        Stream.toReadableStream(Stream.make(new TextEncoder().encode(text))).pipeThrough(
-          new CompressionStream("gzip")
-        ),
-      onError: (cause) => cause
-    })
-  )
 }

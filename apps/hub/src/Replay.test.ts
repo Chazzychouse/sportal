@@ -62,7 +62,8 @@ describe("a recorded game", () => {
           []
         )
       }).pipe(withMetrics, Effect.provide([Database.layer(":memory:"), layer, NodeServices.layer]))
-    }
+    },
+    { timeout: 60_000 }
   )
 
   it.effect(

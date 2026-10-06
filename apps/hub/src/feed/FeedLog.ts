@@ -25,6 +25,7 @@ import { SqlClient, SqlSchema } from "effect/sql"
 import * as Database from "../database/Database.ts"
 import type { HubConfig } from "../HubConfig.ts"
 import { Frame } from "./Frame.ts"
+import * as Gzip from "./Gzip.ts"
 
 /**
  * Every frame the feeds delivered, raw, in the order the Hub received it, kept in `feed_frame`. An append numbers a
@@ -91,20 +92,24 @@ export class FeedLog extends Context.Service<
         const hashed = yield* Effect.forEach(group, (frame) =>
           Effect.gen(function* () {
             const bytes = new TextEncoder().encode(frame.body)
-            return { row: yield* Schema.encodeEffect(Row)(frame), bytes, hash: yield* sha256(bytes) }
+            return {
+              row: yield* Schema.encodeEffect(Row)(frame),
+              body: frame.body,
+              hash: yield* sha256(bytes)
+            }
           })
         )
-        const [hashes, decided] = Arr.mapAccum(hashed, state.hashes, (seen, { row, bytes, hash }) => {
+        const [hashes, decided] = Arr.mapAccum(hashed, state.hashes, (seen, { row, body, hash }) => {
           const response = row.feed === "poll" && row.kind === "response"
           const unchanged = response && seen.get(row.channel) === hash
           return [
             response ? new Map(seen).set(row.channel, hash) : seen,
-            { row: { ...row, kind: unchanged ? "unchanged" : row.kind, body_hash: hash }, bytes, unchanged }
+            { row: { ...row, kind: unchanged ? "unchanged" : row.kind, body_hash: hash }, body, unchanged }
           ] as const
         })
-        const rows = yield* Effect.forEach(decided, ({ row, bytes, unchanged }) =>
+        const rows = yield* Effect.forEach(decided, ({ row, body, unchanged }) =>
           Effect.gen(function* () {
-            return { ...row, body: unchanged ? null : yield* gzip(bytes) }
+            return { ...row, body: unchanged ? null : yield* Gzip.compress(body) }
           })
         )
         const gap = yield* Writer.$match(state, {
@@ -232,7 +237,7 @@ export class FeedLog extends Context.Service<
         Option.match(Option.fromNullishOr(bodies.get(channel)), {
           onSome: Effect.succeed,
           onNone: () =>
-            lastResponse({ channel, before: seq }).pipe(Effect.flatMap(({ body }) => gunzip(body)))
+            lastResponse({ channel, before: seq }).pipe(Effect.flatMap(({ body }) => Gzip.decompress(body)))
         })
 
       const replay = (from: DateTime.Utc) =>
@@ -257,7 +262,7 @@ export class FeedLog extends Context.Service<
                     const body =
                       stored.body === null
                         ? yield* repeated(bodies, stored.channel, stored.seq)
-                        : yield* gunzip(stored.body)
+                        : yield* Gzip.decompress(stored.body)
                     const frame = yield* Schema.decodeEffect(Row)({
                       ...stored,
                       kind: stored.kind === "unchanged" ? "response" : stored.kind,
@@ -391,7 +396,7 @@ function absentWhenNull<S extends Schema.Top>(schema: S) {
 
 /** The row that stands in `feed_frame` for the frames a failed write lost. */
 function gapRow({ from, to, count, receivedAt }: Extract<Writer, { _tag: "Behind" }>) {
-  return Effect.map(gzip(new TextEncoder().encode(JSON.stringify({ from, to, count }))), (body) => ({
+  return Effect.map(Gzip.compress(JSON.stringify({ from, to, count })), (body) => ({
     seq: from,
     received_at: DateTime.toEpochMillis(receivedAt),
     sent_at: null,
@@ -414,23 +419,8 @@ function sha256(bytes: Uint8Array<ArrayBuffer>) {
   )
 }
 
-function gzip(bytes: Uint8Array) {
-  return Stream.mkUint8Array(through(bytes, () => new CompressionStream("gzip")))
-}
-
-function gunzip(bytes: Uint8Array) {
-  return through(bytes, () => new DecompressionStream("gzip")).pipe(Stream.decodeText, Stream.mkString)
-}
-
-function through(bytes: Uint8Array, transform: () => CompressionStream | DecompressionStream) {
-  return Stream.fromReadableStream({
-    evaluate: () => Stream.toReadableStream(Stream.make(bytes)).pipeThrough(transform()),
-    onError: (cause) => new Cause.UnknownError(cause, "A feed log body could not be gzip'd or read back")
-  })
-}
-
 function warnOfGap(body: Uint8Array) {
-  return gunzip(body).pipe(
+  return Gzip.decompress(body).pipe(
     Effect.flatMap(
       Schema.decodeEffect(
         Schema.fromJsonString(Schema.Struct({ from: Schema.Int, to: Schema.Int, count: Schema.Int }))
