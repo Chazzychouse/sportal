@@ -125,10 +125,7 @@ function tickTo(stepped: Stepped, from: DateTime.Utc, at: DateTime.Utc): Effect.
           () => stepped,
           (acc, liveGame) =>
             guarded(acc, liveGame.snapshot, "a tick", () =>
-              settled(acc, liveGame.snapshot.id, due, Option.some(liveGame), {
-                liveGame: liveGame.tick(due),
-                events: []
-              })
+              settled(acc, liveGame.snapshot.id, due, Option.some(liveGame), { liveGame: liveGame.tick(due) })
             )
         ).pipe(Effect.flatMap((ticked) => tickTo(ticked, due, at)))
     }
@@ -193,7 +190,7 @@ function snapshotTaken(
   return guarded(stepped, snapshot, "a delivery", () => {
     const current = Option.fromNullishOr(stepped.live.get(snapshot.id))
     const step = Option.match(current, {
-      onNone: () => ({ liveGame: Option.some(LiveGame.start(snapshot, from, at)), events: [] }),
+      onNone: () => ({ liveGame: Option.some(LiveGame.start(snapshot, from, at)) }),
       onSome: (liveGame) => liveGame.take(Delivery.Snapshot({ snapshot, from }), at)
     })
     const took = FoldReport.Took({
@@ -219,7 +216,7 @@ function settled(
   id: GameId,
   at: DateTime.Utc,
   current: Option.Option<LiveGame>,
-  step: { readonly liveGame: Option.Option<LiveGame>; readonly events: ReadonlyArray<GameEvent> }
+  step: { readonly liveGame: Option.Option<LiveGame>; readonly events?: ReadonlyArray<GameEvent> }
 ): Stepped {
   return Option.match(
     Option.orElse(step.liveGame, () => current),
@@ -236,7 +233,7 @@ function settled(
                 onSome: (before) => [FoldReport.Changed({ before, after, at })]
               })
           }),
-          ...step.events.map((event) => FoldReport.Happened({ snapshot: after.snapshot, event }))
+          ...(step.events ?? []).map((event) => FoldReport.Happened({ snapshot: after.snapshot, event }))
         ]
         if (after.isCurrent(at)) {
           return {

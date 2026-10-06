@@ -92,10 +92,11 @@ export class Stage extends Schema.Class<Stage>("sportal/Stage")({
   /** The first empty on-stage slot after `slot`, wrapping round; never `slot` itself. */
   nextEmptySlot(slot: number): number | undefined {
     const slots = this.onStage()
+    if (slots.length < 2) return undefined
     return Option.getOrUndefined(
       Arr.findFirst(
-        Arr.range(1, slots.length).map((offset) => (slot + offset) % slots.length),
-        (next) => next !== slot && slots[next]?._tag === "Empty"
+        Arr.range(1, slots.length - 1).map((offset) => (slot + offset) % slots.length),
+        (next) => slots[next]?._tag === "Empty"
       )
     )
   }

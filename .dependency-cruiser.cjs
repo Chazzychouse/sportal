@@ -81,6 +81,13 @@ module.exports = {
       to: { path: "^apps/hub/src/TestTelemetry\\.ts$" }
     },
     {
+      name: "test-database-is-for-tests",
+      comment: "An in-memory or scratch SQLite database is imported only by test files.",
+      severity: "error",
+      from: { pathNot: "\\.test\\.ts$" },
+      to: { path: "^apps/hub/src/TestDatabase\\.ts$" }
+    },
+    {
       name: "test-provider-is-for-tests",
       comment: "A provider scripted for a test, and the games it lists, are imported only by test files.",
       severity: "error",

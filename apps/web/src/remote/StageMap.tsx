@@ -135,7 +135,7 @@ export function StageMap(props: {
             </SheetDescription>
           </div>
           <div className="flex flex-col pb-2">
-            {tileActions(props.stage, props.selected).map((action) => (
+            {tileActions(props.stage, props.selected, true).map((action) => (
               <Fragment key={action.id}>
                 {action.id === "clear" && (
                   <Action

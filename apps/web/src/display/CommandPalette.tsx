@@ -70,7 +70,7 @@ export function CommandPalette(props: {
           <CommandGroup heading="Tiles">
             {occupied.flatMap(({ slot, name }) =>
               // The Display group below has the Unsolo.
-              tileActions(props.stage, slot)
+              tileActions(props.stage, slot, slot === props.selected)
                 .filter((action) => action.id !== "unsolo")
                 .map((action) => {
                   return (

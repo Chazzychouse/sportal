@@ -77,7 +77,7 @@ export function TileChrome(props: {
       </button>
       {props.children}
       <span className="flex shrink-0 items-center">
-        {tileActions(props.stage, slot).map((action) => (
+        {tileActions(props.stage, slot, props.selected).map((action) => (
           <Button
             key={action.id}
             variant="ghost"
