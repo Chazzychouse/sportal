@@ -1,11 +1,11 @@
-import { type Broadcast, GameId, GameSnapshot, type GameStatus, Network } from "@sportal/domain/Game"
+import { type Broadcast, GameId, GameSnapshot, Network } from "@sportal/domain/Game"
 import type { LeagueId } from "@sportal/domain/League"
-import { Situation } from "@sportal/domain/Situation"
 import { Team, TeamId } from "@sportal/domain/Team"
 import { DateTime, Effect, Layer, Option, Schema } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/http"
 import { Provider, ProviderError } from "../Provider.ts"
 import * as EspnPayload from "./EspnPayload.ts"
+import * as EspnSnapshot from "./EspnSnapshot.ts"
 
 export const layer = Layer.effect(
   Provider,
@@ -74,37 +74,20 @@ function toSnapshot(league: LeagueId, event: typeof EspnPayload.Event.Type): Opt
       : { ranking: competitor.curatedRank.current })
   })
 
-  const s = competition.situation
   return Option.some(
     new GameSnapshot({
       id: GameId.make(event.id),
       league,
       kickoff: DateTime.toUtc(kickoff.value),
-      status: toStatus(event.status.type),
+      status: event.status.type,
       period: event.status.period,
       clock: event.status.displayClock,
       home: side(home),
       away: side(away),
       broadcasts: (competition.geoBroadcasts ?? []).flatMap(toBroadcast),
-      ...(s === undefined
+      ...(competition.situation === undefined
         ? {}
-        : {
-            situation: new Situation({
-              isRedZone: s.isRedZone ?? false,
-              homeTimeouts: s.homeTimeouts ?? 0,
-              awayTimeouts: s.awayTimeouts ?? 0,
-              ...(s.possession === undefined ? {} : { possession: TeamId.make(`${league}:${s.possession}`) }),
-              // ESPN reports down -1 between plays (after a score, before a kickoff).
-              ...(s.down === undefined || s.down < 1 ? {} : { down: s.down }),
-              ...(s.distance === undefined ? {} : { distance: s.distance }),
-              // ESPN counts the yard line from the home goal line; the domain counts it to the goal the team with
-              // the ball attacks. Without a team on the ball it cannot be oriented.
-              ...(s.yardLine === undefined || s.possession === undefined
-                ? {}
-                : { yardLine: s.possession === home.team.id ? 100 - s.yardLine : s.yardLine }),
-              ...(s.lastPlay?.text === undefined ? {} : { lastPlay: s.lastPlay.text })
-            })
-          })
+        : { situation: EspnSnapshot.situation(league, competition.situation, home.team.id) })
     })
   )
 }
@@ -121,18 +104,4 @@ function toBroadcast(broadcast: {
         ? "streaming"
         : undefined
   return medium === undefined ? [] : [{ network: Network.make(broadcast.media.shortName), medium }]
-}
-
-function toStatus(type: { readonly name: string; readonly state: "pre" | "in" | "post" }): GameStatus {
-  switch (type.name) {
-    case "STATUS_HALFTIME":
-      return "halftime"
-    case "STATUS_DELAYED":
-      return "delayed"
-    case "STATUS_POSTPONED":
-      return "postponed"
-    case "STATUS_CANCELED":
-      return "canceled"
-  }
-  return type.state === "pre" ? "scheduled" : type.state === "in" ? "live" : "final"
 }

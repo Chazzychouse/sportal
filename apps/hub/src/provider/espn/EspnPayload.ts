@@ -1,4 +1,5 @@
 import { Schema } from "effect"
+import * as EspnSnapshot from "./EspnSnapshot.ts"
 
 const Competitor = Schema.Struct({
   homeAway: Schema.Literals(["home", "away"]),
@@ -14,27 +15,13 @@ const Competitor = Schema.Struct({
   })
 })
 
-const Situation = Schema.Struct({
-  possession: Schema.optional(Schema.String),
-  down: Schema.optional(Schema.Int),
-  distance: Schema.optional(Schema.Int),
-  yardLine: Schema.optional(Schema.Int),
-  isRedZone: Schema.optional(Schema.Boolean),
-  homeTimeouts: Schema.optional(Schema.Int),
-  awayTimeouts: Schema.optional(Schema.Int),
-  lastPlay: Schema.optional(Schema.Struct({ text: Schema.optional(Schema.String) }))
-})
-
 export const Event = Schema.Struct({
   id: Schema.String,
   date: Schema.String,
   status: Schema.Struct({
     period: Schema.Int,
     displayClock: Schema.String,
-    type: Schema.Struct({
-      name: Schema.String,
-      state: Schema.Literals(["pre", "in", "post"])
-    })
+    type: EspnSnapshot.Status
   }),
   competitions: Schema.NonEmptyArray(
     Schema.Struct({
@@ -46,7 +33,7 @@ export const Event = Schema.Struct({
           })
         )
       ),
-      situation: Schema.optional(Situation),
+      situation: Schema.optional(EspnSnapshot.Situation),
       competitors: Schema.Array(Competitor)
     })
   )
