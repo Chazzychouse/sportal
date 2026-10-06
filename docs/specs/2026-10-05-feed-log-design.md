@@ -189,7 +189,7 @@ A lull that comes from time passing starts on time instead of at the next listin
 In `sportal.sqlite`, each migrated by its own store (`Database.migrate`):
 
 - `plays`: one row per play by game, updated in place, deleted when the play is removed.
-- `game_snapshots`: each game's latest snapshot, plus one row per status change.
+- `game_snapshots`: each game's latest snapshot only. Per-status history was dropped because the fold's changes are sampled; derive it from an unsampled source when a consumer needs it.
 
 Each records the `seq` it is current to. Both can be dropped and rebuilt from the log.
 

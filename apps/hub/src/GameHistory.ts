@@ -7,20 +7,22 @@ import { SqlClient, SqlSchema } from "effect/sql"
 import * as Database from "./database/Database.ts"
 import { LiveGames } from "./LiveGames.ts"
 
-/** Past plays and snapshots, derived from the fold into the Hub's database. Rebuildable from the feed log. */
+/** Past plays and each game's latest snapshot, derived from the fold into the Hub's database. Rebuildable from the feed log. */
 export class GameHistory extends Context.Service<
   GameHistory,
   {
     /** A game's stored plays, in play order; a game that left the live games keeps the plays it had. */
     plays(game: GameId): Effect.Effect<ReadonlyArray<Play>, GameHistoryError>
-    /** A game's snapshots at each status it reached, in order, then its latest. */
-    snapshots(game: GameId): Effect.Effect<ReadonlyArray<GameSnapshot>, GameHistoryError>
+    /** A game's latest stored snapshot, if it has one. */
+    latest(game: GameId): Effect.Effect<Option.Option<GameSnapshot>, GameHistoryError>
   }
 >()("sportal/hub/GameHistory") {
   /**
    * Follows `LiveGames.changes`, writing what changed since the last write, in batches every 250 ms. Every listed game
-   * gets a snapshot (a final game is often only listed), plus any live game not listed; plays come from live games
-   * only. A write that fails is logged and counted, and the next change writes what it missed.
+   * gets its latest snapshot written (a final game is often only listed), plus any live game not listed; plays come
+   * from live games only. A game that leaves `live` and is never listed again keeps its last written snapshot. Only the
+   * latest snapshot is kept: the changes are sampled by the batch, so a per-status history could not be rebuilt from
+   * the feed log. A write that fails is logged and counted, and the next change writes what it missed.
    */
   static readonly layer: Layer.Layer<GameHistory, never, SqlClient.SqlClient | LiveGames> = Layer.effect(
     GameHistory,
@@ -38,8 +40,7 @@ export class GameHistory extends Context.Service<
       const snapshotRows = SqlSchema.findAll({
         Request: Schema.String,
         Result: Schema.Struct({ body: Schema.fromJsonString(GameSnapshot) }),
-        execute: (game) =>
-          sql`SELECT body FROM game_snapshot WHERE game = ${game} ORDER BY kind = 'latest', seq`
+        execute: (game) => sql`SELECT body FROM game_snapshot WHERE game = ${game}`
       })
 
       const encodePlay = Schema.encodeEffect(Schema.fromJsonString(Play))
@@ -50,13 +51,6 @@ export class GameHistory extends Context.Service<
         Effect.gen(function* () {
           const latest = yield* Effect.forEach(step.latest, ([game, snapshot]) =>
             Effect.map(encodeSnapshot(snapshot), (body) => ({ game, status: snapshot.status, body }))
-          )
-          const statuses = yield* Effect.forEach(step.statuses, (snapshot) =>
-            Effect.map(encodeSnapshot(snapshot), (body) => ({
-              game: snapshot.id,
-              status: snapshot.status,
-              body
-            }))
           )
           const plays = yield* Effect.forEach(step.plays, ({ game, upserts, kept }) =>
             Effect.map(
@@ -88,20 +82,11 @@ export class GameHistory extends Context.Service<
                 { discard: true }
               )
               yield* Effect.forEach(
-                statuses,
-                (row) =>
-                  sql`
-                    INSERT INTO game_snapshot ${sql.insert({ ...row, kind: "status", seq })}
-                    ON CONFLICT (game, status) WHERE kind = 'status' DO NOTHING
-                  `,
-                { discard: true }
-              )
-              yield* Effect.forEach(
                 latest,
                 (row) =>
                   sql`
-                    INSERT INTO game_snapshot ${sql.insert({ ...row, kind: "latest", seq })}
-                    ON CONFLICT (game) WHERE kind = 'latest' DO UPDATE SET
+                    INSERT INTO game_snapshot ${sql.insert({ ...row, seq })}
+                    ON CONFLICT (game) DO UPDATE SET
                       seq = excluded.seq, status = excluded.status, body = excluded.body
                     WHERE excluded.seq > game_snapshot.seq
                   `,
@@ -150,9 +135,9 @@ export class GameHistory extends Context.Service<
             Effect.map((rows) => rows.map(({ body }) => body)),
             Effect.mapError((cause) => new GameHistoryError({ cause }))
           ),
-        snapshots: (game) =>
+        latest: (game) =>
           snapshotRows(game).pipe(
-            Effect.map((rows) => rows.map(({ body }) => body)),
+            Effect.map((rows) => Option.map(Arr.head(rows), ({ body }) => body)),
             Effect.mapError((cause) => new GameHistoryError({ cause }))
           )
       })
@@ -174,7 +159,6 @@ type Written = {
 /** What a step must write to bring one `Written` to the next. */
 type Step = {
   readonly latest: ReadonlyArray<readonly [GameId, GameSnapshot]>
-  readonly statuses: ReadonlyArray<GameSnapshot>
   readonly plays: ReadonlyArray<{
     readonly game: GameId
     readonly upserts: ReadonlyArray<Play>
@@ -200,16 +184,13 @@ function writtenOf(folded: {
 function stepFrom(before: Written, after: Written): Step {
   const snapshots = [...after.snapshots].flatMap(([game, snapshot]) => {
     const had = before.snapshots.get(game)
-    return had !== undefined && Equal.equals(had, snapshot) ? [] : [{ game, snapshot, had }]
+    return had !== undefined && Equal.equals(had, snapshot) ? [] : [{ game, snapshot }]
   })
   return {
     latest: snapshots.map(({ game, snapshot }) => [game, snapshot]),
-    statuses: snapshots
-      .filter(({ snapshot, had }) => had?.status !== snapshot.status)
-      .map(({ snapshot }) => snapshot),
     plays: [...after.plays].flatMap(([game, plays]) => {
       const had = before.plays.get(game)
-      if (had === plays) return []
+      if (had !== undefined && sameAll(had, plays)) return []
       const stored = new Map((had ?? []).map((play) => [play.id, play]))
       return [
         {
@@ -221,6 +202,8 @@ function stepFrom(before: Written, after: Written): Step {
     })
   }
 }
+
+const sameAll = Arr.makeEquivalence(Equal.asEquivalence<Play>())
 
 const writeFailures = Metric.counter("sportal_history_write_failures", {
   description: "Changes the game history could not write; the next change writes what they missed",
@@ -242,15 +225,11 @@ const migrations = {
     `
     yield* sql`
       CREATE TABLE game_snapshot (
-        game TEXT NOT NULL,
-        kind TEXT NOT NULL CHECK (kind IN ('latest', 'status')),
+        game TEXT NOT NULL PRIMARY KEY,
         seq INTEGER NOT NULL,
         status TEXT NOT NULL,
         body TEXT NOT NULL
       )
     `
-    // One latest row per game, and one status row per game and status.
-    yield* sql`CREATE UNIQUE INDEX game_snapshot_latest ON game_snapshot (game) WHERE kind = 'latest'`
-    yield* sql`CREATE UNIQUE INDEX game_snapshot_status ON game_snapshot (game, status) WHERE kind = 'status'`
   })
 }
