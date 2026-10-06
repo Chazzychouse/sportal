@@ -31,6 +31,7 @@ Most pieces went straight onto `main`; the two merge commits are named.
 | 2026-10-05 | FastCast: ESPN's push feed as the live feed, with its dashboard row | `28e138a` | `0a16b35`: `2026-10-05-fastcast.md`, `2026-10-05-fastcast-design.md` |
 | 2026-10-05 | The feed log and one fold: every frame logged raw, and the game actors replaced (ADRs 0008 and 0009) | `e0285b7` | `7b85bd0`: `2026-10-05-feed-log.md`, `2026-10-05-feed-log-design.md` |
 | 2026-10-06 | One path from feed to fold: one Provider port with its polling as a Schedule, decode quiet with Ingest telling only what is live, FastCast's checkpoint retry as a Schedule, scenarios as providers through the real Ingest with recorded scenarios as raw frames, and Watchability removed | `d77ab7b` | The goal package `goals/hub-one-path/` (`goal.md`, `facts.md`, `plan.md`) |
+| 2026-10-06 | Services yielded where they are used: the Provider port split from its Decoder with its member types named (`Polling`, `LiveFeed`), FastCast a service, Ingest's leagues and the scenario clock's speed read from HubConfig, and the shell's address and window as services | `3f1d158` | `2026-10-06-di-cleanup.md`, `2026-10-06-di-cleanup-design.md` |
 
 Also built, with no plan of its own: the game-day checklist (`docs/game-day-checklist.md`) and the decision records.
 
