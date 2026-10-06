@@ -4,7 +4,8 @@ import { GameId } from "@sportal/domain/Game"
 import { Cause, Config, Effect, FiberSet, Layer, Option, Queue, Schedule, Schema, Stream } from "effect"
 import { app, BrowserWindow, components, type IpcMainEvent, ipcMain } from "electron"
 import { GuideReader } from "./GuideReader.ts"
-import { confine, hostOf, load, ProviderSession } from "./ProviderSession.ts"
+import { confine, hostOf, load } from "./Navigation.ts"
+import { ProviderSession } from "./ProviderSession.ts"
 import { TileViews } from "./TileViews.ts"
 
 const Shell = Layer.unwrap(

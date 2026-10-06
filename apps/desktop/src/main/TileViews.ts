@@ -3,7 +3,8 @@ import type { ChannelPick, StageTransition, TilePlacement } from "@sportal/api/S
 import type { GameId } from "@sportal/domain/Game"
 import { Clock, Context, Effect, FiberHandle, Layer, PubSub, Stream } from "effect"
 import type { View, WebContentsView } from "electron"
-import { hostOf, load, ProviderSession } from "./ProviderSession.ts"
+import { hostOf, load } from "./Navigation.ts"
+import { ProviderSession } from "./ProviderSession.ts"
 import { Transition } from "./Transition.ts"
 
 /**
