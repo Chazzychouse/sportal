@@ -27,12 +27,14 @@ Every exported type name must be a term here, except the wire schemas in `*Paylo
 | **Fold report** | What one step of the live games did to one game, for telemetry to tell: took a snapshot, started, changed, stopped, happened (a game event), dropped, or raised a defect. | fold event, log entry |
 | **Stale** | A live game no snapshot has reached for 90 seconds. It stays current for 30 minutes after its last update. | |
 | **Delivery** | What a frame said: a league's listing, one game's snapshot, or one game's whole list of plays. | input, update |
+| **Decoder** | A provider's decode on its own, which its adapter provides, so a recorded scenario decodes its frames as the provider that recorded them would. | parser |
 | **Decoded** | What one frame said, as a provider decodes it: a `Delivered` delivery with the instant and `seq` of its frame, a `Resync` of a live feed channel, or a `Noted` notice. | decoded frame, said |
 | **Notice** | Something a provider's decode noticed in a frame for telemetry to tell: a message received, games pushed, an unlisted game, a document reset, a message of an unknown op, a frame, event, or play that did not decode, or an unknown play type. Told only for frames after a replay. | warning, metric |
 | **Delivery source** | Which feed a snapshot came from: `push` or `poll`. | origin, feed type |
 | **Test game** | A game snapshot built for a test, with defaults for everything the test does not care about. | fixture, mock |
 | **Scenario** | Games a Hub plays as its provider, through the real ingest, feed log, decode, and fold: written as a timeline of game snapshots, or recorded as raw frames. | fixture, simulation |
 | **Recorded scenario** | A scenario kept as the raw frames of a recorded window, `fixtures/scenarios/<name>.frames.jsonl.gz`, decoded by the provider that recorded them. | slice, recording |
+| **Recorded scenarios** | Where the recorded scenarios are kept, and reading one back by name; `RecordedScenarios` in code. | scenario store |
 | **Scenario unknown** | `SPORTAL_SCENARIO` names no written or recorded scenario; `ScenarioUnknown` in code, with the names there are. | |
 | **Scenario unreadable** | A recorded scenario's file could not be read as gzip'd frames; `ScenarioUnreadable` in code. | |
 | **Scenario time** | The clock a scenario plays on: from the Hub's start, at the scenario's speed. Ingest, the fold, and the Slate run on it. | |

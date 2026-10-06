@@ -5,7 +5,6 @@ import { LeagueId } from "@sportal/domain/League"
 import { liveSnapshot, team } from "@sportal/domain/TestGame"
 import {
   Context,
-  type Crypto,
   DateTime,
   Duration,
   Effect,
@@ -28,12 +27,13 @@ import { FeedFrame } from "../Frame.ts"
 import * as Gzip from "../Gzip.ts"
 import * as Ingest from "../ingest/Ingest.ts"
 import { LiveGames } from "../LiveGames.ts"
+import { Decoder } from "../provider/Decoder.ts"
 import * as EspnDecode from "../provider/espn/EspnDecode.ts"
 import { Provider } from "../provider/Provider.ts"
 import { polling } from "../provider/TestProvider.ts"
 import { withEnv } from "../TestHubConfig.ts"
 import { recordingSpans } from "../TestTelemetry.ts"
-import { RecordedScenario } from "./RecordedScenario.ts"
+import { RecordedScenarios } from "./RecordedScenarios.ts"
 import * as ScenarioClock from "./ScenarioClock.ts"
 import * as ScenarioProvider from "./ScenarioProvider.ts"
 
@@ -185,10 +185,11 @@ describe("ScenarioProvider", () => {
     "every committed recorded scenario plays to a non-empty final slate",
     () =>
       Effect.gen(function* () {
-        const names = yield* RecordedScenario.names()
+        const recorded = yield* RecordedScenarios
+        const names = yield* recorded.names
         assert.isAbove(names.length, 0)
         for (const name of names) {
-          const { frames } = yield* RecordedScenario.load(name)
+          const { frames } = yield* recorded.load(name)
           const last = frames.at(-1)?.receivedAt ?? DateTime.makeUnsafe(0)
           const length = DateTime.distance(frames[0]?.receivedAt ?? last, last)
           yield* Effect.gen(function* () {
@@ -197,7 +198,9 @@ describe("ScenarioProvider", () => {
             assert.isNotEmpty(yield* slate, name)
           }).pipe(Effect.provide(playing(name)), Effect.scoped)
         }
-      }).pipe(Effect.provide(NodeServices.layer)),
+      }).pipe(
+        Effect.provide([RecordedScenarios.layer.pipe(Layer.provide(NodeServices.layer)), NodeServices.layer])
+      ),
     120_000
   )
 
@@ -238,12 +241,7 @@ describe("ScenarioProvider", () => {
         )
       }).pipe(
         Effect.provide(
-          playing("two-minute-drill-tie", {
-            feedLog: FeedLog.forScenario.pipe(
-              Layer.provide(withEnv({ SPORTAL_DATA_DIR: dataDir })),
-              Layer.orDie
-            )
-          })
+          playing("two-minute-drill-tie", { env: { SPORTAL_DATA_DIR: dataDir }, scenarioFeedLog: true })
         ),
         Effect.scoped
       )
@@ -262,15 +260,14 @@ describe("ScenarioProvider", () => {
   it.effect("a restart replays the scenario's logged frames and publishes no events for them", () =>
     Effect.gen(function* () {
       const dataDir = yield* (yield* FileSystem.FileSystem).makeTempDirectoryScoped()
-      const feedLog = () =>
-        FeedLog.forScenario.pipe(
-          Layer.provide(withEnv({ SPORTAL_DATA_DIR: dataDir, SPORTAL_SCENARIO_FEED_LOG: "scenario.sqlite" })),
-          Layer.orDie
-        )
+      const onFile = {
+        env: { SPORTAL_DATA_DIR: dataDir, SPORTAL_SCENARIO_FEED_LOG: "scenario.sqlite" },
+        scenarioFeedLog: true
+      }
       yield* Effect.gen(function* () {
         yield* TestClock.adjust(0)
         yield* TestClock.adjust("3 minutes")
-      }).pipe(Effect.provide(playing("two-minute-drill-tie", { feedLog: feedLog() })), Effect.scoped)
+      }).pipe(Effect.provide(playing("two-minute-drill-tie", onFile)), Effect.scoped)
 
       const scope = yield* Scope.make()
       const fold = yield* Layer.buildWithScope(LiveGames.layer, scope)
@@ -280,9 +277,7 @@ describe("ScenarioProvider", () => {
         Effect.forkIn(scope, { startImmediately: true })
       )
       yield* Layer.buildWithScope(
-        ingestOver("two-minute-drill-tie", { feedLog: feedLog() }).pipe(
-          Layer.provide(Layer.succeedContext(fold))
-        ),
+        ingestOver("two-minute-drill-tie", onFile).pipe(Layer.provide(Layer.succeedContext(fold))),
         scope
       )
 
@@ -296,48 +291,52 @@ describe("ScenarioProvider", () => {
   )
 })
 
-/** Scenario `name` as the provider (from `from`, when given; recorded frames decoded by ESPN's decode). */
-function scenario(name: string, options: { readonly from?: string } = {}) {
-  return ScenarioProvider.layer(name, EspnDecode.decode, options.from).pipe(Layer.provide(NodeServices.layer))
+/**
+ * Scenario `name` as the provider, configured by `env` beside its name: recorded scenarios read from `from` (the
+ * committed ones, unless given), their frames decoded by `decode` (ESPN's, unless given).
+ */
+function scenario(name: string, options: Options = {}) {
+  return ScenarioProvider.layer.pipe(
+    Layer.provide([
+      options.from === undefined ? RecordedScenarios.layer : RecordedScenarios.in(options.from),
+      options.decode === undefined
+        ? EspnDecode.layer
+        : Layer.succeed(Decoder, Decoder.of({ decode: options.decode }))
+    ]),
+    Layer.provideMerge(withEnv({ SPORTAL_SCENARIO: name, ...options.env }).pipe(Layer.orDie)),
+    Layer.provide(NodeServices.layer)
+  )
 }
 
 /**
- * Ingest over scenario `name`, recorded frames decoded by `decode` (ESPN's, unless given), onto `feedLog` (in memory,
- * unless given), with the fold provided to the test.
+ * Ingest over `scenario(name, options)`, onto a feed log in memory or, with `scenarioFeedLog`, the scenario's own one
+ * as its settings say, with the fold provided to the test.
  */
-function playing(
-  name: string,
-  options: {
-    readonly from?: string
-    readonly decode?: Provider["Service"]["decode"]
-    readonly feedLog?: Layer.Layer<FeedLog, never, FileSystem.FileSystem | Path.Path | Crypto.Crypto>
-    readonly ended?: Array<Tracer.Span>
-  } = {}
-) {
+function playing(name: string, options: Options & { readonly ended?: Array<Tracer.Span> } = {}) {
   return ingestOver(name, options).pipe(
     Layer.provideMerge(LiveGames.layer),
     Layer.provide(recordingSpans(options.ended ?? []))
   )
 }
 
-function ingestOver(
-  name: string,
-  options: {
-    readonly from?: string
-    readonly decode?: Provider["Service"]["decode"]
-    readonly feedLog?: Layer.Layer<FeedLog, never, FileSystem.FileSystem | Path.Path | Crypto.Crypto>
-  }
-) {
+function ingestOver(name: string, options: Options) {
   return Ingest.layer(LeagueId.literals).pipe(
     Layer.provideMerge(
-      options.feedLog ?? FeedLog.layer.pipe(Layer.provide([Database.at(":memory:"), NodeCrypto.layer]))
+      options.scenarioFeedLog === true
+        ? FeedLog.forScenario
+        : FeedLog.layer.pipe(Layer.provide([Database.at(":memory:"), NodeCrypto.layer]))
     ),
-    Layer.provide([
-      ScenarioProvider.layer(name, options.decode ?? EspnDecode.decode, options.from),
-      DateTime.layerCurrentZoneLocal
-    ]),
+    Layer.provide([scenario(name, options), DateTime.layerCurrentZoneLocal]),
     Layer.provide([NodeServices.layer, NodeCrypto.layer])
   )
+}
+
+/** How a test sets a scenario up; one HubConfig, from `env`, serves the whole Hub under test. */
+type Options = {
+  readonly from?: string
+  readonly decode?: Provider["Service"]["decode"]
+  readonly env?: Record<string, string>
+  readonly scenarioFeedLog?: boolean
 }
 
 /** A decode that reads a poll's body as its league's games, and a pushed frame's as pushed snapshots. */

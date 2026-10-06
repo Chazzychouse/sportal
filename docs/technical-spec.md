@@ -234,6 +234,7 @@ sportal/
     │       │   └── LanAddresses.ts The addresses a phone on the home network can reach
     │       ├── provider/
     │       │   ├── Provider.ts     The port: poll, push, decode, polling; Decoded, Notice, ProviderError
+    │       │   ├── Decoder.ts      A provider's decode on its own, for frames it delivered before
     │       │   ├── TestProvider.ts A provider that answers from a script
     │       │   └── espn/
     │       │       ├── EspnProvider.ts     Implements the port: polls, pushes through FastCast, and its polling Schedule
@@ -256,6 +257,7 @@ sportal/
     │       └── scenario/
     │           ├── Scenario.ts         A written scenario: a timeline of game snapshots
     │           ├── RecordedScenario.ts A recorded scenario: the raw frames of a recorded window
+    │           ├── RecordedScenarios.ts  Where recorded scenarios are kept, and reading one back
     │           ├── ScenarioProvider.ts A scenario as the provider: polled, pushed, and polled again at its frames' times
     │           ├── ScenarioClock.ts    Scenario time: the Hub's clock at a chosen speed
     │           ├── ScenarioSource.ts   Every game carried on a synthetic stream page

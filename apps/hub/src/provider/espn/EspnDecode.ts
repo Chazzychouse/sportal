@@ -2,8 +2,9 @@ import { Delivery } from "@sportal/domain/Delivery"
 import type { GameId, GameSnapshot } from "@sportal/domain/Game"
 import { LeagueId } from "@sportal/domain/League"
 import { Play } from "@sportal/domain/Play"
-import { Array as Arr, Effect, Option, Record, Result, Schema, Stream } from "effect"
+import { Array as Arr, Effect, Layer, Option, Record, Result, Schema, Stream } from "effect"
 import type { Frame } from "../../Frame.ts"
+import { Decoder } from "../Decoder.ts"
 import { Decoded, Notice, type Provider } from "../Provider.ts"
 import { EspnEvent } from "./EspnEvent.ts"
 import * as EspnPlay from "./EspnPlay.ts"
@@ -28,6 +29,9 @@ export const decode: Provider["Service"]["decode"] = (frames) =>
       (state, frame) => (frame.feed === "poll" ? listed(state, frame) : pushed(state, frame))
     )
   )
+
+/** ESPN's decode as the `Decoder`, for frames ESPN delivered before. */
+export const layer = Layer.succeed(Decoder, Decoder.of({ decode }))
 
 /** The site scoreboard as polled: its events, each read by `EspnEvent`. */
 const Scoreboard = Schema.Struct({ events: Schema.Array(Schema.Unknown) })

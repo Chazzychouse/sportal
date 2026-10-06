@@ -12,7 +12,7 @@ import type { FeedFrame } from "./Frame.ts"
 import { LiveGames } from "./LiveGames.ts"
 import * as EspnDecode from "./provider/espn/EspnDecode.ts"
 import { fixtures, neAtBufFrames } from "./provider/espn/TestEspn.ts"
-import { RecordedScenario } from "./scenario/RecordedScenario.ts"
+import { RecordedScenarios } from "./scenario/RecordedScenarios.ts"
 import { counted, recordingLogs, withMetrics } from "./TestTelemetry.ts"
 
 const neAtBuf = GameId.make("401872971")
@@ -129,7 +129,10 @@ describe("a recorded game", () => {
   )
 })
 
-const frames = Effect.map(RecordedScenario.load(neAtBufFrames, fixtures), ({ frames }) => frames)
+const frames = RecordedScenarios.use((recorded) => recorded.load(neAtBufFrames)).pipe(
+  Effect.map(({ frames }) => frames),
+  Effect.provide(RecordedScenarios.in(fixtures))
+)
 
 /** Appends `received` to the feed log in order; the log is closed after, so every frame is written. */
 function appended(received: ReadonlyArray<FeedFrame>) {

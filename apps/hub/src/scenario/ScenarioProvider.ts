@@ -14,37 +14,48 @@ import {
   Stream
 } from "effect"
 import type { FeedFrame } from "../Frame.ts"
+import { HubConfig } from "../HubConfig.ts"
+import { Decoder } from "../provider/Decoder.ts"
 import { Decoded, Provider, type ProviderError } from "../provider/Provider.ts"
-import { RecordedScenario, ScenarioUnknown } from "./RecordedScenario.ts"
+import type { RecordedScenario } from "./RecordedScenario.ts"
+import { RecordedScenarios, ScenarioUnknown, type ScenarioUnreadable } from "./RecordedScenarios.ts"
 import type { Scenario } from "./Scenario.ts"
 import { scenarios } from "./written/Scenarios.ts"
 
 /**
- * Scenario `name` as the provider, on whatever clock runs it, from the moment the layer is built. A written scenario
- * polls its slate at that moment as a frame and never pushes. A recorded one (in `from`) polls the recorded poll
- * current at that moment, received now, and pushes its recorded live feed frames at their recorded offsets, each
- * decoded by `decodeRecorded`. Either is polled again at its next frame's time, and at least every 10 seconds, so a
- * live game never goes stale between frames. Unknown names fail, listing the known ones.
+ * The scenario `SPORTAL_SCENARIO` names as the provider, on whatever clock runs it, from the moment the layer is built.
+ * A written scenario polls its slate at that moment as a frame and never pushes. A recorded one polls the recorded poll
+ * current at that moment, received now, and pushes its recorded live feed frames at their recorded offsets, all read by
+ * the `Decoder`. Either is polled again at its next frame's time, and at least every 10 seconds, so a live game never
+ * goes stale between frames. A name that is unset or unknown fails, listing the known ones.
  */
-export const layer = (name: string, decodeRecorded: Provider["Service"]["decode"], from?: string) =>
-  Layer.effect(
-    Provider,
-    Effect.gen(function* () {
-      const start = yield* DateTime.now
-      const written = scenarios.get(name)
-      if (written !== undefined) {
-        yield* Effect.logInfo(`ScenarioProvider: playing ${name}, ${written.frames.length} written frames`)
-        return playedWritten(written, start)
-      }
-      const recorded = yield* RecordedScenario.load(name, from).pipe(
+export const layer: Layer.Layer<
+  Provider,
+  ScenarioUnknown | ScenarioUnreadable,
+  HubConfig | RecordedScenarios | Decoder
+> = Layer.effect(
+  Provider,
+  Effect.gen(function* () {
+    const { scenario } = yield* HubConfig
+    const recordedScenarios = yield* RecordedScenarios
+    const start = yield* DateTime.now
+    const name = Option.getOrElse(scenario, () => "")
+    const written = scenarios.get(name)
+    if (written !== undefined) {
+      yield* Effect.logInfo(`ScenarioProvider: playing ${name}, ${written.frames.length} written frames`)
+      return playedWritten(written, start)
+    }
+    const recorded = yield* recordedScenarios
+      .load(name)
+      .pipe(
         Effect.catchTag("ScenarioUnknown", ({ known }) =>
           Effect.fail(new ScenarioUnknown({ name, known: [...scenarios.keys(), ...known] }))
         )
       )
-      yield* Effect.logInfo(`ScenarioProvider: playing ${name}, ${recorded.frames.length} recorded frames`)
-      return playedRecorded(recorded, start, decodeRecorded)
-    })
-  )
+    yield* Effect.logInfo(`ScenarioProvider: playing ${name}, ${recorded.frames.length} recorded frames`)
+    return playedRecorded(recorded, start, (yield* Decoder).decode)
+  })
+)
 
 function playedWritten(scenario: Scenario, start: DateTime.Utc): Provider["Service"] {
   return ofSlates(
