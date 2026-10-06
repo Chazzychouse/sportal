@@ -1,3 +1,4 @@
+import { NodeCrypto } from "@effect/platform-node"
 import { assert, describe, it } from "@effect/vitest"
 import { Delivery } from "@sportal/domain/Delivery"
 import { GameId, type GameSnapshot } from "@sportal/domain/Game"
@@ -5,6 +6,7 @@ import { LiveGameState } from "@sportal/domain/LiveGame"
 import { snapshot, team } from "@sportal/domain/TestGame"
 import {
   Context,
+  type Crypto,
   DateTime,
   Duration,
   Effect,
@@ -356,7 +358,7 @@ describe("Ingest", () => {
           SELECT COUNT(*) AS count FROM feed_frame WHERE feed = 'fastcast'
         `
         assert.strictEqual(row?.count, 200)
-      }).pipe(Effect.provide(Database.layer(":memory:"))),
+      }).pipe(Effect.provide([Database.layer(":memory:"), NodeCrypto.layer])),
     10_000
   )
 
@@ -383,7 +385,7 @@ describe("Ingest", () => {
           assert.deepStrictEqual(polled.seq, Option.some(3))
           assert.strictEqual(polled.live.get(GameId.make("1"))?.snapshot.period, 4)
         }).pipe(Effect.provide(over(scripted([[game("1", 4)]]), { ended })), Effect.provide(logged))
-      }).pipe(Effect.provide(Database.layer(":memory:")), withMetrics)
+      }).pipe(Effect.provide([Database.layer(":memory:"), NodeCrypto.layer]), withMetrics)
     }
   )
 
@@ -412,7 +414,7 @@ describe("Ingest", () => {
         const folded = yield* foldedThrough(2)
         assert.strictEqual(folded.live.get(GameId.make("1"))?.snapshot.period, 3)
       }).pipe(Effect.provide(over(scripted([]), { feedLog: appendingAtEnd })))
-    }).pipe(Effect.provide(Database.layer(":memory:")))
+    }).pipe(Effect.provide([Database.layer(":memory:"), NodeCrypto.layer]))
   )
 
   it.effect("the decoder's state from the replayed frames is in effect for the first live frame", () =>
@@ -427,7 +429,7 @@ describe("Ingest", () => {
           [3]
         )
       }).pipe(Effect.provide(over(Layer.succeed(Provider, counting))))
-    }).pipe(Effect.provide(Database.layer(":memory:")))
+    }).pipe(Effect.provide([Database.layer(":memory:"), NodeCrypto.layer]))
   )
 
   describe("dayStart", () => {
@@ -456,7 +458,7 @@ describe("Ingest", () => {
 
 /** `over`, on a fresh in-memory database. */
 function ingesting(provider: Layer.Layer<Provider>, options: Parameters<typeof over>[1] = {}) {
-  return over(provider, options).pipe(Layer.provide(Database.layer(":memory:")))
+  return over(provider, options).pipe(Layer.provide([Database.layer(":memory:"), NodeCrypto.layer]))
 }
 
 /**
@@ -470,7 +472,7 @@ function over(
     readonly leagues?: ReadonlyArray<"nfl" | "fbs">
     readonly liveFeed?: LiveFeed["Service"]
     readonly ended?: Array<Tracer.Span>
-    readonly feedLog?: Layer.Layer<FeedLog, never, SqlClient.SqlClient>
+    readonly feedLog?: Layer.Layer<FeedLog, never, SqlClient.SqlClient | Crypto.Crypto>
   } = {}
 ) {
   return Ingest.layer(options.leagues ?? ["fbs"]).pipe(

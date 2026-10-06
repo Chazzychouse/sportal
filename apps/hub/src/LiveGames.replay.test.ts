@@ -1,5 +1,5 @@
 import { join } from "node:path"
-import { NodeServices } from "@effect/platform-node"
+import { NodeCrypto, NodeServices } from "@effect/platform-node"
 import { assert, describe, it } from "@effect/vitest"
 import { GameId, type GameSnapshot } from "@sportal/domain/Game"
 import type { GameEvent } from "@sportal/domain/GameEvent"
@@ -127,7 +127,7 @@ describe("a recorded game", () => {
 
         const uninterrupted = yield* appended(all).pipe(
           Effect.andThen(replayed),
-          Effect.provide(Database.layer(":memory:"))
+          Effect.provide([Database.layer(":memory:"), NodeCrypto.layer])
         )
         assert.isTrue(Equal.equals(after.latest, uninterrupted.latest))
         assert.isTrue(Equal.equals(after.held, uninterrupted.held))

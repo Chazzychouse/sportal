@@ -1,4 +1,4 @@
-import { NodeHttpServer, NodePath } from "@effect/platform-node"
+import { NodeCrypto, NodeHttpServer, NodePath } from "@effect/platform-node"
 import { assert, describe, it } from "@effect/vitest"
 import { type LiveMessage, LiveMessageJson } from "@sportal/api/LiveMessage"
 import { SportalApi } from "@sportal/api/SportalApi"
@@ -340,7 +340,7 @@ function hubUnderTest() {
         polling(() => Effect.succeed([game]))
       ),
       neverPushing,
-      FeedLog.layer.pipe(Layer.provide(Database.layer(":memory:")))
+      FeedLog.layer.pipe(Layer.provide([Database.layer(":memory:"), NodeCrypto.layer]))
     ]),
     Layer.provideMerge(testConfig())
   )

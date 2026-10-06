@@ -11,4 +11,9 @@ export class Frame extends Schema.Class<Frame>("sportal/hub/Frame")({
   channel: Schema.String,
   kind: Schema.Literals(["response", "message", "checkpoint"]),
   body: Schema.String
-}) {}
+}) {
+  /** Whether `frame` is a poll's response, the only kind the log stores without a body when it repeats. */
+  static isPollResponse(frame: Pick<Frame, "feed" | "kind">): boolean {
+    return frame.feed === "poll" && frame.kind === "response"
+  }
+}
