@@ -2,12 +2,12 @@ import { join } from "node:path"
 import { fileURLToPath } from "node:url"
 import { Delivery } from "@sportal/domain/Delivery"
 import { LeagueId } from "@sportal/domain/League"
-import { Scenario } from "@sportal/domain/Scenario"
-import { scenarios } from "@sportal/domain/scenarios/Scenarios"
 import { Array as Arr, DateTime, Duration, Effect, FileSystem, Layer, Option, Schema } from "effect"
 import * as Cadence from "../ingest/Cadence.ts"
 import { Ingest } from "../ingest/Ingest.ts"
 import { LiveGames } from "../LiveGames.ts"
+import { Scenario } from "./Scenario.ts"
+import { scenarios } from "./written/Scenarios.ts"
 
 /**
  * A scenario as the feed: each league's slate at the time since the Hub started is taken as a `Listing`, on the poll

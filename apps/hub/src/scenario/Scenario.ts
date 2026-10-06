@@ -1,8 +1,8 @@
+import { GameId, GameSnapshot, type GameStatus } from "@sportal/domain/Game"
+import type { LeagueId } from "@sportal/domain/League"
+import { Situation } from "@sportal/domain/Situation"
+import { broadcast, snapshot, team } from "@sportal/domain/TestGame"
 import { DateTime, Duration, Schema } from "effect"
-import { GameId, GameSnapshot, type GameStatus } from "./Game.ts"
-import type { LeagueId } from "./League.ts"
-import { Situation } from "./Situation.ts"
-import { broadcast, snapshot, team } from "./TestGame.ts"
 
 /**
  * A timeline of game snapshots for several games, scripted or cut from a recording, that a Hub can play instead

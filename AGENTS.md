@@ -76,7 +76,7 @@ A reader opens a file to see the thing it is named for. Keep it that way.
   together, each reloading on change. Without Docker it says telemetry is off and runs the rest. The shell
   waits for the UI to come up. Use `pnpm dev:x11` to run the shell through XWayland.
 - `SPORTAL_SCENARIO=<name> SPORTAL_SCENARIO_SPEED=10 pnpm dev` — play a scenario instead of ESPN and YouTube TV, ten
-  times faster: a written one (`packages/domain/src/scenarios/Scenarios.ts`) or a recorded slice in
+  times faster: a written one (`apps/hub/src/scenario/written/Scenarios.ts`) or a recorded slice in
   `fixtures/scenarios/`. Every game plays as a synthetic stream page. Cut a slice from a recording with
   `pnpm --filter @sportal/hub scenario:cut <name> <recording-dir> <from> <to> [game ids…]`; the recording may come
   from either recorder (`record.sh` names its polls by UTC instant, `record.py` by epoch seconds).
