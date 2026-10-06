@@ -1,11 +1,11 @@
-import type { GameSnapshot } from "@sportal/domain/Game"
 import type { Stage } from "@sportal/domain/Stage"
 import { Fragment, useEffect, useRef } from "react"
 import type { Display, DisplayStep } from "../display/Display.ts"
-import { statusText } from "../game/GameStatus.tsx"
-import { TeamLogo } from "../game/TeamLogo.tsx"
+import { GameStatus } from "../game/GameStatus.tsx"
+import { Score } from "../game/Score.tsx"
 import type { useLive } from "../hub/LiveStream.ts"
 import { tileDrag } from "../stage/TileChrome.tsx"
+import { PlaceBadge } from "./PlaceBadge.tsx"
 import type { StripCard } from "./StripCards.ts"
 
 /**
@@ -95,7 +95,6 @@ function Card(props: {
 }) {
   const { game, place } = props.card
   const bench = place?._tag === "Bench" ? place.tile : undefined
-  const onStage = place?._tag === "Slot"
   const networks = game?.networks()
   return (
     <button
@@ -117,13 +116,9 @@ function Card(props: {
         <span className="col-span-4 text-muted-foreground">Off the slate</span>
       ) : (
         <>
-          <Side side={game.away} other={game.home} game={game} />
-          <span
-            className={`label-caps truncate text-right text-[10px] ${game.progress() === "live" ? "text-live" : "text-muted-foreground"}`}
-          >
-            {statusText(game)}
-          </span>
-          <Side side={game.home} other={game.away} game={game} />
+          <Score game={game} side="away" />
+          <GameStatus game={game} className="truncate text-right text-[10px]" />
+          <Score game={game} side="home" />
           <span className="flex min-w-0 items-center justify-end gap-1">
             <span className="truncate font-sans text-[10px] text-muted-foreground" title={networks}>
               {networks}
@@ -136,36 +131,10 @@ function Card(props: {
                 {props.watch.score}
               </span>
             )}
-            {place !== undefined && (
-              <span
-                className={`label-caps shrink-0 rounded-sm border px-1 text-[9px] ${onStage ? "border-on-air/50 text-on-air" : "text-muted-foreground"}`}
-              >
-                {place._tag === "Slot" ? `T${place.slot + 1}` : "Bench"}
-              </span>
-            )}
+            <PlaceBadge place={place} className="text-[9px]" />
           </span>
         </>
       )}
     </button>
-  )
-}
-
-/** One team's cells: logo, rank and abbreviation, and score. Once scores mean something, the trailing side is muted. */
-function Side(props: { side: GameSnapshot["home"]; other: GameSnapshot["home"]; game: GameSnapshot }) {
-  const scored = props.game.scored()
-  const trailing = scored && props.side.score < props.other.score
-  return (
-    <>
-      <TeamLogo team={props.side.team} size={16} />
-      <span className={`truncate font-semibold ${trailing ? "text-muted-foreground" : ""}`}>
-        {props.side.ranking !== undefined && (
-          <span className="mr-0.5 font-normal text-[9px] text-muted-foreground">{props.side.ranking}</span>
-        )}
-        {props.side.team.abbreviation}
-      </span>
-      <span className={`text-right ${trailing ? "text-muted-foreground" : ""}`}>
-        {scored ? props.side.score : null}
-      </span>
-    </>
   )
 }

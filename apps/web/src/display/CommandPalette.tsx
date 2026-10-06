@@ -10,7 +10,8 @@ import {
   CommandList,
   CommandShortcut
 } from "@/design/command"
-import { statusText } from "../game/GameStatus.tsx"
+import { GameStatus } from "../game/GameStatus.tsx"
+import { scoreline } from "../game/Score.tsx"
 import { TeamLogo } from "../game/TeamLogo.tsx"
 import { dispatch } from "../hub/HubClient.ts"
 import { LayoutGlyph, layoutLabel } from "../layout/LayoutGlyph.tsx"
@@ -33,7 +34,7 @@ export function CommandPalette(props: {
   const occupied = props.stage.onStage().flatMap((tile, slot) => {
     if (tile._tag === "Empty") return []
     const game = gameOn(tile.game)
-    return [{ slot, name: game === undefined ? `Tile ${slot + 1}` : matchup(game) }]
+    return [{ slot, name: game === undefined ? `Tile ${slot + 1}` : scoreline(game) }]
   })
 
   return (
@@ -52,17 +53,13 @@ export function CommandPalette(props: {
           {[...props.slate].sort(GameSnapshot.watchOrder).map((game) => (
             <CommandItem
               key={game.id}
-              value={`watch ${matchup(game)} ${game.away.team.name} ${game.home.team.name} ${game.networks()} ${game.id}`}
+              value={`watch ${scoreline(game)} ${game.away.team.name} ${game.home.team.name} ${game.networks()} ${game.id}`}
               onSelect={() => run({ _tag: "Assign", tile: props.selected, game: game.id })}
             >
               <TeamLogo team={game.away.team} size={16} />
-              <span className="font-mono">{matchup(game)}</span>
+              <span className="font-mono">{scoreline(game)}</span>
               <TeamLogo team={game.home.team} size={16} />
-              <span
-                className={`label-caps text-[11px] ${game.progress() === "live" ? "text-live" : "text-muted-foreground"}`}
-              >
-                {statusText(game)}
-              </span>
+              <GameStatus game={game} className="text-[11px]" />
               <CommandShortcut>{game.networks()}</CommandShortcut>
             </CommandItem>
           ))}
@@ -146,8 +143,4 @@ export function CommandPalette(props: {
       </CommandList>
     </CommandDialog>
   )
-}
-
-function matchup(game: GameSnapshot) {
-  return `${game.away.team.abbreviation} ${game.away.score}–${game.home.score} ${game.home.team.abbreviation}`
 }

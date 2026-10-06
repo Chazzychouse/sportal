@@ -4,11 +4,12 @@ import { Shrink } from "lucide-react"
 import { useState } from "react"
 import { Toaster } from "@/design/sonner"
 import { useDisplay } from "../display/DisplayView.tsx"
-import { statusText } from "../game/GameStatus.tsx"
-import { TeamLogo } from "../game/TeamLogo.tsx"
+import { GameStatus } from "../game/GameStatus.tsx"
+import { Score } from "../game/Score.tsx"
 import { dispatch } from "../hub/HubClient.ts"
 import { useLive } from "../hub/LiveStream.ts"
 import { LayoutGlyph, layoutLabel } from "../layout/LayoutGlyph.tsx"
+import { PlaceBadge } from "../slate/PlaceBadge.tsx"
 import { StripCard } from "../slate/StripCards.ts"
 import { useRejectionToasts } from "../stage/Rejections.ts"
 import { StageMap } from "./StageMap.tsx"
@@ -107,7 +108,6 @@ export function RemoteView() {
             const { game, place } = card
             const dropped = display.drop(card, live.stage)
             const networks = game?.networks()
-            const scored = game?.scored() === true
             return (
               <li key={card.id}>
                 <button
@@ -121,51 +121,17 @@ export function RemoteView() {
                   {game === undefined ? (
                     <span className="col-span-4 text-muted-foreground">Off the slate</span>
                   ) : (
-                    [game.away, game.home].map((side, row) => {
-                      const trailing = scored && side.score < (row === 0 ? game.home : game.away).score
-                      return (
-                        <span key={side.team.id} className="contents">
-                          <TeamLogo team={side.team} size={20} />
-                          <span
-                            className={`truncate font-semibold ${trailing ? "text-muted-foreground" : ""}`}
-                          >
-                            {side.ranking !== undefined && (
-                              <span className="mr-1 font-normal text-[10px] text-muted-foreground">
-                                {side.ranking}
-                              </span>
-                            )}
-                            {side.team.abbreviation}
-                          </span>
-                          <span className={`text-right ${trailing ? "text-muted-foreground" : ""}`}>
-                            {scored ? side.score : ""}
-                          </span>
-                          {row === 0 ? (
-                            <span
-                              className={`label-caps text-right text-[11px] ${game.progress() === "live" ? "text-live" : "text-muted-foreground"}`}
-                            >
-                              {statusText(game)}
-                            </span>
-                          ) : (
-                            <span className="flex items-center justify-end gap-1.5">
-                              <span className="max-w-28 truncate font-sans text-[11px] text-muted-foreground">
-                                {networks}
-                              </span>
-                              {place !== undefined && (
-                                <span
-                                  className={`label-caps rounded-sm border px-1 text-[10px] ${
-                                    place._tag === "Slot"
-                                      ? "border-on-air/50 text-on-air"
-                                      : "text-muted-foreground"
-                                  }`}
-                                >
-                                  {place._tag === "Slot" ? `T${place.slot + 1}` : "Bench"}
-                                </span>
-                              )}
-                            </span>
-                          )}
+                    <>
+                      <Score game={game} side="away" />
+                      <GameStatus game={game} className="text-right text-[11px]" />
+                      <Score game={game} side="home" />
+                      <span className="flex items-center justify-end gap-1.5">
+                        <span className="max-w-28 truncate font-sans text-[11px] text-muted-foreground">
+                          {networks}
                         </span>
-                      )
-                    })
+                        <PlaceBadge place={place} className="text-[10px]" />
+                      </span>
+                    </>
                   )}
                 </button>
               </li>

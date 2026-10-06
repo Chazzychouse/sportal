@@ -3,8 +3,8 @@ import type { Stage, Tile } from "@sportal/domain/Stage"
 import { ArrowUpLeft, Shrink, SquareDashed, Volume2, VolumeX, X } from "lucide-react"
 import type { ReactNode } from "react"
 import { Button } from "@/design/button"
-import { statusText } from "../game/GameStatus.tsx"
-import { TeamLogo } from "../game/TeamLogo.tsx"
+import { GameStatus } from "../game/GameStatus.tsx"
+import { Score } from "../game/Score.tsx"
 import { dispatch } from "../hub/HubClient.ts"
 
 /**
@@ -63,18 +63,10 @@ export function TileChrome(props: {
             </span>
           ) : (
             <>
-              <TeamLogo team={props.game.away.team} size={14} />
-              <span className="font-semibold">{props.game.away.team.abbreviation}</span>
-              {props.game.away.score}
+              <Score game={props.game} side="away" />
               <span className="text-muted-foreground">–</span>
-              {props.game.home.score}
-              <span className="font-semibold">{props.game.home.team.abbreviation}</span>
-              <TeamLogo team={props.game.home.team} size={14} />
-              <span
-                className={`label-caps ml-1.5 truncate text-[11px] ${props.game.progress() === "live" ? "text-live" : "text-muted-foreground"}`}
-              >
-                {statusText(props.game)}
-              </span>
+              <Score game={props.game} side="home" />
+              <GameStatus game={props.game} className="ml-1.5 truncate text-[11px]" />
             </>
           )}
         </span>

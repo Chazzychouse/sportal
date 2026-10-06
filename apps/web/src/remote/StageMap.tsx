@@ -3,8 +3,8 @@ import type { Stage, StageCommand } from "@sportal/domain/Stage"
 import { ArrowLeftRight, ArrowUpLeft, Shrink, SquareDashed, Volume2, X } from "lucide-react"
 import { type ReactNode, useState } from "react"
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/design/sheet"
-import { statusText } from "../game/GameStatus.tsx"
-import { TeamLogo } from "../game/TeamLogo.tsx"
+import { GameStatus } from "../game/GameStatus.tsx"
+import { Score, scoreline } from "../game/Score.tsx"
 import { dispatch } from "../hub/HubClient.ts"
 
 /**
@@ -27,6 +27,7 @@ export function StageMap(props: {
       ? undefined
       : props.slate.find((game) => game.id === at.game)
   }
+  const selectedGame = gameIn(props.selected)
   const run = (command: StageCommand) => {
     dispatch(command)
     setActions(false)
@@ -96,18 +97,12 @@ export function StageMap(props: {
                     </span>
                   ) : (
                     <span className="flex min-h-0 flex-1 flex-col justify-center gap-0.5 font-mono text-[11px] tabular-nums">
-                      {[game.away, game.home].map((side) => (
-                        <span key={side.team.id} className="flex items-center gap-1">
-                          <TeamLogo team={side.team} size={14} />
-                          <span className="truncate font-semibold">{side.team.abbreviation}</span>
-                          <span className="ml-auto">{game.scored() ? side.score : ""}</span>
+                      {(["away", "home"] as const).map((side) => (
+                        <span key={side} className="flex items-center gap-1">
+                          <Score game={game} side={side} />
                         </span>
                       ))}
-                      <span
-                        className={`label-caps truncate text-[9px] ${game.progress() === "live" ? "text-live" : "text-muted-foreground"}`}
-                      >
-                        {statusText(game)}
-                      </span>
+                      <GameStatus game={game} className="truncate text-[9px]" />
                     </span>
                   )}
                 </span>
@@ -132,12 +127,7 @@ export function StageMap(props: {
           <div className="px-4 pt-4 pb-2">
             <SheetTitle className="label-caps text-xs">Tile {props.selected + 1}</SheetTitle>
             <SheetDescription className="font-mono text-sm">
-              {(() => {
-                const game = gameIn(props.selected)
-                return game === undefined
-                  ? ""
-                  : `${game.away.team.abbreviation} ${game.away.score}–${game.home.score} ${game.home.team.abbreviation}`
-              })()}
+              {selectedGame === undefined ? "" : scoreline(selectedGame)}
             </SheetDescription>
           </div>
           {tile !== undefined && tile._tag !== "Empty" && (

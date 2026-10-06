@@ -1,5 +1,21 @@
 import type { GameSnapshot } from "@sportal/domain/Game"
 import { DateTime } from "effect"
+import { cn } from "@/design/ClassName"
+
+/** A game's status as a small-caps label, in the live colour while the game is on. `className` sizes and places it. */
+export function GameStatus(props: { game: GameSnapshot; className?: string }) {
+  return (
+    <span
+      className={cn(
+        "label-caps",
+        props.game.progress() === "live" ? "text-live" : "text-muted-foreground",
+        props.className
+      )}
+    >
+      {statusText(props.game)}
+    </span>
+  )
+}
 
 /** A game's status as a slate row or a tile shows it: the period and clock, the kickoff, or the status in a word. */
 export function statusText(game: GameSnapshot): string {
