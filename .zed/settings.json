@@ -1,0 +1,17 @@
+// TypeScript 7 has no tsserver, so Zed's built-in vtsls and typescript-language-server cannot run here.
+// effect-tsgo (the "Effect Language Service (tsgo)" extension) runs @effect/tsgo: TypeScript 7 plus the
+// Effect diagnostics `pnpm check` reports.
+{
+  "languages": {
+    "TypeScript": {
+      "language_servers": ["effect-tsgo", "!vtsls", "!typescript-language-server", "!typescript-ls", "..."]
+    },
+    "TSX": {
+      "language_servers": ["effect-tsgo", "!vtsls", "!typescript-language-server", "!typescript-ls", "..."]
+    }
+  },
+  "lsp": {
+    // The same @effect/tsgo as package.json; bump them together.
+    "effect-tsgo": { "settings": { "package_version": "0.50.0" } }
+  }
+}
