@@ -2,7 +2,7 @@ import { Delivery, type DeliverySource } from "@sportal/domain/Delivery"
 import { type GameId, GameSnapshot } from "@sportal/domain/Game"
 import type { GameEvent } from "@sportal/domain/GameEvent"
 import type { LeagueId } from "@sportal/domain/League"
-import { LiveGame, LiveGameState } from "@sportal/domain/LiveGame"
+import { LiveGame, type LiveGameState } from "@sportal/domain/LiveGame"
 import {
   Array as Arr,
   Cause,
@@ -540,7 +540,7 @@ function logTransition(before: LiveGame, after: LiveGame, now: DateTime.Utc): Ef
   const from = before.state._tag
   const to = after.state._tag
   if (from === to) return Effect.void
-  const silent = Option.map(LiveGameState.updatedAt(before.state), (at) => DateTime.distance(at, now))
+  const silent = Option.map(before.updatedAt(), (at) => DateTime.distance(at, now))
   const since = Option.match(silent, {
     onNone: () => "",
     onSome: (duration) => `, ${Math.round(Duration.toSeconds(duration))} s since the last update`

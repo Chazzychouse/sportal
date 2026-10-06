@@ -1,7 +1,7 @@
 import { Array as Arr, Data, DateTime, Duration, Equal, Option } from "effect"
 import type { Delivery, DeliverySource } from "./Delivery.ts"
 import { type GameId, GameSnapshot } from "./Game.ts"
-import { GameEvent } from "./GameEvent.ts"
+import type { GameEvent } from "./GameEvent.ts"
 import { Play } from "./Play.ts"
 import { Watchability } from "./Watchability.ts"
 
@@ -12,18 +12,7 @@ export type LiveGameState = Data.TaggedEnum<{
   Stale: { readonly updatedAt: DateTime.Utc }
   Over: object
 }>
-const constructors = Data.taggedEnum<LiveGameState>()
-export const LiveGameState = {
-  Upcoming: constructors.Upcoming,
-  Live: constructors.Live,
-  Stale: constructors.Stale,
-  Over: constructors.Over,
-  $is: constructors.$is,
-  $match: constructors.$match,
-  /** When a live or stale game was last updated; none for an upcoming or over game. */
-  updatedAt: (state: LiveGameState): Option.Option<DateTime.Utc> =>
-    state._tag === "Live" || state._tag === "Stale" ? Option.some(state.updatedAt) : Option.none()
-}
+export const LiveGameState = Data.taggedEnum<LiveGameState>()
 
 /**
  * One game as the Hub follows it: its latest snapshot, the feed that gave it, its state, its plays, and its
@@ -74,7 +63,7 @@ export class LiveGame extends Data.Class<{
    *
    * A snapshot behind in game time is none. A poll at the same game time as a live game's pushed snapshot only
    * refreshes it: the push wins a tie, since the poll lags it. Once the game has plays, they decide the events they
-   * cover (`GameEvent.fromPlays`), and a snapshot gives only the rest. A `Plays` delivery replaces the list.
+   * cover (`fromPlays`), and a snapshot gives only the rest. A `Plays` delivery replaces the list.
    */
   take(
     delivery: Data.TaggedEnum.Value<Delivery, "Snapshot" | "Plays">,
@@ -109,7 +98,7 @@ export class LiveGame extends Data.Class<{
     }
     const events = snapshot
       .eventsSince(this.snapshot)
-      .filter((event) => this.plays.length === 0 || !GameEvent.fromPlays.has(event._tag))
+      .filter((event) => this.plays.length === 0 || !fromPlays.has(event._tag))
     return {
       liveGame: Option.some(
         new LiveGame({
@@ -173,6 +162,16 @@ export class LiveGame extends Data.Class<{
     })
   }
 
+  /** When a live or stale game was last updated; none for an upcoming or over game. */
+  updatedAt(): Option.Option<DateTime.Utc> {
+    return LiveGameState.$match(this.state, {
+      Upcoming: () => Option.none(),
+      Live: ({ updatedAt }) => Option.some(updatedAt),
+      Stale: ({ updatedAt }) => Option.some(updatedAt),
+      Over: () => Option.none()
+    })
+  }
+
   /** Live, stale for less than `staleCurrentFor`, or upcoming with kickoff within `currentBefore` of `now`. */
   isCurrent(now: DateTime.Utc): boolean {
     return LiveGameState.$match(this.state, {
@@ -212,3 +211,16 @@ function stateOf(snapshot: GameSnapshot, now: DateTime.Utc): LiveGameState {
       return LiveGameState.Over()
   }
 }
+
+/** The tags a game's plays decide once it has any; its snapshots decide them only before. */
+const fromPlays: ReadonlySet<GameEvent["_tag"]> = new Set([
+  "ScoreChanged",
+  "Turnover",
+  "PossessionChanged",
+  "TimeoutTaken",
+  "PeriodEnded",
+  "FourthDown",
+  "Played",
+  "BigPlay",
+  "Sack"
+])

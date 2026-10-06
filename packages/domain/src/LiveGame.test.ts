@@ -26,12 +26,12 @@ const taken = (game: LiveGame, taking: GameSnapshot, from: DeliverySource, now: 
   game.take(Delivery.Snapshot({ snapshot: taking, from }), now).liveGame
 const ticked = (game: LiveGame, now: DateTime.Utc) => game.tick(now).liveGame
 
-describe("LiveGameState.updatedAt", () => {
+describe("LiveGame.updatedAt", () => {
   it("is the instant of a live or stale game, and none otherwise", () => {
-    assert.deepStrictEqual(LiveGameState.updatedAt(LiveGameState.Upcoming()), Option.none())
-    assert.deepStrictEqual(LiveGameState.updatedAt(LiveGameState.Live({ updatedAt: t0 })), Option.some(t0))
-    assert.deepStrictEqual(LiveGameState.updatedAt(LiveGameState.Stale({ updatedAt: t0 })), Option.some(t0))
-    assert.deepStrictEqual(LiveGameState.updatedAt(LiveGameState.Over()), Option.none())
+    assert.deepStrictEqual(upcomingGame.updatedAt(), Option.none())
+    assert.deepStrictEqual(liveGame.updatedAt(), Option.some(t0))
+    assert.deepStrictEqual(staleGame.updatedAt(), Option.some(t0))
+    assert.deepStrictEqual(overGame.updatedAt(), Option.none())
   })
 })
 
