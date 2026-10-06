@@ -34,7 +34,7 @@ Every exported type name must be a term here.
 | **GameDetail** | A snapshot plus drives, plays, and statistics. | summary |
 | **Situation** | Live football state: possession, down, distance, field position, red zone, timeouts. | context |
 | **Period** | A quarter or an overtime. | quarter (in code) |
-| **Drive** / **Play** | A possession sequence / a single snap. | |
+| **Drive** / **Play** | A possession sequence / a single snap, or a timeout, a penalty, or the end of a period, as the game's play-by-play lists it: its kind, clock, text, yardage, start and end, score after, and win probability. | |
 | **GameEvent** | Something that happened in a game between two snapshots of it: a score, the ball changing hands, a drive reaching the 40, the red zone, goal to go, fourth down, a timeout, a period or the game ending. Derived, never stored. | alert, update |
 
 ### Data and video
