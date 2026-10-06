@@ -22,11 +22,13 @@ export const cut = Effect.fn("CutScenario.cut")(function* (options: {
   to: DateTime.Utc
   games: ReadonlyArray<string>
 }) {
-  const league = leagues[basename(options.recording)]
-  if (league === undefined)
-    return yield* Effect.fail(
-      new CutFailed({ reason: `${options.recording} is not a college-football or nfl recording` })
-    )
+  const league = yield* Option.match(leagueOf(options.recording), {
+    onNone: () =>
+      Effect.fail(
+        new CutFailed({ reason: `${options.recording} is not a college-football or nfl recording` })
+      ),
+    onSome: Effect.succeed
+  })
   const fs = yield* FileSystem.FileSystem
   const scoreboards = join(options.recording, "scoreboard")
   const polls = (yield* fs.readDirectory(scoreboards))
@@ -63,13 +65,18 @@ export const cut = Effect.fn("CutScenario.cut")(function* (options: {
 /** A recording could not be cut into a scenario, and why. */
 class CutFailed extends Schema.TaggedError<CutFailed>()("CutFailed", { reason: Schema.String }) {}
 
+/** The league a recording's folder (`…/college-football` or `…/nfl`) holds. */
+export function leagueOf(recording: string): Option.Option<LeagueId> {
+  return Option.fromUndefinedOr(leagues[basename(recording)])
+}
+
 const leagues: Record<string, LeagueId> = { "college-football": "fbs", nfl: "nfl" }
 
 /**
  * The instant a recorded poll was taken, from its name: "20261003T160848Z.json.gz" (record.sh) or
  * "1791130515.585.json.gz" (record.py: epoch seconds, then milliseconds).
  */
-function instantOf(file: string): Option.Option<DateTime.Utc> {
+export function instantOf(file: string): Option.Option<DateTime.Utc> {
   return utcNameInstant(file).pipe(Option.orElse(() => epochNameInstant(file)))
 }
 

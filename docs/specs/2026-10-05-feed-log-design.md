@@ -209,7 +209,7 @@ guard survives as the fold's per-delivery guard.
 | A batch write fails | The Hub keeps following games. Error log, a counter, and a `gap` row with the lost `seq` range and count once writes recover |
 | A frame will not decode | Error log with its `seq`, a counter, the frame skipped. The body is in the log, so the bug reproduces exactly |
 | Applying a delivery dies | Error log with `seq` and game, a counter; the game keeps its previous state; the fold carries on |
-| Startup | Replay the current game day (from 04:00 local) before serving. The plan measures it; if it is slow, saving fold state is follow-up work |
+| Startup | Replay the current game day (from 04:00 local) before serving. Measured on the whole 2026-10-04 NFL recording imported with `feed:import` (19,093 frames: 1,529 polls, 75 of them unchanged, and 17,564 FastCast frames; a 44.4 MB `feed.sqlite`): opening the log and replaying it through decode and the fold takes 11.0 s (three runs, 10.9–11.0 s, on the development machine). If it grows slow, saving fold state is follow-up work |
 | Shutdown | Flush the pending batch within the existing 3 s bound |
 
 ## Testing
