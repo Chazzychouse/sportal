@@ -26,6 +26,7 @@ import {
 } from "effect"
 import { SqlClient } from "effect/sql"
 import { TestClock } from "effect/testing"
+import * as Database from "../Database.ts"
 import { FeedLog } from "../FeedLog.ts"
 import type { FeedFrame } from "../Frame.ts"
 import { GameHistory } from "../GameHistory.ts"
@@ -34,7 +35,6 @@ import * as EspnDecode from "../provider/espn/EspnDecode.ts"
 import { recordedCheckpoint } from "../provider/espn/TestEspn.ts"
 import { Decoded, Provider, ProviderError } from "../provider/Provider.ts"
 import { polling, pushed, scripted } from "../provider/TestProvider.ts"
-import * as TestDatabase from "../TestDatabase.ts"
 import { counted, recordingLogs, recordingSpans, withMetrics } from "../TestTelemetry.ts"
 import * as Ingest from "./Ingest.ts"
 
@@ -392,7 +392,7 @@ describe("Ingest", () => {
           SELECT COUNT(*) AS count FROM feed_frame WHERE feed = 'fastcast'
         `
         assert.strictEqual(row?.count, 200)
-      }).pipe(Effect.provide([TestDatabase.layer(":memory:"), NodeCrypto.layer])),
+      }).pipe(Effect.provide([Database.at(":memory:"), NodeCrypto.layer])),
     10_000
   )
 
@@ -425,7 +425,7 @@ describe("Ingest", () => {
           Effect.provide(over(scripted([[liveSnapshot({ id: GameId.make("1"), period: 4 })]]), { ended })),
           Effect.provide(logged)
         )
-      }).pipe(Effect.provide([TestDatabase.layer(":memory:"), NodeCrypto.layer]), withMetrics)
+      }).pipe(Effect.provide([Database.at(":memory:"), NodeCrypto.layer]), withMetrics)
     }
   )
 
@@ -446,7 +446,7 @@ describe("Ingest", () => {
       const folded = ended.find((span) => span.name === "LiveGames.replay")
       assert.isDefined(folded)
       assert.isFalse(folded?.attributes.has("sportal.deliveries"))
-    }).pipe(Effect.provide([TestDatabase.layer(":memory:"), NodeCrypto.layer]))
+    }).pipe(Effect.provide([Database.at(":memory:"), NodeCrypto.layer]))
   })
 
   it.effect("a restart replays frames that raised notices without counting or logging them", () => {
@@ -462,7 +462,7 @@ describe("Ingest", () => {
           []
         )
       }).pipe(Effect.provide(over(espnDecoding)), Effect.provide(logged))
-    }).pipe(Effect.provide([TestDatabase.layer(":memory:"), NodeCrypto.layer]), withMetrics)
+    }).pipe(Effect.provide([Database.at(":memory:"), NodeCrypto.layer]), withMetrics)
   })
 
   it.effect("the same notices on frames after the replay are counted and logged", () => {
@@ -521,7 +521,7 @@ describe("Ingest", () => {
         const folded = yield* foldedThrough(2)
         assert.strictEqual(folded.live.get(GameId.make("1"))?.snapshot.period, 3)
       }).pipe(Effect.provide(over(scripted([]), { feedLog: appendingAtEnd })))
-    }).pipe(Effect.provide([TestDatabase.layer(":memory:"), NodeCrypto.layer]))
+    }).pipe(Effect.provide([Database.at(":memory:"), NodeCrypto.layer]))
   )
 
   it.effect("the decoder's state from the replayed frames is in effect for the first live frame", () =>
@@ -536,7 +536,7 @@ describe("Ingest", () => {
           [3]
         )
       }).pipe(Effect.provide(over(Layer.succeed(Provider, counting))))
-    }).pipe(Effect.provide([TestDatabase.layer(":memory:"), NodeCrypto.layer]))
+    }).pipe(Effect.provide([Database.at(":memory:"), NodeCrypto.layer]))
   )
 
   describe("the game day", () => {
@@ -564,7 +564,7 @@ describe("Ingest", () => {
         return yield* Effect.gen(function* () {
           return ended.find((span) => span.name === "Ingest.replay")?.attributes.get("sportal.frames")
         }).pipe(Effect.provide(over(scripted([]), { ended, zone: "America/Chicago" })))
-      }).pipe(Effect.provide([TestDatabase.layer(":memory:"), NodeCrypto.layer]))
+      }).pipe(Effect.provide([Database.at(":memory:"), NodeCrypto.layer]))
 
     it.effect("starts at yesterday's 04:00 before 04:00", () =>
       Effect.gen(function* () {
@@ -583,7 +583,7 @@ describe("Ingest", () => {
 
 /** `over`, on a fresh in-memory database. */
 function ingesting(provider: Layer.Layer<Provider>, options: Parameters<typeof over>[1] = {}) {
-  return over(provider, options).pipe(Layer.provide([TestDatabase.layer(":memory:"), NodeCrypto.layer]))
+  return over(provider, options).pipe(Layer.provide([Database.at(":memory:"), NodeCrypto.layer]))
 }
 
 /**

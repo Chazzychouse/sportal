@@ -3,8 +3,8 @@ import { assert, describe, it } from "@effect/vitest"
 import { DateTime, Effect, Fiber, FileSystem, Layer, Path, Ref, Stream, type Tracer } from "effect"
 import { SqlClient, SqlError } from "effect/sql"
 import { TestClock } from "effect/testing"
+import * as Database from "./Database.ts"
 import { FeedLog } from "./FeedLog.ts"
-import * as TestDatabase from "./TestDatabase.ts"
 import { withEnv } from "./TestHubConfig.ts"
 import { counted, recordingLogs, recordingSpans, withMetrics } from "./TestTelemetry.ts"
 
@@ -160,7 +160,7 @@ describe("FeedLog", () => {
           assert.strictEqual(warnings.length, 1)
           assert.deepInclude(warnings[0]?.annotations, { from: 1, to: 2, count: 2 })
         }).pipe(Effect.provide(FeedLog.layer.pipe(Layer.provide(failingTransactions(failures)))))
-      }).pipe(Effect.provide([TestDatabase.layer(":memory:"), NodeCrypto.layer, logged]), withMetrics)
+      }).pipe(Effect.provide([Database.at(":memory:"), NodeCrypto.layer, logged]), withMetrics)
     }
   )
 
@@ -187,7 +187,7 @@ describe("FeedLog", () => {
       const warnings = logs.filter((entry) => entry.level === "Warn")
       assert.strictEqual(warnings.length, 1)
       assert.deepInclude(warnings[0]?.annotations, { from: 1, to: 2, count: 2 })
-    }).pipe(Effect.provide([TestDatabase.layer(":memory:"), NodeCrypto.layer, logged]), withMetrics)
+    }).pipe(Effect.provide([Database.at(":memory:"), NodeCrypto.layer, logged]), withMetrics)
   })
 
   it.effect("keeps seqs contiguous when appends are interrupted", () =>
@@ -239,7 +239,7 @@ describe("FeedLog", () => {
       }).pipe(Effect.provide(FeedLog.layer))
 
       assert.strictEqual(yield* rowCount, 2)
-    }).pipe(Effect.provide([TestDatabase.layer(":memory:"), NodeCrypto.layer]))
+    }).pipe(Effect.provide([Database.at(":memory:"), NodeCrypto.layer]))
   )
 
   it.effect("continues from the last logged frame when opened again", () =>
@@ -262,7 +262,7 @@ describe("FeedLog", () => {
         kinds.map((row) => row.kind),
         ["response", "message", "unchanged"]
       )
-    }).pipe(Effect.provide([TestDatabase.layer(":memory:"), NodeCrypto.layer]))
+    }).pipe(Effect.provide([Database.at(":memory:"), NodeCrypto.layer]))
   )
 
   it.effect("forScenario keeps frames in memory by default, writing no file in the data directory", () =>
@@ -305,7 +305,7 @@ describe("FeedLog", () => {
 
 const feedLog = FeedLog.layer.pipe(
   Layer.provide(NodeCrypto.layer),
-  Layer.provideMerge(TestDatabase.layer(":memory:"))
+  Layer.provideMerge(Database.at(":memory:"))
 )
 
 function at(millis: number) {

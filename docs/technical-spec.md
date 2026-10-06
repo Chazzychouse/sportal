@@ -225,7 +225,7 @@ sportal/
     │       ├── FeedLog.ts          The append-only log of every frame, in feed.sqlite
     │       ├── Frame.ts            A feed frame as received, and the frame the log numbered
     │       ├── Gzip.ts             Frame bodies in and out of gzip
-    │       ├── TestDatabase.ts, TestHubConfig.ts, TestTelemetry.ts   Layers for tests
+    │       ├── TestHubConfig.ts, TestTelemetry.ts   Layers for tests
     │       ├── ingest/
     │       │   ├── Ingest.ts       Replays the game day from the feed log, then polls, runs the live feed, logs every frame, and folds it
     │       │   └── DecodeTelemetry.ts  What decode noticed, as logs and metrics, for frames after the replay
