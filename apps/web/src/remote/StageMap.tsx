@@ -3,7 +3,7 @@ import type { Stage, StageCommand } from "@sportal/domain/Stage"
 import { ArrowLeftRight, ArrowUpLeft, Shrink, SquareDashed, Volume2, X } from "lucide-react"
 import { type ReactNode, useState } from "react"
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/design/sheet"
-import { statusText } from "../game/GameStatus.ts"
+import { statusText } from "../game/GameStatus.tsx"
 import { TeamLogo } from "../game/TeamLogo.tsx"
 import { dispatch } from "../hub/HubClient.ts"
 

@@ -1,6 +1,6 @@
 import type { GameSnapshot } from "@sportal/domain/Game"
 import type { Tile } from "@sportal/domain/Stage"
-import { localTime, statusText } from "../game/GameStatus.ts"
+import { localTime, statusText } from "../game/GameStatus.tsx"
 import { TeamLogo } from "../game/TeamLogo.tsx"
 
 /**

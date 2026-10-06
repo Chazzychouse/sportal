@@ -10,7 +10,7 @@ import {
   CommandList,
   CommandShortcut
 } from "@/design/command"
-import { statusText } from "../game/GameStatus.ts"
+import { statusText } from "../game/GameStatus.tsx"
 import { TeamLogo } from "../game/TeamLogo.tsx"
 import { dispatch } from "../hub/HubClient.ts"
 import { LayoutGlyph, layoutLabel } from "../layout/LayoutGlyph.tsx"

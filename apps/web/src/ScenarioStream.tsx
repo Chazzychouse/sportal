@@ -1,6 +1,6 @@
 import type { GameSnapshot } from "@sportal/domain/Game"
 import { useEffect } from "react"
-import { statusText } from "./game/GameStatus.ts"
+import { statusText } from "./game/GameStatus.tsx"
 import { TeamLogo } from "./game/TeamLogo.tsx"
 import { useLive } from "./hub/LiveStream.ts"
 
