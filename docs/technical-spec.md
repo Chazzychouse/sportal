@@ -170,7 +170,7 @@ sportal/
 ├── vitest.config.ts
 ├── .dependency-cruiser.cjs     Import-direction and banned-name rules
 ├── lefthook.yml
-├── fixtures/scenarios/         Scenarios cut from recorded game days, as JSON
+├── fixtures/scenarios/         Recorded scenarios: raw frames of recorded game-day windows (and, until they go, their JSON slices)
 ├── telemetry/                  Local Grafana: compose file and the Hub's dashboards
 │
 ├── docs/
@@ -254,11 +254,11 @@ sportal/
     │       │       ├── TestYouTubeTv.ts     A recorded guide for tests of other modules
     │       │       └── fixtures/            Recorded real payloads
     │       ├── scenario/
-    │       │   ├── Scenario.ts         A timeline of game snapshots a Hub can play instead of a provider
+    │       │   ├── Scenario.ts         A written scenario: a timeline of game snapshots
+    │       │   ├── RecordedScenario.ts A recorded scenario: the raw frames of a recorded window
+    │       │   ├── ScenarioProvider.ts A scenario as the provider: polled, pushed, and polled again at its frames' times
     │       │   ├── ScenarioClock.ts    Scenario time: the Hub's clock at a chosen speed
-    │       │   ├── ScenarioIngest.ts   A scenario as the feed into the fold
     │       │   ├── ScenarioSource.ts   Every game carried on a synthetic stream page
-    │       │   ├── RecordedScenarios.test.ts  Replays each cut scenario in fixtures/scenarios/
     │       │   └── written/            Scenarios written by hand, and their registry
     │       └── recording/              Dev tools over a recorded game day
     │           ├── Recording.ts        Reads a recording's polls
@@ -389,8 +389,9 @@ class LiveGames extends Context.Service<LiveGames, {
   `replay` runs a stretch of the log with no per-game telemetry and no events.
 - `Slate` publishes each listed game as the fold has it, within 250 ms of a change; Ingest reads the fold for its polling
   and for the games the live feed should follow.
-- `HubMode` provides it in both modes. A scenario runs on the scenario clock, re-lists its current frame at each frame's
-  time and at least every 10 seconds, and uses no feed log.
+- `HubMode` provides it in both modes. A scenario is the provider through the real Ingest, on the scenario clock: polled
+  at each of its frames' times and at least every 10 seconds, its recorded live feed pushed at its recorded offsets, and
+  every frame appended to a feed log of its own, in memory unless `SPORTAL_SCENARIO_FEED_LOG` names a file.
 
 **GameHistory** — past plays and each game's latest snapshot, derived from the fold's changes into `sportal.sqlite`
 (`plays(game)`, `latest(game)`). Both tables can be dropped and rebuilt from the feed log.

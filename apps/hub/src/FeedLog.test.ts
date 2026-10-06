@@ -265,6 +265,27 @@ describe("FeedLog", () => {
     }).pipe(Effect.provide([TestDatabase.layer(":memory:"), NodeCrypto.layer]))
   )
 
+  it.effect("forScenario keeps frames in memory by default, writing no file in the data directory", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem
+      const dataDir = yield* fs.makeTempDirectoryScoped()
+      yield* Effect.gen(function* () {
+        const log = yield* FeedLog
+        yield* log.append(poll("nfl", "{}", 0))
+        yield* TestClock.adjust("100 millis")
+        yield* settled(Stream.runCollect(log.replay(at(0))), (frames) => frames.length === 1)
+      }).pipe(
+        Effect.provide(
+          FeedLog.forScenario.pipe(
+            Layer.provide([withEnv({ SPORTAL_DATA_DIR: dataDir }), NodeServices.layer, NodeCrypto.layer])
+          )
+        ),
+        Effect.scoped
+      )
+      assert.deepStrictEqual(yield* fs.readDirectory(dataDir), [])
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer))
+  )
+
   it.effect("keeps its own feed.sqlite in the Hub's data directory", () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem

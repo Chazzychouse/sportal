@@ -6,6 +6,7 @@ import { Array as Arr, DateTime, Effect, FileSystem, Option, Path, Schema, Strea
 import { Argument, Command } from "effect/cli"
 import * as Gzip from "../Gzip.ts"
 import * as EspnDecode from "../provider/espn/EspnDecode.ts"
+import { RecordedScenario } from "../scenario/RecordedScenario.ts"
 import { Scenario } from "../scenario/Scenario.ts"
 import * as Recording from "./Recording.ts"
 
@@ -114,8 +115,8 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
           games
         })
         const json = yield* Schema.encodeEffect(Schema.fromJsonString(Scenario))(scenario)
-        yield* fs.makeDirectory(Scenario.folder, { recursive: true })
-        const file = path.join(Scenario.folder, `${name}.json`)
+        yield* fs.makeDirectory(RecordedScenario.folder, { recursive: true })
+        const file = path.join(RecordedScenario.folder, `${name}.json`)
         yield* fs.writeFileString(file, json)
         yield* Effect.logInfo(
           `CutScenario: wrote ${file}: ${scenario.frames.length} frames, ${Math.round(json.length / 1024)} KB`

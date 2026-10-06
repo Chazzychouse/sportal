@@ -10,8 +10,8 @@ import { FeedLog } from "./FeedLog.ts"
 import type { FeedFrame } from "./Frame.ts"
 import { LiveGames } from "./LiveGames.ts"
 import * as EspnDecode from "./provider/espn/EspnDecode.ts"
-import { neAtBufFrames } from "./provider/espn/TestEspn.ts"
-import * as ImportRecording from "./recording/ImportRecording.ts"
+import { fixtures, neAtBufFrames } from "./provider/espn/TestEspn.ts"
+import { RecordedScenario } from "./scenario/RecordedScenario.ts"
 import * as TestDatabase from "./TestDatabase.ts"
 import { counted, recordingLogs, withMetrics } from "./TestTelemetry.ts"
 
@@ -129,7 +129,7 @@ describe("a recorded game", () => {
   )
 })
 
-const frames = Stream.runCollect(ImportRecording.readFrames(neAtBufFrames))
+const frames = Effect.map(RecordedScenario.load(neAtBufFrames, fixtures), ({ frames }) => frames)
 
 /** Appends `received` to the feed log in order; the log is closed after, so every frame is written. */
 function appended(received: ReadonlyArray<FeedFrame>) {

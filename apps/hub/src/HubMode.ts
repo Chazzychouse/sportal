@@ -6,10 +6,11 @@ import { GameHistory } from "./GameHistory.ts"
 import { HubConfig } from "./HubConfig.ts"
 import * as Ingest from "./ingest/Ingest.ts"
 import { LiveGames } from "./LiveGames.ts"
+import * as EspnDecode from "./provider/espn/EspnDecode.ts"
 import * as EspnProvider from "./provider/espn/EspnProvider.ts"
 import { Slate } from "./Slate.ts"
 import * as ScenarioClock from "./scenario/ScenarioClock.ts"
-import * as ScenarioIngest from "./scenario/ScenarioIngest.ts"
+import * as ScenarioProvider from "./scenario/ScenarioProvider.ts"
 import * as ScenarioSource from "./scenario/ScenarioSource.ts"
 import { ChannelStore } from "./source/ChannelStore.ts"
 import * as YouTubeTv from "./source/youtube-tv/YouTubeTv.ts"
@@ -47,13 +48,20 @@ function live() {
   )
 }
 
-// The fold, the scenario, and the Slate share one clock; the rest of the Hub keeps the real one.
+// The scenario plays as the provider through the real Ingest, onto a feed log of its own. Ingest, the fold, and the
+// Slate share the scenario's clock; the rest of the Hub keeps the real one. The game history stays out of a scenario.
 function scripted(name: string, speed: number) {
   return Layer.mergeAll(
-    Layer.mergeAll(Slate.layer, ScenarioIngest.layer(name)).pipe(
-      Layer.provide(LiveGames.layer),
-      Layer.provide(ScenarioClock.layer(speed))
-    ),
+    Layer.mergeAll(
+      Slate.layer,
+      Ingest.layer(LeagueId.literals).pipe(
+        Layer.provide([
+          ScenarioProvider.layer(name, EspnDecode.decode),
+          FeedLog.forScenario,
+          DateTime.layerCurrentZoneLocal
+        ])
+      )
+    ).pipe(Layer.provide(LiveGames.layer), Layer.provide(ScenarioClock.layer(speed))),
     ScenarioSource.layer
   )
 }

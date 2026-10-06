@@ -31,8 +31,11 @@ Every exported type name must be a term here, except the wire schemas in `*Paylo
 | **Notice** | Something a provider's decode noticed in a frame for telemetry to tell: a message received, games pushed, an unlisted game, a document reset, a message of an unknown op, a frame, event, or play that did not decode, or an unknown play type. Told only for frames after a replay. | warning, metric |
 | **Delivery source** | Which feed a snapshot came from: `push` or `poll`. | origin, feed type |
 | **Test game** | A game snapshot built for a test, with defaults for everything the test does not care about. | fixture, mock |
-| **Scenario** | A timeline of game snapshots for several games, written or cut from a recording, that a Hub can play instead of a provider. | fixture, simulation |
-| **Scenario time** | The clock a scenario plays on: from the Hub's start, at the scenario's speed. | |
+| **Scenario** | Games a Hub plays as its provider, through the real ingest, feed log, decode, and fold: written as a timeline of game snapshots, or recorded as raw frames. | fixture, simulation |
+| **Recorded scenario** | A scenario kept as the raw frames of a recorded window, `fixtures/scenarios/<name>.frames.jsonl.gz`, decoded by the provider that recorded them. | slice, recording |
+| **Scenario unknown** | `SPORTAL_SCENARIO` names no written or recorded scenario; `ScenarioUnknown` in code, with the names there are. | |
+| **Scenario unreadable** | A recorded scenario's file could not be read as gzip'd frames; `ScenarioUnreadable` in code. | |
+| **Scenario time** | The clock a scenario plays on: from the Hub's start, at the scenario's speed. Ingest, the fold, and the Slate run on it. | |
 | **Situation** | Live football state: possession, down, distance, field position, red zone (the 20 and in), timeouts. | context |
 | **Period** | A quarter or an overtime. | quarter (in code) |
 | **Play** | A single snap, or a timeout, a penalty, or the end of a period, as the game's play-by-play lists it: its kind, clock, text, yardage, start and end, score after, and win probability. | |

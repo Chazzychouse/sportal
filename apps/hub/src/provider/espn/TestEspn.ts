@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs"
+import { fileURLToPath } from "node:url"
 import { Layer } from "effect"
 import * as Socket from "effect/socket/Socket"
 
@@ -21,9 +22,9 @@ export function recordedCheckpoint() {
 }
 
 /**
- * Where NE at BUF's frames on 2026-10-04 are, for `readFrames`: imported from the recording with
- * `pnpm --filter @sportal/hub feed:import --recording …/2026-10-04/nfl --games 401872971 --out …`, its game topic's
- * frames and every scoreboard poll of the day, trimmed to it.
+ * This adapter's fixtures folder, where NE at BUF's frames on 2026-10-04 are kept as the recorded scenario
+ * `neAtBufFrames`: imported from the recording, its game topic's frames and every scoreboard poll of the day, trimmed
+ * to it.
  */
-export const neAtBufFrames = new URL("./fixtures/nfl-2026-10-04-ne-buf.frames.jsonl.gz", import.meta.url)
-  .pathname
+export const fixtures = fileURLToPath(new URL("./fixtures/", import.meta.url))
+export const neAtBufFrames = "nfl-2026-10-04-ne-buf"

@@ -26,7 +26,7 @@ import { SqlClient, SqlSchema } from "effect/sql"
 import * as Database from "./Database.ts"
 import { type FeedFrame, Frame } from "./Frame.ts"
 import * as Gzip from "./Gzip.ts"
-import type { HubConfig } from "./HubConfig.ts"
+import { HubConfig } from "./HubConfig.ts"
 
 /**
  * Every frame the feeds delivered, raw, in the order the Hub received it, kept in `feed_frame`. An append numbers a
@@ -109,6 +109,29 @@ export class FeedLog extends Context.Service<
     never,
     HubConfig | FileSystem.FileSystem | Path.Path | Crypto.Crypto
   > = FeedLog.layer.pipe(Layer.provide(Database.fileInDataDir("feed.sqlite")), Layer.orDie)
+
+  /**
+   * A scenario's feed log: in memory, or on the file `SPORTAL_SCENARIO_FEED_LOG` names in the data directory. Never on
+   * the game day's `feed.sqlite`.
+   */
+  static readonly forScenario: Layer.Layer<
+    FeedLog,
+    never,
+    HubConfig | FileSystem.FileSystem | Path.Path | Crypto.Crypto
+  > = Layer.unwrap(
+    Effect.gen(function* () {
+      const { scenarioFeedLog } = yield* HubConfig
+      return FeedLog.layer.pipe(
+        Layer.provide(
+          Option.match(scenarioFeedLog, {
+            onNone: () => Database.at(":memory:"),
+            onSome: (name) => Database.fileInDataDir(name)
+          })
+        ),
+        Layer.orDie
+      )
+    })
+  )
 }
 
 const shutdownBound = "1 second"

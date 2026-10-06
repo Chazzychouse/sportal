@@ -7,7 +7,7 @@ import { polled } from "@sportal/domain/TestGame"
 import { DateTime, Effect, FileSystem, Option, Path, Schema, Stream } from "effect"
 import { Frame } from "../Frame.ts"
 import * as EspnDecode from "../provider/espn/EspnDecode.ts"
-import { readFrames } from "../recording/ImportRecording.ts"
+import { RecordedScenario } from "./RecordedScenario.ts"
 import { Scenario } from "./Scenario.ts"
 
 describe("the recorded slices as raw frames", () => {
@@ -62,7 +62,7 @@ describe("the recorded slices as raw frames", () => {
 })
 
 const inFolder = Effect.gen(function* () {
-  const files = yield* (yield* FileSystem.FileSystem).readDirectory(Scenario.folder)
+  const files = yield* (yield* FileSystem.FileSystem).readDirectory(RecordedScenario.folder)
   return {
     slices: files
       .filter((file) => /^[a-z0-9-]+\.json$/.test(file))
@@ -77,15 +77,14 @@ function sliceOf(name: string) {
   return Effect.gen(function* () {
     const { join } = yield* Path.Path
     return yield* (yield* FileSystem.FileSystem)
-      .readFileString(join(Scenario.folder, `${name}.json`))
+      .readFileString(join(RecordedScenario.folder, `${name}.json`))
       .pipe(Effect.flatMap(Schema.decodeEffect(Schema.fromJsonString(Scenario))))
   })
 }
 
 function decodedFrom(name: string) {
   return Effect.gen(function* () {
-    const { join } = yield* Path.Path
-    const frames = yield* Stream.runCollect(readFrames(join(Scenario.folder, `${name}.frames.jsonl.gz`)))
+    const { frames } = yield* RecordedScenario.load(name)
     return yield* EspnDecode.decode(
       Stream.fromIterable(frames.map((frame, index) => new Frame({ ...frame, seq: index + 1 })))
     ).pipe(Stream.runCollect)

@@ -15,9 +15,14 @@ export function fileInDataDir(filename: string) {
     Effect.gen(function* () {
       const { dataDir } = yield* HubConfig
       yield* (yield* FileSystem.FileSystem).makeDirectory(dataDir, { recursive: true })
-      return SqliteClient.layer({ filename: (yield* Path.Path).join(dataDir, filename) })
+      return at((yield* Path.Path).join(dataDir, filename))
     })
   )
+}
+
+/** A SQLite database in `filename`, or in memory as `":memory:"`. */
+export function at(filename: string) {
+  return SqliteClient.layer({ filename })
 }
 
 /**
