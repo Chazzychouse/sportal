@@ -108,7 +108,8 @@ Index `(channel, seq)`.
   100–150 MB gzip'd. Expect 5–10 GB a season with FBS. Fine on the planned home box. Compressing across frames (zstd
   with a dictionary, recorded in `kind`) and slowing the poll are later work.
 - **FastCast checkpoints are logged** like any frame, since patches only apply to the document before them. Replay
-  starts each topic from its latest checkpoint at or before the replay's start.
+  starts each topic from its latest checkpoint before the replay's start: that checkpoint and the topic's frames after
+  it come first, in `seq` order, then every frame from the start.
 
 ### Per-game topics
 
@@ -210,7 +211,7 @@ guard survives as the fold's per-delivery guard.
 | A frame will not decode | Error log with its `seq`, a counter, the frame skipped. The body is in the log, so the bug reproduces exactly |
 | Applying a delivery dies | Error log with `seq` and game, a counter; the game keeps its previous state; the fold carries on |
 | Startup | Replay the current game day (from 04:00 local) before serving. Measured on the whole 2026-10-04 NFL recording imported with `feed:import` (19,093 frames: 1,529 polls, 75 of them unchanged, and 17,564 FastCast frames; a 44.4 MB `feed.sqlite`): opening the log and replaying it through decode and the fold takes 11.0 s (three runs, 10.9–11.0 s, on the development machine). If it grows slow, saving fold state is follow-up work |
-| Shutdown | Flush the pending batch within the existing 3 s bound |
+| Shutdown | Flush the pending batch within 1 s, after the server's 3 s and before telemetry's 1 s: the Hub stops within about 5 s |
 
 ## Testing
 

@@ -25,6 +25,7 @@ Every exported type name must be a term here.
 | **GameSnapshot** | The complete normalized state of a game at an instant. | update, payload |
 | **Game time** | How far a game has got: before kickoff, in play, or over; then the period; then the clock running down. Orders two snapshots of one game. | timestamp, version |
 | **Live game** | One game as the Hub follows it: its latest snapshot, the delivery source that gave it, its state (`LiveGameState`): upcoming, live, stale, or over, its plays, and its watchability. Folded from deliveries. A poll at the same game time as a live game's pushed snapshot only refreshes it: the push wins a tie. | game state, entity |
+| **Live games** | The fold: each league's last listing and every current game's live game, applied from deliveries in `seq` order. Replaying the log gives the same live games. | game actors, registry |
 | **Stale** | A live game no snapshot has reached for 90 seconds. It stays current for 30 minutes after its last update. | |
 | **Delivery** | What a frame said: a league's listing, one game's snapshot, or one game's whole list of plays. | input, update |
 | **Delivery source** | Which feed a snapshot came from: `push` or `poll`. | origin, feed type |
@@ -35,6 +36,8 @@ Every exported type name must be a term here.
 | **Situation** | Live football state: possession, down, distance, field position, red zone, timeouts. | context |
 | **Period** | A quarter or an overtime. | quarter (in code) |
 | **Drive** / **Play** | A possession sequence / a single snap, or a timeout, a penalty, or the end of a period, as the game's play-by-play lists it: its kind, clock, text, yardage, start and end, score after, and win probability. | |
+| **Play id** | The feed's own id for one play; `PlayId` in code. Not ordered: plays are ordered by their sequence. | |
+| **Play kind** | What a play was: a rush, a pass or incompletion, a sack, an interception, a fumble the offense kept or one it lost, a kick, a try, a penalty, a timeout, or the end of a period; `PlayKind` in code. | play type |
 | **GameEvent** | Something that happened in a game: from its plays when it has them, from comparing two snapshots otherwise. Derived, never stored. | alert, update |
 
 ### Data and video
@@ -64,6 +67,7 @@ Every exported type name must be a term here.
 | **Channel store error** | The channel store could not read or write. | database error |
 | **Database** | The Hub's SQLite database. Each store migrates its own tables in it. | store, persistence |
 | **Game history** | Past plays and each game's latest snapshot, derived from the fold into the Hub's database. Rebuildable from the feed log. | archive, stats |
+| **Game history error** | The game history could not read. | database error |
 | **Feed log** | Every frame the feeds delivered, raw, in the order the Hub received it. The truth the Hub's game state is folded from. | event store, journal, recording |
 | **Frame** | One thing a feed delivered: a poll response, a FastCast message, or a FastCast checkpoint. | message, payload |
 | **Live channel URL** | A source's address for a channel, reduced to the one that plays it live. | canonical URL |
@@ -124,7 +128,7 @@ Provider and Source are the two words most likely to be swapped. Provider is alw
 | Term | Meaning | Not |
 | --- | --- | --- |
 | **Follow** | Your declared interest in a team, conference, league, or game. | favourite, subscription |
-| **Watchability** | A 0–100 score of how worth watching a live game is right now, whether it is in a lull, and why; folded forward one snapshot at a time. | excitement, heat |
+| **Watchability** | A 0–100 score of how worth watching a live game is right now, whether it is in a lull, and why; folded with its live game from each delivery. | excitement, heat |
 | **Lull** | A live game with nothing happening: halftime, a delay, between periods, a TV break after a timeout, score, or change of possession, or no play for a minute. | break, stoppage |
 | **Trigger** | A condition over events and snapshots. | |
 | **Rule** | A trigger bound to a stage command and a revert condition. | automation |

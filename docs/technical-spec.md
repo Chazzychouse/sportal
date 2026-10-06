@@ -338,7 +338,8 @@ class LiveFeed extends Context.Service<LiveFeed, {
 
 - One element per frame, raw. ESPN's FastCast implements it (`docs/adr/0007-fastcast-live-feed.md`) and subscribes to
   the scoreboard topics and to a `gp-` topic for each game in `wanted`; a topic named in `resync` is asked for its
-  checkpoint again. A scenario provides `LiveFeed.none`.
+  checkpoint again. A scenario has no live feed: `ScenarioIngest` takes its scripted frames into the fold in place of
+  Ingest.
 
 **FeedLog** — every frame, raw, in the order the Hub received it (`docs/adr/0008-the-feed-log-is-the-truth.md`). Not a
 port: one SQLite implementation over its own `feed.sqlite`:
@@ -354,6 +355,11 @@ class FeedLog extends Context.Service<FeedLog, {
 - An append numbers the frame and publishes it at once; one writer stores batches every 100 ms. Stored kinds are
   `response`, `message`, `checkpoint`, `unchanged` (a poll identical to its channel's last), and `gap` (frames a failed
   write lost).
+- `replay(from)` starts each FastCast topic from its latest checkpoint before `from`: that checkpoint and the topic's
+  frames after it come first, so a patch after `from` applies to the document it was sent against.
+- On shutdown the writer stores what is still queued, for at most 1 s; a frame not stored by then is lost. The Hub's
+  whole shutdown bound is about 5 s: the HTTP server's 3 s for connected Displays, then the feed log's 1 s, then
+  telemetry's 1 s to export what it holds.
 
 **LiveGames** — the fold, between decoding and everything that reads games. Not a port: one implementation
 (`docs/adr/0009-one-fold-not-actors.md`):
@@ -412,7 +418,7 @@ A source's channels are found in its own guide, read by the shell (`docs/specs/2
 - A decoder reset (a missed message, a patch that will not apply) is a resync of that topic: the socket asks for its checkpoint again.
 - Events are derived from the fold's plays and snapshots (see `GameEvent`), including the leading signals the Director anticipates with, and are never stored.
 - The feed log is the truth (`docs/adr/0008-the-feed-log-is-the-truth.md`); live games, plays, watchability, and events are all derived from it, and a restart or a missed poll cannot corrupt anything.
-- Events are published on an in-process hub; the Director and client live streams each subscribe.
+- Events are published on an in-process hub (`LiveGames.events`); nothing reads it yet. The Director and client live streams will subscribe to it.
 
 ### 5.3 Stage
 
