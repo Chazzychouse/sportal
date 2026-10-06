@@ -173,7 +173,7 @@ describe("GameSnapshot.watchOrder", () => {
 
 describe("GameSnapshot#advancedTo", () => {
   const situation = new Situation({
-    isRedZone: true,
+    yardLine: 12,
     homeTimeouts: 2,
     awayTimeouts: 3,
     lastPlay: "Pass complete"
@@ -242,7 +242,7 @@ const ball = (
   down = 1,
   distance = 10,
   rest: Partial<Situation> = {}
-) => situation({ possession: team(side).id, yardLine, down, distance, isRedZone: yardLine <= 20, ...rest })
+) => situation({ possession: team(side).id, yardLine, down, distance, ...rest })
 const tags = (before: GameSnapshot, after: GameSnapshot) =>
   after.eventsSince(before).map((event) => event._tag)
 

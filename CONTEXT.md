@@ -32,7 +32,7 @@ Every exported type name must be a term here, except the wire schemas in `*Paylo
 | **Test game** | A game snapshot built for a test, with defaults for everything the test does not care about. | fixture, mock |
 | **Scenario** | A timeline of game snapshots for several games, written or cut from a recording, that a Hub can play instead of a provider. | fixture, simulation |
 | **Scenario time** | The clock a scenario plays on: from the Hub's start, at the scenario's speed. | |
-| **Situation** | Live football state: possession, down, distance, field position, red zone, timeouts. | context |
+| **Situation** | Live football state: possession, down, distance, field position, red zone (the 20 and in), timeouts. | context |
 | **Period** | A quarter or an overtime. | quarter (in code) |
 | **Play** | A single snap, or a timeout, a penalty, or the end of a period, as the game's play-by-play lists it: its kind, clock, text, yardage, start and end, score after, and win probability. | |
 | **Game id** / **Team id** / **League id** | A provider's own id for a game or a team, and a league's (`nfl` or `fbs`); `GameId`, `TeamId`, `LeagueId` in code. | |

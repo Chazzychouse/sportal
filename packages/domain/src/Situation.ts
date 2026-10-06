@@ -7,7 +7,6 @@ export class Situation extends Schema.Class<Situation>("sportal/Situation")({
   distance: Schema.optional(Schema.Int),
   /** Yards to the goal the team with the ball attacks; absent when no team has the ball. */
   yardLine: Schema.optional(Schema.Int),
-  isRedZone: Schema.Boolean,
   homeTimeouts: Schema.Int,
   awayTimeouts: Schema.Int,
   lastPlay: Schema.optional(Schema.String)
@@ -15,6 +14,11 @@ export class Situation extends Schema.Class<Situation>("sportal/Situation")({
   /** The ball is at the opponent's 40 or closer: about field-goal range, where a drive starts to matter. */
   inScoringRange(): boolean {
     return this.yardLine !== undefined && this.yardLine <= scoringRange
+  }
+
+  /** The ball is at the opponent's 20 or closer. */
+  inRedZone(): boolean {
+    return this.yardLine !== undefined && this.yardLine <= redZone
   }
 
   /** The line to gain is the goal line. */
@@ -25,3 +29,6 @@ export class Situation extends Schema.Class<Situation>("sportal/Situation")({
 
 /** Yards to the goal at which a drive is in scoring range. */
 const scoringRange = 40
+
+/** Yards to the goal at which a drive is in the red zone. */
+const redZone = 20

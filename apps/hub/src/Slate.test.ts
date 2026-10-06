@@ -127,7 +127,7 @@ describe("Slate", () => {
               score: w.score,
               lull: w.lull,
               live: judged.status === "live",
-              red: judged.situation?.isRedZone === true,
+              red: judged.situation?.inRedZone() === true,
               outside: judged.situation?.inScoringRange() === false
             }))
           })

@@ -743,7 +743,6 @@ function inPlay(game: GameSnapshot | undefined) {
     away: game?.away.score,
     down: game?.situation?.down,
     distance: game?.situation?.distance,
-    isRedZone: game?.situation?.isRedZone,
     homeTimeouts: game?.situation?.homeTimeouts,
     awayTimeouts: game?.situation?.awayTimeouts,
     lastPlay: game?.situation?.lastPlay

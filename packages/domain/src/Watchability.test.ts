@@ -18,7 +18,7 @@ const game = (overrides: Partial<GameSnapshot> = {}) =>
     ...overrides
   })
 const ball = (yardLine: number, down = 1, distance = 10, rest: Partial<Situation> = {}) =>
-  situation({ possession: team("UGA").id, yardLine, down, distance, isRedZone: yardLine <= 20, ...rest })
+  situation({ possession: team("UGA").id, yardLine, down, distance, ...rest })
 const score = (g: GameSnapshot) => Watchability.initial(g, now).score
 
 describe("Watchability.initial", () => {

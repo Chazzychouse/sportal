@@ -188,7 +188,9 @@ export class GameSnapshot extends Schema.Class<GameSnapshot>("sportal/GameSnapsh
             ...(after.inScoringRange() && !already((s) => s.inScoringRange())
               ? [GameEvent.ReachedScoringRange({ team })]
               : []),
-            ...(after.isRedZone && !already((s) => s.isRedZone) ? [GameEvent.EnteredRedZone({ team })] : []),
+            ...(after.inRedZone() && !already((s) => s.inRedZone())
+              ? [GameEvent.EnteredRedZone({ team })]
+              : []),
             ...(after.goalToGo() && !already((s) => s.goalToGo()) ? [GameEvent.GoalToGo({ team })] : []),
             ...(after.down === 4 && !already((s) => s.down === 4 && s.yardLine === after.yardLine)
               ? [GameEvent.FourthDown({ team })]

@@ -186,7 +186,7 @@ function situation(game: GameSnapshot) {
     return { points: 0, reason: "" }
   const offense = s.possession === game.home.team.id ? game.home.team : game.away.team
   const signals: ReadonlyArray<readonly [number, string]> = [
-    ...(s.isRedZone
+    ...(s.inRedZone()
       ? [[redZonePoints, `red zone at the ${s.yardLine}`] as const]
       : s.inScoringRange()
         ? [[scoringRangePoints, `at the ${s.yardLine}`] as const]

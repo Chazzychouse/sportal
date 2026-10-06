@@ -60,7 +60,6 @@ describe("EspnProvider", () => {
       assert.strictEqual(game?.away.team.id, "fbs:235")
       assert.strictEqual(game?.away.score, 27)
       assert.deepStrictEqual(game?.broadcasts, [{ network: Network.make("ESPN+"), medium: "streaming" }])
-      assert.strictEqual(game?.situation?.isRedZone, true)
     }).pipe(Effect.provide(TestLayer))
   )
 
@@ -117,9 +116,6 @@ describe("EspnProvider", () => {
       assert.strictEqual(yardLine("401858475"), 67)
       // No one has the ball: the yard line cannot be oriented.
       assert.strictEqual(yardLine("401856710"), undefined)
-      const redZones = slate.flatMap((g) => (g.situation?.isRedZone === true ? [g.situation] : []))
-      assert.isNotEmpty(redZones.filter((s) => s.yardLine !== undefined))
-      assert.isTrue(redZones.every((s) => s.yardLine === undefined || s.yardLine <= 20))
     }).pipe(Effect.provide(recordedEspn(fbsMidday)))
   )
 })

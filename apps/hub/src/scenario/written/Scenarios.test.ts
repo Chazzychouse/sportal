@@ -36,14 +36,14 @@ describe("scenarios", () => {
   })
 
   it("drives the tied game into the red zone at 2:00 and wins it with a field goal", () => {
-    assert.isFalse(game(twoMinuteDrillTie, "tie-uga-ala", 90)?.situation?.isRedZone)
-    assert.isTrue(game(twoMinuteDrillTie, "tie-uga-ala", 120)?.situation?.isRedZone)
+    assert.isFalse(game(twoMinuteDrillTie, "tie-uga-ala", 90)?.situation?.inRedZone())
+    assert.isTrue(game(twoMinuteDrillTie, "tie-uga-ala", 120)?.situation?.inRedZone())
     assert.strictEqual(game(twoMinuteDrillTie, "tie-uga-ala", 180)?.home.score, 27)
     assert.strictEqual(game(twoMinuteDrillTie, "tie-uga-ala", 240)?.status, "final")
   })
 
   it("has three games in the red zone at once at 1:00", () => {
-    assert.strictEqual(at(threeRedZonesAtOnce, 60).filter((g) => g.situation?.isRedZone).length, 3)
+    assert.strictEqual(at(threeRedZonesAtOnce, 60).filter((g) => g.situation?.inRedZone()).length, 3)
   })
 
   it("keeps every game but one still for the first two minutes", () => {

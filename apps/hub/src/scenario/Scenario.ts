@@ -133,24 +133,21 @@ function situationOf(game: GameSnapshot, status: GameStatus, change: Change): Si
   const describes =
     change.ball !== undefined || change.timeouts !== undefined || change.lastPlay !== undefined
   if (before === undefined && !describes)
-    return status === "live"
-      ? new Situation({ isRedZone: false, homeTimeouts: 3, awayTimeouts: 3 })
-      : undefined
+    return status === "live" ? new Situation({ homeTimeouts: 3, awayTimeouts: 3 }) : undefined
   const [homeTimeouts, awayTimeouts] = change.timeouts ?? [
     before?.homeTimeouts ?? 3,
     before?.awayTimeouts ?? 3
   ]
   const lastPlay = change.lastPlay ?? before?.lastPlay
   const timing = { homeTimeouts, awayTimeouts, ...(lastPlay === undefined ? {} : { lastPlay }) }
-  if (change.ball === null) return new Situation({ isRedZone: false, ...timing })
-  if (change.ball === undefined) return new Situation({ ...(before ?? { isRedZone: false }), ...timing })
+  if (change.ball === null) return new Situation(timing)
+  if (change.ball === undefined) return new Situation({ ...before, ...timing })
   const { team: side, yardLine, down, distance } = change.ball
   return new Situation({
     possession: game[side].team.id,
     yardLine,
     down,
     distance,
-    isRedZone: yardLine <= 20,
     ...timing
   })
 }

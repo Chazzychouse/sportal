@@ -84,7 +84,7 @@ function Scorebug(props: {
           goal
         </p>
       )}
-      {situation?.isRedZone && (
+      {situation?.inRedZone() && (
         <p className="rounded bg-red-600 px-[3vmin] py-[1vmin] font-semibold text-[5vmin]">RED ZONE</p>
       )}
       {situation?.lastPlay !== undefined && (

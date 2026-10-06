@@ -148,7 +148,6 @@ const Situation = Schema.Struct({
   down: Schema.optional(Schema.Int),
   distance: Schema.optional(Schema.Int),
   yardLine: Schema.optional(Schema.Int),
-  isRedZone: Schema.optional(Schema.Boolean),
   homeTimeouts: Schema.optional(Schema.Int),
   awayTimeouts: Schema.optional(Schema.Int),
   lastPlay: Schema.optional(Schema.Struct({ text: Schema.optional(Schema.String) }))
@@ -224,7 +223,6 @@ function broadcast(medium: string, network: string): Array<Broadcast> {
 /** The domain `Situation`; the league and the home team's id orient its possession and yard line. */
 function situation(league: LeagueId, raw: typeof Situation.Type, homeTeamId: string): DomainSituation {
   return new DomainSituation({
-    isRedZone: raw.isRedZone ?? false,
     homeTimeouts: raw.homeTimeouts ?? 0,
     awayTimeouts: raw.awayTimeouts ?? 0,
     ...(raw.possession === undefined ? {} : { possession: TeamId.make(`${league}:${raw.possession}`) }),

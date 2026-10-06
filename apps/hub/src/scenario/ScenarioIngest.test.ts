@@ -165,6 +165,6 @@ function listed(liveGames: LiveGames["Service"], league: LeagueId) {
 function tieInRedZone(liveGames: LiveGames["Service"]) {
   return Effect.map(
     listed(liveGames, "fbs"),
-    (games) => games.find((game) => game.id === "tie-uga-ala")?.situation?.isRedZone === true
+    (games) => games.find((game) => game.id === "tie-uga-ala")?.situation?.inRedZone() === true
   )
 }
