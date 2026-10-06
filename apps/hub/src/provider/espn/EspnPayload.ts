@@ -3,7 +3,7 @@ import * as EspnSnapshot from "./EspnSnapshot.ts"
 
 const Competitor = Schema.Struct({
   homeAway: Schema.Literals(["home", "away"]),
-  score: Schema.optional(Schema.String),
+  score: Schema.optional(EspnSnapshot.Score),
   curatedRank: Schema.optional(Schema.Struct({ current: Schema.Int })),
   team: Schema.Struct({
     id: Schema.String,

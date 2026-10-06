@@ -67,7 +67,7 @@ function toSnapshot(league: LeagueId, event: typeof EspnPayload.Event.Type): Opt
       shortName: competitor.team.shortDisplayName ?? competitor.team.displayName,
       ...(competitor.team.logo === undefined ? {} : { logo: competitor.team.logo })
     }),
-    score: Number.parseInt(competitor.score ?? "0", 10) || 0,
+    score: competitor.score ?? 0,
     // ESPN reports 99 for unranked teams.
     ...(competitor.curatedRank === undefined || competitor.curatedRank.current > 25
       ? {}

@@ -42,6 +42,8 @@ Every exported type name must be a term here.
 | --- | --- | --- |
 | **Provider** | An adapter that supplies **game data** (ESPN, CollegeFootballData). | source, feed |
 | **Provider error** | A provider could not supply data for a league: unreachable, rate-limited, or unreadable. | fetch error |
+| **Live feed** | A provider's push connection carrying updates for live games (ESPN FastCast). | socket, stream, webhook |
+| **Live feed error** | The live feed could not continue: refused, closed, silent, or an update it could not apply. | |
 | **Ingest** | The Hub's loop that polls providers, keeps each league's last good listing, and sends what it polled to the game actors. | poller, sync, fetcher |
 | **Cadence** | How long Ingest waits between polls, given what the last poll saw. | interval, rate |
 | **Source** | A way you obtain **video** (YouTube TV). | provider, service |

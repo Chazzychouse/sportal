@@ -15,6 +15,14 @@ export const Status = Schema.Struct({
   })
 )
 
+/** A competitor's score, as both feeds spell it: digits, or nothing before kickoff, which reads as 0. */
+export const Score = Schema.String.pipe(
+  Schema.decodeTo(Schema.Int, {
+    decode: SchemaGetter.transform((score) => Number.parseInt(score, 10) || 0),
+    encode: SchemaGetter.transform(String)
+  })
+)
+
 /** ESPN's situation, as the site scoreboard and FastCast both spell it. */
 export const Situation = Schema.Struct({
   possession: Schema.optional(Schema.String),
