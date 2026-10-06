@@ -8,31 +8,10 @@ import * as FastCastPayload from "./FastCastPayload.ts"
  * The FastCast topics' documents after `frame`, and what it changed: a scoreboard topic's touched events (every event,
  * on a checkpoint), or all of a game topic's plays, by id, when they changed. A topic is synced by its checkpoint
  * frame and moved on by each message after it. A missed message, a patch that will not apply, or a message that does
- * not decode on a synced topic sends only that topic back to waiting for a checkpoint, logged and counted. Fails only
- * when any other frame does not decode, leaving the documents as they were.
+ * not decode on a synced topic sends only that topic back to waiting for a checkpoint, logged and counted, and the
+ * change is `reset`. Fails only when any other frame does not decode, leaving the documents as they were.
  */
-export function advance(
-  documents: Documents,
-  frame: Frame
-): Effect.Effect<
-  readonly [
-    Documents,
-    Option.Option<
-      | {
-          readonly topic: "scoreboard"
-          readonly league: LeagueId
-          readonly events: ReadonlyArray<Schema.Json>
-        }
-      | {
-          readonly topic: "game"
-          readonly league: LeagueId
-          readonly game: GameId
-          readonly plays: Readonly<Record<string, Schema.Json>>
-        }
-    >
-  ],
-  Schema.SchemaError
-> {
+export function advance(documents: Documents, frame: Frame): Effect.Effect<Advanced, Schema.SchemaError> {
   const owned = owner(frame.channel)
   if (frame.kind === "checkpoint") {
     return Option.match(owned, {
@@ -99,6 +78,25 @@ const Topic = Data.taggedEnum<Topic>()
 
 type Documents = ReadonlyMap<string, Topic>
 
+/** The documents after a frame, and what it changed. */
+type Advanced = readonly [
+  Documents,
+  Option.Option<
+    | {
+        readonly topic: "scoreboard"
+        readonly league: LeagueId
+        readonly events: ReadonlyArray<Schema.Json>
+      }
+    | {
+        readonly topic: "game"
+        readonly league: LeagueId
+        readonly game: GameId
+        readonly plays: Readonly<Record<string, Schema.Json>>
+      }
+    | { readonly topic: "reset" }
+  >
+]
+
 function checkpoint(
   owner: { readonly game: Option.Option<GameId> },
   frame: Frame
@@ -161,7 +159,7 @@ function moved(
   tc: string,
   owner: { readonly league: LeagueId; readonly game: Option.Option<GameId> },
   message: Extract<typeof FastCastPayload.Message.Type, { readonly op: "R" | "P" | "I" }>
-) {
+): Effect.Effect<Advanced> {
   const current = documents.get(tc) ?? Topic.AwaitingCheckpoint()
   return Topic.$match(current, {
     AwaitingCheckpoint: () => Effect.succeed([documents, Option.none()] as const),
@@ -211,11 +209,14 @@ function reset(
   league: LeagueId,
   reason: "Gap" | "Unapplicable",
   cause: string
-) {
+): Effect.Effect<Advanced> {
   return Effect.logWarning(`FastCastDocument: ${cause}; ${tc} waits for its next checkpoint`).pipe(
     Effect.annotateLogs({ league, topic: tc, reason }),
     Effect.andThen(Metric.update(Metric.withAttributes(resets, { league, reason }), 1)),
-    Effect.as([new Map([...documents, [tc, Topic.AwaitingCheckpoint()]]), Option.none()] as const)
+    Effect.as([
+      new Map([...documents, [tc, Topic.AwaitingCheckpoint()]]),
+      Option.some({ topic: "reset" } as const)
+    ] as const)
   )
 }
 
@@ -313,7 +314,7 @@ function undecoded(
   frame: Frame,
   owned: Option.Option<{ readonly league: LeagueId }>,
   error: Schema.SchemaError
-) {
+): Effect.Effect<Advanced, Schema.SchemaError> {
   return Option.match(decodeKnownOp(frame.body), {
     onNone: () =>
       Effect.logDebug("FastCastDocument: skipped a message of an unknown op", frame.body).pipe(

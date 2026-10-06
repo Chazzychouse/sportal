@@ -3,6 +3,7 @@ import { assert, describe, it } from "@effect/vitest"
 import { Network } from "@sportal/domain/Game"
 import { DateTime, Effect, Layer } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/http"
+import { listedBy } from "../../TestProvider.ts"
 import { Provider } from "../Provider.ts"
 import * as EspnProvider from "./EspnProvider.ts"
 
@@ -50,8 +51,7 @@ describe("EspnProvider", () => {
 
   it.effect("decodes a live FBS scoreboard into snapshots", () =>
     Effect.gen(function* () {
-      const provider = yield* Provider
-      const slate = yield* provider.slate("fbs")
+      const slate = yield* listedBy("fbs")
 
       assert.strictEqual(slate.length, 59)
       const game = slate.find((g) => g.id === "401862787")
@@ -66,8 +66,7 @@ describe("EspnProvider", () => {
 
   it.effect("keeps television and streaming broadcasts and drops radio", () =>
     Effect.gen(function* () {
-      const provider = yield* Provider
-      const game = (yield* provider.slate("fbs")).find((g) => g.id === "401856710")
+      const game = (yield* listedBy("fbs")).find((g) => g.id === "401856710")
 
       assert.deepStrictEqual(game?.broadcasts, [{ network: Network.make("ESPN"), medium: "tv" }])
     }).pipe(Effect.provide(TestLayer))
@@ -75,8 +74,7 @@ describe("EspnProvider", () => {
 
   it.effect("keeps each team's location and short name", () =>
     Effect.gen(function* () {
-      const provider = yield* Provider
-      const game = (yield* provider.slate("fbs")).find((g) => g.id === "401862787")
+      const game = (yield* listedBy("fbs")).find((g) => g.id === "401862787")
 
       assert.strictEqual(game?.home.team.location, "Charlotte")
       assert.strictEqual(game?.home.team.shortName, "Charlotte")
@@ -86,8 +84,7 @@ describe("EspnProvider", () => {
 
   it.effect("leaves out what ESPN reports with placeholder values", () =>
     Effect.gen(function* () {
-      const provider = yield* Provider
-      const game = (yield* provider.slate("fbs")).find((g) => g.id === "401862787")
+      const game = (yield* listedBy("fbs")).find((g) => g.id === "401862787")
 
       // ESPN sends rank 99 for an unranked team and down -1 between plays.
       assert.strictEqual(game?.home.ranking, undefined)
@@ -97,8 +94,7 @@ describe("EspnProvider", () => {
 
   it.effect("decodes an NFL scoreboard, namespacing team ids by league", () =>
     Effect.gen(function* () {
-      const provider = yield* Provider
-      const slate = yield* provider.slate("nfl")
+      const slate = yield* listedBy("nfl")
 
       assert.strictEqual(slate.length, 16)
       assert.isTrue(slate.every((game) => game.league === "nfl" && game.home.team.id.startsWith("nfl:")))
@@ -108,8 +104,7 @@ describe("EspnProvider", () => {
 
   it.effect("orients the yard line for the team with the ball: ESPN counts it from the home goal line", () =>
     Effect.gen(function* () {
-      const provider = yield* Provider
-      const slate = yield* provider.slate("fbs")
+      const slate = yield* listedBy("fbs")
       const yardLine = (id: string) => slate.find((g) => g.id === id)?.situation?.yardLine
 
       // Away ball, "4th & 1 at NCSU 11": Louisville is 11 yards from the goal.

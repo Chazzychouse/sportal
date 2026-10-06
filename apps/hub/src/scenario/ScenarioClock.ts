@@ -2,8 +2,8 @@ import { Clock, Duration, Effect, Layer } from "effect"
 
 /**
  * Scenario time: a clock that starts where the one it replaces is and runs `speed` times faster, its sleeps
- * shortened to match. Ingest, the game actors, the Slate, and the scenario provider run on it, so a scenario
- * plays faster without any of them waiting differently.
+ * shortened to match. The scenario's ingest, the fold, and the Slate run on it, so a scenario plays faster without
+ * any of them waiting differently.
  */
 export const layer = (speed: number) =>
   Layer.effect(

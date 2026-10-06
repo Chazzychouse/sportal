@@ -1,6 +1,8 @@
-import { DateTime } from "effect"
+import { DateTime, Option } from "effect"
+import { Delivery } from "./Delivery.ts"
 import { type Broadcast, GameId, GameSnapshot, Network } from "./Game.ts"
 import type { LeagueId } from "./League.ts"
+import { LiveGame } from "./LiveGame.ts"
 import { Play, PlayId } from "./Play.ts"
 import { Team, TeamId } from "./Team.ts"
 
@@ -59,4 +61,28 @@ export function play(overrides: Partial<Play> = {}): Play {
     end: { down: 2, distance: 9, yardsToEndzone: 74, team: home },
     ...overrides
   })
+}
+
+/**
+ * Each game on `slate`, polled at `now`, as a live game followed on from `previous`: taken, kept and judged again at
+ * `now` when it is behind, or started when it is new. For tests that play a scenario poll by poll.
+ */
+export function followed(
+  previous: ReadonlyMap<GameId, LiveGame>,
+  slate: ReadonlyArray<GameSnapshot>,
+  now: DateTime.Utc
+): ReadonlyMap<GameId, LiveGame> {
+  return new Map(
+    slate.map((game) => [
+      game.id,
+      Option.match(Option.fromNullishOr(previous.get(game.id)), {
+        onNone: () => LiveGame.start(game, "poll", now),
+        onSome: (liveGame) =>
+          liveGame.take(Delivery.Snapshot({ snapshot: game, from: "poll" }), now).liveGame.pipe(
+            Option.orElse(() => liveGame.tick(now).liveGame),
+            Option.getOrElse(() => liveGame)
+          )
+      })
+    ])
+  )
 }

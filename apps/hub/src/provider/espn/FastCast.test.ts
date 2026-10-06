@@ -184,39 +184,124 @@ describe("FastCast", () => {
       }).pipe(withMetrics)
   )
 
-  it.effect("games, until Ingest takes frames, are the pushed games of each message", () =>
+  it.effect(
+    "a topic its decoder resyncs is subscribed to again, only while it is followed on this socket",
+    () =>
+      Effect.gen(function* () {
+        const server = fakeServer()
+        const { frames, resync } = yield* nflFrames(server)
+        yield* frames.until(atLeast(2))
+        yield* Effect.sync(() => server.send(checkpointMessage(7)))
+        yield* frames.until(atLeast(4))
+
+        yield* Queue.offer(resync, "gp-football-nfl-401872971")
+        yield* Queue.offer(resync, "event-football-nfl")
+        yield* server.sent.until(subscribed("event-football-nfl", 2))
+        // Waiting for its checkpoint already: a second resync asks for nothing more.
+        yield* Queue.offer(resync, "event-football-nfl")
+        yield* Effect.sync(() => server.send(checkpointMessage(20)))
+        yield* frames.until((all) =>
+          all.some((frame) => frame.kind === "checkpoint" && frame.sourceId === 20)
+        )
+
+        assert.deepStrictEqual(
+          server.sent.all().filter((frame) => frame.op === "S"),
+          [
+            { op: "S", sid: "sid-1", tc: "event-football-nfl" },
+            { op: "S", sid: "sid-1", tc: "event-football-nfl" }
+          ]
+        )
+      })
+  )
+
+  it.effect("a checkpoint that hangs fails after 20 s, and its topic is subscribed to again 30 s later", () =>
     Effect.gen(function* () {
       const server = fakeServer()
-      const games = watched<ReadonlyArray<GameSnapshot>>()
-      yield* LiveFeed.use((feed) =>
-        feed.games(["nfl"]).pipe(Stream.runForEach((batch) => Effect.sync(() => games.add(batch))))
-      ).pipe(Effect.provide(fastCast(server)), Effect.forkChild({ startImmediately: true }))
-      yield* server.sent.until(subscribed("event-football-nfl", 1))
-      yield* Effect.sync(() => server.send(checkpointMessage(7)))
-
-      assert.deepStrictEqual(
-        (yield* games.until(atLeast(1))).map((batch) => batch.length),
-        [16]
+      const { ended, frames } = yield* nflFrames(server)
+      yield* frames.until(atLeast(2))
+      yield* Effect.sync(() =>
+        server.send({ op: "H", tc: "event-football-nfl", mid: 7, pl: "https://checkpoint.test/hang" })
       )
+      yield* TestClock.adjust("19 seconds")
+      assert.lengthOf(yield* frames.until(atLeast(2)), 2, "the H waits for its checkpoint")
+
+      yield* TestClock.adjust("1 second")
+      yield* frames.until(atLeast(3))
+      assert.strictEqual(yield* counted("sportal_live_feed_checkpoint_failures", { league: "nfl" }), 1)
+      yield* TestClock.adjust("30 seconds")
+      yield* server.sent.until(subscribed("event-football-nfl", 2))
+      assert.isFalse(yield* Deferred.isDone(ended))
+    }).pipe(withMetrics)
+  )
+
+  it.effect("a topic whose checkpoints keep failing has one subscription pending at a time", () =>
+    Effect.gen(function* () {
+      const server = fakeServer()
+      const { frames } = yield* nflFrames(server)
+      yield* frames.until(atLeast(2))
+      yield* Effect.sync(() => {
+        server.send(missingCheckpoint(5))
+        server.send(missingCheckpoint(6))
+      })
+      yield* frames.until(atLeast(4))
+      yield* TestClock.adjust("30 seconds")
+      yield* server.sent.until(subscribed("event-football-nfl", 2))
+      yield* TestClock.adjust("30 seconds")
+
+      assert.lengthOf(
+        server.sent.all().filter((frame) => frame.op === "S"),
+        2
+      )
+    })
+  )
+
+  it.effect("after five checkpoint failures in a row a topic is not subscribed to again, said once", () =>
+    Effect.gen(function* () {
+      const { logs, layer } = recordingLogs()
+      const server = fakeServer()
+      const { frames } = yield* nflFrames(server).pipe(Effect.provide(layer))
+      yield* frames.until(atLeast(2))
+      yield* Effect.forEach(
+        [1, 2, 3, 4],
+        (failure) =>
+          Effect.sync(() => server.send(missingCheckpoint(failure))).pipe(
+            Effect.andThen(frames.until((all) => all.some((frame) => frame.sourceId === failure))),
+            Effect.andThen(TestClock.adjust("30 seconds")),
+            Effect.andThen(server.sent.until(subscribed("event-football-nfl", failure + 1)))
+          ),
+        { discard: true }
+      )
+      yield* Effect.sync(() => server.send(missingCheckpoint(5)))
+      yield* frames.until((all) => all.some((frame) => frame.sourceId === 5))
+      yield* TestClock.adjust("30 seconds")
+
+      assert.lengthOf(
+        server.sent.all().filter((frame) => frame.op === "S"),
+        5
+      )
+      const gaveUp = logs.filter((log) => log.message.includes("not subscribing to it again"))
+      assert.lengthOf(gaveUp, 1)
+      assert.strictEqual(gaveUp[0]?.level, "Warn")
     })
   )
 })
 
 /**
  * Runs FastCast's frames for the NFL over `server` in a fiber of its own, collecting them into `frames` and completing
- * `ended` with how it ended. `wanted` takes the current games.
+ * `ended` with how it ended. `wanted` takes the current games, and `resync` the topics their decoder resyncs.
  */
 function nflFrames(server: ReturnType<typeof fakeServer>) {
   return Effect.gen(function* () {
     const ended = yield* Deferred.make<void, LiveFeedError>()
     const frames = watched<Omit<Frame, "seq">>()
     const wanted = yield* Queue.unbounded<ReadonlyArray<GameSnapshot>>()
+    const resync = yield* Queue.unbounded<string>()
     yield* LiveFeed.use((feed) =>
       feed
-        .frames(["nfl"], Stream.fromQueue(wanted))
+        .frames(["nfl"], Stream.fromQueue(wanted), Stream.fromQueue(resync))
         .pipe(Stream.runForEach((frame) => Effect.sync(() => frames.add(frame))))
     ).pipe(Deferred.into(ended), Effect.forkChild({ startImmediately: true }))
-    return { ended, frames, wanted }
+    return { ended, frames, wanted, resync }
   }).pipe(Effect.provide(fastCast(server)))
 }
 
@@ -277,6 +362,10 @@ function checkpointMessage(mid: number) {
   return { op: "H", tc: "event-football-nfl", mid, pl: `https://checkpoint.test/${mid}` }
 }
 
+function missingCheckpoint(mid: number) {
+  return { op: "H", tc: "event-football-nfl", mid, pl: "https://checkpoint.test/missing" }
+}
+
 function patchMessage(mid: number) {
   return { op: "P", tc: "event-football-nfl", mid, pl: JSON.stringify({ ts: 1791136341731, pl: [] }) }
 }
@@ -286,7 +375,7 @@ const checkpointBody = readFileSync(
   "utf8"
 )
 
-// FastCast's host lookup, and any checkpoint, which is the recorded one, except a missing one.
+// FastCast's host lookup, and any checkpoint, which is the recorded one, except a missing one and one that never comes.
 const espn = HttpClient.make((request) =>
   Effect.succeed(
     HttpClientResponse.fromWeb(
@@ -297,6 +386,8 @@ const espn = HttpClient.make((request) =>
           ? new Response("Not Found", { status: 404 })
           : new Response(checkpointBody)
     )
+  ).pipe(
+    Effect.andThen((response) => (request.url.endsWith("/hang") ? Effect.never : Effect.succeed(response)))
   )
 )
 

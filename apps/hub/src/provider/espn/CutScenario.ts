@@ -6,7 +6,7 @@ import type { LeagueId } from "@sportal/domain/League"
 import { Scenario } from "@sportal/domain/Scenario"
 import { DateTime, Effect, FileSystem, Option, Schema } from "effect"
 // A script entry point, like main.ts, so it may name the scenario adapter's folder.
-import { folder } from "../../scenario/ScenarioProvider.ts"
+import { folder } from "../../scenario/ScenarioIngest.ts"
 import * as EspnDecode from "./EspnDecode.ts"
 import * as EspnPayload from "./EspnPayload.ts"
 

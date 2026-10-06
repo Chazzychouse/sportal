@@ -6,6 +6,7 @@ import {
   Data,
   DateTime,
   Effect,
+  FiberMap,
   Layer,
   Metric,
   Option,
@@ -17,9 +18,8 @@ import {
 } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/http"
 import * as Socket from "effect/socket/Socket"
-import { Frame } from "../../feed/Frame.ts"
+import type { Frame } from "../../feed/Frame.ts"
 import { LiveFeed, LiveFeedError } from "../LiveFeed.ts"
-import * as EspnDecode from "./EspnDecode.ts"
 import * as FastCastDocument from "./FastCastDocument.ts"
 import * as FastCastPayload from "./FastCastPayload.ts"
 
@@ -35,14 +35,7 @@ export const layer: Layer.Layer<LiveFeed, never, HttpClient.HttpClient | Socket.
         yield* Effect.context<HttpClient.HttpClient | Socket.WebSocketConstructor>()
       )
       return LiveFeed.of({
-        frames: (leagues, wanted) => provide(frames(leagues, wanted)),
-        games: (leagues) =>
-          EspnDecode.pushedGames(
-            provide(frames(leagues, Stream.empty)).pipe(
-              Stream.zipWithIndex,
-              Stream.map(([frame, seq]) => new Frame({ ...frame, seq }))
-            )
-          )
+        frames: (leagues, wanted, resync) => provide(frames(leagues, wanted, resync))
       })
     })
   )
@@ -50,9 +43,10 @@ export const layer: Layer.Layer<LiveFeed, never, HttpClient.HttpClient | Socket.
 /** Every socket text as a frame, each `H` followed by its checkpoint; fails when the socket closes, ends, or goes quiet. */
 function frames(
   leagues: ReadonlyArray<LeagueId>,
-  wanted: Stream.Stream<ReadonlyArray<GameSnapshot>>
+  wanted: Stream.Stream<ReadonlyArray<GameSnapshot>>,
+  resync: Stream.Stream<string>
 ): Stream.Stream<Omit<Frame, "seq">, LiveFeedError, HttpClient.HttpClient | Socket.WebSocketConstructor> {
-  return Stream.unwrap(connect(leagues, wanted)).pipe(
+  return Stream.unwrap(connect(leagues, wanted, resync)).pipe(
     Stream.concat(Stream.fail(new LiveFeedError({ reason: "Closed", cause: "FastCast ended the stream" }))),
     Stream.timeoutOrElse({ duration: silence, orElse: () => Stream.fail(silent()) })
   )
@@ -60,9 +54,13 @@ function frames(
 
 /**
  * Opens the socket and subscribes to each league's topic, returning the frames that follow, the handshake's first.
- * Each game newly in `wanted` is subscribed to beside them, once per socket.
+ * Each game newly in `wanted` is subscribed to beside them, once per socket, and each topic in `resync` again.
  */
-function connect(leagues: ReadonlyArray<LeagueId>, wanted: Stream.Stream<ReadonlyArray<GameSnapshot>>) {
+function connect(
+  leagues: ReadonlyArray<LeagueId>,
+  wanted: Stream.Stream<ReadonlyArray<GameSnapshot>>,
+  resync: Stream.Stream<string>
+) {
   const topics = leagues.map((league) => FastCastDocument.topic(league))
   return Effect.gen(function* () {
     const host = yield* websocketHost
@@ -97,18 +95,23 @@ function connect(leagues: ReadonlyArray<LeagueId>, wanted: Stream.Stream<Readonl
             )
     })
     const subscribe = (tc: string) => Queue.offer(outgoing, JSON.stringify({ op: "S", sid, tc }))
-    const scope = yield* Effect.scope
+    // At most one subscription waiting per topic, however many of its checkpoints fail meanwhile.
+    const pending = yield* FiberMap.make<string>()
     const subscribeLater = (tc: string) =>
-      subscribe(tc).pipe(Effect.delay(checkpointBackoff), Effect.forkIn(scope), Effect.asVoid)
+      FiberMap.run(pending, tc, subscribe(tc).pipe(Effect.delay(checkpointBackoff)), {
+        onlyIfMissing: true
+      }).pipe(Effect.asVoid)
     yield* Effect.forEach(topics, subscribe, { discard: true })
     yield* Metric.update(connected, 1)
     yield* Effect.addFinalizer(() => Metric.update(connected, 0))
     yield* Metric.update(connects, 1)
     yield* Effect.logInfo(`FastCast: connected to ${host.ip}, subscribed to ${topics.join(", ")}`)
     return Stream.concat(Stream.make(opened), rest).pipe(
+      Stream.map((received) => Inbound.Received(received)),
+      Stream.merge(resync.pipe(Stream.map((tc) => Inbound.Resync({ tc }))), { haltStrategy: "left" }),
       Stream.mapAccumEffect(
         (): Followed => new Map(),
-        (followed, received) => framed(followed, received, subscribe, subscribeLater)
+        (followed, inbound) => framed(followed, inbound, subscribe, subscribeLater)
       ),
       Stream.merge(subscriptions(wanted, subscribe), { haltStrategy: "left" })
     )
@@ -139,27 +142,49 @@ function subscriptions(
   )
 }
 
-/** Where the socket is in each topic's messages: waiting for a checkpoint, or following on from message `mid`. */
+/**
+ * Where the socket is in each topic's messages: waiting for a checkpoint (after `failures` in a row did not load),
+ * following on from message `mid`, or given up on until the socket reconnects.
+ */
 type Sequence = Data.TaggedEnum<{
-  AwaitingCheckpoint: object
+  AwaitingCheckpoint: { readonly failures: number }
   Following: { readonly mid: number }
+  GivenUp: object
 }>
 const Sequence = Data.taggedEnum<Sequence>()
 
 type Followed = ReadonlyMap<string, Sequence>
 
+/** What reaches the socket's fold: a text the socket received, or a topic its decoder resyncs. */
+type Inbound = Data.TaggedEnum<{
+  Received: { readonly text: string; readonly receivedAt: DateTime.Utc }
+  Resync: { readonly tc: string }
+}>
+const Inbound = Data.taggedEnum<Inbound>()
+
 /**
- * A socket text as its frame, an `H`'s followed by its checkpoint. A message that skips a mid on its topic subscribes
- * to the topic again, so FastCast sends a fresh `H` to resync from. A checkpoint that does not load is logged and
- * counted, and its topic subscribed to again after a backoff.
+ * A socket text as its frame, an `H`'s followed by its checkpoint. A message that skips a mid on its topic, or a
+ * resync of a topic this socket follows, subscribes to the topic again, so FastCast sends a fresh `H` to resync from.
+ * A checkpoint that does not load is logged and counted, and its topic subscribed to again after a backoff, until
+ * `givenUpAfter` have failed in a row.
  */
 function framed(
   followed: Followed,
-  received: { readonly text: string; readonly receivedAt: DateTime.Utc },
+  inbound: Inbound,
   subscribe: (tc: string) => Effect.Effect<boolean>,
   subscribeLater: (tc: string) => Effect.Effect<void>
 ): Effect.Effect<readonly [Followed, ReadonlyArray<Omit<Frame, "seq">>], never, HttpClient.HttpClient> {
-  const { text, receivedAt } = received
+  if (inbound._tag === "Resync") {
+    const { tc } = inbound
+    // A topic waiting for its checkpoint already has one coming, or has been given up on.
+    return followed.get(tc)?._tag === "Following"
+      ? Effect.logInfo(`FastCast: ${tc} lost its document; subscribing to it again`).pipe(
+          Effect.andThen(subscribe(tc)),
+          Effect.as([new Map([...followed, [tc, Sequence.AwaitingCheckpoint({ failures: 0 })]]), []] as const)
+        )
+      : Effect.succeed([followed, []] as const)
+  }
+  const { text, receivedAt } = inbound
   const message = (envelope: Option.Option<typeof FastCastPayload.Envelope.Type>): Omit<Frame, "seq"> => ({
     receivedAt,
     feed: "fastcast",
@@ -198,35 +223,17 @@ function framed(
                 ] as const
             ),
             Effect.catch((cause) =>
-              Effect.logWarning(
-                `FastCast: the checkpoint of ${envelope.tc} at ${envelope.mid} did not load; subscribing to it again in ${checkpointBackoff}`,
-                cause
-              ).pipe(
-                Effect.annotateLogs({ topic: envelope.tc }),
-                Effect.andThen(
-                  Metric.update(
-                    Metric.withAttributes(
-                      checkpointFailures,
-                      Record.getSomes({
-                        league: Option.map(FastCastDocument.owner(envelope.tc), (owner) => owner.league)
-                      })
-                    ),
-                    1
-                  )
-                ),
-                Effect.andThen(subscribeLater(envelope.tc)),
-                Effect.as([
-                  new Map([...followed, [envelope.tc, Sequence.AwaitingCheckpoint()]]),
-                  [frame]
-                ] as const)
+              checkpointFailed(followed.get(envelope.tc), envelope, cause, subscribeLater).pipe(
+                Effect.map((next) => [new Map([...followed, [envelope.tc, next]]), [frame]] as const)
               )
             )
           )
         case "R":
         case "P":
         case "I":
-          return Sequence.$match(followed.get(envelope.tc) ?? Sequence.AwaitingCheckpoint(), {
+          return Sequence.$match(followed.get(envelope.tc) ?? Sequence.AwaitingCheckpoint({ failures: 0 }), {
             AwaitingCheckpoint: () => Effect.succeed([followed, [frame]] as const),
+            GivenUp: () => Effect.succeed([followed, [frame]] as const),
             Following: ({ mid }) =>
               mid + 1 === envelope.mid
                 ? Effect.succeed([
@@ -238,7 +245,7 @@ function framed(
                   ).pipe(
                     Effect.andThen(subscribe(envelope.tc)),
                     Effect.as([
-                      new Map([...followed, [envelope.tc, Sequence.AwaitingCheckpoint()]]),
+                      new Map([...followed, [envelope.tc, Sequence.AwaitingCheckpoint({ failures: 0 })]]),
                       [frame]
                     ] as const)
                   )
@@ -250,16 +257,63 @@ function framed(
   })
 }
 
+/**
+ * Where a topic is once a checkpoint of it did not load, counted and logged: subscribed to again after the backoff,
+ * or, at `givenUpAfter` failures in a row, given up on, said once.
+ */
+function checkpointFailed(
+  sequence: Sequence | undefined,
+  envelope: { readonly tc: string; readonly mid: number },
+  cause: unknown,
+  subscribeLater: (tc: string) => Effect.Effect<void>
+): Effect.Effect<Sequence> {
+  const { tc, mid } = envelope
+  const counted = Metric.update(
+    Metric.withAttributes(
+      checkpointFailures,
+      Record.getSomes({ league: Option.map(FastCastDocument.owner(tc), (owner) => owner.league) })
+    ),
+    1
+  )
+  const failures = Sequence.$match(sequence ?? Sequence.AwaitingCheckpoint({ failures: 0 }), {
+    AwaitingCheckpoint: ({ failures }) => Option.some(failures + 1),
+    Following: () => Option.some(1),
+    GivenUp: () => Option.none()
+  })
+  return Option.match(failures, {
+    onNone: () => Effect.succeed(Sequence.GivenUp()),
+    onSome: (failures): Effect.Effect<Sequence> =>
+      failures < givenUpAfter
+        ? Effect.logWarning(
+            `FastCast: the checkpoint of ${tc} at ${mid} did not load; subscribing to it again in ${checkpointBackoff}`,
+            cause
+          ).pipe(Effect.andThen(subscribeLater(tc)), Effect.as(Sequence.AwaitingCheckpoint({ failures })))
+        : Effect.logWarning(
+            `FastCast: the checkpoint of ${tc} did not load ${failures} times in a row; not subscribing to it again until the socket reconnects`,
+            cause
+          ).pipe(Effect.as(Sequence.GivenUp()))
+  }).pipe(
+    Effect.annotateLogs({ topic: tc }),
+    Effect.tap(() => counted)
+  )
+}
+
 /** The body of the checkpoint an `H` points to, as served. */
 function checkpoint(envelope: { readonly pl: string }) {
   return HttpClient.get(envelope.pl).pipe(
     Effect.flatMap(HttpClientResponse.filterStatusOk),
-    Effect.flatMap((response) => response.text)
+    Effect.flatMap((response) => response.text),
+    Effect.timeout(checkpointTimeout)
   )
 }
 
-// A checkpoint that did not load is asked for again once, by subscribing again, after this long.
+// Well inside `silence`, so a checkpoint that hangs fails its topic rather than the whole socket.
+const checkpointTimeout = "20 seconds"
+
+// A checkpoint that did not load is asked for again, by subscribing again, after this long, until this many in a row
+// have failed.
 const checkpointBackoff = "30 seconds"
+const givenUpAfter = 5
 
 const decodeEnvelope = Schema.decodeUnknownOption(Schema.fromJsonString(FastCastPayload.Envelope))
 

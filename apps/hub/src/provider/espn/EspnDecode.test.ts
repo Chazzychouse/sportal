@@ -232,6 +232,43 @@ describe("EspnDecode", () => {
     }).pipe(withMetrics)
   )
 
+  it.effect("a topic sent back to waiting asks for its checkpoint again, once per reset", () =>
+    Effect.gen(function* () {
+      const synced = [poll("nfl", scoreboardBody), ...recorded(socketTexts.slice(0, 3))]
+      const gap = [...synced, ...recorded(socketTexts.slice(4, 6))]
+      const unapplicable = [
+        ...synced,
+        message("event-football-nfl", 4286638, [
+          { op: "replace", path: `${ariAtNyg}/competitors/5/score`, value: "21" }
+        ]),
+        message("event-football-nfl", 4286639, [
+          { op: "replace", path: `${ariAtNyg}/competitors/0/score`, value: "17" }
+        ])
+      ]
+      const undecodable = [
+        ...synced,
+        message("event-football-nfl", 4286638, [{ op: "test", path: `${ariAtNyg}/clock`, value: "1:00" }])
+      ]
+      const playsGap = [
+        checkpoint(ariAtNygPlays, 99, { entities: {} }),
+        playsMessage(101, [{ op: "add", path: "/entities/plays", value: plays("401872966237") }])
+      ]
+
+      assert.deepStrictEqual(yield* resyncs(gap), ["event-football-nfl"])
+      assert.deepStrictEqual(yield* resyncs(unapplicable), ["event-football-nfl"])
+      assert.deepStrictEqual(yield* resyncs(undecodable), ["event-football-nfl"])
+      assert.deepStrictEqual(yield* resyncs(playsGap), [ariAtNygPlays])
+    })
+  )
+
+  it.effect("a topic that was never synced asks for nothing", () =>
+    Effect.gen(function* () {
+      const early = recorded([...socketTexts.slice(0, 2), socketTexts[3] ?? "", socketTexts[6] ?? ""])
+
+      assert.deepStrictEqual(yield* resyncs([poll("nfl", scoreboardBody), ...early]), [])
+    })
+  )
+
   it.effect("counts the messages by league and op, and the games pushed", () =>
     Effect.gen(function* () {
       yield* decoded([poll("nfl", scoreboardBody), ...recorded(socketTexts)])
@@ -475,7 +512,21 @@ describe("EspnDecode", () => {
   })
 })
 
+/** The deliveries `frames` decode to, each numbered by its place from 1. */
 function decoded(frames: ReadonlyArray<Omit<Frame, "seq">>) {
+  return outputs(frames).pipe(
+    Effect.map((all) => all.flatMap((output) => (output._tag === "Delivered" ? [output] : [])))
+  )
+}
+
+/** The channels decoding `frames` asks to have checkpointed again, in order. */
+function resyncs(frames: ReadonlyArray<Omit<Frame, "seq">>) {
+  return outputs(frames).pipe(
+    Effect.map((all) => all.flatMap((output) => (output._tag === "Resync" ? [output.channel] : [])))
+  )
+}
+
+function outputs(frames: ReadonlyArray<Omit<Frame, "seq">>) {
   return EspnDecode.decode(
     Stream.fromIterable(frames.map((frame, index) => new Frame({ ...frame, seq: index + 1 })))
   ).pipe(Stream.runCollect)

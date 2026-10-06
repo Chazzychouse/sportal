@@ -1,9 +1,8 @@
 import type { LeagueId } from "@sportal/domain/League"
-import { DateTime, Effect, Layer, Option, Schema } from "effect"
+import { DateTime, Effect, Layer, Option } from "effect"
 import { Headers, HttpClient } from "effect/http"
 import { Provider, ProviderError } from "../Provider.ts"
 import * as EspnDecode from "./EspnDecode.ts"
-import * as EspnPayload from "./EspnPayload.ts"
 
 export const layer = Layer.effect(
   Provider,
@@ -29,19 +28,9 @@ export const layer = Layer.effect(
         Effect.withSpan("EspnProvider.poll", { attributes: { "sportal.league": league } })
       )
 
-    const slate = Effect.fn("EspnProvider.slate")(function* (league: LeagueId) {
-      const frame = yield* poll(league)
-      const scoreboard = yield* decodeScoreboard(frame.body).pipe(
-        Effect.mapError((cause) => new ProviderError({ league, cause }))
-      )
-      return yield* EspnDecode.slateOf(league, scoreboard)
-    })
-
-    return Provider.of({ slate, poll, decode: EspnDecode.decode })
+    return Provider.of({ poll, decode: EspnDecode.decode })
   })
 )
-
-const decodeScoreboard = Schema.decodeUnknownEffect(Schema.fromJsonString(EspnPayload.Scoreboard))
 
 function scoreboardUrl(league: LeagueId): string {
   const base = "https://site.api.espn.com/apis/site/v2/sports/football"

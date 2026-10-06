@@ -80,14 +80,6 @@ module.exports = {
       to: { path: "^apps/hub/src/TestTelemetry\\.ts$" }
     },
     {
-      name: "test-cluster-is-for-tests",
-      comment:
-        "The game actors on an in-memory cluster, as a test runs them, are imported only by test files.",
-      severity: "error",
-      from: { pathNot: "\\.test\\.ts$" },
-      to: { path: "^apps/hub/src/TestCluster\\.ts$" }
-    },
-    {
       name: "test-provider-is-for-tests",
       comment: "A provider scripted for a test, and the games it lists, are imported only by test files.",
       severity: "error",

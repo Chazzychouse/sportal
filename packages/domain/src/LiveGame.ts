@@ -32,7 +32,7 @@ export class LiveGame extends Data.Class<{
   /** An upcoming game is current from this long before kickoff. */
   static readonly currentBefore = Duration.minutes(30)
 
-  /** How long a stale game stays current, from its last update, before its actor may stop. */
+  /** How long a stale game stays current, from its last update. */
   static readonly staleCurrentFor = Duration.minutes(30)
 
   /** A game's first snapshot, from feed `from`, always taken. */

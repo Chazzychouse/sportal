@@ -2,11 +2,12 @@ import { readdirSync, readFileSync } from "node:fs"
 import { isDeepStrictEqual } from "node:util"
 import { assert, describe, it } from "@effect/vitest"
 import { Array as Arr, DateTime, Duration, Option, Schema } from "effect"
-import { GameId, type GameSnapshot } from "./Game.ts"
+import type { GameId, GameSnapshot } from "./Game.ts"
 import { GameEvent } from "./GameEvent.ts"
+import type { LiveGame } from "./LiveGame.ts"
 import { Scenario } from "./Scenario.ts"
 import { Situation } from "./Situation.ts"
-import { play, snapshot, team } from "./TestGame.ts"
+import { followed, play, snapshot, team } from "./TestGame.ts"
 import { Watchability } from "./Watchability.ts"
 
 const now = DateTime.makeUnsafe("2026-10-03T20:00:00Z")
@@ -307,27 +308,6 @@ describe("Watchability#wakeAt", () => {
   })
 })
 
-describe("Watchability.fold", () => {
-  it("carries each game on from the last slate, judges a game first seen fresh, and drops a game that left", () => {
-    const g = game({ clock: "8:00", situation: ball(60) })
-    const other = game({ id: GameId.make("other"), clock: "3:00" })
-    const gone = game({ id: GameId.make("gone") })
-    const first = Watchability.fold({ slate: [], watchability: [] }, [g, gone], now)
-    assert.deepStrictEqual(
-      first.map((w) => w.game),
-      [g.id, "gone"]
-    )
-    const second = Watchability.fold({ slate: [g, gone], watchability: first }, [g, other], later(60))
-    assert.deepStrictEqual(
-      second.map((w) => w.game),
-      [g.id, "other"]
-    )
-    // The carried game remembers it has not moved in 60 s; the new one has no history to tell a lull from.
-    assert.isTrue(second[0]?.lull)
-    assert.isFalse(second[1]?.lull)
-  })
-})
-
 describe("Watchability over recorded game days", () => {
   it("finds the recorded scenarios", () => {
     assert.isAtLeast(recorded.length, 19)
@@ -388,12 +368,20 @@ function played(scenario: Scenario) {
     {
       readonly now: DateTime.Utc
       readonly slate: ReadonlyArray<GameSnapshot>
-      readonly watchability: ReadonlyArray<Watchability>
+      readonly live: ReadonlyMap<GameId, LiveGame>
     }
-  >(scenario.frames, { now: scenario.origin, slate: [], watchability: [] }, (previous, frame) => {
+  >(scenario.frames, { now: scenario.origin, slate: [], live: new Map() }, (previous, frame) => {
     const now = DateTime.addDuration(scenario.origin, Duration.millis(frame.at))
-    return { now, slate: frame.slate, watchability: Watchability.fold(previous, frame.slate, now) }
-  }).slice(1)
+    return { now, slate: frame.slate, live: followed(previous.live, frame.slate, now) }
+  })
+    .slice(1)
+    .map(({ now, slate, live }) => ({
+      now,
+      slate,
+      watchability: slate.flatMap((game) =>
+        Option.toArray(Option.fromNullishOr(live.get(game.id)?.watchability))
+      )
+    }))
 }
 
 /** Every game at every frame of every recorded scenario that `breach` names a breach for, one line each. */

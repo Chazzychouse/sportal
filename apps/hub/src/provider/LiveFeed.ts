@@ -7,22 +7,22 @@ import type { Frame } from "../feed/Frame.ts"
 export class LiveFeed extends Context.Service<
   LiveFeed,
   {
-    /** One element per update: the games it touched, or every game on a checkpoint. Fails when the feed cannot go on. */
-    games(leagues: ReadonlyArray<LeagueId>): Stream.Stream<ReadonlyArray<GameSnapshot>, LiveFeedError>
     /**
-     * Every frame, as received, for the leagues' scoreboards and for each game in `wanted` (the current games). Fails
-     * when the connection cannot go on.
+     * Every frame, as received, for the leagues' scoreboards and for each game in `wanted` (the current games). Each
+     * channel in `resync` is asked for its checkpoint again, if this connection follows it. Fails when the connection
+     * cannot go on.
      */
     frames(
       leagues: ReadonlyArray<LeagueId>,
-      wanted: Stream.Stream<ReadonlyArray<GameSnapshot>>
+      wanted: Stream.Stream<ReadonlyArray<GameSnapshot>>,
+      resync: Stream.Stream<string>
     ): Stream.Stream<Omit<Frame, "seq">, LiveFeedError>
   }
 >()("sportal/hub/LiveFeed") {
   /** A live feed that never pushes. */
   static readonly none: Layer.Layer<LiveFeed> = Layer.succeed(
     LiveFeed,
-    LiveFeed.of({ games: () => Stream.never, frames: () => Stream.never })
+    LiveFeed.of({ frames: () => Stream.never })
   )
 }
 

@@ -87,27 +87,6 @@ export class Watchability extends Schema.Class<Watchability>("sportal/Watchabili
       onNonEmpty: (instants) => Option.some(instants.reduce(DateTime.min))
     })
   }
-
-  /**
-   * Each game on a new slate, its watchability carried on from the previous slate, or judged fresh if first seen.
-   * Used by Slate until the fold owns watchability.
-   */
-  static fold(
-    previous: {
-      readonly slate: ReadonlyArray<GameSnapshot>
-      readonly watchability: ReadonlyArray<Watchability>
-    },
-    slate: ReadonlyArray<GameSnapshot>,
-    now: DateTime.Utc
-  ): ReadonlyArray<Watchability> {
-    return slate.map((game) => {
-      const before = previous.slate.find((candidate) => candidate.id === game.id)
-      const last = previous.watchability.find((candidate) => candidate.game === game.id)
-      return before === undefined || last === undefined
-        ? Watchability.initial(game, now)
-        : last.next(before, game, game.eventsSince(before), now)
-    })
-  }
 }
 
 /** How long a TV break is taken to last after a timeout, a score, or a change of possession. */
