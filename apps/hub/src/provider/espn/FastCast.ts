@@ -10,6 +10,7 @@ import {
   Metric,
   Option,
   Queue,
+  Record,
   Schema,
   Sink,
   Stream
@@ -96,6 +97,9 @@ function connect(leagues: ReadonlyArray<LeagueId>, wanted: Stream.Stream<Readonl
             )
     })
     const subscribe = (tc: string) => Queue.offer(outgoing, JSON.stringify({ op: "S", sid, tc }))
+    const scope = yield* Effect.scope
+    const subscribeLater = (tc: string) =>
+      subscribe(tc).pipe(Effect.delay(checkpointBackoff), Effect.forkIn(scope), Effect.asVoid)
     yield* Effect.forEach(topics, subscribe, { discard: true })
     yield* Metric.update(connected, 1)
     yield* Effect.addFinalizer(() => Metric.update(connected, 0))
@@ -104,7 +108,7 @@ function connect(leagues: ReadonlyArray<LeagueId>, wanted: Stream.Stream<Readonl
     return Stream.concat(Stream.make(opened), rest).pipe(
       Stream.mapAccumEffect(
         (): Followed => new Map(),
-        (followed, received) => framed(followed, received, subscribe)
+        (followed, received) => framed(followed, received, subscribe, subscribeLater)
       ),
       Stream.merge(subscriptions(wanted, subscribe), { haltStrategy: "left" })
     )
@@ -146,17 +150,15 @@ type Followed = ReadonlyMap<string, Sequence>
 
 /**
  * A socket text as its frame, an `H`'s followed by its checkpoint. A message that skips a mid on its topic subscribes
- * to the topic again, so FastCast sends a fresh `H` to resync from.
+ * to the topic again, so FastCast sends a fresh `H` to resync from. A checkpoint that does not load is logged and
+ * counted, and its topic subscribed to again after a backoff.
  */
 function framed(
   followed: Followed,
   received: { readonly text: string; readonly receivedAt: DateTime.Utc },
-  subscribe: (tc: string) => Effect.Effect<boolean>
-): Effect.Effect<
-  readonly [Followed, ReadonlyArray<Omit<Frame, "seq">>],
-  LiveFeedError,
-  HttpClient.HttpClient
-> {
+  subscribe: (tc: string) => Effect.Effect<boolean>,
+  subscribeLater: (tc: string) => Effect.Effect<void>
+): Effect.Effect<readonly [Followed, ReadonlyArray<Omit<Frame, "seq">>], never, HttpClient.HttpClient> {
   const { text, receivedAt } = received
   const message = (envelope: Option.Option<typeof FastCastPayload.Envelope.Type>): Omit<Frame, "seq"> => ({
     receivedAt,
@@ -194,6 +196,30 @@ function framed(
                   new Map([...followed, [envelope.tc, Sequence.Following({ mid: envelope.mid })]]),
                   [frame, { ...frame, kind: "checkpoint", body }]
                 ] as const
+            ),
+            Effect.catch((cause) =>
+              Effect.logWarning(
+                `FastCast: the checkpoint of ${envelope.tc} at ${envelope.mid} did not load; subscribing to it again in ${checkpointBackoff}`,
+                cause
+              ).pipe(
+                Effect.annotateLogs({ topic: envelope.tc }),
+                Effect.andThen(
+                  Metric.update(
+                    Metric.withAttributes(
+                      checkpointFailures,
+                      Record.getSomes({
+                        league: Option.map(FastCastDocument.owner(envelope.tc), (owner) => owner.league)
+                      })
+                    ),
+                    1
+                  )
+                ),
+                Effect.andThen(subscribeLater(envelope.tc)),
+                Effect.as([
+                  new Map([...followed, [envelope.tc, Sequence.AwaitingCheckpoint()]]),
+                  [frame]
+                ] as const)
+              )
             )
           )
         case "R":
@@ -225,15 +251,15 @@ function framed(
 }
 
 /** The body of the checkpoint an `H` points to, as served. */
-function checkpoint(envelope: {
-  readonly pl: string
-}): Effect.Effect<string, LiveFeedError, HttpClient.HttpClient> {
+function checkpoint(envelope: { readonly pl: string }) {
   return HttpClient.get(envelope.pl).pipe(
     Effect.flatMap(HttpClientResponse.filterStatusOk),
-    Effect.flatMap((response) => response.text),
-    Effect.mapError((cause) => new LiveFeedError({ reason: "Refused", cause }))
+    Effect.flatMap((response) => response.text)
   )
 }
+
+// A checkpoint that did not load is asked for again once, by subscribing again, after this long.
+const checkpointBackoff = "30 seconds"
 
 const decodeEnvelope = Schema.decodeUnknownOption(Schema.fromJsonString(FastCastPayload.Envelope))
 
@@ -253,6 +279,11 @@ const websocketHost = HttpClient.get("https://fastcast.semfs.engsvc.go.com/publi
 
 const connected = Metric.gauge("sportal_live_feed_connected", {
   description: "Whether the live feed is subscribed (1) or not (0)"
+})
+
+const checkpointFailures = Metric.counter("sportal_live_feed_checkpoint_failures", {
+  description: "FastCast checkpoints that did not load, by league",
+  incremental: true
 })
 
 const connects = Metric.counter("sportal_live_feed_connects", {

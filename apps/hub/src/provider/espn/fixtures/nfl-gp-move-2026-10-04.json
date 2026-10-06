@@ -1,0 +1,252 @@
+{
+  "checkpoint": {
+    "mid": 818,
+    "body": {
+      "entities": {
+        "plays": {
+          "401872971792": {
+            "id": "401872971792",
+            "type": {
+              "id": "8",
+              "slug": "penalty",
+              "abbreviation": "PEN",
+              "text": "Penalty"
+            },
+            "text": "J.Cook up the middle to NE 26 for 1 yard (C.Woods).PENALTY on BUF-A.Anderson, Offensive Offside, 5 yards, enforced at NE 27 - No Play.",
+            "shortText": "James Cook III 1 Yd Rush Alec Anderson 5 Yd Pnlty",
+            "period": {
+              "number": 1
+            },
+            "clock": {
+              "value": 123,
+              "displayValue": "2:03"
+            },
+            "team": {
+              "$key": "2"
+            },
+            "scoreValue": 0,
+            "scoringPlay": false,
+            "start": {
+              "team": {
+                "$key": "2"
+              },
+              "yardLine": 73,
+              "down": 2,
+              "distance": 5,
+              "yardsToEndzone": 27,
+              "downDistanceText": "2nd & 5 at NE 27",
+              "shortDownDistanceText": "2nd & 5",
+              "possessionText": "NE 27"
+            },
+            "end": {
+              "team": {
+                "$key": "2"
+              },
+              "yardLine": 68,
+              "down": 2,
+              "distance": 10,
+              "yardsToEndzone": 32,
+              "downDistanceText": "2nd & 10 at NE 32",
+              "shortDownDistanceText": "2nd & 10",
+              "possessionText": "NE 32"
+            },
+            "statYardage": -5,
+            "sequenceNumber": "79200",
+            "participants": [
+              {
+                "athlete": {
+                  "$key": "4367203"
+                },
+                "type": "penalized"
+              }
+            ],
+            "shortDescription": "5-yd Penalty",
+            "homeScore": 0,
+            "awayScore": 7,
+            "probabilities": {
+              "winProbability": {
+                "homeWinPercentage": 0.5707
+              },
+              "coverProbability": {
+                "homeCoverPercentage": 0.341,
+                "totalOverPercentage": 0.5289,
+                "spreadPushPercentage": 0.0564
+              }
+            },
+            "priority": false,
+            "wallclock": "2026-10-04T17:24:59Z",
+            "penalty": {
+              "yards": 5,
+              "type": {
+                "slug": "offensive-offside",
+                "text": "Offensive Offside"
+              },
+              "status": {
+                "slug": "accepted",
+                "text": "Accepted"
+              },
+              "team": {
+                "$key": "2"
+              }
+            }
+          },
+          "401872971917": {
+            "id": "401872971917",
+            "type": {
+              "id": "2",
+              "slug": "end-period",
+              "abbreviation": "EP",
+              "text": "End Period"
+            },
+            "text": "END QUARTER 1",
+            "shortText": "End Quarter 1 ",
+            "period": {
+              "number": 1
+            },
+            "clock": {
+              "value": 0,
+              "displayValue": "0:00"
+            },
+            "team": {
+              "$key": "2"
+            },
+            "scoreValue": 0,
+            "scoringPlay": false,
+            "start": {
+              "team": {
+                "$key": "2"
+              },
+              "yardLine": 85,
+              "down": 3,
+              "distance": 6,
+              "yardsToEndzone": 15
+            },
+            "end": {
+              "team": {
+                "$key": "2"
+              },
+              "yardLine": 85,
+              "down": 3,
+              "distance": 6,
+              "yardsToEndzone": 15,
+              "downDistanceText": "3rd & 6 at NE 15",
+              "shortDownDistanceText": "3rd & 6",
+              "possessionText": "NE 15"
+            },
+            "statYardage": 0,
+            "sequenceNumber": "91700",
+            "participants": [
+              {
+                "team": {
+                  "$key": "17"
+                },
+                "type": "away_team",
+                "carouselStats": [
+                  {
+                    "statistic": {
+                      "$key": "totalYards"
+                    },
+                    "displayValue": "190",
+                    "value": 190.0
+                  },
+                  {
+                    "statistic": {
+                      "$key": "totalGiveaways"
+                    },
+                    "displayValue": "1",
+                    "value": 1
+                  },
+                  {
+                    "statistic": {
+                      "$key": "possessionTimeSeconds"
+                    },
+                    "displayValue": "13:18",
+                    "value": 798
+                  }
+                ]
+              },
+              {
+                "team": {
+                  "$key": "2"
+                },
+                "type": "home_team",
+                "carouselStats": [
+                  {
+                    "statistic": {
+                      "$key": "totalYards"
+                    },
+                    "displayValue": "81",
+                    "value": 81
+                  },
+                  {
+                    "statistic": {
+                      "$key": "totalGiveaways"
+                    },
+                    "displayValue": "0",
+                    "value": 0
+                  },
+                  {
+                    "statistic": {
+                      "$key": "possessionTimeSeconds"
+                    },
+                    "displayValue": "11:04",
+                    "value": 664
+                  }
+                ]
+              }
+            ],
+            "shortDescription": "END QUARTER 1",
+            "homeScore": 0,
+            "awayScore": 7,
+            "probabilities": {
+              "winProbability": {
+                "homeWinPercentage": 0.5931
+              },
+              "coverProbability": {
+                "homeCoverPercentage": 0.352,
+                "totalOverPercentage": 0.5207,
+                "spreadPushPercentage": 0.0591
+              }
+            },
+            "priority": false,
+            "wallclock": "2026-10-04T17:27:21Z"
+          }
+        }
+      }
+    }
+  },
+  "messages": [
+    {
+      "at": 1791136763852,
+      "op": "P",
+      "tc": "gp-football-nfl-401872971",
+      "mid": 819,
+      "ts": 1791136763696,
+      "pl": "[{\"op\":\"move\",\"path\":\"/entities/athleteStatistics/4033748\",\"from\":\"/entities/athleteStatistics/4367203\"},{\"op\":\"remove\",\"path\":\"/entities/athletes/4367203\"},{\"op\":\"add\",\"path\":\"/entities/athletes/4033748\",\"value\":{\"id\":\"4033748\",\"uid\":\"s:20~l:28~a:4033748\",\"guid\":\"8c4d9fa6-422d-2a91-c122-06859f7487ae\",\"displayName\":\"Connor McGovern\",\"shortName\":\"C. McGovern\",\"fullName\":\"Connor McGovern\",\"lastName\":\"McGovern\",\"jersey\":\"66\",\"active\":true,\"team\":{\"$key\":\"2\"},\"headshot\":\"https://a.espncdn.com/i/headshots/nfl/players/full/4033748.png\",\"links\":[{\"language\":\"en-US\",\"rel\":[\"playercard\",\"desktop\",\"athlete\"],\"href\":\"https://www.espn.com/nfl/player/_/id/4033748/connor-mcgovern\",\"text\":\"Player Card\",\"shortText\":\"Player Card\",\"isExternal\":false,\"isPremium\":false,\"isHidden\":false},{\"language\":\"en-US\",\"rel\":[\"stats\",\"desktop\",\"athlete\"],\"href\":\"https://www.espn.com/nfl/player/stats/_/id/4033748/connor-mcgovern\",\"text\":\"Stats\",\"shortText\":\"Stats\",\"isExternal\":false,\"isPremium\":false,\"isHidden\":false},{\"language\":\"en-US\",\"rel\":[\"stats\",\"sportscenter\",\"app\",\"athlete\"],\"href\":\"sportscenter://x-callback-url/showClubhouse?uid=s:20~l:28~a:4033748&section=stats\",\"text\":\"Stats\",\"shortText\":\"Stats\",\"isExternal\":false,\"isPremium\":false,\"isHidden\":false},{\"language\":\"en-US\",\"rel\":[\"splits\",\"desktop\",\"athlete\"],\"href\":\"https://www.espn.com/nfl/player/splits/_/id/4033748/connor-mcgovern\",\"text\":\"Splits\",\"shortText\":\"Splits\",\"isExternal\":false,\"isPremium\":false,\"isHidden\":false},{\"language\":\"en-US\",\"rel\":[\"gamelog\",\"desktop\",\"athlete\"],\"href\":\"https://www.espn.com/nfl/player/gamelog/_/id/4033748/connor-mcgovern\",\"text\":\"Game Log\",\"shortText\":\"Game Log\",\"isExternal\":false,\"isPremium\":false,\"isHidden\":false},{\"language\":\"en-US\",\"rel\":[\"gamelog\",\"sportscenter\",\"app\",\"athlete\"],\"href\":\"sportscenter://x-callback-url/showClubhouse?uid=s:20~l:28~a:4033748&section=gamelog\",\"text\":\"Game Log\",\"shortText\":\"Game Log\",\"isExternal\":false,\"isPremium\":false,\"isHidden\":false},{\"language\":\"en-US\",\"rel\":[\"news\",\"desktop\",\"athlete\"],\"href\":\"https://www.espn.com/nfl/player/news/_/id/4033748/connor-mcgovern\",\"text\":\"News\",\"shortText\":\"News\",\"isExternal\":false,\"isPremium\":false,\"isHidden\":false},{\"language\":\"en-US\",\"rel\":[\"news\",\"sportscenter\",\"app\",\"athlete\"],\"href\":\"sportscenter://x-callback-url/showClubhouse?uid=s:20~l:28~a:4033748&section=news\",\"text\":\"News\",\"shortText\":\"News\",\"isExternal\":false,\"isPremium\":false,\"isHidden\":false},{\"language\":\"en-US\",\"rel\":[\"bio\",\"desktop\",\"athlete\"],\"href\":\"https://www.espn.com/nfl/player/bio/_/id/4033748/connor-mcgovern\",\"text\":\"Bio\",\"shortText\":\"Bio\",\"isExternal\":false,\"isPremium\":false,\"isHidden\":false},{\"language\":\"en-US\",\"rel\":[\"bio\",\"sportscenter\",\"app\",\"athlete\"],\"href\":\"sportscenter://x-callback-url/showClubhouse?uid=s:20~l:28~a:4033748&section=bio\",\"text\":\"Bio\",\"shortText\":\"Bio\",\"isExternal\":false,\"isPremium\":false,\"isHidden\":false},{\"language\":\"en-US\",\"rel\":[\"overview\",\"desktop\",\"athlete\"],\"href\":\"https://www.espn.com/nfl/player/_/id/4033748/connor-mcgovern\",\"text\":\"Overview\",\"shortText\":\"Overview\",\"isExternal\":false,\"isPremium\":false,\"isHidden\":false},{\"language\":\"en-US\",\"rel\":[\"overview\",\"sportscenter\",\"app\",\"athlete\"],\"href\":\"sportscenter://x-callback-url/showClubhouse?uid=s:20~l:28~a:4033748\",\"text\":\"Overview\",\"shortText\":\"Overview\",\"isExternal\":false,\"isPremium\":false,\"isHidden\":false}],\"athletePosition\":{\"id\":\"4\",\"name\":\"Center\",\"displayName\":\"Center\",\"abbreviation\":\"C\"}}},{\"op\":\"replace\",\"path\":\"/entities/plays/401872971792/participants/0/athlete/$key\",\"value\":\"4033748\"},{\"op\":\"replace\",\"path\":\"/entities/plays/401872971792/shortText\",\"value\":\"James Cook III 1 Yd Rush Connor McGovern 5 Yd Pnlty\"},{\"op\":\"replace\",\"path\":\"/entities/plays/401872971792/text\",\"value\":\"J.Cook up the middle to NE 26 for 1 yard (C.Woods).PENALTY on BUF-C.McGovern, Offensive Offside, 5 yards, enforced at NE 27 - No Play.\"}]"
+    },
+    {
+      "at": 1791136770054,
+      "op": "P",
+      "tc": "gp-football-nfl-401872971",
+      "mid": 820,
+      "ts": 1791136769811,
+      "pl": "[{\"op\":\"replace\",\"path\":\"/boxscore/players/0/statistics/4/totals/0\",\"value\":\"20\"},{\"op\":\"replace\",\"path\":\"/boxscore/players/0/statistics/4/totals/1\",\"value\":\"14\"},{\"op\":\"replace\",\"path\":\"/boxscore/players/1/statistics/1/totals/0\",\"value\":\"7\"},{\"op\":\"replace\",\"path\":\"/boxscore/players/1/statistics/1/totals/2\",\"value\":\"2.9\"},{\"op\":\"replace\",\"path\":\"/boxscore/teams/1/statistics/6/displayValue\",\"value\":\"20\"},{\"op\":\"replace\",\"path\":\"/boxscore/teams/1/statistics/6/value\",\"value\":2E+1},{\"op\":\"replace\",\"path\":\"/boxscore/teams/1/statistics/8/displayValue\",\"value\":\"4.0\"},{\"op\":\"replace\",\"path\":\"/boxscore/teams/1/statistics/8/value\",\"value\":4.05},{\"op\":\"replace\",\"path\":\"/boxscore/teams/1/statistics/16/displayValue\",\"value\":\"7\"},{\"op\":\"replace\",\"path\":\"/boxscore/teams/1/statistics/16/value\",\"value\":7},{\"op\":\"replace\",\"path\":\"/boxscore/teams/1/statistics/17/displayValue\",\"value\":\"2.9\"},{\"op\":\"replace\",\"path\":\"/boxscore/teams/1/statistics/17/value\",\"value\":2.857},{\"op\":\"replace\",\"path\":\"/boxscore/teams/1/statistics/24/displayValue\",\"value\":\"11:10\"},{\"op\":\"replace\",\"path\":\"/boxscore/teams/1/statistics/24/value\",\"value\":670},{\"op\":\"replace\",\"path\":\"/header/competitions/0/competitors/0/possession\",\"value\":true},{\"op\":\"replace\",\"path\":\"/leaders/0/leaders/1/leaders/0/displayValue\",\"value\":\"4 CAR, 11 YDS, 1 TD\"},{\"op\":\"replace\",\"path\":\"/leaders/0/leaders/1/leaders/0/summary\",\"value\":\"4 CAR, 1 TD\"},{\"op\":\"replace\",\"path\":\"/pickcenter/0/moneyline/away/live/odds\",\"value\":\"-104\"},{\"op\":\"replace\",\"path\":\"/pickcenter/0/moneyline/home/live/odds\",\"value\":\"-126\"},{\"op\":\"replace\",\"path\":\"/pickcenter/0/total/over/live/line\",\"value\":\"o51.5\"},{\"op\":\"replace\",\"path\":\"/pickcenter/0/total/over/live/link/href\",\"value\":\"https://sportsbook.draftkings.com/gateway?s=__s__&wpcid=__wpcid__&wpsrc=413&wpcn=ESPN&wpscn=Widget&wpcrn=BetSlipDeepLink&wpscid=__wpscid__&wpcrid=xx&preurl=https%3A%2F%2Fsportsbook.draftkings.com%2Fevent%2F34118207%3Foutcomes%3D0OU86594736O5150_1\"},{\"op\":\"replace\",\"path\":\"/pickcenter/0/total/over/live/link/tracking/tags/betDetails\",\"value\":\"Over:51.5\"},{\"op\":\"replace\",\"path\":\"/pickcenter/0/total/over/live/odds\",\"value\":\"-125\"},{\"op\":\"replace\",\"path\":\"/pickcenter/0/total/under/live/line\",\"value\":\"u51.5\"},{\"op\":\"replace\",\"path\":\"/pickcenter/0/total/under/live/link/href\",\"value\":\"https://sportsbook.draftkings.com/gateway?s=__s__&wpcid=__wpcid__&wpsrc=413&wpcn=ESPN&wpscn=Widget&wpcrn=BetSlipDeepLink&wpscid=__wpscid__&wpcrid=xx&preurl=https%3A%2F%2Fsportsbook.draftkings.com%2Fevent%2F34118207%3Foutcomes%3D0OU86594736U5150_3\"},{\"op\":\"replace\",\"path\":\"/pickcenter/0/total/under/live/link/tracking/tags/betDetails\",\"value\":\"Under:51.5\"},{\"op\":\"replace\",\"path\":\"/pickcenter/0/total/under/live/odds\",\"value\":\"-106\"}]"
+    },
+    {
+      "at": 1791136772035,
+      "op": "P",
+      "tc": "gp-football-nfl-401872971",
+      "mid": 821,
+      "ts": 1791136771857,
+      "pl": "[{\"op\":\"replace\",\"path\":\"/boxscore/players/0/statistics/4/athletes/1/stats/0\",\"value\":\"3\"},{\"op\":\"replace\",\"path\":\"/boxscore/players/0/statistics/4/athletes/1/stats/1\",\"value\":\"3\"},{\"op\":\"replace\",\"path\":\"/entities/athleteStatistics/3916923/tackler/0/displayValue\",\"value\":\"3\"},{\"op\":\"replace\",\"path\":\"/entities/athleteStatistics/3916923/tackler/0/value\",\"value\":3},{\"op\":\"replace\",\"path\":\"/entities/athleteStatistics/3916923/tackler/1/displayValue\",\"value\":\"3\"},{\"op\":\"replace\",\"path\":\"/entities/athleteStatistics/3916923/tackler/1/value\",\"value\":3},{\"op\":\"replace\",\"path\":\"/entities/athleteStatistics/4379399/rusher/0/displayValue\",\"value\":\"4\"},{\"op\":\"replace\",\"path\":\"/entities/athleteStatistics/4379399/rusher/0/value\",\"value\":4}]"
+    },
+    {
+      "at": 1791136774058,
+      "op": "P",
+      "tc": "gp-football-nfl-401872971",
+      "mid": 822,
+      "ts": 1791136773905,
+      "pl": "[{\"op\":\"replace\",\"path\":\"/drives/current/description\",\"value\":\"1 play, 0 yards, 0:06\"},{\"op\":\"replace\",\"path\":\"/drives/current/offensivePlays\",\"value\":1},{\"op\":\"add\",\"path\":\"/drives/current/plays/-\",\"value\":{\"$key\":\"4018729711662\"}},{\"op\":\"replace\",\"path\":\"/drives/current/start/text\",\"value\":\"BUF 33\"},{\"op\":\"replace\",\"path\":\"/drives/current/start/yardLine\",\"value\":33},{\"op\":\"replace\",\"path\":\"/drives/current/timeElapsed/displayValue\",\"value\":\"0:06\"},{\"op\":\"replace\",\"path\":\"/drives/previous/6/description\",\"value\":\"1 play, 0 yards, 0:06\"},{\"op\":\"replace\",\"path\":\"/drives/previous/6/offensivePlays\",\"value\":1},{\"op\":\"add\",\"path\":\"/drives/previous/6/plays/-\",\"value\":{\"$key\":\"4018729711662\"}},{\"op\":\"replace\",\"path\":\"/drives/previous/6/start/text\",\"value\":\"BUF 33\"},{\"op\":\"replace\",\"path\":\"/drives/previous/6/start/yardLine\",\"value\":33},{\"op\":\"replace\",\"path\":\"/drives/previous/6/timeElapsed/displayValue\",\"value\":\"0:06\"},{\"op\":\"add\",\"path\":\"/entities/plays/4018729711662\",\"value\":{\"id\":\"4018729711662\",\"type\":{\"id\":\"5\",\"slug\":\"rush\",\"abbreviation\":\"RUSH\",\"text\":\"Rush\"},\"text\":\" J.Cook right end to BUF 33 for no gain (C.Davis).\",\"shortText\":\"James Cook III Rush, No Gain \",\"period\":{\"number\":2},\"clock\":{\"value\":332,\"displayValue\":\"5:32\"},\"team\":{\"$key\":\"2\"},\"scoreValue\":0,\"scoringPlay\":false,\"start\":{\"team\":{\"$key\":\"2\"},\"yardLine\":33,\"down\":1,\"distance\":10,\"yardsToEndzone\":67,\"downDistanceText\":\"1st & 10 at BUF 33\",\"shortDownDistanceText\":\"1st & 10\",\"possessionText\":\"BUF 33\"},\"end\":{\"team\":{\"$key\":\"2\"},\"yardLine\":33,\"down\":2,\"distance\":10,\"yardsToEndzone\":67,\"downDistanceText\":\"2nd & 10 at BUF 33\",\"shortDownDistanceText\":\"2nd & 10\",\"possessionText\":\"BUF 33\"},\"statYardage\":0,\"sequenceNumber\":\"166200\",\"participants\":[{\"athlete\":{\"$key\":\"4379399\"},\"type\":\"rusher\"},{\"athlete\":{\"$key\":\"3916923\"},\"type\":\"tackler\"}],\"shortDescription\":\"0-yd Run\",\"homeScore\":7,\"awayScore\":14,\"probabilities\":{\"winProbability\":{\"homeWinPercentage\":0.4606},\"coverProbability\":{\"homeCoverPercentage\":0.2355,\"totalOverPercentage\":0.6178,\"spreadPushPercentage\":0.0541}},\"priority\":false,\"wallclock\":\"2026-10-04T17:59:08Z\"}},{\"op\":\"replace\",\"path\":\"/entities/plays/401872971917/participants/1/carouselStats/2/displayValue\",\"value\":\"11:10\"},{\"op\":\"replace\",\"path\":\"/entities/plays/401872971917/participants/1/carouselStats/2/value\",\"value\":6.7E+2},{\"op\":\"replace\",\"path\":\"/meta/lastPlayWallClock\",\"value\":\"2026-10-04T17:59:08Z\"},{\"op\":\"replace\",\"path\":\"/meta/lastUpdatedAt\",\"value\":\"2026-10-04T17:59:08Z\"},{\"op\":\"add\",\"path\":\"/winprobability/-\",\"value\":{\"homeWinPercentage\":0.4606,\"tiePercentage\":0,\"playId\":\"4018729711662\"}}]"
+    }
+  ]
+}

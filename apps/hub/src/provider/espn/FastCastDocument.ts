@@ -6,10 +6,10 @@ import * as FastCastPayload from "./FastCastPayload.ts"
 
 /**
  * The FastCast topics' documents after `frame`, and what it changed: a scoreboard topic's touched events (every event,
- * on a checkpoint), or a game topic's whole list of plays when they changed. A topic is synced by its checkpoint frame
- * and moved on by each message after it. A missed message or a patch that will not apply sends only that topic back
- * to waiting for a checkpoint, logged and counted; it never fails. Fails only when the frame itself does not decode,
- * leaving the documents as they were.
+ * on a checkpoint), or all of a game topic's plays, by id, when they changed. A topic is synced by its checkpoint
+ * frame and moved on by each message after it. A missed message, a patch that will not apply, or a message that does
+ * not decode on a synced topic sends only that topic back to waiting for a checkpoint, logged and counted. Fails only
+ * when any other frame does not decode, leaving the documents as they were.
  */
 export function advance(
   documents: Documents,
@@ -27,7 +27,7 @@ export function advance(
           readonly topic: "game"
           readonly league: LeagueId
           readonly game: GameId
-          readonly plays: ReadonlyArray<Schema.Json>
+          readonly plays: Readonly<Record<string, Schema.Json>>
         }
     >
   ],
@@ -57,13 +57,7 @@ export function advance(
         ? moved(documents, frame.channel, owned.value, message)
         : Effect.succeed([documents, Option.none()] as const)
     ),
-    Effect.catchIf(
-      () => Option.isNone(decodeKnownOp(frame.body)),
-      () =>
-        Effect.logDebug("FastCastDocument: skipped a message of an unknown op", frame.body).pipe(
-          Effect.as([documents, Option.none()] as const)
-        )
-    )
+    Effect.catch((error) => undecoded(documents, frame, owned, error))
   )
 }
 
@@ -79,20 +73,8 @@ export function topic(league: LeagueId, game?: GameId): string {
   return game === undefined ? `event-${sport}` : `gp-${sport}-${game}`
 }
 
-/**
- * Where one topic's document is: waiting for a checkpoint, or synced as of a message. A scoreboard topic's document
- * is its events by uid; a game topic's is `{ entities: { plays } }`, its plays by id.
- */
-type Topic = Data.TaggedEnum<{
-  AwaitingCheckpoint: object
-  Synced: { readonly mid: number; readonly document: Schema.Json }
-}>
-const Topic = Data.taggedEnum<Topic>()
-
-type Documents = ReadonlyMap<string, Topic>
-
-/** The league, and for a game topic the game, whose topic `tc` is. */
-function owner(
+/** The league, and for a game topic the game, whose FastCast topic `tc` is. */
+export function owner(
   tc: string
 ): Option.Option<{ readonly league: LeagueId; readonly game: Option.Option<GameId> }> {
   return Arr.findFirst(LeagueId.literals, (league) => {
@@ -104,6 +86,18 @@ function owner(
         : Option.none()
   })
 }
+
+/**
+ * Where one topic's document is: waiting for a checkpoint, or synced as of a message. A scoreboard topic's document
+ * is its events by uid; a game topic's is `{ entities: { plays } }`, its plays by id.
+ */
+type Topic = Data.TaggedEnum<{
+  AwaitingCheckpoint: object
+  Synced: { readonly mid: number; readonly document: Schema.Json }
+}>
+const Topic = Data.taggedEnum<Topic>()
+
+type Documents = ReadonlyMap<string, Topic>
 
 function checkpoint(
   owner: { readonly game: Option.Option<GameId> },
@@ -156,7 +150,7 @@ function changeOf(
       topic: "game" as const,
       league,
       game,
-      plays: Record.values(objectAt(document, ["entities", "plays"]))
+      plays: objectAt(document, ["entities", "plays"])
     })
   })
 }
@@ -206,7 +200,7 @@ function relevant(
     path.pointer === playsPointer || path.pointer.startsWith(`${playsPointer}/`)
   return Option.isNone(owner.game)
     ? patches
-    : patches.filter((patch) => inPlays(patch.path) && (patch.op !== "copy" || inPlays(patch.from)))
+    : patches.filter((patch) => inPlays(patch.path) && (!("from" in patch) || inPlays(patch.from)))
 }
 
 const playsPointer = "/entities/plays"
@@ -227,8 +221,9 @@ function reset(
 
 /**
  * The document with `patch` applied. On a scoreboard topic the path's uid is the document's first token, and a path
- * with no pointer adds, replaces, or removes the whole event. `JsonPatch` has no `copy`: a copy is an add of the
- * value read at `from`.
+ * with no pointer adds, replaces, or removes the whole event; removing an event the document lacks changes nothing.
+ * `JsonPatch` has no `copy` or `move`: a copy is an add of the value read at `from`, a move a remove of `from` then
+ * that add.
  */
 function patched(
   document: Schema.Json,
@@ -237,26 +232,42 @@ function patched(
 ): Effect.Effect<Schema.Json, string> {
   const pointer = ({ uid, pointer }: { readonly uid: string; readonly pointer: string }) =>
     Option.isNone(owner.game) ? `/${JsonPointer.escapeToken(uid)}${pointer}` : pointer
-  if (patch.op === "copy") {
+  if ("from" in patch) {
     return Option.match(valueAt(document, tokens(pointer(patch.from))), {
-      onNone: () => Effect.fail(`${described(patch)}: nothing to copy`),
-      onSome: (value) => applied(document, { op: "add", path: pointer(patch.path), value }, patch)
+      onNone: () => Effect.fail(`${described(patch)}: nothing at ${patch.from.uid}${patch.from.pointer}`),
+      onSome: (value) =>
+        applied(
+          document,
+          [
+            ...(patch.op === "move" ? [{ op: "remove" as const, path: pointer(patch.from) }] : []),
+            { op: "add", path: pointer(patch.path), value }
+          ],
+          patch
+        )
     })
   }
-  if (patch.op === "remove") return applied(document, { op: "remove", path: pointer(patch.path) }, patch)
+  if (patch.op === "remove") {
+    const wholeEventMissing =
+      Option.isNone(owner.game) &&
+      patch.path.pointer === "" &&
+      Option.isNone(valueAt(document, [patch.path.uid]))
+    return wholeEventMissing
+      ? Effect.succeed(document)
+      : applied(document, [{ op: "remove", path: pointer(patch.path) }], patch)
+  }
   // A whole event replaced is set, whether or not the document had it.
   const op = patch.op === "replace" && patch.path.pointer === "" ? "add" : patch.op
-  return applied(document, { op, path: pointer(patch.path), value: patch.value }, patch)
+  return applied(document, [{ op, path: pointer(patch.path), value: patch.value }], patch)
 }
 
 function applied(
   document: Schema.Json,
-  operation: JsonPatch.JsonPatchOperation,
+  operations: JsonPatch.JsonPatch,
   patch: typeof FastCastPayload.Patch.Type
 ): Effect.Effect<Schema.Json, string> {
   // JsonPatch.apply throws on an operation it cannot apply, and Effect has no variant that does not.
   return Effect.try({
-    try: () => JsonPatch.apply([operation], document),
+    try: () => JsonPatch.apply(operations, document),
     catch: (cause) => `${described(patch)}: ${String(cause)}`
   })
 }
@@ -290,6 +301,36 @@ function objectAt(json: Schema.Json, path: ReadonlyArray<string>): Readonly<Reco
     onNone: () => ({}),
     onSome: (value) =>
       typeof value === "object" && value !== null && !Arr.isArray<Schema.Json>(value) ? value : {}
+  })
+}
+
+/**
+ * The documents after a message that does not decode: one of an unknown op is skipped, and a patch or idle message
+ * on a synced topic resets that topic, since its mids can no longer be followed. Any other fails with `error`.
+ */
+function undecoded(
+  documents: Documents,
+  frame: Frame,
+  owned: Option.Option<{ readonly league: LeagueId }>,
+  error: Schema.SchemaError
+) {
+  return Option.match(decodeKnownOp(frame.body), {
+    onNone: () =>
+      Effect.logDebug("FastCastDocument: skipped a message of an unknown op", frame.body).pipe(
+        Effect.as([documents, Option.none()] as const)
+      ),
+    onSome: ({ op }) =>
+      Option.isSome(owned) &&
+      (op === "R" || op === "P" || op === "I") &&
+      documents.get(frame.channel)?._tag === "Synced"
+        ? reset(
+            documents,
+            frame.channel,
+            owned.value.league,
+            "Unapplicable",
+            `message ${frame.sourceId} does not decode: ${error.message}`
+          )
+        : Effect.fail(error)
   })
 }
 

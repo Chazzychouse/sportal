@@ -22,7 +22,7 @@ const EventPath = Schema.String.pipe(
 export const Patch = Schema.Union([
   Schema.Struct({ op: Schema.Literals(["add", "replace"]), path: EventPath, value: Schema.Json }),
   Schema.Struct({ op: Schema.Literal("remove"), path: EventPath }),
-  Schema.Struct({ op: Schema.Literal("copy"), path: EventPath, from: EventPath })
+  Schema.Struct({ op: Schema.Literals(["copy", "move"]), path: EventPath, from: EventPath })
 ])
 
 const Patches = Schema.Array(Patch)

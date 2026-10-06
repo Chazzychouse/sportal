@@ -2,7 +2,8 @@ import { readFileSync } from "node:fs"
 import { assert, describe, it } from "@effect/vitest"
 import type { Delivery } from "@sportal/domain/Delivery"
 import { GameId, type GameSnapshot } from "@sportal/domain/Game"
-import { DateTime, Effect, Metric, Schema, Stream } from "effect"
+import { PlayId } from "@sportal/domain/Play"
+import { DateTime, Effect, Metric, Record, Schema, Stream } from "effect"
 import { Frame } from "../../feed/Frame.ts"
 import { counted, recordingLogs, withMetrics } from "../../TestTelemetry.ts"
 import * as EspnDecode from "./EspnDecode.ts"
@@ -19,6 +20,24 @@ const scoreboardBody = fixture("nfl-scoreboard-2026-10-04T1800Z.json")
 const playEntities = Schema.decodeUnknownSync(
   Schema.fromJsonString(Schema.Record(Schema.String, Schema.Record(Schema.String, Schema.Json)))
 )(fixture("nfl-plays-2026-10-04.json"))
+// Recorded from ESPN on 2026-10-04 on BUF at NE's game topic: the two plays its messages 819–822 patch, as they stood
+// after message 818, and those messages as the recorder kept them. Message 819 opens with a `move` outside the plays.
+const moveRecording = Schema.decodeUnknownSync(
+  Schema.fromJsonString(
+    Schema.Struct({
+      checkpoint: Schema.Struct({ mid: Schema.Int, body: Schema.Json }),
+      messages: Schema.Array(
+        Schema.Struct({
+          op: Schema.String,
+          tc: Schema.String,
+          mid: Schema.Int,
+          ts: Schema.Number,
+          pl: Schema.String
+        })
+      )
+    })
+  )
+)(fixture("nfl-gp-move-2026-10-04.json"))
 
 const ariAtNyg = "s:20~l:28~e:401872966~c:401872966"
 const ariAtNygPlays = "gp-football-nfl-401872966"
@@ -170,6 +189,49 @@ describe("EspnDecode", () => {
       }).pipe(withMetrics)
   )
 
+  it.effect("removing a whole event the document does not have changes nothing", () =>
+    Effect.gen(function* () {
+      const deliveries = yield* decoded([
+        poll("nfl", scoreboardBody),
+        ...recorded(socketTexts.slice(0, 3)),
+        message("event-football-nfl", 4286638, [{ op: "remove", path: "s:20~l:28~e:1~c:1" }]),
+        message("event-football-nfl", 4286639, [
+          { op: "replace", path: `${ariAtNyg}/competitors/0/score`, value: "17" }
+        ])
+      ])
+
+      assert.deepStrictEqual(
+        deliveries.filter(({ seq }) => seq > 5).map(({ seq, delivery }) => [seq, delivery._tag]),
+        [[7, "Snapshot"]]
+      )
+      assert.isUndefined(yield* counted("sportal_live_feed_document_resets"))
+    }).pipe(withMetrics)
+  )
+
+  it.effect("a message that does not decode on a synced topic resets the topic, and is counted", () =>
+    Effect.gen(function* () {
+      const deliveries = yield* decoded([
+        poll("nfl", scoreboardBody),
+        ...recorded(socketTexts.slice(0, 3)),
+        message("event-football-nfl", 4286638, [{ op: "test", path: `${ariAtNyg}/clock`, value: "1:00" }]),
+        message("event-football-nfl", 4286639, [
+          { op: "replace", path: `${ariAtNyg}/competitors/0/score`, value: "17" }
+        ])
+      ])
+
+      assert.deepStrictEqual(
+        deliveries.filter(({ seq }) => seq > 5),
+        [],
+        "the topic waits for its next checkpoint"
+      )
+      assert.strictEqual(
+        yield* counted("sportal_live_feed_document_resets", { league: "nfl", reason: "Unapplicable" }),
+        1
+      )
+      assert.isUndefined(yield* counted("sportal_frames_undecoded"))
+    }).pipe(withMetrics)
+  )
+
   it.effect("counts the messages by league and op, and the games pushed", () =>
     Effect.gen(function* () {
       yield* decoded([poll("nfl", scoreboardBody), ...recorded(socketTexts)])
@@ -264,6 +326,94 @@ describe("EspnDecode", () => {
       })
     )
 
+    it.effect("a move within the plays takes the value from its source", () =>
+      Effect.gen(function* () {
+        const deliveries = yield* decoded([
+          checkpoint(ariAtNygPlays, 99, { entities: { plays: plays("401872966237", "401872966271") } }),
+          playsMessage(100, [
+            { op: "move", from: "/entities/plays/401872966271", path: "/entities/plays/moved" }
+          ]),
+          playsMessage(101, [{ op: "remove", path: "/entities/plays/moved" }])
+        ])
+
+        assert.deepStrictEqual(deliveries.map(playIds), [
+          ["401872966237", "401872966271"],
+          ["401872966237", "401872966271"],
+          ["401872966237"]
+        ])
+      })
+    )
+
+    it.effect(
+      "a recorded move outside the plays keeps the topic synced, and the plays after it still arrive",
+      () =>
+        Effect.gen(function* () {
+          const game = "gp-football-nfl-401872971"
+          const deliveries = yield* decoded([
+            checkpoint(game, moveRecording.checkpoint.mid, moveRecording.checkpoint.body),
+            ...moveRecording.messages.map(
+              ({ op, tc, mid, ts, pl }): Omit<Frame, "seq"> => ({
+                receivedAt: at,
+                feed: "fastcast",
+                channel: tc,
+                kind: "message",
+                sourceId: mid,
+                body: JSON.stringify({ op, tc, mid, pl: JSON.stringify({ ts, pl }) })
+              })
+            )
+          ])
+
+          assert.isTrue(
+            moveRecording.messages[0]?.pl.includes('"op":"move"'),
+            "the first recorded message has a move"
+          )
+          assert.deepStrictEqual(
+            deliveries.map(({ seq }) => seq),
+            [1, 2, 5],
+            "the checkpoint, message 819, and message 822 change the plays"
+          )
+          assert.include(
+            deliveries[1]?.delivery._tag === "Plays"
+              ? deliveries[1].delivery.plays.find((play) => play.id === "401872971792")?.text
+              : undefined,
+            "PENALTY on BUF-C.McGovern"
+          )
+          assert.include(deliveries.map(playIds).at(-1) ?? [], PlayId.make("4018729711662"))
+          assert.isUndefined(yield* counted("sportal_live_feed_document_resets"))
+          assert.isUndefined(yield* counted("sportal_frames_undecoded"))
+        }).pipe(withMetrics)
+    )
+
+    it.effect(
+      "a play that does not decode is left out, logged once and counted, and the rest delivered",
+      () =>
+        Effect.gen(function* () {
+          const { logs, layer } = recordingLogs()
+          const broken = {
+            ...Record.remove(playEntities["401872966237"] ?? {}, "statYardage"),
+            id: "401872966999"
+          }
+          const deliveries = yield* decoded([
+            checkpoint(ariAtNygPlays, 99, {
+              entities: { plays: { ...plays("401872966237", "401872966271"), "401872966999": broken } }
+            }),
+            playsMessage(100, [
+              { op: "replace", path: "/entities/plays/401872966271/text", value: "Corrected" }
+            ])
+          ]).pipe(Effect.provide(layer))
+
+          assert.deepStrictEqual(deliveries.map(playIds), [
+            ["401872966237", "401872966271"],
+            ["401872966237", "401872966271"]
+          ])
+          assert.strictEqual(yield* counted("sportal_live_feed_undecoded_plays", { league: "nfl" }), 1)
+          assert.strictEqual(
+            logs.filter((log) => log.level === "Warn" && log.message.includes("401872966999")).length,
+            1
+          )
+        }).pipe(withMetrics)
+    )
+
     it.effect("a patch outside the plays gives nothing and fails nothing", () =>
       Effect.gen(function* () {
         const deliveries = yield* decoded([
@@ -337,7 +487,7 @@ function poll(channel: string, body: string): Omit<Frame, "seq"> {
   return { receivedAt: at, feed: "poll", channel, kind: "response", body }
 }
 
-function checkpoint(channel: string, mid: number, document: object): Omit<Frame, "seq"> {
+function checkpoint(channel: string, mid: number, document: unknown): Omit<Frame, "seq"> {
   return {
     receivedAt: at,
     feed: "fastcast",
