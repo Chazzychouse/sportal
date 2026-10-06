@@ -18,13 +18,13 @@ import * as YouTubeTv from "./source/youtube-tv/YouTubeTv.ts"
 /** What the Hub plays: the live day from ESPN and YouTube TV, or a scenario in their place, on scenario time. */
 export const layer = Layer.unwrap(
   Effect.gen(function* () {
-    const { scenario, scenarioSpeed } = yield* HubConfig
+    const { scenario } = yield* HubConfig
     // Annotated so the compiler checks that a scenario provides everything the live day does.
     const chosen: Layer.Layer<
       Layer.Success<ReturnType<typeof live>>,
       Layer.Error<ReturnType<typeof live>> | Layer.Error<ReturnType<typeof scripted>>,
       Layer.Services<ReturnType<typeof live>> | Layer.Services<ReturnType<typeof scripted>>
-    > = Option.match(scenario, { onNone: live, onSome: () => scripted(scenarioSpeed) })
+    > = Option.match(scenario, { onNone: live, onSome: scripted })
     return chosen
   })
 )
@@ -50,7 +50,7 @@ function live() {
 
 // The scenario plays as the provider through the real Ingest, onto a feed log of its own. Ingest, the fold, and the
 // Slate share the scenario's clock; the rest of the Hub keeps the real one. The game history stays out of a scenario.
-function scripted(speed: number) {
+function scripted() {
   return Layer.mergeAll(
     Layer.mergeAll(
       Slate.layer,
@@ -61,7 +61,7 @@ function scripted(speed: number) {
           DateTime.layerCurrentZoneLocal
         ])
       )
-    ).pipe(Layer.provide(LiveGames.layer), Layer.provide(ScenarioClock.layer(speed))),
+    ).pipe(Layer.provide(LiveGames.layer), Layer.provide(ScenarioClock.layer)),
     ScenarioSource.layer
   )
 }

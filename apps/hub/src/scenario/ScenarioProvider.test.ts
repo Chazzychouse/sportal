@@ -215,8 +215,12 @@ describe("ScenarioProvider", () => {
 
   it.effect("plays at the scenario's speed, while the rest of the Hub keeps real time", () =>
     Effect.gen(function* () {
+      // The clock and the scenario share one HubConfig, so the same variables build it.
+      const env = { SPORTAL_SCENARIO: "two-minute-drill-tie", SPORTAL_SCENARIO_SPEED: "10" }
       const context = yield* Layer.build(
-        playing("two-minute-drill-tie").pipe(Layer.provide(ScenarioClock.layer(10)))
+        playing("two-minute-drill-tie", { env }).pipe(
+          Layer.provide(ScenarioClock.layer.pipe(Layer.provide(withEnv(env).pipe(Layer.orDie))))
+        )
       )
       // 13 real seconds are 130 scenario seconds: the drive is at the 17, in the red zone, since 2:00.
       yield* TestClock.adjust("13 seconds")
