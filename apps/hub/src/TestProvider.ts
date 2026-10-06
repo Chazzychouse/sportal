@@ -101,7 +101,7 @@ function said(
     })
   }
   return games.length === 0
-    ? [{ _tag: "Resync", channel: frame.channel } as const]
+    ? [{ _tag: "Resync", channel: frame.channel, seq: frame.seq } as const]
     : games.map((snapshot) => delivered(Delivery.Snapshot({ snapshot, from: "push" })))
 }
 

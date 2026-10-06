@@ -2,16 +2,19 @@ import { join } from "node:path"
 import { fileURLToPath } from "node:url"
 import { Delivery } from "@sportal/domain/Delivery"
 import { LeagueId } from "@sportal/domain/League"
+import { LiveGame } from "@sportal/domain/LiveGame"
 import { Scenario } from "@sportal/domain/Scenario"
 import { scenarios } from "@sportal/domain/scenarios/Scenarios"
-import { DateTime, Duration, Effect, FileSystem, Layer, Option, Schema } from "effect"
+import { Array as Arr, DateTime, Duration, Effect, FileSystem, Layer, Option, Schema } from "effect"
+import * as Cadence from "../ingest/Cadence.ts"
 import { Ingest } from "../ingest/Ingest.ts"
 import { LiveGames } from "../LiveGames.ts"
 
 /**
- * A scenario as the feed: at each of its frames' times since the Hub started, each league's slate is taken as a
- * `Listing`. That is scenario time when the Hub runs on the scenario clock. Nothing is logged. `name` is a written
- * scenario's, or a recorded slice's in `from`.
+ * A scenario as the feed: each league's slate at the time since the Hub started is taken as a `Listing`, on the poll
+ * Cadence over the fold as live Ingest polls, and also at each of the scenario's frames' times, so a change lands
+ * when it was written. That is scenario time when the Hub runs on the scenario clock. Nothing is logged. `name` is a
+ * written scenario's, or a recorded slice's in `from`.
  */
 export const layer = (name: string, from: string = folder) =>
   Layer.effect(
@@ -22,31 +25,37 @@ export const layer = (name: string, from: string = folder) =>
       const start = yield* DateTime.now
       yield* Effect.logInfo(`ScenarioIngest: playing ${scenario.name}, ${scenario.frames.length} frames`)
       yield* Effect.forkScoped(
-        Effect.forEach(
-          scenario.frames,
-          ({ at }) =>
-            Effect.gen(function* () {
-              const elapsed = Duration.millis(at)
-              yield* Effect.sleep(
-                Duration.max(
-                  DateTime.distance(yield* DateTime.now, DateTime.addDuration(start, elapsed)),
-                  Duration.zero
-                )
-              )
-              const slate = scenario.slateAt(start, elapsed)
-              const now = yield* DateTime.now
-              yield* Effect.forEach(
-                LeagueId.literals,
-                (league) =>
-                  liveGames.take(
-                    Delivery.Listing({ league, games: slate.filter((game) => game.league === league) }),
-                    now,
-                    Option.none()
-                  ),
-                { discard: true }
-              )
-            }),
-          { discard: true }
+        Effect.forever(
+          Effect.gen(function* () {
+            const now = yield* DateTime.now
+            const elapsed = DateTime.distance(start, now)
+            const slate = scenario.slateAt(start, elapsed)
+            yield* Effect.forEach(
+              LeagueId.literals,
+              (league) =>
+                liveGames.take(
+                  Delivery.Listing({ league, games: slate.filter((game) => game.league === league) }),
+                  now,
+                  Option.none()
+                ),
+              { discard: true }
+            )
+            const folded = yield* liveGames.latest
+            const cadence = Cadence.interval(
+              LeagueId.literals.flatMap((league) =>
+                LiveGame.asFolded(folded.listed.get(league) ?? [], folded.live)
+              ),
+              now,
+              false
+            )
+            const nextFrame = Arr.findFirst(scenario.frames, ({ at }) => at > Duration.toMillis(elapsed))
+            yield* Effect.sleep(
+              Option.match(nextFrame, {
+                onNone: () => cadence,
+                onSome: ({ at }) => Duration.min(cadence, Duration.subtract(Duration.millis(at), elapsed))
+              })
+            )
+          })
         )
       )
       return Ingest.of({})

@@ -17,13 +17,14 @@ import {
   Stream,
   type Tracer
 } from "effect"
+import type { SqlClient } from "effect/sql"
 import { TestClock } from "effect/testing"
 import * as Database from "../database/Database.ts"
 import { FeedLog } from "../feed/FeedLog.ts"
 import type { Frame } from "../feed/Frame.ts"
 import { LiveGames } from "../LiveGames.ts"
 import { LiveFeed, LiveFeedError } from "../provider/LiveFeed.ts"
-import { Provider } from "../provider/Provider.ts"
+import { Provider, ProviderError } from "../provider/Provider.ts"
 import { game, polling, pushed, scripted } from "../TestProvider.ts"
 import { counted, recordingLogs, recordingSpans, withMetrics } from "../TestTelemetry.ts"
 import { dayStart, Ingest } from "./Ingest.ts"
@@ -34,7 +35,7 @@ describe("Ingest", () => {
       yield* TestClock.adjust(0)
       const folded = yield* (yield* LiveGames).latest
       yield* TestClock.adjust("100 millis")
-      const logged = yield* logOf(yield* FeedLog, 2)
+      const logged = yield* logOf(2)
 
       assert.deepStrictEqual(
         logged.map(({ seq, feed, channel }) => [seq, feed, channel]),
@@ -91,24 +92,22 @@ describe("Ingest", () => {
 
   it.effect("polls again after the live cadence, and the new listing reaches the fold", () =>
     Effect.gen(function* () {
-      const liveGames = yield* LiveGames
       yield* TestClock.adjust(0)
-      assert.strictEqual((yield* slateOf(liveGames))[0]?.home.score, 0)
+      assert.strictEqual((yield* slateOf())[0]?.home.score, 0)
 
       yield* TestClock.adjust("10 seconds")
-      assert.strictEqual((yield* slateOf(liveGames))[0]?.home.score, 7)
+      assert.strictEqual((yield* slateOf())[0]?.home.score, 7)
     }).pipe(Effect.provide(ingesting(scripted([[liveGame(0)], [liveGame(7)]]))))
   )
 
   it.effect("a failed league appends nothing and keeps its last listing in the fold", () =>
     Effect.gen(function* () {
-      const liveGames = yield* LiveGames
       yield* TestClock.adjust(0)
       yield* TestClock.adjust("10 seconds")
       yield* TestClock.adjust("100 millis")
 
-      assert.strictEqual((yield* slateOf(liveGames))[0]?.home.score, 7)
-      assert.lengthOf(yield* logOf(yield* FeedLog, 1), 1)
+      assert.strictEqual((yield* slateOf())[0]?.home.score, 7)
+      assert.lengthOf(yield* logOf(1), 1)
     }).pipe(Effect.provide(ingesting(scripted([[liveGame(7)], "fail"]))))
   )
 
@@ -124,18 +123,17 @@ describe("Ingest", () => {
           LiveGameState.$is("Stale")(liveGame.state)
         )
       )
-      assert.strictEqual((yield* slateOf(liveGames))[0]?.period, 2)
+      assert.strictEqual((yield* slateOf())[0]?.period, 2)
     }).pipe(Effect.provide(ingesting(scripted([[game("1", 2)], "fail"]))))
   )
 
   it.effect("retries after 30 seconds when the first poll fails", () =>
     Effect.gen(function* () {
-      const liveGames = yield* LiveGames
       yield* TestClock.adjust(0)
-      assert.lengthOf(yield* slateOf(liveGames), 0)
+      assert.lengthOf(yield* slateOf(), 0)
 
       yield* TestClock.adjust("30 seconds")
-      assert.strictEqual((yield* slateOf(liveGames))[0]?.home.score, 3)
+      assert.strictEqual((yield* slateOf())[0]?.home.score, 3)
     }).pipe(Effect.provide(ingesting(scripted(["fail", [liveGame(3)]]))))
   )
 
@@ -183,14 +181,13 @@ describe("Ingest", () => {
       const feed = yield* Queue.unbounded<Offered>()
       const subscriptions = yield* Ref.make(0)
       yield* Effect.gen(function* () {
-        const liveGames = yield* LiveGames
         yield* TestClock.adjust(0)
         yield* Queue.offer(feed, yield* pushed([liveGame(7)]))
         yield* TestClock.adjust("100 millis")
 
-        assert.strictEqual((yield* slateOf(liveGames))[0]?.home.score, 7)
+        assert.strictEqual((yield* slateOf())[0]?.home.score, 7)
         assert.deepStrictEqual(
-          (yield* logOf(yield* FeedLog, 2)).map(({ seq, feed }) => [seq, feed]),
+          (yield* logOf(2)).map(({ seq, feed }) => [seq, feed]),
           [
             [1, "poll"],
             [2, "fastcast"]
@@ -332,11 +329,7 @@ describe("Ingest", () => {
       const ended: Array<Tracer.Span> = []
       const { logs, layer: logged } = recordingLogs()
       return Effect.gen(function* () {
-        yield* Effect.gen(function* () {
-          const log = yield* FeedLog
-          yield* log.append(yield* pollOf([game("1", 2)]))
-          yield* log.append(yield* pollOf([game("1", 3)]))
-        }).pipe(Effect.provide(FeedLog.layer), Effect.scoped)
+        yield* loggedBefore([pollOf([game("1", 2)]), pollOf([game("1", 3)])])
 
         yield* Effect.gen(function* () {
           const replayed = yield* (yield* LiveGames).latest
@@ -355,6 +348,49 @@ describe("Ingest", () => {
         }).pipe(Effect.provide(over(scripted([[game("1", 4)]]), { ended })), Effect.provide(logged))
       }).pipe(Effect.provide(Database.layer(":memory:")), withMetrics)
     }
+  )
+
+  it.effect("a frame appended the moment the replay ends, before anything else runs, reaches the fold", () =>
+    Effect.gen(function* () {
+      yield* loggedBefore([pollOf([game("1", 2)])])
+      // The log's replay appends a frame as it ends, so it is in the log before decoding reaches the end of the replay.
+      const appendingAtEnd = Layer.effect(
+        FeedLog,
+        Effect.map(FeedLog, (log) =>
+          FeedLog.of({
+            ...log,
+            replay: (from) =>
+              log
+                .replay(from)
+                .pipe(
+                  Stream.concat(
+                    Stream.fromEffect(Effect.flatMap(pushed([game("1", 3)]), log.append)).pipe(Stream.drain)
+                  )
+                )
+          })
+        )
+      ).pipe(Layer.provide(FeedLog.layer))
+
+      yield* Effect.gen(function* () {
+        const folded = yield* foldedThrough(2)
+        assert.strictEqual(folded.live.get(GameId.make("1"))?.snapshot.period, 3)
+      }).pipe(Effect.provide(over(scripted([]), { feedLog: appendingAtEnd })))
+    }).pipe(Effect.provide(Database.layer(":memory:")))
+  )
+
+  it.effect("the decoder's state from the replayed frames is in effect for the first live frame", () =>
+    Effect.gen(function* () {
+      yield* loggedBefore([pollOf([]), pollOf([])])
+
+      yield* Effect.gen(function* () {
+        const frame = yield* (yield* FeedLog).append(yield* pushed([]))
+        const folded = yield* foldedThrough(frame.seq)
+        assert.deepStrictEqual(
+          [...folded.live.values()].map((held) => held.snapshot.home.score),
+          [3]
+        )
+      }).pipe(Effect.provide(over(Layer.succeed(Provider, counting))))
+    }).pipe(Effect.provide(Database.layer(":memory:")))
   )
 
   describe("dayStart", () => {
@@ -388,7 +424,8 @@ function ingesting(provider: Layer.Layer<Provider>, options: Parameters<typeof o
 
 /**
  * Ingest over `provider` and `liveFeed` (one that never pushes, unless given), of `leagues` (fbs, unless given), with
- * the fold and the feed log also provided to the test, and each span that ends recorded in `ended`.
+ * the fold and the feed log (`FeedLog.layer`, unless given) also provided to the test, and each span that ends recorded
+ * in `ended`.
  */
 function over(
   provider: Layer.Layer<Provider>,
@@ -396,10 +433,11 @@ function over(
     readonly leagues?: ReadonlyArray<"nfl" | "fbs">
     readonly liveFeed?: LiveFeed["Service"]
     readonly ended?: Array<Tracer.Span>
+    readonly feedLog?: Layer.Layer<FeedLog, never, SqlClient.SqlClient>
   } = {}
 ) {
   return Ingest.layer(options.leagues ?? ["fbs"]).pipe(
-    Layer.provideMerge(Layer.mergeAll(LiveGames.layer, FeedLog.layer)),
+    Layer.provideMerge(Layer.mergeAll(LiveGames.layer, options.feedLog ?? FeedLog.layer)),
     Layer.provide([
       provider,
       Layer.succeed(LiveFeed, options.liveFeed ?? LiveFeed.of({ frames: () => Stream.never }))
@@ -464,6 +502,32 @@ function liveGame(homeScore: number) {
   })
 }
 
+/**
+ * A provider that never polls, whose decode keeps a count of the frames it has read and reads each as a pushed live
+ * game with that count for the home score.
+ */
+const counting = Provider.of({
+  poll: (league) => Effect.fail(new ProviderError({ league, cause: "down" })),
+  decode: (frames) =>
+    frames.pipe(
+      Stream.mapAccum(
+        () => 0,
+        (count, frame) =>
+          [
+            count + 1,
+            [
+              {
+                _tag: "Delivered",
+                delivery: Delivery.Snapshot({ snapshot: liveGame(count + 1), from: "push" }),
+                at: frame.receivedAt,
+                seq: frame.seq
+              } as const
+            ]
+          ] as const
+      )
+    )
+})
+
 /** An fbs poll of `games`, as the scripted provider frames it, received now. */
 function pollOf(games: ReadonlyArray<GameSnapshot>) {
   return polling(() => Effect.succeed(games))
@@ -472,19 +536,46 @@ function pollOf(games: ReadonlyArray<GameSnapshot>) {
 }
 
 /** The fbs listing as the fold has it. */
-function slateOf(liveGames: LiveGames["Service"]) {
-  return Effect.map(liveGames.latest, (folded) =>
-    LiveGame.asFolded(folded.listed.get("fbs") ?? [], folded.live)
-  )
+function slateOf() {
+  return Effect.gen(function* () {
+    const folded = yield* (yield* LiveGames).latest
+    return LiveGame.asFolded(folded.listed.get("fbs") ?? [], folded.live)
+  })
 }
 
 /** Every frame the log has written, once it has written at least `count`. */
-function logOf(log: FeedLog["Service"], count: number) {
-  return log
-    .replay(DateTime.makeUnsafe(0))
-    .pipe(
-      Stream.runCollect,
-      Effect.repeat({ until: (written) => written.length >= count, schedule: Schedule.spaced("5 millis") }),
+function logOf(count: number) {
+  return Effect.gen(function* () {
+    const log = yield* FeedLog
+    return yield* log
+      .replay(DateTime.makeUnsafe(0))
+      .pipe(
+        Stream.runCollect,
+        Effect.repeat({ until: (written) => written.length >= count, schedule: Schedule.spaced("5 millis") }),
+        TestClock.withLive
+      )
+  })
+}
+
+/** The fold once it has taken frame `seq`, waiting up to a real second. */
+function foldedThrough(seq: number) {
+  return Effect.gen(function* () {
+    const liveGames = yield* LiveGames
+    yield* liveGames.changes.pipe(
+      Stream.filter((folded) => Option.exists(folded.seq, (at) => at >= seq)),
+      Stream.take(1),
+      Stream.runDrain,
+      Effect.timeout("1 second"),
       TestClock.withLive
     )
+    return yield* liveGames.latest
+  })
+}
+
+/** Frames logged now, before Ingest starts, in a scope of their own. */
+function loggedBefore(frames: ReadonlyArray<Effect.Effect<Omit<Frame, "seq">>>) {
+  return Effect.gen(function* () {
+    const log = yield* FeedLog
+    yield* Effect.forEach(frames, (frame) => Effect.flatMap(frame, log.append), { discard: true })
+  }).pipe(Effect.provide(FeedLog.layer), Effect.scoped)
 }

@@ -145,7 +145,10 @@ function pushed(state: State, frame: Frame): Effect.Effect<readonly [State, Said
                 )
               )
             case "reset":
-              return Effect.succeed([moved, [{ _tag: "Resync", channel: frame.channel }]] as const)
+              return Effect.succeed([
+                moved,
+                [{ _tag: "Resync", channel: frame.channel, seq: frame.seq }]
+              ] as const)
           }
         }
       })

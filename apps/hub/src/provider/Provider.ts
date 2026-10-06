@@ -12,8 +12,9 @@ export class Provider extends Context.Service<
     /**
      * What each frame said, in order: a poll response is a `Listing`, a pushed game a `Snapshot`, a plays document
      * change a `Plays`, each `Delivered`. A live feed topic whose document had to be dropped (a missed message, a
-     * patch that will not apply) is a `Resync` of its channel, so the live feed can ask for its checkpoint again. A
-     * frame that does not decode is logged with its `seq`, counted, and skipped.
+     * patch that will not apply) is a `Resync` of its channel, so the live feed can ask for its checkpoint again. Each
+     * carries the `seq` of the frame that said it. A frame that does not decode is logged with its `seq`, counted, and
+     * skipped.
      */
     decode(frames: Stream.Stream<Frame>): Stream.Stream<
       | {
@@ -22,7 +23,7 @@ export class Provider extends Context.Service<
           readonly at: DateTime.Utc
           readonly seq: number
         }
-      | { readonly _tag: "Resync"; readonly channel: string }
+      | { readonly _tag: "Resync"; readonly channel: string; readonly seq: number }
     >
   }
 >()("sportal/hub/Provider") {}

@@ -9,27 +9,25 @@ import { counted, recordingLogs, withMetrics } from "../TestTelemetry.ts"
 import { FeedLog } from "./FeedLog.ts"
 
 describe("FeedLog", () => {
-  it.effect("numbers appended frames consecutively, and `frames` emits them in that order", () =>
-    Effect.gen(function* () {
-      const log = yield* FeedLog
-      const emitted = yield* log.frames.pipe(
-        Stream.take(3),
-        Stream.runCollect,
-        Effect.forkChild({ startImmediately: true })
-      )
+  it.effect(
+    "numbers appended frames consecutively, and a subscription emits them in that order, from when it subscribed",
+    () =>
+      Effect.gen(function* () {
+        const log = yield* FeedLog
+        const frames = yield* log.subscribe
 
-      const appended = yield* Effect.forEach(
-        [poll("nfl", "{}", 0), message("event-football-nfl", "[]", 1, 7), poll("fbs", "{}", 2)],
-        log.append,
-        { concurrency: "unbounded" }
-      )
+        const appended = yield* Effect.forEach(
+          [poll("nfl", "{}", 0), message("event-football-nfl", "[]", 1, 7), poll("fbs", "{}", 2)],
+          log.append,
+          { concurrency: "unbounded" }
+        )
 
-      assert.deepStrictEqual(
-        appended.map((frame) => frame.seq),
-        [1, 2, 3]
-      )
-      assert.deepStrictEqual(yield* Fiber.join(emitted), appended)
-    }).pipe(Effect.provide(feedLog))
+        assert.deepStrictEqual(
+          appended.map((frame) => frame.seq),
+          [1, 2, 3]
+        )
+        assert.deepStrictEqual(yield* frames.pipe(Stream.take(3), Stream.runCollect), appended)
+      }).pipe(Effect.scoped, Effect.provide(feedLog))
   )
 
   it.effect("writes appended frames within 100 ms, and replays them as they were appended", () =>
@@ -151,7 +149,7 @@ describe("FeedLog", () => {
       const sql = yield* SqlClient.SqlClient
       const log = yield* FeedLog
       const emitted = yield* Ref.make<ReadonlyArray<number>>([])
-      const listening = yield* log.frames.pipe(
+      const listening = yield* (yield* log.subscribe).pipe(
         Stream.runForEach((frame) => Ref.update(emitted, (seqs) => [...seqs, frame.seq])),
         Effect.forkChild({ startImmediately: true })
       )
@@ -183,7 +181,7 @@ describe("FeedLog", () => {
       assert.isAbove(published.length, 0)
       assert.deepStrictEqual(published, contiguous)
       assert.deepStrictEqual(stored, contiguous)
-    }).pipe(Effect.provide(feedLog))
+    }).pipe(Effect.scoped, Effect.provide(feedLog))
   )
 
   it.effect("writes the frames still waiting when it closes", () =>

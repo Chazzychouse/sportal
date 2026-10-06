@@ -16,6 +16,7 @@ import {
   Ref,
   Schema,
   SchemaTransformation,
+  type Scope,
   Semaphore,
   Stream
 } from "effect"
@@ -32,10 +33,13 @@ import { Frame } from "./Frame.ts"
 export class FeedLog extends Context.Service<
   FeedLog,
   {
-    /** Numbers `frame`, publishes it to `frames`, and queues it to be written. Never waits on disk, never fails. */
+    /** Numbers `frame`, publishes it to subscribers, and queues it to be written. Never waits on disk, never fails. */
     append(frame: Omit<Frame, "seq">): Effect.Effect<Frame>
-    /** Every frame appended from now on, in `seq` order. */
-    readonly frames: Stream.Stream<Frame>
+    /**
+     * Subscribes at once, for as long as the scope is open: the stream is every frame appended from then on, in `seq`
+     * order, however late it is run.
+     */
+    readonly subscribe: Effect.Effect<Stream.Stream<Frame>, never, Scope.Scope>
     /** Every logged frame received at or after `from`, in `seq` order, an unchanged poll with its channel's last body. */
     replay(from: DateTime.Utc): Stream.Stream<Frame>
   }
@@ -267,7 +271,11 @@ export class FeedLog extends Context.Service<
           Stream.orDie
         )
 
-      return FeedLog.of({ append, frames: Stream.fromPubSub(published), replay })
+      return FeedLog.of({
+        append,
+        subscribe: Effect.map(PubSub.subscribe(published), Stream.fromSubscription),
+        replay
+      })
     })
   )
 

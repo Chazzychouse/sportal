@@ -1,6 +1,7 @@
 import { join } from "node:path"
 import { NodeServices } from "@effect/platform-node"
 import { assert, describe, it } from "@effect/vitest"
+import { GameId } from "@sportal/domain/Game"
 import type { LeagueId } from "@sportal/domain/League"
 import { Scenario } from "@sportal/domain/Scenario"
 import { Context, DateTime, Effect, FileSystem, Layer, Option, Schema } from "effect"
@@ -72,6 +73,45 @@ describe("ScenarioIngest", () => {
         { discard: true }
       )
     }).pipe(Effect.provide(NodeServices.layer))
+  )
+
+  it.effect(
+    "lists between frames and after the last, so a live game stays live through a gap and after the end",
+    () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem
+        const dir = yield* fs.makeTempDirectoryScoped()
+        const gap = Scenario.build("gap", [
+          {
+            id: "9",
+            home: "UGA",
+            away: "ALA",
+            timeline: [
+              ["0:00", { status: "live", period: 1, clock: "15:00" }],
+              ["2:30", { clock: "14:00" }]
+            ]
+          }
+        ])
+        yield* fs.writeFileString(
+          join(dir, "gap.json"),
+          yield* Schema.encodeEffect(Schema.fromJsonString(Scenario))(gap)
+        )
+
+        yield* Effect.gen(function* () {
+          const liveGames = yield* LiveGames
+          const state = Effect.map(liveGames.latest, (folded) =>
+            Option.map(Option.fromNullishOr(folded.live.get(GameId.make("9"))), (held) => held.state._tag)
+          )
+          yield* TestClock.adjust(0)
+          yield* TestClock.adjust("2 minutes")
+          assert.deepStrictEqual(yield* state, Option.some("Live"))
+
+          yield* TestClock.adjust("30 seconds")
+          assert.strictEqual((yield* listed(liveGames, "fbs"))[0]?.clock, "14:00")
+          yield* TestClock.adjust("31 minutes")
+          assert.deepStrictEqual(yield* state, Option.some("Live"))
+        }).pipe(Effect.provide(playing("gap", dir)))
+      }).pipe(Effect.scoped, Effect.provide(NodeServices.layer))
   )
 
   it.effect("fails to load a slice that no longer decodes", () =>

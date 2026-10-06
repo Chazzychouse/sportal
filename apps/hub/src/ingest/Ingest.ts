@@ -4,7 +4,6 @@ import {
   Array as Arr,
   Cause,
   Context,
-  Data,
   DateTime,
   Duration,
   Effect,
@@ -45,43 +44,45 @@ export class Ingest extends Context.Service<Ingest, object>()("sportal/hub/Inges
         const from = dayStart(DateTime.setZone(yield* DateTime.now, DateTime.zoneMakeLocal()))
 
         const replayed = yield* Queue.unbounded<Replayed, Cause.Done>()
-        const phase = yield* Ref.make<Phase>(Phase.Replaying({ deliveries: replayed }))
+        const replayedUpTo = yield* Ref.make(0)
         const frames = yield* Ref.make(0)
         const resyncs = yield* PubSub.unbounded<string>()
+        // Subscribed before the replay is read, so a frame appended any time after it ends is in `appended`.
+        const appended = yield* feedLog.subscribe
 
-        // Decoding pulls the next frame only once it has handed on what the last one said, so when it reaches the end
-        // of the replayed frames every delivery they gave has gone to the replay.
-        const endReplay = Ref.getAndSet(phase, Phase.Following()).pipe(
-          Effect.flatMap((was) =>
-            Phase.$match(was, {
-              Replaying: ({ deliveries }) => Queue.end(deliveries),
-              Following: () => Effect.void
-            })
-          )
-        )
+        // Nothing a replayed frame says goes live: its deliveries go to the replay, and a resync is dropped, since no
+        // socket follows a topic yet and one that does starts it from a fresh checkpoint anyway.
         const route = (said: Stream.Success<ReturnType<Provider["Service"]["decode"]>>) =>
-          Effect.flatMap(Ref.get(phase), (current) =>
-            Phase.$match(current, {
-              // No socket follows a topic yet; once one does, it starts the topic from a fresh checkpoint anyway.
-              Replaying: ({ deliveries }) =>
-                said._tag === "Delivered" ? Queue.offer(deliveries, said) : Effect.void,
-              Following: () =>
-                said._tag === "Delivered"
-                  ? liveGames.take(said.delivery, said.at, Option.some(said.seq))
-                  : PubSub.publish(resyncs, said.channel)
-            })
+          Effect.flatMap(Ref.get(replayedUpTo), (last) =>
+            said.seq <= last
+              ? said._tag === "Delivered"
+                ? Queue.offer(replayed, said)
+                : Effect.void
+              : said._tag === "Delivered"
+                ? liveGames.take(said.delivery, said.at, Option.some(said.seq))
+                : PubSub.publish(resyncs, said.channel)
           )
 
         // One decode over the day's log and then every frame appended after it, so each topic's document carries over
-        // from replay to live. Nothing is appended until the replay is over: the feeds start below, after it. Ending
-        // the replay wakes this layer, but the decoding fiber goes straight on to subscribe to `frames`, and it is
-        // scheduled ahead of the feeds' fibers, which are not forked yet; so it never misses their first frame.
+        // from replay to live. Decoding pulls the next frame only once it has handed on what the last one said, so
+        // when it ends the replay's queue every replayed delivery is in it.
         const decoding = yield* provider
           .decode(
             feedLog.replay(from).pipe(
-              Stream.tap(() => Ref.update(frames, (count) => count + 1)),
-              Stream.concat(Stream.fromEffect(endReplay).pipe(Stream.drain)),
-              Stream.concat(feedLog.frames)
+              Stream.tap((frame) =>
+                Effect.andThen(
+                  Ref.set(replayedUpTo, frame.seq),
+                  Ref.update(frames, (n) => n + 1)
+                )
+              ),
+              Stream.concat(Stream.fromEffect(Queue.end(replayed)).pipe(Stream.drain)),
+              Stream.concat(
+                Stream.unwrap(
+                  Effect.map(Ref.get(replayedUpTo), (last) =>
+                    Stream.filter(appended, (frame) => frame.seq > last)
+                  )
+                )
+              )
             )
           )
           .pipe(
@@ -135,7 +136,7 @@ export class Ingest extends Context.Service<Ingest, object>()("sportal/hub/Inges
           Effect.forever(
             Effect.gen(function* () {
               const { failed, last } = yield* poll()
-              yield* Option.match(last, { onNone: () => Effect.void, onSome: (seq) => taken(liveGames, seq) })
+              yield* Option.match(last, { onNone: () => Effect.void, onSome: taken })
               const folded = yield* liveGames.latest
               const slate = leagues.flatMap((league) =>
                 LiveGame.asFolded(folded.listed.get(league) ?? [], folded.live)
@@ -214,25 +215,20 @@ type Replayed = Extract<
   { readonly _tag: "Delivered" }
 >
 
-/** Where decoded frames go: through `deliveries` to the fold's replay until the replay ends, then to `take`. */
-type Phase = Data.TaggedEnum<{
-  Replaying: { readonly deliveries: Queue.Queue<Replayed, Cause.Done> }
-  Following: object
-}>
-const Phase = Data.taggedEnum<Phase>()
-
 /**
  * Waits for the fold to have taken frame `seq`, so the Cadence reads the listing it gave. A frame that gives no
  * delivery (one that does not decode) moves no `seq`, so the wait ends after `takenWithin` regardless.
  */
-function taken(liveGames: LiveGames["Service"], seq: number): Effect.Effect<void> {
-  return liveGames.changes.pipe(
-    Stream.filter((folded) => Option.exists(folded.seq, (at) => at >= seq)),
-    Stream.take(1),
-    Stream.runDrain,
-    Effect.timeoutOption(takenWithin),
-    Effect.asVoid
-  )
+function taken(seq: number): Effect.Effect<void, never, LiveGames> {
+  return Effect.gen(function* () {
+    const liveGames = yield* LiveGames
+    yield* liveGames.changes.pipe(
+      Stream.filter((folded) => Option.exists(folded.seq, (at) => at >= seq)),
+      Stream.take(1),
+      Stream.runDrain,
+      Effect.timeoutOption(takenWithin)
+    )
+  })
 }
 
 const takenWithin = Duration.seconds(5)
