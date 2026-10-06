@@ -2,9 +2,10 @@ import { Hotkey } from "@sportal/api/Hotkey"
 import type { ChannelPick, StageTransition, TileBounds, TilePlacement } from "@sportal/api/ShellBridge"
 import type { GameId } from "@sportal/domain/Game"
 import { Clock, Context, Data, Effect, FiberHandle, Layer, Option, PubSub, Stream } from "effect"
-import type { View, WebContentsView } from "electron"
+import type { WebContentsView } from "electron"
 import { hostOf, load } from "./Navigation.ts"
 import { ProviderSession } from "./ProviderSession.ts"
+import { ShellWindow } from "./ShellWindow.ts"
 import { Transition } from "./Transition.ts"
 import { isChannelAddress } from "./YouTubeTv.ts"
 
@@ -33,182 +34,177 @@ export class TileViews extends Context.Service<
     readonly tilePresses: Stream.Stream<GameId>
   }
 >()("sportal/desktop/TileViews") {
-  // Only the window's own view tree is touched, so that is all the layer asks for.
-  static readonly layer = (window: {
-    readonly contentView: Pick<View, "addChildView" | "removeChildView">
-    isDestroyed(): boolean
-  }) =>
-    Layer.effect(
-      TileViews,
-      Effect.gen(function* () {
-        const providers = yield* ProviderSession
-        const scope = yield* Effect.scope
-        const picks = yield* PubSub.unbounded<ChannelPick>()
-        const hotkeys = yield* PubSub.unbounded<Hotkey>()
-        const presses = yield* PubSub.unbounded<GameId>()
-        const views = new Map<GameId, Entry>()
-        let hidden: ReadonlySet<GameId> = new Set()
-        // Views created during a transition, kept out of sight until it ends.
-        const arriving = new Set<GameId>()
-        const animation = yield* FiberHandle.make<void>()
+  static readonly layer: Layer.Layer<TileViews, never, ProviderSession | ShellWindow> = Layer.effect(
+    TileViews,
+    Effect.gen(function* () {
+      const providers = yield* ProviderSession
+      const window = yield* ShellWindow
+      const scope = yield* Effect.scope
+      const picks = yield* PubSub.unbounded<ChannelPick>()
+      const hotkeys = yield* PubSub.unbounded<Hotkey>()
+      const presses = yield* PubSub.unbounded<GameId>()
+      const views = new Map<GameId, Entry>()
+      let hidden: ReadonlySet<GameId> = new Set()
+      // Views created during a transition, kept out of sight until it ends.
+      const arriving = new Set<GameId>()
+      const animation = yield* FiberHandle.make<void>()
 
-        const showWhereDue = () => {
-          for (const [game, { view }] of views) view.setVisible(!hidden.has(game) && !arriving.has(game))
-        }
-        const place = (entry: Entry, bounds: TileBounds) => {
-          entry.bounds = bounds
-          entry.view.setBounds(bounds)
-        }
+      const showWhereDue = () => {
+        for (const [game, { view }] of views) view.setVisible(!hidden.has(game) && !arriving.has(game))
+      }
+      const place = (entry: Entry, bounds: TileBounds) => {
+        entry.bounds = bounds
+        entry.view.setBounds(bounds)
+      }
 
-        const remove = (view: WebContentsView) => {
-          if (!window.isDestroyed()) window.contentView.removeChildView(view)
-          if (!view.webContents.isDestroyed()) view.webContents.close()
-        }
-        yield* Effect.addFinalizer(() =>
-          Effect.sync(() => {
-            for (const { view } of views.values()) remove(view)
-            views.clear()
-          })
-        )
-
-        const create = Effect.fn("TileViews.create")(function* (game: GameId) {
-          const entry: Entry = {
-            view: yield* providers.createView,
-            url: Option.none(),
-            role: Role.Stream({ interactive: false }),
-            bounds: { x: 0, y: 0, width: 0, height: 0 }
-          }
-          // YouTube TV moves between pages with pushState, which fires did-navigate-in-page, not will-navigate.
-          const landed = (url: string) => {
-            // A view removed in a sync stays silent, even if its page navigates before it closes.
-            if (views.get(game) !== entry) return
-            const role = entry.role
-            if (role._tag !== "Guide") return
-            // Leaving a channel address forgets it, so a refused pick can be retried with the same channel.
-            // Only the same address arriving twice in a row (did-navigate, then did-navigate-in-page) is a repeat.
-            if (!isChannelAddress(url)) {
-              entry.role = Role.Guide({ reported: Option.none() })
-              return
-            }
-            if (Option.contains(role.reported, url)) return
-            entry.role = Role.Guide({ reported: Option.some(url) })
-            PubSub.publishUnsafe(picks, { game, url })
-          }
-          entry.view.webContents.on("did-navigate", (_event, url) => landed(url))
-          entry.view.webContents.on("did-navigate-in-page", (_event, url, isMainFrame) => {
-            if (isMainFrame) landed(url)
-          })
-          // A guide view gets every key, so its search box keeps working.
-          entry.view.webContents.on("before-input-event", (event, input) => {
-            if (views.get(game) !== entry || entry.role._tag !== "Stream" || input.type !== "keyDown") return
-            const hotkey = Hotkey.of(input, "stream")
-            if (hotkey === undefined) return
-            event.preventDefault()
-            PubSub.publishUnsafe(hotkeys, hotkey)
-          })
-          // YouTube TV shows its title and controls whenever the pointer moves over a player.
-          entry.view.webContents.on("before-mouse-event", (event, mouse) => {
-            if (views.get(game) !== entry || entry.role._tag !== "Stream" || entry.role.interactive) return
-            event.preventDefault()
-            if (mouse.type === "mouseDown" && mouse.button === "left") PubSub.publishUnsafe(presses, game)
-          })
-          window.contentView.addChildView(entry.view)
-          return entry
+      const remove = (view: WebContentsView) => {
+        if (!window.isDestroyed()) window.contentView.removeChildView(view)
+        if (!view.webContents.isDestroyed()) view.webContents.close()
+      }
+      yield* Effect.addFinalizer(() =>
+        Effect.sync(() => {
+          for (const { view } of views.values()) remove(view)
+          views.clear()
         })
+      )
 
-        const sync = Effect.fn("TileViews.sync")(function* (
-          placements: ReadonlyArray<TilePlacement>,
-          transition?: StageTransition
-        ) {
-          const permitted: Array<TilePlacement> = []
-          for (const placement of placements) {
-            if (providers.allows(placement.url)) permitted.push(placement)
-            else
-              yield* Effect.logWarning(
-                `TileViews: refused the address for game ${placement.game} on ${hostOf(placement.url)}`
-              )
-          }
-
-          for (const [game, entry] of views) {
-            if (permitted.some((placement) => placement.game === game)) continue
-            remove(entry.view)
-            views.delete(game)
-            arriving.delete(game)
-          }
-
-          const moves: Array<{ game: GameId; entry: Entry; from: TileBounds; to: TileBounds }> = []
-          for (const placement of permitted) {
-            let entry = views.get(placement.game)
-            if (entry === undefined) {
-              entry = yield* create(placement.game)
-              views.set(placement.game, entry)
-              // A new view has nowhere to move from: it waits at its place until the others arrive.
-              place(entry, placement.bounds)
-              if (transition !== undefined) arriving.add(placement.game)
-            }
-            const moved = !Option.contains(entry.url, placement.url)
-            if (moved) {
-              entry.url = Option.some(placement.url)
-              // The load starts now, as Electron issues it; only its outcome is awaited in the background.
-              yield* Effect.forkIn(loadTile(entry.view, placement.url), scope, { startImmediately: true })
-            }
-            const wasInteractive = entry.role._tag === "Stream" && entry.role.interactive
-            const reported =
-              entry.role._tag === "Guide" && !moved ? entry.role.reported : Option.none<string>()
-            entry.role =
-              placement.role === "guide"
-                ? Role.Guide({ reported })
-                : Role.Stream({ interactive: placement.interactive })
-            if (placement.interactive && !wasInteractive) entry.view.webContents.focus()
-            entry.view.webContents.setAudioMuted(placement.muted)
-            moves.push({ game: placement.game, entry, from: entry.bounds, to: placement.bounds })
-          }
-
-          if (transition === undefined) {
-            yield* FiberHandle.clear(animation)
-            arriving.clear()
-            for (const { entry, to } of moves) place(entry, to)
-            showWhereDue()
+      const create = Effect.fn("TileViews.create")(function* (game: GameId) {
+        const entry: Entry = {
+          view: yield* providers.createView,
+          url: Option.none(),
+          role: Role.Stream({ interactive: false }),
+          bounds: { x: 0, y: 0, width: 0, height: 0 }
+        }
+        // YouTube TV moves between pages with pushState, which fires did-navigate-in-page, not will-navigate.
+        const landed = (url: string) => {
+          // A view removed in a sync stays silent, even if its page navigates before it closes.
+          if (views.get(game) !== entry) return
+          const role = entry.role
+          if (role._tag !== "Guide") return
+          // Leaving a channel address forgets it, so a refused pick can be retried with the same channel.
+          // Only the same address arriving twice in a row (did-navigate, then did-navigate-in-page) is a repeat.
+          if (!isChannelAddress(url)) {
+            entry.role = Role.Guide({ reported: Option.none() })
             return
           }
-          showWhereDue()
-          // A newer sync interrupts this one, and starts from wherever the views have got to.
-          yield* FiberHandle.run(animation, animate(moves, transition))
+          if (Option.contains(role.reported, url)) return
+          entry.role = Role.Guide({ reported: Option.some(url) })
+          PubSub.publishUnsafe(picks, { game, url })
+        }
+        entry.view.webContents.on("did-navigate", (_event, url) => landed(url))
+        entry.view.webContents.on("did-navigate-in-page", (_event, url, isMainFrame) => {
+          if (isMainFrame) landed(url)
         })
-
-        const animate = (
-          moves: ReadonlyArray<{ game: GameId; entry: Entry; from: TileBounds; to: TileBounds }>,
-          transition: StageTransition
-        ) =>
-          Effect.gen(function* () {
-            const start = yield* Clock.currentTimeMillis
-            let t = 0
-            while (t < 1) {
-              yield* Effect.sleep(frame)
-              t = ((yield* Clock.currentTimeMillis) - start) / transition.durationMs
-              const eased = Transition.progress(transition.easing, t)
-              for (const { game, entry, from, to } of moves)
-                if (views.get(game) === entry) place(entry, Transition.between(from, to, eased))
-            }
-            arriving.clear()
-            showWhereDue()
-          })
-
-        const hide = (games: ReadonlyArray<GameId>) =>
-          Effect.sync(() => {
-            hidden = new Set(games)
-            showWhereDue()
-          })
-
-        return TileViews.of({
-          sync,
-          hide,
-          channelPicks: Stream.fromPubSub(picks),
-          hotkeys: Stream.fromPubSub(hotkeys),
-          tilePresses: Stream.fromPubSub(presses)
+        // A guide view gets every key, so its search box keeps working.
+        entry.view.webContents.on("before-input-event", (event, input) => {
+          if (views.get(game) !== entry || entry.role._tag !== "Stream" || input.type !== "keyDown") return
+          const hotkey = Hotkey.of(input, "stream")
+          if (hotkey === undefined) return
+          event.preventDefault()
+          PubSub.publishUnsafe(hotkeys, hotkey)
         })
+        // YouTube TV shows its title and controls whenever the pointer moves over a player.
+        entry.view.webContents.on("before-mouse-event", (event, mouse) => {
+          if (views.get(game) !== entry || entry.role._tag !== "Stream" || entry.role.interactive) return
+          event.preventDefault()
+          if (mouse.type === "mouseDown" && mouse.button === "left") PubSub.publishUnsafe(presses, game)
+        })
+        window.contentView.addChildView(entry.view)
+        return entry
       })
-    )
+
+      const sync = Effect.fn("TileViews.sync")(function* (
+        placements: ReadonlyArray<TilePlacement>,
+        transition?: StageTransition
+      ) {
+        const permitted: Array<TilePlacement> = []
+        for (const placement of placements) {
+          if (providers.allows(placement.url)) permitted.push(placement)
+          else
+            yield* Effect.logWarning(
+              `TileViews: refused the address for game ${placement.game} on ${hostOf(placement.url)}`
+            )
+        }
+
+        for (const [game, entry] of views) {
+          if (permitted.some((placement) => placement.game === game)) continue
+          remove(entry.view)
+          views.delete(game)
+          arriving.delete(game)
+        }
+
+        const moves: Array<{ game: GameId; entry: Entry; from: TileBounds; to: TileBounds }> = []
+        for (const placement of permitted) {
+          let entry = views.get(placement.game)
+          if (entry === undefined) {
+            entry = yield* create(placement.game)
+            views.set(placement.game, entry)
+            // A new view has nowhere to move from: it waits at its place until the others arrive.
+            place(entry, placement.bounds)
+            if (transition !== undefined) arriving.add(placement.game)
+          }
+          const moved = !Option.contains(entry.url, placement.url)
+          if (moved) {
+            entry.url = Option.some(placement.url)
+            // The load starts now, as Electron issues it; only its outcome is awaited in the background.
+            yield* Effect.forkIn(loadTile(entry.view, placement.url), scope, { startImmediately: true })
+          }
+          const wasInteractive = entry.role._tag === "Stream" && entry.role.interactive
+          const reported = entry.role._tag === "Guide" && !moved ? entry.role.reported : Option.none<string>()
+          entry.role =
+            placement.role === "guide"
+              ? Role.Guide({ reported })
+              : Role.Stream({ interactive: placement.interactive })
+          if (placement.interactive && !wasInteractive) entry.view.webContents.focus()
+          entry.view.webContents.setAudioMuted(placement.muted)
+          moves.push({ game: placement.game, entry, from: entry.bounds, to: placement.bounds })
+        }
+
+        if (transition === undefined) {
+          yield* FiberHandle.clear(animation)
+          arriving.clear()
+          for (const { entry, to } of moves) place(entry, to)
+          showWhereDue()
+          return
+        }
+        showWhereDue()
+        // A newer sync interrupts this one, and starts from wherever the views have got to.
+        yield* FiberHandle.run(animation, animate(moves, transition))
+      })
+
+      const animate = (
+        moves: ReadonlyArray<{ game: GameId; entry: Entry; from: TileBounds; to: TileBounds }>,
+        transition: StageTransition
+      ) =>
+        Effect.gen(function* () {
+          const start = yield* Clock.currentTimeMillis
+          let t = 0
+          while (t < 1) {
+            yield* Effect.sleep(frame)
+            t = ((yield* Clock.currentTimeMillis) - start) / transition.durationMs
+            const eased = Transition.progress(transition.easing, t)
+            for (const { game, entry, from, to } of moves)
+              if (views.get(game) === entry) place(entry, Transition.between(from, to, eased))
+          }
+          arriving.clear()
+          showWhereDue()
+        })
+
+      const hide = (games: ReadonlyArray<GameId>) =>
+        Effect.sync(() => {
+          hidden = new Set(games)
+          showWhereDue()
+        })
+
+      return TileViews.of({
+        sync,
+        hide,
+        channelPicks: Stream.fromPubSub(picks),
+        hotkeys: Stream.fromPubSub(hotkeys),
+        tilePresses: Stream.fromPubSub(presses)
+      })
+    })
+  )
 }
 
 /** About one display frame: how often a view moves during a transition. */
