@@ -4,7 +4,6 @@ import { Delivery } from "@sportal/domain/Delivery"
 import { LeagueId } from "@sportal/domain/League"
 import { Array as Arr, DateTime, Duration, Effect, FileSystem, Layer, Option, Schema } from "effect"
 import * as Cadence from "../ingest/Cadence.ts"
-import { Ingest } from "../ingest/Ingest.ts"
 import { LiveGames } from "../LiveGames.ts"
 import { Scenario } from "./Scenario.ts"
 import { scenarios } from "./written/Scenarios.ts"
@@ -16,8 +15,7 @@ import { scenarios } from "./written/Scenarios.ts"
  * written scenario's, or a recorded slice's in `from`.
  */
 export const layer = (name: string, from: string = folder) =>
-  Layer.effect(
-    Ingest,
+  Layer.effectDiscard(
     Effect.gen(function* () {
       const scenario = yield* load(name, from)
       const liveGames = yield* LiveGames
@@ -50,7 +48,6 @@ export const layer = (name: string, from: string = folder) =>
           })
         )
       )
-      return Ingest.of({})
     })
   )
 

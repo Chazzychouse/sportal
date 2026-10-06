@@ -34,7 +34,7 @@ import { LiveFeed, LiveFeedError } from "../provider/LiveFeed.ts"
 import { Decoded, Provider, ProviderError } from "../provider/Provider.ts"
 import { game, neverPushing, polling, pushed, scripted } from "../provider/TestProvider.ts"
 import { counted, recordingLogs, recordingSpans, withMetrics } from "../TestTelemetry.ts"
-import { dayStart, Ingest } from "./Ingest.ts"
+import * as Ingest from "./Ingest.ts"
 
 describe("Ingest", () => {
   it.effect("each poll appends one frame per league, then its listing reaches the fold", () =>
@@ -432,27 +432,42 @@ describe("Ingest", () => {
     }).pipe(Effect.provide([Database.layer(":memory:"), NodeCrypto.layer]))
   )
 
-  describe("dayStart", () => {
-    const chicago = (local: string) =>
-      Option.getOrThrow(DateTime.makeZoned(local, { timeZone: "America/Chicago", adjustForTimeZone: true }))
+  describe("the game day", () => {
+    // The log holds a frame at each of these instants; the replay, from the game day's start, reads those from it on.
+    const framesAt = ["2026-10-03T08:59:00Z", "2026-10-03T09:00:00Z", "2026-10-04T09:00:00Z"]
 
-    it("is yesterday's 04:00 before 04:00", () => {
-      assert.deepStrictEqual(
-        dayStart(chicago("2026-10-04T03:59:00")),
-        DateTime.makeUnsafe("2026-10-03T09:00:00Z")
-      )
-    })
+    const replayedAt = (chicago: string) =>
+      Effect.gen(function* () {
+        const ended: Array<Tracer.Span> = []
+        yield* loggedBefore(
+          framesAt.map((at) =>
+            Effect.map(pollOf([game("1", 2)]), (frame) => ({ ...frame, receivedAt: DateTime.makeUnsafe(at) }))
+          )
+        )
+        yield* TestClock.setTime(
+          DateTime.toEpochMillis(
+            Option.getOrThrow(
+              DateTime.makeZoned(chicago, { timeZone: "America/Chicago", adjustForTimeZone: true })
+            )
+          )
+        )
+        return yield* Effect.gen(function* () {
+          return ended.find((span) => span.name === "Ingest.replay")?.attributes.get("sportal.frames")
+        }).pipe(Effect.provide(over(scripted([]), { ended, zone: "America/Chicago" })))
+      }).pipe(Effect.provide([Database.layer(":memory:"), NodeCrypto.layer]))
 
-    it("is today's 04:00 from 04:00", () => {
-      assert.deepStrictEqual(
-        dayStart(chicago("2026-10-04T04:00:00")),
-        DateTime.makeUnsafe("2026-10-04T09:00:00Z")
-      )
-      assert.deepStrictEqual(
-        dayStart(chicago("2026-10-04T23:59:00")),
-        DateTime.makeUnsafe("2026-10-04T09:00:00Z")
-      )
-    })
+    it.effect("starts at yesterday's 04:00 before 04:00", () =>
+      Effect.gen(function* () {
+        assert.strictEqual(yield* replayedAt("2026-10-04T03:59:00"), 2)
+      })
+    )
+
+    it.effect("starts at today's 04:00 from 04:00", () =>
+      Effect.gen(function* () {
+        assert.strictEqual(yield* replayedAt("2026-10-04T04:00:00"), 1)
+        assert.strictEqual(yield* replayedAt("2026-10-04T23:59:00"), 1)
+      })
+    )
   })
 })
 
@@ -463,8 +478,8 @@ function ingesting(provider: Layer.Layer<Provider>, options: Parameters<typeof o
 
 /**
  * Ingest over `provider` and `liveFeed` (one that never pushes, unless given), of `leagues` (fbs, unless given), with
- * the fold and the feed log (`FeedLog.layer`, unless given) also provided to the test, and each span that ends recorded
- * in `ended`.
+ * the fold and the feed log (`FeedLog.layer`, unless given) also provided to the test, each span that ends recorded
+ * in `ended`, and the game day read in `zone` (the local one, unless given).
  */
 function over(
   provider: Layer.Layer<Provider>,
@@ -473,13 +488,17 @@ function over(
     readonly liveFeed?: LiveFeed["Service"]
     readonly ended?: Array<Tracer.Span>
     readonly feedLog?: Layer.Layer<FeedLog, never, SqlClient.SqlClient | Crypto.Crypto>
+    readonly zone?: string
   } = {}
 ) {
   return Ingest.layer(options.leagues ?? ["fbs"]).pipe(
     Layer.provideMerge(Layer.mergeAll(LiveGames.layer, options.feedLog ?? FeedLog.layer)),
     Layer.provide([
       provider,
-      options.liveFeed === undefined ? neverPushing : Layer.succeed(LiveFeed, options.liveFeed)
+      options.liveFeed === undefined ? neverPushing : Layer.succeed(LiveFeed, options.liveFeed),
+      options.zone === undefined
+        ? DateTime.layerCurrentZoneLocal
+        : DateTime.layerCurrentZoneNamed(options.zone).pipe(Layer.orDie)
     ]),
     Layer.provideMerge(recordingSpans(options.ended ?? []))
   )

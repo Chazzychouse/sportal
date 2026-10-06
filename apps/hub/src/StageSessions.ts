@@ -1,7 +1,7 @@
 import { ChannelAvailability } from "@sportal/domain/Channel"
 import type { GameId } from "@sportal/domain/Game"
 import { Stage, type StageCommand, type StageRejection } from "@sportal/domain/Stage"
-import { Context, Effect, Layer, Option, Result, Stream, SubscriptionRef } from "effect"
+import { Context, Effect, Layer, Option, Stream, SubscriptionRef } from "effect"
 import { Slate } from "./Slate.ts"
 import { Source } from "./source/Source.ts"
 
@@ -39,9 +39,8 @@ export class StageSessions extends Context.Service<
             const result = stage.apply(command, (id) =>
               Option.getOrElse(availabilityOf(id), () => ChannelAvailability.NotCarried({ why: "NoStream" }))
             )
-            return yield* Result.isFailure(result)
-              ? Effect.fail(result.failure)
-              : Effect.succeed([result.success, result.success] as const)
+            const next = yield* Effect.fromResult(result)
+            return [next, next] as const
           })
         )
       })

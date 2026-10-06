@@ -173,12 +173,11 @@ function writtenOf(folded: Fold.LiveGames): Written {
 }
 
 function stepFrom(before: Written, after: Written): Step {
-  const snapshots = [...after.snapshots].flatMap(([game, snapshot]) => {
-    const had = before.snapshots.get(game)
-    return had !== undefined && Equal.equals(had, snapshot) ? [] : [{ game, snapshot }]
-  })
   return {
-    latest: snapshots.map(({ game, snapshot }) => [game, snapshot]),
+    latest: [...after.snapshots].filter(([game, snapshot]) => {
+      const had = before.snapshots.get(game)
+      return had === undefined || !Equal.equals(had, snapshot)
+    }),
     plays: [...after.plays].flatMap(([game, plays]) => {
       const had = before.plays.get(game)
       if (had !== undefined && sameAll(had, plays)) return []

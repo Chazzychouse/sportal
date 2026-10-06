@@ -9,35 +9,36 @@ import { HttpApiBuilder } from "effect/http-api"
 import { HubConfig } from "../HubConfig.ts"
 import { Slate } from "../Slate.ts"
 import { StageSessions } from "../StageSessions.ts"
+import type { ChannelStoreError } from "../source/ChannelStore.ts"
 import { Source } from "../source/Source.ts"
 import { lanAddresses } from "./LanAddresses.ts"
 
 /**
- * The handlers for every endpoint group in SportalApi. Exported so tests can drive them without a socket.
- * @testonly
+ * The Hub's routes on the HTTP server in context: the API, the live stream, and the built web UI when there is one.
  */
-export const ApiHandlers = Layer.mergeAll(stageHandlers(), channelHandlers(), guideHandlers(), hostHandlers())
-
-/**
- * Every route the Hub serves: the API, and the live stream.
- * @testonly
- */
-export const layer = Layer.mergeAll(
-  HttpApiBuilder.layer(SportalApi).pipe(Layer.provide(ApiHandlers)),
-  liveRoute()
-)
-
-/** The Hub on its configured address: every route, and the built web UI when there is one. */
 export const serve = Layer.unwrap(
   Effect.gen(function* () {
-    const { webRoot, port, host } = yield* HubConfig
-    const routes = Option.match(webRoot, {
-      onNone: () => layer,
-      onSome: (root) => Layer.mergeAll(layer, HttpStaticServer.layer({ root, spa: true }))
-    })
+    const { webRoot } = yield* HubConfig
+    const routes = Layer.mergeAll(
+      HttpApiBuilder.layer(SportalApi).pipe(
+        Layer.provide(Layer.mergeAll(stageHandlers(), channelHandlers(), guideHandlers(), hostHandlers()))
+      ),
+      liveRoute(),
+      Option.match(webRoot, {
+        onNone: () => Layer.empty,
+        onSome: (root) => HttpStaticServer.layer({ root, spa: true })
+      })
+    )
+    return HttpRouter.serve(routes)
+  })
+)
+
+/** An HTTP server on the configured address, for `serve` to put the Hub's routes on. */
+export const listen = Layer.unwrap(
+  Effect.gen(function* () {
+    const { port, host } = yield* HubConfig
     // Connected Displays hold live streams open. By default shutdown waits 20 seconds for them, and Docker kills at 10.
-    const server = NodeHttpServer.layer(createServer, { port, host, gracefulShutdownTimeout: "3 seconds" })
-    return HttpRouter.serve(routes).pipe(Layer.provide(server))
+    return NodeHttpServer.layer(createServer, { port, host, gracefulShutdownTimeout: "3 seconds" })
   })
 )
 
@@ -61,17 +62,20 @@ function channelHandlers() {
     "channels",
     Effect.fn(function* (handlers) {
       const source = yield* Source
-      // A channel store that cannot be written is not something a client can fix: it is a server error.
       return handlers.handleAll({
-        learn: ({ payload }) =>
-          source.learn(payload.network, payload.url).pipe(Effect.catchTag("ChannelStoreError", Effect.die)),
-        notCarried: ({ payload }) =>
-          source.markNotCarried(payload.network).pipe(Effect.catchTag("ChannelStoreError", Effect.die)),
-        forget: ({ payload }) =>
-          source.forget(payload.network).pipe(Effect.catchTag("ChannelStoreError", Effect.die))
+        learn: ({ payload }) => storeFailureDies(source.learn(payload.network, payload.url)),
+        notCarried: ({ payload }) => storeFailureDies(source.markNotCarried(payload.network)),
+        forget: ({ payload }) => storeFailureDies(source.forget(payload.network))
       })
     })
   )
+}
+
+// A channel store that cannot be written is not something a client can fix: it is a server error.
+function storeFailureDies<A, E extends { readonly _tag: string }, R>(
+  effect: Effect.Effect<A, E | ChannelStoreError, R>
+) {
+  return effect.pipe(Effect.catchTag("ChannelStoreError", Effect.die))
 }
 
 function guideHandlers() {

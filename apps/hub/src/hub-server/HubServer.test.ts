@@ -6,13 +6,13 @@ import { GameId, Network } from "@sportal/domain/Game"
 import type { Tile } from "@sportal/domain/Stage"
 import { broadcast, snapshot, team } from "@sportal/domain/TestGame"
 import { ConfigProvider, DateTime, Effect, Layer, Option, Queue, Result, Schema, Stream } from "effect"
-import { HttpClient, HttpRouter, HttpServer } from "effect/http"
-import { HttpApiClient, HttpApiTest } from "effect/http-api"
+import { HttpClient } from "effect/http"
+import { HttpApiClient } from "effect/http-api"
 import { TestClock } from "effect/testing"
 import * as Database from "../Database.ts"
 import { FeedLog } from "../feed-log/FeedLog.ts"
 import { HubConfig } from "../HubConfig.ts"
-import { Ingest } from "../ingest/Ingest.ts"
+import * as Ingest from "../ingest/Ingest.ts"
 import { LiveGames } from "../LiveGames.ts"
 import { Provider } from "../provider/Provider.ts"
 import { neverPushing, polling } from "../provider/TestProvider.ts"
@@ -45,7 +45,7 @@ const streaming = {
   learnedFor: espn
 } as const
 
-const makeClient = HttpApiTest.groups(SportalApi, ["stage", "channels", "guide", "host"])
+const makeClient = HttpApiClient.make(SportalApi)
 
 describe("Hub API", () => {
   it.effect("turns an assignment on an unlearned network into a picking tile", () =>
@@ -62,7 +62,7 @@ describe("Hub API", () => {
         .dispatch({ payload: { command: { _tag: "Clear", tile: 9 } } })
         .pipe(Effect.flip)
       assert.strictEqual(rejected._tag, "StageRejection")
-    }).pipe(Effect.provide(apiUnderTest()))
+    }).pipe(Effect.provide(serverUnderTest()))
   )
 
   it.live("learns a channel, and the picking tile becomes a stream tile", () =>
@@ -85,7 +85,7 @@ describe("Hub API", () => {
         game: game.id,
         why: { _tag: "NoStream" }
       })
-    }).pipe(Effect.provide(apiUnderTest()))
+    }).pipe(Effect.provide(serverUnderTest()))
   )
 
   it.effect("lists the addresses a Remote can reach the Hub at, none of them loopback", () =>
@@ -93,7 +93,7 @@ describe("Hub API", () => {
       const client = yield* makeClient
       const addresses = yield* client.host.addresses()
       assert.isFalse(addresses.includes("127.0.0.1"))
-    }).pipe(Effect.provide(apiUnderTest()))
+    }).pipe(Effect.provide(serverUnderTest()))
   )
 
   it.effect("says it is up, with its version and when it started", () =>
@@ -102,7 +102,7 @@ describe("Hub API", () => {
       const health = yield* client.host.health()
       assert.strictEqual(health.version, "1.2.3")
       assert.strictEqual(DateTime.toEpochMillis(health.startedAt), 0)
-    }).pipe(Effect.provide(apiUnderTest()))
+    }).pipe(Effect.provide(serverUnderTest()))
   )
 
   it.effect("refuses to learn an address that is not a channel", () =>
@@ -112,7 +112,7 @@ describe("Hub API", () => {
         .learn({ payload: { network: espn, url: "https://tv.youtube.com/live" } })
         .pipe(Effect.flip)
       assert.strictEqual(error._tag, "ChannelUrlRefused")
-    }).pipe(Effect.provide(apiUnderTest()))
+    }).pipe(Effect.provide(serverUnderTest()))
   )
 
   it.live("reads a guide the size of a real one, and a waiting tile plays once its airing is on", () =>
@@ -169,7 +169,7 @@ describe("Hub API", () => {
           locator: { _tag: "WebView", url: "https://tv.youtube.com/watch/PFuNFGzJDE4?vp=0gEEEgIwAQ%3D%3D" }
         }
       })
-    }).pipe(Effect.provide(apiUnderTest()))
+    }).pipe(Effect.provide(serverUnderTest()))
   )
 
   it.effect("refuses a guide it cannot read", () =>
@@ -177,7 +177,7 @@ describe("Hub API", () => {
       const client = yield* makeClient
       const error = yield* client.guide.read({ payload: { guide: "{}" } }).pipe(Effect.flip)
       assert.strictEqual(error._tag, "GuideUnreadable")
-    }).pipe(Effect.provide(apiUnderTest()))
+    }).pipe(Effect.provide(serverUnderTest()))
   )
 })
 
@@ -319,13 +319,6 @@ function tileOnceItIs(sessions: typeof StageSessions.Service, tag: Tile["_tag"])
   )
 }
 
-function apiUnderTest() {
-  return HubServer.ApiHandlers.pipe(
-    Layer.provideMerge(hubUnderTest()),
-    Layer.provideMerge(HttpServer.layerServices)
-  )
-}
-
 /** Everything behind the API, over a fresh in-memory database and a provider that always returns `game`. */
 function hubUnderTest() {
   return StageSessions.layer.pipe(
@@ -340,6 +333,7 @@ function hubUnderTest() {
         polling(() => Effect.succeed([game]))
       ),
       neverPushing,
+      DateTime.layerCurrentZoneLocal,
       FeedLog.layer.pipe(Layer.provide([Database.layer(":memory:"), NodeCrypto.layer]))
     ]),
     Layer.provideMerge(testConfig())
@@ -359,7 +353,7 @@ function testConfig() {
 
 /** The Hub's routes served on an ephemeral port, with an HTTP client pointed at them. */
 function serverUnderTest() {
-  return HttpRouter.serve(HubServer.layer, { disableLogger: true }).pipe(
+  return HubServer.serve.pipe(
     Layer.provideMerge(hubUnderTest()),
     Layer.provideMerge(NodeHttpServer.layerTest)
   )

@@ -9,6 +9,7 @@ import { StageSessions } from "./StageSessions.ts"
 import * as Telemetry from "./Telemetry.ts"
 
 const Hub = HubServer.serve.pipe(
+  Layer.provide(HubServer.listen),
   Layer.provide(StageSessions.layer),
   Layer.provide(HubMode.layer),
   Layer.provide(Database.inDataDir),

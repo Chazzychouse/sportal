@@ -1,9 +1,10 @@
 import { NodeSocket } from "@effect/platform-node"
-import { Effect, Layer, Option } from "effect"
+import { LeagueId } from "@sportal/domain/League"
+import { DateTime, Effect, Layer, Option } from "effect"
 import { FeedLog } from "./feed-log/FeedLog.ts"
 import { GameHistory } from "./GameHistory.ts"
 import { HubConfig } from "./HubConfig.ts"
-import { Ingest } from "./ingest/Ingest.ts"
+import * as Ingest from "./ingest/Ingest.ts"
 import { LiveGames } from "./LiveGames.ts"
 import * as EspnProvider from "./provider/espn/EspnProvider.ts"
 import * as FastCast from "./provider/espn/FastCast.ts"
@@ -28,8 +29,6 @@ export const layer = Layer.unwrap(
   })
 )
 
-const leagues = ["nfl", "fbs"] as const
-
 // Ingest is built once it has replayed the day's frames into the fold, so the Hub serves only after that.
 function live() {
   return Layer.mergeAll(
@@ -37,11 +36,12 @@ function live() {
       Slate.layer,
       // Nothing reads the history yet; it only follows the fold.
       Layer.effectDiscard(Layer.build(GameHistory.layer)),
-      Ingest.layer(leagues).pipe(
+      Ingest.layer(LeagueId.literals).pipe(
         Layer.provide([
           EspnProvider.layer,
           FastCast.layer.pipe(Layer.provide(NodeSocket.layerWebSocketConstructorWS)),
-          FeedLog.inDataDir
+          FeedLog.inDataDir,
+          DateTime.layerCurrentZoneLocal
         ])
       )
     ).pipe(Layer.provide(LiveGames.layer)),
