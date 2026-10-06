@@ -1,4 +1,4 @@
-import { Array as Arr, Cause, Data, DateTime, Effect, Equal, Option } from "effect"
+import { Cause, Data, DateTime, Effect, Equal, Option } from "effect"
 import { Delivery, type DeliverySource } from "./Delivery.ts"
 import type { GameId, GameSnapshot } from "./Game.ts"
 import type { GameEvent } from "./GameEvent.ts"
@@ -52,7 +52,7 @@ export class LiveGames extends Data.Class<{
     )
   }
 
-  /** The earliest instant after `reached` at which a game's tick or its currency may change. */
+  /** The earliest instant after `reached` at which a live game changes with no new frame. */
   earliestDue(): Option.Option<DateTime.Utc> {
     return Option.flatMap(this.reached, (from) => dueAfter(this.live, from))
   }
@@ -111,7 +111,7 @@ function tickTo(stepped: Stepped, from: DateTime.Utc, at: DateTime.Utc): Effect.
       onSome: (due) =>
         Effect.reduce(
           [...stepped.live.values()].filter((liveGame) =>
-            Option.exists(dueAt(liveGame, from), (instant) => DateTime.Equivalence(instant, due))
+            Option.exists(liveGame.dueAfter(from), (instant) => DateTime.Equivalence(instant, due))
           ),
           () => stepped,
           (acc, liveGame) =>
@@ -123,22 +123,9 @@ function tickTo(stepped: Stepped, from: DateTime.Utc, at: DateTime.Utc): Effect.
   )
 }
 
-/** The earliest instant after `from` at which a game's tick or its currency may change. */
+/** The earliest instant after `from` at which a live game changes with no new frame. */
 function dueAfter(live: ReadonlyMap<GameId, LiveGame>, from: DateTime.Utc): Option.Option<DateTime.Utc> {
-  return earliestOf([...live.values()].map((liveGame) => dueAt(liveGame, from)))
-}
-
-function dueAt(liveGame: LiveGame, from: DateTime.Utc): Option.Option<DateTime.Utc> {
-  return earliestOf([liveGame.wakeAt(), liveGame.currencyChangesAt(from)]).pipe(
-    Option.filter((instant) => DateTime.isGreaterThan(instant, from))
-  )
-}
-
-function earliestOf(instants: ReadonlyArray<Option.Option<DateTime.Utc>>): Option.Option<DateTime.Utc> {
-  return Arr.match(Arr.getSomes(instants), {
-    onEmpty: Option.none<DateTime.Utc>,
-    onNonEmpty: (some) => Option.some(some.reduce(DateTime.min))
-  })
+  return LiveGame.earliest([...live.values()].map((liveGame) => liveGame.dueAfter(from)))
 }
 
 function applied(

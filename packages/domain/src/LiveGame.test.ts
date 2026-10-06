@@ -246,23 +246,50 @@ describe("LiveGame#isCurrent", () => {
   })
 })
 
-describe("LiveGame#currencyChangesAt", () => {
-  it("Stale: updatedAt + 30 minutes, until then", () => {
-    const end = DateTime.addDuration(t0, Duration.minutes(30))
-    assert.deepStrictEqual(staleGame.currencyChangesAt(later), Option.some(end))
-    assert.deepStrictEqual(staleGame.currencyChangesAt(end), Option.none())
+describe("LiveGame#dueAfter", () => {
+  it("Live: when it goes stale, updatedAt + 90 s", () => {
+    assert.deepStrictEqual(
+      liveGame.dueAfter(later),
+      Option.some(DateTime.addDuration(t0, Duration.seconds(90)))
+    )
   })
-  it("Upcoming: kickoff - 30 minutes, until then", () => {
+  it("Stale: when it leaves the live-feed window, updatedAt + 30 minutes", () => {
+    assert.deepStrictEqual(
+      staleGame.dueAfter(later),
+      Option.some(DateTime.addDuration(t0, Duration.minutes(30)))
+    )
+  })
+  it("Upcoming: when it enters the live-feed window, kickoff - 30 minutes", () => {
     const opens = DateTime.subtractDuration(upcoming.kickoff, Duration.minutes(30))
     assert.deepStrictEqual(
-      upcomingGame.currencyChangesAt(DateTime.subtractDuration(opens, Duration.seconds(1))),
+      upcomingGame.dueAfter(DateTime.subtractDuration(opens, Duration.seconds(1))),
       Option.some(opens)
     )
-    assert.deepStrictEqual(upcomingGame.currencyChangesAt(opens), Option.none())
   })
-  it("Live and Over: none", () => {
-    assert.deepStrictEqual(liveGame.currencyChangesAt(later), Option.none())
-    assert.deepStrictEqual(overGame.currencyChangesAt(later), Option.none())
+  it("Upcoming already inside the window: none", () => {
+    assert.deepStrictEqual(upcomingGame.dueAfter(upcoming.kickoff), Option.none())
+  })
+  it("Over: none", () => {
+    assert.deepStrictEqual(overGame.dueAfter(later), Option.none())
+  })
+  it("an instant equal to now is not after it", () => {
+    const staleAt = DateTime.addDuration(t0, Duration.seconds(90))
+    assert.deepStrictEqual(liveGame.dueAfter(staleAt), Option.none())
+    const opens = DateTime.subtractDuration(upcoming.kickoff, Duration.minutes(30))
+    assert.deepStrictEqual(upcomingGame.dueAfter(opens), Option.none())
+  })
+})
+
+describe("LiveGame.earliest", () => {
+  it("is none of nothing", () => {
+    assert.deepStrictEqual(LiveGame.earliest([]), Option.none())
+    assert.deepStrictEqual(LiveGame.earliest([Option.none()]), Option.none())
+  })
+  it("is the earliest of some, ignoring nones", () => {
+    assert.deepStrictEqual(
+      LiveGame.earliest([Option.some(later), Option.none(), Option.some(t0)]),
+      Option.some(t0)
+    )
   })
 })
 
@@ -353,16 +380,5 @@ describe("LiveGame#take, a snapshot's events", () => {
       liveGame: Option.none(),
       events: []
     })
-  })
-})
-
-describe("LiveGame#wakeAt", () => {
-  it("a live game wakes when it goes stale", () => {
-    assert.deepStrictEqual(liveGame.wakeAt(), Option.some(DateTime.addDuration(t0, Duration.seconds(90))))
-  })
-  it("an upcoming, stale, or over game never wakes", () => {
-    assert.deepStrictEqual(upcomingGame.wakeAt(), Option.none())
-    assert.deepStrictEqual(staleGame.wakeAt(), Option.none())
-    assert.deepStrictEqual(overGame.wakeAt(), Option.none())
   })
 })

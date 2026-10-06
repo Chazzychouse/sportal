@@ -1,4 +1,4 @@
-import { Data, DateTime, Duration, Equal, Option } from "effect"
+import { Array as Arr, Data, DateTime, Duration, Equal, Option } from "effect"
 import type { Delivery, DeliverySource } from "./Delivery.ts"
 import { GameSnapshot } from "./Game.ts"
 import type { GameEvent } from "./GameEvent.ts"
@@ -29,6 +29,14 @@ export class LiveGame extends Data.Class<{
 
   /** How long a stale game stays current, from its last update. */
   static readonly staleCurrentFor = Duration.minutes(30)
+
+  /** The earliest of `instants`; none when none is given. The one place optional instants are combined. */
+  static earliest(instants: Iterable<Option.Option<DateTime.Utc>>): Option.Option<DateTime.Utc> {
+    return Arr.match(Arr.getSomes(instants), {
+      onEmpty: Option.none<DateTime.Utc>,
+      onNonEmpty: (some) => Option.some(some.reduce(DateTime.min))
+    })
+  }
 
   /** A game's first snapshot, from feed `from`, always taken. */
   static start(snapshot: GameSnapshot, from: DeliverySource, now: DateTime.Utc): LiveGame {
@@ -95,14 +103,17 @@ export class LiveGame extends Data.Class<{
       : Option.none()
   }
 
-  /** When `tick` may next change this live game: a live game's going stale. None when only a delivery can change it. */
-  wakeAt(): Option.Option<DateTime.Utc> {
+  /**
+   * When this live game next changes with no new frame, strictly after `now`: going stale, or entering or leaving the
+   * live-feed window (`isCurrent`). None when only a delivery can change it.
+   */
+  dueAfter(now: DateTime.Utc): Option.Option<DateTime.Utc> {
     return LiveGameState.$match(this.state, {
-      Upcoming: () => Option.none(),
+      Upcoming: () => Option.some(DateTime.subtractDuration(this.snapshot.kickoff, LiveGame.currentBefore)),
       Live: ({ updatedAt }) => Option.some(DateTime.addDuration(updatedAt, LiveGame.staleAfter)),
-      Stale: () => Option.none(),
+      Stale: ({ updatedAt }) => Option.some(DateTime.addDuration(updatedAt, LiveGame.staleCurrentFor)),
       Over: () => Option.none()
-    })
+    }).pipe(Option.filter((at) => DateTime.isLessThan(now, at)))
   }
 
   /** When a live or stale game was last updated; none for an upcoming or over game. */
@@ -128,19 +139,6 @@ export class LiveGame extends Data.Class<{
         DateTime.isLessThan(now, DateTime.addDuration(updatedAt, LiveGame.staleCurrentFor)),
       Over: () => false
     })
-  }
-
-  /**
-   * When `isCurrent` next changes with no snapshot, after `now`: an upcoming game's window opening or a stale game's
-   * closing. None when only a snapshot can change it.
-   */
-  currencyChangesAt(now: DateTime.Utc): Option.Option<DateTime.Utc> {
-    return LiveGameState.$match(this.state, {
-      Upcoming: () => Option.some(DateTime.subtractDuration(this.snapshot.kickoff, LiveGame.currentBefore)),
-      Live: () => Option.none(),
-      Stale: ({ updatedAt }) => Option.some(DateTime.addDuration(updatedAt, LiveGame.staleCurrentFor)),
-      Over: () => Option.none()
-    }).pipe(Option.filter((at) => DateTime.isLessThan(now, at)))
   }
 }
 
