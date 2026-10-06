@@ -21,18 +21,20 @@ import {
 import { FeedLog } from "../FeedLog.ts"
 import { HubConfig } from "../HubConfig.ts"
 import { LiveGames } from "../LiveGames.ts"
+import { Decoder } from "../provider/Decoder.ts"
 import { Decoded, Provider } from "../provider/Provider.ts"
 import * as DecodeTelemetry from "./DecodeTelemetry.ts"
 
 /**
  * Replays the current game day from the feed log into the live games, then polls each league on the provider's polling
- * Schedule and runs its push, appending every frame to the log and taking what each says. The layer is built once the
- * replay is done, so nothing is served from a fold that is still catching up.
+ * Schedule and runs its push, appending every frame to the log and taking what the `Decoder` reads in each. The layer
+ * is built once the replay is done, so nothing is served from a fold that is still catching up.
  */
 export const layer = Layer.effectDiscard(
   Effect.gen(function* () {
     const { leagues } = yield* HubConfig
     const provider = yield* Provider
+    const decoder = yield* Decoder
     const feedLog = yield* FeedLog
     const liveGames = yield* LiveGames
     const from = dayStart(yield* DateTime.nowInCurrentZone)
@@ -63,7 +65,7 @@ export const layer = Layer.effectDiscard(
     // One decode over the day's log and then every frame appended after it, so each topic's document carries over
     // from replay to live. Decoding pulls the next frame only once it has handed on what the last one said, so
     // when it ends the replay's queue every replayed delivery is in it.
-    const decoding = yield* provider
+    const decoding = yield* decoder
       .decode(
         feedLog.replay(from).pipe(
           Stream.tap((frame) =>

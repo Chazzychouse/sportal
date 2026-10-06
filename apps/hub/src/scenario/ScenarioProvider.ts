@@ -16,25 +16,26 @@ import {
 import type { FeedFrame } from "../Frame.ts"
 import { HubConfig } from "../HubConfig.ts"
 import { Decoder } from "../provider/Decoder.ts"
-import { Decoded, Provider, type ProviderError } from "../provider/Provider.ts"
+import { Decoded, type Polling, Provider, type ProviderError } from "../provider/Provider.ts"
 import type { RecordedScenario } from "./RecordedScenario.ts"
 import { RecordedScenarios, ScenarioUnknown, type ScenarioUnreadable } from "./RecordedScenarios.ts"
 import type { Scenario } from "./Scenario.ts"
 import { scenarios } from "./written/Scenarios.ts"
 
 /**
- * The scenario `SPORTAL_SCENARIO` names as the provider, on whatever clock runs it, from the moment the layer is built.
- * A written scenario polls its slate at that moment as a frame and never pushes. A recorded one polls the recorded poll
- * current at that moment, received now, and pushes its recorded live feed frames at their recorded offsets, all read by
- * the `Decoder`. Either is polled again at its next frame's time, and at least every 10 seconds, so a live game never
- * goes stale between frames. A name that is unset or unknown fails, listing the known ones.
+ * The scenario `SPORTAL_SCENARIO` names as the provider and its `Decoder`, on whatever clock runs it, from the moment
+ * the layer is built. A written scenario polls its slate at that moment as a frame, never pushes, and provides its own
+ * decoder, which reads such a poll back as its league's `Listing`. A recorded one polls the recorded poll current at
+ * that moment, received now, and pushes its recorded live feed frames at their recorded offsets; it needs the
+ * `Decoder` of the provider that recorded them and provides that one on, so the layer both needs and provides
+ * `Decoder`. Either is polled again at its next frame's time, and at least every 10 seconds, so a live game never goes
+ * stale between frames. A name that is unset or unknown fails, listing the known ones.
  */
 export const layer: Layer.Layer<
-  Provider,
+  Provider | Decoder,
   ScenarioUnknown | ScenarioUnreadable,
   HubConfig | RecordedScenarios | Decoder
-> = Layer.effect(
-  Provider,
+> = Layer.unwrap(
   Effect.gen(function* () {
     const { scenario } = yield* HubConfig
     const recordedScenarios = yield* RecordedScenarios
@@ -43,7 +44,8 @@ export const layer: Layer.Layer<
     const written = scenarios.get(name)
     if (written !== undefined) {
       yield* Effect.logInfo(`ScenarioProvider: playing ${name}, ${written.frames.length} written frames`)
-      return playedWritten(written, start)
+      const { provider, decoder } = playedWritten(written, start)
+      return Layer.mergeAll(Layer.succeed(Provider, provider), Layer.succeed(Decoder, decoder))
     }
     const recorded = yield* recordedScenarios
       .load(name)
@@ -53,11 +55,14 @@ export const layer: Layer.Layer<
         )
       )
     yield* Effect.logInfo(`ScenarioProvider: playing ${name}, ${recorded.frames.length} recorded frames`)
-    return playedRecorded(recorded, start, (yield* Decoder).decode)
+    return Layer.mergeAll(
+      Layer.succeed(Provider, playedRecorded(recorded, start)),
+      Layer.succeed(Decoder, yield* Decoder)
+    )
   })
 )
 
-function playedWritten(scenario: Scenario, start: DateTime.Utc): Provider["Service"] {
+function playedWritten(scenario: Scenario, start: DateTime.Utc) {
   return ofSlates(
     (league) =>
       DateTime.now.pipe(
@@ -74,52 +79,55 @@ function playedWritten(scenario: Scenario, start: DateTime.Utc): Provider["Servi
 }
 
 /**
- * A provider whose poll of a league is `games(league)` as a frame, the games as JSON for its body, and whose decode
- * reads such a poll back as its league's `Listing`. It never pushes, and is polled on `polling`.
+ * A provider whose poll of a league is `games(league)` as a frame, the games as JSON for its body, which never pushes
+ * and is polled on `polling`; and the decoder that reads such a poll back as its league's `Listing`.
  */
 function ofSlates(
   games: (league: LeagueId) => Effect.Effect<ReadonlyArray<GameSnapshot>, ProviderError>,
-  polling: Provider["Service"]["polling"]
-): Provider["Service"] {
-  return Provider.of({
-    poll: (league) =>
-      Effect.all({ games: games(league), receivedAt: DateTime.now }).pipe(
-        Effect.map(
-          ({ games, receivedAt }): FeedFrame => ({
-            receivedAt,
-            feed: "poll",
-            channel: league,
-            kind: "response",
-            body: encodeGames(games)
-          })
+  polling: Polling
+) {
+  return {
+    provider: Provider.of({
+      poll: (league) =>
+        Effect.all({ games: games(league), receivedAt: DateTime.now }).pipe(
+          Effect.map(
+            ({ games, receivedAt }): FeedFrame => ({
+              receivedAt,
+              feed: "poll",
+              channel: league,
+              kind: "response",
+              body: encodeGames(games)
+            })
+          )
+        ),
+      push: () => Stream.never,
+      polling
+    }),
+    decoder: Decoder.of({
+      decode: (frames) =>
+        frames.pipe(
+          Stream.filterMap((frame) =>
+            Option.match(
+              Option.all({ league: decodeLeague(frame.channel), games: decodeGames(frame.body) }),
+              {
+                onNone: () => Result.failVoid,
+                onSome: ({ league, games }) =>
+                  Result.succeed(
+                    Decoded.Delivered({
+                      delivery: Delivery.Listing({ league, games }),
+                      at: frame.receivedAt,
+                      seq: frame.seq
+                    })
+                  )
+              }
+            )
+          )
         )
-      ),
-    push: () => Stream.never,
-    decode: (frames) =>
-      frames.pipe(
-        Stream.filterMap((frame) =>
-          Option.match(Option.all({ league: decodeLeague(frame.channel), games: decodeGames(frame.body) }), {
-            onNone: () => Result.failVoid,
-            onSome: ({ league, games }) =>
-              Result.succeed(
-                Decoded.Delivered({
-                  delivery: Delivery.Listing({ league, games }),
-                  at: frame.receivedAt,
-                  seq: frame.seq
-                })
-              )
-          })
-        )
-      ),
-    polling
-  })
+    })
+  }
 }
 
-function playedRecorded(
-  scenario: RecordedScenario,
-  start: DateTime.Utc,
-  decode: Provider["Service"]["decode"]
-): Provider["Service"] {
+function playedRecorded(scenario: RecordedScenario, start: DateTime.Utc) {
   const origin = scenario.origin()
   const offsetOf = (frame: FeedFrame) => DateTime.distance(origin, frame.receivedAt)
   const playedAt = (frame: FeedFrame) => DateTime.addDuration(start, offsetOf(frame))
@@ -159,7 +167,6 @@ function playedRecorded(
         ),
         Stream.concat(Stream.never)
       ),
-    decode,
     polling: pollingAt(
       polls.map((frame) => Duration.toMillis(offsetOf(frame))),
       start
@@ -179,7 +186,7 @@ function movedTo(frame: FeedFrame, at: DateTime.Utc): FeedFrame {
 }
 
 /** Polled again at the next of `offsets` (milliseconds from `start`) after now, and at least every `longest`. */
-function pollingAt(offsets: ReadonlyArray<number>, start: DateTime.Utc): Provider["Service"]["polling"] {
+function pollingAt(offsets: ReadonlyArray<number>, start: DateTime.Utc): Polling {
   return Schedule.forever.pipe(
     Schedule.modifyDelay(({ now }) => {
       const elapsed = now - DateTime.toEpochMillis(start)

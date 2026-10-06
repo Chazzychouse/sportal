@@ -31,6 +31,7 @@ import { FeedLog } from "../FeedLog.ts"
 import type { FeedFrame } from "../Frame.ts"
 import { GameHistory } from "../GameHistory.ts"
 import { LiveGames } from "../LiveGames.ts"
+import { Decoder } from "../provider/Decoder.ts"
 import * as EspnDecode from "../provider/espn/EspnDecode.ts"
 import { recordedCheckpoint } from "../provider/espn/TestEspn.ts"
 import { Decoded, Provider, ProviderError } from "../provider/Provider.ts"
@@ -79,16 +80,13 @@ describe("Ingest", () => {
       }).pipe(
         Effect.provide(
           ingesting(
-            Layer.succeed(
-              Provider,
-              polling(
-                () =>
-                  Clock.currentTimeMillis.pipe(
-                    Effect.flatMap((now) => Ref.update(calls, (all) => [...all, now])),
-                    Effect.as([liveSnapshot({ id: GameId.make("1") })])
-                  ),
-                { polling: Schedule.spaced("7 seconds") }
-              )
+            polling(
+              () =>
+                Clock.currentTimeMillis.pipe(
+                  Effect.flatMap((now) => Ref.update(calls, (all) => [...all, now])),
+                  Effect.as([liveSnapshot({ id: GameId.make("1") })])
+                ),
+              { polling: Schedule.spaced("7 seconds") }
             )
           )
         )
@@ -300,12 +298,9 @@ describe("Ingest", () => {
         const feed = yield* Queue.unbounded<Offered>()
         const subscriptions = yield* Ref.make(0)
         const polls = yield* Ref.make(0)
-        const provider = Layer.succeed(
-          Provider,
-          polling(() => Ref.update(polls, (n) => n + 1).pipe(Effect.as([scoring(0)])), {
-            push: feeding(feed, subscriptions)
-          })
-        )
+        const provider = polling(() => Ref.update(polls, (n) => n + 1).pipe(Effect.as([scoring(0)])), {
+          push: feeding(feed, subscriptions)
+        })
         const closed = new ProviderError({ reason: "Closed", cause: "socket closed" })
         yield* Effect.gen(function* () {
           yield* TestClock.adjust(0)
@@ -536,7 +531,7 @@ describe("Ingest", () => {
           [...folded.live.values()].map((held) => held.snapshot.home.score),
           [3]
         )
-      }).pipe(Effect.provide(over(Layer.succeed(Provider, counting))))
+      }).pipe(Effect.provide(over(counting)))
     }).pipe(Effect.provide([Database.at(":memory:"), NodeCrypto.layer]))
   )
 
@@ -583,7 +578,7 @@ describe("Ingest", () => {
 })
 
 /** `over`, on a fresh in-memory database. */
-function ingesting(provider: Layer.Layer<Provider>, options: Parameters<typeof over>[1] = {}) {
+function ingesting(provider: Layer.Layer<Provider | Decoder>, options: Parameters<typeof over>[1] = {}) {
   return over(provider, options).pipe(Layer.provide([Database.at(":memory:"), NodeCrypto.layer]))
 }
 
@@ -593,7 +588,7 @@ function ingesting(provider: Layer.Layer<Provider>, options: Parameters<typeof o
  * in `ended`, and the game day read in `zone` (the local one, unless given).
  */
 function over(
-  provider: Layer.Layer<Provider>,
+  provider: Layer.Layer<Provider | Decoder>,
   options: {
     readonly leagues?: ReadonlyArray<"nfl" | "fbs">
     readonly ended?: Array<Tracer.Span>
@@ -622,10 +617,9 @@ function stopsAndPollsOn(frames: Stream.Stream<FeedFrame>, why: string) {
   const { logs, layer } = recordingLogs()
   return Effect.gen(function* () {
     const polls = yield* Ref.make(0)
-    const provider = Layer.succeed(
-      Provider,
-      polling(() => Ref.update(polls, (n) => n + 1).pipe(Effect.as([scoring(0)])), { push: () => frames })
-    )
+    const provider = polling(() => Ref.update(polls, (n) => n + 1).pipe(Effect.as([scoring(0)])), {
+      push: () => frames
+    })
     yield* Effect.gen(function* () {
       yield* TestClock.adjust(0)
       yield* TestClock.adjust("20 seconds")
@@ -643,7 +637,7 @@ function stopsAndPollsOn(frames: Stream.Stream<FeedFrame>, why: string) {
 type Offered = FeedFrame | ProviderError
 
 /** A push reading `feed`, counting each subscription to it in `subscriptions`. */
-function feeding(feed: Queue.Queue<Offered>, subscriptions: Ref.Ref<number>): Provider["Service"]["push"] {
+function feeding(feed: Queue.Queue<Offered>, subscriptions: Ref.Ref<number>) {
   return () =>
     Stream.unwrap(
       Ref.update(subscriptions, (n) => n + 1).pipe(
@@ -662,41 +656,53 @@ function feeding(feed: Queue.Queue<Offered>, subscriptions: Ref.Ref<number>): Pr
  * A provider that never polls, whose decode keeps a count of the frames it has read and reads each as a pushed live
  * game with that count for the home score.
  */
-const counting = Provider.of({
-  push: () => Stream.never,
-  polling: Schedule.spaced("10 seconds"),
-  poll: (league) => Effect.fail(new ProviderError({ reason: "Unreachable", league, cause: "down" })),
-  decode: (frames) =>
-    frames.pipe(
-      Stream.mapAccum(
-        () => 0,
-        (count, frame) =>
-          [
-            count + 1,
-            [
-              Decoded.Delivered({
-                delivery: Delivery.Snapshot({
-                  snapshot: scoring(count + 1),
-                  from: "push"
-                }),
-                at: frame.receivedAt,
-                seq: frame.seq
-              })
-            ]
-          ] as const
-      )
-    )
-})
+const counting = Layer.mergeAll(
+  Layer.succeed(
+    Provider,
+    Provider.of({
+      push: () => Stream.never,
+      polling: Schedule.spaced("10 seconds"),
+      poll: (league) => Effect.fail(new ProviderError({ reason: "Unreachable", league, cause: "down" }))
+    })
+  ),
+  Layer.succeed(
+    Decoder,
+    Decoder.of({
+      decode: (frames) =>
+        frames.pipe(
+          Stream.mapAccum(
+            () => 0,
+            (count, frame) =>
+              [
+                count + 1,
+                [
+                  Decoded.Delivered({
+                    delivery: Delivery.Snapshot({
+                      snapshot: scoring(count + 1),
+                      from: "push"
+                    }),
+                    at: frame.receivedAt,
+                    seq: frame.seq
+                  })
+                ]
+              ] as const
+          )
+        )
+    })
+  )
+)
 
 /** A provider whose polls fail and whose decode is ESPN's, for frames that raise its notices. */
-const espnDecoding = Layer.succeed(
-  Provider,
-  Provider.of({
-    poll: (league) => Effect.fail(new ProviderError({ reason: "Unreachable", league, cause: "down" })),
-    push: () => Stream.never,
-    decode: EspnDecode.decode,
-    polling: Schedule.spaced("10 seconds")
-  })
+const espnDecoding = Layer.mergeAll(
+  Layer.succeed(
+    Provider,
+    Provider.of({
+      poll: (league) => Effect.fail(new ProviderError({ reason: "Unreachable", league, cause: "down" })),
+      push: () => Stream.never,
+      polling: Schedule.spaced("10 seconds")
+    })
+  ),
+  EspnDecode.layer
 )
 
 /**
@@ -751,9 +757,10 @@ function scoring(n: number) {
 }
 
 function pollOf(games: ReadonlyArray<GameSnapshot>) {
-  return polling(() => Effect.succeed(games))
-    .poll("fbs")
-    .pipe(Effect.orDie)
+  return Provider.use((provider) => provider.poll("fbs")).pipe(
+    Effect.provide(polling(() => Effect.succeed(games))),
+    Effect.orDie
+  )
 }
 
 /** The fbs listing as the fold has it. */

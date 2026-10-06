@@ -1,6 +1,6 @@
 import { join } from "node:path"
 import { NodeCrypto, NodeServices } from "@effect/platform-node"
-import { assert, describe, it } from "@effect/vitest"
+import { assert, layer } from "@effect/vitest"
 import { GameId, type GameSnapshot } from "@sportal/domain/Game"
 import type { GameEvent } from "@sportal/domain/GameEvent"
 import type { LiveGame } from "@sportal/domain/LiveGame"
@@ -10,6 +10,7 @@ import * as Database from "./Database.ts"
 import { FeedLog } from "./FeedLog.ts"
 import type { FeedFrame } from "./Frame.ts"
 import { LiveGames } from "./LiveGames.ts"
+import { Decoder } from "./provider/Decoder.ts"
 import * as EspnDecode from "./provider/espn/EspnDecode.ts"
 import { fixtures, neAtBufFrames } from "./provider/espn/TestEspn.ts"
 import { RecordedScenarios } from "./scenario/RecordedScenarios.ts"
@@ -25,7 +26,7 @@ const neAtBuf = GameId.make("401872971")
 //     | if .path=="/entities/plays" then (.value|keys[]) else (.path|ltrimstr("/entities/plays/")) end' | sort -u | wc -l
 const recordedPlays = 182
 
-describe("a recorded game", () => {
+layer(EspnDecode.layer)("a recorded game", (it) => {
   it.effect(
     "replays through decode and the fold to NE at BUF final, with every play the recording has, and nothing failed",
     () => {
@@ -149,9 +150,8 @@ function replayedFrom(from: DateTime.Utc) {
   return Effect.gen(function* () {
     const liveGames = yield* LiveGames
     const held = yield* Ref.make<ReadonlyArray<LiveGame>>([])
-    yield* liveGames.replay(
-      deliveriesOf(yield* FeedLog, from).pipe(Stream.tap(() => heldAs(held, liveGames)))
-    )
+    const deliveries = yield* deliveriesOf(yield* FeedLog, from)
+    yield* liveGames.replay(deliveries.pipe(Stream.tap(() => heldAs(held, liveGames))))
     yield* heldAs(held, liveGames)
     return { latest: yield* liveGames.latest, held: yield* Ref.get(held) }
   }).pipe(Effect.provide([LiveGames.layer, FeedLog.layer]))
@@ -166,7 +166,7 @@ const replayed = replayedFrom(DateTime.makeUnsafe(0))
  * the fold's timer.
  */
 const takenLive = Effect.gen(function* () {
-  const all = yield* FeedLog.use((log) => Stream.runCollect(deliveriesOf(log))).pipe(
+  const all = yield* FeedLog.use((log) => Effect.flatMap(deliveriesOf(log), Stream.runCollect)).pipe(
     Effect.provide(FeedLog.layer)
   )
   const liveGames = yield* LiveGames
@@ -193,14 +193,18 @@ const takenLive = Effect.gen(function* () {
   return { latest: yield* liveGames.latest, held: yield* Ref.get(held), events: yield* Ref.get(events) }
 }).pipe(Effect.provide(LiveGames.layer))
 
-/** Every frame in `log` replayed from `from` (all of them, unless given), decoded by ESPN's decoder, as the deliveries it said. */
+/** Every frame in `log` replayed from `from` (all of them, unless given), decoded by the `Decoder`, as the deliveries it said. */
 function deliveriesOf(log: FeedLog["Service"], from = DateTime.makeUnsafe(0)) {
-  return EspnDecode.decode(log.replay(from)).pipe(
-    Stream.flatMap((said) =>
-      said._tag === "Delivered"
-        ? Stream.make({ delivery: said.delivery, at: said.at, seq: said.seq })
-        : Stream.empty
-    )
+  return Decoder.useSync((decoder) =>
+    decoder
+      .decode(log.replay(from))
+      .pipe(
+        Stream.flatMap((said) =>
+          said._tag === "Delivered"
+            ? Stream.make({ delivery: said.delivery, at: said.at, seq: said.seq })
+            : Stream.empty
+        )
+      )
   )
 }
 

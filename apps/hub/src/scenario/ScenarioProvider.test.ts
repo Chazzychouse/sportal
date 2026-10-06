@@ -27,10 +27,10 @@ import { FeedFrame } from "../Frame.ts"
 import * as Gzip from "../Gzip.ts"
 import * as Ingest from "../ingest/Ingest.ts"
 import { LiveGames } from "../LiveGames.ts"
-import { Decoder } from "../provider/Decoder.ts"
+import type { Decoder } from "../provider/Decoder.ts"
 import * as EspnDecode from "../provider/espn/EspnDecode.ts"
 import { Provider } from "../provider/Provider.ts"
-import { polling } from "../provider/TestProvider.ts"
+import { decoder } from "../provider/TestProvider.ts"
 import { withEnv } from "../TestHubConfig.ts"
 import { recordingSpans } from "../TestTelemetry.ts"
 import { RecordedScenarios } from "./RecordedScenarios.ts"
@@ -93,7 +93,7 @@ describe("ScenarioProvider", () => {
         assert.strictEqual((yield* listed("fbs"))[0]?.home.score, 0)
         yield* TestClock.adjust("1 second")
         assert.strictEqual((yield* listed("fbs"))[0]?.home.score, 7)
-      }).pipe(Effect.provide(playing("seven", { from: dir, decode: slates })))
+      }).pipe(Effect.provide(playing("seven", { from: dir, decoder: slates })))
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer))
   )
 
@@ -177,7 +177,7 @@ describe("ScenarioProvider", () => {
           7,
           "the tied poll only refreshed the pushed snapshot"
         )
-      }).pipe(Effect.provide(playing("tie", { from: dir, decode: slates })))
+      }).pipe(Effect.provide(playing("tie", { from: dir, decoder: slates })))
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer))
   )
 
@@ -297,15 +297,13 @@ describe("ScenarioProvider", () => {
 
 /**
  * Scenario `name` as the provider, configured by `env` beside its name: recorded scenarios read from `from` (the
- * committed ones, unless given), their frames decoded by `decode` (ESPN's, unless given).
+ * committed ones, unless given), their frames decoded by `decoder` (ESPN's, unless given).
  */
 function scenario(name: string, options: Options = {}) {
   return ScenarioProvider.layer.pipe(
     Layer.provide([
       options.from === undefined ? RecordedScenarios.layer : RecordedScenarios.in(options.from),
-      options.decode === undefined
-        ? EspnDecode.layer
-        : Layer.succeed(Decoder, Decoder.of({ decode: options.decode }))
+      options.decoder ?? EspnDecode.layer
     ]),
     Layer.provideMerge(withEnv({ SPORTAL_SCENARIO: name, ...options.env }).pipe(Layer.orDie)),
     Layer.provide(NodeServices.layer)
@@ -338,13 +336,13 @@ function ingestOver(name: string, options: Options) {
 /** How a test sets a scenario up; one HubConfig, from `env`, serves the whole Hub under test. */
 type Options = {
   readonly from?: string
-  readonly decode?: Provider["Service"]["decode"]
+  readonly decoder?: Layer.Layer<Decoder>
   readonly env?: Record<string, string>
   readonly scenarioFeedLog?: boolean
 }
 
 /** A decode that reads a poll's body as its league's games, and a pushed frame's as pushed snapshots. */
-const slates = polling(() => Effect.succeed([])).decode
+const slates = decoder
 
 /** Writes recorded scenario `name`, of `frames`, to a fresh folder, and gives the folder. */
 function recorded(name: string, frames: ReadonlyArray<FeedFrame>) {

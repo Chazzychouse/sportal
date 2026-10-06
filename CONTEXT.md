@@ -27,7 +27,7 @@ Every exported type name must be a term here, except the wire schemas in `*Paylo
 | **Fold report** | What one step of the live games did to one game, for telemetry to tell: took a snapshot, started, changed, stopped, happened (a game event), dropped, or raised a defect. | fold event, log entry |
 | **Stale** | A live game no snapshot has reached for 90 seconds. It stays current for 30 minutes after its last update. | |
 | **Delivery** | What a frame said: a league's listing, one game's snapshot, or one game's whole list of plays. | input, update |
-| **Decoder** | A provider's decode on its own, which its adapter provides, so a recorded scenario decodes its frames as the provider that recorded them would. | parser |
+| **Decoder** | The one home of a provider's decode, which its adapter provides beside it, so a recorded scenario decodes its frames as the provider that recorded them would. | parser |
 | **Decoded** | What one frame said, as a provider decodes it: a `Delivered` delivery with the instant and `seq` of its frame, a `Resync` of a live feed channel, or a `Noted` notice. | decoded frame, said |
 | **Notice** | Something a provider's decode noticed in a frame for telemetry to tell: a message received, games pushed, an unlisted game, a document reset, a message of an unknown op, a frame, event, or play that did not decode, or an unknown play type. Told only for frames after a replay. | warning, metric |
 | **Delivery source** | Which feed a snapshot came from: `push` or `poll`. | origin, feed type |
@@ -50,7 +50,7 @@ Every exported type name must be a term here, except the wire schemas in `*Paylo
 
 | Term | Meaning | Not |
 | --- | --- | --- |
-| **Provider** | An adapter that supplies **game data** (ESPN, CollegeFootballData): its poll, its push (the live feed), its decode, and its polling Schedule. | source, feed |
+| **Provider** | An adapter that supplies **game data** (ESPN, CollegeFootballData): its poll, its push (the live feed), and its polling Schedule. | source, feed |
 | **Provider error** | A provider could not supply data: a poll of a league unreachable or refused, or a push refused, closed, or gone silent. | fetch error, live feed error |
 | **Live feed** | A provider's push: the connection carrying updates for live games between polls (ESPN FastCast). | socket, stream, webhook |
 | **ESPN event** | One game as either ESPN feed spells it, the polled site scoreboard or a FastCast scoreboard topic, read as a GameSnapshot; `EspnEvent` in code. | payload, DTO |
