@@ -1,8 +1,7 @@
 import type { Hotkey } from "@sportal/api/Hotkey"
-import type { StageCommand } from "@sportal/domain/Stage"
 import { useState } from "react"
 import { Toaster } from "@/design/sonner"
-import { Display } from "./Display.ts"
+import { Display, type DisplayStep } from "./Display.ts"
 import { useFullScreen } from "./frame/FullScreen.ts"
 import { JoinRemote } from "./frame/JoinRemote.tsx"
 import { KeysDialog } from "./frame/KeysDialog.tsx"
@@ -11,30 +10,36 @@ import { dispatch } from "./hub/HubClient.ts"
 import { useLive } from "./hub/Live.ts"
 import { OverlayHost } from "./OverlayHost.tsx"
 import { SlateView } from "./slate/SlateView.tsx"
-import { stripCards } from "./slate/StripCards.ts"
+import { StripCard } from "./slate/StripCards.ts"
 import { CommandPalette } from "./stage/CommandPalette.tsx"
 import { useHotkeys } from "./stage/Hotkeys.ts"
 import { useRejectionToasts } from "./stage/Rejections.ts"
 import { StageView } from "./stage/StageView.tsx"
 
+/** This device's Display: its state, a step run (its display kept, its commands sent to the Hub), and a Display set. */
+export function useDisplay() {
+  const [display, set] = useState(Display.initial)
+  const run = (step: DisplayStep) => {
+    set(step.display)
+    for (const command of step.commands) dispatch(command)
+  }
+  return { display, run, set }
+}
+
 export function App() {
   const live = useLive()
-  const [display, setDisplay] = useState(Display.initial)
-  const apply = (next: { display: Display; commands: ReadonlyArray<StageCommand> }) => {
-    setDisplay(next.display)
-    for (const command of next.commands) dispatch(command)
-  }
+  const { display, run, set: setDisplay } = useDisplay()
   const closeOverlay = (open: boolean) => {
     if (!open) setDisplay(display.close())
   }
   const fullScreen = useFullScreen()
-  const cards = stripCards(live.stage, live.slate)
+  const cards = StripCard.of(live.stage, live.slate)
   const selected = display.selectedOn(live.stage)
   const toggleSolo = display.press({ _tag: "ToggleSolo" }, live.stage, cards)
   useRejectionToasts()
 
   useHotkeys((hotkey: Hotkey) =>
-    hotkey._tag === "FullScreen" ? fullScreen.toggle() : apply(display.press(hotkey, live.stage, cards))
+    hotkey._tag === "FullScreen" ? fullScreen.toggle() : run(display.press(hotkey, live.stage, cards))
   )
 
   return (
@@ -52,7 +57,7 @@ export function App() {
             }}
             solo={{
               enabled: toggleSolo.commands.length > 0,
-              toggle: () => apply(toggleSolo)
+              toggle: () => run(toggleSolo)
             }}
             onKeys={() => setDisplay(display.open("Keys"))}
             onRemote={() => setDisplay(display.open("JoinRemote"))}
@@ -64,7 +69,7 @@ export function App() {
           connected={live.connected}
           selected={selected}
           interacting={display.interactingOn(live.stage)}
-          onSelect={(slot) => apply(display.select(slot, live.stage))}
+          onSelect={(slot) => run(display.select(slot, live.stage))}
         />
         {fullScreen.on || !display.slateOpen ? null : (
           <SlateView
@@ -72,7 +77,7 @@ export function App() {
             display={display}
             stage={live.stage}
             watchability={live.watchability}
-            onDrop={apply}
+            onDrop={run}
           />
         )}
       </div>

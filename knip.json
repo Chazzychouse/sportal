@@ -11,7 +11,7 @@
     },
     "apps/web": {
       "entry": ["src/main.tsx!", "vite.config.ts"],
-      "project": ["src/**/*.{ts,tsx,css}!"]
+      "project": ["src/**/*.{ts,tsx,css}!", "!src/**/Test*.ts!"]
     },
     "apps/desktop": {
       "entry": ["src/main/main.ts!", "src/preload/ShellBridge.ts!", "electron.vite.config.ts"],

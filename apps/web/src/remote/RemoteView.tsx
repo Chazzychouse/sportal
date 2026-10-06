@@ -1,14 +1,14 @@
 import { LayoutName } from "@sportal/domain/Layout"
-import type { StageCommand } from "@sportal/domain/Stage"
+import { Array as Arr } from "effect"
 import { Shrink } from "lucide-react"
 import { useState } from "react"
 import { Toaster } from "@/design/sonner"
-import { Display } from "../Display.ts"
+import { useDisplay } from "../App.tsx"
 import { LayoutGlyph, layoutLabel } from "../frame/LayoutGlyph.tsx"
 import { dispatch } from "../hub/HubClient.ts"
 import { useLive } from "../hub/Live.ts"
 import { statusText } from "../slate/StatusText.ts"
-import { stripCards } from "../slate/StripCards.ts"
+import { StripCard } from "../slate/StripCards.ts"
 import { TeamLogo } from "../slate/TeamLogo.tsx"
 import { useRejectionToasts } from "../stage/Rejections.ts"
 import { StageMap } from "./StageMap.tsx"
@@ -21,16 +21,12 @@ export function RemoteView() {
   const live = useLive()
   // The phone's own, like each desk's. Its inputs are taps, which React renders before the next one, so each
   // handler's `display` is current.
-  const [display, setDisplay] = useState(Display.initial)
-  const apply = (next: { display: Display; commands: ReadonlyArray<StageCommand> }) => {
-    setDisplay(next.display)
-    for (const command of next.commands) dispatch(command)
-  }
-  const [tab, setTab] = useState<(typeof sections)[number]>("Live")
+  const { display, run } = useDisplay()
+  const [tab, setTab] = useState<StripCard["section"]>("Live")
   useRejectionToasts()
 
-  const cards = stripCards(live.stage, live.slate)
-  const shown = sections.filter((section) => cards.some((card) => card.section === section))
+  const cards = StripCard.of(live.stage, live.slate)
+  const shown = Arr.dedupe(cards.map((card) => card.section))
   // A tab with no games is hidden; if it was the open one, the first with games opens instead.
   const open = shown.includes(tab) ? tab : shown[0]
 
@@ -81,7 +77,7 @@ export function RemoteView() {
           stage={live.stage}
           slate={live.slate}
           selected={display.selectedOn(live.stage)}
-          onSelect={(slot) => apply(display.select(slot, live.stage))}
+          onSelect={(slot) => run(display.select(slot, live.stage))}
         />
       </div>
 
@@ -117,7 +113,7 @@ export function RemoteView() {
                 <button
                   type="button"
                   disabled={dropped.commands.length === 0}
-                  onClick={() => apply(dropped)}
+                  onClick={() => run(dropped)}
                   className={`grid min-h-14 w-full grid-cols-[20px_1fr_2.5rem_7.5rem] items-center gap-x-2 rounded-sm px-1.5 py-1.5 text-left font-mono text-sm tabular-nums active:bg-accent disabled:opacity-60 ${
                     game?.progress() === "over" ? "opacity-70" : ""
                   }`}
@@ -180,5 +176,3 @@ export function RemoteView() {
     </div>
   )
 }
-
-const sections = ["Bench", "Live", "Next", "Final"] as const

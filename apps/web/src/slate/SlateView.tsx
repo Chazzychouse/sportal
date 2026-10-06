@@ -1,11 +1,11 @@
 import type { GameSnapshot } from "@sportal/domain/Game"
-import type { Stage, StageCommand } from "@sportal/domain/Stage"
+import type { Stage } from "@sportal/domain/Stage"
 import { Fragment, useEffect, useRef } from "react"
-import type { Display } from "../Display.ts"
+import type { Display, DisplayStep } from "../Display.ts"
 import type { useLive } from "../hub/Live.ts"
 import { tileDrag } from "../stage/TileChrome.tsx"
 import { statusText } from "./StatusText.ts"
-import type { stripCards } from "./StripCards.ts"
+import type { StripCard } from "./StripCards.ts"
 import { TeamLogo } from "./TeamLogo.tsx"
 
 /**
@@ -14,11 +14,11 @@ import { TeamLogo } from "./TeamLogo.tsx"
  * the pick; a bench card can also be dragged onto a tile.
  */
 export function SlateView(props: {
-  cards: ReturnType<typeof stripCards>
+  cards: ReadonlyArray<StripCard>
   display: Display
   stage: Stage
   watchability: ReturnType<typeof useLive>["watchability"]
-  onDrop: (dropped: { display: Display; commands: ReadonlyArray<StageCommand> }) => void
+  onDrop: (dropped: DisplayStep) => void
 }) {
   const pick = props.display.pick
   const rowRef = useRef<HTMLOListElement | null>(null)
@@ -87,7 +87,7 @@ export function SlateView(props: {
  * and clocks change length. A game on stage shows its tile and cannot be picked.
  */
 function Card(props: {
-  card: ReturnType<typeof stripCards>[number]
+  card: StripCard
   picked: boolean
   droppable: boolean
   watch: ReturnType<ReturnType<typeof useLive>["watchability"]["get"]>

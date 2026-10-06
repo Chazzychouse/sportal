@@ -57,11 +57,11 @@ module.exports = {
     {
       name: "test-game-is-for-tests",
       comment:
-        "The test snapshot builder is imported by test files, the Hub's test provider, and scenarios, which are test data by nature.",
+        "The test snapshot builder is imported by test files, the Hub's test provider, the web's test slate, and scenarios, which are test data by nature.",
       severity: "error",
       from: {
         pathNot:
-          "(\\.test\\.tsx?$|^apps/hub/src/TestProvider\\.ts$|^packages/domain/src/Scenario\\.ts$|^packages/domain/src/scenarios/)"
+          "(\\.test\\.tsx?$|^apps/hub/src/TestProvider\\.ts$|^apps/web/src/slate/TestSlate\\.ts$|^packages/domain/src/Scenario\\.ts$|^packages/domain/src/scenarios/)"
       },
       to: { path: "^packages/domain/src/TestGame\\.ts$" }
     },
