@@ -12,7 +12,10 @@ import { Source } from "../source/Source.ts"
 import { StageSessions } from "../stage/StageSessions.ts"
 import { lanAddresses } from "./LanAddresses.ts"
 
-/** The handlers for every endpoint group in SportalApi. Exported so tests can drive them without a socket. */
+/**
+ * The handlers for every endpoint group in SportalApi. Exported so tests can drive them without a socket.
+ * @testonly
+ */
 export const ApiHandlers = Layer.mergeAll(
   slateHandlers(),
   stageHandlers(),
@@ -21,7 +24,10 @@ export const ApiHandlers = Layer.mergeAll(
   hostHandlers()
 )
 
-/** Every route the Hub serves: the API, and the live stream. */
+/**
+ * Every route the Hub serves: the API, and the live stream.
+ * @testonly
+ */
 export const layer = Layer.mergeAll(
   HttpApiBuilder.layer(SportalApi).pipe(Layer.provide(ApiHandlers)),
   liveRoute()

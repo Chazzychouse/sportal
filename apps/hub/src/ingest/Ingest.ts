@@ -195,7 +195,10 @@ export class Ingest extends Context.Service<Ingest, object>()("sportal/hub/Inges
     )
 }
 
-/** The start of the game day `now` is in: 04:00 in its zone, or the day before's when it is earlier than that. */
+/**
+ * The start of the game day `now` is in: 04:00 in its zone, or the day before's when it is earlier than that.
+ * @testonly
+ */
 export function dayStart(now: DateTime.Zoned): DateTime.Utc {
   const today = DateTime.setParts(now, { hour: 4, minute: 0, second: 0, millisecond: 0 })
   return DateTime.toUtc(DateTime.isLessThan(now, today) ? DateTime.subtract(today, { days: 1 }) : today)

@@ -101,6 +101,7 @@ const signInUrl = "https://tv.youtube.com/"
 /**
  * Provider views may visit the provider and its sign-in pages, and the web UI's own synthetic stream pages for a
  * scenario (`ui` is the address the shell loads the UI from).
+ * @testonly
  */
 export function allows(url: string, ui: string): boolean {
   if (!URL.canParse(url)) return false
@@ -144,7 +145,10 @@ export function confine(
   contents.setWindowOpenHandler(() => ({ action: "deny" }))
 }
 
-/** Playback needs DRM key systems, fullscreen, and a screen that stays awake; nothing else is granted. */
+/**
+ * Playback needs DRM key systems, fullscreen, and a screen that stays awake; nothing else is granted.
+ * @testonly
+ */
 export function grantsPermission(permission: string): boolean {
   return ["mediaKeySystem", "fullscreen", "screen-wake-lock"].includes(permission)
 }
@@ -162,7 +166,10 @@ export function load(contents: WebContents, url: string) {
   })
 }
 
-/** The code Electron attaches to a failed load (such as `ERR_ABORTED`); the message would carry the full URL. */
+/**
+ * The code Electron attaches to a failed load (such as `ERR_ABORTED`); the message would carry the full URL.
+ * @testonly
+ */
 export function loadErrorCode(error: unknown) {
   return error instanceof Error && "code" in error && typeof error.code === "string" ? error.code : "unknown"
 }

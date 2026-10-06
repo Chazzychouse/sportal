@@ -10,6 +10,7 @@ export function useLive() {
   return useSyncExternalStore(subscribe, () => state)
 }
 
+/** @testonly */
 export const disconnected = {
   slate: [] as ReadonlyArray<GameSnapshot>,
   watchability: [] as ReadonlyArray<Watchability>,
@@ -17,6 +18,7 @@ export const disconnected = {
   connected: false
 }
 
+/** @testonly */
 export function reduce(live: typeof disconnected, message: LiveMessage): typeof disconnected {
   switch (message._tag) {
     case "SlateChanged":
