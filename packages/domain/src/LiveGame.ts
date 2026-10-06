@@ -1,6 +1,6 @@
 import { Array as Arr, Data, DateTime, Duration, Equal, Option } from "effect"
 import type { Delivery, DeliverySource } from "./Delivery.ts"
-import { type GameId, GameSnapshot } from "./Game.ts"
+import { GameSnapshot } from "./Game.ts"
 import type { GameEvent } from "./GameEvent.ts"
 import { Play } from "./Play.ts"
 import { Watchability } from "./Watchability.ts"
@@ -44,18 +44,6 @@ export class LiveGame extends Data.Class<{
       plays: [],
       watchability: Watchability.initial(snapshot, now)
     })
-  }
-
-  /** Each listed game, in listed order, as the fold has it, or as listed when it has none. */
-  static asFolded(
-    listed: ReadonlyArray<GameSnapshot>,
-    live: ReadonlyMap<GameId, LiveGame>
-  ): ReadonlyArray<GameSnapshot> {
-    return listed.map((game) =>
-      Option.fromNullishOr(live.get(game.id)).pipe(
-        Option.match({ onNone: () => game, onSome: (liveGame) => liveGame.snapshot })
-      )
-    )
   }
 
   /**

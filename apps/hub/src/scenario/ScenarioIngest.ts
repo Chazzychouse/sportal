@@ -2,7 +2,6 @@ import { join } from "node:path"
 import { fileURLToPath } from "node:url"
 import { Delivery } from "@sportal/domain/Delivery"
 import { LeagueId } from "@sportal/domain/League"
-import { LiveGame } from "@sportal/domain/LiveGame"
 import { Scenario } from "@sportal/domain/Scenario"
 import { scenarios } from "@sportal/domain/scenarios/Scenarios"
 import { Array as Arr, DateTime, Duration, Effect, FileSystem, Layer, Option, Schema } from "effect"
@@ -40,14 +39,7 @@ export const layer = (name: string, from: string = folder) =>
                 ),
               { discard: true }
             )
-            const folded = yield* liveGames.latest
-            const cadence = Cadence.interval(
-              LeagueId.literals.flatMap((league) =>
-                LiveGame.asFolded(folded.listed.get(league) ?? [], folded.live)
-              ),
-              now,
-              false
-            )
+            const cadence = Cadence.interval((yield* liveGames.latest).slate(LeagueId.literals), now, false)
             const nextFrame = Arr.findFirst(scenario.frames, ({ at }) => at > Duration.toMillis(elapsed))
             yield* Effect.sleep(
               Option.match(nextFrame, {

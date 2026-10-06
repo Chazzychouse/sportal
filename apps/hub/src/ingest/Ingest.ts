@@ -1,5 +1,4 @@
 import type { LeagueId } from "@sportal/domain/League"
-import { LiveGame } from "@sportal/domain/LiveGame"
 import {
   Array as Arr,
   Cause,
@@ -137,10 +136,7 @@ export class Ingest extends Context.Service<Ingest, object>()("sportal/hub/Inges
             Effect.gen(function* () {
               const { failed, last } = yield* poll()
               yield* Option.match(last, { onNone: () => Effect.void, onSome: taken })
-              const folded = yield* liveGames.latest
-              const slate = leagues.flatMap((league) =>
-                LiveGame.asFolded(folded.listed.get(league) ?? [], folded.live)
-              )
+              const slate = (yield* liveGames.latest).slate(leagues)
               yield* Effect.sleep(Cadence.interval(slate, yield* DateTime.now, failed.length > 0))
             })
           )

@@ -114,7 +114,7 @@ describe("LiveGames", () => {
       yield* taken(Delivery.Plays({ game: one, plays: [play()] }))
       assert.strictEqual((yield* liveGameOf(one)).plays.length, 1)
       const [first] = yield* Fiber.join(events)
-      assert.strictEqual(first?.game, one)
+      assert.strictEqual(first?.snapshot.id, one)
       assert.strictEqual(first?.event._tag, "Played")
       assert.strictEqual(yield* counted("sportal_plays", { league: "fbs" }), 1)
     }).pipe(Effect.provide(LiveGames.layer), withMetrics)
@@ -393,10 +393,10 @@ describe("LiveGames", () => {
           points: 7
         })
         assert.strictEqual(yield* counted("sportal_game_events", { game: "1", event: "ScoreChanged" }), 1)
-        const published: ReadonlyArray<{ readonly game: GameId; readonly event: GameEvent }> =
+        const published: ReadonlyArray<{ readonly snapshot: GameSnapshot; readonly event: GameEvent }> =
           yield* Fiber.join(events)
         assert.deepStrictEqual(
-          published.map(({ game, event }) => [game, event._tag]),
+          published.map((published) => [published.snapshot.id, published.event._tag]),
           [[one, "ScoreChanged"]]
         )
       }).pipe(Effect.provide(LiveGames.layer), Effect.provide(layer), withMetrics)
@@ -677,7 +677,7 @@ describe("LiveGames", () => {
         assert.deepStrictEqual(replayed, [])
         const taken = yield* eventsWhile(takenInTime(deliveries))
         assert.deepStrictEqual(
-          taken.map(({ game, event }) => [game, event._tag]),
+          taken.map((published) => [published.snapshot.id, published.event._tag]),
           [
             [one, "Played"],
             [one, "Played"]
@@ -776,7 +776,9 @@ function takenInTime(deliveries: ReadonlyArray<{ delivery: Delivery; at: DateTim
 function eventsWhile(run: Effect.Effect<void, never, LiveGames>) {
   return Effect.gen(function* () {
     const liveGames = yield* LiveGames
-    const seen = yield* Ref.make<ReadonlyArray<{ readonly game: GameId; readonly event: GameEvent }>>([])
+    const seen = yield* Ref.make<
+      ReadonlyArray<{ readonly snapshot: GameSnapshot; readonly event: GameEvent }>
+    >([])
     const subscriber = yield* liveGames.events.pipe(
       Stream.runForEach((published) => Ref.update(seen, (all) => [...all, published])),
       Effect.forkChild({ startImmediately: true })

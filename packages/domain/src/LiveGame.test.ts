@@ -1,7 +1,7 @@
 import { assert, describe, it } from "@effect/vitest"
 import { DateTime, Duration, Option } from "effect"
 import { Delivery, type DeliverySource } from "./Delivery.ts"
-import { GameId, type GameSnapshot } from "./Game.ts"
+import type { GameSnapshot } from "./Game.ts"
 import { GameEvent } from "./GameEvent.ts"
 import { LiveGame, LiveGameState } from "./LiveGame.ts"
 import { type Play, PlayId } from "./Play.ts"
@@ -297,36 +297,6 @@ describe("LiveGame#currencyChangesAt", () => {
   it("Live and Over: none", () => {
     assert.deepStrictEqual(liveGame.currencyChangesAt(later), Option.none())
     assert.deepStrictEqual(overGame.currencyChangesAt(later), Option.none())
-  })
-})
-
-describe("LiveGame.asFolded", () => {
-  const listed = [snapshot({ id: GameId.make("2") }), snapshot({ id: GameId.make("1") })]
-
-  it("each listed game in listed order, as its live game has it, or as listed when it has none", () => {
-    const games = LiveGame.asFolded(
-      listed,
-      new Map([
-        [
-          GameId.make("1"),
-          LiveGame.start(snapshot({ id: GameId.make("1"), status: "live", period: 2 }), "poll", t0)
-        ]
-      ])
-    )
-    assert.deepStrictEqual(
-      games.map((game) => [game.id, game.status]),
-      [
-        ["2", "scheduled"],
-        ["1", "live"]
-      ]
-    )
-  })
-  it("leaves off a live game no listing has", () => {
-    const games = LiveGame.asFolded(listed, new Map([[GameId.make("9"), liveGame]]))
-    assert.deepStrictEqual(
-      games.map((game) => game.id),
-      ["2", "1"]
-    )
   })
 })
 

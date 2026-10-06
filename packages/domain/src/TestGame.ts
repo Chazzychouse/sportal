@@ -1,8 +1,8 @@
-import { DateTime, Option } from "effect"
+import { DateTime, Effect, Option } from "effect"
 import { Delivery } from "./Delivery.ts"
 import { type Broadcast, GameId, GameSnapshot, Network } from "./Game.ts"
-import type { LeagueId } from "./League.ts"
-import { LiveGame } from "./LiveGame.ts"
+import { LeagueId } from "./League.ts"
+import type { LiveGames } from "./LiveGames.ts"
 import { Play, PlayId } from "./Play.ts"
 import { Situation } from "./Situation.ts"
 import { Team, TeamId } from "./Team.ts"
@@ -79,25 +79,22 @@ export function play(overrides: Partial<Play> = {}): Play {
 }
 
 /**
- * Each game on `slate`, polled at `now`, as a live game followed on from `previous`: taken, kept and judged again at
- * `now` when it is behind, or started when it is new. For tests that play a scenario poll by poll.
+ * `fold` after `slate` is polled at `now`: each league's games as one listing, as Ingest polls. For tests that play a
+ * scenario poll by poll.
  */
-export function followed(
-  previous: ReadonlyMap<GameId, LiveGame>,
-  slate: ReadonlyArray<GameSnapshot>,
-  now: DateTime.Utc
-): ReadonlyMap<GameId, LiveGame> {
-  return new Map(
-    slate.map((game) => [
-      game.id,
-      Option.match(Option.fromNullishOr(previous.get(game.id)), {
-        onNone: () => LiveGame.start(game, "poll", now),
-        onSome: (liveGame) =>
-          liveGame.take(Delivery.Snapshot({ snapshot: game, from: "poll" }), now).liveGame.pipe(
-            Option.orElse(() => liveGame.tick(now).liveGame),
-            Option.getOrElse(() => liveGame)
+export function polled(fold: LiveGames, slate: ReadonlyArray<GameSnapshot>, now: DateTime.Utc): LiveGames {
+  return Effect.runSync(
+    Effect.reduce(
+      LeagueId.literals,
+      () => fold,
+      (folded, league) =>
+        folded
+          .step(
+            Option.some(Delivery.Listing({ league, games: slate.filter((game) => game.league === league) })),
+            now,
+            Option.none()
           )
-      })
-    ])
+          .pipe(Effect.map(({ next }) => next))
+    )
   )
 }

@@ -1,7 +1,7 @@
 import { join } from "node:path"
 import { NodeServices } from "@effect/platform-node"
 import { assert, describe, it } from "@effect/vitest"
-import { GameId } from "@sportal/domain/Game"
+import { GameId, type GameSnapshot } from "@sportal/domain/Game"
 import type { GameEvent } from "@sportal/domain/GameEvent"
 import type { LiveGame } from "@sportal/domain/LiveGame"
 import { DateTime, Effect, Equal, Fiber, FileSystem, Option, Ref, Stream } from "effect"
@@ -177,7 +177,9 @@ const takenLive = Effect.gen(function* () {
   )
   const liveGames = yield* LiveGames
   const held = yield* Ref.make<ReadonlyArray<LiveGame>>([])
-  const events = yield* Ref.make<ReadonlyArray<{ readonly game: GameId; readonly event: GameEvent }>>([])
+  const events = yield* Ref.make<
+    ReadonlyArray<{ readonly snapshot: GameSnapshot; readonly event: GameEvent }>
+  >([])
   const subscriber = yield* liveGames.events.pipe(
     Stream.runForEach((published) => Ref.update(events, (seen) => [...seen, published])),
     Effect.forkChild({ startImmediately: true })

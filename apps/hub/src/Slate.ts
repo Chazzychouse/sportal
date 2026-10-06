@@ -1,8 +1,7 @@
 import type { GameSnapshot } from "@sportal/domain/Game"
 import { LeagueId } from "@sportal/domain/League"
-import { LiveGame } from "@sportal/domain/LiveGame"
-import { Watchability } from "@sportal/domain/Watchability"
-import { Context, DateTime, Effect, Layer, Option, Stream, SubscriptionRef } from "effect"
+import type { Watchability } from "@sportal/domain/Watchability"
+import { Context, DateTime, Effect, Layer, Stream, SubscriptionRef } from "effect"
 import { LiveGames } from "./LiveGames.ts"
 
 /**
@@ -36,20 +35,12 @@ export class Slate extends Context.Service<
       yield* Effect.forkScoped(
         liveGames.changes.pipe(
           Stream.debounce("250 millis"),
-          Stream.runForEach(({ listed, live }) =>
+          Stream.runForEach((folded) =>
             Effect.flatMap(DateTime.now, (now) => {
-              const slate = LiveGame.asFolded(
-                LeagueId.literals.flatMap((league) => listed.get(league) ?? []),
-                live
-              )
+              const slate = folded.slate(LeagueId.literals)
               return SubscriptionRef.set(state, {
                 slate,
-                watchability: slate.map((game) =>
-                  Option.match(Option.fromNullishOr(live.get(game.id)), {
-                    onNone: () => Watchability.initial(game, now),
-                    onSome: (liveGame) => liveGame.watchability
-                  })
-                )
+                watchability: slate.map((game) => folded.watchabilityOf(game, now))
               })
             })
           )

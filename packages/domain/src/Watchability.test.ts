@@ -2,12 +2,12 @@ import { readdirSync, readFileSync } from "node:fs"
 import { isDeepStrictEqual } from "node:util"
 import { assert, describe, it } from "@effect/vitest"
 import { Array as Arr, DateTime, Duration, Option, Schema } from "effect"
-import type { GameId, GameSnapshot } from "./Game.ts"
+import type { GameSnapshot } from "./Game.ts"
 import { GameEvent } from "./GameEvent.ts"
-import type { LiveGame } from "./LiveGame.ts"
+import { LiveGames } from "./LiveGames.ts"
 import { Scenario } from "./Scenario.ts"
 import { Situation } from "./Situation.ts"
-import { followed, play, situation, snapshot, team } from "./TestGame.ts"
+import { play, polled, situation, snapshot, team } from "./TestGame.ts"
 import { Watchability } from "./Watchability.ts"
 
 const now = DateTime.makeUnsafe("2026-10-03T20:00:00Z")
@@ -359,19 +359,17 @@ function played(scenario: Scenario) {
     {
       readonly now: DateTime.Utc
       readonly slate: ReadonlyArray<GameSnapshot>
-      readonly live: ReadonlyMap<GameId, LiveGame>
+      readonly fold: LiveGames
     }
-  >(scenario.frames, { now: scenario.origin, slate: [], live: new Map() }, (previous, frame) => {
+  >(scenario.frames, { now: scenario.origin, slate: [], fold: LiveGames.empty }, (previous, frame) => {
     const now = DateTime.addDuration(scenario.origin, Duration.millis(frame.at))
-    return { now, slate: frame.slate, live: followed(previous.live, frame.slate, now) }
+    return { now, slate: frame.slate, fold: polled(previous.fold, frame.slate, now) }
   })
     .slice(1)
-    .map(({ now, slate, live }) => ({
+    .map(({ now, slate, fold }) => ({
       now,
       slate,
-      watchability: slate.flatMap((game) =>
-        Option.toArray(Option.fromNullishOr(live.get(game.id)?.watchability))
-      )
+      watchability: slate.map((game) => fold.watchabilityOf(game, now))
     }))
 }
 

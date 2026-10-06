@@ -1,7 +1,7 @@
 import { assert, describe, it } from "@effect/vitest"
 import { Delivery } from "@sportal/domain/Delivery"
 import { GameId, type GameSnapshot } from "@sportal/domain/Game"
-import { LiveGame, LiveGameState } from "@sportal/domain/LiveGame"
+import { LiveGameState } from "@sportal/domain/LiveGame"
 import { snapshot, team } from "@sportal/domain/TestGame"
 import {
   Context,
@@ -575,8 +575,7 @@ function pollOf(games: ReadonlyArray<GameSnapshot>) {
 /** The fbs listing as the fold has it. */
 function slateOf() {
   return Effect.gen(function* () {
-    const folded = yield* (yield* LiveGames).latest
-    return LiveGame.asFolded(folded.listed.get("fbs") ?? [], folded.live)
+    return (yield* (yield* LiveGames).latest).slate(["fbs"])
   })
 }
 

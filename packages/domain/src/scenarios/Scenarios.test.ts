@@ -1,9 +1,8 @@
 import { assert, describe, it } from "@effect/vitest"
 import { DateTime, Duration } from "effect"
-import type { GameId } from "../Game.ts"
-import type { LiveGame } from "../LiveGame.ts"
+import { LiveGames } from "../LiveGames.ts"
 import type { Scenario } from "../Scenario.ts"
-import { followed } from "../TestGame.ts"
+import { polled } from "../TestGame.ts"
 import type { Watchability } from "../Watchability.ts"
 import { allLullsButOne } from "./AllLullsButOne.ts"
 import { blowoutAndUpsetBrewing } from "./BlowoutAndUpsetBrewing.ts"
@@ -71,11 +70,11 @@ describe("scenarios", () => {
  */
 function watched(scenario: Scenario, seconds: number) {
   const history = new Map<string, Array<readonly [number, Watchability]>>()
-  let live: ReadonlyMap<GameId, LiveGame> = new Map()
+  let fold = LiveGames.empty
   for (let second = 0; second <= seconds; second += 10) {
     const now = DateTime.makeUnsafe(DateTime.toEpochMillis(scenario.origin) + second * 1000)
-    live = followed(live, scenario.slateAt(scenario.origin, Duration.seconds(second)), now)
-    for (const { watchability: next } of live.values())
+    fold = polled(fold, scenario.slateAt(scenario.origin, Duration.seconds(second)), now)
+    for (const { watchability: next } of fold.live.values())
       history.set(next.game, [...(history.get(next.game) ?? []), [second, next] as const])
   }
   return (id: string, second: number) => history.get(id)?.find(([at]) => at === second)?.[1]
