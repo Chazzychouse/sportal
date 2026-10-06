@@ -5,7 +5,7 @@ import { Play } from "@sportal/domain/Play"
 import { Team, TeamId } from "@sportal/domain/Team"
 import { Array as Arr, DateTime, Effect, Metric, Option, Record, Result, Schema, Stream } from "effect"
 import type { Frame } from "../../feed/Frame.ts"
-import type { Provider } from "../Provider.ts"
+import { Decoded, type Provider } from "../Provider.ts"
 import * as EspnPayload from "./EspnPayload.ts"
 import * as EspnPlay from "./EspnPlay.ts"
 import * as EspnSnapshot from "./EspnSnapshot.ts"
@@ -60,7 +60,7 @@ type State = {
 }
 
 /** What one frame said, as `decode` gives it. */
-type Said = ReadonlyArray<Stream.Success<ReturnType<Provider["Service"]["decode"]>>>
+type Said = ReadonlyArray<Decoded>
 
 function listed(state: State, frame: Frame): Effect.Effect<readonly [State, Said]> {
   return Effect.all({ league: decodeLeague(frame.channel), scoreboard: decodeScoreboard(frame.body) }).pipe(
@@ -147,7 +147,7 @@ function pushed(state: State, frame: Frame): Effect.Effect<readonly [State, Said
             case "reset":
               return Effect.succeed([
                 moved,
-                [{ _tag: "Resync", channel: frame.channel, seq: frame.seq }]
+                [Decoded.Resync({ channel: frame.channel, seq: frame.seq })]
               ] as const)
           }
         }
@@ -158,7 +158,7 @@ function pushed(state: State, frame: Frame): Effect.Effect<readonly [State, Said
 }
 
 function delivered(frame: Frame, delivery: Delivery) {
-  return { _tag: "Delivered", delivery, at: frame.receivedAt, seq: frame.seq } as const
+  return Decoded.Delivered({ delivery, at: frame.receivedAt, seq: frame.seq })
 }
 
 /** The events as games; an event that does not decode is logged and counted, and the rest still delivered. */

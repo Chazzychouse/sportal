@@ -23,7 +23,7 @@ import {
 import { FeedLog } from "../feed/FeedLog.ts"
 import { LiveGames } from "../LiveGames.ts"
 import { LiveFeed } from "../provider/LiveFeed.ts"
-import { Provider } from "../provider/Provider.ts"
+import { type Decoded, Provider } from "../provider/Provider.ts"
 import * as Cadence from "./Cadence.ts"
 
 /**
@@ -51,7 +51,7 @@ export class Ingest extends Context.Service<Ingest, object>()("sportal/hub/Inges
 
         // Nothing a replayed frame says goes live: its deliveries go to the replay, and a resync is dropped, since no
         // socket follows a topic yet and one that does starts it from a fresh checkpoint anyway.
-        const route = (said: Stream.Success<ReturnType<Provider["Service"]["decode"]>>) =>
+        const route = (said: Decoded) =>
           Effect.flatMap(Ref.get(replayedUpTo), (last) =>
             said.seq <= last
               ? said._tag === "Delivered"
@@ -209,10 +209,7 @@ function stopping(exit: Exit.Exit<unknown, unknown>): boolean {
 }
 
 /** A delivery decoded from a replayed frame, on its way to the fold's replay. */
-type Replayed = Extract<
-  Stream.Success<ReturnType<Provider["Service"]["decode"]>>,
-  { readonly _tag: "Delivered" }
->
+type Replayed = Extract<Decoded, { readonly _tag: "Delivered" }>
 
 /**
  * Waits for the fold to have taken frame `seq`, so the Cadence reads the listing it gave. A frame that gives no

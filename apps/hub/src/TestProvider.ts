@@ -2,10 +2,10 @@ import { Delivery } from "@sportal/domain/Delivery"
 import { GameId, GameSnapshot } from "@sportal/domain/Game"
 import { LeagueId } from "@sportal/domain/League"
 import { snapshot } from "@sportal/domain/TestGame"
-import { DateTime, Effect, Layer, Option, Schema, Stream } from "effect"
+import { DateTime, Effect, Layer, Option, Ref, Schema, Stream } from "effect"
 import { Frame } from "./feed/Frame.ts"
 import { LiveFeed } from "./provider/LiveFeed.ts"
-import { Provider, ProviderError } from "./provider/Provider.ts"
+import { Decoded, Provider, ProviderError } from "./provider/Provider.ts"
 
 /** A live game `id` in `period`, at 10:00 on the clock. */
 export function game(id: string, period = 1) {
@@ -17,16 +17,21 @@ export function game(id: string, period = 1) {
  * `provider.poll` span. A `"fail"` response fails the poll, and an empty script fails every poll.
  */
 export function scripted(responses: ReadonlyArray<ReadonlyArray<GameSnapshot> | "fail">) {
-  let call = 0
-  return Layer.succeed(
+  return Layer.effect(
     Provider,
-    polling((league) => {
-      const response = responses[Math.min(call++, responses.length - 1)]
-      return (
-        response === "fail" || response === undefined
-          ? Effect.fail(new ProviderError({ league, cause: "down" }))
-          : Effect.succeed(response)
-      ).pipe(Effect.withSpan("provider.poll"))
+    Effect.gen(function* () {
+      const calls = yield* Ref.make(0)
+      return polling((league) =>
+        Ref.getAndUpdate(calls, (call) => call + 1).pipe(
+          Effect.flatMap((call) => {
+            const response = responses[Math.min(call, responses.length - 1)]
+            return response === "fail" || response === undefined
+              ? Effect.fail(new ProviderError({ league, cause: "down" }))
+              : Effect.succeed(response)
+          }),
+          Effect.withSpan("provider.poll")
+        )
+      )
     })
   )
 }
@@ -42,16 +47,13 @@ export function polling(
   return Provider.of({
     poll: (league) =>
       Effect.all({ games: games(league), receivedAt: DateTime.now }).pipe(
-        Effect.map(
-          ({ games, receivedAt }) =>
-            ({
-              receivedAt,
-              feed: "poll",
-              channel: league,
-              kind: "response",
-              body: encodeGames(games)
-            }) as const
-        )
+        Effect.map(({ games, receivedAt }) => ({
+          receivedAt,
+          feed: "poll",
+          channel: league,
+          kind: "response",
+          body: encodeGames(games)
+        }))
       ),
     decode: (frames) =>
       frames.pipe(
@@ -95,12 +97,9 @@ export function pushed(games: ReadonlyArray<GameSnapshot>, channel = "event-foot
   )
 }
 
-function said(
-  frame: Frame,
-  games: ReadonlyArray<GameSnapshot>
-): ReadonlyArray<Stream.Success<ReturnType<Provider["Service"]["decode"]>>> {
+function said(frame: Frame, games: ReadonlyArray<GameSnapshot>): ReadonlyArray<Decoded> {
   const delivered = (delivery: Delivery) =>
-    ({ _tag: "Delivered", delivery, at: frame.receivedAt, seq: frame.seq }) as const
+    Decoded.Delivered({ delivery, at: frame.receivedAt, seq: frame.seq })
   if (frame.feed === "poll") {
     return Option.match(decodeLeague(frame.channel), {
       onNone: () => [],
@@ -108,7 +107,7 @@ function said(
     })
   }
   return games.length === 0
-    ? [{ _tag: "Resync", channel: frame.channel, seq: frame.seq } as const]
+    ? [Decoded.Resync({ channel: frame.channel, seq: frame.seq })]
     : games.map((snapshot) => delivered(Delivery.Snapshot({ snapshot, from: "push" })))
 }
 
