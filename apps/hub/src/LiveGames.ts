@@ -48,11 +48,6 @@ export class LiveGames extends Context.Service<
     readonly events: Stream.Stream<{ readonly game: GameId; readonly event: GameEvent }>
   }
 >()("sportal/hub/LiveGames") {
-  /** Game `game`'s log annotations and metric attributes, read from `snapshot`. */
-  static annotationsOf(game: GameId, snapshot: GameSnapshot) {
-    return { game, league: snapshot.league, matchup: snapshot.matchup() }
-  }
-
   /** The fold, empty, with its timer running for as long as the layer's scope is open. */
   static readonly layer: Layer.Layer<LiveGames> = Layer.effect(
     LiveGames,
@@ -410,30 +405,30 @@ function reported(
             Metric.withAttributes(snapshots, {
               outcome,
               source: from,
-              ...LiveGames.annotationsOf(snapshot.id, snapshot)
+              ...annotationsOf(snapshot.id, snapshot)
             }),
             1
           )
         ),
-        Effect.annotateLogs(LiveGames.annotationsOf(snapshot.id, snapshot))
+        Effect.annotateLogs(annotationsOf(snapshot.id, snapshot))
       ),
     Started: ({ liveGame, at }) =>
       logLifecycle("started", liveGame, at).pipe(
         Effect.andThen(gaugeState(liveGame, stateValues[liveGame.state._tag])),
         Effect.andThen(gaugeWatchability(liveGame)),
-        Effect.annotateLogs(LiveGames.annotationsOf(liveGame.snapshot.id, liveGame.snapshot))
+        Effect.annotateLogs(annotationsOf(liveGame.snapshot.id, liveGame.snapshot))
       ),
     Changed: ({ before, after, at }) =>
       gaugeState(after, stateValues[after.state._tag]).pipe(
         Effect.andThen(logTransition(before, after, at)),
         Effect.andThen(gaugeWatchability(after)),
         Effect.andThen(before.watchability.lull === after.watchability.lull ? Effect.void : logLull(after)),
-        Effect.annotateLogs(LiveGames.annotationsOf(after.snapshot.id, after.snapshot))
+        Effect.annotateLogs(annotationsOf(after.snapshot.id, after.snapshot))
       ),
     Stopped: ({ liveGame, at }) =>
       logLifecycle("stopped", liveGame, at).pipe(
         Effect.andThen(gaugeState(liveGame, 0)),
-        Effect.annotateLogs(LiveGames.annotationsOf(liveGame.snapshot.id, liveGame.snapshot))
+        Effect.annotateLogs(annotationsOf(liveGame.snapshot.id, liveGame.snapshot))
       ),
     Happened: ({ snapshot, event }) =>
       logEvent(event, snapshot).pipe(
@@ -443,7 +438,7 @@ function reported(
             : Effect.void
         ),
         Effect.andThen(PubSub.publish(events, { game: snapshot.id, event })),
-        Effect.annotateLogs(LiveGames.annotationsOf(snapshot.id, snapshot))
+        Effect.annotateLogs(annotationsOf(snapshot.id, snapshot))
       ),
     Dropped: ({ game, reason }) =>
       Effect.logDebug(`LiveGames: plays for game ${game} dropped: ${reason}`).pipe(
@@ -452,6 +447,11 @@ function reported(
     Raised: ({ snapshot, cause, by }) =>
       logDefect(`LiveGames: ${by} raised a defect; keeping the last good live game`, cause, snapshot, seq)
   })
+}
+
+/** Game `game`'s log annotations and metric attributes, read from `snapshot`. */
+function annotationsOf(game: GameId, snapshot: GameSnapshot) {
+  return { game, league: snapshot.league, matchup: snapshot.matchup() }
 }
 
 /** A report as a replay tells it: only plays are counted for the summary, and a defect is still logged. */
@@ -487,7 +487,7 @@ function logDefect(
   return Effect.logError(message, cause).pipe(
     Effect.andThen(Metric.update(gameDefects, 1)),
     Effect.annotateLogs({
-      ...LiveGames.annotationsOf(snapshot.id, snapshot),
+      ...annotationsOf(snapshot.id, snapshot),
       snapshot: Exit.match(Schema.encodeExit(GameSnapshot)(snapshot), {
         onSuccess: (encoded) => encoded,
         onFailure: () => snapshot.id
@@ -499,13 +499,13 @@ function logDefect(
 
 function gaugeState(liveGame: LiveGame, value: number): Effect.Effect<void> {
   return Metric.update(
-    Metric.withAttributes(gameState, LiveGames.annotationsOf(liveGame.snapshot.id, liveGame.snapshot)),
+    Metric.withAttributes(gameState, annotationsOf(liveGame.snapshot.id, liveGame.snapshot)),
     value
   )
 }
 
 function gaugeWatchability(liveGame: LiveGame): Effect.Effect<void> {
-  const attributes = LiveGames.annotationsOf(liveGame.snapshot.id, liveGame.snapshot)
+  const attributes = annotationsOf(liveGame.snapshot.id, liveGame.snapshot)
   return Metric.update(
     Metric.withAttributes(watchabilityScore, attributes),
     liveGame.watchability.score
@@ -562,10 +562,7 @@ function logTransition(before: LiveGame, after: LiveGame, now: DateTime.Utc): Ef
         onSome: (duration) =>
           from === "Stale"
             ? Metric.update(
-                Metric.withAttributes(
-                  staleDuration,
-                  LiveGames.annotationsOf(after.snapshot.id, after.snapshot)
-                ),
+                Metric.withAttributes(staleDuration, annotationsOf(after.snapshot.id, after.snapshot)),
                 duration
               )
             : Effect.void
@@ -581,7 +578,7 @@ function logEvent(event: GameEvent, snapshot: GameSnapshot): Effect.Effect<void>
   return Effect.logInfo(`LiveGames: ${snapshot.matchup()}: ${_tag}${team} at ${gameTimeOf(snapshot)}`).pipe(
     Effect.andThen(
       Metric.update(
-        Metric.withAttributes(gameEvents, { ...LiveGames.annotationsOf(snapshot.id, snapshot), event: _tag }),
+        Metric.withAttributes(gameEvents, { ...annotationsOf(snapshot.id, snapshot), event: _tag }),
         1
       )
     ),

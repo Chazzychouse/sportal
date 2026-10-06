@@ -1,6 +1,6 @@
 import type { GameSnapshot } from "@sportal/domain/Game"
 import type { LeagueId } from "@sportal/domain/League"
-import { Context, Layer, Schema, Stream } from "effect"
+import { Context, Schema, type Stream } from "effect"
 import type { Frame } from "../feed/Frame.ts"
 
 /** A provider's push connection, carrying updates for live games between polls. */
@@ -18,13 +18,7 @@ export class LiveFeed extends Context.Service<
       resync: Stream.Stream<string>
     ): Stream.Stream<Omit<Frame, "seq">, LiveFeedError>
   }
->()("sportal/hub/LiveFeed") {
-  /** A live feed that never pushes. */
-  static readonly none: Layer.Layer<LiveFeed> = Layer.succeed(
-    LiveFeed,
-    LiveFeed.of({ frames: () => Stream.never })
-  )
-}
+>()("sportal/hub/LiveFeed") {}
 
 /** The live feed's connection could not continue: refused, closed, or silent. */
 export class LiveFeedError extends Schema.TaggedError<LiveFeedError>()("LiveFeedError", {

@@ -67,7 +67,7 @@ describe("a recorded game", () => {
   )
 
   it.effect(
-    "folds the same twice: the same live games, and the same events taken live",
+    "folds the same replayed as taken live, and the same twice: the same live games, and the same events",
     () =>
       Effect.gen(function* () {
         yield* appended(yield* frames)
@@ -79,6 +79,12 @@ describe("a recorded game", () => {
 
         const once = yield* takenLive
         const again = yield* takenLive
+        assert.isTrue(
+          Equal.equals(first.latest.live, once.latest.live),
+          "replay ends with the live games live did"
+        )
+        assert.isTrue(Equal.equals(first.latest.listed, once.latest.listed), "and the listings")
+        assert.isTrue(Equal.equals(first.held, once.held), "and holds the game as live did, change by change")
         assert.isTrue(Equal.equals(once.held, again.held))
         assert.isTrue(Equal.equals(once.events, again.events))
         assert.strictEqual(
@@ -86,6 +92,19 @@ describe("a recorded game", () => {
           recordedPlays,
           "each play is played once"
         )
+      }).pipe(Effect.provide([Database.layer(":memory:"), NodeServices.layer])),
+    { timeout: 60_000 }
+  )
+
+  it.effect(
+    "replayed from after its topic's checkpoint, still takes every play its patches add",
+    () =>
+      Effect.gen(function* () {
+        yield* appended(yield* frames)
+        // After the topic's checkpoint (16:44:55Z) and before the first play's patch (17:02:42Z), as a game day's
+        // start falls for a socket subscribed the night before.
+        const { held } = yield* replayedFrom(DateTime.makeUnsafe("2026-10-04T16:56:40Z"))
+        assert.strictEqual(held.at(-1)?.plays.length, recordedPlays)
       }).pipe(Effect.provide([Database.layer(":memory:"), NodeServices.layer])),
     { timeout: 60_000 }
   )
@@ -129,20 +148,27 @@ function appended(received: ReadonlyArray<Omit<Frame, "seq">>) {
 }
 
 /**
- * A fresh fold of the whole log, decoded as the Hub does on startup: its state at the end, and each live game NE at
- * BUF was held as, in order.
+ * A fresh fold of the log from `from`, decoded as the Hub does on startup: its state at the end, and each live game NE
+ * at BUF was held as, in order.
  */
-const replayed = Effect.gen(function* () {
-  const liveGames = yield* LiveGames
-  const held = yield* Ref.make<ReadonlyArray<LiveGame>>([])
-  yield* liveGames.replay(deliveriesOf(yield* FeedLog).pipe(Stream.tap(() => heldAs(held, liveGames))))
-  yield* heldAs(held, liveGames)
-  return { latest: yield* liveGames.latest, held: yield* Ref.get(held) }
-}).pipe(Effect.provide([LiveGames.layer, FeedLog.layer]))
+function replayedFrom(from: DateTime.Utc) {
+  return Effect.gen(function* () {
+    const liveGames = yield* LiveGames
+    const held = yield* Ref.make<ReadonlyArray<LiveGame>>([])
+    yield* liveGames.replay(
+      deliveriesOf(yield* FeedLog, from).pipe(Stream.tap(() => heldAs(held, liveGames)))
+    )
+    yield* heldAs(held, liveGames)
+    return { latest: yield* liveGames.latest, held: yield* Ref.get(held) }
+  }).pipe(Effect.provide([LiveGames.layer, FeedLog.layer]))
+}
+
+/** A fresh fold of the whole log, as `replayedFrom`. */
+const replayed = replayedFrom(DateTime.makeUnsafe(0))
 
 /**
- * A fresh fold of the whole log taken delivery by delivery, each once the test clock reaches it, as live: each live
- * game NE at BUF was held as, and every event published. The log is read first and closed, so the clock moves only
+ * A fresh fold of the whole log taken delivery by delivery, each once the test clock reaches it, as live: its state at
+ * the end, each live game NE at BUF was held as, and every event published. The log is read first and closed, so the clock moves only
  * the fold's timer.
  */
 const takenLive = Effect.gen(function* () {
@@ -168,12 +194,12 @@ const takenLive = Effect.gen(function* () {
   )
   yield* Effect.yieldNow
   yield* Fiber.interrupt(subscriber)
-  return { held: yield* Ref.get(held), events: yield* Ref.get(events) }
+  return { latest: yield* liveGames.latest, held: yield* Ref.get(held), events: yield* Ref.get(events) }
 }).pipe(Effect.provide(LiveGames.layer))
 
-/** Every frame in `log`, decoded by ESPN's decoder, as the deliveries it said. */
-function deliveriesOf(log: FeedLog["Service"]) {
-  return EspnDecode.decode(log.replay(DateTime.makeUnsafe(0))).pipe(
+/** Every frame in `log` replayed from `from` (all of them, unless given), decoded by ESPN's decoder, as the deliveries it said. */
+function deliveriesOf(log: FeedLog["Service"], from = DateTime.makeUnsafe(0)) {
+  return EspnDecode.decode(log.replay(from)).pipe(
     Stream.flatMap((said) =>
       said._tag === "Delivered"
         ? Stream.make({ delivery: said.delivery, at: said.at, seq: said.seq })

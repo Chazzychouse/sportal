@@ -14,13 +14,12 @@ import { FeedLog } from "../feed/FeedLog.ts"
 import { HubConfig } from "../HubConfig.ts"
 import { Ingest } from "../ingest/Ingest.ts"
 import { LiveGames } from "../LiveGames.ts"
-import { LiveFeed } from "../provider/LiveFeed.ts"
 import { Provider } from "../provider/Provider.ts"
 import { Slate } from "../Slate.ts"
 import * as SqlChannelStore from "../source/SqlChannelStore.ts"
 import * as YouTubeTv from "../source/youtube-tv/YouTubeTv.ts"
 import { StageSessions } from "../stage/StageSessions.ts"
-import { polling } from "../TestProvider.ts"
+import { neverPushing, polling } from "../TestProvider.ts"
 import * as HubServer from "./HubServer.ts"
 
 const espn = Network.make("ESPN")
@@ -310,7 +309,7 @@ function hubUnderTest() {
         Provider,
         polling(() => Effect.succeed([game]))
       ),
-      LiveFeed.none,
+      neverPushing,
       FeedLog.layer.pipe(Layer.provide(Database.layer(":memory:")))
     ]),
     Layer.provideMerge(testConfig())

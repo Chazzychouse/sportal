@@ -4,8 +4,11 @@ import { GameId, type GameSnapshot } from "@sportal/domain/Game"
 import { LiveGame, LiveGameState } from "@sportal/domain/LiveGame"
 import { snapshot, team } from "@sportal/domain/TestGame"
 import {
+  Context,
   DateTime,
+  Duration,
   Effect,
+  Exit,
   Layer,
   Metric,
   Option,
@@ -14,18 +17,20 @@ import {
   Result,
   Schedule,
   Schema,
+  Scope,
   Stream,
   type Tracer
 } from "effect"
-import type { SqlClient } from "effect/sql"
+import { SqlClient } from "effect/sql"
 import { TestClock } from "effect/testing"
 import * as Database from "../database/Database.ts"
 import { FeedLog } from "../feed/FeedLog.ts"
 import type { Frame } from "../feed/Frame.ts"
+import { GameHistory } from "../GameHistory.ts"
 import { LiveGames } from "../LiveGames.ts"
 import { LiveFeed, LiveFeedError } from "../provider/LiveFeed.ts"
 import { Provider, ProviderError } from "../provider/Provider.ts"
-import { game, polling, pushed, scripted } from "../TestProvider.ts"
+import { game, neverPushing, polling, pushed, scripted } from "../TestProvider.ts"
 import { counted, recordingLogs, recordingSpans, withMetrics } from "../TestTelemetry.ts"
 import { dayStart, Ingest } from "./Ingest.ts"
 
@@ -323,6 +328,38 @@ describe("Ingest", () => {
     }).pipe(Effect.provide(layer))
   })
 
+  it.live(
+    "closes within the feed log's shutdown bound, with every frame appended just before it written",
+    () =>
+      Effect.gen(function* () {
+        const sql = yield* SqlClient.SqlClient
+        // The live day's layers, as HubMode builds them, over a provider with one live game and no live feed.
+        const scope = yield* Scope.make()
+        const services = yield* Layer.buildWithScope(
+          Layer.effectDiscard(Layer.build(GameHistory.layer)).pipe(
+            Layer.provideMerge(over(scripted([[liveGame(0)]])))
+          ),
+          scope
+        )
+        const log = Context.get(services, FeedLog)
+        // Far more than the 100 ms the writer could be behind by when the Hub stops.
+        yield* Effect.forEach(
+          Array.from({ length: 200 }, (_, index) => index),
+          (index) => Effect.flatMap(pushed([liveGame(index)]), log.append),
+          { discard: true }
+        )
+
+        const [took] = yield* Effect.timed(Scope.close(scope, Exit.void))
+
+        assert.isBelow(Duration.toMillis(took), Duration.toMillis(Duration.seconds(1)))
+        const [row] = yield* sql<{ count: number }>`
+          SELECT COUNT(*) AS count FROM feed_frame WHERE feed = 'fastcast'
+        `
+        assert.strictEqual(row?.count, 200)
+      }).pipe(Effect.provide(Database.layer(":memory:"))),
+    10_000
+  )
+
   it.effect(
     "replays the day's logged frames into the fold before it is built, quietly, then appends after them",
     () => {
@@ -440,7 +477,7 @@ function over(
     Layer.provideMerge(Layer.mergeAll(LiveGames.layer, options.feedLog ?? FeedLog.layer)),
     Layer.provide([
       provider,
-      Layer.succeed(LiveFeed, options.liveFeed ?? LiveFeed.of({ frames: () => Stream.never }))
+      options.liveFeed === undefined ? neverPushing : Layer.succeed(LiveFeed, options.liveFeed)
     ]),
     Layer.provideMerge(recordingSpans(options.ended ?? []))
   )

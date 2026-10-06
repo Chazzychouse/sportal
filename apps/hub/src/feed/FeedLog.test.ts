@@ -92,6 +92,37 @@ describe("FeedLog", () => {
   )
 
   it.effect(
+    "starts each topic from its latest checkpoint before the given instant, with the topic's frames after it",
+    () =>
+      Effect.gen(function* () {
+        const log = yield* FeedLog
+        const appended = yield* Effect.forEach(
+          [
+            checkpoint("gp-football-nfl-1", "first", 0, 1),
+            poll("nfl", "slate", 10),
+            checkpoint("gp-football-nfl-1", "latest", 20, 2),
+            message("gp-football-nfl-1", "patch", 30, 3),
+            checkpoint("gp-football-nfl-2", "only", 40, 1),
+            message("event-football-nfl", "no checkpoint", 50, 9),
+            message("gp-football-nfl-1", "after", 500, 4),
+            poll("nfl", "slate", 600)
+          ],
+          log.append
+        )
+        yield* TestClock.adjust("100 millis")
+        yield* written(8)
+
+        assert.deepStrictEqual(yield* Stream.runCollect(log.replay(at(500))), [
+          appended[2],
+          appended[3],
+          appended[4],
+          appended[6],
+          appended[7]
+        ])
+      }).pipe(Effect.provide(feedLog))
+  )
+
+  it.effect(
     "keeps appending through a failed write, and logs the lost frames as a gap before the next",
     () => {
       const { logs, layer: logged } = recordingLogs()
@@ -120,7 +151,7 @@ describe("FeedLog", () => {
     }
   )
 
-  it.effect("records a gap left at close, which a replay then warns of", () => {
+  it.effect("records a gap left at close, which a replay then warns of, and numbers on past it", () => {
     const { logs, layer: logged } = recordingLogs()
     return Effect.gen(function* () {
       const failures = yield* Ref.make(0)
@@ -137,6 +168,8 @@ describe("FeedLog", () => {
       yield* Effect.gen(function* () {
         const log = yield* FeedLog
         assert.deepStrictEqual(yield* Stream.runCollect(log.replay(at(0))), [])
+        // The gap row holds the last lost seq, so reopening numbers on past every lost frame.
+        assert.strictEqual((yield* log.append(message("socket", "kept", 200, 3))).seq, 3)
       }).pipe(Effect.provide(FeedLog.layer))
       const warnings = logs.filter((entry) => entry.level === "Warn")
       assert.strictEqual(warnings.length, 1)

@@ -22,7 +22,9 @@ export class GameHistory extends Context.Service<
    * gets its latest snapshot written (a final game is often only listed), plus any live game not listed; plays come
    * from live games only. A game that leaves `live` and is never listed again keeps its last written snapshot. Only the
    * latest snapshot is kept: the changes are sampled by the batch, so a per-status history could not be rebuilt from
-   * the feed log. A write that fails is logged and counted, and the next change writes what it missed.
+   * the feed log. A write that fails is logged and counted, and the next change writes what it missed. After a crash
+   * the history may hold seqs the feed log never wrote, which a reopened log numbers again; it is rebuilt by deleting
+   * its tables and replaying the log.
    */
   static readonly layer: Layer.Layer<GameHistory, never, SqlClient.SqlClient | LiveGames> = Layer.effect(
     GameHistory,

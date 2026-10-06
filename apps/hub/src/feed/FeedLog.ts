@@ -41,7 +41,11 @@ export class FeedLog extends Context.Service<
      * order, however late it is run.
      */
     readonly subscribe: Effect.Effect<Stream.Stream<Frame>, never, Scope.Scope>
-    /** Every logged frame received at or after `from`, in `seq` order, an unchanged poll with its channel's last body. */
+    /**
+     * Every logged frame received at or after `from`, in `seq` order, an unchanged poll with its channel's last body.
+     * Each topic starts from its latest checkpoint before then: that checkpoint and the topic's frames after it come
+     * first, in `seq` order, so a patch after `from` applies to the document it was sent against.
+     */
     replay(from: DateTime.Utc): Stream.Stream<Frame>
   }
 >()("sportal/hub/FeedLog") {
@@ -196,7 +200,7 @@ export class FeedLog extends Context.Service<
         Effect.forkScoped
       )
       // Added after the writer is forked, so it runs first on close: the frames still queued are written before the
-      // writer would be interrupted, as long as that fits the Hub's shutdown bound.
+      // writer would be interrupted, for at most `shutdownBound`, the feed log's share of the Hub's shutdown bound.
       yield* Effect.addFinalizer(() =>
         Queue.end(pending).pipe(
           Effect.andThen(Fiber.join(writer)),
@@ -214,6 +218,19 @@ export class FeedLog extends Context.Service<
         Result: Schema.Struct({ seq: Schema.NullOr(Schema.Int) }),
         execute: (receivedAt) =>
           sql`SELECT MIN(seq) AS seq FROM feed_frame WHERE received_at >= ${receivedAt}`
+      })
+      // Each topic's latest checkpoint before `first`, and that topic's frames after it and before `first`.
+      const lookback = SqlSchema.findAll({
+        Request: Schema.Int,
+        Result: Stored,
+        execute: (first) => sql`
+          SELECT f.seq, f.received_at, f.sent_at, f.source_id, f.feed, f.channel, f.kind, f.body
+          FROM feed_frame f JOIN (
+            SELECT channel, MAX(seq) AS since FROM feed_frame
+            WHERE kind = 'checkpoint' AND seq < ${first} GROUP BY channel
+          ) c ON f.channel = c.channel AND f.seq >= c.since
+          WHERE f.seq < ${first} ORDER BY f.seq
+        `
       })
       const page = SqlSchema.findAll({
         Request: Schema.Int,
@@ -245,11 +262,15 @@ export class FeedLog extends Context.Service<
           Effect.map(firstAt(DateTime.toEpochMillis(from)), ({ seq }) =>
             seq === null
               ? Stream.empty
-              : Stream.paginate(seq - 1, (after) =>
-                  Effect.map(page(after), (rows) => [
-                    rows,
-                    rows.length < pageSize ? Option.none() : Option.map(Arr.last(rows), (row) => row.seq)
-                  ])
+              : Stream.fromIterableEffect(lookback(seq)).pipe(
+                  Stream.concat(
+                    Stream.paginate(seq - 1, (after) =>
+                      Effect.map(page(after), (rows) => [
+                        rows,
+                        rows.length < pageSize ? Option.none() : Option.map(Arr.last(rows), (row) => row.seq)
+                      ])
+                    )
+                  )
                 )
           )
         ).pipe(
@@ -302,7 +323,7 @@ type Writer = Data.TaggedEnum<{
 }>
 const Writer = Data.taggedEnum<Writer>()
 
-const shutdownBound = "3 seconds"
+const shutdownBound = "1 second"
 const pageSize = 512
 
 /** A frame as `feed_frame` keeps it, its body still raw. */
@@ -394,10 +415,13 @@ function absentWhenNull<S extends Schema.Top>(schema: S) {
   )
 }
 
-/** The row that stands in `feed_frame` for the frames a failed write lost. */
+/**
+ * The row that stands in `feed_frame` for the frames a failed write lost, at the last lost `seq`, so a log reopened
+ * after it continues past them.
+ */
 function gapRow({ from, to, count, receivedAt }: Extract<Writer, { _tag: "Behind" }>) {
   return Effect.map(Gzip.compress(JSON.stringify({ from, to, count })), (body) => ({
-    seq: from,
+    seq: to,
     received_at: DateTime.toEpochMillis(receivedAt),
     sent_at: null,
     source_id: null,

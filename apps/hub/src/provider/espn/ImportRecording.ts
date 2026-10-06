@@ -1,6 +1,4 @@
-import { join, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
-import { parseArgs } from "node:util"
 import { NodeRuntime, NodeServices } from "@effect/platform-node"
 import type { LeagueId } from "@sportal/domain/League"
 import {
@@ -9,12 +7,14 @@ import {
   Effect,
   FileSystem,
   Option,
+  Path,
   Schema,
   SchemaGetter,
   SchemaIssue,
   Stream,
   Struct
 } from "effect"
+import { Command, Flag } from "effect/cli"
 import { Frame } from "../../feed/Frame.ts"
 import * as Gzip from "../../feed/Gzip.ts"
 import * as CutScenario from "./CutScenario.ts"
@@ -32,7 +32,7 @@ import * as FastCastDocument from "./FastCastDocument.ts"
 export const importRecording = (options: {
   recording: string
   games: ReadonlyArray<string>
-}): Stream.Stream<Omit<Frame, "seq">, ImportFailed, FileSystem.FileSystem> =>
+}): Stream.Stream<Omit<Frame, "seq">, ImportFailed, FileSystem.FileSystem | Path.Path> =>
   Stream.unwrap(
     Effect.gen(function* () {
       const league = yield* Option.match(CutScenario.leagueOf(options.recording), {
@@ -43,6 +43,7 @@ export const importRecording = (options: {
         onSome: Effect.succeed
       })
       const fs = yield* FileSystem.FileSystem
+      const { join } = yield* Path.Path
       const scoreboards = join(options.recording, "scoreboard")
       const polls = (yield* fs.readDirectory(scoreboards).pipe(Effect.mapError(failed(scoreboards))))
         .flatMap((file) =>
@@ -264,26 +265,32 @@ const encodeReceived = Schema.encodeEffect(Received)
 
 // As a script: pnpm --filter @sportal/hub feed:import --recording <dir> [--games id,…] --out <file.jsonl.gz>
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const { values } = parseArgs({
-    options: { recording: { type: "string" }, games: { type: "string" }, out: { type: "string" } }
-  })
-  if (values.recording === undefined || values.out === undefined) {
-    console.error("Usage: feed:import --recording <dir> [--games id,…] --out <file.jsonl.gz>")
-    process.exitCode = 1
-  } else {
-    // pnpm runs scripts in the package; relative paths are the caller's.
-    const cwd = process.env.INIT_CWD ?? process.cwd()
-    const out = resolve(cwd, values.out)
-    Effect.gen(function* () {
-      const frames = importRecording({
-        recording: resolve(cwd, values.recording ?? ""),
-        games: (values.games ?? "").split(",").filter((game) => game.length > 0)
+  const command = Command.make(
+    "feed:import",
+    {
+      recording: Flag.String("recording").pipe(Flag.withDescription("The recorded day's league folder")),
+      games: Flag.String("games").pipe(
+        Flag.withDescription("Comma-separated game ids to keep; every game when left out"),
+        Flag.withDefault("")
+      ),
+      out: Flag.String("out").pipe(Flag.withDescription("The .jsonl.gz file to write"))
+    },
+    (values) =>
+      Effect.gen(function* () {
+        const path = yield* Path.Path
+        // pnpm runs scripts in the package; relative paths are the caller's.
+        const cwd = process.env.INIT_CWD ?? process.cwd()
+        const out = path.resolve(cwd, values.out)
+        const frames = importRecording({
+          recording: path.resolve(cwd, values.recording),
+          games: values.games.split(",").filter((game) => game.length > 0)
+        })
+        const count = yield* writeFrames(frames, out)
+        const { size } = yield* (yield* FileSystem.FileSystem).stat(out)
+        yield* Effect.logInfo(
+          `ImportRecording: wrote ${out}: ${count} frames, ${Math.round(Number(size) / 1024)} KB`
+        )
       })
-      const count = yield* writeFrames(frames, out)
-      const { size } = yield* (yield* FileSystem.FileSystem).stat(out)
-      yield* Effect.logInfo(
-        `ImportRecording: wrote ${out}: ${count} frames, ${Math.round(Number(size) / 1024)} KB`
-      )
-    }).pipe(Effect.provide(NodeServices.layer), NodeRuntime.runMain)
-  }
+  )
+  Command.run(command, { version: "0.0.0" }).pipe(Effect.provide(NodeServices.layer), NodeRuntime.runMain)
 }

@@ -4,6 +4,7 @@ import { LeagueId } from "@sportal/domain/League"
 import { snapshot } from "@sportal/domain/TestGame"
 import { DateTime, Effect, Layer, Option, Schema, Stream } from "effect"
 import { Frame } from "./feed/Frame.ts"
+import { LiveFeed } from "./provider/LiveFeed.ts"
 import { Provider, ProviderError } from "./provider/Provider.ts"
 
 /** A live game `id` in `period`, at 10:00 on the clock. */
@@ -61,6 +62,12 @@ export function polling(
       )
   })
 }
+
+/** A live feed that never pushes. */
+export const neverPushing: Layer.Layer<LiveFeed> = Layer.succeed(
+  LiveFeed,
+  LiveFeed.of({ frames: () => Stream.never })
+)
 
 /** The games one poll of `league` lists, as the provider decodes it. */
 export function listedBy(league: LeagueId) {
