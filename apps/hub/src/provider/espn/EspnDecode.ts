@@ -30,7 +30,7 @@ export const decode: Provider["Service"]["decode"] = (frames) =>
   )
 
 /** The snapshots in one ESPN scoreboard; an event that does not decode is skipped, logged, and counted. */
-export function slateOf(
+function slateOf(
   league: LeagueId,
   scoreboard: typeof Scoreboard.Type
 ): Effect.Effect<ReadonlyArray<GameSnapshot>> {
@@ -38,7 +38,7 @@ export function slateOf(
 }
 
 /** The site scoreboard as polled: its events, each read by `EspnEvent`. */
-export const Scoreboard = Schema.Struct({ events: Schema.Array(Schema.Unknown) })
+const Scoreboard = Schema.Struct({ events: Schema.Array(Schema.Unknown) })
 
 /**
  * Each league's last listing, the FastCast topics' documents, the unknown play types already logged, and the plays

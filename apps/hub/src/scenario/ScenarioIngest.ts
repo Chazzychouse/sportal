@@ -1,8 +1,6 @@
-import { join } from "node:path"
-import { fileURLToPath } from "node:url"
 import { Delivery } from "@sportal/domain/Delivery"
 import { LeagueId } from "@sportal/domain/League"
-import { Array as Arr, DateTime, Duration, Effect, FileSystem, Layer, Option, Schema } from "effect"
+import { Array as Arr, DateTime, Duration, Effect, FileSystem, Layer, Option, Path, Schema } from "effect"
 import * as Cadence from "../ingest/Cadence.ts"
 import { LiveGames } from "../LiveGames.ts"
 import { Scenario } from "./Scenario.ts"
@@ -14,7 +12,7 @@ import { scenarios } from "./written/Scenarios.ts"
  * when it was written. That is scenario time when the Hub runs on the scenario clock. Nothing is logged. `name` is a
  * written scenario's, or a recorded slice's in `from`.
  */
-export const layer = (name: string, from: string = folder) =>
+export const layer = (name: string, from: string = Scenario.folder) =>
   Layer.effectDiscard(
     Effect.gen(function* () {
       const scenario = yield* load(name, from)
@@ -51,15 +49,13 @@ export const layer = (name: string, from: string = folder) =>
     })
   )
 
-/** Where recorded slices are kept: `fixtures/scenarios/` at the repository's root. */
-export const folder = fileURLToPath(new URL("../../../../fixtures/scenarios/", import.meta.url))
-
 /** A written scenario by name, or else a slice in `from`. Only a listed name is read, so no name reaches a path. */
 function load(name: string, from: string) {
   return Effect.gen(function* () {
     const written = scenarios.get(name)
     if (written !== undefined) return written
     const fs = yield* FileSystem.FileSystem
+    const { join } = yield* Path.Path
     const recorded = (yield* fs.exists(from))
       ? (yield* fs.readDirectory(from))
           .filter((file) => file.endsWith(".json"))

@@ -57,7 +57,7 @@ describe("ScenarioIngest", () => {
   it.effect("plays every slice committed in the folder", () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem
-      const names = (yield* fs.readDirectory(ScenarioIngest.folder))
+      const names = (yield* fs.readDirectory(Scenario.folder))
         .filter((file) => file.endsWith(".json"))
         .map((file) => file.slice(0, -".json".length))
       assert.isAbove(names.length, 0)

@@ -18,7 +18,7 @@ import { Command, Flag } from "effect/cli"
 import { Frame } from "../feed-log/Frame.ts"
 import * as Gzip from "../feed-log/Gzip.ts"
 import * as FastCastMessage from "../provider/espn/FastCastMessage.ts"
-import * as CutScenario from "./CutScenario.ts"
+import * as Recording from "./Recording.ts"
 
 /**
  * A recorded day as frames: each `gp-` topic seeded with an empty checkpoint, its patch batches as messages, and the
@@ -32,29 +32,16 @@ import * as CutScenario from "./CutScenario.ts"
 export const importRecording = (options: {
   recording: string
   games: ReadonlyArray<string>
-}): Stream.Stream<Omit<Frame, "seq">, ImportFailed, FileSystem.FileSystem | Path.Path> =>
+}): Stream.Stream<
+  Omit<Frame, "seq">,
+  ImportFailed | Recording.RecordingUnreadable,
+  FileSystem.FileSystem | Path.Path
+> =>
   Stream.unwrap(
     Effect.gen(function* () {
-      const league = yield* Option.match(CutScenario.leagueOf(options.recording), {
-        onNone: () =>
-          Effect.fail(
-            new ImportFailed({ reason: `${options.recording} is not a college-football or nfl recording` })
-          ),
-        onSome: Effect.succeed
-      })
       const fs = yield* FileSystem.FileSystem
       const { join } = yield* Path.Path
-      const scoreboards = join(options.recording, "scoreboard")
-      const polls = (yield* fs.readDirectory(scoreboards).pipe(Effect.mapError(failed(scoreboards))))
-        .flatMap((file) =>
-          Option.toArray(
-            Option.map(CutScenario.instantOf(file), (receivedAt) => ({
-              path: join(scoreboards, file),
-              receivedAt
-            }))
-          )
-        )
-        .sort((a, b) => DateTime.toEpochMillis(a.receivedAt) - DateTime.toEpochMillis(b.receivedAt))
+      const polls = yield* Recording.polls(options.recording)
       const kept = (tc: string) =>
         Option.exists(
           FastCastMessage.owner(tc),
@@ -69,7 +56,7 @@ export const importRecording = (options: {
             options.games.length === 0 ? Effect.succeed(body) : trimmed(body, options.games)
           ),
           Effect.mapError(failed(poll.path)),
-          Effect.map((body) => polled(league, poll.receivedAt, body))
+          Effect.map((body) => polled(poll.league, poll.at, body))
         )
 
       const socket = join(options.recording, "fastcast.jsonl")
@@ -87,7 +74,7 @@ export const importRecording = (options: {
           () => polls,
           (waiting, frame) => {
             const [due, later] = Arr.span(waiting, (poll) =>
-              DateTime.isLessThanOrEqualTo(poll.receivedAt, frame.receivedAt)
+              DateTime.isLessThanOrEqualTo(poll.at, frame.receivedAt)
             )
             return [later, [...due.map(response), Effect.succeed(frame)]] as const
           },
@@ -114,9 +101,9 @@ export function readFrames(
 
 /** Writes `frames` to `path` as gzip'd JSON lines, one encoded frame each, for `readFrames`. */
 export function writeFrames<R>(
-  frames: Stream.Stream<Omit<Frame, "seq">, ImportFailed, R>,
+  frames: Stream.Stream<Omit<Frame, "seq">, ImportFailed | Recording.RecordingUnreadable, R>,
   path: string
-): Effect.Effect<number, ImportFailed, R | FileSystem.FileSystem> {
+): Effect.Effect<number, ImportFailed | Recording.RecordingUnreadable, R | FileSystem.FileSystem> {
   return Effect.gen(function* () {
     const lines = yield* frames.pipe(
       Stream.mapEffect((frame) => encodeReceived(frame).pipe(Effect.mapError(failed(path)))),

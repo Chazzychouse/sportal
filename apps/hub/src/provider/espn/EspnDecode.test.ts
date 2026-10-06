@@ -138,9 +138,9 @@ describe("EspnDecode", () => {
   it.effect("the checkpoint and every message after it end each live game where the scoreboard had it", () =>
     Effect.gen(function* () {
       const pushed = lastPushed(yield* decoded([poll("nfl", scoreboardBody), ...recorded(socketTexts)]))
-      const polled = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(EspnDecode.Scoreboard))(
-        scoreboardBody
-      ).pipe(Effect.flatMap((board) => EspnDecode.slateOf("nfl", board)))
+      const polled = (yield* decoded([poll("nfl", scoreboardBody)])).flatMap(({ delivery }) =>
+        delivery._tag === "Listing" ? delivery.games : []
+      )
       const live = polled.filter((game) => game.progress() === "live")
 
       assert.strictEqual(live.length, 8)

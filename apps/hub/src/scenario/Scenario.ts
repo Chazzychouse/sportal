@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url"
 import { GameId, GameSnapshot, type GameStatus } from "@sportal/domain/Game"
 import type { LeagueId } from "@sportal/domain/League"
 import { Situation } from "@sportal/domain/Situation"
@@ -15,6 +16,9 @@ export class Scenario extends Schema.Class<Scenario>("sportal/Scenario")({
   /** The whole slate `at` milliseconds after the scenario starts, in order of `at`, the first at 0. */
   frames: Schema.Array(Schema.Struct({ at: Schema.Int, slate: Schema.Array(GameSnapshot) }))
 }) {
+  /** Where recorded slices are kept: `fixtures/scenarios/` at the repository's root. */
+  static readonly folder = fileURLToPath(new URL("../../../../fixtures/scenarios/", import.meta.url))
+
   /**
    * A scenario written as games and the changes to each from an offset in scenario time ("m:ss" or "h:mm:ss";
    * a kickoff may be negative, for a game already under way). It starts at 2026-10-03 16:00 UTC. Each game is

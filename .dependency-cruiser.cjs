@@ -24,15 +24,26 @@ module.exports = {
     {
       name: "provider-payloads-are-private",
       comment:
-        "A provider's or source's wire vocabulary stays inside its folder (the recording tools read the providers' recordings).",
+        "A provider's or source's wire vocabulary stays inside its folder; the recording tools read ESPN's recordings.",
       severity: "error",
       from: { pathNot: "^apps/hub/src/((provider|source)/([^/]+)/|recording/)" },
       to: { path: "^apps/hub/src/(provider|source)/[^/]+/([^/]*Payload|FastCastMessage)\\.ts$" }
     },
     {
+      name: "recording-reads-only-espn",
+      comment:
+        "The recording tools may import ESPN's provider and nothing else that names an adapter or its payloads.",
+      severity: "error",
+      from: { path: "^apps/hub/src/recording/" },
+      to: {
+        path: "^apps/hub/src/(provider/[^/]+/|source/[^/]+/|scenario/Scenario(Ingest|Source|Clock)\\.ts$)",
+        pathNot: "^apps/hub/src/provider/espn/"
+      }
+    },
+    {
       name: "only-hub-mode-names-adapters",
       comment:
-        "Only HubMode, the recording tools, and tests know which concrete providers and sources exist; main.ts names only the database.",
+        "Only HubMode, the recording tools (which reach ESPN's provider alone), and tests know which concrete providers and sources exist; main.ts names only the database.",
       severity: "error",
       from: {
         path: "^apps/hub/src/",

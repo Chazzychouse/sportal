@@ -53,6 +53,8 @@ Every exported type name must be a term here.
 | **ESPN event** | One game as either ESPN feed spells it, the polled site scoreboard or a FastCast scoreboard topic, read as a GameSnapshot; `EspnEvent` in code. | payload, DTO |
 | **Topic owner** | What a live feed topic carries: one league's scoreboard, or one game's plays; `Owner` in code. | subscription |
 | **Live feed error** | The live feed's connection could not continue: refused, closed, or silent. | |
+| **Recording** | A day of one league's raw polls and socket lines kept by the spike's recorders, which the dev tools cut into a scenario or import into the feed log. Not the feed log, which the Hub keeps itself. | feed log |
+| **Recording unreadable** | A recording's folder is no league's, or its polls could not be listed; `RecordingUnreadable` in code. | |
 | **Ingest** | The Hub's loop that replays the day from the feed log into the live games, then polls providers and runs the live feed, appending every frame to the log and folding what each says into the live games. | poller, sync, fetcher |
 | **Cadence** | How long Ingest waits between polls, given what the last poll saw. | interval, rate |
 | **Source** | A way you obtain **video** (YouTube TV). | provider, service |
@@ -73,7 +75,7 @@ Every exported type name must be a term here.
 | **Database** | The Hub's SQLite database. Each store migrates its own tables in it. | store, persistence |
 | **Game history** | Past plays and each game's latest snapshot, derived from the fold into the Hub's database. Rebuildable from the feed log. | archive, stats |
 | **Game history error** | The game history could not read. | database error |
-| **Feed log** | Every frame the feeds delivered, raw, in the order the Hub received it. The truth the Hub's game state is folded from. | event store, journal, recording |
+| **Feed log** | Every frame the feeds delivered, raw, in the order the Hub received it. The truth the Hub's game state is folded from. | event store, journal |
 | **Frame** | One thing a feed delivered: a poll response, a FastCast message, or a FastCast checkpoint. | message, payload |
 | **Live channel URL** | A source's address for a channel, reduced to the one that plays it live. | canonical URL |
 | **Stream** | One playing instance of a game from a source. | feed, video |
