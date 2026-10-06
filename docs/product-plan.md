@@ -1,7 +1,7 @@
-# Sportal — Product Plan (draft 2)
+# Sportal — Product Plan
 
 > A web application for **tracking** live football and **multi-viewing** several games at once.
-> Draft 2 folds in the first review's answers; see [Decisions](#8-decisions-from-review-1). Architecture lives in [technical-spec.md](./technical-spec.md).
+> The first review's answers are in [Decisions](#8-decisions-from-review-1). Architecture lives in [technical-spec.md](./technical-spec.md).
 
 ## 1. Vision
 
