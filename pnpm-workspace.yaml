@@ -7,3 +7,13 @@ allowBuilds:
   lefthook: true
 # Scripts use `VAR=x cmd` and `${VAR:-default}`, which cmd and PowerShell cannot run.
 shellEmulator: true
+# dependency-cruiser parses through the TypeScript JS API, which TS 7.0 does not ship. Drop this once it
+# supports TS 7.1.
+packageExtensions:
+  dependency-cruiser:
+    dependencies:
+      typescript: ^6
+# Effect is the core library and its releases are tracked on purpose; every other package waits out the
+# default release age.
+minimumReleaseAgeExclude:
+  - "@effect/*"
