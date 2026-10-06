@@ -1,6 +1,7 @@
 import { NodeSocket } from "@effect/platform-node"
 import { Effect, Layer, Option } from "effect"
 import { FeedLog } from "./feed/FeedLog.ts"
+import { GameHistory } from "./GameHistory.ts"
 import { HubConfig } from "./HubConfig.ts"
 import { Ingest } from "./ingest/Ingest.ts"
 import { LiveGames } from "./LiveGames.ts"
@@ -34,6 +35,8 @@ function live() {
   return Layer.mergeAll(
     Layer.mergeAll(
       Slate.layer,
+      // Nothing reads the history yet; it only follows the fold.
+      Layer.effectDiscard(Layer.build(GameHistory.layer)),
       Ingest.layer(leagues).pipe(
         Layer.provide([
           EspnProvider.layer,
