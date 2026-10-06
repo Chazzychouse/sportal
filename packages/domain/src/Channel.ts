@@ -1,4 +1,4 @@
-import { Data, type DateTime, Option, Schema } from "effect"
+import { Array as Arr, Data, type DateTime, Option, Schema } from "effect"
 import { type GameSnapshot, Network } from "./Game.ts"
 import { StreamLocator } from "./Stream.ts"
 
@@ -31,15 +31,22 @@ export class ChannelLineup extends Schema.Class<ChannelLineup>("sportal/ChannelL
    * otherwise the first network with no carriage recorded is the one to pick next.
    */
   availabilityOf(game: GameSnapshot): ChannelAvailability {
-    for (const { network } of game.broadcasts) {
+    return Arr.findFirst(game.broadcasts, ({ network }) => {
       const carriage = this.carriageOf(network)
-      if (carriage?._tag === "Carried")
-        return ChannelAvailability.Carried({ channel: carriage.channel, learnedFor: Option.some(network) })
-    }
-    const unlearned = game.broadcasts.find(({ network }) => this.carriageOf(network) === undefined)
-    return unlearned === undefined
-      ? ChannelAvailability.NotCarried({ why: "NoStream" })
-      : ChannelAvailability.Unlearned({ network: unlearned.network, source: this.source, guide: this.guide })
+      return carriage?._tag === "Carried"
+        ? Option.some(
+            ChannelAvailability.Carried({ channel: carriage.channel, learnedFor: Option.some(network) })
+          )
+        : Option.none()
+    }).pipe(
+      Option.orElse(() =>
+        Option.map(
+          Arr.findFirst(game.broadcasts, ({ network }) => this.carriageOf(network) === undefined),
+          ({ network }) => ChannelAvailability.Unlearned({ network, source: this.source, guide: this.guide })
+        )
+      ),
+      Option.getOrElse(() => ChannelAvailability.NotCarried({ why: "NoStream" }))
+    )
   }
 
   /** Records a carriage, replacing any earlier one for the same network. */

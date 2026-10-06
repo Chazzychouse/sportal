@@ -110,8 +110,7 @@ function judged(
 ): Watchability {
   const breakUntil = stillOn(memory.breakUntil, now)
   const boostUntil = stillOn(memory.boostUntil, now)
-  const stopped =
-    DateTime.toEpochMillis(now) - DateTime.toEpochMillis(memory.activeAt) >= Duration.toMillis(stoppedAfter)
+  const stopped = DateTime.isGreaterThanOrEqualTo(now, DateTime.addDuration(memory.activeAt, stoppedAfter))
   const lull =
     game.status === "halftime" ||
     game.status === "delayed" ||
@@ -186,13 +185,18 @@ function situation(game: GameSnapshot) {
   if (game.status !== "live" || s === undefined || s.possession === undefined || s.yardLine === undefined)
     return { points: 0, reason: "" }
   const offense = s.possession === game.home.team.id ? game.home.team : game.away.team
-  const signals: Array<[number, string]> = []
-  if (s.isRedZone) signals.push([redZonePoints, `red zone at the ${s.yardLine}`])
-  else if (s.inScoringRange()) signals.push([scoringRangePoints, `at the ${s.yardLine}`])
-  if (s.goalToGo()) signals.push([goalToGoPoints, "goal to go"])
-  if (s.down === 4) signals.push([fourthDownPoints, `4th & ${s.distance ?? "?"}`])
-  if (lateInHalf(game))
-    signals.push([twoMinutePoints, game.inOvertime() ? "overtime possession" : "two-minute drill"])
+  const signals: ReadonlyArray<readonly [number, string]> = [
+    ...(s.isRedZone
+      ? [[redZonePoints, `red zone at the ${s.yardLine}`] as const]
+      : s.inScoringRange()
+        ? [[scoringRangePoints, `at the ${s.yardLine}`] as const]
+        : []),
+    ...(s.goalToGo() ? [[goalToGoPoints, "goal to go"] as const] : []),
+    ...(s.down === 4 ? [[fourthDownPoints, `4th & ${s.distance ?? "?"}`] as const] : []),
+    ...(lateInHalf(game)
+      ? [[twoMinutePoints, game.inOvertime() ? "overtime possession" : "two-minute drill"] as const]
+      : [])
+  ]
   const raw = Math.min(
     situationCap,
     signals.reduce((total, [points]) => total + points, 0)
@@ -217,26 +221,30 @@ const blowoutShare = 0.2
 function stakes(game: GameSnapshot) {
   const margin = game.margin()
   if (game.period < 3 || margin > oneScore) return { points: 0, reason: "" }
-  for (const [ranked, other] of [
-    [game.home, game.away],
-    [game.away, game.home]
-  ] as const) {
-    if (
+  return Arr.findFirst(
+    [
+      [game.home, game.away],
+      [game.away, game.home]
+    ] as const,
+    ([ranked, other]) =>
       ranked.ranking !== undefined &&
       (other.ranking === undefined || other.ranking > ranked.ranking) &&
       other.score >= ranked.score
+        ? Option.some({
+            points: upsetPoints,
+            reason: `upset brewing: ${other.team.abbreviation} ${other.score > ranked.score ? "leads" : "ties"} #${ranked.ranking} ${ranked.team.abbreviation}`
+          })
+        : Option.none()
+  ).pipe(
+    Option.getOrElse(() =>
+      game.home.ranking !== undefined && game.away.ranking !== undefined
+        ? {
+            points: rankedPoints,
+            reason: `#${game.away.ranking} ${game.away.team.abbreviation} at #${game.home.ranking} ${game.home.team.abbreviation}`
+          }
+        : { points: 0, reason: "" }
     )
-      return {
-        points: upsetPoints,
-        reason: `upset brewing: ${other.team.abbreviation} ${other.score > ranked.score ? "leads" : "ties"} #${ranked.ranking} ${ranked.team.abbreviation}`
-      }
-  }
-  return game.home.ranking !== undefined && game.away.ranking !== undefined
-    ? {
-        points: rankedPoints,
-        reason: `#${game.away.ranking} ${game.away.team.abbreviation} at #${game.home.ranking} ${game.home.team.abbreviation}`
-      }
-    : { points: 0, reason: "" }
+  )
 }
 
 const upsetPoints = 10

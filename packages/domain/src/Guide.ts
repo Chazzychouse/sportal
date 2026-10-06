@@ -69,9 +69,10 @@ export class Guide extends Schema.Class<Guide>("sportal/Guide")({
   }
 
   private airs(airing: Airing, game: GameSnapshot): boolean {
-    const nearKickoff =
-      Math.abs(DateTime.toEpochMillis(airing.begin) - DateTime.toEpochMillis(game.kickoff)) <=
-      Duration.toMillis(kickoffTolerance)
+    const nearKickoff = DateTime.between(airing.begin, {
+      minimum: DateTime.subtractDuration(game.kickoff, kickoffTolerance),
+      maximum: DateTime.addDuration(game.kickoff, kickoffTolerance)
+    })
     const onNow =
       game.progress() === "live" &&
       DateTime.between(this.readAt, { minimum: airing.begin, maximum: airing.end })

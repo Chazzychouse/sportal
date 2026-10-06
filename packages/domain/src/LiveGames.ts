@@ -125,7 +125,10 @@ function tickTo(stepped: Stepped, from: DateTime.Utc, at: DateTime.Utc): Effect.
           () => stepped,
           (acc, liveGame) =>
             guarded(acc, liveGame.snapshot, "a tick", () =>
-              settled(acc, liveGame.snapshot.id, due, Option.some(liveGame), liveGame.tick(due))
+              settled(acc, liveGame.snapshot.id, due, Option.some(liveGame), {
+                liveGame: liveGame.tick(due),
+                events: []
+              })
             )
         ).pipe(Effect.flatMap((ticked) => tickTo(ticked, due, at)))
     }

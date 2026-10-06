@@ -24,7 +24,7 @@ const staleGame = new LiveGame({ ...liveGame, state: LiveGameState.Stale({ updat
 const liveAt = (updatedAt: DateTime.Utc) => LiveGameState.Live({ updatedAt })
 const taken = (game: LiveGame, taking: GameSnapshot, from: DeliverySource, now: DateTime.Utc) =>
   game.take(Delivery.Snapshot({ snapshot: taking, from }), now).liveGame
-const ticked = (game: LiveGame, now: DateTime.Utc) => game.tick(now).liveGame
+const ticked = (game: LiveGame, now: DateTime.Utc) => game.tick(now)
 
 describe("LiveGame.updatedAt", () => {
   it("is the instant of a live or stale game, and none otherwise", () => {
@@ -219,9 +219,6 @@ describe("LiveGame#tick, staleness", () => {
   it("Over: never stale, and nothing changes", () => {
     assert.deepStrictEqual(ticked(overGame, staleTime), Option.none())
   })
-  it("gives no events", () => {
-    assert.deepStrictEqual(liveGame.tick(staleTime).events, [])
-  })
 })
 
 describe("LiveGame#tick, watchability", () => {
@@ -240,17 +237,6 @@ describe("LiveGame#tick, watchability", () => {
     const lull = ticked(withPlay, DateTime.addDuration(lastPlayAt, Duration.seconds(60)))
     assert.deepStrictEqual(lull.pipe(Option.map((game) => game.watchability.lull)), Option.some(true))
     assert.deepStrictEqual(lull.pipe(Option.map((game) => game.state)), Option.some(liveAt(t0)))
-  })
-})
-
-describe("LiveGame#staleAt", () => {
-  it("Live: updatedAt + 90 s", () => {
-    assert.deepStrictEqual(liveGame.staleAt(), Option.some(DateTime.addDuration(t0, Duration.seconds(90))))
-  })
-  it("Upcoming, Stale and Over: none", () => {
-    assert.deepStrictEqual(upcomingGame.staleAt(), Option.none())
-    assert.deepStrictEqual(staleGame.staleAt(), Option.none())
-    assert.deepStrictEqual(overGame.staleAt(), Option.none())
   })
 })
 

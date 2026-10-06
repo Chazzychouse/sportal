@@ -103,12 +103,9 @@ export class LiveGame extends Data.Class<{
 
   /**
    * The live game at `now` with nothing new: stale once its stale time has passed, its watchability judged again.
-   * None when neither changes. Staleness is not a game event, so there are never events.
+   * None when neither changes.
    */
-  tick(now: DateTime.Utc): {
-    readonly liveGame: Option.Option<LiveGame>
-    readonly events: ReadonlyArray<GameEvent>
-  } {
+  tick(now: DateTime.Utc): Option.Option<LiveGame> {
     const state = LiveGameState.$match(this.state, {
       Upcoming: () => this.state,
       Live: ({ updatedAt }) =>
@@ -119,13 +116,9 @@ export class LiveGame extends Data.Class<{
       Over: () => this.state
     })
     const watchability = this.watchability.at(this.snapshot, now)
-    return {
-      liveGame:
-        Equal.equals(state, this.state) && Equal.equals(watchability, this.watchability)
-          ? Option.none()
-          : Option.some(new LiveGame({ ...this, state, watchability })),
-      events: []
-    }
+    return Equal.equals(state, this.state) && Equal.equals(watchability, this.watchability)
+      ? Option.none()
+      : Option.some(new LiveGame({ ...this, state, watchability }))
   }
 
   /**
@@ -141,7 +134,7 @@ export class LiveGame extends Data.Class<{
   }
 
   /** When a live game goes stale; none in every other state. */
-  staleAt(): Option.Option<DateTime.Utc> {
+  private staleAt(): Option.Option<DateTime.Utc> {
     return LiveGameState.$match(this.state, {
       Upcoming: () => Option.none(),
       Live: ({ updatedAt }) => Option.some(DateTime.addDuration(updatedAt, LiveGame.staleAfter)),

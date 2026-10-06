@@ -1,4 +1,4 @@
-import { Option, Result, Schema } from "effect"
+import { Array as Arr, Option, Result, Schema } from "effect"
 import { Channel, type ChannelAvailability, SourceName } from "./Channel.ts"
 import { GameId, Network } from "./Game.ts"
 import { Layout, LayoutName, Split } from "./Layout.ts"
@@ -92,11 +92,12 @@ export class Stage extends Schema.Class<Stage>("sportal/Stage")({
   /** The first empty on-stage slot after `slot`, wrapping round; never `slot` itself. */
   nextEmptySlot(slot: number): number | undefined {
     const slots = this.onStage()
-    for (let offset = 1; offset < slots.length; offset++) {
-      const next = (slot + offset) % slots.length
-      if (slots[next]?._tag === "Empty") return next
-    }
-    return undefined
+    return Option.getOrUndefined(
+      Arr.findFirst(
+        Arr.range(1, slots.length).map((offset) => (slot + offset) % slots.length),
+        (next) => next !== slot && slots[next]?._tag === "Empty"
+      )
+    )
   }
 
   /**
@@ -250,9 +251,14 @@ function settle(fields: {
   solo?: GameId | undefined
 }): Stage {
   const slots = Layout.slotCount(fields.layout)
-  const tiles = [...fields.tiles]
-  while (tiles.length < slots) tiles.push(empty)
-  while (tiles.length > slots && tiles.at(-1)?._tag === "Empty") tiles.pop()
+  const kept = Option.getOrElse(
+    Option.map(
+      Arr.findLastIndex(fields.tiles, (tile) => tile._tag !== "Empty"),
+      (last) => last + 1
+    ),
+    () => 0
+  )
+  const tiles = Arr.makeBy(Math.max(slots, kept), (index) => fields.tiles[index] ?? empty)
   const onStage = tiles.slice(0, slots).flatMap((tile) => (tile._tag === "Empty" ? [] : [tile.game]))
   const audioFocus = onStage.find((game) => game === fields.audioFocus) ?? onStage[0]
   const solo = onStage.find((game) => game === fields.solo)
