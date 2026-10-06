@@ -20,7 +20,7 @@ export const layer: Layer.Layer<LiveFeed, never, HttpClient.HttpClient | Socket.
     })
   )
 
-/** Every message after the handshake, failing when the socket closes or goes quiet. */
+/** Every message after the handshake, failing when the socket closes, ends, or goes quiet. */
 function messages(
   leagues: ReadonlyArray<LeagueId>
 ): Stream.Stream<
@@ -29,6 +29,7 @@ function messages(
   HttpClient.HttpClient | Socket.WebSocketConstructor
 > {
   return Stream.unwrap(connect(leagues)).pipe(
+    Stream.concat(Stream.fail(new LiveFeedError({ reason: "Closed", cause: "FastCast ended the stream" }))),
     Stream.timeoutOrElse({ duration: silence, orElse: () => Stream.fail(silent()) })
   )
 }
@@ -73,6 +74,8 @@ function connect(leagues: ReadonlyArray<LeagueId>) {
   }).pipe(Effect.withSpan("FastCast.connect", { attributes: { "sportal.topics": topics } }))
 }
 
+// FastCast sends `B` itself after 10 s without another frame (it answers a client's `B` with an error, so the client
+// never sends one); live, a subscribed socket went at most 20 s between frames.
 const silence = "45 seconds"
 
 function silent(): LiveFeedError {

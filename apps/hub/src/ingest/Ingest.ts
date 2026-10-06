@@ -3,10 +3,12 @@ import type { LeagueId } from "@sportal/domain/League"
 import { LiveGame } from "@sportal/domain/LiveGame"
 import {
   Array as Arr,
+  Cause,
   Context,
   DateTime,
   Duration,
   Effect,
+  Exit,
   Layer,
   Metric,
   Option,
@@ -120,7 +122,16 @@ export class Ingest extends Context.Service<
               )
             ),
             Stream.retry(reconnect),
-            Stream.runForEach(push)
+            Stream.runForEach(push),
+            // Every failure is retried, so the feed ends only by completing or by a defect, and nothing pushes again.
+            Effect.onExitIf(
+              (exit) => !(Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)),
+              (exit) =>
+                Effect.logError(
+                  "Ingest: the live feed stopped; only the poll reaches the actors until the Hub restarts",
+                  Exit.isFailure(exit) ? exit.cause : "the feed's stream ended"
+                )
+            )
           )
         )
 

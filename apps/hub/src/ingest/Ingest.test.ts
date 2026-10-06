@@ -2,14 +2,14 @@ import { assert, describe, it } from "@effect/vitest"
 import { GameId, type GameSnapshot } from "@sportal/domain/Game"
 import { LiveGameState } from "@sportal/domain/LiveGame"
 import { snapshot, team } from "@sportal/domain/TestGame"
-import { DateTime, Effect, Layer, Metric, Option, Queue, Ref, Stream, type Tracer } from "effect"
+import { DateTime, Effect, Layer, Metric, Option, Queue, Ref, Schema, Stream, type Tracer } from "effect"
 import { TestClock } from "effect/testing"
 import { GameActors } from "../GameActors.ts"
 import { LiveFeed, LiveFeedError } from "../provider/LiveFeed.ts"
 import { Provider } from "../provider/Provider.ts"
 import * as TestCluster from "../TestCluster.ts"
 import { game, scripted } from "../TestProvider.ts"
-import { recordingSpans, withMetrics } from "../TestTelemetry.ts"
+import { counted, recordingLogs, recordingSpans, withMetrics } from "../TestTelemetry.ts"
 import { Ingest } from "./Ingest.ts"
 
 function liveGame(homeScore: number) {
@@ -274,6 +274,14 @@ describe("Ingest", () => {
       }).pipe(withMetrics)
   )
 
+  it.effect("a live feed that completes is logged at Error, and the poll carries on", () =>
+    stopsAndPollsOn(Stream.empty, "the feed's stream ended")
+  )
+
+  it.effect("a live feed that dies is logged at Error with its defect, and the poll carries on", () =>
+    stopsAndPollsOn(Stream.die("socket handler threw"), "socket handler threw")
+  )
+
   it.effect("a push is one span, the parent of the receives it causes", () => {
     const ended: Array<Tracer.Span> = []
     return Effect.gen(function* () {
@@ -306,6 +314,40 @@ describe("Ingest", () => {
   })
 })
 
+/**
+ * Runs Ingest over a live feed of `games`, which stops without failing, and checks the stop is logged once at Error
+ * with `why`, and that polls go on.
+ */
+function stopsAndPollsOn(games: Stream.Stream<ReadonlyArray<GameSnapshot>>, why: string) {
+  const { logs, layer } = recordingLogs()
+  return Effect.gen(function* () {
+    const polls = yield* Ref.make(0)
+    const provider = Layer.succeed(
+      Provider,
+      Provider.of({ slate: () => Ref.update(polls, (n) => n + 1).pipe(Effect.as([liveGame(0)])) })
+    )
+    yield* Effect.provide(
+      Effect.gen(function* () {
+        yield* TestClock.adjust(0)
+        yield* TestClock.adjust("20 seconds")
+      }),
+      Ingest.layer(["fbs"]).pipe(
+        Layer.provide([
+          provider,
+          TestCluster.gameActors,
+          Layer.succeed(LiveFeed, LiveFeed.of({ games: () => games }))
+        ])
+      )
+    )
+    const stopped = logs.filter(
+      (log) => log.level === "Error" && log.message.includes("the live feed stopped")
+    )
+    assert.strictEqual(stopped.length, 1)
+    assert.include(`${stopped[0]?.message} ${stopped[0]?.cause}`, why)
+    assert.isAtLeast(yield* Ref.get(polls), 3)
+  }).pipe(Effect.provide(layer))
+}
+
 /** Ingest of the fbs league over `provider`, with each span that ends recorded in `ended`. */
 function polling(provider: Layer.Layer<Provider>, ended: Array<Tracer.Span>) {
   return Ingest.layer(["fbs"]).pipe(
@@ -334,7 +376,7 @@ function feeding(
           Effect.as(
             Stream.fromQueue(feed).pipe(
               Stream.mapEffect((delivery) =>
-                delivery instanceof LiveFeedError ? Effect.fail(delivery) : Effect.succeed(delivery)
+                Schema.is(LiveFeedError)(delivery) ? Effect.fail(delivery) : Effect.succeed(delivery)
               )
             )
           )
@@ -357,20 +399,6 @@ function pushed(clock: string, homeScore: number) {
     home: { team: team("MSST", "fbs", { shortName: "Pushed name" }), score: homeScore },
     away: { team: team("ALA", "fbs", { shortName: "Pushed name" }), score: 0 }
   })
-}
-
-/** The count of counter `id` with `attributes`, if it has counted. */
-function counted(id: string, attributes: Readonly<Record<string, string>>) {
-  return Metric.snapshot.pipe(
-    Effect.map((metrics) => {
-      const metric = metrics.find(
-        (each) =>
-          each.id === id &&
-          Object.entries(attributes).every(([key, value]) => each.attributes?.[key] === value)
-      )
-      return metric?.type === "Counter" ? metric.state.count : undefined
-    })
-  )
 }
 
 /** The listing Ingest has published most recently. */
