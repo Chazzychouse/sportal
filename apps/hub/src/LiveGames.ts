@@ -31,24 +31,20 @@ export class LiveGames extends Context.Service<
   {
     /**
      * Applies `delivery`, received at `at` as frame `seq` (scripted deliveries have none), first ticking every game
-     * whose wake time is at or before `at`.
+     * whose wake time is at or before `at`. Callers must stamp `at` in the order they call `take` (Ingest takes from
+     * one stream): a tick never goes back. A take during a replay waits for the replay to end.
      */
     take(delivery: Delivery, at: DateTime.Utc, seq: Option.Option<number>): Effect.Effect<void>
-    /** Runs `deliveries` through `take` with no per-game telemetry, then logs one summary line. */
+    /**
+     * Runs `deliveries` through `take` with no per-game telemetry and no `events`, then sets each held game's gauges
+     * once and logs one summary line.
+     */
     replay(
       deliveries: Stream.Stream<{ delivery: Delivery; at: DateTime.Utc; seq: number }>
     ): Effect.Effect<void>
-    readonly latest: Effect.Effect<{
-      readonly seq: Option.Option<number>
-      readonly listed: ReadonlyMap<LeagueId, ReadonlyArray<GameSnapshot>>
-      readonly live: ReadonlyMap<GameId, LiveGame>
-    }>
+    readonly latest: Effect.Effect<Folded>
     /** The latest first, then each change. */
-    readonly changes: Stream.Stream<{
-      readonly seq: Option.Option<number>
-      readonly listed: ReadonlyMap<LeagueId, ReadonlyArray<GameSnapshot>>
-      readonly live: ReadonlyMap<GameId, LiveGame>
-    }>
+    readonly changes: Stream.Stream<Folded>
     readonly events: Stream.Stream<{ readonly game: GameId; readonly event: GameEvent }>
   }
 >()("sportal/hub/LiveGames") {
@@ -61,21 +57,22 @@ export class LiveGames extends Context.Service<
   static readonly layer: Layer.Layer<LiveGames> = Layer.effect(
     LiveGames,
     Effect.gen(function* () {
-      const state = yield* SubscriptionRef.make<{
-        readonly seq: Option.Option<number>
-        readonly listed: ReadonlyMap<LeagueId, ReadonlyArray<GameSnapshot>>
-        readonly live: ReadonlyMap<GameId, LiveGame>
-      }>({ seq: Option.none(), listed: new Map(), live: new Map() })
-      // The instant the fold has reached: every wake time at or before it has been ticked. Written only under the
-      // state's lock.
-      const reached = yield* Ref.make(Option.none<DateTime.Utc>())
+      // `reached` is the instant the fold has reached: every wake time at or before it has been ticked. It is kept
+      // beside what is published so the two commit together, and is mapped out of `latest` and `changes`.
+      const state = yield* SubscriptionRef.make<Folded & { readonly reached: Option.Option<DateTime.Utc> }>({
+        seq: Option.none(),
+        listed: new Map(),
+        live: new Map(),
+        reached: Option.none()
+      })
       const events = yield* PubSub.unbounded<{ readonly game: GameId; readonly event: GameEvent }>()
-      // Held by a replay for its whole run, so the timer never ticks a replayed game to the clock's now between two
+      // Held by a replay for its whole run, so neither the timer nor a live take moves a replayed game between two
       // recorded deliveries.
       const replaying = yield* Semaphore.make(1)
 
       // Ticks to `at`, applies `delivery` if there is one, and hands what happened to `report`, all under the state's
-      // lock; publishes only when the fold changed.
+      // lock; publishes only when the fold changed. Uninterruptible, so an interrupted caller never leaves telemetry
+      // without its state; a report that dies leaves the state as it was, to be stepped again.
       const fold = (
         delivery: Option.Option<Delivery>,
         at: DateTime.Utc,
@@ -88,26 +85,23 @@ export class LiveGames extends Context.Service<
       ) =>
         SubscriptionRef.modifySomeEffect(state, (folded) =>
           Effect.gen(function* () {
-            const from = Option.getOrElse(yield* Ref.get(reached), () => at)
+            const from = Option.getOrElse(folded.reached, () => at)
             const ticked = yield* tickTo({ live: folded.live, reports: [] }, from, at)
             const stepped = yield* Option.match(delivery, {
               onNone: () => Effect.succeed({ listed: folded.listed, ...ticked }),
               onSome: (delivery) => applied(folded.listed, ticked, delivery, at)
             })
-            yield* Ref.set(reached, Option.some(DateTime.max(from, at)))
             yield* report(stepped.reports, folded.live, stepped.live)
             const next = {
               seq: Option.orElse(seq, () => folded.seq),
               listed: stepped.listed,
-              live: stepped.live
+              live: stepped.live,
+              reached: Option.some(DateTime.max(from, at))
             }
-            const changed =
-              next.live !== folded.live ||
-              next.listed !== folded.listed ||
-              !Equal.equals(next.seq, folded.seq)
+            const changed = !sameFolded(next, folded) || !Equal.equals(next.reached, folded.reached)
             return [undefined, changed ? Option.some(next) : Option.none()] as const
           })
-        )
+        ).pipe(Effect.uninterruptible)
 
       const live =
         (seq: Option.Option<number>) =>
@@ -122,10 +116,10 @@ export class LiveGames extends Context.Service<
 
       // The timer: on each change, sleeps until the earliest game is due, then ticks to the clock's now. A tick that
       // changes nothing (a sleep that ended early, or a verdict that stayed) loops; a change restarts it. A defect is
-      // logged and counted, and the timer waits for the next change.
+      // logged and counted, and the timer tries again after a moment.
       const wake = Effect.gen(function* () {
         const folded = yield* SubscriptionRef.get(state)
-        const due = Option.flatMap(yield* Ref.get(reached), (from) => earliestDue(folded.live, from))
+        const due = Option.flatMap(folded.reached, (from) => earliestDue(folded.live, from))
         yield* Option.match(due, {
           onNone: () => Effect.never,
           onSome: (due) =>
@@ -139,12 +133,13 @@ export class LiveGames extends Context.Service<
             )
         })
       }).pipe(
-        Effect.forever,
         Effect.catchDefect((defect) =>
           Effect.logError("LiveGames: the timer raised a defect", Cause.die(defect)).pipe(
-            Effect.andThen(Metric.update(gameDefects, 1))
+            Effect.andThen(Metric.update(gameDefects, 1)),
+            Effect.andThen(Effect.sleep(timerBackoff))
           )
-        )
+        ),
+        Effect.forever
       )
       yield* Effect.forkScoped(
         SubscriptionRef.changes(state).pipe(
@@ -161,7 +156,7 @@ export class LiveGames extends Context.Service<
           seq: Option.Option<number>
         ) {
           yield* Effect.annotateCurrentSpan({ "sportal.delivery": delivery._tag })
-          yield* fold(Option.some(delivery), at, seq, live(seq))
+          yield* fold(Option.some(delivery), at, seq, live(seq)).pipe(Semaphore.withPermit(replaying))
         }, Effect.trackDuration(takeDuration)),
         replay: Effect.fn("LiveGames.replay")(function* (deliveries) {
           const plays = yield* Ref.make(0)
@@ -175,20 +170,44 @@ export class LiveGames extends Context.Service<
                   })
                 ).pipe(Effect.as(count + 1))
             ),
-            Effect.timed,
-            Semaphore.withPermit(replaying)
+            Effect.timed
           )
-          const games = (yield* SubscriptionRef.get(state)).live.size
+          const held = (yield* SubscriptionRef.get(state)).live
+          yield* Effect.forEach(
+            held.values(),
+            (liveGame) =>
+              gaugeState(liveGame, stateValues[liveGame.state._tag]).pipe(
+                Effect.andThen(gaugeWatchability(liveGame))
+              ),
+            { discard: true }
+          )
+          yield* countByState(held)
           yield* Effect.logInfo(
-            `LiveGames: replayed ${taken} deliveries, ${yield* Ref.get(plays)} plays; ${games} live games, in ${Duration.format(duration)}`
+            `LiveGames: replayed ${taken} deliveries, ${yield* Ref.get(plays)} plays; ${held.size} live games, in ${Duration.format(duration)}`
           )
-        }),
-        latest: SubscriptionRef.get(state),
-        changes: SubscriptionRef.changes(state),
+        }, Semaphore.withPermit(replaying)),
+        latest: Effect.map(SubscriptionRef.get(state), published),
+        changes: SubscriptionRef.changes(state).pipe(Stream.map(published), Stream.changesWith(sameFolded)),
         events: Stream.fromPubSub(events)
       })
     })
   )
+}
+
+/** What the fold publishes: the last frame's `seq`, each league's last listing, and every current game's live game. */
+type Folded = {
+  readonly seq: Option.Option<number>
+  readonly listed: ReadonlyMap<LeagueId, ReadonlyArray<GameSnapshot>>
+  readonly live: ReadonlyMap<GameId, LiveGame>
+}
+
+function published({ seq, listed, live }: Folded): Folded {
+  return { seq, listed, live }
+}
+
+/** Whether `self` and `that` publish the same: a step that changed nothing hands back the same maps. */
+function sameFolded(self: Folded, that: Folded): boolean {
+  return self.live === that.live && self.listed === that.listed && Equal.equals(self.seq, that.seq)
 }
 
 /** What one step did to one game, for telemetry to tell. */
@@ -608,6 +627,9 @@ const stateValues = { Upcoming: 1, Live: 2, Stale: 3, Over: 4 } satisfies Record
 
 // Every state, so a state with no games reads 0.
 const everyState = Object.keys(stateValues)
+
+// How long the timer waits after a defect before it tries again.
+const timerBackoff = Duration.seconds(1)
 
 const liveGamesByState = Metric.gauge("sportal_live_games", {
   description: "Live games in the fold, by state"
