@@ -1,4 +1,4 @@
-import { GameSnapshot } from "@sportal/domain/Game"
+import { type GameId, GameSnapshot } from "@sportal/domain/Game"
 import { LayoutName } from "@sportal/domain/Layout"
 import type { Stage, StageCommand } from "@sportal/domain/Stage"
 import {
@@ -15,6 +15,7 @@ import { scoreline } from "../game/Score.tsx"
 import { TeamLogo } from "../game/TeamLogo.tsx"
 import { dispatch } from "../hub/HubClient.ts"
 import { LayoutGlyph, layoutLabel } from "../layout/LayoutGlyph.tsx"
+import { tileActions } from "../stage/TileActions.tsx"
 
 /** Every Stage command by name: watch a game, act on a tile, change layout, go full screen. */
 export function CommandPalette(props: {
@@ -30,7 +31,7 @@ export function CommandPalette(props: {
     dispatch(command)
     props.onOpenChange(false)
   }
-  const gameOn = (id: string) => props.slate.find((game) => game.id === id)
+  const gameOn = (id: GameId) => props.slate.find((game) => game.id === id)
   const occupied = props.stage.onStage().flatMap((tile, slot) => {
     if (tile._tag === "Empty") return []
     const game = gameOn(tile.game)
@@ -66,43 +67,24 @@ export function CommandPalette(props: {
         </CommandGroup>
         {occupied.length > 0 && (
           <CommandGroup heading="Tiles">
-            {occupied.flatMap(({ slot, name }) => [
-              <CommandItem
-                key={`audio-${slot}`}
-                value={`hear audio sound ${name} tile ${slot + 1}`}
-                onSelect={() => run({ _tag: "FocusAudio", tile: slot })}
-              >
-                Hear {name}
-                <CommandShortcut>{slot + 1}</CommandShortcut>
-              </CommandItem>,
-              ...(slot === 0
-                ? []
-                : [
+            {occupied.flatMap(({ slot, name }) =>
+              // The Display group below has the Unsolo.
+              tileActions(props.stage, slot)
+                .filter((action) => action.id !== "unsolo")
+                .map((action) => {
+                  const key = shortcut(action.id, action.key, slot === props.selected)
+                  return (
                     <CommandItem
-                      key={`promote-${slot}`}
-                      value={`promote main ${name} tile ${slot + 1}`}
-                      onSelect={() => run({ _tag: "Promote", tile: slot })}
+                      key={`${action.id}-${slot}`}
+                      value={`${action.verb} ${tileWords[action.id]} ${name} tile ${slot + 1}`}
+                      onSelect={() => run(action.command)}
                     >
-                      Promote {name}
-                      <CommandShortcut>⇧{slot + 1}</CommandShortcut>
+                      {action.verb} {name}
+                      {key !== undefined && <CommandShortcut>{key}</CommandShortcut>}
                     </CommandItem>
-                  ]),
-              <CommandItem
-                key={`solo-${slot}`}
-                value={`solo full ${name} tile ${slot + 1}`}
-                onSelect={() => run({ _tag: "Solo", tile: slot })}
-              >
-                Solo {name}
-                {slot === props.selected && <CommandShortcut>F</CommandShortcut>}
-              </CommandItem>,
-              <CommandItem
-                key={`clear-${slot}`}
-                value={`clear remove ${name} tile ${slot + 1}`}
-                onSelect={() => run({ _tag: "Clear", tile: slot })}
-              >
-                Clear {name}
-              </CommandItem>
-            ])}
+                  )
+                })
+            )}
           </CommandGroup>
         )}
         <CommandGroup heading="Layout">
@@ -144,3 +126,12 @@ export function CommandPalette(props: {
     </CommandDialog>
   )
 }
+
+// A tile's hotkey as the palette shows it. Solo has none of its own: `F` acts on the selected tile.
+function shortcut(id: string, key: string | undefined, selected: boolean) {
+  if (id === "solo") return selected ? "F" : undefined
+  return key?.replace("Shift+", "⇧")
+}
+
+// What else a tile's action is searched by.
+const tileWords = { hear: "audio sound", promote: "main", solo: "full", unsolo: "", clear: "remove" }

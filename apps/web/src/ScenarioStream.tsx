@@ -1,4 +1,4 @@
-import type { GameSnapshot } from "@sportal/domain/Game"
+import type { GameId, GameSnapshot } from "@sportal/domain/Game"
 import { useEffect } from "react"
 import { statusText } from "./game/GameStatus.tsx"
 import { TeamLogo } from "./game/TeamLogo.tsx"
@@ -9,13 +9,12 @@ import { useLive } from "./hub/LiveStream.ts"
  * moving test pattern, so a frozen stream shows, and a steady tone of the game's own pitch, so audio focus can be
  * heard moving. The shell mutes it like any stream.
  */
-export function ScenarioStream(props: { game: string }) {
+export function ScenarioStream(props: { game: GameId }) {
   const { slate, watchability, connected } = useLive()
   const game = slate.find((candidate) => candidate.id === props.game)
   useTone(props.game)
   return (
     <div className="relative h-screen w-screen overflow-hidden bg-black text-white">
-      <style>{"@keyframes scenario-pan { to { background-position: 160px 0 } }"}</style>
       <div
         aria-hidden
         className="absolute inset-0 opacity-30"
@@ -39,7 +38,7 @@ export function ScenarioStream(props: { game: string }) {
   )
 }
 
-function useTone(game: string) {
+function useTone(game: GameId) {
   useEffect(() => {
     const context = new AudioContext()
     const oscillator = context.createOscillator()

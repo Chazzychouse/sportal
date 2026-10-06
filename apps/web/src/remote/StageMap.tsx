@@ -1,11 +1,12 @@
 import type { GameSnapshot } from "@sportal/domain/Game"
 import type { Stage, StageCommand } from "@sportal/domain/Stage"
-import { ArrowLeftRight, ArrowUpLeft, Shrink, SquareDashed, Volume2, X } from "lucide-react"
-import { type ReactNode, useState } from "react"
+import { ArrowLeftRight, Volume2 } from "lucide-react"
+import { Fragment, type ReactNode, useState } from "react"
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/design/sheet"
 import { GameStatus } from "../game/GameStatus.tsx"
 import { Score, scoreline } from "../game/Score.tsx"
 import { dispatch } from "../hub/HubClient.ts"
+import { tileActions } from "../stage/TileActions.tsx"
 
 /**
  * The Stage's layout in miniature, every tile shown even while one is soloed. Tapping a tile selects it; tapping
@@ -20,7 +21,6 @@ export function StageMap(props: {
   const [actions, setActions] = useState(false)
   const [swapFrom, setSwapFrom] = useState<number | undefined>(undefined)
   const tiles = props.stage.onStage()
-  const tile = tiles[props.selected]
   const gameIn = (slot: number) => {
     const at = tiles[slot]
     return at === undefined || at._tag === "Empty"
@@ -130,39 +130,30 @@ export function StageMap(props: {
               {selectedGame === undefined ? "" : scoreline(selectedGame)}
             </SheetDescription>
           </div>
-          {tile !== undefined && tile._tag !== "Empty" && (
-            <div className="flex flex-col pb-2">
-              <Action icon={<Volume2 />} onClick={() => run({ _tag: "FocusAudio", tile: props.selected })}>
-                Hear this game
-              </Action>
-              {props.selected !== 0 && (
-                <Action icon={<ArrowUpLeft />} onClick={() => run({ _tag: "Promote", tile: props.selected })}>
-                  Promote to the main tile
+          <div className="flex flex-col pb-2">
+            {tileActions(props.stage, props.selected).map((action) => (
+              <Fragment key={action.id}>
+                {action.id === "clear" && (
+                  <Action
+                    icon={<ArrowLeftRight />}
+                    onClick={() => {
+                      setSwapFrom(props.selected)
+                      setActions(false)
+                    }}
+                  >
+                    Swap with…
+                  </Action>
+                )}
+                <Action
+                  icon={action.icon}
+                  onClick={() => run(action.command)}
+                  destructive={action.id === "clear"}
+                >
+                  {action.label}
                 </Action>
-              )}
-              {props.stage.soloes(tile.game) ? (
-                <Action icon={<Shrink />} onClick={() => run({ _tag: "Unsolo" })}>
-                  Unsolo
-                </Action>
-              ) : (
-                <Action icon={<SquareDashed />} onClick={() => run({ _tag: "Solo", tile: props.selected })}>
-                  Solo
-                </Action>
-              )}
-              <Action
-                icon={<ArrowLeftRight />}
-                onClick={() => {
-                  setSwapFrom(props.selected)
-                  setActions(false)
-                }}
-              >
-                Swap with…
-              </Action>
-              <Action icon={<X />} onClick={() => run({ _tag: "Clear", tile: props.selected })} destructive>
-                Clear
-              </Action>
-            </div>
-          )}
+              </Fragment>
+            ))}
+          </div>
         </SheetContent>
       </Sheet>
     </>

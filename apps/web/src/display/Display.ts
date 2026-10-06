@@ -137,8 +137,8 @@ export class Display extends Data.Class<{
    */
   drop(card: StripCard, stage: Stage): DisplayStep {
     const slot = this.selectedOn(stage)
+    if (!card.pickable()) return new DisplayStep({ display: this, commands: [] })
     const { place } = card
-    if (place?._tag === "Slot") return new DisplayStep({ display: this, commands: [] })
     const { display, commands } = new Display({ ...this, pick: card.id }).select(
       stage.nextEmptySlot(slot) ?? slot,
       stage
@@ -146,9 +146,9 @@ export class Display extends Data.Class<{
     return new DisplayStep({
       display,
       commands: [
-        place === undefined
-          ? { _tag: "Assign", tile: slot, game: card.id }
-          : { _tag: "Swap", a: place.tile, b: slot },
+        place?._tag === "Bench"
+          ? { _tag: "Swap", a: place.tile, b: slot }
+          : { _tag: "Assign", tile: slot, game: card.id },
         ...commands
       ]
     })

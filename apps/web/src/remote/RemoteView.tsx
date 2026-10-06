@@ -1,14 +1,14 @@
-import { LayoutName } from "@sportal/domain/Layout"
 import { Array as Arr } from "effect"
 import { Shrink } from "lucide-react"
 import { useState } from "react"
 import { Toaster } from "@/design/sonner"
 import { useDisplay } from "../display/DisplayView.tsx"
+import { BrandMark, ConnectionPill } from "../display/Masthead.tsx"
 import { GameStatus } from "../game/GameStatus.tsx"
 import { Score } from "../game/Score.tsx"
 import { dispatch } from "../hub/HubClient.ts"
 import { useLive } from "../hub/LiveStream.ts"
-import { LayoutGlyph, layoutLabel } from "../layout/LayoutGlyph.tsx"
+import { LayoutPicker } from "../layout/LayoutPicker.tsx"
 import { PlaceBadge } from "../slate/PlaceBadge.tsx"
 import { StripCard } from "../slate/StripCards.ts"
 import { useRejectionToasts } from "../stage/Rejections.ts"
@@ -35,18 +35,8 @@ export function RemoteView() {
     <div className="min-h-dvh bg-background pb-[env(safe-area-inset-bottom)]">
       <div className="sticky top-0 z-10 flex flex-col gap-2 border-b bg-background/95 px-3 pt-[max(0.75rem,env(safe-area-inset-top))] pb-3 backdrop-blur">
         <header className="flex items-center gap-2">
-          <span className="label-caps flex items-center gap-2 text-sm tracking-[0.22em]">
-            <span className="size-2 rounded-full bg-on-air" />
-            Sportal
-          </span>
-          <span
-            className={`label-caps ml-1 flex items-center gap-1 text-[10px] ${live.connected ? "text-live" : "text-warn"}`}
-          >
-            <span
-              className={`size-1.5 rounded-full ${live.connected ? "bg-live" : "animate-pulse bg-warn"}`}
-            />
-            {live.connected ? "Live" : "Reconnecting"}
-          </span>
+          <BrandMark />
+          <ConnectionPill connected={live.connected} />
           {live.stage.solo !== undefined && (
             <button
               type="button"
@@ -58,22 +48,7 @@ export function RemoteView() {
             </button>
           )}
         </header>
-        <fieldset className="flex justify-between" aria-label="Layout">
-          {LayoutName.literals.map((name) => (
-            <button
-              key={name}
-              type="button"
-              aria-pressed={live.stage.layout === name}
-              aria-label={layoutLabel(name)}
-              onClick={() => dispatch({ _tag: "SetLayout", layout: name })}
-              className={`grid min-h-10 flex-1 place-items-center rounded-sm ${
-                live.stage.layout === name ? "bg-accent text-on-air" : "text-muted-foreground"
-              }`}
-            >
-              <LayoutGlyph name={name} />
-            </button>
-          ))}
-        </fieldset>
+        <LayoutPicker current={live.stage.layout} fill />
         <StageMap
           stage={live.stage}
           slate={live.slate}

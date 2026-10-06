@@ -97,3 +97,10 @@
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
+
+/* A scenario stream's test pattern, panned one colour-bar tile (160px) at a time. */
+@keyframes scenario-pan {
+  to {
+    background-position: 160px 0;
+  }
+}

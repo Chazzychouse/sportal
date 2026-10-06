@@ -23,8 +23,8 @@ export function Dividers(props: {
         key={axis}
         role="separator"
         aria-orientation={axis === "x" ? "vertical" : "horizontal"}
-        aria-valuemin={Layout.bounds.min * 100}
-        aria-valuemax={Layout.bounds.max * 100}
+        aria-valuemin={Math.round(Layout.bounds.min * 100)}
+        aria-valuemax={Math.round(Layout.bounds.max * 100)}
         aria-valuenow={Math.round(props.split[axis] * 100)}
         tabIndex={-1}
         className={`group absolute z-10 flex touch-none items-center justify-center ${

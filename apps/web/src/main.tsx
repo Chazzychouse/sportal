@@ -1,3 +1,4 @@
+import { GameId } from "@sportal/domain/Game"
 import { StrictMode } from "react"
 import { createRoot } from "react-dom/client"
 import { DisplayView } from "./display/DisplayView.tsx"
@@ -17,7 +18,7 @@ createRoot(root).render(
     {path.startsWith("/remote") ? (
       <RemoteView />
     ) : path.startsWith(scenarioStream) ? (
-      <ScenarioStream game={decodeURIComponent(path.slice(scenarioStream.length))} />
+      <ScenarioStream game={GameId.make(decodeURIComponent(path.slice(scenarioStream.length)))} />
     ) : (
       <DisplayView />
     )}
