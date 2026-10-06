@@ -49,7 +49,6 @@ export function placements(
       url: tile.channel.locator.url.startsWith("/")
         ? new URL(tile.channel.locator.url, page).href
         : tile.channel.locator.url,
-      role: "stream" as const,
       muted: !stage.hears(tile.game),
       interactive: tile.game === interacting
     }

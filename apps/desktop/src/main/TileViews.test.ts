@@ -35,7 +35,6 @@ const two = GameId.make("two")
 const placement = {
   game: one,
   url: "https://tv.youtube.com/watch/one",
-  role: "stream" as const,
   bounds: { x: 10, y: 20, width: 640, height: 360 },
   muted: true,
   interactive: false
@@ -139,112 +138,6 @@ describe("TileViews.sync", () => {
   )
 })
 
-describe("TileViews.channelPicks", () => {
-  const guide = { ...placement, url: "https://tv.youtube.com/live", role: "guide" as const }
-  const espn = "https://tv.youtube.com/watch/espn?vp=0gEEEgIwAQ%3D%3D"
-  const fox = "https://tv.youtube.com/watch/fox?vp=0gEEEgIwAQ%3D%3D"
-
-  it.effect("reports the channel a guide view lands on", () =>
-    Effect.gen(function* () {
-      const { tiles } = yield* attached()
-      yield* tiles.sync([guide])
-      const picks = yield* collect(tiles.channelPicks, 1)
-      created[0]?.webContents.emit("did-navigate-in-page", {}, espn, true)
-      expect(yield* Fiber.join(picks)).toEqual([{ game: one, url: espn }])
-    }).pipe(Effect.scoped)
-  )
-
-  it.effect("ignores the guide itself, subframes, and a repeat of the address just reported", () =>
-    Effect.gen(function* () {
-      const { tiles } = yield* attached()
-      yield* tiles.sync([guide])
-      const picks = yield* collect(tiles.channelPicks, 2)
-      const contents = created[0]?.webContents
-      contents?.emit("did-navigate", {}, "https://tv.youtube.com/live")
-      contents?.emit("did-navigate-in-page", {}, espn, false)
-      contents?.emit("did-navigate-in-page", {}, espn, true)
-      contents?.emit("did-navigate", {}, espn)
-      contents?.emit("did-navigate-in-page", {}, fox, true)
-      expect(yield* Fiber.join(picks)).toEqual([
-        { game: one, url: espn },
-        { game: one, url: fox }
-      ])
-    }).pipe(Effect.scoped)
-  )
-
-  it.effect("reports a channel again once the guide has been back on a non-channel address", () =>
-    Effect.gen(function* () {
-      const { tiles } = yield* attached()
-      yield* tiles.sync([guide])
-      const picks = yield* collect(tiles.channelPicks, 2)
-      const contents = created[0]?.webContents
-      contents?.emit("did-navigate-in-page", {}, espn, true)
-      contents?.emit("did-navigate-in-page", {}, "https://tv.youtube.com/live", true)
-      contents?.emit("did-navigate-in-page", {}, espn, true)
-      expect(yield* Fiber.join(picks)).toEqual([
-        { game: one, url: espn },
-        { game: one, url: espn }
-      ])
-    }).pipe(Effect.scoped)
-  )
-
-  it.effect("reports an address once when it arrives as did-navigate and then did-navigate-in-page", () =>
-    Effect.gen(function* () {
-      const { tiles } = yield* attached()
-      yield* tiles.sync([guide])
-      const picks = yield* collect(tiles.channelPicks, 2)
-      const contents = created[0]?.webContents
-      contents?.emit("did-navigate", {}, espn)
-      contents?.emit("did-navigate-in-page", {}, espn, true)
-      contents?.emit("did-navigate-in-page", {}, fox, true)
-      expect(yield* Fiber.join(picks)).toEqual([
-        { game: one, url: espn },
-        { game: one, url: fox }
-      ])
-    }).pipe(Effect.scoped)
-  )
-
-  it.effect("reports the same channel again once the Hub places a new address in the tile", () =>
-    Effect.gen(function* () {
-      const { tiles } = yield* attached()
-      yield* tiles.sync([guide])
-      const picks = yield* collect(tiles.channelPicks, 2)
-      const contents = created[0]?.webContents
-      contents?.emit("did-navigate-in-page", {}, espn, true)
-      yield* tiles.sync([{ ...guide, url: "https://tv.youtube.com/live?again" }])
-      contents?.emit("did-navigate-in-page", {}, espn, true)
-      expect(yield* Fiber.join(picks)).toEqual([
-        { game: one, url: espn },
-        { game: one, url: espn }
-      ])
-    }).pipe(Effect.scoped)
-  )
-
-  it.effect("does not report for a view removed in a sync", () =>
-    Effect.gen(function* () {
-      const { tiles } = yield* attached()
-      yield* tiles.sync([guide])
-      yield* tiles.sync([])
-      const picks = yield* collect(tiles.channelPicks, 1)
-      created[0]?.webContents.emit("did-navigate-in-page", {}, espn, true)
-      yield* tiles.sync([{ ...guide, game: two }])
-      created[1]?.webContents.emit("did-navigate-in-page", {}, fox, true)
-      expect(yield* Fiber.join(picks)).toEqual([{ game: two, url: fox }])
-    }).pipe(Effect.scoped)
-  )
-
-  it.effect("never reports for a stream view", () =>
-    Effect.gen(function* () {
-      const { tiles } = yield* attached()
-      yield* tiles.sync([placement, { ...guide, game: two }])
-      const picks = yield* collect(tiles.channelPicks, 1)
-      created[0]?.webContents.emit("did-navigate-in-page", {}, espn, true)
-      created[1]?.webContents.emit("did-navigate-in-page", {}, fox, true)
-      expect(yield* Fiber.join(picks)).toEqual([{ game: two, url: fox }])
-    }).pipe(Effect.scoped)
-  )
-})
-
 describe("TileViews transitions", () => {
   const transition = { durationMs: 160, easing: [0, 0, 1, 1] as const }
   const target = { x: 110, y: 20, width: 640, height: 360 }
@@ -317,50 +210,43 @@ describe("TileViews.hide", () => {
 })
 
 describe("TileViews.hotkeys", () => {
-  it.effect(
-    "forwards hotkeys from stream views and keeps them from the page; guide views get every key",
-    () =>
-      Effect.gen(function* () {
-        const { tiles } = yield* attached()
-        const guide = { ...placement, game: two, role: "guide" as const, url: "https://tv.youtube.com/live" }
-        yield* tiles.sync([placement, guide])
-        const hotkeys = yield* collect(tiles.hotkeys, 1)
-        const press = (view: number, code: string, type = "keyDown") => {
-          const event = { preventDefault: vi.fn() }
-          created[view]?.webContents.emit("before-input-event", event, {
-            type,
-            code,
-            shift: false,
-            control: false,
-            meta: false
-          })
-          return event.preventDefault
-        }
-        expect(press(1, "Digit2")).not.toHaveBeenCalled()
-        expect(press(0, "KeyA")).not.toHaveBeenCalled()
-        expect(press(0, "Digit2", "keyUp")).not.toHaveBeenCalled()
-        expect(press(0, "Digit2")).toHaveBeenCalled()
-        expect(yield* Fiber.join(hotkeys)).toEqual([{ _tag: "FocusAudio", slot: 1 }])
-      }).pipe(Effect.scoped)
+  it.effect("forwards hotkeys from stream views and keeps them from the page", () =>
+    Effect.gen(function* () {
+      const { tiles } = yield* attached()
+      yield* tiles.sync([placement])
+      const hotkeys = yield* collect(tiles.hotkeys, 1)
+      const press = (code: string, type = "keyDown") => {
+        const event = { preventDefault: vi.fn() }
+        created[0]?.webContents.emit("before-input-event", event, {
+          type,
+          code,
+          shift: false,
+          control: false,
+          meta: false
+        })
+        return event.preventDefault
+      }
+      expect(press("KeyA")).not.toHaveBeenCalled()
+      expect(press("Digit2", "keyUp")).not.toHaveBeenCalled()
+      expect(press("Digit2")).toHaveBeenCalled()
+      expect(yield* Fiber.join(hotkeys)).toEqual([{ _tag: "FocusAudio", slot: 1 }])
+    }).pipe(Effect.scoped)
   )
 })
 
 describe("TileViews mouse filter", () => {
-  const guide = { ...placement, game: two, role: "guide" as const, url: "https://tv.youtube.com/live" }
   const mouse = (view: number, type: string, button?: string) => {
     const event = { preventDefault: vi.fn() }
     created[view]?.webContents.emit("before-mouse-event", event, { type, button, x: 5, y: 5 })
     return event.preventDefault
   }
 
-  it.effect("keeps every mouse event from a stream view's page; a guide view gets them all", () =>
+  it.effect("keeps every mouse event from a stream view's page", () =>
     Effect.gen(function* () {
       const { tiles } = yield* attached()
-      yield* tiles.sync([placement, guide])
+      yield* tiles.sync([placement])
       for (const type of ["mouseMove", "mouseEnter", "mouseDown", "mouseUp", "mouseWheel", "contextMenu"])
         expect(mouse(0, type)).toHaveBeenCalled()
-      expect(mouse(1, "mouseMove")).not.toHaveBeenCalled()
-      expect(mouse(1, "mouseDown", "left")).not.toHaveBeenCalled()
     }).pipe(Effect.scoped)
   )
 
@@ -388,9 +274,8 @@ describe("TileViews mouse filter", () => {
   it.effect("reports a left press on a filtered stream view as its game", () =>
     Effect.gen(function* () {
       const { tiles } = yield* attached()
-      yield* tiles.sync([placement, guide])
+      yield* tiles.sync([placement])
       const presses = yield* collect(tiles.tilePresses, 1)
-      mouse(1, "mouseDown", "left")
       mouse(0, "mouseDown", "right")
       mouse(0, "mouseUp", "left")
       mouse(0, "mouseDown", "left")
@@ -412,10 +297,10 @@ describe("TileViews mouse filter", () => {
   )
 })
 
-/** Starts collecting the first `count` picks, subscribed before this returns. */
-function collect<A>(picks: Stream.Stream<A>, count: number) {
+/** Starts collecting the first `count` values of `stream`, subscribed before this returns. */
+function collect<A>(stream: Stream.Stream<A>, count: number) {
   return Effect.gen(function* () {
-    const fiber = yield* picks.pipe(Stream.take(count), Stream.runCollect, Effect.forkScoped)
+    const fiber = yield* stream.pipe(Stream.take(count), Stream.runCollect, Effect.forkScoped)
     yield* Effect.yieldNow
     return fiber
   })
