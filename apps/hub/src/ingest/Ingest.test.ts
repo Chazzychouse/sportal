@@ -6,7 +6,6 @@ import { LiveGameState } from "@sportal/domain/LiveGame"
 import { liveSnapshot, snapshot, team } from "@sportal/domain/TestGame"
 import {
   Clock,
-  Context,
   type Crypto,
   DateTime,
   Duration,
@@ -34,7 +33,7 @@ import { LiveGames } from "../LiveGames.ts"
 import { Decoder } from "../provider/Decoder.ts"
 import * as EspnDecode from "../provider/espn/EspnDecode.ts"
 import { recordedCheckpoint } from "../provider/espn/TestEspn.ts"
-import { Decoded, Provider, ProviderError } from "../provider/Provider.ts"
+import { Decoded, type Polling, Provider, ProviderError } from "../provider/Provider.ts"
 import { polling, pushed, scripted } from "../provider/TestProvider.ts"
 import { withEnv } from "../TestHubConfig.ts"
 import { counted, recordingLogs, recordingSpans, withMetrics } from "../TestTelemetry.ts"
@@ -102,10 +101,7 @@ describe("Ingest", () => {
           ReadonlyArray<readonly [ReadonlyArray<number>, ReadonlyArray<string>]>
         >([])
         const recording = Schedule.spaced("10 seconds").pipe(
-          Schedule.setInputType<{
-            readonly slate: ReadonlyArray<GameSnapshot>
-            readonly failed: ReadonlyArray<"nfl" | "fbs">
-          }>(),
+          Schedule.setInputType<Schedule.Input<Polling>>(),
           Schedule.tap(({ input }) =>
             Ref.update(inputs, (all) => [
               ...all,
@@ -373,7 +369,7 @@ describe("Ingest", () => {
           ),
           scope
         )
-        const log = Context.get(services, FeedLog)
+        const log = yield* FeedLog.pipe(Effect.provideContext(services))
         // Far more than the 100 ms the writer could be behind by when the Hub stops.
         yield* Effect.forEach(
           Array.from({ length: 200 }, (_, index) => index),

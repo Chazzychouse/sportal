@@ -150,9 +150,14 @@ function replayedFrom(from: DateTime.Utc) {
   return Effect.gen(function* () {
     const liveGames = yield* LiveGames
     const held = yield* Ref.make<ReadonlyArray<LiveGame>>([])
-    const deliveries = yield* deliveriesOf(yield* FeedLog, from)
-    yield* liveGames.replay(deliveries.pipe(Stream.tap(() => heldAs(held, liveGames))))
-    yield* heldAs(held, liveGames)
+    const services = yield* Effect.context<FeedLog | Decoder | LiveGames>()
+    yield* liveGames.replay(
+      deliveriesOf(from).pipe(
+        Stream.tap(() => heldAs(held)),
+        Stream.provideContext(services)
+      )
+    )
+    yield* heldAs(held)
     return { latest: yield* liveGames.latest, held: yield* Ref.get(held) }
   }).pipe(Effect.provide([LiveGames.layer, FeedLog.layer]))
 }
@@ -166,9 +171,7 @@ const replayed = replayedFrom(DateTime.makeUnsafe(0))
  * the fold's timer.
  */
 const takenLive = Effect.gen(function* () {
-  const all = yield* FeedLog.use((log) => Effect.flatMap(deliveriesOf(log), Stream.runCollect)).pipe(
-    Effect.provide(FeedLog.layer)
-  )
+  const all = yield* Stream.runCollect(deliveriesOf()).pipe(Effect.provide(FeedLog.layer))
   const liveGames = yield* LiveGames
   const held = yield* Ref.make<ReadonlyArray<LiveGame>>([])
   const events = yield* Ref.make<
@@ -184,7 +187,7 @@ const takenLive = Effect.gen(function* () {
       DateTime.now.pipe(
         Effect.flatMap((now) => TestClock.adjust(DateTime.distance(now, at))),
         Effect.andThen(liveGames.take(delivery, at, Option.some(seq))),
-        Effect.andThen(heldAs(held, liveGames))
+        Effect.andThen(heldAs(held))
       ),
     { discard: true }
   )
@@ -193,27 +196,32 @@ const takenLive = Effect.gen(function* () {
   return { latest: yield* liveGames.latest, held: yield* Ref.get(held), events: yield* Ref.get(events) }
 }).pipe(Effect.provide(LiveGames.layer))
 
-/** Every frame in `log` replayed from `from` (all of them, unless given), decoded by the `Decoder`, as the deliveries it said. */
-function deliveriesOf(log: FeedLog["Service"], from = DateTime.makeUnsafe(0)) {
-  return Decoder.useSync((decoder) =>
-    decoder
-      .decode(log.replay(from))
-      .pipe(
-        Stream.flatMap((said) =>
-          said._tag === "Delivered"
-            ? Stream.make({ delivery: said.delivery, at: said.at, seq: said.seq })
-            : Stream.empty
+/** Every frame in the `FeedLog` replayed from `from` (all of them, unless given), decoded by the `Decoder`, as the deliveries it said. */
+function deliveriesOf(from = DateTime.makeUnsafe(0)) {
+  return Stream.unwrap(
+    Effect.gen(function* () {
+      const log = yield* FeedLog
+      const decoder = yield* Decoder
+      return decoder
+        .decode(log.replay(from))
+        .pipe(
+          Stream.flatMap((said) =>
+            said._tag === "Delivered"
+              ? Stream.make({ delivery: said.delivery, at: said.at, seq: said.seq })
+              : Stream.empty
+          )
         )
-      )
+    })
   )
 }
 
-/** Notes NE at BUF's live game now, when the fold holds it and it changed since the last noted. */
-function heldAs(held: Ref.Ref<ReadonlyArray<LiveGame>>, liveGames: LiveGames["Service"]) {
-  return Effect.flatMap(liveGames.latest, (latest) =>
-    Option.match(Option.fromUndefinedOr(latest.live.get(neAtBuf)), {
-      onNone: () => Effect.void,
-      onSome: (liveGame) => Ref.update(held, (all) => (all.at(-1) === liveGame ? all : [...all, liveGame]))
-    })
-  )
+/** Notes NE at BUF's live game now, when the `LiveGames` fold holds it and it changed since the last noted. */
+function heldAs(held: Ref.Ref<ReadonlyArray<LiveGame>>) {
+  return Effect.gen(function* () {
+    const latest = yield* (yield* LiveGames).latest
+    const liveGame = latest.live.get(neAtBuf)
+    if (liveGame !== undefined) {
+      yield* Ref.update(held, (all) => (all.at(-1) === liveGame ? all : [...all, liveGame]))
+    }
+  })
 }
