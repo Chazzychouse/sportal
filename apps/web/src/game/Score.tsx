@@ -39,7 +39,8 @@ export function Score(props: { game: GameSnapshot; side: "home" | "away"; size?:
   )
 }
 
-/** The score as one line of text: "KC 21–14 BUF". */
+/** The score as one line of text: "KC 21–14 BUF", or "KC @ BUF" before there is a score. */
 export function scoreline(game: GameSnapshot): string {
+  if (!game.scored()) return `${game.away.team.abbreviation} @ ${game.home.team.abbreviation}`
   return `${game.away.team.abbreviation} ${game.away.score}–${game.home.score} ${game.home.team.abbreviation}`
 }

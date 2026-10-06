@@ -12,6 +12,10 @@ describe("scoreline", () => {
     })
     assert.strictEqual(scoreline(game), "AWAY 21–14 HOME")
   })
+
+  it("shows no score before kickoff", () => {
+    assert.strictEqual(scoreline(snapshot()), "AWAY @ HOME")
+  })
 })
 
 describe("Score", () => {

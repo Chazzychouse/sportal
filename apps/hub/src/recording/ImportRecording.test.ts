@@ -199,7 +199,7 @@ function described(frame: Omit<Frame, "seq">) {
   }
 }
 
-/** An NFL recording folder, as the spike's recorder writes one: socket lines, and each poll gzip'd under its stem. */
+/** An NFL recording folder, as a recorded day keeps one: socket lines, and each poll gzip'd under its stem. */
 function recordingOf(
   lines: ReadonlyArray<Record<string, string | number>>,
   polls: ReadonlyArray<{ readonly stem: string; readonly body: string }>

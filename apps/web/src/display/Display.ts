@@ -8,12 +8,6 @@ import { StripCard } from "../slate/StripCards.ts"
 type Overlay = Data.TaggedEnum<{ None: object; Keys: object; Palette: object; JoinRemote: object }>
 const Overlay = Data.taggedEnum<Overlay>()
 
-/** A Display after an input, and the Stage commands the input sends. */
-export class DisplayStep extends Data.Class<{
-  readonly display: Display
-  readonly commands: ReadonlyArray<StageCommand>
-}> {}
-
 /**
  * A Display's local state: what is selected, interacting, picked, and open. Never sent to the Hub. Each input
  * answers with the next Display and the stage commands for the caller to send.
@@ -167,3 +161,9 @@ export class Display extends Data.Class<{
     return new Display({ ...this, overlay: Overlay.None() })
   }
 }
+
+/** A Display after an input, and the Stage commands the input sends. */
+export class DisplayStep extends Data.Class<{
+  readonly display: Display
+  readonly commands: ReadonlyArray<StageCommand>
+}> {}

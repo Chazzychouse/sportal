@@ -3,7 +3,7 @@ import { Expand, Keyboard, List, LogIn, Minimize2, Shrink, Smartphone, SquareDas
 import { Button } from "@/design/button"
 import type { Connection } from "../hub/LiveStream.ts"
 import { LayoutPicker } from "../layout/LayoutPicker.tsx"
-import { BrandMark, ConnectionPill } from "./Masthead.tsx"
+import { BrandMark, ConnectionPill } from "./Brand.tsx"
 
 /** The strip across the top of a Display: the slate, layout, solo, full screen, and whether the Hub is live. */
 export function TopBar(props: {

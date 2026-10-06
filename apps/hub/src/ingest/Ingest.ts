@@ -39,7 +39,7 @@ export const layer = (leagues: ReadonlyArray<LeagueId>) =>
       const liveGames = yield* LiveGames
       const from = dayStart(yield* DateTime.nowInCurrentZone)
 
-      const replayed = yield* Queue.unbounded<Replayed, Cause.Done>()
+      const replayed = yield* Queue.unbounded<Extract<Decoded, { readonly _tag: "Delivered" }>, Cause.Done>()
       const replayedUpTo = yield* Ref.make(0)
       const frames = yield* Ref.make(0)
       const resyncs = yield* PubSub.unbounded<string>()
@@ -195,9 +195,6 @@ function loggedUnlessStopping(message: string, ended: string) {
     (exit) => Effect.logError(message, Exit.isFailure(exit) ? exit.cause : ended)
   )
 }
-
-/** A delivery decoded from a replayed frame, on its way to the fold's replay. */
-type Replayed = Extract<Decoded, { readonly _tag: "Delivered" }>
 
 /**
  * Waits for the fold to have taken frame `seq`, so the Cadence reads the listing it gave. A frame that gives no

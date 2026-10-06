@@ -70,7 +70,7 @@ function Scorebug(props: {
           <div key={side.team.id} className="flex items-center gap-[3vmin]">
             <TeamLogo team={side.team} size={64} />
             <span className="w-[20vmin]">{side.team.abbreviation}</span>
-            <span>{side.score}</span>
+            <span>{game.scored() ? side.score : null}</span>
             {situation?.possession === side.team.id && (
               <span className="text-[5vmin] text-yellow-300">●</span>
             )}

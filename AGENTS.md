@@ -14,7 +14,7 @@ easiest to break.
   `effect/http-api`, the test clock in `effect/testing`.
 - **Use the words in `CONTEXT.md`.** Every exported type name must be a term there; a new concept adds
   its glossary row in the same commit. The wire schemas in `*Payload.ts` and `FastCastMessage.ts` are exempt: they
-  spell a provider's own words. Terms the code does not have yet sit under Planned.
+  spell a provider's own words. So are React components: they are named for what they show. Terms the code does not have yet sit under Planned.
 
 ## Where code goes
 

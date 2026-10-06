@@ -6,7 +6,7 @@ import { assert, describe, it } from "@effect/vitest"
 import { DateTime, Effect, FileSystem } from "effect"
 import * as CutScenario from "./CutScenario.ts"
 
-// A real ESPN poll, recorded as the spike's recorder writes them: gzipped, named for the instant.
+// A real ESPN poll, as a recorded day keeps it: gzipped, named for the instant.
 const poll = gzipSync(
   readFileSync(new URL("../provider/espn/fixtures/fbs-scoreboard-live.json", import.meta.url))
 )

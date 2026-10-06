@@ -2,9 +2,9 @@ import type { LeagueId } from "@sportal/domain/League"
 import { Array as Arr, DateTime, Effect, FileSystem, Option, Order, Path, Schema } from "effect"
 
 /**
- * A recorded day's polls, as the spike's recorders left them: a folder per league (`…/college-football`, `…/nfl`)
+ * A recorded day's polls, as they were saved to disk: a folder per league (`…/college-football`, `…/nfl`)
  * holds that league's scoreboard polls, each gzip'd under the instant it was taken. Both dev tools read a day
- * through this. The polls come in order of that instant; a file named for neither recorder is skipped.
+ * through this. The polls come in order of that instant; a file not named for an instant is skipped.
  */
 export function polls(
   dir: string

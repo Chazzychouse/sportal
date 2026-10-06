@@ -16,16 +16,6 @@ import { KeysDialog } from "./KeysDialog.tsx"
 import { OverlayHost } from "./OverlayHost.tsx"
 import { TopBar } from "./TopBar.tsx"
 
-/** This device's Display: its state, a step run (its display kept, its commands sent to the Hub), and a Display set. */
-export function useDisplay() {
-  const [display, set] = useState(Display.initial)
-  const run = (step: DisplayStep) => {
-    set(step.display)
-    for (const command of step.commands) runtime.runFork(dispatch(command))
-  }
-  return { display, run, set }
-}
-
 export function DisplayView() {
   const live = useLive()
   const { display, run, set: setDisplay } = useDisplay()
@@ -103,4 +93,14 @@ export function DisplayView() {
       />
     </OverlayHost>
   )
+}
+
+/** This device's Display: its state, a step run (its display kept, its commands sent to the Hub), and a Display set. */
+export function useDisplay() {
+  const [display, set] = useState(Display.initial)
+  const run = (step: DisplayStep) => {
+    set(step.display)
+    for (const command of step.commands) runtime.runFork(dispatch(command))
+  }
+  return { display, run, set }
 }

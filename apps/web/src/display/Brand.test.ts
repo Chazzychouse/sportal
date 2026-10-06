@@ -3,7 +3,7 @@ import { DateTime } from "effect"
 import { createElement } from "react"
 import { renderToStaticMarkup } from "react-dom/server"
 import { Connection } from "../hub/LiveStream.ts"
-import { ConnectionPill } from "./Masthead.tsx"
+import { ConnectionPill } from "./Brand.tsx"
 
 describe("ConnectionPill", () => {
   const pill = (connection: Connection) => renderToStaticMarkup(createElement(ConnectionPill, { connection }))

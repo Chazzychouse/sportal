@@ -1,7 +1,7 @@
 # Sportal — Domain Language
 
 One word per concept, used identically in code, UI, documents, and conversation.
-Every exported type name must be a term here, except the wire schemas in `*Payload.ts` and `FastCastMessage.ts`, which carry a provider's own vocabulary. Terms the code does not yet have are under [Planned](#planned).
+Every exported type name must be a term here, except the wire schemas in `*Payload.ts` and `FastCastMessage.ts`, which carry a provider's own vocabulary, and React components, which are named for what they show. Terms the code does not yet have are under [Planned](#planned).
 
 ### Competition
 
