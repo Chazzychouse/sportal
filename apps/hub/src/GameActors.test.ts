@@ -272,6 +272,10 @@ describe("GameActors", () => {
         const transitions = logs.filter(({ message }) => message.includes("Upcoming → Live"))
         assert.strictEqual(transitions.length, 1)
         assert.strictEqual(transitions[0]?.level, "Info")
+        assert.include(
+          transitions[0]?.message,
+          "GameActors: AWAY at HOME: Upcoming → Live at live, period 1, 15:00"
+        )
         assert.include(transitions[0]?.annotations, { game: "1", league: "fbs", matchup: "AWAY at HOME" })
         assert.strictEqual(yield* counted("sportal_transitions", { from: "Upcoming", to: "Live" }), 1)
       }).pipe(Effect.provide(TestCluster.gameActors), Effect.provide(layer), withMetrics)
@@ -286,6 +290,7 @@ describe("GameActors", () => {
         const stale = logs.filter(({ message }) => message.includes("Live → Stale"))
         assert.strictEqual(stale.length, 1)
         assert.strictEqual(stale[0]?.level, "Info")
+        assert.include(stale[0]?.message, "GameActors: AWAY at HOME: Live → Stale at ")
         assert.include(stale[0]?.annotations, { game: "1", league: "fbs", matchup: "AWAY at HOME" })
       }).pipe(Effect.provide(TestCluster.gameActors), Effect.provide(layer))
     })
@@ -376,6 +381,7 @@ describe("GameActors", () => {
               ["Debug", "stopped"]
             ]
           )
+          assert.include(lifecycle[1]?.message, "GameActors: AWAY at HOME: stopped, ")
           assert.include(lifecycle[1]?.annotations, { game: "1", league: "fbs", matchup: "AWAY at HOME" })
         }).pipe(Effect.provide(TestCluster.gameActors), Effect.provide(layer), withMetrics)
       }

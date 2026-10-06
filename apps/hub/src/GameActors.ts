@@ -169,7 +169,7 @@ const gameEntity = Game.toLayer(
           )
           const outcome = Option.isSome(next) ? "taken" : "behind"
           yield* Effect.logDebug(
-            `GameActors: ${outcome} ${gameTimeOf(snapshot)}${Option.match(before, {
+            `GameActors: ${snapshot.matchup()}: ${outcome} ${gameTimeOf(snapshot)}${Option.match(before, {
               onNone: () => "",
               onSome: (liveGame) => ` (had ${gameTimeOf(liveGame.snapshot)})`
             })}`
@@ -262,7 +262,7 @@ function logLifecycle(
   now: DateTime.Utc
 ): Effect.Effect<void> {
   return Effect.logWithLevel(liveGame.isCurrent(now) ? "Info" : "Debug")(
-    `GameActors: ${what}, ${liveGame.state._tag} at ${gameTimeOf(liveGame.snapshot)}`
+    `GameActors: ${liveGame.snapshot.matchup()}: ${what}, ${liveGame.state._tag} at ${gameTimeOf(liveGame.snapshot)}`
   )
 }
 
@@ -280,9 +280,9 @@ function logTransition(before: LiveGame, after: LiveGame, now: DateTime.Utc): Ef
     onNone: () => "",
     onSome: (at) => `, ${Math.round(Duration.toSeconds(DateTime.distance(at, now)))} s since the last update`
   })
-  return Effect.logInfo(`GameActors: ${from} → ${to} at ${gameTimeOf(after.snapshot)}${since}`).pipe(
-    Effect.andThen(Metric.update(Metric.withAttributes(transitions, { from, to }), 1))
-  )
+  return Effect.logInfo(
+    `GameActors: ${after.snapshot.matchup()}: ${from} → ${to} at ${gameTimeOf(after.snapshot)}${since}`
+  ).pipe(Effect.andThen(Metric.update(Metric.withAttributes(transitions, { from, to }), 1)))
 }
 
 function gameTimeOf(snapshot: GameSnapshot): string {
