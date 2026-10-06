@@ -323,7 +323,7 @@ function hubUnderTest() {
     Layer.provideMerge(YouTubeTv.layer),
     Layer.provide(ChannelStore.layer),
     Layer.provide(Database.at(":memory:")),
-    Layer.provideMerge(Layer.mergeAll(Slate.layer, Ingest.layer(["fbs"]))),
+    Layer.provideMerge(Layer.mergeAll(Slate.layer, Ingest.layer)),
     Layer.provide([
       LiveGames.layer,
       Layer.succeed(
@@ -333,7 +333,9 @@ function hubUnderTest() {
       DateTime.layerCurrentZoneLocal,
       FeedLog.layer.pipe(Layer.provide([Database.at(":memory:"), NodeCrypto.layer]))
     ]),
-    Layer.provideMerge(withEnv({ SPORTAL_VERSION: "1.2.3", SPORTAL_DATA_DIR: "unused" }))
+    Layer.provideMerge(
+      withEnv({ SPORTAL_VERSION: "1.2.3", SPORTAL_DATA_DIR: "unused", SPORTAL_LEAGUES: "fbs" })
+    )
   )
 }
 

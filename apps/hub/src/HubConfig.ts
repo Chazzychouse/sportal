@@ -1,4 +1,15 @@
-import { Config, Context, Effect, Layer, type LogLevel, Option, Path, Schema } from "effect"
+import { LeagueId } from "@sportal/domain/League"
+import {
+  Config,
+  Context,
+  Effect,
+  Layer,
+  type LogLevel,
+  Option,
+  Path,
+  Schema,
+  SchemaTransformation
+} from "effect"
 
 /** Every setting the Hub reads from its environment, decoded once at startup. */
 export class HubConfig extends Context.Service<
@@ -16,6 +27,8 @@ export class HubConfig extends Context.Service<
     readonly logFormat: "pretty" | "json"
     readonly version: string
     readonly otlpUrl: Option.Option<URL>
+    /** The leagues Ingest follows, from SPORTAL_LEAGUES as a comma-separated list; every league when it is unset. */
+    readonly leagues: ReadonlyArray<LeagueId>
   }
 >()("sportal/hub/HubConfig") {
   static readonly layer = Layer.effect(
@@ -55,7 +68,20 @@ export class HubConfig extends Context.Service<
             })
           ),
           "SPORTAL_OTLP_URL"
-        ).pipe(Config.option)
+        ).pipe(Config.option),
+        leagues: yield* Config.schema(
+          Schema.String.pipe(
+            Schema.decodeTo(
+              Schema.Array(Schema.String),
+              SchemaTransformation.transform<ReadonlyArray<string>, string>({
+                decode: (list) => list.split(",").map((league) => league.trim()),
+                encode: (leagues) => leagues.join(",")
+              })
+            ),
+            Schema.decodeTo(Schema.Array(LeagueId).check(Schema.isMinLength(1)))
+          ),
+          "SPORTAL_LEAGUES"
+        ).pipe(Config.withDefault(LeagueId.literals))
       })
     })
   )

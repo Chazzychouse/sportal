@@ -1,5 +1,4 @@
 import { NodeSocket } from "@effect/platform-node"
-import { LeagueId } from "@sportal/domain/League"
 import { DateTime, Effect, Layer, Option } from "effect"
 import { FeedLog } from "./FeedLog.ts"
 import { GameHistory } from "./GameHistory.ts"
@@ -37,7 +36,7 @@ function live() {
       Slate.layer,
       // Nothing reads the history yet; it only follows the fold.
       Layer.effectDiscard(Layer.build(GameHistory.layer)),
-      Ingest.layer(LeagueId.literals).pipe(
+      Ingest.layer.pipe(
         Layer.provide([
           EspnProvider.layer.pipe(Layer.provide(NodeSocket.layerWebSocketConstructorWS)),
           FeedLog.inDataDir,
@@ -55,7 +54,7 @@ function scripted(speed: number) {
   return Layer.mergeAll(
     Layer.mergeAll(
       Slate.layer,
-      Ingest.layer(LeagueId.literals).pipe(
+      Ingest.layer.pipe(
         Layer.provide([
           ScenarioProvider.layer.pipe(Layer.provide([RecordedScenarios.layer, EspnDecode.layer])),
           FeedLog.forScenario,

@@ -35,6 +35,7 @@ import * as EspnDecode from "../provider/espn/EspnDecode.ts"
 import { recordedCheckpoint } from "../provider/espn/TestEspn.ts"
 import { Decoded, Provider, ProviderError } from "../provider/Provider.ts"
 import { polling, pushed, scripted } from "../provider/TestProvider.ts"
+import { withEnv } from "../TestHubConfig.ts"
 import { counted, recordingLogs, recordingSpans, withMetrics } from "../TestTelemetry.ts"
 import * as Ingest from "./Ingest.ts"
 
@@ -600,10 +601,11 @@ function over(
     readonly zone?: string
   } = {}
 ) {
-  return Ingest.layer(options.leagues ?? ["fbs"]).pipe(
+  return Ingest.layer.pipe(
     Layer.provideMerge(Layer.mergeAll(LiveGames.layer, options.feedLog ?? FeedLog.layer)),
     Layer.provide([
       provider,
+      withEnv({ SPORTAL_LEAGUES: (options.leagues ?? ["fbs"]).join(",") }).pipe(Layer.orDie),
       options.zone === undefined
         ? DateTime.layerCurrentZoneLocal
         : DateTime.layerCurrentZoneNamed(options.zone).pipe(Layer.orDie)

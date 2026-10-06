@@ -320,7 +320,7 @@ function playing(name: string, options: Options & { readonly ended?: Array<Trace
 }
 
 function ingestOver(name: string, options: Options) {
-  return Ingest.layer(LeagueId.literals).pipe(
+  return Ingest.layer.pipe(
     Layer.provideMerge(
       options.scenarioFeedLog === true
         ? FeedLog.forScenario
