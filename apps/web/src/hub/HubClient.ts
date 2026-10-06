@@ -1,5 +1,4 @@
 import { SportalApi } from "@sportal/api/SportalApi"
-import type { Network } from "@sportal/domain/Game"
 import type { StageCommand, StageRejection } from "@sportal/domain/Stage"
 import { Context, Effect, Layer, PubSub, type Schema, Stream } from "effect"
 import type { HttpClientError } from "effect/http"
@@ -50,22 +49,6 @@ export const stageFailures = Stream.unwrap(
 /** Passes a guide the shell read to the Hub. The tiles it changes arrive on the live stream. */
 export function sendGuide(guide: string) {
   return HubClient.use((hub) => answerRead(hub.api.guide.read({ payload: { guide } })))
-}
-
-/**
- * Tells the Hub the channel the user picked for `network`. The Stage change arrives on the live stream, as it
- * does for the other channel commands.
- */
-export function learnChannel(network: Network, url: string) {
-  return HubClient.use((hub) => answerRead(hub.api.channels.learn({ payload: { network, url } })))
-}
-
-export function markNotCarried(network: Network) {
-  return HubClient.use((hub) => answerRead(hub.api.channels.notCarried({ payload: { network } })))
-}
-
-export function forgetChannel(network: Network) {
-  return HubClient.use((hub) => answerRead(hub.api.channels.forget({ payload: { network } })))
 }
 
 /**

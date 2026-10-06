@@ -92,8 +92,7 @@ describe("Guide#availabilityOf", () => {
     assert.deepStrictEqual(
       guide.availabilityOf(ohioStateAtIowa),
       ChannelAvailability.Carried({
-        channel: { name: "News 3", source: "YouTube TV", locator: news3Live },
-        learnedFor: Option.none()
+        channel: { name: "News 3", source: "YouTube TV", locator: news3Live }
       })
     )
   })

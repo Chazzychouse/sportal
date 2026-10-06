@@ -14,10 +14,3 @@ export const guideOrigin = "https://tv.youtube.com"
 
 /** The browse id of YouTube TV's live guide. */
 export const guideBrowseId = "FEunplugged_epg"
-
-/** Whether an address is a live channel's watch page on YouTube TV. */
-export function isChannelAddress(url: string) {
-  if (!URL.canParse(url)) return false
-  const { protocol, hostname, pathname } = new URL(url)
-  return protocol === "https:" && hostname === "tv.youtube.com" && pathname.startsWith("/watch/")
-}

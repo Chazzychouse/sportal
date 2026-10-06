@@ -65,15 +65,11 @@ Every exported type name must be a term here, except the wire schemas in `*Paylo
 | **Network** | A network's name as a provider reports it ("CBS", "ESPN"). | channel, station |
 | **Channel** | A station as a source names it ("News 3", "ESPN2"), with the address that plays it live. | network |
 | **Channel id** | A source's own id for one of its channels (YouTube TV's station id); `ChannelId` in code. | station id |
-| **Channel carriage** | Whether a source carries a network: on a channel, or not at all. | answer, mapping |
-| **Channel lineup** | The channel carriages one source has learned, and the guide where the rest are picked. | channel map |
-| **Channel availability** | Whether and where a source can show a game: carried, upcoming, unlearned (its network still to be picked), or not carried, with why. | availability |
+| **Channel availability** | Whether and where a source can show a game: carried, upcoming, no guide (the source has no fresh guide to say), or not carried, with why. | availability |
+| **No guide** | A source's answer while it has no fresh guide: before the first read, and once the last is stale. | unknown |
 | **Guide** | One reading of a source's listing of the channels this account gets, with their live addresses, and what each airs. | schedule, EPG |
 | **Airing** | One programme on a channel, with its begin and end. | listing, show |
 | **Guide unreadable** | A guide response the source could not read. | |
-| **Channel URL refused** | An address a source would not learn, because it is not one of its live channels. | not a channel |
-| **Channel store** | Where the Hub keeps the channel carriages it has learned. | channel repository |
-| **Channel store error** | The channel store could not read or write. | database error |
 | **Database** | The Hub's SQLite database. Each store migrates its own tables in it. | store, persistence |
 | **Game history** | Past plays and each game's latest snapshot, derived from the fold into the Hub's database. Rebuildable from the feed log. | archive, stats |
 | **Game history error** | The game history could not read. | database error |
@@ -96,7 +92,7 @@ Provider and Source are the two words most likely to be swapped. Provider is alw
 | **Live message** | One update the Hub pushes to clients on the live stream: the slate changed, or the Stage changed; `LiveMessage`, and `LiveMessageJson` its JSON form. | event, notification |
 | **Live stream** | The Hub's server-sent events at `/api/live` that carry live messages; in the web UI, `LiveStream` holds what they said and the connection. | event stream, socket |
 | **Connection** | Whether a client's live stream is up: connecting (never yet connected), connected, or lost (since an instant, retrying). | online, status |
-| **Hub client** | The web UI's way to the Hub's API, `HubClient` in code: stage and channel commands, and the stage commands that failed: refused by the Hub, or never reaching it. It runs in the web UI's one runtime (`HubRuntime.ts`), with the live stream. | API client, fetcher |
+| **Hub client** | The web UI's way to the Hub's API, `HubClient` in code: stage commands, and the stage commands that failed: refused by the Hub, or never reaching it. It runs in the web UI's one runtime (`HubRuntime.ts`), with the live stream. | API client, fetcher |
 | **Stage sessions** | The Hub component holding the authoritative Stage for each Display and applying stage commands to it. | stage store, stage manager |
 | **Telemetry** | The traces, logs, and metrics the Hub exports for people to read in Grafana. | monitoring, observability stack |
 | **Display** | A device running the shell and presenting a Stage. Its local state (selected tile, interacting tile, pick, slate drawer, and the one open overlay) is the web UI's `Display`. | screen, client, player |
@@ -107,9 +103,8 @@ Provider and Source are the two words most likely to be swapped. Provider is alw
 | **Full screen** | A Display's window filling its monitor with only the Stage; local to the Display, not a Stage state. | solo |
 | **Hotkey** | A key Sportal acts on, wherever it was pressed: in the web UI or in a stream view with focus. | shortcut, keybind |
 | **Provider session** | The shell's single persistent browser session shared by every provider view, with its navigation allowlist and permissions. | partition, profile |
-| **Tile views** | The shell component that keeps one provider web view per stream or picking tile, placed where the web UI says. | view manager |
+| **Tile views** | The shell component that keeps one provider web view per stream tile, placed where the web UI says. | view manager |
 | **Tile bounds** | A tile view's rectangle in the web UI's window, in whole CSS pixels; `TileBounds` in code. | rect, frame |
-| **Channel pick** | The shell's report that a picking tile's guide view landed on a channel's address, for its game. | selection |
 | **Guide reader** | The shell component that reads a source's guide with the source's own guide request, sent on the provider session. | scraper, EPG fetcher |
 
 ### Viewing
@@ -122,8 +117,7 @@ Provider and Source are the two words most likely to be swapped. Provider is alw
 | **Stage rejection** | The reason a stage command was refused. | error |
 | **Layout** | A named arrangement of tile slots whose dividers can be moved. | grid, template |
 | **Split** | Where a layout's dividers sit, as fractions of the Stage area. | ratio, sizes |
-| **Tile** | One slot's content: a **stream tile**, a **picking tile**, a **data tile**, or empty. | pane, cell, window |
-| **Picking tile** | A tile showing a source's guide until its game's network has a channel; `PickingChannel` in code. | setup tile |
+| **Tile** | One slot's content: a **stream tile**, a **data tile**, or empty. | pane, cell, window |
 | **Main tile** | The largest slot of a layout. | hero, primary |
 | **Bench** | The tiles a layout has no slot for, kept in order and not played. | queue, reserve |
 | **Pick** | The slate game a Display has stepped to with `[` `]`, ready to drop into the selected tile with Enter. Local to the Display, like the selected tile. | highlight, cursor |
@@ -134,7 +128,7 @@ Provider and Source are the two words most likely to be swapped. Provider is alw
 | **Display step** | A Display after an input, and the stage commands that input sends; `DisplayStep` in code. | result, update |
 | **Interacting tile** | The one stream tile whose player gets the mouse, after `I`; every other stream tile's player never sees the pointer. Local to the Display, like the selected tile. | active, unlocked |
 | **Promote** | Move a game into the main tile. | feature |
-| **Tile placement** | Where a game's stream or picking tile sits in a Display's window, what it loads, and whether it is a stream or a guide, as told to the shell. | bounds, rect |
+| **Tile placement** | Where a game's stream tile sits in a Display's window, what it loads, and whether it is muted or interactive, as told to the shell. | bounds, rect |
 | **Stage transition** | How tiles move to new places: one duration and easing, shared by the web UI and the shell. | animation |
 
 ## Planned

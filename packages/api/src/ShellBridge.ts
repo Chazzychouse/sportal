@@ -12,24 +12,18 @@ export const TileBounds = Schema.Struct({
 export type TileBounds = typeof TileBounds.Type
 
 /**
- * Where a game's provider view sits in the Display's window, in CSS pixels, and what it loads. A `stream` view
- * plays a channel; a `guide` view shows the source's guide so the user can pick the channel for a network.
+ * Where a game's provider view sits in the Display's window, in CSS pixels, and what it loads.
  * An `interactive` stream's player gets the mouse; every other stream's player never sees it.
  * A view belongs to its game, so a game that changes tiles keeps its player.
  */
 export const TilePlacement = Schema.Struct({
   game: GameId,
   url: Schema.String,
-  role: Schema.Literals(["stream", "guide"]),
   bounds: TileBounds,
   muted: Schema.Boolean,
   interactive: Schema.Boolean
 })
 export type TilePlacement = typeof TilePlacement.Type
-
-/** A guide view landed on a channel's address: the user picked that channel in the game's guide. */
-export const ChannelPick = Schema.Struct({ game: GameId, url: Schema.String })
-export type ChannelPick = typeof ChannelPick.Type
 
 /** How the shell moves provider views to new bounds: over `durationMs`, along a CSS cubic-bezier. */
 export const StageTransition = Schema.Struct({
@@ -57,8 +51,6 @@ export interface ShellBridge {
   onTilePressed(listener: (game: GameId) => void): () => void
   /** Opens the sign-in window for YouTube TV, or focuses it if open. Its sign-in is shared by every tile. */
   openSignIn(): void
-  /** Calls `listener` for every channel picked in a guide view. Returns a function that stops the calls. */
-  onChannelPicked(listener: (pick: ChannelPick) => void): () => void
   /** Calls `listener` with each guide the shell reads from the source, unchanged. Returns a function that stops the calls. */
   onGuideRead(listener: (guide: string) => void): () => void
   /** Asks the shell to read the guide now: at start, and when the Hub comes back. The shell also reads every 5 minutes. */

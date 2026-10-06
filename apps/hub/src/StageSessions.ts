@@ -43,7 +43,7 @@ export class StageSessions extends Context.Service<
         )
       })
 
-      // When the source learns or forgets a channel, every tile it affects changes on every Display.
+      // When what the source answers changes, every tile it affects changes on every Display.
       const refresh = SubscriptionRef.updateEffect(current, (stage) =>
         availabilityOnSlate.pipe(Effect.map((availabilityOf) => stage.refresh(availabilityOf)))
       )

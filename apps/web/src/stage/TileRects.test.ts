@@ -2,7 +2,7 @@ import { assert, describe, it } from "@effect/vitest"
 import { ChannelAvailability } from "@sportal/domain/Channel"
 import { GameId } from "@sportal/domain/Game"
 import { Stage } from "@sportal/domain/Stage"
-import { Option, Result } from "effect"
+import { Result } from "effect"
 import { coveredGames, placements, tileRects } from "./TileRects.ts"
 
 const area = { width: 1600, height: 900 }
@@ -43,8 +43,7 @@ describe("placements", () => {
       source: "Scenario" as const,
       locator: { _tag: "WebView" as const, url: "/scenario-stream/401856707" }
     }
-    const carriedOnScenario = () =>
-      ChannelAvailability.Carried({ channel: scenario, learnedFor: Option.none() })
+    const carriedOnScenario = () => ChannelAvailability.Carried({ channel: scenario })
     const stage = Result.getOrThrow(
       Result.getOrThrow(
         Stage.initial.apply({ _tag: "Assign", tile: 0, game: bama }, carriedOnScenario)
@@ -119,7 +118,7 @@ function soloed() {
 }
 
 function carriedOnFox() {
-  return ChannelAvailability.Carried({ channel: fox, learnedFor: Option.none() })
+  return ChannelAvailability.Carried({ channel: fox })
 }
 
 function none() {

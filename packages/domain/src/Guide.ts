@@ -62,8 +62,7 @@ export class Guide extends Schema.Class<Guide>("sportal/Guide")({
     const soon = DateTime.isLessThanOrEqualTo(airing.begin, DateTime.addDuration(this.readAt, startingSoon))
     return channel.live !== undefined && soon
       ? ChannelAvailability.Carried({
-          channel: { name: channel.name, source: this.source, locator: channel.live },
-          learnedFor: Option.none()
+          channel: { name: channel.name, source: this.source, locator: channel.live }
         })
       : ChannelAvailability.Upcoming({ channel: Option.some(channel.name), begin: Option.some(airing.begin) })
   }

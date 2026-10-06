@@ -4,7 +4,7 @@ import { GameStatus, localTime } from "../game/GameStatus.tsx"
 import { Score } from "../game/Score.tsx"
 
 /**
- * What a tile's well shows from the web UI. In the shell a provider view covers a stream or picking tile's
+ * What a tile's well shows from the web UI. In the shell a provider view covers a stream tile's
  * well; in a plain browser this is what is seen, with a link to watch.
  */
 export function TileBody(props: { tile: Tile; game: GameSnapshot | undefined }) {
@@ -18,15 +18,6 @@ export function TileBody(props: { tile: Tile; game: GameSnapshot | undefined }) 
           {props.game !== undefined && <Scoreboard game={props.game} />}
           <p className="text-muted-foreground text-sm">{noStream(tile.why)}</p>
         </div>
-      )
-    case "PickingChannel":
-      return (
-        <span className="flex flex-col items-center gap-1 text-muted-foreground text-sm">
-          <a className="underline underline-offset-4" href={tile.guide.url} target="_blank" rel="noreferrer">
-            Open the guide
-          </a>
-          <span>Picking a channel works in the desktop app</span>
-        </span>
       )
     case "StreamTile":
       return (
@@ -62,6 +53,8 @@ function noStream(why: Extract<Tile, { _tag: "DataTile" }>["why"]): string {
       return "Streaming only: not on YouTube TV"
     case "NotInGuide":
       return "Not in your YouTube TV guide"
+    case "NoGuide":
+      return "Waiting for the YouTube TV guide"
     case "NotYet":
       return why.channel === undefined
         ? "Not in your YouTube TV guide yet"

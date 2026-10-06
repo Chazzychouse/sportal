@@ -10,7 +10,6 @@ export const ShellChannel = {
   hotkey: "sportal:hotkey",
   tilePressed: "sportal:tile-pressed",
   openSignIn: "sportal:open-sign-in",
-  channelPicked: "sportal:channel-picked",
   guideRead: "sportal:guide-read",
   readGuide: "sportal:read-guide"
 } as const

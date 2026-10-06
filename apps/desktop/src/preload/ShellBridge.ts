@@ -10,7 +10,6 @@ const bridge: ShellBridge = {
   onHotkey: subscribe(ShellChannel.hotkey),
   onTilePressed: subscribe(ShellChannel.tilePressed),
   openSignIn: () => ipcRenderer.send(ShellChannel.openSignIn),
-  onChannelPicked: subscribe(ShellChannel.channelPicked),
   onGuideRead: subscribe(ShellChannel.guideRead),
   readGuide: () => ipcRenderer.send(ShellChannel.readGuide)
 }

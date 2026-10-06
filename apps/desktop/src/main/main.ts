@@ -92,7 +92,6 @@ const serveHub = Effect.gen(function* () {
   yield* forward(ShellChannel.hotkey, tiles.hotkeys)
   yield* forward(ShellChannel.tilePressed, tiles.tilePresses)
   yield* listen(ShellChannel.openSignIn, () => run(providers.openSignIn))
-  yield* forward(ShellChannel.channelPicked, tiles.channelPicks)
 
   const reader = yield* GuideReader
   yield* forward(ShellChannel.guideRead, reader.guides)
