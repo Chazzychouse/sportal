@@ -194,7 +194,7 @@ sportal/
 │   │       ├── Delivery.ts     What a frame said: a listing, a snapshot, or a game's plays; DeliverySource
 │   │       ├── LiveGame.ts     One game as the Hub follows it: LiveGame, LiveGameState; take and tick
 │   │       ├── LiveGames.ts    The pure fold of every delivery in order; FoldReport
-│   │       ├── Channel.ts      SourceName, Channel, ChannelCarriage, ChannelLineup, ChannelAvailability, ChannelUrlRefused
+│   │       ├── Channel.ts      SourceName, Channel, ChannelAvailability
 │   │       ├── Guide.ts        Guide, Airing, ChannelId, GuideUnreadable
 │   │       ├── Stream.ts       StreamLocator
 │   │       ├── Layout.ts       Layouts, splits, and their tile slots
@@ -205,7 +205,7 @@ sportal/
 │       └── src/
 │           ├── SportalApi.ts   HttpApi declaration: endpoint groups built from domain schemas
 │           ├── LiveMessage.ts  The union of messages on the live stream
-│           ├── ShellBridge.ts  What the desktop shell exposes to the web UI; TilePlacement, TileBounds, ChannelPick
+│           ├── ShellBridge.ts  What the desktop shell exposes to the web UI; TilePlacement, TileBounds
 │           ├── ShellChannel.ts The IPC channel names, apart so the sandboxed preload bundles only them
 │           └── Hotkey.ts       The keys Sportal acts on, with their help text
 │
@@ -248,9 +248,8 @@ sportal/
     │       │       └── fixtures/           Recorded real payloads
     │       ├── source/
     │       │   ├── Source.ts       The port
-    │       │   ├── ChannelStore.ts Learned channel carriages, in the Database; owns its migrations
     │       │   └── youtube-tv/
-    │       │       ├── YouTubeTv.ts         Guide reading, availability, learned channels
+    │       │       ├── YouTubeTv.ts         Guide reading and availability
     │       │       ├── YouTubeTvPayload.ts  The guide response's wire shape
     │       │       ├── TestYouTubeTv.ts     A recorded guide for tests of other modules
     │       │       └── fixtures/            Recorded real payloads
@@ -407,21 +406,17 @@ class LiveGames extends Context.Service<LiveGames, {
 
 ```ts
 class Source extends Context.Service<Source, {
-  readonly budget: StreamBudget
   readonly availability: Effect<(game: GameSnapshot) => ChannelAvailability>
   readonly changes: Stream<void>
   readGuide(guide: string): Effect<void, GuideUnreadable>
-  learn(network: Network, url: string): Effect<void, ChannelUrlRefused | ChannelStoreError>
-  markNotCarried(network: Network): Effect<void, ChannelStoreError>
-  forget(network: Network): Effect<void, ChannelStoreError>
 }>()("sportal/hub/Source") {}
 ```
 
-A source's channels are found in its own guide, read by the shell (`docs/history.md`, "Guide-matched channels"); channels picked by hand answer only until a guide is read.
+A source's channels are found in its own guide, read by the shell (`docs/history.md`, "Guide-matched channels"); with no fresh guide, a source answers "no guide".
 
 `StreamLocator` is a tagged union. Today it has one member, a web-view address; a new kind is added only when a source needs it.
 
-**Stores** — persistence. Each concept's store is a service over the `Database` module (SQLite; Postgres when cloud-hosted) and owns its migrations in its own table. `ChannelStore` and `GameHistory` exist; follows, presets, and rules arrive with the Tracker. A Stage is not stored.
+**Stores** — persistence. Each concept's store is a service over the `Database` module (SQLite; Postgres when cloud-hosted) and owns its migrations in its own table. `GameHistory` exists; follows, presets, and rules arrive with the Tracker. A Stage is not stored.
 
 ### 5.2 Ingest: frames, deliveries, and events
 
@@ -439,7 +434,7 @@ A source's channels are found in its own guide, read by the shell (`docs/history
 
 `stage.apply(command, availabilityOf)` is a pure method returning the new Stage or a typed rejection.
 
-- State: a layout (`Single`, `Pair`, `Quad`, `MainThree`, `MainFive`), each layout's split, the tiles (each empty, stream, picking, or data), audio focus, and solo. The first `Layout.slotCount(layout)` tiles are on stage, main tile first; the rest are the **bench**, kept in order and not played. Audio focus and solo name a game, so they follow it when tiles move.
+- State: a layout (`Single`, `Pair`, `Quad`, `MainThree`, `MainFive`), each layout's split, the tiles (each empty, stream, or data), audio focus, and solo. The first `Layout.slotCount(layout)` tiles are on stage, main tile first; the rest are the **bench**, kept in order and not played. Audio focus and solo name a game, so they follow it when tiles move.
 - Commands: `Assign`, `Clear`, `Swap`, `Promote`, `SetLayout`, `SetSplit`, `Solo`, `Unsolo`, `FocusAudio`. `LoadPreset` comes with presets.
 - Invariants, enforced only here: a game appears in at most one tile, on stage or benched; audio focus is an on-stage game (the focused one while it is on stage, else the first), or none on an empty stage; solo is an on-stage game; dividers stay within 0.2–0.8. Still to come: stream tiles per source across **all** Displays never exceed that source's budget, and an assignment beyond it becomes a data tile.
 - Geometry: `Layout#slots` gives each slot as fractions of the Stage area. The web UI turns them into pixels once and uses the same numbers for its tile chrome and the shell's tile placements, so the two move together along one **Stage transition** (280 ms, `cubic-bezier(0.2, 0, 0, 1)`), which the shell follows by moving each view's bounds.
