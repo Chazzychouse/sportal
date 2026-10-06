@@ -29,6 +29,8 @@ import { FeedLog } from "../FeedLog.ts"
 import type { FeedFrame } from "../Frame.ts"
 import { GameHistory } from "../GameHistory.ts"
 import { LiveGames } from "../LiveGames.ts"
+import * as EspnDecode from "../provider/espn/EspnDecode.ts"
+import { recordedCheckpoint } from "../provider/espn/TestEspn.ts"
 import { LiveFeed, LiveFeedError } from "../provider/LiveFeed.ts"
 import { Decoded, Provider, ProviderError } from "../provider/Provider.ts"
 import { neverPushing, polling, pushed, scripted } from "../provider/TestProvider.ts"
@@ -425,6 +427,51 @@ describe("Ingest", () => {
     }).pipe(Effect.provide([TestDatabase.layer(":memory:"), NodeCrypto.layer]))
   })
 
+  it.effect("a restart replays frames that raised notices without counting or logging them", () => {
+    const { logs, layer: logged } = recordingLogs()
+    return Effect.gen(function* () {
+      yield* loggedBefore(noticeable)
+
+      yield* Effect.gen(function* () {
+        yield* (yield* LiveGames).latest
+        for (const counter of decodeCounters) assert.isUndefined(yield* counted(counter), counter)
+        assert.deepStrictEqual(
+          logs.filter(({ message }) => message.includes("Decode:")),
+          []
+        )
+      }).pipe(Effect.provide(over(espnDecoding)), Effect.provide(logged))
+    }).pipe(Effect.provide([TestDatabase.layer(":memory:"), NodeCrypto.layer]), withMetrics)
+  })
+
+  it.effect("the same notices on frames after the replay are counted and logged", () => {
+    const { logs, layer: logged } = recordingLogs()
+    return Effect.gen(function* () {
+      const log = yield* FeedLog
+      yield* Effect.forEach(noticeable, (frame) => Effect.flatMap(frame, log.append), { discard: true })
+      yield* counted("sportal_live_feed_document_resets").pipe(
+        Effect.repeat({ until: (count) => count !== undefined, schedule: Schedule.spaced("5 millis") }),
+        Effect.timeout("1 second"),
+        TestClock.withLive
+      )
+
+      assert.strictEqual(yield* counted("sportal_frames_undecoded", { feed: "poll" }), 1)
+      assert.strictEqual(yield* counted("sportal_live_feed_games", { league: "nfl" }), 16)
+      assert.strictEqual(yield* counted("sportal_live_feed_unlisted", { league: "nfl" }), 16)
+      assert.strictEqual(yield* counted("sportal_live_feed_messages", { league: "nfl", op: "P" }), 1)
+      assert.strictEqual(
+        yield* counted("sportal_live_feed_document_resets", { league: "nfl", reason: "Gap" }),
+        1
+      )
+      assert.strictEqual(
+        logs.filter(
+          ({ level, message }) => level === "Warn" && message.includes("waits for its next checkpoint")
+        ).length,
+        1
+      )
+      assert.isTrue(logs.some(({ level, message }) => level === "Error" && message.includes("Decode:")))
+    }).pipe(Effect.provide(ingesting(espnDecoding)), Effect.provide(logged), withMetrics)
+  })
+
   it.effect("a frame appended the moment the replay ends, before anything else runs, reaches the fold", () =>
     Effect.gen(function* () {
       yield* loggedBefore([pollOf([liveSnapshot({ id: GameId.make("1"), period: 2 })])])
@@ -618,6 +665,61 @@ const counting = Provider.of({
       )
     )
 })
+
+/** A provider whose polls fail and whose decode is ESPN's, for frames that raise its notices. */
+const espnDecoding = Layer.succeed(
+  Provider,
+  Provider.of({
+    poll: (league) => Effect.fail(new ProviderError({ league, cause: "down" })),
+    decode: EspnDecode.decode
+  })
+)
+
+/**
+ * Frames, received now, that ESPN's decode notices: a poll that does not decode, the recorded NFL scoreboard
+ * checkpoint before any listing (sixteen games pushed and unlisted), and a game topic's checkpoint and then a message
+ * after a gap.
+ */
+const noticeable: ReadonlyArray<Effect.Effect<FeedFrame>> = (
+  [
+    { feed: "poll", channel: "nfl", kind: "response", body: "not json" },
+    {
+      feed: "fastcast",
+      channel: "event-football-nfl",
+      kind: "checkpoint",
+      sourceId: 4286637,
+      body: recordedCheckpoint()
+    },
+    {
+      feed: "fastcast",
+      channel: "gp-football-nfl-1",
+      kind: "checkpoint",
+      sourceId: 99,
+      body: JSON.stringify({ entities: {} })
+    },
+    {
+      feed: "fastcast",
+      channel: "gp-football-nfl-1",
+      kind: "message",
+      sourceId: 101,
+      body: JSON.stringify({
+        op: "P",
+        tc: "gp-football-nfl-1",
+        mid: 101,
+        pl: JSON.stringify({ ts: 1, pl: [] })
+      })
+    }
+  ] satisfies ReadonlyArray<Omit<FeedFrame, "receivedAt">>
+).map((frame) => Effect.map(DateTime.now, (receivedAt): FeedFrame => ({ ...frame, receivedAt })))
+
+const decodeCounters = [
+  "sportal_live_feed_messages",
+  "sportal_live_feed_games",
+  "sportal_events_undecoded",
+  "sportal_live_feed_unlisted",
+  "sportal_live_feed_document_resets",
+  "sportal_frames_undecoded"
+]
 
 /** An fbs poll of `games`, as the scripted provider frames it, received now. */
 function scoring(n: number) {

@@ -228,6 +228,7 @@ sportal/
     │       ├── TestDatabase.ts, TestHubConfig.ts, TestTelemetry.ts   Layers for tests
     │       ├── ingest/
     │       │   ├── Ingest.ts       Replays the game day from the feed log, then polls, runs the live feed, logs every frame, and folds it
+    │       │   ├── DecodeTelemetry.ts  What decode noticed, as logs and metrics, for frames after the replay
     │       │   └── Cadence.ts      How long to wait between polls
     │       ├── hub-server/
     │       │   ├── HubServer.ts    Serves the API, the live stream, and the web UI's files

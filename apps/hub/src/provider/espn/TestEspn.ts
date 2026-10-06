@@ -5,6 +5,14 @@ export function recordedScoreboard(name: "fbs-scoreboard-2026-10-03T2024Z" | "nf
   return readFileSync(new URL(`./fixtures/${name}.json`, import.meta.url), "utf8")
 }
 
+/** ESPN's NFL FastCast scoreboard checkpoint of 2026-10-04 at 17:52Z (mid 4286637), as its checkpoint frame's body. */
+export function recordedCheckpoint() {
+  return readFileSync(
+    new URL("./fixtures/nfl-fastcast-checkpoint-2026-10-04T1752Z.json", import.meta.url),
+    "utf8"
+  )
+}
+
 /**
  * Where NE at BUF's frames on 2026-10-04 are, for `readFrames`: imported from the recording with
  * `pnpm --filter @sportal/hub feed:import --recording …/2026-10-04/nfl --games 401872971 --out …`, its game topic's

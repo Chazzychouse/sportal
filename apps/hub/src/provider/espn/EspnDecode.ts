@@ -2,9 +2,9 @@ import { Delivery } from "@sportal/domain/Delivery"
 import type { GameId, GameSnapshot } from "@sportal/domain/Game"
 import { LeagueId } from "@sportal/domain/League"
 import { Play } from "@sportal/domain/Play"
-import { Array as Arr, Effect, Metric, Option, Record, Result, Schema, Stream } from "effect"
+import { Array as Arr, Effect, Option, Record, Result, Schema, Stream } from "effect"
 import type { Frame } from "../../Frame.ts"
-import { Decoded, type Provider } from "../Provider.ts"
+import { Decoded, Notice, type Provider } from "../Provider.ts"
 import { EspnEvent } from "./EspnEvent.ts"
 import * as EspnPlay from "./EspnPlay.ts"
 import * as FastCastDocument from "./FastCastDocument.ts"
@@ -12,9 +12,9 @@ import * as FastCastDocument from "./FastCastDocument.ts"
 /**
  * What each ESPN frame said, in order. A poll response is its league's `Listing`. A scoreboard topic's change is a
  * pushed `Snapshot` of each game it touched, advanced to the game its league last listed (FastCast has no short
- * names); a game no listing has is counted and not delivered. A game topic's change is a `Plays` of the game's whole
- * list, in `Play.order`. A topic whose document was sent back to waiting for a checkpoint is a `Resync` of it. A frame
- * that does not decode is logged with its `seq`, counted, and skipped.
+ * names); a game no listing has is noted `Unlisted` and not delivered. A game topic's change is a `Plays` of the
+ * game's whole list, in `Play.order`. A topic whose document was sent back to waiting for a checkpoint is a `Resync`
+ * of it. A frame that does not decode is noted `FrameUndecoded` and skipped. Logs and counts nothing.
  */
 export const decode: Provider["Service"]["decode"] = (frames) =>
   frames.pipe(
@@ -22,8 +22,8 @@ export const decode: Provider["Service"]["decode"] = (frames) =>
       (): State => ({
         listings: new Map(),
         documents: FastCastDocument.empty,
-        loggedTypes: new Set(),
-        undecodedPlays: new Set()
+        notedTypes: new Set(),
+        notedPlays: new Set()
       }),
       (state, frame) => (frame.feed === "poll" ? listed(state, frame) : pushed(state, frame))
     )
@@ -33,14 +33,14 @@ export const decode: Provider["Service"]["decode"] = (frames) =>
 const Scoreboard = Schema.Struct({ events: Schema.Array(Schema.Unknown) })
 
 /**
- * Each league's last listing, the FastCast topics' documents, the unknown play types already logged, and the plays
- * already logged as not decoding.
+ * Each league's last listing, the FastCast topics' documents, the unknown play types already noted, and the plays
+ * already noted as not decoding.
  */
 type State = {
   readonly listings: ReadonlyMap<LeagueId, ReadonlyArray<GameSnapshot>>
   readonly documents: typeof FastCastDocument.empty
-  readonly loggedTypes: ReadonlySet<string>
-  readonly undecodedPlays: ReadonlySet<string>
+  readonly notedTypes: ReadonlySet<string>
+  readonly notedPlays: ReadonlySet<string>
 }
 
 /** What one frame said, as `decode` gives it. */
@@ -51,15 +51,15 @@ function listed(state: State, frame: Frame): Effect.Effect<readonly [State, Said
     Effect.flatMap(({ league, scoreboard }) =>
       gamesOf(league, scoreboard.events, frame.feed).pipe(
         Effect.map(
-          (games) =>
+          ({ games, noticed }) =>
             [
               { ...state, listings: new Map([...state.listings, [league, games]]) },
-              [delivered(frame, Delivery.Listing({ league, games }))]
+              [...noted(frame, noticed), delivered(frame, Delivery.Listing({ league, games }))]
             ] as const
         )
       )
     ),
-    Effect.catch((cause) => undecodable(frame, cause).pipe(Effect.as([state, []] as const)))
+    Effect.catch((cause) => Effect.succeed([state, [undecodable(frame, cause)]] as const))
   )
 }
 
@@ -68,38 +68,50 @@ const decodeScoreboard = Schema.decodeUnknownEffect(Schema.fromJsonString(Scoreb
 
 function pushed(state: State, frame: Frame): Effect.Effect<readonly [State, Said]> {
   return FastCastDocument.advance(state.documents, frame).pipe(
-    Effect.flatMap(([documents, change]): Effect.Effect<readonly [State, Said]> => {
+    Effect.flatMap(({ documents, change, noticed }): Effect.Effect<readonly [State, Said]> => {
       const moved = { ...state, documents }
+      const told = noted(frame, noticed)
       return Option.match(change, {
-        onNone: () => Effect.succeed([moved, []] as const),
+        onNone: () => Effect.succeed([moved, told] as const),
         onSome: (said) => {
           switch (said._tag) {
             case "Scoreboard":
               return gamesOf(said.league, said.events, frame.feed).pipe(
-                Effect.tap((games) =>
-                  Metric.update(Metric.withAttributes(gamesPushed, { league: said.league }), games.length)
-                ),
-                Effect.flatMap((games) => advancedToListed(state.listings, games)),
-                Effect.map((deliveries) => [moved, deliveries.map((one) => delivered(frame, one))] as const)
+                Effect.map(({ games, noticed: undecoded }) => {
+                  const { deliveries, unlisted } = advancedToListed(state.listings, games)
+                  return [
+                    moved,
+                    [
+                      ...told,
+                      ...noted(frame, [
+                        ...undecoded,
+                        Notice.Pushed({ league: said.league, games: games.length }),
+                        ...unlisted.map((game) => Notice.Unlisted({ league: game.league, game: game.id }))
+                      ]),
+                      ...deliveries.map((one) => delivered(frame, one))
+                    ]
+                  ] as const
+                })
               )
             case "Game":
               return playsOf(moved, said.league, said.game, said.plays).pipe(
                 Effect.map(
-                  ([next, deliveries]) => [next, deliveries.map((one) => delivered(frame, one))] as const
+                  ({ state: next, noticed: notes, plays }) =>
+                    [next, [...told, ...noted(frame, notes), delivered(frame, plays)]] as const
                 )
               )
             case "Reset":
               return Effect.succeed([
                 moved,
-                [Decoded.Resync({ channel: frame.channel, seq: frame.seq })]
+                [...told, Decoded.Resync({ channel: frame.channel, seq: frame.seq })]
               ] as const)
             case "Unreadable":
-              return undecodable(frame, said.cause).pipe(Effect.as([moved, []] as const))
+              return Effect.succeed([moved, [...told, undecodable(frame, said.cause)]] as const)
           }
         }
       })
     }),
-    Effect.catch((cause) => undecodable(frame, cause).pipe(Effect.as([state, []] as const)))
+    Effect.catch((cause) => Effect.succeed([state, [undecodable(frame, cause)]] as const))
   )
 }
 
@@ -107,24 +119,27 @@ function delivered(frame: Frame, delivery: Delivery) {
   return Decoded.Delivered({ delivery, at: frame.receivedAt, seq: frame.seq })
 }
 
-/** The events as games; an event that does not decode is logged and counted, and the rest still delivered. */
+function noted(frame: Frame, notices: ReadonlyArray<Notice>): Said {
+  return notices.map((notice) => Decoded.Noted({ notice, seq: frame.seq }))
+}
+
+/** The events as games; an event that does not decode is noted and skipped, and the rest still delivered. */
 function gamesOf(
   league: LeagueId,
   events: ReadonlyArray<unknown>,
   feed: Frame["feed"]
-): Effect.Effect<ReadonlyArray<GameSnapshot>> {
+): Effect.Effect<{ readonly games: ReadonlyArray<GameSnapshot>; readonly noticed: ReadonlyArray<Notice> }> {
   return Effect.forEach(events, (event) =>
     decodeEvent[league](event).pipe(
-      Effect.asSome,
-      Effect.catch((issue) =>
-        Effect.logWarning("EspnDecode: skipped an event that failed to decode", issue).pipe(
-          Effect.annotateLogs({ league, feed }),
-          Effect.andThen(Metric.update(Metric.withAttributes(undecodedEvents, { league, feed }), 1)),
-          Effect.as(Option.none())
-        )
-      )
+      Effect.map(Result.succeed),
+      Effect.catch((cause) => Effect.succeed(Result.fail(Notice.EventUndecoded({ league, feed, cause }))))
     )
-  ).pipe(Effect.map(Arr.getSomes))
+  ).pipe(
+    Effect.map((decoded) => {
+      const [games, noticed] = Arr.separate(decoded)
+      return { games, noticed }
+    })
+  )
 }
 
 const decodeEvent = {
@@ -132,12 +147,12 @@ const decodeEvent = {
   fbs: Schema.decodeUnknownEffect(EspnEvent("fbs"))
 }
 
-/** Each pushed game as its league's listed game advanced to it; a game no listing has is counted and dropped. */
+/** Each pushed game as its league's listed game advanced to it; a game no listing has is unlisted. */
 function advancedToListed(
   listings: ReadonlyMap<LeagueId, ReadonlyArray<GameSnapshot>>,
   games: ReadonlyArray<GameSnapshot>
-): Effect.Effect<ReadonlyArray<Delivery>> {
-  const [advanced, unlisted] = Arr.partition(games, (game) =>
+): { readonly deliveries: ReadonlyArray<Delivery>; readonly unlisted: ReadonlyArray<GameSnapshot> } {
+  const [deliveries, unlisted] = Arr.partition(games, (game) =>
     Option.match(
       Option.fromUndefinedOr(listings.get(game.league)?.find((listedGame) => listedGame.id === game.id)),
       {
@@ -147,60 +162,48 @@ function advancedToListed(
       }
     )
   )
-  return Effect.forEach(
-    unlisted,
-    (game) => Metric.update(Metric.withAttributes(liveFeedUnlisted, { league: game.league }), 1),
-    { discard: true }
-  ).pipe(Effect.as(advanced))
+  return { deliveries, unlisted }
 }
 
 /**
- * The game's plays, in `Play.order`. A play that does not decode is skipped, and logged and counted the first time;
- * a play type the table does not know is logged once.
+ * The game's plays, in `Play.order`. A play that does not decode is skipped, and noted the first time; a play type
+ * the table does not know is noted once.
  */
 function playsOf(
   state: State,
   league: LeagueId,
   game: GameId,
   entities: Readonly<Record<string, Schema.Json>>
-): Effect.Effect<readonly [State, ReadonlyArray<Delivery>]> {
+): Effect.Effect<{
+  readonly state: State
+  readonly noticed: ReadonlyArray<Notice>
+  readonly plays: Delivery
+}> {
   const unknown = EspnPlay.unknownTypes(Record.values(entities)).filter(
-    (type) => !state.loggedTypes.has(type.id)
+    (type) => !state.notedTypes.has(type.id)
   )
   return Effect.forEach(Record.toEntries(entities), ([id, entity]) =>
     decodePlay[league](entity).pipe(
-      Effect.map((play) => Result.succeed(play)),
-      Effect.catch((issue) =>
-        (state.undecodedPlays.has(id)
-          ? Effect.void
-          : Effect.logWarning(`EspnDecode: skipped play ${id}, which does not decode`, issue).pipe(
-              Effect.annotateLogs({ league, game }),
-              Effect.andThen(Metric.update(Metric.withAttributes(undecodedPlays, { league }), 1))
-            )
-        ).pipe(Effect.as(Result.fail(id)))
-      )
+      Effect.map(Result.succeed),
+      Effect.catch((cause) => Effect.succeed(Result.fail({ id, cause })))
     )
   ).pipe(
-    Effect.tap(() =>
-      Effect.forEach(
-        unknown,
-        (type) =>
-          Effect.logInfo(
-            `EspnDecode: ESPN play type ${type.id} (${type.text}) is not in the table; read as other`
-          ),
-        { discard: true }
-      )
-    ),
     Effect.map((decoded) => {
       const [plays, skipped] = Arr.separate(decoded)
-      return [
-        {
+      return {
+        state: {
           ...state,
-          loggedTypes: new Set([...state.loggedTypes, ...unknown.map((type) => type.id)]),
-          undecodedPlays: new Set([...state.undecodedPlays, ...skipped])
+          notedTypes: new Set([...state.notedTypes, ...unknown.map((type) => type.id)]),
+          notedPlays: new Set([...state.notedPlays, ...skipped.map(({ id }) => id)])
         },
-        [Delivery.Plays({ game, plays: plays.toSorted(Play.order) })]
-      ] as const
+        noticed: [
+          ...skipped
+            .filter(({ id }) => !state.notedPlays.has(id))
+            .map(({ id, cause }) => Notice.PlayUndecoded({ league, game, play: id, cause })),
+          ...unknown.map((type) => Notice.PlayTypeUnknown(type))
+        ],
+        plays: Delivery.Plays({ game, plays: plays.toSorted(Play.order) })
+      }
     })
   )
 }
@@ -210,34 +213,9 @@ const decodePlay = {
   fbs: Schema.decodeUnknownEffect(EspnPlay.Play("fbs"))
 }
 
-function undecodable(frame: Frame, cause: unknown): Effect.Effect<void> {
-  return Effect.logError("EspnDecode: skipped a frame that does not decode", cause).pipe(
-    Effect.annotateLogs({ seq: frame.seq, feed: frame.feed, channel: frame.channel, kind: frame.kind }),
-    Effect.andThen(Metric.update(Metric.withAttributes(framesUndecoded, { feed: frame.feed }), 1))
-  )
+function undecodable(frame: Frame, cause: unknown): Decoded {
+  return Decoded.Noted({
+    notice: Notice.FrameUndecoded({ feed: frame.feed, channel: frame.channel, kind: frame.kind, cause }),
+    seq: frame.seq
+  })
 }
-
-const framesUndecoded = Metric.counter("sportal_frames_undecoded", {
-  description: "Frames that did not decode and were skipped, by feed",
-  incremental: true
-})
-
-const gamesPushed = Metric.counter("sportal_live_feed_games", {
-  description: "Game snapshots the live feed delivered, by league",
-  incremental: true
-})
-
-const undecodedPlays = Metric.counter("sportal_live_feed_undecoded_plays", {
-  description: "ESPN plays that did not decode and were left out of their game's list, each once, by league",
-  incremental: true
-})
-
-const undecodedEvents = Metric.counter("sportal_events_undecoded", {
-  description: "ESPN events, polled or pushed, that did not decode and were skipped, by league and feed",
-  incremental: true
-})
-
-const liveFeedUnlisted = Metric.counter("sportal_live_feed_unlisted", {
-  description: "Pushed games no poll has listed yet, so not sent",
-  incremental: true
-})

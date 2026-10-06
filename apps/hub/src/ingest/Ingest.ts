@@ -22,8 +22,9 @@ import {
 import { FeedLog } from "../FeedLog.ts"
 import { LiveGames } from "../LiveGames.ts"
 import { LiveFeed } from "../provider/LiveFeed.ts"
-import { type Decoded, Provider } from "../provider/Provider.ts"
+import { Decoded, Provider } from "../provider/Provider.ts"
 import * as Cadence from "./Cadence.ts"
+import * as DecodeTelemetry from "./DecodeTelemetry.ts"
 
 /**
  * Replays the current game day from the feed log into the live games, then polls each league at the Cadence and runs
@@ -46,17 +47,20 @@ export const layer = (leagues: ReadonlyArray<LeagueId>) =>
       // Subscribed before the replay is read, so a frame appended any time after it ends is in `appended`.
       const appended = yield* feedLog.subscribe
 
-      // Nothing a replayed frame says goes live: its deliveries go to the replay, and a resync is dropped, since no
-      // socket follows a topic yet and one that does starts it from a fresh checkpoint anyway.
+      // Nothing a replayed frame says goes live: its deliveries go to the replay, and a resync or a notice is dropped,
+      // since no socket follows a topic yet (one that does starts it from a fresh checkpoint anyway) and its notices
+      // were told when the frame first arrived.
       const route = (said: Decoded) =>
         Effect.flatMap(Ref.get(replayedUpTo), (last) =>
           said.seq <= last
             ? said._tag === "Delivered"
               ? Queue.offer(replayed, said)
               : Effect.void
-            : said._tag === "Delivered"
-              ? liveGames.take(said.delivery, said.at, Option.some(said.seq))
-              : PubSub.publish(resyncs, said.channel)
+            : Decoded.$match(said, {
+                Delivered: ({ delivery, at, seq }) => liveGames.take(delivery, at, Option.some(seq)),
+                Resync: ({ channel }) => PubSub.publish(resyncs, channel),
+                Noted: ({ notice, seq }) => DecodeTelemetry.noticed(notice, seq)
+              })
         )
 
       // One decode over the day's log and then every frame appended after it, so each topic's document carries over
