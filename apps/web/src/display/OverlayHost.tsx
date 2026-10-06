@@ -32,14 +32,6 @@ export function useVideoAreas(areas: ReadonlyArray<{ game: GameId; bounds: Rect 
   useLayoutEffect(() => host?.place(areas), [host, areas])
 }
 
-/**
- * Whether two rectangles share any area; touching edges do not.
- * @testonly
- */
-export function overlaps(a: Rect, b: Rect) {
-  return a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height
-}
-
 type Rect = { x: number; y: number; width: number; height: number }
 type Host = ReturnType<typeof makeHost>
 
@@ -81,4 +73,9 @@ function makeHost() {
       update()
     }
   }
+}
+
+/** Whether two rectangles share any area; touching edges do not. */
+function overlaps(a: Rect, b: Rect) {
+  return a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height
 }

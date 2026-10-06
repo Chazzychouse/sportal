@@ -1,3 +1,4 @@
+import { Effect } from "effect"
 import { useSyncExternalStore } from "react"
 
 /**
@@ -28,7 +29,11 @@ function subscribe(listener: () => void) {
 
 function setFullScreen(on: boolean) {
   const shell = window.sportalShell
-  if (shell !== undefined) shell.setFullScreen(on)
-  else if (on) void document.documentElement.requestFullscreen()
-  else void document.exitFullscreen()
+  if (shell !== undefined) return shell.setFullScreen(on)
+  // A browser refuses full screen outside a user gesture, or when the page may not have it.
+  Effect.runFork(
+    Effect.tryPromise(() =>
+      on ? document.documentElement.requestFullscreen() : document.exitFullscreen()
+    ).pipe(Effect.catch((error) => Effect.logWarning("The browser did not change full screen", error)))
+  )
 }

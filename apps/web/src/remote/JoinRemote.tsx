@@ -1,4 +1,4 @@
-import { Effect, Option } from "effect"
+import { Data, Effect, Fiber } from "effect"
 import { useEffect, useState } from "react"
 import { encode } from "uqr"
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/design/dialog"
@@ -10,20 +10,31 @@ import { runtime } from "../hub/HubRuntime.ts"
  * and the address as text. With several addresses (a VPN, a second network), each is listed to switch to.
  */
 export function JoinRemote(props: { open: boolean; onOpenChange: (open: boolean) => void }) {
-  // Undefined while asking; none when the Hub could not be asked.
-  const [addresses, setAddresses] = useState<Option.Option<ReadonlyArray<string>> | undefined>(undefined)
+  const [answer, setAnswer] = useState<Answer>(Answer.Asking())
   const [chosen, setChosen] = useState(0)
 
   useEffect(() => {
     if (!props.open) return
     setChosen(0)
-    setAddresses(undefined)
-    void runtime.runPromise(Effect.option(hostAddresses)).then(setAddresses)
+    setAnswer(Answer.Asking())
+    // Closing or reopening the dialog interrupts the question, so a late answer never lands in a newer dialog.
+    const asking = runtime.runFork(
+      hostAddresses.pipe(
+        Effect.matchCause({
+          onSuccess: (addresses) => Answer.Answered({ addresses }),
+          onFailure: () => Answer.NoAnswer()
+        }),
+        Effect.flatMap((answered) => Effect.sync(() => setAnswer(answered)))
+      )
+    )
+    return () => {
+      runtime.runFork(Fiber.interrupt(asking))
+    }
   }, [props.open])
 
   const port = window.location.port === "" ? "" : `:${window.location.port}`
   const url = (address: string) => `${window.location.protocol}//${address}${port}/remote`
-  const listed = addresses === undefined ? [] : Option.getOrElse(addresses, (): ReadonlyArray<string> => [])
+  const listed = answer._tag === "Answered" ? answer.addresses : []
   const shown = listed[chosen]
 
   return (
@@ -35,9 +46,9 @@ export function JoinRemote(props: { open: boolean; onOpenChange: (open: boolean)
             Scan with a phone on the same network to control this Stage.
           </DialogDescription>
         </div>
-        {addresses === undefined ? (
+        {answer._tag === "Asking" ? (
           <p className="text-muted-foreground text-sm">Asking the Hub…</p>
-        ) : Option.isNone(addresses) ? (
+        ) : answer._tag === "NoAnswer" ? (
           <p className="text-muted-foreground text-sm">
             The Hub did not answer. Restart it (<code className="font-mono">pnpm dev</code>) so it runs this
             version.
@@ -75,6 +86,14 @@ export function JoinRemote(props: { open: boolean; onOpenChange: (open: boolean)
     </Dialog>
   )
 }
+
+/** Where the question to the Hub for its addresses stands. */
+type Answer = Data.TaggedEnum<{
+  Asking: object
+  NoAnswer: object
+  Answered: { readonly addresses: ReadonlyArray<string> }
+}>
+const Answer = Data.taggedEnum<Answer>()
 
 /** A QR code, dark on light whatever the theme, since that is what phone cameras read best. */
 function QrCode(props: { text: string }) {
