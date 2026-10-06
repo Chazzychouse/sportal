@@ -163,9 +163,11 @@ describe("LiveGames", () => {
         const listedFbs = snapshot({ id: one, status: "live", period: 1, clock: "10:00" })
         const listedNfl = snapshot({ id: two, league: "nfl", kickoff: DateTime.add(t0, { hours: 3 }) })
         const later = live(one, "9:00")
+        const unlisted = live(GameId.make("3"), "5:00")
         const fold = yield* stepped(LiveGames.empty, listing("fbs", [listedFbs]), t0).pipe(
           Effect.flatMap((fold) => stepped(fold, listing("nfl", [listedNfl]), t0)),
-          Effect.flatMap((fold) => stepped(fold, polled(later), t0))
+          Effect.flatMap((fold) => stepped(fold, polled(later), t0)),
+          Effect.flatMap((fold) => stepped(fold, polled(unlisted), t0))
         )
         assert.deepStrictEqual(fold.slate(["fbs"]), [later])
         assert.deepStrictEqual(fold.slate(["nfl", "fbs"]), [listedNfl, later])

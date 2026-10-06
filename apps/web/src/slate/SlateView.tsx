@@ -1,6 +1,5 @@
 import type { GameSnapshot } from "@sportal/domain/Game"
 import type { Stage, StageCommand } from "@sportal/domain/Stage"
-import type { Watchability } from "@sportal/domain/Watchability"
 import { Fragment, useEffect, useRef } from "react"
 import type { Display } from "../Display.ts"
 import type { useLive } from "../hub/Live.ts"
@@ -91,7 +90,7 @@ function Card(props: {
   card: ReturnType<typeof stripCards>[number]
   picked: boolean
   droppable: boolean
-  watch: Pick<Watchability, "score" | "lull" | "reasons"> | undefined
+  watch: ReturnType<ReturnType<typeof useLive>["watchability"]["get"]>
   onDrop: () => void
 }) {
   const { game, place } = props.card

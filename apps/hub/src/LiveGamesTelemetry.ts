@@ -286,7 +286,6 @@ const gameEvents = Metric.counter("sportal_game_events", {
   incremental: true
 })
 
-/** How long the fold takes to apply one delivery, as its caller waits. */
 export const takeDuration = Metric.timer("sportal_take_duration", {
   description: "How long the fold takes to apply one delivery, as its caller waits"
 })

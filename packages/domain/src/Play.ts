@@ -2,7 +2,7 @@ import { Order, Schema } from "effect"
 import { GameEvent } from "./GameEvent.ts"
 import { TeamId } from "./Team.ts"
 
-/** the feed's own id. Not ordered: order plays by `Play.sequence`. */
+/** The feed's own id. Not ordered: order plays by `Play.sequence`. */
 export const PlayId = Schema.String.pipe(Schema.brand("PlayId"))
 export type PlayId = typeof PlayId.Type
 

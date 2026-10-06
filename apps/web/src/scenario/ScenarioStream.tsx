@@ -1,5 +1,4 @@
 import type { GameSnapshot } from "@sportal/domain/Game"
-import type { Watchability } from "@sportal/domain/Watchability"
 import { useEffect } from "react"
 import { useLive } from "../hub/Live.ts"
 import { statusText } from "../slate/StatusText.ts"
@@ -59,7 +58,7 @@ function useTone(game: string) {
 
 function Scorebug(props: {
   game: GameSnapshot
-  watch: Pick<Watchability, "score" | "lull" | "reasons"> | undefined
+  watch: ReturnType<ReturnType<typeof useLive>["watchability"]["get"]>
 }) {
   const { game } = props
   const situation = game.situation

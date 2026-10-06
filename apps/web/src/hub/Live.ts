@@ -14,7 +14,7 @@ export const disconnected = {
   slate: [] as ReadonlyArray<GameSnapshot>,
   watchability: new Map() as ReadonlyMap<
     GameId,
-    { score: number; lull: boolean; reasons: ReadonlyArray<string> }
+    Extract<LiveMessage, { _tag: "SlateChanged" }>["slate"][number]["watchability"]
   >,
   stage: Stage.initial,
   connected: false

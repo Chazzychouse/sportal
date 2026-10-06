@@ -93,7 +93,10 @@ export class Watchability extends Schema.Class<Watchability>("sportal/Watchabili
 const breakLength = Duration.seconds(90)
 /** How long a score or a turnover adds to a game's score. */
 const boostLength = Duration.seconds(60)
-/** No change in the clock or the last play for this long is a lull (60 s: on the 2026-10-03 recordings, with 30 s polls, 25% of live poll pairs sat unchanged for 60 s or more and 38% for 30 s, so 45 s would flag ordinary play). */
+/**
+ * No change in the clock or the last play for this long is a lull (60 s: on the 2026-10-03 recordings, 30 s polls
+ * sat unchanged for 60 s or more in 25% of live pairs, so 45 s would flag ordinary play).
+ */
 const stoppedAfter = Duration.seconds(60)
 
 function judged(

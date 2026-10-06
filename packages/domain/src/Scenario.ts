@@ -76,18 +76,7 @@ export class Scenario extends Schema.Class<Scenario>("sportal/Scenario")({
 }
 
 /** A game as `build` first writes it: scheduled at its kickoff, nil–nil. */
-function initial(
-  game: {
-    readonly id: string
-    readonly home: string
-    readonly away: string
-    readonly league?: LeagueId
-    readonly network?: string
-    readonly kickoff?: string
-    readonly ranking?: { readonly home?: number; readonly away?: number }
-  },
-  origin: DateTime.Utc
-): GameSnapshot {
+function initial(game: Parameters<typeof Scenario.build>[1][number], origin: DateTime.Utc): GameSnapshot {
   const league = game.league ?? "fbs"
   return snapshot({
     id: GameId.make(game.id),

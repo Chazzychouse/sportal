@@ -13,9 +13,7 @@ import { LiveGames } from "./LiveGames.ts"
 export class Slate extends Context.Service<
   Slate,
   {
-    readonly latest: Effect.Effect<
-      ReadonlyArray<{ readonly game: GameSnapshot; readonly watchability: Watchability }>
-    >
+    readonly latest: Effect.Effect<Listed>
     /** The latest first, then each new one. */
     readonly changes: Stream.Stream<Listed>
   }

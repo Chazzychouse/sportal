@@ -29,7 +29,7 @@ import type { Frame } from "../feed/Frame.ts"
 import { GameHistory } from "../GameHistory.ts"
 import { LiveGames } from "../LiveGames.ts"
 import { LiveFeed, LiveFeedError } from "../provider/LiveFeed.ts"
-import { Provider, ProviderError } from "../provider/Provider.ts"
+import { Decoded, Provider, ProviderError } from "../provider/Provider.ts"
 import { game, neverPushing, polling, pushed, scripted } from "../TestProvider.ts"
 import { counted, recordingLogs, recordingSpans, withMetrics } from "../TestTelemetry.ts"
 import { dayStart, Ingest } from "./Ingest.ts"
@@ -553,12 +553,11 @@ const counting = Provider.of({
           [
             count + 1,
             [
-              {
-                _tag: "Delivered",
+              Decoded.Delivered({
                 delivery: Delivery.Snapshot({ snapshot: liveGame(count + 1), from: "push" }),
                 at: frame.receivedAt,
                 seq: frame.seq
-              } as const
+              })
             ]
           ] as const
       )
