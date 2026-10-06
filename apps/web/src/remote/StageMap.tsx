@@ -3,9 +3,9 @@ import type { Stage, StageCommand } from "@sportal/domain/Stage"
 import { ArrowLeftRight, ArrowUpLeft, Shrink, SquareDashed, Volume2, X } from "lucide-react"
 import { type ReactNode, useState } from "react"
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/design/sheet"
+import { statusText } from "../game/GameStatus.ts"
+import { TeamLogo } from "../game/TeamLogo.tsx"
 import { dispatch } from "../hub/HubClient.ts"
-import { statusText } from "../slate/StatusText.ts"
-import { TeamLogo } from "../slate/TeamLogo.tsx"
 
 /**
  * The Stage's layout in miniature, every tile shown even while one is soloed. Tapping a tile selects it; tapping

@@ -1,6 +1,6 @@
 import { assert, describe, it } from "@effect/vitest"
 import { Stage } from "@sportal/domain/Stage"
-import { disconnected, reduce } from "./Live.ts"
+import { disconnected, reduce } from "./LiveStream.ts"
 
 describe("Live.reduce", () => {
   it("replaces the stage and keeps the slate", () => {

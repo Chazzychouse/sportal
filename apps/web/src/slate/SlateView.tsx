@@ -1,12 +1,12 @@
 import type { GameSnapshot } from "@sportal/domain/Game"
 import type { Stage } from "@sportal/domain/Stage"
 import { Fragment, useEffect, useRef } from "react"
-import type { Display, DisplayStep } from "../Display.ts"
-import type { useLive } from "../hub/Live.ts"
+import type { Display, DisplayStep } from "../display/Display.ts"
+import { statusText } from "../game/GameStatus.ts"
+import { TeamLogo } from "../game/TeamLogo.tsx"
+import type { useLive } from "../hub/LiveStream.ts"
 import { tileDrag } from "../stage/TileChrome.tsx"
-import { statusText } from "./StatusText.ts"
 import type { StripCard } from "./StripCards.ts"
-import { TeamLogo } from "./TeamLogo.tsx"
 
 /**
  * The slate as a strip under the Stage: the bench, then live, upcoming, and final games, scrolling sideways. It

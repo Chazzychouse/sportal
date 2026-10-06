@@ -1,5 +1,5 @@
 import type { GameSnapshot } from "@sportal/domain/Game"
-import { localTime } from "../LocalTime.ts"
+import { localTime } from "./LocalTime.ts"
 
 /** A game's status as a slate row or a tile shows it: the period and clock, the kickoff, or the status in a word. */
 export function statusText(game: GameSnapshot): string {

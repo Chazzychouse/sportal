@@ -3,9 +3,9 @@ import type { Stage, Tile } from "@sportal/domain/Stage"
 import { ArrowUpLeft, Shrink, SquareDashed, Volume2, VolumeX, X } from "lucide-react"
 import type { ReactNode } from "react"
 import { Button } from "@/design/button"
+import { statusText } from "../game/GameStatus.ts"
+import { TeamLogo } from "../game/TeamLogo.tsx"
 import { dispatch } from "../hub/HubClient.ts"
-import { statusText } from "../slate/StatusText.ts"
-import { TeamLogo } from "../slate/TeamLogo.tsx"
 
 /**
  * A tile's header strip: its slot, its game and score, the on-air tally when its sound is on, and its controls.

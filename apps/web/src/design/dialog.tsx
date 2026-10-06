@@ -3,7 +3,7 @@ import { Dialog as DialogPrimitive } from "radix-ui"
 import type * as React from "react"
 import { Button } from "@/design/button"
 import { cn } from "@/design/ClassName"
-import { useCovering } from "@/OverlayHost"
+import { useCovering } from "@/display/OverlayHost"
 
 function Dialog({ ...props }: React.ComponentProps<typeof DialogPrimitive.Root>) {
   return <DialogPrimitive.Root data-slot="dialog" {...props} />

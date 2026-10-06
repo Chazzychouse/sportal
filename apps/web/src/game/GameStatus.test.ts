@@ -1,7 +1,7 @@
 import { assert, describe, it } from "@effect/vitest"
 import { snapshot } from "@sportal/domain/TestGame"
-import { localTime } from "../LocalTime.ts"
-import { statusText } from "./StatusText.ts"
+import { statusText } from "./GameStatus.ts"
+import { localTime } from "./LocalTime.ts"
 
 describe("statusText", () => {
   it.each([

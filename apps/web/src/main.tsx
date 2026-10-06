@@ -1,9 +1,9 @@
 import { StrictMode } from "react"
 import { createRoot } from "react-dom/client"
-import { App } from "./App.tsx"
+import { App } from "./display/DisplayView.tsx"
 import { RemoteView } from "./remote/RemoteView.tsx"
-import { ScenarioStream } from "./scenario/ScenarioStream.tsx"
-import "./theme/theme.css"
+import { ScenarioStream } from "./ScenarioStream.tsx"
+import "./theme.css"
 
 const root = document.getElementById("root")
 if (root === null) throw new Error("index.html has no #root element")

@@ -1,8 +1,8 @@
 import type { GameSnapshot } from "@sportal/domain/Game"
 import type { Tile } from "@sportal/domain/Stage"
-import { localTime } from "../LocalTime.ts"
-import { statusText } from "../slate/StatusText.ts"
-import { TeamLogo } from "../slate/TeamLogo.tsx"
+import { statusText } from "../game/GameStatus.ts"
+import { localTime } from "../game/LocalTime.ts"
+import { TeamLogo } from "../game/TeamLogo.tsx"
 
 /**
  * What a tile's well shows from the web UI. In the shell a provider view covers a stream or picking tile's

@@ -1,9 +1,9 @@
 import { assert, describe, it } from "@effect/vitest"
 import { GameId } from "@sportal/domain/Game"
 import { Stage } from "@sportal/domain/Stage"
+import { StripCard } from "../slate/StripCards.ts"
+import { slate } from "../slate/TestSlate.ts"
 import { Display, DisplayStep } from "./Display.ts"
-import { StripCard } from "./slate/StripCards.ts"
-import { slate } from "./slate/TestSlate.ts"
 
 describe("Display", () => {
   it("starts on slot 0, with nothing interacting or picked, the slate open, and no overlay", () => {

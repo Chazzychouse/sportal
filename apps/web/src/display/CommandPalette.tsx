@@ -10,10 +10,10 @@ import {
   CommandList,
   CommandShortcut
 } from "@/design/command"
-import { LayoutGlyph, layoutLabel } from "../frame/LayoutGlyph.tsx"
+import { statusText } from "../game/GameStatus.ts"
+import { TeamLogo } from "../game/TeamLogo.tsx"
 import { dispatch } from "../hub/HubClient.ts"
-import { statusText } from "../slate/StatusText.ts"
-import { TeamLogo } from "../slate/TeamLogo.tsx"
+import { LayoutGlyph, layoutLabel } from "../layout/LayoutGlyph.tsx"
 
 /** Every Stage command by name: watch a game, act on a tile, change layout, go full screen. */
 export function CommandPalette(props: {

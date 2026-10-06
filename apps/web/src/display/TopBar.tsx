@@ -4,7 +4,7 @@ import { Expand, Keyboard, List, LogIn, Minimize2, Shrink, Smartphone, SquareDas
 import { Button } from "@/design/button"
 import { ToggleGroup, ToggleGroupItem } from "@/design/toggle-group"
 import { dispatch } from "../hub/HubClient.ts"
-import { LayoutGlyph, layoutLabel } from "./LayoutGlyph.tsx"
+import { LayoutGlyph, layoutLabel } from "../layout/LayoutGlyph.tsx"
 
 /** The strip across the top of a Display: the slate, layout, solo, full screen, and whether the Hub is live. */
 export function TopBar(props: {

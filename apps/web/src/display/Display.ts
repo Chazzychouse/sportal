@@ -3,7 +3,7 @@ import type { GameId } from "@sportal/domain/Game"
 import { Layout } from "@sportal/domain/Layout"
 import type { Stage, StageCommand } from "@sportal/domain/Stage"
 import { Data } from "effect"
-import { StripCard } from "./slate/StripCards.ts"
+import { StripCard } from "../slate/StripCards.ts"
 
 type Overlay = Data.TaggedEnum<{ None: object; Keys: object; Palette: object; JoinRemote: object }>
 const Overlay = Data.taggedEnum<Overlay>()

@@ -1,8 +1,8 @@
 import type { GameSnapshot } from "@sportal/domain/Game"
 import { useEffect } from "react"
-import { useLive } from "../hub/Live.ts"
-import { statusText } from "../slate/StatusText.ts"
-import { TeamLogo } from "../slate/TeamLogo.tsx"
+import { statusText } from "./game/GameStatus.ts"
+import { TeamLogo } from "./game/TeamLogo.tsx"
+import { useLive } from "./hub/LiveStream.ts"
 
 /**
  * A scenario's stream of one game, in place of a provider's player: the game's live state from the Hub over a
