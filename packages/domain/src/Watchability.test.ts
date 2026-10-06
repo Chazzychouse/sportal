@@ -1,6 +1,9 @@
+import { readdirSync, readFileSync } from "node:fs"
+import { isDeepStrictEqual } from "node:util"
 import { assert, describe, it } from "@effect/vitest"
-import { DateTime, Duration } from "effect"
+import { Array as Arr, DateTime, Duration, Option, Schema } from "effect"
 import { GameId, type GameSnapshot } from "./Game.ts"
+import { Scenario } from "./Scenario.ts"
 import { Situation } from "./Situation.ts"
 import { snapshot, team } from "./TestGame.ts"
 import { Watchability } from "./Watchability.ts"
@@ -95,6 +98,13 @@ describe("Watchability.initial", () => {
       ).lull
     )
     assert.isFalse(Watchability.initial(game({ situation: ball(60) }), now).lull)
+  })
+
+  it("is not in a lull at 0:00 in a college overtime, but is in an NFL one", () => {
+    assert.isFalse(Watchability.initial(game({ period: 5, clock: "0:00", situation: ball(25) }), now).lull)
+    assert.isTrue(
+      Watchability.initial(game({ league: "nfl", period: 5, clock: "0:00", situation: ball(25) }), now).lull
+    )
   })
 })
 
@@ -224,3 +234,96 @@ describe("Watchability.fold", () => {
     assert.isFalse(second[1]?.lull)
   })
 })
+
+describe("Watchability over recorded game days", () => {
+  it("finds the recorded scenarios", () => {
+    assert.isAtLeast(recorded.length, 19)
+  })
+
+  it("is the same when a day is played twice", () => {
+    assert.deepStrictEqual(
+      recorded.flatMap((scenario) =>
+        Arr.zip(played(scenario), played(scenario)).flatMap(([first, second]) =>
+          isDeepStrictEqual(first.watchability, second.watchability)
+            ? []
+            : [`${scenario.name} ${instantOf(first.now)}: judged differently the second time`]
+        )
+      ),
+      []
+    )
+  })
+
+  it("scores a game that is not being played 0", () => {
+    assert.deepStrictEqual(
+      breaches(({ game, watchability }) =>
+        game.progress() !== "live" && watchability.score !== 0
+          ? Option.some(`scored ${watchability.score} while ${game.status}`)
+          : Option.none()
+      ),
+      []
+    )
+  })
+
+  it("never puts an overtime in a lull for its clock alone", () => {
+    assert.deepStrictEqual(
+      breaches(({ game, watchability, now }) =>
+        game.status === "live" &&
+        game.period >= 5 &&
+        watchability.lull &&
+        watchability.breakUntil === undefined &&
+        DateTime.toEpochMillis(now) - DateTime.toEpochMillis(watchability.activeAt) < 60_000
+          ? Option.some(`in a lull at ${game.clock} in overtime`)
+          : Option.none()
+      ),
+      []
+    )
+  })
+})
+
+const scenarios = new URL("../../../fixtures/scenarios/", import.meta.url)
+const recorded = readdirSync(scenarios)
+  .filter((file) => file.endsWith(".json"))
+  .map((file) =>
+    Schema.decodeUnknownSync(Schema.fromJsonString(Scenario))(readFileSync(new URL(file, scenarios), "utf8"))
+  )
+
+/** Each frame of a scenario with the watchability folded up to it, judged at `origin + at`. */
+function played(scenario: Scenario) {
+  return Arr.scan<
+    Scenario["frames"][number],
+    {
+      readonly now: DateTime.Utc
+      readonly slate: ReadonlyArray<GameSnapshot>
+      readonly watchability: ReadonlyArray<Watchability>
+    }
+  >(scenario.frames, { now: scenario.origin, slate: [], watchability: [] }, (previous, frame) => {
+    const now = DateTime.addDuration(scenario.origin, Duration.millis(frame.at))
+    return { now, slate: frame.slate, watchability: Watchability.fold(previous, frame.slate, now) }
+  }).slice(1)
+}
+
+/** Every game at every frame of every recorded scenario that `breach` names a breach for, one line each. */
+function breaches(
+  breach: (judged: {
+    game: GameSnapshot
+    watchability: Watchability
+    now: DateTime.Utc
+  }) => Option.Option<string>
+): ReadonlyArray<string> {
+  return recorded.flatMap((scenario) =>
+    played(scenario).flatMap(({ now, slate, watchability }) =>
+      Arr.getSomes(
+        Arr.zip(slate, watchability).map(([game, judged]) =>
+          Option.map(
+            breach({ game, watchability: judged, now }),
+            (line) => `${scenario.name} ${instantOf(now)} ${game.id}: ${line}`
+          )
+        )
+      )
+    )
+  )
+}
+
+function instantOf(now: DateTime.Utc): string {
+  return DateTime.formatIso(now).replace(/\.\d{3}Z$/, "Z")
+}

@@ -99,7 +99,8 @@ function judged(
   const lull =
     game.status === "halftime" ||
     game.status === "delayed" ||
-    (game.status === "live" && (game.secondsLeft() === 0 || breakUntil !== undefined || stopped))
+    (game.status === "live" &&
+      ((game.timed() && game.secondsLeft() === 0) || breakUntil !== undefined || stopped))
   const parts =
     game.progress() === "live"
       ? [closeness(game), situation(game), stakes(game), ...(boostUntil === undefined ? [] : [boost])]

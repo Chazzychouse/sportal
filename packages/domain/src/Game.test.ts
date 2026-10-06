@@ -22,6 +22,14 @@ describe("GameSnapshot.progress", () => {
   })
 })
 
+describe("GameSnapshot.timed", () => {
+  it("knows a college overtime has no clock", () => {
+    assert.isTrue(snapshot({ league: "fbs", status: "live", period: 4 }).timed())
+    assert.isFalse(snapshot({ league: "fbs", status: "live", period: 5 }).timed())
+    assert.isTrue(snapshot({ league: "nfl", status: "live", period: 5 }).timed())
+  })
+})
+
 describe("GameSnapshot.matchup", () => {
   it("names the away team at the home team", () => {
     const game = snapshot({ away: { team: team("UGA"), score: 0 }, home: { team: team("BAMA"), score: 0 } })

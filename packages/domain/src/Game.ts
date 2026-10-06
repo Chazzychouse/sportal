@@ -95,6 +95,14 @@ export class GameSnapshot extends Schema.Class<GameSnapshot>("sportal/GameSnapsh
     return this.secondsLeft() / quarterSeconds
   }
 
+  /**
+   * Whether the period runs on a game clock, so 0:00 means it is over. A college overtime has no clock: ESPN shows
+   * it as 0:00 throughout. An NFL overtime has one.
+   */
+  timed(): boolean {
+    return !(this.league === "fbs" && this.period >= 5)
+  }
+
   /** Live in the last two minutes of the first or second half, with time still on the clock. */
   inTwoMinuteDrill(): boolean {
     const left = this.secondsLeft()
