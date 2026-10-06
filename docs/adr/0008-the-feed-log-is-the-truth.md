@@ -18,7 +18,7 @@ features.
 Every frame the feeds deliver (poll responses, FastCast checkpoints and patch batches) is appended raw, in order of
 arrival, to the feed log, `feed.sqlite`, and kept forever. Snapshots, plays, live games, watchability, and events are
 all derived from it by one fold, and can be derived again. Polls and pushes share the log, ordered by one `seq`.
-Design: `docs/specs/2026-10-05-feed-log-design.md`.
+Design: `docs/history.md`.
 
 Chosen over a durable job queue (`PersistedQueue`): a queue delivers work until it succeeds and then prunes it, which
 suits work that must eventually happen, not data the next frame supersedes, and leaves no history.

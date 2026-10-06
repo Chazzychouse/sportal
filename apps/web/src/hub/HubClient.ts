@@ -1,95 +1,84 @@
 import { SportalApi } from "@sportal/api/SportalApi"
 import type { Network } from "@sportal/domain/Game"
 import type { StageCommand, StageRejection } from "@sportal/domain/Stage"
-import { Cause, Context, Effect, Layer, ManagedRuntime, Option, Predicate } from "effect"
-import { FetchHttpClient } from "effect/http"
+import { Context, Effect, Layer, PubSub, type Schema, Stream } from "effect"
+import type { HttpClientError } from "effect/http"
 import { HttpApiClient } from "effect/http-api"
 
-class HubClient extends Context.Service<HubClient, HttpApiClient.ForApi<typeof SportalApi>>()(
-  "sportal/web/HubClient"
-) {
-  static readonly layer = Layer.effect(HubClient, HttpApiClient.make(SportalApi)).pipe(
-    Layer.provide(FetchHttpClient.layer)
+/**
+ * This client's way to the Hub's HTTP API, and the stage commands that failed — refused by the Hub or never
+ * reaching it — to whoever is listening.
+ */
+export class HubClient extends Context.Service<
+  HubClient,
+  {
+    api: HttpApiClient.ForApi<typeof SportalApi>
+    stageFailures: PubSub.PubSub<StageRejection | HttpClientError.HttpClientError>
+  }
+>()("sportal/web/HubClient") {
+  static readonly layer = Layer.effect(
+    HubClient,
+    Effect.gen(function* () {
+      return {
+        api: yield* HttpApiClient.make(SportalApi),
+        stageFailures: yield* PubSub.unbounded<StageRejection | HttpClientError.HttpClientError>()
+      }
+    })
   )
 }
-
-const runtime = ManagedRuntime.make(HubClient.layer)
 
 /**
  * Sends a stage command. The resulting stage arrives on the live stream, not from this call; a command the Hub
- * refuses reaches every `onStageRejected` listener.
+ * refuses, or one that never reaches it, arrives on `stageFailures`.
  */
-export function dispatch(command: StageCommand): void {
-  runtime.runFork(
-    HubClient.use((hub) => hub.stage.dispatch({ payload: { command } })).pipe(
-      Effect.catchTag("StageRejection", (rejection) =>
-        Effect.sync(() => {
-          for (const listener of rejectionListeners) listener(rejection.reason)
-        })
-      )
+export function dispatch(command: StageCommand) {
+  return HubClient.use((hub) =>
+    answerRead(hub.api.stage.dispatch({ payload: { command } })).pipe(
+      Effect.catch((failure) => PubSub.publish(hub.stageFailures, failure)),
+      Effect.asVoid
     )
   )
 }
 
-/** Calls `listener` with the reason for each stage command the Hub refuses. Returns a function that stops the calls. */
-export function onStageRejected(listener: (reason: StageRejection["reason"]) => void): () => void {
-  rejectionListeners.add(listener)
-  return () => {
-    rejectionListeners.delete(listener)
-  }
-}
-
-const rejectionListeners = new Set<(reason: StageRejection["reason"]) => void>()
+/** Each stage command that failed, from when the stream starts. */
+export const stageFailures = Stream.unwrap(
+  Effect.gen(function* () {
+    return Stream.fromPubSub((yield* HubClient).stageFailures)
+  })
+)
 
 /** Passes a guide the shell read to the Hub. The tiles it changes arrive on the live stream. */
-export function sendGuide(guide: string): void {
-  runtime.runFork(HubClient.use((hub) => hub.guide.read({ payload: { guide } })))
+export function sendGuide(guide: string) {
+  return HubClient.use((hub) => answerRead(hub.api.guide.read({ payload: { guide } })))
 }
 
 /**
- * Tells the Hub the channel the user picked for `network`. Like the other channel commands, it resolves to
- * the message to show the user if the Hub did not take it; the Stage change arrives on the live stream.
+ * Tells the Hub the channel the user picked for `network`. The Stage change arrives on the live stream, as it
+ * does for the other channel commands.
  */
-export function learnChannel(network: Network, url: string): Promise<Option.Option<string>> {
-  return outcome(HubClient.use((hub) => hub.channels.learn({ payload: { network, url } })))
+export function learnChannel(network: Network, url: string) {
+  return HubClient.use((hub) => answerRead(hub.api.channels.learn({ payload: { network, url } })))
 }
 
-export function markNotCarried(network: Network): Promise<Option.Option<string>> {
-  return outcome(HubClient.use((hub) => hub.channels.notCarried({ payload: { network } })))
+export function markNotCarried(network: Network) {
+  return HubClient.use((hub) => answerRead(hub.api.channels.notCarried({ payload: { network } })))
 }
 
-export function forgetChannel(network: Network): Promise<Option.Option<string>> {
-  return outcome(HubClient.use((hub) => hub.channels.forget({ payload: { network } })))
+export function forgetChannel(network: Network) {
+  return HubClient.use((hub) => answerRead(hub.api.channels.forget({ payload: { network } })))
 }
 
 /**
- * The addresses a Remote on the home network can reach the Hub's machine at, or none when the Hub could not be
+ * The addresses a Remote on the home network can reach the Hub's machine at. It fails when the Hub could not be
  * asked — not running, or older than this UI.
  */
-export function hostAddresses(): Promise<Option.Option<ReadonlyArray<string>>> {
-  return runtime.runPromise(
-    HubClient.use((hub) => hub.host.addresses()).pipe(
-      Effect.map(Option.some),
-      Effect.orElseSucceed(() => Option.none())
-    )
-  )
-}
+export const hostAddresses = HubClient.use((hub) => answerRead(hub.api.host.addresses()))
 
-function outcome(command: Effect.Effect<void, unknown, HubClient>) {
-  return runtime.runPromise(
-    command.pipe(
-      // Any failure, expected or not, becomes a notice on the tile; only a refused channel gets its own words.
-      Effect.matchCause({
-        onSuccess: () => Option.none(),
-        onFailure: (cause) =>
-          Option.some(
-            Option.exists(Cause.findErrorOption(cause), (error) =>
-              Predicate.isTagged(error, "ChannelUrlRefused")
-            )
-              ? "That is not a live channel. Pick one from the live guide."
-              : "The Hub did not take that. Try again."
-          )
-      })
+/** An answer this UI cannot read means it and the Hub disagree on the API: a defect, logged where it happens. */
+function answerRead<A, E, R>(request: Effect.Effect<A, E | Schema.SchemaError, R>) {
+  return request.pipe(
+    Effect.catchTag("SchemaError", (error) =>
+      Effect.logError("The Hub's answer did not decode", error).pipe(Effect.andThen(Effect.die(error)))
     )
   )
 }

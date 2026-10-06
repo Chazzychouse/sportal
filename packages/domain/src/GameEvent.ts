@@ -27,16 +27,3 @@ export type GameEvent = Data.TaggedEnum<{
   Sack: { readonly team: TeamId }
 }>
 export const GameEvent = Data.taggedEnum<GameEvent>()
-
-/** The tags a game's plays decide once it has any; its snapshots decide them only before. */
-export const fromPlays: ReadonlySet<GameEvent["_tag"]> = new Set([
-  "ScoreChanged",
-  "Turnover",
-  "PossessionChanged",
-  "TimeoutTaken",
-  "PeriodEnded",
-  "FourthDown",
-  "Played",
-  "BigPlay",
-  "Sack"
-])

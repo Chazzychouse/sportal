@@ -93,7 +93,10 @@ export class Watchability extends Schema.Class<Watchability>("sportal/Watchabili
 const breakLength = Duration.seconds(90)
 /** How long a score or a turnover adds to a game's score. */
 const boostLength = Duration.seconds(60)
-/** No change in the clock or the last play for this long is a lull (60 s: see the plan's measurement). */
+/**
+ * No change in the clock or the last play for this long is a lull (60 s: on the 2026-10-03 recordings, 30 s polls
+ * sat unchanged for 60 s or more in 25% of live pairs, so 45 s would flag ordinary play).
+ */
 const stoppedAfter = Duration.seconds(60)
 
 function judged(
@@ -107,8 +110,7 @@ function judged(
 ): Watchability {
   const breakUntil = stillOn(memory.breakUntil, now)
   const boostUntil = stillOn(memory.boostUntil, now)
-  const stopped =
-    DateTime.toEpochMillis(now) - DateTime.toEpochMillis(memory.activeAt) >= Duration.toMillis(stoppedAfter)
+  const stopped = DateTime.isGreaterThanOrEqualTo(now, DateTime.addDuration(memory.activeAt, stoppedAfter))
   const lull =
     game.status === "halftime" ||
     game.status === "delayed" ||
@@ -147,22 +149,21 @@ function announcesBreak(game: GameSnapshot): boolean {
 
 /** The last two minutes of a half or overtime: timeouts there are short, not TV breaks. */
 function lateInHalf(game: GameSnapshot): boolean {
-  return game.inTwoMinuteDrill() || (game.status === "live" && game.period >= 5)
+  return game.inTwoMinuteDrill() || (game.status === "live" && game.inOvertime())
 }
 
 /** Late and close: the largest part. Overtime counts fully; the fourth quarter more the less time is left. */
 function closeness(game: GameSnapshot) {
-  const margin = Math.abs(game.home.score - game.away.score)
-  const lateness =
-    game.period >= 5
-      ? 1
-      : game.period === 4
-        ? 0.6 + 0.4 * (1 - game.quarterLeft())
-        : (earlyLateness[game.period] ?? 0)
+  const margin = game.margin()
+  const lateness = game.inOvertime()
+    ? 1
+    : game.period === 4
+      ? 0.6 + 0.4 * (1 - game.quarterLeft())
+      : (earlyLateness[game.period] ?? 0)
   const close = margin <= 3 ? 1 : margin <= oneScore ? 0.8 : margin <= 16 ? 0.35 : 0.05
   const how =
     margin === 0 ? "tied" : margin <= oneScore ? "one-score" : margin <= 16 ? "two-score" : `${margin}-point`
-  const period = game.period >= 5 ? "OT" : `Q${game.period}`
+  const period = game.inOvertime() ? "OT" : `Q${game.period}`
   return {
     points: closenessPoints * lateness * close,
     reason: game.clock === "" ? `${how} ${period}` : `${how} ${period}, ${game.clock}`
@@ -184,18 +185,23 @@ function situation(game: GameSnapshot) {
   if (game.status !== "live" || s === undefined || s.possession === undefined || s.yardLine === undefined)
     return { points: 0, reason: "" }
   const offense = s.possession === game.home.team.id ? game.home.team : game.away.team
-  const signals: Array<[number, string]> = []
-  if (s.isRedZone) signals.push([redZonePoints, `red zone at the ${s.yardLine}`])
-  else if (s.inScoringRange()) signals.push([scoringRangePoints, `at the ${s.yardLine}`])
-  if (s.goalToGo()) signals.push([goalToGoPoints, "goal to go"])
-  if (s.down === 4) signals.push([fourthDownPoints, `4th & ${s.distance ?? "?"}`])
-  if (lateInHalf(game))
-    signals.push([twoMinutePoints, game.period >= 5 ? "overtime possession" : "two-minute drill"])
+  const signals: ReadonlyArray<readonly [number, string]> = [
+    ...(s.isRedZone
+      ? [[redZonePoints, `red zone at the ${s.yardLine}`] as const]
+      : s.inScoringRange()
+        ? [[scoringRangePoints, `at the ${s.yardLine}`] as const]
+        : []),
+    ...(s.goalToGo() ? [[goalToGoPoints, "goal to go"] as const] : []),
+    ...(s.down === 4 ? [[fourthDownPoints, `4th & ${s.distance ?? "?"}`] as const] : []),
+    ...(lateInHalf(game)
+      ? [[twoMinutePoints, game.inOvertime() ? "overtime possession" : "two-minute drill"] as const]
+      : [])
+  ]
   const raw = Math.min(
     situationCap,
     signals.reduce((total, [points]) => total + points, 0)
   )
-  const margin = Math.abs(game.home.score - game.away.score)
+  const margin = game.margin()
   return {
     points: raw * (margin <= oneScore ? 1 : blowoutShare),
     reason: `${offense.abbreviation} ${signals.map(([, label]) => label).join(", ")}`
@@ -213,28 +219,32 @@ const blowoutShare = 0.2
 
 /** Stakes, from the third quarter in a one-score game: an upset brewing, or two ranked teams. */
 function stakes(game: GameSnapshot) {
-  const margin = Math.abs(game.home.score - game.away.score)
+  const margin = game.margin()
   if (game.period < 3 || margin > oneScore) return { points: 0, reason: "" }
-  for (const [ranked, other] of [
-    [game.home, game.away],
-    [game.away, game.home]
-  ] as const) {
-    if (
+  return Arr.findFirst(
+    [
+      [game.home, game.away],
+      [game.away, game.home]
+    ] as const,
+    ([ranked, other]) =>
       ranked.ranking !== undefined &&
       (other.ranking === undefined || other.ranking > ranked.ranking) &&
       other.score >= ranked.score
+        ? Option.some({
+            points: upsetPoints,
+            reason: `upset brewing: ${other.team.abbreviation} ${other.score > ranked.score ? "leads" : "ties"} #${ranked.ranking} ${ranked.team.abbreviation}`
+          })
+        : Option.none()
+  ).pipe(
+    Option.getOrElse(() =>
+      game.home.ranking !== undefined && game.away.ranking !== undefined
+        ? {
+            points: rankedPoints,
+            reason: `#${game.away.ranking} ${game.away.team.abbreviation} at #${game.home.ranking} ${game.home.team.abbreviation}`
+          }
+        : { points: 0, reason: "" }
     )
-      return {
-        points: upsetPoints,
-        reason: `upset brewing: ${other.team.abbreviation} ${other.score > ranked.score ? "leads" : "ties"} #${ranked.ranking} ${ranked.team.abbreviation}`
-      }
-  }
-  return game.home.ranking !== undefined && game.away.ranking !== undefined
-    ? {
-        points: rankedPoints,
-        reason: `#${game.away.ranking} ${game.away.team.abbreviation} at #${game.home.ranking} ${game.home.team.abbreviation}`
-      }
-    : { points: 0, reason: "" }
+  )
 }
 
 const upsetPoints = 10

@@ -1,9 +1,9 @@
 import { assert, describe, it } from "@effect/vitest"
+import { ChannelAvailability } from "@sportal/domain/Channel"
 import { GameId } from "@sportal/domain/Game"
-import { ChannelAvailability } from "@sportal/domain/Source"
 import { Stage } from "@sportal/domain/Stage"
 import { Option, Result } from "effect"
-import { placements, tileRects } from "./TileRects.ts"
+import { coveredGames, placements, tileRects } from "./TileRects.ts"
 
 const area = { width: 1600, height: 900 }
 const bama = GameId.make("401856707")
@@ -125,3 +125,24 @@ function carriedOnFox() {
 function none() {
   return ChannelAvailability.NotCarried({ why: "NoStream" })
 }
+
+describe("coveredGames", () => {
+  const video = { game: bama, bounds: { x: 100, y: 100, width: 200, height: 100 } }
+
+  it("covers a video an overlay shares area with", () => {
+    assert.deepStrictEqual(coveredGames([{ x: 250, y: 150, width: 200, height: 200 }], [video]), [bama])
+    assert.deepStrictEqual(coveredGames([{ x: 0, y: 0, width: 1000, height: 1000 }], [video]), [bama])
+  })
+
+  it("leaves a video an overlay only touches, or is apart from", () => {
+    assert.deepStrictEqual(coveredGames([{ x: 300, y: 100, width: 50, height: 50 }], [video]), [])
+    assert.deepStrictEqual(coveredGames([{ x: 0, y: 0, width: 50, height: 50 }], [video]), [])
+  })
+
+  it("leaves a video shown under an overlay flush against its top edge, and covers the one it reaches", () => {
+    const below = { game: irish, bounds: { x: 100, y: 300, width: 200, height: 100 } }
+    const sheet = { x: 0, y: 0, width: 400, height: 100 }
+    assert.deepStrictEqual(coveredGames([sheet], [video, below]), [])
+    assert.deepStrictEqual(coveredGames([{ ...sheet, height: 301 }], [video, below]), [bama, irish])
+  })
+})

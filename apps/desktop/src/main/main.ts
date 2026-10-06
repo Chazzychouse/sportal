@@ -1,10 +1,13 @@
 import { join } from "node:path"
 import { StageTransition, TilePlacement } from "@sportal/api/ShellBridge"
+import { ShellChannel } from "@sportal/api/ShellChannel"
 import { GameId } from "@sportal/domain/Game"
 import { Cause, Config, Effect, FiberSet, Layer, Option, Queue, Schedule, Schema, Stream } from "effect"
 import { app, BrowserWindow, components, type IpcMainEvent, ipcMain } from "electron"
 import { GuideReader } from "./GuideReader.ts"
-import { confine, hostOf, load, ProviderSession } from "./ProviderSession.ts"
+import { confine, hostOf, load } from "./Navigation.ts"
+import { ProviderSession } from "./ProviderSession.ts"
+import { sandboxed } from "./Sandbox.ts"
 import { TileViews } from "./TileViews.ts"
 
 const Shell = Layer.unwrap(
@@ -40,10 +43,8 @@ function openWindow(hubUrl: string) {
             height: 1080,
             backgroundColor: "#0a0a0a",
             webPreferences: {
-              preload: join(import.meta.dirname, "../preload/ShellBridge.cjs"),
-              contextIsolation: true,
-              nodeIntegration: false,
-              sandbox: true
+              ...sandboxed,
+              preload: join(import.meta.dirname, "../preload/ShellBridge.cjs")
             }
           })
       ),
@@ -93,38 +94,22 @@ function serveHub(window: BrowserWindow, hubUrl: string) {
         )
       )
     )
-    const syncTiles = (event: IpcMainEvent, placements: unknown, transition: unknown) => {
-      if (event.sender !== window.webContents) return
+    yield* listen(window, ShellChannel.syncTiles, (placements, transition) => {
       const decoded = decodePlacements(placements)
       const along = decodeTransition(transition)
       if (Option.isSome(decoded) && Option.isSome(along))
         Queue.offerUnsafe(pending, { placements: decoded.value, transition: along.value })
-    }
-    yield* Effect.acquireRelease(
-      Effect.sync(() => ipcMain.on("sportal:sync-tiles", syncTiles)),
-      () => Effect.sync(() => ipcMain.removeListener("sportal:sync-tiles", syncTiles))
-    )
-
-    const setHidden = (event: IpcMainEvent, games: unknown) => {
-      if (event.sender !== window.webContents) return
+    })
+    yield* listen(window, ShellChannel.setHidden, (games) => {
       const decoded = decodeGames(games)
       if (Option.isSome(decoded)) run(tiles.hide(decoded.value))
-    }
-    yield* Effect.acquireRelease(
-      Effect.sync(() => ipcMain.on("sportal:set-hidden", setHidden)),
-      () => Effect.sync(() => ipcMain.removeListener("sportal:set-hidden", setHidden))
-    )
-
-    const setFullScreen = (event: IpcMainEvent, on: unknown) => {
-      if (event.sender === window.webContents && typeof on === "boolean") window.setFullScreen(on)
-    }
-    yield* Effect.acquireRelease(
-      Effect.sync(() => ipcMain.on("sportal:set-full-screen", setFullScreen)),
-      () => Effect.sync(() => ipcMain.removeListener("sportal:set-full-screen", setFullScreen))
-    )
+    })
+    yield* listen(window, ShellChannel.setFullScreen, (on) => {
+      if (typeof on === "boolean") window.setFullScreen(on)
+    })
     // The window manager or the OS may change full screen too; the web UI hears every change from here.
-    const enteredFullScreen = () => window.webContents.send("sportal:full-screen-changed", true)
-    const leftFullScreen = () => window.webContents.send("sportal:full-screen-changed", false)
+    const enteredFullScreen = () => window.webContents.send(ShellChannel.fullScreenChanged, true)
+    const leftFullScreen = () => window.webContents.send(ShellChannel.fullScreenChanged, false)
     yield* Effect.acquireRelease(
       Effect.sync(() => {
         window.on("enter-full-screen", enteredFullScreen)
@@ -138,29 +123,14 @@ function serveHub(window: BrowserWindow, hubUrl: string) {
         })
     )
 
-    yield* forward(window, "sportal:hotkey", tiles.hotkeys)
-
-    yield* forward(window, "sportal:tile-pressed", tiles.tilePresses)
-
-    const openSignIn = (event: IpcMainEvent) => {
-      if (event.sender === window.webContents) run(providers.openSignIn(window))
-    }
-    yield* Effect.acquireRelease(
-      Effect.sync(() => ipcMain.on("sportal:open-sign-in", openSignIn)),
-      () => Effect.sync(() => ipcMain.removeListener("sportal:open-sign-in", openSignIn))
-    )
-
-    yield* forward(window, "sportal:channel-picked", tiles.channelPicks)
+    yield* forward(window, ShellChannel.hotkey, tiles.hotkeys)
+    yield* forward(window, ShellChannel.tilePressed, tiles.tilePresses)
+    yield* listen(window, ShellChannel.openSignIn, () => run(providers.openSignIn(window)))
+    yield* forward(window, ShellChannel.channelPicked, tiles.channelPicks)
 
     const reader = yield* GuideReader
-    yield* forward(window, "sportal:guide-read", reader.guides)
-    const readGuide = (event: IpcMainEvent) => {
-      if (event.sender === window.webContents) run(reader.readSoon)
-    }
-    yield* Effect.acquireRelease(
-      Effect.sync(() => ipcMain.on("sportal:read-guide", readGuide)),
-      () => Effect.sync(() => ipcMain.removeListener("sportal:read-guide", readGuide))
-    )
+    yield* forward(window, ShellChannel.guideRead, reader.guides)
+    yield* listen(window, ShellChannel.readGuide, () => run(reader.readSoon))
 
     // The Hub may still be starting; wait for it rather than leave the window blank.
     yield* load(window.webContents, hubUrl).pipe(
@@ -193,6 +163,20 @@ function forward(window: BrowserWindow, channel: string, stream: Stream.Stream<u
       )
     ),
     { startImmediately: true }
+  )
+}
+
+/** Hears the shell window's own page on `channel`; a message from any other sender is dropped. */
+function listen(window: BrowserWindow, channel: string, handler: (...args: ReadonlyArray<unknown>) => void) {
+  return Effect.acquireRelease(
+    Effect.sync(() => {
+      const onMessage = (event: IpcMainEvent, ...args: ReadonlyArray<unknown>) => {
+        if (event.sender === window.webContents) handler(...args)
+      }
+      ipcMain.on(channel, onMessage)
+      return onMessage
+    }),
+    (onMessage) => Effect.sync(() => ipcMain.removeListener(channel, onMessage))
   )
 }
 

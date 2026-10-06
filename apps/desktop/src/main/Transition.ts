@@ -1,4 +1,4 @@
-import type { StageTransition, TilePlacement } from "@sportal/api/ShellBridge"
+import type { StageTransition, TileBounds } from "@sportal/api/ShellBridge"
 
 /** The arithmetic of a Stage transition: how far along its curve a moment is, and where a view is then. */
 export const Transition = {
@@ -11,11 +11,7 @@ export const Transition = {
   },
 
   /** The bounds `eased` of the way from `from` to `to`, in whole pixels; exactly `to` at 1. */
-  between(
-    from: TilePlacement["bounds"],
-    to: TilePlacement["bounds"],
-    eased: number
-  ): TilePlacement["bounds"] {
+  between(from: TileBounds, to: TileBounds, eased: number): TileBounds {
     if (eased >= 1) return to
     const at = (a: number, b: number) => Math.round(a + (b - a) * eased)
     return {

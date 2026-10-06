@@ -2,7 +2,7 @@ import { DateTime, Order, Schema } from "effect"
 import { GameEvent } from "./GameEvent.ts"
 import { LeagueId } from "./League.ts"
 import { Situation } from "./Situation.ts"
-import { Team } from "./Team.ts"
+import { Team, type TeamId } from "./Team.ts"
 
 export const GameId = Schema.String.pipe(Schema.brand("GameId"))
 export type GameId = typeof GameId.Type
@@ -78,6 +78,36 @@ export class GameSnapshot extends Schema.Class<GameSnapshot>("sportal/GameSnapsh
     }
   }
 
+  /** The points between the teams. */
+  margin(): number {
+    return Math.abs(this.home.score - this.away.score)
+  }
+
+  /** Whether the game is in overtime, the fifth period or later. */
+  inOvertime(): boolean {
+    return this.period >= 5
+  }
+
+  /** Whether the game has a score worth showing: it is being played or is final. */
+  scored(): boolean {
+    return this.progress() === "live" || this.status === "final"
+  }
+
+  /** The broadcast networks, joined with " · ". */
+  networks(): string {
+    return this.broadcasts.map(({ network }) => network).join(" · ")
+  }
+
+  /** The status, period, and clock as one line, for a log. */
+  gameTime(): string {
+    return `${this.status}, period ${this.period}, ${this.clock}`
+  }
+
+  /** A team's abbreviation, or its id when it plays in neither side. */
+  abbreviationOf(id: TeamId): string {
+    return [this.home.team, this.away.team].find((team) => team.id === id)?.abbreviation ?? id
+  }
+
   /** "<away abbreviation> at <home abbreviation>", for a title or a log line. */
   matchup(): string {
     return `${this.away.team.abbreviation} at ${this.home.team.abbreviation}`
@@ -116,7 +146,7 @@ export class GameSnapshot extends Schema.Class<GameSnapshot>("sportal/GameSnapsh
    * it as 0:00 throughout. An NFL overtime has one.
    */
   timed(): boolean {
-    return !(this.league === "fbs" && this.period >= 5)
+    return !(this.league === "fbs" && this.inOvertime())
   }
 
   /** Live in the last two minutes of the first or second half, with time still on the clock. */
@@ -131,48 +161,58 @@ export class GameSnapshot extends Schema.Class<GameSnapshot>("sportal/GameSnapsh
    * of possession is a turnover only when the last play names an interception or a fumble and nobody scored.
    */
   eventsSince(previous: GameSnapshot): ReadonlyArray<GameEvent> {
-    const events: Array<GameEvent> = []
-    for (const side of ["home", "away"] as const) {
+    const scores = (["home", "away"] as const).flatMap((side) => {
       const points = this[side].score - previous[side].score
-      if (points > 0) events.push(GameEvent.ScoreChanged({ team: this[side].team.id, points }))
-    }
-    const scored = events.length > 0
+      return points > 0 ? [GameEvent.ScoreChanged({ team: this[side].team.id, points })] : []
+    })
     const before = previous.situation
     const after = this.situation
     const team = after?.possession
-    if (team !== undefined && before?.possession !== undefined && team !== before.possession)
-      events.push(
-        !scored && /intercept|fumble/i.test(after?.lastPlay ?? "")
-          ? GameEvent.Turnover({ team })
-          : GameEvent.PossessionChanged({ team })
-      )
-    if (team !== undefined && after !== undefined) {
-      // Only a change on the same team's drive is news, except that a new drive starting inside the 40 (a turnover
-      // on a short field) is reported: a short field is what the Director should anticipate.
-      const already = (test: (situation: Situation) => boolean) =>
-        before !== undefined && before.possession === team && test(before)
-      if (after.inScoringRange() && !already((s) => s.inScoringRange()))
-        events.push(GameEvent.ReachedScoringRange({ team }))
-      if (after.isRedZone && !already((s) => s.isRedZone)) events.push(GameEvent.EnteredRedZone({ team }))
-      if (after.goalToGo() && !already((s) => s.goalToGo())) events.push(GameEvent.GoalToGo({ team }))
-      if (after.down === 4 && !already((s) => s.down === 4 && s.yardLine === after.yardLine))
-        events.push(GameEvent.FourthDown({ team }))
-    }
-    if (before !== undefined && after !== undefined) {
-      // One fewer in the same period only: a new period resets counts, and a poll without counts reads as zero.
-      const tookOne = (was: number, now: number) => this.period === previous.period && was - now === 1
-      if (tookOne(before.homeTimeouts, after.homeTimeouts))
-        events.push(GameEvent.TimeoutTaken({ team: this.home.team.id }))
-      if (tookOne(before.awayTimeouts, after.awayTimeouts))
-        events.push(GameEvent.TimeoutTaken({ team: this.away.team.id }))
-    }
-    if (this.inTwoMinuteDrill() && !previous.inTwoMinuteDrill()) events.push(GameEvent.TwoMinuteDrill())
-    if (this.period >= 5 && previous.period < 5) events.push(GameEvent.Overtime())
-    if (this.period > previous.period && previous.period >= 1)
-      events.push(GameEvent.PeriodEnded({ period: previous.period }))
-    if (this.status === "halftime" && previous.status !== "halftime") events.push(GameEvent.WentToHalftime())
-    if (this.status === "final" && previous.status !== "final") events.push(GameEvent.WentFinal())
-    return events
+    // Only a change on the same team's drive is news, except that a new drive starting inside the 40 (a turnover
+    // on a short field) is reported: a short field is what the Director should anticipate.
+    const already = (test: (situation: Situation) => boolean) =>
+      before !== undefined && before.possession === team && test(before)
+    // One fewer in the same period only: a new period resets counts, and a poll without counts reads as zero.
+    const tookOne = (was: number, now: number) => this.period === previous.period && was - now === 1
+    return [
+      scores,
+      team !== undefined && before?.possession !== undefined && team !== before.possession
+        ? [
+            scores.length === 0 && /intercept|fumble/i.test(after?.lastPlay ?? "")
+              ? GameEvent.Turnover({ team })
+              : GameEvent.PossessionChanged({ team })
+          ]
+        : [],
+      team !== undefined && after !== undefined
+        ? [
+            ...(after.inScoringRange() && !already((s) => s.inScoringRange())
+              ? [GameEvent.ReachedScoringRange({ team })]
+              : []),
+            ...(after.isRedZone && !already((s) => s.isRedZone) ? [GameEvent.EnteredRedZone({ team })] : []),
+            ...(after.goalToGo() && !already((s) => s.goalToGo()) ? [GameEvent.GoalToGo({ team })] : []),
+            ...(after.down === 4 && !already((s) => s.down === 4 && s.yardLine === after.yardLine)
+              ? [GameEvent.FourthDown({ team })]
+              : [])
+          ]
+        : [],
+      before !== undefined && after !== undefined
+        ? [
+            ...(tookOne(before.homeTimeouts, after.homeTimeouts)
+              ? [GameEvent.TimeoutTaken({ team: this.home.team.id })]
+              : []),
+            ...(tookOne(before.awayTimeouts, after.awayTimeouts)
+              ? [GameEvent.TimeoutTaken({ team: this.away.team.id })]
+              : [])
+          ]
+        : [],
+      this.inTwoMinuteDrill() && !previous.inTwoMinuteDrill() ? [GameEvent.TwoMinuteDrill()] : [],
+      this.inOvertime() && !previous.inOvertime() ? [GameEvent.Overtime()] : [],
+      this.period > previous.period && previous.period >= 1
+        ? [GameEvent.PeriodEnded({ period: previous.period })]
+        : [],
+      this.status === "halftime" && previous.status !== "halftime" ? [GameEvent.WentToHalftime()] : [],
+      this.status === "final" && previous.status !== "final" ? [GameEvent.WentFinal()] : []
+    ].flat()
   }
 }
 

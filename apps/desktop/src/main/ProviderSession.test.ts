@@ -43,9 +43,7 @@ vi.mock("electron", () => ({
   }
 }))
 
-const { ProviderSession, allows, confine, grantsPermission, hostOf, loadErrorCode } = await import(
-  "./ProviderSession.ts"
-)
+const { ProviderSession } = await import("./ProviderSession.ts")
 
 describe("ProviderSession.openSignIn", () => {
   it.effect("opens a window on the shared provider session at YouTube TV, without a preload", () =>
@@ -136,26 +134,16 @@ describe("ProviderSession.openSignIn", () => {
   afterEach(() => {
     loadFailure = undefined
   })
-
-  function built(logs: Array<string> = []) {
-    windows.length = 0
-    const capture = Logger.make<unknown, void>(({ message }) => {
-      logs.push(String(Array.isArray(message) ? message[0] : message))
-    })
-    return Layer.build(ProviderSession.layer(ui).pipe(Layer.provide(Logger.layer([capture])))).pipe(
-      Effect.map((context) => Context.get(context, ProviderSession))
-    )
-  }
 })
 
-describe("allows", () => {
+describe("ProviderSession.allows", () => {
   it.each([
     "https://tv.youtube.com/watch",
     "https://www.youtube.com/",
     "https://accounts.youtube.com/",
     "https://accounts.google.com/signin"
   ])("allows %s", (url) => {
-    expect(allows(url, ui)).toBe(true)
+    expect(allowed(url)).toBe(true)
   })
 
   it.each([
@@ -167,14 +155,14 @@ describe("allows", () => {
     "https://tv.youtube.com@evil.com/",
     "not a url"
   ])("refuses %s", (url) => {
-    expect(allows(url, ui)).toBe(false)
+    expect(allowed(url)).toBe(false)
   })
 
   it.each([
     "http://127.0.0.1:4401/scenario-stream/401856707",
     "http://127.0.0.1:4401/scenario-stream/tie-uga-ala"
   ])("allows the UI's own scenario stream %s", (url) => {
-    expect(allows(url, ui)).toBe(true)
+    expect(allowed(url)).toBe(true)
   })
 
   it.each([
@@ -186,95 +174,52 @@ describe("allows", () => {
     "http://localhost:4401/scenario-stream/1",
     "https://evil.example/scenario-stream/1"
   ])("refuses %s, which is not the UI's scenario stream", (url) => {
-    expect(allows(url, ui)).toBe(false)
+    expect(allowed(url)).toBe(false)
   })
 })
 
-describe("grantsPermission", () => {
+describe("ProviderSession permission requests", () => {
   it.each(["mediaKeySystem", "fullscreen", "screen-wake-lock"])("grants %s", (permission) => {
-    expect(grantsPermission(permission)).toBe(true)
+    expect(granted(permission)).toBe(true)
   })
 
   it.each(["media", "geolocation", "notifications", "clipboard-read", "openExternal", "unknown"])(
     "denies %s",
     (permission) => {
-      expect(grantsPermission(permission)).toBe(false)
+      expect(granted(permission)).toBe(false)
     }
   )
-})
-
-describe("hostOf", () => {
-  it("keeps only the hostname, dropping any path or query that could carry a token", () => {
-    expect(hostOf("https://tv.youtube.com/watch/abc?token=secret")).toBe("tv.youtube.com")
-  })
-
-  it("names an address it cannot parse without repeating it", () => {
-    expect(hostOf("not a url")).toBe("(unparseable address)")
-  })
-})
-
-describe("loadErrorCode", () => {
-  it("reads the code Electron attaches to a failed load", () => {
-    expect(
-      loadErrorCode(
-        Object.assign(new Error("ERR_ABORTED (-3) loading 'https://x/?t=1'"), { code: "ERR_ABORTED" })
-      )
-    ).toBe("ERR_ABORTED")
-  })
-
-  it.each([new Error("no code"), "a string", undefined])("is unknown for %s", (error) => {
-    expect(loadErrorCode(error)).toBe("unknown")
-  })
-})
-
-describe("confine", () => {
-  const onHub = (url: string) => url.startsWith("http://hub/")
-
-  it.each(["will-navigate", "will-redirect"])(
-    "refuses a %s off the permitted addresses, saying where",
-    (event) => {
-      const { contents, warn } = confined({ subframes: false })
-      const refused = navigation("https://evil.example/path?token=secret", true)
-      contents.emit(event, refused)
-      expect(refused.preventDefault).toHaveBeenCalled()
-      expect(warn).toHaveBeenCalledWith("refused navigation to evil.example")
-    }
-  )
-
-  it("lets a permitted navigation through", () => {
-    const { contents, warn } = confined({ subframes: false })
-    const allowed = navigation("http://hub/stage", true)
-    contents.emit("will-navigate", allowed)
-    expect(allowed.preventDefault).not.toHaveBeenCalled()
-    expect(warn).not.toHaveBeenCalled()
-  })
-
-  it("never opens a new window", () => {
-    const { contents } = confined({ subframes: false })
-    expect(contents.openWindow()).toEqual({ action: "deny" })
-  })
-
-  it("refuses a subframe navigation off the permitted addresses only when asked to", () => {
-    const guarded = confined({ subframes: true })
-    const inFrame = navigation("https://evil.example/", false)
-    guarded.contents.emit("will-frame-navigate", inFrame)
-    expect(inFrame.preventDefault).toHaveBeenCalled()
-
-    const unguarded = confined({ subframes: false })
-    const elsewhere = navigation("https://evil.example/", false)
-    unguarded.contents.emit("will-frame-navigate", elsewhere)
-    expect(elsewhere.preventDefault).not.toHaveBeenCalled()
-  })
-
-  function confined(options: { subframes: boolean }) {
-    const contents = fakeContents()
-    const warn = vi.fn()
-    confine(contents, onHub, warn, options)
-    return { contents, warn }
-  }
 })
 
 let loadFailure: Error | undefined
+
+function allowed(url: string) {
+  return Effect.runSync(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const providers = yield* built()
+        return providers.allows(url)
+      })
+    )
+  )
+}
+
+/** Asks the provider session's permission handler, as Electron would, and returns what it answered. */
+function granted(permission: string) {
+  const answers: Array<boolean> = []
+  Effect.runSync(
+    Effect.scoped(
+      Effect.gen(function* () {
+        yield* built()
+        const handler = providerSession.setPermissionRequestHandler.mock.lastCall?.[0]
+        handler?.(undefined, permission, (answer: boolean) => answers.push(answer), {
+          requestingUrl: "https://tv.youtube.com/"
+        })
+      })
+    )
+  )
+  return answers[0]
+}
 
 const { BrowserWindow } = await import("electron")
 const shell = new BrowserWindow()
@@ -300,4 +245,14 @@ function fakeContents() {
     },
     openWindow: () => openHandler()
   }
+}
+
+function built(logs: Array<string> = []) {
+  windows.length = 0
+  const capture = Logger.make<unknown, void>(({ message }) => {
+    logs.push(String(Array.isArray(message) ? message[0] : message))
+  })
+  return Layer.build(ProviderSession.layer(ui).pipe(Layer.provide(Logger.layer([capture])))).pipe(
+    Effect.map((context) => Context.get(context, ProviderSession))
+  )
 }

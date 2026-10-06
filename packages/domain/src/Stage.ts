@@ -1,7 +1,7 @@
-import { Option, Result, Schema } from "effect"
+import { Array as Arr, Option, Result, Schema } from "effect"
+import { Channel, type ChannelAvailability, SourceName } from "./Channel.ts"
 import { GameId, Network } from "./Game.ts"
 import { Layout, LayoutName, Split } from "./Layout.ts"
-import { Channel, type ChannelAvailability, SourceName } from "./Source.ts"
 import { StreamLocator } from "./Stream.ts"
 
 export const Tile = Schema.Union([
@@ -38,7 +38,7 @@ export class Stage extends Schema.Class<Stage>("sportal/Stage")({
   tiles: Schema.Array(Tile),
   layout: LayoutName,
   /** Each layout's own split, kept while another layout is shown. */
-  splits: Schema.Struct({ Single: Split, Pair: Split, Quad: Split, MainThree: Split, MainFive: Split }),
+  splits: Schema.Record(LayoutName, Split),
   /** The game whose sound is on: always an on-stage game, or none when the stage is empty. */
   audioFocus: Schema.optional(GameId),
   /** The game filling the Stage: always an on-stage game. */
@@ -48,14 +48,23 @@ export class Stage extends Schema.Class<Stage>("sportal/Stage")({
   static readonly initial = new Stage({
     tiles: [empty, empty, empty, empty],
     layout: "Quad",
-    splits: {
-      Single: Layout.defaultSplit("Single"),
-      Pair: Layout.defaultSplit("Pair"),
-      Quad: Layout.defaultSplit("Quad"),
-      MainThree: Layout.defaultSplit("MainThree"),
-      MainFive: Layout.defaultSplit("MainFive")
-    }
+    splits: Layout.defaultSplits()
   })
+
+  /** Whether the game's sound is on. */
+  hears(game: GameId): boolean {
+    return this.audioFocus === game
+  }
+
+  /** Whether the game fills the Stage. */
+  soloes(game: GameId): boolean {
+    return this.solo === game
+  }
+
+  /** The Stage with the current layout's split replaced: the preview of a divider drag. */
+  withSplit(split: Split): Stage {
+    return new Stage({ ...this, splits: { ...this.splits, [this.layout]: split } })
+  }
 
   currentLayout(): Layout {
     return new Layout({ name: this.layout, split: this.splits[this.layout] })
@@ -83,11 +92,13 @@ export class Stage extends Schema.Class<Stage>("sportal/Stage")({
   /** The first empty on-stage slot after `slot`, wrapping round; never `slot` itself. */
   nextEmptySlot(slot: number): number | undefined {
     const slots = this.onStage()
-    for (let offset = 1; offset < slots.length; offset++) {
-      const next = (slot + offset) % slots.length
-      if (slots[next]?._tag === "Empty") return next
-    }
-    return undefined
+    if (slots.length < 2) return undefined
+    return Option.getOrUndefined(
+      Arr.findFirst(
+        Arr.range(1, slots.length - 1).map((offset) => (slot + offset) % slots.length),
+        (next) => slots[next]?._tag === "Empty"
+      )
+    )
   }
 
   /**
@@ -103,7 +114,7 @@ export class Stage extends Schema.Class<Stage>("sportal/Stage")({
         return Result.succeed(settle({ ...this, layout: command.layout }))
       case "SetSplit":
         return Layout.holds(command.split)
-          ? Result.succeed(settle({ ...this, splits: { ...this.splits, [this.layout]: command.split } }))
+          ? Result.succeed(settle(this.withSplit(command.split)))
           : reject("split-out-of-range")
       case "Unsolo":
         return Result.succeed(settle({ ...this, solo: undefined }))
@@ -241,9 +252,14 @@ function settle(fields: {
   solo?: GameId | undefined
 }): Stage {
   const slots = Layout.slotCount(fields.layout)
-  const tiles = [...fields.tiles]
-  while (tiles.length < slots) tiles.push(empty)
-  while (tiles.length > slots && tiles.at(-1)?._tag === "Empty") tiles.pop()
+  const kept = Option.getOrElse(
+    Option.map(
+      Arr.findLastIndex(fields.tiles, (tile) => tile._tag !== "Empty"),
+      (last) => last + 1
+    ),
+    () => 0
+  )
+  const tiles = Arr.makeBy(Math.max(slots, kept), (index) => fields.tiles[index] ?? empty)
   const onStage = tiles.slice(0, slots).flatMap((tile) => (tile._tag === "Empty" ? [] : [tile.game]))
   const audioFocus = onStage.find((game) => game === fields.audioFocus) ?? onStage[0]
   const solo = onStage.find((game) => game === fields.solo)

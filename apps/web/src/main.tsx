@@ -1,9 +1,10 @@
+import { GameId } from "@sportal/domain/Game"
 import { StrictMode } from "react"
 import { createRoot } from "react-dom/client"
-import { App } from "./App.tsx"
+import { DisplayView } from "./display/DisplayView.tsx"
 import { RemoteView } from "./remote/RemoteView.tsx"
-import { ScenarioStream } from "./scenario/ScenarioStream.tsx"
-import "./theme/theme.css"
+import { ScenarioStream } from "./ScenarioStream.tsx"
+import "./theme.css"
 
 const root = document.getElementById("root")
 if (root === null) throw new Error("index.html has no #root element")
@@ -17,9 +18,9 @@ createRoot(root).render(
     {path.startsWith("/remote") ? (
       <RemoteView />
     ) : path.startsWith(scenarioStream) ? (
-      <ScenarioStream game={decodeURIComponent(path.slice(scenarioStream.length))} />
+      <ScenarioStream game={GameId.make(decodeURIComponent(path.slice(scenarioStream.length)))} />
     ) : (
-      <App />
+      <DisplayView />
     )}
   </StrictMode>
 )

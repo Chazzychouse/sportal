@@ -1,4 +1,4 @@
-import type { LayoutName, Split } from "@sportal/domain/Layout"
+import { Layout, type LayoutName, type Split } from "@sportal/domain/Layout"
 import { useRef } from "react"
 import { gap } from "./TileRects.ts"
 
@@ -14,14 +14,8 @@ export function Dividers(props: {
   onDrop: (split: Split) => void
 }) {
   const dragging = useRef<Split | undefined>(undefined)
-  const axes: ReadonlyArray<"x" | "y"> =
-    props.layout === "Single"
-      ? []
-      : props.layout === "Quad" || props.layout === "MainFive"
-        ? ["x", "y"]
-        : ["x"]
 
-  return axes.map((axis) => {
+  return Layout.dividers(props.layout).map((axis) => {
     const at = props.split[axis] * (axis === "x" ? props.area.width : props.area.height)
     return (
       // biome-ignore lint/a11y/useSemanticElements: a draggable splitter is a widget, not an <hr>'s thematic break.
@@ -29,8 +23,8 @@ export function Dividers(props: {
         key={axis}
         role="separator"
         aria-orientation={axis === "x" ? "vertical" : "horizontal"}
-        aria-valuemin={20}
-        aria-valuemax={80}
+        aria-valuemin={Math.round(Layout.bounds.min * 100)}
+        aria-valuemax={Math.round(Layout.bounds.max * 100)}
         aria-valuenow={Math.round(props.split[axis] * 100)}
         tabIndex={-1}
         className={`group absolute z-10 flex touch-none items-center justify-center ${
@@ -49,7 +43,7 @@ export function Dividers(props: {
             axis === "x"
               ? (event.clientX - bounds.x) / bounds.width
               : (event.clientY - bounds.y) / bounds.height
-          dragging.current = { ...dragging.current, [axis]: Math.min(0.8, Math.max(0.2, fraction)) }
+          dragging.current = Layout.clamp({ ...dragging.current, [axis]: fraction })
           props.onDrag(dragging.current)
         }}
         onPointerUp={() => {

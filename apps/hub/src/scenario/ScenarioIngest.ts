@@ -1,14 +1,10 @@
-import { join } from "node:path"
-import { fileURLToPath } from "node:url"
 import { Delivery } from "@sportal/domain/Delivery"
 import { LeagueId } from "@sportal/domain/League"
-import { LiveGame } from "@sportal/domain/LiveGame"
-import { Scenario } from "@sportal/domain/Scenario"
-import { scenarios } from "@sportal/domain/scenarios/Scenarios"
-import { Array as Arr, DateTime, Duration, Effect, FileSystem, Layer, Option, Schema } from "effect"
+import { Array as Arr, DateTime, Duration, Effect, FileSystem, Layer, Option, Path, Schema } from "effect"
 import * as Cadence from "../ingest/Cadence.ts"
-import { Ingest } from "../ingest/Ingest.ts"
 import { LiveGames } from "../LiveGames.ts"
+import { Scenario } from "./Scenario.ts"
+import { scenarios } from "./written/Scenarios.ts"
 
 /**
  * A scenario as the feed: each league's slate at the time since the Hub started is taken as a `Listing`, on the poll
@@ -16,9 +12,8 @@ import { LiveGames } from "../LiveGames.ts"
  * when it was written. That is scenario time when the Hub runs on the scenario clock. Nothing is logged. `name` is a
  * written scenario's, or a recorded slice's in `from`.
  */
-export const layer = (name: string, from: string = folder) =>
-  Layer.effect(
-    Ingest,
+export const layer = (name: string, from: string = Scenario.folder) =>
+  Layer.effectDiscard(
     Effect.gen(function* () {
       const scenario = yield* load(name, from)
       const liveGames = yield* LiveGames
@@ -40,14 +35,7 @@ export const layer = (name: string, from: string = folder) =>
                 ),
               { discard: true }
             )
-            const folded = yield* liveGames.latest
-            const cadence = Cadence.interval(
-              LeagueId.literals.flatMap((league) =>
-                LiveGame.asFolded(folded.listed.get(league) ?? [], folded.live)
-              ),
-              now,
-              false
-            )
+            const cadence = Cadence.interval((yield* liveGames.latest).slate(LeagueId.literals), now, false)
             const nextFrame = Arr.findFirst(scenario.frames, ({ at }) => at > Duration.toMillis(elapsed))
             yield* Effect.sleep(
               Option.match(nextFrame, {
@@ -58,12 +46,8 @@ export const layer = (name: string, from: string = folder) =>
           })
         )
       )
-      return Ingest.of({})
     })
   )
-
-/** Where recorded slices are kept: `fixtures/scenarios/` at the repository's root. */
-export const folder = fileURLToPath(new URL("../../../../fixtures/scenarios/", import.meta.url))
 
 /** A written scenario by name, or else a slice in `from`. Only a listed name is read, so no name reaches a path. */
 function load(name: string, from: string) {
@@ -71,6 +55,7 @@ function load(name: string, from: string) {
     const written = scenarios.get(name)
     if (written !== undefined) return written
     const fs = yield* FileSystem.FileSystem
+    const { join } = yield* Path.Path
     const recorded = (yield* fs.exists(from))
       ? (yield* fs.readDirectory(from))
           .filter((file) => file.endsWith(".json"))

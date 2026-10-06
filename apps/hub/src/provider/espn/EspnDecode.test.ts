@@ -1,13 +1,13 @@
 import { readFileSync } from "node:fs"
 import { assert, describe, it } from "@effect/vitest"
 import type { Delivery } from "@sportal/domain/Delivery"
-import { GameId, type GameSnapshot } from "@sportal/domain/Game"
+import { GameId, GameSnapshot } from "@sportal/domain/Game"
 import { PlayId } from "@sportal/domain/Play"
 import { DateTime, Effect, Metric, Record, Schema, Stream } from "effect"
-import { Frame } from "../../feed/Frame.ts"
+import { Frame } from "../../feed-log/Frame.ts"
 import { counted, recordingLogs, withMetrics } from "../../TestTelemetry.ts"
 import * as EspnDecode from "./EspnDecode.ts"
-import * as EspnPayload from "./EspnPayload.ts"
+import { EspnEvent } from "./EspnEvent.ts"
 
 // Recorded from ESPN on 2026-10-04: the NFL checkpoint at 17:52Z, every socket text on its topic after it until
 // 18:00Z, each line one text as it arrived, and the scoreboard polled at 18:00Z.
@@ -43,6 +43,75 @@ const ariAtNyg = "s:20~l:28~e:401872966~c:401872966"
 const ariAtNygPlays = "gp-football-nfl-401872966"
 
 describe("EspnDecode", () => {
+  // Each recorded feed as it decoded when both feeds' events were read by one transform: the poll's listings, the
+  // checkpoint's pushes, and the checkpoint's events each read alone.
+  describe("the recorded feeds decode to the same games", () => {
+    const expected = Schema.decodeUnknownSync(
+      Schema.fromJsonString(Schema.Struct({ deliveries: Schema.Json, checkpointEvents: Schema.Json }))
+    )(fixture("decoded-snapshots.json"))
+    const encoded = (value: unknown) => JSON.parse(JSON.stringify(value))
+    const encode = Schema.encodeSync(GameSnapshot)
+
+    it.effect("each listing and push", () =>
+      Effect.gen(function* () {
+        const all = yield* outputs([
+          poll("fbs", fixture("fbs-scoreboard-live.json")),
+          poll("nfl", scoreboardBody),
+          checkpoint(
+            "event-football-nfl",
+            1,
+            Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Json))(checkpointBody)
+          )
+        ])
+
+        assert.deepStrictEqual(
+          encoded(
+            all.map((output) =>
+              output._tag !== "Delivered"
+                ? { tag: output._tag }
+                : output.delivery._tag === "Listing"
+                  ? {
+                      seq: output.seq,
+                      tag: "Listing",
+                      league: output.delivery.league,
+                      games: output.delivery.games.map((game) => encode(game))
+                    }
+                  : output.delivery._tag === "Snapshot"
+                    ? {
+                        seq: output.seq,
+                        tag: "Snapshot",
+                        from: output.delivery.from,
+                        snapshot: encode(output.delivery.snapshot)
+                      }
+                    : { seq: output.seq, tag: output.delivery._tag }
+            )
+          ),
+          expected.deliveries
+        )
+      })
+    )
+
+    it("each checkpoint event alone", () => {
+      const events = Schema.decodeUnknownSync(
+        Schema.fromJsonString(
+          Schema.Struct({
+            sports: Schema.Tuple([
+              Schema.Struct({
+                leagues: Schema.Tuple([Schema.Struct({ events: Schema.Array(Schema.Unknown) })])
+              })
+            ])
+          })
+        )
+      )(checkpointBody).sports[0].leagues[0].events
+      const decodeEvent = Schema.decodeUnknownSync(EspnEvent("nfl"))
+
+      assert.deepStrictEqual(
+        encoded(events.map((event) => encode(decodeEvent(event)))),
+        expected.checkpointEvents
+      )
+    })
+  })
+
   it.effect("a poll response is its league's listing", () =>
     Effect.gen(function* () {
       const [listing] = yield* decoded([poll("nfl", scoreboardBody)])
@@ -69,9 +138,9 @@ describe("EspnDecode", () => {
   it.effect("the checkpoint and every message after it end each live game where the scoreboard had it", () =>
     Effect.gen(function* () {
       const pushed = lastPushed(yield* decoded([poll("nfl", scoreboardBody), ...recorded(socketTexts)]))
-      const polled = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(EspnPayload.Scoreboard))(
-        scoreboardBody
-      ).pipe(Effect.flatMap((board) => EspnDecode.slateOf("nfl", board)))
+      const polled = (yield* decoded([poll("nfl", scoreboardBody)])).flatMap(({ delivery }) =>
+        delivery._tag === "Listing" ? delivery.games : []
+      )
       const live = polled.filter((game) => game.progress() === "live")
 
       assert.strictEqual(live.length, 8)
@@ -266,6 +335,68 @@ describe("EspnDecode", () => {
       const early = recorded([...socketTexts.slice(0, 2), socketTexts[3] ?? "", socketTexts[6] ?? ""])
 
       assert.deepStrictEqual(yield* resyncs([poll("nfl", scoreboardBody), ...early]), [])
+    })
+  )
+
+  it.effect(
+    "a checkpoint that does not decode is counted, and the next message on its topic asks for it again",
+    () =>
+      Effect.gen(function* () {
+        const unreadable = [
+          checkpoint("event-football-nfl", 7, { sports: "not a scoreboard" }),
+          message("event-football-nfl", 8, [])
+        ]
+
+        assert.deepStrictEqual(yield* resyncs(unreadable), ["event-football-nfl"])
+        assert.strictEqual(yield* counted("sportal_frames_undecoded", { feed: "fastcast" }), 1)
+      }).pipe(withMetrics)
+  )
+
+  it.effect("checkpoints that keep not decoding ask for another only once, until one decodes", () =>
+    Effect.gen(function* () {
+      const unreadableAgain = [
+        checkpoint("event-football-nfl", 7, { sports: "not a scoreboard" }),
+        message("event-football-nfl", 8, []),
+        checkpoint("event-football-nfl", 9, { sports: "not a scoreboard" }),
+        message("event-football-nfl", 10, []),
+        message("event-football-nfl", 11, []),
+        checkpoint("event-football-nfl", 12, { sports: "not a scoreboard" }),
+        message("event-football-nfl", 13, [])
+      ]
+
+      assert.deepStrictEqual(yield* resyncs(unreadableAgain), ["event-football-nfl"])
+    })
+  )
+
+  it.effect("a checkpoint that decodes after an unreadable one syncs its topic again", () =>
+    Effect.gen(function* () {
+      const recovered = [
+        poll("nfl", scoreboardBody),
+        checkpoint("event-football-nfl", 7, { sports: "not a scoreboard" }),
+        message("event-football-nfl", 8, []),
+        checkpoint("event-football-nfl", 9, { sports: "not a scoreboard" }),
+        checkpoint("event-football-nfl", 4286637, JSON.parse(checkpointBody)),
+        // ARI at NYG: the away team (competitor 0) had 14, the home team 6.
+        message("event-football-nfl", 4286638, [
+          { op: "copy", from: `${ariAtNyg}/competitors/1/score`, path: `${ariAtNyg}/competitors/0/score` }
+        ]),
+        message("event-football-nfl", 4286640, [])
+      ]
+      const all = yield* outputs(recovered)
+
+      assert.deepStrictEqual(
+        all.flatMap((output) =>
+          output._tag === "Delivered" && output.seq === 6 && output.delivery._tag === "Snapshot"
+            ? [[output.delivery.snapshot.id, output.delivery.snapshot.away.score]]
+            : []
+        ),
+        [["401872966", 6]]
+      )
+      assert.deepStrictEqual(
+        all.flatMap((output) => (output._tag === "Resync" ? [output.seq] : [])),
+        [3, 7],
+        "one resync for the unreadable checkpoint, and one for the gap after the good one"
+      )
     })
   )
 

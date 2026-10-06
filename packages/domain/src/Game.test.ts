@@ -2,7 +2,7 @@ import { assert, describe, it } from "@effect/vitest"
 import { DateTime } from "effect"
 import { GameId, GameSnapshot, type GameStatus } from "./Game.ts"
 import { Situation } from "./Situation.ts"
-import { broadcast, snapshot, team } from "./TestGame.ts"
+import { broadcast, situation, snapshot, team } from "./TestGame.ts"
 
 describe("GameSnapshot.progress", () => {
   it.each([
@@ -20,6 +20,76 @@ describe("GameSnapshot.progress", () => {
   it("reads a delay before kickoff as upcoming and a delay during the game as live", () => {
     assert.strictEqual(snapshot({ status: "delayed", period: 0 }).progress(), "upcoming")
     assert.strictEqual(snapshot({ status: "delayed", period: 2 }).progress(), "live")
+  })
+})
+
+describe("GameSnapshot.margin", () => {
+  it("is the points between the teams", () => {
+    assert.strictEqual(
+      snapshot({ home: { team: team("H"), score: 24 }, away: { team: team("A"), score: 17 } }).margin(),
+      7
+    )
+    assert.strictEqual(
+      snapshot({ home: { team: team("H"), score: 3 }, away: { team: team("A"), score: 10 } }).margin(),
+      7
+    )
+    assert.strictEqual(
+      snapshot({ home: { team: team("H"), score: 14 }, away: { team: team("A"), score: 14 } }).margin(),
+      0
+    )
+  })
+})
+
+describe("GameSnapshot.inOvertime", () => {
+  it("starts in the fifth period", () => {
+    assert.isFalse(snapshot({ period: 4 }).inOvertime())
+    assert.isTrue(snapshot({ period: 5 }).inOvertime())
+    assert.isTrue(snapshot({ period: 6 }).inOvertime())
+  })
+})
+
+describe("GameSnapshot.scored", () => {
+  it.each([
+    ["scheduled", 0, false],
+    ["live", 2, true],
+    ["halftime", 2, true],
+    ["final", 4, true],
+    ["delayed", 0, false],
+    ["delayed", 2, true],
+    ["postponed", 0, false],
+    ["canceled", 0, false]
+  ] as const)("is %s in period %d → %s", (status, period, scored) => {
+    assert.strictEqual(snapshot({ status, period }).scored(), scored)
+  })
+})
+
+describe("GameSnapshot.networks", () => {
+  it("joins the networks with a dot", () => {
+    assert.strictEqual(snapshot().networks(), "")
+    assert.strictEqual(snapshot({ broadcasts: [broadcast("CBS")] }).networks(), "CBS")
+    assert.strictEqual(
+      snapshot({ broadcasts: [broadcast("CBS"), broadcast("ESPN", "streaming")] }).networks(),
+      "CBS · ESPN"
+    )
+  })
+})
+
+describe("GameSnapshot#gameTime", () => {
+  it("reads status, period, and clock", () => {
+    assert.strictEqual(
+      snapshot({ status: "live", period: 3, clock: "4:12" }).gameTime(),
+      "live, period 3, 4:12"
+    )
+  })
+})
+
+describe("GameSnapshot.abbreviationOf", () => {
+  const game = snapshot({ home: { team: team("BAMA"), score: 0 }, away: { team: team("UGA"), score: 0 } })
+
+  it("names a team by its abbreviation, or an unknown id as itself", () => {
+    assert.strictEqual(game.abbreviationOf(team("BAMA").id), "BAMA")
+    assert.strictEqual(game.abbreviationOf(team("UGA").id), "UGA")
+    assert.strictEqual(game.abbreviationOf(team("XYZ").id), team("XYZ").id)
   })
 })
 
@@ -156,3 +226,118 @@ describe("GameSnapshot#advancedTo", () => {
 function game(id: string, status: GameStatus, kickoff: string) {
   return snapshot({ id: GameId.make(id), status, kickoff: DateTime.makeUnsafe(kickoff) })
 }
+
+const inPlay = (overrides: Partial<GameSnapshot> = {}) =>
+  snapshot({
+    status: "live",
+    period: 4,
+    clock: "5:00",
+    home: { team: team("UGA"), score: 21 },
+    away: { team: team("ALA"), score: 17 },
+    ...overrides
+  })
+const ball = (
+  side: "UGA" | "ALA",
+  yardLine: number,
+  down = 1,
+  distance = 10,
+  rest: Partial<Situation> = {}
+) => situation({ possession: team(side).id, yardLine, down, distance, isRedZone: yardLine <= 20, ...rest })
+const tags = (before: GameSnapshot, after: GameSnapshot) =>
+  after.eventsSince(before).map((event) => event._tag)
+
+describe("GameSnapshot#eventsSince", () => {
+  it("reports each side's points", () => {
+    const events = inPlay({ home: { team: team("UGA"), score: 28 } }).eventsSince(inPlay())
+    assert.deepStrictEqual(
+      events.map((e) => (e._tag === "ScoreChanged" ? { team: e.team, points: e.points } : e._tag)),
+      [{ team: team("UGA").id, points: 7 }]
+    )
+  })
+
+  it("reports a drive reaching the 40, then the red zone, then goal to go, once each", () => {
+    const at = (yardLine: number, distance = 10) => inPlay({ situation: ball("ALA", yardLine, 1, distance) })
+    assert.deepStrictEqual(tags(at(55), at(38)), ["ReachedScoringRange"])
+    assert.deepStrictEqual(tags(at(38), at(30)), [])
+    assert.deepStrictEqual(tags(at(30), at(18)), ["EnteredRedZone"])
+    assert.deepStrictEqual(tags(at(18), at(6, 6)), ["GoalToGo"])
+  })
+
+  it("reports fourth down once per spot", () => {
+    const fourth = inPlay({ situation: ball("ALA", 33, 4, 2) })
+    assert.deepStrictEqual(tags(inPlay({ situation: ball("ALA", 34, 3, 3) }), fourth), ["FourthDown"])
+    assert.deepStrictEqual(tags(fourth, fourth), [])
+  })
+
+  it("calls a change of possession a turnover only when the last play says interception or fumble", () => {
+    const before = inPlay({ situation: ball("ALA", 45) })
+    const picked = inPlay({ situation: ball("UGA", 70, 1, 10, { lastPlay: "Pass INTERCEPTED by K.Smith" }) })
+    const punted = inPlay({ situation: ball("UGA", 80, 1, 10, { lastPlay: "J.Doe punt 40 yards" }) })
+    const unclear = inPlay({ situation: ball("UGA", 80) })
+    assert.deepStrictEqual(tags(before, picked), ["Turnover"])
+    assert.deepStrictEqual(tags(before, punted), ["PossessionChanged"])
+    assert.deepStrictEqual(tags(before, unclear), ["PossessionChanged"])
+  })
+
+  it("does not call the ball changing hands after a score a turnover", () => {
+    const before = inPlay({ situation: ball("ALA", 3, 1, 3) })
+    const after = inPlay({
+      away: { team: team("ALA"), score: 24 },
+      situation: ball("UGA", 75, 1, 10, { lastPlay: "Fumble recovered in the end zone, touchdown" })
+    })
+    assert.deepStrictEqual(tags(before, after), ["ScoreChanged", "PossessionChanged"])
+  })
+
+  it("reports a timeout from a drop in either side's count", () => {
+    const before = inPlay({ situation: ball("ALA", 45) })
+    const after = inPlay({ situation: ball("ALA", 45, 1, 10, { awayTimeouts: 2 }) })
+    assert.deepStrictEqual(tags(before, after), ["TimeoutTaken"])
+  })
+
+  it("reports a timeout only as one fewer within the same period", () => {
+    const at = (period: number, home: number, away: number) =>
+      inPlay({ period, situation: ball("ALA", 45, 1, 10, { homeTimeouts: home, awayTimeouts: away }) })
+    assert.deepStrictEqual(tags(at(4, 3, 3), at(5, 1, 1)), ["Overtime", "PeriodEnded"])
+    assert.deepStrictEqual(tags(at(4, 3, 3), at(4, 0, 0)), [])
+    assert.deepStrictEqual(tags(at(4, 3, 3), at(4, 3, 2)), ["TimeoutTaken"])
+  })
+
+  it("reports a new drive starting inside the 40 as reaching scoring range", () => {
+    const before = inPlay({ situation: ball("ALA", 45) })
+    const picked = inPlay({ situation: ball("UGA", 30, 1, 10, { lastPlay: "Pass INTERCEPTED by K.Smith" }) })
+    assert.deepStrictEqual(tags(before, picked), ["Turnover", "ReachedScoringRange"])
+  })
+
+  it("reports the clock and status: two-minute drill, end of a period, halftime, overtime, final", () => {
+    assert.deepStrictEqual(tags(inPlay({ clock: "2:05" }), inPlay({ clock: "1:58" })), ["TwoMinuteDrill"])
+    assert.deepStrictEqual(
+      tags(inPlay({ period: 1, clock: "0:00" }), inPlay({ period: 2, clock: "15:00" })),
+      ["PeriodEnded"]
+    )
+    assert.deepStrictEqual(
+      tags(inPlay({ period: 2, clock: "0:00" }), inPlay({ period: 2, status: "halftime" })),
+      ["WentToHalftime"]
+    )
+    assert.deepStrictEqual(tags(inPlay({ clock: "0:00" }), inPlay({ period: 5, clock: "" })), [
+      "Overtime",
+      "PeriodEnded"
+    ])
+    assert.deepStrictEqual(tags(inPlay(), inPlay({ status: "final" })), ["WentFinal"])
+  })
+})
+
+describe("GameSnapshot#secondsLeft", () => {
+  it("reads the clock, and an unreadable one as a full quarter", () => {
+    assert.strictEqual(inPlay({ clock: "2:10" }).secondsLeft(), 130)
+    assert.strictEqual(inPlay({ clock: "0:00" }).secondsLeft(), 0)
+    assert.strictEqual(inPlay({ clock: "" }).secondsLeft(), 900)
+  })
+})
+
+describe("GameSnapshot#quarterLeft", () => {
+  it("is the share of the quarter left on the clock", () => {
+    assert.strictEqual(inPlay({ clock: "7:30" }).quarterLeft(), 0.5)
+    assert.strictEqual(inPlay({ clock: "0:00" }).quarterLeft(), 0)
+    assert.strictEqual(inPlay({ clock: "" }).quarterLeft(), 1)
+  })
+})

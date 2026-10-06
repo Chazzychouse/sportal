@@ -1,7 +1,7 @@
-# Sportal — Technical Spec (draft 2)
+# Sportal — Technical Spec
 
-> Architecture, physical layout, toolchain, coding practices, and domain language.
-> Companion to [product-plan.md](./product-plan.md). Draft 2 is rewritten around the plan review: Effect TypeScript, NFL + FBS from the start, several devices on one network, a Hub that can move to a cloud host, and an explicit standard for how files and modules are organized.
+> Architecture, physical layout, toolchain, and the designs behind them.
+> Companion to [product-plan.md](./product-plan.md).
 
 ## 1. Architectural drivers
 
@@ -47,7 +47,7 @@ Versions were checked against the registry on 2026-10-03. Effect is at 4.0, whic
 | Lint and format | Biome | One fast tool |
 | Structure enforcement | dependency-cruiser (import boundaries), knip (unused files, exports, dependencies) | The layout rules in section 4 are checked by machine, not by memory |
 | Hooks | Lefthook: format and lint on commit; typecheck, test, structure checks on push | |
-| Hub packaging | A container image built from `apps/hub` | The cloud move is "run the image with different environment" |
+| Hub packaging (not built) | A container image built from `apps/hub` | The cloud move is "run the image with different environment" |
 
 **Decided: no CI host yet.** The repository is local; the Lefthook hooks are the gate. CI is added when the repository gets a remote.
 
@@ -69,8 +69,8 @@ flowchart LR
     fold[LiveGames: one fold, every game's plays and watchability]
     history[(GameHistory: plays, latest snapshots)]
     slate[Slate: listed games and their watchability, as the fold has them]
-    director[Director: rules over watchability]
-    stages[Stage sessions: one per Display]
+    director[Director: rules over watchability, not built]
+    stages[Stage sessions: the one Stage, in memory]
     store[(SQL store)]
     api[HTTP API + live stream]
   end
@@ -97,7 +97,6 @@ flowchart LR
   fold -- live games, listings --> slate
   fold -- game events --> director
   director -- stage commands --> stages
-  stages --> store
   api <--> ui1
   api <--> ui2
   slate --> api
@@ -106,9 +105,9 @@ flowchart LR
   yttv --> views
 ```
 
-- **Hub** — polls providers and follows their live feeds, appends every frame to the feed log, folds what the frames say into each game's plays, state, and watchability (deriving its game events), runs the Director, and holds one authoritative **Stage session** per Display. Serves the web UI's static files, the HTTP API, and one live stream per client.
+- **Hub** — polls providers and follows their live feeds, appends every frame to the feed log, folds what the frames say into each game's plays, state, and watchability (deriving its game events), runs the Director, and holds the authoritative **Stage** in memory (one, until a second Display needs its own). Serves the web UI's static files, the HTTP API, and one live stream per client.
 - **Web UI** — one codebase for desk, couch, and phone. It renders Hub state and sends commands. It contains no business rules.
-- **Desktop shell** — loads the web UI from the Hub, registers as a Display, and mirrors that Display's stream tiles into native provider web views. It is told the Hub's address by configuration; for the single-machine case it can start a Hub itself.
+- **Desktop shell** — loads the web UI from the Hub, registers as a Display, and mirrors that Display's stream tiles into native provider web views. It is told the Hub's address by configuration (`SPORTAL_HUB_URL`) and never starts a Hub.
 
 ### 3.1 Why Stage state lives in the Hub
 
@@ -133,13 +132,13 @@ On a local network the round trip is a few milliseconds. If a cloud-hosted Hub e
 ### 3.3 Portability and network exposure
 
 - All Hub configuration comes from the environment through Effect `Config`: bind address, storage address, provider keys, access token.
-- The Hub keeps no state outside its SQL store, so it can be stopped, moved, and restarted freely.
-- On the home network the Hub requires a single shared access token, entered once per device. It is not built for the public internet: a cloud deployment additionally requires real authentication, which is deliberately left as a future decision record rather than half-built now.
+- The Hub keeps no state outside its data directory (`sportal.sqlite` and `feed.sqlite`), so it can be stopped, moved, and restarted freely.
+- Planned: on the home network the Hub requires a single shared access token, entered once per device. It is not built for the public internet: a cloud deployment additionally requires real authentication, which is deliberately left as a future decision record rather than half-built now.
 - The Electron shell never moves to the cloud; Displays always run at home and point at wherever the Hub is.
 
 ## 4. Physical layout and module standard
 
-This section is binding in the same way the type checker is. It will also be written into `AGENTS.md` so every coding agent session starts with it.
+This section is binding in the same way the type checker is. `AGENTS.md` carries the rules that are easiest to break.
 
 ### 4.1 Principles
 
@@ -159,127 +158,148 @@ Two packages and three apps. Providers, sources, ingest, and the Director are us
 
 ```
 sportal/
-├── AGENTS.md                   Rules for coding agents: section 4 and section 7 of this spec, condensed
+├── AGENTS.md                   Rules for coding agents that are easiest to break
 ├── CLAUDE.md                   One line: read AGENTS.md
-├── CONTEXT.md                  Domain language (section 6), kept current
+├── CONTEXT.md                  Domain language: built terms, then the planned ones
 ├── mise.toml                   Pinned Node and pnpm
 ├── package.json                Workspace scripts: check, test, dev
 ├── pnpm-workspace.yaml
 ├── tsconfig.base.json
 ├── biome.json
+├── knip.json
+├── vitest.config.ts
 ├── .dependency-cruiser.cjs     Import-direction and banned-name rules
 ├── lefthook.yml
+├── fixtures/scenarios/         Scenarios cut from recorded game days, as JSON
+├── telemetry/                  Local Grafana: compose file and the Hub's dashboards
 │
 ├── docs/
 │   ├── product-plan.md
 │   ├── technical-spec.md
-│   └── adr/                    One short file per hard-to-reverse decision
+│   ├── game-day-checklist.md   What only a live game day can verify
+│   ├── history.md              The shipped pieces, and where their old plans live in git
+│   ├── adr/                    One short file per hard-to-reverse decision
+│   ├── specs/                  Designs not yet built, and the cleanup's
+│   └── plans/                  The cleanup's plan
 │
 ├── packages/
 │   ├── domain/                 Pure. Imports only Effect. No I/O.
 │   │   └── src/
-│   │       ├── League.ts       Sport, League, Season, SeasonPhase, Conference
+│   │       ├── League.ts       LeagueId
 │   │       ├── Team.ts         Team, Ranking
-│   │       ├── Game.ts         Game, GameStatus, Period, GameSnapshot, Network
-│   │       ├── LiveGame.ts     One game as the Hub follows it: LiveGame, LiveGameState, take and tick
-│   │       ├── Delivery.ts     What a frame said: a listing, a snapshot, or a game's plays; DeliverySource
-│   │       ├── Play.ts         A single play, as the game's play-by-play lists it
+│   │       ├── Game.ts         GameId, GameStatus, GameSnapshot, Network, Broadcast
 │   │       ├── Situation.ts    Possession, down, distance, field position, red zone
-│   │       ├── GameEvent.ts    The event union
-│   │       ├── Slate.ts        SlateWindow and grouping (Tracker); watch order is GameSnapshot.watchOrder
-│   │       ├── Source.ts       SourceName, Channel, ChannelCarriage, ChannelLineup, ChannelAvailability
-│   │       ├── Stream.ts       StreamLocator, StreamBudget
-│   │       ├── Follow.ts
-│   │       ├── Watchability.ts The scoring function
-│   │       ├── Layout.ts       Layouts and their tile slots
-│   │       ├── Stage.ts        Stage state, StageCommand, apply(), invariants
-│   │       ├── Rule.ts         Trigger, Rule, evaluation against events
-│   │       └── Display.ts      Display, presentation mode
+│   │       ├── Play.ts         A single play, as the game's play-by-play lists it; PlayKind
+│   │       ├── GameEvent.ts    The event union, derived from plays or from two snapshots
+│   │       ├── Delivery.ts     What a frame said: a listing, a snapshot, or a game's plays; DeliverySource
+│   │       ├── Watchability.ts The score, the lull, and the reasons, folded one snapshot at a time
+│   │       ├── LiveGame.ts     One game as the Hub follows it: LiveGame, LiveGameState; take and tick
+│   │       ├── LiveGames.ts    The pure fold of every delivery in order; FoldReport
+│   │       ├── Channel.ts      SourceName, Channel, ChannelCarriage, ChannelLineup, ChannelAvailability, ChannelUrlRefused
+│   │       ├── Guide.ts        Guide, Airing, ChannelId, GuideUnreadable
+│   │       ├── Stream.ts       StreamLocator
+│   │       ├── Layout.ts       Layouts, splits, and their tile slots
+│   │       ├── Stage.ts        Tile, Stage state, StageCommand, StageRejection, apply, invariants
+│   │       └── TestGame.ts     Game snapshots for tests
 │   │
 │   └── api/                    The contracts between processes.
 │       └── src/
 │           ├── SportalApi.ts   HttpApi declaration: endpoint groups built from domain schemas
 │           ├── LiveMessage.ts  The union of messages on the live stream
-│           └── ShellBridge.ts  What the desktop shell exposes to the web UI; TilePlacement
+│           ├── ShellBridge.ts  What the desktop shell exposes to the web UI; TilePlacement, TileBounds, ChannelPick
+│           ├── ShellChannel.ts The IPC channel names, apart so the sandboxed preload bundles only them
+│           └── Hotkey.ts       The keys Sportal acts on, with their help text
 │
 └── apps/
     ├── hub/
-    │   ├── Dockerfile
     │   └── src/
     │       ├── main.ts             Composition root: the Hub's layer pipe, run until a signal stops it
     │       ├── HubMode.ts          What the Hub plays: the live day or a scenario; the only file that names providers and sources
-    │       ├── Telemetry.ts        Log level and format; OTLP export when configured
     │       ├── HubConfig.ts        Every environment setting, in one place
-    │       ├── LiveGames.ts        The fold: every delivery, in seq order, into each game's live game
+    │       ├── Telemetry.ts        Log level and format; OTLP export when configured
+    │       ├── Database.ts         The SQLite client; each store migrates its own tables in it
+    │       ├── LiveGames.ts        The domain fold, run: its timer, telemetry, and game events
+    │       ├── LiveGamesTelemetry.ts  A fold report as logs, metrics, and published events
     │       ├── GameHistory.ts      Past plays and each game's latest snapshot, derived from the fold
     │       ├── Slate.ts            Each listed game as the fold has it, and its watchability
-    │       ├── feed/
+    │       ├── StageSessions.ts    The one authoritative Stage, held in memory
+    │       ├── TestDatabase.ts, TestHubConfig.ts, TestTelemetry.ts   Layers for tests
+    │       ├── feed-log/
     │       │   ├── FeedLog.ts      The append-only log of every frame, in feed.sqlite
     │       │   ├── Frame.ts        One thing a feed delivered, as received
     │       │   └── Gzip.ts         Frame bodies in and out of gzip
-    │       ├── provider/
-    │       │   ├── Provider.ts     The port
-    │       │   ├── LiveFeed.ts     The push port, beside it
-    │       │   ├── espn/
-    │       │   │   ├── EspnProvider.ts   Implements the port: polls, and decodes frames
-    │       │   │   ├── EspnDecode.ts     Frames to deliveries: listings, snapshots, plays, resyncs
-    │       │   │   ├── EspnPlay.ts       ESPN's plays and their type ids, as Play
-    │       │   │   ├── EspnPayload.ts    Schemas of ESPN's wire format; private to this folder
-    │       │   │   ├── EspnSnapshot.ts   Status and situation as both ESPN feeds spell them
-    │       │   │   ├── FastCast.ts       Implements the live feed: the socket, as frames
-    │       │   │   ├── FastCastDocument.ts  A topic's document, rebuilt from checkpoints and patches
-    │       │   │   ├── FastCastPayload.ts   FastCast's wire shapes
-    │       │   │   ├── ImportRecording.ts  Dev tool: a recorded game day into a feed.sqlite
-    │       │   │   ├── CutScenario.ts    Dev tool: a recorded slice into a scenario
-    │       │   │   └── fixtures/         Recorded real payloads
-    │       │   └── cfbd/                 Same shape, college supplement
-    │       ├── source/
-    │       │   ├── Source.ts       The port
-    │       │   ├── youtube-tv/
-    │       │   │   ├── YouTubeTv.ts         Guide reading, availability, learned channels
-    │       │   │   ├── YouTubeTvPayload.ts  The guide response's wire shape
-    │       │   │   └── fixtures/            Recorded real payloads
-    │       │   ├── ChannelStore.ts The port for learned channel carriages
-    │       │   └── SqlChannelStore.ts  Over the Database; owns its migrations
     │       ├── ingest/
     │       │   ├── Ingest.ts       Replays the game day from the feed log, then polls, runs the live feed, logs every frame, and folds it
-    │       │   └── Cadence.ts      How often to poll, given game status
-    │       ├── director/
-    │       │   └── Director.ts     Events in, stage commands and alerts out
-    │       ├── stage/
-    │       │   └── StageSessions.ts  One authoritative Stage per Display
-    │       ├── database/
-    │       │   └── Database.ts     SQLite client; migrate(store, migrations) into <store>_migrations.
-    │       │                       Each concept's SQL store (games, follows, presets, rules, stages)
-    │       │                       sits beside its concept and owns its migrations
-    │       └── http/
-    │           ├── HubServer.ts    Serves the API, the live stream, and the web UI's files
-    │           └── handlers/       One file per endpoint group in SportalApi
+    │       │   └── Cadence.ts      How long to wait between polls
+    │       ├── hub-server/
+    │       │   ├── HubServer.ts    Serves the API, the live stream, and the web UI's files
+    │       │   └── LanAddresses.ts The addresses a phone on the home network can reach
+    │       ├── provider/
+    │       │   ├── Provider.ts     The port; Decoded
+    │       │   ├── LiveFeed.ts     The push port, beside it
+    │       │   ├── TestProvider.ts A provider that answers from a script
+    │       │   └── espn/
+    │       │       ├── EspnProvider.ts     Implements the port: polls
+    │       │       ├── EspnDecode.ts       Frames to deliveries: listings, snapshots, plays, resyncs
+    │       │       ├── EspnEvent.ts        One game as either ESPN feed spells it, as a GameSnapshot
+    │       │       ├── EspnPlay.ts         ESPN's plays and their type ids, as Play
+    │       │       ├── FastCast.ts         Implements the live feed: the socket, as frames
+    │       │       ├── FastCastDocument.ts A topic's document, rebuilt from checkpoints and patches
+    │       │       ├── FastCastMessage.ts  FastCast's wire shapes
+    │       │       ├── TestEspn.ts         Recorded frames for tests of other modules
+    │       │       └── fixtures/           Recorded real payloads
+    │       ├── source/
+    │       │   ├── Source.ts       The port
+    │       │   ├── ChannelStore.ts Learned channel carriages, in the Database; owns its migrations
+    │       │   └── youtube-tv/
+    │       │       ├── YouTubeTv.ts         Guide reading, availability, learned channels
+    │       │       ├── YouTubeTvPayload.ts  The guide response's wire shape
+    │       │       ├── TestYouTubeTv.ts     A recorded guide for tests of other modules
+    │       │       └── fixtures/            Recorded real payloads
+    │       ├── scenario/
+    │       │   ├── Scenario.ts         A timeline of game snapshots a Hub can play instead of a provider
+    │       │   ├── ScenarioClock.ts    Scenario time: the Hub's clock at a chosen speed
+    │       │   ├── ScenarioIngest.ts   A scenario as the feed into the fold
+    │       │   ├── ScenarioSource.ts   Every game carried on a synthetic stream page
+    │       │   ├── RecordedScenarios.test.ts  Replays each cut scenario in fixtures/scenarios/
+    │       │   └── written/            Scenarios written by hand, and their registry
+    │       └── recording/              Dev tools over a recorded game day
+    │           ├── Recording.ts        Reads a recording's polls
+    │           ├── CutScenario.ts      A recorded slice into a scenario
+    │           └── ImportRecording.ts  A recording into a feed.sqlite
     │
     ├── web/
     │   └── src/
     │       ├── main.tsx
-    │       ├── Display.ts          A Display's local state and its rules
-    │       ├── hub/                Typed client derived from SportalApi; live-stream subscription; the store
-    │       ├── slate/              Slate view and its parts
-    │       ├── game/               Game detail
-    │       ├── stage/              Stage view, tiles, hotkeys
-    │       ├── remote/             Phone remote view
-    │       ├── settings/           Follows, presets, rules, sources
-    │       └── theme/              Desk and couch density themes
+    │       ├── ScenarioStream.tsx  A scenario's synthetic stream page
+    │       ├── theme.css           Desk and couch density themes
+    │       ├── design/             Vendored shadcn primitives, under the CLI's own file names
+    │       ├── display/            This device's Display: state and rules, hotkeys, full screen, overlays, top bar, command palette
+    │       ├── hub/                HubClient (typed client from SportalApi), LiveStream (the live stream), HubRuntime
+    │       ├── slate/              The slate strip and its cards
+    │       ├── stage/              The Stage: tiles, dividers, tile actions, rejections
+    │       ├── layout/             Layout picker and glyphs
+    │       ├── game/               A game's status, score, and logo, as slate and tiles show them
+    │       └── remote/             The phone Remote: stage map, join QR code
     │
     └── desktop/
         └── src/
             ├── main/
-            │   ├── main.ts             App lifecycle; optional local Hub start
+            │   ├── main.ts             App lifecycle: the window, its IPC, and the Hub's address
             │   ├── TileViews.ts        Creates, positions, tunes, and mutes provider views
+            │   ├── Transition.ts       The arithmetic of a Stage transition
             │   ├── GuideReader.ts      Reads the source's guide with its own request
-            │   └── ProviderSession.ts  The persistent session and navigation allowlist
+            │   ├── ProviderSession.ts  The persistent session and its permissions
+            │   ├── Navigation.ts       Keeps a page on the addresses allowed
+            │   ├── Sandbox.ts          What every window and view runs under
+            │   └── YouTubeTv.ts        YouTube TV's sign-in address, hosts, and origin
             └── preload/
                 └── ShellBridge.ts      Implements the shell bridge declared in packages/api
 ```
 
-Tests sit beside the file they test as `Game.test.ts`. A module grows into a folder of the same name only when it genuinely has private parts, as `provider/espn/` does.
+Tests sit beside the file they test as `Game.test.ts`. A module grows into a folder of the same name only when it genuinely has private parts, as `provider/espn/` does. Regenerate this tree from `git ls-files` when the layout changes.
+
+**Not built:** domain `Slate.ts` (the window and grouping), `Follow.ts`, `Rule.ts`; hub `Dockerfile`, `provider/cfbd/`, `director/`, and the SQL stores for follows, presets, and rules; web `settings/` and a game's detail view. The Director, follows, presets, rules, the spoiler shield, and cloud hosting in the sections below are designs, not code.
 
 ### 4.3 Inside a file
 
@@ -320,7 +340,7 @@ class Provider extends Context.Service<Provider, {
 ```
 
 - `poll` returns a league's scoreboard as received; the Hub logs it before anything decodes it. `decode` turns frames, polled or pushed, into `Delivery`s (`Listing`, `Snapshot`, or `Plays`) stamped with the frame's `seq` and receive time, or a `Resync` when a topic's document had to be dropped.
-- Provider vocabulary stops at the folder edge. ESPN's "event", "competition", and "competitor" exist only in `EspnPayload.ts`, `FastCastPayload.ts`, `EspnPlay.ts`, and `EspnSnapshot.ts`.
+- Provider vocabulary stops at the folder edge. ESPN's "event", "competition", and "competitor" exist only in `EspnEvent.ts`, `FastCastMessage.ts`, and `EspnPlay.ts`.
 - The Hub composes providers per league: ESPN for NFL; ESPN with CollegeFootballData filling gaps for FBS. The composition is itself a `Provider`, so Ingest sees one.
 - Each adapter's tests are "this recorded frame decodes to this delivery".
 
@@ -402,11 +422,11 @@ class Source extends Context.Service<Source, {
 }>()("sportal/hub/Source") {}
 ```
 
-A source's channels are found in its own guide, read by the shell (`docs/specs/2026-10-03-guide-matched-channels-design.md`); channels picked by hand answer only until a guide is read.
+A source's channels are found in its own guide, read by the shell (`docs/history.md`, "Guide-matched channels"); channels picked by hand answer only until a guide is read.
 
 `StreamLocator` is a tagged union. Today it has one member, a web-view address; a new kind is added only when a source needs it.
 
-**Stores** — persistence. One port per concept (`ChannelStore` first; games, follows, presets, rules, and stages in the Tracker), each with one SQL implementation over the `Database` module that runs on SQLite or Postgres. Each SQL store owns its migrations and records them in its own table.
+**Stores** — persistence. Each concept's store is a service over the `Database` module (SQLite; Postgres when cloud-hosted) and owns its migrations in its own table. `ChannelStore` and `GameHistory` exist; follows, presets, and rules arrive with the Tracker. A Stage is not stored.
 
 ### 5.2 Ingest: frames, deliveries, and events
 
@@ -430,7 +450,7 @@ A source's channels are found in its own guide, read by the shell (`docs/specs/2
 - Geometry: `Layout#slots` gives each slot as fractions of the Stage area. The web UI turns them into pixels once and uses the same numbers for its tile chrome and the shell's tile placements, so the two move together along one **Stage transition** (280 ms, `cubic-bezier(0.2, 0, 0, 1)`), which the shell follows by moving each view's bounds.
 - Full screen is the Display's window, local to it, and is not Stage state.
 
-`StageSessions` in the Hub holds the current state per Display, applies commands from any origin, persists, and broadcasts.
+`StageSessions` in the Hub holds the one Stage in memory, applies commands from any origin, and broadcasts it. Nothing is persisted: a restart starts an empty Stage, and a second Display would need a keyed session.
 
 ### 5.4 Director
 
@@ -464,150 +484,12 @@ Expected failures are typed errors in the Effect error channel, each handled whe
 
 ## 6. Domain language
 
-One word per concept, used identically in code, UI, documents, and conversation. `CONTEXT.md` is the living copy of this section; when they differ, `CONTEXT.md` is right. Every exported type name must be a term here.
-
-### Competition
-
-| Term | Meaning | Not |
-| --- | --- | --- |
-| **Sport** | A kind of game (football). | |
-| **League** | An organized competition (NFL, FBS). | association, division |
-| **Conference** | A grouping of teams within a league (SEC, AFC). | |
-| **Season** | One league year, with a **SeasonPhase**: preseason, regular, postseason. | |
-| **Team** | A league member. | club, competitor, franchise |
-| **Ranking** | A team's position in a poll (college). | seed |
-| **Game** | One scheduled contest between two teams. | event, match, competition, fixture |
-| **Slate** | The games in a time window (a Saturday, an NFL week). | schedule, scoreboard |
-| **Kickoff** | A game's scheduled start instant. | start time, date |
-
-### Game state
-
-| Term | Meaning | Not |
-| --- | --- | --- |
-| **GameStatus** | `scheduled`, `live`, `halftime`, `delayed`, `final`, `postponed`, `canceled`. | state, phase |
-| **GameSnapshot** | The complete normalized state of a game at an instant. | update, payload |
-| **GameDetail** | A snapshot plus drives, plays, and statistics. | summary |
-| **Situation** | Live football state: possession, down, distance, field position, red zone, timeouts. | context |
-| **Period** | A quarter or an overtime. | quarter (in code) |
-| **Drive** / **Play** | A possession sequence / a single snap. | |
-| **GameEvent** | Something that happened, derived by diffing snapshots. | alert, update |
-
-### Data and video
-
-| Term | Meaning | Not |
-| --- | --- | --- |
-| **Provider** | An adapter that supplies **game data** (ESPN, CollegeFootballData). | source, feed |
-| **Source** | A way you obtain **video** (YouTube TV). | provider, service |
-| **Broadcast** | The fact that a network is airing a game, on television or streaming only. | channel, stream |
-| **Channel** | A station as a source names it ("News 3", "ESPN2"), with the address that plays it live. | network |
-| **Channel id** | A source's own id for one of its channels (YouTube TV's station id); `ChannelId` in code. | station id |
-| **Channel availability** | Whether and where a source can show a game: carried, upcoming, unlearned (its network still to be picked), or not carried, with why. | availability |
-| **Guide** | One reading of a source's listing of the channels this account gets, with their live addresses, and what each airs. | schedule, EPG |
-| **Airing** | One programme on a channel, with its begin and end. | listing, show |
-| **Guide unreadable** | A guide response the source could not read. | |
-| **Guide reader** | The shell component that reads a source's guide with the source's own guide request, sent on the provider session. | scraper, EPG fetcher |
-| **Stream** | One playing instance of a game from a source. | feed, video |
-| **StreamLocator** | What a Display must load to play a stream. | URL, link |
-| **StreamBudget** | How many concurrent streams a source allows. | limit, cap |
-
-Provider and Source are the two words most likely to be swapped. Provider is always data; Source is always video.
-
-### Devices
-
-| Term | Meaning | Not |
-| --- | --- | --- |
-| **Hub** | The server process that owns all shared state. | backend, server |
-| **Display** | A device running the shell and presenting a Stage. | screen, client, player |
-| **Remote** | A client controlling a Display's Stage without presenting it. | controller |
-| **Desk mode** / **Couch mode** | The two presentation densities. | desktop/TV layout |
-| **Shell bridge** | The small interface the desktop shell exposes to the web UI. | IPC, native API |
-
-### Viewing
-
-| Term | Meaning | Not |
-| --- | --- | --- |
-| **Stage** | A Display's multi-view surface and its state. | grid, multiview, wall |
-| **Layout** | A named arrangement of tile slots. | grid, template |
-| **Tile** | One slot's content: a **stream tile**, a **data tile**, or empty. | pane, cell, window |
-| **Main tile** | The largest slot of a layout. | hero, primary |
-| **Audio focus** | The single tile whose sound is on. | active, unmuted |
-| **Promote** | Move a game into the main tile. | feature |
-| **Preset** | A saved layout with tile assignments. | |
-| **Tile placement** | Where a stream tile sits in a Display's window and what it plays, as told to the shell. | bounds, rect |
-| **Tile delay** | Seconds that data is held back for a tile to match its video. | offset, latency |
-| **Spoiler shield** | Hiding or delaying scores for chosen games. | |
-
-### Personalization and automation
-
-| Term | Meaning | Not |
-| --- | --- | --- |
-| **Follow** | Your declared interest in a team, conference, league, or game. | favourite, subscription |
-| **Watchability** | A 0–100 score of how worth watching a live game is right now. | excitement, heat |
-| **Trigger** | A condition over events and snapshots. | |
-| **Rule** | A trigger bound to a stage command and a revert condition. | automation |
-| **Director** | The Hub component that evaluates rules and issues stage commands. | autopilot |
-| **Alert** | A user-facing notification produced by a rule. | event |
-| **Ticket** | A bet you have placed, tracked by the betting lens (later). | bet, wager |
+[`CONTEXT.md`](../CONTEXT.md) holds the glossary: built terms first, planned ones after. Every exported type name must be a term there.
 
 ## 7. Coding practices
 
-Section 4 covers where code goes. This section covers how it is written.
+[`AGENTS.md`](../AGENTS.md) holds the rules for how code is written, tested, and committed. Section 4 above says where code goes.
 
-**Effect**
+## 8. History
 
-- Business logic is either a pure function or an `Effect`. No bare promises, no `async` functions outside the thin edges where a framework demands one (React event handlers, Electron callbacks).
-- Dependencies are services provided by Layers. No module-level singletons, no reading the environment outside `HubConfig`.
-- Expected failures are tagged errors in the error channel and are named for what went wrong in domain terms. Defects are for bugs. Nothing is caught and ignored.
-- Use what Effect already provides — `Option`, `Either`, `Duration`, `DateTime`, `Schedule`, `Array` and `Record` helpers — before writing a helper. A hand-rolled version of something in Effect is duplication.
-- Identifiers are branded (`GameId`, `TeamId`, `DisplayId`) so they cannot be confused.
-
-**Types**
-
-- A type is introduced only for a concept in the glossary. Function-local shapes stay inline.
-- Tagged unions for anything with variants (status, tile content, commands, events); matching is exhaustive.
-- No `any`, no non-null assertions, no casts outside decoding. No enums. Named exports only.
-
-**Testing**
-
-- Test-first for everything in `packages/domain` and for provider decoding. These are pure, so tests are cheap and serve as the specification.
-- Provider adapters are tested against recorded real payloads. A payload that breaks decoding becomes a fixture before the fix.
-- **Whole-game replay** is the main integration test: a recorded game is fed through Ingest and the Director under the test clock, asserting the events, watchability curve, and stage commands produced. It is also the tuning harness for rules.
-- Web UI tests cover behaviour, not markup. No rendered-output snapshot tests.
-- The shell's provider-view behaviour is verified by hand on a game day against a short written checklist; it cannot be automated meaningfully.
-
-**Workflow**
-
-- Trunk-based, small changes, conventional commit messages.
-- One command, `pnpm check`, runs format, lint, typecheck, structure checks, and tests; it is what the push hook runs.
-- A hard-to-reverse decision gets a short record in `docs/adr/`. The first ones are implied here: Effect TypeScript end to end; desktop shell with unmodified provider views; Hub-owned Stage state; the feed log as truth with derived events (ADR 0008, which superseded snapshots as truth, ADR 0004); one fold, not actors (ADR 0009).
-- A new concept changes `CONTEXT.md` in the same commit that introduces it.
-- Polite network behaviour is a rule: cache, back off, never poll faster than `Cadence` allows.
-
-## 8. Spikes
-
-Throwaway code in a scratch directory outside the workspace, deleted afterwards. Only the finding is kept, as a decision record, plus any recorded fixtures.
-
-| Spike | Question | Pass condition |
-| --- | --- | --- |
-| **Feed fidelity** | Is the free feed fresh and rich enough, and where does ESPN's FBS coverage fall short? | Record slate and detail payloads through live games: situation fields present, lag measured, FBS gaps listed, fixture set saved |
-| **Shell playback** | Can the Widevine Electron build sign in to Google and play several YouTube TV channels in separate views? | Three live channels in three views for 30 minutes; per-view mute works; sign-in survives restart |
-| **Stream budget** | What actually happens at the concurrent limit? | Documented behaviour at the next stream past the cap, and whether two Displays share it |
-| **Channel mapping** | Can a broadcast be turned into a YouTube TV address reliably? | A stable mapping for national networks and local affiliates |
-
-Feed fidelity is time-sensitive: live payloads can only be recorded while games are being played, and they become the fixtures every later test depends on. Recording of the FBS slate of 2026-10-03 was approved ahead of the rest and is in `fixtures/espn-recordings/` (raw, uncurated; selected payloads move into `apps/hub/src/provider/espn/fixtures/` when the adapter is written).
-
-If shell playback fails, the shell is dropped, sources return deep links, and the plan's fallback takes over. Sections 5.1–5.5 do not change.
-
-## 9. Build order
-
-**Decided: thin vertical first.** After the spikes, the first slice is a minimal NFL + FBS slate with live scores, where clicking a game plays it in a tile in the shell. It touches every boundary once — Provider, Ingest, Store, API, live stream, web UI, Stage, shell, Source — and is then widened along the plan's phases.
-
-## 10. Decisions from review
-
-| Question | Decision |
-| --- | --- |
-| Language shape | Effect TypeScript end to end |
-| CI | Local only for now; hooks are the gate |
-| First slice | Thin vertical |
-| Record today's FBS feed before approval | Yes |
-| Layout standard | Accepted, with section 4.3 added: files are not junk drawers either — main behaviour first, no scattered incidental interfaces, no helper pile at the top |
+What shipped, in what order, the finished spikes, and the early decisions are in [`history.md`](./history.md). Old plans and designs are read from git, at the commit it names.

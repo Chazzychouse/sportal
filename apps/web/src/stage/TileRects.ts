@@ -30,11 +30,6 @@ export function tileRects(
     })
 }
 
-/** The part of a tile below its header, where its video goes. */
-function videoBounds(rect: { x: number; y: number; width: number; height: number }) {
-  return { x: rect.x, y: rect.y + header, width: rect.width, height: Math.max(0, rect.height - header) }
-}
-
 /**
  * What the shell must show for each stream and picking tile with a size: its game's view, in window pixels.
  * `origin` is where the Stage area sits in the window; `page` is the web UI's own address, which a source's path
@@ -57,7 +52,7 @@ export function placements(
               ? new URL(tile.channel.locator.url, page).href
               : tile.channel.locator.url,
             role: "stream" as const,
-            muted: stage.audioFocus !== tile.game,
+            muted: !stage.hears(tile.game),
             interactive: tile.game === interacting
           }
         : tile._tag === "PickingChannel"
@@ -70,9 +65,42 @@ export function placements(
   })
 }
 
-/** Pixels between tiles, and the height of a tile's header strip. */
+/**
+ * The games whose video an open overlay covers, in the order of `videos`: those sharing any area with an
+ * overlay. An overlay flush against a video, touching only its edge, leaves it shown.
+ */
+export function coveredGames(
+  overlays: ReadonlyArray<{ x: number; y: number; width: number; height: number }>,
+  videos: ReadonlyArray<{ game: GameId; bounds: { x: number; y: number; width: number; height: number } }>
+): ReadonlyArray<GameId> {
+  return videos
+    .filter((video) => overlays.some((overlay) => overlaps(overlay, video.bounds)))
+    .map((video) => video.game)
+}
+
+/** The part of a tile below its tileHeader, where its video goes. */
+function videoBounds(rect: { x: number; y: number; width: number; height: number }) {
+  return {
+    x: rect.x,
+    y: rect.y + tileHeader,
+    width: rect.width,
+    height: Math.max(0, rect.height - tileHeader)
+  }
+}
+
+/** Whether two rectangles share any area; touching edges do not. */
+function overlaps(
+  a: { x: number; y: number; width: number; height: number },
+  b: { x: number; y: number; width: number; height: number }
+) {
+  return a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height
+}
+
+/** Pixels between tiles. */
 export const gap = 6
-const header = 28
+
+/** The height of a tile's header strip, in pixels: the part of a tile above its video. */
+export const tileHeader = 28
 
 function inset(rect: { x: number; y: number; width: number; height: number }) {
   const half = gap / 2

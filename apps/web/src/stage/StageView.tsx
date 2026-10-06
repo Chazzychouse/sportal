@@ -1,11 +1,22 @@
 import type { StageTransition } from "@sportal/api/ShellBridge"
+import type { ChannelUrlRefused } from "@sportal/domain/Channel"
 import type { GameId, GameSnapshot } from "@sportal/domain/Game"
 import type { Split } from "@sportal/domain/Layout"
-import { Stage } from "@sportal/domain/Stage"
-import { Option } from "effect"
+import type { Stage } from "@sportal/domain/Stage"
+import { Effect } from "effect"
+import type { HttpClientError } from "effect/http"
 import { useEffect, useLayoutEffect, useRef, useState } from "react"
-import { dispatch, forgetChannel, learnChannel, markNotCarried, sendGuide } from "../hub/HubClient.ts"
-import { useVideoAreas } from "../OverlayHost.tsx"
+import { useVideoAreas } from "../display/OverlayHost.tsx"
+import {
+  dispatch,
+  forgetChannel,
+  type HubClient,
+  learnChannel,
+  markNotCarried,
+  sendGuide
+} from "../hub/HubClient.ts"
+import { runtime } from "../hub/HubRuntime.ts"
+import type { Connection } from "../hub/LiveStream.ts"
 import { Dividers } from "./Dividers.tsx"
 import { TileBody } from "./TileBody.tsx"
 import { TileChrome } from "./TileChrome.tsx"
@@ -18,7 +29,7 @@ import { placements, tileRects } from "./TileRects.ts"
 export function StageView(props: {
   stage: Stage
   slate: ReadonlyArray<GameSnapshot>
-  connected: boolean
+  connection: Connection
   selected: number
   interacting: GameId | undefined
   onSelect: (tile: number) => void
@@ -30,10 +41,7 @@ export function StageView(props: {
   // What went wrong with the last channel command on a tile, until the Stage next changes.
   const [notices, setNotices] = useState<ReadonlyMap<number, string>>(new Map())
 
-  const shown =
-    dragged === undefined
-      ? props.stage
-      : new Stage({ ...props.stage, splits: { ...props.stage.splits, [props.stage.layout]: dragged } })
+  const shown = dragged === undefined ? props.stage : props.stage.withSplit(dragged)
   const rects = tileRects(shown, area)
   const placed = placements(shown, rects, area, window.location.origin, props.interacting)
   useVideoAreas(placed)
@@ -61,7 +69,7 @@ export function StageView(props: {
       )
       const tile = props.stage.tiles[index]
       if (tile?._tag === "PickingChannel")
-        void learnChannel(tile.network, pick.url).then((failure) => setNotices(noticed(index, failure)))
+        channelCommand(learnChannel(tile.network, pick.url), index, setNotices)
     })
   }, [props.stage])
 
@@ -75,13 +83,24 @@ export function StageView(props: {
     [props.stage, props.onSelect]
   )
 
+  const connected = props.connection._tag === "Connected"
   // Listening first, then asking: the shell's first read waits for the web UI to ask.
-  useEffect(() => window.sportalShell?.onGuideRead(sendGuide), [])
+  useEffect(
+    () =>
+      window.sportalShell?.onGuideRead((guide) => {
+        runtime.runFork(
+          sendGuide(guide).pipe(
+            Effect.catch((failure) => Effect.logWarning("The Hub did not take a guide", failure))
+          )
+        )
+      }),
+    []
+  )
 
   useEffect(() => {
     // Asked again whenever the Hub comes back, since a guide read while it was away was lost.
-    if (props.connected) window.sportalShell?.readGuide()
-  }, [props.connected])
+    if (connected) window.sportalShell?.readGuide()
+  }, [connected])
 
   return (
     <main ref={areaRef} className="relative min-h-0 overflow-hidden bg-background">
@@ -90,6 +109,7 @@ export function StageView(props: {
         if (rect === undefined) return null
         const game = tile._tag === "Empty" ? undefined : props.slate.find((g) => g.id === tile.game)
         const notice = notices.get(index)
+        const learnedFor = tile._tag === "StreamTile" ? tile.learnedFor : undefined
         const hidden = rect.width === 0
         return (
           <section
@@ -124,22 +144,16 @@ export function StageView(props: {
                 <button
                   type="button"
                   className="shrink-0 text-muted-foreground hover:text-foreground"
-                  onClick={() =>
-                    void markNotCarried(tile.network).then((failure) => setNotices(noticed(index, failure)))
-                  }
+                  onClick={() => channelCommand(markNotCarried(tile.network), index, setNotices)}
                 >
                   Not on {tile.source}
                 </button>
               ) : null}
-              {tile._tag === "StreamTile" && tile.learnedFor !== undefined ? (
+              {learnedFor !== undefined ? (
                 <button
                   type="button"
                   className="shrink-0 text-muted-foreground hover:text-foreground"
-                  onClick={() => {
-                    const network = tile.learnedFor
-                    if (network !== undefined)
-                      void forgetChannel(network).then((failure) => setNotices(noticed(index, failure)))
-                  }}
+                  onClick={() => channelCommand(forgetChannel(learnedFor), index, setNotices)}
                 >
                   wrong channel
                 </button>
@@ -159,7 +173,7 @@ export function StageView(props: {
           onDrag={setDragged}
           onDrop={(split) => {
             setDragged(undefined)
-            dispatch({ _tag: "SetSplit", split })
+            runtime.runFork(dispatch({ _tag: "SetSplit", split }))
           }}
         />
       )}
@@ -213,8 +227,24 @@ function arrangementOf(stage: Stage) {
   ])
 }
 
-/** The notices with `failure`, if there was one, shown on `tile`. */
-function noticed(tile: number, failure: Option.Option<string>) {
-  return (notices: ReadonlyMap<number, string>) =>
-    Option.isSome(failure) ? new Map(notices).set(tile, failure.value) : notices
+/** Runs a channel command; if the Hub did not take it, `tile` says why until the Stage next changes. */
+function channelCommand(
+  command: Effect.Effect<void, ChannelUrlRefused | HttpClientError.HttpClientError, HubClient>,
+  tile: number,
+  setNotices: (update: (notices: ReadonlyMap<number, string>) => ReadonlyMap<number, string>) => void
+) {
+  runtime.runFork(
+    command.pipe(
+      Effect.catch((failure) =>
+        Effect.sync(() => setNotices((notices) => new Map(notices).set(tile, channelNotice(failure))))
+      )
+    )
+  )
+}
+
+/** What to tell the user when the Hub did not take a channel command. */
+function channelNotice(failure: ChannelUrlRefused | HttpClientError.HttpClientError) {
+  return failure._tag === "ChannelUrlRefused"
+    ? "That is not a live channel. Pick one from the live guide."
+    : "The Hub did not take that. Try again."
 }

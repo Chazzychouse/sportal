@@ -40,22 +40,22 @@ export function withMetrics<A, E, R>(effect: Effect.Effect<A, E, R>) {
 
 /** The count of counter `id` with `attributes` among its others, if it has counted. */
 export function counted(id: string, attributes: Readonly<Record<string, string>> = {}) {
-  return Effect.map(Metric.snapshot, (metrics) => {
-    const metric = metrics.find(
-      (candidate) => candidate.id === id && matches(candidate.attributes, attributes)
-    )
-    return metric?.type === "Counter" ? metric.state.count : undefined
-  })
+  return Effect.map(metricOf(id, attributes), (metric) =>
+    metric?.type === "Counter" ? metric.state.count : undefined
+  )
 }
 
 /** The value of gauge `id` with `attributes` among its others, if it has been set. */
 export function gauged(id: string, attributes: Readonly<Record<string, string>> = {}) {
-  return Effect.map(Metric.snapshot, (metrics) => {
-    const metric = metrics.find(
-      (candidate) => candidate.id === id && matches(candidate.attributes, attributes)
-    )
-    return metric?.type === "Gauge" ? metric.state.value : undefined
-  })
+  return Effect.map(metricOf(id, attributes), (metric) =>
+    metric?.type === "Gauge" ? metric.state.value : undefined
+  )
+}
+
+function metricOf(id: string, attributes: Readonly<Record<string, string>>) {
+  return Effect.map(Metric.snapshot, (metrics) =>
+    metrics.find((candidate) => candidate.id === id && matches(candidate.attributes, attributes))
+  )
 }
 
 function matches(

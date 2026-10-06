@@ -1,10 +1,9 @@
 import { type GameId, GameSnapshot } from "@sportal/domain/Game"
-import type { LeagueId } from "@sportal/domain/League"
-import { LiveGame } from "@sportal/domain/LiveGame"
+import type * as Fold from "@sportal/domain/LiveGames"
 import { Play, type PlayId } from "@sportal/domain/Play"
 import { Array as Arr, Context, Effect, Equal, Filter, Layer, Metric, Option, Schema, Stream } from "effect"
 import { SqlClient, SqlSchema } from "effect/sql"
-import * as Database from "./database/Database.ts"
+import * as Database from "./Database.ts"
 import { LiveGames } from "./LiveGames.ts"
 
 /** Past plays and each game's latest snapshot, derived from the fold into the Hub's database. Rebuildable from the feed log. */
@@ -69,11 +68,11 @@ export class GameHistory extends Context.Service<
                 ({ game, rows, kept }) =>
                   Effect.andThen(
                     Arr.isReadonlyArrayNonEmpty(rows)
-                      ? sql`
+                      ? Effect.asVoid(sql`
                           INSERT INTO play ${sql.insert(rows)}
                           ON CONFLICT (game, id) DO UPDATE SET seq = excluded.seq, body = excluded.body
                           WHERE excluded.seq > play.seq
-                        `
+                        `)
                       : Effect.void,
                     sql`
                       DELETE FROM play
@@ -99,10 +98,7 @@ export class GameHistory extends Context.Service<
         })
 
       // A change that cannot be written leaves `written` as it was, so the next change diffs from the last success.
-      const write = (
-        written: Written,
-        { seq, folded }: { seq: number; folded: Parameters<typeof writtenOf>[0] }
-      ) => {
+      const write = (written: Written, { seq, folded }: { seq: number; folded: Fold.LiveGames }) => {
         const next = writtenOf(folded)
         return store(stepFrom(written, next), seq).pipe(
           Effect.as(next),
@@ -169,27 +165,19 @@ type Step = {
 }
 
 /** The folded state as the history keeps it: every listed game as the fold has it, plus live games not listed. */
-function writtenOf(folded: {
-  readonly listed: ReadonlyMap<LeagueId, ReadonlyArray<GameSnapshot>>
-  readonly live: ReadonlyMap<GameId, LiveGame>
-}): Written {
-  const listed = [...folded.listed.values()].flatMap((games) => LiveGame.asFolded(games, folded.live))
-  const unlisted = [...folded.live.values()]
-    .map(({ snapshot }) => snapshot)
-    .filter((snapshot) => !listed.some(({ id }) => id === snapshot.id))
+function writtenOf(folded: Fold.LiveGames): Written {
   return {
-    snapshots: new Map([...listed, ...unlisted].map((snapshot) => [snapshot.id, snapshot])),
+    snapshots: new Map(folded.games().map((snapshot) => [snapshot.id, snapshot])),
     plays: new Map([...folded.live].map(([game, liveGame]) => [game, liveGame.plays]))
   }
 }
 
 function stepFrom(before: Written, after: Written): Step {
-  const snapshots = [...after.snapshots].flatMap(([game, snapshot]) => {
-    const had = before.snapshots.get(game)
-    return had !== undefined && Equal.equals(had, snapshot) ? [] : [{ game, snapshot }]
-  })
   return {
-    latest: snapshots.map(({ game, snapshot }) => [game, snapshot]),
+    latest: [...after.snapshots].filter(([game, snapshot]) => {
+      const had = before.snapshots.get(game)
+      return had === undefined || !Equal.equals(had, snapshot)
+    }),
     plays: [...after.plays].flatMap(([game, plays]) => {
       const had = before.plays.get(game)
       if (had !== undefined && sameAll(had, plays)) return []

@@ -9,9 +9,9 @@
   "scripts": {
     "dev": "pnpm telemetry || echo 'sportal: telemetry is off (is Docker running?)'; pnpm -r --parallel run dev",
     "dev:x11": "SPORTAL_ELECTRON_FLAGS=--ozone-platform=x11 pnpm dev",
-    "check": "biome check . && pnpm typecheck && pnpm structure && vitest run",
-    "typecheck": "pnpm -r --parallel exec tsc --noEmit",
-    "structure": "depcruise apps packages && knip",
+    "check": "biome check . && pnpm typecheck && pnpm structure && pnpm test",
+    "typecheck": "tsc --noEmit && pnpm -r --parallel exec tsc --noEmit",
+    "structure": "depcruise apps packages && knip --no-config-hints && knip --production --no-config-hints",
     "test": "vitest run",
     "format": "biome check --write .",
     "telemetry": "docker compose -f telemetry/compose.yaml up -d",

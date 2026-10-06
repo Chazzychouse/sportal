@@ -3,10 +3,10 @@ import { NodeServices } from "@effect/platform-node"
 import { assert, describe, it } from "@effect/vitest"
 import { GameId } from "@sportal/domain/Game"
 import type { LeagueId } from "@sportal/domain/League"
-import { Scenario } from "@sportal/domain/Scenario"
 import { Context, DateTime, Effect, FileSystem, Layer, Option, Schema } from "effect"
 import { TestClock } from "effect/testing"
 import { LiveGames } from "../LiveGames.ts"
+import { Scenario } from "./Scenario.ts"
 import * as ScenarioClock from "./ScenarioClock.ts"
 import * as ScenarioIngest from "./ScenarioIngest.ts"
 
@@ -57,7 +57,7 @@ describe("ScenarioIngest", () => {
   it.effect("plays every slice committed in the folder", () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem
-      const names = (yield* fs.readDirectory(ScenarioIngest.folder))
+      const names = (yield* fs.readDirectory(Scenario.folder))
         .filter((file) => file.endsWith(".json"))
         .map((file) => file.slice(0, -".json".length))
       assert.isAbove(names.length, 0)

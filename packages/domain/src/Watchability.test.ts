@@ -1,13 +1,9 @@
-import { readdirSync, readFileSync } from "node:fs"
-import { isDeepStrictEqual } from "node:util"
 import { assert, describe, it } from "@effect/vitest"
-import { Array as Arr, DateTime, Duration, Option, Schema } from "effect"
-import type { GameId, GameSnapshot } from "./Game.ts"
+import { DateTime, Duration, Option } from "effect"
+import type { GameSnapshot } from "./Game.ts"
 import { GameEvent } from "./GameEvent.ts"
-import type { LiveGame } from "./LiveGame.ts"
-import { Scenario } from "./Scenario.ts"
 import { Situation } from "./Situation.ts"
-import { followed, play, snapshot, team } from "./TestGame.ts"
+import { play, situation, snapshot, team } from "./TestGame.ts"
 import { Watchability } from "./Watchability.ts"
 
 const now = DateTime.makeUnsafe("2026-10-03T20:00:00Z")
@@ -22,16 +18,7 @@ const game = (overrides: Partial<GameSnapshot> = {}) =>
     ...overrides
   })
 const ball = (yardLine: number, down = 1, distance = 10, rest: Partial<Situation> = {}) =>
-  new Situation({
-    possession: team("UGA").id,
-    yardLine,
-    down,
-    distance,
-    isRedZone: yardLine <= 20,
-    homeTimeouts: 3,
-    awayTimeouts: 3,
-    ...rest
-  })
+  situation({ possession: team("UGA").id, yardLine, down, distance, isRedZone: yardLine <= 20, ...rest })
 const score = (g: GameSnapshot) => Watchability.initial(g, now).score
 
 describe("Watchability.initial", () => {
@@ -307,105 +294,3 @@ describe("Watchability#wakeAt", () => {
     )
   })
 })
-
-describe("Watchability over recorded game days", () => {
-  it("finds the recorded scenarios", () => {
-    assert.isAtLeast(recorded.length, 19)
-  })
-
-  it("is the same when a day is played twice", () => {
-    assert.deepStrictEqual(
-      recorded.flatMap((scenario) =>
-        Arr.zip(played(scenario), played(scenario)).flatMap(([first, second]) =>
-          isDeepStrictEqual(first.watchability, second.watchability)
-            ? []
-            : [`${scenario.name} ${instantOf(first.now)}: judged differently the second time`]
-        )
-      ),
-      []
-    )
-  })
-
-  it("scores a game that is not being played 0", () => {
-    assert.deepStrictEqual(
-      breaches(({ game, watchability }) =>
-        game.progress() !== "live" && watchability.score !== 0
-          ? Option.some(`scored ${watchability.score} while ${game.status}`)
-          : Option.none()
-      ),
-      []
-    )
-  })
-
-  it("never puts a college overtime in a lull for its clock alone", () => {
-    assert.deepStrictEqual(
-      breaches(({ game, watchability, now }) =>
-        game.status === "live" &&
-        game.league === "fbs" &&
-        game.period >= 5 &&
-        watchability.lull &&
-        watchability.breakUntil === undefined &&
-        DateTime.toEpochMillis(now) - DateTime.toEpochMillis(watchability.activeAt) < 60_000
-          ? Option.some(`in a lull at ${game.clock} in college overtime`)
-          : Option.none()
-      ),
-      []
-    )
-  })
-})
-
-const scenarios = new URL("../../../fixtures/scenarios/", import.meta.url)
-const recorded = readdirSync(scenarios)
-  .filter((file) => file.endsWith(".json"))
-  .map((file) =>
-    Schema.decodeUnknownSync(Schema.fromJsonString(Scenario))(readFileSync(new URL(file, scenarios), "utf8"))
-  )
-
-/** Each frame of a scenario with the watchability folded up to it, judged at `origin + at`. */
-function played(scenario: Scenario) {
-  return Arr.scan<
-    Scenario["frames"][number],
-    {
-      readonly now: DateTime.Utc
-      readonly slate: ReadonlyArray<GameSnapshot>
-      readonly live: ReadonlyMap<GameId, LiveGame>
-    }
-  >(scenario.frames, { now: scenario.origin, slate: [], live: new Map() }, (previous, frame) => {
-    const now = DateTime.addDuration(scenario.origin, Duration.millis(frame.at))
-    return { now, slate: frame.slate, live: followed(previous.live, frame.slate, now) }
-  })
-    .slice(1)
-    .map(({ now, slate, live }) => ({
-      now,
-      slate,
-      watchability: slate.flatMap((game) =>
-        Option.toArray(Option.fromNullishOr(live.get(game.id)?.watchability))
-      )
-    }))
-}
-
-/** Every game at every frame of every recorded scenario that `breach` names a breach for, one line each. */
-function breaches(
-  breach: (judged: {
-    game: GameSnapshot
-    watchability: Watchability
-    now: DateTime.Utc
-  }) => Option.Option<string>
-): ReadonlyArray<string> {
-  return recorded.flatMap((scenario) =>
-    played(scenario).flatMap(({ now, slate, watchability }) =>
-      Arr.getSomes(
-        Arr.zip(slate, watchability).map(([game, judged]) =>
-          Option.map(
-            breach({ game, watchability: judged, now }),
-            (line) => `${scenario.name} ${instantOf(now)} ${game.id}: ${line}`
-          )
-        )
-      )
-    )
-  )
-}
-
-function instantOf(now: DateTime.Utc): string {
-  return DateTime.formatIso(now).replace(/\.\d{3}Z$/, "Z")
-}

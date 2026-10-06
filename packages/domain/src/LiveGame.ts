@@ -1,7 +1,7 @@
 import { Array as Arr, Data, DateTime, Duration, Equal, Option } from "effect"
 import type { Delivery, DeliverySource } from "./Delivery.ts"
-import { type GameId, GameSnapshot } from "./Game.ts"
-import { fromPlays, type GameEvent } from "./GameEvent.ts"
+import { GameSnapshot } from "./Game.ts"
+import type { GameEvent } from "./GameEvent.ts"
 import { Play } from "./Play.ts"
 import { Watchability } from "./Watchability.ts"
 
@@ -9,7 +9,7 @@ import { Watchability } from "./Watchability.ts"
 export type LiveGameState = Data.TaggedEnum<{
   Upcoming: object
   Live: { readonly updatedAt: DateTime.Utc }
-  Stale: { readonly lastUpdatedAt: DateTime.Utc }
+  Stale: { readonly updatedAt: DateTime.Utc }
   Over: object
 }>
 export const LiveGameState = Data.taggedEnum<LiveGameState>()
@@ -44,18 +44,6 @@ export class LiveGame extends Data.Class<{
       plays: [],
       watchability: Watchability.initial(snapshot, now)
     })
-  }
-
-  /** Each listed game, in listed order, as the fold has it, or as listed when it has none. */
-  static asFolded(
-    listed: ReadonlyArray<GameSnapshot>,
-    live: ReadonlyMap<GameId, LiveGame>
-  ): ReadonlyArray<GameSnapshot> {
-    return listed.map((game) =>
-      Option.fromNullishOr(live.get(game.id)).pipe(
-        Option.match({ onNone: () => game, onSome: (liveGame) => liveGame.snapshot })
-      )
-    )
   }
 
   /**
@@ -115,29 +103,22 @@ export class LiveGame extends Data.Class<{
 
   /**
    * The live game at `now` with nothing new: stale once its stale time has passed, its watchability judged again.
-   * None when neither changes. Staleness is not a game event, so there are never events.
+   * None when neither changes.
    */
-  tick(now: DateTime.Utc): {
-    readonly liveGame: Option.Option<LiveGame>
-    readonly events: ReadonlyArray<GameEvent>
-  } {
+  tick(now: DateTime.Utc): Option.Option<LiveGame> {
     const state = LiveGameState.$match(this.state, {
       Upcoming: () => this.state,
       Live: ({ updatedAt }) =>
         DateTime.isGreaterThanOrEqualTo(now, DateTime.addDuration(updatedAt, LiveGame.staleAfter))
-          ? LiveGameState.Stale({ lastUpdatedAt: updatedAt })
+          ? LiveGameState.Stale({ updatedAt })
           : this.state,
       Stale: () => this.state,
       Over: () => this.state
     })
     const watchability = this.watchability.at(this.snapshot, now)
-    return {
-      liveGame:
-        Equal.equals(state, this.state) && Equal.equals(watchability, this.watchability)
-          ? Option.none()
-          : Option.some(new LiveGame({ ...this, state, watchability })),
-      events: []
-    }
+    return Equal.equals(state, this.state) && Equal.equals(watchability, this.watchability)
+      ? Option.none()
+      : Option.some(new LiveGame({ ...this, state, watchability }))
   }
 
   /**
@@ -153,11 +134,21 @@ export class LiveGame extends Data.Class<{
   }
 
   /** When a live game goes stale; none in every other state. */
-  staleAt(): Option.Option<DateTime.Utc> {
+  private staleAt(): Option.Option<DateTime.Utc> {
     return LiveGameState.$match(this.state, {
       Upcoming: () => Option.none(),
       Live: ({ updatedAt }) => Option.some(DateTime.addDuration(updatedAt, LiveGame.staleAfter)),
       Stale: () => Option.none(),
+      Over: () => Option.none()
+    })
+  }
+
+  /** When a live or stale game was last updated; none for an upcoming or over game. */
+  updatedAt(): Option.Option<DateTime.Utc> {
+    return LiveGameState.$match(this.state, {
+      Upcoming: () => Option.none(),
+      Live: ({ updatedAt }) => Option.some(updatedAt),
+      Stale: ({ updatedAt }) => Option.some(updatedAt),
       Over: () => Option.none()
     })
   }
@@ -171,8 +162,8 @@ export class LiveGame extends Data.Class<{
           DateTime.addDuration(now, LiveGame.currentBefore)
         ),
       Live: () => true,
-      Stale: ({ lastUpdatedAt }) =>
-        DateTime.isLessThan(now, DateTime.addDuration(lastUpdatedAt, LiveGame.staleCurrentFor)),
+      Stale: ({ updatedAt }) =>
+        DateTime.isLessThan(now, DateTime.addDuration(updatedAt, LiveGame.staleCurrentFor)),
       Over: () => false
     })
   }
@@ -185,8 +176,7 @@ export class LiveGame extends Data.Class<{
     return LiveGameState.$match(this.state, {
       Upcoming: () => Option.some(DateTime.subtractDuration(this.snapshot.kickoff, LiveGame.currentBefore)),
       Live: () => Option.none(),
-      Stale: ({ lastUpdatedAt }) =>
-        Option.some(DateTime.addDuration(lastUpdatedAt, LiveGame.staleCurrentFor)),
+      Stale: ({ updatedAt }) => Option.some(DateTime.addDuration(updatedAt, LiveGame.staleCurrentFor)),
       Over: () => Option.none()
     }).pipe(Option.filter((at) => DateTime.isLessThan(now, at)))
   }
@@ -202,3 +192,16 @@ function stateOf(snapshot: GameSnapshot, now: DateTime.Utc): LiveGameState {
       return LiveGameState.Over()
   }
 }
+
+/** The tags a game's plays decide once it has any; its snapshots decide them only before. */
+const fromPlays: ReadonlySet<GameEvent["_tag"]> = new Set([
+  "ScoreChanged",
+  "Turnover",
+  "PossessionChanged",
+  "TimeoutTaken",
+  "PeriodEnded",
+  "FourthDown",
+  "Played",
+  "BigPlay",
+  "Sack"
+])

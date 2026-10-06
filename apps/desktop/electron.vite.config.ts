@@ -3,13 +3,13 @@ import { defineConfig } from "electron-vite"
 export default defineConfig({
   main: {
     build: {
-      externalizeDeps: { exclude: ["@sportal/api", "effect"] },
+      externalizeDeps: false,
       rollupOptions: { input: "src/main/main.ts", external: ["electron"] }
     }
   },
   preload: {
     build: {
-      externalizeDeps: { exclude: ["@sportal/api"] },
+      externalizeDeps: false,
       rollupOptions: {
         input: "src/preload/ShellBridge.ts",
         external: ["electron"],

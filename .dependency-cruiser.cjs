@@ -23,23 +23,35 @@ module.exports = {
     },
     {
       name: "provider-payloads-are-private",
-      comment: "A provider's or source's wire vocabulary stays inside its folder.",
+      comment:
+        "A provider's or source's wire vocabulary stays inside its folder; the recording tools read ESPN's recordings.",
       severity: "error",
-      from: { pathNot: "^apps/hub/src/(provider|source)/([^/]+)/" },
-      to: { path: "^apps/hub/src/(provider|source)/[^/]+/[^/]*Payload\\.ts$" }
+      from: { pathNot: "^apps/hub/src/((provider|source)/([^/]+)/|recording/)" },
+      to: { path: "^apps/hub/src/(provider|source)/[^/]+/([^/]*Payload|FastCastMessage)\\.ts$" }
+    },
+    {
+      name: "recording-reads-only-espn",
+      comment:
+        "The recording tools may import ESPN's provider and nothing else that names an adapter or its payloads.",
+      severity: "error",
+      from: { path: "^apps/hub/src/recording/" },
+      to: {
+        path: "^apps/hub/src/(provider/[^/]+/|source/[^/]+/|scenario/Scenario(Ingest|Source|Clock)\\.ts$)",
+        pathNot: "^apps/hub/src/provider/espn/"
+      }
     },
     {
       name: "only-hub-mode-names-adapters",
       comment:
-        "Only HubMode and tests know which concrete providers and sources exist; main.ts names only the database.",
+        "Only HubMode, the recording tools (which reach ESPN's provider alone), and tests know which concrete providers and sources exist; main.ts names only the database.",
       severity: "error",
       from: {
         path: "^apps/hub/src/",
         pathNot:
-          "(^apps/hub/src/HubMode\\.ts$|\\.test\\.ts$|^apps/hub/src/provider/[^/]+/|^apps/hub/src/source/youtube-tv/|^apps/hub/src/source/Sql[^/]+\\.ts$)"
+          "(^apps/hub/src/HubMode\\.ts$|\\.test\\.ts$|^apps/hub/src/recording/|^apps/hub/src/provider/[^/]+/|^apps/hub/src/source/youtube-tv/)"
       },
       to: {
-        path: "^apps/hub/src/(provider/[^/]+/|source/youtube-tv/|source/Sql[^/]+\\.ts$|scenario/Scenario(Provider|Source|Clock)\\.ts$)"
+        path: "^apps/hub/src/(provider/[^/]+/|source/youtube-tv/|scenario/Scenario(Ingest|Source|Clock)\\.ts$)"
       }
     },
     {
@@ -50,18 +62,18 @@ module.exports = {
       from: {
         path: "^apps/hub/src/",
         pathNot:
-          "(^apps/hub/src/main\\.ts$|\\.test\\.ts$|^apps/hub/src/source/Sql[^/]+\\.ts$|^apps/hub/src/database/|^apps/hub/src/feed/FeedLog\\.ts$|^apps/hub/src/GameHistory\\.ts$)"
+          "(^apps/hub/src/main\\.ts$|\\.test\\.ts$|^apps/hub/src/source/ChannelStore\\.ts$|^apps/hub/src/Database\\.ts$|^apps/hub/src/feed-log/FeedLog\\.ts$|^apps/hub/src/GameHistory\\.ts$)"
       },
-      to: { path: "^apps/hub/src/database/" }
+      to: { path: "^apps/hub/src/Database\\.ts$" }
     },
     {
       name: "test-game-is-for-tests",
       comment:
-        "The test snapshot builder is imported by test files, the Hub's test provider, and scenarios, which are test data by nature.",
+        "The test snapshot builder is imported by test files, the web's test slate, and scenarios, which are test data by nature.",
       severity: "error",
       from: {
         pathNot:
-          "(\\.test\\.tsx?$|^apps/hub/src/TestProvider\\.ts$|^packages/domain/src/Scenario\\.ts$|^packages/domain/src/scenarios/)"
+          "(\\.test\\.tsx?$|^apps/web/src/slate/TestSlate\\.ts$|^apps/hub/src/scenario/(Scenario\\.ts|written/))"
       },
       to: { path: "^packages/domain/src/TestGame\\.ts$" }
     },
@@ -80,11 +92,26 @@ module.exports = {
       to: { path: "^apps/hub/src/TestTelemetry\\.ts$" }
     },
     {
+      name: "test-database-is-for-tests",
+      comment: "An in-memory or scratch SQLite database is imported only by test files.",
+      severity: "error",
+      from: { pathNot: "\\.test\\.ts$" },
+      to: { path: "^apps/hub/src/TestDatabase\\.ts$" }
+    },
+    {
       name: "test-provider-is-for-tests",
       comment: "A provider scripted for a test, and the games it lists, are imported only by test files.",
       severity: "error",
       from: { pathNot: "\\.test\\.ts$" },
-      to: { path: "^apps/hub/src/TestProvider\\.ts$" }
+      to: { path: "^apps/hub/src/provider/TestProvider\\.ts$" }
+    },
+    {
+      name: "test-adapter-data-is-for-tests",
+      comment:
+        "An adapter's recorded payloads, read for tests of other modules, are imported only by test files.",
+      severity: "error",
+      from: { pathNot: "\\.test\\.ts$" },
+      to: { path: "^apps/hub/src/(provider/espn/TestEspn|source/youtube-tv/TestYouTubeTv)\\.ts$" }
     },
     {
       name: "no-junk-drawers",

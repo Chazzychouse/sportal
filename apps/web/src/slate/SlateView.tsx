@@ -1,12 +1,13 @@
-import type { GameSnapshot } from "@sportal/domain/Game"
-import type { Stage, StageCommand } from "@sportal/domain/Stage"
+import type { GameId } from "@sportal/domain/Game"
+import type { Stage } from "@sportal/domain/Stage"
 import type { Watchability } from "@sportal/domain/Watchability"
 import { Fragment, useEffect, useRef } from "react"
-import type { Display } from "../Display.ts"
+import type { Display, DisplayStep } from "../display/Display.ts"
+import { GameStatus } from "../game/GameStatus.tsx"
+import { Score } from "../game/Score.tsx"
 import { tileDrag } from "../stage/TileChrome.tsx"
-import { statusText } from "./StatusText.ts"
-import type { stripCards } from "./StripCards.ts"
-import { TeamLogo } from "./TeamLogo.tsx"
+import { PlaceBadge } from "./PlaceBadge.tsx"
+import type { StripCard } from "./StripCards.ts"
 
 /**
  * The slate as a strip under the Stage: the bench, then live, upcoming, and final games, scrolling sideways. It
@@ -14,11 +15,11 @@ import { TeamLogo } from "./TeamLogo.tsx"
  * the pick; a bench card can also be dragged onto a tile.
  */
 export function SlateView(props: {
-  cards: ReturnType<typeof stripCards>
+  cards: ReadonlyArray<StripCard>
   display: Display
   stage: Stage
-  watchability: ReadonlyArray<Watchability>
-  onDrop: (dropped: { display: Display; commands: ReadonlyArray<StageCommand> }) => void
+  watchability: ReadonlyMap<GameId, Pick<Watchability, "score" | "lull" | "reasons">>
+  onDrop: (dropped: DisplayStep) => void
 }) {
   const pick = props.display.pick
   const rowRef = useRef<HTMLOListElement | null>(null)
@@ -69,7 +70,7 @@ export function SlateView(props: {
                     card={card}
                     picked={pick === card.id}
                     droppable={dropped.commands.length > 0}
-                    watch={props.watchability.find((w) => w.game === card.id)}
+                    watch={props.watchability.get(card.id)}
                     onDrop={() => props.onDrop(dropped)}
                   />
                 </li>
@@ -87,16 +88,15 @@ export function SlateView(props: {
  * and clocks change length. A game on stage shows its tile and cannot be picked.
  */
 function Card(props: {
-  card: ReturnType<typeof stripCards>[number]
+  card: StripCard
   picked: boolean
   droppable: boolean
-  watch: Watchability | undefined
+  watch: Pick<Watchability, "score" | "lull" | "reasons"> | undefined
   onDrop: () => void
 }) {
   const { game, place } = props.card
   const bench = place?._tag === "Bench" ? place.tile : undefined
-  const onStage = place?._tag === "Slot"
-  const networks = game?.broadcasts.map(({ network }) => network).join(" · ")
+  const networks = game?.networks()
   return (
     <button
       type="button"
@@ -117,13 +117,9 @@ function Card(props: {
         <span className="col-span-4 text-muted-foreground">Off the slate</span>
       ) : (
         <>
-          <Side side={game.away} other={game.home} game={game} />
-          <span
-            className={`label-caps truncate text-right text-[10px] ${game.progress() === "live" ? "text-live" : "text-muted-foreground"}`}
-          >
-            {statusText(game)}
-          </span>
-          <Side side={game.home} other={game.away} game={game} />
+          <Score game={game} side="away" />
+          <GameStatus game={game} className="truncate text-right text-[10px]" />
+          <Score game={game} side="home" />
           <span className="flex min-w-0 items-center justify-end gap-1">
             <span className="truncate font-sans text-[10px] text-muted-foreground" title={networks}>
               {networks}
@@ -136,36 +132,10 @@ function Card(props: {
                 {props.watch.score}
               </span>
             )}
-            {place !== undefined && (
-              <span
-                className={`label-caps shrink-0 rounded-sm border px-1 text-[9px] ${onStage ? "border-on-air/50 text-on-air" : "text-muted-foreground"}`}
-              >
-                {place._tag === "Slot" ? `T${place.slot + 1}` : "Bench"}
-              </span>
-            )}
+            <PlaceBadge place={place} className="text-[9px]" />
           </span>
         </>
       )}
     </button>
-  )
-}
-
-/** One team's cells: logo, rank and abbreviation, and score. Once scores mean something, the trailing side is muted. */
-function Side(props: { side: GameSnapshot["home"]; other: GameSnapshot["home"]; game: GameSnapshot }) {
-  const scored = props.game.progress() === "live" || props.game.status === "final"
-  const trailing = scored && props.side.score < props.other.score
-  return (
-    <>
-      <TeamLogo team={props.side.team} size={16} />
-      <span className={`truncate font-semibold ${trailing ? "text-muted-foreground" : ""}`}>
-        {props.side.ranking !== undefined && (
-          <span className="mr-0.5 font-normal text-[9px] text-muted-foreground">{props.side.ranking}</span>
-        )}
-        {props.side.team.abbreviation}
-      </span>
-      <span className={`text-right ${trailing ? "text-muted-foreground" : ""}`}>
-        {scored ? props.side.score : null}
-      </span>
-    </>
   )
 }

@@ -2,6 +2,15 @@ import { GameId } from "@sportal/domain/Game"
 import { Schema } from "effect"
 import type { Hotkey } from "./Hotkey.ts"
 
+/** A rectangle in the web UI's window, in whole CSS pixels. */
+export const TileBounds = Schema.Struct({
+  x: Schema.Int,
+  y: Schema.Int,
+  width: Schema.Int,
+  height: Schema.Int
+})
+export type TileBounds = typeof TileBounds.Type
+
 /**
  * Where a game's provider view sits in the Display's window, in CSS pixels, and what it loads. A `stream` view
  * plays a channel; a `guide` view shows the source's guide so the user can pick the channel for a network.
@@ -12,7 +21,7 @@ export const TilePlacement = Schema.Struct({
   game: GameId,
   url: Schema.String,
   role: Schema.Literals(["stream", "guide"]),
-  bounds: Schema.Struct({ x: Schema.Int, y: Schema.Int, width: Schema.Int, height: Schema.Int }),
+  bounds: TileBounds,
   muted: Schema.Boolean,
   interactive: Schema.Boolean
 })

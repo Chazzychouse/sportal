@@ -1,5 +1,8 @@
-import { Context, Effect, FiberSet, Layer, Schema } from "effect"
-import { BrowserWindow, type Session, session, type WebContents, WebContentsView } from "electron"
+import { Context, Effect, FiberSet, Layer } from "effect"
+import { BrowserWindow, type Session, session, WebContentsView } from "electron"
+import { confine, hostOf, load } from "./Navigation.ts"
+import { sandboxed } from "./Sandbox.ts"
+import { allowedHosts, signInUrl } from "./YouTubeTv.ts"
 
 /**
  * The one persistent session every provider view shares, so one sign-in covers every tile and survives
@@ -53,12 +56,7 @@ export class ProviderSession extends Context.Service<
           allows: permits,
           createView: Effect.sync(() => {
             const view = new WebContentsView({
-              webPreferences: {
-                session: providers,
-                contextIsolation: true,
-                nodeIntegration: false,
-                sandbox: true
-              }
+              webPreferences: { ...sandboxed, session: providers }
             })
             // Subframes are left alone: provider pages embed frames from hosts the allowlist does not name.
             confine(view.webContents, permits, warn, { subframes: false })
@@ -74,12 +72,7 @@ export class ProviderSession extends Context.Service<
                 width: 1000,
                 height: 800,
                 parent,
-                webPreferences: {
-                  session: providers,
-                  contextIsolation: true,
-                  nodeIntegration: false,
-                  sandbox: true
-                }
+                webPreferences: { ...sandboxed, session: providers }
               })
               signIn = window
               confine(window.webContents, permits, warn, { subframes: false })
@@ -96,13 +89,11 @@ export class ProviderSession extends Context.Service<
     )
 }
 
-const signInUrl = "https://tv.youtube.com/"
-
 /**
  * Provider views may visit the provider and its sign-in pages, and the web UI's own synthetic stream pages for a
  * scenario (`ui` is the address the shell loads the UI from).
  */
-export function allows(url: string, ui: string): boolean {
+function allows(url: string, ui: string): boolean {
   if (!URL.canParse(url)) return false
   const { protocol, hostname, origin, pathname } = new URL(url)
   if (URL.canParse(ui) && origin === new URL(ui).origin && pathname.startsWith("/scenario-stream/"))
@@ -110,61 +101,9 @@ export function allows(url: string, ui: string): boolean {
   return protocol === "https:" && allowedHosts.includes(hostname)
 }
 
-const allowedHosts = ["tv.youtube.com", "www.youtube.com", "accounts.youtube.com", "accounts.google.com"]
-
 /**
- * Keeps a page on the addresses `permits` allows: a navigation or server redirect elsewhere is refused and
- * reported to `warn` by hostname only, and the page never opens a window. With `subframes`, navigations
- * inside the page's frames are held to the same addresses.
+ * Playback needs DRM key systems, fullscreen, and a screen that stays awake; nothing else is granted.
  */
-export function confine(
-  contents: {
-    on(
-      event: "will-navigate" | "will-redirect" | "will-frame-navigate",
-      listener: (details: { url: string; isMainFrame: boolean; preventDefault(): void }) => void
-    ): unknown
-    setWindowOpenHandler(handler: () => { action: "deny" }): void
-  },
-  permits: (url: string) => boolean,
-  warn: (message: string) => void,
-  options: { subframes: boolean }
-) {
-  const refuseUnlessPermitted = (details: { url: string; preventDefault(): void }) => {
-    if (permits(details.url)) return
-    details.preventDefault()
-    warn(`refused navigation to ${hostOf(details.url)}`)
-  }
-  // will-navigate does not fire for server redirects, so both are guarded.
-  contents.on("will-navigate", refuseUnlessPermitted)
-  contents.on("will-redirect", refuseUnlessPermitted)
-  if (options.subframes)
-    contents.on("will-frame-navigate", (details) => {
-      if (!details.isMainFrame) refuseUnlessPermitted(details)
-    })
-  contents.setWindowOpenHandler(() => ({ action: "deny" }))
-}
-
-/** Playback needs DRM key systems, fullscreen, and a screen that stays awake; nothing else is granted. */
-export function grantsPermission(permission: string): boolean {
+function grantsPermission(permission: string): boolean {
   return ["mediaKeySystem", "fullscreen", "screen-wake-lock"].includes(permission)
 }
-
-/** The hostname alone, for logging: a full URL can carry tokens. */
-export function hostOf(url: string) {
-  return URL.canParse(url) ? new URL(url).hostname : "(unparseable address)"
-}
-
-/** Loads an address into a page; a failed load fails with Electron's error code, never its message. */
-export function load(contents: WebContents, url: string) {
-  return Effect.tryPromise({
-    try: () => contents.loadURL(url),
-    catch: (error) => new LoadFailed({ code: loadErrorCode(error) })
-  })
-}
-
-/** The code Electron attaches to a failed load (such as `ERR_ABORTED`); the message would carry the full URL. */
-export function loadErrorCode(error: unknown) {
-  return error instanceof Error && "code" in error && typeof error.code === "string" ? error.code : "unknown"
-}
-
-class LoadFailed extends Schema.TaggedError<LoadFailed>()("LoadFailed", { code: Schema.String }) {}

@@ -1,11 +1,14 @@
 import type { GameSnapshot } from "@sportal/domain/Game"
 import type { Stage, StageCommand } from "@sportal/domain/Stage"
-import { ArrowLeftRight, ArrowUpLeft, Shrink, SquareDashed, Volume2, X } from "lucide-react"
-import { type ReactNode, useState } from "react"
+import { Data } from "effect"
+import { ArrowLeftRight, Volume2 } from "lucide-react"
+import { Fragment, type ReactNode, useState } from "react"
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/design/sheet"
+import { GameStatus } from "../game/GameStatus.tsx"
+import { Score, scoreline } from "../game/Score.tsx"
 import { dispatch } from "../hub/HubClient.ts"
-import { statusText } from "../slate/StatusText.ts"
-import { TeamLogo } from "../slate/TeamLogo.tsx"
+import { runtime } from "../hub/HubRuntime.ts"
+import { tileActions } from "../stage/TileActions.tsx"
 
 /**
  * The Stage's layout in miniature, every tile shown even while one is soloed. Tapping a tile selects it; tapping
@@ -17,27 +20,26 @@ export function StageMap(props: {
   selected: number
   onSelect: (slot: number) => void
 }) {
-  const [actions, setActions] = useState(false)
-  const [swapFrom, setSwapFrom] = useState<number | undefined>(undefined)
+  const [mode, setMode] = useState<Mode>(Mode.Idle())
   const tiles = props.stage.onStage()
-  const tile = tiles[props.selected]
   const gameIn = (slot: number) => {
     const at = tiles[slot]
     return at === undefined || at._tag === "Empty"
       ? undefined
       : props.slate.find((game) => game.id === at.game)
   }
+  const selectedGame = gameIn(props.selected)
   const run = (command: StageCommand) => {
-    dispatch(command)
-    setActions(false)
+    runtime.runFork(dispatch(command))
+    setMode(Mode.Idle())
   }
   const tap = (slot: number) => {
-    if (swapFrom !== undefined) {
-      if (slot !== swapFrom) dispatch({ _tag: "Swap", a: swapFrom, b: slot })
-      setSwapFrom(undefined)
+    if (mode._tag === "Swapping") {
+      if (slot !== mode.from) runtime.runFork(dispatch({ _tag: "Swap", a: mode.from, b: slot }))
+      setMode(Mode.Idle())
       return props.onSelect(slot)
     }
-    if (slot === props.selected && tiles[slot]?._tag !== "Empty") return setActions(true)
+    if (slot === props.selected && tiles[slot]?._tag !== "Empty") return setMode(Mode.Actions())
     props.onSelect(slot)
   }
 
@@ -50,8 +52,8 @@ export function StageMap(props: {
           .map((slot, index) => {
             const at = tiles[index]
             const game = gameIn(index)
-            const onAir = at !== undefined && at._tag !== "Empty" && props.stage.audioFocus === at.game
-            const soloed = at !== undefined && at._tag !== "Empty" && props.stage.solo === at.game
+            const onAir = at !== undefined && at._tag !== "Empty" && props.stage.hears(at.game)
+            const soloed = at !== undefined && at._tag !== "Empty" && props.stage.soloes(at.game)
             return (
               <button
                 // biome-ignore lint/suspicious/noArrayIndexKey: a slot is identified by its place in the layout.
@@ -75,7 +77,7 @@ export function StageMap(props: {
                       : onAir
                         ? "border-on-air/60 bg-on-air/10"
                         : "border-border bg-card"
-                  } ${swapFrom !== undefined && swapFrom !== index ? "border-dashed" : ""}`}
+                  } ${mode._tag === "Swapping" && mode.from !== index ? "border-dashed" : ""}`}
                 >
                   <span className="flex items-center gap-1">
                     <span
@@ -96,18 +98,12 @@ export function StageMap(props: {
                     </span>
                   ) : (
                     <span className="flex min-h-0 flex-1 flex-col justify-center gap-0.5 font-mono text-[11px] tabular-nums">
-                      {[game.away, game.home].map((side) => (
-                        <span key={side.team.id} className="flex items-center gap-1">
-                          <TeamLogo team={side.team} size={14} />
-                          <span className="truncate font-semibold">{side.team.abbreviation}</span>
-                          <span className="ml-auto">{game.progress() === "upcoming" ? "" : side.score}</span>
+                      {(["away", "home"] as const).map((side) => (
+                        <span key={side} className="flex items-center gap-1">
+                          <Score game={game} side={side} />
                         </span>
                       ))}
-                      <span
-                        className={`label-caps truncate text-[9px] ${game.progress() === "live" ? "text-live" : "text-muted-foreground"}`}
-                      >
-                        {statusText(game)}
-                      </span>
+                      <GameStatus game={game} className="truncate text-[9px]" />
                     </span>
                   )}
                 </span>
@@ -115,15 +111,18 @@ export function StageMap(props: {
             )
           })}
       </div>
-      {swapFrom !== undefined && (
+      {mode._tag === "Swapping" && (
         <div className="flex items-center justify-between rounded-md border border-dashed px-3 py-2 text-sm">
-          <span>Tap the tile to swap with tile {swapFrom + 1}</span>
-          <button type="button" className="text-muted-foreground" onClick={() => setSwapFrom(undefined)}>
+          <span>Tap the tile to swap with tile {mode.from + 1}</span>
+          <button type="button" className="text-muted-foreground" onClick={() => setMode(Mode.Idle())}>
             Cancel
           </button>
         </div>
       )}
-      <Sheet open={actions} onOpenChange={setActions}>
+      <Sheet
+        open={mode._tag === "Actions"}
+        onOpenChange={(open) => setMode(open ? Mode.Actions() : Mode.Idle())}
+      >
         <SheetContent
           side="bottom"
           showCloseButton={false}
@@ -132,52 +131,39 @@ export function StageMap(props: {
           <div className="px-4 pt-4 pb-2">
             <SheetTitle className="label-caps text-xs">Tile {props.selected + 1}</SheetTitle>
             <SheetDescription className="font-mono text-sm">
-              {(() => {
-                const game = gameIn(props.selected)
-                return game === undefined
-                  ? ""
-                  : `${game.away.team.abbreviation} ${game.away.score}–${game.home.score} ${game.home.team.abbreviation}`
-              })()}
+              {selectedGame === undefined ? "" : scoreline(selectedGame)}
             </SheetDescription>
           </div>
-          {tile !== undefined && tile._tag !== "Empty" && (
-            <div className="flex flex-col pb-2">
-              <Action icon={<Volume2 />} onClick={() => run({ _tag: "FocusAudio", tile: props.selected })}>
-                Hear this game
-              </Action>
-              {props.selected !== 0 && (
-                <Action icon={<ArrowUpLeft />} onClick={() => run({ _tag: "Promote", tile: props.selected })}>
-                  Promote to the main tile
+          <div className="flex flex-col pb-2">
+            {tileActions(props.stage, props.selected, true).map((action) => (
+              <Fragment key={action.id}>
+                {action.id === "clear" && (
+                  <Action
+                    icon={<ArrowLeftRight />}
+                    onClick={() => setMode(Mode.Swapping({ from: props.selected }))}
+                  >
+                    Swap with…
+                  </Action>
+                )}
+                <Action
+                  icon={action.icon}
+                  onClick={() => run(action.command)}
+                  destructive={action.id === "clear"}
+                >
+                  {action.label}
                 </Action>
-              )}
-              {props.stage.solo === tile.game ? (
-                <Action icon={<Shrink />} onClick={() => run({ _tag: "Unsolo" })}>
-                  Unsolo
-                </Action>
-              ) : (
-                <Action icon={<SquareDashed />} onClick={() => run({ _tag: "Solo", tile: props.selected })}>
-                  Solo
-                </Action>
-              )}
-              <Action
-                icon={<ArrowLeftRight />}
-                onClick={() => {
-                  setSwapFrom(props.selected)
-                  setActions(false)
-                }}
-              >
-                Swap with…
-              </Action>
-              <Action icon={<X />} onClick={() => run({ _tag: "Clear", tile: props.selected })} destructive>
-                Clear
-              </Action>
-            </div>
-          )}
+              </Fragment>
+            ))}
+          </div>
         </SheetContent>
       </Sheet>
     </>
   )
 }
+
+/** What a tap does next: select a tile, act from the open sheet, or finish a swap from tile `from`. */
+type Mode = Data.TaggedEnum<{ Idle: object; Actions: object; Swapping: { readonly from: number } }>
+const Mode = Data.taggedEnum<Mode>()
 
 function Action(props: { icon: ReactNode; onClick: () => void; destructive?: boolean; children: ReactNode }) {
   return (

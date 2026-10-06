@@ -1,8 +1,8 @@
 import { assert, describe, it } from "@effect/vitest"
-import { DateTime, Option, Result } from "effect"
+import { DateTime, Option, Result, Schema } from "effect"
+import { ChannelAvailability } from "./Channel.ts"
 import { GameId, Network } from "./Game.ts"
 import { Layout } from "./Layout.ts"
-import { ChannelAvailability } from "./Source.ts"
 import { Stage, type StageCommand, type Tile } from "./Stage.ts"
 
 const bama = GameId.make("401856707")
@@ -262,6 +262,23 @@ describe("Stage layouts and the bench", () => {
     assert.deepStrictEqual(Stage.initial.splits.MainFive, Layout.defaultSplit("MainFive"))
   })
 
+  it("encodes the initial Stage as it always has", () => {
+    assert.strictEqual(
+      JSON.stringify(Schema.encodeSync(Stage)(Stage.initial)),
+      JSON.stringify({
+        tiles: [{ _tag: "Empty" }, { _tag: "Empty" }, { _tag: "Empty" }, { _tag: "Empty" }],
+        layout: "Quad",
+        splits: {
+          Single: { x: 0.5, y: 0.5 },
+          Pair: { x: 0.5, y: 0.5 },
+          Quad: { x: 0.5, y: 0.5 },
+          MainThree: { x: 0.75, y: 0.5 },
+          MainFive: { x: 2 / 3, y: 2 / 3 }
+        }
+      })
+    )
+  })
+
   it("benches the tiles that no longer fit, and brings them back in order", () => {
     const full = fill([bama, irish, usc, ohio])
     const pair = run(full, { _tag: "SetLayout", layout: "Pair" })
@@ -310,6 +327,28 @@ describe("Stage layouts and the bench", () => {
       rejection(Stage.initial, { _tag: "SetSplit", split: { x: 0.1, y: 0.5 } }),
       "split-out-of-range"
     )
+  })
+})
+
+describe("Stage#hears and Stage#soloes", () => {
+  it("answers for the on-air game, the soloed game, and a game in no tile", () => {
+    const stage = run(run(fill([bama, irish]), { _tag: "Solo", tile: 0 }), { _tag: "FocusAudio", tile: 1 })
+    assert.isTrue(stage.hears(irish))
+    assert.isFalse(stage.hears(bama))
+    assert.isTrue(stage.soloes(bama))
+    assert.isFalse(stage.soloes(irish))
+    assert.isFalse(stage.hears(usc))
+    assert.isFalse(stage.soloes(usc))
+  })
+})
+
+describe("Stage#withSplit", () => {
+  it("replaces only the current layout's split", () => {
+    const moved = Stage.initial.withSplit({ x: 0.3, y: 0.7 })
+    assert.deepStrictEqual(moved.splits.Quad, { x: 0.3, y: 0.7 })
+    assert.deepStrictEqual(moved.splits.Pair, Layout.defaultSplit("Pair"))
+    assert.strictEqual(moved.layout, "Quad")
+    assert.deepStrictEqual(moved.tiles, Stage.initial.tiles)
   })
 })
 

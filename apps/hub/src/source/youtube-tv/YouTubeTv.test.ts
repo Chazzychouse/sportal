@@ -1,18 +1,18 @@
-import { readFileSync } from "node:fs"
 import { assert, describe, it } from "@effect/vitest"
+import { ChannelAvailability } from "@sportal/domain/Channel"
 import { Network } from "@sportal/domain/Game"
 import type { LeagueId } from "@sportal/domain/League"
-import { ChannelAvailability } from "@sportal/domain/Source"
 import { broadcast, snapshot, team } from "@sportal/domain/TestGame"
-import { DateTime, Effect, Fiber, Layer, Logger, Option, Ref, Schema, Stream } from "effect"
+import { DateTime, Effect, Fiber, Layer, Logger, Option, Ref, Stream } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/http"
 import { TestClock } from "effect/testing"
-import * as Database from "../../database/Database.ts"
 import * as EspnProvider from "../../provider/espn/EspnProvider.ts"
-import { listedBy } from "../../TestProvider.ts"
+import { recordedScoreboard } from "../../provider/espn/TestEspn.ts"
+import { listedBy } from "../../provider/TestProvider.ts"
+import * as TestDatabase from "../../TestDatabase.ts"
 import { ChannelStore } from "../ChannelStore.ts"
 import { Source } from "../Source.ts"
-import * as SqlChannelStore from "../SqlChannelStore.ts"
+import { recordedGuide } from "./TestYouTubeTv.ts"
 import * as YouTubeTv from "./YouTubeTv.ts"
 
 // Addresses recorded from YouTube TV's live guide on 2026-10-03.
@@ -26,30 +26,6 @@ const disney = Network.make("Disney+")
 const onEspn = snapshot({ broadcasts: [broadcast(espn)] })
 const onEspnAndDisney = snapshot({ broadcasts: [broadcast(disney), broadcast(espn)] })
 const guide = { _tag: "WebView" as const, url: "https://tv.youtube.com/live" }
-const decodeLive = Schema.decodeUnknownOption(YouTubeTv.LiveChannelUrl)
-
-describe("YouTubeTv.LiveChannelUrl", () => {
-  it("keeps a live channel address as it is", () => {
-    assert.deepStrictEqual(decodeLive(cbsLive), Option.some(cbsLive))
-  })
-
-  it("decodes a from-the-beginning address to the live address for the same channel", () => {
-    assert.deepStrictEqual(decodeLive(foxFromTheBeginning), Option.some(foxLive))
-  })
-
-  it.each([
-    "https://tv.youtube.com/live",
-    "https://tv.youtube.com/watch/",
-    "https://tv.youtube.com/watch/abc/extra",
-    "http://tv.youtube.com/watch/abc",
-    "https://www.youtube.com/watch/abc",
-    "https://tv.youtube.com.evil.example/watch/abc",
-    "not a url"
-  ])("refuses %s", (url) => {
-    assert.isTrue(Option.isNone(decodeLive(url)))
-  })
-})
-
 describe("YouTubeTv source", () => {
   it.effect("starts with every network unlearned, pointing at the live guide", () =>
     Effect.gen(function* () {
@@ -75,10 +51,32 @@ describe("YouTubeTv source", () => {
     }).pipe(Effect.provide(testSource()))
   )
 
-  it.effect("refuses to learn an address that is not a channel, and learns nothing", () =>
+  it.effect("keeps a live channel address as it is", () =>
     Effect.gen(function* () {
       const source = yield* Source
-      const error = yield* source.learn(espn, "https://tv.youtube.com/live").pipe(Effect.flip)
+      yield* source.learn(espn, cbsLive)
+      assert.deepStrictEqual(
+        (yield* source.availability)(onEspn),
+        ChannelAvailability.Carried({
+          channel: { name: espn, source: "YouTube TV", locator: { _tag: "WebView", url: cbsLive } },
+          learnedFor: Option.some(espn)
+        })
+      )
+    }).pipe(Effect.provide(testSource()))
+  )
+
+  it.effect.each([
+    "https://tv.youtube.com/live",
+    "https://tv.youtube.com/watch/",
+    "https://tv.youtube.com/watch/abc/extra",
+    "http://tv.youtube.com/watch/abc",
+    "https://www.youtube.com/watch/abc",
+    "https://tv.youtube.com.evil.example/watch/abc",
+    "not a url"
+  ])("refuses to learn %s, which is not a channel address, and learns nothing", (url) =>
+    Effect.gen(function* () {
+      const source = yield* Source
+      const error = yield* source.learn(espn, url).pipe(Effect.flip)
       assert.strictEqual(error._tag, "ChannelUrlRefused")
       assert.strictEqual((yield* source.availability)(onEspn)._tag, "Unlearned")
     }).pipe(Effect.provide(testSource()))
@@ -124,7 +122,10 @@ describe("YouTubeTv source", () => {
 
 /** The source over a fresh in-memory database. */
 function testSource() {
-  return YouTubeTv.layer.pipe(Layer.provide(SqlChannelStore.layer), Layer.provide(Database.layer(":memory:")))
+  return YouTubeTv.layer.pipe(
+    Layer.provide(ChannelStore.layer),
+    Layer.provide(TestDatabase.layer(":memory:"))
+  )
 }
 
 /** An in-memory channel store that already holds ESPN's channel when the source starts. */
@@ -140,11 +141,9 @@ function storeKnowingEspn() {
       })
       return store
     })
-  ).pipe(Layer.provide(SqlChannelStore.layer), Layer.provide(Database.layer(":memory:")))
+  ).pipe(Layer.provide(ChannelStore.layer), Layer.provide(TestDatabase.layer(":memory:")))
 }
 
-// The first page of YouTube TV's live guide, read 2026-10-03T20:24:45Z, reduced to what the source reads.
-const recordedGuide = readFileSync(new URL("./fixtures/guide-2026-10-03T2024Z.json", import.meta.url), "utf8")
 const readAt = DateTime.toEpochMillis(DateTime.makeUnsafe("2026-10-03T20:24:45Z"))
 const ohioStateAtIowa = snapshot({
   status: "live",
@@ -413,10 +412,8 @@ function tallied(league: LeagueId) {
 
 /** The source over a fresh database, and ESPN answering from its 2026-10-03 recordings. */
 function matchingLayer() {
-  const espn = (name: string) =>
-    readFileSync(new URL(`../../provider/espn/fixtures/${name}.json`, import.meta.url), "utf8")
-  const fbs = espn("fbs-scoreboard-2026-10-03T2024Z")
-  const nfl = espn("nfl-scoreboard-pregame")
+  const fbs = recordedScoreboard("fbs-scoreboard-2026-10-03T2024Z")
+  const nfl = recordedScoreboard("nfl-scoreboard-pregame")
   const recorded = Layer.succeed(
     HttpClient.HttpClient,
     HttpClient.make((request) =>

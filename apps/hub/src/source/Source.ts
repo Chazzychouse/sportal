@@ -1,5 +1,6 @@
+import type { ChannelAvailability, ChannelUrlRefused } from "@sportal/domain/Channel"
 import type { GameSnapshot, Network } from "@sportal/domain/Game"
-import type { ChannelAvailability, ChannelUrlRefused, GuideUnreadable } from "@sportal/domain/Source"
+import type { GuideUnreadable } from "@sportal/domain/Guide"
 import { Context, type Effect, type Stream } from "effect"
 import type { ChannelStoreError } from "./ChannelStore.ts"
 

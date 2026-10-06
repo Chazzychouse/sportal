@@ -1,11 +1,14 @@
 import type { GameSnapshot } from "@sportal/domain/Game"
 import type { Stage, Tile } from "@sportal/domain/Stage"
-import { ArrowUpLeft, Shrink, SquareDashed, Volume2, VolumeX, X } from "lucide-react"
 import type { ReactNode } from "react"
 import { Button } from "@/design/button"
+import { cn } from "@/design/ClassName"
+import { GameStatus } from "../game/GameStatus.tsx"
+import { Score } from "../game/Score.tsx"
 import { dispatch } from "../hub/HubClient.ts"
-import { statusText } from "../slate/StatusText.ts"
-import { TeamLogo } from "../slate/TeamLogo.tsx"
+import { runtime } from "../hub/HubRuntime.ts"
+import { keyText, tileActions } from "./TileActions.tsx"
+import { tileHeader } from "./TileRects.ts"
 
 /**
  * A tile's header strip: its slot, its game and score, the on-air tally when its sound is on, and its controls.
@@ -21,8 +24,7 @@ export function TileChrome(props: {
   children?: ReactNode
 }) {
   const { tile, slot } = props
-  const onAir = tile._tag !== "Empty" && props.stage.audioFocus === tile.game
-  const soloed = tile._tag !== "Empty" && props.stage.solo === tile.game
+  const onAir = tile._tag !== "Empty" && props.stage.hears(tile.game)
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: dragging is a shortcut; every swap is also in the command palette.
     <div
@@ -33,9 +35,11 @@ export function TileChrome(props: {
       }}
       onDrop={(event) => {
         const from = Number(event.dataTransfer.getData(tileDrag))
-        if (Number.isInteger(from) && from !== slot) dispatch({ _tag: "Swap", a: from, b: slot })
+        if (Number.isInteger(from) && from !== slot)
+          runtime.runFork(dispatch({ _tag: "Swap", a: from, b: slot }))
       }}
-      className={`flex h-7 shrink-0 items-center gap-2 border-b px-1.5 text-xs ${
+      style={{ height: tileHeader }}
+      className={`flex shrink-0 items-center gap-2 border-b px-1.5 text-xs ${
         onAir ? "border-on-air/60 bg-on-air/10" : "bg-card"
       }`}
     >
@@ -63,71 +67,35 @@ export function TileChrome(props: {
             </span>
           ) : (
             <>
-              <TeamLogo team={props.game.away.team} size={14} />
-              <span className="font-semibold">{props.game.away.team.abbreviation}</span>
-              {props.game.away.score}
-              <span className="text-muted-foreground">–</span>
-              {props.game.home.score}
-              <span className="font-semibold">{props.game.home.team.abbreviation}</span>
-              <TeamLogo team={props.game.home.team} size={14} />
-              <span
-                className={`label-caps ml-1.5 truncate text-[11px] ${props.game.progress() === "live" ? "text-live" : "text-muted-foreground"}`}
-              >
-                {statusText(props.game)}
-              </span>
+              <Score game={props.game} side="away" />
+              {props.game.scored() && <span className="text-muted-foreground">–</span>}
+              <Score game={props.game} side="home" />
+              <GameStatus game={props.game} className="ml-1.5 truncate text-[11px]" />
             </>
           )}
         </span>
       </button>
       {props.children}
-      {tile._tag !== "Empty" && (
-        <span className="flex shrink-0 items-center">
+      <span className="flex shrink-0 items-center">
+        {tileActions(props.stage, slot, props.selected).map((action) => (
           <Button
+            key={action.id}
             variant="ghost"
             size="icon-xs"
-            aria-label={onAir ? "Sound on" : "Hear this game"}
-            aria-keyshortcuts={String(slot + 1)}
-            title={`${onAir ? "Sound on" : "Hear this game"} · ${slot + 1}`}
-            className={onAir ? "text-on-air" : "text-muted-foreground"}
-            onClick={() => dispatch({ _tag: "FocusAudio", tile: slot })}
+            aria-label={action.label}
+            aria-keyshortcuts={action.key}
+            title={action.key === undefined ? action.label : `${action.label} · ${keyText(action.key)}`}
+            className={cn(
+              "text-muted-foreground",
+              action.id === "hear" && onAir && "text-on-air",
+              action.id === "clear" && "hover:text-destructive"
+            )}
+            onClick={() => runtime.runFork(dispatch(action.command))}
           >
-            {onAir ? <Volume2 /> : <VolumeX />}
+            {action.icon}
           </Button>
-          {slot !== 0 && (
-            <Button
-              variant="ghost"
-              size="icon-xs"
-              aria-label="Promote to the main tile"
-              aria-keyshortcuts={`Shift+${slot + 1}`}
-              title={`Promote to the main tile · Shift ${slot + 1}`}
-              className="text-muted-foreground"
-              onClick={() => dispatch({ _tag: "Promote", tile: slot })}
-            >
-              <ArrowUpLeft />
-            </Button>
-          )}
-          <Button
-            variant="ghost"
-            size="icon-xs"
-            aria-label={soloed ? "Unsolo" : "Solo"}
-            title={soloed ? "Unsolo · Esc" : "Solo · select, then F"}
-            className="text-muted-foreground"
-            onClick={() => dispatch(soloed ? { _tag: "Unsolo" } : { _tag: "Solo", tile: slot })}
-          >
-            {soloed ? <Shrink /> : <SquareDashed />}
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon-xs"
-            aria-label="Clear"
-            title="Clear"
-            className="text-muted-foreground hover:text-destructive"
-            onClick={() => dispatch({ _tag: "Clear", tile: slot })}
-          >
-            <X />
-          </Button>
-        </span>
-      )}
+        ))}
+      </span>
     </div>
   )
 }

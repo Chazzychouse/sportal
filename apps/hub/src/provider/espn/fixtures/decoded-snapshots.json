@@ -1,0 +1,4282 @@
+{
+  "deliveries": [
+    {
+      "seq": 1,
+      "tag": "Listing",
+      "league": "fbs",
+      "games": [
+        {
+          "id": "401862787",
+          "league": "fbs",
+          "kickoff": "2026-10-03T15:00:00.000Z",
+          "status": "live",
+          "period": 2,
+          "clock": "7:21",
+          "home": {
+            "team": {
+              "id": "fbs:2429",
+              "abbreviation": "CLT",
+              "name": "Charlotte 49ers",
+              "location": "Charlotte",
+              "shortName": "Charlotte",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2429.png"
+            },
+            "score": 0
+          },
+          "away": {
+            "team": {
+              "id": "fbs:235",
+              "abbreviation": "MEM",
+              "name": "Memphis Tigers",
+              "location": "Memphis",
+              "shortName": "Memphis",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/235.png"
+            },
+            "score": 27
+          },
+          "broadcasts": [
+            {
+              "network": "ESPN+",
+              "medium": "streaming"
+            }
+          ],
+          "situation": {
+            "distance": 0,
+            "isRedZone": true,
+            "homeTimeouts": 3,
+            "awayTimeouts": 1,
+            "lastPlay": "(07:28) No Huddle-Shotgun #2 M.Stokes pass complete deep left to #5 S.Burnside caught at CLT00, for 24 yards to the CLT00 TOUCHDOWN, clock 07:21, 1ST DOWN. The previous play is under automatic review - \"\""
+          }
+        },
+        {
+          "id": "401858250",
+          "league": "fbs",
+          "kickoff": "2026-10-03T16:00:00.000Z",
+          "status": "live",
+          "period": 1,
+          "clock": "15:00",
+          "home": {
+            "team": {
+              "id": "fbs:153",
+              "abbreviation": "UNC",
+              "name": "North Carolina Tar Heels",
+              "location": "North Carolina",
+              "shortName": "North Carolina",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/153.png"
+            },
+            "score": 0
+          },
+          "away": {
+            "team": {
+              "id": "fbs:87",
+              "abbreviation": "ND",
+              "name": "Notre Dame Fighting Irish",
+              "location": "Notre Dame",
+              "shortName": "Notre Dame",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/87.png"
+            },
+            "score": 0,
+            "ranking": 3
+          },
+          "broadcasts": [
+            {
+              "network": "ESPN",
+              "medium": "tv"
+            },
+            {
+              "network": "Disney+",
+              "medium": "streaming"
+            }
+          ],
+          "situation": {
+            "down": 1,
+            "distance": 10,
+            "isRedZone": false,
+            "homeTimeouts": 3,
+            "awayTimeouts": 3,
+            "lastPlay": "(15:00) #92 A.Burrell kickoff 65 yards to the ND 00, Touchback"
+          }
+        },
+        {
+          "id": "401856707",
+          "league": "fbs",
+          "kickoff": "2026-10-03T16:00:00.000Z",
+          "status": "live",
+          "period": 1,
+          "clock": "14:55",
+          "home": {
+            "team": {
+              "id": "fbs:344",
+              "abbreviation": "MSST",
+              "name": "Mississippi State Bulldogs",
+              "location": "Mississippi State",
+              "shortName": "Mississippi St",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/344.png"
+            },
+            "score": 0,
+            "ranking": 16
+          },
+          "away": {
+            "team": {
+              "id": "fbs:333",
+              "abbreviation": "ALA",
+              "name": "Alabama Crimson Tide",
+              "location": "Alabama",
+              "shortName": "Alabama",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/333.png"
+            },
+            "score": 0,
+            "ranking": 7
+          },
+          "broadcasts": [
+            {
+              "network": "ABC",
+              "medium": "tv"
+            }
+          ],
+          "situation": {
+            "down": 1,
+            "distance": 10,
+            "isRedZone": false,
+            "homeTimeouts": 3,
+            "awayTimeouts": 3,
+            "lastPlay": "(15:00) #90 L.Quinn kickoff 65 yards to the State00, Touchback"
+          }
+        },
+        {
+          "id": "401856819",
+          "league": "fbs",
+          "kickoff": "2026-10-03T16:00:00.000Z",
+          "status": "live",
+          "period": 1,
+          "clock": "11:23",
+          "home": {
+            "team": {
+              "id": "fbs:248",
+              "abbreviation": "HOU",
+              "name": "Houston Cougars",
+              "location": "Houston",
+              "shortName": "Houston",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/248.png"
+            },
+            "score": 0,
+            "ranking": 20
+          },
+          "away": {
+            "team": {
+              "id": "fbs:2116",
+              "abbreviation": "UCF",
+              "name": "UCF Knights",
+              "location": "UCF",
+              "shortName": "UCF",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2116.png"
+            },
+            "score": 0
+          },
+          "broadcasts": [
+            {
+              "network": "ESPN2",
+              "medium": "tv"
+            }
+          ],
+          "situation": {
+            "possession": "fbs:2116",
+            "down": 3,
+            "distance": 13,
+            "yardLine": 13,
+            "isRedZone": true,
+            "homeTimeouts": 3,
+            "awayTimeouts": 3,
+            "lastPlay": "(11:27) Shotgun #12 K.Jenkins pass incomplete short left to #9 W.Charles thrown to HOU00 broken up by #6 J.Allen PENALTY HOU Offside (#10 L.McCutchin) 5 yards from HOU18 to HOU13. NO PLAY"
+          }
+        },
+        {
+          "id": "401858246",
+          "league": "fbs",
+          "kickoff": "2026-10-03T16:00:00.000Z",
+          "status": "scheduled",
+          "period": 0,
+          "clock": "0:00",
+          "home": {
+            "team": {
+              "id": "fbs:2567",
+              "abbreviation": "SMU",
+              "name": "SMU Mustangs",
+              "location": "SMU",
+              "shortName": "SMU",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2567.png"
+            },
+            "score": 0,
+            "ranking": 21
+          },
+          "away": {
+            "team": {
+              "id": "fbs:103",
+              "abbreviation": "BC",
+              "name": "Boston College Eagles",
+              "location": "Boston College",
+              "shortName": "Boston College",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/103.png"
+            },
+            "score": 0
+          },
+          "broadcasts": [
+            {
+              "network": "CW",
+              "medium": "tv"
+            }
+          ]
+        },
+        {
+          "id": "401856807",
+          "league": "fbs",
+          "kickoff": "2026-10-03T16:00:00.000Z",
+          "status": "live",
+          "period": 1,
+          "clock": "15:00",
+          "home": {
+            "team": {
+              "id": "fbs:2305",
+              "abbreviation": "KU",
+              "name": "Kansas Jayhawks",
+              "location": "Kansas",
+              "shortName": "Kansas",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2305.png"
+            },
+            "score": 0
+          },
+          "away": {
+            "team": {
+              "id": "fbs:2393",
+              "abbreviation": "MTSU",
+              "name": "Middle Tennessee Blue Raiders",
+              "location": "Middle Tennessee",
+              "shortName": "MTSU",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2393.png"
+            },
+            "score": 0
+          },
+          "broadcasts": [
+            {
+              "network": "ESPNU",
+              "medium": "tv"
+            }
+          ],
+          "situation": {
+            "down": 1,
+            "distance": 10,
+            "isRedZone": false,
+            "homeTimeouts": 3,
+            "awayTimeouts": 3,
+            "lastPlay": "(15:00) #98 D.Efird kickoff 65 yards to the MTSU00 fair catch by #0 S.Fleming at MTSU00"
+          }
+        },
+        {
+          "id": "401856822",
+          "league": "fbs",
+          "kickoff": "2026-10-03T16:00:00.000Z",
+          "status": "live",
+          "period": 1,
+          "clock": "12:38",
+          "home": {
+            "team": {
+              "id": "fbs:66",
+              "abbreviation": "ISU",
+              "name": "Iowa State Cyclones",
+              "location": "Iowa State",
+              "shortName": "Iowa State",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/66.png"
+            },
+            "score": 0
+          },
+          "away": {
+            "team": {
+              "id": "fbs:277",
+              "abbreviation": "WVU",
+              "name": "West Virginia Mountaineers",
+              "location": "West Virginia",
+              "shortName": "West Virginia",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/277.png"
+            },
+            "score": 0
+          },
+          "broadcasts": [
+            {
+              "network": "TNT",
+              "medium": "tv"
+            }
+          ],
+          "situation": {
+            "distance": 14,
+            "isRedZone": false,
+            "homeTimeouts": 3,
+            "awayTimeouts": 3,
+            "lastPlay": "Timeout Iowa State, clock 12:38"
+          }
+        },
+        {
+          "id": "401858251",
+          "league": "fbs",
+          "kickoff": "2026-10-03T16:00:00.000Z",
+          "status": "live",
+          "period": 1,
+          "clock": "12:09",
+          "home": {
+            "team": {
+              "id": "fbs:154",
+              "abbreviation": "WAKE",
+              "name": "Wake Forest Demon Deacons",
+              "location": "Wake Forest",
+              "shortName": "Wake Forest",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/154.png"
+            },
+            "score": 0
+          },
+          "away": {
+            "team": {
+              "id": "fbs:24",
+              "abbreviation": "STAN",
+              "name": "Stanford Cardinal",
+              "location": "Stanford",
+              "shortName": "Stanford",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/24.png"
+            },
+            "score": 0
+          },
+          "broadcasts": [
+            {
+              "network": "ACC Network",
+              "medium": "tv"
+            }
+          ],
+          "situation": {
+            "possession": "fbs:24",
+            "down": 4,
+            "distance": 3,
+            "yardLine": 27,
+            "isRedZone": false,
+            "homeTimeouts": 3,
+            "awayTimeouts": 3,
+            "lastPlay": "(12:56) No Huddle-Shotgun #8 D.Warren pass complete short right to #26 S.Irvin caught at WAKE31, for 8 yards to the WAKE27 (#23 V.Firenze; #5 D.Patterson)"
+          }
+        },
+        {
+          "id": "401858252",
+          "league": "fbs",
+          "kickoff": "2026-10-03T16:00:00.000Z",
+          "status": "live",
+          "period": 1,
+          "clock": "13:10",
+          "home": {
+            "team": {
+              "id": "fbs:41",
+              "abbreviation": "CONN",
+              "name": "UConn Huskies",
+              "location": "UConn",
+              "shortName": "UConn",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/41.png"
+            },
+            "score": 0
+          },
+          "away": {
+            "team": {
+              "id": "fbs:183",
+              "abbreviation": "SYR",
+              "name": "Syracuse Orange",
+              "location": "Syracuse",
+              "shortName": "Syracuse",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/183.png"
+            },
+            "score": 0
+          },
+          "broadcasts": [
+            {
+              "network": "CBSSN",
+              "medium": "tv"
+            }
+          ],
+          "situation": {
+            "possession": "fbs:183",
+            "down": 1,
+            "distance": 10,
+            "yardLine": 40,
+            "isRedZone": false,
+            "homeTimeouts": 3,
+            "awayTimeouts": 3,
+            "lastPlay": "(13:19) No Huddle-Shotgun #13 M.Outten rush middle for 7 yards gain to the UConn40 (#13 J.Price; #4 B.Moore), 1ST DOWN"
+          }
+        },
+        {
+          "id": "401858474",
+          "league": "fbs",
+          "kickoff": "2026-10-03T16:00:00.000Z",
+          "status": "scheduled",
+          "period": 0,
+          "clock": "0:00",
+          "home": {
+            "team": {
+              "id": "fbs:135",
+              "abbreviation": "MINN",
+              "name": "Minnesota Golden Gophers",
+              "location": "Minnesota",
+              "shortName": "Minnesota",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/135.png"
+            },
+            "score": 0
+          },
+          "away": {
+            "team": {
+              "id": "fbs:130",
+              "abbreviation": "MICH",
+              "name": "Michigan Wolverines",
+              "location": "Michigan",
+              "shortName": "Michigan",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/130.png"
+            },
+            "score": 0
+          },
+          "broadcasts": [
+            {
+              "network": "FOX",
+              "medium": "tv"
+            }
+          ]
+        },
+        {
+          "id": "401862791",
+          "league": "fbs",
+          "kickoff": "2026-10-03T16:00:00.000Z",
+          "status": "scheduled",
+          "period": 0,
+          "clock": "0:00",
+          "home": {
+            "team": {
+              "id": "fbs:2005",
+              "abbreviation": "AFA",
+              "name": "Air Force Falcons",
+              "location": "Air Force",
+              "shortName": "Air Force",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2005.png"
+            },
+            "score": 0
+          },
+          "away": {
+            "team": {
+              "id": "fbs:2426",
+              "abbreviation": "NAVY",
+              "name": "Navy Midshipmen",
+              "location": "Navy",
+              "shortName": "Navy",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2426.png"
+            },
+            "score": 0
+          },
+          "broadcasts": [
+            {
+              "network": "CBS",
+              "medium": "tv"
+            }
+          ]
+        },
+        {
+          "id": "401858479",
+          "league": "fbs",
+          "kickoff": "2026-10-03T16:30:00.000Z",
+          "status": "scheduled",
+          "period": 0,
+          "clock": "0:00",
+          "home": {
+            "team": {
+              "id": "fbs:275",
+              "abbreviation": "WIS",
+              "name": "Wisconsin Badgers",
+              "location": "Wisconsin",
+              "shortName": "Wisconsin",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/275.png"
+            },
+            "score": 0
+          },
+          "away": {
+            "team": {
+              "id": "fbs:127",
+              "abbreviation": "MSU",
+              "name": "Michigan State Spartans",
+              "location": "Michigan State",
+              "shortName": "Michigan St",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/127.png"
+            },
+            "score": 0
+          },
+          "broadcasts": [
+            {
+              "network": "BTN",
+              "medium": "tv"
+            }
+          ]
+        },
+        {
+          "id": "401856705",
+          "league": "fbs",
+          "kickoff": "2026-10-03T16:45:00.000Z",
+          "status": "scheduled",
+          "period": 0,
+          "clock": "0:00",
+          "home": {
+            "team": {
+              "id": "fbs:61",
+              "abbreviation": "UGA",
+              "name": "Georgia Bulldogs",
+              "location": "Georgia",
+              "shortName": "Georgia",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/61.png"
+            },
+            "score": 0,
+            "ranking": 2
+          },
+          "away": {
+            "team": {
+              "id": "fbs:238",
+              "abbreviation": "VAN",
+              "name": "Vanderbilt Commodores",
+              "location": "Vanderbilt",
+              "shortName": "Vanderbilt",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/238.png"
+            },
+            "score": 0
+          },
+          "broadcasts": [
+            {
+              "network": "SEC Network",
+              "medium": "tv"
+            }
+          ]
+        },
+        {
+          "id": "401866432",
+          "league": "fbs",
+          "kickoff": "2026-10-03T17:00:00.000Z",
+          "status": "scheduled",
+          "period": 0,
+          "clock": "0:00",
+          "home": {
+            "team": {
+              "id": "fbs:2084",
+              "abbreviation": "BUFF",
+              "name": "Buffalo Bulls",
+              "location": "Buffalo",
+              "shortName": "Buffalo",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2084.png"
+            },
+            "score": 0
+          },
+          "away": {
+            "team": {
+              "id": "fbs:2711",
+              "abbreviation": "WMU",
+              "name": "Western Michigan Broncos",
+              "location": "Western Michigan",
+              "shortName": "W Michigan",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2711.png"
+            },
+            "score": 0
+          },
+          "broadcasts": [
+            {
+              "network": "ESPN+",
+              "medium": "streaming"
+            }
+          ]
+        },
+        {
+          "id": "401866431",
+          "league": "fbs",
+          "kickoff": "2026-10-03T18:00:00.000Z",
+          "status": "scheduled",
+          "period": 0,
+          "clock": "0:00",
+          "home": {
+            "team": {
+              "id": "fbs:2050",
+              "abbreviation": "BALL",
+              "name": "Ball State Cardinals",
+              "location": "Ball State",
+              "shortName": "Ball State",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2050.png"
+            },
+            "score": 0
+          },
+          "away": {
+            "team": {
+              "id": "fbs:2649",
+              "abbreviation": "TOL",
+              "name": "Toledo Rockets",
+              "location": "Toledo",
+              "shortName": "Toledo",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2649.png"
+            },
+            "score": 0
+          },
+          "broadcasts": [
+            {
+              "network": "ESPN+",
+              "medium": "streaming"
+            }
+          ]
+        },
+        {
+          "id": "401858473",
+          "league": "fbs",
+          "kickoff": "2026-10-03T19:30:00.000Z",
+          "status": "scheduled",
+          "period": 0,
+          "clock": "0:00",
+          "home": {
+            "team": {
+              "id": "fbs:2294",
+              "abbreviation": "IOWA",
+              "name": "Iowa Hawkeyes",
+              "location": "Iowa",
+              "shortName": "Iowa",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2294.png"
+            },
+            "score": 0,
+            "ranking": 14
+          },
+          "away": {
+            "team": {
+              "id": "fbs:194",
+              "abbreviation": "OSU",
+              "name": "Ohio State Buckeyes",
+              "location": "Ohio State",
+              "shortName": "Ohio State",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/194.png"
+            },
+            "score": 0,
+            "ranking": 5
+          },
+          "broadcasts": [
+            {
+              "network": "CBS",
+              "medium": "tv"
+            }
+          ]
+        },
+        {
+          "id": "401856708",
+          "league": "fbs",
+          "kickoff": "2026-10-03T19:30:00.000Z",
+          "status": "scheduled",
+          "period": 0,
+          "clock": "0:00",
+          "home": {
+            "team": {
+              "id": "fbs:142",
+              "abbreviation": "MIZ",
+              "name": "Missouri Tigers",
+              "location": "Missouri",
+              "shortName": "Missouri",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/142.png"
+            },
+            "score": 0,
+            "ranking": 25
+          },
+          "away": {
+            "team": {
+              "id": "fbs:57",
+              "abbreviation": "FLA",
+              "name": "Florida Gators",
+              "location": "Florida",
+              "shortName": "Florida",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/57.png"
+            },
+            "score": 0,
+            "ranking": 8
+          },
+          "broadcasts": [
+            {
+              "network": "ABC",
+              "medium": "tv"
+            }
+          ]
+        },
+        {
+          "id": "401856710",
+          "league": "fbs",
+          "kickoff": "2026-10-03T19:30:00.000Z",
+          "status": "scheduled",
+          "period": 0,
+          "clock": "0:00",
+          "home": {
+            "team": {
+              "id": "fbs:2633",
+              "abbreviation": "TENN",
+              "name": "Tennessee Volunteers",
+              "location": "Tennessee",
+              "shortName": "Tennessee",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2633.png"
+            },
+            "score": 0,
+            "ranking": 17
+          },
+          "away": {
+            "team": {
+              "id": "fbs:2",
+              "abbreviation": "AUB",
+              "name": "Auburn Tigers",
+              "location": "Auburn",
+              "shortName": "Auburn",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2.png"
+            },
+            "score": 0
+          },
+          "broadcasts": [
+            {
+              "network": "ESPN",
+              "medium": "tv"
+            }
+          ]
+        },
+        {
+          "id": "401858247",
+          "league": "fbs",
+          "kickoff": "2026-10-03T19:30:00.000Z",
+          "status": "scheduled",
+          "period": 0,
+          "clock": "0:00",
+          "home": {
+            "team": {
+              "id": "fbs:2439",
+              "abbreviation": "UNLV",
+              "name": "UNLV Rebels",
+              "location": "UNLV",
+              "shortName": "UNLV",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2439.png"
+            },
+            "score": 0
+          },
+          "away": {
+            "team": {
+              "id": "fbs:25",
+              "abbreviation": "CAL",
+              "name": "California Golden Bears",
+              "location": "California",
+              "shortName": "California",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/25.png"
+            },
+            "score": 0
+          },
+          "broadcasts": [
+            {
+              "network": "CBSSN",
+              "medium": "tv"
+            }
+          ]
+        },
+        {
+          "id": "401858248",
+          "league": "fbs",
+          "kickoff": "2026-10-03T19:30:00.000Z",
+          "status": "scheduled",
+          "period": 0,
+          "clock": "0:00",
+          "home": {
+            "team": {
+              "id": "fbs:152",
+              "abbreviation": "NCSU",
+              "name": "NC State Wolfpack",
+              "location": "NC State",
+              "shortName": "NC State",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/152.png"
+            },
+            "score": 0
+          },
+          "away": {
+            "team": {
+              "id": "fbs:97",
+              "abbreviation": "LOU",
+              "name": "Louisville Cardinals",
+              "location": "Louisville",
+              "shortName": "Louisville",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/97.png"
+            },
+            "score": 0
+          },
+          "broadcasts": [
+            {
+              "network": "ACC Network",
+              "medium": "tv"
+            }
+          ]
+        },
+        {
+          "id": "401858253",
+          "league": "fbs",
+          "kickoff": "2026-10-03T19:30:00.000Z",
+          "status": "scheduled",
+          "period": 0,
+          "clock": "0:00",
+          "home": {
+            "team": {
+              "id": "fbs:52",
+              "abbreviation": "FSU",
+              "name": "Florida State Seminoles",
+              "location": "Florida State",
+              "shortName": "Florida St",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/52.png"
+            },
+            "score": 0
+          },
+          "away": {
+            "team": {
+              "id": "fbs:258",
+              "abbreviation": "UVA",
+              "name": "Virginia Cavaliers",
+              "location": "Virginia",
+              "shortName": "Virginia",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/258.png"
+            },
+            "score": 0
+          },
+          "broadcasts": [
+            {
+              "network": "ESPN2",
+              "medium": "tv"
+            }
+          ]
+        },
+        {
+          "id": "401862793",
+          "league": "fbs",
+          "kickoff": "2026-10-03T19:30:00.000Z",
+          "status": "scheduled",
+          "period": 0,
+          "clock": "0:00",
+          "home": {
+            "team": {
+              "id": "fbs:5",
+              "abbreviation": "UAB",
+              "name": "UAB Blazers",
+              "location": "UAB",
+              "shortName": "UAB",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/5.png"
+            },
+            "score": 0
+          },
+          "away": {
+            "team": {
+              "id": "fbs:2535",
+              "abbreviation": "SAM",
+              "name": "Samford Bulldogs",
+              "location": "Samford",
+              "shortName": "Samford",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2535.png"
+            },
+            "score": 0
+          },
+          "broadcasts": [
+            {
+              "network": "ESPN+",
+              "medium": "streaming"
+            }
+          ]
+        },
+        {
+          "id": "401864515",
+          "league": "fbs",
+          "kickoff": "2026-10-03T19:30:00.000Z",
+          "status": "scheduled",
+          "period": 0,
+          "clock": "0:00",
+          "home": {
+            "team": {
+              "id": "fbs:2449",
+              "abbreviation": "NDSU",
+              "name": "North Dakota State Bison",
+              "location": "North Dakota State",
+              "shortName": "N Dakota St",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2449.png"
+            },
+            "score": 0
+          },
+          "away": {
+            "team": {
+              "id": "fbs:2751",
+              "abbreviation": "WYO",
+              "name": "Wyoming Cowboys",
+              "location": "Wyoming",
+              "shortName": "Wyoming",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2751.png"
+            },
+            "score": 0
+          },
+          "broadcasts": [
+            {
+              "network": "CW",
+              "medium": "tv"
+            }
+          ]
+        },
+        {
+          "id": "401866430",
+          "league": "fbs",
+          "kickoff": "2026-10-03T19:30:00.000Z",
+          "status": "scheduled",
+          "period": 0,
+          "clock": "0:00",
+          "home": {
+            "team": {
+              "id": "fbs:2117",
+              "abbreviation": "CMU",
+              "name": "Central Michigan Chippewas",
+              "location": "Central Michigan",
+              "shortName": "C Michigan",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2117.png"
+            },
+            "score": 0
+          },
+          "away": {
+            "team": {
+              "id": "fbs:2006",
+              "abbreviation": "AKR",
+              "name": "Akron Zips",
+              "location": "Akron",
+              "shortName": "Akron",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2006.png"
+            },
+            "score": 0
+          },
+          "broadcasts": [
+            {
+              "network": "ESPN+",
+              "medium": "streaming"
+            }
+          ]
+        },
+        {
+          "id": "401866433",
+          "league": "fbs",
+          "kickoff": "2026-10-03T19:30:00.000Z",
+          "status": "scheduled",
+          "period": 0,
+          "clock": "0:00",
+          "home": {
+            "team": {
+              "id": "fbs:113",
+              "abbreviation": "MASS",
+              "name": "Massachusetts Minutemen",
+              "location": "Massachusetts",
+              "shortName": "UMass",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/113.png"
+            },
+            "score": 0
+          },
+          "away": {
+            "team": {
+              "id": "fbs:2199",
+              "abbreviation": "EMU",
+              "name": "Eastern Michigan Eagles",
+              "location": "Eastern Michigan",
+              "shortName": "E Michigan",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2199.png"
+            },
+            "score": 0
+          },
+          "broadcasts": [
+            {
+              "network": "ESPN+",
+              "medium": "streaming"
+            }
+          ]
+        },
+        {
+          "id": "401866434",
+          "league": "fbs",
+          "kickoff": "2026-10-03T19:30:00.000Z",
+          "status": "scheduled",
+          "period": 0,
+          "clock": "0:00",
+          "home": {
+            "team": {
+              "id": "fbs:2309",
+              "abbreviation": "KENT",
+              "name": "Kent State Golden Flashes",
+              "location": "Kent State",
+              "shortName": "Kent State",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2309.png"
+            },
+            "score": 0
+          },
+          "away": {
+            "team": {
+              "id": "fbs:195",
+              "abbreviation": "OHIO",
+              "name": "Ohio Bobcats",
+              "location": "Ohio",
+              "shortName": "Ohio",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/195.png"
+            },
+            "score": 0
+          },
+          "broadcasts": [
+            {
+              "network": "ESPN+",
+              "medium": "streaming"
+            }
+          ]
+        },
+        {
+          "id": "401866477",
+          "league": "fbs",
+          "kickoff": "2026-10-03T19:30:00.000Z",
+          "status": "scheduled",
+          "period": 0,
+          "clock": "0:00",
+          "home": {
+            "team": {
+              "id": "fbs:193",
+              "abbreviation": "M-OH",
+              "name": "Miami (OH) RedHawks",
+              "location": "Miami (OH)",
+              "shortName": "Miami OH",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/193.png"
+            },
+            "score": 0
+          },
+          "away": {
+            "team": {
+              "id": "fbs:189",
+              "abbreviation": "BGSU",
+              "name": "Bowling Green Falcons",
+              "location": "Bowling Green",
+              "shortName": "Bowling Green",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/189.png"
+            },
+            "score": 0
+          },
+          "broadcasts": [
+            {
+              "network": "ESPN+",
+              "medium": "streaming"
+            }
+          ]
+        },
+        {
+          "id": "401869956",
+          "league": "fbs",
+          "kickoff": "2026-10-03T19:30:00.000Z",
+          "status": "scheduled",
+          "period": 0,
+          "clock": "0:00",
+          "home": {
+            "team": {
+              "id": "fbs:2247",
+              "abbreviation": "GAST",
+              "name": "Georgia State Panthers",
+              "location": "Georgia State",
+              "shortName": "Georgia St",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2247.png"
+            },
+            "score": 0
+          },
+          "away": {
+            "team": {
+              "id": "fbs:295",
+              "abbreviation": "ODU",
+              "name": "Old Dominion Monarchs",
+              "location": "Old Dominion",
+              "shortName": "Old Dominion",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/295.png"
+            },
+            "score": 0
+          },
+          "broadcasts": [
+            {
+              "network": "ESPN+",
+              "medium": "streaming"
+            }
+          ]
+        },
+        {
+          "id": "401869962",
+          "league": "fbs",
+          "kickoff": "2026-10-03T19:45:00.000Z",
+          "status": "scheduled",
+          "period": 0,
+          "clock": "0:00",
+          "home": {
+            "team": {
+              "id": "fbs:256",
+              "abbreviation": "JMU",
+              "name": "James Madison Dukes",
+              "location": "James Madison",
+              "shortName": "James Madison",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/256.png"
+            },
+            "score": 0
+          },
+          "away": {
+            "team": {
+              "id": "fbs:276",
+              "abbreviation": "MRSH",
+              "name": "Marshall Thundering Herd",
+              "location": "Marshall",
+              "shortName": "Marshall",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/276.png"
+            },
+            "score": 0
+          },
+          "broadcasts": [
+            {
+              "network": "ESPNU",
+              "medium": "tv"
+            }
+          ]
+        },
+        {
+          "id": "401858475",
+          "league": "fbs",
+          "kickoff": "2026-10-03T20:00:00.000Z",
+          "status": "scheduled",
+          "period": 0,
+          "clock": "0:00",
+          "home": {
+            "team": {
+              "id": "fbs:158",
+              "abbreviation": "NEB",
+              "name": "Nebraska Cornhuskers",
+              "location": "Nebraska",
+              "shortName": "Nebraska",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/158.png"
+            },
+            "score": 0
+          },
+          "away": {
+            "team": {
+              "id": "fbs:120",
+              "abbreviation": "MD",
+              "name": "Maryland Terrapins",
+              "location": "Maryland",
+              "shortName": "Maryland",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/120.png"
+            },
+            "score": 0
+          },
+          "broadcasts": [
+            {
+              "network": "FS1",
+              "medium": "tv"
+            }
+          ]
+        },
+        {
+          "id": "401864514",
+          "league": "fbs",
+          "kickoff": "2026-10-03T20:00:00.000Z",
+          "status": "scheduled",
+          "period": 0,
+          "clock": "0:00",
+          "home": {
+            "team": {
+              "id": "fbs:167",
+              "abbreviation": "UNM",
+              "name": "New Mexico Lobos",
+              "location": "New Mexico",
+              "shortName": "New Mexico",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/167.png"
+            },
+            "score": 0
+          },
+          "away": {
+            "team": {
+              "id": "fbs:2638",
+              "abbreviation": "UTEP",
+              "name": "UTEP Miners",
+              "location": "UTEP",
+              "shortName": "UTEP",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2638.png"
+            },
+            "score": 0
+          },
+          "broadcasts": [
+            {
+              "network": "MW+",
+              "medium": "streaming"
+            }
+          ]
+        },
+        {
+          "id": "401856709",
+          "league": "fbs",
+          "kickoff": "2026-10-03T20:15:00.000Z",
+          "status": "scheduled",
+          "period": 0,
+          "clock": "0:00",
+          "home": {
+            "team": {
+              "id": "fbs:2579",
+              "abbreviation": "SC",
+              "name": "South Carolina Gamecocks",
+              "location": "South Carolina",
+              "shortName": "South Carolina",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2579.png"
+            },
+            "score": 0
+          },
+          "away": {
+            "team": {
+              "id": "fbs:96",
+              "abbreviation": "UK",
+              "name": "Kentucky Wildcats",
+              "location": "Kentucky",
+              "shortName": "Kentucky",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/96.png"
+            },
+            "score": 0,
+            "ranking": 24
+          },
+          "broadcasts": [
+            {
+              "network": "SEC Network",
+              "medium": "tv"
+            }
+          ]
+        },
+        {
+          "id": "401858472",
+          "league": "fbs",
+          "kickoff": "2026-10-03T20:15:00.000Z",
+          "status": "scheduled",
+          "period": 0,
+          "clock": "0:00",
+          "home": {
+            "team": {
+              "id": "fbs:356",
+              "abbreviation": "ILL",
+              "name": "Illinois Fighting Illini",
+              "location": "Illinois",
+              "shortName": "Illinois",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/356.png"
+            },
+            "score": 0
+          },
+          "away": {
+            "team": {
+              "id": "fbs:2509",
+              "abbreviation": "PUR",
+              "name": "Purdue Boilermakers",
+              "location": "Purdue",
+              "shortName": "Purdue",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2509.png"
+            },
+            "score": 0
+          },
+          "broadcasts": [
+            {
+              "network": "BTN",
+              "medium": "tv"
+            }
+          ]
+        },
+        {
+          "id": "401860899",
+          "league": "fbs",
+          "kickoff": "2026-10-03T22:00:00.000Z",
+          "status": "scheduled",
+          "period": 0,
+          "clock": "0:00",
+          "home": {
+            "team": {
+              "id": "fbs:36",
+              "abbreviation": "CSU",
+              "name": "Colorado State Rams",
+              "location": "Colorado State",
+              "shortName": "Colorado St",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/36.png"
+            },
+            "score": 0
+          },
+          "away": {
+            "team": {
+              "id": "fbs:204",
+              "abbreviation": "ORST",
+              "name": "Oregon State Beavers",
+              "location": "Oregon State",
+              "shortName": "Oregon St",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/204.png"
+            },
+            "score": 0
+          },
+          "broadcasts": [
+            {
+              "network": "USA Net",
+              "medium": "tv"
+            }
+          ]
+        },
+        {
+          "id": "401862790",
+          "league": "fbs",
+          "kickoff": "2026-10-03T22:00:00.000Z",
+          "status": "scheduled",
+          "period": 0,
+          "clock": "0:00",
+          "home": {
+            "team": {
+              "id": "fbs:2226",
+              "abbreviation": "FAU",
+              "name": "Florida Atlantic Owls",
+              "location": "Florida Atlantic",
+              "shortName": "FAU",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2226.png"
+            },
+            "score": 0
+          },
+          "away": {
+            "team": {
+              "id": "fbs:2640",
+              "abbreviation": "TXSO",
+              "name": "Texas Southern Tigers",
+              "location": "Texas Southern",
+              "shortName": "Texas Southern",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2640.png"
+            },
+            "score": 0
+          },
+          "broadcasts": [
+            {
+              "network": "ESPN+",
+              "medium": "streaming"
+            }
+          ]
+        },
+        {
+          "id": "401856818",
+          "league": "fbs",
+          "kickoff": "2026-10-03T23:00:00.000Z",
+          "status": "scheduled",
+          "period": 0,
+          "clock": "0:00",
+          "home": {
+            "team": {
+              "id": "fbs:2628",
+              "abbreviation": "TCU",
+              "name": "TCU Horned Frogs",
+              "location": "TCU",
+              "shortName": "TCU",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2628.png"
+            },
+            "score": 0
+          },
+          "away": {
+            "team": {
+              "id": "fbs:252",
+              "abbreviation": "BYU",
+              "name": "BYU Cougars",
+              "location": "BYU",
+              "shortName": "BYU",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/252.png"
+            },
+            "score": 0,
+            "ranking": 10
+          },
+          "broadcasts": [
+            {
+              "network": "ESPN",
+              "medium": "tv"
+            },
+            {
+              "network": "Disney+",
+              "medium": "streaming"
+            }
+          ]
+        },
+        {
+          "id": "401856711",
+          "league": "fbs",
+          "kickoff": "2026-10-03T23:00:00.000Z",
+          "status": "scheduled",
+          "period": 0,
+          "clock": "0:00",
+          "home": {
+            "team": {
+              "id": "fbs:245",
+              "abbreviation": "TA&M",
+              "name": "Texas A&M Aggies",
+              "location": "Texas A&M",
+              "shortName": "Texas A&M",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/245.png"
+            },
+            "score": 0
+          },
+          "away": {
+            "team": {
+              "id": "fbs:8",
+              "abbreviation": "ARK",
+              "name": "Arkansas Razorbacks",
+              "location": "Arkansas",
+              "shortName": "Arkansas",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/8.png"
+            },
+            "score": 0
+          },
+          "broadcasts": [
+            {
+              "network": "ESPN2",
+              "medium": "tv"
+            }
+          ]
+        },
+        {
+          "id": "401862788",
+          "league": "fbs",
+          "kickoff": "2026-10-03T23:00:00.000Z",
+          "status": "scheduled",
+          "period": 0,
+          "clock": "0:00",
+          "home": {
+            "team": {
+              "id": "fbs:242",
+              "abbreviation": "RICE",
+              "name": "Rice Owls",
+              "location": "Rice",
+              "shortName": "Rice",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/242.png"
+            },
+            "score": 0
+          },
+          "away": {
+            "team": {
+              "id": "fbs:2636",
+              "abbreviation": "UTSA",
+              "name": "UTSA Roadrunners",
+              "location": "UTSA",
+              "shortName": "UTSA",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2636.png"
+            },
+            "score": 0
+          },
+          "broadcasts": [
+            {
+              "network": "ESPN+",
+              "medium": "streaming"
+            }
+          ]
+        },
+        {
+          "id": "401869942",
+          "league": "fbs",
+          "kickoff": "2026-10-03T23:00:00.000Z",
+          "status": "scheduled",
+          "period": 0,
+          "clock": "0:00",
+          "home": {
+            "team": {
+              "id": "fbs:324",
+              "abbreviation": "CCU",
+              "name": "Coastal Carolina Chanticleers",
+              "location": "Coastal Carolina",
+              "shortName": "Coastal",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/324.png"
+            },
+            "score": 0
+          },
+          "away": {
+            "team": {
+              "id": "fbs:290",
+              "abbreviation": "GASO",
+              "name": "Georgia Southern Eagles",
+              "location": "Georgia Southern",
+              "shortName": "GA Southern",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/290.png"
+            },
+            "score": 0
+          },
+          "broadcasts": [
+            {
+              "network": "ESPN+",
+              "medium": "streaming"
+            }
+          ]
+        },
+        {
+          "id": "401871089",
+          "league": "fbs",
+          "kickoff": "2026-10-03T23:00:00.000Z",
+          "status": "scheduled",
+          "period": 0,
+          "clock": "0:00",
+          "home": {
+            "team": {
+              "id": "fbs:6",
+              "abbreviation": "USA",
+              "name": "South Alabama Jaguars",
+              "location": "South Alabama",
+              "shortName": "South Alabama",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/6.png"
+            },
+            "score": 0
+          },
+          "away": {
+            "team": {
+              "id": "fbs:2433",
+              "abbreviation": "ULM",
+              "name": "UL Monroe Warhawks",
+              "location": "UL Monroe",
+              "shortName": "UL Monroe",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2433.png"
+            },
+            "score": 0
+          },
+          "broadcasts": [
+            {
+              "network": "ESPN+",
+              "medium": "streaming"
+            }
+          ]
+        },
+        {
+          "id": "401858249",
+          "league": "fbs",
+          "kickoff": "2026-10-03T23:30:00.000Z",
+          "status": "scheduled",
+          "period": 0,
+          "clock": "0:00",
+          "home": {
+            "team": {
+              "id": "fbs:228",
+              "abbreviation": "CLEM",
+              "name": "Clemson Tigers",
+              "location": "Clemson",
+              "shortName": "Clemson",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/228.png"
+            },
+            "score": 0
+          },
+          "away": {
+            "team": {
+              "id": "fbs:2390",
+              "abbreviation": "MIA",
+              "name": "Miami Hurricanes",
+              "location": "Miami",
+              "shortName": "Miami",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2390.png"
+            },
+            "score": 0,
+            "ranking": 4
+          },
+          "broadcasts": [
+            {
+              "network": "ABC",
+              "medium": "tv"
+            }
+          ]
+        },
+        {
+          "id": "401856821",
+          "league": "fbs",
+          "kickoff": "2026-10-03T23:30:00.000Z",
+          "status": "scheduled",
+          "period": 0,
+          "clock": "0:00",
+          "home": {
+            "team": {
+              "id": "fbs:38",
+              "abbreviation": "COLO",
+              "name": "Colorado Buffaloes",
+              "location": "Colorado",
+              "shortName": "Colorado",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/38.png"
+            },
+            "score": 0
+          },
+          "away": {
+            "team": {
+              "id": "fbs:2641",
+              "abbreviation": "TTU",
+              "name": "Texas Tech Red Raiders",
+              "location": "Texas Tech",
+              "shortName": "Texas Tech",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2641.png"
+            },
+            "score": 0,
+            "ranking": 12
+          },
+          "broadcasts": [
+            {
+              "network": "FOX",
+              "medium": "tv"
+            }
+          ]
+        },
+        {
+          "id": "401858478",
+          "league": "fbs",
+          "kickoff": "2026-10-03T23:30:00.000Z",
+          "status": "scheduled",
+          "period": 0,
+          "clock": "0:00",
+          "home": {
+            "team": {
+              "id": "fbs:30",
+              "abbreviation": "USC",
+              "name": "USC Trojans",
+              "location": "USC",
+              "shortName": "USC",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/30.png"
+            },
+            "score": 0,
+            "ranking": 18
+          },
+          "away": {
+            "team": {
+              "id": "fbs:264",
+              "abbreviation": "WASH",
+              "name": "Washington Huskies",
+              "location": "Washington",
+              "shortName": "Washington",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/264.png"
+            },
+            "score": 0
+          },
+          "broadcasts": [
+            {
+              "network": "NBC",
+              "medium": "tv"
+            }
+          ]
+        },
+        {
+          "id": "401860898",
+          "league": "fbs",
+          "kickoff": "2026-10-03T23:30:00.000Z",
+          "status": "scheduled",
+          "period": 0,
+          "clock": "0:00",
+          "home": {
+            "team": {
+              "id": "fbs:68",
+              "abbreviation": "BOIS",
+              "name": "Boise State Broncos",
+              "location": "Boise State",
+              "shortName": "Boise St",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/68.png"
+            },
+            "score": 0,
+            "ranking": 22
+          },
+          "away": {
+            "team": {
+              "id": "fbs:328",
+              "abbreviation": "USU",
+              "name": "Utah State Aggies",
+              "location": "Utah State",
+              "shortName": "Utah State",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/328.png"
+            },
+            "score": 0
+          },
+          "broadcasts": [
+            {
+              "network": "CBSSN",
+              "medium": "tv"
+            }
+          ]
+        },
+        {
+          "id": "401862792",
+          "league": "fbs",
+          "kickoff": "2026-10-03T23:30:00.000Z",
+          "status": "scheduled",
+          "period": 0,
+          "clock": "0:00",
+          "home": {
+            "team": {
+              "id": "fbs:58",
+              "abbreviation": "USF",
+              "name": "South Florida Bulls",
+              "location": "South Florida",
+              "shortName": "South Florida",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/58.png"
+            },
+            "score": 0
+          },
+          "away": {
+            "team": {
+              "id": "fbs:218",
+              "abbreviation": "TEM",
+              "name": "Temple Owls",
+              "location": "Temple",
+              "shortName": "Temple",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/218.png"
+            },
+            "score": 0
+          },
+          "broadcasts": [
+            {
+              "network": "ESPNU",
+              "medium": "tv"
+            }
+          ]
+        },
+        {
+          "id": "401869842",
+          "league": "fbs",
+          "kickoff": "2026-10-03T23:30:00.000Z",
+          "status": "scheduled",
+          "period": 0,
+          "clock": "0:00",
+          "home": {
+            "team": {
+              "id": "fbs:2348",
+              "abbreviation": "LT",
+              "name": "Louisiana Tech Bulldogs",
+              "location": "Louisiana Tech",
+              "shortName": "Louisiana Tech",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2348.png"
+            },
+            "score": 0
+          },
+          "away": {
+            "team": {
+              "id": "fbs:349",
+              "abbreviation": "ARMY",
+              "name": "Army Black Knights",
+              "location": "Army",
+              "shortName": "Army",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/349.png"
+            },
+            "score": 0
+          },
+          "broadcasts": [
+            {
+              "network": "ESPN+",
+              "medium": "streaming"
+            }
+          ]
+        },
+        {
+          "id": "401856706",
+          "league": "fbs",
+          "kickoff": "2026-10-03T23:45:00.000Z",
+          "status": "scheduled",
+          "period": 0,
+          "clock": "0:00",
+          "home": {
+            "team": {
+              "id": "fbs:99",
+              "abbreviation": "LSU",
+              "name": "LSU Tigers",
+              "location": "LSU",
+              "shortName": "LSU",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/99.png"
+            },
+            "score": 0,
+            "ranking": 11
+          },
+          "away": {
+            "team": {
+              "id": "fbs:2377",
+              "abbreviation": "MCN",
+              "name": "McNeese Cowboys",
+              "location": "McNeese",
+              "shortName": "McNeese",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2377.png"
+            },
+            "score": 0
+          },
+          "broadcasts": [
+            {
+              "network": "SEC Network",
+              "medium": "tv"
+            }
+          ]
+        },
+        {
+          "id": "401858477",
+          "league": "fbs",
+          "kickoff": "2026-10-04T00:00:00.000Z",
+          "status": "scheduled",
+          "period": 0,
+          "clock": "0:00",
+          "home": {
+            "team": {
+              "id": "fbs:164",
+              "abbreviation": "RUTG",
+              "name": "Rutgers Scarlet Knights",
+              "location": "Rutgers",
+              "shortName": "Rutgers",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/164.png"
+            },
+            "score": 0
+          },
+          "away": {
+            "team": {
+              "id": "fbs:84",
+              "abbreviation": "IU",
+              "name": "Indiana Hoosiers",
+              "location": "Indiana",
+              "shortName": "Indiana",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/84.png"
+            },
+            "score": 0,
+            "ranking": 6
+          },
+          "broadcasts": [
+            {
+              "network": "BTN",
+              "medium": "tv"
+            }
+          ]
+        },
+        {
+          "id": "401869932",
+          "league": "fbs",
+          "kickoff": "2026-10-04T00:00:00.000Z",
+          "status": "scheduled",
+          "period": 0,
+          "clock": "0:00",
+          "home": {
+            "team": {
+              "id": "fbs:309",
+              "abbreviation": "UL",
+              "name": "Louisiana Ragin' Cajuns",
+              "location": "Louisiana",
+              "shortName": "Louisiana",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/309.png"
+            },
+            "score": 0
+          },
+          "away": {
+            "team": {
+              "id": "fbs:2032",
+              "abbreviation": "ARST",
+              "name": "Arkansas State Red Wolves",
+              "location": "Arkansas State",
+              "shortName": "Arkansas St",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2032.png"
+            },
+            "score": 0
+          },
+          "broadcasts": [
+            {
+              "network": "ESPN+",
+              "medium": "streaming"
+            }
+          ]
+        },
+        {
+          "id": "401860921",
+          "league": "fbs",
+          "kickoff": "2026-10-04T01:30:00.000Z",
+          "status": "scheduled",
+          "period": 0,
+          "clock": "0:00",
+          "home": {
+            "team": {
+              "id": "fbs:265",
+              "abbreviation": "WSU",
+              "name": "Washington State Cougars",
+              "location": "Washington State",
+              "shortName": "Washington St",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/265.png"
+            },
+            "score": 0
+          },
+          "away": {
+            "team": {
+              "id": "fbs:278",
+              "abbreviation": "FRES",
+              "name": "Fresno State Bulldogs",
+              "location": "Fresno State",
+              "shortName": "Fresno St",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/278.png"
+            },
+            "score": 0
+          },
+          "broadcasts": [
+            {
+              "network": "USA Net",
+              "medium": "tv"
+            }
+          ]
+        },
+        {
+          "id": "401856817",
+          "league": "fbs",
+          "kickoff": "2026-10-04T02:30:00.000Z",
+          "status": "scheduled",
+          "period": 0,
+          "clock": "0:00",
+          "home": {
+            "team": {
+              "id": "fbs:9",
+              "abbreviation": "ASU",
+              "name": "Arizona State Sun Devils",
+              "location": "Arizona State",
+              "shortName": "Arizona St",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/9.png"
+            },
+            "score": 0
+          },
+          "away": {
+            "team": {
+              "id": "fbs:239",
+              "abbreviation": "BAY",
+              "name": "Baylor Bears",
+              "location": "Baylor",
+              "shortName": "Baylor",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/239.png"
+            },
+            "score": 0
+          },
+          "broadcasts": [
+            {
+              "network": "ESPN",
+              "medium": "tv"
+            }
+          ]
+        },
+        {
+          "id": "401860900",
+          "league": "fbs",
+          "kickoff": "2026-10-04T02:30:00.000Z",
+          "status": "scheduled",
+          "period": 0,
+          "clock": "0:00",
+          "home": {
+            "team": {
+              "id": "fbs:21",
+              "abbreviation": "SDSU",
+              "name": "San Diego State Aztecs",
+              "location": "San Diego State",
+              "shortName": "San Diego St",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/21.png"
+            },
+            "score": 0
+          },
+          "away": {
+            "team": {
+              "id": "fbs:326",
+              "abbreviation": "TXST",
+              "name": "Texas State Bobcats",
+              "location": "Texas State",
+              "shortName": "Texas St",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/326.png"
+            },
+            "score": 0
+          },
+          "broadcasts": [
+            {
+              "network": "CW",
+              "medium": "tv"
+            }
+          ]
+        },
+        {
+          "id": "401856820",
+          "league": "fbs",
+          "kickoff": "2026-10-04T03:00:00.000Z",
+          "status": "scheduled",
+          "period": 0,
+          "clock": "0:00",
+          "home": {
+            "team": {
+              "id": "fbs:12",
+              "abbreviation": "ARIZ",
+              "name": "Arizona Wildcats",
+              "location": "Arizona",
+              "shortName": "Arizona",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/12.png"
+            },
+            "score": 0
+          },
+          "away": {
+            "team": {
+              "id": "fbs:2132",
+              "abbreviation": "CIN",
+              "name": "Cincinnati Bearcats",
+              "location": "Cincinnati",
+              "shortName": "Cincinnati",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2132.png"
+            },
+            "score": 0
+          },
+          "broadcasts": [
+            {
+              "network": "FOX",
+              "medium": "tv"
+            }
+          ]
+        },
+        {
+          "id": "401864513",
+          "league": "fbs",
+          "kickoff": "2026-10-04T03:59:00.000Z",
+          "status": "scheduled",
+          "period": 0,
+          "clock": "0:00",
+          "home": {
+            "team": {
+              "id": "fbs:62",
+              "abbreviation": "HAW",
+              "name": "Hawai'i Rainbow Warriors",
+              "location": "Hawai'i",
+              "shortName": "Hawai'i",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/62.png"
+            },
+            "score": 0
+          },
+          "away": {
+            "team": {
+              "id": "fbs:23",
+              "abbreviation": "SJSU",
+              "name": "San José State Spartans",
+              "location": "San José State",
+              "shortName": "San José St",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/23.png"
+            },
+            "score": 0
+          },
+          "broadcasts": [
+            {
+              "network": "MW+",
+              "medium": "streaming"
+            }
+          ]
+        },
+        {
+          "id": "401871049",
+          "league": "fbs",
+          "kickoff": "2026-10-02T00:00:00.000Z",
+          "status": "final",
+          "period": 4,
+          "clock": "0:00",
+          "home": {
+            "team": {
+              "id": "fbs:166",
+              "abbreviation": "NMSU",
+              "name": "New Mexico State Aggies",
+              "location": "New Mexico State",
+              "shortName": "New Mexico St",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/166.png"
+            },
+            "score": 34
+          },
+          "away": {
+            "team": {
+              "id": "fbs:98",
+              "abbreviation": "WKU",
+              "name": "Western Kentucky Hilltoppers",
+              "location": "Western Kentucky",
+              "shortName": "Western KY",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/98.png"
+            },
+            "score": 13
+          },
+          "broadcasts": [
+            {
+              "network": "CBSSN",
+              "medium": "tv"
+            }
+          ]
+        },
+        {
+          "id": "401862786",
+          "league": "fbs",
+          "kickoff": "2026-10-02T01:00:00.000Z",
+          "status": "final",
+          "period": 5,
+          "clock": "0:00",
+          "home": {
+            "team": {
+              "id": "fbs:202",
+              "abbreviation": "TLSA",
+              "name": "Tulsa Golden Hurricane",
+              "location": "Tulsa",
+              "shortName": "Tulsa",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/202.png"
+            },
+            "score": 44
+          },
+          "away": {
+            "team": {
+              "id": "fbs:249",
+              "abbreviation": "UNT",
+              "name": "North Texas Mean Green",
+              "location": "North Texas",
+              "shortName": "North Texas",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/249.png"
+            },
+            "score": 45
+          },
+          "broadcasts": [
+            {
+              "network": "ESPN",
+              "medium": "tv"
+            }
+          ]
+        },
+        {
+          "id": "401858245",
+          "league": "fbs",
+          "kickoff": "2026-10-02T23:00:00.000Z",
+          "status": "final",
+          "period": 4,
+          "clock": "0:00",
+          "home": {
+            "team": {
+              "id": "fbs:259",
+              "abbreviation": "VT",
+              "name": "Virginia Tech Hokies",
+              "location": "Virginia Tech",
+              "shortName": "Virginia Tech",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/259.png"
+            },
+            "score": 33
+          },
+          "away": {
+            "team": {
+              "id": "fbs:221",
+              "abbreviation": "PITT",
+              "name": "Pittsburgh Panthers",
+              "location": "Pittsburgh",
+              "shortName": "Pitt",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/221.png"
+            },
+            "score": 35
+          },
+          "broadcasts": [
+            {
+              "network": "ESPN",
+              "medium": "tv"
+            }
+          ]
+        },
+        {
+          "id": "401871050",
+          "league": "fbs",
+          "kickoff": "2026-10-02T23:00:00.000Z",
+          "status": "final",
+          "period": 4,
+          "clock": "0:00",
+          "home": {
+            "team": {
+              "id": "fbs:48",
+              "abbreviation": "DEL",
+              "name": "Delaware Blue Hens",
+              "location": "Delaware",
+              "shortName": "Delaware",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/48.png"
+            },
+            "score": 14
+          },
+          "away": {
+            "team": {
+              "id": "fbs:2335",
+              "abbreviation": "LIB",
+              "name": "Liberty Flames",
+              "location": "Liberty",
+              "shortName": "Liberty",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2335.png"
+            },
+            "score": 30
+          },
+          "broadcasts": [
+            {
+              "network": "CBSSN",
+              "medium": "tv"
+            }
+          ]
+        },
+        {
+          "id": "401858476",
+          "league": "fbs",
+          "kickoff": "2026-10-03T00:00:00.000Z",
+          "status": "final",
+          "period": 4,
+          "clock": "0:00",
+          "home": {
+            "team": {
+              "id": "fbs:77",
+              "abbreviation": "NU",
+              "name": "Northwestern Wildcats",
+              "location": "Northwestern",
+              "shortName": "Northwestern",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/77.png"
+            },
+            "score": 34
+          },
+          "away": {
+            "team": {
+              "id": "fbs:213",
+              "abbreviation": "PSU",
+              "name": "Penn State Nittany Lions",
+              "location": "Penn State",
+              "shortName": "Penn State",
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/213.png"
+            },
+            "score": 13
+          },
+          "broadcasts": [
+            {
+              "network": "FOX",
+              "medium": "tv"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "seq": 2,
+      "tag": "Listing",
+      "league": "nfl",
+      "games": [
+        {
+          "id": "401872971",
+          "league": "nfl",
+          "kickoff": "2026-10-04T17:00:00.000Z",
+          "status": "live",
+          "period": 2,
+          "clock": "4:51",
+          "home": {
+            "team": {
+              "id": "nfl:2",
+              "abbreviation": "BUF",
+              "name": "Buffalo Bills",
+              "location": "Buffalo",
+              "shortName": "Bills",
+              "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/buf.png"
+            },
+            "score": 7
+          },
+          "away": {
+            "team": {
+              "id": "nfl:17",
+              "abbreviation": "NE",
+              "name": "New England Patriots",
+              "location": "New England",
+              "shortName": "Patriots",
+              "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/ne.png"
+            },
+            "score": 14
+          },
+          "broadcasts": [
+            {
+              "network": "CBS",
+              "medium": "tv"
+            }
+          ],
+          "situation": {
+            "possession": "nfl:2",
+            "down": 3,
+            "distance": 1,
+            "yardLine": 58,
+            "isRedZone": false,
+            "homeTimeouts": 3,
+            "awayTimeouts": 2,
+            "lastPlay": " J.Allen pass short left to D.Knox to BUF 42 for 8 yards (C.Elliss)."
+          }
+        },
+        {
+          "id": "401872972",
+          "league": "nfl",
+          "kickoff": "2026-10-04T17:00:00.000Z",
+          "status": "live",
+          "period": 2,
+          "clock": "8:15",
+          "home": {
+            "team": {
+              "id": "nfl:3",
+              "abbreviation": "CHI",
+              "name": "Chicago Bears",
+              "location": "Chicago",
+              "shortName": "Bears",
+              "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/chi.png"
+            },
+            "score": 7
+          },
+          "away": {
+            "team": {
+              "id": "nfl:20",
+              "abbreviation": "NYJ",
+              "name": "New York Jets",
+              "location": "New York",
+              "shortName": "Jets",
+              "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/nyj.png"
+            },
+            "score": 3
+          },
+          "broadcasts": [
+            {
+              "network": "FOX",
+              "medium": "tv"
+            }
+          ],
+          "situation": {
+            "down": 1,
+            "distance": 10,
+            "isRedZone": false,
+            "homeTimeouts": 3,
+            "awayTimeouts": 2,
+            "lastPlay": "J.Sanders kicks 59 yards from NYJ 35 to CHI 6. Z.Thomas to CHI 29 for 23 yards (I.Davis)."
+          }
+        },
+        {
+          "id": "401872969",
+          "league": "nfl",
+          "kickoff": "2026-10-04T17:00:00.000Z",
+          "status": "live",
+          "period": 2,
+          "clock": "4:28",
+          "home": {
+            "team": {
+              "id": "nfl:4",
+              "abbreviation": "CIN",
+              "name": "Cincinnati Bengals",
+              "location": "Cincinnati",
+              "shortName": "Bengals",
+              "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/cin.png"
+            },
+            "score": 3
+          },
+          "away": {
+            "team": {
+              "id": "nfl:30",
+              "abbreviation": "JAX",
+              "name": "Jacksonville Jaguars",
+              "location": "Jacksonville",
+              "shortName": "Jaguars",
+              "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/jax.png"
+            },
+            "score": 3
+          },
+          "broadcasts": [
+            {
+              "network": "CBS",
+              "medium": "tv"
+            }
+          ],
+          "situation": {
+            "possession": "nfl:30",
+            "down": 3,
+            "distance": 10,
+            "yardLine": 10,
+            "isRedZone": true,
+            "homeTimeouts": 2,
+            "awayTimeouts": 3,
+            "lastPlay": " (Shotgun) T.Lawrence pass incomplete short middle to P.Washington (B.Carter)."
+          }
+        },
+        {
+          "id": "401872966",
+          "league": "nfl",
+          "kickoff": "2026-10-04T17:00:00.000Z",
+          "status": "live",
+          "period": 2,
+          "clock": "9:12",
+          "home": {
+            "team": {
+              "id": "nfl:19",
+              "abbreviation": "NYG",
+              "name": "New York Giants",
+              "location": "New York",
+              "shortName": "Giants",
+              "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/nyg.png"
+            },
+            "score": 6
+          },
+          "away": {
+            "team": {
+              "id": "nfl:22",
+              "abbreviation": "ARI",
+              "name": "Arizona Cardinals",
+              "location": "Arizona",
+              "shortName": "Cardinals",
+              "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/ari.png"
+            },
+            "score": 14
+          },
+          "broadcasts": [
+            {
+              "network": "CBS",
+              "medium": "tv"
+            }
+          ],
+          "situation": {
+            "possession": "nfl:22",
+            "down": 4,
+            "distance": 8,
+            "yardLine": 81,
+            "isRedZone": false,
+            "homeTimeouts": 3,
+            "awayTimeouts": 3,
+            "lastPlay": " J.Brissett pass short right to T.McBride to ARZ 19 for 2 yards (G.Newsome)."
+          }
+        },
+        {
+          "id": "401872970",
+          "league": "nfl",
+          "kickoff": "2026-10-04T17:00:00.000Z",
+          "status": "live",
+          "period": 2,
+          "clock": "6:57",
+          "home": {
+            "team": {
+              "id": "nfl:21",
+              "abbreviation": "PHI",
+              "name": "Philadelphia Eagles",
+              "location": "Philadelphia",
+              "shortName": "Eagles",
+              "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/phi.png"
+            },
+            "score": 6
+          },
+          "away": {
+            "team": {
+              "id": "nfl:14",
+              "abbreviation": "LAR",
+              "name": "Los Angeles Rams",
+              "location": "Los Angeles",
+              "shortName": "Rams",
+              "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/lar.png"
+            },
+            "score": 3
+          },
+          "broadcasts": [
+            {
+              "network": "FOX",
+              "medium": "tv"
+            }
+          ],
+          "situation": {
+            "possession": "nfl:14",
+            "down": 1,
+            "distance": 10,
+            "yardLine": 96,
+            "isRedZone": false,
+            "homeTimeouts": 3,
+            "awayTimeouts": 3,
+            "lastPlay": "Official Timeout at 06:57."
+          }
+        },
+        {
+          "id": "401872968",
+          "league": "nfl",
+          "kickoff": "2026-10-04T17:00:00.000Z",
+          "status": "live",
+          "period": 2,
+          "clock": "5:13",
+          "home": {
+            "team": {
+              "id": "nfl:27",
+              "abbreviation": "TB",
+              "name": "Tampa Bay Buccaneers",
+              "location": "Tampa Bay",
+              "shortName": "Buccaneers",
+              "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/tb.png"
+            },
+            "score": 7
+          },
+          "away": {
+            "team": {
+              "id": "nfl:9",
+              "abbreviation": "GB",
+              "name": "Green Bay Packers",
+              "location": "Green Bay",
+              "shortName": "Packers",
+              "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/gb.png"
+            },
+            "score": 7
+          },
+          "broadcasts": [
+            {
+              "network": "FOX",
+              "medium": "tv"
+            }
+          ],
+          "situation": {
+            "distance": 0,
+            "isRedZone": true,
+            "homeTimeouts": 3,
+            "awayTimeouts": 1,
+            "lastPlay": "Official Timeout at 05:13."
+          }
+        },
+        {
+          "id": "401872973",
+          "league": "nfl",
+          "kickoff": "2026-10-04T17:00:00.000Z",
+          "status": "live",
+          "period": 2,
+          "clock": "6:56",
+          "home": {
+            "team": {
+              "id": "nfl:33",
+              "abbreviation": "BAL",
+              "name": "Baltimore Ravens",
+              "location": "Baltimore",
+              "shortName": "Ravens",
+              "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/bal.png"
+            },
+            "score": 14
+          },
+          "away": {
+            "team": {
+              "id": "nfl:10",
+              "abbreviation": "TEN",
+              "name": "Tennessee Titans",
+              "location": "Tennessee",
+              "shortName": "Titans",
+              "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/ten.png"
+            },
+            "score": 7
+          },
+          "broadcasts": [
+            {
+              "network": "CBS",
+              "medium": "tv"
+            }
+          ],
+          "situation": {
+            "possession": "nfl:33",
+            "down": 1,
+            "distance": 10,
+            "yardLine": 86,
+            "isRedZone": false,
+            "homeTimeouts": 3,
+            "awayTimeouts": 2,
+            "lastPlay": "(Shotgun) L.Jackson pass short right to M.Andrews to BLT 14 for 6 yards (A.Hooker)."
+          }
+        },
+        {
+          "id": "401872967",
+          "league": "nfl",
+          "kickoff": "2026-10-04T17:00:00.000Z",
+          "status": "live",
+          "period": 2,
+          "clock": "8:13",
+          "home": {
+            "team": {
+              "id": "nfl:34",
+              "abbreviation": "HOU",
+              "name": "Houston Texans",
+              "location": "Houston",
+              "shortName": "Texans",
+              "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/hou.png"
+            },
+            "score": 10
+          },
+          "away": {
+            "team": {
+              "id": "nfl:6",
+              "abbreviation": "DAL",
+              "name": "Dallas Cowboys",
+              "location": "Dallas",
+              "shortName": "Cowboys",
+              "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/dal.png"
+            },
+            "score": 6
+          },
+          "broadcasts": [
+            {
+              "network": "FOX",
+              "medium": "tv"
+            }
+          ],
+          "situation": {
+            "possession": "nfl:34",
+            "down": 1,
+            "distance": 10,
+            "yardLine": 83,
+            "isRedZone": false,
+            "homeTimeouts": 3,
+            "awayTimeouts": 2,
+            "lastPlay": "Official Timeout at 08:13."
+          }
+        },
+        {
+          "id": "401872965",
+          "league": "nfl",
+          "kickoff": "2026-10-04T13:30:00.000Z",
+          "status": "final",
+          "period": 4,
+          "clock": "0:00",
+          "home": {
+            "team": {
+              "id": "nfl:28",
+              "abbreviation": "WSH",
+              "name": "Washington Commanders",
+              "location": "Washington",
+              "shortName": "Commanders",
+              "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/wsh.png"
+            },
+            "score": 13
+          },
+          "away": {
+            "team": {
+              "id": "nfl:11",
+              "abbreviation": "IND",
+              "name": "Indianapolis Colts",
+              "location": "Indianapolis",
+              "shortName": "Colts",
+              "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/ind.png"
+            },
+            "score": 30
+          },
+          "broadcasts": [
+            {
+              "network": "NFL Net",
+              "medium": "tv"
+            }
+          ]
+        },
+        {
+          "id": "401872974",
+          "league": "nfl",
+          "kickoff": "2026-10-04T20:05:00.000Z",
+          "status": "scheduled",
+          "period": 0,
+          "clock": "0:00",
+          "home": {
+            "team": {
+              "id": "nfl:16",
+              "abbreviation": "MIN",
+              "name": "Minnesota Vikings",
+              "location": "Minnesota",
+              "shortName": "Vikings",
+              "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/min.png"
+            },
+            "score": 0
+          },
+          "away": {
+            "team": {
+              "id": "nfl:15",
+              "abbreviation": "MIA",
+              "name": "Miami Dolphins",
+              "location": "Miami",
+              "shortName": "Dolphins",
+              "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/mia.png"
+            },
+            "score": 0
+          },
+          "broadcasts": [
+            {
+              "network": "FOX",
+              "medium": "tv"
+            }
+          ]
+        },
+        {
+          "id": "401872976",
+          "league": "nfl",
+          "kickoff": "2026-10-04T20:25:00.000Z",
+          "status": "scheduled",
+          "period": 0,
+          "clock": "0:00",
+          "home": {
+            "team": {
+              "id": "nfl:13",
+              "abbreviation": "LV",
+              "name": "Las Vegas Raiders",
+              "location": "Las Vegas",
+              "shortName": "Raiders",
+              "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/lv.png"
+            },
+            "score": 0
+          },
+          "away": {
+            "team": {
+              "id": "nfl:12",
+              "abbreviation": "KC",
+              "name": "Kansas City Chiefs",
+              "location": "Kansas City",
+              "shortName": "Chiefs",
+              "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/kc.png"
+            },
+            "score": 0
+          },
+          "broadcasts": [
+            {
+              "network": "CBS",
+              "medium": "tv"
+            }
+          ]
+        },
+        {
+          "id": "401872975",
+          "league": "nfl",
+          "kickoff": "2026-10-04T20:25:00.000Z",
+          "status": "scheduled",
+          "period": 0,
+          "clock": "0:00",
+          "home": {
+            "team": {
+              "id": "nfl:25",
+              "abbreviation": "SF",
+              "name": "San Francisco 49ers",
+              "location": "San Francisco",
+              "shortName": "49ers",
+              "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/sf.png"
+            },
+            "score": 0
+          },
+          "away": {
+            "team": {
+              "id": "nfl:7",
+              "abbreviation": "DEN",
+              "name": "Denver Broncos",
+              "location": "Denver",
+              "shortName": "Broncos",
+              "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/den.png"
+            },
+            "score": 0
+          },
+          "broadcasts": [
+            {
+              "network": "CBS",
+              "medium": "tv"
+            }
+          ]
+        },
+        {
+          "id": "401872977",
+          "league": "nfl",
+          "kickoff": "2026-10-04T20:25:00.000Z",
+          "status": "scheduled",
+          "period": 0,
+          "clock": "0:00",
+          "home": {
+            "team": {
+              "id": "nfl:26",
+              "abbreviation": "SEA",
+              "name": "Seattle Seahawks",
+              "location": "Seattle",
+              "shortName": "Seahawks",
+              "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/sea.png"
+            },
+            "score": 0
+          },
+          "away": {
+            "team": {
+              "id": "nfl:24",
+              "abbreviation": "LAC",
+              "name": "Los Angeles Chargers",
+              "location": "Los Angeles",
+              "shortName": "Chargers",
+              "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/lac.png"
+            },
+            "score": 0
+          },
+          "broadcasts": [
+            {
+              "network": "CBS",
+              "medium": "tv"
+            }
+          ]
+        },
+        {
+          "id": "401872978",
+          "league": "nfl",
+          "kickoff": "2026-10-05T00:20:00.000Z",
+          "status": "scheduled",
+          "period": 0,
+          "clock": "0:00",
+          "home": {
+            "team": {
+              "id": "nfl:29",
+              "abbreviation": "CAR",
+              "name": "Carolina Panthers",
+              "location": "Carolina",
+              "shortName": "Panthers",
+              "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/car.png"
+            },
+            "score": 0
+          },
+          "away": {
+            "team": {
+              "id": "nfl:8",
+              "abbreviation": "DET",
+              "name": "Detroit Lions",
+              "location": "Detroit",
+              "shortName": "Lions",
+              "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/det.png"
+            },
+            "score": 0
+          },
+          "broadcasts": [
+            {
+              "network": "NBC",
+              "medium": "tv"
+            }
+          ]
+        },
+        {
+          "id": "401872964",
+          "league": "nfl",
+          "kickoff": "2026-10-02T00:15:00.000Z",
+          "status": "final",
+          "period": 4,
+          "clock": "0:00",
+          "home": {
+            "team": {
+              "id": "nfl:5",
+              "abbreviation": "CLE",
+              "name": "Cleveland Browns",
+              "location": "Cleveland",
+              "shortName": "Browns",
+              "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/cle.png"
+            },
+            "score": 27
+          },
+          "away": {
+            "team": {
+              "id": "nfl:23",
+              "abbreviation": "PIT",
+              "name": "Pittsburgh Steelers",
+              "location": "Pittsburgh",
+              "shortName": "Steelers",
+              "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/pit.png"
+            },
+            "score": 24
+          },
+          "broadcasts": [
+            {
+              "network": "Prime Video",
+              "medium": "streaming"
+            }
+          ]
+        },
+        {
+          "id": "401872979",
+          "league": "nfl",
+          "kickoff": "2026-10-06T00:15:00.000Z",
+          "status": "scheduled",
+          "period": 0,
+          "clock": "0:00",
+          "home": {
+            "team": {
+              "id": "nfl:18",
+              "abbreviation": "NO",
+              "name": "New Orleans Saints",
+              "location": "New Orleans",
+              "shortName": "Saints",
+              "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/no.png"
+            },
+            "score": 0
+          },
+          "away": {
+            "team": {
+              "id": "nfl:1",
+              "abbreviation": "ATL",
+              "name": "Atlanta Falcons",
+              "location": "Atlanta",
+              "shortName": "Falcons",
+              "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/atl.png"
+            },
+            "score": 0
+          },
+          "broadcasts": [
+            {
+              "network": "ESPN",
+              "medium": "tv"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "seq": 3,
+      "tag": "Snapshot",
+      "from": "push",
+      "snapshot": {
+        "id": "401872966",
+        "league": "nfl",
+        "kickoff": "2026-10-04T17:00:00.000Z",
+        "status": "live",
+        "period": 2,
+        "clock": "11:23",
+        "home": {
+          "team": {
+            "id": "nfl:19",
+            "abbreviation": "NYG",
+            "name": "New York Giants",
+            "location": "New York",
+            "shortName": "Giants",
+            "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/nyg.png"
+          },
+          "score": 6
+        },
+        "away": {
+          "team": {
+            "id": "nfl:22",
+            "abbreviation": "ARI",
+            "name": "Arizona Cardinals",
+            "location": "Arizona",
+            "shortName": "Cardinals",
+            "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/ari.png"
+          },
+          "score": 14
+        },
+        "broadcasts": [
+          {
+            "network": "CBS",
+            "medium": "tv"
+          }
+        ],
+        "situation": {
+          "possession": "nfl:19",
+          "down": 1,
+          "distance": 10,
+          "yardLine": 75,
+          "isRedZone": false,
+          "homeTimeouts": 3,
+          "awayTimeouts": 3,
+          "lastPlay": "Official Timeout at 11:23."
+        }
+      }
+    },
+    {
+      "seq": 3,
+      "tag": "Snapshot",
+      "from": "push",
+      "snapshot": {
+        "id": "401872967",
+        "league": "nfl",
+        "kickoff": "2026-10-04T17:00:00.000Z",
+        "status": "live",
+        "period": 2,
+        "clock": "9:44",
+        "home": {
+          "team": {
+            "id": "nfl:34",
+            "abbreviation": "HOU",
+            "name": "Houston Texans",
+            "location": "Houston",
+            "shortName": "Texans",
+            "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/hou.png"
+          },
+          "score": 10
+        },
+        "away": {
+          "team": {
+            "id": "nfl:6",
+            "abbreviation": "DAL",
+            "name": "Dallas Cowboys",
+            "location": "Dallas",
+            "shortName": "Cowboys",
+            "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/dal.png"
+          },
+          "score": 6
+        },
+        "broadcasts": [
+          {
+            "network": "FOX",
+            "medium": "tv"
+          }
+        ],
+        "situation": {
+          "possession": "nfl:6",
+          "down": 2,
+          "distance": 8,
+          "yardLine": 67,
+          "isRedZone": false,
+          "homeTimeouts": 3,
+          "awayTimeouts": 3,
+          "lastPlay": " J.Williams up the middle to DAL 33 for 2 yards (R.Blankenship; T.Togiai)."
+        }
+      }
+    },
+    {
+      "seq": 3,
+      "tag": "Snapshot",
+      "from": "push",
+      "snapshot": {
+        "id": "401872968",
+        "league": "nfl",
+        "kickoff": "2026-10-04T17:00:00.000Z",
+        "status": "live",
+        "period": 2,
+        "clock": "8:36",
+        "home": {
+          "team": {
+            "id": "nfl:27",
+            "abbreviation": "TB",
+            "name": "Tampa Bay Buccaneers",
+            "location": "Tampa Bay",
+            "shortName": "Buccaneers",
+            "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/tb.png"
+          },
+          "score": 0
+        },
+        "away": {
+          "team": {
+            "id": "nfl:9",
+            "abbreviation": "GB",
+            "name": "Green Bay Packers",
+            "location": "Green Bay",
+            "shortName": "Packers",
+            "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/gb.png"
+          },
+          "score": 7
+        },
+        "broadcasts": [
+          {
+            "network": "FOX",
+            "medium": "tv"
+          }
+        ],
+        "situation": {
+          "possession": "nfl:27",
+          "down": 2,
+          "distance": 7,
+          "yardLine": 25,
+          "isRedZone": false,
+          "homeTimeouts": 3,
+          "awayTimeouts": 1,
+          "lastPlay": " (Shotgun) B.Irving right tackle to GB 25 for 3 yards (D.Wyatt)."
+        }
+      }
+    },
+    {
+      "seq": 3,
+      "tag": "Snapshot",
+      "from": "push",
+      "snapshot": {
+        "id": "401872969",
+        "league": "nfl",
+        "kickoff": "2026-10-04T17:00:00.000Z",
+        "status": "live",
+        "period": 2,
+        "clock": "10:03",
+        "home": {
+          "team": {
+            "id": "nfl:4",
+            "abbreviation": "CIN",
+            "name": "Cincinnati Bengals",
+            "location": "Cincinnati",
+            "shortName": "Bengals",
+            "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/cin.png"
+          },
+          "score": 3
+        },
+        "away": {
+          "team": {
+            "id": "nfl:30",
+            "abbreviation": "JAX",
+            "name": "Jacksonville Jaguars",
+            "location": "Jacksonville",
+            "shortName": "Jaguars",
+            "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/jax.png"
+          },
+          "score": 3
+        },
+        "broadcasts": [
+          {
+            "network": "CBS",
+            "medium": "tv"
+          }
+        ],
+        "situation": {
+          "possession": "nfl:30",
+          "down": 1,
+          "distance": 10,
+          "yardLine": 73,
+          "isRedZone": false,
+          "homeTimeouts": 2,
+          "awayTimeouts": 3,
+          "lastPlay": "E.McPherson kicks 65 yards from CIN 35 to JAX 0. A.Abdullah to JAX 27 for 27 yards (C.Johnson)."
+        }
+      }
+    },
+    {
+      "seq": 3,
+      "tag": "Snapshot",
+      "from": "push",
+      "snapshot": {
+        "id": "401872970",
+        "league": "nfl",
+        "kickoff": "2026-10-04T17:00:00.000Z",
+        "status": "live",
+        "period": 2,
+        "clock": "8:36",
+        "home": {
+          "team": {
+            "id": "nfl:21",
+            "abbreviation": "PHI",
+            "name": "Philadelphia Eagles",
+            "location": "Philadelphia",
+            "shortName": "Eagles",
+            "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/phi.png"
+          },
+          "score": 6
+        },
+        "away": {
+          "team": {
+            "id": "nfl:14",
+            "abbreviation": "LAR",
+            "name": "Los Angeles Rams",
+            "location": "Los Angeles",
+            "shortName": "Rams",
+            "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/lar.png"
+          },
+          "score": 3
+        },
+        "broadcasts": [
+          {
+            "network": "FOX",
+            "medium": "tv"
+          }
+        ],
+        "situation": {
+          "possession": "nfl:21",
+          "down": 1,
+          "distance": 10,
+          "yardLine": 72,
+          "isRedZone": false,
+          "homeTimeouts": 3,
+          "awayTimeouts": 3,
+          "lastPlay": "Official Timeout at 08:36."
+        }
+      }
+    },
+    {
+      "seq": 3,
+      "tag": "Snapshot",
+      "from": "push",
+      "snapshot": {
+        "id": "401872971",
+        "league": "nfl",
+        "kickoff": "2026-10-04T17:00:00.000Z",
+        "status": "live",
+        "period": 2,
+        "clock": "8:21",
+        "home": {
+          "team": {
+            "id": "nfl:2",
+            "abbreviation": "BUF",
+            "name": "Buffalo Bills",
+            "location": "Buffalo",
+            "shortName": "Bills",
+            "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/buf.png"
+          },
+          "score": 7
+        },
+        "away": {
+          "team": {
+            "id": "nfl:17",
+            "abbreviation": "NE",
+            "name": "New England Patriots",
+            "location": "New England",
+            "shortName": "Patriots",
+            "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/ne.png"
+          },
+          "score": 7
+        },
+        "broadcasts": [
+          {
+            "network": "CBS",
+            "medium": "tv"
+          }
+        ],
+        "situation": {
+          "possession": "nfl:17",
+          "down": 2,
+          "distance": 10,
+          "yardLine": 63,
+          "isRedZone": false,
+          "homeTimeouts": 3,
+          "awayTimeouts": 2,
+          "lastPlay": " D.Maye pass incomplete short left to E.Chism."
+        }
+      }
+    },
+    {
+      "seq": 3,
+      "tag": "Snapshot",
+      "from": "push",
+      "snapshot": {
+        "id": "401872972",
+        "league": "nfl",
+        "kickoff": "2026-10-04T17:00:00.000Z",
+        "status": "live",
+        "period": 2,
+        "clock": "12:36",
+        "home": {
+          "team": {
+            "id": "nfl:3",
+            "abbreviation": "CHI",
+            "name": "Chicago Bears",
+            "location": "Chicago",
+            "shortName": "Bears",
+            "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/chi.png"
+          },
+          "score": 7
+        },
+        "away": {
+          "team": {
+            "id": "nfl:20",
+            "abbreviation": "NYJ",
+            "name": "New York Jets",
+            "location": "New York",
+            "shortName": "Jets",
+            "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/nyj.png"
+          },
+          "score": 0
+        },
+        "broadcasts": [
+          {
+            "network": "FOX",
+            "medium": "tv"
+          }
+        ],
+        "situation": {
+          "possession": "nfl:3",
+          "down": 1,
+          "distance": 10,
+          "yardLine": 57,
+          "isRedZone": false,
+          "homeTimeouts": 3,
+          "awayTimeouts": 2,
+          "lastPlay": " T.Bagent pass short left to D.Swift to CHI 43 for 4 yards (D.Davis; J.Sherwood)."
+        }
+      }
+    },
+    {
+      "seq": 3,
+      "tag": "Snapshot",
+      "from": "push",
+      "snapshot": {
+        "id": "401872973",
+        "league": "nfl",
+        "kickoff": "2026-10-04T17:00:00.000Z",
+        "status": "live",
+        "period": 2,
+        "clock": "10:48",
+        "home": {
+          "team": {
+            "id": "nfl:33",
+            "abbreviation": "BAL",
+            "name": "Baltimore Ravens",
+            "location": "Baltimore",
+            "shortName": "Ravens",
+            "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/bal.png"
+          },
+          "score": 14
+        },
+        "away": {
+          "team": {
+            "id": "nfl:10",
+            "abbreviation": "TEN",
+            "name": "Tennessee Titans",
+            "location": "Tennessee",
+            "shortName": "Titans",
+            "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/ten.png"
+          },
+          "score": 7
+        },
+        "broadcasts": [
+          {
+            "network": "CBS",
+            "medium": "tv"
+          }
+        ],
+        "situation": {
+          "possession": "nfl:10",
+          "down": 1,
+          "distance": 10,
+          "yardLine": 20,
+          "isRedZone": true,
+          "homeTimeouts": 3,
+          "awayTimeouts": 3,
+          "lastPlay": " (Shotgun) PENALTY on BLT-K.Hamilton, Unnecessary Roughness, 15 yards, enforced at BLT 35 - No Play."
+        }
+      }
+    },
+    {
+      "seq": 3,
+      "tag": "Snapshot",
+      "from": "push",
+      "snapshot": {
+        "id": "401872965",
+        "league": "nfl",
+        "kickoff": "2026-10-04T13:30:00.000Z",
+        "status": "final",
+        "period": 4,
+        "clock": "0:00",
+        "home": {
+          "team": {
+            "id": "nfl:28",
+            "abbreviation": "WSH",
+            "name": "Washington Commanders",
+            "location": "Washington",
+            "shortName": "Commanders",
+            "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/wsh.png"
+          },
+          "score": 13
+        },
+        "away": {
+          "team": {
+            "id": "nfl:11",
+            "abbreviation": "IND",
+            "name": "Indianapolis Colts",
+            "location": "Indianapolis",
+            "shortName": "Colts",
+            "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/ind.png"
+          },
+          "score": 30
+        },
+        "broadcasts": [
+          {
+            "network": "NFL Net",
+            "medium": "tv"
+          }
+        ]
+      }
+    },
+    {
+      "seq": 3,
+      "tag": "Snapshot",
+      "from": "push",
+      "snapshot": {
+        "id": "401872974",
+        "league": "nfl",
+        "kickoff": "2026-10-04T20:05:00.000Z",
+        "status": "scheduled",
+        "period": 0,
+        "clock": "0:00",
+        "home": {
+          "team": {
+            "id": "nfl:16",
+            "abbreviation": "MIN",
+            "name": "Minnesota Vikings",
+            "location": "Minnesota",
+            "shortName": "Vikings",
+            "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/min.png"
+          },
+          "score": 0
+        },
+        "away": {
+          "team": {
+            "id": "nfl:15",
+            "abbreviation": "MIA",
+            "name": "Miami Dolphins",
+            "location": "Miami",
+            "shortName": "Dolphins",
+            "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/mia.png"
+          },
+          "score": 0
+        },
+        "broadcasts": [
+          {
+            "network": "FOX",
+            "medium": "tv"
+          }
+        ]
+      }
+    },
+    {
+      "seq": 3,
+      "tag": "Snapshot",
+      "from": "push",
+      "snapshot": {
+        "id": "401872975",
+        "league": "nfl",
+        "kickoff": "2026-10-04T20:25:00.000Z",
+        "status": "scheduled",
+        "period": 0,
+        "clock": "0:00",
+        "home": {
+          "team": {
+            "id": "nfl:25",
+            "abbreviation": "SF",
+            "name": "San Francisco 49ers",
+            "location": "San Francisco",
+            "shortName": "49ers",
+            "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/sf.png"
+          },
+          "score": 0
+        },
+        "away": {
+          "team": {
+            "id": "nfl:7",
+            "abbreviation": "DEN",
+            "name": "Denver Broncos",
+            "location": "Denver",
+            "shortName": "Broncos",
+            "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/den.png"
+          },
+          "score": 0
+        },
+        "broadcasts": [
+          {
+            "network": "CBS",
+            "medium": "tv"
+          }
+        ]
+      }
+    },
+    {
+      "seq": 3,
+      "tag": "Snapshot",
+      "from": "push",
+      "snapshot": {
+        "id": "401872976",
+        "league": "nfl",
+        "kickoff": "2026-10-04T20:25:00.000Z",
+        "status": "scheduled",
+        "period": 0,
+        "clock": "0:00",
+        "home": {
+          "team": {
+            "id": "nfl:13",
+            "abbreviation": "LV",
+            "name": "Las Vegas Raiders",
+            "location": "Las Vegas",
+            "shortName": "Raiders",
+            "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/lv.png"
+          },
+          "score": 0
+        },
+        "away": {
+          "team": {
+            "id": "nfl:12",
+            "abbreviation": "KC",
+            "name": "Kansas City Chiefs",
+            "location": "Kansas City",
+            "shortName": "Chiefs",
+            "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/kc.png"
+          },
+          "score": 0
+        },
+        "broadcasts": [
+          {
+            "network": "CBS",
+            "medium": "tv"
+          }
+        ]
+      }
+    },
+    {
+      "seq": 3,
+      "tag": "Snapshot",
+      "from": "push",
+      "snapshot": {
+        "id": "401872977",
+        "league": "nfl",
+        "kickoff": "2026-10-04T20:25:00.000Z",
+        "status": "scheduled",
+        "period": 0,
+        "clock": "0:00",
+        "home": {
+          "team": {
+            "id": "nfl:26",
+            "abbreviation": "SEA",
+            "name": "Seattle Seahawks",
+            "location": "Seattle",
+            "shortName": "Seahawks",
+            "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/sea.png"
+          },
+          "score": 0
+        },
+        "away": {
+          "team": {
+            "id": "nfl:24",
+            "abbreviation": "LAC",
+            "name": "Los Angeles Chargers",
+            "location": "Los Angeles",
+            "shortName": "Chargers",
+            "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/lac.png"
+          },
+          "score": 0
+        },
+        "broadcasts": [
+          {
+            "network": "CBS",
+            "medium": "tv"
+          }
+        ]
+      }
+    },
+    {
+      "seq": 3,
+      "tag": "Snapshot",
+      "from": "push",
+      "snapshot": {
+        "id": "401872978",
+        "league": "nfl",
+        "kickoff": "2026-10-05T00:20:00.000Z",
+        "status": "scheduled",
+        "period": 0,
+        "clock": "0:00",
+        "home": {
+          "team": {
+            "id": "nfl:29",
+            "abbreviation": "CAR",
+            "name": "Carolina Panthers",
+            "location": "Carolina",
+            "shortName": "Panthers",
+            "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/car.png"
+          },
+          "score": 0
+        },
+        "away": {
+          "team": {
+            "id": "nfl:8",
+            "abbreviation": "DET",
+            "name": "Detroit Lions",
+            "location": "Detroit",
+            "shortName": "Lions",
+            "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/det.png"
+          },
+          "score": 0
+        },
+        "broadcasts": [
+          {
+            "network": "NBC",
+            "medium": "tv"
+          }
+        ]
+      }
+    },
+    {
+      "seq": 3,
+      "tag": "Snapshot",
+      "from": "push",
+      "snapshot": {
+        "id": "401872964",
+        "league": "nfl",
+        "kickoff": "2026-10-02T00:15:00.000Z",
+        "status": "final",
+        "period": 4,
+        "clock": "0:00",
+        "home": {
+          "team": {
+            "id": "nfl:5",
+            "abbreviation": "CLE",
+            "name": "Cleveland Browns",
+            "location": "Cleveland",
+            "shortName": "Browns",
+            "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/cle.png"
+          },
+          "score": 27
+        },
+        "away": {
+          "team": {
+            "id": "nfl:23",
+            "abbreviation": "PIT",
+            "name": "Pittsburgh Steelers",
+            "location": "Pittsburgh",
+            "shortName": "Steelers",
+            "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/pit.png"
+          },
+          "score": 24
+        },
+        "broadcasts": [
+          {
+            "network": "Prime Video",
+            "medium": "streaming"
+          }
+        ]
+      }
+    },
+    {
+      "seq": 3,
+      "tag": "Snapshot",
+      "from": "push",
+      "snapshot": {
+        "id": "401872979",
+        "league": "nfl",
+        "kickoff": "2026-10-06T00:15:00.000Z",
+        "status": "scheduled",
+        "period": 0,
+        "clock": "0:00",
+        "home": {
+          "team": {
+            "id": "nfl:18",
+            "abbreviation": "NO",
+            "name": "New Orleans Saints",
+            "location": "New Orleans",
+            "shortName": "Saints",
+            "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/no.png"
+          },
+          "score": 0
+        },
+        "away": {
+          "team": {
+            "id": "nfl:1",
+            "abbreviation": "ATL",
+            "name": "Atlanta Falcons",
+            "location": "Atlanta",
+            "shortName": "Falcons",
+            "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/atl.png"
+          },
+          "score": 0
+        },
+        "broadcasts": [
+          {
+            "network": "ESPN",
+            "medium": "tv"
+          }
+        ]
+      }
+    }
+  ],
+  "checkpointEvents": [
+    {
+      "id": "401872966",
+      "league": "nfl",
+      "kickoff": "2026-10-04T17:00:00.000Z",
+      "status": "live",
+      "period": 2,
+      "clock": "11:23",
+      "home": {
+        "team": {
+          "id": "nfl:19",
+          "abbreviation": "NYG",
+          "name": "New York Giants",
+          "location": "New York",
+          "shortName": "New York Giants",
+          "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/nyg.png"
+        },
+        "score": 6
+      },
+      "away": {
+        "team": {
+          "id": "nfl:22",
+          "abbreviation": "ARI",
+          "name": "Arizona Cardinals",
+          "location": "Arizona",
+          "shortName": "Arizona Cardinals",
+          "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/ari.png"
+        },
+        "score": 14
+      },
+      "broadcasts": [
+        {
+          "network": "CBS",
+          "medium": "tv"
+        }
+      ],
+      "situation": {
+        "possession": "nfl:19",
+        "down": 1,
+        "distance": 10,
+        "yardLine": 75,
+        "isRedZone": false,
+        "homeTimeouts": 3,
+        "awayTimeouts": 3,
+        "lastPlay": "Official Timeout at 11:23."
+      }
+    },
+    {
+      "id": "401872967",
+      "league": "nfl",
+      "kickoff": "2026-10-04T17:00:00.000Z",
+      "status": "live",
+      "period": 2,
+      "clock": "9:44",
+      "home": {
+        "team": {
+          "id": "nfl:34",
+          "abbreviation": "HOU",
+          "name": "Houston Texans",
+          "location": "Houston",
+          "shortName": "Houston Texans",
+          "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/hou.png"
+        },
+        "score": 10
+      },
+      "away": {
+        "team": {
+          "id": "nfl:6",
+          "abbreviation": "DAL",
+          "name": "Dallas Cowboys",
+          "location": "Dallas",
+          "shortName": "Dallas Cowboys",
+          "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/dal.png"
+        },
+        "score": 6
+      },
+      "broadcasts": [
+        {
+          "network": "FOX",
+          "medium": "tv"
+        }
+      ],
+      "situation": {
+        "possession": "nfl:6",
+        "down": 2,
+        "distance": 8,
+        "yardLine": 67,
+        "isRedZone": false,
+        "homeTimeouts": 3,
+        "awayTimeouts": 3,
+        "lastPlay": " J.Williams up the middle to DAL 33 for 2 yards (R.Blankenship; T.Togiai)."
+      }
+    },
+    {
+      "id": "401872968",
+      "league": "nfl",
+      "kickoff": "2026-10-04T17:00:00.000Z",
+      "status": "live",
+      "period": 2,
+      "clock": "8:36",
+      "home": {
+        "team": {
+          "id": "nfl:27",
+          "abbreviation": "TB",
+          "name": "Tampa Bay Buccaneers",
+          "location": "Tampa Bay",
+          "shortName": "Tampa Bay Buccaneers",
+          "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/tb.png"
+        },
+        "score": 0
+      },
+      "away": {
+        "team": {
+          "id": "nfl:9",
+          "abbreviation": "GB",
+          "name": "Green Bay Packers",
+          "location": "Green Bay",
+          "shortName": "Green Bay Packers",
+          "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/gb.png"
+        },
+        "score": 7
+      },
+      "broadcasts": [
+        {
+          "network": "FOX",
+          "medium": "tv"
+        }
+      ],
+      "situation": {
+        "possession": "nfl:27",
+        "down": 2,
+        "distance": 7,
+        "yardLine": 25,
+        "isRedZone": false,
+        "homeTimeouts": 3,
+        "awayTimeouts": 1,
+        "lastPlay": " (Shotgun) B.Irving right tackle to GB 25 for 3 yards (D.Wyatt)."
+      }
+    },
+    {
+      "id": "401872969",
+      "league": "nfl",
+      "kickoff": "2026-10-04T17:00:00.000Z",
+      "status": "live",
+      "period": 2,
+      "clock": "10:03",
+      "home": {
+        "team": {
+          "id": "nfl:4",
+          "abbreviation": "CIN",
+          "name": "Cincinnati Bengals",
+          "location": "Cincinnati",
+          "shortName": "Cincinnati Bengals",
+          "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/cin.png"
+        },
+        "score": 3
+      },
+      "away": {
+        "team": {
+          "id": "nfl:30",
+          "abbreviation": "JAX",
+          "name": "Jacksonville Jaguars",
+          "location": "Jacksonville",
+          "shortName": "Jacksonville Jaguars",
+          "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/jax.png"
+        },
+        "score": 3
+      },
+      "broadcasts": [
+        {
+          "network": "CBS",
+          "medium": "tv"
+        }
+      ],
+      "situation": {
+        "possession": "nfl:30",
+        "down": 1,
+        "distance": 10,
+        "yardLine": 73,
+        "isRedZone": false,
+        "homeTimeouts": 2,
+        "awayTimeouts": 3,
+        "lastPlay": "E.McPherson kicks 65 yards from CIN 35 to JAX 0. A.Abdullah to JAX 27 for 27 yards (C.Johnson)."
+      }
+    },
+    {
+      "id": "401872970",
+      "league": "nfl",
+      "kickoff": "2026-10-04T17:00:00.000Z",
+      "status": "live",
+      "period": 2,
+      "clock": "8:36",
+      "home": {
+        "team": {
+          "id": "nfl:21",
+          "abbreviation": "PHI",
+          "name": "Philadelphia Eagles",
+          "location": "Philadelphia",
+          "shortName": "Philadelphia Eagles",
+          "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/phi.png"
+        },
+        "score": 6
+      },
+      "away": {
+        "team": {
+          "id": "nfl:14",
+          "abbreviation": "LAR",
+          "name": "Los Angeles Rams",
+          "location": "Los Angeles",
+          "shortName": "Los Angeles Rams",
+          "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/lar.png"
+        },
+        "score": 3
+      },
+      "broadcasts": [
+        {
+          "network": "FOX",
+          "medium": "tv"
+        }
+      ],
+      "situation": {
+        "possession": "nfl:21",
+        "down": 1,
+        "distance": 10,
+        "yardLine": 72,
+        "isRedZone": false,
+        "homeTimeouts": 3,
+        "awayTimeouts": 3,
+        "lastPlay": "Official Timeout at 08:36."
+      }
+    },
+    {
+      "id": "401872971",
+      "league": "nfl",
+      "kickoff": "2026-10-04T17:00:00.000Z",
+      "status": "live",
+      "period": 2,
+      "clock": "8:21",
+      "home": {
+        "team": {
+          "id": "nfl:2",
+          "abbreviation": "BUF",
+          "name": "Buffalo Bills",
+          "location": "Buffalo",
+          "shortName": "Buffalo Bills",
+          "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/buf.png"
+        },
+        "score": 7
+      },
+      "away": {
+        "team": {
+          "id": "nfl:17",
+          "abbreviation": "NE",
+          "name": "New England Patriots",
+          "location": "New England",
+          "shortName": "New England Patriots",
+          "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/ne.png"
+        },
+        "score": 7
+      },
+      "broadcasts": [
+        {
+          "network": "CBS",
+          "medium": "tv"
+        }
+      ],
+      "situation": {
+        "possession": "nfl:17",
+        "down": 2,
+        "distance": 10,
+        "yardLine": 63,
+        "isRedZone": false,
+        "homeTimeouts": 3,
+        "awayTimeouts": 2,
+        "lastPlay": " D.Maye pass incomplete short left to E.Chism."
+      }
+    },
+    {
+      "id": "401872972",
+      "league": "nfl",
+      "kickoff": "2026-10-04T17:00:00.000Z",
+      "status": "live",
+      "period": 2,
+      "clock": "12:36",
+      "home": {
+        "team": {
+          "id": "nfl:3",
+          "abbreviation": "CHI",
+          "name": "Chicago Bears",
+          "location": "Chicago",
+          "shortName": "Chicago Bears",
+          "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/chi.png"
+        },
+        "score": 7
+      },
+      "away": {
+        "team": {
+          "id": "nfl:20",
+          "abbreviation": "NYJ",
+          "name": "New York Jets",
+          "location": "New York",
+          "shortName": "New York Jets",
+          "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/nyj.png"
+        },
+        "score": 0
+      },
+      "broadcasts": [
+        {
+          "network": "FOX",
+          "medium": "tv"
+        }
+      ],
+      "situation": {
+        "possession": "nfl:3",
+        "down": 1,
+        "distance": 10,
+        "yardLine": 57,
+        "isRedZone": false,
+        "homeTimeouts": 3,
+        "awayTimeouts": 2,
+        "lastPlay": " T.Bagent pass short left to D.Swift to CHI 43 for 4 yards (D.Davis; J.Sherwood)."
+      }
+    },
+    {
+      "id": "401872973",
+      "league": "nfl",
+      "kickoff": "2026-10-04T17:00:00.000Z",
+      "status": "live",
+      "period": 2,
+      "clock": "10:48",
+      "home": {
+        "team": {
+          "id": "nfl:33",
+          "abbreviation": "BAL",
+          "name": "Baltimore Ravens",
+          "location": "Baltimore",
+          "shortName": "Baltimore Ravens",
+          "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/bal.png"
+        },
+        "score": 14
+      },
+      "away": {
+        "team": {
+          "id": "nfl:10",
+          "abbreviation": "TEN",
+          "name": "Tennessee Titans",
+          "location": "Tennessee",
+          "shortName": "Tennessee Titans",
+          "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/ten.png"
+        },
+        "score": 7
+      },
+      "broadcasts": [
+        {
+          "network": "CBS",
+          "medium": "tv"
+        }
+      ],
+      "situation": {
+        "possession": "nfl:10",
+        "down": 1,
+        "distance": 10,
+        "yardLine": 20,
+        "isRedZone": true,
+        "homeTimeouts": 3,
+        "awayTimeouts": 3,
+        "lastPlay": " (Shotgun) PENALTY on BLT-K.Hamilton, Unnecessary Roughness, 15 yards, enforced at BLT 35 - No Play."
+      }
+    },
+    {
+      "id": "401872965",
+      "league": "nfl",
+      "kickoff": "2026-10-04T13:30:00.000Z",
+      "status": "final",
+      "period": 4,
+      "clock": "0:00",
+      "home": {
+        "team": {
+          "id": "nfl:28",
+          "abbreviation": "WSH",
+          "name": "Washington Commanders",
+          "location": "Washington",
+          "shortName": "Washington Commanders",
+          "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/wsh.png"
+        },
+        "score": 13
+      },
+      "away": {
+        "team": {
+          "id": "nfl:11",
+          "abbreviation": "IND",
+          "name": "Indianapolis Colts",
+          "location": "Indianapolis",
+          "shortName": "Indianapolis Colts",
+          "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/ind.png"
+        },
+        "score": 30
+      },
+      "broadcasts": [
+        {
+          "network": "NFL Net",
+          "medium": "tv"
+        }
+      ]
+    },
+    {
+      "id": "401872974",
+      "league": "nfl",
+      "kickoff": "2026-10-04T20:05:00.000Z",
+      "status": "scheduled",
+      "period": 0,
+      "clock": "0:00",
+      "home": {
+        "team": {
+          "id": "nfl:16",
+          "abbreviation": "MIN",
+          "name": "Minnesota Vikings",
+          "location": "Minnesota",
+          "shortName": "Minnesota Vikings",
+          "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/min.png"
+        },
+        "score": 0
+      },
+      "away": {
+        "team": {
+          "id": "nfl:15",
+          "abbreviation": "MIA",
+          "name": "Miami Dolphins",
+          "location": "Miami",
+          "shortName": "Miami Dolphins",
+          "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/mia.png"
+        },
+        "score": 0
+      },
+      "broadcasts": [
+        {
+          "network": "FOX",
+          "medium": "tv"
+        }
+      ]
+    },
+    {
+      "id": "401872975",
+      "league": "nfl",
+      "kickoff": "2026-10-04T20:25:00.000Z",
+      "status": "scheduled",
+      "period": 0,
+      "clock": "0:00",
+      "home": {
+        "team": {
+          "id": "nfl:25",
+          "abbreviation": "SF",
+          "name": "San Francisco 49ers",
+          "location": "San Francisco",
+          "shortName": "San Francisco 49ers",
+          "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/sf.png"
+        },
+        "score": 0
+      },
+      "away": {
+        "team": {
+          "id": "nfl:7",
+          "abbreviation": "DEN",
+          "name": "Denver Broncos",
+          "location": "Denver",
+          "shortName": "Denver Broncos",
+          "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/den.png"
+        },
+        "score": 0
+      },
+      "broadcasts": [
+        {
+          "network": "CBS",
+          "medium": "tv"
+        }
+      ]
+    },
+    {
+      "id": "401872976",
+      "league": "nfl",
+      "kickoff": "2026-10-04T20:25:00.000Z",
+      "status": "scheduled",
+      "period": 0,
+      "clock": "0:00",
+      "home": {
+        "team": {
+          "id": "nfl:13",
+          "abbreviation": "LV",
+          "name": "Las Vegas Raiders",
+          "location": "Las Vegas",
+          "shortName": "Las Vegas Raiders",
+          "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/lv.png"
+        },
+        "score": 0
+      },
+      "away": {
+        "team": {
+          "id": "nfl:12",
+          "abbreviation": "KC",
+          "name": "Kansas City Chiefs",
+          "location": "Kansas City",
+          "shortName": "Kansas City Chiefs",
+          "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/kc.png"
+        },
+        "score": 0
+      },
+      "broadcasts": [
+        {
+          "network": "CBS",
+          "medium": "tv"
+        }
+      ]
+    },
+    {
+      "id": "401872977",
+      "league": "nfl",
+      "kickoff": "2026-10-04T20:25:00.000Z",
+      "status": "scheduled",
+      "period": 0,
+      "clock": "0:00",
+      "home": {
+        "team": {
+          "id": "nfl:26",
+          "abbreviation": "SEA",
+          "name": "Seattle Seahawks",
+          "location": "Seattle",
+          "shortName": "Seattle Seahawks",
+          "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/sea.png"
+        },
+        "score": 0
+      },
+      "away": {
+        "team": {
+          "id": "nfl:24",
+          "abbreviation": "LAC",
+          "name": "Los Angeles Chargers",
+          "location": "Los Angeles",
+          "shortName": "Los Angeles Chargers",
+          "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/lac.png"
+        },
+        "score": 0
+      },
+      "broadcasts": [
+        {
+          "network": "CBS",
+          "medium": "tv"
+        }
+      ]
+    },
+    {
+      "id": "401872978",
+      "league": "nfl",
+      "kickoff": "2026-10-05T00:20:00.000Z",
+      "status": "scheduled",
+      "period": 0,
+      "clock": "0:00",
+      "home": {
+        "team": {
+          "id": "nfl:29",
+          "abbreviation": "CAR",
+          "name": "Carolina Panthers",
+          "location": "Carolina",
+          "shortName": "Carolina Panthers",
+          "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/car.png"
+        },
+        "score": 0
+      },
+      "away": {
+        "team": {
+          "id": "nfl:8",
+          "abbreviation": "DET",
+          "name": "Detroit Lions",
+          "location": "Detroit",
+          "shortName": "Detroit Lions",
+          "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/det.png"
+        },
+        "score": 0
+      },
+      "broadcasts": [
+        {
+          "network": "NBC",
+          "medium": "tv"
+        }
+      ]
+    },
+    {
+      "id": "401872964",
+      "league": "nfl",
+      "kickoff": "2026-10-02T00:15:00.000Z",
+      "status": "final",
+      "period": 4,
+      "clock": "0:00",
+      "home": {
+        "team": {
+          "id": "nfl:5",
+          "abbreviation": "CLE",
+          "name": "Cleveland Browns",
+          "location": "Cleveland",
+          "shortName": "Cleveland Browns",
+          "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/cle.png"
+        },
+        "score": 27
+      },
+      "away": {
+        "team": {
+          "id": "nfl:23",
+          "abbreviation": "PIT",
+          "name": "Pittsburgh Steelers",
+          "location": "Pittsburgh",
+          "shortName": "Pittsburgh Steelers",
+          "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/pit.png"
+        },
+        "score": 24
+      },
+      "broadcasts": [
+        {
+          "network": "Prime Video",
+          "medium": "streaming"
+        }
+      ]
+    },
+    {
+      "id": "401872979",
+      "league": "nfl",
+      "kickoff": "2026-10-06T00:15:00.000Z",
+      "status": "scheduled",
+      "period": 0,
+      "clock": "0:00",
+      "home": {
+        "team": {
+          "id": "nfl:18",
+          "abbreviation": "NO",
+          "name": "New Orleans Saints",
+          "location": "New Orleans",
+          "shortName": "New Orleans Saints",
+          "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/no.png"
+        },
+        "score": 0
+      },
+      "away": {
+        "team": {
+          "id": "nfl:1",
+          "abbreviation": "ATL",
+          "name": "Atlanta Falcons",
+          "location": "Atlanta",
+          "shortName": "Atlanta Falcons",
+          "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/atl.png"
+        },
+        "score": 0
+      },
+      "broadcasts": [
+        {
+          "network": "ESPN",
+          "medium": "tv"
+        }
+      ]
+    }
+  ]
+}
