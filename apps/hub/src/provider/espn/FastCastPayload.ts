@@ -1,4 +1,4 @@
-import { type Broadcast, GameId, GameSnapshot, Network } from "@sportal/domain/Game"
+import { GameId, GameSnapshot } from "@sportal/domain/Game"
 import type { LeagueId } from "@sportal/domain/League"
 import { Team, TeamId } from "@sportal/domain/Team"
 import { Effect, Schema, SchemaGetter, SchemaIssue, Stream } from "effect"
@@ -98,7 +98,7 @@ const Competitor = Schema.Struct({
   displayName: Schema.String,
   location: Schema.optional(Schema.String),
   logo: Schema.optional(Schema.String),
-  rank: Schema.optional(Schema.Int)
+  rank: Schema.optional(EspnSnapshot.Ranking)
 })
 
 /** One event of a `league` topic's document, read as a `GameSnapshot`. */
@@ -131,7 +131,9 @@ export function Event(league: LeagueId) {
                 clock: event.fullStatus.displayClock,
                 home: side(league, home),
                 away: side(league, away),
-                broadcasts: (event.broadcasts ?? []).flatMap(broadcast),
+                broadcasts: (event.broadcasts ?? []).flatMap(({ type, shortName }) =>
+                  EspnSnapshot.broadcast(type, shortName)
+                ),
                 situation:
                   event.situation === undefined
                     ? undefined
@@ -165,19 +167,6 @@ function side(league: LeagueId, competitor: typeof Competitor.Type) {
       logo: competitor.logo
     }),
     score: competitor.score ?? 0,
-    // ESPN ranks an unranked team 99.
-    ranking: competitor.rank === undefined || competitor.rank > 25 ? undefined : competitor.rank
+    ranking: competitor.rank
   }
-}
-
-/** A TV or streaming broadcast; any other kind is one no source plays. */
-function broadcast({
-  type,
-  shortName
-}: {
-  readonly type: string
-  readonly shortName: string
-}): Array<Broadcast> {
-  const medium = type === "TV" ? "tv" : type === "Streaming" ? "streaming" : undefined
-  return medium === undefined ? [] : [{ network: Network.make(shortName), medium }]
 }

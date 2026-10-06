@@ -4,6 +4,7 @@ import {
   Array as Arr,
   Data,
   Effect,
+  Exit,
   JsonPatch,
   JsonPointer,
   Metric,
@@ -26,17 +27,27 @@ export function batches(
       (): Topics => new Map(leagues.map((league) => [league, Topic.AwaitingCheckpoint()])),
       (topics, message) => {
         if (message.op === "C" || message.op === "B") {
-          return delivered(message.op, [], {}).pipe(Effect.as([topics, []] as const))
+          return received(message, undefined, Exit.succeed([])).pipe(Effect.as([topics, []] as const))
         }
         const league = leagues.find((candidate) => topic(candidate) === message.tc)
         const current = league === undefined ? undefined : topics.get(league)
         if (league === undefined || current === undefined) return Effect.succeed([topics, []] as const)
-        return Effect.gen(function* () {
-          const [next, touched] = yield* advance(current, message)
-          const games = yield* snapshotsOf(league, next, touched)
-          yield* delivered(message.op, games, { league, mid: message.op === "S" ? undefined : message.mid })
-          return [new Map([...topics, [league, next]]), games.length === 0 ? [] : [games]] as const
-        })
+        return advance(current, message).pipe(
+          Effect.flatMap(([next, touched]) =>
+            snapshotsOf(league, next, touched).pipe(Effect.map((games) => [next, games] as const))
+          ),
+          Effect.onExit((exit) =>
+            received(
+              message,
+              league,
+              Exit.map(exit, ([, games]) => games)
+            )
+          ),
+          Effect.map(
+            ([next, games]) =>
+              [new Map([...topics, [league, next]]), games.length === 0 ? [] : [games]] as const
+          )
+        )
       }
     )
   )
@@ -44,7 +55,12 @@ export function batches(
 
 /** The scoreboard topic carrying `league`'s games. */
 export function topic(league: LeagueId): string {
-  return league === "nfl" ? "event-football-nfl" : "event-football-college-football"
+  return topics[league]
+}
+
+const topics: { readonly [League in LeagueId]: string } = {
+  nfl: "event-football-nfl",
+  fbs: "event-football-college-football"
 }
 
 /** Where one topic's document is: waiting for a checkpoint, or synced as of a message, with its events' JSON by uid. */
@@ -142,6 +158,7 @@ function patched(
   }
   const event = games.get(uid)
   if (event === undefined) return Effect.fail(unapplicable(patch, "no such event"))
+  // JsonPatch.apply throws on an operation it cannot apply, and Effect has no variant that does not.
   return Effect.try({
     try: () =>
       JsonPatch.apply(
@@ -159,7 +176,6 @@ function unapplicable(patch: typeof FastCastPayload.Patch.Type, cause: unknown):
   })
 }
 
-/** The value a JSON Pointer names in `json`, if there is one. */
 function valueAt(json: Schema.Json, pointer: string): Option.Option<Schema.Json> {
   return pointer
     .split("/")
@@ -180,7 +196,6 @@ function child(value: Schema.Json, token: string): Option.Option<Schema.Json> {
     : Option.none()
 }
 
-/** The touched events of a synced topic as snapshots; an event that does not decode is logged, counted, and skipped. */
 function snapshotsOf(
   league: LeagueId,
   current: Topic,
@@ -213,23 +228,31 @@ const decodeEvent = {
   fbs: Schema.decodeUnknownEffect(FastCastPayload.Event("fbs"))
 }
 
-/** Logs and counts one message, with the league and `mid` of its topic, if it has one, and the games it delivered. */
-function delivered(
-  op: (typeof FastCastPayload.Message.Type)["op"],
-  games: ReadonlyArray<GameSnapshot>,
-  { league, mid }: { readonly league?: LeagueId; readonly mid?: number | undefined }
+// Called on exit, so the message that fails the feed is logged and counted too.
+function received(
+  message: typeof FastCastPayload.Message.Type,
+  league: LeagueId | undefined,
+  delivered: Exit.Exit<ReadonlyArray<GameSnapshot>, LiveFeedError>
 ): Effect.Effect<void> {
+  const mid = "mid" in message ? message.mid : undefined
+  const games = Exit.match(delivered, { onFailure: () => 0, onSuccess: (snapshots) => snapshots.length })
+  const where = Record.getSomes({ league: Option.fromUndefinedOr(league), op: Option.some(message.op) })
   return Effect.logDebug(
-    `FastCastDocument: ${op}${mid === undefined ? "" : ` ${mid}`}, ${games.length} games`
+    `FastCastDocument: ${message.op}${mid === undefined ? "" : ` ${mid}`}, ${Exit.isSuccess(delivered) ? `${games} games` : "failed"}`
   ).pipe(
-    Effect.annotateLogs({ league, op, mid, games: games.length }),
-    Effect.andThen(
-      Metric.update(Metric.withAttributes(messages, league === undefined ? { op } : { league, op }), 1)
+    Effect.annotateLogs(
+      Record.getSomes({
+        league: Option.fromUndefinedOr(league),
+        op: Option.some<string | number>(message.op),
+        mid: Option.fromUndefinedOr(mid)
+      })
     ),
+    Effect.annotateLogs("games", games),
+    Effect.andThen(Metric.update(Metric.withAttributes(messages, where), 1)),
     Effect.andThen(
       league === undefined
         ? Effect.void
-        : Metric.update(Metric.withAttributes(gamesDelivered, { league }), games.length)
+        : Metric.update(Metric.withAttributes(gamesDelivered, { league }), games)
     )
   )
 }

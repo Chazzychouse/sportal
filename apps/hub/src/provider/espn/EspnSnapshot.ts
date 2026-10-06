@@ -1,4 +1,4 @@
-import { GameStatus } from "@sportal/domain/Game"
+import { type Broadcast, GameStatus, Network } from "@sportal/domain/Game"
 import type { LeagueId } from "@sportal/domain/League"
 import { Situation as DomainSituation } from "@sportal/domain/Situation"
 import { TeamId } from "@sportal/domain/Team"
@@ -22,6 +22,23 @@ export const Score = Schema.String.pipe(
     encode: SchemaGetter.transform(String)
   })
 )
+
+/** A team's rank, as both feeds spell it; ESPN ranks an unranked team 99, which reads as no ranking. */
+export const Ranking = Schema.Int.pipe(
+  Schema.decodeTo(Schema.UndefinedOr(Schema.Int), {
+    decode: SchemaGetter.transform((rank) => (rank > 25 ? undefined : rank)),
+    encode: SchemaGetter.transform((ranking) => ranking ?? 99)
+  })
+)
+
+/** A broadcast from its medium and network names; ESPN also lists radio, which no source plays. */
+export function broadcast(medium: string, network: string): Array<Broadcast> {
+  return medium === "TV"
+    ? [{ network: Network.make(network), medium: "tv" }]
+    : medium === "Streaming"
+      ? [{ network: Network.make(network), medium: "streaming" }]
+      : []
+}
 
 /** ESPN's situation, as the site scoreboard and FastCast both spell it. */
 export const Situation = Schema.Struct({

@@ -30,6 +30,19 @@ const decodeRecorded = Schema.decodeUnknownEffect(
   Schema.fromJsonString(Schema.fromJsonString(FastCastPayload.Message))
 )
 
+const decodeMessage = Schema.decodeUnknownEffect(FastCastPayload.Message)
+
+// A `P` whose patches are sent as an array, one of the three ways FastCast spells them.
+const patchMessage = (mid: number, patches: ReadonlyArray<object>) =>
+  decodeMessage({
+    op: "P",
+    tc: "event-football-nfl",
+    mid,
+    pl: JSON.stringify({ ts: 1791136341731, pl: patches })
+  })
+
+const ariAtNyg = "s:20~l:28~e:401872966~c:401872966"
+
 // Answers every request, whatever its URL, with the recorded checkpoint.
 const recordedCheckpoint = Layer.effect(
   HttpClient.HttpClient,
@@ -132,18 +145,73 @@ describe("FastCastDocument", () => {
     }).pipe(Effect.provide(TestLayer))
   )
 
+  it.effect("a patch or an idle message before any checkpoint fails with Gap", () =>
+    Effect.gen(function* () {
+      const recorded = yield* recordedMessages
+      const early = [recorded.slice(3, 4), recorded.slice(8, 9)]
+      assert.deepStrictEqual(
+        early.flat().map((message) => message.op),
+        ["R", "I"]
+      )
+
+      const reasons = yield* Effect.forEach(early, (message) =>
+        Effect.flip(batchesOf(["nfl"], [...recorded.slice(0, 2), ...message])).pipe(
+          Effect.map((error) => error.reason)
+        )
+      )
+      assert.deepStrictEqual(reasons, ["Gap", "Gap"])
+    }).pipe(Effect.provide(TestLayer))
+  )
+
+  it.effect("an idle message that skips a mid fails with Gap, and is still counted", () =>
+    Effect.gen(function* () {
+      const recorded = yield* recordedMessages
+      const skipping = yield* decodeMessage({ op: "I", tc: "event-football-nfl", mid: 4286639 })
+      const error = yield* Effect.flip(batchesOf(["nfl"], [...recorded.slice(0, 3), skipping]))
+
+      assert.strictEqual(error.reason, "Gap")
+      const idles = (yield* Metric.snapshot).find(
+        (metric) => metric.id === "sportal_live_feed_messages" && metric.attributes?.op === "I"
+      )
+      assert.strictEqual(idles?.type === "Counter" ? idles.state.count : undefined, 1)
+    }).pipe(Effect.provide(TestLayer), withMetrics)
+  )
+
+  it.effect("a copy adds the value read at its source", () =>
+    Effect.gen(function* () {
+      const recorded = yield* recordedMessages
+      // ARI at NYG: the away team (competitor 0) had 14, the home team 6.
+      const copy = yield* patchMessage(4286638, [
+        { op: "copy", from: `${ariAtNyg}/competitors/1/score`, path: `${ariAtNyg}/competitors/0/score` }
+      ])
+      const batches = yield* batchesOf(["nfl"], [...recorded.slice(0, 3), copy])
+
+      assert.strictEqual(batches.length, 2)
+      assert.deepStrictEqual(
+        batches[1]?.map((game) => [game.id, game.away.score, game.home.score]),
+        [["401872966", 6, 6]]
+      )
+    }).pipe(Effect.provide(TestLayer))
+  )
+
+  it.effect("a copy from nothing fails with Unapplicable", () =>
+    Effect.gen(function* () {
+      const recorded = yield* recordedMessages
+      const copy = yield* patchMessage(4286638, [
+        { op: "copy", from: `${ariAtNyg}/competitors/5/score`, path: `${ariAtNyg}/competitors/0/score` }
+      ])
+      const error = yield* Effect.flip(batchesOf(["nfl"], [...recorded.slice(0, 3), copy]))
+
+      assert.strictEqual(error.reason, "Unapplicable")
+    }).pipe(Effect.provide(TestLayer))
+  )
+
   it.effect("a patch at a competitor that does not exist fails with Unapplicable", () =>
     Effect.gen(function* () {
       const recorded = yield* recordedMessages
-      const unapplicable = yield* Schema.decodeUnknownEffect(FastCastPayload.Message)({
-        op: "P",
-        tc: "event-football-nfl",
-        mid: 4286638,
-        pl: JSON.stringify({
-          ts: 1791136341731,
-          pl: [{ op: "replace", path: "s:20~l:28~e:401872966~c:401872966/competitors/5/score", value: "21" }]
-        })
-      })
+      const unapplicable = yield* patchMessage(4286638, [
+        { op: "replace", path: `${ariAtNyg}/competitors/5/score`, value: "21" }
+      ])
       const error = yield* Effect.flip(batchesOf(["nfl"], [...recorded.slice(0, 3), unapplicable]))
 
       assert.strictEqual(error.reason, "Unapplicable")
@@ -179,6 +247,18 @@ describe("FastCastDocument", () => {
         (yield* Metric.snapshot).find((metric) => metric.id === "sportal_live_feed_undecoded"),
         "every event decodes"
       )
+    }).pipe(Effect.provide(TestLayer), withMetrics)
+  )
+
+  it.effect("counts the games it delivers", () =>
+    Effect.gen(function* () {
+      const batches = yield* batchesOf(["nfl"], yield* recordedMessages)
+      const games = (yield* Metric.snapshot).find(
+        (metric) => metric.id === "sportal_live_feed_games" && metric.attributes?.league === "nfl"
+      )
+
+      assert.strictEqual(games?.type === "Counter" ? games.state.count : undefined, batches.flat().length)
+      assert.isAbove(batches.flat().length, 16)
     }).pipe(Effect.provide(TestLayer), withMetrics)
   )
 })

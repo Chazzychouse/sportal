@@ -1,4 +1,4 @@
-import { type Broadcast, GameId, GameSnapshot, Network } from "@sportal/domain/Game"
+import { GameId, GameSnapshot } from "@sportal/domain/Game"
 import type { LeagueId } from "@sportal/domain/League"
 import { Team, TeamId } from "@sportal/domain/Team"
 import { DateTime, Effect, Layer, Option, Schema } from "effect"
@@ -68,10 +68,7 @@ function toSnapshot(league: LeagueId, event: typeof EspnPayload.Event.Type): Opt
       ...(competitor.team.logo === undefined ? {} : { logo: competitor.team.logo })
     }),
     score: competitor.score ?? 0,
-    // ESPN reports 99 for unranked teams.
-    ...(competitor.curatedRank === undefined || competitor.curatedRank.current > 25
-      ? {}
-      : { ranking: competitor.curatedRank.current })
+    ranking: competitor.curatedRank?.current
   })
 
   return Option.some(
@@ -84,24 +81,12 @@ function toSnapshot(league: LeagueId, event: typeof EspnPayload.Event.Type): Opt
       clock: event.status.displayClock,
       home: side(home),
       away: side(away),
-      broadcasts: (competition.geoBroadcasts ?? []).flatMap(toBroadcast),
+      broadcasts: (competition.geoBroadcasts ?? []).flatMap((broadcast) =>
+        EspnSnapshot.broadcast(broadcast.type.shortName, broadcast.media.shortName)
+      ),
       ...(competition.situation === undefined
         ? {}
         : { situation: EspnSnapshot.situation(league, competition.situation, home.team.id) })
     })
   )
-}
-
-/** A TV or streaming broadcast; ESPN also lists radio, which no source plays. */
-function toBroadcast(broadcast: {
-  readonly type: { readonly shortName: string }
-  readonly media: { readonly shortName: string }
-}): Array<Broadcast> {
-  const medium =
-    broadcast.type.shortName === "TV"
-      ? "tv"
-      : broadcast.type.shortName === "Streaming"
-        ? "streaming"
-        : undefined
-  return medium === undefined ? [] : [{ network: Network.make(broadcast.media.shortName), medium }]
 }
