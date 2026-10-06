@@ -6,9 +6,9 @@ import { snapshot } from "@sportal/domain/TestGame"
 import { DateTime, Effect, Layer, Option, Ref, Stream } from "effect"
 import { TestClock } from "effect/testing"
 import { LiveGames } from "./LiveGames.ts"
+import { game } from "./provider/TestProvider.ts"
 import { Slate } from "./Slate.ts"
 import * as ScenarioIngest from "./scenario/ScenarioIngest.ts"
-import { game } from "./TestProvider.ts"
 
 describe("Slate", () => {
   it.effect("keeps the listing's order, leagues in their order", () =>

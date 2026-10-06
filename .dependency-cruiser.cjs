@@ -23,20 +23,21 @@ module.exports = {
     },
     {
       name: "provider-payloads-are-private",
-      comment: "A provider's or source's wire vocabulary stays inside its folder.",
+      comment:
+        "A provider's or source's wire vocabulary stays inside its folder (the recording tools read the providers' recordings).",
       severity: "error",
-      from: { pathNot: "^apps/hub/src/(provider|source)/([^/]+)/" },
+      from: { pathNot: "^apps/hub/src/((provider|source)/([^/]+)/|recording/)" },
       to: { path: "^apps/hub/src/(provider|source)/[^/]+/[^/]*Payload\\.ts$" }
     },
     {
       name: "only-hub-mode-names-adapters",
       comment:
-        "Only HubMode and tests know which concrete providers and sources exist; main.ts names only the database.",
+        "Only HubMode, the recording tools, and tests know which concrete providers and sources exist; main.ts names only the database.",
       severity: "error",
       from: {
         path: "^apps/hub/src/",
         pathNot:
-          "(^apps/hub/src/HubMode\\.ts$|\\.test\\.ts$|^apps/hub/src/provider/[^/]+/|^apps/hub/src/source/youtube-tv/|^apps/hub/src/source/Sql[^/]+\\.ts$)"
+          "(^apps/hub/src/HubMode\\.ts$|\\.test\\.ts$|^apps/hub/src/recording/|^apps/hub/src/provider/[^/]+/|^apps/hub/src/source/youtube-tv/|^apps/hub/src/source/Sql[^/]+\\.ts$)"
       },
       to: {
         path: "^apps/hub/src/(provider/[^/]+/|source/youtube-tv/|source/Sql[^/]+\\.ts$|scenario/Scenario(Ingest|Source|Clock)\\.ts$)"
@@ -50,9 +51,9 @@ module.exports = {
       from: {
         path: "^apps/hub/src/",
         pathNot:
-          "(^apps/hub/src/main\\.ts$|\\.test\\.ts$|^apps/hub/src/source/Sql[^/]+\\.ts$|^apps/hub/src/database/|^apps/hub/src/feed/FeedLog\\.ts$|^apps/hub/src/GameHistory\\.ts$)"
+          "(^apps/hub/src/main\\.ts$|\\.test\\.ts$|^apps/hub/src/source/Sql[^/]+\\.ts$|^apps/hub/src/Database\\.ts$|^apps/hub/src/feed-log/FeedLog\\.ts$|^apps/hub/src/GameHistory\\.ts$)"
       },
-      to: { path: "^apps/hub/src/database/" }
+      to: { path: "^apps/hub/src/Database\\.ts$" }
     },
     {
       name: "test-game-is-for-tests",
@@ -61,7 +62,7 @@ module.exports = {
       severity: "error",
       from: {
         pathNot:
-          "(\\.test\\.tsx?$|^apps/hub/src/TestProvider\\.ts$|^apps/web/src/slate/TestSlate\\.ts$|^apps/hub/src/scenario/(Scenario\\.ts|written/))"
+          "(\\.test\\.tsx?$|^apps/hub/src/provider/TestProvider\\.ts$|^apps/web/src/slate/TestSlate\\.ts$|^apps/hub/src/scenario/(Scenario\\.ts|written/))"
       },
       to: { path: "^packages/domain/src/TestGame\\.ts$" }
     },
@@ -84,7 +85,7 @@ module.exports = {
       comment: "A provider scripted for a test, and the games it lists, are imported only by test files.",
       severity: "error",
       from: { pathNot: "\\.test\\.ts$" },
-      to: { path: "^apps/hub/src/TestProvider\\.ts$" }
+      to: { path: "^apps/hub/src/provider/TestProvider\\.ts$" }
     },
     {
       name: "no-junk-drawers",

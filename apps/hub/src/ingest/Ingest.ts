@@ -20,7 +20,7 @@ import {
   Schedule,
   Stream
 } from "effect"
-import { FeedLog } from "../feed/FeedLog.ts"
+import { FeedLog } from "../feed-log/FeedLog.ts"
 import { LiveGames } from "../LiveGames.ts"
 import { LiveFeed } from "../provider/LiveFeed.ts"
 import { type Decoded, Provider } from "../provider/Provider.ts"

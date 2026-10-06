@@ -3,9 +3,9 @@ import { GameId, GameSnapshot } from "@sportal/domain/Game"
 import { LeagueId } from "@sportal/domain/League"
 import { snapshot } from "@sportal/domain/TestGame"
 import { DateTime, Effect, Layer, Option, Ref, Schema, Stream } from "effect"
-import { Frame } from "./feed/Frame.ts"
-import { LiveFeed } from "./provider/LiveFeed.ts"
-import { Decoded, Provider, ProviderError } from "./provider/Provider.ts"
+import { Frame } from "../feed-log/Frame.ts"
+import { LiveFeed } from "./LiveFeed.ts"
+import { Decoded, Provider, ProviderError } from "./Provider.ts"
 
 /** A live game `id` in `period`, at 10:00 on the clock. */
 export function game(id: string, period = 1) {

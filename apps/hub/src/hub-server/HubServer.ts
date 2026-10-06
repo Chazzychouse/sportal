@@ -8,8 +8,8 @@ import { HttpRouter, HttpServerResponse, HttpStaticServer } from "effect/http"
 import { HttpApiBuilder } from "effect/http-api"
 import { HubConfig } from "../HubConfig.ts"
 import { Slate } from "../Slate.ts"
+import { StageSessions } from "../StageSessions.ts"
 import { Source } from "../source/Source.ts"
-import { StageSessions } from "../stage/StageSessions.ts"
 import { lanAddresses } from "./LanAddresses.ts"
 
 /**

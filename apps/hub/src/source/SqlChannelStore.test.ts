@@ -3,7 +3,7 @@ import { NodeServices } from "@effect/platform-node"
 import { assert, describe, it } from "@effect/vitest"
 import { Network } from "@sportal/domain/Game"
 import { Effect, FileSystem, Layer } from "effect"
-import * as Database from "../database/Database.ts"
+import * as Database from "../Database.ts"
 import { ChannelStore } from "./ChannelStore.ts"
 import * as SqlChannelStore from "./SqlChannelStore.ts"
 

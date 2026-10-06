@@ -1,7 +1,7 @@
 import { SqliteClient } from "@effect/sql-sqlite-node"
 import { Effect, FileSystem, Layer, Path } from "effect"
 import { Migrator, type SqlClient } from "effect/sql"
-import { HubConfig } from "../HubConfig.ts"
+import { HubConfig } from "./HubConfig.ts"
 
 /**
  * The Hub's SQLite database, in `filename` (or `":memory:"`). Each store migrates its own tables.

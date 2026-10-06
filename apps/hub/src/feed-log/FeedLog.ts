@@ -22,7 +22,7 @@ import {
 } from "effect"
 import { Hex } from "effect/encoding"
 import { SqlClient, SqlSchema } from "effect/sql"
-import * as Database from "../database/Database.ts"
+import * as Database from "../Database.ts"
 import type { HubConfig } from "../HubConfig.ts"
 import { Frame } from "./Frame.ts"
 import * as Gzip from "./Gzip.ts"

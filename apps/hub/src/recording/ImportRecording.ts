@@ -15,10 +15,10 @@ import {
   Struct
 } from "effect"
 import { Command, Flag } from "effect/cli"
-import { Frame } from "../../feed/Frame.ts"
-import * as Gzip from "../../feed/Gzip.ts"
+import { Frame } from "../feed-log/Frame.ts"
+import * as Gzip from "../feed-log/Gzip.ts"
+import * as FastCastDocument from "../provider/espn/FastCastDocument.ts"
 import * as CutScenario from "./CutScenario.ts"
-import * as FastCastDocument from "./FastCastDocument.ts"
 
 /**
  * A recorded day as frames: each `gp-` topic seeded with an empty checkpoint, its patch batches as messages, and the

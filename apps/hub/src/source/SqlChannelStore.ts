@@ -2,7 +2,7 @@ import { type ChannelCarriage, SourceName } from "@sportal/domain/Channel"
 import { Network } from "@sportal/domain/Game"
 import { DateTime, Effect, Layer, Schema } from "effect"
 import { SqlClient, SqlSchema } from "effect/sql"
-import * as Database from "../database/Database.ts"
+import * as Database from "../Database.ts"
 import { ChannelStore, ChannelStoreError } from "./ChannelStore.ts"
 
 /** Channel carriages in the Hub's database, in a table this store creates and migrates itself. */

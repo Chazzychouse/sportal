@@ -2,8 +2,8 @@ import { ChannelAvailability } from "@sportal/domain/Channel"
 import type { GameId } from "@sportal/domain/Game"
 import { Stage, type StageCommand, type StageRejection } from "@sportal/domain/Stage"
 import { Context, Effect, Layer, Option, Result, Stream, SubscriptionRef } from "effect"
-import { Slate } from "../Slate.ts"
-import { Source } from "../source/Source.ts"
+import { Slate } from "./Slate.ts"
+import { Source } from "./source/Source.ts"
 
 export class StageSessions extends Context.Service<
   StageSessions,

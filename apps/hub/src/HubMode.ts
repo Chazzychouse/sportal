@@ -1,6 +1,6 @@
 import { NodeSocket } from "@effect/platform-node"
 import { Effect, Layer, Option } from "effect"
-import { FeedLog } from "./feed/FeedLog.ts"
+import { FeedLog } from "./feed-log/FeedLog.ts"
 import { GameHistory } from "./GameHistory.ts"
 import { HubConfig } from "./HubConfig.ts"
 import { Ingest } from "./ingest/Ingest.ts"

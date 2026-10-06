@@ -1,11 +1,11 @@
 import { NodeRuntime, NodeServices } from "@effect/platform-node"
 import { Cause, Exit, Layer, Runtime } from "effect"
 import { FetchHttpClient } from "effect/http"
-import * as Database from "./database/Database.ts"
+import * as Database from "./Database.ts"
 import { HubConfig } from "./HubConfig.ts"
 import * as HubMode from "./HubMode.ts"
-import * as HubServer from "./http/HubServer.ts"
-import { StageSessions } from "./stage/StageSessions.ts"
+import * as HubServer from "./hub-server/HubServer.ts"
+import { StageSessions } from "./StageSessions.ts"
 import * as Telemetry from "./Telemetry.ts"
 
 const Hub = HubServer.serve.pipe(

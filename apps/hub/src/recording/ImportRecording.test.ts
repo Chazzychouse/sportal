@@ -2,8 +2,8 @@ import { join } from "node:path"
 import { NodeServices } from "@effect/platform-node"
 import { assert, describe, it } from "@effect/vitest"
 import { DateTime, Effect, FileSystem, Option, Schema, Stream } from "effect"
-import type { Frame } from "../../feed/Frame.ts"
-import * as Gzip from "../../feed/Gzip.ts"
+import type { Frame } from "../feed-log/Frame.ts"
+import * as Gzip from "../feed-log/Gzip.ts"
 import * as ImportRecording from "./ImportRecording.ts"
 
 const neAtBuf = "gp-football-nfl-401872971"
@@ -109,7 +109,14 @@ describe("ImportRecording.importRecording", () => {
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem
       const scoreboard = yield* fs.readFileString(
-        join(import.meta.dirname, "fixtures", "nfl-scoreboard-2026-10-04T1800Z.json")
+        join(
+          import.meta.dirname,
+          "..",
+          "provider",
+          "espn",
+          "fixtures",
+          "nfl-scoreboard-2026-10-04T1800Z.json"
+        )
       )
       const buf = "gp-football-nfl-401872972"
       const recording = yield* recordingOf(

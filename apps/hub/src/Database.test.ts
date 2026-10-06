@@ -2,8 +2,8 @@ import { NodeServices } from "@effect/platform-node"
 import { assert, describe, it } from "@effect/vitest"
 import { ConfigProvider, Effect, FileSystem, Layer, Path } from "effect"
 import { SqlClient } from "effect/sql"
-import { HubConfig } from "../HubConfig.ts"
 import * as Database from "./Database.ts"
+import { HubConfig } from "./HubConfig.ts"
 
 describe("Database.migrate", () => {
   it.effect("keeps each store's migrations in its own table, so stores number them independently", () =>

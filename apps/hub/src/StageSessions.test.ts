@@ -5,12 +5,12 @@ import { broadcast, snapshot, team } from "@sportal/domain/TestGame"
 import { Watchability } from "@sportal/domain/Watchability"
 import { DateTime, Deferred, Effect, Fiber, Layer, Option, Ref, Stream } from "effect"
 import { TestClock } from "effect/testing"
-import * as Database from "../database/Database.ts"
-import { Slate } from "../Slate.ts"
-import { Source } from "../source/Source.ts"
-import * as SqlChannelStore from "../source/SqlChannelStore.ts"
-import * as YouTubeTv from "../source/youtube-tv/YouTubeTv.ts"
+import * as Database from "./Database.ts"
+import { Slate } from "./Slate.ts"
 import { StageSessions } from "./StageSessions.ts"
+import { Source } from "./source/Source.ts"
+import * as SqlChannelStore from "./source/SqlChannelStore.ts"
+import * as YouTubeTv from "./source/youtube-tv/YouTubeTv.ts"
 
 const espn = Network.make("ESPN")
 const espnPlus = Network.make("ESPN+")
@@ -241,7 +241,7 @@ describe("StageSessions", () => {
       const source = yield* Source
       yield* source.readGuide(
         readFileSync(
-          new URL("../source/youtube-tv/fixtures/guide-2026-10-03T2024Z.json", import.meta.url),
+          new URL("./source/youtube-tv/fixtures/guide-2026-10-03T2024Z.json", import.meta.url),
           "utf8"
         )
       )

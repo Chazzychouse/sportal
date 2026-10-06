@@ -4,11 +4,11 @@ import { gunzipSync } from "node:zlib"
 import { NodeRuntime, NodeServices } from "@effect/platform-node"
 import type { LeagueId } from "@sportal/domain/League"
 import { DateTime, Effect, FileSystem, Option, Schema } from "effect"
-import { Scenario } from "../../scenario/Scenario.ts"
+import * as EspnDecode from "../provider/espn/EspnDecode.ts"
+import * as EspnPayload from "../provider/espn/EspnPayload.ts"
+import { Scenario } from "../scenario/Scenario.ts"
 // A script entry point, like main.ts, so it may name the scenario adapter's folder.
-import { folder } from "../../scenario/ScenarioIngest.ts"
-import * as EspnDecode from "./EspnDecode.ts"
-import * as EspnPayload from "./EspnPayload.ts"
+import { folder } from "../scenario/ScenarioIngest.ts"
 
 /**
  * A window of a recorded game day as a scenario: each scoreboard poll in it, decoded as ESPN's live ones are, is a

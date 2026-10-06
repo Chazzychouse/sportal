@@ -3,8 +3,8 @@ import { assert, describe, it } from "@effect/vitest"
 import { Network } from "@sportal/domain/Game"
 import { DateTime, Effect, Layer } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/http"
-import { listedBy } from "../../TestProvider.ts"
 import { Provider } from "../Provider.ts"
+import { listedBy } from "../TestProvider.ts"
 import * as EspnProvider from "./EspnProvider.ts"
 
 // Real payloads recorded from ESPN. A payload that breaks decoding gets added here before the fix.

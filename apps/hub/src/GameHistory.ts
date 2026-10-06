@@ -3,7 +3,7 @@ import type * as Fold from "@sportal/domain/LiveGames"
 import { Play, type PlayId } from "@sportal/domain/Play"
 import { Array as Arr, Context, Effect, Equal, Filter, Layer, Metric, Option, Schema, Stream } from "effect"
 import { SqlClient, SqlSchema } from "effect/sql"
-import * as Database from "./database/Database.ts"
+import * as Database from "./Database.ts"
 import { LiveGames } from "./LiveGames.ts"
 
 /** Past plays and each game's latest snapshot, derived from the fold into the Hub's database. Rebuildable from the feed log. */
@@ -68,11 +68,11 @@ export class GameHistory extends Context.Service<
                 ({ game, rows, kept }) =>
                   Effect.andThen(
                     Arr.isReadonlyArrayNonEmpty(rows)
-                      ? sql`
+                      ? Effect.asVoid(sql`
                           INSERT INTO play ${sql.insert(rows)}
                           ON CONFLICT (game, id) DO UPDATE SET seq = excluded.seq, body = excluded.body
                           WHERE excluded.seq > play.seq
-                        `
+                        `)
                       : Effect.void,
                     sql`
                       DELETE FROM play

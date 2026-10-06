@@ -7,7 +7,9 @@ import { DateTime, Effect, FileSystem } from "effect"
 import * as CutScenario from "./CutScenario.ts"
 
 // A real ESPN poll, recorded as the spike's recorder writes them: gzipped, named for the instant.
-const poll = gzipSync(readFileSync(new URL("./fixtures/fbs-scoreboard-live.json", import.meta.url)))
+const poll = gzipSync(
+  readFileSync(new URL("../provider/espn/fixtures/fbs-scoreboard-live.json", import.meta.url))
+)
 const utc = (iso: string) => DateTime.makeUnsafe(iso)
 
 describe("CutScenario.cut", () => {
