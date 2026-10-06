@@ -1,7 +1,6 @@
 import { type LiveMessage, LiveMessageJson } from "@sportal/api/LiveMessage"
-import type { GameSnapshot } from "@sportal/domain/Game"
+import type { GameId, GameSnapshot } from "@sportal/domain/Game"
 import { Stage } from "@sportal/domain/Stage"
-import type { Watchability } from "@sportal/domain/Watchability"
 import { Schema } from "effect"
 import { useSyncExternalStore } from "react"
 
@@ -13,7 +12,10 @@ export function useLive() {
 /** @testonly */
 export const disconnected = {
   slate: [] as ReadonlyArray<GameSnapshot>,
-  watchability: [] as ReadonlyArray<Watchability>,
+  watchability: new Map() as ReadonlyMap<
+    GameId,
+    { score: number; lull: boolean; reasons: ReadonlyArray<string> }
+  >,
   stage: Stage.initial,
   connected: false
 }
@@ -22,7 +24,11 @@ export const disconnected = {
 export function reduce(live: typeof disconnected, message: LiveMessage): typeof disconnected {
   switch (message._tag) {
     case "SlateChanged":
-      return { ...live, slate: message.slate, watchability: message.watchability }
+      return {
+        ...live,
+        slate: message.slate.map((entry) => entry.game),
+        watchability: new Map(message.slate.map((entry) => [entry.game.id, entry.watchability]))
+      }
     case "StageChanged":
       return { ...live, stage: message.stage }
   }

@@ -31,7 +31,7 @@ export function ScenarioStream(props: { game: string }) {
           {connected ? `No game ${props.game} in this scenario` : "Waiting for the Hub"}
         </p>
       ) : (
-        <Scorebug game={game} watch={watchability.find((w) => w.game === props.game)} />
+        <Scorebug game={game} watch={watchability.get(game.id)} />
       )}
       <p className="absolute right-[2vmin] bottom-[2vmin] font-mono text-[2.5vmin] opacity-70">
         {props.game}
@@ -57,7 +57,10 @@ function useTone(game: string) {
   }, [game])
 }
 
-function Scorebug(props: { game: GameSnapshot; watch: Watchability | undefined }) {
+function Scorebug(props: {
+  game: GameSnapshot
+  watch: Pick<Watchability, "score" | "lull" | "reasons"> | undefined
+}) {
   const { game } = props
   const situation = game.situation
   const down = situation?.down

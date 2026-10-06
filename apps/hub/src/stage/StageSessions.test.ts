@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs"
 import { assert, describe, it } from "@effect/vitest"
 import { GameId, type GameSnapshot, Network } from "@sportal/domain/Game"
 import { broadcast, snapshot, team } from "@sportal/domain/TestGame"
+import { Watchability } from "@sportal/domain/Watchability"
 import { DateTime, Deferred, Effect, Fiber, Layer, Option, Ref, Stream } from "effect"
 import { TestClock } from "effect/testing"
 import * as Database from "../database/Database.ts"
@@ -114,7 +115,7 @@ describe("StageSessions", () => {
       const fakeSlate = Slate.of({
         latest: Ref.update(refreshes, (count) => count + 1).pipe(
           Effect.andThen(Deferred.succeed(refreshed, undefined)),
-          Effect.as({ slate, watchability: [] })
+          Effect.as(listed(slate))
         ),
         changes: Stream.empty
       })
@@ -197,7 +198,7 @@ describe("StageSessions", () => {
     Effect.gen(function* () {
       const onSlate = yield* Ref.make(slate)
       const fakeSlate = Slate.of({
-        latest: Effect.map(Ref.get(onSlate), (current) => ({ slate: current, watchability: [] })),
+        latest: Effect.map(Ref.get(onSlate), listed),
         changes: Stream.empty
       })
       yield* Effect.gen(function* () {
@@ -276,9 +277,13 @@ describe("StageSessions", () => {
   )
 })
 
-/** A Slate that lists `games`, with no watchability and no changes. */
+/** A Slate that lists `games`, each as fresh as at the epoch, with no changes. */
 function slateOf(games: ReadonlyArray<GameSnapshot>) {
-  return Slate.of({ latest: Effect.succeed({ slate: games, watchability: [] }), changes: Stream.empty })
+  return Slate.of({ latest: Effect.succeed(listed(games)), changes: Stream.empty })
+}
+
+function listed(games: ReadonlyArray<GameSnapshot>) {
+  return games.map((game) => ({ game, watchability: Watchability.initial(game, DateTime.makeUnsafe(0)) }))
 }
 
 function game(id: string, broadcasts: ReadonlyArray<Network>) {

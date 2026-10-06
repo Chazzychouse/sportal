@@ -16,13 +16,7 @@ import { lanAddresses } from "./LanAddresses.ts"
  * The handlers for every endpoint group in SportalApi. Exported so tests can drive them without a socket.
  * @testonly
  */
-export const ApiHandlers = Layer.mergeAll(
-  slateHandlers(),
-  stageHandlers(),
-  channelHandlers(),
-  guideHandlers(),
-  hostHandlers()
-)
+export const ApiHandlers = Layer.mergeAll(stageHandlers(), channelHandlers(), guideHandlers(), hostHandlers())
 
 /**
  * Every route the Hub serves: the API, and the live stream.
@@ -46,17 +40,6 @@ export const serve = Layer.unwrap(
     return HttpRouter.serve(routes).pipe(Layer.provide(server))
   })
 )
-
-function slateHandlers() {
-  return HttpApiBuilder.group(
-    SportalApi,
-    "slate",
-    Effect.fn(function* (handlers) {
-      const slate = yield* Slate
-      return handlers.handleAll({ current: () => Effect.map(slate.latest, (latest) => latest.slate) })
-    })
-  )
-}
 
 function stageHandlers() {
   return HttpApiBuilder.group(
@@ -140,9 +123,7 @@ function liveRoute() {
       const slate = yield* Slate
       const sessions = yield* StageSessions
       const messages: Stream.Stream<LiveMessage> = Stream.merge(
-        slate.changes.pipe(
-          Stream.map(({ slate, watchability }) => ({ _tag: "SlateChanged" as const, slate, watchability }))
-        ),
+        slate.changes.pipe(Stream.map((slate) => ({ _tag: "SlateChanged" as const, slate }))),
         sessions.changes.pipe(Stream.map((stage) => ({ _tag: "StageChanged" as const, stage })))
       )
       const encode = Schema.encodeSync(LiveMessageJson)

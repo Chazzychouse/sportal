@@ -21,11 +21,11 @@ export class StageSessions extends Context.Service<
       const current = yield* SubscriptionRef.make(Stage.initial)
       // Where each game on the current slate can be streamed; a game no longer on the slate has none.
       const availabilityOnSlate = Effect.gen(function* () {
-        const { slate: games } = yield* slate.latest
+        const games = yield* slate.latest
         const availabilityOf = yield* source.availability
         return (id: GameId): Option.Option<ChannelAvailability> =>
-          Option.fromNullishOr(games.find((candidate) => candidate.id === id)).pipe(
-            Option.map(availabilityOf)
+          Option.fromNullishOr(games.find((candidate) => candidate.game.id === id)).pipe(
+            Option.map((listed) => availabilityOf(listed.game))
           )
       })
 

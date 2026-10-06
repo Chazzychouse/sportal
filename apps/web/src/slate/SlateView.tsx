@@ -3,6 +3,7 @@ import type { Stage, StageCommand } from "@sportal/domain/Stage"
 import type { Watchability } from "@sportal/domain/Watchability"
 import { Fragment, useEffect, useRef } from "react"
 import type { Display } from "../Display.ts"
+import type { useLive } from "../hub/Live.ts"
 import { tileDrag } from "../stage/TileChrome.tsx"
 import { statusText } from "./StatusText.ts"
 import type { stripCards } from "./StripCards.ts"
@@ -17,7 +18,7 @@ export function SlateView(props: {
   cards: ReturnType<typeof stripCards>
   display: Display
   stage: Stage
-  watchability: ReadonlyArray<Watchability>
+  watchability: ReturnType<typeof useLive>["watchability"]
   onDrop: (dropped: { display: Display; commands: ReadonlyArray<StageCommand> }) => void
 }) {
   const pick = props.display.pick
@@ -69,7 +70,7 @@ export function SlateView(props: {
                     card={card}
                     picked={pick === card.id}
                     droppable={dropped.commands.length > 0}
-                    watch={props.watchability.find((w) => w.game === card.id)}
+                    watch={props.watchability.get(card.id)}
                     onDrop={() => props.onDrop(dropped)}
                   />
                 </li>
@@ -90,7 +91,7 @@ function Card(props: {
   card: ReturnType<typeof stripCards>[number]
   picked: boolean
   droppable: boolean
-  watch: Watchability | undefined
+  watch: Pick<Watchability, "score" | "lull" | "reasons"> | undefined
   onDrop: () => void
 }) {
   const { game, place } = props.card

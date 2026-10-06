@@ -45,17 +45,13 @@ const streaming = {
   learnedFor: espn
 } as const
 
-const makeClient = HttpApiTest.groups(SportalApi, ["slate", "stage", "channels", "guide", "host"])
+const makeClient = HttpApiTest.groups(SportalApi, ["stage", "channels", "guide", "host"])
 
 describe("Hub API", () => {
-  it.effect("serves the slate and turns an assignment on an unlearned network into a picking tile", () =>
+  it.effect("turns an assignment on an unlearned network into a picking tile", () =>
     Effect.gen(function* () {
       const client = yield* makeClient
       yield* firstSlateOnTestClock()
-
-      const slate = yield* client.slate.current()
-      assert.strictEqual(slate[0]?.away.team.abbreviation, "ALA")
-      assert.isTrue(DateTime.isDateTime(slate[0]?.kickoff))
 
       const stage = yield* client.stage.dispatch({
         payload: { command: { _tag: "Assign", tile: 0, game: game.id } }
@@ -185,6 +181,16 @@ describe("Hub API", () => {
   )
 })
 
+describe("GET /api/slate", () => {
+  it.effect("is not served: the slate comes only on the live stream", () =>
+    Effect.gen(function* () {
+      const http = yield* HttpClient.HttpClient
+      const response = yield* http.get("/api/slate")
+      assert.strictEqual(response.status, 404)
+    }).pipe(Effect.scoped, Effect.provide(serverUnderTest()))
+  )
+})
+
 describe("GET /api/live", () => {
   it.effect("streams the current slate and stage first, then each change, as server-sent events", () =>
     Effect.gen(function* () {
@@ -218,6 +224,30 @@ describe("GET /api/live", () => {
       yield* api.stage.dispatch({ payload: { command: { _tag: "Assign", tile: 0, game: game.id } } })
       const third = yield* Queue.take(received)
       assert.deepStrictEqual(third._tag === "StageChanged" ? third.stage.tiles[0] : third, picking)
+    }).pipe(Effect.scoped, Effect.provide(serverUnderTest()))
+  )
+
+  it.effect("sends each listed game with its watchability, and none of what the fold remembers", () =>
+    Effect.gen(function* () {
+      const http = yield* HttpClient.HttpClient
+      yield* firstSlateOnTestClock()
+
+      const response = yield* http.get("/api/live")
+      const lines = yield* Queue.unbounded<string>()
+      yield* response.stream.pipe(
+        Stream.decodeText,
+        Stream.splitLines,
+        Stream.filter((line) => line.includes("SlateChanged")),
+        Stream.runForEach((line) => Queue.offer(lines, line)),
+        Effect.forkScoped
+      )
+      const line = yield* Queue.take(lines)
+
+      assert.notMatch(line, /activeAt|breakUntil|boostUntil/)
+      const [entry] = JSON.parse(line.slice("data: ".length)).slate
+      assert.deepStrictEqual(Object.keys(entry).sort(), ["game", "watchability"])
+      assert.strictEqual(entry.game.id, game.id)
+      assert.deepStrictEqual(Object.keys(entry.watchability).sort(), ["lull", "reasons", "score"])
     }).pipe(Effect.scoped, Effect.provide(serverUnderTest()))
   )
 
@@ -260,7 +290,7 @@ function firstSlate() {
   return Effect.gen(function* () {
     const slate = yield* Slate
     yield* slate.changes.pipe(
-      Stream.filter((latest) => latest.slate.length > 0),
+      Stream.filter((latest) => latest.length > 0),
       Stream.take(1),
       Stream.runDrain
     )
