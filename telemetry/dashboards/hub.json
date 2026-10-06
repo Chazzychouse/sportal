@@ -229,7 +229,7 @@
     {
       "id": 8,
       "type": "timeseries",
-      "title": "Snapshots taken and behind",
+      "title": "Snapshots taken, kept, and behind",
       "gridPos": {
         "x": 12,
         "y": 25,
