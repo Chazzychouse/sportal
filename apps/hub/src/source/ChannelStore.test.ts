@@ -5,7 +5,6 @@ import { Network } from "@sportal/domain/Game"
 import { Effect, FileSystem, Layer } from "effect"
 import * as Database from "../Database.ts"
 import { ChannelStore } from "./ChannelStore.ts"
-import * as SqlChannelStore from "./SqlChannelStore.ts"
 
 const espn = Network.make("ESPN")
 const espnPlus = Network.make("ESPN+")
@@ -16,7 +15,7 @@ const carried = (url: string) => ({
 })
 const notCarried = { _tag: "NotCarried" as const, network: espnPlus, source: "YouTube TV" as const }
 
-describe("SqlChannelStore", () => {
+describe("ChannelStore", () => {
   it.effect("starts empty and returns each carriage recorded", () =>
     Effect.gen(function* () {
       const filename = yield* tempDatabase()
@@ -82,5 +81,5 @@ function tempDatabase() {
 function withStore<A, E>(filename: string, use: (store: typeof ChannelStore.Service) => Effect.Effect<A, E>) {
   return Effect.gen(function* () {
     return yield* use(yield* ChannelStore)
-  }).pipe(Effect.provide(SqlChannelStore.layer.pipe(Layer.provide(Database.layer(filename)))))
+  }).pipe(Effect.provide(ChannelStore.layer.pipe(Layer.provide(Database.layer(filename)))))
 }
