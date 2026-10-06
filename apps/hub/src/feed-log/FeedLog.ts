@@ -54,7 +54,7 @@ export class FeedLog extends Context.Service<
     FeedLog,
     Effect.gen(function* () {
       yield* Database.migrate("feed", migrations).pipe(Effect.orDie)
-      const context = yield* Effect.context<SqlClient.SqlClient | Crypto.Crypto>()
+      const sql = yield* SqlClient.SqlClient
       const last = yield* lastSeq().pipe(Effect.orDie)
       const intake = {
         next: yield* Ref.make(last + 1),
@@ -78,10 +78,27 @@ export class FeedLog extends Context.Service<
         )
       )
 
+      // Uninterruptible, so a seq once assigned is always published and queued; every step is non-blocking.
+      const append = Effect.fn("FeedLog.append")(function* (received: Omit<Frame, "seq">) {
+        return yield* intake.permit.withPermit(
+          Effect.uninterruptible(
+            Effect.gen(function* () {
+              const frame = new Frame({
+                ...received,
+                seq: yield* Ref.getAndUpdate(intake.next, (seq) => seq + 1)
+              })
+              yield* PubSub.publish(intake.published, frame)
+              yield* Queue.offer(intake.pending, frame)
+              return frame
+            })
+          )
+        )
+      })
+
       return FeedLog.of({
-        append: (frame) => append(intake, frame),
+        append,
         subscribe: Effect.map(PubSub.subscribe(intake.published), Stream.fromSubscription),
-        replay: (from) => replay(from).pipe(Stream.provideContext(context))
+        replay: (from) => replay(from).pipe(Stream.provideService(SqlClient.SqlClient, sql))
       })
     })
   )
@@ -106,28 +123,6 @@ function lastSeq() {
     })().pipe(Effect.map(({ seq }) => seq ?? 0))
   )
 }
-
-// Uninterruptible, so a seq once assigned is always published and queued; every step is non-blocking.
-const append = Effect.fn("FeedLog.append")(function* (
-  intake: {
-    readonly next: Ref.Ref<number>
-    readonly permit: Semaphore.Semaphore
-    readonly published: PubSub.PubSub<Frame>
-    readonly pending: Queue.Queue<Frame, Cause.Done>
-  },
-  received: Omit<Frame, "seq">
-) {
-  return yield* intake.permit.withPermit(
-    Effect.uninterruptible(
-      Effect.gen(function* () {
-        const frame = new Frame({ ...received, seq: yield* Ref.getAndUpdate(intake.next, (seq) => seq + 1) })
-        yield* PubSub.publish(intake.published, frame)
-        yield* Queue.offer(intake.pending, frame)
-        return frame
-      })
-    )
-  )
-})
 
 /** Writes what `pending` yields in groups every 100 ms, until it ends; the gap of any frames lost is then logged. */
 function startWriter(pending: Queue.Queue<Frame, Cause.Done>) {
@@ -217,11 +212,10 @@ const store = Effect.fn("FeedLog.store")(function* (state: Writer, group: Readon
   const sql = yield* SqlClient.SqlClient
   const crypto = yield* Crypto.Crypto
   const hashed = yield* Effect.forEach(group, (frame) =>
-    Effect.all({
-      frame: Effect.succeed(frame),
-      row: Schema.encodeEffect(Row)(frame),
-      hash: crypto.digest("SHA-256", new TextEncoder().encode(frame.body)).pipe(Effect.map(Hex.encode))
-    })
+    Effect.all([
+      Schema.encodeEffect(Row)(frame),
+      crypto.digest("SHA-256", new TextEncoder().encode(frame.body)).pipe(Effect.map(Hex.encode))
+    ]).pipe(Effect.map(([row, hash]) => ({ frame, row, hash })))
   )
   const [hashes, decided] = Arr.mapAccum(hashed, state.hashes, (seen, { frame, row, hash }) => {
     const response = Frame.isPollResponse(frame)
@@ -251,9 +245,7 @@ const store = Effect.fn("FeedLog.store")(function* (state: Writer, group: Readon
   yield* Effect.forEach(
     rows,
     ({ feed, kind }) => Metric.update(Metric.withAttributes(framesWritten, { feed, kind }), 1),
-    {
-      discard: true
-    }
+    { discard: true }
   )
   return Writer.Current({ hashes })
 })

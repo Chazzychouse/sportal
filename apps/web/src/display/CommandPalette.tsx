@@ -16,7 +16,7 @@ import { TeamLogo } from "../game/TeamLogo.tsx"
 import { dispatch } from "../hub/HubClient.ts"
 import { runtime } from "../hub/HubRuntime.ts"
 import { LayoutGlyph, layoutLabel } from "../layout/LayoutGlyph.tsx"
-import { tileActions } from "../stage/TileActions.tsx"
+import { keyText, tileActions } from "../stage/TileActions.tsx"
 
 /** Every Stage command by name: watch a game, act on a tile, change layout, go full screen. */
 export function CommandPalette(props: {
@@ -73,7 +73,6 @@ export function CommandPalette(props: {
               tileActions(props.stage, slot)
                 .filter((action) => action.id !== "unsolo")
                 .map((action) => {
-                  const key = shortcut(action.id, action.key, slot === props.selected)
                   return (
                     <CommandItem
                       key={`${action.id}-${slot}`}
@@ -81,7 +80,7 @@ export function CommandPalette(props: {
                       onSelect={() => run(action.command)}
                     >
                       {action.verb} {name}
-                      {key !== undefined && <CommandShortcut>{key}</CommandShortcut>}
+                      {action.key !== undefined && <CommandShortcut>{keyText(action.key)}</CommandShortcut>}
                     </CommandItem>
                   )
                 })
@@ -126,12 +125,6 @@ export function CommandPalette(props: {
       </CommandList>
     </CommandDialog>
   )
-}
-
-// A tile's hotkey as the palette shows it. Solo has none of its own: `F` acts on the selected tile.
-function shortcut(id: string, key: string | undefined, selected: boolean) {
-  if (id === "solo") return selected ? "F" : undefined
-  return key?.replace("Shift+", "⇧")
 }
 
 // What else a tile's action is searched by.

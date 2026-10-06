@@ -7,7 +7,7 @@ import { GameStatus } from "../game/GameStatus.tsx"
 import { Score } from "../game/Score.tsx"
 import { dispatch } from "../hub/HubClient.ts"
 import { runtime } from "../hub/HubRuntime.ts"
-import { tileActions } from "./TileActions.tsx"
+import { keyText, tileActions } from "./TileActions.tsx"
 import { tileHeader } from "./TileRects.ts"
 
 /**
@@ -68,7 +68,7 @@ export function TileChrome(props: {
           ) : (
             <>
               <Score game={props.game} side="away" />
-              <span className="text-muted-foreground">–</span>
+              {props.game.scored() && <span className="text-muted-foreground">–</span>}
               <Score game={props.game} side="home" />
               <GameStatus game={props.game} className="ml-1.5 truncate text-[11px]" />
             </>
@@ -84,7 +84,7 @@ export function TileChrome(props: {
             size="icon-xs"
             aria-label={action.label}
             aria-keyshortcuts={action.key}
-            title={action.key === undefined ? action.label : `${action.label} · ${action.key}`}
+            title={action.key === undefined ? action.label : `${action.label} · ${keyText(action.key)}`}
             className={cn(
               "text-muted-foreground",
               action.id === "hear" && onAir && "text-on-air",

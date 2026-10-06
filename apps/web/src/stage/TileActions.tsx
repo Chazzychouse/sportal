@@ -6,7 +6,7 @@ import type { ReactNode } from "react"
  * What can be done to the tile in `slot`, in the order every host lists it: hear it, promote it unless it is the
  * main tile, solo or unsolo it, clear it. An empty tile has none. A host renders them as buttons, sheet rows, or
  * palette items, and sends `command` itself. `verb` is the short form for a list that already names the tile;
- * `key` is the hotkey, in the form `aria-keyshortcuts` takes.
+ * `key` is the hotkey, in the form `aria-keyshortcuts` takes; solo's `F` acts on the selected tile.
  */
 export function tileActions(
   stage: Stage,
@@ -58,7 +58,7 @@ export function tileActions(
           label: "Solo",
           icon: <SquareDashed />,
           command: { _tag: "Solo", tile: slot },
-          key: undefined
+          key: "F"
         },
     {
       id: "clear",
@@ -69,4 +69,9 @@ export function tileActions(
       key: undefined
     }
   ]
+}
+
+/** A hotkey as a person reads it, in tooltips and the palette: `Shift+2` is "⇧2", `Escape` is "Esc". */
+export function keyText(key: string): string {
+  return key.replace("Shift+", "⇧").replace("Escape", "Esc")
 }

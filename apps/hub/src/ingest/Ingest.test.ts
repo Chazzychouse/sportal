@@ -108,16 +108,7 @@ describe("Ingest", () => {
 
       yield* TestClock.adjust("10 seconds")
       assert.strictEqual((yield* slateOf())[0]?.home.score, 7)
-    }).pipe(
-      Effect.provide(
-        ingesting(
-          scripted([
-            [liveSnapshot({ home: { team: team("HOME"), score: 0 } })],
-            [liveSnapshot({ home: { team: team("HOME"), score: 7 } })]
-          ])
-        )
-      )
-    )
+    }).pipe(Effect.provide(ingesting(scripted([[scoring(0)], [scoring(7)]]))))
   )
 
   it.effect("a failed league appends nothing and keeps its last listing in the fold", () =>
@@ -128,11 +119,7 @@ describe("Ingest", () => {
 
       assert.strictEqual((yield* slateOf())[0]?.home.score, 7)
       assert.lengthOf(yield* logOf(1), 1)
-    }).pipe(
-      Effect.provide(
-        ingesting(scripted([[liveSnapshot({ home: { team: team("HOME"), score: 7 } })], "fail"]))
-      )
-    )
+    }).pipe(Effect.provide(ingesting(scripted([[scoring(7)], "fail"]))))
   )
 
   it.effect("a failed league's game goes stale in the fold, its listing kept", () =>
@@ -160,11 +147,7 @@ describe("Ingest", () => {
 
       yield* TestClock.adjust("30 seconds")
       assert.strictEqual((yield* slateOf())[0]?.home.score, 3)
-    }).pipe(
-      Effect.provide(
-        ingesting(scripted(["fail", [liveSnapshot({ home: { team: team("HOME"), score: 3 } })]]))
-      )
-    )
+    }).pipe(Effect.provide(ingesting(scripted(["fail", [scoring(3)]]))))
   )
 
   it.effect("a poll is one span, ended before the poll sleeps, with the provider's span inside it", () => {
@@ -184,11 +167,7 @@ describe("Ingest", () => {
       )
       assert.deepStrictEqual(poll?.attributes.get("sportal.leagues"), ["fbs"])
       assert.deepStrictEqual(poll?.attributes.get("sportal.failed_leagues"), [])
-    }).pipe(
-      Effect.provide(
-        ingesting(scripted([[liveSnapshot({ home: { team: team("HOME"), score: 0 } })]]), { ended })
-      )
-    )
+    }).pipe(Effect.provide(ingesting(scripted([[scoring(0)]]), { ended })))
   })
 
   it.effect("a failed league is on the span and counted", () => {
@@ -207,17 +186,7 @@ describe("Ingest", () => {
       yield* TestClock.adjust("10 seconds")
       const duration = (yield* Metric.snapshot).find((metric) => metric.id === "sportal_poll_duration")
       assert.strictEqual(duration?.type === "Histogram" ? duration.state.count : undefined, 2)
-    }).pipe(
-      Effect.provide(
-        ingesting(
-          scripted([
-            [liveSnapshot({ home: { team: team("HOME"), score: 0 } })],
-            [liveSnapshot({ home: { team: team("HOME"), score: 7 } })]
-          ])
-        )
-      ),
-      withMetrics
-    )
+    }).pipe(Effect.provide(ingesting(scripted([[scoring(0)], [scoring(7)]]))), withMetrics)
   )
 
   it.effect("a frame the live feed gives is appended and its delivery taken", () =>
@@ -226,7 +195,7 @@ describe("Ingest", () => {
       const subscriptions = yield* Ref.make(0)
       yield* Effect.gen(function* () {
         yield* TestClock.adjust(0)
-        yield* Queue.offer(feed, yield* pushed([liveSnapshot({ home: { team: team("HOME"), score: 7 } })]))
+        yield* Queue.offer(feed, yield* pushed([scoring(7)]))
         yield* TestClock.adjust("100 millis")
 
         assert.strictEqual((yield* slateOf())[0]?.home.score, 7)
@@ -239,7 +208,7 @@ describe("Ingest", () => {
         )
       }).pipe(
         Effect.provide(
-          ingesting(scripted([[liveSnapshot({ home: { team: team("HOME"), score: 0 } })]]), {
+          ingesting(scripted([[scoring(0)]]), {
             liveFeed: feeding(feed, subscriptions)
           })
         )
@@ -259,7 +228,7 @@ describe("Ingest", () => {
         assert.deepStrictEqual(yield* Ref.get(resynced), ["gp-football-college-football-1"])
       }).pipe(
         Effect.provide(
-          ingesting(scripted([[liveSnapshot({ home: { team: team("HOME"), score: 0 } })]]), {
+          ingesting(scripted([[scoring(0)]]), {
             liveFeed: LiveFeed.of({
               frames: (_leagues, _wanted, resync) =>
                 Stream.fromQueue(feed).pipe(
@@ -324,11 +293,7 @@ describe("Ingest", () => {
         const polls = yield* Ref.make(0)
         const provider = Layer.succeed(
           Provider,
-          polling(() =>
-            Ref.update(polls, (n) => n + 1).pipe(
-              Effect.as([liveSnapshot({ home: { team: team("HOME"), score: 0 } })])
-            )
-          )
+          polling(() => Ref.update(polls, (n) => n + 1).pipe(Effect.as([scoring(0)])))
         )
         const closed = new LiveFeedError({ reason: "Closed", cause: "socket closed" })
         yield* Effect.gen(function* () {
@@ -366,9 +331,7 @@ describe("Ingest", () => {
       yield* Effect.gen(function* () {
         yield* TestClock.adjust(0)
         yield* TestClock.adjust("10 seconds")
-      }).pipe(
-        Effect.provide(ingesting(scripted([[liveSnapshot({ home: { team: team("HOME"), score: 0 } })]])))
-      )
+      }).pipe(Effect.provide(ingesting(scripted([[scoring(0)]]))))
 
       assert.deepStrictEqual(
         logs.filter((log) => log.level === "Error").map((log) => log.message),
@@ -386,7 +349,7 @@ describe("Ingest", () => {
         const scope = yield* Scope.make()
         const services = yield* Layer.buildWithScope(
           Layer.effectDiscard(Layer.build(GameHistory.layer)).pipe(
-            Layer.provideMerge(over(scripted([[liveSnapshot({ home: { team: team("HOME"), score: 0 } })]])))
+            Layer.provideMerge(over(scripted([[scoring(0)]])))
           ),
           scope
         )
@@ -394,11 +357,7 @@ describe("Ingest", () => {
         // Far more than the 100 ms the writer could be behind by when the Hub stops.
         yield* Effect.forEach(
           Array.from({ length: 200 }, (_, index) => index),
-          (index) =>
-            Effect.flatMap(
-              pushed([liveSnapshot({ home: { team: team("HOME"), score: index } })]),
-              log.append
-            ),
+          (index) => Effect.flatMap(pushed([scoring(index)]), log.append),
           { discard: true }
         )
 
@@ -576,11 +535,7 @@ function stopsAndPollsOn(frames: Stream.Stream<Omit<Frame, "seq">>, why: string)
     const polls = yield* Ref.make(0)
     const provider = Layer.succeed(
       Provider,
-      polling(() =>
-        Ref.update(polls, (n) => n + 1).pipe(
-          Effect.as([liveSnapshot({ home: { team: team("HOME"), score: 0 } })])
-        )
-      )
+      polling(() => Ref.update(polls, (n) => n + 1).pipe(Effect.as([scoring(0)])))
     )
     yield* Effect.gen(function* () {
       yield* TestClock.adjust(0)
@@ -632,7 +587,7 @@ const counting = Provider.of({
             [
               Decoded.Delivered({
                 delivery: Delivery.Snapshot({
-                  snapshot: liveSnapshot({ home: { team: team("HOME"), score: count + 1 } }),
+                  snapshot: scoring(count + 1),
                   from: "push"
                 }),
                 at: frame.receivedAt,
@@ -645,6 +600,10 @@ const counting = Provider.of({
 })
 
 /** An fbs poll of `games`, as the scripted provider frames it, received now. */
+function scoring(n: number) {
+  return liveSnapshot({ home: { team: team("HOME"), score: n } })
+}
+
 function pollOf(games: ReadonlyArray<GameSnapshot>) {
   return polling(() => Effect.succeed(games))
     .poll("fbs")

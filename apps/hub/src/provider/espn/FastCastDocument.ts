@@ -10,7 +10,8 @@ import * as FastCastMessage from "./FastCastMessage.ts"
  * frame and moved on by each message after it. A missed message, a patch that will not apply, or a message that does
  * not decode on a synced topic sends only that topic back to waiting for a checkpoint, logged and counted, and the
  * change is a `Reset`. A checkpoint that does not decode is `Unreadable`, and the next message on its topic resets it,
- * so it is asked for again, once: until a checkpoint decodes, another that does not waits without asking. Fails only when any other frame does not decode, leaving the documents as they were.
+ * so it is asked for again, once: until a checkpoint decodes, another that does not waits without asking. Fails only
+ * when any other frame does not decode, leaving the documents as they were.
  */
 export function advance(documents: Documents, frame: Frame): Effect.Effect<Advanced, Schema.SchemaError> {
   const owned = FastCastMessage.owner(frame.channel)
@@ -157,11 +158,19 @@ function moved(
         tc,
         owner.league,
         "Unreadable",
-        `message ${message.mid} came after a checkpoint that did not decode`
+        `message ${message.mid} came after a checkpoint that did not decode`,
+        Topic.AskedAgain()
       ),
     Synced: ({ mid, document }) => {
       if (mid + 1 !== message.mid) {
-        return reset(documents, tc, owner.league, "Gap", `message ${message.mid} came after ${mid}`)
+        return reset(
+          documents,
+          tc,
+          owner.league,
+          "Gap",
+          `message ${message.mid} came after ${mid}`,
+          Topic.AwaitingCheckpoint()
+        )
       }
       const patches = message.op === "I" ? [] : relevant(owner, message.pl)
       return Effect.reduce(
@@ -180,7 +189,9 @@ function moved(
             patches.length === 0 ? Option.none() : Option.some(changeOf(owner, next, touched))
           ] as const
         }),
-        Effect.catch((cause) => reset(documents, tc, owner.league, "Unapplicable", cause))
+        Effect.catch((cause) =>
+          reset(documents, tc, owner.league, "Unapplicable", cause, Topic.AwaitingCheckpoint())
+        )
       )
     }
   })
@@ -205,18 +216,13 @@ function reset(
   tc: string,
   league: LeagueId,
   reason: "Gap" | "Unapplicable" | "Unreadable",
-  cause: string
+  cause: string,
+  next: Topic
 ): Effect.Effect<Advanced> {
   return Effect.logWarning(`FastCastDocument: ${cause}; ${tc} waits for its next checkpoint`).pipe(
     Effect.annotateLogs({ league, topic: tc, reason }),
     Effect.andThen(Metric.update(Metric.withAttributes(resets, { league, reason }), 1)),
-    Effect.as([
-      new Map([
-        ...documents,
-        [tc, documents.get(tc)?._tag === "Unreadable" ? Topic.AskedAgain() : Topic.AwaitingCheckpoint()]
-      ]),
-      Option.some(Change.Reset())
-    ] as const)
+    Effect.as([new Map([...documents, [tc, next]]), Option.some(Change.Reset())] as const)
   )
 }
 
@@ -329,7 +335,10 @@ function undecoded(
             frame.channel,
             owned.value.league,
             "Unapplicable",
-            `message ${frame.sourceId} does not decode: ${error.message}`
+            `message ${frame.sourceId} does not decode: ${error.message}`,
+            documents.get(frame.channel)?._tag === "Unreadable"
+              ? Topic.AskedAgain()
+              : Topic.AwaitingCheckpoint()
           )
         : Effect.fail(error)
   })

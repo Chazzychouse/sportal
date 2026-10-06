@@ -136,7 +136,7 @@ export class TileViews extends Context.Service<
             arriving.delete(game)
           }
 
-          const moves: Array<{ entry: Entry; from: TileBounds; to: TileBounds }> = []
+          const moves: Array<{ game: GameId; entry: Entry; from: TileBounds; to: TileBounds }> = []
           for (const placement of permitted) {
             let entry = views.get(placement.game)
             if (entry === undefined) {
@@ -161,7 +161,7 @@ export class TileViews extends Context.Service<
                 : Role.Stream({ interactive: placement.interactive })
             if (placement.interactive && !wasInteractive) entry.view.webContents.focus()
             entry.view.webContents.setAudioMuted(placement.muted)
-            moves.push({ entry, from: entry.bounds, to: placement.bounds })
+            moves.push({ game: placement.game, entry, from: entry.bounds, to: placement.bounds })
           }
 
           if (transition === undefined) {
@@ -177,7 +177,7 @@ export class TileViews extends Context.Service<
         })
 
         const animate = (
-          moves: ReadonlyArray<{ entry: Entry; from: TileBounds; to: TileBounds }>,
+          moves: ReadonlyArray<{ game: GameId; entry: Entry; from: TileBounds; to: TileBounds }>,
           transition: StageTransition
         ) =>
           Effect.gen(function* () {
@@ -187,8 +187,8 @@ export class TileViews extends Context.Service<
               yield* Effect.sleep(frame)
               t = ((yield* Clock.currentTimeMillis) - start) / transition.durationMs
               const eased = Transition.progress(transition.easing, t)
-              for (const { entry, from, to } of moves)
-                if ([...views.values()].includes(entry)) place(entry, Transition.between(from, to, eased))
+              for (const { game, entry, from, to } of moves)
+                if (views.get(game) === entry) place(entry, Transition.between(from, to, eased))
             }
             arriving.clear()
             showWhereDue()
