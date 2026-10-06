@@ -108,4 +108,4 @@ A reader opens a file to see the thing it is named for. Keep it that way.
 
 - Provider web players are loaded unmodified. Never inject scripts into them, rewrite their requests, or
   capture their video.
-- Poll the data feed no faster than `Cadence` allows.
+- Poll the data feed no faster than the provider's polling allows.

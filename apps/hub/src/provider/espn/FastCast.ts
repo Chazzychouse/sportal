@@ -7,7 +7,6 @@ import {
   DateTime,
   Effect,
   FiberMap,
-  Layer,
   Metric,
   Option,
   Queue,
@@ -19,34 +18,21 @@ import {
 import { HttpClient, HttpClientResponse } from "effect/http"
 import * as Socket from "effect/socket/Socket"
 import type { FeedFrame } from "../../Frame.ts"
-import { LiveFeed, LiveFeedError } from "../LiveFeed.ts"
+import { ProviderError } from "../Provider.ts"
 import * as FastCastMessage from "./FastCastMessage.ts"
 
 /**
- * ESPN FastCast as the live feed: one socket subscribed to each league's scoreboard topic, and to the game topic of
- * each game wanted while it is open.
+ * ESPN FastCast as the provider's push: one socket subscribed to each league's scoreboard topic, and to the game topic
+ * of each game wanted while it is open. Every socket text is a frame, each `H` followed by its checkpoint; fails when
+ * the socket closes, ends, or goes quiet.
  */
-export const layer: Layer.Layer<LiveFeed, never, HttpClient.HttpClient | Socket.WebSocketConstructor> =
-  Layer.effect(
-    LiveFeed,
-    Effect.gen(function* () {
-      const provide = Stream.provideContext(
-        yield* Effect.context<HttpClient.HttpClient | Socket.WebSocketConstructor>()
-      )
-      return LiveFeed.of({
-        frames: (leagues, wanted, resync) => provide(frames(leagues, wanted, resync))
-      })
-    })
-  )
-
-/** Every socket text as a frame, each `H` followed by its checkpoint; fails when the socket closes, ends, or goes quiet. */
-function frames(
+export function push(
   leagues: ReadonlyArray<LeagueId>,
   wanted: Stream.Stream<ReadonlyArray<GameSnapshot>>,
   resync: Stream.Stream<string>
-): Stream.Stream<FeedFrame, LiveFeedError, HttpClient.HttpClient | Socket.WebSocketConstructor> {
+): Stream.Stream<FeedFrame, ProviderError, HttpClient.HttpClient | Socket.WebSocketConstructor> {
   return Stream.unwrap(connect(leagues, wanted, resync)).pipe(
-    Stream.concat(Stream.fail(new LiveFeedError({ reason: "Closed", cause: "FastCast ended the stream" }))),
+    Stream.concat(Stream.fail(new ProviderError({ reason: "Closed", cause: "FastCast ended the stream" }))),
     Stream.timeoutOrElse({ duration: silence, orElse: () => Stream.fail(silent()) })
   )
 }
@@ -71,7 +57,7 @@ function connect(
     const [first, rest] = yield* Channel.fromQueueArray(outgoing).pipe(
       Channel.pipeTo(Socket.toChannelString(socket)),
       Stream.fromChannel,
-      Stream.mapError((cause) => new LiveFeedError({ reason: "Closed", cause })),
+      Stream.mapError((cause) => new ProviderError({ reason: "Closed", cause })),
       // One text per chunk, so peeling the first leaves the rest of its batch in the stream.
       Stream.rechunk(1),
       Stream.mapEffect((text) => Effect.map(DateTime.now, (receivedAt) => ({ text, receivedAt }))),
@@ -80,16 +66,16 @@ function connect(
     )
     const opened = yield* Option.match(first, {
       onNone: () =>
-        Effect.fail(new LiveFeedError({ reason: "Closed", cause: "FastCast closed before connecting" })),
+        Effect.fail(new ProviderError({ reason: "Closed", cause: "FastCast closed before connecting" })),
       onSome: Effect.succeed
     })
     const sid = yield* Option.match(decodeEnvelope(opened.text), {
       onNone: () =>
-        Effect.fail(new LiveFeedError({ reason: "Refused", cause: "FastCast opened with an unknown op" })),
+        Effect.fail(new ProviderError({ reason: "Refused", cause: "FastCast opened with an unknown op" })),
       onSome: ({ message }) =>
         message.op === "C"
           ? Effect.succeed(message.sid)
-          : Effect.fail(new LiveFeedError({ reason: "Refused", cause: `FastCast opened with ${message.op}` }))
+          : Effect.fail(new ProviderError({ reason: "Refused", cause: `FastCast opened with ${message.op}` }))
     })
     const subscribe = (tc: string) => Queue.offer(outgoing, JSON.stringify({ op: "S", sid, tc }))
     // At most one subscription waiting per topic, however many of its checkpoints fail meanwhile.
@@ -279,14 +265,14 @@ const decodeEnvelope = Schema.decodeUnknownOption(FastCastMessage.Envelope)
 // never sends one); live, a subscribed socket went at most 20 s between frames.
 const silence = "45 seconds"
 
-function silent(): LiveFeedError {
-  return new LiveFeedError({ reason: "Silent", cause: `No FastCast message for ${silence}` })
+function silent(): ProviderError {
+  return new ProviderError({ reason: "Silent", cause: `No FastCast message for ${silence}` })
 }
 
 const websocketHost = HttpClient.get("https://fastcast.semfs.engsvc.go.com/public/websockethost").pipe(
   Effect.flatMap(HttpClientResponse.filterStatusOk),
   Effect.flatMap(HttpClientResponse.schemaBodyJson(FastCastMessage.Host)),
-  Effect.mapError((cause) => new LiveFeedError({ reason: "Refused", cause }))
+  Effect.mapError((cause) => new ProviderError({ reason: "Refused", cause }))
 )
 
 const connected = Metric.gauge("sportal_live_feed_connected", {

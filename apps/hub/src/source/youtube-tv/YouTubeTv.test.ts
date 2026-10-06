@@ -7,7 +7,7 @@ import { DateTime, Effect, Fiber, Layer, Logger, Option, Ref, Stream } from "eff
 import { HttpClient, HttpClientResponse } from "effect/http"
 import { TestClock } from "effect/testing"
 import * as EspnProvider from "../../provider/espn/EspnProvider.ts"
-import { recordedScoreboard } from "../../provider/espn/TestEspn.ts"
+import { noSocket, recordedScoreboard } from "../../provider/espn/TestEspn.ts"
 import { listedBy } from "../../provider/TestProvider.ts"
 import * as TestDatabase from "../../TestDatabase.ts"
 import { ChannelStore } from "../ChannelStore.ts"
@@ -422,5 +422,5 @@ function matchingLayer() {
       )
     )
   )
-  return Layer.mergeAll(testSource(), EspnProvider.layer.pipe(Layer.provide(recorded)))
+  return Layer.mergeAll(testSource(), EspnProvider.layer.pipe(Layer.provide([recorded, noSocket])))
 }

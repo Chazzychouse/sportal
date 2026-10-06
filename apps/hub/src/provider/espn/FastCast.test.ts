@@ -8,7 +8,7 @@ import * as Socket from "effect/socket/Socket"
 import { TestClock } from "effect/testing"
 import type { FeedFrame } from "../../Frame.ts"
 import { counted, recordingLogs, withMetrics } from "../../TestTelemetry.ts"
-import { LiveFeed, type LiveFeedError } from "../LiveFeed.ts"
+import type { ProviderError } from "../Provider.ts"
 import * as FastCast from "./FastCast.ts"
 
 describe("FastCast", () => {
@@ -262,20 +262,20 @@ describe("FastCast", () => {
 })
 
 /**
- * Runs FastCast's frames for the NFL over `server` in a fiber of its own, collecting them into `frames` and completing
+ * Runs FastCast's push for the NFL over `server` in a fiber of its own, collecting them into `frames` and completing
  * `ended` with how it ended. `wanted` takes the current games, and `resync` the topics their decoder resyncs.
  */
 function nflFrames(server: ReturnType<typeof fakeServer>) {
   return Effect.gen(function* () {
-    const ended = yield* Deferred.make<void, LiveFeedError>()
+    const ended = yield* Deferred.make<void, ProviderError>()
     const frames = watched<FeedFrame>()
     const wanted = yield* Queue.unbounded<ReadonlyArray<GameSnapshot>>()
     const resync = yield* Queue.unbounded<string>()
-    yield* LiveFeed.use((feed) =>
-      feed
-        .frames(["nfl"], Stream.fromQueue(wanted), Stream.fromQueue(resync))
-        .pipe(Stream.runForEach((frame) => Effect.sync(() => frames.add(frame))))
-    ).pipe(Deferred.into(ended), Effect.forkChild({ startImmediately: true }))
+    yield* FastCast.push(["nfl"], Stream.fromQueue(wanted), Stream.fromQueue(resync)).pipe(
+      Stream.runForEach((frame) => Effect.sync(() => frames.add(frame))),
+      Deferred.into(ended),
+      Effect.forkChild({ startImmediately: true })
+    )
     return { ended, frames, wanted, resync }
   }).pipe(Effect.provide(fastCast(server)))
 }
@@ -321,11 +321,9 @@ function subscribed(tc: string, times: number) {
 }
 
 function fastCast(server: ReturnType<typeof fakeServer>) {
-  return FastCast.layer.pipe(
-    Layer.provide([
-      Layer.succeed(HttpClient.HttpClient, espn),
-      Layer.succeed(Socket.WebSocketConstructor, () => server.socket)
-    ])
+  return Layer.mergeAll(
+    Layer.succeed(HttpClient.HttpClient, espn),
+    Layer.succeed(Socket.WebSocketConstructor, () => server.socket)
   )
 }
 

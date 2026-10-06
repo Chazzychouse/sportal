@@ -1,31 +1,39 @@
 import { Delivery } from "@sportal/domain/Delivery"
 import { GameSnapshot } from "@sportal/domain/Game"
 import { LeagueId } from "@sportal/domain/League"
-import { DateTime, Effect, Layer, Option, Ref, Schema, Stream } from "effect"
+import { DateTime, Effect, Layer, Option, Ref, Schedule, Schema, Stream } from "effect"
 import { type FeedFrame, Frame } from "../Frame.ts"
 import { LiveGames } from "../LiveGames.ts"
-import { LiveFeed } from "./LiveFeed.ts"
 import { Decoded, Provider, ProviderError } from "./Provider.ts"
 
 /**
  * A provider that answers each poll with the next scripted response, and the last one after that, inside a
- * `provider.poll` span. A `"fail"` response fails the poll, and an empty script fails every poll.
+ * `provider.poll` span. A `"fail"` response fails the poll, and an empty script fails every poll. Its push and polling
+ * are `polling`'s, unless `options` give them.
  */
-export function scripted(responses: ReadonlyArray<ReadonlyArray<GameSnapshot> | "fail">) {
+export function scripted(
+  responses: ReadonlyArray<ReadonlyArray<GameSnapshot> | "fail">,
+  options: {
+    readonly polling?: Provider["Service"]["polling"]
+    readonly push?: Provider["Service"]["push"]
+  } = {}
+) {
   return Layer.effect(
     Provider,
     Effect.gen(function* () {
       const calls = yield* Ref.make(0)
-      return polling((league) =>
-        Ref.getAndUpdate(calls, (call) => call + 1).pipe(
-          Effect.flatMap((call) => {
-            const response = responses[Math.min(call, responses.length - 1)]
-            return response === "fail" || response === undefined
-              ? Effect.fail(new ProviderError({ league, cause: "down" }))
-              : Effect.succeed(response)
-          }),
-          Effect.withSpan("provider.poll")
-        )
+      return polling(
+        (league) =>
+          Ref.getAndUpdate(calls, (call) => call + 1).pipe(
+            Effect.flatMap((call) => {
+              const response = responses[Math.min(call, responses.length - 1)]
+              return response === "fail" || response === undefined
+                ? Effect.fail(new ProviderError({ reason: "Unreachable", league, cause: "down" }))
+                : Effect.succeed(response)
+            }),
+            Effect.withSpan("provider.poll")
+          ),
+        options
       )
     })
   )
@@ -34,12 +42,19 @@ export function scripted(responses: ReadonlyArray<ReadonlyArray<GameSnapshot> | 
 /**
  * A provider whose poll is the games `games` answers, as a frame with those games as JSON for its body. Its decode
  * reads a poll back as its league's `Listing`, and a live feed frame as a pushed `Snapshot` of each game in it, or,
- * when it holds none, as a `Resync` of its channel. A frame that does not decode is skipped.
+ * when it holds none, as a `Resync` of its channel. A frame that does not decode is skipped. It never pushes and is
+ * polled every 10 seconds, unless `options` say otherwise.
  */
 export function polling(
-  games: (league: LeagueId) => Effect.Effect<ReadonlyArray<GameSnapshot>, ProviderError>
+  games: (league: LeagueId) => Effect.Effect<ReadonlyArray<GameSnapshot>, ProviderError>,
+  options: {
+    readonly polling?: Provider["Service"]["polling"]
+    readonly push?: Provider["Service"]["push"]
+  } = {}
 ): Provider["Service"] {
   return Provider.of({
+    push: options.push ?? (() => Stream.never),
+    polling: options.polling ?? Schedule.spaced("10 seconds"),
     poll: (league) =>
       Effect.all({ games: games(league), receivedAt: DateTime.now }).pipe(
         Effect.map(({ games, receivedAt }) => ({
@@ -66,12 +81,6 @@ export function taken(delivery: Delivery, seq?: number) {
     LiveGames.use((liveGames) => liveGames.take(delivery, at, Option.fromNullishOr(seq)))
   )
 }
-
-/** A live feed that never pushes. */
-export const neverPushing: Layer.Layer<LiveFeed> = Layer.succeed(
-  LiveFeed,
-  LiveFeed.of({ frames: () => Stream.never })
-)
 
 /** The games one poll of `league` lists, as the provider decodes it. */
 export function listedBy(league: LeagueId) {

@@ -1,15 +1,14 @@
 import { Delivery } from "@sportal/domain/Delivery"
 import { LeagueId } from "@sportal/domain/League"
 import { Array as Arr, DateTime, Duration, Effect, FileSystem, Layer, Option, Path, Schema } from "effect"
-import * as Cadence from "../ingest/Cadence.ts"
 import { LiveGames } from "../LiveGames.ts"
 import { Scenario } from "./Scenario.ts"
 import { scenarios } from "./written/Scenarios.ts"
 
 /**
- * A scenario as the feed: each league's slate at the time since the Hub started is taken as a `Listing`, on the poll
- * Cadence over the fold as live Ingest polls, and also at each of the scenario's frames' times, so a change lands
- * when it was written. That is scenario time when the Hub runs on the scenario clock. Nothing is logged. `name` is a
+ * A scenario as the feed: each league's slate at the time since the Hub started is taken as a `Listing` every 10
+ * seconds, so a live game never goes stale between frames, and also at each of the scenario's frames' times, so a
+ * change lands when it was written. That is scenario time when the Hub runs on the scenario clock. Nothing is logged. `name` is a
  * written scenario's, or a recorded slice's in `from`.
  */
 export const layer = (name: string, from: string = Scenario.folder) =>
@@ -35,12 +34,11 @@ export const layer = (name: string, from: string = Scenario.folder) =>
                 ),
               { discard: true }
             )
-            const cadence = Cadence.interval((yield* liveGames.latest).slate(LeagueId.literals), now, false)
             const nextFrame = Arr.findFirst(scenario.frames, ({ at }) => at > Duration.toMillis(elapsed))
             yield* Effect.sleep(
               Option.match(nextFrame, {
-                onNone: () => cadence,
-                onSome: ({ at }) => Duration.min(cadence, Duration.subtract(Duration.millis(at), elapsed))
+                onNone: () => relisted,
+                onSome: ({ at }) => Duration.min(relisted, Duration.subtract(Duration.millis(at), elapsed))
               })
             )
           })
@@ -48,6 +46,9 @@ export const layer = (name: string, from: string = Scenario.folder) =>
       )
     })
   )
+
+// The longest a scenario goes without listing its slate again.
+const relisted = Duration.seconds(10)
 
 /** A written scenario by name, or else a slice in `from`. Only a listed name is read, so no name reaches a path. */
 function load(name: string, from: string) {

@@ -45,16 +45,15 @@ Every exported type name must be a term here, except the wire schemas in `*Paylo
 
 | Term | Meaning | Not |
 | --- | --- | --- |
-| **Provider** | An adapter that supplies **game data** (ESPN, CollegeFootballData). | source, feed |
-| **Provider error** | A provider could not supply data for a league: unreachable, rate-limited, or unreadable. | fetch error |
-| **Live feed** | A provider's push connection carrying updates for live games (ESPN FastCast). | socket, stream, webhook |
+| **Provider** | An adapter that supplies **game data** (ESPN, CollegeFootballData): its poll, its push (the live feed), its decode, and its polling Schedule. | source, feed |
+| **Provider error** | A provider could not supply data: a poll of a league unreachable or refused, or a push refused, closed, or gone silent. | fetch error, live feed error |
+| **Live feed** | A provider's push: the connection carrying updates for live games between polls (ESPN FastCast). | socket, stream, webhook |
 | **ESPN event** | One game as either ESPN feed spells it, the polled site scoreboard or a FastCast scoreboard topic, read as a GameSnapshot; `EspnEvent` in code. | payload, DTO |
 | **Topic owner** | What a live feed topic carries: one league's scoreboard, or one game's plays; `Owner` in code. | subscription |
-| **Live feed error** | The live feed's connection could not continue: refused, closed, or silent. | |
 | **Recording** | A day of one league's raw polls and socket lines recorded by hand before the Hub kept a feed log, which the dev tools cut into a scenario or import into the feed log. Not the feed log, which the Hub keeps itself. | feed log |
 | **Recording unreadable** | A recording's folder is no league's, or its polls could not be listed; `RecordingUnreadable` in code. | |
-| **Ingesting** | The Hub's loop, in `ingest/`, that replays the day from the feed log into the live games, then polls providers and runs the live feed, appending every frame to the log and folding what each says into the live games. | poller, sync, fetcher |
-| **Cadence** | How long the ingest loop waits between polls, given what the last poll saw. | interval, rate |
+| **Ingesting** | The Hub's loop, in `ingest/`, that replays the day from the feed log into the live games, then polls the provider on its polling and runs its push, appending every frame to the log and folding what each says into the live games. | poller, sync, fetcher |
+| **Polling** | When a provider is polled again, given the slate the last poll left and the leagues that failed: a Schedule its adapter declares. ESPN's is 10 s while a game is live, 1 min within 30 minutes of a kickoff, 15 min otherwise. | cadence, interval |
 | **Source** | A way you obtain **video** (YouTube TV). | provider, service |
 | **Source name** | A source as people know it ("YouTube TV"); how code and the UI name a source. | source id |
 | **Broadcast** | The fact that a network is airing a game, on television or streaming only. | channel, stream |

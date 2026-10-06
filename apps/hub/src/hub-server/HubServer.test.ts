@@ -13,7 +13,7 @@ import { FeedLog } from "../FeedLog.ts"
 import * as Ingest from "../ingest/Ingest.ts"
 import { LiveGames } from "../LiveGames.ts"
 import { Provider } from "../provider/Provider.ts"
-import { neverPushing, polling } from "../provider/TestProvider.ts"
+import { polling } from "../provider/TestProvider.ts"
 import { Slate } from "../Slate.ts"
 import { StageSessions } from "../StageSessions.ts"
 import { ChannelStore } from "../source/ChannelStore.ts"
@@ -330,7 +330,6 @@ function hubUnderTest() {
         Provider,
         polling(() => Effect.succeed([game]))
       ),
-      neverPushing,
       DateTime.layerCurrentZoneLocal,
       FeedLog.layer.pipe(Layer.provide([TestDatabase.layer(":memory:"), NodeCrypto.layer]))
     ]),

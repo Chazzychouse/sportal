@@ -1,15 +1,37 @@
 import type { Delivery } from "@sportal/domain/Delivery"
-import type { GameId } from "@sportal/domain/Game"
+import type { GameId, GameSnapshot } from "@sportal/domain/Game"
 import { LeagueId } from "@sportal/domain/League"
-import { Context, Data, type DateTime, type Effect, type Option, Schema, type Stream } from "effect"
+import {
+  Context,
+  Data,
+  type DateTime,
+  type Effect,
+  type Option,
+  type Schedule,
+  Schema,
+  type Stream
+} from "effect"
 import type { FeedFrame, Frame } from "../Frame.ts"
 
-/** A provider's scoreboard: polled as frames, and what those and its live feed's frames say, decoded. */
+/**
+ * A provider of game data: its scoreboard polled as frames, its live feed pushing frames between polls, what those
+ * frames say, decoded, and when it is polled again.
+ */
 export class Provider extends Context.Service<
   Provider,
   {
     /** One poll of `league`, as received. */
     poll(league: LeagueId): Effect.Effect<FeedFrame, ProviderError>
+    /**
+     * Every pushed frame, as received, for the leagues' scoreboards and for each game in `wanted` (the current games).
+     * Each channel in `resync` is asked for its checkpoint again, if the push follows it. Fails when the push cannot go
+     * on.
+     */
+    push(
+      leagues: ReadonlyArray<LeagueId>,
+      wanted: Stream.Stream<ReadonlyArray<GameSnapshot>>,
+      resync: Stream.Stream<string>
+    ): Stream.Stream<FeedFrame, ProviderError>
     /**
      * What each frame said, in order: a poll response is a `Listing`, a pushed game a `Snapshot`, a plays document
      * change a `Plays`, each `Delivered`. A live feed topic whose document had to be dropped (a missed message, a
@@ -18,6 +40,14 @@ export class Provider extends Context.Service<
      * that said it. Never fails, logs, or counts.
      */
     decode(frames: Stream.Stream<Frame>): Stream.Stream<Decoded>
+    /**
+     * When to poll again, given what the last poll left: the fold's slate for the polled leagues, and the leagues that
+     * failed. Ingest runs `poll` for each league repeated on it, and nothing else decides when.
+     */
+    readonly polling: Schedule.Schedule<
+      unknown,
+      { readonly slate: ReadonlyArray<GameSnapshot>; readonly failed: ReadonlyArray<LeagueId> }
+    >
   }
 >()("sportal/hub/Provider") {}
 
@@ -67,7 +97,12 @@ export type Notice = Data.TaggedEnum<{
 }>
 export const Notice = Data.taggedEnum<Notice>()
 
+/**
+ * A provider could not supply data: unreachable or refused for a poll of `league`, or a push refused, closed, or gone
+ * silent (a push serves every league, so it has none).
+ */
 export class ProviderError extends Schema.TaggedError<ProviderError>()("ProviderError", {
-  league: LeagueId,
+  reason: Schema.Literals(["Unreachable", "Refused", "Closed", "Silent"]),
+  league: Schema.optional(LeagueId),
   cause: Schema.Defect()
 }) {}

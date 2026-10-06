@@ -7,7 +7,6 @@ import { HubConfig } from "./HubConfig.ts"
 import * as Ingest from "./ingest/Ingest.ts"
 import { LiveGames } from "./LiveGames.ts"
 import * as EspnProvider from "./provider/espn/EspnProvider.ts"
-import * as FastCast from "./provider/espn/FastCast.ts"
 import { Slate } from "./Slate.ts"
 import * as ScenarioClock from "./scenario/ScenarioClock.ts"
 import * as ScenarioIngest from "./scenario/ScenarioIngest.ts"
@@ -38,8 +37,7 @@ function live() {
       Layer.effectDiscard(Layer.build(GameHistory.layer)),
       Ingest.layer(LeagueId.literals).pipe(
         Layer.provide([
-          EspnProvider.layer,
-          FastCast.layer.pipe(Layer.provide(NodeSocket.layerWebSocketConstructorWS)),
+          EspnProvider.layer.pipe(Layer.provide(NodeSocket.layerWebSocketConstructorWS)),
           FeedLog.inDataDir,
           DateTime.layerCurrentZoneLocal
         ])

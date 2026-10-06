@@ -1,4 +1,11 @@
 import { readFileSync } from "node:fs"
+import { Layer } from "effect"
+import * as Socket from "effect/socket/Socket"
+
+/** A WebSocket constructor for tests that never push: opening a socket throws. */
+export const noSocket = Layer.succeed(Socket.WebSocketConstructor, () => {
+  throw new Error("this test opens no socket")
+})
 
 /** A recorded ESPN site scoreboard from this adapter's fixtures, for tests of other modules. */
 export function recordedScoreboard(name: "fbs-scoreboard-2026-10-03T2024Z" | "nfl-scoreboard-pregame") {
