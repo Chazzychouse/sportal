@@ -37,10 +37,10 @@ module.exports = {
       from: {
         path: "^apps/hub/src/",
         pathNot:
-          "(^apps/hub/src/HubMode\\.ts$|\\.test\\.ts$|^apps/hub/src/recording/|^apps/hub/src/provider/[^/]+/|^apps/hub/src/source/youtube-tv/|^apps/hub/src/source/Sql[^/]+\\.ts$)"
+          "(^apps/hub/src/HubMode\\.ts$|\\.test\\.ts$|^apps/hub/src/recording/|^apps/hub/src/provider/[^/]+/|^apps/hub/src/source/youtube-tv/)"
       },
       to: {
-        path: "^apps/hub/src/(provider/[^/]+/|source/youtube-tv/|source/Sql[^/]+\\.ts$|scenario/Scenario(Ingest|Source|Clock)\\.ts$)"
+        path: "^apps/hub/src/(provider/[^/]+/|source/youtube-tv/|scenario/Scenario(Ingest|Source|Clock)\\.ts$)"
       }
     },
     {
@@ -51,7 +51,7 @@ module.exports = {
       from: {
         path: "^apps/hub/src/",
         pathNot:
-          "(^apps/hub/src/main\\.ts$|\\.test\\.ts$|^apps/hub/src/source/Sql[^/]+\\.ts$|^apps/hub/src/Database\\.ts$|^apps/hub/src/feed-log/FeedLog\\.ts$|^apps/hub/src/GameHistory\\.ts$)"
+          "(^apps/hub/src/main\\.ts$|\\.test\\.ts$|^apps/hub/src/source/ChannelStore\\.ts$|^apps/hub/src/Database\\.ts$|^apps/hub/src/feed-log/FeedLog\\.ts$|^apps/hub/src/GameHistory\\.ts$)"
       },
       to: { path: "^apps/hub/src/Database\\.ts$" }
     },

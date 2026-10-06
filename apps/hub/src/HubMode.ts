@@ -11,7 +11,7 @@ import { Slate } from "./Slate.ts"
 import * as ScenarioClock from "./scenario/ScenarioClock.ts"
 import * as ScenarioIngest from "./scenario/ScenarioIngest.ts"
 import * as ScenarioSource from "./scenario/ScenarioSource.ts"
-import * as SqlChannelStore from "./source/SqlChannelStore.ts"
+import { ChannelStore } from "./source/ChannelStore.ts"
 import * as YouTubeTv from "./source/youtube-tv/YouTubeTv.ts"
 
 /** What the Hub plays: the live day from ESPN and YouTube TV, or a scenario in their place, on scenario time. */
@@ -45,7 +45,7 @@ function live() {
         ])
       )
     ).pipe(Layer.provide(LiveGames.layer)),
-    YouTubeTv.layer.pipe(Layer.provide(SqlChannelStore.layer))
+    YouTubeTv.layer.pipe(Layer.provide(ChannelStore.layer))
   )
 }
 

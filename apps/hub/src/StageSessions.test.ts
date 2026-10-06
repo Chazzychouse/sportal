@@ -8,8 +8,8 @@ import { TestClock } from "effect/testing"
 import * as Database from "./Database.ts"
 import { Slate } from "./Slate.ts"
 import { StageSessions } from "./StageSessions.ts"
+import { ChannelStore } from "./source/ChannelStore.ts"
 import { Source } from "./source/Source.ts"
-import * as SqlChannelStore from "./source/SqlChannelStore.ts"
 import * as YouTubeTv from "./source/youtube-tv/YouTubeTv.ts"
 
 const espn = Network.make("ESPN")
@@ -306,7 +306,7 @@ function sourceKnowingEspn() {
     })
   ).pipe(
     Layer.provideMerge(YouTubeTv.layer),
-    Layer.provide(SqlChannelStore.layer),
+    Layer.provide(ChannelStore.layer),
     Layer.provide(Database.layer(":memory:"))
   )
 }

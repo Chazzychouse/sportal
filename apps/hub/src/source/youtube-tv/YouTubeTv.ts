@@ -1,7 +1,13 @@
-import { type ChannelCarriage, ChannelLineup, ChannelUrlRefused } from "@sportal/domain/Channel"
-import type { GameSnapshot } from "@sportal/domain/Game"
-import { type Airing, ChannelId, Guide, GuideUnreadable } from "@sportal/domain/Guide"
 import {
+  type ChannelCarriage,
+  ChannelLineup,
+  ChannelUrlRefused,
+  type SourceName
+} from "@sportal/domain/Channel"
+import type { GameSnapshot } from "@sportal/domain/Game"
+import { ChannelId, Guide, GuideUnreadable } from "@sportal/domain/Guide"
+import {
+  Array as Arr,
   DateTime,
   Duration,
   Effect,
@@ -9,6 +15,7 @@ import {
   Layer,
   Option,
   Schema,
+  SchemaGetter,
   SchemaTransformation,
   Stream,
   SubscriptionRef
@@ -30,7 +37,7 @@ export const layer = Layer.effect(
     const expiry = yield* FiberHandle.make<void>()
     // One ref for both, so a single subscription sees every change: the lineup, and the latest guide read.
     const state = yield* SubscriptionRef.make({
-      lineup: new ChannelLineup({ source: "YouTube TV", guide, carriages: yield* store.carriages }),
+      lineup: new ChannelLineup({ source, guide, carriages: yield* store.carriages }),
       read: Option.none<Guide>()
     })
 
@@ -63,7 +70,7 @@ export const layer = Layer.effect(
             ),
             Effect.mapError(() => new GuideUnreadable())
           )
-          const read = toGuide(decoded, yield* DateTime.now)
+          const read = new Guide({ source, readAt: yield* DateTime.now, ...decoded })
           if (read.channels.length === 0) {
             yield* Effect.logWarning("YouTubeTv: a guide response listed no channels")
             return yield* Effect.fail(new GuideUnreadable())
@@ -93,15 +100,15 @@ export const layer = Layer.effect(
             record({
               _tag: "Carried",
               network,
-              channel: { name: network, source: "YouTube TV", locator: { _tag: "WebView", url: live } }
+              channel: { name: network, source, locator: { _tag: "WebView", url: live } }
             })
           )
         ),
-      markNotCarried: (network) => record({ _tag: "NotCarried", network, source: "YouTube TV" }),
+      markNotCarried: (network) => record({ _tag: "NotCarried", network, source }),
       forget: (network) =>
         SubscriptionRef.updateEffect(state, (current) =>
           store
-            .forget(network, "YouTube TV")
+            .forget(network, source)
             .pipe(Effect.as({ ...current, lineup: current.lineup.forget(network) }))
         )
     })
@@ -133,48 +140,73 @@ const staleAfter = Duration.minutes(45)
 
 const decodeLiveChannelUrl = Schema.decodeEffect(LiveChannelUrl)
 
-const guide = { _tag: "WebView", url: "https://tv.youtube.com/live" } as const
+const source: SourceName = "YouTube TV"
 
-const decodeGuide = Schema.decodeEffect(YouTubeTvPayload.GuideResponseJson)
+const guide = { _tag: "WebView", url: "https://tv.youtube.com/live" } as const
 
 const decodeLiveChannelUrlOption = Schema.decodeOption(LiveChannelUrl)
 
+const decodeBegin = Schema.decodeOption(Schema.FiniteFromString.check(Schema.isGreaterThanOrEqualTo(0)))
+const decodeEnd = Schema.decodeOption(Schema.FiniteFromString)
+
 /**
- * The channels and airings of one guide response, read at `readAt`. Rows without an id or a name are skipped;
- * a row whose live id is not a channel id keeps its channel without a live address.
+ * A guide response as the channels and airings it lists. Rows without an id or a name are skipped; a row whose
+ * live id is not a channel id keeps its channel without a live address; an airing with no title or a time that is
+ * not a time is skipped, such as the one untitled airing spanning all of time that a row with nothing listed has.
  */
-function toGuide(response: typeof YouTubeTvPayload.GuideResponse.Type, readAt: DateTime.Utc): Guide {
-  const channels: Array<Guide["channels"][number]> = []
-  const airings: Array<Airing> = []
-  for (const { epgRowRenderer: row } of response.contents.epgRenderer.paginationRenderer.epgPaginationRenderer
-    .contents) {
-    const station = row?.station?.epgStationRenderer
-    const id = station?.stationId
-    const name = station?.icon?.accessibility?.accessibilityData.label
-    if (row === undefined || id === undefined || id === null || name === undefined) continue
-    const channel = ChannelId.make(id)
-    const videoId = row.navigationEndpoint?.watchEndpoint?.videoId
-    // Encoded, an id that is not one fails the address's pattern instead of smuggling in a query.
-    const live =
-      videoId === undefined
-        ? Option.none()
-        : decodeLiveChannelUrlOption(`https://tv.youtube.com/watch/${encodeURIComponent(videoId)}`)
-    channels.push({
-      id: channel,
-      name,
-      ...Option.match(live, {
-        onNone: () => ({}),
-        onSome: (url) => ({ live: { _tag: "WebView" as const, url } })
-      })
-    })
-    for (const { epgAiringRenderer: airing } of row.airings ?? []) {
-      const title = airing?.title?.runs[0].text
-      const begin = Number(airing?.beginTimeMs)
-      const end = Number(airing?.endTimeMs)
-      // A row with nothing listed has one untitled airing spanning all of time.
-      if (title === undefined || !Number.isFinite(begin) || begin < 0 || !Number.isFinite(end)) continue
-      airings.push({ channel, title, begin: DateTime.makeUnsafe(begin), end: DateTime.makeUnsafe(end) })
+const GuideListing = YouTubeTvPayload.GuideResponseJson.pipe(
+  Schema.decodeTo(Schema.Struct({ channels: Guide.fields.channels, airings: Guide.fields.airings }), {
+    decode: SchemaGetter.transform(listingOf),
+    encode: SchemaGetter.forbidden(() => "A guide is never written back as a response")
+  })
+)
+
+const decodeGuide = Schema.decodeEffect(GuideListing)
+
+function listingOf(response: typeof YouTubeTvPayload.GuideResponse.Type) {
+  const stations = Arr.flatMap(
+    response.contents.epgRenderer.paginationRenderer.epgPaginationRenderer.contents,
+    ({ epgRowRenderer: row }) => {
+      const station = row?.station?.epgStationRenderer
+      return Option.all({
+        row: Option.fromNullishOr(row),
+        id: Option.fromNullishOr(station?.stationId).pipe(Option.map(ChannelId.make)),
+        name: Option.fromNullishOr(station?.icon?.accessibility?.accessibilityData.label)
+      }).pipe(Option.toArray)
     }
+  )
+  return {
+    channels: stations.map(({ row, id, name }) => ({
+      id,
+      name,
+      ...liveOf(row.navigationEndpoint?.watchEndpoint?.videoId)
+    })),
+    airings: stations.flatMap(({ row, id }) =>
+      Arr.flatMap(row.airings ?? [], ({ epgAiringRenderer: airing }) =>
+        Option.all({
+          title: Option.fromNullishOr(airing?.title?.runs[0].text),
+          begin: Option.flatMap(Option.fromNullishOr(airing), (listed) => decodeBegin(listed.beginTimeMs)),
+          end: Option.flatMap(Option.fromNullishOr(airing), (listed) => decodeEnd(listed.endTimeMs))
+        }).pipe(
+          Option.map(({ title, begin, end }) => ({
+            channel: id,
+            title,
+            begin: DateTime.makeUnsafe(begin),
+            end: DateTime.makeUnsafe(end)
+          })),
+          Option.toArray
+        )
+      )
+    )
   }
-  return new Guide({ source: "YouTube TV", readAt, channels, airings })
+}
+
+// Encoded, an id that is not one fails the address's pattern instead of smuggling in a query.
+function liveOf(videoId: string | undefined) {
+  return Option.fromNullishOr(videoId).pipe(
+    Option.flatMap((id) =>
+      decodeLiveChannelUrlOption(`https://tv.youtube.com/watch/${encodeURIComponent(id)}`)
+    ),
+    Option.match({ onNone: () => ({}), onSome: (url) => ({ live: { _tag: "WebView" as const, url } }) })
+  )
 }

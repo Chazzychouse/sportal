@@ -18,7 +18,7 @@ import { Provider } from "../provider/Provider.ts"
 import { neverPushing, polling } from "../provider/TestProvider.ts"
 import { Slate } from "../Slate.ts"
 import { StageSessions } from "../StageSessions.ts"
-import * as SqlChannelStore from "../source/SqlChannelStore.ts"
+import { ChannelStore } from "../source/ChannelStore.ts"
 import * as YouTubeTv from "../source/youtube-tv/YouTubeTv.ts"
 import * as HubServer from "./HubServer.ts"
 
@@ -330,7 +330,7 @@ function apiUnderTest() {
 function hubUnderTest() {
   return StageSessions.layer.pipe(
     Layer.provideMerge(YouTubeTv.layer),
-    Layer.provide(SqlChannelStore.layer),
+    Layer.provide(ChannelStore.layer),
     Layer.provide(Database.layer(":memory:")),
     Layer.provideMerge(Layer.mergeAll(Slate.layer, Ingest.layer(["fbs"]))),
     Layer.provide([

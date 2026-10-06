@@ -12,7 +12,6 @@ import * as EspnProvider from "../../provider/espn/EspnProvider.ts"
 import { listedBy } from "../../provider/TestProvider.ts"
 import { ChannelStore } from "../ChannelStore.ts"
 import { Source } from "../Source.ts"
-import * as SqlChannelStore from "../SqlChannelStore.ts"
 import * as YouTubeTv from "./YouTubeTv.ts"
 
 // Addresses recorded from YouTube TV's live guide on 2026-10-03.
@@ -124,7 +123,7 @@ describe("YouTubeTv source", () => {
 
 /** The source over a fresh in-memory database. */
 function testSource() {
-  return YouTubeTv.layer.pipe(Layer.provide(SqlChannelStore.layer), Layer.provide(Database.layer(":memory:")))
+  return YouTubeTv.layer.pipe(Layer.provide(ChannelStore.layer), Layer.provide(Database.layer(":memory:")))
 }
 
 /** An in-memory channel store that already holds ESPN's channel when the source starts. */
@@ -140,7 +139,7 @@ function storeKnowingEspn() {
       })
       return store
     })
-  ).pipe(Layer.provide(SqlChannelStore.layer), Layer.provide(Database.layer(":memory:")))
+  ).pipe(Layer.provide(ChannelStore.layer), Layer.provide(Database.layer(":memory:")))
 }
 
 // The first page of YouTube TV's live guide, read 2026-10-03T20:24:45Z, reduced to what the source reads.
