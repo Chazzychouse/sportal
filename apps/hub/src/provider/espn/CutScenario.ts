@@ -12,7 +12,7 @@ import * as EspnProvider from "./EspnProvider.ts"
 
 /**
  * A window of a recorded game day as a scenario: each scoreboard poll in it, decoded as ESPN's live ones are, is a
- * frame, timed from the first. `recording` is a league's folder of the spike's recorder (`…/college-football`
+ * frame, timed from the first. `recording` is a league's folder of one of the spike's recorders (`…/college-football`
  * or `…/nfl`); `games`, when not empty, keeps only those games.
  */
 export const cut = Effect.fn("CutScenario.cut")(function* (options: {

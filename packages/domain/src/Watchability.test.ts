@@ -264,15 +264,16 @@ describe("Watchability over recorded game days", () => {
     )
   })
 
-  it("never puts an overtime in a lull for its clock alone", () => {
+  it("never puts a college overtime in a lull for its clock alone", () => {
     assert.deepStrictEqual(
       breaches(({ game, watchability, now }) =>
         game.status === "live" &&
+        game.league === "fbs" &&
         game.period >= 5 &&
         watchability.lull &&
         watchability.breakUntil === undefined &&
         DateTime.toEpochMillis(now) - DateTime.toEpochMillis(watchability.activeAt) < 60_000
-          ? Option.some(`in a lull at ${game.clock} in overtime`)
+          ? Option.some(`in a lull at ${game.clock} in college overtime`)
           : Option.none()
       ),
       []

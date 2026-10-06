@@ -1,7 +1,7 @@
 # Recorded Game Days — Design
 
 Date: 2026-10-05
-Status: Draft, for annotation
+Status: Approved 2026-10-05
 
 ## Goal
 
@@ -14,7 +14,7 @@ designs or builds it, but every scenario says what it should do, so the scenario
 
 | Day | What | Where | Size |
 | --- | --- | --- | --- |
-| Sun 2026-10-04, NFL | FastCast push (one connection, 16:44:54–20:30:05) and the polled scoreboard, summary, situation, and plays every 10 s (16:15–20:29), on one clock | `~/.cache/sportal-spike/feed-lag/nfl-2026-10-04/` | 247 MB |
+| Sun 2026-10-04, NFL | FastCast push (one connection, 16:44:54–20:30:05) and the polled scoreboard, summary, situation, and plays every 10 s (16:15–20:29), on one clock | `fixtures/espn-recordings/2026-10-04/nfl/` (copied from `~/.cache/sportal-spike/feed-lag/nfl-2026-10-04/`) | 247 MB |
 | Sat 2026-10-03, FBS | Scoreboard every 30 s (16:08Z–06:30Z), summaries for up to three live games every 60 s; no push | `fixtures/espn-recordings/2026-10-03/college-football/` | 198 MB |
 
 Sunday covers the 1pm window from kickoff to final, and the first minutes of the 4pm games. It has no overtime.
