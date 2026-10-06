@@ -19,12 +19,21 @@ const over = snapshot({ status: "final", period: 4, clock: "0:00" })
 const upcomingGame = LiveGame.start(upcoming, "poll", t0)
 const liveGame = LiveGame.start(live, "poll", t0)
 const overGame = LiveGame.start(over, "poll", t0)
-const staleGame = new LiveGame({ ...liveGame, state: LiveGameState.Stale({ lastUpdatedAt: t0 }) })
+const staleGame = new LiveGame({ ...liveGame, state: LiveGameState.Stale({ updatedAt: t0 }) })
 
 const liveAt = (updatedAt: DateTime.Utc) => LiveGameState.Live({ updatedAt })
 const taken = (game: LiveGame, taking: GameSnapshot, from: DeliverySource, now: DateTime.Utc) =>
   game.take(Delivery.Snapshot({ snapshot: taking, from }), now).liveGame
 const ticked = (game: LiveGame, now: DateTime.Utc) => game.tick(now).liveGame
+
+describe("LiveGameState.updatedAt", () => {
+  it("is the instant of a live or stale game, and none otherwise", () => {
+    expect(LiveGameState.updatedAt(LiveGameState.Upcoming())).toEqual(Option.none())
+    expect(LiveGameState.updatedAt(LiveGameState.Live({ updatedAt: t0 }))).toEqual(Option.some(t0))
+    expect(LiveGameState.updatedAt(LiveGameState.Stale({ updatedAt: t0 }))).toEqual(Option.some(t0))
+    expect(LiveGameState.updatedAt(LiveGameState.Over())).toEqual(Option.none())
+  })
+})
 
 describe("LiveGame.start", () => {
   it("an upcoming snapshot starts Upcoming", () => {
@@ -143,7 +152,7 @@ describe("LiveGame#take, a snapshot, ties between the feeds", () => {
     expect(next.pipe(Option.map((game) => game.from))).toEqual(Option.some("push"))
   })
   it("a tied poll on a stale pushed game is taken", () => {
-    const stale = new LiveGame({ ...pushed, state: LiveGameState.Stale({ lastUpdatedAt: t0 }) })
+    const stale = new LiveGame({ ...pushed, state: LiveGameState.Stale({ updatedAt: t0 }) })
     const next = taken(stale, touchdown, "poll", later)
     expect(next.pipe(Option.map((game) => game.snapshot))).toEqual(Option.some(touchdown))
     expect(next.pipe(Option.map((game) => game.from))).toEqual(Option.some("poll"))
@@ -170,7 +179,7 @@ describe("LiveGame#tick, staleness", () => {
   })
   it("Live at exactly updatedAt + 90 s: Stale", () => {
     expect(ticked(liveGame, staleTime).pipe(Option.map((game) => game.state))).toEqual(
-      Option.some(LiveGameState.Stale({ lastUpdatedAt: t0 }))
+      Option.some(LiveGameState.Stale({ updatedAt: t0 }))
     )
   })
   it("after a refresh at 60 s, Live at 149 s and Stale at 150 s", () => {
@@ -179,7 +188,7 @@ describe("LiveGame#tick, staleness", () => {
     const refreshed = Option.getOrThrow(taken(liveGame, next, "poll", refreshedAt))
     expect(stateAt(refreshed, DateTime.addDuration(t0, Duration.seconds(149)))).toEqual(liveAt(refreshedAt))
     expect(stateAt(refreshed, DateTime.addDuration(t0, Duration.seconds(150)))).toEqual(
-      LiveGameState.Stale({ lastUpdatedAt: refreshedAt })
+      LiveGameState.Stale({ updatedAt: refreshedAt })
     )
   })
   it("Stale, live again on the next snapshot", () => {
@@ -190,7 +199,7 @@ describe("LiveGame#tick, staleness", () => {
     )
   })
   it("Stale stays Stale", () => {
-    expect(stateAt(staleGame, staleTime)).toEqual(LiveGameState.Stale({ lastUpdatedAt: t0 }))
+    expect(stateAt(staleGame, staleTime)).toEqual(LiveGameState.Stale({ updatedAt: t0 }))
   })
   it("Over: never stale, and nothing changes", () => {
     expect(ticked(overGame, staleTime)).toEqual(Option.none())
@@ -232,7 +241,7 @@ describe("LiveGame#isCurrent", () => {
     expect(liveGame.isCurrent(later)).toBe(true)
     expect(staleGame.isCurrent(later)).toBe(true)
   })
-  it("Stale at lastUpdatedAt + 29:59 is current, and at + 30:00 is not", () => {
+  it("Stale at updatedAt + 29:59 is current, and at + 30:00 is not", () => {
     expect(staleGame.isCurrent(DateTime.addDuration(t0, Duration.seconds(30 * 60 - 1)))).toBe(true)
     expect(staleGame.isCurrent(DateTime.addDuration(t0, Duration.minutes(30)))).toBe(false)
   })
@@ -252,7 +261,7 @@ describe("LiveGame#isCurrent", () => {
 })
 
 describe("LiveGame#currencyChangesAt", () => {
-  it("Stale: lastUpdatedAt + 30 minutes, until then", () => {
+  it("Stale: updatedAt + 30 minutes, until then", () => {
     const end = DateTime.addDuration(t0, Duration.minutes(30))
     expect(staleGame.currencyChangesAt(later)).toEqual(Option.some(end))
     expect(staleGame.currencyChangesAt(end)).toEqual(Option.none())

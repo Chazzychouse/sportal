@@ -157,7 +157,7 @@ describe("LiveGames", () => {
         assert.isTrue(LiveGameState.$is("Live")((yield* liveGameOf(one)).state))
         yield* TestClock.adjust("1 second")
         const state = (yield* liveGameOf(one)).state
-        assert.isTrue(LiveGameState.$is("Stale")(state) && DateTime.Equivalence(state.lastUpdatedAt, takenAt))
+        assert.isTrue(LiveGameState.$is("Stale")(state) && DateTime.Equivalence(state.updatedAt, takenAt))
       }).pipe(Effect.provide(LiveGames.layer))
     )
 

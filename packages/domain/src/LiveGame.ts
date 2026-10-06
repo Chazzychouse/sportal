@@ -9,10 +9,21 @@ import { Watchability } from "./Watchability.ts"
 export type LiveGameState = Data.TaggedEnum<{
   Upcoming: object
   Live: { readonly updatedAt: DateTime.Utc }
-  Stale: { readonly lastUpdatedAt: DateTime.Utc }
+  Stale: { readonly updatedAt: DateTime.Utc }
   Over: object
 }>
-export const LiveGameState = Data.taggedEnum<LiveGameState>()
+const constructors = Data.taggedEnum<LiveGameState>()
+export const LiveGameState = {
+  Upcoming: constructors.Upcoming,
+  Live: constructors.Live,
+  Stale: constructors.Stale,
+  Over: constructors.Over,
+  $is: constructors.$is,
+  $match: constructors.$match,
+  /** When a live or stale game was last updated; none for an upcoming or over game. */
+  updatedAt: (state: LiveGameState): Option.Option<DateTime.Utc> =>
+    state._tag === "Live" || state._tag === "Stale" ? Option.some(state.updatedAt) : Option.none()
+}
 
 /**
  * One game as the Hub follows it: its latest snapshot, the feed that gave it, its state, its plays, and its
@@ -125,7 +136,7 @@ export class LiveGame extends Data.Class<{
       Upcoming: () => this.state,
       Live: ({ updatedAt }) =>
         DateTime.isGreaterThanOrEqualTo(now, DateTime.addDuration(updatedAt, LiveGame.staleAfter))
-          ? LiveGameState.Stale({ lastUpdatedAt: updatedAt })
+          ? LiveGameState.Stale({ updatedAt })
           : this.state,
       Stale: () => this.state,
       Over: () => this.state
@@ -171,8 +182,8 @@ export class LiveGame extends Data.Class<{
           DateTime.addDuration(now, LiveGame.currentBefore)
         ),
       Live: () => true,
-      Stale: ({ lastUpdatedAt }) =>
-        DateTime.isLessThan(now, DateTime.addDuration(lastUpdatedAt, LiveGame.staleCurrentFor)),
+      Stale: ({ updatedAt }) =>
+        DateTime.isLessThan(now, DateTime.addDuration(updatedAt, LiveGame.staleCurrentFor)),
       Over: () => false
     })
   }
@@ -185,8 +196,7 @@ export class LiveGame extends Data.Class<{
     return LiveGameState.$match(this.state, {
       Upcoming: () => Option.some(DateTime.subtractDuration(this.snapshot.kickoff, LiveGame.currentBefore)),
       Live: () => Option.none(),
-      Stale: ({ lastUpdatedAt }) =>
-        Option.some(DateTime.addDuration(lastUpdatedAt, LiveGame.staleCurrentFor)),
+      Stale: ({ updatedAt }) => Option.some(DateTime.addDuration(updatedAt, LiveGame.staleCurrentFor)),
       Over: () => Option.none()
     }).pipe(Option.filter((at) => DateTime.isLessThan(now, at)))
   }
