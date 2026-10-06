@@ -170,7 +170,7 @@ sportal/
 ├── vitest.config.ts
 ├── .dependency-cruiser.cjs     Import-direction and banned-name rules
 ├── lefthook.yml
-├── fixtures/scenarios/         Recorded scenarios: raw frames of recorded game-day windows (and, until they go, their JSON slices)
+├── fixtures/scenarios/         Recorded scenarios: the raw frames of recorded game-day windows
 ├── telemetry/                  Local Grafana: compose file and the Hub's dashboards
 │
 ├── docs/
@@ -253,17 +253,13 @@ sportal/
     │       │       ├── YouTubeTvPayload.ts  The guide response's wire shape
     │       │       ├── TestYouTubeTv.ts     A recorded guide for tests of other modules
     │       │       └── fixtures/            Recorded real payloads
-    │       ├── scenario/
-    │       │   ├── Scenario.ts         A written scenario: a timeline of game snapshots
-    │       │   ├── RecordedScenario.ts A recorded scenario: the raw frames of a recorded window
-    │       │   ├── ScenarioProvider.ts A scenario as the provider: polled, pushed, and polled again at its frames' times
-    │       │   ├── ScenarioClock.ts    Scenario time: the Hub's clock at a chosen speed
-    │       │   ├── ScenarioSource.ts   Every game carried on a synthetic stream page
-    │       │   └── written/            Scenarios written by hand, and their registry
-    │       └── recording/              Dev tools over a recorded game day
-    │           ├── Recording.ts        Reads a recording's polls
-    │           ├── CutScenario.ts      A recorded slice into a scenario
-    │           └── ImportRecording.ts  A recording into a feed.sqlite
+    │       └── scenario/
+    │           ├── Scenario.ts         A written scenario: a timeline of game snapshots
+    │           ├── RecordedScenario.ts A recorded scenario: the raw frames of a recorded window
+    │           ├── ScenarioProvider.ts A scenario as the provider: polled, pushed, and polled again at its frames' times
+    │           ├── ScenarioClock.ts    Scenario time: the Hub's clock at a chosen speed
+    │           ├── ScenarioSource.ts   Every game carried on a synthetic stream page
+    │           └── written/            Scenarios written by hand, and their registry
     │
     ├── web/
     │   └── src/

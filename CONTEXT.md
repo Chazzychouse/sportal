@@ -54,8 +54,6 @@ Every exported type name must be a term here, except the wire schemas in `*Paylo
 | **ESPN event** | One game as either ESPN feed spells it, the polled site scoreboard or a FastCast scoreboard topic, read as a GameSnapshot; `EspnEvent` in code. | payload, DTO |
 | **Topic owner** | What a live feed topic carries: one league's scoreboard, or one game's plays; `Owner` in code. | subscription |
 | **Checkpoint error** | A live feed topic's checkpoint could not be loaded or did not decode; retried by FastCast's checkpoint retry, then the game is left to polling. | |
-| **Recording** | A day of one league's raw polls and socket lines recorded by hand before the Hub kept a feed log, which the dev tools cut into a scenario or import into the feed log. Not the feed log, which the Hub keeps itself. | feed log |
-| **Recording unreadable** | A recording's folder is no league's, or its polls could not be listed; `RecordingUnreadable` in code. | |
 | **Ingesting** | The Hub's loop, in `ingest/`, that replays the day from the feed log into the live games, then polls the provider on its polling and runs its push, appending every frame to the log and folding what each says into the live games. | poller, sync, fetcher |
 | **Polling** | When a provider is polled again, given the slate the last poll left and the leagues that failed: a Schedule its adapter declares. ESPN's is 10 s while a game is live, 1 min within 30 minutes of a kickoff, 15 min otherwise. | cadence, interval |
 | **Source** | A way you obtain **video** (YouTube TV). | provider, service |

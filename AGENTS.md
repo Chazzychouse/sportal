@@ -32,8 +32,7 @@ easiest to break.
   the wire format. Derive a variant at the point of use; do not name it.
 - In the Hub, only `HubMode.ts` and tests name concrete providers and sources, and `main.ts` is only the layer pipe and how the process runs it.
   Everything else depends on the port.
-- In the Hub, only `HubConfig.ts` reads the environment, except that the dev tools `scenario:cut` and `feed:import` read `INIT_CWD`
-  to resolve the paths they are given. A new setting is a field there, with its default.
+- In the Hub, only `HubConfig.ts` reads the environment. A new setting is a field there, with its default.
 - A service is yielded where it is used, never passed as an argument. A layer that needs a setting yields `HubConfig`;
   a choice between layers at startup is a `Layer.unwrap` that yields it.
 
@@ -82,11 +81,7 @@ A reader opens a file to see the thing it is named for. Keep it that way.
   times faster: a written one (`apps/hub/src/scenario/written/Scenarios.ts`) or a recorded one,
   `fixtures/scenarios/<name>.frames.jsonl.gz`. It plays as the provider through the real ingest and fold, on a feed log
   in memory (`SPORTAL_SCENARIO_FEED_LOG` names a file in the data directory instead). Every game plays as a synthetic
-  stream page. The feed log records every game day. Cut a
-  slice of an old recording into a scenario with
-  `pnpm --filter @sportal/hub scenario:cut <name> <recording-dir> <from> <to> [game ids…]`, or import one into a
-  feed log with `pnpm --filter @sportal/hub feed:import --recording <dir> --out <file.jsonl.gz>`; the tools
-  live in `apps/hub/src/recording/`, and both resolve a relative path against `INIT_CWD`, where pnpm was run.
+  stream page. The feed log records every game day.
 - `pnpm --filter @sportal/hub dev` — run only the Hub on port 4400 (API and live stream), on every interface so a phone Remote can reach it (`SPORTAL_HOST` narrows it). In
   dev it keeps its SQLite database in `.sportal/` at the repo root; set `SPORTAL_DATA_DIR` to move it. Started any other
   way, it keeps it where the OS keeps app data: `$XDG_DATA_HOME/sportal` or `~/.local/share/sportal` on Linux,
