@@ -150,8 +150,9 @@ The drag preview (`StageView.tsx:33-36`) and the on-air/soloed checks (`TileChro
 `StageMap.tsx:237-238`) become `Stage` methods.
 
 **Smaller.** `GameEvent.fromPlays` becomes a static; `GameEvent.test.ts` merges into `Game.test.ts`;
-`Scenario.ts`'s private `Frame` is renamed (it collides with the feed-log Frame); `Scenario.build` stops
-importing `TestGame` (production on test builders) by owning its builders.
+`Scenario.ts`'s private `Frame` is renamed (it collides with the feed-log Frame). Scenarios keep building
+on `TestGame`: `.dependency-cruiser.cjs` allows it on purpose (scenarios are test data), and owning a
+second set of builders would duplicate them; the rule's paths follow the move to the Hub.
 
 **Fixes:** overtime and status text; SlateChanged without fold memory; `GET /slate` removed.
 
