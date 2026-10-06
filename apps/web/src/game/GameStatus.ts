@@ -1,5 +1,5 @@
 import type { GameSnapshot } from "@sportal/domain/Game"
-import { localTime } from "./LocalTime.ts"
+import { DateTime } from "effect"
 
 /** A game's status as a slate row or a tile shows it: the period and clock, the kickoff, or the status in a word. */
 export function statusText(game: GameSnapshot): string {
@@ -19,6 +19,11 @@ export function statusText(game: GameSnapshot): string {
     case "canceled":
       return "Canceled"
   }
+}
+
+/** A time of day as this browser shows it ("1:00 PM"). */
+export function localTime(at: DateTime.Utc): string {
+  return DateTime.toDateUtc(at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
 }
 
 function periodName(period: number): string {

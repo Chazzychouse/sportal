@@ -1,6 +1,6 @@
 import { StrictMode } from "react"
 import { createRoot } from "react-dom/client"
-import { App } from "./display/DisplayView.tsx"
+import { DisplayView } from "./display/DisplayView.tsx"
 import { RemoteView } from "./remote/RemoteView.tsx"
 import { ScenarioStream } from "./ScenarioStream.tsx"
 import "./theme.css"
@@ -19,7 +19,7 @@ createRoot(root).render(
     ) : path.startsWith(scenarioStream) ? (
       <ScenarioStream game={decodeURIComponent(path.slice(scenarioStream.length))} />
     ) : (
-      <App />
+      <DisplayView />
     )}
   </StrictMode>
 )

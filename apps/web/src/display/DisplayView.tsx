@@ -26,7 +26,7 @@ export function useDisplay() {
   return { display, run, set }
 }
 
-export function App() {
+export function DisplayView() {
   const live = useLive()
   const { display, run, set: setDisplay } = useDisplay()
   const closeOverlay = (open: boolean) => {
