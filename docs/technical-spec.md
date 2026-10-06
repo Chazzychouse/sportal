@@ -406,6 +406,7 @@ class LiveGames extends Context.Service<LiveGames, {
 
 ```ts
 class Source extends Context.Service<Source, {
+  readonly budget: StreamBudget
   readonly availability: Effect<(game: GameSnapshot) => ChannelAvailability>
   readonly changes: Stream<void>
   readGuide(guide: string): Effect<void, GuideUnreadable>

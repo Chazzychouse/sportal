@@ -289,6 +289,7 @@ describe("TileViews mouse filter", () => {
       yield* tiles.sync([{ ...placement, interactive: true }])
       const presses = yield* collect(tiles.tilePresses, 1)
       mouse(0, "mouseDown", "left")
+      yield* tiles.sync([placement])
       yield* tiles.sync([{ ...placement, game: two }])
       mouse(0, "mouseDown", "left")
       mouse(1, "mouseDown", "left")
