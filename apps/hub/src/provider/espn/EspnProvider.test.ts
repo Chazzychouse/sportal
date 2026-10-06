@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs"
 import { assert, describe, it } from "@effect/vitest"
 import { Network } from "@sportal/domain/Game"
-import { Effect, Layer } from "effect"
+import { DateTime, Effect, Layer } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/http"
 import { Provider } from "../Provider.ts"
 import * as EspnProvider from "./EspnProvider.ts"
@@ -21,7 +21,9 @@ const recordedEspn = (fbs: string) =>
           Effect.succeed(
             HttpClientResponse.fromWeb(
               request,
-              new Response(request.url.includes("/nfl/") ? nflPregame : fbs)
+              new Response(request.url.includes("/nfl/") ? nflPregame : fbs, {
+                headers: { date: "Sun, 04 Oct 2026 18:00:00 GMT" }
+              })
             )
           )
         )
@@ -32,6 +34,20 @@ const recordedEspn = (fbs: string) =>
 const TestLayer = recordedEspn(fbsLive)
 
 describe("EspnProvider", () => {
+  it.effect("a poll is the scoreboard's body untouched, sent when its Date header says", () =>
+    Effect.gen(function* () {
+      const provider = yield* Provider
+      const frame = yield* provider.poll("nfl")
+
+      assert.strictEqual(frame.body, nflPregame)
+      assert.deepStrictEqual([frame.feed, frame.channel, frame.kind], ["poll", "nfl", "response"])
+      assert.strictEqual(
+        frame.sentAt?.epochMilliseconds,
+        DateTime.makeUnsafe("2026-10-04T18:00:00Z").epochMilliseconds
+      )
+    }).pipe(Effect.provide(TestLayer))
+  )
+
   it.effect("decodes a live FBS scoreboard into snapshots", () =>
     Effect.gen(function* () {
       const provider = yield* Provider

@@ -1,0 +1,383 @@
+{
+  "40187297063": {
+    "id": "40187297063",
+    "type": {
+      "id": "5",
+      "slug": "rush",
+      "abbreviation": "RUSH",
+      "text": "Rush"
+    },
+    "text": "S.Barkley up the middle to PHI 27 for 2 yards (O.Speights; J.Stewart).",
+    "shortText": "Saquon Barkley 2 Yd Rush",
+    "period": {
+      "number": 1
+    },
+    "clock": {
+      "value": 895,
+      "displayValue": "14:55"
+    },
+    "team": {
+      "$key": "21"
+    },
+    "scoreValue": 0,
+    "scoringPlay": false,
+    "start": {
+      "team": {
+        "$key": "21"
+      },
+      "yardLine": 25,
+      "down": 1,
+      "distance": 10,
+      "yardsToEndzone": 75,
+      "downDistanceText": "1st & 10 at PHI 25",
+      "shortDownDistanceText": "1st & 10",
+      "possessionText": "PHI 25"
+    },
+    "end": {
+      "team": {
+        "$key": "21"
+      },
+      "yardLine": 27,
+      "down": 2,
+      "distance": 8,
+      "yardsToEndzone": 73,
+      "downDistanceText": "2nd & 8 at PHI 27",
+      "shortDownDistanceText": "2nd & 8",
+      "possessionText": "PHI 27"
+    },
+    "statYardage": 2,
+    "sequenceNumber": "6300",
+    "shortDescription": "2-yd Run",
+    "homeScore": 0,
+    "awayScore": 0,
+    "probabilities": {
+      "winProbability": {
+        "homeWinPercentage": 0.3675
+      },
+      "coverProbability": {
+        "homeCoverPercentage": 0.51,
+        "totalOverPercentage": 0.5046
+      }
+    },
+    "priority": false,
+    "wallclock": "2026-10-04T17:03:29Z"
+  },
+  "40187297363": {
+    "id": "40187297363",
+    "type": {
+      "id": "24",
+      "slug": "pass-reception",
+      "abbreviation": "REC",
+      "text": "Pass Reception"
+    },
+    "text": " C.Ward pass short left to C.Dike ran ob at BLT 43 for 15 yards (M.Humphrey).",
+    "shortText": "Cam Ward Pass Complete for 15 Yds to Chimere Dike ",
+    "period": {
+      "number": 1
+    },
+    "clock": {
+      "value": 893,
+      "displayValue": "14:53"
+    },
+    "team": {
+      "$key": "10"
+    },
+    "scoreValue": 0,
+    "scoringPlay": false,
+    "start": {
+      "team": {
+        "$key": "10"
+      },
+      "yardLine": 58,
+      "down": 1,
+      "distance": 10,
+      "yardsToEndzone": 58,
+      "downDistanceText": "1st & 10 at TEN 42",
+      "shortDownDistanceText": "1st & 10",
+      "possessionText": "TEN 42"
+    },
+    "end": {
+      "team": {
+        "$key": "10"
+      },
+      "yardLine": 43,
+      "down": 1,
+      "distance": 10,
+      "yardsToEndzone": 43,
+      "downDistanceText": "1st & 10 at BAL 43",
+      "shortDownDistanceText": "1st & 10",
+      "possessionText": "BAL 43"
+    },
+    "statYardage": 15,
+    "sequenceNumber": "6300",
+    "shortDescription": "15-yd Pass",
+    "homeScore": 0,
+    "awayScore": 0,
+    "probabilities": {
+      "winProbability": {
+        "homeWinPercentage": 0.8042
+      },
+      "coverProbability": {
+        "homeCoverPercentage": 0.4766,
+        "totalOverPercentage": 0.5315
+      }
+    },
+    "priority": false,
+    "wallclock": "2026-10-04T17:03:18Z",
+    "afterCatchYardage": 15
+  },
+  "401872971330": {
+    "id": "401872971330",
+    "type": {
+      "id": "9",
+      "slug": "fumble-recovery-own",
+      "text": "Fumble Recovery (Own)"
+    },
+    "text": " D.Maye FUMBLES (Aborted) at NE 43, and recovers at NE 43. D.Maye pass short left to H.Henry to BUF 36 for 21 yards (D.Williams).",
+    "shortText": "Drake Maye Pass Complete for 21 Yds to Hunter Henry Drake Maye Fumble Drake Maye 0 Yd Fumble Recovery ",
+    "period": {
+      "number": 1
+    },
+    "clock": {
+      "value": 578,
+      "displayValue": "9:38"
+    },
+    "team": {
+      "$key": "17"
+    },
+    "scoreValue": 0,
+    "scoringPlay": false,
+    "start": {
+      "team": {
+        "$key": "17"
+      },
+      "yardLine": 57,
+      "down": 1,
+      "distance": 10,
+      "yardsToEndzone": 57,
+      "downDistanceText": "1st & 10 at NE 43",
+      "shortDownDistanceText": "1st & 10",
+      "possessionText": "NE 43"
+    },
+    "end": {
+      "team": {
+        "$key": "17"
+      },
+      "yardLine": 36,
+      "down": 1,
+      "distance": 10,
+      "yardsToEndzone": 36,
+      "downDistanceText": "1st & 10 at BUF 36",
+      "shortDownDistanceText": "1st & 10",
+      "possessionText": "BUF 36"
+    },
+    "statYardage": 21,
+    "sequenceNumber": "33000",
+    "shortDescription": "Fumble Recovery (Own)",
+    "homeScore": 0,
+    "awayScore": 0,
+    "probabilities": {
+      "winProbability": {
+        "homeWinPercentage": 0.6299
+      },
+      "coverProbability": {
+        "homeCoverPercentage": 0.4283,
+        "totalOverPercentage": 0.4699,
+        "spreadPushPercentage": 0.0645
+      }
+    },
+    "priority": false,
+    "wallclock": "2026-10-04T17:10:46Z",
+    "afterCatchYardage": 22
+  },
+  "401872966237": {
+    "id": "401872966237",
+    "type": {
+      "id": "67",
+      "slug": "passing-touchdown",
+      "abbreviation": "TD",
+      "text": "Passing Touchdown"
+    },
+    "text": " J.Brissett pass short left to M.Harrison for 12 yards, TOUCHDOWN.",
+    "shortText": "Marvin Harrison Jr. 12 Yd pass from Jacoby Brissett ",
+    "period": {
+      "number": 1
+    },
+    "clock": {
+      "value": 668,
+      "displayValue": "11:08"
+    },
+    "team": {
+      "$key": "22"
+    },
+    "scoreValue": 6,
+    "scoringPlay": true,
+    "start": {
+      "team": {
+        "$key": "22"
+      },
+      "yardLine": 12,
+      "down": 1,
+      "distance": 10,
+      "yardsToEndzone": 12,
+      "downDistanceText": "1st & 10 at NYG 12",
+      "shortDownDistanceText": "1st & 10",
+      "possessionText": "NYG 12"
+    },
+    "end": {
+      "team": {
+        "$key": "22"
+      },
+      "yardLine": 0,
+      "down": -1,
+      "distance": 10,
+      "yardsToEndzone": 0
+    },
+    "statYardage": 12,
+    "sequenceNumber": "23700",
+    "shortDescription": "12-yd Touchdown Pass",
+    "homeScore": 0,
+    "awayScore": 6,
+    "scoringType": {
+      "name": "touchdown",
+      "abbreviation": "TD",
+      "displayName": "Touchdown"
+    },
+    "probabilities": {
+      "winProbability": {
+        "homeWinPercentage": 0.3159
+      },
+      "coverProbability": {
+        "homeCoverPercentage": 0.3752,
+        "totalOverPercentage": 0.6058
+      }
+    },
+    "priority": false,
+    "wallclock": "2026-10-04T17:08:03Z",
+    "afterCatchYardage": 0
+  },
+  "401872966271": {
+    "id": "401872966271",
+    "type": {
+      "id": "74",
+      "slug": "official-timeout",
+      "abbreviation": "Off TO",
+      "text": "Official Timeout"
+    },
+    "text": "Official Timeout at 11:08.",
+    "shortText": "Official Timeout At 11:08. ",
+    "period": {
+      "number": 1
+    },
+    "clock": {
+      "value": 668,
+      "displayValue": "11:08"
+    },
+    "team": {
+      "$key": "22"
+    },
+    "scoreValue": 0,
+    "scoringPlay": false,
+    "start": {
+      "team": {
+        "$key": "22"
+      },
+      "yardLine": 15,
+      "down": -1,
+      "distance": 0,
+      "yardsToEndzone": 0,
+      "downDistanceText": " & Goal at NYG 15",
+      "shortDownDistanceText": " & Goal",
+      "possessionText": "NYG 15"
+    },
+    "end": {
+      "team": {
+        "$key": "22"
+      },
+      "yardLine": 15,
+      "down": -1,
+      "distance": 0,
+      "yardsToEndzone": 0
+    },
+    "statYardage": 0,
+    "sequenceNumber": "27100",
+    "shortDescription": "Official Timeout",
+    "homeScore": 0,
+    "awayScore": 7,
+    "probabilities": {
+      "winProbability": {
+        "homeWinPercentage": 0.314
+      },
+      "coverProbability": {
+        "homeCoverPercentage": 0.3633,
+        "totalOverPercentage": 0.6181
+      }
+    },
+    "priority": false,
+    "wallclock": "2026-10-04T17:09:13Z"
+  },
+  "4018729712179": {
+    "id": "4018729712179",
+    "type": {
+      "id": "29",
+      "slug": "fumble-recovery-opponent",
+      "text": "Fumble Recovery (Opponent)"
+    },
+    "text": " (Shotgun) J.Allen pass short middle to K.Shakir to NE 39 for 8 yards (R.Spillane). FUMBLES (R.Spillane), RECOVERED by NE-E.Ponder at NE 36.",
+    "shortText": "Josh Allen Pass Complete for 8 Yds to Khalil Shakir Khalil Shakir Fumble Elijah Ponder 0 Yd Fumble Recovery ",
+    "period": {
+      "number": 2
+    },
+    "clock": {
+      "value": 23,
+      "displayValue": "0:23"
+    },
+    "team": {
+      "$key": "17"
+    },
+    "scoreValue": 0,
+    "scoringPlay": false,
+    "start": {
+      "team": {
+        "$key": "2"
+      },
+      "yardLine": 53,
+      "down": 1,
+      "distance": 10,
+      "yardsToEndzone": 47,
+      "downDistanceText": "1st & 10 at NE 47",
+      "shortDownDistanceText": "1st & 10",
+      "possessionText": "NE 47"
+    },
+    "end": {
+      "team": {
+        "$key": "17"
+      },
+      "yardLine": 64,
+      "down": 1,
+      "distance": 10,
+      "yardsToEndzone": 64,
+      "downDistanceText": "1st & 10 at NE 36",
+      "shortDownDistanceText": "1st & 10",
+      "possessionText": "NE 36"
+    },
+    "statYardage": 0,
+    "sequenceNumber": "217900",
+    "shortDescription": "Fumble Recovery",
+    "homeScore": 14,
+    "awayScore": 14,
+    "probabilities": {
+      "winProbability": {
+        "homeWinPercentage": 0.641
+      },
+      "coverProbability": {
+        "homeCoverPercentage": 0.3586,
+        "totalOverPercentage": 0.6679,
+        "spreadPushPercentage": 0.0971
+      }
+    },
+    "priority": false,
+    "wallclock": "2026-10-04T18:23:06Z",
+    "afterCatchYardage": 8
+  }
+}

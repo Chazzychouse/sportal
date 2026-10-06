@@ -304,7 +304,10 @@ function hubUnderTest() {
     Layer.provideMerge(Slate.layer),
     Layer.provide(Ingest.layer(["fbs"])),
     Layer.provide([
-      Layer.succeed(Provider, Provider.of({ slate: () => Effect.succeed([game]) })),
+      Layer.succeed(
+        Provider,
+        Provider.fromSlate(() => Effect.succeed([game]))
+      ),
       TestCluster.gameActors,
       LiveFeed.none
     ]),

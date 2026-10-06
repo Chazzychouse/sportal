@@ -51,7 +51,7 @@ describe("Slate", () => {
           slateOver(
             Layer.succeed(
               Provider,
-              Provider.of({ slate: () => Ref.update(calls, (n) => n + 1).pipe(Effect.as([game("1")])) })
+              Provider.fromSlate(() => Ref.update(calls, (n) => n + 1).pipe(Effect.as([game("1")])))
             )
           )
         )

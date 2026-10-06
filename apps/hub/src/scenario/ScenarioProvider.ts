@@ -18,14 +18,14 @@ export const layer = (name: string, from: string = folder) =>
       const scenario = yield* load(name, from)
       const start = yield* DateTime.now
       yield* Effect.logInfo(`ScenarioProvider: playing ${scenario.name}, ${scenario.frames.length} frames`)
-      return Provider.of({
-        slate: Effect.fn("ScenarioProvider.slate")(function* (league: LeagueId) {
+      return Provider.fromSlate(
+        Effect.fn("ScenarioProvider.slate")(function* (league: LeagueId) {
           const now = yield* DateTime.now
           return scenario
             .slateAt(start, Duration.millis(DateTime.toEpochMillis(now) - DateTime.toEpochMillis(start)))
             .filter((game) => game.league === league)
         })
-      })
+      )
     })
   )
 

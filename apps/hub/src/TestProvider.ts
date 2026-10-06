@@ -16,15 +16,13 @@ export function scripted(responses: ReadonlyArray<ReadonlyArray<GameSnapshot> | 
   let call = 0
   return Layer.succeed(
     Provider,
-    Provider.of({
-      slate: (league) => {
-        const response = responses[Math.min(call++, responses.length - 1)]
-        return (
-          response === "fail" || response === undefined
-            ? Effect.fail(new ProviderError({ league, cause: "down" }))
-            : Effect.succeed(response)
-        ).pipe(Effect.withSpan("provider.slate"))
-      }
+    Provider.fromSlate((league) => {
+      const response = responses[Math.min(call++, responses.length - 1)]
+      return (
+        response === "fail" || response === undefined
+          ? Effect.fail(new ProviderError({ league, cause: "down" }))
+          : Effect.succeed(response)
+      ).pipe(Effect.withSpan("provider.slate"))
     })
   )
 }

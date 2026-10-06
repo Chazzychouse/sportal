@@ -7,8 +7,8 @@ import { Scenario } from "@sportal/domain/Scenario"
 import { DateTime, Effect, FileSystem, Option, Schema } from "effect"
 // A script entry point, like main.ts, so it may name the scenario adapter's folder.
 import { folder } from "../../scenario/ScenarioProvider.ts"
+import * as EspnDecode from "./EspnDecode.ts"
 import * as EspnPayload from "./EspnPayload.ts"
-import * as EspnProvider from "./EspnProvider.ts"
 
 /**
  * A window of a recorded game day as a scenario: each scoreboard poll in it, decoded as ESPN's live ones are, is a
@@ -52,7 +52,7 @@ export const cut = Effect.fn("CutScenario.cut")(function* (options: {
         )
       )
     )
-    const slate = (yield* EspnProvider.slateOf(league, scoreboard)).filter(
+    const slate = (yield* EspnDecode.slateOf(league, scoreboard)).filter(
       (game) => options.games.length === 0 || options.games.includes(game.id)
     )
     frames.push({ at: DateTime.toEpochMillis(instant) - DateTime.toEpochMillis(first.instant), slate })

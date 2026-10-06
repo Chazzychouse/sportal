@@ -88,7 +88,7 @@ describe("Ingest", () => {
           Layer.provide(
             Layer.succeed(
               Provider,
-              Provider.of({ slate: () => Ref.update(calls, (n) => n + 1).pipe(Effect.as([scheduled])) })
+              Provider.fromSlate(() => Ref.update(calls, (n) => n + 1).pipe(Effect.as([scheduled])))
             )
           ),
           Layer.provide(Layer.succeed(GameActors, actors)),
@@ -247,7 +247,7 @@ describe("Ingest", () => {
         const polls = yield* Ref.make(0)
         const provider = Layer.succeed(
           Provider,
-          Provider.of({ slate: () => Ref.update(polls, (n) => n + 1).pipe(Effect.as([liveGame(0)])) })
+          Provider.fromSlate(() => Ref.update(polls, (n) => n + 1).pipe(Effect.as([liveGame(0)])))
         )
         const closed = new LiveFeedError({ reason: "Closed", cause: "socket closed" })
         yield* Effect.provide(
@@ -324,7 +324,7 @@ function stopsAndPollsOn(games: Stream.Stream<ReadonlyArray<GameSnapshot>>, why:
     const polls = yield* Ref.make(0)
     const provider = Layer.succeed(
       Provider,
-      Provider.of({ slate: () => Ref.update(polls, (n) => n + 1).pipe(Effect.as([liveGame(0)])) })
+      Provider.fromSlate(() => Ref.update(polls, (n) => n + 1).pipe(Effect.as([liveGame(0)])))
     )
     yield* Effect.provide(
       Effect.gen(function* () {
@@ -335,7 +335,7 @@ function stopsAndPollsOn(games: Stream.Stream<ReadonlyArray<GameSnapshot>>, why:
         Layer.provide([
           provider,
           TestCluster.gameActors,
-          Layer.succeed(LiveFeed, LiveFeed.of({ games: () => games }))
+          Layer.succeed(LiveFeed, LiveFeed.of({ games: () => games, frames: () => Stream.never }))
         ])
       )
     )
@@ -381,7 +381,8 @@ function feeding(
             )
           )
         )
-      )
+      ),
+    frames: () => Stream.never
   })
   return Ingest.layer(["fbs"]).pipe(
     Layer.provideMerge(TestCluster.gameActors),
