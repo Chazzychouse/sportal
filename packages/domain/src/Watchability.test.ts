@@ -3,9 +3,10 @@ import { isDeepStrictEqual } from "node:util"
 import { assert, describe, it } from "@effect/vitest"
 import { Array as Arr, DateTime, Duration, Option, Schema } from "effect"
 import { GameId, type GameSnapshot } from "./Game.ts"
+import { GameEvent } from "./GameEvent.ts"
 import { Scenario } from "./Scenario.ts"
 import { Situation } from "./Situation.ts"
-import { snapshot, team } from "./TestGame.ts"
+import { play, snapshot, team } from "./TestGame.ts"
 import { Watchability } from "./Watchability.ts"
 
 const now = DateTime.makeUnsafe("2026-10-03T20:00:00Z")
@@ -112,10 +113,12 @@ describe("Watchability#next", () => {
   it("falls into a lull once neither the clock nor the last play has changed for 60 seconds", () => {
     const g = game({ clock: "8:00", situation: ball(60) })
     const first = Watchability.initial(g, now)
-    assert.isFalse(first.next(g, g, later(59)).lull)
-    assert.isTrue(first.next(g, g, later(60)).lull)
+    assert.isFalse(first.next(g, g, g.eventsSince(g), later(59)).lull)
+    assert.isTrue(first.next(g, g, g.eventsSince(g), later(60)).lull)
     const moved = game({ clock: "7:40", situation: ball(55) })
-    assert.isFalse(first.next(g, g, later(60)).next(g, moved, later(70)).lull)
+    assert.isFalse(
+      first.next(g, g, g.eventsSince(g), later(60)).next(g, moved, moved.eventsSince(g), later(70)).lull
+    )
   })
 
   it("takes a 90-second break after a score, ended early by a new last play", () => {
@@ -125,7 +128,12 @@ describe("Watchability#next", () => {
       home: { team: team("UGA"), score: 31 },
       situation: ball(75, 1, 10, { lastPlay: "TD" })
     })
-    const afterScore = Watchability.initial(before, now).next(before, scored, later(10))
+    const afterScore = Watchability.initial(before, now).next(
+      before,
+      scored,
+      scored.eventsSince(before),
+      later(10)
+    )
     assert.isTrue(afterScore.lull)
     // The clock moves but no new play shows: the break holds until it runs out.
     const ticking = game({
@@ -133,14 +141,14 @@ describe("Watchability#next", () => {
       home: { team: team("UGA"), score: 31 },
       situation: ball(75, 1, 10, { lastPlay: "TD" })
     })
-    assert.isTrue(afterScore.next(scored, ticking, later(99)).lull)
-    assert.isFalse(afterScore.next(scored, ticking, later(101)).lull)
+    assert.isTrue(afterScore.next(scored, ticking, ticking.eventsSince(scored), later(99)).lull)
+    assert.isFalse(afterScore.next(scored, ticking, ticking.eventsSince(scored), later(101)).lull)
     const kickoff = game({
       clock: "7:52",
       home: { team: team("UGA"), score: 31 },
       situation: ball(75, 1, 10, { lastPlay: "Kickoff" })
     })
-    assert.isFalse(afterScore.next(scored, kickoff, later(40)).lull)
+    assert.isFalse(afterScore.next(scored, kickoff, kickoff.eventsSince(scored), later(40)).lull)
   })
 
   it("keeps the break through the try after a touchdown", () => {
@@ -150,14 +158,19 @@ describe("Watchability#next", () => {
       home: { team: team("UGA"), score: 30 },
       situation: ball(75, 1, 10, { lastPlay: "K. Bowen 3 Yd Run" })
     })
-    const afterScore = Watchability.initial(before, now).next(before, touchdown, later(10))
+    const afterScore = Watchability.initial(before, now).next(
+      before,
+      touchdown,
+      touchdown.eventsSince(before),
+      later(10)
+    )
     for (const lastPlay of ["(B. Baird KICK)", "(Two-Point Conversion failed)"]) {
       const tried = game({
         clock: "7:52",
         home: { team: team("UGA"), score: 30 },
         situation: ball(75, 1, 10, { lastPlay })
       })
-      assert.isTrue(afterScore.next(touchdown, tried, later(30)).lull, lastPlay)
+      assert.isTrue(afterScore.next(touchdown, tried, tried.eventsSince(touchdown), later(30)).lull, lastPlay)
     }
   })
 
@@ -168,7 +181,12 @@ describe("Watchability#next", () => {
       clock: "15:00",
       situation: ball(60, 2, 7, { lastPlay: "End of 3rd quarter" })
     })
-    const quarterBreak = Watchability.initial(before, now).next(before, ended, later(10))
+    const quarterBreak = Watchability.initial(before, now).next(
+      before,
+      ended,
+      ended.eventsSince(before),
+      later(10)
+    )
     assert.isTrue(quarterBreak.lull)
     // The next quarter's clock runs before a new play shows: the break holds until it runs out.
     const ticking = game({
@@ -176,28 +194,34 @@ describe("Watchability#next", () => {
       clock: "14:52",
       situation: ball(60, 2, 7, { lastPlay: "End of 3rd quarter" })
     })
-    assert.isTrue(quarterBreak.next(ended, ticking, later(99)).lull)
-    assert.isFalse(quarterBreak.next(ended, ticking, later(101)).lull)
+    assert.isTrue(quarterBreak.next(ended, ticking, ticking.eventsSince(ended), later(99)).lull)
+    assert.isFalse(quarterBreak.next(ended, ticking, ticking.eventsSince(ended), later(101)).lull)
 
     const playing = game({ clock: "8:00", situation: ball(60, 2, 7, { lastPlay: "Pass complete" }) })
     const called = game({
       clock: "7:51",
       situation: ball(60, 3, 2, { lastPlay: "Timeout Georgia, clock 07:51" })
     })
-    assert.isTrue(Watchability.initial(playing, now).next(playing, called, later(10)).lull)
+    assert.isTrue(
+      Watchability.initial(playing, now).next(playing, called, called.eventsSince(playing), later(10)).lull
+    )
 
     const late = game({ clock: "1:30", situation: ball(30, 2, 7, { lastPlay: "Pass complete" }) })
     const lateTimeout = game({
       clock: "1:24",
       situation: ball(30, 3, 2, { lastPlay: "Timeout Georgia, clock 01:24" })
     })
-    assert.isFalse(Watchability.initial(late, now).next(late, lateTimeout, later(10)).lull)
+    assert.isFalse(
+      Watchability.initial(late, now).next(late, lateTimeout, lateTimeout.eventsSince(late), later(10)).lull
+    )
   })
 
   it("takes no break for a timeout in the two-minute drill", () => {
     const before = game({ clock: "1:30", situation: ball(30) })
     const timeout = game({ clock: "1:24", situation: ball(26, 2, 6, { homeTimeouts: 2 }) })
-    assert.isFalse(Watchability.initial(before, now).next(before, timeout, later(10)).lull)
+    assert.isFalse(
+      Watchability.initial(before, now).next(before, timeout, timeout.eventsSince(before), later(10)).lull
+    )
   })
 
   it("boosts a game for a minute after a turnover, without a break", () => {
@@ -207,10 +231,79 @@ describe("Watchability#next", () => {
     })
     const picked = game({ clock: "8:51", situation: ball(70, 1, 10, { lastPlay: "INTERCEPTED" }) })
     const first = Watchability.initial(before, now)
-    const turned = first.next(before, picked, later(10))
+    const turned = first.next(before, picked, picked.eventsSince(before), later(10))
     assert.isFalse(turned.lull)
     assert.isAbove(turned.score, Watchability.initial(picked, now).score)
-    assert.strictEqual(turned.next(picked, picked, later(71)).score, Watchability.initial(picked, now).score)
+    assert.strictEqual(
+      turned.next(picked, picked, picked.eventsSince(picked), later(71)).score,
+      Watchability.initial(picked, now).score
+    )
+  })
+})
+
+describe("Watchability#next with a played event", () => {
+  it("moves activeAt for a Played event though the snapshot is unchanged", () => {
+    const g = game({ clock: "8:00", situation: ball(60) })
+    const first = Watchability.initial(g, now)
+    const quiet = first.next(g, g, [], later(50))
+    assert.deepStrictEqual(quiet.activeAt, now)
+    const shown = first.next(g, g, [GameEvent.Played({ play: play() })], later(50))
+    assert.deepStrictEqual(shown.activeAt, later(50))
+    assert.isFalse(shown.at(g, later(100)).lull)
+  })
+})
+
+describe("Watchability#at", () => {
+  const g = game({ clock: "8:00", situation: ball(60) })
+  const scoredGame = game({
+    clock: "7:52",
+    home: { team: team("UGA"), score: 31 },
+    situation: ball(75, 1, 10, { lastPlay: "TD" })
+  })
+  const broken = Watchability.initial(g, now).next(g, scoredGame, scoredGame.eventsSince(g), later(10))
+
+  it("ends a break's lull once breakUntil has passed, and not before", () => {
+    // Play shows (a Played event) at 95 s, so only the break is left to end.
+    const shown = broken.next(scoredGame, scoredGame, [GameEvent.Played({ play: play() })], later(95))
+    assert.isTrue(shown.at(scoredGame, later(99)).lull)
+    assert.isFalse(shown.at(scoredGame, later(101)).lull)
+  })
+
+  it("is a lull 60 s after the last activity", () => {
+    const first = Watchability.initial(g, now)
+    assert.isFalse(first.at(g, later(59)).lull)
+    assert.isTrue(first.at(g, later(60)).lull)
+  })
+
+  it("drops the boost once it has run out", () => {
+    assert.isAbove(broken.boostUntil === undefined ? 0 : 1, 0)
+    assert.isUndefined(broken.at(scoredGame, later(71)).boostUntil)
+  })
+})
+
+describe("Watchability#wakeAt", () => {
+  const g = game({ clock: "8:00", situation: ball(60) })
+  const scoredGame = game({
+    clock: "7:52",
+    home: { team: team("UGA"), score: 31 },
+    situation: ball(75, 1, 10, { lastPlay: "TD" })
+  })
+
+  it("gives the earliest of the break's end, the boost's end, and play counting as stopped", () => {
+    const broken = Watchability.initial(g, now).next(g, scoredGame, scoredGame.eventsSince(g), later(10))
+    // boost to 70 s, break to 100 s, stopped at 10 + 60 = 70 s
+    assert.deepStrictEqual(broken.wakeAt(later(10)), Option.some(later(70)))
+    assert.deepStrictEqual(broken.wakeAt(later(70)), Option.some(later(100)))
+  })
+
+  it("leaves out an instant already past, and is none for a game in no timed state", () => {
+    const first = Watchability.initial(g, now)
+    assert.deepStrictEqual(first.wakeAt(later(0)), Option.some(later(60)))
+    assert.deepStrictEqual(first.wakeAt(later(60)), Option.none())
+    assert.deepStrictEqual(
+      Watchability.initial(game({ status: "final" }), now).wakeAt(later(60)),
+      Option.none()
+    )
   })
 })
 
