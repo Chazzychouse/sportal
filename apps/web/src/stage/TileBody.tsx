@@ -47,8 +47,8 @@ function Scoreboard(props: { game: GameSnapshot }) {
   const { game } = props
   return (
     <div className="grid grid-cols-[auto_auto_auto_auto] items-center gap-x-5 gap-y-1">
-      <Score game={game} side="away" />
-      <Score game={game} side="home" />
+      <Score game={game} side="away" size="board" />
+      <Score game={game} side="home" size="board" />
       <GameStatus game={game} className="col-span-4 text-center text-xs" />
     </div>
   )
