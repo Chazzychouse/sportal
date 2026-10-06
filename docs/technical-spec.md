@@ -30,7 +30,7 @@ Versions were checked against the registry on 2026-10-03. Effect is at 4.0, whic
 
 | Concern | Choice | Why |
 | --- | --- | --- |
-| Language | TypeScript 6, `strict`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`, `erasableSyntaxOnly` | Shared model across every process. Not TypeScript 7 yet: dependency-cruiser does not support it. Erasable-only syntax lets Node run the Hub's source directly, with no build step |
+| Language | TypeScript 7 with the Effect language service (`@effect/tsgo`), `strict`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`, `erasableSyntaxOnly` | Shared model across every process. The language service's Effect diagnostics run in `tsc` and the editor. dependency-cruiser runs on a private TypeScript 6 until it supports 7.1. Erasable-only syntax lets Node run the Hub's source directly, with no build step |
 | Core library | Effect 4 | Typed errors, dependency injection by Layer, schedules for polling, streams for live data, a test clock for replaying games |
 | Schemas | Effect Schema | The single definition of each domain concept: type, decoder, encoder |
 | HTTP API | Effect `HttpApi` (`effect/http-api`) | The API is declared once from domain schemas; the Hub implements it and clients derive a fully typed client from the same declaration — no hand-written request or response types anywhere |

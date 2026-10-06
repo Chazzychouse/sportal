@@ -75,6 +75,10 @@ A reader opens a file to see the thing it is named for. Keep it that way.
 
 - `pnpm check` — format check, lint, typecheck, import boundaries, unused code, tests. Must pass before
   every commit; the push hook runs it.
+- `pnpm install` patches `tsc` with `@effect/tsgo`, so its Effect diagnostics fail `pnpm check` and show in the
+  editor. Bump `typescript` and `@effect/tsgo` together, to a pair `@effect/tsgo` lists as supported. Zed needs the
+  "Effect Language Service (tsgo)" extension; `.zed/settings.json` turns vtsls off and pins its `@effect/tsgo` to
+  the same version.
 - `pnpm format` — apply formatting and safe lint fixes.
 - `pnpm dev` — start the local Grafana (`pnpm telemetry`), then run the Hub, the web dev server, and the desktop shell
   together, each reloading on change. Without Docker it says telemetry is off and runs the rest. The shell
