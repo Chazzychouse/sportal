@@ -8,12 +8,12 @@ allowBuilds:
 # Scripts use `VAR=x cmd` and `${VAR:-default}`, which cmd and PowerShell cannot run.
 shellEmulator: true
 # dependency-cruiser parses through the TypeScript JS API, which TS 7.0 does not ship. Drop this once it
-# supports TS 7.1.
+# supports TS 7.1, and check it still cruises every module: on TS 7 it cruises none and still exits 0.
 packageExtensions:
   dependency-cruiser:
     dependencies:
       typescript: ^6
-# Effect is the core library and its releases are tracked on purpose; every other package waits out the
-# default release age.
+# The @effect/* packages (@effect/tsgo, @effect/vitest) skip the release-age wait, so a new Effect language
+# service can be taken the day it ships. `effect` itself and every other package wait it out.
 minimumReleaseAgeExclude:
   - "@effect/*"
