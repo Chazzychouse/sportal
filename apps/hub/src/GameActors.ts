@@ -1,6 +1,7 @@
+import { DeliverySource } from "@sportal/domain/Delivery"
 import { GameId, GameSnapshot } from "@sportal/domain/Game"
 import type { GameEvent } from "@sportal/domain/GameEvent"
-import { DeliverySource, LiveGame, LiveGameState } from "@sportal/domain/LiveGame"
+import { LiveGame, LiveGameState } from "@sportal/domain/LiveGame"
 import type { TeamId } from "@sportal/domain/Team"
 import {
   Cause,

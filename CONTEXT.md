@@ -27,6 +27,7 @@ Every exported type name must be a term here.
 | **Live game** | One game as the Hub follows it: its latest snapshot, the delivery source that gave it, and its state (`LiveGameState`): upcoming, live, stale, or over. A poll at the same game time as a live game's pushed snapshot only refreshes it: the push wins a tie. | game state, entity |
 | **Stale** | A live game no snapshot has reached for 90 seconds. It stays current for 30 minutes after its last update, then its actor may stop. | |
 | **Game actor** | The cluster entity that follows one game: its live game in memory, its staleness timer, its lifecycle. | durable object, worker |
+| **Delivery** | What a frame said: a league's listing, one game's snapshot, or one game's whole list of plays. | input, update |
 | **Delivery source** | Which feed a snapshot came from: `push` or `poll`. | origin, feed type |
 | **Test game** | A game snapshot built for a test, with defaults for everything the test does not care about. | fixture, mock |
 | **Scenario** | A timeline of game snapshots for several games, written or cut from a recording, that a Hub can play instead of a provider. | fixture, simulation |
@@ -35,7 +36,7 @@ Every exported type name must be a term here.
 | **Situation** | Live football state: possession, down, distance, field position, red zone, timeouts. | context |
 | **Period** | A quarter or an overtime. | quarter (in code) |
 | **Drive** / **Play** | A possession sequence / a single snap, or a timeout, a penalty, or the end of a period, as the game's play-by-play lists it: its kind, clock, text, yardage, start and end, score after, and win probability. | |
-| **GameEvent** | Something that happened in a game between two snapshots of it: a score, the ball changing hands, a drive reaching the 40, the red zone, goal to go, fourth down, a timeout, a period or the game ending. Derived, never stored. | alert, update |
+| **GameEvent** | Something that happened in a game: from its plays when it has them, from comparing two snapshots otherwise. Derived, never stored. | alert, update |
 
 ### Data and video
 

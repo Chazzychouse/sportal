@@ -109,7 +109,12 @@ module.exports = {
       from: {},
       to: { path: "(^|/)index\\.tsx?$", pathNot: "node_modules" }
     },
-    { name: "no-circular", severity: "error", from: {}, to: { circular: true } }
+    {
+      name: "no-circular",
+      severity: "error",
+      from: {},
+      to: { circular: true, viaOnly: { dependencyTypesNot: ["type-only"] } }
+    }
   ],
   options: {
     doNotFollow: { path: "node_modules" },

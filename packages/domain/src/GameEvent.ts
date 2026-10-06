@@ -1,9 +1,10 @@
 import { Data } from "effect"
+import type { Play } from "./Play.ts"
 import type { TeamId } from "./Team.ts"
 
 /**
- * Something that happened in a game between two snapshots of it, derived by `GameSnapshot#eventsSince` and never
- * stored as truth. `team` is the team that scored, has the ball, gained it, or called the timeout.
+ * Something that happened in a game: from its plays when it has them (`Play.eventsSince`), from comparing two
+ * snapshots otherwise (`GameSnapshot#eventsSince`). Derived, never stored as truth. `team` is the team that scored, has the ball, gained it, or called the timeout.
  */
 export type GameEvent = Data.TaggedEnum<{
   ScoreChanged: { readonly team: TeamId; readonly points: number }
@@ -19,5 +20,21 @@ export type GameEvent = Data.TaggedEnum<{
   PeriodEnded: { readonly period: number }
   WentToHalftime: object
   WentFinal: object
+  Played: { readonly play: Play }
+  BigPlay: { readonly team: TeamId; readonly yards: number }
+  Sack: { readonly team: TeamId }
 }>
 export const GameEvent = Data.taggedEnum<GameEvent>()
+
+/** The tags a game's plays decide once it has any; its snapshots decide them only before. */
+export const fromPlays: ReadonlySet<GameEvent["_tag"]> = new Set([
+  "ScoreChanged",
+  "Turnover",
+  "PossessionChanged",
+  "TimeoutTaken",
+  "PeriodEnded",
+  "FourthDown",
+  "Played",
+  "BigPlay",
+  "Sack"
+])

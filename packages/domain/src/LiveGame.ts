@@ -1,9 +1,6 @@
-import { Data, DateTime, Duration, Option, Schema } from "effect"
+import { Data, DateTime, Duration, Option } from "effect"
+import type { DeliverySource } from "./Delivery.ts"
 import { type GameId, GameSnapshot } from "./Game.ts"
-
-/** Which feed a snapshot came from. */
-export const DeliverySource = Schema.Literals(["push", "poll"])
-export type DeliverySource = typeof DeliverySource.Type
 
 /** Where a live game is: upcoming, live (last updated at), stale (last updated at), or over. */
 export type LiveGameState = Data.TaggedEnum<{
