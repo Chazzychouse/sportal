@@ -47,7 +47,7 @@ unchanged.
 **EspnDecode** exports only `layer: Layer<Decoder>`. Its `decode` stays the private function the layer is
 built from, and `EspnDecode.test.ts` yields `Decoder` from that layer.
 
-**EspnProvider.layer** is `Layer<Provider | Decoder, never, FastCast>`. "ESPN as the provider" is its feed
+**EspnProvider.layer** is `Layer<Provider | Decoder, never, FastCast | HttpClient>` (the poll still uses the HTTP client). "ESPN as the provider" is its feed
 and its decode together, so HubMode wires one layer for ESPN.
 
 **ScenarioProvider.layer** is
@@ -121,9 +121,9 @@ FastCast.layer: Layer<FastCast, never, HttpClient | Socket.WebSocketConstructor>
 ## 5. Tests and rules
 
 - Test helpers that take a service value yield it: `LiveGames.replay.test.ts` `deliveriesOf` (FeedLog) and
-  `heldAs` (LiveGames); `HubClient.test.ts` `onHub` becomes a layer over the base `HttpClient`;
-  `Ingest.test.ts` `Context.get(services, FeedLog)` becomes a yield. `LiveGames.test.ts`'s `sleeping`
-  callback receives a `Clock` because it *is* a fake Clock's sleep, so it stays as it is.
+  `heldAs` (LiveGames); `Ingest.test.ts` `Context.get(services, FeedLog)` becomes a yield. `LiveGames.test.ts`'s `sleeping`
+  callback receives a `Clock` because it *is* a fake Clock's sleep, and `HubClient.test.ts` `onHub` wraps a
+  client the test itself builds, so both stay as they are.
 - AGENTS.md, under "How code is written": *A port's member types that other modules need are named and
   exported beside it (`Polling`); nothing indexes a service's type with `X["Service"]`.*
 
