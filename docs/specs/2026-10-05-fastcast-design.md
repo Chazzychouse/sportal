@@ -1,7 +1,7 @@
 # FastCast — Design
 
 Date: 2026-10-05
-Status: Draft, for review
+Status: Approved 2026-10-05
 
 Piece 2 of the live-feed work. The game actors (piece 1, on `main`) gain ESPN FastCast as a second source of
 snapshots beside the scoreboard poll, and the Hub reports what the push delivers as well as it reports the poll.
