@@ -4,6 +4,14 @@
   "schemaVersion": 41,
   "time": { "from": "now-30m", "to": "now" },
   "refresh": "30s",
+  "links": [
+    {
+      "title": "Game actors",
+      "type": "link",
+      "icon": "dashboard",
+      "url": "/d/sportal-game/game-actors?${mode:queryparam}&${__url_time_range}"
+    }
+  ],
   "templating": {
     "list": [
       {

@@ -1,7 +1,7 @@
 import type { GameSnapshot } from "@sportal/domain/Game"
 import { LiveGame } from "@sportal/domain/LiveGame"
 import { Watchability } from "@sportal/domain/Watchability"
-import { Context, DateTime, Effect, Layer, Stream, SubscriptionRef } from "effect"
+import { Context, DateTime, Effect, Layer, Metric, Stream, SubscriptionRef } from "effect"
 import { GameActors } from "./GameActors.ts"
 import { Ingest } from "./ingest/Ingest.ts"
 
@@ -39,10 +39,12 @@ export class Slate extends Context.Service<
           Stream.runForEach((slate) =>
             DateTime.now.pipe(
               Effect.flatMap((now) =>
-                SubscriptionRef.update(state, (current) => ({
-                  slate,
-                  watchability: Watchability.fold(current, slate, now)
-                }))
+                SubscriptionRef.updateEffect(state, (current) => {
+                  const watchability = Watchability.fold(current, slate, now)
+                  return report(current.watchability, slate, watchability).pipe(
+                    Effect.as({ slate, watchability })
+                  )
+                })
               )
             )
           )
@@ -53,3 +55,41 @@ export class Slate extends Context.Service<
     })
   )
 }
+
+/** Gauges each game's watchability and lull, and logs a lull beginning or ending at Info, with its reasons. */
+function report(
+  previous: ReadonlyArray<Watchability>,
+  slate: ReadonlyArray<GameSnapshot>,
+  watchability: ReadonlyArray<Watchability>
+): Effect.Effect<void> {
+  return Effect.forEach(
+    watchability,
+    (judged, index) => {
+      const game = slate[index]
+      if (game === undefined) return Effect.void
+      const attributes = GameActors.annotationsOf(game.id, game)
+      const before = previous.find((candidate) => candidate.game === judged.game)
+      const changed = before !== undefined && before.lull !== judged.lull
+      return Effect.all([
+        Metric.update(Metric.withAttributes(watchabilityScore, attributes), judged.score),
+        Metric.update(Metric.withAttributes(lulls, attributes), judged.lull ? 1 : 0),
+        changed
+          ? Effect.logInfo(
+              `Slate: ${game.matchup()}: a lull ${judged.lull ? "began" : "ended"}, watchability ${judged.score}${
+                judged.reasons.length === 0 ? "" : ` (${judged.reasons.join(", ")})`
+              }`
+            ).pipe(Effect.annotateLogs(attributes))
+          : Effect.void
+      ])
+    },
+    { discard: true }
+  )
+}
+
+const watchabilityScore = Metric.gauge("sportal_watchability", {
+  description: "How worth watching a game is, 0–100, by game"
+})
+
+const lulls = Metric.gauge("sportal_lull", {
+  description: "Whether a game is in a lull (1) or not (0), by game"
+})

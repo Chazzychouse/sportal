@@ -35,3 +35,27 @@ export function recordingSpans(ended: Array<Tracer.Span>) {
 export function withMetrics<A, E, R>(effect: Effect.Effect<A, E, R>) {
   return Effect.provideService(effect, Metric.MetricRegistry, new Map())
 }
+
+/** A counter's count in the test's registry, for the series whose attributes include `attributes`. */
+export function counted(id: string, attributes: Record<string, string> = {}) {
+  return Effect.map(Metric.snapshot, (metrics) => {
+    const metric = metrics.find(
+      (candidate) => candidate.id === id && matches(candidate.attributes, attributes)
+    )
+    return metric?.type === "Counter" ? metric.state.count : undefined
+  })
+}
+
+/** A gauge's value in the test's registry, for the series whose attributes include `attributes`. */
+export function gauged(id: string, attributes: Record<string, string> = {}) {
+  return Effect.map(Metric.snapshot, (metrics) => {
+    const metric = metrics.find(
+      (candidate) => candidate.id === id && matches(candidate.attributes, attributes)
+    )
+    return metric?.type === "Gauge" ? metric.state.value : undefined
+  })
+}
+
+function matches(actual: Readonly<Record<string, string>> | undefined, expected: Record<string, string>) {
+  return Object.entries(expected).every(([key, value]) => actual?.[key] === value)
+}

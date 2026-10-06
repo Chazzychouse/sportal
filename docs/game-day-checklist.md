@@ -53,5 +53,6 @@ Setup: Hub serving the built web UI, desktop shell running, signed in to YouTube
 | 44 | Select tile 4 in Quad, switch to Single from the Remote | The one tile is selected, and a drop goes into it |
 | 45 | Solo a tile, press `?`, then `Esc` | The key help closes and the tile stays soloed |
 | 46 | After a real game day, record it with the recorder into `fixtures/espn-recordings/<date>/<league>/` (never `~/.cache`), then cut its moments with `pnpm --filter @sportal/hub scenario:cut` | The recording folder holds the day's polls; each cut writes `fixtures/scenarios/<name>.json` with more than one frame, every named game in every frame |
+| 47 | With a game live and telemetry on, open **Game actors** from the Hub dashboard's links (mode `live`), then click a game in **Games** | Games lists each game with its state, watchability, and counts; clicking one narrows every panel below to it; its state timeline matches its transitions, scores and turnovers mark its graphs, and its lulls read as play stops |
 
 Record the date, the build, and any row that failed.
