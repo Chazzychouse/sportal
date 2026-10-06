@@ -243,7 +243,7 @@ describe("LiveGames", () => {
           LiveGameState.$is("Live")(state) &&
             DateTime.Equivalence(state.updatedAt, DateTime.add(start, { minutes: 2 }))
         )
-      }).pipe(Effect.provide(LiveGames.layer), Effect.provide(layer))
+      }).pipe(Effect.provide(LiveGames.layer.pipe(Layer.provideMerge(layer))))
     })
 
     it.effect("a fold whose report dies commits nothing, and the game still goes stale on time", () =>
@@ -264,7 +264,7 @@ describe("LiveGames", () => {
         assert.isTrue(LiveGameState.$is("Live")((yield* liveGameOf(one)).state))
         yield* TestClock.adjust("1 second")
         assert.isTrue(LiveGameState.$is("Stale")((yield* liveGameOf(one)).state))
-      }).pipe(Effect.provide(LiveGames.layer), Effect.provide(dyingOnce("Live → Stale")))
+      }).pipe(Effect.provide(LiveGames.layer.pipe(Layer.provideMerge(dyingOnce("Live → Stale")))))
     )
   })
 
@@ -287,7 +287,7 @@ describe("LiveGames", () => {
         )
         assert.include(transitions[0]?.annotations, { game: "1", league: "fbs", matchup: "AWAY at HOME" })
         assert.strictEqual(yield* counted("sportal_transitions", { from: "Upcoming", to: "Live" }), 1)
-      }).pipe(Effect.provide(LiveGames.layer), Effect.provide(layer), withMetrics)
+      }).pipe(Effect.provide(LiveGames.layer.pipe(Layer.provideMerge(layer))), withMetrics)
     })
 
     it.effect("going stale is logged", () => {
@@ -300,7 +300,7 @@ describe("LiveGames", () => {
         assert.strictEqual(stale[0]?.level, "Info")
         assert.include(stale[0]?.message, "LiveGames: AWAY at HOME: Live → Stale at ")
         assert.include(stale[0]?.annotations, { game: "1", league: "fbs", matchup: "AWAY at HOME" })
-      }).pipe(Effect.provide(LiveGames.layer), Effect.provide(layer))
+      }).pipe(Effect.provide(LiveGames.layer.pipe(Layer.provideMerge(layer))))
     })
 
     it.effect("a behind snapshot is logged at Debug and counted", () => {
@@ -316,7 +316,7 @@ describe("LiveGames", () => {
           yield* counted("sportal_snapshots", { outcome: "taken", game: "1", matchup: "AWAY at HOME" }),
           1
         )
-      }).pipe(Effect.provide(LiveGames.layer), Effect.provide(layer), withMetrics)
+      }).pipe(Effect.provide(LiveGames.layer.pipe(Layer.provideMerge(layer))), withMetrics)
     })
 
     it.effect("a game's state is gauged by game, and reads 0 once it leaves the fold", () =>
@@ -384,7 +384,7 @@ describe("LiveGames", () => {
           published.map((published) => [published.snapshot.id, published.event._tag]),
           [[one, "ScoreChanged"]]
         )
-      }).pipe(Effect.provide(LiveGames.layer), Effect.provide(layer), withMetrics)
+      }).pipe(Effect.provide(LiveGames.layer.pipe(Layer.provideMerge(layer))), withMetrics)
     })
 
     it.effect("snapshots are counted by the feed they came from", () => {
@@ -396,7 +396,7 @@ describe("LiveGames", () => {
         assert.strictEqual(yield* counted("sportal_snapshots", { outcome: "behind", source: "poll" }), 1)
         assert.isTrue(logs.some(({ message }) => message.includes("taken push live, period 2, 4:12")))
         assert.isTrue(logs.some(({ message }) => message.includes("behind poll live, period 2, 5:00")))
-      }).pipe(Effect.provide(LiveGames.layer), Effect.provide(layer), withMetrics)
+      }).pipe(Effect.provide(LiveGames.layer.pipe(Layer.provideMerge(layer))), withMetrics)
     })
 
     it.effect("a tied poll after a pushed try is kept, and counted", () => {
@@ -412,7 +412,7 @@ describe("LiveGames", () => {
         assert.strictEqual(yield* counted("sportal_snapshots", { outcome: "taken", source: "push" }), 1)
         assert.strictEqual(yield* counted("sportal_snapshots", { outcome: "taken", source: "poll" }), 1)
         assert.isTrue(logs.some(({ message }) => message.includes("kept poll live, period 2, 4:12")))
-      }).pipe(Effect.provide(LiveGames.layer), Effect.provide(layer), withMetrics)
+      }).pipe(Effect.provide(LiveGames.layer.pipe(Layer.provideMerge(layer))), withMetrics)
     })
 
     it.effect("a defect is logged with its frame and the snapshot that raised it, and counted", () => {
@@ -427,7 +427,7 @@ describe("LiveGames", () => {
         assert.include(JSON.stringify(errors[0]?.annotations.snapshot), '"clock":"8:00"')
         assert.include(errors[0]?.annotations, { game: "1", seq: 42 })
         assert.strictEqual(yield* counted("sportal_game_defects"), 1)
-      }).pipe(Effect.provide(LiveGames.layer), Effect.provide(layer), withMetrics)
+      }).pipe(Effect.provide(LiveGames.layer.pipe(Layer.provideMerge(layer))), withMetrics)
     })
 
     it.effect("take is a span under the caller's, and timed", () => {
@@ -447,7 +447,7 @@ describe("LiveGames", () => {
         assert.strictEqual(take?.attributes.get("sportal.delivery"), "Snapshot")
         const duration = (yield* Metric.snapshot).find((metric) => metric.id === "sportal_take_duration")
         assert.strictEqual(duration?.type === "Histogram" ? duration.state.count : undefined, 1)
-      }).pipe(Effect.provide(LiveGames.layer), Effect.provide(recordingSpans(ended)), withMetrics)
+      }).pipe(Effect.provide(LiveGames.layer.pipe(Layer.provideMerge(recordingSpans(ended)))), withMetrics)
     })
 
     it.effect("live games are counted by state", () =>
@@ -477,7 +477,7 @@ describe("LiveGames", () => {
         )
         assert.include(lifecycle[1]?.message, "LiveGames: AWAY at HOME: stopped, Over at final")
         assert.include(lifecycle[1]?.annotations, { game: "1", league: "fbs", matchup: "AWAY at HOME" })
-      }).pipe(Effect.provide(LiveGames.layer), Effect.provide(layer))
+      }).pipe(Effect.provide(LiveGames.layer.pipe(Layer.provideMerge(layer))))
     })
 
     it.effect("a game that is never current is neither started nor stopped", () => {
@@ -486,7 +486,7 @@ describe("LiveGames", () => {
         yield* takenSnapshot(snapshot({ id: one, status: "final", period: 4, clock: "0:00" }))
         assert.isFalse(logs.some(({ message }) => /started|stopped/.test(message)))
         assert.isUndefined(yield* gauged("sportal_game_state", { game: "1" }))
-      }).pipe(Effect.provide(LiveGames.layer), Effect.provide(layer), withMetrics)
+      }).pipe(Effect.provide(LiveGames.layer.pipe(Layer.provideMerge(layer))), withMetrics)
     })
 
     it.effect(
@@ -512,10 +512,10 @@ describe("LiveGames", () => {
                     ? Effect.die(new Error("the timer's sleep died"))
                     : clock.sleep(duration)
                 )
-              )
+              ),
+              Layer.provideMerge(layer)
             )
           ),
-          Effect.provide(layer),
           withMetrics
         )
       }
@@ -612,7 +612,7 @@ describe("LiveGames", () => {
           assert.strictEqual(yield* gauged("sportal_game_state", attributes), 2)
           assert.strictEqual(yield* gauged("sportal_live_games", { state: "Live" }), 1)
           assert.strictEqual(yield* gauged("sportal_live_games", { state: "Stale" }), 0)
-        }).pipe(Effect.provide(LiveGames.layer), Effect.provide(layer), withMetrics)
+        }).pipe(Effect.provide(LiveGames.layer.pipe(Layer.provideMerge(layer))), withMetrics)
       }
     )
 
@@ -720,7 +720,7 @@ describe("LiveGames", () => {
           })
         )
         assert.isDefined(ended.find((span) => span.name === "LiveGames.replay"))
-      }).pipe(Effect.provide(LiveGames.layer), Effect.provide(recordingSpans(ended)))
+      }).pipe(Effect.provide(LiveGames.layer.pipe(Layer.provideMerge(recordingSpans(ended)))))
     })
   })
 })

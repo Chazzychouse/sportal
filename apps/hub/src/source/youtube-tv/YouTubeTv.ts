@@ -54,7 +54,7 @@ export const layer = Layer.effect(
           const read = new Guide({ source, readAt: yield* DateTime.now, ...decoded })
           if (read.channels.length === 0) {
             yield* Effect.logWarning("YouTubeTv: a guide response listed no channels")
-            return yield* Effect.fail(new GuideUnreadable())
+            return yield* new GuideUnreadable()
           }
           yield* Effect.logInfo(
             `YouTubeTv: read a guide of ${read.channels.length} channels and ${read.airings.length} airings`

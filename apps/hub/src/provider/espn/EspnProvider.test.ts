@@ -4,7 +4,7 @@ import type { GameSnapshot } from "@sportal/domain/Game"
 import { Network } from "@sportal/domain/Game"
 import type { LeagueId } from "@sportal/domain/League"
 import { liveSnapshot, snapshot } from "@sportal/domain/TestGame"
-import { DateTime, Duration, Effect, Layer, Schedule } from "effect"
+import { Cause, DateTime, Duration, Effect, Layer, Schedule } from "effect"
 import { HttpClient, HttpClientError, HttpClientResponse } from "effect/http"
 import { Provider } from "../Provider.ts"
 import { listedBy } from "../TestProvider.ts"
@@ -173,7 +173,7 @@ describe("EspnProvider", () => {
 
   it.effect("a poll that fails to connect is Unreachable for its league; a non-2xx is Refused", () =>
     Effect.gen(function* () {
-      const failing = (respond: () => Effect.Effect<Response, Error>) =>
+      const failing = (respond: () => Effect.Effect<Response, Cause.UnknownError>) =>
         EspnProvider.layer.pipe(
           Layer.provide(FastCast.layer),
           Layer.provide(noSocket),
@@ -195,7 +195,7 @@ describe("EspnProvider", () => {
           )
         )
       const unreachable = yield* Provider.use((provider) => Effect.flip(provider.poll("nfl"))).pipe(
-        Effect.provide(failing(() => Effect.fail(new Error("ECONNREFUSED"))))
+        Effect.provide(failing(() => Effect.fail(new Cause.UnknownError("ECONNREFUSED"))))
       )
       const refused = yield* Provider.use((provider) => Effect.flip(provider.poll("fbs"))).pipe(
         Effect.provide(failing(() => Effect.succeed(new Response("busy", { status: 503 }))))

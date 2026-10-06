@@ -61,7 +61,7 @@ describe("FeedLog", () => {
 
       assert.isFalse(ended.some((span) => span.name === "FeedLog.append"))
       assert.isTrue(ended.some((span) => span.name === "FeedLog.store"))
-    }).pipe(Effect.provide(feedLog), Effect.provide(recordingSpans(ended)))
+    }).pipe(Effect.provide(feedLog.pipe(Layer.provideMerge(recordingSpans(ended)))))
   })
 
   it.effect("stores an unchanged poll response once per channel, and replays every one with its body", () =>

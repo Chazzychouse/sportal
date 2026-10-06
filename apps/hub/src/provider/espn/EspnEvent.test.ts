@@ -34,7 +34,7 @@ const Competitor = Schema.StructWithRest(Schema.Struct({ homeAway: Schema.String
 ])
 
 function siteEvent() {
-  return Schema.decodeUnknownSync(
+  return Schema.decodeSync(
     Schema.fromJsonString(
       Schema.Struct({
         events: Schema.NonEmptyArray(
@@ -55,7 +55,7 @@ function siteEvent() {
 }
 
 function fastCastEvent() {
-  return Schema.decodeUnknownSync(
+  return Schema.decodeSync(
     Schema.fromJsonString(
       Schema.Struct({
         sports: Schema.NonEmptyArray(
