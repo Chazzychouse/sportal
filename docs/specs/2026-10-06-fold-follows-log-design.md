@@ -202,16 +202,19 @@ provider/snapshot/
 ## 6. One telling, told the phase
 
 ```
-Phase = Data.TaggedEnum<{ Replaying: {}; Live: {} }>
+Following = Data.TaggedEnum<{ Replaying: {}; Live: {}; Stopped: {} }>   // §3's states, exported from LiveGames.ts
 
-LiveGamesTelemetry.told(phase, decoded, reports): Effect<void>
+LiveGamesTelemetry.told(following, decoded, reports): Effect<void>
 ```
 
-- One entry point for everything a step tells, reports and notices both. Replaying: counts plays for the summary and
+- One entry point for everything a step tells, reports and notices both, told which state the following is in.
+  Replaying: counts plays for the summary and
   logs a `Raised` defect, as `quiet` does; tells no notice (each was told when its frame first arrived). Live: what
   `reported` does today, and each notice through `DecodeTelemetry`'s table.
 - `reported` and `quiet` merge into the one `$match`, whose `Replaying` arm is today's `quiet` arm. Notice gating
   leaves Ingest.
+- Glossary: new row **Following** — *Where the live games are in reading the feed log: replaying the day before
+  the Hub serves, live, or stopped by a decode defect; `Following` in code.*
 - `DecodeTelemetry.ts` moves from `ingest/` to `apps/hub/src/` beside `LiveGamesTelemetry.ts`, which calls it. Its
   doc comment says LiveGames tells notices only from frames after the replay.
 
