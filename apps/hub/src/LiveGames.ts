@@ -3,7 +3,6 @@ import { type GameId, GameSnapshot } from "@sportal/domain/Game"
 import type { GameEvent } from "@sportal/domain/GameEvent"
 import type { LeagueId } from "@sportal/domain/League"
 import { LiveGame, LiveGameState } from "@sportal/domain/LiveGame"
-import type { TeamId } from "@sportal/domain/Team"
 import {
   Array as Arr,
   Cause,
@@ -395,9 +394,9 @@ function reported(
   return Report.$match(report, {
     Took: ({ snapshot, from, outcome, had }) =>
       Effect.logDebug(
-        `LiveGames: ${snapshot.matchup()}: ${outcome} ${from} ${gameTimeOf(snapshot)}${Option.match(had, {
+        `LiveGames: ${snapshot.matchup()}: ${outcome} ${from} ${snapshot.gameTime()}${Option.match(had, {
           onNone: () => "",
-          onSome: (had) => ` (had ${gameTimeOf(had)})`
+          onSome: (had) => ` (had ${had.gameTime()})`
         })}`
       ).pipe(
         Effect.andThen(
@@ -533,7 +532,7 @@ function logLifecycle(
   now: DateTime.Utc
 ): Effect.Effect<void> {
   return Effect.logWithLevel(liveGame.isCurrent(now) ? "Info" : "Debug")(
-    `LiveGames: ${liveGame.snapshot.matchup()}: ${what}, ${liveGame.state._tag} at ${gameTimeOf(liveGame.snapshot)}`
+    `LiveGames: ${liveGame.snapshot.matchup()}: ${what}, ${liveGame.state._tag} at ${liveGame.snapshot.gameTime()}`
   )
 }
 
@@ -553,7 +552,7 @@ function logTransition(before: LiveGame, after: LiveGame, now: DateTime.Utc): Ef
     onSome: (duration) => `, ${Math.round(Duration.toSeconds(duration))} s since the last update`
   })
   return Effect.logInfo(
-    `LiveGames: ${after.snapshot.matchup()}: ${from} → ${to} at ${gameTimeOf(after.snapshot)}${since}`
+    `LiveGames: ${after.snapshot.matchup()}: ${from} → ${to} at ${after.snapshot.gameTime()}${since}`
   ).pipe(
     Effect.andThen(Metric.update(Metric.withAttributes(transitions, { from, to }), 1)),
     Effect.andThen(
@@ -574,8 +573,8 @@ function logTransition(before: LiveGame, after: LiveGame, now: DateTime.Utc): Ef
 /** Info, with the event's fields as annotations, so the dashboard can mark it on the game's timeline. */
 function logEvent(event: GameEvent, snapshot: GameSnapshot): Effect.Effect<void> {
   const { _tag, ...fields } = event
-  const team = "team" in event ? ` ${teamOf(event.team, snapshot)}` : ""
-  return Effect.logInfo(`LiveGames: ${snapshot.matchup()}: ${_tag}${team} at ${gameTimeOf(snapshot)}`).pipe(
+  const team = "team" in event ? ` ${snapshot.abbreviationOf(event.team)}` : ""
+  return Effect.logInfo(`LiveGames: ${snapshot.matchup()}: ${_tag}${team} at ${snapshot.gameTime()}`).pipe(
     Effect.andThen(
       Metric.update(
         Metric.withAttributes(gameEvents, { ...annotationsOf(snapshot.id, snapshot), event: _tag }),
@@ -584,14 +583,6 @@ function logEvent(event: GameEvent, snapshot: GameSnapshot): Effect.Effect<void>
     ),
     Effect.annotateLogs({ ...fields, event: _tag })
   )
-}
-
-function teamOf(id: TeamId, snapshot: GameSnapshot): string {
-  return [snapshot.home.team, snapshot.away.team].find((team) => team.id === id)?.abbreviation ?? id
-}
-
-function gameTimeOf(snapshot: GameSnapshot): string {
-  return `${snapshot.status}, period ${snapshot.period}, ${snapshot.clock}`
 }
 
 function sleepUntil(at: DateTime.Utc): Effect.Effect<void> {

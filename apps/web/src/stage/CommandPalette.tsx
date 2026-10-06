@@ -52,9 +52,7 @@ export function CommandPalette(props: {
           {[...props.slate].sort(GameSnapshot.watchOrder).map((game) => (
             <CommandItem
               key={game.id}
-              value={`watch ${matchup(game)} ${game.away.team.name} ${game.home.team.name} ${game.broadcasts
-                .map(({ network }) => network)
-                .join(" ")} ${game.id}`}
+              value={`watch ${matchup(game)} ${game.away.team.name} ${game.home.team.name} ${game.networks()} ${game.id}`}
               onSelect={() => run({ _tag: "Assign", tile: props.selected, game: game.id })}
             >
               <TeamLogo team={game.away.team} size={16} />
@@ -65,7 +63,7 @@ export function CommandPalette(props: {
               >
                 {statusText(game)}
               </span>
-              <CommandShortcut>{game.broadcasts.map(({ network }) => network).join(" · ")}</CommandShortcut>
+              <CommandShortcut>{game.networks()}</CommandShortcut>
             </CommandItem>
           ))}
         </CommandGroup>

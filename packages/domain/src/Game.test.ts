@@ -23,6 +23,76 @@ describe("GameSnapshot.progress", () => {
   })
 })
 
+describe("GameSnapshot.margin", () => {
+  it("is the points between the teams", () => {
+    assert.strictEqual(
+      snapshot({ home: { team: team("H"), score: 24 }, away: { team: team("A"), score: 17 } }).margin(),
+      7
+    )
+    assert.strictEqual(
+      snapshot({ home: { team: team("H"), score: 3 }, away: { team: team("A"), score: 10 } }).margin(),
+      7
+    )
+    assert.strictEqual(
+      snapshot({ home: { team: team("H"), score: 14 }, away: { team: team("A"), score: 14 } }).margin(),
+      0
+    )
+  })
+})
+
+describe("GameSnapshot.inOvertime", () => {
+  it("starts in the fifth period", () => {
+    assert.isFalse(snapshot({ period: 4 }).inOvertime())
+    assert.isTrue(snapshot({ period: 5 }).inOvertime())
+    assert.isTrue(snapshot({ period: 6 }).inOvertime())
+  })
+})
+
+describe("GameSnapshot.scored", () => {
+  it.each([
+    ["scheduled", 0, false],
+    ["live", 2, true],
+    ["halftime", 2, true],
+    ["final", 4, true],
+    ["delayed", 0, false],
+    ["delayed", 2, true],
+    ["postponed", 0, false],
+    ["canceled", 0, false]
+  ] as const)("is %s in period %d → %s", (status, period, scored) => {
+    assert.strictEqual(snapshot({ status, period }).scored(), scored)
+  })
+})
+
+describe("GameSnapshot.networks", () => {
+  it("joins the networks with a dot", () => {
+    assert.strictEqual(snapshot().networks(), "")
+    assert.strictEqual(snapshot({ broadcasts: [broadcast("CBS")] }).networks(), "CBS")
+    assert.strictEqual(
+      snapshot({ broadcasts: [broadcast("CBS"), broadcast("ESPN", "streaming")] }).networks(),
+      "CBS · ESPN"
+    )
+  })
+})
+
+describe("GameSnapshot#gameTime", () => {
+  it("reads status, period, and clock", () => {
+    assert.strictEqual(
+      snapshot({ status: "live", period: 3, clock: "4:12" }).gameTime(),
+      "live, period 3, 4:12"
+    )
+  })
+})
+
+describe("GameSnapshot.abbreviationOf", () => {
+  const game = snapshot({ home: { team: team("BAMA"), score: 0 }, away: { team: team("UGA"), score: 0 } })
+
+  it("names a team by its abbreviation, or an unknown id as itself", () => {
+    assert.strictEqual(game.abbreviationOf(team("BAMA").id), "BAMA")
+    assert.strictEqual(game.abbreviationOf(team("UGA").id), "UGA")
+    assert.strictEqual(game.abbreviationOf(team("XYZ").id), team("XYZ").id)
+  })
+})
+
 describe("GameSnapshot.timed", () => {
   it("knows a college overtime has no clock", () => {
     assert.isTrue(snapshot({ league: "fbs", status: "live", period: 4 }).timed())

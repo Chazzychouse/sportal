@@ -2,7 +2,7 @@ import { DateTime, Order, Schema } from "effect"
 import { GameEvent } from "./GameEvent.ts"
 import { LeagueId } from "./League.ts"
 import { Situation } from "./Situation.ts"
-import { Team } from "./Team.ts"
+import { Team, type TeamId } from "./Team.ts"
 
 export const GameId = Schema.String.pipe(Schema.brand("GameId"))
 export type GameId = typeof GameId.Type
@@ -78,6 +78,36 @@ export class GameSnapshot extends Schema.Class<GameSnapshot>("sportal/GameSnapsh
     }
   }
 
+  /** The points between the teams. */
+  margin(): number {
+    return Math.abs(this.home.score - this.away.score)
+  }
+
+  /** Whether the game is in overtime, the fifth period or later. */
+  inOvertime(): boolean {
+    return this.period >= 5
+  }
+
+  /** Whether the game has a score worth showing: it is being played or is final. */
+  scored(): boolean {
+    return this.progress() === "live" || this.status === "final"
+  }
+
+  /** The broadcast networks, joined with " · ". */
+  networks(): string {
+    return this.broadcasts.map(({ network }) => network).join(" · ")
+  }
+
+  /** The status, period, and clock as one line, for a log. */
+  gameTime(): string {
+    return `${this.status}, period ${this.period}, ${this.clock}`
+  }
+
+  /** A team's abbreviation, or its id when it plays in neither side. */
+  abbreviationOf(id: TeamId): string {
+    return [this.home.team, this.away.team].find((team) => team.id === id)?.abbreviation ?? id
+  }
+
   /** "<away abbreviation> at <home abbreviation>", for a title or a log line. */
   matchup(): string {
     return `${this.away.team.abbreviation} at ${this.home.team.abbreviation}`
@@ -116,7 +146,7 @@ export class GameSnapshot extends Schema.Class<GameSnapshot>("sportal/GameSnapsh
    * it as 0:00 throughout. An NFL overtime has one.
    */
   timed(): boolean {
-    return !(this.league === "fbs" && this.period >= 5)
+    return !(this.league === "fbs" && this.inOvertime())
   }
 
   /** Live in the last two minutes of the first or second half, with time still on the clock. */
@@ -167,7 +197,7 @@ export class GameSnapshot extends Schema.Class<GameSnapshot>("sportal/GameSnapsh
         events.push(GameEvent.TimeoutTaken({ team: this.away.team.id }))
     }
     if (this.inTwoMinuteDrill() && !previous.inTwoMinuteDrill()) events.push(GameEvent.TwoMinuteDrill())
-    if (this.period >= 5 && previous.period < 5) events.push(GameEvent.Overtime())
+    if (this.inOvertime() && !previous.inOvertime()) events.push(GameEvent.Overtime())
     if (this.period > previous.period && previous.period >= 1)
       events.push(GameEvent.PeriodEnded({ period: previous.period }))
     if (this.status === "halftime" && previous.status !== "halftime") events.push(GameEvent.WentToHalftime())

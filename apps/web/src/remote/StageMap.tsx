@@ -100,7 +100,7 @@ export function StageMap(props: {
                         <span key={side.team.id} className="flex items-center gap-1">
                           <TeamLogo team={side.team} size={14} />
                           <span className="truncate font-semibold">{side.team.abbreviation}</span>
-                          <span className="ml-auto">{game.progress() === "upcoming" ? "" : side.score}</span>
+                          <span className="ml-auto">{game.scored() ? side.score : ""}</span>
                         </span>
                       ))}
                       <span

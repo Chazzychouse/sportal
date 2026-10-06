@@ -147,22 +147,21 @@ function announcesBreak(game: GameSnapshot): boolean {
 
 /** The last two minutes of a half or overtime: timeouts there are short, not TV breaks. */
 function lateInHalf(game: GameSnapshot): boolean {
-  return game.inTwoMinuteDrill() || (game.status === "live" && game.period >= 5)
+  return game.inTwoMinuteDrill() || (game.status === "live" && game.inOvertime())
 }
 
 /** Late and close: the largest part. Overtime counts fully; the fourth quarter more the less time is left. */
 function closeness(game: GameSnapshot) {
-  const margin = Math.abs(game.home.score - game.away.score)
-  const lateness =
-    game.period >= 5
-      ? 1
-      : game.period === 4
-        ? 0.6 + 0.4 * (1 - game.quarterLeft())
-        : (earlyLateness[game.period] ?? 0)
+  const margin = game.margin()
+  const lateness = game.inOvertime()
+    ? 1
+    : game.period === 4
+      ? 0.6 + 0.4 * (1 - game.quarterLeft())
+      : (earlyLateness[game.period] ?? 0)
   const close = margin <= 3 ? 1 : margin <= oneScore ? 0.8 : margin <= 16 ? 0.35 : 0.05
   const how =
     margin === 0 ? "tied" : margin <= oneScore ? "one-score" : margin <= 16 ? "two-score" : `${margin}-point`
-  const period = game.period >= 5 ? "OT" : `Q${game.period}`
+  const period = game.inOvertime() ? "OT" : `Q${game.period}`
   return {
     points: closenessPoints * lateness * close,
     reason: game.clock === "" ? `${how} ${period}` : `${how} ${period}, ${game.clock}`
@@ -190,12 +189,12 @@ function situation(game: GameSnapshot) {
   if (s.goalToGo()) signals.push([goalToGoPoints, "goal to go"])
   if (s.down === 4) signals.push([fourthDownPoints, `4th & ${s.distance ?? "?"}`])
   if (lateInHalf(game))
-    signals.push([twoMinutePoints, game.period >= 5 ? "overtime possession" : "two-minute drill"])
+    signals.push([twoMinutePoints, game.inOvertime() ? "overtime possession" : "two-minute drill"])
   const raw = Math.min(
     situationCap,
     signals.reduce((total, [points]) => total + points, 0)
   )
-  const margin = Math.abs(game.home.score - game.away.score)
+  const margin = game.margin()
   return {
     points: raw * (margin <= oneScore ? 1 : blowoutShare),
     reason: `${offense.abbreviation} ${signals.map(([, label]) => label).join(", ")}`
@@ -213,7 +212,7 @@ const blowoutShare = 0.2
 
 /** Stakes, from the third quarter in a one-score game: an upset brewing, or two ranked teams. */
 function stakes(game: GameSnapshot) {
-  const margin = Math.abs(game.home.score - game.away.score)
+  const margin = game.margin()
   if (game.period < 3 || margin > oneScore) return { points: 0, reason: "" }
   for (const [ranked, other] of [
     [game.home, game.away],

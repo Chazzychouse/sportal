@@ -110,8 +110,8 @@ export function RemoteView() {
           .map((card) => {
             const { game, place } = card
             const dropped = display.drop(card, live.stage)
-            const networks = game?.broadcasts.map(({ network }) => network).join(" · ")
-            const scored = game !== undefined && (game.progress() === "live" || game.status === "final")
+            const networks = game?.networks()
+            const scored = game?.scored() === true
             return (
               <li key={card.id}>
                 <button

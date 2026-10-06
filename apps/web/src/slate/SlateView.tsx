@@ -96,7 +96,7 @@ function Card(props: {
   const { game, place } = props.card
   const bench = place?._tag === "Bench" ? place.tile : undefined
   const onStage = place?._tag === "Slot"
-  const networks = game?.broadcasts.map(({ network }) => network).join(" · ")
+  const networks = game?.networks()
   return (
     <button
       type="button"
@@ -152,7 +152,7 @@ function Card(props: {
 
 /** One team's cells: logo, rank and abbreviation, and score. Once scores mean something, the trailing side is muted. */
 function Side(props: { side: GameSnapshot["home"]; other: GameSnapshot["home"]; game: GameSnapshot }) {
-  const scored = props.game.progress() === "live" || props.game.status === "final"
+  const scored = props.game.scored()
   const trailing = scored && props.side.score < props.other.score
   return (
     <>
