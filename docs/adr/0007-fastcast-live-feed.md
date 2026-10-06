@@ -41,6 +41,10 @@ showed that play. Polled feeds are upper bounds: polls were 10 s apart.
   connects.
 - Its scoreboard topic carries everything a `GameSnapshot` needs (status, clock, scores, situation, last play); its
   gamecast topics carry drives, plays, win probability, the box score, and highlight clips.
+- FastCast keeps the socket alive itself (MNF, 2026-10-05, 5 minutes on four sockets): a `B` frame once 10 s pass
+  without another message, and a WebSocket ping every 10 s. It answers a client's `B`, with or without `sid`, with
+  `{"op":"ERROR","rc":400,"pl":"Missing OpCode"}`, and closed no socket that never sent one, so the `hbi` of 30 in its
+  `C` frame asks nothing of the client.
 
 ## Decision
 
@@ -56,5 +60,9 @@ game advanced to the push. Design: `docs/specs/2026-10-05-fastcast-design.md`.
 - The Hub depends on an undocumented feed in addition to undocumented endpoints. When it fails, Ingest logs and counts
   the failure and resubscribes from a checkpoint with backoff, and the poll carries on: the Hub degrades to
   poll-only, rather than breaking.
+- A frame of a known op that fails to decode fails the feed with `Unapplicable`, as a patch that does not apply does,
+  and the feed resubscribes from a checkpoint; a frame of an op FastCast is not known to send is skipped.
+- A checkpoint that arrives before the first poll has listed its games counts them as unlisted and sends nothing; each
+  reaches its actor from the poll, or from FastCast once a patch touches it again.
 - Plays and win probability for every live game become affordable later, as patches, instead of 600 KB summaries.
 - Recordings and the prototype are kept on the unmerged branch `prototype/feed-lag`.

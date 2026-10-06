@@ -303,7 +303,7 @@ class Provider extends Context.Service<Provider, {
 }>()("sportal/hub/Provider") {}
 ```
 
-- Provider vocabulary stops at the folder edge. ESPN's "event", "competition", and "competitor" exist only in `EspnPayload.ts`.
+- Provider vocabulary stops at the folder edge. ESPN's "event", "competition", and "competitor" exist only in `EspnPayload.ts`, `FastCastPayload.ts`, and `EspnSnapshot.ts`.
 - The Hub composes providers per league: ESPN for NFL; ESPN with CollegeFootballData filling gaps for FBS. The composition is itself a `Provider`, so Ingest sees one.
 - Each adapter's tests are "this recorded payload decodes to this snapshot".
 
@@ -323,7 +323,7 @@ with one entity per game (`docs/adr/0006-live-games-are-actors.md`):
 
 ```ts
 class GameActors extends Context.Service<GameActors, {
-  receive(snapshot: GameSnapshot): Effect<void>
+  receive(snapshot: GameSnapshot, source: DeliverySource): Effect<void>
   readonly liveGames: Effect<ReadonlyMap<GameId, LiveGame>>
   readonly changes: Stream<ReadonlyMap<GameId, LiveGame>>
 }>()("sportal/hub/GameActors") {}

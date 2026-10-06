@@ -65,7 +65,7 @@ flowchart LR
 | --- | --- |
 | The port | `LiveFeed`, a `Context.Service`: `games(leagues): Stream<ReadonlyArray<GameSnapshot>, LiveFeedError>`. One element per FastCast message: the games it touched, or every game on a checkpoint. One stream for every league, so the adapter shares one connection |
 | No feed | `LiveFeed.none`, a stream that never emits, for tests and scenarios |
-| Error | `LiveFeedError`, a `Schema.TaggedError` with `reason`: `Refused` (no host or token), `Closed`, `Silent` (nothing for 45 s), `Gap` (a missed `mid`), `Unapplicable` (a patch that does not apply). The reason is a literal so it can be a metric attribute |
+| Error | `LiveFeedError`, a `Schema.TaggedError` with `reason`: `Refused` (no host or token), `Closed`, `Silent` (nothing for 45 s), `Gap` (a missed `mid`), `Unapplicable` (a patch that does not apply, or a frame of a known op that fails to decode). The reason is a literal so it can be a metric attribute |
 
 ### The adapter: `provider/espn/FastCast.ts`, `FastCastDocument.ts`, `FastCastPayload.ts`
 
@@ -78,7 +78,7 @@ Unchanged from the live-feed design, which was checked against the 2026-10-04 re
 | Topics | `event-football-nfl` (every NFL game), `event-football-college-football` (the ~16 FBS games ESPN features). FBS games it does not carry stay on the poll |
 | The document | Per topic, `mid` increases by exactly one across `H`, `R`, `P`, `I`. `H` names a checkpoint to fetch; `R` and `P` are JSON Patch operations keyed by event uid, applied with `JsonPatch.apply` (`copy` becomes an `add`); `B` is a heartbeat. A gap or a patch that does not apply fails the stream, which reconnects from a fresh checkpoint |
 | To snapshots | Each touched event is decoded with `FastCastPayload.ts` and mapped to a `GameSnapshot`. Mapping shared with the scoreboard (status, situation) moves to `EspnSnapshot.ts`, not copied. An event that does not decode is logged and skipped |
-| Heartbeats | Nothing for 45 s fails the stream with `Silent`, so a half-open socket cannot look healthy |
+| Heartbeats | FastCast sends `B` itself once 10 s pass without another message, and a WebSocket ping every 10 s (`ws` answers it); it answers a client's `B` with an `ERROR` frame, so the client never sends one, whatever the `hbi` of 30 in `C`. Live, a subscribed socket went at most 20 s between messages. Nothing for 45 s fails the stream with `Silent`, so a half-open socket cannot look healthy |
 
 ### Ingest: `ingest/Ingest.ts`
 
