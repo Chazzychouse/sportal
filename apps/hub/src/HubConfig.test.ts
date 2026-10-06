@@ -17,6 +17,7 @@ describe("HubConfig", () => {
       assert.strictEqual(config.dataDir, expected)
       assert.isTrue(Option.isNone(config.scenario))
       assert.strictEqual(config.scenarioSpeed, 1)
+      assert.isTrue(Option.isNone(config.scenarioFeedLog), "a scenario's feed log is in memory")
       assert.strictEqual(config.logLevel, "Info")
       assert.strictEqual(config.logFormat, "pretty")
       assert.strictEqual(config.version, "dev")
@@ -33,6 +34,7 @@ describe("HubConfig", () => {
       assert.strictEqual(config.dataDir, "/data")
       assert.deepStrictEqual(config.scenario, Option.some("two-minute-drill-tie"))
       assert.strictEqual(config.scenarioSpeed, 10)
+      assert.deepStrictEqual(config.scenarioFeedLog, Option.some("scenario.sqlite"))
       assert.strictEqual(config.logLevel, "Debug")
       assert.strictEqual(config.logFormat, "json")
       assert.strictEqual(config.version, "1.2.3")
@@ -49,6 +51,7 @@ describe("HubConfig", () => {
           SPORTAL_DATA_DIR: "/data",
           SPORTAL_SCENARIO: "two-minute-drill-tie",
           SPORTAL_SCENARIO_SPEED: "10",
+          SPORTAL_SCENARIO_FEED_LOG: "scenario.sqlite",
           SPORTAL_LOG_LEVEL: "Debug",
           SPORTAL_LOG_FORMAT: "json",
           SPORTAL_VERSION: "1.2.3",
@@ -65,7 +68,9 @@ describe("HubConfig", () => {
     ["SPORTAL_LOG_LEVEL", "Loud"],
     ["SPORTAL_LOG_FORMAT", "xml"],
     ["SPORTAL_OTLP_URL", "not a url"],
-    ["SPORTAL_OTLP_URL", "localhost:4318"]
+    ["SPORTAL_OTLP_URL", "localhost:4318"],
+    ["SPORTAL_SCENARIO_FEED_LOG", "feed.sqlite"],
+    ["SPORTAL_SCENARIO_FEED_LOG", "../elsewhere.sqlite"]
   ] as const) {
     it.effect(`refuses ${name}=${value}, naming the setting`, () =>
       Effect.gen(function* () {

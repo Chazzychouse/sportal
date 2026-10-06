@@ -12,7 +12,7 @@ import {
   Struct,
   Tuple
 } from "effect"
-import * as Gzip from "../../feed-log/Gzip.ts"
+import * as Gzip from "../../Gzip.ts"
 
 // A patch's path. On a scoreboard topic: the uid of the event it changes (`s:20~l:28~e:<id>~c:<id>`), then a JSON
 // Pointer into that event, where no pointer means the whole event. On a game topic: a JSON Pointer alone, with no uid.
@@ -120,7 +120,7 @@ export const Envelope = Schema.fromJsonString(Framed).pipe(
 export const Host = Schema.Struct({ ip: Schema.String, securePort: Schema.Int, token: Schema.String })
 
 /** A scoreboard topic's whole document, as a checkpoint URL serves it; each event stays JSON, to be patched. */
-export const ScoreboardCheckpoint = Schema.Struct({
+const ScoreboardCheckpoint = Schema.Struct({
   sports: Schema.Array(
     Schema.Struct({
       leagues: Schema.Array(
@@ -137,11 +137,19 @@ export const ScoreboardCheckpoint = Schema.Struct({
 })
 
 /** A game topic's whole document, ESPN's game package, as a checkpoint URL serves it: only its plays, by id. */
-export const GameCheckpoint = Schema.Struct({
+const GameCheckpoint = Schema.Struct({
   entities: Schema.optional(
     Schema.Struct({ plays: Schema.optional(Schema.Record(Schema.String, Schema.Json)) })
   )
 })
+
+/** The checkpoint body of a topic `owner` carries, read by its schema: a scoreboard's events, or a game's plays. */
+export function checkpointOf(owner: Owner) {
+  return Owner.$match(owner, {
+    Scoreboard: () => Schema.fromJsonString(ScoreboardCheckpoint),
+    Game: () => Schema.fromJsonString(GameCheckpoint)
+  })
+}
 
 /** What a FastCast topic carries: one league's scoreboard, or one game's package. */
 export type Owner = Data.TaggedEnum<{

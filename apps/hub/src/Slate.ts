@@ -1,41 +1,31 @@
 import type { GameSnapshot } from "@sportal/domain/Game"
 import { LeagueId } from "@sportal/domain/League"
-import type { Watchability } from "@sportal/domain/Watchability"
-import { Context, DateTime, Effect, Layer, Stream, SubscriptionRef } from "effect"
+import { Context, Effect, Layer, Stream, SubscriptionRef } from "effect"
 import { LiveGames } from "./LiveGames.ts"
 
 /**
- * The current slate: each listed game with its watchability, leagues in order, as the fold has it, published
- * on every burst of changes to the fold. A game the fold does not hold (one not yet current, or over) is judged
- * fresh. A burst settles after 250 ms with no further change, on the layer's clock; changes arriving more often than
- * that, without a pause, publish nothing until they pause.
+ * The current slate: each listed game, leagues in order, as the fold has it (a game the fold does not hold, one not
+ * yet current or over, as listed), published on every burst of changes to the fold. A burst settles after 250 ms with
+ * no further change, on the layer's clock; changes arriving more often than that, without a pause, publish nothing
+ * until they pause.
  */
 export class Slate extends Context.Service<
   Slate,
   {
-    readonly latest: Effect.Effect<Listed>
+    readonly latest: Effect.Effect<ReadonlyArray<GameSnapshot>>
     /** The latest first, then each new one. */
-    readonly changes: Stream.Stream<Listed>
+    readonly changes: Stream.Stream<ReadonlyArray<GameSnapshot>>
   }
 >()("sportal/hub/Slate") {
   static readonly layer: Layer.Layer<Slate, never, LiveGames> = Layer.effect(
     Slate,
     Effect.gen(function* () {
       const liveGames = yield* LiveGames
-      const state = yield* SubscriptionRef.make<Listed>([])
+      const state = yield* SubscriptionRef.make<ReadonlyArray<GameSnapshot>>([])
       yield* Effect.forkScoped(
         liveGames.changes.pipe(
           Stream.debounce("250 millis"),
-          Stream.runForEach((folded) =>
-            Effect.flatMap(DateTime.now, (now) =>
-              SubscriptionRef.set(
-                state,
-                folded
-                  .slate(LeagueId.literals)
-                  .map((game) => ({ game, watchability: folded.watchabilityOf(game, now) }))
-              )
-            )
-          )
+          Stream.runForEach((folded) => SubscriptionRef.set(state, folded.slate(LeagueId.literals)))
         ),
         { startImmediately: true }
       )
@@ -43,5 +33,3 @@ export class Slate extends Context.Service<
     })
   )
 }
-
-type Listed = ReadonlyArray<{ readonly game: GameSnapshot; readonly watchability: Watchability }>

@@ -6,10 +6,10 @@ import { broadcast, snapshot, team } from "@sportal/domain/TestGame"
 import { DateTime, Effect, Fiber, Layer, Logger, Option, Ref, Stream } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/http"
 import { TestClock } from "effect/testing"
+import * as Database from "../../Database.ts"
 import * as EspnProvider from "../../provider/espn/EspnProvider.ts"
-import { recordedScoreboard } from "../../provider/espn/TestEspn.ts"
+import { noSocket, recordedScoreboard } from "../../provider/espn/TestEspn.ts"
 import { listedBy } from "../../provider/TestProvider.ts"
-import * as TestDatabase from "../../TestDatabase.ts"
 import { ChannelStore } from "../ChannelStore.ts"
 import { Source } from "../Source.ts"
 import { recordedGuide } from "./TestYouTubeTv.ts"
@@ -122,10 +122,7 @@ describe("YouTubeTv source", () => {
 
 /** The source over a fresh in-memory database. */
 function testSource() {
-  return YouTubeTv.layer.pipe(
-    Layer.provide(ChannelStore.layer),
-    Layer.provide(TestDatabase.layer(":memory:"))
-  )
+  return YouTubeTv.layer.pipe(Layer.provide(ChannelStore.layer), Layer.provide(Database.at(":memory:")))
 }
 
 /** An in-memory channel store that already holds ESPN's channel when the source starts. */
@@ -141,7 +138,7 @@ function storeKnowingEspn() {
       })
       return store
     })
-  ).pipe(Layer.provide(ChannelStore.layer), Layer.provide(TestDatabase.layer(":memory:")))
+  ).pipe(Layer.provide(ChannelStore.layer), Layer.provide(Database.at(":memory:")))
 }
 
 const readAt = DateTime.toEpochMillis(DateTime.makeUnsafe("2026-10-03T20:24:45Z"))
@@ -422,5 +419,5 @@ function matchingLayer() {
       )
     )
   )
-  return Layer.mergeAll(testSource(), EspnProvider.layer.pipe(Layer.provide(recorded)))
+  return Layer.mergeAll(testSource(), EspnProvider.layer.pipe(Layer.provide([recorded, noSocket])))
 }

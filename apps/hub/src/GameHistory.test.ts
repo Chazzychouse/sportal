@@ -6,10 +6,10 @@ import { play, snapshot } from "@sportal/domain/TestGame"
 import { DateTime, Effect, Layer, Option } from "effect"
 import { SqlClient } from "effect/sql"
 import { TestClock } from "effect/testing"
+import * as Database from "./Database.ts"
 import { GameHistory } from "./GameHistory.ts"
 import { LiveGames } from "./LiveGames.ts"
 import { taken } from "./provider/TestProvider.ts"
-import * as TestDatabase from "./TestDatabase.ts"
 import { counted, withMetrics } from "./TestTelemetry.ts"
 
 const one = GameId.make("1")
@@ -165,7 +165,7 @@ const over = snapshot({ id: one, status: "final", period: 4, clock: "0:00" })
 // The fold, the Hub's database in memory, and the history that follows the one and writes the other.
 const history = GameHistory.layer.pipe(
   Layer.provideMerge(LiveGames.layer),
-  Layer.provideMerge(TestDatabase.layer(":memory:"))
+  Layer.provideMerge(Database.at(":memory:"))
 )
 
 // Past the writer's 250 ms batch window, then lets the write finish.

@@ -55,14 +55,14 @@ describe("Scenario.build", () => {
   })
 
   it("marks the red zone from the yard line", () => {
-    assert.isFalse(game("1", 0)?.situation?.isRedZone)
-    assert.isTrue(game("1", 60)?.situation?.isRedZone)
+    assert.isFalse(game("1", 0)?.situation?.inRedZone())
+    assert.isTrue(game("1", 60)?.situation?.inRedZone())
   })
 
   it("takes the ball away between plays but keeps the timeouts and the last play", () => {
     const situation = game("1", 120)?.situation
     assert.isUndefined(situation?.possession)
-    assert.isFalse(situation?.isRedZone)
+    assert.isFalse(situation?.inRedZone())
     assert.strictEqual(situation?.homeTimeouts, 3)
     assert.strictEqual(situation?.lastPlay, "Field goal is good")
   })

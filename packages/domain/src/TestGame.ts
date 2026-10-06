@@ -35,7 +35,6 @@ export function situation(overrides: Partial<Situation> = {}): Situation {
     down: 1,
     distance: 10,
     yardLine: 50,
-    isRedZone: false,
     homeTimeouts: 3,
     awayTimeouts: 3,
     ...overrides

@@ -1,5 +1,5 @@
 import { type LiveMessage, LiveMessageJson } from "@sportal/api/LiveMessage"
-import type { GameId, GameSnapshot } from "@sportal/domain/Game"
+import type { GameSnapshot } from "@sportal/domain/Game"
 import { Stage } from "@sportal/domain/Stage"
 import {
   Context,
@@ -27,7 +27,6 @@ export class LiveStream extends Context.Service<LiveStream, SubscriptionRef.Subs
       const live = yield* SubscriptionRef.make<Live>({
         connection: Connection.Connecting(),
         slate: [],
-        watchability: new Map(),
         stage: Stage.initial
       })
       yield* sourceEvents().pipe(
@@ -50,10 +49,6 @@ export const Connection = Data.taggedEnum<Connection>()
 type Live = {
   readonly connection: Connection
   readonly slate: ReadonlyArray<GameSnapshot>
-  readonly watchability: ReadonlyMap<
-    GameId,
-    Extract<LiveMessage, { _tag: "SlateChanged" }>["slate"][number]["watchability"]
-  >
   readonly stage: Stage
 }
 
@@ -103,11 +98,7 @@ function step(live: SubscriptionRef.SubscriptionRef<Live>, event: SourceEvent) {
 function received(live: Live, message: LiveMessage): Live {
   switch (message._tag) {
     case "SlateChanged":
-      return {
-        ...live,
-        slate: message.slate.map((entry) => entry.game),
-        watchability: new Map(message.slate.map((entry) => [entry.game.id, entry.watchability]))
-      }
+      return { ...live, slate: message.slate }
     case "StageChanged":
       return { ...live, stage: message.stage }
   }

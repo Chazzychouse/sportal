@@ -6,7 +6,6 @@ import { GameEvent } from "./GameEvent.ts"
 import { LiveGame, LiveGameState } from "./LiveGame.ts"
 import { type Play, PlayId } from "./Play.ts"
 import { play, snapshot } from "./TestGame.ts"
-import { Watchability } from "./Watchability.ts"
 
 const t0 = DateTime.makeUnsafe("2026-10-03T16:00:00Z")
 const later = DateTime.addDuration(t0, Duration.seconds(30))
@@ -177,7 +176,7 @@ describe("LiveGame#take, a snapshot, ties between the feeds", () => {
 
 describe("LiveGame#tick, staleness", () => {
   const staleTime = DateTime.addDuration(t0, Duration.seconds(90))
-  // The state a tick leaves, whether or not the watchability changed with it.
+  // The state a tick leaves, or the one it had when the tick changed nothing.
   const stateAt = (game: LiveGame, now: DateTime.Utc) => Option.getOrElse(ticked(game, now), () => game).state
 
   it("Upcoming: never stale", () => {
@@ -221,25 +220,6 @@ describe("LiveGame#tick, staleness", () => {
   })
 })
 
-describe("LiveGame#tick, watchability", () => {
-  const lastPlayAt = DateTime.addDuration(t0, Duration.seconds(10))
-  const withPlay = Option.getOrThrow(
-    liveGame.take(Delivery.Plays({ game: live.id, plays: [play()] }), lastPlayAt).liveGame
-  )
-
-  it("nothing changes before the lull", () => {
-    assert.deepStrictEqual(
-      ticked(withPlay, DateTime.addDuration(lastPlayAt, Duration.seconds(59))),
-      Option.none()
-    )
-  })
-  it("begins a lull 60 s after the last play with no snapshot", () => {
-    const lull = ticked(withPlay, DateTime.addDuration(lastPlayAt, Duration.seconds(60)))
-    assert.deepStrictEqual(lull.pipe(Option.map((game) => game.watchability.lull)), Option.some(true))
-    assert.deepStrictEqual(lull.pipe(Option.map((game) => game.state)), Option.some(liveAt(t0)))
-  })
-})
-
 describe("LiveGame#isCurrent", () => {
   it("Live and Stale are current", () => {
     assert.strictEqual(liveGame.isCurrent(later), true)
@@ -266,30 +246,56 @@ describe("LiveGame#isCurrent", () => {
   })
 })
 
-describe("LiveGame#currencyChangesAt", () => {
-  it("Stale: updatedAt + 30 minutes, until then", () => {
-    const end = DateTime.addDuration(t0, Duration.minutes(30))
-    assert.deepStrictEqual(staleGame.currencyChangesAt(later), Option.some(end))
-    assert.deepStrictEqual(staleGame.currencyChangesAt(end), Option.none())
+describe("LiveGame#dueAfter", () => {
+  it("Live: when it goes stale, updatedAt + 90 s", () => {
+    assert.deepStrictEqual(
+      liveGame.dueAfter(later),
+      Option.some(DateTime.addDuration(t0, Duration.seconds(90)))
+    )
   })
-  it("Upcoming: kickoff - 30 minutes, until then", () => {
+  it("Stale: when it leaves the live-feed window, updatedAt + 30 minutes", () => {
+    assert.deepStrictEqual(
+      staleGame.dueAfter(later),
+      Option.some(DateTime.addDuration(t0, Duration.minutes(30)))
+    )
+  })
+  it("Upcoming: when it enters the live-feed window, kickoff - 30 minutes", () => {
     const opens = DateTime.subtractDuration(upcoming.kickoff, Duration.minutes(30))
     assert.deepStrictEqual(
-      upcomingGame.currencyChangesAt(DateTime.subtractDuration(opens, Duration.seconds(1))),
+      upcomingGame.dueAfter(DateTime.subtractDuration(opens, Duration.seconds(1))),
       Option.some(opens)
     )
-    assert.deepStrictEqual(upcomingGame.currencyChangesAt(opens), Option.none())
   })
-  it("Live and Over: none", () => {
-    assert.deepStrictEqual(liveGame.currencyChangesAt(later), Option.none())
-    assert.deepStrictEqual(overGame.currencyChangesAt(later), Option.none())
+  it("Upcoming already inside the window: none", () => {
+    assert.deepStrictEqual(upcomingGame.dueAfter(upcoming.kickoff), Option.none())
+  })
+  it("Over: none", () => {
+    assert.deepStrictEqual(overGame.dueAfter(later), Option.none())
+  })
+  it("an instant equal to now is not after it", () => {
+    const staleAt = DateTime.addDuration(t0, Duration.seconds(90))
+    assert.deepStrictEqual(liveGame.dueAfter(staleAt), Option.none())
+    const opens = DateTime.subtractDuration(upcoming.kickoff, Duration.minutes(30))
+    assert.deepStrictEqual(upcomingGame.dueAfter(opens), Option.none())
   })
 })
 
-describe("LiveGame.start, plays and watchability", () => {
-  it("starts with no plays, judged fresh", () => {
+describe("LiveGame.earliest", () => {
+  it("is none of nothing", () => {
+    assert.deepStrictEqual(LiveGame.earliest([]), Option.none())
+    assert.deepStrictEqual(LiveGame.earliest([Option.none()]), Option.none())
+  })
+  it("is the earliest of some, ignoring nones", () => {
+    assert.deepStrictEqual(
+      LiveGame.earliest([Option.some(later), Option.none(), Option.some(t0)]),
+      Option.some(t0)
+    )
+  })
+})
+
+describe("LiveGame.start, plays", () => {
+  it("starts with no plays", () => {
     assert.deepStrictEqual(liveGame.plays, [])
-    assert.deepStrictEqual(liveGame.watchability, Watchability.initial(live, t0))
   })
 })
 
@@ -308,17 +314,6 @@ describe("LiveGame#take, plays", () => {
     const { liveGame: next, events } = take(withFirst, [second, first])
     assert.deepStrictEqual(next.pipe(Option.map((game) => game.plays)), Option.some([first, second]))
     assert.deepStrictEqual(events, secondsEvents)
-  })
-  it("moves the watchability on with those events", () => {
-    const next = take(withFirst, [first, second]).liveGame
-    assert.deepStrictEqual(
-      next.pipe(Option.map((game) => game.watchability)),
-      Option.some(withFirst.watchability.next(live, live, secondsEvents, later))
-    )
-    assert.deepStrictEqual(
-      next.pipe(Option.map((game) => game.watchability.boostUntil !== undefined)),
-      Option.some(true)
-    )
   })
   it("keeps the snapshot, its source, and its state", () => {
     const next = take(withFirst, [first, second]).liveGame
@@ -371,13 +366,6 @@ describe("LiveGame#take, a snapshot's events", () => {
       "WentFinal"
     )
   })
-  it("moves the watchability on with them", () => {
-    const next = taken(liveGame, scoredFinal, "poll", later)
-    assert.deepStrictEqual(
-      next.pipe(Option.map((game) => game.watchability)),
-      Option.some(liveGame.watchability.next(live, scoredFinal, scoredFinal.eventsSince(live), later))
-    )
-  })
   it("keeps the plays", () => {
     const withPlay = Option.getOrThrow(
       liveGame.take(Delivery.Plays({ game: live.id, plays: [play()] }), later).liveGame
@@ -392,27 +380,5 @@ describe("LiveGame#take, a snapshot's events", () => {
       liveGame: Option.none(),
       events: []
     })
-  })
-})
-
-describe("LiveGame#wakeAt", () => {
-  it("a live game wakes for its watchability before it goes stale", () => {
-    // Play counts as stopped 60 s after it last showed; stale comes at 90 s.
-    assert.deepStrictEqual(liveGame.wakeAt(t0), Option.some(DateTime.addDuration(t0, Duration.seconds(60))))
-  })
-  it("a live game wakes when it goes stale if that is earlier", () => {
-    const playedAt = DateTime.addDuration(t0, Duration.seconds(50))
-    const played = Option.getOrThrow(
-      liveGame.take(Delivery.Plays({ game: live.id, plays: [play()] }), playedAt).liveGame
-    )
-    assert.deepStrictEqual(
-      played.wakeAt(playedAt),
-      Option.some(DateTime.addDuration(t0, Duration.seconds(90)))
-    )
-  })
-  it("an upcoming, stale, or over game never wakes for watchability", () => {
-    assert.deepStrictEqual(upcomingGame.wakeAt(t0), Option.none())
-    assert.deepStrictEqual(staleGame.wakeAt(t0), Option.none())
-    assert.deepStrictEqual(overGame.wakeAt(t0), Option.none())
   })
 })

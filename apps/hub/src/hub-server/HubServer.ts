@@ -116,7 +116,7 @@ function hostHandlers() {
 }
 
 /**
- * GET /api/live — the current slate with its watchability and the stage, then every change, as server-sent events,
+ * GET /api/live — the current slate and the stage, then every change, as server-sent events,
  * with a comment every 20 seconds so proxies that close idle connections leave a quiet stream open.
  */
 function liveRoute() {

@@ -9,16 +9,16 @@ import { DateTime, Effect, Layer, Option, Queue, Result, Schema, Stream } from "
 import { HttpClient } from "effect/http"
 import { HttpApiClient } from "effect/http-api"
 import { TestClock } from "effect/testing"
-import { FeedLog } from "../feed-log/FeedLog.ts"
+import * as Database from "../Database.ts"
+import { FeedLog } from "../FeedLog.ts"
 import * as Ingest from "../ingest/Ingest.ts"
 import { LiveGames } from "../LiveGames.ts"
 import { Provider } from "../provider/Provider.ts"
-import { neverPushing, polling } from "../provider/TestProvider.ts"
+import { polling } from "../provider/TestProvider.ts"
 import { Slate } from "../Slate.ts"
 import { StageSessions } from "../StageSessions.ts"
 import { ChannelStore } from "../source/ChannelStore.ts"
 import * as YouTubeTv from "../source/youtube-tv/YouTubeTv.ts"
-import * as TestDatabase from "../TestDatabase.ts"
 import { withEnv } from "../TestHubConfig.ts"
 import * as HubServer from "./HubServer.ts"
 
@@ -227,7 +227,7 @@ describe("GET /api/live", () => {
     }).pipe(Effect.scoped, Effect.provide(serverUnderTest()))
   )
 
-  it.effect("sends each listed game with its watchability, and none of what the fold remembers", () =>
+  it.effect("sends each listed game as its snapshot, and none of what the fold remembers", () =>
     Effect.gen(function* () {
       const http = yield* HttpClient.HttpClient
       yield* firstSlateOnTestClock()
@@ -243,11 +243,9 @@ describe("GET /api/live", () => {
       )
       const line = yield* Queue.take(lines)
 
-      assert.notMatch(line, /activeAt|breakUntil|boostUntil/)
       const [entry] = JSON.parse(line.slice("data: ".length)).slate
-      assert.deepStrictEqual(Object.keys(entry).sort(), ["game", "watchability"])
-      assert.strictEqual(entry.game.id, game.id)
-      assert.deepStrictEqual(Object.keys(entry.watchability).sort(), ["lull", "reasons", "score"])
+      assert.strictEqual(entry.id, game.id)
+      assert.notMatch(line, /"plays"|"state"|"updatedAt"|"from"/)
     }).pipe(Effect.scoped, Effect.provide(serverUnderTest()))
   )
 
@@ -324,7 +322,7 @@ function hubUnderTest() {
   return StageSessions.layer.pipe(
     Layer.provideMerge(YouTubeTv.layer),
     Layer.provide(ChannelStore.layer),
-    Layer.provide(TestDatabase.layer(":memory:")),
+    Layer.provide(Database.at(":memory:")),
     Layer.provideMerge(Layer.mergeAll(Slate.layer, Ingest.layer(["fbs"]))),
     Layer.provide([
       LiveGames.layer,
@@ -332,9 +330,8 @@ function hubUnderTest() {
         Provider,
         polling(() => Effect.succeed([game]))
       ),
-      neverPushing,
       DateTime.layerCurrentZoneLocal,
-      FeedLog.layer.pipe(Layer.provide([TestDatabase.layer(":memory:"), NodeCrypto.layer]))
+      FeedLog.layer.pipe(Layer.provide([Database.at(":memory:"), NodeCrypto.layer]))
     ]),
     Layer.provideMerge(withEnv({ SPORTAL_VERSION: "1.2.3", SPORTAL_DATA_DIR: "unused" }))
   )

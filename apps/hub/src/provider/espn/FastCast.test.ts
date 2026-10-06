@@ -2,13 +2,13 @@ import { readFileSync } from "node:fs"
 import { assert, describe, it } from "@effect/vitest"
 import { GameId, type GameSnapshot } from "@sportal/domain/Game"
 import { snapshot } from "@sportal/domain/TestGame"
-import { Deferred, Effect, Layer, Queue, Schema, Stream } from "effect"
+import { Deferred, Effect, Layer, Queue, Schedule, Schema, Stream } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/http"
 import * as Socket from "effect/socket/Socket"
 import { TestClock } from "effect/testing"
-import type { FeedFrame } from "../../feed-log/Frame.ts"
+import type { FeedFrame } from "../../Frame.ts"
 import { counted, recordingLogs, withMetrics } from "../../TestTelemetry.ts"
-import { LiveFeed, type LiveFeedError } from "../LiveFeed.ts"
+import type { ProviderError } from "../Provider.ts"
 import * as FastCast from "./FastCast.ts"
 
 describe("FastCast", () => {
@@ -189,10 +189,11 @@ describe("FastCast", () => {
       })
   )
 
-  it.effect("a checkpoint that hangs fails after 20 s, and its topic is subscribed to again 30 s later", () =>
+  it.effect("a checkpoint that hangs is Unloaded after 20 s and followed again when the Schedule says", () =>
     Effect.gen(function* () {
+      const { logs, layer } = recordingLogs()
       const server = fakeServer()
-      const { ended, frames } = yield* nflFrames(server)
+      const { ended, frames } = yield* nflFrames(server).pipe(Effect.provide(layer))
       yield* frames.until(atLeast(2))
       yield* Effect.sync(() =>
         server.send({ op: "H", tc: "event-football-nfl", mid: 7, pl: "https://checkpoint.test/hang" })
@@ -203,10 +204,64 @@ describe("FastCast", () => {
       yield* TestClock.adjust("1 second")
       yield* frames.until(atLeast(3))
       assert.strictEqual(yield* counted("sportal_live_feed_checkpoint_failures", { league: "nfl" }), 1)
-      yield* TestClock.adjust("30 seconds")
+      assert.isTrue(logs.some((log) => log.level === "Warn" && log.annotations.reason === "Unloaded"))
+      yield* TestClock.adjust("29 seconds")
+      assert.lengthOf(
+        server.sent.all().filter((frame) => frame.op === "S"),
+        1
+      )
+      yield* TestClock.adjust("1 second")
       yield* server.sent.until(subscribed("event-football-nfl", 2))
       assert.isFalse(yield* Deferred.isDone(ended))
     }).pipe(withMetrics)
+  )
+
+  it.effect("a checkpoint that does not decode is Undecodable, emits only its H, and is followed again", () =>
+    Effect.gen(function* () {
+      const { logs, layer } = recordingLogs()
+      const server = fakeServer()
+      const { frames } = yield* nflFrames(server).pipe(Effect.provide(layer))
+      yield* frames.until(atLeast(2))
+      yield* Effect.sync(() => server.send(garbledCheckpoint(7)))
+      yield* Effect.sync(() => server.send(patchMessage(8)))
+      const received = yield* frames.until(atLeast(4))
+
+      assert.deepStrictEqual(
+        received.slice(2).map(({ kind, sourceId }) => [kind, sourceId]),
+        [
+          ["message", 7],
+          ["message", 8]
+        ]
+      )
+      assert.strictEqual(yield* counted("sportal_live_feed_checkpoint_failures", { league: "nfl" }), 1)
+      assert.isTrue(logs.some((log) => log.level === "Warn" && log.annotations.reason === "Undecodable"))
+      yield* TestClock.adjust("30 seconds")
+      yield* server.sent.until(subscribed("event-football-nfl", 2))
+    }).pipe(withMetrics)
+  )
+
+  it.effect("a resync of a topic already being followed again sends no second S", () =>
+    Effect.gen(function* () {
+      const server = fakeServer()
+      const { frames, resync } = yield* nflFrames(server)
+      yield* frames.until(atLeast(2))
+      yield* Effect.sync(() => server.send(missingCheckpoint(5)))
+      yield* frames.until(atLeast(3))
+      yield* Queue.offer(resync, "event-football-nfl")
+      yield* TestClock.adjust("1 second")
+
+      assert.lengthOf(
+        server.sent.all().filter((frame) => frame.op === "S"),
+        1
+      )
+      yield* TestClock.adjust("29 seconds")
+      yield* server.sent.until(subscribed("event-football-nfl", 2))
+      yield* TestClock.adjust("30 seconds")
+      assert.lengthOf(
+        server.sent.all().filter((frame) => frame.op === "S"),
+        2
+      )
+    })
   )
 
   it.effect("a topic whose checkpoints keep failing has one subscription pending at a time", () =>
@@ -230,52 +285,52 @@ describe("FastCast", () => {
     })
   )
 
-  it.effect("after five checkpoint failures in a row a topic is not subscribed to again, said once", () =>
-    Effect.gen(function* () {
-      const { logs, layer } = recordingLogs()
-      const server = fakeServer()
-      const { frames } = yield* nflFrames(server).pipe(Effect.provide(layer))
-      yield* frames.until(atLeast(2))
-      yield* Effect.forEach(
-        [1, 2, 3, 4],
-        (failure) =>
-          Effect.sync(() => server.send(missingCheckpoint(failure))).pipe(
-            Effect.andThen(frames.until((all) => all.some((frame) => frame.sourceId === failure))),
-            Effect.andThen(TestClock.adjust("30 seconds")),
-            Effect.andThen(server.sent.until(subscribed("event-football-nfl", failure + 1)))
-          ),
-        { discard: true }
-      )
-      yield* Effect.sync(() => server.send(missingCheckpoint(5)))
-      yield* frames.until((all) => all.some((frame) => frame.sourceId === 5))
-      yield* TestClock.adjust("30 seconds")
+  it.effect(
+    "once the Schedule is done the topic is left to polling, said once, and not subscribed again until the socket reconnects",
+    () =>
+      Effect.gen(function* () {
+        const { logs, layer } = recordingLogs()
+        const server = fakeServer()
+        const { frames, resync } = yield* nflFrames(server, Schedule.recurs(1)).pipe(Effect.provide(layer))
+        yield* frames.until(atLeast(2))
+        yield* Effect.sync(() => server.send(missingCheckpoint(1)))
+        yield* server.sent.until(subscribed("event-football-nfl", 2))
+        yield* Effect.sync(() => server.send(missingCheckpoint(2)))
+        yield* frames.until((all) => all.some((frame) => frame.sourceId === 2))
+        yield* Queue.offer(resync, "event-football-nfl")
+        yield* TestClock.adjust("1 minute")
 
-      assert.lengthOf(
-        server.sent.all().filter((frame) => frame.op === "S"),
-        5
-      )
-      const gaveUp = logs.filter((log) => log.message.includes("not subscribing to it again"))
-      assert.lengthOf(gaveUp, 1)
-      assert.strictEqual(gaveUp[0]?.level, "Warn")
-    })
+        assert.lengthOf(
+          server.sent.all().filter((frame) => frame.op === "S"),
+          2
+        )
+        const gaveUp = logs.filter((log) => log.message.includes("left to polling"))
+        assert.lengthOf(gaveUp, 1)
+        assert.strictEqual(gaveUp[0]?.level, "Warn")
+      })
   )
 })
 
 /**
- * Runs FastCast's frames for the NFL over `server` in a fiber of its own, collecting them into `frames` and completing
+ * Runs FastCast's push for the NFL over `server` in a fiber of its own, collecting them into `frames` and completing
  * `ended` with how it ended. `wanted` takes the current games, and `resync` the topics their decoder resyncs.
  */
-function nflFrames(server: ReturnType<typeof fakeServer>) {
+function nflFrames(
+  server: ReturnType<typeof fakeServer>,
+  checkpointRetry: Schedule.Schedule<unknown, FastCast.CheckpointError> = FastCast.checkpointRetry
+) {
   return Effect.gen(function* () {
-    const ended = yield* Deferred.make<void, LiveFeedError>()
+    const ended = yield* Deferred.make<void, ProviderError>()
     const frames = watched<FeedFrame>()
     const wanted = yield* Queue.unbounded<ReadonlyArray<GameSnapshot>>()
     const resync = yield* Queue.unbounded<string>()
-    yield* LiveFeed.use((feed) =>
-      feed
-        .frames(["nfl"], Stream.fromQueue(wanted), Stream.fromQueue(resync))
-        .pipe(Stream.runForEach((frame) => Effect.sync(() => frames.add(frame))))
-    ).pipe(Deferred.into(ended), Effect.forkChild({ startImmediately: true }))
+    yield* FastCast.push(["nfl"], Stream.fromQueue(wanted), Stream.fromQueue(resync), {
+      checkpointRetry
+    }).pipe(
+      Stream.runForEach((frame) => Effect.sync(() => frames.add(frame))),
+      Deferred.into(ended),
+      Effect.forkChild({ startImmediately: true })
+    )
     return { ended, frames, wanted, resync }
   }).pipe(Effect.provide(fastCast(server)))
 }
@@ -321,11 +376,9 @@ function subscribed(tc: string, times: number) {
 }
 
 function fastCast(server: ReturnType<typeof fakeServer>) {
-  return FastCast.layer.pipe(
-    Layer.provide([
-      Layer.succeed(HttpClient.HttpClient, espn),
-      Layer.succeed(Socket.WebSocketConstructor, () => server.socket)
-    ])
+  return Layer.mergeAll(
+    Layer.succeed(HttpClient.HttpClient, espn),
+    Layer.succeed(Socket.WebSocketConstructor, () => server.socket)
   )
 }
 
@@ -335,6 +388,10 @@ function nflGame(id: string) {
 
 function checkpointMessage(mid: number) {
   return { op: "H", tc: "event-football-nfl", mid, pl: `https://checkpoint.test/${mid}` }
+}
+
+function garbledCheckpoint(mid: number) {
+  return { op: "H", tc: "event-football-nfl", mid, pl: "https://checkpoint.test/garbled" }
 }
 
 function missingCheckpoint(mid: number) {
@@ -350,7 +407,8 @@ const checkpointBody = readFileSync(
   "utf8"
 )
 
-// FastCast's host lookup, and any checkpoint, which is the recorded one, except a missing one and one that never comes.
+// FastCast's host lookup, and any checkpoint, which is the recorded one, except a missing one, one that is not a
+// scoreboard, and one that never comes.
 const espn = HttpClient.make((request) =>
   Effect.succeed(
     HttpClientResponse.fromWeb(
@@ -359,7 +417,9 @@ const espn = HttpClient.make((request) =>
         ? new Response(JSON.stringify({ ip: "fastcast.test", securePort: 443, token: "token" }))
         : request.url.endsWith("/missing")
           ? new Response("Not Found", { status: 404 })
-          : new Response(checkpointBody)
+          : request.url.endsWith("/garbled")
+            ? new Response(JSON.stringify({ sports: "not a scoreboard" }))
+            : new Response(checkpointBody)
     )
   ).pipe(
     Effect.andThen((response) => (request.url.endsWith("/hang") ? Effect.never : Effect.succeed(response)))

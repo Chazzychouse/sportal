@@ -19,22 +19,20 @@ import {
   Schedule,
   Stream
 } from "effect"
-import { FeedLog } from "../feed-log/FeedLog.ts"
+import { FeedLog } from "../FeedLog.ts"
 import { LiveGames } from "../LiveGames.ts"
-import { LiveFeed } from "../provider/LiveFeed.ts"
-import { type Decoded, Provider } from "../provider/Provider.ts"
-import * as Cadence from "./Cadence.ts"
+import { Decoded, Provider } from "../provider/Provider.ts"
+import * as DecodeTelemetry from "./DecodeTelemetry.ts"
 
 /**
- * Replays the current game day from the feed log into the live games, then polls each league at the Cadence and runs
- * the live feed, appending every frame to the log and taking what each says. The layer is built once the replay is
- * done, so nothing is served from a fold that is still catching up.
+ * Replays the current game day from the feed log into the live games, then polls each league on the provider's polling
+ * Schedule and runs its push, appending every frame to the log and taking what each says. The layer is built once the
+ * replay is done, so nothing is served from a fold that is still catching up.
  */
 export const layer = (leagues: ReadonlyArray<LeagueId>) =>
   Layer.effectDiscard(
     Effect.gen(function* () {
       const provider = yield* Provider
-      const liveFeed = yield* LiveFeed
       const feedLog = yield* FeedLog
       const liveGames = yield* LiveGames
       const from = dayStart(yield* DateTime.nowInCurrentZone)
@@ -46,17 +44,20 @@ export const layer = (leagues: ReadonlyArray<LeagueId>) =>
       // Subscribed before the replay is read, so a frame appended any time after it ends is in `appended`.
       const appended = yield* feedLog.subscribe
 
-      // Nothing a replayed frame says goes live: its deliveries go to the replay, and a resync is dropped, since no
-      // socket follows a topic yet and one that does starts it from a fresh checkpoint anyway.
+      // Nothing a replayed frame says goes live: its deliveries go to the replay, and a resync or a notice is dropped,
+      // since no socket follows a topic yet (one that does starts it from a fresh checkpoint anyway) and its notices
+      // were told when the frame first arrived.
       const route = (said: Decoded) =>
         Effect.flatMap(Ref.get(replayedUpTo), (last) =>
           said.seq <= last
             ? said._tag === "Delivered"
               ? Queue.offer(replayed, said)
               : Effect.void
-            : said._tag === "Delivered"
-              ? liveGames.take(said.delivery, said.at, Option.some(said.seq))
-              : PubSub.publish(resyncs, said.channel)
+            : Decoded.$match(said, {
+                Delivered: ({ delivery, at, seq }) => liveGames.take(delivery, at, Option.some(seq)),
+                Resync: ({ channel }) => PubSub.publish(resyncs, channel),
+                Noted: ({ notice, seq }) => DecodeTelemetry.noticed(notice, seq)
+              })
         )
 
       // One decode over the day's log and then every frame appended after it, so each topic's document carries over
@@ -91,13 +92,10 @@ export const layer = (leagues: ReadonlyArray<LeagueId>) =>
         )
 
       const replay = Effect.fn("Ingest.replay")(function* () {
-        const deliveries = yield* Ref.make(0)
-        yield* liveGames.replay(
-          Stream.fromQueue(replayed).pipe(Stream.tap(() => Ref.update(deliveries, (count) => count + 1)))
-        )
+        const deliveries = yield* liveGames.replay(Stream.fromQueue(replayed))
         yield* Effect.annotateCurrentSpan({
           "sportal.frames": yield* Ref.get(frames),
-          "sportal.deliveries": yield* Ref.get(deliveries)
+          "sportal.deliveries": deliveries
         })
       })
       // Decoding that dies during the replay fails the layer, rather than leaving the replay waiting.
@@ -116,7 +114,9 @@ export const layer = (leagues: ReadonlyArray<LeagueId>) =>
             Effect.result
           )
         )
-        const failed = results.filter(Result.isFailure).map((result) => result.failure.league)
+        const failed = results.flatMap((result) =>
+          Result.isFailure(result) && result.failure.league !== undefined ? [result.failure.league] : []
+        )
         yield* Effect.annotateCurrentSpan({ "sportal.leagues": leagues, "sportal.failed_leagues": failed })
         return {
           failed,
@@ -124,19 +124,16 @@ export const layer = (leagues: ReadonlyArray<LeagueId>) =>
         }
       }, Effect.trackDuration(pollDuration))
 
-      yield* Effect.forkScoped(
-        Effect.forever(
-          Effect.gen(function* () {
-            const { failed, last } = yield* poll()
-            yield* Option.match(last, { onNone: () => Effect.void, onSome: taken })
-            const slate = (yield* liveGames.latest).slate(leagues)
-            yield* Effect.sleep(Cadence.interval(slate, yield* DateTime.now, failed.length > 0))
-          })
-        )
-      )
+      // The Schedule is given the fold's slate once it has taken the poll's listings, and the leagues that failed.
+      const polled = Effect.gen(function* () {
+        const { failed, last } = yield* poll()
+        yield* Option.match(last, { onNone: () => Effect.void, onSome: taken })
+        return { slate: (yield* liveGames.latest).slate(leagues), failed }
+      })
+      yield* Effect.forkScoped(Effect.repeat(polled, provider.polling))
 
       // The current games' snapshots, again on each change to which games they are. Each subscriber gets the
-      // current ones first, so a reconnecting live feed subscribes to them all again.
+      // current ones first, so a reconnecting push subscribes to them all again.
       const wanted = liveGames.changes.pipe(
         Stream.mapEffect((folded) =>
           Effect.map(DateTime.now, (now) =>
@@ -154,7 +151,7 @@ export const layer = (leagues: ReadonlyArray<LeagueId>) =>
       )
 
       yield* Effect.forkScoped(
-        liveFeed.frames(leagues, wanted, Stream.fromPubSub(resyncs)).pipe(
+        provider.push(leagues, wanted, Stream.fromPubSub(resyncs)).pipe(
           Stream.tapError((error) =>
             Effect.logWarning(
               `Ingest: the live feed failed (${error.reason}); subscribing again`,
@@ -197,7 +194,7 @@ function loggedUnlessStopping(message: string, ended: string) {
 }
 
 /**
- * Waits for the fold to have taken frame `seq`, so the Cadence reads the listing it gave. A frame that gives no
+ * Waits for the fold to have taken frame `seq`, so the polling Schedule reads the listing it gave. A frame that gives no
  * delivery (one that does not decode) moves no `seq`, so the wait ends after `takenWithin` regardless.
  */
 function taken(seq: number): Effect.Effect<void, never, LiveGames> {

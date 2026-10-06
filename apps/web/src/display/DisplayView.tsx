@@ -62,13 +62,7 @@ export function DisplayView() {
           onSelect={(slot) => run(display.select(slot, live.stage))}
         />
         {fullScreen.on || !display.slateOpen ? null : (
-          <SlateView
-            cards={cards}
-            display={display}
-            stage={live.stage}
-            watchability={live.watchability}
-            onDrop={run}
-          />
+          <SlateView cards={cards} display={display} stage={live.stage} onDrop={run} />
         )}
       </div>
       <KeysDialog open={display.overlay._tag === "Keys"} onOpenChange={closeOverlay} />

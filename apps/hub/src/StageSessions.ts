@@ -24,9 +24,7 @@ export class StageSessions extends Context.Service<
         const games = yield* slate.latest
         const availabilityOf = yield* source.availability
         return (id: GameId): Option.Option<ChannelAvailability> =>
-          Option.fromNullishOr(games.find((candidate) => candidate.game.id === id)).pipe(
-            Option.map((listed) => availabilityOf(listed.game))
-          )
+          Option.fromNullishOr(games.find((game) => game.id === id)).pipe(Option.map(availabilityOf))
       })
 
       const dispatch = Effect.fn("StageSessions.dispatch")(function* (command: StageCommand) {

@@ -70,7 +70,6 @@ describe("LiveStream", () => {
       source.onmessage?.({ data: message({ _tag: "SlateChanged", slate: [] }) })
       const state = yield* until(live, (current) => current.stage.layout === "Pair")
       assert.deepStrictEqual(state.slate, [])
-      assert.strictEqual(state.watchability.size, 0)
     }).pipe(Effect.provide(LiveStream.layer))
   )
 
@@ -86,7 +85,6 @@ describe("LiveStream", () => {
       const after = yield* until(live, (state) => state.stage.layout === "Pair")
       assert.strictEqual(after.connection, before.connection)
       assert.strictEqual(after.slate, before.slate)
-      assert.strictEqual(after.watchability, before.watchability)
     }).pipe(Effect.provide(LiveStream.layer))
   )
 

@@ -1,4 +1,3 @@
-import { fileURLToPath } from "node:url"
 import { GameId, GameSnapshot, type GameStatus } from "@sportal/domain/Game"
 import type { LeagueId } from "@sportal/domain/League"
 import { Situation } from "@sportal/domain/Situation"
@@ -6,8 +5,8 @@ import { broadcast, snapshot, team } from "@sportal/domain/TestGame"
 import { DateTime, Duration, Schema } from "effect"
 
 /**
- * A timeline of game snapshots for several games, scripted or cut from a recording, that a Hub can play instead
- * of a provider. Its instants are as written or recorded; `slateAt` moves them to when it is played.
+ * A written scenario: a timeline of game snapshots for several games that a Hub can play as its provider. Its
+ * instants are as written; `slateAt` moves them to when it is played.
  */
 export class Scenario extends Schema.Class<Scenario>("sportal/Scenario")({
   name: Schema.String,
@@ -16,9 +15,6 @@ export class Scenario extends Schema.Class<Scenario>("sportal/Scenario")({
   /** The whole slate `at` milliseconds after the scenario starts, in order of `at`, the first at 0. */
   frames: Schema.Array(Schema.Struct({ at: Schema.Int, slate: Schema.Array(GameSnapshot) }))
 }) {
-  /** Where recorded slices are kept: `fixtures/scenarios/` at the repository's root. */
-  static readonly folder = fileURLToPath(new URL("../../../../fixtures/scenarios/", import.meta.url))
-
   /**
    * A scenario written as games and the changes to each from an offset in scenario time ("m:ss" or "h:mm:ss";
    * a kickoff may be negative, for a game already under way). It starts at 2026-10-03 16:00 UTC. Each game is
@@ -133,24 +129,21 @@ function situationOf(game: GameSnapshot, status: GameStatus, change: Change): Si
   const describes =
     change.ball !== undefined || change.timeouts !== undefined || change.lastPlay !== undefined
   if (before === undefined && !describes)
-    return status === "live"
-      ? new Situation({ isRedZone: false, homeTimeouts: 3, awayTimeouts: 3 })
-      : undefined
+    return status === "live" ? new Situation({ homeTimeouts: 3, awayTimeouts: 3 }) : undefined
   const [homeTimeouts, awayTimeouts] = change.timeouts ?? [
     before?.homeTimeouts ?? 3,
     before?.awayTimeouts ?? 3
   ]
   const lastPlay = change.lastPlay ?? before?.lastPlay
   const timing = { homeTimeouts, awayTimeouts, ...(lastPlay === undefined ? {} : { lastPlay }) }
-  if (change.ball === null) return new Situation({ isRedZone: false, ...timing })
-  if (change.ball === undefined) return new Situation({ ...(before ?? { isRedZone: false }), ...timing })
+  if (change.ball === null) return new Situation(timing)
+  if (change.ball === undefined) return new Situation({ ...before, ...timing })
   const { team: side, yardLine, down, distance } = change.ball
   return new Situation({
     possession: game[side].team.id,
     yardLine,
     down,
     distance,
-    isRedZone: yardLine <= 20,
     ...timing
   })
 }

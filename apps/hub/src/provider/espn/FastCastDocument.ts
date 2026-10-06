@@ -1,48 +1,52 @@
 import type { GameId } from "@sportal/domain/Game"
 import type { LeagueId } from "@sportal/domain/League"
-import { Array as Arr, Data, Effect, JsonPatch, JsonPointer, Metric, Option, Record, Schema } from "effect"
-import type { Frame } from "../../feed-log/Frame.ts"
+import { Array as Arr, Data, Effect, JsonPatch, JsonPointer, Option, Record, Schema } from "effect"
+import type { Frame } from "../../Frame.ts"
+import { Notice } from "../Provider.ts"
 import * as FastCastMessage from "./FastCastMessage.ts"
 
 /**
  * The FastCast topics' documents after `frame`, and what it changed: a scoreboard topic's touched events (every event,
  * on a checkpoint), or all of a game topic's plays, by id, when they changed. A topic is synced by its checkpoint
  * frame and moved on by each message after it. A missed message, a patch that will not apply, or a message that does
- * not decode on a synced topic sends only that topic back to waiting for a checkpoint, logged and counted, and the
- * change is a `Reset`. A checkpoint that does not decode is `Unreadable`, and the next message on its topic resets it,
- * so it is asked for again, once: until a checkpoint decodes, another that does not waits without asking. Fails only
- * when any other frame does not decode, leaving the documents as they were.
+ * not decode on a synced topic sends only that topic back to waiting for a checkpoint, and the change is a `Reset`. A
+ * checkpoint that does not decode leaves its topic waiting, noticed as a frame that did not decode, and asks for
+ * nothing: the live feed already followed it again. Each message received and each reset is noticed. Fails only when
+ * any other frame does not decode, leaving the documents as they were.
  */
 export function advance(documents: Documents, frame: Frame): Effect.Effect<Advanced, Schema.SchemaError> {
   const owned = FastCastMessage.owner(frame.channel)
   if (frame.kind === "checkpoint") {
     return Option.match(owned, {
-      onNone: () => Effect.succeed([documents, Option.none()] as const),
+      onNone: () => Effect.succeed(unchanged(documents)),
       onSome: (owner) =>
         checkpoint(owner, frame).pipe(
-          Effect.map(
-            ({ mid, document }) =>
-              [
-                new Map([...documents, [frame.channel, Topic.Synced({ mid, document })]]),
-                Option.some(changeOf(owner, document, Option.none()))
-              ] as const
-          ),
+          Effect.map(({ mid, document }) => ({
+            documents: new Map([...documents, [frame.channel, Topic.Synced({ mid, document })]]),
+            change: Option.some(changeOf(owner, document, Option.none())),
+            noticed: []
+          })),
           Effect.catch((cause) =>
-            Effect.succeed([
-              new Map([...documents, [frame.channel, unreadable(documents.get(frame.channel))]]),
-              Option.some(Change.Unreadable({ cause }))
-            ] as const)
+            Effect.succeed({
+              documents: new Map([...documents, [frame.channel, Topic.AwaitingCheckpoint()]]),
+              change: Option.none(),
+              noticed: [
+                Notice.FrameUndecoded({ feed: frame.feed, channel: frame.channel, kind: frame.kind, cause })
+              ]
+            })
           )
         )
     })
   }
-  if (frame.kind !== "message") return Effect.succeed([documents, Option.none()])
+  if (frame.kind !== "message") return Effect.succeed(unchanged(documents))
   return decodeMessage(frame.body).pipe(
-    Effect.tap((message) => received(message, owned)),
     Effect.flatMap((message) =>
-      Option.isSome(owned) && (message.op === "R" || message.op === "P" || message.op === "I")
+      (Option.isSome(owned) && (message.op === "R" || message.op === "P" || message.op === "I")
         ? moved(documents, frame.channel, owned.value, message)
-        : Effect.succeed([documents, Option.none()] as const)
+        : Effect.succeed(unchanged(documents))
+      ).pipe(
+        Effect.map((advanced) => ({ ...advanced, noticed: [received(message, owned), ...advanced.noticed] }))
+      )
     ),
     Effect.catch((error) => undecoded(documents, frame, owned, error))
   )
@@ -52,26 +56,31 @@ export function advance(documents: Documents, frame: Frame): Effect.Effect<Advan
 export const empty: Documents = new Map()
 
 /**
- * Where one topic's document is: waiting for a checkpoint, synced as of a message, lost to a checkpoint that did not
- * decode (its next message asks for another), or waiting for one that decodes after asking for another once. A
- * scoreboard topic's document is its events by uid; a game topic's is `{ entities: { plays } }`, its plays by id.
+ * Where one topic's document is: waiting for a checkpoint, or synced as of a message. A scoreboard topic's document is
+ * its events by uid; a game topic's is its plays by id, at `gamePlays`.
  */
 type Topic = Data.TaggedEnum<{
   AwaitingCheckpoint: object
   Synced: { readonly mid: number; readonly document: Schema.Json }
-  Unreadable: object
-  AskedAgain: object
 }>
 const Topic = Data.taggedEnum<Topic>()
 
 type Documents = ReadonlyMap<string, Topic>
 
-/** The documents after a frame, and what it changed. */
-type Advanced = readonly [Documents, Option.Option<Change>]
+/** The documents after a frame, what it changed, and what was noticed. */
+type Advanced = {
+  readonly documents: Documents
+  readonly change: Option.Option<Change>
+  readonly noticed: ReadonlyArray<Notice>
+}
+
+function unchanged(documents: Documents): Advanced {
+  return { documents, change: Option.none(), noticed: [] }
+}
 
 /**
- * What a frame changed: a scoreboard topic's touched events, a game topic's whole list of plays, by id, a topic sent
- * back to waiting for a checkpoint, or a topic whose checkpoint did not decode, and why.
+ * What a frame changed: a scoreboard topic's touched events, a game topic's whole list of plays, by id, or a topic sent
+ * back to waiting for a checkpoint.
  */
 type Change = Data.TaggedEnum<{
   Scoreboard: { readonly league: LeagueId; readonly events: ReadonlyArray<Schema.Json> }
@@ -81,7 +90,6 @@ type Change = Data.TaggedEnum<{
     readonly plays: Readonly<Record<string, Schema.Json>>
   }
   Reset: object
-  Unreadable: { readonly cause: Schema.SchemaError }
 }>
 const Change = Data.taggedEnum<Change>()
 
@@ -89,37 +97,30 @@ function checkpoint(
   owner: FastCastMessage.Owner,
   frame: Frame
 ): Effect.Effect<{ readonly mid: number; readonly document: Schema.Json }, Schema.SchemaError> {
-  return owner._tag === "Scoreboard"
-    ? decodeScoreboardCheckpoint(frame).pipe(
-        Effect.map(({ sourceId, body }) => ({
-          mid: sourceId,
-          document: Object.fromEntries(
-            body.sports.flatMap((sport) =>
-              sport.leagues.flatMap((league) => league.events.map((event) => [event.uid, event] as const))
+  return Effect.all({
+    mid: decodeMid(frame.sourceId),
+    body: Schema.decodeUnknownEffect(FastCastMessage.checkpointOf(owner))(frame.body)
+  }).pipe(
+    Effect.map(({ mid, body }) => ({
+      mid,
+      document:
+        "sports" in body
+          ? Object.fromEntries(
+              body.sports.flatMap((sport) =>
+                sport.leagues.flatMap((league) => league.events.map((event) => [event.uid, event] as const))
+              )
             )
-          )
-        }))
-      )
-    : decodeGameCheckpoint(frame).pipe(
-        Effect.map(({ sourceId, body }) => ({
-          mid: sourceId,
-          document: { entities: body.entities?.plays === undefined ? {} : { plays: body.entities.plays } }
-        }))
-      )
+          : JsonPatch.apply([{ op: "add", path: gamePlays.pointer, value: body.entities?.plays ?? {} }], {
+              entities: {}
+            })
+    }))
+  )
 }
 
-const decodeScoreboardCheckpoint = Schema.decodeUnknownEffect(
-  Schema.Struct({ sourceId: Schema.Int, body: Schema.fromJsonString(FastCastMessage.ScoreboardCheckpoint) })
-)
+const decodeMid = Schema.decodeUnknownEffect(Schema.Int)
 
-const decodeGameCheckpoint = Schema.decodeUnknownEffect(
-  Schema.Struct({ sourceId: Schema.Int, body: Schema.fromJsonString(FastCastMessage.GameCheckpoint) })
-)
-
-/** A topic whose checkpoint did not decode: one that has already asked for another after that keeps waiting. */
-function unreadable(topic: Topic | undefined): Topic {
-  return topic?._tag === "AskedAgain" ? Topic.AskedAgain() : Topic.Unreadable()
-}
+/** Where a game topic's plays are in its document. */
+const gamePlays = { pointer: "/entities/plays", path: ["entities", "plays"] } as const
 
 /** What a topic's document says: the events `touched` names (all of them when none), or its whole list of plays. */
 function changeOf(
@@ -136,8 +137,7 @@ function changeOf(
           onSome: (uids) => uids.flatMap((uid) => Option.toArray(valueAt(document, [uid])))
         })
       }),
-    Game: ({ league, game }) =>
-      Change.Game({ league, game, plays: objectAt(document, ["entities", "plays"]) })
+    Game: ({ league, game }) => Change.Game({ league, game, plays: objectAt(document, gamePlays.path) })
   })
 }
 
@@ -150,17 +150,7 @@ function moved(
 ): Effect.Effect<Advanced> {
   const current = documents.get(tc) ?? Topic.AwaitingCheckpoint()
   return Topic.$match(current, {
-    AwaitingCheckpoint: () => Effect.succeed([documents, Option.none()] as const),
-    AskedAgain: () => Effect.succeed([documents, Option.none()] as const),
-    Unreadable: () =>
-      reset(
-        documents,
-        tc,
-        owner.league,
-        "Unreadable",
-        `message ${message.mid} came after a checkpoint that did not decode`,
-        Topic.AskedAgain()
-      ),
+    AwaitingCheckpoint: () => Effect.succeed(unchanged(documents)),
     Synced: ({ mid, document }) => {
       if (mid + 1 !== message.mid) {
         return reset(
@@ -184,10 +174,11 @@ function moved(
             owner._tag === "Scoreboard"
               ? Option.some(Arr.dedupe(patches.map((patch) => patch.path.uid)))
               : Option.none()
-          return [
-            synced,
-            patches.length === 0 ? Option.none() : Option.some(changeOf(owner, next, touched))
-          ] as const
+          return {
+            documents: synced,
+            change: patches.length === 0 ? Option.none() : Option.some(changeOf(owner, next, touched)),
+            noticed: []
+          }
         }),
         Effect.catch((cause) =>
           reset(documents, tc, owner.league, "Unapplicable", cause, Topic.AwaitingCheckpoint())
@@ -197,33 +188,31 @@ function moved(
   })
 }
 
-/** On a game topic, only the patches inside `/entities/plays`: the rest of ESPN's game package is not kept. */
+/** On a game topic, only the patches inside its plays: the rest of ESPN's game package is not kept. */
 function relevant(
   owner: FastCastMessage.Owner,
   patches: ReadonlyArray<typeof FastCastMessage.Patch.Type>
 ): ReadonlyArray<typeof FastCastMessage.Patch.Type> {
   const inPlays = (path: { readonly pointer: string }) =>
-    path.pointer === playsPointer || path.pointer.startsWith(`${playsPointer}/`)
+    path.pointer === gamePlays.pointer || path.pointer.startsWith(`${gamePlays.pointer}/`)
   return owner._tag === "Scoreboard"
     ? patches
     : patches.filter((patch) => inPlays(patch.path) && (!("from" in patch) || inPlays(patch.from)))
 }
 
-const playsPointer = "/entities/plays"
-
 function reset(
   documents: Documents,
   tc: string,
   league: LeagueId,
-  reason: "Gap" | "Unapplicable" | "Unreadable",
-  cause: string,
+  reason: "Gap" | "Unapplicable",
+  detail: string,
   next: Topic
 ): Effect.Effect<Advanced> {
-  return Effect.logWarning(`FastCastDocument: ${cause}; ${tc} waits for its next checkpoint`).pipe(
-    Effect.annotateLogs({ league, topic: tc, reason }),
-    Effect.andThen(Metric.update(Metric.withAttributes(resets, { league, reason }), 1)),
-    Effect.as([new Map([...documents, [tc, next]]), Option.some(Change.Reset())] as const)
-  )
+  return Effect.succeed({
+    documents: new Map([...documents, [tc, next]]),
+    change: Option.some(Change.Reset()),
+    noticed: [Notice.Reset({ league, topic: tc, reason, detail })]
+  })
 }
 
 /**
@@ -323,22 +312,18 @@ function undecoded(
 ): Effect.Effect<Advanced, Schema.SchemaError> {
   return Option.match(decodeKnownOp(frame.body), {
     onNone: () =>
-      Effect.logDebug("FastCastDocument: skipped a message of an unknown op", frame.body).pipe(
-        Effect.as([documents, Option.none()] as const)
-      ),
+      Effect.succeed({ ...unchanged(documents), noticed: [Notice.OpUnknown({ body: frame.body })] }),
     onSome: ({ op }) =>
       Option.isSome(owned) &&
       (op === "R" || op === "P" || op === "I") &&
-      (documents.get(frame.channel)?._tag === "Synced" || documents.get(frame.channel)?._tag === "Unreadable")
+      documents.get(frame.channel)?._tag === "Synced"
         ? reset(
             documents,
             frame.channel,
             owned.value.league,
             "Unapplicable",
             `message ${frame.sourceId} does not decode: ${error.message}`,
-            documents.get(frame.channel)?._tag === "Unreadable"
-              ? Topic.AskedAgain()
-              : Topic.AwaitingCheckpoint()
+            Topic.AwaitingCheckpoint()
           )
         : Effect.fail(error)
   })
@@ -355,34 +340,11 @@ const decodeKnownOp = Schema.decodeUnknownOption(
 function received(
   message: typeof FastCastMessage.Message.Type,
   owned: Option.Option<FastCastMessage.Owner>
-): Effect.Effect<void> {
-  const mid = "mid" in message ? message.mid : undefined
-  const league = Option.map(owned, (owner) => owner.league)
-  return Effect.logDebug(`FastCastDocument: ${message.op}${mid === undefined ? "" : ` ${mid}`}`).pipe(
-    Effect.annotateLogs(
-      Record.getSomes({
-        league,
-        topic: "tc" in message ? Option.some(message.tc) : Option.none(),
-        op: Option.some<string | number>(message.op),
-        mid: Option.fromUndefinedOr(mid)
-      })
-    ),
-    Effect.andThen(
-      Metric.update(
-        Metric.withAttributes(messages, Record.getSomes({ league, op: Option.some(message.op) })),
-        1
-      )
-    )
-  )
+): Notice {
+  return Notice.Received({
+    league: Option.map(owned, (owner) => owner.league),
+    op: message.op,
+    topic: "tc" in message ? Option.some(message.tc) : Option.none(),
+    mid: Option.fromUndefinedOr("mid" in message ? message.mid : undefined)
+  })
 }
-
-const messages = Metric.counter("sportal_live_feed_messages", {
-  description: "FastCast messages received, by league and op",
-  incremental: true
-})
-
-const resets = Metric.counter("sportal_live_feed_document_resets", {
-  description:
-    "Times a FastCast topic's document missed a message or could not apply one, by league and reason",
-  incremental: true
-})

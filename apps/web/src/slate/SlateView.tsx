@@ -1,6 +1,4 @@
-import type { GameId } from "@sportal/domain/Game"
 import type { Stage } from "@sportal/domain/Stage"
-import type { Watchability } from "@sportal/domain/Watchability"
 import { Fragment, useEffect, useRef } from "react"
 import type { Display, DisplayStep } from "../display/Display.ts"
 import { GameStatus } from "../game/GameStatus.tsx"
@@ -18,7 +16,6 @@ export function SlateView(props: {
   cards: ReadonlyArray<StripCard>
   display: Display
   stage: Stage
-  watchability: ReadonlyMap<GameId, Pick<Watchability, "score" | "lull" | "reasons">>
   onDrop: (dropped: DisplayStep) => void
 }) {
   const pick = props.display.pick
@@ -70,7 +67,6 @@ export function SlateView(props: {
                     card={card}
                     picked={pick === card.id}
                     droppable={dropped.commands.length > 0}
-                    watch={props.watchability.get(card.id)}
                     onDrop={() => props.onDrop(dropped)}
                   />
                 </li>
@@ -87,13 +83,7 @@ export function SlateView(props: {
  * One game in fixed columns — logo, team, score, then status and networks — so nothing shifts as names, scores,
  * and clocks change length. A game on stage shows its tile and cannot be picked.
  */
-function Card(props: {
-  card: StripCard
-  picked: boolean
-  droppable: boolean
-  watch: Pick<Watchability, "score" | "lull" | "reasons"> | undefined
-  onDrop: () => void
-}) {
+function Card(props: { card: StripCard; picked: boolean; droppable: boolean; onDrop: () => void }) {
   const { game, place } = props.card
   const bench = place?._tag === "Bench" ? place.tile : undefined
   const networks = game?.networks()
@@ -124,14 +114,6 @@ function Card(props: {
             <span className="truncate font-sans text-[10px] text-muted-foreground" title={networks}>
               {networks}
             </span>
-            {game.progress() === "live" && props.watch !== undefined && (
-              <span
-                title={props.watch.reasons.join(" · ") || "Nothing happening"}
-                className={`shrink-0 rounded-sm px-1 text-[9px] tabular-nums ${props.watch.lull ? "text-muted-foreground opacity-60" : "bg-live/15 text-live"}`}
-              >
-                {props.watch.score}
-              </span>
-            )}
             <PlaceBadge place={place} className="text-[9px]" />
           </span>
         </>

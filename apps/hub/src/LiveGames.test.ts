@@ -129,7 +129,7 @@ describe("LiveGames", () => {
     Effect.gen(function* () {
       yield* taken(Delivery.Plays({ game: one, plays: [play()] }))
       assert.strictEqual((yield* LiveGames.use((liveGames) => liveGames.latest)).live.size, 0)
-      assert.strictEqual(yield* counted("sportal_deliveries_dropped", { reason: "no game" }), 1)
+      assert.strictEqual(yield* counted("sportal_deliveries_dropped"), 1)
     }).pipe(Effect.provide(LiveGames.layer), withMetrics)
   )
 
@@ -218,26 +218,6 @@ describe("LiveGames", () => {
         assert.isFalse((yield* liveNow).has(one))
       }).pipe(Effect.provide(LiveGames.layer))
     )
-
-    it.effect("a lull begins 60 seconds after the last play, with no delivery, and is logged", () => {
-      const { logs, layer } = recording()
-      return Effect.gen(function* () {
-        yield* takenSnapshot(liveSnapshot({ id: one }))
-        const attributes = { game: "1", league: "fbs", matchup: "AWAY at HOME" }
-        assert.strictEqual(yield* gauged("sportal_lull", attributes), 0)
-        yield* TestClock.adjust("59 seconds")
-        assert.isFalse((yield* liveGameOf(one)).watchability.lull)
-        yield* TestClock.adjust("1 second")
-        assert.isTrue((yield* liveGameOf(one)).watchability.lull)
-        assert.strictEqual(yield* gauged("sportal_lull", attributes), 1)
-        assert.isDefined(yield* gauged("sportal_watchability", attributes))
-        const lulls = logs.filter(({ message }) => message.includes("lull"))
-        assert.strictEqual(lulls.length, 1)
-        assert.strictEqual(lulls[0]?.level, "Info")
-        assert.include(lulls[0]?.message, "LiveGames: AWAY at HOME: a lull began, watchability ")
-        assert.include(lulls[0]?.annotations, attributes)
-      }).pipe(Effect.provide(LiveGames.layer), Effect.provide(layer), withMetrics)
-    })
 
     it.effect("a delivery at a later time first ticks every game due before it", () => {
       const { logs, layer } = recording()
@@ -518,9 +498,7 @@ describe("LiveGames", () => {
           yield* TestClock.adjust("10 seconds")
           assert.strictEqual(logs.filter(({ level }) => level === "Error").length, 1)
           assert.strictEqual(yield* counted("sportal_game_defects"), 1)
-          yield* TestClock.adjust("50 seconds")
-          assert.isTrue((yield* liveGameOf(one)).watchability.lull)
-          yield* TestClock.adjust("29 seconds")
+          yield* TestClock.adjust("79 seconds")
           assert.isTrue(LiveGameState.$is("Live")((yield* liveGameOf(one)).state))
           yield* TestClock.adjust("1 second")
           assert.isTrue(LiveGameState.$is("Stale")((yield* liveGameOf(one)).state))
@@ -530,7 +508,7 @@ describe("LiveGames", () => {
             LiveGames.layer.pipe(
               Layer.provide(
                 sleeping((duration, clock, earlier) =>
-                  earlier === 0 && Duration.equals(duration, Duration.seconds(60))
+                  earlier === 0 && Duration.equals(duration, Duration.seconds(90))
                     ? Effect.die(new Error("the timer's sleep died"))
                     : clock.sleep(duration)
                 )
@@ -558,8 +536,7 @@ describe("LiveGames", () => {
         )
         yield* takenSnapshot(home("10:00"))
         yield* TestClock.adjust("90 seconds")
-        // The lull at 60 s changes the live game once while it is still Live.
-        assert.deepStrictEqual(yield* Ref.get(seen), ["Live", "Live", "Stale"])
+        assert.deepStrictEqual(yield* Ref.get(seen), ["Live", "Stale"])
       }).pipe(
         Effect.provide(
           LiveGames.layer.pipe(
@@ -619,7 +596,7 @@ describe("LiveGames", () => {
           assert.strictEqual(folded.live.get(one)?.plays.length, 1)
           assert.strictEqual(folded.live.get(one)?.snapshot.clock, "9:00")
           assert.isAbove(yield* Ref.get(published), 1)
-          assert.isFalse(logs.some(({ message }) => /→|started|ScoreChanged|Played|lull/.test(message)))
+          assert.isFalse(logs.some(({ message }) => /→|started|ScoreChanged|Played/.test(message)))
           const info = logs.filter(({ level }) => level === "Info")
           assert.strictEqual(info.length, 1)
           assert.include(info[0]?.message, "LiveGames: replayed 3 deliveries, 1 plays; 1 live games, in ")
@@ -633,12 +610,29 @@ describe("LiveGames", () => {
           assert.isUndefined(yield* counted("sportal_transitions"))
           const attributes = { game: "1", league: "fbs", matchup: "AWAY at HOME" }
           assert.strictEqual(yield* gauged("sportal_game_state", attributes), 2)
-          assert.isDefined(yield* gauged("sportal_watchability", attributes))
-          assert.isDefined(yield* gauged("sportal_lull", attributes))
           assert.strictEqual(yield* gauged("sportal_live_games", { state: "Live" }), 1)
           assert.strictEqual(yield* gauged("sportal_live_games", { state: "Stale" }), 0)
         }).pipe(Effect.provide(LiveGames.layer), Effect.provide(layer), withMetrics)
       }
+    )
+
+    it.effect("replay returns the number of deliveries it took", () =>
+      Effect.gen(function* () {
+        const start = yield* DateTime.now
+        const taken = yield* LiveGames.use((liveGames) =>
+          liveGames.replay(
+            Stream.make(
+              {
+                delivery: Delivery.Snapshot({ snapshot: liveSnapshot({ id: one }), from: "poll" }),
+                at: start,
+                seq: 1
+              },
+              { delivery: Delivery.Plays({ game: one, plays: [play()] }), at: start, seq: 2 }
+            )
+          )
+        )
+        assert.strictEqual(taken, 2)
+      }).pipe(Effect.provide(LiveGames.layer))
     )
 
     it.effect("replay applies recorded times, and the timer waits until it ends", () =>
@@ -708,7 +702,6 @@ describe("LiveGames", () => {
         assert.deepStrictEqual(replayed.seq, taken.seq)
         assert.isTrue(LiveGameState.$is("Live")(taken.live.get(one)?.state ?? LiveGameState.Over()))
         assert.isTrue(logs.some(({ message }) => message.includes("Live → Stale")))
-        assert.isTrue(logs.some(({ message }) => message.includes("a lull began")))
         const summary = logs.find(({ message }) => message.includes("replayed"))
         assert.include(summary?.message, "replayed 5 deliveries, 2 plays; 1 live games")
       }).pipe(Effect.provide(layer))
@@ -733,7 +726,7 @@ describe("LiveGames", () => {
 })
 
 /**
- * Five deliveries of game one from the clock's now: a snapshot, a play, a lull and a stale stretch, a score with a
+ * Five deliveries of game one from the clock's now: a snapshot, a play, a stale stretch, a score with a
  * second play, and a last snapshot.
  */
 const day = DateTime.now.pipe(

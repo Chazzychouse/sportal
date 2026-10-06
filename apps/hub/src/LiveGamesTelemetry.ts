@@ -25,9 +25,9 @@ export function reported(
   return FoldReport.$match(report, {
     Took: ({ snapshot, from, outcome, had }) =>
       Effect.logDebug(
-        `LiveGames: ${snapshot.matchup()}: ${outcome} ${from} ${snapshot.gameTime()}${Option.match(had, {
+        `LiveGames: ${snapshot.matchup()}: ${outcome} ${from} ${snapshot.statusLine()}${Option.match(had, {
           onNone: () => "",
-          onSome: (had) => ` (had ${had.gameTime()})`
+          onSome: (had) => ` (had ${had.statusLine()})`
         })}`
       ).pipe(
         Effect.andThen(
@@ -46,7 +46,6 @@ export function reported(
     Changed: ({ before, after, at }) =>
       gaugeHeld(after).pipe(
         Effect.andThen(logTransition(before, after, at)),
-        Effect.andThen(before.watchability.lull === after.watchability.lull ? Effect.void : logLull(after)),
         Effect.annotateLogs(annotationsOf(after.snapshot))
       ),
     Stopped: ({ liveGame, at }) =>
@@ -64,9 +63,9 @@ export function reported(
         Effect.andThen(PubSub.publish(events, happened)),
         Effect.annotateLogs(annotationsOf(happened.snapshot))
       ),
-    Dropped: ({ game, reason }) =>
-      Effect.logDebug(`LiveGames: plays for game ${game} dropped: ${reason}`).pipe(
-        Effect.andThen(Metric.update(Metric.withAttributes(deliveriesDropped, { reason }), 1))
+    Dropped: ({ game }) =>
+      Effect.logDebug(`LiveGames: plays for game ${game} dropped: no live game holds it`).pipe(
+        Effect.andThen(Metric.update(deliveriesDropped, 1))
       ),
     Raised: ({ snapshot, cause, by }) =>
       logDefect(`LiveGames: ${by} raised a defect; keeping the last good live game`, cause, snapshot, seq)
@@ -97,11 +96,9 @@ export function quiet(
   })
 }
 
-/** A held game's state and watchability gauges. */
+/** A held game's state gauge. */
 export function gaugeHeld(liveGame: LiveGame): Effect.Effect<void> {
-  return gaugeState(liveGame, stateValues[liveGame.state._tag]).pipe(
-    Effect.andThen(gaugeWatchability(liveGame))
-  )
+  return gaugeState(liveGame, stateValues[liveGame.state._tag])
 }
 
 /** Gauges how many live games are in each state; a state with none reads 0. */
@@ -137,24 +134,12 @@ function logLifecycle(
   now: DateTime.Utc
 ): Effect.Effect<void> {
   return Effect.logWithLevel(liveGame.isCurrent(now) ? "Info" : "Debug")(
-    `LiveGames: ${liveGame.snapshot.matchup()}: ${what}, ${liveGame.state._tag} at ${liveGame.snapshot.gameTime()}`
+    `LiveGames: ${liveGame.snapshot.matchup()}: ${what}, ${liveGame.state._tag} at ${liveGame.snapshot.statusLine()}`
   )
 }
 
 function gaugeState(liveGame: LiveGame, value: number): Effect.Effect<void> {
   return Metric.update(Metric.withAttributes(gameState, annotationsOf(liveGame.snapshot)), value)
-}
-
-function gaugeWatchability(liveGame: LiveGame): Effect.Effect<void> {
-  const attributes = annotationsOf(liveGame.snapshot)
-  return Metric.update(
-    Metric.withAttributes(watchabilityScore, attributes),
-    liveGame.watchability.score
-  ).pipe(
-    Effect.andThen(
-      Metric.update(Metric.withAttributes(lulls, attributes), liveGame.watchability.lull ? 1 : 0)
-    )
-  )
 }
 
 function logTransition(before: LiveGame, after: LiveGame, now: DateTime.Utc): Effect.Effect<void> {
@@ -167,7 +152,7 @@ function logTransition(before: LiveGame, after: LiveGame, now: DateTime.Utc): Ef
     onSome: (duration) => `, ${Math.round(Duration.toSeconds(duration))} s since the last update`
   })
   return Effect.logInfo(
-    `LiveGames: ${after.snapshot.matchup()}: ${from} → ${to} at ${after.snapshot.gameTime()}${since}`
+    `LiveGames: ${after.snapshot.matchup()}: ${from} → ${to} at ${after.snapshot.statusLine()}${since}`
   ).pipe(
     Effect.andThen(Metric.update(Metric.withAttributes(transitions, { from, to }), 1)),
     Effect.andThen(
@@ -182,21 +167,11 @@ function logTransition(before: LiveGame, after: LiveGame, now: DateTime.Utc): Ef
   )
 }
 
-/** A lull beginning or ending, at Info, with its reasons. */
-function logLull(liveGame: LiveGame): Effect.Effect<void> {
-  const { lull, score, reasons } = liveGame.watchability
-  return Effect.logInfo(
-    `LiveGames: ${liveGame.snapshot.matchup()}: a lull ${lull ? "began" : "ended"}, watchability ${score}${
-      reasons.length === 0 ? "" : ` (${reasons.join(", ")})`
-    }`
-  )
-}
-
 /** Info, with the event's fields as annotations, so the dashboard can mark it on the game's timeline. */
 function logEvent(event: GameEvent, snapshot: GameSnapshot): Effect.Effect<void> {
   const { _tag, ...fields } = event
   const team = "team" in event ? ` ${snapshot.abbreviationOf(event.team)}` : ""
-  return Effect.logInfo(`LiveGames: ${snapshot.matchup()}: ${_tag}${team} at ${snapshot.gameTime()}`).pipe(
+  return Effect.logInfo(`LiveGames: ${snapshot.matchup()}: ${_tag}${team} at ${snapshot.statusLine()}`).pipe(
     Effect.andThen(
       Metric.update(Metric.withAttributes(gameEvents, { ...annotationsOf(snapshot), event: _tag }), 1)
     ),
@@ -246,7 +221,7 @@ const snapshots = Metric.counter("sportal_snapshots", {
 const plays = Metric.counter("sportal_plays", { description: "New plays, by league", incremental: true })
 
 const deliveriesDropped = Metric.counter("sportal_deliveries_dropped", {
-  description: "Deliveries the fold could not apply, by reason",
+  description: "Plays the fold dropped, since no live game held their game",
   incremental: true
 })
 
@@ -261,14 +236,6 @@ const gameDefects = Metric.counter("sportal_game_defects", {
 
 const gameState = Metric.gauge("sportal_game_state", {
   description: "A game's state, by game: 1 Upcoming, 2 Live, 3 Stale, 4 Over, 0 once the fold lets it go"
-})
-
-const watchabilityScore = Metric.gauge("sportal_watchability", {
-  description: "How worth watching a game is, 0–100, by game"
-})
-
-const lulls = Metric.gauge("sportal_lull", {
-  description: "Whether a game is in a lull (1) or not (0), by game"
 })
 
 const transitions = Metric.counter("sportal_transitions", {

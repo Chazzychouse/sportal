@@ -550,8 +550,8 @@
         },
         {
           "refId": "C",
-          "expr": "sum by (league) (increase(sportal_live_feed_undecoded_total[$__rate_interval]) * on (job, instance) group_left target_info{sportal_mode=\"$mode\"})",
-          "legendFormat": "undecoded {{league}}"
+          "expr": "sum by (league, feed) (increase(sportal_events_undecoded_total[$__rate_interval]) * on (job, instance) group_left target_info{sportal_mode=\"$mode\"})",
+          "legendFormat": "undecoded {{league}} ({{feed}})"
         }
       ]
     },
@@ -810,11 +810,11 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by (reason) (increase(sportal_deliveries_dropped_total[$__rate_interval]) * on (job, instance) group_left target_info{sportal_mode=\"$mode\"})",
-          "legendFormat": "{{reason}}"
+          "expr": "sum (increase(sportal_deliveries_dropped_total[$__rate_interval]) * on (job, instance) group_left target_info{sportal_mode=\"$mode\"})",
+          "legendFormat": "dropped"
         }
       ],
-      "description": "Deliveries the fold could not apply, by reason."
+      "description": "Plays the fold dropped, since no live game held their game."
     },
     {
       "id": 25,

@@ -3,9 +3,10 @@ import { assert, describe, it } from "@effect/vitest"
 import type { Delivery } from "@sportal/domain/Delivery"
 import { GameId, GameSnapshot } from "@sportal/domain/Game"
 import { PlayId } from "@sportal/domain/Play"
-import { DateTime, Effect, Metric, Record, Schema, Stream } from "effect"
-import { type FeedFrame, Frame } from "../../feed-log/Frame.ts"
-import { counted, recordingLogs, withMetrics } from "../../TestTelemetry.ts"
+import { type Data, DateTime, Effect, Metric, Option, Record, Schema, Stream } from "effect"
+import { type FeedFrame, Frame } from "../../Frame.ts"
+import { recordingLogs, withMetrics } from "../../TestTelemetry.ts"
+import type { Notice } from "../Provider.ts"
 import * as EspnDecode from "./EspnDecode.ts"
 import { EspnEvent } from "./EspnEvent.ts"
 
@@ -66,25 +67,27 @@ describe("EspnDecode", () => {
 
         assert.deepStrictEqual(
           encoded(
-            all.map((output) =>
-              output._tag !== "Delivered"
-                ? { tag: output._tag }
-                : output.delivery._tag === "Listing"
-                  ? {
-                      seq: output.seq,
-                      tag: "Listing",
-                      league: output.delivery.league,
-                      games: output.delivery.games.map((game) => encode(game))
-                    }
-                  : output.delivery._tag === "Snapshot"
+            all
+              .filter((output) => output._tag !== "Noted")
+              .map((output) =>
+                output._tag !== "Delivered"
+                  ? { tag: output._tag }
+                  : output.delivery._tag === "Listing"
                     ? {
                         seq: output.seq,
-                        tag: "Snapshot",
-                        from: output.delivery.from,
-                        snapshot: encode(output.delivery.snapshot)
+                        tag: "Listing",
+                        league: output.delivery.league,
+                        games: output.delivery.games.map((game) => encode(game))
                       }
-                    : { seq: output.seq, tag: output.delivery._tag }
-            )
+                    : output.delivery._tag === "Snapshot"
+                      ? {
+                          seq: output.seq,
+                          tag: "Snapshot",
+                          from: output.delivery.from,
+                          snapshot: encode(output.delivery.snapshot)
+                        }
+                      : { seq: output.seq, tag: output.delivery._tag }
+              )
           ),
           expected.deliveries
         )
@@ -163,13 +166,13 @@ describe("EspnDecode", () => {
       })
   )
 
-  it.effect("a pushed game no listing has is not delivered, and is counted", () =>
+  it.effect("a pushed game no listing has is not delivered, and is noted Unlisted", () =>
     Effect.gen(function* () {
-      const deliveries = yield* decoded(recorded(socketTexts.slice(0, 3)))
+      const { deliveries, noted } = yield* said(recorded(socketTexts.slice(0, 3)))
 
       assert.deepStrictEqual(deliveries, [])
-      assert.strictEqual(yield* counted("sportal_live_feed_unlisted", { league: "nfl" }), 16)
-    }).pipe(withMetrics)
+      assert.strictEqual(count(noted, "Unlisted", { league: "nfl" }), 16)
+    })
   )
 
   it.effect("a copy adds the value read at its source", () =>
@@ -197,19 +200,16 @@ describe("EspnDecode", () => {
     })
   )
 
-  it.effect("a missed message sends only that topic back to waiting for a checkpoint, and is counted", () =>
+  it.effect("a missed message sends only that topic back to waiting for a checkpoint, noted Reset Gap", () =>
     Effect.gen(function* () {
       const skipped = [...socketTexts.slice(0, 20), ...socketTexts.slice(21)]
-      const deliveries = yield* decoded([
+      const { deliveries, noted } = yield* said([
         poll("nfl", scoreboardBody),
         ...recorded(skipped),
         poll("nfl", scoreboardBody)
       ])
 
-      assert.strictEqual(
-        yield* counted("sportal_live_feed_document_resets", { league: "nfl", reason: "Gap" }),
-        1
-      )
+      assert.strictEqual(count(noted, "Reset", { league: "nfl", reason: "Gap" }), 1)
       // Frames 2–5 are C, S, H, and its checkpoint, so text 21, the first after the gap, is frame 23.
       const snapshotSeqs = deliveries.flatMap(({ seq, delivery }) =>
         delivery._tag === "Snapshot" ? [seq] : []
@@ -217,7 +217,7 @@ describe("EspnDecode", () => {
       assert.isNotEmpty(snapshotSeqs)
       assert.isTrue(snapshotSeqs.every((seq) => seq < 23))
       assert.strictEqual(deliveries.at(-1)?.delivery._tag, "Listing", "the scoreboard poll still decodes")
-    }).pipe(withMetrics)
+    })
   )
 
   it.effect("a patch or an idle message before any checkpoint gives nothing and fails nothing", () =>
@@ -231,7 +231,7 @@ describe("EspnDecode", () => {
   )
 
   it.effect(
-    "a patch that will not apply sends its topic back to waiting for a checkpoint, and is counted",
+    "a patch that will not apply sends its topic back to waiting for a checkpoint, and is noted",
     () =>
       Effect.gen(function* () {
         const unapplicable = message("event-football-nfl", 4286638, [
@@ -240,7 +240,7 @@ describe("EspnDecode", () => {
         const copyFromNothing = message("event-football-nfl", 4286639, [
           { op: "copy", from: `${ariAtNyg}/competitors/5/score`, path: `${ariAtNyg}/competitors/0/score` }
         ])
-        const deliveries = yield* decoded([
+        const { deliveries, noted } = yield* said([
           poll("nfl", scoreboardBody),
           ...recorded(socketTexts.slice(0, 3)),
           unapplicable,
@@ -251,16 +251,13 @@ describe("EspnDecode", () => {
           deliveries.filter(({ seq }) => seq > 5),
           []
         )
-        assert.strictEqual(
-          yield* counted("sportal_live_feed_document_resets", { league: "nfl", reason: "Unapplicable" }),
-          1
-        )
-      }).pipe(withMetrics)
+        assert.strictEqual(count(noted, "Reset", { league: "nfl", reason: "Unapplicable" }), 1)
+      })
   )
 
   it.effect("removing a whole event the document does not have changes nothing", () =>
     Effect.gen(function* () {
-      const deliveries = yield* decoded([
+      const { deliveries, noted } = yield* said([
         poll("nfl", scoreboardBody),
         ...recorded(socketTexts.slice(0, 3)),
         message("event-football-nfl", 4286638, [{ op: "remove", path: "s:20~l:28~e:1~c:1" }]),
@@ -273,13 +270,13 @@ describe("EspnDecode", () => {
         deliveries.filter(({ seq }) => seq > 5).map(({ seq, delivery }) => [seq, delivery._tag]),
         [[7, "Snapshot"]]
       )
-      assert.isUndefined(yield* counted("sportal_live_feed_document_resets"))
-    }).pipe(withMetrics)
+      assert.strictEqual(count(noted, "Reset"), 0)
+    })
   )
 
-  it.effect("a message that does not decode on a synced topic resets the topic, and is counted", () =>
+  it.effect("a message that does not decode on a synced topic resets the topic, and is noted", () =>
     Effect.gen(function* () {
-      const deliveries = yield* decoded([
+      const { deliveries, noted } = yield* said([
         poll("nfl", scoreboardBody),
         ...recorded(socketTexts.slice(0, 3)),
         message("event-football-nfl", 4286638, [{ op: "test", path: `${ariAtNyg}/clock`, value: "1:00" }]),
@@ -293,12 +290,9 @@ describe("EspnDecode", () => {
         [],
         "the topic waits for its next checkpoint"
       )
-      assert.strictEqual(
-        yield* counted("sportal_live_feed_document_resets", { league: "nfl", reason: "Unapplicable" }),
-        1
-      )
-      assert.isUndefined(yield* counted("sportal_frames_undecoded"))
-    }).pipe(withMetrics)
+      assert.strictEqual(count(noted, "Reset", { league: "nfl", reason: "Unapplicable" }), 1)
+      assert.strictEqual(count(noted, "FrameUndecoded"), 0)
+    })
   )
 
   it.effect("a topic sent back to waiting asks for its checkpoint again, once per reset", () =>
@@ -339,103 +333,146 @@ describe("EspnDecode", () => {
   )
 
   it.effect(
-    "a checkpoint that does not decode is counted, and the next message on its topic asks for it again",
+    "a checkpoint that does not decode leaves its topic waiting, noted FrameUndecoded, with no Resync",
     () =>
       Effect.gen(function* () {
         const unreadable = [
+          poll("nfl", scoreboardBody),
           checkpoint("event-football-nfl", 7, { sports: "not a scoreboard" }),
-          message("event-football-nfl", 8, [])
+          message("event-football-nfl", 8, [
+            { op: "replace", path: `${ariAtNyg}/competitors/0/score`, value: "17" }
+          ])
         ]
+        const { deliveries, noted } = yield* said(unreadable)
 
-        assert.deepStrictEqual(yield* resyncs(unreadable), ["event-football-nfl"])
-        assert.strictEqual(yield* counted("sportal_frames_undecoded", { feed: "fastcast" }), 1)
-      }).pipe(withMetrics)
+        assert.deepStrictEqual(yield* resyncs(unreadable), [])
+        assert.deepStrictEqual(
+          deliveries.map(({ seq }) => seq),
+          [1],
+          "the message after it is not applied"
+        )
+        assert.strictEqual(count(noted, "FrameUndecoded", { feed: "fastcast", kind: "checkpoint" }), 1)
+      })
   )
 
-  it.effect("checkpoints that keep not decoding ask for another only once, until one decodes", () =>
+  it.effect("the next checkpoint that decodes syncs it", () =>
     Effect.gen(function* () {
-      const unreadableAgain = [
-        checkpoint("event-football-nfl", 7, { sports: "not a scoreboard" }),
-        message("event-football-nfl", 8, []),
-        checkpoint("event-football-nfl", 9, { sports: "not a scoreboard" }),
-        message("event-football-nfl", 10, []),
-        message("event-football-nfl", 11, []),
-        checkpoint("event-football-nfl", 12, { sports: "not a scoreboard" }),
-        message("event-football-nfl", 13, [])
-      ]
-
-      assert.deepStrictEqual(yield* resyncs(unreadableAgain), ["event-football-nfl"])
-    })
-  )
-
-  it.effect("a checkpoint that decodes after an unreadable one syncs its topic again", () =>
-    Effect.gen(function* () {
-      const recovered = [
+      const all = yield* outputs([
         poll("nfl", scoreboardBody),
         checkpoint("event-football-nfl", 7, { sports: "not a scoreboard" }),
-        message("event-football-nfl", 8, []),
-        checkpoint("event-football-nfl", 9, { sports: "not a scoreboard" }),
         checkpoint("event-football-nfl", 4286637, JSON.parse(checkpointBody)),
         // ARI at NYG: the away team (competitor 0) had 14, the home team 6.
         message("event-football-nfl", 4286638, [
           { op: "copy", from: `${ariAtNyg}/competitors/1/score`, path: `${ariAtNyg}/competitors/0/score` }
-        ]),
-        message("event-football-nfl", 4286640, [])
-      ]
-      const all = yield* outputs(recovered)
+        ])
+      ])
 
       assert.deepStrictEqual(
         all.flatMap((output) =>
-          output._tag === "Delivered" && output.seq === 6 && output.delivery._tag === "Snapshot"
+          output._tag === "Delivered" && output.seq === 4 && output.delivery._tag === "Snapshot"
             ? [[output.delivery.snapshot.id, output.delivery.snapshot.away.score]]
             : []
         ),
         [["401872966", 6]]
       )
-      assert.deepStrictEqual(
-        all.flatMap((output) => (output._tag === "Resync" ? [output.seq] : [])),
-        [3, 7],
-        "one resync for the unreadable checkpoint, and one for the gap after the good one"
-      )
+      assert.isFalse(all.some((output) => output._tag === "Resync"))
     })
   )
 
-  it.effect("counts the messages by league and op, and the games pushed", () =>
+  it.effect("decode touches no metric and logs nothing", () =>
     Effect.gen(function* () {
-      yield* decoded([poll("nfl", scoreboardBody), ...recorded(socketTexts)])
-      const byLeagueAndOp = (yield* Metric.snapshot).flatMap((metric) =>
-        metric.id === "sportal_live_feed_messages" && metric.type === "Counter"
-          ? [[metric.attributes?.league, metric.attributes?.op, metric.state.count]]
-          : []
-      )
+      const { logs, layer } = recordingLogs()
+      const unknownType = { ...playEntities["40187297063"], type: { id: "999", text: "Something New" } }
+      const brokenPlay = { ...Record.remove(playEntities["401872966237"] ?? {}, "statYardage"), id: "1" }
+      const skipped = [...socketTexts.slice(0, 20), ...socketTexts.slice(21)]
+      const { noted } = yield* said([
+        poll("nfl", "not json"),
+        poll("nfl", JSON.stringify({ events: [{ id: "broken" }] })),
+        ...recorded(socketTexts.slice(0, 3)),
+        poll("nfl", scoreboardBody),
+        ...recorded(skipped.slice(3)),
+        checkpoint(ariAtNygPlays, 99, {
+          entities: { plays: { "40187297063": unknownType, "1": brokenPlay } }
+        })
+      ]).pipe(Effect.provide(layer))
 
-      assert.sameDeepMembers(byLeagueAndOp, [
-        [undefined, "C", 1],
-        ["nfl", "S", 1],
-        ["nfl", "H", 1],
-        ["nfl", "R", 3],
-        ["nfl", "P", 81],
-        ["nfl", "I", 16]
-      ])
-      assert.isAbove(Number((yield* counted("sportal_live_feed_games", { league: "nfl" })) ?? 0), 16)
-      assert.isUndefined(yield* counted("sportal_live_feed_undecoded"), "every event decodes")
+      assert.sameMembers(
+        [...new Set(noted.map(({ notice }) => notice._tag))],
+        [
+          "FrameUndecoded",
+          "EventUndecoded",
+          "Received",
+          "Unlisted",
+          "Pushed",
+          "Reset",
+          "PlayTypeUnknown",
+          "PlayUndecoded"
+        ]
+      )
+      assert.deepStrictEqual(yield* Metric.snapshot, [])
+      assert.deepStrictEqual(logs, [])
     }).pipe(withMetrics)
   )
 
-  it.effect("a frame that does not decode is logged with its seq, counted, and skipped", () =>
+  it.effect("notes each message by league and op, and the games pushed", () =>
     Effect.gen(function* () {
-      const { logs, layer } = recordingLogs()
-      const deliveries = yield* decoded([poll("nfl", "not json"), poll("nfl", scoreboardBody)]).pipe(
-        Effect.provide(layer)
+      const { noted } = yield* said([poll("nfl", scoreboardBody), ...recorded(socketTexts)])
+      const received = noted.flatMap(({ notice }) =>
+        notice._tag === "Received" ? [`${Option.getOrElse(notice.league, () => "none")} ${notice.op}`] : []
       )
+      const pushed = noted.flatMap(({ notice }) =>
+        notice._tag === "Pushed" && notice.league === "nfl" ? [notice.games] : []
+      )
+
+      assert.deepStrictEqual(
+        Object.fromEntries(
+          [...new Set(received)].map((key) => [key, received.filter((k) => k === key).length])
+        ),
+        { "none C": 1, "nfl S": 1, "nfl H": 1, "nfl R": 3, "nfl P": 81, "nfl I": 16 }
+      )
+      assert.isAbove(
+        pushed.reduce((total, games) => total + games, 0),
+        16
+      )
+      assert.strictEqual(count(noted, "EventUndecoded"), 0, "every event decodes")
+    })
+  )
+
+  it.effect(
+    "an event that does not decode is skipped and noted by league and feed, and the rest listed",
+    () =>
+      Effect.gen(function* () {
+        const { events } = Schema.decodeUnknownSync(
+          Schema.fromJsonString(Schema.Struct({ events: Schema.Array(Schema.Json) }))
+        )(scoreboardBody)
+        const {
+          deliveries: [listing],
+          noted
+        } = yield* said([poll("nfl", JSON.stringify({ events: [{ id: "broken" }, ...events] }))])
+
+        assert.strictEqual(
+          listing?.delivery._tag === "Listing" ? listing.delivery.games.length : 0,
+          events.length
+        )
+        assert.strictEqual(count(noted, "EventUndecoded", { league: "nfl", feed: "poll" }), 1)
+      })
+  )
+
+  it.effect("a frame that does not decode is noted FrameUndecoded with its seq, and skipped", () =>
+    Effect.gen(function* () {
+      const { deliveries, noted } = yield* said([poll("nfl", "not json"), poll("nfl", scoreboardBody)])
 
       assert.deepStrictEqual(
         deliveries.map(({ seq }) => seq),
         [2]
       )
-      assert.strictEqual(yield* counted("sportal_frames_undecoded", { feed: "poll" }), 1)
-      assert.isTrue(logs.some((log) => log.level === "Error" && log.annotations.seq === 1))
-    }).pipe(withMetrics)
+      assert.deepStrictEqual(
+        noted.flatMap(({ notice, seq }) =>
+          notice._tag === "FrameUndecoded" ? [[seq, notice.feed, notice.channel, notice.kind]] : []
+        ),
+        [[1, "poll", "nfl", "response"]]
+      )
+    })
   )
 
   describe("a game's plays", () => {
@@ -517,7 +554,7 @@ describe("EspnDecode", () => {
       () =>
         Effect.gen(function* () {
           const game = "gp-football-nfl-401872971"
-          const deliveries = yield* decoded([
+          const { deliveries, noted } = yield* said([
             checkpoint(game, moveRecording.checkpoint.mid, moveRecording.checkpoint.body),
             ...moveRecording.messages.map(
               ({ op, tc, mid, ts, pl }): FeedFrame => ({
@@ -547,44 +584,38 @@ describe("EspnDecode", () => {
             "PENALTY on BUF-C.McGovern"
           )
           assert.include(deliveries.map(playIds).at(-1) ?? [], PlayId.make("4018729711662"))
-          assert.isUndefined(yield* counted("sportal_live_feed_document_resets"))
-          assert.isUndefined(yield* counted("sportal_frames_undecoded"))
-        }).pipe(withMetrics)
+          assert.strictEqual(count(noted, "Reset"), 0)
+          assert.strictEqual(count(noted, "FrameUndecoded"), 0)
+        })
     )
 
-    it.effect(
-      "a play that does not decode is left out, logged once and counted, and the rest delivered",
-      () =>
-        Effect.gen(function* () {
-          const { logs, layer } = recordingLogs()
-          const broken = {
-            ...Record.remove(playEntities["401872966237"] ?? {}, "statYardage"),
-            id: "401872966999"
-          }
-          const deliveries = yield* decoded([
-            checkpoint(ariAtNygPlays, 99, {
-              entities: { plays: { ...plays("401872966237", "401872966271"), "401872966999": broken } }
-            }),
-            playsMessage(100, [
-              { op: "replace", path: "/entities/plays/401872966271/text", value: "Corrected" }
-            ])
-          ]).pipe(Effect.provide(layer))
-
-          assert.deepStrictEqual(deliveries.map(playIds), [
-            ["401872966237", "401872966271"],
-            ["401872966237", "401872966271"]
+    it.effect("a play that does not decode is left out, noted once, and the rest delivered", () =>
+      Effect.gen(function* () {
+        const broken = {
+          ...Record.remove(playEntities["401872966237"] ?? {}, "statYardage"),
+          id: "401872966999"
+        }
+        const { deliveries, noted } = yield* said([
+          checkpoint(ariAtNygPlays, 99, {
+            entities: { plays: { ...plays("401872966237", "401872966271"), "401872966999": broken } }
+          }),
+          playsMessage(100, [
+            { op: "replace", path: "/entities/plays/401872966271/text", value: "Corrected" }
           ])
-          assert.strictEqual(yield* counted("sportal_live_feed_undecoded_plays", { league: "nfl" }), 1)
-          assert.strictEqual(
-            logs.filter((log) => log.level === "Warn" && log.message.includes("401872966999")).length,
-            1
-          )
-        }).pipe(withMetrics)
+        ])
+
+        assert.deepStrictEqual(deliveries.map(playIds), [
+          ["401872966237", "401872966271"],
+          ["401872966237", "401872966271"]
+        ])
+        assert.strictEqual(count(noted, "PlayUndecoded", { league: "nfl", play: "401872966999" }), 1)
+        assert.strictEqual(count(noted, "PlayUndecoded"), 1)
+      })
     )
 
     it.effect("a patch outside the plays gives nothing and fails nothing", () =>
       Effect.gen(function* () {
-        const deliveries = yield* decoded([
+        const { deliveries, noted } = yield* said([
           checkpoint(ariAtNygPlays, 99, { entities: {} }),
           playsMessage(100, [
             { op: "replace", path: "/boxscore/teams/0/statistics/0/displayValue", value: "12" }
@@ -593,14 +624,14 @@ describe("EspnDecode", () => {
         ])
 
         assert.deepStrictEqual(deliveries.map(playIds), [[], ["40187297063"]])
-        assert.isUndefined(yield* counted("sportal_live_feed_document_resets"))
-      }).pipe(withMetrics)
+        assert.strictEqual(count(noted, "Reset"), 0)
+      })
     )
 
     it.effect("a gap on one game's topic leaves the other games and the scoreboard decoding", () =>
       Effect.gen(function* () {
         const other = "gp-football-nfl-401872971"
-        const deliveries = yield* decoded([
+        const { deliveries, noted } = yield* said([
           poll("nfl", scoreboardBody),
           ...recorded(socketTexts.slice(0, 3)),
           checkpoint(ariAtNygPlays, 99, { entities: {} }),
@@ -618,30 +649,46 @@ describe("EspnDecode", () => {
           ["Plays", "Snapshot"]
         )
         assert.deepStrictEqual(after.map(playIds)[0], ["401872971330"])
-        assert.strictEqual(
-          yield* counted("sportal_live_feed_document_resets", { league: "nfl", reason: "Gap" }),
-          1
-        )
-      }).pipe(withMetrics)
+        assert.strictEqual(count(noted, "Reset", { league: "nfl", reason: "Gap" }), 1)
+      })
     )
 
-    it.effect("logs a play type the table does not know once, at Info", () =>
+    it.effect("notes a play type the table does not know once", () =>
       Effect.gen(function* () {
-        const { logs, layer } = recordingLogs()
         const unknown = { ...playEntities["40187297063"], type: { id: "999", text: "Something New" } }
-        yield* decoded([
+        const { noted } = yield* said([
           checkpoint(ariAtNygPlays, 99, { entities: { plays: { "40187297063": unknown } } }),
           playsMessage(100, [{ op: "replace", path: "/entities/plays/40187297063/text", value: "Again" }])
-        ]).pipe(Effect.provide(layer))
+        ])
 
-        assert.strictEqual(
-          logs.filter((log) => log.level === "Info" && log.message.includes("Something New")).length,
-          1
-        )
+        assert.strictEqual(count(noted, "PlayTypeUnknown", { id: "999", text: "Something New" }), 1)
+        assert.strictEqual(count(noted, "PlayTypeUnknown"), 1)
       })
     )
   })
 })
+
+/** What `frames` decode to, each numbered by its place from 1: the deliveries, and what decoding noticed. */
+function said(frames: ReadonlyArray<FeedFrame>) {
+  return outputs(frames).pipe(
+    Effect.map((all) => ({
+      deliveries: all.flatMap((output) => (output._tag === "Delivered" ? [output] : [])),
+      noted: all.flatMap((output) => (output._tag === "Noted" ? [output] : []))
+    }))
+  )
+}
+
+/** How many of `noted` are `tag` notices with `fields`. */
+function count<T extends Notice["_tag"]>(
+  noted: ReadonlyArray<{ readonly notice: Notice }>,
+  tag: T,
+  fields: Partial<Data.TaggedEnum.Value<Notice, T>> = {}
+) {
+  return noted.filter(({ notice }) => {
+    const values = new Map(Object.entries(notice))
+    return notice._tag === tag && Object.entries(fields).every(([key, value]) => values.get(key) === value)
+  }).length
+}
 
 /** The deliveries `frames` decode to, each numbered by its place from 1. */
 function decoded(frames: ReadonlyArray<FeedFrame>) {
@@ -743,7 +790,6 @@ function inPlay(game: GameSnapshot | undefined) {
     away: game?.away.score,
     down: game?.situation?.down,
     distance: game?.situation?.distance,
-    isRedZone: game?.situation?.isRedZone,
     homeTimeouts: game?.situation?.homeTimeouts,
     awayTimeouts: game?.situation?.awayTimeouts,
     lastPlay: game?.situation?.lastPlay
