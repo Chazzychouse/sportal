@@ -306,8 +306,82 @@ describe("GameActors", () => {
         const behind = logs.filter(({ message }) => message.includes("behind"))
         assert.strictEqual(behind.length, 1)
         assert.strictEqual(behind[0]?.level, "Debug")
-        assert.strictEqual(yield* counted("sportal_snapshots", { outcome: "behind" }), 1)
-        assert.strictEqual(yield* counted("sportal_snapshots", { outcome: "taken" }), 1)
+        assert.strictEqual(yield* counted("sportal_snapshots", { outcome: "behind", game: "1" }), 1)
+        assert.strictEqual(
+          yield* counted("sportal_snapshots", { outcome: "taken", game: "1", matchup: "AWAY at HOME" }),
+          1
+        )
+      }).pipe(Effect.provide(TestCluster.gameActors), Effect.provide(layer), withMetrics)
+    })
+
+    it.effect("a game's state is gauged by game, and reads 0 once its actor stops", () =>
+      Effect.gen(function* () {
+        const actors = yield* GameActors
+        yield* actors.receive(live("10:00"), "poll")
+        assert.strictEqual(yield* gauged("sportal_game_state", { game: "1", matchup: "AWAY at HOME" }), 2)
+        yield* TestClock.adjust(0)
+        yield* TestClock.adjust("90 seconds")
+        assert.strictEqual(yield* gauged("sportal_game_state", { game: "1" }), 3)
+        yield* actors.receive(snapshot({ id: one, status: "final", period: 4, clock: "0:00" }), "poll")
+        assert.strictEqual(yield* gauged("sportal_game_state", { game: "1" }), 4)
+        yield* TestClock.adjust("330 seconds")
+        assert.strictEqual(yield* gauged("sportal_game_state", { game: "1" }), 0)
+      }).pipe(Effect.provide(TestCluster.gameActors), withMetrics)
+    )
+
+    it.effect("an actor's start is counted by game", () =>
+      Effect.gen(function* () {
+        const actors = yield* GameActors
+        yield* actors.receive(live("10:00"), "poll")
+        yield* actors.receive(live("9:00"), "poll")
+        assert.strictEqual(yield* counted("sportal_game_actor_starts", { game: "1", league: "fbs" }), 1)
+      }).pipe(Effect.provide(TestCluster.gameActors), withMetrics)
+    )
+
+    it.effect("a stale stretch is timed when the game is taken again", () =>
+      Effect.gen(function* () {
+        const actors = yield* GameActors
+        yield* actors.receive(live("10:00"), "poll")
+        yield* TestClock.adjust(0)
+        yield* TestClock.adjust("120 seconds")
+        yield* actors.receive(live("9:00"), "poll")
+        const stale = (yield* Metric.snapshot).find((metric) => metric.id === "sportal_stale_duration")
+        assert.deepStrictEqual(
+          stale?.type === "Histogram" ? [stale.state.count, stale.state.sum] : undefined,
+          [1, 120_000]
+        )
+      }).pipe(Effect.provide(TestCluster.gameActors), withMetrics)
+    )
+
+    it.effect("a game event is logged at Info with the game's annotations, and counted", () => {
+      const { logs, layer } = recording()
+      return Effect.gen(function* () {
+        const actors = yield* GameActors
+        yield* actors.receive(live("10:00"), "poll")
+        yield* actors.receive(
+          snapshot({
+            id: one,
+            status: "live",
+            period: 1,
+            clock: "9:00",
+            home: { team: team("HOME"), score: 7 }
+          }),
+          "poll"
+        )
+        const scored = logs.filter(({ message }) => message.includes("ScoreChanged"))
+        assert.strictEqual(scored.length, 1)
+        assert.strictEqual(scored[0]?.level, "Info")
+        assert.include(
+          scored[0]?.message,
+          "GameActors: AWAY at HOME: ScoreChanged HOME at live, period 1, 9:00"
+        )
+        assert.include(scored[0]?.annotations, {
+          game: "1",
+          matchup: "AWAY at HOME",
+          event: "ScoreChanged",
+          points: 7
+        })
+        assert.strictEqual(yield* counted("sportal_game_events", { game: "1", event: "ScoreChanged" }), 1)
       }).pipe(Effect.provide(TestCluster.gameActors), Effect.provide(layer), withMetrics)
     })
 

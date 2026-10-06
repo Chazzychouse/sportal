@@ -10,6 +10,7 @@ import { Slate } from "./Slate.ts"
 import * as ScenarioProvider from "./scenario/ScenarioProvider.ts"
 import * as TestCluster from "./TestCluster.ts"
 import { game, scripted } from "./TestProvider.ts"
+import { gauged, recordingLogs, withMetrics } from "./TestTelemetry.ts"
 
 describe("Slate", () => {
   it.effect("keeps the listing's order", () =>
@@ -100,6 +101,27 @@ describe("Slate", () => {
       assert.isTrue((yield* slate.latest).watchability[0]?.lull)
     }).pipe(Effect.provide(slateOver(scripted([[game("1")]]))))
   )
+
+  it.effect("gauges each game's watchability and lull, and logs a lull beginning", () => {
+    const { logs, layer } = recordingLogs()
+    return Effect.gen(function* () {
+      yield* TestClock.adjust(0)
+      yield* TestClock.adjust("250 millis")
+      const attributes = { game: "1", league: "fbs", matchup: "AWAY at HOME" }
+      assert.isDefined(yield* gauged("sportal_watchability", attributes))
+      assert.strictEqual(yield* gauged("sportal_lull", attributes), 0)
+      for (let poll = 0; poll < 7; poll++) {
+        yield* TestClock.adjust("10 seconds")
+        yield* TestClock.adjust("250 millis")
+      }
+      assert.strictEqual(yield* gauged("sportal_lull", attributes), 1)
+      const lulls = logs.filter(({ message }) => message.includes("lull"))
+      assert.strictEqual(lulls.length, 1)
+      assert.strictEqual(lulls[0]?.level, "Info")
+      assert.include(lulls[0]?.message, "Slate: AWAY at HOME: a lull began, watchability ")
+      assert.include(lulls[0]?.annotations, attributes)
+    }).pipe(Effect.provide(slateOver(scripted([[game("1")]]))), Effect.provide(layer), withMetrics)
+  })
 
   it.effect("leaves off a game no listing has", () =>
     Effect.gen(function* () {

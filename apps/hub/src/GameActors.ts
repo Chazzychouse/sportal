@@ -1,5 +1,7 @@
 import { GameId, GameSnapshot } from "@sportal/domain/Game"
+import type { GameEvent } from "@sportal/domain/GameEvent"
 import { DeliverySource, LiveGame, LiveGameState } from "@sportal/domain/LiveGame"
+import type { TeamId } from "@sportal/domain/Team"
 import {
   Cause,
   Context,
@@ -30,6 +32,11 @@ export class GameActors extends Context.Service<
     readonly changes: Stream.Stream<ReadonlyMap<GameId, LiveGame>>
   }
 >()("sportal/hub/GameActors") {
+  /** Game `game`'s log annotations and metric attributes, read from `snapshot`. */
+  static annotationsOf(game: GameId, snapshot: GameSnapshot) {
+    return { game, league: snapshot.league, matchup: snapshot.matchup() }
+  }
+
   /** The service, its entity, and its registry, on the cluster provided by the caller. */
   static readonly layer: Layer.Layer<GameActors, never, Sharding.Sharding> = Layer.suspend(() =>
     // Suspended because the entity and the registry are declared below this class.
@@ -76,17 +83,13 @@ function logDefect(
   return Effect.logError(message, cause).pipe(
     Effect.andThen(Metric.update(gameDefects, 1)),
     Effect.annotateLogs({
-      ...annotationsOf(game, snapshot),
+      ...GameActors.annotationsOf(game, snapshot),
       snapshot: Exit.match(Schema.encodeExit(GameSnapshot)(snapshot), {
         onSuccess: (encoded) => encoded,
         onFailure: () => snapshot.id
       })
     })
   )
-}
-
-function annotationsOf(game: GameId, snapshot: GameSnapshot) {
-  return { game, league: snapshot.league, matchup: snapshot.matchup() }
 }
 
 const Receive = Rpc.make("Receive", { payload: { snapshot: GameSnapshot, source: DeliverySource } })
@@ -109,7 +112,16 @@ const gameEntity = Game.toLayer(
         yield* Option.match(yield* SubscriptionRef.get(state), {
           onNone: () => Effect.void,
           onSome: (liveGame) =>
-            logLifecycle("stopped", liveGame, now).pipe(asGame(liveGame.snapshot, "stopping"), Effect.asVoid)
+            logLifecycle("stopped", liveGame, now).pipe(
+              Effect.andThen(
+                Metric.update(
+                  Metric.withAttributes(gameState, GameActors.annotationsOf(id, liveGame.snapshot)),
+                  0
+                )
+              ),
+              asGame(liveGame.snapshot, "stopping"),
+              Effect.asVoid
+            )
         })
       })
     )
@@ -124,8 +136,22 @@ const gameEntity = Game.toLayer(
           onSome: (liveGame) =>
             liveGames.set(id, liveGame).pipe(
               Effect.andThen(
+                Metric.update(
+                  Metric.withAttributes(gameState, GameActors.annotationsOf(id, liveGame.snapshot)),
+                  stateValues[liveGame.state._tag]
+                )
+              ),
+              Effect.andThen(
                 Option.match(current, {
-                  onNone: () => logLifecycle("started", liveGame, now),
+                  onNone: () =>
+                    logLifecycle("started", liveGame, now).pipe(
+                      Effect.andThen(
+                        Metric.update(
+                          Metric.withAttributes(actorStarts, GameActors.annotationsOf(id, liveGame.snapshot)),
+                          1
+                        )
+                      )
+                    ),
                   onSome: (before) => logTransition(before, liveGame, now)
                 })
               )
@@ -187,7 +213,15 @@ const gameEntity = Game.toLayer(
               }
             )}`
           )
-          yield* Metric.update(Metric.withAttributes(snapshots, { outcome, source }), 1)
+          yield* Metric.update(
+            Metric.withAttributes(snapshots, { outcome, source, ...GameActors.annotationsOf(id, snapshot) }),
+            1
+          )
+          if (Option.isSome(before) && Option.isSome(next)) {
+            yield* Effect.forEach(next.value.snapshot.eventsSince(before.value.snapshot), (event) =>
+              logEvent(event, next.value.snapshot)
+            )
+          }
         }).pipe(asGame(snapshot, "a snapshot"), Effect.asVoid)
     })
 
@@ -207,7 +241,7 @@ const gameEntity = Game.toLayer(
               snapshot
             ).pipe(Effect.as(Option.none<A>()))
           ),
-          Effect.annotateLogs(annotationsOf(id, snapshot))
+          Effect.annotateLogs(GameActors.annotationsOf(id, snapshot))
         )
     }
 
@@ -289,13 +323,53 @@ function logTransition(before: LiveGame, after: LiveGame, now: DateTime.Utc): Ef
     Stale: ({ lastUpdatedAt }) => Option.some(lastUpdatedAt),
     Over: () => Option.none()
   })
-  const since = Option.match(lastUpdatedAt, {
+  const silent = Option.map(lastUpdatedAt, (at) => DateTime.distance(at, now))
+  const since = Option.match(silent, {
     onNone: () => "",
-    onSome: (at) => `, ${Math.round(Duration.toSeconds(DateTime.distance(at, now)))} s since the last update`
+    onSome: (duration) => `, ${Math.round(Duration.toSeconds(duration))} s since the last update`
   })
   return Effect.logInfo(
     `GameActors: ${after.snapshot.matchup()}: ${from} → ${to} at ${gameTimeOf(after.snapshot)}${since}`
-  ).pipe(Effect.andThen(Metric.update(Metric.withAttributes(transitions, { from, to }), 1)))
+  ).pipe(
+    Effect.andThen(Metric.update(Metric.withAttributes(transitions, { from, to }), 1)),
+    Effect.andThen(
+      Option.match(silent, {
+        onNone: () => Effect.void,
+        onSome: (duration) =>
+          from === "Stale"
+            ? Metric.update(
+                Metric.withAttributes(
+                  staleDuration,
+                  GameActors.annotationsOf(after.snapshot.id, after.snapshot)
+                ),
+                duration
+              )
+            : Effect.void
+      })
+    )
+  )
+}
+
+/** Info, with the event's fields as annotations, so the dashboard can mark it on the game's timeline. */
+function logEvent(event: GameEvent, snapshot: GameSnapshot): Effect.Effect<void> {
+  const { _tag, ...fields } = event
+  const team = "team" in event ? ` ${teamOf(event.team, snapshot)}` : ""
+  return Effect.logInfo(`GameActors: ${snapshot.matchup()}: ${_tag}${team} at ${gameTimeOf(snapshot)}`).pipe(
+    Effect.andThen(
+      Metric.update(
+        Metric.withAttributes(gameEvents, {
+          ...GameActors.annotationsOf(snapshot.id, snapshot),
+          event: _tag
+        }),
+        1
+      )
+    ),
+    Effect.annotateLogs({ ...fields, event: _tag })
+  )
+}
+
+function teamOf(id: TeamId, snapshot: GameSnapshot): string {
+  return [snapshot.home.team, snapshot.away.team].find((team) => team.id === id)?.abbreviation ?? id
 }
 
 function gameTimeOf(snapshot: GameSnapshot): string {
@@ -350,11 +424,15 @@ function countByState(games: ReadonlyMap<GameId, LiveGame>): Effect.Effect<void>
   )
 }
 
-// Every state, so a state with no games reads 0. Written as a record so that a new state fails to compile here.
-const everyState = Object.keys({ Upcoming: 0, Live: 0, Stale: 0, Over: 0 } satisfies Record<
+// Each state's value on `sportal_game_state`, where 0 is an actor that has stopped. Written as a record so that a new
+// state fails to compile here.
+const stateValues = { Upcoming: 1, Live: 2, Stale: 3, Over: 4 } satisfies Record<
   LiveGameState["_tag"],
-  0
->)
+  number
+>
+
+// Every state, so a state with no games reads 0.
+const everyState = Object.keys(stateValues)
 
 const gameActors = Metric.gauge("sportal_game_actors", { description: "Game actors running" })
 
@@ -376,6 +454,25 @@ const transitions = Metric.counter("sportal_transitions", {
 const gameDefects = Metric.counter("sportal_game_defects", {
   description: "Defects in a game actor, and snapshots a game actor did not take",
   incremental: true
+})
+
+const gameState = Metric.gauge("sportal_game_state", {
+  description: "A game's state, by game: 1 Upcoming, 2 Live, 3 Stale, 4 Over, 0 once its actor stops"
+})
+
+const actorStarts = Metric.counter("sportal_game_actor_starts", {
+  description: "Starts of a game's actor, by game",
+  incremental: true
+})
+
+const gameEvents = Metric.counter("sportal_game_events", {
+  description: "Events in a game between the snapshots its actor took, by game and event",
+  incremental: true
+})
+
+const staleDuration = Metric.timer("sportal_stale_duration", {
+  description: "How long a stale game went without a snapshot, recorded when it is taken again",
+  boundaries: [90, 120, 180, 300, 600, 900, 1800, 3600].map((seconds) => seconds * 1000)
 })
 
 const receiveDuration = Metric.timer("sportal_receive_duration", {

@@ -1,0 +1,711 @@
+{
+  "uid": "sportal-game",
+  "title": "Game actors",
+  "schemaVersion": 41,
+  "time": {
+    "from": "now-3h",
+    "to": "now"
+  },
+  "refresh": "30s",
+  "links": [
+    {
+      "title": "Hub",
+      "type": "link",
+      "url": "/d/sportal-hub/hub?${mode:queryparam}&${__url_time_range}",
+      "icon": "dashboard"
+    }
+  ],
+  "annotations": {
+    "list": [
+      {
+        "name": "Events",
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "enable": true,
+        "iconColor": "yellow",
+        "expr": "{service_name=\"sportal-hub\"} | sportal_mode=\"$mode\" | game=~\"$game\" | event!=\"\"",
+        "textFormat": "{{matchup}}: {{event}}"
+      },
+      {
+        "name": "Transitions",
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "enable": true,
+        "iconColor": "blue",
+        "expr": "{service_name=\"sportal-hub\"} | sportal_mode=\"$mode\" | game=~\"$game\" |= \"→\""
+      },
+      {
+        "name": "Lulls",
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "enable": false,
+        "iconColor": "orange",
+        "expr": "{service_name=\"sportal-hub\"} | sportal_mode=\"$mode\" | game=~\"$game\" |= \"a lull\""
+      }
+    ]
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "mode",
+        "label": "Mode",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "query": "label_values(target_info{service_name=\"sportal-hub\"}, sportal_mode)",
+        "refresh": 2,
+        "sort": 1
+      },
+      {
+        "name": "game",
+        "label": "Game",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "description": "Games with an actor in the time range, by matchup.",
+        "query": {
+          "query": "query_result(max by (game, matchup) (max_over_time(sportal_game_state_ratio[$__range]) * on (job, instance) group_left target_info{sportal_mode=\"$mode\"}))",
+          "refId": "game"
+        },
+        "regex": "/game=\"(?<value>[^\"]+)\".*matchup=\"(?<text>[^\"]+)\"/",
+        "refresh": 2,
+        "sort": 5,
+        "multi": true,
+        "includeAll": true,
+        "allValue": ".+",
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "type": "row",
+      "title": "Games",
+      "collapsed": false,
+      "id": 1,
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "type": "table",
+      "title": "Games",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Every game with an actor in the time range. Click a game to show only it below.",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "max by (game, league, matchup) (sportal_game_state_ratio * on (job, instance) group_left target_info{sportal_mode=\"$mode\"})",
+          "instant": true,
+          "range": false,
+          "format": "table"
+        },
+        {
+          "refId": "B",
+          "expr": "max by (game) (sportal_watchability_ratio * on (job, instance) group_left target_info{sportal_mode=\"$mode\"})",
+          "instant": true,
+          "range": false,
+          "format": "table"
+        },
+        {
+          "refId": "C",
+          "expr": "max by (game) (sportal_lull_ratio * on (job, instance) group_left target_info{sportal_mode=\"$mode\"})",
+          "instant": true,
+          "range": false,
+          "format": "table"
+        },
+        {
+          "refId": "D",
+          "expr": "sum by (game) (round(increase(sportal_snapshots_total{outcome=\"taken\"}[$__range]) * on (job, instance) group_left target_info{sportal_mode=\"$mode\"}))",
+          "instant": true,
+          "range": false,
+          "format": "table"
+        },
+        {
+          "refId": "E",
+          "expr": "sum by (game) (round(increase(sportal_snapshots_total{outcome=\"behind\"}[$__range]) * on (job, instance) group_left target_info{sportal_mode=\"$mode\"}))",
+          "instant": true,
+          "range": false,
+          "format": "table"
+        },
+        {
+          "refId": "F",
+          "expr": "sum by (game) (round(increase(sportal_stale_duration_milliseconds_count[$__range]) * on (job, instance) group_left target_info{sportal_mode=\"$mode\"}))",
+          "instant": true,
+          "range": false,
+          "format": "table"
+        },
+        {
+          "refId": "G",
+          "expr": "sum by (game) (round(increase(sportal_game_events_total[$__range]) * on (job, instance) group_left target_info{sportal_mode=\"$mode\"}))",
+          "instant": true,
+          "range": false,
+          "format": "table"
+        },
+        {
+          "refId": "H",
+          "expr": "sum by (game) (round(increase(sportal_game_actor_starts_total[$__range]) * on (job, instance) group_left target_info{sportal_mode=\"$mode\"}))",
+          "instant": true,
+          "range": false,
+          "format": "table"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "joinByField",
+          "options": {
+            "byField": "game",
+            "mode": "outer"
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "Time 1": true,
+              "Time 2": true,
+              "Time 3": true,
+              "Time 4": true,
+              "Time 5": true,
+              "Time 6": true,
+              "Time 7": true,
+              "Time 8": true
+            },
+            "indexByName": {
+              "matchup": 0,
+              "league": 1,
+              "Value #A": 2,
+              "Value #B": 3,
+              "Value #C": 4,
+              "Value #D": 5,
+              "Value #E": 6,
+              "Value #F": 7,
+              "Value #G": 8,
+              "Value #H": 9,
+              "game": 10
+            },
+            "renameByName": {
+              "Value #A": "State",
+              "Value #B": "Watchability",
+              "Value #C": "Now",
+              "Value #D": "Taken",
+              "Value #E": "Behind",
+              "Value #F": "Stale stretches",
+              "Value #G": "Events",
+              "Value #H": "Actor starts",
+              "matchup": "Matchup",
+              "league": "League",
+              "game": "Game id"
+            }
+          }
+        },
+        {
+          "id": "sortBy",
+          "options": {
+            "sort": [
+              {
+                "field": "Watchability",
+                "desc": true
+              }
+            ]
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "links": [
+            {
+              "title": "Show only this game",
+              "url": "/d/sportal-game/game-actors?${mode:queryparam}&var-game=${__data.fields[\"Game id\"]}&${__url_time_range}"
+            }
+          ]
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "State"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "0": {
+                        "text": "Stopped",
+                        "color": "text",
+                        "index": 0
+                      },
+                      "1": {
+                        "text": "Upcoming",
+                        "color": "blue",
+                        "index": 1
+                      },
+                      "2": {
+                        "text": "Live",
+                        "color": "green",
+                        "index": 2
+                      },
+                      "3": {
+                        "text": "Stale",
+                        "color": "orange",
+                        "index": 3
+                      },
+                      "4": {
+                        "text": "Over",
+                        "color": "purple",
+                        "index": 4
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Now"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "0": {
+                        "text": "Play",
+                        "color": "green",
+                        "index": 0
+                      },
+                      "1": {
+                        "text": "Lull",
+                        "color": "yellow",
+                        "index": 1
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Watchability"
+            },
+            "properties": [
+              {
+                "id": "min",
+                "value": 0
+              },
+              {
+                "id": "max",
+                "value": 100
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "gauge",
+                  "mode": "basic"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "id": 2,
+      "gridPos": {
+        "x": 0,
+        "y": 1,
+        "w": 24,
+        "h": 10
+      }
+    },
+    {
+      "type": "row",
+      "title": "Selected games",
+      "collapsed": false,
+      "id": 3,
+      "gridPos": {
+        "x": 0,
+        "y": 11,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "type": "state-timeline",
+      "title": "State",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "max by (matchup) (sportal_game_state_ratio{game=~\"$game\"} * on (job, instance) group_left target_info{sportal_mode=\"$mode\"})",
+          "legendFormat": "{{matchup}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "Stopped",
+                  "color": "text",
+                  "index": 0
+                },
+                "1": {
+                  "text": "Upcoming",
+                  "color": "blue",
+                  "index": 1
+                },
+                "2": {
+                  "text": "Live",
+                  "color": "green",
+                  "index": 2
+                },
+                "3": {
+                  "text": "Stale",
+                  "color": "orange",
+                  "index": 3
+                },
+                "4": {
+                  "text": "Over",
+                  "color": "purple",
+                  "index": 4
+                }
+              }
+            }
+          ],
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "showValue": "never",
+        "mergeValues": true
+      },
+      "id": 4,
+      "gridPos": {
+        "x": 0,
+        "y": 12,
+        "w": 24,
+        "h": 8
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Watchability",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "max by (matchup) (sportal_watchability_ratio{game=~\"$game\"} * on (job, instance) group_left target_info{sportal_mode=\"$mode\"})",
+          "legendFormat": "{{matchup}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "min": 0,
+          "max": 100,
+          "custom": {
+            "lineInterpolation": "stepAfter"
+          }
+        },
+        "overrides": []
+      },
+      "id": 5,
+      "gridPos": {
+        "x": 0,
+        "y": 20,
+        "w": 24,
+        "h": 9
+      }
+    },
+    {
+      "type": "state-timeline",
+      "title": "Lulls",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "max by (matchup) (sportal_lull_ratio{game=~\"$game\"} * on (job, instance) group_left target_info{sportal_mode=\"$mode\"})",
+          "legendFormat": "{{matchup}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "Play",
+                  "color": "green",
+                  "index": 0
+                },
+                "1": {
+                  "text": "Lull",
+                  "color": "yellow",
+                  "index": 1
+                }
+              }
+            }
+          ],
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "showValue": "never",
+        "mergeValues": true
+      },
+      "id": 6,
+      "gridPos": {
+        "x": 0,
+        "y": 29,
+        "w": 24,
+        "h": 8
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Snapshots taken and behind",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Behind is a snapshot older in game time than the one the actor has: the feed serving a stale copy.",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (matchup, outcome) (increase(sportal_snapshots_total{game=~\"$game\"}[$__rate_interval]) * on (job, instance) group_left target_info{sportal_mode=\"$mode\"})",
+          "legendFormat": "{{matchup}} {{outcome}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 60
+          }
+        },
+        "overrides": []
+      },
+      "id": 7,
+      "gridPos": {
+        "x": 0,
+        "y": 37,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "type": "barchart",
+      "title": "Events",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (matchup, event) (round(increase(sportal_game_events_total{game=~\"$game\"}[$__range]) * on (job, instance) group_left target_info{sportal_mode=\"$mode\"}))",
+          "instant": true,
+          "range": false,
+          "format": "table"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "groupingToMatrix",
+          "options": {
+            "columnField": "event",
+            "rowField": "matchup",
+            "valueField": "Value"
+          }
+        }
+      ],
+      "options": {
+        "stacking": "normal",
+        "xTickLabelRotation": -30
+      },
+      "id": 8,
+      "gridPos": {
+        "x": 12,
+        "y": 37,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Stale stretches",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "How long a stale game went without a snapshot, recorded when it is taken again. A game goes stale after 90 s.",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.5, sum by (le) (rate(sportal_stale_duration_milliseconds_bucket{game=~\"$game\"}[$__rate_interval]) * on (job, instance) group_left target_info{sportal_mode=\"$mode\"}))",
+          "legendFormat": "p50"
+        },
+        {
+          "refId": "B",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(sportal_stale_duration_milliseconds_bucket{game=~\"$game\"}[$__rate_interval]) * on (job, instance) group_left target_info{sportal_mode=\"$mode\"}))",
+          "legendFormat": "p95"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms"
+        },
+        "overrides": []
+      },
+      "id": 9,
+      "gridPos": {
+        "x": 0,
+        "y": 45,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "type": "bargauge",
+      "title": "Actor starts",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "More than one start for a game is its actor stopping and starting again.",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (matchup) (round(increase(sportal_game_actor_starts_total{game=~\"$game\"}[$__range]) * on (job, instance) group_left target_info{sportal_mode=\"$mode\"}))",
+          "instant": true,
+          "range": false,
+          "format": "time_series",
+          "legendFormat": "{{matchup}}"
+        }
+      ],
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "basic"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "min": 0,
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "id": 10,
+      "gridPos": {
+        "x": 12,
+        "y": 45,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "type": "logs",
+      "title": "Logs",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "{service_name=\"sportal-hub\"} | sportal_mode=\"$mode\" | game=~\"$game\""
+        }
+      ],
+      "options": {
+        "sortOrder": "Descending",
+        "showTime": true
+      },
+      "id": 11,
+      "gridPos": {
+        "x": 0,
+        "y": 53,
+        "w": 24,
+        "h": 12
+      }
+    },
+    {
+      "type": "table",
+      "title": "Receive traces",
+      "datasource": {
+        "type": "tempo",
+        "uid": "tempo"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "queryType": "traceql",
+          "limit": 20,
+          "query": "{resource.service.name=\"sportal-hub\" && resource.sportal.mode=\"$mode\" && name=\"GameActors.receive\" && span.sportal.game=~\"$game\"}"
+        }
+      ],
+      "id": 12,
+      "gridPos": {
+        "x": 0,
+        "y": 65,
+        "w": 24,
+        "h": 8
+      }
+    }
+  ]
+}
