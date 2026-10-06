@@ -44,8 +44,8 @@ function leagueOf(folder: string): Option.Option<LeagueId> {
 }
 
 /**
- * The instant a poll was taken, from its file name: "20261003T160848Z.json.gz" (`record.sh`, a UTC instant) or
- * "1791130515.585.json.gz" (`record.py`, epoch seconds then milliseconds).
+ * The instant a poll was taken, from its file name: "20261003T160848Z.json.gz" (a UTC instant) or
+ * "1791130515.585.json.gz" (epoch seconds, then milliseconds).
  */
 function instantOf(file: string): Option.Option<DateTime.Utc> {
   const utc = /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z\.json\.gz$/.exec(file)

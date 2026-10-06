@@ -28,7 +28,7 @@ describe("Recording.polls", () => {
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer))
   )
 
-  it.effect("reads a record.sh name as its UTC instant", () =>
+  it.effect("reads a name written as a UTC instant", () =>
     Effect.gen(function* () {
       const dir = yield* recordedLeague("nfl", ["20261003T160848Z.json.gz"])
       const polls = yield* Recording.polls(dir)

@@ -10,20 +10,11 @@ import { FeedLog } from "./feed-log/FeedLog.ts"
 import type { Frame } from "./feed-log/Frame.ts"
 import { LiveGames } from "./LiveGames.ts"
 import * as EspnDecode from "./provider/espn/EspnDecode.ts"
+import { neAtBufFrames } from "./provider/espn/TestEspn.ts"
 import * as ImportRecording from "./recording/ImportRecording.ts"
 import * as TestDatabase from "./TestDatabase.ts"
 import { counted, recordingLogs, withMetrics } from "./TestTelemetry.ts"
 
-// NE at BUF on 2026-10-04, imported from the recording with
-// `pnpm --filter @sportal/hub feed:import --recording …/2026-10-04/nfl --games 401872971 --out …`: its game topic's
-// frames and every scoreboard poll of the day, trimmed to it.
-const fixture = join(
-  import.meta.dirname,
-  "provider",
-  "espn",
-  "fixtures",
-  "nfl-2026-10-04-ne-buf.frames.jsonl.gz"
-)
 const neAtBuf = GameId.make("401872971")
 
 // Measured once over the fixture: every play id its topic's patches add, whole or one at a time (none is removed,
@@ -138,7 +129,7 @@ describe("a recorded game", () => {
   )
 })
 
-const frames = Stream.runCollect(ImportRecording.readFrames(fixture))
+const frames = Stream.runCollect(ImportRecording.readFrames(neAtBufFrames))
 
 /** Appends `received` to the feed log in order; the log is closed after, so every frame is written. */
 function appended(received: ReadonlyArray<Omit<Frame, "seq">>) {

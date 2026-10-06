@@ -1,4 +1,3 @@
-import { readFileSync } from "node:fs"
 import { assert, describe, it } from "@effect/vitest"
 import { ChannelAvailability } from "@sportal/domain/Channel"
 import { Network } from "@sportal/domain/Game"
@@ -8,10 +7,12 @@ import { DateTime, Effect, Fiber, Layer, Logger, Option, Ref, Stream } from "eff
 import { HttpClient, HttpClientResponse } from "effect/http"
 import { TestClock } from "effect/testing"
 import * as EspnProvider from "../../provider/espn/EspnProvider.ts"
+import { recordedScoreboard } from "../../provider/espn/TestEspn.ts"
 import { listedBy } from "../../provider/TestProvider.ts"
 import * as TestDatabase from "../../TestDatabase.ts"
 import { ChannelStore } from "../ChannelStore.ts"
 import { Source } from "../Source.ts"
+import { recordedGuide } from "./TestYouTubeTv.ts"
 import * as YouTubeTv from "./YouTubeTv.ts"
 
 // Addresses recorded from YouTube TV's live guide on 2026-10-03.
@@ -143,8 +144,6 @@ function storeKnowingEspn() {
   ).pipe(Layer.provide(ChannelStore.layer), Layer.provide(TestDatabase.layer(":memory:")))
 }
 
-// The first page of YouTube TV's live guide, read 2026-10-03T20:24:45Z, reduced to what the source reads.
-const recordedGuide = readFileSync(new URL("./fixtures/guide-2026-10-03T2024Z.json", import.meta.url), "utf8")
 const readAt = DateTime.toEpochMillis(DateTime.makeUnsafe("2026-10-03T20:24:45Z"))
 const ohioStateAtIowa = snapshot({
   status: "live",
@@ -413,10 +412,8 @@ function tallied(league: LeagueId) {
 
 /** The source over a fresh database, and ESPN answering from its 2026-10-03 recordings. */
 function matchingLayer() {
-  const espn = (name: string) =>
-    readFileSync(new URL(`../../provider/espn/fixtures/${name}.json`, import.meta.url), "utf8")
-  const fbs = espn("fbs-scoreboard-2026-10-03T2024Z")
-  const nfl = espn("nfl-scoreboard-pregame")
+  const fbs = recordedScoreboard("fbs-scoreboard-2026-10-03T2024Z")
+  const nfl = recordedScoreboard("nfl-scoreboard-pregame")
   const recorded = Layer.succeed(
     HttpClient.HttpClient,
     HttpClient.make((request) =>

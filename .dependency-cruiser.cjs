@@ -106,6 +106,14 @@ module.exports = {
       to: { path: "^apps/hub/src/provider/TestProvider\\.ts$" }
     },
     {
+      name: "test-adapter-data-is-for-tests",
+      comment:
+        "An adapter's recorded payloads, read for tests of other modules, are imported only by test files.",
+      severity: "error",
+      from: { pathNot: "\\.test\\.ts$" },
+      to: { path: "^apps/hub/src/(provider/espn/TestEspn|source/youtube-tv/TestYouTubeTv)\\.ts$" }
+    },
+    {
       name: "no-junk-drawers",
       comment: "Name a file for the concept it owns.",
       severity: "error",

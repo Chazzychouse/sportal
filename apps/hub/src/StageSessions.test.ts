@@ -1,4 +1,3 @@
-import { readFileSync } from "node:fs"
 import { assert, describe, it } from "@effect/vitest"
 import { GameId, type GameSnapshot, Network } from "@sportal/domain/Game"
 import { broadcast, liveSnapshot, snapshot, team } from "@sportal/domain/TestGame"
@@ -9,6 +8,7 @@ import { Slate } from "./Slate.ts"
 import { StageSessions } from "./StageSessions.ts"
 import { ChannelStore } from "./source/ChannelStore.ts"
 import { Source } from "./source/Source.ts"
+import { recordedGuide } from "./source/youtube-tv/TestYouTubeTv.ts"
 import * as YouTubeTv from "./source/youtube-tv/YouTubeTv.ts"
 import * as TestDatabase from "./TestDatabase.ts"
 
@@ -239,12 +239,7 @@ describe("StageSessions", () => {
     Effect.gen(function* () {
       yield* TestClock.setTime(DateTime.toEpochMillis(DateTime.makeUnsafe("2026-10-03T20:24:45Z")))
       const source = yield* Source
-      yield* source.readGuide(
-        readFileSync(
-          new URL("./source/youtube-tv/fixtures/guide-2026-10-03T2024Z.json", import.meta.url),
-          "utf8"
-        )
-      )
+      yield* source.readGuide(recordedGuide)
       const sessions = yield* StageSessions
       const playing = yield* sessions.dispatch({ _tag: "Assign", tile: 0, game: ohioStateAtIowa.id })
       assert.strictEqual(playing.tiles[0]?._tag, "StreamTile")
