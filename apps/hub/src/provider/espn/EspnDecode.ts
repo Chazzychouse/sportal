@@ -1,16 +1,13 @@
 import { Delivery } from "@sportal/domain/Delivery"
-import { GameId, GameSnapshot } from "@sportal/domain/Game"
+import type { GameId, GameSnapshot } from "@sportal/domain/Game"
 import { LeagueId } from "@sportal/domain/League"
 import { Play } from "@sportal/domain/Play"
-import { Team, TeamId } from "@sportal/domain/Team"
-import { Array as Arr, DateTime, Effect, Metric, Option, Record, Result, Schema, Stream } from "effect"
+import { Array as Arr, Effect, Metric, Option, Record, Result, Schema, Stream } from "effect"
 import type { Frame } from "../../feed-log/Frame.ts"
 import { Decoded, type Provider } from "../Provider.ts"
-import * as EspnPayload from "./EspnPayload.ts"
+import { EspnEvent } from "./EspnEvent.ts"
 import * as EspnPlay from "./EspnPlay.ts"
-import * as EspnSnapshot from "./EspnSnapshot.ts"
 import * as FastCastDocument from "./FastCastDocument.ts"
-import * as FastCastPayload from "./FastCastPayload.ts"
 
 /**
  * What each ESPN frame said, in order. A poll response is its league's `Listing`. A scoreboard topic's change is a
@@ -32,21 +29,16 @@ export const decode: Provider["Service"]["decode"] = (frames) =>
     )
   )
 
-/** The snapshots in one ESPN scoreboard; an event that does not decode is skipped and logged. */
+/** The snapshots in one ESPN scoreboard; an event that does not decode is skipped, logged, and counted. */
 export function slateOf(
   league: LeagueId,
-  scoreboard: typeof EspnPayload.Scoreboard.Type
+  scoreboard: typeof Scoreboard.Type
 ): Effect.Effect<ReadonlyArray<GameSnapshot>> {
-  return Effect.forEach(scoreboard.events, (raw) =>
-    Option.match(decodeScoreboardEvent(raw), {
-      onNone: () =>
-        Effect.logWarning("EspnDecode: skipped an event that failed to decode", raw).pipe(
-          Effect.as(Option.none())
-        ),
-      onSome: (event) => Effect.succeed(toSnapshot(league, event))
-    })
-  ).pipe(Effect.map(Arr.getSomes), Effect.withSpan("EspnDecode.slateOf"))
+  return gamesOf(league, scoreboard.events).pipe(Effect.withSpan("EspnDecode.slateOf"))
 }
+
+/** The site scoreboard as polled: its events, each read by `EspnEvent`. */
+export const Scoreboard = Schema.Struct({ events: Schema.Array(Schema.Unknown) })
 
 /**
  * Each league's last listing, the FastCast topics' documents, the unknown play types already logged, and the plays
@@ -80,50 +72,7 @@ function listed(state: State, frame: Frame): Effect.Effect<readonly [State, Said
 }
 
 const decodeLeague = Schema.decodeUnknownEffect(LeagueId)
-const decodeScoreboard = Schema.decodeUnknownEffect(Schema.fromJsonString(EspnPayload.Scoreboard))
-
-const decodeScoreboardEvent = Schema.decodeUnknownOption(EspnPayload.Event)
-
-function toSnapshot(league: LeagueId, event: typeof EspnPayload.Event.Type): Option.Option<GameSnapshot> {
-  const competition = event.competitions[0]
-  const home = competition.competitors.find((c) => c.homeAway === "home")
-  const away = competition.competitors.find((c) => c.homeAway === "away")
-  const kickoff = DateTime.make(event.date)
-  if (home === undefined || away === undefined || Option.isNone(kickoff)) return Option.none()
-
-  const side = (competitor: typeof home) => ({
-    team: new Team({
-      id: TeamId.make(`${league}:${competitor.team.id}`),
-      abbreviation: competitor.team.abbreviation,
-      name: competitor.team.displayName,
-      location: competitor.team.location ?? competitor.team.displayName,
-      shortName: competitor.team.shortDisplayName ?? competitor.team.displayName,
-      logo: competitor.team.logo
-    }),
-    score: competitor.score ?? 0,
-    ranking: competitor.curatedRank?.current
-  })
-
-  return Option.some(
-    new GameSnapshot({
-      id: GameId.make(event.id),
-      league,
-      kickoff: DateTime.toUtc(kickoff.value),
-      status: event.status.type,
-      period: event.status.period,
-      clock: event.status.displayClock,
-      home: side(home),
-      away: side(away),
-      broadcasts: (competition.geoBroadcasts ?? []).flatMap((broadcast) =>
-        EspnSnapshot.broadcast(broadcast.type.shortName, broadcast.media.shortName)
-      ),
-      situation:
-        competition.situation === undefined
-          ? undefined
-          : EspnSnapshot.situation(league, competition.situation, home.team.id)
-    })
-  )
-}
+const decodeScoreboard = Schema.decodeUnknownEffect(Schema.fromJsonString(Scoreboard))
 
 function pushed(state: State, frame: Frame): Effect.Effect<readonly [State, Said]> {
   return FastCastDocument.advance(state.documents, frame).pipe(
@@ -134,7 +83,10 @@ function pushed(state: State, frame: Frame): Effect.Effect<readonly [State, Said
         onSome: (said) => {
           switch (said.topic) {
             case "scoreboard":
-              return snapshotsOf(said.league, said.events).pipe(
+              return gamesOf(said.league, said.events).pipe(
+                Effect.tap((games) =>
+                  Metric.update(Metric.withAttributes(gamesPushed, { league: said.league }), games.length)
+                ),
                 Effect.flatMap((games) => advancedToListed(state.listings, games)),
                 Effect.map((deliveries) => [moved, deliveries.map((one) => delivered(frame, one))] as const)
               )
@@ -162,9 +114,9 @@ function delivered(frame: Frame, delivery: Delivery) {
 }
 
 /** The events as games; an event that does not decode is logged and counted, and the rest still delivered. */
-function snapshotsOf(
+function gamesOf(
   league: LeagueId,
-  events: ReadonlyArray<Schema.Json>
+  events: ReadonlyArray<unknown>
 ): Effect.Effect<ReadonlyArray<GameSnapshot>> {
   return Effect.forEach(events, (event) =>
     decodeEvent[league](event).pipe(
@@ -177,15 +129,12 @@ function snapshotsOf(
         )
       )
     )
-  ).pipe(
-    Effect.map(Arr.getSomes),
-    Effect.tap((games) => Metric.update(Metric.withAttributes(gamesPushed, { league }), games.length))
-  )
+  ).pipe(Effect.map(Arr.getSomes))
 }
 
 const decodeEvent = {
-  nfl: Schema.decodeUnknownEffect(FastCastPayload.Event("nfl")),
-  fbs: Schema.decodeUnknownEffect(FastCastPayload.Event("fbs"))
+  nfl: Schema.decodeUnknownEffect(EspnEvent("nfl")),
+  fbs: Schema.decodeUnknownEffect(EspnEvent("fbs"))
 }
 
 /** Each pushed game as its league's listed game advanced to it; a game no listing has is counted and dropped. */
@@ -289,7 +238,7 @@ const undecodedPlays = Metric.counter("sportal_live_feed_undecoded_plays", {
 })
 
 const undecodedEvents = Metric.counter("sportal_live_feed_undecoded", {
-  description: "Events the live feed changed in a way that no longer decodes, by league",
+  description: "ESPN events, polled or pushed, that did not decode and were skipped, by league",
   incremental: true
 })
 

@@ -5,7 +5,6 @@ import { NodeRuntime, NodeServices } from "@effect/platform-node"
 import type { LeagueId } from "@sportal/domain/League"
 import { DateTime, Effect, FileSystem, Option, Schema } from "effect"
 import * as EspnDecode from "../provider/espn/EspnDecode.ts"
-import * as EspnPayload from "../provider/espn/EspnPayload.ts"
 import { Scenario } from "../scenario/Scenario.ts"
 // A script entry point, like main.ts, so it may name the scenario adapter's folder.
 import { folder } from "../scenario/ScenarioIngest.ts"
@@ -93,7 +92,7 @@ function epochNameInstant(file: string): Option.Option<DateTime.Utc> {
   return Option.some(DateTime.makeUnsafe(Number(match[1]) * 1000 + Number(match[2])))
 }
 
-const decodeScoreboard = Schema.decodeEffect(Schema.fromJsonString(EspnPayload.Scoreboard))
+const decodeScoreboard = Schema.decodeEffect(Schema.fromJsonString(EspnDecode.Scoreboard))
 
 // As a script: pnpm --filter @sportal/hub scenario:cut <name> <recording-dir> <from> <to> [game ids…]
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

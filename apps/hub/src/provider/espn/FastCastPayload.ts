@@ -1,8 +1,4 @@
-import { GameId, GameSnapshot } from "@sportal/domain/Game"
-import type { LeagueId } from "@sportal/domain/League"
-import { Team, TeamId } from "@sportal/domain/Team"
-import { Effect, Schema, SchemaGetter, SchemaIssue, Stream } from "effect"
-import * as EspnSnapshot from "./EspnSnapshot.ts"
+import { type Effect, Schema, SchemaGetter, SchemaIssue, Stream } from "effect"
 
 // A patch's path. On a scoreboard topic: the uid of the event it changes (`s:20~l:28~e:<id>~c:<id>`), then a JSON
 // Pointer into that event, where no pointer means the whole event. On a game topic: a JSON Pointer alone, with no uid.
@@ -111,63 +107,6 @@ export const GameCheckpoint = Schema.Struct({
   )
 })
 
-// FastCast's competitor is the team itself, with its score and rank beside its names.
-const Competitor = Schema.Struct({
-  id: Schema.String,
-  homeAway: Schema.Literals(["home", "away"]),
-  score: Schema.optional(EspnSnapshot.Score),
-  abbreviation: Schema.String,
-  displayName: Schema.String,
-  location: Schema.optional(Schema.String),
-  logo: Schema.optional(Schema.String),
-  rank: Schema.optional(EspnSnapshot.Ranking)
-})
-
-/** One event of a `league` topic's document, read as a `GameSnapshot`. */
-export function Event(league: LeagueId) {
-  return Schema.Struct({
-    id: Schema.String,
-    date: Schema.DateTimeUtcFromString,
-    fullStatus: Schema.Struct({ period: Schema.Int, displayClock: Schema.String, type: EspnSnapshot.Status }),
-    competitors: Schema.Array(Competitor),
-    broadcasts: Schema.optional(
-      Schema.Array(Schema.Struct({ type: Schema.String, shortName: Schema.String }))
-    ),
-    situation: Schema.optional(EspnSnapshot.Situation)
-  }).pipe(
-    Schema.decodeTo(Schema.toType(GameSnapshot), {
-      decode: SchemaGetter.transformEffect((event) => {
-        const home = event.competitors.find((competitor) => competitor.homeAway === "home")
-        const away = event.competitors.find((competitor) => competitor.homeAway === "away")
-        return home === undefined || away === undefined
-          ? Effect.fail(
-              new SchemaIssue.InvalidValue({ message: "An event needs a home and an away team" }, event)
-            )
-          : Effect.succeed(
-              new GameSnapshot({
-                id: GameId.make(event.id),
-                league,
-                kickoff: event.date,
-                status: event.fullStatus.type,
-                period: event.fullStatus.period,
-                clock: event.fullStatus.displayClock,
-                home: side(league, home),
-                away: side(league, away),
-                broadcasts: (event.broadcasts ?? []).flatMap(({ type, shortName }) =>
-                  EspnSnapshot.broadcast(type, shortName)
-                ),
-                situation:
-                  event.situation === undefined
-                    ? undefined
-                    : EspnSnapshot.situation(league, event.situation, home.id)
-              })
-            )
-      }),
-      encode: SchemaGetter.forbidden(() => "A GameSnapshot cannot be encoded back to a FastCast event")
-    })
-  )
-}
-
 function inflate(compressed: Uint8Array): Effect.Effect<string, SchemaIssue.Issue> {
   return Stream.fromReadableStream({
     evaluate: () =>
@@ -175,20 +114,4 @@ function inflate(compressed: Uint8Array): Effect.Effect<string, SchemaIssue.Issu
     onError: (cause) =>
       new SchemaIssue.InvalidValue({ message: `Not zlib-deflated: ${String(cause)}` }, compressed)
   }).pipe(Stream.decodeText, Stream.mkString)
-}
-
-// FastCast has no short display name: Ingest replaces every pushed game's names with the poll's.
-function side(league: LeagueId, competitor: typeof Competitor.Type) {
-  return {
-    team: new Team({
-      id: TeamId.make(`${league}:${competitor.id}`),
-      abbreviation: competitor.abbreviation,
-      name: competitor.displayName,
-      location: competitor.location ?? competitor.displayName,
-      shortName: competitor.displayName,
-      logo: competitor.logo
-    }),
-    score: competitor.score ?? 0,
-    ranking: competitor.rank
-  }
 }
