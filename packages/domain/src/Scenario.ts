@@ -4,9 +4,6 @@ import type { LeagueId } from "./League.ts"
 import { Situation } from "./Situation.ts"
 import { broadcast, snapshot, team } from "./TestGame.ts"
 
-/** The whole slate `at` milliseconds after a scenario starts. */
-const Frame = Schema.Struct({ at: Schema.Int, slate: Schema.Array(GameSnapshot) })
-
 /**
  * A timeline of game snapshots for several games, scripted or cut from a recording, that a Hub can play instead
  * of a provider. Its instants are as written or recorded; `slateAt` moves them to when it is played.
@@ -15,8 +12,8 @@ export class Scenario extends Schema.Class<Scenario>("sportal/Scenario")({
   name: Schema.String,
   /** When the scenario starts, as written or recorded. */
   origin: Schema.DateTimeUtcFromString,
-  /** In order of `at`, the first at 0. */
-  frames: Schema.Array(Frame)
+  /** The whole slate `at` milliseconds after the scenario starts, in order of `at`, the first at 0. */
+  frames: Schema.Array(Schema.Struct({ at: Schema.Int, slate: Schema.Array(GameSnapshot) }))
 }) {
   /**
    * A scenario written as games and the changes to each from an offset in scenario time ("m:ss" or "h:mm:ss";
@@ -34,29 +31,7 @@ export class Scenario extends Schema.Class<Scenario>("sportal/Scenario")({
       readonly network?: string
       readonly kickoff?: string
       readonly ranking?: { readonly home?: number; readonly away?: number }
-      readonly timeline: ReadonlyArray<
-        readonly [
-          offset: string,
-          change: {
-            readonly status?: GameStatus
-            readonly period?: number
-            readonly clock?: string
-            readonly score?: readonly [home: number, away: number]
-            /**
-             * Who has the ball and where, `yardLine` being yards to the goal they attack (the ESPN adapter orients ESPN's yard line this way);
-             * `null` while the ball is dead (after a score, at a break).
-             */
-            readonly ball?: {
-              readonly team: "home" | "away"
-              readonly yardLine: number
-              readonly down: number
-              readonly distance: number
-            } | null
-            readonly timeouts?: readonly [home: number, away: number]
-            readonly lastPlay?: string
-          }
-        ]
-      >
+      readonly timeline: ReadonlyArray<readonly [offset: string, change: Change]>
     }>
   ): Scenario {
     const origin = DateTime.makeUnsafe("2026-10-03T16:00:00Z")
@@ -94,19 +69,30 @@ export class Scenario extends Schema.Class<Scenario>("sportal/Scenario")({
       (game) =>
         new GameSnapshot({
           ...game,
-          kickoff: DateTime.makeUnsafe(DateTime.toEpochMillis(game.kickoff) + shift)
+          kickoff: DateTime.add(game.kickoff, { milliseconds: shift })
         })
     )
   }
 }
 
 /** A game as `build` first writes it: scheduled at its kickoff, nil–nil. */
-function initial(game: Parameters<typeof Scenario.build>[1][number], origin: DateTime.Utc): GameSnapshot {
+function initial(
+  game: {
+    readonly id: string
+    readonly home: string
+    readonly away: string
+    readonly league?: LeagueId
+    readonly network?: string
+    readonly kickoff?: string
+    readonly ranking?: { readonly home?: number; readonly away?: number }
+  },
+  origin: DateTime.Utc
+): GameSnapshot {
   const league = game.league ?? "fbs"
   return snapshot({
     id: GameId.make(game.id),
     league,
-    kickoff: DateTime.makeUnsafe(DateTime.toEpochMillis(origin) + millisOf(game.kickoff ?? "0:00")),
+    kickoff: DateTime.add(origin, { milliseconds: millisOf(game.kickoff ?? "0:00") }),
     home: {
       team: team(game.home, league),
       score: 0,
@@ -130,10 +116,7 @@ function millisOf(offset: string): number {
   return (offset.startsWith("-") ? -1 : 1) * seconds * 1000
 }
 
-function changed(
-  game: GameSnapshot,
-  change: Parameters<typeof Scenario.build>[1][number]["timeline"][number][1]
-): GameSnapshot {
+function changed(game: GameSnapshot, change: Change): GameSnapshot {
   const [home, away] = change.score ?? [game.home.score, game.away.score]
   const status = change.status ?? game.status
   const situation = situationOf(game, status, change)
@@ -152,11 +135,7 @@ function changed(
  * The game's situation after `change`: none until the game is live or a change describes one, and from then on
  * the earlier situation with the change merged in. Three timeouts each unless said otherwise.
  */
-function situationOf(
-  game: GameSnapshot,
-  status: GameStatus,
-  change: Parameters<typeof Scenario.build>[1][number]["timeline"][number][1]
-): Situation | undefined {
+function situationOf(game: GameSnapshot, status: GameStatus, change: Change): Situation | undefined {
   const before = game.situation
   const describes =
     change.ball !== undefined || change.timeouts !== undefined || change.lastPlay !== undefined
@@ -181,4 +160,24 @@ function situationOf(
     isRedZone: yardLine <= 20,
     ...timing
   })
+}
+
+/** What `build` says changes in a game at an offset. */
+type Change = {
+  readonly status?: GameStatus
+  readonly period?: number
+  readonly clock?: string
+  readonly score?: readonly [home: number, away: number]
+  /**
+   * Who has the ball and where, `yardLine` being yards to the goal they attack (the ESPN adapter orients ESPN's yard line this way);
+   * `null` while the ball is dead (after a score, at a break).
+   */
+  readonly ball?: {
+    readonly team: "home" | "away"
+    readonly yardLine: number
+    readonly down: number
+    readonly distance: number
+  } | null
+  readonly timeouts?: readonly [home: number, away: number]
+  readonly lastPlay?: string
 }
