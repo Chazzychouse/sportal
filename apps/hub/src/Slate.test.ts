@@ -88,9 +88,9 @@ describe("Slate", () => {
 const slateOverFold = Slate.layer.pipe(Layer.provideMerge(LiveGames.layer))
 
 function listing(league: "nfl" | "fbs", games: ReadonlyArray<GameSnapshot>) {
-  return taken(Delivery.Listing({ league, games }))
+  return taken(Delivery.cases.Listing.make({ league, games }))
 }
 
 function push(snapshot: GameSnapshot) {
-  return taken(Delivery.Snapshot({ snapshot, from: "push" }))
+  return taken(Delivery.cases.Snapshot.make({ snapshot, from: "push" }))
 }

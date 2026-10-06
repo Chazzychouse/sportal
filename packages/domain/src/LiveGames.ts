@@ -134,7 +134,7 @@ function applied(
   delivery: Delivery,
   at: DateTime.Utc
 ): Effect.Effect<Stepped & { readonly listed: ReadonlyMap<LeagueId, ReadonlyArray<GameSnapshot>> }> {
-  return Delivery.$match(delivery, {
+  return Delivery.match(delivery, {
     Listing: ({ league, games }) =>
       Effect.reduce(
         games,
@@ -169,7 +169,7 @@ function snapshotTaken(
     const current = Option.fromNullishOr(stepped.live.get(snapshot.id))
     const step = Option.match(current, {
       onNone: () => ({ liveGame: Option.some(LiveGame.start(snapshot, from, at)) }),
-      onSome: (liveGame) => liveGame.take(Delivery.Snapshot({ snapshot, from }), at)
+      onSome: (liveGame) => liveGame.take(Delivery.cases.Snapshot.make({ snapshot, from }), at)
     })
     const took = FoldReport.Took({
       snapshot,

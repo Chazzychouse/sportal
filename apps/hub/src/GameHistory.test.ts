@@ -19,9 +19,9 @@ const second = PlayId.make("b")
 describe("GameHistory", () => {
   it.effect("a game's plays are readable after its Plays delivery", () =>
     Effect.gen(function* () {
-      yield* taken(Delivery.Snapshot({ snapshot: live, from: "push" }), 1)
+      yield* taken(Delivery.cases.Snapshot.make({ snapshot: live, from: "push" }), 1)
       yield* taken(
-        Delivery.Plays({
+        Delivery.cases.Plays.make({
           game: one,
           plays: [play({ id: first, sequence: 1 }), play({ id: second, sequence: 2 })]
         }),
@@ -34,10 +34,10 @@ describe("GameHistory", () => {
 
   it.effect("a revised play replaces its row", () =>
     Effect.gen(function* () {
-      yield* taken(Delivery.Snapshot({ snapshot: live, from: "push" }), 1)
-      yield* taken(Delivery.Plays({ game: one, plays: [play({ id: first, text: "before" })] }), 2)
+      yield* taken(Delivery.cases.Snapshot.make({ snapshot: live, from: "push" }), 1)
+      yield* taken(Delivery.cases.Plays.make({ game: one, plays: [play({ id: first, text: "before" })] }), 2)
       yield* batched
-      yield* taken(Delivery.Plays({ game: one, plays: [play({ id: first, text: "after" })] }), 3)
+      yield* taken(Delivery.cases.Plays.make({ game: one, plays: [play({ id: first, text: "after" })] }), 3)
       yield* batched
       const plays = yield* GameHistory.use((gameHistory) => gameHistory.plays(one))
       assert.deepStrictEqual(
@@ -49,16 +49,16 @@ describe("GameHistory", () => {
 
   it.effect("a play no longer in a live game's list loses its row", () =>
     Effect.gen(function* () {
-      yield* taken(Delivery.Snapshot({ snapshot: live, from: "push" }), 1)
+      yield* taken(Delivery.cases.Snapshot.make({ snapshot: live, from: "push" }), 1)
       yield* taken(
-        Delivery.Plays({
+        Delivery.cases.Plays.make({
           game: one,
           plays: [play({ id: first, sequence: 1 }), play({ id: second, sequence: 2 })]
         }),
         2
       )
       yield* batched
-      yield* taken(Delivery.Plays({ game: one, plays: [play({ id: second, sequence: 2 })] }), 3)
+      yield* taken(Delivery.cases.Plays.make({ game: one, plays: [play({ id: second, sequence: 2 })] }), 3)
       yield* batched
       assert.deepStrictEqual(yield* playIds, [second])
     }).pipe(Effect.provide(history))
@@ -66,10 +66,10 @@ describe("GameHistory", () => {
 
   it.effect("a game that leaves the live games keeps its plays", () =>
     Effect.gen(function* () {
-      yield* taken(Delivery.Snapshot({ snapshot: live, from: "push" }), 1)
-      yield* taken(Delivery.Plays({ game: one, plays: [play({ id: first })] }), 2)
+      yield* taken(Delivery.cases.Snapshot.make({ snapshot: live, from: "push" }), 1)
+      yield* taken(Delivery.cases.Plays.make({ game: one, plays: [play({ id: first })] }), 2)
       yield* batched
-      yield* taken(Delivery.Snapshot({ snapshot: over, from: "push" }), 3)
+      yield* taken(Delivery.cases.Snapshot.make({ snapshot: over, from: "push" }), 3)
       yield* batched
       assert.isFalse((yield* LiveGames.use((liveGames) => liveGames.latest)).live.has(one))
       assert.deepStrictEqual(yield* playIds, [first])
@@ -78,10 +78,10 @@ describe("GameHistory", () => {
 
   it.effect("the latest row follows the newest snapshot", () =>
     Effect.gen(function* () {
-      yield* taken(Delivery.Snapshot({ snapshot: live, from: "push" }), 1)
+      yield* taken(Delivery.cases.Snapshot.make({ snapshot: live, from: "push" }), 1)
       yield* batched
-      yield* taken(Delivery.Snapshot({ snapshot: over, from: "push" }), 2)
-      yield* taken(Delivery.Listing({ league: "fbs", games: [over] }), 3)
+      yield* taken(Delivery.cases.Snapshot.make({ snapshot: over, from: "push" }), 2)
+      yield* taken(Delivery.cases.Listing.make({ league: "fbs", games: [over] }), 3)
       yield* batched
       const latest = yield* GameHistory.use((gameHistory) => gameHistory.latest(one))
       assert.deepStrictEqual(
@@ -93,7 +93,7 @@ describe("GameHistory", () => {
 
   it.effect("a final game that is only listed still gets its snapshot", () =>
     Effect.gen(function* () {
-      yield* taken(Delivery.Listing({ league: "fbs", games: [over] }), 1)
+      yield* taken(Delivery.cases.Listing.make({ league: "fbs", games: [over] }), 1)
       yield* batched
       assert.isFalse((yield* LiveGames.use((liveGames) => liveGames.latest)).live.has(one))
       const latest = yield* GameHistory.use((gameHistory) => gameHistory.latest(one))
@@ -106,10 +106,10 @@ describe("GameHistory", () => {
 
   it.effect("replaying an older seq changes nothing", () =>
     Effect.gen(function* () {
-      yield* taken(Delivery.Snapshot({ snapshot: live, from: "push" }), 1)
-      yield* taken(Delivery.Plays({ game: one, plays: [play({ id: first, text: "newer" })] }), 5)
+      yield* taken(Delivery.cases.Snapshot.make({ snapshot: live, from: "push" }), 1)
+      yield* taken(Delivery.cases.Plays.make({ game: one, plays: [play({ id: first, text: "newer" })] }), 5)
       yield* batched
-      yield* taken(Delivery.Plays({ game: one, plays: [play({ id: first, text: "older" })] }), 3)
+      yield* taken(Delivery.cases.Plays.make({ game: one, plays: [play({ id: first, text: "older" })] }), 3)
       yield* batched
       const plays = yield* GameHistory.use((gameHistory) => gameHistory.plays(one))
       assert.deepStrictEqual(
@@ -124,10 +124,14 @@ describe("GameHistory", () => {
       const at = yield* DateTime.now
       yield* LiveGames.use((liveGames) =>
         liveGames
-          .take(Delivery.Snapshot({ snapshot: live, from: "push" }), at, Option.none())
+          .take(Delivery.cases.Snapshot.make({ snapshot: live, from: "push" }), at, Option.none())
           .pipe(
             Effect.andThen(
-              liveGames.take(Delivery.Plays({ game: one, plays: [play({ id: first })] }), at, Option.none())
+              liveGames.take(
+                Delivery.cases.Plays.make({ game: one, plays: [play({ id: first })] }),
+                at,
+                Option.none()
+              )
             )
           )
       )
@@ -141,15 +145,18 @@ describe("GameHistory", () => {
     withMetrics(
       Effect.gen(function* () {
         const sql = yield* SqlClient.SqlClient
-        yield* taken(Delivery.Snapshot({ snapshot: live, from: "push" }), 1)
+        yield* taken(Delivery.cases.Snapshot.make({ snapshot: live, from: "push" }), 1)
         yield* batched
         yield* sql`ALTER TABLE play RENAME TO play_away`
-        yield* taken(Delivery.Plays({ game: one, plays: [play({ id: first })] }), 2)
+        yield* taken(Delivery.cases.Plays.make({ game: one, plays: [play({ id: first })] }), 2)
         yield* batched
         assert.strictEqual(yield* counted("sportal_history_write_failures"), 1)
         yield* sql`ALTER TABLE play_away RENAME TO play`
         yield* taken(
-          Delivery.Plays({ game: one, plays: [play({ id: first }), play({ id: second, sequence: 2 })] }),
+          Delivery.cases.Plays.make({
+            game: one,
+            plays: [play({ id: first }), play({ id: second, sequence: 2 })]
+          }),
           3
         )
         yield* batched

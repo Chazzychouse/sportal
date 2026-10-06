@@ -60,7 +60,7 @@ function listed(state: State, frame: Frame): Effect.Effect<readonly [State, Said
           ({ games, noticed }) =>
             [
               { ...state, listings: new Map([...state.listings, [league, games]]) },
-              [...noted(frame, noticed), delivered(frame, Delivery.Listing({ league, games }))]
+              [...noted(frame, noticed), delivered(frame, Delivery.cases.Listing.make({ league, games }))]
             ] as const
         )
       )
@@ -162,7 +162,9 @@ function advancedToListed(
       {
         onNone: () => Result.fail(game),
         onSome: (listedGame) =>
-          Result.succeed(Delivery.Snapshot({ snapshot: listedGame.advancedTo(game), from: "push" }))
+          Result.succeed(
+            Delivery.cases.Snapshot.make({ snapshot: listedGame.advancedTo(game), from: "push" })
+          )
       }
     )
   )
@@ -206,7 +208,7 @@ function playsOf(
             .map(({ id, cause }) => Notice.PlayUndecoded({ league, game, play: id, cause })),
           ...unknown.map((type) => Notice.PlayTypeUnknown(type))
         ],
-        plays: Delivery.Plays({ game, plays: plays.toSorted(Play.order) })
+        plays: Delivery.cases.Plays.make({ game, plays: plays.toSorted(Play.order) })
       }
     })
   )

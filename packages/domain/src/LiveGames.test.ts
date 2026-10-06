@@ -77,7 +77,7 @@ describe("LiveGames", () => {
   it.effect("plays for a game not held are dropped, and nothing changes", () =>
     Effect.gen(function* () {
       const { next, reports } = yield* LiveGames.empty.step(
-        Option.some(Delivery.Plays({ game: one, plays: [play()] })),
+        Option.some(Delivery.cases.Plays.make({ game: one, plays: [play()] })),
         t0,
         Option.none()
       )
@@ -212,7 +212,7 @@ function outcomes(reports: ReadonlyArray<FoldReport>): ReadonlyArray<string> {
 }
 
 function listing(league: "fbs" | "nfl", games: ReadonlyArray<GameSnapshot>) {
-  return Option.some(Delivery.Listing({ league, games }))
+  return Option.some(Delivery.cases.Listing.make({ league, games }))
 }
 
 function polled(game: GameSnapshot) {
@@ -224,7 +224,7 @@ function pushed(game: GameSnapshot) {
 }
 
 function delivered(game: GameSnapshot, from: DeliverySource) {
-  return Option.some(Delivery.Snapshot({ snapshot: game, from }))
+  return Option.some(Delivery.cases.Snapshot.make({ snapshot: game, from }))
 }
 
 function live(id: GameId, clock: string): GameSnapshot {

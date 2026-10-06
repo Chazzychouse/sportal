@@ -677,7 +677,7 @@ const counting = Layer.mergeAll(
                 count + 1,
                 [
                   Decoded.Delivered({
-                    delivery: Delivery.Snapshot({
+                    delivery: Delivery.cases.Snapshot.make({
                       snapshot: scoring(count + 1),
                       from: "push"
                     }),

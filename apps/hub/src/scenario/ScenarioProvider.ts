@@ -114,7 +114,7 @@ function ofSlates(
                 onSome: ({ league, games }) =>
                   Result.succeed(
                     Decoded.Delivered({
-                      delivery: Delivery.Listing({ league, games }),
+                      delivery: Delivery.cases.Listing.make({ league, games }),
                       at: frame.receivedAt,
                       seq: frame.seq
                     })

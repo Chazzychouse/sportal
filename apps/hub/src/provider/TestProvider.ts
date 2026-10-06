@@ -132,12 +132,12 @@ function said(frame: Frame, games: ReadonlyArray<GameSnapshot>): ReadonlyArray<D
   if (frame.feed === "poll") {
     return Option.match(decodeLeague(frame.channel), {
       onNone: () => [],
-      onSome: (league) => [delivered(Delivery.Listing({ league, games }))]
+      onSome: (league) => [delivered(Delivery.cases.Listing.make({ league, games }))]
     })
   }
   return games.length === 0
     ? [Decoded.Resync({ channel: frame.channel, seq: frame.seq })]
-    : games.map((snapshot) => delivered(Delivery.Snapshot({ snapshot, from: "push" })))
+    : games.map((snapshot) => delivered(Delivery.cases.Snapshot.make({ snapshot, from: "push" })))
 }
 
 const Games = Schema.fromJsonString(Schema.Array(GameSnapshot))

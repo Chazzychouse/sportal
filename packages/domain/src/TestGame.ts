@@ -94,7 +94,9 @@ export function polled(fold: LiveGames, slate: ReadonlyArray<GameSnapshot>, now:
       (folded, league) =>
         folded
           .step(
-            Option.some(Delivery.Listing({ league, games: slate.filter((game) => game.league === league) })),
+            Option.some(
+              Delivery.cases.Listing.make({ league, games: slate.filter((game) => game.league === league) })
+            ),
             now,
             Option.none()
           )
