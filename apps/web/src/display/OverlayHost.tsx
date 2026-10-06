@@ -1,5 +1,6 @@
 import type { GameId } from "@sportal/domain/Game"
 import { createContext, type ReactNode, useCallback, useContext, useLayoutEffect, useRef } from "react"
+import { coveredGames } from "../stage/TileRects.ts"
 
 /**
  * Where overlays meet native video. Provider views draw above the web UI, so an overlay (a dialog, the command
@@ -43,10 +44,10 @@ function makeHost() {
   let hidden = ""
 
   const update = () => {
-    const covering = [...overlays].map((element) => element.getBoundingClientRect())
-    const games = videos
-      .filter((video) => covering.some((overlay) => overlaps(overlay, video.bounds)))
-      .map((video) => video.game)
+    const games = coveredGames(
+      [...overlays].map((element) => element.getBoundingClientRect()),
+      videos
+    )
     const key = games.join(" ")
     if (key === hidden) return
     hidden = key
@@ -73,9 +74,4 @@ function makeHost() {
       update()
     }
   }
-}
-
-/** Whether two rectangles share any area; touching edges do not. */
-function overlaps(a: Rect, b: Rect) {
-  return a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height
 }

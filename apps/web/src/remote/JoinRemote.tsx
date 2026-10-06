@@ -20,10 +20,13 @@ export function JoinRemote(props: { open: boolean; onOpenChange: (open: boolean)
     // Closing or reopening the dialog interrupts the question, so a late answer never lands in a newer dialog.
     const asking = runtime.runFork(
       hostAddresses.pipe(
-        Effect.matchCause({
-          onSuccess: (addresses) => Answer.Answered({ addresses }),
-          onFailure: () => Answer.NoAnswer()
-        }),
+        Effect.map((addresses) => Answer.Answered({ addresses })),
+        Effect.catchTag("HttpClientError", () => Effect.succeed(Answer.NoAnswer())),
+        Effect.catchDefect((defect) =>
+          Effect.logError("Asking the Hub for its addresses failed", defect).pipe(
+            Effect.as(Answer.NoAnswer())
+          )
+        ),
         Effect.flatMap((answered) => Effect.sync(() => setAnswer(answered)))
       )
     )

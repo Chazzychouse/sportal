@@ -1,7 +1,7 @@
 import { afterEach, assert, beforeEach, describe, it } from "@effect/vitest"
 import { LiveMessageJson } from "@sportal/api/LiveMessage"
 import { Stage } from "@sportal/domain/Stage"
-import { Effect, Schema, Stream, SubscriptionRef } from "effect"
+import { Deferred, Effect, Fiber, Schema, Stream, SubscriptionRef } from "effect"
 import { vi } from "vitest"
 import { LiveStream } from "./LiveStream.ts"
 
@@ -23,6 +23,28 @@ describe("LiveStream", () => {
       source.onmessage?.({ data: message({ _tag: "StageChanged", stage: pair }) })
       const after = yield* until(live, (state) => state.stage.layout === "Pair")
       assert.strictEqual(after.connection._tag, "Connecting")
+    }).pipe(Effect.provide(LiveStream.layer))
+  )
+
+  it.effect("publishes nothing for an error while connecting or already lost", () =>
+    Effect.gen(function* () {
+      const live = yield* LiveStream
+      const source = yield* opened()
+      const listening = yield* Deferred.make<void>()
+      const published = yield* SubscriptionRef.changes(live).pipe(
+        Stream.tap(() => Deferred.succeed(listening, undefined)),
+        Stream.takeUntil((state) => state.stage.layout === "Pair"),
+        Stream.runCollect,
+        Effect.forkChild
+      )
+      yield* Deferred.await(listening)
+      source.onerror?.()
+      source.onopen?.()
+      source.onerror?.()
+      source.onerror?.()
+      source.onmessage?.({ data: message({ _tag: "StageChanged", stage: pair }) })
+      const connections = Array.from(yield* Fiber.join(published), (state) => state.connection._tag)
+      assert.deepStrictEqual(connections, ["Connecting", "Connected", "Lost", "Lost"])
     }).pipe(Effect.provide(LiveStream.layer))
   )
 

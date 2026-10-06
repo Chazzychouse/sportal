@@ -6,7 +6,7 @@ import { runtime, useLive } from "../hub/HubRuntime.ts"
 import { JoinRemote } from "../remote/JoinRemote.tsx"
 import { SlateView } from "../slate/SlateView.tsx"
 import { StripCard } from "../slate/StripCards.ts"
-import { useRejectionToasts } from "../stage/Rejections.ts"
+import { useStageFailureToasts } from "../stage/Rejections.ts"
 import { StageView } from "../stage/StageView.tsx"
 import { CommandPalette } from "./CommandPalette.tsx"
 import { Display, type DisplayStep } from "./Display.ts"
@@ -36,7 +36,7 @@ export function DisplayView() {
   const cards = StripCard.of(live.stage, live.slate)
   const selected = display.selectedOn(live.stage)
   const toggleSolo = display.press({ _tag: "ToggleSolo" }, live.stage, cards)
-  useRejectionToasts()
+  useStageFailureToasts()
 
   useHotkeys((hotkey: Hotkey) =>
     hotkey._tag === "FullScreen" ? fullScreen.toggle() : run(display.press(hotkey, live.stage, cards))

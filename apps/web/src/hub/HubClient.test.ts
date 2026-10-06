@@ -1,17 +1,17 @@
 import { assert, describe, it } from "@effect/vitest"
-import { Effect, Fiber, Layer, Option, Stream } from "effect"
+import { Effect, Layer, PubSub } from "effect"
 import { HttpClient, HttpClientError, HttpClientRequest, HttpClientResponse } from "effect/http"
-import { dispatch, HubClient, stageFailures } from "./HubClient.ts"
+import { dispatch, HubClient } from "./HubClient.ts"
 
 describe("dispatch", () => {
   it.effect("reports a stage command the Hub refused, with its reason", () =>
     Effect.gen(function* () {
-      const reported = yield* Stream.runHead(stageFailures).pipe(Effect.forkChild)
-      yield* Effect.yieldNow
+      const failures = yield* PubSub.subscribe((yield* HubClient).stageFailures)
       yield* dispatch({ _tag: "Clear", tile: 0 })
-      const failure = Option.getOrThrow(yield* Fiber.join(reported))
+      const failure = yield* PubSub.take(failures)
       assert.isTrue(failure._tag === "StageRejection" && failure.reason === "empty-tile")
     }).pipe(
+      Effect.scoped,
       Effect.provide(
         HubClient.layer.pipe(Layer.provide(answering(422, { _tag: "StageRejection", reason: "empty-tile" })))
       )
@@ -20,15 +20,12 @@ describe("dispatch", () => {
 
   it.effect("reports a stage command that never reached the Hub where refused commands are reported", () =>
     Effect.gen(function* () {
-      const reported = yield* Stream.runHead(stageFailures).pipe(Effect.forkChild)
-      yield* Effect.yieldNow
+      const failures = yield* PubSub.subscribe((yield* HubClient).stageFailures)
       const sent = yield* Effect.exit(dispatch({ _tag: "Unsolo" }))
       assert.isTrue(sent._tag === "Success")
-      const failure = yield* Fiber.join(reported)
-      assert.isTrue(Option.isSome(failure))
-      const failed = Option.getOrThrow(failure)
+      const failed = yield* PubSub.take(failures)
       assert.isTrue(failed._tag === "HttpClientError" && failed.reason._tag === "TransportError")
-    }).pipe(Effect.provide(HubClient.layer.pipe(Layer.provide(unreachable))))
+    }).pipe(Effect.scoped, Effect.provide(HubClient.layer.pipe(Layer.provide(unreachable))))
   )
 })
 

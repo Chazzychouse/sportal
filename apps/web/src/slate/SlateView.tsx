@@ -1,6 +1,6 @@
-import type { LiveMessage } from "@sportal/api/LiveMessage"
 import type { GameId } from "@sportal/domain/Game"
 import type { Stage } from "@sportal/domain/Stage"
+import type { Watchability } from "@sportal/domain/Watchability"
 import { Fragment, useEffect, useRef } from "react"
 import type { Display, DisplayStep } from "../display/Display.ts"
 import { GameStatus } from "../game/GameStatus.tsx"
@@ -18,10 +18,7 @@ export function SlateView(props: {
   cards: ReadonlyArray<StripCard>
   display: Display
   stage: Stage
-  watchability: ReadonlyMap<
-    GameId,
-    Extract<LiveMessage, { _tag: "SlateChanged" }>["slate"][number]["watchability"]
-  >
+  watchability: ReadonlyMap<GameId, Pick<Watchability, "score" | "lull" | "reasons">>
   onDrop: (dropped: DisplayStep) => void
 }) {
   const pick = props.display.pick
@@ -94,7 +91,7 @@ function Card(props: {
   card: StripCard
   picked: boolean
   droppable: boolean
-  watch: Extract<LiveMessage, { _tag: "SlateChanged" }>["slate"][number]["watchability"] | undefined
+  watch: Pick<Watchability, "score" | "lull" | "reasons"> | undefined
   onDrop: () => void
 }) {
   const { game, place } = props.card

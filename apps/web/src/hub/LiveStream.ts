@@ -1,7 +1,18 @@
 import { type LiveMessage, LiveMessageJson } from "@sportal/api/LiveMessage"
 import type { GameId, GameSnapshot } from "@sportal/domain/Game"
 import { Stage } from "@sportal/domain/Stage"
-import { Context, Data, DateTime, Effect, Layer, Queue, Schema, Stream, SubscriptionRef } from "effect"
+import {
+  Context,
+  Data,
+  DateTime,
+  Effect,
+  Layer,
+  Option,
+  Queue,
+  Schema,
+  Stream,
+  SubscriptionRef
+} from "effect"
 
 /**
  * Everything the Hub has told this client over the live stream at /api/live, and whether the stream is up. The
@@ -68,13 +79,14 @@ function step(live: SubscriptionRef.SubscriptionRef<Live>, event: SourceEvent) {
     case "Opened":
       return SubscriptionRef.update(live, (current) => ({ ...current, connection: Connection.Connected() }))
     case "Errored":
-      // Only a stream that was up is lost; one that never connected is still connecting.
+      // Only a stream that was up is lost; one that never connected is still connecting, and one already lost
+      // keeps the instant it was lost. Either way, nothing changed, so nothing is published.
       return DateTime.now.pipe(
         Effect.flatMap((now) =>
-          SubscriptionRef.update(live, (current) =>
+          SubscriptionRef.updateSome(live, (current) =>
             current.connection._tag === "Connected"
-              ? { ...current, connection: Connection.Lost({ since: now }) }
-              : current
+              ? Option.some({ ...current, connection: Connection.Lost({ since: now }) })
+              : Option.none()
           )
         )
       )

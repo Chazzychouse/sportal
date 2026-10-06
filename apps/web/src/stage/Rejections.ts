@@ -7,7 +7,7 @@ import { stageFailures } from "../hub/HubClient.ts"
 import { runtime } from "../hub/HubRuntime.ts"
 
 /** Shows each stage command that failed as a warning toast, saying why: the Hub refused it, or never got it. */
-export function useRejectionToasts() {
+export function useStageFailureToasts() {
   useEffect(() => {
     const fiber = runtime.runFork(
       stageFailures.pipe(

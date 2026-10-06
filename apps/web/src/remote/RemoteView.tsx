@@ -11,7 +11,7 @@ import { runtime, useLive } from "../hub/HubRuntime.ts"
 import { LayoutPicker } from "../layout/LayoutPicker.tsx"
 import { PlaceBadge } from "../slate/PlaceBadge.tsx"
 import { StripCard } from "../slate/StripCards.ts"
-import { useRejectionToasts } from "../stage/Rejections.ts"
+import { useStageFailureToasts } from "../stage/Rejections.ts"
 import { StageMap } from "./StageMap.tsx"
 
 /**
@@ -24,7 +24,7 @@ export function RemoteView() {
   // handler's `display` is current.
   const { display, run } = useDisplay()
   const [tab, setTab] = useState<StripCard["section"]>("Live")
-  useRejectionToasts()
+  useStageFailureToasts()
 
   const cards = StripCard.of(live.stage, live.slate)
   const shown = Arr.dedupe(cards.map((card) => card.section))

@@ -65,6 +65,19 @@ export function placements(
   })
 }
 
+/**
+ * The games whose video an open overlay covers, in the order of `videos`: those sharing any area with an
+ * overlay. An overlay flush against a video, touching only its edge, leaves it shown.
+ */
+export function coveredGames(
+  overlays: ReadonlyArray<{ x: number; y: number; width: number; height: number }>,
+  videos: ReadonlyArray<{ game: GameId; bounds: { x: number; y: number; width: number; height: number } }>
+): ReadonlyArray<GameId> {
+  return videos
+    .filter((video) => overlays.some((overlay) => overlaps(overlay, video.bounds)))
+    .map((video) => video.game)
+}
+
 /** The part of a tile below its tileHeader, where its video goes. */
 function videoBounds(rect: { x: number; y: number; width: number; height: number }) {
   return {
@@ -73,6 +86,14 @@ function videoBounds(rect: { x: number; y: number; width: number; height: number
     width: rect.width,
     height: Math.max(0, rect.height - tileHeader)
   }
+}
+
+/** Whether two rectangles share any area; touching edges do not. */
+function overlaps(
+  a: { x: number; y: number; width: number; height: number },
+  b: { x: number; y: number; width: number; height: number }
+) {
+  return a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height
 }
 
 /** Pixels between tiles. */

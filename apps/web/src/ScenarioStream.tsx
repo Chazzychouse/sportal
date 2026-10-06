@@ -1,5 +1,5 @@
-import type { LiveMessage } from "@sportal/api/LiveMessage"
 import type { GameId, GameSnapshot } from "@sportal/domain/Game"
+import type { Watchability } from "@sportal/domain/Watchability"
 import { useEffect } from "react"
 import { statusText } from "./game/GameStatus.tsx"
 import { TeamLogo } from "./game/TeamLogo.tsx"
@@ -58,7 +58,7 @@ function useTone(game: GameId) {
 
 function Scorebug(props: {
   game: GameSnapshot
-  watch: Extract<LiveMessage, { _tag: "SlateChanged" }>["slate"][number]["watchability"] | undefined
+  watch: Pick<Watchability, "score" | "lull" | "reasons"> | undefined
 }) {
   const { game } = props
   const situation = game.situation
