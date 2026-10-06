@@ -101,10 +101,6 @@ describe("GameSnapshot.watchOrder", () => {
   })
 })
 
-function game(id: string, status: GameStatus, kickoff: string) {
-  return snapshot({ id: GameId.make(id), status, kickoff: DateTime.makeUnsafe(kickoff) })
-}
-
 describe("GameSnapshot#advancedTo", () => {
   const situation = new Situation({
     isRedZone: true,
@@ -146,7 +142,9 @@ describe("GameSnapshot#advancedTo", () => {
   })
 
   it("has no situation when the later snapshot has none", () => {
-    const result = polled.advancedTo(snapshot({ status: "final", period: 4 }))
+    const result = snapshot({ status: "live", period: 3, situation }).advancedTo(
+      snapshot({ status: "final", period: 4 })
+    )
     assert.isFalse("situation" in result)
   })
 
@@ -154,3 +152,7 @@ describe("GameSnapshot#advancedTo", () => {
     assert.strictEqual(GameSnapshot.gameTime(advanced, pushed), 0)
   })
 })
+
+function game(id: string, status: GameStatus, kickoff: string) {
+  return snapshot({ id: GameId.make(id), status, kickoff: DateTime.makeUnsafe(kickoff) })
+}
