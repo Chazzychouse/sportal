@@ -23,6 +23,16 @@ describe("Cadence.interval", () => {
     assert.deepStrictEqual(Cadence.interval(slate, now, false), Duration.minutes(1))
   })
 
+  it("polls every minute when a game delayed before kickoff kicks off within 30 minutes", () => {
+    const slate = [snapshot({ status: "delayed", kickoff: DateTime.makeUnsafe("2026-10-03T12:20:00Z") })]
+    assert.deepStrictEqual(Cadence.interval(slate, now, false), Duration.minutes(1))
+  })
+
+  it("polls every 15 minutes when a game delayed before kickoff is more than 30 minutes away", () => {
+    const slate = [snapshot({ status: "delayed", kickoff: DateTime.makeUnsafe("2026-10-03T13:00:00Z") })]
+    assert.deepStrictEqual(Cadence.interval(slate, now, false), Duration.minutes(15))
+  })
+
   it("polls every 15 minutes when the next kickoff is more than 30 minutes away", () => {
     const slate = [snapshot({ kickoff: DateTime.makeUnsafe("2026-10-03T13:00:00Z") })]
     assert.deepStrictEqual(Cadence.interval(slate, now, false), Duration.minutes(15))

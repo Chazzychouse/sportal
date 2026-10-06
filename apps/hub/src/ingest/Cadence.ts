@@ -19,7 +19,7 @@ function normalInterval(slate: ReadonlyArray<GameSnapshot>, now: DateTime.Utc): 
   if (slate.some((game) => game.progress() === "live")) return Duration.seconds(10)
   const soon = DateTime.add(now, { minutes: 30 })
   const kickoffSoon = slate.some(
-    (game) => game.status === "scheduled" && DateTime.isLessThanOrEqualTo(game.kickoff, soon)
+    (game) => game.progress() === "upcoming" && DateTime.isLessThanOrEqualTo(game.kickoff, soon)
   )
   return kickoffSoon ? Duration.minutes(1) : Duration.minutes(15)
 }
