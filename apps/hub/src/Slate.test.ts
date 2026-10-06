@@ -2,11 +2,11 @@ import { NodeServices } from "@effect/platform-node"
 import { assert, describe, it } from "@effect/vitest"
 import { Delivery } from "@sportal/domain/Delivery"
 import { GameId, type GameSnapshot } from "@sportal/domain/Game"
-import { snapshot } from "@sportal/domain/TestGame"
-import { DateTime, Effect, Layer, Option, Ref, Stream } from "effect"
+import { liveSnapshot, snapshot } from "@sportal/domain/TestGame"
+import { Effect, Layer, Ref, Stream } from "effect"
 import { TestClock } from "effect/testing"
 import { LiveGames } from "./LiveGames.ts"
-import { game } from "./provider/TestProvider.ts"
+import { taken } from "./provider/TestProvider.ts"
 import { Slate } from "./Slate.ts"
 import * as ScenarioIngest from "./scenario/ScenarioIngest.ts"
 
@@ -14,7 +14,11 @@ describe("Slate", () => {
   it.effect("keeps the listing's order, leagues in their order", () =>
     Effect.gen(function* () {
       const slate = yield* Slate
-      yield* listing("fbs", [game("3"), game("1"), game("2")])
+      yield* listing("fbs", [
+        liveSnapshot({ id: GameId.make("3") }),
+        liveSnapshot({ id: GameId.make("1") }),
+        liveSnapshot({ id: GameId.make("2") })
+      ])
       yield* listing("nfl", [snapshot({ id: GameId.make("9"), league: "nfl", status: "live" })])
       yield* TestClock.adjust("250 millis")
       assert.deepStrictEqual(
@@ -27,8 +31,8 @@ describe("Slate", () => {
   it.effect("a live game's snapshot wins over its listing", () =>
     Effect.gen(function* () {
       const slate = yield* Slate
-      yield* listing("fbs", [game("1", 1)])
-      yield* push(game("1", 2))
+      yield* listing("fbs", [liveSnapshot({ id: GameId.make("1"), period: 1 })])
+      yield* push(liveSnapshot({ id: GameId.make("1"), period: 2 }))
       yield* TestClock.adjust("250 millis")
       assert.strictEqual((yield* slate.latest)[0]?.game.period, 2)
     }).pipe(Effect.provide(slateOverFold))
@@ -42,9 +46,13 @@ describe("Slate", () => {
         Stream.runForEach((latest) => Ref.update(published, (all) => [...all, latest.length])),
         Effect.forkScoped
       )
-      yield* listing("fbs", [game("3"), game("1"), game("2")])
-      yield* push(game("3", 2))
-      yield* push(game("1", 2))
+      yield* listing("fbs", [
+        liveSnapshot({ id: GameId.make("3") }),
+        liveSnapshot({ id: GameId.make("1") }),
+        liveSnapshot({ id: GameId.make("2") })
+      ])
+      yield* push(liveSnapshot({ id: GameId.make("3"), period: 2 }))
+      yield* push(liveSnapshot({ id: GameId.make("1"), period: 2 }))
       yield* TestClock.adjust("250 millis")
       assert.deepStrictEqual(
         (yield* Ref.get(published)).filter((length) => length > 0),
@@ -72,7 +80,7 @@ describe("Slate", () => {
   it.effect("an unchanged live game becomes a lull with no new listing", () =>
     Effect.gen(function* () {
       const slate = yield* Slate
-      yield* listing("fbs", [game("1")])
+      yield* listing("fbs", [liveSnapshot({ id: GameId.make("1") })])
       yield* TestClock.adjust("250 millis")
       assert.isFalse((yield* slate.latest)[0]?.watchability.lull)
 
@@ -85,8 +93,8 @@ describe("Slate", () => {
   it.effect("leaves off a game no listing has", () =>
     Effect.gen(function* () {
       const slate = yield* Slate
-      yield* listing("fbs", [game("1")])
-      yield* push(game("9"))
+      yield* listing("fbs", [liveSnapshot({ id: GameId.make("1") })])
+      yield* push(liveSnapshot({ id: GameId.make("9") }))
       yield* TestClock.adjust("250 millis")
       assert.deepStrictEqual(
         (yield* slate.latest).map((listed) => listed.game.id),
@@ -150,15 +158,9 @@ function playing(name: string) {
 }
 
 function listing(league: "nfl" | "fbs", games: ReadonlyArray<GameSnapshot>) {
-  return take(Delivery.Listing({ league, games }))
+  return taken(Delivery.Listing({ league, games }))
 }
 
 function push(snapshot: GameSnapshot) {
-  return take(Delivery.Snapshot({ snapshot, from: "push" }))
-}
-
-function take(delivery: Delivery) {
-  return Effect.gen(function* () {
-    yield* (yield* LiveGames).take(delivery, yield* DateTime.now, Option.none())
-  })
+  return taken(Delivery.Snapshot({ snapshot, from: "push" }))
 }

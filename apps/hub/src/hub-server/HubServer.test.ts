@@ -1,17 +1,16 @@
-import { NodeCrypto, NodeHttpServer, NodePath } from "@effect/platform-node"
+import { NodeCrypto, NodeHttpServer } from "@effect/platform-node"
 import { assert, describe, it } from "@effect/vitest"
 import { type LiveMessage, LiveMessageJson } from "@sportal/api/LiveMessage"
 import { SportalApi } from "@sportal/api/SportalApi"
 import { GameId, Network } from "@sportal/domain/Game"
 import type { Tile } from "@sportal/domain/Stage"
 import { broadcast, snapshot, team } from "@sportal/domain/TestGame"
-import { ConfigProvider, DateTime, Effect, Layer, Option, Queue, Result, Schema, Stream } from "effect"
+import { DateTime, Effect, Layer, Option, Queue, Result, Schema, Stream } from "effect"
 import { HttpClient } from "effect/http"
 import { HttpApiClient } from "effect/http-api"
 import { TestClock } from "effect/testing"
 import * as Database from "../Database.ts"
 import { FeedLog } from "../feed-log/FeedLog.ts"
-import { HubConfig } from "../HubConfig.ts"
 import * as Ingest from "../ingest/Ingest.ts"
 import { LiveGames } from "../LiveGames.ts"
 import { Provider } from "../provider/Provider.ts"
@@ -20,6 +19,7 @@ import { Slate } from "../Slate.ts"
 import { StageSessions } from "../StageSessions.ts"
 import { ChannelStore } from "../source/ChannelStore.ts"
 import * as YouTubeTv from "../source/youtube-tv/YouTubeTv.ts"
+import { withEnv } from "../TestHubConfig.ts"
 import * as HubServer from "./HubServer.ts"
 
 const espn = Network.make("ESPN")
@@ -336,18 +336,7 @@ function hubUnderTest() {
       DateTime.layerCurrentZoneLocal,
       FeedLog.layer.pipe(Layer.provide([Database.layer(":memory:"), NodeCrypto.layer]))
     ]),
-    Layer.provideMerge(testConfig())
-  )
-}
-
-function testConfig() {
-  return HubConfig.layer.pipe(
-    Layer.provide([
-      ConfigProvider.layer(
-        ConfigProvider.fromEnv({ env: { SPORTAL_VERSION: "1.2.3", SPORTAL_DATA_DIR: "unused" } })
-      ),
-      NodePath.layer
-    ])
+    Layer.provideMerge(withEnv({ SPORTAL_VERSION: "1.2.3", SPORTAL_DATA_DIR: "unused" }))
   )
 }
 

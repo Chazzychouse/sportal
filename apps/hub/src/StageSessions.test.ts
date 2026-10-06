@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs"
 import { assert, describe, it } from "@effect/vitest"
 import { GameId, type GameSnapshot, Network } from "@sportal/domain/Game"
-import { broadcast, snapshot, team } from "@sportal/domain/TestGame"
+import { broadcast, liveSnapshot, snapshot, team } from "@sportal/domain/TestGame"
 import { Watchability } from "@sportal/domain/Watchability"
 import { DateTime, Deferred, Effect, Fiber, Layer, Option, Ref, Stream } from "effect"
 import { TestClock } from "effect/testing"
@@ -21,11 +21,11 @@ const espnChannel = {
 }
 const fox = Network.make("FOX")
 const slate = [
-  game("1", [espn]),
-  game("2", [espn]),
-  game("3", [espn]),
-  game("4", [espnPlus]),
-  game("5", [fox])
+  liveSnapshot({ id: GameId.make("1"), broadcasts: [broadcast(espn)] }),
+  liveSnapshot({ id: GameId.make("2"), broadcasts: [broadcast(espn)] }),
+  liveSnapshot({ id: GameId.make("3"), broadcasts: [broadcast(espn)] }),
+  liveSnapshot({ id: GameId.make("4"), broadcasts: [broadcast(espnPlus)] }),
+  liveSnapshot({ id: GameId.make("5"), broadcasts: [broadcast(fox)] })
 ]
 
 const ohioStateAtIowa = snapshot({
@@ -284,16 +284,6 @@ function slateOf(games: ReadonlyArray<GameSnapshot>) {
 
 function listed(games: ReadonlyArray<GameSnapshot>) {
   return games.map((game) => ({ game, watchability: Watchability.initial(game, DateTime.makeUnsafe(0)) }))
-}
-
-function game(id: string, broadcasts: ReadonlyArray<Network>) {
-  return snapshot({
-    id: GameId.make(id),
-    status: "live",
-    period: 1,
-    clock: "10:00",
-    broadcasts: broadcasts.map((network) => broadcast(network))
-  })
 }
 
 /** YouTube TV over an in-memory database, already knowing ESPN's channel and that ESPN+ is not carried. */

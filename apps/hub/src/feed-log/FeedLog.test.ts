@@ -1,10 +1,10 @@
 import { NodeCrypto, NodeServices } from "@effect/platform-node"
 import { assert, describe, it } from "@effect/vitest"
-import { ConfigProvider, DateTime, Effect, Fiber, FileSystem, Layer, Path, Ref, Stream } from "effect"
+import { DateTime, Effect, Fiber, FileSystem, Layer, Path, Ref, Stream } from "effect"
 import { SqlClient, SqlError } from "effect/sql"
 import { TestClock } from "effect/testing"
 import * as Database from "../Database.ts"
-import { HubConfig } from "../HubConfig.ts"
+import { withEnv } from "../TestHubConfig.ts"
 import { counted, recordingLogs, withMetrics } from "../TestTelemetry.ts"
 import { FeedLog } from "./FeedLog.ts"
 
@@ -257,9 +257,7 @@ describe("FeedLog", () => {
       const fs = yield* FileSystem.FileSystem
       const path = yield* Path.Path
       const dataDir = path.join(yield* fs.makeTempDirectoryScoped(), "sportal")
-      const config = HubConfig.layer.pipe(
-        Layer.provide(ConfigProvider.layer(ConfigProvider.fromEnv({ env: { SPORTAL_DATA_DIR: dataDir } })))
-      )
+      const config = withEnv({ SPORTAL_DATA_DIR: dataDir })
 
       yield* Effect.gen(function* () {
         const log = yield* FeedLog

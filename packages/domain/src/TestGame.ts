@@ -23,6 +23,11 @@ export function snapshot(overrides: Partial<GameSnapshot> = {}): GameSnapshot {
   })
 }
 
+/** A live game snapshot for a test: in the first period with 10:00 on the clock unless the overrides say otherwise. */
+export function liveSnapshot(overrides: Partial<GameSnapshot> = {}): GameSnapshot {
+  return snapshot({ status: "live", period: 1, clock: "10:00", ...overrides })
+}
+
 /** A situation for a test: the home team's first and ten at midfield, three timeouts each, unless the overrides say otherwise. */
 export function situation(overrides: Partial<Situation> = {}): Situation {
   return new Situation({

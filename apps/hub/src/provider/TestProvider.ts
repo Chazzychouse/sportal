@@ -1,16 +1,11 @@
 import { Delivery } from "@sportal/domain/Delivery"
-import { GameId, GameSnapshot } from "@sportal/domain/Game"
+import { GameSnapshot } from "@sportal/domain/Game"
 import { LeagueId } from "@sportal/domain/League"
-import { snapshot } from "@sportal/domain/TestGame"
 import { DateTime, Effect, Layer, Option, Ref, Schema, Stream } from "effect"
 import { Frame } from "../feed-log/Frame.ts"
+import { LiveGames } from "../LiveGames.ts"
 import { LiveFeed } from "./LiveFeed.ts"
 import { Decoded, Provider, ProviderError } from "./Provider.ts"
-
-/** A live game `id` in `period`, at 10:00 on the clock. */
-export function game(id: string, period = 1) {
-  return snapshot({ id: GameId.make(id), status: "live", period, clock: "10:00" })
-}
 
 /**
  * A provider that answers each poll with the next scripted response, and the last one after that, inside a
@@ -63,6 +58,13 @@ export function polling(
         Stream.flattenIterable
       )
   })
+}
+
+/** `delivery` taken into the fold at the test clock's now, as the delivery of frame `seq` when given. */
+export function taken(delivery: Delivery, seq?: number) {
+  return Effect.flatMap(DateTime.now, (at) =>
+    LiveGames.use((liveGames) => liveGames.take(delivery, at, Option.fromNullishOr(seq)))
+  )
 }
 
 /** A live feed that never pushes. */

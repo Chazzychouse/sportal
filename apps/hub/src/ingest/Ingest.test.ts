@@ -3,7 +3,7 @@ import { assert, describe, it } from "@effect/vitest"
 import { Delivery } from "@sportal/domain/Delivery"
 import { GameId, type GameSnapshot } from "@sportal/domain/Game"
 import { LiveGameState } from "@sportal/domain/LiveGame"
-import { snapshot, team } from "@sportal/domain/TestGame"
+import { liveSnapshot, snapshot, team } from "@sportal/domain/TestGame"
 import {
   Context,
   type Crypto,
@@ -32,7 +32,7 @@ import { GameHistory } from "../GameHistory.ts"
 import { LiveGames } from "../LiveGames.ts"
 import { LiveFeed, LiveFeedError } from "../provider/LiveFeed.ts"
 import { Decoded, Provider, ProviderError } from "../provider/Provider.ts"
-import { game, neverPushing, polling, pushed, scripted } from "../provider/TestProvider.ts"
+import { neverPushing, polling, pushed, scripted } from "../provider/TestProvider.ts"
 import { counted, recordingLogs, recordingSpans, withMetrics } from "../TestTelemetry.ts"
 import * as Ingest from "./Ingest.ts"
 
@@ -59,7 +59,11 @@ describe("Ingest", () => {
           ["fbs", ["1"]]
         ]
       )
-    }).pipe(Effect.provide(ingesting(scripted([[game("1")]]), { leagues: ["nfl", "fbs"] })))
+    }).pipe(
+      Effect.provide(
+        ingesting(scripted([[liveSnapshot({ id: GameId.make("1") })]]), { leagues: ["nfl", "fbs"] })
+      )
+    )
   )
 
   it.effect("polls at the live cadence once the fold holds the game live", () =>
@@ -75,7 +79,7 @@ describe("Ingest", () => {
         const liveGames = yield* LiveGames
         yield* TestClock.adjust(0)
         yield* liveGames.take(
-          Delivery.Snapshot({ snapshot: game("1"), from: "push" }),
+          Delivery.Snapshot({ snapshot: liveSnapshot({ id: GameId.make("1") }), from: "push" }),
           yield* DateTime.now,
           Option.none()
         )
@@ -104,7 +108,16 @@ describe("Ingest", () => {
 
       yield* TestClock.adjust("10 seconds")
       assert.strictEqual((yield* slateOf())[0]?.home.score, 7)
-    }).pipe(Effect.provide(ingesting(scripted([[liveGame(0)], [liveGame(7)]]))))
+    }).pipe(
+      Effect.provide(
+        ingesting(
+          scripted([
+            [liveSnapshot({ home: { team: team("HOME"), score: 0 } })],
+            [liveSnapshot({ home: { team: team("HOME"), score: 7 } })]
+          ])
+        )
+      )
+    )
   )
 
   it.effect("a failed league appends nothing and keeps its last listing in the fold", () =>
@@ -115,7 +128,11 @@ describe("Ingest", () => {
 
       assert.strictEqual((yield* slateOf())[0]?.home.score, 7)
       assert.lengthOf(yield* logOf(1), 1)
-    }).pipe(Effect.provide(ingesting(scripted([[liveGame(7)], "fail"]))))
+    }).pipe(
+      Effect.provide(
+        ingesting(scripted([[liveSnapshot({ home: { team: team("HOME"), score: 7 } })], "fail"]))
+      )
+    )
   )
 
   it.effect("a failed league's game goes stale in the fold, its listing kept", () =>
@@ -131,7 +148,9 @@ describe("Ingest", () => {
         )
       )
       assert.strictEqual((yield* slateOf())[0]?.period, 2)
-    }).pipe(Effect.provide(ingesting(scripted([[game("1", 2)], "fail"]))))
+    }).pipe(
+      Effect.provide(ingesting(scripted([[liveSnapshot({ id: GameId.make("1"), period: 2 })], "fail"])))
+    )
   )
 
   it.effect("retries after 30 seconds when the first poll fails", () =>
@@ -141,7 +160,11 @@ describe("Ingest", () => {
 
       yield* TestClock.adjust("30 seconds")
       assert.strictEqual((yield* slateOf())[0]?.home.score, 3)
-    }).pipe(Effect.provide(ingesting(scripted(["fail", [liveGame(3)]]))))
+    }).pipe(
+      Effect.provide(
+        ingesting(scripted(["fail", [liveSnapshot({ home: { team: team("HOME"), score: 3 } })]]))
+      )
+    )
   )
 
   it.effect("a poll is one span, ended before the poll sleeps, with the provider's span inside it", () => {
@@ -161,7 +184,11 @@ describe("Ingest", () => {
       )
       assert.deepStrictEqual(poll?.attributes.get("sportal.leagues"), ["fbs"])
       assert.deepStrictEqual(poll?.attributes.get("sportal.failed_leagues"), [])
-    }).pipe(Effect.provide(ingesting(scripted([[liveGame(0)]]), { ended })))
+    }).pipe(
+      Effect.provide(
+        ingesting(scripted([[liveSnapshot({ home: { team: team("HOME"), score: 0 } })]]), { ended })
+      )
+    )
   })
 
   it.effect("a failed league is on the span and counted", () => {
@@ -180,7 +207,17 @@ describe("Ingest", () => {
       yield* TestClock.adjust("10 seconds")
       const duration = (yield* Metric.snapshot).find((metric) => metric.id === "sportal_poll_duration")
       assert.strictEqual(duration?.type === "Histogram" ? duration.state.count : undefined, 2)
-    }).pipe(Effect.provide(ingesting(scripted([[liveGame(0)], [liveGame(7)]]))), withMetrics)
+    }).pipe(
+      Effect.provide(
+        ingesting(
+          scripted([
+            [liveSnapshot({ home: { team: team("HOME"), score: 0 } })],
+            [liveSnapshot({ home: { team: team("HOME"), score: 7 } })]
+          ])
+        )
+      ),
+      withMetrics
+    )
   )
 
   it.effect("a frame the live feed gives is appended and its delivery taken", () =>
@@ -189,7 +226,7 @@ describe("Ingest", () => {
       const subscriptions = yield* Ref.make(0)
       yield* Effect.gen(function* () {
         yield* TestClock.adjust(0)
-        yield* Queue.offer(feed, yield* pushed([liveGame(7)]))
+        yield* Queue.offer(feed, yield* pushed([liveSnapshot({ home: { team: team("HOME"), score: 7 } })]))
         yield* TestClock.adjust("100 millis")
 
         assert.strictEqual((yield* slateOf())[0]?.home.score, 7)
@@ -201,7 +238,11 @@ describe("Ingest", () => {
           ]
         )
       }).pipe(
-        Effect.provide(ingesting(scripted([[liveGame(0)]]), { liveFeed: feeding(feed, subscriptions) }))
+        Effect.provide(
+          ingesting(scripted([[liveSnapshot({ home: { team: team("HOME"), score: 0 } })]]), {
+            liveFeed: feeding(feed, subscriptions)
+          })
+        )
       )
     })
   )
@@ -218,7 +259,7 @@ describe("Ingest", () => {
         assert.deepStrictEqual(yield* Ref.get(resynced), ["gp-football-college-football-1"])
       }).pipe(
         Effect.provide(
-          ingesting(scripted([[liveGame(0)]]), {
+          ingesting(scripted([[liveSnapshot({ home: { team: team("HOME"), score: 0 } })]]), {
             liveFeed: LiveFeed.of({
               frames: (_leagues, _wanted, resync) =>
                 Stream.fromQueue(feed).pipe(
@@ -283,7 +324,11 @@ describe("Ingest", () => {
         const polls = yield* Ref.make(0)
         const provider = Layer.succeed(
           Provider,
-          polling(() => Ref.update(polls, (n) => n + 1).pipe(Effect.as([liveGame(0)])))
+          polling(() =>
+            Ref.update(polls, (n) => n + 1).pipe(
+              Effect.as([liveSnapshot({ home: { team: team("HOME"), score: 0 } })])
+            )
+          )
         )
         const closed = new LiveFeedError({ reason: "Closed", cause: "socket closed" })
         yield* Effect.gen(function* () {
@@ -321,7 +366,9 @@ describe("Ingest", () => {
       yield* Effect.gen(function* () {
         yield* TestClock.adjust(0)
         yield* TestClock.adjust("10 seconds")
-      }).pipe(Effect.provide(ingesting(scripted([[liveGame(0)]]))))
+      }).pipe(
+        Effect.provide(ingesting(scripted([[liveSnapshot({ home: { team: team("HOME"), score: 0 } })]])))
+      )
 
       assert.deepStrictEqual(
         logs.filter((log) => log.level === "Error").map((log) => log.message),
@@ -339,7 +386,7 @@ describe("Ingest", () => {
         const scope = yield* Scope.make()
         const services = yield* Layer.buildWithScope(
           Layer.effectDiscard(Layer.build(GameHistory.layer)).pipe(
-            Layer.provideMerge(over(scripted([[liveGame(0)]])))
+            Layer.provideMerge(over(scripted([[liveSnapshot({ home: { team: team("HOME"), score: 0 } })]])))
           ),
           scope
         )
@@ -347,7 +394,11 @@ describe("Ingest", () => {
         // Far more than the 100 ms the writer could be behind by when the Hub stops.
         yield* Effect.forEach(
           Array.from({ length: 200 }, (_, index) => index),
-          (index) => Effect.flatMap(pushed([liveGame(index)]), log.append),
+          (index) =>
+            Effect.flatMap(
+              pushed([liveSnapshot({ home: { team: team("HOME"), score: index } })]),
+              log.append
+            ),
           { discard: true }
         )
 
@@ -368,7 +419,10 @@ describe("Ingest", () => {
       const ended: Array<Tracer.Span> = []
       const { logs, layer: logged } = recordingLogs()
       return Effect.gen(function* () {
-        yield* loggedBefore([pollOf([game("1", 2)]), pollOf([game("1", 3)])])
+        yield* loggedBefore([
+          pollOf([liveSnapshot({ id: GameId.make("1"), period: 2 })]),
+          pollOf([liveSnapshot({ id: GameId.make("1"), period: 3 })])
+        ])
 
         yield* Effect.gen(function* () {
           const replayed = yield* (yield* LiveGames).latest
@@ -384,14 +438,17 @@ describe("Ingest", () => {
           const polled = yield* (yield* LiveGames).latest
           assert.deepStrictEqual(polled.seq, Option.some(3))
           assert.strictEqual(polled.live.get(GameId.make("1"))?.snapshot.period, 4)
-        }).pipe(Effect.provide(over(scripted([[game("1", 4)]]), { ended })), Effect.provide(logged))
+        }).pipe(
+          Effect.provide(over(scripted([[liveSnapshot({ id: GameId.make("1"), period: 4 })]]), { ended })),
+          Effect.provide(logged)
+        )
       }).pipe(Effect.provide([Database.layer(":memory:"), NodeCrypto.layer]), withMetrics)
     }
   )
 
   it.effect("a frame appended the moment the replay ends, before anything else runs, reaches the fold", () =>
     Effect.gen(function* () {
-      yield* loggedBefore([pollOf([game("1", 2)])])
+      yield* loggedBefore([pollOf([liveSnapshot({ id: GameId.make("1"), period: 2 })])])
       // The log's replay appends a frame as it ends, so it is in the log before decoding reaches the end of the replay.
       const appendingAtEnd = Layer.effect(
         FeedLog,
@@ -403,7 +460,9 @@ describe("Ingest", () => {
                 .replay(from)
                 .pipe(
                   Stream.concat(
-                    Stream.fromEffect(Effect.flatMap(pushed([game("1", 3)]), log.append)).pipe(Stream.drain)
+                    Stream.fromEffect(
+                      Effect.flatMap(pushed([liveSnapshot({ id: GameId.make("1"), period: 3 })]), log.append)
+                    ).pipe(Stream.drain)
                   )
                 )
           })
@@ -441,7 +500,10 @@ describe("Ingest", () => {
         const ended: Array<Tracer.Span> = []
         yield* loggedBefore(
           framesAt.map((at) =>
-            Effect.map(pollOf([game("1", 2)]), (frame) => ({ ...frame, receivedAt: DateTime.makeUnsafe(at) }))
+            Effect.map(pollOf([liveSnapshot({ id: GameId.make("1"), period: 2 })]), (frame) => ({
+              ...frame,
+              receivedAt: DateTime.makeUnsafe(at)
+            }))
           )
         )
         yield* TestClock.setTime(
@@ -514,7 +576,11 @@ function stopsAndPollsOn(frames: Stream.Stream<Omit<Frame, "seq">>, why: string)
     const polls = yield* Ref.make(0)
     const provider = Layer.succeed(
       Provider,
-      polling(() => Ref.update(polls, (n) => n + 1).pipe(Effect.as([liveGame(0)])))
+      polling(() =>
+        Ref.update(polls, (n) => n + 1).pipe(
+          Effect.as([liveSnapshot({ home: { team: team("HOME"), score: 0 } })])
+        )
+      )
     )
     yield* Effect.gen(function* () {
       yield* TestClock.adjust(0)
@@ -550,16 +616,6 @@ function feeding(feed: Queue.Queue<Offered>, subscriptions: Ref.Ref<number>): Li
   })
 }
 
-function liveGame(homeScore: number) {
-  return snapshot({
-    status: "live",
-    period: 1,
-    clock: "10:00",
-    home: { team: team("MSST"), score: homeScore },
-    away: { team: team("ALA"), score: 0 }
-  })
-}
-
 /**
  * A provider that never polls, whose decode keeps a count of the frames it has read and reads each as a pushed live
  * game with that count for the home score.
@@ -575,7 +631,10 @@ const counting = Provider.of({
             count + 1,
             [
               Decoded.Delivered({
-                delivery: Delivery.Snapshot({ snapshot: liveGame(count + 1), from: "push" }),
+                delivery: Delivery.Snapshot({
+                  snapshot: liveSnapshot({ home: { team: team("HOME"), score: count + 1 } }),
+                  from: "push"
+                }),
                 at: frame.receivedAt,
                 seq: frame.seq
               })

@@ -1,9 +1,9 @@
 import { NodeServices } from "@effect/platform-node"
 import { assert, describe, it } from "@effect/vitest"
-import { ConfigProvider, Effect, FileSystem, Layer, Path } from "effect"
+import { Effect, FileSystem, Layer, Path } from "effect"
 import { SqlClient } from "effect/sql"
 import * as Database from "./Database.ts"
-import { HubConfig } from "./HubConfig.ts"
+import { withEnv } from "./TestHubConfig.ts"
 
 describe("Database.migrate", () => {
   it.effect("keeps each store's migrations in its own table, so stores number them independently", () =>
@@ -37,9 +37,7 @@ describe("Database.inDataDir", () => {
       const fs = yield* FileSystem.FileSystem
       const path = yield* Path.Path
       const dataDir = path.join(yield* fs.makeTempDirectoryScoped(), "nested", "sportal")
-      const config = HubConfig.layer.pipe(
-        Layer.provide(ConfigProvider.layer(ConfigProvider.fromEnv({ env: { SPORTAL_DATA_DIR: dataDir } })))
-      )
+      const config = withEnv({ SPORTAL_DATA_DIR: dataDir })
 
       yield* Effect.gen(function* () {
         const sql = yield* SqlClient.SqlClient
