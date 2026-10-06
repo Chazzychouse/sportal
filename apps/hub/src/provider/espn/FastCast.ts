@@ -3,9 +3,11 @@ import type { LeagueId } from "@sportal/domain/League"
 import {
   Array as Arr,
   Channel,
+  Context,
   DateTime,
   Effect,
   FiberMap,
+  Layer,
   Metric,
   Option,
   PubSub,
@@ -21,24 +23,52 @@ import {
 import { HttpClient, HttpClientResponse } from "effect/http"
 import * as Socket from "effect/socket/Socket"
 import type { FeedFrame } from "../../Frame.ts"
-import { ProviderError } from "../Provider.ts"
+import { type LiveFeed, ProviderError } from "../Provider.ts"
 import * as FastCastMessage from "./FastCastMessage.ts"
 
 /**
- * ESPN FastCast as the provider's push: one socket subscribed to each league's scoreboard topic, and to the game topic
- * of each game wanted while it is open. Every socket text is a frame, each `H` followed by its checkpoint; fails when
- * the socket closes, ends, or goes quiet. A topic whose checkpoint fails is followed again on `checkpointRetry`.
+ * ESPN FastCast as the ESPN provider's push: one socket subscribed to each league's scoreboard topic, and to the game
+ * topic of each game wanted while it is open. Every socket text is a frame, each `H` followed by its checkpoint; fails
+ * when the socket closes, ends, or goes quiet. A topic whose checkpoint fails is followed again on `checkpointRetry`.
  */
-export function push(
-  leagues: ReadonlyArray<LeagueId>,
-  wanted: Stream.Stream<ReadonlyArray<GameSnapshot>>,
-  resync: Stream.Stream<string>,
-  options: { readonly checkpointRetry: Schedule.Schedule<unknown, CheckpointError> }
-): Stream.Stream<FeedFrame, ProviderError, HttpClient.HttpClient | Socket.WebSocketConstructor> {
-  return Stream.unwrap(connect(leagues, wanted, resync, options.checkpointRetry)).pipe(
-    Stream.concat(Stream.fail(new ProviderError({ reason: "Closed", cause: "FastCast ended the stream" }))),
-    Stream.timeoutOrElse({ duration: silence, orElse: () => Stream.fail(silent()) })
-  )
+export class FastCast extends Context.Service<
+  FastCast,
+  {
+    readonly push: LiveFeed
+    /** How a topic whose checkpoint failed is followed again. */
+    readonly checkpointRetry: Schedule.Schedule<unknown, CheckpointError>
+  }
+>()("sportal/hub/FastCast") {
+  /** FastCast following topics again on `checkpointRetry`. */
+  static readonly make = (checkpointRetry: Schedule.Schedule<unknown, CheckpointError>) =>
+    Effect.gen(function* () {
+      const provide = Stream.provideContext(
+        yield* Effect.context<HttpClient.HttpClient | Socket.WebSocketConstructor>()
+      )
+      return FastCast.of({
+        push: (leagues, wanted, resync) =>
+          Stream.unwrap(connect(leagues, wanted, resync, checkpointRetry)).pipe(
+            Stream.concat(
+              Stream.fail(new ProviderError({ reason: "Closed", cause: "FastCast ended the stream" }))
+            ),
+            Stream.timeoutOrElse({ duration: silence, orElse: () => Stream.fail(silent()) }),
+            provide
+          ),
+        checkpointRetry
+      })
+    })
+
+  /** Every 30 s, five tries in all, then left to polling. */
+  static readonly layer: Layer.Layer<FastCast, never, HttpClient.HttpClient | Socket.WebSocketConstructor> =
+    Layer.effect(
+      FastCast,
+      FastCast.make(
+        Schedule.spaced("30 seconds").pipe(
+          Schedule.setInputType<CheckpointError>(),
+          Schedule.upTo({ times: 4 })
+        )
+      )
+    )
 }
 
 /** A topic's checkpoint could not be loaded (unreachable, refused, timed out) or did not decode. */
@@ -47,11 +77,6 @@ export class CheckpointError extends Schema.TaggedError<CheckpointError>()("Chec
   reason: Schema.Literals(["Unloaded", "Undecodable"]),
   cause: Schema.Defect()
 }) {}
-
-/** How a topic whose checkpoint failed is followed again: every 30 s, five tries in all, then left to polling. */
-export const checkpointRetry: Schedule.Schedule<unknown, CheckpointError> = Schedule.spaced(
-  "30 seconds"
-).pipe(Schedule.setInputType<CheckpointError>(), Schedule.upTo({ times: 4 }))
 
 /**
  * Opens the socket and follows each league's topic, returning the frames that follow, the handshake's first. Each

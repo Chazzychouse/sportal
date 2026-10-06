@@ -1,12 +1,11 @@
 import type { GameSnapshot } from "@sportal/domain/Game"
 import type { LeagueId } from "@sportal/domain/League"
-import { DateTime, Duration, Effect, Layer, Option, Schedule, Stream } from "effect"
+import { DateTime, Duration, Effect, Layer, Option, Schedule } from "effect"
 import { Headers, HttpClient } from "effect/http"
-import type * as Socket from "effect/socket/Socket"
 import type { Decoder } from "../Decoder.ts"
 import { type Polling, Provider, ProviderError } from "../Provider.ts"
 import * as EspnDecode from "./EspnDecode.ts"
-import * as FastCast from "./FastCast.ts"
+import { FastCast } from "./FastCast.ts"
 
 /**
  * ESPN as the provider: the site scoreboard polled and FastCast pushing, with `EspnDecode` beside them as its
@@ -14,18 +13,12 @@ import * as FastCast from "./FastCast.ts"
  * 2xx `Refused`. Polled every 10 seconds while a game is live, every minute within 30 minutes of a kickoff, and every
  * 15 minutes otherwise; at most 30 seconds after a poll in which a league failed.
  */
-export const layer: Layer.Layer<
-  Provider | Decoder,
-  never,
-  HttpClient.HttpClient | Socket.WebSocketConstructor
-> = Layer.merge(
+export const layer: Layer.Layer<Provider | Decoder, never, FastCast | HttpClient.HttpClient> = Layer.merge(
   Layer.effect(
     Provider,
     Effect.gen(function* () {
       const client = (yield* HttpClient.HttpClient).pipe(HttpClient.filterStatusOk)
-      const provide = Stream.provideContext(
-        yield* Effect.context<HttpClient.HttpClient | Socket.WebSocketConstructor>()
-      )
+      const fastCast = yield* FastCast
 
       const poll = (league: LeagueId) =>
         Effect.gen(function* () {
@@ -55,8 +48,7 @@ export const layer: Layer.Layer<
 
       return Provider.of({
         poll,
-        push: (leagues, wanted, resync) =>
-          provide(FastCast.push(leagues, wanted, resync, { checkpointRetry: FastCast.checkpointRetry })),
+        push: fastCast.push,
         polling: Schedule.forever.pipe(
           Schedule.setInputType<Schedule.Input<Polling>>(),
           Schedule.modifyDelay(({ input, now }) =>

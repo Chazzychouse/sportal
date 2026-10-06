@@ -9,6 +9,7 @@ import { HttpClient, HttpClientError, HttpClientResponse } from "effect/http"
 import { Provider } from "../Provider.ts"
 import { listedBy } from "../TestProvider.ts"
 import * as EspnProvider from "./EspnProvider.ts"
+import { FastCast } from "./FastCast.ts"
 import { noSocket } from "./TestEspn.ts"
 
 // Real payloads recorded from ESPN. A payload that breaks decoding gets added here before the fix.
@@ -19,6 +20,7 @@ const nflPregame = fixture("nfl-scoreboard-pregame")
 
 const recordedEspn = (fbs: string) =>
   EspnProvider.layer.pipe(
+    Layer.provide(FastCast.layer),
     Layer.provide(noSocket),
     Layer.provide(
       Layer.succeed(
@@ -173,6 +175,7 @@ describe("EspnProvider", () => {
     Effect.gen(function* () {
       const failing = (respond: () => Effect.Effect<Response, Error>) =>
         EspnProvider.layer.pipe(
+          Layer.provide(FastCast.layer),
           Layer.provide(noSocket),
           Layer.provide(
             Layer.succeed(
