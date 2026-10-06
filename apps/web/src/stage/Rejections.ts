@@ -1,16 +1,17 @@
 import type { StageRejection } from "@sportal/domain/Stage"
 import { Effect, Fiber, Stream } from "effect"
+import type { HttpClientError } from "effect/http"
 import { useEffect } from "react"
 import { toast } from "sonner"
-import { stageRejections } from "../hub/HubClient.ts"
+import { stageFailures } from "../hub/HubClient.ts"
 import { runtime } from "../hub/HubRuntime.ts"
 
-/** Shows each stage command the Hub refuses as a warning toast, saying why. */
+/** Shows each stage command that failed as a warning toast, saying why: the Hub refused it, or never got it. */
 export function useRejectionToasts() {
   useEffect(() => {
     const fiber = runtime.runFork(
-      stageRejections.pipe(
-        Stream.runForEach((rejection) => Effect.sync(() => toast.warning(rejectionText(rejection.reason))))
+      stageFailures.pipe(
+        Stream.runForEach((failure) => Effect.sync(() => toast.warning(failureText(failure))))
       )
     )
     return () => {
@@ -19,8 +20,9 @@ export function useRejectionToasts() {
   }, [])
 }
 
-function rejectionText(reason: StageRejection["reason"]): string {
-  switch (reason) {
+function failureText(failure: StageRejection | HttpClientError.HttpClientError): string {
+  if (failure._tag === "HttpClientError") return "The Hub did not get that. Is it running?"
+  switch (failure.reason) {
     case "no-such-tile":
       return "There is no tile there."
     case "empty-tile":

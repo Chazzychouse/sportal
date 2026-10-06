@@ -1,4 +1,4 @@
-import { Option } from "effect"
+import { Effect, Option } from "effect"
 import { useEffect, useState } from "react"
 import { encode } from "uqr"
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/design/dialog"
@@ -18,7 +18,7 @@ export function JoinRemote(props: { open: boolean; onOpenChange: (open: boolean)
     if (!props.open) return
     setChosen(0)
     setAddresses(undefined)
-    void runtime.runPromise(hostAddresses).then(setAddresses)
+    void runtime.runPromise(Effect.option(hostAddresses)).then(setAddresses)
   }, [props.open])
 
   const port = window.location.port === "" ? "" : `:${window.location.port}`
