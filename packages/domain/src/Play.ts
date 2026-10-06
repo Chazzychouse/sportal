@@ -48,7 +48,7 @@ export class Play extends Schema.Class<Play>("sportal/Play")({
   awayScore: Schema.Int,
   start: Spot,
   end: Spot,
-  homeWinProbability: Schema.optional(Schema.Number)
+  homeWinProbability: Schema.optional(Schema.Finite)
 }) {
   /** By `sequence`. */
   static readonly order: Order.Order<Play> = Order.mapInput(Order.Number, (play: Play) => play.sequence)
