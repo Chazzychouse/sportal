@@ -5,33 +5,35 @@ import { Play } from "@sportal/domain/Play"
 import { Array as Arr, Effect, Layer, Option, Record, Result, Schema, Stream } from "effect"
 import type { Frame } from "../../Frame.ts"
 import { Decoder } from "../Decoder.ts"
-import { Decoded, Notice, type Provider } from "../Provider.ts"
+import { Decoded, Notice } from "../Provider.ts"
 import { EspnEvent } from "./EspnEvent.ts"
 import * as EspnPlay from "./EspnPlay.ts"
 import * as FastCastDocument from "./FastCastDocument.ts"
 
 /**
- * What each ESPN frame said, in order. A poll response is its league's `Listing`. A scoreboard topic's change is a
- * pushed `Snapshot` of each game it touched, advanced to the game its league last listed (FastCast has no short
- * names); a game no listing has is noted `Unlisted` and not delivered. A game topic's change is a `Plays` of the
- * game's whole list, in `Play.order`. A topic whose document was sent back to waiting for a checkpoint is a `Resync`
- * of it. A frame that does not decode is noted `FrameUndecoded` and skipped. Logs and counts nothing.
+ * ESPN's decode as the `Decoder`: what each ESPN frame said, in order. A poll response is its league's `Listing`. A
+ * scoreboard topic's change is a pushed `Snapshot` of each game it touched, advanced to the game its league last listed
+ * (FastCast has no short names); a game no listing has is noted `Unlisted` and not delivered. A game topic's change is
+ * a `Plays` of the game's whole list, in `Play.order`. A topic whose document was sent back to waiting for a checkpoint
+ * is a `Resync` of it. A frame that does not decode is noted `FrameUndecoded` and skipped. Logs and counts nothing.
  */
-export const decode: Provider["Service"]["decode"] = (frames) =>
-  frames.pipe(
-    Stream.mapAccumEffect(
-      (): State => ({
-        listings: new Map(),
-        documents: FastCastDocument.empty,
-        notedTypes: new Set(),
-        notedPlays: new Set()
-      }),
-      (state, frame) => (frame.feed === "poll" ? listed(state, frame) : pushed(state, frame))
-    )
-  )
-
-/** ESPN's decode as the `Decoder`, for frames ESPN delivered before. */
-export const layer = Layer.succeed(Decoder, Decoder.of({ decode }))
+export const layer = Layer.succeed(
+  Decoder,
+  Decoder.of({
+    decode: (frames) =>
+      frames.pipe(
+        Stream.mapAccumEffect(
+          (): State => ({
+            listings: new Map(),
+            documents: FastCastDocument.empty,
+            notedTypes: new Set(),
+            notedPlays: new Set()
+          }),
+          (state, frame) => (frame.feed === "poll" ? listed(state, frame) : pushed(state, frame))
+        )
+      )
+  })
+)
 
 /** The site scoreboard as polled: its events, each read by `EspnEvent`. */
 const Scoreboard = Schema.Struct({ events: Schema.Array(Schema.Unknown) })
@@ -47,7 +49,7 @@ type State = {
   readonly notedPlays: ReadonlySet<string>
 }
 
-/** What one frame said, as `decode` gives it. */
+/** What one frame said, as the decode gives it. */
 type Said = ReadonlyArray<Decoded>
 
 function listed(state: State, frame: Frame): Effect.Effect<readonly [State, Said]> {

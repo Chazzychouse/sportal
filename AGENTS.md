@@ -33,8 +33,10 @@ easiest to break.
 - In the Hub, only `HubMode.ts` and tests name concrete providers and sources, and `main.ts` is only the layer pipe and how the process runs it.
   Everything else depends on the port.
 - In the Hub, only `HubConfig.ts` reads the environment. A new setting is a field there, with its default.
-- A service is yielded where it is used, never passed as an argument. A layer that needs a setting yields `HubConfig`;
-  a choice between layers at startup is a `Layer.unwrap` that yields it.
+- A service is yielded where it is used, never passed as an argument. A layer that needs a setting yields `HubConfig`
+  (in the shell, `ShellConfig`); a choice between layers at startup is a `Layer.unwrap` that yields it.
+- A port's member types that other modules need are named and exported beside it (`Polling`, `LiveFeed`). Nothing
+  indexes a service's type with `X["Service"]`.
 
 ## Inside a file
 

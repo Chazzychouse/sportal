@@ -44,12 +44,14 @@ vi.mock("electron", () => ({
 }))
 
 const { ProviderSession } = await import("./ProviderSession.ts")
+const { ShellConfig } = await import("./ShellConfig.ts")
+const { ShellWindow } = await import("./ShellWindow.ts")
 
 describe("ProviderSession.openSignIn", () => {
   it.effect("opens a window on the shared provider session at YouTube TV, without a preload", () =>
     Effect.gen(function* () {
       const providers = yield* built()
-      yield* providers.openSignIn(shell)
+      yield* providers.openSignIn
       expect(windows).toHaveLength(1)
       const [signIn] = windows
       expect(signIn?.options.webPreferences).toEqual({
@@ -67,7 +69,7 @@ describe("ProviderSession.openSignIn", () => {
   it.effect("makes the window a child of the shell window, so it closes with it", () =>
     Effect.gen(function* () {
       const providers = yield* built()
-      yield* providers.openSignIn(shell)
+      yield* providers.openSignIn
       expect(windows[0]?.options.parent).toBe(shell)
     }).pipe(Effect.scoped)
   )
@@ -75,7 +77,7 @@ describe("ProviderSession.openSignIn", () => {
   it.effect("confines the window to the provider's addresses", () =>
     Effect.gen(function* () {
       const providers = yield* built()
-      yield* providers.openSignIn(shell)
+      yield* providers.openSignIn
       const refused = navigation("https://evil.example/", true)
       windows[0]?.webContents.emit("will-navigate", refused)
       expect(refused.preventDefault).toHaveBeenCalled()
@@ -88,8 +90,8 @@ describe("ProviderSession.openSignIn", () => {
   it.effect("focuses the open window instead of opening a second", () =>
     Effect.gen(function* () {
       const providers = yield* built()
-      yield* providers.openSignIn(shell)
-      yield* providers.openSignIn(shell)
+      yield* providers.openSignIn
+      yield* providers.openSignIn
       expect(windows).toHaveLength(1)
       expect(windows[0]?.focus).toHaveBeenCalledTimes(1)
     }).pipe(Effect.scoped)
@@ -98,9 +100,9 @@ describe("ProviderSession.openSignIn", () => {
   it.effect("opens a new window once the user has closed the last", () =>
     Effect.gen(function* () {
       const providers = yield* built()
-      yield* providers.openSignIn(shell)
+      yield* providers.openSignIn
       if (windows[0]) windows[0].destroyed = true
-      yield* providers.openSignIn(shell)
+      yield* providers.openSignIn
       expect(windows).toHaveLength(2)
     }).pipe(Effect.scoped)
   )
@@ -110,7 +112,7 @@ describe("ProviderSession.openSignIn", () => {
       yield* Effect.scoped(
         Effect.gen(function* () {
           const providers = yield* built()
-          yield* providers.openSignIn(shell)
+          yield* providers.openSignIn
           expect(windows[0]?.close).not.toHaveBeenCalled()
         })
       )
@@ -125,7 +127,7 @@ describe("ProviderSession.openSignIn", () => {
       loadFailure = Object.assign(new Error("ERR_FAILED loading 'https://tv.youtube.com/?t=1'"), {
         code: "ERR_FAILED"
       })
-      yield* providers.openSignIn(shell)
+      yield* providers.openSignIn
       yield* Effect.yieldNow
       expect(logs).toEqual(["ProviderSession: the sign-in window did not load: ERR_FAILED"])
     }).pipe(Effect.scoped)
@@ -252,7 +254,13 @@ function built(logs: Array<string> = []) {
   const capture = Logger.make<unknown, void>(({ message }) => {
     logs.push(String(Array.isArray(message) ? message[0] : message))
   })
-  return Layer.build(ProviderSession.layer(ui).pipe(Layer.provide(Logger.layer([capture])))).pipe(
-    Effect.map((context) => Context.get(context, ProviderSession))
-  )
+  return Layer.build(
+    ProviderSession.layer.pipe(
+      Layer.provide([
+        Layer.succeed(ShellConfig, ShellConfig.of({ hubUrl: ui })),
+        Layer.succeed(ShellWindow, shell),
+        Logger.layer([capture])
+      ])
+    )
+  ).pipe(Effect.map((context) => Context.get(context, ProviderSession)))
 }

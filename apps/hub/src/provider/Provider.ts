@@ -11,45 +11,43 @@ import {
   Schema,
   type Stream
 } from "effect"
-import type { FeedFrame, Frame } from "../Frame.ts"
+import type { FeedFrame } from "../Frame.ts"
 
 /**
- * A provider of game data: its scoreboard polled as frames, its live feed pushing frames between polls, what those
- * frames say, decoded, and when it is polled again.
+ * A provider of game data: its scoreboard polled as frames, its live feed pushing frames between polls, and when it is
+ * polled again. What those frames say is its `Decoder`'s, which its adapter provides beside it.
  */
 export class Provider extends Context.Service<
   Provider,
   {
     /** One poll of `league`, as received. */
     poll(league: LeagueId): Effect.Effect<FeedFrame, ProviderError>
-    /**
-     * Every pushed frame, as received, for the leagues' scoreboards and for each game in `wanted` (the current games).
-     * Each channel in `resync` is asked for its checkpoint again, if the push follows it. Fails when the push cannot go
-     * on.
-     */
-    push(
-      leagues: ReadonlyArray<LeagueId>,
-      wanted: Stream.Stream<ReadonlyArray<GameSnapshot>>,
-      resync: Stream.Stream<string>
-    ): Stream.Stream<FeedFrame, ProviderError>
-    /**
-     * What each frame said, in order: a poll response is a `Listing`, a pushed game a `Snapshot`, a plays document
-     * change a `Plays`, each `Delivered`. A live feed topic whose document had to be dropped (a missed message, a
-     * patch that will not apply) is a `Resync` of its channel, so the live feed can ask for its checkpoint again.
-     * Anything decode noticed, a frame that does not decode among it, is `Noted`. Each carries the `seq` of the frame
-     * that said it. Never fails, logs, or counts.
-     */
-    decode(frames: Stream.Stream<Frame>): Stream.Stream<Decoded>
+    /** Its live feed. */
+    readonly push: LiveFeed
     /**
      * When to poll again, given what the last poll left: the fold's slate for the polled leagues, and the leagues that
      * failed. Ingest runs `poll` for each league repeated on it, and nothing else decides when.
      */
-    readonly polling: Schedule.Schedule<
-      unknown,
-      { readonly slate: ReadonlyArray<GameSnapshot>; readonly failed: ReadonlyArray<LeagueId> }
-    >
+    readonly polling: Polling
   }
 >()("sportal/hub/Provider") {}
+
+/**
+ * A provider's push: every pushed frame, as received, for the leagues' scoreboards and for each game in `wanted` (the
+ * current games), with each channel in `resync` asked for its checkpoint again if the push follows it. Fails when the
+ * push cannot go on.
+ */
+export type LiveFeed = (
+  leagues: ReadonlyArray<LeagueId>,
+  wanted: Stream.Stream<ReadonlyArray<GameSnapshot>>,
+  resync: Stream.Stream<string>
+) => Stream.Stream<FeedFrame, ProviderError>
+
+/** When a provider is polled again, given the slate the last poll left and the leagues that failed in it. */
+export type Polling = Schedule.Schedule<
+  unknown,
+  { readonly slate: ReadonlyArray<GameSnapshot>; readonly failed: ReadonlyArray<LeagueId> }
+>
 
 /** What one frame said: a delivery, a live feed channel to resync, or something decode noticed. */
 export type Decoded = Data.TaggedEnum<{

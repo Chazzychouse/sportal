@@ -13,7 +13,6 @@ import {
   Schema,
   Stream
 } from "effect"
-import type { Session } from "electron"
 import { ProviderSession } from "./ProviderSession.ts"
 import { guideBrowseId, guideOrigin } from "./YouTubeTv.ts"
 
@@ -34,11 +33,10 @@ export class GuideReader extends Context.Service<
   static readonly layer = Layer.effect(
     GuideReader,
     Effect.gen(function* () {
-      const providers = yield* ProviderSession
       const guides = yield* PubSub.unbounded<string>()
       const requests = yield* Queue.sliding<void>(1)
 
-      const read = readGuide(providers.session).pipe(
+      const read = readGuide().pipe(
         Effect.flatMap((guide) => PubSub.publish(guides, guide)),
         Effect.catchTag("GuideNotRead", (failure) =>
           Effect.logWarning(`GuideReader: the guide could not be read: ${failure.reason}`)
@@ -76,9 +74,10 @@ export class GuideReader extends Context.Service<
 class GuideNotRead extends Schema.TaggedError<GuideNotRead>()("GuideNotRead", { reason: Schema.String }) {}
 
 /** Reads the guide page's client config, then sends the guide request it describes, signed as the account. */
-function readGuide(session: Session) {
+function readGuide() {
   return Effect.gen(function* () {
-    const context = clientContext(yield* send(session, `${guideOrigin}/live`, {}))
+    const { session } = yield* ProviderSession
+    const context = clientContext(yield* send(`${guideOrigin}/live`, {}))
     if (Option.isNone(context))
       return yield* Effect.fail(new GuideNotRead({ reason: "the guide page has no client config" }))
     const cookies = yield* Effect.tryPromise({
@@ -94,7 +93,7 @@ function readGuide(session: Session) {
     const signature = createHash("sha1")
       .update(`${seconds} ${sapisid.value.value} ${guideOrigin}`)
       .digest("hex")
-    return yield* send(session, `${guideOrigin}/youtubei/v1/browse?prettyPrint=false`, {
+    return yield* send(`${guideOrigin}/youtubei/v1/browse?prettyPrint=false`, {
       method: "POST",
       headers: {
         "content-type": "application/json",
@@ -108,25 +107,24 @@ function readGuide(session: Session) {
 }
 
 /** Sends one request on the session and reads its body. A failed request or a status outside 2xx is `GuideNotRead`. */
-function send(session: Session, url: string, init: RequestInit) {
+function send(url: string, init: RequestInit) {
   const path = new URL(url).pathname
-  return Effect.tryPromise({
-    try: () =>
-      session
-        .fetch(url, init)
-        .then((response) => response.text().then((body) => ({ status: response.status, body }))),
-    catch: (cause) => new GuideNotRead({ reason: `${path} could not be reached: ${String(cause)}` })
-  }).pipe(
-    Effect.flatMap(({ status, body }) =>
-      status >= 200 && status < 300
-        ? Effect.succeed(body)
-        : Effect.fail(
-            new GuideNotRead({
-              reason: `${path} answered ${status}${status === 401 || status === 403 ? " (signed out of YouTube TV?)" : ""}`
-            })
-          )
+  return Effect.gen(function* () {
+    const { session } = yield* ProviderSession
+    const { status, body } = yield* Effect.tryPromise({
+      try: () =>
+        session
+          .fetch(url, init)
+          .then((response) => response.text().then((body) => ({ status: response.status, body }))),
+      catch: (cause) => new GuideNotRead({ reason: `${path} could not be reached: ${String(cause)}` })
+    })
+    if (status >= 200 && status < 300) return body
+    return yield* Effect.fail(
+      new GuideNotRead({
+        reason: `${path} answered ${status}${status === 401 || status === 403 ? " (signed out of YouTube TV?)" : ""}`
+      })
     )
-  )
+  })
 }
 
 /** The client context a guide page publishes in its `ytcfg.set({...})` config, which the guide request repeats. */

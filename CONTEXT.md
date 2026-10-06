@@ -27,7 +27,7 @@ Every exported type name must be a term here, except the wire schemas in `*Paylo
 | **Fold report** | What one step of the live games did to one game, for telemetry to tell: took a snapshot, started, changed, stopped, happened (a game event), dropped, or raised a defect. | fold event, log entry |
 | **Stale** | A live game no snapshot has reached for 90 seconds. It stays current for 30 minutes after its last update. | |
 | **Delivery** | What a frame said: a league's listing, one game's snapshot, or one game's whole list of plays. | input, update |
-| **Decoder** | A provider's decode on its own, which its adapter provides, so a recorded scenario decodes its frames as the provider that recorded them would. | parser |
+| **Decoder** | The one home of a provider's decode, which its adapter provides beside it, so a recorded scenario decodes its frames as the provider that recorded them would. | parser |
 | **Decoded** | What one frame said, as a provider decodes it: a `Delivered` delivery with the instant and `seq` of its frame, a `Resync` of a live feed channel, or a `Noted` notice. | decoded frame, said |
 | **Notice** | Something a provider's decode noticed in a frame for telemetry to tell: a message received, games pushed, an unlisted game, a document reset, a message of an unknown op, a frame, event, or play that did not decode, or an unknown play type. Told only for frames after a replay. | warning, metric |
 | **Delivery source** | Which feed a snapshot came from: `push` or `poll`. | origin, feed type |
@@ -50,12 +50,13 @@ Every exported type name must be a term here, except the wire schemas in `*Paylo
 
 | Term | Meaning | Not |
 | --- | --- | --- |
-| **Provider** | An adapter that supplies **game data** (ESPN, CollegeFootballData): its poll, its push (the live feed), its decode, and its polling Schedule. | source, feed |
+| **Provider** | An adapter that supplies **game data** (ESPN, CollegeFootballData): its poll, its push (the live feed), and its polling Schedule. | source, feed |
 | **Provider error** | A provider could not supply data: a poll of a league unreachable or refused, or a push refused, closed, or gone silent. | fetch error, live feed error |
-| **Live feed** | A provider's push: the connection carrying updates for live games between polls (ESPN FastCast). | socket, stream, webhook |
+| **Live feed** | A provider's push: the connection carrying updates for live games between polls (ESPN FastCast). `LiveFeed` in code. | socket, stream, webhook |
+| **FastCast** | ESPN's live feed, as the ESPN provider's push: one socket following each league's scoreboard and each wanted game, with FastCast's checkpoint retry. | |
 | **ESPN event** | One game as either ESPN feed spells it, the polled site scoreboard or a FastCast scoreboard topic, read as a GameSnapshot; `EspnEvent` in code. | payload, DTO |
 | **Topic owner** | What a live feed topic carries: one league's scoreboard, or one game's plays; `Owner` in code. | subscription |
-| **Checkpoint error** | A live feed topic's checkpoint could not be loaded or did not decode; retried by FastCast's checkpoint retry, then the game is left to polling. | |
+| **Checkpoint error** | A live feed topic's checkpoint could not be loaded or did not decode; retried on FastCast's checkpoint retry, then the game is left to polling. | |
 | **Ingesting** | The Hub's loop, in `ingest/`, that replays the day from the feed log into the live games, then polls the provider on its polling and runs its push, appending every frame to the log and folding what each says into the live games. | poller, sync, fetcher |
 | **Polling** | When a provider is polled again, given the slate the last poll left and the leagues that failed: a Schedule its adapter declares. ESPN's is 10 s while a game is live, 1 min within 30 minutes of a kickoff, 15 min otherwise. | cadence, interval |
 | **Source** | A way you obtain **video** (YouTube TV). | provider, service |
@@ -100,6 +101,8 @@ Provider and Source are the two words most likely to be swapped. Provider is alw
 | **Telemetry** | The traces, logs, and metrics the Hub exports for people to read in Grafana. | monitoring, observability stack |
 | **Display** | A device running the shell and presenting a Stage. Its local state (selected tile, interacting tile, pick, slate drawer, and the one open overlay) is the web UI's `Display`. | screen, client, player |
 | **Remote** | A client controlling a Display's Stage without presenting it. | controller |
+| **Shell config** | Every setting the desktop shell reads from its environment: the Hub's address; `ShellConfig` in code. | settings, env |
+| **Shell window** | The shell's one window, showing the Hub's web UI, confined to the Hub's origin; `ShellWindow` in code. | main window, BrowserWindow |
 | **Shell bridge** | The small interface the desktop shell exposes to the web UI; its IPC channel names are `ShellChannel`. | IPC, native API |
 | **Full screen** | A Display's window filling its monitor with only the Stage; local to the Display, not a Stage state. | solo |
 | **Hotkey** | A key Sportal acts on, wherever it was pressed: in the web UI or in a stream view with focus. | shortcut, keybind |

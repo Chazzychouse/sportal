@@ -19,8 +19,10 @@ describe("ChannelStore", () => {
   it.effect("starts empty and returns each carriage recorded", () =>
     Effect.gen(function* () {
       const filename = yield* tempDatabase()
-      const carriages = yield* withStore(filename, (store) =>
+      const carriages = yield* withStore(
+        filename,
         Effect.gen(function* () {
+          const store = yield* ChannelStore
           assert.deepStrictEqual(yield* store.carriages, [])
           yield* store.record(carried("https://tv.youtube.com/watch/espn"))
           yield* store.record(notCarried)
@@ -34,8 +36,10 @@ describe("ChannelStore", () => {
   it.effect("replaces an earlier carriage for the same network", () =>
     Effect.gen(function* () {
       const filename = yield* tempDatabase()
-      const carriages = yield* withStore(filename, (store) =>
+      const carriages = yield* withStore(
+        filename,
         Effect.gen(function* () {
+          const store = yield* ChannelStore
           yield* store.record(carried("https://tv.youtube.com/watch/first"))
           yield* store.record(carried("https://tv.youtube.com/watch/second"))
           return yield* store.carriages
@@ -48,8 +52,10 @@ describe("ChannelStore", () => {
   it.effect("forgets a carriage", () =>
     Effect.gen(function* () {
       const filename = yield* tempDatabase()
-      const carriages = yield* withStore(filename, (store) =>
+      const carriages = yield* withStore(
+        filename,
         Effect.gen(function* () {
+          const store = yield* ChannelStore
           yield* store.record(carried("https://tv.youtube.com/watch/espn"))
           yield* store.forget(espn, "YouTube TV")
           return yield* store.carriages
@@ -62,8 +68,14 @@ describe("ChannelStore", () => {
   it.effect("keeps carriages when the database is opened again", () =>
     Effect.gen(function* () {
       const filename = yield* tempDatabase()
-      yield* withStore(filename, (store) => store.record(notCarried))
-      const carriages = yield* withStore(filename, (store) => store.carriages)
+      yield* withStore(
+        filename,
+        ChannelStore.use((store) => store.record(notCarried))
+      )
+      const carriages = yield* withStore(
+        filename,
+        ChannelStore.use((store) => store.carriages)
+      )
       assert.deepStrictEqual(carriages, [notCarried])
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer))
   )
@@ -77,9 +89,7 @@ function tempDatabase() {
   })
 }
 
-/** Runs `use` against the channel store over the given database file, opened fresh. */
-function withStore<A, E>(filename: string, use: (store: typeof ChannelStore.Service) => Effect.Effect<A, E>) {
-  return Effect.gen(function* () {
-    return yield* use(yield* ChannelStore)
-  }).pipe(Effect.provide(ChannelStore.layer.pipe(Layer.provide(Database.at(filename)))))
+/** Runs `use` with the channel store over the given database file, opened fresh. */
+function withStore<A, E>(filename: string, use: Effect.Effect<A, E, ChannelStore>) {
+  return use.pipe(Effect.provide(ChannelStore.layer.pipe(Layer.provide(Database.at(filename)))))
 }

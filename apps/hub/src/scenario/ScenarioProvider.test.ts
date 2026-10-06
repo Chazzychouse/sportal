@@ -27,10 +27,10 @@ import { FeedFrame } from "../Frame.ts"
 import * as Gzip from "../Gzip.ts"
 import * as Ingest from "../ingest/Ingest.ts"
 import { LiveGames } from "../LiveGames.ts"
-import { Decoder } from "../provider/Decoder.ts"
+import type { Decoder } from "../provider/Decoder.ts"
 import * as EspnDecode from "../provider/espn/EspnDecode.ts"
 import { Provider } from "../provider/Provider.ts"
-import { polling } from "../provider/TestProvider.ts"
+import { decoder } from "../provider/TestProvider.ts"
 import { withEnv } from "../TestHubConfig.ts"
 import { recordingSpans } from "../TestTelemetry.ts"
 import { RecordedScenarios } from "./RecordedScenarios.ts"
@@ -93,7 +93,7 @@ describe("ScenarioProvider", () => {
         assert.strictEqual((yield* listed("fbs"))[0]?.home.score, 0)
         yield* TestClock.adjust("1 second")
         assert.strictEqual((yield* listed("fbs"))[0]?.home.score, 7)
-      }).pipe(Effect.provide(playing("seven", { from: dir, decode: slates })))
+      }).pipe(Effect.provide(playing("seven", { from: dir, decoder })))
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer))
   )
 
@@ -177,7 +177,7 @@ describe("ScenarioProvider", () => {
           7,
           "the tied poll only refreshed the pushed snapshot"
         )
-      }).pipe(Effect.provide(playing("tie", { from: dir, decode: slates })))
+      }).pipe(Effect.provide(playing("tie", { from: dir, decoder })))
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer))
   )
 
@@ -215,8 +215,12 @@ describe("ScenarioProvider", () => {
 
   it.effect("plays at the scenario's speed, while the rest of the Hub keeps real time", () =>
     Effect.gen(function* () {
+      // The clock and the scenario share one HubConfig, so the same variables build it.
+      const env = { SPORTAL_SCENARIO: "two-minute-drill-tie", SPORTAL_SCENARIO_SPEED: "10" }
       const context = yield* Layer.build(
-        playing("two-minute-drill-tie").pipe(Layer.provide(ScenarioClock.layer(10)))
+        playing("two-minute-drill-tie", { env }).pipe(
+          Layer.provide(ScenarioClock.layer.pipe(Layer.provide(withEnv(env).pipe(Layer.orDie))))
+        )
       )
       // 13 real seconds are 130 scenario seconds: the drive is at the 17, in the red zone, since 2:00.
       yield* TestClock.adjust("13 seconds")
@@ -293,15 +297,13 @@ describe("ScenarioProvider", () => {
 
 /**
  * Scenario `name` as the provider, configured by `env` beside its name: recorded scenarios read from `from` (the
- * committed ones, unless given), their frames decoded by `decode` (ESPN's, unless given).
+ * committed ones, unless given), their frames decoded by `decoder` (ESPN's, unless given).
  */
 function scenario(name: string, options: Options = {}) {
   return ScenarioProvider.layer.pipe(
     Layer.provide([
       options.from === undefined ? RecordedScenarios.layer : RecordedScenarios.in(options.from),
-      options.decode === undefined
-        ? EspnDecode.layer
-        : Layer.succeed(Decoder, Decoder.of({ decode: options.decode }))
+      options.decoder ?? EspnDecode.layer
     ]),
     Layer.provideMerge(withEnv({ SPORTAL_SCENARIO: name, ...options.env }).pipe(Layer.orDie)),
     Layer.provide(NodeServices.layer)
@@ -320,7 +322,7 @@ function playing(name: string, options: Options & { readonly ended?: Array<Trace
 }
 
 function ingestOver(name: string, options: Options) {
-  return Ingest.layer(LeagueId.literals).pipe(
+  return Ingest.layer.pipe(
     Layer.provideMerge(
       options.scenarioFeedLog === true
         ? FeedLog.forScenario
@@ -334,13 +336,10 @@ function ingestOver(name: string, options: Options) {
 /** How a test sets a scenario up; one HubConfig, from `env`, serves the whole Hub under test. */
 type Options = {
   readonly from?: string
-  readonly decode?: Provider["Service"]["decode"]
+  readonly decoder?: Layer.Layer<Decoder>
   readonly env?: Record<string, string>
   readonly scenarioFeedLog?: boolean
 }
-
-/** A decode that reads a poll's body as its league's games, and a pushed frame's as pushed snapshots. */
-const slates = polling(() => Effect.succeed([])).decode
 
 /** Writes recorded scenario `name`, of `frames`, to a fresh folder, and gives the folder. */
 function recorded(name: string, frames: ReadonlyArray<FeedFrame>) {

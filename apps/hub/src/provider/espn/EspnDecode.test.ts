@@ -1,11 +1,12 @@
 import { readFileSync } from "node:fs"
-import { assert, describe, it } from "@effect/vitest"
+import { assert, describe, layer } from "@effect/vitest"
 import type { Delivery } from "@sportal/domain/Delivery"
 import { GameId, GameSnapshot } from "@sportal/domain/Game"
 import { PlayId } from "@sportal/domain/Play"
 import { type Data, DateTime, Effect, Metric, Option, Record, Schema, Stream } from "effect"
 import { type FeedFrame, Frame } from "../../Frame.ts"
 import { recordingLogs, withMetrics } from "../../TestTelemetry.ts"
+import { Decoder } from "../Decoder.ts"
 import type { Notice } from "../Provider.ts"
 import * as EspnDecode from "./EspnDecode.ts"
 import { EspnEvent } from "./EspnEvent.ts"
@@ -43,7 +44,7 @@ const moveRecording = Schema.decodeUnknownSync(
 const ariAtNyg = "s:20~l:28~e:401872966~c:401872966"
 const ariAtNygPlays = "gp-football-nfl-401872966"
 
-describe("EspnDecode", () => {
+layer(EspnDecode.layer)("EspnDecode", (it) => {
   // Each recorded feed as it decoded when both feeds' events were read by one transform: the poll's listings, the
   // checkpoint's pushes, and the checkpoint's events each read alone.
   describe("the recorded feeds decode to the same games", () => {
@@ -705,9 +706,11 @@ function resyncs(frames: ReadonlyArray<FeedFrame>) {
 }
 
 function outputs(frames: ReadonlyArray<FeedFrame>) {
-  return EspnDecode.decode(
-    Stream.fromIterable(frames.map((frame, index) => new Frame({ ...frame, seq: index + 1 })))
-  ).pipe(Stream.runCollect)
+  return Decoder.use((decoder) =>
+    decoder
+      .decode(Stream.fromIterable(frames.map((frame, index) => new Frame({ ...frame, seq: index + 1 }))))
+      .pipe(Stream.runCollect)
+  )
 }
 
 const at = DateTime.makeUnsafe("2026-10-04T18:00:00Z")

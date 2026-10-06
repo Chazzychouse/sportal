@@ -1,26 +1,24 @@
 import type { GameSnapshot } from "@sportal/domain/Game"
 import type { LeagueId } from "@sportal/domain/League"
-import { DateTime, Duration, Effect, Layer, Option, Schedule, Stream } from "effect"
+import { DateTime, Duration, Effect, Layer, Option, Schedule } from "effect"
 import { Headers, HttpClient } from "effect/http"
-import type * as Socket from "effect/socket/Socket"
-import { Provider, ProviderError } from "../Provider.ts"
+import type { Decoder } from "../Decoder.ts"
+import { type Polling, Provider, ProviderError } from "../Provider.ts"
 import * as EspnDecode from "./EspnDecode.ts"
-import * as FastCast from "./FastCast.ts"
+import { FastCast } from "./FastCast.ts"
 
 /**
- * ESPN as the provider: the site scoreboard polled, FastCast pushing, both decoded by `EspnDecode`. A poll that does
- * not connect is `Unreachable` for its league, and one answered with a status other than 2xx `Refused`. Polled every
- * 10 seconds while a game is live, every minute within 30 minutes of a kickoff, and every 15 minutes otherwise; at
- * most 30 seconds after a poll in which a league failed.
+ * ESPN as the provider: the site scoreboard polled and FastCast pushing, with `EspnDecode` beside them as its
+ * `Decoder`. A poll that does not connect is `Unreachable` for its league, and one answered with a status other than
+ * 2xx `Refused`. Polled every 10 seconds while a game is live, every minute within 30 minutes of a kickoff, and every
+ * 15 minutes otherwise; at most 30 seconds after a poll in which a league failed.
  */
-export const layer: Layer.Layer<Provider, never, HttpClient.HttpClient | Socket.WebSocketConstructor> =
+export const layer: Layer.Layer<Provider | Decoder, never, FastCast | HttpClient.HttpClient> = Layer.merge(
   Layer.effect(
     Provider,
     Effect.gen(function* () {
       const client = (yield* HttpClient.HttpClient).pipe(HttpClient.filterStatusOk)
-      const provide = Stream.provideContext(
-        yield* Effect.context<HttpClient.HttpClient | Socket.WebSocketConstructor>()
-      )
+      const fastCast = yield* FastCast
 
       const poll = (league: LeagueId) =>
         Effect.gen(function* () {
@@ -50,21 +48,18 @@ export const layer: Layer.Layer<Provider, never, HttpClient.HttpClient | Socket.
 
       return Provider.of({
         poll,
-        push: (leagues, wanted, resync) =>
-          provide(FastCast.push(leagues, wanted, resync, { checkpointRetry: FastCast.checkpointRetry })),
-        decode: EspnDecode.decode,
+        push: fastCast.push,
         polling: Schedule.forever.pipe(
-          Schedule.setInputType<{
-            readonly slate: ReadonlyArray<GameSnapshot>
-            readonly failed: ReadonlyArray<LeagueId>
-          }>(),
+          Schedule.setInputType<Schedule.Input<Polling>>(),
           Schedule.modifyDelay(({ input, now }) =>
             Effect.succeed(interval(input.slate, DateTime.makeUnsafe(now), input.failed.length > 0))
           )
         )
       })
     })
-  )
+  ),
+  EspnDecode.layer
+)
 
 function scoreboardUrl(league: LeagueId): string {
   const base = "https://site.api.espn.com/apis/site/v2/sports/football"

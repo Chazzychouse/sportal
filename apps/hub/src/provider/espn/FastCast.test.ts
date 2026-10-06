@@ -9,7 +9,7 @@ import { TestClock } from "effect/testing"
 import type { FeedFrame } from "../../Frame.ts"
 import { counted, recordingLogs, withMetrics } from "../../TestTelemetry.ts"
 import type { ProviderError } from "../Provider.ts"
-import * as FastCast from "./FastCast.ts"
+import { FastCast } from "./FastCast.ts"
 
 describe("FastCast", () => {
   it.effect("a socket FastCast closes cleanly fails with Closed, so Ingest subscribes again", () =>
@@ -317,22 +317,27 @@ describe("FastCast", () => {
  */
 function nflFrames(
   server: ReturnType<typeof fakeServer>,
-  checkpointRetry: Schedule.Schedule<unknown, FastCast.CheckpointError> = FastCast.checkpointRetry
+  checkpointRetry?: Parameters<typeof FastCast.make>[0]
 ) {
   return Effect.gen(function* () {
     const ended = yield* Deferred.make<void, ProviderError>()
     const frames = watched<FeedFrame>()
     const wanted = yield* Queue.unbounded<ReadonlyArray<GameSnapshot>>()
     const resync = yield* Queue.unbounded<string>()
-    yield* FastCast.push(["nfl"], Stream.fromQueue(wanted), Stream.fromQueue(resync), {
-      checkpointRetry
-    }).pipe(
+    yield* (yield* FastCast).push(["nfl"], Stream.fromQueue(wanted), Stream.fromQueue(resync)).pipe(
       Stream.runForEach((frame) => Effect.sync(() => frames.add(frame))),
       Deferred.into(ended),
       Effect.forkChild({ startImmediately: true })
     )
     return { ended, frames, wanted, resync }
-  }).pipe(Effect.provide(fastCast(server)))
+  }).pipe(
+    Effect.provide(
+      (checkpointRetry === undefined
+        ? FastCast.layer
+        : Layer.effect(FastCast, FastCast.make(checkpointRetry))
+      ).pipe(Layer.provide(fastCast(server)))
+    )
+  )
 }
 
 /**

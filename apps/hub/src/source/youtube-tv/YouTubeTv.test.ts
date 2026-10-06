@@ -8,6 +8,7 @@ import { HttpClient, HttpClientResponse } from "effect/http"
 import { TestClock } from "effect/testing"
 import * as Database from "../../Database.ts"
 import * as EspnProvider from "../../provider/espn/EspnProvider.ts"
+import { FastCast } from "../../provider/espn/FastCast.ts"
 import { noSocket, recordedScoreboard } from "../../provider/espn/TestEspn.ts"
 import { listedBy } from "../../provider/TestProvider.ts"
 import { ChannelStore } from "../ChannelStore.ts"
@@ -419,5 +420,8 @@ function matchingLayer() {
       )
     )
   )
-  return Layer.mergeAll(testSource(), EspnProvider.layer.pipe(Layer.provide([recorded, noSocket])))
+  return Layer.mergeAll(
+    testSource(),
+    EspnProvider.layer.pipe(Layer.provide(FastCast.layer), Layer.provide([recorded, noSocket]))
+  )
 }

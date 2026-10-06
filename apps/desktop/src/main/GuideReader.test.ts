@@ -26,11 +26,15 @@ vi.mock("electron", () => ({
       cookies: { get: () => Promise.resolve(answers.cookies) }
     })
   },
-  WebContentsView: vi.fn()
+  WebContentsView: vi.fn(),
+  BrowserWindow: class {}
 }))
 
 const { ProviderSession } = await import("./ProviderSession.ts")
 const { GuideReader } = await import("./GuideReader.ts")
+const { ShellConfig } = await import("./ShellConfig.ts")
+const { ShellWindow } = await import("./ShellWindow.ts")
+const { BrowserWindow } = await import("electron")
 
 // The second config holds the context, and the first has a brace inside a string, as real pages do.
 const guidePage = [
@@ -153,7 +157,11 @@ function attached(logs: Array<string> = []) {
   })
   return Layer.build(
     GuideReader.layer.pipe(
-      Layer.provide(ProviderSession.layer("http://127.0.0.1:4401")),
+      Layer.provide(ProviderSession.layer),
+      Layer.provide([
+        Layer.succeed(ShellConfig, ShellConfig.of({ hubUrl: "http://127.0.0.1:4401" })),
+        Layer.succeed(ShellWindow, new BrowserWindow())
+      ]),
       Layer.provide(Logger.layer([capture]))
     )
   ).pipe(Effect.map((context) => Context.get(context, GuideReader)))

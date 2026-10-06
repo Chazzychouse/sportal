@@ -15,11 +15,20 @@ vi.mock("electron", () => ({
     constructor() {
       created.push(this)
     }
+  },
+  BrowserWindow: class {
+    readonly contentView = { addChildView: vi.fn(), removeChildView: vi.fn() }
+    isDestroyed() {
+      return false
+    }
   }
 }))
 
 const { ProviderSession } = await import("./ProviderSession.ts")
 const { TileViews } = await import("./TileViews.ts")
+const { ShellConfig } = await import("./ShellConfig.ts")
+const { ShellWindow } = await import("./ShellWindow.ts")
+const { BrowserWindow } = await import("electron")
 
 const one = GameId.make("one")
 const two = GameId.make("two")
@@ -412,11 +421,17 @@ function collect<A>(picks: Stream.Stream<A>, count: number) {
   })
 }
 
-/** Tile views over a fake window, on the real provider session with Electron mocked. */
+/** Tile views over a mocked shell window, on the real provider session with Electron mocked. */
 function attached() {
   created.length = 0
-  const window = fakeWindow()
-  const layer = TileViews.layer(window).pipe(Layer.provide(ProviderSession.layer("http://127.0.0.1:4401")))
+  const window = new BrowserWindow({})
+  const layer = TileViews.layer.pipe(
+    Layer.provide(ProviderSession.layer),
+    Layer.provide([
+      Layer.succeed(ShellConfig, ShellConfig.of({ hubUrl: "http://127.0.0.1:4401" })),
+      Layer.succeed(ShellWindow, window)
+    ])
+  )
   return Layer.build(layer).pipe(
     Effect.map((context) => ({ window, tiles: Context.get(context, TileViews) }))
   )
@@ -438,12 +453,5 @@ function fakeContents() {
     emit: (event: string, ...args: Array<unknown>) => {
       for (const listener of listeners.get(event) ?? []) listener(...args)
     }
-  }
-}
-
-function fakeWindow() {
-  return {
-    isDestroyed: () => false,
-    contentView: { addChildView: vi.fn(), removeChildView: vi.fn() }
   }
 }
