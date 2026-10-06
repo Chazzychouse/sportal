@@ -68,14 +68,17 @@ export class FeedLog extends Context.Service<
       const published = yield* PubSub.unbounded<Frame>()
       const pending = yield* Queue.unbounded<Frame, Cause.Done>()
 
+      // Uninterruptible, so a seq once assigned is always published and queued; every step is non-blocking.
       const append = Effect.fn("FeedLog.append")((received: Omit<Frame, "seq">) =>
         permit.withPermit(
-          Effect.gen(function* () {
-            const frame = new Frame({ ...received, seq: yield* Ref.getAndUpdate(next, (seq) => seq + 1) })
-            yield* PubSub.publish(published, frame)
-            yield* Queue.offer(pending, frame)
-            return frame
-          })
+          Effect.uninterruptible(
+            Effect.gen(function* () {
+              const frame = new Frame({ ...received, seq: yield* Ref.getAndUpdate(next, (seq) => seq + 1) })
+              yield* PubSub.publish(published, frame)
+              yield* Queue.offer(pending, frame)
+              return frame
+            })
+          )
         )
       )
 
@@ -102,20 +105,7 @@ export class FeedLog extends Context.Service<
         )
         const gap = yield* Writer.$match(state, {
           Current: () => Effect.succeed([]),
-          Behind: ({ from, to, count, receivedAt }) =>
-            Effect.map(gzip(new TextEncoder().encode(JSON.stringify({ from, to, count }))), (body) => [
-              {
-                seq: from,
-                received_at: DateTime.toEpochMillis(receivedAt),
-                sent_at: null,
-                source_id: null,
-                feed: null,
-                channel: null,
-                kind: "gap",
-                body,
-                body_hash: null
-              }
-            ])
+          Behind: (behind) => Effect.map(gapRow(behind), (row) => [row])
         })
         yield* sql
           .withTransaction(sql`INSERT INTO feed_frame ${sql.insert([...gap, ...rows])}`)
@@ -160,17 +150,40 @@ export class FeedLog extends Context.Service<
           )
         )
 
+      const state = yield* Ref.make<Writer>(
+        Writer.Current({ hashes: new Map(polled.map(({ channel, body_hash }) => [channel, body_hash])) })
+      )
+
+      // Frames lost with no later group to carry their gap row are recorded on their own, as the stream ends.
+      const closeGap = Ref.get(state).pipe(
+        Effect.flatMap((writer) =>
+          Writer.$match(writer, {
+            Current: () => Effect.void,
+            Behind: (behind) =>
+              gapRow(behind).pipe(
+                Effect.flatMap((row) => sql.withTransaction(sql`INSERT INTO feed_frame ${sql.insert(row)}`)),
+                Effect.catch((error) =>
+                  Effect.logError(
+                    `FeedLog: ${behind.count} frames were lost (seq ${behind.from} to ${behind.to}) and their gap could not be logged`,
+                    error
+                  )
+                )
+              )
+          })
+        )
+      )
+
       const writer = yield* Stream.fromQueue(pending).pipe(
         Stream.groupedWithin(512, "100 millis"),
-        Stream.mapAccumEffect(
-          (): Writer =>
-            Writer.Current({ hashes: new Map(polled.map(({ channel, body_hash }) => [channel, body_hash])) }),
-          (state, group) =>
-            Arr.isReadonlyArrayNonEmpty(group)
-              ? Effect.map(write(state, group), (next) => [next, []])
-              : Effect.succeed([state, []])
+        Stream.runForEach((group) =>
+          Arr.isReadonlyArrayNonEmpty(group)
+            ? Ref.get(state).pipe(
+                Effect.flatMap((current) => write(current, group)),
+                Effect.flatMap((next) => Ref.set(state, next))
+              )
+            : Effect.void
         ),
-        Stream.runDrain,
+        Effect.andThen(closeGap),
         Effect.forkScoped
       )
       // Added after the writer is forked, so it runs first on close: the frames still queued are written before the
@@ -326,6 +339,7 @@ const migrations = {
       )
     `
     yield* sql`CREATE INDEX feed_frame_channel_seq ON feed_frame (channel, seq)`
+    yield* sql`CREATE INDEX feed_frame_received_at ON feed_frame (received_at)`
   })
 }
 
@@ -367,9 +381,27 @@ function absentWhenNull<S extends Schema.Top>(schema: S) {
   )
 }
 
+/** The row that stands in `feed_frame` for the frames a failed write lost. */
+function gapRow({ from, to, count, receivedAt }: Extract<Writer, { _tag: "Behind" }>) {
+  return Effect.map(gzip(new TextEncoder().encode(JSON.stringify({ from, to, count }))), (body) => ({
+    seq: from,
+    received_at: DateTime.toEpochMillis(receivedAt),
+    sent_at: null,
+    source_id: null,
+    feed: null,
+    channel: null,
+    kind: "gap",
+    body,
+    body_hash: null
+  }))
+}
+
 function sha256(bytes: Uint8Array<ArrayBuffer>) {
   return Effect.map(
-    Effect.promise(() => crypto.subtle.digest("SHA-256", bytes)),
+    Effect.tryPromise({
+      try: () => crypto.subtle.digest("SHA-256", bytes),
+      catch: (cause) => new Cause.UnknownError(cause, "A feed log body could not be hashed")
+    }),
     (digest) => Hex.encode(new Uint8Array(digest))
   )
 }

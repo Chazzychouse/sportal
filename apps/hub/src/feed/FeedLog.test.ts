@@ -122,6 +122,70 @@ describe("FeedLog", () => {
     }
   )
 
+  it.effect("records a gap left at close, which a replay then warns of", () => {
+    const { logs, layer: logged } = recordingLogs()
+    return Effect.gen(function* () {
+      const failures = yield* Ref.make(0)
+      yield* Effect.gen(function* () {
+        const log = yield* FeedLog
+        yield* Ref.set(failures, 1)
+        yield* log.append(message("socket", "lost", 0, 1))
+        yield* log.append(message("socket", "lost too", 10, 2))
+        yield* TestClock.adjust("100 millis")
+        yield* settled(counted("sportal_feed_write_failures"), (failed) => failed === 1)
+      }).pipe(Effect.provide(FeedLog.layer.pipe(Layer.provide(failingTransactions(failures)))))
+
+      assert.strictEqual(yield* rowCount, 1)
+      yield* Effect.gen(function* () {
+        const log = yield* FeedLog
+        assert.deepStrictEqual(yield* Stream.runCollect(log.replay(at(0))), [])
+      }).pipe(Effect.provide(FeedLog.layer))
+      const warnings = logs.filter((entry) => entry.level === "Warn")
+      assert.strictEqual(warnings.length, 1)
+      assert.deepInclude(warnings[0]?.annotations, { from: 1, to: 2, count: 2 })
+    }).pipe(Effect.provide([Database.layer(":memory:"), logged]), withMetrics)
+  })
+
+  it.effect("keeps seqs contiguous when appends are interrupted", () =>
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient
+      const log = yield* FeedLog
+      const emitted = yield* Ref.make<ReadonlyArray<number>>([])
+      const listening = yield* log.frames.pipe(
+        Stream.runForEach((frame) => Ref.update(emitted, (seqs) => [...seqs, frame.seq])),
+        Effect.forkChild({ startImmediately: true })
+      )
+      yield* TestClock.withLive(Effect.sleep("5 millis"))
+
+      const fibers = yield* Effect.forEach(
+        Array.from({ length: 2_000 }, (_, index) => index),
+        (index) => Effect.forkDetach(log.append(message("socket", `body ${index}`, index, index)))
+      )
+      // Interrupted while the other appends are running, so some land between an append's steps.
+      yield* Effect.forEach(
+        fibers.filter((_, index) => index % 2 === 1),
+        (fiber) => Fiber.interrupt(fiber),
+        { concurrency: "unbounded", discard: true }
+      )
+      yield* Effect.forEach(fibers, (fiber) => Fiber.await(fiber), { discard: true })
+      yield* TestClock.withLive(Effect.sleep("5 millis"))
+      const published = yield* Ref.get(emitted)
+      yield* Fiber.interrupt(listening)
+      yield* settled(
+        Effect.andThen(TestClock.adjust("100 millis"), rowCount),
+        (rows) => rows >= published.length
+      )
+      const stored = (yield* sql<{ seq: number }>`SELECT seq FROM feed_frame ORDER BY seq`).map(
+        (row) => row.seq
+      )
+
+      const contiguous = published.map((_, index) => index + 1)
+      assert.isAbove(published.length, 0)
+      assert.deepStrictEqual(published, contiguous)
+      assert.deepStrictEqual(stored, contiguous)
+    }).pipe(Effect.provide(feedLog))
+  )
+
   it.effect("writes the frames still waiting when it closes", () =>
     Effect.gen(function* () {
       yield* Effect.gen(function* () {
