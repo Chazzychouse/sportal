@@ -1,6 +1,7 @@
 import { Context, Effect, FiberSet, Layer } from "effect"
 import { BrowserWindow, type Session, session, WebContentsView } from "electron"
 import { confine, hostOf, load } from "./Navigation.ts"
+import { sandboxed } from "./Sandbox.ts"
 import { allowedHosts, signInUrl } from "./YouTubeTv.ts"
 
 /**
@@ -55,12 +56,7 @@ export class ProviderSession extends Context.Service<
           allows: permits,
           createView: Effect.sync(() => {
             const view = new WebContentsView({
-              webPreferences: {
-                session: providers,
-                contextIsolation: true,
-                nodeIntegration: false,
-                sandbox: true
-              }
+              webPreferences: { ...sandboxed, session: providers }
             })
             // Subframes are left alone: provider pages embed frames from hosts the allowlist does not name.
             confine(view.webContents, permits, warn, { subframes: false })
@@ -76,12 +72,7 @@ export class ProviderSession extends Context.Service<
                 width: 1000,
                 height: 800,
                 parent,
-                webPreferences: {
-                  session: providers,
-                  contextIsolation: true,
-                  nodeIntegration: false,
-                  sandbox: true
-                }
+                webPreferences: { ...sandboxed, session: providers }
               })
               signIn = window
               confine(window.webContents, permits, warn, { subframes: false })
