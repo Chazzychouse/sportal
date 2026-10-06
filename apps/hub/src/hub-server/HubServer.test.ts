@@ -67,19 +67,18 @@ describe("Hub API", () => {
   it.live("learns a channel, and the picking tile becomes a stream tile", () =>
     Effect.gen(function* () {
       const client = yield* makeClient
-      const sessions = yield* StageSessions
       yield* firstSlate()
       yield* client.stage.dispatch({ payload: { command: { _tag: "Assign", tile: 0, game: game.id } } })
 
       // The Stage refreshes on its own fiber after each change, so wait for the tile rather than assume timing.
       yield* client.channels.learn({ payload: { network: espn, url: "https://tv.youtube.com/watch/espn" } })
-      assert.deepStrictEqual(yield* tileOnceItIs(sessions, "StreamTile"), streaming)
+      assert.deepStrictEqual(yield* tileOnceItIs("StreamTile"), streaming)
 
       yield* client.channels.forget({ payload: { network: espn } })
-      assert.deepStrictEqual(yield* tileOnceItIs(sessions, "PickingChannel"), picking)
+      assert.deepStrictEqual(yield* tileOnceItIs("PickingChannel"), picking)
 
       yield* client.channels.notCarried({ payload: { network: espn } })
-      assert.deepStrictEqual(yield* tileOnceItIs(sessions, "DataTile"), {
+      assert.deepStrictEqual(yield* tileOnceItIs("DataTile"), {
         _tag: "DataTile",
         game: game.id,
         why: { _tag: "NoStream" }
@@ -117,7 +116,6 @@ describe("Hub API", () => {
   it.live("reads a guide the size of a real one, and a waiting tile plays once its airing is on", () =>
     Effect.gen(function* () {
       const client = yield* makeClient
-      const sessions = yield* StageSessions
       yield* firstSlate()
       yield* client.stage.dispatch({ payload: { command: { _tag: "Assign", tile: 0, game: game.id } } })
 
@@ -158,7 +156,7 @@ describe("Hub API", () => {
       })
       yield* client.guide.read({ payload: { guide } })
 
-      const tile = yield* tileOnceItIs(sessions, "StreamTile")
+      const tile = yield* tileOnceItIs("StreamTile")
       assert.deepStrictEqual(tile, {
         _tag: "StreamTile",
         game: game.id,
@@ -303,17 +301,20 @@ function firstSlateOnTestClock() {
 }
 
 /** The first tile 0 the Stage shows that has the given kind; the current Stage is replayed, so this may not wait. */
-function tileOnceItIs(sessions: typeof StageSessions.Service, tag: Tile["_tag"]) {
-  return sessions.changes.pipe(
-    Stream.filterMap((stage) => {
-      const tile = stage.tiles[0]
-      return tile?._tag === tag ? Result.succeed(tile) : Result.failVoid
-    }),
-    Stream.take(1),
-    Stream.runHead,
-    Effect.timeout("2 seconds"),
-    Effect.map(Option.getOrThrow)
-  )
+function tileOnceItIs(tag: Tile["_tag"]) {
+  return Effect.gen(function* () {
+    const sessions = yield* StageSessions
+    return yield* sessions.changes.pipe(
+      Stream.filterMap((stage) => {
+        const tile = stage.tiles[0]
+        return tile?._tag === tag ? Result.succeed(tile) : Result.failVoid
+      }),
+      Stream.take(1),
+      Stream.runHead,
+      Effect.timeout("2 seconds"),
+      Effect.map(Option.getOrThrow)
+    )
+  })
 }
 
 /** Everything behind the API, over a fresh in-memory database and a provider that always returns `game`. */

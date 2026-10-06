@@ -150,6 +150,7 @@ function replayedFrom(from: DateTime.Utc) {
   return Effect.gen(function* () {
     const liveGames = yield* LiveGames
     const held = yield* Ref.make<ReadonlyArray<LiveGame>>([])
+    // `liveGames.replay` takes a stream with no requirements, so the stream gets the services it reads here.
     const services = yield* Effect.context<FeedLog | Decoder | LiveGames>()
     yield* liveGames.replay(
       deliveriesOf(from).pipe(
@@ -167,8 +168,8 @@ const replayed = replayedFrom(DateTime.makeUnsafe(0))
 
 /**
  * A fresh fold of the whole log taken delivery by delivery, each once the test clock reaches it, as live: its state at
- * the end, each live game NE at BUF was held as, and every event published. The log is read first and closed, so the clock moves only
- * the fold's timer.
+ * the end, each live game NE at BUF was held as, and every event published. The log is read first and closed, so the
+ * clock moves only the fold's timer.
  */
 const takenLive = Effect.gen(function* () {
   const all = yield* Stream.runCollect(deliveriesOf()).pipe(Effect.provide(FeedLog.layer))
@@ -196,7 +197,10 @@ const takenLive = Effect.gen(function* () {
   return { latest: yield* liveGames.latest, held: yield* Ref.get(held), events: yield* Ref.get(events) }
 }).pipe(Effect.provide(LiveGames.layer))
 
-/** Every frame in the `FeedLog` replayed from `from` (all of them, unless given), decoded by the `Decoder`, as the deliveries it said. */
+/**
+ * Every frame in the `FeedLog` replayed from `from` (all of them, unless given), decoded by the `Decoder`, as the
+ * deliveries it said.
+ */
 function deliveriesOf(from = DateTime.makeUnsafe(0)) {
   return Stream.unwrap(
     Effect.gen(function* () {
@@ -219,9 +223,9 @@ function deliveriesOf(from = DateTime.makeUnsafe(0)) {
 function heldAs(held: Ref.Ref<ReadonlyArray<LiveGame>>) {
   return Effect.gen(function* () {
     const latest = yield* (yield* LiveGames).latest
-    const liveGame = latest.live.get(neAtBuf)
-    if (liveGame !== undefined) {
-      yield* Ref.update(held, (all) => (all.at(-1) === liveGame ? all : [...all, liveGame]))
-    }
+    yield* Option.match(Option.fromUndefinedOr(latest.live.get(neAtBuf)), {
+      onNone: () => Effect.void,
+      onSome: (liveGame) => Ref.update(held, (all) => (all.at(-1) === liveGame ? all : [...all, liveGame]))
+    })
   })
 }

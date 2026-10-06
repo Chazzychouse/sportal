@@ -2,6 +2,7 @@ import { NodeCrypto } from "@effect/platform-node"
 import { assert, describe, it } from "@effect/vitest"
 import { Delivery } from "@sportal/domain/Delivery"
 import { GameId, type GameSnapshot } from "@sportal/domain/Game"
+import type { LeagueId } from "@sportal/domain/League"
 import { LiveGameState } from "@sportal/domain/LiveGame"
 import { liveSnapshot, snapshot, team } from "@sportal/domain/TestGame"
 import {
@@ -579,14 +580,14 @@ function ingesting(provider: Layer.Layer<Provider | Decoder>, options: Parameter
 }
 
 /**
- * Ingest over `provider`, of `leagues` (fbs, unless given), with
- * the fold and the feed log (`FeedLog.layer`, unless given) also provided to the test, each span that ends recorded
- * in `ended`, and the game day read in `zone` (the local one, unless given).
+ * Ingest over `provider`, of `leagues` (fbs, unless given), with the fold and the feed log (`FeedLog.layer`, unless
+ * given) also provided to the test, each span that ends recorded in `ended`, and the game day read in `zone` (the local
+ * one, unless given).
  */
 function over(
   provider: Layer.Layer<Provider | Decoder>,
   options: {
-    readonly leagues?: ReadonlyArray<"nfl" | "fbs">
+    readonly leagues?: ReadonlyArray<LeagueId>
     readonly ended?: Array<Tracer.Span>
     readonly feedLog?: Layer.Layer<FeedLog, never, SqlClient.SqlClient | Crypto.Crypto>
     readonly zone?: string

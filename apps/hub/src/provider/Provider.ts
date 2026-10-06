@@ -22,11 +22,7 @@ export class Provider extends Context.Service<
   {
     /** One poll of `league`, as received. */
     poll(league: LeagueId): Effect.Effect<FeedFrame, ProviderError>
-    /**
-     * Every pushed frame, as received, for the leagues' scoreboards and for each game in `wanted` (the current games).
-     * Each channel in `resync` is asked for its checkpoint again, if the push follows it. Fails when the push cannot go
-     * on.
-     */
+    /** Its live feed. */
     readonly push: LiveFeed
     /**
      * When to poll again, given what the last poll left: the fold's slate for the polled leagues, and the leagues that
@@ -38,7 +34,8 @@ export class Provider extends Context.Service<
 
 /**
  * A provider's push: every pushed frame, as received, for the leagues' scoreboards and for each game in `wanted` (the
- * current games), with each channel in `resync` asked for its checkpoint again if the push follows it.
+ * current games), with each channel in `resync` asked for its checkpoint again if the push follows it. Fails when the
+ * push cannot go on.
  */
 export type LiveFeed = (
   leagues: ReadonlyArray<LeagueId>,
