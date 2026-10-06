@@ -93,7 +93,7 @@ describe("ScenarioProvider", () => {
         assert.strictEqual((yield* listed("fbs"))[0]?.home.score, 0)
         yield* TestClock.adjust("1 second")
         assert.strictEqual((yield* listed("fbs"))[0]?.home.score, 7)
-      }).pipe(Effect.provide(playing("seven", { from: dir, decoder: slates })))
+      }).pipe(Effect.provide(playing("seven", { from: dir, decoder })))
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer))
   )
 
@@ -177,7 +177,7 @@ describe("ScenarioProvider", () => {
           7,
           "the tied poll only refreshed the pushed snapshot"
         )
-      }).pipe(Effect.provide(playing("tie", { from: dir, decoder: slates })))
+      }).pipe(Effect.provide(playing("tie", { from: dir, decoder })))
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer))
   )
 
@@ -340,9 +340,6 @@ type Options = {
   readonly env?: Record<string, string>
   readonly scenarioFeedLog?: boolean
 }
-
-/** A decode that reads a poll's body as its league's games, and a pushed frame's as pushed snapshots. */
-const slates = decoder
 
 /** Writes recorded scenario `name`, of `frames`, to a fresh folder, and gives the folder. */
 function recorded(name: string, frames: ReadonlyArray<FeedFrame>) {

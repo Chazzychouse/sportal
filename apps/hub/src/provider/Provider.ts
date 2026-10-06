@@ -27,11 +27,7 @@ export class Provider extends Context.Service<
      * Each channel in `resync` is asked for its checkpoint again, if the push follows it. Fails when the push cannot go
      * on.
      */
-    push(
-      leagues: ReadonlyArray<LeagueId>,
-      wanted: Stream.Stream<ReadonlyArray<GameSnapshot>>,
-      resync: Stream.Stream<string>
-    ): Stream.Stream<FeedFrame, ProviderError>
+    readonly push: LiveFeed
     /**
      * When to poll again, given what the last poll left: the fold's slate for the polled leagues, and the leagues that
      * failed. Ingest runs `poll` for each league repeated on it, and nothing else decides when.
@@ -39,6 +35,16 @@ export class Provider extends Context.Service<
     readonly polling: Polling
   }
 >()("sportal/hub/Provider") {}
+
+/**
+ * A provider's push: every pushed frame, as received, for the leagues' scoreboards and for each game in `wanted` (the
+ * current games), with each channel in `resync` asked for its checkpoint again if the push follows it.
+ */
+export type LiveFeed = (
+  leagues: ReadonlyArray<LeagueId>,
+  wanted: Stream.Stream<ReadonlyArray<GameSnapshot>>,
+  resync: Stream.Stream<string>
+) => Stream.Stream<FeedFrame, ProviderError>
 
 /** When a provider is polled again, given the slate the last poll left and the leagues that failed in it. */
 export type Polling = Schedule.Schedule<

@@ -5,7 +5,7 @@ import { DateTime, Effect, Layer, Option, Ref, Schedule, Schema, Stream } from "
 import { type FeedFrame, Frame } from "../Frame.ts"
 import { LiveGames } from "../LiveGames.ts"
 import { Decoder } from "./Decoder.ts"
-import { Decoded, type Polling, Provider, ProviderError } from "./Provider.ts"
+import { Decoded, type LiveFeed, type Polling, Provider, ProviderError } from "./Provider.ts"
 
 /**
  * A provider that answers each poll with the next scripted response, and the last one after that, inside a
@@ -48,11 +48,7 @@ export function polling(
   games: (league: LeagueId) => Effect.Effect<ReadonlyArray<GameSnapshot>, ProviderError>,
   options: {
     readonly polling?: Polling
-    readonly push?: (
-      leagues: ReadonlyArray<LeagueId>,
-      wanted: Stream.Stream<ReadonlyArray<GameSnapshot>>,
-      resync: Stream.Stream<string>
-    ) => Stream.Stream<FeedFrame, ProviderError>
+    readonly push?: LiveFeed
   } = {}
 ): Layer.Layer<Provider | Decoder> {
   return Layer.merge(Layer.succeed(Provider, polled(games, options)), decoder)
@@ -87,9 +83,9 @@ export function taken(delivery: Delivery, seq?: number) {
 export function listedBy(league: LeagueId) {
   return Effect.gen(function* () {
     const provider = yield* Provider
-    const decoder = yield* Decoder
+    const decoding = yield* Decoder
     const frame = new Frame({ ...(yield* provider.poll(league)), seq: 1 })
-    const said = yield* decoder.decode(Stream.make(frame)).pipe(Stream.runCollect)
+    const said = yield* decoding.decode(Stream.make(frame)).pipe(Stream.runCollect)
     return said.flatMap((one) =>
       one._tag === "Delivered" && one.delivery._tag === "Listing" ? one.delivery.games : []
     )

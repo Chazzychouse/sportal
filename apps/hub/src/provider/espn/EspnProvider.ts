@@ -4,7 +4,7 @@ import { DateTime, Duration, Effect, Layer, Option, Schedule, Stream } from "eff
 import { Headers, HttpClient } from "effect/http"
 import type * as Socket from "effect/socket/Socket"
 import type { Decoder } from "../Decoder.ts"
-import { Provider, ProviderError } from "../Provider.ts"
+import { type Polling, Provider, ProviderError } from "../Provider.ts"
 import * as EspnDecode from "./EspnDecode.ts"
 import * as FastCast from "./FastCast.ts"
 
@@ -58,10 +58,7 @@ export const layer: Layer.Layer<
         push: (leagues, wanted, resync) =>
           provide(FastCast.push(leagues, wanted, resync, { checkpointRetry: FastCast.checkpointRetry })),
         polling: Schedule.forever.pipe(
-          Schedule.setInputType<{
-            readonly slate: ReadonlyArray<GameSnapshot>
-            readonly failed: ReadonlyArray<LeagueId>
-          }>(),
+          Schedule.setInputType<Schedule.Input<Polling>>(),
           Schedule.modifyDelay(({ input, now }) =>
             Effect.succeed(interval(input.slate, DateTime.makeUnsafe(now), input.failed.length > 0))
           )
