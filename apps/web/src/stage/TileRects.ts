@@ -31,7 +31,7 @@ export function tileRects(
 }
 
 /**
- * What the shell must show for each stream and picking tile with a size: its game's view, in window pixels.
+ * What the shell must show for each stream tile with a size: its game's view, in window pixels.
  * `origin` is where the Stage area sits in the window; `page` is the web UI's own address, which a source's path
  * (a scenario's synthetic stream) is resolved against. Only `interacting`'s stream gets the mouse.
  */
@@ -44,22 +44,15 @@ export function placements(
 ): Array<TilePlacement> {
   return stage.onStage().flatMap((tile, index) => {
     const rect = rects[index]
-    if (rect === undefined || rect.width === 0 || tile._tag === "Empty") return []
-    const view =
-      tile._tag === "StreamTile"
-        ? {
-            url: tile.channel.locator.url.startsWith("/")
-              ? new URL(tile.channel.locator.url, page).href
-              : tile.channel.locator.url,
-            role: "stream" as const,
-            muted: !stage.hears(tile.game),
-            interactive: tile.game === interacting
-          }
-        : tile._tag === "PickingChannel"
-          ? // A guide can preview what is on; it never takes the sound.
-            { url: tile.guide.url, role: "guide" as const, muted: true, interactive: false }
-          : undefined
-    if (view === undefined) return []
+    if (rect === undefined || rect.width === 0 || tile._tag !== "StreamTile") return []
+    const view = {
+      url: tile.channel.locator.url.startsWith("/")
+        ? new URL(tile.channel.locator.url, page).href
+        : tile.channel.locator.url,
+      role: "stream" as const,
+      muted: !stage.hears(tile.game),
+      interactive: tile.game === interacting
+    }
     const video = videoBounds(rect)
     return [{ game: tile.game, ...view, bounds: { ...video, x: video.x + origin.x, y: video.y + origin.y } }]
   })

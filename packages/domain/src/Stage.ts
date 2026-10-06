@@ -1,20 +1,11 @@
 import { Array as Arr, Option, Result, Schema } from "effect"
-import { Channel, type ChannelAvailability, SourceName } from "./Channel.ts"
-import { GameId, Network } from "./Game.ts"
+import { Channel, type ChannelAvailability } from "./Channel.ts"
+import { GameId } from "./Game.ts"
 import { Layout, LayoutName, Split } from "./Layout.ts"
-import { StreamLocator } from "./Stream.ts"
 
 export const Tile = Schema.Union([
   Schema.TaggedStruct("Empty", {}),
-  /** `learnedFor` is the network a hand-picked channel was learned for; **wrong channel** forgets it. */
-  Schema.TaggedStruct("StreamTile", { game: GameId, channel: Channel, learnedFor: Schema.optional(Network) }),
-  /** The game's network has no channel yet: the tile shows the source's guide until one is picked. */
-  Schema.TaggedStruct("PickingChannel", {
-    game: GameId,
-    network: Network,
-    source: SourceName,
-    guide: StreamLocator
-  }),
+  Schema.TaggedStruct("StreamTile", { game: GameId, channel: Channel }),
   /** No stream, and why: none on any source, streaming only, not in the guide, not on yet, or no guide to ask. */
   Schema.TaggedStruct("DataTile", {
     game: GameId,
@@ -104,7 +95,7 @@ export class Stage extends Schema.Class<Stage>("sportal/Stage")({
 
   /**
    * Applies a command. `availabilityOf` says whether and where a game can be streamed: a carried game
-   * becomes a stream tile, a game on an unlearned network a picking tile, and any other a data tile.
+   * becomes a stream tile and any other a data tile.
    */
   apply(
     command: StageCommand,
@@ -167,10 +158,9 @@ export class Stage extends Schema.Class<Stage>("sportal/Stage")({
    * Re-resolves every occupied tile, on stage and benched, after what a source knows has changed. A game
    * `availabilityOf` knows nothing about keeps its tile as it was: the change did not concern it.
    *
-   * A stream tile follows its origin. One the guide matched (no `learnedFor`) keeps playing on any answer
-   * but a channel: a game running past its listing, or a failed or stale read falling back to the lineup,
-   * never stops it; carried on another channel moves it. One picked by hand (`learnedFor` set) follows the
-   * answer, so **wrong channel** returns it to the guide.
+   * A stream tile is replaced only when the guide carries its game on another channel. Any other answer
+   * (a game running past its listing, no guide, a failed or stale read) never stops it. Every other occupied
+   * tile becomes what the answer says.
    */
   refresh(availabilityOf: (game: GameId) => Option.Option<ChannelAvailability>): Stage {
     return settle({
@@ -181,7 +171,9 @@ export class Stage extends Schema.Class<Stage>("sportal/Stage")({
           : Option.match(availabilityOf(tile.game), {
               onNone: () => tile,
               onSome: (availability) =>
-                tile._tag === "StreamTile" && tile.learnedFor === undefined && availability._tag !== "Carried"
+                tile._tag === "StreamTile" &&
+                (availability._tag !== "Carried" ||
+                  availability.channel.locator.url === tile.channel.locator.url)
                   ? tile
                   : tileFor(tile.game, availability)
             })
@@ -212,20 +204,7 @@ export class StageRejection extends Schema.TaggedError<StageRejection>()(
 function tileFor(game: GameId, availability: ChannelAvailability): Tile {
   switch (availability._tag) {
     case "Carried":
-      return {
-        _tag: "StreamTile",
-        game,
-        channel: availability.channel,
-        ...(Option.isSome(availability.learnedFor) ? { learnedFor: availability.learnedFor.value } : {})
-      }
-    case "Unlearned":
-      return {
-        _tag: "PickingChannel",
-        game,
-        network: availability.network,
-        source: availability.source,
-        guide: availability.guide
-      }
+      return { _tag: "StreamTile", game, channel: availability.channel }
     case "Upcoming":
       return {
         _tag: "DataTile",

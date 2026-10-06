@@ -1,6 +1,6 @@
 import { ChannelAvailability } from "@sportal/domain/Channel"
 import type { GameSnapshot } from "@sportal/domain/Game"
-import { Effect, Layer, Option, Stream } from "effect"
+import { Effect, Layer, Stream } from "effect"
 import { Source } from "../source/Source.ts"
 
 /**
@@ -17,8 +17,7 @@ export const layer = Layer.succeed(
           name: game.broadcasts[0]?.network ?? "Scenario",
           source: "Scenario",
           locator: { _tag: "WebView", url: `/scenario-stream/${encodeURIComponent(game.id)}` }
-        },
-        learnedFor: Option.none()
+        }
       })
     ),
     changes: Stream.empty,

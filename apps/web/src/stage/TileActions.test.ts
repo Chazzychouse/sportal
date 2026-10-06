@@ -2,7 +2,7 @@ import { assert, describe, it } from "@effect/vitest"
 import { ChannelAvailability } from "@sportal/domain/Channel"
 import { GameId } from "@sportal/domain/Game"
 import { Stage } from "@sportal/domain/Stage"
-import { Option, Result } from "effect"
+import { Result } from "effect"
 import { tileActions } from "./TileActions.tsx"
 
 const bama = GameId.make("401856707")
@@ -71,7 +71,7 @@ function streaming() {
 }
 
 function carriedOnFox() {
-  return ChannelAvailability.Carried({ channel: fox, learnedFor: Option.none() })
+  return ChannelAvailability.Carried({ channel: fox })
 }
 
 function none() {

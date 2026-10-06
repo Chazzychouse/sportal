@@ -38,8 +38,7 @@ const ohioStateAtIowa = snapshot({
   broadcasts: [broadcast("CBS")]
 })
 const onNews3 = ChannelAvailability.Carried({
-  channel: { name: "News 3", source: "YouTube TV", locator: { _tag: "WebView", url: cbsLive } },
-  learnedFor: Option.none()
+  channel: { name: "News 3", source: "YouTube TV", locator: { _tag: "WebView", url: cbsLive } }
 })
 
 describe("YouTubeTv source reading its guide", () => {
@@ -272,7 +271,6 @@ function tallied(league: LeagueId) {
               tally.upcomingOn[game.id] = name
             }
           }),
-        Unlearned: () => assert.fail(`${game.id} was left unlearned`),
         NoGuide: () => assert.fail(`${game.id} had no guide`),
         NotCarried: ({ why }) => {
           if (why === "StreamingOnly") tally.streamingOnly++

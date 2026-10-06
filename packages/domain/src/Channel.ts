@@ -1,5 +1,4 @@
 import { Data, type DateTime, type Option, Schema } from "effect"
-import type { Network } from "./Game.ts"
 import { StreamLocator } from "./Stream.ts"
 
 /** The sources Sportal can play video from, by the name people know them by. */
@@ -12,13 +11,11 @@ export type Channel = typeof Channel.Type
 
 /**
  * Whether and where a source can show one game: carried, upcoming (its airing is still to come, or past what
- * the guide lists), unlearned (its network still to be picked), no guide (the source has no fresh guide to
- * say), or not carried, with why.
+ * the guide lists), not carried with why, or no guide (the source has no fresh guide to say).
  */
 export type ChannelAvailability = Data.TaggedEnum<{
-  Carried: { readonly channel: Channel; readonly learnedFor: Option.Option<Network> }
+  Carried: { readonly channel: Channel }
   Upcoming: { readonly channel: Option.Option<string>; readonly begin: Option.Option<DateTime.Utc> }
-  Unlearned: { readonly network: Network; readonly source: SourceName; readonly guide: StreamLocator }
   NoGuide: { readonly source: SourceName }
   NotCarried: { readonly why: "NoStream" | "StreamingOnly" | "NotInGuide" }
 }>
