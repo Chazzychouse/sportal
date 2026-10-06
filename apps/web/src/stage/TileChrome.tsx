@@ -1,6 +1,5 @@
 import type { GameSnapshot } from "@sportal/domain/Game"
 import type { Stage, Tile } from "@sportal/domain/Stage"
-import type { ReactNode } from "react"
 import { Button } from "@/design/button"
 import { cn } from "@/design/ClassName"
 import { GameStatus } from "../game/GameStatus.tsx"
@@ -21,7 +20,6 @@ export function TileChrome(props: {
   game: GameSnapshot | undefined
   selected: boolean
   onSelect: () => void
-  children?: ReactNode
 }) {
   const { tile, slot } = props
   const onAir = tile._tag !== "Empty" && props.stage.hears(tile.game)
@@ -75,7 +73,6 @@ export function TileChrome(props: {
           )}
         </span>
       </button>
-      {props.children}
       <span className="flex shrink-0 items-center">
         {tileActions(props.stage, slot, props.selected).map((action) => (
           <Button

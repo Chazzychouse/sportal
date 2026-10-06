@@ -1,9 +1,4 @@
-import {
-  type ChannelCarriage,
-  ChannelLineup,
-  ChannelUrlRefused,
-  type SourceName
-} from "@sportal/domain/Channel"
+import { ChannelAvailability, type SourceName } from "@sportal/domain/Channel"
 import type { GameSnapshot } from "@sportal/domain/Game"
 import { ChannelId, Guide, GuideUnreadable } from "@sportal/domain/Guide"
 import {
@@ -20,48 +15,34 @@ import {
   Stream,
   SubscriptionRef
 } from "effect"
-import { ChannelStore } from "../ChannelStore.ts"
 import { Source } from "../Source.ts"
 import * as YouTubeTvPayload from "./YouTubeTvPayload.ts"
 
 /**
  * YouTube TV as a source. Its guide, read by the shell from the guide page, says where each game airs while
- * it is fresh; until one is read, and once the last one is stale, the channels the user has picked by hand,
- * kept in the channel store, do.
+ * it is fresh; until one is read, and once the last one is stale, it answers no guide.
  */
 export const layer = Layer.effect(
   Source,
   Effect.gen(function* () {
-    const store = yield* ChannelStore
     // At most one fiber waiting to retire the latest guide; a newer read replaces it.
     const expiry = yield* FiberHandle.make<void>()
-    // One ref for both, so a single subscription sees every change: the lineup, and the latest guide read.
-    const state = yield* SubscriptionRef.make({
-      lineup: new ChannelLineup({ source, guide, carriages: yield* store.carriages }),
-      read: Option.none<Guide>()
-    })
-
-    // Store first, then memory, one write at a time: a failed write changes nothing.
-    const record = (carriage: ChannelCarriage) =>
-      SubscriptionRef.updateEffect(state, (current) =>
-        store.record(carriage).pipe(Effect.as({ ...current, lineup: current.lineup.record(carriage) }))
-      )
+    const latest = yield* SubscriptionRef.make(Option.none<Guide>())
 
     return Source.of({
       availability: Effect.gen(function* () {
-        const { lineup, read } = yield* SubscriptionRef.get(state)
         const now = yield* DateTime.now
-        const fresh = Option.filter(read, (current) =>
+        const fresh = Option.filter(yield* SubscriptionRef.get(latest), (current) =>
           DateTime.isLessThan(now, DateTime.addDuration(current.readAt, staleAfter))
         )
         return (game: GameSnapshot) =>
           Option.match(fresh, {
-            onNone: () => lineup.availabilityOf(game),
+            onNone: () => ChannelAvailability.NoGuide({ source }),
             onSome: (current) => current.availabilityOf(game)
           })
       }),
       // The ref's current value comes first on every subscription; only later values are changes.
-      changes: SubscriptionRef.changes(state).pipe(Stream.drop(1), Stream.as(undefined)),
+      changes: SubscriptionRef.changes(latest).pipe(Stream.drop(1), Stream.as(undefined)),
       readGuide: (response) =>
         Effect.gen(function* () {
           const decoded = yield* decodeGuide(response).pipe(
@@ -78,45 +59,27 @@ export const layer = Layer.effect(
           yield* Effect.logInfo(
             `YouTubeTv: read a guide of ${read.channels.length} channels and ${read.airings.length} airings`
           )
-          yield* SubscriptionRef.update(state, (current) => ({ ...current, read: Option.some(read) }))
-          // Retire this guide once it is stale, unless a newer one has replaced it, so tiles fall back too.
+          yield* SubscriptionRef.set(latest, Option.some(read))
+          // Retire this guide once it is stale, unless a newer one has replaced it, so tiles hear of it too.
           yield* FiberHandle.run(
             expiry,
             Effect.sleep(staleAfter).pipe(
               Effect.andThen(
-                SubscriptionRef.updateSome(state, (current) =>
-                  Option.exists(current.read, (latest) => latest === read)
-                    ? Option.some({ ...current, read: Option.none<Guide>() })
+                SubscriptionRef.updateSome(latest, (current) =>
+                  Option.exists(current, (guide) => guide === read)
+                    ? Option.some(Option.none<Guide>())
                     : Option.none()
                 )
               )
             )
           )
-        }),
-      learn: (network, url) =>
-        decodeLiveChannelUrl(url).pipe(
-          Effect.mapError(() => new ChannelUrlRefused()),
-          Effect.flatMap((live) =>
-            record({
-              _tag: "Carried",
-              network,
-              channel: { name: network, source, locator: { _tag: "WebView", url: live } }
-            })
-          )
-        ),
-      markNotCarried: (network) => record({ _tag: "NotCarried", network, source }),
-      forget: (network) =>
-        SubscriptionRef.updateEffect(state, (current) =>
-          store
-            .forget(network, source)
-            .pipe(Effect.as({ ...current, lineup: current.lineup.forget(network) }))
-        )
+        })
     })
   })
 )
 
 /**
- * A YouTube TV channel address, decoded to the address that plays the channel live. A guide pick can
+ * A YouTube TV channel address, decoded to the address that plays the channel live. An address can
  * carry a start point ("from the beginning"); keeping it would replay every later game on the channel
  * from that moment, so decoding keeps only the channel's id and the live flag.
  */
@@ -133,15 +96,11 @@ const LiveChannelUrl = Schema.String.pipe(
 
 /**
  * How long a guide answers after its reading: three missed 15-minute reads. After that a guide may list a
- * channel that has moved on, so the lineup answers until the next read.
+ * channel that has moved on, so the source answers no guide until the next read.
  */
 const staleAfter = Duration.minutes(45)
 
-const decodeLiveChannelUrl = Schema.decodeEffect(LiveChannelUrl)
-
 const source: SourceName = "YouTube TV"
-
-const guide = { _tag: "WebView", url: "https://tv.youtube.com/live" } as const
 
 const decodeLiveChannelUrlOption = Schema.decodeOption(LiveChannelUrl)
 

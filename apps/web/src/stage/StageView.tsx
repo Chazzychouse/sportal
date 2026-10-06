@@ -1,20 +1,11 @@
 import type { StageTransition } from "@sportal/api/ShellBridge"
-import type { ChannelUrlRefused } from "@sportal/domain/Channel"
 import type { GameId, GameSnapshot } from "@sportal/domain/Game"
 import type { Split } from "@sportal/domain/Layout"
 import type { Stage } from "@sportal/domain/Stage"
 import { Effect } from "effect"
-import type { HttpClientError } from "effect/http"
 import { useEffect, useLayoutEffect, useRef, useState } from "react"
 import { useVideoAreas } from "../display/OverlayHost.tsx"
-import {
-  dispatch,
-  forgetChannel,
-  type HubClient,
-  learnChannel,
-  markNotCarried,
-  sendGuide
-} from "../hub/HubClient.ts"
+import { dispatch, sendGuide } from "../hub/HubClient.ts"
 import { runtime } from "../hub/HubRuntime.ts"
 import type { Connection } from "../hub/LiveStream.ts"
 import { Dividers } from "./Dividers.tsx"
@@ -38,8 +29,6 @@ export function StageView(props: {
   const area = useArea(areaRef)
   // The split being dragged, shown in place of the Stage's until the drag is committed.
   const [dragged, setDragged] = useState<Split | undefined>(undefined)
-  // What went wrong with the last channel command on a tile, until the Stage next changes.
-  const [notices, setNotices] = useState<ReadonlyMap<number, string>>(new Map())
 
   const shown = dragged === undefined ? props.stage : props.stage.withSplit(dragged)
   const rects = tileRects(shown, area)
@@ -59,19 +48,6 @@ export function StageView(props: {
     synced.current = { placements: key, arrangement }
     window.sportalShell?.syncTiles(placed, moved ? stageTransition : undefined)
   })
-
-  useEffect(() => {
-    setNotices(new Map())
-    // A channel picked in a picking tile's guide teaches the Hub that network's channel.
-    return window.sportalShell?.onChannelPicked((pick) => {
-      const index = props.stage.tiles.findIndex(
-        (tile) => tile._tag === "PickingChannel" && tile.game === pick.game
-      )
-      const tile = props.stage.tiles[index]
-      if (tile?._tag === "PickingChannel")
-        channelCommand(learnChannel(tile.network, pick.url), index, setNotices)
-    })
-  }, [props.stage])
 
   // A click on a video reaches the shell, not this page: the shell reports which game's view it was.
   useEffect(
@@ -108,8 +84,6 @@ export function StageView(props: {
         const rect = rects[index]
         if (rect === undefined) return null
         const game = tile._tag === "Empty" ? undefined : props.slate.find((g) => g.id === tile.game)
-        const notice = notices.get(index)
-        const learnedFor = tile._tag === "StreamTile" ? tile.learnedFor : undefined
         const hidden = rect.width === 0
         return (
           <section
@@ -133,32 +107,7 @@ export function StageView(props: {
               game={game}
               selected={props.selected === index}
               onSelect={() => props.onSelect(index)}
-            >
-              {/* In the header, on its one line: the provider view always draws over the well. */}
-              {notice === undefined ? null : (
-                <p className="min-w-0 max-w-[40%] truncate text-warn" title={notice}>
-                  {notice}
-                </p>
-              )}
-              {tile._tag === "PickingChannel" ? (
-                <button
-                  type="button"
-                  className="shrink-0 text-muted-foreground hover:text-foreground"
-                  onClick={() => channelCommand(markNotCarried(tile.network), index, setNotices)}
-                >
-                  Not on {tile.source}
-                </button>
-              ) : null}
-              {learnedFor !== undefined ? (
-                <button
-                  type="button"
-                  className="shrink-0 text-muted-foreground hover:text-foreground"
-                  onClick={() => channelCommand(forgetChannel(learnedFor), index, setNotices)}
-                >
-                  wrong channel
-                </button>
-              ) : null}
-            </TileChrome>
+            />
             <div className="flex min-h-0 flex-1 items-center justify-center bg-well">
               <TileBody tile={tile} game={game} />
             </div>
@@ -225,26 +174,4 @@ function arrangementOf(stage: Stage) {
     stage.solo,
     stage.onStage().map((tile) => (tile._tag === "Empty" ? null : tile.game))
   ])
-}
-
-/** Runs a channel command; if the Hub did not take it, `tile` says why until the Stage next changes. */
-function channelCommand(
-  command: Effect.Effect<void, ChannelUrlRefused | HttpClientError.HttpClientError, HubClient>,
-  tile: number,
-  setNotices: (update: (notices: ReadonlyMap<number, string>) => ReadonlyMap<number, string>) => void
-) {
-  runtime.runFork(
-    command.pipe(
-      Effect.catch((failure) =>
-        Effect.sync(() => setNotices((notices) => new Map(notices).set(tile, channelNotice(failure))))
-      )
-    )
-  )
-}
-
-/** What to tell the user when the Hub did not take a channel command. */
-function channelNotice(failure: ChannelUrlRefused | HttpClientError.HttpClientError) {
-  return failure._tag === "ChannelUrlRefused"
-    ? "That is not a live channel. Pick one from the live guide."
-    : "The Hub did not take that. Try again."
 }

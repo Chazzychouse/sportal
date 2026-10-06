@@ -65,16 +65,11 @@ Every exported type name must be a term here, except the wire schemas in `*Paylo
 | **Network** | A network's name as a provider reports it ("CBS", "ESPN"). | channel, station |
 | **Channel** | A station as a source names it ("News 3", "ESPN2"), with the address that plays it live. | network |
 | **Channel id** | A source's own id for one of its channels (YouTube TV's station id); `ChannelId` in code. | station id |
-| **Channel carriage** | Whether a source carries a network: on a channel, or not at all. | answer, mapping |
-| **Channel lineup** | The channel carriages one source has learned, and the guide where the rest are picked. | channel map |
 | **Channel availability** | Whether and where a source can show a game: carried, upcoming, unlearned (its network still to be picked), no guide (the source has no fresh guide to say), or not carried, with why. | availability |
 | **No guide** | A source's answer while it has no fresh guide: before the first read, and once the last is stale. | unknown |
 | **Guide** | One reading of a source's listing of the channels this account gets, with their live addresses, and what each airs. | schedule, EPG |
 | **Airing** | One programme on a channel, with its begin and end. | listing, show |
 | **Guide unreadable** | A guide response the source could not read. | |
-| **Channel URL refused** | An address a source would not learn, because it is not one of its live channels. | not a channel |
-| **Channel store** | Where the Hub keeps the channel carriages it has learned. | channel repository |
-| **Channel store error** | The channel store could not read or write. | database error |
 | **Database** | The Hub's SQLite database. Each store migrates its own tables in it. | store, persistence |
 | **Game history** | Past plays and each game's latest snapshot, derived from the fold into the Hub's database. Rebuildable from the feed log. | archive, stats |
 | **Game history error** | The game history could not read. | database error |
@@ -97,7 +92,7 @@ Provider and Source are the two words most likely to be swapped. Provider is alw
 | **Live message** | One update the Hub pushes to clients on the live stream: the slate changed, or the Stage changed; `LiveMessage`, and `LiveMessageJson` its JSON form. | event, notification |
 | **Live stream** | The Hub's server-sent events at `/api/live` that carry live messages; in the web UI, `LiveStream` holds what they said and the connection. | event stream, socket |
 | **Connection** | Whether a client's live stream is up: connecting (never yet connected), connected, or lost (since an instant, retrying). | online, status |
-| **Hub client** | The web UI's way to the Hub's API, `HubClient` in code: stage and channel commands, and the stage commands that failed: refused by the Hub, or never reaching it. It runs in the web UI's one runtime (`HubRuntime.ts`), with the live stream. | API client, fetcher |
+| **Hub client** | The web UI's way to the Hub's API, `HubClient` in code: stage commands, and the stage commands that failed: refused by the Hub, or never reaching it. It runs in the web UI's one runtime (`HubRuntime.ts`), with the live stream. | API client, fetcher |
 | **Stage sessions** | The Hub component holding the authoritative Stage for each Display and applying stage commands to it. | stage store, stage manager |
 | **Telemetry** | The traces, logs, and metrics the Hub exports for people to read in Grafana. | monitoring, observability stack |
 | **Display** | A device running the shell and presenting a Stage. Its local state (selected tile, interacting tile, pick, slate drawer, and the one open overlay) is the web UI's `Display`. | screen, client, player |

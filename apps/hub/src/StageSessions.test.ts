@@ -1,23 +1,18 @@
 import { assert, describe, it } from "@effect/vitest"
+import { ChannelAvailability } from "@sportal/domain/Channel"
 import { GameId, type GameSnapshot, Network } from "@sportal/domain/Game"
+import type { Tile } from "@sportal/domain/Stage"
 import { broadcast, liveSnapshot, snapshot, team } from "@sportal/domain/TestGame"
 import { DateTime, Deferred, Effect, Fiber, Layer, Option, Ref, Stream } from "effect"
 import { TestClock } from "effect/testing"
-import * as Database from "./Database.ts"
 import { Slate } from "./Slate.ts"
 import { StageSessions } from "./StageSessions.ts"
-import { ChannelStore } from "./source/ChannelStore.ts"
 import { Source } from "./source/Source.ts"
 import { recordedGuide } from "./source/youtube-tv/TestYouTubeTv.ts"
 import * as YouTubeTv from "./source/youtube-tv/YouTubeTv.ts"
 
 const espn = Network.make("ESPN")
 const espnPlus = Network.make("ESPN+")
-const espnChannel = {
-  name: espn,
-  source: "YouTube TV" as const,
-  locator: { _tag: "WebView" as const, url: "https://tv.youtube.com/watch/espn?vp=0gEEEgIwAQ%3D%3D" }
-}
 const fox = Network.make("FOX")
 const slate = [
   liveSnapshot({ id: GameId.make("1"), broadcasts: [broadcast(espn)] }),
@@ -36,10 +31,11 @@ const ohioStateAtIowa = snapshot({
   broadcasts: [broadcast("CBS")]
 })
 
-const TestSessions = StageSessions.layer.pipe(
-  Layer.provide(Layer.succeed(Slate, slateOf(slate))),
-  Layer.provideMerge(sourceKnowingEspn())
-)
+// When the recorded guide was read, and News 3's live address in it.
+const recordedAt = DateTime.toEpochMillis(DateTime.makeUnsafe("2026-10-03T20:24:45Z"))
+const news3Live = "https://tv.youtube.com/watch/y6zFA17zDsw?vp=0gEEEgIwAQ%3D%3D"
+
+const TestSessions = sessionsOver(slate)
 
 describe("StageSessions", () => {
   it.effect("applies concurrent commands without losing any", () =>
@@ -69,40 +65,40 @@ describe("StageSessions", () => {
 
   it.effect("assigns a carried game as a stream tile and any other as a data tile", () =>
     Effect.gen(function* () {
+      yield* TestClock.setTime(recordedAt)
+      yield* (yield* Source).readGuide(recordedGuide)
       const sessions = yield* StageSessions
-      yield* sessions.dispatch({ _tag: "Assign", tile: 0, game: GameId.make("1") })
+      yield* sessions.dispatch({ _tag: "Assign", tile: 0, game: ohioStateAtIowa.id })
       const stage = yield* sessions.dispatch({ _tag: "Assign", tile: 1, game: GameId.make("4") })
       assert.deepStrictEqual(stage.tiles[0], {
         _tag: "StreamTile",
-        game: GameId.make("1"),
-        channel: espnChannel,
-        learnedFor: espn
+        game: ohioStateAtIowa.id,
+        channel: { name: "News 3", source: "YouTube TV", locator: { _tag: "WebView", url: news3Live } }
       })
       assert.deepStrictEqual(stage.tiles[1], {
         _tag: "DataTile",
         game: GameId.make("4"),
-        why: { _tag: "NoStream" }
+        why: { _tag: "NotInGuide" }
       })
-    }).pipe(Effect.provide(TestSessions))
+    }).pipe(Effect.provide(sessionsOver([ohioStateAtIowa, ...slate])))
   )
 
-  it.live("refreshes the stage when the source learns a channel", () =>
+  it.live("refreshes the stage when the source reads a guide", () =>
     Effect.gen(function* () {
       const sessions = yield* StageSessions
-      const picking = yield* sessions.dispatch({ _tag: "Assign", tile: 0, game: GameId.make("5") })
-      assert.strictEqual(picking.tiles[0]?._tag, "PickingChannel")
+      const before = yield* sessions.dispatch({ _tag: "Assign", tile: 0, game: GameId.make("5") })
+      assert.deepStrictEqual(before.tiles[0], noGuideTile(GameId.make("5")))
 
-      yield* (yield* Source).learn(fox, "https://tv.youtube.com/watch/fox")
+      yield* (yield* Source).readGuide(recordedGuide)
       // The current value is replayed to a new subscriber, so wait for the tile that only a refresh makes.
       const stage = yield* sessions.changes.pipe(
-        Stream.filter((stage) => stage.tiles[0]?._tag === "StreamTile"),
+        Stream.filter((stage) => !isNoGuideTile(stage.tiles[0])),
         Stream.take(1),
         Stream.runHead,
         Effect.timeout("2 seconds")
       )
       const tile = Option.getOrThrow(stage).tiles[0]
-      assert.deepStrictEqual(tile?._tag === "StreamTile" ? tile.learnedFor : tile, fox)
-      assert.deepStrictEqual(tile?._tag === "StreamTile" ? tile.game : tile, GameId.make("5"))
+      assert.deepStrictEqual(tile === undefined || tile._tag === "Empty" ? tile : tile.game, GameId.make("5"))
     }).pipe(Effect.provide(TestSessions))
   )
 
@@ -119,10 +115,10 @@ describe("StageSessions", () => {
         changes: Stream.empty
       })
       // Depending on StageSessions orders this after the layer has built.
-      const learnAtOnce = Layer.effectDiscard(
+      const readAtOnce = Layer.effectDiscard(
         Effect.gen(function* () {
           yield* StageSessions
-          yield* (yield* Source).learn(fox, "https://tv.youtube.com/watch/fox")
+          yield* (yield* Source).readGuide(recordedGuide)
         })
       )
       yield* Effect.gen(function* () {
@@ -132,10 +128,10 @@ describe("StageSessions", () => {
         assert.strictEqual(yield* Ref.get(refreshes), 1)
       }).pipe(
         Effect.provide(
-          learnAtOnce.pipe(
+          readAtOnce.pipe(
             Layer.provideMerge(StageSessions.layer),
             Layer.provide(Layer.succeed(Slate, fakeSlate)),
-            Layer.provide(sourceKnowingEspn())
+            Layer.provide(YouTubeTv.layer)
           )
         )
       )
@@ -163,7 +159,7 @@ describe("StageSessions", () => {
           })
           return Source.of({ ...source, availability })
         })
-      ).pipe(Layer.provide(sourceKnowingEspn()))
+      ).pipe(Layer.provide(YouTubeTv.layer))
       yield* Effect.gen(function* () {
         const sessions = yield* StageSessions
         const source = yield* Source
@@ -171,12 +167,13 @@ describe("StageSessions", () => {
           .dispatch({ _tag: "Assign", tile: 0, game: GameId.make("5") })
           .pipe(Effect.forkScoped)
         yield* Deferred.await(reading)
-        yield* source.learn(fox, "https://tv.youtube.com/watch/fox")
+        yield* source.readGuide(recordedGuide)
         yield* Deferred.succeed(release, undefined)
-        yield* Fiber.join(assigning)
+        const assigned = yield* Fiber.join(assigning)
+        assert.deepStrictEqual(assigned.tiles[0], noGuideTile(GameId.make("5")))
 
         const stage = yield* sessions.changes.pipe(
-          Stream.filter((stage) => stage.tiles[0]?._tag === "StreamTile"),
+          Stream.filter((stage) => !isNoGuideTile(stage.tiles[0])),
           Stream.take(1),
           Stream.runHead,
           Effect.timeout("2 seconds")
@@ -193,7 +190,7 @@ describe("StageSessions", () => {
     })
   )
 
-  it.live("keeps a playing tile whose game has left the slate when another network is learned", () =>
+  it.live("keeps a tile whose game has left the slate as it was when the source reads a guide", () =>
     Effect.gen(function* () {
       const onSlate = yield* Ref.make(slate)
       const fakeSlate = Slate.of({
@@ -209,34 +206,29 @@ describe("StageSessions", () => {
           slate.filter((snapshot) => snapshot.id !== GameId.make("1"))
         )
 
-        yield* (yield* Source).learn(fox, "https://tv.youtube.com/watch/fox")
+        yield* (yield* Source).readGuide(recordedGuide)
         const stage = yield* sessions.changes.pipe(
-          Stream.filter((stage) => stage.tiles[1]?._tag === "StreamTile"),
+          Stream.filter((stage) => !isNoGuideTile(stage.tiles[1])),
           Stream.take(1),
           Stream.runHead,
           Effect.timeout("2 seconds")
         )
-        const tiles = Option.getOrThrow(stage).tiles
-        assert.deepStrictEqual(tiles[0], {
-          _tag: "StreamTile",
-          game: GameId.make("1"),
-          channel: espnChannel,
-          learnedFor: espn
-        })
+        // Off the slate it would be a data tile with no stream; the refresh leaves it alone instead.
+        assert.deepStrictEqual(Option.getOrThrow(stage).tiles[0], noGuideTile(GameId.make("1")))
       }).pipe(
         Effect.provide(
           StageSessions.layer.pipe(
             Layer.provide(Layer.succeed(Slate, fakeSlate)),
-            Layer.provideMerge(sourceKnowingEspn())
+            Layer.provideMerge(YouTubeTv.layer)
           )
         )
       )
     })
   )
 
-  it.effect("keeps a guide-matched tile playing when its guide goes stale and the lineup answers", () =>
+  it.effect("keeps a guide-matched tile playing when its guide goes stale", () =>
     Effect.gen(function* () {
-      yield* TestClock.setTime(DateTime.toEpochMillis(DateTime.makeUnsafe("2026-10-03T20:24:45Z")))
+      yield* TestClock.setTime(recordedAt)
       const source = yield* Source
       yield* source.readGuide(recordedGuide)
       const sessions = yield* StageSessions
@@ -245,17 +237,12 @@ describe("StageSessions", () => {
 
       yield* TestClock.adjust("45 minutes")
       for (let turn = 0; turn < 10; turn++) yield* Effect.yieldNow
-      // The lineup answers now, and has never heard of CBS.
-      assert.strictEqual((yield* source.availability)(ohioStateAtIowa)._tag, "Unlearned")
-      assert.deepStrictEqual((yield* sessions.stage).tiles[0], playing.tiles[0])
-    }).pipe(
-      Effect.provide(
-        StageSessions.layer.pipe(
-          Layer.provide(Layer.succeed(Slate, slateOf([ohioStateAtIowa]))),
-          Layer.provideMerge(sourceKnowingEspn())
-        )
+      assert.deepStrictEqual(
+        (yield* source.availability)(ohioStateAtIowa),
+        ChannelAvailability.NoGuide({ source: "YouTube TV" })
       )
-    )
+      assert.deepStrictEqual((yield* sessions.stage).tiles[0], playing.tiles[0])
+    }).pipe(Effect.provide(sessionsOver([ohioStateAtIowa])))
   )
 
   it.effect("assigns a game missing from the slate as a data tile", () =>
@@ -276,17 +263,20 @@ function slateOf(games: ReadonlyArray<GameSnapshot>) {
   return Slate.of({ latest: Effect.succeed(games), changes: Stream.empty })
 }
 
-/** YouTube TV over an in-memory database, already knowing ESPN's channel and that ESPN+ is not carried. */
-function sourceKnowingEspn() {
-  return Layer.effectDiscard(
-    Effect.gen(function* () {
-      const source = yield* Source
-      yield* source.learn(espn, "https://tv.youtube.com/watch/espn")
-      yield* source.markNotCarried(espnPlus)
-    })
-  ).pipe(
-    Layer.provideMerge(YouTubeTv.layer),
-    Layer.provide(ChannelStore.layer),
-    Layer.provide(Database.at(":memory:"))
+/** StageSessions over a Slate of `games` and YouTube TV with nothing read yet. */
+function sessionsOver(games: ReadonlyArray<GameSnapshot>) {
+  return StageSessions.layer.pipe(
+    Layer.provide(Layer.succeed(Slate, slateOf(games))),
+    Layer.provideMerge(YouTubeTv.layer)
   )
+}
+
+/** The data tile a game gets while the source has no guide. */
+function noGuideTile(game: GameId) {
+  return { _tag: "DataTile" as const, game, why: { _tag: "NoGuide" as const } }
+}
+
+/** Whether `tile` is the data tile of a game while the source has no guide. */
+function isNoGuideTile(tile: Tile | undefined) {
+  return tile?._tag === "DataTile" && tile.why._tag === "NoGuide"
 }

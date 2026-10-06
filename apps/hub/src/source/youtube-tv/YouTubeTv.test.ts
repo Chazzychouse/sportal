@@ -6,141 +6,28 @@ import { broadcast, snapshot, team } from "@sportal/domain/TestGame"
 import { DateTime, Effect, Fiber, Layer, Logger, Option, Ref, Stream } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/http"
 import { TestClock } from "effect/testing"
-import * as Database from "../../Database.ts"
 import * as EspnProvider from "../../provider/espn/EspnProvider.ts"
 import { FastCast } from "../../provider/espn/FastCast.ts"
 import { noSocket, recordedScoreboard } from "../../provider/espn/TestEspn.ts"
 import { listedBy } from "../../provider/TestProvider.ts"
-import { ChannelStore } from "../ChannelStore.ts"
 import { Source } from "../Source.ts"
 import { recordedGuide } from "./TestYouTubeTv.ts"
 import * as YouTubeTv from "./YouTubeTv.ts"
 
-// Addresses recorded from YouTube TV's live guide on 2026-10-03.
+// News 3's live address, recorded from YouTube TV's live guide on 2026-10-03.
 const cbsLive = "https://tv.youtube.com/watch/y6zFA17zDsw?vp=0gEEEgIwAQ%3D%3D"
-const foxLive = "https://tv.youtube.com/watch/_MpmFlh-Wzc?vp=0gEEEgIwAQ%3D%3D"
-const foxFromTheBeginning =
-  "https://tv.youtube.com/watch/_MpmFlh-Wzc?vpp=gAKAzYTWBg%3D%3D&vp=0gEKEgIwARiAzYTWBg%3D%3D"
 
 const espn = Network.make("ESPN")
-const disney = Network.make("Disney+")
 const onEspn = snapshot({ broadcasts: [broadcast(espn)] })
-const onEspnAndDisney = snapshot({ broadcasts: [broadcast(disney), broadcast(espn)] })
-const guide = { _tag: "WebView" as const, url: "https://tv.youtube.com/live" }
+
 describe("YouTubeTv source", () => {
-  it.effect("starts with every network unlearned, pointing at the live guide", () =>
+  it.effect("answers no guide before any guide is read", () =>
     Effect.gen(function* () {
       const availabilityOf = yield* (yield* Source).availability
-      assert.deepStrictEqual(
-        availabilityOf(onEspn),
-        ChannelAvailability.Unlearned({ network: espn, source: "YouTube TV", guide })
-      )
-    }).pipe(Effect.provide(testSource()))
-  )
-
-  it.effect("learns a channel from a guide address and keeps its live address", () =>
-    Effect.gen(function* () {
-      const source = yield* Source
-      yield* source.learn(espn, foxFromTheBeginning)
-      assert.deepStrictEqual(
-        (yield* source.availability)(onEspn),
-        ChannelAvailability.Carried({
-          channel: { name: espn, source: "YouTube TV", locator: { _tag: "WebView", url: foxLive } },
-          learnedFor: Option.some(espn)
-        })
-      )
-    }).pipe(Effect.provide(testSource()))
-  )
-
-  it.effect("keeps a live channel address as it is", () =>
-    Effect.gen(function* () {
-      const source = yield* Source
-      yield* source.learn(espn, cbsLive)
-      assert.deepStrictEqual(
-        (yield* source.availability)(onEspn),
-        ChannelAvailability.Carried({
-          channel: { name: espn, source: "YouTube TV", locator: { _tag: "WebView", url: cbsLive } },
-          learnedFor: Option.some(espn)
-        })
-      )
-    }).pipe(Effect.provide(testSource()))
-  )
-
-  it.effect.each([
-    "https://tv.youtube.com/live",
-    "https://tv.youtube.com/watch/",
-    "https://tv.youtube.com/watch/abc/extra",
-    "http://tv.youtube.com/watch/abc",
-    "https://www.youtube.com/watch/abc",
-    "https://tv.youtube.com.evil.example/watch/abc",
-    "not a url"
-  ])("refuses to learn %s, which is not a channel address, and learns nothing", (url) =>
-    Effect.gen(function* () {
-      const source = yield* Source
-      const error = yield* source.learn(espn, url).pipe(Effect.flip)
-      assert.strictEqual(error._tag, "ChannelUrlRefused")
-      assert.strictEqual((yield* source.availability)(onEspn)._tag, "Unlearned")
-    }).pipe(Effect.provide(testSource()))
-  )
-
-  it.effect("moves on to the next network once one is marked not carried", () =>
-    Effect.gen(function* () {
-      const source = yield* Source
-      yield* source.markNotCarried(disney)
-      assert.deepStrictEqual(
-        (yield* source.availability)(onEspnAndDisney),
-        ChannelAvailability.Unlearned({ network: espn, source: "YouTube TV", guide })
-      )
-    }).pipe(Effect.provide(testSource()))
-  )
-
-  it.effect("forgets a learned channel", () =>
-    Effect.gen(function* () {
-      const source = yield* Source
-      yield* source.learn(espn, cbsLive)
-      yield* source.forget(espn)
-      assert.strictEqual((yield* source.availability)(onEspn)._tag, "Unlearned")
-    }).pipe(Effect.provide(testSource()))
-  )
-
-  it.effect("signals a change after each write, not before", () =>
-    Effect.gen(function* () {
-      const source = yield* Source
-      const signals = yield* source.changes.pipe(Stream.take(2), Stream.runCount, Effect.forkChild)
-      yield* Effect.yieldNow
-      yield* source.learn(espn, cbsLive)
-      yield* source.markNotCarried(disney)
-      assert.strictEqual(yield* Fiber.join(signals), 2)
-    }).pipe(Effect.provide(testSource()))
-  )
-
-  it.effect("loads what the channel store already holds", () =>
-    Effect.gen(function* () {
-      assert.strictEqual((yield* (yield* Source).availability)(onEspn)._tag, "Carried")
-    }).pipe(Effect.provide(YouTubeTv.layer.pipe(Layer.provide(storeKnowingEspn()))))
+      assert.deepStrictEqual(availabilityOf(onEspn), ChannelAvailability.NoGuide({ source: "YouTube TV" }))
+    }).pipe(Effect.provide(YouTubeTv.layer))
   )
 })
-
-/** The source over a fresh in-memory database. */
-function testSource() {
-  return YouTubeTv.layer.pipe(Layer.provide(ChannelStore.layer), Layer.provide(Database.at(":memory:")))
-}
-
-/** An in-memory channel store that already holds ESPN's channel when the source starts. */
-function storeKnowingEspn() {
-  return Layer.effect(
-    ChannelStore,
-    Effect.gen(function* () {
-      const store = yield* ChannelStore
-      yield* store.record({
-        _tag: "Carried",
-        network: espn,
-        channel: { name: espn, source: "YouTube TV", locator: { _tag: "WebView", url: cbsLive } }
-      })
-      return store
-    })
-  ).pipe(Layer.provide(ChannelStore.layer), Layer.provide(Database.at(":memory:")))
-}
 
 const readAt = DateTime.toEpochMillis(DateTime.makeUnsafe("2026-10-03T20:24:45Z"))
 const ohioStateAtIowa = snapshot({
@@ -162,7 +49,7 @@ describe("YouTubeTv source reading its guide", () => {
       const source = yield* Source
       yield* source.readGuide(recordedGuide)
       assert.deepStrictEqual((yield* source.availability)(ohioStateAtIowa), onNews3)
-    }).pipe(Effect.provide(testSource()))
+    }).pipe(Effect.provide(YouTubeTv.layer))
   )
 
   it.effect("signals a change after a guide is read", () =>
@@ -172,10 +59,10 @@ describe("YouTubeTv source reading its guide", () => {
       yield* Effect.yieldNow
       yield* source.readGuide(recordedGuide)
       assert.strictEqual(yield* Fiber.join(signals), 1)
-    }).pipe(Effect.provide(testSource()))
+    }).pipe(Effect.provide(YouTubeTv.layer))
   )
 
-  it.effect("falls back to the lineup once its guide is 45 minutes old, and signals then", () =>
+  it.effect("answers no guide once its guide is 45 minutes old, and signals then", () =>
     Effect.gen(function* () {
       yield* TestClock.setTime(readAt)
       const source = yield* Source
@@ -185,9 +72,12 @@ describe("YouTubeTv source reading its guide", () => {
       assert.deepStrictEqual((yield* source.availability)(ohioStateAtIowa), onNews3)
       assert.strictEqual(yield* Ref.get(changes), 0)
       yield* TestClock.adjust("1 minute")
-      assert.strictEqual((yield* source.availability)(ohioStateAtIowa)._tag, "Unlearned")
+      assert.deepStrictEqual(
+        (yield* source.availability)(ohioStateAtIowa),
+        ChannelAvailability.NoGuide({ source: "YouTube TV" })
+      )
       assert.strictEqual(yield* Ref.get(changes), 1)
-    }).pipe(Effect.provide(testSource()))
+    }).pipe(Effect.provide(YouTubeTv.layer))
   )
 
   it.effect("keeps a newer guide when an older one would have gone stale", () =>
@@ -199,7 +89,7 @@ describe("YouTubeTv source reading its guide", () => {
       yield* source.readGuide(recordedGuide)
       yield* TestClock.adjust("20 minutes")
       assert.deepStrictEqual((yield* source.availability)(ohioStateAtIowa), onNews3)
-    }).pipe(Effect.provide(testSource()))
+    }).pipe(Effect.provide(YouTubeTv.layer))
   )
 
   it.effect("keeps the guide it has, and signals nothing, when a later response cannot be read", () =>
@@ -212,20 +102,7 @@ describe("YouTubeTv source reading its guide", () => {
       yield* Effect.yieldNow
       assert.deepStrictEqual((yield* source.availability)(ohioStateAtIowa), onNews3)
       assert.strictEqual(yield* Ref.get(changes), 0)
-    }).pipe(Effect.provide(testSource()))
-  )
-
-  it.effect("keeps answering from the guide after the lineup changes", () =>
-    Effect.gen(function* () {
-      yield* TestClock.setTime(readAt)
-      const source = yield* Source
-      yield* source.readGuide(recordedGuide)
-      const cbs = Network.make("CBS")
-      yield* source.learn(cbs, foxLive)
-      yield* source.markNotCarried(espn)
-      yield* source.forget(cbs)
-      assert.deepStrictEqual((yield* source.availability)(ohioStateAtIowa), onNews3)
-    }).pipe(Effect.provide(testSource()))
+    }).pipe(Effect.provide(YouTubeTv.layer))
   )
 
   it.effect("leaves a channel without a live address when its row's live id is not one", () =>
@@ -240,7 +117,7 @@ describe("YouTubeTv source reading its guide", () => {
           begin: Option.some(DateTime.makeUnsafe("2026-10-03T19:35:00Z"))
         })
       )
-    }).pipe(Effect.provide(testSource()))
+    }).pipe(Effect.provide(YouTubeTv.layer))
   )
 
   it.effect("logs why a response could not be read, without the response", () =>
@@ -252,7 +129,7 @@ describe("YouTubeTv source reading its guide", () => {
       const response = JSON.stringify({ contents: { secret: "payload" } })
       yield* Effect.gen(function* () {
         yield* (yield* Source).readGuide(response).pipe(Effect.flip)
-      }).pipe(Effect.provide(Layer.merge(testSource(), Logger.layer([collector]))))
+      }).pipe(Effect.provide(Layer.merge(YouTubeTv.layer, Logger.layer([collector]))))
       const warnings = logged.filter(({ level }) => level === "Warn")
       assert.strictEqual(warnings.length, 1)
       assert.include(warnings[0]?.message, "epgRenderer")
@@ -272,9 +149,8 @@ describe("YouTubeTv source reading its guide", () => {
         const source = yield* Source
         const error = yield* source.readGuide(response).pipe(Effect.flip)
         assert.strictEqual(error._tag, "GuideUnreadable")
-        // Still answering from the lineup: nothing was read.
-        assert.strictEqual((yield* source.availability)(onEspn)._tag, "Unlearned")
-      }).pipe(Effect.provide(testSource()))
+        assert.strictEqual((yield* source.availability)(onEspn)._tag, "NoGuide")
+      }).pipe(Effect.provide(YouTubeTv.layer))
     )
 })
 
@@ -396,7 +272,7 @@ function tallied(league: LeagueId) {
               tally.upcomingOn[game.id] = name
             }
           }),
-        Unlearned: () => assert.fail(`${game.id} was left to the lineup`),
+        Unlearned: () => assert.fail(`${game.id} was left unlearned`),
         NoGuide: () => assert.fail(`${game.id} had no guide`),
         NotCarried: ({ why }) => {
           if (why === "StreamingOnly") tally.streamingOnly++
@@ -422,7 +298,7 @@ function matchingLayer() {
     )
   )
   return Layer.mergeAll(
-    testSource(),
+    YouTubeTv.layer,
     EspnProvider.layer.pipe(Layer.provide(FastCast.layer), Layer.provide([recorded, noSocket]))
   )
 }

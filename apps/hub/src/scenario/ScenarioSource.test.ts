@@ -1,5 +1,4 @@
 import { assert, describe, it } from "@effect/vitest"
-import { Network } from "@sportal/domain/Game"
 import { broadcast, snapshot } from "@sportal/domain/TestGame"
 import { Effect, Stream } from "effect"
 import { Source } from "../source/Source.ts"
@@ -29,10 +28,9 @@ describe("ScenarioSource", () => {
     }).pipe(Effect.provide(ScenarioSource.layer))
   )
 
-  it.effect("learns nothing and never changes", () =>
+  it.effect("reads no guide and never changes", () =>
     Effect.gen(function* () {
       const source = yield* Source
-      yield* source.learn(Network.make("CBS"), "https://tv.youtube.com/watch/x")
       yield* source.readGuide("{}")
       assert.strictEqual(yield* Stream.runCount(source.changes), 0)
     }).pipe(Effect.provide(ScenarioSource.layer))

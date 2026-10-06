@@ -9,7 +9,6 @@ import { HttpApiBuilder } from "effect/http-api"
 import { HubConfig } from "../HubConfig.ts"
 import { Slate } from "../Slate.ts"
 import { StageSessions } from "../StageSessions.ts"
-import type { ChannelStoreError } from "../source/ChannelStore.ts"
 import { Source } from "../source/Source.ts"
 import { lanAddresses } from "./LanAddresses.ts"
 
@@ -21,7 +20,7 @@ export const serve = Layer.unwrap(
     const { webRoot } = yield* HubConfig
     const routes = Layer.mergeAll(
       HttpApiBuilder.layer(SportalApi).pipe(
-        Layer.provide(Layer.mergeAll(stageHandlers(), channelHandlers(), guideHandlers(), hostHandlers()))
+        Layer.provide(Layer.mergeAll(stageHandlers(), guideHandlers(), hostHandlers()))
       ),
       liveRoute(),
       Option.match(webRoot, {
@@ -54,28 +53,6 @@ function stageHandlers() {
       })
     })
   )
-}
-
-function channelHandlers() {
-  return HttpApiBuilder.group(
-    SportalApi,
-    "channels",
-    Effect.fn(function* (handlers) {
-      const source = yield* Source
-      return handlers.handleAll({
-        learn: ({ payload }) => storeFailureDies(source.learn(payload.network, payload.url)),
-        notCarried: ({ payload }) => storeFailureDies(source.markNotCarried(payload.network)),
-        forget: ({ payload }) => storeFailureDies(source.forget(payload.network))
-      })
-    })
-  )
-}
-
-// A channel store that cannot be written is not something a client can fix: it is a server error.
-function storeFailureDies<A, E extends { readonly _tag: string }, R>(
-  effect: Effect.Effect<A, E | ChannelStoreError, R>
-) {
-  return effect.pipe(Effect.catchTag("ChannelStoreError", Effect.die))
 }
 
 function guideHandlers() {

@@ -6,7 +6,7 @@ import { Source } from "../source/Source.ts"
 /**
  * A scenario's source: every game is carried on the web UI's synthetic stream page for it, so a scenario needs
  * no sign-in and no stream budget. The address is a path, since only the web UI knows the origin it is served
- * from. Nothing is learned or stored.
+ * from.
  */
 export const layer = Layer.succeed(
   Source,
@@ -22,9 +22,6 @@ export const layer = Layer.succeed(
       })
     ),
     changes: Stream.empty,
-    readGuide: () => Effect.void,
-    learn: () => Effect.void,
-    markNotCarried: () => Effect.void,
-    forget: () => Effect.void
+    readGuide: () => Effect.void
   })
 )

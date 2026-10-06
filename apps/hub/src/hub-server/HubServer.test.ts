@@ -16,13 +16,11 @@ import { LiveGames } from "../LiveGames.ts"
 import { polling } from "../provider/TestProvider.ts"
 import { Slate } from "../Slate.ts"
 import { StageSessions } from "../StageSessions.ts"
-import { ChannelStore } from "../source/ChannelStore.ts"
 import * as YouTubeTv from "../source/youtube-tv/YouTubeTv.ts"
 import { withEnv } from "../TestHubConfig.ts"
 import * as HubServer from "./HubServer.ts"
 
 const espn = Network.make("ESPN")
-const espnLive = "https://tv.youtube.com/watch/espn?vp=0gEEEgIwAQ%3D%3D"
 const game = snapshot({
   id: GameId.make("401856707"),
   status: "live",
@@ -30,24 +28,12 @@ const game = snapshot({
   away: { team: team("ALA"), score: 0 },
   broadcasts: [broadcast(espn)]
 })
-const picking = {
-  _tag: "PickingChannel",
-  game: game.id,
-  network: espn,
-  source: "YouTube TV",
-  guide: { _tag: "WebView", url: "https://tv.youtube.com/live" }
-} as const
-const streaming = {
-  _tag: "StreamTile",
-  game: game.id,
-  channel: { name: espn, source: "YouTube TV", locator: { _tag: "WebView", url: espnLive } },
-  learnedFor: espn
-} as const
+const noGuide = { _tag: "DataTile", game: game.id, why: { _tag: "NoGuide" } } as const
 
 const makeClient = HttpApiClient.make(SportalApi)
 
 describe("Hub API", () => {
-  it.effect("turns an assignment on an unlearned network into a picking tile", () =>
+  it.effect("turns an assignment with no guide read into a data tile saying so", () =>
     Effect.gen(function* () {
       const client = yield* makeClient
       yield* firstSlateOnTestClock()
@@ -55,34 +41,12 @@ describe("Hub API", () => {
       const stage = yield* client.stage.dispatch({
         payload: { command: { _tag: "Assign", tile: 0, game: game.id } }
       })
-      assert.deepStrictEqual(stage.tiles[0], picking)
+      assert.deepStrictEqual(stage.tiles[0], noGuide)
 
       const rejected = yield* client.stage
         .dispatch({ payload: { command: { _tag: "Clear", tile: 9 } } })
         .pipe(Effect.flip)
       assert.strictEqual(rejected._tag, "StageRejection")
-    }).pipe(Effect.provide(serverUnderTest()))
-  )
-
-  it.live("learns a channel, and the picking tile becomes a stream tile", () =>
-    Effect.gen(function* () {
-      const client = yield* makeClient
-      yield* firstSlate()
-      yield* client.stage.dispatch({ payload: { command: { _tag: "Assign", tile: 0, game: game.id } } })
-
-      // The Stage refreshes on its own fiber after each change, so wait for the tile rather than assume timing.
-      yield* client.channels.learn({ payload: { network: espn, url: "https://tv.youtube.com/watch/espn" } })
-      assert.deepStrictEqual(yield* tileOnceItIs("StreamTile"), streaming)
-
-      yield* client.channels.forget({ payload: { network: espn } })
-      assert.deepStrictEqual(yield* tileOnceItIs("PickingChannel"), picking)
-
-      yield* client.channels.notCarried({ payload: { network: espn } })
-      assert.deepStrictEqual(yield* tileOnceItIs("DataTile"), {
-        _tag: "DataTile",
-        game: game.id,
-        why: { _tag: "NoStream" }
-      })
     }).pipe(Effect.provide(serverUnderTest()))
   )
 
@@ -100,16 +64,6 @@ describe("Hub API", () => {
       const health = yield* client.host.health()
       assert.strictEqual(health.version, "1.2.3")
       assert.strictEqual(DateTime.toEpochMillis(health.startedAt), 0)
-    }).pipe(Effect.provide(serverUnderTest()))
-  )
-
-  it.effect("refuses to learn an address that is not a channel", () =>
-    Effect.gen(function* () {
-      const client = yield* makeClient
-      const error = yield* client.channels
-        .learn({ payload: { network: espn, url: "https://tv.youtube.com/live" } })
-        .pipe(Effect.flip)
-      assert.strictEqual(error._tag, "ChannelUrlRefused")
     }).pipe(Effect.provide(serverUnderTest()))
   )
 
@@ -220,7 +174,7 @@ describe("GET /api/live", () => {
 
       yield* api.stage.dispatch({ payload: { command: { _tag: "Assign", tile: 0, game: game.id } } })
       const third = yield* Queue.take(received)
-      assert.deepStrictEqual(third._tag === "StageChanged" ? third.stage.tiles[0] : third, picking)
+      assert.deepStrictEqual(third._tag === "StageChanged" ? third.stage.tiles[0] : third, noGuide)
     }).pipe(Effect.scoped, Effect.provide(serverUnderTest()))
   )
 
@@ -317,12 +271,10 @@ function tileOnceItIs(tag: Tile["_tag"]) {
   })
 }
 
-/** Everything behind the API, over a fresh in-memory database and a provider that always returns `game`. */
+/** Everything behind the API, over a feed log in memory and a provider that always returns `game`. */
 function hubUnderTest() {
   return StageSessions.layer.pipe(
     Layer.provideMerge(YouTubeTv.layer),
-    Layer.provide(ChannelStore.layer),
-    Layer.provide(Database.at(":memory:")),
     Layer.provideMerge(Layer.mergeAll(Slate.layer, Ingest.layer)),
     Layer.provide([
       LiveGames.layer,
