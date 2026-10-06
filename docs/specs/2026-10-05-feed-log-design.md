@@ -90,7 +90,7 @@ database stay cheap. Kept forever.
 | `source_id` | FastCast `mid`; nullable. Shows gaps and duplicates in replay |
 | `feed` | `poll` or `fastcast` |
 | `channel` | The poll's league, or the FastCast topic |
-| `kind` | `response`, `checkpoint`, `patches`, `unchanged` (below), or `gap` (below) |
+| `kind` | `response`, `message`, `checkpoint`, `unchanged` (below), or `gap` (below) |
 | `body` | The raw bytes, gzip'd; null for `unchanged` and `gap` |
 | `body_hash` | Hash of the raw bytes, for `unchanged` |
 
@@ -222,7 +222,7 @@ guard survives as the fold's per-delivery guard.
 - **Restart:** replay half the day, restart, replay the rest; the end state equals one uninterrupted replay.
 - **`FeedLog`** on in-memory SQLite: append order, batched flush, unchanged polls, gap rows.
 - **Scenarios:** all 19 still pass, as scripted deliveries.
-- **Telemetry:** the new counters and the event log lines appear on the Game actors dashboard, renamed for the fold.
+- **Telemetry:** the new counters and the event log lines appear on the Live games dashboard, renamed for the fold.
 
 ## Out of scope
 
@@ -250,6 +250,8 @@ play against a close game; and which logged days make its test set.
 
 Also queued, from earlier pieces:
 
+- Open question: plays from final games. A play corrected after its game goes final is dropped, because the fold
+  lets a final game go. Keep finals for a grace window so late corrections land, or freeze them as they were.
 - Slow the poll while the push covers the slate (FastCast's open item; also most of the log's size).
 - Recorded scenarios as log slices, replacing the scenario push-replay item.
 - The live-day staleness check (game-day checklist row 42).

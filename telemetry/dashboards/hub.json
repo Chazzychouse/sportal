@@ -9,10 +9,10 @@
   "refresh": "30s",
   "links": [
     {
-      "title": "Game actors",
+      "title": "Live games",
       "type": "link",
       "icon": "dashboard",
-      "url": "/d/sportal-game/game-actors?${mode:queryparam}&${__url_time_range}"
+      "url": "/d/sportal-game/live-games?${mode:queryparam}&${__url_time_range}"
     }
   ],
   "templating": {
@@ -191,7 +191,7 @@
     {
       "id": 6,
       "type": "row",
-      "title": "Game actors",
+      "title": "Live games",
       "collapsed": false,
       "gridPos": {
         "x": 0,
@@ -271,7 +271,7 @@
     {
       "id": 9,
       "type": "timeseries",
-      "title": "Game actor defects",
+      "title": "Game defects",
       "gridPos": {
         "x": 0,
         "y": 33,
@@ -305,7 +305,7 @@
     {
       "id": 10,
       "type": "timeseries",
-      "title": "Receive latency",
+      "title": "Take latency",
       "gridPos": {
         "x": 12,
         "y": 33,
@@ -325,12 +325,12 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "histogram_quantile(0.5, sum by (le) (rate(sportal_receive_duration_milliseconds_bucket[$__rate_interval]) * on (job, instance) group_left target_info{sportal_mode=\"$mode\"}))",
+          "expr": "histogram_quantile(0.5, sum by (le) (rate(sportal_take_duration_milliseconds_bucket[$__rate_interval]) * on (job, instance) group_left target_info{sportal_mode=\"$mode\"}))",
           "legendFormat": "p50"
         },
         {
           "refId": "B",
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(sportal_receive_duration_milliseconds_bucket[$__rate_interval]) * on (job, instance) group_left target_info{sportal_mode=\"$mode\"}))",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(sportal_take_duration_milliseconds_bucket[$__rate_interval]) * on (job, instance) group_left target_info{sportal_mode=\"$mode\"}))",
           "legendFormat": "p95"
         }
       ]
@@ -356,7 +356,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "{service_name=\"sportal-hub\"} | sportal_mode=\"$mode\" | game=~\"$game\" |= \"\u2192\""
+          "expr": "{service_name=\"sportal-hub\"} | sportal_mode=\"$mode\" | game=~\"$game\" |= \"→\""
         }
       ]
     },
@@ -579,6 +579,282 @@
           "expr": "{service_name=\"sportal-hub\"} | sportal_mode=\"$mode\" |~ \"FastCast|Ingest: the live feed\""
         }
       ]
+    },
+    {
+      "id": 18,
+      "type": "row",
+      "title": "Feed log",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 78,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 19,
+      "type": "timeseries",
+      "title": "Frames by feed and kind",
+      "gridPos": {
+        "x": 0,
+        "y": 79,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 80,
+            "stacking": {
+              "mode": "normal"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (feed, kind) (increase(sportal_feed_frames_total[$__rate_interval]) * on (job, instance) group_left target_info{sportal_mode=\"$mode\"})",
+          "legendFormat": "{{feed}} {{kind}}"
+        }
+      ],
+      "description": "Frames written to feed.sqlite. Kinds: response, message, checkpoint, unchanged, gap."
+    },
+    {
+      "id": 20,
+      "type": "timeseries",
+      "title": "Write duration",
+      "gridPos": {
+        "x": 12,
+        "y": 79,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.5, sum by (le) (rate(sportal_feed_write_duration_milliseconds_bucket[$__rate_interval]) * on (job, instance) group_left target_info{sportal_mode=\"$mode\"}))",
+          "legendFormat": "p50"
+        },
+        {
+          "refId": "B",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(sportal_feed_write_duration_milliseconds_bucket[$__rate_interval]) * on (job, instance) group_left target_info{sportal_mode=\"$mode\"}))",
+          "legendFormat": "p95"
+        }
+      ],
+      "description": "How long writing one batch of frames takes."
+    },
+    {
+      "id": 21,
+      "type": "timeseries",
+      "title": "Write failures and frames lost",
+      "gridPos": {
+        "x": 0,
+        "y": 87,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 80,
+            "stacking": {
+              "mode": "normal"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum (increase(sportal_feed_write_failures_total[$__rate_interval]) * on (job, instance) group_left target_info{sportal_mode=\"$mode\"}) or vector(0)",
+          "legendFormat": "feed log write failures"
+        },
+        {
+          "refId": "B",
+          "expr": "sum (increase(sportal_feed_frames_lost_total[$__rate_interval]) * on (job, instance) group_left target_info{sportal_mode=\"$mode\"}) or vector(0)",
+          "legendFormat": "frames lost"
+        },
+        {
+          "refId": "C",
+          "expr": "sum (increase(sportal_history_write_failures_total[$__rate_interval]) * on (job, instance) group_left target_info{sportal_mode=\"$mode\"}) or vector(0)",
+          "legendFormat": "history write failures"
+        }
+      ],
+      "description": "A lost frame is part of a gap row in the log."
+    },
+    {
+      "id": 22,
+      "type": "timeseries",
+      "title": "Decode failures",
+      "gridPos": {
+        "x": 12,
+        "y": 87,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 80,
+            "stacking": {
+              "mode": "normal"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (feed) (increase(sportal_frames_undecoded_total[$__rate_interval]) * on (job, instance) group_left target_info{sportal_mode=\"$mode\"})",
+          "legendFormat": "frames {{feed}}"
+        },
+        {
+          "refId": "B",
+          "expr": "sum by (league) (increase(sportal_live_feed_undecoded_plays_total[$__rate_interval]) * on (job, instance) group_left target_info{sportal_mode=\"$mode\"})",
+          "legendFormat": "plays {{league}}"
+        }
+      ],
+      "description": "Frames and plays that did not decode and were skipped."
+    },
+    {
+      "id": 23,
+      "type": "timeseries",
+      "title": "Plays by league",
+      "gridPos": {
+        "x": 0,
+        "y": 95,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 80,
+            "stacking": {
+              "mode": "normal"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (league) (increase(sportal_plays_total[$__rate_interval]) * on (job, instance) group_left target_info{sportal_mode=\"$mode\"})",
+          "legendFormat": "{{league}}"
+        }
+      ]
+    },
+    {
+      "id": 24,
+      "type": "timeseries",
+      "title": "Deliveries dropped",
+      "gridPos": {
+        "x": 12,
+        "y": 95,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 80,
+            "stacking": {
+              "mode": "normal"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (reason) (increase(sportal_deliveries_dropped_total[$__rate_interval]) * on (job, instance) group_left target_info{sportal_mode=\"$mode\"})",
+          "legendFormat": "{{reason}}"
+        }
+      ],
+      "description": "Deliveries the fold could not apply, by reason."
+    },
+    {
+      "id": 25,
+      "type": "timeseries",
+      "title": "Document resets and checkpoint failures",
+      "gridPos": {
+        "x": 0,
+        "y": 103,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 80,
+            "stacking": {
+              "mode": "normal"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum (increase(sportal_live_feed_document_resets_total[$__rate_interval]) * on (job, instance) group_left target_info{sportal_mode=\"$mode\"}) or vector(0)",
+          "legendFormat": "document resets"
+        },
+        {
+          "refId": "B",
+          "expr": "sum (increase(sportal_live_feed_checkpoint_failures_total[$__rate_interval]) * on (job, instance) group_left target_info{sportal_mode=\"$mode\"}) or vector(0)",
+          "legendFormat": "checkpoint failures"
+        }
+      ],
+      "description": "A document reset triggers a resync of that topic."
     }
   ]
 }
