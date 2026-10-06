@@ -207,9 +207,14 @@ sportal/
     │       ├── Slate.ts            Each listed game as its actor has it, and its watchability
     │       ├── provider/
     │       │   ├── Provider.ts     The port
+    │       │   ├── LiveFeed.ts     The push port, beside it
     │       │   ├── espn/
     │       │   │   ├── EspnProvider.ts   Implements the port
     │       │   │   ├── EspnPayload.ts    Schemas of ESPN's wire format; private to this folder
+    │       │   │   ├── EspnSnapshot.ts   Status and situation as both ESPN feeds spell them
+    │       │   │   ├── FastCast.ts       Implements the live feed: the socket
+    │       │   │   ├── FastCastDocument.ts  A topic's document, rebuilt from checkpoints and patches
+    │       │   │   ├── FastCastPayload.ts   FastCast's wire shapes
     │       │   │   └── fixtures/         Recorded real payloads
     │       │   └── cfbd/                 Same shape, college supplement
     │       ├── source/
@@ -302,6 +307,17 @@ class Provider extends Context.Service<Provider, {
 - The Hub composes providers per league: ESPN for NFL; ESPN with CollegeFootballData filling gaps for FBS. The composition is itself a `Provider`, so Ingest sees one.
 - Each adapter's tests are "this recorded payload decodes to this snapshot".
 
+**LiveFeed** — game data in, pushed:
+
+```ts
+class LiveFeed extends Context.Service<LiveFeed, {
+  games(leagues: ReadonlyArray<LeagueId>): Stream<ReadonlyArray<GameSnapshot>, LiveFeedError>
+}>()("sportal/hub/LiveFeed") {}
+```
+
+- One element per update: the games it touched, or every game on a checkpoint. ESPN's FastCast implements it
+  (`docs/adr/0007-fastcast-live-feed.md`); a scenario provides `LiveFeed.none`.
+
 **GameActors** — between Ingest and the slate. Not a port: one implementation, a single-process `effect/cluster`
 with one entity per game (`docs/adr/0006-live-games-are-actors.md`):
 
@@ -344,6 +360,9 @@ A source's channels are found in its own guide, read by the shell (`docs/specs/2
 - Polling cadence is an Effect `Schedule` chosen by `Cadence`: about every 10 seconds while any game is live, every minute near kickoff, every 15 minutes otherwise. One slate request per league covers every game; detail is fetched only for games someone has open or on a Stage.
 - A college Saturday is one request for 50+ games, not 50 requests.
 - Each poll yields snapshots. `snapshot.eventsSince(previous)` derives events (see `GameEvent`), including the leading signals the Director anticipates with.
+- The live feed pushes snapshots between polls. Ingest sends each pushed game, advanced onto its listed game, to the
+  game's actor as a `push`; a game no poll has listed yet is dropped and counted. The poll still lists the slate and
+  sends `poll` snapshots; the actor takes whichever is further along in game time.
 - Snapshots are the truth; events are derived and never stored as truth. A restart or a missed poll cannot corrupt anything.
 - Snapshots and events are published on an in-process hub; the Director, the store, and client live streams each subscribe.
 
@@ -384,6 +403,7 @@ Expected failures are typed errors in the Effect error channel, each handled whe
 | Stream view fails to load | Tile becomes a data tile with a retry action |
 | Over budget | Assignment becomes a data tile; the UI says why |
 | Client loses the Hub | UI shows disconnected and reconnects; provider views keep playing |
+| Live feed refused, closed, silent, or out of step | Logged and counted by reason; resubscribed from a checkpoint with backoff from 1 s to 1 min; the poll carries on, so games go on updating at the poll's pace |
 | Telemetry collector unreachable | One warning naming its URL; the exporters drop what they cannot send and the Hub carries on, and still stops within its shutdown bound |
 
 ## 6. Domain language

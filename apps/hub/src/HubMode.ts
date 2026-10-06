@@ -1,9 +1,11 @@
+import { NodeSocket } from "@effect/platform-node"
 import { Effect, Layer, Option } from "effect"
 import * as Cluster from "./Cluster.ts"
 import { GameActors } from "./GameActors.ts"
 import { HubConfig } from "./HubConfig.ts"
 import { Ingest } from "./ingest/Ingest.ts"
 import * as EspnProvider from "./provider/espn/EspnProvider.ts"
+import * as FastCast from "./provider/espn/FastCast.ts"
 import { LiveFeed } from "./provider/LiveFeed.ts"
 import { Slate } from "./Slate.ts"
 import * as ScenarioClock from "./scenario/ScenarioClock.ts"
@@ -31,7 +33,14 @@ const leagues = ["nfl", "fbs"] as const
 function live() {
   return Layer.mergeAll(
     Slate.layer.pipe(
-      Layer.provide(Ingest.layer(leagues).pipe(Layer.provide([EspnProvider.layer, LiveFeed.none]))),
+      Layer.provide(
+        Ingest.layer(leagues).pipe(
+          Layer.provide([
+            EspnProvider.layer,
+            FastCast.layer.pipe(Layer.provide(NodeSocket.layerWebSocketConstructorWS))
+          ])
+        )
+      ),
       Layer.provide(gameActors())
     ),
     YouTubeTv.layer.pipe(Layer.provide(SqlChannelStore.layer))
