@@ -78,7 +78,8 @@ A reader opens a file to see the thing it is named for. Keep it that way.
 - `SPORTAL_SCENARIO=<name> SPORTAL_SCENARIO_SPEED=10 pnpm dev` — play a scenario instead of ESPN and YouTube TV, ten
   times faster: a written one (`packages/domain/src/scenarios/Scenarios.ts`) or a recorded slice in
   `fixtures/scenarios/`. Every game plays as a synthetic stream page. Cut a slice from a recording with
-  `pnpm --filter @sportal/hub scenario:cut <name> <recording-dir> <from> <to> [game ids…]`.
+  `pnpm --filter @sportal/hub scenario:cut <name> <recording-dir> <from> <to> [game ids…]`; the recording may come
+  from either recorder (`record.sh` names its polls by UTC instant, `record.py` by epoch seconds).
 - `pnpm --filter @sportal/hub dev` — run only the Hub on port 4400 (API and live stream), on every interface so a phone Remote can reach it (`SPORTAL_HOST` narrows it). In
   dev it keeps its SQLite database in `.sportal/` at the repo root; set `SPORTAL_DATA_DIR` to move it. Started any other
   way, it keeps it where the OS keeps app data: `$XDG_DATA_HOME/sportal` or `~/.local/share/sportal` on Linux,

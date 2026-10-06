@@ -65,12 +65,25 @@ class CutFailed extends Schema.TaggedError<CutFailed>()("CutFailed", { reason: S
 
 const leagues: Record<string, LeagueId> = { "college-football": "fbs", nfl: "nfl" }
 
-/** The instant a recorded poll was taken, from its name ("20261003T160848Z.json.gz"). */
+/**
+ * The instant a recorded poll was taken, from its name: "20261003T160848Z.json.gz" (record.sh) or
+ * "1791130515.585.json.gz" (record.py: epoch seconds, then milliseconds).
+ */
 function instantOf(file: string): Option.Option<DateTime.Utc> {
+  return utcNameInstant(file).pipe(Option.orElse(() => epochNameInstant(file)))
+}
+
+function utcNameInstant(file: string): Option.Option<DateTime.Utc> {
   const match = /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z\.json\.gz$/.exec(file)
   if (match === null) return Option.none()
   const [, year, month, day, hour, minute, second] = match
   return Option.some(DateTime.makeUnsafe(`${year}-${month}-${day}T${hour}:${minute}:${second}Z`))
+}
+
+function epochNameInstant(file: string): Option.Option<DateTime.Utc> {
+  const match = /^(\d{10})\.(\d{3})\.json\.gz$/.exec(file)
+  if (match === null) return Option.none()
+  return Option.some(DateTime.makeUnsafe(Number(match[1]) * 1000 + Number(match[2])))
 }
 
 const decodeScoreboard = Schema.decodeEffect(Schema.fromJsonString(EspnPayload.Scoreboard))
