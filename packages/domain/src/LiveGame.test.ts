@@ -12,10 +12,14 @@ const live = snapshot({ status: "live", period: 2, clock: "10:00" })
 const liveBehind = snapshot({ status: "live", period: 1, clock: "10:00" })
 const over = snapshot({ status: "final", period: 4, clock: "0:00" })
 
-const upcomingGame = LiveGame.start(upcoming, t0)
-const liveGame = LiveGame.start(live, t0)
-const staleGame = new LiveGame({ snapshot: live, state: LiveGameState.Stale({ lastUpdatedAt: t0 }) })
-const overGame = LiveGame.start(over, t0)
+const upcomingGame = LiveGame.start(upcoming, "poll", t0)
+const liveGame = LiveGame.start(live, "poll", t0)
+const staleGame = new LiveGame({
+  snapshot: live,
+  from: "poll",
+  state: LiveGameState.Stale({ lastUpdatedAt: t0 })
+})
+const overGame = LiveGame.start(over, "poll", t0)
 
 const liveAt = (updatedAt: DateTime.Utc) => LiveGameState.Live({ updatedAt })
 
@@ -33,63 +37,63 @@ describe("LiveGame.start", () => {
 
 describe("LiveGame#receive", () => {
   it("Upcoming + upcoming snapshot: Upcoming", () => {
-    expect(upcomingGame.receive(upcoming, later).pipe(Option.map((game) => game.state))).toEqual(
+    expect(upcomingGame.receive(upcoming, "poll", later).pipe(Option.map((game) => game.state))).toEqual(
       Option.some(LiveGameState.Upcoming())
     )
   })
   it("Upcoming + live snapshot: Live, refreshed", () => {
-    expect(upcomingGame.receive(live, later).pipe(Option.map((game) => game.state))).toEqual(
+    expect(upcomingGame.receive(live, "poll", later).pipe(Option.map((game) => game.state))).toEqual(
       Option.some(liveAt(later))
     )
   })
   it("Upcoming + final snapshot: Over", () => {
-    expect(upcomingGame.receive(over, later).pipe(Option.map((game) => game.state))).toEqual(
+    expect(upcomingGame.receive(over, "poll", later).pipe(Option.map((game) => game.state))).toEqual(
       Option.some(LiveGameState.Over())
     )
   })
   it("Upcoming + behind snapshot: none", () => {
     // Unreachable through start and receive; kept so every cell of the transition table is covered.
-    const ahead = new LiveGame({ snapshot: live, state: LiveGameState.Upcoming() })
-    expect(ahead.receive(upcoming, later)).toEqual(Option.none())
+    const ahead = new LiveGame({ snapshot: live, from: "poll", state: LiveGameState.Upcoming() })
+    expect(ahead.receive(upcoming, "poll", later)).toEqual(Option.none())
   })
   it("Live + upcoming snapshot: none (behind)", () => {
-    expect(liveGame.receive(upcoming, later)).toEqual(Option.none())
+    expect(liveGame.receive(upcoming, "poll", later)).toEqual(Option.none())
   })
   it("Live + behind snapshot: none", () => {
-    expect(liveGame.receive(liveBehind, later)).toEqual(Option.none())
+    expect(liveGame.receive(liveBehind, "poll", later)).toEqual(Option.none())
   })
   it("Live + live snapshot: Live, refreshed", () => {
     const next = snapshot({ status: "live", period: 2, clock: "9:00" })
-    expect(liveGame.receive(next, later).pipe(Option.map((game) => game.state))).toEqual(
+    expect(liveGame.receive(next, "poll", later).pipe(Option.map((game) => game.state))).toEqual(
       Option.some(liveAt(later))
     )
   })
   it("Live + final snapshot: Over", () => {
-    expect(liveGame.receive(over, later).pipe(Option.map((game) => game.state))).toEqual(
+    expect(liveGame.receive(over, "poll", later).pipe(Option.map((game) => game.state))).toEqual(
       Option.some(LiveGameState.Over())
     )
   })
   it("Stale + upcoming snapshot: none (behind)", () => {
-    expect(staleGame.receive(upcoming, later)).toEqual(Option.none())
+    expect(staleGame.receive(upcoming, "poll", later)).toEqual(Option.none())
   })
   it("Stale + behind snapshot: none", () => {
-    expect(staleGame.receive(liveBehind, later)).toEqual(Option.none())
+    expect(staleGame.receive(liveBehind, "poll", later)).toEqual(Option.none())
   })
   it("Stale + live snapshot: Live, refreshed", () => {
-    expect(staleGame.receive(live, later).pipe(Option.map((game) => game.state))).toEqual(
+    expect(staleGame.receive(live, "poll", later).pipe(Option.map((game) => game.state))).toEqual(
       Option.some(liveAt(later))
     )
   })
   it("Stale + final snapshot: Over", () => {
-    expect(staleGame.receive(over, later).pipe(Option.map((game) => game.state))).toEqual(
+    expect(staleGame.receive(over, "poll", later).pipe(Option.map((game) => game.state))).toEqual(
       Option.some(LiveGameState.Over())
     )
   })
   it("Over + upcoming snapshot: none (behind)", () => {
-    expect(overGame.receive(upcoming, later)).toEqual(Option.none())
+    expect(overGame.receive(upcoming, "poll", later)).toEqual(Option.none())
   })
   it("Over + live snapshot: none (behind)", () => {
-    expect(overGame.receive(live, later)).toEqual(Option.none())
+    expect(overGame.receive(live, "poll", later)).toEqual(Option.none())
   })
   it("Over + final snapshot: Over, new snapshot", () => {
     const corrected = snapshot({
@@ -98,20 +102,59 @@ describe("LiveGame#receive", () => {
       clock: "0:00",
       home: { ...over.home, score: 7 }
     })
-    const next = overGame.receive(corrected, later)
+    const next = overGame.receive(corrected, "poll", later)
     expect(next.pipe(Option.map((game) => game.state))).toEqual(Option.some(LiveGameState.Over()))
     expect(next.pipe(Option.map((game) => game.snapshot))).toEqual(Option.some(corrected))
   })
   it("a taken snapshot replaces the snapshot", () => {
     const scored = snapshot({ status: "live", period: 2, clock: "9:00", home: { ...live.home, score: 3 } })
-    expect(liveGame.receive(scored, later).pipe(Option.map((game) => game.snapshot))).toEqual(
+    expect(liveGame.receive(scored, "poll", later).pipe(Option.map((game) => game.snapshot))).toEqual(
       Option.some(scored)
     )
   })
   it("an identical snapshot is taken and refreshes updatedAt", () => {
-    expect(liveGame.receive(live, later).pipe(Option.map((game) => game.state))).toEqual(
+    expect(liveGame.receive(live, "poll", later).pipe(Option.map((game) => game.state))).toEqual(
       Option.some(liveAt(later))
     )
+  })
+})
+
+describe("LiveGame#receive, ties between the feeds", () => {
+  const touchdown = snapshot({ status: "live", period: 2, clock: "4:12", home: { ...live.home, score: 13 } })
+  const tried = snapshot({ status: "live", period: 2, clock: "4:12", home: { ...live.home, score: 14 } })
+  const pushed = LiveGame.start(tried, "push", t0)
+
+  it("a tied poll on a pushed live game keeps the pushed snapshot, refreshed", () => {
+    const next = pushed.receive(touchdown, "poll", later)
+    expect(next.pipe(Option.map((game) => game.snapshot.home.score))).toEqual(Option.some(14))
+    expect(next.pipe(Option.map((game) => game.from))).toEqual(Option.some("push"))
+    expect(next.pipe(Option.map((game) => game.state))).toEqual(Option.some(liveAt(later)))
+  })
+  it("a tied poll on a polled live game is taken", () => {
+    const next = LiveGame.start(tried, "poll", t0).receive(touchdown, "poll", later)
+    expect(next.pipe(Option.map((game) => game.snapshot))).toEqual(Option.some(touchdown))
+  })
+  it("a tied push on a pushed live game is taken, as an overturned score is", () => {
+    const next = pushed.receive(touchdown, "push", later)
+    expect(next.pipe(Option.map((game) => game.snapshot))).toEqual(Option.some(touchdown))
+    expect(next.pipe(Option.map((game) => game.from))).toEqual(Option.some("push"))
+  })
+  it("a tied poll on a stale pushed game is taken", () => {
+    const stale = new LiveGame({
+      snapshot: tried,
+      from: "push",
+      state: LiveGameState.Stale({ lastUpdatedAt: t0 })
+    })
+    const next = stale.receive(touchdown, "poll", later)
+    expect(next.pipe(Option.map((game) => game.snapshot))).toEqual(Option.some(touchdown))
+    expect(next.pipe(Option.map((game) => game.from))).toEqual(Option.some("poll"))
+    expect(next.pipe(Option.map((game) => game.state))).toEqual(Option.some(liveAt(later)))
+  })
+  it("a poll ahead of a pushed live game is taken", () => {
+    const ahead = snapshot({ status: "live", period: 2, clock: "4:05", home: { ...live.home, score: 14 } })
+    const next = pushed.receive(ahead, "poll", later)
+    expect(next.pipe(Option.map((game) => game.snapshot))).toEqual(Option.some(ahead))
+    expect(next.pipe(Option.map((game) => game.from))).toEqual(Option.some("poll"))
   })
 })
 
@@ -131,7 +174,7 @@ describe("LiveGame#tick", () => {
   it("after a refresh at 60 s, none at 140 s and Stale at 150 s", () => {
     const refreshedAt = DateTime.addDuration(t0, Duration.seconds(60))
     const next = snapshot({ status: "live", period: 2, clock: "9:00" })
-    const refreshed = liveGame.receive(next, refreshedAt)
+    const refreshed = liveGame.receive(next, "poll", refreshedAt)
     expect(
       refreshed.pipe(Option.flatMap((game) => game.tick(DateTime.addDuration(t0, Duration.seconds(140)))))
     ).toEqual(Option.none())
@@ -211,7 +254,10 @@ describe("LiveGame.asActorsHaveThem", () => {
     const games = LiveGame.asActorsHaveThem(
       listed,
       new Map([
-        [GameId.make("1"), LiveGame.start(snapshot({ id: GameId.make("1"), status: "live", period: 2 }), t0)]
+        [
+          GameId.make("1"),
+          LiveGame.start(snapshot({ id: GameId.make("1"), status: "live", period: 2 }), "poll", t0)
+        ]
       ])
     )
     expect(games.map((game) => [game.id, game.status])).toEqual([

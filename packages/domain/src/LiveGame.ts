@@ -1,5 +1,9 @@
-import { Data, DateTime, Duration, Option } from "effect"
+import { Data, DateTime, Duration, Option, Schema } from "effect"
 import { type GameId, GameSnapshot } from "./Game.ts"
+
+/** Which feed a snapshot came from. */
+export const DeliverySource = Schema.Literals(["push", "poll"])
+export type DeliverySource = typeof DeliverySource.Type
 
 /** Where a live game is: upcoming, live (last updated at), stale (last updated at), or over. */
 export type LiveGameState = Data.TaggedEnum<{
@@ -10,8 +14,12 @@ export type LiveGameState = Data.TaggedEnum<{
 }>
 export const LiveGameState = Data.taggedEnum<LiveGameState>()
 
-/** One game as the Hub follows it: its latest snapshot and its state. */
-export class LiveGame extends Data.Class<{ readonly snapshot: GameSnapshot; readonly state: LiveGameState }> {
+/** One game as the Hub follows it: its latest snapshot, the feed that gave it, and its state. */
+export class LiveGame extends Data.Class<{
+  readonly snapshot: GameSnapshot
+  readonly from: DeliverySource
+  readonly state: LiveGameState
+}> {
   /** A live game no snapshot has reached for this long is stale. */
   static readonly staleAfter = Duration.seconds(90)
 
@@ -21,9 +29,9 @@ export class LiveGame extends Data.Class<{ readonly snapshot: GameSnapshot; read
   /** How long a stale game stays current, from its last update, before its actor may stop. */
   static readonly staleCurrentFor = Duration.minutes(30)
 
-  /** A game's first snapshot, always taken. */
-  static start(snapshot: GameSnapshot, now: DateTime.Utc): LiveGame {
-    return new LiveGame({ snapshot, state: stateOf(snapshot, now) })
+  /** A game's first snapshot, from feed `from`, always taken. */
+  static start(snapshot: GameSnapshot, from: DeliverySource, now: DateTime.Utc): LiveGame {
+    return new LiveGame({ snapshot, from, state: stateOf(snapshot, now) })
   }
 
   /** Each listed game, in listed order, as its game's actor has it, or as listed when its actor has none. */
@@ -38,11 +46,23 @@ export class LiveGame extends Data.Class<{ readonly snapshot: GameSnapshot; read
     )
   }
 
-  /** The live game after `snapshot` arrives at `now`, or none when it is behind in game time. */
-  receive(snapshot: GameSnapshot, now: DateTime.Utc): Option.Option<LiveGame> {
-    return GameSnapshot.gameTime(snapshot, this.snapshot) < 0
-      ? Option.none()
-      : Option.some(LiveGame.start(snapshot, now))
+  /**
+   * The live game after `snapshot` arrives from feed `from` at `now`, or none when it is behind in game time. A poll at
+   * the same game time as a live game's pushed snapshot only refreshes it: the push wins a tie, since the poll lags it.
+   */
+  receive(snapshot: GameSnapshot, from: DeliverySource, now: DateTime.Utc): Option.Option<LiveGame> {
+    const order = GameSnapshot.gameTime(snapshot, this.snapshot)
+    if (order < 0) return Option.none()
+    if (order === 0 && from === "poll" && this.from === "push" && LiveGameState.$is("Live")(this.state)) {
+      return Option.some(
+        new LiveGame({
+          snapshot: this.snapshot,
+          from: this.from,
+          state: LiveGameState.Live({ updatedAt: now })
+        })
+      )
+    }
+    return Option.some(LiveGame.start(snapshot, from, now))
   }
 
   /** The live game once `now` has passed its stale time, or none when nothing changes. */
@@ -54,6 +74,7 @@ export class LiveGame extends Data.Class<{ readonly snapshot: GameSnapshot; read
           ? Option.some(
               new LiveGame({
                 snapshot: this.snapshot,
+                from: this.from,
                 state: LiveGameState.Stale({ lastUpdatedAt: updatedAt })
               })
             )

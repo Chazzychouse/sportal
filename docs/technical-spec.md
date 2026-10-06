@@ -175,7 +175,7 @@ sportal/
 │   │       ├── League.ts       Sport, League, Season, SeasonPhase, Conference
 │   │       ├── Team.ts         Team, Ranking
 │   │       ├── Game.ts         Game, GameStatus, Period, GameSnapshot, Network
-│   │       ├── LiveGame.ts     One game as the Hub follows it: LiveGame and LiveGameState
+│   │       ├── LiveGame.ts     One game as the Hub follows it: LiveGame, LiveGameState, DeliverySource
 │   │       ├── Situation.ts    Possession, down, distance, field position, red zone
 │   │       ├── GameEvent.ts    The event union
 │   │       ├── Slate.ts        SlateWindow and grouping (Tracker); watch order is GameSnapshot.watchOrder

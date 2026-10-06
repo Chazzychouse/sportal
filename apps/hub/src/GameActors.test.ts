@@ -324,6 +324,23 @@ describe("GameActors", () => {
       }).pipe(Effect.provide(TestCluster.gameActors), Effect.provide(layer), withMetrics)
     })
 
+    it.effect("a tied poll after a pushed try is kept, and counted", () => {
+      const { logs, layer } = recording()
+      return Effect.gen(function* () {
+        const actors = yield* GameActors
+        const at = (score: number) =>
+          snapshot({ id: one, status: "live", period: 2, clock: "4:12", home: { team: team("HOME"), score } })
+        yield* actors.receive(at(13), "poll")
+        yield* actors.receive(at(14), "push")
+        yield* actors.receive(at(13), "poll")
+        assert.strictEqual((yield* actors.liveGames).get(one)?.snapshot.home.score, 14)
+        assert.strictEqual(yield* counted("sportal_snapshots", { outcome: "kept", source: "poll" }), 1)
+        assert.strictEqual(yield* counted("sportal_snapshots", { outcome: "taken", source: "push" }), 1)
+        assert.strictEqual(yield* counted("sportal_snapshots", { outcome: "taken", source: "poll" }), 1)
+        assert.isTrue(logs.some(({ message }) => message.includes("kept poll live, period 2, 4:12")))
+      }).pipe(Effect.provide(TestCluster.gameActors), Effect.provide(layer), withMetrics)
+    })
+
     it.effect("a defect is logged with the snapshot that raised it", () => {
       const { logs, layer } = recording()
       return Effect.gen(function* () {

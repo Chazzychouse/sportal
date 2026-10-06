@@ -1,5 +1,5 @@
 import { GameId, GameSnapshot } from "@sportal/domain/Game"
-import { LiveGame, LiveGameState } from "@sportal/domain/LiveGame"
+import { DeliverySource, LiveGame, LiveGameState } from "@sportal/domain/LiveGame"
 import {
   Cause,
   Context,
@@ -17,10 +17,6 @@ import {
 } from "effect"
 import { Entity, type Sharding } from "effect/cluster"
 import { Rpc } from "effect/rpc"
-
-/** Which feed a snapshot came from. */
-export const DeliverySource = Schema.Literals(["push", "poll"])
-export type DeliverySource = typeof DeliverySource.Type
 
 /** The game actors: one cluster entity per game, each deciding its game's live state from the snapshots sent to it. */
 export class GameActors extends Context.Service<
@@ -174,11 +170,14 @@ const gameEntity = Game.toLayer(
           const [before, next] = yield* change(
             now,
             Option.match({
-              onNone: () => Option.some(LiveGame.start(snapshot, now)),
-              onSome: (liveGame) => liveGame.receive(snapshot, now)
+              onNone: () => Option.some(LiveGame.start(snapshot, source, now)),
+              onSome: (liveGame) => liveGame.receive(snapshot, source, now)
             })
           )
-          const outcome = Option.isSome(next) ? "taken" : "behind"
+          const outcome = Option.match(next, {
+            onNone: () => "behind",
+            onSome: (liveGame) => (liveGame.snapshot === snapshot ? "taken" : "kept")
+          })
           yield* Effect.logDebug(
             `GameActors: ${snapshot.matchup()}: ${outcome} ${source} ${gameTimeOf(snapshot)}${Option.match(
               before,
@@ -364,7 +363,8 @@ const liveGamesByState = Metric.gauge("sportal_live_games", {
 })
 
 const snapshots = Metric.counter("sportal_snapshots", {
-  description: "Snapshots a game actor took, or ignored as behind its live game",
+  description:
+    "Snapshots a game actor took, ignored as behind its live game, or kept (a tied poll that refreshed a pushed snapshot)",
   incremental: true
 })
 
