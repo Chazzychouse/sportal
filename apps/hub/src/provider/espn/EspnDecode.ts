@@ -81,8 +81,8 @@ function pushed(state: State, frame: Frame): Effect.Effect<readonly [State, Said
       return Option.match(change, {
         onNone: () => Effect.succeed([moved, []] as const),
         onSome: (said) => {
-          switch (said.topic) {
-            case "scoreboard":
+          switch (said._tag) {
+            case "Scoreboard":
               return gamesOf(said.league, said.events).pipe(
                 Effect.tap((games) =>
                   Metric.update(Metric.withAttributes(gamesPushed, { league: said.league }), games.length)
@@ -90,13 +90,13 @@ function pushed(state: State, frame: Frame): Effect.Effect<readonly [State, Said
                 Effect.flatMap((games) => advancedToListed(state.listings, games)),
                 Effect.map((deliveries) => [moved, deliveries.map((one) => delivered(frame, one))] as const)
               )
-            case "game":
+            case "Game":
               return playsOf(moved, said.league, said.game, said.plays).pipe(
                 Effect.map(
                   ([next, deliveries]) => [next, deliveries.map((one) => delivered(frame, one))] as const
                 )
               )
-            case "reset":
+            case "Reset":
               return Effect.succeed([
                 moved,
                 [Decoded.Resync({ channel: frame.channel, seq: frame.seq })]

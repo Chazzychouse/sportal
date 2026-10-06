@@ -254,7 +254,9 @@ export class FeedLog extends Context.Service<
         Option.match(Option.fromNullishOr(bodies.get(channel)), {
           onSome: Effect.succeed,
           onNone: () =>
-            lastResponse({ channel, before: seq }).pipe(Effect.flatMap(({ body }) => Gzip.decompress(body)))
+            lastResponse({ channel, before: seq }).pipe(
+              Effect.flatMap(({ body }) => Gzip.decompress(body, "gzip"))
+            )
         })
 
       const replay = (from: DateTime.Utc) =>
@@ -283,7 +285,7 @@ export class FeedLog extends Context.Service<
                     const body =
                       stored.body === null
                         ? yield* repeated(bodies, stored.channel, stored.seq)
-                        : yield* Gzip.decompress(stored.body)
+                        : yield* Gzip.decompress(stored.body, "gzip")
                     const frame = yield* Schema.decodeEffect(Row)({
                       ...stored,
                       kind: stored.kind === "unchanged" ? "response" : stored.kind,
@@ -444,7 +446,7 @@ function sha256(bytes: Uint8Array<ArrayBuffer>) {
 }
 
 function warnOfGap(body: Uint8Array) {
-  return Gzip.decompress(body).pipe(
+  return Gzip.decompress(body, "gzip").pipe(
     Effect.flatMap(
       Schema.decodeEffect(
         Schema.fromJsonString(Schema.Struct({ from: Schema.Int, to: Schema.Int, count: Schema.Int }))

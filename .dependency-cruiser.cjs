@@ -27,7 +27,7 @@ module.exports = {
         "A provider's or source's wire vocabulary stays inside its folder (the recording tools read the providers' recordings).",
       severity: "error",
       from: { pathNot: "^apps/hub/src/((provider|source)/([^/]+)/|recording/)" },
-      to: { path: "^apps/hub/src/(provider|source)/[^/]+/[^/]*Payload\\.ts$" }
+      to: { path: "^apps/hub/src/(provider|source)/[^/]+/([^/]*Payload|FastCastMessage)\\.ts$" }
     },
     {
       name: "only-hub-mode-names-adapters",

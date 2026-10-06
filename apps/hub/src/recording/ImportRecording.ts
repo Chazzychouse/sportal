@@ -17,7 +17,7 @@ import {
 import { Command, Flag } from "effect/cli"
 import { Frame } from "../feed-log/Frame.ts"
 import * as Gzip from "../feed-log/Gzip.ts"
-import * as FastCastDocument from "../provider/espn/FastCastDocument.ts"
+import * as FastCastMessage from "../provider/espn/FastCastMessage.ts"
 import * as CutScenario from "./CutScenario.ts"
 
 /**
@@ -56,13 +56,15 @@ export const importRecording = (options: {
         )
         .sort((a, b) => DateTime.toEpochMillis(a.receivedAt) - DateTime.toEpochMillis(b.receivedAt))
       const kept = (tc: string) =>
-        Option.exists(FastCastDocument.owner(tc), (owner) =>
-          Option.exists(owner.game, (game) => options.games.length === 0 || options.games.includes(game))
+        Option.exists(
+          FastCastMessage.owner(tc),
+          (owner) =>
+            owner._tag === "Game" && (options.games.length === 0 || options.games.includes(owner.game))
         )
       const response = (poll: (typeof polls)[number]) =>
         fs.readFile(poll.path).pipe(
           Effect.mapError(failed(poll.path)),
-          Effect.flatMap(Gzip.decompress),
+          Effect.flatMap((bytes) => Gzip.decompress(bytes, "gzip")),
           Effect.flatMap((body) =>
             options.games.length === 0 ? Effect.succeed(body) : trimmed(body, options.games)
           ),
@@ -102,7 +104,9 @@ export function readFrames(
 ): Stream.Stream<Omit<Frame, "seq">, ImportFailed, FileSystem.FileSystem> {
   return Stream.unwrap(
     Effect.gen(function* () {
-      const text = yield* (yield* FileSystem.FileSystem).readFile(path).pipe(Effect.flatMap(Gzip.decompress))
+      const text = yield* (yield* FileSystem.FileSystem)
+        .readFile(path)
+        .pipe(Effect.flatMap((bytes) => Gzip.decompress(bytes, "gzip")))
       return Stream.fromIterable(text.split("\n").filter((line) => line.length > 0))
     }).pipe(Effect.mapError(failed(path)))
   ).pipe(Stream.mapEffect((line) => decodeReceived(line).pipe(Effect.mapError(failed(path)))))

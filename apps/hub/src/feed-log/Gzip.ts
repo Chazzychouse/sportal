@@ -1,8 +1,9 @@
 import { Cause, type Effect, Stream } from "effect"
 
 /**
- * Gzip for the bodies the feed log stores and the recordings the importer writes: the web `CompressionStream` and
- * `DecompressionStream`, as Effect streams. Both fail with an `UnknownError` when the bytes cannot be gzip'd or read.
+ * Gzip for the bodies the feed log stores and the recordings the importer writes, and the zlib-deflated patches
+ * FastCast sends: the web `CompressionStream` and `DecompressionStream`, as Effect streams. Both fail with an
+ * `UnknownError` when the bytes cannot be compressed or read.
  */
 
 /** `text` as gzip'd UTF-8 bytes. */
@@ -10,14 +11,17 @@ export function compress(text: string): Effect.Effect<Uint8Array, Cause.UnknownE
   return Stream.mkUint8Array(through(new TextEncoder().encode(text), () => new CompressionStream("gzip")))
 }
 
-/** The text a gzip'd body holds. */
-export function decompress(bytes: Uint8Array): Effect.Effect<string, Cause.UnknownError> {
-  return through(bytes, () => new DecompressionStream("gzip")).pipe(Stream.decodeText, Stream.mkString)
+/** The text a gzip'd or zlib-deflated body holds. */
+export function decompress(
+  bytes: Uint8Array,
+  format: "gzip" | "deflate"
+): Effect.Effect<string, Cause.UnknownError> {
+  return through(bytes, () => new DecompressionStream(format)).pipe(Stream.decodeText, Stream.mkString)
 }
 
 function through(bytes: Uint8Array, transform: () => CompressionStream | DecompressionStream) {
   return Stream.fromReadableStream({
     evaluate: () => Stream.toReadableStream(Stream.make(bytes)).pipeThrough(transform()),
-    onError: (cause) => new Cause.UnknownError(cause, "A body could not be gzip'd or read back")
+    onError: (cause) => new Cause.UnknownError(cause, "A body could not be compressed or read back")
   })
 }

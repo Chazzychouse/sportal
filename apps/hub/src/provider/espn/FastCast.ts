@@ -20,8 +20,7 @@ import { HttpClient, HttpClientResponse } from "effect/http"
 import * as Socket from "effect/socket/Socket"
 import type { Frame } from "../../feed-log/Frame.ts"
 import { LiveFeed, LiveFeedError } from "../LiveFeed.ts"
-import * as FastCastDocument from "./FastCastDocument.ts"
-import * as FastCastPayload from "./FastCastPayload.ts"
+import * as FastCastMessage from "./FastCastMessage.ts"
 
 /**
  * ESPN FastCast as the live feed: one socket subscribed to each league's scoreboard topic, and to the game topic of
@@ -61,7 +60,7 @@ function connect(
   wanted: Stream.Stream<ReadonlyArray<GameSnapshot>>,
   resync: Stream.Stream<string>
 ) {
-  const topics = leagues.map((league) => FastCastDocument.topic(league))
+  const topics = leagues.map((league) => FastCastMessage.topic(league))
   return Effect.gen(function* () {
     const host = yield* websocketHost
     const outgoing = yield* Queue.unbounded<string>()
@@ -87,12 +86,10 @@ function connect(
     const sid = yield* Option.match(decodeEnvelope(opened.text), {
       onNone: () =>
         Effect.fail(new LiveFeedError({ reason: "Refused", cause: "FastCast opened with an unknown op" })),
-      onSome: (envelope) =>
-        envelope.op === "C"
-          ? Effect.succeed(envelope.sid)
-          : Effect.fail(
-              new LiveFeedError({ reason: "Refused", cause: `FastCast opened with ${envelope.op}` })
-            )
+      onSome: ({ message }) =>
+        message.op === "C"
+          ? Effect.succeed(message.sid)
+          : Effect.fail(new LiveFeedError({ reason: "Refused", cause: `FastCast opened with ${message.op}` }))
     })
     const subscribe = (tc: string) => Queue.offer(outgoing, JSON.stringify({ op: "S", sid, tc }))
     // At most one subscription waiting per topic, however many of its checkpoints fail meanwhile.
@@ -127,7 +124,7 @@ function subscriptions(
     Stream.mapAccumEffect(
       (): ReadonlySet<string> => new Set(),
       (subscribed, games) => {
-        const fresh = Arr.dedupe(games.map((game) => FastCastDocument.topic(game.league, game.id))).filter(
+        const fresh = Arr.dedupe(games.map((game) => FastCastMessage.topic(game.league, game.id))).filter(
           (tc) => !subscribed.has(tc)
         )
         return Effect.forEach(fresh, subscribe, { discard: true }).pipe(
@@ -144,11 +141,11 @@ function subscriptions(
 
 /**
  * Where the socket is in each topic's messages: waiting for a checkpoint (after `failures` in a row did not load),
- * following on from message `mid`, or given up on until the socket reconnects.
+ * following on from its checkpoint, or given up on until the socket reconnects.
  */
 type Sequence = Data.TaggedEnum<{
   AwaitingCheckpoint: { readonly failures: number }
-  Following: { readonly mid: number }
+  Following: object
   GivenUp: object
 }>
 const Sequence = Data.taggedEnum<Sequence>()
@@ -163,10 +160,10 @@ type Inbound = Data.TaggedEnum<{
 const Inbound = Data.taggedEnum<Inbound>()
 
 /**
- * A socket text as its frame, an `H`'s followed by its checkpoint. A message that skips a mid on its topic, or a
- * resync of a topic this socket follows, subscribes to the topic again, so FastCast sends a fresh `H` to resync from.
- * A checkpoint that does not load is logged and counted, and its topic subscribed to again after a backoff, until
- * `givenUpAfter` have failed in a row.
+ * A socket text as its frame, an `H`'s followed by its checkpoint. A resync of a topic this socket follows (its
+ * decoder's document missed a message, or could not apply one) subscribes to the topic again, so FastCast sends a
+ * fresh `H` to resync from. A checkpoint that does not load is logged and counted, and its topic subscribed to again
+ * after a backoff, until `givenUpAfter` have failed in a row.
  */
 function framed(
   followed: Followed,
@@ -185,76 +182,37 @@ function framed(
       : Effect.succeed([followed, []] as const)
   }
   const { text, receivedAt } = inbound
-  const message = (envelope: Option.Option<typeof FastCastPayload.Envelope.Type>): Omit<Frame, "seq"> => ({
+  const envelope = Option.getOrUndefined(decodeEnvelope(text))
+  const frame: Omit<Frame, "seq"> = {
     receivedAt,
     feed: "fastcast",
-    channel: Option.getOrElse(
-      Option.flatMap(envelope, (known) => ("tc" in known ? Option.some(known.tc) : Option.none())),
-      () => "socket"
-    ),
+    channel: envelope?.channel ?? "socket",
     kind: "message",
     body: text,
-    sourceId: Option.getOrUndefined(
-      Option.flatMap(envelope, (known) => ("mid" in known ? Option.some(known.mid) : Option.none()))
+    sourceId: envelope?.sourceId,
+    sentAt: envelope?.sentAt
+  }
+  if (envelope === undefined) {
+    return Effect.logDebug("FastCast: framed a text of an unknown op", text).pipe(
+      Effect.as([followed, [frame]] as const)
+    )
+  }
+  const { message } = envelope
+  if (message.op !== "H") return Effect.succeed([followed, [frame]] as const)
+  return checkpoint(message).pipe(
+    Effect.map(
+      (body) =>
+        [
+          new Map([...followed, [message.tc, Sequence.Following()]]),
+          [frame, { ...frame, kind: "checkpoint", body }]
+        ] as const
     ),
-    sentAt: Option.getOrUndefined(
-      Option.flatMap(envelope, (known) =>
-        known.op === "R" || known.op === "P"
-          ? Option.map(Option.fromUndefinedOr(known.pl.ts), DateTime.makeUnsafe)
-          : Option.none()
+    Effect.catch((cause) =>
+      checkpointFailed(followed.get(message.tc), message, cause, subscribeLater).pipe(
+        Effect.map((next) => [new Map([...followed, [message.tc, next]]), [frame]] as const)
       )
     )
-  })
-  return Option.match(decodeEnvelope(text), {
-    onNone: () =>
-      Effect.logDebug("FastCast: framed a text of an unknown op", text).pipe(
-        Effect.as([followed, [message(Option.none())]] as const)
-      ),
-    onSome: (envelope) => {
-      const frame = message(Option.some(envelope))
-      switch (envelope.op) {
-        case "H":
-          return checkpoint(envelope).pipe(
-            Effect.map(
-              (body) =>
-                [
-                  new Map([...followed, [envelope.tc, Sequence.Following({ mid: envelope.mid })]]),
-                  [frame, { ...frame, kind: "checkpoint", body }]
-                ] as const
-            ),
-            Effect.catch((cause) =>
-              checkpointFailed(followed.get(envelope.tc), envelope, cause, subscribeLater).pipe(
-                Effect.map((next) => [new Map([...followed, [envelope.tc, next]]), [frame]] as const)
-              )
-            )
-          )
-        case "R":
-        case "P":
-        case "I":
-          return Sequence.$match(followed.get(envelope.tc) ?? Sequence.AwaitingCheckpoint({ failures: 0 }), {
-            AwaitingCheckpoint: () => Effect.succeed([followed, [frame]] as const),
-            GivenUp: () => Effect.succeed([followed, [frame]] as const),
-            Following: ({ mid }) =>
-              mid + 1 === envelope.mid
-                ? Effect.succeed([
-                    new Map([...followed, [envelope.tc, Sequence.Following({ mid: envelope.mid })]]),
-                    [frame]
-                  ] as const)
-                : Effect.logWarning(
-                    `FastCast: message ${envelope.mid} on ${envelope.tc} came after ${mid}; subscribing to it again`
-                  ).pipe(
-                    Effect.andThen(subscribe(envelope.tc)),
-                    Effect.as([
-                      new Map([...followed, [envelope.tc, Sequence.AwaitingCheckpoint({ failures: 0 })]]),
-                      [frame]
-                    ] as const)
-                  )
-          })
-        default:
-          return Effect.succeed([followed, [frame]] as const)
-      }
-    }
-  })
+  )
 }
 
 /**
@@ -271,7 +229,7 @@ function checkpointFailed(
   const counted = Metric.update(
     Metric.withAttributes(
       checkpointFailures,
-      Record.getSomes({ league: Option.map(FastCastDocument.owner(tc), (owner) => owner.league) })
+      Record.getSomes({ league: Option.map(FastCastMessage.owner(tc), (owner) => owner.league) })
     ),
     1
   )
@@ -315,7 +273,7 @@ const checkpointTimeout = "20 seconds"
 const checkpointBackoff = "30 seconds"
 const givenUpAfter = 5
 
-const decodeEnvelope = Schema.decodeUnknownOption(Schema.fromJsonString(FastCastPayload.Envelope))
+const decodeEnvelope = Schema.decodeUnknownOption(FastCastMessage.Envelope)
 
 // FastCast sends `B` itself after 10 s without another frame (it answers a client's `B` with an error, so the client
 // never sends one); live, a subscribed socket went at most 20 s between frames.
@@ -327,7 +285,7 @@ function silent(): LiveFeedError {
 
 const websocketHost = HttpClient.get("https://fastcast.semfs.engsvc.go.com/public/websockethost").pipe(
   Effect.flatMap(HttpClientResponse.filterStatusOk),
-  Effect.flatMap(HttpClientResponse.schemaBodyJson(FastCastPayload.Host)),
+  Effect.flatMap(HttpClientResponse.schemaBodyJson(FastCastMessage.Host)),
   Effect.mapError((cause) => new LiveFeedError({ reason: "Refused", cause }))
 )
 

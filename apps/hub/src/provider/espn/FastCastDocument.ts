@@ -1,18 +1,18 @@
-import { GameId } from "@sportal/domain/Game"
-import { LeagueId } from "@sportal/domain/League"
+import type { GameId } from "@sportal/domain/Game"
+import type { LeagueId } from "@sportal/domain/League"
 import { Array as Arr, Data, Effect, JsonPatch, JsonPointer, Metric, Option, Record, Schema } from "effect"
 import type { Frame } from "../../feed-log/Frame.ts"
-import * as FastCastPayload from "./FastCastPayload.ts"
+import * as FastCastMessage from "./FastCastMessage.ts"
 
 /**
  * The FastCast topics' documents after `frame`, and what it changed: a scoreboard topic's touched events (every event,
  * on a checkpoint), or all of a game topic's plays, by id, when they changed. A topic is synced by its checkpoint
  * frame and moved on by each message after it. A missed message, a patch that will not apply, or a message that does
  * not decode on a synced topic sends only that topic back to waiting for a checkpoint, logged and counted, and the
- * change is `reset`. Fails only when any other frame does not decode, leaving the documents as they were.
+ * change is a `Reset`. Fails only when any other frame does not decode, leaving the documents as they were.
  */
 export function advance(documents: Documents, frame: Frame): Effect.Effect<Advanced, Schema.SchemaError> {
-  const owned = owner(frame.channel)
+  const owned = FastCastMessage.owner(frame.channel)
   if (frame.kind === "checkpoint") {
     return Option.match(owned, {
       onNone: () => Effect.succeed([documents, Option.none()] as const),
@@ -44,29 +44,6 @@ export function advance(documents: Documents, frame: Frame): Effect.Effect<Advan
 export const empty: Documents = new Map()
 
 /**
- * The FastCast topic of `league`'s scoreboard, or of one game's package. A college game's topic is assumed to follow
- * its scoreboard's, unverified until a live college day.
- */
-export function topic(league: LeagueId, game?: GameId): string {
-  const sport = league === "nfl" ? "football-nfl" : "football-college-football"
-  return game === undefined ? `event-${sport}` : `gp-${sport}-${game}`
-}
-
-/** The league, and for a game topic the game, whose FastCast topic `tc` is. */
-export function owner(
-  tc: string
-): Option.Option<{ readonly league: LeagueId; readonly game: Option.Option<GameId> }> {
-  return Arr.findFirst(LeagueId.literals, (league) => {
-    const gamePrefix = topic(league, GameId.make(""))
-    return tc === topic(league)
-      ? Option.some({ league, game: Option.none() })
-      : tc.startsWith(gamePrefix) && tc.length > gamePrefix.length
-        ? Option.some({ league, game: Option.some(GameId.make(tc.slice(gamePrefix.length))) })
-        : Option.none()
-  })
-}
-
-/**
  * Where one topic's document is: waiting for a checkpoint, or synced as of a message. A scoreboard topic's document
  * is its events by uid; a game topic's is `{ entities: { plays } }`, its plays by id.
  */
@@ -79,29 +56,28 @@ const Topic = Data.taggedEnum<Topic>()
 type Documents = ReadonlyMap<string, Topic>
 
 /** The documents after a frame, and what it changed. */
-type Advanced = readonly [
-  Documents,
-  Option.Option<
-    | {
-        readonly topic: "scoreboard"
-        readonly league: LeagueId
-        readonly events: ReadonlyArray<Schema.Json>
-      }
-    | {
-        readonly topic: "game"
-        readonly league: LeagueId
-        readonly game: GameId
-        readonly plays: Readonly<Record<string, Schema.Json>>
-      }
-    | { readonly topic: "reset" }
-  >
-]
+type Advanced = readonly [Documents, Option.Option<Change>]
+
+/**
+ * What a frame changed: a scoreboard topic's touched events, a game topic's whole list of plays, by id, or a topic
+ * sent back to waiting for a checkpoint.
+ */
+type Change = Data.TaggedEnum<{
+  Scoreboard: { readonly league: LeagueId; readonly events: ReadonlyArray<Schema.Json> }
+  Game: {
+    readonly league: LeagueId
+    readonly game: GameId
+    readonly plays: Readonly<Record<string, Schema.Json>>
+  }
+  Reset: object
+}>
+const Change = Data.taggedEnum<Change>()
 
 function checkpoint(
-  owner: { readonly game: Option.Option<GameId> },
+  owner: FastCastMessage.Owner,
   frame: Frame
 ): Effect.Effect<{ readonly mid: number; readonly document: Schema.Json }, Schema.SchemaError> {
-  return Option.isNone(owner.game)
+  return owner._tag === "Scoreboard"
     ? decodeScoreboardCheckpoint(frame).pipe(
         Effect.map(({ sourceId, body }) => ({
           mid: sourceId,
@@ -121,35 +97,30 @@ function checkpoint(
 }
 
 const decodeScoreboardCheckpoint = Schema.decodeUnknownEffect(
-  Schema.Struct({ sourceId: Schema.Int, body: Schema.fromJsonString(FastCastPayload.ScoreboardCheckpoint) })
+  Schema.Struct({ sourceId: Schema.Int, body: Schema.fromJsonString(FastCastMessage.ScoreboardCheckpoint) })
 )
 
 const decodeGameCheckpoint = Schema.decodeUnknownEffect(
-  Schema.Struct({ sourceId: Schema.Int, body: Schema.fromJsonString(FastCastPayload.GameCheckpoint) })
+  Schema.Struct({ sourceId: Schema.Int, body: Schema.fromJsonString(FastCastMessage.GameCheckpoint) })
 )
 
 /** What a topic's document says: the events `touched` names (all of them when none), or its whole list of plays. */
 function changeOf(
-  owner: { readonly league: LeagueId; readonly game: Option.Option<GameId> },
+  owner: FastCastMessage.Owner,
   document: Schema.Json,
   touched: Option.Option<ReadonlyArray<string>>
-) {
-  const { league } = owner
-  return Option.match(owner.game, {
-    onNone: () => ({
-      topic: "scoreboard" as const,
-      league,
-      events: Option.match(touched, {
-        onNone: () => Record.values(objectAt(document, [])),
-        onSome: (uids) => uids.flatMap((uid) => Option.toArray(valueAt(document, [uid])))
-      })
-    }),
-    onSome: (game) => ({
-      topic: "game" as const,
-      league,
-      game,
-      plays: objectAt(document, ["entities", "plays"])
-    })
+): Change {
+  return FastCastMessage.Owner.$match(owner, {
+    Scoreboard: ({ league }) =>
+      Change.Scoreboard({
+        league,
+        events: Option.match(touched, {
+          onNone: () => Record.values(objectAt(document, [])),
+          onSome: (uids) => uids.flatMap((uid) => Option.toArray(valueAt(document, [uid])))
+        })
+      }),
+    Game: ({ league, game }) =>
+      Change.Game({ league, game, plays: objectAt(document, ["entities", "plays"]) })
   })
 }
 
@@ -157,8 +128,8 @@ function changeOf(
 function moved(
   documents: Documents,
   tc: string,
-  owner: { readonly league: LeagueId; readonly game: Option.Option<GameId> },
-  message: Extract<typeof FastCastPayload.Message.Type, { readonly op: "R" | "P" | "I" }>
+  owner: FastCastMessage.Owner,
+  message: Extract<typeof FastCastMessage.Message.Type, { readonly op: "R" | "P" | "I" }>
 ): Effect.Effect<Advanced> {
   const current = documents.get(tc) ?? Topic.AwaitingCheckpoint()
   return Topic.$match(current, {
@@ -175,9 +146,10 @@ function moved(
       ).pipe(
         Effect.map((next) => {
           const synced = new Map([...documents, [tc, Topic.Synced({ mid: message.mid, document: next })]])
-          const touched = Option.isNone(owner.game)
-            ? Option.some(Arr.dedupe(patches.map((patch) => patch.path.uid)))
-            : Option.none()
+          const touched =
+            owner._tag === "Scoreboard"
+              ? Option.some(Arr.dedupe(patches.map((patch) => patch.path.uid)))
+              : Option.none()
           return [
             synced,
             patches.length === 0 ? Option.none() : Option.some(changeOf(owner, next, touched))
@@ -191,12 +163,12 @@ function moved(
 
 /** On a game topic, only the patches inside `/entities/plays`: the rest of ESPN's game package is not kept. */
 function relevant(
-  owner: { readonly game: Option.Option<GameId> },
-  patches: ReadonlyArray<typeof FastCastPayload.Patch.Type>
-): ReadonlyArray<typeof FastCastPayload.Patch.Type> {
+  owner: FastCastMessage.Owner,
+  patches: ReadonlyArray<typeof FastCastMessage.Patch.Type>
+): ReadonlyArray<typeof FastCastMessage.Patch.Type> {
   const inPlays = (path: { readonly pointer: string }) =>
     path.pointer === playsPointer || path.pointer.startsWith(`${playsPointer}/`)
-  return Option.isNone(owner.game)
+  return owner._tag === "Scoreboard"
     ? patches
     : patches.filter((patch) => inPlays(patch.path) && (!("from" in patch) || inPlays(patch.from)))
 }
@@ -215,7 +187,7 @@ function reset(
     Effect.andThen(Metric.update(Metric.withAttributes(resets, { league, reason }), 1)),
     Effect.as([
       new Map([...documents, [tc, Topic.AwaitingCheckpoint()]]),
-      Option.some({ topic: "reset" } as const)
+      Option.some(Change.Reset())
     ] as const)
   )
 }
@@ -228,11 +200,11 @@ function reset(
  */
 function patched(
   document: Schema.Json,
-  owner: { readonly game: Option.Option<GameId> },
-  patch: typeof FastCastPayload.Patch.Type
+  owner: FastCastMessage.Owner,
+  patch: typeof FastCastMessage.Patch.Type
 ): Effect.Effect<Schema.Json, string> {
   const pointer = ({ uid, pointer }: { readonly uid: string; readonly pointer: string }) =>
-    Option.isNone(owner.game) ? `/${JsonPointer.escapeToken(uid)}${pointer}` : pointer
+    owner._tag === "Scoreboard" ? `/${JsonPointer.escapeToken(uid)}${pointer}` : pointer
   if ("from" in patch) {
     return Option.match(valueAt(document, tokens(pointer(patch.from))), {
       onNone: () => Effect.fail(`${described(patch)}: nothing at ${patch.from.uid}${patch.from.pointer}`),
@@ -249,7 +221,7 @@ function patched(
   }
   if (patch.op === "remove") {
     const wholeEventMissing =
-      Option.isNone(owner.game) &&
+      owner._tag === "Scoreboard" &&
       patch.path.pointer === "" &&
       Option.isNone(valueAt(document, [patch.path.uid]))
     return wholeEventMissing
@@ -264,7 +236,7 @@ function patched(
 function applied(
   document: Schema.Json,
   operations: JsonPatch.JsonPatch,
-  patch: typeof FastCastPayload.Patch.Type
+  patch: typeof FastCastMessage.Patch.Type
 ): Effect.Effect<Schema.Json, string> {
   // JsonPatch.apply throws on an operation it cannot apply, and Effect has no variant that does not.
   return Effect.try({
@@ -273,7 +245,7 @@ function applied(
   })
 }
 
-function described(patch: typeof FastCastPayload.Patch.Type): string {
+function described(patch: typeof FastCastMessage.Patch.Type): string {
   return `${patch.op} at ${patch.path.uid}${patch.path.pointer}`
 }
 
@@ -312,7 +284,7 @@ function objectAt(json: Schema.Json, path: ReadonlyArray<string>): Readonly<Reco
 function undecoded(
   documents: Documents,
   frame: Frame,
-  owned: Option.Option<{ readonly league: LeagueId }>,
+  owned: Option.Option<FastCastMessage.Owner>,
   error: Schema.SchemaError
 ): Effect.Effect<Advanced, Schema.SchemaError> {
   return Option.match(decodeKnownOp(frame.body), {
@@ -335,17 +307,17 @@ function undecoded(
   })
 }
 
-const decodeMessage = Schema.decodeUnknownEffect(Schema.fromJsonString(FastCastPayload.Message))
+const decodeMessage = Schema.decodeUnknownEffect(Schema.fromJsonString(FastCastMessage.Message))
 
 const decodeKnownOp = Schema.decodeUnknownOption(
   Schema.fromJsonString(
-    Schema.Union(FastCastPayload.Message.members.map((member) => Schema.Struct({ op: member.fields.op })))
+    Schema.Union(FastCastMessage.Message.members.map((member) => Schema.Struct({ op: member.fields.op })))
   )
 )
 
 function received(
-  message: typeof FastCastPayload.Message.Type,
-  owned: Option.Option<{ readonly league: LeagueId }>
+  message: typeof FastCastMessage.Message.Type,
+  owned: Option.Option<FastCastMessage.Owner>
 ): Effect.Effect<void> {
   const mid = "mid" in message ? message.mid : undefined
   const league = Option.map(owned, (owner) => owner.league)

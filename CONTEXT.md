@@ -51,6 +51,7 @@ Every exported type name must be a term here.
 | **Provider error** | A provider could not supply data for a league: unreachable, rate-limited, or unreadable. | fetch error |
 | **Live feed** | A provider's push connection carrying updates for live games (ESPN FastCast). | socket, stream, webhook |
 | **ESPN event** | One game as either ESPN feed spells it, the polled site scoreboard or a FastCast scoreboard topic, read as a GameSnapshot; `EspnEvent` in code. | payload, DTO |
+| **Topic owner** | What a live feed topic carries: one league's scoreboard, or one game's plays; `Owner` in code. | subscription |
 | **Live feed error** | The live feed's connection could not continue: refused, closed, or silent. | |
 | **Ingest** | The Hub's loop that replays the day from the feed log into the live games, then polls providers and runs the live feed, appending every frame to the log and folding what each says into the live games. | poller, sync, fetcher |
 | **Cadence** | How long Ingest waits between polls, given what the last poll saw. | interval, rate |

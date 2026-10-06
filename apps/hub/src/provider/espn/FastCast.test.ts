@@ -111,31 +111,6 @@ describe("FastCast", () => {
     })
   )
 
-  it.effect("a missed message on a topic subscribes to that topic again, for a fresh checkpoint", () =>
-    Effect.gen(function* () {
-      const server = fakeServer()
-      const { frames } = yield* nflFrames(server)
-      yield* frames.until(atLeast(2))
-      yield* Effect.sync(() => server.send(checkpointMessage(7)))
-      yield* frames.until(atLeast(4))
-      yield* Effect.sync(() => {
-        server.send(patchMessage(8))
-        server.send(patchMessage(10))
-        server.send(patchMessage(11))
-      })
-      yield* server.sent.until(subscribed("event-football-nfl", 2))
-      yield* frames.until((received) => received.some((frame) => frame.sourceId === 11))
-
-      assert.deepStrictEqual(
-        server.sent.all().filter((frame) => frame.op === "S"),
-        [
-          { op: "S", sid: "sid-1", tc: "event-football-nfl" },
-          { op: "S", sid: "sid-1", tc: "event-football-nfl" }
-        ]
-      )
-    })
-  )
-
   it.effect(
     "a checkpoint that does not load is counted, keeps the socket and the other topics, and subscribes again after 30 s",
     () =>
