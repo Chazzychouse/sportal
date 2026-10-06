@@ -18,7 +18,7 @@ import {
 } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/http"
 import * as Socket from "effect/socket/Socket"
-import type { FeedFrame } from "../../feed-log/Frame.ts"
+import type { FeedFrame } from "../../Frame.ts"
 import { LiveFeed, LiveFeedError } from "../LiveFeed.ts"
 import * as FastCastMessage from "./FastCastMessage.ts"
 

@@ -223,11 +223,10 @@ sportal/
     │       ├── GameHistory.ts      Past plays and each game's latest snapshot, derived from the fold
     │       ├── Slate.ts            Each listed game as the fold has it, and its watchability
     │       ├── StageSessions.ts    The one authoritative Stage, held in memory
+    │       ├── FeedLog.ts          The append-only log of every frame, in feed.sqlite
+    │       ├── Frame.ts            A feed frame as received, and the frame the log numbered
+    │       ├── Gzip.ts             Frame bodies in and out of gzip
     │       ├── TestDatabase.ts, TestHubConfig.ts, TestTelemetry.ts   Layers for tests
-    │       ├── feed-log/
-    │       │   ├── FeedLog.ts      The append-only log of every frame, in feed.sqlite
-    │       │   ├── Frame.ts        A feed frame as received, and the frame the log numbered
-    │       │   └── Gzip.ts         Frame bodies in and out of gzip
     │       ├── ingest/
     │       │   ├── Ingest.ts       Replays the game day from the feed log, then polls, runs the live feed, logs every frame, and folds it
     │       │   └── Cadence.ts      How long to wait between polls

@@ -1,7 +1,7 @@
 import type { Delivery } from "@sportal/domain/Delivery"
 import { LeagueId } from "@sportal/domain/League"
 import { Context, Data, type DateTime, type Effect, Schema, type Stream } from "effect"
-import type { FeedFrame, Frame } from "../feed-log/Frame.ts"
+import type { FeedFrame, Frame } from "../Frame.ts"
 
 /** A provider's scoreboard: polled as frames, and what those and its live feed's frames say, decoded. */
 export class Provider extends Context.Service<

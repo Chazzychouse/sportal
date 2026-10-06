@@ -3,10 +3,10 @@ import { assert, describe, it } from "@effect/vitest"
 import { DateTime, Effect, Fiber, FileSystem, Layer, Path, Ref, Stream } from "effect"
 import { SqlClient, SqlError } from "effect/sql"
 import { TestClock } from "effect/testing"
-import * as TestDatabase from "../TestDatabase.ts"
-import { withEnv } from "../TestHubConfig.ts"
-import { counted, recordingLogs, withMetrics } from "../TestTelemetry.ts"
 import { FeedLog } from "./FeedLog.ts"
+import * as TestDatabase from "./TestDatabase.ts"
+import { withEnv } from "./TestHubConfig.ts"
+import { counted, recordingLogs, withMetrics } from "./TestTelemetry.ts"
 
 describe("FeedLog", () => {
   it.effect(

@@ -1,7 +1,7 @@
 import type { GameSnapshot } from "@sportal/domain/Game"
 import type { LeagueId } from "@sportal/domain/League"
 import { Context, Schema, type Stream } from "effect"
-import type { FeedFrame } from "../feed-log/Frame.ts"
+import type { FeedFrame } from "../Frame.ts"
 
 /** A provider's push connection, carrying updates for live games between polls. */
 export class LiveFeed extends Context.Service<

@@ -62,7 +62,7 @@ module.exports = {
       from: {
         path: "^apps/hub/src/",
         pathNot:
-          "(^apps/hub/src/main\\.ts$|\\.test\\.ts$|^apps/hub/src/source/ChannelStore\\.ts$|^apps/hub/src/Database\\.ts$|^apps/hub/src/feed-log/FeedLog\\.ts$|^apps/hub/src/GameHistory\\.ts$)"
+          "(^apps/hub/src/main\\.ts$|\\.test\\.ts$|^apps/hub/src/source/ChannelStore\\.ts$|^apps/hub/src/Database\\.ts$|^apps/hub/src/FeedLog\\.ts$|^apps/hub/src/GameHistory\\.ts$)"
       },
       to: { path: "^apps/hub/src/Database\\.ts$" }
     },

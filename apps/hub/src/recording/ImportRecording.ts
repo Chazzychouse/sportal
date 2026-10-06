@@ -15,8 +15,8 @@ import {
   Struct
 } from "effect"
 import { Command, Flag } from "effect/cli"
-import { type FeedFrame, Frame } from "../feed-log/Frame.ts"
-import * as Gzip from "../feed-log/Gzip.ts"
+import { type FeedFrame, Frame } from "../Frame.ts"
+import * as Gzip from "../Gzip.ts"
 import * as FastCastMessage from "../provider/espn/FastCastMessage.ts"
 import * as Recording from "./Recording.ts"
 

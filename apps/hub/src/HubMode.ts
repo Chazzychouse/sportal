@@ -1,7 +1,7 @@
 import { NodeSocket } from "@effect/platform-node"
 import { LeagueId } from "@sportal/domain/League"
 import { DateTime, Effect, Layer, Option } from "effect"
-import { FeedLog } from "./feed-log/FeedLog.ts"
+import { FeedLog } from "./FeedLog.ts"
 import { GameHistory } from "./GameHistory.ts"
 import { HubConfig } from "./HubConfig.ts"
 import * as Ingest from "./ingest/Ingest.ts"

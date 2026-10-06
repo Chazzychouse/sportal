@@ -1,7 +1,7 @@
 import type { GameId } from "@sportal/domain/Game"
 import type { LeagueId } from "@sportal/domain/League"
 import { Array as Arr, Data, Effect, JsonPatch, JsonPointer, Metric, Option, Record, Schema } from "effect"
-import type { Frame } from "../../feed-log/Frame.ts"
+import type { Frame } from "../../Frame.ts"
 import * as FastCastMessage from "./FastCastMessage.ts"
 
 /**
