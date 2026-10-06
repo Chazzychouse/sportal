@@ -1,13 +1,6 @@
+import { type ChannelCarriage, ChannelLineup, ChannelUrlRefused } from "@sportal/domain/Channel"
 import type { GameSnapshot } from "@sportal/domain/Game"
-import {
-  type Airing,
-  type ChannelCarriage,
-  ChannelId,
-  ChannelLineup,
-  ChannelUrlRefused,
-  Guide,
-  GuideUnreadable
-} from "@sportal/domain/Source"
+import { type Airing, ChannelId, Guide, GuideUnreadable } from "@sportal/domain/Guide"
 import {
   DateTime,
   Duration,

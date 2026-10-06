@@ -1,5 +1,5 @@
+import { ChannelAvailability } from "@sportal/domain/Channel"
 import type { GameId } from "@sportal/domain/Game"
-import { ChannelAvailability } from "@sportal/domain/Source"
 import { Stage, type StageCommand, type StageRejection } from "@sportal/domain/Stage"
 import { Context, Effect, Layer, Option, Result, Stream, SubscriptionRef } from "effect"
 import { Slate } from "../Slate.ts"

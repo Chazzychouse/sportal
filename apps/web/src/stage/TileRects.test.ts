@@ -1,6 +1,6 @@
 import { assert, describe, it } from "@effect/vitest"
+import { ChannelAvailability } from "@sportal/domain/Channel"
 import { GameId } from "@sportal/domain/Game"
-import { ChannelAvailability } from "@sportal/domain/Source"
 import { Stage } from "@sportal/domain/Stage"
 import { Option, Result } from "effect"
 import { placements, tileRects } from "./TileRects.ts"

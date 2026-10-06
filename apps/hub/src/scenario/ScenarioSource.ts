@@ -1,5 +1,5 @@
+import { ChannelAvailability } from "@sportal/domain/Channel"
 import type { GameSnapshot } from "@sportal/domain/Game"
-import { ChannelAvailability } from "@sportal/domain/Source"
 import { Effect, Layer, Option, Stream } from "effect"
 import { Source } from "../source/Source.ts"
 

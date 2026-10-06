@@ -1,7 +1,7 @@
 import { Option, Result, Schema } from "effect"
+import { Channel, type ChannelAvailability, SourceName } from "./Channel.ts"
 import { GameId, Network } from "./Game.ts"
 import { Layout, LayoutName, Split } from "./Layout.ts"
-import { Channel, type ChannelAvailability, SourceName } from "./Source.ts"
 import { StreamLocator } from "./Stream.ts"
 
 export const Tile = Schema.Union([

@@ -1,5 +1,5 @@
+import { type ChannelCarriage, SourceName } from "@sportal/domain/Channel"
 import { Network } from "@sportal/domain/Game"
-import { type ChannelCarriage, SourceName } from "@sportal/domain/Source"
 import { DateTime, Effect, Layer, Schema } from "effect"
 import { SqlClient, SqlSchema } from "effect/sql"
 import * as Database from "../database/Database.ts"

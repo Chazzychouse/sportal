@@ -1,5 +1,6 @@
+import { ChannelUrlRefused } from "@sportal/domain/Channel"
 import { Network } from "@sportal/domain/Game"
-import { ChannelUrlRefused, GuideUnreadable } from "@sportal/domain/Source"
+import { GuideUnreadable } from "@sportal/domain/Guide"
 import { Stage, StageCommand, StageRejection } from "@sportal/domain/Stage"
 import { Schema } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "effect/http-api"

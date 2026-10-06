@@ -1,8 +1,8 @@
 import { assert, describe, it } from "@effect/vitest"
 import { DateTime, Option, Result, Schema } from "effect"
+import { ChannelAvailability } from "./Channel.ts"
 import { GameId, Network } from "./Game.ts"
 import { Layout } from "./Layout.ts"
-import { ChannelAvailability } from "./Source.ts"
 import { Stage, type StageCommand, type Tile } from "./Stage.ts"
 
 const bama = GameId.make("401856707")

@@ -1,5 +1,5 @@
+import type { ChannelCarriage, SourceName } from "@sportal/domain/Channel"
 import type { Network } from "@sportal/domain/Game"
-import type { ChannelCarriage, SourceName } from "@sportal/domain/Source"
 import { Context, type Effect, Schema } from "effect"
 
 /** Where the Hub keeps the channel carriages it learned from the user: they cannot be fetched again. */
