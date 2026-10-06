@@ -42,10 +42,9 @@ export class GuideReader extends Context.Service<
           Effect.logWarning(`GuideReader: the guide could not be read: ${failure.reason}`)
         ),
         // A read that goes wrong any other way must not end the loop; only interruption does.
-        Effect.catchCause((cause) =>
-          Cause.hasInterrupts(cause)
-            ? Effect.failCause(cause)
-            : Effect.logError("GuideReader: a read failed", cause)
+        Effect.catchCauseIf(
+          (cause) => !Cause.hasInterrupts(cause),
+          (cause) => Effect.logError("GuideReader: a read failed", cause)
         )
       )
       yield* Effect.forkScoped(Effect.forever(Queue.take(requests).pipe(Effect.andThen(read))))
@@ -79,7 +78,7 @@ function readGuide() {
     const { session } = yield* ProviderSession
     const context = clientContext(yield* send(`${guideOrigin}/live`, {}))
     if (Option.isNone(context))
-      return yield* Effect.fail(new GuideNotRead({ reason: "the guide page has no client config" }))
+      return yield* new GuideNotRead({ reason: "the guide page has no client config" })
     const cookies = yield* Effect.tryPromise({
       try: () => session.cookies.get({ url: guideOrigin, name: "SAPISID" }),
       catch: (cause) =>
@@ -87,7 +86,7 @@ function readGuide() {
     })
     const sapisid = Arr.head(cookies)
     if (Option.isNone(sapisid))
-      return yield* Effect.fail(new GuideNotRead({ reason: "the session has no YouTube sign-in (SAPISID)" }))
+      return yield* new GuideNotRead({ reason: "the session has no YouTube sign-in (SAPISID)" })
     // YouTube's web clients sign each request with the time and the session's SAPISID, as the guide page does.
     const seconds = Math.floor((yield* Clock.currentTimeMillis) / 1000)
     const signature = createHash("sha1")
@@ -119,11 +118,9 @@ function send(url: string, init: RequestInit) {
       catch: (cause) => new GuideNotRead({ reason: `${path} could not be reached: ${String(cause)}` })
     })
     if (status >= 200 && status < 300) return body
-    return yield* Effect.fail(
-      new GuideNotRead({
-        reason: `${path} answered ${status}${status === 401 || status === 403 ? " (signed out of YouTube TV?)" : ""}`
-      })
-    )
+    return yield* new GuideNotRead({
+      reason: `${path} answered ${status}${status === 401 || status === 403 ? " (signed out of YouTube TV?)" : ""}`
+    })
   })
 }
 
