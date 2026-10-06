@@ -1,7 +1,7 @@
 # 6. Live games are volatile `effect/cluster` entities
 
 Date: 2026-10-04
-Status: Accepted
+Status: Superseded by ADR 0009
 
 ## Context
 
