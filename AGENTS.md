@@ -12,8 +12,9 @@ easiest to break.
   its own current examples: read `node_modules/effect/ai-docs/src/` (start with `index.md`) and
   `node_modules/effect/AGENTS.md`. Services are `Context.Service`, HTTP lives in `effect/http` and
   `effect/http-api`, the test clock in `effect/testing`.
-- **Use the words in `CONTEXT.md`.** Every exported type name must be a term there. A new concept adds
-  its glossary row in the same commit.
+- **Use the words in `CONTEXT.md`.** Every exported type name must be a term there; a new concept adds
+  its glossary row in the same commit. The wire schemas in `*Payload.ts` and `FastCastMessage.ts` are exempt: they
+  spell a provider's own words. Terms the code does not have yet sit under Planned.
 
 ## Where code goes
 
@@ -21,7 +22,7 @@ easiest to break.
   contract between the Hub and its clients. Apps never import each other.
 - A package exists only when two apps need the same code. A folder exists only when a concept has
   several files private to it. Do not add either for symmetry or for later.
-- A module is a file named for the concept it owns (`Game.ts`, `Ingest.ts`), imported as a namespace or
+- A module is a file named for the concept it owns (`Game.ts`, `Stage.ts`), imported as a namespace or
   by name. Organize by concept, never by kind: no `components/`, `hooks/`, `services/`, `schemas/`.
 - Banned file and folder names: `utils`, `helpers`, `common`, `shared`, `misc`, `lib`, `types`,
   `constants`, `models`, `interfaces`, and `index.ts` barrels.
@@ -31,7 +32,8 @@ easiest to break.
   the wire format. Derive a variant at the point of use; do not name it.
 - In the Hub, only `HubMode.ts` and tests name concrete providers and sources, and `main.ts` is only the layer pipe and how the process runs it.
   Everything else depends on the port.
-- In the Hub, only `HubConfig.ts` reads the environment (the `scenario:cut` dev tool keeps its `INIT_CWD`). A new setting is a field there, with its default.
+- In the Hub, only `HubConfig.ts` reads the environment, except that the dev tools `scenario:cut` and `feed:import` read `INIT_CWD`
+  to resolve the paths they are given. A new setting is a field there, with its default.
 - A service is yielded where it is used, never passed as an argument. A layer that needs a setting yields `HubConfig`;
   a choice between layers at startup is a `Layer.unwrap` that yields it.
 
@@ -78,17 +80,17 @@ A reader opens a file to see the thing it is named for. Keep it that way.
   waits for the UI to come up. Use `pnpm dev:x11` to run the shell through XWayland.
 - `SPORTAL_SCENARIO=<name> SPORTAL_SCENARIO_SPEED=10 pnpm dev` — play a scenario instead of ESPN and YouTube TV, ten
   times faster: a written one (`apps/hub/src/scenario/written/Scenarios.ts`) or a recorded slice in
-  `fixtures/scenarios/`. Every game plays as a synthetic stream page. Cut a slice from a recording with
-  `pnpm --filter @sportal/hub scenario:cut <name> <recording-dir> <from> <to> [game ids…]`; the recording may come
-  from either recorder (`record.sh` names its polls by UTC instant, `record.py` by epoch seconds).
+  `fixtures/scenarios/`. Every game plays as a synthetic stream page. The feed log records every game day. Cut a
+  slice of an old recording into a scenario with
+  `pnpm --filter @sportal/hub scenario:cut <name> <recording-dir> <from> <to> [game ids…]`, or import one into a
+  feed log with `pnpm --filter @sportal/hub feed:import --recording <dir> --out <file.jsonl.gz>`; the tools
+  live in `apps/hub/src/recording/`, and both resolve a relative path against `INIT_CWD`, where pnpm was run.
 - `pnpm --filter @sportal/hub dev` — run only the Hub on port 4400 (API and live stream), on every interface so a phone Remote can reach it (`SPORTAL_HOST` narrows it). In
   dev it keeps its SQLite database in `.sportal/` at the repo root; set `SPORTAL_DATA_DIR` to move it. Started any other
   way, it keeps it where the OS keeps app data: `$XDG_DATA_HOME/sportal` or `~/.local/share/sportal` on Linux,
   `~/Library/Application Support/Sportal` on macOS, `%LOCALAPPDATA%\Sportal` on Windows.
-- Hub settings (all in `apps/hub/src/HubConfig.ts`): `SPORTAL_PORT`, `SPORTAL_HOST`, `SPORTAL_WEB_ROOT`, `SPORTAL_DATA_DIR`,
-  `SPORTAL_SCENARIO`, `SPORTAL_SCENARIO_SPEED`, `SPORTAL_LOG_LEVEL` (an Effect level, default `Info`),
-  `SPORTAL_LOG_FORMAT` (`pretty` or `json`), `SPORTAL_OTLP_URL` (the collector's OTLP/HTTP base URL; unset exports nothing), `SPORTAL_VERSION`. A bad value stops the Hub at startup. `GET /api/health`
-  answers while it is up.
+- Hub settings: every one is a field of `apps/hub/src/HubConfig.ts`, with its variable and default. A bad value stops
+  the Hub at startup. `GET /api/health` answers while it is up.
 - `pnpm telemetry` / `pnpm telemetry:down` — start or stop a local Grafana (`localhost:3000`) with OTLP on `localhost:4318`
   and the Hub dashboard; needs Docker. `pnpm dev` starts it but never stops it. The Hub's `dev` script sends to it unless
   `SPORTAL_OTLP_URL` says otherwise; started any other way, the Hub exports nothing until that is set.

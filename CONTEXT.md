@@ -1,16 +1,13 @@
 # Sportal — Domain Language
 
 One word per concept, used identically in code, UI, documents, and conversation.
-Every exported type name must be a term here.
+Every exported type name must be a term here, except the wire schemas in `*Payload.ts` and `FastCastMessage.ts`, which carry a provider's own vocabulary. Terms the code does not yet have are under [Planned](#planned).
 
 ### Competition
 
 | Term | Meaning | Not |
 | --- | --- | --- |
-| **Sport** | A kind of game (football). | |
 | **League** | An organized competition (NFL, FBS). | association, division |
-| **Conference** | A grouping of teams within a league (SEC, AFC). | |
-| **Season** | One league year, with a **SeasonPhase**: preseason, regular, postseason. | |
 | **Team** | A league member. | club, competitor, franchise |
 | **Ranking** | A team's position in a poll (college). | seed |
 | **Game** | One scheduled contest between two teams. | event, match, competition, fixture |
@@ -35,10 +32,10 @@ Every exported type name must be a term here.
 | **Test game** | A game snapshot built for a test, with defaults for everything the test does not care about. | fixture, mock |
 | **Scenario** | A timeline of game snapshots for several games, written or cut from a recording, that a Hub can play instead of a provider. | fixture, simulation |
 | **Scenario time** | The clock a scenario plays on: from the Hub's start, at the scenario's speed. | |
-| **GameDetail** | A snapshot plus drives, plays, and statistics. | summary |
 | **Situation** | Live football state: possession, down, distance, field position, red zone, timeouts. | context |
 | **Period** | A quarter or an overtime. | quarter (in code) |
-| **Drive** / **Play** | A possession sequence / a single snap, or a timeout, a penalty, or the end of a period, as the game's play-by-play lists it: its kind, clock, text, yardage, start and end, score after, and win probability. | |
+| **Play** | A single snap, or a timeout, a penalty, or the end of a period, as the game's play-by-play lists it: its kind, clock, text, yardage, start and end, score after, and win probability. | |
+| **Game id** / **Team id** / **League id** | A provider's own id for a game or a team, and a league's (`nfl` or `fbs`); `GameId`, `TeamId`, `LeagueId` in code. | |
 | **Play id** | The feed's own id for one play; `PlayId` in code. Not ordered: plays are ordered by their sequence. | |
 | **Play kind** | What a play was: a rush, a pass or incompletion, a sack, an interception, a fumble the offense kept or one it lost, a kick, a try, a penalty, a timeout, or the end of a period; `PlayKind` in code. | play type |
 | **GameEvent** | Something that happened in a game: from its plays when it has them, from comparing two snapshots otherwise. Derived, never stored. | alert, update |
@@ -53,10 +50,10 @@ Every exported type name must be a term here.
 | **ESPN event** | One game as either ESPN feed spells it, the polled site scoreboard or a FastCast scoreboard topic, read as a GameSnapshot; `EspnEvent` in code. | payload, DTO |
 | **Topic owner** | What a live feed topic carries: one league's scoreboard, or one game's plays; `Owner` in code. | subscription |
 | **Live feed error** | The live feed's connection could not continue: refused, closed, or silent. | |
-| **Recording** | A day of one league's raw polls and socket lines kept by the spike's recorders, which the dev tools cut into a scenario or import into the feed log. Not the feed log, which the Hub keeps itself. | feed log |
+| **Recording** | A day of one league's raw polls and socket lines recorded by hand before the Hub kept a feed log, which the dev tools cut into a scenario or import into the feed log. Not the feed log, which the Hub keeps itself. | feed log |
 | **Recording unreadable** | A recording's folder is no league's, or its polls could not be listed; `RecordingUnreadable` in code. | |
-| **Ingest** | The Hub's loop that replays the day from the feed log into the live games, then polls providers and runs the live feed, appending every frame to the log and folding what each says into the live games. | poller, sync, fetcher |
-| **Cadence** | How long Ingest waits between polls, given what the last poll saw. | interval, rate |
+| **Ingesting** | The Hub's loop, in `ingest/`, that replays the day from the feed log into the live games, then polls providers and runs the live feed, appending every frame to the log and folding what each says into the live games. | poller, sync, fetcher |
+| **Cadence** | How long the ingest loop waits between polls, given what the last poll saw. | interval, rate |
 | **Source** | A way you obtain **video** (YouTube TV). | provider, service |
 | **Source name** | A source as people know it ("YouTube TV"); how code and the UI name a source. | source id |
 | **Broadcast** | The fact that a network is airing a game, on television or streaming only. | channel, stream |
@@ -80,7 +77,6 @@ Every exported type name must be a term here.
 | **Live channel URL** | A source's address for a channel, reduced to the one that plays it live. | canonical URL |
 | **Stream** | One playing instance of a game from a source. | feed, video |
 | **StreamLocator** | What a Display must load to play a stream. | URL, link |
-| **StreamBudget** | How many concurrent streams a source allows. | limit, cap |
 
 Provider and Source are the two words most likely to be swapped. Provider is always data; Source is always video.
 
@@ -89,9 +85,10 @@ Provider and Source are the two words most likely to be swapped. Provider is alw
 | Term | Meaning | Not |
 | --- | --- | --- |
 | **Hub** | The server process that owns all shared state. | backend, server |
+| **Hub API** | The Hub's HTTP API, declared once as `SportalApi`: the Hub serves it and every client derives its typed client from it. | REST layer |
 | **Hub config** | Every setting a Hub reads from its environment, decoded once at startup; `HubConfig` in code. | settings, env |
 | **Hub mode** | What a Hub plays: the live day from its providers and sources, or a scenario in their place. | scenario mode, profile |
-| **Live message** | One update the Hub pushes to clients on the live stream: the slate changed, or the Stage changed. | event, notification |
+| **Live message** | One update the Hub pushes to clients on the live stream: the slate changed, or the Stage changed; `LiveMessage`, and `LiveMessageJson` its JSON form. | event, notification |
 | **Live stream** | The Hub's server-sent events at `/api/live` that carry live messages; in the web UI, `LiveStream` holds what they said and the connection. | event stream, socket |
 | **Connection** | Whether a client's live stream is up: connecting (never yet connected), connected, or lost (since an instant, retrying). | online, status |
 | **Hub client** | The web UI's way to the Hub's API, `HubClient` in code: stage and channel commands, and the stage commands that failed: refused by the Hub, or never reaching it. It runs in the web UI's one runtime (`HubRuntime.ts`), with the live stream. | API client, fetcher |
@@ -99,8 +96,7 @@ Provider and Source are the two words most likely to be swapped. Provider is alw
 | **Telemetry** | The traces, logs, and metrics the Hub exports for people to read in Grafana. | monitoring, observability stack |
 | **Display** | A device running the shell and presenting a Stage. Its local state (selected tile, interacting tile, pick, slate drawer, and the one open overlay) is the web UI's `Display`. | screen, client, player |
 | **Remote** | A client controlling a Display's Stage without presenting it. | controller |
-| **Desk mode** / **Couch mode** | The two presentation densities. | desktop/TV layout |
-| **Shell bridge** | The small interface the desktop shell exposes to the web UI. | IPC, native API |
+| **Shell bridge** | The small interface the desktop shell exposes to the web UI; its IPC channel names are `ShellChannel`. | IPC, native API |
 | **Full screen** | A Display's window filling its monitor with only the Stage; local to the Display, not a Stage state. | solo |
 | **Hotkey** | A key Sportal acts on, wherever it was pressed: in the web UI or in a stream view with focus. | shortcut, keybind |
 | **Provider session** | The shell's single persistent browser session shared by every provider view, with its navigation allowlist and permissions. | partition, profile |
@@ -115,6 +111,7 @@ Provider and Source are the two words most likely to be swapped. Provider is alw
 | --- | --- | --- |
 | **Stage** | A Display's multi-view surface and its state. | grid, multiview, wall |
 | **Stage command** | An instruction to change a Stage: assign, clear, swap, promote, solo, change layout or split, or focus audio. Issued by people and by the Director alike. | action, event |
+| **Layout name** | A layout's own name, as the Stage and the layout picker name it; `LayoutName` in code. | |
 | **Stage rejection** | The reason a stage command was refused. | error |
 | **Layout** | A named arrangement of tile slots whose dividers can be moved. | grid, template |
 | **Split** | Where a layout's dividers sit, as fractions of the Stage area. | ratio, sizes |
@@ -130,19 +127,33 @@ Provider and Source are the two words most likely to be swapped. Provider is alw
 | **Display step** | A Display after an input, and the stage commands that input sends; `DisplayStep` in code. | result, update |
 | **Interacting tile** | The one stream tile whose player gets the mouse, after `I`; every other stream tile's player never sees the pointer. Local to the Display, like the selected tile. | active, unlocked |
 | **Promote** | Move a game into the main tile. | feature |
-| **Preset** | A saved layout with tile assignments. | |
 | **Tile placement** | Where a game's stream or picking tile sits in a Display's window, what it loads, and whether it is a stream or a guide, as told to the shell. | bounds, rect |
 | **Stage transition** | How tiles move to new places: one duration and easing, shared by the web UI and the shell. | animation |
-| **Tile delay** | Seconds that data is held back for a tile to match its video. | offset, latency |
-| **Spoiler shield** | Hiding or delaying scores for chosen games. | |
 
 ### Personalization and automation
 
 | Term | Meaning | Not |
 | --- | --- | --- |
-| **Follow** | Your declared interest in a team, conference, league, or game. | favourite, subscription |
 | **Watchability** | A 0–100 score of how worth watching a live game is right now, whether it is in a lull, and why; folded with its live game from each delivery. | excitement, heat |
 | **Lull** | A live game with nothing happening: halftime, a delay, between periods, a TV break after a timeout, score, or change of possession, or no play for a minute. | break, stoppage |
+
+## Planned
+
+Names the design uses that no code has yet. Move a row up, into its table, in the commit that builds it.
+
+| Term | Meaning | Not |
+| --- | --- | --- |
+| **Sport** | A kind of game (football). | |
+| **Conference** | A grouping of teams within a league (SEC, AFC). | |
+| **Season** | One league year, with a **SeasonPhase**: preseason, regular, postseason. | |
+| **Drive** | A possession sequence. | |
+| **GameDetail** | A snapshot plus drives, plays, and statistics. | summary |
+| **StreamBudget** | How many concurrent streams a source allows. | limit, cap |
+| **Desk mode** / **Couch mode** | The two presentation densities. | desktop/TV layout |
+| **Preset** | A saved layout with tile assignments. | |
+| **Tile delay** | Seconds that data is held back for a tile to match its video. | offset, latency |
+| **Spoiler shield** | Hiding or delaying scores for chosen games. | |
+| **Follow** | Your declared interest in a team, conference, league, or game. | favourite, subscription |
 | **Trigger** | A condition over events and snapshots. | |
 | **Rule** | A trigger bound to a stage command and a revert condition. | automation |
 | **Director** | The Hub component that evaluates rules and issues stage commands. | autopilot |
