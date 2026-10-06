@@ -7,7 +7,7 @@ import { GameEvent } from "./GameEvent.ts"
 import type { LiveGame } from "./LiveGame.ts"
 import { Scenario } from "./Scenario.ts"
 import { Situation } from "./Situation.ts"
-import { followed, play, snapshot, team } from "./TestGame.ts"
+import { followed, play, situation, snapshot, team } from "./TestGame.ts"
 import { Watchability } from "./Watchability.ts"
 
 const now = DateTime.makeUnsafe("2026-10-03T20:00:00Z")
@@ -22,16 +22,7 @@ const game = (overrides: Partial<GameSnapshot> = {}) =>
     ...overrides
   })
 const ball = (yardLine: number, down = 1, distance = 10, rest: Partial<Situation> = {}) =>
-  new Situation({
-    possession: team("UGA").id,
-    yardLine,
-    down,
-    distance,
-    isRedZone: yardLine <= 20,
-    homeTimeouts: 3,
-    awayTimeouts: 3,
-    ...rest
-  })
+  situation({ possession: team("UGA").id, yardLine, down, distance, isRedZone: yardLine <= 20, ...rest })
 const score = (g: GameSnapshot) => Watchability.initial(g, now).score
 
 describe("Watchability.initial", () => {

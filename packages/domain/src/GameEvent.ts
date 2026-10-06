@@ -26,17 +26,36 @@ export type GameEvent = Data.TaggedEnum<{
   BigPlay: { readonly team: TeamId; readonly yards: number }
   Sack: { readonly team: TeamId }
 }>
-export const GameEvent = Data.taggedEnum<GameEvent>()
-
-/** The tags a game's plays decide once it has any; its snapshots decide them only before. */
-export const fromPlays: ReadonlySet<GameEvent["_tag"]> = new Set([
-  "ScoreChanged",
-  "Turnover",
-  "PossessionChanged",
-  "TimeoutTaken",
-  "PeriodEnded",
-  "FourthDown",
-  "Played",
-  "BigPlay",
-  "Sack"
-])
+const constructors = Data.taggedEnum<GameEvent>()
+export const GameEvent = {
+  ScoreChanged: constructors.ScoreChanged,
+  EnteredRedZone: constructors.EnteredRedZone,
+  ReachedScoringRange: constructors.ReachedScoringRange,
+  GoalToGo: constructors.GoalToGo,
+  FourthDown: constructors.FourthDown,
+  TwoMinuteDrill: constructors.TwoMinuteDrill,
+  Overtime: constructors.Overtime,
+  Turnover: constructors.Turnover,
+  PossessionChanged: constructors.PossessionChanged,
+  TimeoutTaken: constructors.TimeoutTaken,
+  PeriodEnded: constructors.PeriodEnded,
+  WentToHalftime: constructors.WentToHalftime,
+  WentFinal: constructors.WentFinal,
+  Played: constructors.Played,
+  BigPlay: constructors.BigPlay,
+  Sack: constructors.Sack,
+  $is: constructors.$is,
+  $match: constructors.$match,
+  /** The tags a game's plays decide once it has any; its snapshots decide them only before. */
+  fromPlays: new Set<GameEvent["_tag"]>([
+    "ScoreChanged",
+    "Turnover",
+    "PossessionChanged",
+    "TimeoutTaken",
+    "PeriodEnded",
+    "FourthDown",
+    "Played",
+    "BigPlay",
+    "Sack"
+  ])
+}

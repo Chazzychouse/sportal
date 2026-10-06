@@ -4,6 +4,7 @@ import { type Broadcast, GameId, GameSnapshot, Network } from "./Game.ts"
 import type { LeagueId } from "./League.ts"
 import { LiveGame } from "./LiveGame.ts"
 import { Play, PlayId } from "./Play.ts"
+import { Situation } from "./Situation.ts"
 import { Team, TeamId } from "./Team.ts"
 
 /** A game snapshot for a test: an FBS scheduled game unless the overrides say otherwise. */
@@ -18,6 +19,20 @@ export function snapshot(overrides: Partial<GameSnapshot> = {}): GameSnapshot {
     home: { team: team("HOME"), score: 0 },
     away: { team: team("AWAY"), score: 0 },
     broadcasts: [],
+    ...overrides
+  })
+}
+
+/** A situation for a test: the home team's first and ten at midfield, three timeouts each, unless the overrides say otherwise. */
+export function situation(overrides: Partial<Situation> = {}): Situation {
+  return new Situation({
+    possession: team("HOME").id,
+    down: 1,
+    distance: 10,
+    yardLine: 50,
+    isRedZone: false,
+    homeTimeouts: 3,
+    awayTimeouts: 3,
     ...overrides
   })
 }

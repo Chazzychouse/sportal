@@ -1,7 +1,7 @@
 import { Array as Arr, Data, DateTime, Duration, Equal, Option } from "effect"
 import type { Delivery, DeliverySource } from "./Delivery.ts"
 import { type GameId, GameSnapshot } from "./Game.ts"
-import { fromPlays, type GameEvent } from "./GameEvent.ts"
+import { GameEvent } from "./GameEvent.ts"
 import { Play } from "./Play.ts"
 import { Watchability } from "./Watchability.ts"
 
@@ -74,7 +74,7 @@ export class LiveGame extends Data.Class<{
    *
    * A snapshot behind in game time is none. A poll at the same game time as a live game's pushed snapshot only
    * refreshes it: the push wins a tie, since the poll lags it. Once the game has plays, they decide the events they
-   * cover (`fromPlays`), and a snapshot gives only the rest. A `Plays` delivery replaces the list.
+   * cover (`GameEvent.fromPlays`), and a snapshot gives only the rest. A `Plays` delivery replaces the list.
    */
   take(
     delivery: Data.TaggedEnum.Value<Delivery, "Snapshot" | "Plays">,
@@ -109,7 +109,7 @@ export class LiveGame extends Data.Class<{
     }
     const events = snapshot
       .eventsSince(this.snapshot)
-      .filter((event) => this.plays.length === 0 || !fromPlays.has(event._tag))
+      .filter((event) => this.plays.length === 0 || !GameEvent.fromPlays.has(event._tag))
     return {
       liveGame: Option.some(
         new LiveGame({
