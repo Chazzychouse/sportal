@@ -3,7 +3,7 @@ import { NodeServices } from "@effect/platform-node"
 import { assert, describe, it } from "@effect/vitest"
 import { Network } from "@sportal/domain/Game"
 import { Effect, FileSystem, Layer } from "effect"
-import * as Database from "../Database.ts"
+import * as TestDatabase from "../TestDatabase.ts"
 import { ChannelStore } from "./ChannelStore.ts"
 
 const espn = Network.make("ESPN")
@@ -81,5 +81,5 @@ function tempDatabase() {
 function withStore<A, E>(filename: string, use: (store: typeof ChannelStore.Service) => Effect.Effect<A, E>) {
   return Effect.gen(function* () {
     return yield* use(yield* ChannelStore)
-  }).pipe(Effect.provide(ChannelStore.layer.pipe(Layer.provide(Database.layer(filename)))))
+  }).pipe(Effect.provide(ChannelStore.layer.pipe(Layer.provide(TestDatabase.layer(filename)))))
 }

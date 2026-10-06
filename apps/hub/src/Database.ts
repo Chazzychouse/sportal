@@ -3,22 +3,19 @@ import { Effect, FileSystem, Layer, Path } from "effect"
 import { Migrator, type SqlClient } from "effect/sql"
 import { HubConfig } from "./HubConfig.ts"
 
-/**
- * The Hub's SQLite database, in `filename` (or `":memory:"`). Each store migrates its own tables.
- * @testonly
- */
-export const layer = (filename: string) => SqliteClient.layer({ filename })
-
 /** The Hub's database as `sportal.sqlite` in its data directory, which is created if it is missing. */
 export const inDataDir = fileInDataDir("sportal.sqlite")
 
-/** A SQLite database as `filename` in the Hub's data directory, which is created if it is missing. */
+/**
+ * A SQLite database as `filename` in the Hub's data directory, which is created if it is missing. Each store
+ * migrates its own tables.
+ */
 export function fileInDataDir(filename: string) {
   return Layer.unwrap(
     Effect.gen(function* () {
       const { dataDir } = yield* HubConfig
       yield* (yield* FileSystem.FileSystem).makeDirectory(dataDir, { recursive: true })
-      return layer((yield* Path.Path).join(dataDir, filename))
+      return SqliteClient.layer({ filename: (yield* Path.Path).join(dataDir, filename) })
     })
   )
 }

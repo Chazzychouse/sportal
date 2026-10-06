@@ -9,7 +9,6 @@ import { DateTime, Effect, Layer, Option, Queue, Result, Schema, Stream } from "
 import { HttpClient } from "effect/http"
 import { HttpApiClient } from "effect/http-api"
 import { TestClock } from "effect/testing"
-import * as Database from "../Database.ts"
 import { FeedLog } from "../feed-log/FeedLog.ts"
 import * as Ingest from "../ingest/Ingest.ts"
 import { LiveGames } from "../LiveGames.ts"
@@ -19,6 +18,7 @@ import { Slate } from "../Slate.ts"
 import { StageSessions } from "../StageSessions.ts"
 import { ChannelStore } from "../source/ChannelStore.ts"
 import * as YouTubeTv from "../source/youtube-tv/YouTubeTv.ts"
+import * as TestDatabase from "../TestDatabase.ts"
 import { withEnv } from "../TestHubConfig.ts"
 import * as HubServer from "./HubServer.ts"
 
@@ -324,7 +324,7 @@ function hubUnderTest() {
   return StageSessions.layer.pipe(
     Layer.provideMerge(YouTubeTv.layer),
     Layer.provide(ChannelStore.layer),
-    Layer.provide(Database.layer(":memory:")),
+    Layer.provide(TestDatabase.layer(":memory:")),
     Layer.provideMerge(Layer.mergeAll(Slate.layer, Ingest.layer(["fbs"]))),
     Layer.provide([
       LiveGames.layer,
@@ -334,7 +334,7 @@ function hubUnderTest() {
       ),
       neverPushing,
       DateTime.layerCurrentZoneLocal,
-      FeedLog.layer.pipe(Layer.provide([Database.layer(":memory:"), NodeCrypto.layer]))
+      FeedLog.layer.pipe(Layer.provide([TestDatabase.layer(":memory:"), NodeCrypto.layer]))
     ]),
     Layer.provideMerge(withEnv({ SPORTAL_VERSION: "1.2.3", SPORTAL_DATA_DIR: "unused" }))
   )

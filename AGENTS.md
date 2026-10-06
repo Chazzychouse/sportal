@@ -64,6 +64,7 @@ A reader opens a file to see the thing it is named for. Keep it that way.
 - Expected failures are tagged errors in the error channel. Nothing is caught and ignored.
 - Time comes from Effect's `Clock`. No `Date.now()` in `packages/domain` or the Hub.
 - No `any`, no non-null assertions, no enums, no default exports, no casts outside decoding.
+- No export lives only for its tests: `knip --production` fails on one.
 - Tests sit beside the file as `Name.test.ts`. Domain logic and provider decoding are written test-first.
   Provider tests run against recorded real payloads in the adapter's `fixtures/` folder.
 

@@ -119,9 +119,8 @@ export const layer = Layer.effect(
  * A YouTube TV channel address, decoded to the address that plays the channel live. A guide pick can
  * carry a start point ("from the beginning"); keeping it would replay every later game on the channel
  * from that moment, so decoding keeps only the channel's id and the live flag.
- * @testonly
  */
-export const LiveChannelUrl = Schema.String.pipe(
+const LiveChannelUrl = Schema.String.pipe(
   Schema.check(Schema.isPattern(/^https:\/\/tv\.youtube\.com\/watch\/[A-Za-z0-9_-]+(\?.*)?$/)),
   Schema.decodeTo(
     Schema.String,

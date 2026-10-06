@@ -3,7 +3,7 @@ import { assert, describe, it } from "@effect/vitest"
 import { DateTime, Effect, Fiber, FileSystem, Layer, Path, Ref, Stream } from "effect"
 import { SqlClient, SqlError } from "effect/sql"
 import { TestClock } from "effect/testing"
-import * as Database from "../Database.ts"
+import * as TestDatabase from "../TestDatabase.ts"
 import { withEnv } from "../TestHubConfig.ts"
 import { counted, recordingLogs, withMetrics } from "../TestTelemetry.ts"
 import { FeedLog } from "./FeedLog.ts"
@@ -147,7 +147,7 @@ describe("FeedLog", () => {
           assert.strictEqual(warnings.length, 1)
           assert.deepInclude(warnings[0]?.annotations, { from: 1, to: 2, count: 2 })
         }).pipe(Effect.provide(FeedLog.layer.pipe(Layer.provide(failingTransactions(failures)))))
-      }).pipe(Effect.provide([Database.layer(":memory:"), NodeCrypto.layer, logged]), withMetrics)
+      }).pipe(Effect.provide([TestDatabase.layer(":memory:"), NodeCrypto.layer, logged]), withMetrics)
     }
   )
 
@@ -174,7 +174,7 @@ describe("FeedLog", () => {
       const warnings = logs.filter((entry) => entry.level === "Warn")
       assert.strictEqual(warnings.length, 1)
       assert.deepInclude(warnings[0]?.annotations, { from: 1, to: 2, count: 2 })
-    }).pipe(Effect.provide([Database.layer(":memory:"), NodeCrypto.layer, logged]), withMetrics)
+    }).pipe(Effect.provide([TestDatabase.layer(":memory:"), NodeCrypto.layer, logged]), withMetrics)
   })
 
   it.effect("keeps seqs contiguous when appends are interrupted", () =>
@@ -226,7 +226,7 @@ describe("FeedLog", () => {
       }).pipe(Effect.provide(FeedLog.layer))
 
       assert.strictEqual(yield* rowCount, 2)
-    }).pipe(Effect.provide([Database.layer(":memory:"), NodeCrypto.layer]))
+    }).pipe(Effect.provide([TestDatabase.layer(":memory:"), NodeCrypto.layer]))
   )
 
   it.effect("continues from the last logged frame when opened again", () =>
@@ -249,7 +249,7 @@ describe("FeedLog", () => {
         kinds.map((row) => row.kind),
         ["response", "message", "unchanged"]
       )
-    }).pipe(Effect.provide([Database.layer(":memory:"), NodeCrypto.layer]))
+    }).pipe(Effect.provide([TestDatabase.layer(":memory:"), NodeCrypto.layer]))
   )
 
   it.effect("keeps its own feed.sqlite in the Hub's data directory", () =>
@@ -271,7 +271,7 @@ describe("FeedLog", () => {
 
 const feedLog = FeedLog.layer.pipe(
   Layer.provide(NodeCrypto.layer),
-  Layer.provideMerge(Database.layer(":memory:"))
+  Layer.provideMerge(TestDatabase.layer(":memory:"))
 )
 
 function at(millis: number) {

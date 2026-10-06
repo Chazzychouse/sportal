@@ -6,12 +6,12 @@ import type { GameEvent } from "@sportal/domain/GameEvent"
 import type { LiveGame } from "@sportal/domain/LiveGame"
 import { DateTime, Effect, Equal, Fiber, FileSystem, Option, Ref, Stream } from "effect"
 import { TestClock } from "effect/testing"
-import * as Database from "./Database.ts"
 import { FeedLog } from "./feed-log/FeedLog.ts"
 import type { Frame } from "./feed-log/Frame.ts"
 import { LiveGames } from "./LiveGames.ts"
 import * as EspnDecode from "./provider/espn/EspnDecode.ts"
 import * as ImportRecording from "./recording/ImportRecording.ts"
+import * as TestDatabase from "./TestDatabase.ts"
 import { counted, recordingLogs, withMetrics } from "./TestTelemetry.ts"
 
 // NE at BUF on 2026-10-04, imported from the recording with
@@ -61,7 +61,7 @@ describe("a recorded game", () => {
           logs.filter(({ level }) => level === "Error"),
           []
         )
-      }).pipe(withMetrics, Effect.provide([Database.layer(":memory:"), layer, NodeServices.layer]))
+      }).pipe(withMetrics, Effect.provide([TestDatabase.layer(":memory:"), layer, NodeServices.layer]))
     },
     { timeout: 60_000 }
   )
@@ -92,7 +92,7 @@ describe("a recorded game", () => {
           recordedPlays,
           "each play is played once"
         )
-      }).pipe(Effect.provide([Database.layer(":memory:"), NodeServices.layer])),
+      }).pipe(Effect.provide([TestDatabase.layer(":memory:"), NodeServices.layer])),
     { timeout: 60_000 }
   )
 
@@ -105,7 +105,7 @@ describe("a recorded game", () => {
         // start falls for a socket subscribed the night before.
         const { held } = yield* replayedFrom(DateTime.makeUnsafe("2026-10-04T16:56:40Z"))
         assert.strictEqual(held.at(-1)?.plays.length, recordedPlays)
-      }).pipe(Effect.provide([Database.layer(":memory:"), NodeServices.layer])),
+      }).pipe(Effect.provide([TestDatabase.layer(":memory:"), NodeServices.layer])),
     { timeout: 60_000 }
   )
 
@@ -116,7 +116,7 @@ describe("a recorded game", () => {
         const all = yield* frames
         const half = Math.floor(all.length / 2)
         const fs = yield* FileSystem.FileSystem
-        const onDisk = Database.layer(join(yield* fs.makeTempDirectoryScoped(), "feed.sqlite"))
+        const onDisk = TestDatabase.layer(join(yield* fs.makeTempDirectoryScoped(), "feed.sqlite"))
 
         // Half the day logged and replayed, then every layer closed; reopened on the same file, the rest logged, and
         // the whole log replayed, as a Hub starting again would.
@@ -127,7 +127,7 @@ describe("a recorded game", () => {
 
         const uninterrupted = yield* appended(all).pipe(
           Effect.andThen(replayed),
-          Effect.provide([Database.layer(":memory:"), NodeCrypto.layer])
+          Effect.provide([TestDatabase.layer(":memory:"), NodeCrypto.layer])
         )
         assert.isTrue(Equal.equals(after.latest, uninterrupted.latest))
         assert.isTrue(Equal.equals(after.held, uninterrupted.held))

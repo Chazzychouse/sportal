@@ -3,6 +3,7 @@ import { assert, describe, it } from "@effect/vitest"
 import { Effect, FileSystem, Layer, Path } from "effect"
 import { SqlClient } from "effect/sql"
 import * as Database from "./Database.ts"
+import * as TestDatabase from "./TestDatabase.ts"
 import { withEnv } from "./TestHubConfig.ts"
 
 describe("Database.migrate", () => {
@@ -19,7 +20,7 @@ describe("Database.migrate", () => {
         tables.map((table) => table.name),
         ["first_migrations", "second_migrations", "first_thing", "second_thing"]
       )
-    }).pipe(Effect.provide(Database.layer(":memory:")))
+    }).pipe(Effect.provide(TestDatabase.layer(":memory:")))
   )
 
   it.effect("runs a migration once", () =>
@@ -27,7 +28,7 @@ describe("Database.migrate", () => {
       const migrations = { "1_create": createTable("thing") }
       yield* Database.migrate("store", migrations)
       assert.deepStrictEqual(yield* Database.migrate("store", migrations), [])
-    }).pipe(Effect.provide(Database.layer(":memory:")))
+    }).pipe(Effect.provide(TestDatabase.layer(":memory:")))
   )
 })
 
@@ -49,7 +50,7 @@ describe("Database.inDataDir", () => {
   )
 })
 
-describe("Database.layer", () => {
+describe("TestDatabase.layer", () => {
   it.effect("closing the database checkpoints it, so only the database file remains", () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem
@@ -61,7 +62,7 @@ describe("Database.layer", () => {
         yield* sql`CREATE TABLE thing (id INTEGER)`
         yield* sql`INSERT INTO thing (id) VALUES (1)`
         assert.isTrue(yield* fs.exists(`${file}-wal`))
-      }).pipe(Effect.provide(Database.layer(file)))
+      }).pipe(Effect.provide(TestDatabase.layer(file)))
 
       assert.isFalse(yield* fs.exists(`${file}-wal`))
       assert.isFalse(yield* fs.exists(`${file}-shm`))

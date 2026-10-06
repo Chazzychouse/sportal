@@ -5,12 +5,12 @@ import { broadcast, liveSnapshot, snapshot, team } from "@sportal/domain/TestGam
 import { Watchability } from "@sportal/domain/Watchability"
 import { DateTime, Deferred, Effect, Fiber, Layer, Option, Ref, Stream } from "effect"
 import { TestClock } from "effect/testing"
-import * as Database from "./Database.ts"
 import { Slate } from "./Slate.ts"
 import { StageSessions } from "./StageSessions.ts"
 import { ChannelStore } from "./source/ChannelStore.ts"
 import { Source } from "./source/Source.ts"
 import * as YouTubeTv from "./source/youtube-tv/YouTubeTv.ts"
+import * as TestDatabase from "./TestDatabase.ts"
 
 const espn = Network.make("ESPN")
 const espnPlus = Network.make("ESPN+")
@@ -297,6 +297,6 @@ function sourceKnowingEspn() {
   ).pipe(
     Layer.provideMerge(YouTubeTv.layer),
     Layer.provide(ChannelStore.layer),
-    Layer.provide(Database.layer(":memory:"))
+    Layer.provide(TestDatabase.layer(":memory:"))
   )
 }
