@@ -50,7 +50,7 @@ showed that play. Polled feeds are upper bounds: polls were 10 s apart.
 
 The Hub takes live updates from FastCast through a new `LiveFeed` port. Ingest runs it beside the scoreboard poll,
 which stays as the source of the whole slate and as the fallback. A pushed game reaches the game actors as its listed
-game advanced to the push. Design: `docs/specs/2026-10-05-fastcast-design.md`.
+game advanced to the push. Design: `docs/history.md`.
 
 "Connected" (`sportal_live_feed_connected`) means the subscriptions were sent, not that ESPN acknowledged them.
 

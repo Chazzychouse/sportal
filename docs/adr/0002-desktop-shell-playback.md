@@ -58,7 +58,7 @@ per network or per game depends on the address-stability observation above.
 
 See "Amendment: the guide reader" below: picking a channel is now the fallback.
 
-Built as designed in `docs/specs/2026-10-03-learned-channels-design.md`. What changed in the shell:
+Built as designed in `docs/history.md`. What changed in the shell:
 
 - A guide view reads only the address its page lands on (`did-navigate`, `did-navigate-in-page`);
   nothing is injected. The Hub keeps the channel's live address (`/watch/<id>?vp=0gEEEgIwAQ%3D%3D`).
@@ -74,8 +74,8 @@ Built as designed in `docs/specs/2026-10-03-learned-channels-design.md`. What ch
 ## Amendment: the guide reader (2026-10-03)
 
 Channels are found in YouTube TV's own guide instead of being picked per network
-(`docs/specs/2026-10-03-guide-matched-channels-design.md`). The guide is read with one request
-(`docs/specs/2026-10-03-guide-direct-read-design.md`), replacing a first version that opened a hidden guide
+(see `docs/history.md`). The guide is read with one request
+(see `docs/history.md`), replacing a first version that opened a hidden guide
 view and read its response through the debugger.
 
 Provider pages are still loaded unmodified, and nothing is injected into any view. Added: the shell may send
@@ -105,7 +105,7 @@ were run by hand on the development machine:
 So the overlay is fixed by filtering input, and the native Wayland failure is the one already recorded above,
 independent of either approach. The filter changes nothing in the provider's page; it withholds input, as
 `before-input-event` already does for hotkeys, so it is within "provider pages are loaded unmodified". Its
-design is `docs/specs/2026-10-04-mouse-filter-design.md`.
+design is `docs/history.md`.
 
 Consequence: on this machine the shell should run through XWayland (`pnpm dev:x11`, `start:x11`) until native
 Wayland is shown to play video reliably. Making that the default is a separate change.
