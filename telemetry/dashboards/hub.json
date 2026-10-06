@@ -348,7 +348,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "{service_name=\"sportal-hub\"} | sportal_mode=\"$mode\" | game=~\"$game\" |= \"→\""
+          "expr": "{service_name=\"sportal-hub\"} | sportal_mode=\"$mode\" | game=~\"$game\" |= \"\u2192\""
         }
       ]
     },
@@ -373,7 +373,7 @@
         "x": 0,
         "y": 52,
         "w": 6,
-        "h": 8
+        "h": 4
       },
       "datasource": {
         "type": "prometheus",
@@ -401,8 +401,37 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "max(sportal_live_feed_connected * on (job, instance) group_left target_info{sportal_mode=\"$mode\"})",
+          "expr": "max(sportal_live_feed_connected_ratio * on (job, instance) group_left target_info{sportal_mode=\"$mode\"})",
           "legendFormat": "connected"
+        }
+      ]
+    },
+    {
+      "id": 18,
+      "type": "stat",
+      "title": "Connects in range",
+      "gridPos": {
+        "x": 0,
+        "y": 56,
+        "w": 6,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(increase(sportal_live_feed_connects_total[$__range]) * on (job, instance) group_left target_info{sportal_mode=\"$mode\"}) or vector(0)",
+          "legendFormat": "connects"
         }
       ]
     },
