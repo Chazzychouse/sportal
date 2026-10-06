@@ -50,7 +50,8 @@ export const layer: Layer.Layer<Provider, never, HttpClient.HttpClient | Socket.
 
       return Provider.of({
         poll,
-        push: (leagues, wanted, resync) => provide(FastCast.push(leagues, wanted, resync)),
+        push: (leagues, wanted, resync) =>
+          provide(FastCast.push(leagues, wanted, resync, { checkpointRetry: FastCast.checkpointRetry })),
         decode: EspnDecode.decode,
         polling: Schedule.forever.pipe(
           Schedule.setInputType<{

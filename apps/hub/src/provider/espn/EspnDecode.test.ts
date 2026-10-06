@@ -333,64 +333,49 @@ describe("EspnDecode", () => {
   )
 
   it.effect(
-    "a checkpoint that does not decode is noted, and the next message on its topic asks for it again",
+    "a checkpoint that does not decode leaves its topic waiting, noted FrameUndecoded, with no Resync",
     () =>
       Effect.gen(function* () {
         const unreadable = [
+          poll("nfl", scoreboardBody),
           checkpoint("event-football-nfl", 7, { sports: "not a scoreboard" }),
-          message("event-football-nfl", 8, [])
+          message("event-football-nfl", 8, [
+            { op: "replace", path: `${ariAtNyg}/competitors/0/score`, value: "17" }
+          ])
         ]
+        const { deliveries, noted } = yield* said(unreadable)
 
-        assert.deepStrictEqual(yield* resyncs(unreadable), ["event-football-nfl"])
-        assert.strictEqual(count((yield* said(unreadable)).noted, "FrameUndecoded", { feed: "fastcast" }), 1)
+        assert.deepStrictEqual(yield* resyncs(unreadable), [])
+        assert.deepStrictEqual(
+          deliveries.map(({ seq }) => seq),
+          [1],
+          "the message after it is not applied"
+        )
+        assert.strictEqual(count(noted, "FrameUndecoded", { feed: "fastcast", kind: "checkpoint" }), 1)
       })
   )
 
-  it.effect("checkpoints that keep not decoding ask for another only once, until one decodes", () =>
+  it.effect("the next checkpoint that decodes syncs it", () =>
     Effect.gen(function* () {
-      const unreadableAgain = [
-        checkpoint("event-football-nfl", 7, { sports: "not a scoreboard" }),
-        message("event-football-nfl", 8, []),
-        checkpoint("event-football-nfl", 9, { sports: "not a scoreboard" }),
-        message("event-football-nfl", 10, []),
-        message("event-football-nfl", 11, []),
-        checkpoint("event-football-nfl", 12, { sports: "not a scoreboard" }),
-        message("event-football-nfl", 13, [])
-      ]
-
-      assert.deepStrictEqual(yield* resyncs(unreadableAgain), ["event-football-nfl"])
-    })
-  )
-
-  it.effect("a checkpoint that decodes after an unreadable one syncs its topic again", () =>
-    Effect.gen(function* () {
-      const recovered = [
+      const all = yield* outputs([
         poll("nfl", scoreboardBody),
         checkpoint("event-football-nfl", 7, { sports: "not a scoreboard" }),
-        message("event-football-nfl", 8, []),
-        checkpoint("event-football-nfl", 9, { sports: "not a scoreboard" }),
         checkpoint("event-football-nfl", 4286637, JSON.parse(checkpointBody)),
         // ARI at NYG: the away team (competitor 0) had 14, the home team 6.
         message("event-football-nfl", 4286638, [
           { op: "copy", from: `${ariAtNyg}/competitors/1/score`, path: `${ariAtNyg}/competitors/0/score` }
-        ]),
-        message("event-football-nfl", 4286640, [])
-      ]
-      const all = yield* outputs(recovered)
+        ])
+      ])
 
       assert.deepStrictEqual(
         all.flatMap((output) =>
-          output._tag === "Delivered" && output.seq === 6 && output.delivery._tag === "Snapshot"
+          output._tag === "Delivered" && output.seq === 4 && output.delivery._tag === "Snapshot"
             ? [[output.delivery.snapshot.id, output.delivery.snapshot.away.score]]
             : []
         ),
         [["401872966", 6]]
       )
-      assert.deepStrictEqual(
-        all.flatMap((output) => (output._tag === "Resync" ? [output.seq] : [])),
-        [3, 7],
-        "one resync for the unreadable checkpoint, and one for the gap after the good one"
-      )
+      assert.isFalse(all.some((output) => output._tag === "Resync"))
     })
   )
 

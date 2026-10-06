@@ -77,7 +77,7 @@ export type Notice = Data.TaggedEnum<{
   Reset: {
     readonly league: LeagueId
     readonly topic: string
-    readonly reason: "Gap" | "Unapplicable" | "Unreadable"
+    readonly reason: "Gap" | "Unapplicable"
     readonly detail: string
   }
   FrameUndecoded: {
