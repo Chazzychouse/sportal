@@ -397,6 +397,7 @@ function tallied(league: LeagueId) {
             }
           }),
         Unlearned: () => assert.fail(`${game.id} was left to the lineup`),
+        NoGuide: () => assert.fail(`${game.id} had no guide`),
         NotCarried: ({ why }) => {
           if (why === "StreamingOnly") tally.streamingOnly++
           else if (why === "NotInGuide") tally.notInGuide++

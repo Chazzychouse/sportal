@@ -19,6 +19,7 @@ const guide = { _tag: "WebView" as const, url: "https://tv.youtube.com/live" }
 const onFox = () => ChannelAvailability.Carried({ channel: foxChannel, learnedFor: Option.some(fox) })
 const foxUnlearned = () => ChannelAvailability.Unlearned({ network: fox, source: "YouTube TV", guide })
 const nowhere = () => ChannelAvailability.NotCarried({ why: "NoStream" })
+const noGuide = () => ChannelAvailability.NoGuide({ source: "YouTube TV" })
 const onGuide = () => ChannelAvailability.Carried({ channel: foxChannel, learnedFor: Option.none() })
 
 describe("Stage#apply", () => {
@@ -46,6 +47,11 @@ describe("Stage#apply", () => {
   it("assigns a game that is not carried as a data tile", () => {
     const stage = assign(Stage.initial, 0, bama, nowhere)
     assert.deepStrictEqual(stage.tiles[0], { _tag: "DataTile", game: bama, why: { _tag: "NoStream" } })
+  })
+
+  it("assigns a game its source has no guide for as a data tile saying so", () => {
+    const stage = assign(Stage.initial, 0, bama, noGuide)
+    assert.deepStrictEqual(stage.tiles[0], { _tag: "DataTile", game: bama, why: { _tag: "NoGuide" } })
   })
 
   it("replaces whatever an occupied tile held", () => {
@@ -213,6 +219,17 @@ describe("Stage#refresh", () => {
       ChannelAvailability.Upcoming({ channel: Option.some("FOX 43"), begin: Option.some(begin) })
     ])
       assert.deepStrictEqual(streaming.refresh(() => Option.some(answer)).tiles[0], streaming.tiles[0])
+  })
+
+  it("keeps a guide-matched stream tile playing when its source has no guide", () => {
+    const streaming = assign(Stage.initial, 0, bama, onGuide)
+    assert.deepStrictEqual(streaming.refresh(some(noGuide)).tiles[0], streaming.tiles[0])
+  })
+
+  it("turns a no-guide data tile into a stream once the guide carries its game", () => {
+    const waiting = assign(Stage.initial, 0, bama, noGuide)
+    const refreshed = waiting.refresh(some(onGuide))
+    assert.deepStrictEqual(refreshed.tiles[0], { _tag: "StreamTile", game: bama, channel: foxChannel })
   })
 
   it("moves a guide-matched stream tile to the channel a later guide carries it on", () => {

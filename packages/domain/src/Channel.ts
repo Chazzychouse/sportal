@@ -73,12 +73,14 @@ export class ChannelLineup extends Schema.Class<ChannelLineup>("sportal/ChannelL
 
 /**
  * Whether and where a source can show one game: carried, upcoming (its airing is still to come, or past what
- * the guide lists), unlearned (its network still to be picked), or not carried, with why.
+ * the guide lists), unlearned (its network still to be picked), no guide (the source has no fresh guide to
+ * say), or not carried, with why.
  */
 export type ChannelAvailability = Data.TaggedEnum<{
   Carried: { readonly channel: Channel; readonly learnedFor: Option.Option<Network> }
   Upcoming: { readonly channel: Option.Option<string>; readonly begin: Option.Option<DateTime.Utc> }
   Unlearned: { readonly network: Network; readonly source: SourceName; readonly guide: StreamLocator }
+  NoGuide: { readonly source: SourceName }
   NotCarried: { readonly why: "NoStream" | "StreamingOnly" | "NotInGuide" }
 }>
 export const ChannelAvailability = Data.taggedEnum<ChannelAvailability>()

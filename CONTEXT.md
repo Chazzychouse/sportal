@@ -67,7 +67,8 @@ Every exported type name must be a term here, except the wire schemas in `*Paylo
 | **Channel id** | A source's own id for one of its channels (YouTube TV's station id); `ChannelId` in code. | station id |
 | **Channel carriage** | Whether a source carries a network: on a channel, or not at all. | answer, mapping |
 | **Channel lineup** | The channel carriages one source has learned, and the guide where the rest are picked. | channel map |
-| **Channel availability** | Whether and where a source can show a game: carried, upcoming, unlearned (its network still to be picked), or not carried, with why. | availability |
+| **Channel availability** | Whether and where a source can show a game: carried, upcoming, unlearned (its network still to be picked), no guide (the source has no fresh guide to say), or not carried, with why. | availability |
+| **No guide** | A source's answer while it has no fresh guide: before the first read, and once the last is stale. | unknown |
 | **Guide** | One reading of a source's listing of the channels this account gets, with their live addresses, and what each airs. | schedule, EPG |
 | **Airing** | One programme on a channel, with its begin and end. | listing, show |
 | **Guide unreadable** | A guide response the source could not read. | |

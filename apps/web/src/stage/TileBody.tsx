@@ -62,6 +62,8 @@ function noStream(why: Extract<Tile, { _tag: "DataTile" }>["why"]): string {
       return "Streaming only: not on YouTube TV"
     case "NotInGuide":
       return "Not in your YouTube TV guide"
+    case "NoGuide":
+      return "Waiting for the YouTube TV guide"
     case "NotYet":
       return why.channel === undefined
         ? "Not in your YouTube TV guide yet"
