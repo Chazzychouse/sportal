@@ -10,7 +10,7 @@ import * as FastCastMessage from "./FastCastMessage.ts"
  * frame and moved on by each message after it. A missed message, a patch that will not apply, or a message that does
  * not decode on a synced topic sends only that topic back to waiting for a checkpoint, logged and counted, and the
  * change is a `Reset`. A checkpoint that does not decode is `Unreadable`, and the next message on its topic resets it,
- * so it is asked for again. Fails only when any other frame does not decode, leaving the documents as they were.
+ * so it is asked for again, once: until a checkpoint decodes, another that does not waits without asking. Fails only when any other frame does not decode, leaving the documents as they were.
  */
 export function advance(documents: Documents, frame: Frame): Effect.Effect<Advanced, Schema.SchemaError> {
   const owned = FastCastMessage.owner(frame.channel)
@@ -28,7 +28,7 @@ export function advance(documents: Documents, frame: Frame): Effect.Effect<Advan
           ),
           Effect.catch((cause) =>
             Effect.succeed([
-              new Map([...documents, [frame.channel, Topic.Unreadable()]]),
+              new Map([...documents, [frame.channel, unreadable(documents.get(frame.channel))]]),
               Option.some(Change.Unreadable({ cause }))
             ] as const)
           )
@@ -51,14 +51,15 @@ export function advance(documents: Documents, frame: Frame): Effect.Effect<Advan
 export const empty: Documents = new Map()
 
 /**
- * Where one topic's document is: waiting for a checkpoint, synced as of a message, or lost to a checkpoint that did
- * not decode. A scoreboard topic's document is its events by uid; a game topic's is `{ entities: { plays } }`, its
- * plays by id.
+ * Where one topic's document is: waiting for a checkpoint, synced as of a message, lost to a checkpoint that did not
+ * decode (its next message asks for another), or waiting for one that decodes after asking for another once. A
+ * scoreboard topic's document is its events by uid; a game topic's is `{ entities: { plays } }`, its plays by id.
  */
 type Topic = Data.TaggedEnum<{
   AwaitingCheckpoint: object
   Synced: { readonly mid: number; readonly document: Schema.Json }
   Unreadable: object
+  AskedAgain: object
 }>
 const Topic = Data.taggedEnum<Topic>()
 
@@ -114,6 +115,11 @@ const decodeGameCheckpoint = Schema.decodeUnknownEffect(
   Schema.Struct({ sourceId: Schema.Int, body: Schema.fromJsonString(FastCastMessage.GameCheckpoint) })
 )
 
+/** A topic whose checkpoint did not decode: one that has already asked for another after that keeps waiting. */
+function unreadable(topic: Topic | undefined): Topic {
+  return topic?._tag === "AskedAgain" ? Topic.AskedAgain() : Topic.Unreadable()
+}
+
 /** What a topic's document says: the events `touched` names (all of them when none), or its whole list of plays. */
 function changeOf(
   owner: FastCastMessage.Owner,
@@ -144,6 +150,7 @@ function moved(
   const current = documents.get(tc) ?? Topic.AwaitingCheckpoint()
   return Topic.$match(current, {
     AwaitingCheckpoint: () => Effect.succeed([documents, Option.none()] as const),
+    AskedAgain: () => Effect.succeed([documents, Option.none()] as const),
     Unreadable: () =>
       reset(
         documents,
@@ -204,7 +211,10 @@ function reset(
     Effect.annotateLogs({ league, topic: tc, reason }),
     Effect.andThen(Metric.update(Metric.withAttributes(resets, { league, reason }), 1)),
     Effect.as([
-      new Map([...documents, [tc, Topic.AwaitingCheckpoint()]]),
+      new Map([
+        ...documents,
+        [tc, documents.get(tc)?._tag === "Unreadable" ? Topic.AskedAgain() : Topic.AwaitingCheckpoint()]
+      ]),
       Option.some(Change.Reset())
     ] as const)
   )
@@ -313,7 +323,7 @@ function undecoded(
     onSome: ({ op }) =>
       Option.isSome(owned) &&
       (op === "R" || op === "P" || op === "I") &&
-      (documents.get(frame.channel)?._tag ?? "AwaitingCheckpoint") !== "AwaitingCheckpoint"
+      (documents.get(frame.channel)?._tag === "Synced" || documents.get(frame.channel)?._tag === "Unreadable")
         ? reset(
             documents,
             frame.channel,

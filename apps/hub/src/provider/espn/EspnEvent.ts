@@ -189,7 +189,7 @@ function snapshot(
       abbreviation: competitor.abbreviation,
       name: competitor.displayName,
       location: competitor.location ?? competitor.displayName,
-      // FastCast has no short name: Ingest replaces every pushed game's names with the poll's.
+      // FastCast has no short name: EspnDecode advances each pushed game's listed game to it, keeping the poll's names.
       shortName: competitor.shortDisplayName ?? competitor.displayName,
       logo: competitor.logo
     }),

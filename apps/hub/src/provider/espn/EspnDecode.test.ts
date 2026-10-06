@@ -352,6 +352,54 @@ describe("EspnDecode", () => {
       }).pipe(withMetrics)
   )
 
+  it.effect("checkpoints that keep not decoding ask for another only once, until one decodes", () =>
+    Effect.gen(function* () {
+      const unreadableAgain = [
+        checkpoint("event-football-nfl", 7, { sports: "not a scoreboard" }),
+        message("event-football-nfl", 8, []),
+        checkpoint("event-football-nfl", 9, { sports: "not a scoreboard" }),
+        message("event-football-nfl", 10, []),
+        message("event-football-nfl", 11, []),
+        checkpoint("event-football-nfl", 12, { sports: "not a scoreboard" }),
+        message("event-football-nfl", 13, [])
+      ]
+
+      assert.deepStrictEqual(yield* resyncs(unreadableAgain), ["event-football-nfl"])
+    })
+  )
+
+  it.effect("a checkpoint that decodes after an unreadable one syncs its topic again", () =>
+    Effect.gen(function* () {
+      const recovered = [
+        poll("nfl", scoreboardBody),
+        checkpoint("event-football-nfl", 7, { sports: "not a scoreboard" }),
+        message("event-football-nfl", 8, []),
+        checkpoint("event-football-nfl", 9, { sports: "not a scoreboard" }),
+        checkpoint("event-football-nfl", 4286637, JSON.parse(checkpointBody)),
+        // ARI at NYG: the away team (competitor 0) had 14, the home team 6.
+        message("event-football-nfl", 4286638, [
+          { op: "copy", from: `${ariAtNyg}/competitors/1/score`, path: `${ariAtNyg}/competitors/0/score` }
+        ]),
+        message("event-football-nfl", 4286640, [])
+      ]
+      const all = yield* outputs(recovered)
+
+      assert.deepStrictEqual(
+        all.flatMap((output) =>
+          output._tag === "Delivered" && output.seq === 6 && output.delivery._tag === "Snapshot"
+            ? [[output.delivery.snapshot.id, output.delivery.snapshot.away.score]]
+            : []
+        ),
+        [["401872966", 6]]
+      )
+      assert.deepStrictEqual(
+        all.flatMap((output) => (output._tag === "Resync" ? [output.seq] : [])),
+        [3, 7],
+        "one resync for the unreadable checkpoint, and one for the gap after the good one"
+      )
+    })
+  )
+
   it.effect("counts the messages by league and op, and the games pushed", () =>
     Effect.gen(function* () {
       yield* decoded([poll("nfl", scoreboardBody), ...recorded(socketTexts)])
