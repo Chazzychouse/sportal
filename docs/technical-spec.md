@@ -241,7 +241,7 @@ sportal/
     │       │       ├── EspnDecode.ts       Frames to deliveries: listings, snapshots, plays, resyncs
     │       │       ├── EspnEvent.ts        One game as either ESPN feed spells it, as a GameSnapshot
     │       │       ├── EspnPlay.ts         ESPN's plays and their type ids, as Play
-    │       │       ├── FastCast.ts         ESPN's push, a service: the socket, as frames; owns its checkpoint retry
+    │       │       ├── FastCast.ts         ESPN's push, a service: the socket, as frames; its checkpoint retry is the schedule `FastCast.layer` builds it with
     │       │       ├── FastCastDocument.ts A topic's document, rebuilt from checkpoints and patches
     │       │       ├── FastCastMessage.ts  FastCast's wire shapes
     │       │       ├── TestEspn.ts         Recorded frames for tests of other modules
@@ -350,7 +350,7 @@ class Decoder extends Context.Service<Decoder, {
 ```
 
 - `poll` returns a league's scoreboard as received; the Hub logs it before anything decodes it. A provider's adapter provides its `Decoder` beside it, the only home of its decode, so a recorded scenario decodes its frames as the provider that recorded them would. `decode` turns frames, polled or pushed, into `Delivery`s (`Listing`, `Snapshot`, or `Plays`) stamped with the frame's `seq` and receive time, a `Resync` when a topic's document had to be dropped, or a `Noted` notice for telemetry. It never logs or counts.
-- `push` is the live feed: one element per frame, raw. ESPN's FastCast implements it (`docs/adr/0007-fastcast-live-feed.md`), a service the ESPN provider yields that owns its checkpoint retry, and subscribes to the scoreboard topics and to a `gp-` topic for each game in `wanted`; a topic named in `resync` is asked for its checkpoint again.
+- `push` is the live feed: one element per frame, raw. ESPN's FastCast implements it (`docs/adr/0007-fastcast-live-feed.md`), a service the ESPN provider yields, whose checkpoint retry is the schedule `FastCast.layer` builds it with, and subscribes to the scoreboard topics and to a `gp-` topic for each game in `wanted`; a topic named in `resync` is asked for its checkpoint again.
 - `polling` is when to poll again, given the fold's slate after the last poll and the leagues that failed. Ingest runs `poll` repeated on it; the adapter owns the rules.
 - Provider vocabulary stops at the folder edge. ESPN's "event", "competition", and "competitor" exist only in `EspnEvent.ts`, `FastCastMessage.ts`, and `EspnPlay.ts`.
 - The Hub composes providers per league: ESPN for NFL; ESPN with CollegeFootballData filling gaps for FBS. The composition is itself a `Provider`, so Ingest sees one.

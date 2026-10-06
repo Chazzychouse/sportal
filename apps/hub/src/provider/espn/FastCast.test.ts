@@ -9,7 +9,7 @@ import { TestClock } from "effect/testing"
 import type { FeedFrame } from "../../Frame.ts"
 import { counted, recordingLogs, withMetrics } from "../../TestTelemetry.ts"
 import type { ProviderError } from "../Provider.ts"
-import { type CheckpointError, FastCast } from "./FastCast.ts"
+import { FastCast } from "./FastCast.ts"
 
 describe("FastCast", () => {
   it.effect("a socket FastCast closes cleanly fails with Closed, so Ingest subscribes again", () =>
@@ -317,7 +317,7 @@ describe("FastCast", () => {
  */
 function nflFrames(
   server: ReturnType<typeof fakeServer>,
-  checkpointRetry?: Schedule.Schedule<unknown, CheckpointError>
+  checkpointRetry?: Parameters<typeof FastCast.make>[0]
 ) {
   return Effect.gen(function* () {
     const ended = yield* Deferred.make<void, ProviderError>()

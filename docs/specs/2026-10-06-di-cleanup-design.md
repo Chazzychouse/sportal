@@ -68,19 +68,18 @@ and with the push member's own signature, named once in the test file where it i
 ```
 FastCast: Context.Service<{
   push(leagues, wanted, resync): Stream<FeedFrame, ProviderError>
-  readonly checkpointRetry: Schedule<unknown, CheckpointError>
 }>
 FastCast.layer: Layer<FastCast, never, HttpClient | Socket.WebSocketConstructor>
 ```
 
 - The layer yields `HttpClient` and `WebSocketConstructor` once, and its `push` closes over them. The
-  policy (every 30 s, five tries in all) is the layer's own value of `checkpointRetry`. `connect` reads it
-  from the service it is part of, not from an argument.
+  policy (every 30 s, five tries in all) is the schedule `FastCast.layer` builds it with, through
+  `FastCast.make(checkpointRetry)`; it is not a member of the service. `connect` takes it from `make`.
 - `EspnProvider` yields `FastCast`. Its `Effect.context` / `Stream.provideContext` capture goes away.
-- `FastCast.test.ts` builds the service with a short retry (a test layer beside the real one, in the test
-  file) instead of passing `checkpointRetry` to `push`.
+- `FastCast.test.ts` builds the service with `FastCast.make` and a short retry instead of passing it to
+  `push`.
 - **FastCast** gets a glossary row (the ESPN live feed adapter), and **Checkpoint error**'s row says the
-  retry is FastCast's `checkpointRetry`.
+  retry is FastCast's checkpoint retry.
 
 ## 3. Settings come from HubConfig
 

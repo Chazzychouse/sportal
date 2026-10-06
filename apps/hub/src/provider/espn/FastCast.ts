@@ -29,17 +29,16 @@ import * as FastCastMessage from "./FastCastMessage.ts"
 /**
  * ESPN FastCast as the ESPN provider's push: one socket subscribed to each league's scoreboard topic, and to the game
  * topic of each game wanted while it is open. Every socket text is a frame, each `H` followed by its checkpoint; fails
- * when the socket closes, ends, or goes quiet. A topic whose checkpoint fails is followed again on `checkpointRetry`.
+ * when the socket closes, ends, or goes quiet. A topic whose checkpoint fails is followed again
+ * on the retry `FastCast.make` is given; `FastCast.layer` gives it `layer`'s own.
  */
 export class FastCast extends Context.Service<
   FastCast,
   {
     readonly push: LiveFeed
-    /** How a topic whose checkpoint failed is followed again. */
-    readonly checkpointRetry: Schedule.Schedule<unknown, CheckpointError>
   }
 >()("sportal/hub/FastCast") {
-  /** FastCast following topics again on `checkpointRetry`. */
+  /** FastCast following a topic whose checkpoint failed again on `checkpointRetry`, then leaving it to polling. */
   static readonly make = (checkpointRetry: Schedule.Schedule<unknown, CheckpointError>) =>
     Effect.gen(function* () {
       const provide = Stream.provideContext(
@@ -53,12 +52,11 @@ export class FastCast extends Context.Service<
             ),
             Stream.timeoutOrElse({ duration: silence, orElse: () => Stream.fail(silent()) }),
             provide
-          ),
-        checkpointRetry
+          )
       })
     })
 
-  /** Every 30 s, five tries in all, then left to polling. */
+  /** FastCast whose `checkpointRetry` is every 30 s, five tries in all, then the topic is left to polling. */
   static readonly layer: Layer.Layer<FastCast, never, HttpClient.HttpClient | Socket.WebSocketConstructor> =
     Layer.effect(
       FastCast,
