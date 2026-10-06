@@ -101,6 +101,8 @@ function pushed(state: State, frame: Frame): Effect.Effect<readonly [State, Said
                 moved,
                 [Decoded.Resync({ channel: frame.channel, seq: frame.seq })]
               ] as const)
+            case "Unreadable":
+              return undecodable(frame, said.cause).pipe(Effect.as([moved, []] as const))
           }
         }
       })

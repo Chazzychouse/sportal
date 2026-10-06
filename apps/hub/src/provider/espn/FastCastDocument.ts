@@ -9,7 +9,8 @@ import * as FastCastMessage from "./FastCastMessage.ts"
  * on a checkpoint), or all of a game topic's plays, by id, when they changed. A topic is synced by its checkpoint
  * frame and moved on by each message after it. A missed message, a patch that will not apply, or a message that does
  * not decode on a synced topic sends only that topic back to waiting for a checkpoint, logged and counted, and the
- * change is a `Reset`. Fails only when any other frame does not decode, leaving the documents as they were.
+ * change is a `Reset`. A checkpoint that does not decode is `Unreadable`, and the next message on its topic resets it,
+ * so it is asked for again. Fails only when any other frame does not decode, leaving the documents as they were.
  */
 export function advance(documents: Documents, frame: Frame): Effect.Effect<Advanced, Schema.SchemaError> {
   const owned = FastCastMessage.owner(frame.channel)
@@ -24,6 +25,12 @@ export function advance(documents: Documents, frame: Frame): Effect.Effect<Advan
                 new Map([...documents, [frame.channel, Topic.Synced({ mid, document })]]),
                 Option.some(changeOf(owner, document, Option.none()))
               ] as const
+          ),
+          Effect.catch((cause) =>
+            Effect.succeed([
+              new Map([...documents, [frame.channel, Topic.Unreadable()]]),
+              Option.some(Change.Unreadable({ cause }))
+            ] as const)
           )
         )
     })
@@ -44,12 +51,14 @@ export function advance(documents: Documents, frame: Frame): Effect.Effect<Advan
 export const empty: Documents = new Map()
 
 /**
- * Where one topic's document is: waiting for a checkpoint, or synced as of a message. A scoreboard topic's document
- * is its events by uid; a game topic's is `{ entities: { plays } }`, its plays by id.
+ * Where one topic's document is: waiting for a checkpoint, synced as of a message, or lost to a checkpoint that did
+ * not decode. A scoreboard topic's document is its events by uid; a game topic's is `{ entities: { plays } }`, its
+ * plays by id.
  */
 type Topic = Data.TaggedEnum<{
   AwaitingCheckpoint: object
   Synced: { readonly mid: number; readonly document: Schema.Json }
+  Unreadable: object
 }>
 const Topic = Data.taggedEnum<Topic>()
 
@@ -59,8 +68,8 @@ type Documents = ReadonlyMap<string, Topic>
 type Advanced = readonly [Documents, Option.Option<Change>]
 
 /**
- * What a frame changed: a scoreboard topic's touched events, a game topic's whole list of plays, by id, or a topic
- * sent back to waiting for a checkpoint.
+ * What a frame changed: a scoreboard topic's touched events, a game topic's whole list of plays, by id, a topic sent
+ * back to waiting for a checkpoint, or a topic whose checkpoint did not decode, and why.
  */
 type Change = Data.TaggedEnum<{
   Scoreboard: { readonly league: LeagueId; readonly events: ReadonlyArray<Schema.Json> }
@@ -70,6 +79,7 @@ type Change = Data.TaggedEnum<{
     readonly plays: Readonly<Record<string, Schema.Json>>
   }
   Reset: object
+  Unreadable: { readonly cause: Schema.SchemaError }
 }>
 const Change = Data.taggedEnum<Change>()
 
@@ -134,6 +144,14 @@ function moved(
   const current = documents.get(tc) ?? Topic.AwaitingCheckpoint()
   return Topic.$match(current, {
     AwaitingCheckpoint: () => Effect.succeed([documents, Option.none()] as const),
+    Unreadable: () =>
+      reset(
+        documents,
+        tc,
+        owner.league,
+        "Unreadable",
+        `message ${message.mid} came after a checkpoint that did not decode`
+      ),
     Synced: ({ mid, document }) => {
       if (mid + 1 !== message.mid) {
         return reset(documents, tc, owner.league, "Gap", `message ${message.mid} came after ${mid}`)
@@ -179,7 +197,7 @@ function reset(
   documents: Documents,
   tc: string,
   league: LeagueId,
-  reason: "Gap" | "Unapplicable",
+  reason: "Gap" | "Unapplicable" | "Unreadable",
   cause: string
 ): Effect.Effect<Advanced> {
   return Effect.logWarning(`FastCastDocument: ${cause}; ${tc} waits for its next checkpoint`).pipe(
@@ -295,7 +313,7 @@ function undecoded(
     onSome: ({ op }) =>
       Option.isSome(owned) &&
       (op === "R" || op === "P" || op === "I") &&
-      documents.get(frame.channel)?._tag === "Synced"
+      (documents.get(frame.channel)?._tag ?? "AwaitingCheckpoint") !== "AwaitingCheckpoint"
         ? reset(
             documents,
             frame.channel,

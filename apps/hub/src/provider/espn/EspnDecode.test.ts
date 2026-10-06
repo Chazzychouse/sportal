@@ -338,6 +338,20 @@ describe("EspnDecode", () => {
     })
   )
 
+  it.effect(
+    "a checkpoint that does not decode is counted, and the next message on its topic asks for it again",
+    () =>
+      Effect.gen(function* () {
+        const unreadable = [
+          checkpoint("event-football-nfl", 7, { sports: "not a scoreboard" }),
+          message("event-football-nfl", 8, [])
+        ]
+
+        assert.deepStrictEqual(yield* resyncs(unreadable), ["event-football-nfl"])
+        assert.strictEqual(yield* counted("sportal_frames_undecoded", { feed: "fastcast" }), 1)
+      }).pipe(withMetrics)
+  )
+
   it.effect("counts the messages by league and op, and the games pushed", () =>
     Effect.gen(function* () {
       yield* decoded([poll("nfl", scoreboardBody), ...recorded(socketTexts)])
