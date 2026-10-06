@@ -79,7 +79,7 @@ export class FeedLog extends Context.Service<
       )
 
       // Uninterruptible, so a seq once assigned is always published and queued; every step is non-blocking.
-      const append = Effect.fn("FeedLog.append")(function* (received: FeedFrame) {
+      const append = Effect.fnUntraced(function* (received: FeedFrame) {
         return yield* intake.permit.withPermit(
           Effect.uninterruptible(
             Effect.gen(function* () {

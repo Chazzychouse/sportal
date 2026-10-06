@@ -41,7 +41,7 @@ describe("a recorded game", () => {
         assert.strictEqual(held.at(-1)?.snapshot.period, 4)
         for (const counter of [
           "sportal_frames_undecoded",
-          "sportal_live_feed_undecoded",
+          "sportal_events_undecoded",
           "sportal_live_feed_undecoded_plays",
           "sportal_live_feed_document_resets",
           "sportal_game_defects"

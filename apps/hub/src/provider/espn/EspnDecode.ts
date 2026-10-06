@@ -49,7 +49,7 @@ type Said = ReadonlyArray<Decoded>
 function listed(state: State, frame: Frame): Effect.Effect<readonly [State, Said]> {
   return Effect.all({ league: decodeLeague(frame.channel), scoreboard: decodeScoreboard(frame.body) }).pipe(
     Effect.flatMap(({ league, scoreboard }) =>
-      gamesOf(league, scoreboard.events).pipe(
+      gamesOf(league, scoreboard.events, frame.feed).pipe(
         Effect.map(
           (games) =>
             [
@@ -75,7 +75,7 @@ function pushed(state: State, frame: Frame): Effect.Effect<readonly [State, Said
         onSome: (said) => {
           switch (said._tag) {
             case "Scoreboard":
-              return gamesOf(said.league, said.events).pipe(
+              return gamesOf(said.league, said.events, frame.feed).pipe(
                 Effect.tap((games) =>
                   Metric.update(Metric.withAttributes(gamesPushed, { league: said.league }), games.length)
                 ),
@@ -110,15 +110,16 @@ function delivered(frame: Frame, delivery: Delivery) {
 /** The events as games; an event that does not decode is logged and counted, and the rest still delivered. */
 function gamesOf(
   league: LeagueId,
-  events: ReadonlyArray<unknown>
+  events: ReadonlyArray<unknown>,
+  feed: Frame["feed"]
 ): Effect.Effect<ReadonlyArray<GameSnapshot>> {
   return Effect.forEach(events, (event) =>
     decodeEvent[league](event).pipe(
       Effect.asSome,
       Effect.catch((issue) =>
         Effect.logWarning("EspnDecode: skipped an event that failed to decode", issue).pipe(
-          Effect.annotateLogs({ league }),
-          Effect.andThen(Metric.update(Metric.withAttributes(undecodedEvents, { league }), 1)),
+          Effect.annotateLogs({ league, feed }),
+          Effect.andThen(Metric.update(Metric.withAttributes(undecodedEvents, { league, feed }), 1)),
           Effect.as(Option.none())
         )
       )
@@ -231,8 +232,8 @@ const undecodedPlays = Metric.counter("sportal_live_feed_undecoded_plays", {
   incremental: true
 })
 
-const undecodedEvents = Metric.counter("sportal_live_feed_undecoded", {
-  description: "ESPN events, polled or pushed, that did not decode and were skipped, by league",
+const undecodedEvents = Metric.counter("sportal_events_undecoded", {
+  description: "ESPN events, polled or pushed, that did not decode and were skipped, by league and feed",
   incremental: true
 })
 

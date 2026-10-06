@@ -550,8 +550,8 @@
         },
         {
           "refId": "C",
-          "expr": "sum by (league) (increase(sportal_live_feed_undecoded_total[$__rate_interval]) * on (job, instance) group_left target_info{sportal_mode=\"$mode\"})",
-          "legendFormat": "undecoded {{league}}"
+          "expr": "sum by (league, feed) (increase(sportal_events_undecoded_total[$__rate_interval]) * on (job, instance) group_left target_info{sportal_mode=\"$mode\"})",
+          "legendFormat": "undecoded {{league}} ({{feed}})"
         }
       ]
     },

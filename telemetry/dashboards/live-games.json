@@ -614,6 +614,38 @@
       }
     },
     {
+      "type": "timeseries",
+      "title": "Transitions",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Changes of a live game's state, every game together: Live → Stale as games go stale, Stale → Live as they return.",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (from, to) (increase(sportal_transitions_total[$__rate_interval]) * on (job, instance) group_left target_info{sportal_mode=\"$mode\"})",
+          "legendFormat": "{{from}} → {{to}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 60
+          }
+        },
+        "overrides": []
+      },
+      "id": 13,
+      "gridPos": {
+        "x": 12,
+        "y": 45,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
       "type": "logs",
       "title": "Logs",
       "datasource": {
@@ -633,7 +665,7 @@
       "id": 11,
       "gridPos": {
         "x": 0,
-        "y": 45,
+        "y": 53,
         "w": 24,
         "h": 12
       }
@@ -656,7 +688,7 @@
       "id": 12,
       "gridPos": {
         "x": 0,
-        "y": 57,
+        "y": 65,
         "w": 24,
         "h": 8
       }

@@ -418,8 +418,27 @@ describe("EspnDecode", () => {
         ["nfl", "I", 16]
       ])
       assert.isAbove(Number((yield* counted("sportal_live_feed_games", { league: "nfl" })) ?? 0), 16)
-      assert.isUndefined(yield* counted("sportal_live_feed_undecoded"), "every event decodes")
+      assert.isUndefined(yield* counted("sportal_events_undecoded"), "every event decodes")
     }).pipe(withMetrics)
+  )
+
+  it.effect(
+    "an event that does not decode is skipped and counted by league and feed, and the rest listed",
+    () =>
+      Effect.gen(function* () {
+        const { events } = Schema.decodeUnknownSync(
+          Schema.fromJsonString(Schema.Struct({ events: Schema.Array(Schema.Json) }))
+        )(scoreboardBody)
+        const [listing] = yield* decoded([
+          poll("nfl", JSON.stringify({ events: [{ id: "broken" }, ...events] }))
+        ])
+
+        assert.strictEqual(
+          listing?.delivery._tag === "Listing" ? listing.delivery.games.length : 0,
+          events.length
+        )
+        assert.strictEqual(yield* counted("sportal_events_undecoded", { league: "nfl", feed: "poll" }), 1)
+      }).pipe(withMetrics)
   )
 
   it.effect("a frame that does not decode is logged with its seq, counted, and skipped", () =>

@@ -1,12 +1,12 @@
 import { NodeCrypto, NodeServices } from "@effect/platform-node"
 import { assert, describe, it } from "@effect/vitest"
-import { DateTime, Effect, Fiber, FileSystem, Layer, Path, Ref, Stream } from "effect"
+import { DateTime, Effect, Fiber, FileSystem, Layer, Path, Ref, Stream, type Tracer } from "effect"
 import { SqlClient, SqlError } from "effect/sql"
 import { TestClock } from "effect/testing"
 import { FeedLog } from "./FeedLog.ts"
 import * as TestDatabase from "./TestDatabase.ts"
 import { withEnv } from "./TestHubConfig.ts"
-import { counted, recordingLogs, withMetrics } from "./TestTelemetry.ts"
+import { counted, recordingLogs, recordingSpans, withMetrics } from "./TestTelemetry.ts"
 
 describe("FeedLog", () => {
   it.effect(
@@ -50,6 +50,19 @@ describe("FeedLog", () => {
       assert.deepStrictEqual(yield* Stream.runCollect(log.replay(at(0))), appended)
     }).pipe(Effect.provide(feedLog))
   )
+
+  it.effect("appending frames opens no span; storing them does", () => {
+    const ended: Array<Tracer.Span> = []
+    return Effect.gen(function* () {
+      const log = yield* FeedLog
+      yield* Effect.forEach([poll("nfl", "{}", 0), poll("fbs", "{}", 1)], log.append)
+      yield* TestClock.adjust("100 millis")
+      yield* written(2)
+
+      assert.isFalse(ended.some((span) => span.name === "FeedLog.append"))
+      assert.isTrue(ended.some((span) => span.name === "FeedLog.store"))
+    }).pipe(Effect.provide(feedLog), Effect.provide(recordingSpans(ended)))
+  })
 
   it.effect("stores an unchanged poll response once per channel, and replays every one with its body", () =>
     Effect.gen(function* () {
