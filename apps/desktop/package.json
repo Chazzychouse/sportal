@@ -7,8 +7,8 @@
     "postinstall": "install-electron",
     "dev": "SPORTAL_HUB_URL=${SPORTAL_HUB_URL:-http://127.0.0.1:4401} electron-vite dev --watch -- $SPORTAL_ELECTRON_FLAGS",
     "build": "electron-vite build",
-    "start": "electron-vite build && electron .",
-    "start:x11": "electron-vite build && electron . --ozone-platform=x11"
+    "start": "electron-vite build && electron . $SPORTAL_ELECTRON_FLAGS",
+    "start:x11": "SPORTAL_ELECTRON_FLAGS=--ozone-platform=x11 pnpm start"
   },
   "dependencies": {
     "@sportal/api": "workspace:*",
