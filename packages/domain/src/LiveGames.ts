@@ -4,7 +4,6 @@ import type { GameId, GameSnapshot } from "./Game.ts"
 import type { GameEvent } from "./GameEvent.ts"
 import type { LeagueId } from "./League.ts"
 import { LiveGame } from "./LiveGame.ts"
-import { Watchability } from "./Watchability.ts"
 
 /**
  * The fold of every delivery, in order: the last frame's `seq`, each league's last listing, every current game's live
@@ -72,14 +71,6 @@ export class LiveGames extends Data.Class<{
     return [...listed, ...unlisted]
   }
 
-  /** A game's watchability: its live game's, or fresh at `now` for a game the fold does not hold. */
-  watchabilityOf(game: GameSnapshot, now: DateTime.Utc): Watchability {
-    return Option.match(Option.fromNullishOr(this.live.get(game.id)), {
-      onNone: () => Watchability.initial(game, now),
-      onSome: (liveGame) => liveGame.watchability
-    })
-  }
-
   /** Whether `that` publishes the same: a step that changed nothing hands back the same maps. `reached` is ignored. */
   publishesSameAs(that: LiveGames): boolean {
     return this.live === that.live && this.listed === that.listed && Equal.equals(this.seq, that.seq)
@@ -138,7 +129,7 @@ function dueAfter(live: ReadonlyMap<GameId, LiveGame>, from: DateTime.Utc): Opti
 }
 
 function dueAt(liveGame: LiveGame, from: DateTime.Utc): Option.Option<DateTime.Utc> {
-  return earliestOf([liveGame.wakeAt(from), liveGame.currencyChangesAt(from)]).pipe(
+  return earliestOf([liveGame.wakeAt(), liveGame.currencyChangesAt(from)]).pipe(
     Option.filter((instant) => DateTime.isGreaterThan(instant, from))
   )
 }

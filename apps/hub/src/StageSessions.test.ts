@@ -1,7 +1,6 @@
 import { assert, describe, it } from "@effect/vitest"
 import { GameId, type GameSnapshot, Network } from "@sportal/domain/Game"
 import { broadcast, liveSnapshot, snapshot, team } from "@sportal/domain/TestGame"
-import { Watchability } from "@sportal/domain/Watchability"
 import { DateTime, Deferred, Effect, Fiber, Layer, Option, Ref, Stream } from "effect"
 import { TestClock } from "effect/testing"
 import { Slate } from "./Slate.ts"
@@ -115,7 +114,7 @@ describe("StageSessions", () => {
       const fakeSlate = Slate.of({
         latest: Ref.update(refreshes, (count) => count + 1).pipe(
           Effect.andThen(Deferred.succeed(refreshed, undefined)),
-          Effect.as(listed(slate))
+          Effect.as(slate)
         ),
         changes: Stream.empty
       })
@@ -198,7 +197,7 @@ describe("StageSessions", () => {
     Effect.gen(function* () {
       const onSlate = yield* Ref.make(slate)
       const fakeSlate = Slate.of({
-        latest: Effect.map(Ref.get(onSlate), listed),
+        latest: Ref.get(onSlate),
         changes: Stream.empty
       })
       yield* Effect.gen(function* () {
@@ -272,13 +271,9 @@ describe("StageSessions", () => {
   )
 })
 
-/** A Slate that lists `games`, each as fresh as at the epoch, with no changes. */
+/** A Slate that lists `games`, with no changes. */
 function slateOf(games: ReadonlyArray<GameSnapshot>) {
-  return Slate.of({ latest: Effect.succeed(listed(games)), changes: Stream.empty })
-}
-
-function listed(games: ReadonlyArray<GameSnapshot>) {
-  return games.map((game) => ({ game, watchability: Watchability.initial(game, DateTime.makeUnsafe(0)) }))
+  return Slate.of({ latest: Effect.succeed(games), changes: Stream.empty })
 }
 
 /** YouTube TV over an in-memory database, already knowing ESPN's channel and that ESPN+ is not carried. */

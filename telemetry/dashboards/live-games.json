@@ -37,16 +37,6 @@
         "enable": true,
         "iconColor": "blue",
         "expr": "{service_name=\"sportal-hub\"} | sportal_mode=\"$mode\" | game=~\"$game\" |= \"→\""
-      },
-      {
-        "name": "Lulls",
-        "datasource": {
-          "type": "loki",
-          "uid": "loki"
-        },
-        "enable": false,
-        "iconColor": "orange",
-        "expr": "{service_name=\"sportal-hub\"} | sportal_mode=\"$mode\" | game=~\"$game\" |= \"a lull\""
       }
     ]
   },
@@ -120,20 +110,6 @@
           "format": "table"
         },
         {
-          "refId": "B",
-          "expr": "max by (game) (sportal_watchability_ratio * on (job, instance) group_left target_info{sportal_mode=\"$mode\"})",
-          "instant": true,
-          "range": false,
-          "format": "table"
-        },
-        {
-          "refId": "C",
-          "expr": "max by (game) (sportal_lull_ratio * on (job, instance) group_left target_info{sportal_mode=\"$mode\"})",
-          "instant": true,
-          "range": false,
-          "format": "table"
-        },
-        {
           "refId": "D",
           "expr": "sum by (game) (round(increase(sportal_snapshots_total{outcome=\"taken\"}[$__range]) * on (job, instance) group_left target_info{sportal_mode=\"$mode\"}))",
           "instant": true,
@@ -180,26 +156,20 @@
               "Time 3": true,
               "Time 4": true,
               "Time 5": true,
-              "Time 6": true,
-              "Time 7": true,
-              "Time 8": true
+              "Time 6": true
             },
             "indexByName": {
               "matchup": 0,
               "league": 1,
               "Value #A": 2,
-              "Value #B": 3,
-              "Value #C": 4,
-              "Value #D": 5,
-              "Value #E": 6,
-              "Value #F": 7,
-              "Value #G": 8,
-              "game": 9
+              "Value #D": 3,
+              "Value #E": 4,
+              "Value #F": 5,
+              "Value #G": 6,
+              "game": 7
             },
             "renameByName": {
               "Value #A": "State",
-              "Value #B": "Watchability",
-              "Value #C": "Now",
               "Value #D": "Taken",
               "Value #E": "Behind",
               "Value #F": "Stale stretches",
@@ -208,17 +178,6 @@
               "league": "League",
               "game": "Game id"
             }
-          }
-        },
-        {
-          "id": "sortBy",
-          "options": {
-            "sort": [
-              {
-                "field": "Watchability",
-                "desc": true
-              }
-            ]
           }
         }
       ],
@@ -277,63 +236,6 @@
                 "id": "custom.cellOptions",
                 "value": {
                   "type": "color-text"
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Now"
-            },
-            "properties": [
-              {
-                "id": "mappings",
-                "value": [
-                  {
-                    "type": "value",
-                    "options": {
-                      "0": {
-                        "text": "Play",
-                        "color": "green",
-                        "index": 0
-                      },
-                      "1": {
-                        "text": "Lull",
-                        "color": "yellow",
-                        "index": 1
-                      }
-                    }
-                  }
-                ]
-              },
-              {
-                "id": "custom.cellOptions",
-                "value": {
-                  "type": "color-text"
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Watchability"
-            },
-            "properties": [
-              {
-                "id": "min",
-                "value": 0
-              },
-              {
-                "id": "max",
-                "value": 100
-              },
-              {
-                "id": "custom.cellOptions",
-                "value": {
-                  "type": "gauge",
-                  "mode": "basic"
                 }
               }
             ]
@@ -428,89 +330,6 @@
     },
     {
       "type": "timeseries",
-      "title": "Watchability",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "max by (matchup) (sportal_watchability_ratio{game=~\"$game\"} * on (job, instance) group_left target_info{sportal_mode=\"$mode\"})",
-          "legendFormat": "{{matchup}}"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "min": 0,
-          "max": 100,
-          "custom": {
-            "lineInterpolation": "stepAfter"
-          }
-        },
-        "overrides": []
-      },
-      "id": 5,
-      "gridPos": {
-        "x": 0,
-        "y": 20,
-        "w": 24,
-        "h": 9
-      }
-    },
-    {
-      "type": "state-timeline",
-      "title": "Lulls",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "max by (matchup) (sportal_lull_ratio{game=~\"$game\"} * on (job, instance) group_left target_info{sportal_mode=\"$mode\"})",
-          "legendFormat": "{{matchup}}"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "mappings": [
-            {
-              "type": "value",
-              "options": {
-                "0": {
-                  "text": "Play",
-                  "color": "green",
-                  "index": 0
-                },
-                "1": {
-                  "text": "Lull",
-                  "color": "yellow",
-                  "index": 1
-                }
-              }
-            }
-          ],
-          "color": {
-            "mode": "thresholds"
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "showValue": "never",
-        "mergeValues": true
-      },
-      "id": 6,
-      "gridPos": {
-        "x": 0,
-        "y": 29,
-        "w": 24,
-        "h": 8
-      }
-    },
-    {
-      "type": "timeseries",
       "title": "Snapshots taken and behind",
       "datasource": {
         "type": "prometheus",
@@ -536,7 +355,7 @@
       "id": 7,
       "gridPos": {
         "x": 0,
-        "y": 37,
+        "y": 20,
         "w": 12,
         "h": 8
       }
@@ -574,7 +393,7 @@
       "id": 8,
       "gridPos": {
         "x": 12,
-        "y": 37,
+        "y": 20,
         "w": 12,
         "h": 8
       }
@@ -608,7 +427,7 @@
       "id": 9,
       "gridPos": {
         "x": 0,
-        "y": 45,
+        "y": 28,
         "w": 12,
         "h": 8
       }
@@ -640,7 +459,7 @@
       "id": 13,
       "gridPos": {
         "x": 12,
-        "y": 45,
+        "y": 28,
         "w": 12,
         "h": 8
       }
@@ -665,7 +484,7 @@
       "id": 11,
       "gridPos": {
         "x": 0,
-        "y": 53,
+        "y": 36,
         "w": 24,
         "h": 12
       }
@@ -688,7 +507,7 @@
       "id": 12,
       "gridPos": {
         "x": 0,
-        "y": 65,
+        "y": 48,
         "w": 24,
         "h": 8
       }

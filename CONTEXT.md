@@ -11,7 +11,7 @@ Every exported type name must be a term here, except the wire schemas in `*Paylo
 | **Team** | A league member. | club, competitor, franchise |
 | **Ranking** | A team's position in a poll (college). | seed |
 | **Game** | One scheduled contest between two teams. | event, match, competition, fixture |
-| **Slate** | The games in a time window (a Saturday, an NFL week). Shown as a strip under the Stage. The Hub's `Slate` publishes it: each listed game as the fold has it, with its watchability. | schedule, scoreboard |
+| **Slate** | The games in a time window (a Saturday, an NFL week). Shown as a strip under the Stage. The Hub's `Slate` publishes it: each listed game as the fold has it. | schedule, scoreboard |
 | **Kickoff** | A game's scheduled start instant. | start time, date |
 
 ### Game state
@@ -22,7 +22,7 @@ Every exported type name must be a term here, except the wire schemas in `*Paylo
 | **GameSnapshot** | The complete normalized state of a game at an instant. | update, payload |
 | **Game time** | How far a game has got: before kickoff, in play, or over; then the period; then the clock running down. Orders two snapshots of one game. | timestamp, version |
 | **Progress** | Where a game is in its day: `upcoming`, `live`, or `over`. A delay before kickoff is upcoming and a delay during the game is live. | phase, state |
-| **Live game** | One game as the Hub follows it: its latest snapshot, the delivery source that gave it, its state (`LiveGameState`): upcoming, live, stale, or over, its plays, and its watchability. Folded from deliveries. A poll at the same game time as a live game's pushed snapshot only refreshes it: the push wins a tie. | game state, entity |
+| **Live game** | One game as the Hub follows it: its latest snapshot, the delivery source that gave it, its state (`LiveGameState`): upcoming, live, stale, or over, and its plays. Folded from deliveries. A poll at the same game time as a live game's pushed snapshot only refreshes it: the push wins a tie. | game state, entity |
 | **Live games** | The fold: each league's last listing and every current game's live game, applied from deliveries in `seq` order, and the instant it has ticked to. The domain's `LiveGames` is the pure fold; the Hub's service of the same name runs it with a timer and telemetry. Replaying the log gives the same live games. | game actors, registry |
 | **Fold report** | What one step of the live games did to one game, for telemetry to tell: took a snapshot, started, changed, stopped, happened (a game event), dropped, or raised a defect. | fold event, log entry |
 | **Stale** | A live game no snapshot has reached for 90 seconds. It stays current for 30 minutes after its last update. | |
@@ -129,13 +129,6 @@ Provider and Source are the two words most likely to be swapped. Provider is alw
 | **Promote** | Move a game into the main tile. | feature |
 | **Tile placement** | Where a game's stream or picking tile sits in a Display's window, what it loads, and whether it is a stream or a guide, as told to the shell. | bounds, rect |
 | **Stage transition** | How tiles move to new places: one duration and easing, shared by the web UI and the shell. | animation |
-
-### Personalization and automation
-
-| Term | Meaning | Not |
-| --- | --- | --- |
-| **Watchability** | A 0–100 score of how worth watching a live game is right now, whether it is in a lull, and why; folded with its live game from each delivery. | excitement, heat |
-| **Lull** | A live game with nothing happening: halftime, a delay, between periods, a TV break after a timeout, score, or change of possession, or no play for a minute. | break, stoppage |
 
 ## Planned
 

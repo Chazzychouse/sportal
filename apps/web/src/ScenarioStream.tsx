@@ -1,5 +1,4 @@
 import type { GameId, GameSnapshot } from "@sportal/domain/Game"
-import type { Watchability } from "@sportal/domain/Watchability"
 import { useEffect } from "react"
 import { statusText } from "./game/GameStatus.tsx"
 import { TeamLogo } from "./game/TeamLogo.tsx"
@@ -11,7 +10,7 @@ import { useLive } from "./hub/HubRuntime.ts"
  * heard moving. The shell mutes it like any stream.
  */
 export function ScenarioStream(props: { game: GameId }) {
-  const { slate, watchability, connection } = useLive()
+  const { slate, connection } = useLive()
   const game = slate.find((candidate) => candidate.id === props.game)
   useTone(props.game)
   return (
@@ -30,7 +29,7 @@ export function ScenarioStream(props: { game: GameId }) {
           {connection._tag === "Connected" ? `No game ${props.game} in this scenario` : "Waiting for the Hub"}
         </p>
       ) : (
-        <Scorebug game={game} watch={watchability.get(game.id)} />
+        <Scorebug game={game} />
       )}
       <p className="absolute right-[2vmin] bottom-[2vmin] font-mono text-[2.5vmin] opacity-70">
         {props.game}
@@ -56,10 +55,7 @@ function useTone(game: GameId) {
   }, [game])
 }
 
-function Scorebug(props: {
-  game: GameSnapshot
-  watch: Pick<Watchability, "score" | "lull" | "reasons"> | undefined
-}) {
+function Scorebug(props: { game: GameSnapshot }) {
   const { game } = props
   const situation = game.situation
   const down = situation?.down
@@ -89,13 +85,6 @@ function Scorebug(props: {
       )}
       {situation?.lastPlay !== undefined && (
         <p className="px-[4vmin] text-center text-[3.5vmin] opacity-80">{situation.lastPlay}</p>
-      )}
-      {props.watch !== undefined && (
-        <p className="px-[4vmin] text-center font-mono text-[3vmin] opacity-80">
-          {props.watch.score}
-          {props.watch.lull ? " · lull" : ""}
-          {props.watch.reasons.length > 0 ? ` · ${props.watch.reasons.join(" · ")}` : ""}
-        </p>
       )}
     </div>
   )

@@ -66,10 +66,10 @@ flowchart LR
     ingest[Ingest: poll, live feed, replay]
     feedlog[(Feed log: feed.sqlite)]
     decode[Provider.decode: frames to deliveries]
-    fold[LiveGames: one fold, every game's plays and watchability]
+    fold[LiveGames: one fold, every game's state and plays]
     history[(GameHistory: plays, latest snapshots)]
-    slate[Slate: listed games and their watchability, as the fold has them]
-    director[Director: rules over watchability, not built]
+    slate[Slate: listed games, as the fold has them]
+    director[Director: rules over game events and plays, not built]
     stages[Stage sessions: the one Stage, in memory]
     store[(SQL store)]
     api[HTTP API + live stream]
@@ -105,7 +105,7 @@ flowchart LR
   yttv --> views
 ```
 
-- **Hub** — polls providers and follows their live feeds, appends every frame to the feed log, folds what the frames say into each game's plays, state, and watchability (deriving its game events), runs the Director, and holds the authoritative **Stage** in memory (one, until a second Display needs its own). Serves the web UI's static files, the HTTP API, and one live stream per client.
+- **Hub** — polls providers and follows their live feeds, appends every frame to the feed log, folds what the frames say into each game's plays and state (deriving its game events), runs the Director, and holds the authoritative **Stage** in memory (one, until a second Display needs its own). Serves the web UI's static files, the HTTP API, and one live stream per client.
 - **Web UI** — one codebase for desk, couch, and phone. It renders Hub state and sends commands. It contains no business rules.
 - **Desktop shell** — loads the web UI from the Hub, registers as a Display, and mirrors that Display's stream tiles into native provider web views. It is told the Hub's address by configuration (`SPORTAL_HUB_URL`) and never starts a Hub.
 
@@ -192,7 +192,6 @@ sportal/
 │   │       ├── Play.ts         A single play, as the game's play-by-play lists it; PlayKind
 │   │       ├── GameEvent.ts    The event union, derived from plays or from two snapshots
 │   │       ├── Delivery.ts     What a frame said: a listing, a snapshot, or a game's plays; DeliverySource
-│   │       ├── Watchability.ts The score, the lull, and the reasons, folded one snapshot at a time
 │   │       ├── LiveGame.ts     One game as the Hub follows it: LiveGame, LiveGameState; take and tick
 │   │       ├── LiveGames.ts    The pure fold of every delivery in order; FoldReport
 │   │       ├── Channel.ts      SourceName, Channel, ChannelCarriage, ChannelLineup, ChannelAvailability, ChannelUrlRefused
@@ -221,7 +220,7 @@ sportal/
     │       ├── LiveGames.ts        The domain fold, run: its timer, telemetry, and game events
     │       ├── LiveGamesTelemetry.ts  A fold report as logs, metrics, and published events
     │       ├── GameHistory.ts      Past plays and each game's latest snapshot, derived from the fold
-    │       ├── Slate.ts            Each listed game as the fold has it, and its watchability
+    │       ├── Slate.ts            Each listed game as the fold has it
     │       ├── StageSessions.ts    The one authoritative Stage, held in memory
     │       ├── FeedLog.ts          The append-only log of every frame, in feed.sqlite
     │       ├── Frame.ts            A feed frame as received, and the frame the log numbered
@@ -394,11 +393,10 @@ class LiveGames extends Context.Service<LiveGames, {
 ```
 
 - One fiber applies each delivery, in `seq` order, to a `Map<GameId, LiveGame>`; a `LiveGame` holds a game's latest
-  snapshot, its state (upcoming, live, stale, or over), its plays, and its watchability, and `take` and `tick` on it are
-  pure. A game's state is decided there alone; a snapshot behind in game time is ignored, so two feeds can deliver the
+  snapshot, its state (upcoming, live, stale, or over), and its plays, and `take` and `tick` on it are pure. A game's state is decided there alone; a snapshot behind in game time is ignored, so two feeds can deliver the
   same game. One timer wakes the fold when a game changes with no delivery.
-- The fold's clock is each frame's receive time, so a replay of the log gives the same games, events, and watchability
-  as live did. `replay` runs a stretch of the log with no per-game telemetry and no events.
+- The fold's clock is each frame's receive time, so a replay of the log gives the same games and events as live did.
+  `replay` runs a stretch of the log with no per-game telemetry and no events.
 - `Slate` publishes each listed game as the fold has it, within 250 ms of a change; Ingest reads the fold for Cadence
   and for the games the live feed should follow.
 - `HubMode` provides it in both modes. A scenario runs on the scenario clock, re-lists its current frame on the poll
@@ -436,7 +434,7 @@ A source's channels are found in its own guide, read by the shell (`docs/history
 - The live feed pushes snapshots between polls, and, for each current game, its plays. A pushed game is advanced onto its listed game; one no poll has listed yet is counted and not delivered. The fold takes whichever snapshot is further along in game time, and the push wins a tie with the poll.
 - A decoder reset (a missed message, a patch that will not apply) is a resync of that topic: the socket asks for its checkpoint again.
 - Events are derived from the fold's plays and snapshots (see `GameEvent`), including the leading signals the Director anticipates with, and are never stored.
-- The feed log is the truth (`docs/adr/0008-the-feed-log-is-the-truth.md`); live games, plays, watchability, and events are all derived from it, and a restart or a missed poll cannot corrupt anything.
+- The feed log is the truth (`docs/adr/0008-the-feed-log-is-the-truth.md`); live games, plays, and events are all derived from it, and a restart or a missed poll cannot corrupt anything.
 - Events are published on an in-process hub (`LiveGames.events`); nothing reads it yet. The Director and client live streams will subscribe to it.
 
 ### 5.3 Stage
@@ -455,7 +453,8 @@ A source's channels are found in its own guide, read by the shell (`docs/history
 
 Designed in full in `docs/specs/2026-10-03-director-design.md`.
 
-- `Watchability.score(snapshot, follows)` is pure and tuned against recorded games.
+- What makes a game worth watching is still to be designed again: the first watchability score is gone, and the
+  Director's rules read game events and plays.
 - A **Trigger** is a condition over events and snapshots; a **Rule** binds a trigger to a stage command and a revert condition.
 - The Director runs in the Hub, so it works with no client focused and affects every Display consistently.
 - A manual command on a tile suppresses automation on that tile for a cooldown.

@@ -46,7 +46,6 @@ export function reported(
     Changed: ({ before, after, at }) =>
       gaugeHeld(after).pipe(
         Effect.andThen(logTransition(before, after, at)),
-        Effect.andThen(before.watchability.lull === after.watchability.lull ? Effect.void : logLull(after)),
         Effect.annotateLogs(annotationsOf(after.snapshot))
       ),
     Stopped: ({ liveGame, at }) =>
@@ -97,11 +96,9 @@ export function quiet(
   })
 }
 
-/** A held game's state and watchability gauges. */
+/** A held game's state gauge. */
 export function gaugeHeld(liveGame: LiveGame): Effect.Effect<void> {
-  return gaugeState(liveGame, stateValues[liveGame.state._tag]).pipe(
-    Effect.andThen(gaugeWatchability(liveGame))
-  )
+  return gaugeState(liveGame, stateValues[liveGame.state._tag])
 }
 
 /** Gauges how many live games are in each state; a state with none reads 0. */
@@ -145,18 +142,6 @@ function gaugeState(liveGame: LiveGame, value: number): Effect.Effect<void> {
   return Metric.update(Metric.withAttributes(gameState, annotationsOf(liveGame.snapshot)), value)
 }
 
-function gaugeWatchability(liveGame: LiveGame): Effect.Effect<void> {
-  const attributes = annotationsOf(liveGame.snapshot)
-  return Metric.update(
-    Metric.withAttributes(watchabilityScore, attributes),
-    liveGame.watchability.score
-  ).pipe(
-    Effect.andThen(
-      Metric.update(Metric.withAttributes(lulls, attributes), liveGame.watchability.lull ? 1 : 0)
-    )
-  )
-}
-
 function logTransition(before: LiveGame, after: LiveGame, now: DateTime.Utc): Effect.Effect<void> {
   const from = before.state._tag
   const to = after.state._tag
@@ -179,16 +164,6 @@ function logTransition(before: LiveGame, after: LiveGame, now: DateTime.Utc): Ef
             : Effect.void
       })
     )
-  )
-}
-
-/** A lull beginning or ending, at Info, with its reasons. */
-function logLull(liveGame: LiveGame): Effect.Effect<void> {
-  const { lull, score, reasons } = liveGame.watchability
-  return Effect.logInfo(
-    `LiveGames: ${liveGame.snapshot.matchup()}: a lull ${lull ? "began" : "ended"}, watchability ${score}${
-      reasons.length === 0 ? "" : ` (${reasons.join(", ")})`
-    }`
   )
 }
 
@@ -261,14 +236,6 @@ const gameDefects = Metric.counter("sportal_game_defects", {
 
 const gameState = Metric.gauge("sportal_game_state", {
   description: "A game's state, by game: 1 Upcoming, 2 Live, 3 Stale, 4 Over, 0 once the fold lets it go"
-})
-
-const watchabilityScore = Metric.gauge("sportal_watchability", {
-  description: "How worth watching a game is, 0–100, by game"
-})
-
-const lulls = Metric.gauge("sportal_lull", {
-  description: "Whether a game is in a lull (1) or not (0), by game"
 })
 
 const transitions = Metric.counter("sportal_transitions", {

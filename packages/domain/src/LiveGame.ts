@@ -1,9 +1,8 @@
-import { Array as Arr, Data, DateTime, Duration, Equal, Option } from "effect"
+import { Data, DateTime, Duration, Equal, Option } from "effect"
 import type { Delivery, DeliverySource } from "./Delivery.ts"
 import { GameSnapshot } from "./Game.ts"
 import type { GameEvent } from "./GameEvent.ts"
 import { Play } from "./Play.ts"
-import { Watchability } from "./Watchability.ts"
 
 /** Where a live game is: upcoming, live (last updated at), stale (last updated at), or over. */
 export type LiveGameState = Data.TaggedEnum<{
@@ -14,17 +13,13 @@ export type LiveGameState = Data.TaggedEnum<{
 }>
 export const LiveGameState = Data.taggedEnum<LiveGameState>()
 
-/**
- * One game as the Hub follows it: its latest snapshot, the feed that gave it, its state, its plays, and its
- * watchability. Folded from deliveries.
- */
+/** One game as the Hub follows it: its latest snapshot, the feed that gave it, its state, and its plays. Folded from deliveries. */
 export class LiveGame extends Data.Class<{
   readonly snapshot: GameSnapshot
   readonly from: DeliverySource
   readonly state: LiveGameState
   /** In `Play.order`. */
   readonly plays: ReadonlyArray<Play>
-  readonly watchability: Watchability
 }> {
   /** A live game no snapshot has reached for this long is stale. */
   static readonly staleAfter = Duration.seconds(90)
@@ -41,8 +36,7 @@ export class LiveGame extends Data.Class<{
       snapshot,
       from,
       state: stateOf(snapshot, now),
-      plays: [],
-      watchability: Watchability.initial(snapshot, now)
+      plays: []
     })
   }
 
@@ -64,16 +58,7 @@ export class LiveGame extends Data.Class<{
         home: this.snapshot.home.team.id,
         away: this.snapshot.away.team.id
       })
-      return {
-        liveGame: Option.some(
-          new LiveGame({
-            ...this,
-            plays,
-            watchability: this.watchability.next(this.snapshot, this.snapshot, events, now)
-          })
-        ),
-        events
-      }
+      return { liveGame: Option.some(new LiveGame({ ...this, plays })), events }
     }
     const { snapshot, from } = delivery
     const order = GameSnapshot.gameTime(snapshot, this.snapshot)
@@ -93,48 +78,25 @@ export class LiveGame extends Data.Class<{
           snapshot,
           from,
           state: stateOf(snapshot, now),
-          plays: this.plays,
-          watchability: this.watchability.next(this.snapshot, snapshot, events, now)
+          plays: this.plays
         })
       ),
       events
     }
   }
 
-  /**
-   * The live game at `now` with nothing new: stale once its stale time has passed, its watchability judged again.
-   * None when neither changes.
-   */
+  /** The live game at `now` with nothing new: stale once its stale time has passed. None when that changes nothing. */
   tick(now: DateTime.Utc): Option.Option<LiveGame> {
-    const state = LiveGameState.$match(this.state, {
-      Upcoming: () => this.state,
-      Live: ({ updatedAt }) =>
-        DateTime.isGreaterThanOrEqualTo(now, DateTime.addDuration(updatedAt, LiveGame.staleAfter))
-          ? LiveGameState.Stale({ updatedAt })
-          : this.state,
-      Stale: () => this.state,
-      Over: () => this.state
-    })
-    const watchability = this.watchability.at(this.snapshot, now)
-    return Equal.equals(state, this.state) && Equal.equals(watchability, this.watchability)
-      ? Option.none()
-      : Option.some(new LiveGame({ ...this, state, watchability }))
+    return LiveGameState.$is("Live")(this.state) &&
+      DateTime.isGreaterThanOrEqualTo(now, DateTime.addDuration(this.state.updatedAt, LiveGame.staleAfter))
+      ? Option.some(
+          new LiveGame({ ...this, state: LiveGameState.Stale({ updatedAt: this.state.updatedAt }) })
+        )
+      : Option.none()
   }
 
-  /**
-   * When `tick` may next change this live game, after `now`: the earlier of `staleAt` and, while it is live, the
-   * watchability's `wakeAt`. None when only a delivery can change it.
-   */
-  wakeAt(now: DateTime.Utc): Option.Option<DateTime.Utc> {
-    const watchability = LiveGameState.$is("Live")(this.state) ? this.watchability.wakeAt(now) : Option.none()
-    return Arr.match(Arr.getSomes([this.staleAt(), watchability]), {
-      onEmpty: Option.none<DateTime.Utc>,
-      onNonEmpty: (instants) => Option.some(instants.reduce(DateTime.min))
-    })
-  }
-
-  /** When a live game goes stale; none in every other state. */
-  private staleAt(): Option.Option<DateTime.Utc> {
+  /** When `tick` may next change this live game: a live game's going stale. None when only a delivery can change it. */
+  wakeAt(): Option.Option<DateTime.Utc> {
     return LiveGameState.$match(this.state, {
       Upcoming: () => Option.none(),
       Live: ({ updatedAt }) => Option.some(DateTime.addDuration(updatedAt, LiveGame.staleAfter)),

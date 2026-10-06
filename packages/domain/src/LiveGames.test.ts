@@ -5,7 +5,6 @@ import { GameId, GameSnapshot } from "./Game.ts"
 import { LiveGameState } from "./LiveGame.ts"
 import { FoldReport, LiveGames } from "./LiveGames.ts"
 import { play, snapshot } from "./TestGame.ts"
-import { Watchability } from "./Watchability.ts"
 
 const t0 = DateTime.makeUnsafe("2026-10-03T16:00:00Z")
 const one = GameId.make("1")
@@ -182,17 +181,6 @@ describe("LiveGames", () => {
         Effect.flatMap((fold) => stepped(fold, polled(unlisted), t0))
       )
       assert.deepStrictEqual(fold.games(), [listed, unlisted])
-    })
-  )
-
-  it.effect("a game's watchability is its live game's when held, and fresh otherwise", () =>
-    Effect.gen(function* () {
-      const held = live(one, "10:00")
-      const notHeld = snapshot({ id: two, kickoff: DateTime.add(t0, { hours: 3 }) })
-      const fold = yield* stepped(LiveGames.empty, listing("fbs", [held, notHeld]), t0)
-      const now = DateTime.add(t0, { seconds: 10 })
-      assert.strictEqual(fold.watchabilityOf(held, now), fold.live.get(one)?.watchability)
-      assert.deepStrictEqual(fold.watchabilityOf(notHeld, now), Watchability.initial(notHeld, now))
     })
   )
 

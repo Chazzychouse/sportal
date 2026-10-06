@@ -227,7 +227,7 @@ describe("GET /api/live", () => {
     }).pipe(Effect.scoped, Effect.provide(serverUnderTest()))
   )
 
-  it.effect("sends each listed game with its watchability, and none of what the fold remembers", () =>
+  it.effect("sends each listed game as its snapshot, and none of what the fold remembers", () =>
     Effect.gen(function* () {
       const http = yield* HttpClient.HttpClient
       yield* firstSlateOnTestClock()
@@ -243,11 +243,9 @@ describe("GET /api/live", () => {
       )
       const line = yield* Queue.take(lines)
 
-      assert.notMatch(line, /activeAt|breakUntil|boostUntil/)
       const [entry] = JSON.parse(line.slice("data: ".length)).slate
-      assert.deepStrictEqual(Object.keys(entry).sort(), ["game", "watchability"])
-      assert.strictEqual(entry.game.id, game.id)
-      assert.deepStrictEqual(Object.keys(entry.watchability).sort(), ["lull", "reasons", "score"])
+      assert.strictEqual(entry.id, game.id)
+      assert.notMatch(line, /"plays"|"state"|"updatedAt"|"from"/)
     }).pipe(Effect.scoped, Effect.provide(serverUnderTest()))
   )
 

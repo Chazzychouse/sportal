@@ -4,9 +4,9 @@ import { Scenario } from "../Scenario.ts"
  * Every game stopped but one: a halftime, a timeout, the end of a quarter, and a weather delay, while one game
  * goes for it on fourth down late and scores.
  */
-export const allLullsButOne = Scenario.build("all-lulls-but-one", [
+export const allStoppedButOne = Scenario.build("all-stopped-but-one", [
   {
-    id: "lull-aub-ark",
+    id: "still-aub-ark",
     home: "AUB",
     away: "ARK",
     network: "SECN",
@@ -29,7 +29,7 @@ export const allLullsButOne = Scenario.build("all-lulls-but-one", [
     ]
   },
   {
-    id: "lull-tenn-uk",
+    id: "still-tenn-uk",
     home: "TENN",
     away: "UK",
     network: "ESPN",
@@ -48,7 +48,7 @@ export const allLullsButOne = Scenario.build("all-lulls-but-one", [
     ]
   },
   {
-    id: "lull-wisc-minn",
+    id: "still-wisc-minn",
     home: "WISC",
     away: "MINN",
     network: "BTN",
@@ -77,7 +77,7 @@ export const allLullsButOne = Scenario.build("all-lulls-but-one", [
     ]
   },
   {
-    id: "lull-unc-duke",
+    id: "still-unc-duke",
     home: "UNC",
     away: "DUKE",
     network: "ACCN",
@@ -98,7 +98,7 @@ export const allLullsButOne = Scenario.build("all-lulls-but-one", [
     ]
   },
   {
-    id: "lull-hou-rice",
+    id: "still-hou-rice",
     home: "HOU",
     away: "RICE",
     network: "ESPNU",
