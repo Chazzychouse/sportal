@@ -69,6 +69,9 @@ const Heartbeat = Schema.Struct({ op: Schema.Literal("B") })
 /** One FastCast socket message. */
 export const Message = Schema.Union([Connected, Subscribed, Checkpoint, Patched, Idle, Heartbeat])
 
+/** Where to open the socket, and the token it takes, as `public/websockethost` answers. */
+export const Host = Schema.Struct({ ip: Schema.String, securePort: Schema.Int, token: Schema.String })
+
 /** A topic's whole document, as a checkpoint URL serves it; each event stays JSON, to be patched. */
 export const CheckpointDocument = Schema.Struct({
   sports: Schema.Array(
