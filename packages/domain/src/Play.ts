@@ -78,29 +78,32 @@ function eventsOf(
   previous: Play | undefined,
   teams: { readonly home: TeamId; readonly away: TeamId }
 ): ReadonlyArray<GameEvent> {
-  const events: GameEvent[] = [GameEvent.Played({ play })]
-  if (play.scoring) {
-    const rises = [
-      { team: teams.home, points: play.homeScore - (previous?.homeScore ?? 0) },
-      { team: teams.away, points: play.awayScore - (previous?.awayScore ?? 0) }
-    ]
-    events.push(...rises.filter((rise) => rise.points > 0).map(GameEvent.ScoreChanged))
-  }
+  const rises = play.scoring
+    ? [
+        { team: teams.home, points: play.homeScore - (previous?.homeScore ?? 0) },
+        { team: teams.away, points: play.awayScore - (previous?.awayScore ?? 0) }
+      ].filter((rise) => rise.points > 0)
+    : []
   const taker = play.end.team
-  if (taker !== undefined && (play.kind === "interception" || play.kind === "fumbleLost")) {
-    events.push(GameEvent.Turnover({ team: taker }))
-  } else if (taker !== undefined && !play.scoring && play.start.team !== taker) {
-    events.push(GameEvent.PossessionChanged({ team: taker }))
-  }
-  if (play.kind === "timeout" && play.team !== undefined)
-    events.push(GameEvent.TimeoutTaken({ team: play.team }))
-  if (play.kind === "endPeriod") events.push(GameEvent.PeriodEnded({ period: play.period }))
-  if (play.end.down === 4 && play.end.team !== undefined)
-    events.push(GameEvent.FourthDown({ team: play.end.team }))
-  if (play.yards >= bigPlayYards && play.team !== undefined) {
-    events.push(GameEvent.BigPlay({ team: play.team, yards: play.yards }))
-  }
+  const turnedOver = play.kind === "interception" || play.kind === "fumbleLost"
   const sacked = play.team ?? play.start.team
-  if (play.kind === "sack" && sacked !== undefined) events.push(GameEvent.Sack({ team: sacked }))
-  return events
+  return [
+    [GameEvent.Played({ play })],
+    rises.map(GameEvent.ScoreChanged),
+    taker !== undefined && turnedOver ? [GameEvent.Turnover({ team: taker })] : [],
+    taker !== undefined &&
+    !turnedOver &&
+    !play.scoring &&
+    play.start.team !== undefined &&
+    play.start.team !== taker
+      ? [GameEvent.PossessionChanged({ team: taker })]
+      : [],
+    play.kind === "timeout" && play.team !== undefined ? [GameEvent.TimeoutTaken({ team: play.team })] : [],
+    play.kind === "endPeriod" ? [GameEvent.PeriodEnded({ period: play.period })] : [],
+    play.end.down === 4 && taker !== undefined ? [GameEvent.FourthDown({ team: taker })] : [],
+    (play.kind === "rush" || play.kind === "pass") && play.yards >= bigPlayYards && play.team !== undefined
+      ? [GameEvent.BigPlay({ team: play.team, yards: play.yards })]
+      : [],
+    play.kind === "sack" && sacked !== undefined ? [GameEvent.Sack({ team: sacked })] : []
+  ].flat()
 }

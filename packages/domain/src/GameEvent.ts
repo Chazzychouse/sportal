@@ -4,7 +4,8 @@ import type { TeamId } from "./Team.ts"
 
 /**
  * Something that happened in a game: from its plays when it has them (`Play.eventsSince`), from comparing two
- * snapshots otherwise (`GameSnapshot#eventsSince`). Derived, never stored as truth. `team` is the team that scored, has the ball, gained it, or called the timeout.
+ * snapshots otherwise (`GameSnapshot#eventsSince`). Derived, never stored as truth. `team` is the team that scored, has
+ * the ball, gained it, or called the timeout.
  */
 export type GameEvent = Data.TaggedEnum<{
   ScoreChanged: { readonly team: TeamId; readonly points: number }
@@ -21,6 +22,7 @@ export type GameEvent = Data.TaggedEnum<{
   WentToHalftime: object
   WentFinal: object
   Played: { readonly play: Play }
+  /** A run or completed pass of 20 or more yards. */
   BigPlay: { readonly team: TeamId; readonly yards: number }
   Sack: { readonly team: TeamId }
 }>

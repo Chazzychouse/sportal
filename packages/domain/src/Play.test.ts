@@ -77,8 +77,9 @@ describe("Play.eventsSince", () => {
 
   it("reports an interception as a turnover for the team that took the ball, not a change of possession", () => {
     const picked = next({ kind: "interception", end: { team: away } })
-    assert.deepStrictEqual(tags(since([play()], [play(), picked])), ["Played", "Turnover"])
-    assert.deepStrictEqual(since([play()], [play(), picked])[1], GameEvent.Turnover({ team: away }))
+    const events = since([play()], [play(), picked])
+    assert.deepStrictEqual(tags(events), ["Played", "Turnover"])
+    assert.deepStrictEqual(events[1], GameEvent.Turnover({ team: away }))
   })
 
   it("reports a lost fumble as a turnover", () => {
@@ -93,6 +94,18 @@ describe("Play.eventsSince", () => {
     ])
     const kept = next({ kind: "fumble" })
     assert.deepStrictEqual(tags(since([play()], [play(), kept])), ["Played"])
+  })
+
+  it("reports no change of possession when the play's start has no team", () => {
+    const unknown = next({ kind: "punt", start: {}, end: { team: away } })
+    assert.deepStrictEqual(tags(since([play()], [play(), unknown])), ["Played"])
+  })
+
+  it("reports a long punt or penalty as played, not a big play", () => {
+    const punt = next({ kind: "punt", yards: 45 })
+    const penalty = next({ kind: "penalty", yards: 25 })
+    assert.deepStrictEqual(tags(since([play()], [play(), punt])), ["Played"])
+    assert.deepStrictEqual(tags(since([play()], [play(), penalty])), ["Played"])
   })
 
   it("reports a team timeout, and an official timeout as nothing but played", () => {
