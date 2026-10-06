@@ -2,7 +2,7 @@ import { join } from "node:path"
 import { NodeServices } from "@effect/platform-node"
 import { assert, describe, it } from "@effect/vitest"
 import { DateTime, Effect, FileSystem, Option, Schema, Stream } from "effect"
-import type { Frame } from "../feed-log/Frame.ts"
+import type { FeedFrame } from "../feed-log/Frame.ts"
 import * as Gzip from "../feed-log/Gzip.ts"
 import * as ImportRecording from "./ImportRecording.ts"
 
@@ -187,7 +187,7 @@ describe("ImportRecording.readFrames", () => {
 })
 
 /** A frame with its instants as epoch milliseconds, to compare. */
-function described(frame: Omit<Frame, "seq">) {
+function described(frame: FeedFrame) {
   return {
     receivedAt: DateTime.toEpochMillis(frame.receivedAt),
     sentAt: Option.getOrUndefined(Option.map(Option.fromUndefinedOr(frame.sentAt), DateTime.toEpochMillis)),

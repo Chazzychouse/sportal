@@ -4,7 +4,7 @@ import type { Delivery } from "@sportal/domain/Delivery"
 import { GameId, GameSnapshot } from "@sportal/domain/Game"
 import { PlayId } from "@sportal/domain/Play"
 import { DateTime, Effect, Metric, Record, Schema, Stream } from "effect"
-import { Frame } from "../../feed-log/Frame.ts"
+import { type FeedFrame, Frame } from "../../feed-log/Frame.ts"
 import { counted, recordingLogs, withMetrics } from "../../TestTelemetry.ts"
 import * as EspnDecode from "./EspnDecode.ts"
 import { EspnEvent } from "./EspnEvent.ts"
@@ -520,7 +520,7 @@ describe("EspnDecode", () => {
           const deliveries = yield* decoded([
             checkpoint(game, moveRecording.checkpoint.mid, moveRecording.checkpoint.body),
             ...moveRecording.messages.map(
-              ({ op, tc, mid, ts, pl }): Omit<Frame, "seq"> => ({
+              ({ op, tc, mid, ts, pl }): FeedFrame => ({
                 receivedAt: at,
                 feed: "fastcast",
                 channel: tc,
@@ -644,20 +644,20 @@ describe("EspnDecode", () => {
 })
 
 /** The deliveries `frames` decode to, each numbered by its place from 1. */
-function decoded(frames: ReadonlyArray<Omit<Frame, "seq">>) {
+function decoded(frames: ReadonlyArray<FeedFrame>) {
   return outputs(frames).pipe(
     Effect.map((all) => all.flatMap((output) => (output._tag === "Delivered" ? [output] : [])))
   )
 }
 
 /** The channels decoding `frames` asks to have checkpointed again, in order. */
-function resyncs(frames: ReadonlyArray<Omit<Frame, "seq">>) {
+function resyncs(frames: ReadonlyArray<FeedFrame>) {
   return outputs(frames).pipe(
     Effect.map((all) => all.flatMap((output) => (output._tag === "Resync" ? [output.channel] : [])))
   )
 }
 
-function outputs(frames: ReadonlyArray<Omit<Frame, "seq">>) {
+function outputs(frames: ReadonlyArray<FeedFrame>) {
   return EspnDecode.decode(
     Stream.fromIterable(frames.map((frame, index) => new Frame({ ...frame, seq: index + 1 })))
   ).pipe(Stream.runCollect)
@@ -665,11 +665,11 @@ function outputs(frames: ReadonlyArray<Omit<Frame, "seq">>) {
 
 const at = DateTime.makeUnsafe("2026-10-04T18:00:00Z")
 
-function poll(channel: string, body: string): Omit<Frame, "seq"> {
+function poll(channel: string, body: string): FeedFrame {
   return { receivedAt: at, feed: "poll", channel, kind: "response", body }
 }
 
-function checkpoint(channel: string, mid: number, document: unknown): Omit<Frame, "seq"> {
+function checkpoint(channel: string, mid: number, document: unknown): FeedFrame {
   return {
     receivedAt: at,
     feed: "fastcast",
@@ -681,7 +681,7 @@ function checkpoint(channel: string, mid: number, document: unknown): Omit<Frame
 }
 
 /** A `P` on `channel`, its patches sent as an array, one of the three ways FastCast spells them. */
-function message(channel: string, mid: number, patches: ReadonlyArray<object>): Omit<Frame, "seq"> {
+function message(channel: string, mid: number, patches: ReadonlyArray<object>): FeedFrame {
   const pl = JSON.stringify({ ts: 1791136341731, pl: patches })
   return {
     receivedAt: at,
@@ -702,10 +702,10 @@ function plays(...ids: ReadonlyArray<string>) {
 }
 
 /** The recorded socket texts as FastCast frames them, each `H` followed by the recorded checkpoint. */
-function recorded(texts: ReadonlyArray<string>): ReadonlyArray<Omit<Frame, "seq">> {
+function recorded(texts: ReadonlyArray<string>): ReadonlyArray<FeedFrame> {
   return texts.flatMap((body) => {
     const { op, tc, mid } = decodeEnvelope(body)
-    const frame: Omit<Frame, "seq"> = {
+    const frame: FeedFrame = {
       receivedAt: at,
       feed: "fastcast",
       channel: tc ?? "socket",

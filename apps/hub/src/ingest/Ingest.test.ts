@@ -26,7 +26,7 @@ import {
 import { SqlClient } from "effect/sql"
 import { TestClock } from "effect/testing"
 import { FeedLog } from "../feed-log/FeedLog.ts"
-import type { Frame } from "../feed-log/Frame.ts"
+import type { FeedFrame } from "../feed-log/Frame.ts"
 import { GameHistory } from "../GameHistory.ts"
 import { LiveGames } from "../LiveGames.ts"
 import { LiveFeed, LiveFeedError } from "../provider/LiveFeed.ts"
@@ -529,7 +529,7 @@ function over(
  * Runs Ingest over a live feed of `frames`, which stops without failing, and checks the stop is logged once at Error
  * with `why`, and that polls go on.
  */
-function stopsAndPollsOn(frames: Stream.Stream<Omit<Frame, "seq">>, why: string) {
+function stopsAndPollsOn(frames: Stream.Stream<FeedFrame>, why: string) {
   const { logs, layer } = recordingLogs()
   return Effect.gen(function* () {
     const polls = yield* Ref.make(0)
@@ -551,7 +551,7 @@ function stopsAndPollsOn(frames: Stream.Stream<Omit<Frame, "seq">>, why: string)
 }
 
 /** What a test offers its live feed: a frame, or the error that ends the feed's stream. */
-type Offered = Omit<Frame, "seq"> | LiveFeedError
+type Offered = FeedFrame | LiveFeedError
 
 /** A live feed reading `feed`, counting each subscription to it in `subscriptions`. */
 function feeding(feed: Queue.Queue<Offered>, subscriptions: Ref.Ref<number>): LiveFeed["Service"] {
@@ -647,7 +647,7 @@ function foldedThrough(seq: number) {
 }
 
 /** Frames logged now, before Ingest starts, in a scope of their own. */
-function loggedBefore(frames: ReadonlyArray<Effect.Effect<Omit<Frame, "seq">>>) {
+function loggedBefore(frames: ReadonlyArray<Effect.Effect<FeedFrame>>) {
   return Effect.gen(function* () {
     const log = yield* FeedLog
     yield* Effect.forEach(frames, (frame) => Effect.flatMap(frame, log.append), { discard: true })

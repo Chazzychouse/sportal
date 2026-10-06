@@ -6,7 +6,7 @@ import { Deferred, Effect, Layer, Queue, Schema, Stream } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/http"
 import * as Socket from "effect/socket/Socket"
 import { TestClock } from "effect/testing"
-import type { Frame } from "../../feed-log/Frame.ts"
+import type { FeedFrame } from "../../feed-log/Frame.ts"
 import { counted, recordingLogs, withMetrics } from "../../TestTelemetry.ts"
 import { LiveFeed, type LiveFeedError } from "../LiveFeed.ts"
 import * as FastCast from "./FastCast.ts"
@@ -268,7 +268,7 @@ describe("FastCast", () => {
 function nflFrames(server: ReturnType<typeof fakeServer>) {
   return Effect.gen(function* () {
     const ended = yield* Deferred.make<void, LiveFeedError>()
-    const frames = watched<Omit<Frame, "seq">>()
+    const frames = watched<FeedFrame>()
     const wanted = yield* Queue.unbounded<ReadonlyArray<GameSnapshot>>()
     const resync = yield* Queue.unbounded<string>()
     yield* LiveFeed.use((feed) =>

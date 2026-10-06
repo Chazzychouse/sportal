@@ -15,7 +15,7 @@ import {
   Struct
 } from "effect"
 import { Command, Flag } from "effect/cli"
-import { Frame } from "../feed-log/Frame.ts"
+import { type FeedFrame, Frame } from "../feed-log/Frame.ts"
 import * as Gzip from "../feed-log/Gzip.ts"
 import * as FastCastMessage from "../provider/espn/FastCastMessage.ts"
 import * as Recording from "./Recording.ts"
@@ -33,7 +33,7 @@ export const importRecording = (options: {
   recording: string
   games: ReadonlyArray<string>
 }): Stream.Stream<
-  Omit<Frame, "seq">,
+  FeedFrame,
   ImportFailed | Recording.RecordingUnreadable,
   FileSystem.FileSystem | Path.Path
 > =>
@@ -86,9 +86,7 @@ export const importRecording = (options: {
   )
 
 /** The frames an import wrote to `path`, in order. */
-export function readFrames(
-  path: string
-): Stream.Stream<Omit<Frame, "seq">, ImportFailed, FileSystem.FileSystem> {
+export function readFrames(path: string): Stream.Stream<FeedFrame, ImportFailed, FileSystem.FileSystem> {
   return Stream.unwrap(
     Effect.gen(function* () {
       const text = yield* (yield* FileSystem.FileSystem)
@@ -101,7 +99,7 @@ export function readFrames(
 
 /** Writes `frames` to `path` as gzip'd JSON lines, one encoded frame each, for `readFrames`. */
 export function writeFrames<R>(
-  frames: Stream.Stream<Omit<Frame, "seq">, ImportFailed | Recording.RecordingUnreadable, R>,
+  frames: Stream.Stream<FeedFrame, ImportFailed | Recording.RecordingUnreadable, R>,
   path: string
 ): Effect.Effect<number, ImportFailed | Recording.RecordingUnreadable, R | FileSystem.FileSystem> {
   return Effect.gen(function* () {
@@ -168,7 +166,7 @@ type Line = Exclude<Effect.Success<ReturnType<typeof decodeLine>>, { readonly op
 function framed(
   mids: ReadonlyMap<string, number>,
   line: Line
-): Effect.Effect<readonly [ReadonlyMap<string, number>, ReadonlyArray<Omit<Frame, "seq">>], ImportFailed> {
+): Effect.Effect<readonly [ReadonlyMap<string, number>, ReadonlyArray<FeedFrame>], ImportFailed> {
   const receivedAt = DateTime.makeUnsafe(line.at)
   const message = (mid: number, body: object, sentAt?: DateTime.Utc) =>
     ({
@@ -220,7 +218,7 @@ function framed(
 // The recording has no checkpoint bodies, and every game in it kicked off after the recorder subscribed (deviation 5).
 const emptyCheckpoint = '{"entities":{}}'
 
-function polled(league: LeagueId, receivedAt: DateTime.Utc, body: string): Omit<Frame, "seq"> {
+function polled(league: LeagueId, receivedAt: DateTime.Utc, body: string): FeedFrame {
   return { receivedAt, feed: "poll", channel: league, kind: "response", body }
 }
 

@@ -2,7 +2,7 @@ import { Delivery } from "@sportal/domain/Delivery"
 import { GameSnapshot } from "@sportal/domain/Game"
 import { LeagueId } from "@sportal/domain/League"
 import { DateTime, Effect, Layer, Option, Ref, Schema, Stream } from "effect"
-import { Frame } from "../feed-log/Frame.ts"
+import { type FeedFrame, Frame } from "../feed-log/Frame.ts"
 import { LiveGames } from "../LiveGames.ts"
 import { LiveFeed } from "./LiveFeed.ts"
 import { Decoded, Provider, ProviderError } from "./Provider.ts"
@@ -89,7 +89,7 @@ export function listedBy(league: LeagueId) {
 export function pushed(games: ReadonlyArray<GameSnapshot>, channel = "event-football-college-football") {
   return Effect.map(
     DateTime.now,
-    (receivedAt): Omit<Frame, "seq"> => ({
+    (receivedAt): FeedFrame => ({
       receivedAt,
       feed: "fastcast",
       channel,

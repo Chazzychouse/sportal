@@ -25,7 +25,7 @@ import { Hex } from "effect/encoding"
 import { SqlClient, SqlSchema } from "effect/sql"
 import * as Database from "../Database.ts"
 import type { HubConfig } from "../HubConfig.ts"
-import { Frame } from "./Frame.ts"
+import { type FeedFrame, Frame } from "./Frame.ts"
 import * as Gzip from "./Gzip.ts"
 
 /**
@@ -36,7 +36,7 @@ export class FeedLog extends Context.Service<
   FeedLog,
   {
     /** Numbers `frame`, publishes it to subscribers, and queues it to be written. Never waits on disk, never fails. */
-    append(frame: Omit<Frame, "seq">): Effect.Effect<Frame>
+    append(frame: FeedFrame): Effect.Effect<Frame>
     /**
      * Subscribes at once, for as long as the scope is open: the stream is every frame appended from then on, in `seq`
      * order, however late it is run.
@@ -79,7 +79,7 @@ export class FeedLog extends Context.Service<
       )
 
       // Uninterruptible, so a seq once assigned is always published and queued; every step is non-blocking.
-      const append = Effect.fn("FeedLog.append")(function* (received: Omit<Frame, "seq">) {
+      const append = Effect.fn("FeedLog.append")(function* (received: FeedFrame) {
         return yield* intake.permit.withPermit(
           Effect.uninterruptible(
             Effect.gen(function* () {

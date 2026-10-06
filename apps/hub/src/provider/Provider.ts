@@ -1,14 +1,14 @@
 import type { Delivery } from "@sportal/domain/Delivery"
 import { LeagueId } from "@sportal/domain/League"
 import { Context, Data, type DateTime, type Effect, Schema, type Stream } from "effect"
-import type { Frame } from "../feed-log/Frame.ts"
+import type { FeedFrame, Frame } from "../feed-log/Frame.ts"
 
 /** A provider's scoreboard: polled as frames, and what those and its live feed's frames say, decoded. */
 export class Provider extends Context.Service<
   Provider,
   {
     /** One poll of `league`, as received. */
-    poll(league: LeagueId): Effect.Effect<Omit<Frame, "seq">, ProviderError>
+    poll(league: LeagueId): Effect.Effect<FeedFrame, ProviderError>
     /**
      * What each frame said, in order: a poll response is a `Listing`, a pushed game a `Snapshot`, a plays document
      * change a `Plays`, each `Delivered`. A live feed topic whose document had to be dropped (a missed message, a

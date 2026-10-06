@@ -226,7 +226,7 @@ sportal/
     │       ├── TestDatabase.ts, TestHubConfig.ts, TestTelemetry.ts   Layers for tests
     │       ├── feed-log/
     │       │   ├── FeedLog.ts      The append-only log of every frame, in feed.sqlite
-    │       │   ├── Frame.ts        One thing a feed delivered, as received
+    │       │   ├── Frame.ts        A feed frame as received, and the frame the log numbered
     │       │   └── Gzip.ts         Frame bodies in and out of gzip
     │       ├── ingest/
     │       │   ├── Ingest.ts       Replays the game day from the feed log, then polls, runs the live feed, logs every frame, and folds it
@@ -334,7 +334,7 @@ Ports are Effect services; implementations are Layers; `HubMode` chooses them. S
 
 ```ts
 class Provider extends Context.Service<Provider, {
-  poll(league: LeagueId): Effect<Omit<Frame, "seq">, ProviderError>
+  poll(league: LeagueId): Effect<FeedFrame, ProviderError>
   decode(frames: Stream<Frame>): Stream<Delivered | Resync>
 }>()("sportal/hub/Provider") {}
 ```
@@ -352,7 +352,7 @@ class LiveFeed extends Context.Service<LiveFeed, {
     leagues: ReadonlyArray<LeagueId>,
     wanted: Stream<ReadonlyArray<GameSnapshot>>,
     resync: Stream<string>
-  ): Stream<Omit<Frame, "seq">, LiveFeedError>
+  ): Stream<FeedFrame, LiveFeedError>
 }>()("sportal/hub/LiveFeed") {}
 ```
 
@@ -366,7 +366,7 @@ port: one SQLite implementation over its own `feed.sqlite`:
 
 ```ts
 class FeedLog extends Context.Service<FeedLog, {
-  append(frame: Omit<Frame, "seq">): Effect<Frame>
+  append(frame: FeedFrame): Effect<Frame>
   readonly subscribe: Effect<Stream<Frame>, never, Scope>
   replay(from: DateTime.Utc): Stream<Frame>
 }>()("sportal/hub/FeedLog") {}

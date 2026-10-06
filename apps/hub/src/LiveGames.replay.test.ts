@@ -7,7 +7,7 @@ import type { LiveGame } from "@sportal/domain/LiveGame"
 import { DateTime, Effect, Equal, Fiber, FileSystem, Option, Ref, Stream } from "effect"
 import { TestClock } from "effect/testing"
 import { FeedLog } from "./feed-log/FeedLog.ts"
-import type { Frame } from "./feed-log/Frame.ts"
+import type { FeedFrame } from "./feed-log/Frame.ts"
 import { LiveGames } from "./LiveGames.ts"
 import * as EspnDecode from "./provider/espn/EspnDecode.ts"
 import { neAtBufFrames } from "./provider/espn/TestEspn.ts"
@@ -132,7 +132,7 @@ describe("a recorded game", () => {
 const frames = Stream.runCollect(ImportRecording.readFrames(neAtBufFrames))
 
 /** Appends `received` to the feed log in order; the log is closed after, so every frame is written. */
-function appended(received: ReadonlyArray<Omit<Frame, "seq">>) {
+function appended(received: ReadonlyArray<FeedFrame>) {
   return FeedLog.use((log) => Effect.forEach(received, log.append, { discard: true })).pipe(
     Effect.provide(FeedLog.layer)
   )
