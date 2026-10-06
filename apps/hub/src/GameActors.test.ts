@@ -23,7 +23,7 @@ import { TestClock } from "effect/testing"
 import * as Cluster from "./Cluster.ts"
 import { Game, GameActors } from "./GameActors.ts"
 import * as TestCluster from "./TestCluster.ts"
-import { recordingLogs, recordingSpans, withMetrics } from "./TestTelemetry.ts"
+import { counted, gauged, recordingLogs, recordingSpans, withMetrics } from "./TestTelemetry.ts"
 
 const one = GameId.make("1")
 const two = GameId.make("2")
@@ -551,28 +551,6 @@ function stateOf(id: GameId) {
 function recording() {
   const { logs, layer } = recordingLogs()
   return { logs, layer: Layer.merge(layer, Layer.succeed(References.MinimumLogLevel, "Debug")) }
-}
-
-function counted(id: string, attributes: Record<string, string> = {}) {
-  return Effect.map(Metric.snapshot, (metrics) => {
-    const metric = metrics.find(
-      (candidate) => candidate.id === id && matches(candidate.attributes, attributes)
-    )
-    return metric?.type === "Counter" ? metric.state.count : undefined
-  })
-}
-
-function gauged(id: string, attributes: Record<string, string> = {}) {
-  return Effect.map(Metric.snapshot, (metrics) => {
-    const metric = metrics.find(
-      (candidate) => candidate.id === id && matches(candidate.attributes, attributes)
-    )
-    return metric?.type === "Gauge" ? metric.state.value : undefined
-  })
-}
-
-function matches(actual: Readonly<Record<string, string>> | undefined, expected: Record<string, string>) {
-  return Object.entries(expected).every(([key, value]) => actual?.[key] === value)
 }
 
 /** The test clock, with each sleep made by `sleep`, which is told how many sleeps as long came before. */

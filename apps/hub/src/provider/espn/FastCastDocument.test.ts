@@ -4,7 +4,7 @@ import type { GameSnapshot } from "@sportal/domain/Game"
 import type { LeagueId } from "@sportal/domain/League"
 import { Effect, FileSystem, Layer, Metric, Schema, Stream } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/http"
-import { withMetrics } from "../../TestTelemetry.ts"
+import { counted, withMetrics } from "../../TestTelemetry.ts"
 import * as EspnPayload from "./EspnPayload.ts"
 import * as EspnProvider from "./EspnProvider.ts"
 import * as FastCastDocument from "./FastCastDocument.ts"
@@ -148,10 +148,10 @@ describe("FastCastDocument", () => {
   it.effect("a patch or an idle message before any checkpoint fails with Gap", () =>
     Effect.gen(function* () {
       const recorded = yield* recordedMessages
-      const early = [recorded.slice(3, 4), recorded.slice(8, 9)]
+      const early = [recorded.slice(3, 4), recorded.slice(6, 7), recorded.slice(8, 9)]
       assert.deepStrictEqual(
         early.flat().map((message) => message.op),
-        ["R", "I"]
+        ["R", "P", "I"]
       )
 
       const reasons = yield* Effect.forEach(early, (message) =>
@@ -159,7 +159,7 @@ describe("FastCastDocument", () => {
           Effect.map((error) => error.reason)
         )
       )
-      assert.deepStrictEqual(reasons, ["Gap", "Gap"])
+      assert.deepStrictEqual(reasons, ["Gap", "Gap", "Gap"])
     }).pipe(Effect.provide(TestLayer))
   )
 
@@ -170,10 +170,7 @@ describe("FastCastDocument", () => {
       const error = yield* Effect.flip(batchesOf(["nfl"], [...recorded.slice(0, 3), skipping]))
 
       assert.strictEqual(error.reason, "Gap")
-      const idles = (yield* Metric.snapshot).find(
-        (metric) => metric.id === "sportal_live_feed_messages" && metric.attributes?.op === "I"
-      )
-      assert.strictEqual(idles?.type === "Counter" ? idles.state.count : undefined, 1)
+      assert.strictEqual(yield* counted("sportal_live_feed_messages", { op: "I" }), 1)
     }).pipe(Effect.provide(TestLayer), withMetrics)
   )
 
@@ -229,13 +226,13 @@ describe("FastCastDocument", () => {
   it.effect("counts the messages by league and op", () =>
     Effect.gen(function* () {
       yield* batchesOf(["nfl"], yield* recordedMessages)
-      const counted = (yield* Metric.snapshot).flatMap((metric) =>
+      const byLeagueAndOp = (yield* Metric.snapshot).flatMap((metric) =>
         metric.id === "sportal_live_feed_messages" && metric.type === "Counter"
           ? [[metric.attributes?.league, metric.attributes?.op, metric.state.count]]
           : []
       )
 
-      assert.sameDeepMembers(counted, [
+      assert.sameDeepMembers(byLeagueAndOp, [
         [undefined, "C", 1],
         ["nfl", "S", 1],
         ["nfl", "H", 1],
@@ -243,21 +240,14 @@ describe("FastCastDocument", () => {
         ["nfl", "P", 81],
         ["nfl", "I", 16]
       ])
-      assert.isUndefined(
-        (yield* Metric.snapshot).find((metric) => metric.id === "sportal_live_feed_undecoded"),
-        "every event decodes"
-      )
+      assert.isUndefined(yield* counted("sportal_live_feed_undecoded"), "every event decodes")
     }).pipe(Effect.provide(TestLayer), withMetrics)
   )
 
   it.effect("counts the games it delivers", () =>
     Effect.gen(function* () {
       const batches = yield* batchesOf(["nfl"], yield* recordedMessages)
-      const games = (yield* Metric.snapshot).find(
-        (metric) => metric.id === "sportal_live_feed_games" && metric.attributes?.league === "nfl"
-      )
-
-      assert.strictEqual(games?.type === "Counter" ? games.state.count : undefined, batches.flat().length)
+      assert.strictEqual(yield* counted("sportal_live_feed_games", { league: "nfl" }), batches.flat().length)
       assert.isAbove(batches.flat().length, 16)
     }).pipe(Effect.provide(TestLayer), withMetrics)
   )
