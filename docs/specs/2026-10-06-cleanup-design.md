@@ -18,9 +18,9 @@ mix of the built and the planned. This spec fixes that.
 
 ## Delivery
 
-One phase at a time, in order. Each phase gets a plan, a worktree (`../sportal-cleanup-<n>`), subagent
-implementation, `plannotator review` on the code, and a merge to main before the next phase starts. For
-this push the spec and plans are not put through `plannotator annotate`.
+One session of work: one plan covering every phase, one branch `cleanup` in one worktree
+(`../sportal-cleanup`), the phases done in order as commits on it, then `plannotator review` on the whole
+branch and one merge to main. The spec and plan are not put through `plannotator annotate`.
 
 Every commit passes `pnpm check`. Behavior-preserving commits are `refactor:`; the bug fixes are `fix:`.
 A moved file moves in a commit that changes nothing else in it, so `git log --follow` keeps its history.
@@ -285,8 +285,8 @@ May be planned as 3a Hub, 3b web, 3c desktop. Done means the knip ignore list is
 
 - **Phase 1 moves the fold.** The replay-equals-live property test and the LiveGames tests run unchanged
   against the new class before the Hub copies are deleted.
-- **Phase 2 touches every import.** It is mechanical and lands quickly, so the next phases' worktrees
-  start from it; no other branch should be open across it.
+- **Phase 2 touches every import.** No other branch should be open across the cleanup branch.
+- **One long branch.** Main may move while it runs; the branch rebases onto main before review.
 - **Wire change.** SlateChanged's shape changes; the web and the Hub change in the same commit. No client
   outside the repo exists.
 - **The user runs the app from main.** Work happens in worktrees; merges land between game days.
