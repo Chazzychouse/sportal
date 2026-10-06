@@ -4,8 +4,8 @@ import { Team, TeamId } from "@sportal/domain/Team"
 import { Effect, Schema, SchemaGetter, SchemaIssue, Stream } from "effect"
 import * as EspnSnapshot from "./EspnSnapshot.ts"
 
-// A patch's path: the uid of the event it changes (`s:20~l:28~e:<id>~c:<id>`), then a JSON Pointer into that event.
-// No pointer means the whole event.
+// A patch's path. On a scoreboard topic: the uid of the event it changes (`s:20~l:28~e:<id>~c:<id>`), then a JSON
+// Pointer into that event, where no pointer means the whole event. On a game topic: a JSON Pointer alone, with no uid.
 const EventPath = Schema.String.pipe(
   Schema.decodeTo(Schema.Struct({ uid: Schema.String, pointer: Schema.String }), {
     decode: SchemaGetter.transform((path) => {
@@ -18,11 +18,11 @@ const EventPath = Schema.String.pipe(
   })
 )
 
-/** One JSON Patch operation on one event of a topic's document. */
+/** One JSON Patch operation on a topic's document. */
 export const Patch = Schema.Union([
   Schema.Struct({ op: Schema.Literals(["add", "replace"]), path: EventPath, value: Schema.Json }),
   Schema.Struct({ op: Schema.Literal("remove"), path: EventPath }),
-  Schema.Struct({ op: Schema.Literal("copy"), path: EventPath, from: EventPath })
+  Schema.Struct({ op: Schema.Literals(["copy", "move"]), path: EventPath, from: EventPath })
 ])
 
 const Patches = Schema.Array(Patch)
@@ -69,11 +69,26 @@ const Heartbeat = Schema.Struct({ op: Schema.Literal("B") })
 /** One FastCast socket message. */
 export const Message = Schema.Union([Connected, Subscribed, Checkpoint, Patched, Idle, Heartbeat])
 
+/** One FastCast socket message read only as far as framing it needs: its patches stay text, with the time sent. */
+export const Envelope = Schema.Union([
+  Connected,
+  Subscribed,
+  Checkpoint,
+  Schema.Struct({
+    op: Schema.Literals(["R", "P"]),
+    tc: Schema.String,
+    mid: Schema.Int,
+    pl: Schema.fromJsonString(Schema.Struct({ ts: Schema.optional(Schema.Number) }))
+  }),
+  Idle,
+  Heartbeat
+])
+
 /** Where to open the socket, and the token it takes, as `public/websockethost` answers. */
 export const Host = Schema.Struct({ ip: Schema.String, securePort: Schema.Int, token: Schema.String })
 
-/** A topic's whole document, as a checkpoint URL serves it; each event stays JSON, to be patched. */
-export const CheckpointDocument = Schema.Struct({
+/** A scoreboard topic's whole document, as a checkpoint URL serves it; each event stays JSON, to be patched. */
+export const ScoreboardCheckpoint = Schema.Struct({
   sports: Schema.Array(
     Schema.Struct({
       leagues: Schema.Array(
@@ -86,6 +101,13 @@ export const CheckpointDocument = Schema.Struct({
         })
       )
     })
+  )
+})
+
+/** A game topic's whole document, ESPN's game package, as a checkpoint URL serves it: only its plays, by id. */
+export const GameCheckpoint = Schema.Struct({
+  entities: Schema.optional(
+    Schema.Struct({ plays: Schema.optional(Schema.Record(Schema.String, Schema.Json)) })
   )
 })
 

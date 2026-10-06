@@ -6,9 +6,9 @@ import type { LeagueId } from "@sportal/domain/League"
 import { Scenario } from "@sportal/domain/Scenario"
 import { DateTime, Effect, FileSystem, Option, Schema } from "effect"
 // A script entry point, like main.ts, so it may name the scenario adapter's folder.
-import { folder } from "../../scenario/ScenarioProvider.ts"
+import { folder } from "../../scenario/ScenarioIngest.ts"
+import * as EspnDecode from "./EspnDecode.ts"
 import * as EspnPayload from "./EspnPayload.ts"
-import * as EspnProvider from "./EspnProvider.ts"
 
 /**
  * A window of a recorded game day as a scenario: each scoreboard poll in it, decoded as ESPN's live ones are, is a
@@ -22,11 +22,13 @@ export const cut = Effect.fn("CutScenario.cut")(function* (options: {
   to: DateTime.Utc
   games: ReadonlyArray<string>
 }) {
-  const league = leagues[basename(options.recording)]
-  if (league === undefined)
-    return yield* Effect.fail(
-      new CutFailed({ reason: `${options.recording} is not a college-football or nfl recording` })
-    )
+  const league = yield* Option.match(leagueOf(options.recording), {
+    onNone: () =>
+      Effect.fail(
+        new CutFailed({ reason: `${options.recording} is not a college-football or nfl recording` })
+      ),
+    onSome: Effect.succeed
+  })
   const fs = yield* FileSystem.FileSystem
   const scoreboards = join(options.recording, "scoreboard")
   const polls = (yield* fs.readDirectory(scoreboards))
@@ -52,7 +54,7 @@ export const cut = Effect.fn("CutScenario.cut")(function* (options: {
         )
       )
     )
-    const slate = (yield* EspnProvider.slateOf(league, scoreboard)).filter(
+    const slate = (yield* EspnDecode.slateOf(league, scoreboard)).filter(
       (game) => options.games.length === 0 || options.games.includes(game.id)
     )
     frames.push({ at: DateTime.toEpochMillis(instant) - DateTime.toEpochMillis(first.instant), slate })
@@ -63,13 +65,18 @@ export const cut = Effect.fn("CutScenario.cut")(function* (options: {
 /** A recording could not be cut into a scenario, and why. */
 class CutFailed extends Schema.TaggedError<CutFailed>()("CutFailed", { reason: Schema.String }) {}
 
+/** The league a recording's folder (`…/college-football` or `…/nfl`) holds. */
+export function leagueOf(recording: string): Option.Option<LeagueId> {
+  return Option.fromUndefinedOr(leagues[basename(recording)])
+}
+
 const leagues: Record<string, LeagueId> = { "college-football": "fbs", nfl: "nfl" }
 
 /**
  * The instant a recorded poll was taken, from its name: "20261003T160848Z.json.gz" (record.sh) or
  * "1791130515.585.json.gz" (record.py: epoch seconds, then milliseconds).
  */
-function instantOf(file: string): Option.Option<DateTime.Utc> {
+export function instantOf(file: string): Option.Option<DateTime.Utc> {
   return utcNameInstant(file).pipe(Option.orElse(() => epochNameInstant(file)))
 }
 

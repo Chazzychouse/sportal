@@ -14,7 +14,7 @@ Every exported type name must be a term here.
 | **Team** | A league member. | club, competitor, franchise |
 | **Ranking** | A team's position in a poll (college). | seed |
 | **Game** | One scheduled contest between two teams. | event, match, competition, fixture |
-| **Slate** | The games in a time window (a Saturday, an NFL week). Shown as a strip under the Stage. The Hub's `Slate` publishes it: each listed game as its game actor has it, with its watchability. | schedule, scoreboard |
+| **Slate** | The games in a time window (a Saturday, an NFL week). Shown as a strip under the Stage. The Hub's `Slate` publishes it: each listed game as the fold has it, with its watchability. | schedule, scoreboard |
 | **Kickoff** | A game's scheduled start instant. | start time, date |
 
 ### Game state
@@ -24,9 +24,10 @@ Every exported type name must be a term here.
 | **GameStatus** | `scheduled`, `live`, `halftime`, `delayed`, `final`, `postponed`, `canceled`. | state, phase |
 | **GameSnapshot** | The complete normalized state of a game at an instant. | update, payload |
 | **Game time** | How far a game has got: before kickoff, in play, or over; then the period; then the clock running down. Orders two snapshots of one game. | timestamp, version |
-| **Live game** | One game as the Hub follows it: its latest snapshot, the delivery source that gave it, and its state (`LiveGameState`): upcoming, live, stale, or over. A poll at the same game time as a live game's pushed snapshot only refreshes it: the push wins a tie. | game state, entity |
-| **Stale** | A live game no snapshot has reached for 90 seconds. It stays current for 30 minutes after its last update, then its actor may stop. | |
-| **Game actor** | The cluster entity that follows one game: its live game in memory, its staleness timer, its lifecycle. | durable object, worker |
+| **Live game** | One game as the Hub follows it: its latest snapshot, the delivery source that gave it, its state (`LiveGameState`): upcoming, live, stale, or over, its plays, and its watchability. Folded from deliveries. A poll at the same game time as a live game's pushed snapshot only refreshes it: the push wins a tie. | game state, entity |
+| **Live games** | The fold: each league's last listing and every current game's live game, applied from deliveries in `seq` order. Replaying the log gives the same live games. | game actors, registry |
+| **Stale** | A live game no snapshot has reached for 90 seconds. It stays current for 30 minutes after its last update. | |
+| **Delivery** | What a frame said: a league's listing, one game's snapshot, or one game's whole list of plays. | input, update |
 | **Delivery source** | Which feed a snapshot came from: `push` or `poll`. | origin, feed type |
 | **Test game** | A game snapshot built for a test, with defaults for everything the test does not care about. | fixture, mock |
 | **Scenario** | A timeline of game snapshots for several games, written or cut from a recording, that a Hub can play instead of a provider. | fixture, simulation |
@@ -34,8 +35,10 @@ Every exported type name must be a term here.
 | **GameDetail** | A snapshot plus drives, plays, and statistics. | summary |
 | **Situation** | Live football state: possession, down, distance, field position, red zone, timeouts. | context |
 | **Period** | A quarter or an overtime. | quarter (in code) |
-| **Drive** / **Play** | A possession sequence / a single snap. | |
-| **GameEvent** | Something that happened in a game between two snapshots of it: a score, the ball changing hands, a drive reaching the 40, the red zone, goal to go, fourth down, a timeout, a period or the game ending. Derived, never stored. | alert, update |
+| **Drive** / **Play** | A possession sequence / a single snap, or a timeout, a penalty, or the end of a period, as the game's play-by-play lists it: its kind, clock, text, yardage, start and end, score after, and win probability. | |
+| **Play id** | The feed's own id for one play; `PlayId` in code. Not ordered: plays are ordered by their sequence. | |
+| **Play kind** | What a play was: a rush, a pass or incompletion, a sack, an interception, a fumble the offense kept or one it lost, a kick, a try, a penalty, a timeout, or the end of a period; `PlayKind` in code. | play type |
+| **GameEvent** | Something that happened in a game: from its plays when it has them, from comparing two snapshots otherwise. Derived, never stored. | alert, update |
 
 ### Data and video
 
@@ -44,8 +47,8 @@ Every exported type name must be a term here.
 | **Provider** | An adapter that supplies **game data** (ESPN, CollegeFootballData). | source, feed |
 | **Provider error** | A provider could not supply data for a league: unreachable, rate-limited, or unreadable. | fetch error |
 | **Live feed** | A provider's push connection carrying updates for live games (ESPN FastCast). | socket, stream, webhook |
-| **Live feed error** | The live feed could not continue: refused, closed, silent, or an update it could not apply. | |
-| **Ingest** | The Hub's loop that polls providers, keeps each league's last good listing, and sends what it polled to the game actors. | poller, sync, fetcher |
+| **Live feed error** | The live feed's connection could not continue: refused, closed, or silent. | |
+| **Ingest** | The Hub's loop that replays the day from the feed log into the live games, then polls providers and runs the live feed, appending every frame to the log and folding what each says into the live games. | poller, sync, fetcher |
 | **Cadence** | How long Ingest waits between polls, given what the last poll saw. | interval, rate |
 | **Source** | A way you obtain **video** (YouTube TV). | provider, service |
 | **Source name** | A source as people know it ("YouTube TV"); how code and the UI name a source. | source id |
@@ -63,6 +66,10 @@ Every exported type name must be a term here.
 | **Channel store** | Where the Hub keeps the channel carriages it has learned. | channel repository |
 | **Channel store error** | The channel store could not read or write. | database error |
 | **Database** | The Hub's SQLite database. Each store migrates its own tables in it. | store, persistence |
+| **Game history** | Past plays and each game's latest snapshot, derived from the fold into the Hub's database. Rebuildable from the feed log. | archive, stats |
+| **Game history error** | The game history could not read. | database error |
+| **Feed log** | Every frame the feeds delivered, raw, in the order the Hub received it. The truth the Hub's game state is folded from. | event store, journal, recording |
+| **Frame** | One thing a feed delivered: a poll response, a FastCast message, or a FastCast checkpoint. | message, payload |
 | **Live channel URL** | A source's address for a channel, reduced to the one that plays it live. | canonical URL |
 | **Stream** | One playing instance of a game from a source. | feed, video |
 | **StreamLocator** | What a Display must load to play a stream. | URL, link |
@@ -121,7 +128,7 @@ Provider and Source are the two words most likely to be swapped. Provider is alw
 | Term | Meaning | Not |
 | --- | --- | --- |
 | **Follow** | Your declared interest in a team, conference, league, or game. | favourite, subscription |
-| **Watchability** | A 0–100 score of how worth watching a live game is right now, whether it is in a lull, and why; folded forward one snapshot at a time. | excitement, heat |
+| **Watchability** | A 0–100 score of how worth watching a live game is right now, whether it is in a lull, and why; folded with its live game from each delivery. | excitement, heat |
 | **Lull** | A live game with nothing happening: halftime, a delay, between periods, a TV break after a timeout, score, or change of possession, or no play for a minute. | break, stoppage |
 | **Trigger** | A condition over events and snapshots. | |
 | **Rule** | A trigger bound to a stage command and a revert condition. | automation |

@@ -1,6 +1,9 @@
-import { DateTime } from "effect"
+import { DateTime, Option } from "effect"
+import { Delivery } from "./Delivery.ts"
 import { type Broadcast, GameId, GameSnapshot, Network } from "./Game.ts"
 import type { LeagueId } from "./League.ts"
+import { LiveGame } from "./LiveGame.ts"
+import { Play, PlayId } from "./Play.ts"
 import { Team, TeamId } from "./Team.ts"
 
 /** A game snapshot for a test: an FBS scheduled game unless the overrides say otherwise. */
@@ -37,4 +40,49 @@ export function team(
 /** A broadcast of `network`, on television unless said otherwise. */
 export function broadcast(network: string, medium: Broadcast["medium"] = "tv"): Broadcast {
   return { network: Network.make(network), medium }
+}
+
+/** A play for a test: a one-yard rush by the home team in the first quarter unless the overrides say otherwise. */
+export function play(overrides: Partial<Play> = {}): Play {
+  const home = team("HOME").id
+  return new Play({
+    id: PlayId.make("1"),
+    sequence: 1,
+    period: 1,
+    clock: "15:00",
+    team: home,
+    kind: "rush",
+    text: "Rush for 1 yard",
+    yards: 1,
+    scoring: false,
+    homeScore: 0,
+    awayScore: 0,
+    start: { down: 1, distance: 10, yardsToEndzone: 75, team: home },
+    end: { down: 2, distance: 9, yardsToEndzone: 74, team: home },
+    ...overrides
+  })
+}
+
+/**
+ * Each game on `slate`, polled at `now`, as a live game followed on from `previous`: taken, kept and judged again at
+ * `now` when it is behind, or started when it is new. For tests that play a scenario poll by poll.
+ */
+export function followed(
+  previous: ReadonlyMap<GameId, LiveGame>,
+  slate: ReadonlyArray<GameSnapshot>,
+  now: DateTime.Utc
+): ReadonlyMap<GameId, LiveGame> {
+  return new Map(
+    slate.map((game) => [
+      game.id,
+      Option.match(Option.fromNullishOr(previous.get(game.id)), {
+        onNone: () => LiveGame.start(game, "poll", now),
+        onSome: (liveGame) =>
+          liveGame.take(Delivery.Snapshot({ snapshot: game, from: "poll" }), now).liveGame.pipe(
+            Option.orElse(() => liveGame.tick(now).liveGame),
+            Option.getOrElse(() => liveGame)
+          )
+      })
+    ])
+  )
 }

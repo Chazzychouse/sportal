@@ -63,9 +63,12 @@ flowchart LR
 
   subgraph hub[Hub — one server process]
     prov[Providers]
-    ingest[Ingest: poll, decode]
-    slate[Slate: listed games as their actors have them, watchability]
-    actors[Game actors: one per game]
+    ingest[Ingest: poll, live feed, replay]
+    feedlog[(Feed log: feed.sqlite)]
+    decode[Provider.decode: frames to deliveries]
+    fold[LiveGames: one fold, every game's plays and watchability]
+    history[(GameHistory: plays, latest snapshots)]
+    slate[Slate: listed games and their watchability, as the fold has them]
     director[Director: rules over watchability]
     stages[Stage sessions: one per Display]
     store[(SQL store)]
@@ -84,12 +87,15 @@ flowchart LR
 
   espn --> prov
   cfbd --> prov
-  prov --> ingest --> store
-  ingest -- snapshots --> actors
-  actors -- live games, for Cadence --> ingest
-  ingest -- listings --> slate
-  actors -- live games --> slate
-  ingest -- game events --> director
+  prov -- frames --> ingest
+  ingest -- every frame, raw --> feedlog
+  feedlog -- frames in seq order --> decode
+  prov --> decode
+  decode -- deliveries --> fold
+  fold -- live games, for Cadence and the live feed --> ingest
+  fold -- changes --> history --> store
+  fold -- live games, listings --> slate
+  fold -- game events --> director
   director -- stage commands --> stages
   stages --> store
   api <--> ui1
@@ -100,7 +106,7 @@ flowchart LR
   yttv --> views
 ```
 
-- **Hub** — polls providers, decodes payloads into snapshots, diffs snapshots into game events, runs the Director, and holds one authoritative **Stage session** per Display. Serves the web UI's static files, the HTTP API, and one live stream per client.
+- **Hub** — polls providers and follows their live feeds, appends every frame to the feed log, folds what the frames say into each game's plays, state, and watchability (deriving its game events), runs the Director, and holds one authoritative **Stage session** per Display. Serves the web UI's static files, the HTTP API, and one live stream per client.
 - **Web UI** — one codebase for desk, couch, and phone. It renders Hub state and sends commands. It contains no business rules.
 - **Desktop shell** — loads the web UI from the Hub, registers as a Display, and mirrors that Display's stream tiles into native provider web views. It is told the Hub's address by configuration; for the single-machine case it can start a Hub itself.
 
@@ -175,7 +181,9 @@ sportal/
 │   │       ├── League.ts       Sport, League, Season, SeasonPhase, Conference
 │   │       ├── Team.ts         Team, Ranking
 │   │       ├── Game.ts         Game, GameStatus, Period, GameSnapshot, Network
-│   │       ├── LiveGame.ts     One game as the Hub follows it: LiveGame, LiveGameState, DeliverySource
+│   │       ├── LiveGame.ts     One game as the Hub follows it: LiveGame, LiveGameState, take and tick
+│   │       ├── Delivery.ts     What a frame said: a listing, a snapshot, or a game's plays; DeliverySource
+│   │       ├── Play.ts         A single play, as the game's play-by-play lists it
 │   │       ├── Situation.ts    Possession, down, distance, field position, red zone
 │   │       ├── GameEvent.ts    The event union
 │   │       ├── Slate.ts        SlateWindow and grouping (Tracker); watch order is GameSnapshot.watchOrder
@@ -202,19 +210,27 @@ sportal/
     │       ├── HubMode.ts          What the Hub plays: the live day or a scenario; the only file that names providers and sources
     │       ├── Telemetry.ts        Log level and format; OTLP export when configured
     │       ├── HubConfig.ts        Every environment setting, in one place
-    │       ├── GameActors.ts       The game actors: one cluster entity per game
-    │       ├── Cluster.ts          The single-process cluster the game actors run on
-    │       ├── Slate.ts            Each listed game as its actor has it, and its watchability
+    │       ├── LiveGames.ts        The fold: every delivery, in seq order, into each game's live game
+    │       ├── GameHistory.ts      Past plays and each game's latest snapshot, derived from the fold
+    │       ├── Slate.ts            Each listed game as the fold has it, and its watchability
+    │       ├── feed/
+    │       │   ├── FeedLog.ts      The append-only log of every frame, in feed.sqlite
+    │       │   ├── Frame.ts        One thing a feed delivered, as received
+    │       │   └── Gzip.ts         Frame bodies in and out of gzip
     │       ├── provider/
     │       │   ├── Provider.ts     The port
     │       │   ├── LiveFeed.ts     The push port, beside it
     │       │   ├── espn/
-    │       │   │   ├── EspnProvider.ts   Implements the port
+    │       │   │   ├── EspnProvider.ts   Implements the port: polls, and decodes frames
+    │       │   │   ├── EspnDecode.ts     Frames to deliveries: listings, snapshots, plays, resyncs
+    │       │   │   ├── EspnPlay.ts       ESPN's plays and their type ids, as Play
     │       │   │   ├── EspnPayload.ts    Schemas of ESPN's wire format; private to this folder
     │       │   │   ├── EspnSnapshot.ts   Status and situation as both ESPN feeds spell them
-    │       │   │   ├── FastCast.ts       Implements the live feed: the socket
+    │       │   │   ├── FastCast.ts       Implements the live feed: the socket, as frames
     │       │   │   ├── FastCastDocument.ts  A topic's document, rebuilt from checkpoints and patches
     │       │   │   ├── FastCastPayload.ts   FastCast's wire shapes
+    │       │   │   ├── ImportRecording.ts  Dev tool: a recorded game day into a feed.sqlite
+    │       │   │   ├── CutScenario.ts    Dev tool: a recorded slice into a scenario
     │       │   │   └── fixtures/         Recorded real payloads
     │       │   └── cfbd/                 Same shape, college supplement
     │       ├── source/
@@ -226,7 +242,7 @@ sportal/
     │       │   ├── ChannelStore.ts The port for learned channel carriages
     │       │   └── SqlChannelStore.ts  Over the Database; owns its migrations
     │       ├── ingest/
-    │       │   ├── Ingest.ts       The poll loop: listings to the slate, snapshots to the actors
+    │       │   ├── Ingest.ts       Replays the game day from the feed log, then polls, runs the live feed, logs every frame, and folds it
     │       │   └── Cadence.ts      How often to poll, given game status
     │       ├── director/
     │       │   └── Director.ts     Events in, stage commands and alerts out
@@ -294,46 +310,83 @@ Rules 2, 6, and 7 of section 4.1 and all of section 4.3 need judgement and are r
 
 Ports are Effect services; implementations are Layers; `HubMode` chooses them. Signatures are indicative.
 
-**Provider** — game data in:
+**Provider** — game data in, as frames:
 
 ```ts
 class Provider extends Context.Service<Provider, {
-  slate(league: LeagueId, window: SlateWindow): Effect<ReadonlyArray<GameSnapshot>, ProviderError>
-  detail(game: GameId): Effect<GameDetail, ProviderError>
+  poll(league: LeagueId): Effect<Omit<Frame, "seq">, ProviderError>
+  decode(frames: Stream<Frame>): Stream<Delivered | Resync>
 }>()("sportal/hub/Provider") {}
 ```
 
-- Provider vocabulary stops at the folder edge. ESPN's "event", "competition", and "competitor" exist only in `EspnPayload.ts`, `FastCastPayload.ts`, and `EspnSnapshot.ts`.
+- `poll` returns a league's scoreboard as received; the Hub logs it before anything decodes it. `decode` turns frames, polled or pushed, into `Delivery`s (`Listing`, `Snapshot`, or `Plays`) stamped with the frame's `seq` and receive time, or a `Resync` when a topic's document had to be dropped.
+- Provider vocabulary stops at the folder edge. ESPN's "event", "competition", and "competitor" exist only in `EspnPayload.ts`, `FastCastPayload.ts`, `EspnPlay.ts`, and `EspnSnapshot.ts`.
 - The Hub composes providers per league: ESPN for NFL; ESPN with CollegeFootballData filling gaps for FBS. The composition is itself a `Provider`, so Ingest sees one.
-- Each adapter's tests are "this recorded payload decodes to this snapshot".
+- Each adapter's tests are "this recorded frame decodes to this delivery".
 
-**LiveFeed** — game data in, pushed:
+**LiveFeed** — game data in, pushed, as frames:
 
 ```ts
 class LiveFeed extends Context.Service<LiveFeed, {
-  games(leagues: ReadonlyArray<LeagueId>): Stream<ReadonlyArray<GameSnapshot>, LiveFeedError>
+  frames(
+    leagues: ReadonlyArray<LeagueId>,
+    wanted: Stream<ReadonlyArray<GameSnapshot>>,
+    resync: Stream<string>
+  ): Stream<Omit<Frame, "seq">, LiveFeedError>
 }>()("sportal/hub/LiveFeed") {}
 ```
 
-- One element per update: the games it touched, or every game on a checkpoint. ESPN's FastCast implements it
-  (`docs/adr/0007-fastcast-live-feed.md`); a scenario provides `LiveFeed.none`.
+- One element per frame, raw. ESPN's FastCast implements it (`docs/adr/0007-fastcast-live-feed.md`) and subscribes to
+  the scoreboard topics and to a `gp-` topic for each game in `wanted`; a topic named in `resync` is asked for its
+  checkpoint again. A scenario has no live feed: `ScenarioIngest` takes its scripted frames into the fold in place of
+  Ingest.
 
-**GameActors** — between Ingest and the slate. Not a port: one implementation, a single-process `effect/cluster`
-with one entity per game (`docs/adr/0006-live-games-are-actors.md`):
+**FeedLog** — every frame, raw, in the order the Hub received it (`docs/adr/0008-the-feed-log-is-the-truth.md`). Not a
+port: one SQLite implementation over its own `feed.sqlite`:
 
 ```ts
-class GameActors extends Context.Service<GameActors, {
-  receive(snapshot: GameSnapshot, source: DeliverySource): Effect<void>
-  readonly liveGames: Effect<ReadonlyMap<GameId, LiveGame>>
-  readonly changes: Stream<ReadonlyMap<GameId, LiveGame>>
-}>()("sportal/hub/GameActors") {}
+class FeedLog extends Context.Service<FeedLog, {
+  append(frame: Omit<Frame, "seq">): Effect<Frame>
+  readonly subscribe: Effect<Stream<Frame>, never, Scope>
+  replay(from: DateTime.Utc): Stream<Frame>
+}>()("sportal/hub/FeedLog") {}
 ```
 
-- Ingest sends every polled snapshot to its game's actor and awaits them all; Slate publishes each listed game as its
-  actor has it, within 250 ms of a change. A game's actor alone decides its state (upcoming, live, stale, or over) and
-  ignores a snapshot that is behind in game time, so a second feed can send to the same actors.
-- `HubMode` provides it in both modes; in a scenario it runs on the scenario clock, so staleness and idling happen in
-  scenario time.
+- An append numbers the frame and publishes it at once; one writer stores batches every 100 ms. Stored kinds are
+  `response`, `message`, `checkpoint`, `unchanged` (a poll identical to its channel's last), and `gap` (frames a failed
+  write lost).
+- `replay(from)` starts each FastCast topic from its latest checkpoint before `from`: that checkpoint and the topic's
+  frames after it come first, so a patch after `from` applies to the document it was sent against.
+- On shutdown the writer stores what is still queued, for at most 1 s; a frame not stored by then is lost. The Hub's
+  whole shutdown bound is about 5 s: the HTTP server's 3 s for connected Displays, then the feed log's 1 s, then
+  telemetry's 1 s to export what it holds.
+
+**LiveGames** — the fold, between decoding and everything that reads games. Not a port: one implementation
+(`docs/adr/0009-one-fold-not-actors.md`):
+
+```ts
+class LiveGames extends Context.Service<LiveGames, {
+  take(delivery: Delivery, at: DateTime.Utc, seq: Option<number>): Effect<void>
+  replay(deliveries: Stream<{ delivery: Delivery; at: DateTime.Utc; seq: number }>): Effect<void>
+  readonly latest: Effect<Folded>
+  readonly changes: Stream<Folded>
+  readonly events: Stream<{ game: GameId; event: GameEvent }>
+}>()("sportal/hub/LiveGames") {}
+```
+
+- One fiber applies each delivery, in `seq` order, to a `Map<GameId, LiveGame>`; a `LiveGame` holds a game's latest
+  snapshot, its state (upcoming, live, stale, or over), its plays, and its watchability, and `take` and `tick` on it are
+  pure. A game's state is decided there alone; a snapshot behind in game time is ignored, so two feeds can deliver the
+  same game. One timer wakes the fold when a game changes with no delivery.
+- The fold's clock is each frame's receive time, so a replay of the log gives the same games, events, and watchability
+  as live did. `replay` runs a stretch of the log with no per-game telemetry and no events.
+- `Slate` publishes each listed game as the fold has it, within 250 ms of a change; Ingest reads the fold for Cadence
+  and for the games the live feed should follow.
+- `HubMode` provides it in both modes. A scenario runs on the scenario clock, re-lists its current frame on the poll
+  cadence, and uses no feed log.
+
+**GameHistory** — past plays and each game's latest snapshot, derived from the fold's changes into `sportal.sqlite`
+(`plays(game)`, `latest(game)`). Both tables can be dropped and rebuilt from the feed log.
 
 **Source** — video out:
 
@@ -355,16 +408,17 @@ A source's channels are found in its own guide, read by the shell (`docs/specs/2
 
 **Stores** — persistence. One port per concept (`ChannelStore` first; games, follows, presets, rules, and stages in the Tracker), each with one SQL implementation over the `Database` module that runs on SQLite or Postgres. Each SQL store owns its migrations and records them in its own table.
 
-### 5.2 Ingest: snapshots and events
+### 5.2 Ingest: frames, deliveries, and events
 
 - Polling cadence is an Effect `Schedule` chosen by `Cadence`: about every 10 seconds while any game is live, every minute near kickoff, every 15 minutes otherwise. One slate request per league covers every game; detail is fetched only for games someone has open or on a Stage.
 - A college Saturday is one request for 50+ games, not 50 requests.
-- Each poll yields snapshots. `snapshot.eventsSince(previous)` derives events (see `GameEvent`), including the leading signals the Director anticipates with.
-- The live feed pushes snapshots between polls. Ingest sends each pushed game, advanced onto its listed game, to the
-  game's actor as a `push`; a game no poll has listed yet is dropped and counted. The poll still lists the slate and
-  sends `poll` snapshots; the actor takes whichever is further along in game time.
-- Snapshots are the truth; events are derived and never stored as truth. A restart or a missed poll cannot corrupt anything.
-- Snapshots and events are published on an in-process hub; the Director, the store, and client live streams each subscribe.
+- Ingest starts by replaying the current game day (from 04:00 local) from the feed log into the fold, before the Hub serves. It subscribes to new frames first, then routes each frame by `seq`: at or before the replay's end it is replayed, after it is live.
+- Each poll response and each live-feed frame is appended to the feed log, raw, before anything decodes it. `Provider.decode` turns frames into deliveries; the fold applies them in `seq` order. A frame that will not decode is logged with its `seq`, counted, and skipped.
+- The live feed pushes snapshots between polls, and, for each current game, its plays. A pushed game is advanced onto its listed game; one no poll has listed yet is counted and not delivered. The fold takes whichever snapshot is further along in game time, and the push wins a tie with the poll.
+- A decoder reset (a missed message, a patch that will not apply) is a resync of that topic: the socket asks for its checkpoint again.
+- Events are derived from the fold's plays and snapshots (see `GameEvent`), including the leading signals the Director anticipates with, and are never stored.
+- The feed log is the truth (`docs/adr/0008-the-feed-log-is-the-truth.md`); live games, plays, watchability, and events are all derived from it, and a restart or a missed poll cannot corrupt anything.
+- Events are published on an in-process hub (`LiveGames.events`); nothing reads it yet. The Director and client live streams will subscribe to it.
 
 ### 5.3 Stage
 
@@ -404,6 +458,8 @@ Expected failures are typed errors in the Effect error channel, each handled whe
 | Over budget | Assignment becomes a data tile; the UI says why |
 | Client loses the Hub | UI shows disconnected and reconnects; provider views keep playing |
 | Live feed refused, closed, silent, or out of step | Logged and counted by reason; resubscribed from a checkpoint with backoff from 1 s to 1 min; the poll carries on, so games go on updating at the poll's pace |
+| A batch of frames fails to write | The Hub keeps following games; error log, `sportal_feed_write_failures`, and a `gap` row with the lost frames' count once writes recover |
+| Applying a delivery dies | Error log with the frame's `seq` and game, `sportal_game_defects`; the game keeps its previous state; the fold carries on |
 | Telemetry collector unreachable | One warning naming its URL; the exporters drop what they cannot send and the Hub carries on, and still stops within its shutdown bound |
 
 ## 6. Domain language
@@ -523,7 +579,7 @@ Section 4 covers where code goes. This section covers how it is written.
 
 - Trunk-based, small changes, conventional commit messages.
 - One command, `pnpm check`, runs format, lint, typecheck, structure checks, and tests; it is what the push hook runs.
-- A hard-to-reverse decision gets a short record in `docs/adr/`. The first ones are implied here: Effect TypeScript end to end; desktop shell with unmodified provider views; Hub-owned Stage state; snapshots as truth with derived events.
+- A hard-to-reverse decision gets a short record in `docs/adr/`. The first ones are implied here: Effect TypeScript end to end; desktop shell with unmodified provider views; Hub-owned Stage state; the feed log as truth with derived events (ADR 0008, which superseded snapshots as truth, ADR 0004); one fold, not actors (ADR 0009).
 - A new concept changes `CONTEXT.md` in the same commit that introduces it.
 - Polite network behaviour is a rule: cache, back off, never poll faster than `Cadence` allows.
 

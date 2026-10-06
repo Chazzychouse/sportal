@@ -44,12 +44,13 @@ module.exports = {
     },
     {
       name: "only-main-opens-the-database",
-      comment: "The composition root provides the database; stores reach it through SqlClient.",
+      comment:
+        "The composition root provides the database; stores reach it through SqlClient. The feed log opens its own file; the game history only migrates its tables.",
       severity: "error",
       from: {
         path: "^apps/hub/src/",
         pathNot:
-          "(^apps/hub/src/main\\.ts$|\\.test\\.ts$|^apps/hub/src/source/Sql[^/]+\\.ts$|^apps/hub/src/database/)"
+          "(^apps/hub/src/main\\.ts$|\\.test\\.ts$|^apps/hub/src/source/Sql[^/]+\\.ts$|^apps/hub/src/database/|^apps/hub/src/feed/FeedLog\\.ts$|^apps/hub/src/GameHistory\\.ts$)"
       },
       to: { path: "^apps/hub/src/database/" }
     },
@@ -79,14 +80,6 @@ module.exports = {
       to: { path: "^apps/hub/src/TestTelemetry\\.ts$" }
     },
     {
-      name: "test-cluster-is-for-tests",
-      comment:
-        "The game actors on an in-memory cluster, as a test runs them, are imported only by test files.",
-      severity: "error",
-      from: { pathNot: "\\.test\\.ts$" },
-      to: { path: "^apps/hub/src/TestCluster\\.ts$" }
-    },
-    {
       name: "test-provider-is-for-tests",
       comment: "A provider scripted for a test, and the games it lists, are imported only by test files.",
       severity: "error",
@@ -109,7 +102,12 @@ module.exports = {
       from: {},
       to: { path: "(^|/)index\\.tsx?$", pathNot: "node_modules" }
     },
-    { name: "no-circular", severity: "error", from: {}, to: { circular: true } }
+    {
+      name: "no-circular",
+      severity: "error",
+      from: {},
+      to: { circular: true, viaOnly: { dependencyTypesNot: ["type-only"] } }
+    }
   ],
   options: {
     doNotFollow: { path: "node_modules" },

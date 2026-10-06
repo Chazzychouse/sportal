@@ -10,15 +10,16 @@ import { HttpClient, HttpRouter, HttpServer } from "effect/http"
 import { HttpApiClient, HttpApiTest } from "effect/http-api"
 import { TestClock } from "effect/testing"
 import * as Database from "../database/Database.ts"
+import { FeedLog } from "../feed/FeedLog.ts"
 import { HubConfig } from "../HubConfig.ts"
 import { Ingest } from "../ingest/Ingest.ts"
-import { LiveFeed } from "../provider/LiveFeed.ts"
+import { LiveGames } from "../LiveGames.ts"
 import { Provider } from "../provider/Provider.ts"
 import { Slate } from "../Slate.ts"
 import * as SqlChannelStore from "../source/SqlChannelStore.ts"
 import * as YouTubeTv from "../source/youtube-tv/YouTubeTv.ts"
 import { StageSessions } from "../stage/StageSessions.ts"
-import * as TestCluster from "../TestCluster.ts"
+import { neverPushing, polling } from "../TestProvider.ts"
 import * as HubServer from "./HubServer.ts"
 
 const espn = Network.make("ESPN")
@@ -301,12 +302,15 @@ function hubUnderTest() {
     Layer.provideMerge(YouTubeTv.layer),
     Layer.provide(SqlChannelStore.layer),
     Layer.provide(Database.layer(":memory:")),
-    Layer.provideMerge(Slate.layer),
-    Layer.provide(Ingest.layer(["fbs"])),
+    Layer.provideMerge(Layer.mergeAll(Slate.layer, Ingest.layer(["fbs"]))),
     Layer.provide([
-      Layer.succeed(Provider, Provider.of({ slate: () => Effect.succeed([game]) })),
-      TestCluster.gameActors,
-      LiveFeed.none
+      LiveGames.layer,
+      Layer.succeed(
+        Provider,
+        polling(() => Effect.succeed([game]))
+      ),
+      neverPushing,
+      FeedLog.layer.pipe(Layer.provide(Database.layer(":memory:")))
     ]),
     Layer.provideMerge(testConfig())
   )

@@ -9,7 +9,7 @@ import { HttpClient, HttpClientResponse } from "effect/http"
 import { TestClock } from "effect/testing"
 import * as Database from "../../database/Database.ts"
 import * as EspnProvider from "../../provider/espn/EspnProvider.ts"
-import { Provider } from "../../provider/Provider.ts"
+import { listedBy } from "../../TestProvider.ts"
 import { ChannelStore } from "../ChannelStore.ts"
 import { Source } from "../Source.ts"
 import * as SqlChannelStore from "../SqlChannelStore.ts"
@@ -385,7 +385,7 @@ function tallied(league: LeagueId) {
       streamingOnly: 0,
       notInGuide: 0
     }
-    for (const game of yield* (yield* Provider).slate(league)) {
+    for (const game of yield* listedBy(league)) {
       ChannelAvailability.$match(availabilityOf(game), {
         Carried: ({ channel }) => {
           tally.carried[game.id] = channel.name

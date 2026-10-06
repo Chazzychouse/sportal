@@ -1,6 +1,6 @@
 {
   "uid": "sportal-game",
-  "title": "Game actors",
+  "title": "Live games",
   "schemaVersion": 41,
   "time": {
     "from": "now-3h",
@@ -72,7 +72,7 @@
           "type": "prometheus",
           "uid": "prometheus"
         },
-        "description": "Games with an actor in the time range, by matchup.",
+        "description": "Games in the time range, by matchup.",
         "query": {
           "query": "query_result(max by (game, matchup) (max_over_time(sportal_game_state_ratio[$__range]) * on (job, instance) group_left target_info{sportal_mode=\"$mode\"}))",
           "refId": "game"
@@ -110,7 +110,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Every game with an actor in the time range. Click a game to show only it below.",
+      "description": "Every game in the time range. Click a game to show only it below.",
       "targets": [
         {
           "refId": "A",
@@ -160,13 +160,6 @@
           "instant": true,
           "range": false,
           "format": "table"
-        },
-        {
-          "refId": "H",
-          "expr": "sum by (game) (round(increase(sportal_game_actor_starts_total[$__range]) * on (job, instance) group_left target_info{sportal_mode=\"$mode\"}))",
-          "instant": true,
-          "range": false,
-          "format": "table"
         }
       ],
       "transformations": [
@@ -201,8 +194,7 @@
               "Value #E": 6,
               "Value #F": 7,
               "Value #G": 8,
-              "Value #H": 9,
-              "game": 10
+              "game": 9
             },
             "renameByName": {
               "Value #A": "State",
@@ -212,7 +204,6 @@
               "Value #E": "Behind",
               "Value #F": "Stale stretches",
               "Value #G": "Events",
-              "Value #H": "Actor starts",
               "matchup": "Matchup",
               "league": "League",
               "game": "Game id"
@@ -236,7 +227,7 @@
           "links": [
             {
               "title": "Show only this game",
-              "url": "/d/sportal-game/game-actors?${mode:queryparam}&var-game=${__data.fields[\"Game id\"]}&${__url_time_range}"
+              "url": "/d/sportal-game/live-games?${mode:queryparam}&var-game=${__data.fields[\"Game id\"]}&${__url_time_range}"
             }
           ]
         },
@@ -525,7 +516,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Behind is a snapshot older in game time than the one the actor has: the feed serving a stale copy.",
+      "description": "Behind is a snapshot older in game time than the one the fold has: the feed serving a stale copy.",
       "targets": [
         {
           "refId": "A",
@@ -623,43 +614,6 @@
       }
     },
     {
-      "type": "bargauge",
-      "title": "Actor starts",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "description": "More than one start for a game is its actor stopping and starting again.",
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "sum by (matchup) (round(increase(sportal_game_actor_starts_total{game=~\"$game\"}[$__range]) * on (job, instance) group_left target_info{sportal_mode=\"$mode\"}))",
-          "instant": true,
-          "range": false,
-          "format": "time_series",
-          "legendFormat": "{{matchup}}"
-        }
-      ],
-      "options": {
-        "orientation": "horizontal",
-        "displayMode": "basic"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "min": 0,
-          "decimals": 0
-        },
-        "overrides": []
-      },
-      "id": 10,
-      "gridPos": {
-        "x": 12,
-        "y": 45,
-        "w": 12,
-        "h": 8
-      }
-    },
-    {
       "type": "logs",
       "title": "Logs",
       "datasource": {
@@ -679,14 +633,14 @@
       "id": 11,
       "gridPos": {
         "x": 0,
-        "y": 53,
+        "y": 45,
         "w": 24,
         "h": 12
       }
     },
     {
       "type": "table",
-      "title": "Receive traces",
+      "title": "Take traces",
       "datasource": {
         "type": "tempo",
         "uid": "tempo"
@@ -696,13 +650,13 @@
           "refId": "A",
           "queryType": "traceql",
           "limit": 20,
-          "query": "{resource.service.name=\"sportal-hub\" && resource.sportal.mode=\"$mode\" && name=\"GameActors.receive\" && span.sportal.game=~\"$game\"}"
+          "query": "{resource.service.name=\"sportal-hub\" && resource.sportal.mode=\"$mode\" && name=\"LiveGames.take\"}"
         }
       ],
       "id": 12,
       "gridPos": {
         "x": 0,
-        "y": 65,
+        "y": 57,
         "w": 24,
         "h": 8
       }

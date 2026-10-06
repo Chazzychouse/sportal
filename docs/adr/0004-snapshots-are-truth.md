@@ -1,7 +1,7 @@
 # 4. Snapshots are the truth
 
 Date: 2026-10-03
-Status: Accepted
+Status: Superseded by ADR 0008
 
 ## Context
 

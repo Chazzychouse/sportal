@@ -1,15 +1,15 @@
 import { NodeSocket } from "@effect/platform-node"
 import { Effect, Layer, Option } from "effect"
-import * as Cluster from "./Cluster.ts"
-import { GameActors } from "./GameActors.ts"
+import { FeedLog } from "./feed/FeedLog.ts"
+import { GameHistory } from "./GameHistory.ts"
 import { HubConfig } from "./HubConfig.ts"
 import { Ingest } from "./ingest/Ingest.ts"
+import { LiveGames } from "./LiveGames.ts"
 import * as EspnProvider from "./provider/espn/EspnProvider.ts"
 import * as FastCast from "./provider/espn/FastCast.ts"
-import { LiveFeed } from "./provider/LiveFeed.ts"
 import { Slate } from "./Slate.ts"
 import * as ScenarioClock from "./scenario/ScenarioClock.ts"
-import * as ScenarioProvider from "./scenario/ScenarioProvider.ts"
+import * as ScenarioIngest from "./scenario/ScenarioIngest.ts"
 import * as ScenarioSource from "./scenario/ScenarioSource.ts"
 import * as SqlChannelStore from "./source/SqlChannelStore.ts"
 import * as YouTubeTv from "./source/youtube-tv/YouTubeTv.ts"
@@ -30,35 +30,32 @@ export const layer = Layer.unwrap(
 
 const leagues = ["nfl", "fbs"] as const
 
+// Ingest is built once it has replayed the day's frames into the fold, so the Hub serves only after that.
 function live() {
   return Layer.mergeAll(
-    Slate.layer.pipe(
-      Layer.provide(
-        Ingest.layer(leagues).pipe(
-          Layer.provide([
-            EspnProvider.layer,
-            FastCast.layer.pipe(Layer.provide(NodeSocket.layerWebSocketConstructorWS))
-          ])
-        )
-      ),
-      Layer.provide(gameActors())
-    ),
+    Layer.mergeAll(
+      Slate.layer,
+      // Nothing reads the history yet; it only follows the fold.
+      Layer.effectDiscard(Layer.build(GameHistory.layer)),
+      Ingest.layer(leagues).pipe(
+        Layer.provide([
+          EspnProvider.layer,
+          FastCast.layer.pipe(Layer.provide(NodeSocket.layerWebSocketConstructorWS)),
+          FeedLog.inDataDir
+        ])
+      )
+    ).pipe(Layer.provide(LiveGames.layer)),
     YouTubeTv.layer.pipe(Layer.provide(SqlChannelStore.layer))
   )
 }
 
-// Ingest, the game actors, the scenario, and the Slate share one clock; the rest of the Hub keeps the real one.
+// The fold, the scenario, and the Slate share one clock; the rest of the Hub keeps the real one.
 function scripted(name: string, speed: number) {
   return Layer.mergeAll(
-    Slate.layer.pipe(
-      Layer.provide(Ingest.layer(leagues).pipe(Layer.provide([ScenarioProvider.layer(name), LiveFeed.none]))),
-      Layer.provide(gameActors()),
+    Layer.mergeAll(Slate.layer, ScenarioIngest.layer(name)).pipe(
+      Layer.provide(LiveGames.layer),
       Layer.provide(ScenarioClock.layer(speed))
     ),
     ScenarioSource.layer
   )
-}
-
-function gameActors() {
-  return GameActors.layer.pipe(Layer.provide(Cluster.inMemory))
 }

@@ -1,8 +1,10 @@
 import { assert, describe, it } from "@effect/vitest"
 import { DateTime, Duration } from "effect"
-import type { GameSnapshot } from "../Game.ts"
+import type { GameId } from "../Game.ts"
+import type { LiveGame } from "../LiveGame.ts"
 import type { Scenario } from "../Scenario.ts"
-import { Watchability } from "../Watchability.ts"
+import { followed } from "../TestGame.ts"
+import type { Watchability } from "../Watchability.ts"
 import { allLullsButOne } from "./AllLullsButOne.ts"
 import { blowoutAndUpsetBrewing } from "./BlowoutAndUpsetBrewing.ts"
 import { kickoffWindow } from "./KickoffWindow.ts"
@@ -69,17 +71,12 @@ describe("scenarios", () => {
  */
 function watched(scenario: Scenario, seconds: number) {
   const history = new Map<string, Array<readonly [number, Watchability]>>()
-  let previous: { slate: ReadonlyArray<GameSnapshot>; watchability: ReadonlyArray<Watchability> } = {
-    slate: [],
-    watchability: []
-  }
+  let live: ReadonlyMap<GameId, LiveGame> = new Map()
   for (let second = 0; second <= seconds; second += 10) {
     const now = DateTime.makeUnsafe(DateTime.toEpochMillis(scenario.origin) + second * 1000)
-    const slate = scenario.slateAt(scenario.origin, Duration.seconds(second))
-    const watchability = Watchability.fold(previous, slate, now)
-    for (const next of watchability)
+    live = followed(live, scenario.slateAt(scenario.origin, Duration.seconds(second)), now)
+    for (const { watchability: next } of live.values())
       history.set(next.game, [...(history.get(next.game) ?? []), [second, next] as const])
-    previous = { slate, watchability }
   }
   return (id: string, second: number) => history.get(id)?.find(([at]) => at === second)?.[1]
 }

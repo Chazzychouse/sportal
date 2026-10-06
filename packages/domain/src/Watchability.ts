@@ -1,5 +1,6 @@
-import { DateTime, Duration, Schema } from "effect"
+import { Array as Arr, DateTime, Duration, Option, Schema } from "effect"
 import { GameId, type GameSnapshot } from "./Game.ts"
+import type { GameEvent } from "./GameEvent.ts"
 
 /**
  * How worth watching a game is right now, 0–100, whether it is in a lull, and why — with what it remembers to tell
@@ -30,14 +31,19 @@ export class Watchability extends Schema.Class<Watchability>("sportal/Watchabili
     })
   }
 
-  /** This game one snapshot on: `before` is the snapshot this was judged from, `after` the new one. */
-  next(before: GameSnapshot, after: GameSnapshot, now: DateTime.Utc): Watchability {
-    const events = after.eventsSince(before)
+  /** This game one snapshot on, with the events between `before` and `after`. */
+  next(
+    before: GameSnapshot,
+    after: GameSnapshot,
+    events: ReadonlyArray<GameEvent>,
+    now: DateTime.Utc
+  ): Watchability {
     const played =
       before.clock !== after.clock ||
       before.period !== after.period ||
       before.status !== after.status ||
-      before.situation?.lastPlay !== after.situation?.lastPlay
+      before.situation?.lastPlay !== after.situation?.lastPlay ||
+      events.some((event) => event._tag === "Played")
     const newPlay = before.situation?.lastPlay !== after.situation?.lastPlay
     const breaks =
       (newPlay && announcesBreak(after)) ||
@@ -57,21 +63,28 @@ export class Watchability extends Schema.Class<Watchability>("sportal/Watchabili
     })
   }
 
-  /** Each game on a new slate, its watchability carried on from the previous slate, or judged fresh if first seen. */
-  static fold(
-    previous: {
-      readonly slate: ReadonlyArray<GameSnapshot>
-      readonly watchability: ReadonlyArray<Watchability>
-    },
-    slate: ReadonlyArray<GameSnapshot>,
-    now: DateTime.Utc
-  ): ReadonlyArray<Watchability> {
-    return slate.map((game) => {
-      const before = previous.slate.find((candidate) => candidate.id === game.id)
-      const last = previous.watchability.find((candidate) => candidate.game === game.id)
-      return before === undefined || last === undefined
-        ? Watchability.initial(game, now)
-        : last.next(before, game, now)
+  /** This game judged again at `now`, with nothing new: a break or a boost may have run out, or play stopped. */
+  at(game: GameSnapshot, now: DateTime.Utc): Watchability {
+    return judged(game, now, {
+      activeAt: this.activeAt,
+      breakUntil: this.breakUntil,
+      boostUntil: this.boostUntil
+    })
+  }
+
+  /**
+   * When `at` would next change its verdict with nothing new: the earliest of `breakUntil`, `boostUntil`, and when
+   * play counts as stopped (`activeAt` + 60 s), each only if after `now`. None when only a snapshot can change it.
+   */
+  wakeAt(now: DateTime.Utc): Option.Option<DateTime.Utc> {
+    const upcoming = Arr.getSomes([
+      Option.fromNullishOr(this.breakUntil),
+      Option.fromNullishOr(this.boostUntil),
+      Option.some(DateTime.addDuration(this.activeAt, stoppedAfter))
+    ]).filter((instant) => DateTime.isGreaterThan(instant, now))
+    return Arr.match(upcoming, {
+      onEmpty: Option.none<DateTime.Utc>,
+      onNonEmpty: (instants) => Option.some(instants.reduce(DateTime.min))
     })
   }
 }
