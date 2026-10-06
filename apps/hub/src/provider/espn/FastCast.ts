@@ -106,11 +106,10 @@ function connect(
       Stream.peel(Sink.head()),
       Effect.timeoutOrElse({ duration: silence, orElse: () => Effect.fail(silent()) })
     )
-    const opened = yield* Option.match(first, {
-      onNone: () =>
-        Effect.fail(new ProviderError({ reason: "Closed", cause: "FastCast closed before connecting" })),
-      onSome: Effect.succeed
-    })
+    const opened = yield* Effect.fromOption(
+      first,
+      () => new ProviderError({ reason: "Closed", cause: "FastCast closed before connecting" })
+    )
     const sid = yield* Option.match(decodeEnvelope(opened.text), {
       onNone: () =>
         Effect.fail(new ProviderError({ reason: "Refused", cause: "FastCast opened with an unknown op" })),
@@ -276,7 +275,7 @@ function checkpoint(envelope: { readonly tc: string; readonly pl: string }) {
       Option.match(FastCastMessage.owner(envelope.tc), {
         onNone: () => Effect.void,
         onSome: (owner) =>
-          Schema.decodeUnknownEffect(FastCastMessage.checkpointOf(owner))(body).pipe(
+          Schema.decodeEffect(FastCastMessage.checkpointOf(owner))(body).pipe(
             Effect.mapError(
               (cause) => new CheckpointError({ topic: envelope.tc, reason: "Undecodable", cause })
             )

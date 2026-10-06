@@ -7,7 +7,7 @@ import * as EspnPlay from "./EspnPlay.ts"
 
 // Play entities from the 2026-10-04 NFL recording, each as its game's `gp-` topic first added it, without its
 // participants.
-const recorded = Schema.decodeUnknownSync(
+const recorded = Schema.decodeSync(
   Schema.fromJsonString(Schema.Record(Schema.String, Schema.Record(Schema.String, Schema.Json)))
 )(readFileSync(new URL("./fixtures/nfl-plays-2026-10-04.json", import.meta.url), "utf8"))
 const entity = (id: string) => recorded[id] ?? {}

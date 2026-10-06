@@ -84,7 +84,7 @@ const Framed = Message.mapMembers(
   Tuple.evolve([
     (patched) =>
       patched.mapFields(
-        Struct.assign({ pl: Schema.fromJsonString(Schema.Struct({ ts: Schema.optional(Schema.Number) })) })
+        Struct.assign({ pl: Schema.fromJsonString(Schema.Struct({ ts: Schema.optional(Schema.Finite) })) })
       )
   ])
 )

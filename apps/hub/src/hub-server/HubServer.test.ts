@@ -158,7 +158,7 @@ describe("GET /api/live", () => {
         Stream.map((line) => {
           // Each event is one line, `data: <json>`, followed by a blank line.
           assert.isTrue(line.startsWith("data: "))
-          return Schema.decodeUnknownSync(LiveMessageJson)(line.slice("data: ".length))
+          return Schema.decodeSync(LiveMessageJson)(line.slice("data: ".length))
         })
       )
 

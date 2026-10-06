@@ -41,10 +41,9 @@ describe("StageSessions", () => {
   it.effect("applies concurrent commands without losing any", () =>
     Effect.gen(function* () {
       const sessions = yield* StageSessions
-      yield* Effect.all(
-        slate
-          .slice(0, 4)
-          .map((snapshot, tile) => sessions.dispatch({ _tag: "Assign", tile, game: snapshot.id })),
+      yield* Effect.forEach(
+        slate.slice(0, 4),
+        (snapshot, tile) => sessions.dispatch({ _tag: "Assign", tile, game: snapshot.id }),
         { concurrency: "unbounded" }
       )
       const stage = yield* sessions.stage

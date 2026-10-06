@@ -19,6 +19,7 @@
       "ignoreBinaries": ["electron", "electron-vite"]
     }
   },
+  "ignoreDependencies": ["@effect/language-service"],
   "ignoreIssues": {
     "apps/web/src/design/**": ["exports", "types"]
   }

@@ -107,8 +107,10 @@ function liveRoute() {
         slate.changes.pipe(Stream.map((slate) => ({ _tag: "SlateChanged" as const, slate }))),
         sessions.changes.pipe(Stream.map((stage) => ({ _tag: "StageChanged" as const, stage })))
       )
-      const encode = Schema.encodeSync(LiveMessageJson)
-      const events = messages.pipe(Stream.map((message) => `data: ${encode(message)}\n\n`))
+      const encode = Schema.encodeEffect(LiveMessageJson)
+      const events = messages.pipe(
+        Stream.mapEffect((message) => Effect.map(encode(message), (json) => `data: ${json}\n\n`))
+      )
       // `tick` emits once at the start; only the later ticks are wanted.
       const keepAlive = Stream.tick("20 seconds").pipe(
         Stream.drop(1),

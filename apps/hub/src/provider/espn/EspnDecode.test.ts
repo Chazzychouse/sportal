@@ -15,16 +15,16 @@ import { EspnEvent } from "./EspnEvent.ts"
 // 18:00Z, each line one text as it arrived, and the scoreboard polled at 18:00Z.
 const fixture = (name: string) => readFileSync(new URL(`./fixtures/${name}`, import.meta.url), "utf8")
 const checkpointBody = fixture("nfl-fastcast-checkpoint-2026-10-04T1752Z.json")
-const socketTexts = Schema.decodeUnknownSync(Schema.Array(Schema.fromJsonString(Schema.String)))(
+const socketTexts = Schema.decodeSync(Schema.Array(Schema.fromJsonString(Schema.String)))(
   fixture("nfl-fastcast-messages-2026-10-04T1752Z.jsonl").trim().split("\n")
 )
 const scoreboardBody = fixture("nfl-scoreboard-2026-10-04T1800Z.json")
-const playEntities = Schema.decodeUnknownSync(
+const playEntities = Schema.decodeSync(
   Schema.fromJsonString(Schema.Record(Schema.String, Schema.Record(Schema.String, Schema.Json)))
 )(fixture("nfl-plays-2026-10-04.json"))
 // Recorded from ESPN on 2026-10-04 on BUF at NE's game topic: the two plays its messages 819–822 patch, as they stood
 // after message 818, and those messages as the recorder kept them. Message 819 opens with a `move` outside the plays.
-const moveRecording = Schema.decodeUnknownSync(
+const moveRecording = Schema.decodeSync(
   Schema.fromJsonString(
     Schema.Struct({
       checkpoint: Schema.Struct({ mid: Schema.Int, body: Schema.Json }),
@@ -33,7 +33,7 @@ const moveRecording = Schema.decodeUnknownSync(
           op: Schema.String,
           tc: Schema.String,
           mid: Schema.Int,
-          ts: Schema.Number,
+          ts: Schema.Finite,
           pl: Schema.String
         })
       )
@@ -48,7 +48,7 @@ layer(EspnDecode.layer)("EspnDecode", (it) => {
   // Each recorded feed as it decoded when both feeds' events were read by one transform: the poll's listings, the
   // checkpoint's pushes, and the checkpoint's events each read alone.
   describe("the recorded feeds decode to the same games", () => {
-    const expected = Schema.decodeUnknownSync(
+    const expected = Schema.decodeSync(
       Schema.fromJsonString(Schema.Struct({ deliveries: Schema.Json, checkpointEvents: Schema.Json }))
     )(fixture("decoded-snapshots.json"))
     const encoded = (value: unknown) => JSON.parse(JSON.stringify(value))
@@ -62,7 +62,7 @@ layer(EspnDecode.layer)("EspnDecode", (it) => {
           checkpoint(
             "event-football-nfl",
             1,
-            Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Json))(checkpointBody)
+            yield* Schema.decodeEffect(Schema.fromJsonString(Schema.Json))(checkpointBody)
           )
         ])
 
@@ -96,7 +96,7 @@ layer(EspnDecode.layer)("EspnDecode", (it) => {
     )
 
     it("each checkpoint event alone", () => {
-      const events = Schema.decodeUnknownSync(
+      const events = Schema.decodeSync(
         Schema.fromJsonString(
           Schema.Struct({
             sports: Schema.Tuple([
@@ -443,7 +443,7 @@ layer(EspnDecode.layer)("EspnDecode", (it) => {
     "an event that does not decode is skipped and noted by league and feed, and the rest listed",
     () =>
       Effect.gen(function* () {
-        const { events } = Schema.decodeUnknownSync(
+        const { events } = yield* Schema.decodeEffect(
           Schema.fromJsonString(Schema.Struct({ events: Schema.Array(Schema.Json) }))
         )(scoreboardBody)
         const {

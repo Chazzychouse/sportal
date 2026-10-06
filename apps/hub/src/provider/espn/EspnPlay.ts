@@ -79,7 +79,7 @@ const Entity = Schema.Struct({
   end: Spot,
   probabilities: Schema.optional(
     Schema.Struct({
-      winProbability: Schema.optional(Schema.Struct({ homeWinPercentage: Schema.Number }))
+      winProbability: Schema.optional(Schema.Struct({ homeWinPercentage: Schema.Finite }))
     })
   )
 })

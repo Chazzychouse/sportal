@@ -99,7 +99,7 @@ function checkpoint(
 ): Effect.Effect<{ readonly mid: number; readonly document: Schema.Json }, Schema.SchemaError> {
   return Effect.all({
     mid: decodeMid(frame.sourceId),
-    body: Schema.decodeUnknownEffect(FastCastMessage.checkpointOf(owner))(frame.body)
+    body: Schema.decodeEffect(FastCastMessage.checkpointOf(owner))(frame.body)
   }).pipe(
     Effect.map(({ mid, body }) => ({
       mid,

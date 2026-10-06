@@ -49,12 +49,10 @@ const serveHub = Effect.gen(function* () {
       Queue.take(pending).pipe(
         Effect.flatMap(({ placements, transition }) =>
           tiles.sync(placements, transition).pipe(
-            Effect.catchCause((cause) => {
-              if (Cause.hasInterrupts(cause)) {
-                return Effect.failCause(cause)
-              }
-              return Effect.logError("Sportal: a tile sync failed", cause)
-            })
+            Effect.catchCauseIf(
+              (cause) => !Cause.hasInterrupts(cause),
+              (cause) => Effect.logError("Sportal: a tile sync failed", cause)
+            )
           )
         )
       )

@@ -415,8 +415,11 @@ describe("Ingest", () => {
           assert.deepStrictEqual(polled.seq, Option.some(3))
           assert.strictEqual(polled.live.get(GameId.make("1"))?.snapshot.period, 4)
         }).pipe(
-          Effect.provide(over(scripted([[liveSnapshot({ id: GameId.make("1"), period: 4 })]]), { ended })),
-          Effect.provide(logged)
+          Effect.provide(
+            over(scripted([[liveSnapshot({ id: GameId.make("1"), period: 4 })]]), { ended }).pipe(
+              Layer.provideMerge(logged)
+            )
+          )
         )
       }).pipe(Effect.provide([Database.at(":memory:"), NodeCrypto.layer]), withMetrics)
     }
@@ -454,7 +457,7 @@ describe("Ingest", () => {
           logs.filter(({ message }) => message.includes("Decode:")),
           []
         )
-      }).pipe(Effect.provide(over(espnDecoding)), Effect.provide(logged))
+      }).pipe(Effect.provide(over(espnDecoding).pipe(Layer.provideMerge(logged))))
     }).pipe(Effect.provide([Database.at(":memory:"), NodeCrypto.layer]), withMetrics)
   })
 
@@ -484,7 +487,7 @@ describe("Ingest", () => {
         1
       )
       assert.isTrue(logs.some(({ level, message }) => level === "Error" && message.includes("Decode:")))
-    }).pipe(Effect.provide(ingesting(espnDecoding)), Effect.provide(logged), withMetrics)
+    }).pipe(Effect.provide(ingesting(espnDecoding).pipe(Layer.provideMerge(logged))), withMetrics)
   })
 
   it.effect("a frame appended the moment the replay ends, before anything else runs, reaches the fold", () =>

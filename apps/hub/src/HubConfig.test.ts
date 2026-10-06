@@ -87,9 +87,10 @@ describe("HubConfig", () => {
   ] as const) {
     it.effect(`refuses ${name}=${value}, naming the setting`, () =>
       Effect.gen(function* () {
-        const error = yield* Effect.gen(function* () {
-          return yield* HubConfig
-        }).pipe(Effect.provide(withEnv({ [name]: value })), Effect.flip)
+        const error = yield* Effect.service(HubConfig).pipe(
+          Effect.provide(withEnv({ [name]: value })),
+          Effect.flip
+        )
         assert.include(error.message, name)
       })
     )

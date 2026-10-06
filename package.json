@@ -7,6 +7,7 @@
     "node": ">=24"
   },
   "scripts": {
+    "prepare": "effect-tsgo patch --typescript --no-oxlint",
     "dev": "pnpm telemetry || echo 'sportal: telemetry is off (is Docker running?)'; pnpm -r --parallel run dev",
     "dev:x11": "SPORTAL_ELECTRON_FLAGS=--ozone-platform=x11 pnpm dev",
     "check": "biome check . && pnpm typecheck && pnpm structure && pnpm test",
@@ -19,12 +20,13 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.15",
+    "@effect/tsgo": "0.50.0",
     "@effect/vitest": "4.0.0",
     "@types/node": "^24",
     "dependency-cruiser": "^18.5.0",
     "knip": "^6.39.0",
     "lefthook": "^2.1.16",
-    "typescript": "^6.0.3",
+    "typescript": "7.0.2",
     "vitest": "^5.0.3"
   }
 }
