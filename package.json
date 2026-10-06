@@ -7,7 +7,7 @@
     "node": ">=24"
   },
   "scripts": {
-    "dev": "pnpm -r --parallel run dev",
+    "dev": "pnpm telemetry || echo 'sportal: telemetry is off (is Docker running?)'; pnpm -r --parallel run dev",
     "dev:x11": "SPORTAL_ELECTRON_FLAGS=--ozone-platform=x11 pnpm dev",
     "check": "biome check . && pnpm typecheck && pnpm structure && vitest run",
     "typecheck": "pnpm -r --parallel exec tsc --noEmit",

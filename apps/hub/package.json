@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "SPORTAL_DATA_DIR=${SPORTAL_DATA_DIR:-../../.sportal} node --watch src/main.ts",
+    "dev": "SPORTAL_OTLP_URL=${SPORTAL_OTLP_URL:-http://localhost:4318} SPORTAL_DATA_DIR=${SPORTAL_DATA_DIR:-../../.sportal} node --watch src/main.ts",
     "start": "node src/main.ts",
     "scenario:cut": "node src/provider/espn/CutScenario.ts"
   },
