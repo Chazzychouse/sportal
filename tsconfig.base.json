@@ -1,4 +1,5 @@
 {
+  "$schema": "./node_modules/@effect/tsgo/schema.json",
   "compilerOptions": {
     "target": "ES2023",
     "lib": ["ES2023"],
@@ -14,6 +15,23 @@
     "resolveJsonModule": true,
     "noEmit": true,
     "skipLibCheck": true,
-    "types": ["node"]
+    "types": ["node"],
+    "plugins": [
+      {
+        "name": "@effect/language-service",
+        // AGENTS.md: "HTTP lives in `effect/http` and `effect/http-api`". The technical spec (2.2) adds Effect SQL for
+        // persistence and `effect/observability` for OTLP telemetry; FastCast is ESPN's WebSocket, read through
+        // `effect/socket`. The Hub's process test spawns the Hub through Effect's process wrapper, `effect/process`.
+        // Effect marks all of these unstable; they are the house choices, not accidents.
+        "allowedUnstableApis": [
+          "effect/http",
+          "effect/http-api",
+          "effect/sql",
+          "effect/socket",
+          "effect/observability/Otlp",
+          "effect/process"
+        ]
+      }
+    ]
   }
 }
