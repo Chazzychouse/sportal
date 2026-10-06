@@ -18,12 +18,16 @@ import {
 import { Entity, type Sharding } from "effect/cluster"
 import { Rpc } from "effect/rpc"
 
+/** Which feed a snapshot came from. */
+export const DeliverySource = Schema.Literals(["push", "poll"])
+export type DeliverySource = typeof DeliverySource.Type
+
 /** The game actors: one cluster entity per game, each deciding its game's live state from the snapshots sent to it. */
 export class GameActors extends Context.Service<
   GameActors,
   {
     /** Sends a snapshot to its game's actor and waits until the actor has taken or ignored it. */
-    readonly receive: (snapshot: GameSnapshot) => Effect.Effect<void>
+    readonly receive: (snapshot: GameSnapshot, source: DeliverySource) => Effect.Effect<void>
     /** Every running actor's live game, by game id. */
     readonly liveGames: Effect.Effect<ReadonlyMap<GameId, LiveGame>>
     /** Every running actor's live game, by game id, on each change. */
@@ -39,10 +43,13 @@ export class GameActors extends Context.Service<
         const clientFor = yield* Game.client
         const liveGames = yield* LiveGames
         return GameActors.of({
-          receive: Effect.fn("GameActors.receive")(function* (snapshot: GameSnapshot) {
-            yield* Effect.annotateCurrentSpan({ "sportal.game": snapshot.id })
+          receive: Effect.fn("GameActors.receive")(function* (
+            snapshot: GameSnapshot,
+            source: DeliverySource
+          ) {
+            yield* Effect.annotateCurrentSpan({ "sportal.game": snapshot.id, "sportal.source": source })
             yield* clientFor(snapshot.id)
-              .Receive({ snapshot })
+              .Receive({ snapshot, source })
               .pipe(
                 Effect.catch((error) => logDefect(undelivered, Cause.fail(error), snapshot.id, snapshot)),
                 Effect.catchDefect((defect) =>
@@ -86,7 +93,7 @@ function annotationsOf(game: GameId, snapshot: GameSnapshot) {
   return { game, league: snapshot.league, matchup: snapshot.matchup() }
 }
 
-const Receive = Rpc.make("Receive", { payload: { snapshot: GameSnapshot } })
+const Receive = Rpc.make("Receive", { payload: { snapshot: GameSnapshot, source: DeliverySource } })
 
 /** The game actor entity, keyed by game id. Exported for its tests, which address an entity directly. */
 export const Game = Entity.make("Game", [Receive])
@@ -153,9 +160,13 @@ const gameEntity = Game.toLayer(
       { startImmediately: true }
     )
     return Game.of({
-      Receive: ({ payload: { snapshot } }) =>
+      Receive: ({ payload: { snapshot, source } }) =>
         Effect.gen(function* () {
-          yield* Effect.annotateCurrentSpan({ "sportal.game": id, "sportal.league": snapshot.league })
+          yield* Effect.annotateCurrentSpan({
+            "sportal.game": id,
+            "sportal.league": snapshot.league,
+            "sportal.source": source
+          })
           if (snapshot.id !== id) {
             return yield* Effect.die(new Error(`Game actor ${id} was sent a snapshot of game ${snapshot.id}`))
           }
@@ -169,12 +180,15 @@ const gameEntity = Game.toLayer(
           )
           const outcome = Option.isSome(next) ? "taken" : "behind"
           yield* Effect.logDebug(
-            `GameActors: ${snapshot.matchup()}: ${outcome} ${gameTimeOf(snapshot)}${Option.match(before, {
-              onNone: () => "",
-              onSome: (liveGame) => ` (had ${gameTimeOf(liveGame.snapshot)})`
-            })}`
+            `GameActors: ${snapshot.matchup()}: ${outcome} ${source} ${gameTimeOf(snapshot)}${Option.match(
+              before,
+              {
+                onNone: () => "",
+                onSome: (liveGame) => ` (had ${gameTimeOf(liveGame.snapshot)})`
+              }
+            )}`
           )
-          yield* Metric.update(Metric.withAttributes(snapshots, { outcome }), 1)
+          yield* Metric.update(Metric.withAttributes(snapshots, { outcome, source }), 1)
         }).pipe(asGame(snapshot, "a snapshot"), Effect.asVoid)
     })
 

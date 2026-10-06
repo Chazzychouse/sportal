@@ -42,7 +42,7 @@ export class Ingest extends Context.Service<
           // Only this poll's games: a failed league's kept games are not resent, so their actors go stale.
           yield* Effect.forEach(
             results.filter(Result.isSuccess).flatMap((result) => result.success),
-            gameActors.receive,
+            (snapshot) => gameActors.receive(snapshot, "poll"),
             { concurrency: "unbounded", discard: true }
           )
           yield* SubscriptionRef.set(listed, games)

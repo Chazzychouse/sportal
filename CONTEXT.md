@@ -27,6 +27,7 @@ Every exported type name must be a term here.
 | **Live game** | One game as the Hub follows it: its latest snapshot and its state (`LiveGameState`): upcoming, live, stale, or over. | game state, entity |
 | **Stale** | A live game no snapshot has reached for 90 seconds. It stays current for 30 minutes after its last update, then its actor may stop. | |
 | **Game actor** | The cluster entity that follows one game: its live game in memory, its staleness timer, its lifecycle. | durable object, worker |
+| **Delivery source** | Which feed a snapshot came from: `push` or `poll`. | origin, feed type |
 | **Test game** | A game snapshot built for a test, with defaults for everything the test does not care about. | fixture, mock |
 | **Scenario** | A timeline of game snapshots for several games, written or cut from a recording, that a Hub can play instead of a provider. | fixture, simulation |
 | **Scenario time** | The clock a scenario plays on: from the Hub's start, at the scenario's speed. | |

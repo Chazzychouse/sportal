@@ -39,8 +39,8 @@ describe("GameActors", () => {
         clock: "10:00",
         home: { team: team("HOME"), score: 7 }
       })
-      yield* actors.receive(snapshot({ id: one }))
-      yield* actors.receive(live)
+      yield* actors.receive(snapshot({ id: one }), "poll")
+      yield* actors.receive(live, "poll")
       const game = (yield* actors.liveGames).get(one)
       assert.isTrue(game !== undefined && LiveGameState.$is("Live")(game.state))
       assert.strictEqual(game?.snapshot.home.score, 7)
@@ -50,8 +50,8 @@ describe("GameActors", () => {
   it.effect("a behind snapshot is ignored", () =>
     Effect.gen(function* () {
       const actors = yield* GameActors
-      yield* actors.receive(snapshot({ id: one, status: "live", period: 2, clock: "5:00" }))
-      yield* actors.receive(snapshot({ id: one, status: "live", period: 1, clock: "5:00" }))
+      yield* actors.receive(snapshot({ id: one, status: "live", period: 2, clock: "5:00" }), "poll")
+      yield* actors.receive(snapshot({ id: one, status: "live", period: 1, clock: "5:00" }), "poll")
       assert.strictEqual((yield* actors.liveGames).get(one)?.snapshot.period, 2)
     }).pipe(Effect.provide(TestCluster.gameActors))
   )
@@ -61,8 +61,8 @@ describe("GameActors", () => {
       const actors = yield* GameActors
       const first = snapshot({ id: one })
       const second = snapshot({ id: two, status: "live", period: 3, clock: "1:00" })
-      yield* actors.receive(first)
-      yield* actors.receive(second)
+      yield* actors.receive(first, "poll")
+      yield* actors.receive(second, "poll")
       const liveGames = yield* actors.liveGames
       assert.strictEqual(liveGames.get(one)?.snapshot, first)
       assert.strictEqual(liveGames.get(two)?.snapshot, second)
@@ -79,8 +79,8 @@ describe("GameActors", () => {
         Stream.runCollect,
         Effect.forkChild({ startImmediately: true })
       )
-      yield* actors.receive(first)
-      yield* actors.receive(second)
+      yield* actors.receive(first, "poll")
+      yield* actors.receive(second, "poll")
       const values = yield* Fiber.join(collecting)
       assert.isTrue(values.some((liveGames) => liveGames.get(one)?.snapshot === first))
       assert.strictEqual(values.at(-1)?.get(one)?.snapshot, second)
@@ -98,7 +98,7 @@ describe("GameActors", () => {
       ]
       yield* Effect.forEach(snapshots, (sent) =>
         Effect.gen(function* () {
-          yield* actors.receive(sent)
+          yield* actors.receive(sent, "poll")
           assert.strictEqual((yield* actors.liveGames).get(one)?.snapshot, sent)
         })
       )
@@ -110,16 +110,16 @@ describe("GameActors", () => {
       const actors = yield* GameActors
       const first = snapshot({ id: one, status: "live", period: 1, clock: "9:00" })
       const second = snapshot({ id: two, status: "live", period: 2, clock: "9:00" })
-      yield* actors.receive(first)
-      yield* actors.receive(second)
+      yield* actors.receive(first, "poll")
+      yield* actors.receive(second, "poll")
       const clientFor = yield* Game.client
-      const sent = yield* Effect.exit(clientFor(one).Receive({ snapshot: second }))
+      const sent = yield* Effect.exit(clientFor(one).Receive({ snapshot: second, source: "poll" }))
       assert.isTrue(Exit.isSuccess(sent))
       const afterDefect = yield* actors.liveGames
       assert.strictEqual(afterDefect.get(one)?.snapshot, first)
       assert.strictEqual(afterDefect.get(two)?.snapshot, second)
       const next = snapshot({ id: one, status: "live", period: 1, clock: "8:00" })
-      yield* actors.receive(next)
+      yield* actors.receive(next, "poll")
       assert.strictEqual((yield* actors.liveGames).get(one)?.snapshot, next)
     }).pipe(Effect.provide(GameActors.layer.pipe(Layer.provideMerge(Cluster.inMemory))))
   )
@@ -127,11 +127,13 @@ describe("GameActors", () => {
   it.effect("after the layer is rebuilt a game is current on its next snapshot", () =>
     Effect.gen(function* () {
       const live = snapshot({ id: one, status: "live", period: 2, clock: "5:00" })
-      yield* GameActors.use((actors) => actors.receive(live)).pipe(Effect.provide(TestCluster.gameActors))
+      yield* GameActors.use((actors) => actors.receive(live, "poll")).pipe(
+        Effect.provide(TestCluster.gameActors)
+      )
       yield* Effect.gen(function* () {
         const actors = yield* GameActors
         assert.strictEqual((yield* actors.liveGames).size, 0)
-        yield* actors.receive(live)
+        yield* actors.receive(live, "poll")
         assert.strictEqual((yield* actors.liveGames).get(one)?.snapshot, live)
       }).pipe(Effect.provide(TestCluster.gameActors))
     })
@@ -144,7 +146,7 @@ describe("GameActors", () => {
       Effect.gen(function* () {
         const actors = yield* GameActors
         const receivedAt = yield* DateTime.now
-        yield* actors.receive(live("10:00"))
+        yield* actors.receive(live("10:00"), "poll")
         yield* TestClock.adjust("89 seconds")
         assert.isTrue(LiveGameState.$is("Live")(yield* stateOf(one)))
         yield* TestClock.adjust("1 second")
@@ -159,9 +161,9 @@ describe("GameActors", () => {
     it.effect("a refreshed game's timer moves with it", () =>
       Effect.gen(function* () {
         const actors = yield* GameActors
-        yield* actors.receive(live("10:00"))
+        yield* actors.receive(live("10:00"), "poll")
         yield* TestClock.adjust("60 seconds")
-        yield* actors.receive(live("9:00"))
+        yield* actors.receive(live("9:00"), "poll")
         yield* TestClock.adjust("60 seconds")
         assert.isTrue(LiveGameState.$is("Live")(yield* stateOf(one)))
         yield* TestClock.adjust("30 seconds")
@@ -172,12 +174,12 @@ describe("GameActors", () => {
     it.effect("a stale game is live again on its next snapshot", () =>
       Effect.gen(function* () {
         const actors = yield* GameActors
-        yield* actors.receive(live("10:00"))
+        yield* actors.receive(live("10:00"), "poll")
         yield* TestClock.adjust("90 seconds")
         assert.isTrue(LiveGameState.$is("Stale")(yield* stateOf(one)))
         yield* TestClock.adjust("10 seconds")
         const receivedAt = yield* DateTime.now
-        yield* actors.receive(live("9:00"))
+        yield* actors.receive(live("9:00"), "poll")
         const state = yield* stateOf(one)
         assert.isTrue(LiveGameState.$is("Live")(state) && DateTime.Equivalence(state.updatedAt, receivedAt))
       }).pipe(Effect.provide(TestCluster.gameActors))
@@ -196,8 +198,8 @@ describe("GameActors", () => {
           ),
           Effect.forkChild({ startImmediately: true })
         )
-        yield* actors.receive(snapshot({ id: one }))
-        yield* actors.receive(snapshot({ id: two, status: "final", period: 4, clock: "0:00" }))
+        yield* actors.receive(snapshot({ id: one }), "poll")
+        yield* actors.receive(snapshot({ id: two, status: "final", period: 4, clock: "0:00" }), "poll")
         yield* TestClock.adjust("10 minutes")
         const states = yield* Ref.get(seen)
         assert.isTrue(states.some(LiveGameState.$is("Upcoming")))
@@ -211,7 +213,7 @@ describe("GameActors", () => {
     it.effect("a live game outlasts 5 idle minutes", () =>
       Effect.gen(function* () {
         const actors = yield* GameActors
-        yield* actors.receive(live("10:00"))
+        yield* actors.receive(live("10:00"), "poll")
         yield* TestClock.adjust("10 minutes")
         assert.isTrue(LiveGameState.$is("Stale")(yield* stateOf(one)))
       }).pipe(Effect.provide(TestCluster.gameActors))
@@ -220,7 +222,7 @@ describe("GameActors", () => {
     it.effect("a stale game is kept alive for 30 minutes after its last snapshot, then idles out", () =>
       Effect.gen(function* () {
         const actors = yield* GameActors
-        yield* actors.receive(live("10:00"))
+        yield* actors.receive(live("10:00"), "poll")
         yield* TestClock.adjust("90 seconds")
         assert.isTrue(LiveGameState.$is("Stale")(yield* stateOf(one)))
         yield* TestClock.adjust("20 minutes")
@@ -237,7 +239,7 @@ describe("GameActors", () => {
     it.effect("a final game is gone 5 minutes after its last snapshot", () =>
       Effect.gen(function* () {
         const actors = yield* GameActors
-        yield* actors.receive(snapshot({ id: one, status: "final", period: 4, clock: "0:00" }))
+        yield* actors.receive(snapshot({ id: one, status: "final", period: 4, clock: "0:00" }), "poll")
         yield* TestClock.adjust("299 seconds")
         assert.isTrue((yield* actors.liveGames).has(one))
         yield* TestClock.adjust("31 seconds")
@@ -249,8 +251,8 @@ describe("GameActors", () => {
       Effect.gen(function* () {
         const actors = yield* GameActors
         const now = yield* DateTime.now
-        yield* actors.receive(snapshot({ id: one, kickoff: DateTime.add(now, { minutes: 20 }) }))
-        yield* actors.receive(snapshot({ id: two, kickoff: DateTime.add(now, { hours: 3 }) }))
+        yield* actors.receive(snapshot({ id: one, kickoff: DateTime.add(now, { minutes: 20 }) }), "poll")
+        yield* actors.receive(snapshot({ id: two, kickoff: DateTime.add(now, { hours: 3 }) }), "poll")
         yield* TestClock.adjust("10 minutes")
         const liveGames = yield* actors.liveGames
         assert.isTrue(liveGames.has(one))
@@ -267,8 +269,8 @@ describe("GameActors", () => {
       const { logs, layer } = recording()
       return Effect.gen(function* () {
         const actors = yield* GameActors
-        yield* actors.receive(snapshot({ id: one }))
-        yield* actors.receive(live("15:00"))
+        yield* actors.receive(snapshot({ id: one }), "poll")
+        yield* actors.receive(live("15:00"), "poll")
         const transitions = logs.filter(({ message }) => message.includes("Upcoming → Live"))
         assert.strictEqual(transitions.length, 1)
         assert.strictEqual(transitions[0]?.level, "Info")
@@ -285,7 +287,7 @@ describe("GameActors", () => {
       const { logs, layer } = recording()
       return Effect.gen(function* () {
         const actors = yield* GameActors
-        yield* actors.receive(live("10:00"))
+        yield* actors.receive(live("10:00"), "poll")
         yield* TestClock.adjust("90 seconds")
         const stale = logs.filter(({ message }) => message.includes("Live → Stale"))
         assert.strictEqual(stale.length, 1)
@@ -299,8 +301,8 @@ describe("GameActors", () => {
       const { logs, layer } = recording()
       return Effect.gen(function* () {
         const actors = yield* GameActors
-        yield* actors.receive(snapshot({ id: one, status: "live", period: 2, clock: "5:00" }))
-        yield* actors.receive(snapshot({ id: one, status: "live", period: 1, clock: "5:00" }))
+        yield* actors.receive(snapshot({ id: one, status: "live", period: 2, clock: "5:00" }), "poll")
+        yield* actors.receive(snapshot({ id: one, status: "live", period: 1, clock: "5:00" }), "poll")
         const behind = logs.filter(({ message }) => message.includes("behind"))
         assert.strictEqual(behind.length, 1)
         assert.strictEqual(behind[0]?.level, "Debug")
@@ -309,14 +311,28 @@ describe("GameActors", () => {
       }).pipe(Effect.provide(TestCluster.gameActors), Effect.provide(layer), withMetrics)
     })
 
+    it.effect("snapshots are counted by the feed they came from", () => {
+      const { logs, layer } = recording()
+      return Effect.gen(function* () {
+        const actors = yield* GameActors
+        yield* actors.receive(snapshot({ id: one, status: "live", period: 2, clock: "4:12" }), "push")
+        yield* actors.receive(snapshot({ id: one, status: "live", period: 2, clock: "5:00" }), "poll")
+        assert.strictEqual(yield* counted("sportal_snapshots", { outcome: "taken", source: "push" }), 1)
+        assert.strictEqual(yield* counted("sportal_snapshots", { outcome: "behind", source: "poll" }), 1)
+        assert.isTrue(logs.some(({ message }) => message.includes("taken push live, period 2, 4:12")))
+        assert.isTrue(logs.some(({ message }) => message.includes("behind poll live, period 2, 5:00")))
+      }).pipe(Effect.provide(TestCluster.gameActors), Effect.provide(layer), withMetrics)
+    })
+
     it.effect("a defect is logged with the snapshot that raised it", () => {
       const { logs, layer } = recording()
       return Effect.gen(function* () {
         const actors = yield* GameActors
-        yield* actors.receive(live("9:00"))
+        yield* actors.receive(live("9:00"), "poll")
         const clientFor = yield* Game.client
         yield* clientFor(one).Receive({
-          snapshot: snapshot({ id: two, status: "live", period: 2, clock: "9:00" })
+          snapshot: snapshot({ id: two, status: "live", period: 2, clock: "9:00" }),
+          source: "poll"
         })
         const errors = logs.filter(({ level }) => level === "Error")
         assert.strictEqual(errors.length, 1)
@@ -334,7 +350,7 @@ describe("GameActors", () => {
       const ended: Array<Tracer.Span> = []
       return Effect.gen(function* () {
         const actors = yield* GameActors
-        yield* actors.receive(live("10:00")).pipe(Effect.withSpan("caller"))
+        yield* actors.receive(live("10:00"), "poll").pipe(Effect.withSpan("caller"))
         const caller = ended.find((span) => span.name === "caller")
         const receive = ended.find((span) => span.name === "GameActors.receive")
         assert.isDefined(caller)
@@ -346,6 +362,7 @@ describe("GameActors", () => {
           caller?.spanId
         )
         assert.strictEqual(receive?.attributes.get("sportal.game"), "1")
+        assert.strictEqual(receive?.attributes.get("sportal.source"), "poll")
         const duration = (yield* Metric.snapshot).find((metric) => metric.id === "sportal_receive_duration")
         assert.strictEqual(duration?.type === "Histogram" ? duration.state.count : undefined, 1)
       }).pipe(Effect.provide(TestCluster.gameActors), Effect.provide(recordingSpans(ended)), withMetrics)
@@ -354,9 +371,9 @@ describe("GameActors", () => {
     it.effect("live games are counted by state", () =>
       Effect.gen(function* () {
         const actors = yield* GameActors
-        yield* actors.receive(live("10:00"))
-        yield* actors.receive(snapshot({ id: two, status: "live", period: 3, clock: "1:00" }))
-        yield* actors.receive(snapshot({ id: GameId.make("3") }))
+        yield* actors.receive(live("10:00"), "poll")
+        yield* actors.receive(snapshot({ id: two, status: "live", period: 3, clock: "1:00" }), "poll")
+        yield* actors.receive(snapshot({ id: GameId.make("3") }), "poll")
         assert.strictEqual(yield* gauged("sportal_live_games", { state: "Live" }), 2)
         assert.strictEqual(yield* gauged("sportal_live_games", { state: "Upcoming" }), 1)
         assert.strictEqual(yield* gauged("sportal_live_games", { state: "Stale" }), 0)
@@ -369,7 +386,7 @@ describe("GameActors", () => {
         const { logs, layer } = recording()
         return Effect.gen(function* () {
           const actors = yield* GameActors
-          yield* actors.receive(snapshot({ id: one, status: "final", period: 4, clock: "0:00" }))
+          yield* actors.receive(snapshot({ id: one, status: "final", period: 4, clock: "0:00" }), "poll")
           assert.strictEqual(yield* gauged("sportal_game_actors"), 1)
           yield* TestClock.adjust("330 seconds")
           assert.strictEqual(yield* gauged("sportal_game_actors"), 0)
@@ -391,7 +408,7 @@ describe("GameActors", () => {
       const { logs, layer } = recording()
       return Effect.gen(function* () {
         const actors = yield* GameActors
-        yield* actors.receive(live("10:00"))
+        yield* actors.receive(live("10:00"), "poll")
         const started = logs.filter(({ message }) => message.includes("started"))
         assert.deepStrictEqual(
           started.map(({ level }) => level),
@@ -403,7 +420,7 @@ describe("GameActors", () => {
     it.effect("a current game's actor logs its stop at Info when the layer closes", () => {
       const { logs, layer } = recording()
       return Effect.gen(function* () {
-        yield* GameActors.use((actors) => actors.receive(live("10:00"))).pipe(
+        yield* GameActors.use((actors) => actors.receive(live("10:00"), "poll")).pipe(
           Effect.provide(TestCluster.gameActors)
         )
         const stopped = logs.filter(({ message }) => message.includes("stopped"))
@@ -419,7 +436,7 @@ describe("GameActors", () => {
       const { logs, layer } = recording()
       return Effect.gen(function* () {
         const actors = yield* GameActors
-        yield* actors.receive(live("10:00"))
+        yield* actors.receive(live("10:00"), "poll")
         // The actor replies before the stale timer's `changes` subscriber fiber has run; one yield lets the scheduler
         // run it, so the timer begins its sleep before time moves.
         yield* TestClock.adjust(0)
@@ -428,7 +445,7 @@ describe("GameActors", () => {
         assert.strictEqual(errors.length, 1)
         assert.include(errors[0]?.annotations, { game: "1", league: "fbs", matchup: "AWAY at HOME" })
         assert.strictEqual(yield* counted("sportal_game_defects"), 1)
-        yield* actors.receive(live("9:00"))
+        yield* actors.receive(live("9:00"), "poll")
         yield* TestClock.adjust("89 seconds")
         assert.isTrue(LiveGameState.$is("Live")(yield* stateOf(one)))
         yield* TestClock.adjust("1 second")
@@ -458,11 +475,11 @@ describe("GameActors", () => {
         const kickingOff = (minutes: number) => snapshot({ id: one, kickoff: DateTime.add(now, { minutes }) })
         // Ten seconds apart, as polls are: keep-alive follows each change's latest value, so one replaced at once
         // would never be sent.
-        yield* actors.receive(kickingOff(20))
+        yield* actors.receive(kickingOff(20), "poll")
         yield* TestClock.adjust("10 seconds")
-        yield* actors.receive(kickingOff(180))
+        yield* actors.receive(kickingOff(180), "poll")
         yield* TestClock.adjust("10 seconds")
-        yield* actors.receive(kickingOff(20))
+        yield* actors.receive(kickingOff(20), "poll")
         yield* TestClock.adjust("10 seconds")
         const errors = logs.filter(({ level }) => level === "Error")
         assert.strictEqual(errors.length, 2)
@@ -491,7 +508,7 @@ describe("GameActors", () => {
           ),
           Effect.forkChild({ startImmediately: true })
         )
-        yield* actors.receive(live("10:00"))
+        yield* actors.receive(live("10:00"), "poll")
         yield* TestClock.adjust("90 seconds")
         assert.deepStrictEqual(
           (yield* Ref.get(seen)).map(({ _tag }) => _tag),

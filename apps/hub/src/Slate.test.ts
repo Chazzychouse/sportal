@@ -40,7 +40,7 @@ describe("Slate", () => {
         const slate = yield* Slate
         const actors = yield* GameActors
         yield* TestClock.adjust("3 seconds")
-        yield* actors.receive(game("1", 2))
+        yield* actors.receive(game("1", 2), "poll")
         yield* TestClock.adjust("250 millis")
         assert.strictEqual((yield* slate.latest).slate[0]?.period, 2)
         assert.strictEqual(yield* Ref.get(calls), 1)
@@ -105,7 +105,7 @@ describe("Slate", () => {
       const slate = yield* Slate
       const actors = yield* GameActors
       yield* TestClock.adjust("250 millis")
-      yield* actors.receive(game("9"))
+      yield* actors.receive(game("9"), "poll")
       yield* TestClock.adjust("250 millis")
       assert.deepStrictEqual(
         (yield* slate.latest).slate.map((listed) => listed.id),

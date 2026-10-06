@@ -32,7 +32,7 @@ describe("Ingest", () => {
       const ingest = yield* Ingest
       const actors = yield* GameActors
       yield* TestClock.adjust(0)
-      yield* actors.receive(game("1", 2))
+      yield* actors.receive(game("1", 2), "poll")
       assert.deepStrictEqual(
         (yield* listing(ingest)).map((listed) => [listed.id, listed.period]),
         [
@@ -73,7 +73,7 @@ describe("Ingest", () => {
         Effect.gen(function* () {
           yield* Ingest
           yield* TestClock.adjust(0)
-          yield* actors.receive(game("1"))
+          yield* actors.receive(game("1"), "poll")
           // The scheduled cadence the listing alone would give.
           yield* TestClock.adjust("15 minutes")
           assert.strictEqual(yield* Ref.get(calls), 2)
