@@ -1,7 +1,7 @@
 import type { StageTransition } from "@sportal/api/ShellBridge"
 import type { GameId, GameSnapshot } from "@sportal/domain/Game"
 import type { Split } from "@sportal/domain/Layout"
-import { Stage } from "@sportal/domain/Stage"
+import type { Stage } from "@sportal/domain/Stage"
 import { Option } from "effect"
 import { useEffect, useLayoutEffect, useRef, useState } from "react"
 import { dispatch, forgetChannel, learnChannel, markNotCarried, sendGuide } from "../hub/HubClient.ts"
@@ -30,10 +30,7 @@ export function StageView(props: {
   // What went wrong with the last channel command on a tile, until the Stage next changes.
   const [notices, setNotices] = useState<ReadonlyMap<number, string>>(new Map())
 
-  const shown =
-    dragged === undefined
-      ? props.stage
-      : new Stage({ ...props.stage, splits: { ...props.stage.splits, [props.stage.layout]: dragged } })
+  const shown = dragged === undefined ? props.stage : props.stage.withSplit(dragged)
   const rects = tileRects(shown, area)
   const placed = placements(shown, rects, area, window.location.origin, props.interacting)
   useVideoAreas(placed)

@@ -38,7 +38,7 @@ export class Stage extends Schema.Class<Stage>("sportal/Stage")({
   tiles: Schema.Array(Tile),
   layout: LayoutName,
   /** Each layout's own split, kept while another layout is shown. */
-  splits: Schema.Struct({ Single: Split, Pair: Split, Quad: Split, MainThree: Split, MainFive: Split }),
+  splits: Schema.Record(LayoutName, Split),
   /** The game whose sound is on: always an on-stage game, or none when the stage is empty. */
   audioFocus: Schema.optional(GameId),
   /** The game filling the Stage: always an on-stage game. */
@@ -48,14 +48,23 @@ export class Stage extends Schema.Class<Stage>("sportal/Stage")({
   static readonly initial = new Stage({
     tiles: [empty, empty, empty, empty],
     layout: "Quad",
-    splits: {
-      Single: Layout.defaultSplit("Single"),
-      Pair: Layout.defaultSplit("Pair"),
-      Quad: Layout.defaultSplit("Quad"),
-      MainThree: Layout.defaultSplit("MainThree"),
-      MainFive: Layout.defaultSplit("MainFive")
-    }
+    splits: Layout.defaultSplits()
   })
+
+  /** Whether the game's sound is on. */
+  hears(game: GameId): boolean {
+    return this.audioFocus === game
+  }
+
+  /** Whether the game fills the Stage. */
+  soloes(game: GameId): boolean {
+    return this.solo === game
+  }
+
+  /** The Stage with the current layout's split replaced: the preview of a divider drag. */
+  withSplit(split: Split): Stage {
+    return new Stage({ ...this, splits: { ...this.splits, [this.layout]: split } })
+  }
 
   currentLayout(): Layout {
     return new Layout({ name: this.layout, split: this.splits[this.layout] })
@@ -103,7 +112,7 @@ export class Stage extends Schema.Class<Stage>("sportal/Stage")({
         return Result.succeed(settle({ ...this, layout: command.layout }))
       case "SetSplit":
         return Layout.holds(command.split)
-          ? Result.succeed(settle({ ...this, splits: { ...this.splits, [this.layout]: command.split } }))
+          ? Result.succeed(settle(this.withSplit(command.split)))
           : reject("split-out-of-range")
       case "Unsolo":
         return Result.succeed(settle({ ...this, solo: undefined }))

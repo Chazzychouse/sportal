@@ -57,7 +57,7 @@ export function placements(
               ? new URL(tile.channel.locator.url, page).href
               : tile.channel.locator.url,
             role: "stream" as const,
-            muted: stage.audioFocus !== tile.game,
+            muted: !stage.hears(tile.game),
             interactive: tile.game === interacting
           }
         : tile._tag === "PickingChannel"

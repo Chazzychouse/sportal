@@ -59,6 +59,27 @@ describe("Layout statics", () => {
     assert.strictEqual(Layout.next("MainFive"), "Single")
   })
 
+  it("knows the dividers each layout has", () => {
+    assert.deepStrictEqual(Layout.dividers("Single"), [])
+    assert.deepStrictEqual(Layout.dividers("Pair"), ["x"])
+    assert.deepStrictEqual(Layout.dividers("Quad"), ["x", "y"])
+    assert.deepStrictEqual(Layout.dividers("MainThree"), ["x"])
+    assert.deepStrictEqual(Layout.dividers("MainFive"), ["x", "y"])
+  })
+
+  it("clamps each axis into the bounds: below, inside, above", () => {
+    assert.deepStrictEqual(Layout.bounds, { min: 0.2, max: 0.8 })
+    assert.deepStrictEqual(Layout.clamp({ x: 0.1, y: 0.95 }), { x: 0.2, y: 0.8 })
+    assert.deepStrictEqual(Layout.clamp({ x: 0.5, y: 0.3 }), { x: 0.5, y: 0.3 })
+  })
+
+  it("holds exactly what clamp leaves alone, at the bounds too", () => {
+    for (const at of [0.19, 0.2, 0.5, 0.8, 0.81]) {
+      const split = { x: at, y: 0.5 }
+      assert.strictEqual(Layout.holds(split), Layout.clamp(split).x === at)
+    }
+  })
+
   it("holds dividers between 0.2 and 0.8", () => {
     assert.isTrue(Layout.holds({ x: 0.2, y: 0.8 }))
     assert.isFalse(Layout.holds({ x: 0.19, y: 0.5 }))

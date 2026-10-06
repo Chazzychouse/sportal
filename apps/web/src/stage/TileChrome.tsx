@@ -21,8 +21,8 @@ export function TileChrome(props: {
   children?: ReactNode
 }) {
   const { tile, slot } = props
-  const onAir = tile._tag !== "Empty" && props.stage.audioFocus === tile.game
-  const soloed = tile._tag !== "Empty" && props.stage.solo === tile.game
+  const onAir = tile._tag !== "Empty" && props.stage.hears(tile.game)
+  const soloed = tile._tag !== "Empty" && props.stage.soloes(tile.game)
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: dragging is a shortcut; every swap is also in the command palette.
     <div
