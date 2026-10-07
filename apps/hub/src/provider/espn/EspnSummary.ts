@@ -1,7 +1,7 @@
 import type { LeagueId } from "@sportal/domain/League"
 import { Play } from "@sportal/domain/Play"
 import { Effect, Schema, SchemaGetter } from "effect"
-import { Summary as SummaryPayload } from "./EspnPayload.ts"
+import { Summary } from "./EspnPayload.ts"
 import * as EspnPlay from "./EspnPlay.ts"
 
 /**
@@ -9,8 +9,8 @@ import * as EspnPlay from "./EspnPlay.ts"
  * is not read. A timeout's team is the one its team participants mark as having called it; timeouts with none marked
  * are logged together, once, and count for neither team.
  */
-export function Summary(league: LeagueId) {
-  return SummaryPayload.pipe(
+export function SummaryPlays(league: LeagueId) {
+  return Summary.pipe(
     Schema.decodeTo(Read, {
       decode: SchemaGetter.transformEffect(({ drives, winprobability }) => {
         const probabilities = new Map(

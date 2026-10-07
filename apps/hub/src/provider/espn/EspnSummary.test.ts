@@ -32,7 +32,7 @@ const decodeEntity = Schema.decodeUnknownEffect(EspnPlay.FootballPlay("nfl"))
 // NE at BUF's recorded frames, decoded once by ESPN's decode for the tests that read them.
 const neAtBufDecoded = FramesDecoded.layerOf(recordedNeAtBuf).pipe(Layer.provide(EspnDecode.layer))
 
-describe("EspnSummary.Summary", () => {
+describe("EspnDecode.decoders.decodeSummary", () => {
   it.effect("should read every play a drive lists", () =>
     Effect.gen(function* () {
       const plays = yield* EspnDecode.decoders.nfl.decodeSummary(summary)
@@ -292,7 +292,7 @@ describe("EspnSummary.Summary", () => {
 // Decoding NE–BUF's whole recording takes about a second alone, and many under a full suite's load: the layer decodes
 // it once for the tests that read it, with a timeout to match.
 layer(neAtBufDecoded, { timeout: "60 seconds" })(
-  "EspnSummary.Summary, beside the recorded FastCast topic",
+  "EspnDecode.decoders.decodeSummary, beside the recorded FastCast topic",
   (it) => {
     it.effect("should read the plays the recorded FastCast topic last had, in its order", () =>
       Effect.gen(function* () {

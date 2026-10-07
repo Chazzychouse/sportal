@@ -80,7 +80,7 @@ export function unknownTypes(
 const decodeType = Schema.decodeUnknownOption(Schema.Struct({ type: PlayType }))
 const decodeCase = Schema.decodeUnknownEffect(Play)
 
-function outcomeOf(type: typeof PlayType.Type): PlayOutcome {
+function outcomeOf(type: PlayType): PlayOutcome {
   return byId.get(type.id) ?? { _tag: "Other", type }
 }
 

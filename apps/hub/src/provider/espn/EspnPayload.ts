@@ -12,6 +12,7 @@ export const EspnStatus = Schema.Struct({
     state: Schema.Literals(["pre", "in", "post"])
   })
 })
+export type EspnStatus = typeof EspnStatus.Type
 
 /** The down, distance and ball of a game in play, as both feeds spell it. */
 export const EspnSituation = Schema.Struct({
@@ -23,6 +24,7 @@ export const EspnSituation = Schema.Struct({
   awayTimeouts: Schema.optional(Schema.Int),
   lastPlay: Schema.optional(Schema.Struct({ text: Schema.optional(Schema.String) }))
 })
+export type EspnSituation = typeof EspnSituation.Type
 
 /** One side of a site scoreboard competition: its score as digits, its poll rank, and its team. */
 const Competitor = Schema.Struct({
@@ -103,6 +105,7 @@ function TeamRef<Key extends "$key" | "id">(key: Key) {
 
 /** A play's type: ESPN's id for it, and its text. */
 export const PlayType = Schema.Struct({ id: Schema.String, text: Schema.String })
+export type PlayType = typeof PlayType.Type
 
 /**
  * The fields of a play that both of ESPN's feeds spell alike, a spot's team read by `team`: FastCast's entity refers to

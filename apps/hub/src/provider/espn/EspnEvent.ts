@@ -63,7 +63,7 @@ function snapshot(
   event: {
     readonly id: string
     readonly kickoff: DateTime.Utc
-    readonly status: typeof EspnStatus.Type
+    readonly status: EspnStatus
     readonly competitors: ReadonlyArray<{
       readonly homeAway: "home" | "away"
       readonly id: string
@@ -78,7 +78,7 @@ function snapshot(
       readonly rank?: number | undefined
     }>
     readonly broadcasts: ReadonlyArray<{ readonly medium: string; readonly network: string }>
-    readonly situation: typeof EspnSituation.Type | undefined
+    readonly situation: EspnSituation | undefined
   }
 ): Effect.Effect<GameSnapshot, SchemaIssue.Issue> {
   const home = event.competitors.find((competitor) => competitor.homeAway === "home")
@@ -131,7 +131,7 @@ function broadcast(medium: string, network: string): Array<Broadcast> {
 }
 
 /** The domain `Situation`; the league and the home team's id orient its possession and yard line. */
-function situation(league: LeagueId, raw: typeof EspnSituation.Type, homeTeamId: string): Situation {
+function situation(league: LeagueId, raw: EspnSituation, homeTeamId: string): Situation {
   return new Situation({
     homeTimeouts: raw.homeTimeouts ?? 0,
     awayTimeouts: raw.awayTimeouts ?? 0,
@@ -148,7 +148,7 @@ function situation(league: LeagueId, raw: typeof EspnSituation.Type, homeTeamId:
   })
 }
 
-function statusOf(type: (typeof EspnStatus.Type)["type"]): GameStatus {
+function statusOf(type: EspnStatus["type"]): GameStatus {
   return byName.get(type.name) ?? byState[type.state]
 }
 
@@ -161,7 +161,7 @@ const byName: ReadonlyMap<string, GameStatus> = new Map([
 ])
 
 const byState = { pre: "scheduled", in: "live", post: "final" } as const satisfies Readonly<
-  Record<(typeof EspnStatus.Type)["type"]["state"], GameStatus>
+  Record<EspnStatus["type"]["state"], GameStatus>
 >
 
 /** The `TeamId` of ESPN's team `id` in `league`: ESPN's ids are only unique within a league. */

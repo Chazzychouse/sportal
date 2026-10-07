@@ -43,17 +43,16 @@ export const layer = Layer.succeed(
  * Each league's decode of what ESPN sends for it: an event of either feed, a play entity, a game summary, and the
  * site scoreboard's JSON.
  */
-export const decoders = Record.fromIterableWith(LeagueId.literals, (league) => [
-  league,
-  decodersOf(league)
-  // Effect types a record built from keys as keyed by any string; every league is a key, as its test asserts.
-]) as Readonly<Record<LeagueId, ReturnType<typeof decodersOf>>>
+export const decoders: { readonly [L in LeagueId]: ReturnType<typeof decodersOf> } = {
+  nfl: decodersOf("nfl"),
+  fbs: decodersOf("fbs")
+}
 
 function decodersOf(league: LeagueId) {
   return {
     decodeEvent: Schema.decodeUnknownEffect(EspnEvent(league)),
     decodePlay: Schema.decodeUnknownEffect(EspnPlay.FootballPlay(league)),
-    decodeSummary: Schema.decodeUnknownEffect(EspnSummary.Summary(league)),
+    decodeSummary: Schema.decodeUnknownEffect(EspnSummary.SummaryPlays(league)),
     decodeScoreboard: Schema.decodeUnknownEffect(Schema.fromJsonString(Scoreboard))
   }
 }
