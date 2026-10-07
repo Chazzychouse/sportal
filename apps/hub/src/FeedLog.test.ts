@@ -51,6 +51,74 @@ describe("FeedLog", () => {
     }).pipe(Effect.provide(feedLog))
   )
 
+  it.effect(
+    "upgrading a populated version 1 log keeps every row as it was, and lets snapshot frames in",
+    () =>
+      Effect.gen(function* () {
+        const sql = yield* SqlClient.SqlClient
+        yield* Database.migrate("feed", {
+          "1_create_feed_frame": sql`
+          CREATE TABLE feed_frame (
+            seq INTEGER PRIMARY KEY,
+            received_at INTEGER NOT NULL,
+            sent_at INTEGER,
+            source_id INTEGER,
+            feed TEXT CHECK (feed IN ('poll', 'fastcast')),
+            channel TEXT,
+            kind TEXT NOT NULL CHECK (kind IN ('response', 'message', 'checkpoint', 'unchanged', 'gap')),
+            body BLOB,
+            body_hash TEXT,
+            CHECK ((kind = 'gap') = (feed IS NULL AND channel IS NULL))
+          )
+        `.pipe(
+            Effect.andThen(sql`CREATE INDEX feed_frame_channel_seq ON feed_frame (channel, seq)`),
+            Effect.andThen(sql`CREATE INDEX feed_frame_received_at ON feed_frame (received_at)`),
+            Effect.asVoid
+          )
+        })
+        yield* sql`
+        INSERT INTO feed_frame (seq, received_at, sent_at, source_id, feed, channel, kind, body, body_hash) VALUES
+          (1, 1000, NULL, NULL, 'poll', 'nfl', 'response', x'1f8b0800', 'abc'),
+          (5, 2000, NULL, NULL, NULL, NULL, 'gap', x'05', NULL),
+          (9, 3000, 2999, 41, 'fastcast', 'event-football-nfl', 'message', x'00ff', NULL)
+      `
+        const rows = sql<Record<string, unknown>>`
+        SELECT seq, received_at, sent_at, source_id, feed, channel, kind, typeof(body) AS stored, hex(body) AS bytes,
+          body_hash
+        FROM feed_frame ORDER BY seq
+      `
+        const before = yield* rows
+
+        yield* Effect.gen(function* () {
+          const log = yield* FeedLog
+          assert.deepStrictEqual(yield* rows, before)
+          const frame = yield* log.append({
+            receivedAt: at(4000),
+            feed: "snapshot",
+            channel: "fbs",
+            kind: "response",
+            body: "{}"
+          })
+          yield* TestClock.adjust("100 millis")
+          yield* written(4)
+          assert.strictEqual(frame.seq, 10)
+          assert.deepStrictEqual(
+            (yield* rows).map(({ seq, feed, stored }) => [seq, feed, stored]),
+            [...before.map(({ seq, feed, stored }) => [seq, feed, stored]), [10, "snapshot", "blob"]]
+          )
+        }).pipe(Effect.provide(FeedLog.layer.pipe(Layer.provide(NodeCrypto.layer))))
+
+        const indexes = yield* sql<{ name: string }>`
+        SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'feed_frame' AND name LIKE 'feed_frame_%'
+        ORDER BY name
+      `
+        assert.deepStrictEqual(
+          indexes.map(({ name }) => name),
+          ["feed_frame_channel_seq", "feed_frame_received_at"]
+        )
+      }).pipe(Effect.provide(Database.at(":memory:")))
+  )
+
   it.effect("appending frames opens no span; storing them does", () => {
     const ended: Array<Tracer.Span> = []
     return Effect.gen(function* () {

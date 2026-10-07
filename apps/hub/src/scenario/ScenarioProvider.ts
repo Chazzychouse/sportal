@@ -12,10 +12,10 @@ import { scenarios } from "./written/Scenarios.ts"
 
 /**
  * The scenario `SPORTAL_SCENARIO` names as the provider and its `Decoder`, on whatever clock runs it, from the moment
- * the layer is built. A written scenario polls its slate at that moment as a snapshot feed frame, never pushes, and provides
- * the snapshot feed's decoder. A recorded one polls the recorded poll current at
- * that moment, received now, and pushes its recorded live feed frames at their recorded offsets; it needs the
- * `Decoder` of the provider that recorded them and provides that one on, so the layer both needs and provides
+ * the layer is built. A written scenario polls its slate at that moment as a snapshot feed frame, never pushes, and
+ * provides the snapshot feed's decoder. A recorded one polls the recorded poll current at that moment, received now,
+ * and pushes its recorded live feed frames at their recorded offsets; it needs the `Decoder` of the provider that
+ * recorded them and provides that one on, so the layer both needs and provides
  * `Decoder`. Either is polled again at its next frame's time, and at least every 10 seconds, so a live game never goes
  * stale between frames. A name that is unset or unknown fails, listing the known ones.
  */
