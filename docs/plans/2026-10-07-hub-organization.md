@@ -475,6 +475,71 @@ Each has an `export type` pair only if a module outside the file names the type.
   finds nothing.
 - [ ] `pnpm check`. Commit `refactor(hub): the live slate follows, times and publishes; Ingest asks the feed`.
 
+## H7b: ESPN's one front door
+
+Added 2026-10-07 at the user's request, during H7. The `Provider` port stays.
+
+**Files:**
+- Create `provider/espn/Espn.ts`.
+- `git mv provider/espn/EspnDecode.ts provider/espn/EspnDecoder.ts`, `provider/espn/EspnArchive.ts` →
+  `EspnArchiver.ts`, and `provider/Archive.ts` → `provider/Archiver.ts`, each with its test and Test file.
+- `git mv scenario/ScenarioProvider.ts provider/espn/ScenarioProvider.ts` (with its test), and
+  `corpus/GameDay.ts` → `packages/domain/src/GameDay.ts` (with its test).
+- Modify every importer (`rg -l "EspnDecode|EspnArchive|Archive\.ts|\bArchive\b" apps/hub/src`), `HubMode.ts`,
+  `corpus/corpus.ts`, `.dependency-cruiser.cjs`, `CONTEXT.md`, `docs/technical-spec.md`, and AGENTS.md if it names
+  them.
+
+**Interfaces:**
+- **The ports are agent nouns: `Provider`, `Decoder`, `Archiver`.**
+  - `Archive` becomes `Archiver`, with the service id `"sportal/hub/provider/Archiver"`.
+  - **Archive** stays the domain noun: what the archiver keeps under the corpus's `archive/` folder, which is
+    unchanged on disk. `ArchiveFetchFailed` keeps its name.
+  - `ArchivedGame` → `GameArchive` (a game's entry in the archive), and `ArchivedPlay` → `PlayArchive`. They lead
+    with the concept. They take no `-d`: a past participle reads as an event here (`Played`). Their CONTEXT.md rows
+    move.
+- **The adapters are named for their ports:**
+  - `EspnProvider`.
+  - `EspnDecoder`, formerly `EspnDecode`. Its table `decoders` becomes `byLeague`, so a call reads
+    `EspnDecoder.byLeague[league].decodeEvent(json)`.
+  - `EspnArchiver`, formerly `EspnArchive`.
+- **`Espn.ts`** is a namespace module, and the only module outside `provider/espn/` that may import ESPN's layers.
+  Confirmed by the user 2026-10-07. One layer per mode, and each layer provides several ports, as Effect's
+  `UserRepository.layerWithSqlClient` does (`01_effect/03_services/20_layer-composition.ts`):
+  - `layer: Layer.Layer<Provider | Decoder, never, HttpClient.HttpClient | Socket.WebSocketConstructor | HubConfig>`:
+    live. `EspnProvider` with FastCast wired inside, and the decoder.
+  - `layerScenario: Layer.Layer<Provider | Decoder, never, Scenarios>`: a scenario's ESPN frames replayed, and the
+    decoder. `scenario/ScenarioProvider.ts` moves to `provider/espn/ScenarioProvider.ts`, since its frames are ESPN's
+    spelling. If a dependency-cruiser rule forbids `provider/espn/` importing `scenario/Scenarios.ts`, stop and report.
+  - `layerArchival: Layer.Layer<Decoder | Archiver, never, HttpClient.HttpClient | HubConfig | FileSystem.FileSystem |
+    Path.Path>`: the corpus's. No `Provider`. The archiver keeps using `EspnDecoder.byLeague` directly, not the
+    `Decoder` service.
+
+  Each requirement type is written out from what HubMode and corpus.ts provide today. Where the real one differs from
+  the above, the real one wins, and the report says so.
+- **HubMode and corpus.ts** import only `Espn` from `provider/espn/`: live mode `Espn.layer`, scenario mode
+  `Espn.layerScenario`, corpus `Espn.layerArchival`.
+- **`GameDay` moves to `packages/domain/src/GameDay.ts`,** with its test, decided by the user 2026-10-07. `bounds`
+  already reads `Slate.dayStart`, and a day of games is a domain idea. `provider/Archiver.ts` and
+  `provider/espn/EspnArchiver.ts` import it from `@sportal/domain/GameDay`, so `provider/` imports nothing from
+  `corpus/` again (spec, the move of Archive). Its CONTEXT.md row stays. Ask the peer session before touching
+  `packages/`.
+- **dependency-cruiser:** only `Espn.ts`, files inside `provider/espn/`, and tests may import `EspnProvider`,
+  `EspnDecoder`, `EspnArchiver` or `FastCast`. `only-hub-mode-names-adapters` names `Espn.ts` in place of the adapter
+  files.
+- **CONTEXT.md:** the **Archive** row becomes **Archiver**, with "archive" moving to Avoid for the port. Add a row
+  for **Espn** if adapters have rows; otherwise none.
+
+**Tests:**
+- Tests move with their files, keeping their assertions.
+- New, in `Espn.test.ts`: `it("should provide a provider and a decoder that decodes its frames")`. It builds
+  `Espn.layer` over `TestEspn.noSocket` and a recorded scoreboard, as `EspnProvider.test` does today. Copy that
+  arrangement.
+
+**Steps:**
+- [ ] `rg -n "EspnDecode\b|EspnArchive\b|\bArchive\b|decoders" apps/hub/src` finds nothing.
+- [ ] `rg -n "corpus/" apps/hub/src/provider` finds nothing.
+- [ ] `pnpm check`. Commit `refactor(espn): one front door; ports and adapters named alike`.
+
 ## H8: No mirror, and the server flattened
 
 **Files:**
