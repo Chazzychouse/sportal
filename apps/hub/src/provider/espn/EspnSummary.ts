@@ -1,14 +1,14 @@
 import type { LeagueId } from "@sportal/domain/League"
-import { Play, PlayId } from "@sportal/domain/Play"
+import { Play, PlayId, Timeout } from "@sportal/domain/Play"
 import { TeamId } from "@sportal/domain/Team"
-import { Effect, Schema, SchemaGetter } from "effect"
+import { type DateTime, Effect, Schema, SchemaGetter } from "effect"
 import type { ArchivedPlay } from "../../corpus/Archive.ts"
 import { teamId } from "./EspnEvent.ts"
 import * as EspnPlay from "./EspnPlay.ts"
 
 /**
  * ESPN's game summary, read as its plays with their wallclocks; a play without one is not read. A timeout says who
- * called it when its text names one of the header's teams: by a code ("Timeout #1 by NE at 03:27.") or a school's name
+ * called it (its `team`, and `timeoutBy`) when its text names one of the header's teams: by a code ("Timeout #1 by NE at 03:27.") or a school's name
  * ("Timeout Georgia, clock 02:05"), matched across the game (`callers`). One that names neither is logged and says no
  * caller; one no team called (an official's) says none, unlogged.
  */
@@ -92,51 +92,65 @@ const Read = Schema.Struct({
 function Summary(league: LeagueId) {
   return Raw.pipe(
     Schema.decodeTo(Read, {
-      decode: SchemaGetter.transform(({ drives, winprobability, header }) => {
+      decode: SchemaGetter.transformEffect(({ drives, winprobability, header }) => {
         const probabilities = new Map(
           (winprobability ?? []).map(({ playId, homeWinPercentage }) => [playId, homeWinPercentage])
         )
-        const plays = (drives?.previous ?? [])
+        const wallclocked = (drives?.previous ?? [])
           .flatMap((drive) => drive.plays ?? [])
-          .flatMap(({ wallclock, ...play }) =>
-            wallclock === undefined
-              ? []
-              : [
-                  {
-                    play: EspnPlay.read(league, {
-                      ...play,
-                      team: play.end.team,
-                      homeWinProbability: probabilities.get(play.id)
-                    }),
-                    wallclock
-                  }
-                ]
+          .flatMap(({ wallclock, ...play }) => (wallclock === undefined ? [] : [{ play, wallclock }]))
+        const competitors = (header?.competitions ?? []).flatMap(({ competitors }) => competitors)
+
+        return Effect.forEach(wallclocked, ({ play, wallclock }) =>
+          Effect.map(
+            EspnPlay.read(league, {
+              ...play,
+              team: play.end.team,
+              homeWinProbability: probabilities.get(play.id)
+            }),
+            (read) => ({ play: read, wallclock })
           )
-          .toSorted((a, b) => Play.order(a.play, b.play))
-          .map((read) => ({
-            read,
-            caller: read.play.kind === "timeout" ? callerOf(read.play.text) : undefined
-          }))
-        const teamOf = callers(
-          league,
-          (header?.competitions ?? []).flatMap(({ competitors }) => competitors),
-          plays.flatMap(({ caller }) => (caller === undefined ? [] : [caller]))
-        )
-        const read = plays.map(({ read, caller }) => {
-          const timeoutBy = caller === undefined ? undefined : teamOf(caller)
-          return { read: timeoutBy === undefined ? read : { ...read, timeoutBy }, caller }
-        })
-        return {
-          plays: read.map(({ read }) => read),
-          // A timeout no team called (an official's) is not one a caller is missing from.
-          uncalled: read.flatMap(({ read, caller }) =>
-            caller !== undefined && caller._tag !== "Nobody" && !("timeoutBy" in read) ? [read.play.id] : []
-          )
-        }
+        ).pipe(Effect.map((plays) => called(league, competitors, plays)))
       }),
       encode: SchemaGetter.forbidden(() => "Plays cannot be encoded back to an ESPN game summary")
     })
   )
+}
+
+/**
+ * The plays in `Play.order`, each timeout with the team that called it, when its text names one of `competitors`, as
+ * its `team` and `timeoutBy`; and the timeouts whose caller did not read.
+ */
+function called(
+  league: LeagueId,
+  competitors: ReadonlyArray<typeof Competitor.Type>,
+  plays: ReadonlyArray<{ readonly play: Play; readonly wallclock: DateTime.Utc }>
+): typeof Read.Type {
+  const read = plays
+    .toSorted((a, b) => Play.order(a.play, b.play))
+    .map((read) => ({
+      read,
+      caller: Play.guards.Timeout(read.play) ? callerOf(read.play.text) : undefined
+    }))
+  const teamOf = callers(
+    league,
+    competitors,
+    read.flatMap(({ caller }) => (caller === undefined ? [] : [caller]))
+  )
+  const withCallers = read.map(({ read, caller }) => {
+    const timeoutBy = caller === undefined ? undefined : teamOf(caller)
+    if (timeoutBy === undefined || !Play.guards.Timeout(read.play)) return { read, caller }
+    const timeout = new Timeout({ ...read.play, team: timeoutBy })
+    return { read: { ...read, play: timeout, timeoutBy }, caller }
+  })
+
+  return {
+    plays: withCallers.map(({ read }) => read),
+    // A timeout no team called (an official's) is not one a caller is missing from.
+    uncalled: withCallers.flatMap(({ read, caller }) =>
+      caller !== undefined && caller._tag !== "Nobody" && !("timeoutBy" in read) ? [read.play.id] : []
+    )
+  }
 }
 
 // Who a timeout's text says called it: a code ("Timeout #1 by NE at 03:27."), a school or club by name ("Timeout

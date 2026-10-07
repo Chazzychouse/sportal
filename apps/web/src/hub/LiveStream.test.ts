@@ -1,7 +1,7 @@
 import { afterEach, assert, beforeEach, describe, it } from "@effect/vitest"
 import { LiveMessageJson } from "@sportal/api/LiveMessage"
 import { GameId } from "@sportal/domain/Game"
-import { Play, PlayId } from "@sportal/domain/Play"
+import { Completion, PlayId } from "@sportal/domain/Play"
 import { Stage } from "@sportal/domain/Stage"
 import { play, team } from "@sportal/domain/TestGame"
 import { Deferred, Effect, Fiber, Schema, Stream, SubscriptionRef } from "effect"
@@ -76,29 +76,38 @@ describe("LiveStream", () => {
     }).pipe(Effect.provide(LiveStream.layer))
   )
 
-  it.effect("keeps the recent plays a slate message carries, each play read back from its JSON", () =>
-    Effect.gen(function* () {
-      const live = yield* LiveStream
-      const source = yield* opened()
-      const away = team("AWAY").id
-      const plays = [
-        play(),
-        play({
+  it.effect(
+    "should keep the recent plays a slate message carries, each read back from its JSON as its case",
+    () =>
+      Effect.gen(function* () {
+        const live = yield* LiveStream
+        const source = yield* opened()
+        const home = team("HOME").id
+        const away = team("AWAY").id
+        const touchdown = new Completion({
           id: PlayId.make("2"),
           sequence: 2,
-          kind: "pass",
+          period: 1,
+          clock: "14:30",
+          text: "Pass complete for 1 yard",
           scoring: true,
           homeScore: 7,
+          awayScore: 0,
+          start: { down: 1, distance: 10, yardsToEndzone: 1, team: home },
           end: { team: away },
-          homeWinProbability: 0.62
+          homeWinProbability: 0.62,
+          team: home,
+          yards: 1,
+          touchdown: true
         })
-      ]
-      const recentPlays = { [GameId.make("401")]: plays }
-      source.onmessage?.({ data: message({ _tag: "SlateChanged", slate: [], recentPlays }) })
-      const state = yield* until(live, (current) => Object.keys(current.recentPlays).length > 0)
-      assert.deepStrictEqual(state.recentPlays, recentPlays)
-      assert.instanceOf(state.recentPlays[GameId.make("401")]?.[1], Play)
-    }).pipe(Effect.provide(LiveStream.layer))
+        const recentPlays = { [GameId.make("401")]: [play(), touchdown] }
+
+        source.onmessage?.({ data: message({ _tag: "SlateChanged", slate: [], recentPlays }) })
+        const state = yield* until(live, (current) => Object.keys(current.recentPlays).length > 0)
+
+        assert.deepStrictEqual(state.recentPlays, recentPlays)
+        assert.instanceOf(state.recentPlays[GameId.make("401")]?.[1], Completion)
+      }).pipe(Effect.provide(LiveStream.layer))
   )
 
   it.effect("skips a malformed message and keeps reading", () =>

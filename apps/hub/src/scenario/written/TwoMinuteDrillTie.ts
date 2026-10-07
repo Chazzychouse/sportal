@@ -26,7 +26,7 @@ export const twoMinuteDrillTie = ScenarioScript.build("two-minute-drill-tie", [
         {
           clock: "1:48",
           ball: { team: "home", yardLine: 52, down: 2, distance: 4 },
-          play: { kind: "pass", yards: 23 }
+          play: { _tag: "Completion", touchdown: false, yards: 23 }
         }
       ],
       [
@@ -34,7 +34,7 @@ export const twoMinuteDrillTie = ScenarioScript.build("two-minute-drill-tie", [
         {
           clock: "1:12",
           ball: { team: "home", yardLine: 38, down: 1, distance: 10 },
-          play: { kind: "pass", yards: 14 }
+          play: { _tag: "Completion", touchdown: false, yards: 14 }
         }
       ],
       [
@@ -42,7 +42,7 @@ export const twoMinuteDrillTie = ScenarioScript.build("two-minute-drill-tie", [
         {
           clock: "0:41",
           ball: { team: "home", yardLine: 17, down: 1, distance: 10 },
-          play: { kind: "pass", yards: 21 }
+          play: { _tag: "Completion", touchdown: false, yards: 21 }
         }
       ],
       [
@@ -51,7 +51,7 @@ export const twoMinuteDrillTie = ScenarioScript.build("two-minute-drill-tie", [
           clock: "0:22",
           timeouts: [1, 2],
           ball: { team: "home", yardLine: 9, down: 3, distance: 5 },
-          play: { kind: "rush", yards: 8 }
+          play: { _tag: "Rush", touchdown: false, yards: 8 }
         }
       ],
       [
@@ -61,7 +61,7 @@ export const twoMinuteDrillTie = ScenarioScript.build("two-minute-drill-tie", [
           score: [27, 24],
           ball: null,
           lastPlay: "Field goal is good",
-          play: { kind: "fieldGoal", yards: 26 }
+          play: { _tag: "FieldGoal", result: "good", yards: 26 }
         }
       ],
       ["3:40", { status: "final", clock: "0:00" }]
@@ -89,7 +89,7 @@ export const twoMinuteDrillTie = ScenarioScript.build("two-minute-drill-tie", [
         {
           clock: "4:10",
           ball: { team: "away", yardLine: 49, down: 3, distance: 2 },
-          play: { kind: "pass", yards: 15 }
+          play: { _tag: "Completion", touchdown: false, yards: 15 }
         }
       ],
       [
@@ -98,7 +98,7 @@ export const twoMinuteDrillTie = ScenarioScript.build("two-minute-drill-tie", [
           clock: "1:55",
           ball: { team: "home", yardLine: 80, down: 1, distance: 10 },
           lastPlay: "Punt",
-          play: { kind: "punt", yards: 29 }
+          play: { _tag: "Punt", return: "none", yards: 29 }
         }
       ]
     ]
@@ -144,7 +144,7 @@ export const twoMinuteDrillTie = ScenarioScript.build("two-minute-drill-tie", [
         {
           clock: "7:40",
           ball: { team: "home", yardLine: 44, down: 2, distance: 6 },
-          play: { kind: "pass", yards: 17 }
+          play: { _tag: "Completion", touchdown: false, yards: 17 }
         }
       ]
     ]

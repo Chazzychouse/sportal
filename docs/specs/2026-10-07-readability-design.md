@@ -77,11 +77,13 @@ read from the play's text.
 `FootballPlay` is a `Schema.Union` of `Schema.TaggedClass` cases. `PlayKind` is deleted.
 
 **Fields on every case** come from one struct that each case spreads in: `id`, `sequence`, `period`, `clock`, `text`,
-`homeScore`, `awayScore`, `scoring`, `homeWinProbability?`. `scoring` stays ESPN's own flag, because it can run
-ahead of the type: 280 recorded `Rush` rows are flagged scoring.
+`homeScore`, `awayScore`, `scoring`, `start`, `end`, `homeWinProbability?`. `scoring` stays ESPN's own flag, because it
+can run ahead of the type: 280 recorded `Rush` rows are flagged scoring. Every case keeps its spots, a timeout's and a
+period end's among them, because a backfilled day's snapshots take their situation from each play's end spot. A spot's
+team is required at its start and optional at its end: the recordings have a pass reception, a blocked field goal, and
+an official timeout that end with no team.
 
-**Fields on each snap, kick, safety and penalty:** `team`, `yards`, `start`, `end`. `Spot` keeps optional only the
-fields that the recordings show can be missing for that case. The plan settles which against the fixtures.
+**Fields on each snap, kick, safety and penalty:** `team?` (the team with the ball) and `yards`.
 
 | Case | ESPN type ids | Outcome field |
 | --- | --- | --- |
@@ -98,12 +100,12 @@ fields that the recordings show can be missing for that case. The plan settles w
 | `ExtraPoint` | 61 good, 62 missed | `good: boolean` |
 | `Safety` | 20 | none |
 | `Penalty` | 8 | none |
-| `Timeout` | 21 | `team?`: the team that called it |
+| `Timeout` | 21 | `team?`: the team that called it (from a summary's text; FastCast's `team` on one is the team with the ball) |
 | `Stoppage` | 74 official timeout, 75 two-minute warning, 70 coin toss | `kind: "officialTimeout" \| "twoMinuteWarning" \| "coinToss"` |
 | `PeriodEnd` | 2, 65 half, 79 regulation, 66 game | `ends: "period" \| "half" \| "regulation" \| "game"` |
 | `Other` | any id not in the table | `type: { id, text }` |
 
-The ids are the 39 that appear in `fixtures/espn-recordings` and `apps/hub/src/provider/espn/fixtures` (tallied
+The ids are the 37 that appear in `fixtures/espn-recordings` and `apps/hub/src/provider/espn/fixtures` (tallied
 2026-10-07). An unknown id still decodes, as `Other`, and `EspnPlay.unknownTypes` keeps reporting it.
 
 **On the types:**

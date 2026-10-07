@@ -23,7 +23,7 @@ export type GameEventKind = Data.TaggedEnum<{
   WentToHalftime: object
   WentFinal: object
   Played: { readonly play: Play }
-  /** A run or completed pass of 20 or more yards. */
+  /** A `Rush` or `Completion` of 20 or more yards. */
   BigPlay: { readonly team: TeamId; readonly yards: number }
   Sack: { readonly team: TeamId }
 }>

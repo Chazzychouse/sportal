@@ -1,9 +1,9 @@
 import { GameId, GameSnapshot, type GameStatus } from "@sportal/domain/Game"
 import type { LeagueId } from "@sportal/domain/League"
-import { Play, PlayId, type PlayKind } from "@sportal/domain/Play"
+import { type FootballPlay, type Penalty, Play, PlayId } from "@sportal/domain/Play"
 import { Situation } from "@sportal/domain/Situation"
 import { broadcast, snapshot, team } from "@sportal/domain/TestGame"
-import { Array as Arr, Data, DateTime } from "effect"
+import { Array as Arr, Data, DateTime, Schema } from "effect"
 
 /**
  * A written scenario before it is written as frames: each offset's slate, and the plays run at that offset. Its instants,
@@ -92,9 +92,20 @@ type Change = {
   readonly timeouts?: readonly [home: number, away: number]
   /** The play's text, unless given. */
   readonly lastPlay?: string
-  /** The play that made this change, written in a sentence of its kind and yards unless `text` is given. */
-  readonly play?: { readonly kind: PlayKind; readonly yards: number; readonly text?: string }
+  /**
+   * The play that made this change: a case that gains yards, its outcome, and its yards, written in a sentence of them
+   * unless `text` is given.
+   */
+  readonly play?: Scripted & { readonly yards: number; readonly text?: string }
 }
+
+// A case that gains yards, by its tag and the fields that say its outcome: `{ _tag: "Punt", return: "none" }`.
+type Scripted =
+  Extract<FootballPlay, { readonly yards: number }> extends infer Case
+    ? Case extends { readonly _tag: string }
+      ? Pick<Case, "_tag"> & Omit<Case, keyof Penalty>
+      : never
+    : never
 
 /** A game as `build` first writes it: scheduled at its kickoff, nil–nil. */
 function initial(
@@ -204,8 +215,8 @@ function situationOf(game: GameSnapshot, status: GameStatus, change: Change): Si
 
 /**
  * The play a change ran, numbered `sequence`: its team is the one with the ball before (when the ball was dead, the one
- * whose score rose), it goes from the ball before to the ball after (only its team, when the ball is dead after), and
- * it scores when the score changed.
+ * whose score rose: the home team's if it did, the away team's otherwise), it goes from the ball before to the ball
+ * after (only its team, when the ball is dead after), and it scores when the score changed.
  */
 function playOf(
   before: GameSnapshot,
@@ -215,57 +226,87 @@ function playOf(
 ): Play {
   const team =
     before.situation?.possession ??
-    (after.home.score > before.home.score
-      ? after.home.team.id
-      : after.away.score > before.away.score
-        ? after.away.team.id
-        : undefined)
+    (after.home.score > before.home.score ? after.home.team.id : after.away.team.id)
   const spot = (situation: Situation | undefined) => ({
-    ...(situation?.possession === undefined ? {} : { team: situation.possession }),
     ...(situation?.yardLine === undefined ? {} : { yardsToEndzone: situation.yardLine }),
     ...(situation?.down === undefined ? {} : { down: situation.down }),
-    ...(situation?.distance === undefined ? {} : { distance: situation.distance })
+    ...(situation?.distance === undefined ? {} : { distance: situation.distance }),
+    team: situation?.possession ?? team
   })
-  return new Play({
+  const { text: _text, ...outcome } = play
+
+  return decodePlay({
+    ...outcome,
     id: PlayId.make(`${before.id}-${sequence}`),
     sequence,
     period: after.period,
     clock: after.clock,
-    ...(team === undefined ? {} : { team }),
-    kind: play.kind,
+    team,
     text: textOf(play),
-    yards: play.yards,
     scoring: after.home.score !== before.home.score || after.away.score !== before.away.score,
     homeScore: after.home.score,
     awayScore: after.away.score,
     start: spot(before.situation),
-    end:
-      after.situation?.possession === undefined ? (team === undefined ? {} : { team }) : spot(after.situation)
+    end: after.situation?.possession === undefined ? { team } : spot(after.situation)
   })
 }
 
-/** The play's own text, or a sentence of its kind and yards: "Rush for 4 yards". */
+const decodePlay = Schema.decodeSync(Play)
+
+/** The play's own text, or a sentence of its case, outcome, and yards: "Rush for 4 yards". */
 function textOf(play: NonNullable<Change["play"]>): string {
   if (play.text !== undefined) return play.text
   const yards = `${Math.abs(play.yards)} ${Math.abs(play.yards) === 1 ? "yard" : "yards"}`
-  return sentences[play.kind](yards)
+  return sentenceOf(play, yards)
 }
 
-const sentences: Readonly<Record<PlayKind, (yards: string) => string>> = {
-  rush: (yards) => `Rush for ${yards}`,
-  pass: (yards) => `Pass complete for ${yards}`,
-  incompletion: () => "Pass incomplete",
-  sack: (yards) => `Sacked for a loss of ${yards}`,
-  interception: () => "Pass intercepted",
-  fumble: () => "Fumble, recovered by the offense",
-  fumbleLost: () => "Fumble, recovered by the defense",
-  punt: (yards) => `Punt for ${yards}`,
-  kickoff: (yards) => `Kickoff for ${yards}`,
-  fieldGoal: (yards) => `Field goal from ${yards}`,
-  extraPoint: () => "Extra point is good",
-  twoPoint: () => "Two-point conversion",
-  penalty: (yards) => `Penalty for ${yards}`,
-  timeout: () => "Timeout",
-  endPeriod: () => "End of period",
-  other: () => "Play"
+/** Each scripted case and outcome in a sentence, given its yards in words. */
+function sentenceOf(play: Scripted, yards: string): string {
+  switch (play._tag) {
+    case "Rush":
+      return `Rush for ${yards}`
+    case "Completion":
+      return `Pass complete for ${yards}`
+    case "Incompletion":
+      return "Pass incomplete"
+    case "Interception":
+      return {
+        none: "Pass intercepted",
+        returned: "Pass intercepted and returned",
+        touchdown: "Pass intercepted and returned for a touchdown"
+      }[play.return]
+    case "Sack":
+      return play.fumbleLost
+        ? `Sacked for a loss of ${yards}, fumble recovered by the defense`
+        : `Sacked for a loss of ${yards}`
+    case "Fumble":
+      return {
+        unknown: "Fumble",
+        own: "Fumble, recovered by the offense",
+        opponent: "Fumble, recovered by the defense",
+        touchdown: "Fumble returned for a touchdown"
+      }[play.recovery]
+    case "TwoPointTry":
+      return play.by === "pass" ? "Two-point conversion, passed" : "Two-point conversion, run"
+    case "Kickoff":
+      return play.returnTouchdown ? "Kickoff returned for a touchdown" : `Kickoff for ${yards}`
+    case "Punt":
+      return {
+        none: `Punt for ${yards}`,
+        returned: `Punt for ${yards}, returned`,
+        touchdown: `Punt for ${yards}, returned for a touchdown`
+      }[play.return]
+    case "FieldGoal":
+      return {
+        good: `Field goal from ${yards}`,
+        missed: `Field goal from ${yards}, missed`,
+        blocked: "Field goal blocked"
+      }[play.result]
+    case "ExtraPoint":
+      return play.good ? "Extra point is good" : "Extra point is no good"
+    case "Safety":
+      return "Safety"
+    case "Penalty":
+      return `Penalty for ${yards}`
+  }
 }

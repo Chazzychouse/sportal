@@ -27,7 +27,7 @@ export const threeRedZonesAtOnce = ScenarioScript.build("three-red-zones-at-once
         {
           clock: "4:31",
           ball: { team: "away", yardLine: 12, down: 1, distance: 10 },
-          play: { kind: "pass", yards: 22 }
+          play: { _tag: "Completion", touchdown: false, yards: 22 }
         }
       ],
       [
@@ -37,7 +37,7 @@ export const threeRedZonesAtOnce = ScenarioScript.build("three-red-zones-at-once
           score: [17, 20],
           ball: null,
           lastPlay: "Touchdown",
-          play: { kind: "pass", yards: 12 }
+          play: { _tag: "Completion", touchdown: true, yards: 12 }
         }
       ]
     ]
@@ -64,7 +64,7 @@ export const threeRedZonesAtOnce = ScenarioScript.build("three-red-zones-at-once
         {
           clock: "7:20",
           ball: { team: "home", yardLine: 15, down: 2, distance: 5 },
-          play: { kind: "pass", yards: 15 }
+          play: { _tag: "Completion", touchdown: false, yards: 15 }
         }
       ],
       [
@@ -73,7 +73,7 @@ export const threeRedZonesAtOnce = ScenarioScript.build("three-red-zones-at-once
           clock: "6:02",
           ball: { team: "away", yardLine: 92, down: 1, distance: 10 },
           lastPlay: "Interception",
-          play: { kind: "interception", yards: 7 }
+          play: { _tag: "Interception", return: "none", yards: 7 }
         }
       ]
     ]
@@ -100,7 +100,7 @@ export const threeRedZonesAtOnce = ScenarioScript.build("three-red-zones-at-once
         {
           clock: "8:55",
           ball: { team: "home", yardLine: 8, down: 1, distance: 8 },
-          play: { kind: "pass", yards: 33 }
+          play: { _tag: "Completion", touchdown: false, yards: 33 }
         }
       ],
       [
@@ -110,7 +110,7 @@ export const threeRedZonesAtOnce = ScenarioScript.build("three-red-zones-at-once
           score: [41, 10],
           ball: null,
           lastPlay: "Field goal is good",
-          play: { kind: "fieldGoal", yards: 25 }
+          play: { _tag: "FieldGoal", result: "good", yards: 25 }
         }
       ]
     ]
@@ -137,7 +137,7 @@ export const threeRedZonesAtOnce = ScenarioScript.build("three-red-zones-at-once
         {
           clock: "9:30",
           ball: { team: "away", yardLine: 50, down: 3, distance: 5 },
-          play: { kind: "rush", yards: 5 }
+          play: { _tag: "Rush", touchdown: false, yards: 5 }
         }
       ]
     ]

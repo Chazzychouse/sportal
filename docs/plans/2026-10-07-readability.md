@@ -158,10 +158,12 @@ export type Play = FootballPlay
 ```
 
 - `common` (private struct fields): `id: PlayId`, `sequence: Int`, `period: Int`, `clock: String`, `text: String`,
-  `homeScore: Int`, `awayScore: Int`, `scoring: Boolean`, `homeWinProbability?: Finite`.
-- `gained` (private struct fields): `team?: TeamId`, `yards: Int`, `start: Spot`, `end: Spot`.
-- `Spot` (private struct): `team: TeamId` (every recorded play has both spots' team), `down?`, `distance?`,
-  `yardsToEndzone?`. The decode drops a down below 1 and its distance, as today.
+  `homeScore: Int`, `awayScore: Int`, `scoring: Boolean`, `start: Spot`, `end: EndSpot`, `homeWinProbability?: Finite`.
+  Every case carries its spots: `Synthesis` takes a snapshot's situation from each play's end spot, timeouts' too.
+- `gained` (private struct fields): `team?: TeamId`, `yards: Int`.
+- `Spot` (private struct): `team: TeamId`, `down?`, `distance?`, `yardsToEndzone?`; `EndSpot` the same with `team?`, since
+  the recordings have a pass reception, a blocked field goal and an official timeout that end with no team. The decode
+  drops a down below 1 and its distance, as today.
 - `FootballPlay` is built with `Object.assign(union, { order, eventsSince })` so call sites keep `Play.order` and
   `Play.eventsSince`, and gain `Play.match` and `Play.guards`.
 - Methods on the cases that have `gained`, declared once as a private function the classes call:
@@ -173,28 +175,30 @@ export type Play = FootballPlay
 **ESPN (`EspnPlay.ts`):**
 
 - One private table, a `ReadonlyArray` of rows `{ id: string, text: string, play: <case tag and outcome> }`, with
-  the 39 ids of the spec's table, each row's text as ESPN spells it (the spec's table and the Task 0 tally agree).
+  the 37 ids of the spec's table, each row's text as ESPN spells it (the spec's table and Task 1's tally agree).
 - `read(league, play)` decodes by the table: the row's case, with its outcome fields; an id with no row is `Other`
   with `type: { id, text }`.
 - `typeOf(play: FootballPlay): { id: string; text: string }` is the reverse lookup: the first row whose case and
   outcome equal the play's. Every case and outcome reachable from a script has a row. `Other` writes its own `type`.
 - `unknownTypes` is unchanged in behaviour.
-- `EspnSummary.ts:118`: the timeout caller is read when `Play.guards.Timeout(read.play)`.
-- `EspnScript.entityOf`: writes `type: EspnPlay.typeOf(play)`, `statYardage` and the spots only for a case with
-  `gained` (0 and the previous spot otherwise, as ESPN does for a stoppage — read one recorded `Timeout` entity in
-  `nfl-plays-2026-10-04.json` and copy what it carries).
+- `read` leaves a `Timeout`'s `team` unset: ESPN's `team` on one is the team with the ball.
+- `EspnSummary.ts:118`: the timeout caller is read when `Play.guards.Timeout(read.play)`, and a caller it resolves is
+  the timeout's `team` as well as `timeoutBy`.
+- `EspnScript.entityOf`: writes `type: EspnPlay.typeOf(play)` and the spots; `statYardage` and `team` from a case with
+  `gained`, and 0 and the start spot's team otherwise, as ESPN writes a stoppage.
 
-**Scenarios (`ScenarioScript.ts`):** a script change's `play?` is
-`{ readonly play: <a case's tag and its outcome fields>; readonly yards: number; readonly text?: string }`, written as
-e.g. `play: { _tag: "Completion", touchdown: false, yards: 23 }`. The `sentences` table is keyed by case tag, its
-function taking the outcome and the yards; every written scenario keeps its sentences word for word (pass → "Pass
+**Scenarios (`ScenarioScript.ts`):** a script change's `play?` is a case that gains yards, by its tag and outcome
+fields, with `yards: number` and `text?: string`, written as e.g. `play: { _tag: "Completion", touchdown: false,
+yards: 23 }`. Its sentence is one `switch` over the case tag, taking the outcome and the yards (a table keyed by tag
+cannot type its argument per case without a cast); every written scenario keeps its sentences word for word (pass → "Pass
 complete for …", etc.), and new outcomes get a sentence each ("Kickoff returned for a touchdown", "Field goal
 blocked"). The 31 written uses map: `pass` → `Completion` (touchdown when the change's score rises by 6),
 `rush` → `Rush` (likewise), `incompletion` → `Incompletion`, `interception` → `Interception` `return: "none"`,
 `fieldGoal` → `FieldGoal` `result: "good"`, `punt` → `Punt` `return: "none"`.
 
 **Corpus:** `Synthesis.ts` uses `Play.guards.Timeout` for the timeout count and
-`Play.guards.PeriodEnd(play) && play.ends === "half"` (and `period === 2` as today) for halftime. `CorpusInput.ts`:
+`Play.guards.PeriodEnd(play)` and `period === 2`, as today, for halftime: college summaries end the second period with
+End Period (2), not End of Half (65), so `ends === "half"` would lose college halftimes. `CorpusInput.ts`:
 `CorpusLine.format` becomes `2`, so a day built in the old shape is refused with "build it again".
 
 **Web (`Field.tsx`):** `pathOf` and `dashesOf` become one `Play.match` each, with an arm per case (kicks: `Kickoff`,
@@ -230,7 +234,7 @@ arrow, as today's zero-yard stoppages draw none — check `PlayArrow`'s current 
 - `describe("Sack#lostYards")`: should be true; `describe("Rush#lostYards")`: should be true below zero yards, false at zero
 
 `apps/hub/src/provider/espn/EspnPlay.test.ts` — each existing test, split per case, plus:
-- should read each of the 39 recorded type ids as its table row (`it.each` over the table)
+- should read each recorded type id as its table row (`it.each` over the table)
 - should read every play in the recorded fixtures without falling back to `Other` (walks
   `apps/hub/src/provider/espn/fixtures/*` and the 2026-10-04 recording the way `TestEspn` loads them)
 - should read an unknown type as `Other`, keeping its id and text

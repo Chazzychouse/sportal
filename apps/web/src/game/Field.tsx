@@ -209,7 +209,7 @@ function Scrimmage(props: { game: GameSnapshot; situation: Situation; spot: Ball
 }
 
 /**
- * One play, drawn once over `drawSeconds`: its arrow by kind, the ball leaving its start and arriving at its end in
+ * One play, drawn once over `drawSeconds`: its arrow by case, the ball leaving its start and arriving at its end in
  * the color of the team that has it there, and on a score the end zone the scorer attacks flashing in its color.
  * `onDrawn` runs when the arrow is finished.
  */
@@ -230,7 +230,7 @@ function PlayArrow(props: {
     onNone: () => null,
     onSome: ({ start, end }) => {
       const scorer = play.scoring ? scorerOf(game, props.plays, play) : undefined
-      const losing = play.kind === "sack" || play.yards < 0
+      const losing = "yards" in play && play.lostYards()
       return (
         <g>
           {scorer !== undefined && (
@@ -268,7 +268,7 @@ function PlayArrow(props: {
 }
 
 /**
- * The arrow's course by kind: a high arc for a kick, an arc for a pass, a loop downfield and back for an
+ * The arrow's course by case: a high arc for a kick, an arc for a completion, a loop downfield and back for an
  * incompletion, and straight along the field for anything else.
  */
 function pathOf(play: Play, start: BallSpot, end: BallSpot): string {
@@ -277,21 +277,30 @@ function pathOf(play: Play, start: BallSpot, end: BallSpot): string {
   const span = Math.abs(to - from)
   const arc = (height: number) =>
     `M ${from} ${middle} Q ${(from + to) / 2} ${middle - height} ${to} ${middle}`
-  switch (play.kind) {
-    case "kickoff":
-    case "punt":
-    case "fieldGoal":
-    case "extraPoint":
-      return arc(Math.min(24, Math.max(10, span * 0.6)))
-    case "pass":
-      return arc(Math.min(18, Math.max(4, span * 0.4)))
-    case "incompletion": {
+  const kick = () => arc(Math.min(24, Math.max(10, span * 0.6)))
+  const straight = () => `M ${from} ${middle} L ${to} ${middle}`
+  return Play.match(play, {
+    Kickoff: kick,
+    Punt: kick,
+    FieldGoal: kick,
+    ExtraPoint: kick,
+    Completion: () => arc(Math.min(18, Math.max(4, span * 0.4))),
+    Incompletion: () => {
       const out = from + directionOf(start) * 16
       return `M ${from} ${middle} C ${out} ${middle - 16} ${out} ${middle - 2} ${from} ${middle}`
-    }
-    default:
-      return `M ${from} ${middle} L ${to} ${middle}`
-  }
+    },
+    Rush: straight,
+    Interception: straight,
+    Sack: straight,
+    Fumble: straight,
+    TwoPointTry: straight,
+    Safety: straight,
+    Penalty: straight,
+    Timeout: straight,
+    Stoppage: straight,
+    PeriodEnd: straight,
+    Other: straight
+  })
 }
 
 /**
@@ -305,25 +314,37 @@ function dashesOf(play: Play): string {
       { length: count },
       (_, index) => `${dash} ${1 / count - dash + (index === count - 1 ? 1 : 0)}`
     ).join(" ")
-  switch (play.kind) {
-    case "penalty":
-      return pattern(12, 0.05)
-    case "incompletion":
-      return pattern(24, 0.001)
-    default:
-      return "1 1"
-  }
+  const solid = () => "1 1"
+  return Play.match(play, {
+    Penalty: () => pattern(12, 0.05),
+    Incompletion: () => pattern(24, 0.001),
+    Rush: solid,
+    Completion: solid,
+    Interception: solid,
+    Sack: solid,
+    Fumble: solid,
+    TwoPointTry: solid,
+    Kickoff: solid,
+    Punt: solid,
+    FieldGoal: solid,
+    ExtraPoint: solid,
+    Safety: solid,
+    Timeout: solid,
+    Stoppage: solid,
+    PeriodEnd: solid,
+    Other: solid
+  })
 }
 
 /**
- * The team that scored on `play`: the side whose score rose since the play before it, or the play's own team
- * when the play before it is not on hand.
+ * The team that scored on `play`: the side whose score rose since the play before it, or the offense when the play
+ * before it is not on hand.
  */
 function scorerOf(game: GameSnapshot, plays: ReadonlyArray<Play>, play: Play): Team | undefined {
   const previous = plays.findLast((candidate) => candidate.sequence < play.sequence)
   if (previous !== undefined && play.homeScore > previous.homeScore) return game.home.team
   if (previous !== undefined && play.awayScore > previous.awayScore) return game.away.team
-  const team = play.team ?? play.start.team
+  const team = "yards" in play ? play.offense() : play.start.team
   return [game.home.team, game.away.team].find((candidate) => candidate.id === team)
 }
 

@@ -22,12 +22,18 @@ export const kickoffWindow = ScenarioScript.build("kickoff-window", [
         {
           clock: "13:20",
           ball: { team: "away", yardLine: 52, down: 1, distance: 10 },
-          play: { kind: "pass", yards: 23 }
+          play: { _tag: "Completion", touchdown: false, yards: 23 }
         }
       ],
       [
         "3:00",
-        { clock: "9:45", score: [0, 7], ball: null, lastPlay: "Touchdown", play: { kind: "pass", yards: 52 } }
+        {
+          clock: "9:45",
+          score: [0, 7],
+          ball: null,
+          lastPlay: "Touchdown",
+          play: { _tag: "Completion", touchdown: true, yards: 52 }
+        }
       ]
     ]
   },
@@ -52,7 +58,7 @@ export const kickoffWindow = ScenarioScript.build("kickoff-window", [
         {
           clock: "12:10",
           ball: { team: "home", yardLine: 40, down: 2, distance: 3 },
-          play: { kind: "pass", yards: 35 }
+          play: { _tag: "Completion", touchdown: false, yards: 35 }
         }
       ]
     ]
@@ -79,7 +85,7 @@ export const kickoffWindow = ScenarioScript.build("kickoff-window", [
         {
           clock: "11:30",
           ball: { team: "home", yardLine: 22, down: 1, distance: 10 },
-          play: { kind: "pass", yards: 53 }
+          play: { _tag: "Completion", touchdown: false, yards: 53 }
         }
       ]
     ]
@@ -105,7 +111,7 @@ export const kickoffWindow = ScenarioScript.build("kickoff-window", [
         {
           clock: "14:00",
           ball: { team: "away", yardLine: 61, down: 2, distance: 3 },
-          play: { kind: "rush", yards: 14 }
+          play: { _tag: "Rush", touchdown: false, yards: 14 }
         }
       ]
     ]

@@ -27,7 +27,7 @@ export const allStoppedButOne = ScenarioScript.build("all-stopped-but-one", [
         {
           clock: "1:40",
           ball: { team: "home", yardLine: 29, down: 1, distance: 10 },
-          play: { kind: "rush", yards: 4 }
+          play: { _tag: "Rush", touchdown: false, yards: 4 }
         }
       ],
       [
@@ -35,7 +35,7 @@ export const allStoppedButOne = ScenarioScript.build("all-stopped-but-one", [
         {
           clock: "1:02",
           ball: { team: "home", yardLine: 21, down: 2, distance: 2 },
-          play: { kind: "rush", yards: 8 }
+          play: { _tag: "Rush", touchdown: false, yards: 8 }
         }
       ],
       [
@@ -43,7 +43,7 @@ export const allStoppedButOne = ScenarioScript.build("all-stopped-but-one", [
         {
           clock: "0:40",
           ball: { team: "home", yardLine: 14, down: 1, distance: 10 },
-          play: { kind: "pass", yards: 7 }
+          play: { _tag: "Completion", touchdown: false, yards: 7 }
         }
       ],
       [
@@ -53,7 +53,7 @@ export const allStoppedButOne = ScenarioScript.build("all-stopped-but-one", [
           score: [27, 23],
           ball: null,
           lastPlay: "Touchdown",
-          play: { kind: "rush", yards: 14 }
+          play: { _tag: "Rush", touchdown: true, yards: 14 }
         }
       ]
     ]
@@ -102,7 +102,7 @@ export const allStoppedButOne = ScenarioScript.build("all-stopped-but-one", [
           clock: "3:40",
           ball: { team: "home", yardLine: 58, down: 1, distance: 10 },
           lastPlay: "Pass complete",
-          play: { kind: "pass", yards: 8 }
+          play: { _tag: "Completion", touchdown: false, yards: 8 }
         }
       ]
     ]

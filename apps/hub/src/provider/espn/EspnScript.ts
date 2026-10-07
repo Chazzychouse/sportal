@@ -134,24 +134,29 @@ function eventOf(game: GameSnapshot): typeof EspnEvent.Raw.Type {
 
 const encodeEntity = Schema.encodeSync(EspnPlay.Entity)
 
-/** The play as a game package lists it, its teams by ESPN's own ids. */
+/**
+ * The play as a game package lists it, its teams by ESPN's own ids. A play that gains no yards (a timeout, a stoppage,
+ * a period's end) is written as ESPN writes one: no yards, and the team with the ball.
+ */
 function entityOf(play: Play): typeof EspnPlay.Entity.Encoded {
   const ref = (team: TeamId | undefined) => (team === undefined ? undefined : espnId(team))
-  const spot = ({ team, down, distance, yardsToEndzone }: Play["start"]) => ({
+  const spot = ({ team, down, distance, yardsToEndzone }: Play["end"]) => ({
     team: ref(team),
     down,
     distance,
     yardsToEndzone
   })
+  const gained = "yards" in play ? play : { team: play.start.team, yards: 0 }
+
   return encodeEntity({
     id: play.id,
     sequenceNumber: play.sequence,
-    type: EspnPlay.typeOf(play.kind),
+    type: EspnPlay.typeOf(play),
     text: play.text,
     period: { number: play.period },
     clock: { displayValue: play.clock },
-    team: ref(play.team),
-    statYardage: play.yards,
+    team: ref(gained.team),
+    statYardage: gained.yards,
     scoringPlay: play.scoring,
     homeScore: play.homeScore,
     awayScore: play.awayScore,

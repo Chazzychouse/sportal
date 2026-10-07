@@ -1,6 +1,7 @@
 import { Delivery } from "@sportal/domain/Delivery"
 import { GameSnapshot } from "@sportal/domain/Game"
 import type { LeagueId } from "@sportal/domain/League"
+import { Play } from "@sportal/domain/Play"
 import { Situation } from "@sportal/domain/Situation"
 import type { TeamId } from "@sportal/domain/Team"
 import { Array as Arr, DateTime, Duration, Effect, Option, Order, Stream } from "effect"
@@ -126,7 +127,7 @@ function snapshotAfter(
       half.timeouts -
         played.filter(
           ({ play: called, timeoutBy }) =>
-            called.kind === "timeout" &&
+            Play.guards.Timeout(called) &&
             timeoutBy === team &&
             halfOf(final.league, called.period).half === half.half
         ).length
@@ -136,7 +137,7 @@ function snapshotAfter(
     status:
       played.length === game.plays.length
         ? "final"
-        : play.kind === "endPeriod" && play.period === 2
+        : Play.guards.PeriodEnd(play) && play.period === 2
           ? "halftime"
           : "live",
     period: play.period,

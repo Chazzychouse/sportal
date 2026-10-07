@@ -1,13 +1,13 @@
 import type { LeagueId } from "@sportal/domain/League"
-import { Play as DomainPlay, PlayId, type PlayKind } from "@sportal/domain/Play"
-import { Array as Arr, Option, Record, Schema, SchemaGetter } from "effect"
+import { FootballPlay, type Penalty } from "@sportal/domain/Play"
+import { Array as Arr, Effect, Option, Schema, SchemaGetter, type SchemaIssue } from "effect"
 import { teamId } from "./EspnEvent.ts"
 
 /** ESPN's play entity, as a game package lists it under `entities.plays`, read as a `Play` of `league`. */
 export function Play(league: LeagueId) {
   return Entity.pipe(
-    Schema.decodeTo(Schema.toType(DomainPlay), {
-      decode: SchemaGetter.transform((entity) =>
+    Schema.decodeTo(Schema.toType(FootballPlay), {
+      decode: SchemaGetter.transformEffect((entity) =>
         read(league, {
           ...entity,
           homeWinProbability: entity.probabilities?.winProbability?.homeWinPercentage
@@ -19,8 +19,10 @@ export function Play(league: LeagueId) {
 }
 
 /**
- * The `Play` of `league` that an ESPN play says, as either of ESPN's feeds spells it: the fields both spell alike, its
- * teams by ESPN's own ids, and its win probability.
+ * The `Play` of `league` that an ESPN play says, as either of ESPN's feeds spells it: the case and outcome its type
+ * reads as (`Other` for a type the table does not know), the fields both feeds spell alike, its teams by ESPN's own ids,
+ * and its win probability. It fails when its start spot has no team. A timeout's caller is not read: ESPN's `team` on one
+ * is the team with the ball.
  */
 export function read(
   league: LeagueId,
@@ -28,31 +30,41 @@ export function read(
     readonly team?: string | undefined
     readonly homeWinProbability?: number | undefined
   }
-): DomainPlay {
-  const team = (id: string | undefined) => (id === undefined ? {} : { team: teamId(league, id) })
+): Effect.Effect<FootballPlay, SchemaIssue.Issue> {
+  const outcome = outcomeOf(play.type)
   // ESPN reports down -1, with a meaningless distance, when no down is being played (after a score, at a stoppage).
-  const spot = ({ down, distance, yardsToEndzone, team: id }: typeof Alike.Type.start) => ({
+  const spot = ({ down, distance, yardsToEndzone, team }: typeof Alike.Type.start) => ({
     ...(down === undefined || down < 1 ? {} : { down }),
     ...(down === undefined || down < 1 || distance === undefined ? {} : { distance }),
     ...(yardsToEndzone === undefined ? {} : { yardsToEndzone }),
-    ...team(id)
+    ...(team === undefined ? {} : { team: teamId(league, team) })
   })
-  return new DomainPlay({
-    id: PlayId.make(play.id),
+  const gained = {
+    ...(play.team === undefined ? {} : { team: teamId(league, play.team) }),
+    yards: play.statYardage
+  }
+
+  const shared = {
+    id: play.id,
     sequence: play.sequenceNumber,
     period: play.period.number,
     clock: play.clock.displayValue,
-    ...team(play.team),
-    kind: Option.getOrElse(Record.get(kinds, play.type.id), (): PlayKind => "other"),
     text: play.text,
-    yards: play.statYardage,
     scoring: play.scoringPlay,
     homeScore: play.homeScore,
     awayScore: play.awayScore,
     start: spot(play.start),
     end: spot(play.end),
     ...(play.homeWinProbability === undefined ? {} : { homeWinProbability: play.homeWinProbability })
-  })
+  }
+
+  // A snap, a kick, a safety, or a penalty gains yards for a team; a timeout's team is its caller, not ESPN's `team`.
+  const wire =
+    "yards" in FootballPlay.cases[outcome._tag].fields
+      ? { ...outcome, ...shared, ...gained }
+      : { ...outcome, ...shared }
+
+  return decodeCase(wire).pipe(Effect.mapError(({ issue }) => issue))
 }
 
 /**
@@ -82,13 +94,15 @@ export function fields<Team extends Schema.Top>(team: Team) {
   }
 }
 
-/** The types of `entities` that the `PlayKind` table does not know, each once. */
+/** The types of `entities` that the table does not know, each once. */
 export function unknownTypes(
   entities: ReadonlyArray<unknown>
 ): ReadonlyArray<{ readonly id: string; readonly text: string }> {
   return Arr.dedupeWith(
     entities.flatMap((entity) =>
-      Option.toArray(decodeType(entity)).flatMap(({ type }) => (Record.has(kinds, type.id) ? [] : [type]))
+      Option.toArray(decodeType(entity)).flatMap(({ type }) =>
+        types.some((row) => row.id === type.id) ? [] : [type]
+      )
     ),
     (a, b) => a.id === b.id
   )
@@ -118,67 +132,73 @@ export const Entity = Schema.Struct({
 // What `read` takes of either feed's play, its teams read to ESPN's ids.
 const Alike = Schema.Struct(fields(Schema.String))
 
-/** The ESPN play type that reads as `kind`: its plain one, as ESPN names it. */
-export function typeOf(kind: PlayKind): typeof PlayType.Type {
-  return types[kind]
+/** The ESPN play type that reads as `play`'s case and outcome, as ESPN names it; an `Other` keeps its own. */
+export function typeOf(play: FootballPlay): typeof PlayType.Type {
+  if (FootballPlay.guards.Other(play)) return play.type
+  const row = types.find(
+    (candidate) =>
+      candidate.play._tag === play._tag &&
+      Object.entries(candidate.play).every(([field, value]) => Reflect.get(play, field) === value)
+  )
+  if (row === undefined) throw new Error(`EspnPlay: no ESPN play type reads as ${play._tag}`)
+  return { id: row.id, text: row.text }
 }
 
 const decodeType = Schema.decodeUnknownOption(Schema.Struct({ type: PlayType }))
+const decodeCase = Schema.decodeUnknownEffect(FootballPlay)
 
-// ESPN's play type ids, each with its slug, as the 2026-10-04 NFL recording lists them under `/entities/plays`; the tries
-// as the recorded scoreboards name a last play's; and, by their text, the college types the 2026-10-03 FBS game summaries
-// list.
-const kinds: Readonly<Record<string, PlayKind>> = {
-  "2": "endPeriod", // end-period
-  "3": "incompletion", // pass-incompletion
-  "5": "rush", // rush
-  "7": "sack", // sack
-  "8": "penalty", // penalty
-  "9": "fumble", // fumble-recovery-own
-  "14": "punt", // Punt Return
-  "15": "twoPoint", // two-point-pass
-  "16": "twoPoint", // two-point-rush
-  "18": "fieldGoal", // blocked-field-goal
-  "21": "timeout", // timeout
-  "24": "pass", // pass-reception
-  "26": "interception", // pass-interception-return
-  "29": "fumbleLost", // fumble-recovery-opponent
-  "32": "kickoff", // Kickoff Return Touchdown
-  "36": "interception", // interception-return-touchdown
-  "52": "punt", // punt
-  "53": "kickoff", // kickoff
-  "59": "fieldGoal", // field-goal-good
-  "60": "fieldGoal", // field-goal-missed
-  "61": "extraPoint", // extra-point-good
-  "63": "interception", // Interception
-  "65": "endPeriod", // end-of-half
-  "66": "endPeriod", // end-of-game
-  "67": "pass", // passing-touchdown
-  "68": "rush", // rushing-touchdown
-  "69": "fumble", // Fumble
-  // Stoppages no team called: as `timeout`, the team with the ball would read as having taken one.
-  "74": "other", // official-timeout
-  "75": "other", // two-minute-warning
-  "79": "endPeriod", // End of Regulation
-  "80": "fumbleLost" // sack-opp-fumble-recovery
+// A case's tag and the fields that say its outcome: what an ESPN play type says of a play.
+type Outcome = FootballPlay extends infer Case
+  ? Case extends { readonly _tag: Exclude<FootballPlay["_tag"], "Other"> }
+    ? Pick<Case, "_tag"> & Omit<Case, keyof Penalty>
+    : never
+  : never
+
+function outcomeOf(
+  type: typeof PlayType.Type
+): Outcome | { readonly _tag: "Other"; readonly type: typeof PlayType.Type } {
+  return types.find((row) => row.id === type.id)?.play ?? { _tag: "Other", type }
 }
 
-// The type `typeOf` writes for each kind, as ESPN's recordings name it; `kinds` reads each back as its kind.
-const types: Readonly<Record<PlayKind, typeof PlayType.Type>> = {
-  rush: { id: "5", text: "Rush" },
-  pass: { id: "24", text: "Pass Reception" },
-  incompletion: { id: "3", text: "Pass Incompletion" },
-  sack: { id: "7", text: "Sack" },
-  interception: { id: "26", text: "Pass Interception Return" },
-  fumble: { id: "9", text: "Fumble Recovery (Own)" },
-  fumbleLost: { id: "29", text: "Fumble Recovery (Opponent)" },
-  punt: { id: "52", text: "Punt" },
-  kickoff: { id: "53", text: "Kickoff" },
-  fieldGoal: { id: "59", text: "Field Goal Good" },
-  extraPoint: { id: "61", text: "Extra Point Good" },
-  twoPoint: { id: "16", text: "Two Point Rush" },
-  penalty: { id: "8", text: "Penalty" },
-  timeout: { id: "21", text: "Timeout" },
-  endPeriod: { id: "2", text: "End Period" },
-  other: { id: "74", text: "Official Timeout" }
-}
+// Every ESPN play type id the recordings have (fixtures/espn-recordings, this adapter's fixtures, and the recorded
+// scenarios, tallied 2026-10-07), its text as ESPN spells it, and the case and outcome it reads as. Where two ids read
+// alike, `typeOf` writes the first.
+const types: ReadonlyArray<{ readonly id: string; readonly text: string; readonly play: Outcome }> = [
+  { id: "5", text: "Rush", play: { _tag: "Rush", touchdown: false } },
+  { id: "68", text: "Rushing Touchdown", play: { _tag: "Rush", touchdown: true } },
+  { id: "24", text: "Pass Reception", play: { _tag: "Completion", touchdown: false } },
+  { id: "4", text: "Pass Completion", play: { _tag: "Completion", touchdown: false } },
+  { id: "67", text: "Passing Touchdown", play: { _tag: "Completion", touchdown: true } },
+  { id: "3", text: "Pass Incompletion", play: { _tag: "Incompletion" } },
+  { id: "63", text: "Interception", play: { _tag: "Interception", return: "none" } },
+  { id: "26", text: "Pass Interception Return", play: { _tag: "Interception", return: "returned" } },
+  { id: "36", text: "Interception Return Touchdown", play: { _tag: "Interception", return: "touchdown" } },
+  { id: "7", text: "Sack", play: { _tag: "Sack", fumbleLost: false } },
+  { id: "80", text: "Sack Opp Fumble Recovery", play: { _tag: "Sack", fumbleLost: true } },
+  { id: "69", text: "Fumble", play: { _tag: "Fumble", recovery: "unknown" } },
+  { id: "9", text: "Fumble Recovery (Own)", play: { _tag: "Fumble", recovery: "own" } },
+  { id: "29", text: "Fumble Recovery (Opponent)", play: { _tag: "Fumble", recovery: "opponent" } },
+  { id: "39", text: "Fumble Return Touchdown", play: { _tag: "Fumble", recovery: "touchdown" } },
+  { id: "15", text: "Two Point Pass", play: { _tag: "TwoPointTry", by: "pass" } },
+  { id: "16", text: "Two Point Rush", play: { _tag: "TwoPointTry", by: "rush" } },
+  { id: "53", text: "Kickoff", play: { _tag: "Kickoff", returnTouchdown: false } },
+  { id: "32", text: "Kickoff Return Touchdown", play: { _tag: "Kickoff", returnTouchdown: true } },
+  { id: "52", text: "Punt", play: { _tag: "Punt", return: "none" } },
+  { id: "14", text: "Punt Return", play: { _tag: "Punt", return: "returned" } },
+  { id: "34", text: "Punt Return Touchdown", play: { _tag: "Punt", return: "touchdown" } },
+  { id: "59", text: "Field Goal Good", play: { _tag: "FieldGoal", result: "good" } },
+  { id: "60", text: "Field Goal Missed", play: { _tag: "FieldGoal", result: "missed" } },
+  { id: "18", text: "Blocked Field Goal", play: { _tag: "FieldGoal", result: "blocked" } },
+  { id: "61", text: "Extra Point Good", play: { _tag: "ExtraPoint", good: true } },
+  { id: "62", text: "Extra Point Missed", play: { _tag: "ExtraPoint", good: false } },
+  { id: "20", text: "Safety", play: { _tag: "Safety" } },
+  { id: "8", text: "Penalty", play: { _tag: "Penalty" } },
+  { id: "21", text: "Timeout", play: { _tag: "Timeout" } },
+  { id: "74", text: "Official Timeout", play: { _tag: "Stoppage", kind: "officialTimeout" } },
+  { id: "75", text: "Two-minute warning", play: { _tag: "Stoppage", kind: "twoMinuteWarning" } },
+  { id: "70", text: "Coin Toss", play: { _tag: "Stoppage", kind: "coinToss" } },
+  { id: "2", text: "End Period", play: { _tag: "PeriodEnd", ends: "period" } },
+  { id: "65", text: "End of Half", play: { _tag: "PeriodEnd", ends: "half" } },
+  { id: "79", text: "End of Regulation", play: { _tag: "PeriodEnd", ends: "regulation" } },
+  { id: "66", text: "End of Game", play: { _tag: "PeriodEnd", ends: "game" } }
+]

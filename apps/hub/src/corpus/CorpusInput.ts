@@ -24,7 +24,7 @@ export class CorpusLine extends Schema.Class<CorpusLine>("sportal/hub/CorpusLine
   input: CorpusInput
 }) {
   /** This corpus format; a day built to another does not load. */
-  static readonly format: number = 1
+  static readonly format: number = 2
 
   /** A corpus day's order: by arrival, then by `seq`, so a frame's lines sit together and `Had` threads one way. */
   static readonly byArrival: Order.Order<{ readonly at: DateTime.Utc; readonly seq: number }> = Order.Struct({

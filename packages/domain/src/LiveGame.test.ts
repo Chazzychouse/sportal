@@ -473,7 +473,7 @@ describe("LiveGame.start, plays", () => {
 
 describe("LiveGame#take, plays", () => {
   const first = play()
-  const second = play({ id: PlayId.make("2"), sequence: 2, scoring: true, homeScore: 7, kind: "pass" })
+  const second = play({ id: PlayId.make("2"), sequence: 2, scoring: true, homeScore: 7, touchdown: true })
   const take = (game: LiveGame, plays: ReadonlyArray<Play>) =>
     game.take(Delivery.cases.Plays.make({ game: live.id, plays }), later)
   const withFirst = Option.getOrThrow(take(liveGame, [first]).liveGame)
@@ -543,7 +543,13 @@ describe("LiveGame#take, a snapshot's events", () => {
   })
   it("a snapshot's score change, then the touchdown play: ScoreChanged once, then Played only", () => {
     const scored = snapshot({ status: "live", period: 2, clock: "9:00", home: { ...live.home, score: 7 } })
-    const touchdown = play({ id: PlayId.make("2"), sequence: 2, scoring: true, homeScore: 7, kind: "pass" })
+    const touchdown = play({
+      id: PlayId.make("2"),
+      sequence: 2,
+      scoring: true,
+      homeScore: 7,
+      touchdown: true
+    })
     const withPlay = Option.getOrThrow(
       liveGame.take(Delivery.cases.Plays.make({ game: live.id, plays: [play()] }), later).liveGame
     )
@@ -559,7 +565,13 @@ describe("LiveGame#take, a snapshot's events", () => {
   })
   it("the touchdown play, then the snapshot's score change: Played, then ScoreChanged, once each", () => {
     const scored = snapshot({ status: "live", period: 2, clock: "9:00", home: { ...live.home, score: 7 } })
-    const touchdown = play({ id: PlayId.make("2"), sequence: 2, scoring: true, homeScore: 7, kind: "pass" })
+    const touchdown = play({
+      id: PlayId.make("2"),
+      sequence: 2,
+      scoring: true,
+      homeScore: 7,
+      touchdown: true
+    })
     const withPlay = Option.getOrThrow(
       liveGame.take(Delivery.cases.Plays.make({ game: live.id, plays: [play()] }), later).liveGame
     )

@@ -2,7 +2,7 @@ import { DateTime, Effect, Option } from "effect"
 import { Delivery } from "./Delivery.ts"
 import { type Broadcast, GameId, GameSnapshot, Network } from "./Game.ts"
 import { LeagueId } from "./League.ts"
-import { Play, PlayId } from "./Play.ts"
+import { PlayId, Rush } from "./Play.ts"
 import { Situation } from "./Situation.ts"
 import type { Slate } from "./Slate.ts"
 import { Team, TeamId } from "./Team.ts"
@@ -61,18 +61,21 @@ export function broadcast(network: string, medium: Broadcast["medium"] = "tv"): 
   return { network: Network.make(network), medium }
 }
 
-/** A play for a test: a one-yard rush by the home team in the first quarter unless the overrides say otherwise. */
-export function play(overrides: Partial<Play> = {}): Play {
+/**
+ * A play for a test: a one-yard rush by the home team in the first quarter unless the overrides say otherwise. A test
+ * that needs another case constructs it.
+ */
+export function play(overrides: Partial<Rush> = {}): Rush {
   const home = team("HOME").id
-  return new Play({
+  return new Rush({
     id: PlayId.make("1"),
     sequence: 1,
     period: 1,
     clock: "15:00",
     team: home,
-    kind: "rush",
     text: "Rush for 1 yard",
     yards: 1,
+    touchdown: false,
     scoring: false,
     homeScore: 0,
     awayScore: 0,

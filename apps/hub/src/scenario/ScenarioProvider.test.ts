@@ -168,9 +168,11 @@ describe("ScenarioProvider", () => {
     }).pipe(Effect.provide(playing("two-minute-drill-tie")))
   )
 
-  it.effect("a written scenario pushes each play's message at its offset", () =>
+  it.effect("should push each play's message of a written scenario at its offset", () =>
     Effect.gen(function* () {
-      const dir = yield* (yield* FileSystem.FileSystem).makeTempDirectoryScoped()
+      const fileSystem = yield* FileSystem.FileSystem
+      const dir = yield* fileSystem.makeTempDirectoryScoped()
+
       yield* Effect.gen(function* () {
         const provider = yield* Provider
         const received = yield* Ref.make<ReadonlyArray<number>>([])
@@ -487,7 +489,7 @@ const aDrive = ScenarioScript.build("a-drive", [
         {
           clock: "14:30",
           ball: { team: "home", yardLine: 71, down: 2, distance: 6 },
-          play: { kind: "rush", yards: 4 }
+          play: { _tag: "Rush", touchdown: false, yards: 4 }
         }
       ],
       [
@@ -495,7 +497,7 @@ const aDrive = ScenarioScript.build("a-drive", [
         {
           clock: "14:00",
           ball: { team: "home", yardLine: 59, down: 1, distance: 10 },
-          play: { kind: "pass", yards: 12 }
+          play: { _tag: "Completion", touchdown: false, yards: 12 }
         }
       ]
     ]

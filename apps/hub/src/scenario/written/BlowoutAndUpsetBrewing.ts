@@ -25,7 +25,7 @@ export const blowoutAndUpsetBrewing = ScenarioScript.build("blowout-and-upset-br
         {
           clock: "6:02",
           ball: { team: "away", yardLine: 45, down: 3, distance: 2 },
-          play: { kind: "pass", yards: 25 }
+          play: { _tag: "Completion", touchdown: false, yards: 25 }
         }
       ],
       [
@@ -34,7 +34,7 @@ export const blowoutAndUpsetBrewing = ScenarioScript.build("blowout-and-upset-br
           clock: "4:15",
           ball: { team: "home", yardLine: 80, down: 1, distance: 10 },
           lastPlay: "Punt",
-          play: { kind: "punt", yards: 25 }
+          play: { _tag: "Punt", return: "none", yards: 25 }
         }
       ],
       [
@@ -42,7 +42,7 @@ export const blowoutAndUpsetBrewing = ScenarioScript.build("blowout-and-upset-br
         {
           clock: "2:20",
           ball: { team: "home", yardLine: 48, down: 4, distance: 3 },
-          play: { kind: "pass", yards: 32 }
+          play: { _tag: "Completion", touchdown: false, yards: 32 }
         }
       ],
       [
@@ -51,7 +51,7 @@ export const blowoutAndUpsetBrewing = ScenarioScript.build("blowout-and-upset-br
           clock: "1:50",
           ball: { team: "away", yardLine: 52, down: 1, distance: 10 },
           lastPlay: "Turnover on downs",
-          play: { kind: "incompletion", yards: 0 }
+          play: { _tag: "Incompletion", yards: 0 }
         }
       ]
     ]
@@ -81,7 +81,7 @@ export const blowoutAndUpsetBrewing = ScenarioScript.build("blowout-and-upset-br
           score: [56, 3],
           ball: null,
           lastPlay: "Touchdown",
-          play: { kind: "rush", yards: 35 }
+          play: { _tag: "Rush", touchdown: true, yards: 35 }
         }
       ]
     ]
@@ -108,7 +108,7 @@ export const blowoutAndUpsetBrewing = ScenarioScript.build("blowout-and-upset-br
         {
           clock: "9:05",
           ball: { team: "home", yardLine: 37, down: 1, distance: 10 },
-          play: { kind: "pass", yards: 21 }
+          play: { _tag: "Completion", touchdown: false, yards: 21 }
         }
       ]
     ]
