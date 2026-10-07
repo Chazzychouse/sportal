@@ -6,17 +6,17 @@ import { HubConfig } from "./HubConfig.ts"
 import { home, withEnv } from "./TestHubConfig.ts"
 
 describe("HubConfig", () => {
-  it.effect("has a default for every setting", () =>
+  it.effect("should have a default for every setting", () =>
     Effect.gen(function* () {
+      const expectedDataDir = yield* dataDirOn(process.platform, home, NodePath.layer)
+
       const config = yield* HubConfig
+
       assert.strictEqual(config.port, 4400)
       assert.strictEqual(config.host, "0.0.0.0")
       assert.isTrue(Option.isNone(config.webRoot))
-      const expected = yield* HubConfig.defaultDataDir(process.platform).pipe(
-        Effect.provide(inEnv(home, NodePath.layer))
-      )
-      assert.strictEqual(config.dataDir, expected)
-      assert.strictEqual(config.corpusDir, `${expected}/corpus`)
+      assert.strictEqual(config.dataDir, expectedDataDir)
+      assert.strictEqual(config.corpusDir, `${expectedDataDir}/corpus`)
       assert.isTrue(Option.isNone(config.scenario))
       assert.strictEqual(config.scenarioSpeed, 1)
       assert.isTrue(Option.isNone(config.scenarioFeedLog), "a scenario's feed log is in memory")
@@ -28,9 +28,10 @@ describe("HubConfig", () => {
     }).pipe(Effect.provide(withEnv({})))
   )
 
-  it.effect("reads each setting", () =>
+  it.effect("should read each setting", () =>
     Effect.gen(function* () {
       const config = yield* HubConfig
+
       assert.strictEqual(config.port, 5000)
       assert.strictEqual(config.host, "127.0.0.1")
       assert.deepStrictEqual(config.webRoot, Option.some("/srv/web"))
@@ -47,42 +48,26 @@ describe("HubConfig", () => {
         Option.some("http://localhost:4318/")
       )
       assert.deepStrictEqual(config.leagues, ["fbs"])
-    }).pipe(
-      Effect.provide(
-        withEnv({
-          SPORTAL_PORT: "5000",
-          SPORTAL_HOST: "127.0.0.1",
-          SPORTAL_WEB_ROOT: "/srv/web",
-          SPORTAL_DATA_DIR: "/data",
-          SPORTAL_CORPUS_DIR: "/srv/corpus",
-          SPORTAL_SCENARIO: "two-minute-drill-tie",
-          SPORTAL_SCENARIO_SPEED: "10",
-          SPORTAL_SCENARIO_FEED_LOG: "scenario.sqlite",
-          SPORTAL_LOG_LEVEL: "Debug",
-          SPORTAL_LOG_FORMAT: "json",
-          SPORTAL_VERSION: "1.2.3",
-          SPORTAL_OTLP_URL: "http://localhost:4318",
-          SPORTAL_LEAGUES: "fbs"
-        })
-      )
-    )
+    }).pipe(Effect.provide(withEnv(everySetting)))
   )
 
-  it.effect("keeps the corpus in the data directory it is given", () =>
+  it.effect("should keep the corpus in the data directory it is given", () =>
     Effect.gen(function* () {
       const config = yield* HubConfig
+
       assert.strictEqual(config.corpusDir, "/data/corpus")
     }).pipe(Effect.provide(withEnv({ SPORTAL_DATA_DIR: "/data" })))
   )
 
-  it.effect("reads a list of leagues, ignoring the spaces around each", () =>
+  it.effect("should read a list of leagues, ignoring the spaces around each", () =>
     Effect.gen(function* () {
       const config = yield* HubConfig
+
       assert.deepStrictEqual(config.leagues, ["nfl", "fbs"])
     }).pipe(Effect.provide(withEnv({ SPORTAL_LEAGUES: " nfl , fbs " })))
   )
 
-  for (const [name, value] of [
+  it.effect.each([
     ["SPORTAL_PORT", "eighty"],
     ["SPORTAL_SCENARIO_SPEED", "0"],
     ["SPORTAL_SCENARIO_SPEED", "NaN"],
@@ -94,67 +79,101 @@ describe("HubConfig", () => {
     ["SPORTAL_SCENARIO_FEED_LOG", "../elsewhere.sqlite"],
     ["SPORTAL_LEAGUES", "mlb"],
     ["SPORTAL_LEAGUES", " , "]
-  ] as const) {
-    it.effect(`refuses ${name}=${value}, naming the setting`, () =>
-      Effect.gen(function* () {
-        const error = yield* Effect.service(HubConfig).pipe(
-          Effect.provide(withEnv({ [name]: value })),
-          Effect.flip
-        )
-        assert.include(error.message, name)
-      })
-    )
-  }
+  ] as const)("should refuse %s=%s, naming the setting", ([name, value]) =>
+    Effect.gen(function* () {
+      const config = Effect.service(HubConfig).pipe(Effect.provide(withEnv({ [name]: value })))
+
+      const error = yield* Effect.flip(config)
+
+      assert.include(error.message, name)
+    })
+  )
 })
 
 describe("HubConfig.defaultDataDir", () => {
-  it.effect("is under XDG_DATA_HOME on Linux, when it is set and not empty", () =>
+  it.effect("should be under XDG_DATA_HOME on Linux, when it is set", () =>
     Effect.gen(function* () {
-      const dir = (env: Record<string, string>) =>
-        HubConfig.defaultDataDir("linux").pipe(Effect.provide(inEnv(env, NodePath.layerPosix)))
-      assert.strictEqual(yield* dir({ HOME: "/home/fan", XDG_DATA_HOME: "/data/xdg" }), "/data/xdg/sportal")
-      assert.strictEqual(yield* dir({ HOME: "/home/fan" }), "/home/fan/.local/share/sportal")
-      assert.strictEqual(
-        yield* dir({ HOME: "/home/fan", XDG_DATA_HOME: "" }),
-        "/home/fan/.local/share/sportal"
-      )
+      const env = { HOME: "/home/fan", XDG_DATA_HOME: "/data/xdg" }
+
+      const dir = yield* dataDirOn("linux", env, NodePath.layerPosix)
+
+      assert.strictEqual(dir, "/data/xdg/sportal")
     })
   )
 
-  it.effect("is in Application Support on macOS", () =>
+  it.effect.each([
+    ["missing", { HOME: "/home/fan" }],
+    ["empty", { HOME: "/home/fan", XDG_DATA_HOME: "" }]
+  ] as const)("should be under the home folder on Linux when XDG_DATA_HOME is %s", ([_name, env]) =>
     Effect.gen(function* () {
-      const dir = yield* HubConfig.defaultDataDir("darwin").pipe(
-        Effect.provide(inEnv({ HOME: "/Users/fan" }, NodePath.layerPosix))
-      )
+      const dir = yield* dataDirOn("linux", env, NodePath.layerPosix)
+
+      assert.strictEqual(dir, "/home/fan/.local/share/sportal")
+    })
+  )
+
+  it.effect("should be in Application Support on macOS", () =>
+    Effect.gen(function* () {
+      const env = { HOME: "/Users/fan" }
+
+      const dir = yield* dataDirOn("darwin", env, NodePath.layerPosix)
+
       assert.strictEqual(dir, "/Users/fan/Library/Application Support/Sportal")
     })
   )
 
-  it.effect("is under LOCALAPPDATA on Windows, never the roaming folder", () =>
+  it.effect("should be under LOCALAPPDATA on Windows, when it is set", () =>
     Effect.gen(function* () {
-      const dir = (env: Record<string, string>) =>
-        HubConfig.defaultDataDir("win32").pipe(Effect.provide(inEnv(env, NodePath.layerWin32)))
-      assert.strictEqual(
-        yield* dir({ USERPROFILE: "C:\\Users\\fan", LOCALAPPDATA: "D:\\Local" }),
-        "D:\\Local\\Sportal"
-      )
-      assert.strictEqual(
-        yield* dir({ USERPROFILE: "C:\\Users\\fan" }),
-        "C:\\Users\\fan\\AppData\\Local\\Sportal"
-      )
+      const env = { USERPROFILE: "C:\\Users\\fan", LOCALAPPDATA: "D:\\Local" }
+
+      const dir = yield* dataDirOn("win32", env, NodePath.layerWin32)
+
+      assert.strictEqual(dir, "D:\\Local\\Sportal")
     })
   )
 
-  it.effect("names HOME when it is needed and missing", () =>
+  it.effect("should be in the local app data under the profile on Windows, never the roaming folder", () =>
     Effect.gen(function* () {
-      const error = yield* HubConfig.defaultDataDir("linux").pipe(
-        Effect.provide(inEnv({}, NodePath.layerPosix)),
-        Effect.flip
-      )
+      const env = { USERPROFILE: "C:\\Users\\fan" }
+
+      const dir = yield* dataDirOn("win32", env, NodePath.layerWin32)
+
+      assert.strictEqual(dir, "C:\\Users\\fan\\AppData\\Local\\Sportal")
+    })
+  )
+
+  it.effect("should name HOME when it is needed and missing", () =>
+    Effect.gen(function* () {
+      const dir = dataDirOn("linux", {}, NodePath.layerPosix)
+
+      const error = yield* Effect.flip(dir)
+
       assert.include(error.message, "HOME")
     })
   )
 })
+
+/** A value for every setting, none of them its default. */
+const everySetting = {
+  SPORTAL_PORT: "5000",
+  SPORTAL_HOST: "127.0.0.1",
+  SPORTAL_WEB_ROOT: "/srv/web",
+  SPORTAL_DATA_DIR: "/data",
+  SPORTAL_CORPUS_DIR: "/srv/corpus",
+  SPORTAL_SCENARIO: "two-minute-drill-tie",
+  SPORTAL_SCENARIO_SPEED: "10",
+  SPORTAL_SCENARIO_FEED_LOG: "scenario.sqlite",
+  SPORTAL_LOG_LEVEL: "Debug",
+  SPORTAL_LOG_FORMAT: "json",
+  SPORTAL_VERSION: "1.2.3",
+  SPORTAL_OTLP_URL: "http://localhost:4318",
+  SPORTAL_LEAGUES: "fbs"
+}
+
+/** The default data directory on `platform`, read from exactly the variables `env` with `path`'s separators. */
+function dataDirOn(platform: NodeJS.Platform, env: Record<string, string>, path: typeof NodePath.layer) {
+  return HubConfig.defaultDataDir(platform).pipe(Effect.provide(inEnv(env, path)))
+}
 
 /** Exactly these variables as the configuration, beside `path`, and nothing from the machine running the test. */
 function inEnv(env: Record<string, string>, path: typeof NodePath.layer) {
