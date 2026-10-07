@@ -5,7 +5,15 @@ import { EspnEvent } from "./EspnEvent.ts"
 
 // How each recorded feed's events decode is locked in EspnDecode's tests; these are the cases a recording lacks.
 describe("EspnEvent", () => {
-  it("a site scoreboard event missing a competitor does not decode", () => {
+  it("should decode a site scoreboard event", () => {
+    const event = siteEvent()
+
+    const decoded = decode(event)
+
+    assert.isTrue(Result.isSuccess(decoded))
+  })
+
+  it("should not decode a site scoreboard event missing a competitor", () => {
     const event = siteEvent()
     const [competition] = event.competitions
     const homeOnly = {
@@ -13,15 +21,26 @@ describe("EspnEvent", () => {
       competitions: [{ ...competition, competitors: competition.competitors.filter(isHome) }]
     }
 
-    assert.isTrue(Result.isSuccess(decode(event)))
-    assert.isTrue(Result.isFailure(decode(homeOnly)))
+    const decoded = decode(homeOnly)
+
+    assert.isTrue(Result.isFailure(decoded))
   })
 
-  it("a FastCast event missing a competitor does not decode", () => {
+  it("should decode a FastCast event", () => {
     const event = fastCastEvent()
 
-    assert.isTrue(Result.isSuccess(decode(event)))
-    assert.isTrue(Result.isFailure(decode({ ...event, competitors: event.competitors.filter(isHome) })))
+    const decoded = decode(event)
+
+    assert.isTrue(Result.isSuccess(decoded))
+  })
+
+  it("should not decode a FastCast event missing a competitor", () => {
+    const event = fastCastEvent()
+    const homeOnly = { ...event, competitors: event.competitors.filter(isHome) }
+
+    const decoded = decode(homeOnly)
+
+    assert.isTrue(Result.isFailure(decoded))
   })
 })
 

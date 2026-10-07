@@ -4,30 +4,51 @@ import { Option } from "effect"
 import * as FastCastMessage from "./FastCastMessage.ts"
 
 // How each document follows its frames is tested through EspnDecode, which reads what the documents say.
-describe("FastCastMessage", () => {
-  it("names each league's scoreboard topic", () => {
-    assert.strictEqual(FastCastMessage.topic("nfl"), "event-football-nfl")
-    assert.strictEqual(FastCastMessage.topic("fbs"), "event-football-college-football")
+describe("FastCastMessage.topic", () => {
+  it.each([
+    ["nfl", "event-football-nfl"],
+    ["fbs", "event-football-college-football"]
+  ] as const)("should name the %s scoreboard's topic", (league, expected) => {
+    const topic = FastCastMessage.topic(league)
+
+    assert.strictEqual(topic, expected)
   })
 
-  it("names each game's package topic after its league's scoreboard topic", () => {
-    assert.strictEqual(FastCastMessage.topic("nfl", GameId.make("401872971")), "gp-football-nfl-401872971")
-    assert.strictEqual(
-      FastCastMessage.topic("fbs", GameId.make("401862787")),
-      "gp-football-college-football-401862787"
-    )
+  it.each([
+    ["nfl", "401872971", "gp-football-nfl-401872971"],
+    ["fbs", "401862787", "gp-football-college-football-401862787"]
+  ] as const)(
+    "should name %s game %s's package topic after its league's scoreboard topic",
+    (league, game, expected) => {
+      const topic = FastCastMessage.topic(league, GameId.make(game))
+
+      assert.strictEqual(topic, expected)
+    }
+  )
+})
+
+describe("FastCastMessage.owner", () => {
+  it("should own a scoreboard topic by its league's scoreboard", () => {
+    const owner = FastCastMessage.owner("event-football-nfl")
+
+    assert.deepStrictEqual(owner, Option.some(FastCastMessage.Owner.Scoreboard({ league: "nfl" })))
   })
 
-  it("owns each topic by its league's scoreboard or one game, and no other", () => {
+  it("should own a package topic by its game", () => {
+    const owner = FastCastMessage.owner("gp-football-college-football-401862787")
+
     assert.deepStrictEqual(
-      FastCastMessage.owner("event-football-nfl"),
-      Option.some(FastCastMessage.Owner.Scoreboard({ league: "nfl" }))
-    )
-    assert.deepStrictEqual(
-      FastCastMessage.owner("gp-football-college-football-401862787"),
+      owner,
       Option.some(FastCastMessage.Owner.Game({ league: "fbs", game: GameId.make("401862787") }))
     )
-    assert.isTrue(Option.isNone(FastCastMessage.owner("gp-football-nfl-")))
-    assert.isTrue(Option.isNone(FastCastMessage.owner("event-basketball-nba")))
+  })
+
+  it.each([
+    ["a package topic without a game", "gp-football-nfl-"],
+    ["another sport's scoreboard topic", "event-basketball-nba"]
+  ])("should give no owner for %s", (_name, topic) => {
+    const owner = FastCastMessage.owner(topic)
+
+    assert.isTrue(Option.isNone(owner))
   })
 })
