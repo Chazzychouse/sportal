@@ -5,11 +5,8 @@ import { FeedLog } from "./feed-log/FeedLog.ts"
 import { HubConfig } from "./HubConfig.ts"
 import * as Ingest from "./Ingest.ts"
 import { LiveSlate } from "./LiveSlate.ts"
-import * as EspnDecode from "./provider/espn/EspnDecode.ts"
-import * as EspnProvider from "./provider/espn/EspnProvider.ts"
-import { FastCast } from "./provider/espn/FastCast.ts"
+import * as Espn from "./provider/espn/Espn.ts"
 import * as ScenarioClock from "./scenario/ScenarioClock.ts"
-import * as ScenarioProvider from "./scenario/ScenarioProvider.ts"
 import * as ScenarioSource from "./scenario/ScenarioSource.ts"
 import { Scenarios } from "./scenario/Scenarios.ts"
 import * as YouTubeTv from "./source/youtube-tv/YouTubeTv.ts"
@@ -33,19 +30,13 @@ export const layer = Layer.unwrap(
 // Hub's own layers needs the log.
 function live() {
   return Layer.mergeAll(
-    Layer.mergeAll(
-      Ingest.layer.pipe(
-        Layer.provide(
-          EspnProvider.layer.pipe(
-            Layer.provide(FastCast.layer),
-            Layer.provide(NodeSocket.layerWebSocketConstructorWS)
-          )
-        )
-      )
-    ).pipe(
+    Ingest.layer.pipe(
       Layer.provideMerge(LiveSlate.layer),
       Layer.provide(FeedLog.layerInDataDir),
-      Layer.provide([EspnDecode.layer, DateTime.layerCurrentZoneLocal])
+      Layer.provide([
+        Espn.layer.pipe(Layer.provide(NodeSocket.layerWebSocketConstructorWS)),
+        DateTime.layerCurrentZoneLocal
+      ])
     ),
     YouTubeTv.layer
   )
@@ -55,12 +46,13 @@ function live() {
 // Ingest and the LiveSlate share the scenario's clock; the rest of the Hub keeps the real one.
 function scenario() {
   return Layer.mergeAll(
-    Layer.mergeAll(
-      Ingest.layer.pipe(Layer.provide(ScenarioProvider.layer.pipe(Layer.provide(Scenarios.layer))))
-    ).pipe(
+    Ingest.layer.pipe(
       Layer.provideMerge(LiveSlate.layer),
       Layer.provide(scenarioFeedLog),
-      Layer.provide([EspnDecode.layer, DateTime.layerCurrentZoneLocal]),
+      Layer.provide([
+        Espn.layerScenario.pipe(Layer.provide(Scenarios.layer)),
+        DateTime.layerCurrentZoneLocal
+      ]),
       Layer.provide(ScenarioClock.layer)
     ),
     ScenarioSource.layer

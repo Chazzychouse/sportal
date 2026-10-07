@@ -6,8 +6,8 @@ import { HttpClient, HttpClientResponse } from "effect/http"
 import { TestClock } from "effect/testing"
 import { CorpusDays } from "../../corpus/CorpusDay.ts"
 import { withEnv } from "../../TestHubConfig.ts"
-import type { Archive } from "../Archive.ts"
-import * as EspnArchive from "./EspnArchive.ts"
+import type { Archiver } from "../Archiver.ts"
+import * as EspnArchiver from "./EspnArchiver.ts"
 import { fixtures } from "./TestEspn.ts"
 
 // ESPN's archive of 2026-10-04's NFL games, as fetched once after they were final:
@@ -35,7 +35,7 @@ export function inArchive<A, E>(
   test: (context: {
     readonly dir: string
     readonly requests: Effect.Effect<ReadonlyArray<string>>
-  }) => Effect.Effect<A, E, Archive | CorpusDays | FileSystem.FileSystem | Path.Path>
+  }) => Effect.Effect<A, E, Archiver | CorpusDays | FileSystem.FileSystem | Path.Path>
 ) {
   return Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem
@@ -60,7 +60,7 @@ export function inArchive<A, E>(
     )
     return yield* test({ dir, requests: Ref.get(requests) }).pipe(
       Effect.provide(
-        Layer.mergeAll(EspnArchive.layer, CorpusDays.layer).pipe(
+        Layer.mergeAll(EspnArchiver.layer, CorpusDays.layer).pipe(
           Layer.provide(withEnv({ SPORTAL_CORPUS_DIR: dir })),
           Layer.provide(Layer.succeed(HttpClient.HttpClient, client))
         )

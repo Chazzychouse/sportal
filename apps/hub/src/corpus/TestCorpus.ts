@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs"
 import { NodeCrypto, NodeServices } from "@effect/platform-node"
+import type { GameDay } from "@sportal/domain/GameDay"
 import { type Crypto, DateTime, Effect, FileSystem, Layer, type Path } from "effect"
 import type { SqlClient } from "effect/sql"
 import * as Database from "../Database.ts"
@@ -9,7 +10,6 @@ import type { Decoder } from "../provider/Decoder.ts"
 import { withEnv } from "../TestHubConfig.ts"
 import * as CorpusBuild from "./CorpusBuild.ts"
 import { CorpusDays } from "./CorpusDay.ts"
-import type { GameDay } from "./GameDay.ts"
 
 // The zone corpus tests read their game days in.
 const zone = "America/New_York"

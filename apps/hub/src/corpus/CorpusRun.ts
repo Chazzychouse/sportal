@@ -1,3 +1,4 @@
+import { bounds, GameDay } from "@sportal/domain/GameDay"
 import type { GameEvent } from "@sportal/domain/GameEvent"
 import { Slate, type Taken } from "@sportal/domain/Slate"
 import {
@@ -20,7 +21,6 @@ import {
 } from "effect"
 import { Worker, type WorkerError } from "effect/workers"
 import { CorpusDays, CorpusDayUnreadable } from "./CorpusDay.ts"
-import { bounds, GameDay } from "./GameDay.ts"
 
 /**
  * Plays corpus day `date` through the slate on virtual time: each frame taken at its `at`, which first ticks every

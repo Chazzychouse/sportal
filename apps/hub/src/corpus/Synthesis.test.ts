@@ -1,14 +1,14 @@
 import { assert, describe, it } from "@effect/vitest"
+import { GameDay } from "@sportal/domain/GameDay"
 import type { GameEvent } from "@sportal/domain/GameEvent"
 import type { SlateObservation } from "@sportal/domain/SlateObservation"
 import { Chunk, Context, Effect, Layer, Schema, Stream } from "effect"
-import { Archive, type ArchivedGame } from "../provider/Archive.ts"
-import { inArchive, stepped } from "../provider/espn/TestEspnArchive.ts"
+import { Archiver, type GameArchive } from "../provider/Archiver.ts"
+import { inArchive, stepped } from "../provider/espn/TestEspnArchiver.ts"
 import * as TestSnapshotFeed from "../TestSnapshotFeed.ts"
 import { CorpusDay, CorpusDays } from "./CorpusDay.ts"
 import { CorpusLine } from "./CorpusLine.ts"
 import * as CorpusRun from "./CorpusRun.ts"
-import { GameDay } from "./GameDay.ts"
 import * as Synthesis from "./Synthesis.ts"
 import { golden, inCorpus, local } from "./TestCorpus.ts"
 
@@ -137,7 +137,7 @@ describe("Synthesis.day", () => {
 class NeBufSynthesized extends Context.Service<
   NeBufSynthesized,
   {
-    readonly games: ReadonlyArray<ArchivedGame>
+    readonly games: ReadonlyArray<GameArchive>
     readonly poll: ReadonlyArray<CorpusLine>
     readonly push: ReadonlyArray<CorpusLine>
   }
@@ -159,7 +159,7 @@ function neBufSynthesizedLayer() {
 const neBufDay = GameDay.make("2026-10-04")
 
 // NE–BUF of 2026-10-04 from ESPN's archive (its recorded scoreboard and summary), the only game of the day with plays.
-const archived = inArchive({}, () => stepped(Archive.use((archive) => archive.games("nfl", neBufDay))))
+const archived = inArchive({}, () => stepped(Archiver.use((archive) => archive.games("nfl", neBufDay))))
 
 const encodeLine = Schema.encodeSync(Schema.fromJsonString(CorpusLine))
 

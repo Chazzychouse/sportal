@@ -1,6 +1,7 @@
 import { assert, describe, it } from "@effect/vitest"
 import { Delivery } from "@sportal/domain/Delivery"
 import { GameId, type GameSnapshot } from "@sportal/domain/Game"
+import { GameDay } from "@sportal/domain/GameDay"
 import { Slate } from "@sportal/domain/Slate"
 import { liveSnapshot, snapshot } from "@sportal/domain/TestGame"
 import {
@@ -20,15 +21,14 @@ import { FeedFrame } from "../Frame.ts"
 import { FeedLog } from "../feed-log/FeedLog.ts"
 import * as Gzip from "../Gzip.ts"
 import { Decoder } from "../provider/Decoder.ts"
-import * as EspnDecode from "../provider/espn/EspnDecode.ts"
+import * as EspnDecoder from "../provider/espn/EspnDecoder.ts"
 import { recordedNeAtBuf, recordedPlays } from "../provider/espn/TestEspn.ts"
-import { inArchive, site, stepped } from "../provider/espn/TestEspnArchive.ts"
+import { inArchive, site, stepped } from "../provider/espn/TestEspnArchiver.ts"
 import * as TestSnapshotFeed from "../TestSnapshotFeed.ts"
 import { framed } from "../TestSnapshotFeed.ts"
 import * as CorpusBuild from "./CorpusBuild.ts"
 import { CorpusDay, CorpusDays } from "./CorpusDay.ts"
 import { CorpusLine } from "./CorpusLine.ts"
-import { GameDay } from "./GameDay.ts"
 import { built, golden, inCorpus, local } from "./TestCorpus.ts"
 
 describe.each([
@@ -401,7 +401,7 @@ function recordedDayBuilt(from: DateTime.Utc, zone: DateTime.TimeZone | undefine
   return Layer.effect(
     RecordedDayBuilt,
     inCorpus(
-      EspnDecode.layer,
+      EspnDecoder.layer,
       (dir) =>
         Effect.gen(function* () {
           const fs = yield* FileSystem.FileSystem

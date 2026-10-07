@@ -7,7 +7,7 @@ import { Array as Arr, type Cause, Context, DateTime, Effect, FileSystem, Layer,
 import { FeedFrame } from "../Frame.ts"
 import * as Gzip from "../Gzip.ts"
 import type { Decoded } from "../provider/Decoder.ts"
-import * as EspnDecode from "../provider/espn/EspnDecode.ts"
+import * as EspnDecoder from "../provider/espn/EspnDecoder.ts"
 import { decodedFrames } from "../provider/TestDecoder.ts"
 import { takenOf } from "../TestLiveSlate.ts"
 import { Scenarios } from "./Scenarios.ts"
@@ -204,7 +204,7 @@ const everyScenarioPlayed = Layer.effect(
       })
     )
   })
-).pipe(Layer.provide([committed, EspnDecode.layer]))
+).pipe(Layer.provide([committed, EspnDecoder.layer]))
 
 /** The scenarios `Scenarios.layerFrom` reads from a fresh directory holding only `file`, written as `contents`. */
 function scenariosRecording(file: string, contents: Effect.Effect<Uint8Array, Cause.UnknownError>) {

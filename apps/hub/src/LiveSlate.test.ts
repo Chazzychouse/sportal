@@ -33,7 +33,7 @@ import { FeedFrame } from "./Frame.ts"
 import { FeedLog } from "./feed-log/FeedLog.ts"
 import { LiveSlate } from "./LiveSlate.ts"
 import { Decoded, Decoder } from "./provider/Decoder.ts"
-import * as EspnDecode from "./provider/espn/EspnDecode.ts"
+import * as EspnDecoder from "./provider/espn/EspnDecoder.ts"
 import { fixtures, recordedNeAtBuf, recordedPlays } from "./provider/espn/TestEspn.ts"
 import { withEnv } from "./TestHubConfig.ts"
 import {
@@ -1188,7 +1188,7 @@ describe("LiveSlate following the feed log", () => {
       assert.deepStrictEqual(decodeLogs, [])
     }).pipe(
       Effect.provide(
-        slateFollowingFramesFrom(Effect.all(noticeable), { decoder: EspnDecode.layer }).pipe(
+        slateFollowingFramesFrom(Effect.all(noticeable), { decoder: EspnDecoder.layer }).pipe(
           Layer.provideMerge(layer)
         )
       ),
@@ -1222,7 +1222,7 @@ describe("LiveSlate following the feed log", () => {
       assert.strictEqual(waits.length, 1)
       assert.isTrue(logs.some(({ level, message }) => level === "Error" && message.includes("Decode:")))
     }).pipe(
-      Effect.provide(slateFollowing([], { decoder: EspnDecode.layer }).pipe(Layer.provideMerge(layer))),
+      Effect.provide(slateFollowing([], { decoder: EspnDecoder.layer }).pipe(Layer.provideMerge(layer))),
       withMetrics
     )
   })
@@ -1357,7 +1357,7 @@ describe("LiveSlate, a recorded game", () => {
         assert.deepStrictEqual(errors, [])
       }).pipe(
         Effect.provide(
-          slateFollowingFramesFrom(recordedNeAtBuf, { decoder: EspnDecode.layer }).pipe(
+          slateFollowingFramesFrom(recordedNeAtBuf, { decoder: EspnDecoder.layer }).pipe(
             Layer.provideMerge(layer)
           )
         ),
@@ -1424,7 +1424,7 @@ describe("LiveSlate, a recorded game", () => {
         const zone = DateTime.zoneMakeOffset(-((12 * 60 + 56) * 60 + 40) * 1000)
         yield* TestClock.setTime(DateTime.toEpochMillis(DateTime.makeUnsafe("2026-10-04T20:00:00Z")))
 
-        yield* latestOf(slateFollowing(frames, { decoder: EspnDecode.layer, zone }))
+        yield* latestOf(slateFollowing(frames, { decoder: EspnDecoder.layer, zone }))
         const summary = logs.find(({ message }) => message.includes("replayed"))
 
         assert.notInclude(
@@ -1453,10 +1453,10 @@ describe("LiveSlate, a recorded game", () => {
 
         // Half the day logged and followed, then every layer closed; reopened on the same file, the rest logged, and
         // the whole log followed, as a Hub starting again would.
-        const before = yield* latestOf(slateOn(FeedLog.layerTest(all.slice(0, half)), EspnDecode.layer)).pipe(
-          Effect.provide(onDisk)
-        )
-        const after = yield* latestOf(slateOn(FeedLog.layerTest(all.slice(half)), EspnDecode.layer)).pipe(
+        const before = yield* latestOf(
+          slateOn(FeedLog.layerTest(all.slice(0, half)), EspnDecoder.layer)
+        ).pipe(Effect.provide(onDisk))
+        const after = yield* latestOf(slateOn(FeedLog.layerTest(all.slice(half)), EspnDecoder.layer)).pipe(
           Effect.provide(onDisk)
         )
         const uninterrupted = yield* replayed(all)
@@ -1900,7 +1900,7 @@ const aheadOfCovered = liveSnapshot({ id: one, clock: "4:30", home: { team: team
 
 /** A fresh slate's latest once it has replayed `frames`, decoded as ESPN. */
 function replayed(frames: ReadonlyArray<FeedFrame>) {
-  return latestOf(slateFollowing(frames, { decoder: EspnDecode.layer }))
+  return latestOf(slateFollowing(frames, { decoder: EspnDecoder.layer }))
 }
 
 /**
@@ -1946,7 +1946,7 @@ function takenLive(frames: ReadonlyArray<FeedFrame>, sampling: ReadonlyArray<num
     const heldAs = yield* Ref.get(held)
     const published = yield* Ref.get(events)
     return { latest: end, sampled: samples, held: heldAs, events: published }
-  }).pipe(Effect.provide(slateFollowing([], { decoder: EspnDecode.layer })))
+  }).pipe(Effect.provide(slateFollowing([], { decoder: EspnDecoder.layer })))
   return Option.match(Option.fromUndefinedOr(frames[0]), {
     onNone: () => taking,
     onSome: (first) =>

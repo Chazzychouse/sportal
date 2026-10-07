@@ -1,9 +1,9 @@
 import { assert, describe, it } from "@effect/vitest"
 import { GameId } from "@sportal/domain/Game"
+import { GameDay } from "@sportal/domain/GameDay"
 import { Effect, FileSystem } from "effect"
-import { GameDay } from "../../corpus/GameDay.ts"
 import * as Gzip from "../../Gzip.ts"
-import { Archive, ArchiveFetchFailed } from "../Archive.ts"
+import { ArchiveFetchFailed, Archiver } from "../Archiver.ts"
 import {
   inArchive,
   scoreboardUrl,
@@ -11,14 +11,14 @@ import {
   stepped,
   archivedSummary as summary,
   summaryUrl
-} from "./TestEspnArchive.ts"
+} from "./TestEspnArchiver.ts"
 
 const neBuf = GameId.make("401872971")
 // Another of the date's games, whose summary the tests refuse.
 const refusedGame = GameId.make("401872965")
 const refusedSummaryUrl = `${site}/summary?event=401872965`
 
-describe("EspnArchive", () => {
+describe("EspnArchiver", () => {
   it.effect(
     "should fetch a date's final games, each as scheduled and as final with its plays, and keep both files",
     () =>
@@ -83,7 +83,7 @@ describe("EspnArchive", () => {
   it.effect("should fail a date not archived as NotArchived, without fetching it", () =>
     inArchive({}, ({ requests }) =>
       Effect.gen(function* () {
-        const archive = yield* Archive
+        const archive = yield* Archiver
 
         const error = yield* Effect.flip(archive.archived("nfl", GameDay.make("2026-10-11")))
 
@@ -266,12 +266,12 @@ describe("EspnArchive", () => {
 
 /** 2026-10-04's NFL games from the archive, fetching what it has not archived, the test clock stepped through. */
 function fetchedDay() {
-  return Archive.use((archive) => stepped(archive.games("nfl", GameDay.make("2026-10-04"))))
+  return Archiver.use((archive) => stepped(archive.games("nfl", GameDay.make("2026-10-04"))))
 }
 
 /** 2026-10-04's NFL games from what is archived only. */
 function archivedDay() {
-  return Archive.use((archive) => archive.archived("nfl", GameDay.make("2026-10-04")))
+  return Archiver.use((archive) => archive.archived("nfl", GameDay.make("2026-10-04")))
 }
 
 function fileExists(path: string) {

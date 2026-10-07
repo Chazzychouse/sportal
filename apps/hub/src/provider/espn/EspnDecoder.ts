@@ -43,12 +43,12 @@ export const layer = Layer.succeed(
  * Each league's decode of what ESPN sends for it: an event of either feed, a play entity, a game summary, and the
  * site scoreboard's JSON.
  */
-export const decoders: { readonly [L in LeagueId]: ReturnType<typeof decodersOf> } = {
-  nfl: decodersOf("nfl"),
-  fbs: decodersOf("fbs")
+export const byLeague: { readonly [L in LeagueId]: ReturnType<typeof leagueDecode> } = {
+  nfl: leagueDecode("nfl"),
+  fbs: leagueDecode("fbs")
 }
 
-function decodersOf(league: LeagueId) {
+function leagueDecode(league: LeagueId) {
   return {
     decodeEvent: Schema.decodeUnknownEffect(EspnEvent(league)),
     decodePlay: Schema.decodeUnknownEffect(EspnPlay.FootballPlay(league)),
@@ -71,7 +71,7 @@ type State = {
 function listed(state: State, frame: Frame): Effect.Effect<readonly [State, Decoded]> {
   return decodeLeague(frame.channel).pipe(
     Effect.flatMap((league) =>
-      Effect.map(decoders[league].decodeScoreboard(frame.body), (scoreboard) => ({ league, scoreboard }))
+      Effect.map(byLeague[league].decodeScoreboard(frame.body), (scoreboard) => ({ league, scoreboard }))
     ),
     Effect.flatMap(({ league, scoreboard }) =>
       gamesOf(league, scoreboard.events, "poll").pipe(
@@ -154,7 +154,7 @@ function gamesOf(
   readonly observed: ReadonlyArray<DecodeObservation>
 }> {
   return Effect.forEach(events, (event) =>
-    decoders[league].decodeEvent(event).pipe(
+    byLeague[league].decodeEvent(event).pipe(
       Effect.map(Result.succeed),
       Effect.catch((cause) =>
         Effect.succeed(Result.fail(DecodeObservation.EventUndecoded({ league, feed, cause })))
@@ -206,7 +206,7 @@ function playsOf(
     (type) => !state.notedTypes.has(type.id)
   )
   return Effect.forEach(Record.toEntries(entities), ([id, entity]) =>
-    decoders[league].decodePlay(entity).pipe(
+    byLeague[league].decodePlay(entity).pipe(
       Effect.map(Result.succeed),
       Effect.catch((cause) => Effect.succeed(Result.fail({ id, cause })))
     )

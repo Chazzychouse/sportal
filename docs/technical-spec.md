@@ -148,7 +148,7 @@ This section is binding in the same way the type checker is. `AGENTS.md` carries
 6. **No mirror types.** There is no `GameDto`, `GameRow`, `GameResponse`, `GameProps`. The domain schema is the wire format and the stored format. A variant is derived from the original (`pick`, `omit`, `extend`) at the point of use and is not given a name unless it is itself a domain concept with a glossary entry.
 7. **Search before you write.** Before adding a function, type, or file, look for the existing one. Duplicating logic that already exists is a defect even when the code works.
 8. **Organize by concept, not by kind.** No top-level `components/`, `hooks/`, `services/`, `schemas/` folders. Code for the slate lives under `slate/`, whatever kind of code it is.
-9. **Dependencies point one way.** `domain` imports only Effect. `api` imports `domain`. Apps import packages. Nothing imports an app. Within the Hub, only `HubMode.ts` knows which concrete providers and sources exist.
+9. **Dependencies point one way.** `domain` imports only Effect. `api` imports `domain`. Apps import packages. Nothing imports an app. Within the Hub, only `HubMode.ts` (and the corpus CLI) knows which concrete providers and sources exist, and it reaches ESPN's only through `provider/espn/Espn.ts`.
 
 ### 4.2 The tree
 
@@ -193,6 +193,7 @@ sportal/
 │   │       ├── Delivery.ts     What a frame said: a listing, a snapshot, or a game's plays; DeliverySource
 │   │       ├── LiveGame.ts     One game as the Hub follows it: LiveGame, LiveGameState; take and tick
 │   │       ├── Slate.ts        The pure slate: every delivery taken in order, with the games it saw finish; Taken
+│   │       ├── GameDay.ts      A game day as YYYY-MM-DD, its bounds in a zone, and every game day of a span
 │   │       ├── SlateObservation.ts  What one take or tick did to one game, for telemetry only
 │   │       ├── Channel.ts      SourceName, Channel, ChannelAvailability
 │   │       ├── Guide.ts        Guide, Airing, ChannelId, GuideUnreadable
@@ -212,14 +213,14 @@ sportal/
     ├── hub/
     │   └── src/
     │       ├── main.ts             Composition root: the Hub's layer pipe, run until a signal stops it
-    │       ├── HubMode.ts          What the Hub plays: the live day or a scenario; the only file that names providers and sources
+    │       ├── HubMode.ts          What the Hub plays: the live day or a scenario; the only file that names providers and sources, ESPN's through `Espn`
     │       ├── HubConfig.ts        Every environment setting, in one place
     │       ├── Telemetry.ts        Log level and format; OTLP export when configured
     │       ├── Database.ts         The SQLite plumbing the feed log needs: a file or memory client layer, and migrations per store
     │       ├── LiveSlate.ts        The domain slate, run over the feed log: the day's replay, then each appended frame; following the log, its timer, game events, the resyncs live frames ask for, and the listed games it publishes with their recent plays
     │       ├── Following.ts        Where the live slate is in following the feed log: `Replaying`, `Live`, or `Halted`
     │       ├── LiveSlateTelemetry.ts  The slate's telemetry moments: what a take or tick told (decode and slate observations, events, state counts) as the following stands, going live, a timer defect, and a take's duration
-    │       ├── corpus/             Typed game days built from the feed log or the archive, run through the slate on virtual time: `GameDay`, `CorpusDay`, `CorpusLine`, `CorpusBuild`, `CorpusRun` (with its worker pool), `Synthesis`, the `corpus` CLI and its worker thread
+    │       ├── corpus/             Typed game days built from the feed log or the archive, run through the slate on virtual time: `CorpusDay`, `CorpusLine`, `CorpusBuild`, `CorpusRun` (with its worker pool), `Synthesis`, the `corpus` CLI and its worker thread
     │       ├── LiveStage.ts        The one authoritative Stage, held in memory
     │       ├── Ingest.ts           Polls HubConfig's leagues, runs the push on the live feed's demand (the slate's current games and resyncs), appends every frame to the feed log, and waits on `through`
     │       ├── HubStopping.ts      Whether a task that should run until the Hub stops ended because it is stopping, and the Error log unless it did
@@ -235,12 +236,15 @@ sportal/
     │       ├── HubServer.ts        Serves the API, the live stream, the addresses a phone can reach, and the web UI's files
     │       ├── provider/
     │       │   ├── Provider.ts     The port: poll, push, polling, reconnect; LiveFeed, LiveFeedDemand, Polling, ProviderUnavailable
-    │       │   ├── Decoder.ts      A provider's decode, and its only home; Decoded, DecodeObservation, ResetReason; a layer of its own, paired with its provider by HubMode
-    │       │   ├── Archive.ts      A provider's archive of finished games: the port, ArchivedGame, ArchiveFetchFailed
+    │       │   ├── Decoder.ts      A provider's decode, and its only home; Decoded, DecodeObservation, ResetReason; provided beside its provider by the adapter's one layer per mode
+    │       │   ├── Archiver.ts     A provider's archiver of finished games: the port, GameArchive, PlayArchive, ArchiveFetchFailed
     │       │   ├── TestDecoder.ts  What the provided `Decoder` says of a test's frames
     │       │   └── espn/
+    │       │       ├── Espn.ts             ESPN's one front door: one layer per mode, live (`layer`), scenario (`layerScenario`), and the corpus's (`layerArchival`), each providing several ports
     │       │       ├── EspnProvider.ts     Implements the port: polls, pushes through the FastCast service, and its polling Schedule
-    │       │       ├── EspnDecode.ts       Frames to deliveries: listings, snapshots, plays, resyncs; each league's decoders
+    │       │       ├── EspnDecoder.ts      Frames to deliveries: listings, snapshots, plays, resyncs; each league's decode (`byLeague`)
+    │       │       ├── EspnArchiver.ts     ESPN's archiver: scoreboards and summaries fetched into the corpus's `archive/` and read back
+    │       │       ├── ScenarioProvider.ts A scenario's ESPN frames as the provider: polled, pushed, and polled again at their times
     │       │       ├── EspnPayload.ts      ESPN's JSON as ESPN spells it: events, scoreboard, plays, summary
     │       │       ├── EspnEvent.ts        One game as either ESPN feed spells it, as a GameSnapshot
     │       │       ├── EspnPlay.ts         ESPN's plays and their type ids, as Play
@@ -250,8 +254,8 @@ sportal/
     │       │       ├── FastCastMessage.ts  FastCast's wire shapes
     │       │       ├── FastCastTopic.ts    A topic's owner, and the topic of a scoreboard or a game
     │       │       ├── TestEspn.ts         Recorded frames for tests of other modules, NE at BUF's day among them (`recordedNeAtBuf`)
-    │       │       ├── TestEspnArchive.ts  ESPN's archive answered from recorded payloads, for the corpus's tests
-    │       │       └── fixtures/           Recorded real payloads
+    │       │       ├── TestEspnArchiver.ts ESPN's archiver answered from recorded payloads, for the corpus's tests
+    │       │       └── fixtures/           Recorded real payloads, and the recordings that are test data for the scenario provider's tests
     │       ├── source/
     │       │   ├── Source.ts       The port
     │       │   └── youtube-tv/
@@ -261,10 +265,8 @@ sportal/
     │       │       └── fixtures/            Recorded real payloads
     │       └── scenario/
     │           ├── Scenarios.ts        Every recording by name, and reading one back as a Scenario: a name and ESPN's frames
-    │           ├── ScenarioProvider.ts A scenario as the provider: its frames polled, pushed, and polled again at their times
     │           ├── ScenarioClock.ts    Scenario time: the Hub's clock at HubConfig's scenario speed
-    │           ├── ScenarioSource.ts   Every game carried on a synthetic stream page
-    │           └── fixtures/           Recordings that are test data for the scenario tests, not scenarios to play
+    │           └── ScenarioSource.ts   Every game carried on a synthetic stream page
     │
     ├── web/
     │   └── src/
@@ -352,7 +354,7 @@ class Decoder extends Context.Service<Decoder, {
 }>()("sportal/hub/Decoder") {}
 ```
 
-- `poll` returns a league's scoreboard as received; the Hub logs it before anything decodes it. A provider's adapter provides its `Decoder` as a layer of its own, the only home of its decode, and `HubMode` pairs the two, so a recorded scenario decodes its frames as the provider that recorded them would. `decode` turns frames, polled or pushed, into exactly one `Decoded` per frame, carrying the frame's `seq` and receive time, its `Delivery`s (`Listing`, `Snapshot`, or `Plays`), the channels whose document had to be dropped (`resyncs`), and the `DecodeObservation`s decode made for telemetry. A frame that said nothing is a `Decoded` with three empty arrays. It never logs or counts. The snapshot feed (`TestSnapshotFeed.ts`) is the provider tests play: its frames are our own deliveries. Every scenario plays through ESPN's decode.
+- `poll` returns a league's scoreboard as received; the Hub logs it before anything decodes it. A provider's adapter provides its `Decoder` beside its provider, the only home of its decode, in one layer per mode (`Espn.layer`, `Espn.layerScenario`), so a recorded scenario decodes its frames as the provider that recorded them would. `decode` turns frames, polled or pushed, into exactly one `Decoded` per frame, carrying the frame's `seq` and receive time, its `Delivery`s (`Listing`, `Snapshot`, or `Plays`), the channels whose document had to be dropped (`resyncs`), and the `DecodeObservation`s decode made for telemetry. A frame that said nothing is a `Decoded` with three empty arrays. It never logs or counts. The snapshot feed (`TestSnapshotFeed.ts`) is the provider tests play: its frames are our own deliveries. Every scenario plays through ESPN's decode.
 - `push` is the live feed: one element per frame, raw, on a `demand` stream (`LiveFeedDemand`: `Games`, the current games whenever which they are changes, and `Resync`, a channel to read again from its checkpoint). ESPN's FastCast implements it (`docs/adr/0007-fastcast-live-feed.md`), a service the ESPN provider yields, whose checkpoint retry is the schedule `FastCast.layer` builds it with, and subscribes to the scoreboard topics (the leagues from `HubConfig`) and to a `gp-` topic for each game in `Games`. `reconnect` is the Schedule Ingest subscribes to the push again on when it fails.
 - `polling` is when to poll again, given the slate after the last poll and the leagues that failed. Ingest runs `poll` repeated on it, once the slate has taken the poll's last frame; the adapter owns the rules.
 - Provider vocabulary stops at the folder edge. ESPN's "event", "competition", and "competitor" exist only in `EspnPayload.ts`, `EspnEvent.ts`, `FastCastMessage.ts`, and `EspnPlay.ts`.
@@ -414,7 +416,7 @@ class LiveSlate extends Context.Service<LiveSlate, {
 port. A day is a directory of `day.json` and two files of typed lines, `poll.ndjson` and `push.ndjson`, under
 `HubConfig.corpusDir`, rebuilt when a decoder or the format changes and never migrated. `corpus build` makes a captured
 day from the feed log and a backfilled day from the archive; `corpus backfill` fetches a date range of a provider's
-finished games into the archive (`ArchivedGame`, `ArchivedPlay`) and builds its days; `corpus run` plays days through
+finished games into the archive (`GameArchive`, `PlayArchive`, through the `Archiver` port) and builds its days; `corpus run` plays days through
 the slate on virtual time, on worker threads, reading a subject's output over each take and tick. Each command exits
 nonzero (`DaysFailed`) when a day fails. Backfill refuses a date that is not over, never overwrites a captured day, and
 archives a 404 or 410 summary as refused so its game is skipped.

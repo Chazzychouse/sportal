@@ -8,7 +8,7 @@ import { broadcast, snapshot, team } from "@sportal/domain/TestGame"
 import { DateTime, Effect, Fiber, Layer, Logger, Option, Ref, Stream } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/http"
 import { TestClock } from "effect/testing"
-import * as EspnDecode from "../../provider/espn/EspnDecode.ts"
+import * as EspnDecoder from "../../provider/espn/EspnDecoder.ts"
 import * as EspnProvider from "../../provider/espn/EspnProvider.ts"
 import { FastCast } from "../../provider/espn/FastCast.ts"
 import { fixtures, noSocket } from "../../provider/espn/TestEspn.ts"
@@ -353,7 +353,7 @@ function matchingLayer() {
       Layer.provide(FastCast.layer),
       Layer.provide([recorded, noSocket, withEnv({}).pipe(Layer.orDie)])
     ),
-    EspnDecode.layer
+    EspnDecoder.layer
   )
 }
 

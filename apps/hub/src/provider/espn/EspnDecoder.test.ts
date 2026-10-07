@@ -9,7 +9,7 @@ import type { FeedFrame } from "../../Frame.ts"
 import { recordingLogs, withMetrics } from "../../TestTelemetry.ts"
 import type { DecodeObservation } from "../Decoder.ts"
 import { decodedFrames, FramesDecoded } from "../TestDecoder.ts"
-import * as EspnDecode from "./EspnDecode.ts"
+import * as EspnDecoder from "./EspnDecoder.ts"
 import { EspnEvent } from "./EspnEvent.ts"
 import * as FastCastMessage from "./FastCastMessage.ts"
 import { recordedNeAtBuf } from "./TestEspn.ts"
@@ -51,9 +51,9 @@ const ariAtNyg = "s:20~l:28~e:401872966~c:401872966"
 const ariAtNygPlays = "gp-football-nfl-401872966"
 
 // NE at BUF's recorded frames, decoded once by ESPN's decode for the tests that read them.
-const neAtBufDecoded = FramesDecoded.layerOf(recordedNeAtBuf).pipe(Layer.provide(EspnDecode.layer))
+const neAtBufDecoded = FramesDecoded.layerOf(recordedNeAtBuf).pipe(Layer.provide(EspnDecoder.layer))
 
-layer(EspnDecode.layer)("EspnDecode", (it) => {
+layer(EspnDecoder.layer)("EspnDecoder", (it) => {
   // Each recorded feed as it decoded when both feeds' events were read by one transform: the poll's listings, the
   // checkpoint's pushes, and the checkpoint's events each read alone.
   describe("the recorded feeds decode to the same games", () => {
@@ -791,9 +791,9 @@ layer(EspnDecode.layer)("EspnDecode", (it) => {
   })
 })
 
-describe("EspnDecode.decoders", () => {
+describe("EspnDecoder.byLeague", () => {
   it("should have a decoder for every league", () => {
-    const leagues = Record.keys(EspnDecode.decoders)
+    const leagues = Record.keys(EspnDecoder.byLeague)
 
     assert.deepStrictEqual(leagues, [...LeagueId.literals])
   })

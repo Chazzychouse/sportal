@@ -1,19 +1,18 @@
 import { availableParallelism } from "node:os"
 import { Worker } from "node:worker_threads"
 import { NodeRuntime, NodeServices, NodeWorker } from "@effect/platform-node"
+import { bounds, dates, GameDay } from "@sportal/domain/GameDay"
 import { LeagueId } from "@sportal/domain/League"
 import { Array as Arr, DateTime, Duration, Effect, Layer, Option, Result, Schema, Stream } from "effect"
 import { Argument, CliError, Command, Flag } from "effect/cli"
 import { FetchHttpClient } from "effect/http"
 import { FeedLog } from "../feed-log/FeedLog.ts"
 import { HubConfig } from "../HubConfig.ts"
-import { Archive, type ArchiveFetchFailed } from "../provider/Archive.ts"
-import * as EspnArchive from "../provider/espn/EspnArchive.ts"
-import * as EspnDecode from "../provider/espn/EspnDecode.ts"
+import { type ArchiveFetchFailed, Archiver } from "../provider/Archiver.ts"
+import * as Espn from "../provider/espn/Espn.ts"
 import * as CorpusBuild from "./CorpusBuild.ts"
 import { type CorpusDay, CorpusDays } from "./CorpusDay.ts"
 import * as CorpusRun from "./CorpusRun.ts"
-import { bounds, dates, GameDay } from "./GameDay.ts"
 
 const days = {
   date: Argument.String("date").pipe(
@@ -33,8 +32,8 @@ const days = {
   )
 }
 
-// ESPN's archive, over the network: only the commands that read or fetch it are given it.
-const archive = EspnArchive.layer.pipe(Layer.provide(FetchHttpClient.layer))
+// ESPN's archiver and decode, over the network: only the commands that read or fetch the archive are given it.
+const archival = Espn.layerArchival.pipe(Layer.provide(FetchHttpClient.layer))
 
 const build = Command.make(
   "build",
@@ -72,7 +71,7 @@ const build = Command.make(
   })
 ).pipe(
   Command.withDescription("Build corpus days: captured from the feed log, backfilled from the archive"),
-  Command.provide(Layer.mergeAll(FeedLog.layerInDataDir, EspnDecode.layer, archive))
+  Command.provide(Layer.mergeAll(FeedLog.layerInDataDir, archival))
 )
 
 const backfill = Command.make(
@@ -103,7 +102,7 @@ const backfill = Command.make(
       })
     }
 
-    const { pacing } = yield* Archive
+    const { pacing } = yield* Archiver
     const [took, outcomes] = yield* Stream.fromIterable(span).pipe(
       Stream.schedule(pacing),
       Stream.mapEffect((date) =>
@@ -132,7 +131,7 @@ const backfill = Command.make(
   Command.withDescription(
     "Fetch a league's days into the archive, and build each as a backfilled corpus day"
   ),
-  Command.provide(archive)
+  Command.provide(archival)
 )
 
 const run = Command.make(

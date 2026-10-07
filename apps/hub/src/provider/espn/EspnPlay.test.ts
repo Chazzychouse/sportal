@@ -5,7 +5,7 @@ import { TeamId } from "@sportal/domain/Team"
 import { Effect, Schema } from "effect"
 import * as Gzip from "../../Gzip.ts"
 import { decodedFrames } from "../TestDecoder.ts"
-import * as EspnDecode from "./EspnDecode.ts"
+import * as EspnDecoder from "./EspnDecoder.ts"
 import * as EspnPlay from "./EspnPlay.ts"
 import { recordedNeAtBuf } from "./TestEspn.ts"
 
@@ -230,7 +230,7 @@ describe("EspnPlay.FootballPlay", () => {
     () =>
       Effect.gen(function* () {
         const frames = yield* recordedNeAtBuf
-        const decoded = yield* decodedFrames(frames).pipe(Effect.provide(EspnDecode.layer))
+        const decoded = yield* decodedFrames(frames).pipe(Effect.provide(EspnDecoder.layer))
         const pushed = decoded
           .flatMap(({ deliveries }) => deliveries)
           .flatMap((delivery) => (delivery._tag === "Plays" ? delivery.plays : []))
@@ -242,7 +242,7 @@ describe("EspnPlay.FootballPlay", () => {
             { league: "nfl", name: "nfl-summary-401872929" },
             { league: "fbs", name: "fbs-summary-401856705" }
           ] as const,
-          ({ league, name }) => Effect.flatMap(summaryOf(name), EspnDecode.decoders[league].decodeSummary)
+          ({ league, name }) => Effect.flatMap(summaryOf(name), EspnDecoder.byLeague[league].decodeSummary)
         )
 
         const all = [...pushed, ...entities, ...summaries.flat().map(({ play }) => play)]

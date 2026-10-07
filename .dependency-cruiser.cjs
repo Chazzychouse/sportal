@@ -31,7 +31,7 @@ module.exports = {
     {
       name: "only-hub-mode-names-adapters",
       comment:
-        "Only HubMode, the corpus command's composition, and tests know which concrete providers and sources exist; main.ts names only the database.",
+        "Only HubMode, the corpus command's composition, and tests know which concrete providers and sources exist, ESPN's through Espn.ts; main.ts names only the database.",
       severity: "error",
       from: {
         path: "^apps/hub/src/",
@@ -39,7 +39,16 @@ module.exports = {
           "(^apps/hub/src/HubMode\\.ts$|^apps/hub/src/corpus/corpus\\.ts$|\\.test\\.ts$|^apps/hub/src/provider/[^/]+/|^apps/hub/src/source/youtube-tv/)"
       },
       to: {
-        path: "^apps/hub/src/(provider/[^/]+/|source/youtube-tv/|scenario/Scenario(Provider|Source|Clock)\\.ts$)"
+        path: "^apps/hub/src/(provider/[^/]+/|source/youtube-tv/|scenario/Scenario(Source|Clock)\\.ts$)"
+      }
+    },
+    {
+      name: "espn-has-one-front-door",
+      comment: "Outside ESPN's folder and tests, ESPN's layers are reached only through Espn.ts.",
+      severity: "error",
+      from: { pathNot: "(^apps/hub/src/provider/espn/|\\.test\\.ts$)" },
+      to: {
+        path: "^apps/hub/src/provider/espn/(EspnProvider|EspnDecoder|EspnArchiver|FastCast|ScenarioProvider)\\.ts$"
       }
     },
     {
@@ -66,11 +75,11 @@ module.exports = {
     {
       name: "test-hub-config-is-for-tests",
       comment:
-        "HubConfig read from a test's own variables is imported only by test files, TestCorpus and TestEspnArchive.",
+        "HubConfig read from a test's own variables is imported only by test files, TestCorpus and TestEspnArchiver.",
       severity: "error",
       from: {
         pathNot:
-          "(\\.test\\.ts$|^apps/hub/src/corpus/TestCorpus\\.ts$|^apps/hub/src/provider/espn/TestEspnArchive\\.ts$)"
+          "(\\.test\\.ts$|^apps/hub/src/corpus/TestCorpus\\.ts$|^apps/hub/src/provider/espn/TestEspnArchiver\\.ts$)"
       },
       to: { path: "^apps/hub/src/TestHubConfig\\.ts$" }
     },
@@ -96,11 +105,11 @@ module.exports = {
       to: { path: "^apps/hub/src/TestLiveSlate\\.ts$" }
     },
     {
-      name: "test-espn-archive-is-for-tests",
-      comment: "ESPN's archive answered from recorded payloads is imported only by test files.",
+      name: "test-espn-archiver-is-for-tests",
+      comment: "ESPN's archiver answered from recorded payloads is imported only by test files.",
       severity: "error",
       from: { pathNot: "\\.test\\.ts$" },
-      to: { path: "^apps/hub/src/provider/espn/TestEspnArchive\\.ts$" }
+      to: { path: "^apps/hub/src/provider/espn/TestEspnArchiver\\.ts$" }
     },
     {
       name: "test-corpus-is-for-tests",
@@ -157,9 +166,9 @@ module.exports = {
     {
       name: "test-adapter-data-is-for-tests",
       comment:
-        "An adapter's recorded payloads, read for tests of other modules, are imported only by test files and TestEspnArchive.",
+        "An adapter's recorded payloads, read for tests of other modules, are imported only by test files and TestEspnArchiver.",
       severity: "error",
-      from: { pathNot: "(\\.test\\.ts$|^apps/hub/src/provider/espn/TestEspnArchive\\.ts$)" },
+      from: { pathNot: "(\\.test\\.ts$|^apps/hub/src/provider/espn/TestEspnArchiver\\.ts$)" },
       to: { path: "^apps/hub/src/(provider/espn/TestEspn|source/youtube-tv/TestYouTubeTv)\\.ts$" }
     },
     {

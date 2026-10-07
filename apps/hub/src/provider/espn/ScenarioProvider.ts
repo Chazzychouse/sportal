@@ -1,9 +1,14 @@
 import type { LeagueId } from "@sportal/domain/League"
 import { Array as Arr, DateTime, Duration, Effect, Layer, Option, Schedule, Stream } from "effect"
-import { FeedFrame } from "../Frame.ts"
-import { HubConfig } from "../HubConfig.ts"
-import { type Polling, Provider } from "../provider/Provider.ts"
-import { type Scenario, Scenarios, type ScenarioUnknown, type ScenarioUnreadable } from "./Scenarios.ts"
+import { FeedFrame } from "../../Frame.ts"
+import { HubConfig } from "../../HubConfig.ts"
+import {
+  type Scenario,
+  Scenarios,
+  type ScenarioUnknown,
+  type ScenarioUnreadable
+} from "../../scenario/Scenarios.ts"
+import { type Polling, Provider } from "../Provider.ts"
 
 /**
  * The scenario `SPORTAL_SCENARIO` names as the provider, on whatever clock runs it, from the moment the layer is built.

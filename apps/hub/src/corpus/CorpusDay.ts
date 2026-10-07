@@ -1,10 +1,10 @@
+import { GameDay } from "@sportal/domain/GameDay"
 import { LeagueId } from "@sportal/domain/League"
 import { Context, Effect, FileSystem, Layer, Option, Path, type PlatformError, Schema, Stream } from "effect"
 import * as Gzip from "../Gzip.ts"
 import { HubConfig } from "../HubConfig.ts"
 import type { Decoded } from "../provider/Decoder.ts"
 import { CorpusLine } from "./CorpusLine.ts"
-import { GameDay } from "./GameDay.ts"
 
 /** A day of the corpus: what kind it is and the inputs it holds, by arrival. */
 export class CorpusDay extends Schema.Class<CorpusDay>("sportal/hub/CorpusDay")({

@@ -1,4 +1,5 @@
 import { assert, describe, it } from "@effect/vitest"
+import { bounds, GameDay } from "@sportal/domain/GameDay"
 import { type GameEvent, GameEventKind } from "@sportal/domain/GameEvent"
 import { LiveGame } from "@sportal/domain/LiveGame"
 import type { Slate } from "@sportal/domain/Slate"
@@ -27,16 +28,15 @@ import type { FeedFrame } from "../Frame.ts"
 import { FeedLog } from "../feed-log/FeedLog.ts"
 import * as Ingest from "../Ingest.ts"
 import { LiveSlate } from "../LiveSlate.ts"
-import * as EspnDecode from "../provider/espn/EspnDecode.ts"
+import * as EspnDecoder from "../provider/espn/EspnDecoder.ts"
+import * as ScenarioProvider from "../provider/espn/ScenarioProvider.ts"
 import { fixtures, neAtBufFrames, recordedNeAtBuf, recordedPlays } from "../provider/espn/TestEspn.ts"
-import * as ScenarioProvider from "../scenario/ScenarioProvider.ts"
 import { Scenarios } from "../scenario/Scenarios.ts"
 import { withEnv } from "../TestHubConfig.ts"
 import * as TestSnapshotFeed from "../TestSnapshotFeed.ts"
 import { CorpusDay, CorpusDays, CorpusDayUnreadable } from "./CorpusDay.ts"
 import { CorpusInput, CorpusLine } from "./CorpusLine.ts"
 import * as CorpusRun from "./CorpusRun.ts"
-import { bounds, GameDay } from "./GameDay.ts"
 import { built, inCorpus, local } from "./TestCorpus.ts"
 
 describe("CorpusRun.day", () => {
@@ -69,7 +69,7 @@ describe("CorpusRun.day", () => {
   it.effect(
     "should give the events the Hub's slate published live, the day played through Ingest on the test clock",
     () =>
-      inCorpus(EspnDecode.layer, () =>
+      inCorpus(EspnDecoder.layer, () =>
         Effect.gen(function* () {
           const frames = yield* recordedNeAtBuf
           const zone = yield* DateTime.CurrentTimeZone
@@ -154,7 +154,7 @@ describe("RunDay.run", () => {
   it.effect(
     "should answer RunDay for the recorded NE at BUF day with the event count its run gives",
     () =>
-      inCorpus(EspnDecode.layer, () =>
+      inCorpus(EspnDecoder.layer, () =>
         Effect.gen(function* () {
           const frames = yield* recordedNeAtBuf
           yield* built(recordedDay, frames)
@@ -172,7 +172,7 @@ describe("RunDay.run", () => {
   )
 
   it.effect("should fail a day that has not been built as CorpusDayUnreadable Missing", () =>
-    inCorpus(EspnDecode.layer, () =>
+    inCorpus(EspnDecoder.layer, () =>
       Effect.gen(function* () {
         const error = yield* new CorpusRun.RunDay({ date: recordedDay }).run().pipe(Effect.flip)
 
@@ -260,7 +260,7 @@ class NeAtBufRunTwice extends Context.Service<
 function neAtBufRunTwiceLayer() {
   return Layer.effect(
     NeAtBufRunTwice,
-    inCorpus(EspnDecode.layer, () =>
+    inCorpus(EspnDecoder.layer, () =>
       Effect.gen(function* () {
         const frames = yield* recordedNeAtBuf
         yield* built(recordedDay, frames)

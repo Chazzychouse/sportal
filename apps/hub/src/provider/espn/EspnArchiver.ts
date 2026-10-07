@@ -1,4 +1,5 @@
 import { type GameId, GameSnapshot } from "@sportal/domain/Game"
+import type { GameDay } from "@sportal/domain/GameDay"
 import type { LeagueId } from "@sportal/domain/League"
 import {
   Array as Arr,
@@ -13,11 +14,10 @@ import {
   Stream
 } from "effect"
 import { HttpClient, HttpClientError } from "effect/http"
-import type { GameDay } from "../../corpus/GameDay.ts"
 import * as Gzip from "../../Gzip.ts"
 import { HubConfig } from "../../HubConfig.ts"
-import { Archive, ArchivedGame, ArchiveFetchFailed } from "../Archive.ts"
-import * as EspnDecode from "./EspnDecode.ts"
+import { ArchiveFetchFailed, Archiver, GameArchive } from "../Archiver.ts"
+import * as EspnDecoder from "./EspnDecoder.ts"
 import * as EspnProvider from "./EspnProvider.ts"
 
 /**
@@ -32,18 +32,18 @@ import * as EspnProvider from "./EspnProvider.ts"
  * the date. A fetch that fails otherwise writes no file, so the next call fetches it again.
  */
 export const layer: Layer.Layer<
-  Archive,
+  Archiver,
   never,
   HttpClient.HttpClient | HubConfig | FileSystem.FileSystem | Path.Path
 > = Layer.effect(
-  Archive,
+  Archiver,
   Effect.gen(function* () {
     const context = yield* Effect.context<
       HttpClient.HttpClient | HubConfig | FileSystem.FileSystem | Path.Path
     >()
     const provide = Effect.provideContext(context)
 
-    return Archive.of({
+    return Archiver.of({
       games: (league, date) => provide(gamesOf(league, date, "fetch")),
       archived: (league, date) => provide(gamesOf(league, date, "archived")),
       pacing
@@ -87,12 +87,14 @@ const gamesOf = Effect.fn("EspnArchive.games")(function* (
     missing(scoreboardUrl.toString(), files.scoreboard)
   ).pipe(
     Effect.flatMap((body) =>
-      EspnDecode.decoders[league]
+      EspnDecoder.byLeague[league]
         .decodeScoreboard(body)
         .pipe(Effect.mapError((cause) => failed()("Unreadable", cause)))
     ),
     Effect.flatMap(({ events }) =>
-      Effect.forEach(events, (event) => finalOf(league, date, EspnDecode.decoders[league].decodeEvent(event)))
+      Effect.forEach(events, (event) =>
+        finalOf(league, date, EspnDecoder.byLeague[league].decodeEvent(event))
+      )
     ),
     Effect.map(Arr.getSomes)
   )
@@ -141,7 +143,7 @@ const gamesOf = Effect.fn("EspnArchive.games")(function* (
           ).pipe(
             Effect.flatMap((body) =>
               decodeJson(body).pipe(
-                Effect.flatMap(EspnDecode.decoders[league].decodeSummary),
+                Effect.flatMap(EspnDecoder.byLeague[league].decodeSummary),
                 Effect.mapError((cause) => failed(final.id)("Unreadable", cause))
               )
             ),
@@ -153,7 +155,7 @@ const gamesOf = Effect.fn("EspnArchive.games")(function* (
                     ),
                     Option.none()
                   )
-                : Effect.succeedSome(new ArchivedGame({ scheduled: scheduled(final), final, plays }))
+                : Effect.succeedSome(new GameArchive({ scheduled: scheduled(final), final, plays }))
             )
           )
     )

@@ -7,7 +7,7 @@ import { type Polling, Provider, ProviderUnavailable } from "../Provider.ts"
 import { FastCast } from "./FastCast.ts"
 
 /**
- * ESPN as the provider: the site scoreboard polled and FastCast pushing, their frames read by `EspnDecode`. A poll
+ * ESPN as the provider: the site scoreboard polled and FastCast pushing, their frames read by `EspnDecoder`. A poll
  * that does not connect is `Unreachable` for its league, and one answered with a status other than 2xx `Refused`.
  * Polled every 10 seconds while a game is live, every minute within 30 minutes of a kickoff, and every 15 minutes
  * otherwise; at most 30 seconds after a poll in which a league failed. FastCast is subscribed to again after about 1

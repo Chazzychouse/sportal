@@ -1,12 +1,12 @@
 import { Delivery } from "@sportal/domain/Delivery"
+import { bounds, GameDay } from "@sportal/domain/GameDay"
 import type { LeagueId } from "@sportal/domain/League"
 import { Array as Arr, DateTime, Effect, Option, Result, Schema, Stream } from "effect"
 import { FeedLog } from "../feed-log/FeedLog.ts"
-import { Archive, type ArchiveFetchFailed } from "../provider/Archive.ts"
+import { type ArchiveFetchFailed, Archiver } from "../provider/Archiver.ts"
 import { DecodeObservation, Decoder } from "../provider/Decoder.ts"
 import { CorpusDay, CorpusDays } from "./CorpusDay.ts"
 import { CorpusLine } from "./CorpusLine.ts"
-import { bounds, GameDay } from "./GameDay.ts"
 import * as Synthesis from "./Synthesis.ts"
 
 /**
@@ -69,13 +69,13 @@ export const backfilled = Effect.fn("CorpusBuild.backfilled")(function* (
   date: GameDay,
   leagues: ReadonlyArray<LeagueId>,
   how: "fetch" | "archived"
-): Effect.fn.Return<CorpusDay, CorpusBuildFailed | ArchiveFetchFailed, Archive | CorpusDays> {
+): Effect.fn.Return<CorpusDay, CorpusBuildFailed | ArchiveFetchFailed, Archiver | CorpusDays> {
   const days = yield* CorpusDays
   // A day.json that cannot be read is the machine's fault, as a write that fails is; nothing is built over it.
   const existing = yield* days.day(date).pipe(Effect.orDie)
   if (Option.isSome(existing) && existing.value.kind === "captured") return existing.value
 
-  const archive = yield* Archive
+  const archive = yield* Archiver
   const asked = [
     ...new Set([...leagues, ...Option.match(existing, { onNone: () => [], onSome: (day) => day.leagues })])
   ].toSorted()

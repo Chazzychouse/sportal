@@ -10,7 +10,7 @@ import { TestClock } from "effect/testing"
 import { withEnv } from "../../TestHubConfig.ts"
 import { Provider, ProviderUnavailable } from "../Provider.ts"
 import { listedBy } from "../TestDecoder.ts"
-import * as EspnDecode from "./EspnDecode.ts"
+import * as EspnDecoder from "./EspnDecoder.ts"
 import * as EspnProvider from "./EspnProvider.ts"
 import { FastCast } from "./FastCast.ts"
 import { noSocket } from "./TestEspn.ts"
@@ -332,7 +332,7 @@ function recordedEspn(fbs: string) {
     const response = new Response(body, { headers: { date: "Sun, 04 Oct 2026 18:00:00 GMT" } })
     return Effect.succeed(HttpClientResponse.fromWeb(request, response))
   })
-  return Layer.merge(espnOver(recordedHttp), EspnDecode.layer)
+  return Layer.merge(espnOver(recordedHttp), EspnDecoder.layer)
 }
 
 /** ESPN's provider whose every request is answered by `respond`, a failure as a transport error. */

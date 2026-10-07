@@ -5,7 +5,7 @@ import { Play } from "@sportal/domain/Play"
 import { Situation } from "@sportal/domain/Situation"
 import type { TeamId } from "@sportal/domain/Team"
 import { Array as Arr, DateTime, Duration, type Effect, Option, Order, Stream } from "effect"
-import type { ArchivedGame, ArchivedPlay } from "../provider/Archive.ts"
+import type { GameArchive, PlayArchive } from "../provider/Archiver.ts"
 import { Decoded } from "../provider/Decoder.ts"
 import { CorpusLine } from "./CorpusLine.ts"
 
@@ -18,7 +18,7 @@ import { CorpusLine } from "./CorpusLine.ts"
  * its last play `lag.poll` old or older left, or as scheduled before any. Frames are numbered from 1 by arrival, a push
  * before a poll at one instant, and turned into lines by `CorpusLine.ofDecoded`, as a captured day's are.
  */
-export function day(games: ReadonlyArray<ArchivedGame>): Effect.Effect<{
+export function day(games: ReadonlyArray<GameArchive>): Effect.Effect<{
   readonly poll: ReadonlyArray<CorpusLine>
   readonly push: ReadonlyArray<CorpusLine>
 }> {
@@ -104,9 +104,9 @@ const overtimeTimeouts: Record<LeagueId, { readonly timeouts: number; readonly p
  * situation from the play's end spot, each team's timeouts its allowance less those it called in the half.
  */
 function snapshotAfter(
-  game: ArchivedGame,
-  { play }: ArchivedPlay,
-  played: ReadonlyArray<ArchivedPlay>
+  game: GameArchive,
+  { play }: PlayArchive,
+  played: ReadonlyArray<PlayArchive>
 ): GameSnapshot {
   const { final } = game
   const { end } = play
@@ -154,7 +154,7 @@ function halfOf(league: LeagueId, period: number): { readonly half: number; read
 }
 
 /** Every 10 s from the first kickoff less `pregame` up to the first instant at or after the last play is `lag.poll` old. */
-function pollInstants(games: ReadonlyArray<ArchivedGame>): ReadonlyArray<DateTime.Utc> {
+function pollInstants(games: ReadonlyArray<GameArchive>): ReadonlyArray<DateTime.Utc> {
   if (!Arr.isReadonlyArrayNonEmpty(games)) return []
   const first = Arr.min(
     Arr.map(games, ({ scheduled }) => DateTime.subtractDuration(scheduled.kickoff, pregame)),

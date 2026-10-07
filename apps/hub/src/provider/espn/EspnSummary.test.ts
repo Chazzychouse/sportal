@@ -5,10 +5,10 @@ import { Play, PlayId } from "@sportal/domain/Play"
 import { TeamId } from "@sportal/domain/Team"
 import { DateTime, Effect, Equal, Layer, Logger, Order, Schema } from "effect"
 import * as Gzip from "../../Gzip.ts"
-import type { ArchivedPlay } from "../Archive.ts"
+import type { PlayArchive } from "../Archiver.ts"
 import type { Decoded } from "../Decoder.ts"
 import { FramesDecoded } from "../TestDecoder.ts"
-import * as EspnDecode from "./EspnDecode.ts"
+import * as EspnDecoder from "./EspnDecoder.ts"
 import * as EspnPlay from "./EspnPlay.ts"
 import { recordedNeAtBuf, recordedPlays } from "./TestEspn.ts"
 
@@ -30,12 +30,12 @@ const fbs = (team: string) => TeamId.make(`fbs:${team}`)
 const decodeEntity = Schema.decodeUnknownEffect(EspnPlay.FootballPlay("nfl"))
 
 // NE at BUF's recorded frames, decoded once by ESPN's decode for the tests that read them.
-const neAtBufDecoded = FramesDecoded.layerOf(recordedNeAtBuf).pipe(Layer.provide(EspnDecode.layer))
+const neAtBufDecoded = FramesDecoded.layerOf(recordedNeAtBuf).pipe(Layer.provide(EspnDecoder.layer))
 
-describe("EspnDecode.decoders.decodeSummary", () => {
+describe("EspnDecoder.byLeague.decodeSummary", () => {
   it.effect("should read every play a drive lists", () =>
     Effect.gen(function* () {
-      const plays = yield* EspnDecode.decoders.nfl.decodeSummary(summary)
+      const plays = yield* EspnDecoder.byLeague.nfl.decodeSummary(summary)
 
       assert.strictEqual(plays.length, recordedPlays)
     })
@@ -43,7 +43,7 @@ describe("EspnDecode.decoders.decodeSummary", () => {
 
   it.effect("should read the plays in sequence order", () =>
     Effect.gen(function* () {
-      const plays = yield* EspnDecode.decoders.nfl.decodeSummary(summary)
+      const plays = yield* EspnDecoder.byLeague.nfl.decodeSummary(summary)
 
       const sequences = plays.map(({ play }) => play.sequence)
 
@@ -53,7 +53,7 @@ describe("EspnDecode.decoders.decodeSummary", () => {
 
   it.effect("should read the first play, a kickoff, with its wallclock", () =>
     Effect.gen(function* () {
-      const [first] = yield* EspnDecode.decoders.nfl.decodeSummary(summary)
+      const [first] = yield* EspnDecoder.byLeague.nfl.decodeSummary(summary)
 
       assert.deepStrictEqual(
         [first?.play.id, first?.play._tag, first?.wallclock.epochMilliseconds],
@@ -64,7 +64,7 @@ describe("EspnDecode.decoders.decodeSummary", () => {
 
   it.effect("should read the first scoring play's scores, case, and team", () =>
     Effect.gen(function* () {
-      const plays = yield* EspnDecode.decoders.nfl.decodeSummary(summary)
+      const plays = yield* EspnDecoder.byLeague.nfl.decodeSummary(summary)
 
       const scoring = plays.find(({ play }) => play.scoring)?.play
 
@@ -88,7 +88,7 @@ describe("EspnDecode.decoders.decodeSummary", () => {
 
   it.effect("should read the first scoring play as FastCast's entity for it, field for field", () =>
     Effect.gen(function* () {
-      const plays = yield* EspnDecode.decoders.nfl.decodeSummary(summary)
+      const plays = yield* EspnDecoder.byLeague.nfl.decodeSummary(summary)
       const pushed = yield* decodeEntity(fastCast["401872971484"])
 
       const scoring = plays.find(({ play }) => play.scoring)?.play
@@ -99,7 +99,7 @@ describe("EspnDecode.decoders.decodeSummary", () => {
 
   it.effect("should give a lost fumble the recovering team: the team with the ball as it ended", () =>
     Effect.gen(function* () {
-      const plays = yield* EspnDecode.decoders.nfl.decodeSummary(summary)
+      const plays = yield* EspnDecoder.byLeague.nfl.decodeSummary(summary)
 
       const fumble = plays
         .map(({ play }) => play)
@@ -115,7 +115,7 @@ describe("EspnDecode.decoders.decodeSummary", () => {
 
   it.effect("should read win probability where the summary has the play's", () =>
     Effect.gen(function* () {
-      const [first] = yield* EspnDecode.decoders.nfl.decodeSummary(summary)
+      const [first] = yield* EspnDecoder.byLeague.nfl.decodeSummary(summary)
 
       assert.strictEqual(first?.play.homeWinProbability, 0.7286)
     })
@@ -123,7 +123,7 @@ describe("EspnDecode.decoders.decodeSummary", () => {
 
   it.effect("should read no win probability where the summary has none for the play", () =>
     Effect.gen(function* () {
-      const [first] = yield* EspnDecode.decoders.nfl.decodeSummary(withoutFirstProbability())
+      const [first] = yield* EspnDecoder.byLeague.nfl.decodeSummary(withoutFirstProbability())
 
       assert.isFalse(first !== undefined && "homeWinProbability" in first.play)
     })
@@ -131,9 +131,9 @@ describe("EspnDecode.decoders.decodeSummary", () => {
 
   it.effect("should still read the next play's win probability when one is missing", () =>
     Effect.gen(function* () {
-      const read = yield* EspnDecode.decoders.nfl.decodeSummary(summary)
+      const read = yield* EspnDecoder.byLeague.nfl.decodeSummary(summary)
 
-      const unread = yield* EspnDecode.decoders.nfl.decodeSummary(withoutFirstProbability())
+      const unread = yield* EspnDecoder.byLeague.nfl.decodeSummary(withoutFirstProbability())
 
       assert.isDefined(unread[1]?.play.homeWinProbability)
       assert.strictEqual(unread[1]?.play.homeWinProbability, read[1]?.play.homeWinProbability)
@@ -142,7 +142,7 @@ describe("EspnDecode.decoders.decodeSummary", () => {
 
   it.effect("should give each timeout the team its participants mark as calling it", () =>
     Effect.gen(function* () {
-      const plays = yield* EspnDecode.decoders.nfl.decodeSummary(summary)
+      const plays = yield* EspnDecoder.byLeague.nfl.decodeSummary(summary)
 
       assert.deepStrictEqual(timeoutsOf(plays), [
         [1, "3:27", nfl("17")],
@@ -163,7 +163,7 @@ describe("EspnDecode.decoders.decodeSummary", () => {
       // Its timeouts' texts call Washington WAS, which its header calls WSH; the caller comes from the participants.
       const recordedSummary = yield* gzipped("nfl-summary-401872929")
 
-      const plays = yield* EspnDecode.decoders.nfl.decodeSummary(recordedSummary)
+      const plays = yield* EspnDecoder.byLeague.nfl.decodeSummary(recordedSummary)
 
       assert.deepStrictEqual(timeoutsOf(plays), [
         [1, "1:02", nfl("21")],
@@ -183,7 +183,7 @@ describe("EspnDecode.decoders.decodeSummary", () => {
       // Only Cleveland called timeouts; their texts say "CLV", which no header abbreviation is.
       const recordedSummary = yield* gzipped("nfl-summary-401872922")
 
-      const plays = yield* EspnDecode.decoders.nfl.decodeSummary(recordedSummary)
+      const plays = yield* EspnDecoder.byLeague.nfl.decodeSummary(recordedSummary)
 
       assert.deepStrictEqual(timeoutsOf(plays), [
         [2, "4:52", nfl("5")],
@@ -201,7 +201,7 @@ describe("EspnDecode.decoders.decodeSummary", () => {
       // Its timeouts' texts name each school by its place ("Timeout Georgia, clock 02:05"), two of them at 2:00.
       const recordedSummary = yield* gzipped("fbs-summary-401856705")
 
-      const plays = yield* EspnDecode.decoders.fbs.decodeSummary(recordedSummary)
+      const plays = yield* EspnDecoder.byLeague.fbs.decodeSummary(recordedSummary)
 
       assert.deepStrictEqual(timeoutsOf(plays), [
         [2, "2:05", fbs("61")],
@@ -215,7 +215,7 @@ describe("EspnDecode.decoders.decodeSummary", () => {
 
   it.effect("should give a timeout no participant is marked as calling no caller", () =>
     Effect.gen(function* () {
-      const plays = yield* EspnDecode.decoders.nfl.decodeSummary(withoutFirstCaller())
+      const plays = yield* EspnDecoder.byLeague.nfl.decodeSummary(withoutFirstCaller())
 
       assert.deepStrictEqual(timeoutsOf(plays)[0], [1, "3:27", undefined])
     })
@@ -225,7 +225,7 @@ describe("EspnDecode.decoders.decodeSummary", () => {
     Effect.gen(function* () {
       const warnings: Array<string> = []
 
-      yield* EspnDecode.decoders.nfl
+      yield* EspnDecoder.byLeague.nfl
         .decodeSummary(withoutFirstCaller())
         .pipe(Effect.provide(collecting(warnings)))
 
@@ -239,7 +239,7 @@ describe("EspnDecode.decoders.decodeSummary", () => {
     Effect.gen(function* () {
       const warnings: Array<string> = []
 
-      yield* EspnDecode.decoders.nfl.decodeSummary(summary).pipe(Effect.provide(collecting(warnings)))
+      yield* EspnDecoder.byLeague.nfl.decodeSummary(summary).pipe(Effect.provide(collecting(warnings)))
 
       assert.deepStrictEqual(warnings, [])
     })
@@ -247,7 +247,7 @@ describe("EspnDecode.decoders.decodeSummary", () => {
 
   it.effect("should still read the game when a timeout has no caller", () =>
     Effect.gen(function* () {
-      const plays = yield* EspnDecode.decoders.nfl.decodeSummary(withoutFirstCaller())
+      const plays = yield* EspnDecoder.byLeague.nfl.decodeSummary(withoutFirstCaller())
 
       assert.strictEqual(plays.length, recordedPlays)
     })
@@ -257,7 +257,7 @@ describe("EspnDecode.decoders.decodeSummary", () => {
     Effect.gen(function* () {
       const kickoffWithoutWallclock = edited(',"wallclock":"2026-10-04T17:02:33Z"', "")
 
-      const plays = yield* EspnDecode.decoders.nfl.decodeSummary(kickoffWithoutWallclock)
+      const plays = yield* EspnDecoder.byLeague.nfl.decodeSummary(kickoffWithoutWallclock)
 
       // The kickoff, 40187297140, is not read: the first play read is the rush after it.
       assert.deepStrictEqual(
@@ -269,7 +269,7 @@ describe("EspnDecode.decoders.decodeSummary", () => {
 
   it.effect("should read no plays from a summary without drives", () =>
     Effect.gen(function* () {
-      const plays = yield* EspnDecode.decoders.nfl.decodeSummary({})
+      const plays = yield* EspnDecoder.byLeague.nfl.decodeSummary({})
 
       assert.deepStrictEqual(plays, [])
     })
@@ -277,7 +277,7 @@ describe("EspnDecode.decoders.decodeSummary", () => {
 
   it.effect("should read plays that round-trip Equal through their JSON", () =>
     Effect.gen(function* () {
-      const plays = yield* EspnDecode.decoders.nfl.decodeSummary(summary)
+      const plays = yield* EspnDecoder.byLeague.nfl.decodeSummary(summary)
       const json = Schema.fromJsonString(Play)
 
       const back = yield* Effect.forEach(plays, ({ play }) =>
@@ -292,14 +292,14 @@ describe("EspnDecode.decoders.decodeSummary", () => {
 // Decoding NE–BUF's whole recording takes about a second alone, and many under a full suite's load: the layer decodes
 // it once for the tests that read it, with a timeout to match.
 layer(neAtBufDecoded, { timeout: "60 seconds" })(
-  "EspnDecode.decoders.decodeSummary, beside the recorded FastCast topic",
+  "EspnDecoder.byLeague.decodeSummary, beside the recorded FastCast topic",
   (it) => {
     it.effect("should read the plays the recorded FastCast topic last had, in its order", () =>
       Effect.gen(function* () {
         const decoded = yield* FramesDecoded
         const pushed = lastPushedOf(decoded)
 
-        const plays = yield* EspnDecode.decoders.nfl.decodeSummary(summary)
+        const plays = yield* EspnDecoder.byLeague.nfl.decodeSummary(summary)
 
         assert.deepStrictEqual(
           plays.map(({ play }) => play.id),
@@ -324,7 +324,7 @@ layer(neAtBufDecoded, { timeout: "60 seconds" })(
             return play.id === PlayId.make("4018729714600") ? { ...rest, yards: 0, end: {} } : { ...rest }
           }
 
-          const plays = yield* EspnDecode.decoders.nfl.decodeSummary(summary)
+          const plays = yield* EspnDecoder.byLeague.nfl.decodeSummary(summary)
 
           assert.deepStrictEqual(
             plays.map(({ play }) => compared(play)),
@@ -340,7 +340,7 @@ layer(neAtBufDecoded, { timeout: "60 seconds" })(
           const decoded = yield* FramesDecoded
           const pushed = lastPushedOf(decoded)
 
-          const plays = yield* EspnDecode.decoders.nfl.decodeSummary(summary)
+          const plays = yield* EspnDecoder.byLeague.nfl.decodeSummary(summary)
 
           const equal = plays.filter(({ play }, i) => Equal.equals(play, pushed[i]))
           assert.strictEqual(equal.length, recordedPlays - 3)
@@ -357,7 +357,7 @@ function gzipped(name: string) {
 }
 
 // Each timeout's period, clock, and caller.
-function timeoutsOf(plays: ReadonlyArray<ArchivedPlay>) {
+function timeoutsOf(plays: ReadonlyArray<PlayArchive>) {
   return plays
     .map(({ play }) => play)
     .filter(Play.guards.Timeout)

@@ -21,24 +21,24 @@ import {
   type Tracer
 } from "effect"
 import { TestClock } from "effect/testing"
-import * as Database from "../Database.ts"
-import { FeedFrame } from "../Frame.ts"
-import { FeedLog } from "../feed-log/FeedLog.ts"
-import * as Gzip from "../Gzip.ts"
-import type { HubConfig } from "../HubConfig.ts"
-import * as Ingest from "../Ingest.ts"
-import { LiveSlate } from "../LiveSlate.ts"
-import type { Decoder } from "../provider/Decoder.ts"
-import * as EspnDecode from "../provider/espn/EspnDecode.ts"
-import { Provider } from "../provider/Provider.ts"
-import { decodedFrames, listedBy } from "../provider/TestDecoder.ts"
-import { withEnv } from "../TestHubConfig.ts"
-import * as TestSnapshotFeed from "../TestSnapshotFeed.ts"
-import { pushed } from "../TestSnapshotFeed.ts"
-import { recordingSpans } from "../TestTelemetry.ts"
-import * as ScenarioClock from "./ScenarioClock.ts"
+import * as Database from "../../Database.ts"
+import { FeedFrame } from "../../Frame.ts"
+import { FeedLog } from "../../feed-log/FeedLog.ts"
+import * as Gzip from "../../Gzip.ts"
+import type { HubConfig } from "../../HubConfig.ts"
+import * as Ingest from "../../Ingest.ts"
+import { LiveSlate } from "../../LiveSlate.ts"
+import * as ScenarioClock from "../../scenario/ScenarioClock.ts"
+import { Scenarios, type ScenarioUnknown, type ScenarioUnreadable } from "../../scenario/Scenarios.ts"
+import { withEnv } from "../../TestHubConfig.ts"
+import * as TestSnapshotFeed from "../../TestSnapshotFeed.ts"
+import { pushed } from "../../TestSnapshotFeed.ts"
+import { recordingSpans } from "../../TestTelemetry.ts"
+import type { Decoder } from "../Decoder.ts"
+import { Provider } from "../Provider.ts"
+import { decodedFrames, listedBy } from "../TestDecoder.ts"
+import * as EspnDecoder from "./EspnDecoder.ts"
 import * as ScenarioProvider from "./ScenarioProvider.ts"
-import { Scenarios, type ScenarioUnknown, type ScenarioUnreadable } from "./Scenarios.ts"
 
 describe("ScenarioProvider", () => {
   it.effect("should bring each league's listing to the slate at the scenario's start", () =>
@@ -185,7 +185,7 @@ describe("ScenarioProvider", () => {
           ScenarioUnknown | ScenarioUnreadable,
           HubConfig | Scenarios
         >
-        const crowded = Layer.merge(provider, EspnDecode.layer).pipe(
+        const crowded = Layer.merge(provider, EspnDecoder.layer).pipe(
           Layer.provide([
             Scenarios.layer,
             withEnv({ SPORTAL_SCENARIO: "crowded-fourth-quarter" }).pipe(Layer.orDie)
@@ -458,7 +458,7 @@ describe("ScenarioProvider", () => {
 function scenario(name: string, options: Options = {}) {
   return Layer.merge(
     ScenarioProvider.layer.pipe(Layer.provide(Scenarios.layerFrom(options.from ?? fixtures))),
-    options.decoder ?? EspnDecode.layer
+    options.decoder ?? EspnDecoder.layer
   ).pipe(
     Layer.provideMerge(withEnv({ SPORTAL_SCENARIO: name, ...options.env }).pipe(Layer.orDie)),
     Layer.provide(NodeServices.layer)
@@ -505,7 +505,7 @@ type Options = {
 const fixtures = fileURLToPath(new URL("./fixtures/", import.meta.url))
 
 // The committed recordings, in fixtures/scenarios/ at the repository's root.
-const committed = fileURLToPath(new URL("../../../../fixtures/scenarios/", import.meta.url))
+const committed = fileURLToPath(new URL("../../../../../fixtures/scenarios/", import.meta.url))
 
 /** League `league`'s last listing in the slate. */
 function listed(league: LeagueId) {

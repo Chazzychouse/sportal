@@ -1,32 +1,32 @@
 import { GameId, type GameSnapshot } from "@sportal/domain/Game"
+import { GameDay } from "@sportal/domain/GameDay"
 import { LeagueId } from "@sportal/domain/League"
 import type { Play } from "@sportal/domain/Play"
 import { Context, Data, type DateTime, type Effect, type Schedule, Schema } from "effect"
-import { GameDay } from "../corpus/GameDay.ts"
 
-/** A provider's archive of finished games, kept as fetched under the corpus's `archive/`. */
-export class Archive extends Context.Service<
-  Archive,
+/** A provider's archiver of finished games: what it fetches it keeps, as fetched, under the corpus's `archive/`. */
+export class Archiver extends Context.Service<
+  Archiver,
   {
     /** The final games of `league` on `date`, fetching what is not archived yet; a game it cannot use is skipped and logged. */
-    games(league: LeagueId, date: GameDay): Effect.Effect<ReadonlyArray<ArchivedGame>, ArchiveFetchFailed>
+    games(league: LeagueId, date: GameDay): Effect.Effect<ReadonlyArray<GameArchive>, ArchiveFetchFailed>
     /** The same from what is archived only, fetching nothing: what a rebuild reads. */
-    archived(league: LeagueId, date: GameDay): Effect.Effect<ReadonlyArray<ArchivedGame>, ArchiveFetchFailed>
+    archived(league: LeagueId, date: GameDay): Effect.Effect<ReadonlyArray<GameArchive>, ArchiveFetchFailed>
     /** Between two fetches. */
     readonly pacing: Schedule.Schedule<unknown>
   }
->()("sportal/hub/provider/Archive") {}
+>()("sportal/hub/provider/Archiver") {}
 
-/** A finished game as a provider's archive gives it: as scheduled, as final, and its plays with when each was run. */
-export class ArchivedGame extends Data.Class<{
+/** A finished game's entry in the archive: as scheduled, as final, and its plays with when each was run. */
+export class GameArchive extends Data.Class<{
   /** The scoreboard's event, its status set to scheduled. */
   readonly scheduled: GameSnapshot
   readonly final: GameSnapshot
-  readonly plays: ReadonlyArray<ArchivedPlay>
+  readonly plays: ReadonlyArray<PlayArchive>
 }> {}
 
 /** A play of an archived game, with the wallclock instant it was run at. */
-export interface ArchivedPlay {
+export interface PlayArchive {
   readonly play: Play
   readonly wallclock: DateTime.Utc
 }

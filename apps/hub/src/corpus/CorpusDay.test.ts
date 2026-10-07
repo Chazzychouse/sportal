@@ -1,13 +1,13 @@
 import { assert, describe, it } from "@effect/vitest"
 import { Delivery } from "@sportal/domain/Delivery"
 import { GameId } from "@sportal/domain/Game"
+import { GameDay } from "@sportal/domain/GameDay"
 import { liveSnapshot, play, snapshot } from "@sportal/domain/TestGame"
 import { DateTime, Effect, Equal, FileSystem, Option, Path, Stream } from "effect"
 import * as Gzip from "../Gzip.ts"
 import * as TestSnapshotFeed from "../TestSnapshotFeed.ts"
 import { CorpusDay, CorpusDays } from "./CorpusDay.ts"
 import { CorpusInput, CorpusLine } from "./CorpusLine.ts"
-import { GameDay } from "./GameDay.ts"
 import { inCorpus } from "./TestCorpus.ts"
 
 describe("CorpusDays", () => {
