@@ -3,24 +3,30 @@ import { Delivery, type DeliverySource } from "./Delivery.ts"
 import type { GameId, GameSnapshot } from "./Game.ts"
 import { GameEvent, type GameEventKind } from "./GameEvent.ts"
 import type { LeagueId } from "./League.ts"
-import { LiveGame, type TookOutcome } from "./LiveGame.ts"
+import { LiveGame, LiveGameState, type TookOutcome } from "./LiveGame.ts"
 import type { RecentPlays } from "./RecentPlays.ts"
 
 /**
  * The slate: the last frame's `seq`, each league's last listing, every current game's live game, taken from push and
- * poll deliveries in arrival order, and `reached`, the instant it has ticked to: every wake time at or before it has
- * been ticked.
+ * poll deliveries in arrival order, each game it saw finish, and `reached`, the instant it has ticked to: every wake
+ * time at or before it has been ticked.
  */
 export class Slate extends Data.Class<{
   readonly seq: Option.Option<number>
   readonly listed: ReadonlyMap<LeagueId, ReadonlyArray<GameSnapshot>>
   readonly live: ReadonlyMap<GameId, LiveGame>
+  /**
+   * Each game the slate stopped as over, as its final snapshot, while a league's last listing names it: a snapshot of
+   * one not ahead of its final is behind, so a poll lagging the push does not start it again.
+   */
+  readonly finished: ReadonlyMap<GameId, GameSnapshot>
   readonly reached: Option.Option<DateTime.Utc>
 }> {
   static readonly empty: Slate = new Slate({
     seq: Option.none(),
     listed: new Map(),
     live: new Map(),
+    finished: new Map(),
     reached: Option.none()
   })
 
@@ -61,7 +67,7 @@ export class Slate extends Data.Class<{
 
   /** Each listed game in `leagues`, leagues in order, as the slate has it. */
   games(leagues: ReadonlyArray<LeagueId>): ReadonlyArray<GameSnapshot> {
-    return leagues.flatMap((league) => asHeld(this.listed.get(league) ?? [], this.live))
+    return leagues.flatMap((league) => asHeld(this.listed.get(league) ?? [], this))
   }
 
   /** The last `recentPlayCount` plays of each of `games` that has plays in `live`. */
@@ -76,7 +82,7 @@ export class Slate extends Data.Class<{
 
   /** Every listed game as the slate has it, then live games no listing holds. */
   everyGame(): ReadonlyArray<GameSnapshot> {
-    const listed = [...this.listed.values()].flatMap((games) => asHeld(games, this.live))
+    const listed = [...this.listed.values()].flatMap((games) => asHeld(games, this))
     const unlisted = [...this.live.values()]
       .map(({ snapshot }) => snapshot)
       .filter((snapshot) => !listed.some(({ id }) => id === snapshot.id))
@@ -88,7 +94,7 @@ export class Slate extends Data.Class<{
    * are ignored, since moving only them changes no game.
    */
   publishesSameAs(that: Slate): boolean {
-    return this.live === that.live && this.listed === that.listed
+    return this.live === that.live && this.listed === that.listed && this.finished === that.finished
   }
 
   /** Ticks to `at`, then runs `then` on what the ticks left, as frame `seq` (none keeps the last). */
@@ -98,13 +104,14 @@ export class Slate extends Data.Class<{
     then: (ticked: Advanced) => Effect.Effect<Listed>
   ): Effect.Effect<Taken> {
     const from = Option.getOrElse(this.reached, () => at)
-    return tickTo({ live: this.live, events: [], observations: [] }, from, at).pipe(
+    return tickTo({ live: this.live, finished: this.finished, events: [], observations: [] }, from, at).pipe(
       Effect.flatMap(then),
       Effect.map((step) => ({
         next: new Slate({
           seq: Option.orElse(seq, () => this.seq),
           listed: step.listed,
           live: step.live,
+          finished: step.finished,
           reached: Option.some(DateTime.max(from, at))
         }),
         events: step.events,
@@ -145,9 +152,13 @@ export type SlateObservation = Data.TaggedEnum<{
 }>
 export const SlateObservation = Data.taggedEnum<SlateObservation>()
 
-/** Every current game's live game, and the events and observations advancing the slate has made so far. */
+/**
+ * Every current game's live game, each game seen to finish, and the events and observations advancing the slate has
+ * made so far.
+ */
 type Advanced = {
   readonly live: ReadonlyMap<GameId, LiveGame>
+  readonly finished: ReadonlyMap<GameId, GameSnapshot>
   readonly events: ReadonlyArray<GameEvent>
   readonly observations: ReadonlyArray<SlateObservation>
 }
@@ -209,7 +220,12 @@ function applied(step: Listed, delivery: Delivery, at: DateTime.Utc): Effect.Eff
         games,
         (): Advanced => step,
         (acc, snapshot) => snapshotTaken(acc, snapshot, "poll", at)
-      ).pipe(Effect.map((after) => ({ ...after, listed: new Map(listed).set(league, games) }))),
+      ).pipe(
+        Effect.map((after) => {
+          const relisted = new Map(listed).set(league, games)
+          return { ...after, listed: relisted, finished: stillListed(after.finished, relisted) }
+        })
+      ),
     Snapshot: ({ snapshot, from }) =>
       snapshotTaken(step, snapshot, from, at).pipe(Effect.map((after) => ({ ...after, listed }))),
     Plays: (plays) =>
@@ -234,7 +250,15 @@ function snapshotTaken(
   at: DateTime.Utc
 ): Effect.Effect<Advanced> {
   return guarded(advanced, snapshot, "a delivery", () => {
-    const current = Option.fromNullishOr(advanced.live.get(snapshot.id))
+    const final = Option.fromNullishOr(advanced.finished.get(snapshot.id))
+    if (Option.isSome(final) && !snapshot.isAheadOf(final.value)) {
+      const ignored = SlateObservation.Took({ snapshot, from, outcome: "behind", had: final })
+      return { ...advanced, observations: [...advanced.observations, ignored] }
+    }
+    // A finished game is taken as the over game it was, so a correction ahead of its final says what it changed.
+    const current = Option.orElse(Option.fromNullishOr(advanced.live.get(snapshot.id)), () =>
+      Option.map(final, (over) => LiveGame.start(over, from, at))
+    )
     const step = Option.match(current, {
       onNone: (): { readonly liveGame: Option.Option<LiveGame>; readonly outcome: TookOutcome } => ({
         liveGame: Option.some(LiveGame.start(snapshot, from, at)),
@@ -260,8 +284,8 @@ function snapshotTaken(
 
 /**
  * Game `id` after a step at `at` from `current` (none for a game the slate does not hold): holds the step's new live
- * game, if any, while it is current, and lets it go once it is not. A game that was never held and is not current is
- * not held, and nothing is reported of it.
+ * game, if any, while it is current, and lets it go once it is not, remembering it as finished when it is over. A game
+ * that was never held and is not current is not held, and nothing is reported of it.
  */
 function settled(
   advanced: Advanced,
@@ -293,6 +317,7 @@ function settled(
         if (after.isCurrent(at)) {
           return {
             live: Option.isSome(step.liveGame) ? new Map(advanced.live).set(id, after) : advanced.live,
+            finished: advanced.finished,
             events,
             observations
           }
@@ -300,6 +325,9 @@ function settled(
         if (Option.isNone(current)) return advanced
         return {
           live: new Map([...advanced.live].filter(([game]) => game !== id)),
+          finished: LiveGameState.$is("Over")(after.state)
+            ? new Map(advanced.finished).set(id, after.snapshot)
+            : advanced.finished,
           events,
           observations: [...observations, SlateObservation.Stopped({ liveGame: after, at })]
         }
@@ -328,14 +356,24 @@ function guarded(
   )
 }
 
-/** Each listed game, in listed order, as the slate has it, or as listed when it has none. */
+/** Each listed game, in listed order, as the slate has it (live, or as its final once finished), or as listed. */
 function asHeld(
   listed: ReadonlyArray<GameSnapshot>,
-  live: ReadonlyMap<GameId, LiveGame>
+  {
+    live,
+    finished
+  }: { readonly live: ReadonlyMap<GameId, LiveGame>; readonly finished: ReadonlyMap<GameId, GameSnapshot> }
 ): ReadonlyArray<GameSnapshot> {
-  return listed.map((game) =>
-    Option.fromNullishOr(live.get(game.id)).pipe(
-      Option.match({ onNone: () => game, onSome: (liveGame) => liveGame.snapshot })
-    )
-  )
+  return listed.map((game) => live.get(game.id)?.snapshot ?? finished.get(game.id) ?? game)
+}
+
+/** `finished` less the games no listing in `listed` names; itself when it loses none. */
+function stillListed(
+  finished: ReadonlyMap<GameId, GameSnapshot>,
+  listed: ReadonlyMap<LeagueId, ReadonlyArray<GameSnapshot>>
+): ReadonlyMap<GameId, GameSnapshot> {
+  const named = new Set([...listed.values()].flatMap((games) => games.map(({ id }) => id)))
+  return [...finished.keys()].every((id) => named.has(id))
+    ? finished
+    : new Map([...finished].filter(([id]) => named.has(id)))
 }

@@ -6,7 +6,7 @@ import { GameEvent, GameEventKind } from "./GameEvent.ts"
 import { LiveGame, LiveGameState } from "./LiveGame.ts"
 import { PlayId } from "./Play.ts"
 import { Slate, SlateObservation } from "./Slate.ts"
-import { liveSnapshot, play, snapshot } from "./TestGame.ts"
+import { liveSnapshot, play, snapshot, team } from "./TestGame.ts"
 
 const t0 = DateTime.makeUnsafe("2026-10-03T16:00:00Z")
 const one = GameId.make("1")
@@ -171,6 +171,72 @@ describe("Slate", () => {
       assert.deepStrictEqual(tags(observations), ["Took", "Changed", "Stopped"])
     })
   )
+
+  describe("a game the slate saw finish", () => {
+    const later = (seconds: number) => DateTime.addDuration(t0, Duration.seconds(seconds))
+    const home = (score: number) => ({ team: team("HOME"), score })
+    const playing = snapshot({ id: one, status: "live", period: 4, clock: "0:39", home: home(26) })
+    const final = snapshot({ id: one, status: "final", period: 4, clock: "0:00", home: home(26) })
+    // The push says the final; the poll, behind it, still lists the game live.
+    const finished = Effect.gen(function* () {
+      const held = yield* taken(Slate.empty, [listing("nfl", [playing]), pushed(playing)], t0)
+      return yield* taken(held, [pushed(final)], later(1))
+    })
+
+    it.effect("is not started again by a lagging poll, and shows as its final", () =>
+      Effect.gen(function* () {
+        const { next, events, observations } = yield* took(
+          yield* finished,
+          [listing("nfl", [playing])],
+          later(5)
+        )
+
+        assert.deepStrictEqual(events, [])
+        assert.deepStrictEqual(tags(observations), ["Took"])
+        assert.deepStrictEqual(outcomes(observations), ["behind"])
+        assert.isFalse(next.live.has(one))
+        assert.deepStrictEqual(next.games(["nfl"]), [final])
+        assert.deepStrictEqual(next.everyGame(), [final])
+      })
+    )
+
+    it.effect("says nothing new when the poll catches up to the final", () =>
+      Effect.gen(function* () {
+        const lagged = yield* taken(yield* finished, [listing("nfl", [playing])], later(5))
+        const { next, events, observations } = yield* took(lagged, [listing("nfl", [final])], later(15))
+
+        assert.deepStrictEqual(events, [])
+        assert.deepStrictEqual(tags(observations), ["Took"])
+        assert.isFalse(next.live.has(one))
+        assert.deepStrictEqual(next.games(["nfl"]), [final])
+      })
+    )
+
+    it.effect("is forgotten once no league's listing names it", () =>
+      Effect.gen(function* () {
+        const slate = yield* finished
+        const unlisted = yield* taken(slate, [listing("nfl", [])], later(5))
+
+        assert.strictEqual(slate.finished.get(one), final)
+        assert.isFalse(unlisted.finished.has(one))
+      })
+    )
+
+    it.effect("takes a snapshot ahead of its final, a corrected score, and says the change", () =>
+      Effect.gen(function* () {
+        const corrected = snapshot({ ...final, home: home(27) })
+        const { next, events, observations } = yield* took(yield* finished, [polled(corrected)], later(5))
+
+        assert.deepStrictEqual(outcomes(observations), ["taken"])
+        assert.deepStrictEqual(
+          events.map(({ what }) => what._tag),
+          ["ScoreChanged"]
+        )
+        assert.isFalse(next.live.has(one))
+        assert.deepStrictEqual(next.games(["nfl"]), [corrected])
+      })
+    )
+  })
 
   it.effect("a stale game ticked past its hold is stopped and let go", () =>
     Effect.gen(function* () {
