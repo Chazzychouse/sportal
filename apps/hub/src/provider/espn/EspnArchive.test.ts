@@ -147,26 +147,50 @@ describe("EspnArchive", () => {
     )
   )
 
-  it.effect("a game whose summary is refused is skipped, the rest still read, and nothing kept for it", () =>
-    inArchive(
-      { answer: (url) => (url === summaryUrl ? new Response("", { status: 404 }) : undefined) },
-      ({ dir, requests }) =>
-        Effect.gen(function* () {
-          const games = yield* stepped((yield* Archive).games("nfl", "2026-10-04"))
+  it.effect(
+    "a refused summary is archived as refused: its game is skipped, the date rebuilds, and it is not fetched again",
+    () =>
+      inArchive(
+        {
+          answer: (url) =>
+            url === `${site}/summary?event=401872965` ? new Response("", { status: 404 }) : undefined
+        },
+        ({ dir, requests }) =>
+          Effect.gen(function* () {
+            const archive = yield* Archive
+            const fs = yield* FileSystem.FileSystem
+            const games = yield* stepped(archive.games("nfl", "2026-10-04"))
+            const fetched = yield* requests
+            const refusal = yield* fs.readFileString(`${dir}/archive/nfl/summary/401872965.refused.json`)
+            const archived = yield* archive.archived("nfl", "2026-10-04")
+            const again = yield* stepped(archive.games("nfl", "2026-10-04"))
 
-          assert.deepStrictEqual(games, [])
-          assert.strictEqual(
-            (yield* requests).length,
-            15,
-            "the scoreboard and every summary, the refused one once"
-          )
-          assert.isFalse(
-            yield* (yield* FileSystem.FileSystem).exists(`${dir}/archive/nfl/summary/401872971.json.gz`)
-          )
-          assert.isTrue(
-            yield* (yield* FileSystem.FileSystem).exists(`${dir}/archive/nfl/summary/401872965.json.gz`)
-          )
-        })
+            assert.deepStrictEqual(
+              games.map((game) => game.final.id),
+              [neBuf]
+            )
+            assert.strictEqual(fetched.length, 15, "the scoreboard and every summary, the refused one once")
+            assert.isFalse(yield* fs.exists(`${dir}/archive/nfl/summary/401872965.json.gz`))
+            assert.include(refusal, '"status":404')
+            assert.deepStrictEqual(archived, games)
+            assert.deepStrictEqual(again, games)
+            assert.strictEqual((yield* requests).length, fetched.length)
+          })
+      )
+  )
+
+  it.effect("a final game with neither its summary nor a refusal is NotArchived", () =>
+    inArchive({}, ({ dir, requests }) =>
+      Effect.gen(function* () {
+        const archive = yield* Archive
+        yield* stepped(archive.games("nfl", "2026-10-04"))
+        const fetched = (yield* requests).length
+        yield* (yield* FileSystem.FileSystem).remove(`${dir}/archive/nfl/summary/401872971.json.gz`)
+        const error = yield* Effect.flip(archive.archived("nfl", "2026-10-04"))
+
+        assert.deepStrictEqual([error.reason, error.game], ["NotArchived", neBuf])
+        assert.strictEqual((yield* requests).length, fetched)
+      })
     )
   )
 

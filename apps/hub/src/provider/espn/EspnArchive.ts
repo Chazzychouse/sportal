@@ -1,6 +1,17 @@
 import { type GameId, GameSnapshot } from "@sportal/domain/Game"
 import type { LeagueId } from "@sportal/domain/League"
-import { Array as Arr, Effect, FileSystem, Layer, Option, Path, Schedule, Schema, Stream } from "effect"
+import {
+  Array as Arr,
+  DateTime,
+  Effect,
+  FileSystem,
+  Layer,
+  Option,
+  Path,
+  Schedule,
+  Schema,
+  Stream
+} from "effect"
 import { HttpClient, type HttpClientError } from "effect/http"
 import { Archive, ArchivedGame, ArchiveFetchFailed } from "../../corpus/Archive.ts"
 import * as Gzip from "../../Gzip.ts"
@@ -16,7 +27,8 @@ import * as EspnSummary from "./EspnSummary.ts"
  * fetch that does not connect, or is answered 429 or with a status of 500 or more, is `Unreachable` and tried again
  * from 1 second later, twice as long each time, jittered, five tries in all; one answered with another status that is
  * not 2xx is `Refused`, and a body that is not JSON is `Unreadable`. A game whose summary is refused is skipped and
- * logged; a refused scoreboard fails the date. A fetch that fails writes no file, so the next call fetches it again.
+ * logged, and its refusal archived as `summary/<game>.refused.json` (the status, and when), so it is never fetched
+ * again and the date still reads from the archive; a refused scoreboard fails the date. A fetch that fails writes no file, so the next call fetches it again.
  */
 export const layer: Layer.Layer<
   Archive,
@@ -30,24 +42,36 @@ export const layer: Layer.Layer<
     const path = yield* Path.Path
     const archive = path.join((yield* HubConfig).corpusDir, "archive")
 
-    // Fetches `url` and keeps its body at `file`, written whole or not at all, and only once it reads as JSON.
-    const fetch = (url: string, file: string, failed: Failed) =>
+    // `bytes` at `file`, written whole or not at all. A corpus directory that cannot be written stops the command.
+    const write = (file: string, bytes: Uint8Array) =>
+      Effect.gen(function* () {
+        yield* fs.makeDirectory(path.dirname(file), { recursive: true })
+        yield* fs.writeFile(`${file}.tmp`, bytes)
+        yield* fs.rename(`${file}.tmp`, file)
+      }).pipe(Effect.orDie)
+
+    // Fetches `url` and keeps its body at `file` once it reads as JSON; when it is refused and `refusal` names a
+    // file, the refusal is kept there instead.
+    const fetch = (url: string, file: string, failed: Failed, refusal?: string) =>
       client.get(url).pipe(
         Effect.flatMap((response) => response.text),
+        Effect.tapError((cause) => {
+          const { reason } = cause
+          return refusal === undefined || reason._tag !== "StatusCodeError" || reasonOf(cause) !== "Refused"
+            ? Effect.void
+            : DateTime.now.pipe(
+                Effect.flatMap((refusedAt) => encodeRefusal({ status: reason.response.status, refusedAt })),
+                // Encoding a refusal built from its own schema cannot fail.
+                Effect.orDie,
+                Effect.flatMap((json) => write(refusal, new TextEncoder().encode(json)))
+              )
+        }),
         Effect.mapError((cause) => failed(reasonOf(cause), cause)),
         Effect.retry(retry),
         Effect.tap((body) => decodeJson(body).pipe(Effect.mapError((cause) => failed("Unreadable", cause)))),
-        Effect.flatMap((body) =>
-          Effect.gen(function* () {
-            const bytes = yield* Gzip.compress(body)
-            yield* fs.makeDirectory(path.dirname(file), { recursive: true })
-            yield* fs.writeFile(`${file}.tmp`, bytes)
-            yield* fs.rename(`${file}.tmp`, file)
-          }).pipe(
-            // Compressing text in memory cannot fail; a corpus directory that cannot be written stops the command.
-            Effect.orDie
-          )
-        ),
+        // Compressing text in memory cannot fail.
+        Effect.flatMap((body) => Gzip.compress(body).pipe(Effect.orDie)),
+        Effect.flatMap((bytes) => write(file, bytes)),
         Effect.withSpan("EspnArchive.fetch", { attributes: { "url.full": url } })
       )
 
@@ -68,7 +92,8 @@ export const layer: Layer.Layer<
       Effect.gen(function* () {
         const files = {
           scoreboard: path.join(archive, league, "scoreboard", `${date}.json.gz`),
-          summary: (game: GameId) => path.join(archive, league, "summary", `${game}.json.gz`)
+          summary: (game: GameId) => path.join(archive, league, "summary", `${game}.json.gz`),
+          refusal: (game: GameId) => path.join(archive, league, "summary", `${game}.refused.json`)
         }
         const failed =
           (game?: GameId): Failed =>
@@ -97,60 +122,80 @@ export const layer: Layer.Layer<
         )
 
         const summaryUrl = (game: GameId) => `${EspnProvider.siteUrl(league)}/summary?event=${game}`
-        const refused =
-          how === "fetch"
-            ? yield* Stream.fromIterable(
-                yield* Effect.filter(finals, (game) =>
-                  Effect.map(exists(files.summary(game.id), failed(game.id)), (archived) => !archived)
-                )
-              ).pipe(
-                Stream.schedule(pacing),
-                Stream.mapEffect((game) =>
-                  missing(summaryUrl(game.id), files.summary(game.id), game.id).pipe(
-                    Effect.as(Option.none<GameId>()),
-                    Effect.catchIf(
-                      (error) => error.reason === "Refused",
-                      (error) =>
-                        Effect.as(
-                          Effect.logWarning(
-                            `Archive: ${league} game ${game.id} (${game.away.team.abbreviation} at ${game.home.team.abbreviation}) has its summary refused; skipped`,
-                            error
-                          ),
-                          Option.some(game.id)
-                        )
-                    )
-                  )
-                ),
-                Stream.runCollect,
-                Effect.map(Arr.getSomes)
-              )
-            : []
-
-        return yield* Effect.forEach(
-          finals.filter((final) => !refused.includes(final.id)),
-          (final) =>
-            kept(
-              files.summary(final.id),
-              failed(final.id),
-              missing(summaryUrl(final.id), files.summary(final.id), final.id)
-            ).pipe(
-              Effect.flatMap((body) =>
-                decodeJson(body).pipe(
-                  Effect.flatMap((summary) => EspnSummary.plays(league, summary)),
-                  Effect.mapError((cause) => failed(final.id)("Unreadable", cause))
-                )
-              ),
-              Effect.flatMap((plays) =>
-                plays.length === 0
-                  ? Effect.as(
-                      Effect.logWarning(
-                        `Archive: ${league} game ${final.id} (${final.away.team.abbreviation} at ${final.home.team.abbreviation}) has no plays with wallclocks; skipped`
-                      ),
-                      Option.none()
-                    )
-                  : Effect.succeedSome(new ArchivedGame({ scheduled: scheduled(final), final, plays }))
+        if (how === "fetch") {
+          yield* Stream.fromIterable(
+            yield* Effect.filter(finals, (game) =>
+              Effect.map(
+                Effect.all([
+                  exists(files.summary(game.id), failed(game.id)),
+                  exists(files.refusal(game.id), failed(game.id))
+                ]),
+                ([archived, refused]) => !archived && !refused
               )
             )
+          ).pipe(
+            Stream.schedule(pacing),
+            Stream.runForEach((game) =>
+              fetch(
+                summaryUrl(game.id),
+                files.summary(game.id),
+                failed(game.id),
+                files.refusal(game.id)
+              ).pipe(
+                // The refusal is archived in its place, and read below.
+                Effect.catchIf(
+                  (error) => error.reason === "Refused",
+                  () => Effect.void
+                )
+              )
+            )
+          )
+        }
+
+        const refusalOf = (game: GameSnapshot) =>
+          Effect.gen(function* () {
+            const file = files.refusal(game.id)
+            if (!(yield* exists(file, failed(game.id)))) return Option.none()
+            return Option.some(
+              yield* fs.readFileString(file).pipe(
+                Effect.flatMap(decodeRefusal),
+                Effect.mapError((cause) => failed(game.id)("Unreadable", cause))
+              )
+            )
+          })
+
+        return yield* Effect.forEach(finals, (final) =>
+          Effect.flatMap(refusalOf(final), (refusal) =>
+            Option.isSome(refusal)
+              ? Effect.as(
+                  Effect.logWarning(
+                    `Archive: ${league} game ${final.id} (${final.away.team.abbreviation} at ${final.home.team.abbreviation}) had its summary refused (${refusal.value.status}, ${DateTime.formatIso(refusal.value.refusedAt)}); skipped`
+                  ),
+                  Option.none()
+                )
+              : kept(
+                  files.summary(final.id),
+                  failed(final.id),
+                  missing(summaryUrl(final.id), files.summary(final.id), final.id)
+                ).pipe(
+                  Effect.flatMap((body) =>
+                    decodeJson(body).pipe(
+                      Effect.flatMap((summary) => EspnSummary.plays(league, summary)),
+                      Effect.mapError((cause) => failed(final.id)("Unreadable", cause))
+                    )
+                  ),
+                  Effect.flatMap((plays) =>
+                    plays.length === 0
+                      ? Effect.as(
+                          Effect.logWarning(
+                            `Archive: ${league} game ${final.id} (${final.away.team.abbreviation} at ${final.home.team.abbreviation}) has no plays with wallclocks; skipped`
+                          ),
+                          Option.none()
+                        )
+                      : Effect.succeedSome(new ArchivedGame({ scheduled: scheduled(final), final, plays }))
+                  )
+                )
+          )
         ).pipe(Effect.map(Arr.getSomes))
       }).pipe(
         Effect.withSpan("EspnArchive.games", {
@@ -187,6 +232,13 @@ function reasonOf(cause: HttpClientError.HttpClientError): ArchiveFetchFailed["r
       ? "Unreadable"
       : "Unreachable"
 }
+
+// A refused summary, archived in its place so the date is never fetched for it again, and still rebuilds.
+const Refusal = Schema.Struct({ status: Schema.Int, refusedAt: Schema.DateTimeUtcFromString })
+
+const encodeRefusal = Schema.encodeEffect(Schema.fromJsonString(Refusal))
+
+const decodeRefusal = Schema.decodeEffect(Schema.fromJsonString(Refusal))
 
 const decodeJson = Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Unknown))
 

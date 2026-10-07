@@ -1,10 +1,16 @@
 import { readFileSync } from "node:fs"
+import { NodeServices } from "@effect/platform-node"
 import { assert, describe, it } from "@effect/vitest"
+import { GameId } from "@sportal/domain/Game"
 import { Play, PlayId } from "@sportal/domain/Play"
 import { TeamId } from "@sportal/domain/Team"
-import { DateTime, Effect, Equal, Order, Schema } from "effect"
+import { DateTime, Effect, Equal, Layer, Order, Schema } from "effect"
+import { Scenarios } from "../../scenario/Scenarios.ts"
+import { decodedFrames } from "../../TestFeed.ts"
+import * as EspnDecode from "./EspnDecode.ts"
 import * as EspnPlay from "./EspnPlay.ts"
 import * as EspnSummary from "./EspnSummary.ts"
+import { fixtures, neAtBufFrames } from "./TestEspn.ts"
 
 // NE–BUF's summary, the game the frames fixture records, recorded once after it was final:
 //   curl -o fixtures/nfl-summary-401872971.json \
@@ -74,26 +80,44 @@ describe("EspnSummary", () => {
       })
   )
 
-  it.effect("every play FastCast's entities also have reads with the entity's team", () =>
-    Effect.gen(function* () {
-      const decodeEntity = Schema.decodeUnknownEffect(EspnPlay.Play("nfl"))
-      const both = (yield* EspnSummary.plays("nfl", summary)).flatMap(({ play }) => {
-        const entity = fastCast[play.id]
-        return entity === undefined ? [] : [{ play, entity }]
-      })
-      const teams = yield* Effect.forEach(both, ({ play, entity }) =>
-        Effect.map(decodeEntity(entity), (pushed) => [play.id, play.team, pushed.team])
-      )
+  it.effect(
+    "every play reads as the recorded FastCast topic last had it",
+    () =>
+      Effect.gen(function* () {
+        const { frames } = yield* Scenarios.use((scenarios) => scenarios.load(neAtBufFrames)).pipe(
+          Effect.provide(Scenarios.in(fixtures, []).pipe(Layer.provideMerge(NodeServices.layer)))
+        )
+        const pushed = (yield* decodedFrames(frames).pipe(Effect.provide(EspnDecode.layer)))
+          .flatMap(({ deliveries }) => deliveries)
+          .flatMap((delivery) =>
+            delivery._tag === "Plays" && delivery.game === GameId.make("401872971") ? [delivery.plays] : []
+          )
+          .at(-1)
+        const plays = yield* EspnSummary.plays("nfl", summary)
 
-      assert.deepStrictEqual(
-        teams.map(([id]) => id),
-        ["401872971330", "401872971484", "4018729712179"].map((id) => PlayId.make(id))
-      )
-      assert.deepStrictEqual(
-        teams.map(([id, team]) => [id, team]),
-        teams.map(([id, , pushed]) => [id, pushed])
-      )
-    })
+        assert.deepStrictEqual(
+          plays.map(({ play }) => play.id),
+          (pushed ?? []).map((play) => play.id)
+        )
+        // Left out: `text`, which ESPN rewrote for the summary (a penalty's line break, a clock prefix, a leading space);
+        // and, on the last kneel only, 4018729714600, `yards` and `end`, which ESPN corrected after the game (-2 yards to
+        // -1) and FastCast never sent. Every other field of every play is compared, team, kind, period, clock, scores,
+        // start and end among them.
+        const compared = (play: Play) => {
+          const { text: _text, ...rest } = play
+          return play.id === PlayId.make("4018729714600") ? { ...rest, yards: 0, end: {} } : { ...rest }
+        }
+        assert.deepStrictEqual(
+          plays.map(({ play }) => compared(play)),
+          (pushed ?? []).map(compared)
+        )
+        assert.strictEqual(
+          plays.filter(({ play }, i) => Equal.equals(play, pushed?.[i])).length,
+          recordedPlays - 3,
+          "every other play is FastCast's, field for field"
+        )
+      }),
+    { timeout: 60_000 }
   )
 
   it.effect("reads win probability where the summary has the play's, and none where it does not", () =>
