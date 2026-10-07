@@ -161,7 +161,8 @@ describe("ScenarioProvider", () => {
   it.effect("holds a written scenario's last slate once it has ended", () =>
     Effect.gen(function* () {
       yield* TestClock.adjust(0)
-      yield* TestClock.adjust("1 hour")
+      // Six minutes past its last frame, at 4:00, no further: every 10 s of it polls each league through the decode.
+      yield* TestClock.adjust("10 minutes")
       const tie = (yield* listed("fbs")).find((game) => game.id === "tie-uga-ala")
       assert.deepStrictEqual([tie?.status, tie?.home.score], ["final", 27])
     }).pipe(Effect.provide(playing("two-minute-drill-tie")))
