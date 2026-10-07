@@ -6,12 +6,12 @@ import { HubConfig } from "./HubConfig.ts"
 import * as HubMode from "./HubMode.ts"
 import { isStopping } from "./HubStopping.ts"
 import * as HubServer from "./hub-server/HubServer.ts"
-import { StageSessions } from "./StageSessions.ts"
+import { LiveStage } from "./LiveStage.ts"
 import * as Telemetry from "./Telemetry.ts"
 
 const Hub = HubServer.serve.pipe(
   Layer.provide(HubServer.listen),
-  Layer.provide(StageSessions.layer),
+  Layer.provide(LiveStage.layer),
   Layer.provide(HubMode.layer),
   Layer.provide(Database.inDataDir),
   Layer.provide(Telemetry.layer),

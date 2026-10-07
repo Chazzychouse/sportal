@@ -66,11 +66,11 @@ flowchart LR
     ingest[Ingest: poll, push, append]
     feedlog[(Feed log: feed.sqlite)]
     decode[Decoder: the provider's decode, frames to deliveries]
-    slate[Slate: every game's state and plays, from both feeds]
+    slate[Live slate: every game's state and plays, from both feeds]
     history[(GameHistory: plays, latest snapshots)]
     corpus[Corpus: typed days, built from the feed log or the archive; run on virtual time]
     director[Director: rules over game events and plays, not built]
-    stages[Stage sessions: the one Stage, in memory]
+    stages[Live stage: the one Stage, in memory]
     store[(SQL store)]
     api[HTTP API + live stream]
   end
@@ -225,7 +225,7 @@ sportal/
     │       ├── DecodeTelemetry.ts  What decode observed, as logs and metrics, for frames after the replay (moved here from `ingest/`)
     │       ├── GameHistory.ts      Past plays and each game's latest snapshot, derived from the slate
     │       ├── corpus/             Typed game days built from the feed log or the archive, run through the slate on virtual time: `CorpusDay`, `CorpusInput`, `CorpusBuild`, `CorpusRun`, `Archive`, `Synthesis`, the `corpus` CLI and its worker
-    │       ├── StageSessions.ts    The one authoritative Stage, held in memory
+    │       ├── LiveStage.ts        The one authoritative Stage, held in memory
     │       ├── Ingest.ts           Polls HubConfig's leagues, runs the push on the slate's demand, appends every frame to the feed log, and waits on `through`
     │       ├── HubStopping.ts      Whether a task that should run until the Hub stops ended because it is stopping, and the Error log unless it did
     │       ├── FeedLog.ts          The append-only log of every frame, in feed.sqlite
@@ -301,7 +301,7 @@ sportal/
 
 Tests sit beside the file they test as `Game.test.ts`. A module grows into a folder of the same name only when it genuinely has private parts, as `provider/espn/` does. Regenerate this tree from `git ls-files` when the layout changes.
 
-**Not built:** domain `Slate.ts` (the window and grouping), `Follow.ts`, `Rule.ts`; hub `Dockerfile`, `provider/cfbd/`, `director/`, and the SQL stores for follows, presets, and rules; web `settings/` and a game's detail view. The Director, follows, presets, rules, the spoiler shield, and cloud hosting in the sections below are designs, not code.
+**Not built:** domain `Follow.ts`, `Rule.ts`; hub `Dockerfile`, `provider/cfbd/`, `director/`, and the SQL stores for follows, presets, and rules; web `settings/` and a game's detail view. The Director, follows, presets, rules, the spoiler shield, and cloud hosting in the sections below are designs, not code.
 
 ### 4.3 Inside a file
 
@@ -462,7 +462,7 @@ A source's channels are found in its own guide, read by the shell (`docs/history
 - Geometry: `Layout#slots` gives each slot as fractions of the Stage area. The web UI turns them into pixels once and uses the same numbers for its tile chrome and the shell's tile placements, so the two move together along one **Stage transition** (280 ms, `cubic-bezier(0.2, 0, 0, 1)`), which the shell follows by moving each view's bounds.
 - Full screen is the Display's window, local to it, and is not Stage state.
 
-`StageSessions` in the Hub holds the one Stage in memory, applies commands from any origin, and broadcasts it. Nothing is persisted: a restart starts an empty Stage, and a second Display would need a keyed session.
+`LiveStage` in the Hub holds the one Stage in memory, applies commands from any origin, and broadcasts it. Nothing is persisted: a restart starts an empty Stage, and a second Display would need a keyed session.
 
 ### 5.4 Director
 

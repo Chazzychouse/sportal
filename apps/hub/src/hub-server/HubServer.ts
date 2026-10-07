@@ -8,7 +8,7 @@ import { HttpRouter, HttpServerResponse, HttpStaticServer } from "effect/http"
 import { HttpApiBuilder } from "effect/http-api"
 import { HubConfig } from "../HubConfig.ts"
 import { LiveSlate } from "../LiveSlate.ts"
-import { StageSessions } from "../StageSessions.ts"
+import { LiveStage } from "../LiveStage.ts"
 import { Source } from "../source/Source.ts"
 import { lanAddresses } from "./LanAddresses.ts"
 
@@ -46,7 +46,7 @@ function stageHandlers() {
     SportalApi,
     "stage",
     Effect.fn(function* (handlers) {
-      const sessions = yield* StageSessions
+      const sessions = yield* LiveStage
       return handlers.handleAll({
         current: () => sessions.stage,
         dispatch: ({ payload }) => sessions.dispatch(payload.command)
@@ -102,7 +102,7 @@ function liveRoute() {
     "/api/live",
     Effect.gen(function* () {
       const slate = yield* LiveSlate
-      const sessions = yield* StageSessions
+      const sessions = yield* LiveStage
       const messages: Stream.Stream<LiveMessage> = Stream.merge(
         slate.publishedChanges.pipe(
           Stream.map(({ games, recentPlays }) => ({

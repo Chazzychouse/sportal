@@ -5,16 +5,16 @@ import { Context, Effect, Layer, Option, Stream, SubscriptionRef } from "effect"
 import { LiveSlate } from "./LiveSlate.ts"
 import { Source } from "./source/Source.ts"
 
-export class StageSessions extends Context.Service<
-  StageSessions,
+export class LiveStage extends Context.Service<
+  LiveStage,
   {
     readonly stage: Effect.Effect<Stage>
     readonly changes: Stream.Stream<Stage>
     dispatch(command: StageCommand): Effect.Effect<Stage, StageRejection>
   }
->()("sportal/hub/StageSessions") {
+>()("sportal/hub/LiveStage") {
   static readonly layer = Layer.effect(
-    StageSessions,
+    LiveStage,
     Effect.gen(function* () {
       const slate = yield* LiveSlate
       const source = yield* Source
@@ -27,13 +27,12 @@ export class StageSessions extends Context.Service<
           Option.fromNullishOr(games.find((game) => game.id === id)).pipe(Option.map(availabilityOf))
       })
 
-      const dispatch = Effect.fn("StageSessions.dispatch")(function* (command: StageCommand) {
+      const dispatch = Effect.fn("LiveStage.dispatch")(function* (command: StageCommand) {
         // One atomic step: concurrent dispatches queue up, and a rejection leaves the Stage as it was.
         // Availability is read inside it, so a refresh that lands first is never overwritten with a stale read.
         return yield* SubscriptionRef.modifyEffect(current, (stage) =>
           Effect.gen(function* () {
             const availabilityOf = yield* availabilityOnSlate
-            // Assigning a game that is not on the slate gives a data tile.
             const result = stage.apply(command, (id) =>
               Option.getOrElse(availabilityOf(id), () => ChannelAvailability.NotCarried({ why: "NoStream" }))
             )
@@ -51,7 +50,7 @@ export class StageSessions extends Context.Service<
         startImmediately: true
       })
 
-      return StageSessions.of({
+      return LiveStage.of({
         stage: SubscriptionRef.get(current),
         changes: SubscriptionRef.changes(current),
         dispatch

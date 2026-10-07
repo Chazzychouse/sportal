@@ -7,7 +7,7 @@ import { broadcast, liveSnapshot, snapshot, team } from "@sportal/domain/TestGam
 import { DateTime, Deferred, Effect, Fiber, Layer, Option, Ref, Stream } from "effect"
 import { TestClock } from "effect/testing"
 import { LiveSlate, type Published } from "./LiveSlate.ts"
-import { StageSessions } from "./StageSessions.ts"
+import { LiveStage } from "./LiveStage.ts"
 import { Source } from "./source/Source.ts"
 import { recordedGuide } from "./source/youtube-tv/TestYouTubeTv.ts"
 import * as YouTubeTv from "./source/youtube-tv/YouTubeTv.ts"
@@ -38,10 +38,10 @@ const news3Live = "https://tv.youtube.com/watch/y6zFA17zDsw?vp=0gEEEgIwAQ%3D%3D"
 
 const TestSessions = sessionsOver(slate)
 
-describe("StageSessions", () => {
+describe("LiveStage", () => {
   it.effect("applies concurrent commands without losing any", () =>
     Effect.gen(function* () {
-      const sessions = yield* StageSessions
+      const sessions = yield* LiveStage
       yield* Effect.forEach(
         slate.slice(0, 4),
         (snapshot, tile) => sessions.dispatch({ _tag: "Assign", tile, game: snapshot.id }),
@@ -54,7 +54,7 @@ describe("StageSessions", () => {
 
   it.effect("rejects a command for a missing tile and leaves the stage unchanged", () =>
     Effect.gen(function* () {
-      const sessions = yield* StageSessions
+      const sessions = yield* LiveStage
       yield* sessions.dispatch({ _tag: "Assign", tile: 0, game: GameId.make("1") })
       const before = yield* sessions.stage
       const rejection = yield* sessions.dispatch({ _tag: "FocusAudio", tile: 9 }).pipe(Effect.flip)
@@ -67,7 +67,7 @@ describe("StageSessions", () => {
     Effect.gen(function* () {
       yield* TestClock.setTime(recordedAt)
       yield* (yield* Source).readGuide(recordedGuide)
-      const sessions = yield* StageSessions
+      const sessions = yield* LiveStage
       yield* sessions.dispatch({ _tag: "Assign", tile: 0, game: ohioStateAtIowa.id })
       const stage = yield* sessions.dispatch({ _tag: "Assign", tile: 1, game: GameId.make("4") })
       assert.deepStrictEqual(stage.tiles[0], {
@@ -85,7 +85,7 @@ describe("StageSessions", () => {
 
   it.live("refreshes the stage when the source reads a guide", () =>
     Effect.gen(function* () {
-      const sessions = yield* StageSessions
+      const sessions = yield* LiveStage
       const before = yield* sessions.dispatch({ _tag: "Assign", tile: 0, game: GameId.make("5") })
       assert.deepStrictEqual(before.tiles[0], noGuideTile(GameId.make("5")))
 
@@ -113,10 +113,10 @@ describe("StageSessions", () => {
           Effect.as({ games: slate, recentPlays: {} })
         )
       )
-      // Depending on StageSessions orders this after the layer has built.
+      // Depending on LiveStage orders this after the layer has built.
       const readAtOnce = Layer.effectDiscard(
         Effect.gen(function* () {
-          yield* StageSessions
+          yield* LiveStage
           yield* (yield* Source).readGuide(recordedGuide)
         })
       )
@@ -128,7 +128,7 @@ describe("StageSessions", () => {
       }).pipe(
         Effect.provide(
           readAtOnce.pipe(
-            Layer.provideMerge(StageSessions.layer),
+            Layer.provideMerge(LiveStage.layer),
             Layer.provide(Layer.succeed(LiveSlate, fakeSlate)),
             Layer.provide(YouTubeTv.layer)
           )
@@ -160,7 +160,7 @@ describe("StageSessions", () => {
         })
       ).pipe(Layer.provide(YouTubeTv.layer))
       yield* Effect.gen(function* () {
-        const sessions = yield* StageSessions
+        const sessions = yield* LiveStage
         const source = yield* Source
         const assigning = yield* sessions
           .dispatch({ _tag: "Assign", tile: 0, game: GameId.make("5") })
@@ -180,7 +180,7 @@ describe("StageSessions", () => {
         assert.isTrue(Option.isSome(stage))
       }).pipe(
         Effect.provide(
-          StageSessions.layer.pipe(
+          LiveStage.layer.pipe(
             Layer.provide(
               Layer.succeed(LiveSlate, slateOf(Effect.succeed({ games: slate, recentPlays: {} })))
             ),
@@ -196,7 +196,7 @@ describe("StageSessions", () => {
       const onSlate = yield* Ref.make(slate)
       const fakeSlate = slateOf(Effect.map(Ref.get(onSlate), (games) => ({ games, recentPlays: {} })))
       yield* Effect.gen(function* () {
-        const sessions = yield* StageSessions
+        const sessions = yield* LiveStage
         yield* sessions.dispatch({ _tag: "Assign", tile: 0, game: GameId.make("1") })
         yield* sessions.dispatch({ _tag: "Assign", tile: 1, game: GameId.make("5") })
         yield* Ref.set(
@@ -215,7 +215,7 @@ describe("StageSessions", () => {
         assert.deepStrictEqual(Option.getOrThrow(stage).tiles[0], noGuideTile(GameId.make("1")))
       }).pipe(
         Effect.provide(
-          StageSessions.layer.pipe(
+          LiveStage.layer.pipe(
             Layer.provide(Layer.succeed(LiveSlate, fakeSlate)),
             Layer.provideMerge(YouTubeTv.layer)
           )
@@ -229,7 +229,7 @@ describe("StageSessions", () => {
       yield* TestClock.setTime(recordedAt)
       const source = yield* Source
       yield* source.readGuide(recordedGuide)
-      const sessions = yield* StageSessions
+      const sessions = yield* LiveStage
       const playing = yield* sessions.dispatch({ _tag: "Assign", tile: 0, game: ohioStateAtIowa.id })
       assert.strictEqual(playing.tiles[0]?._tag, "StreamTile")
 
@@ -245,7 +245,7 @@ describe("StageSessions", () => {
 
   it.effect("assigns a game missing from the slate as a data tile", () =>
     Effect.gen(function* () {
-      const sessions = yield* StageSessions
+      const sessions = yield* LiveStage
       const stage = yield* sessions.dispatch({ _tag: "Assign", tile: 0, game: GameId.make("gone") })
       assert.deepStrictEqual(stage.tiles[0], {
         _tag: "DataTile",
@@ -269,9 +269,9 @@ function slateOf(published: Effect.Effect<Published>) {
   })
 }
 
-/** StageSessions over a LiveSlate of `games` and YouTube TV with nothing read yet. */
+/** LiveStage over a LiveSlate of `games` and YouTube TV with nothing read yet. */
 function sessionsOver(games: ReadonlyArray<GameSnapshot>) {
-  return StageSessions.layer.pipe(
+  return LiveStage.layer.pipe(
     Layer.provide(Layer.succeed(LiveSlate, slateOf(Effect.succeed({ games, recentPlays: {} })))),
     Layer.provideMerge(YouTubeTv.layer)
   )

@@ -31,7 +31,7 @@ import { Decoder } from "./provider/Decoder.ts"
 import { type Decoded, LiveFeedDemand } from "./provider/Provider.ts"
 
 /**
- * The slate, run: the domain slate taking every frame in the feed log, in order, with its timer, its telemetry, and its
+ * The live slate: the domain slate taking every frame in the feed log, in order, with its timer, its telemetry, and its
  * game events. It follows the log on its own, from the game day's start: nothing writes to it.
  */
 export class LiveSlate extends Context.Service<

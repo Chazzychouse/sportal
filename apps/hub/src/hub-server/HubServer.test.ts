@@ -13,7 +13,7 @@ import * as Database from "../Database.ts"
 import { FeedLog } from "../FeedLog.ts"
 import * as Ingest from "../Ingest.ts"
 import { LiveSlate } from "../LiveSlate.ts"
-import { StageSessions } from "../StageSessions.ts"
+import { LiveStage } from "../LiveStage.ts"
 import * as YouTubeTv from "../source/youtube-tv/YouTubeTv.ts"
 import { polled } from "../TestFeed.ts"
 import { withEnv } from "../TestHubConfig.ts"
@@ -261,7 +261,7 @@ function firstSlateOnTestClock() {
 /** The first tile 0 the Stage shows that has the given kind; the current Stage is replayed, so this may not wait. */
 function tileOnceItIs(tag: Tile["_tag"]) {
   return Effect.gen(function* () {
-    const sessions = yield* StageSessions
+    const sessions = yield* LiveStage
     return yield* sessions.changes.pipe(
       Stream.filterMap((stage) => {
         const tile = stage.tiles[0]
@@ -277,7 +277,7 @@ function tileOnceItIs(tag: Tile["_tag"]) {
 
 /** Everything behind the API, over a feed log in memory and a provider that always returns `game`. */
 function hubUnderTest() {
-  return StageSessions.layer.pipe(
+  return LiveStage.layer.pipe(
     Layer.provideMerge(YouTubeTv.layer),
     Layer.provideMerge(Ingest.layer),
     Layer.provideMerge(
