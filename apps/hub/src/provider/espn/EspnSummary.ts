@@ -3,6 +3,7 @@ import { Play, PlayId } from "@sportal/domain/Play"
 import { TeamId } from "@sportal/domain/Team"
 import { Effect, Schema, SchemaGetter } from "effect"
 import type { ArchivedPlay } from "../../corpus/Archive.ts"
+import { teamId } from "./EspnEvent.ts"
 import * as EspnPlay from "./EspnPlay.ts"
 
 /**
@@ -166,7 +167,7 @@ function callers(
   said: ReadonlyArray<Caller>
 ): (caller: Caller) => TeamId | undefined {
   const teams = competitors.map(({ id, team }) => ({
-    id: TeamId.make(`${league}:${id}`),
+    id: teamId(league, id),
     abbreviation: team.abbreviation,
     place: (team.location ?? "").toLowerCase(),
     names: [team.location, team.nickname, team.shortDisplayName, team.displayName, team.name].flatMap(

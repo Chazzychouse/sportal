@@ -65,7 +65,7 @@ export function day(games: ReadonlyArray<ArchivedGame>): Effect.Effect<{
     )
   }))
   const frames = [...pushes, ...polls]
-    .toSorted(byArrival)
+    .toSorted(pushFirst)
     .map(
       ({ at, deliveries }, i) => new Decoded({ seq: i + 1, at, deliveries, resyncs: [], observations: [] })
     )
@@ -91,8 +91,8 @@ const pregame = Duration.minutes(30)
 /** Between two polls. */
 const pollEvery = Duration.seconds(10)
 
-/** A push before a poll at one instant; otherwise as made. */
-const byArrival: Order.Order<{ readonly at: DateTime.Utc; readonly feed: "push" | "poll" }> = Order.Struct({
+/** Earlier first, and a push before a poll at one instant; otherwise as made. */
+const pushFirst: Order.Order<{ readonly at: DateTime.Utc; readonly feed: "push" | "poll" }> = Order.Struct({
   at: DateTime.Order,
   feed: Order.mapInput(Order.Number, (feed: "push" | "poll") => (feed === "push" ? 0 : 1))
 })

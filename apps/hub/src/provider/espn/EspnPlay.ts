@@ -1,7 +1,7 @@
 import type { LeagueId } from "@sportal/domain/League"
 import { Play as DomainPlay, PlayId, type PlayKind } from "@sportal/domain/Play"
-import { TeamId } from "@sportal/domain/Team"
 import { Array as Arr, Option, Record, Schema, SchemaGetter } from "effect"
+import { teamId } from "./EspnEvent.ts"
 
 /** ESPN's play entity, as a game package lists it under `entities.plays`, read as a `Play` of `league`. */
 export function Play(league: LeagueId) {
@@ -29,7 +29,7 @@ export function read(
     readonly homeWinProbability?: number | undefined
   }
 ): DomainPlay {
-  const team = (id: string | undefined) => (id === undefined ? {} : { team: TeamId.make(`${league}:${id}`) })
+  const team = (id: string | undefined) => (id === undefined ? {} : { team: teamId(league, id) })
   // ESPN reports down -1, with a meaningless distance, when no down is being played (after a score, at a stoppage).
   const spot = ({ down, distance, yardsToEndzone, team: id }: typeof Alike.Type.start) => ({
     ...(down === undefined || down < 1 ? {} : { down }),
