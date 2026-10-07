@@ -1,9 +1,9 @@
 import { fileURLToPath } from "node:url"
 import { NodeServices } from "@effect/platform-node"
 import { assert, describe, it } from "@effect/vitest"
-import { DateTime, Effect, FileSystem, Layer, Path } from "effect"
+import { Array as Arr, DateTime, Effect, FileSystem, Layer, Path } from "effect"
 import * as EspnDecode from "../provider/espn/EspnDecode.ts"
-import { reportsOf, writtenScenarios } from "../TestFeed.ts"
+import { decodedFrames, reportsOf, writtenScenarios } from "../TestFeed.ts"
 import { Scenarios } from "./Scenarios.ts"
 import { scripts } from "./written/Scripts.ts"
 
@@ -52,21 +52,54 @@ describe("Scenarios", () => {
       Effect.gen(function* () {
         const scenarios = yield* Scenarios
         for (const name of yield* scenarios.names) {
-          const reports = yield* reportsOf((yield* scenarios.load(name)).frames)
-          assert.isAbove(
-            reports.filter((report) => report._tag === "Happened" && report.event._tag === "Played").length,
-            0,
-            `${name} plays`
+          const { frames } = yield* scenarios.load(name)
+          const decoded = yield* decodedFrames(frames)
+          assert.deepStrictEqual(
+            decoded.flatMap(({ notices }) =>
+              notices
+                .filter(({ _tag }) => _tag !== "Received" && _tag !== "Pushed" && _tag !== "PlayTypeUnknown")
+                .map(({ _tag }) => _tag)
+            ),
+            [],
+            `${name} decodes`
+          )
+          const reports = yield* reportsOf(frames)
+          const played = reports.flatMap((report) =>
+            report._tag === "Happened" && report.event._tag === "Played"
+              ? [{ game: report.snapshot.id, play: report.event.play.id }]
+              : []
+          )
+          assert.isAbove(played.length, 0, `${name} plays`)
+          const delivered = decoded.flatMap(({ deliveries }) =>
+            deliveries.flatMap((delivery) =>
+              delivery._tag === "Plays"
+                ? delivery.plays.map(({ id }) => ({ game: delivery.game, play: id }))
+                : []
+            )
           )
           // ESPN edits a game's plays after it ends; those reach a fold that has let the game go, and are dropped.
-          const dropped = reports.filter(
-            (report, index) =>
-              report._tag === "Dropped" &&
-              !reports
-                .slice(0, index)
-                .some((before) => before._tag === "Stopped" && before.liveGame.snapshot.id === report.game)
+          const [stopped, dropped] = Arr.mapAccum(reports, new Set<string>(), (stopped, report) =>
+            report._tag === "Stopped"
+              ? [new Set([...stopped, report.liveGame.snapshot.id]), []]
+              : [stopped, report._tag === "Dropped" && !stopped.has(report.game) ? [report] : []]
           )
-          assert.deepStrictEqual(dropped, [], `${name} drops none`)
+          for (const game of new Set(delivered.map(({ game }) => game))) {
+            const playedIds = played.filter((one) => one.game === game).map(({ play }) => play)
+            const deliveredIds = new Set(delivered.filter((one) => one.game === game).map(({ play }) => play))
+            assert.strictEqual(
+              new Set(playedIds).size,
+              playedIds.length,
+              `${name}: ${game} plays each play once`
+            )
+            if (!stopped.has(game)) {
+              assert.strictEqual(
+                playedIds.length,
+                deliveredIds.size,
+                `${name}: ${game} plays every delivered play`
+              )
+            }
+          }
+          assert.deepStrictEqual(dropped.flat(), [], `${name} drops none before the game is let go`)
         }
       }).pipe(Effect.provide([committed, EspnDecode.layer])),
     { timeout: 120_000 }
