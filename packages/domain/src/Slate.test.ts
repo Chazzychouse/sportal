@@ -241,7 +241,7 @@ describe("Slate#take", () => {
   )
 })
 
-describe("Slate#take, a covered game and a listing ahead of it", () => {
+describe("Slate#take and #tick, a covered game and a listing ahead of it", () => {
   const scored = liveSnapshot({ id: one, clock: "4:30", home: { ...live(one, "4:30").home, score: 7 } })
   const at = DateTime.add(t0, { seconds: 5 })
   const until = DateTime.addDuration(at, LiveGame.fallbackAfter)
@@ -424,11 +424,19 @@ describe("Slate#tick", () => {
 })
 
 describe("Slate#take and #tick, seq", () => {
-  it.effect("should set seq to the frame's on a take", () =>
+  it.effect("should replace seq with the frame's on a take", () =>
     Effect.gen(function* () {
-      const { next } = yield* Slate.empty.take({ deliveries: [polled(live(one, "10:00"))], at: t0, seq: 7 })
+      const first = yield* Slate.empty.take({ deliveries: [polled(live(one, "10:00"))], at: t0, seq: 7 })
+      const kept = yield* first.next.tick(DateTime.add(t0, { minutes: 31 }))
 
-      assert.deepStrictEqual(next.seq, Option.some(7))
+      const { next } = yield* kept.next.take({
+        deliveries: [],
+        at: DateTime.add(t0, { minutes: 32 }),
+        seq: 8
+      })
+
+      assert.deepStrictEqual(first.next.seq, Option.some(7))
+      assert.deepStrictEqual(next.seq, Option.some(8))
     })
   )
 
@@ -449,21 +457,6 @@ describe("Slate#take and #tick, seq", () => {
       const { next } = yield* first.next.tick(DateTime.add(t0, { minutes: 31 }))
 
       assert.deepStrictEqual(next.seq, Option.some(7))
-    })
-  )
-
-  it.effect("should replace it on a take", () =>
-    Effect.gen(function* () {
-      const first = yield* Slate.empty.take({ deliveries: [polled(live(one, "10:00"))], at: t0, seq: 7 })
-      const kept = yield* first.next.tick(DateTime.add(t0, { minutes: 31 }))
-
-      const { next } = yield* kept.next.take({
-        deliveries: [],
-        at: DateTime.add(t0, { minutes: 32 }),
-        seq: 8
-      })
-
-      assert.deepStrictEqual(next.seq, Option.some(8))
     })
   )
 })

@@ -139,10 +139,11 @@ football's only for now.
 `recentPlays`, `everyGame`, `publishesSameAs`, `Taken`. Inside:
 
 - **A private `Advancing` data class replaces the `Advanced` and `Listed` types.** It holds `live`, `finished`,
-  `listed`, `events` and `observations`. Its methods have names: `observe`, `say`, `hold`, `release`, `guard`. The
+  `listed`, `events` and `observations`. Its methods have names: `observe`, `say`, `relist`, `settle`, `guard` (and private `hold`, `release`). The
   helpers call those methods instead of spreading `{ ...acc, observations: [...acc.observations, …] }`.
-- **What one step did to one game is a private tagged union:** `Started | Changed | Stopped | Unheld`. One function
-  decides it from the current live game, the step's new one, and whether that is current. One `$match` applies it.
+- **What one step did to one game is a private tagged union:** `Started | Changed | Kept | Stopped | Unheld`. One
+  function decides it from the current live game, the step's new one, and whether that is current. One `$match` applies
+  it, its arms reading nothing of the step but its events.
   This replaces `settled`'s Option matches nested three deep.
 - **`SlateObservation` moves to its own `SlateObservation.ts`.** It has its own `CONTEXT.md` row, and the Hub's
   telemetry is its reader.

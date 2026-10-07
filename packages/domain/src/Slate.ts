@@ -175,16 +175,15 @@ class Advancing extends Data.Class<{
   ): Advancing {
     const gameStep = gameStepOf(current, step, at)
     const said = this.say(id, at, step.events)
-    // A step that made no new live game changes nothing to observe; only its events are said.
-    const made = Option.isSome(step.liveGame)
 
     return GameStep.$match(gameStep, {
       Started: ({ after }) => said.hold(id, after).observe(SlateObservation.Started({ liveGame: after, at })),
       Changed: ({ before, after }) =>
-        made ? said.hold(id, after).observe(SlateObservation.Changed({ before, after, at })) : said,
-      Stopped: ({ before, after }) => {
-        const changed = made ? said.observe(SlateObservation.Changed({ before, after, at })) : said
-        return changed.release(id, after).observe(SlateObservation.Stopped({ liveGame: after, at }))
+        said.hold(id, after).observe(SlateObservation.Changed({ before, after, at })),
+      Kept: () => said,
+      Stopped: ({ before, after, changed }) => {
+        const observed = changed ? said.observe(SlateObservation.Changed({ before, after, at })) : said
+        return observed.release(id, after).observe(SlateObservation.Stopped({ liveGame: after, at }))
       },
       Unheld: (): Advancing => this
     })
@@ -219,12 +218,17 @@ class Advancing extends Data.Class<{
 
 /** What one step did to one game's place in the slate. */
 type GameStep = Data.TaggedEnum<{
-  /** Not held before, current now. */
+  /** Not held before, current now: held and observed as started. */
   Started: { readonly after: LiveGame }
-  /** Held, still current. */
+  /** Held, still current, and the step made a new live game: held and observed as changed. */
   Changed: { readonly before: LiveGame; readonly after: LiveGame }
-  /** Held, no longer current. */
-  Stopped: { readonly before: LiveGame; readonly after: LiveGame }
+  /** Held, still current, and the step made nothing new: only its events are said. */
+  Kept: { readonly before: LiveGame }
+  /**
+   * Held, no longer current: let go and observed as stopped, after a change when the step made a new live game
+   * (`after` is then the new one, else the held one).
+   */
+  Stopped: { readonly before: LiveGame; readonly after: LiveGame; readonly changed: boolean }
   /** Not held, not current: nothing happens, nothing is said. */
   Unheld: object
 }>
@@ -311,16 +315,19 @@ function gameStepOf(
   step: { readonly liveGame: Option.Option<LiveGame> },
   at: DateTime.Utc
 ): GameStep {
-  const after = Option.orElse(step.liveGame, () => current)
+  return Option.match(current, {
+    onNone: () =>
+      Option.match(step.liveGame, {
+        onNone: () => GameStep.Unheld(),
+        onSome: (after) => (after.isCurrent(at) ? GameStep.Started({ after }) : GameStep.Unheld())
+      }),
+    onSome: (before) => {
+      const after = Option.getOrElse(step.liveGame, () => before)
+      const changed = Option.isSome(step.liveGame)
 
-  return Option.match(after, {
-    onNone: () => GameStep.Unheld(),
-    onSome: (after) =>
-      Option.match(current, {
-        onNone: () => (after.isCurrent(at) ? GameStep.Started({ after }) : GameStep.Unheld()),
-        onSome: (before) =>
-          after.isCurrent(at) ? GameStep.Changed({ before, after }) : GameStep.Stopped({ before, after })
-      })
+      if (!after.isCurrent(at)) return GameStep.Stopped({ before, after, changed })
+      return changed ? GameStep.Changed({ before, after }) : GameStep.Kept({ before })
+    }
   })
 }
 

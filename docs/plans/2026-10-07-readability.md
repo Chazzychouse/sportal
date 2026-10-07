@@ -319,17 +319,19 @@ class Advancing extends Data.Class<{
 
 /** What one step did to one game's place in the slate. */
 type GameStep = Data.TaggedEnum<{
-  Started: { readonly after: LiveGame }          // not held before, current now
-  Changed: { readonly before: LiveGame; readonly after: LiveGame }   // held, still current
-  Stopped: { readonly before: Option.Option<LiveGame>; readonly after: LiveGame }  // held, no longer current
-  Unheld: {}                                     // not held, not current: nothing happens, nothing is said
+  Started: { readonly after: LiveGame }                               // not held before, current now
+  Changed: { readonly before: LiveGame; readonly after: LiveGame }    // held, still current, the step made a new one
+  Kept: { readonly before: LiveGame }                                 // held, still current, the step made nothing new
+  Stopped: { readonly before: LiveGame; readonly after: LiveGame; readonly changed: boolean }  // held, no longer current
+  Unheld: object                                                      // not held, not current: nothing happens, nothing is said
 }>
 ```
 
 - `settle` decides the `GameStep` in one private function (`gameStepOf(current, step, at)`) and applies it with one
-  `$match`: `Started` holds and observes `Started`; `Changed` holds the new live game if the step made one and observes
-  `Changed`; `Stopped` releases, remembers an `Over` game as finished, and observes `Stopped`; `Unheld` returns the
-  slate unchanged. Events are said for every case but `Unheld`, exactly as `settled` does today.
+  `$match` whose arms read nothing of the step but its events: `Started` holds and observes `Started`; `Changed` holds
+  the new live game and observes `Changed`; `Kept` only says the events; `Stopped` observes `Changed` first when
+  `changed`, releases, remembers an `Over` game as finished, and observes `Stopped`; `Unheld` returns the slate
+  unchanged. Events are said for every case but `Unheld`, exactly as `settled` does today.
 - `advance`, `tickTo`, `applied` and `snapshotTaken` keep their logic, threading an `Advancing` instead of
   `Advanced`/`Listed`. `Taken` is built from the final `Advancing`.
 - File order: `Slate`, `Taken`, `Advancing`, `GameStep`, then helpers in first-use order.
