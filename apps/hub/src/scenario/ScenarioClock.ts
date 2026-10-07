@@ -6,7 +6,7 @@ import { HubConfig } from "../HubConfig.ts"
  * sleeps shortened to match. The scenario's ingest and the Slate run on it, so a scenario plays faster
  * without either waiting differently.
  */
-export const layer = Layer.effect(
+export const layer: Layer.Layer<never, never, HubConfig> = Layer.effect(
   Clock.Clock,
   Effect.gen(function* () {
     const { scenarioSpeed: speed } = yield* HubConfig

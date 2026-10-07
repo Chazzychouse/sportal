@@ -8,7 +8,7 @@ import { Source } from "../source/Source.ts"
  * no sign-in and no stream budget. The address is a path, since only the web UI knows the origin it is served
  * from.
  */
-export const layer = Layer.succeed(
+export const layer: Layer.Layer<Source> = Layer.succeed(
   Source,
   Source.of({
     availability: Effect.succeed((game: GameSnapshot) =>

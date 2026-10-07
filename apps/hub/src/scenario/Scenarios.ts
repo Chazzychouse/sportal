@@ -12,7 +12,7 @@ export class Scenarios extends Context.Service<
     /** Scenario `name`. Only a listed name is read, so no name reaches a path. */
     load(name: string): Effect.Effect<Scenario, ScenarioUnknown | ScenarioUnreadable>
   }
->()("sportal/hub/Scenarios") {
+>()("sportal/hub/scenario/Scenarios") {
   /** The committed recordings, in `fixtures/scenarios/` at the repository's root. */
   static readonly layer: Layer.Layer<Scenarios, never, FileSystem.FileSystem | Path.Path> =
     Scenarios.layerFrom(fileURLToPath(new URL("../../../../fixtures/scenarios/", import.meta.url)))
@@ -35,27 +35,25 @@ export class Scenarios extends Context.Service<
             .sort()
         }).pipe(Effect.mapError(unreadable(folder)))
 
-        return Scenarios.of({
-          names,
-          load: (name) =>
-            Effect.gen(function* () {
-              const known = yield* names
-              if (!known.includes(name)) {
-                return yield* new ScenarioUnknown({ name, known })
-              }
+        const load = Effect.fn("Scenarios.load")(function* (name: string) {
+          const known = yield* names
+          if (!known.includes(name)) {
+            return yield* new ScenarioUnknown({ name, known })
+          }
 
-              const file = join(folder, `${name}${suffix}`)
-              const text = yield* fs.readFile(file).pipe(
-                Effect.flatMap((bytes) => Gzip.decompress(bytes, "gzip")),
-                Effect.mapError(unreadable(file))
-              )
-              const frames = yield* Effect.forEach(
-                text.split("\n").filter((line) => line.length > 0),
-                (line) => decodeFrame(line).pipe(Effect.mapError(unreadable(file)))
-              )
-              return new Scenario({ name, frames })
-            })
+          const file = join(folder, `${name}${suffix}`)
+          const text = yield* fs.readFile(file).pipe(
+            Effect.flatMap((bytes) => Gzip.decompress(bytes, "gzip")),
+            Effect.mapError(unreadable(file))
+          )
+          const frames = yield* Effect.forEach(
+            text.split("\n").filter((line) => line.length > 0),
+            (line) => decodeFrame(line).pipe(Effect.mapError(unreadable(file)))
+          )
+          return new Scenario({ name, frames })
         })
+
+        return Scenarios.of({ names, load })
       })
     )
   }
