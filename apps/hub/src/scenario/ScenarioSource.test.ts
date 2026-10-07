@@ -5,12 +5,14 @@ import { Source } from "../source/Source.ts"
 import * as ScenarioSource from "./ScenarioSource.ts"
 
 describe("ScenarioSource", () => {
-  it.effect("carries every game on its synthetic stream page, named for its first network", () =>
+  it.effect("should carry every game on its synthetic stream page, named for its first network", () =>
     Effect.gen(function* () {
-      const availability = yield* (yield* Source).availability
-      const carried = availability(
-        snapshot({ broadcasts: [broadcast("CBS"), broadcast("Paramount+", "streaming")] })
-      )
+      const source = yield* Source
+      const availability = yield* source.availability
+      const game = snapshot({ broadcasts: [broadcast("CBS"), broadcast("Paramount+", "streaming")] })
+
+      const carried = availability(game)
+
       assert.strictEqual(carried._tag, "Carried")
       if (carried._tag !== "Carried") return
       assert.deepStrictEqual(carried.channel, {
@@ -21,18 +23,25 @@ describe("ScenarioSource", () => {
     }).pipe(Effect.provide(ScenarioSource.layer))
   )
 
-  it.effect("calls a game with no network's channel Scenario", () =>
+  it.effect("should call a game with no network's channel Scenario", () =>
     Effect.gen(function* () {
-      const carried = (yield* (yield* Source).availability)(snapshot())
+      const source = yield* Source
+      const availability = yield* source.availability
+
+      const carried = availability(snapshot())
+
       assert.strictEqual(carried._tag === "Carried" ? carried.channel.name : undefined, "Scenario")
     }).pipe(Effect.provide(ScenarioSource.layer))
   )
 
-  it.effect("reads no guide and never changes", () =>
+  it.effect("should read no guide, never changing", () =>
     Effect.gen(function* () {
       const source = yield* Source
+
       yield* source.readGuide("{}")
-      assert.strictEqual(yield* Stream.runCount(source.changes), 0)
+
+      const changes = yield* Stream.runCount(source.changes)
+      assert.strictEqual(changes, 0)
     }).pipe(Effect.provide(ScenarioSource.layer))
   )
 })
