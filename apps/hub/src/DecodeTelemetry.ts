@@ -1,5 +1,5 @@
 import { Effect, Metric, Option, Record } from "effect"
-import { DecodeObservation } from "./provider/Provider.ts"
+import { DecodeObservation } from "./provider/Decoder.ts"
 
 /** What decode observed in frame `seq`, as logs and metrics. The slate tells decode observations only from frames after the replay. */
 export function observed(observation: DecodeObservation, seq: number): Effect.Effect<void> {

@@ -3,8 +3,8 @@ import type { GameSnapshot } from "@sportal/domain/Game"
 import type { LeagueId } from "@sportal/domain/League"
 import { DateTime, Effect, Layer, Schedule, Schema, Stream } from "effect"
 import { FeedFrame } from "./Frame.ts"
-import { Decoder } from "./provider/Decoder.ts"
-import { Decoded, type Polling, Provider, type ProviderError } from "./provider/Provider.ts"
+import { Decoded, Decoder } from "./provider/Decoder.ts"
+import { type Polling, Provider, type ProviderUnavailable } from "./provider/Provider.ts"
 
 /**
  * The snapshot feed, which tests drive, as the provider: its frames are our own deliveries, read back by `decoder`. A
@@ -13,10 +13,10 @@ import { Decoded, type Polling, Provider, type ProviderError } from "./provider/
  * and is polled on `polling`.
  */
 export function provider(options: {
-  readonly games: (league: LeagueId) => Effect.Effect<ReadonlyArray<GameSnapshot>, ProviderError>
-  readonly push?: Stream.Stream<FeedFrame, ProviderError>
+  readonly games: (league: LeagueId) => Effect.Effect<ReadonlyArray<GameSnapshot>, ProviderUnavailable>
+  readonly push?: Stream.Stream<FeedFrame, ProviderUnavailable>
   readonly polling: Polling
-  readonly reconnect?: Schedule.Schedule<unknown, ProviderError>
+  readonly reconnect?: Schedule.Schedule<unknown, ProviderUnavailable>
 }): Layer.Layer<Provider> {
   return Layer.succeed(
     Provider,
@@ -80,11 +80,11 @@ export const SnapshotPayload = Schema.fromJsonString(
  * unless `options.polling` says otherwise. Tests read its frames with `decoder`.
  */
 export function polled(
-  games: (league: LeagueId) => Effect.Effect<ReadonlyArray<GameSnapshot>, ProviderError>,
+  games: (league: LeagueId) => Effect.Effect<ReadonlyArray<GameSnapshot>, ProviderUnavailable>,
   options: {
     readonly polling?: Polling
-    readonly push?: Stream.Stream<FeedFrame, ProviderError>
-    readonly reconnect?: Schedule.Schedule<unknown, ProviderError>
+    readonly push?: Stream.Stream<FeedFrame, ProviderUnavailable>
+    readonly reconnect?: Schedule.Schedule<unknown, ProviderUnavailable>
   } = {}
 ): Layer.Layer<Provider> {
   return provider({

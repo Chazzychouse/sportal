@@ -2,7 +2,7 @@ import type { GameId } from "@sportal/domain/Game"
 import type { LeagueId } from "@sportal/domain/League"
 import { Array as Arr, Data, Effect, JsonPatch, JsonPointer, Option, Record, Schema } from "effect"
 import type { Frame } from "../../Frame.ts"
-import { DecodeObservation } from "../Provider.ts"
+import { DecodeObservation } from "../Decoder.ts"
 import * as FastCastMessage from "./FastCastMessage.ts"
 
 /**

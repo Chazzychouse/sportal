@@ -27,8 +27,9 @@ import {
 import { FeedLog } from "./feed-log/FeedLog.ts"
 import { isStopping } from "./HubStopping.ts"
 import { countByState, gaugeHeld, takeDuration, timerDefect, told } from "./LiveSlateTelemetry.ts"
+import type { Decoded } from "./provider/Decoder.ts"
 import { Decoder } from "./provider/Decoder.ts"
-import { type Decoded, LiveFeedDemand } from "./provider/Provider.ts"
+import { LiveFeedDemand } from "./provider/Provider.ts"
 
 /**
  * The live slate: the domain slate taking every frame in the feed log, in order, with its timer, its telemetry, and its

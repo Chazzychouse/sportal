@@ -1,7 +1,7 @@
 import type { LeagueId } from "@sportal/domain/League"
 import { Play } from "@sportal/domain/Play"
 import { Effect, Schema, SchemaGetter } from "effect"
-import type { ArchivedPlay } from "../../corpus/Archive.ts"
+import type { ArchivedPlay } from "../Archive.ts"
 import * as EspnPlay from "./EspnPlay.ts"
 
 /**

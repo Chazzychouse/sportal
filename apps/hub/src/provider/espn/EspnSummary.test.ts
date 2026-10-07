@@ -4,9 +4,9 @@ import { GameId } from "@sportal/domain/Game"
 import { Play, PlayId } from "@sportal/domain/Play"
 import { TeamId } from "@sportal/domain/Team"
 import { DateTime, Effect, Equal, Layer, Logger, Order, Schema } from "effect"
-import type { ArchivedPlay } from "../../corpus/Archive.ts"
 import * as Gzip from "../../Gzip.ts"
-import type { Decoded } from "../Provider.ts"
+import type { ArchivedPlay } from "../Archive.ts"
+import type { Decoded } from "../Decoder.ts"
 import { FramesDecoded } from "../TestDecoder.ts"
 import * as EspnDecode from "./EspnDecode.ts"
 import * as EspnPlay from "./EspnPlay.ts"
@@ -31,7 +31,7 @@ const fbs = (team: string) => TeamId.make(`fbs:${team}`)
 const decodeEntity = Schema.decodeUnknownEffect(EspnPlay.Play("nfl"))
 
 // NE at BUF's recorded frames, decoded once by ESPN's decode for the tests that read them.
-const neAtBufDecoded = FramesDecoded.layer(recordedNeAtBuf).pipe(Layer.provide(EspnDecode.layer))
+const neAtBufDecoded = FramesDecoded.layerOf(recordedNeAtBuf).pipe(Layer.provide(EspnDecode.layer))
 
 describe("EspnSummary.plays", () => {
   it.effect("should read every play a drive lists", () =>

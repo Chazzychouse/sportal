@@ -24,7 +24,7 @@ import { HttpClient, HttpClientResponse } from "effect/http"
 import * as Socket from "effect/socket/Socket"
 import type { FeedFrame } from "../../Frame.ts"
 import { HubConfig } from "../../HubConfig.ts"
-import { type LiveFeed, LiveFeedDemand, ProviderError } from "../Provider.ts"
+import { type LiveFeed, LiveFeedDemand, ProviderUnavailable } from "../Provider.ts"
 import * as FastCastMessage from "./FastCastMessage.ts"
 
 /**
@@ -62,7 +62,7 @@ export class FastCast extends Context.Service<
             ).pipe(Effect.flatMap(([wanted, resync]) => connect(leagues, wanted, resync, checkpointRetry)))
           ).pipe(
             Stream.concat(
-              Stream.fail(new ProviderError({ reason: "Closed", cause: "FastCast ended the stream" }))
+              Stream.fail(new ProviderUnavailable({ reason: "Closed", cause: "FastCast ended the stream" }))
             ),
             Stream.timeoutOrElse({ duration: silence, orElse: () => Stream.fail(silent()) }),
             provide
@@ -116,7 +116,7 @@ function connect(
     const [first, rest] = yield* Channel.fromQueueArray(outgoing).pipe(
       Channel.pipeTo(Socket.toChannelString(socket)),
       Stream.fromChannel,
-      Stream.mapError((cause) => new ProviderError({ reason: "Closed", cause })),
+      Stream.mapError((cause) => new ProviderUnavailable({ reason: "Closed", cause })),
       // One text per chunk, so peeling the first leaves the rest of its batch in the stream.
       Stream.rechunk(1),
       Stream.mapEffect((text) => Effect.map(DateTime.now, (receivedAt) => ({ text, receivedAt }))),
@@ -125,15 +125,19 @@ function connect(
     )
     const opened = yield* Effect.fromOption(
       first,
-      () => new ProviderError({ reason: "Closed", cause: "FastCast closed before connecting" })
+      () => new ProviderUnavailable({ reason: "Closed", cause: "FastCast closed before connecting" })
     )
     const sid = yield* Option.match(decodeEnvelope(opened.text), {
       onNone: () =>
-        Effect.fail(new ProviderError({ reason: "Refused", cause: "FastCast opened with an unknown op" })),
+        Effect.fail(
+          new ProviderUnavailable({ reason: "Refused", cause: "FastCast opened with an unknown op" })
+        ),
       onSome: ({ message }) =>
         message.op === "C"
           ? Effect.succeed(message.sid)
-          : Effect.fail(new ProviderError({ reason: "Refused", cause: `FastCast opened with ${message.op}` }))
+          : Effect.fail(
+              new ProviderUnavailable({ reason: "Refused", cause: `FastCast opened with ${message.op}` })
+            )
     })
     const subscribe = (tc: string) => Queue.offer(outgoing, JSON.stringify({ op: "S", sid, tc }))
     // Each checkpoint's outcome, by topic: its topic on success, or why it failed.
@@ -311,14 +315,14 @@ const decodeEnvelope = Schema.decodeUnknownOption(FastCastMessage.Envelope)
 // never sends one); live, a subscribed socket went at most 20 s between frames.
 const silence = "45 seconds"
 
-function silent(): ProviderError {
-  return new ProviderError({ reason: "Silent", cause: `No FastCast message for ${silence}` })
+function silent(): ProviderUnavailable {
+  return new ProviderUnavailable({ reason: "Silent", cause: `No FastCast message for ${silence}` })
 }
 
 const websocketHost = HttpClient.get("https://fastcast.semfs.engsvc.go.com/public/websockethost").pipe(
   Effect.flatMap(HttpClientResponse.filterStatusOk),
   Effect.flatMap(HttpClientResponse.schemaBodyJson(FastCastMessage.Host)),
-  Effect.mapError((cause) => new ProviderError({ reason: "Refused", cause }))
+  Effect.mapError((cause) => new ProviderUnavailable({ reason: "Refused", cause }))
 )
 
 const connected = Metric.gauge("sportal_live_feed_connected", {

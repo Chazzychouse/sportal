@@ -6,7 +6,7 @@ import { Play, PlayId } from "@sportal/domain/Play"
 import { type Data, DateTime, Effect, Equal, Layer, Metric, Option, Record, Schema } from "effect"
 import type { FeedFrame } from "../../Frame.ts"
 import { recordingLogs, withMetrics } from "../../TestTelemetry.ts"
-import type { DecodeObservation } from "../Provider.ts"
+import type { DecodeObservation } from "../Decoder.ts"
 import { decodedFrames, FramesDecoded } from "../TestDecoder.ts"
 import * as EspnDecode from "./EspnDecode.ts"
 import { EspnEvent } from "./EspnEvent.ts"
@@ -49,7 +49,7 @@ const ariAtNyg = "s:20~l:28~e:401872966~c:401872966"
 const ariAtNygPlays = "gp-football-nfl-401872966"
 
 // NE at BUF's recorded frames, decoded once by ESPN's decode for the tests that read them.
-const neAtBufDecoded = FramesDecoded.layer(recordedNeAtBuf).pipe(Layer.provide(EspnDecode.layer))
+const neAtBufDecoded = FramesDecoded.layerOf(recordedNeAtBuf).pipe(Layer.provide(EspnDecode.layer))
 
 layer(EspnDecode.layer)("EspnDecode", (it) => {
   // Each recorded feed as it decoded when both feeds' events were read by one transform: the poll's listings, the

@@ -4,15 +4,13 @@ import { LeagueId } from "@sportal/domain/League"
 import { Play } from "@sportal/domain/Play"
 import { Array as Arr, Effect, Layer, Option, Record, Result, Schema, Stream } from "effect"
 import type { Frame } from "../../Frame.ts"
-import { Decoder } from "../Decoder.ts"
-import { Decoded, DecodeObservation } from "../Provider.ts"
+import { Decoded, DecodeObservation, Decoder } from "../Decoder.ts"
 import { EspnEvent, Scoreboard } from "./EspnEvent.ts"
 import * as EspnPlay from "./EspnPlay.ts"
 import * as FastCastDocument from "./FastCastDocument.ts"
 
 /**
- * ESPN's decode as the `Decoder`: what each ESPN frame said, one `Decoded` per frame, in order. A poll response is its
- * league's `Listing`. A scoreboard topic's change is a pushed `Snapshot` of each game it touched, advanced to the game
+ * ESPN's decode as the `Decoder`. A poll response is its league's `Listing`. A scoreboard topic's change is a pushed `Snapshot` of each game it touched, advanced to the game
  * its league last listed (FastCast has no short names); a game no listing has is noted `Unlisted` and not delivered. A
  * game topic's change is a `Plays` of the game's whole list, in `Play.order`. A topic whose document was sent back to
  * waiting for a checkpoint is a resync of it. A frame that does not decode is noted `FrameUndecoded` and says no

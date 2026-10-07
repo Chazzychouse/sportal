@@ -34,11 +34,10 @@ import { FeedFrame } from "./Frame.ts"
 import { FeedLog } from "./feed-log/FeedLog.ts"
 import { Following, LiveSlate } from "./LiveSlate.ts"
 import { told } from "./LiveSlateTelemetry.ts"
-import { Decoder } from "./provider/Decoder.ts"
+import { Decoded, Decoder } from "./provider/Decoder.ts"
 import * as EspnDecode from "./provider/espn/EspnDecode.ts"
 import { fixtures, recordedNeAtBuf, recordedPlays } from "./provider/espn/TestEspn.ts"
-import { Decoded, LiveFeedDemand } from "./provider/Provider.ts"
-import { dyingAt } from "./provider/TestDecoder.ts"
+import { LiveFeedDemand } from "./provider/Provider.ts"
 import { withEnv } from "./TestHubConfig.ts"
 import {
   appended,
@@ -246,7 +245,7 @@ describe("LiveSlate#through", () => {
       const current = yield* appended(frame)
 
       assert.deepStrictEqual(current.seq, Option.some(1))
-    }).pipe(Effect.provide(slateFollowing([], { decoder: dyingAt("die") })))
+    }).pipe(Effect.provide(slateFollowing([], { decoder: dyingDecoder })))
   )
 
   it.effect(
@@ -269,7 +268,7 @@ describe("LiveSlate#through", () => {
           "frames are no longer taken into the slate until the Hub restarts"
         )
         assert.include(stopped[0]?.cause, "decode died")
-      }).pipe(Effect.provide(slateFollowing([], { decoder: dyingAt("die") }).pipe(Layer.provideMerge(layer))))
+      }).pipe(Effect.provide(slateFollowing([], { decoder: dyingDecoder }).pipe(Layer.provideMerge(layer))))
     }
   )
 })
@@ -541,7 +540,7 @@ describe("LiveSlate over time", () => {
       assert.strictEqual(gameState, 3)
       assert.strictEqual(staleGames, 1)
     }).pipe(
-      Effect.provide(slateFollowing([], { decoder: dyingAt("die") }).pipe(Layer.provideMerge(layer))),
+      Effect.provide(slateFollowing([], { decoder: dyingDecoder }).pipe(Layer.provideMerge(layer))),
       withMetrics
     )
   })
@@ -1368,7 +1367,7 @@ describe("LiveSlate following the feed log", () => {
       const built = yield* Layer.build(
         slateFollowingFramesFrom(
           Effect.map(dyingFrame, (frame) => [frame]),
-          { decoder: dyingAt("die") }
+          { decoder: dyingDecoder }
         )
       ).pipe(Effect.scoped, Effect.exit)
 
@@ -1659,7 +1658,10 @@ const undecodable = Effect.map(
   (frame) => new FeedFrame({ ...frame, kind: "response", body: "not json" })
 )
 
-/** A snapshot feed frame, received now, whose decode `dyingAt("die")` dies on. */
+/** The snapshot feed's decode, which dies at a frame whose body is `"die"`. */
+const dyingDecoder = Decoder.layerTestDying("die").pipe(Layer.provide(TestSnapshotFeed.decoder))
+
+/** A snapshot feed frame, received now, whose decode `dyingDecoder` dies on. */
 const dyingFrame = Effect.map(
   pushed({ _tag: "Resync" }, "x"),
   (frame) => new FeedFrame({ ...frame, body: "die" })

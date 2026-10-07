@@ -8,7 +8,7 @@ import { Cause, Context, DateTime, Duration, Effect, Layer, Queue, Ref, Schedule
 import { HttpClient, HttpClientError, HttpClientResponse } from "effect/http"
 import { TestClock } from "effect/testing"
 import { withEnv } from "../../TestHubConfig.ts"
-import { Provider, ProviderError } from "../Provider.ts"
+import { Provider, ProviderUnavailable } from "../Provider.ts"
 import { listedBy } from "../TestDecoder.ts"
 import * as EspnDecode from "./EspnDecode.ts"
 import * as EspnProvider from "./EspnProvider.ts"
@@ -313,7 +313,7 @@ describe("EspnProvider reconnect", () => {
   )
 })
 
-const closed = new ProviderError({ reason: "Closed", cause: "socket closed" })
+const closed = new ProviderUnavailable({ reason: "Closed", cause: "socket closed" })
 
 /** `body` without any team's colors. */
 function withoutColors(body: string) {
@@ -381,7 +381,7 @@ function waitAfter(slate: ReadonlyArray<GameSnapshot>, failed: ReadonlyArray<Lea
 /** What `closingPush` fails its push with, and how many times its push was subscribed. */
 class PushCloses extends Context.Service<
   PushCloses,
-  { readonly closes: Queue.Queue<ProviderError>; readonly subscriptions: Ref.Ref<number> }
+  { readonly closes: Queue.Queue<ProviderUnavailable>; readonly subscriptions: Ref.Ref<number> }
 >()("test/PushCloses") {}
 
 /** ESPN's provider over a FastCast whose push fails with each close offered, counting each subscription. */
@@ -389,7 +389,7 @@ function closingPush() {
   const state = Layer.effect(
     PushCloses,
     Effect.gen(function* () {
-      const closes = yield* Queue.unbounded<ProviderError>()
+      const closes = yield* Queue.unbounded<ProviderUnavailable>()
       const subscriptions = yield* Ref.make(0)
 
       return { closes, subscriptions }

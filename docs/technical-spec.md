@@ -236,8 +236,9 @@ sportal/
     │       │   ├── HubServer.ts    Serves the API, the live stream, and the web UI's files
     │       │   └── LanAddresses.ts The addresses a phone on the home network can reach
     │       ├── provider/
-    │       │   ├── Provider.ts     The port: poll, push, polling, reconnect; LiveFeed, LiveFeedDemand, Polling, Decoded, DecodeObservation, ProviderError
-    │       │   ├── Decoder.ts      A provider's decode, and its only home; a layer of its own, paired with its provider by HubMode
+    │       │   ├── Provider.ts     The port: poll, push, polling, reconnect; LiveFeed, LiveFeedDemand, Polling, ProviderUnavailable
+    │       │   ├── Decoder.ts      A provider's decode, and its only home; Decoded, DecodeObservation; a layer of its own, paired with its provider by HubMode
+    │       │   ├── Archive.ts      A provider's archive of finished games: the port, ArchivedGame, ArchiveFetchFailed
     │       │   ├── TestDecoder.ts  What the provided `Decoder` says of a test's frames
     │       │   └── espn/
     │       │       ├── EspnProvider.ts     Implements the port: polls, pushes through the FastCast service, and its polling Schedule
@@ -333,13 +334,13 @@ Ports are Effect services; implementations are Layers; `HubMode` chooses them. S
 
 ```ts
 class Provider extends Context.Service<Provider, {
-  poll(league: LeagueId): Effect<FeedFrame, ProviderError>
+  poll(league: LeagueId): Effect<FeedFrame, ProviderUnavailable>
   readonly push: LiveFeed
   readonly polling: Polling
-  readonly reconnect: Schedule<unknown, ProviderError>   // how Ingest subscribes to the push again after it fails
+  readonly reconnect: Schedule<unknown, ProviderUnavailable>   // how Ingest subscribes to the push again after it fails
 }>()("sportal/hub/Provider") {}
 
-type LiveFeed = (demand: Stream<LiveFeedDemand>) => Stream<FeedFrame, ProviderError>
+type LiveFeed = (demand: Stream<LiveFeedDemand>) => Stream<FeedFrame, ProviderUnavailable>
 
 type LiveFeedDemand = Games { games } | Resync { channel }   // what the push follows; a channel to checkpoint again
 

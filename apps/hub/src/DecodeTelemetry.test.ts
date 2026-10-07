@@ -2,7 +2,7 @@ import { assert, describe, it } from "@effect/vitest"
 import { GameId } from "@sportal/domain/Game"
 import { Effect, Option, References } from "effect"
 import * as DecodeTelemetry from "./DecodeTelemetry.ts"
-import { DecodeObservation } from "./provider/Provider.ts"
+import { DecodeObservation } from "./provider/Decoder.ts"
 import { counted, recordingLogs, withMetrics } from "./TestTelemetry.ts"
 
 describe("DecodeTelemetry.observed", () => {

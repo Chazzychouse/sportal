@@ -30,7 +30,13 @@ import type { FeedFrame } from "./Frame.ts"
 import { FeedLog } from "./feed-log/FeedLog.ts"
 import * as Ingest from "./Ingest.ts"
 import { LiveSlate } from "./LiveSlate.ts"
-import { type LiveFeed, LiveFeedDemand, type Polling, Provider, ProviderError } from "./provider/Provider.ts"
+import {
+  type LiveFeed,
+  LiveFeedDemand,
+  type Polling,
+  Provider,
+  ProviderUnavailable
+} from "./provider/Provider.ts"
 import { withEnv } from "./TestHubConfig.ts"
 import * as TestSnapshotFeed from "./TestSnapshotFeed.ts"
 import { polled, pushed } from "./TestSnapshotFeed.ts"
@@ -372,7 +378,7 @@ describe("Ingest", () => {
     Effect.gen(function* () {
       const feed = yield* Queue.unbounded<Offered>()
       const subscriptions = yield* Ref.make(0)
-      const silent = new ProviderError({ reason: "Silent", cause: "no message for 45 s" })
+      const silent = new ProviderUnavailable({ reason: "Silent", cause: "no message for 45 s" })
 
       yield* Effect.gen(function* () {
         yield* TestClock.adjust(0)
@@ -586,7 +592,7 @@ function resyncsRecorded(feed: Queue.Queue<Offered>, resynced: Ref.Ref<ReadonlyA
   return (demand) =>
     Stream.fromQueue(feed).pipe(
       Stream.filterMap((offered) =>
-        Schema.is(ProviderError)(offered) ? Result.failVoid : Result.succeed(offered)
+        Schema.is(ProviderUnavailable)(offered) ? Result.failVoid : Result.succeed(offered)
       ),
       Stream.merge(
         demand.pipe(
@@ -673,7 +679,7 @@ function scripted(
             Effect.flatMap((call) => {
               const response = responses[Math.min(call, responses.length - 1)]
               return response === "fail" || response === undefined
-                ? Effect.fail(new ProviderError({ reason: "Unreachable", league, cause: "down" }))
+                ? Effect.fail(new ProviderUnavailable({ reason: "Unreachable", league, cause: "down" }))
                 : Effect.succeed(response)
             }),
             Effect.withSpan("provider.poll")
@@ -691,10 +697,10 @@ function scripted(
 }
 
 /** The error that ends a push's stream as the socket closing. */
-const closed = new ProviderError({ reason: "Closed", cause: "socket closed" })
+const closed = new ProviderUnavailable({ reason: "Closed", cause: "socket closed" })
 
 /** What a test offers its push: a frame, or the error that ends the push's stream. */
-type Offered = FeedFrame | ProviderError
+type Offered = FeedFrame | ProviderUnavailable
 
 /** A push reading `feed`, counting each subscription to it in `subscriptions`. */
 function feeding(feed: Queue.Queue<Offered>, subscriptions: Ref.Ref<number>) {
@@ -703,7 +709,7 @@ function feeding(feed: Queue.Queue<Offered>, subscriptions: Ref.Ref<number>) {
       Effect.as(
         Stream.fromQueue(feed).pipe(
           Stream.mapEffect((offered) =>
-            Schema.is(ProviderError)(offered) ? Effect.fail(offered) : Effect.succeed(offered)
+            Schema.is(ProviderUnavailable)(offered) ? Effect.fail(offered) : Effect.succeed(offered)
           )
         )
       )

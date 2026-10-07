@@ -9,7 +9,7 @@ import { TestClock } from "effect/testing"
 import type { FeedFrame } from "../../Frame.ts"
 import { withEnv } from "../../TestHubConfig.ts"
 import { counted, recordingLogs, withMetrics } from "../../TestTelemetry.ts"
-import { LiveFeedDemand, type ProviderError } from "../Provider.ts"
+import { LiveFeedDemand, type ProviderUnavailable } from "../Provider.ts"
 import { FastCast } from "./FastCast.ts"
 
 // Two games' topics: the first's checkpoint is missing in the tests that follow both.
@@ -494,7 +494,7 @@ function nflFrames(
   checkpointRetry?: Parameters<typeof FastCast.make>[0]
 ) {
   return Effect.gen(function* () {
-    const ended = yield* Deferred.make<void, ProviderError>()
+    const ended = yield* Deferred.make<void, ProviderUnavailable>()
     const frames = watched<FeedFrame>()
     const demand = yield* Queue.unbounded<LiveFeedDemand>()
     const fastCast = yield* FastCast

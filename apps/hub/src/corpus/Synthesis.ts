@@ -5,8 +5,8 @@ import { Play } from "@sportal/domain/Play"
 import { Situation } from "@sportal/domain/Situation"
 import type { TeamId } from "@sportal/domain/Team"
 import { Array as Arr, DateTime, Duration, Effect, Option, Order, Stream } from "effect"
-import { Decoded } from "../provider/Provider.ts"
-import type { ArchivedGame, ArchivedPlay } from "./Archive.ts"
+import type { ArchivedGame, ArchivedPlay } from "../provider/Archive.ts"
+import { Decoded } from "../provider/Decoder.ts"
 import { CorpusLine, Had } from "./CorpusInput.ts"
 
 /**

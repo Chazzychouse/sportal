@@ -3,7 +3,7 @@ import { GameId, GameSnapshot } from "@sportal/domain/Game"
 import { LeagueId } from "@sportal/domain/League"
 import { Play, PlayId } from "@sportal/domain/Play"
 import { Array as Arr, Data, DateTime, Effect, Equal, Order, Schema } from "effect"
-import type { Decoded } from "../provider/Provider.ts"
+import type { Decoded } from "../provider/Decoder.ts"
 
 /**
  * One line of a corpus day's poll or push file: a listing changed or unchanged since its league's last, a pushed

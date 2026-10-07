@@ -1,8 +1,8 @@
 import { assert, describe, it } from "@effect/vitest"
 import { GameId } from "@sportal/domain/Game"
 import { Effect, FileSystem } from "effect"
-import { Archive, ArchiveFetchFailed } from "../../corpus/Archive.ts"
 import * as Gzip from "../../Gzip.ts"
+import { Archive, ArchiveFetchFailed } from "../Archive.ts"
 import {
   inArchive,
   scoreboardUrl,

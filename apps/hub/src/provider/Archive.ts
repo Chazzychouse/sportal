@@ -13,10 +13,8 @@ export class Archive extends Context.Service<
     archived(league: LeagueId, date: string): Effect.Effect<ReadonlyArray<ArchivedGame>, ArchiveFetchFailed>
     /** Between two fetches. */
     readonly pacing: Schedule.Schedule<unknown>
-    /** How a failed fetch is tried again. */
-    readonly retry: Schedule.Schedule<unknown, ArchiveFetchFailed>
   }
->()("sportal/hub/Archive") {}
+>()("sportal/hub/provider/Archive") {}
 
 /** A finished game as a provider's archive gives it: as scheduled, as final, and its plays with when each was run. */
 export class ArchivedGame extends Data.Class<{
@@ -27,7 +25,7 @@ export class ArchivedGame extends Data.Class<{
 }> {}
 
 /** A play of an archived game, with the wallclock instant it was run at. */
-export type ArchivedPlay = {
+export interface ArchivedPlay {
   readonly play: Play
   readonly wallclock: DateTime.Utc
 }

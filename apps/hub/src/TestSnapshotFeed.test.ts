@@ -5,7 +5,7 @@ import type { LeagueId } from "@sportal/domain/League"
 import { liveSnapshot, play, snapshot } from "@sportal/domain/TestGame"
 import { DateTime, Effect, Exit, Schedule, Schema } from "effect"
 import type { FeedFrame } from "./Frame.ts"
-import { Provider, ProviderError } from "./provider/Provider.ts"
+import { Provider, ProviderUnavailable } from "./provider/Provider.ts"
 import { decodedFrames } from "./provider/TestDecoder.ts"
 import * as TestSnapshotFeed from "./TestSnapshotFeed.ts"
 
@@ -101,9 +101,9 @@ describe("TestSnapshotFeed.provider", () => {
     }).pipe(Effect.provide(providerListing((league) => (league === "nfl" ? [liveSnapshot()] : [snapshot()]))))
   )
 
-  it.effect("should fail the poll with the ProviderError `games` fails with", () =>
+  it.effect("should fail the poll with the ProviderUnavailable `games` fails with", () =>
     Effect.gen(function* () {
-      const error = new ProviderError({ reason: "Refused", league: "fbs", cause: "no" })
+      const error = new ProviderUnavailable({ reason: "Refused", league: "fbs", cause: "no" })
       const failing = TestSnapshotFeed.provider({
         games: () => Effect.fail(error),
         polling: Schedule.spaced("10 seconds")

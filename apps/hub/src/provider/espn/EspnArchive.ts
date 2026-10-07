@@ -13,9 +13,9 @@ import {
   Stream
 } from "effect"
 import { HttpClient, type HttpClientError } from "effect/http"
-import { Archive, ArchivedGame, ArchiveFetchFailed } from "../../corpus/Archive.ts"
 import * as Gzip from "../../Gzip.ts"
 import { HubConfig } from "../../HubConfig.ts"
+import { Archive, ArchivedGame, ArchiveFetchFailed } from "../Archive.ts"
 import { EspnEvent, Scoreboard } from "./EspnEvent.ts"
 import * as EspnProvider from "./EspnProvider.ts"
 import * as EspnSummary from "./EspnSummary.ts"
@@ -212,8 +212,7 @@ export const layer: Layer.Layer<
     return Archive.of({
       games: (league, date) => gamesOf(league, date, "fetch"),
       archived: (league, date) => gamesOf(league, date, "archived"),
-      pacing,
-      retry
+      pacing
     })
   })
 )

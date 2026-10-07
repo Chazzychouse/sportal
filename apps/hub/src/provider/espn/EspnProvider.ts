@@ -2,7 +2,7 @@ import type { GameSnapshot } from "@sportal/domain/Game"
 import type { LeagueId } from "@sportal/domain/League"
 import { DateTime, Duration, Effect, Layer, Option, Schedule } from "effect"
 import { Headers, HttpClient } from "effect/http"
-import { type Polling, Provider, ProviderError } from "../Provider.ts"
+import { type Polling, Provider, ProviderUnavailable } from "../Provider.ts"
 import { FastCast } from "./FastCast.ts"
 
 /**
@@ -35,7 +35,7 @@ export const layer: Layer.Layer<Provider, never, FastCast | HttpClient.HttpClien
       }).pipe(
         Effect.mapError(
           (cause) =>
-            new ProviderError({
+            new ProviderUnavailable({
               reason: cause.reason._tag === "StatusCodeError" ? "Refused" : "Unreachable",
               league,
               cause

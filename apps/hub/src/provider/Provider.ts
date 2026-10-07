@@ -1,17 +1,7 @@
-import type { Delivery } from "@sportal/domain/Delivery"
-import type { GameId, GameSnapshot } from "@sportal/domain/Game"
+import type { GameSnapshot } from "@sportal/domain/Game"
 import { LeagueId } from "@sportal/domain/League"
-import {
-  Context,
-  Data,
-  type DateTime,
-  type Effect,
-  type Option,
-  type Schedule,
-  Schema,
-  type Stream
-} from "effect"
-import type { FeedFrame, Frame } from "../Frame.ts"
+import { Context, Data, type Effect, type Schedule, Schema, type Stream } from "effect"
+import type { FeedFrame } from "../Frame.ts"
 
 /**
  * A provider of game data: its scoreboard polled as frames, its live feed pushing frames between polls, when it is
@@ -22,7 +12,7 @@ export class Provider extends Context.Service<
   Provider,
   {
     /** One poll of `league`, as received. */
-    poll(league: LeagueId): Effect.Effect<FeedFrame, ProviderError>
+    poll(league: LeagueId): Effect.Effect<FeedFrame, ProviderUnavailable>
     /** Its live feed. */
     readonly push: LiveFeed
     /**
@@ -31,16 +21,18 @@ export class Provider extends Context.Service<
      */
     readonly polling: Polling
     /** How its push is subscribed to again after it fails. Ingest retries the push on it, and nothing else does. */
-    readonly reconnect: Schedule.Schedule<unknown, ProviderError>
+    readonly reconnect: Schedule.Schedule<unknown, ProviderUnavailable>
   }
->()("sportal/hub/Provider") {}
+>()("sportal/hub/provider/Provider") {}
 
 /**
  * A provider's push: every pushed frame, as received, for its leagues' scoreboards and for each game `demand` last
  * named, with each channel it resyncs asked for its checkpoint again if the push follows it. Fails when the push cannot
  * go on.
  */
-export type LiveFeed = (demand: Stream.Stream<LiveFeedDemand>) => Stream.Stream<FeedFrame, ProviderError>
+export type LiveFeed = (
+  demand: Stream.Stream<LiveFeedDemand>
+) => Stream.Stream<FeedFrame, ProviderUnavailable>
 
 /**
  * What the live feed should follow: the current games, whenever which games they are changes, and each channel whose
@@ -59,94 +51,10 @@ export type Polling = Schedule.Schedule<
 >
 
 /**
- * What one frame said, as its provider decodes it, one per frame: the deliveries in the order the frame said them, the
- * live feed channels whose document was dropped and so are to be checkpointed again, and what decode observed. A frame
- * that said nothing is a `Decoded` with three empty arrays. It never crosses the wire.
- */
-export class Decoded extends Data.Class<{
-  readonly seq: number
-  /** When the frame was received. */
-  readonly at: DateTime.Utc
-  readonly deliveries: ReadonlyArray<Delivery>
-  readonly resyncs: ReadonlyArray<string>
-  readonly observations: ReadonlyArray<DecodeObservation>
-}> {
-  /** What `frame` said: `of`'s deliveries, resyncs, and observations, each none unless given. */
-  static of(
-    frame: Frame,
-    of: {
-      readonly deliveries?: ReadonlyArray<Delivery>
-      readonly resyncs?: ReadonlyArray<string>
-      readonly observations?: ReadonlyArray<DecodeObservation>
-    } = {}
-  ): Decoded {
-    return new Decoded({
-      seq: frame.seq,
-      at: frame.receivedAt,
-      deliveries: of.deliveries ?? [],
-      resyncs: of.resyncs ?? [],
-      observations: of.observations ?? []
-    })
-  }
-
-  /** A frame that did not decode: it says nothing but a `FrameUndecoded` observation of `cause`. */
-  static undecodable(frame: Frame, cause: unknown): Decoded {
-    return Decoded.of(frame, {
-      observations: [
-        DecodeObservation.FrameUndecoded({
-          feed: frame.feed,
-          channel: frame.channel,
-          kind: frame.kind,
-          cause
-        })
-      ]
-    })
-  }
-}
-
-/**
- * Something decode observed in a frame, for telemetry to tell: a live feed message received, games pushed, a pushed
- * game no listing has, a topic's document reset, a message of an op it does not know, or a frame, an event, or a play
- * that did not decode, or a play type it does not know. Nothing in it is particular to a sport.
- */
-export type DecodeObservation = Data.TaggedEnum<{
-  Received: {
-    readonly league: Option.Option<LeagueId>
-    readonly op: string
-    readonly topic: Option.Option<string>
-    readonly mid: Option.Option<number>
-  }
-  OpUnknown: { readonly body: string }
-  Pushed: { readonly league: LeagueId; readonly games: number }
-  Unlisted: { readonly league: LeagueId; readonly game: GameId }
-  Reset: {
-    readonly league: LeagueId
-    readonly topic: string
-    readonly reason: "Gap" | "Unapplicable"
-    readonly detail: string
-  }
-  FrameUndecoded: {
-    readonly feed: FeedFrame["feed"]
-    readonly channel: string
-    readonly kind: string
-    readonly cause: unknown
-  }
-  EventUndecoded: { readonly league: LeagueId; readonly feed: "poll" | "fastcast"; readonly cause: unknown }
-  PlayUndecoded: {
-    readonly league: LeagueId
-    readonly game: GameId
-    readonly play: string
-    readonly cause: unknown
-  }
-  PlayTypeUnknown: { readonly id: string; readonly text: string }
-}>
-export const DecodeObservation = Data.taggedEnum<DecodeObservation>()
-
-/**
  * A provider could not supply data: unreachable or refused for a poll of `league`, or a push refused, closed, or gone
  * silent (a push serves every league, so it has none).
  */
-export class ProviderError extends Schema.TaggedError<ProviderError>()("ProviderError", {
+export class ProviderUnavailable extends Schema.TaggedError<ProviderUnavailable>()("ProviderUnavailable", {
   reason: Schema.Literals(["Unreachable", "Refused", "Closed", "Silent"]),
   league: Schema.optional(LeagueId),
   cause: Schema.Defect()

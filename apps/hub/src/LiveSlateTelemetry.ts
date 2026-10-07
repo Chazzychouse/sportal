@@ -6,7 +6,7 @@ import { SlateObservation } from "@sportal/domain/SlateObservation"
 import { Cause, DateTime, Duration, Effect, Exit, Match, Metric, Option, Schema } from "effect"
 import { observed } from "./DecodeTelemetry.ts"
 import type { Following } from "./LiveSlate.ts"
-import type { Decoded } from "./provider/Provider.ts"
+import type { Decoded } from "./provider/Decoder.ts"
 
 /**
  * What one take or tick of the slate did, told as its following stands. During the replay, only a defect is logged:

@@ -15,7 +15,7 @@ import {
 } from "effect"
 import * as Gzip from "../Gzip.ts"
 import { HubConfig } from "../HubConfig.ts"
-import type { Decoded } from "../provider/Provider.ts"
+import type { Decoded } from "../provider/Decoder.ts"
 import { CorpusLine, Had } from "./CorpusInput.ts"
 
 /** A day of the corpus: what kind it is and the inputs it holds, by arrival. */

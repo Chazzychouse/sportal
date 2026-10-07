@@ -4,7 +4,7 @@ import { GameId } from "@sportal/domain/Game"
 import { PlayId } from "@sportal/domain/Play"
 import { liveSnapshot, play, snapshot } from "@sportal/domain/TestGame"
 import { DateTime, Effect, Equal, Exit, Schema } from "effect"
-import { Decoded } from "../provider/Provider.ts"
+import { Decoded } from "../provider/Decoder.ts"
 import { CorpusInput, CorpusLine, Had } from "./CorpusInput.ts"
 
 describe("CorpusLine", () => {
