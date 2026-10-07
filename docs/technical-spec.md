@@ -186,9 +186,10 @@ sportal/
 │   ├── domain/                 Pure. Imports only Effect. No I/O.
 │   │   └── src/
 │   │       ├── League.ts       LeagueId
-│   │       ├── Team.ts         Team, Ranking
-│   │       ├── Game.ts         GameId, GameStatus, GameSnapshot, Network, Broadcast
+│   │       ├── Team.ts         Team, its colors, Ranking
+│   │       ├── Game.ts         GameId, GameStatus, GameSnapshot, BallSpot, Network, Broadcast
 │   │       ├── Situation.ts    Possession, down, distance, field position, red zone
+│   │       ├── RecentPlays.ts  Each game's last ten plays, sent with the slate
 │   │       ├── Play.ts         A single play, as the game's play-by-play lists it; PlayKind
 │   │       ├── GameEvent.ts    The event union, derived from plays or from two snapshots
 │   │       ├── Delivery.ts     What a frame said: a listing, a snapshot, or a game's plays; DeliverySource
@@ -267,7 +268,8 @@ sportal/
     ├── web/
     │   └── src/
     │       ├── main.tsx
-    │       ├── ScenarioStream.tsx  A scenario's synthetic stream page
+    │       ├── ScenarioStream.tsx  A scenario's synthetic stream page: a scorebug over the field
+    │       ├── ScenarioStrip.tsx   The scorebug across the top of a scenario stream
     │       ├── theme.css           Desk and couch density themes
     │       ├── design/             Vendored shadcn primitives, under the CLI's own file names
     │       ├── display/            This device's Display: state and rules, hotkeys, full screen, overlays, top bar, command palette
@@ -275,7 +277,7 @@ sportal/
     │       ├── slate/              The slate strip and its cards
     │       ├── stage/              The Stage: tiles, dividers, tile actions, rejections
     │       ├── layout/             Layout picker and glyphs
-    │       ├── game/               A game's status, score, and logo, as slate and tiles show them
+    │       ├── game/               A game's status, score, and logo, as slate and tiles show them; the field, which draws a game's plays
     │       └── remote/             The phone Remote: stage map, join QR code
     │
     └── desktop/
@@ -397,7 +399,7 @@ class LiveGames extends Context.Service<LiveGames, {
   telemetry and no events, and its layer is built only then, so the Hub serves no fold still catching up. Then it takes
   each frame as it is appended, and its timer starts. Its `Following` is `Replaying`, `Live`, or `Halted` (a decode
   defect after the replay: no new frame is taken, but the fold keeps serving and its timer still runs and is told).
-- `Slate` publishes each listed game as the fold has it, within 250 ms of a change; Ingest reads the fold for its polling,
+- `Slate` publishes each listed game as the fold has it, with each game's last ten plays (`recentPlays`, on `SlateChanged`), within 250 ms of a change; Ingest reads the fold for its polling,
   and `LiveGames.demand` names the games the live feed should follow.
 - `HubMode` provides it in both modes. A scenario is the provider through the real Ingest, on the scenario clock: polled
   at each of its frames' times and at least every 10 seconds, its recorded live feed pushed at its recorded offsets, and
