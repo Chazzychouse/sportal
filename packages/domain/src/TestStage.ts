@@ -3,7 +3,9 @@ import { ChannelAvailability } from "./Channel.ts"
 import { GameId } from "./Game.ts"
 import { Stage } from "./Stage.ts"
 
+/** A game the stage tests put in a tile, by an ESPN event id. */
 export const bama = GameId.make("401856707")
+/** A second game for the stage tests, by another ESPN event id. */
 export const irish = GameId.make("401858250")
 
 /** FOX on YouTube TV, a channel a carried game is watched on. */

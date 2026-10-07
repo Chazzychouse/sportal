@@ -1,8 +1,9 @@
 import { assert, describe, it } from "@effect/vitest"
 import { GameId } from "@sportal/domain/Game"
 import { Stage } from "@sportal/domain/Stage"
+import { withTiles } from "../stage/TestStage.ts"
 import { StripCard } from "./StripCards.ts"
-import { slate, withTiles } from "./TestSlate.ts"
+import { slate } from "./TestSlate.ts"
 
 describe("StripCard.of", () => {
   it("should order the slate live, upcoming by kickoff, then over", () => {

@@ -137,6 +137,41 @@ module.exports = {
       to: { path: "^apps/hub/src/TestSnapshotFeed\\.ts$" }
     },
     {
+      name: "test-stage-is-for-tests",
+      comment: "Stages of the domain's test games, on FOX or nowhere, are imported only by test files.",
+      severity: "error",
+      from: { pathNot: "\\.test\\.tsx?$" },
+      to: { path: "^packages/domain/src/TestStage\\.ts$" }
+    },
+    {
+      name: "test-slate-is-for-tests",
+      comment: "The web's test slate is imported only by test files.",
+      severity: "error",
+      from: { pathNot: "\\.test\\.tsx?$" },
+      to: { path: "^apps/web/src/slate/TestSlate\\.ts$" }
+    },
+    {
+      name: "web-test-stage-is-for-tests",
+      comment: "Stages of the test slate's games in the web's tiles are imported only by test files.",
+      severity: "error",
+      from: { pathNot: "\\.test\\.tsx?$" },
+      to: { path: "^apps/web/src/stage/TestStage\\.ts$" }
+    },
+    {
+      name: "test-shell-is-for-tests",
+      comment: "The shell around a desktop service under test is imported only by test files.",
+      severity: "error",
+      from: { pathNot: "\\.test\\.ts$" },
+      to: { path: "^apps/desktop/src/main/TestShell\\.ts$" }
+    },
+    {
+      name: "test-web-contents-is-for-tests",
+      comment: "Fake page contents and navigations are imported only by test files.",
+      severity: "error",
+      from: { pathNot: "\\.test\\.ts$" },
+      to: { path: "^apps/desktop/src/main/TestWebContents\\.ts$" }
+    },
+    {
       name: "test-adapter-data-is-for-tests",
       comment:
         "An adapter's recorded payloads, read for tests of other modules, are imported only by test files and TestEspnArchive.",

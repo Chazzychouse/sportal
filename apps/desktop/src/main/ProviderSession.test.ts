@@ -91,7 +91,7 @@ describe("ProviderSession.openSignIn", () => {
       yield* providers.openSignIn
       const refused = navigation("https://evil.example/", true)
 
-      windows[0]?.webContents.emit("will-navigate", refused)
+      onlyWindow().webContents.emit("will-navigate", refused)
 
       expect(refused.preventDefault).toHaveBeenCalled()
     }).pipe(Effect.scoped)
@@ -103,7 +103,7 @@ describe("ProviderSession.openSignIn", () => {
       yield* providers.openSignIn
       const allowed = navigation("https://accounts.google.com/signin", true)
 
-      windows[0]?.webContents.emit("will-navigate", allowed)
+      onlyWindow().webContents.emit("will-navigate", allowed)
 
       expect(allowed.preventDefault).not.toHaveBeenCalled()
     }).pipe(Effect.scoped)
@@ -273,4 +273,11 @@ function granted(permission: string) {
     )
   )
   return answers[0]
+}
+
+/** The one sign-in window open; a test with none, or several, fails here. */
+function onlyWindow() {
+  const [window, ...others] = windows
+  if (window === undefined || others.length > 0) throw new Error(`${windows.length} sign-in windows are open`)
+  return window
 }

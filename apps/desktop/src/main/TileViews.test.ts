@@ -356,7 +356,7 @@ describe("TileViews mouse filter", () => {
 
       yield* tiles.sync([placement])
 
-      expect(created[0]?.webContents.focus).not.toHaveBeenCalled()
+      expect(viewAt(0).webContents.focus).not.toHaveBeenCalled()
     }).pipe(Effect.scoped)
   )
 
@@ -440,7 +440,7 @@ function arriving() {
 /** Presses `code` in the first view, as Electron reports it; answers the spy for keeping it from the page. */
 function press(code: string, type = "keyDown") {
   const event = { preventDefault: vi.fn() }
-  created[0]?.webContents.emit("before-input-event", event, {
+  viewAt(0).webContents.emit("before-input-event", event, {
     type,
     code,
     shift: false,
@@ -453,6 +453,13 @@ function press(code: string, type = "keyDown") {
 /** A mouse event on a view, as Electron reports it; answers the spy for keeping it from the page. */
 function mouse(view: number, type: string, button?: string) {
   const event = { preventDefault: vi.fn() }
-  created[view]?.webContents.emit("before-mouse-event", event, { type, button, x: 5, y: 5 })
+  viewAt(view).webContents.emit("before-mouse-event", event, { type, button, x: 5, y: 5 })
   return event.preventDefault
+}
+
+/** The view created `index`th; a test that asks for one never created fails here. */
+function viewAt(index: number) {
+  const view = created[index]
+  if (view === undefined) throw new Error(`no view ${index} was created`)
+  return view
 }

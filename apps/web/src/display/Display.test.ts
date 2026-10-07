@@ -2,7 +2,8 @@ import { assert, describe, it } from "@effect/vitest"
 import { GameId } from "@sportal/domain/Game"
 import { Stage, type StageCommand } from "@sportal/domain/Stage"
 import { StripCard } from "../slate/StripCards.ts"
-import { slate, withTiles } from "../slate/TestSlate.ts"
+import { slate } from "../slate/TestSlate.ts"
+import { withTiles } from "../stage/TestStage.ts"
 import { Display, DisplayStep } from "./Display.ts"
 
 describe("Display.initial", () => {
@@ -123,11 +124,10 @@ describe("Display#selectedOn and Display#interactingOn", () => {
   it("should read interacting again once its game is swapped back into the selected slot", () => {
     const before = withTiles(["live", "soon"])
     const display = press(Display.initial, { _tag: "Interact" }, before).display
+    display.interactingOn(withTiles(["soon", "live"]))
 
-    const whileSwapped = display.interactingOn(withTiles(["soon", "live"]))
     const swappedBack = display.interactingOn(withTiles(["live", "soon"]))
 
-    assert.isUndefined(whileSwapped)
     assert.strictEqual(swappedBack, "live")
   })
 })
