@@ -1,5 +1,6 @@
 import { NodeServices } from "@effect/platform-node"
 import { assert, describe, it } from "@effect/vitest"
+import { Slate } from "@sportal/domain/Slate"
 import { DateTime, Effect, FileSystem, Path, Stream } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/process"
 
@@ -8,14 +9,15 @@ describe("corpus backfill", () => {
     "refuses a span that reaches today, whose archived scoreboard would freeze part way, and fetches nothing",
     () =>
       Effect.gen(function* () {
-        const today = DateTime.formatIsoDate(DateTime.setZone(yield* DateTime.now, zone))
-        const yesterday = DateTime.formatIsoDate(
-          DateTime.subtract(DateTime.setZone(yield* DateTime.now, zone), { days: 1 })
-        )
+        const now = DateTime.setZone(yield* DateTime.now, zone)
+        const today = DateTime.formatIsoDate(now)
+        const yesterday = DateTime.formatIsoDate(DateTime.subtract(now, { days: 1 }))
+        // The game day now is in: yesterday's until 04:00.
+        const unended = DateTime.formatIsoDate(DateTime.setZone(Slate.dayStart(now), zone))
         const { output, code, corpus } = yield* backfill(["--from", yesterday, "--to", today])
 
         assert.notStrictEqual(code, ChildProcessSpawner.ExitCode(0))
-        assert.include(output, `${today} is not over`)
+        assert.include(output, `${unended} is not over`)
         assert.isFalse(yield* (yield* FileSystem.FileSystem).exists(corpus))
       }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
     30_000
