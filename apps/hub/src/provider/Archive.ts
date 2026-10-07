@@ -2,15 +2,16 @@ import { GameId, type GameSnapshot } from "@sportal/domain/Game"
 import { LeagueId } from "@sportal/domain/League"
 import type { Play } from "@sportal/domain/Play"
 import { Context, Data, type DateTime, type Effect, type Schedule, Schema } from "effect"
+import { GameDay } from "../corpus/GameDay.ts"
 
 /** A provider's archive of finished games, kept as fetched under the corpus's `archive/`. */
 export class Archive extends Context.Service<
   Archive,
   {
     /** The final games of `league` on `date`, fetching what is not archived yet; a game it cannot use is skipped and logged. */
-    games(league: LeagueId, date: string): Effect.Effect<ReadonlyArray<ArchivedGame>, ArchiveFetchFailed>
+    games(league: LeagueId, date: GameDay): Effect.Effect<ReadonlyArray<ArchivedGame>, ArchiveFetchFailed>
     /** The same from what is archived only, fetching nothing: what a rebuild reads. */
-    archived(league: LeagueId, date: string): Effect.Effect<ReadonlyArray<ArchivedGame>, ArchiveFetchFailed>
+    archived(league: LeagueId, date: GameDay): Effect.Effect<ReadonlyArray<ArchivedGame>, ArchiveFetchFailed>
     /** Between two fetches. */
     readonly pacing: Schedule.Schedule<unknown>
   }
@@ -37,7 +38,7 @@ export interface ArchivedPlay {
  */
 export class ArchiveFetchFailed extends Schema.TaggedError<ArchiveFetchFailed>()("ArchiveFetchFailed", {
   league: LeagueId,
-  date: Schema.String,
+  date: GameDay,
   game: Schema.optional(GameId),
   reason: Schema.Literals(["Unreachable", "Refused", "Unreadable", "NotArchived"]),
   cause: Schema.Defect()

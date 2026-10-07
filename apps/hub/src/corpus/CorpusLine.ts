@@ -2,7 +2,7 @@ import { Delivery } from "@sportal/domain/Delivery"
 import { GameId, GameSnapshot } from "@sportal/domain/Game"
 import { LeagueId } from "@sportal/domain/League"
 import { Play, PlayId } from "@sportal/domain/Play"
-import { Array as Arr, Data, DateTime, Effect, Equal, Order, Schema } from "effect"
+import { Array as Arr, Data, DateTime, Effect, Equal, Order, Schema, Stream } from "effect"
 import type { Decoded } from "../provider/Decoder.ts"
 
 /**
@@ -33,11 +33,45 @@ export class CorpusLine extends Schema.Class<CorpusLine>("sportal/hub/CorpusLine
   })
 
   /**
-   * Each frame's lines from what it delivered, against what the day had before it (each league's last listing,
-   * each game's last plays), and what the day has after: the inverse of `deliveries`. Listings go to the poll file,
+   * A day's lines from its frames, in the day's order (`byArrival`): each frame's against what the day had before it
+   * (each league's last listing, each game's last plays), the inverse of `decodedOf`. Listings go to the poll file,
    * pushed snapshots and plays to the push file. A snapshot from the poll is a defect: ESPN's decode never says one.
    */
-  static of(
+  static ofDecoded(decoded: Stream.Stream<Decoded>): Effect.Effect<{
+    readonly poll: ReadonlyArray<CorpusLine>
+    readonly push: ReadonlyArray<CorpusLine>
+  }> {
+    return decoded.pipe(
+      Stream.mapAccumEffect(
+        () => Had.empty,
+        (had, frame) => Effect.map(CorpusLine.of(frame, had), (lines) => [lines.had, [lines]] as const)
+      ),
+      Stream.runCollect,
+      Effect.map((frames) => ({
+        poll: frames.flatMap(({ poll }) => poll),
+        push: frames.flatMap(({ push }) => push)
+      }))
+    )
+  }
+
+  /** The deliveries a day's `lines`, from both its files, say: one step per frame, in the day's order. */
+  static decodedOf(
+    lines: ReadonlyArray<CorpusLine>
+  ): Stream.Stream<Pick<Decoded, "seq" | "at" | "deliveries">> {
+    return Stream.fromIterable(lines.toSorted(CorpusLine.byArrival)).pipe(
+      Stream.groupAdjacentBy((line) => line.seq),
+      Stream.mapAccum(
+        () => Had.empty,
+        (had, [seq, frame]): readonly [Had, ReadonlyArray<Pick<Decoded, "seq" | "at" | "deliveries">>] => {
+          const read = CorpusLine.deliveries(frame, had)
+          return [read.had, [{ seq, at: Arr.headNonEmpty(frame).at, deliveries: read.deliveries }]]
+        }
+      )
+    )
+  }
+
+  /** One frame's lines from what it delivered, against what the day had before it; with what the day has after. */
+  private static of(
     decoded: Decoded,
     had: Had
   ): Effect.Effect<{
@@ -80,7 +114,7 @@ export class CorpusLine extends Schema.Class<CorpusLine>("sportal/hub/CorpusLine
   }
 
   /** The deliveries `lines` (one frame's, from both files) say, against `had`; with the next `had`. */
-  static deliveries(
+  private static deliveries(
     lines: ReadonlyArray<CorpusLine>,
     had: Had
   ): { readonly deliveries: ReadonlyArray<Delivery>; readonly had: Had } {
@@ -102,7 +136,7 @@ export class CorpusLine extends Schema.Class<CorpusLine>("sportal/hub/CorpusLine
 }
 
 /** What a day had delivered so far: each league's last listing and each game's last plays. */
-export class Had extends Data.Class<{
+class Had extends Data.Class<{
   readonly listings: ReadonlyMap<LeagueId, ReadonlyArray<GameSnapshot>>
   readonly plays: ReadonlyMap<GameId, ReadonlyArray<Play>>
 }> {

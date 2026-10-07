@@ -13,6 +13,7 @@ import {
   Stream
 } from "effect"
 import { HttpClient, HttpClientError } from "effect/http"
+import type { GameDay } from "../../corpus/GameDay.ts"
 import * as Gzip from "../../Gzip.ts"
 import { HubConfig } from "../../HubConfig.ts"
 import { Archive, ArchivedGame, ArchiveFetchFailed } from "../Archive.ts"
@@ -52,7 +53,7 @@ export const layer: Layer.Layer<
 
 const gamesOf = Effect.fn("EspnArchive.games")(function* (
   league: LeagueId,
-  date: string,
+  date: GameDay,
   how: "fetch" | "archived"
 ) {
   yield* Effect.annotateCurrentSpan({

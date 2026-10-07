@@ -219,7 +219,7 @@ sportal/
     │       ├── LiveSlate.ts        The domain slate, run over the feed log: the day's replay, then each appended frame; following the log, its timer, game events, the resyncs live frames ask for, and the listed games it publishes with their recent plays
     │       ├── Following.ts        Where the live slate is in following the feed log: `Replaying`, `Live`, or `Halted`
     │       ├── LiveSlateTelemetry.ts  The slate's telemetry moments: what a take or tick told (decode and slate observations, events, state counts) as the following stands, going live, a timer defect, and a take's duration
-    │       ├── corpus/             Typed game days built from the feed log or the archive, run through the slate on virtual time: `CorpusDay`, `CorpusInput`, `CorpusBuild`, `CorpusRun`, `Archive`, `Synthesis`, the `corpus` CLI and its worker
+    │       ├── corpus/             Typed game days built from the feed log or the archive, run through the slate on virtual time: `GameDay`, `CorpusDay`, `CorpusLine`, `CorpusBuild`, `CorpusRun` (with its worker pool), `Synthesis`, the `corpus` CLI and its worker thread
     │       ├── LiveStage.ts        The one authoritative Stage, held in memory
     │       ├── Ingest.ts           Polls HubConfig's leagues, runs the push on the live feed's demand (the slate's current games and resyncs), appends every frame to the feed log, and waits on `through`
     │       ├── HubStopping.ts      Whether a task that should run until the Hub stops ended because it is stopping, and the Error log unless it did

@@ -4,10 +4,10 @@ import type { LeagueId } from "@sportal/domain/League"
 import { Play } from "@sportal/domain/Play"
 import { Situation } from "@sportal/domain/Situation"
 import type { TeamId } from "@sportal/domain/Team"
-import { Array as Arr, DateTime, Duration, Effect, Option, Order, Stream } from "effect"
+import { Array as Arr, DateTime, Duration, type Effect, Option, Order, Stream } from "effect"
 import type { ArchivedGame, ArchivedPlay } from "../provider/Archive.ts"
 import { Decoded } from "../provider/Decoder.ts"
-import { CorpusLine, Had } from "./CorpusInput.ts"
+import { CorpusLine } from "./CorpusLine.ts"
 
 /**
  * A backfilled day's poll and push lines from its archived games, in arrival order, with synthetic seqs.
@@ -16,7 +16,7 @@ import { CorpusLine, Had } from "./CorpusInput.ts"
  * plays so far, and the snapshot it leaves (`snapshotAfter`). The poll lists each league every 10 s from the first
  * kickoff less 30 minutes until the first poll at or after the last play is `lag.poll` old, each game as the snapshot
  * its last play `lag.poll` old or older left, or as scheduled before any. Frames are numbered from 1 by arrival, a push
- * before a poll at one instant, and turned into lines by `CorpusLine.of`, as a captured day's are.
+ * before a poll at one instant, and turned into lines by `CorpusLine.ofDecoded`, as a captured day's are.
  */
 export function day(games: ReadonlyArray<ArchivedGame>): Effect.Effect<{
   readonly poll: ReadonlyArray<CorpusLine>
@@ -70,17 +70,7 @@ export function day(games: ReadonlyArray<ArchivedGame>): Effect.Effect<{
     .map(
       ({ at, deliveries }, i) => new Decoded({ seq: i + 1, at, deliveries, resyncs: [], observations: [] })
     )
-  return Stream.fromIterable(frames).pipe(
-    Stream.mapAccumEffect(
-      () => Had.empty,
-      (had, decoded) => Effect.map(CorpusLine.of(decoded, had), (lines) => [lines.had, [lines]] as const)
-    ),
-    Stream.runCollect,
-    Effect.map((said) => ({
-      poll: said.flatMap(({ poll }) => poll),
-      push: said.flatMap(({ push }) => push)
-    }))
-  )
+  return CorpusLine.ofDecoded(Stream.fromIterable(frames))
 }
 
 /** How long after a play is run each feed shows it, on a backfilled day: ADR 0007's medians. */

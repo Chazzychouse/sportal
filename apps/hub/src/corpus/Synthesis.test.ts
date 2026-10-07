@@ -6,8 +6,9 @@ import { Archive, type ArchivedGame } from "../provider/Archive.ts"
 import { inArchive, stepped } from "../provider/espn/TestEspnArchive.ts"
 import * as TestSnapshotFeed from "../TestSnapshotFeed.ts"
 import { CorpusDay, CorpusDays } from "./CorpusDay.ts"
-import { CorpusLine } from "./CorpusInput.ts"
+import { CorpusLine } from "./CorpusLine.ts"
 import * as CorpusRun from "./CorpusRun.ts"
+import { GameDay } from "./GameDay.ts"
 import * as Synthesis from "./Synthesis.ts"
 import { golden, inCorpus, local } from "./TestCorpus.ts"
 
@@ -155,8 +156,10 @@ function neBufSynthesizedLayer() {
   )
 }
 
+const neBufDay = GameDay.make("2026-10-04")
+
 // NE–BUF of 2026-10-04 from ESPN's archive (its recorded scoreboard and summary), the only game of the day with plays.
-const archived = inArchive({}, () => stepped(Archive.use((archive) => archive.games("nfl", "2026-10-04"))))
+const archived = inArchive({}, () => stepped(Archive.use((archive) => archive.games("nfl", neBufDay))))
 
 const encodeLine = Schema.encodeSync(Schema.fromJsonString(CorpusLine))
 
@@ -176,7 +179,7 @@ function neBufRunLayer() {
         Effect.gen(function* () {
           const days = yield* CorpusDays
           const day = new CorpusDay({
-            date: "2026-10-04",
+            date: neBufDay,
             kind: "backfilled",
             format: CorpusLine.format,
             leagues: ["nfl"],
@@ -186,7 +189,7 @@ function neBufRunLayer() {
 
           yield* days.write(day, { poll: Stream.fromIterable(poll), push: Stream.fromIterable(push) })
 
-          return yield* CorpusRun.day("2026-10-04", kept)
+          return yield* CorpusRun.day(neBufDay, kept)
         })
       )
     })

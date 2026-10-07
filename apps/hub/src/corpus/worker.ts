@@ -3,12 +3,13 @@ import { DateTime, Effect, Layer, Schema } from "effect"
 import { WorkerRunner } from "effect/workers"
 import { HubConfig } from "../HubConfig.ts"
 import { CorpusDays } from "./CorpusDay.ts"
-import { DayRun, RunDay } from "./CorpusWorker.ts"
+import { DayRun, RunDay } from "./CorpusRun.ts"
 
 // A corpus worker thread: answers each `RunDay` its parent sends, until the parent closes it. Every outcome is replied,
 // a defect too, so the parent never waits on a day that ended.
 const serve = Effect.gen(function* () {
-  const runner = yield* (yield* WorkerRunner.WorkerRunnerPlatform).start<unknown, unknown>()
+  const platform = yield* WorkerRunner.WorkerRunnerPlatform
+  const runner = yield* platform.start<unknown, unknown>()
   yield* runner.run((port, message) =>
     Schema.decodeUnknownEffect(RunDay)(message).pipe(
       Effect.orDie,

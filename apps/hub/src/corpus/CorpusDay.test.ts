@@ -6,7 +6,8 @@ import { DateTime, Effect, Equal, FileSystem, Option, Path, Stream } from "effec
 import * as Gzip from "../Gzip.ts"
 import * as TestSnapshotFeed from "../TestSnapshotFeed.ts"
 import { CorpusDay, CorpusDays } from "./CorpusDay.ts"
-import { CorpusInput, CorpusLine } from "./CorpusInput.ts"
+import { CorpusInput, CorpusLine } from "./CorpusLine.ts"
+import { GameDay } from "./GameDay.ts"
 import { inCorpus } from "./TestCorpus.ts"
 
 describe("CorpusDays", () => {
@@ -197,29 +198,9 @@ describe("CorpusDays#read", () => {
   )
 })
 
-describe("CorpusDay.dates", () => {
-  it("should list every day from one to another, both included, across a month's end", () => {
-    const dates = CorpusDay.dates("2026-09-29", "2026-10-02")
-
-    assert.deepStrictEqual(dates, ["2026-09-29", "2026-09-30", "2026-10-01", "2026-10-02"])
-  })
-
-  it("should list the one day when both are the same", () => {
-    const dates = CorpusDay.dates("2026-10-04", "2026-10-04")
-
-    assert.deepStrictEqual(dates, ["2026-10-04"])
-  })
-
-  it("should list none when the last is before the first", () => {
-    const dates = CorpusDay.dates("2026-10-04", "2026-10-03")
-
-    assert.deepStrictEqual(dates, [])
-  })
-})
-
 const game = GameId.make("1")
 const day = new CorpusDay({
-  date: "2026-10-03",
+  date: GameDay.make("2026-10-03"),
   kind: "captured",
   format: CorpusLine.format,
   leagues: ["fbs"],

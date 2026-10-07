@@ -1,6 +1,7 @@
 import { assert, describe, it } from "@effect/vitest"
 import { GameId } from "@sportal/domain/Game"
 import { Effect, FileSystem } from "effect"
+import { GameDay } from "../../corpus/GameDay.ts"
 import * as Gzip from "../../Gzip.ts"
 import { Archive, ArchiveFetchFailed } from "../Archive.ts"
 import {
@@ -84,7 +85,7 @@ describe("EspnArchive", () => {
       Effect.gen(function* () {
         const archive = yield* Archive
 
-        const error = yield* Effect.flip(archive.archived("nfl", "2026-10-11"))
+        const error = yield* Effect.flip(archive.archived("nfl", GameDay.make("2026-10-11")))
 
         const urls = yield* requests
         assert.instanceOf(error, ArchiveFetchFailed)
@@ -265,12 +266,12 @@ describe("EspnArchive", () => {
 
 /** 2026-10-04's NFL games from the archive, fetching what it has not archived, the test clock stepped through. */
 function fetchedDay() {
-  return Archive.use((archive) => stepped(archive.games("nfl", "2026-10-04")))
+  return Archive.use((archive) => stepped(archive.games("nfl", GameDay.make("2026-10-04"))))
 }
 
 /** 2026-10-04's NFL games from what is archived only. */
 function archivedDay() {
-  return Archive.use((archive) => archive.archived("nfl", "2026-10-04"))
+  return Archive.use((archive) => archive.archived("nfl", GameDay.make("2026-10-04")))
 }
 
 function fileExists(path: string) {

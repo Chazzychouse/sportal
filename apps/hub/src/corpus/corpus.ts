@@ -11,17 +11,9 @@ import { Archive, type ArchiveFetchFailed } from "../provider/Archive.ts"
 import * as EspnArchive from "../provider/espn/EspnArchive.ts"
 import * as EspnDecode from "../provider/espn/EspnDecode.ts"
 import * as CorpusBuild from "./CorpusBuild.ts"
-import { CorpusDay, CorpusDays, DaysFailed } from "./CorpusDay.ts"
-import * as CorpusWorker from "./CorpusWorker.ts"
-
-const GameDay = Schema.String.check(
-  Schema.makeFilter(
-    (date) =>
-      /^\d{4}-\d{2}-\d{2}$/.test(date) &&
-      Option.exists(DateTime.make(`${date}T12:00:00Z`), (noon) => DateTime.formatIsoDateUtc(noon) === date),
-    { expected: "a date, YYYY-MM-DD" }
-  )
-)
+import { type CorpusDay, CorpusDays } from "./CorpusDay.ts"
+import * as CorpusRun from "./CorpusRun.ts"
+import { bounds, dates, GameDay } from "./GameDay.ts"
 
 const days = {
   date: Argument.String("date").pipe(
@@ -61,12 +53,8 @@ const build = Command.make(
   },
   Effect.fn(function* ({ all, backfilled, ...chosen }) {
     const corpusDays = yield* CorpusDays
-    const dates = all
-      ? Option.isNone(chosen.date) && Option.isNone(chosen.from) && Option.isNone(chosen.to)
-        ? [...new Set([...(yield* (yield* FeedLog).days), ...(yield* corpusDays.dates)])].toSorted()
-        : yield* unchosen("Name a date, --from and --to, or --all alone")
-      : yield* named(chosen)
-    const outcomes = yield* Effect.forEach(dates, (date) =>
+    const chosenDays = yield* all ? everyDay(chosen) : named(chosen)
+    const outcomes = yield* Effect.forEach(chosenDays, (date) =>
       Effect.gen(function* () {
         const existing = yield* corpusDays.day(date)
         if (!backfilled && !Option.exists(existing, ({ kind }) => kind === "backfilled")) {
@@ -78,7 +66,9 @@ const build = Command.make(
       })
     )
     const failed = outcomes.filter(({ outcome }) => outcome === "failed").length
-    if (failed > 0) return yield* new DaysFailed({ failed, days: dates.length })
+    if (failed > 0) {
+      return yield* new CorpusRun.DaysFailed({ failed, days: chosenDays.length })
+    }
   })
 ).pipe(
   Command.withDescription("Build corpus days: captured from the feed log, backfilled from the archive"),
@@ -93,25 +83,28 @@ const backfill = Command.make(
     to: Flag.String("to").pipe(Flag.withDescription("The last game day"), Flag.withSchema(GameDay))
   },
   Effect.fn(function* ({ league, from, to }) {
-    if (to < from) return yield* unchosen(`--to ${to} is before --from ${from}`)
-    const dates = CorpusDay.dates(from, to)
+    if (to < from) {
+      return yield* unchosen(`--to ${to} is before --from ${from}`)
+    }
+    const span = dates(from, to)
     // An archived scoreboard is never fetched again, so a day not over yet would be kept part way for good.
     const now = yield* DateTime.now
-    const unended = yield* Effect.filterMapEffect(dates, (date) =>
-      Effect.map(CorpusDay.bounds(date), ({ until }) =>
-        DateTime.isGreaterThan(until, now) ? Result.succeed({ date, until }) : Result.failVoid
-      )
-    )
+    const zone = yield* DateTime.CurrentTimeZone
+    const unended = Arr.filterMap(span, (date) => {
+      const { until } = bounds(date, zone)
+      return DateTime.isGreaterThan(until, now) ? Result.succeed({ date, until }) : Result.failVoid
+    })
     if (Arr.isReadonlyArrayNonEmpty(unended)) {
       const { date, until } = Arr.headNonEmpty(unended)
+      const ends = DateTime.formatIsoZoned(DateTime.setZone(until, zone))
       return yield* new CliError.UserError({
         cause: "day not over",
-        userMessage: `${date} is not over until ${DateTime.formatIsoZoned(yield* DateTime.setZoneCurrent(until))}; backfill only days that have ended, since an archived scoreboard is never fetched again`
+        userMessage: `${date} is not over until ${ends}; backfill only days that have ended, since an archived scoreboard is never fetched again`
       })
     }
 
     const { pacing } = yield* Archive
-    const [took, outcomes] = yield* Stream.fromIterable(dates).pipe(
+    const [took, outcomes] = yield* Stream.fromIterable(span).pipe(
       Stream.schedule(pacing),
       Stream.mapEffect((date) =>
         reported(date, "backfilled", CorpusBuild.backfilled(date, [league], "fetch"))
@@ -131,7 +124,9 @@ const backfill = Command.make(
         ...(failed.length > 0 ? [`(${failed.map(({ date }) => date).join(", ")})`] : [])
       ].join(" ")
     )
-    if (failed.length > 0) return yield* new DaysFailed({ failed: failed.length, days: dates.length })
+    if (failed.length > 0) {
+      return yield* new CorpusRun.DaysFailed({ failed: failed.length, days: span.length })
+    }
   })
 ).pipe(
   Command.withDescription(
@@ -151,25 +146,28 @@ const run = Command.make(
     )
   },
   Effect.fn(function* ({ workers, ...chosen }) {
-    yield* CorpusWorker.runDays(yield* named(chosen), workers)
+    const chosenDays = yield* named(chosen)
+    yield* CorpusRun.runDays(chosenDays, workers)
   })
 ).pipe(
   Command.withDescription("Run corpus days through the slate, on worker threads"),
   Command.provide(NodeWorker.layer(() => new Worker(new URL("./worker.ts", import.meta.url))))
 )
 
-Command.make("corpus").pipe(
-  Command.withDescription("Build, backfill, and run the corpus's game days"),
-  Command.withSubcommands([build, backfill, run]),
-  Command.run({ version: "dev" }),
-  Effect.provide(
-    Layer.mergeAll(CorpusDays.layer, DateTime.layerCurrentZoneLocal).pipe(
-      Layer.provideMerge(HubConfig.layer),
-      Layer.provideMerge(NodeServices.layer)
-    )
-  ),
-  NodeRuntime.runMain
-)
+// Every game day the feed log has frames of, and every day the corpus has: `--all`, which names no day beside it.
+function everyDay(chosen: {
+  readonly date: Option.Option<GameDay>
+  readonly from: Option.Option<GameDay>
+  readonly to: Option.Option<GameDay>
+}) {
+  if (Option.isSome(chosen.date) || Option.isSome(chosen.from) || Option.isSome(chosen.to)) {
+    return unchosen("Name a date, --from and --to, or --all alone")
+  }
+  return Effect.all([
+    FeedLog.use((feedLog) => feedLog.days).pipe(Effect.flatMap(decodeDays), Effect.orDie),
+    CorpusDays.use((corpusDays) => corpusDays.dates)
+  ]).pipe(Effect.map(([logged, built]) => [...new Set([...logged, ...built])].toSorted()))
+}
 
 // The days a command names: one, or every day of a span.
 function named({
@@ -177,15 +175,15 @@ function named({
   from,
   to
 }: {
-  readonly date: Option.Option<string>
-  readonly from: Option.Option<string>
-  readonly to: Option.Option<string>
+  readonly date: Option.Option<GameDay>
+  readonly from: Option.Option<GameDay>
+  readonly to: Option.Option<GameDay>
 }) {
   if (Option.isSome(date) && Option.isNone(from) && Option.isNone(to)) return Effect.succeed([date.value])
   if (Option.isNone(date) && Option.isSome(from) && Option.isSome(to)) {
     return to.value < from.value
       ? unchosen(`--to ${to.value} is before --from ${from.value}`)
-      : Effect.succeed(CorpusDay.dates(from.value, to.value))
+      : Effect.succeed(dates(from.value, to.value))
   }
   return unchosen("Name a date, or --from and --to")
 }
@@ -195,11 +193,15 @@ function named({
  * replace), absent (a day the feed log or archive does not have, which is not a failure of the command), or failed.
  */
 function reported<R>(
-  date: string,
+  date: GameDay,
   kind: CorpusDay["kind"],
   build: Effect.Effect<CorpusDay, CorpusBuild.CorpusBuildFailed | ArchiveFetchFailed, R>
 ): Effect.Effect<
-  { readonly date: string; readonly outcome: "built" | "kept" | "absent" | "failed"; readonly games: number },
+  {
+    readonly date: GameDay
+    readonly outcome: "built" | "kept" | "absent" | "failed"
+    readonly games: number
+  },
   never,
   R
 > {
@@ -233,3 +235,19 @@ function reported<R>(
 function unchosen(userMessage: string) {
   return Effect.fail(new CliError.UserError({ cause: "no days chosen", userMessage }))
 }
+
+// A feed log day is always YYYY-MM-DD.
+const decodeDays = Schema.decodeUnknownEffect(Schema.Array(GameDay))
+
+Command.make("corpus").pipe(
+  Command.withDescription("Build, backfill, and run the corpus's game days"),
+  Command.withSubcommands([build, backfill, run]),
+  Command.run({ version: "dev" }),
+  Effect.provide(
+    Layer.mergeAll(CorpusDays.layer, DateTime.layerCurrentZoneLocal).pipe(
+      Layer.provideMerge(HubConfig.layer),
+      Layer.provideMerge(NodeServices.layer)
+    )
+  ),
+  NodeRuntime.runMain
+)

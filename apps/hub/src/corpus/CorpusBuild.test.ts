@@ -27,7 +27,8 @@ import * as TestSnapshotFeed from "../TestSnapshotFeed.ts"
 import { framed } from "../TestSnapshotFeed.ts"
 import * as CorpusBuild from "./CorpusBuild.ts"
 import { CorpusDay, CorpusDays } from "./CorpusDay.ts"
-import { CorpusLine } from "./CorpusInput.ts"
+import { CorpusLine } from "./CorpusLine.ts"
+import { GameDay } from "./GameDay.ts"
 import { built, golden, inCorpus, local } from "./TestCorpus.ts"
 
 describe.each([
@@ -89,9 +90,9 @@ describe("CorpusBuild.captured", () => {
           framed(pushedSnapshot, local("2026-10-05T05:00:00"))
         ]
 
-        yield* built("2026-10-04", logged)
+        yield* built(neAtBufDay, logged)
 
-        const frames = yield* readBack("2026-10-04")
+        const frames = yield* readBack(neAtBufDay)
         assert.deepStrictEqual(
           frames.map(({ seq }) => seq),
           [1, 2]
@@ -114,9 +115,9 @@ describe("CorpusBuild.captured", () => {
             framed(b, local("2026-10-04T10:00:03"))
           ]
 
-          yield* built("2026-10-04", logged)
+          yield* built(neAtBufDay, logged)
 
-          const frames = yield* readBack("2026-10-04")
+          const frames = yield* readBack(neAtBufDay)
           assert.deepStrictEqual(
             frames.map(({ seq }) => seq),
             [2, 1, 3]
@@ -141,7 +142,7 @@ describe("CorpusBuild.captured", () => {
           })
         ]
 
-        const error = yield* built("2026-10-04", logged).pipe(Effect.flip)
+        const error = yield* built(neAtBufDay, logged).pipe(Effect.flip)
 
         const dates = yield* days.dates
         assert.deepStrictEqual(
@@ -163,7 +164,7 @@ describe("CorpusBuild.captured", () => {
           framed(pushedSnapshot, local("2026-10-05T05:00:00"))
         ]
 
-        const error = yield* built("2026-10-04", logged).pipe(Effect.flip)
+        const error = yield* built(neAtBufDay, logged).pipe(Effect.flip)
 
         const dates = yield* days.dates
         assert.deepStrictEqual([error.date, error.reason], ["2026-10-04", "NoFrames"])
@@ -177,7 +178,7 @@ describe("CorpusBuild.captured", () => {
       Effect.gen(function* () {
         const days = yield* CorpusDays
 
-        const error = yield* built("2026-10-04").pipe(Effect.flip)
+        const error = yield* built(neAtBufDay).pipe(Effect.flip)
 
         const dates = yield* days.dates
         assert.deepStrictEqual([error.date, error.reason], ["2026-10-04", "NoFrames"])
@@ -193,10 +194,10 @@ describe("CorpusBuild.backfilled", () => {
       Effect.gen(function* () {
         const days = yield* CorpusDays
 
-        const day = yield* stepped(CorpusBuild.backfilled("2026-10-04", ["nfl"], "fetch"))
+        const day = yield* stepped(CorpusBuild.backfilled(neAtBufDay, ["nfl"], "fetch"))
 
-        const files = yield* dayFiles(dir, "2026-10-04")
-        const written = yield* days.day("2026-10-04")
+        const files = yield* dayFiles(dir, neAtBufDay)
+        const written = yield* days.day(neAtBufDay)
         assert.deepStrictEqual(
           [day.date, day.kind, day.format, day.leagues, day.games],
           ["2026-10-04", "backfilled", CorpusLine.format, ["nfl"], 1]
@@ -216,13 +217,13 @@ describe("CorpusBuild.backfilled", () => {
   it.effect("should build the same day again from the archive alone, requesting nothing", () =>
     inArchive({}, ({ dir, requests }) =>
       Effect.gen(function* () {
-        const fetched = yield* stepped(CorpusBuild.backfilled("2026-10-04", ["nfl"], "fetch"))
+        const fetched = yield* stepped(CorpusBuild.backfilled(neAtBufDay, ["nfl"], "fetch"))
         const before = yield* requests
 
-        const rebuilt = yield* CorpusBuild.backfilled("2026-10-04", ["nfl"], "archived")
+        const rebuilt = yield* CorpusBuild.backfilled(neAtBufDay, ["nfl"], "archived")
 
         const after = yield* requests
-        const files = yield* dayFiles(dir, "2026-10-04")
+        const files = yield* dayFiles(dir, neAtBufDay)
         assert.deepStrictEqual(after, before)
         assert.deepStrictEqual(
           [rebuilt.kind, rebuilt.leagues, rebuilt.games],
@@ -241,7 +242,7 @@ describe("CorpusBuild.backfilled", () => {
       Effect.gen(function* () {
         const days = yield* CorpusDays
         const captured = new CorpusDay({
-          date: "2026-10-04",
+          date: neAtBufDay,
           kind: "captured",
           format: CorpusLine.format,
           leagues: ["nfl"],
@@ -250,9 +251,9 @@ describe("CorpusBuild.backfilled", () => {
         })
         yield* days.write(captured, { poll: Stream.empty, push: Stream.empty })
 
-        const kept = yield* stepped(CorpusBuild.backfilled("2026-10-04", ["nfl"], "fetch"))
+        const kept = yield* stepped(CorpusBuild.backfilled(neAtBufDay, ["nfl"], "fetch"))
 
-        const written = yield* days.day("2026-10-04")
+        const written = yield* days.day(neAtBufDay)
         const fetched = yield* requests
         assert.deepStrictEqual(kept, captured)
         assert.deepStrictEqual(written, Option.some(captured))
@@ -271,9 +272,7 @@ describe("CorpusBuild.backfilled", () => {
           const file = join(dir, "days", "2026-10-04", "day.json")
           yield* fs.makeDirectory(file, { recursive: true })
 
-          const exit = yield* stepped(CorpusBuild.backfilled("2026-10-04", ["nfl"], "fetch")).pipe(
-            Effect.exit
-          )
+          const exit = yield* stepped(CorpusBuild.backfilled(neAtBufDay, ["nfl"], "fetch")).pipe(Effect.exit)
 
           const fetched = yield* requests
           const there = yield* fs.stat(file)
@@ -294,9 +293,7 @@ describe("CorpusBuild.backfilled", () => {
         Effect.gen(function* () {
           const days = yield* CorpusDays
 
-          const error = yield* stepped(CorpusBuild.backfilled("2026-10-06", ["nfl"], "fetch")).pipe(
-            Effect.flip
-          )
+          const error = yield* stepped(CorpusBuild.backfilled(noGamesDay, ["nfl"], "fetch")).pipe(Effect.flip)
 
           const dates = yield* days.dates
           assert.deepStrictEqual(
@@ -316,11 +313,11 @@ describe("CorpusBuild.backfilled", () => {
       },
       ({ dir }) =>
         Effect.gen(function* () {
-          yield* stepped(CorpusBuild.backfilled("2026-10-04", ["nfl"], "fetch"))
+          yield* stepped(CorpusBuild.backfilled(neAtBufDay, ["nfl"], "fetch"))
 
-          const day = yield* stepped(CorpusBuild.backfilled("2026-10-04", ["fbs"], "fetch"))
+          const day = yield* stepped(CorpusBuild.backfilled(neAtBufDay, ["fbs"], "fetch"))
 
-          const files = yield* dayFiles(dir, "2026-10-04")
+          const files = yield* dayFiles(dir, neAtBufDay)
           assert.deepStrictEqual([day.kind, day.leagues, day.games], ["backfilled", ["fbs", "nfl"], 1])
           assert.deepStrictEqual(files, {
             poll: golden("poll"),
@@ -335,9 +332,9 @@ describe("CorpusBuild.backfilled", () => {
     () =>
       inArchive({}, () =>
         Effect.gen(function* () {
-          yield* stepped(CorpusBuild.backfilled("2026-10-04", ["nfl"], "fetch"))
+          yield* stepped(CorpusBuild.backfilled(neAtBufDay, ["nfl"], "fetch"))
 
-          const day = yield* CorpusBuild.backfilled("2026-10-04", ["fbs", "nfl"], "archived")
+          const day = yield* CorpusBuild.backfilled(neAtBufDay, ["fbs", "nfl"], "archived")
 
           assert.deepStrictEqual([day.leagues, day.games], [["nfl"], 1])
         })
@@ -347,9 +344,7 @@ describe("CorpusBuild.backfilled", () => {
   it.effect("should fail NotArchived, from the archive alone, for a date it has no scoreboard of", () =>
     inArchive({}, () =>
       Effect.gen(function* () {
-        const error = yield* CorpusBuild.backfilled("2026-10-04", ["fbs", "nfl"], "archived").pipe(
-          Effect.flip
-        )
+        const error = yield* CorpusBuild.backfilled(neAtBufDay, ["fbs", "nfl"], "archived").pipe(Effect.flip)
 
         assert.deepStrictEqual(
           [error._tag, error.reason, error.date],
@@ -359,6 +354,10 @@ describe("CorpusBuild.backfilled", () => {
     )
   )
 })
+
+// NE at BUF's recorded and archived day, and a day the archive has no game of.
+const neAtBufDay = GameDay.make("2026-10-04")
+const noGamesDay = GameDay.make("2026-10-06")
 
 // The lines of day `date`'s two files, as written.
 function dayFiles(dir: string, date: string) {
@@ -409,7 +408,7 @@ function recordedDayBuilt(from: DateTime.Utc, zone: DateTime.TimeZone | undefine
           const { join } = yield* Path.Path
           const frames = yield* recordedNeAtBuf
 
-          const day = yield* built("2026-10-04", frames)
+          const day = yield* built(neAtBufDay, frames)
 
           const bytes = yield* fs.readFile(join(dir, "days", day.date, "push.ndjson.gz"))
           const push = yield* Gzip.decompress(bytes, "gzip")
@@ -445,7 +444,7 @@ function replayedFrom(from: DateTime.Utc) {
 }
 
 /** Day `date`'s frames, as read back from the corpus. */
-function readBack(date: string) {
+function readBack(date: GameDay) {
   return Effect.gen(function* () {
     const days = yield* CorpusDays
     const read = yield* days.read(date)

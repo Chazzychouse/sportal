@@ -9,6 +9,7 @@ import type { Decoder } from "../provider/Decoder.ts"
 import { withEnv } from "../TestHubConfig.ts"
 import * as CorpusBuild from "./CorpusBuild.ts"
 import { CorpusDays } from "./CorpusDay.ts"
+import type { GameDay } from "./GameDay.ts"
 
 // The zone corpus tests read their game days in.
 const zone = "America/New_York"
@@ -58,7 +59,7 @@ export function inCorpus<A, E>(
 }
 
 /** Day `date` built from the feed log, opened for the build alone once `frames` are logged to it. */
-export function built(date: string, frames: ReadonlyArray<FeedFrame> = []) {
+export function built(date: GameDay, frames: ReadonlyArray<FeedFrame> = []) {
   return CorpusBuild.captured(date).pipe(Effect.provide(FeedLog.layerTest(frames)), Effect.scoped)
 }
 
