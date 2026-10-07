@@ -4,55 +4,6 @@ import { TeamId } from "@sportal/domain/Team"
 import { DateTime } from "effect"
 import { ScenarioScript } from "./ScenarioScript.ts"
 
-const uga = TeamId.make("fbs:UGA")
-const ala = TeamId.make("fbs:ALA")
-
-const drive = ScenarioScript.build("drive", [
-  {
-    id: "1",
-    home: "UGA",
-    away: "ALA",
-    timeline: [
-      [
-        "0:00",
-        {
-          status: "live",
-          period: 1,
-          clock: "15:00",
-          ball: { team: "home", yardLine: 75, down: 1, distance: 10 }
-        }
-      ],
-      [
-        "0:30",
-        {
-          clock: "14:30",
-          ball: { team: "home", yardLine: 71, down: 2, distance: 6 },
-          play: { _tag: "Rush", touchdown: false, yards: 4 }
-        }
-      ],
-      [
-        "1:00",
-        {
-          clock: "14:00",
-          ball: { team: "away", yardLine: 80, down: 1, distance: 10 },
-          play: { _tag: "Punt", return: "none", yards: 51 }
-        }
-      ],
-      [
-        "1:30",
-        {
-          clock: "13:20",
-          score: [0, 7],
-          ball: null,
-          play: { _tag: "Completion", touchdown: true, yards: 80, text: "Touchdown pass" }
-        }
-      ]
-    ]
-  }
-])
-
-const playAt = (at: number) => drive.steps.find((step) => step.at === at)?.plays[0]?.play
-
 describe("ScenarioScript.build", () => {
   it("should write a play from the ball before the change to the ball after it", () => {
     const rush = playAt(30_000)
@@ -114,14 +65,15 @@ describe("ScenarioScript.build", () => {
   })
 
   it("should write no plays for a step with no play", () => {
-    assert.deepStrictEqual(drive.steps[0]?.plays, [])
+    const first = drive.steps[0]
+
+    assert.deepStrictEqual(first?.plays, [])
   })
 
   it("should make one step per offset of a play", () => {
-    assert.deepStrictEqual(
-      drive.steps.map(({ at }) => at),
-      [0, 30_000, 60_000, 90_000]
-    )
+    const offsets = drive.steps.map(({ at }) => at)
+
+    assert.deepStrictEqual(offsets, [0, 30_000, 60_000, 90_000])
   })
 
   it.each([
@@ -160,25 +112,7 @@ describe("ScenarioScript.build", () => {
     { play: { _tag: "Safety" }, sentence: "Safety" },
     { play: { _tag: "Penalty" }, sentence: "Penalty for 4 yards" }
   ] as const)("should give each case and outcome a sentence: $sentence", ({ play, sentence }) => {
-    const script = ScenarioScript.build("sentence", [
-      {
-        id: "1",
-        home: "UGA",
-        away: "ALA",
-        timeline: [
-          [
-            "0:00",
-            {
-              status: "live",
-              period: 1,
-              clock: "15:00",
-              ball: { team: "home", yardLine: 75, down: 1, distance: 10 }
-            }
-          ],
-          ["0:30", { clock: "14:30", play: { ...play, yards: 4 } }]
-        ]
-      }
-    ])
+    const script = scriptOf({ ...play, yards: 4 })
 
     const written = script.steps.at(-1)?.plays[0]?.play
 
@@ -186,6 +120,168 @@ describe("ScenarioScript.build", () => {
   })
 })
 
+describe("ScenarioScript.build after the ball goes dead", () => {
+  it("should give a play with no ball before it the team whose score rose", () => {
+    const extraPoint = extraPointAfterTouchdown()
+
+    assert.instanceOf(extraPoint, ExtraPoint)
+    assert.strictEqual(extraPoint.team, ala)
+  })
+
+  it("should write it as scoring, its team at its end", () => {
+    const extraPoint = extraPointAfterTouchdown()
+
+    assert.deepStrictEqual([extraPoint?.scoring, extraPoint?.end], [true, { team: ala }])
+  })
+
+  it("should give it no spot but its team's at its start", () => {
+    const extraPoint = extraPointAfterTouchdown()
+
+    assert.deepStrictEqual(extraPoint?.start, { team: ala })
+  })
+})
+
+describe("ScenarioScript.build, as slates", () => {
+  it("should make one step per distinct offset, in time order", () => {
+    const offsets = twoGames.steps.map((step) => step.at)
+
+    assert.deepStrictEqual(offsets, [0, 30_000, 60_000, 90_000, 120_000])
+  })
+
+  it("should merge each change onto the game as it was before it", () => {
+    const tie = game("1", 60)
+
+    assert.deepStrictEqual(
+      [tie?.clock, tie?.home.score, tie?.period, tie?.situation?.possession, tie?.situation?.down],
+      ["0:41", 24, 4, "fbs:UGA", 1]
+    )
+  })
+
+  it("should not mark the red zone outside the 20", () => {
+    const tie = game("1", 0)
+
+    assert.isFalse(tie?.situation?.inRedZone())
+  })
+
+  it("should mark the red zone from the yard line", () => {
+    const tie = game("1", 60)
+
+    assert.isTrue(tie?.situation?.inRedZone())
+  })
+
+  it("should take the ball away between plays but keep the timeouts and the last play", () => {
+    const situation = game("1", 120)?.situation
+
+    assert.deepStrictEqual(
+      [situation?.possession, situation?.inRedZone(), situation?.homeTimeouts, situation?.lastPlay],
+      [undefined, false, 3, "Field goal is good"]
+    )
+  })
+
+  it("should keep a game scheduled until its first change", () => {
+    const before = game("2", 60)
+    const after = game("2", 90)
+
+    assert.deepStrictEqual([before?.status, after?.status], ["scheduled", "live"])
+  })
+
+  it("should schedule a game at its kickoff", () => {
+    const kickoff = game("2", 0)?.kickoff ?? twoGames.origin
+
+    assert.strictEqual(DateTime.toEpochMillis(kickoff), DateTime.toEpochMillis(twoGames.origin) + 90_000)
+  })
+
+  it("should list the networks it is given", () => {
+    const networks = game("1", 0)?.broadcasts.map((broadcast) => broadcast.network)
+
+    assert.deepStrictEqual(networks, ["CBS"])
+  })
+
+  it("should list no networks when it is given none", () => {
+    const opener = game("2", 0)
+
+    assert.deepStrictEqual(opener?.broadcasts, [])
+  })
+})
+
+const uga = TeamId.make("fbs:UGA")
+const ala = TeamId.make("fbs:ALA")
+
+/** One drive: a rush, a punt that turns the ball over, then a touchdown that kills it. */
+const drive = ScenarioScript.build("drive", [
+  {
+    id: "1",
+    home: "UGA",
+    away: "ALA",
+    timeline: [
+      [
+        "0:00",
+        {
+          status: "live",
+          period: 1,
+          clock: "15:00",
+          ball: { team: "home", yardLine: 75, down: 1, distance: 10 }
+        }
+      ],
+      [
+        "0:30",
+        {
+          clock: "14:30",
+          ball: { team: "home", yardLine: 71, down: 2, distance: 6 },
+          play: { _tag: "Rush", touchdown: false, yards: 4 }
+        }
+      ],
+      [
+        "1:00",
+        {
+          clock: "14:00",
+          ball: { team: "away", yardLine: 80, down: 1, distance: 10 },
+          play: { _tag: "Punt", return: "none", yards: 51 }
+        }
+      ],
+      [
+        "1:30",
+        {
+          clock: "13:20",
+          score: [0, 7],
+          ball: null,
+          play: { _tag: "Completion", touchdown: true, yards: 80, text: "Touchdown pass" }
+        }
+      ]
+    ]
+  }
+])
+
+function playAt(at: number) {
+  return drive.steps.find((step) => step.at === at)?.plays[0]?.play
+}
+
+/** A script whose only change, at 0:30, runs `play` from UGA's 25. */
+function scriptOf(
+  play: NonNullable<Parameters<typeof ScenarioScript.build>[1][number]["timeline"][number][1]["play"]>
+) {
+  return ScenarioScript.build("sentence", [
+    {
+      id: "1",
+      home: "UGA",
+      away: "ALA",
+      timeline: [
+        [
+          "0:00",
+          {
+            status: "live",
+            period: 1,
+            clock: "15:00",
+            ball: { team: "home", yardLine: 75, down: 1, distance: 10 }
+          }
+        ],
+        ["0:30", { clock: "14:30", play }]
+      ]
+    }
+  ])
+}
+
+/** An away touchdown that kills the ball, then its extra point. */
 const afterTouchdown = ScenarioScript.build("after touchdown", [
   {
     id: "1",
@@ -218,23 +314,11 @@ const afterTouchdown = ScenarioScript.build("after touchdown", [
   }
 ])
 
-describe("ScenarioScript.build after the ball goes dead", () => {
-  const extraPoint = afterTouchdown.steps.find((step) => step.at === 60_000)?.plays[0]?.play
+function extraPointAfterTouchdown() {
+  return afterTouchdown.steps.find((step) => step.at === 60_000)?.plays[0]?.play
+}
 
-  it("should give a play with no ball before it the team whose score rose", () => {
-    assert.instanceOf(extraPoint, ExtraPoint)
-    assert.strictEqual(extraPoint.team, ala)
-  })
-
-  it("should write it as scoring, its team at its end", () => {
-    assert.deepStrictEqual([extraPoint?.scoring, extraPoint?.end], [true, { team: ala }])
-  })
-
-  it("should give it no spot but its team's at its start", () => {
-    assert.deepStrictEqual(extraPoint?.start, { team: ala })
-  })
-})
-
+/** A tie in its last two minutes, its changes written out of order, and a game that kicks off at 1:30. */
 const twoGames = ScenarioScript.build("two games", [
   {
     id: "1",
@@ -266,62 +350,6 @@ const twoGames = ScenarioScript.build("two games", [
     timeline: [["1:30", { status: "live", period: 1, clock: "15:00" }]]
   }
 ])
-
-describe("ScenarioScript.build, as slates", () => {
-  it("should make one step per distinct offset, in time order", () => {
-    assert.deepStrictEqual(
-      twoGames.steps.map((step) => step.at),
-      [0, 30_000, 60_000, 90_000, 120_000]
-    )
-  })
-
-  it("should merge each change onto the game as it was before it", () => {
-    const tie = game("1", 60)
-
-    assert.deepStrictEqual(
-      [tie?.clock, tie?.home.score, tie?.period, tie?.situation?.possession, tie?.situation?.down],
-      ["0:41", 24, 4, "fbs:UGA", 1]
-    )
-  })
-
-  it("should not mark the red zone outside the 20", () => {
-    assert.isFalse(game("1", 0)?.situation?.inRedZone())
-  })
-
-  it("should mark the red zone from the yard line", () => {
-    assert.isTrue(game("1", 60)?.situation?.inRedZone())
-  })
-
-  it("should take the ball away between plays but keep the timeouts and the last play", () => {
-    const situation = game("1", 120)?.situation
-
-    assert.deepStrictEqual(
-      [situation?.possession, situation?.inRedZone(), situation?.homeTimeouts, situation?.lastPlay],
-      [undefined, false, 3, "Field goal is good"]
-    )
-  })
-
-  it("should keep a game scheduled until its first change", () => {
-    assert.deepStrictEqual([game("2", 60)?.status, game("2", 90)?.status], ["scheduled", "live"])
-  })
-
-  it("should schedule a game at its kickoff", () => {
-    const kickoff = game("2", 0)?.kickoff ?? twoGames.origin
-
-    assert.strictEqual(DateTime.toEpochMillis(kickoff), DateTime.toEpochMillis(twoGames.origin) + 90_000)
-  })
-
-  it("should list the networks it is given", () => {
-    assert.deepStrictEqual(
-      game("1", 0)?.broadcasts.map((broadcast) => broadcast.network),
-      ["CBS"]
-    )
-  })
-
-  it("should list no networks when it is given none", () => {
-    assert.deepStrictEqual(game("2", 0)?.broadcasts, [])
-  })
-})
 
 /** Game `id` in the slate of `twoGames`'s latest step by `seconds`. */
 function game(id: string, seconds: number) {
