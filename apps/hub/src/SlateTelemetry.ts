@@ -79,7 +79,8 @@ function toldInReplay(observation: SlateObservation, seq: Option.Option<number>)
 function toldLive(observation: SlateObservation, seq: Option.Option<number>): Effect.Effect<void> {
   return SlateObservation.$match(observation, {
     Took: ({ snapshot, from, outcome, had }) =>
-      Effect.logDebug(
+      // A hold and a fallback are rare, and each says the push fell behind the scoreboard.
+      Effect.logWithLevel(outcome === "held" || outcome === "fellBack" ? "Info" : "Debug")(
         `Slate: ${snapshot.matchup()}: ${outcome} ${from} ${snapshot.statusLine()}${Option.match(had, {
           onNone: () => "",
           onSome: (had) => ` (had ${had.statusLine()})`
@@ -90,6 +91,11 @@ function toldLive(observation: SlateObservation, seq: Option.Option<number>): Ef
             Metric.withAttributes(snapshots, { outcome, source: from, ...annotationsOf(snapshot) }),
             1
           )
+        ),
+        Effect.andThen(
+          outcome === "fellBack"
+            ? Metric.update(Metric.withAttributes(pollFallbacks, { league: snapshot.league }), 1)
+            : Effect.void
         ),
         Effect.annotateLogs(annotationsOf(snapshot))
       ),
@@ -245,6 +251,11 @@ const everyState = Object.keys(stateValues)
 const snapshots = Metric.counter("sportal_snapshots", {
   description:
     "Snapshots the slate took, ignored as behind its live game, or held by a covered game, and held ones that fell back",
+  incremental: true
+})
+
+const pollFallbacks = Metric.counter("sportal_poll_fallbacks", {
+  description: "Held poll snapshots that applied because the push had not caught them up in time, by league",
   incremental: true
 })
 

@@ -4,7 +4,7 @@ import { assert, describe, it } from "@effect/vitest"
 import { Delivery } from "@sportal/domain/Delivery"
 import { GameId } from "@sportal/domain/Game"
 import type { GameEvent } from "@sportal/domain/GameEvent"
-import { type LiveGame, LiveGameState } from "@sportal/domain/LiveGame"
+import { LiveGame, LiveGameState } from "@sportal/domain/LiveGame"
 import { PlayId } from "@sportal/domain/Play"
 import type { Slate as DomainSlate } from "@sportal/domain/Slate"
 import { liveSnapshot, play, snapshot, team } from "@sportal/domain/TestGame"
@@ -35,7 +35,7 @@ import { fixtures, neAtBufFrames, recordedCheckpoint } from "./provider/espn/Tes
 import { Decoded } from "./provider/Provider.ts"
 import { Slate } from "./Slate.ts"
 import { Scenarios } from "./scenario/Scenarios.ts"
-import { dyingAt, framed, pushed, slateFollowing } from "./TestFeed.ts"
+import { delivered, dyingAt, framed, pushed, slateFollowing } from "./TestFeed.ts"
 import * as TestSnapshotFeed from "./TestSnapshotFeed.ts"
 import { counted, gauged, recordingLogs, recordingSpans, withMetrics } from "./TestTelemetry.ts"
 
@@ -398,6 +398,36 @@ describe("following the feed log", () => {
       })
     )
   })
+})
+
+describe("a covered game's fallback", () => {
+  it.effect(
+    "a live poll ahead of a covered game is held, then falls back at until, logged and counted by league",
+    () => {
+      const { logs, layer } = recordingLogs()
+      return Effect.gen(function* () {
+        yield* delivered(
+          Delivery.cases.Snapshot.make({ snapshot: liveSnapshot({ id: one, clock: "5:00" }), from: "push" })
+        )
+        const ahead = liveSnapshot({ id: one, clock: "4:30", home: { team: team("HOME"), score: 7 } })
+        yield* delivered(Delivery.cases.Listing.make({ league: "fbs", games: [ahead] }))
+        assert.isTrue(
+          LiveGameState.$is("Holding")(
+            (yield* (yield* Slate).latest).live.get(one)?.state ?? LiveGameState.Over()
+          )
+        )
+        assert.isUndefined(yield* counted("sportal_poll_fallbacks"))
+        yield* TestClock.adjust(LiveGame.fallbackAfter)
+        assert.strictEqual((yield* (yield* Slate).latest).live.get(one)?.snapshot.home.score, 7)
+        assert.strictEqual(yield* counted("sportal_poll_fallbacks", { league: "fbs" }), 1)
+        const told = logs.filter(({ level }) => level === "Info").map(({ message }) => message)
+        assert.isTrue(told.some((message) => message.includes("held poll live, period 1, 4:30")))
+        assert.isTrue(told.some((message) => message.includes("fellBack poll live, period 1, 4:30")))
+        assert.isTrue(told.some((message) => message.includes("ScoreChanged")))
+        assert.isFalse(logs.some(({ level }) => level === "Error"))
+      }).pipe(Effect.provide(slateFollowing().pipe(Layer.provideMerge(layer))), withMetrics)
+    }
+  )
 })
 
 describe("a recorded game", () => {

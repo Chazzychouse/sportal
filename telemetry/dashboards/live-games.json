@@ -227,6 +227,11 @@
                         "text": "Over",
                         "color": "purple",
                         "index": 4
+                      },
+                      "5": {
+                        "text": "Holding",
+                        "color": "yellow",
+                        "index": 5
                       }
                     }
                   }
@@ -306,6 +311,11 @@
                   "text": "Over",
                   "color": "purple",
                   "index": 4
+                },
+                "5": {
+                  "text": "Holding",
+                  "color": "yellow",
+                  "index": 5
                 }
               }
             }
