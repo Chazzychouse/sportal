@@ -1,5 +1,5 @@
 import { assert, describe, it } from "@effect/vitest"
-import { DateTime } from "effect"
+import { DateTime, Option } from "effect"
 import { GameId, GameSnapshot, type GameStatus } from "./Game.ts"
 import { Situation } from "./Situation.ts"
 import { broadcast, situation, snapshot, team } from "./TestGame.ts"
@@ -339,5 +339,31 @@ describe("GameSnapshot#quarterLeft", () => {
     assert.strictEqual(inPlay({ clock: "7:30" }).quarterLeft(), 0.5)
     assert.strictEqual(inPlay({ clock: "0:00" }).quarterLeft(), 0)
     assert.strictEqual(inPlay({ clock: "" }).quarterLeft(), 1)
+  })
+})
+
+describe("GameSnapshot.spotOf", () => {
+  const game = snapshot({ home: { team: team("H"), score: 0 }, away: { team: team("A"), score: 0 } })
+
+  it.each([
+    ["home", 75, 25, "away"],
+    ["away", 75, 75, "home"],
+    ["home", 1, 99, "away"],
+    ["away", 1, 1, "home"],
+    ["home", 99, 1, "away"]
+  ] as const)(
+    "puts %s with %d to go at %d yards from the home goal, going %s",
+    (side, toGo, yards, toward) => {
+      assert.deepStrictEqual(
+        game.spotOf({ team: game[side].team.id, yardsToEndzone: toGo }),
+        Option.some({ yards, toward })
+      )
+    }
+  )
+
+  it("is none without a team, without a yard line, or for a team in neither side", () => {
+    assert.isTrue(Option.isNone(game.spotOf({ yardsToEndzone: 40 })))
+    assert.isTrue(Option.isNone(game.spotOf({ team: game.home.team.id })))
+    assert.isTrue(Option.isNone(game.spotOf({ team: team("X").id, yardsToEndzone: 40 })))
   })
 })

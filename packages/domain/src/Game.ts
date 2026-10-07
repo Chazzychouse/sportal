@@ -1,4 +1,4 @@
-import { DateTime, Order, Schema } from "effect"
+import { DateTime, Option, Order, Schema } from "effect"
 import { GameEvent } from "./GameEvent.ts"
 import { LeagueId } from "./League.ts"
 import { Situation } from "./Situation.ts"
@@ -156,6 +156,21 @@ export class GameSnapshot extends Schema.Class<GameSnapshot>("sportal/GameSnapsh
   }
 
   /**
+   * Where a spot is on the field, from the team with the ball and the yards it has to the goal it attacks. None
+   * when either is missing or the team plays in neither side.
+   */
+  spotOf(spot: {
+    readonly team?: TeamId | undefined
+    readonly yardsToEndzone?: number | undefined
+  }): Option.Option<BallSpot> {
+    const { team, yardsToEndzone } = spot
+    if (team === undefined || yardsToEndzone === undefined) return Option.none()
+    if (team === this.home.team.id) return Option.some({ yards: 100 - yardsToEndzone, toward: "away" })
+    if (team === this.away.team.id) return Option.some({ yards: yardsToEndzone, toward: "home" })
+    return Option.none()
+  }
+
+  /**
    * What happened in this game since `previous`, an earlier snapshot of it: points, the ball changing hands, a
    * drive reaching the 40, the red zone, goal to go, or fourth down, a timeout, and the clock and status. A change
    * of possession is a turnover only when the last play names an interception or a fumble and nobody scored.
@@ -217,6 +232,9 @@ export class GameSnapshot extends Schema.Class<GameSnapshot>("sportal/GameSnapsh
     ].flat()
   }
 }
+
+/** Where a spot is on the field: yards from the home goal line (0–100), and the way its team is going. */
+export type BallSpot = { readonly yards: number; readonly toward: "home" | "away" }
 
 const watchRank = { live: 0, upcoming: 1, over: 2 } as const
 
