@@ -1,12 +1,13 @@
 import type { LeagueId } from "@sportal/domain/League"
-import { FootballPlay, type PlayOutcome } from "@sportal/domain/Play"
+import { Play, type PlayOutcome } from "@sportal/domain/Play"
 import { Array as Arr, Effect, Option, Schema, SchemaGetter, type SchemaIssue } from "effect"
 import { teamId } from "./EspnEvent.ts"
+import { PlayEntity, type PlayFields, PlayType } from "./EspnPayload.ts"
 
 /** ESPN's play entity, as a game package lists it under `entities.plays`, read as a `Play` of `league`. */
-export function Play(league: LeagueId) {
-  return Entity.pipe(
-    Schema.decodeTo(Schema.toType(FootballPlay), {
+export function FootballPlay(league: LeagueId) {
+  return PlayEntity.pipe(
+    Schema.decodeTo(Schema.toType(Play), {
       decode: SchemaGetter.transformEffect((entity) =>
         read(league, {
           ...entity,
@@ -27,15 +28,15 @@ export function Play(league: LeagueId) {
  */
 export function read(
   league: LeagueId,
-  play: typeof Alike.Type & {
+  play: Schema.Struct.Type<ReturnType<typeof PlayFields<Schema.String>>> & {
     readonly team?: string | undefined
     readonly caller?: string | undefined
     readonly homeWinProbability?: number | undefined
   }
-): Effect.Effect<FootballPlay, SchemaIssue.Issue> {
+): Effect.Effect<Play, SchemaIssue.Issue> {
   const outcome = outcomeOf(play.type)
   // ESPN reports down -1, with a meaningless distance, when no down is being played (after a score, at a stoppage).
-  const spot = ({ down, distance, yardsToEndzone, team }: typeof Alike.Type.start) => ({
+  const spot = ({ down, distance, yardsToEndzone, team }: typeof play.start) => ({
     ...(down === undefined || down < 1 ? {} : { down }),
     ...(down === undefined || down < 1 || distance === undefined ? {} : { distance }),
     ...(yardsToEndzone === undefined ? {} : { yardsToEndzone }),
@@ -57,38 +58,11 @@ export function read(
     ...(play.homeWinProbability === undefined ? {} : { homeWinProbability: play.homeWinProbability })
   }
 
-  const wire = FootballPlay.gainsYards(outcome)
+  const wire = Play.gainsYards(outcome)
     ? { ...outcome, ...shared, ...team(play.team), yards: play.statYardage }
     : { ...outcome, ...shared, ...(outcome._tag === "Timeout" ? team(play.caller) : {}) }
 
   return decodeCase(wire).pipe(Effect.mapError(({ issue }) => issue))
-}
-
-/**
- * The fields of a play that both of ESPN's feeds spell alike, a spot's team read by `team`: FastCast's entity refers to
- * a team by `$key`, a game summary's play by `id`.
- */
-export function fields<Team extends Schema.Top>(team: Team) {
-  const spot = Schema.Struct({
-    team: Schema.optional(team),
-    down: Schema.optional(Schema.Int),
-    distance: Schema.optional(Schema.Int),
-    yardsToEndzone: Schema.optional(Schema.Int)
-  })
-  return {
-    id: Schema.String,
-    sequenceNumber: Schema.FiniteFromString.check(Schema.isInt()),
-    type: PlayType,
-    text: Schema.String,
-    period: Schema.Struct({ number: Schema.Int }),
-    clock: Schema.Struct({ displayValue: Schema.String }),
-    statYardage: Schema.Int,
-    scoringPlay: Schema.Boolean,
-    homeScore: Schema.Int,
-    awayScore: Schema.Int,
-    start: spot,
-    end: spot
-  }
 }
 
 /** The types of `entities` that the table does not know, each once. */
@@ -103,35 +77,8 @@ export function unknownTypes(
   )
 }
 
-const PlayType = Schema.Struct({ id: Schema.String, text: Schema.String })
-
-// FastCast refers to a team by its `$key`, ESPN's id for it.
-const Key = Schema.Struct({ $key: Schema.String }).pipe(
-  Schema.decodeTo(Schema.String, {
-    decode: SchemaGetter.transform(({ $key }) => $key),
-    encode: SchemaGetter.transform(($key) => ({ $key }))
-  })
-)
-
-/** ESPN's play entity as a game package lists it: what `Play` reads of it. */
-const Entity = Schema.Struct({
-  ...fields(Key),
-  team: Schema.optional(Key),
-  participants: Schema.optional(
-    Schema.Array(Schema.Struct({ type: Schema.optional(Schema.String), team: Schema.optional(Key) }))
-  ),
-  probabilities: Schema.optional(
-    Schema.Struct({
-      winProbability: Schema.optional(Schema.Struct({ homeWinPercentage: Schema.Finite }))
-    })
-  )
-})
-
-// What `read` takes of either feed's play, its teams read to ESPN's ids.
-const Alike = Schema.Struct(fields(Schema.String))
-
 const decodeType = Schema.decodeUnknownOption(Schema.Struct({ type: PlayType }))
-const decodeCase = Schema.decodeUnknownEffect(FootballPlay)
+const decodeCase = Schema.decodeUnknownEffect(Play)
 
 function outcomeOf(type: typeof PlayType.Type): PlayOutcome {
   return byId.get(type.id) ?? { _tag: "Other", type }

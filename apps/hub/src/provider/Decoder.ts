@@ -103,7 +103,7 @@ export type DecodeObservation = Data.TaggedEnum<{
   Reset: {
     readonly league: LeagueId
     readonly topic: string
-    readonly reason: "Gap" | "Unapplicable"
+    readonly reason: ResetReason
     readonly detail: string
   }
   FrameUndecoded: {
@@ -112,7 +112,7 @@ export type DecodeObservation = Data.TaggedEnum<{
     readonly kind: string
     readonly cause: unknown
   }
-  EventUndecoded: { readonly league: LeagueId; readonly feed: "poll" | "fastcast"; readonly cause: unknown }
+  EventUndecoded: { readonly league: LeagueId; readonly feed: FeedFrame["feed"]; readonly cause: unknown }
   PlayUndecoded: {
     readonly league: LeagueId
     readonly game: GameId
@@ -122,3 +122,6 @@ export type DecodeObservation = Data.TaggedEnum<{
   PlayTypeUnknown: { readonly id: string; readonly text: string }
 }>
 export const DecodeObservation = Data.taggedEnum<DecodeObservation>()
+
+/** Why a live feed topic's document was reset: a message was missed, or one would not apply to it. */
+export type ResetReason = "Gap" | "Unapplicable"

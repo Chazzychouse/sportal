@@ -7,7 +7,6 @@ import * as Gzip from "../../Gzip.ts"
 import { decodedFrames } from "../TestDecoder.ts"
 import * as EspnDecode from "./EspnDecode.ts"
 import * as EspnPlay from "./EspnPlay.ts"
-import * as EspnSummary from "./EspnSummary.ts"
 import { recordedNeAtBuf } from "./TestEspn.ts"
 
 // Play entities from the 2026-10-04 NFL recording, each as its game's `gp-` topic first added it, without its
@@ -19,7 +18,7 @@ const entity = (id: string) => recorded[id] ?? {}
 
 const nfl = (team: string) => TeamId.make(`nfl:${team}`)
 
-const decodePlay = Schema.decodeUnknownEffect(EspnPlay.Play("nfl"))
+const decodePlay = Schema.decodeUnknownEffect(EspnPlay.FootballPlay("nfl"))
 
 // A recorded play read as `type` instead of its own.
 const typed = (type: { readonly id: string; readonly text: string }) =>
@@ -74,7 +73,7 @@ const recordedTypes = [
   { id: "66", text: "End of Game", play: { _tag: "PeriodEnd", ends: "game" } }
 ] as const
 
-describe("EspnPlay.Play", () => {
+describe("EspnPlay.FootballPlay", () => {
   it.effect("should read a rush, with its text and win probability", () =>
     Effect.gen(function* () {
       const play = yield* decodePlay(entity("40187297063"))
@@ -243,8 +242,7 @@ describe("EspnPlay.Play", () => {
             { league: "nfl", name: "nfl-summary-401872929" },
             { league: "fbs", name: "fbs-summary-401856705" }
           ] as const,
-          ({ league, name }) =>
-            Effect.flatMap(summaryOf(name), (summary) => EspnSummary.plays(league, summary))
+          ({ league, name }) => Effect.flatMap(summaryOf(name), EspnDecode.decoders[league].decodeSummary)
         )
 
         const all = [...pushed, ...entities, ...summaries.flat().map(({ play }) => play)]

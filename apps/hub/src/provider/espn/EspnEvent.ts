@@ -1,8 +1,9 @@
-import { type Broadcast, GameId, GameSnapshot, GameStatus, Network } from "@sportal/domain/Game"
+import { type Broadcast, GameId, GameSnapshot, type GameStatus, Network } from "@sportal/domain/Game"
 import type { LeagueId } from "@sportal/domain/League"
-import { Situation as DomainSituation } from "@sportal/domain/Situation"
+import { Situation } from "@sportal/domain/Situation"
 import { Team, TeamId } from "@sportal/domain/Team"
 import { type DateTime, Effect, Schema, SchemaGetter, SchemaIssue } from "effect"
+import { type EspnSituation, type EspnStatus, FastCastEvent, SiteEvent } from "./EspnPayload.ts"
 
 /**
  * One game as either ESPN feed spells it, read as a `league` `GameSnapshot`: an event of the site scoreboard the Hub
@@ -11,7 +12,7 @@ import { type DateTime, Effect, Schema, SchemaGetter, SchemaIssue } from "effect
  */
 export function EspnEvent(league: LeagueId) {
   return Schema.Union([
-    Raw.pipe(
+    SiteEvent.pipe(
       Schema.decodeTo(Schema.toType(GameSnapshot), {
         decode: SchemaGetter.transformEffect((event) => {
           const [competition] = event.competitions
@@ -23,7 +24,7 @@ export function EspnEvent(league: LeagueId) {
               ...team,
               homeAway,
               score,
-              ranking: curatedRank?.current
+              rank: curatedRank?.current
             })),
             broadcasts: (competition.geoBroadcasts ?? []).map(({ type, media }) => ({
               medium: type.shortName,
@@ -35,40 +36,14 @@ export function EspnEvent(league: LeagueId) {
         encode: SchemaGetter.forbidden(() => "A GameSnapshot cannot be encoded back to an ESPN event")
       })
     ),
-    // FastCast's competitor is the team itself, with its score and rank beside its names, and no short name.
-    Schema.Struct({
-      id: Schema.String,
-      date: Schema.DateTimeUtcFromString,
-      fullStatus: Status,
-      competitors: Schema.Array(
-        Schema.Struct({
-          id: Schema.String,
-          homeAway: Schema.Literals(["home", "away"]),
-          score: Schema.optional(Score),
-          abbreviation: Schema.String,
-          displayName: Schema.String,
-          location: Schema.optional(Schema.String),
-          logo: Schema.optional(Schema.String),
-          color: Schema.optional(Schema.String),
-          alternateColor: Schema.optional(Schema.String),
-          rank: Schema.optional(Ranking)
-        })
-      ),
-      broadcasts: Schema.optional(
-        Schema.Array(Schema.Struct({ type: Schema.String, shortName: Schema.String }))
-      ),
-      situation: Schema.optional(Situation)
-    }).pipe(
+    FastCastEvent.pipe(
       Schema.decodeTo(Schema.toType(GameSnapshot), {
         decode: SchemaGetter.transformEffect((event) =>
           snapshot(league, {
             id: event.id,
             kickoff: event.date,
             status: event.fullStatus,
-            competitors: event.competitors.map(({ rank, ...competitor }) => ({
-              ...competitor,
-              ranking: rank
-            })),
+            competitors: event.competitors,
             broadcasts: (event.broadcasts ?? []).map(({ type, shortName }) => ({
               medium: type,
               network: shortName
@@ -82,94 +57,13 @@ export function EspnEvent(league: LeagueId) {
   ])
 }
 
-// The game's status as both feeds spell it (the site's `status`, FastCast's `fullStatus`).
-const Status = Schema.Struct({
-  period: Schema.Int,
-  displayClock: Schema.String,
-  type: Schema.Struct({
-    name: Schema.String,
-    state: Schema.Literals(["pre", "in", "post"])
-  }).pipe(
-    Schema.decodeTo(GameStatus, {
-      decode: SchemaGetter.transform(statusOf),
-      encode: SchemaGetter.transform((status) => espnStatuses[status])
-    })
-  )
-})
-
-// A competitor's score: digits, or nothing before kickoff, which reads as 0.
-const Score = Schema.String.pipe(
-  Schema.decodeTo(Schema.Int, {
-    decode: SchemaGetter.transform((score) => Number.parseInt(score, 10) || 0),
-    encode: SchemaGetter.transform(String)
-  })
-)
-
-// ESPN ranks an unranked team 99, which reads as no ranking.
-const Ranking = Schema.Int.pipe(
-  Schema.decodeTo(Schema.UndefinedOr(Schema.Int), {
-    decode: SchemaGetter.transform((rank) => (rank > 25 ? undefined : rank)),
-    encode: SchemaGetter.transform((ranking) => ranking ?? 99)
-  })
-)
-
-const Situation = Schema.Struct({
-  possession: Schema.optional(Schema.String),
-  down: Schema.optional(Schema.Int),
-  distance: Schema.optional(Schema.Int),
-  yardLine: Schema.optional(Schema.Int),
-  homeTimeouts: Schema.optional(Schema.Int),
-  awayTimeouts: Schema.optional(Schema.Int),
-  lastPlay: Schema.optional(Schema.Struct({ text: Schema.optional(Schema.String) }))
-})
-
-/**
- * One event of the site scoreboard, as ESPN spells it: what the decoder reads of it, each field read into the domain's
- * words. Encoding one writes those words back in ESPN's.
- */
-const Raw = Schema.Struct({
-  id: Schema.String,
-  date: Schema.DateTimeUtcFromString,
-  status: Status,
-  competitions: Schema.NonEmptyArray(
-    Schema.Struct({
-      geoBroadcasts: Schema.optional(
-        Schema.Array(
-          Schema.Struct({
-            type: Schema.Struct({ shortName: Schema.String }),
-            media: Schema.Struct({ shortName: Schema.String })
-          })
-        )
-      ),
-      situation: Schema.optional(Situation),
-      competitors: Schema.Array(
-        Schema.Struct({
-          homeAway: Schema.Literals(["home", "away"]),
-          score: Schema.optional(Score),
-          curatedRank: Schema.optional(Schema.Struct({ current: Ranking })),
-          team: Schema.Struct({
-            id: Schema.String,
-            abbreviation: Schema.String,
-            displayName: Schema.String,
-            location: Schema.optional(Schema.String),
-            shortDisplayName: Schema.optional(Schema.String),
-            logo: Schema.optional(Schema.String),
-            color: Schema.optional(Schema.String),
-            alternateColor: Schema.optional(Schema.String)
-          })
-        })
-      )
-    })
-  )
-})
-
 /** The snapshot an event says, once each feed's spelling is read into one shape. */
 function snapshot(
   league: LeagueId,
   event: {
     readonly id: string
     readonly kickoff: DateTime.Utc
-    readonly status: typeof Status.Type
+    readonly status: typeof EspnStatus.Type
     readonly competitors: ReadonlyArray<{
       readonly homeAway: "home" | "away"
       readonly id: string
@@ -180,11 +74,11 @@ function snapshot(
       readonly logo?: string | undefined
       readonly color?: string | undefined
       readonly alternateColor?: string | undefined
-      readonly score?: number | undefined
-      readonly ranking?: number | undefined
+      readonly score?: string | undefined
+      readonly rank?: number | undefined
     }>
     readonly broadcasts: ReadonlyArray<{ readonly medium: string; readonly network: string }>
-    readonly situation: typeof Situation.Type | undefined
+    readonly situation: typeof EspnSituation.Type | undefined
   }
 ): Effect.Effect<GameSnapshot, SchemaIssue.Issue> {
   const home = event.competitors.find((competitor) => competitor.homeAway === "home")
@@ -206,15 +100,17 @@ function snapshot(
       ...(competitor.color === undefined ? {} : { color: competitor.color }),
       ...(competitor.alternateColor === undefined ? {} : { alternateColor: competitor.alternateColor })
     }),
-    score: competitor.score ?? 0,
-    ...(competitor.ranking === undefined ? {} : { ranking: competitor.ranking })
+    // A score is digits, or nothing before kickoff, which reads as 0.
+    score: Number.parseInt(competitor.score ?? "", 10) || 0,
+    // ESPN ranks an unranked team 99, which reads as no ranking.
+    ...(competitor.rank === undefined || competitor.rank > 25 ? {} : { ranking: competitor.rank })
   })
   return Effect.succeed(
     new GameSnapshot({
       id: GameId.make(event.id),
       league,
       kickoff: event.kickoff,
-      status: event.status.type,
+      status: statusOf(event.status.type),
       period: event.status.period,
       clock: event.status.displayClock,
       home: side(home),
@@ -235,8 +131,8 @@ function broadcast(medium: string, network: string): Array<Broadcast> {
 }
 
 /** The domain `Situation`; the league and the home team's id orient its possession and yard line. */
-function situation(league: LeagueId, raw: typeof Situation.Type, homeTeamId: string): DomainSituation {
-  return new DomainSituation({
+function situation(league: LeagueId, raw: typeof EspnSituation.Type, homeTeamId: string): Situation {
+  return new Situation({
     homeTimeouts: raw.homeTimeouts ?? 0,
     awayTimeouts: raw.awayTimeouts ?? 0,
     ...(raw.possession === undefined ? {} : { possession: teamId(league, raw.possession) }),
@@ -252,35 +148,21 @@ function situation(league: LeagueId, raw: typeof Situation.Type, homeTeamId: str
   })
 }
 
-function statusOf(type: { readonly name: string; readonly state: "pre" | "in" | "post" }): GameStatus {
-  switch (type.name) {
-    case "STATUS_HALFTIME":
-      return "halftime"
-    case "STATUS_DELAYED":
-      return "delayed"
-    case "STATUS_POSTPONED":
-      return "postponed"
-    case "STATUS_CANCELED":
-      return "canceled"
-  }
-  return type.state === "pre" ? "scheduled" : type.state === "in" ? "live" : "final"
+function statusOf(type: (typeof EspnStatus.Type)["type"]): GameStatus {
+  return byName.get(type.name) ?? byState[type.state]
 }
 
-// Each status as ESPN spells it, for `statusOf` to read back.
-const espnStatuses: Readonly<
-  Record<GameStatus, { readonly name: string; readonly state: "pre" | "in" | "post" }>
-> = {
-  scheduled: { name: "STATUS_SCHEDULED", state: "pre" },
-  live: { name: "STATUS_IN_PROGRESS", state: "in" },
-  halftime: { name: "STATUS_HALFTIME", state: "in" },
-  delayed: { name: "STATUS_DELAYED", state: "in" },
-  final: { name: "STATUS_FINAL", state: "post" },
-  postponed: { name: "STATUS_POSTPONED", state: "post" },
-  canceled: { name: "STATUS_CANCELED", state: "post" }
-}
+// The statuses ESPN's name says, whatever its state; any other name reads as its state's.
+const byName: ReadonlyMap<string, GameStatus> = new Map([
+  ["STATUS_HALFTIME", "halftime"],
+  ["STATUS_DELAYED", "delayed"],
+  ["STATUS_POSTPONED", "postponed"],
+  ["STATUS_CANCELED", "canceled"]
+])
 
-/** The site scoreboard, as polled or as fetched for a past date: its events, each for `EspnEvent` to read. */
-export const Scoreboard = Schema.Struct({ events: Schema.Array(Schema.Unknown) })
+const byState = { pre: "scheduled", in: "live", post: "final" } as const satisfies Readonly<
+  Record<(typeof EspnStatus.Type)["type"]["state"], GameStatus>
+>
 
 /** The `TeamId` of ESPN's team `id` in `league`: ESPN's ids are only unique within a league. */
 export function teamId(league: LeagueId, id: string): TeamId {

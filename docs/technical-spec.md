@@ -237,14 +237,16 @@ sportal/
     │       │   └── LanAddresses.ts The addresses a phone on the home network can reach
     │       ├── provider/
     │       │   ├── Provider.ts     The port: poll, push, polling, reconnect; LiveFeed, LiveFeedDemand, Polling, ProviderUnavailable
-    │       │   ├── Decoder.ts      A provider's decode, and its only home; Decoded, DecodeObservation; a layer of its own, paired with its provider by HubMode
+    │       │   ├── Decoder.ts      A provider's decode, and its only home; Decoded, DecodeObservation, ResetReason; a layer of its own, paired with its provider by HubMode
     │       │   ├── Archive.ts      A provider's archive of finished games: the port, ArchivedGame, ArchiveFetchFailed
     │       │   ├── TestDecoder.ts  What the provided `Decoder` says of a test's frames
     │       │   └── espn/
     │       │       ├── EspnProvider.ts     Implements the port: polls, pushes through the FastCast service, and its polling Schedule
-    │       │       ├── EspnDecode.ts       Frames to deliveries: listings, snapshots, plays, resyncs
+    │       │       ├── EspnDecode.ts       Frames to deliveries: listings, snapshots, plays, resyncs; each league's decoders
+    │       │       ├── EspnPayload.ts      ESPN's JSON as ESPN spells it: events, scoreboard, plays, summary
     │       │       ├── EspnEvent.ts        One game as either ESPN feed spells it, as a GameSnapshot
     │       │       ├── EspnPlay.ts         ESPN's plays and their type ids, as Play
+    │       │       ├── EspnSummary.ts      A game summary, as its plays with their wallclocks
     │       │       ├── FastCast.ts         ESPN's push, a service: the socket, as frames; its checkpoint retry is the schedule `FastCast.layer` builds it with
     │       │       ├── FastCastDocument.ts A topic's document, rebuilt from checkpoints and patches
     │       │       ├── FastCastMessage.ts  FastCast's wire shapes
@@ -354,7 +356,7 @@ class Decoder extends Context.Service<Decoder, {
 - `poll` returns a league's scoreboard as received; the Hub logs it before anything decodes it. A provider's adapter provides its `Decoder` as a layer of its own, the only home of its decode, and `HubMode` pairs the two, so a recorded scenario decodes its frames as the provider that recorded them would. `decode` turns frames, polled or pushed, into exactly one `Decoded` per frame, carrying the frame's `seq` and receive time, its `Delivery`s (`Listing`, `Snapshot`, or `Plays`), the channels whose document had to be dropped (`resyncs`), and the `DecodeObservation`s decode made for telemetry. A frame that said nothing is a `Decoded` with three empty arrays. It never logs or counts. The snapshot feed (`TestSnapshotFeed.ts`) is the provider tests play: its frames are our own deliveries. Every scenario plays through ESPN's decode.
 - `push` is the live feed: one element per frame, raw, on a `demand` stream (`LiveFeedDemand`: `Games`, the current games whenever which they are changes, and `Resync`, a channel to read again from its checkpoint). ESPN's FastCast implements it (`docs/adr/0007-fastcast-live-feed.md`), a service the ESPN provider yields, whose checkpoint retry is the schedule `FastCast.layer` builds it with, and subscribes to the scoreboard topics (the leagues from `HubConfig`) and to a `gp-` topic for each game in `Games`. `reconnect` is the Schedule Ingest subscribes to the push again on when it fails.
 - `polling` is when to poll again, given the slate after the last poll and the leagues that failed. Ingest runs `poll` repeated on it, once the slate has taken the poll's last frame; the adapter owns the rules.
-- Provider vocabulary stops at the folder edge. ESPN's "event", "competition", and "competitor" exist only in `EspnEvent.ts`, `FastCastMessage.ts`, and `EspnPlay.ts`.
+- Provider vocabulary stops at the folder edge. ESPN's "event", "competition", and "competitor" exist only in `EspnPayload.ts`, `EspnEvent.ts`, `FastCastMessage.ts`, and `EspnPlay.ts`.
 - The Hub composes providers per league: ESPN for NFL; ESPN with CollegeFootballData filling gaps for FBS. The composition is itself a `Provider`, so Ingest sees one.
 - Each adapter's tests are "this recorded frame decodes to this delivery".
 

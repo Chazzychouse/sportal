@@ -1,7 +1,8 @@
 import { readFileSync } from "node:fs"
-import { assert, describe, layer } from "@effect/vitest"
+import { assert, describe, it, layer } from "@effect/vitest"
 import type { Delivery } from "@sportal/domain/Delivery"
 import { GameId, GameSnapshot } from "@sportal/domain/Game"
+import { LeagueId } from "@sportal/domain/League"
 import { Play, PlayId } from "@sportal/domain/Play"
 import { type Data, DateTime, Effect, Equal, Layer, Metric, Option, Record, Schema } from "effect"
 import type { FeedFrame } from "../../Frame.ts"
@@ -10,6 +11,7 @@ import type { DecodeObservation } from "../Decoder.ts"
 import { decodedFrames, FramesDecoded } from "../TestDecoder.ts"
 import * as EspnDecode from "./EspnDecode.ts"
 import { EspnEvent } from "./EspnEvent.ts"
+import * as FastCastMessage from "./FastCastMessage.ts"
 import { recordedNeAtBuf } from "./TestEspn.ts"
 
 // Recorded from ESPN on 2026-10-04: the NFL checkpoint at 17:52Z, every socket text on its topic after it until
@@ -789,6 +791,14 @@ layer(EspnDecode.layer)("EspnDecode", (it) => {
   })
 })
 
+describe("EspnDecode.decoders", () => {
+  it("should have a decoder for every league", () => {
+    const leagues = Record.keys(EspnDecode.decoders)
+
+    assert.deepStrictEqual(leagues, [...LeagueId.literals])
+  })
+})
+
 /**
  * What `frames` decode to, each numbered by its place from 1: the deliveries, what decoding observed, and the channels
  * it asked to have checkpointed again, in order.
@@ -867,26 +877,22 @@ function plays(...ids: ReadonlyArray<string>) {
 /** The recorded socket texts as FastCast frames them, each `H` followed by the recorded checkpoint. */
 function recorded(texts: ReadonlyArray<string>): ReadonlyArray<FeedFrame> {
   return texts.flatMap((body) => {
-    const { op, tc, mid } = decodeEnvelope(body)
+    const { message, channel, sourceId } = decodeEnvelope(body)
     const frame: FeedFrame = {
       receivedAt: at,
       feed: "fastcast",
-      channel: tc ?? "socket",
+      channel: channel ?? "socket",
       kind: "message",
       body,
-      ...(mid === undefined ? {} : { sourceId: mid })
+      ...(sourceId === undefined ? {} : { sourceId })
     }
-    return op === "H" && tc !== undefined && mid !== undefined
+    return message.op === "H" && channel !== undefined && sourceId !== undefined
       ? [frame, { ...frame, kind: "checkpoint", body: checkpointBody }]
       : [frame]
   })
 }
 
-const decodeEnvelope = Schema.decodeUnknownSync(
-  Schema.fromJsonString(
-    Schema.Struct({ op: Schema.String, tc: Schema.optional(Schema.String), mid: Schema.optional(Schema.Int) })
-  )
-)
+const decodeEnvelope = Schema.decodeUnknownSync(FastCastMessage.Envelope)
 
 // Each game as the last pushed snapshot of it.
 function lastPushed(deliveries: ReadonlyArray<{ readonly delivery: Delivery }>) {

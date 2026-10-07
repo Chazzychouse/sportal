@@ -3,10 +3,12 @@ import type { GameId, GameSnapshot } from "@sportal/domain/Game"
 import { LeagueId } from "@sportal/domain/League"
 import { Play } from "@sportal/domain/Play"
 import { Array as Arr, Effect, Layer, Option, Record, Result, Schema, Stream } from "effect"
-import type { Frame } from "../../Frame.ts"
+import type { FeedFrame, Frame } from "../../Frame.ts"
 import { Decoded, DecodeObservation, Decoder } from "../Decoder.ts"
-import { EspnEvent, Scoreboard } from "./EspnEvent.ts"
+import { EspnEvent } from "./EspnEvent.ts"
+import { Scoreboard } from "./EspnPayload.ts"
 import * as EspnPlay from "./EspnPlay.ts"
+import * as EspnSummary from "./EspnSummary.ts"
 import * as FastCastDocument from "./FastCastDocument.ts"
 
 /**
@@ -38,6 +40,25 @@ export const layer = Layer.succeed(
 )
 
 /**
+ * Each league's decode of what ESPN sends for it: an event of either feed, a play entity, a game summary, and the
+ * site scoreboard's JSON.
+ */
+export const decoders = Record.fromIterableWith(LeagueId.literals, (league) => [
+  league,
+  decodersOf(league)
+  // Effect types a record built from keys as keyed by any string; every league is a key, as its test asserts.
+]) as Readonly<Record<LeagueId, ReturnType<typeof decodersOf>>>
+
+function decodersOf(league: LeagueId) {
+  return {
+    decodeEvent: Schema.decodeUnknownEffect(EspnEvent(league)),
+    decodePlay: Schema.decodeUnknownEffect(EspnPlay.FootballPlay(league)),
+    decodeSummary: Schema.decodeUnknownEffect(EspnSummary.Summary(league)),
+    decodeScoreboard: Schema.decodeUnknownEffect(Schema.fromJsonString(Scoreboard))
+  }
+}
+
+/**
  * Each league's last listing, the FastCast topics' documents, the unknown play types already noted, and the plays
  * already noted as not decoding.
  */
@@ -49,7 +70,10 @@ type State = {
 }
 
 function listed(state: State, frame: Frame): Effect.Effect<readonly [State, Decoded]> {
-  return Effect.all({ league: decodeLeague(frame.channel), scoreboard: decodeScoreboard(frame.body) }).pipe(
+  return decodeLeague(frame.channel).pipe(
+    Effect.flatMap((league) =>
+      Effect.map(decoders[league].decodeScoreboard(frame.body), (scoreboard) => ({ league, scoreboard }))
+    ),
     Effect.flatMap(({ league, scoreboard }) =>
       gamesOf(league, scoreboard.events, "poll").pipe(
         Effect.map(
@@ -69,7 +93,6 @@ function listed(state: State, frame: Frame): Effect.Effect<readonly [State, Deco
 }
 
 const decodeLeague = Schema.decodeUnknownEffect(LeagueId)
-const decodeScoreboard = Schema.decodeUnknownEffect(Schema.fromJsonString(Scoreboard))
 
 function pushed(state: State, frame: Frame): Effect.Effect<readonly [State, Decoded]> {
   return FastCastDocument.advance(state.documents, frame).pipe(
@@ -126,13 +149,13 @@ function pushed(state: State, frame: Frame): Effect.Effect<readonly [State, Deco
 function gamesOf(
   league: LeagueId,
   events: ReadonlyArray<unknown>,
-  feed: "poll" | "fastcast"
+  feed: FeedFrame["feed"]
 ): Effect.Effect<{
   readonly games: ReadonlyArray<GameSnapshot>
   readonly observed: ReadonlyArray<DecodeObservation>
 }> {
   return Effect.forEach(events, (event) =>
-    decodeEvent[league](event).pipe(
+    decoders[league].decodeEvent(event).pipe(
       Effect.map(Result.succeed),
       Effect.catch((cause) =>
         Effect.succeed(Result.fail(DecodeObservation.EventUndecoded({ league, feed, cause })))
@@ -144,11 +167,6 @@ function gamesOf(
       return { games, observed }
     })
   )
-}
-
-const decodeEvent = {
-  nfl: Schema.decodeUnknownEffect(EspnEvent("nfl")),
-  fbs: Schema.decodeUnknownEffect(EspnEvent("fbs"))
 }
 
 /** Each pushed game as its league's listed game advanced to it; a game no listing has is unlisted. */
@@ -189,7 +207,7 @@ function playsOf(
     (type) => !state.notedTypes.has(type.id)
   )
   return Effect.forEach(Record.toEntries(entities), ([id, entity]) =>
-    decodePlay[league](entity).pipe(
+    decoders[league].decodePlay(entity).pipe(
       Effect.map(Result.succeed),
       Effect.catch((cause) => Effect.succeed(Result.fail({ id, cause })))
     )
@@ -212,9 +230,4 @@ function playsOf(
       }
     })
   )
-}
-
-const decodePlay = {
-  nfl: Schema.decodeUnknownEffect(EspnPlay.Play("nfl")),
-  fbs: Schema.decodeUnknownEffect(EspnPlay.Play("fbs"))
 }

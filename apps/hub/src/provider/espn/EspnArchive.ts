@@ -16,9 +16,8 @@ import { HttpClient, type HttpClientError } from "effect/http"
 import * as Gzip from "../../Gzip.ts"
 import { HubConfig } from "../../HubConfig.ts"
 import { Archive, ArchivedGame, ArchiveFetchFailed } from "../Archive.ts"
-import { EspnEvent, Scoreboard } from "./EspnEvent.ts"
+import * as EspnDecode from "./EspnDecode.ts"
 import * as EspnProvider from "./EspnProvider.ts"
-import * as EspnSummary from "./EspnSummary.ts"
 
 /**
  * ESPN's archive: a date's site scoreboard, then each final game's summary, each kept as ESPN sent it, gzip'd, as
@@ -115,12 +114,15 @@ export const layer: Layer.Layer<
           missing(scoreboardUrl.toString(), files.scoreboard)
         ).pipe(
           Effect.flatMap((body) =>
-            decodeScoreboard(body).pipe(Effect.mapError((cause) => failed()("Unreadable", cause)))
+            EspnDecode.decoders[league]
+              .decodeScoreboard(body)
+              .pipe(Effect.mapError((cause) => failed()("Unreadable", cause)))
           ),
-          Effect.flatMap(({ events }) => {
-            const decodeEvent = Schema.decodeUnknownEffect(EspnEvent(league))
-            return Effect.forEach(events, (event) => finalOf(league, date, decodeEvent(event)))
-          }),
+          Effect.flatMap(({ events }) =>
+            Effect.forEach(events, (event) =>
+              finalOf(league, date, EspnDecode.decoders[league].decodeEvent(event))
+            )
+          ),
           Effect.map(Arr.getSomes)
         )
 
@@ -186,7 +188,7 @@ export const layer: Layer.Layer<
                 ).pipe(
                   Effect.flatMap((body) =>
                     decodeJson(body).pipe(
-                      Effect.flatMap((summary) => EspnSummary.plays(league, summary)),
+                      Effect.flatMap(EspnDecode.decoders[league].decodeSummary),
                       Effect.mapError((cause) => failed(final.id)("Unreadable", cause))
                     )
                   ),
@@ -249,8 +251,6 @@ const encodeRefusal = Schema.encodeEffect(Schema.fromJsonString(Refusal))
 const decodeRefusal = Schema.decodeEffect(Schema.fromJsonString(Refusal))
 
 const decodeJson = Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Unknown))
-
-const decodeScoreboard = Schema.decodeUnknownEffect(Schema.fromJsonString(Scoreboard))
 
 /** The decoded event as its final game; one that does not decode, or is not final, is logged and skipped. */
 function finalOf(league: LeagueId, date: string, event: Effect.Effect<GameSnapshot, Schema.SchemaError>) {

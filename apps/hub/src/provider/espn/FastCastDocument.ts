@@ -2,7 +2,7 @@ import type { GameId } from "@sportal/domain/Game"
 import type { LeagueId } from "@sportal/domain/League"
 import { Array as Arr, Data, Effect, JsonPatch, JsonPointer, Option, Record, Schema } from "effect"
 import type { Frame } from "../../Frame.ts"
-import { DecodeObservation } from "../Decoder.ts"
+import { DecodeObservation, type ResetReason } from "../Decoder.ts"
 import * as FastCastMessage from "./FastCastMessage.ts"
 
 /**
@@ -212,7 +212,7 @@ function reset(
   documents: Documents,
   tc: string,
   league: LeagueId,
-  reason: "Gap" | "Unapplicable",
+  reason: ResetReason,
   detail: string,
   next: Topic
 ): Effect.Effect<Advanced> {
