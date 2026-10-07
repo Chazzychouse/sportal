@@ -14,6 +14,7 @@ export function tileRects(
 ): ReadonlyArray<{ x: number; y: number; width: number; height: number }> {
   const whole = inset({ x: 0, y: 0, width: area.width, height: area.height })
   const solo = stage.solo === undefined ? undefined : stage.slotOf(stage.solo)
+
   return Layout.of(stage)
     .slots()
     .map((slot, index) => {

@@ -18,6 +18,7 @@ export function Dividers(props: {
 
   return Layout.dividers(props.layout).map((axis) => {
     const at = props.split[axis] * (axis === "x" ? props.area.width : props.area.height)
+
     return (
       // biome-ignore lint/a11y/useSemanticElements: a draggable splitter is a widget, not an <hr>'s thematic break.
       <div

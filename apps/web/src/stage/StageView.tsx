@@ -84,6 +84,7 @@ export function StageView(props: {
         if (rect === undefined) return null
         const game = tile._tag === "Empty" ? undefined : props.slate.find((g) => g.id === tile.game)
         const hidden = rect.width === 0
+
         return (
           <section
             key={tile._tag === "Empty" ? `slot-${index}` : tile.game}
