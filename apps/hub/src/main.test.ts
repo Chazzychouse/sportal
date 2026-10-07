@@ -122,7 +122,7 @@ function spawnHub(settings: Record<string, string>) {
         env: {
           ...Object.fromEntries(inherited),
           SPORTAL_HOST: "127.0.0.1",
-          SPORTAL_SCENARIO: "two-minute-drill-tie",
+          SPORTAL_SCENARIO: "bogus-clock-two-minute",
           ...settings
         },
         extendEnv: false

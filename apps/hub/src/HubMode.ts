@@ -6,7 +6,6 @@ import * as Ingest from "./Ingest.ts"
 import { LiveSlate } from "./LiveSlate.ts"
 import * as EspnDecode from "./provider/espn/EspnDecode.ts"
 import * as EspnProvider from "./provider/espn/EspnProvider.ts"
-import * as EspnScript from "./provider/espn/EspnScript.ts"
 import { FastCast } from "./provider/espn/FastCast.ts"
 import * as ScenarioClock from "./scenario/ScenarioClock.ts"
 import * as ScenarioProvider from "./scenario/ScenarioProvider.ts"
@@ -17,13 +16,13 @@ import * as YouTubeTv from "./source/youtube-tv/YouTubeTv.ts"
 /** What the Hub plays: the live day from ESPN and YouTube TV, or a scenario in their place, on scenario time. */
 export const layer = Layer.unwrap(
   Effect.gen(function* () {
-    const { scenario } = yield* HubConfig
+    const config = yield* HubConfig
     // Annotated so the compiler checks that a scenario provides everything the live day does.
     const chosen: Layer.Layer<
       Layer.Success<ReturnType<typeof live>>,
-      Layer.Error<ReturnType<typeof live>> | Layer.Error<ReturnType<typeof scripted>>,
-      Layer.Services<ReturnType<typeof live>> | Layer.Services<ReturnType<typeof scripted>>
-    > = Option.match(scenario, { onNone: live, onSome: scripted })
+      Layer.Error<ReturnType<typeof live>> | Layer.Error<ReturnType<typeof scenario>>,
+      Layer.Services<ReturnType<typeof live>> | Layer.Services<ReturnType<typeof scenario>>
+    > = Option.match(config.scenario, { onNone: live, onSome: scenario })
     return chosen
   })
 )
@@ -51,19 +50,12 @@ function live() {
   )
 }
 
-// The scenario plays as the provider through the real Ingest, onto a feed log of its own, decoded as ESPN: a recorded
-// one as ESPN recorded it, a written one as ESPN's writer writes its script. Ingest and the LiveSlate share the
-// scenario's clock; the rest of the Hub keeps the real one.
-function scripted() {
+// The scenario plays as the provider through the real Ingest, onto a feed log of its own, decoded as ESPN recorded it.
+// Ingest and the LiveSlate share the scenario's clock; the rest of the Hub keeps the real one.
+function scenario() {
   return Layer.mergeAll(
     Layer.mergeAll(
-      Ingest.layer.pipe(
-        Layer.provide(
-          ScenarioProvider.layer.pipe(
-            Layer.provide(Scenarios.layer(Scenarios.written(EspnScript.scenarioOf)))
-          )
-        )
-      )
+      Ingest.layer.pipe(Layer.provide(ScenarioProvider.layer.pipe(Layer.provide(Scenarios.layer))))
     ).pipe(
       Layer.provideMerge(LiveSlate.layer),
       Layer.provide(FeedLog.forScenario),

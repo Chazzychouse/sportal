@@ -41,14 +41,12 @@ Every exported type name must be a term here, except the wire schemas in `*Paylo
 | **Decode observation** | Something a provider's decode observed in a frame for telemetry to tell: a message received, games pushed, an unlisted game, a document reset, a message of an unknown op, a frame, event, or play that did not decode, or an unknown play type; `DecodeObservation` in code. Told only for frames after a replay. | notice, warning, metric |
 | **Delivery source** | Which feed a snapshot came from: `push` or `poll`. | origin, feed type |
 | **Test game** | A game snapshot built for a test, with defaults for everything the test does not care about. | fixture, mock |
-| **Scenario** | Games a Hub plays as its provider, through the real ingest, feed log, decode, and slate: a name and ESPN's frames, recorded from a game day or written from a scenario script; `Scenario` in code. Every scenario plays through ESPN's decode. | fixture, simulation |
-| **Scenario script** | A written scenario before it is written as frames: games and a timeline of changes, some with a play; `ScenarioScript` in code, each offset's slate and the plays run then. The ESPN adapter writes it as ESPN's frames. | |
+| **Scenario** | Games a Hub plays as its provider, through the real ingest, feed log, decode, and slate: a name and ESPN's frames, recorded from a game day; `Scenario` in code. Every scenario plays through ESPN's decode. | fixture, simulation |
 | **Recorded scenario** | A scenario kept as the raw frames of a recorded window, `fixtures/scenarios/<name>.frames.jsonl.gz`, decoded by the provider that recorded them. | slice, recording |
-| **Scenarios** | Every scenario there is, by name: the recorded ones where they are kept, and the written ones as ESPN's writer writes their scripts; reading one back by name. `Scenarios` in code. | scenario store, catalogue |
-| **Scenario unknown** | `SPORTAL_SCENARIO` names no written or recorded scenario; `ScenarioUnknown` in code, with the names there are. | |
-| **Scenario duplicate** | A recorded scenario and a written one share a name, which stops the Hub at startup; `ScenarioDuplicate` in code. | |
+| **Scenarios** | Every scenario there is, by name: the recordings in a folder, the committed ones in `fixtures/scenarios/` unless a test names another; reading one back by name. `Scenarios` in code. | scenario store, catalogue |
+| **Scenario unknown** | `SPORTAL_SCENARIO` names no recorded scenario; `ScenarioUnknown` in code, with the names there are. | |
 | **Scenario unreadable** | A recorded scenario's file could not be read as gzip'd frames; `ScenarioUnreadable` in code. | |
-| **Scenario time** | The clock a scenario plays on: from the Hub's start, at the scenario's speed. Ingest and the live slate run on it. A scenario's frames are received at their offsets on it, but what they say, kickoffs among them, stays as recorded or written. | |
+| **Scenario time** | The clock a scenario plays on: from the Hub's start, at the scenario's speed. Ingest and the live slate run on it. A scenario's frames are received at their offsets on it, but what they say, kickoffs among them, stays as recorded. | |
 | **Situation** | Live football state: possession, down, distance, field position, red zone (the 20 and in), timeouts. | context |
 | **Ball spot** | Where a spot is on the field: yards from the home goal line (0–100) and the way its team is going, from a team and its yards to the goal it attacks. | |
 | **Period** | A quarter or an overtime. | quarter (in code) |

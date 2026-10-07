@@ -242,7 +242,6 @@ sportal/
     │       │       ├── EspnDecode.ts       Frames to deliveries: listings, snapshots, plays, resyncs
     │       │       ├── EspnEvent.ts        One game as either ESPN feed spells it, as a GameSnapshot
     │       │       ├── EspnPlay.ts         ESPN's plays and their type ids, as Play
-    │       │       ├── EspnScript.ts       A scenario script written as the frames ESPN would have sent
     │       │       ├── FastCast.ts         ESPN's push, a service: the socket, as frames; its checkpoint retry is the schedule `FastCast.layer` builds it with
     │       │       ├── FastCastDocument.ts A topic's document, rebuilt from checkpoints and patches
     │       │       ├── FastCastMessage.ts  FastCast's wire shapes
@@ -257,14 +256,11 @@ sportal/
     │       │       ├── TestYouTubeTv.ts     A recorded guide for tests of other modules
     │       │       └── fixtures/            Recorded real payloads
     │       └── scenario/
-    │           ├── Scenario.ts         A scenario: a name and ESPN's frames, recorded or written
-    │           ├── ScenarioScript.ts   A written scenario before it is written as frames: each offset's slate and plays
-    │           ├── Scenarios.ts        Every scenario by name, recorded and written, and reading one back
-    │           ├── TestScenarios.ts    The written scenarios as HubMode plays them, for tests
+    │           ├── Scenarios.ts        Every recording by name, and reading one back as a Scenario: a name and ESPN's frames
     │           ├── ScenarioProvider.ts A scenario as the provider: its frames polled, pushed, and polled again at their times
     │           ├── ScenarioClock.ts    Scenario time: the Hub's clock at HubConfig's scenario speed
     │           ├── ScenarioSource.ts   Every game carried on a synthetic stream page
-    │           └── written/            Scenario scripts written by hand, and their registry (`Scripts.ts`)
+    │           └── fixtures/           Recordings that are test data for the scenario tests, not scenarios to play
     │
     ├── web/
     │   └── src/

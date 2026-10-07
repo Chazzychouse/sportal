@@ -85,9 +85,9 @@ describe("Telemetry", () => {
 
   it.effect("should name a scenario's mode in the resource", () =>
     Effect.gen(function* () {
-      const resource = yield* resourceOf({ SPORTAL_SCENARIO: "two-minute-drill-tie" })
+      const resource = yield* resourceOf({ SPORTAL_SCENARIO: "bogus-clock-two-minute" })
 
-      assert.strictEqual(resource.get("sportal.mode"), "scenario:two-minute-drill-tie")
+      assert.strictEqual(resource.get("sportal.mode"), "scenario:bogus-clock-two-minute")
     })
   )
 
@@ -96,7 +96,7 @@ describe("Telemetry", () => {
       const live = yield* resourceOf({})
       const instance = live.get("service.instance.id")
 
-      const scenario = yield* resourceOf({ SPORTAL_SCENARIO: "two-minute-drill-tie" })
+      const scenario = yield* resourceOf({ SPORTAL_SCENARIO: "bogus-clock-two-minute" })
 
       assert.isNotEmpty(instance)
       assert.notStrictEqual(scenario.get("service.instance.id"), instance)

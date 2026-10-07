@@ -340,34 +340,6 @@ describe("EspnPlay.unknownTypes", () => {
   })
 })
 
-describe("EspnPlay.typeOf", () => {
-  it.effect.each(recordedTypes.filter(({ id }) => id !== "4"))(
-    "should write each row's case back as the row's id: $id $text",
-    ({ id, text }) =>
-      Effect.gen(function* () {
-        const play = yield* typed({ id, text })
-
-        assert.deepStrictEqual(EspnPlay.typeOf(play), { id, text })
-      })
-  )
-
-  it.effect("should write a pass completion back as a pass reception, the first row that reads alike", () =>
-    Effect.gen(function* () {
-      const play = yield* typed({ id: "4", text: "Pass Completion" })
-
-      assert.deepStrictEqual(EspnPlay.typeOf(play), { id: "24", text: "Pass Reception" })
-    })
-  )
-
-  it.effect("should write an Other back as its own type", () =>
-    Effect.gen(function* () {
-      const play = yield* typed({ id: "999", text: "Something New" })
-
-      assert.deepStrictEqual(EspnPlay.typeOf(play), { id: "999", text: "Something New" })
-    })
-  )
-})
-
 // A recorded summary in `fixtures/`, as JSON or gzip'd JSON.
 function summaryOf(name: string) {
   const plain = new URL(`./fixtures/${name}.json`, import.meta.url)

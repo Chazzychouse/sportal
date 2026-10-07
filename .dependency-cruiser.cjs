@@ -31,12 +31,12 @@ module.exports = {
     {
       name: "only-hub-mode-names-adapters",
       comment:
-        "Only HubMode, the corpus command's composition, and tests, TestScenarios among them, know which concrete providers and sources exist; main.ts names only the database.",
+        "Only HubMode, the corpus command's composition, and tests know which concrete providers and sources exist; main.ts names only the database.",
       severity: "error",
       from: {
         path: "^apps/hub/src/",
         pathNot:
-          "(^apps/hub/src/HubMode\\.ts$|^apps/hub/src/corpus/corpus\\.ts$|^apps/hub/src/scenario/TestScenarios\\.ts$|\\.test\\.ts$|^apps/hub/src/provider/[^/]+/|^apps/hub/src/source/youtube-tv/)"
+          "(^apps/hub/src/HubMode\\.ts$|^apps/hub/src/corpus/corpus\\.ts$|\\.test\\.ts$|^apps/hub/src/provider/[^/]+/|^apps/hub/src/source/youtube-tv/)"
       },
       to: {
         path: "^apps/hub/src/(provider/[^/]+/|source/youtube-tv/|scenario/Scenario(Provider|Source|Clock)\\.ts$)"
@@ -56,12 +56,10 @@ module.exports = {
     },
     {
       name: "test-game-is-for-tests",
-      comment:
-        "The test snapshot builder is imported by test files, the web's test slate, and scenarios, which are test data by nature.",
+      comment: "The test snapshot builder is imported by test files and the web's test slate.",
       severity: "error",
       from: {
-        pathNot:
-          "(\\.test\\.tsx?$|^apps/web/src/slate/TestSlate\\.ts$|^apps/hub/src/scenario/(ScenarioScript\\.ts|written/))"
+        pathNot: "(\\.test\\.tsx?$|^apps/web/src/slate/TestSlate\\.ts$)"
       },
       to: { path: "^packages/domain/src/TestGame\\.ts$" }
     },
@@ -104,13 +102,6 @@ module.exports = {
       severity: "error",
       from: { pathNot: "\\.test\\.ts$" },
       to: { path: "^apps/hub/src/TestLiveSlate\\.ts$" }
-    },
-    {
-      name: "test-scenarios-is-for-tests",
-      comment: "The written scenarios as HubMode plays them are imported only by test files.",
-      severity: "error",
-      from: { pathNot: "\\.test\\.ts$" },
-      to: { path: "^apps/hub/src/scenario/TestScenarios\\.ts$" }
     },
     {
       name: "test-espn-archive-is-for-tests",

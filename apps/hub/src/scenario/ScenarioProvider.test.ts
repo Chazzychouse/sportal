@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url"
 import { NodeCrypto, NodeServices } from "@effect/platform-node"
 import { assert, describe, it } from "@effect/vitest"
 import { Delivery } from "@sportal/domain/Delivery"
@@ -29,24 +30,15 @@ import * as Ingest from "../Ingest.ts"
 import { LiveSlate } from "../LiveSlate.ts"
 import type { Decoder } from "../provider/Decoder.ts"
 import * as EspnDecode from "../provider/espn/EspnDecode.ts"
-import * as EspnScript from "../provider/espn/EspnScript.ts"
 import { Provider } from "../provider/Provider.ts"
 import { decodedFrames, listedBy } from "../provider/TestDecoder.ts"
 import { withEnv } from "../TestHubConfig.ts"
 import * as TestSnapshotFeed from "../TestSnapshotFeed.ts"
 import { pushed } from "../TestSnapshotFeed.ts"
 import { recordingSpans } from "../TestTelemetry.ts"
-import type { Scenario } from "./Scenario.ts"
 import * as ScenarioClock from "./ScenarioClock.ts"
 import * as ScenarioProvider from "./ScenarioProvider.ts"
-import { ScenarioScript } from "./ScenarioScript.ts"
-import {
-  type ScenarioDuplicate,
-  Scenarios,
-  type ScenarioUnknown,
-  type ScenarioUnreadable
-} from "./Scenarios.ts"
-import { writtenScenarios } from "./TestScenarios.ts"
+import { Scenarios, type ScenarioUnknown, type ScenarioUnreadable } from "./Scenarios.ts"
 
 describe("ScenarioProvider", () => {
   it.effect("should bring each league's listing to the slate at the scenario's start", () =>
@@ -147,7 +139,7 @@ describe("ScenarioProvider", () => {
     }).pipe(Effect.provide(playingChangedAtSeven()))
   )
 
-  it.effect("should decode a written scenario's poll through ESPN's decode to the league's listing", () =>
+  it.effect("should decode a scenario's poll through ESPN's decode to the league's listing", () =>
     Effect.gen(function* () {
       const provider = yield* Provider
       const polled = yield* provider.poll("fbs")
@@ -190,12 +182,12 @@ describe("ScenarioProvider", () => {
       Effect.gen(function* () {
         const provider = ScenarioProvider.layer satisfies Layer.Layer<
           Provider,
-          ScenarioUnknown | ScenarioUnreadable | ScenarioDuplicate,
+          ScenarioUnknown | ScenarioUnreadable,
           HubConfig | Scenarios
         >
         const crowded = Layer.merge(provider, EspnDecode.layer).pipe(
           Layer.provide([
-            Scenarios.layer(writtenScenarios),
+            Scenarios.layer,
             withEnv({ SPORTAL_SCENARIO: "crowded-fourth-quarter" }).pipe(Layer.orDie)
           ]),
           Layer.provide(NodeServices.layer)
@@ -207,7 +199,7 @@ describe("ScenarioProvider", () => {
       })
   )
 
-  it.effect("should hold a written scenario's last slate once it has ended", () =>
+  it.effect("should hold a scenario's last slate once it has ended", () =>
     Effect.gen(function* () {
       yield* TestClock.adjust(0)
 
@@ -220,7 +212,7 @@ describe("ScenarioProvider", () => {
     }).pipe(Effect.provide(playing("two-minute-drill-tie")))
   )
 
-  describe("a written scenario's pushed plays", () => {
+  describe("a scenario's pushed plays", () => {
     it.effect("should push no play's message before the first play's offset", () =>
       Effect.gen(function* () {
         const received = yield* pushedInstants((frame) => frame.kind === "message")
@@ -229,7 +221,7 @@ describe("ScenarioProvider", () => {
 
         const instants = yield* Ref.get(received)
         assert.deepStrictEqual(instants, [])
-      }).pipe(Effect.provide(writtenDrive()), Effect.scoped)
+      }).pipe(Effect.provide(scenario("a-drive")), Effect.scoped)
     )
 
     it.effect("should push a play's message at its offset", () =>
@@ -241,7 +233,7 @@ describe("ScenarioProvider", () => {
 
         const instants = yield* Ref.get(received)
         assert.deepStrictEqual(instants, [30_002])
-      }).pipe(Effect.provide(writtenDrive()), Effect.scoped)
+      }).pipe(Effect.provide(scenario("a-drive")), Effect.scoped)
     )
 
     it.effect("should push each later play's message at its offset", () =>
@@ -254,7 +246,7 @@ describe("ScenarioProvider", () => {
 
         const instants = yield* Ref.get(received)
         assert.deepStrictEqual(instants, [30_002, 60_002])
-      }).pipe(Effect.provide(writtenDrive()), Effect.scoped)
+      }).pipe(Effect.provide(scenario("a-drive")), Effect.scoped)
     )
   })
 
@@ -357,7 +349,7 @@ describe("ScenarioProvider", () => {
 
   // Plays every committed scenario to its end, one after another: tens of seconds alone, more under a full suite.
   it.effect(
-    "should play every committed scenario, recorded or written, to a non-empty final slate",
+    "should play every committed scenario to a non-empty final slate",
     () =>
       Effect.gen(function* () {
         const scenarios = yield* Scenarios
@@ -366,7 +358,10 @@ describe("ScenarioProvider", () => {
         const finals = yield* Effect.forEach(names, (name) =>
           Effect.gen(function* () {
             const { frames } = yield* scenarios.load(name)
-            const games = yield* playedToItsEnd(frames).pipe(Effect.provide(playing(name)), Effect.scoped)
+            const games = yield* playedToItsEnd(frames).pipe(
+              Effect.provide(playing(name, { from: committed })),
+              Effect.scoped
+            )
 
             return { name, games }
           })
@@ -374,25 +369,17 @@ describe("ScenarioProvider", () => {
 
         assert.isAbove(names.length, 0)
         for (const { name, games } of finals) assert.isNotEmpty(games, name)
-      }).pipe(
-        Effect.provide([
-          Scenarios.layer(writtenScenarios).pipe(Layer.provide(NodeServices.layer)),
-          NodeServices.layer
-        ])
-      ),
+      }).pipe(Effect.provide([Scenarios.layer.pipe(Layer.provide(NodeServices.layer)), NodeServices.layer])),
     120_000
   )
 
   it.effect("should refuse a name it does not know, listing the names it does", () =>
     Effect.gen(function* () {
-      const fs = yield* FileSystem.FileSystem
-      const dir = yield* fs.makeTempDirectoryScoped()
-
-      const error = yield* Layer.build(scenario("../../etc/passwd", { from: dir })).pipe(Effect.flip)
+      const error = yield* Layer.build(scenario("../../etc/passwd")).pipe(Effect.flip)
 
       assert.strictEqual(error._tag, "ScenarioUnknown")
       assert.include(error.message, "two-minute-drill-tie")
-    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer))
+    }).pipe(Effect.scoped)
   )
 
   it.effect("should play at the scenario's speed, while the rest of the Hub keeps real time", () =>
@@ -468,18 +455,12 @@ describe("ScenarioProvider", () => {
 
 /**
  * Scenario `name` as the provider and its decoder, played as `HubMode` plays it and configured by `env` beside its
- * name: a written one, or a recorded one read from `from` (the committed ones, unless given), its frames decoded by
- * `decoder` (ESPN's, unless given).
+ * name: a recording read from `from` (this folder's `fixtures/`, unless given), its frames decoded by `decoder` (ESPN's,
+ * unless given).
  */
 function scenario(name: string, options: Options = {}) {
   return Layer.merge(
-    ScenarioProvider.layer.pipe(
-      Layer.provide(
-        options.from === undefined
-          ? Scenarios.layer(writtenScenarios)
-          : Scenarios.in(options.from, options.written ?? writtenScenarios)
-      )
-    ),
+    ScenarioProvider.layer.pipe(Layer.provide(Scenarios.layerFrom(options.from ?? fixtures))),
     options.decoder ?? EspnDecode.layer
   ).pipe(
     Layer.provideMerge(withEnv({ SPORTAL_SCENARIO: name, ...options.env }).pipe(Layer.orDie)),
@@ -515,17 +496,19 @@ function following(options: Options) {
   )
 }
 
-/**
- * How a test sets a scenario up; one HubConfig, from `env`, serves the whole Hub under test. `written` replaces the
- * written scenarios beside the recorded ones in `from`.
- */
+/** How a test sets a scenario up; one HubConfig, from `env`, serves the whole Hub under test. */
 type Options = {
   readonly from?: string
   readonly decoder?: Layer.Layer<Decoder>
   readonly env?: Record<string, string>
   readonly scenarioFeedLog?: boolean
-  readonly written?: ReadonlyArray<Scenario>
 }
+
+// Recordings that are test data, not scenarios to play: two-minute-drill-tie and a-drive.
+const fixtures = fileURLToPath(new URL("./fixtures/", import.meta.url))
+
+// The committed recordings, in fixtures/scenarios/ at the repository's root.
+const committed = fileURLToPath(new URL("../../../../fixtures/scenarios/", import.meta.url))
 
 /** League `league`'s last listing in the slate. */
 function listed(league: LeagueId) {
@@ -618,54 +601,6 @@ function pushedInstants(keep: (frame: FeedFrame) => boolean) {
     return received
   })
 }
-
-/** Scenario `a-drive`, written beside no recorded scenarios. */
-function writtenDrive() {
-  return Layer.unwrap(
-    Effect.gen(function* () {
-      const fs = yield* FileSystem.FileSystem
-      const from = yield* fs.makeTempDirectoryScoped()
-
-      return scenario("a-drive", { from, written: [EspnScript.scenarioOf(aDrive)] })
-    })
-  ).pipe(Layer.provide(NodeServices.layer))
-}
-
-// A written scenario of one drive, with a play at 0:30 and another at 1:00.
-const aDrive = ScenarioScript.build("a-drive", [
-  {
-    id: "drive-uga-ala",
-    home: "UGA",
-    away: "ALA",
-    timeline: [
-      [
-        "0:00",
-        {
-          status: "live",
-          period: 1,
-          clock: "15:00",
-          ball: { team: "home", yardLine: 75, down: 1, distance: 10 }
-        }
-      ],
-      [
-        "0:30",
-        {
-          clock: "14:30",
-          ball: { team: "home", yardLine: 71, down: 2, distance: 6 },
-          play: { _tag: "Rush", touchdown: false, yards: 4 }
-        }
-      ],
-      [
-        "1:00",
-        {
-          clock: "14:00",
-          ball: { team: "home", yardLine: 59, down: 1, distance: 10 },
-          play: { _tag: "Completion", touchdown: false, yards: 12 }
-        }
-      ]
-    ]
-  }
-])
 
 /** A recording polled at 0:00 with its game at 3 points and at 0:30 with it at 10, as the provider. */
 function scenarioOfTwoPolls() {

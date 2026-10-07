@@ -18,7 +18,7 @@ describe("HubMode", () => {
       const published = yield* liveSlate.published
 
       assert.isAbove(published.games.length, 0)
-    }).pipe(Effect.provide(scenarioHub("two-minute-drill-tie")))
+    }).pipe(Effect.provide(scenarioHub("bogus-clock-two-minute")))
   )
 })
 

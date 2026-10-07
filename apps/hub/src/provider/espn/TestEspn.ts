@@ -31,5 +31,5 @@ export const recordedPlays = 182
 /** NE at BUF's recorded frames, read back as the recorded scenario `neAtBufFrames`. */
 export const recordedNeAtBuf = Scenarios.use((scenarios) => scenarios.load(neAtBufFrames)).pipe(
   Effect.map(({ frames }) => frames),
-  Effect.provide(Scenarios.in(fixtures, []).pipe(Layer.provideMerge(NodeServices.layer)))
+  Effect.provide(Scenarios.layerFrom(fixtures).pipe(Layer.provideMerge(NodeServices.layer)))
 )

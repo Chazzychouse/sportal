@@ -265,7 +265,7 @@ function ingesting(appended: Ref.Ref<{ readonly seq: number; readonly polled: Da
   )
   return Ingest.layer.pipe(
     Layer.provide(tracked),
-    Layer.provide(ScenarioProvider.layer.pipe(Layer.provide(Scenarios.in(fixtures, [])))),
+    Layer.provide(ScenarioProvider.layer.pipe(Layer.provide(Scenarios.layerFrom(fixtures)))),
     // Fresh, or HubConfig.layer is the one the corpus days were built with, memoized, which names no scenario.
     Layer.provide(Layer.fresh(withEnv({ SPORTAL_SCENARIO: neAtBufFrames, SPORTAL_LEAGUES: "nfl" }))),
     Layer.orDie

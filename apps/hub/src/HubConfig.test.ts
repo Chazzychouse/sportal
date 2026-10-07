@@ -37,7 +37,7 @@ describe("HubConfig", () => {
       assert.deepStrictEqual(config.webRoot, Option.some("/srv/web"))
       assert.strictEqual(config.dataDir, "/data")
       assert.strictEqual(config.corpusDir, "/srv/corpus")
-      assert.deepStrictEqual(config.scenario, Option.some("two-minute-drill-tie"))
+      assert.deepStrictEqual(config.scenario, Option.some("bogus-clock-two-minute"))
       assert.strictEqual(config.scenarioSpeed, 10)
       assert.deepStrictEqual(config.scenarioFeedLog, Option.some("scenario.sqlite"))
       assert.strictEqual(config.logLevel, "Debug")
@@ -160,7 +160,7 @@ const everySetting = {
   SPORTAL_WEB_ROOT: "/srv/web",
   SPORTAL_DATA_DIR: "/data",
   SPORTAL_CORPUS_DIR: "/srv/corpus",
-  SPORTAL_SCENARIO: "two-minute-drill-tie",
+  SPORTAL_SCENARIO: "bogus-clock-two-minute",
   SPORTAL_SCENARIO_SPEED: "10",
   SPORTAL_SCENARIO_FEED_LOG: "scenario.sqlite",
   SPORTAL_LOG_LEVEL: "Debug",

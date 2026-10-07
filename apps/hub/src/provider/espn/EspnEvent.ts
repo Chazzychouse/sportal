@@ -127,7 +127,7 @@ const Situation = Schema.Struct({
  * One event of the site scoreboard, as ESPN spells it: what the decoder reads of it, each field read into the domain's
  * words. Encoding one writes those words back in ESPN's.
  */
-export const Raw = Schema.Struct({
+const Raw = Schema.Struct({
   id: Schema.String,
   date: Schema.DateTimeUtcFromString,
   status: Status,

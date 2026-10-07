@@ -114,7 +114,7 @@ const Key = Schema.Struct({ $key: Schema.String }).pipe(
 )
 
 /** ESPN's play entity as a game package lists it: what `Play` reads of it. */
-export const Entity = Schema.Struct({
+const Entity = Schema.Struct({
   ...fields(Key),
   team: Schema.optional(Key),
   participants: Schema.optional(
@@ -129,41 +129,6 @@ export const Entity = Schema.Struct({
 
 // What `read` takes of either feed's play, its teams read to ESPN's ids.
 const Alike = Schema.Struct(fields(Schema.String))
-
-/**
- * The ESPN play type that reads as `play`'s case and outcome, as ESPN names it; an `Other` keeps its own. Each case and
- * outcome names its type's id, which the compiler checks is in the table.
- */
-export function typeOf(play: FootballPlay): typeof PlayType.Type {
-  return FootballPlay.match(play, {
-    Rush: ({ touchdown }) => written(touchdown ? "68" : "5"),
-    Completion: ({ touchdown }) => written(touchdown ? "67" : "24"),
-    Incompletion: () => written("3"),
-    Interception: (interception) =>
-      written(({ none: "63", returned: "26", touchdown: "36" } as const)[interception.return]),
-    Sack: ({ fumbleLost }) => written(fumbleLost ? "80" : "7"),
-    Fumble: ({ recovery }) =>
-      written(({ unknown: "69", own: "9", opponent: "29", touchdown: "39" } as const)[recovery]),
-    TwoPointTry: ({ by }) => written(by === "pass" ? "15" : "16"),
-    Kickoff: ({ returnTouchdown }) => written(returnTouchdown ? "32" : "53"),
-    Punt: (punt) => written(({ none: "52", returned: "14", touchdown: "34" } as const)[punt.return]),
-    FieldGoal: ({ result }) => written(({ good: "59", missed: "60", blocked: "18" } as const)[result]),
-    ExtraPoint: ({ good }) => written(good ? "61" : "62"),
-    Safety: () => written("20"),
-    Penalty: () => written("8"),
-    Timeout: () => written("21"),
-    Stoppage: ({ kind }) =>
-      written(({ officialTimeout: "74", twoMinuteWarning: "75", coinToss: "70" } as const)[kind]),
-    PeriodEnd: ({ ends }) =>
-      written(({ period: "2", half: "65", regulation: "79", game: "66" } as const)[ends]),
-    Other: (other) => other.type
-  })
-}
-
-// The table's type `id`, as `typeOf` writes it.
-function written(id: keyof typeof types): typeof PlayType.Type {
-  return { id, text: types[id].text }
-}
 
 const decodeType = Schema.decodeUnknownOption(Schema.Struct({ type: PlayType }))
 const decodeCase = Schema.decodeUnknownEffect(FootballPlay)

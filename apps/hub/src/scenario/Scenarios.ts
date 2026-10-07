@@ -1,58 +1,49 @@
 import { fileURLToPath } from "node:url"
-import { Array as Arr, Context, Effect, FileSystem, Layer, Option, Path, Schema } from "effect"
+import { Context, Data, DateTime, Effect, FileSystem, Layer, Path, Schema } from "effect"
 import { FeedFrame } from "../Frame.ts"
 import * as Gzip from "../Gzip.ts"
-import { Scenario } from "./Scenario.ts"
-import type { ScenarioScript } from "./ScenarioScript.ts"
-import { scripts } from "./written/Scripts.ts"
 
-/**
- * Every scenario a Hub can play, by name: the recorded ones, each kept as `<name>.frames.jsonl.gz`, and the written
- * ones, given already written as frames.
- */
+/** Every scenario a Hub can play, by name: the recordings in a folder, each kept as `<name>.frames.jsonl.gz`. */
 export class Scenarios extends Context.Service<
   Scenarios,
   {
-    /** The scenarios there are, recorded and written, sorted; no recorded ones when their folder is missing. */
-    readonly names: Effect.Effect<ReadonlyArray<string>, ScenarioUnreadable | ScenarioDuplicate>
+    /** The recordings there are, sorted; none when their folder is missing. */
+    readonly names: Effect.Effect<ReadonlyArray<string>, ScenarioUnreadable>
     /** Scenario `name`. Only a listed name is read, so no name reaches a path. */
-    load(name: string): Effect.Effect<Scenario, ScenarioUnknown | ScenarioUnreadable | ScenarioDuplicate>
+    load(name: string): Effect.Effect<Scenario, ScenarioUnknown | ScenarioUnreadable>
   }
 >()("sportal/hub/Scenarios") {
-  /** The recorded scenarios in `folder`, and `written`. */
-  static in(
-    folder: string,
-    written: ReadonlyArray<Scenario>
-  ): Layer.Layer<Scenarios, never, FileSystem.FileSystem | Path.Path> {
+  /** The committed recordings, in `fixtures/scenarios/` at the repository's root. */
+  static readonly layer: Layer.Layer<Scenarios, never, FileSystem.FileSystem | Path.Path> =
+    Scenarios.layerFrom(fileURLToPath(new URL("../../../../fixtures/scenarios/", import.meta.url)))
+
+  /** The recordings in `folder`. */
+  static layerFrom(folder: string): Layer.Layer<Scenarios, never, FileSystem.FileSystem | Path.Path> {
     return Layer.effect(
       Scenarios,
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem
         const { join } = yield* Path.Path
-        const recorded = Effect.gen(function* () {
-          return (yield* fs.exists(folder))
-            ? (yield* fs.readDirectory(folder))
-                .filter((file) => file.endsWith(suffix))
-                .map((file) => file.slice(0, -suffix.length))
-            : []
+
+        const names = Effect.gen(function* () {
+          const exists = yield* fs.exists(folder)
+          if (!exists) return []
+          const files = yield* fs.readDirectory(folder)
+          return files
+            .filter((file) => file.endsWith(suffix))
+            .map((file) => file.slice(0, -suffix.length))
+            .sort()
         }).pipe(Effect.mapError(unreadable(folder)))
-        const names = Effect.flatMap(recorded, (files) =>
-          Option.match(
-            Arr.findFirst(files, (name) => written.some((scenario) => scenario.name === name)),
-            {
-              onSome: (name) => Effect.fail(new ScenarioDuplicate({ name })),
-              onNone: () => Effect.succeed([...files, ...written.map(({ name }) => name)].sort())
-            }
-          )
-        )
+
         return Scenarios.of({
           names,
           load: (name) =>
             Effect.gen(function* () {
               const known = yield* names
-              if (!known.includes(name)) return yield* new ScenarioUnknown({ name, known })
-              const script = written.find((scenario) => scenario.name === name)
-              if (script !== undefined) return script
+              if (!known.includes(name)) {
+                return yield* new ScenarioUnknown({ name, known })
+              }
+
               const file = join(folder, `${name}${suffix}`)
               const text = yield* fs.readFile(file).pipe(
                 Effect.flatMap((bytes) => Gzip.decompress(bytes, "gzip")),
@@ -68,21 +59,20 @@ export class Scenarios extends Context.Service<
       })
     )
   }
+}
 
-  /** The committed recorded scenarios, in `fixtures/scenarios/` at the repository's root, and `written`. */
-  static layer(
-    written: ReadonlyArray<Scenario>
-  ): Layer.Layer<Scenarios, never, FileSystem.FileSystem | Path.Path> {
-    return Scenarios.in(fileURLToPath(new URL("../../../../fixtures/scenarios/", import.meta.url)), written)
-  }
-
-  /** Every committed written script as a scenario, written as frames by `write`, a provider's writer. */
-  static written(write: (script: ScenarioScript) => Scenario): ReadonlyArray<Scenario> {
-    return [...scripts.values()].map(write)
+/** Games a Hub plays as its provider: a provider's raw frames, in order of receipt, recorded from a window of a game day. */
+export class Scenario extends Data.Class<{
+  readonly name: string
+  readonly frames: ReadonlyArray<FeedFrame>
+}> {
+  /** When it starts: its first frame's receipt. */
+  origin(): DateTime.Utc {
+    return this.frames[0]?.receivedAt ?? DateTime.makeUnsafe(0)
   }
 }
 
-/** `SPORTAL_SCENARIO` names neither a written scenario nor a recorded one; `known` are the names there are. */
+/** `SPORTAL_SCENARIO` names no recording; `known` are the names there are. */
 export class ScenarioUnknown extends Schema.TaggedError<ScenarioUnknown>()("ScenarioUnknown", {
   name: Schema.String,
   known: Schema.Array(Schema.String)
@@ -92,25 +82,16 @@ export class ScenarioUnknown extends Schema.TaggedError<ScenarioUnknown>()("Scen
   }
 }
 
-/** A recorded scenario's folder or file could not be read as gzip'd frames. */
+/** A recording's folder or file could not be read as gzip'd frames. */
 export class ScenarioUnreadable extends Schema.TaggedError<ScenarioUnreadable>()("ScenarioUnreadable", {
   path: Schema.String,
   cause: Schema.Defect()
 }) {}
 
-/** A recorded scenario and a written one share `name`, so the name cannot say which to play. */
-export class ScenarioDuplicate extends Schema.TaggedError<ScenarioDuplicate>()("ScenarioDuplicate", {
-  name: Schema.String
-}) {
-  override get message() {
-    return `Scenario "${this.name}" is both recorded and written`
-  }
-}
-
 const suffix = ".frames.jsonl.gz"
-
-const decodeFrame = Schema.decodeEffect(Schema.fromJsonString(FeedFrame))
 
 function unreadable(path: string) {
   return (cause: unknown) => new ScenarioUnreadable({ path, cause })
 }
+
+const decodeFrame = Schema.decodeEffect(Schema.fromJsonString(FeedFrame))

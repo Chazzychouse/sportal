@@ -2,13 +2,7 @@ import { Array as Arr, DateTime, Duration, Effect, Layer, Option, Schedule, Stre
 import type { FeedFrame } from "../Frame.ts"
 import { HubConfig } from "../HubConfig.ts"
 import { type Polling, Provider } from "../provider/Provider.ts"
-import type { Scenario } from "./Scenario.ts"
-import {
-  type ScenarioDuplicate,
-  Scenarios,
-  type ScenarioUnknown,
-  type ScenarioUnreadable
-} from "./Scenarios.ts"
+import { type Scenario, Scenarios, type ScenarioUnknown, type ScenarioUnreadable } from "./Scenarios.ts"
 
 /**
  * The scenario `SPORTAL_SCENARIO` names as the provider, on whatever clock runs it, from the moment the layer is built.
@@ -16,22 +10,19 @@ import {
  * moment, received now, and the scenario is polled again at its next poll's time and at least every 10 seconds; its
  * live feed frames are pushed at their offsets. A name that is unset or unknown fails, listing the scenarios there are.
  */
-export const layer: Layer.Layer<
-  Provider,
-  ScenarioUnknown | ScenarioUnreadable | ScenarioDuplicate,
-  HubConfig | Scenarios
-> = Layer.effect(
-  Provider,
-  Effect.gen(function* () {
-    const { scenario } = yield* HubConfig
-    const scenarios = yield* Scenarios
-    const start = yield* DateTime.now
-    const name = Option.getOrElse(scenario, () => "")
-    const loaded = yield* scenarios.load(name)
-    yield* Effect.logInfo(`ScenarioProvider: playing ${name}, ${loaded.frames.length} frames`)
-    return played(loaded, start)
-  })
-)
+export const layer: Layer.Layer<Provider, ScenarioUnknown | ScenarioUnreadable, HubConfig | Scenarios> =
+  Layer.effect(
+    Provider,
+    Effect.gen(function* () {
+      const { scenario } = yield* HubConfig
+      const scenarios = yield* Scenarios
+      const start = yield* DateTime.now
+      const name = Option.getOrElse(scenario, () => "")
+      const loaded = yield* scenarios.load(name)
+      yield* Effect.logInfo(`ScenarioProvider: playing ${name}, ${loaded.frames.length} frames`)
+      return played(loaded, start)
+    })
+  )
 
 function played(scenario: Scenario, start: DateTime.Utc) {
   const origin = scenario.origin()
