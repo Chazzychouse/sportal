@@ -1,8 +1,11 @@
 import { fileURLToPath } from "node:url"
 import { NodeServices } from "@effect/platform-node"
 import { assert, describe, it } from "@effect/vitest"
-import { Array as Arr, DateTime, Effect, FileSystem, Layer, Path } from "effect"
+import type { GameEvent } from "@sportal/domain/GameEvent"
+import type { SlateObservation } from "@sportal/domain/SlateObservation"
+import { Array as Arr, Context, DateTime, Effect, FileSystem, Layer, Path } from "effect"
 import * as EspnDecode from "../provider/espn/EspnDecode.ts"
+import type { Decoded } from "../provider/Provider.ts"
 import { decodedFrames } from "../provider/TestDecoder.ts"
 import { takenOf } from "../TestLiveSlate.ts"
 import { Scenarios } from "./Scenarios.ts"
@@ -10,13 +13,17 @@ import { writtenScenarios } from "./TestScenarios.ts"
 import { scripts } from "./written/Scripts.ts"
 
 describe("Scenarios", () => {
-  it.effect("lists every recorded file and every written script, sorted", () =>
+  it.effect("should list every recorded file and every written script, sorted", () =>
     Effect.gen(function* () {
-      const files = yield* (yield* FileSystem.FileSystem).readDirectory(fixtures)
+      const fs = yield* FileSystem.FileSystem
+      const files = yield* fs.readDirectory(fixtures)
       const recorded = files
         .filter((file) => file.endsWith(".frames.jsonl.gz"))
         .map((file) => file.slice(0, -".frames.jsonl.gz".length))
-      const names = yield* (yield* Scenarios).names
+      const scenarios = yield* Scenarios
+
+      const names = yield* scenarios.names
+
       assert.lengthOf(scripts, 5)
       assert.deepStrictEqual(names, [...recorded, ...scripts.keys()].sort())
       assert.include(names, "late-go-ahead-cascade")
@@ -24,11 +31,13 @@ describe("Scenarios", () => {
     }).pipe(Effect.provide([committed, NodeServices.layer]))
   )
 
-  it.effect("loads a frames file in order, starting at its first frame's receipt", () =>
+  it.effect("should load a frames file in order, starting at its first frame's receipt", () =>
     Effect.gen(function* () {
-      const scenario = yield* (yield* Scenarios).load("late-go-ahead-cascade")
-      const received = scenario.frames.map(({ receivedAt }) => receivedAt.epochMilliseconds)
+      const scenarios = yield* Scenarios
 
+      const scenario = yield* scenarios.load("late-go-ahead-cascade")
+
+      const received = scenario.frames.map(({ receivedAt }) => receivedAt.epochMilliseconds)
       assert.isAbove(scenario.frames.length, 100)
       assert.deepStrictEqual(
         received,
@@ -38,9 +47,12 @@ describe("Scenarios", () => {
     }).pipe(Effect.provide(committed))
   )
 
-  it.effect("loads a written script as ESPN's frames, the first of them a poll at its start", () =>
+  it.effect("should load a written script as ESPN's frames, the first of them a poll at its start", () =>
     Effect.gen(function* () {
-      const scenario = yield* (yield* Scenarios).load("two-minute-drill-tie")
+      const scenarios = yield* Scenarios
+
+      const scenario = yield* scenarios.load("two-minute-drill-tie")
+
       const [first] = scenario.frames
       assert.strictEqual(scenario.name, "two-minute-drill-tie")
       assert.deepStrictEqual([first?.feed, first?.kind], ["poll", "response"])
@@ -48,53 +60,68 @@ describe("Scenarios", () => {
     }).pipe(Effect.provide(committed))
   )
 
-  it.effect(
-    "every scenario, written and recorded, taken whole through ESPN's decode, plays a game's plays and drops none before the game is let go",
-    () =>
-      Effect.gen(function* () {
-        const scenarios = yield* Scenarios
-        for (const name of yield* scenarios.names) {
-          const { frames } = yield* scenarios.load(name)
-          const decoded = yield* decodedFrames(frames)
-          assert.deepStrictEqual(
-            decoded.flatMap(({ observations }) =>
+  // Every committed scenario, written and recorded, decoded and taken whole through ESPN's decode once for these
+  // tests: tens of seconds alone, and more under a full suite's load.
+  it.layer(everyScenarioPlayed, { timeout: "120 seconds" })(
+    "every scenario, taken whole through ESPN's decode",
+    (it) => {
+      it.effect("should decode, observing nothing but Received, Pushed and PlayTypeUnknown", () =>
+        Effect.gen(function* () {
+          const played = yield* EveryScenarioPlayed
+
+          for (const { name, decoded } of played) {
+            const unexpected = decoded.flatMap(({ observations }) =>
               observations
                 .filter(({ _tag }) => _tag !== "Received" && _tag !== "Pushed" && _tag !== "PlayTypeUnknown")
                 .map(({ _tag }) => _tag)
-            ),
-            [],
-            `${name} decodes`
-          )
-          const { events, observations } = yield* takenOf(frames)
-          const played = events.flatMap(({ game, what }) =>
-            what._tag === "Played" ? [{ game, play: what.play.id }] : []
-          )
-          assert.isAbove(played.length, 0, `${name} plays`)
-          const delivered = decoded.flatMap(({ deliveries }) =>
-            deliveries.flatMap((delivery) =>
-              delivery._tag === "Plays"
-                ? delivery.plays.map(({ id }) => ({ game: delivery.game, play: id }))
-                : []
             )
-          )
-          // ESPN edits a game's plays after it ends; those reach a slate that has let the game go, and are dropped.
-          const [stopped, dropped] = Arr.mapAccum(observations, new Set<string>(), (stopped, observation) =>
-            observation._tag === "Stopped"
-              ? [new Set([...stopped, observation.liveGame.snapshot.id]), []]
-              : [
-                  stopped,
-                  observation._tag === "Dropped" && !stopped.has(observation.game) ? [observation] : []
-                ]
-          )
-          for (const game of new Set(delivered.map(({ game }) => game))) {
-            const playedIds = played.filter((one) => one.game === game).map(({ play }) => play)
-            const deliveredIds = new Set(delivered.filter((one) => one.game === game).map(({ play }) => play))
-            assert.strictEqual(
-              new Set(playedIds).size,
-              playedIds.length,
-              `${name}: ${game} plays each play once`
-            )
-            if (!stopped.has(game)) {
+            assert.deepStrictEqual(unexpected, [], `${name} decodes`)
+          }
+        })
+      )
+
+      it.effect("should play some play", () =>
+        Effect.gen(function* () {
+          const played = yield* EveryScenarioPlayed
+
+          for (const { name, events } of played) {
+            assert.isAbove(playsOf(events).length, 0, `${name} plays`)
+          }
+        })
+      )
+
+      it.effect("should play each of a game's plays once", () =>
+        Effect.gen(function* () {
+          const played = yield* EveryScenarioPlayed
+
+          for (const { name, decoded, events } of played) {
+            const plays = playsOf(events)
+            for (const game of new Set(deliveredPlaysOf(decoded).map(({ game }) => game))) {
+              const playedIds = plays.filter((one) => one.game === game).map(({ play }) => play)
+              assert.strictEqual(
+                new Set(playedIds).size,
+                playedIds.length,
+                `${name}: ${game} plays each play once`
+              )
+            }
+          }
+        })
+      )
+
+      it.effect("should play every play delivered for a game it has not let go", () =>
+        Effect.gen(function* () {
+          const played = yield* EveryScenarioPlayed
+
+          for (const { name, decoded, events, observations } of played) {
+            const plays = playsOf(events)
+            const delivered = deliveredPlaysOf(decoded)
+            const { stopped } = letGo(observations)
+            for (const game of new Set(delivered.map(({ game }) => game))) {
+              if (stopped.has(game)) continue
+              const playedIds = plays.filter((one) => one.game === game).map(({ play }) => play)
+              const deliveredIds = new Set(
+                delivered.filter((one) => one.game === game).map(({ play }) => play)
+              )
               assert.strictEqual(
                 playedIds.length,
                 deliveredIds.size,
@@ -102,55 +129,144 @@ describe("Scenarios", () => {
               )
             }
           }
-          assert.deepStrictEqual(dropped.flat(), [], `${name} drops none before the game is let go`)
-        }
-      }).pipe(Effect.provide([committed, EspnDecode.layer])),
-    { timeout: 120_000 }
+        })
+      )
+
+      // ESPN edits a game's plays after it ends; those reach a slate that has let the game go, and are dropped.
+      it.effect("should drop none before the game is let go", () =>
+        Effect.gen(function* () {
+          const played = yield* EveryScenarioPlayed
+
+          for (const { name, observations } of played) {
+            const { droppedEarly } = letGo(observations)
+            assert.deepStrictEqual(droppedEarly, [], `${name} drops none before the game is let go`)
+          }
+        })
+      )
+    }
   )
 
-  it.effect("a file that is not gzip'd frames is ScenarioUnreadable", () =>
+  it.effect("should fail ScenarioUnreadable for a file that is not gzip'd frames", () =>
     Effect.gen(function* () {
-      const fs = yield* FileSystem.FileSystem
-      const dir = yield* fs.makeTempDirectoryScoped()
-      yield* fs.writeFileString((yield* Path.Path).join(dir, "broken.frames.jsonl.gz"), "not gzip")
-      const error = yield* Scenarios.use((scenarios) => scenarios.load("broken")).pipe(
-        Effect.provide(Scenarios.in(dir, writtenScenarios)),
-        Effect.flip
-      )
+      const scenarios = yield* Scenarios
+
+      const error = yield* scenarios.load("broken").pipe(Effect.flip)
+
       assert.strictEqual(error._tag, "ScenarioUnreadable")
-    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer))
+    }).pipe(Effect.provide(scenariosRecording("broken.frames.jsonl.gz", "not gzip")))
   )
 
-  it.effect("a recorded file named like a written script is ScenarioDuplicate, to list or to load", () =>
+  it.effect("should fail ScenarioDuplicate listing a recorded file named like a written script", () =>
     Effect.gen(function* () {
-      const fs = yield* FileSystem.FileSystem
-      const dir = yield* fs.makeTempDirectoryScoped()
-      yield* fs.writeFileString((yield* Path.Path).join(dir, "two-minute-drill-tie.frames.jsonl.gz"), "")
-      const errors = yield* Effect.all([
-        Scenarios.use((scenarios) => scenarios.names).pipe(Effect.flip),
-        Scenarios.use((scenarios) => scenarios.load("kickoff-window")).pipe(Effect.flip)
-      ]).pipe(Effect.provide(Scenarios.in(dir, writtenScenarios)))
+      const scenarios = yield* Scenarios
+
+      const error = yield* scenarios.names.pipe(Effect.flip)
+
       assert.deepStrictEqual(
-        errors.map((error) => [error._tag, error._tag === "ScenarioDuplicate" && error.name]),
-        [
-          ["ScenarioDuplicate", "two-minute-drill-tie"],
-          ["ScenarioDuplicate", "two-minute-drill-tie"]
-        ]
+        [error._tag, error._tag === "ScenarioDuplicate" && error.name],
+        ["ScenarioDuplicate", "two-minute-drill-tie"]
       )
-    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer))
+    }).pipe(Effect.provide(scenariosRecording("two-minute-drill-tie.frames.jsonl.gz", "")))
   )
 
-  it.effect("a name that is neither is ScenarioUnknown, listing the recorded and the written", () =>
-    Effect.gen(function* () {
-      const error = yield* (yield* Scenarios).load("nope").pipe(Effect.flip)
-      assert.strictEqual(error._tag, "ScenarioUnknown")
-      assert.include(error._tag === "ScenarioUnknown" ? error.known : [], "late-go-ahead-cascade")
-      assert.include(error.message, "late-go-ahead-cascade")
-      assert.include(error.message, "two-minute-drill-tie")
-    }).pipe(Effect.provide(committed))
+  it.effect(
+    "should fail ScenarioDuplicate loading while a recorded file is named like a written script",
+    () =>
+      Effect.gen(function* () {
+        const scenarios = yield* Scenarios
+
+        const error = yield* scenarios.load("kickoff-window").pipe(Effect.flip)
+
+        assert.deepStrictEqual(
+          [error._tag, error._tag === "ScenarioDuplicate" && error.name],
+          ["ScenarioDuplicate", "two-minute-drill-tie"]
+        )
+      }).pipe(Effect.provide(scenariosRecording("two-minute-drill-tie.frames.jsonl.gz", "")))
+  )
+
+  it.effect(
+    "should fail ScenarioUnknown for a name that is neither, listing the recorded and the written",
+    () =>
+      Effect.gen(function* () {
+        const scenarios = yield* Scenarios
+
+        const error = yield* scenarios.load("nope").pipe(Effect.flip)
+
+        assert.strictEqual(error._tag, "ScenarioUnknown")
+        assert.include(error._tag === "ScenarioUnknown" ? error.known : [], "late-go-ahead-cascade")
+        assert.include(error.message, "late-go-ahead-cascade")
+        assert.include(error.message, "two-minute-drill-tie")
+      }).pipe(Effect.provide(committed))
   )
 })
 
 const fixtures = fileURLToPath(new URL("../../../../fixtures/scenarios/", import.meta.url))
 
 const committed = Scenarios.layer(writtenScenarios).pipe(Layer.provide(NodeServices.layer))
+
+/** Every committed scenario by name, as ESPN's decode said its frames and as the slate took them. */
+class EveryScenarioPlayed extends Context.Service<
+  EveryScenarioPlayed,
+  ReadonlyArray<{
+    readonly name: string
+    readonly decoded: ReadonlyArray<Decoded>
+    readonly events: ReadonlyArray<GameEvent>
+    readonly observations: ReadonlyArray<SlateObservation>
+  }>
+>()("test/EveryScenarioPlayed") {}
+
+const everyScenarioPlayed = Layer.effect(
+  EveryScenarioPlayed,
+  Effect.gen(function* () {
+    const scenarios = yield* Scenarios
+    const names = yield* scenarios.names
+
+    return yield* Effect.forEach(names, (name) =>
+      Effect.gen(function* () {
+        const { frames } = yield* scenarios.load(name)
+        const decoded = yield* decodedFrames(frames)
+        const { events, observations } = yield* takenOf(frames)
+
+        return { name, decoded, events, observations }
+      })
+    )
+  })
+).pipe(Layer.provide([committed, EspnDecode.layer]))
+
+/** The scenarios `Scenarios.in` reads from a fresh directory holding only `file`, written as `contents`. */
+function scenariosRecording(file: string, contents: string) {
+  return Layer.unwrap(
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem
+      const path = yield* Path.Path
+      const dir = yield* fs.makeTempDirectoryScoped()
+
+      yield* fs.writeFileString(path.join(dir, file), contents)
+
+      return Scenarios.in(dir, writtenScenarios)
+    })
+  ).pipe(Layer.provide(NodeServices.layer))
+}
+
+function playsOf(events: ReadonlyArray<GameEvent>) {
+  return events.flatMap(({ game, what }) => (what._tag === "Played" ? [{ game, play: what.play.id }] : []))
+}
+
+function deliveredPlaysOf(decoded: ReadonlyArray<Decoded>) {
+  return decoded.flatMap(({ deliveries }) =>
+    deliveries.flatMap((delivery) =>
+      delivery._tag === "Plays" ? delivery.plays.map(({ id }) => ({ game: delivery.game, play: id })) : []
+    )
+  )
+}
+
+/** The games the slate let go, and what it dropped of a game before letting it go. */
+function letGo(observations: ReadonlyArray<SlateObservation>) {
+  const [stopped, dropped] = Arr.mapAccum(observations, new Set<string>(), (stopped, observation) =>
+    observation._tag === "Stopped"
+      ? [new Set([...stopped, observation.liveGame.snapshot.id]), []]
+      : [stopped, observation._tag === "Dropped" && !stopped.has(observation.game) ? [observation] : []]
+  )
+
+  return { stopped, droppedEarly: dropped.flat() }
+}
