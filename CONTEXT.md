@@ -103,6 +103,7 @@ Every exported type name must be a term here, except the wire schemas in `*Paylo
 | **Corpus build failed** | A corpus day that could not be built: the feed log has no frame received in it, or a frame of it does not decode; `CorpusBuildFailed` in code. Nothing of the day is written. | |
 | **Run day** | A worker thread's request to run one corpus day with the events subject; `RunDay` in code. `corpus run` sends one per day, one day to a worker at a time. | job, task |
 | **Day run** | A worker's reply to a run day: how many events the day's run gave and how long it took; `DayRun` in code. A failed day crosses back as its failure instead. | result, report |
+| **Days failed** | How many of the days a corpus build or run named did not succeed: a day that did not decode, could not be read, or whose worker thread crashed; `DaysFailed` in code. The command logs each, then exits nonzero. A day the feed log does not have is not one. | errors |
 | **Live channel URL** | A source's address for a channel, reduced to the one that plays it live. | canonical URL |
 | **Stream** | One playing instance of a game from a source. | feed, video |
 | **StreamLocator** | What a Display must load to play a stream. | URL, link |

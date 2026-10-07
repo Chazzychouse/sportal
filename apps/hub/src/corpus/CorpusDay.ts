@@ -201,6 +201,16 @@ export class CorpusDayUnreadable extends Schema.TaggedError<CorpusDayUnreadable>
   }
 }
 
+/** Of the `days` a corpus command built or ran, `failed` did not succeed; each was logged as it failed. */
+export class DaysFailed extends Schema.TaggedError<DaysFailed>()("DaysFailed", {
+  failed: Schema.Int,
+  days: Schema.Int
+}) {
+  override get message() {
+    return `${this.failed} of ${this.days} days failed`
+  }
+}
+
 const encodeLine = Schema.encodeEffect(Schema.fromJsonString(CorpusLine))
 
 const decodeLine = Schema.decodeEffect(Schema.fromJsonString(CorpusLine))

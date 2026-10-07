@@ -1,9 +1,10 @@
 import { assert, describe, it } from "@effect/vitest"
-import { Cause, Effect, Exit, Option } from "effect"
+import { Cause, Effect, Exit, Layer, Option, Queue, Ref, Schema } from "effect"
+import { Worker, WorkerError } from "effect/workers"
 import * as EspnDecode from "../provider/espn/EspnDecode.ts"
-import { CorpusDayUnreadable } from "./CorpusDay.ts"
+import { CorpusDayUnreadable, DaysFailed } from "./CorpusDay.ts"
 import * as CorpusRun from "./CorpusRun.ts"
-import { DayRun, RunDay } from "./CorpusWorker.ts"
+import { DayRun, RunDay, runDays } from "./CorpusWorker.ts"
 import { built, inCorpus, logged, recorded } from "./TestCorpus.ts"
 
 describe("RunDay.run", () => {
@@ -58,3 +59,86 @@ describe("DayRun.reply", () => {
     })
   )
 })
+
+describe("runDays", () => {
+  it.effect("runs every day, and succeeds when none failed", () =>
+    Effect.gen(function* () {
+      const threads = yield* stubThreads()
+      yield* runDays([ok, "2026-10-06"], 2).pipe(Effect.provide(threads.layer))
+      assert.deepStrictEqual((yield* Ref.get(threads.answered)).toSorted(), [ok, "2026-10-06"])
+      assert.strictEqual(yield* Ref.get(threads.spawned), 2)
+    })
+  )
+
+  it.effect(
+    "fails a crashed thread's day alone, a fresh thread runs the rest, and the run fails DaysFailed",
+    () =>
+      Effect.gen(function* () {
+        const threads = yield* stubThreads()
+        const error = yield* runDays([ok, crash, missing, "2026-10-06"], 1).pipe(
+          Effect.provide(threads.layer),
+          Effect.flip
+        )
+        assert.instanceOf(error, DaysFailed)
+        assert.deepStrictEqual([error.failed, error.days], [2, 4])
+        assert.deepStrictEqual(yield* Ref.get(threads.answered), [ok, "2026-10-06"])
+        assert.strictEqual(yield* Ref.get(threads.spawned), 2)
+      })
+  )
+})
+
+const ok = "2026-10-03"
+const crash = "2026-10-04"
+const missing = "2026-10-05"
+
+/**
+ * Worker threads in this one: each answers a day with one event, a day not built as `CorpusDayUnreadable`, and stops
+ * with a `WorkerError` on `crash`'s, as a thread that crashed would.
+ */
+function stubThreads() {
+  return Effect.gen(function* () {
+    const answered = yield* Ref.make<ReadonlyArray<string>>([])
+    const spawned = yield* Ref.make(0)
+    const platform = Worker.WorkerPlatform.of({
+      spawn: () =>
+        Effect.gen(function* () {
+          yield* Ref.update(spawned, (count) => count + 1)
+          const inbox = yield* Queue.unbounded<unknown>()
+          return Worker.makeUnsafe({
+            send: (message) => Queue.offer(inbox, message).pipe(Effect.asVoid),
+            run: (handler) =>
+              Queue.take(inbox).pipe(
+                Effect.flatMap((message) => Schema.decodeUnknownEffect(RunDay)(message).pipe(Effect.orDie)),
+                Effect.flatMap(({ date }) =>
+                  date === crash
+                    ? Effect.fail(
+                        new WorkerError.WorkerError({
+                          reason: new WorkerError.WorkerReceiveError({ message: "exited with code 1" })
+                        })
+                      )
+                    : DayRun.reply(
+                        date === missing
+                          ? Exit.fail(new CorpusDayUnreadable({ date, reason: "Missing", cause: "day.json" }))
+                          : Exit.succeed(new DayRun({ date, events: 1, millis: 1 }))
+                      ).pipe(
+                        Effect.tap(() =>
+                          date === missing ? Effect.void : Ref.update(answered, (dates) => [...dates, date])
+                        )
+                      )
+                ),
+                Effect.flatMap((reply) => handler([1, reply])),
+                Effect.forever
+              )
+          })
+        })
+    })
+    return {
+      answered,
+      spawned,
+      layer: Layer.merge(
+        Layer.succeed(Worker.WorkerPlatform, platform),
+        Worker.layerSpawner(() => undefined)
+      )
+    }
+  })
+}

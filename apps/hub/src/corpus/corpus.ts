@@ -7,7 +7,7 @@ import { FeedLog } from "../FeedLog.ts"
 import { HubConfig } from "../HubConfig.ts"
 import * as EspnDecode from "../provider/espn/EspnDecode.ts"
 import * as CorpusBuild from "./CorpusBuild.ts"
-import { CorpusDay, CorpusDays } from "./CorpusDay.ts"
+import { CorpusDay, CorpusDays, DaysFailed } from "./CorpusDay.ts"
 import * as CorpusWorker from "./CorpusWorker.ts"
 
 const GameDay = Schema.String.check(
@@ -52,24 +52,24 @@ const build = Command.make(
         ? yield* (yield* FeedLog).days
         : yield* unchosen("Name a date, --from and --to, or --all alone")
       : yield* named(chosen)
-    yield* Effect.forEach(
-      dates,
-      (date) =>
-        CorpusBuild.captured(date).pipe(
-          Effect.timed,
-          Effect.matchEffect({
-            onSuccess: ([took, day]) =>
-              Effect.log(
-                `Built ${day.date} in ${Math.round(Duration.toMillis(took))} ms: ${day.games} games of ${day.leagues.join(", ")}`
-              ),
-            onFailure: (failed) =>
-              failed.reason === "NoFrames"
-                ? Effect.logWarning(failed.message)
-                : Effect.logError(failed.message, failed.cause)
-          })
-        ),
-      { discard: true }
+    const built = yield* Effect.forEach(dates, (date) =>
+      CorpusBuild.captured(date).pipe(
+        Effect.timed,
+        Effect.matchEffect({
+          onSuccess: ([took, day]) =>
+            Effect.log(
+              `Built ${day.date} in ${Math.round(Duration.toMillis(took))} ms: ${day.games} games of ${day.leagues.join(", ")}`
+            ).pipe(Effect.as("built" as const)),
+          // A day the feed log does not have is reported, not a failure of the command.
+          onFailure: (failed) =>
+            failed.reason === "NoFrames"
+              ? Effect.logWarning(failed.message).pipe(Effect.as("absent" as const))
+              : Effect.logError(failed.message, failed.cause).pipe(Effect.as("failed" as const))
+        })
+      )
     )
+    const failed = built.filter((outcome) => outcome === "failed").length
+    if (failed > 0) return yield* new DaysFailed({ failed, days: dates.length })
   })
 ).pipe(
   Command.withDescription("Build captured corpus days from the feed log"),
@@ -119,7 +119,9 @@ function named({
 }) {
   if (Option.isSome(date) && Option.isNone(from) && Option.isNone(to)) return Effect.succeed([date.value])
   if (Option.isNone(date) && Option.isSome(from) && Option.isSome(to)) {
-    return Effect.succeed(CorpusDay.dates(from.value, to.value))
+    return to.value < from.value
+      ? unchosen(`--to ${to.value} is before --from ${from.value}`)
+      : Effect.succeed(CorpusDay.dates(from.value, to.value))
   }
   return unchosen("Name a date, or --from and --to")
 }

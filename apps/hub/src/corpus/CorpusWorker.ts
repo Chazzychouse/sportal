@@ -14,7 +14,7 @@ import {
   Schema
 } from "effect"
 import { Worker, type WorkerError } from "effect/workers"
-import { type CorpusDays, CorpusDayUnreadable } from "./CorpusDay.ts"
+import { type CorpusDays, CorpusDayUnreadable, DaysFailed } from "./CorpusDay.ts"
 import * as CorpusRun from "./CorpusRun.ts"
 
 /** A worker's request: run one day with the events subject; its reply is the day's event count and duration. */
@@ -51,12 +51,14 @@ export class DayRun extends Schema.Class<DayRun>("sportal/hub/DayRun")({
 
 /**
  * Runs `dates` across up to `workers` worker threads, one day to a worker at a time, and ends with one summary line:
- * days, failed days, events, wall time, and each worker's mean day time. A failed day is logged and counted.
+ * days, failed days, events, wall time, and each worker's mean day time. A failed day is logged and counted, and fails
+ * the run with `DaysFailed` once every day has run. A thread that crashes fails its day alone: a fresh one takes its
+ * place. Only a thread that cannot be spawned stops the run.
  */
 export function runDays(
   dates: ReadonlyArray<string>,
   workers: number
-): Effect.Effect<void, WorkerError.WorkerError, Worker.WorkerPlatform | Worker.Spawner> {
+): Effect.Effect<void, WorkerError.WorkerError | DaysFailed, Worker.WorkerPlatform | Worker.Spawner> {
   return Effect.gen(function* () {
     const pool = yield* Pool.make({
       acquire: spawned(yield* Ref.make(1)),
@@ -65,19 +67,25 @@ export function runDays(
     const [wall, ran] = yield* Effect.forEach(
       dates,
       (date) =>
-        Pool.use(pool, ({ id, ask }) =>
-          ask(date).pipe(
+        Pool.use(pool, (worker) =>
+          worker.ask(date).pipe(
+            Effect.catch((crashed) => Pool.invalidate(pool, worker).pipe(Effect.as(Exit.fail(crashed)))),
+            Effect.map((exit): Exit.Exit<DayRun, CorpusDayUnreadable | WorkerError.WorkerError> => exit),
             Effect.tap(
               Exit.match({
                 onSuccess: () => Effect.void,
                 onFailure: (cause) =>
                   Option.match(Cause.findErrorOption(cause), {
-                    onSome: (unreadable) => Effect.logError(unreadable.message),
+                    // A day that cannot be read says why; a crashed thread is logged with its cause.
+                    onSome: (error) =>
+                      error._tag === "CorpusDayUnreadable"
+                        ? Effect.logError(error.message)
+                        : Effect.logError(`Corpus day ${date} failed`, cause),
                     onNone: () => Effect.logError(`Corpus day ${date} failed`, cause)
                   })
               })
             ),
-            Effect.map((exit) => ({ worker: id, exit }))
+            Effect.map((exit) => ({ worker: worker.id, exit }))
           )
         ),
       { concurrency: "unbounded" }
@@ -89,9 +97,11 @@ export function runDays(
       ([worker, of]) =>
         `worker ${worker} ${Math.round(Arr.reduce(of, 0, (sum, { run }) => sum + run.millis) / of.length)} ms`
     )
+    const failed = dates.length - runs.length
     yield* Console.log(
-      `${dates.length} days, ${dates.length - runs.length} failed, ${Arr.reduce(runs, 0, (sum, { run }) => sum + run.events)} events in ${Math.round(Duration.toMillis(wall))} ms; mean day: ${means.join(", ") || "none"}`
+      `${dates.length} days, ${failed} failed, ${Arr.reduce(runs, 0, (sum, { run }) => sum + run.events)} events in ${Math.round(Duration.toMillis(wall))} ms; mean day: ${means.join(", ") || "none"}`
     )
+    if (failed > 0) return yield* new DaysFailed({ failed, days: dates.length })
   }).pipe(Effect.scoped)
 }
 
