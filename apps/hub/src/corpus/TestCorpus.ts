@@ -98,15 +98,15 @@ export const scoreboardUrl = `${site}/scoreboard?dates=20261004`
 export const summaryUrl = `${site}/summary?event=401872971`
 
 /**
- * Runs `test` against ESPN's archive over a temporary corpus, with the URLs it requested. Its HTTP is answered by
- * `answer`, given how many times the URL was requested before, and otherwise from the fixtures.
+ * Runs `test` against ESPN's archive and the corpus's days over a temporary corpus, with the URLs it requested. Its
+ * HTTP is answered by `answer`, given how many times the URL was requested before, and otherwise from the fixtures.
  */
 export function inArchive<A, E>(
   options: { readonly answer?: (url: string, earlier: number) => Response | undefined },
   test: (context: {
     readonly dir: string
     readonly requests: Effect.Effect<ReadonlyArray<string>>
-  }) => Effect.Effect<A, E, Archive | FileSystem.FileSystem | Path.Path>
+  }) => Effect.Effect<A, E, Archive | CorpusDays | FileSystem.FileSystem | Path.Path>
 ) {
   return Effect.gen(function* () {
     const dir = yield* (yield* FileSystem.FileSystem).makeTempDirectoryScoped()
@@ -130,7 +130,7 @@ export function inArchive<A, E>(
     )
     return yield* test({ dir, requests: Ref.get(requests) }).pipe(
       Effect.provide(
-        EspnArchive.layer.pipe(
+        Layer.mergeAll(EspnArchive.layer, CorpusDays.layer).pipe(
           Layer.provide(withEnv({ SPORTAL_CORPUS_DIR: dir })),
           Layer.provide(Layer.succeed(HttpClient.HttpClient, client))
         )

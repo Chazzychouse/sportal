@@ -6,13 +6,7 @@
       "project": ["src/**/*.ts!", "!src/**/Test*.ts!"]
     },
     "apps/hub": {
-      "entry": [
-        "src/main.ts!",
-        "src/corpus/corpus.ts!",
-        "src/corpus/worker.ts!",
-        "src/provider/espn/EspnArchive.ts!",
-        "src/corpus/Synthesis.ts!"
-      ],
+      "entry": ["src/main.ts!", "src/corpus/corpus.ts!", "src/corpus/worker.ts!"],
       "project": ["src/**/*.ts!", "!src/**/Test*.ts!"]
     },
     "apps/web": {

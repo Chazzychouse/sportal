@@ -1,11 +1,15 @@
 import { availableParallelism } from "node:os"
 import { Worker } from "node:worker_threads"
 import { NodeRuntime, NodeServices, NodeWorker } from "@effect/platform-node"
-import { DateTime, Duration, Effect, Layer, Option, Schema } from "effect"
+import { LeagueId } from "@sportal/domain/League"
+import { Array as Arr, DateTime, Duration, Effect, Layer, Option, Result, Schema, Stream } from "effect"
 import { Argument, CliError, Command, Flag } from "effect/cli"
+import { FetchHttpClient } from "effect/http"
 import { FeedLog } from "../FeedLog.ts"
 import { HubConfig } from "../HubConfig.ts"
+import * as EspnArchive from "../provider/espn/EspnArchive.ts"
 import * as EspnDecode from "../provider/espn/EspnDecode.ts"
+import { Archive, type ArchiveFetchFailed } from "./Archive.ts"
 import * as CorpusBuild from "./CorpusBuild.ts"
 import { CorpusDay, CorpusDays, DaysFailed } from "./CorpusDay.ts"
 import * as CorpusWorker from "./CorpusWorker.ts"
@@ -37,43 +41,103 @@ const days = {
   )
 }
 
+// ESPN's archive, over the network: only the commands that read or fetch it are given it.
+const archive = EspnArchive.layer.pipe(Layer.provide(FetchHttpClient.layer))
+
 const build = Command.make(
   "build",
   {
     ...days,
     all: Flag.Boolean("all").pipe(
-      Flag.withDescription("Every game day the feed log has frames of"),
+      Flag.withDescription("Every game day the feed log has frames of, and every day the corpus has"),
+      Flag.withDefault(false)
+    ),
+    backfilled: Flag.Boolean("backfilled").pipe(
+      Flag.withDescription(
+        "Build each day from the archive, as a backfilled day, whatever the corpus has of it"
+      ),
       Flag.withDefault(false)
     )
   },
-  Effect.fn(function* ({ all, ...chosen }) {
+  Effect.fn(function* ({ all, backfilled, ...chosen }) {
+    const corpusDays = yield* CorpusDays
     const dates = all
       ? Option.isNone(chosen.date) && Option.isNone(chosen.from) && Option.isNone(chosen.to)
-        ? yield* (yield* FeedLog).days
+        ? [...new Set([...(yield* (yield* FeedLog).days), ...(yield* corpusDays.dates)])].toSorted()
         : yield* unchosen("Name a date, --from and --to, or --all alone")
       : yield* named(chosen)
-    const built = yield* Effect.forEach(dates, (date) =>
-      CorpusBuild.captured(date).pipe(
-        Effect.timed,
-        Effect.matchEffect({
-          onSuccess: ([took, day]) =>
-            Effect.log(
-              `Built ${day.date} in ${Math.round(Duration.toMillis(took))} ms: ${day.games} games of ${day.leagues.join(", ")}`
-            ).pipe(Effect.as("built" as const)),
-          // A day the feed log does not have is reported, not a failure of the command.
-          onFailure: (failed) =>
-            failed.reason === "NoFrames"
-              ? Effect.logWarning(failed.message).pipe(Effect.as("absent" as const))
-              : Effect.logError(failed.message, failed.cause).pipe(Effect.as("failed" as const))
-        })
-      )
+    const outcomes = yield* Effect.forEach(dates, (date) =>
+      Effect.gen(function* () {
+        const existing = yield* corpusDays.day(date)
+        if (!backfilled && !Option.exists(existing, ({ kind }) => kind === "backfilled")) {
+          return yield* reported(date, "captured", CorpusBuild.captured(date))
+        }
+        // The day's own leagues, or, for a day the corpus does not have, every league the archive has of it.
+        const leagues = Option.isSome(existing) ? [] : LeagueId.literals
+        return yield* reported(date, "backfilled", CorpusBuild.backfilled(date, leagues, "archived"))
+      })
     )
-    const failed = built.filter((outcome) => outcome === "failed").length
+    const failed = outcomes.filter(({ outcome }) => outcome === "failed").length
     if (failed > 0) return yield* new DaysFailed({ failed, days: dates.length })
   })
 ).pipe(
-  Command.withDescription("Build captured corpus days from the feed log"),
-  Command.provide(Layer.mergeAll(FeedLog.inDataDir, EspnDecode.layer))
+  Command.withDescription("Build corpus days: captured from the feed log, backfilled from the archive"),
+  Command.provide(Layer.mergeAll(FeedLog.inDataDir, EspnDecode.layer, archive))
+)
+
+const backfill = Command.make(
+  "backfill",
+  {
+    league: Flag.Literals("league", LeagueId.literals).pipe(Flag.withDescription("The league to backfill")),
+    from: Flag.String("from").pipe(Flag.withDescription("The first game day"), Flag.withSchema(GameDay)),
+    to: Flag.String("to").pipe(Flag.withDescription("The last game day"), Flag.withSchema(GameDay))
+  },
+  Effect.fn(function* ({ league, from, to }) {
+    if (to < from) return yield* unchosen(`--to ${to} is before --from ${from}`)
+    const dates = CorpusDay.dates(from, to)
+    // An archived scoreboard is never fetched again, so a day not over yet would be kept part way for good.
+    const now = yield* DateTime.now
+    const unended = yield* Effect.filterMapEffect(dates, (date) =>
+      Effect.map(CorpusDay.bounds(date), ({ until }) =>
+        DateTime.isGreaterThan(until, now) ? Result.succeed({ date, until }) : Result.failVoid
+      )
+    )
+    if (Arr.isReadonlyArrayNonEmpty(unended)) {
+      const { date, until } = Arr.headNonEmpty(unended)
+      return yield* new CliError.UserError({
+        cause: "day not over",
+        userMessage: `${date} is not over until ${DateTime.formatIsoZoned(yield* DateTime.setZoneCurrent(until))}; backfill only days that have ended, since an archived scoreboard is never fetched again`
+      })
+    }
+
+    const { pacing } = yield* Archive
+    const [took, outcomes] = yield* Stream.fromIterable(dates).pipe(
+      Stream.schedule(pacing),
+      Stream.mapEffect((date) =>
+        reported(date, "backfilled", CorpusBuild.backfilled(date, [league], "fetch"))
+      ),
+      Stream.runCollect,
+      Effect.timed
+    )
+    const of = (outcome: (typeof outcomes)[number]["outcome"]) =>
+      outcomes.filter((reported) => reported.outcome === outcome)
+    const failed = of("failed")
+    yield* Effect.log(
+      [
+        `Backfilled ${league} from ${from} to ${to} in ${Math.round(Duration.toSeconds(took))} s:`,
+        `${of("built").length} days built,`,
+        `${outcomes.reduce((games, reported) => games + reported.games, 0)} games;`,
+        `${of("kept").length} captured kept, ${of("absent").length} without games, ${failed.length} failed`,
+        ...(failed.length > 0 ? [`(${failed.map(({ date }) => date).join(", ")})`] : [])
+      ].join(" ")
+    )
+    if (failed.length > 0) return yield* new DaysFailed({ failed: failed.length, days: dates.length })
+  })
+).pipe(
+  Command.withDescription(
+    "Fetch a league's days into the archive, and build each as a backfilled corpus day"
+  ),
+  Command.provide(archive)
 )
 
 const run = Command.make(
@@ -95,8 +159,8 @@ const run = Command.make(
 )
 
 Command.make("corpus").pipe(
-  Command.withDescription("Build and run the corpus's game days"),
-  Command.withSubcommands([build, run]),
+  Command.withDescription("Build, backfill, and run the corpus's game days"),
+  Command.withSubcommands([build, backfill, run]),
   Command.run({ version: "dev" }),
   Effect.provide(
     Layer.mergeAll(CorpusDays.layer, DateTime.layerCurrentZoneLocal).pipe(
@@ -124,6 +188,46 @@ function named({
       : Effect.succeed(CorpusDay.dates(from.value, to.value))
   }
   return unchosen("Name a date, or --from and --to")
+}
+
+/**
+ * Runs `build` of day `date` as a `kind` day, and logs how it went: built, kept (a captured day a backfill does not
+ * replace), absent (a day the feed log or archive does not have, which is not a failure of the command), or failed.
+ */
+function reported<R>(
+  date: string,
+  kind: CorpusDay["kind"],
+  build: Effect.Effect<CorpusDay, CorpusBuild.CorpusBuildFailed | ArchiveFetchFailed, R>
+): Effect.Effect<
+  { readonly date: string; readonly outcome: "built" | "kept" | "absent" | "failed"; readonly games: number },
+  never,
+  R
+> {
+  return Effect.gen(function* () {
+    const [took, built] = yield* Effect.timed(Effect.result(build))
+    if (Result.isSuccess(built)) {
+      const day = built.success
+      if (day.kind !== kind) {
+        yield* Effect.log(`Kept ${day.date}: a captured day is never replaced by a backfilled one`)
+        return { date, outcome: "kept", games: 0 }
+      }
+      yield* Effect.log(
+        `Built ${kind} ${day.date} in ${Math.round(Duration.toMillis(took))} ms: ${day.games} games of ${day.leagues.join(", ")}`
+      )
+      return { date, outcome: "built", games: day.games }
+    }
+    const failed = built.failure
+    if (
+      failed.reason === "NoFrames" ||
+      failed.reason === "NoGames" ||
+      (failed._tag === "ArchiveFetchFailed" && failed.reason === "NotArchived" && failed.game === undefined)
+    ) {
+      yield* Effect.logWarning(failed.message)
+      return { date, outcome: "absent", games: 0 }
+    }
+    yield* Effect.logError(failed.message, failed.cause)
+    return { date, outcome: "failed", games: 0 }
+  })
 }
 
 function unchosen(userMessage: string) {

@@ -79,6 +79,11 @@ export class CorpusDays extends Context.Service<
       },
       CorpusDayUnreadable
     >
+    /**
+     * Day `date`'s `day.json`, whatever format it was built to; none when the day has not been built, or its `day.json`
+     * does not read, so a build replaces it.
+     */
+    day(date: string): Effect.Effect<Option.Option<CorpusDay>>
     /** The dates of the days there are, sorted; none when the corpus has no days yet. */
     readonly dates: Effect.Effect<ReadonlyArray<string>, PlatformError.PlatformError>
   }
@@ -118,6 +123,13 @@ export class CorpusDays extends Context.Service<
             ),
             Effect.mapError(unreadable(date, "Invalid"))
           )
+        // The day's `day.json`, or none when it has none.
+        const dayOf = (date: string) =>
+          Effect.gen(function* () {
+            const file = files(date).day
+            if (!(yield* fs.exists(file))) return Option.none()
+            return Option.some(yield* fs.readFileString(file).pipe(Effect.flatMap(decodeDay)))
+          }).pipe(Effect.mapError(unreadable(date, "Invalid")))
         return CorpusDays.of({
           write: (day, lines) =>
             Effect.gen(function* () {
@@ -134,12 +146,11 @@ export class CorpusDays extends Context.Service<
           read: (date) =>
             Effect.gen(function* () {
               const at = files(date)
-              if (!(yield* fs.exists(at.day).pipe(Effect.mapError(unreadable(date, "Invalid"))))) {
+              const built = yield* dayOf(date)
+              if (Option.isNone(built)) {
                 return yield* new CorpusDayUnreadable({ date, reason: "Missing", cause: at.day })
               }
-              const day = yield* fs
-                .readFileString(at.day)
-                .pipe(Effect.flatMap(decodeDay), Effect.mapError(unreadable(date, "Invalid")))
+              const day = built.value
               if (day.format !== CorpusLine.format) {
                 return yield* new CorpusDayUnreadable({
                   date,
@@ -171,6 +182,7 @@ export class CorpusDays extends Context.Service<
               )
               return { day, frames }
             }),
+          day: (date) => dayOf(date).pipe(Effect.orElseSucceed(Option.none)),
           dates: Effect.gen(function* () {
             if (!(yield* fs.exists(days))) return []
             const dates = yield* Effect.filter(yield* fs.readDirectory(days), (date) =>

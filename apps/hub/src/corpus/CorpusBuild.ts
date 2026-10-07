@@ -1,10 +1,13 @@
 import { Delivery } from "@sportal/domain/Delivery"
-import { Array as Arr, DateTime, Effect, Option, Schema, Stream } from "effect"
+import type { LeagueId } from "@sportal/domain/League"
+import { Array as Arr, DateTime, Effect, Option, Result, Schema, Stream } from "effect"
 import { FeedLog } from "../FeedLog.ts"
 import { Decoder } from "../provider/Decoder.ts"
 import { DecodeObservation } from "../provider/Provider.ts"
+import { Archive, type ArchiveFetchFailed } from "./Archive.ts"
 import { CorpusDay, CorpusDays } from "./CorpusDay.ts"
 import { CorpusLine, Had } from "./CorpusInput.ts"
+import * as Synthesis from "./Synthesis.ts"
 
 /**
  * Builds the captured day `date` (YYYY-MM-DD) from the feed log: its frames through the decoder, split by feed. The
@@ -89,18 +92,86 @@ export function captured(
 }
 
 /**
- * Corpus day `date` could not be built: the feed log has no frame received in it, or a frame of it did not decode,
- * which `cause` holds.
+ * Builds the backfilled day `date` for `leagues` from the archive: fetching what is missing when `fetch`, else from
+ * what is archived. A backfilled day already there adds its leagues, so the day is rebuilt for them all; from what is
+ * archived, a league the archive has no scoreboard of on `date` is left out, and the day fails `NotArchived` when that
+ * is every league. A captured day already there is never overwritten: it is returned as it is, and nothing is fetched.
+ */
+export function backfilled(
+  date: string,
+  leagues: ReadonlyArray<LeagueId>,
+  how: "fetch" | "archived"
+): Effect.Effect<CorpusDay, CorpusBuildFailed | ArchiveFetchFailed, Archive | CorpusDays> {
+  return Effect.gen(function* () {
+    const days = yield* CorpusDays
+    const existing = yield* days.day(date)
+    if (Option.isSome(existing) && existing.value.kind === "captured") return existing.value
+
+    const archive = yield* Archive
+    const asked = [
+      ...new Set([...leagues, ...Option.match(existing, { onNone: () => [], onSome: (day) => day.leagues })])
+    ].toSorted()
+    const [read, unarchived] = Arr.partition(
+      yield* Effect.forEach(asked, (league) =>
+        (how === "fetch" ? archive.games(league, date) : archive.archived(league, date)).pipe(
+          Effect.map((games) => Result.succeed({ league, games })),
+          Effect.catchIf(
+            (failed) => how === "archived" && failed.reason === "NotArchived" && failed.game === undefined,
+            (failed) => Effect.succeed(Result.fail(failed))
+          )
+        )
+      ),
+      (result) => result
+    )
+    if (read.length === 0 && Arr.isReadonlyArrayNonEmpty(unarchived))
+      return yield* Arr.headNonEmpty(unarchived)
+    yield* Effect.forEach(
+      unarchived,
+      (failed) => Effect.logWarning(`${failed.message}; left out of ${date}`),
+      {
+        discard: true
+      }
+    )
+    const games = read.flatMap(({ games }) => games)
+    if (games.length === 0) {
+      return yield* new CorpusBuildFailed({
+        date,
+        reason: "NoGames",
+        cause: `no final game with plays of ${asked.join(", ")} on ${date}`
+      })
+    }
+
+    const { poll, push } = yield* Synthesis.day(games)
+    const day = new CorpusDay({
+      date,
+      kind: "backfilled",
+      format: CorpusLine.format,
+      leagues: read.map(({ league }) => league),
+      games: games.length,
+      built: yield* DateTime.now
+    })
+    // As a captured day's: a corpus directory that cannot be written stops the CLI.
+    yield* days
+      .write(day, { poll: Stream.fromIterable(poll), push: Stream.fromIterable(push) })
+      .pipe(Effect.orDie)
+    return day
+  })
+}
+
+/**
+ * Corpus day `date` could not be built: the feed log has no frame received in it, a frame of it did not decode,
+ * which `cause` holds, or the archive has no final game with plays on it.
  */
 export class CorpusBuildFailed extends Schema.TaggedError<CorpusBuildFailed>()("CorpusBuildFailed", {
   date: Schema.String,
-  reason: Schema.Literals(["NoFrames", "Undecodable"]),
+  reason: Schema.Literals(["NoFrames", "Undecodable", "NoGames"]),
   cause: Schema.Defect()
 }) {
   override get message() {
     return {
       NoFrames: `The feed log has no frames of ${this.date}`,
-      Undecodable: `A frame of ${this.date} does not decode; the day is not built`
+      Undecodable: `A frame of ${this.date} does not decode; the day is not built`,
+      NoGames: `The archive has no final game with plays on ${this.date}`
     }[this.reason]
   }
 }
