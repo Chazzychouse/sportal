@@ -1,4 +1,4 @@
-import { Cause, Data, DateTime, Effect, Option } from "effect"
+import { Cause, Data, DateTime, Effect, Equal, Option } from "effect"
 import { Delivery, type DeliverySource } from "./Delivery.ts"
 import type { GameId, GameSnapshot } from "./Game.ts"
 import { GameEvent, type GameEventKind } from "./GameEvent.ts"
@@ -136,7 +136,8 @@ export type Taken = {
 export type SlateObservation = Data.TaggedEnum<{
   /**
    * A snapshot was taken, ignored as behind, or held by a covered game; or a held one fell back, applying as the
-   * poll's once the push had not caught it up for `LiveGame.fallbackAfter`.
+   * poll's once the push had not caught it up for `LiveGame.fallbackAfter`. A snapshot equal to a finished game's
+   * final is not observed at all: every poll of a game still listed repeats it.
    */
   Took: {
     readonly snapshot: GameSnapshot
@@ -252,6 +253,8 @@ function snapshotTaken(
 ): Effect.Effect<Advanced> {
   return guarded(advanced, snapshot, "a delivery", () => {
     const final = Option.fromNullishOr(advanced.finished.get(snapshot.id))
+    // Every poll of a finished game still listed repeats its final; only a different one is worth observing.
+    if (Option.exists(final, (over) => Equal.equals(snapshot, over))) return advanced
     if (Option.isSome(final) && !snapshot.isAheadOfOver(final.value)) {
       const ignored = SlateObservation.Took({ snapshot, from, outcome: "behind", had: final })
       return { ...advanced, observations: [...advanced.observations, ignored] }

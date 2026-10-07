@@ -217,8 +217,21 @@ describe("Slate", () => {
         const { next, events, observations } = yield* took(lagged, [listing("nfl", [final])], later(15))
 
         assert.deepStrictEqual(events, [])
-        assert.deepStrictEqual(tags(observations), ["Took"])
+        assert.deepStrictEqual(tags(observations), [])
         assert.isFalse(next.live.has(one))
+        assert.deepStrictEqual(next.games(["nfl"]), [final])
+      })
+    )
+
+    it.effect("observes nothing of a poll equal to its final, and a lagging one as behind", () =>
+      Effect.gen(function* () {
+        const { next, observations } = yield* took(
+          yield* finished,
+          [listing("nfl", [final]), polled(final), polled(playing)],
+          later(5)
+        )
+
+        assert.deepStrictEqual(outcomes(observations), ["behind"])
         assert.deepStrictEqual(next.games(["nfl"]), [final])
       })
     )
