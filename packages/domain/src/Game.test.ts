@@ -272,63 +272,85 @@ describe("GameSnapshot#isAheadOf", () => {
   it("should be ahead in a later period", () => {
     const later = at({ period: 3, clock: "15:00" })
 
-    assert.isTrue(later.isAheadOf(at()))
+    const ahead = later.isAheadOf(at())
+
+    assert.isTrue(ahead)
   })
 
   it("should be ahead in the same period with less on the clock", () => {
     const later = at({ clock: "4:59" })
 
-    assert.isTrue(later.isAheadOf(at()))
+    const ahead = later.isAheadOf(at())
+
+    assert.isTrue(ahead)
   })
 
   it("should be ahead at the same game time with more points", () => {
-    assert.isTrue(scoredAt(7, 0).isAheadOf(scoredAt(6, 0)))
+    const ahead = scoredAt(7, 0).isAheadOf(scoredAt(6, 0))
+
+    assert.isTrue(ahead)
   })
 
   it("should not be ahead at the same game time with fewer points", () => {
-    assert.isFalse(scoredAt(6, 0).isAheadOf(scoredAt(7, 0)))
+    const ahead = scoredAt(6, 0).isAheadOf(scoredAt(7, 0))
+
+    assert.isFalse(ahead)
   })
 
   it("should be ahead at the same game time with equal points split differently", () => {
-    assert.isTrue(scoredAt(7, 3).isAheadOf(scoredAt(3, 7)))
+    const ahead = scoredAt(7, 3).isAheadOf(scoredAt(3, 7))
+
+    assert.isTrue(ahead)
   })
 
   it("should have halftime ahead of play at the end of the second period", () => {
     const halftime = at({ status: "halftime", clock: "0:00" })
 
-    assert.isTrue(halftime.isAheadOf(at({ clock: "0:00" })))
+    const ahead = halftime.isAheadOf(at({ clock: "0:00" }))
+
+    assert.isTrue(ahead)
   })
 
   it("should not have play at the end of the second period ahead of halftime", () => {
     const halftime = at({ status: "halftime", clock: "0:00" })
 
-    assert.isFalse(at({ clock: "0:00" }).isAheadOf(halftime))
+    const ahead = at({ clock: "0:00" }).isAheadOf(halftime)
+
+    assert.isFalse(ahead)
   })
 
   it("should have a final ahead of play at the end of the last period", () => {
     const final = at({ status: "final", period: 4, clock: "0:00" })
     const endOfGame = at({ period: 4, clock: "0:00" })
 
-    assert.isTrue(final.isAheadOf(endOfGame))
+    const ahead = final.isAheadOf(endOfGame)
+
+    assert.isTrue(ahead)
   })
 
   it("should not have play at the end of the last period ahead of the final", () => {
     const final = at({ status: "final", period: 4, clock: "0:00" })
     const endOfGame = at({ period: 4, clock: "0:00" })
 
-    assert.isFalse(endOfGame.isAheadOf(final))
+    const ahead = endOfGame.isAheadOf(final)
+
+    assert.isFalse(ahead)
   })
 
   it("should not have a delay ahead of play at the same clock and points", () => {
     const delayed = at({ status: "delayed" })
 
-    assert.isFalse(delayed.isAheadOf(at()))
+    const ahead = delayed.isAheadOf(at())
+
+    assert.isFalse(ahead)
   })
 
   it("should not have play ahead of a delay at the same clock and points", () => {
     const delayed = at({ status: "delayed" })
 
-    assert.isFalse(at().isAheadOf(delayed))
+    const ahead = at().isAheadOf(delayed)
+
+    assert.isFalse(ahead)
   })
 
   it.each(
@@ -352,11 +374,15 @@ describe("GameSnapshot#isAheadOf", () => {
   })
 
   it("should not have an equal snapshot ahead", () => {
-    assert.isFalse(at().isAheadOf(at()))
+    const ahead = at().isAheadOf(at())
+
+    assert.isFalse(ahead)
   })
 
   it("should not be ahead at an earlier game time whatever its points", () => {
-    assert.isFalse(scoredAt(14, 0).isAheadOf(at({ period: 3 })))
+    const ahead = scoredAt(14, 0).isAheadOf(at({ period: 3 }))
+
+    assert.isFalse(ahead)
   })
 })
 
@@ -400,44 +426,24 @@ describe("GameSnapshot#advancedTo", () => {
     situation: situationPushed
   })
 
-  it("should take the later status, period, and clock", () => {
+  it("should take the later status, period, clock, scores, and situation", () => {
     const advanced = polled.advancedTo(pushed)
 
     assert.strictEqual(advanced.status, "live")
     assert.strictEqual(advanced.period, 3)
     assert.strictEqual(advanced.clock, "7:45")
-  })
-
-  it("should take the later scores", () => {
-    const advanced = polled.advancedTo(pushed)
-
     assert.strictEqual(advanced.home.score, 14)
     assert.strictEqual(advanced.away.score, 10)
-  })
-
-  it("should take the later situation", () => {
-    const advanced = polled.advancedTo(pushed)
-
     assert.deepStrictEqual(advanced.situation, situationPushed)
   })
 
-  it("should keep its own teams", () => {
+  it("should keep its own teams, rankings, kickoff, and broadcasts", () => {
     const advanced = polled.advancedTo(pushed)
 
     assert.strictEqual(advanced.home.team.shortName, "Home")
     assert.strictEqual(advanced.away.team.shortName, "Away")
-  })
-
-  it("should keep its own rankings", () => {
-    const advanced = polled.advancedTo(pushed)
-
     assert.strictEqual(advanced.home.ranking, 5)
     assert.strictEqual(advanced.away.ranking, 12)
-  })
-
-  it("should keep its own kickoff and broadcasts", () => {
-    const advanced = polled.advancedTo(pushed)
-
     assert.isTrue(DateTime.Equivalence(advanced.kickoff, polled.kickoff))
     assert.deepStrictEqual(advanced.broadcasts, polled.broadcasts)
   })

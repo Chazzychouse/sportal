@@ -28,7 +28,7 @@ describe("Situation#inRedZone", () => {
     assert.isFalse(noYardLine.inRedZone())
   })
 
-  it("should decode a snapshot stored with isRedZone", () => {
+  it("should decode a snapshot stored with isRedZone, its red zone its yard line's", () => {
     const stored = Schema.encodeSync(GameSnapshot)(liveSnapshot({ situation: situation({ yardLine: 35 }) }))
 
     const decoded = Schema.decodeUnknownSync(GameSnapshot)({
@@ -37,16 +37,6 @@ describe("Situation#inRedZone", () => {
     })
 
     assert.strictEqual(decoded.situation?.yardLine, 35)
-  })
-
-  it("should take a decoded snapshot's red zone from its yard line, not its stored isRedZone", () => {
-    const stored = Schema.encodeSync(GameSnapshot)(liveSnapshot({ situation: situation({ yardLine: 35 }) }))
-
-    const decoded = Schema.decodeUnknownSync(GameSnapshot)({
-      ...stored,
-      situation: { ...stored.situation, isRedZone: true }
-    })
-
     assert.isFalse(decoded.situation?.inRedZone())
   })
 })

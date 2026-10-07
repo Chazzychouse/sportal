@@ -1,5 +1,6 @@
 import { DateTime } from "effect"
 import { type Broadcast, GameId, GameSnapshot, Network } from "./Game.ts"
+import type { GameEventKind } from "./GameEvent.ts"
 import type { LeagueId } from "./League.ts"
 import { Completion, PlayId, Rush } from "./Play.ts"
 import { Situation } from "./Situation.ts"
@@ -90,4 +91,9 @@ export function play(overrides: Partial<Rush> = {}): Rush {
  */
 export function completion(overrides: Partial<Completion> = {}): Completion {
   return new Completion({ ...oneYardPlay, text: "Pass complete for 1 yard", ...overrides })
+}
+
+/** The tags of these events, in order. */
+export function tags(events: ReadonlyArray<GameEventKind>): ReadonlyArray<string> {
+  return events.map((event) => event._tag)
 }

@@ -48,19 +48,12 @@ describe("Stage#apply", () => {
     assert.deepStrictEqual(second.tiles[0], { _tag: "DataTile", game: irish, why: { _tag: "NoStream" } })
   })
 
-  it("should empty the tile a moved game came from rather than show it twice", () => {
+  it("should move a game rather than show it twice", () => {
     const first = assign(Stage.initial, 0, bama, onFox)
 
     const second = assign(first, 2, bama, onFox)
 
     assert.strictEqual(second.tiles[0]?._tag, "Empty")
-  })
-
-  it("should show a moved game in the tile it moved to", () => {
-    const first = assign(Stage.initial, 0, bama, onFox)
-
-    const second = assign(first, 2, bama, onFox)
-
     assert.strictEqual(second.tiles[2]?._tag, "StreamTile")
   })
 
@@ -73,19 +66,12 @@ describe("Stage#apply", () => {
     assert.deepStrictEqual(second.tiles[1], { _tag: "DataTile", game: bama, why: { _tag: "NoStream" } })
   })
 
-  it("should clear a tile", () => {
+  it("should clear a tile and leave the others", () => {
     const stage = fill([bama, irish])
 
     const cleared = run(stage, { _tag: "Clear", tile: 0 })
 
     assert.strictEqual(cleared.tiles[0]?._tag, "Empty")
-  })
-
-  it("should leave the other tiles when it clears one", () => {
-    const stage = fill([bama, irish])
-
-    const cleared = run(stage, { _tag: "Clear", tile: 0 })
-
     assert.strictEqual(cleared.tiles[1]?._tag, "StreamTile")
   })
 
@@ -167,19 +153,12 @@ describe("Stage#apply", () => {
 })
 
 describe("Stage#refresh", () => {
-  it("should leave a tile whose game has no availability to report as it was", () => {
+  it("should re-resolve only the tiles whose game has an availability to report", () => {
     const streaming = assign(fill([bama]), 1, irish, nowhere)
 
     const refreshed = streaming.refresh(reportingOnly(irish))
 
     assert.deepStrictEqual(refreshed.tiles[0], streaming.tiles[0])
-  })
-
-  it("should re-resolve a tile whose game has an availability to report", () => {
-    const streaming = assign(fill([bama]), 1, irish, nowhere)
-
-    const refreshed = streaming.refresh(reportingOnly(irish))
-
     assert.deepStrictEqual(refreshed.tiles[1], {
       _tag: "StreamTile",
       game: irish,
@@ -188,7 +167,7 @@ describe("Stage#refresh", () => {
   })
 
   it("should leave empty tiles empty", () => {
-    const stage = assign(fill([bama]), 1, irish, onFox)
+    const stage = assign(assign(Stage.initial, 0, bama, nowhere), 1, irish, onFox)
 
     const refreshed = stage.refresh(some(onFox))
 
@@ -368,16 +347,11 @@ describe("Stage layouts and the bench", () => {
     assert.strictEqual(reason, "offstage-tile")
   })
 
-  it("should set the current layout's split", () => {
+  it("should set the current layout's split and remember each layout's own", () => {
     const moved = run(Stage.initial, { _tag: "SetSplit", split: { x: 0.3, y: 0.7 } })
 
     assert.deepStrictEqual(moved.splits.Quad, { x: 0.3, y: 0.7 })
     assert.deepStrictEqual(moved.splits[moved.layout], { x: 0.3, y: 0.7 })
-  })
-
-  it("should remember each layout's own split", () => {
-    const moved = run(Stage.initial, { _tag: "SetSplit", split: { x: 0.3, y: 0.7 } })
-
     assert.deepStrictEqual(moved.splits.Pair, Stage.initial.splits.Pair)
   })
 })
@@ -463,21 +437,11 @@ describe("Stage#hears and Stage#soloes", () => {
 })
 
 describe("Stage#withSplit", () => {
-  it("should replace the current layout's split", () => {
+  it("should replace only the current layout's split", () => {
     const moved = Stage.initial.withSplit({ x: 0.3, y: 0.7 })
 
     assert.deepStrictEqual(moved.splits.Quad, { x: 0.3, y: 0.7 })
-  })
-
-  it("should leave the other layouts' splits", () => {
-    const moved = Stage.initial.withSplit({ x: 0.3, y: 0.7 })
-
     assert.deepStrictEqual(moved.splits.Pair, Stage.initial.splits.Pair)
-  })
-
-  it("should leave the layout and tiles", () => {
-    const moved = Stage.initial.withSplit({ x: 0.3, y: 0.7 })
-
     assert.strictEqual(moved.layout, "Quad")
     assert.deepStrictEqual(moved.tiles, Stage.initial.tiles)
   })
@@ -564,19 +528,12 @@ describe("Stage swap and promote", () => {
     assert.strictEqual(swapped.audioFocus, bama)
   })
 
-  it("should promote a tile into the main tile", () => {
+  it("should promote a tile into the main tile and give it audio", () => {
     const stage = fill([bama, undefined, undefined, irish])
 
     const promoted = run(stage, { _tag: "Promote", tile: 3 })
 
     assert.deepStrictEqual(promoted.tiles.map(gameOf), [irish, undefined, undefined, bama])
-  })
-
-  it("should give a promoted tile audio", () => {
-    const stage = fill([bama, undefined, undefined, irish])
-
-    const promoted = run(stage, { _tag: "Promote", tile: 3 })
-
     assert.strictEqual(promoted.audioFocus, irish)
   })
 
@@ -596,15 +553,10 @@ describe("Stage swap and promote", () => {
 })
 
 describe("Stage solo", () => {
-  it("should solo a tile's game", () => {
+  it("should solo a tile's game and give it audio", () => {
     const solo = run(fill([bama, irish]), { _tag: "Solo", tile: 1 })
 
     assert.strictEqual(solo.solo, irish)
-  })
-
-  it("should give a soloed game audio", () => {
-    const solo = run(fill([bama, irish]), { _tag: "Solo", tile: 1 })
-
     assert.strictEqual(solo.audioFocus, irish)
   })
 

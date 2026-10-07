@@ -5,7 +5,7 @@ import { GameSnapshot } from "./Game.ts"
 import { GameEventKind } from "./GameEvent.ts"
 import { LiveGame, LiveGameState } from "./LiveGame.ts"
 import { type Play, PlayId } from "./Play.ts"
-import { completion, liveSnapshot, play, snapshot } from "./TestGame.ts"
+import { completion, liveSnapshot, play, snapshot, tags } from "./TestGame.ts"
 
 const t0 = DateTime.makeUnsafe("2026-10-03T16:00:00Z")
 const later = DateTime.addDuration(t0, Duration.seconds(30))
@@ -146,23 +146,16 @@ describe("LiveGame#take, a snapshot", () => {
     assert.deepStrictEqual(next, Option.none())
   })
 
-  it("should go Live when a game that is Over takes overtime after the final", () => {
+  it("should go Live on overtime after the final, taking its snapshot", () => {
     const overtime = snapshot({ status: "live", period: 5, clock: "15:00" })
 
     const next = taken(overGame, overtime, "poll", later)
 
     assert.deepStrictEqual(stateOf(next), Option.some(liveAt(later)))
-  })
-
-  it("should replace the snapshot when a game that is Over takes overtime after the final", () => {
-    const overtime = snapshot({ status: "live", period: 5, clock: "15:00" })
-
-    const next = taken(overGame, overtime, "poll", later)
-
     assert.deepStrictEqual(snapshotOf(next), Option.some(overtime))
   })
 
-  it("should stay Over when a game that is Over takes a corrected final snapshot", () => {
+  it("should stay Over on a corrected final snapshot, taking its snapshot", () => {
     const corrected = snapshot({
       status: "final",
       period: 4,
@@ -173,18 +166,6 @@ describe("LiveGame#take, a snapshot", () => {
     const next = taken(overGame, corrected, "poll", later)
 
     assert.deepStrictEqual(stateOf(next), Option.some(LiveGameState.Over()))
-  })
-
-  it("should replace the snapshot when a game that is Over takes a corrected final snapshot", () => {
-    const corrected = snapshot({
-      status: "final",
-      period: 4,
-      clock: "0:00",
-      home: { ...over.home, score: 7 }
-    })
-
-    const next = taken(overGame, corrected, "poll", later)
-
     assert.deepStrictEqual(snapshotOf(next), Option.some(corrected))
   })
 
@@ -222,15 +203,10 @@ describe("LiveGame#take, a snapshot, ties between the feeds", () => {
     assert.deepStrictEqual(snapshotOf(next), Option.some(touchdown))
   })
 
-  it("should take a tied push on a pushed live game, as an overturned score is", () => {
+  it("should take a tied push on a pushed live game, as an overturned score is, from the push", () => {
     const next = taken(pushed, touchdown, "push", later)
 
     assert.deepStrictEqual(snapshotOf(next), Option.some(touchdown))
-  })
-
-  it("should take a tied push on a pushed live game from the push", () => {
-    const next = taken(pushed, touchdown, "push", later)
-
     assert.deepStrictEqual(sourceOf(next), Option.some("push"))
   })
 
@@ -244,19 +220,12 @@ describe("LiveGame#take, a snapshot, ties between the feeds", () => {
     assert.deepStrictEqual(stateOf(next), Option.some(liveAt(later)))
   })
 
-  it("should keep the pushed snapshot when a poll is ahead of a pushed live game", () => {
+  it("should hold a poll ahead of a pushed live game, keeping the pushed snapshot", () => {
     const ahead = snapshot({ status: "live", period: 2, clock: "4:05", home: { ...live.home, score: 14 } })
 
     const next = taken(pushed, ahead, "poll", later)
 
     assert.deepStrictEqual(snapshotOf(next), Option.some(tried))
-  })
-
-  it("should hold a poll ahead of a pushed live game", () => {
-    const ahead = snapshot({ status: "live", period: 2, clock: "4:05", home: { ...live.home, score: 14 } })
-
-    const next = taken(pushed, ahead, "poll", later)
-
     assert.deepStrictEqual(next.pipe(Option.map((game) => game.state._tag)), Option.some("Holding"))
   })
 })
@@ -287,29 +256,14 @@ describe("LiveGame#take and #tick, a covered game and a poll ahead of it", () =>
     assert.isFalse(stale.isCovered())
   })
 
-  it("should hold a poll at a later clock on a covered live game, until fallbackAfter from now", () => {
+  it("should hold a poll at a later clock on a covered live game until fallbackAfter from now, keeping the pushed snapshot", () => {
     const polled = liveAtScore(14, 7, "4:30")
 
-    const { liveGame: next } = take(covered, polled, "poll", now)
+    const { liveGame: next, events, outcome } = take(covered, polled, "poll", now)
 
     assert.deepStrictEqual(stateOf(next), Option.some(holdingAt(polled, now, until)))
-  })
-
-  it("should keep the pushed snapshot while holding a poll", () => {
-    const { liveGame: next } = take(covered, liveAtScore(14, 7, "4:30"), "poll", now)
-
     assert.deepStrictEqual(snapshotOf(next), Option.some(covered.snapshot))
-  })
-
-  it("should say no events while holding a poll", () => {
-    const { events } = take(covered, liveAtScore(14, 7, "4:30"), "poll", now)
-
     assert.deepStrictEqual(events, [])
-  })
-
-  it("should call the outcome of holding a poll held", () => {
-    const { outcome } = take(covered, liveAtScore(14, 7, "4:30"), "poll", now)
-
     assert.strictEqual(outcome, "held")
   })
 
@@ -328,33 +282,23 @@ describe("LiveGame#take and #tick, a covered game and a poll ahead of it", () =>
     assert.strictEqual(outcome, "held")
   })
 
-  it("should take an equal poll on a covered live game, updated now", () => {
-    const { liveGame: next } = take(covered, liveAtScore(14, 7), "poll", now)
+  it("should take an equal poll on a covered live game as a refresh, updated now", () => {
+    const { liveGame: next, events, outcome } = take(covered, liveAtScore(14, 7), "poll", now)
 
     assert.deepStrictEqual(stateOf(next), Option.some(liveAt(now)))
-  })
-
-  it("should keep the pushed snapshot and source on an equal poll", () => {
-    const { liveGame: next } = take(covered, liveAtScore(14, 7), "poll", now)
-
     assert.deepStrictEqual(snapshotOf(next), Option.some(covered.snapshot))
     assert.deepStrictEqual(sourceOf(next), Option.some("push"))
-  })
-
-  it("should say no events on an equal poll, and call it taken", () => {
-    const { events, outcome } = take(covered, liveAtScore(14, 7), "poll", now)
-
     assert.deepStrictEqual(events, [])
     assert.strictEqual(outcome, "taken")
   })
 
-  it("should find a poll behind a covered live game behind", () => {
+  it("should find a poll at an earlier clock than a covered live game behind it", () => {
     const result = take(covered, liveAtScore(14, 7, "6:00"), "poll", now)
 
     assert.deepStrictEqual(result, { liveGame: Option.none(), events: [], outcome: "behind" })
   })
 
-  it("should find a poll at the same game time with fewer points behind a covered live game behind", () => {
+  it("should find a poll at the same game time with fewer points than a covered live game behind it", () => {
     const result = take(covered, liveAtScore(10, 7), "poll", now)
 
     assert.deepStrictEqual(result, { liveGame: Option.none(), events: [], outcome: "behind" })
@@ -363,16 +307,9 @@ describe("LiveGame#take and #tick, a covered game and a poll ahead of it", () =>
   it("should apply a poll at the same game time with fewer points to a game that is not covered", () => {
     const polled = LiveGame.start(liveAtScore(14, 7), "poll", t0)
 
-    const { liveGame: next } = take(polled, liveAtScore(10, 7), "poll", now)
+    const { liveGame: next, outcome } = take(polled, liveAtScore(10, 7), "poll", now)
 
     assert.deepStrictEqual(snapshotOf(next), Option.some(liveAtScore(10, 7)))
-  })
-
-  it("should call the outcome of applying a poll to a game that is not covered taken", () => {
-    const polled = LiveGame.start(liveAtScore(14, 7), "poll", t0)
-
-    const { outcome } = take(polled, liveAtScore(10, 7), "poll", now)
-
     assert.strictEqual(outcome, "taken")
   })
 
@@ -402,20 +339,13 @@ describe("LiveGame#take and #tick, a covered game and a poll ahead of it", () =>
     assert.strictEqual(outcome, "held")
   })
 
-  it("should replace held, keeping until, when a holding game takes a poll further ahead", () => {
+  it("should replace held, keeping until and the snapshot, when a holding game takes a poll further ahead", () => {
     const further = liveAtScore(14, 7, "4:00")
     const at = DateTime.addDuration(now, Duration.seconds(10))
 
-    const { liveGame: next } = take(holding, further, "poll", at)
+    const { liveGame: next, outcome } = take(holding, further, "poll", at)
 
     assert.deepStrictEqual(stateOf(next), Option.some(holdingAt(further, at, until)))
-  })
-
-  it("should keep the snapshot and call it held when a holding game takes a poll further ahead", () => {
-    const at = DateTime.addDuration(now, Duration.seconds(10))
-
-    const { liveGame: next, outcome } = take(holding, liveAtScore(14, 7, "4:00"), "poll", at)
-
     assert.deepStrictEqual(snapshotOf(next), Option.some(covered.snapshot))
     assert.strictEqual(outcome, "held")
   })
@@ -423,16 +353,9 @@ describe("LiveGame#take and #tick, a covered game and a poll ahead of it", () =>
   it("should refresh updatedAt, still holding, when a holding game takes a poll equal to the snapshot", () => {
     const at = DateTime.addDuration(now, Duration.seconds(10))
 
-    const { liveGame: next } = take(holding, liveAtScore(14, 7), "poll", at)
+    const { liveGame: next, outcome } = take(holding, liveAtScore(14, 7), "poll", at)
 
     assert.deepStrictEqual(stateOf(next), Option.some(holdingAt(liveAtScore(14, 7, "4:30"), at, until)))
-  })
-
-  it("should call a poll equal to the snapshot taken by a holding game", () => {
-    const at = DateTime.addDuration(now, Duration.seconds(10))
-
-    const { outcome } = take(holding, liveAtScore(14, 7), "poll", at)
-
     assert.strictEqual(outcome, "taken")
   })
 
@@ -443,76 +366,42 @@ describe("LiveGame#take and #tick, a covered game and a poll ahead of it", () =>
     assert.strictEqual(outcome, "behind")
   })
 
-  it("should go Live from a push at held's game time, dropping held", () => {
+  it("should end the hold on a push at held's game time: Live from the push, held dropped, its events said", () => {
     const pushed = liveAtScore(21, 7, "4:30")
 
-    const { liveGame: next } = take(holding, pushed, "push", now)
+    const { liveGame: next, events, outcome } = take(holding, pushed, "push", now)
 
     assert.deepStrictEqual(stateOf(next), Option.some(liveAt(now)))
     assert.deepStrictEqual(snapshotOf(next), Option.some(pushed))
-  })
-
-  it("should say held's events when a push at held's game time ends the hold", () => {
-    const { events } = take(holding, liveAtScore(21, 7, "4:30"), "push", now)
-
     assert.deepStrictEqual(events, [GameEventKind.ScoreChanged({ team: live.home.team.id, points: 7 })])
-  })
-
-  it("should call a push at held's game time taken", () => {
-    const { outcome } = take(holding, liveAtScore(21, 7, "4:30"), "push", now)
-
     assert.strictEqual(outcome, "taken")
   })
 
-  it("should apply a push behind held but ahead of the snapshot", () => {
+  it("should apply a push behind held but ahead of the snapshot, still holding", () => {
     const pushed = liveAtScore(14, 7, "4:45")
 
     const { liveGame: next } = take(holding, pushed, "push", now)
 
     assert.deepStrictEqual(snapshotOf(next), Option.some(pushed))
-  })
-
-  it("should still hold after a push behind held but ahead of the snapshot", () => {
-    const { liveGame: next } = take(holding, liveAtScore(14, 7, "4:45"), "push", now)
-
     assert.deepStrictEqual(stateOf(next), Option.some(holdingAt(liveAtScore(14, 7, "4:30"), now, until)))
   })
 
-  it("should go Live from the poll, with held the snapshot, when a tick reaches until", () => {
+  it("should fall back to the poll when a tick reaches until: Live, held the snapshot, its events said", () => {
     const scoring = Option.getOrThrow(take(covered, liveAtScore(21, 7, "4:30"), "poll", now).liveGame)
 
-    const { liveGame: next } = scoring.tick(until)
+    const { liveGame: next, events, fellBack } = scoring.tick(until)
 
     assert.deepStrictEqual(stateOf(next), Option.some(liveAt(until)))
     assert.deepStrictEqual(snapshotOf(next), Option.some(liveAtScore(21, 7, "4:30")))
     assert.deepStrictEqual(sourceOf(next), Option.some("poll"))
-  })
-
-  it("should say held's events when a tick reaches until", () => {
-    const scoring = Option.getOrThrow(take(covered, liveAtScore(21, 7, "4:30"), "poll", now).liveGame)
-
-    const { events } = scoring.tick(until)
-
     assert.deepStrictEqual(events, [GameEventKind.ScoreChanged({ team: live.home.team.id, points: 7 })])
-  })
-
-  it("should report that a tick reaching until fell back", () => {
-    const scoring = Option.getOrThrow(take(covered, liveAtScore(21, 7, "4:30"), "poll", now).liveGame)
-
-    const { fellBack } = scoring.tick(until)
-
     assert.isTrue(fellBack)
   })
 
   it("should change nothing when a tick comes before until", () => {
-    const { liveGame: next } = holding.tick(DateTime.subtractDuration(until, Duration.millis(1)))
+    const { liveGame: next, fellBack } = holding.tick(DateTime.subtractDuration(until, Duration.millis(1)))
 
     assert.deepStrictEqual(next, Option.none())
-  })
-
-  it("should not report a fall back when a tick comes before until", () => {
-    const { fellBack } = holding.tick(DateTime.subtractDuration(until, Duration.millis(1)))
-
     assert.isFalse(fellBack)
   })
 
@@ -532,32 +421,20 @@ describe("LiveGame#take and #tick, a covered game and a poll ahead of it", () =>
     const polled = LiveGame.start(liveAtScore(14, 7), "poll", t0)
     const ahead = liveAtScore(21, 7, "4:30")
 
-    const { liveGame: next } = take(polled, ahead, "poll", now)
+    const { liveGame: next, outcome } = take(polled, ahead, "poll", now)
 
     assert.deepStrictEqual(snapshotOf(next), Option.some(ahead))
     assert.deepStrictEqual(stateOf(next), Option.some(liveAt(now)))
-  })
-
-  it("should call a poll ahead of a game that is not covered taken", () => {
-    const polled = LiveGame.start(liveAtScore(14, 7), "poll", t0)
-
-    const { outcome } = take(polled, liveAtScore(21, 7, "4:30"), "poll", now)
-
     assert.strictEqual(outcome, "taken")
   })
 
   it("should apply a poll at kickoff with status live at once to an upcoming game", () => {
     const kickoff = liveSnapshot({ clock: "15:00" })
 
-    const { liveGame: next } = take(upcomingGame, kickoff, "poll", now)
+    const { liveGame: next, outcome } = take(upcomingGame, kickoff, "poll", now)
 
     assert.deepStrictEqual(snapshotOf(next), Option.some(kickoff))
     assert.deepStrictEqual(stateOf(next), Option.some(liveAt(now)))
-  })
-
-  it("should call a poll at kickoff with status live taken by an upcoming game", () => {
-    const { outcome } = take(upcomingGame, liveSnapshot({ clock: "15:00" }), "poll", now)
-
     assert.strictEqual(outcome, "taken")
   })
 })
@@ -729,33 +606,18 @@ describe("LiveGame#take, plays", () => {
   })
   const withFirst = Option.getOrThrow(takePlays(liveGame, [first]).liveGame)
 
-  it("should replace the list, in Play.order", () => {
-    const { liveGame: next } = takePlays(withFirst, [second, first])
+  it("should replace the list, in Play.order, and give the new plays' events", () => {
+    const { liveGame: next, events } = takePlays(withFirst, [second, first])
 
     assert.deepStrictEqual(playsOf(next), Option.some([first, second]))
-  })
-
-  it("should give the new plays' events", () => {
-    const { events } = takePlays(withFirst, [second, first])
-
     assert.deepStrictEqual(events, [GameEventKind.Played({ play: second })])
   })
 
-  it("should keep the snapshot", () => {
+  it("should keep the snapshot, its source, and its state when plays are taken", () => {
     const { liveGame: next } = takePlays(withFirst, [first, second])
 
     assert.deepStrictEqual(snapshotOf(next), Option.some(live))
-  })
-
-  it("should keep the snapshot's source", () => {
-    const { liveGame: next } = takePlays(withFirst, [first, second])
-
     assert.deepStrictEqual(sourceOf(next), Option.some("poll"))
-  })
-
-  it("should keep the state", () => {
-    const { liveGame: next } = takePlays(withFirst, [first, second])
-
     assert.deepStrictEqual(stateOf(next), Option.some(liveAt(t0)))
   })
 
@@ -771,19 +633,12 @@ describe("LiveGame#take, plays", () => {
     assert.deepStrictEqual(result, { liveGame: Option.none(), events: [] })
   })
 
-  it("should drop a play removed from the list", () => {
+  it("should drop a play removed from the list, giving no events", () => {
     const both = Option.getOrThrow(takePlays(withFirst, [first, second]).liveGame)
 
-    const { liveGame: next } = takePlays(both, [first])
+    const { liveGame: next, events } = takePlays(both, [first])
 
     assert.deepStrictEqual(playsOf(next), Option.some([first]))
-  })
-
-  it("should give no events for a play removed from the list", () => {
-    const both = Option.getOrThrow(takePlays(withFirst, [first, second]).liveGame)
-
-    const { events } = takePlays(both, [first])
-
     assert.deepStrictEqual(events, [])
   })
 })
@@ -804,32 +659,20 @@ describe("LiveGame#take, a snapshot's events", () => {
     touchdown: true
   })
 
-  it("should say ScoreChanged for a score change before any plays", () => {
+  it("should say ScoreChanged and WentFinal for a final with a score change before any plays", () => {
     const { events } = take(liveGame, scoredFinal, "poll", later)
 
-    assert.include(tagsOf(events), "ScoreChanged")
+    assert.include(tags(events), "ScoreChanged")
+    assert.include(tags(events), "WentFinal")
   })
 
-  it("should say WentFinal for a final before any plays", () => {
-    const { events } = take(liveGame, scoredFinal, "poll", later)
-
-    assert.include(tagsOf(events), "WentFinal")
-  })
-
-  it("should say ScoreChanged for a score change once plays exist", () => {
+  it("should say ScoreChanged and WentFinal for a final with a score change once plays exist", () => {
     const withPlay = Option.getOrThrow(takePlays(liveGame, [play()]).liveGame)
 
     const { events } = take(withPlay, scoredFinal, "poll", later)
 
-    assert.include(tagsOf(events), "ScoreChanged")
-  })
-
-  it("should say WentFinal for a final once plays exist", () => {
-    const withPlay = Option.getOrThrow(takePlays(liveGame, [play()]).liveGame)
-
-    const { events } = take(withPlay, scoredFinal, "poll", later)
-
-    assert.include(tagsOf(events), "WentFinal")
+    assert.include(tags(events), "ScoreChanged")
+    assert.include(tags(events), "WentFinal")
   })
 
   it("should say ScoreChanged for a snapshot's score change that comes before the touchdown pass", () => {
@@ -948,8 +791,4 @@ function sourceOf(game: Option.Option<LiveGame>) {
 
 function playsOf(game: Option.Option<LiveGame>) {
   return game.pipe(Option.map((g) => g.plays))
-}
-
-function tagsOf(events: ReadonlyArray<GameEventKind>) {
-  return events.map((event) => event._tag)
 }

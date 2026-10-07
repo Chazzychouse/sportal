@@ -238,7 +238,7 @@ describe("Guide#availabilityOf", () => {
     assert.deepStrictEqual(availability, ChannelAvailability.NotCarried({ why: "NotInGuide" }))
   })
 
-  it("should not match a title naming other teams from the same places, in baseball for Arizona and Chicago", () => {
+  it("should not match a baseball airing between teams from the same places as Arizona and Chicago, for the Cardinals at the Bears", () => {
     const cardinalsAtBears = nfl(
       team("ARI", "nfl", { name: "Arizona Cardinals", location: "Arizona", shortName: "Cardinals" }),
       team("CHI", "nfl", { name: "Chicago Bears", location: "Chicago", shortName: "Bears" })
@@ -249,7 +249,7 @@ describe("Guide#availabilityOf", () => {
     assert.deepStrictEqual(availability, ChannelAvailability.NotCarried({ why: "NotInGuide" }))
   })
 
-  it("should not match a title naming other teams from the same places, in baseball for New York and Tampa Bay", () => {
+  it("should not match a baseball airing between teams from the same places as New York and Tampa Bay, for the Jets at the Buccaneers", () => {
     const jetsAtBuccaneers = nfl(
       team("NYJ", "nfl", { name: "New York Jets", location: "New York", shortName: "Jets" }),
       team("TB", "nfl", { name: "Tampa Bay Buccaneers", location: "Tampa Bay", shortName: "Buccaneers" })

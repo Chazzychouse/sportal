@@ -22,7 +22,7 @@ import {
   Timeout,
   TwoPointTry
 } from "./Play.ts"
-import { play, team } from "./TestGame.ts"
+import { play, tags, team } from "./TestGame.ts"
 
 const home = team("HOME").id
 const away = team("AWAY").id
@@ -46,7 +46,6 @@ const gained = { ...fields, team: home, yards: 4 }
 const encode = Schema.encodeSync(Play)
 const decode = Schema.decodeUnknownSync(Play)
 const since = (before: ReadonlyArray<Play>, after: ReadonlyArray<Play>) => Play.eventsSince(before, after)
-const tags = (events: ReadonlyArray<GameEventKind>) => events.map((event) => event._tag)
 
 describe("FootballPlay", () => {
   it.each([
