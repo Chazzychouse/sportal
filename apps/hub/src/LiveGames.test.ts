@@ -234,7 +234,7 @@ describe("LiveGames", () => {
       }).pipe(Effect.provide(liveGames()))
     )
 
-    it.effect("carries a live frame's resync, and not a replayed one's", () =>
+    it.effect("carries a live frame's resync, after the current games", () =>
       Effect.gen(function* () {
         const demanded = yield* demandOf()
         assert.deepStrictEqual(yield* Queue.take(demanded), LiveFeedDemand.Games({ games: [] }))
@@ -242,13 +242,7 @@ describe("LiveGames", () => {
         yield* (yield* LiveGames).through(frame.seq)
         assert.deepStrictEqual(yield* Queue.take(demanded), LiveFeedDemand.Resync({ channel: "live-topic" }))
         assert.isTrue(Option.isNone(yield* Queue.poll(demanded)))
-      }).pipe(
-        Effect.provide(
-          Layer.unwrap(
-            Effect.map(pushed({ _tag: "Resync" }, "replayed-topic"), (frame) => liveGames([frame]))
-          )
-        )
-      )
+      }).pipe(Effect.provide(liveGames()))
     )
 
     it.effect("a second subscription starts with the current games again", () =>

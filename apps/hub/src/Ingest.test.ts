@@ -342,6 +342,7 @@ describe("Ingest", () => {
           yield* TestClock.adjust(0)
           assert.strictEqual(yield* Ref.get(subscriptions), 1)
           yield* Queue.offer(feed, closed)
+          // `Schedule.recurs(1)` retries with no delay, so the clock need not move.
           yield* TestClock.adjust(0)
           assert.strictEqual(yield* Ref.get(subscriptions), 2)
           assert.lengthOf(stopped(), 0)

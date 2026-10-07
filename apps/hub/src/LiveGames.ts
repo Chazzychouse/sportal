@@ -16,6 +16,7 @@ import {
   Option,
   PubSub,
   Ref,
+  Sink,
   Stream,
   SubscriptionRef
 } from "effect"
@@ -277,16 +278,23 @@ export class LiveGames extends Context.Service<
                 Option.match({ onNone: () => latest, onSome: ({ folded }) => Effect.succeed(folded) })
               )
             ),
-          // Subscribed to the resyncs before the first games are given, so every resync after them is in the demand.
+          // Subscribed to the resyncs before the first games are peeled off, so the games come first and every resync
+          // after them is in the demand.
           demand: Stream.unwrap(
-            Effect.map(PubSub.subscribe(resyncs), (subscription) =>
-              Stream.merge(
-                currentGames,
-                Stream.fromSubscription(subscription).pipe(
-                  Stream.map((channel) => LiveFeedDemand.Resync({ channel }))
+            Effect.gen(function* () {
+              const subscription = yield* PubSub.subscribe(resyncs)
+              const [first, rest] = yield* Stream.peel(currentGames, Sink.head())
+              return Stream.fromIterable(Option.toArray(first)).pipe(
+                Stream.concat(
+                  Stream.merge(
+                    rest,
+                    Stream.fromSubscription(subscription).pipe(
+                      Stream.map((channel) => LiveFeedDemand.Resync({ channel }))
+                    )
+                  )
                 )
               )
-            )
+            })
           )
         })
       })
