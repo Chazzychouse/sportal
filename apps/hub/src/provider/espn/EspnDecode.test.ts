@@ -3,11 +3,11 @@ import { assert, describe, layer } from "@effect/vitest"
 import type { Delivery } from "@sportal/domain/Delivery"
 import { GameId, GameSnapshot } from "@sportal/domain/Game"
 import { Play, PlayId } from "@sportal/domain/Play"
-import { Context, type Data, DateTime, Effect, Equal, Layer, Metric, Option, Record, Schema } from "effect"
+import { type Data, DateTime, Effect, Equal, Layer, Metric, Option, Record, Schema } from "effect"
 import type { FeedFrame } from "../../Frame.ts"
 import { recordingLogs, withMetrics } from "../../TestTelemetry.ts"
 import type { DecodeObservation } from "../Provider.ts"
-import { decodedFrames } from "../TestDecoder.ts"
+import { decodedFrames, FramesDecoded } from "../TestDecoder.ts"
 import * as EspnDecode from "./EspnDecode.ts"
 import { EspnEvent } from "./EspnEvent.ts"
 import { recordedNeAtBuf } from "./TestEspn.ts"
@@ -48,21 +48,8 @@ const playJson = Schema.fromJsonString(Play)
 const ariAtNyg = "s:20~l:28~e:401872966~c:401872966"
 const ariAtNygPlays = "gp-football-nfl-401872966"
 
-/** Every delivery decoded from NE at BUF's recorded day. */
-class NeAtBufDeliveries extends Context.Service<NeAtBufDeliveries, ReadonlyArray<Delivery>>()(
-  "test/NeAtBufDeliveries"
-) {}
-
-// NE at BUF's recorded day decoded once, by the provided decode, for every test that reads `NeAtBufDeliveries`.
-const neAtBufDeliveriesLayer = Layer.effect(
-  NeAtBufDeliveries,
-  Effect.gen(function* () {
-    const frames = yield* recordedNeAtBuf
-    const all = yield* decodedFrames(frames)
-
-    return all.flatMap(({ deliveries }) => deliveries)
-  })
-)
+// NE at BUF's recorded frames, decoded once by ESPN's decode for the tests that read them.
+const neAtBufDecoded = FramesDecoded.layer(recordedNeAtBuf).pipe(Layer.provide(EspnDecode.layer))
 
 layer(EspnDecode.layer)("EspnDecode", (it) => {
   // Each recorded feed as it decoded when both feeds' events were read by one transform: the poll's listings, the
@@ -755,11 +742,11 @@ layer(EspnDecode.layer)("EspnDecode", (it) => {
 
   // Decoding NE at BUF's whole recorded day takes seconds alone, and many under a full suite's load: the layer decodes
   // it once for both tests, with a timeout to match.
-  it.layer(neAtBufDeliveriesLayer, { timeout: "60 seconds" })("the recorded NE at BUF day", (it) => {
+  it.layer(neAtBufDecoded, { timeout: "60 seconds" })("the recorded NE at BUF day", (it) => {
     it.effect("should decode every snapshot so it reads back from its JSON Equal to itself", () =>
       Effect.gen(function* () {
-        const deliveries = yield* NeAtBufDeliveries
-
+        const decoded = yield* FramesDecoded
+        const deliveries = decoded.flatMap(({ deliveries }) => deliveries)
         const snapshots = deliveries.flatMap((delivery) =>
           delivery._tag === "Listing"
             ? delivery.games
@@ -781,8 +768,8 @@ layer(EspnDecode.layer)("EspnDecode", (it) => {
 
     it.effect("should decode every play so it reads back from its JSON Equal to itself", () =>
       Effect.gen(function* () {
-        const deliveries = yield* NeAtBufDeliveries
-
+        const decoded = yield* FramesDecoded
+        const deliveries = decoded.flatMap(({ deliveries }) => deliveries)
         const plays = deliveries.flatMap((delivery) => (delivery._tag === "Plays" ? delivery.plays : []))
 
         const backs = yield* Effect.forEach(plays, (play) =>

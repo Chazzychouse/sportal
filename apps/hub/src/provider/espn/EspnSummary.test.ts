@@ -3,10 +3,11 @@ import { assert, describe, it, layer } from "@effect/vitest"
 import { GameId } from "@sportal/domain/Game"
 import { Play, PlayId } from "@sportal/domain/Play"
 import { TeamId } from "@sportal/domain/Team"
-import { Context, DateTime, Effect, Equal, Layer, Logger, Order, Schema } from "effect"
+import { DateTime, Effect, Equal, Layer, Logger, Order, Schema } from "effect"
 import type { ArchivedPlay } from "../../corpus/Archive.ts"
 import * as Gzip from "../../Gzip.ts"
-import { decodedFrames } from "../TestDecoder.ts"
+import type { Decoded } from "../Provider.ts"
+import { FramesDecoded } from "../TestDecoder.ts"
 import * as EspnDecode from "./EspnDecode.ts"
 import * as EspnPlay from "./EspnPlay.ts"
 import * as EspnSummary from "./EspnSummary.ts"
@@ -30,24 +31,8 @@ const fbs = (team: string) => TeamId.make(`fbs:${team}`)
 
 const decodeEntity = Schema.decodeUnknownEffect(EspnPlay.Play("nfl"))
 
-/** The plays NE–BUF's recorded FastCast topic last had. */
-class LastPushed extends Context.Service<LastPushed, ReadonlyArray<Play>>()("test/LastPushed") {}
-
-// NE–BUF's recording decoded once, for every test that reads `LastPushed`.
-const lastPushedLayer = Layer.effect(
-  LastPushed,
-  Effect.gen(function* () {
-    const frames = yield* recordedNeAtBuf
-    const decoded = yield* decodedFrames(frames)
-
-    const lists = decoded
-      .flatMap(({ deliveries }) => deliveries)
-      .flatMap((delivery) =>
-        delivery._tag === "Plays" && delivery.game === GameId.make("401872971") ? [delivery.plays] : []
-      )
-    return lists.at(-1) ?? []
-  })
-).pipe(Layer.provide(EspnDecode.layer))
+// NE at BUF's recorded frames, decoded once by ESPN's decode for the tests that read them.
+const neAtBufDecoded = FramesDecoded.layer(recordedNeAtBuf).pipe(Layer.provide(EspnDecode.layer))
 
 describe("EspnSummary.plays", () => {
   it.effect("should read every play a drive lists", () =>
@@ -306,12 +291,13 @@ describe("EspnSummary.plays", () => {
 
 // Decoding NE–BUF's whole recording takes about a second alone, and many under a full suite's load: the layer decodes
 // it once for the tests that read it, with a timeout to match.
-layer(lastPushedLayer, { timeout: "60 seconds" })(
+layer(neAtBufDecoded, { timeout: "60 seconds" })(
   "EspnSummary.plays, beside the recorded FastCast topic",
   (it) => {
     it.effect("should read the plays the recorded FastCast topic last had, in its order", () =>
       Effect.gen(function* () {
-        const pushed = yield* LastPushed
+        const decoded = yield* FramesDecoded
+        const pushed = lastPushedOf(decoded)
 
         const plays = yield* EspnSummary.plays("nfl", summary)
 
@@ -326,7 +312,9 @@ layer(lastPushedLayer, { timeout: "60 seconds" })(
       "should read every field of every play as the recorded FastCast topic last had it, but those ESPN rewrote",
       () =>
         Effect.gen(function* () {
-          const pushed = yield* LastPushed
+          const decoded = yield* FramesDecoded
+          const pushed = lastPushedOf(decoded)
+
           // Left out: `text`, which ESPN rewrote for the summary (a penalty's line break, a clock prefix, a leading
           // space); and, on the last kneel only, 4018729714600, `yards` and `end`, which ESPN corrected after the game
           // (-2 yards to -1) and FastCast never sent. Every other field of every play is compared, team, case, outcome,
@@ -349,7 +337,8 @@ layer(lastPushedLayer, { timeout: "60 seconds" })(
       "should read every play but three as the recorded FastCast topic last had it, field for field",
       () =>
         Effect.gen(function* () {
-          const pushed = yield* LastPushed
+          const decoded = yield* FramesDecoded
+          const pushed = lastPushedOf(decoded)
 
           const plays = yield* EspnSummary.plays("nfl", summary)
 
@@ -406,4 +395,14 @@ function withoutFirstCaller() {
 function edited(from: string, to: string): unknown {
   assert.include(recorded, from)
   return JSON.parse(recorded.replace(from, to))
+}
+
+/** The plays NE–BUF's recorded FastCast topic last had, from what its frames said. */
+function lastPushedOf(decoded: ReadonlyArray<Decoded>): ReadonlyArray<Play> {
+  const lists = decoded
+    .flatMap(({ deliveries }) => deliveries)
+    .flatMap((delivery) =>
+      delivery._tag === "Plays" && delivery.game === GameId.make("401872971") ? [delivery.plays] : []
+    )
+  return lists.at(-1) ?? []
 }

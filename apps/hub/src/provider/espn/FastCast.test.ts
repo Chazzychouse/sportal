@@ -53,9 +53,9 @@ describe("FastCast", () => {
       yield* frames.until(atLeast(2))
       // FastCast sends `B` after 10 s of nothing else; a gap of 20 s was seen live.
       yield* TestClock.adjust("20 seconds")
+
       yield* Effect.sync(() => server.send({ op: "B" }))
       yield* frames.until(atLeast(3))
-
       yield* TestClock.adjust("40 seconds")
 
       const done = yield* Deferred.isDone(ended)
@@ -217,7 +217,7 @@ describe("FastCast", () => {
         yield* server.sent.until(subscribed(missingTopic, 2))
         const done = yield* Deferred.isDone(ended)
         assert.isFalse(done)
-      }).pipe(withMetrics)
+      })
   )
 
   it.effect(
@@ -291,7 +291,7 @@ describe("FastCast", () => {
         server.sent.all().filter((frame) => frame.op === "S"),
         1
       )
-    }).pipe(withMetrics)
+    })
   )
 
   it.effect(
@@ -309,7 +309,7 @@ describe("FastCast", () => {
         yield* server.sent.until(subscribed("event-football-nfl", 2))
         const done = yield* Deferred.isDone(ended)
         assert.isFalse(done)
-      }).pipe(withMetrics)
+      })
   )
 
   it.effect("should emit only the H of a checkpoint that does not decode, counting it as Undecodable", () =>
@@ -352,7 +352,7 @@ describe("FastCast", () => {
         server.sent.all().filter((frame) => frame.op === "S"),
         2
       )
-    }).pipe(withMetrics)
+    })
   )
 
   it.effect("should send no second S for a resync of a topic already due to be followed again", () =>

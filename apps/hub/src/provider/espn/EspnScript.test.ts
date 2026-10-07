@@ -166,8 +166,7 @@ describe("scenarioOf", () => {
               `${game.id}'s plays at ${at}`
             )
         }
-      }),
-    { timeout: 30_000 }
+      })
   )
 
   it("should write each game's plays on its own topic", () => {
