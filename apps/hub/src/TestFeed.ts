@@ -29,7 +29,7 @@ export function polled(
 }
 
 /** A snapshot feed frame pushed on `channel`, received at the clock's now, that says `payload`. */
-export function pushed(payload: typeof SnapshotPayload.Type, channel = "event-football-college-football") {
+export function pushed(payload: typeof SnapshotPayload.Type, channel: string) {
   return Effect.map(
     DateTime.now,
     (receivedAt): FeedFrame => ({

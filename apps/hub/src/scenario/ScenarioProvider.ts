@@ -1,18 +1,47 @@
+import type { GameSnapshot } from "@sportal/domain/Game"
 import type { LeagueId } from "@sportal/domain/League"
 import { Array as Arr, DateTime, Duration, Effect, Layer, Option, Schedule, Stream } from "effect"
 import type { FeedFrame } from "../Frame.ts"
 import { HubConfig } from "../HubConfig.ts"
+import type { Decoder } from "../provider/Decoder.ts"
 import { type Polling, Provider } from "../provider/Provider.ts"
 import type { RecordedScenario } from "./RecordedScenario.ts"
 import { RecordedScenarios, ScenarioUnknown, type ScenarioUnreadable } from "./RecordedScenarios.ts"
 import { scenarios } from "./written/Scenarios.ts"
 
 /**
- * The written scenario `SPORTAL_SCENARIO` names, if it names one, as what the snapshot feed plays from the moment this
- * runs, on whatever clock runs it: a poll of a league answers the league's games in its slate at that scenario time,
- * polled again at each written frame's time and at least every 10 seconds, and nothing is pushed.
+ * The scenario `SPORTAL_SCENARIO` names, played as the provider beside the decoder that reads its frames, on whatever
+ * clock runs it from the moment the layer is built. A written scenario is played by `adapters.written`: its `provider`
+ * is given what a poll of a league answers (the league's games in its slate at that scenario time) and when to poll
+ * again (at each written frame's time, and at least every 10 seconds), and its `decoder` reads the frames. A recorded
+ * scenario polls the recorded poll current at the moment, received now, pushes its recorded live feed frames at their
+ * recorded offsets, is polled again at its next poll's time and at least every 10 seconds, and is read by
+ * `adapters.recorded.decoder`, the decode of the provider that recorded it. A name that is unset or unknown fails,
+ * listing the known ones, written and recorded.
  */
-export const written = Effect.gen(function* () {
+export function layer(adapters: {
+  readonly written: {
+    readonly provider: (feed: {
+      readonly games: (league: LeagueId) => Effect.Effect<ReadonlyArray<GameSnapshot>>
+      readonly polling: Polling
+    }) => Layer.Layer<Provider>
+    readonly decoder: Layer.Layer<Decoder>
+  }
+  readonly recorded: { readonly decoder: Layer.Layer<Decoder> }
+}) {
+  return Layer.unwrap(
+    Effect.map(
+      written,
+      Option.match({
+        onSome: (feed) => Layer.merge(adapters.written.provider(feed), adapters.written.decoder),
+        onNone: () => Layer.merge(recorded, adapters.recorded.decoder)
+      })
+    )
+  )
+}
+
+// The written scenario `SPORTAL_SCENARIO` names, if it names one, as the games a poll answers and when to poll again.
+const written = Effect.gen(function* () {
   const { scenario } = yield* HubConfig
   const start = yield* DateTime.now
   const name = Option.getOrElse(scenario, () => "")
@@ -34,35 +63,26 @@ export const written = Effect.gen(function* () {
   })
 })
 
-/**
- * The recorded scenario `SPORTAL_SCENARIO` names as the provider, on whatever clock runs it, from the moment the layer
- * is built. It polls the recorded poll current at that moment, received now, and pushes its recorded live feed frames
- * at their recorded offsets, to be decoded by the `Decoder` of the provider that recorded them. It is polled again at
- * its next poll's time, and at least every 10 seconds, so a live game never goes stale between frames. A name that is
- * unset or unknown fails, listing the known ones, written and recorded.
- */
-export const recorded: Layer.Layer<
-  Provider,
-  ScenarioUnknown | ScenarioUnreadable,
-  HubConfig | RecordedScenarios
-> = Layer.effect(
-  Provider,
-  Effect.gen(function* () {
-    const { scenario } = yield* HubConfig
-    const recordedScenarios = yield* RecordedScenarios
-    const start = yield* DateTime.now
-    const name = Option.getOrElse(scenario, () => "")
-    const loaded = yield* recordedScenarios
-      .load(name)
-      .pipe(
-        Effect.catchTag("ScenarioUnknown", ({ known }) =>
-          Effect.fail(new ScenarioUnknown({ name, known: [...scenarios.keys(), ...known] }))
+// The recorded scenario `SPORTAL_SCENARIO` names as the provider, from the moment the layer is built.
+const recorded: Layer.Layer<Provider, ScenarioUnknown | ScenarioUnreadable, HubConfig | RecordedScenarios> =
+  Layer.effect(
+    Provider,
+    Effect.gen(function* () {
+      const { scenario } = yield* HubConfig
+      const recordedScenarios = yield* RecordedScenarios
+      const start = yield* DateTime.now
+      const name = Option.getOrElse(scenario, () => "")
+      const loaded = yield* recordedScenarios
+        .load(name)
+        .pipe(
+          Effect.catchTag("ScenarioUnknown", ({ known }) =>
+            Effect.fail(new ScenarioUnknown({ name, known: [...scenarios.keys(), ...known] }))
+          )
         )
-      )
-    yield* Effect.logInfo(`ScenarioProvider: playing ${name}, ${loaded.frames.length} recorded frames`)
-    return playedRecorded(loaded, start)
-  })
-)
+      yield* Effect.logInfo(`ScenarioProvider: playing ${name}, ${loaded.frames.length} recorded frames`)
+      return playedRecorded(loaded, start)
+    })
+  )
 
 function playedRecorded(scenario: RecordedScenario, start: DateTime.Utc) {
   const origin = scenario.origin()

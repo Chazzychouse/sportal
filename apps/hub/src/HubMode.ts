@@ -63,19 +63,10 @@ function scripted() {
       Slate.layer,
       Ingest.layer.pipe(
         Layer.provide([
-          Layer.unwrap(
-            Effect.map(
-              ScenarioProvider.written,
-              Option.match({
-                onSome: (feed) => Layer.merge(SnapshotProvider.layer(feed), SnapshotDecode.layer),
-                onNone: () =>
-                  Layer.merge(
-                    ScenarioProvider.recorded.pipe(Layer.provide(RecordedScenarios.layer)),
-                    EspnDecode.layer
-                  )
-              })
-            )
-          ),
+          ScenarioProvider.layer({
+            written: { provider: SnapshotProvider.layer, decoder: SnapshotDecode.layer },
+            recorded: { decoder: EspnDecode.layer }
+          }).pipe(Layer.provide(RecordedScenarios.layer)),
           FeedLog.forScenario,
           DateTime.layerCurrentZoneLocal
         ])

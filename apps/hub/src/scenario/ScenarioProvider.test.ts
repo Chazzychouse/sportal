@@ -130,17 +130,17 @@ describe("ScenarioProvider", () => {
   )
 
   it.effect(
-    "a recorded scenario is a provider alone, built from its settings and the recorded scenarios",
+    "a recorded scenario is played with only its settings and the recorded scenarios, read by ESPN's decode",
     () =>
       Effect.gen(function* () {
-        const recorded: Layer.Layer<
+        const played = ScenarioProvider.layer(adapters) satisfies Layer.Layer<
           Provider,
           ScenarioUnknown | ScenarioUnreadable,
           HubConfig | RecordedScenarios
-        > = ScenarioProvider.recorded
+        >
         const games = yield* listedBy("fbs").pipe(
           Effect.provide(
-            Layer.mergeAll(recorded, EspnDecode.layer).pipe(
+            played.pipe(
               Layer.provide([
                 RecordedScenarios.layer,
                 withEnv({ SPORTAL_SCENARIO: "crowded-fourth-quarter" }).pipe(Layer.orDie)
@@ -151,12 +151,6 @@ describe("ScenarioProvider", () => {
         )
         assert.isNotEmpty(games)
       })
-  )
-
-  it.effect("a recorded scenario's name is no written scenario", () =>
-    Effect.gen(function* () {
-      assert.isTrue(Option.isNone(yield* ScenarioProvider.written))
-    }).pipe(Effect.provide(withEnv({ SPORTAL_SCENARIO: "crowded-fourth-quarter" }).pipe(Layer.orDie)))
   )
 
   it.effect("a written scenario never pushes", () =>
@@ -358,31 +352,24 @@ describe("ScenarioProvider", () => {
 })
 
 /**
- * Scenario `name` as the provider and its decoder, paired as `HubMode` pairs them and configured by `env` beside its
- * name: a written one as the snapshot feed, and a recorded one read from `from` (the committed ones, unless given), its
- * frames decoded by `decoder` (ESPN's, unless given).
+ * Scenario `name` as the provider and its decoder, played with the adapters `HubMode` plays it with and configured by
+ * `env` beside its name: a recorded one read from `from` (the committed ones, unless given), its frames decoded by
+ * `decoder` (ESPN's, unless given).
  */
 function scenario(name: string, options: Options = {}) {
-  return Layer.unwrap(
-    Effect.map(
-      ScenarioProvider.written,
-      Option.match({
-        onSome: (feed) => Layer.merge(SnapshotProvider.layer(feed), SnapshotDecode.layer),
-        onNone: () =>
-          Layer.merge(
-            ScenarioProvider.recorded.pipe(
-              Layer.provide(
-                options.from === undefined ? RecordedScenarios.layer : RecordedScenarios.in(options.from)
-              )
-            ),
-            options.decoder ?? EspnDecode.layer
-          )
-      })
-    )
+  return ScenarioProvider.layer(
+    options.decoder === undefined ? adapters : { ...adapters, recorded: { decoder: options.decoder } }
   ).pipe(
+    Layer.provide(options.from === undefined ? RecordedScenarios.layer : RecordedScenarios.in(options.from)),
     Layer.provideMerge(withEnv({ SPORTAL_SCENARIO: name, ...options.env }).pipe(Layer.orDie)),
     Layer.provide(NodeServices.layer)
   )
+}
+
+// The adapters HubMode plays a scenario with.
+const adapters = {
+  written: { provider: SnapshotProvider.layer, decoder: SnapshotDecode.layer },
+  recorded: { decoder: EspnDecode.layer }
 }
 
 /**
@@ -443,11 +430,14 @@ function pushedAt(seconds: number, game: GameSnapshot) {
   return recordedAs(
     seconds,
     "fastcast",
-    pushed(Delivery.cases.Snapshot.make({ snapshot: game, from: "push" }))
+    pushed(Delivery.cases.Snapshot.make({ snapshot: game, from: "push" }), "fbs")
   )
 }
 
-/** `said` as a recording from `feed` holds it, received `seconds` into the recording. */
+/**
+ * `said` as a recording from `feed` holds it, received `seconds` into the recording. The frame is synthetic: a snapshot
+ * feed body under an ESPN feed's name, for a recorded scenario decoded by `SnapshotDecode`.
+ */
 function recordedAs(seconds: number, feed: "poll" | "fastcast", said: Effect.Effect<FeedFrame>) {
   return Effect.map(
     said,

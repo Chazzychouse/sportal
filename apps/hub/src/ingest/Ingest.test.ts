@@ -238,7 +238,7 @@ describe("Ingest", () => {
         yield* TestClock.adjust(0)
         yield* Queue.offer(
           feed,
-          yield* pushed(Delivery.cases.Snapshot.make({ snapshot: scoring(7), from: "push" }))
+          yield* pushed(Delivery.cases.Snapshot.make({ snapshot: scoring(7), from: "push" }), "fbs")
         )
         yield* TestClock.adjust("100 millis")
 
@@ -414,7 +414,7 @@ describe("Ingest", () => {
           Array.from({ length: 200 }, (_, index) => index),
           (index) =>
             Effect.flatMap(
-              pushed(Delivery.cases.Snapshot.make({ snapshot: scoring(index), from: "push" })),
+              pushed(Delivery.cases.Snapshot.make({ snapshot: scoring(index), from: "push" }), "fbs"),
               log.append
             ),
           { discard: true }
@@ -555,7 +555,8 @@ describe("Ingest", () => {
                         Delivery.cases.Snapshot.make({
                           snapshot: liveSnapshot({ id: GameId.make("1"), period: 3 }),
                           from: "push"
-                        })
+                        }),
+                        "fbs"
                       ),
                       log.append
                     )
@@ -578,7 +579,7 @@ describe("Ingest", () => {
       yield* loggedBefore([pollOf([]), pollOf([])])
 
       yield* Effect.gen(function* () {
-        const frame = yield* (yield* FeedLog).append(yield* pushed({ _tag: "Resync" }))
+        const frame = yield* (yield* FeedLog).append(yield* pushed({ _tag: "Resync" }, "fbs"))
         const folded = yield* foldedThrough(frame.seq)
         assert.deepStrictEqual(
           [...folded.live.values()].map((held) => held.snapshot.home.score),
