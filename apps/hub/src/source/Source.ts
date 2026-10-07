@@ -3,6 +3,10 @@ import type { GameSnapshot } from "@sportal/domain/Game"
 import type { GuideUnreadable } from "@sportal/domain/Guide"
 import { Context, type Effect, type Stream } from "effect"
 
+/**
+ * A way to obtain video for a game. It says whether and where each game can be shown, from a guide the shell reads,
+ * and when that answer changes.
+ */
 export class Source extends Context.Service<
   Source,
   {
@@ -16,4 +20,4 @@ export class Source extends Context.Service<
     /** Reads a guide response as the source's guide page received it; availability comes from it next. */
     readGuide(guide: string): Effect.Effect<void, GuideUnreadable>
   }
->()("sportal/hub/Source") {}
+>()("sportal/hub/source/Source") {}

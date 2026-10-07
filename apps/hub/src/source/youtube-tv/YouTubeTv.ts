@@ -22,58 +22,57 @@ import * as YouTubeTvPayload from "./YouTubeTvPayload.ts"
  * YouTube TV as a source. Its guide, read by the shell from the guide page, says where each game airs while
  * it is fresh; until one is read, and once the last one is stale, it answers no guide.
  */
-export const layer = Layer.effect(
+export const layer: Layer.Layer<Source> = Layer.effect(
   Source,
   Effect.gen(function* () {
     // At most one fiber waiting to retire the latest guide; a newer read replaces it.
     const expiry = yield* FiberHandle.make<void>()
     const latest = yield* SubscriptionRef.make(Option.none<Guide>())
 
+    const availability = Effect.fn("YouTubeTv.availability")(function* () {
+      const now = yield* DateTime.now
+      const current = yield* SubscriptionRef.get(latest)
+      const fresh = Option.filter(current, (guide) =>
+        DateTime.isLessThan(now, DateTime.addDuration(guide.readAt, staleAfter))
+      )
+      return (game: GameSnapshot) =>
+        Option.match(fresh, {
+          onNone: () => ChannelAvailability.NoGuide({ source }),
+          onSome: (guide) => guide.availabilityOf(game)
+        })
+    })
+
+    const readGuide = Effect.fn("YouTubeTv.readGuide")(function* (response: string) {
+      const decoded = yield* decodeGuide(response).pipe(
+        Effect.tapError((error) =>
+          Effect.logWarning("YouTubeTv: a guide response did not decode", error.message)
+        ),
+        Effect.mapError(() => new GuideUnreadable())
+      )
+      const readAt = yield* DateTime.now
+      const read = new Guide({ source, readAt, ...decoded })
+      if (read.channels.length === 0) {
+        yield* Effect.logWarning("YouTubeTv: a guide response listed no channels")
+        return yield* new GuideUnreadable()
+      }
+
+      yield* Effect.logInfo(
+        `YouTubeTv: read a guide of ${read.channels.length} channels and ${read.airings.length} airings`
+      )
+      yield* SubscriptionRef.set(latest, Option.some(read))
+
+      // Retire this guide once it is stale, unless a newer one has replaced it, so tiles hear of it too.
+      const retire = SubscriptionRef.updateSome(latest, (current) =>
+        Option.exists(current, (guide) => guide === read) ? Option.some(Option.none<Guide>()) : Option.none()
+      )
+      yield* FiberHandle.run(expiry, Effect.sleep(staleAfter).pipe(Effect.andThen(retire)))
+    })
+
     return Source.of({
-      availability: Effect.gen(function* () {
-        const now = yield* DateTime.now
-        const fresh = Option.filter(yield* SubscriptionRef.get(latest), (current) =>
-          DateTime.isLessThan(now, DateTime.addDuration(current.readAt, staleAfter))
-        )
-        return (game: GameSnapshot) =>
-          Option.match(fresh, {
-            onNone: () => ChannelAvailability.NoGuide({ source }),
-            onSome: (current) => current.availabilityOf(game)
-          })
-      }),
+      availability: availability(),
       // The ref's current value comes first on every subscription; only later values are changes.
       changes: SubscriptionRef.changes(latest).pipe(Stream.drop(1), Stream.as(undefined)),
-      readGuide: (response) =>
-        Effect.gen(function* () {
-          const decoded = yield* decodeGuide(response).pipe(
-            Effect.tapError((error) =>
-              Effect.logWarning("YouTubeTv: a guide response did not decode", error.message)
-            ),
-            Effect.mapError(() => new GuideUnreadable())
-          )
-          const read = new Guide({ source, readAt: yield* DateTime.now, ...decoded })
-          if (read.channels.length === 0) {
-            yield* Effect.logWarning("YouTubeTv: a guide response listed no channels")
-            return yield* new GuideUnreadable()
-          }
-          yield* Effect.logInfo(
-            `YouTubeTv: read a guide of ${read.channels.length} channels and ${read.airings.length} airings`
-          )
-          yield* SubscriptionRef.set(latest, Option.some(read))
-          // Retire this guide once it is stale, unless a newer one has replaced it, so tiles hear of it too.
-          yield* FiberHandle.run(
-            expiry,
-            Effect.sleep(staleAfter).pipe(
-              Effect.andThen(
-                SubscriptionRef.updateSome(latest, (current) =>
-                  Option.exists(current, (guide) => guide === read)
-                    ? Option.some(Option.none<Guide>())
-                    : Option.none()
-                )
-              )
-            )
-          )
-        })
+      readGuide
     })
   })
 )
