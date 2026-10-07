@@ -14,12 +14,19 @@ describe("statusText", () => {
     [{ status: "final", period: 5, clock: "0:00" }, "Final/OT"],
     [{ status: "postponed" }, "Postponed"],
     [{ status: "canceled" }, "Canceled"]
-  ] as const)("reads %j as %s", (overrides, text) => {
-    assert.strictEqual(statusText(snapshot(overrides)), text)
+  ] as const)("should read %j as %s", (overrides, text) => {
+    const game = snapshot(overrides)
+
+    const status = statusText(game)
+
+    assert.strictEqual(status, text)
   })
 
-  it("reads a scheduled game as its local kickoff time", () => {
+  it("should read a scheduled game as its local kickoff time", () => {
     const game = snapshot({ status: "scheduled" })
-    assert.strictEqual(statusText(game), localTime(game.kickoff))
+
+    const status = statusText(game)
+
+    assert.strictEqual(status, localTime(game.kickoff))
   })
 })
