@@ -33,7 +33,7 @@ const noGuide = { _tag: "DataTile", game: game.id, why: { _tag: "NoGuide" } } as
 const makeClient = HttpApiClient.make(SportalApi)
 
 describe("Hub API", () => {
-  it.effect("turns an assignment with no guide read into a data tile saying so", () =>
+  it.effect("should turn an assignment with no guide read into a data tile saying so", () =>
     Effect.gen(function* () {
       const client = yield* makeClient
       yield* firstSlateOnTestClock()
@@ -41,73 +41,53 @@ describe("Hub API", () => {
       const stage = yield* client.stage.dispatch({
         payload: { command: { _tag: "Assign", tile: 0, game: game.id } }
       })
+
       assert.deepStrictEqual(stage.tiles[0], noGuide)
+    }).pipe(Effect.provide(serverUnderTest()))
+  )
+
+  it.effect("should reject a command for a missing tile", () =>
+    Effect.gen(function* () {
+      const client = yield* makeClient
+      yield* firstSlateOnTestClock()
 
       const rejected = yield* client.stage
         .dispatch({ payload: { command: { _tag: "Clear", tile: 9 } } })
         .pipe(Effect.flip)
+
       assert.strictEqual(rejected._tag, "StageRejection")
     }).pipe(Effect.provide(serverUnderTest()))
   )
 
-  it.effect("lists the addresses a Remote can reach the Hub at, none of them loopback", () =>
+  it.effect("should list the addresses a Remote can reach the Hub at, none of them loopback", () =>
     Effect.gen(function* () {
       const client = yield* makeClient
+
       const addresses = yield* client.host.addresses()
+
       assert.isFalse(addresses.includes("127.0.0.1"))
     }).pipe(Effect.provide(serverUnderTest()))
   )
 
-  it.effect("says it is up, with its version and when it started", () =>
+  it.effect("should say it is up, with its version and when it started", () =>
     Effect.gen(function* () {
       const client = yield* makeClient
+
       const health = yield* client.host.health()
+
       assert.strictEqual(health.version, "1.2.3")
       assert.strictEqual(DateTime.toEpochMillis(health.startedAt), 0)
     }).pipe(Effect.provide(serverUnderTest()))
   )
 
-  it.live("reads a guide the size of a real one, and a waiting tile plays once its airing is on", () =>
+  it.live("should read a guide the size of a real one, playing a waiting tile once its airing is on", () =>
     Effect.gen(function* () {
       const client = yield* makeClient
       yield* firstSlate()
       yield* client.stage.dispatch({ payload: { command: { _tag: "Assign", tile: 0, game: game.id } } })
+      const now = yield* DateTime.now
+      const guide = realSizedGuideAiring(now)
 
-      // The game's teams and network are on ESPN, on now, in this guide; padding brings it to a real response's size.
-      const now = DateTime.toEpochMillis(yield* DateTime.now)
-      const guide = JSON.stringify({
-        contents: {
-          epgRenderer: {
-            paginationRenderer: {
-              epgPaginationRenderer: {
-                contents: [
-                  {
-                    epgRowRenderer: {
-                      station: {
-                        epgStationRenderer: {
-                          stationId: "UCW7W_WAogi3qWDbO9PqOmZQ",
-                          icon: { accessibility: { accessibilityData: { label: "ESPN" } } }
-                        }
-                      },
-                      navigationEndpoint: { watchEndpoint: { videoId: "PFuNFGzJDE4" } },
-                      airings: [
-                        {
-                          epgAiringRenderer: {
-                            beginTimeMs: String(now - 3_600_000),
-                            endTimeMs: String(now + 3_600_000),
-                            title: { runs: [{ text: "ALA at MSST" }] }
-                          }
-                        }
-                      ]
-                    }
-                  }
-                ]
-              }
-            }
-          }
-        },
-        padding: "x".repeat(700_000)
-      })
       yield* client.guide.read({ payload: { guide } })
 
       const tile = yield* tileOnceItIs("StreamTile")
@@ -123,80 +103,78 @@ describe("Hub API", () => {
     }).pipe(Effect.provide(serverUnderTest()))
   )
 
-  it.effect("refuses a guide it cannot read", () =>
+  it.effect("should refuse a guide it cannot read", () =>
     Effect.gen(function* () {
       const client = yield* makeClient
+
       const error = yield* client.guide.read({ payload: { guide: "{}" } }).pipe(Effect.flip)
+
       assert.strictEqual(error._tag, "GuideUnreadable")
     }).pipe(Effect.provide(serverUnderTest()))
   )
 })
 
 describe("GET /api/slate", () => {
-  it.effect("is not served: the slate comes only on the live stream", () =>
+  it.effect("should not be served: the slate comes only on the live stream", () =>
     Effect.gen(function* () {
       const http = yield* HttpClient.HttpClient
+
       const response = yield* http.get("/api/slate")
+
       assert.strictEqual(response.status, 404)
     }).pipe(Effect.scoped, Effect.provide(serverUnderTest()))
   )
 })
 
 describe("GET /api/live", () => {
-  it.effect("streams the current slate and stage first, then each change, as server-sent events", () =>
+  it.effect("should stream the current slate and stage first, as server-sent events", () =>
     Effect.gen(function* () {
-      const http = yield* HttpClient.HttpClient
-      const api = yield* HttpApiClient.make(SportalApi)
       yield* firstSlateOnTestClock()
 
-      const response = yield* http.get("/api/live")
-      assert.strictEqual(response.headers["content-type"], "text/event-stream")
-      const messages = response.stream.pipe(
-        Stream.decodeText,
-        Stream.splitLines,
-        Stream.filter((line) => line !== ""),
-        Stream.map((line) => {
-          // Each event is one line, `data: <json>`, followed by a blank line.
-          assert.isTrue(line.startsWith("data: "))
-          return Schema.decodeSync(LiveMessageJson)(line.slice("data: ".length))
-        })
-      )
-
-      const received = yield* Queue.unbounded<LiveMessage>()
-      yield* messages.pipe(
-        Stream.runForEach((message) => Queue.offer(received, message)),
-        Effect.forkScoped
-      )
+      const { response, lines } = yield* liveLines()
       // The server subscribes as the body is pulled; once both initial messages are here, it is subscribed.
-      const first = yield* Queue.take(received)
-      const second = yield* Queue.take(received)
+      const firstLine = yield* Queue.take(lines)
+      const secondLine = yield* Queue.take(lines)
+
+      const first = messageOf(firstLine)
+      const second = messageOf(secondLine)
+      assert.strictEqual(response.headers["content-type"], "text/event-stream")
+      // Each event is one line, `data: <json>`, followed by a blank line.
+      assert.isTrue(firstLine.startsWith("data: "))
+      assert.isTrue(secondLine.startsWith("data: "))
       assert.sameMembers([first._tag, second._tag], ["SlateChanged", "StageChanged"])
       assert.deepStrictEqual(
         [first, second].flatMap((message) => (message._tag === "SlateChanged" ? [message.recentPlays] : [])),
         [{}]
       )
+    }).pipe(Effect.scoped, Effect.provide(serverUnderTest()))
+  )
+
+  it.effect("should stream each change after the current slate and stage", () =>
+    Effect.gen(function* () {
+      const api = yield* makeClient
+      yield* firstSlateOnTestClock()
+      const { lines } = yield* liveLines()
+      yield* Queue.take(lines)
+      yield* Queue.take(lines)
 
       yield* api.stage.dispatch({ payload: { command: { _tag: "Assign", tile: 0, game: game.id } } })
-      const third = yield* Queue.take(received)
+      const thirdLine = yield* Queue.take(lines)
+
+      const third = messageOf(thirdLine)
+      assert.isTrue(thirdLine.startsWith("data: "))
       assert.deepStrictEqual(third._tag === "StageChanged" ? third.stage.tiles[0] : third, noGuide)
     }).pipe(Effect.scoped, Effect.provide(serverUnderTest()))
   )
 
-  it.effect("sends each listed game as its snapshot, and none of what the slate remembers", () =>
+  it.effect("should send each listed game as its snapshot, and none of what the slate remembers", () =>
     Effect.gen(function* () {
-      const http = yield* HttpClient.HttpClient
       yield* firstSlateOnTestClock()
 
-      const response = yield* http.get("/api/live")
-      const lines = yield* Queue.unbounded<string>()
-      yield* response.stream.pipe(
-        Stream.decodeText,
-        Stream.splitLines,
-        Stream.filter((line) => line.includes("SlateChanged")),
-        Stream.runForEach((line) => Queue.offer(lines, line)),
-        Effect.forkScoped
+      const { lines } = yield* liveLines()
+      const line = yield* Queue.take(lines).pipe(
+        Effect.repeat({ until: (line) => line.includes("SlateChanged") })
       )
-      const line = yield* Queue.take(lines)
 
       const [entry] = JSON.parse(line.slice("data: ".length)).slate
       assert.strictEqual(entry.id, game.id)
@@ -204,35 +182,35 @@ describe("GET /api/live", () => {
     }).pipe(Effect.scoped, Effect.provide(serverUnderTest()))
   )
 
-  it.effect("sends a comment every 20 seconds, so a proxy does not close a quiet stream", () =>
+  it.effect("should send a comment every 20 seconds, so a proxy does not close a quiet stream", () =>
     Effect.gen(function* () {
-      const http = yield* HttpClient.HttpClient
-      const api = yield* HttpApiClient.make(SportalApi)
       yield* firstSlateOnTestClock()
-
-      const response = yield* http.get("/api/live")
-      const lines = yield* Queue.unbounded<string>()
-      yield* response.stream.pipe(
-        Stream.decodeText,
-        Stream.splitLines,
-        Stream.filter((line) => line !== ""),
-        Stream.runForEach((line) => Queue.offer(lines, line)),
-        Effect.forkScoped
-      )
+      const { lines } = yield* liveLines()
       yield* Queue.take(lines)
       yield* Queue.take(lines)
 
-      // Ingest polls during these 20 seconds too; skip the data lines that causes.
       yield* TestClock.adjust("20 seconds")
-      const comment = yield* Queue.take(lines).pipe(
-        Effect.repeat({ until: (line) => !line.startsWith("data: ") })
-      )
+      const comment = yield* nextComment(lines)
+
       assert.strictEqual(comment, ": keep-alive")
+    }).pipe(Effect.scoped, Effect.provide(serverUnderTest()))
+  )
+
+  it.effect("should still send each change as data after a keep-alive comment", () =>
+    Effect.gen(function* () {
+      const api = yield* makeClient
+      yield* firstSlateOnTestClock()
+      const { lines } = yield* liveLines()
+      yield* Queue.take(lines)
+      yield* Queue.take(lines)
+      yield* TestClock.adjust("20 seconds")
+      yield* nextComment(lines)
 
       yield* api.stage.dispatch({ payload: { command: { _tag: "Assign", tile: 0, game: game.id } } })
       const change = yield* Queue.take(lines).pipe(
         Effect.repeat({ until: (line) => line.includes("StageChanged") })
       )
+
       assert.isTrue(change.startsWith("data: "))
     }).pipe(Effect.scoped, Effect.provide(serverUnderTest()))
   )
@@ -258,11 +236,52 @@ function firstSlateOnTestClock() {
   )
 }
 
+/**
+ * A guide with the game's teams and network on ESPN, on at `now`; padding brings it to a real response's size.
+ */
+function realSizedGuideAiring(now: DateTime.Utc) {
+  const at = DateTime.toEpochMillis(now)
+  return JSON.stringify({
+    contents: {
+      epgRenderer: {
+        paginationRenderer: {
+          epgPaginationRenderer: {
+            contents: [
+              {
+                epgRowRenderer: {
+                  station: {
+                    epgStationRenderer: {
+                      stationId: "UCW7W_WAogi3qWDbO9PqOmZQ",
+                      icon: { accessibility: { accessibilityData: { label: "ESPN" } } }
+                    }
+                  },
+                  navigationEndpoint: { watchEndpoint: { videoId: "PFuNFGzJDE4" } },
+                  airings: [
+                    {
+                      epgAiringRenderer: {
+                        beginTimeMs: String(at - 3_600_000),
+                        endTimeMs: String(at + 3_600_000),
+                        title: { runs: [{ text: "ALA at MSST" }] }
+                      }
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    padding: "x".repeat(700_000)
+  })
+}
+
 /** The first tile 0 the Stage shows that has the given kind; the current Stage is replayed, so this may not wait. */
 function tileOnceItIs(tag: Tile["_tag"]) {
   return Effect.gen(function* () {
-    const sessions = yield* LiveStage
-    return yield* sessions.changes.pipe(
+    const liveStage = yield* LiveStage
+
+    return yield* liveStage.changes.pipe(
       Stream.filterMap((stage) => {
         const tile = stage.tiles[0]
         return tile?._tag === tag ? Result.succeed(tile) : Result.failVoid
@@ -273,6 +292,35 @@ function tileOnceItIs(tag: Tile["_tag"]) {
       Effect.map(Option.getOrThrow)
     )
   })
+}
+
+/** Opens the live stream: its response, and a queue of its lines that are not blank, as they arrive. */
+function liveLines() {
+  return Effect.gen(function* () {
+    const http = yield* HttpClient.HttpClient
+    const lines = yield* Queue.unbounded<string>()
+
+    const response = yield* http.get("/api/live")
+    yield* response.stream.pipe(
+      Stream.decodeText,
+      Stream.splitLines,
+      Stream.filter((line) => line !== ""),
+      Stream.runForEach((line) => Queue.offer(lines, line)),
+      Effect.forkScoped
+    )
+
+    return { response, lines }
+  })
+}
+
+/** The live message a `data: <json>` line carries. */
+function messageOf(line: string): LiveMessage {
+  return Schema.decodeSync(LiveMessageJson)(line.slice("data: ".length))
+}
+
+/** The next line of `lines` that is not data. Ingest polls while the clock moves, so data lines come between. */
+function nextComment(lines: Queue.Queue<string>) {
+  return Queue.take(lines).pipe(Effect.repeat({ until: (line) => !line.startsWith("data: ") }))
 }
 
 /** Everything behind the API, over a feed log in memory and a provider that always returns `game`. */
