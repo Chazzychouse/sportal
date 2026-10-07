@@ -34,7 +34,7 @@ export const Writer = Data.taggedEnum<Writer>()
  * Forks the one writer: it writes what `pending` yields in groups every 100 ms, until it ends; the gap of any frames
  * lost is then logged.
  */
-export const start = Effect.fn("FeedLog.writer")(function* (
+export const start = Effect.fnUntraced(function* (
   pending: Queue.Queue<Frame, Cause.Done>,
   table: ReturnType<typeof queries>
 ) {

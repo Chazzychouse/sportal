@@ -206,7 +206,7 @@ function warnOfGap(body: Uint8Array) {
 }
 
 // Skips from one game day to the next through the received_at index: one query a day, never a scan of the frames.
-const days = Effect.fn("FeedLog.days")(function* (table: ReturnType<typeof queries>) {
+const days = Effect.fnUntraced(function* (table: ReturnType<typeof queries>) {
   const zone = yield* DateTime.CurrentTimeZone
 
   return yield* Stream.paginate(0, (after) =>

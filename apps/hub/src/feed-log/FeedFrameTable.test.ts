@@ -2,7 +2,6 @@ import { assert, describe, it } from "@effect/vitest"
 import { DateTime, Effect } from "effect"
 import { Frame } from "../Frame.ts"
 import { FeedFrameRow } from "./FeedFrameTable.ts"
-import { Writer } from "./FeedLogWriter.ts"
 
 describe("FeedFrameRow", () => {
   it.effect("should read an unchanged row as a poll response", () =>
@@ -58,13 +57,12 @@ describe("FeedFrameRow", () => {
 
   it.effect("should write a gap row at the last lost seq with no feed or channel", () =>
     Effect.gen(function* () {
-      const behind = Writer.Behind({
-        hashes: new Map(),
+      const behind = {
         from: 3,
         to: 5,
         count: 3,
         receivedAt: DateTime.makeUnsafe(1_000)
-      })
+      }
 
       const row = yield* FeedFrameRow.gap(behind)
 

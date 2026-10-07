@@ -1,9 +1,8 @@
-import { type Data, DateTime, Effect, Schema } from "effect"
+import { DateTime, Effect, Schema } from "effect"
 import { Model } from "effect/schema"
 import { SqlClient, SqlSchema } from "effect/sql"
 import { Frame } from "../Frame.ts"
 import * as Gzip from "../Gzip.ts"
-import type { Writer } from "./FeedLogWriter.ts"
 
 /**
  * A row of `feed_frame`: a frame with its body gzip'd, or with no body for an unchanged poll (a poll response that
@@ -55,7 +54,17 @@ export class FeedFrameRow extends Model.Class<FeedFrameRow>("sportal/hub/feed-lo
    * The row that stands for the frames a failed write lost, at the last lost `seq`, so a log reopened after it
    * continues past them.
    */
-  static gap({ from, to, count, receivedAt }: Data.TaggedEnum.Value<Writer, "Behind">) {
+  static gap({
+    from,
+    to,
+    count,
+    receivedAt
+  }: {
+    readonly from: number
+    readonly to: number
+    readonly count: number
+    readonly receivedAt: DateTime.Utc
+  }) {
     return Schema.encodeEffect(Gap)({ from, to, count }).pipe(
       Effect.flatMap(Gzip.compress),
       Effect.map(
