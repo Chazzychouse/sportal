@@ -1,6 +1,6 @@
 import { assert, describe, it } from "@effect/vitest"
 import { DateTime, Option } from "effect"
-import { GameId, GameSnapshot, type GameStatus } from "./Game.ts"
+import { BallSpot, GameId, GameSnapshot, type GameStatus } from "./Game.ts"
 import { Situation } from "./Situation.ts"
 import { broadcast, situation, snapshot, team } from "./TestGame.ts"
 
@@ -342,7 +342,7 @@ describe("GameSnapshot#quarterLeft", () => {
   })
 })
 
-describe("GameSnapshot.spotOf", () => {
+describe("GameSnapshot#spotOf", () => {
   const game = snapshot({ home: { team: team("H"), score: 0 }, away: { team: team("A"), score: 0 } })
 
   it.each([
@@ -356,7 +356,7 @@ describe("GameSnapshot.spotOf", () => {
     (side, toGo, yards, toward) => {
       assert.deepStrictEqual(
         game.spotOf({ team: game[side].team.id, yardsToEndzone: toGo }),
-        Option.some({ yards, toward })
+        Option.some(new BallSpot({ yards, toward }))
       )
     }
   )
@@ -365,5 +365,10 @@ describe("GameSnapshot.spotOf", () => {
     assert.isTrue(Option.isNone(game.spotOf({ yardsToEndzone: 40 })))
     assert.isTrue(Option.isNone(game.spotOf({ team: game.home.team.id })))
     assert.isTrue(Option.isNone(game.spotOf({ team: team("X").id, yardsToEndzone: 40 })))
+  })
+
+  it.each([105, -3])("is none for %d yards to the goal, off the field", (yardsToEndzone) => {
+    assert.isTrue(Option.isNone(game.spotOf({ team: game.home.team.id, yardsToEndzone })))
+    assert.isTrue(Option.isNone(game.spotOf({ team: game.away.team.id, yardsToEndzone })))
   })
 })

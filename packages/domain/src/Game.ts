@@ -157,7 +157,7 @@ export class GameSnapshot extends Schema.Class<GameSnapshot>("sportal/GameSnapsh
 
   /**
    * Where a spot is on the field, from the team with the ball and the yards it has to the goal it attacks. None
-   * when either is missing or the team plays in neither side.
+   * when either is missing, the team plays in neither side, or the yards are off the field.
    */
   spotOf(spot: {
     readonly team?: TeamId | undefined
@@ -165,8 +165,9 @@ export class GameSnapshot extends Schema.Class<GameSnapshot>("sportal/GameSnapsh
   }): Option.Option<BallSpot> {
     const { team, yardsToEndzone } = spot
     if (team === undefined || yardsToEndzone === undefined) return Option.none()
-    if (team === this.home.team.id) return Option.some({ yards: 100 - yardsToEndzone, toward: "away" })
-    if (team === this.away.team.id) return Option.some({ yards: yardsToEndzone, toward: "home" })
+    if (team === this.home.team.id)
+      return BallSpot.makeOption({ yards: 100 - yardsToEndzone, toward: "away" })
+    if (team === this.away.team.id) return BallSpot.makeOption({ yards: yardsToEndzone, toward: "home" })
     return Option.none()
   }
 
@@ -234,7 +235,10 @@ export class GameSnapshot extends Schema.Class<GameSnapshot>("sportal/GameSnapsh
 }
 
 /** Where a spot is on the field: yards from the home goal line (0–100), and the way its team is going. */
-export type BallSpot = { readonly yards: number; readonly toward: "home" | "away" }
+export class BallSpot extends Schema.Class<BallSpot>("sportal/BallSpot")({
+  yards: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 100 })),
+  toward: Schema.Literals(["home", "away"])
+}) {}
 
 const watchRank = { live: 0, upcoming: 1, over: 2 } as const
 
