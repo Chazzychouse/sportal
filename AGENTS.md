@@ -88,6 +88,7 @@ A reader opens a file to see the thing it is named for. Keep it that way.
   `fixtures/scenarios/<name>.frames.jsonl.gz`. It plays as the provider through the real ingest and fold, on a feed log
   in memory (`SPORTAL_SCENARIO_FEED_LOG` names a file in the data directory instead). Every game plays as a synthetic
   stream page. The feed log records every game day.
+- `pnpm dev:golden` — the same, with the golden scenario: the recorded `crowded-fourth-quarter` at ten times speed.
 - `pnpm --filter @sportal/hub dev` — run only the Hub on port 4400 (API and live stream), on every interface so a phone Remote can reach it (`SPORTAL_HOST` narrows it). In
   dev it keeps its SQLite database in `.sportal/` at the repo root; set `SPORTAL_DATA_DIR` to move it. Started any other
   way, it keeps it where the OS keeps app data: `$XDG_DATA_HOME/sportal` or `~/.local/share/sportal` on Linux,
