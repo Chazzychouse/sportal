@@ -3,18 +3,10 @@ import { DateTime, Option, Result, Schema } from "effect"
 import { ChannelAvailability } from "./Channel.ts"
 import { GameId } from "./Game.ts"
 import { type LayoutName, Stage, type StageCommand, type Tile } from "./Stage.ts"
+import { assign, bama, fill, foxChannel, irish, nowhere, onFox } from "./TestStage.ts"
 
-const bama = GameId.make("401856707")
-const irish = GameId.make("401858250")
 const usc = GameId.make("401856800")
 const ohio = GameId.make("401858473")
-const foxChannel = {
-  name: "FOX",
-  source: "YouTube TV" as const,
-  locator: { _tag: "WebView" as const, url: "https://tv.youtube.com/watch/fox" }
-}
-const onFox = () => ChannelAvailability.Carried({ channel: foxChannel })
-const nowhere = () => ChannelAvailability.NotCarried({ why: "NoStream" })
 const noGuide = () => ChannelAvailability.NoGuide({ source: "YouTube TV" })
 
 describe("Stage#apply", () => {
@@ -601,18 +593,6 @@ describe("Stage solo", () => {
 
 function some(availability: () => ChannelAvailability) {
   return () => Option.some(availability())
-}
-
-function assign(stage: Stage, tile: number, game: GameId, availabilityOf: () => ChannelAvailability) {
-  return Result.getOrThrow(stage.apply({ _tag: "Assign", tile, game }, availabilityOf))
-}
-
-/** A Quad holding these games as stream tiles, in order; `undefined` leaves a tile empty. */
-function fill(games: ReadonlyArray<GameId | undefined>) {
-  return games.reduce<Stage>(
-    (stage, game, tile) => (game === undefined ? stage : assign(stage, tile, game, onFox)),
-    Stage.initial
-  )
 }
 
 function run(stage: Stage, command: StageCommand) {
