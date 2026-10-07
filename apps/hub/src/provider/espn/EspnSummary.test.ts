@@ -5,6 +5,7 @@ import { GameId } from "@sportal/domain/Game"
 import { Play, PlayId } from "@sportal/domain/Play"
 import { TeamId } from "@sportal/domain/Team"
 import { DateTime, Effect, Equal, Layer, Order, Schema } from "effect"
+import * as Gzip from "../../Gzip.ts"
 import { Scenarios } from "../../scenario/Scenarios.ts"
 import { decodedFrames } from "../../TestFeed.ts"
 import * as EspnDecode from "./EspnDecode.ts"
@@ -153,6 +154,70 @@ describe("EspnSummary", () => {
         ]
       )
       assert.isTrue(plays.every((archived) => archived.play.kind === "timeout" || !("timeoutBy" in archived)))
+    })
+  )
+
+  it.effect(
+    "a timeout's caller is the header's team when the text uses another code for it: WAS for the header's WSH",
+    () =>
+      Effect.gen(function* () {
+        // WSH at PHI of 2026-09-13, as the archive fetched it:
+        //   curl 'https://site.api.espn.com/apis/site/v2/sports/football/nfl/summary?event=401872929' | gzip \
+        //     > fixtures/nfl-summary-401872929.json.gz
+        // Its timeouts name PHI, and WAS for Washington, which its header calls WSH.
+        const washingtonAtPhiladelphia = yield* Gzip.decompress(
+          readFileSync(new URL("./fixtures/nfl-summary-401872929.json.gz", import.meta.url)),
+          "gzip"
+        ).pipe(Effect.map((text): unknown => JSON.parse(text)))
+
+        const plays = yield* EspnSummary.plays("nfl", washingtonAtPhiladelphia)
+
+        assert.deepStrictEqual(
+          plays.flatMap(({ play, ...archived }) =>
+            play.kind === "timeout" ? [[play.period, play.clock, archived.timeoutBy]] : []
+          ),
+          [
+            [1, "1:02", nfl("21")],
+            [2, "0:33", nfl("28")],
+            [3, "10:03", nfl("28")],
+            [4, "2:04", nfl("28")],
+            [4, "1:01", nfl("21")]
+          ]
+        )
+      })
+  )
+
+  it.effect("a code left over once both teams are named names no caller", () =>
+    Effect.gen(function* () {
+      const plays = yield* EspnSummary.plays(
+        "nfl",
+        edited("Timeout #1 by BUF at 00:45.", "Timeout #1 by XYZ at 00:45.")
+      )
+
+      assert.deepStrictEqual(
+        plays.flatMap(({ play, ...archived }) =>
+          play.kind === "timeout" ? [[play.period, play.clock, archived.timeoutBy]] : []
+        ),
+        [
+          [1, "3:27", nfl("17")],
+          [2, "0:45", undefined],
+          [2, "0:16", nfl("2")],
+          [4, "1:00", nfl("2")],
+          [4, "0:42", nfl("2")],
+          [4, "0:39", nfl("2")]
+        ]
+      )
+    })
+  )
+
+  it.effect("one code no header team has is the one team never named", () =>
+    Effect.gen(function* () {
+      const plays = yield* EspnSummary.plays(
+        "nfl",
+        edited("Timeout #1 by NE at 03:27.", "Timeout #1 by NWE at 03:27.")
+      )
+
+      assert.strictEqual(plays.find(({ play }) => play.kind === "timeout")?.timeoutBy, nfl("17"))
     })
   )
 
