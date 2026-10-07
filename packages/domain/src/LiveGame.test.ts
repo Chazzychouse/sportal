@@ -5,7 +5,7 @@ import type { GameSnapshot } from "./Game.ts"
 import { GameEventKind } from "./GameEvent.ts"
 import { LiveGame, LiveGameState } from "./LiveGame.ts"
 import { type Play, PlayId } from "./Play.ts"
-import { play, snapshot } from "./TestGame.ts"
+import { liveSnapshot, play, snapshot } from "./TestGame.ts"
 
 const t0 = DateTime.makeUnsafe("2026-10-03T16:00:00Z")
 const later = DateTime.addDuration(t0, Duration.seconds(30))
@@ -23,7 +23,7 @@ const staleGame = new LiveGame({ ...liveGame, state: LiveGameState.Stale({ updat
 const liveAt = (updatedAt: DateTime.Utc) => LiveGameState.Live({ updatedAt })
 const taken = (game: LiveGame, taking: GameSnapshot, from: DeliverySource, now: DateTime.Utc) =>
   game.take(Delivery.cases.Snapshot.make({ snapshot: taking, from }), now).liveGame
-const ticked = (game: LiveGame, now: DateTime.Utc) => game.tick(now)
+const ticked = (game: LiveGame, now: DateTime.Utc) => game.tick(now).liveGame
 
 describe("LiveGame.updatedAt", () => {
   it("is the instant of a live or stale game, and none otherwise", () => {
@@ -144,11 +144,8 @@ describe("LiveGame#take, a snapshot, ties between the feeds", () => {
   const tried = snapshot({ status: "live", period: 2, clock: "4:12", home: { ...live.home, score: 14 } })
   const pushed = LiveGame.start(tried, "push", t0)
 
-  it("a tied poll on a pushed live game keeps the pushed snapshot, refreshed", () => {
-    const next = taken(pushed, touchdown, "poll", later)
-    assert.deepStrictEqual(next.pipe(Option.map((game) => game.snapshot.home.score)), Option.some(14))
-    assert.deepStrictEqual(next.pipe(Option.map((game) => game.from)), Option.some("push"))
-    assert.deepStrictEqual(next.pipe(Option.map((game) => game.state)), Option.some(liveAt(later)))
+  it("a poll with fewer points at the same game time on a pushed live game is behind", () => {
+    assert.deepStrictEqual(taken(pushed, touchdown, "poll", later), Option.none())
   })
   it("a tied poll on a polled live game is taken", () => {
     const next = taken(LiveGame.start(tried, "poll", t0), touchdown, "poll", later)
@@ -166,11 +163,161 @@ describe("LiveGame#take, a snapshot, ties between the feeds", () => {
     assert.deepStrictEqual(next.pipe(Option.map((game) => game.from)), Option.some("poll"))
     assert.deepStrictEqual(next.pipe(Option.map((game) => game.state)), Option.some(liveAt(later)))
   })
-  it("a poll ahead of a pushed live game is taken", () => {
+  it("a poll ahead of a pushed live game is held, and the pushed snapshot kept", () => {
     const ahead = snapshot({ status: "live", period: 2, clock: "4:05", home: { ...live.home, score: 14 } })
     const next = taken(pushed, ahead, "poll", later)
-    assert.deepStrictEqual(next.pipe(Option.map((game) => game.snapshot)), Option.some(ahead))
+    assert.deepStrictEqual(next.pipe(Option.map((game) => game.snapshot)), Option.some(tried))
+    assert.deepStrictEqual(next.pipe(Option.map((game) => game.state._tag)), Option.some("Holding"))
+  })
+})
+
+describe("LiveGame#take and #tick, a covered game and a poll ahead of it", () => {
+  const now = DateTime.addDuration(t0, Duration.seconds(5))
+  const until = DateTime.addDuration(now, LiveGame.fallbackAfter)
+  const scored = (home: number, away: number, clock = "5:00") =>
+    liveSnapshot({
+      period: 2,
+      clock,
+      home: { ...live.home, score: home },
+      away: { ...live.away, score: away }
+    })
+  const covered = LiveGame.start(scored(14, 7), "push", t0)
+  const take = (game: LiveGame, taking: GameSnapshot, from: DeliverySource, at: DateTime.Utc) =>
+    game.take(Delivery.cases.Snapshot.make({ snapshot: taking, from }), at)
+  const holding = Option.getOrThrow(take(covered, scored(14, 7, "4:30"), "poll", now).liveGame)
+  const holdingAt = (held: GameSnapshot) => LiveGameState.Holding({ updatedAt: now, held, until })
+
+  it("a covered game is live or holding from the push", () => {
+    assert.isTrue(covered.isCovered())
+    assert.isTrue(holding.isCovered())
+    assert.isFalse(LiveGame.start(scored(14, 7), "poll", t0).isCovered())
+    assert.isFalse(new LiveGame({ ...covered, state: LiveGameState.Stale({ updatedAt: t0 }) }).isCovered())
+  })
+  it("covered Live, a poll at a later clock: Holding until fallbackAfter from now, snapshot kept, no events", () => {
+    const { liveGame: next, events, outcome } = take(covered, scored(14, 7, "4:30"), "poll", now)
+    assert.deepStrictEqual(
+      next.pipe(Option.map((game) => game.state)),
+      Option.some(holdingAt(scored(14, 7, "4:30")))
+    )
+    assert.deepStrictEqual(next.pipe(Option.map((game) => game.snapshot)), Option.some(covered.snapshot))
+    assert.deepStrictEqual(events, [])
+    assert.strictEqual(outcome, "held")
+  })
+  it("covered Live, a poll at the same game time with a higher home score: Holding", () => {
+    const { liveGame: next, outcome } = take(covered, scored(17, 7), "poll", now)
+    assert.deepStrictEqual(next.pipe(Option.map((game) => game.state)), Option.some(holdingAt(scored(17, 7))))
+    assert.strictEqual(outcome, "held")
+  })
+  it("covered Live, a poll at the same game time with equal points split differently: Holding", () => {
+    const { outcome } = take(covered, scored(7, 14), "poll", now)
+    assert.strictEqual(outcome, "held")
+  })
+  it("covered Live, an equal poll: Live, updated now, snapshot kept, no events, taken", () => {
+    const { liveGame: next, events, outcome } = take(covered, scored(14, 7), "poll", now)
+    assert.deepStrictEqual(next.pipe(Option.map((game) => game.state)), Option.some(liveAt(now)))
+    assert.deepStrictEqual(next.pipe(Option.map((game) => game.snapshot)), Option.some(covered.snapshot))
+    assert.deepStrictEqual(next.pipe(Option.map((game) => game.from)), Option.some("push"))
+    assert.deepStrictEqual(events, [])
+    assert.strictEqual(outcome, "taken")
+  })
+  it("covered Live, a poll behind: none, behind", () => {
+    assert.deepStrictEqual(take(covered, scored(14, 7, "6:00"), "poll", now), {
+      liveGame: Option.none(),
+      events: [],
+      outcome: "behind"
+    })
+  })
+  it("covered Live, a poll at the same game time with fewer points: none, behind", () => {
+    assert.deepStrictEqual(take(covered, scored(10, 7), "poll", now), {
+      liveGame: Option.none(),
+      events: [],
+      outcome: "behind"
+    })
+  })
+  it("not covered, a poll at the same game time with fewer points: applies", () => {
+    const polled = LiveGame.start(scored(14, 7), "poll", t0)
+    const { liveGame: next, outcome } = take(polled, scored(10, 7), "poll", now)
+    assert.deepStrictEqual(next.pipe(Option.map((game) => game.snapshot)), Option.some(scored(10, 7)))
+    assert.strictEqual(outcome, "taken")
+  })
+  it("the PAT flicker of 2026-10-05: covered at 21–14, a poll at 20–14 on the same clock is behind, with no hold", () => {
+    const afterTry = LiveGame.start(scored(21, 14, "2:03"), "push", t0)
+    const { liveGame: next, outcome } = take(afterTry, scored(20, 14, "2:03"), "poll", now)
+    assert.deepStrictEqual(next, Option.none())
+    assert.strictEqual(outcome, "behind")
+  })
+  it("Holding, a poll further ahead of held: held replaced, until kept", () => {
+    const further = scored(14, 7, "4:00")
+    const at = DateTime.addDuration(now, Duration.seconds(10))
+    const { liveGame: next, outcome } = take(holding, further, "poll", at)
+    assert.deepStrictEqual(
+      next.pipe(Option.map((game) => game.state)),
+      Option.some(LiveGameState.Holding({ updatedAt: at, held: further, until }))
+    )
+    assert.deepStrictEqual(next.pipe(Option.map((game) => game.snapshot)), Option.some(covered.snapshot))
+    assert.strictEqual(outcome, "held")
+  })
+  it("Holding, a poll equal to the snapshot: updatedAt refreshed, still holding, taken", () => {
+    const at = DateTime.addDuration(now, Duration.seconds(10))
+    const { liveGame: next, outcome } = take(holding, scored(14, 7), "poll", at)
+    assert.deepStrictEqual(
+      next.pipe(Option.map((game) => game.state)),
+      Option.some(LiveGameState.Holding({ updatedAt: at, held: scored(14, 7, "4:30"), until }))
+    )
+    assert.strictEqual(outcome, "taken")
+  })
+  it("Holding, a poll neither ahead of held nor equal to the snapshot: none, behind", () => {
+    const { liveGame: next, outcome } = take(holding, scored(14, 7, "4:45"), "poll", now)
+    assert.deepStrictEqual(next, Option.none())
+    assert.strictEqual(outcome, "behind")
+  })
+  it("Holding, a push at held's game time: Live from the push, held dropped, its events said", () => {
+    const { liveGame: next, events, outcome } = take(holding, scored(21, 7, "4:30"), "push", now)
+    assert.deepStrictEqual(next.pipe(Option.map((game) => game.state)), Option.some(liveAt(now)))
+    assert.deepStrictEqual(next.pipe(Option.map((game) => game.snapshot)), Option.some(scored(21, 7, "4:30")))
+    assert.deepStrictEqual(events, [GameEventKind.ScoreChanged({ team: live.home.team.id, points: 7 })])
+    assert.strictEqual(outcome, "taken")
+  })
+  it("Holding, a push behind held but ahead of the snapshot: applies, still Holding", () => {
+    const { liveGame: next } = take(holding, scored(14, 7, "4:45"), "push", now)
+    assert.deepStrictEqual(next.pipe(Option.map((game) => game.snapshot)), Option.some(scored(14, 7, "4:45")))
+    assert.deepStrictEqual(
+      next.pipe(Option.map((game) => game.state)),
+      Option.some(holdingAt(scored(14, 7, "4:30")))
+    )
+  })
+  it("Holding, a tick at until: Live from the poll, held the snapshot, its events said, fellBack", () => {
+    const scoring = Option.getOrThrow(take(covered, scored(21, 7, "4:30"), "poll", now).liveGame)
+    const { liveGame: next, events, fellBack } = scoring.tick(until)
+    assert.deepStrictEqual(next.pipe(Option.map((game) => game.state)), Option.some(liveAt(until)))
+    assert.deepStrictEqual(next.pipe(Option.map((game) => game.snapshot)), Option.some(scored(21, 7, "4:30")))
     assert.deepStrictEqual(next.pipe(Option.map((game) => game.from)), Option.some("poll"))
+    assert.deepStrictEqual(events, [GameEventKind.ScoreChanged({ team: live.home.team.id, points: 7 })])
+    assert.isTrue(fellBack)
+  })
+  it("Holding, a tick before until: nothing", () => {
+    const { liveGame: next, fellBack } = holding.tick(DateTime.subtractDuration(until, Duration.millis(1)))
+    assert.deepStrictEqual(next, Option.none())
+    assert.isFalse(fellBack)
+  })
+  it("Holding: due at until, live, and updated when the hold began", () => {
+    assert.deepStrictEqual(holding.dueAfter(now), Option.some(until))
+    assert.isTrue(holding.isCurrent(now))
+    assert.deepStrictEqual(holding.updatedAt(), Option.some(now))
+  })
+  it("not covered, a poll ahead: applies at once", () => {
+    const polled = LiveGame.start(scored(14, 7), "poll", t0)
+    const { liveGame: next, outcome } = take(polled, scored(21, 7, "4:30"), "poll", now)
+    assert.deepStrictEqual(next.pipe(Option.map((game) => game.snapshot)), Option.some(scored(21, 7, "4:30")))
+    assert.deepStrictEqual(next.pipe(Option.map((game) => game.state)), Option.some(liveAt(now)))
+    assert.strictEqual(outcome, "taken")
+  })
+  it("an upcoming game, a poll at kickoff with status live: applies at once", () => {
+    const kickoff = liveSnapshot({ clock: "15:00" })
+    const { liveGame: next, outcome } = take(upcomingGame, kickoff, "poll", now)
+    assert.deepStrictEqual(next.pipe(Option.map((game) => game.snapshot)), Option.some(kickoff))
+    assert.deepStrictEqual(next.pipe(Option.map((game) => game.state)), Option.some(liveAt(now)))
+    assert.strictEqual(outcome, "taken")
   })
 })
 
@@ -418,7 +565,8 @@ describe("LiveGame#take, a snapshot's events", () => {
       liveGame.take(Delivery.cases.Snapshot.make({ snapshot: liveBehind, from: "poll" }), later),
       {
         liveGame: Option.none(),
-        events: []
+        events: [],
+        outcome: "behind"
       }
     )
   })

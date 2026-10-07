@@ -2,7 +2,7 @@ import { assert, describe, it } from "@effect/vitest"
 import { DateTime, Option } from "effect"
 import { BallSpot, GameId, GameSnapshot, type GameStatus } from "./Game.ts"
 import { Situation } from "./Situation.ts"
-import { broadcast, situation, snapshot, team } from "./TestGame.ts"
+import { broadcast, liveSnapshot, situation, snapshot, team } from "./TestGame.ts"
 
 describe("GameSnapshot.progress", () => {
   it.each([
@@ -152,6 +152,38 @@ describe("GameSnapshot.gameTime", () => {
       compare(snapshot({ status: "delayed", period: 0 }), snapshot({ status: "live", period: 1 })),
       -1
     )
+  })
+})
+
+describe("GameSnapshot#isAheadOf", () => {
+  const at = (overrides: Partial<GameSnapshot> = {}) =>
+    liveSnapshot({ period: 2, clock: "5:00", ...overrides })
+  const scored = (home: number, away: number) =>
+    at({ home: { team: team("HOME"), score: home }, away: { team: team("AWAY"), score: away } })
+
+  it("a later period is ahead", () => {
+    assert.isTrue(at({ period: 3, clock: "15:00" }).isAheadOf(at()))
+  })
+  it("the same period with less on the clock is ahead", () => {
+    assert.isTrue(at({ clock: "4:59" }).isAheadOf(at()))
+  })
+  it("the same game time with more points is ahead", () => {
+    assert.isTrue(scored(7, 0).isAheadOf(scored(6, 0)))
+  })
+  it("the same game time with fewer points is not ahead", () => {
+    assert.isFalse(scored(6, 0).isAheadOf(scored(7, 0)))
+  })
+  it("the same game time with equal points split differently is ahead", () => {
+    assert.isTrue(scored(7, 3).isAheadOf(scored(3, 7)))
+  })
+  it("the same game time with a different status is ahead", () => {
+    assert.isTrue(at({ status: "halftime", clock: "0:00" }).isAheadOf(at({ clock: "0:00" })))
+  })
+  it("an equal snapshot is not ahead", () => {
+    assert.isFalse(at().isAheadOf(at()))
+  })
+  it("an earlier game time is not ahead, whatever its points", () => {
+    assert.isFalse(scored(14, 0).isAheadOf(at({ period: 3 })))
   })
 })
 

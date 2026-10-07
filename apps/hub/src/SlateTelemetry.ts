@@ -234,7 +234,7 @@ function logDefect(
 
 // Each state's value on `sportal_game_state`, where 0 is a game the slate has let go. Written as a record so that a new
 // state fails to compile here.
-const stateValues = { Upcoming: 1, Live: 2, Stale: 3, Over: 4 } satisfies Record<
+const stateValues = { Upcoming: 1, Live: 2, Stale: 3, Over: 4, Holding: 5 } satisfies Record<
   LiveGameState["_tag"],
   number
 >
@@ -244,7 +244,7 @@ const everyState = Object.keys(stateValues)
 
 const snapshots = Metric.counter("sportal_snapshots", {
   description:
-    "Snapshots the slate took, ignored as behind its live game, or kept (a tied poll that refreshed a pushed snapshot)",
+    "Snapshots the slate took, ignored as behind its live game, or held by a covered game, and held ones that fell back",
   incremental: true
 })
 
@@ -265,7 +265,8 @@ const gameDefects = Metric.counter("sportal_game_defects", {
 })
 
 const gameState = Metric.gauge("sportal_game_state", {
-  description: "A game's state, by game: 1 Upcoming, 2 Live, 3 Stale, 4 Over, 0 once the slate lets it go"
+  description:
+    "A game's state, by game: 1 Upcoming, 2 Live, 3 Stale, 4 Over, 5 Holding, 0 once the slate lets it go"
 })
 
 const transitions = Metric.counter("sportal_transitions", {

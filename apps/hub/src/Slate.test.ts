@@ -591,21 +591,30 @@ describe("Slate", () => {
       }).pipe(Effect.provide(slateFollowing().pipe(Layer.provideMerge(layer))), withMetrics)
     })
 
-    it.effect("a tied poll after a pushed try is kept, and counted", () => {
-      const { logs, layer } = recordingLogs("Debug")
-      return Effect.gen(function* () {
-        const at = (score: number) =>
-          snapshot({ id: one, status: "live", period: 2, clock: "4:12", home: { team: team("HOME"), score } })
-        yield* takenSnapshot(at(13), "poll")
-        yield* takenSnapshot(at(14), "push")
-        yield* takenSnapshot(at(13), "poll")
-        assert.strictEqual((yield* liveGameOf(one)).snapshot.home.score, 14)
-        assert.strictEqual(yield* counted("sportal_snapshots", { outcome: "kept", source: "poll" }), 1)
-        assert.strictEqual(yield* counted("sportal_snapshots", { outcome: "taken", source: "push" }), 1)
-        assert.strictEqual(yield* counted("sportal_snapshots", { outcome: "taken", source: "poll" }), 1)
-        assert.isTrue(logs.some(({ message }) => message.includes("kept poll live, period 2, 4:12")))
-      }).pipe(Effect.provide(slateFollowing().pipe(Layer.provideMerge(layer))), withMetrics)
-    })
+    it.effect(
+      "a poll with fewer points at the same game time after a pushed try is behind, and counted",
+      () => {
+        const { logs, layer } = recordingLogs("Debug")
+        return Effect.gen(function* () {
+          const at = (score: number) =>
+            snapshot({
+              id: one,
+              status: "live",
+              period: 2,
+              clock: "4:12",
+              home: { team: team("HOME"), score }
+            })
+          yield* takenSnapshot(at(13), "poll")
+          yield* takenSnapshot(at(14), "push")
+          yield* takenSnapshot(at(13), "poll")
+          assert.strictEqual((yield* liveGameOf(one)).snapshot.home.score, 14)
+          assert.strictEqual(yield* counted("sportal_snapshots", { outcome: "behind", source: "poll" }), 1)
+          assert.strictEqual(yield* counted("sportal_snapshots", { outcome: "taken", source: "push" }), 1)
+          assert.strictEqual(yield* counted("sportal_snapshots", { outcome: "taken", source: "poll" }), 1)
+          assert.isTrue(logs.some(({ message }) => message.includes("behind poll live, period 2, 4:12")))
+        }).pipe(Effect.provide(slateFollowing().pipe(Layer.provideMerge(layer))), withMetrics)
+      }
+    )
 
     it.effect("a defect is logged with its frame and the snapshot that raised it, and counted", () => {
       const { logs, layer } = recordingLogs("Debug")

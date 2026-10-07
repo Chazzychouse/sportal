@@ -112,8 +112,11 @@ type LiveGameState = Data.TaggedEnum<{
 ```
 
 A game is **covered** when it is `Live` or `Holding` and its snapshot came from the push (`LiveGame.from`). A snapshot
-is **ahead** of another when it is later in game time (`GameSnapshot.gameTime`), or at the same game time with a
-different score or status.
+is **ahead** of another when it is later in game time (`GameSnapshot.gameTime`), or at the same game time with more
+points, or with as many points split differently or a different status. The game clock stops on a score, so at the
+same game time only the points say which snapshot is newer; a correction that lowers a score reaches a covered game by
+the push. On a covered game, a poll neither ahead nor equal is behind; on any other game, a poll at the same game time
+applies whatever its points.
 
 ### A poll snapshot (a listing's game, or a `Snapshot` from `poll`)
 

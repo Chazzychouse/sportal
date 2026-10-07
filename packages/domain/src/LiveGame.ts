@@ -4,10 +4,15 @@ import { GameSnapshot } from "./Game.ts"
 import type { GameEventKind } from "./GameEvent.ts"
 import { Play } from "./Play.ts"
 
-/** Where a live game is: upcoming, live (last updated at), stale (last updated at), or over. */
+/**
+ * Where a live game is: upcoming, live (last updated at), holding (live, with a poll snapshot ahead of it held until
+ * `until`), stale (last updated at), or over.
+ */
 export type LiveGameState = Data.TaggedEnum<{
   Upcoming: object
   Live: { readonly updatedAt: DateTime.Utc }
+  /** Live, followed by the push, with a poll snapshot ahead of it held until `until`. */
+  Holding: { readonly updatedAt: DateTime.Utc; readonly held: GameSnapshot; readonly until: DateTime.Utc }
   Stale: { readonly updatedAt: DateTime.Utc }
   Over: object
 }>
@@ -30,6 +35,12 @@ export class LiveGame extends Data.Class<{
   /** How long a stale game stays current, from its last update. */
   static readonly staleCurrentFor = Duration.minutes(30)
 
+  /**
+   * How long a covered game holds a poll snapshot ahead of it before the poll's applies: the push leads the
+   * scoreboard on most plays, so a poll ahead of it this long means the push is stuck.
+   */
+  static readonly fallbackAfter = Duration.seconds(15)
+
   /** The earliest of `instants`; none when none is given. The one place optional instants are combined. */
   static earliest(instants: Iterable<Option.Option<DateTime.Utc>>): Option.Option<DateTime.Utc> {
     return Arr.match(Arr.getSomes(instants), {
@@ -51,14 +62,32 @@ export class LiveGame extends Data.Class<{
   /**
    * The live game after a `Snapshot` or `Plays` delivery at `now`, and what happened; none when nothing changes.
    *
-   * A snapshot behind in game time is none. A poll at the same game time as a live game's pushed snapshot only
-   * refreshes it: the push wins a tie, since the poll lags it. A snapshot gives the events of its changes, whether or
-   * not the game has plays; a `Plays` delivery replaces the list and gives only the play events of its new plays.
+   * A snapshot's `outcome` is `taken`, `behind` (ignored), or `held`. A covered game takes a poll only ahead of it,
+   * and only by holding it for `fallbackAfter`: a poll ahead of the held one replaces it, one equal to the game's
+   * snapshot refreshes it, and any other is behind. A push applies unless behind in game time, and ends a hold unless
+   * the held snapshot is still ahead of it; on any other game, so does a poll. A snapshot gives the events of its
+   * changes; a `Plays` delivery replaces the list and gives only the play events of its new plays.
    */
+  take(
+    delivery: Extract<Delivery, { readonly _tag: "Snapshot" }>,
+    now: DateTime.Utc
+  ): {
+    readonly liveGame: Option.Option<LiveGame>
+    readonly events: ReadonlyArray<GameEventKind>
+    readonly outcome: "taken" | "behind" | "held"
+  }
+  take(
+    delivery: Extract<Delivery, { readonly _tag: "Plays" }>,
+    now: DateTime.Utc
+  ): { readonly liveGame: Option.Option<LiveGame>; readonly events: ReadonlyArray<GameEventKind> }
   take(
     delivery: Extract<Delivery, { readonly _tag: "Snapshot" | "Plays" }>,
     now: DateTime.Utc
-  ): { readonly liveGame: Option.Option<LiveGame>; readonly events: ReadonlyArray<GameEventKind> } {
+  ): {
+    readonly liveGame: Option.Option<LiveGame>
+    readonly events: ReadonlyArray<GameEventKind>
+    readonly outcome?: "taken" | "behind" | "held"
+  } {
     if (delivery._tag === "Plays") {
       const plays = delivery.plays.toSorted(Play.order)
       if (Equal.equals(plays, this.plays)) return { liveGame: Option.none(), events: [] }
@@ -66,62 +95,97 @@ export class LiveGame extends Data.Class<{
       return { liveGame: Option.some(new LiveGame({ ...this, plays })), events }
     }
     const { snapshot, from } = delivery
-    const order = GameSnapshot.gameTime(snapshot, this.snapshot)
-    if (order < 0) return { liveGame: Option.none(), events: [] }
-    if (order === 0 && from === "poll" && this.from === "push" && LiveGameState.$is("Live")(this.state)) {
-      return {
-        liveGame: Option.some(new LiveGame({ ...this, state: LiveGameState.Live({ updatedAt: now }) })),
-        events: []
-      }
-    }
-    const events = snapshot.eventsSince(this.snapshot)
+    if (from === "poll" && this.isCovered()) return this.polledWhileCovered(snapshot, now)
+    if (GameSnapshot.gameTime(snapshot, this.snapshot) < 0) return behind
+    const state = stateOf(snapshot, now)
     return {
       liveGame: Option.some(
         new LiveGame({
           snapshot,
           from,
-          state: stateOf(snapshot, now),
+          state:
+            LiveGameState.$is("Holding")(this.state) &&
+            LiveGameState.$is("Live")(state) &&
+            this.state.held.isAheadOf(snapshot)
+              ? LiveGameState.Holding({ updatedAt: now, held: this.state.held, until: this.state.until })
+              : state,
           plays: this.plays
         })
       ),
-      events
+      events: snapshot.eventsSince(this.snapshot),
+      outcome: "taken"
     }
   }
 
-  /** The live game at `now` with nothing new: stale once its stale time has passed. None when that changes nothing. */
-  tick(now: DateTime.Utc): Option.Option<LiveGame> {
-    return LiveGameState.$is("Live")(this.state) &&
-      DateTime.isGreaterThanOrEqualTo(now, DateTime.addDuration(this.state.updatedAt, LiveGame.staleAfter))
-      ? Option.some(
-          new LiveGame({ ...this, state: LiveGameState.Stale({ updatedAt: this.state.updatedAt }) })
-        )
-      : Option.none()
+  /**
+   * The live game at `now` with nothing new: a holding game falls back to its held snapshot at `until`, as a poll's,
+   * saying its events; a live one goes stale once its stale time has passed. None when that changes nothing.
+   */
+  tick(now: DateTime.Utc): {
+    readonly liveGame: Option.Option<LiveGame>
+    readonly events: ReadonlyArray<GameEventKind>
+    readonly fellBack: boolean
+  } {
+    const unchanged = { liveGame: Option.none(), events: [], fellBack: false }
+    return LiveGameState.$match(this.state, {
+      Holding: ({ held, until }) =>
+        DateTime.isGreaterThanOrEqualTo(now, until)
+          ? {
+              liveGame: Option.some(
+                new LiveGame({ ...this, snapshot: held, from: "poll", state: stateOf(held, now) })
+              ),
+              events: held.eventsSince(this.snapshot),
+              fellBack: true
+            }
+          : unchanged,
+      Live: ({ updatedAt }) =>
+        DateTime.isGreaterThanOrEqualTo(now, DateTime.addDuration(updatedAt, LiveGame.staleAfter))
+          ? {
+              ...unchanged,
+              liveGame: Option.some(new LiveGame({ ...this, state: LiveGameState.Stale({ updatedAt }) }))
+            }
+          : unchanged,
+      Upcoming: () => unchanged,
+      Stale: () => unchanged,
+      Over: () => unchanged
+    })
+  }
+
+  /** Live or holding, its snapshot from the push. */
+  isCovered(): boolean {
+    return (
+      (LiveGameState.$is("Live")(this.state) || LiveGameState.$is("Holding")(this.state)) &&
+      this.from === "push"
+    )
   }
 
   /**
-   * When this live game next changes with no new frame, strictly after `now`: going stale, or entering or leaving the
-   * live-feed window (`isCurrent`). None when only a delivery can change it.
+   * When this live game next changes with no new frame, strictly after `now`: falling back, going stale, or entering or
+   * leaving the live-feed window (`isCurrent`). None when only a delivery can change it.
    */
   dueAfter(now: DateTime.Utc): Option.Option<DateTime.Utc> {
     return LiveGameState.$match(this.state, {
       Upcoming: () => Option.some(DateTime.subtractDuration(this.snapshot.kickoff, LiveGame.currentBefore)),
       Live: ({ updatedAt }) => Option.some(DateTime.addDuration(updatedAt, LiveGame.staleAfter)),
+      // Always before it would go stale: a hold begins with updatedAt, and fallbackAfter is shorter than staleAfter.
+      Holding: ({ until }) => Option.some(until),
       Stale: ({ updatedAt }) => Option.some(DateTime.addDuration(updatedAt, LiveGame.staleCurrentFor)),
       Over: () => Option.none()
     }).pipe(Option.filter((at) => DateTime.isLessThan(now, at)))
   }
 
-  /** When a live or stale game was last updated; none for an upcoming or over game. */
+  /** When a live, holding, or stale game was last updated; none for an upcoming or over game. */
   updatedAt(): Option.Option<DateTime.Utc> {
     return LiveGameState.$match(this.state, {
       Upcoming: () => Option.none(),
       Live: ({ updatedAt }) => Option.some(updatedAt),
+      Holding: ({ updatedAt }) => Option.some(updatedAt),
       Stale: ({ updatedAt }) => Option.some(updatedAt),
       Over: () => Option.none()
     })
   }
 
-  /** Live, stale for less than `staleCurrentFor`, or upcoming with kickoff within `currentBefore` of `now`. */
+  /** Live or holding, stale for less than `staleCurrentFor`, or upcoming with kickoff within `currentBefore` of `now`. */
   isCurrent(now: DateTime.Utc): boolean {
     return LiveGameState.$match(this.state, {
       Upcoming: () =>
@@ -130,12 +194,50 @@ export class LiveGame extends Data.Class<{
           DateTime.addDuration(now, LiveGame.currentBefore)
         ),
       Live: () => true,
+      Holding: () => true,
       Stale: ({ updatedAt }) =>
         DateTime.isLessThan(now, DateTime.addDuration(updatedAt, LiveGame.staleCurrentFor)),
       Over: () => false
     })
   }
+
+  /**
+   * A covered game after a poll: held when ahead of what the game waits on (the held snapshot, or its own), a refresh
+   * when equal to its snapshot, and behind otherwise.
+   */
+  private polledWhileCovered(
+    snapshot: GameSnapshot,
+    now: DateTime.Utc
+  ): {
+    readonly liveGame: Option.Option<LiveGame>
+    readonly events: ReadonlyArray<GameEventKind>
+    readonly outcome: "taken" | "behind" | "held"
+  } {
+    const holding = LiveGameState.$is("Holding")(this.state) ? Option.some(this.state) : Option.none()
+    const waitingOn = Option.match(holding, { onNone: () => this.snapshot, onSome: ({ held }) => held })
+    if (snapshot.isAheadOf(waitingOn)) {
+      const until = Option.match(holding, {
+        onNone: () => DateTime.addDuration(now, LiveGame.fallbackAfter),
+        onSome: ({ until }) => until
+      })
+      const state = LiveGameState.Holding({ updatedAt: now, held: snapshot, until })
+      return { liveGame: Option.some(new LiveGame({ ...this, state })), events: [], outcome: "held" }
+    }
+    if (snapshot.isAheadOf(this.snapshot) || this.snapshot.isAheadOf(snapshot)) return behind
+    const state = Option.match(holding, {
+      onNone: () => LiveGameState.Live({ updatedAt: now }),
+      onSome: ({ held, until }) => LiveGameState.Holding({ updatedAt: now, held, until })
+    })
+    return { liveGame: Option.some(new LiveGame({ ...this, state })), events: [], outcome: "taken" }
+  }
 }
+
+/** A snapshot behind the game: nothing changes. */
+const behind: {
+  readonly liveGame: Option.Option<LiveGame>
+  readonly events: ReadonlyArray<GameEventKind>
+  readonly outcome: "behind"
+} = { liveGame: Option.none(), events: [], outcome: "behind" }
 
 function stateOf(snapshot: GameSnapshot, now: DateTime.Utc): LiveGameState {
   switch (snapshot.progress()) {

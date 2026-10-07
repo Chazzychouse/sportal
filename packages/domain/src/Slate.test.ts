@@ -2,10 +2,11 @@ import { assert, describe, it } from "@effect/vitest"
 import { DateTime, Duration, Effect, Option } from "effect"
 import { Delivery, type DeliverySource } from "./Delivery.ts"
 import { GameId, GameSnapshot } from "./Game.ts"
-import { LiveGameState } from "./LiveGame.ts"
+import { GameEvent, GameEventKind } from "./GameEvent.ts"
+import { LiveGame, LiveGameState } from "./LiveGame.ts"
 import { PlayId } from "./Play.ts"
 import { Slate, SlateObservation } from "./Slate.ts"
-import { play, snapshot } from "./TestGame.ts"
+import { liveSnapshot, play, snapshot } from "./TestGame.ts"
 
 const t0 = DateTime.makeUnsafe("2026-10-03T16:00:00Z")
 const one = GameId.make("1")
@@ -71,7 +72,7 @@ describe("Slate", () => {
     })
   )
 
-  it.effect("a poll at the same game time as a pushed snapshot is kept: the push wins the tie", () =>
+  it.effect("a poll at the same game time as a pushed snapshot, with fewer points, is behind", () =>
     Effect.gen(function* () {
       const at = (score: number) =>
         snapshot({
@@ -84,8 +85,34 @@ describe("Slate", () => {
       const held = yield* taken(Slate.empty, [pushed(at(14))], t0)
       const { next, observations } = yield* took(held, [polled(at(13))], t0)
       assert.strictEqual(next.live.get(one)?.snapshot.home.score, 14)
-      assert.deepStrictEqual(outcomes(observations), ["kept"])
+      assert.deepStrictEqual(outcomes(observations), ["behind"])
     })
+  )
+
+  it.effect(
+    "a listing ahead of a covered game is held, then falls back at until, saying its events then",
+    () =>
+      Effect.gen(function* () {
+        const covered = yield* taken(Slate.empty, [pushed(liveSnapshot({ id: one, clock: "5:00" }))], t0)
+        const scored = liveSnapshot({ id: one, clock: "4:30", home: { ...live(one, "4:30").home, score: 7 } })
+        const at = DateTime.add(t0, { seconds: 5 })
+        const until = DateTime.addDuration(at, LiveGame.fallbackAfter)
+        const holding = yield* took(covered, [listing("fbs", [scored])], at)
+        assert.deepStrictEqual(outcomes(holding.observations), ["held"])
+        assert.deepStrictEqual(holding.events, [])
+        assert.deepStrictEqual(holding.next.earliestDue(), Option.some(until))
+        const fellBack = yield* holding.next.tick(DateTime.add(until, { seconds: 1 }))
+        assert.deepStrictEqual(outcomes(fellBack.observations), ["fellBack"])
+        assert.deepStrictEqual(tags(fellBack.observations), ["Took", "Changed"])
+        assert.deepStrictEqual(fellBack.events, [
+          new GameEvent({
+            game: one,
+            at: until,
+            what: GameEventKind.ScoreChanged({ team: scored.home.team.id, points: 7 })
+          })
+        ])
+        assert.strictEqual(fellBack.next.live.get(one)?.snapshot, scored)
+      })
   )
 
   it.effect("plays for a game not held are dropped, and nothing changes", () =>

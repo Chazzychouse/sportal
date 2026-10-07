@@ -126,11 +126,14 @@ export type Taken = {
 
 /** What one take or tick did to one game, for telemetry only. */
 export type SlateObservation = Data.TaggedEnum<{
-  /** A snapshot was taken, ignored as behind, or kept (a tied poll that refreshed a pushed snapshot). */
+  /**
+   * A snapshot was taken, ignored as behind, or held by a covered game; or a held one fell back, applying as the
+   * poll's once the push had not caught it up for `LiveGame.fallbackAfter`.
+   */
   Took: {
     readonly snapshot: GameSnapshot
     readonly from: DeliverySource
-    readonly outcome: "taken" | "behind" | "kept"
+    readonly outcome: "taken" | "behind" | "held" | "fellBack"
     readonly had: Option.Option<GameSnapshot>
   }
   Started: { readonly liveGame: LiveGame; readonly at: DateTime.Utc }
@@ -168,9 +171,26 @@ function tickTo(advanced: Advanced, from: DateTime.Utc, at: DateTime.Utc): Effec
           ),
           () => advanced,
           (acc, liveGame) =>
-            guarded(acc, liveGame.snapshot, "a tick", () =>
-              settled(acc, liveGame.snapshot.id, due, Option.some(liveGame), { liveGame: liveGame.tick(due) })
-            )
+            guarded(acc, liveGame.snapshot, "a tick", () => {
+              const step = liveGame.tick(due)
+              const fellBack = Option.filter(step.liveGame, () => step.fellBack).pipe(
+                Option.map((after) =>
+                  SlateObservation.Took({
+                    snapshot: after.snapshot,
+                    from: after.from,
+                    outcome: "fellBack",
+                    had: Option.some(liveGame.snapshot)
+                  })
+                )
+              )
+              return settled(
+                { ...acc, observations: [...acc.observations, ...Option.toArray(fellBack)] },
+                liveGame.snapshot.id,
+                due,
+                Option.some(liveGame),
+                step
+              )
+            })
         ).pipe(Effect.flatMap((ticked) => tickTo(ticked, due, at)))
     }
   )
@@ -216,16 +236,17 @@ function snapshotTaken(
   return guarded(advanced, snapshot, "a delivery", () => {
     const current = Option.fromNullishOr(advanced.live.get(snapshot.id))
     const step = Option.match(current, {
-      onNone: () => ({ liveGame: Option.some(LiveGame.start(snapshot, from, at)) }),
+      onNone: () => ({
+        liveGame: Option.some(LiveGame.start(snapshot, from, at)),
+        events: [],
+        outcome: "taken" as const
+      }),
       onSome: (liveGame) => liveGame.take(Delivery.cases.Snapshot.make({ snapshot, from }), at)
     })
     const took = SlateObservation.Took({
       snapshot,
       from,
-      outcome: Option.match(step.liveGame, {
-        onNone: () => "behind",
-        onSome: (liveGame) => (liveGame.snapshot === snapshot ? "taken" : "kept")
-      }),
+      outcome: step.outcome,
       had: Option.map(current, (liveGame) => liveGame.snapshot)
     })
     return settled(

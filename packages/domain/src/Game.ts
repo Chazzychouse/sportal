@@ -78,6 +78,18 @@ export class GameSnapshot extends Schema.Class<GameSnapshot>("sportal/GameSnapsh
     }
   }
 
+  /**
+   * Later in game time, or at the same game time with more points, or with as many points split differently or a
+   * different status. The clock stops on a score, so at the same game time only the points say which is newer.
+   */
+  isAheadOf(that: GameSnapshot): boolean {
+    const order = GameSnapshot.gameTime(this, that)
+    if (order !== 0) return order > 0
+    const points = this.home.score + this.away.score - (that.home.score + that.away.score)
+    if (points !== 0) return points > 0
+    return this.home.score !== that.home.score || this.status !== that.status
+  }
+
   /** The points between the teams. */
   margin(): number {
     return Math.abs(this.home.score - this.away.score)
