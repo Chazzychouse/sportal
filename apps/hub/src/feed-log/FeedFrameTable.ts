@@ -22,8 +22,8 @@ export class FeedFrameRow extends Model.Class<FeedFrameRow>("sportal/hub/feed-lo
   static readonly columns = Object.keys(FeedFrameRow.fields)
 
   /** The frame a row other than a gap holds, its body read as `body`; an unchanged poll reads as a response. */
-  static frame(row: FeedFrameRow, body: string): Effect.Effect<Frame, Schema.SchemaError> {
-    return decodeFrame({
+  static readonly frame = Effect.fnUntraced(function* (row: FeedFrameRow, body: string) {
+    return yield* decodeFrame({
       seq: row.seq,
       receivedAt: row.received_at,
       ...(row.sent_at === null ? {} : { sentAt: row.sent_at }),
@@ -33,7 +33,7 @@ export class FeedFrameRow extends Model.Class<FeedFrameRow>("sportal/hub/feed-lo
       kind: row.kind === "unchanged" ? "response" : row.kind,
       body
     })
-  }
+  })
 
   /** `frame`'s row, hashed `hash`, its body gzip'd as `body`, or none when it is an `unchanged` poll. */
   static of(frame: Frame, hash: string, body: Uint8Array | null, unchanged: boolean): FeedFrameRow {
@@ -54,7 +54,7 @@ export class FeedFrameRow extends Model.Class<FeedFrameRow>("sportal/hub/feed-lo
    * The row that stands for the frames a failed write lost, at the last lost `seq`, so a log reopened after it
    * continues past them.
    */
-  static gap({
+  static readonly gap = Effect.fnUntraced(function* ({
     from,
     to,
     count,
@@ -65,24 +65,20 @@ export class FeedFrameRow extends Model.Class<FeedFrameRow>("sportal/hub/feed-lo
     readonly count: number
     readonly receivedAt: DateTime.Utc
   }) {
-    return Schema.encodeEffect(Gap)({ from, to, count }).pipe(
-      Effect.flatMap(Gzip.compress),
-      Effect.map(
-        (body) =>
-          new FeedFrameRow({
-            seq: to,
-            received_at: DateTime.toEpochMillis(receivedAt),
-            sent_at: null,
-            source_id: null,
-            feed: null,
-            channel: null,
-            kind: "gap",
-            body,
-            body_hash: null
-          })
-      )
-    )
-  }
+    const json = yield* Schema.encodeEffect(Gap)({ from, to, count })
+    const body = yield* Gzip.compress(json)
+    return new FeedFrameRow({
+      seq: to,
+      received_at: DateTime.toEpochMillis(receivedAt),
+      sent_at: null,
+      source_id: null,
+      feed: null,
+      channel: null,
+      kind: "gap",
+      body,
+      body_hash: null
+    })
+  })
 }
 
 /** What a gap row's body holds: the `seq` range and number of frames a failed write lost. */

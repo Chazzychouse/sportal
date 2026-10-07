@@ -181,29 +181,26 @@ const readBack = Effect.fnUntraced(function* (
 })
 
 // The body an unchanged poll repeats: its channel's last one in this replay, or else the last one stored.
-function repeated(
+const repeated = Effect.fnUntraced(function* (
   table: ReturnType<typeof queries>,
   bodies: ReadonlyMap<string, string>,
   channel: string,
   seq: number
 ) {
-  return Option.match(Option.fromNullishOr(bodies.get(channel)), {
-    onSome: Effect.succeed,
-    onNone: () =>
-      table.lastBody({ channel, seq }).pipe(Effect.flatMap(({ body }) => Gzip.decompress(body, "gzip")))
-  })
-}
+  const last = bodies.get(channel)
+  if (last !== undefined) return last
 
-function warnOfGap(body: Uint8Array) {
-  return Gzip.decompress(body, "gzip").pipe(
-    Effect.flatMap(decodeGap),
-    Effect.flatMap((gap) =>
-      Effect.logWarning(
-        `FeedLog: replay passes ${gap.count} frames that were never written (seq ${gap.from} to ${gap.to})`
-      ).pipe(Effect.annotateLogs(gap))
-    )
-  )
-}
+  const { body } = yield* table.lastBody({ channel, seq })
+  return yield* Gzip.decompress(body, "gzip")
+})
+
+const warnOfGap = Effect.fnUntraced(function* (body: Uint8Array) {
+  const json = yield* Gzip.decompress(body, "gzip")
+  const gap = yield* decodeGap(json)
+  yield* Effect.logWarning(
+    `FeedLog: replay passes ${gap.count} frames that were never written (seq ${gap.from} to ${gap.to})`
+  ).pipe(Effect.annotateLogs(gap))
+})
 
 // Skips from one game day to the next through the received_at index: one query a day, never a scan of the frames.
 const days = Effect.fnUntraced(function* (table: ReturnType<typeof queries>) {
