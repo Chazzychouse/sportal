@@ -139,6 +139,18 @@ describe("GameSnapshot.gameTime", () => {
     assert.strictEqual(compare(a, b), 0)
   })
 
+  it("puts halftime after the end of period 2, at the same clock", () => {
+    const halftime = snapshot({ status: "halftime", period: 2, clock: "0:00" })
+    const endOfHalf = snapshot({ status: "live", period: 2, clock: "0:00" })
+    assert.strictEqual(compare(halftime, endOfHalf), 1)
+    assert.strictEqual(compare(endOfHalf, halftime), -1)
+  })
+
+  it("ties a delay with play at the same clock", () => {
+    const delayed = snapshot({ status: "delayed", period: 3, clock: "8:00" })
+    assert.strictEqual(compare(delayed, snapshot({ status: "live", period: 3, clock: "8:00" })), 0)
+  })
+
   it("puts halftime between the end of period 2 and the start of period 3", () => {
     const halftime = snapshot({ status: "halftime", period: 2, clock: "0:00" })
     assert.strictEqual(compare(halftime, snapshot({ status: "live", period: 2, clock: "0:10" })), 1)
@@ -176,8 +188,41 @@ describe("GameSnapshot#isAheadOf", () => {
   it("the same game time with equal points split differently is ahead", () => {
     assert.isTrue(scored(7, 3).isAheadOf(scored(3, 7)))
   })
-  it("the same game time with a different status is ahead", () => {
+  it("halftime is ahead of play at the end of the second period", () => {
     assert.isTrue(at({ status: "halftime", clock: "0:00" }).isAheadOf(at({ clock: "0:00" })))
+  })
+  it("play at the end of the second period is not ahead of halftime", () => {
+    assert.isFalse(at({ clock: "0:00" }).isAheadOf(at({ status: "halftime", clock: "0:00" })))
+  })
+  it("a final is ahead of play at the end of the last period, and not the reverse", () => {
+    const final = at({ status: "final", period: 4, clock: "0:00" })
+    const endOfGame = at({ period: 4, clock: "0:00" })
+    assert.isTrue(final.isAheadOf(endOfGame))
+    assert.isFalse(endOfGame.isAheadOf(final))
+  })
+  it("a delay and play at the same clock and points are neither ahead", () => {
+    assert.isFalse(at({ status: "delayed" }).isAheadOf(at()))
+    assert.isFalse(at().isAheadOf(at({ status: "delayed" })))
+  })
+  it("is never ahead both ways, over status, clock, and points", () => {
+    const pairs: ReadonlyArray<readonly [GameSnapshot, GameSnapshot]> = [
+      [at({ status: "halftime", clock: "0:00" }), at({ clock: "0:00" })],
+      [at({ status: "delayed" }), at()],
+      [at({ status: "delayed", clock: "0:00" }), at({ status: "halftime", clock: "0:00" })],
+      [at({ status: "final", period: 4, clock: "0:00" }), at({ period: 4, clock: "0:00" })],
+      [
+        at({ status: "final", period: 4, clock: "0:00" }),
+        at({ status: "canceled", period: 4, clock: "0:00" })
+      ],
+      [at({ status: "postponed" }), at()],
+      [snapshot({ status: "scheduled" }), snapshot({ status: "delayed", period: 0 })],
+      [scored(7, 0), scored(6, 0)],
+      [at({ clock: "4:59" }), at()],
+      [at(), at()]
+    ]
+    for (const [a, b] of pairs) {
+      assert.isFalse(a.isAheadOf(b) && b.isAheadOf(a), `${a.statusLine()} against ${b.statusLine()}`)
+    }
   })
   it("an equal snapshot is not ahead", () => {
     assert.isFalse(at().isAheadOf(at()))

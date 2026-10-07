@@ -19,8 +19,9 @@ week.
   listings: the slate, upcoming and final games, broadcasts.
 - **A covered game holds a poll snapshot ahead of it for `fallbackAfter` (15 s), replacing the tie rule.** A game is
   covered when its snapshot came from the push. A poll is ahead when it is later in game time, or at the same game
-  time has more total points, or at equal totals has a different split or status: the clock stops on a score, so only
-  points say which snapshot is newer. A covered game ignores a poll with fewer points. The held snapshot applies when
+  time has more total points, or at equal totals has a different split: the clock stops on a score, so only points
+  say which snapshot is newer. Game time puts halftime after play at the same clock and ties any other status-only
+  difference, so no two snapshots are ahead of each other on their status alone. A covered game ignores a poll with fewer points. The held snapshot applies when
   `fallbackAfter` passes and the push has not caught it up, and says its events. A dropped push is a stuck one; the
   hold covers it.
 - **Each event kind has one origin.** State events come from snapshot changes and play events from plays, each said

@@ -22,11 +22,11 @@ Every exported type name must be a term here, except the wire schemas in `*Paylo
 | --- | --- | --- |
 | **GameStatus** | `scheduled`, `live`, `halftime`, `delayed`, `final`, `postponed`, `canceled`. | state, phase |
 | **GameSnapshot** | The complete normalized state of a game at an instant. | update, payload |
-| **Game time** | How far a game has got: before kickoff, in play, or over; then the period; then the clock running down. Orders two snapshots of one game. | timestamp, version |
+| **Game time** | How far a game has got: before kickoff, in play, or over; then the period; then the clock running down; then, at the same clock, halftime after play (any other statuses at the same clock tie). Orders two snapshots of one game. | timestamp, version |
 | **Progress** | Where a game is in its day: `upcoming`, `live`, or `over`. A delay before kickoff is upcoming and a delay during the game is live. | phase, state |
 | **Live game** | One game as the Hub follows it: its latest snapshot, the delivery source that gave it, its state (`LiveGameState`): upcoming, live, holding, stale, or over, and its plays. Taken from deliveries by the slate. A covered game takes a poll only ahead of it, by holding it for 15 seconds (`fallbackAfter`). | game state, entity |
 | **Covered** | A live game followed by the push: live or holding, its snapshot from the push. | |
-| **Ahead** | One snapshot of a game past another: later in game time, or at the same game time with more points, or as many points split differently, or a different status. | newer |
+| **Ahead** | One snapshot of a game past another: later in game time, or at the same game time with more points, or as many points split differently. A status alone puts a snapshot ahead only where game time orders it (halftime after play at the same clock), so two snapshots are never ahead of each other on their status. | newer |
 | **Held snapshot** | A poll snapshot ahead of a covered game, held until the push catches it up or `fallbackAfter` passes; `held` on `LiveGameState.Holding`. | pending |
 | **Fallback** | A held snapshot applying as the poll's once the push has not caught it up for `fallbackAfter`, saying its events; the `Took` outcome `fellBack`. | |
 | **Took outcome** | What taking a snapshot did to its game: taken, ignored as behind, or held by a covered game; `TookOutcome` in code. A slate observation's `Took` adds `fellBack`, for a fallback. | result |

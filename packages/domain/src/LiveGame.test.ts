@@ -1,7 +1,7 @@
 import { assert, describe, it } from "@effect/vitest"
 import { DateTime, Duration, Option } from "effect"
 import { Delivery, type DeliverySource } from "./Delivery.ts"
-import type { GameSnapshot } from "./Game.ts"
+import { GameSnapshot } from "./Game.ts"
 import { GameEventKind } from "./GameEvent.ts"
 import { LiveGame, LiveGameState } from "./LiveGame.ts"
 import { type Play, PlayId } from "./Play.ts"
@@ -186,6 +186,8 @@ describe("LiveGame#take and #tick, a covered game and a poll ahead of it", () =>
     game.take(Delivery.cases.Snapshot.make({ snapshot: taking, from }), at)
   const holding = Option.getOrThrow(take(covered, scored(14, 7, "4:30"), "poll", now).liveGame)
   const holdingAt = (held: GameSnapshot) => LiveGameState.Holding({ updatedAt: now, held, until })
+  const halftimeAt = (home: number, away: number) =>
+    new GameSnapshot({ ...scored(home, away, "0:00"), status: "halftime" })
 
   it("a covered game is live or holding from the push", () => {
     assert.isTrue(covered.isCovered())
@@ -245,6 +247,23 @@ describe("LiveGame#take and #tick, a covered game and a poll ahead of it", () =>
     const { liveGame: next, outcome } = take(afterTry, scored(20, 14, "2:03"), "poll", now)
     assert.deepStrictEqual(next, Option.none())
     assert.strictEqual(outcome, "behind")
+  })
+  it("covered at halftime, a poll still at the end of the second period: none, behind, with no hold", () => {
+    const atHalf = LiveGame.start(halftimeAt(14, 7), "push", t0)
+    assert.deepStrictEqual(take(atHalf, scored(14, 7, "0:00"), "poll", now), {
+      liveGame: Option.none(),
+      events: [],
+      outcome: "behind"
+    })
+  })
+  it("covered at the end of the second period, a poll at halftime: Holding", () => {
+    const endOfHalf = LiveGame.start(scored(14, 7, "0:00"), "push", t0)
+    const { liveGame: next, outcome } = take(endOfHalf, halftimeAt(14, 7), "poll", now)
+    assert.deepStrictEqual(
+      next.pipe(Option.map((game) => game.state)),
+      Option.some(holdingAt(halftimeAt(14, 7)))
+    )
+    assert.strictEqual(outcome, "held")
   })
   it("Holding, a poll further ahead of held: held replaced, until kept", () => {
     const further = scored(14, 7, "4:00")
