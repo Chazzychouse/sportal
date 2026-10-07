@@ -1,6 +1,6 @@
 import { type GameId, GameSnapshot } from "@sportal/domain/Game"
-import type * as Fold from "@sportal/domain/LiveGames"
 import { Play, type PlayId } from "@sportal/domain/Play"
+import type { Slate as DomainSlate } from "@sportal/domain/Slate"
 import { Array as Arr, Context, Effect, Equal, Filter, Layer, Metric, Option, Schema, Stream } from "effect"
 import { SqlClient, SqlSchema } from "effect/sql"
 import * as Database from "./Database.ts"
@@ -98,7 +98,7 @@ export class GameHistory extends Context.Service<
         })
 
       // A change that cannot be written leaves `written` as it was, so the next change diffs from the last success.
-      const write = (written: Written, { seq, folded }: { seq: number; folded: Fold.LiveGames }) => {
+      const write = (written: Written, { seq, folded }: { seq: number; folded: DomainSlate }) => {
         const next = writtenOf(folded)
         return store(stepFrom(written, next), seq).pipe(
           Effect.as(next),
@@ -165,9 +165,9 @@ type Step = {
 }
 
 /** The folded state as the history keeps it: every listed game as the fold has it, plus live games not listed. */
-function writtenOf(folded: Fold.LiveGames): Written {
+function writtenOf(folded: DomainSlate): Written {
   return {
-    snapshots: new Map(folded.games().map((snapshot) => [snapshot.id, snapshot])),
+    snapshots: new Map(folded.everyGame().map((snapshot) => [snapshot.id, snapshot])),
     plays: new Map([...folded.live].map(([game, liveGame]) => [game, liveGame.plays]))
   }
 }

@@ -7,21 +7,28 @@ import { LiveGame } from "./LiveGame.ts"
 import type { RecentPlays } from "./RecentPlays.ts"
 
 /**
- * The fold of every delivery, in order: the last frame's `seq`, each league's last listing, every current game's live
- * game, and `reached`, the instant it has ticked to: every wake time at or before it has been ticked.
+ * The slate: the last frame's `seq`, each league's last listing, every current game's live game, taken from push and
+ * poll deliveries in arrival order, and `reached`, the instant it has ticked to: every wake time at or before it has
+ * been ticked.
  */
-export class LiveGames extends Data.Class<{
+export class Slate extends Data.Class<{
   readonly seq: Option.Option<number>
   readonly listed: ReadonlyMap<LeagueId, ReadonlyArray<GameSnapshot>>
   readonly live: ReadonlyMap<GameId, LiveGame>
   readonly reached: Option.Option<DateTime.Utc>
 }> {
-  static readonly empty: LiveGames = new LiveGames({
+  static readonly empty: Slate = new Slate({
     seq: Option.none(),
     listed: new Map(),
     live: new Map(),
     reached: Option.none()
   })
+
+  /** The start of the game day `now` is in: 04:00 local, the day before when `now` is earlier. */
+  static dayStart(now: DateTime.Zoned): DateTime.Utc {
+    const today = DateTime.setParts(now, { hour: 4, minute: 0, second: 0, millisecond: 0 })
+    return DateTime.toUtc(DateTime.isLessThan(now, today) ? DateTime.subtract(today, { days: 1 }) : today)
+  }
 
   /**
    * Takes one frame: ticks every game due after `reached` and at or before `at`, then applies each of its deliveries in
@@ -32,7 +39,7 @@ export class LiveGames extends Data.Class<{
     readonly deliveries: ReadonlyArray<Delivery>
     readonly at: DateTime.Utc
     readonly seq: number
-  }): Effect.Effect<{ readonly next: LiveGames; readonly reports: ReadonlyArray<FoldReport> }> {
+  }): Effect.Effect<Taken> {
     return this.advance(frame.at, Option.some(frame.seq), (ticked) =>
       Effect.reduce(
         frame.deliveries,
@@ -43,9 +50,7 @@ export class LiveGames extends Data.Class<{
   }
 
   /** Ticks every game due after `reached` and at or before `now`, with no frame: `seq` stays as it was. */
-  tick(
-    now: DateTime.Utc
-  ): Effect.Effect<{ readonly next: LiveGames; readonly reports: ReadonlyArray<FoldReport> }> {
+  tick(now: DateTime.Utc): Effect.Effect<Taken> {
     return this.advance(now, Option.none(), (ticked) => Effect.succeed({ listed: this.listed, ...ticked }))
   }
 
@@ -54,8 +59,8 @@ export class LiveGames extends Data.Class<{
     return Option.flatMap(this.reached, (from) => dueAfter(this.live, from))
   }
 
-  /** Each listed game in `leagues`, leagues in order, as the fold has it. */
-  slate(leagues: ReadonlyArray<LeagueId>): ReadonlyArray<GameSnapshot> {
+  /** Each listed game in `leagues`, leagues in order, as the slate has it. */
+  games(leagues: ReadonlyArray<LeagueId>): ReadonlyArray<GameSnapshot> {
     return leagues.flatMap((league) => asFolded(this.listed.get(league) ?? [], this.live))
   }
 
@@ -69,8 +74,8 @@ export class LiveGames extends Data.Class<{
     )
   }
 
-  /** Every listed game as the fold has it, then live games no listing holds. */
-  games(): ReadonlyArray<GameSnapshot> {
+  /** Every listed game as the slate has it, then live games no listing holds. */
+  everyGame(): ReadonlyArray<GameSnapshot> {
     const listed = [...this.listed.values()].flatMap((games) => asFolded(games, this.live))
     const unlisted = [...this.live.values()]
       .map(({ snapshot }) => snapshot)
@@ -82,7 +87,7 @@ export class LiveGames extends Data.Class<{
    * Whether `that` publishes the same: a take or tick that changed nothing hands back the same maps. `seq` and `reached`
    * are ignored, since moving only them changes no game.
    */
-  publishesSameAs(that: LiveGames): boolean {
+  publishesSameAs(that: Slate): boolean {
     return this.live === that.live && this.listed === that.listed
   }
 
@@ -91,18 +96,19 @@ export class LiveGames extends Data.Class<{
     at: DateTime.Utc,
     seq: Option.Option<number>,
     then: (ticked: Advanced) => Effect.Effect<Folded>
-  ): Effect.Effect<{ readonly next: LiveGames; readonly reports: ReadonlyArray<FoldReport> }> {
+  ): Effect.Effect<Taken> {
     const from = Option.getOrElse(this.reached, () => at)
-    return tickTo({ live: this.live, reports: [] }, from, at).pipe(
+    return tickTo({ live: this.live, events: [], observations: [] }, from, at).pipe(
       Effect.flatMap(then),
       Effect.map((folded) => ({
-        next: new LiveGames({
+        next: new Slate({
           seq: Option.orElse(seq, () => this.seq),
           listed: folded.listed,
           live: folded.live,
           reached: Option.some(DateTime.max(from, at))
         }),
-        reports: folded.reports
+        events: folded.events,
+        observations: folded.observations
       }))
     )
   }
@@ -111,8 +117,15 @@ export class LiveGames extends Data.Class<{
 /** How many of a game's plays `recentPlays` keeps: its last ten. */
 const recentPlayCount = 10
 
-/** What one take or tick did to one game, for telemetry to tell. */
-export type FoldReport = Data.TaggedEnum<{
+/** What one take or tick did: the next slate, the game events it said, and what telemetry tells of it. */
+export type Taken = {
+  readonly next: Slate
+  readonly events: ReadonlyArray<GameEvent>
+  readonly observations: ReadonlyArray<SlateObservation>
+}
+
+/** What one take or tick did to one game, for telemetry only. */
+export type SlateObservation = Data.TaggedEnum<{
   /** A snapshot was taken, ignored as behind, or kept (a tied poll that refreshed a pushed snapshot). */
   Took: {
     readonly snapshot: GameSnapshot
@@ -123,15 +136,18 @@ export type FoldReport = Data.TaggedEnum<{
   Started: { readonly liveGame: LiveGame; readonly at: DateTime.Utc }
   Changed: { readonly before: LiveGame; readonly after: LiveGame; readonly at: DateTime.Utc }
   Stopped: { readonly liveGame: LiveGame; readonly at: DateTime.Utc }
-  Happened: { readonly snapshot: GameSnapshot; readonly event: GameEvent }
   Dropped: { readonly game: GameId }
   /** A game's take or tick raised a defect; the game kept its last good live game. `snapshot` is the one at hand. */
   Raised: { readonly snapshot: GameSnapshot; readonly cause: Cause.Cause<never>; readonly by: string }
 }>
-export const FoldReport = Data.taggedEnum<FoldReport>()
+export const SlateObservation = Data.taggedEnum<SlateObservation>()
 
-/** Every current game's live game, and what advancing the fold has reported so far. */
-type Advanced = { readonly live: ReadonlyMap<GameId, LiveGame>; readonly reports: ReadonlyArray<FoldReport> }
+/** Every current game's live game, and the events and observations advancing the slate has made so far. */
+type Advanced = {
+  readonly live: ReadonlyMap<GameId, LiveGame>
+  readonly events: ReadonlyArray<GameEvent>
+  readonly observations: ReadonlyArray<SlateObservation>
+}
 
 /** `Advanced`, with each league's last listing. */
 type Folded = Advanced & { readonly listed: ReadonlyMap<LeagueId, ReadonlyArray<GameSnapshot>> }
@@ -181,7 +197,7 @@ function applied(folded: Folded, delivery: Delivery, at: DateTime.Utc): Effect.E
         onNone: () =>
           Effect.succeed({
             ...folded,
-            reports: [...folded.reports, FoldReport.Dropped({ game: plays.game })]
+            observations: [...folded.observations, SlateObservation.Dropped({ game: plays.game })]
           }),
         onSome: (liveGame) =>
           guarded(folded, liveGame.snapshot, "a delivery", () =>
@@ -203,7 +219,7 @@ function snapshotTaken(
       onNone: () => ({ liveGame: Option.some(LiveGame.start(snapshot, from, at)) }),
       onSome: (liveGame) => liveGame.take(Delivery.cases.Snapshot.make({ snapshot, from }), at)
     })
-    const took = FoldReport.Took({
+    const took = SlateObservation.Took({
       snapshot,
       from,
       outcome: Option.match(step.liveGame, {
@@ -212,12 +228,18 @@ function snapshotTaken(
       }),
       had: Option.map(current, (liveGame) => liveGame.snapshot)
     })
-    return settled({ ...advanced, reports: [...advanced.reports, took] }, snapshot.id, at, current, step)
+    return settled(
+      { ...advanced, observations: [...advanced.observations, took] },
+      snapshot.id,
+      at,
+      current,
+      step
+    )
   })
 }
 
 /**
- * Game `id` after a step at `at` from `current` (none for a game the fold does not hold): holds the step's new live
+ * Game `id` after a step at `at` from `current` (none for a game the slate does not hold): holds the step's new live
  * game, if any, while it is current, and lets it go once it is not. A game that was never held and is not current is
  * not held, and nothing is reported of it.
  */
@@ -233,30 +255,33 @@ function settled(
     {
       onNone: () => advanced,
       onSome: (after) => {
-        const reports = [
-          ...advanced.reports,
+        const observations = [
+          ...advanced.observations,
           ...Option.match(step.liveGame, {
             onNone: () => [],
             onSome: () =>
               Option.match(current, {
-                onNone: () => [FoldReport.Started({ liveGame: after, at })],
-                onSome: (before) => [FoldReport.Changed({ before, after, at })]
+                onNone: () => [SlateObservation.Started({ liveGame: after, at })],
+                onSome: (before) => [SlateObservation.Changed({ before, after, at })]
               })
-          }),
-          ...(step.events ?? []).map((what) =>
-            FoldReport.Happened({ snapshot: after.snapshot, event: new GameEvent({ game: id, at, what }) })
-          )
+          })
+        ]
+        const events = [
+          ...advanced.events,
+          ...(step.events ?? []).map((what) => new GameEvent({ game: id, at, what }))
         ]
         if (after.isCurrent(at)) {
           return {
             live: Option.isSome(step.liveGame) ? new Map(advanced.live).set(id, after) : advanced.live,
-            reports
+            events,
+            observations
           }
         }
         if (Option.isNone(current)) return advanced
         return {
           live: new Map([...advanced.live].filter(([game]) => game !== id)),
-          reports: [...reports, FoldReport.Stopped({ liveGame: after, at })]
+          events,
+          observations: [...observations, SlateObservation.Stopped({ liveGame: after, at })]
         }
       }
     }
@@ -274,13 +299,16 @@ function guarded(
     Effect.catchDefect((defect) =>
       Effect.succeed({
         ...advanced,
-        reports: [...advanced.reports, FoldReport.Raised({ snapshot, cause: Cause.die(defect), by })]
+        observations: [
+          ...advanced.observations,
+          SlateObservation.Raised({ snapshot, cause: Cause.die(defect), by })
+        ]
       })
     )
   )
 }
 
-/** Each listed game, in listed order, as the fold has it, or as listed when it has none. */
+/** Each listed game, in listed order, as the slate has it, or as listed when it has none. */
 function asFolded(
   listed: ReadonlyArray<GameSnapshot>,
   live: ReadonlyMap<GameId, LiveGame>

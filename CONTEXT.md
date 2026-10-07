@@ -12,7 +12,7 @@ Every exported type name must be a term here, except the wire schemas in `*Paylo
 | **Ranking** | A team's position in a poll (college). | seed |
 | **Team colors** | The two colors a team plays in: `color` and `alternateColor` on `Team`, six hex digits without `#`, as ESPN sends them. The Hub reads them from the scoreboard; a team ESPN sends none for has neither. | |
 | **Game** | One scheduled contest between two teams. | event, match, competition, fixture |
-| **Slate** | The games in a time window (a Saturday, an NFL week). Shown as a strip under the Stage. The Hub's `Slate` publishes it: each listed game as the fold has it. | schedule, scoreboard |
+| **Slate** | The domain's `Slate`: each league's last listing and every current game's live game, taken from push and poll deliveries in arrival order, and the instant it has ticked to. Pure; `take` and `tick` return the next slate, the game events it said, and its slate observations. The Hub's `LiveGames` service follows the feed log from the game day's start, replaying it quietly and then taking each new frame as it is appended, with a timer and telemetry; the Hub's `Slate` publishes each listed game as the slate has it to the strip under the Stage. Replaying the log gives the same slate. | schedule, scoreboard, fold, live games |
 | **Kickoff** | A game's scheduled start instant. | start time, date |
 
 ### Game state
@@ -24,9 +24,9 @@ Every exported type name must be a term here, except the wire schemas in `*Paylo
 | **Game time** | How far a game has got: before kickoff, in play, or over; then the period; then the clock running down. Orders two snapshots of one game. | timestamp, version |
 | **Progress** | Where a game is in its day: `upcoming`, `live`, or `over`. A delay before kickoff is upcoming and a delay during the game is live. | phase, state |
 | **Live game** | One game as the Hub follows it: its latest snapshot, the delivery source that gave it, its state (`LiveGameState`): upcoming, live, stale, or over, and its plays. Folded from deliveries. A poll at the same game time as a live game's pushed snapshot only refreshes it: the push wins a tie. | game state, entity |
-| **Live games** | The fold: each league's last listing and every current game's live game, applied from deliveries in `seq` order, and the instant it has ticked to. The domain's `LiveGames` is the pure fold; the Hub's service of the same name follows the feed log from the game day's start, replaying it quietly and then taking each new frame as it is appended, with a timer and telemetry. Replaying the log gives the same live games. | game actors, registry |
 | **Following** | Where the live games are in reading the feed log: replaying the day before the Hub serves, live, or halted by a decode defect, when no new frame is taken but the timer still runs and is told; `Following` in code. | phase, mode |
-| **Fold report** | What one take or tick of the live games did to one game, for telemetry to tell: took a snapshot, started, changed, stopped, happened (a game event), dropped, or raised a defect. | fold event, log entry |
+| **Taken** | What one take or tick of the slate did: the next slate, the game events it said, in order, and its slate observations; `Taken` in code. | result, report |
+| **Slate observation** | What one take or tick of the slate did to one game, for telemetry only: took a snapshot, started, changed, stopped, dropped, or raised a defect. The game events it said are `Taken.events`, not observations. | fold report, log entry |
 | **Stale** | A live game no snapshot has reached for 90 seconds. It stays current for 30 minutes after its last update. | |
 | **Delivery** | What a frame said: a league's listing, one game's snapshot, or one game's whole list of plays. | input, update |
 | **Decoder** | The one home of a provider's decode, provided by its adapter as a layer of its own; `HubMode` pairs it with its provider, so a recorded scenario decodes its frames as the provider that recorded them would. | parser |

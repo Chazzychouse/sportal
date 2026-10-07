@@ -3,7 +3,7 @@ import { NodeServices } from "@effect/platform-node"
 import { assert, describe, it } from "@effect/vitest"
 import { Array as Arr, DateTime, Effect, FileSystem, Layer, Path } from "effect"
 import * as EspnDecode from "../provider/espn/EspnDecode.ts"
-import { decodedFrames, reportsOf, writtenScenarios } from "../TestFeed.ts"
+import { decodedFrames, takenOf, writtenScenarios } from "../TestFeed.ts"
 import { Scenarios } from "./Scenarios.ts"
 import { scripts } from "./written/Scripts.ts"
 
@@ -63,11 +63,9 @@ describe("Scenarios", () => {
             [],
             `${name} decodes`
           )
-          const reports = yield* reportsOf(frames)
-          const played = reports.flatMap((report) =>
-            report._tag === "Happened" && report.event.what._tag === "Played"
-              ? [{ game: report.snapshot.id, play: report.event.what.play.id }]
-              : []
+          const { events, observations } = yield* takenOf(frames)
+          const played = events.flatMap(({ game, what }) =>
+            what._tag === "Played" ? [{ game, play: what.play.id }] : []
           )
           assert.isAbove(played.length, 0, `${name} plays`)
           const delivered = decoded.flatMap(({ deliveries }) =>
@@ -78,7 +76,7 @@ describe("Scenarios", () => {
             )
           )
           // ESPN edits a game's plays after it ends; those reach a fold that has let the game go, and are dropped.
-          const [stopped, dropped] = Arr.mapAccum(reports, new Set<string>(), (stopped, report) =>
+          const [stopped, dropped] = Arr.mapAccum(observations, new Set<string>(), (stopped, report) =>
             report._tag === "Stopped"
               ? [new Set([...stopped, report.liveGame.snapshot.id]), []]
               : [stopped, report._tag === "Dropped" && !stopped.has(report.game) ? [report] : []]

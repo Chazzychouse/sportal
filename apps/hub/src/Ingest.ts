@@ -47,7 +47,7 @@ export const layer: Layer.Layer<never, never, HubConfig | Provider | FeedLog | L
           onNone: () => liveGames.latest,
           onSome: liveGames.through
         })
-        return { slate: folded.slate(leagues), failed }
+        return { slate: folded.games(leagues), failed }
       })
       yield* Effect.forkScoped(Effect.repeat(polled, provider.polling))
 

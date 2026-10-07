@@ -1,4 +1,5 @@
-import * as Fold from "@sportal/domain/LiveGames"
+import type { GameEvent } from "@sportal/domain/GameEvent"
+import { Slate as DomainSlate, type Taken } from "@sportal/domain/Slate"
 import {
   Array as Arr,
   Clock,
@@ -33,15 +34,15 @@ import { type Decoded, LiveFeedDemand } from "./provider/Provider.ts"
 export class LiveGames extends Context.Service<
   LiveGames,
   {
-    readonly latest: Effect.Effect<Fold.LiveGames>
+    readonly latest: Effect.Effect<DomainSlate>
     /** The latest first, then each change. `seq` or `reached` alone changing is not a change. */
-    readonly changes: Stream.Stream<Fold.LiveGames>
-    readonly events: Stream.Stream<Data.TaggedEnum.Value<Fold.FoldReport, "Happened">>
+    readonly changes: Stream.Stream<DomainSlate>
+    readonly events: Stream.Stream<GameEvent>
     /**
      * The fold once it has taken frame `seq`, or the latest once it has halted following the log, so a fold that takes
      * no more frames never keeps its caller waiting.
      */
-    through(seq: number): Effect.Effect<Fold.LiveGames>
+    through(seq: number): Effect.Effect<DomainSlate>
     /**
      * What the live feed should follow, afresh on each run: the current games first, then each change of which games
      * they are, and each channel whose document a live frame's decode dropped.
@@ -61,14 +62,14 @@ export class LiveGames extends Context.Service<
       Effect.gen(function* () {
         const feedLog = yield* FeedLog
         const decoder = yield* Decoder
-        const from = dayStart(yield* DateTime.nowInCurrentZone)
+        const from = DomainSlate.dayStart(yield* DateTime.nowInCurrentZone)
         const started = yield* Clock.currentTimeMillis
         const state = yield* SubscriptionRef.make<{
-          readonly folded: Fold.LiveGames
+          readonly folded: DomainSlate
           readonly following: Following
-        }>({ folded: Fold.LiveGames.empty, following: Following.Replaying() })
+        }>({ folded: DomainSlate.empty, following: Following.Replaying() })
         const latest = Effect.map(SubscriptionRef.get(state), ({ folded }) => folded)
-        const events = yield* PubSub.unbounded<Data.TaggedEnum.Value<Fold.FoldReport, "Happened">>()
+        const events = yield* PubSub.unbounded<GameEvent>()
         const resyncs = yield* PubSub.unbounded<string>()
         // What the replay took, for its summary.
         const replayed = yield* Ref.make({ frames: 0, deliveries: 0, plays: 0 })
@@ -81,40 +82,31 @@ export class LiveGames extends Context.Service<
         // Takes or ticks the fold and tells what it did as the following stands, all under the state's lock; publishes
         // whenever the fold or its watermarks moved, so `through` sees every frame. Uninterruptible, so an interrupted
         // caller never leaves telemetry without its state; a report that dies leaves the state as it was.
-        const step = (
-          frame: Option.Option<Decoded>,
-          run: (folded: Fold.LiveGames) => Effect.Effect<{
-            readonly next: Fold.LiveGames
-            readonly reports: ReadonlyArray<Fold.FoldReport>
-          }>
-        ) =>
+        const step = (frame: Option.Option<Decoded>, run: (folded: DomainSlate) => Effect.Effect<Taken>) =>
           SubscriptionRef.modifySomeEffect(state, ({ folded, following }) =>
             Effect.gen(function* () {
-              const { next, reports } = yield* run(folded)
-              yield* told(following, frame, reports)
+              const taken = yield* run(folded)
+              const { next } = taken
+              yield* told(following, frame, taken, folded)
               if (!Following.$is("Replaying")(following)) {
-                yield* PubSub.publishAll(events, reports.filter(Fold.FoldReport.$is("Happened")))
+                yield* PubSub.publishAll(events, taken.events)
                 if (next.live !== folded.live) yield* countByState(next.live)
               }
               const moved =
                 !next.publishesSameAs(folded) ||
                 !Equal.equals(next.seq, folded.seq) ||
                 !Equal.equals(next.reached, folded.reached)
-              return [reports, moved ? Option.some({ folded: next, following }) : Option.none()] as const
+              return [taken, moved ? Option.some({ folded: next, following }) : Option.none()] as const
             })
           ).pipe(Effect.uninterruptible)
 
         const replay = (decoded: Decoded) =>
           step(Option.some(decoded), (folded) => folded.take(decoded)).pipe(
-            Effect.flatMap((reports) =>
+            Effect.flatMap(({ events }) =>
               Ref.update(replayed, ({ frames, deliveries, plays }) => ({
                 frames: frames + 1,
                 deliveries: deliveries + decoded.deliveries.length,
-                plays:
-                  plays +
-                  reports.filter(
-                    (report) => report._tag === "Happened" && report.event.what._tag === "Played"
-                  ).length
+                plays: plays + events.filter(({ what }) => what._tag === "Played").length
               }))
             )
           )
@@ -308,12 +300,6 @@ export class LiveGames extends Context.Service<
  */
 export type Following = Data.TaggedEnum<{ Replaying: object; Live: object; Halted: object }>
 export const Following = Data.taggedEnum<Following>()
-
-/** The start of the game day `now` is in: 04:00 in its zone, or the day before's when it is earlier than that. */
-function dayStart(now: DateTime.Zoned): DateTime.Utc {
-  const today = DateTime.setParts(now, { hour: 4, minute: 0, second: 0, millisecond: 0 })
-  return DateTime.toUtc(DateTime.isLessThan(now, today) ? DateTime.subtract(today, { days: 1 }) : today)
-}
 
 function sleepUntil(at: DateTime.Utc): Effect.Effect<void> {
   return DateTime.now.pipe(

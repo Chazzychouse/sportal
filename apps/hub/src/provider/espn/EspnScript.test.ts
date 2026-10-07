@@ -1,13 +1,13 @@
 import { assert, describe, it } from "@effect/vitest"
 import { GameSnapshot } from "@sportal/domain/Game"
 import { LeagueId } from "@sportal/domain/League"
-import * as Fold from "@sportal/domain/LiveGames"
 import { Play } from "@sportal/domain/Play"
+import { SlateObservation } from "@sportal/domain/Slate"
 import { DateTime, Effect, Schema } from "effect"
 import type { FeedFrame } from "../../Frame.ts"
 import { LiveGames } from "../../LiveGames.ts"
 import { ScenarioScript } from "../../scenario/ScenarioScript.ts"
-import { decodedFrames, liveGames, reportsOf } from "../../TestFeed.ts"
+import { decodedFrames, liveGames, takenOf } from "../../TestFeed.ts"
 import * as EspnDecode from "./EspnDecode.ts"
 import { scenarioOf } from "./EspnScript.ts"
 
@@ -147,7 +147,7 @@ describe("scenarioOf", () => {
           Effect.gen(function* () {
             const folded = yield* (yield* LiveGames).latest
             assert.deepStrictEqual(
-              onWire(slateOnWire(folded.slate(LeagueId.literals))),
+              onWire(slateOnWire(folded.games(LeagueId.literals))),
               onWire(slateOnWire(step.slate)),
               `the slate at ${step.at}`
             )
@@ -221,8 +221,8 @@ describe("scenarioOf", () => {
           ),
           []
         )
-        const reports = yield* reportsOf(frames)
-        assert.deepStrictEqual(reports.filter(Fold.FoldReport.$is("Dropped")), [])
+        const { observations } = yield* takenOf(frames)
+        assert.deepStrictEqual(observations.filter(SlateObservation.$is("Dropped")), [])
         assert.strictEqual(
           decoded.flatMap(({ deliveries }) => deliveries.filter(({ _tag }) => _tag === "Plays")).length,
           // One per game's checkpoint, and one per play.

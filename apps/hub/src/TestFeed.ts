@@ -1,8 +1,9 @@
 import { NodeCrypto } from "@effect/platform-node"
 import type { Delivery } from "@sportal/domain/Delivery"
 import type { GameSnapshot } from "@sportal/domain/Game"
+import type { GameEvent } from "@sportal/domain/GameEvent"
 import type { LeagueId } from "@sportal/domain/League"
-import * as Fold from "@sportal/domain/LiveGames"
+import { Slate, type SlateObservation } from "@sportal/domain/Slate"
 import { DateTime, Effect, Layer, Schedule, Schema, Stream } from "effect"
 import * as Database from "./Database.ts"
 import { FeedLog } from "./FeedLog.ts"
@@ -139,23 +140,25 @@ export function decodedFrames(frames: ReadonlyArray<FeedFrame>) {
   )
 }
 
-/** Every report the domain fold makes taking `frames` whole, in order, as the provided `Decoder` reads them. */
-export function reportsOf(frames: ReadonlyArray<FeedFrame>) {
+/** Every game event and observation the domain slate makes taking `frames` whole, in order, as the provided `Decoder` reads them. */
+export function takenOf(frames: ReadonlyArray<FeedFrame>) {
   return Effect.gen(function* () {
-    const empty: { readonly fold: Fold.LiveGames; readonly reports: ReadonlyArray<Fold.FoldReport> } = {
-      fold: Fold.LiveGames.empty,
-      reports: []
-    }
-    const { reports } = yield* Effect.reduce(
+    const empty: {
+      readonly slate: Slate
+      readonly events: ReadonlyArray<GameEvent>
+      readonly observations: ReadonlyArray<SlateObservation>
+    } = { slate: Slate.empty, events: [], observations: [] }
+    const { events, observations } = yield* Effect.reduce(
       yield* decodedFrames(frames),
       () => empty,
-      ({ fold, reports }, said) =>
-        Effect.map(fold.take(said), ({ next, reports: more }) => ({
-          fold: next,
-          reports: [...reports, ...more]
+      ({ slate, events, observations }, said) =>
+        Effect.map(slate.take(said), (taken) => ({
+          slate: taken.next,
+          events: [...events, ...taken.events],
+          observations: [...observations, ...taken.observations]
         }))
     )
-    return reports
+    return { events, observations }
   })
 }
 

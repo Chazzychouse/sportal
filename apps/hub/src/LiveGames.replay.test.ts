@@ -2,11 +2,11 @@ import { join } from "node:path"
 import { NodeCrypto, NodeServices } from "@effect/platform-node"
 import { assert, describe, it } from "@effect/vitest"
 import { Delivery } from "@sportal/domain/Delivery"
-import { GameId, type GameSnapshot } from "@sportal/domain/Game"
+import { GameId } from "@sportal/domain/Game"
 import type { GameEvent } from "@sportal/domain/GameEvent"
 import { type LiveGame, LiveGameState } from "@sportal/domain/LiveGame"
-import type * as Fold from "@sportal/domain/LiveGames"
 import { PlayId } from "@sportal/domain/Play"
+import type { Slate as DomainSlate } from "@sportal/domain/Slate"
 import { liveSnapshot, play, snapshot, team } from "@sportal/domain/TestGame"
 import {
   Context,
@@ -156,7 +156,7 @@ describe("following the feed log", () => {
       assert.isUndefined(yield* counted("sportal_game_events"))
       const taken = yield* eventsWhile(takenInTime(day))
       assert.deepStrictEqual(
-        taken.map((published) => [published.snapshot.id, published.event.what._tag]),
+        taken.map(({ game, what }) => [game, what._tag]),
         [
           [one, "Played"],
           [one, "Played"]
@@ -470,7 +470,7 @@ describe("a recorded game", () => {
         assert.isTrue(Equal.equals(first.listed, once.latest.listed), "and the listings")
         assert.isTrue(Equal.equals(once.held, again.held))
         assert.isTrue(Equal.equals(once.events, again.events))
-        const played = once.events.filter(({ event }) => event.what._tag === "Played").length
+        const played = once.events.filter(({ what }) => what._tag === "Played").length
         assert.strictEqual(played, recordedPlays, "each play is played once")
         const summary = logs.find(({ message }) => message.includes("replayed"))
         assert.include(summary?.message, ` ${played} plays`, "and the replay took each play live did")
@@ -589,9 +589,7 @@ function takenInTime(frames: ReadonlyArray<FeedFrame>) {
 function eventsWhile(run: Effect.Effect<void, never, LiveGames | FeedLog>) {
   return Effect.gen(function* () {
     const liveGames = yield* LiveGames
-    const seen = yield* Ref.make<
-      ReadonlyArray<{ readonly snapshot: GameSnapshot; readonly event: GameEvent }>
-    >([])
+    const seen = yield* Ref.make<ReadonlyArray<GameEvent>>([])
     const subscriber = yield* liveGames.events.pipe(
       Stream.runForEach((published) => Ref.update(seen, (all) => [...all, published])),
       Effect.forkChild({ startImmediately: true })
@@ -648,10 +646,8 @@ function takenLive(frames: ReadonlyArray<FeedFrame>, sampling: ReadonlyArray<num
   const taking = Effect.gen(function* () {
     const liveGames = yield* LiveGames
     const held = yield* Ref.make<ReadonlyArray<LiveGame>>([])
-    const sampled = yield* Ref.make<ReadonlyMap<number, Fold.LiveGames>>(new Map())
-    const events = yield* Ref.make<
-      ReadonlyArray<{ readonly snapshot: GameSnapshot; readonly event: GameEvent }>
-    >([])
+    const sampled = yield* Ref.make<ReadonlyMap<number, DomainSlate>>(new Map())
+    const events = yield* Ref.make<ReadonlyArray<GameEvent>>([])
     const subscriber = yield* liveGames.events.pipe(
       Stream.runForEach((published) => Ref.update(events, (seen) => [...seen, published])),
       Effect.forkChild({ startImmediately: true })

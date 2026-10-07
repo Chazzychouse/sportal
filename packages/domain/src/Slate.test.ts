@@ -3,58 +3,71 @@ import { DateTime, Duration, Effect, Option } from "effect"
 import { Delivery, type DeliverySource } from "./Delivery.ts"
 import { GameId, GameSnapshot } from "./Game.ts"
 import { LiveGameState } from "./LiveGame.ts"
-import { FoldReport, LiveGames } from "./LiveGames.ts"
 import { PlayId } from "./Play.ts"
+import { Slate, SlateObservation } from "./Slate.ts"
 import { play, snapshot } from "./TestGame.ts"
 
 const t0 = DateTime.makeUnsafe("2026-10-03T16:00:00Z")
 const one = GameId.make("1")
 const two = GameId.make("2")
 
-describe("LiveGames", () => {
+describe("Slate", () => {
+  it("dayStart is 04:00 local, the day before when now is earlier", () => {
+    const at = (time: string) =>
+      DateTime.makeZonedUnsafe(`2026-10-07T${time}:00`, {
+        timeZone: "America/Chicago",
+        adjustForTimeZone: true
+      })
+    const four = (day: string) =>
+      DateTime.toUtc(
+        DateTime.makeZonedUnsafe(`2026-10-${day}T04:00:00`, {
+          timeZone: "America/Chicago",
+          adjustForTimeZone: true
+        })
+      )
+    assert.deepStrictEqual(Slate.dayStart(at("03:59")), four("06"))
+    assert.deepStrictEqual(Slate.dayStart(at("04:00")), four("07"))
+  })
+
   it("empty holds nothing", () => {
-    assert.strictEqual(LiveGames.empty.live.size, 0)
-    assert.strictEqual(LiveGames.empty.listed.size, 0)
-    assert.deepStrictEqual(LiveGames.empty.earliestDue(), Option.none())
-    assert.deepStrictEqual(LiveGames.empty.slate(["fbs", "nfl"]), [])
+    assert.strictEqual(Slate.empty.live.size, 0)
+    assert.strictEqual(Slate.empty.listed.size, 0)
+    assert.deepStrictEqual(Slate.empty.earliestDue(), Option.none())
+    assert.deepStrictEqual(Slate.empty.games(["fbs", "nfl"]), [])
   })
 
   it.effect("a listing with a live game starts it, and the fold keeps the listing", () =>
     Effect.gen(function* () {
       const game = live(one, "10:00")
-      const { next, reports } = yield* took(LiveGames.empty, [listing("fbs", [game])], t0)
+      const { next, observations } = yield* took(Slate.empty, [listing("fbs", [game])], t0)
       assert.strictEqual(next.live.get(one)?.snapshot, game)
       assert.deepStrictEqual(next.listed.get("fbs"), [game])
-      assert.deepStrictEqual(tags(reports), ["Took", "Started"])
-      assert.deepStrictEqual(outcomes(reports), ["taken"])
+      assert.deepStrictEqual(tags(observations), ["Took", "Started"])
+      assert.deepStrictEqual(outcomes(observations), ["taken"])
     })
   )
 
   it.effect("an upcoming game far from kickoff is listed but not held, and only its take is reported", () =>
     Effect.gen(function* () {
       const later = snapshot({ id: two, kickoff: DateTime.add(t0, { hours: 3 }) })
-      const { next, reports } = yield* took(LiveGames.empty, [listing("fbs", [later])], t0)
+      const { next, observations } = yield* took(Slate.empty, [listing("fbs", [later])], t0)
       assert.deepStrictEqual(next.listed.get("fbs"), [later])
       assert.isFalse(next.live.has(two))
-      assert.deepStrictEqual(tags(reports), ["Took"])
+      assert.deepStrictEqual(tags(observations), ["Took"])
     })
   )
 
   it.effect("a pushed snapshot behind the held one is behind, and the live game is unchanged", () =>
     Effect.gen(function* () {
-      const held = yield* taken(
-        LiveGames.empty,
-        [pushed(snapshot({ id: one, status: "live", period: 2 }))],
-        t0
-      )
-      const { next, reports } = yield* took(
+      const held = yield* taken(Slate.empty, [pushed(snapshot({ id: one, status: "live", period: 2 }))], t0)
+      const { next, observations } = yield* took(
         held,
         [pushed(snapshot({ id: one, status: "live", period: 1 }))],
         t0
       )
       assert.strictEqual(next.live.get(one), held.live.get(one))
-      assert.deepStrictEqual(tags(reports), ["Took"])
-      assert.deepStrictEqual(outcomes(reports), ["behind"])
+      assert.deepStrictEqual(tags(observations), ["Took"])
+      assert.deepStrictEqual(outcomes(observations), ["behind"])
     })
   )
 
@@ -68,32 +81,42 @@ describe("LiveGames", () => {
           clock: "4:12",
           home: { ...live(one, "4:12").home, score }
         })
-      const held = yield* taken(LiveGames.empty, [pushed(at(14))], t0)
-      const { next, reports } = yield* took(held, [polled(at(13))], t0)
+      const held = yield* taken(Slate.empty, [pushed(at(14))], t0)
+      const { next, observations } = yield* took(held, [polled(at(13))], t0)
       assert.strictEqual(next.live.get(one)?.snapshot.home.score, 14)
-      assert.deepStrictEqual(outcomes(reports), ["kept"])
+      assert.deepStrictEqual(outcomes(observations), ["kept"])
     })
   )
 
   it.effect("plays for a game not held are dropped, and nothing changes", () =>
     Effect.gen(function* () {
-      const { next, reports } = yield* took(
-        LiveGames.empty,
+      const { next, observations } = yield* took(
+        Slate.empty,
         [Delivery.cases.Plays.make({ game: one, plays: [play()] })],
         t0
       )
-      assert.strictEqual(next.live, LiveGames.empty.live)
-      assert.strictEqual(next.listed, LiveGames.empty.listed)
-      assert.deepStrictEqual(reports, [FoldReport.Dropped({ game: one })])
+      assert.strictEqual(next.live, Slate.empty.live)
+      assert.strictEqual(next.listed, Slate.empty.listed)
+      assert.deepStrictEqual(observations, [SlateObservation.Dropped({ game: one })])
+    })
+  )
+
+  it.effect("plays for a held game say their events, stamped with the game and the instant, in order", () =>
+    Effect.gen(function* () {
+      const held = yield* taken(Slate.empty, [polled(live(one, "10:00"))], t0)
+      const at = DateTime.add(t0, { seconds: 5 })
+      const { events } = yield* took(held, [playsOf(one, 3)], at)
+      assert.isAbove(events.length, 0)
+      assert.isTrue(events.every((event) => event.game === one && DateTime.Equivalence(event.at, at)))
     })
   )
 
   it.effect("a tick past a game's wake time ticks it: a live game goes stale", () =>
     Effect.gen(function* () {
-      const held = yield* taken(LiveGames.empty, [polled(live(one, "10:00"))], t0)
-      const { next, reports } = yield* held.tick(DateTime.add(t0, { seconds: 100 }))
+      const held = yield* taken(Slate.empty, [polled(live(one, "10:00"))], t0)
+      const { next, observations } = yield* held.tick(DateTime.add(t0, { seconds: 100 }))
       assert.isTrue(LiveGameState.$is("Stale")(next.live.get(one)?.state ?? LiveGameState.Over()))
-      const changed = reports.filter((report) => report._tag === "Changed")
+      const changed = observations.filter((report) => report._tag === "Changed")
       assert.isTrue(
         changed.some(
           ({ before, after }) =>
@@ -105,41 +128,38 @@ describe("LiveGames", () => {
 
   it.effect("a game taken as final is stopped and let go at once", () =>
     Effect.gen(function* () {
-      const held = yield* taken(LiveGames.empty, [polled(live(one, "1:00"))], t0)
-      const { next, reports } = yield* took(
+      const held = yield* taken(Slate.empty, [polled(live(one, "1:00"))], t0)
+      const { next, observations } = yield* took(
         held,
         [polled(snapshot({ id: one, status: "final", period: 4, clock: "0:00" }))],
         t0
       )
       assert.isFalse(next.live.has(one))
-      assert.deepStrictEqual(
-        tags(reports).filter((tag) => tag !== "Happened"),
-        ["Took", "Changed", "Stopped"]
-      )
+      assert.deepStrictEqual(tags(observations), ["Took", "Changed", "Stopped"])
     })
   )
 
   it.effect("a stale game ticked past its hold is stopped and let go", () =>
     Effect.gen(function* () {
-      const held = yield* taken(LiveGames.empty, [polled(live(one, "10:00"))], t0)
-      const { next, reports } = yield* held.tick(DateTime.add(t0, { minutes: 31 }))
+      const held = yield* taken(Slate.empty, [polled(live(one, "10:00"))], t0)
+      const { next, observations } = yield* held.tick(DateTime.add(t0, { minutes: 31 }))
       assert.isFalse(next.live.has(one))
-      assert.strictEqual(reports.at(-1)?._tag, "Stopped")
+      assert.strictEqual(observations.at(-1)?._tag, "Stopped")
     })
   )
 
   it.effect("a take that raises a defect is reported, and the game keeps its last good live game", () =>
     Effect.gen(function* () {
-      const held = yield* taken(LiveGames.empty, [polled(live(one, "9:00"))], t0)
-      const { next, reports } = yield* took(held, [polled(broken(one))], t0)
+      const held = yield* taken(Slate.empty, [polled(live(one, "9:00"))], t0)
+      const { next, observations } = yield* took(held, [polled(broken(one))], t0)
       assert.strictEqual(next.live.get(one), held.live.get(one))
-      assert.deepStrictEqual(tags(reports), ["Raised"])
+      assert.deepStrictEqual(tags(observations), ["Raised"])
     })
   )
 
   it.effect("a tick keeps the last seq; a take replaces it", () =>
     Effect.gen(function* () {
-      const first = (yield* LiveGames.empty.take({
+      const first = (yield* Slate.empty.take({
         deliveries: [polled(live(one, "10:00"))],
         at: t0,
         seq: 7
@@ -155,7 +175,7 @@ describe("LiveGames", () => {
 
   it.effect("a frame with no deliveries ticks a due game and sets seq", () =>
     Effect.gen(function* () {
-      const held = yield* taken(LiveGames.empty, [polled(live(one, "10:00"))], t0)
+      const held = yield* taken(Slate.empty, [polled(live(one, "10:00"))], t0)
       const { next } = yield* held.take({ deliveries: [], at: DateTime.add(t0, { seconds: 100 }), seq: 9 })
       assert.isTrue(LiveGameState.$is("Stale")(next.live.get(one)?.state ?? LiveGameState.Over()))
       assert.deepStrictEqual(next.seq, Option.some(9))
@@ -168,14 +188,14 @@ describe("LiveGames", () => {
       Effect.gen(function* () {
         const listedGame = live(one, "10:00")
         const pushedGame = live(one, "9:00")
-        const { next, reports } = yield* took(
-          LiveGames.empty,
+        const { next, observations } = yield* took(
+          Slate.empty,
           [listing("fbs", [listedGame]), pushed(pushedGame)],
           t0
         )
         assert.strictEqual(next.live.get(one)?.snapshot, pushedGame)
         assert.deepStrictEqual(
-          reports.flatMap((report) =>
+          observations.flatMap((report) =>
             report._tag === "Took" ? [[report.snapshot, report.from, report.outcome] as const] : []
           ),
           [
@@ -189,10 +209,10 @@ describe("LiveGames", () => {
   it.effect("two deliveries in one frame fold as the same two in two frames at the same instant", () =>
     Effect.gen(function* () {
       const deliveries = [listing("fbs", [live(one, "10:00"), live(two, "5:00")]), pushed(live(one, "9:00"))]
-      const together = yield* taken(LiveGames.empty, deliveries, t0)
+      const together = yield* taken(Slate.empty, deliveries, t0)
       const apart = yield* Effect.reduce(
         deliveries,
-        () => LiveGames.empty,
+        () => Slate.empty,
         (fold, delivery) => taken(fold, [delivery], t0)
       )
       assert.deepStrictEqual(together.live, apart.live)
@@ -208,13 +228,13 @@ describe("LiveGames", () => {
         const listedNfl = snapshot({ id: two, league: "nfl", kickoff: DateTime.add(t0, { hours: 3 }) })
         const later = live(one, "9:00")
         const unlisted = live(GameId.make("3"), "5:00")
-        const fold = yield* taken(LiveGames.empty, [listing("fbs", [listedFbs])], t0).pipe(
+        const fold = yield* taken(Slate.empty, [listing("fbs", [listedFbs])], t0).pipe(
           Effect.flatMap((fold) => taken(fold, [listing("nfl", [listedNfl])], t0)),
           Effect.flatMap((fold) => taken(fold, [polled(later)], t0)),
           Effect.flatMap((fold) => taken(fold, [polled(unlisted)], t0))
         )
-        assert.deepStrictEqual(fold.slate(["fbs"]), [later])
-        assert.deepStrictEqual(fold.slate(["nfl", "fbs"]), [listedNfl, later])
+        assert.deepStrictEqual(fold.games(["fbs"]), [later])
+        assert.deepStrictEqual(fold.games(["nfl", "fbs"]), [listedNfl, later])
       })
   )
 
@@ -225,21 +245,21 @@ describe("LiveGames", () => {
         const three = GameId.make("3")
         const listedNfl = live(two, "5:00")
         const fold = yield* taken(
-          LiveGames.empty,
+          Slate.empty,
           [listing("fbs", [live(one, "10:00"), live(three, "9:00")]), listing("nfl", [listedNfl])],
           t0
         ).pipe(Effect.flatMap((fold) => taken(fold, [playsOf(one, 12), playsOf(two, 3)], t0)))
         assert.deepStrictEqual(
-          fold.recentPlays(fold.slate(["fbs"]))[one]?.map(({ sequence }) => sequence),
+          fold.recentPlays(fold.games(["fbs"]))[one]?.map(({ sequence }) => sequence),
           [3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
         )
-        assert.deepStrictEqual(Object.keys(fold.recentPlays(fold.slate(["fbs"]))), [one])
+        assert.deepStrictEqual(Object.keys(fold.recentPlays(fold.games(["fbs"]))), [one])
         assert.deepStrictEqual(
-          fold.recentPlays(fold.slate(["nfl"]))[two]?.map(({ sequence }) => sequence),
+          fold.recentPlays(fold.games(["nfl"]))[two]?.map(({ sequence }) => sequence),
           [1, 2, 3]
         )
-        assert.deepStrictEqual(Object.keys(fold.recentPlays(fold.slate(["nfl"]))), [two])
-        assert.deepStrictEqual(Object.keys(fold.recentPlays(fold.slate(["fbs", "nfl"]))).toSorted(), [
+        assert.deepStrictEqual(Object.keys(fold.recentPlays(fold.games(["nfl"]))), [two])
+        assert.deepStrictEqual(Object.keys(fold.recentPlays(fold.games(["fbs", "nfl"]))).toSorted(), [
           one,
           two
         ])
@@ -250,16 +270,16 @@ describe("LiveGames", () => {
     Effect.gen(function* () {
       const listed = live(one, "10:00")
       const unlisted = live(two, "5:00")
-      const fold = yield* taken(LiveGames.empty, [listing("fbs", [listed])], t0).pipe(
+      const fold = yield* taken(Slate.empty, [listing("fbs", [listed])], t0).pipe(
         Effect.flatMap((fold) => taken(fold, [polled(unlisted)], t0))
       )
-      assert.deepStrictEqual(fold.games(), [listed, unlisted])
+      assert.deepStrictEqual(fold.everyGame(), [listed, unlisted])
     })
   )
 
   it.effect("a take that moves only seq publishes the same", () =>
     Effect.gen(function* () {
-      const held = yield* taken(LiveGames.empty, [polled(live(one, "10:00"))], t0)
+      const held = yield* taken(Slate.empty, [polled(live(one, "10:00"))], t0)
       const moved = yield* taken(held, [], t0)
       assert.notDeepEqual(moved.seq, held.seq)
       assert.isTrue(moved.publishesSameAs(held))
@@ -268,7 +288,7 @@ describe("LiveGames", () => {
 
   it.effect("a tick that changed nothing publishes the same; a take that changed a game does not", () =>
     Effect.gen(function* () {
-      const held = yield* taken(LiveGames.empty, [polled(live(one, "10:00"))], t0)
+      const held = yield* taken(Slate.empty, [polled(live(one, "10:00"))], t0)
       const still = (yield* held.tick(DateTime.addDuration(t0, Duration.seconds(1)))).next
       assert.isTrue(still.publishesSameAs(held))
       const took = yield* taken(
@@ -282,20 +302,20 @@ describe("LiveGames", () => {
 })
 
 /** `fold` taking `deliveries` as one frame received at `at`, the frame after its last. */
-function took(fold: LiveGames, deliveries: ReadonlyArray<Delivery>, at: DateTime.Utc) {
+function took(fold: Slate, deliveries: ReadonlyArray<Delivery>, at: DateTime.Utc) {
   return fold.take({ deliveries, at, seq: Option.getOrElse(fold.seq, () => 0) + 1 })
 }
 
-function taken(fold: LiveGames, deliveries: ReadonlyArray<Delivery>, at: DateTime.Utc) {
+function taken(fold: Slate, deliveries: ReadonlyArray<Delivery>, at: DateTime.Utc) {
   return Effect.map(took(fold, deliveries, at), ({ next }) => next)
 }
 
-function tags(reports: ReadonlyArray<FoldReport>): ReadonlyArray<FoldReport["_tag"]> {
-  return reports.map(({ _tag }) => _tag)
+function tags(observations: ReadonlyArray<SlateObservation>): ReadonlyArray<SlateObservation["_tag"]> {
+  return observations.map(({ _tag }) => _tag)
 }
 
-function outcomes(reports: ReadonlyArray<FoldReport>): ReadonlyArray<string> {
-  return reports.flatMap((report) => (report._tag === "Took" ? [report.outcome] : []))
+function outcomes(observations: ReadonlyArray<SlateObservation>): ReadonlyArray<string> {
+  return observations.flatMap((report) => (report._tag === "Took" ? [report.outcome] : []))
 }
 
 function listing(league: "fbs" | "nfl", games: ReadonlyArray<GameSnapshot>) {

@@ -27,7 +27,7 @@ export class Slate extends Context.Service<
         liveGames.changes.pipe(
           Stream.debounce("250 millis"),
           Stream.runForEach((folded) => {
-            const games = folded.slate(LeagueId.literals)
+            const games = folded.games(LeagueId.literals)
             return SubscriptionRef.set(state, { games, recentPlays: folded.recentPlays(games) })
           })
         ),

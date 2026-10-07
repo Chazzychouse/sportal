@@ -550,7 +550,7 @@ function listed(league: LeagueId) {
 /** The slate as the fold has it. */
 const slate = Effect.map(
   LiveGames.use((liveGames) => liveGames.latest),
-  (folded) => folded.slate(LeagueId.literals)
+  (folded) => folded.games(LeagueId.literals)
 )
 
 const tieInRedZone = Effect.map(

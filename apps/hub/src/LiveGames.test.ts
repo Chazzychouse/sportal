@@ -1,7 +1,6 @@
 import { assert, describe, it } from "@effect/vitest"
 import { Delivery } from "@sportal/domain/Delivery"
 import { GameId, GameSnapshot } from "@sportal/domain/Game"
-import type { GameEvent } from "@sportal/domain/GameEvent"
 import { type LiveGame, LiveGameState } from "@sportal/domain/LiveGame"
 import { liveSnapshot, play, snapshot, team } from "@sportal/domain/TestGame"
 import {
@@ -133,10 +132,9 @@ describe("LiveGames", () => {
       yield* delivered(Delivery.cases.Plays.make({ game: one, plays: [play()] }), frameAt)
       assert.strictEqual((yield* liveGameOf(one)).plays.length, 1)
       const [first] = yield* Fiber.join(events)
-      assert.strictEqual(first?.snapshot.id, one)
-      assert.strictEqual(first?.event.game, one)
-      assert.deepStrictEqual(first?.event.at, frameAt)
-      assert.strictEqual(first?.event.what._tag, "Played")
+      assert.strictEqual(first?.game, one)
+      assert.deepStrictEqual(first?.at, frameAt)
+      assert.strictEqual(first?.what._tag, "Played")
       assert.strictEqual(yield* counted("sportal_plays", { league: "fbs" }), 1)
     }).pipe(Effect.provide(liveGames()), withMetrics)
   )
@@ -514,10 +512,9 @@ describe("LiveGames", () => {
           points: 7
         })
         assert.strictEqual(yield* counted("sportal_game_events", { game: "1", event: "ScoreChanged" }), 1)
-        const published: ReadonlyArray<{ readonly snapshot: GameSnapshot; readonly event: GameEvent }> =
-          yield* Fiber.join(events)
+        const published = yield* Fiber.join(events)
         assert.deepStrictEqual(
-          published.map((published) => [published.snapshot.id, published.event.what._tag]),
+          published.map(({ game, what }) => [game, what._tag]),
           [[one, "ScoreChanged"]]
         )
       }).pipe(Effect.provide(liveGames().pipe(Layer.provideMerge(layer))), withMetrics)

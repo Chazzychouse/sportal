@@ -99,7 +99,7 @@ describe("scripts", () => {
 function at(script: ScenarioScript, seconds: number) {
   const until = DateTime.add(script.origin, { seconds })
   return LiveGames.use((live) => live.latest).pipe(
-    Effect.map((folded) => folded.slate(LeagueId.literals)),
+    Effect.map((folded) => folded.games(LeagueId.literals)),
     Effect.provide(
       liveGames(
         EspnScript.scenarioOf(script).frames.filter((frame) =>

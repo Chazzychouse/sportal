@@ -589,7 +589,7 @@ function pollOf(games: ReadonlyArray<GameSnapshot>) {
 /** The fbs listing as the fold has it. */
 function slateOf() {
   return Effect.gen(function* () {
-    return (yield* (yield* LiveGames).latest).slate(["fbs"])
+    return (yield* (yield* LiveGames).latest).games(["fbs"])
   })
 }
 

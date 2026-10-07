@@ -1,7 +1,7 @@
 import { type GameId, GameSnapshot } from "@sportal/domain/Game"
-import type { GameEventKind } from "@sportal/domain/GameEvent"
+import type { GameEvent, GameEventKind } from "@sportal/domain/GameEvent"
 import type { LiveGame, LiveGameState } from "@sportal/domain/LiveGame"
-import { FoldReport } from "@sportal/domain/LiveGames"
+import { type Slate, SlateObservation, type Taken } from "@sportal/domain/Slate"
 import { Cause, DateTime, Duration, Effect, Exit, Match, Metric, Option, Schema } from "effect"
 import { noticed } from "./DecodeTelemetry.ts"
 import type { Following } from "./LiveGames.ts"
@@ -9,23 +9,34 @@ import type { Decoded } from "./provider/Provider.ts"
 
 /**
  * What one take or tick of the live games did, told as their following stands. During the replay, only a defect is
- * logged: every report and notice was told when its frame first arrived. Otherwise each notice of the frame taken is told,
- * then each report is logged and counted. `frame` is the frame taken; a tick has none.
+ * logged: every observation and notice was told when its frame first arrived. Otherwise each notice of the frame taken
+ * is told, then each observation and each game event is logged and counted. `before` is the slate taken from, which
+ * holds the snapshot of a game the next slate has let go. `frame` is the frame taken; a tick has none.
  */
 export function told(
   following: Following,
   frame: Option.Option<Decoded>,
-  reports: ReadonlyArray<FoldReport>
+  taken: Taken,
+  before: Slate
 ): Effect.Effect<void> {
+  const { observations, events } = taken
   const seq = Option.map(frame, ({ seq }) => seq)
   const loudly = () =>
     Option.match(frame, {
       onNone: () => Effect.void,
       onSome: ({ notices, seq }) =>
         Effect.forEach(notices, (notice) => noticed(notice, seq), { discard: true })
-    }).pipe(Effect.andThen(Effect.forEach(reports, (report) => toldLive(report, seq), { discard: true })))
+    }).pipe(
+      Effect.andThen(
+        Effect.forEach(observations, (observation) => toldLive(observation, seq), { discard: true })
+      ),
+      Effect.andThen(
+        Effect.forEach(events, (event) => toldEvent(event, taken.next, before), { discard: true })
+      )
+    )
   return Match.valueTags(following, {
-    Replaying: () => Effect.forEach(reports, (report) => toldInReplay(report, seq), { discard: true }),
+    Replaying: () =>
+      Effect.forEach(observations, (observation) => toldInReplay(observation, seq), { discard: true }),
     Live: loudly,
     Halted: loudly
   })
@@ -57,21 +68,21 @@ export function timerDefect(defect: unknown): Effect.Effect<void> {
   )
 }
 
-/** A report as a replay tells it: only a defect is logged. */
-function toldInReplay(report: FoldReport, seq: Option.Option<number>): Effect.Effect<void> {
-  return FoldReport.$is("Raised")(report)
+/** An observation as a replay tells it: only a defect is logged. */
+function toldInReplay(observation: SlateObservation, seq: Option.Option<number>): Effect.Effect<void> {
+  return SlateObservation.$is("Raised")(observation)
     ? logDefect(
-        `LiveGames: ${report.by} raised a defect in replay; keeping the last good live game`,
-        report.cause,
-        report.snapshot,
+        `LiveGames: ${observation.by} raised a defect in replay; keeping the last good live game`,
+        observation.cause,
+        observation.snapshot,
         seq
       )
     : Effect.void
 }
 
-/** A report's logs and metrics, as a live fold tells them. */
-function toldLive(report: FoldReport, seq: Option.Option<number>): Effect.Effect<void> {
-  return FoldReport.$match(report, {
+/** An observation's logs and metrics, as a live fold tells them. */
+function toldLive(observation: SlateObservation, seq: Option.Option<number>): Effect.Effect<void> {
+  return SlateObservation.$match(observation, {
     Took: ({ snapshot, from, outcome, had }) =>
       Effect.logDebug(
         `LiveGames: ${snapshot.matchup()}: ${outcome} ${from} ${snapshot.statusLine()}${Option.match(had, {
@@ -102,15 +113,6 @@ function toldLive(report: FoldReport, seq: Option.Option<number>): Effect.Effect
         Effect.andThen(gaugeState(liveGame, 0)),
         Effect.annotateLogs(annotationsOf(liveGame.snapshot))
       ),
-    Happened: (happened) =>
-      logEvent(happened.event.what, happened.snapshot).pipe(
-        Effect.andThen(
-          happened.event.what._tag === "Played"
-            ? Metric.update(Metric.withAttributes(plays, { league: happened.snapshot.league }), 1)
-            : Effect.void
-        ),
-        Effect.annotateLogs(annotationsOf(happened.snapshot))
-      ),
     Dropped: ({ game }) =>
       Effect.logDebug(`LiveGames: plays for game ${game} dropped: no live game holds it`).pipe(
         Effect.andThen(Metric.update(deliveriesDropped, 1))
@@ -118,6 +120,30 @@ function toldLive(report: FoldReport, seq: Option.Option<number>): Effect.Effect
     Raised: ({ snapshot, cause, by }) =>
       logDefect(`LiveGames: ${by} raised a defect; keeping the last good live game`, cause, snapshot, seq)
   })
+}
+
+/**
+ * A game event's log and metrics, with the snapshot of its game: the next slate's, or the one before it for a game
+ * the next has let go. An event of a game neither holds is not told.
+ */
+function toldEvent(event: GameEvent, next: Slate, before: Slate): Effect.Effect<void> {
+  return Option.match(
+    Option.orElse(Option.fromNullishOr(next.live.get(event.game)), () =>
+      Option.fromNullishOr(before.live.get(event.game))
+    ),
+    {
+      onNone: () => Effect.void,
+      onSome: ({ snapshot }) =>
+        logEvent(event.what, snapshot).pipe(
+          Effect.andThen(
+            event.what._tag === "Played"
+              ? Metric.update(Metric.withAttributes(plays, { league: snapshot.league }), 1)
+              : Effect.void
+          ),
+          Effect.annotateLogs(annotationsOf(snapshot))
+        )
+    }
+  )
 }
 
 /** Game `snapshot`'s log annotations and metric attributes. */
