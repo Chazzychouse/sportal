@@ -4,7 +4,7 @@ import { BallSpot, GameId, GameSnapshot, type GameStatus } from "./Game.ts"
 import { Situation } from "./Situation.ts"
 import { broadcast, liveSnapshot, situation, snapshot, team } from "./TestGame.ts"
 
-describe("GameSnapshot.progress", () => {
+describe("GameSnapshot#progress", () => {
   it.each([
     ["scheduled", "upcoming"],
     ["delayed", "upcoming"],
@@ -13,42 +13,66 @@ describe("GameSnapshot.progress", () => {
     ["final", "over"],
     ["postponed", "over"],
     ["canceled", "over"]
-  ] as const)("is %s → %s", (status, progress) => {
-    assert.strictEqual(snapshot({ status }).progress(), progress)
+  ] as const)("should read a %s game as %s", (status, progress) => {
+    const game = snapshot({ status })
+
+    assert.strictEqual(game.progress(), progress)
   })
 
-  it("reads a delay before kickoff as upcoming and a delay during the game as live", () => {
-    assert.strictEqual(snapshot({ status: "delayed", period: 0 }).progress(), "upcoming")
-    assert.strictEqual(snapshot({ status: "delayed", period: 2 }).progress(), "live")
-  })
-})
+  it("should read a delay before kickoff as upcoming", () => {
+    const game = snapshot({ status: "delayed", period: 0 })
 
-describe("GameSnapshot.margin", () => {
-  it("is the points between the teams", () => {
-    assert.strictEqual(
-      snapshot({ home: { team: team("H"), score: 24 }, away: { team: team("A"), score: 17 } }).margin(),
-      7
-    )
-    assert.strictEqual(
-      snapshot({ home: { team: team("H"), score: 3 }, away: { team: team("A"), score: 10 } }).margin(),
-      7
-    )
-    assert.strictEqual(
-      snapshot({ home: { team: team("H"), score: 14 }, away: { team: team("A"), score: 14 } }).margin(),
-      0
-    )
+    assert.strictEqual(game.progress(), "upcoming")
+  })
+
+  it("should read a delay during the game as live", () => {
+    const game = snapshot({ status: "delayed", period: 2 })
+
+    assert.strictEqual(game.progress(), "live")
   })
 })
 
-describe("GameSnapshot.inOvertime", () => {
-  it("starts in the fifth period", () => {
-    assert.isFalse(snapshot({ period: 4 }).inOvertime())
-    assert.isTrue(snapshot({ period: 5 }).inOvertime())
-    assert.isTrue(snapshot({ period: 6 }).inOvertime())
+describe("GameSnapshot#margin", () => {
+  it("should be the points the home team leads by", () => {
+    const game = withScores(24, 17)
+
+    assert.strictEqual(game.margin(), 7)
+  })
+
+  it("should be the points the away team leads by", () => {
+    const game = withScores(3, 10)
+
+    assert.strictEqual(game.margin(), 7)
+  })
+
+  it("should be zero when the scores are level", () => {
+    const game = withScores(14, 14)
+
+    assert.strictEqual(game.margin(), 0)
   })
 })
 
-describe("GameSnapshot.scored", () => {
+describe("GameSnapshot#inOvertime", () => {
+  it("should not be in overtime in the fourth period", () => {
+    const game = snapshot({ period: 4 })
+
+    assert.isFalse(game.inOvertime())
+  })
+
+  it("should be in overtime in the fifth period", () => {
+    const game = snapshot({ period: 5 })
+
+    assert.isTrue(game.inOvertime())
+  })
+
+  it("should be in overtime in the sixth period", () => {
+    const game = snapshot({ period: 6 })
+
+    assert.isTrue(game.inOvertime())
+  })
+})
+
+describe("GameSnapshot#scored", () => {
   it.each([
     ["scheduled", 0, false],
     ["live", 2, true],
@@ -58,52 +82,81 @@ describe("GameSnapshot.scored", () => {
     ["delayed", 2, true],
     ["postponed", 0, false],
     ["canceled", 0, false]
-  ] as const)("is %s in period %d → %s", (status, period, scored) => {
-    assert.strictEqual(snapshot({ status, period }).scored(), scored)
+  ] as const)("should read %s in period %d as scored: %s", (status, period, scored) => {
+    const game = snapshot({ status, period })
+
+    assert.strictEqual(game.scored(), scored)
   })
 })
 
-describe("GameSnapshot.networks", () => {
-  it("joins the networks with a dot", () => {
-    assert.strictEqual(snapshot().networks(), "")
-    assert.strictEqual(snapshot({ broadcasts: [broadcast("CBS")] }).networks(), "CBS")
-    assert.strictEqual(
-      snapshot({ broadcasts: [broadcast("CBS"), broadcast("ESPN", "streaming")] }).networks(),
-      "CBS · ESPN"
-    )
+describe("GameSnapshot#networks", () => {
+  it("should be empty with no broadcasts", () => {
+    const game = snapshot()
+
+    assert.strictEqual(game.networks(), "")
+  })
+
+  it("should name the one network", () => {
+    const game = snapshot({ broadcasts: [broadcast("CBS")] })
+
+    assert.strictEqual(game.networks(), "CBS")
+  })
+
+  it("should join the networks with a dot", () => {
+    const game = snapshot({ broadcasts: [broadcast("CBS"), broadcast("ESPN", "streaming")] })
+
+    assert.strictEqual(game.networks(), "CBS · ESPN")
   })
 })
 
 describe("GameSnapshot#statusLine", () => {
-  it("reads status, period, and clock", () => {
-    assert.strictEqual(
-      snapshot({ status: "live", period: 3, clock: "4:12" }).statusLine(),
-      "live, period 3, 4:12"
-    )
+  it("should read status, period, and clock", () => {
+    const game = snapshot({ status: "live", period: 3, clock: "4:12" })
+
+    assert.strictEqual(game.statusLine(), "live, period 3, 4:12")
   })
 })
 
-describe("GameSnapshot.abbreviationOf", () => {
+describe("GameSnapshot#abbreviationOf", () => {
   const game = snapshot({ home: { team: team("BAMA"), score: 0 }, away: { team: team("UGA"), score: 0 } })
 
-  it("names a team by its abbreviation, or an unknown id as itself", () => {
+  it("should name the home team by its abbreviation", () => {
     assert.strictEqual(game.abbreviationOf(team("BAMA").id), "BAMA")
+  })
+
+  it("should name the away team by its abbreviation", () => {
     assert.strictEqual(game.abbreviationOf(team("UGA").id), "UGA")
+  })
+
+  it("should name an unknown id as itself", () => {
     assert.strictEqual(game.abbreviationOf(team("XYZ").id), team("XYZ").id)
   })
 })
 
-describe("GameSnapshot.timed", () => {
-  it("knows a college overtime has no clock", () => {
-    assert.isTrue(snapshot({ league: "fbs", status: "live", period: 4 }).timed())
-    assert.isFalse(snapshot({ league: "fbs", status: "live", period: 5 }).timed())
-    assert.isTrue(snapshot({ league: "nfl", status: "live", period: 5 }).timed())
+describe("GameSnapshot#timed", () => {
+  it("should run on a clock in a college fourth period", () => {
+    const game = snapshot({ league: "fbs", status: "live", period: 4 })
+
+    assert.isTrue(game.timed())
+  })
+
+  it("should have no clock in a college overtime", () => {
+    const game = snapshot({ league: "fbs", status: "live", period: 5 })
+
+    assert.isFalse(game.timed())
+  })
+
+  it("should run on a clock in an NFL overtime", () => {
+    const game = snapshot({ league: "nfl", status: "live", period: 5 })
+
+    assert.isTrue(game.timed())
   })
 })
 
-describe("GameSnapshot.matchup", () => {
-  it("names the away team at the home team", () => {
+describe("GameSnapshot#matchup", () => {
+  it("should name the away team at the home team", () => {
     const game = snapshot({ away: { team: team("UGA"), score: 0 }, home: { team: team("BAMA"), score: 0 } })
+
     assert.strictEqual(game.matchup(), "UGA at BAMA")
   })
 })
@@ -111,101 +164,175 @@ describe("GameSnapshot.matchup", () => {
 describe("GameSnapshot.gameTime", () => {
   const compare = GameSnapshot.gameTime
 
-  it("puts upcoming behind live and live behind over", () => {
+  it("should put upcoming before live", () => {
     const upcoming = snapshot({ status: "scheduled" })
     const live = snapshot({ status: "live", period: 1, clock: "10:00" })
-    const over = snapshot({ status: "final", period: 4, clock: "0:00" })
+
     assert.strictEqual(compare(upcoming, live), -1)
+  })
+
+  it("should put live before over", () => {
+    const live = snapshot({ status: "live", period: 1, clock: "10:00" })
+    const over = snapshot({ status: "final", period: 4, clock: "0:00" })
+
     assert.strictEqual(compare(live, over), -1)
+  })
+
+  it("should put over after upcoming", () => {
+    const upcoming = snapshot({ status: "scheduled" })
+    const over = snapshot({ status: "final", period: 4, clock: "0:00" })
+
     assert.strictEqual(compare(over, upcoming), 1)
   })
 
-  it("puts a later period ahead of an earlier one whatever the clock", () => {
+  it("should put a later period ahead of an earlier one whatever the clock", () => {
     const later = snapshot({ status: "live", period: 2, clock: "14:00" })
     const earlier = snapshot({ status: "live", period: 1, clock: "0:30" })
+
     assert.strictEqual(compare(later, earlier), 1)
   })
 
-  it("puts less time left ahead within a period", () => {
+  it("should put less time left ahead within a period", () => {
     const later = snapshot({ status: "live", period: 3, clock: "2:00" })
     const earlier = snapshot({ status: "live", period: 3, clock: "9:00" })
+
     assert.strictEqual(compare(later, earlier), 1)
+  })
+
+  it("should put more time left behind within a period", () => {
+    const later = snapshot({ status: "live", period: 3, clock: "2:00" })
+    const earlier = snapshot({ status: "live", period: 3, clock: "9:00" })
+
     assert.strictEqual(compare(earlier, later), -1)
   })
 
-  it("ignores the score", () => {
-    const a = snapshot({ status: "live", period: 2, clock: "5:00", home: { team: team("HOME"), score: 7 } })
-    const b = snapshot({ status: "live", period: 2, clock: "5:00" })
-    assert.strictEqual(compare(a, b), 0)
+  it("should ignore the score", () => {
+    const scored = snapshot({
+      status: "live",
+      period: 2,
+      clock: "5:00",
+      home: { team: team("HOME"), score: 7 }
+    })
+    const level = snapshot({ status: "live", period: 2, clock: "5:00" })
+
+    assert.strictEqual(compare(scored, level), 0)
   })
 
-  it("puts halftime after the end of period 2, at the same clock", () => {
+  it("should put halftime after the end of period 2 at the same clock", () => {
     const halftime = snapshot({ status: "halftime", period: 2, clock: "0:00" })
     const endOfHalf = snapshot({ status: "live", period: 2, clock: "0:00" })
+
     assert.strictEqual(compare(halftime, endOfHalf), 1)
+  })
+
+  it("should put the end of period 2 before halftime at the same clock", () => {
+    const halftime = snapshot({ status: "halftime", period: 2, clock: "0:00" })
+    const endOfHalf = snapshot({ status: "live", period: 2, clock: "0:00" })
+
     assert.strictEqual(compare(endOfHalf, halftime), -1)
   })
 
-  it("ties a delay with play at the same clock", () => {
+  it("should tie a delay with play at the same clock", () => {
     const delayed = snapshot({ status: "delayed", period: 3, clock: "8:00" })
-    assert.strictEqual(compare(delayed, snapshot({ status: "live", period: 3, clock: "8:00" })), 0)
+    const playing = snapshot({ status: "live", period: 3, clock: "8:00" })
+
+    assert.strictEqual(compare(delayed, playing), 0)
   })
 
-  it("puts halftime between the end of period 2 and the start of period 3", () => {
+  it("should put halftime after play with time left in period 2", () => {
     const halftime = snapshot({ status: "halftime", period: 2, clock: "0:00" })
-    assert.strictEqual(compare(halftime, snapshot({ status: "live", period: 2, clock: "0:10" })), 1)
-    assert.strictEqual(compare(halftime, snapshot({ status: "live", period: 3, clock: "15:00" })), -1)
+    const playing = snapshot({ status: "live", period: 2, clock: "0:10" })
+
+    assert.strictEqual(compare(halftime, playing), 1)
   })
 
-  it("reads a delay during the game as live and a delay before kickoff as upcoming", () => {
+  it("should put halftime before the start of period 3", () => {
+    const halftime = snapshot({ status: "halftime", period: 2, clock: "0:00" })
+    const secondHalf = snapshot({ status: "live", period: 3, clock: "15:00" })
+
+    assert.strictEqual(compare(halftime, secondHalf), -1)
+  })
+
+  it("should read a delay during the game as live", () => {
     const delayed = snapshot({ status: "delayed", period: 2, clock: "5:00" })
-    assert.strictEqual(compare(delayed, snapshot({ status: "live", period: 1, clock: "1:00" })), 1)
-    assert.strictEqual(
-      compare(snapshot({ status: "delayed", period: 0 }), snapshot({ status: "live", period: 1 })),
-      -1
-    )
+    const earlierPlay = snapshot({ status: "live", period: 1, clock: "1:00" })
+
+    assert.strictEqual(compare(delayed, earlierPlay), 1)
+  })
+
+  it("should read a delay before kickoff as upcoming", () => {
+    const delayed = snapshot({ status: "delayed", period: 0 })
+    const live = snapshot({ status: "live", period: 1 })
+
+    assert.strictEqual(compare(delayed, live), -1)
   })
 })
 
 describe("GameSnapshot#isAheadOf", () => {
-  const at = (overrides: Partial<GameSnapshot> = {}) =>
-    liveSnapshot({ period: 2, clock: "5:00", ...overrides })
-  const scored = (home: number, away: number) =>
-    at({ home: { team: team("HOME"), score: home }, away: { team: team("AWAY"), score: away } })
+  it("should be ahead in a later period", () => {
+    const later = at({ period: 3, clock: "15:00" })
 
-  it("a later period is ahead", () => {
-    assert.isTrue(at({ period: 3, clock: "15:00" }).isAheadOf(at()))
+    assert.isTrue(later.isAheadOf(at()))
   })
-  it("the same period with less on the clock is ahead", () => {
-    assert.isTrue(at({ clock: "4:59" }).isAheadOf(at()))
+
+  it("should be ahead in the same period with less on the clock", () => {
+    const later = at({ clock: "4:59" })
+
+    assert.isTrue(later.isAheadOf(at()))
   })
-  it("the same game time with more points is ahead", () => {
-    assert.isTrue(scored(7, 0).isAheadOf(scored(6, 0)))
+
+  it("should be ahead at the same game time with more points", () => {
+    assert.isTrue(scoredAt(7, 0).isAheadOf(scoredAt(6, 0)))
   })
-  it("the same game time with fewer points is not ahead", () => {
-    assert.isFalse(scored(6, 0).isAheadOf(scored(7, 0)))
+
+  it("should not be ahead at the same game time with fewer points", () => {
+    assert.isFalse(scoredAt(6, 0).isAheadOf(scoredAt(7, 0)))
   })
-  it("the same game time with equal points split differently is ahead", () => {
-    assert.isTrue(scored(7, 3).isAheadOf(scored(3, 7)))
+
+  it("should be ahead at the same game time with equal points split differently", () => {
+    assert.isTrue(scoredAt(7, 3).isAheadOf(scoredAt(3, 7)))
   })
-  it("halftime is ahead of play at the end of the second period", () => {
-    assert.isTrue(at({ status: "halftime", clock: "0:00" }).isAheadOf(at({ clock: "0:00" })))
+
+  it("should have halftime ahead of play at the end of the second period", () => {
+    const halftime = at({ status: "halftime", clock: "0:00" })
+
+    assert.isTrue(halftime.isAheadOf(at({ clock: "0:00" })))
   })
-  it("play at the end of the second period is not ahead of halftime", () => {
-    assert.isFalse(at({ clock: "0:00" }).isAheadOf(at({ status: "halftime", clock: "0:00" })))
+
+  it("should not have play at the end of the second period ahead of halftime", () => {
+    const halftime = at({ status: "halftime", clock: "0:00" })
+
+    assert.isFalse(at({ clock: "0:00" }).isAheadOf(halftime))
   })
-  it("a final is ahead of play at the end of the last period, and not the reverse", () => {
+
+  it("should have a final ahead of play at the end of the last period", () => {
     const final = at({ status: "final", period: 4, clock: "0:00" })
     const endOfGame = at({ period: 4, clock: "0:00" })
+
     assert.isTrue(final.isAheadOf(endOfGame))
+  })
+
+  it("should not have play at the end of the last period ahead of the final", () => {
+    const final = at({ status: "final", period: 4, clock: "0:00" })
+    const endOfGame = at({ period: 4, clock: "0:00" })
+
     assert.isFalse(endOfGame.isAheadOf(final))
   })
-  it("a delay and play at the same clock and points are neither ahead", () => {
-    assert.isFalse(at({ status: "delayed" }).isAheadOf(at()))
-    assert.isFalse(at().isAheadOf(at({ status: "delayed" })))
+
+  it("should not have a delay ahead of play at the same clock and points", () => {
+    const delayed = at({ status: "delayed" })
+
+    assert.isFalse(delayed.isAheadOf(at()))
   })
-  it("is never ahead both ways, over status, clock, and points", () => {
-    const pairs: ReadonlyArray<readonly [GameSnapshot, GameSnapshot]> = [
+
+  it("should not have play ahead of a delay at the same clock and points", () => {
+    const delayed = at({ status: "delayed" })
+
+    assert.isFalse(at().isAheadOf(delayed))
+  })
+
+  it.each(
+    pairs([
       [at({ status: "halftime", clock: "0:00" }), at({ clock: "0:00" })],
       [at({ status: "delayed" }), at()],
       [at({ status: "delayed", clock: "0:00" }), at({ status: "halftime", clock: "0:00" })],
@@ -216,31 +343,35 @@ describe("GameSnapshot#isAheadOf", () => {
       ],
       [at({ status: "postponed" }), at()],
       [snapshot({ status: "scheduled" }), snapshot({ status: "delayed", period: 0 })],
-      [scored(7, 0), scored(6, 0)],
+      [scoredAt(7, 0), scoredAt(6, 0)],
       [at({ clock: "4:59" }), at()],
       [at(), at()]
-    ]
-    for (const [a, b] of pairs) {
-      assert.isFalse(a.isAheadOf(b) && b.isAheadOf(a), `${a.statusLine()} against ${b.statusLine()}`)
-    }
+    ])
+  )("should never be ahead both ways, %s", (_name, a, b) => {
+    assert.isFalse(a.isAheadOf(b) && b.isAheadOf(a))
   })
-  it("an equal snapshot is not ahead", () => {
+
+  it("should not have an equal snapshot ahead", () => {
     assert.isFalse(at().isAheadOf(at()))
   })
-  it("an earlier game time is not ahead, whatever its points", () => {
-    assert.isFalse(scored(14, 0).isAheadOf(at({ period: 3 })))
+
+  it("should not be ahead at an earlier game time whatever its points", () => {
+    assert.isFalse(scoredAt(14, 0).isAheadOf(at({ period: 3 })))
   })
 })
 
 describe("GameSnapshot.watchOrder", () => {
-  it("puts live games first, then upcoming by kickoff, then finished", () => {
-    const ordered = [
-      game("final", "final", "2026-10-03T16:00:00Z"),
-      game("late", "scheduled", "2026-10-03T23:30:00Z"),
-      game("halftime", "halftime", "2026-10-03T19:30:00Z"),
-      game("early", "scheduled", "2026-10-03T20:00:00Z"),
-      game("live", "live", "2026-10-03T16:00:00Z")
-    ].sort(GameSnapshot.watchOrder)
+  it("should put live games first, then upcoming by kickoff, then finished", () => {
+    const games = [
+      gameAt("final", "final", "2026-10-03T16:00:00Z"),
+      gameAt("late", "scheduled", "2026-10-03T23:30:00Z"),
+      gameAt("halftime", "halftime", "2026-10-03T19:30:00Z"),
+      gameAt("early", "scheduled", "2026-10-03T20:00:00Z"),
+      gameAt("live", "live", "2026-10-03T16:00:00Z")
+    ]
+
+    const ordered = games.toSorted(GameSnapshot.watchOrder)
+
     assert.deepStrictEqual(
       ordered.map((g) => g.id),
       ["live", "halftime", "early", "late", "final"]
@@ -249,7 +380,7 @@ describe("GameSnapshot.watchOrder", () => {
 })
 
 describe("GameSnapshot#advancedTo", () => {
-  const situation = new Situation({
+  const situationPushed = new Situation({
     yardLine: 12,
     homeTimeouts: 2,
     awayTimeouts: 3,
@@ -266,179 +397,273 @@ describe("GameSnapshot#advancedTo", () => {
     clock: "7:45",
     home: { team: team("HOME", "fbs", { shortName: "Pushed Home" }), score: 14 },
     away: { team: team("AWAY", "fbs", { shortName: "Pushed Away" }), score: 10 },
-    situation
+    situation: situationPushed
   })
-  const advanced = polled.advancedTo(pushed)
 
-  it("takes the later status, period, clock, scores, and situation", () => {
+  it("should take the later status, period, and clock", () => {
+    const advanced = polled.advancedTo(pushed)
+
     assert.strictEqual(advanced.status, "live")
     assert.strictEqual(advanced.period, 3)
     assert.strictEqual(advanced.clock, "7:45")
-    assert.strictEqual(advanced.home.score, 14)
-    assert.strictEqual(advanced.away.score, 10)
-    assert.deepStrictEqual(advanced.situation, situation)
   })
 
-  it("keeps its own teams, rankings, kickoff, and broadcasts", () => {
+  it("should take the later scores", () => {
+    const advanced = polled.advancedTo(pushed)
+
+    assert.strictEqual(advanced.home.score, 14)
+    assert.strictEqual(advanced.away.score, 10)
+  })
+
+  it("should take the later situation", () => {
+    const advanced = polled.advancedTo(pushed)
+
+    assert.deepStrictEqual(advanced.situation, situationPushed)
+  })
+
+  it("should keep its own teams", () => {
+    const advanced = polled.advancedTo(pushed)
+
     assert.strictEqual(advanced.home.team.shortName, "Home")
     assert.strictEqual(advanced.away.team.shortName, "Away")
+  })
+
+  it("should keep its own rankings", () => {
+    const advanced = polled.advancedTo(pushed)
+
     assert.strictEqual(advanced.home.ranking, 5)
     assert.strictEqual(advanced.away.ranking, 12)
+  })
+
+  it("should keep its own kickoff and broadcasts", () => {
+    const advanced = polled.advancedTo(pushed)
+
     assert.isTrue(DateTime.Equivalence(advanced.kickoff, polled.kickoff))
     assert.deepStrictEqual(advanced.broadcasts, polled.broadcasts)
   })
 
-  it("has no situation when the later snapshot has none", () => {
-    const result = snapshot({ status: "live", period: 3, situation }).advancedTo(
-      snapshot({ status: "final", period: 4 })
-    )
-    assert.isFalse("situation" in result)
+  it("should have no situation when the later snapshot has none", () => {
+    const earlier = snapshot({ status: "live", period: 3, situation: situationPushed })
+
+    const advanced = earlier.advancedTo(snapshot({ status: "final", period: 4 }))
+
+    assert.isFalse("situation" in advanced)
   })
 
-  it("is at the later snapshot's game time", () => {
+  it("should be at the later snapshot's game time", () => {
+    const advanced = polled.advancedTo(pushed)
+
     assert.strictEqual(GameSnapshot.gameTime(advanced, pushed), 0)
   })
 })
 
 describe("GameSnapshot#isAheadOfOver", () => {
   const final = liveSnapshot({ status: "final", period: 4, clock: "0:00" })
-  const scored = (home: number, overrides: Partial<GameSnapshot> = {}) =>
-    snapshot({ ...final, ...overrides, home: { ...final.home, score: home } })
 
-  it("play lagging the end of the game is not ahead", () => {
-    assert.isFalse(snapshot({ ...final, status: "live", clock: "0:03" }).isAheadOfOver(final))
-    assert.isFalse(snapshot({ ...final, status: "live" }).isAheadOfOver(final))
+  it("should not have play with 0:03 left ahead of the end of the game", () => {
+    const lagging = snapshot({ ...final, status: "live", clock: "0:03" })
+
+    assert.isFalse(lagging.isAheadOfOver(final))
   })
-  it("overtime after a final is ahead", () => {
-    assert.isTrue(snapshot({ ...final, status: "live", period: 5, clock: "15:00" }).isAheadOfOver(final))
+
+  it("should not have play at the end of the game ahead of it", () => {
+    const lagging = snapshot({ ...final, status: "live" })
+
+    assert.isFalse(lagging.isAheadOfOver(final))
   })
-  it("at the same clock, more points is ahead and as many is not", () => {
-    assert.isTrue(scored(final.home.score + 1).isAheadOfOver(final))
-    assert.isFalse(scored(final.home.score).isAheadOfOver(final))
-    assert.isFalse(scored(final.home.score - 1).isAheadOfOver(final))
+
+  it("should have overtime after a final ahead", () => {
+    const overtime = snapshot({ ...final, status: "live", period: 5, clock: "15:00" })
+
+    assert.isTrue(overtime.isAheadOfOver(final))
   })
-  it("a postponed game resuming is ahead once its clock runs", () => {
+
+  it("should have more points at the same clock ahead", () => {
+    const moreScored = finalWithHomeScore(final, final.home.score + 1)
+
+    assert.isTrue(moreScored.isAheadOfOver(final))
+  })
+
+  it("should not have as many points at the same clock ahead", () => {
+    const equalScored = finalWithHomeScore(final, final.home.score)
+
+    assert.isFalse(equalScored.isAheadOfOver(final))
+  })
+
+  it("should not have fewer points at the same clock ahead", () => {
+    const fewerScored = finalWithHomeScore(final, final.home.score - 1)
+
+    assert.isFalse(fewerScored.isAheadOfOver(final))
+  })
+
+  it("should have a postponed game resuming ahead once its clock runs", () => {
     const postponed = liveSnapshot({ status: "postponed", period: 2, clock: "8:00" })
-    assert.isTrue(snapshot({ ...postponed, status: "live", clock: "7:40" }).isAheadOfOver(postponed))
-    assert.isFalse(snapshot({ ...postponed, status: "live" }).isAheadOfOver(postponed))
+    const resumed = snapshot({ ...postponed, status: "live", clock: "7:40" })
+
+    assert.isTrue(resumed.isAheadOfOver(postponed))
+  })
+
+  it("should not have a postponed game resuming ahead before its clock runs", () => {
+    const postponed = liveSnapshot({ status: "postponed", period: 2, clock: "8:00" })
+    const resumed = snapshot({ ...postponed, status: "live" })
+
+    assert.isFalse(resumed.isAheadOfOver(postponed))
   })
 })
 
-function game(id: string, status: GameStatus, kickoff: string) {
-  return snapshot({ id: GameId.make(id), status, kickoff: DateTime.makeUnsafe(kickoff) })
-}
-
-const inPlay = (overrides: Partial<GameSnapshot> = {}) =>
-  snapshot({
-    status: "live",
-    period: 4,
-    clock: "5:00",
-    home: { team: team("UGA"), score: 21 },
-    away: { team: team("ALA"), score: 17 },
-    ...overrides
-  })
-const ball = (
-  side: "UGA" | "ALA",
-  yardLine: number,
-  down = 1,
-  distance = 10,
-  rest: Partial<Situation> = {}
-) => situation({ possession: team(side).id, yardLine, down, distance, ...rest })
-const tags = (before: GameSnapshot, after: GameSnapshot) =>
-  after.eventsSince(before).map((event) => event._tag)
-
 describe("GameSnapshot#eventsSince", () => {
-  it("reports each side's points", () => {
-    const events = inPlay({ home: { team: team("UGA"), score: 28 } }).eventsSince(inPlay())
+  it("should report each side's points", () => {
+    const before = inPlay()
+    const after = inPlay({ home: { team: team("UGA"), score: 28 } })
+
+    const events = after.eventsSince(before)
+
     assert.deepStrictEqual(
       events.map((e) => (e._tag === "ScoreChanged" ? { team: e.team, points: e.points } : e._tag)),
       [{ team: team("UGA").id, points: 7 }]
     )
   })
 
-  it("reports a drive reaching the 40, then the red zone, then goal to go, once each", () => {
-    const at = (yardLine: number, distance = 10) => inPlay({ situation: ball("ALA", yardLine, 1, distance) })
-    assert.deepStrictEqual(tags(at(55), at(38)), ["ReachedScoringRange"])
-    assert.deepStrictEqual(tags(at(38), at(30)), [])
-    assert.deepStrictEqual(tags(at(30), at(18)), ["EnteredRedZone"])
-    assert.deepStrictEqual(tags(at(18), at(6, 6)), ["GoalToGo"])
+  it("should report a drive reaching the 40 as reaching scoring range", () => {
+    assert.deepStrictEqual(tags(driveAt(55), driveAt(38)), ["ReachedScoringRange"])
   })
 
-  it("reports fourth down once per spot", () => {
+  it("should not report reaching scoring range again further down the field", () => {
+    assert.deepStrictEqual(tags(driveAt(38), driveAt(30)), [])
+  })
+
+  it("should report a drive reaching the 20 as entering the red zone", () => {
+    assert.deepStrictEqual(tags(driveAt(30), driveAt(18)), ["EnteredRedZone"])
+  })
+
+  it("should report a drive with the distance to the goal line as goal to go", () => {
+    assert.deepStrictEqual(tags(driveAt(18), driveAt(6, 6)), ["GoalToGo"])
+  })
+
+  it("should report fourth down at a new spot", () => {
+    const third = inPlay({ situation: ball("ALA", 34, 3, 3) })
     const fourth = inPlay({ situation: ball("ALA", 33, 4, 2) })
-    assert.deepStrictEqual(tags(inPlay({ situation: ball("ALA", 34, 3, 3) }), fourth), ["FourthDown"])
+
+    assert.deepStrictEqual(tags(third, fourth), ["FourthDown"])
+  })
+
+  it("should report fourth down once per spot", () => {
+    const fourth = inPlay({ situation: ball("ALA", 33, 4, 2) })
+
     assert.deepStrictEqual(tags(fourth, fourth), [])
   })
 
-  it("calls a change of possession a turnover only when the last play says interception or fumble", () => {
+  it("should call a change of possession a turnover when the last play says interception", () => {
     const before = inPlay({ situation: ball("ALA", 45) })
     const picked = inPlay({ situation: ball("UGA", 70, 1, 10, { lastPlay: "Pass INTERCEPTED by K.Smith" }) })
-    const punted = inPlay({ situation: ball("UGA", 80, 1, 10, { lastPlay: "J.Doe punt 40 yards" }) })
-    const unclear = inPlay({ situation: ball("UGA", 80) })
+
     assert.deepStrictEqual(tags(before, picked), ["Turnover"])
+  })
+
+  it("should call a change of possession by a punt a possession change, not a turnover", () => {
+    const before = inPlay({ situation: ball("ALA", 45) })
+    const punted = inPlay({ situation: ball("UGA", 80, 1, 10, { lastPlay: "J.Doe punt 40 yards" }) })
+
     assert.deepStrictEqual(tags(before, punted), ["PossessionChanged"])
+  })
+
+  it("should call a change of possession with no clear last play a possession change, not a turnover", () => {
+    const before = inPlay({ situation: ball("ALA", 45) })
+    const unclear = inPlay({ situation: ball("UGA", 80) })
+
     assert.deepStrictEqual(tags(before, unclear), ["PossessionChanged"])
   })
 
-  it("does not call the ball changing hands after a score a turnover", () => {
+  it("should not call the ball changing hands after a score a turnover", () => {
     const before = inPlay({ situation: ball("ALA", 3, 1, 3) })
     const after = inPlay({
       away: { team: team("ALA"), score: 24 },
       situation: ball("UGA", 75, 1, 10, { lastPlay: "Fumble recovered in the end zone, touchdown" })
     })
+
     assert.deepStrictEqual(tags(before, after), ["ScoreChanged", "PossessionChanged"])
   })
 
-  it("reports a timeout from a drop in either side's count", () => {
+  it("should report a timeout from a drop in either side's count", () => {
     const before = inPlay({ situation: ball("ALA", 45) })
     const after = inPlay({ situation: ball("ALA", 45, 1, 10, { awayTimeouts: 2 }) })
+
     assert.deepStrictEqual(tags(before, after), ["TimeoutTaken"])
   })
 
-  it("reports a timeout only as one fewer within the same period", () => {
-    const at = (period: number, home: number, away: number) =>
-      inPlay({ period, situation: ball("ALA", 45, 1, 10, { homeTimeouts: home, awayTimeouts: away }) })
-    assert.deepStrictEqual(tags(at(4, 3, 3), at(5, 1, 1)), ["Overtime", "PeriodEnded"])
-    assert.deepStrictEqual(tags(at(4, 3, 3), at(4, 0, 0)), [])
-    assert.deepStrictEqual(tags(at(4, 3, 3), at(4, 3, 2)), ["TimeoutTaken"])
+  it("should report a timeout as one fewer in the same period", () => {
+    assert.deepStrictEqual(tags(withTimeouts(4, 3, 3), withTimeouts(4, 3, 2)), ["TimeoutTaken"])
   })
 
-  it("reports a new drive starting inside the 40 as reaching scoring range", () => {
+  it("should not report a timeout when the counts drop by more than one", () => {
+    assert.deepStrictEqual(tags(withTimeouts(4, 3, 3), withTimeouts(4, 0, 0)), [])
+  })
+
+  it("should not report a timeout when the period changes", () => {
+    assert.deepStrictEqual(tags(withTimeouts(4, 3, 3), withTimeouts(5, 1, 1)), ["Overtime", "PeriodEnded"])
+  })
+
+  it("should report a new drive starting inside the 40 as reaching scoring range", () => {
     const before = inPlay({ situation: ball("ALA", 45) })
     const picked = inPlay({ situation: ball("UGA", 30, 1, 10, { lastPlay: "Pass INTERCEPTED by K.Smith" }) })
+
     assert.deepStrictEqual(tags(before, picked), ["Turnover", "ReachedScoringRange"])
   })
 
-  it("reports the clock and status: two-minute drill, end of a period, halftime, overtime, final", () => {
+  it("should report the two-minute drill", () => {
     assert.deepStrictEqual(tags(inPlay({ clock: "2:05" }), inPlay({ clock: "1:58" })), ["TwoMinuteDrill"])
-    assert.deepStrictEqual(
-      tags(inPlay({ period: 1, clock: "0:00" }), inPlay({ period: 2, clock: "15:00" })),
-      ["PeriodEnded"]
-    )
-    assert.deepStrictEqual(
-      tags(inPlay({ period: 2, clock: "0:00" }), inPlay({ period: 2, status: "halftime" })),
-      ["WentToHalftime"]
-    )
-    assert.deepStrictEqual(tags(inPlay({ clock: "0:00" }), inPlay({ period: 5, clock: "" })), [
-      "Overtime",
-      "PeriodEnded"
-    ])
+  })
+
+  it("should report the end of a period", () => {
+    const before = inPlay({ period: 1, clock: "0:00" })
+    const after = inPlay({ period: 2, clock: "15:00" })
+
+    assert.deepStrictEqual(tags(before, after), ["PeriodEnded"])
+  })
+
+  it("should report halftime", () => {
+    const before = inPlay({ period: 2, clock: "0:00" })
+    const after = inPlay({ period: 2, status: "halftime" })
+
+    assert.deepStrictEqual(tags(before, after), ["WentToHalftime"])
+  })
+
+  it("should report overtime", () => {
+    const before = inPlay({ clock: "0:00" })
+    const after = inPlay({ period: 5, clock: "" })
+
+    assert.deepStrictEqual(tags(before, after), ["Overtime", "PeriodEnded"])
+  })
+
+  it("should report the final", () => {
     assert.deepStrictEqual(tags(inPlay(), inPlay({ status: "final" })), ["WentFinal"])
   })
 })
 
 describe("GameSnapshot#secondsLeft", () => {
-  it("reads the clock, and an unreadable one as a full quarter", () => {
+  it("should read the clock", () => {
     assert.strictEqual(inPlay({ clock: "2:10" }).secondsLeft(), 130)
+  })
+
+  it("should read an empty clock as none left", () => {
     assert.strictEqual(inPlay({ clock: "0:00" }).secondsLeft(), 0)
+  })
+
+  it("should read an unreadable clock as a full quarter", () => {
     assert.strictEqual(inPlay({ clock: "" }).secondsLeft(), 900)
   })
 })
 
 describe("GameSnapshot#quarterLeft", () => {
-  it("is the share of the quarter left on the clock", () => {
+  it("should be the share of the quarter left on the clock", () => {
     assert.strictEqual(inPlay({ clock: "7:30" }).quarterLeft(), 0.5)
+  })
+
+  it("should be zero at 0:00", () => {
     assert.strictEqual(inPlay({ clock: "0:00" }).quarterLeft(), 0)
+  })
+
+  it("should read an unreadable clock as a full quarter", () => {
     assert.strictEqual(inPlay({ clock: "" }).quarterLeft(), 1)
   })
 })
@@ -453,57 +678,157 @@ describe("GameSnapshot#spotOf", () => {
     ["away", 1, 1, "home"],
     ["home", 99, 1, "away"]
   ] as const)(
-    "puts %s with %d to go at %d yards from the home goal, going %s",
+    "should put %s with %d to go at %d yards from the home goal, going %s",
     (side, toGo, yards, toward) => {
-      assert.deepStrictEqual(
-        game.spotOf({ team: game[side].team.id, yardsToEndzone: toGo }),
-        Option.some(new BallSpot({ yards, toward }))
-      )
+      const spot = game.spotOf({ team: game[side].team.id, yardsToEndzone: toGo })
+
+      assert.deepStrictEqual(spot, Option.some(new BallSpot({ yards, toward })))
     }
   )
 
-  it("is none without a team, without a yard line, or for a team in neither side", () => {
+  it("should be none without a team", () => {
     assert.isTrue(Option.isNone(game.spotOf({ yardsToEndzone: 40 })))
+  })
+
+  it("should be none without a yard line", () => {
     assert.isTrue(Option.isNone(game.spotOf({ team: game.home.team.id })))
+  })
+
+  it("should be none for a team in neither side", () => {
     assert.isTrue(Option.isNone(game.spotOf({ team: team("X").id, yardsToEndzone: 40 })))
   })
 
-  it.each([105, -3])("is none for %d yards to the goal, off the field", (yardsToEndzone) => {
-    assert.isTrue(Option.isNone(game.spotOf({ team: game.home.team.id, yardsToEndzone })))
-    assert.isTrue(Option.isNone(game.spotOf({ team: game.away.team.id, yardsToEndzone })))
+  it.each([
+    ["home", 105],
+    ["home", -3],
+    ["away", 105],
+    ["away", -3]
+  ] as const)("should be none for %s at %d yards to the goal, off the field", (side, yardsToEndzone) => {
+    assert.isTrue(Option.isNone(game.spotOf({ team: game[side].team.id, yardsToEndzone })))
   })
 })
 
 describe("GameSnapshot#ball", () => {
-  it("is the spot of the team with the ball at its yard line", () => {
-    assert.deepStrictEqual(
-      snapshot({ situation: situation({ yardLine: 75 }) }).ball(),
-      Option.some(new BallSpot({ yards: 25, toward: "away" }))
-    )
+  it("should be the spot of the team with the ball at its yard line", () => {
+    const game = snapshot({ situation: situation({ yardLine: 75 }) })
+
+    assert.deepStrictEqual(game.ball(), Option.some(new BallSpot({ yards: 25, toward: "away" })))
   })
 
-  it("is none without a situation or without a team with the ball", () => {
+  it("should be none without a situation", () => {
     assert.isTrue(Option.isNone(snapshot().ball()))
-    assert.isTrue(Option.isNone(snapshot({ situation: situation({ possession: undefined }) }).ball()))
+  })
+
+  it("should be none without a team with the ball", () => {
+    const game = snapshot({ situation: situation({ possession: undefined }) })
+
+    assert.isTrue(Option.isNone(game.ball()))
   })
 })
 
 describe("GameSnapshot#inPlay", () => {
-  it("is live with time on the clock, or in a college overtime", () => {
-    assert.isTrue(snapshot({ status: "live", period: 2, clock: "4:12" }).inPlay())
-    assert.isTrue(snapshot({ status: "live", period: 5, clock: "0:00" }).inPlay())
+  it("should be in play when live with time on the clock", () => {
+    const game = snapshot({ status: "live", period: 2, clock: "4:12" })
+
+    assert.isTrue(game.inPlay())
   })
 
-  it("is not at halftime, between periods, in a delay, before kickoff, or after the final", () => {
-    assert.isFalse(snapshot({ status: "halftime", period: 2, clock: "0:00" }).inPlay())
-    assert.isFalse(snapshot({ status: "delayed", period: 3, clock: "6:40" }).inPlay())
-    assert.isFalse(snapshot({ status: "live", period: 1, clock: "0:00" }).inPlay())
-    assert.isFalse(snapshot({ status: "scheduled" }).inPlay())
-    assert.isFalse(snapshot({ status: "final", period: 4, clock: "0:00" }).inPlay())
+  it("should be in play in a college overtime at 0:00", () => {
+    const game = snapshot({ status: "live", period: 5, clock: "0:00" })
+
+    assert.isTrue(game.inPlay())
   })
 
-  it("is not at 0:00 in an NFL overtime, which runs on a clock", () => {
-    assert.isFalse(snapshot({ league: "nfl", status: "live", period: 5, clock: "0:00" }).inPlay())
-    assert.isTrue(snapshot({ league: "nfl", status: "live", period: 5, clock: "3:20" }).inPlay())
+  it("should not be in play at halftime", () => {
+    const game = snapshot({ status: "halftime", period: 2, clock: "0:00" })
+
+    assert.isFalse(game.inPlay())
+  })
+
+  it("should not be in play in a delay", () => {
+    const game = snapshot({ status: "delayed", period: 3, clock: "6:40" })
+
+    assert.isFalse(game.inPlay())
+  })
+
+  it("should not be in play between periods", () => {
+    const game = snapshot({ status: "live", period: 1, clock: "0:00" })
+
+    assert.isFalse(game.inPlay())
+  })
+
+  it("should not be in play before kickoff", () => {
+    const game = snapshot({ status: "scheduled" })
+
+    assert.isFalse(game.inPlay())
+  })
+
+  it("should not be in play after the final", () => {
+    const game = snapshot({ status: "final", period: 4, clock: "0:00" })
+
+    assert.isFalse(game.inPlay())
+  })
+
+  it("should not be in play at 0:00 in an NFL overtime, which runs on a clock", () => {
+    const game = snapshot({ league: "nfl", status: "live", period: 5, clock: "0:00" })
+
+    assert.isFalse(game.inPlay())
+  })
+
+  it("should be in play with time on the clock in an NFL overtime", () => {
+    const game = snapshot({ league: "nfl", status: "live", period: 5, clock: "3:20" })
+
+    assert.isTrue(game.inPlay())
   })
 })
+
+function pairs(snapshots: ReadonlyArray<readonly [GameSnapshot, GameSnapshot]>) {
+  return snapshots.map(([a, b]) => [`${a.statusLine()} against ${b.statusLine()}`, a, b] as const)
+}
+
+function withScores(home: number, away: number) {
+  return snapshot({ home: { team: team("H"), score: home }, away: { team: team("A"), score: away } })
+}
+
+function at(overrides: Partial<GameSnapshot> = {}) {
+  return liveSnapshot({ period: 2, clock: "5:00", ...overrides })
+}
+
+function scoredAt(home: number, away: number) {
+  return at({ home: { team: team("HOME"), score: home }, away: { team: team("AWAY"), score: away } })
+}
+
+function gameAt(id: string, status: GameStatus, kickoff: string) {
+  return snapshot({ id: GameId.make(id), status, kickoff: DateTime.makeUnsafe(kickoff) })
+}
+
+function finalWithHomeScore(final: GameSnapshot, home: number) {
+  return snapshot({ ...final, home: { ...final.home, score: home } })
+}
+
+function inPlay(overrides: Partial<GameSnapshot> = {}) {
+  return snapshot({
+    status: "live",
+    period: 4,
+    clock: "5:00",
+    home: { team: team("UGA"), score: 21 },
+    away: { team: team("ALA"), score: 17 },
+    ...overrides
+  })
+}
+
+function ball(side: "UGA" | "ALA", yardLine: number, down = 1, distance = 10, rest: Partial<Situation> = {}) {
+  return situation({ possession: team(side).id, yardLine, down, distance, ...rest })
+}
+
+function driveAt(yardLine: number, distance = 10) {
+  return inPlay({ situation: ball("ALA", yardLine, 1, distance) })
+}
+
+function withTimeouts(period: number, home: number, away: number) {
+  return inPlay({ period, situation: ball("ALA", 45, 1, 10, { homeTimeouts: home, awayTimeouts: away }) })
+}
+
+function tags(before: GameSnapshot, after: GameSnapshot) {
+  return after.eventsSince(before).map((event) => event._tag)
+}
