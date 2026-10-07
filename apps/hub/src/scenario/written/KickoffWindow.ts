@@ -17,8 +17,18 @@ export const kickoffWindow = ScenarioScript.build("kickoff-window", [
           ball: { team: "away", yardLine: 75, down: 1, distance: 10 }
         }
       ],
-      ["1:00", { clock: "13:20", ball: { team: "away", yardLine: 52, down: 1, distance: 10 } }],
-      ["3:00", { clock: "9:45", score: [0, 7], ball: null, lastPlay: "Touchdown" }]
+      [
+        "1:00",
+        {
+          clock: "13:20",
+          ball: { team: "away", yardLine: 52, down: 1, distance: 10 },
+          play: { kind: "pass", yards: 23 }
+        }
+      ],
+      [
+        "3:00",
+        { clock: "9:45", score: [0, 7], ball: null, lastPlay: "Touchdown", play: { kind: "pass", yards: 52 } }
+      ]
     ]
   },
   {
@@ -37,7 +47,14 @@ export const kickoffWindow = ScenarioScript.build("kickoff-window", [
           ball: { team: "home", yardLine: 75, down: 1, distance: 10 }
         }
       ],
-      ["4:00", { clock: "12:10", ball: { team: "home", yardLine: 40, down: 2, distance: 3 } }]
+      [
+        "4:00",
+        {
+          clock: "12:10",
+          ball: { team: "home", yardLine: 40, down: 2, distance: 3 },
+          play: { kind: "pass", yards: 35 }
+        }
+      ]
     ]
   },
   {
@@ -57,7 +74,14 @@ export const kickoffWindow = ScenarioScript.build("kickoff-window", [
           ball: { team: "home", yardLine: 75, down: 1, distance: 10 }
         }
       ],
-      ["6:00", { clock: "11:30", ball: { team: "home", yardLine: 22, down: 1, distance: 10 } }]
+      [
+        "6:00",
+        {
+          clock: "11:30",
+          ball: { team: "home", yardLine: 22, down: 1, distance: 10 },
+          play: { kind: "pass", yards: 53 }
+        }
+      ]
     ]
   },
   {
@@ -76,7 +100,14 @@ export const kickoffWindow = ScenarioScript.build("kickoff-window", [
           ball: { team: "away", yardLine: 75, down: 1, distance: 10 }
         }
       ],
-      ["7:00", { clock: "14:00", ball: { team: "away", yardLine: 61, down: 2, distance: 3 } }]
+      [
+        "7:00",
+        {
+          clock: "14:00",
+          ball: { team: "away", yardLine: 61, down: 2, distance: 3 },
+          play: { kind: "rush", yards: 14 }
+        }
+      ]
     ]
   }
 ])

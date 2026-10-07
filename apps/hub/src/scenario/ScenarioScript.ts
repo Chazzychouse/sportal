@@ -203,8 +203,9 @@ function situationOf(game: GameSnapshot, status: GameStatus, change: Change): Si
 }
 
 /**
- * The play a change ran, numbered `sequence`: its team is the one with the ball before, it goes from the ball before to
- * the ball after (only its team, when the ball is dead after), and it scores when the score changed.
+ * The play a change ran, numbered `sequence`: its team is the one with the ball before (when the ball was dead, the one
+ * whose score rose), it goes from the ball before to the ball after (only its team, when the ball is dead after), and
+ * it scores when the score changed.
  */
 function playOf(
   before: GameSnapshot,
@@ -212,7 +213,13 @@ function playOf(
   play: NonNullable<Change["play"]>,
   sequence: number
 ): Play {
-  const team = before.situation?.possession
+  const team =
+    before.situation?.possession ??
+    (after.home.score > before.home.score
+      ? after.home.team.id
+      : after.away.score > before.away.score
+        ? after.away.team.id
+        : undefined)
   const spot = (situation: Situation | undefined) => ({
     team: situation?.possession,
     yardsToEndzone: situation?.yardLine,

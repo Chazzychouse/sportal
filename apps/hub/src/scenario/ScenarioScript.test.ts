@@ -107,6 +107,44 @@ describe("ScenarioScript.build", () => {
   })
 })
 
+const afterTouchdown = ScenarioScript.build("after touchdown", [
+  {
+    id: "1",
+    home: "UGA",
+    away: "ALA",
+    timeline: [
+      [
+        "0:00",
+        {
+          status: "live",
+          period: 1,
+          clock: "15:00",
+          ball: { team: "away", yardLine: 20, down: 1, distance: 10 }
+        }
+      ],
+      ["0:30", { clock: "14:30", score: [0, 6], ball: null, play: { kind: "pass", yards: 20 } }],
+      ["1:00", { clock: "14:30", score: [0, 7], ball: null, play: { kind: "extraPoint", yards: 0 } }]
+    ]
+  }
+])
+
+describe("ScenarioScript.build after the ball goes dead", () => {
+  const extraPoint = afterTouchdown.steps.find((step) => step.at === 60_000)?.plays[0]?.play
+
+  it("gives a play with no ball before it the team whose score rose", () => {
+    assert.strictEqual(extraPoint?.kind, "extraPoint")
+    assert.strictEqual(extraPoint?.team, "fbs:ALA")
+    assert.isTrue(extraPoint?.scoring)
+    assert.deepStrictEqual(extraPoint?.end, { team: ala })
+  })
+
+  it("gives it no spots", () => {
+    assert.isUndefined(extraPoint?.start.yardsToEndzone)
+    assert.isUndefined(extraPoint?.start.down)
+    assert.isUndefined(extraPoint?.start.distance)
+  })
+})
+
 const twoGames = ScenarioScript.build("two games", [
   {
     id: "1",

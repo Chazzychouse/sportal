@@ -20,18 +20,38 @@ export const blowoutAndUpsetBrewing = ScenarioScript.build("blowout-and-upset-br
           ball: { team: "away", yardLine: 70, down: 1, distance: 10 }
         }
       ],
-      ["1:30", { clock: "6:02", ball: { team: "away", yardLine: 45, down: 3, distance: 2 } }],
+      [
+        "1:30",
+        {
+          clock: "6:02",
+          ball: { team: "away", yardLine: 45, down: 3, distance: 2 },
+          play: { kind: "pass", yards: 25 }
+        }
+      ],
       [
         "3:00",
-        { clock: "4:15", ball: { team: "home", yardLine: 80, down: 1, distance: 10 }, lastPlay: "Punt" }
+        {
+          clock: "4:15",
+          ball: { team: "home", yardLine: 80, down: 1, distance: 10 },
+          lastPlay: "Punt",
+          play: { kind: "punt", yards: 25 }
+        }
       ],
-      ["4:30", { clock: "2:20", ball: { team: "home", yardLine: 48, down: 4, distance: 3 } }],
+      [
+        "4:30",
+        {
+          clock: "2:20",
+          ball: { team: "home", yardLine: 48, down: 4, distance: 3 },
+          play: { kind: "pass", yards: 32 }
+        }
+      ],
       [
         "5:30",
         {
           clock: "1:50",
           ball: { team: "away", yardLine: 52, down: 1, distance: 10 },
-          lastPlay: "Turnover on downs"
+          lastPlay: "Turnover on downs",
+          play: { kind: "incompletion", yards: 0 }
         }
       ]
     ]
@@ -54,7 +74,16 @@ export const blowoutAndUpsetBrewing = ScenarioScript.build("blowout-and-upset-br
           ball: { team: "home", yardLine: 35, down: 1, distance: 10 }
         }
       ],
-      ["2:00", { clock: "7:45", score: [56, 3], ball: null, lastPlay: "Touchdown" }]
+      [
+        "2:00",
+        {
+          clock: "7:45",
+          score: [56, 3],
+          ball: null,
+          lastPlay: "Touchdown",
+          play: { kind: "rush", yards: 35 }
+        }
+      ]
     ]
   },
   {
@@ -74,7 +103,14 @@ export const blowoutAndUpsetBrewing = ScenarioScript.build("blowout-and-upset-br
           ball: { team: "home", yardLine: 58, down: 2, distance: 8 }
         }
       ],
-      ["3:00", { clock: "9:05", ball: { team: "home", yardLine: 37, down: 1, distance: 10 } }]
+      [
+        "3:00",
+        {
+          clock: "9:05",
+          ball: { team: "home", yardLine: 37, down: 1, distance: 10 },
+          play: { kind: "pass", yards: 21 }
+        }
+      ]
     ]
   }
 ])

@@ -42,6 +42,27 @@ describe("scripts", () => {
     })
   )
 
+  it("runs a play at every change that moves the ball for the same team, turns it over, or scores", () => {
+    for (const script of scripts.values())
+      script.steps.forEach((step, index) => {
+        const previous = script.steps[index - 1]
+        for (const game of step.slate) {
+          const earlier = previous?.slate.find((candidate) => candidate.id === game.id)
+          const before = earlier?.situation
+          const after = game.situation
+          const ran = step.plays.some((run) => run.game === game.id)
+          const moved =
+            before?.possession !== undefined &&
+            after?.possession !== undefined &&
+            (before.possession !== after.possession || before.yardLine !== after.yardLine)
+          const scored =
+            earlier !== undefined &&
+            (earlier.home.score !== game.home.score || earlier.away.score !== game.away.score)
+          if (moved || scored) assert.isTrue(ran, `${script.name} ${game.id} at ${step.at} has no play`)
+        }
+      })
+  })
+
   it.effect("has three games in the red zone at once at 1:00", () =>
     Effect.gen(function* () {
       assert.strictEqual(
