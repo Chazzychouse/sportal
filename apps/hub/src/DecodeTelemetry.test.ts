@@ -6,122 +6,141 @@ import { DecodeObservation } from "./provider/Provider.ts"
 import { counted, recordingLogs, withMetrics } from "./TestTelemetry.ts"
 
 describe("DecodeTelemetry.observed", () => {
-  it.effect("a message received is counted by league and op, and logged at Debug", () =>
-    told(
-      DecodeObservation.Received({
+  it.effect("should count a message received by league and op, logging it at Debug", () =>
+    Effect.gen(function* () {
+      const received = DecodeObservation.Received({
         league: Option.some("nfl"),
         op: "P",
         topic: Option.some("event-football-nfl"),
         mid: Option.some(8)
-      }),
-      (logs) =>
-        Effect.gen(function* () {
-          assert.strictEqual(yield* counted("sportal_live_feed_messages", { league: "nfl", op: "P" }), 1)
-          assert.deepStrictEqual(levels(logs), ["Debug"])
-        })
-    )
-  )
-
-  it.effect("a message of an unknown op is logged at Debug and counted nowhere", () =>
-    told(DecodeObservation.OpUnknown({ body: "{}" }), (logs) =>
-      Effect.sync(() => {
-        assert.deepStrictEqual(levels(logs), ["Debug"])
       })
-    )
+
+      const logs = yield* told(received)
+
+      const messages = yield* counted("sportal_live_feed_messages", { league: "nfl", op: "P" })
+      assert.strictEqual(messages, 1)
+      assert.deepStrictEqual(levels(logs), ["Debug"])
+    }).pipe(withMetrics)
   )
 
-  it.effect("games pushed are counted by league", () =>
-    told(DecodeObservation.Pushed({ league: "nfl", games: 16 }), (logs) =>
-      Effect.gen(function* () {
-        assert.strictEqual(yield* counted("sportal_live_feed_games", { league: "nfl" }), 16)
-        assert.deepStrictEqual(levels(logs), [])
-      })
-    )
+  it.effect("should log a message of an unknown op at Debug, counting it nowhere", () =>
+    Effect.gen(function* () {
+      const unknown = DecodeObservation.OpUnknown({ body: "{}" })
+
+      const logs = yield* told(unknown)
+
+      assert.deepStrictEqual(levels(logs), ["Debug"])
+    }).pipe(withMetrics)
   )
 
-  it.effect("a pushed game no listing has is counted by league", () =>
-    told(DecodeObservation.Unlisted({ league: "nfl", game: GameId.make("1") }), () =>
-      Effect.gen(function* () {
-        assert.strictEqual(yield* counted("sportal_live_feed_unlisted", { league: "nfl" }), 1)
-      })
-    )
+  it.effect("should count games pushed by league, logging nothing", () =>
+    Effect.gen(function* () {
+      const pushed = DecodeObservation.Pushed({ league: "nfl", games: 16 })
+
+      const logs = yield* told(pushed)
+
+      const games = yield* counted("sportal_live_feed_games", { league: "nfl" })
+      assert.strictEqual(games, 16)
+      assert.deepStrictEqual(levels(logs), [])
+    }).pipe(withMetrics)
   )
 
-  it.effect("a reset is counted by league and reason, and logged at Warn", () =>
-    told(
-      DecodeObservation.Reset({
+  it.effect("should count a pushed game no listing has by league", () =>
+    Effect.gen(function* () {
+      const unlisted = DecodeObservation.Unlisted({ league: "nfl", game: GameId.make("1") })
+
+      yield* told(unlisted)
+
+      const count = yield* counted("sportal_live_feed_unlisted", { league: "nfl" })
+      assert.strictEqual(count, 1)
+    }).pipe(withMetrics)
+  )
+
+  it.effect("should count a reset by league and reason, logging it at Warn", () =>
+    Effect.gen(function* () {
+      const reset = DecodeObservation.Reset({
         league: "nfl",
         topic: "event-football-nfl",
         reason: "Gap",
         detail: "message 9 came after 7"
-      }),
-      (logs) =>
-        Effect.gen(function* () {
-          assert.strictEqual(
-            yield* counted("sportal_live_feed_document_resets", { league: "nfl", reason: "Gap" }),
-            1
-          )
-          assert.deepStrictEqual(levels(logs), ["Warn"])
-          assert.include(logs[0]?.message, "event-football-nfl waits for its next checkpoint")
-        })
-    )
-  )
-
-  it.effect("a frame that does not decode is counted by feed, and logged at Error with its seq", () =>
-    told(
-      DecodeObservation.FrameUndecoded({ feed: "poll", channel: "nfl", kind: "response", cause: "not json" }),
-      (logs) =>
-        Effect.gen(function* () {
-          assert.strictEqual(yield* counted("sportal_frames_undecoded", { feed: "poll" }), 1)
-          assert.deepStrictEqual(levels(logs), ["Error"])
-          assert.strictEqual(logs[0]?.annotations.seq, 7)
-        })
-    )
-  )
-
-  it.effect("an event that does not decode is counted by league and feed, and logged at Warn", () =>
-    told(DecodeObservation.EventUndecoded({ league: "fbs", feed: "fastcast", cause: "bad" }), (logs) =>
-      Effect.gen(function* () {
-        assert.strictEqual(yield* counted("sportal_events_undecoded", { league: "fbs", feed: "fastcast" }), 1)
-        assert.deepStrictEqual(levels(logs), ["Warn"])
       })
-    )
+
+      const logs = yield* told(reset)
+
+      const resets = yield* counted("sportal_live_feed_document_resets", { league: "nfl", reason: "Gap" })
+      assert.strictEqual(resets, 1)
+      assert.deepStrictEqual(levels(logs), ["Warn"])
+      assert.include(logs[0]?.message, "event-football-nfl waits for its next checkpoint")
+    }).pipe(withMetrics)
   )
 
-  it.effect("a play that does not decode is counted by league, and logged at Warn", () =>
-    told(
-      DecodeObservation.PlayUndecoded({ league: "nfl", game: GameId.make("1"), play: "19", cause: "bad" }),
-      (logs) =>
-        Effect.gen(function* () {
-          assert.strictEqual(yield* counted("sportal_live_feed_undecoded_plays", { league: "nfl" }), 1)
-          assert.deepStrictEqual(levels(logs), ["Warn"])
-        })
-    )
-  )
-
-  it.effect("a play type the table does not know is logged at Info", () =>
-    told(DecodeObservation.PlayTypeUnknown({ id: "999", text: "Something New" }), (logs) =>
-      Effect.sync(() => {
-        assert.deepStrictEqual(levels(logs), ["Info"])
-        assert.include(logs[0]?.message, "Something New")
+  it.effect("should count a frame that does not decode by feed, logging it at Error with its seq", () =>
+    Effect.gen(function* () {
+      const undecoded = DecodeObservation.FrameUndecoded({
+        feed: "poll",
+        channel: "nfl",
+        kind: "response",
+        cause: "not json"
       })
-    )
+
+      const logs = yield* told(undecoded)
+
+      const frames = yield* counted("sportal_frames_undecoded", { feed: "poll" })
+      assert.strictEqual(frames, 1)
+      assert.deepStrictEqual(levels(logs), ["Error"])
+      assert.strictEqual(logs[0]?.annotations.seq, 7)
+    }).pipe(withMetrics)
+  )
+
+  it.effect("should count an event that does not decode by league and feed, logging it at Warn", () =>
+    Effect.gen(function* () {
+      const undecoded = DecodeObservation.EventUndecoded({ league: "fbs", feed: "fastcast", cause: "bad" })
+
+      const logs = yield* told(undecoded)
+
+      const events = yield* counted("sportal_events_undecoded", { league: "fbs", feed: "fastcast" })
+      assert.strictEqual(events, 1)
+      assert.deepStrictEqual(levels(logs), ["Warn"])
+    }).pipe(withMetrics)
+  )
+
+  it.effect("should count a play that does not decode by league, logging it at Warn", () =>
+    Effect.gen(function* () {
+      const undecoded = DecodeObservation.PlayUndecoded({
+        league: "nfl",
+        game: GameId.make("1"),
+        play: "19",
+        cause: "bad"
+      })
+
+      const logs = yield* told(undecoded)
+
+      const plays = yield* counted("sportal_live_feed_undecoded_plays", { league: "nfl" })
+      assert.strictEqual(plays, 1)
+      assert.deepStrictEqual(levels(logs), ["Warn"])
+    }).pipe(withMetrics)
+  )
+
+  it.effect("should log a play type the table does not know at Info, with its text", () =>
+    Effect.gen(function* () {
+      const unknown = DecodeObservation.PlayTypeUnknown({ id: "999", text: "Something New" })
+
+      const logs = yield* told(unknown)
+
+      assert.deepStrictEqual(levels(logs), ["Info"])
+      assert.include(logs[0]?.message, "Something New")
+    }).pipe(withMetrics)
   )
 })
 
-/** Tells `observation` as frame 7, logging from Debug, then runs `check` over what was logged, with the metrics it left. */
-function told(
-  observation: DecodeObservation,
-  check: (logs: ReturnType<typeof recordingLogs>["logs"]) => Effect.Effect<void>
-) {
+/** Tells `observation` as frame 7, logging from Debug: what was logged. */
+function told(observation: DecodeObservation) {
   const { logs, layer } = recordingLogs()
-  return Effect.gen(function* () {
-    yield* DecodeTelemetry.observed(observation, 7).pipe(
-      Effect.provide(layer),
-      Effect.provideService(References.MinimumLogLevel, "Debug")
-    )
-    yield* check(logs)
-  }).pipe(withMetrics)
+  return DecodeTelemetry.observed(observation, 7).pipe(
+    Effect.provide(layer),
+    Effect.provideService(References.MinimumLogLevel, "Debug"),
+    Effect.as(logs)
+  )
 }
 
 function levels(logs: ReturnType<typeof recordingLogs>["logs"]) {

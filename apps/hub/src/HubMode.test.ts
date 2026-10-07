@@ -9,19 +9,24 @@ import { LiveSlate } from "./LiveSlate.ts"
 import { withEnv } from "./TestHubConfig.ts"
 
 describe("HubMode", () => {
-  it.effect("a scenario's polls, appended by Ingest, reach the LiveSlate", () =>
+  it.effect("should bring a scenario's polls, appended by Ingest, to the LiveSlate", () =>
     Effect.gen(function* () {
+      const liveSlate = yield* LiveSlate
+
       yield* TestClock.adjust(0)
       yield* TestClock.adjust("1 second")
-      assert.isAbove((yield* (yield* LiveSlate).published).games.length, 0)
-    }).pipe(
-      Effect.provide(
-        HubMode.layer.pipe(
-          Layer.provide([Database.at(":memory:"), NodeCrypto.layer, FetchHttpClient.layer]),
-          Layer.provide(withEnv({ SPORTAL_SCENARIO: "two-minute-drill-tie" }).pipe(Layer.orDie)),
-          Layer.provide(NodeServices.layer)
-        )
-      )
-    )
+      const published = yield* liveSlate.published
+
+      assert.isAbove(published.games.length, 0)
+    }).pipe(Effect.provide(scenarioHub("two-minute-drill-tie")))
   )
 })
+
+/** The Hub's mode on the scenario `name`, with an in-memory database. */
+function scenarioHub(name: string) {
+  return HubMode.layer.pipe(
+    Layer.provide([Database.at(":memory:"), NodeCrypto.layer, FetchHttpClient.layer]),
+    Layer.provide(withEnv({ SPORTAL_SCENARIO: name }).pipe(Layer.orDie)),
+    Layer.provide(NodeServices.layer)
+  )
+}

@@ -7,20 +7,36 @@ import { ChildProcess, ChildProcessSpawner } from "effect/process"
 describe("the Hub process", () => {
   // Windows cannot send a child SIGTERM. Ctrl-C there is SIGINT, which NodeRuntime.runMain handles the same way.
   it.live.skipIf(process.platform === "win32")(
-    "stops within seconds of SIGTERM with a Display connected, and exits 0",
-    () => stopsOnSigterm(Effect.succeed({})),
+    "should stop within seconds of SIGTERM with a Display connected, exiting 0 with its database written",
+    () =>
+      Effect.gen(function* () {
+        const stopped = yield* sigtermed({})
+
+        assert.strictEqual(stopped.code, ChildProcessSpawner.ExitCode(0))
+        assert.isBelow(stopped.took, 5_000)
+        assert.isTrue(stopped.databaseWritten)
+      }),
     30_000
   )
 
   it.live.skipIf(process.platform === "win32")(
-    "stops as quickly when the telemetry collector cannot be reached",
+    "should stop as quickly when the telemetry collector cannot be reached",
     () =>
-      stopsOnSigterm(Effect.map(freePort(), (port) => ({ SPORTAL_OTLP_URL: `http://127.0.0.1:${port}` }))),
+      Effect.gen(function* () {
+        const port = yield* freePort()
+        const settings = { SPORTAL_OTLP_URL: `http://127.0.0.1:${port}` }
+
+        const stopped = yield* sigtermed(settings)
+
+        assert.strictEqual(stopped.code, ChildProcessSpawner.ExitCode(0))
+        assert.isBelow(stopped.took, 5_000)
+        assert.isTrue(stopped.databaseWritten)
+      }),
     30_000
   )
 
   it.live(
-    "exits non-zero and names the setting when one is invalid",
+    "should exit non-zero, naming the setting, when one is invalid",
     () =>
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem
@@ -38,10 +54,10 @@ describe("the Hub process", () => {
 })
 
 /**
- * Starts the Hub with `settings`, connects a Display, and checks that SIGTERM stops it within seconds with exit
- * code 0, its database written.
+ * Starts the Hub with `settings`, connects a Display, and sends the Hub SIGTERM: its exit code, how long it took to
+ * stop in milliseconds, and whether its database was written.
  */
-function stopsOnSigterm<E, R>(settings: Effect.Effect<Record<string, string>, E, R>) {
+function sigtermed(settings: Record<string, string>) {
   return Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem
     const path = yield* Path.Path
@@ -50,11 +66,7 @@ function stopsOnSigterm<E, R>(settings: Effect.Effect<Record<string, string>, E,
     const port = yield* freePort()
     const base = `http://127.0.0.1:${port}`
 
-    const hub = yield* spawnHub({
-      ...(yield* settings),
-      SPORTAL_PORT: String(port),
-      SPORTAL_DATA_DIR: dataDir
-    })
+    const hub = yield* spawnHub({ ...settings, SPORTAL_PORT: String(port), SPORTAL_DATA_DIR: dataDir })
     // Unread output would fill the pipe and block the Hub.
     yield* hub.all.pipe(Stream.runDrain, Effect.exit, Effect.forkScoped)
 
@@ -68,11 +80,10 @@ function stopsOnSigterm<E, R>(settings: Effect.Effect<Record<string, string>, E,
     const stopping = yield* Clock.currentTimeMillis
     yield* hub.kill({ killSignal: "SIGTERM" })
     const code = yield* hub.exitCode
-    const took = (yield* Clock.currentTimeMillis) - stopping
+    const stopped = yield* Clock.currentTimeMillis
 
-    assert.strictEqual(code, ChildProcessSpawner.ExitCode(0))
-    assert.isBelow(took, 5_000)
-    assert.isTrue(yield* fs.exists(path.join(dataDir, "sportal.sqlite")))
+    const databaseWritten = yield* fs.exists(path.join(dataDir, "sportal.sqlite"))
+    return { code, took: stopped - stopping, databaseWritten }
   }).pipe(Effect.scoped, Effect.provide([NodeServices.layer, FetchHttpClient.layer]))
 }
 
@@ -84,11 +95,13 @@ function spawnHub(settings: Record<string, string>) {
   return Effect.gen(function* () {
     const path = yield* Path.Path
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
+    const main = yield* path.fromFileUrl(new URL("./main.ts", import.meta.url))
     const inherited = Object.entries(process.env).filter(
       (entry): entry is [string, string] => entry[1] !== undefined && !entry[0].startsWith("SPORTAL_")
     )
+
     return yield* spawner.spawn(
-      ChildProcess.make(process.execPath, [yield* path.fromFileUrl(new URL("./main.ts", import.meta.url))], {
+      ChildProcess.make(process.execPath, [main], {
         env: {
           ...Object.fromEntries(inherited),
           SPORTAL_HOST: "127.0.0.1",
@@ -105,6 +118,9 @@ function spawnHub(settings: Record<string, string>) {
 function freePort() {
   return Effect.gen(function* () {
     const { address } = yield* HttpServer.HttpServer
-    return "port" in address ? address.port : yield* Effect.die("the test server listens on no TCP port")
+    if (!("port" in address)) {
+      return yield* Effect.die("the test server listens on no TCP port")
+    }
+    return address.port
   }).pipe(Effect.provide(NodeHttpServer.layerTest))
 }
