@@ -54,6 +54,7 @@ export function StageMap(props: {
             const game = gameIn(index)
             const onAir = at !== undefined && at._tag !== "Empty" && props.stage.hears(at.game)
             const soloed = at !== undefined && at._tag !== "Empty" && props.stage.soloes(at.game)
+
             return (
               <button
                 // biome-ignore lint/suspicious/noArrayIndexKey: a slot is identified by its place in the layout.

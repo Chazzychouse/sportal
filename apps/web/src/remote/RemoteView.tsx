@@ -83,6 +83,7 @@ export function RemoteView() {
             const { game, place } = card
             const dropped = display.drop(card, live.stage)
             const networks = game?.networks()
+
             return (
               <li key={card.id}>
                 <button

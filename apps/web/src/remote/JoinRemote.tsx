@@ -19,17 +19,9 @@ export function JoinRemote(props: { open: boolean; onOpenChange: (open: boolean)
     setAnswer(Answer.Asking())
     // Closing or reopening the dialog interrupts the question, so a late answer never lands in a newer dialog.
     const asking = runtime.runFork(
-      hostAddresses.pipe(
-        Effect.map((addresses) => Answer.Answered({ addresses })),
-        Effect.catchTag("HttpClientError", () => Effect.succeed(Answer.NoAnswer())),
-        Effect.catchDefect((defect) =>
-          Effect.logError("Asking the Hub for its addresses failed", defect).pipe(
-            Effect.as(Answer.NoAnswer())
-          )
-        ),
-        Effect.flatMap((answered) => Effect.sync(() => setAnswer(answered)))
-      )
+      askHub().pipe(Effect.flatMap((answered) => Effect.sync(() => setAnswer(answered))))
     )
+
     return () => {
       runtime.runFork(Fiber.interrupt(asking))
     }
@@ -97,6 +89,16 @@ type Answer = Data.TaggedEnum<{
   Answered: { readonly addresses: ReadonlyArray<string> }
 }>
 const Answer = Data.taggedEnum<Answer>()
+
+function askHub() {
+  return hostAddresses.pipe(
+    Effect.map((addresses) => Answer.Answered({ addresses })),
+    Effect.catchTag("HttpClientError", () => Effect.succeed(Answer.NoAnswer())),
+    Effect.catchDefect((defect) =>
+      Effect.logError("Asking the Hub for its addresses failed", defect).pipe(Effect.as(Answer.NoAnswer()))
+    )
+  )
+}
 
 /** A QR code, dark on light whatever the theme, since that is what phone cameras read best. */
 function QrCode(props: { text: string }) {
