@@ -37,7 +37,11 @@ describe("FeedLog", () => {
       const log = yield* FeedLog
 
       yield* Effect.forEach(
-        [poll("nfl", '{"events":[]}', 0), message("event-football-nfl", '{"op":"P"}', 5, 41)],
+        [
+          poll("nfl", '{"events":[]}', 0),
+          message("event-football-nfl", '{"op":"P"}', 5, 41),
+          checkpoint("gp-football-nfl-401872971", '{"entities":{}}', 9, 42)
+        ],
         log.append
       )
       yield* TestClock.withLive(Effect.sleep("20 millis"))
@@ -50,17 +54,12 @@ describe("FeedLog", () => {
   it.effect("should write appended frames within 100 ms, replaying them as they were appended", () =>
     Effect.gen(function* () {
       const log = yield* FeedLog
-      const appended = yield* Effect.forEach(
-        [
-          poll("nfl", '{"events":[]}', 0),
-          message("event-football-nfl", '{"op":"P"}', 5, 41),
-          checkpoint("gp-football-nfl-401872971", '{"entities":{}}', 9, 42)
-        ],
-        log.append
-      )
 
-      yield* TestClock.adjust("100 millis")
-      yield* written(3)
+      const appended = yield* appendedAndWritten([
+        poll("nfl", '{"events":[]}', 0),
+        message("event-football-nfl", '{"op":"P"}', 5, 41),
+        checkpoint("gp-football-nfl-401872971", '{"entities":{}}', 9, 42)
+      ])
 
       const replayed = yield* Stream.runCollect(log.replay(at(0)))
       assert.deepStrictEqual(replayed, appended)
@@ -289,45 +288,49 @@ describe("FeedLog", () => {
     }).pipe(Effect.provide([Database.at(":memory:"), NodeCrypto.layer]), withMetrics)
   )
 
-  it.effect("should keep seqs contiguous when appends are interrupted", () =>
-    Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient
-      const log = yield* FeedLog
-      const emitted = yield* Ref.make<ReadonlyArray<number>>([])
-      const frames = yield* log.subscribe
-      const listening = yield* frames.pipe(
-        Stream.runForEach((frame) => Ref.update(emitted, (seqs) => [...seqs, frame.seq])),
-        Effect.forkChild({ startImmediately: true })
-      )
-      yield* TestClock.withLive(Effect.sleep("5 millis"))
+  it.effect(
+    "should keep seqs contiguous when appends are interrupted",
+    () =>
+      Effect.gen(function* () {
+        const sql = yield* SqlClient.SqlClient
+        const log = yield* FeedLog
+        const emitted = yield* Ref.make<ReadonlyArray<number>>([])
+        const frames = yield* log.subscribe
+        const listening = yield* frames.pipe(
+          Stream.runForEach((frame) => Ref.update(emitted, (seqs) => [...seqs, frame.seq])),
+          Effect.forkChild({ startImmediately: true })
+        )
+        yield* TestClock.withLive(Effect.sleep("5 millis"))
 
-      // Enough that some run before the interrupts below, once the forking fiber yields; with half as many, none do.
-      const fibers = yield* Effect.forEach(
-        Array.from({ length: 2_000 }, (_, index) => index),
-        (index) => Effect.forkDetach(log.append(message("socket", `body ${index}`, index, index)))
-      )
-      // Interrupted while the other appends are running, so some land between an append's steps.
-      yield* Effect.forEach(
-        fibers.filter((_, index) => index % 2 === 1),
-        (fiber) => Fiber.interrupt(fiber),
-        { concurrency: "unbounded", discard: true }
-      )
-      yield* Effect.forEach(fibers, (fiber) => Fiber.await(fiber), { discard: true })
-      yield* TestClock.withLive(Effect.sleep("5 millis"))
+        // Enough that some run before the interrupts below, once the forking fiber yields; with half as many, none do.
+        const fibers = yield* Effect.forEach(
+          Array.from({ length: 2_000 }, (_, index) => index),
+          (index) => Effect.forkDetach(log.append(message("socket", `body ${index}`, index, index)))
+        )
+        // Interrupted while the other appends are running, so some land between an append's steps.
+        yield* Effect.forEach(
+          fibers.filter((_, index) => index % 2 === 1),
+          (fiber) => Fiber.interrupt(fiber),
+          { concurrency: "unbounded", discard: true }
+        )
+        yield* Effect.forEach(fibers, (fiber) => Fiber.await(fiber), { discard: true })
+        yield* TestClock.withLive(Effect.sleep("5 millis"))
 
-      const published = yield* Ref.get(emitted)
-      yield* Fiber.interrupt(listening)
-      yield* settled(
-        Effect.andThen(TestClock.adjust("100 millis"), rowCount()),
-        (rows) => rows >= published.length
-      )
-      const rows = yield* sql<{ seq: number }>`SELECT seq FROM feed_frame ORDER BY seq`
-      const stored = rows.map((row) => row.seq)
-      const contiguous = published.map((_, index) => index + 1)
-      assert.isAbove(published.length, 0)
-      assert.deepStrictEqual(published, contiguous)
-      assert.deepStrictEqual(stored, contiguous)
-    }).pipe(Effect.scoped, Effect.provide(feedLog))
+        const published = yield* Ref.get(emitted)
+        yield* Fiber.interrupt(listening)
+        yield* settled(
+          Effect.andThen(TestClock.adjust("100 millis"), rowCount()),
+          (rows) => rows >= published.length
+        )
+        const rows = yield* sql<{ seq: number }>`SELECT seq FROM feed_frame ORDER BY seq`
+        const stored = rows.map((row) => row.seq)
+        const contiguous = published.map((_, index) => index + 1)
+        assert.isAbove(published.length, 0)
+        assert.deepStrictEqual(published, contiguous)
+        assert.deepStrictEqual(stored, contiguous)
+      }).pipe(Effect.scoped, Effect.provide(feedLog)),
+    // Some 1,500 frames are gzip'd and hashed on the thread pool in turn: 3.4 s on a loaded full suite, near the 5 s default.
+    { timeout: 20_000 }
   )
 
   it.effect("should write the frames still waiting when it closes", () =>

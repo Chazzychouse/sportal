@@ -154,9 +154,7 @@ describe("GET /api/live", () => {
     Effect.gen(function* () {
       const api = yield* makeClient
       yield* firstSlateOnTestClock()
-      const { lines } = yield* liveLines()
-      yield* Queue.take(lines)
-      yield* Queue.take(lines)
+      const lines = yield* pastInitialMessages()
 
       yield* api.stage.dispatch({ payload: { command: { _tag: "Assign", tile: 0, game: game.id } } })
       const thirdLine = yield* Queue.take(lines)
@@ -185,9 +183,7 @@ describe("GET /api/live", () => {
   it.effect("should send a comment every 20 seconds, so a proxy does not close a quiet stream", () =>
     Effect.gen(function* () {
       yield* firstSlateOnTestClock()
-      const { lines } = yield* liveLines()
-      yield* Queue.take(lines)
-      yield* Queue.take(lines)
+      const lines = yield* pastInitialMessages()
 
       yield* TestClock.adjust("20 seconds")
       const comment = yield* nextComment(lines)
@@ -200,9 +196,7 @@ describe("GET /api/live", () => {
     Effect.gen(function* () {
       const api = yield* makeClient
       yield* firstSlateOnTestClock()
-      const { lines } = yield* liveLines()
-      yield* Queue.take(lines)
-      yield* Queue.take(lines)
+      const lines = yield* pastInitialMessages()
       yield* TestClock.adjust("20 seconds")
       yield* nextComment(lines)
 
@@ -310,6 +304,18 @@ function liveLines() {
     )
 
     return { response, lines }
+  })
+}
+
+/** Opens the live stream and takes its first two messages, the current slate and stage: the lines after them. */
+function pastInitialMessages() {
+  return Effect.gen(function* () {
+    const { lines } = yield* liveLines()
+
+    yield* Queue.take(lines)
+    yield* Queue.take(lines)
+
+    return lines
   })
 }
 

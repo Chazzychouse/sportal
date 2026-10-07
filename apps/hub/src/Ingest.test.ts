@@ -43,10 +43,10 @@ describe("Ingest", () => {
       const liveSlate = yield* LiveSlate
 
       yield* TestClock.adjust(0)
-
       const current = yield* liveSlate.latest
       yield* TestClock.adjust("100 millis")
       const logged = yield* logOf(2)
+
       assert.deepStrictEqual(
         logged.map(({ seq, feed, channel }) => [seq, feed, channel]),
         [
@@ -111,7 +111,7 @@ describe("Ingest", () => {
       })
   )
 
-  it.effect("should take the first poll's listing into the slate", () =>
+  it.effect("should take the first poll's scores into the slate", () =>
     Effect.gen(function* () {
       yield* TestClock.adjust(0)
 
@@ -390,26 +390,17 @@ describe("Ingest", () => {
     }).pipe(withMetrics)
   )
 
-  it.effect("should log a live feed that completes at Error, the poll carrying on", () => {
+  it.effect.each([
+    ["completes", Stream.empty, "the feed's stream ended"],
+    ["dies, with its defect", Stream.die("socket handler threw"), "socket handler threw"]
+  ] as const)("should log at Error a live feed that %s, the poll carrying on", ([_name, frames, why]) => {
     const { logs, layer } = recordingLogs()
     return Effect.gen(function* () {
-      const polls = yield* polledFor20SecondsOver(Stream.empty)
+      const polls = yield* polledFor20SecondsOver(frames)
 
       const stopped = feedStopped(logs)
       assert.strictEqual(stopped.length, 1)
-      assert.include(`${stopped[0]?.message} ${stopped[0]?.cause}`, "the feed's stream ended")
-      assert.isAtLeast(polls, 3)
-    }).pipe(Effect.provide(layer))
-  })
-
-  it.effect("should log a live feed that dies at Error with its defect, the poll carrying on", () => {
-    const { logs, layer } = recordingLogs()
-    return Effect.gen(function* () {
-      const polls = yield* polledFor20SecondsOver(Stream.die("socket handler threw"))
-
-      const stopped = feedStopped(logs)
-      assert.strictEqual(stopped.length, 1)
-      assert.include(`${stopped[0]?.message} ${stopped[0]?.cause}`, "socket handler threw")
+      assert.include(`${stopped[0]?.message} ${stopped[0]?.cause}`, why)
       assert.isAtLeast(polls, 3)
     }).pipe(Effect.provide(layer))
   })
