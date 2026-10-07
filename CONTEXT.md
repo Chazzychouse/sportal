@@ -88,8 +88,6 @@ Every exported type name must be a term here, except the wire schemas in `*Paylo
 | **Airing** | One programme on a channel, with its begin and end. | listing, show |
 | **Guide unreadable** | A guide response the source could not read. | |
 | **Database** | The Hub's SQLite database. Each store migrates its own tables in it. | store, persistence |
-| **Game history** | Past plays and each game's latest snapshot, derived from the slate into the Hub's database. Rebuildable from the feed log. | archive, stats |
-| **Game history error** | The game history could not read. | database error |
 | **Feed log** | Every frame the feeds delivered, raw, in the order the Hub received it. The truth the Hub's game state is derived from. | event store, journal |
 | **Frame** | One thing a feed delivered: a poll response, a FastCast message, or a FastCast checkpoint. | message, payload |
 | **Corpus** | Game days kept typed for runs to play through the slate, in `HubConfig.corpusDir`: each day's corpus inputs, read back as the deliveries the live decode handed over. | dataset, fixtures |

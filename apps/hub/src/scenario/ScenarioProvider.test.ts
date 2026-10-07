@@ -508,7 +508,7 @@ function following(options: Options) {
     Layer.provideMerge(
       options.scenarioFeedLog === true
         ? FeedLog.forScenario
-        : FeedLog.layer.pipe(Layer.provide([Database.at(":memory:"), NodeCrypto.layer]))
+        : FeedLog.layer.pipe(Layer.provide([Database.layerMemory, NodeCrypto.layer]))
     ),
     Layer.provide(DateTime.layerCurrentZoneLocal),
     Layer.provide([NodeServices.layer, NodeCrypto.layer])

@@ -48,7 +48,7 @@ export function inCorpus<A, E>(
           CorpusDays.layer.pipe(Layer.provide(withEnv({ SPORTAL_CORPUS_DIR: dir }))),
           decoder,
           DateTime.layerCurrentZone(timeZone),
-          Database.at(":memory:"),
+          Database.layerMemory,
           NodeCrypto.layer
         )
       )

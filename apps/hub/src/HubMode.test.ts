@@ -25,7 +25,7 @@ describe("HubMode", () => {
 /** The Hub's mode on the scenario `name`, with an in-memory database. */
 function scenarioHub(name: string) {
   return HubMode.layer.pipe(
-    Layer.provide([Database.at(":memory:"), NodeCrypto.layer, FetchHttpClient.layer]),
+    Layer.provide([Database.layerMemory, NodeCrypto.layer, FetchHttpClient.layer]),
     Layer.provide(withEnv({ SPORTAL_SCENARIO: name }).pipe(Layer.orDie)),
     Layer.provide(NodeServices.layer)
   )

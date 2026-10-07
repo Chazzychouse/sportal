@@ -67,11 +67,9 @@ flowchart LR
     feedlog[(Feed log: feed.sqlite)]
     decode[Decoder: the provider's decode, frames to deliveries]
     slate[Live slate: every game's state and plays, from both feeds]
-    history[(GameHistory: plays, latest snapshots)]
     corpus[Corpus: typed days, built from the feed log or the archive; run on virtual time]
     director[Director: rules over game events and plays, not built]
     stages[Live stage: the one Stage, in memory]
-    store[(SQL store)]
     api[HTTP API + live stream]
   end
 
@@ -93,7 +91,6 @@ flowchart LR
   prov --> decode
   decode -- deliveries --> slate
   slate -- live games for the polling Schedule, and the live feed's demand --> ingest
-  slate -- changes --> history --> store
   slate -- listed games, recent plays --> api
   feedlog -- build --> corpus
   corpus -- days --> slate
@@ -133,7 +130,7 @@ On a local network the round trip is a few milliseconds. If a cloud-hosted Hub e
 ### 3.3 Portability and network exposure
 
 - All Hub configuration comes from the environment through Effect `Config`: bind address, storage address, provider keys, access token.
-- The Hub keeps no state outside its data directory (`sportal.sqlite` and `feed.sqlite`), so it can be stopped, moved, and restarted freely.
+- The Hub keeps no state outside its data directory (`feed.sqlite`), so it can be stopped, moved, and restarted freely.
 - Planned: on the home network the Hub requires a single shared access token, entered once per device. It is not built for the public internet: a cloud deployment additionally requires real authentication, which is deliberately left as a future decision record rather than half-built now.
 - The Electron shell never moves to the cloud; Displays always run at home and point at wherever the Hub is.
 
@@ -218,11 +215,10 @@ sportal/
     │       ├── HubMode.ts          What the Hub plays: the live day or a scenario; the only file that names providers and sources
     │       ├── HubConfig.ts        Every environment setting, in one place
     │       ├── Telemetry.ts        Log level and format; OTLP export when configured
-    │       ├── Database.ts         The SQLite client; each store migrates its own tables in it
+    │       ├── Database.ts         The SQLite plumbing the feed log needs: a file or memory client layer, and migrations per store
     │       ├── LiveSlate.ts        The domain slate, run over the feed log: the day's replay, then each appended frame; its `Following`, timer, telemetry, game events, the live feed's demand, and the listed games it publishes with their recent plays
     │       ├── LiveSlateTelemetry.ts  What a take or tick did, as logs and metrics, told as the following stands
     │       ├── DecodeTelemetry.ts  What decode observed, as logs and metrics, for frames after the replay (moved here from `ingest/`)
-    │       ├── GameHistory.ts      Past plays and each game's latest snapshot, derived from the slate
     │       ├── corpus/             Typed game days built from the feed log or the archive, run through the slate on virtual time: `CorpusDay`, `CorpusInput`, `CorpusBuild`, `CorpusRun`, `Archive`, `Synthesis`, the `corpus` CLI and its worker
     │       ├── LiveStage.ts        The one authoritative Stage, held in memory
     │       ├── Ingest.ts           Polls HubConfig's leagues, runs the push on the slate's demand, appends every frame to the feed log, and waits on `through`
@@ -423,9 +419,6 @@ the slate on virtual time, on worker threads, reading a subject's output over ea
 nonzero (`DaysFailed`) when a day fails. Backfill refuses a date that is not over, never overwrites a captured day, and
 archives a 404 or 410 summary as refused so its game is skipped.
 
-**GameHistory** — past plays and each game's latest snapshot, derived from the slate's changes into `sportal.sqlite`
-(`plays(game)`, `latest(game)`). Both tables can be dropped and rebuilt from the feed log.
-
 **Source** — video out:
 
 ```ts
@@ -441,7 +434,7 @@ A source's channels are found in its own guide, read by the shell (`docs/history
 
 `StreamLocator` is a tagged union. Today it has one member, a web-view address; a new kind is added only when a source needs it.
 
-**Stores** — persistence. Each concept's store is a service over the `Database` module (SQLite; Postgres when cloud-hosted) and owns its migrations in its own table. `GameHistory` exists; follows, presets, and rules arrive with the Tracker. A Stage is not stored.
+**Stores** — persistence. Each concept's store is a service over the `Database` module (SQLite; Postgres when cloud-hosted) and owns its migrations in its own table. The feed log is the only one today; follows, presets, and rules arrive with the Tracker. A Stage is not stored.
 
 ### 5.2 Ingest: frames, deliveries, and events
 

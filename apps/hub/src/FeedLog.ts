@@ -107,12 +107,12 @@ export class FeedLog extends Context.Service<
     })
   )
 
-  /** On `feed.sqlite` in the data directory, its own client so it never shares `sportal.sqlite`'s. */
+  /** On `feed.sqlite` in the data directory, its own client. */
   static readonly inDataDir: Layer.Layer<
     FeedLog,
     never,
     HubConfig | FileSystem.FileSystem | Path.Path | Crypto.Crypto
-  > = FeedLog.layer.pipe(Layer.provide(Database.fileInDataDir("feed.sqlite")), Layer.orDie)
+  > = FeedLog.layer.pipe(Layer.provide(Database.layerFile("feed.sqlite")), Layer.orDie)
 
   /**
    * A scenario's feed log: in memory, or on the file `SPORTAL_SCENARIO_FEED_LOG` names in the data directory. Never on
@@ -128,8 +128,8 @@ export class FeedLog extends Context.Service<
       return FeedLog.layer.pipe(
         Layer.provide(
           Option.match(scenarioFeedLog, {
-            onNone: () => Database.at(":memory:"),
-            onSome: (name) => Database.fileInDataDir(name)
+            onNone: () => Database.layerMemory,
+            onSome: (name) => Database.layerFile(name)
           })
         ),
         Layer.orDie

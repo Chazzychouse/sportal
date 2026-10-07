@@ -40,6 +40,7 @@ import { fixtures, recordedNeAtBuf, recordedPlays } from "./provider/espn/TestEs
 import { Decoded, LiveFeedDemand } from "./provider/Provider.ts"
 import { dyingAt } from "./provider/TestDecoder.ts"
 import { logged } from "./TestFeedLog.ts"
+import { withEnv } from "./TestHubConfig.ts"
 import {
   appended,
   delivered,
@@ -1229,7 +1230,7 @@ describe("LiveSlate following the feed log", () => {
 
       assert.strictEqual(current.live.get(one)?.snapshot.period, 3)
       assert.strictEqual(taken, 1)
-    }).pipe(Effect.provide([Database.at(":memory:"), NodeCrypto.layer]), withMetrics)
+    }).pipe(Effect.provide([Database.layerMemory, NodeCrypto.layer]), withMetrics)
   )
 
   it.effect(
@@ -1246,7 +1247,7 @@ describe("LiveSlate following the feed log", () => {
         )
 
         assert.isUndefined(built, "the build waits for the last replayed frame")
-      }).pipe(Effect.provide([Database.at(":memory:"), NodeCrypto.layer]))
+      }).pipe(Effect.provide([Database.layerMemory, NodeCrypto.layer]))
   )
 
   it.effect(
@@ -1268,7 +1269,7 @@ describe("LiveSlate following the feed log", () => {
         assert.strictEqual(current.live.get(one)?.snapshot.period, 4)
         assert.include(summary?.message, "replayed 3 frames")
         assert.strictEqual(taken, 1)
-      }).pipe(Effect.provide([Database.at(":memory:"), NodeCrypto.layer, layer]), withMetrics)
+      }).pipe(Effect.provide([Database.layerMemory, NodeCrypto.layer, layer]), withMetrics)
     }
   )
 
@@ -1549,7 +1550,10 @@ describe("LiveSlate, a recorded game", () => {
         const half = Math.floor(all.length / 2)
         const fs = yield* FileSystem.FileSystem
         const dir = yield* fs.makeTempDirectoryScoped()
-        const onDisk = Layer.merge(Database.at(join(dir, "feed.sqlite")), NodeCrypto.layer)
+        const feedFile = Database.layerFile("feed.sqlite").pipe(
+          Layer.provide(withEnv({ SPORTAL_DATA_DIR: dir }))
+        )
+        const onDisk = Layer.merge(feedFile, NodeCrypto.layer)
 
         // Half the day logged and followed, then every layer closed; reopened on the same file, the rest logged, and
         // the whole log followed, as a Hub starting again would.

@@ -1,7 +1,6 @@
 import { NodeRuntime, NodeServices } from "@effect/platform-node"
 import { Layer, Runtime } from "effect"
 import { FetchHttpClient } from "effect/http"
-import * as Database from "./Database.ts"
 import { HubConfig } from "./HubConfig.ts"
 import * as HubMode from "./HubMode.ts"
 import { isStopping } from "./HubStopping.ts"
@@ -13,7 +12,6 @@ const Hub = HubServer.serve.pipe(
   Layer.provide(HubServer.listen),
   Layer.provide(LiveStage.layer),
   Layer.provide(HubMode.layer),
-  Layer.provide(Database.inDataDir),
   Layer.provide(Telemetry.layer),
   Layer.provide([HubConfig.layer, FetchHttpClient.layer]),
   Layer.provide(NodeServices.layer)

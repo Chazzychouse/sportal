@@ -74,7 +74,7 @@ describe("FeedLog", () => {
       const after = yield* FeedLog.use(() => storedRows()).pipe(Effect.provide(feedLogOnDatabase))
 
       assert.deepStrictEqual(after, before)
-    }).pipe(Effect.provide(Database.at(":memory:")))
+    }).pipe(Effect.provide(Database.layerMemory))
   )
 
   it.effect("should let snapshot frames into an upgraded version 1 log, numbered after its last row", () =>
@@ -104,7 +104,7 @@ describe("FeedLog", () => {
         after.map(({ seq, feed, stored }) => [seq, feed, stored]),
         [...before.map(({ seq, feed, stored }) => [seq, feed, stored]), [10, "snapshot", "blob"]]
       )
-    }).pipe(Effect.provide(Database.at(":memory:")))
+    }).pipe(Effect.provide(Database.layerMemory))
   )
 
   it.effect("should keep a version 1 log's indexes on upgrading", () =>
@@ -122,7 +122,7 @@ describe("FeedLog", () => {
         indexes.map(({ name }) => name),
         ["feed_frame_channel_seq", "feed_frame_received_at"]
       )
-    }).pipe(Effect.provide(Database.at(":memory:")))
+    }).pipe(Effect.provide(Database.layerMemory))
   )
 
   it.effect("should open no span appending frames, and one storing them", () => {
@@ -236,7 +236,7 @@ describe("FeedLog", () => {
         assert.deepStrictEqual(replayed, [kept])
         assert.strictEqual(warnings.length, 1)
         assert.deepInclude(warnings[0]?.annotations, { from: 1, to: 2, count: 2 })
-      }).pipe(Effect.provide([Database.at(":memory:"), NodeCrypto.layer, logged]), withMetrics)
+      }).pipe(Effect.provide([Database.layerMemory, NodeCrypto.layer, logged]), withMetrics)
     }
   )
 
@@ -250,7 +250,7 @@ describe("FeedLog", () => {
 
       const rows = yield* rowCount()
       assert.strictEqual(rows, 1)
-    }).pipe(Effect.provide([Database.at(":memory:"), NodeCrypto.layer]), withMetrics)
+    }).pipe(Effect.provide([Database.layerMemory, NodeCrypto.layer]), withMetrics)
   )
 
   it.effect("should warn of a gap left at close on replay, replaying none of its frames", () => {
@@ -269,7 +269,7 @@ describe("FeedLog", () => {
       assert.deepStrictEqual(replayed, [])
       assert.strictEqual(warnings.length, 1)
       assert.deepInclude(warnings[0]?.annotations, { from: 1, to: 2, count: 2 })
-    }).pipe(Effect.provide([Database.at(":memory:"), NodeCrypto.layer, logged]), withMetrics)
+    }).pipe(Effect.provide([Database.layerMemory, NodeCrypto.layer, logged]), withMetrics)
   })
 
   it.effect("should number on past a gap left at close when opened again", () =>
@@ -285,7 +285,7 @@ describe("FeedLog", () => {
 
       // The gap row holds the last lost seq, so reopening numbers on past every lost frame.
       assert.strictEqual(kept.seq, 3)
-    }).pipe(Effect.provide([Database.at(":memory:"), NodeCrypto.layer]), withMetrics)
+    }).pipe(Effect.provide([Database.layerMemory, NodeCrypto.layer]), withMetrics)
   )
 
   it.effect(
@@ -343,7 +343,7 @@ describe("FeedLog", () => {
 
       const rows = yield* rowCount()
       assert.strictEqual(rows, 2)
-    }).pipe(Effect.provide([Database.at(":memory:"), NodeCrypto.layer]))
+    }).pipe(Effect.provide([Database.layerMemory, NodeCrypto.layer]))
   )
 
   it.effect("should continue from the last logged frame when opened again", () =>
@@ -365,7 +365,7 @@ describe("FeedLog", () => {
         kinds.map((row) => row.kind),
         ["response", "message", "unchanged"]
       )
-    }).pipe(Effect.provide([Database.at(":memory:"), NodeCrypto.layer]))
+    }).pipe(Effect.provide([Database.layerMemory, NodeCrypto.layer]))
   )
 
   it.effect(
@@ -433,10 +433,7 @@ describe("FeedLog", () => {
   )
 })
 
-const feedLog = FeedLog.layer.pipe(
-  Layer.provide(NodeCrypto.layer),
-  Layer.provideMerge(Database.at(":memory:"))
-)
+const feedLog = FeedLog.layer.pipe(Layer.provide(NodeCrypto.layer), Layer.provideMerge(Database.layerMemory))
 
 /** The feed log over the database the test provides. */
 const feedLogOnDatabase = FeedLog.layer.pipe(Layer.provide(NodeCrypto.layer))

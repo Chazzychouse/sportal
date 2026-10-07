@@ -1,7 +1,6 @@
 import { NodeSocket } from "@effect/platform-node"
 import { DateTime, Effect, Layer, Option } from "effect"
 import { FeedLog } from "./FeedLog.ts"
-import { GameHistory } from "./GameHistory.ts"
 import { HubConfig } from "./HubConfig.ts"
 import * as Ingest from "./Ingest.ts"
 import { LiveSlate } from "./LiveSlate.ts"
@@ -35,8 +34,6 @@ export const layer = Layer.unwrap(
 function live() {
   return Layer.mergeAll(
     Layer.mergeAll(
-      // Nothing reads the history yet; it only follows the slate.
-      Layer.effectDiscard(Layer.build(GameHistory.layer)),
       Ingest.layer.pipe(
         Layer.provide(
           EspnProvider.layer.pipe(
@@ -56,7 +53,7 @@ function live() {
 
 // The scenario plays as the provider through the real Ingest, onto a feed log of its own, decoded as ESPN: a recorded
 // one as ESPN recorded it, a written one as ESPN's writer writes its script. Ingest and the LiveSlate share the
-// scenario's clock; the rest of the Hub keeps the real one. The game history stays out of a scenario.
+// scenario's clock; the rest of the Hub keeps the real one.
 function scripted() {
   return Layer.mergeAll(
     Layer.mergeAll(

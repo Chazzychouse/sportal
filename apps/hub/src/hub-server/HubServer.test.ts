@@ -336,7 +336,7 @@ function hubUnderTest() {
     Layer.provideMerge(Ingest.layer),
     Layer.provideMerge(
       LiveSlate.layer.pipe(
-        Layer.provideMerge(FeedLog.layer.pipe(Layer.provide([Database.at(":memory:"), NodeCrypto.layer]))),
+        Layer.provideMerge(FeedLog.layer.pipe(Layer.provide([Database.layerMemory, NodeCrypto.layer]))),
         Layer.provide([TestSnapshotFeed.decoder, DateTime.layerCurrentZoneLocal])
       )
     ),

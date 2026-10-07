@@ -1,29 +1,33 @@
 import { SqliteClient } from "@effect/sql-sqlite-node"
-import { Effect, FileSystem, Layer, Path } from "effect"
-import { Migrator, type SqlClient } from "effect/sql"
+import { Effect, FileSystem, Layer, Path, type PlatformError } from "effect"
+import { Migrator, type SqlClient, type SqlError } from "effect/sql"
 import { HubConfig } from "./HubConfig.ts"
 
-/** The Hub's database as `sportal.sqlite` in its data directory, which is created if it is missing. */
-export const inDataDir = fileInDataDir("sportal.sqlite")
-
-/**
- * A SQLite database as `filename` in the Hub's data directory, which is created if it is missing. Each store
- * migrates its own tables.
- */
-export function fileInDataDir(filename: string) {
+/** A SQLite database as `name` in the Hub's data directory, which is created if it is missing. */
+export function layerFile(
+  name: string
+): Layer.Layer<
+  SqlClient.SqlClient,
+  SqlError.SqlError | PlatformError.PlatformError,
+  HubConfig | FileSystem.FileSystem | Path.Path
+> {
   return Layer.unwrap(
     Effect.gen(function* () {
       const { dataDir } = yield* HubConfig
-      yield* (yield* FileSystem.FileSystem).makeDirectory(dataDir, { recursive: true })
-      return at((yield* Path.Path).join(dataDir, filename))
+      const fs = yield* FileSystem.FileSystem
+      const path = yield* Path.Path
+
+      yield* fs.makeDirectory(dataDir, { recursive: true })
+
+      return SqliteClient.layer({ filename: path.join(dataDir, name) })
     })
   )
 }
 
-/** A SQLite database in `filename`, or in memory as `":memory:"`. */
-export function at(filename: string) {
-  return SqliteClient.layer({ filename })
-}
+/** A SQLite database in memory. */
+export const layerMemory: Layer.Layer<SqlClient.SqlClient, SqlError.SqlError> = SqliteClient.layer({
+  filename: ":memory:"
+})
 
 /**
  * Runs one store's pending migrations, keyed `<id>_<name>`, and records them in that store's own table,

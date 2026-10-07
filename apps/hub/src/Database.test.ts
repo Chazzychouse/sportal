@@ -20,7 +20,7 @@ describe("Database.migrate", () => {
         tables.map((table) => table.name),
         ["first_migrations", "second_migrations", "first_thing", "second_thing"]
       )
-    }).pipe(Effect.provide(Database.at(":memory:")))
+    }).pipe(Effect.provide(Database.layerMemory))
   )
 
   it.effect("should run a migration once", () =>
@@ -31,38 +31,22 @@ describe("Database.migrate", () => {
       const again = yield* Database.migrate("store", migrations)
 
       assert.deepStrictEqual(again, [])
-    }).pipe(Effect.provide(Database.at(":memory:")))
+    }).pipe(Effect.provide(Database.layerMemory))
   )
 })
 
-describe("Database.inDataDir", () => {
-  it.effect(
-    "should keep the database in the Hub's data directory, creating the directory if it is missing",
-    () =>
-      Effect.gen(function* () {
-        const fs = yield* FileSystem.FileSystem
-        const path = yield* Path.Path
-        const temp = yield* fs.makeTempDirectoryScoped()
-        const dataDir = path.join(temp, "nested", "sportal")
-        const database = Database.inDataDir.pipe(Layer.provide(withEnv({ SPORTAL_DATA_DIR: dataDir })))
-
-        yield* selectOne().pipe(Effect.provide(database))
-
-        const written = yield* fs.exists(path.join(dataDir, "sportal.sqlite"))
-        assert.isTrue(written)
-      }).pipe(Effect.scoped, Effect.provide(NodeServices.layer))
-  )
-})
-
-describe("Database.at", () => {
+describe("Database.layerFile", () => {
   it.effect("should checkpoint the database on closing, so only the database file remains", () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem
       const path = yield* Path.Path
-      const temp = yield* fs.makeTempDirectoryScoped()
-      const file = path.join(temp, "x.sqlite")
+      const dataDir = yield* fs.makeTempDirectoryScoped()
+      const file = path.join(dataDir, "x.sqlite")
+      const database = Database.layerFile("x.sqlite").pipe(
+        Layer.provide(withEnv({ SPORTAL_DATA_DIR: dataDir }))
+      )
 
-      const walWhileOpen = yield* writtenThenWal(file).pipe(Effect.provide(Database.at(file)))
+      const walWhileOpen = yield* writtenThenWal(file).pipe(Effect.provide(database))
 
       const walAfter = yield* fs.exists(`${file}-wal`)
       const shmAfter = yield* fs.exists(`${file}-shm`)
@@ -79,13 +63,6 @@ function createTable(name: string) {
   return Effect.gen(function* () {
     const sql = yield* SqlClient.SqlClient
     yield* sql`CREATE TABLE ${sql(name)} (id INTEGER)`
-  })
-}
-
-function selectOne() {
-  return Effect.gen(function* () {
-    const sql = yield* SqlClient.SqlClient
-    yield* sql`SELECT 1`
   })
 }
 

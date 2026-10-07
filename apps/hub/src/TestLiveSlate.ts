@@ -30,7 +30,7 @@ export function slateFollowing(
       options.decoder ?? TestSnapshotFeed.decoder,
       options.zone === undefined ? DateTime.layerCurrentZoneLocal : DateTime.layerCurrentZone(options.zone)
     ]),
-    Layer.provide([Database.at(":memory:"), NodeCrypto.layer]),
+    Layer.provide([Database.layerMemory, NodeCrypto.layer]),
     Layer.orDie
   )
 }

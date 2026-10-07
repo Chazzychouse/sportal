@@ -7,14 +7,24 @@ import { ChildProcess, ChildProcessSpawner } from "effect/process"
 describe("the Hub process", () => {
   // Windows cannot send a child SIGTERM. Ctrl-C there is SIGINT, which NodeRuntime.runMain handles the same way.
   it.live.skipIf(process.platform === "win32")(
-    "should stop within seconds of SIGTERM with a Display connected, exiting 0 with its database written",
+    "should stop within seconds of SIGTERM with a Display connected, exiting 0",
     () =>
       Effect.gen(function* () {
         const stopped = yield* sigtermed({})
 
         assert.strictEqual(stopped.code, ChildProcessSpawner.ExitCode(0))
         assert.isBelow(stopped.took, 5_000)
-        assert.isTrue(stopped.databaseWritten)
+      }),
+    30_000
+  )
+
+  it.live.skipIf(process.platform === "win32")(
+    "should open no sportal.sqlite in the data directory",
+    () =>
+      Effect.gen(function* () {
+        const stopped = yield* sigtermed({})
+
+        assert.isFalse(stopped.sportalOpened)
       }),
     30_000
   )
@@ -30,7 +40,6 @@ describe("the Hub process", () => {
 
         assert.strictEqual(stopped.code, ChildProcessSpawner.ExitCode(0))
         assert.isBelow(stopped.took, 5_000)
-        assert.isTrue(stopped.databaseWritten)
       }),
     30_000
   )
@@ -55,7 +64,7 @@ describe("the Hub process", () => {
 
 /**
  * Starts the Hub with `settings`, connects a Display, and sends the Hub SIGTERM: its exit code, how long it took to
- * stop in milliseconds, and whether its database was written.
+ * stop in milliseconds, and whether it opened a `sportal.sqlite` in its data directory.
  */
 function sigtermed(settings: Record<string, string>) {
   return Effect.gen(function* () {
@@ -82,8 +91,8 @@ function sigtermed(settings: Record<string, string>) {
     const code = yield* hub.exitCode
     const stopped = yield* Clock.currentTimeMillis
 
-    const databaseWritten = yield* fs.exists(path.join(dataDir, "sportal.sqlite"))
-    return { code, took: stopped - stopping, databaseWritten }
+    const sportalOpened = yield* fs.exists(path.join(dataDir, "sportal.sqlite"))
+    return { code, took: stopped - stopping, sportalOpened }
   }).pipe(Effect.scoped, Effect.provide([NodeServices.layer, FetchHttpClient.layer]))
 }
 

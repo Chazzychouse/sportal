@@ -28,7 +28,6 @@ import { TestClock } from "effect/testing"
 import * as Database from "./Database.ts"
 import { FeedLog } from "./FeedLog.ts"
 import type { FeedFrame } from "./Frame.ts"
-import { GameHistory } from "./GameHistory.ts"
 import * as Ingest from "./Ingest.ts"
 import { LiveSlate } from "./LiveSlate.ts"
 import { type LiveFeed, LiveFeedDemand, type Polling, Provider, ProviderError } from "./provider/Provider.ts"
@@ -424,7 +423,7 @@ describe("Ingest", () => {
       Effect.gen(function* () {
         const sql = yield* SqlClient.SqlClient
         const scope = yield* Scope.make()
-        const services = yield* Layer.buildWithScope(liveDay(scripted([[scoring(0)]])), scope)
+        const services = yield* Layer.buildWithScope(over(scripted([[scoring(0)]])), scope)
         const log = yield* FeedLog.pipe(Effect.provideContext(services))
         // Far more than the 100 ms the writer could be behind by when the Hub stops.
         yield* Effect.forEach(
@@ -444,7 +443,7 @@ describe("Ingest", () => {
         `
         assert.isBelow(Duration.toMillis(took), Duration.toMillis(Duration.seconds(1)))
         assert.strictEqual(row?.count, 200)
-      }).pipe(Effect.provide([Database.at(":memory:"), NodeCrypto.layer])),
+      }).pipe(Effect.provide([Database.layerMemory, NodeCrypto.layer])),
     10_000
   )
 
@@ -469,7 +468,7 @@ describe("Ingest", () => {
       assert.isFalse(logs.some((log) => log.message.includes("started")))
       assert.strictEqual(replay?.attributes.get("sportal.frames"), 2)
       assert.strictEqual(replay?.attributes.get("sportal.deliveries"), 2)
-    }).pipe(Effect.provide([Database.at(":memory:"), NodeCrypto.layer]), withMetrics)
+    }).pipe(Effect.provide([Database.layerMemory, NodeCrypto.layer]), withMetrics)
   })
 
   it.effect("should append its first poll after the frames the slate replayed", () => {
@@ -490,13 +489,13 @@ describe("Ingest", () => {
 
       assert.deepStrictEqual(polledSlate.seq, Option.some(3))
       assert.strictEqual(polledSlate.live.get(GameId.make("1"))?.snapshot.period, 4)
-    }).pipe(Effect.provide([Database.at(":memory:"), NodeCrypto.layer]), withMetrics)
+    }).pipe(Effect.provide([Database.layerMemory, NodeCrypto.layer]), withMetrics)
   })
 })
 
 /** `over`, on a fresh in-memory database. */
 function ingesting(provider: Layer.Layer<Provider>, options: Parameters<typeof over>[1] = {}) {
-  return over(provider, options).pipe(Layer.provide([Database.at(":memory:"), NodeCrypto.layer]))
+  return over(provider, options).pipe(Layer.provide([Database.layerMemory, NodeCrypto.layer]))
 }
 
 /**
@@ -646,11 +645,6 @@ function reconnectingOnce(
     push: feeding(feed, subscriptions),
     reconnect: Schedule.recurs(1)
   })
-}
-
-/** The live day's layers, as HubMode builds them, over `provider`. */
-function liveDay(provider: Layer.Layer<Provider>) {
-  return Layer.effectDiscard(Layer.build(GameHistory.layer)).pipe(Layer.provideMerge(over(provider)))
 }
 
 /** Ingest whose next poll lists game 1 in period 4, each span that ends recorded in `ended`, logging to `logged`. */

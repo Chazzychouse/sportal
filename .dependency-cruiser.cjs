@@ -45,12 +45,12 @@ module.exports = {
     {
       name: "only-main-opens-the-database",
       comment:
-        "The composition root provides the database; stores reach it through SqlClient. The feed log opens its own file; the game history only migrates its tables; TestLiveSlate and TestCorpus keep a test's feed log in memory.",
+        "The composition root provides the database; stores reach it through SqlClient. The feed log opens its own file; TestLiveSlate and TestCorpus keep a test's feed log in memory.",
       severity: "error",
       from: {
         path: "^apps/hub/src/",
         pathNot:
-          "(^apps/hub/src/main\\.ts$|\\.test\\.ts$|^apps/hub/src/Database\\.ts$|^apps/hub/src/FeedLog\\.ts$|^apps/hub/src/GameHistory\\.ts$|^apps/hub/src/TestLiveSlate\\.ts$|^apps/hub/src/corpus/TestCorpus\\.ts$)"
+          "(^apps/hub/src/main\\.ts$|\\.test\\.ts$|^apps/hub/src/Database\\.ts$|^apps/hub/src/FeedLog\\.ts$|^apps/hub/src/TestLiveSlate\\.ts$|^apps/hub/src/corpus/TestCorpus\\.ts$)"
       },
       to: { path: "^apps/hub/src/Database\\.ts$" }
     },
