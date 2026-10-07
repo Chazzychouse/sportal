@@ -77,8 +77,19 @@ A reader opens a file to see the thing it is named for. Keep it that way.
 - Time comes from Effect's `Clock`. No `Date.now()` in `packages/domain` or the Hub.
 - No `any`, no non-null assertions, no enums, no default exports, no casts outside decoding.
 - No export lives only for its tests: `knip --production` fails on one.
+
+## Tests
+
 - Tests sit beside the file as `Name.test.ts`. Domain logic and provider decoding are written test-first.
   Provider tests run against recorded real payloads in the adapter's `fixtures/` folder.
+- A `Test*.ts` file is named for the concept it builds or fakes and sits beside its module.
+- One behaviour per test. Several cases are several tests; `it.each` only when the cases are one behaviour over
+  different inputs.
+- `it("should …")`; the `describe` names the unit (`describe("Play.eventsSince")`).
+- Arrange, Act, Assert, separated by a blank line each, with no `// Arrange` comments. Nothing to arrange: Act, then
+  Assert.
+- Rewriting a test keeps every assertion it had. The commit body lists, per rewritten file, each old test name and
+  the new test names that carry its assertions.
 
 ## Commands
 

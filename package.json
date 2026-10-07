@@ -15,6 +15,7 @@
     "typecheck": "tsc --noEmit && pnpm -r --parallel exec tsc --noEmit",
     "structure": "depcruise apps packages && knip --no-config-hints && knip --production --no-config-hints",
     "test": "vitest run",
+    "coverage": "vitest run --coverage",
     "format": "biome check --write .",
     "telemetry": "docker compose -f telemetry/compose.yaml up -d",
     "telemetry:down": "docker compose -f telemetry/compose.yaml down"
@@ -28,6 +29,7 @@
     "knip": "^6.39.0",
     "lefthook": "^2.1.16",
     "typescript": "7.0.2",
+    "@vitest/coverage-v8": "5.0.3",
     "vitest": "^5.0.3"
   }
 }

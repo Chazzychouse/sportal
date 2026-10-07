@@ -43,7 +43,7 @@ Versions were checked against the registry on 2026-10-03. Effect is at 4.0, whic
 | Styling | Tailwind CSS with two density themes (desk, couch) | Same components, two presentation modes |
 | Desktop shell | Electron (castlabs Widevine build), one `WebContentsView` per stream tile, electron-vite | The only dependable way to play Widevine content in several independent views |
 | Telemetry | Effect's own OTLP exporters (`effect/observability`), over OTLP/HTTP to a collector named by `SPORTAL_OTLP_URL`; without it the Hub only logs to the console | Spans, logs, and metrics with no OpenTelemetry SDK and no new dependency |
-| Tests | Vitest with `@effect/vitest`; Playwright for the web UI | Effect-aware tests with a controllable clock |
+| Tests | Vitest with `@effect/vitest` | Effect-aware tests with a controllable clock |
 | Lint and format | Biome | One fast tool |
 | Structure enforcement | dependency-cruiser (import boundaries), knip (unused files, exports, dependencies) | The layout rules in section 4 are checked by machine, not by memory |
 | Hooks | Lefthook: format and lint on commit; typecheck, test, structure checks on push | |
@@ -168,7 +168,7 @@ sportal/
 ├── tsconfig.base.json
 ├── biome.json
 ├── knip.json
-├── vitest.config.ts
+├── vitest.config.ts            Vitest projects and coverage; each workspace has its own vitest.config.ts
 ├── .dependency-cruiser.cjs     Import-direction and banned-name rules
 ├── lefthook.yml
 ├── fixtures/scenarios/         Recorded scenarios: the raw frames of recorded game-day windows
