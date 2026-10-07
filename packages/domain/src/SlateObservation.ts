@@ -17,9 +17,9 @@ export type SlateObservation = Data.TaggedEnum<{
     readonly outcome: TookOutcome | "fellBack"
     readonly had: Option.Option<GameSnapshot>
   }
-  Started: { readonly liveGame: LiveGame; readonly at: DateTime.Utc }
+  Started: { readonly after: LiveGame; readonly at: DateTime.Utc }
   Changed: { readonly before: LiveGame; readonly after: LiveGame; readonly at: DateTime.Utc }
-  Stopped: { readonly liveGame: LiveGame; readonly at: DateTime.Utc }
+  Stopped: { readonly after: LiveGame; readonly at: DateTime.Utc }
   Dropped: { readonly game: GameId }
   /** A game's take or tick raised a defect; the game kept its last good live game. `snapshot` is the one at hand. */
   Raised: { readonly snapshot: GameSnapshot; readonly cause: Cause.Cause<never>; readonly by: string }

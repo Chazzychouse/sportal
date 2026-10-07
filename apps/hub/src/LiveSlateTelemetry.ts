@@ -144,20 +144,20 @@ function toldObservation(observation: SlateObservation, seq: Option.Option<numbe
         ),
         Effect.annotateLogs(annotationsOf(snapshot))
       ),
-    Started: ({ liveGame, at }) =>
-      logLifecycle("started", liveGame, at).pipe(
-        Effect.andThen(gaugeState(liveGame)),
-        Effect.annotateLogs(annotationsOf(liveGame.snapshot))
+    Started: ({ after, at }) =>
+      logLifecycle("started", after, at).pipe(
+        Effect.andThen(gaugeState(after)),
+        Effect.annotateLogs(annotationsOf(after.snapshot))
       ),
     Changed: ({ before, after, at }) =>
       gaugeState(after).pipe(
         Effect.andThen(logTransition(before, after, at)),
         Effect.annotateLogs(annotationsOf(after.snapshot))
       ),
-    Stopped: ({ liveGame, at }) =>
-      logLifecycle("stopped", liveGame, at).pipe(
-        Effect.andThen(gaugeState(liveGame, 0)),
-        Effect.annotateLogs(annotationsOf(liveGame.snapshot))
+    Stopped: ({ after, at }) =>
+      logLifecycle("stopped", after, at).pipe(
+        Effect.andThen(gaugeState(after, 0)),
+        Effect.annotateLogs(annotationsOf(after.snapshot))
       ),
     Dropped: ({ game }) =>
       Effect.logDebug(`LiveSlate: plays for game ${game} dropped: no live game holds it`).pipe(
@@ -176,7 +176,7 @@ function toldObservation(observation: SlateObservation, seq: Option.Option<numbe
 function toldEvent(event: GameEvent, observations: ReadonlyArray<SlateObservation>): Effect.Effect<void> {
   const stepped = observations.flatMap((observation) =>
     SlateObservation.$is("Started")(observation) || SlateObservation.$is("Changed")(observation)
-      ? [{ at: observation.at, snapshot: afterOf(observation).snapshot }]
+      ? [{ at: observation.at, snapshot: observation.after.snapshot }]
       : []
   )
   const step = stepped.findLast(
@@ -197,10 +197,6 @@ function toldEvent(event: GameEvent, observations: ReadonlyArray<SlateObservatio
         Effect.annotateLogs(annotationsOf(snapshot))
       )
   })
-}
-
-function afterOf(observation: Extract<SlateObservation, { readonly _tag: "Started" | "Changed" }>): LiveGame {
-  return observation._tag === "Started" ? observation.liveGame : observation.after
 }
 
 /** Game `snapshot`'s log annotations and metric attributes. */

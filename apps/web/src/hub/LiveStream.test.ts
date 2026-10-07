@@ -112,7 +112,7 @@ describe("LiveStream", () => {
       const source = yield* opened()
 
       source.onmessage?.({ data: message({ _tag: "StageChanged", stage: pair }) })
-      source.onmessage?.({ data: message({ _tag: "SlateChanged", slate: [], recentPlays: {} }) })
+      source.onmessage?.({ data: message({ _tag: "SlateChanged", games: [], recentPlays: {} }) })
       const state = yield* until(live, (current) => current.stage.layout === "Pair")
 
       assert.deepStrictEqual(state.slate, [])
@@ -127,7 +127,7 @@ describe("LiveStream", () => {
         const source = yield* opened()
         const recentPlays = { [GameId.make("401")]: [play(), touchdown()] }
 
-        source.onmessage?.({ data: message({ _tag: "SlateChanged", slate: [], recentPlays }) })
+        source.onmessage?.({ data: message({ _tag: "SlateChanged", games: [], recentPlays }) })
         const state = yield* until(live, (current) => Object.keys(current.recentPlays).length > 0)
 
         assert.deepStrictEqual(state.recentPlays, recentPlays)

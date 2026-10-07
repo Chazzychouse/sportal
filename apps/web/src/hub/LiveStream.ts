@@ -103,7 +103,7 @@ function step(live: SubscriptionRef.SubscriptionRef<Live>, event: SourceEvent) {
 function received(live: Live, message: LiveMessage): Live {
   switch (message._tag) {
     case "SlateChanged":
-      return { ...live, slate: message.slate, recentPlays: message.recentPlays }
+      return { ...live, slate: message.games, recentPlays: message.recentPlays }
     case "StageChanged":
       return { ...live, stage: message.stage }
   }

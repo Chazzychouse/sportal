@@ -1,4 +1,5 @@
 import { assert, describe, it } from "@effect/vitest"
+import { LiveMessage, type SlateChanged } from "@sportal/api/LiveMessage"
 import { ChannelAvailability } from "@sportal/domain/Channel"
 import { GameId, type GameSnapshot, Network } from "@sportal/domain/Game"
 import { Slate } from "@sportal/domain/Slate"
@@ -6,7 +7,7 @@ import type { Stage, Tile } from "@sportal/domain/Stage"
 import { broadcast, liveSnapshot, snapshot, team } from "@sportal/domain/TestGame"
 import { DateTime, Deferred, Effect, Fiber, Layer, Option, Ref, Stream } from "effect"
 import { TestClock } from "effect/testing"
-import { LiveSlate, type Published } from "./LiveSlate.ts"
+import { LiveSlate } from "./LiveSlate.ts"
 import { LiveStage } from "./LiveStage.ts"
 import { Source } from "./source/Source.ts"
 import { recordedGuide } from "./source/youtube-tv/TestYouTubeTv.ts"
@@ -300,14 +301,14 @@ function firstStageWhere(changes: Stream.Stream<Stage>, test: (stage: Stage) => 
 }
 
 /** A LiveSlate that publishes what `published` gives, with no changes, and holds nothing else. */
-function slateOf(published: Effect.Effect<Published>) {
+function slateOf(published: Effect.Effect<Omit<SlateChanged, "_tag">>) {
   return LiveSlate.of({
     latest: Effect.succeed(Slate.empty),
     changes: Stream.empty,
     events: Stream.empty,
     resyncs: Effect.succeed(Stream.empty),
     through: () => Effect.succeed(Slate.empty),
-    published,
+    published: Effect.map(published, LiveMessage.cases.SlateChanged.make),
     publishedChanges: Stream.empty
   })
 }

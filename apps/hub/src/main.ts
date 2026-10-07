@@ -3,13 +3,13 @@ import { Layer, Runtime } from "effect"
 import { FetchHttpClient } from "effect/http"
 import { HubConfig } from "./HubConfig.ts"
 import * as HubMode from "./HubMode.ts"
+import * as HubServer from "./HubServer.ts"
 import { isStopping } from "./HubStopping.ts"
-import * as HubServer from "./hub-server/HubServer.ts"
 import { LiveStage } from "./LiveStage.ts"
 import * as Telemetry from "./Telemetry.ts"
 
-const Hub = HubServer.serve.pipe(
-  Layer.provide(HubServer.listen),
+const Hub = HubServer.layer.pipe(
+  Layer.provide(HubServer.layerListen),
   Layer.provide(LiveStage.layer),
   Layer.provide(HubMode.layer),
   Layer.provide(Telemetry.layer),

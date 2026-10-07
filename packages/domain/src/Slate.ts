@@ -177,13 +177,13 @@ class Advancing extends Data.Class<{
     const said = this.say(id, at, step.events)
 
     return GameStep.$match(gameStep, {
-      Started: ({ after }) => said.hold(id, after).observe(SlateObservation.Started({ liveGame: after, at })),
+      Started: ({ after }) => said.hold(id, after).observe(SlateObservation.Started({ after, at })),
       Changed: ({ before, after }) =>
         said.hold(id, after).observe(SlateObservation.Changed({ before, after, at })),
       Kept: () => said,
       Stopped: ({ before, after, changed }) => {
         const observed = changed ? said.observe(SlateObservation.Changed({ before, after, at })) : said
-        return observed.release(id, after).observe(SlateObservation.Stopped({ liveGame: after, at }))
+        return observed.release(id, after).observe(SlateObservation.Stopped({ after, at }))
       },
       Unheld: (): Advancing => this
     })

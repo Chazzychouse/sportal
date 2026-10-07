@@ -9,16 +9,30 @@ import { DateTime, Effect, Layer, Option, Queue, Result, Schema, Stream } from "
 import { HttpClient } from "effect/http"
 import { HttpApiClient } from "effect/http-api"
 import { TestClock } from "effect/testing"
-import * as Database from "../Database.ts"
-import { FeedLog } from "../feed-log/FeedLog.ts"
-import * as Ingest from "../Ingest.ts"
-import { LiveSlate } from "../LiveSlate.ts"
-import { LiveStage } from "../LiveStage.ts"
-import * as YouTubeTv from "../source/youtube-tv/YouTubeTv.ts"
-import { withEnv } from "../TestHubConfig.ts"
-import * as TestSnapshotFeed from "../TestSnapshotFeed.ts"
-import { polled } from "../TestSnapshotFeed.ts"
+import { vi } from "vitest"
+import * as Database from "./Database.ts"
+import { FeedLog } from "./feed-log/FeedLog.ts"
 import * as HubServer from "./HubServer.ts"
+import * as Ingest from "./Ingest.ts"
+import { LiveSlate } from "./LiveSlate.ts"
+import { LiveStage } from "./LiveStage.ts"
+import * as YouTubeTv from "./source/youtube-tv/YouTubeTv.ts"
+import { withEnv } from "./TestHubConfig.ts"
+import * as TestSnapshotFeed from "./TestSnapshotFeed.ts"
+import { polled } from "./TestSnapshotFeed.ts"
+
+const network = vi.hoisted(
+  (): {
+    interfaces: Record<
+      string,
+      ReadonlyArray<{ address: string; family: string; internal: boolean }> | undefined
+    >
+  } => ({ interfaces: {} })
+)
+vi.mock("node:os", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("node:os")>()),
+  networkInterfaces: () => network.interfaces
+}))
 
 const espn = Network.make("ESPN")
 const game = snapshot({
@@ -114,6 +128,52 @@ describe("Hub API", () => {
   )
 })
 
+describe("HubServer.lanAddresses", () => {
+  it.effect("should list external IPv4 addresses, home ranges first, then any other such as a VPN", () =>
+    Effect.gen(function* () {
+      network.interfaces = {
+        lo: [v4("127.0.0.1", true), v6("::1", true)],
+        tailscale0: [v4("100.64.0.9")],
+        eth0: [v4("10.0.0.7")],
+        wlo1: [v4("192.168.0.54"), v6("fe80::1")]
+      }
+      const client = yield* makeClient
+
+      const addresses = yield* client.host.addresses()
+
+      assert.deepStrictEqual(addresses, ["192.168.0.54", "10.0.0.7", "100.64.0.9"])
+    }).pipe(Effect.provide(serverUnderTest()))
+  )
+
+  it.effect("should leave out container and VM bridges", () =>
+    Effect.gen(function* () {
+      network.interfaces = {
+        docker0: [v4("172.17.0.1")],
+        "br-3f2a": [v4("172.18.0.1")],
+        virbr0: [v4("192.168.122.1")],
+        veth12: [v4("169.254.1.1")],
+        enp3s0: [v4("172.20.1.5")]
+      }
+      const client = yield* makeClient
+
+      const addresses = yield* client.host.addresses()
+
+      assert.deepStrictEqual(addresses, ["172.20.1.5"])
+    }).pipe(Effect.provide(serverUnderTest()))
+  )
+
+  it.effect("should be empty with no network", () =>
+    Effect.gen(function* () {
+      network.interfaces = { lo: [v4("127.0.0.1", true)], down: undefined }
+      const client = yield* makeClient
+
+      const addresses = yield* client.host.addresses()
+
+      assert.deepStrictEqual(addresses, [])
+    }).pipe(Effect.provide(serverUnderTest()))
+  )
+})
+
 describe("GET /api/slate", () => {
   it.effect("should not be served: the slate comes only on the live stream", () =>
     Effect.gen(function* () {
@@ -174,7 +234,7 @@ describe("GET /api/live", () => {
         Effect.repeat({ until: (line) => line.includes("SlateChanged") })
       )
 
-      const [entry] = JSON.parse(line.slice("data: ".length)).slate
+      const [entry] = JSON.parse(line.slice("data: ".length)).games
       assert.strictEqual(entry.id, game.id)
       assert.notMatch(line, /"plays"|"state"|"updatedAt"|"from"/)
     }).pipe(Effect.scoped, Effect.provide(serverUnderTest()))
@@ -349,8 +409,16 @@ function hubUnderTest() {
 
 /** The Hub's routes served on an ephemeral port, with an HTTP client pointed at them. */
 function serverUnderTest() {
-  return HubServer.serve.pipe(
+  return HubServer.layer.pipe(
     Layer.provideMerge(hubUnderTest()),
     Layer.provideMerge(NodeHttpServer.layerTest)
   )
+}
+
+function v4(address: string, internal = false) {
+  return { address, family: "IPv4", internal }
+}
+
+function v6(address: string, internal = false) {
+  return { address, family: "IPv6", internal }
 }

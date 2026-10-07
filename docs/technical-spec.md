@@ -232,9 +232,7 @@ sportal/
     │       ├── TestHubConfig.ts, TestTelemetry.ts   Layers for tests
     │       ├── TestLiveSlate.ts    The live slate following an in-memory feed log (`slateFollowing`), and what it takes of a test's frames
     │       ├── TestSnapshotFeed.ts The snapshot feed: a provider whose frames are our own deliveries, its decode, its wire shape, and the frames tests build of it; for tests only
-    │       ├── hub-server/
-    │       │   ├── HubServer.ts    Serves the API, the live stream, and the web UI's files
-    │       │   └── LanAddresses.ts The addresses a phone on the home network can reach
+    │       ├── HubServer.ts        Serves the API, the live stream, the addresses a phone can reach, and the web UI's files
     │       ├── provider/
     │       │   ├── Provider.ts     The port: poll, push, polling, reconnect; LiveFeed, LiveFeedDemand, Polling, ProviderUnavailable
     │       │   ├── Decoder.ts      A provider's decode, and its only home; Decoded, DecodeObservation, ResetReason; a layer of its own, paired with its provider by HubMode
@@ -390,8 +388,8 @@ class LiveSlate extends Context.Service<LiveSlate, {
   readonly changes: Stream<Slate>                    // seq or reached alone is not a change
   readonly events: Stream<GameEvent>
   readonly resyncs: Effect<Stream<string>, never, Scope>  // subscribes at once: each channel a frame taken live asks to resync
-  readonly published: Effect<Published>              // the listed games and their recent plays, debounced 250 ms
-  readonly publishedChanges: Stream<Published>
+  readonly published: Effect<SlateChanged>           // the listed games and their recent plays, debounced 250 ms
+  readonly publishedChanges: Stream<SlateChanged>
   through(seq: number): Effect<Slate>                // the slate once it has taken frame `seq`, or the latest once Halted
 }>()("sportal/hub/LiveSlate") {}
 ```

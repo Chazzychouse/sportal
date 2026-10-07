@@ -1,7 +1,6 @@
-import type { GameSnapshot } from "@sportal/domain/Game"
+import { LiveMessage, type SlateChanged } from "@sportal/api/LiveMessage"
 import { type GameEvent, GameEventKind } from "@sportal/domain/GameEvent"
 import { LeagueId } from "@sportal/domain/League"
-import type { RecentPlays } from "@sportal/domain/RecentPlays"
 import { Slate, type Taken } from "@sportal/domain/Slate"
 import {
   Clock,
@@ -49,9 +48,9 @@ export class LiveSlate extends Context.Service<
      */
     through(seq: number): Effect.Effect<Slate>
     /** The listed games and their recent plays, debounced 250 ms: what the live stream sends. */
-    readonly published: Effect.Effect<Published>
+    readonly published: Effect.Effect<SlateChanged>
     /** `published` first, then each new one. */
-    readonly publishedChanges: Stream.Stream<Published>
+    readonly publishedChanges: Stream.Stream<SlateChanged>
   }
 >()("sportal/hub/LiveSlate") {
   /**
@@ -257,13 +256,19 @@ export class LiveSlate extends Context.Service<
           Stream.map(({ slate }) => slate),
           Stream.changesWith((a, b) => a.publishesSameAs(b))
         )
-        const publication = yield* SubscriptionRef.make<Published>({ games: [], recentPlays: {} })
+        const publication = yield* SubscriptionRef.make(
+          LiveMessage.cases.SlateChanged.make({ games: [], recentPlays: {} })
+        )
         yield* Effect.forkScoped(
           changes.pipe(
             Stream.debounce("250 millis"),
             Stream.runForEach((slate) => {
               const games = slate.games(LeagueId.literals)
-              return SubscriptionRef.set(publication, { games, recentPlays: slate.recentPlays(games) })
+              const recentPlays = slate.recentPlays(games)
+              return SubscriptionRef.set(
+                publication,
+                LiveMessage.cases.SlateChanged.make({ games, recentPlays })
+              )
             })
           ),
           { startImmediately: true }
@@ -281,9 +286,6 @@ export class LiveSlate extends Context.Service<
       })
     )
 }
-
-/** What the slate publishes to the live stream: the listed games and their recent plays. */
-export type Published = { readonly games: ReadonlyArray<GameSnapshot>; readonly recentPlays: RecentPlays }
 
 // How long the timer waits after a defect before it tries again.
 const timerBackoff = Duration.seconds(1)

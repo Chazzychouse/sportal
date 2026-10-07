@@ -255,7 +255,7 @@ function deliveredPlaysOf(decoded: ReadonlyArray<Decoded>) {
 function letGo(observations: ReadonlyArray<SlateObservation>) {
   const [stopped, dropped] = Arr.mapAccum(observations, new Set<string>(), (stopped, observation) =>
     observation._tag === "Stopped"
-      ? [new Set([...stopped, observation.liveGame.snapshot.id]), []]
+      ? [new Set([...stopped, observation.after.snapshot.id]), []]
       : [stopped, observation._tag === "Dropped" && !stopped.has(observation.game) ? [observation] : []]
   )
 
