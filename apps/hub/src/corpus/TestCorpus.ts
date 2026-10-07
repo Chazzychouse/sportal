@@ -23,24 +23,24 @@ export function local(wallClock: string): DateTime.Utc {
  * `test` over an in-memory feed log's database, `decoder`, and corpus days in a temporary directory it is given, in
  * `timeZone`, `zone` unless given.
  */
-export function inCorpus<A, E>(
-  decoder: Layer.Layer<Decoder>,
-  test: (
-    dir: string
-  ) => Effect.Effect<
-    A,
-    E,
-    | CorpusDays
-    | Decoder
-    | DateTime.CurrentTimeZone
-    | FileSystem.FileSystem
-    | Path.Path
-    | SqlClient.SqlClient
-    | Crypto.Crypto
-  >,
-  timeZone: DateTime.TimeZone = DateTime.zoneMakeNamedUnsafe(zone)
-) {
-  return Effect.gen(function* () {
+export const inCorpus = Effect.fn("TestCorpus.inCorpus")(
+  function* <A, E>(
+    decoder: Layer.Layer<Decoder>,
+    test: (
+      dir: string
+    ) => Effect.Effect<
+      A,
+      E,
+      | CorpusDays
+      | Decoder
+      | DateTime.CurrentTimeZone
+      | FileSystem.FileSystem
+      | Path.Path
+      | SqlClient.SqlClient
+      | Crypto.Crypto
+    >,
+    timeZone: DateTime.TimeZone = DateTime.zoneMakeNamedUnsafe(zone)
+  ) {
     const fs = yield* FileSystem.FileSystem
     const dir = yield* fs.makeTempDirectoryScoped()
 
@@ -55,8 +55,10 @@ export function inCorpus<A, E>(
         )
       )
     )
-  }).pipe(Effect.scoped, Effect.provide(NodeServices.layer))
-}
+  },
+  Effect.scoped,
+  Effect.provide(NodeServices.layer)
+)
 
 /** Day `date` built from the feed log, opened for the build alone once `frames` are logged to it. */
 export function built(date: GameDay, frames: ReadonlyArray<FeedFrame> = []) {

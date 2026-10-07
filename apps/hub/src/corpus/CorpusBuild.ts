@@ -4,7 +4,7 @@ import type { LeagueId } from "@sportal/domain/League"
 import { Array as Arr, DateTime, Effect, Option, Result, Schema, Stream } from "effect"
 import { FeedLog } from "../feed-log/FeedLog.ts"
 import { type ArchiveFetchFailed, Archiver } from "../provider/Archiver.ts"
-import { DecodeObservation, Decoder } from "../provider/Decoder.ts"
+import { type Decoded, DecodeObservation, Decoder } from "../provider/Decoder.ts"
 import { CorpusDay, CorpusDays } from "./CorpusDay.ts"
 import { CorpusLine } from "./CorpusLine.ts"
 import * as Synthesis from "./Synthesis.ts"
@@ -27,15 +27,9 @@ export const captured = Effect.fn("CorpusBuild.captured")(function* (
   const frames = feedLog
     .replay(from)
     .pipe(Stream.takeWhile((frame) => DateTime.isLessThan(frame.receivedAt, until)))
-  const decoded = yield* decoder.decode(frames).pipe(
-    Stream.mapEffect((said) =>
-      Option.match(Arr.findFirst(said.observations, DecodeObservation.$is("FrameUndecoded")), {
-        onNone: () => Effect.succeed(said),
-        onSome: ({ cause }) => Effect.fail(new CorpusBuildFailed({ date, reason: "Undecodable", cause }))
-      })
-    ),
-    Stream.runCollect
-  )
+  const decoded = yield* decoder
+    .decode(frames)
+    .pipe(Stream.mapEffect(failIfUndecoded(date)), Stream.runCollect)
   if (!decoded.some(({ at }) => DateTime.isGreaterThanOrEqualTo(at, from))) {
     return yield* new CorpusBuildFailed({
       date,
@@ -76,9 +70,8 @@ export const backfilled = Effect.fn("CorpusBuild.backfilled")(function* (
   if (Option.isSome(existing) && existing.value.kind === "captured") return existing.value
 
   const archive = yield* Archiver
-  const asked = [
-    ...new Set([...leagues, ...Option.match(existing, { onNone: () => [], onSome: (day) => day.leagues })])
-  ].toSorted()
+  const kept = Option.match(existing, { onNone: () => [], onSome: (day) => day.leagues })
+  const asked = [...new Set([...leagues, ...kept])].toSorted()
   const results = yield* Effect.forEach(asked, (league) =>
     (how === "fetch" ? archive.games(league, date) : archive.archived(league, date)).pipe(
       Effect.map((games) => Result.succeed({ league, games })),
@@ -137,6 +130,15 @@ export class CorpusBuildFailed extends Schema.TaggedError<CorpusBuildFailed>()("
       NoGames: `The archive has no final game with plays on ${this.date}`
     }[this.reason]
   }
+}
+
+/** A step of the decoder as it is, or the build's failure when it holds a frame that did not decode. */
+function failIfUndecoded(date: GameDay) {
+  return (said: Decoded) =>
+    Option.match(Arr.findFirst(said.observations, DecodeObservation.$is("FrameUndecoded")), {
+      onNone: () => Effect.succeed(said),
+      onSome: ({ cause }) => Effect.fail(new CorpusBuildFailed({ date, reason: "Undecodable", cause }))
+    })
 }
 
 /** The leagues `deliveries` name, sorted. */

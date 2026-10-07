@@ -135,7 +135,7 @@ export const runDays = Effect.fn("CorpusRun.runDays")(function* (
                 Option.match(Cause.findErrorOption(cause), {
                   // A day that cannot be read says why; a crashed thread is logged with its cause.
                   onSome: (error) =>
-                    error._tag === "CorpusDayUnreadable"
+                    error instanceof CorpusDayUnreadable
                       ? Effect.logError(error.message)
                       : Effect.logError(`Corpus day ${date} failed`, cause),
                   onNone: () => Effect.logError(`Corpus day ${date} failed`, cause)
