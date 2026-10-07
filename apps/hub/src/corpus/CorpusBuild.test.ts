@@ -4,7 +4,7 @@ import { Delivery } from "@sportal/domain/Delivery"
 import { GameId, type GameSnapshot } from "@sportal/domain/Game"
 import { Slate } from "@sportal/domain/Slate"
 import { liveSnapshot, snapshot } from "@sportal/domain/TestGame"
-import { DateTime, Effect, Equal, FileSystem, Option, Path, Schema, Stream } from "effect"
+import { DateTime, Effect, Equal, Exit, FileSystem, Option, Path, Schema, Stream } from "effect"
 import { FeedLog } from "../FeedLog.ts"
 import { FeedFrame } from "../Frame.ts"
 import * as Gzip from "../Gzip.ts"
@@ -195,6 +195,22 @@ describe("CorpusBuild.backfilled", () => {
         assert.deepStrictEqual(kept, captured)
         assert.deepStrictEqual(yield* days.day("2026-10-04"), Option.some(captured))
         assert.deepStrictEqual(yield* requests, [])
+      })
+    )
+  )
+
+  it.effect("stops at a day.json that cannot be read, fetching nothing and building nothing over it", () =>
+    inArchive({}, ({ dir, requests }) =>
+      Effect.gen(function* () {
+        const { join } = yield* Path.Path
+        const file = join(dir, "days", "2026-10-04", "day.json")
+        yield* (yield* FileSystem.FileSystem).makeDirectory(file, { recursive: true })
+
+        const exit = yield* stepped(CorpusBuild.backfilled("2026-10-04", ["nfl"], "fetch")).pipe(Effect.exit)
+
+        assert.isTrue(Exit.hasDies(exit))
+        assert.deepStrictEqual(yield* requests, [])
+        assert.isTrue((yield* (yield* FileSystem.FileSystem).stat(file)).type === "Directory")
       })
     )
   )

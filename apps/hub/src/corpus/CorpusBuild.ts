@@ -104,7 +104,8 @@ export function backfilled(
 ): Effect.Effect<CorpusDay, CorpusBuildFailed | ArchiveFetchFailed, Archive | CorpusDays> {
   return Effect.gen(function* () {
     const days = yield* CorpusDays
-    const existing = yield* days.day(date)
+    // A day.json that cannot be read is the machine's fault, as a write that fails is; nothing is built over it.
+    const existing = yield* days.day(date).pipe(Effect.orDie)
     if (Option.isSome(existing) && existing.value.kind === "captured") return existing.value
 
     const archive = yield* Archive

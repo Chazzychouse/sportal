@@ -3,7 +3,7 @@ import { assert, describe, it } from "@effect/vitest"
 import { Delivery } from "@sportal/domain/Delivery"
 import { GameId } from "@sportal/domain/Game"
 import { liveSnapshot, play, snapshot } from "@sportal/domain/TestGame"
-import { DateTime, Effect, Equal, FileSystem, Layer, Path, Stream } from "effect"
+import { DateTime, Effect, Equal, FileSystem, Layer, Option, Path, Stream } from "effect"
 import * as Gzip from "../Gzip.ts"
 import { withEnv } from "../TestHubConfig.ts"
 import { CorpusDay, CorpusDays } from "./CorpusDay.ts"
@@ -101,6 +101,44 @@ describe("CorpusDays", () => {
         const error = yield* days.read(day.date).pipe(Effect.flip)
         assert.deepStrictEqual([error.date, error.reason], [day.date, "Missing"])
         assert.deepStrictEqual(yield* days.dates, [])
+      })
+    )
+  )
+
+  it.effect("day: the day.json as built, whatever its format; none for a day not built", () =>
+    inCorpus(() =>
+      Effect.gen(function* () {
+        const days = yield* CorpusDays
+        assert.deepStrictEqual(yield* days.day(day.date), Option.none())
+        const stale = new CorpusDay({ ...day, format: 0 })
+        yield* days.write(stale, { poll: Stream.empty, push: Stream.empty })
+        assert.deepStrictEqual(yield* days.day(day.date), Option.some(stale))
+      })
+    )
+  )
+
+  it.effect("day: none for a day.json that does not decode, so a build replaces it", () =>
+    inCorpus((dir) =>
+      Effect.gen(function* () {
+        const days = yield* CorpusDays
+        yield* days.write(day, { poll: Stream.empty, push: Stream.empty })
+        const { join } = yield* Path.Path
+        yield* (yield* FileSystem.FileSystem).writeFileString(join(dir, "days", day.date, "day.json"), "{")
+        assert.deepStrictEqual(yield* days.day(day.date), Option.none())
+      })
+    )
+  )
+
+  it.effect("day: a day.json that cannot be read fails, rather than reading as none", () =>
+    inCorpus((dir) =>
+      Effect.gen(function* () {
+        const days = yield* CorpusDays
+        const fs = yield* FileSystem.FileSystem
+        const { join } = yield* Path.Path
+        // A directory where day.json should be: it exists, and reading it fails as the machine's fault.
+        yield* fs.makeDirectory(join(dir, "days", day.date, "day.json"), { recursive: true })
+        const error = yield* days.day(day.date).pipe(Effect.flip)
+        assert.strictEqual(error._tag, "PlatformError")
       })
     )
   )
