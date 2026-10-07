@@ -3,11 +3,11 @@ import { assert, describe, it } from "@effect/vitest"
 import { DateTime, Effect, Fiber, FileSystem, Layer, Path, Ref, Stream, type Tracer } from "effect"
 import { SqlClient, SqlError } from "effect/sql"
 import { TestClock } from "effect/testing"
-import * as Database from "./Database.ts"
+import * as Database from "../Database.ts"
+import type { FeedFrame } from "../Frame.ts"
+import { withEnv } from "../TestHubConfig.ts"
+import { counted, recordingLogs, recordingSpans, withMetrics } from "../TestTelemetry.ts"
 import { FeedLog } from "./FeedLog.ts"
-import type { FeedFrame } from "./Frame.ts"
-import { withEnv } from "./TestHubConfig.ts"
-import { counted, recordingLogs, recordingSpans, withMetrics } from "./TestTelemetry.ts"
 
 describe("FeedLog", () => {
   it.effect(
@@ -368,28 +368,6 @@ describe("FeedLog", () => {
     }).pipe(Effect.provide([Database.layerMemory, NodeCrypto.layer]))
   )
 
-  it.effect(
-    "should keep a scenario's frames in memory by default, writing no file in the data directory",
-    () =>
-      Effect.gen(function* () {
-        const fs = yield* FileSystem.FileSystem
-        const dataDir = yield* fs.makeTempDirectoryScoped()
-        const scenarioLog = FeedLog.forScenario.pipe(
-          Layer.provide([withEnv({ SPORTAL_DATA_DIR: dataDir }), NodeServices.layer, NodeCrypto.layer])
-        )
-
-        yield* Effect.gen(function* () {
-          const log = yield* FeedLog
-          yield* log.append(poll("nfl", "{}", 0))
-          yield* TestClock.adjust("100 millis")
-          yield* settled(Stream.runCollect(log.replay(at(0))), (frames) => frames.length === 1)
-        }).pipe(Effect.provide(scenarioLog), Effect.scoped)
-
-        const files = yield* fs.readDirectory(dataDir)
-        assert.deepStrictEqual(files, [])
-      }).pipe(Effect.scoped, Effect.provide(NodeServices.layer))
-  )
-
   it.effect("should give no game days for an empty log", () =>
     Effect.gen(function* () {
       const log = yield* FeedLog
@@ -423,7 +401,7 @@ describe("FeedLog", () => {
       const path = yield* Path.Path
       const temp = yield* fs.makeTempDirectoryScoped()
       const dataDir = path.join(temp, "sportal")
-      const inDataDir = FeedLog.inDataDir.pipe(Layer.provide(withEnv({ SPORTAL_DATA_DIR: dataDir })))
+      const inDataDir = FeedLog.layerInDataDir.pipe(Layer.provide(withEnv({ SPORTAL_DATA_DIR: dataDir })))
 
       yield* FeedLog.use((log) => log.append(poll("nfl", "{}", 0))).pipe(Effect.provide(inDataDir))
 

@@ -45,12 +45,12 @@ module.exports = {
     {
       name: "only-main-opens-the-database",
       comment:
-        "The composition root provides the database; stores reach it through SqlClient. The feed log opens its own file; TestLiveSlate and TestCorpus keep a test's feed log in memory.",
+        "The composition root provides the database; stores reach it through SqlClient. The feed log opens its own file, and HubMode a scenario's; TestLiveSlate and TestCorpus keep a test's feed log in memory.",
       severity: "error",
       from: {
         path: "^apps/hub/src/",
         pathNot:
-          "(^apps/hub/src/main\\.ts$|\\.test\\.ts$|^apps/hub/src/Database\\.ts$|^apps/hub/src/FeedLog\\.ts$|^apps/hub/src/TestLiveSlate\\.ts$|^apps/hub/src/corpus/TestCorpus\\.ts$)"
+          "(^apps/hub/src/main\\.ts$|\\.test\\.ts$|^apps/hub/src/Database\\.ts$|^apps/hub/src/feed-log/FeedLog\\.ts$|^apps/hub/src/HubMode\\.ts$|^apps/hub/src/TestLiveSlate\\.ts$|^apps/hub/src/corpus/TestCorpus\\.ts$)"
       },
       to: { path: "^apps/hub/src/Database\\.ts$" }
     },
@@ -87,14 +87,6 @@ module.exports = {
       severity: "error",
       from: { pathNot: "(\\.test\\.ts$|^apps/hub/src/TestLiveSlate\\.ts$)" },
       to: { path: "^apps/hub/src/provider/TestDecoder\\.ts$" }
-    },
-    {
-      name: "test-feed-log-is-for-tests",
-      comment:
-        "Frames logged through a feed log of their own are imported only by test files and TestLiveSlate.",
-      severity: "error",
-      from: { pathNot: "(\\.test\\.ts$|^apps/hub/src/TestLiveSlate\\.ts$)" },
-      to: { path: "^apps/hub/src/TestFeedLog\\.ts$" }
     },
     {
       name: "test-live-slate-is-for-tests",

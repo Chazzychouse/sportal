@@ -1,7 +1,7 @@
 import { Delivery } from "@sportal/domain/Delivery"
 import type { LeagueId } from "@sportal/domain/League"
 import { Array as Arr, DateTime, Effect, Option, Result, Schema, Stream } from "effect"
-import { FeedLog } from "../FeedLog.ts"
+import { FeedLog } from "../feed-log/FeedLog.ts"
 import { Decoder } from "../provider/Decoder.ts"
 import { DecodeObservation } from "../provider/Provider.ts"
 import { Archive, type ArchiveFetchFailed } from "./Archive.ts"

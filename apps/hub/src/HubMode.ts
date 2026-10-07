@@ -1,6 +1,7 @@
 import { NodeSocket } from "@effect/platform-node"
 import { DateTime, Effect, Layer, Option } from "effect"
-import { FeedLog } from "./FeedLog.ts"
+import * as Database from "./Database.ts"
+import { FeedLog } from "./feed-log/FeedLog.ts"
 import { HubConfig } from "./HubConfig.ts"
 import * as Ingest from "./Ingest.ts"
 import { LiveSlate } from "./LiveSlate.ts"
@@ -43,7 +44,7 @@ function live() {
       )
     ).pipe(
       Layer.provideMerge(LiveSlate.layer),
-      Layer.provide(FeedLog.inDataDir),
+      Layer.provide(FeedLog.layerInDataDir),
       Layer.provide([EspnDecode.layer, DateTime.layerCurrentZoneLocal])
     ),
     YouTubeTv.layer
@@ -58,10 +59,23 @@ function scenario() {
       Ingest.layer.pipe(Layer.provide(ScenarioProvider.layer.pipe(Layer.provide(Scenarios.layer))))
     ).pipe(
       Layer.provideMerge(LiveSlate.layer),
-      Layer.provide(FeedLog.forScenario),
+      Layer.provide(scenarioFeedLog),
       Layer.provide([EspnDecode.layer, DateTime.layerCurrentZoneLocal]),
       Layer.provide(ScenarioClock.layer)
     ),
     ScenarioSource.layer
   )
 }
+
+// A scenario's feed log: in memory, or on the file `SPORTAL_SCENARIO_FEED_LOG` names in the data directory. Never on the
+// game day's `feed.sqlite`.
+const scenarioFeedLog = Layer.unwrap(
+  Effect.gen(function* () {
+    const config = yield* HubConfig
+
+    return Option.match(config.scenarioFeedLog, {
+      onNone: () => FeedLog.layerMemory,
+      onSome: (name) => FeedLog.layer.pipe(Layer.provide(Database.layerFile(name)), Layer.orDie)
+    })
+  })
+)

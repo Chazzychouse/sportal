@@ -22,8 +22,8 @@ import {
 } from "effect"
 import { TestClock } from "effect/testing"
 import * as Database from "../Database.ts"
-import { FeedLog } from "../FeedLog.ts"
 import { FeedFrame } from "../Frame.ts"
+import { FeedLog } from "../feed-log/FeedLog.ts"
 import * as Gzip from "../Gzip.ts"
 import type { HubConfig } from "../HubConfig.ts"
 import * as Ingest from "../Ingest.ts"
@@ -407,7 +407,7 @@ describe("ScenarioProvider", () => {
       const fs = yield* FileSystem.FileSystem
       const { join } = yield* Path.Path
       const dataDir = yield* fs.makeTempDirectoryScoped()
-      const onFile = { env: { SPORTAL_DATA_DIR: dataDir }, scenarioFeedLog: true }
+      const onFile = { env: { SPORTAL_DATA_DIR: dataDir }, scenarioFeedLog: "scenario.sqlite" }
 
       const logged = yield* loggedAfterAMoment.pipe(
         Effect.provide(playing("two-minute-drill-tie", onFile)),
@@ -434,10 +434,7 @@ describe("ScenarioProvider", () => {
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem
       const dataDir = yield* fs.makeTempDirectoryScoped()
-      const onFile = {
-        env: { SPORTAL_DATA_DIR: dataDir, SPORTAL_SCENARIO_FEED_LOG: "scenario.sqlite" },
-        scenarioFeedLog: true
-      }
+      const onFile = { env: { SPORTAL_DATA_DIR: dataDir }, scenarioFeedLog: "scenario.sqlite" }
       yield* playedForThreeMinutes.pipe(
         Effect.provide(playing("two-minute-drill-tie", onFile)),
         Effect.scoped
@@ -469,8 +466,8 @@ function scenario(name: string, options: Options = {}) {
 }
 
 /**
- * Ingest over `scenario(name, options)`, onto a feed log in memory or, with `scenarioFeedLog`, the scenario's own one
- * as its settings say, with the slate provided to the test.
+ * Ingest over `scenario(name, options)`, onto a feed log in memory or on the file `scenarioFeedLog` names in the data
+ * directory, with the slate provided to the test.
  */
 function playing(name: string, options: Options & { readonly ended?: Array<Tracer.Span> } = {}) {
   return Ingest.layer.pipe(
@@ -481,15 +478,15 @@ function playing(name: string, options: Options & { readonly ended?: Array<Trace
 }
 
 /**
- * The slate following a feed log in memory or, with `scenarioFeedLog`, the scenario's own one as its settings say,
- * which is provided too.
+ * The slate following a feed log in memory or on the file `scenarioFeedLog` names in the data directory, which is
+ * provided too.
  */
 function following(options: Options) {
   return LiveSlate.layer.pipe(
     Layer.provideMerge(
-      options.scenarioFeedLog === true
-        ? FeedLog.forScenario
-        : FeedLog.layer.pipe(Layer.provide([Database.layerMemory, NodeCrypto.layer]))
+      options.scenarioFeedLog === undefined
+        ? FeedLog.layer.pipe(Layer.provide([Database.layerMemory, NodeCrypto.layer]))
+        : FeedLog.layer.pipe(Layer.provide(Database.layerFile(options.scenarioFeedLog)), Layer.orDie)
     ),
     Layer.provide(DateTime.layerCurrentZoneLocal),
     Layer.provide([NodeServices.layer, NodeCrypto.layer])
@@ -501,7 +498,7 @@ type Options = {
   readonly from?: string
   readonly decoder?: Layer.Layer<Decoder>
   readonly env?: Record<string, string>
-  readonly scenarioFeedLog?: boolean
+  readonly scenarioFeedLog?: string
 }
 
 // Recordings that are test data, not scenarios to play: two-minute-drill-tie and a-drive.

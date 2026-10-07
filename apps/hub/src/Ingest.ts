@@ -1,5 +1,5 @@
 import { Array as Arr, Effect, Layer, Metric, Option, Result, Stream } from "effect"
-import { FeedLog } from "./FeedLog.ts"
+import { FeedLog } from "./feed-log/FeedLog.ts"
 import { HubConfig } from "./HubConfig.ts"
 import { loggedUnlessStopping } from "./HubStopping.ts"
 import { LiveSlate } from "./LiveSlate.ts"

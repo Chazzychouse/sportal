@@ -3,7 +3,6 @@ import { Cause, Effect, Exit, Layer, Option, Queue, Ref, Schema } from "effect"
 import { Worker, WorkerError } from "effect/workers"
 import * as EspnDecode from "../provider/espn/EspnDecode.ts"
 import { recordedNeAtBuf } from "../provider/espn/TestEspn.ts"
-import { logged } from "../TestFeedLog.ts"
 import { CorpusDayUnreadable, DaysFailed } from "./CorpusDay.ts"
 import * as CorpusRun from "./CorpusRun.ts"
 import { DayRun, RunDay, runDays } from "./CorpusWorker.ts"
@@ -17,8 +16,7 @@ describe("RunDay.run", () => {
       inCorpus(EspnDecode.layer, () =>
         Effect.gen(function* () {
           const frames = yield* recordedNeAtBuf
-          yield* logged(frames)
-          yield* built("2026-10-04")
+          yield* built("2026-10-04", frames)
 
           const run = yield* new RunDay({ date: "2026-10-04" }).run()
 

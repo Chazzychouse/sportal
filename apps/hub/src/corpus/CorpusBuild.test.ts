@@ -16,14 +16,13 @@ import {
   Schema,
   Stream
 } from "effect"
-import { FeedLog } from "../FeedLog.ts"
 import { FeedFrame } from "../Frame.ts"
+import { FeedLog } from "../feed-log/FeedLog.ts"
 import * as Gzip from "../Gzip.ts"
 import { Decoder } from "../provider/Decoder.ts"
 import * as EspnDecode from "../provider/espn/EspnDecode.ts"
 import { recordedNeAtBuf, recordedPlays } from "../provider/espn/TestEspn.ts"
 import { inArchive, site, stepped } from "../provider/espn/TestEspnArchive.ts"
-import { logged } from "../TestFeedLog.ts"
 import * as TestSnapshotFeed from "../TestSnapshotFeed.ts"
 import { framed } from "../TestSnapshotFeed.ts"
 import * as CorpusBuild from "./CorpusBuild.ts"
@@ -84,13 +83,13 @@ describe("CorpusBuild.captured", () => {
   it.effect("should keep a frame before the next day's 04:00 local and leave out one at 05:00", () =>
     inCorpus(TestSnapshotFeed.decoder, () =>
       Effect.gen(function* () {
-        yield* logged([
+        const logged = [
           framed(listing([snapshot()]), local("2026-10-04T10:00:00")),
           framed(pushedSnapshot, local("2026-10-05T03:00:00")),
           framed(pushedSnapshot, local("2026-10-05T05:00:00"))
-        ])
+        ]
 
-        yield* built("2026-10-04")
+        yield* built("2026-10-04", logged)
 
         const frames = yield* readBack("2026-10-04")
         assert.deepStrictEqual(
@@ -109,13 +108,13 @@ describe("CorpusBuild.captured", () => {
           const a = listing([snapshot()])
           const b = listing([snapshot({ id: GameId.make("2") })])
           // Logged in seq order 1, 2, 3, but received 2, 1, 3: seq 3 repeats seq 2's listing, not seq 1's.
-          yield* logged([
+          const logged = [
             framed(a, local("2026-10-04T10:00:02")),
             framed(b, local("2026-10-04T10:00:01")),
             framed(b, local("2026-10-04T10:00:03"))
-          ])
+          ]
 
-          yield* built("2026-10-04")
+          yield* built("2026-10-04", logged)
 
           const frames = yield* readBack("2026-10-04")
           assert.deepStrictEqual(
@@ -131,7 +130,7 @@ describe("CorpusBuild.captured", () => {
     inCorpus(TestSnapshotFeed.decoder, () =>
       Effect.gen(function* () {
         const days = yield* CorpusDays
-        yield* logged([
+        const logged = [
           framed(listing([snapshot()]), local("2026-10-04T10:00:00")),
           new FeedFrame({
             receivedAt: local("2026-10-04T10:00:10"),
@@ -140,9 +139,9 @@ describe("CorpusBuild.captured", () => {
             kind: "message",
             body: "nonsense"
           })
-        ])
+        ]
 
-        const error = yield* built("2026-10-04").pipe(Effect.flip)
+        const error = yield* built("2026-10-04", logged).pipe(Effect.flip)
 
         const dates = yield* days.dates
         assert.deepStrictEqual(
@@ -159,12 +158,12 @@ describe("CorpusBuild.captured", () => {
       Effect.gen(function* () {
         const days = yield* CorpusDays
         const checkpoint = framed(pushedSnapshot, local("2026-10-04T03:00:00"))
-        yield* logged([
+        const logged = [
           new FeedFrame({ ...checkpoint, kind: "checkpoint" }),
           framed(pushedSnapshot, local("2026-10-05T05:00:00"))
-        ])
+        ]
 
-        const error = yield* built("2026-10-04").pipe(Effect.flip)
+        const error = yield* built("2026-10-04", logged).pipe(Effect.flip)
 
         const dates = yield* days.dates
         assert.deepStrictEqual([error.date, error.reason], ["2026-10-04", "NoFrames"])
@@ -409,9 +408,8 @@ function recordedDayBuilt(from: DateTime.Utc, zone: DateTime.TimeZone | undefine
           const fs = yield* FileSystem.FileSystem
           const { join } = yield* Path.Path
           const frames = yield* recordedNeAtBuf
-          yield* logged(frames)
 
-          const day = yield* built("2026-10-04")
+          const day = yield* built("2026-10-04", frames)
 
           const bytes = yield* fs.readFile(join(dir, "days", day.date, "push.ndjson.gz"))
           const push = yield* Gzip.decompress(bytes, "gzip")

@@ -3,7 +3,8 @@ import { NodeCrypto, NodeServices } from "@effect/platform-node"
 import { type Crypto, DateTime, Effect, FileSystem, Layer, type Path } from "effect"
 import type { SqlClient } from "effect/sql"
 import * as Database from "../Database.ts"
-import { FeedLog } from "../FeedLog.ts"
+import type { FeedFrame } from "../Frame.ts"
+import { FeedLog } from "../feed-log/FeedLog.ts"
 import type { Decoder } from "../provider/Decoder.ts"
 import { withEnv } from "../TestHubConfig.ts"
 import * as CorpusBuild from "./CorpusBuild.ts"
@@ -56,9 +57,9 @@ export function inCorpus<A, E>(
   }).pipe(Effect.scoped, Effect.provide(NodeServices.layer))
 }
 
-/** Day `date` built from the feed log, opened for the build alone. */
-export function built(date: string) {
-  return CorpusBuild.captured(date).pipe(Effect.provide(FeedLog.layer), Effect.scoped)
+/** Day `date` built from the feed log, opened for the build alone once `frames` are logged to it. */
+export function built(date: string, frames: ReadonlyArray<FeedFrame> = []) {
+  return CorpusBuild.captured(date).pipe(Effect.provide(FeedLog.layerTest(frames)), Effect.scoped)
 }
 
 /**

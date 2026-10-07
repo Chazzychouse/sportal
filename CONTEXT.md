@@ -87,6 +87,9 @@ Every exported type name must be a term here, except the wire schemas in `*Paylo
 | **Database** | The Hub's SQLite database. Each store migrates its own tables in it. | store, persistence |
 | **Feed log** | Every frame the feeds delivered, raw, in the order the Hub received it. The truth the Hub's game state is derived from. | event store, journal |
 | **Frame** | One thing a feed delivered: a poll response, a FastCast message, or a FastCast checkpoint. | message, payload |
+| **Feed frame row** | A frame as the feed log keeps it in `feed_frame`: its body gzip'd, or none for an unchanged poll (a response the same as its channel's last), or a gap; `FeedFrameRow` in code. | record, entry |
+| **Gap** | The frames a failed write lost, kept in the feed log as one row at the last lost `seq` with their range and count, and warned of on replay; `Gap` in code. | hole |
+| **Writer** | The feed log's one fiber that stores what was appended, in batches: current, or behind by the frames failed writes lost; `Writer` in code. | flusher |
 | **Corpus** | Game days kept typed for runs to play through the slate, in `HubConfig.corpusDir`: each day's corpus inputs, read back as the deliveries the live decode handed over. | dataset, fixtures |
 | **Corpus day** | One game day of the corpus: its kind, format, leagues, game count, and when it was built, beside its poll and push files of corpus lines; `CorpusDay` in code. `CorpusDays` writes and reads them. A day without its `day.json` has not been built. | |
 | **Captured day** | A corpus day built from the feed log's frames for the day, through the provider's decode. | recorded day |

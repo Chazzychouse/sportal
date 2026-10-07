@@ -24,7 +24,7 @@ import {
   Stream,
   SubscriptionRef
 } from "effect"
-import { FeedLog } from "./FeedLog.ts"
+import { FeedLog } from "./feed-log/FeedLog.ts"
 import { isStopping } from "./HubStopping.ts"
 import { countByState, gaugeHeld, takeDuration, timerDefect, told } from "./LiveSlateTelemetry.ts"
 import { Decoder } from "./provider/Decoder.ts"

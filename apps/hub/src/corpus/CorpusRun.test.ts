@@ -18,15 +18,14 @@ import {
   Stream
 } from "effect"
 import { TestClock } from "effect/testing"
-import { FeedLog } from "../FeedLog.ts"
 import type { FeedFrame } from "../Frame.ts"
+import { FeedLog } from "../feed-log/FeedLog.ts"
 import * as Ingest from "../Ingest.ts"
 import { LiveSlate } from "../LiveSlate.ts"
 import * as EspnDecode from "../provider/espn/EspnDecode.ts"
 import { fixtures, neAtBufFrames, recordedNeAtBuf, recordedPlays } from "../provider/espn/TestEspn.ts"
 import * as ScenarioProvider from "../scenario/ScenarioProvider.ts"
 import { Scenarios } from "../scenario/Scenarios.ts"
-import { logged } from "../TestFeedLog.ts"
 import { withEnv } from "../TestHubConfig.ts"
 import * as TestSnapshotFeed from "../TestSnapshotFeed.ts"
 import { CorpusDay, CorpusDays } from "./CorpusDay.ts"
@@ -155,8 +154,7 @@ function neAtBufRunTwiceLayer() {
     inCorpus(EspnDecode.layer, () =>
       Effect.gen(function* () {
         const frames = yield* recordedNeAtBuf
-        yield* logged(frames)
-        yield* built("2026-10-04")
+        yield* built("2026-10-04", frames)
 
         const first = yield* CorpusRun.day("2026-10-04", CorpusRun.events)
         const second = yield* CorpusRun.day("2026-10-04", CorpusRun.events)

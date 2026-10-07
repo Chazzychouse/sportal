@@ -5,7 +5,7 @@ import { LeagueId } from "@sportal/domain/League"
 import { Array as Arr, DateTime, Duration, Effect, Layer, Option, Result, Schema, Stream } from "effect"
 import { Argument, CliError, Command, Flag } from "effect/cli"
 import { FetchHttpClient } from "effect/http"
-import { FeedLog } from "../FeedLog.ts"
+import { FeedLog } from "../feed-log/FeedLog.ts"
 import { HubConfig } from "../HubConfig.ts"
 import * as EspnArchive from "../provider/espn/EspnArchive.ts"
 import * as EspnDecode from "../provider/espn/EspnDecode.ts"
@@ -82,7 +82,7 @@ const build = Command.make(
   })
 ).pipe(
   Command.withDescription("Build corpus days: captured from the feed log, backfilled from the archive"),
-  Command.provide(Layer.mergeAll(FeedLog.inDataDir, EspnDecode.layer, archive))
+  Command.provide(Layer.mergeAll(FeedLog.layerInDataDir, EspnDecode.layer, archive))
 )
 
 const backfill = Command.make(

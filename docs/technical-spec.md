@@ -223,11 +223,13 @@ sportal/
     │       ├── LiveStage.ts        The one authoritative Stage, held in memory
     │       ├── Ingest.ts           Polls HubConfig's leagues, runs the push on the slate's demand, appends every frame to the feed log, and waits on `through`
     │       ├── HubStopping.ts      Whether a task that should run until the Hub stops ended because it is stopping, and the Error log unless it did
-    │       ├── FeedLog.ts          The append-only log of every frame, in feed.sqlite
+    │       ├── feed-log/
+    │       │   ├── FeedLog.ts      The append-only log of every frame, in feed.sqlite: the port, its layers, and replay
+    │       │   ├── FeedLogWriter.ts  The one writer that stores appended frames in batches, and the gaps failed writes leave
+    │       │   └── FeedFrameTable.ts The `feed_frame` table: its row, its queries, and its migrations
     │       ├── Frame.ts            A feed frame as received, and the frame the log numbered
     │       ├── Gzip.ts             Frame bodies in and out of gzip
     │       ├── TestHubConfig.ts, TestTelemetry.ts   Layers for tests
-    │       ├── TestFeedLog.ts      A test's frames logged through a feed log of their own, before what reads them opens it
     │       ├── TestLiveSlate.ts    The live slate following an in-memory feed log (`slateFollowing`), and what it takes of a test's frames
     │       ├── TestSnapshotFeed.ts The snapshot feed: a provider whose frames are our own deliveries, its decode, its wire shape, and the frames tests build of it; for tests only
     │       ├── hub-server/
@@ -363,7 +365,7 @@ class FeedLog extends Context.Service<FeedLog, {
   append(frame: FeedFrame): Effect<Frame>
   readonly subscribe: Effect<Stream<Frame>, never, Scope>
   replay(from: DateTime.Utc): Stream<Frame>
-}>()("sportal/hub/FeedLog") {}
+}>()("sportal/hub/feed-log/FeedLog") {}
 ```
 
 - An append numbers the frame and publishes it at once; one writer stores batches every 100 ms. Stored kinds are

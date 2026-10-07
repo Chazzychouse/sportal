@@ -30,8 +30,8 @@ import {
 } from "effect"
 import { TestClock } from "effect/testing"
 import * as Database from "./Database.ts"
-import { FeedLog } from "./FeedLog.ts"
 import { FeedFrame } from "./Frame.ts"
+import { FeedLog } from "./feed-log/FeedLog.ts"
 import { Following, LiveSlate } from "./LiveSlate.ts"
 import { told } from "./LiveSlateTelemetry.ts"
 import { Decoder } from "./provider/Decoder.ts"
@@ -39,7 +39,6 @@ import * as EspnDecode from "./provider/espn/EspnDecode.ts"
 import { fixtures, recordedNeAtBuf, recordedPlays } from "./provider/espn/TestEspn.ts"
 import { Decoded, LiveFeedDemand } from "./provider/Provider.ts"
 import { dyingAt } from "./provider/TestDecoder.ts"
-import { logged } from "./TestFeedLog.ts"
 import { withEnv } from "./TestHubConfig.ts"
 import {
   appended,
@@ -1221,10 +1220,9 @@ describe("LiveSlate following the feed log", () => {
         Delivery.cases.Snapshot.make({ snapshot: liveSnapshot({ id: one, period: 2 }), from: "push" }),
         "fbs"
       )
-      yield* logged([first])
 
       const current = yield* LiveSlate.use((slate) => slate.through(2)).pipe(
-        Effect.provide(slateOn(appendingAtEnd, TestSnapshotFeed.decoder))
+        Effect.provide(slateOn(appendingAtEnd([first]), TestSnapshotFeed.decoder))
       )
       const taken = yield* counted("sportal_snapshots", { outcome: "taken" })
 
@@ -1238,12 +1236,11 @@ describe("LiveSlate following the feed log", () => {
     () =>
       Effect.gen(function* () {
         const frames = yield* periodsPushed
-        yield* logged(frames)
 
         const built = yield* buildingInPairs.pipe(
           Effect.map((building) => building.pollUnsafe()),
           Effect.scoped,
-          Effect.provide(FeedLog.layer)
+          Effect.provide(FeedLog.layerTest(frames))
         )
 
         assert.isUndefined(built, "the build waits for the last replayed frame")
@@ -1260,9 +1257,8 @@ describe("LiveSlate following the feed log", () => {
           Delivery.cases.Snapshot.make({ snapshot: liveSnapshot({ id: one, period: 4 }), from: "push" }),
           "fbs"
         )
-        yield* logged(frames)
 
-        const current = yield* inPairsThen(fourth)
+        const current = yield* inPairsThen(frames, fourth)
         const summary = logs.find(({ message }) => message.includes("replayed"))
         const taken = yield* counted("sportal_snapshots", { outcome: "taken" })
 
@@ -1557,10 +1553,12 @@ describe("LiveSlate, a recorded game", () => {
 
         // Half the day logged and followed, then every layer closed; reopened on the same file, the rest logged, and
         // the whole log followed, as a Hub starting again would.
-        yield* logged(all.slice(0, half)).pipe(Effect.provide(onDisk))
-        const before = yield* latestOf(slateOn(FeedLog.layer, EspnDecode.layer)).pipe(Effect.provide(onDisk))
-        yield* logged(all.slice(half)).pipe(Effect.provide(onDisk))
-        const after = yield* latestOf(slateOn(FeedLog.layer, EspnDecode.layer)).pipe(Effect.provide(onDisk))
+        const before = yield* latestOf(slateOn(FeedLog.layerTest(all.slice(0, half)), EspnDecode.layer)).pipe(
+          Effect.provide(onDisk)
+        )
+        const after = yield* latestOf(slateOn(FeedLog.layerTest(all.slice(half)), EspnDecode.layer)).pipe(
+          Effect.provide(onDisk)
+        )
         const uninterrupted = yield* replayed(all)
         const halfway = yield* replayed(all.slice(0, half))
 
@@ -1820,33 +1818,35 @@ function eventsWhile(run: Effect.Effect<void, never, LiveSlate | FeedLog>) {
   }).pipe(Effect.provide(slateFollowing()))
 }
 
-/** The feed log, whose replay appends a frame of game one in the third period as it ends. */
-const appendingAtEnd = Layer.effect(
-  FeedLog,
-  Effect.map(FeedLog, (log) =>
-    FeedLog.of({
-      ...log,
-      // Appended as the replay ends, so it is in the log before decoding reaches the end of the replay.
-      replay: (from) =>
-        log.replay(from).pipe(
-          Stream.concat(
-            Stream.fromEffect(
-              Effect.flatMap(
-                pushed(
-                  Delivery.cases.Snapshot.make({
-                    snapshot: liveSnapshot({ id: one, period: 3 }),
-                    from: "push"
-                  }),
-                  "fbs"
-                ),
-                log.append
-              )
-            ).pipe(Stream.drain)
+/** The feed log with `frames` logged, whose replay appends a frame of game one in the third period as it ends. */
+function appendingAtEnd(frames: ReadonlyArray<FeedFrame>) {
+  return Layer.effect(
+    FeedLog,
+    Effect.map(FeedLog, (log) =>
+      FeedLog.of({
+        ...log,
+        // Appended as the replay ends, so it is in the log before decoding reaches the end of the replay.
+        replay: (from) =>
+          log.replay(from).pipe(
+            Stream.concat(
+              Stream.fromEffect(
+                Effect.flatMap(
+                  pushed(
+                    Delivery.cases.Snapshot.make({
+                      snapshot: liveSnapshot({ id: one, period: 3 }),
+                      from: "push"
+                    }),
+                    "fbs"
+                  ),
+                  log.append
+                )
+              ).pipe(Stream.drain)
+            )
           )
-        )
-    })
-  )
-).pipe(Layer.provide(FeedLog.layer))
+      })
+    )
+  ).pipe(Layer.provide(FeedLog.layerTest(frames)))
+}
 
 /** Game one pushed in the first, second, and third periods, received now. */
 const periodsPushed = Effect.forEach([1, 2, 3], (period) =>
@@ -1863,16 +1863,19 @@ const buildingInPairs = Effect.gen(function* () {
   return building
 })
 
-/** The slate built as `buildingInPairs` builds it, with `frame` appended while it waits, once it has taken the frame. */
-function inPairsThen(frame: FeedFrame) {
+/**
+ * The slate built as `buildingInPairs` builds it over `logged`, with `frame` appended while it waits, once it has taken
+ * the frame.
+ */
+function inPairsThen(logged: ReadonlyArray<FeedFrame>, frame: FeedFrame) {
   return Effect.gen(function* () {
     const feedLog = yield* FeedLog
     const building = yield* buildingInPairs
-    const logged = yield* feedLog.append(frame)
+    const appended = yield* feedLog.append(frame)
     const built = yield* Fiber.join(building)
     const slate = Context.get(built, LiveSlate)
-    return yield* slate.through(logged.seq)
-  }).pipe(Effect.scoped, Effect.provide(FeedLog.layer))
+    return yield* slate.through(appended.seq)
+  }).pipe(Effect.scoped, Effect.provide(FeedLog.layerTest(logged)))
 }
 
 /** The snapshot feed's decode, handing on what frames said two at a time, so it reads a frame ahead of the last it gave. */

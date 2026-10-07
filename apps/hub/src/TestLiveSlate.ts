@@ -7,12 +7,11 @@ import { type Crypto, DateTime, Effect, Layer } from "effect"
 import type { SqlClient } from "effect/sql"
 import { TestClock } from "effect/testing"
 import * as Database from "./Database.ts"
-import { FeedLog } from "./FeedLog.ts"
 import type { FeedFrame } from "./Frame.ts"
+import { FeedLog } from "./feed-log/FeedLog.ts"
 import { LiveSlate } from "./LiveSlate.ts"
 import type { Decoder } from "./provider/Decoder.ts"
 import { decodedFrames } from "./provider/TestDecoder.ts"
-import { logged } from "./TestFeedLog.ts"
 import * as TestSnapshotFeed from "./TestSnapshotFeed.ts"
 
 /**
@@ -25,7 +24,7 @@ export function slateFollowing(
   options: { readonly decoder?: Layer.Layer<Decoder>; readonly zone?: DateTime.TimeZone } = {}
 ): Layer.Layer<LiveSlate | FeedLog> {
   return LiveSlate.layer.pipe(
-    Layer.provideMerge(FeedLog.layer.pipe(Layer.provide(Layer.effectDiscard(logged(frames))))),
+    Layer.provideMerge(FeedLog.layerTest(frames)),
     Layer.provide([
       options.decoder ?? TestSnapshotFeed.decoder,
       options.zone === undefined ? DateTime.layerCurrentZoneLocal : DateTime.layerCurrentZone(options.zone)
