@@ -38,7 +38,9 @@ export function inCorpus<A, E>(
   timeZone: DateTime.TimeZone = DateTime.zoneMakeNamedUnsafe(zone)
 ) {
   return Effect.gen(function* () {
-    const dir = yield* (yield* FileSystem.FileSystem).makeTempDirectoryScoped()
+    const fs = yield* FileSystem.FileSystem
+    const dir = yield* fs.makeTempDirectoryScoped()
+
     return yield* test(dir).pipe(
       Effect.provide(
         Layer.mergeAll(

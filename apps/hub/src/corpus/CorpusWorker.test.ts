@@ -10,14 +10,18 @@ import { DayRun, RunDay, runDays } from "./CorpusWorker.ts"
 import { built, inCorpus } from "./TestCorpus.ts"
 
 describe("RunDay.run", () => {
+  // Builds and runs NE at BUF's whole recorded day, through ESPN's decode: seconds alone, more under a full suite.
   it.effect(
-    "answers RunDay for the recorded NE at BUF day with the event count its run gives",
+    "should answer RunDay for the recorded NE at BUF day with the event count its run gives",
     () =>
       inCorpus(EspnDecode.layer, () =>
         Effect.gen(function* () {
-          yield* logged(yield* recordedNeAtBuf)
+          const frames = yield* recordedNeAtBuf
+          yield* logged(frames)
           yield* built("2026-10-04")
+
           const run = yield* new RunDay({ date: "2026-10-04" }).run()
+
           const events = yield* CorpusRun.day("2026-10-04", CorpusRun.events)
           assert.strictEqual(run.date, "2026-10-04")
           assert.strictEqual(run.events, events.length)
@@ -28,10 +32,11 @@ describe("RunDay.run", () => {
     { timeout: 60_000 }
   )
 
-  it.effect("fails a day that has not been built as CorpusDayUnreadable Missing", () =>
+  it.effect("should fail a day that has not been built as CorpusDayUnreadable Missing", () =>
     inCorpus(EspnDecode.layer, () =>
       Effect.gen(function* () {
         const error = yield* new RunDay({ date: "2026-10-04" }).run().pipe(Effect.flip)
+
         assert.deepStrictEqual([error.date, error.reason], ["2026-10-04", "Missing"])
       })
     )
@@ -39,17 +44,24 @@ describe("RunDay.run", () => {
 })
 
 describe("DayRun.reply", () => {
-  it.effect("crosses a thread as the run or the typed failure it holds", () =>
+  it.effect("should cross a thread as the run it holds", () =>
     Effect.gen(function* () {
       const run = Exit.succeed(new DayRun({ date: "2026-10-04", events: 266, millis: 95 }))
+
+      const received = yield* crossed(run)
+
+      assert.deepStrictEqual(received, run)
+    })
+  )
+
+  it.effect("should cross a thread as the typed failure it holds", () =>
+    Effect.gen(function* () {
       const missing = Exit.fail(
         new CorpusDayUnreadable({ date: "2026-10-05", reason: "Missing", cause: "day.json" })
       )
-      const crossed = (exit: Exit.Exit<DayRun, CorpusDayUnreadable>) =>
-        DayRun.reply(exit).pipe(Effect.flatMap((reply) => DayRun.fromReply(structuredClone(reply))))
 
-      assert.deepStrictEqual(yield* crossed(run), run)
       const failed = yield* crossed(missing)
+
       assert.isTrue(Exit.isFailure(failed))
       if (Exit.isFailure(failed)) {
         const error = Cause.findErrorOption(failed.cause)
@@ -63,31 +75,44 @@ describe("DayRun.reply", () => {
 })
 
 describe("runDays", () => {
-  it.effect("runs every day, and succeeds when none failed", () =>
+  it.effect("should run every day, succeeding when none failed", () =>
     Effect.gen(function* () {
       const threads = yield* stubThreads()
+
       yield* runDays([ok, "2026-10-06"], 2).pipe(Effect.provide(threads.layer))
-      assert.deepStrictEqual((yield* Ref.get(threads.answered)).toSorted(), [ok, "2026-10-06"])
-      assert.strictEqual(yield* Ref.get(threads.spawned), 2)
+
+      const answered = yield* Ref.get(threads.answered)
+      const spawned = yield* Ref.get(threads.spawned)
+      assert.deepStrictEqual(answered.toSorted(), [ok, "2026-10-06"])
+      assert.strictEqual(spawned, 2)
     })
   )
 
   it.effect(
-    "fails a crashed thread's day alone, a fresh thread runs the rest, and the run fails DaysFailed",
+    "should fail a crashed thread's day alone, running the rest on a fresh thread, and fail the run DaysFailed",
     () =>
       Effect.gen(function* () {
         const threads = yield* stubThreads()
+
         const error = yield* runDays([ok, crash, missing, "2026-10-06"], 1).pipe(
           Effect.provide(threads.layer),
           Effect.flip
         )
+
+        const answered = yield* Ref.get(threads.answered)
+        const spawned = yield* Ref.get(threads.spawned)
         assert.instanceOf(error, DaysFailed)
         assert.deepStrictEqual([error.failed, error.days], [2, 4])
-        assert.deepStrictEqual(yield* Ref.get(threads.answered), [ok, "2026-10-06"])
-        assert.strictEqual(yield* Ref.get(threads.spawned), 2)
+        assert.deepStrictEqual(answered, [ok, "2026-10-06"])
+        assert.strictEqual(spawned, 2)
       })
   )
 })
+
+/** `exit` as a reply, cloned as a message crossing a thread is, and read back. */
+function crossed(exit: Exit.Exit<DayRun, CorpusDayUnreadable>) {
+  return DayRun.reply(exit).pipe(Effect.flatMap((reply) => DayRun.fromReply(structuredClone(reply))))
+}
 
 const ok = "2026-10-03"
 const crash = "2026-10-04"
