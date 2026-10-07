@@ -13,11 +13,13 @@ import { TileViews } from "./TileViews.ts"
 const Shell = Layer.unwrap(
   Effect.gen(function* () {
     yield* Effect.promise(() => app.whenReady())
+
     // Widevine is delivered as a component of the castlabs Electron build; wait for it before any playback.
     yield* Effect.tryPromise({
       try: () => components.whenReady(),
       catch: (cause) => new WidevineUnavailable({ cause })
     })
+
     return Layer.effectDiscard(serveHub).pipe(
       Layer.provide([TileViews.layer, GuideReader.layer]),
       Layer.provideMerge(ProviderSession.layer),
@@ -35,29 +37,31 @@ const serveHub = Effect.gen(function* () {
   const window = yield* ShellWindow
   const { hubUrl } = yield* ShellConfig
   const tiles = yield* TileViews
+  const providers = yield* ProviderSession
+  const reader = yield* GuideReader
   // Electron's IPC callbacks decide synchronously; the work they start runs as an Effect.
   const run = yield* FiberSet.makeRuntime()
-  const providers = yield* ProviderSession
 
   // Placements are applied one at a time, and only the newest waiting set matters: each replaces all before it.
   const pending = yield* Queue.sliding<{
     placements: ReadonlyArray<TilePlacement>
     transition: StageTransition | undefined
   }>(1)
+  const syncTiles = (placements: ReadonlyArray<TilePlacement>, transition: StageTransition | undefined) =>
+    tiles.sync(placements, transition).pipe(
+      Effect.catchCauseIf(
+        (cause) => !Cause.hasInterrupts(cause),
+        (cause) => Effect.logError("Sportal: a tile sync failed", cause)
+      )
+    )
   yield* Effect.forkScoped(
     Effect.forever(
       Queue.take(pending).pipe(
-        Effect.flatMap(({ placements, transition }) =>
-          tiles.sync(placements, transition).pipe(
-            Effect.catchCauseIf(
-              (cause) => !Cause.hasInterrupts(cause),
-              (cause) => Effect.logError("Sportal: a tile sync failed", cause)
-            )
-          )
-        )
+        Effect.flatMap(({ placements, transition }) => syncTiles(placements, transition))
       )
     )
   )
+
   yield* listen(ShellChannel.syncTiles, (placements, transition) => {
     const decoded = decodePlacements(placements)
     const along = decodeTransition(transition)
@@ -71,6 +75,7 @@ const serveHub = Effect.gen(function* () {
   yield* listen(ShellChannel.setFullScreen, (on) => {
     if (typeof on === "boolean") window.setFullScreen(on)
   })
+
   // The window manager or the OS may change full screen too; the web UI hears every change from here.
   const enteredFullScreen = () => window.webContents.send(ShellChannel.fullScreenChanged, true)
   const leftFullScreen = () => window.webContents.send(ShellChannel.fullScreenChanged, false)
@@ -90,8 +95,6 @@ const serveHub = Effect.gen(function* () {
   yield* forward(ShellChannel.hotkey, tiles.hotkeys)
   yield* forward(ShellChannel.tilePressed, tiles.tilePresses)
   yield* listen(ShellChannel.openSignIn, () => run(providers.openSignIn))
-
-  const reader = yield* GuideReader
   yield* forward(ShellChannel.guideRead, reader.guides)
   yield* listen(ShellChannel.readGuide, () => run(reader.readSoon))
 

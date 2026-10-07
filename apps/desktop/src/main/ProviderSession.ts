@@ -68,6 +68,7 @@ export class ProviderSession extends Context.Service<
             signIn.focus()
             return
           }
+
           const window = new BrowserWindow({
             width: 1000,
             height: 800,
@@ -76,6 +77,7 @@ export class ProviderSession extends Context.Service<
           })
           signIn = window
           confine(window.webContents, permits, warn, { subframes: false })
+
           log(
             load(window.webContents, signInUrl).pipe(
               Effect.catchTag("LoadFailed", (failure) =>

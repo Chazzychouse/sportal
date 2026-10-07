@@ -42,6 +42,7 @@ export class ShellWindow extends Context.Service<ShellWindow, BrowserWindow>()(
         (message) => log(Effect.logWarning(`Sportal: ${message}`)),
         { subframes: true }
       )
+
       return ShellWindow.of(window)
     })
   )
