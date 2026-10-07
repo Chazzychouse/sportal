@@ -1,39 +1,41 @@
 import { assert, describe, it } from "@effect/vitest"
-import { ChannelAvailability } from "@sportal/domain/Channel"
-import { GameId } from "@sportal/domain/Game"
+import type { GameId } from "@sportal/domain/Game"
 import { Stage } from "@sportal/domain/Stage"
-import { Result } from "effect"
+import { bama, fill, irish, soloed } from "@sportal/domain/TestStage"
 import { tileActions } from "./TileActions.tsx"
 
-const bama = GameId.make("401856707")
-const irish = GameId.make("401858250")
-const fox = {
-  name: "FOX",
-  source: "YouTube TV" as const,
-  locator: { _tag: "WebView" as const, url: "https://tv.youtube.com/watch/fox" }
-}
-
 describe("tileActions", () => {
-  it("offers nothing for an empty tile", () => {
-    assert.deepStrictEqual(tileActions(Stage.initial, 0, true), [])
+  it("should offer nothing for an empty tile", () => {
+    const actions = tileActions(Stage.initial, 0, true)
+
+    assert.deepStrictEqual(actions, [])
   })
 
-  it("offers hear, solo, and clear for the main tile, with no promote", () => {
+  it("should offer hear, solo, and clear for the main tile, with no promote", () => {
+    const stage = fill([bama, irish])
+
+    const actions = tileActions(stage, 0, true)
+
     assert.deepStrictEqual(
-      tileActions(streaming(), 0, true).map((action) => action.id),
+      actions.map((action) => action.id),
       ["hear", "solo", "clear"]
     )
   })
 
-  it("offers promote for any other tile, and sends it that tile", () => {
-    const promote = tileActions(streaming(), 1, true).find((action) => action.id === "promote")
+  it("should offer promote for any other tile, sending it that tile", () => {
+    const stage = fill([bama, irish])
+
+    const promote = tileActions(stage, 1, true).find((action) => action.id === "promote")
+
     assert.deepStrictEqual(promote?.command, { _tag: "Promote", tile: 1 })
     assert.strictEqual(promote?.key, "Shift+2")
   })
 
-  it("swaps solo for unsolo on the soloed tile", () => {
-    const stage = Result.getOrThrow(streaming().apply({ _tag: "Solo", tile: 1 }, none))
+  it("should swap solo for unsolo on the soloed tile", () => {
+    const stage = soloed([bama, irish], 1)
+
     const actions = tileActions(stage, 1, true)
+
     assert.deepStrictEqual(
       actions.map((action) => action.id),
       ["hear", "promote", "unsolo", "clear"]
@@ -41,39 +43,40 @@ describe("tileActions", () => {
     assert.deepStrictEqual(actions[2]?.command, { _tag: "Unsolo" })
   })
 
-  it("gives solo its key only on the selected tile", () => {
-    const soloKey = (slot: number, selected: boolean) =>
-      tileActions(streaming(), slot, selected).find((action) => action.id === "solo")?.key
-    assert.strictEqual(soloKey(1, true), "F")
-    assert.strictEqual(soloKey(1, false), undefined)
+  it("should give solo its key on the selected tile", () => {
+    const stage = fill([bama, irish])
+
+    const key = actionOf(stage, 1, true, "solo")?.key
+
+    assert.strictEqual(key, "F")
   })
 
-  it("shows unsolo's key on the soloed tile whether or not it is selected", () => {
-    const stage = Result.getOrThrow(streaming().apply({ _tag: "Solo", tile: 1 }, none))
-    const key = tileActions(stage, 1, false).find((action) => action.id === "unsolo")?.key
+  it("should give solo no key on a tile that is not selected", () => {
+    const stage = fill([bama, irish])
+
+    const key = actionOf(stage, 1, false, "solo")?.key
+
+    assert.strictEqual(key, undefined)
+  })
+
+  it("should show unsolo's key on the soloed tile whether or not it is selected", () => {
+    const stage = soloed([bama, irish], 1)
+
+    const key = actionOf(stage, 1, false, "unsolo")?.key
+
     assert.strictEqual(key, "Escape")
   })
 
-  it("words hear by whether the tile's sound is already on", () => {
-    const stage = streaming()
-    const labels = (slot: number) =>
-      tileActions(stage, slot, true).find((action) => action.id === "hear")?.label
-    assert.deepStrictEqual(
-      [labels(0), labels(1)],
-      [stage.hears(bama) ? "Sound on" : "Hear this game", stage.hears(irish) ? "Sound on" : "Hear this game"]
-    )
+  it("should word hear by whether the tile's sound is already on", () => {
+    const stage = fill([bama, irish])
+    const wording = (game: GameId) => (stage.hears(game) ? "Sound on" : "Hear this game")
+
+    const labels = [actionOf(stage, 0, true, "hear")?.label, actionOf(stage, 1, true, "hear")?.label]
+
+    assert.deepStrictEqual(labels, [wording(bama), wording(irish)])
   })
 })
 
-function streaming() {
-  const one = Result.getOrThrow(Stage.initial.apply({ _tag: "Assign", tile: 0, game: bama }, carriedOnFox))
-  return Result.getOrThrow(one.apply({ _tag: "Assign", tile: 1, game: irish }, carriedOnFox))
-}
-
-function carriedOnFox() {
-  return ChannelAvailability.Carried({ channel: fox })
-}
-
-function none() {
-  return ChannelAvailability.NotCarried({ why: "NoStream" })
+function actionOf(stage: Stage, slot: number, selected: boolean, id: string) {
+  return tileActions(stage, slot, selected).find((action) => action.id === id)
 }
