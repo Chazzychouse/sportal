@@ -6,8 +6,9 @@ import type { LeagueId } from "@sportal/domain/League"
 import { liveSnapshot, snapshot } from "@sportal/domain/TestGame"
 import { Cause, DateTime, Duration, Effect, Layer, Schedule } from "effect"
 import { HttpClient, HttpClientError, HttpClientResponse } from "effect/http"
+import { listedBy } from "../../TestFeed.ts"
 import { Provider } from "../Provider.ts"
-import { listedBy } from "../TestProvider.ts"
+import * as EspnDecode from "./EspnDecode.ts"
 import * as EspnProvider from "./EspnProvider.ts"
 import { FastCast } from "./FastCast.ts"
 import { noSocket } from "./TestEspn.ts"
@@ -19,24 +20,27 @@ const fbsMidday = fixture("fbs-scoreboard-2026-10-03T2024Z")
 const nflPregame = fixture("nfl-scoreboard-pregame")
 
 const recordedEspn = (fbs: string) =>
-  EspnProvider.layer.pipe(
-    Layer.provide(FastCast.layer),
-    Layer.provide(noSocket),
-    Layer.provide(
-      Layer.succeed(
-        HttpClient.HttpClient,
-        HttpClient.make((request) =>
-          Effect.succeed(
-            HttpClientResponse.fromWeb(
-              request,
-              new Response(request.url.includes("/nfl/") ? nflPregame : fbs, {
-                headers: { date: "Sun, 04 Oct 2026 18:00:00 GMT" }
-              })
+  Layer.merge(
+    EspnProvider.layer.pipe(
+      Layer.provide(FastCast.layer),
+      Layer.provide(noSocket),
+      Layer.provide(
+        Layer.succeed(
+          HttpClient.HttpClient,
+          HttpClient.make((request) =>
+            Effect.succeed(
+              HttpClientResponse.fromWeb(
+                request,
+                new Response(request.url.includes("/nfl/") ? nflPregame : fbs, {
+                  headers: { date: "Sun, 04 Oct 2026 18:00:00 GMT" }
+                })
+              )
             )
           )
         )
       )
-    )
+    ),
+    EspnDecode.layer
   )
 
 const TestLayer = recordedEspn(fbsLive)

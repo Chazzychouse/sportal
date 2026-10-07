@@ -9,7 +9,7 @@ import { TestClock } from "effect/testing"
 import * as Database from "./Database.ts"
 import { GameHistory } from "./GameHistory.ts"
 import { LiveGames } from "./LiveGames.ts"
-import { taken } from "./provider/TestProvider.ts"
+import { taken } from "./TestFeed.ts"
 import { counted, withMetrics } from "./TestTelemetry.ts"
 
 const one = GameId.make("1")

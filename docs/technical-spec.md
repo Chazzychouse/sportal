@@ -226,6 +226,7 @@ sportal/
     │       ├── Frame.ts            A feed frame as received, and the frame the log numbered
     │       ├── Gzip.ts             Frame bodies in and out of gzip
     │       ├── TestHubConfig.ts, TestTelemetry.ts   Layers for tests
+    │       ├── TestFeed.ts         The snapshot feed as a test's provider, its frames, and what a decode reads in them
     │       ├── ingest/
     │       │   ├── Ingest.ts       Replays the game day from the feed log, then polls HubConfig's leagues, runs the live feed, logs every frame, and folds it
     │       │   └── DecodeTelemetry.ts  What decode noticed, as logs and metrics, for frames after the replay
@@ -234,8 +235,7 @@ sportal/
     │       │   └── LanAddresses.ts The addresses a phone on the home network can reach
     │       ├── provider/
     │       │   ├── Provider.ts     The port: poll, push, polling; LiveFeed, Polling, Decoded, Notice, ProviderError
-    │       │   ├── Decoder.ts      A provider's decode, and its only home; provided beside the provider
-    │       │   ├── TestProvider.ts A provider that answers from a script
+    │       │   ├── Decoder.ts      A provider's decode, and its only home; a layer of its own, paired with its provider by HubMode
     │       │   └── espn/
     │       │       ├── EspnProvider.ts     Implements the port: polls, pushes through the FastCast service, and its polling Schedule
     │       │       ├── EspnDecode.ts       Frames to deliveries: listings, snapshots, plays, resyncs
@@ -348,7 +348,7 @@ class Decoder extends Context.Service<Decoder, {
 }>()("sportal/hub/Decoder") {}
 ```
 
-- `poll` returns a league's scoreboard as received; the Hub logs it before anything decodes it. A provider's adapter provides its `Decoder` beside it, the only home of its decode, so a recorded scenario decodes its frames as the provider that recorded them would. `decode` turns frames, polled or pushed, into `Delivery`s (`Listing`, `Snapshot`, or `Plays`) stamped with the frame's `seq` and receive time, a `Resync` when a topic's document had to be dropped, or a `Noted` notice for telemetry. It never logs or counts.
+- `poll` returns a league's scoreboard as received; the Hub logs it before anything decodes it. A provider's adapter provides its `Decoder` as a layer of its own, the only home of its decode, and `HubMode` pairs the two, so a recorded scenario decodes its frames as the provider that recorded them would. `decode` turns frames, polled or pushed, into `Delivery`s (`Listing`, `Snapshot`, or `Plays`) stamped with the frame's `seq` and receive time, a `Resync` when a topic's document had to be dropped, or a `Noted` notice for telemetry. It never logs or counts.
 - `push` is the live feed: one element per frame, raw. ESPN's FastCast implements it (`docs/adr/0007-fastcast-live-feed.md`), a service the ESPN provider yields, whose checkpoint retry is the schedule `FastCast.layer` builds it with, and subscribes to the scoreboard topics and to a `gp-` topic for each game in `wanted`; a topic named in `resync` is asked for its checkpoint again.
 - `polling` is when to poll again, given the fold's slate after the last poll and the leagues that failed. Ingest runs `poll` repeated on it; the adapter owns the rules.
 - Provider vocabulary stops at the folder edge. ESPN's "event", "competition", and "competitor" exist only in `EspnEvent.ts`, `FastCastMessage.ts`, and `EspnPlay.ts`.

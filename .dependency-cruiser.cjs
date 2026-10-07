@@ -23,20 +23,21 @@ module.exports = {
     },
     {
       name: "provider-payloads-are-private",
-      comment: "A provider's or source's wire vocabulary stays inside its folder.",
+      comment:
+        "A provider's or source's wire vocabulary stays inside its folder; TestFeed builds the snapshot feed's frames for tests.",
       severity: "error",
-      from: { pathNot: "^apps/hub/src/(provider|source)/([^/]+)/" },
+      from: { pathNot: "(^apps/hub/src/(provider|source)/([^/]+)/|^apps/hub/src/TestFeed\\.ts$)" },
       to: { path: "^apps/hub/src/(provider|source)/[^/]+/([^/]*Payload|FastCastMessage)\\.ts$" }
     },
     {
       name: "only-hub-mode-names-adapters",
       comment:
-        "Only HubMode and tests know which concrete providers and sources exist, and ScenarioProvider, which plays written scenarios as the snapshot feed; main.ts names only the database.",
+        "Only HubMode and tests, TestFeed among them, know which concrete providers and sources exist; main.ts names only the database.",
       severity: "error",
       from: {
         path: "^apps/hub/src/",
         pathNot:
-          "(^apps/hub/src/HubMode\\.ts$|^apps/hub/src/scenario/ScenarioProvider\\.ts$|\\.test\\.ts$|^apps/hub/src/provider/[^/]+/|^apps/hub/src/source/youtube-tv/)"
+          "(^apps/hub/src/HubMode\\.ts$|^apps/hub/src/TestFeed\\.ts$|\\.test\\.ts$|^apps/hub/src/provider/[^/]+/|^apps/hub/src/source/youtube-tv/)"
       },
       to: {
         path: "^apps/hub/src/(provider/[^/]+/|source/youtube-tv/|scenario/Scenario(Provider|Source|Clock)\\.ts$)"
@@ -87,11 +88,12 @@ module.exports = {
       to: { path: "^apps/hub/src/TestDatabase\\.ts$" }
     },
     {
-      name: "test-provider-is-for-tests",
-      comment: "A provider scripted for a test, and the games it lists, are imported only by test files.",
+      name: "test-feed-is-for-tests",
+      comment:
+        "The snapshot feed set up for a test, and what a decode reads in it, are imported only by test files.",
       severity: "error",
       from: { pathNot: "\\.test\\.ts$" },
-      to: { path: "^apps/hub/src/provider/TestProvider\\.ts$" }
+      to: { path: "^apps/hub/src/TestFeed\\.ts$" }
     },
     {
       name: "test-adapter-data-is-for-tests",

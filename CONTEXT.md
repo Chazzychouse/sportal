@@ -27,7 +27,7 @@ Every exported type name must be a term here, except the wire schemas in `*Paylo
 | **Fold report** | What one step of the live games did to one game, for telemetry to tell: took a snapshot, started, changed, stopped, happened (a game event), dropped, or raised a defect. | fold event, log entry |
 | **Stale** | A live game no snapshot has reached for 90 seconds. It stays current for 30 minutes after its last update. | |
 | **Delivery** | What a frame said: a league's listing, one game's snapshot, or one game's whole list of plays. | input, update |
-| **Decoder** | The one home of a provider's decode, which its adapter provides beside it, so a recorded scenario decodes its frames as the provider that recorded them would. | parser |
+| **Decoder** | The one home of a provider's decode, provided by its adapter as a layer of its own; `HubMode` pairs it with its provider, so a recorded scenario decodes its frames as the provider that recorded them would. | parser |
 | **Decoded** | What one frame said, one per frame: its deliveries, the live feed channels to resync, and its notices, with the frame's `seq` and receive time. | decoded frame, said |
 | **Notice** | Something a provider's decode noticed in a frame for telemetry to tell: a message received, games pushed, an unlisted game, a document reset, a message of an unknown op, a frame, event, or play that did not decode, or an unknown play type. Told only for frames after a replay. | warning, metric |
 | **Delivery source** | Which feed a snapshot came from: `push` or `poll`. | origin, feed type |

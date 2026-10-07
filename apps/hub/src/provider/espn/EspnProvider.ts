@@ -2,63 +2,58 @@ import type { GameSnapshot } from "@sportal/domain/Game"
 import type { LeagueId } from "@sportal/domain/League"
 import { DateTime, Duration, Effect, Layer, Option, Schedule } from "effect"
 import { Headers, HttpClient } from "effect/http"
-import type { Decoder } from "../Decoder.ts"
 import { type Polling, Provider, ProviderError } from "../Provider.ts"
-import * as EspnDecode from "./EspnDecode.ts"
 import { FastCast } from "./FastCast.ts"
 
 /**
- * ESPN as the provider: the site scoreboard polled and FastCast pushing, with `EspnDecode` beside them as its
- * `Decoder`. A poll that does not connect is `Unreachable` for its league, and one answered with a status other than
- * 2xx `Refused`. Polled every 10 seconds while a game is live, every minute within 30 minutes of a kickoff, and every
- * 15 minutes otherwise; at most 30 seconds after a poll in which a league failed.
+ * ESPN as the provider: the site scoreboard polled and FastCast pushing, their frames read by `EspnDecode`. A poll
+ * that does not connect is `Unreachable` for its league, and one answered with a status other than 2xx `Refused`.
+ * Polled every 10 seconds while a game is live, every minute within 30 minutes of a kickoff, and every 15 minutes
+ * otherwise; at most 30 seconds after a poll in which a league failed.
  */
-export const layer: Layer.Layer<Provider | Decoder, never, FastCast | HttpClient.HttpClient> = Layer.merge(
-  Layer.effect(
-    Provider,
-    Effect.gen(function* () {
-      const client = (yield* HttpClient.HttpClient).pipe(HttpClient.filterStatusOk)
-      const fastCast = yield* FastCast
+export const layer: Layer.Layer<Provider, never, FastCast | HttpClient.HttpClient> = Layer.effect(
+  Provider,
+  Effect.gen(function* () {
+    const client = (yield* HttpClient.HttpClient).pipe(HttpClient.filterStatusOk)
+    const fastCast = yield* FastCast
 
-      const poll = (league: LeagueId) =>
-        Effect.gen(function* () {
-          const response = yield* client.get(scoreboardUrl(league))
-          const body = yield* response.text
-          return {
-            receivedAt: yield* DateTime.now,
-            sentAt: Option.getOrUndefined(
-              Option.flatMap(Headers.get(response.headers, "date"), (date) => DateTime.make(date))
-            ),
-            feed: "poll",
-            channel: league,
-            kind: "response",
-            body
-          } as const
-        }).pipe(
-          Effect.mapError(
-            (cause) =>
-              new ProviderError({
-                reason: cause.reason._tag === "StatusCodeError" ? "Refused" : "Unreachable",
-                league,
-                cause
-              })
+    const poll = (league: LeagueId) =>
+      Effect.gen(function* () {
+        const response = yield* client.get(scoreboardUrl(league))
+        const body = yield* response.text
+        return {
+          receivedAt: yield* DateTime.now,
+          sentAt: Option.getOrUndefined(
+            Option.flatMap(Headers.get(response.headers, "date"), (date) => DateTime.make(date))
           ),
-          Effect.withSpan("EspnProvider.poll", { attributes: { "sportal.league": league } })
-        )
+          feed: "poll",
+          channel: league,
+          kind: "response",
+          body
+        } as const
+      }).pipe(
+        Effect.mapError(
+          (cause) =>
+            new ProviderError({
+              reason: cause.reason._tag === "StatusCodeError" ? "Refused" : "Unreachable",
+              league,
+              cause
+            })
+        ),
+        Effect.withSpan("EspnProvider.poll", { attributes: { "sportal.league": league } })
+      )
 
-      return Provider.of({
-        poll,
-        push: fastCast.push,
-        polling: Schedule.forever.pipe(
-          Schedule.setInputType<Schedule.Input<Polling>>(),
-          Schedule.modifyDelay(({ input, now }) =>
-            Effect.succeed(interval(input.slate, DateTime.makeUnsafe(now), input.failed.length > 0))
-          )
+    return Provider.of({
+      poll,
+      push: fastCast.push,
+      polling: Schedule.forever.pipe(
+        Schedule.setInputType<Schedule.Input<Polling>>(),
+        Schedule.modifyDelay(({ input, now }) =>
+          Effect.succeed(interval(input.slate, DateTime.makeUnsafe(now), input.failed.length > 0))
         )
-      })
+      )
     })
-  ),
-  EspnDecode.layer
+  })
 )
 
 function scoreboardUrl(league: LeagueId): string {

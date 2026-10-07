@@ -3,8 +3,9 @@ import type { Frame } from "../Frame.ts"
 import type { Decoded } from "./Provider.ts"
 
 /**
- * A provider's decode on its own: what each frame it delivered said. Its adapter provides it beside the provider, so a
- * recorded scenario decodes its frames as the provider that recorded them would, without naming that provider.
+ * A provider's decode on its own: what each frame it delivered said. Its adapter provides it as a layer of its own, and
+ * `HubMode` pairs it with its provider, so a recorded scenario decodes its frames as the provider that recorded them
+ * would.
  */
 export class Decoder extends Context.Service<
   Decoder,

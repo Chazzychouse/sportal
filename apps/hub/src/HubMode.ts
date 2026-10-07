@@ -8,6 +8,8 @@ import { LiveGames } from "./LiveGames.ts"
 import * as EspnDecode from "./provider/espn/EspnDecode.ts"
 import * as EspnProvider from "./provider/espn/EspnProvider.ts"
 import { FastCast } from "./provider/espn/FastCast.ts"
+import * as SnapshotDecode from "./provider/snapshot/SnapshotDecode.ts"
+import * as SnapshotProvider from "./provider/snapshot/SnapshotProvider.ts"
 import { Slate } from "./Slate.ts"
 import { RecordedScenarios } from "./scenario/RecordedScenarios.ts"
 import * as ScenarioClock from "./scenario/ScenarioClock.ts"
@@ -42,6 +44,7 @@ function live() {
             Layer.provide(FastCast.layer),
             Layer.provide(NodeSocket.layerWebSocketConstructorWS)
           ),
+          EspnDecode.layer,
           FeedLog.inDataDir,
           DateTime.layerCurrentZoneLocal
         ])
@@ -51,15 +54,28 @@ function live() {
   )
 }
 
-// The scenario plays as the provider through the real Ingest, onto a feed log of its own. Ingest, the fold, and the
-// Slate share the scenario's clock; the rest of the Hub keeps the real one. The game history stays out of a scenario.
+// The scenario plays as the provider through the real Ingest, onto a feed log of its own: a written one as the snapshot
+// feed, a recorded one decoded as ESPN, which recorded it. Ingest, the fold, and the Slate share the scenario's clock;
+// the rest of the Hub keeps the real one. The game history stays out of a scenario.
 function scripted() {
   return Layer.mergeAll(
     Layer.mergeAll(
       Slate.layer,
       Ingest.layer.pipe(
         Layer.provide([
-          ScenarioProvider.layer.pipe(Layer.provide([RecordedScenarios.layer, EspnDecode.layer])),
+          Layer.unwrap(
+            Effect.map(
+              ScenarioProvider.written,
+              Option.match({
+                onSome: (feed) => Layer.merge(SnapshotProvider.layer(feed), SnapshotDecode.layer),
+                onNone: () =>
+                  Layer.merge(
+                    ScenarioProvider.recorded.pipe(Layer.provide(RecordedScenarios.layer)),
+                    EspnDecode.layer
+                  )
+              })
+            )
+          ),
           FeedLog.forScenario,
           DateTime.layerCurrentZoneLocal
         ])

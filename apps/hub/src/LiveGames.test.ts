@@ -25,7 +25,7 @@ import {
 import { TestClock } from "effect/testing"
 import { LiveGames } from "./LiveGames.ts"
 import type { Decoded } from "./provider/Provider.ts"
-import { delivered, taken } from "./provider/TestProvider.ts"
+import { delivered, taken } from "./TestFeed.ts"
 import { counted, gauged, recordingLogs, recordingSpans, withMetrics } from "./TestTelemetry.ts"
 
 const one = GameId.make("1")

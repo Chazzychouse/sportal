@@ -5,8 +5,8 @@ import { liveSnapshot, snapshot } from "@sportal/domain/TestGame"
 import { Effect, Layer, Ref, Stream } from "effect"
 import { TestClock } from "effect/testing"
 import { LiveGames } from "./LiveGames.ts"
-import { taken } from "./provider/TestProvider.ts"
 import { Slate } from "./Slate.ts"
+import { taken } from "./TestFeed.ts"
 
 describe("Slate", () => {
   it.effect("keeps the listing's order, leagues in their order", () =>

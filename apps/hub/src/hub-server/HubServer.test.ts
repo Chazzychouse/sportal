@@ -13,10 +13,11 @@ import * as Database from "../Database.ts"
 import { FeedLog } from "../FeedLog.ts"
 import * as Ingest from "../ingest/Ingest.ts"
 import { LiveGames } from "../LiveGames.ts"
-import { polling } from "../provider/TestProvider.ts"
+import * as SnapshotDecode from "../provider/snapshot/SnapshotDecode.ts"
 import { Slate } from "../Slate.ts"
 import { StageSessions } from "../StageSessions.ts"
 import * as YouTubeTv from "../source/youtube-tv/YouTubeTv.ts"
+import { polled } from "../TestFeed.ts"
 import { withEnv } from "../TestHubConfig.ts"
 import * as HubServer from "./HubServer.ts"
 
@@ -278,7 +279,8 @@ function hubUnderTest() {
     Layer.provideMerge(Layer.mergeAll(Slate.layer, Ingest.layer)),
     Layer.provide([
       LiveGames.layer,
-      polling(() => Effect.succeed([game])),
+      polled(() => Effect.succeed([game])),
+      SnapshotDecode.layer,
       DateTime.layerCurrentZoneLocal,
       FeedLog.layer.pipe(Layer.provide([Database.at(":memory:"), NodeCrypto.layer]))
     ]),

@@ -3,10 +3,10 @@ import { assert, describe, layer } from "@effect/vitest"
 import type { Delivery } from "@sportal/domain/Delivery"
 import { GameId, GameSnapshot } from "@sportal/domain/Game"
 import { PlayId } from "@sportal/domain/Play"
-import { type Data, DateTime, Effect, Metric, Option, Record, Schema, Stream } from "effect"
-import { type FeedFrame, Frame } from "../../Frame.ts"
+import { type Data, DateTime, Effect, Metric, Option, Record, Schema } from "effect"
+import type { FeedFrame } from "../../Frame.ts"
+import { decodedFrames } from "../../TestFeed.ts"
 import { recordingLogs, withMetrics } from "../../TestTelemetry.ts"
-import { Decoder } from "../Decoder.ts"
 import type { Notice } from "../Provider.ts"
 import * as EspnDecode from "./EspnDecode.ts"
 import { EspnEvent } from "./EspnEvent.ts"
@@ -354,7 +354,7 @@ layer(EspnDecode.layer)("EspnDecode", (it) => {
 
   it.effect("the next checkpoint that decodes syncs it", () =>
     Effect.gen(function* () {
-      const all = yield* outputs([
+      const all = yield* decodedFrames([
         poll("nfl", scoreboardBody),
         checkpoint("event-football-nfl", 7, { sports: "not a scoreboard" }),
         checkpoint("event-football-nfl", 4286637, JSON.parse(checkpointBody)),
@@ -672,7 +672,7 @@ layer(EspnDecode.layer)("EspnDecode", (it) => {
   describe("one Decoded per frame", () => {
     it.effect("a message that changes no document is a Decoded with only its Received notice", () =>
       Effect.gen(function* () {
-        const [only, ...rest] = yield* outputs([
+        const [only, ...rest] = yield* decodedFrames([
           message("event-football-nfl", 1, [{ op: "replace", path: "/x", value: "1" }])
         ])
 
@@ -689,7 +689,7 @@ layer(EspnDecode.layer)("EspnDecode", (it) => {
 
     it.effect("a poll that does not decode is a Decoded with no deliveries and one FrameUndecoded", () =>
       Effect.gen(function* () {
-        const all = yield* outputs([poll("nfl", "not json")])
+        const all = yield* decodedFrames([poll("nfl", "not json")])
 
         assert.strictEqual(all.length, 1)
         assert.deepStrictEqual(all[0]?.deliveries, [])
@@ -702,7 +702,7 @@ layer(EspnDecode.layer)("EspnDecode", (it) => {
 
     it.effect("a scoreboard push is a Decoded of each pushed game's Snapshot, noted Pushed", () =>
       Effect.gen(function* () {
-        const all = yield* outputs([poll("nfl", scoreboardBody), ...recorded(socketTexts.slice(0, 3))])
+        const all = yield* decodedFrames([poll("nfl", scoreboardBody), ...recorded(socketTexts.slice(0, 3))])
         const pushing = all.find((one) => one.notices.some((notice) => notice._tag === "Pushed"))
 
         assert.strictEqual(pushing?.deliveries.length, 16)
@@ -712,7 +712,7 @@ layer(EspnDecode.layer)("EspnDecode", (it) => {
 
     it.effect("a dropped document is a Decoded whose resyncs are its topic", () =>
       Effect.gen(function* () {
-        const all = yield* outputs([
+        const all = yield* decodedFrames([
           poll("nfl", scoreboardBody),
           ...recorded(socketTexts.slice(0, 3)),
           message("event-football-nfl", 4286638, [{ op: "test", path: `${ariAtNyg}/clock`, value: "1:00" }])
@@ -725,7 +725,7 @@ layer(EspnDecode.layer)("EspnDecode", (it) => {
     it.effect("N frames in give N Decoded out, with matching seqs", () =>
       Effect.gen(function* () {
         const frames = [poll("nfl", scoreboardBody), poll("nfl", "not json"), ...recorded(socketTexts)]
-        const all = yield* outputs(frames)
+        const all = yield* decodedFrames(frames)
 
         assert.deepStrictEqual(
           all.map(({ seq }) => seq),
@@ -738,7 +738,7 @@ layer(EspnDecode.layer)("EspnDecode", (it) => {
 
 /** What `frames` decode to, each numbered by its place from 1: the deliveries, and what decoding noticed. */
 function said(frames: ReadonlyArray<FeedFrame>) {
-  return outputs(frames).pipe(
+  return decodedFrames(frames).pipe(
     Effect.map((all) => ({
       deliveries: all.flatMap(({ seq, at, deliveries }) =>
         deliveries.map((delivery) => ({ seq, at, delivery }))
@@ -767,15 +767,7 @@ function decoded(frames: ReadonlyArray<FeedFrame>) {
 
 /** The channels decoding `frames` asks to have checkpointed again, in order. */
 function resyncs(frames: ReadonlyArray<FeedFrame>) {
-  return outputs(frames).pipe(Effect.map((all) => all.flatMap(({ resyncs }) => resyncs)))
-}
-
-function outputs(frames: ReadonlyArray<FeedFrame>) {
-  return Decoder.use((decoder) =>
-    decoder
-      .decode(Stream.fromIterable(frames.map((frame, index) => new Frame({ ...frame, seq: index + 1 }))))
-      .pipe(Stream.runCollect)
-  )
+  return decodedFrames(frames).pipe(Effect.map((all) => all.flatMap(({ resyncs }) => resyncs)))
 }
 
 const at = DateTime.makeUnsafe("2026-10-04T18:00:00Z")
