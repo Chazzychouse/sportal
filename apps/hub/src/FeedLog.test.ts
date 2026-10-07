@@ -258,44 +258,51 @@ describe("FeedLog", () => {
     }).pipe(Effect.provide([Database.at(":memory:"), NodeCrypto.layer, logged]), withMetrics)
   })
 
-  it.effect("keeps seqs contiguous when appends are interrupted", () =>
-    Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient
-      const log = yield* FeedLog
-      const emitted = yield* Ref.make<ReadonlyArray<number>>([])
-      const listening = yield* (yield* log.subscribe).pipe(
-        Stream.runForEach((frame) => Ref.update(emitted, (seqs) => [...seqs, frame.seq])),
-        Effect.forkChild({ startImmediately: true })
-      )
-      yield* TestClock.withLive(Effect.sleep("5 millis"))
+  it.effect(
+    "keeps seqs contiguous when appends are interrupted",
+    () =>
+      Effect.gen(function* () {
+        const sql = yield* SqlClient.SqlClient
+        const log = yield* FeedLog
+        const emitted = yield* Ref.make<ReadonlyArray<number>>([])
+        const frames = yield* log.subscribe
+        const listening = yield* frames.pipe(
+          Stream.runForEach((frame) => Ref.update(emitted, (seqs) => [...seqs, frame.seq])),
+          Effect.forkChild({ startImmediately: true })
+        )
+        yield* TestClock.withLive(Effect.sleep("5 millis"))
 
-      const fibers = yield* Effect.forEach(
-        Array.from({ length: 2_000 }, (_, index) => index),
-        (index) => Effect.forkDetach(log.append(message("socket", `body ${index}`, index, index)))
-      )
-      // Interrupted while the other appends are running, so some land between an append's steps.
-      yield* Effect.forEach(
-        fibers.filter((_, index) => index % 2 === 1),
-        (fiber) => Fiber.interrupt(fiber),
-        { concurrency: "unbounded", discard: true }
-      )
-      yield* Effect.forEach(fibers, (fiber) => Fiber.await(fiber), { discard: true })
-      yield* TestClock.withLive(Effect.sleep("5 millis"))
-      const published = yield* Ref.get(emitted)
-      yield* Fiber.interrupt(listening)
-      yield* settled(
-        Effect.andThen(TestClock.adjust("100 millis"), rowCount),
-        (rows) => rows >= published.length
-      )
-      const stored = (yield* sql<{ seq: number }>`SELECT seq FROM feed_frame ORDER BY seq`).map(
-        (row) => row.seq
-      )
+        // Enough that some run before the interrupts below, once the forking fiber yields; with half as many, none do.
+        const fibers = yield* Effect.forEach(
+          Array.from({ length: 2_000 }, (_, index) => index),
+          (index) => Effect.forkDetach(log.append(message("socket", `body ${index}`, index, index)))
+        )
+        // Interrupted while the other appends are running, so some land between an append's steps.
+        yield* Effect.forEach(
+          fibers.filter((_, index) => index % 2 === 1),
+          (fiber) => Fiber.interrupt(fiber),
+          { concurrency: "unbounded", discard: true }
+        )
+        yield* Effect.forEach(fibers, (fiber) => Fiber.await(fiber), { discard: true })
+        yield* TestClock.withLive(Effect.sleep("5 millis"))
 
-      const contiguous = published.map((_, index) => index + 1)
-      assert.isAbove(published.length, 0)
-      assert.deepStrictEqual(published, contiguous)
-      assert.deepStrictEqual(stored, contiguous)
-    }).pipe(Effect.scoped, Effect.provide(feedLog))
+        const published = yield* Ref.get(emitted)
+        yield* Fiber.interrupt(listening)
+        yield* settled(
+          Effect.andThen(TestClock.adjust("100 millis"), rowCount),
+          (rows) => rows >= published.length
+        )
+        const rows = yield* sql<{ seq: number }>`SELECT seq FROM feed_frame ORDER BY seq`
+        const stored = rows.map((row) => row.seq)
+
+        const contiguous = published.map((_, index) => index + 1)
+        assert.isAbove(published.length, 0)
+        assert.deepStrictEqual(published, contiguous)
+        assert.deepStrictEqual(stored, contiguous)
+      }).pipe(Effect.scoped, Effect.provide(feedLog)),
+    // It waits for some 1,500 frames to be written, each gzip'd and hashed on the thread pool in turn, which a busy
+    // machine slows manyfold.
+    { timeout: 20_000 }
   )
 
   it.effect("writes the frames still waiting when it closes", () =>
