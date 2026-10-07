@@ -63,7 +63,7 @@ flowchart LR
 
   subgraph hub[Hub — one server process]
     prov[Providers]
-    ingest[Ingest: poll, live feed, replay]
+    ingest[Ingest: poll, live feed]
     feedlog[(Feed log: feed.sqlite)]
     decode[Decoder: the provider's decode, frames to deliveries]
     fold[LiveGames: one fold, every game's state and plays]
@@ -217,8 +217,9 @@ sportal/
     │       ├── HubConfig.ts        Every environment setting, in one place
     │       ├── Telemetry.ts        Log level and format; OTLP export when configured
     │       ├── Database.ts         The SQLite client; each store migrates its own tables in it
-    │       ├── LiveGames.ts        The domain fold, run: its timer, telemetry, and game events
-    │       ├── LiveGamesTelemetry.ts  A fold report as logs, metrics, and published events
+    │       ├── LiveGames.ts        The domain fold, run over the feed log: replay, then each appended frame; its timer, telemetry, and game events
+    │       ├── LiveGamesTelemetry.ts  What a take or tick did, as logs and metrics, told as the following stands
+    │       ├── DecodeTelemetry.ts  What decode noticed, as logs and metrics, for frames after the replay
     │       ├── GameHistory.ts      Past plays and each game's latest snapshot, derived from the fold
     │       ├── Slate.ts            Each listed game as the fold has it
     │       ├── StageSessions.ts    The one authoritative Stage, held in memory
@@ -228,8 +229,7 @@ sportal/
     │       ├── TestHubConfig.ts, TestTelemetry.ts   Layers for tests
     │       ├── TestFeed.ts         The snapshot feed as a test's provider, its frames, and what a decode reads in them
     │       ├── ingest/
-    │       │   ├── Ingest.ts       Replays the game day from the feed log, then polls HubConfig's leagues, runs the live feed, logs every frame, and folds it
-    │       │   └── DecodeTelemetry.ts  What decode noticed, as logs and metrics, for frames after the replay
+    │       │   └── Ingest.ts       Polls HubConfig's leagues, runs the live feed, and appends every frame to the feed log
     │       ├── hub-server/
     │       │   ├── HubServer.ts    Serves the API, the live stream, and the web UI's files
     │       │   └── LanAddresses.ts The addresses a phone on the home network can reach
@@ -380,11 +380,10 @@ class FeedLog extends Context.Service<FeedLog, {
 
 ```ts
 class LiveGames extends Context.Service<LiveGames, {
-  take(delivery: Delivery, at: DateTime.Utc, seq: Option<number>): Effect<void>
-  replay(deliveries: Stream<{ delivery: Delivery; at: DateTime.Utc; seq: number }>): Effect<void>
-  readonly latest: Effect<Folded>
-  readonly changes: Stream<Folded>
-  readonly events: Stream<{ game: GameId; event: GameEvent }>
+  readonly latest: Effect<Fold.LiveGames>
+  readonly changes: Stream<Fold.LiveGames>          // seq or reached alone is not a change
+  readonly events: Stream<Happened>
+  through(seq: number): Effect<Fold.LiveGames>      // the fold once it has taken frame `seq`, or the latest once Stopped
 }>()("sportal/hub/LiveGames") {}
 ```
 
@@ -392,7 +391,10 @@ class LiveGames extends Context.Service<LiveGames, {
   snapshot, its state (upcoming, live, stale, or over), and its plays, and `take` and `tick` on it are pure. A game's state is decided there alone; a snapshot behind in game time is ignored, so two feeds can deliver the
   same game. One timer wakes the fold when a game changes with no delivery.
 - The fold's clock is each frame's receive time, so a replay of the log gives the same games and events as live did.
-  `replay` runs a stretch of the log with no per-game telemetry and no events.
+- It follows the feed log itself: from the game day's start (04:00 local) it replays the day quietly, with no per-game
+  telemetry and no events, and its layer is built only then, so the Hub serves no fold still catching up. Then it takes
+  each frame as it is appended, and its timer starts. Its `Following` is `Replaying`, `Live`, or `Stopped` (a decode
+  defect after the replay; the fold keeps serving what it has).
 - `Slate` publishes each listed game as the fold has it, within 250 ms of a change; Ingest reads the fold for its polling
   and for the games the live feed should follow.
 - `HubMode` provides it in both modes. A scenario is the provider through the real Ingest, on the scenario clock: polled
@@ -423,8 +425,8 @@ A source's channels are found in its own guide, read by the shell (`docs/history
 
 - Polling is an Effect `Schedule` on the provider's port, which its adapter declares; ESPN's polls about every 10 seconds while any game is live, every minute near kickoff, every 15 minutes otherwise. One slate request per league covers every game; detail is fetched only for games someone has open or on a Stage.
 - A college Saturday is one request for 50+ games, not 50 requests.
-- Ingest starts by replaying the current game day (from 04:00 local) from the feed log into the fold, before the Hub serves. It subscribes to new frames first, then routes each frame by `seq`: at or before the replay's end it is replayed, after it is live.
-- Each poll response and each live-feed frame is appended to the feed log, raw, before anything decodes it. The provider's `Decoder` turns frames into deliveries; the fold applies them in `seq` order. A frame that will not decode is noted and skipped; Ingest logs and counts what decode noticed only for frames after the replay.
+- `LiveGames` replays the current game day (from 04:00 local) from the feed log before the Hub serves. It subscribes to new frames first, then decodes the replay and every frame appended after its last `seq` as one stream.
+- Each poll response and each live-feed frame is appended to the feed log, raw, before anything decodes it. The provider's `Decoder` turns frames into deliveries; the fold applies them in `seq` order. A frame that will not decode is noted and skipped; `LiveGames` tells what decode noticed only for frames after the replay. Ingest waits for the fold to take a poll's last frame (`through`) before its polling Schedule reads the slate.
 - The live feed pushes snapshots between polls, and, for each current game, its plays. A pushed game is advanced onto its listed game; one no poll has listed yet is counted and not delivered. The fold takes whichever snapshot is further along in game time, and the push wins a tie with the poll.
 - A decoder reset (a missed message, a patch that will not apply) is a resync of that topic: the socket asks for its checkpoint again.
 - Events are derived from the fold's plays and snapshots (see `GameEvent`), including the leading signals the Director anticipates with, and are never stored.

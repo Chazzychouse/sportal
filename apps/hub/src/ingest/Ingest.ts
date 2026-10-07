@@ -6,14 +6,10 @@ import {
   Effect,
   Equivalence,
   Exit,
-  Fiber,
   Layer,
   Metric,
   Option,
-  PubSub,
   Pull,
-  Queue,
-  Ref,
   Result,
   Schedule,
   Stream
@@ -21,88 +17,18 @@ import {
 import { FeedLog } from "../FeedLog.ts"
 import { HubConfig } from "../HubConfig.ts"
 import { LiveGames } from "../LiveGames.ts"
-import { Decoder } from "../provider/Decoder.ts"
-import { type Decoded, Provider } from "../provider/Provider.ts"
-import * as DecodeTelemetry from "./DecodeTelemetry.ts"
+import { Provider } from "../provider/Provider.ts"
 
 /**
- * Replays the current game day from the feed log into the live games, then polls each league on the provider's polling
- * Schedule and runs its push, appending every frame to the log and taking what the `Decoder` reads in each. The layer
- * is built once the replay is done, so nothing is served from a fold that is still catching up.
+ * Polls each league on the provider's polling Schedule and runs its push, appending every frame to the feed log; the
+ * live games fold what it appends.
  */
 export const layer = Layer.effectDiscard(
   Effect.gen(function* () {
     const { leagues } = yield* HubConfig
     const provider = yield* Provider
-    const decoder = yield* Decoder
     const feedLog = yield* FeedLog
     const liveGames = yield* LiveGames
-    const from = dayStart(yield* DateTime.nowInCurrentZone)
-
-    const replayed = yield* Queue.unbounded<Decoded, Cause.Done>()
-    const replayedUpTo = yield* Ref.make(0)
-    const frames = yield* Ref.make(0)
-    const resyncs = yield* PubSub.unbounded<string>()
-    // Subscribed before the replay is read, so a frame appended any time after it ends is in `appended`.
-    const appended = yield* feedLog.subscribe
-
-    // Nothing a replayed frame says goes live: it goes to the replay, and its resyncs and notices are dropped,
-    // since no socket follows a topic yet (one that does starts it from a fresh checkpoint anyway) and its notices
-    // were told when the frame first arrived.
-    const route = (decoded: Decoded) =>
-      Effect.flatMap(Ref.get(replayedUpTo), (last) =>
-        decoded.seq <= last
-          ? Queue.offer(replayed, decoded)
-          : Effect.all(
-              [
-                liveGames.take(decoded),
-                ...decoded.resyncs.map((channel) => PubSub.publish(resyncs, channel)),
-                ...decoded.notices.map((notice) => DecodeTelemetry.noticed(notice, decoded.seq))
-              ],
-              { discard: true }
-            )
-      )
-
-    // One decode over the day's log and then every frame appended after it, so each topic's document carries over
-    // from replay to live. Decoding pulls the next frame only once it has handed on what the last one said, so
-    // when it ends the replay's queue every replayed frame is in it.
-    const decoding = yield* decoder
-      .decode(
-        feedLog.replay(from).pipe(
-          Stream.tap((frame) =>
-            Effect.andThen(
-              Ref.set(replayedUpTo, frame.seq),
-              Ref.update(frames, (n) => n + 1)
-            )
-          ),
-          Stream.concat(Stream.fromEffect(Queue.end(replayed)).pipe(Stream.drain)),
-          Stream.concat(
-            Stream.unwrap(
-              Effect.map(Ref.get(replayedUpTo), (last) =>
-                Stream.filter(appended, (frame) => frame.seq > last)
-              )
-            )
-          )
-        )
-      )
-      .pipe(
-        Stream.runForEach(route),
-        loggedUnlessStopping(
-          "Ingest: frames are no longer taken into the fold until the Hub restarts",
-          "the log's stream ended"
-        ),
-        Effect.forkScoped
-      )
-
-    const replay = Effect.fn("Ingest.replay")(function* () {
-      const deliveries = yield* liveGames.replay(Stream.fromQueue(replayed))
-      yield* Effect.annotateCurrentSpan({
-        "sportal.frames": yield* Ref.get(frames),
-        "sportal.deliveries": deliveries
-      })
-    })
-    // Decoding that dies during the replay fails the layer, rather than leaving the replay waiting.
-    yield* Effect.raceFirst(replay(), Fiber.join(decoding))
 
     const poll = Effect.fn("Ingest.poll")(function* () {
       const results = yield* Effect.forEach(leagues, (league) =>
@@ -130,8 +56,8 @@ export const layer = Layer.effectDiscard(
     // The Schedule is given the fold's slate once it has taken the poll's listings, and the leagues that failed.
     const polled = Effect.gen(function* () {
       const { failed, last } = yield* poll()
-      yield* Option.match(last, { onNone: () => Effect.void, onSome: taken })
-      return { slate: (yield* liveGames.latest).slate(leagues), failed }
+      const folded = yield* Option.match(last, { onNone: () => liveGames.latest, onSome: liveGames.through })
+      return { slate: folded.slate(leagues), failed }
     })
     yield* Effect.forkScoped(Effect.repeat(polled, provider.polling))
 
@@ -154,7 +80,7 @@ export const layer = Layer.effectDiscard(
     )
 
     yield* Effect.forkScoped(
-      provider.push(leagues, wanted, Stream.fromPubSub(resyncs)).pipe(
+      provider.push(leagues, wanted, liveGames.resyncs).pipe(
         Stream.tapError((error) =>
           Effect.logWarning(`Ingest: the live feed failed (${error.reason}); subscribing again`, error).pipe(
             Effect.andThen(Metric.update(Metric.withAttributes(liveFeedErrors, { reason: error.reason }), 1))
@@ -172,16 +98,10 @@ export const layer = Layer.effectDiscard(
   })
 )
 
-/** The start of the game day `now` is in: 04:00 in its zone, or the day before's when it is earlier than that. */
-function dayStart(now: DateTime.Zoned): DateTime.Utc {
-  const today = DateTime.setParts(now, { hour: 4, minute: 0, second: 0, millisecond: 0 })
-  return DateTime.toUtc(DateTime.isLessThan(now, today) ? DateTime.subtract(today, { days: 1 }) : today)
-}
-
 /**
  * Logs at Error that a task which should run until the Hub stops has ended, with its failure or else `ended`, unless
- * it is the Hub stopping: an interruption, or the end a stream over a `PubSub` (the log's frames, the fold's changes)
- * fails with when its subscription is shut down as the Hub's scope closes.
+ * it is the Hub stopping: an interruption, or the end a stream over a `PubSub` (the fold's changes) fails with when its
+ * subscription is shut down as the Hub's scope closes.
  */
 function loggedUnlessStopping(message: string, ended: string) {
   return Effect.onExitIf(
@@ -190,25 +110,6 @@ function loggedUnlessStopping(message: string, ended: string) {
     (exit) => Effect.logError(message, Exit.isFailure(exit) ? exit.cause : ended)
   )
 }
-
-/**
- * Waits for the fold to have taken frame `seq`, so the polling Schedule reads the listing it gave. Every frame moves the
- * fold's `seq`, one that does not decode too; the wait ends after `takenWithin` regardless, should the fold stop taking
- * frames.
- */
-function taken(seq: number): Effect.Effect<void, never, LiveGames> {
-  return Effect.gen(function* () {
-    const liveGames = yield* LiveGames
-    yield* liveGames.changes.pipe(
-      Stream.filter((folded) => Option.exists(folded.seq, (at) => at >= seq)),
-      Stream.take(1),
-      Stream.runDrain,
-      Effect.timeoutOption(takenWithin)
-    )
-  })
-}
-
-const takenWithin = Duration.seconds(5)
 
 const sameIds = Arr.makeEquivalence(Equivalence.String)
 

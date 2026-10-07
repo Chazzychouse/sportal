@@ -277,13 +277,13 @@ function hubUnderTest() {
   return StageSessions.layer.pipe(
     Layer.provideMerge(YouTubeTv.layer),
     Layer.provideMerge(Layer.mergeAll(Slate.layer, Ingest.layer)),
-    Layer.provide([
-      LiveGames.layer,
-      polled(() => Effect.succeed([game])),
-      SnapshotDecode.layer,
-      DateTime.layerCurrentZoneLocal,
-      FeedLog.layer.pipe(Layer.provide([Database.at(":memory:"), NodeCrypto.layer]))
-    ]),
+    Layer.provide(
+      LiveGames.layer.pipe(
+        Layer.provideMerge(FeedLog.layer.pipe(Layer.provide([Database.at(":memory:"), NodeCrypto.layer]))),
+        Layer.provide([SnapshotDecode.layer, DateTime.layerCurrentZoneLocal])
+      )
+    ),
+    Layer.provide(polled(() => Effect.succeed([game]))),
     Layer.provideMerge(
       withEnv({ SPORTAL_VERSION: "1.2.3", SPORTAL_DATA_DIR: "unused", SPORTAL_LEAGUES: "fbs" })
     )

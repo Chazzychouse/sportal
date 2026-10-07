@@ -3,29 +3,29 @@ import { Delivery } from "@sportal/domain/Delivery"
 import { GameId, GameSnapshot } from "@sportal/domain/Game"
 import type { GameEvent } from "@sportal/domain/GameEvent"
 import { type LiveGame, LiveGameState } from "@sportal/domain/LiveGame"
-import { PlayId } from "@sportal/domain/Play"
 import { liveSnapshot, play, snapshot, team } from "@sportal/domain/TestGame"
 import {
   Clock,
   DateTime,
   Duration,
   Effect,
-  Equal,
-  Exit,
   Fiber,
   Layer,
   Logger,
   Metric,
   Option,
   Ref,
-  References,
   Stream,
   type Tracer
 } from "effect"
 import { TestClock } from "effect/testing"
+import { FeedLog } from "./FeedLog.ts"
+import { FeedFrame } from "./Frame.ts"
 import { LiveGames } from "./LiveGames.ts"
-import type { Decoded } from "./provider/Provider.ts"
-import { delivered, taken } from "./TestFeed.ts"
+import { Decoder } from "./provider/Decoder.ts"
+import { Decoded } from "./provider/Provider.ts"
+import * as SnapshotDecode from "./provider/snapshot/SnapshotDecode.ts"
+import { delivered, dyingAt, liveGames, pushed } from "./TestFeed.ts"
 import { counted, gauged, recordingLogs, recordingSpans, withMetrics } from "./TestTelemetry.ts"
 
 const one = GameId.make("1")
@@ -38,33 +38,25 @@ describe("LiveGames", () => {
       const live = liveSnapshot({ id: one })
       const soon = snapshot({ id: two, kickoff: DateTime.add(now, { minutes: 20 }) })
       const later = snapshot({ id: GameId.make("3"), kickoff: DateTime.add(now, { hours: 3 }) })
-      yield* taken(Delivery.cases.Listing.make({ league: "fbs", games: [live, soon, later] }))
+      yield* delivered(Delivery.cases.Listing.make({ league: "fbs", games: [live, soon, later] }))
       const folded = yield* LiveGames.use((liveGames) => liveGames.latest)
       assert.deepStrictEqual(folded.listed.get("fbs"), [live, soon, later])
-      assert.strictEqual(folded.live.get(one)?.snapshot, live)
+      assert.deepStrictEqual(folded.live.get(one)?.snapshot, live)
       assert.strictEqual(folded.live.get(one)?.from, "poll")
-      assert.strictEqual(folded.live.get(two)?.snapshot, soon)
+      assert.deepStrictEqual(folded.live.get(two)?.snapshot, soon)
       assert.isFalse(folded.live.has(GameId.make("3")))
-    }).pipe(Effect.provide(LiveGames.layer))
+    }).pipe(Effect.provide(liveGames()))
   )
 
   it.effect("a game's snapshots reach its live game, and the fold remembers the last frame", () =>
     Effect.gen(function* () {
-      const at = yield* DateTime.now
-      yield* LiveGames.use((liveGames) =>
-        liveGames.take(
-          delivered(
-            Delivery.cases.Snapshot.make({ snapshot: liveSnapshot({ id: one }), from: "push" }),
-            at,
-            7
-          )
-        )
-      )
+      yield* delivered(Delivery.cases.Snapshot.make({ snapshot: liveSnapshot({ id: one }), from: "push" }))
+      yield* delivered(Delivery.cases.Snapshot.make({ snapshot: liveSnapshot({ id: one }), from: "push" }))
       const folded = yield* LiveGames.use((liveGames) => liveGames.latest)
-      assert.deepStrictEqual(folded.seq, Option.some(7))
+      assert.deepStrictEqual(folded.seq, Option.some(2))
       assert.isTrue(LiveGameState.$is("Live")(folded.live.get(one)?.state ?? LiveGameState.Over()))
       assert.strictEqual(folded.live.get(one)?.from, "push")
-    }).pipe(Effect.provide(LiveGames.layer))
+    }).pipe(Effect.provide(liveGames()))
   )
 
   it.effect("a behind snapshot is ignored", () =>
@@ -72,7 +64,7 @@ describe("LiveGames", () => {
       yield* takenSnapshot(snapshot({ id: one, status: "live", period: 2, clock: "5:00" }))
       yield* takenSnapshot(snapshot({ id: one, status: "live", period: 1, clock: "5:00" }))
       assert.strictEqual((yield* liveGameOf(one)).snapshot.period, 2)
-    }).pipe(Effect.provide(LiveGames.layer))
+    }).pipe(Effect.provide(liveGames()))
   )
 
   it.effect("each game has its own live game", () =>
@@ -81,9 +73,9 @@ describe("LiveGames", () => {
       const second = snapshot({ id: two, status: "live", period: 3, clock: "1:00" })
       yield* takenSnapshot(first)
       yield* takenSnapshot(second)
-      assert.strictEqual((yield* liveGameOf(one)).snapshot, first)
-      assert.strictEqual((yield* liveGameOf(two)).snapshot, second)
-    }).pipe(Effect.provide(LiveGames.layer))
+      assert.deepStrictEqual((yield* liveGameOf(one)).snapshot, first)
+      assert.deepStrictEqual((yield* liveGameOf(two)).snapshot, second)
+    }).pipe(Effect.provide(liveGames()))
   )
 
   it.effect("changes publishes the latest, then each new state once", () =>
@@ -100,18 +92,31 @@ describe("LiveGames", () => {
       const second = liveSnapshot({ id: one, clock: "9:00" })
       yield* takenSnapshot(first)
       yield* takenSnapshot(second)
-      // Frame 2 again, so `seq` stays put: a frame that moves only `seq` still publishes, for Ingest's wait on it.
-      yield* taken(
-        Delivery.cases.Snapshot.make({ snapshot: liveSnapshot({ id: one, clock: "11:00" }), from: "poll" }),
-        2
-      )
+      yield* takenSnapshot(liveSnapshot({ id: one, clock: "11:00" }))
       yield* Effect.yieldNow
       assert.deepStrictEqual(yield* Ref.get(published), [
         Option.none(),
         Option.some(first),
         Option.some(second)
       ])
-    }).pipe(Effect.provide(LiveGames.layer))
+    }).pipe(Effect.provide(liveGames()))
+  )
+
+  it.effect("changes does not publish a frame that moves only seq", () =>
+    Effect.gen(function* () {
+      const liveGames = yield* LiveGames
+      const published = yield* Ref.make(0)
+      yield* liveGames.changes.pipe(
+        Stream.runForEach(() => Ref.update(published, (count) => count + 1)),
+        Effect.forkScoped({ startImmediately: true })
+      )
+      yield* takenSnapshot(liveSnapshot({ id: one }))
+      const frame = yield* (yield* FeedLog).append(yield* pushed({ _tag: "Resync" }, "topic"))
+      const folded = yield* liveGames.through(frame.seq)
+      yield* Effect.yieldNow
+      assert.deepStrictEqual(folded.seq, Option.some(2))
+      assert.strictEqual(yield* Ref.get(published), 2)
+    }).pipe(Effect.provide(liveGames()))
   )
 
   it.effect("a game's plays reach it, and each new play is an event", () =>
@@ -123,21 +128,21 @@ describe("LiveGames", () => {
         Effect.forkScoped({ startImmediately: true })
       )
       yield* takenSnapshot(liveSnapshot({ id: one }))
-      yield* taken(Delivery.cases.Plays.make({ game: one, plays: [play()] }))
+      yield* delivered(Delivery.cases.Plays.make({ game: one, plays: [play()] }))
       assert.strictEqual((yield* liveGameOf(one)).plays.length, 1)
       const [first] = yield* Fiber.join(events)
       assert.strictEqual(first?.snapshot.id, one)
       assert.strictEqual(first?.event._tag, "Played")
       assert.strictEqual(yield* counted("sportal_plays", { league: "fbs" }), 1)
-    }).pipe(Effect.provide(LiveGames.layer), withMetrics)
+    }).pipe(Effect.provide(liveGames()), withMetrics)
   )
 
   it.effect("plays for a game with no live game are dropped and counted", () =>
     Effect.gen(function* () {
-      yield* taken(Delivery.cases.Plays.make({ game: one, plays: [play()] }))
+      yield* delivered(Delivery.cases.Plays.make({ game: one, plays: [play()] }))
       assert.strictEqual((yield* LiveGames.use((liveGames) => liveGames.latest)).live.size, 0)
       assert.strictEqual(yield* counted("sportal_deliveries_dropped"), 1)
-    }).pipe(Effect.provide(LiveGames.layer), withMetrics)
+    }).pipe(Effect.provide(liveGames()), withMetrics)
   )
 
   it.effect("a defect in one game's delivery leaves the others and its last good live game alone", () =>
@@ -146,19 +151,51 @@ describe("LiveGames", () => {
       const second = snapshot({ id: two, status: "live", period: 2, clock: "9:00" })
       yield* takenSnapshot(first)
       yield* takenSnapshot(second)
-      yield* taken(
+      yield* delivered(
         Delivery.cases.Listing.make({
           league: "fbs",
           games: [broken(one), snapshot({ id: two, status: "live", period: 2, clock: "8:00" })]
         })
       )
-      assert.strictEqual((yield* liveGameOf(one)).snapshot, first)
+      assert.deepStrictEqual((yield* liveGameOf(one)).snapshot, first)
       assert.strictEqual((yield* liveGameOf(two)).snapshot.clock, "8:00")
       const next = liveSnapshot({ id: one, clock: "8:00" })
       yield* takenSnapshot(next)
-      assert.strictEqual((yield* liveGameOf(one)).snapshot, next)
-    }).pipe(Effect.provide(LiveGames.layer))
+      assert.deepStrictEqual((yield* liveGameOf(one)).snapshot, next)
+    }).pipe(Effect.provide(liveGames([], { decoder: breaking })))
   )
+
+  describe("through", () => {
+    it.effect("answers for a frame that decodes only to a notice, which is told", () =>
+      Effect.gen(function* () {
+        const frame = yield* (yield* FeedLog).append(
+          new FeedFrame({ ...(yield* pushed({ _tag: "Resync" }, "nfl")), kind: "response", body: "not json" })
+        )
+        const folded = yield* (yield* LiveGames).through(frame.seq)
+        assert.deepStrictEqual(folded.seq, Option.some(frame.seq))
+        assert.strictEqual(yield* counted("sportal_frames_undecoded", { feed: "snapshot" }), 1)
+      }).pipe(Effect.provide(liveGames()), withMetrics)
+    )
+
+    it.effect("answers with the latest once a decode defect stops the fold, which is logged once", () => {
+      const { logs, layer } = recordingLogs("Debug")
+      return Effect.gen(function* () {
+        const log = yield* FeedLog
+        const liveGames = yield* LiveGames
+        yield* takenSnapshot(liveSnapshot({ id: one }))
+        const dies = yield* log.append(
+          new FeedFrame({ ...(yield* pushed({ _tag: "Resync" }, "x")), body: "die" })
+        )
+        assert.deepStrictEqual((yield* liveGames.through(dies.seq)).seq, Option.some(1))
+        const after = yield* log.append(yield* pushed({ _tag: "Resync" }, "x"))
+        assert.deepStrictEqual((yield* liveGames.through(after.seq)).seq, Option.some(1))
+        const stopped = logs.filter(({ level }) => level === "Error")
+        assert.strictEqual(stopped.length, 1)
+        assert.include(stopped[0]?.message, "frames are no longer taken into the fold until the Hub restarts")
+        assert.include(stopped[0]?.cause, "decode died")
+      }).pipe(Effect.provide(liveGames([], { decoder: dyingAt("die") }).pipe(Layer.provideMerge(layer))))
+    })
+  })
 
   describe("over time", () => {
     it.effect("a live game nobody updates is stale at 90 seconds, with no delivery", () =>
@@ -170,7 +207,7 @@ describe("LiveGames", () => {
         yield* TestClock.adjust("1 second")
         const state = (yield* liveGameOf(one)).state
         assert.isTrue(LiveGameState.$is("Stale")(state) && DateTime.Equivalence(state.updatedAt, takenAt))
-      }).pipe(Effect.provide(LiveGames.layer))
+      }).pipe(Effect.provide(liveGames()))
     )
 
     it.effect("a refreshed game's timer moves with it", () =>
@@ -182,7 +219,7 @@ describe("LiveGames", () => {
         assert.isTrue(LiveGameState.$is("Live")((yield* liveGameOf(one)).state))
         yield* TestClock.adjust("30 seconds")
         assert.isTrue(LiveGameState.$is("Stale")((yield* liveGameOf(one)).state))
-      }).pipe(Effect.provide(LiveGames.layer))
+      }).pipe(Effect.provide(liveGames()))
     )
 
     it.effect("a stale game is live again on its next snapshot", () =>
@@ -194,7 +231,7 @@ describe("LiveGames", () => {
         yield* takenSnapshot(liveSnapshot({ id: one, clock: "9:00" }))
         const state = (yield* liveGameOf(one)).state
         assert.isTrue(LiveGameState.$is("Live")(state) && DateTime.Equivalence(state.updatedAt, takenAt))
-      }).pipe(Effect.provide(LiveGames.layer))
+      }).pipe(Effect.provide(liveGames()))
     )
 
     it.effect("an upcoming game never goes stale", () =>
@@ -203,7 +240,7 @@ describe("LiveGames", () => {
         yield* takenSnapshot(snapshot({ id: one, kickoff: DateTime.add(now, { minutes: 20 }) }))
         yield* TestClock.adjust("10 minutes")
         assert.isTrue(LiveGameState.$is("Upcoming")((yield* liveGameOf(one)).state))
-      }).pipe(Effect.provide(LiveGames.layer))
+      }).pipe(Effect.provide(liveGames()))
     )
 
     it.effect("a stale game is gone 30 minutes after its last update", () =>
@@ -215,7 +252,7 @@ describe("LiveGames", () => {
         assert.isTrue((yield* liveNow).has(one))
         yield* TestClock.adjust("1 second")
         assert.isFalse((yield* liveNow).has(one))
-      }).pipe(Effect.provide(LiveGames.layer))
+      }).pipe(Effect.provide(liveGames()))
     )
 
     it.effect("a final game is gone at once", () =>
@@ -223,30 +260,20 @@ describe("LiveGames", () => {
         yield* takenSnapshot(liveSnapshot({ id: one, clock: "1:00" }))
         yield* takenSnapshot(snapshot({ id: one, status: "final", period: 4, clock: "0:00" }))
         assert.isFalse((yield* liveNow).has(one))
-      }).pipe(Effect.provide(LiveGames.layer))
+      }).pipe(Effect.provide(liveGames()))
     )
 
     it.effect("a delivery at a later time first ticks every game due before it", () => {
-      const { logs, layer } = recording()
+      const { logs, layer } = recordingLogs("Debug")
       return Effect.gen(function* () {
-        const liveGames = yield* LiveGames
         const start = yield* DateTime.now
-        yield* liveGames.take(
-          delivered(
-            Delivery.cases.Snapshot.make({ snapshot: liveSnapshot({ id: one }), from: "poll" }),
-            start,
-            1
-          )
+        yield* delivered(
+          Delivery.cases.Snapshot.make({ snapshot: liveSnapshot({ id: one }), from: "poll" }),
+          start
         )
-        yield* liveGames.take(
-          delivered(
-            Delivery.cases.Snapshot.make({
-              snapshot: liveSnapshot({ id: one, clock: "9:00" }),
-              from: "poll"
-            }),
-            DateTime.add(start, { minutes: 2 }),
-            2
-          )
+        yield* delivered(
+          Delivery.cases.Snapshot.make({ snapshot: liveSnapshot({ id: one, clock: "9:00" }), from: "poll" }),
+          DateTime.add(start, { minutes: 2 })
         )
         const transitions = logs
           .map(({ message }) => /(\w+) → (\w+)/.exec(message)?.[0])
@@ -257,30 +284,24 @@ describe("LiveGames", () => {
           LiveGameState.$is("Live")(state) &&
             DateTime.Equivalence(state.updatedAt, DateTime.add(start, { minutes: 2 }))
         )
-      }).pipe(Effect.provide(LiveGames.layer.pipe(Layer.provideMerge(layer))))
+      }).pipe(Effect.provide(liveGames().pipe(Layer.provideMerge(layer))))
     })
 
     it.effect("a fold whose report dies commits nothing, and the game still goes stale on time", () =>
       Effect.gen(function* () {
-        const liveGames = yield* LiveGames
         const start = yield* DateTime.now
         yield* takenSnapshot(liveSnapshot({ id: one }))
-        const died = yield* liveGames
-          .take(
-            delivered(
-              Delivery.cases.Plays.make({ game: two, plays: [play()] }),
-              DateTime.add(start, { seconds: 100 }),
-              2
-            )
-          )
-          .pipe(Effect.exit)
-        assert.isTrue(Exit.hasDies(died))
+        const stopped = yield* delivered(
+          Delivery.cases.Plays.make({ game: two, plays: [play()] }),
+          DateTime.add(start, { seconds: 100 })
+        )
+        assert.deepStrictEqual(stopped.seq, Option.some(1), "the frame whose report died is not taken")
         assert.isTrue(LiveGameState.$is("Live")((yield* liveGameOf(one)).state))
         yield* TestClock.adjust("89 seconds")
         assert.isTrue(LiveGameState.$is("Live")((yield* liveGameOf(one)).state))
         yield* TestClock.adjust("1 second")
         assert.isTrue(LiveGameState.$is("Stale")((yield* liveGameOf(one)).state))
-      }).pipe(Effect.provide(LiveGames.layer.pipe(Layer.provideMerge(dyingOnce("Live → Stale")))))
+      }).pipe(Effect.provide(liveGames().pipe(Layer.provideMerge(dyingOnce("Live → Stale")))))
     )
   })
 
@@ -289,7 +310,7 @@ describe("LiveGames", () => {
       snapshot({ id: one, status: "live", period: 1, clock, home: { team: team("HOME"), score: 0 } })
 
     it.effect("a transition is logged with the game's annotations", () => {
-      const { logs, layer } = recording()
+      const { logs, layer } = recordingLogs("Debug")
       return Effect.gen(function* () {
         const now = yield* DateTime.now
         yield* takenSnapshot(snapshot({ id: one, kickoff: DateTime.add(now, { minutes: 5 }) }))
@@ -303,11 +324,11 @@ describe("LiveGames", () => {
         )
         assert.include(transitions[0]?.annotations, { game: "1", league: "fbs", matchup: "AWAY at HOME" })
         assert.strictEqual(yield* counted("sportal_transitions", { from: "Upcoming", to: "Live" }), 1)
-      }).pipe(Effect.provide(LiveGames.layer.pipe(Layer.provideMerge(layer))), withMetrics)
+      }).pipe(Effect.provide(liveGames().pipe(Layer.provideMerge(layer))), withMetrics)
     })
 
     it.effect("going stale is logged", () => {
-      const { logs, layer } = recording()
+      const { logs, layer } = recordingLogs("Debug")
       return Effect.gen(function* () {
         yield* takenSnapshot(home("10:00"))
         yield* TestClock.adjust("90 seconds")
@@ -316,11 +337,11 @@ describe("LiveGames", () => {
         assert.strictEqual(stale[0]?.level, "Info")
         assert.include(stale[0]?.message, "LiveGames: AWAY at HOME: Live → Stale at ")
         assert.include(stale[0]?.annotations, { game: "1", league: "fbs", matchup: "AWAY at HOME" })
-      }).pipe(Effect.provide(LiveGames.layer.pipe(Layer.provideMerge(layer))))
+      }).pipe(Effect.provide(liveGames().pipe(Layer.provideMerge(layer))))
     })
 
     it.effect("a behind snapshot is logged at Debug and counted", () => {
-      const { logs, layer } = recording()
+      const { logs, layer } = recordingLogs("Debug")
       return Effect.gen(function* () {
         yield* takenSnapshot(snapshot({ id: one, status: "live", period: 2, clock: "5:00" }))
         yield* takenSnapshot(snapshot({ id: one, status: "live", period: 1, clock: "5:00" }))
@@ -332,7 +353,7 @@ describe("LiveGames", () => {
           yield* counted("sportal_snapshots", { outcome: "taken", game: "1", matchup: "AWAY at HOME" }),
           1
         )
-      }).pipe(Effect.provide(LiveGames.layer.pipe(Layer.provideMerge(layer))), withMetrics)
+      }).pipe(Effect.provide(liveGames().pipe(Layer.provideMerge(layer))), withMetrics)
     })
 
     it.effect("a game's state is gauged by game, and reads 0 once it leaves the fold", () =>
@@ -345,7 +366,7 @@ describe("LiveGames", () => {
         assert.strictEqual(yield* gauged("sportal_game_state", { game: "1" }), 2)
         yield* takenSnapshot(snapshot({ id: one, status: "final", period: 4, clock: "0:00" }))
         assert.strictEqual(yield* gauged("sportal_game_state", { game: "1" }), 0)
-      }).pipe(Effect.provide(LiveGames.layer), withMetrics)
+      }).pipe(Effect.provide(liveGames()), withMetrics)
     )
 
     it.effect("a stale stretch is timed when the game is taken again", () =>
@@ -358,11 +379,11 @@ describe("LiveGames", () => {
           stale?.type === "Histogram" ? [stale.state.count, stale.state.sum] : undefined,
           [1, 120_000]
         )
-      }).pipe(Effect.provide(LiveGames.layer), withMetrics)
+      }).pipe(Effect.provide(liveGames()), withMetrics)
     )
 
     it.effect("a game event is logged at Info with the game's annotations, counted, and published", () => {
-      const { logs, layer } = recording()
+      const { logs, layer } = recordingLogs("Debug")
       return Effect.gen(function* () {
         const liveGames = yield* LiveGames
         const events = yield* liveGames.events.pipe(
@@ -400,11 +421,11 @@ describe("LiveGames", () => {
           published.map((published) => [published.snapshot.id, published.event._tag]),
           [[one, "ScoreChanged"]]
         )
-      }).pipe(Effect.provide(LiveGames.layer.pipe(Layer.provideMerge(layer))), withMetrics)
+      }).pipe(Effect.provide(liveGames().pipe(Layer.provideMerge(layer))), withMetrics)
     })
 
     it.effect("snapshots are counted by the feed they came from", () => {
-      const { logs, layer } = recording()
+      const { logs, layer } = recordingLogs("Debug")
       return Effect.gen(function* () {
         yield* takenSnapshot(snapshot({ id: one, status: "live", period: 2, clock: "4:12" }), "push")
         yield* takenSnapshot(snapshot({ id: one, status: "live", period: 2, clock: "5:00" }), "poll")
@@ -412,11 +433,11 @@ describe("LiveGames", () => {
         assert.strictEqual(yield* counted("sportal_snapshots", { outcome: "behind", source: "poll" }), 1)
         assert.isTrue(logs.some(({ message }) => message.includes("taken push live, period 2, 4:12")))
         assert.isTrue(logs.some(({ message }) => message.includes("behind poll live, period 2, 5:00")))
-      }).pipe(Effect.provide(LiveGames.layer.pipe(Layer.provideMerge(layer))), withMetrics)
+      }).pipe(Effect.provide(liveGames().pipe(Layer.provideMerge(layer))), withMetrics)
     })
 
     it.effect("a tied poll after a pushed try is kept, and counted", () => {
-      const { logs, layer } = recording()
+      const { logs, layer } = recordingLogs("Debug")
       return Effect.gen(function* () {
         const at = (score: number) =>
           snapshot({ id: one, status: "live", period: 2, clock: "4:12", home: { team: team("HOME"), score } })
@@ -428,45 +449,39 @@ describe("LiveGames", () => {
         assert.strictEqual(yield* counted("sportal_snapshots", { outcome: "taken", source: "push" }), 1)
         assert.strictEqual(yield* counted("sportal_snapshots", { outcome: "taken", source: "poll" }), 1)
         assert.isTrue(logs.some(({ message }) => message.includes("kept poll live, period 2, 4:12")))
-      }).pipe(Effect.provide(LiveGames.layer.pipe(Layer.provideMerge(layer))), withMetrics)
+      }).pipe(Effect.provide(liveGames().pipe(Layer.provideMerge(layer))), withMetrics)
     })
 
     it.effect("a defect is logged with its frame and the snapshot that raised it, and counted", () => {
-      const { logs, layer } = recording()
+      const { logs, layer } = recordingLogs("Debug")
       return Effect.gen(function* () {
-        const liveGames = yield* LiveGames
-        const at = yield* DateTime.now
         yield* takenSnapshot(home("9:00"))
-        yield* liveGames.take(
-          delivered(Delivery.cases.Snapshot.make({ snapshot: broken(one), from: "poll" }), at, 42)
-        )
+        yield* delivered(Delivery.cases.Snapshot.make({ snapshot: broken(one), from: "poll" }))
         const errors = logs.filter(({ level }) => level === "Error")
         assert.strictEqual(errors.length, 1)
         assert.include(JSON.stringify(errors[0]?.annotations.snapshot), '"clock":"8:00"')
-        assert.include(errors[0]?.annotations, { game: "1", seq: 42 })
+        assert.include(errors[0]?.annotations, { game: "1", seq: 2 })
         assert.strictEqual(yield* counted("sportal_game_defects"), 1)
-      }).pipe(Effect.provide(LiveGames.layer.pipe(Layer.provideMerge(layer))), withMetrics)
+      }).pipe(
+        Effect.provide(liveGames([], { decoder: breaking }).pipe(Layer.provideMerge(layer))),
+        withMetrics
+      )
     })
 
-    it.effect("take is a span under the caller's, and timed", () => {
+    it.effect("each frame taken live is a span, and timed", () => {
       const ended: Array<Tracer.Span> = []
       return Effect.gen(function* () {
-        yield* takenSnapshot(home("10:00")).pipe(Effect.withSpan("caller"))
-        const caller = ended.find((span) => span.name === "caller")
-        const take = ended.find((span) => span.name === "LiveGames.take")
-        assert.isDefined(caller)
-        assert.strictEqual(
-          take?.parent.pipe(
-            Option.map((parent) => parent.spanId),
-            Option.getOrUndefined
-          ),
-          caller?.spanId
+        yield* takenSnapshot(home("10:00"))
+        // `through` answers once the state has the frame, which can be before the span around it ends.
+        const take = yield* Effect.yieldNow.pipe(
+          Effect.andThen(Effect.sync(() => ended.find((span) => span.name === "LiveGames.take"))),
+          Effect.repeat({ until: (span) => span !== undefined })
         )
         assert.strictEqual(take?.attributes.get("sportal.seq"), 1)
         assert.strictEqual(take?.attributes.get("sportal.deliveries"), 1)
         const duration = (yield* Metric.snapshot).find((metric) => metric.id === "sportal_take_duration")
         assert.strictEqual(duration?.type === "Histogram" ? duration.state.count : undefined, 1)
-      }).pipe(Effect.provide(LiveGames.layer.pipe(Layer.provideMerge(recordingSpans(ended)))), withMetrics)
+      }).pipe(Effect.provide(liveGames().pipe(Layer.provideMerge(recordingSpans(ended)))), withMetrics)
     })
 
     it.effect("live games are counted by state", () =>
@@ -478,11 +493,11 @@ describe("LiveGames", () => {
         assert.strictEqual(yield* gauged("sportal_live_games", { state: "Live" }), 2)
         assert.strictEqual(yield* gauged("sportal_live_games", { state: "Upcoming" }), 1)
         assert.strictEqual(yield* gauged("sportal_live_games", { state: "Stale" }), 0)
-      }).pipe(Effect.provide(LiveGames.layer), withMetrics)
+      }).pipe(Effect.provide(liveGames()), withMetrics)
     )
 
     it.effect("a live game's start is logged at Info; its stop once final at Debug", () => {
-      const { logs, layer } = recording()
+      const { logs, layer } = recordingLogs("Debug")
       return Effect.gen(function* () {
         yield* takenSnapshot(home("1:00"))
         yield* takenSnapshot(snapshot({ id: one, status: "final", period: 4, clock: "0:00" }))
@@ -496,22 +511,22 @@ describe("LiveGames", () => {
         )
         assert.include(lifecycle[1]?.message, "LiveGames: AWAY at HOME: stopped, Over at final")
         assert.include(lifecycle[1]?.annotations, { game: "1", league: "fbs", matchup: "AWAY at HOME" })
-      }).pipe(Effect.provide(LiveGames.layer.pipe(Layer.provideMerge(layer))))
+      }).pipe(Effect.provide(liveGames().pipe(Layer.provideMerge(layer))))
     })
 
     it.effect("a game that is never current is neither started nor stopped", () => {
-      const { logs, layer } = recording()
+      const { logs, layer } = recordingLogs("Debug")
       return Effect.gen(function* () {
         yield* takenSnapshot(snapshot({ id: one, status: "final", period: 4, clock: "0:00" }))
         assert.isFalse(logs.some(({ message }) => /started|stopped/.test(message)))
         assert.isUndefined(yield* gauged("sportal_game_state", { game: "1" }))
-      }).pipe(Effect.provide(LiveGames.layer.pipe(Layer.provideMerge(layer))), withMetrics)
+      }).pipe(Effect.provide(liveGames().pipe(Layer.provideMerge(layer))), withMetrics)
     })
 
     it.effect(
       "a defect in the timer is logged and counted, and the timer carries on with no new delivery",
       () => {
-        const { logs, layer } = recording()
+        const { logs, layer } = recordingLogs("Debug")
         return Effect.gen(function* () {
           yield* takenSnapshot(home("10:00"))
           yield* TestClock.adjust("10 seconds")
@@ -524,7 +539,7 @@ describe("LiveGames", () => {
           assert.strictEqual(yield* counted("sportal_game_defects"), 1)
         }).pipe(
           Effect.provide(
-            LiveGames.layer.pipe(
+            liveGames().pipe(
               Layer.provide(
                 sleeping((duration, clock, earlier) =>
                   earlier === 0 && Duration.equals(duration, Duration.seconds(90))
@@ -558,7 +573,7 @@ describe("LiveGames", () => {
         assert.deepStrictEqual(yield* Ref.get(seen), ["Live", "Stale"])
       }).pipe(
         Effect.provide(
-          LiveGames.layer.pipe(
+          liveGames().pipe(
             Layer.provide(
               sleeping((duration, clock) =>
                 clock.sleep(
@@ -573,248 +588,7 @@ describe("LiveGames", () => {
       )
     )
   })
-
-  describe("replay", () => {
-    it.effect(
-      "replaying three deliveries folds them, logs one summary line, and only then sets each game's gauges",
-      () => {
-        const { logs, layer } = recording()
-        return Effect.gen(function* () {
-          const liveGames = yield* LiveGames
-          const published = yield* Ref.make(0)
-          yield* liveGames.changes.pipe(
-            Stream.runForEach(() => Ref.update(published, (count) => count + 1)),
-            Effect.forkScoped({ startImmediately: true })
-          )
-          const start = yield* DateTime.now
-          yield* liveGames.replay(
-            Stream.make(
-              delivered(
-                Delivery.cases.Snapshot.make({ snapshot: liveSnapshot({ id: one }), from: "poll" }),
-                start,
-                1
-              ),
-              delivered(
-                Delivery.cases.Plays.make({ game: one, plays: [play()] }),
-                DateTime.add(start, { seconds: 10 }),
-                2
-              ),
-              delivered(
-                Delivery.cases.Snapshot.make({
-                  snapshot: liveSnapshot({ id: one, clock: "9:00" }),
-                  from: "poll"
-                }),
-                DateTime.add(start, { minutes: 3 }),
-                3
-              )
-            )
-          )
-          yield* Effect.yieldNow
-          const folded = yield* liveGames.latest
-          assert.deepStrictEqual(folded.seq, Option.some(3))
-          assert.strictEqual(folded.live.get(one)?.plays.length, 1)
-          assert.strictEqual(folded.live.get(one)?.snapshot.clock, "9:00")
-          assert.isAbove(yield* Ref.get(published), 1)
-          assert.isFalse(logs.some(({ message }) => /→|started|ScoreChanged|Played/.test(message)))
-          const info = logs.filter(({ level }) => level === "Info")
-          assert.strictEqual(info.length, 1)
-          assert.include(info[0]?.message, "LiveGames: replayed 3 deliveries, 1 plays; 1 live games, in ")
-          const metrics = yield* Metric.snapshot
-          assert.deepStrictEqual(
-            metrics
-              .filter(({ attributes, type }) => attributes?.game !== undefined && type !== "Gauge")
-              .map(({ id }) => id),
-            []
-          )
-          assert.isUndefined(yield* counted("sportal_transitions"))
-          const attributes = { game: "1", league: "fbs", matchup: "AWAY at HOME" }
-          assert.strictEqual(yield* gauged("sportal_game_state", attributes), 2)
-          assert.strictEqual(yield* gauged("sportal_live_games", { state: "Live" }), 1)
-          assert.strictEqual(yield* gauged("sportal_live_games", { state: "Stale" }), 0)
-        }).pipe(Effect.provide(LiveGames.layer.pipe(Layer.provideMerge(layer))), withMetrics)
-      }
-    )
-
-    it.effect("replay returns the number of deliveries it took", () =>
-      Effect.gen(function* () {
-        const start = yield* DateTime.now
-        const taken = yield* LiveGames.use((liveGames) =>
-          liveGames.replay(
-            Stream.make(
-              delivered(
-                Delivery.cases.Snapshot.make({ snapshot: liveSnapshot({ id: one }), from: "poll" }),
-                start,
-                1
-              ),
-              delivered(Delivery.cases.Plays.make({ game: one, plays: [play()] }), start, 2)
-            )
-          )
-        )
-        assert.strictEqual(taken, 2)
-      }).pipe(Effect.provide(LiveGames.layer))
-    )
-
-    it.effect("replay applies recorded times, and the timer waits until it ends", () =>
-      Effect.gen(function* () {
-        const liveGames = yield* LiveGames
-        const playsSeen = yield* Ref.make<ReadonlyArray<number>>([])
-        yield* liveGames.changes.pipe(
-          Stream.runForEach((folded) =>
-            Ref.update(playsSeen, (all) => [...all, folded.live.get(one)?.plays.length ?? -1])
-          ),
-          Effect.forkScoped({ startImmediately: true })
-        )
-        const start = yield* DateTime.now
-        yield* TestClock.adjust("1 hour")
-        yield* liveGames.replay(
-          Stream.make(
-            delivered(
-              Delivery.cases.Snapshot.make({ snapshot: liveSnapshot({ id: one }), from: "poll" }),
-              start,
-              1
-            ),
-            delivered(
-              Delivery.cases.Plays.make({ game: one, plays: [play()] }),
-              DateTime.add(start, { seconds: 10 }),
-              2
-            )
-          ).pipe(
-            // As a stream read from the log does, between deliveries.
-            Stream.tap(() => Effect.yieldNow)
-          )
-        )
-        yield* TestClock.adjust(0)
-        assert.include(yield* Ref.get(playsSeen), 1)
-        assert.isFalse((yield* liveNow).has(one))
-      }).pipe(Effect.provide(LiveGames.layer))
-    )
-
-    it.effect("replayed deliveries publish no events; the same deliveries taken do", () =>
-      Effect.gen(function* () {
-        const deliveries = yield* day
-        const replayed = yield* eventsWhile(
-          LiveGames.use((liveGames) => liveGames.replay(Stream.fromIterable(deliveries)))
-        )
-        assert.deepStrictEqual(replayed, [])
-        const taken = yield* eventsWhile(takenInTime(deliveries))
-        assert.deepStrictEqual(
-          taken.map((published) => [published.snapshot.id, published.event._tag]),
-          [
-            [one, "Played"],
-            [one, "Played"]
-          ]
-        )
-      })
-    )
-
-    it.effect("the same deliveries taken in time and replayed fold to the same live games", () => {
-      const { logs, layer } = recording()
-      return Effect.gen(function* () {
-        const deliveries = yield* day
-        const replayed = yield* LiveGames.use((liveGames) =>
-          liveGames.replay(Stream.fromIterable(deliveries)).pipe(Effect.andThen(liveGames.latest))
-        ).pipe(Effect.provide(LiveGames.layer))
-        const taken = yield* LiveGames.use((liveGames) =>
-          takenInTime(deliveries).pipe(Effect.andThen(liveGames.latest))
-        ).pipe(Effect.provide(LiveGames.layer))
-        assert.isTrue(Equal.equals(replayed.live, taken.live))
-        assert.deepStrictEqual(replayed.seq, taken.seq)
-        assert.isTrue(LiveGameState.$is("Live")(taken.live.get(one)?.state ?? LiveGameState.Over()))
-        assert.isTrue(logs.some(({ message }) => message.includes("Live → Stale")))
-        const summary = logs.find(({ message }) => message.includes("replayed"))
-        assert.include(summary?.message, "replayed 5 deliveries, 2 plays; 1 live games")
-      }).pipe(Effect.provide(layer))
-    })
-
-    it.effect("replay is a span", () => {
-      const ended: Array<Tracer.Span> = []
-      return Effect.gen(function* () {
-        const liveGames = yield* LiveGames
-        const at = yield* DateTime.now
-        yield* liveGames.replay(
-          Stream.make(
-            delivered(
-              Delivery.cases.Snapshot.make({ snapshot: liveSnapshot({ id: one }), from: "poll" }),
-              at,
-              1
-            )
-          )
-        )
-        assert.isDefined(ended.find((span) => span.name === "LiveGames.replay"))
-      }).pipe(Effect.provide(LiveGames.layer.pipe(Layer.provideMerge(recordingSpans(ended)))))
-    })
-  })
 })
-
-/**
- * Five deliveries of game one from the clock's now: a snapshot, a play, a stale stretch, a score with a
- * second play, and a last snapshot.
- */
-const day = DateTime.now.pipe(
-  Effect.map((start) => {
-    const scored = (clock: string) =>
-      snapshot({ id: one, status: "live", period: 1, clock, home: { team: team("HOME"), score: 7 } })
-    const second = play({ id: PlayId.make("2"), sequence: 2, clock: "14:30" })
-    return [
-      delivered(
-        Delivery.cases.Snapshot.make({ snapshot: liveSnapshot({ id: one }), from: "poll" }),
-        start,
-        1
-      ),
-      delivered(
-        Delivery.cases.Plays.make({ game: one, plays: [play()] }),
-        DateTime.add(start, { seconds: 10 }),
-        2
-      ),
-      delivered(
-        Delivery.cases.Snapshot.make({ snapshot: scored("9:00"), from: "push" }),
-        DateTime.add(start, { minutes: 3 }),
-        3
-      ),
-      delivered(
-        Delivery.cases.Plays.make({ game: one, plays: [play(), second] }),
-        DateTime.add(start, { minutes: 3, seconds: 5 }),
-        4
-      ),
-      delivered(
-        Delivery.cases.Snapshot.make({ snapshot: scored("8:00"), from: "poll" }),
-        DateTime.add(start, { minutes: 4, seconds: 30 }),
-        5
-      )
-    ]
-  })
-)
-
-/** Takes each of `frames` once the test clock reaches its `at`, so the timer runs between them as it would live. */
-function takenInTime(frames: ReadonlyArray<Decoded>) {
-  return Effect.forEach(
-    frames,
-    (decoded) =>
-      DateTime.now.pipe(
-        Effect.flatMap((now) => TestClock.adjust(DateTime.distance(now, decoded.at))),
-        Effect.andThen(LiveGames.use((liveGames) => liveGames.take(decoded)))
-      ),
-    { discard: true }
-  )
-}
-
-/** The events a fresh fold publishes while it runs `run`. */
-function eventsWhile(run: Effect.Effect<void, never, LiveGames>) {
-  return Effect.gen(function* () {
-    const liveGames = yield* LiveGames
-    const seen = yield* Ref.make<
-      ReadonlyArray<{ readonly snapshot: GameSnapshot; readonly event: GameEvent }>
-    >([])
-    const subscriber = yield* liveGames.events.pipe(
-      Stream.runForEach((published) => Ref.update(seen, (all) => [...all, published])),
-      Effect.forkChild({ startImmediately: true })
-    )
-    yield* run
-    yield* Effect.yieldNow
-    yield* Fiber.interrupt(subscriber)
-    return yield* Ref.get(seen)
-  }).pipe(Effect.provide(LiveGames.layer))
-}
 
 /** Beside the default logger, one that throws the first time it is given a message containing `text`. */
 function dyingOnce(text: string) {
@@ -832,18 +606,50 @@ function dyingOnce(text: string) {
   )
 }
 
-/** A live snapshot of game `id` at 8:00 in the first period whose events raise a defect. */
+/** A live snapshot of game `id` at 8:00 in the first period, at home to BRK, which `breaking` reads as broken. */
 function broken(id: GameId): GameSnapshot {
+  return liveSnapshot({ id, clock: "8:00", home: { team: team("BRK"), score: 0 } })
+}
+
+/**
+ * The snapshot feed's decode, reading each snapshot at home to BRK as one whose events raise a defect, since a snapshot
+ * that does so cannot cross the feed log.
+ */
+const breaking = Layer.effect(
+  Decoder,
+  Effect.map(Decoder, (decoder) =>
+    Decoder.of({
+      decode: (frames) =>
+        decoder
+          .decode(frames)
+          .pipe(
+            Stream.map((decoded) => new Decoded({ ...decoded, deliveries: decoded.deliveries.map(brokenIn) }))
+          )
+    })
+  )
+).pipe(Layer.provide(SnapshotDecode.layer))
+
+function brokenIn(delivery: Delivery): Delivery {
+  return Delivery.match(delivery, {
+    Listing: ({ league, games }): Delivery =>
+      Delivery.cases.Listing.make({ league, games: games.map(brokenIfMarked) }),
+    Snapshot: ({ snapshot, from }): Delivery =>
+      Delivery.cases.Snapshot.make({ snapshot: brokenIfMarked(snapshot), from }),
+    Plays: (plays): Delivery => plays
+  })
+}
+
+function brokenIfMarked(snapshot: GameSnapshot): GameSnapshot {
   class Broken extends GameSnapshot {
     override eventsSince(): never {
       throw new Error("a broken snapshot")
     }
   }
-  return new Broken({ ...liveSnapshot({ id, clock: "8:00" }) })
+  return snapshot.home.team.abbreviation === "BRK" ? new Broken({ ...snapshot }) : snapshot
 }
 
 function takenSnapshot(snapshot: GameSnapshot, from: "push" | "poll" = "poll") {
-  return taken(Delivery.cases.Snapshot.make({ snapshot, from }))
+  return delivered(Delivery.cases.Snapshot.make({ snapshot, from }))
 }
 
 const liveNow = LiveGames.use((liveGames) => liveGames.latest).pipe(Effect.map(({ live }) => live))
@@ -853,12 +659,6 @@ function liveGameOf(id: GameId): Effect.Effect<LiveGame, never, LiveGames> {
     Effect.flatMap((live) => Effect.fromNullishOr(live.get(id))),
     Effect.orDie
   )
-}
-
-/** The test's logs at Debug and above, recorded. */
-function recording() {
-  const { logs, layer } = recordingLogs()
-  return { logs, layer: Layer.merge(layer, Layer.succeed(References.MinimumLogLevel, "Debug")) }
 }
 
 /** The test clock, with each sleep made by `sleep`, which is told how many sleeps as long came before. */

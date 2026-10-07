@@ -1,9 +1,9 @@
 import { assert, describe, it } from "@effect/vitest"
 import { GameId } from "@sportal/domain/Game"
 import { Effect, Option, References } from "effect"
-import { Notice } from "../provider/Provider.ts"
-import { counted, recordingLogs, withMetrics } from "../TestTelemetry.ts"
 import * as DecodeTelemetry from "./DecodeTelemetry.ts"
+import { Notice } from "./provider/Provider.ts"
+import { counted, recordingLogs, withMetrics } from "./TestTelemetry.ts"
 
 describe("DecodeTelemetry.noticed", () => {
   it.effect("a message received is counted by league and op, and logged at Debug", () =>

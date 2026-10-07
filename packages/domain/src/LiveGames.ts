@@ -1,4 +1,4 @@
-import { Cause, Data, DateTime, Effect, Equal, Option } from "effect"
+import { Cause, Data, DateTime, Effect, Option } from "effect"
 import { Delivery, type DeliverySource } from "./Delivery.ts"
 import type { GameId, GameSnapshot } from "./Game.ts"
 import type { GameEvent } from "./GameEvent.ts"
@@ -32,7 +32,7 @@ export class LiveGames extends Data.Class<{
     readonly at: DateTime.Utc
     readonly seq: number
   }): Effect.Effect<{ readonly next: LiveGames; readonly reports: ReadonlyArray<FoldReport> }> {
-    return this.stepped(frame.at, Option.some(frame.seq), (ticked) =>
+    return this.advance(frame.at, Option.some(frame.seq), (ticked) =>
       Effect.reduce(
         frame.deliveries,
         () => ({ listed: this.listed, ...ticked }),
@@ -45,7 +45,7 @@ export class LiveGames extends Data.Class<{
   tick(
     now: DateTime.Utc
   ): Effect.Effect<{ readonly next: LiveGames; readonly reports: ReadonlyArray<FoldReport> }> {
-    return this.stepped(now, Option.none(), (ticked) => Effect.succeed({ listed: this.listed, ...ticked }))
+    return this.advance(now, Option.none(), (ticked) => Effect.succeed({ listed: this.listed, ...ticked }))
   }
 
   /** The earliest instant after `reached` at which a live game changes with no new frame. */
@@ -67,13 +67,16 @@ export class LiveGames extends Data.Class<{
     return [...listed, ...unlisted]
   }
 
-  /** Whether `that` publishes the same: a step that changed nothing hands back the same maps. `reached` is ignored. */
+  /**
+   * Whether `that` publishes the same: a take or tick that changed nothing hands back the same maps. `seq` and `reached`
+   * are ignored, since moving only them changes no game.
+   */
   publishesSameAs(that: LiveGames): boolean {
-    return this.live === that.live && this.listed === that.listed && Equal.equals(this.seq, that.seq)
+    return this.live === that.live && this.listed === that.listed
   }
 
   /** Ticks to `at`, then runs `then` on what the ticks left, as frame `seq` (none keeps the last). */
-  private stepped(
+  private advance(
     at: DateTime.Utc,
     seq: Option.Option<number>,
     then: (ticked: Stepped) => Effect.Effect<Folded>
@@ -94,7 +97,7 @@ export class LiveGames extends Data.Class<{
   }
 }
 
-/** What one step did to one game, for telemetry to tell. */
+/** What one take or tick did to one game, for telemetry to tell. */
 export type FoldReport = Data.TaggedEnum<{
   /** A snapshot was taken, ignored as behind, or kept (a tied poll that refreshed a pushed snapshot). */
   Took: {

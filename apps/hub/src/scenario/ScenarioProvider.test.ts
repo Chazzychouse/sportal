@@ -352,14 +352,20 @@ describe("ScenarioProvider", () => {
       }).pipe(Effect.provide(playing("two-minute-drill-tie", onFile)), Effect.scoped)
 
       const scope = yield* Scope.make()
-      const fold = yield* Layer.buildWithScope(LiveGames.layer, scope)
+      const fold = yield* Layer.buildWithScope(
+        following(onFile).pipe(Layer.provide(scenario("two-minute-drill-tie", onFile))),
+        scope
+      )
       const events = yield* Ref.make(0)
       yield* Context.get(fold, LiveGames).events.pipe(
         Stream.runForEach(() => Ref.update(events, (count) => count + 1)),
         Effect.forkIn(scope, { startImmediately: true })
       )
       yield* Layer.buildWithScope(
-        ingestOver("two-minute-drill-tie", onFile).pipe(Layer.provide(Layer.succeedContext(fold))),
+        Ingest.layer.pipe(
+          Layer.provide(scenario("two-minute-drill-tie", onFile)),
+          Layer.provide(Layer.succeedContext(fold))
+        ),
         scope
       )
 
@@ -400,20 +406,25 @@ const decoders = { written: SnapshotDecode.layer, recorded: EspnDecode.layer }
  * as its settings say, with the fold provided to the test.
  */
 function playing(name: string, options: Options & { readonly ended?: Array<Tracer.Span> } = {}) {
-  return ingestOver(name, options).pipe(
-    Layer.provideMerge(LiveGames.layer),
+  return Ingest.layer.pipe(
+    Layer.provideMerge(following(options)),
+    Layer.provide(scenario(name, options)),
     Layer.provide(recordingSpans(options.ended ?? []))
   )
 }
 
-function ingestOver(name: string, options: Options) {
-  return Ingest.layer.pipe(
+/**
+ * The live games following a feed log in memory or, with `scenarioFeedLog`, the scenario's own one as its settings say,
+ * which is provided too.
+ */
+function following(options: Options) {
+  return LiveGames.layer.pipe(
     Layer.provideMerge(
       options.scenarioFeedLog === true
         ? FeedLog.forScenario
         : FeedLog.layer.pipe(Layer.provide([Database.at(":memory:"), NodeCrypto.layer]))
     ),
-    Layer.provide([scenario(name, options), DateTime.layerCurrentZoneLocal]),
+    Layer.provide(DateTime.layerCurrentZoneLocal),
     Layer.provide([NodeServices.layer, NodeCrypto.layer])
   )
 }

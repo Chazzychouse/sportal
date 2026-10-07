@@ -127,7 +127,7 @@ describe("LiveGames", () => {
     })
   )
 
-  it.effect("a step that raises a defect is reported, and the game keeps its last good live game", () =>
+  it.effect("a take that raises a defect is reported, and the game keeps its last good live game", () =>
     Effect.gen(function* () {
       const held = yield* taken(LiveGames.empty, [polled(live(one, "9:00"))], t0)
       const { next, reports } = yield* took(held, [polled(broken(one))], t0)
@@ -228,7 +228,16 @@ describe("LiveGames", () => {
     })
   )
 
-  it.effect("a step that changed nothing publishes the same; a take does not", () =>
+  it.effect("a take that moves only seq publishes the same", () =>
+    Effect.gen(function* () {
+      const held = yield* taken(LiveGames.empty, [polled(live(one, "10:00"))], t0)
+      const moved = yield* taken(held, [], t0)
+      assert.notDeepEqual(moved.seq, held.seq)
+      assert.isTrue(moved.publishesSameAs(held))
+    })
+  )
+
+  it.effect("a tick that changed nothing publishes the same; a take that changed a game does not", () =>
     Effect.gen(function* () {
       const held = yield* taken(LiveGames.empty, [polled(live(one, "10:00"))], t0)
       const still = (yield* held.tick(DateTime.addDuration(t0, Duration.seconds(1)))).next

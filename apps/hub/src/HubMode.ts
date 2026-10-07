@@ -31,7 +31,8 @@ export const layer = Layer.unwrap(
   })
 )
 
-// Ingest is built once it has replayed the day's frames into the fold, so the Hub serves only after that.
+// The live games are built once they have replayed the day's frames, so the Hub serves only after that. They and
+// Ingest share one feed log: Ingest appends to it, and the live games follow it.
 function live() {
   return Layer.mergeAll(
     Layer.mergeAll(
@@ -39,17 +40,18 @@ function live() {
       // Nothing reads the history yet; it only follows the fold.
       Layer.effectDiscard(Layer.build(GameHistory.layer)),
       Ingest.layer.pipe(
-        Layer.provide([
+        Layer.provide(
           EspnProvider.layer.pipe(
             Layer.provide(FastCast.layer),
             Layer.provide(NodeSocket.layerWebSocketConstructorWS)
-          ),
-          EspnDecode.layer,
-          FeedLog.inDataDir,
-          DateTime.layerCurrentZoneLocal
-        ])
+          )
+        )
       )
-    ).pipe(Layer.provide(LiveGames.layer)),
+    ).pipe(
+      Layer.provideMerge(LiveGames.layer),
+      Layer.provideMerge(FeedLog.inDataDir),
+      Layer.provide([EspnDecode.layer, DateTime.layerCurrentZoneLocal])
+    ),
     YouTubeTv.layer
   )
 }
@@ -62,14 +64,19 @@ function scripted() {
     Layer.mergeAll(
       Slate.layer,
       Ingest.layer.pipe(
-        Layer.provide([
-          ScenarioProvider.layer(SnapshotProvider.layer).pipe(Layer.provide(RecordedScenarios.layer)),
-          ScenarioProvider.decoder({ written: SnapshotDecode.layer, recorded: EspnDecode.layer }),
-          FeedLog.forScenario,
-          DateTime.layerCurrentZoneLocal
-        ])
+        Layer.provide(
+          ScenarioProvider.layer(SnapshotProvider.layer).pipe(Layer.provide(RecordedScenarios.layer))
+        )
       )
-    ).pipe(Layer.provide(LiveGames.layer), Layer.provide(ScenarioClock.layer)),
+    ).pipe(
+      Layer.provideMerge(LiveGames.layer),
+      Layer.provideMerge(FeedLog.forScenario),
+      Layer.provide([
+        ScenarioProvider.decoder({ written: SnapshotDecode.layer, recorded: EspnDecode.layer }),
+        DateTime.layerCurrentZoneLocal
+      ]),
+      Layer.provide(ScenarioClock.layer)
+    ),
     ScenarioSource.layer
   )
 }
