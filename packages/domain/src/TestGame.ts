@@ -2,7 +2,7 @@ import { DateTime, Effect, Option } from "effect"
 import { Delivery } from "./Delivery.ts"
 import { type Broadcast, GameId, GameSnapshot, Network } from "./Game.ts"
 import { LeagueId } from "./League.ts"
-import { PlayId, Rush } from "./Play.ts"
+import { Completion, PlayId, Rush } from "./Play.ts"
 import { Situation } from "./Situation.ts"
 import type { Slate } from "./Slate.ts"
 import { Team, TeamId } from "./Team.ts"
@@ -74,6 +74,29 @@ export function play(overrides: Partial<Rush> = {}): Rush {
     clock: "15:00",
     team: home,
     text: "Rush for 1 yard",
+    yards: 1,
+    touchdown: false,
+    scoring: false,
+    homeScore: 0,
+    awayScore: 0,
+    start: { down: 1, distance: 10, yardsToEndzone: 75, team: home },
+    end: { down: 2, distance: 9, yardsToEndzone: 74, team: home },
+    ...overrides
+  })
+}
+
+/**
+ * A pass for a test: a one-yard completion by the home team in the first quarter unless the overrides say otherwise.
+ */
+export function completion(overrides: Partial<Completion> = {}): Completion {
+  const home = team("HOME").id
+  return new Completion({
+    id: PlayId.make("1"),
+    sequence: 1,
+    period: 1,
+    clock: "15:00",
+    team: home,
+    text: "Pass complete for 1 yard",
     yards: 1,
     touchdown: false,
     scoring: false,

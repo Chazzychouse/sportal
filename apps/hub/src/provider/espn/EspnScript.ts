@@ -1,6 +1,6 @@
 import type { GameId, GameSnapshot } from "@sportal/domain/Game"
 import { LeagueId } from "@sportal/domain/League"
-import type { Play } from "@sportal/domain/Play"
+import { Play } from "@sportal/domain/Play"
 import type { TeamId } from "@sportal/domain/Team"
 import { Array as Arr, DateTime, Schema } from "effect"
 import { FeedFrame } from "../../Frame.ts"
@@ -146,7 +146,7 @@ function entityOf(play: Play): typeof EspnPlay.Entity.Encoded {
     distance,
     yardsToEndzone
   })
-  const gained = "yards" in play ? play : { team: play.start.team, yards: 0 }
+  const gained = Play.gainsYards(play) ? play : { team: play.start.team, yards: 0 }
 
   return encodeEntity({
     id: play.id,

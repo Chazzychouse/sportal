@@ -4,7 +4,7 @@ import { assert, describe, it } from "@effect/vitest"
 import { GameId } from "@sportal/domain/Game"
 import { Play, PlayId } from "@sportal/domain/Play"
 import { TeamId } from "@sportal/domain/Team"
-import { DateTime, Effect, Equal, Layer, Logger, Order, Schema } from "effect"
+import { DateTime, Effect, Equal, Layer, Order, Schema } from "effect"
 import type { ArchivedPlay } from "../../corpus/Archive.ts"
 import * as Gzip from "../../Gzip.ts"
 import { Scenarios } from "../../scenario/Scenarios.ts"
@@ -28,330 +28,309 @@ const fastCast = Schema.decodeSync(
 )(readFileSync(new URL("./fixtures/nfl-plays-2026-10-04.json", import.meta.url), "utf8"))
 
 const nfl = (team: string) => TeamId.make(`nfl:${team}`)
+const fbs = (team: string) => TeamId.make(`fbs:${team}`)
 
-describe("EspnSummary", () => {
-  it.effect("should read every play a drive lists, with its wallclock, in sequence order", () =>
+const decodeEntity = Schema.decodeUnknownEffect(EspnPlay.Play("nfl"))
+
+// The plays NE–BUF's recorded FastCast topic last had.
+const lastPushed = Effect.gen(function* () {
+  const { frames } = yield* Scenarios.use((scenarios) => scenarios.load(neAtBufFrames)).pipe(
+    Effect.provide(Scenarios.in(fixtures, []).pipe(Layer.provideMerge(NodeServices.layer)))
+  )
+  const decoded = yield* decodedFrames(frames).pipe(Effect.provide(EspnDecode.layer))
+
+  const lists = decoded
+    .flatMap(({ deliveries }) => deliveries)
+    .flatMap((delivery) =>
+      delivery._tag === "Plays" && delivery.game === GameId.make("401872971") ? [delivery.plays] : []
+    )
+  return lists.at(-1) ?? []
+})
+
+describe("EspnSummary.plays", () => {
+  it.effect("should read every play a drive lists", () =>
     Effect.gen(function* () {
       const plays = yield* EspnSummary.plays("nfl", summary)
 
       assert.strictEqual(plays.length, recordedPlays)
+    })
+  )
+
+  it.effect("should read the plays in sequence order", () =>
+    Effect.gen(function* () {
+      const plays = yield* EspnSummary.plays("nfl", summary)
+
+      const sequences = plays.map(({ play }) => play.sequence)
+
+      assert.deepStrictEqual(sequences, sequences.toSorted(Order.Number))
+    })
+  )
+
+  it.effect("should read the first play, a kickoff, with its wallclock", () =>
+    Effect.gen(function* () {
+      const [first] = yield* EspnSummary.plays("nfl", summary)
+
       assert.deepStrictEqual(
-        plays.map(({ play }) => play.sequence),
-        plays.map(({ play }) => play.sequence).toSorted(Order.Number)
+        [first?.play.id, first?.play._tag, first?.wallclock.epochMilliseconds],
+        [PlayId.make("40187297140"), "Kickoff", DateTime.makeUnsafe("2026-10-04T17:02:33Z").epochMilliseconds]
       )
-      const [first] = plays
-      assert.strictEqual(first?.play.id, PlayId.make("40187297140"))
-      assert.strictEqual(first?.play._tag, "Kickoff")
-      assert.strictEqual(
-        first?.wallclock.epochMilliseconds,
-        DateTime.makeUnsafe("2026-10-04T17:02:33Z").epochMilliseconds
+    })
+  )
+
+  it.effect("should read the first scoring play's scores, case, and team", () =>
+    Effect.gen(function* () {
+      const plays = yield* EspnSummary.plays("nfl", summary)
+
+      const scoring = plays.find(({ play }) => play.scoring)?.play
+
+      assert.deepStrictEqual(
+        [scoring?.id, scoring?.homeScore, scoring?.awayScore, scoring?._tag, completedBy(scoring)],
+        [PlayId.make("401872971484"), 0, 7, "Completion", nfl("17")]
+      )
+    })
+  )
+
+  it.effect("should read the first scoring play's scores, case, and team as FastCast's entity does", () =>
+    Effect.gen(function* () {
+      const pushed = yield* decodeEntity(fastCast["401872971484"])
+
+      assert.deepStrictEqual(
+        [pushed.homeScore, pushed.awayScore, pushed._tag, completedBy(pushed)],
+        [0, 7, "Completion", nfl("17")]
+      )
+    })
+  )
+
+  it.effect("should read the first scoring play as FastCast's entity for it, field for field", () =>
+    Effect.gen(function* () {
+      const plays = yield* EspnSummary.plays("nfl", summary)
+      const pushed = yield* decodeEntity(fastCast["401872971484"])
+
+      const scoring = plays.find(({ play }) => play.scoring)?.play
+
+      assert.isTrue(Equal.equals(scoring, pushed))
+    })
+  )
+
+  it.effect("should give a lost fumble the recovering team: the team with the ball as it ended", () =>
+    Effect.gen(function* () {
+      const plays = yield* EspnSummary.plays("nfl", summary)
+
+      const fumble = plays
+        .map(({ play }) => play)
+        .filter(Play.guards.Fumble)
+        .find((play) => play.id === PlayId.make("4018729712179"))
+
+      assert.deepStrictEqual(
+        [fumble?.recovery, fumble?.team, fumble?.start.team, fumble?.end.team],
+        ["opponent", nfl("17"), nfl("2"), nfl("17")]
       )
     })
   )
 
   it.effect(
-    "should read the first scoring play as FastCast's entity for it does: its scores, case, and team",
+    "should read the plays the recorded FastCast topic last had, in its order",
     () =>
       Effect.gen(function* () {
-        const scoring = (yield* EspnSummary.plays("nfl", summary)).find(({ play }) => play.scoring)
-        const pushed = yield* Schema.decodeUnknownEffect(EspnPlay.Play("nfl"))(fastCast["401872971484"])
-
-        assert.strictEqual(scoring?.play.id, PlayId.make("401872971484"))
-        assert.deepStrictEqual(
-          [scoring?.play.homeScore, scoring?.play.awayScore, scoring?.play._tag, teamOf(scoring?.play)],
-          [0, 7, "Completion", nfl("17")]
-        )
-        assert.deepStrictEqual(
-          [pushed.homeScore, pushed.awayScore, pushed._tag, teamOf(pushed)],
-          [0, 7, "Completion", nfl("17")]
-        )
-        assert.isTrue(
-          Equal.equals(scoring?.play, pushed),
-          "the summary's play is FastCast's, field for field"
-        )
-      })
-  )
-
-  it.effect(
-    "should give a play FastCast's team: the team with the ball as it ended, so a lost fumble's is the recovering team",
-    () =>
-      Effect.gen(function* () {
-        const play = (yield* EspnSummary.plays("nfl", summary)).find(
-          ({ play }) => play.id === PlayId.make("4018729712179")
-        )?.play
-
-        assert.deepStrictEqual(
-          [
-            play?._tag,
-            play === undefined ? undefined : Reflect.get(play, "recovery"),
-            teamOf(play),
-            play?.start.team,
-            play?.end.team
-          ],
-          ["Fumble", "opponent", nfl("17"), nfl("2"), nfl("17")]
-        )
-      })
-  )
-
-  it.effect(
-    "should read every play as the recorded FastCast topic last had it",
-    () =>
-      Effect.gen(function* () {
-        const { frames } = yield* Scenarios.use((scenarios) => scenarios.load(neAtBufFrames)).pipe(
-          Effect.provide(Scenarios.in(fixtures, []).pipe(Layer.provideMerge(NodeServices.layer)))
-        )
-        const pushed = (yield* decodedFrames(frames).pipe(Effect.provide(EspnDecode.layer)))
-          .flatMap(({ deliveries }) => deliveries)
-          .flatMap((delivery) =>
-            delivery._tag === "Plays" && delivery.game === GameId.make("401872971") ? [delivery.plays] : []
-          )
-          .at(-1)
+        const pushed = yield* lastPushed
         const plays = yield* EspnSummary.plays("nfl", summary)
 
         assert.deepStrictEqual(
           plays.map(({ play }) => play.id),
-          (pushed ?? []).map((play) => play.id)
-        )
-        // Left out: `text`, which ESPN rewrote for the summary (a penalty's line break, a clock prefix, a leading space);
-        // and, on the last kneel only, 4018729714600, `yards` and `end`, which ESPN corrected after the game (-2 yards to
-        // -1) and FastCast never sent; and a timeout's `team`, its caller, which only the summary's text says. Every other
-        // field of every play is compared, team, case, outcome, period, clock, scores, start and end among them.
-        const compared = (play: Play) => {
-          const { text: _text, ...rest } = play
-          if (play.id === PlayId.make("4018729714600")) return { ...rest, yards: 0, end: {} }
-          return Play.guards.Timeout(play) ? { ...rest, team: undefined } : { ...rest }
-        }
-        assert.deepStrictEqual(
-          plays.map(({ play }) => compared(play)),
-          (pushed ?? []).map(compared)
-        )
-        assert.strictEqual(
-          plays.filter(({ play }, i) => Equal.equals(play, pushed?.[i])).length,
-          recordedPlays - 3 - 6,
-          "every play but those and the six timeouts is FastCast's, field for field"
+          pushed.map((play) => play.id)
         )
       }),
     { timeout: 60_000 }
   )
 
-  it.effect("reads win probability where the summary has the play's, and none where it does not", () =>
-    Effect.gen(function* () {
-      const read = yield* EspnSummary.plays("nfl", summary)
-      const unread = yield* EspnSummary.plays(
-        "nfl",
-        edited('{"homeWinPercentage":0.7286,"tiePercentage":0.0,"playId":"40187297140"},', "")
-      )
+  it.effect(
+    "should read every field of every play as the recorded FastCast topic last had it, but those ESPN rewrote",
+    () =>
+      Effect.gen(function* () {
+        const pushed = yield* lastPushed
+        const plays = yield* EspnSummary.plays("nfl", summary)
 
-      assert.strictEqual(read[0]?.play.homeWinProbability, 0.7286)
-      assert.isFalse(unread[0] !== undefined && "homeWinProbability" in unread[0].play)
-      assert.strictEqual(unread[1]?.play.homeWinProbability, read[1]?.play.homeWinProbability)
-      assert.isDefined(unread[1]?.play.homeWinProbability)
+        // Left out: `text`, which ESPN rewrote for the summary (a penalty's line break, a clock prefix, a leading
+        // space); and, on the last kneel only, 4018729714600, `yards` and `end`, which ESPN corrected after the game
+        // (-2 yards to -1) and FastCast never sent. Every other field of every play is compared, team, case, outcome,
+        // period, clock, scores, start and end among them, a timeout's caller too.
+        const compared = (play: Play) => {
+          const { text: _text, ...rest } = play
+          return play.id === PlayId.make("4018729714600") ? { ...rest, yards: 0, end: {} } : { ...rest }
+        }
+
+        assert.deepStrictEqual(
+          plays.map(({ play }) => compared(play)),
+          pushed.map(compared)
+        )
+      }),
+    { timeout: 60_000 }
+  )
+
+  it.effect(
+    "should read every play but three as the recorded FastCast topic last had it, field for field",
+    () =>
+      Effect.gen(function* () {
+        const pushed = yield* lastPushed
+        const plays = yield* EspnSummary.plays("nfl", summary)
+
+        const equal = plays.filter(({ play }, i) => Equal.equals(play, pushed[i]))
+
+        assert.strictEqual(equal.length, recordedPlays - 3)
+      }),
+    { timeout: 60_000 }
+  )
+
+  it.effect("should read win probability where the summary has the play's", () =>
+    Effect.gen(function* () {
+      const [first] = yield* EspnSummary.plays("nfl", summary)
+
+      assert.strictEqual(first?.play.homeWinProbability, 0.7286)
     })
   )
 
-  it.effect("should say who called a timeout, from its text, and on no other play", () =>
+  it.effect("should read no win probability where the summary has none for the play", () =>
+    Effect.gen(function* () {
+      const [first] = yield* EspnSummary.plays("nfl", withoutFirstProbability())
+
+      assert.isFalse(first !== undefined && "homeWinProbability" in first.play)
+    })
+  )
+
+  it.effect("should still read the next play's win probability when one is missing", () =>
+    Effect.gen(function* () {
+      const read = yield* EspnSummary.plays("nfl", summary)
+      const unread = yield* EspnSummary.plays("nfl", withoutFirstProbability())
+
+      assert.isDefined(unread[1]?.play.homeWinProbability)
+      assert.strictEqual(unread[1]?.play.homeWinProbability, read[1]?.play.homeWinProbability)
+    })
+  )
+
+  it.effect("should give each timeout the team its participants mark as calling it", () =>
     Effect.gen(function* () {
       const plays = yield* EspnSummary.plays("nfl", summary)
 
-      assert.deepStrictEqual(
-        plays.flatMap(({ play, ...archived }) =>
-          Play.guards.Timeout(play) ? [[play.period, play.clock, archived.timeoutBy]] : []
-        ),
-        [
-          [1, "3:27", nfl("17")],
-          [2, "0:45", nfl("2")],
-          [2, "0:16", nfl("2")],
-          [4, "1:00", nfl("2")],
-          [4, "0:42", nfl("2")],
-          [4, "0:39", nfl("2")]
-        ]
-      )
-      assert.isTrue(
-        plays.every((archived) => Play.guards.Timeout(archived.play) || !("timeoutBy" in archived))
-      )
+      assert.deepStrictEqual(timeoutsOf(plays), [
+        [1, "3:27", nfl("17")],
+        [2, "0:45", nfl("2")],
+        [2, "0:16", nfl("2")],
+        [4, "1:00", nfl("2")],
+        [4, "0:42", nfl("2")],
+        [4, "0:39", nfl("2")]
+      ])
     })
   )
 
   it.effect(
-    "should read a timeout's caller as the header's team when the text uses another code for it: WAS for WSH",
+    "should give a timeout its caller when its text names the team by another code: WAS for WSH",
     () =>
       Effect.gen(function* () {
         // WSH at PHI of 2026-09-13, as the archive fetched it:
         //   curl 'https://site.api.espn.com/apis/site/v2/sports/football/nfl/summary?event=401872929' | gzip \
         //     > fixtures/nfl-summary-401872929.json.gz
-        // Its timeouts name PHI, and WAS for Washington, which its header calls WSH.
+        // Its timeouts' texts name PHI, and WAS for Washington, which its header calls WSH.
         const recordedSummary = yield* gzipped("nfl-summary-401872929")
-        const plays = yield* EspnSummary.plays("nfl", recordedSummary)
 
-        assert.deepStrictEqual(
-          plays.flatMap(({ play, ...archived }) =>
-            Play.guards.Timeout(play) ? [[play.period, play.clock, archived.timeoutBy]] : []
-          ),
-          [
-            [1, "1:02", nfl("21")],
-            [2, "0:33", nfl("28")],
-            [3, "10:03", nfl("28")],
-            [4, "2:04", nfl("28")],
-            [4, "1:01", nfl("21")]
-          ]
-        )
-      })
-  )
-
-  it.effect(
-    "should read a timeout's caller as the one team whose place has the code's letters in order: CLV",
-    () =>
-      Effect.gen(function* () {
-        // CLE at JAX of 2026-09-13, as the archive fetched it:
-        //   curl 'https://site.api.espn.com/apis/site/v2/sports/football/nfl/summary?event=401872922' | gzip \
-        //     > fixtures/nfl-summary-401872922.json.gz
-        // Only Cleveland called timeouts, each "by CLV", which no header abbreviation is and no elimination places.
-        const recordedSummary = yield* gzipped("nfl-summary-401872922")
         const plays = yield* EspnSummary.plays("nfl", recordedSummary)
 
         assert.deepStrictEqual(timeoutsOf(plays), [
-          [2, "4:52", nfl("5")],
-          [2, "1:45", nfl("5")],
-          [3, "0:50", nfl("5")]
+          [1, "1:02", nfl("21")],
+          [2, "0:33", nfl("28")],
+          [3, "10:03", nfl("28")],
+          [4, "2:04", nfl("28")],
+          [4, "1:01", nfl("21")]
         ])
       })
   )
 
-  it.effect(
-    'should read a college timeout\'s caller as the school its text names: "Timeout Georgia, clock 02:05"',
-    () =>
-      Effect.gen(function* () {
-        // VAN at UGA of 2026-10-03, once it was final:
-        //   curl 'https://site.api.espn.com/apis/site/v2/sports/football/college-football/summary?event=401856705' \
-        //     | gzip > fixtures/fbs-summary-401856705.json.gz
-        // Its timeouts name each school by its place, two of them at 2:00.
-        const recordedSummary = yield* gzipped("fbs-summary-401856705")
-        const plays = yield* EspnSummary.plays("fbs", recordedSummary)
-        const fbs = (team: string) => TeamId.make(`fbs:${team}`)
-
-        assert.deepStrictEqual(timeoutsOf(plays), [
-          [2, "2:05", fbs("61")],
-          [2, "2:00", fbs("238")],
-          [2, "0:35", fbs("238")],
-          [3, "1:37", fbs("238")],
-          [4, "2:00", fbs("61")]
-        ])
-      })
-  )
-
-  it.effect("should give a timeout the team that called it as its team", () =>
+  it.effect("should give a timeout its caller when its text's code is no team's abbreviation: CLV", () =>
     Effect.gen(function* () {
-      const plays = yield* EspnSummary.plays("nfl", summary)
+      // CLE at JAX of 2026-09-13, as the archive fetched it:
+      //   curl 'https://site.api.espn.com/apis/site/v2/sports/football/nfl/summary?event=401872922' | gzip \
+      //     > fixtures/nfl-summary-401872922.json.gz
+      // Only Cleveland called timeouts, each "by CLV" in its text, which no header abbreviation is.
+      const recordedSummary = yield* gzipped("nfl-summary-401872922")
 
-      const called = plays.flatMap(({ play, timeoutBy }) =>
-        Play.guards.Timeout(play) ? [[play.team, timeoutBy]] : []
-      )
+      const plays = yield* EspnSummary.plays("nfl", recordedSummary)
 
-      assert.deepStrictEqual(
-        called.map(([team]) => team),
-        called.map(([, timeoutBy]) => timeoutBy)
-      )
-      assert.lengthOf(called, 6)
+      assert.deepStrictEqual(timeoutsOf(plays), [
+        [2, "4:52", nfl("5")],
+        [2, "1:45", nfl("5")],
+        [3, "0:50", nfl("5")]
+      ])
     })
   )
 
-  it.effect("should read a timeout no team called as no caller, and not warn of it", () =>
+  it.effect('should give a college timeout its caller: "Timeout Georgia, clock 02:05"', () =>
     Effect.gen(function* () {
-      const logs: Array<string> = []
-      const plays = yield* EspnSummary.plays(
-        "nfl",
-        edited("Timeout #1 by NE at 03:27.", "Official timeout at 03:27.")
-      ).pipe(Effect.provide(captured(logs)))
+      // VAN at UGA of 2026-10-03, once it was final:
+      //   curl 'https://site.api.espn.com/apis/site/v2/sports/football/college-football/summary?event=401856705' \
+      //     | gzip > fixtures/fbs-summary-401856705.json.gz
+      // Its timeouts' texts name each school by its place, two of them at 2:00.
+      const recordedSummary = yield* gzipped("fbs-summary-401856705")
+
+      const plays = yield* EspnSummary.plays("fbs", recordedSummary)
+
+      assert.deepStrictEqual(timeoutsOf(plays), [
+        [2, "2:05", fbs("61")],
+        [2, "2:00", fbs("238")],
+        [2, "0:35", fbs("238")],
+        [3, "1:37", fbs("238")],
+        [4, "2:00", fbs("61")]
+      ])
+    })
+  )
+
+  it.effect("should give a timeout no participant is marked as calling no caller", () =>
+    Effect.gen(function* () {
+      const plays = yield* EspnSummary.plays("nfl", withoutFirstCaller())
 
       assert.deepStrictEqual(timeoutsOf(plays)[0], [1, "3:27", undefined])
-      assert.deepStrictEqual(logs, [])
     })
   )
 
-  it.effect("should read a code left over once both teams are named as no caller", () =>
+  it.effect("should still read the game when a timeout has no caller", () =>
     Effect.gen(function* () {
-      const plays = yield* EspnSummary.plays(
-        "nfl",
-        edited("Timeout #1 by BUF at 00:45.", "Timeout #1 by XYZ at 00:45.")
-      )
-
-      assert.deepStrictEqual(
-        plays.flatMap(({ play, ...archived }) =>
-          Play.guards.Timeout(play) ? [[play.period, play.clock, archived.timeoutBy]] : []
-        ),
-        [
-          [1, "3:27", nfl("17")],
-          [2, "0:45", undefined],
-          [2, "0:16", nfl("2")],
-          [4, "1:00", nfl("2")],
-          [4, "0:42", nfl("2")],
-          [4, "0:39", nfl("2")]
-        ]
-      )
-    })
-  )
-
-  it.effect("should read one code no header team has as the one team never named", () =>
-    Effect.gen(function* () {
-      const plays = yield* EspnSummary.plays(
-        "nfl",
-        edited("Timeout #1 by NE at 03:27.", "Timeout #1 by NWE at 03:27.")
-      )
-
-      assert.strictEqual(plays.find(({ play }) => Play.guards.Timeout(play))?.timeoutBy, nfl("17"))
-    })
-  )
-
-  it.effect("should read a timeout whose caller does not read as none, and still read the game", () =>
-    Effect.gen(function* () {
-      const logs: Array<string> = []
-      const plays = yield* EspnSummary.plays(
-        "nfl",
-        edited("Timeout #1 by NE at 03:27.", "Timeout #1 at 03:27.")
-      ).pipe(Effect.provide(captured(logs)))
-      const timeout = plays.find(({ play }) => Play.guards.Timeout(play))
-
-      assert.strictEqual(logs.length, 1)
-      assert.include(logs[0], "name neither team")
+      const plays = yield* EspnSummary.plays("nfl", withoutFirstCaller())
 
       assert.strictEqual(plays.length, recordedPlays)
-      assert.strictEqual(timeout?.play.clock, "3:27")
-      assert.isFalse(timeout !== undefined && "timeoutBy" in timeout)
     })
   )
 
-  it.effect("a play without a wallclock is not read", () =>
+  it.effect("should not read a play without a wallclock", () =>
     Effect.gen(function* () {
       const plays = yield* EspnSummary.plays("nfl", edited(',"wallclock":"2026-10-04T17:02:33Z"', ""))
 
-      assert.strictEqual(plays.length, recordedPlays - 1)
-      assert.notStrictEqual(plays[0]?.play.id, PlayId.make("40187297140"))
+      assert.deepStrictEqual(
+        [plays.length, plays[0]?.play.id === PlayId.make("40187297140")],
+        [recordedPlays - 1, false]
+      )
     })
   )
 
-  it.effect("a summary without drives has no plays", () =>
+  it.effect("should read no plays from a summary without drives", () =>
     Effect.gen(function* () {
-      assert.deepStrictEqual(yield* EspnSummary.plays("nfl", {}), [])
+      const plays = yield* EspnSummary.plays("nfl", {})
+
+      assert.deepStrictEqual(plays, [])
     })
   )
 
-  it.effect("a play round-trips Equal through its JSON", () =>
+  it.effect("should read plays that round-trip Equal through their JSON", () =>
     Effect.gen(function* () {
       const plays = yield* EspnSummary.plays("nfl", summary)
       const json = Schema.fromJsonString(Play)
+
       const back = yield* Effect.forEach(plays, ({ play }) =>
         Schema.encodeEffect(json)(play).pipe(Effect.flatMap(Schema.decodeEffect(json)))
       )
 
-      assert.isTrue(
-        back.every((play, i) => Equal.equals(play, plays[i]?.play)),
-        "every play reads back Equal"
-      )
+      assert.isTrue(back.every((play, i) => Equal.equals(play, plays[i]?.play)))
     })
   )
 })
 
-/** The recorded summary with its one `from` replaced by `to`. */
 // A recorded summary kept gzip'd in `fixtures/`.
 function gzipped(name: string) {
   return Gzip.decompress(readFileSync(new URL(`./fixtures/${name}.json.gz`, import.meta.url)), "gzip").pipe(
@@ -361,25 +340,28 @@ function gzipped(name: string) {
 
 // Each timeout's period, clock, and caller.
 function timeoutsOf(plays: ReadonlyArray<ArchivedPlay>) {
-  return plays.flatMap(({ play, ...archived }) =>
-    Play.guards.Timeout(play) ? [[play.period, play.clock, archived.timeoutBy]] : []
-  )
+  return plays
+    .map(({ play }) => play)
+    .filter(Play.guards.Timeout)
+    .map((timeout) => [timeout.period, timeout.clock, timeout.team])
 }
 
-// A play's team, on a case that has one.
-function teamOf(play: Play | undefined) {
-  return play === undefined ? undefined : Reflect.get(play, "team")
+// A completion's team; none for another case.
+function completedBy(play: Play | undefined) {
+  return [play].filter(Play.guards.Completion).at(0)?.team
 }
 
-// A logger that keeps each message logged in `logs`, in place of the default.
-function captured(logs: Array<string>) {
-  return Logger.layer([
-    Logger.make<unknown, void>(({ message }) => {
-      logs.push(String(Array.isArray(message) ? message[0] : message))
-    })
-  ])
+// The recorded summary without the first play's win probability.
+function withoutFirstProbability() {
+  return edited('{"homeWinPercentage":0.7286,"tiePercentage":0.0,"playId":"40187297140"},', "")
 }
 
+// The recorded summary with its first timeout, NE's at 3:27 of the first quarter, marked as called by no team.
+function withoutFirstCaller() {
+  return edited('"id":"17","order":2,"type":"defense","timeout":true', '"id":"17","order":2,"type":"defense"')
+}
+
+// The recorded summary with its first `from` replaced by `to`.
 function edited(from: string, to: string): unknown {
   assert.include(recorded, from)
   return JSON.parse(recorded.replace(from, to))

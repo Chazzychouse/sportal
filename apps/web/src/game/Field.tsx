@@ -230,7 +230,7 @@ function PlayArrow(props: {
     onNone: () => null,
     onSome: ({ start, end }) => {
       const scorer = play.scoring ? scorerOf(game, props.plays, play) : undefined
-      const losing = "yards" in play && play.lostYards()
+      const losing = Play.gainsYards(play) && play.lostYards()
       return (
         <g>
           {scorer !== undefined && (
@@ -344,7 +344,7 @@ function scorerOf(game: GameSnapshot, plays: ReadonlyArray<Play>, play: Play): T
   const previous = plays.findLast((candidate) => candidate.sequence < play.sequence)
   if (previous !== undefined && play.homeScore > previous.homeScore) return game.home.team
   if (previous !== undefined && play.awayScore > previous.awayScore) return game.away.team
-  const team = "yards" in play ? play.offense() : play.start.team
+  const team = Play.gainsYards(play) ? play.offense() : play.start.team
   return [game.home.team, game.away.team].find((candidate) => candidate.id === team)
 }
 

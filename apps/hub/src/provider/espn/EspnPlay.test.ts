@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs"
 import { NodeServices } from "@effect/platform-node"
 import { assert, describe, it } from "@effect/vitest"
-import { Fumble, Other, type Play, PlayId, Rush, Stoppage } from "@sportal/domain/Play"
+import { FootballPlay, Other, type Play, PlayId, Rush } from "@sportal/domain/Play"
 import { TeamId } from "@sportal/domain/Team"
 import { Effect, Layer, Schema } from "effect"
 import * as Gzip from "../../Gzip.ts"
@@ -27,9 +27,13 @@ const decodePlay = Schema.decodeUnknownEffect(EspnPlay.Play("nfl"))
 const typed = (type: { readonly id: string; readonly text: string }) =>
   decodePlay({ ...entity("401872966237"), type })
 
-// Some fields of a play, by name.
-const fieldsOf = (play: Play, names: ReadonlyArray<string>) =>
-  Object.fromEntries(names.map((name) => [name, Reflect.get(play, name)]))
+// `play` as the case `guard` narrows to; none when it is another case.
+const narrowed = <Case extends Play>(guard: (play: Play) => play is Case, play: Play): Case | undefined =>
+  guard(play) ? play : undefined
+
+// A play's wire form, field by field.
+const wireOf = (play: Play): Readonly<Record<string, unknown>> =>
+  Object.fromEntries(Object.entries(Schema.encodeSync(FootballPlay)(play)))
 
 // Every ESPN play type id the recordings have, with its text, and the case and outcome it reads as.
 const recordedTypes = [
@@ -103,12 +107,11 @@ describe("EspnPlay.Play", () => {
     Effect.gen(function* () {
       const play = yield* decodePlay(entity("40187297363"))
 
-      assert.deepStrictEqual(fieldsOf(play, ["_tag", "touchdown", "team", "yards"]), {
-        _tag: "Completion",
-        touchdown: false,
-        team: nfl("10"),
-        yards: 15
-      })
+      const completion = narrowed(FootballPlay.guards.Completion, play)
+      assert.deepStrictEqual(
+        [completion?.touchdown, completion?.team, completion?.yards],
+        [false, nfl("10"), 15]
+      )
       assert.deepStrictEqual([play.start.yardsToEndzone, play.end.yardsToEndzone], [58, 43])
     })
   )
@@ -117,13 +120,11 @@ describe("EspnPlay.Play", () => {
     Effect.gen(function* () {
       const play = yield* decodePlay(entity("401872971330"))
 
-      assert.instanceOf(play, Fumble)
-      assert.deepStrictEqual(fieldsOf(play, ["recovery", "team", "yards"]), {
-        recovery: "own",
-        team: nfl("17"),
-        yards: 21
-      })
-      assert.deepStrictEqual([play.start.team, play.end.team], [nfl("17"), nfl("17")])
+      const fumble = narrowed(FootballPlay.guards.Fumble, play)
+      assert.deepStrictEqual(
+        [fumble?.recovery, fumble?.team, fumble?.yards, fumble?.start.team, fumble?.end.team],
+        ["own", nfl("17"), 21, nfl("17"), nfl("17")]
+      )
     })
   )
 
@@ -131,8 +132,11 @@ describe("EspnPlay.Play", () => {
     Effect.gen(function* () {
       const play = yield* decodePlay(entity("4018729712179"))
 
-      assert.deepStrictEqual(fieldsOf(play, ["_tag", "recovery"]), { _tag: "Fumble", recovery: "opponent" })
-      assert.deepStrictEqual([play.start.team, play.end.team], [nfl("2"), nfl("17")])
+      const fumble = narrowed(FootballPlay.guards.Fumble, play)
+      assert.deepStrictEqual(
+        [fumble?.recovery, fumble?.start.team, fumble?.end.team],
+        ["opponent", nfl("2"), nfl("17")]
+      )
     })
   )
 
@@ -174,9 +178,15 @@ describe("EspnPlay.Play", () => {
     Effect.gen(function* () {
       const play = yield* decodePlay(entity("401872966271"))
 
-      assert.instanceOf(play, Stoppage)
+      const stoppage = narrowed(FootballPlay.guards.Stoppage, play)
       assert.deepStrictEqual(
-        [play.kind, play.start.team, play.start.down, play.start.distance, play.awayScore],
+        [
+          stoppage?.kind,
+          stoppage?.start.team,
+          stoppage?.start.down,
+          stoppage?.start.distance,
+          stoppage?.awayScore
+        ],
         ["officialTimeout", nfl("22"), undefined, undefined, 7]
       )
     })
@@ -188,7 +198,7 @@ describe("EspnPlay.Play", () => {
       // (fixtures/fbs-scoreboard-2026-10-03T2024Z.json) names a last play's.
       const play = yield* typed({ id: "61", text: "Extra Point Good" })
 
-      assert.deepStrictEqual(fieldsOf(play, ["_tag", "good"]), { _tag: "ExtraPoint", good: true })
+      assert.isTrue(narrowed(FootballPlay.guards.ExtraPoint, play)?.good)
     })
   )
 
@@ -199,7 +209,7 @@ describe("EspnPlay.Play", () => {
     Effect.gen(function* () {
       const play = yield* typed(type)
 
-      assert.deepStrictEqual(fieldsOf(play, ["_tag", "by"]), { _tag: "TwoPointTry", by })
+      assert.strictEqual(narrowed(FootballPlay.guards.TwoPointTry, play)?.by, by)
     })
   )
 
@@ -209,7 +219,12 @@ describe("EspnPlay.Play", () => {
       Effect.gen(function* () {
         const read = yield* typed({ id, text })
 
-        assert.deepStrictEqual(fieldsOf(read, Object.keys(play)), play)
+        const wire = wireOf(read)
+
+        assert.deepStrictEqual(
+          Object.fromEntries(Object.keys(play).map((field) => [field, wire[field]])),
+          play
+        )
       })
   )
 
@@ -251,8 +266,10 @@ describe("EspnPlay.Play", () => {
     Effect.gen(function* () {
       const play = yield* typed({ id: "999", text: "Something New" })
 
-      assert.instanceOf(play, Other)
-      assert.deepStrictEqual(play.type, { id: "999", text: "Something New" })
+      assert.deepStrictEqual(narrowed(FootballPlay.guards.Other, play)?.type, {
+        id: "999",
+        text: "Something New"
+      })
     })
   )
 
@@ -260,10 +277,7 @@ describe("EspnPlay.Play", () => {
     Effect.gen(function* () {
       const play = yield* typed({ id: "32", text: "Kickoff Return Touchdown" })
 
-      assert.deepStrictEqual(fieldsOf(play, ["_tag", "returnTouchdown"]), {
-        _tag: "Kickoff",
-        returnTouchdown: true
-      })
+      assert.isTrue(narrowed(FootballPlay.guards.Kickoff, play)?.returnTouchdown)
     })
   )
 
@@ -271,7 +285,7 @@ describe("EspnPlay.Play", () => {
     Effect.gen(function* () {
       const play = yield* typed({ id: "18", text: "Blocked Field Goal" })
 
-      assert.deepStrictEqual(fieldsOf(play, ["_tag", "result"]), { _tag: "FieldGoal", result: "blocked" })
+      assert.strictEqual(narrowed(FootballPlay.guards.FieldGoal, play)?.result, "blocked")
     })
   )
 
@@ -287,15 +301,29 @@ describe("EspnPlay.Play", () => {
     Effect.gen(function* () {
       const play = yield* typed({ id: "70", text: "Coin Toss" })
 
-      assert.deepStrictEqual(fieldsOf(play, ["_tag", "kind"]), { _tag: "Stoppage", kind: "coinToss" })
+      assert.strictEqual(narrowed(FootballPlay.guards.Stoppage, play)?.kind, "coinToss")
     })
   )
 
-  it.effect("should leave a timeout's caller unread", () =>
+  it.effect("should read a timeout's caller from its timeout taker", () =>
+    Effect.gen(function* () {
+      const play = yield* decodePlay({
+        ...entity("401872966237"),
+        type: { id: "21", text: "Timeout" },
+        participants: [{ type: "timeout_taker", team: { $key: "4" } }]
+      })
+
+      assert.strictEqual(narrowed(FootballPlay.guards.Timeout, play)?.team, nfl("4"))
+    })
+  )
+
+  it.effect("should not read the team with the ball as a timeout's caller", () =>
     Effect.gen(function* () {
       const play = yield* typed({ id: "21", text: "Timeout" })
 
-      assert.deepStrictEqual(fieldsOf(play, ["_tag", "team"]), { _tag: "Timeout", team: undefined })
+      const timeout = narrowed(FootballPlay.guards.Timeout, play)
+
+      assert.deepStrictEqual([timeout?._tag, timeout?.team], ["Timeout", undefined])
     })
   )
 })

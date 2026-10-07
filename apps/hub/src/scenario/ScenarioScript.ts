@@ -1,6 +1,6 @@
 import { GameId, GameSnapshot, type GameStatus } from "@sportal/domain/Game"
 import type { LeagueId } from "@sportal/domain/League"
-import { type FootballPlay, type Penalty, Play, PlayId } from "@sportal/domain/Play"
+import { type FootballPlay, Play, PlayId, type PlayOutcome } from "@sportal/domain/Play"
 import { Situation } from "@sportal/domain/Situation"
 import { broadcast, snapshot, team } from "@sportal/domain/TestGame"
 import { Array as Arr, Data, DateTime, Schema } from "effect"
@@ -100,12 +100,10 @@ type Change = {
 }
 
 // A case that gains yards, by its tag and the fields that say its outcome: `{ _tag: "Punt", return: "none" }`.
-type Scripted =
-  Extract<FootballPlay, { readonly yards: number }> extends infer Case
-    ? Case extends { readonly _tag: string }
-      ? Pick<Case, "_tag"> & Omit<Case, keyof Penalty>
-      : never
-    : never
+type Scripted = Extract<
+  PlayOutcome,
+  { readonly _tag: Extract<FootballPlay, { readonly yards: number }>["_tag"] }
+>
 
 /** A game as `build` first writes it: scheduled at its kickoff, nil–nil. */
 function initial(

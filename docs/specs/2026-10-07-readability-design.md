@@ -100,7 +100,7 @@ an official timeout that end with no team.
 | `ExtraPoint` | 61 good, 62 missed | `good: boolean` |
 | `Safety` | 20 | none |
 | `Penalty` | 8 | none |
-| `Timeout` | 21 | `team?`: the team that called it (from a summary's text; FastCast's `team` on one is the team with the ball) |
+| `Timeout` | 21 | `team?`: the team that called it (FastCast's `timeout_taker` participant, a summary's `teamParticipants` marked `timeout`; ESPN's `team` on one is the team with the ball) |
 | `Stoppage` | 74 official timeout, 75 two-minute warning, 70 coin toss | `kind: "officialTimeout" \| "twoMinuteWarning" \| "coinToss"` |
 | `PeriodEnd` | 2, 65 half, 79 regulation, 66 game | `ends: "period" \| "half" \| "regulation" \| "game"` |
 | `Other` | any id not in the table | `type: { id, text }` |

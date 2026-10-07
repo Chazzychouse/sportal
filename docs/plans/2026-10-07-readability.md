@@ -181,9 +181,9 @@ export type Play = FootballPlay
 - `typeOf(play: FootballPlay): { id: string; text: string }` is the reverse lookup: the first row whose case and
   outcome equal the play's. Every case and outcome reachable from a script has a row. `Other` writes its own `type`.
 - `unknownTypes` is unchanged in behaviour.
-- `read` leaves a `Timeout`'s `team` unset: ESPN's `team` on one is the team with the ball.
-- `EspnSummary.ts:118`: the timeout caller is read when `Play.guards.Timeout(read.play)`, and a caller it resolves is
-  the timeout's `team` as well as `timeoutBy`.
+- `read` gives a `Timeout` the `team` that called it, from ESPN's own fields: FastCast's participant of type
+  `timeout_taker`, a summary's `teamParticipants` entry marked `timeout`. ESPN's `team` on a timeout is the team with
+  the ball. `EspnSummary`'s text matching and `ArchivedPlay.timeoutBy` are gone; `Synthesis` counts `Timeout.team`.
 - `EspnScript.entityOf`: writes `type: EspnPlay.typeOf(play)` and the spots; `statYardage` and `team` from a case with
   `gained`, and 0 and the start spot's team otherwise, as ESPN writes a stoppage.
 

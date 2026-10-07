@@ -126,9 +126,9 @@ function snapshotAfter(
       0,
       half.timeouts -
         played.filter(
-          ({ play: called, timeoutBy }) =>
+          ({ play: called }) =>
             Play.guards.Timeout(called) &&
-            timeoutBy === team &&
+            called.team === team &&
             halfOf(final.league, called.period).half === half.half
         ).length
     )

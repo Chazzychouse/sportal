@@ -5,7 +5,7 @@ import { GameSnapshot } from "./Game.ts"
 import { GameEventKind } from "./GameEvent.ts"
 import { LiveGame, LiveGameState } from "./LiveGame.ts"
 import { type Play, PlayId } from "./Play.ts"
-import { liveSnapshot, play, snapshot } from "./TestGame.ts"
+import { completion, liveSnapshot, play, snapshot } from "./TestGame.ts"
 
 const t0 = DateTime.makeUnsafe("2026-10-03T16:00:00Z")
 const later = DateTime.addDuration(t0, Duration.seconds(30))
@@ -473,7 +473,13 @@ describe("LiveGame.start, plays", () => {
 
 describe("LiveGame#take, plays", () => {
   const first = play()
-  const second = play({ id: PlayId.make("2"), sequence: 2, scoring: true, homeScore: 7, touchdown: true })
+  const second = completion({
+    id: PlayId.make("2"),
+    sequence: 2,
+    scoring: true,
+    homeScore: 7,
+    touchdown: true
+  })
   const take = (game: LiveGame, plays: ReadonlyArray<Play>) =>
     game.take(Delivery.cases.Plays.make({ game: live.id, plays }), later)
   const withFirst = Option.getOrThrow(take(liveGame, [first]).liveGame)
@@ -509,6 +515,16 @@ describe("LiveGame#take, a snapshot's events", () => {
     clock: "0:00",
     home: { ...live.home, score: 3 }
   })
+  const scored = snapshot({ status: "live", period: 2, clock: "9:00", home: { ...live.home, score: 7 } })
+  const touchdown = completion({
+    id: PlayId.make("2"),
+    sequence: 2,
+    scoring: true,
+    homeScore: 7,
+    touchdown: true
+  })
+  const takePlays = (game: LiveGame, plays: ReadonlyArray<Play>) =>
+    game.take(Delivery.cases.Plays.make({ game: live.id, plays }), later)
 
   it("before any plays, a score change is the snapshot's", () => {
     const { events } = liveGame.take(
@@ -541,53 +557,47 @@ describe("LiveGame#take, a snapshot's events", () => {
       "WentFinal"
     )
   })
-  it("a snapshot's score change, then the touchdown play: ScoreChanged once, then Played only", () => {
-    const scored = snapshot({ status: "live", period: 2, clock: "9:00", home: { ...live.home, score: 7 } })
-    const touchdown = play({
-      id: PlayId.make("2"),
-      sequence: 2,
-      scoring: true,
-      homeScore: 7,
-      touchdown: true
-    })
-    const withPlay = Option.getOrThrow(
-      liveGame.take(Delivery.cases.Plays.make({ game: live.id, plays: [play()] }), later).liveGame
-    )
+  it("should say ScoreChanged for a snapshot's score change that comes before the touchdown pass", () => {
+    const withPlay = Option.getOrThrow(takePlays(liveGame, [play()]).liveGame)
+
     const byScore = withPlay.take(Delivery.cases.Snapshot.make({ snapshot: scored, from: "poll" }), later)
+
     assert.deepStrictEqual(byScore.events, [
       GameEventKind.ScoreChanged({ team: live.home.team.id, points: 7 })
     ])
-    const byPlay = Option.getOrThrow(byScore.liveGame).take(
-      Delivery.cases.Plays.make({ game: live.id, plays: [play(), touchdown] }),
-      later
-    )
+  })
+
+  it("should say only Played for the touchdown pass after the snapshot's score change", () => {
+    const withPlay = Option.getOrThrow(takePlays(liveGame, [play()]).liveGame)
+    const byScore = withPlay.take(Delivery.cases.Snapshot.make({ snapshot: scored, from: "poll" }), later)
+
+    const byPlay = takePlays(Option.getOrThrow(byScore.liveGame), [play(), touchdown])
+
     assert.deepStrictEqual(byPlay.events, [GameEventKind.Played({ play: touchdown })])
   })
-  it("the touchdown play, then the snapshot's score change: Played, then ScoreChanged, once each", () => {
-    const scored = snapshot({ status: "live", period: 2, clock: "9:00", home: { ...live.home, score: 7 } })
-    const touchdown = play({
-      id: PlayId.make("2"),
-      sequence: 2,
-      scoring: true,
-      homeScore: 7,
-      touchdown: true
-    })
-    const withPlay = Option.getOrThrow(
-      liveGame.take(Delivery.cases.Plays.make({ game: live.id, plays: [play()] }), later).liveGame
-    )
-    const byPlay = withPlay.take(
-      Delivery.cases.Plays.make({ game: live.id, plays: [play(), touchdown] }),
-      later
-    )
+
+  it("should say only Played for the touchdown pass that comes before the snapshot's score change", () => {
+    const withPlay = Option.getOrThrow(takePlays(liveGame, [play()]).liveGame)
+
+    const byPlay = takePlays(withPlay, [play(), touchdown])
+
     assert.deepStrictEqual(byPlay.events, [GameEventKind.Played({ play: touchdown })])
+  })
+
+  it("should say ScoreChanged once for the snapshot's score change after the touchdown pass", () => {
+    const withPlay = Option.getOrThrow(takePlays(liveGame, [play()]).liveGame)
+    const byPlay = takePlays(withPlay, [play(), touchdown])
+
     const bySnapshot = Option.getOrThrow(byPlay.liveGame).take(
       Delivery.cases.Snapshot.make({ snapshot: scored, from: "poll" }),
       later
     )
+
     assert.deepStrictEqual(bySnapshot.events, [
       GameEventKind.ScoreChanged({ team: live.home.team.id, points: 7 })
     ])
   })
+
   it("keeps the plays", () => {
     const withPlay = Option.getOrThrow(
       liveGame.take(Delivery.cases.Plays.make({ game: live.id, plays: [play()] }), later).liveGame

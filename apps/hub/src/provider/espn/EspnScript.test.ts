@@ -145,6 +145,16 @@ const Listed = Schema.fromJsonString(
   Schema.Struct({ events: Schema.Array(Schema.Struct({ id: Schema.String })) })
 )
 
+const messages = frames.filter((frame) => frame.kind === "message")
+const topics = [...new Set(messages.map((frame) => frame.channel))].map((channel) =>
+  messages.filter((frame) => frame.channel === channel)
+)
+const checkpoints = frames.filter((frame) => frame.kind === "checkpoint")
+// 1, 2, 3 … on each topic.
+const countedFromOne: ReadonlyArray<ReadonlyArray<number | undefined>> = topics.map((onTopic) =>
+  onTopic.map((_, index) => index + 1)
+)
+
 describe("scenarioOf", () => {
   it("should write a scenario of the script's name", () => {
     assert.strictEqual(scenario.name, "written-as-espn")
@@ -228,27 +238,27 @@ describe("scenarioOf", () => {
   })
 
   it("should checkpoint each game's topic after the first poll that lists it", () => {
-    const after = checkpoints.map((checkpoint) => {
+    for (const checkpoint of checkpoints) {
       const game = checkpoint.channel.split("-").at(-1) ?? ""
       const firstPoll = frames.findIndex(
         (frame) =>
           frame.feed === "poll" &&
           Schema.decodeSync(Listed)(frame.body).events.some((event) => event.id === game)
       )
-      return firstPoll >= 0 && frames.indexOf(checkpoint) > firstPoll
-    })
 
-    assert.deepStrictEqual(after, [true, true])
+      assert.isAtLeast(firstPoll, 0, `a poll lists ${game}`)
+      assert.isAbove(frames.indexOf(checkpoint), firstPoll, checkpoint.channel)
+    }
   })
 
   it("should checkpoint each game's topic before its first play", () => {
-    const before = checkpoints.map(
-      (checkpoint) =>
-        frames.indexOf(checkpoint) <
-        frames.findIndex((frame) => frame.kind === "message" && frame.channel === checkpoint.channel)
-    )
+    for (const checkpoint of checkpoints) {
+      const firstPlay = frames.findIndex(
+        (frame) => frame.kind === "message" && frame.channel === checkpoint.channel
+      )
 
-    assert.deepStrictEqual(before, [true, true])
+      assert.isBelow(frames.indexOf(checkpoint), firstPlay, checkpoint.channel)
+    }
   })
 
   it("should give each checkpoint source id 0", () => {
@@ -330,13 +340,3 @@ describe("scenarioOf", () => {
     })
   })
 })
-
-const messages = frames.filter((frame) => frame.kind === "message")
-const topics = [...new Set(messages.map((frame) => frame.channel))].map((channel) =>
-  messages.filter((frame) => frame.channel === channel)
-)
-const checkpoints = frames.filter((frame) => frame.kind === "checkpoint")
-// 1, 2, 3 … on each topic.
-const countedFromOne: ReadonlyArray<ReadonlyArray<number | undefined>> = topics.map((onTopic) =>
-  onTopic.map((_, index) => index + 1)
-)

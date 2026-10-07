@@ -1,7 +1,6 @@
 import { GameId, type GameSnapshot } from "@sportal/domain/Game"
 import { LeagueId } from "@sportal/domain/League"
 import type { Play } from "@sportal/domain/Play"
-import type { TeamId } from "@sportal/domain/Team"
 import { Context, Data, type DateTime, type Effect, type Schedule, Schema } from "effect"
 
 /** A provider's archive of finished games, kept as fetched under the corpus's `archive/`. */
@@ -27,14 +26,10 @@ export class ArchivedGame extends Data.Class<{
   readonly plays: ReadonlyArray<ArchivedPlay>
 }> {}
 
-/**
- * A play of an archived game, with the wallclock instant it was run at, and, for a timeout, the team that called it
- * when the archive says.
- */
+/** A play of an archived game, with the wallclock instant it was run at. */
 export type ArchivedPlay = {
   readonly play: Play
   readonly wallclock: DateTime.Utc
-  readonly timeoutBy?: TeamId
 }
 
 /**

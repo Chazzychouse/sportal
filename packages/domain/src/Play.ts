@@ -13,8 +13,8 @@ const Spot = Schema.Struct({
   team: TeamId
 })
 
-// Where a play ended, which can lack its team: the feed has sent a completion's, a blocked field goal's, and an official
-// timeout's end without one.
+// Where a play ended, which can lack its team: the feed has sent a completion's, a blocked field goal's, and an
+// official timeout's end without one.
 const EndSpot = Schema.Struct({ ...Spot.fields, team: Schema.optional(TeamId) })
 
 // What every play carries.
@@ -294,14 +294,25 @@ const cases = Schema.Union([
 
 /**
  * Every football play, as the game's play-by-play lists it: a tagged union of its cases, each keeping what the feed's
- * play type says, with `.match`, `.guards`, `.cases`, `order`, and `eventsSince`.
+ * play type says, with `.match`, `.guards`, `.cases`, `order`, `eventsSince`, and `gainsYards`.
  */
 export const FootballPlay = Object.assign(cases, {
   /** By `sequence`. */
   order: Order.mapInput(Order.Number, (play: typeof cases.Type) => play.sequence),
-  eventsSince
+  eventsSince,
+  gainsYards
 })
 export type FootballPlay = typeof FootballPlay.Type
+
+/**
+ * A football play's case and what its feed's play type says of it: its `_tag` and its outcome fields, without what
+ * every play carries or what it gained, as `{ _tag: "Punt", return: "none" }`.
+ */
+export type PlayOutcome = typeof cases.Encoded extends infer Case
+  ? Case extends unknown
+    ? Omit<Case, keyof typeof common | keyof typeof gained>
+    : never
+  : never
 
 /**
  * The plays of every sport; football's only, for now.
@@ -326,6 +337,13 @@ function eventsSince(
     .toSorted(FootballPlay.order)
     .filter((play) => !known.has(play.id))
     .flatMap(eventsOf)
+}
+
+/** Whether `play`'s case gains yards for a team: a snap, a kick, a safety, or a penalty. */
+function gainsYards<P extends { readonly _tag: (typeof cases.Type)["_tag"] }>(
+  play: P
+): play is Extract<P, { readonly _tag: Extract<typeof cases.Type, { readonly yards: number }>["_tag"] }> {
+  return "yards" in cases.cases[play._tag].fields
 }
 
 /** A play of at least this many yards is a big play. */
