@@ -158,6 +158,30 @@ describe("EspnPlay", () => {
     })
   )
 
+  it.effect(
+    "the college types the summaries list read as themselves: returns, interceptions, fumbles, the end of regulation",
+    () =>
+      Effect.gen(function* () {
+        // As the 2026-10-03 FBS game summaries name them. A safety stays other: no kind is one.
+        const types = [
+          { id: "14", text: "Punt Return" },
+          { id: "32", text: "Kickoff Return Touchdown" },
+          { id: "63", text: "Interception" },
+          { id: "69", text: "Fumble" },
+          { id: "79", text: "End of Regulation" },
+          { id: "20", text: "Safety" }
+        ]
+        const kinds = yield* Effect.forEach(types, (type) =>
+          Effect.map(decodePlay({ ...entity("401872966237"), type }), (play) => play.kind)
+        )
+
+        assert.deepStrictEqual(kinds, ["punt", "kickoff", "interception", "fumble", "endPeriod", "other"])
+        assert.deepStrictEqual(EspnPlay.unknownTypes(types.map((type) => ({ type }))), [
+          { id: "20", text: "Safety" }
+        ])
+      })
+  )
+
   it.effect("every kind's ESPN type reads back as that kind, and a field goal's is a good one", () =>
     Effect.gen(function* () {
       const read = yield* Effect.forEach(PlayKind.literals, (kind) =>

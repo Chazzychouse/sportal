@@ -93,7 +93,8 @@ export function typeOf(kind: PlayKind): typeof PlayType.Type {
 const decodeType = Schema.decodeUnknownOption(Schema.Struct({ type: PlayType }))
 
 // ESPN's play type ids, each with its slug, as the 2026-10-04 NFL recording lists them under `/entities/plays`; the tries
-// as the recorded scoreboards name a last play's.
+// as the recorded scoreboards name a last play's; and, by their text, the college types the 2026-10-03 FBS game summaries
+// list.
 const kinds: Readonly<Record<string, PlayKind>> = {
   "2": "endPeriod", // end-period
   "3": "incompletion", // pass-incompletion
@@ -101,6 +102,7 @@ const kinds: Readonly<Record<string, PlayKind>> = {
   "7": "sack", // sack
   "8": "penalty", // penalty
   "9": "fumble", // fumble-recovery-own
+  "14": "punt", // Punt Return
   "15": "twoPoint", // two-point-pass
   "16": "twoPoint", // two-point-rush
   "18": "fieldGoal", // blocked-field-goal
@@ -108,19 +110,23 @@ const kinds: Readonly<Record<string, PlayKind>> = {
   "24": "pass", // pass-reception
   "26": "interception", // pass-interception-return
   "29": "fumbleLost", // fumble-recovery-opponent
+  "32": "kickoff", // Kickoff Return Touchdown
   "36": "interception", // interception-return-touchdown
   "52": "punt", // punt
   "53": "kickoff", // kickoff
   "59": "fieldGoal", // field-goal-good
   "60": "fieldGoal", // field-goal-missed
   "61": "extraPoint", // extra-point-good
+  "63": "interception", // Interception
   "65": "endPeriod", // end-of-half
   "66": "endPeriod", // end-of-game
   "67": "pass", // passing-touchdown
   "68": "rush", // rushing-touchdown
+  "69": "fumble", // Fumble
   // Stoppages no team called: as `timeout`, the team with the ball would read as having taken one.
   "74": "other", // official-timeout
   "75": "other", // two-minute-warning
+  "79": "endPeriod", // End of Regulation
   "80": "fumbleLost" // sack-opp-fumble-recovery
 }
 
