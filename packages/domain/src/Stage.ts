@@ -183,22 +183,15 @@ export class Stage extends Schema.Class<Stage>("sportal/Stage")({
    * tile becomes what the answer says.
    */
   refresh(availabilityOf: (game: GameId) => Option.Option<ChannelAvailability>): Stage {
-    return settle({
-      ...this,
-      tiles: this.tiles.map((tile) =>
-        tile._tag === "Empty"
-          ? tile
-          : Option.match(availabilityOf(tile.game), {
-              onNone: () => tile,
-              onSome: (availability) =>
-                tile._tag === "StreamTile" &&
-                (availability._tag !== "Carried" ||
-                  availability.channel.locator.url === tile.channel.locator.url)
-                  ? tile
-                  : tileFor(tile.game, availability)
-            })
-      )
+    const tiles = this.tiles.map((tile) => {
+      if (tile._tag === "Empty") return tile
+      return Option.match(availabilityOf(tile.game), {
+        onNone: () => tile,
+        onSome: (availability) => (keepsStream(tile, availability) ? tile : tileFor(tile.game, availability))
+      })
     })
+
+    return settle({ ...this, tiles })
   }
 }
 
@@ -272,6 +265,14 @@ function settle(fields: {
     ...(audioFocus === undefined ? {} : { audioFocus }),
     ...(solo === undefined ? {} : { solo })
   })
+}
+
+/** Whether a stream tile stays as it is: only a guide that carries its game on another channel replaces it. */
+function keepsStream(tile: Exclude<Tile, { _tag: "Empty" }>, availability: ChannelAvailability): boolean {
+  return (
+    tile._tag === "StreamTile" &&
+    (availability._tag !== "Carried" || availability.channel.locator.url === tile.channel.locator.url)
+  )
 }
 
 function reject(reason: StageRejection["reason"]) {
