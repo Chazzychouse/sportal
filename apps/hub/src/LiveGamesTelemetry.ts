@@ -2,26 +2,75 @@ import { type GameId, GameSnapshot } from "@sportal/domain/Game"
 import type { GameEvent } from "@sportal/domain/GameEvent"
 import type { LiveGame, LiveGameState } from "@sportal/domain/LiveGame"
 import { FoldReport } from "@sportal/domain/LiveGames"
-import {
-  Cause,
-  type Data,
-  DateTime,
-  Duration,
-  Effect,
-  Exit,
-  Metric,
-  Option,
-  PubSub,
-  Ref,
-  Schema
-} from "effect"
+import { Cause, DateTime, Duration, Effect, Exit, Match, Metric, Option, Schema } from "effect"
+import { noticed } from "./DecodeTelemetry.ts"
+import type { Following } from "./LiveGames.ts"
+import type { Decoded } from "./provider/Provider.ts"
 
-/** A report's logs, metrics, and published events, as a live fold tells them. */
-export function reported(
-  report: FoldReport,
-  seq: Option.Option<number>,
-  events: PubSub.PubSub<Data.TaggedEnum.Value<FoldReport, "Happened">>
+/**
+ * What one take or tick of the live games did, told as their following stands. During the replay, only a defect is
+ * logged: every report and notice was told when its frame first arrived. Otherwise each notice of the frame taken is told,
+ * then each report is logged and counted. `frame` is the frame taken; a tick has none.
+ */
+export function told(
+  following: Following,
+  frame: Option.Option<Decoded>,
+  reports: ReadonlyArray<FoldReport>
 ): Effect.Effect<void> {
+  const seq = Option.map(frame, ({ seq }) => seq)
+  const loudly = () =>
+    Option.match(frame, {
+      onNone: () => Effect.void,
+      onSome: ({ notices, seq }) =>
+        Effect.forEach(notices, (notice) => noticed(notice, seq), { discard: true })
+    }).pipe(Effect.andThen(Effect.forEach(reports, (report) => toldLive(report, seq), { discard: true })))
+  return Match.valueTags(following, {
+    Replaying: () => Effect.forEach(reports, (report) => toldInReplay(report, seq), { discard: true }),
+    Live: loudly,
+    Halted: loudly
+  })
+}
+
+/** A held game's state gauge. */
+export function gaugeHeld(liveGame: LiveGame): Effect.Effect<void> {
+  return gaugeState(liveGame, stateValues[liveGame.state._tag])
+}
+
+/** Gauges how many live games are in each state; a state with none reads 0. */
+export function countByState(games: ReadonlyMap<GameId, LiveGame>): Effect.Effect<void> {
+  const states = [...games.values()].map(({ state }) => state._tag)
+  return Effect.forEach(
+    everyState,
+    (state) =>
+      Metric.update(
+        Metric.withAttributes(liveGamesByState, { state }),
+        states.filter((other) => other === state).length
+      ),
+    { discard: true }
+  )
+}
+
+/** A defect in the fold's timer, logged and counted. */
+export function timerDefect(defect: unknown): Effect.Effect<void> {
+  return Effect.logError("LiveGames: the timer raised a defect", Cause.die(defect)).pipe(
+    Effect.andThen(Metric.update(gameDefects, 1))
+  )
+}
+
+/** A report as a replay tells it: only a defect is logged. */
+function toldInReplay(report: FoldReport, seq: Option.Option<number>): Effect.Effect<void> {
+  return FoldReport.$is("Raised")(report)
+    ? logDefect(
+        `LiveGames: ${report.by} raised a defect in replay; keeping the last good live game`,
+        report.cause,
+        report.snapshot,
+        seq
+      )
+    : Effect.void
+}
+
+/** A report's logs and metrics, as a live fold tells them. */
+function toldLive(report: FoldReport, seq: Option.Option<number>): Effect.Effect<void> {
   return FoldReport.$match(report, {
     Took: ({ snapshot, from, outcome, had }) =>
       Effect.logDebug(
@@ -60,7 +109,6 @@ export function reported(
             ? Metric.update(Metric.withAttributes(plays, { league: happened.snapshot.league }), 1)
             : Effect.void
         ),
-        Effect.andThen(PubSub.publish(events, happened)),
         Effect.annotateLogs(annotationsOf(happened.snapshot))
       ),
     Dropped: ({ game }) =>
@@ -70,56 +118,6 @@ export function reported(
     Raised: ({ snapshot, cause, by }) =>
       logDefect(`LiveGames: ${by} raised a defect; keeping the last good live game`, cause, snapshot, seq)
   })
-}
-
-/** A report as a replay tells it: only plays are counted for the summary, and a defect is still logged. */
-export function quiet(
-  report: FoldReport,
-  seq: Option.Option<number>,
-  plays: Ref.Ref<number>
-): Effect.Effect<void> {
-  return FoldReport.$match(report, {
-    Took: () => Effect.void,
-    Started: () => Effect.void,
-    Changed: () => Effect.void,
-    Stopped: () => Effect.void,
-    Happened: ({ event }) =>
-      event._tag === "Played" ? Ref.update(plays, (count) => count + 1) : Effect.void,
-    Dropped: () => Effect.void,
-    Raised: ({ snapshot, cause, by }) =>
-      logDefect(
-        `LiveGames: ${by} raised a defect in replay; keeping the last good live game`,
-        cause,
-        snapshot,
-        seq
-      )
-  })
-}
-
-/** A held game's state gauge. */
-export function gaugeHeld(liveGame: LiveGame): Effect.Effect<void> {
-  return gaugeState(liveGame, stateValues[liveGame.state._tag])
-}
-
-/** Gauges how many live games are in each state; a state with none reads 0. */
-export function countByState(games: ReadonlyMap<GameId, LiveGame>): Effect.Effect<void> {
-  const states = [...games.values()].map(({ state }) => state._tag)
-  return Effect.forEach(
-    everyState,
-    (state) =>
-      Metric.update(
-        Metric.withAttributes(liveGamesByState, { state }),
-        states.filter((other) => other === state).length
-      ),
-    { discard: true }
-  )
-}
-
-/** A defect in the fold's timer, logged and counted. */
-export function timerDefect(defect: unknown): Effect.Effect<void> {
-  return Effect.logError("LiveGames: the timer raised a defect", Cause.die(defect)).pipe(
-    Effect.andThen(Metric.update(gameDefects, 1))
-  )
 }
 
 /** Game `snapshot`'s log annotations and metric attributes. */
@@ -254,5 +252,5 @@ const gameEvents = Metric.counter("sportal_game_events", {
 })
 
 export const takeDuration = Metric.timer("sportal_take_duration", {
-  description: "How long the fold takes to apply one delivery, as its caller waits"
+  description: "How long the fold takes to apply one frame"
 })

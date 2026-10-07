@@ -1,14 +1,15 @@
 import { readFileSync } from "node:fs"
 import { assert, describe, it } from "@effect/vitest"
-import { GameId, type GameSnapshot } from "@sportal/domain/Game"
+import { GameId } from "@sportal/domain/Game"
 import { snapshot } from "@sportal/domain/TestGame"
 import { Deferred, Effect, Layer, Queue, Schedule, Schema, Stream } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/http"
 import * as Socket from "effect/socket/Socket"
 import { TestClock } from "effect/testing"
 import type { FeedFrame } from "../../Frame.ts"
+import { withEnv } from "../../TestHubConfig.ts"
 import { counted, recordingLogs, withMetrics } from "../../TestTelemetry.ts"
-import type { ProviderError } from "../Provider.ts"
+import { LiveFeedDemand, type ProviderError } from "../Provider.ts"
 import { FastCast } from "./FastCast.ts"
 
 describe("FastCast", () => {
@@ -91,17 +92,20 @@ describe("FastCast", () => {
   it.effect("a newly wanted game subscribes its game topic once", () =>
     Effect.gen(function* () {
       const server = fakeServer()
-      const { wanted } = yield* nflFrames(server)
+      const { demand } = yield* nflFrames(server)
       const gameTopics = () =>
         server.sent.all().flatMap((frame) => (frame.tc?.startsWith("gp-") ? [frame] : []))
 
-      yield* Queue.offer(wanted, [nflGame("401872971")])
+      yield* Queue.offer(demand, LiveFeedDemand.Games({ games: [nflGame("401872971")] }))
       yield* server.sent.until(subscribed("gp-football-nfl-401872971", 1))
       assert.deepStrictEqual(gameTopics(), [{ op: "S", sid: "sid-1", tc: "gp-football-nfl-401872971" }])
 
       // Wanted changes are taken in order, so once the third has subscribed, the second has sent all it would.
-      yield* Queue.offer(wanted, [nflGame("401872971")])
-      yield* Queue.offer(wanted, [nflGame("401872971"), nflGame("401872972")])
+      yield* Queue.offer(demand, LiveFeedDemand.Games({ games: [nflGame("401872971")] }))
+      yield* Queue.offer(
+        demand,
+        LiveFeedDemand.Games({ games: [nflGame("401872971"), nflGame("401872972")] })
+      )
       yield* server.sent.until(subscribed("gp-football-nfl-401872972", 1))
       assert.deepStrictEqual(
         gameTopics().map((frame) => frame.tc),
@@ -119,8 +123,11 @@ describe("FastCast", () => {
         const server = fakeServer()
         const missing = "gp-football-nfl-401872971"
         const other = "gp-football-nfl-401872972"
-        const { ended, frames, wanted } = yield* nflFrames(server).pipe(Effect.provide(layer))
-        yield* Queue.offer(wanted, [nflGame("401872971"), nflGame("401872972")])
+        const { ended, frames, demand } = yield* nflFrames(server).pipe(Effect.provide(layer))
+        yield* Queue.offer(
+          demand,
+          LiveFeedDemand.Games({ games: [nflGame("401872971"), nflGame("401872972")] })
+        )
         yield* server.sent.until(subscribed(other, 1))
         yield* Effect.sync(() => {
           server.send({ op: "H", tc: missing, mid: 5, pl: "https://checkpoint.test/missing" })
@@ -164,16 +171,16 @@ describe("FastCast", () => {
     () =>
       Effect.gen(function* () {
         const server = fakeServer()
-        const { frames, resync } = yield* nflFrames(server)
+        const { frames, demand } = yield* nflFrames(server)
         yield* frames.until(atLeast(2))
         yield* Effect.sync(() => server.send(checkpointMessage(7)))
         yield* frames.until(atLeast(4))
 
-        yield* Queue.offer(resync, "gp-football-nfl-401872971")
-        yield* Queue.offer(resync, "event-football-nfl")
+        yield* Queue.offer(demand, LiveFeedDemand.Resync({ channel: "gp-football-nfl-401872971" }))
+        yield* Queue.offer(demand, LiveFeedDemand.Resync({ channel: "event-football-nfl" }))
         yield* server.sent.until(subscribed("event-football-nfl", 2))
         // Waiting for its checkpoint already: a second resync asks for nothing more.
-        yield* Queue.offer(resync, "event-football-nfl")
+        yield* Queue.offer(demand, LiveFeedDemand.Resync({ channel: "event-football-nfl" }))
         yield* Effect.sync(() => server.send(checkpointMessage(20)))
         yield* frames.until((all) =>
           all.some((frame) => frame.kind === "checkpoint" && frame.sourceId === 20)
@@ -243,11 +250,11 @@ describe("FastCast", () => {
   it.effect("a resync of a topic already being followed again sends no second S", () =>
     Effect.gen(function* () {
       const server = fakeServer()
-      const { frames, resync } = yield* nflFrames(server)
+      const { frames, demand } = yield* nflFrames(server)
       yield* frames.until(atLeast(2))
       yield* Effect.sync(() => server.send(missingCheckpoint(5)))
       yield* frames.until(atLeast(3))
-      yield* Queue.offer(resync, "event-football-nfl")
+      yield* Queue.offer(demand, LiveFeedDemand.Resync({ channel: "event-football-nfl" }))
       yield* TestClock.adjust("1 second")
 
       assert.lengthOf(
@@ -291,13 +298,13 @@ describe("FastCast", () => {
       Effect.gen(function* () {
         const { logs, layer } = recordingLogs()
         const server = fakeServer()
-        const { frames, resync } = yield* nflFrames(server, Schedule.recurs(1)).pipe(Effect.provide(layer))
+        const { frames, demand } = yield* nflFrames(server, Schedule.recurs(1)).pipe(Effect.provide(layer))
         yield* frames.until(atLeast(2))
         yield* Effect.sync(() => server.send(missingCheckpoint(1)))
         yield* server.sent.until(subscribed("event-football-nfl", 2))
         yield* Effect.sync(() => server.send(missingCheckpoint(2)))
         yield* frames.until((all) => all.some((frame) => frame.sourceId === 2))
-        yield* Queue.offer(resync, "event-football-nfl")
+        yield* Queue.offer(demand, LiveFeedDemand.Resync({ channel: "event-football-nfl" }))
         yield* TestClock.adjust("1 minute")
 
         assert.lengthOf(
@@ -313,7 +320,7 @@ describe("FastCast", () => {
 
 /**
  * Runs FastCast's push for the NFL over `server` in a fiber of its own, collecting them into `frames` and completing
- * `ended` with how it ended. `wanted` takes the current games, and `resync` the topics their decoder resyncs.
+ * `ended` with how it ended. `demand` takes the current games, and the topics their decoder resyncs.
  */
 function nflFrames(
   server: ReturnType<typeof fakeServer>,
@@ -322,20 +329,19 @@ function nflFrames(
   return Effect.gen(function* () {
     const ended = yield* Deferred.make<void, ProviderError>()
     const frames = watched<FeedFrame>()
-    const wanted = yield* Queue.unbounded<ReadonlyArray<GameSnapshot>>()
-    const resync = yield* Queue.unbounded<string>()
-    yield* (yield* FastCast).push(["nfl"], Stream.fromQueue(wanted), Stream.fromQueue(resync)).pipe(
+    const demand = yield* Queue.unbounded<LiveFeedDemand>()
+    yield* (yield* FastCast).push(Stream.fromQueue(demand)).pipe(
       Stream.runForEach((frame) => Effect.sync(() => frames.add(frame))),
       Deferred.into(ended),
       Effect.forkChild({ startImmediately: true })
     )
-    return { ended, frames, wanted, resync }
+    return { ended, frames, demand }
   }).pipe(
     Effect.provide(
       (checkpointRetry === undefined
         ? FastCast.layer
         : Layer.effect(FastCast, FastCast.make(checkpointRetry))
-      ).pipe(Layer.provide(fastCast(server)))
+      ).pipe(Layer.provide([fastCast(server), withEnv({ SPORTAL_LEAGUES: "nfl" }).pipe(Layer.orDie)]))
     )
   )
 }

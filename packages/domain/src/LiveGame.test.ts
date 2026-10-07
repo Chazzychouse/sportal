@@ -22,7 +22,7 @@ const staleGame = new LiveGame({ ...liveGame, state: LiveGameState.Stale({ updat
 
 const liveAt = (updatedAt: DateTime.Utc) => LiveGameState.Live({ updatedAt })
 const taken = (game: LiveGame, taking: GameSnapshot, from: DeliverySource, now: DateTime.Utc) =>
-  game.take(Delivery.Snapshot({ snapshot: taking, from }), now).liveGame
+  game.take(Delivery.cases.Snapshot.make({ snapshot: taking, from }), now).liveGame
 const ticked = (game: LiveGame, now: DateTime.Utc) => game.tick(now)
 
 describe("LiveGame.updatedAt", () => {
@@ -303,7 +303,7 @@ describe("LiveGame#take, plays", () => {
   const first = play()
   const second = play({ id: PlayId.make("2"), sequence: 2, scoring: true, homeScore: 7, kind: "pass" })
   const take = (game: LiveGame, plays: ReadonlyArray<Play>) =>
-    game.take(Delivery.Plays({ game: live.id, plays }), later)
+    game.take(Delivery.cases.Plays.make({ game: live.id, plays }), later)
   const withFirst = Option.getOrThrow(take(liveGame, [first]).liveGame)
   const secondsEvents = [
     GameEvent.Played({ play: second }),
@@ -342,7 +342,10 @@ describe("LiveGame#take, a snapshot's events", () => {
   })
 
   it("before any plays, a score change is the snapshot's", () => {
-    const { events } = liveGame.take(Delivery.Snapshot({ snapshot: scoredFinal, from: "poll" }), later)
+    const { events } = liveGame.take(
+      Delivery.cases.Snapshot.make({ snapshot: scoredFinal, from: "poll" }),
+      later
+    )
     assert.include(
       events.map((event) => event._tag),
       "ScoreChanged"
@@ -354,9 +357,12 @@ describe("LiveGame#take, a snapshot's events", () => {
   })
   it("once plays exist, the plays own the score change, and the snapshot still goes final", () => {
     const withPlay = Option.getOrThrow(
-      liveGame.take(Delivery.Plays({ game: live.id, plays: [play()] }), later).liveGame
+      liveGame.take(Delivery.cases.Plays.make({ game: live.id, plays: [play()] }), later).liveGame
     )
-    const { events } = withPlay.take(Delivery.Snapshot({ snapshot: scoredFinal, from: "poll" }), later)
+    const { events } = withPlay.take(
+      Delivery.cases.Snapshot.make({ snapshot: scoredFinal, from: "poll" }),
+      later
+    )
     assert.notInclude(
       events.map((event) => event._tag),
       "ScoreChanged"
@@ -368,7 +374,7 @@ describe("LiveGame#take, a snapshot's events", () => {
   })
   it("keeps the plays", () => {
     const withPlay = Option.getOrThrow(
-      liveGame.take(Delivery.Plays({ game: live.id, plays: [play()] }), later).liveGame
+      liveGame.take(Delivery.cases.Plays.make({ game: live.id, plays: [play()] }), later).liveGame
     )
     assert.deepStrictEqual(
       taken(withPlay, scoredFinal, "poll", later).pipe(Option.map((game) => game.plays)),
@@ -376,9 +382,12 @@ describe("LiveGame#take, a snapshot's events", () => {
     )
   })
   it("a snapshot behind gives no events", () => {
-    assert.deepStrictEqual(liveGame.take(Delivery.Snapshot({ snapshot: liveBehind, from: "poll" }), later), {
-      liveGame: Option.none(),
-      events: []
-    })
+    assert.deepStrictEqual(
+      liveGame.take(Delivery.cases.Snapshot.make({ snapshot: liveBehind, from: "poll" }), later),
+      {
+        liveGame: Option.none(),
+        events: []
+      }
+    )
   })
 })

@@ -83,8 +83,8 @@ export function play(overrides: Partial<Play> = {}): Play {
 }
 
 /**
- * `fold` after `slate` is polled at `now`: each league's games as one listing, as Ingest polls. For tests that play a
- * scenario poll by poll.
+ * `fold` after `slate` is polled at `now`: each league's games as one listing in a frame of its own, as Ingest polls.
+ * For tests that play a scenario poll by poll.
  */
 export function polled(fold: LiveGames, slate: ReadonlyArray<GameSnapshot>, now: DateTime.Utc): LiveGames {
   return Effect.runSync(
@@ -93,11 +93,13 @@ export function polled(fold: LiveGames, slate: ReadonlyArray<GameSnapshot>, now:
       () => fold,
       (folded, league) =>
         folded
-          .step(
-            Option.some(Delivery.Listing({ league, games: slate.filter((game) => game.league === league) })),
-            now,
-            Option.none()
-          )
+          .take({
+            deliveries: [
+              Delivery.cases.Listing.make({ league, games: slate.filter((game) => game.league === league) })
+            ],
+            at: now,
+            seq: Option.getOrElse(folded.seq, () => 0) + 1
+          })
           .pipe(Effect.map(({ next }) => next))
     )
   )

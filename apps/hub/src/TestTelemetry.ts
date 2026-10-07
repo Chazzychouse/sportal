@@ -1,10 +1,11 @@
-import { Cause, Effect, type Exit, Layer, Logger, Metric, References, Tracer } from "effect"
+import { Cause, Effect, type Exit, Layer, Logger, type LogLevel, Metric, References, Tracer } from "effect"
 
 /**
  * A logger for a test that records every message it is given, with its level, annotations, and cause (pretty-printed,
- * empty when there is none), beside the default one. `layer` installs it.
+ * empty when there is none), beside the default one. `layer` installs it, and lowers the minimum level to `minimum` when
+ * given.
  */
-export function recordingLogs() {
+export function recordingLogs(minimum?: LogLevel.LogLevel) {
   const logs: Array<{
     readonly level: string
     readonly message: string
@@ -19,7 +20,14 @@ export function recordingLogs() {
       cause: Cause.pretty(cause)
     })
   })
-  return { logs, layer: Logger.layer([recorder], { mergeWithExisting: true }) }
+  const recorded = Logger.layer([recorder], { mergeWithExisting: true })
+  return {
+    logs,
+    layer:
+      minimum === undefined
+        ? recorded
+        : Layer.merge(recorded, Layer.succeed(References.MinimumLogLevel, minimum))
+  }
 }
 
 /** A tracer for a test that records each span in `ended` as it ends. */

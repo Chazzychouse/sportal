@@ -305,7 +305,8 @@
     {
       "id": 10,
       "type": "timeseries",
-      "title": "Take latency",
+      "title": "Frame take latency",
+      "description": "How long the fold takes to apply one frame.",
       "gridPos": {
         "x": 12,
         "y": 33,

@@ -5,8 +5,8 @@ import { liveSnapshot, snapshot } from "@sportal/domain/TestGame"
 import { Effect, Layer, Ref, Stream } from "effect"
 import { TestClock } from "effect/testing"
 import { LiveGames } from "./LiveGames.ts"
-import { taken } from "./provider/TestProvider.ts"
 import { Slate } from "./Slate.ts"
+import { delivered, liveGames } from "./TestFeed.ts"
 
 describe("Slate", () => {
   it.effect("keeps the listing's order, leagues in their order", () =>
@@ -85,12 +85,12 @@ describe("Slate", () => {
 })
 
 /** The Slate over a fold the test feeds, which is also provided to the test. */
-const slateOverFold = Slate.layer.pipe(Layer.provideMerge(LiveGames.layer))
+const slateOverFold = Slate.layer.pipe(Layer.provideMerge(liveGames()))
 
 function listing(league: "nfl" | "fbs", games: ReadonlyArray<GameSnapshot>) {
-  return taken(Delivery.Listing({ league, games }))
+  return delivered(Delivery.cases.Listing.make({ league, games }))
 }
 
 function push(snapshot: GameSnapshot) {
-  return taken(Delivery.Snapshot({ snapshot, from: "push" }))
+  return delivered(Delivery.cases.Snapshot.make({ snapshot, from: "push" }))
 }

@@ -56,7 +56,7 @@ export class LiveGame extends Data.Class<{
    * cover (`fromPlays`), and a snapshot gives only the rest. A `Plays` delivery replaces the list.
    */
   take(
-    delivery: Data.TaggedEnum.Value<Delivery, "Snapshot" | "Plays">,
+    delivery: Extract<Delivery, { readonly _tag: "Snapshot" | "Plays" }>,
     now: DateTime.Utc
   ): { readonly liveGame: Option.Option<LiveGame>; readonly events: ReadonlyArray<GameEvent> } {
     if (delivery._tag === "Plays") {

@@ -11,12 +11,13 @@ import { HttpApiClient } from "effect/http-api"
 import { TestClock } from "effect/testing"
 import * as Database from "../Database.ts"
 import { FeedLog } from "../FeedLog.ts"
-import * as Ingest from "../ingest/Ingest.ts"
+import * as Ingest from "../Ingest.ts"
 import { LiveGames } from "../LiveGames.ts"
-import { polling } from "../provider/TestProvider.ts"
+import * as SnapshotDecode from "../provider/snapshot/SnapshotDecode.ts"
 import { Slate } from "../Slate.ts"
 import { StageSessions } from "../StageSessions.ts"
 import * as YouTubeTv from "../source/youtube-tv/YouTubeTv.ts"
+import { polled } from "../TestFeed.ts"
 import { withEnv } from "../TestHubConfig.ts"
 import * as HubServer from "./HubServer.ts"
 
@@ -276,12 +277,13 @@ function hubUnderTest() {
   return StageSessions.layer.pipe(
     Layer.provideMerge(YouTubeTv.layer),
     Layer.provideMerge(Layer.mergeAll(Slate.layer, Ingest.layer)),
-    Layer.provide([
-      LiveGames.layer,
-      polling(() => Effect.succeed([game])),
-      DateTime.layerCurrentZoneLocal,
-      FeedLog.layer.pipe(Layer.provide([Database.at(":memory:"), NodeCrypto.layer]))
-    ]),
+    Layer.provide(
+      LiveGames.layer.pipe(
+        Layer.provideMerge(FeedLog.layer.pipe(Layer.provide([Database.at(":memory:"), NodeCrypto.layer]))),
+        Layer.provide([SnapshotDecode.layer, DateTime.layerCurrentZoneLocal])
+      )
+    ),
+    Layer.provide(polled(() => Effect.succeed([game]))),
     Layer.provideMerge(
       withEnv({ SPORTAL_VERSION: "1.2.3", SPORTAL_DATA_DIR: "unused", SPORTAL_LEAGUES: "fbs" })
     )

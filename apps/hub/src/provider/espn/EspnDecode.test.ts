@@ -3,10 +3,10 @@ import { assert, describe, layer } from "@effect/vitest"
 import type { Delivery } from "@sportal/domain/Delivery"
 import { GameId, GameSnapshot } from "@sportal/domain/Game"
 import { PlayId } from "@sportal/domain/Play"
-import { type Data, DateTime, Effect, Metric, Option, Record, Schema, Stream } from "effect"
-import { type FeedFrame, Frame } from "../../Frame.ts"
+import { type Data, DateTime, Effect, Metric, Option, Record, Schema } from "effect"
+import type { FeedFrame } from "../../Frame.ts"
+import { decodedFrames } from "../../TestFeed.ts"
 import { recordingLogs, withMetrics } from "../../TestTelemetry.ts"
-import { Decoder } from "../Decoder.ts"
 import type { Notice } from "../Provider.ts"
 import * as EspnDecode from "./EspnDecode.ts"
 import { EspnEvent } from "./EspnEvent.ts"
@@ -56,7 +56,7 @@ layer(EspnDecode.layer)("EspnDecode", (it) => {
 
     it.effect("each listing and push", () =>
       Effect.gen(function* () {
-        const all = yield* outputs([
+        const all = yield* decoded([
           poll("fbs", fixture("fbs-scoreboard-live.json")),
           poll("nfl", scoreboardBody),
           checkpoint(
@@ -68,27 +68,23 @@ layer(EspnDecode.layer)("EspnDecode", (it) => {
 
         assert.deepStrictEqual(
           encoded(
-            all
-              .filter((output) => output._tag !== "Noted")
-              .map((output) =>
-                output._tag !== "Delivered"
-                  ? { tag: output._tag }
-                  : output.delivery._tag === "Listing"
-                    ? {
-                        seq: output.seq,
-                        tag: "Listing",
-                        league: output.delivery.league,
-                        games: output.delivery.games.map((game) => encode(game))
-                      }
-                    : output.delivery._tag === "Snapshot"
-                      ? {
-                          seq: output.seq,
-                          tag: "Snapshot",
-                          from: output.delivery.from,
-                          snapshot: encode(output.delivery.snapshot)
-                        }
-                      : { seq: output.seq, tag: output.delivery._tag }
-              )
+            all.map((output) =>
+              output.delivery._tag === "Listing"
+                ? {
+                    seq: output.seq,
+                    tag: "Listing",
+                    league: output.delivery.league,
+                    games: output.delivery.games.map((game) => encode(game))
+                  }
+                : output.delivery._tag === "Snapshot"
+                  ? {
+                      seq: output.seq,
+                      tag: "Snapshot",
+                      from: output.delivery.from,
+                      snapshot: encode(output.delivery.snapshot)
+                    }
+                  : { seq: output.seq, tag: output.delivery._tag }
+            )
           ),
           expected.deliveries
         )
@@ -358,7 +354,7 @@ layer(EspnDecode.layer)("EspnDecode", (it) => {
 
   it.effect("the next checkpoint that decodes syncs it", () =>
     Effect.gen(function* () {
-      const all = yield* outputs([
+      const all = yield* decodedFrames([
         poll("nfl", scoreboardBody),
         checkpoint("event-football-nfl", 7, { sports: "not a scoreboard" }),
         checkpoint("event-football-nfl", 4286637, JSON.parse(checkpointBody)),
@@ -370,13 +366,18 @@ layer(EspnDecode.layer)("EspnDecode", (it) => {
 
       assert.deepStrictEqual(
         all.flatMap((output) =>
-          output._tag === "Delivered" && output.seq === 4 && output.delivery._tag === "Snapshot"
-            ? [[output.delivery.snapshot.id, output.delivery.snapshot.away.score]]
+          output.seq === 4
+            ? output.deliveries.flatMap((delivery) =>
+                delivery._tag === "Snapshot" ? [[delivery.snapshot.id, delivery.snapshot.away.score]] : []
+              )
             : []
         ),
         [["401872966", 6]]
       )
-      assert.isFalse(all.some((output) => output._tag === "Resync"))
+      assert.deepStrictEqual(
+        all.flatMap(({ resyncs }) => resyncs),
+        []
+      )
     })
   )
 
@@ -667,14 +668,82 @@ layer(EspnDecode.layer)("EspnDecode", (it) => {
       })
     )
   })
+
+  describe("one Decoded per frame", () => {
+    it.effect("a message that changes no document is a Decoded with only its Received notice", () =>
+      Effect.gen(function* () {
+        const [only, ...rest] = yield* decodedFrames([
+          message("event-football-nfl", 1, [{ op: "replace", path: "/x", value: "1" }])
+        ])
+
+        assert.deepStrictEqual(rest, [])
+        assert.strictEqual(only?.seq, 1)
+        assert.deepStrictEqual(only?.deliveries, [])
+        assert.deepStrictEqual(only?.resyncs, [])
+        assert.deepStrictEqual(
+          only?.notices.map((notice) => notice._tag),
+          ["Received"]
+        )
+      })
+    )
+
+    it.effect("a poll that does not decode is a Decoded with no deliveries and one FrameUndecoded", () =>
+      Effect.gen(function* () {
+        const all = yield* decodedFrames([poll("nfl", "not json")])
+
+        assert.strictEqual(all.length, 1)
+        assert.deepStrictEqual(all[0]?.deliveries, [])
+        assert.deepStrictEqual(
+          all[0]?.notices.map((notice) => notice._tag),
+          ["FrameUndecoded"]
+        )
+      })
+    )
+
+    it.effect("a scoreboard push is a Decoded of each pushed game's Snapshot, noted Pushed", () =>
+      Effect.gen(function* () {
+        const all = yield* decodedFrames([poll("nfl", scoreboardBody), ...recorded(socketTexts.slice(0, 3))])
+        const pushing = all.find((one) => one.notices.some((notice) => notice._tag === "Pushed"))
+
+        assert.strictEqual(pushing?.deliveries.length, 16)
+        assert.isTrue(pushing?.deliveries.every((delivery) => delivery._tag === "Snapshot"))
+      })
+    )
+
+    it.effect("a dropped document is a Decoded whose resyncs are its topic", () =>
+      Effect.gen(function* () {
+        const all = yield* decodedFrames([
+          poll("nfl", scoreboardBody),
+          ...recorded(socketTexts.slice(0, 3)),
+          message("event-football-nfl", 4286638, [{ op: "test", path: `${ariAtNyg}/clock`, value: "1:00" }])
+        ])
+
+        assert.deepStrictEqual(all.at(-1)?.resyncs, ["event-football-nfl"])
+      })
+    )
+
+    it.effect("N frames in give N Decoded out, with matching seqs", () =>
+      Effect.gen(function* () {
+        const frames = [poll("nfl", scoreboardBody), poll("nfl", "not json"), ...recorded(socketTexts)]
+        const all = yield* decodedFrames(frames)
+
+        assert.deepStrictEqual(
+          all.map(({ seq }) => seq),
+          frames.map((_, index) => index + 1)
+        )
+      })
+    )
+  })
 })
 
 /** What `frames` decode to, each numbered by its place from 1: the deliveries, and what decoding noticed. */
 function said(frames: ReadonlyArray<FeedFrame>) {
-  return outputs(frames).pipe(
+  return decodedFrames(frames).pipe(
     Effect.map((all) => ({
-      deliveries: all.flatMap((output) => (output._tag === "Delivered" ? [output] : [])),
-      noted: all.flatMap((output) => (output._tag === "Noted" ? [output] : []))
+      deliveries: all.flatMap(({ seq, at, deliveries }) =>
+        deliveries.map((delivery) => ({ seq, at, delivery }))
+      ),
+      noted: all.flatMap(({ seq, notices }) => notices.map((notice) => ({ seq, notice })))
     }))
   )
 }
@@ -693,24 +762,12 @@ function count<T extends Notice["_tag"]>(
 
 /** The deliveries `frames` decode to, each numbered by its place from 1. */
 function decoded(frames: ReadonlyArray<FeedFrame>) {
-  return outputs(frames).pipe(
-    Effect.map((all) => all.flatMap((output) => (output._tag === "Delivered" ? [output] : [])))
-  )
+  return said(frames).pipe(Effect.map(({ deliveries }) => deliveries))
 }
 
 /** The channels decoding `frames` asks to have checkpointed again, in order. */
 function resyncs(frames: ReadonlyArray<FeedFrame>) {
-  return outputs(frames).pipe(
-    Effect.map((all) => all.flatMap((output) => (output._tag === "Resync" ? [output.channel] : [])))
-  )
-}
-
-function outputs(frames: ReadonlyArray<FeedFrame>) {
-  return Decoder.use((decoder) =>
-    decoder
-      .decode(Stream.fromIterable(frames.map((frame, index) => new Frame({ ...frame, seq: index + 1 }))))
-      .pipe(Stream.runCollect)
-  )
+  return decodedFrames(frames).pipe(Effect.map((all) => all.flatMap(({ resyncs }) => resyncs)))
 }
 
 const at = DateTime.makeUnsafe("2026-10-04T18:00:00Z")

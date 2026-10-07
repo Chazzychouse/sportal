@@ -1,7 +1,7 @@
 import { Effect, Metric, Option, Record } from "effect"
-import { Notice } from "../provider/Provider.ts"
+import { Notice } from "./provider/Provider.ts"
 
-/** What decode noticed in frame `seq`, as logs and metrics. Ingest tells only notices from frames after the replay. */
+/** What decode noticed in frame `seq`, as logs and metrics. LiveGames tells notices only from frames after the replay. */
 export function noticed(notice: Notice, seq: number): Effect.Effect<void> {
   return Notice.$match(notice, {
     Received: ({ league, op, topic, mid }) =>

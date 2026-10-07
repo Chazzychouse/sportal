@@ -11,11 +11,12 @@ import * as EspnPlay from "./EspnPlay.ts"
 import * as FastCastDocument from "./FastCastDocument.ts"
 
 /**
- * ESPN's decode as the `Decoder`: what each ESPN frame said, in order. A poll response is its league's `Listing`. A
- * scoreboard topic's change is a pushed `Snapshot` of each game it touched, advanced to the game its league last listed
- * (FastCast has no short names); a game no listing has is noted `Unlisted` and not delivered. A game topic's change is
- * a `Plays` of the game's whole list, in `Play.order`. A topic whose document was sent back to waiting for a checkpoint
- * is a `Resync` of it. A frame that does not decode is noted `FrameUndecoded` and skipped. Logs and counts nothing.
+ * ESPN's decode as the `Decoder`: what each ESPN frame said, one `Decoded` per frame, in order. A poll response is its
+ * league's `Listing`. A scoreboard topic's change is a pushed `Snapshot` of each game it touched, advanced to the game
+ * its league last listed (FastCast has no short names); a game no listing has is noted `Unlisted` and not delivered. A
+ * game topic's change is a `Plays` of the game's whole list, in `Play.order`. A topic whose document was sent back to
+ * waiting for a checkpoint is a resync of it. A frame that does not decode is noted `FrameUndecoded` and says no
+ * deliveries. Logs and counts nothing.
  */
 export const layer = Layer.succeed(
   Decoder,
@@ -29,7 +30,10 @@ export const layer = Layer.succeed(
             notedTypes: new Set(),
             notedPlays: new Set()
           }),
-          (state, frame) => (frame.feed === "poll" ? listed(state, frame) : pushed(state, frame))
+          (state, frame) =>
+            (frame.feed === "poll" ? listed(state, frame) : pushed(state, frame)).pipe(
+              Effect.map(([next, decoded]) => [next, [decoded]] as const)
+            )
         )
       )
   })
@@ -49,89 +53,83 @@ type State = {
   readonly notedPlays: ReadonlySet<string>
 }
 
-/** What one frame said, as the decode gives it. */
-type Said = ReadonlyArray<Decoded>
-
-function listed(state: State, frame: Frame): Effect.Effect<readonly [State, Said]> {
+function listed(state: State, frame: Frame): Effect.Effect<readonly [State, Decoded]> {
   return Effect.all({ league: decodeLeague(frame.channel), scoreboard: decodeScoreboard(frame.body) }).pipe(
     Effect.flatMap(({ league, scoreboard }) =>
-      gamesOf(league, scoreboard.events, frame.feed).pipe(
+      gamesOf(league, scoreboard.events, "poll").pipe(
         Effect.map(
           ({ games, noticed }) =>
             [
               { ...state, listings: new Map([...state.listings, [league, games]]) },
-              [...noted(frame, noticed), delivered(frame, Delivery.Listing({ league, games }))]
+              Decoded.of(frame, {
+                deliveries: [Delivery.cases.Listing.make({ league, games })],
+                notices: noticed
+              })
             ] as const
         )
       )
     ),
-    Effect.catch((cause) => Effect.succeed([state, [undecodable(frame, cause)]] as const))
+    Effect.catch((cause) => Effect.succeed([state, Decoded.undecodable(frame, cause)] as const))
   )
 }
 
 const decodeLeague = Schema.decodeUnknownEffect(LeagueId)
 const decodeScoreboard = Schema.decodeUnknownEffect(Schema.fromJsonString(Scoreboard))
 
-function pushed(state: State, frame: Frame): Effect.Effect<readonly [State, Said]> {
+function pushed(state: State, frame: Frame): Effect.Effect<readonly [State, Decoded]> {
   return FastCastDocument.advance(state.documents, frame).pipe(
-    Effect.flatMap(({ documents, change, noticed }): Effect.Effect<readonly [State, Said]> => {
+    Effect.flatMap(({ documents, change, noticed }): Effect.Effect<readonly [State, Decoded]> => {
       const moved = { ...state, documents }
-      const told = noted(frame, noticed)
       return Option.match(change, {
-        onNone: () => Effect.succeed([moved, told] as const),
-        onSome: (said) => {
-          switch (said._tag) {
+        onNone: () => Effect.succeed([moved, Decoded.of(frame, { notices: noticed })] as const),
+        onSome: (changed) => {
+          switch (changed._tag) {
             case "Scoreboard":
-              return gamesOf(said.league, said.events, frame.feed).pipe(
+              return gamesOf(changed.league, changed.events, "fastcast").pipe(
                 Effect.map(({ games, noticed: undecoded }) => {
                   const { deliveries, unlisted } = advancedToListed(state.listings, games)
                   return [
                     moved,
-                    [
-                      ...told,
-                      ...noted(frame, [
+                    Decoded.of(frame, {
+                      deliveries,
+                      notices: [
+                        ...noticed,
                         ...undecoded,
-                        Notice.Pushed({ league: said.league, games: games.length }),
+                        Notice.Pushed({ league: changed.league, games: games.length }),
                         ...unlisted.map((game) => Notice.Unlisted({ league: game.league, game: game.id }))
-                      ]),
-                      ...deliveries.map((one) => delivered(frame, one))
-                    ]
+                      ]
+                    })
                   ] as const
                 })
               )
             case "Game":
-              return playsOf(moved, said.league, said.game, said.plays).pipe(
+              return playsOf(moved, changed.league, changed.game, changed.plays).pipe(
                 Effect.map(
                   ({ state: next, noticed: notes, plays }) =>
-                    [next, [...told, ...noted(frame, notes), delivered(frame, plays)]] as const
+                    [
+                      next,
+                      Decoded.of(frame, { deliveries: [plays], notices: [...noticed, ...notes] })
+                    ] as const
                 )
               )
             case "Reset":
               return Effect.succeed([
                 moved,
-                [...told, Decoded.Resync({ channel: frame.channel, seq: frame.seq })]
+                Decoded.of(frame, { resyncs: [frame.channel], notices: noticed })
               ] as const)
           }
         }
       })
     }),
-    Effect.catch((cause) => Effect.succeed([state, [undecodable(frame, cause)]] as const))
+    Effect.catch((cause) => Effect.succeed([state, Decoded.undecodable(frame, cause)] as const))
   )
-}
-
-function delivered(frame: Frame, delivery: Delivery) {
-  return Decoded.Delivered({ delivery, at: frame.receivedAt, seq: frame.seq })
-}
-
-function noted(frame: Frame, notices: ReadonlyArray<Notice>): Said {
-  return notices.map((notice) => Decoded.Noted({ notice, seq: frame.seq }))
 }
 
 /** The events as games; an event that does not decode is noted and skipped, and the rest still delivered. */
 function gamesOf(
   league: LeagueId,
   events: ReadonlyArray<unknown>,
-  feed: Frame["feed"]
+  feed: "poll" | "fastcast"
 ): Effect.Effect<{ readonly games: ReadonlyArray<GameSnapshot>; readonly noticed: ReadonlyArray<Notice> }> {
   return Effect.forEach(events, (event) =>
     decodeEvent[league](event).pipe(
@@ -162,7 +160,9 @@ function advancedToListed(
       {
         onNone: () => Result.fail(game),
         onSome: (listedGame) =>
-          Result.succeed(Delivery.Snapshot({ snapshot: listedGame.advancedTo(game), from: "push" }))
+          Result.succeed(
+            Delivery.cases.Snapshot.make({ snapshot: listedGame.advancedTo(game), from: "push" })
+          )
       }
     )
   )
@@ -206,7 +206,7 @@ function playsOf(
             .map(({ id, cause }) => Notice.PlayUndecoded({ league, game, play: id, cause })),
           ...unknown.map((type) => Notice.PlayTypeUnknown(type))
         ],
-        plays: Delivery.Plays({ game, plays: plays.toSorted(Play.order) })
+        plays: Delivery.cases.Plays.make({ game, plays: plays.toSorted(Play.order) })
       }
     })
   )
@@ -215,11 +215,4 @@ function playsOf(
 const decodePlay = {
   nfl: Schema.decodeUnknownEffect(EspnPlay.Play("nfl")),
   fbs: Schema.decodeUnknownEffect(EspnPlay.Play("fbs"))
-}
-
-function undecodable(frame: Frame, cause: unknown): Decoded {
-  return Decoded.Noted({
-    notice: Notice.FrameUndecoded({ feed: frame.feed, channel: frame.channel, kind: frame.kind, cause }),
-    seq: frame.seq
-  })
 }

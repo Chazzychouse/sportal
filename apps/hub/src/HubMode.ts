@@ -3,11 +3,13 @@ import { DateTime, Effect, Layer, Option } from "effect"
 import { FeedLog } from "./FeedLog.ts"
 import { GameHistory } from "./GameHistory.ts"
 import { HubConfig } from "./HubConfig.ts"
-import * as Ingest from "./ingest/Ingest.ts"
+import * as Ingest from "./Ingest.ts"
 import { LiveGames } from "./LiveGames.ts"
 import * as EspnDecode from "./provider/espn/EspnDecode.ts"
 import * as EspnProvider from "./provider/espn/EspnProvider.ts"
 import { FastCast } from "./provider/espn/FastCast.ts"
+import * as SnapshotDecode from "./provider/snapshot/SnapshotDecode.ts"
+import * as SnapshotProvider from "./provider/snapshot/SnapshotProvider.ts"
 import { Slate } from "./Slate.ts"
 import { RecordedScenarios } from "./scenario/RecordedScenarios.ts"
 import * as ScenarioClock from "./scenario/ScenarioClock.ts"
@@ -29,7 +31,9 @@ export const layer = Layer.unwrap(
   })
 )
 
-// Ingest is built once it has replayed the day's frames into the fold, so the Hub serves only after that.
+// The live games are built once they have replayed the day's frames, so the Hub serves only after that. They and
+// Ingest share one feed log: Ingest appends to it, and the live games follow it. Neither is
+// provided onward: nothing outside the Hub's own layers needs them.
 function live() {
   return Layer.mergeAll(
     Layer.mergeAll(
@@ -37,34 +41,43 @@ function live() {
       // Nothing reads the history yet; it only follows the fold.
       Layer.effectDiscard(Layer.build(GameHistory.layer)),
       Ingest.layer.pipe(
-        Layer.provide([
+        Layer.provide(
           EspnProvider.layer.pipe(
             Layer.provide(FastCast.layer),
             Layer.provide(NodeSocket.layerWebSocketConstructorWS)
-          ),
-          FeedLog.inDataDir,
-          DateTime.layerCurrentZoneLocal
-        ])
+          )
+        )
       )
-    ).pipe(Layer.provide(LiveGames.layer)),
+    ).pipe(
+      Layer.provide(LiveGames.layer),
+      Layer.provide(FeedLog.inDataDir),
+      Layer.provide([EspnDecode.layer, DateTime.layerCurrentZoneLocal])
+    ),
     YouTubeTv.layer
   )
 }
 
-// The scenario plays as the provider through the real Ingest, onto a feed log of its own. Ingest, the fold, and the
-// Slate share the scenario's clock; the rest of the Hub keeps the real one. The game history stays out of a scenario.
+// The scenario plays as the provider through the real Ingest, onto a feed log of its own: a written one as the snapshot
+// feed, a recorded one decoded as ESPN, which recorded it. Ingest, the fold, and the Slate share the scenario's clock;
+// the rest of the Hub keeps the real one. The game history stays out of a scenario.
 function scripted() {
   return Layer.mergeAll(
     Layer.mergeAll(
       Slate.layer,
       Ingest.layer.pipe(
-        Layer.provide([
-          ScenarioProvider.layer.pipe(Layer.provide([RecordedScenarios.layer, EspnDecode.layer])),
-          FeedLog.forScenario,
-          DateTime.layerCurrentZoneLocal
-        ])
+        Layer.provide(
+          ScenarioProvider.layer(SnapshotProvider.layer).pipe(Layer.provide(RecordedScenarios.layer))
+        )
       )
-    ).pipe(Layer.provide(LiveGames.layer), Layer.provide(ScenarioClock.layer)),
+    ).pipe(
+      Layer.provide(LiveGames.layer),
+      Layer.provide(FeedLog.forScenario),
+      Layer.provide([
+        ScenarioProvider.decoder({ written: SnapshotDecode.layer, recorded: EspnDecode.layer }),
+        DateTime.layerCurrentZoneLocal
+      ]),
+      Layer.provide(ScenarioClock.layer)
+    ),
     ScenarioSource.layer
   )
 }

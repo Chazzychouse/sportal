@@ -1,131 +1,103 @@
-import { Delivery } from "@sportal/domain/Delivery"
-import { GameSnapshot } from "@sportal/domain/Game"
-import { LeagueId } from "@sportal/domain/League"
-import {
-  Array as Arr,
-  DateTime,
-  Duration,
-  Effect,
-  Layer,
-  Option,
-  Result,
-  Schedule,
-  Schema,
-  Stream
-} from "effect"
+import type { GameSnapshot } from "@sportal/domain/Game"
+import type { LeagueId } from "@sportal/domain/League"
+import { Array as Arr, DateTime, Duration, Effect, Layer, Option, Schedule, Stream } from "effect"
 import type { FeedFrame } from "../Frame.ts"
 import { HubConfig } from "../HubConfig.ts"
-import { Decoder } from "../provider/Decoder.ts"
-import { Decoded, type Polling, Provider, type ProviderError } from "../provider/Provider.ts"
+import type { Decoder } from "../provider/Decoder.ts"
+import { type Polling, Provider } from "../provider/Provider.ts"
 import type { RecordedScenario } from "./RecordedScenario.ts"
 import { RecordedScenarios, ScenarioUnknown, type ScenarioUnreadable } from "./RecordedScenarios.ts"
 import type { Scenario } from "./Scenario.ts"
 import { scenarios } from "./written/Scenarios.ts"
 
 /**
- * The scenario `SPORTAL_SCENARIO` names as the provider and its `Decoder`, on whatever clock runs it, from the moment
- * the layer is built. A written scenario polls its slate at that moment as a frame, never pushes, and provides its own
- * decoder, which reads such a poll back as its league's `Listing`. A recorded one polls the recorded poll current at
- * that moment, received now, and pushes its recorded live feed frames at their recorded offsets; it needs the
- * `Decoder` of the provider that recorded them and provides that one on, so the layer both needs and provides
- * `Decoder`. Either is polled again at its next frame's time, and at least every 10 seconds, so a live game never goes
- * stale between frames. A name that is unset or unknown fails, listing the known ones.
+ * The scenario `SPORTAL_SCENARIO` names as the provider, on whatever clock runs it, from the moment the layer is built.
+ * A written scenario is played by `written`, given what a poll of a league answers (the league's games in its slate at
+ * that scenario time) and when to poll again (at each written frame's time, and at least every 10 seconds). A recorded
+ * scenario polls the recorded poll current at the moment, received now, pushes its recorded live feed frames at their
+ * recorded offsets, and is polled again at its next poll's time and at least every 10 seconds. A name that is unset or
+ * unknown fails, listing the known ones, written and recorded.
  */
-export const layer: Layer.Layer<
-  Provider | Decoder,
-  ScenarioUnknown | ScenarioUnreadable,
-  HubConfig | RecordedScenarios | Decoder
-> = Layer.unwrap(
-  Effect.gen(function* () {
-    const { scenario } = yield* HubConfig
-    const recordedScenarios = yield* RecordedScenarios
-    const start = yield* DateTime.now
-    const name = Option.getOrElse(scenario, () => "")
-    const written = scenarios.get(name)
-    if (written !== undefined) {
-      yield* Effect.logInfo(`ScenarioProvider: playing ${name}, ${written.frames.length} written frames`)
-      const { provider, decoder } = playedWritten(written, start)
-      return Layer.mergeAll(Layer.succeed(Provider, provider), Layer.succeed(Decoder, decoder))
-    }
-    const recorded = yield* recordedScenarios
-      .load(name)
-      .pipe(
-        Effect.catchTag("ScenarioUnknown", ({ known }) =>
-          Effect.fail(new ScenarioUnknown({ name, known: [...scenarios.keys(), ...known] }))
-        )
-      )
-    yield* Effect.logInfo(`ScenarioProvider: playing ${name}, ${recorded.frames.length} recorded frames`)
-    return Layer.mergeAll(
-      Layer.succeed(Provider, playedRecorded(recorded, start)),
-      Layer.succeed(Decoder, yield* Decoder)
-    )
-  })
-)
-
-function playedWritten(scenario: Scenario, start: DateTime.Utc) {
-  return ofSlates(
-    (league) =>
-      DateTime.now.pipe(
-        Effect.map((now) =>
-          scenario.slateAt(start, DateTime.distance(start, now)).filter((game) => game.league === league)
-        ),
-        Effect.withSpan("ScenarioProvider.poll", { attributes: { "sportal.league": league } })
-      ),
-    pollingAt(
-      scenario.frames.map(({ at }) => at),
-      start
+export function layer(
+  written: (feed: {
+    readonly games: (league: LeagueId) => Effect.Effect<ReadonlyArray<GameSnapshot>>
+    readonly polling: Polling
+  }) => Layer.Layer<Provider>
+): Layer.Layer<Provider, ScenarioUnknown | ScenarioUnreadable, HubConfig | RecordedScenarios> {
+  return Layer.unwrap(
+    Effect.map(
+      writtenNamed,
+      Option.match({
+        onSome: (scenario) => Layer.unwrap(Effect.map(feedOf(scenario), written)),
+        onNone: () => recorded
+      })
     )
   )
 }
 
 /**
- * A provider whose poll of a league is `games(league)` as a frame, the games as JSON for its body, which never pushes
- * and is polled on `polling`; and the decoder that reads such a poll back as its league's `Listing`.
+ * The decoder that reads the frames of the scenario `SPORTAL_SCENARIO` names: `written` when it names a written
+ * scenario, and otherwise `recorded`, the decode of the provider that recorded it. It never loads a recording; a name
+ * that is unknown is left for `layer` to fail on.
  */
-function ofSlates(
-  games: (league: LeagueId) => Effect.Effect<ReadonlyArray<GameSnapshot>, ProviderError>,
-  polling: Polling
-) {
-  return {
-    provider: Provider.of({
-      poll: (league) =>
-        Effect.all({ games: games(league), receivedAt: DateTime.now }).pipe(
-          Effect.map(
-            ({ games, receivedAt }): FeedFrame => ({
-              receivedAt,
-              feed: "poll",
-              channel: league,
-              kind: "response",
-              body: encodeGames(games)
-            })
-          )
+export function decoder(adapters: {
+  readonly written: Layer.Layer<Decoder>
+  readonly recorded: Layer.Layer<Decoder>
+}): Layer.Layer<Decoder, never, HubConfig> {
+  return Layer.unwrap(
+    Effect.map(writtenNamed, (named) => (Option.isSome(named) ? adapters.written : adapters.recorded))
+  )
+}
+
+// The written scenario `SPORTAL_SCENARIO` names, if it names one; `layer` and `decoder` choose by it alike.
+const writtenNamed = Effect.gen(function* () {
+  const { scenario } = yield* HubConfig
+  return Option.flatMap(scenario, (name) => Option.fromUndefinedOr(scenarios.get(name)))
+})
+
+// Written `scenario` from now, as the games a poll answers and when to poll again.
+function feedOf(scenario: Scenario) {
+  return Effect.gen(function* () {
+    const start = yield* DateTime.now
+    yield* Effect.logInfo(
+      `ScenarioProvider: playing ${scenario.name}, ${scenario.frames.length} written frames`
+    )
+    return {
+      games: (league: LeagueId) =>
+        DateTime.now.pipe(
+          Effect.map((now) =>
+            scenario.slateAt(start, DateTime.distance(start, now)).filter((game) => game.league === league)
+          ),
+          Effect.withSpan("ScenarioProvider.poll", { attributes: { "sportal.league": league } })
         ),
-      push: () => Stream.never,
-      polling
-    }),
-    decoder: Decoder.of({
-      decode: (frames) =>
-        frames.pipe(
-          Stream.filterMap((frame) =>
-            Option.match(
-              Option.all({ league: decodeLeague(frame.channel), games: decodeGames(frame.body) }),
-              {
-                onNone: () => Result.failVoid,
-                onSome: ({ league, games }) =>
-                  Result.succeed(
-                    Decoded.Delivered({
-                      delivery: Delivery.Listing({ league, games }),
-                      at: frame.receivedAt,
-                      seq: frame.seq
-                    })
-                  )
-              }
-            )
+      polling: pollingAt(
+        scenario.frames.map(({ at }) => at),
+        start
+      )
+    }
+  })
+}
+
+// The recorded scenario `SPORTAL_SCENARIO` names as the provider, from the moment the layer is built.
+const recorded: Layer.Layer<Provider, ScenarioUnknown | ScenarioUnreadable, HubConfig | RecordedScenarios> =
+  Layer.effect(
+    Provider,
+    Effect.gen(function* () {
+      const { scenario } = yield* HubConfig
+      const recordedScenarios = yield* RecordedScenarios
+      const start = yield* DateTime.now
+      const name = Option.getOrElse(scenario, () => "")
+      const loaded = yield* recordedScenarios
+        .load(name)
+        .pipe(
+          Effect.catchTag("ScenarioUnknown", ({ known }) =>
+            Effect.fail(new ScenarioUnknown({ name, known: [...scenarios.keys(), ...known] }))
           )
         )
+      yield* Effect.logInfo(`ScenarioProvider: playing ${name}, ${loaded.frames.length} recorded frames`)
+      return playedRecorded(loaded, start)
     })
-  }
-}
+  )
 
 function playedRecorded(scenario: RecordedScenario, start: DateTime.Utc) {
   const origin = scenario.origin()
@@ -170,7 +142,9 @@ function playedRecorded(scenario: RecordedScenario, start: DateTime.Utc) {
     polling: pollingAt(
       polls.map((frame) => Duration.toMillis(offsetOf(frame))),
       start
-    )
+    ),
+    // Its push never fails.
+    reconnect: Schedule.spaced("1 second")
   })
 }
 
@@ -201,8 +175,3 @@ const longest = 10_000
 
 // A scoreboard with no games, for a league a recorded scenario never polled.
 const noEvents = JSON.stringify({ events: [] })
-
-const Games = Schema.fromJsonString(Schema.Array(GameSnapshot))
-const encodeGames = Schema.encodeSync(Games)
-const decodeGames = Schema.decodeUnknownOption(Games)
-const decodeLeague = Schema.decodeUnknownOption(LeagueId)

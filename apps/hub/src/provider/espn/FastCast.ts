@@ -23,14 +23,15 @@ import {
 import { HttpClient, HttpClientResponse } from "effect/http"
 import * as Socket from "effect/socket/Socket"
 import type { FeedFrame } from "../../Frame.ts"
-import { type LiveFeed, ProviderError } from "../Provider.ts"
+import { HubConfig } from "../../HubConfig.ts"
+import { type LiveFeed, LiveFeedDemand, ProviderError } from "../Provider.ts"
 import * as FastCastMessage from "./FastCastMessage.ts"
 
 /**
  * ESPN FastCast as the ESPN provider's push: one socket subscribed to each league's scoreboard topic, and to the game
- * topic of each game wanted while it is open. Every socket text is a frame, each `H` followed by its checkpoint; fails
- * when the socket closes, ends, or goes quiet. A topic whose checkpoint fails is followed again
- * on the retry `FastCast.make` is given; `FastCast.layer` gives it `layer`'s own.
+ * topic of each game its demand names while it is open, each channel its demand resyncs followed again. Every socket
+ * text is a frame, each `H` followed by its checkpoint; fails when the socket closes, ends, or goes quiet. A topic whose
+ * checkpoint fails is followed again on the retry `FastCast.make` is given; `FastCast.layer` gives it `layer`'s own.
  */
 export class FastCast extends Context.Service<
   FastCast,
@@ -38,15 +39,28 @@ export class FastCast extends Context.Service<
     readonly push: LiveFeed
   }
 >()("sportal/hub/FastCast") {
-  /** FastCast following a topic whose checkpoint failed again on `checkpointRetry`, then leaving it to polling. */
+  /**
+   * FastCast for the leagues `HubConfig` names, following a topic whose checkpoint failed again on `checkpointRetry`,
+   * then leaving it to polling.
+   */
   static readonly make = (checkpointRetry: Schedule.Schedule<unknown, CheckpointError>) =>
     Effect.gen(function* () {
+      const { leagues } = yield* HubConfig
       const provide = Stream.provideContext(
         yield* Effect.context<HttpClient.HttpClient | Socket.WebSocketConstructor>()
       )
       return FastCast.of({
-        push: (leagues, wanted, resync) =>
-          Stream.unwrap(connect(leagues, wanted, resync, checkpointRetry)).pipe(
+        push: (demand) =>
+          Stream.unwrap(
+            Stream.partition(
+              demand,
+              LiveFeedDemand.$match({
+                Games: ({ games }) => Result.succeed(games),
+                Resync: ({ channel }) => Result.fail(channel)
+              }),
+              { capacity: "unbounded" }
+            ).pipe(Effect.flatMap(([wanted, resync]) => connect(leagues, wanted, resync, checkpointRetry)))
+          ).pipe(
             Stream.concat(
               Stream.fail(new ProviderError({ reason: "Closed", cause: "FastCast ended the stream" }))
             ),
@@ -57,16 +71,19 @@ export class FastCast extends Context.Service<
     })
 
   /** FastCast whose `checkpointRetry` is every 30 s, five tries in all, then the topic is left to polling. */
-  static readonly layer: Layer.Layer<FastCast, never, HttpClient.HttpClient | Socket.WebSocketConstructor> =
-    Layer.effect(
-      FastCast,
-      FastCast.make(
-        Schedule.spaced("30 seconds").pipe(
-          Schedule.setInputType<CheckpointError>(),
-          Schedule.upTo({ times: 4 })
-        )
+  static readonly layer: Layer.Layer<
+    FastCast,
+    never,
+    HttpClient.HttpClient | Socket.WebSocketConstructor | HubConfig
+  > = Layer.effect(
+    FastCast,
+    FastCast.make(
+      Schedule.spaced("30 seconds").pipe(
+        Schedule.setInputType<CheckpointError>(),
+        Schedule.upTo({ times: 4 })
       )
     )
+  )
 }
 
 /** A topic's checkpoint could not be loaded (unreachable, refused, timed out) or did not decode. */
