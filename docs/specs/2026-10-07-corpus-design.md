@@ -257,7 +257,7 @@ Checked against ESPN, 2026-10-07:
   and spot rules; team from `end.team.id` (FastCast's entity names the team with the ball as the play ended, as on a kickoff, punt, or turnover), win probability from `winprobability` by play id.
 - **Push file:** each game's scoreboard snapshot (status scheduled) at kickoff less 30 minutes; then, for each play at
   `wallclock + pushLag`, a `PlaysChanged` and a `Snapshot` read from the play: period, clock, scores, situation from
-  its end spot, timeouts counted from the half's timeout plays, `halftime` after period 2 ends, `final` after the last
+  its end spot, timeouts counted from the half's timeout plays by the team that called them, `halftime` after period 2 ends, `final` after the last
   play.
 - **Poll file:** a poll every 10 s from the first kickoff less 30 minutes until the last game is final; each game in
   the listing as it stood after its last play with `wallclock + pollLag` at or before the poll.

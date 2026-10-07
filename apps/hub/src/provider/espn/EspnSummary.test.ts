@@ -135,6 +135,41 @@ describe("EspnSummary", () => {
     })
   )
 
+  it.effect("a timeout says who called it, from its text; no other play says one", () =>
+    Effect.gen(function* () {
+      const plays = yield* EspnSummary.plays("nfl", summary)
+
+      assert.deepStrictEqual(
+        plays.flatMap(({ play, ...archived }) =>
+          play.kind === "timeout" ? [[play.period, play.clock, archived.timeoutBy]] : []
+        ),
+        [
+          [1, "3:27", nfl("17")],
+          [2, "0:45", nfl("2")],
+          [2, "0:16", nfl("2")],
+          [4, "1:00", nfl("2")],
+          [4, "0:42", nfl("2")],
+          [4, "0:39", nfl("2")]
+        ]
+      )
+      assert.isTrue(plays.every((archived) => archived.play.kind === "timeout" || !("timeoutBy" in archived)))
+    })
+  )
+
+  it.effect("a timeout whose caller does not read says none, and the game still reads", () =>
+    Effect.gen(function* () {
+      const plays = yield* EspnSummary.plays(
+        "nfl",
+        edited("Timeout #1 by NE at 03:27.", "Timeout #1 at 03:27.")
+      )
+      const timeout = plays.find(({ play }) => play.kind === "timeout")
+
+      assert.strictEqual(plays.length, recordedPlays)
+      assert.strictEqual(timeout?.play.clock, "3:27")
+      assert.isFalse(timeout !== undefined && "timeoutBy" in timeout)
+    })
+  )
+
   it.effect("a play without a wallclock is not read", () =>
     Effect.gen(function* () {
       const plays = yield* EspnSummary.plays("nfl", edited(',"wallclock":"2026-10-04T17:02:33Z"', ""))
