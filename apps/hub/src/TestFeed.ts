@@ -2,6 +2,7 @@ import { NodeCrypto } from "@effect/platform-node"
 import type { Delivery } from "@sportal/domain/Delivery"
 import type { GameSnapshot } from "@sportal/domain/Game"
 import type { LeagueId } from "@sportal/domain/League"
+import * as Fold from "@sportal/domain/LiveGames"
 import { DateTime, Effect, Layer, Schedule, Schema, Stream } from "effect"
 import * as Database from "./Database.ts"
 import { FeedLog } from "./FeedLog.ts"
@@ -136,6 +137,26 @@ export function decodedFrames(frames: ReadonlyArray<FeedFrame>) {
       .decode(Stream.fromIterable(frames.map((frame, index) => new Frame({ ...frame, seq: index + 1 }))))
       .pipe(Stream.runCollect)
   )
+}
+
+/** Every report the domain fold makes taking `frames` whole, in order, as the provided `Decoder` reads them. */
+export function reportsOf(frames: ReadonlyArray<FeedFrame>) {
+  return Effect.gen(function* () {
+    const empty: { readonly fold: Fold.LiveGames; readonly reports: ReadonlyArray<Fold.FoldReport> } = {
+      fold: Fold.LiveGames.empty,
+      reports: []
+    }
+    const { reports } = yield* Effect.reduce(
+      yield* decodedFrames(frames),
+      () => empty,
+      ({ fold, reports }, said) =>
+        Effect.map(fold.take(said), ({ next, reports: more }) => ({
+          fold: next,
+          reports: [...reports, ...more]
+        }))
+    )
+    return reports
+  })
 }
 
 /** The written scenarios as `HubMode` plays them: each script written as ESPN's frames. */

@@ -7,7 +7,7 @@ import { DateTime, Effect, Schema } from "effect"
 import type { FeedFrame } from "../../Frame.ts"
 import { LiveGames } from "../../LiveGames.ts"
 import { ScenarioScript } from "../../scenario/ScenarioScript.ts"
-import { decodedFrames, liveGames } from "../../TestFeed.ts"
+import { decodedFrames, liveGames, reportsOf } from "../../TestFeed.ts"
 import * as EspnDecode from "./EspnDecode.ts"
 import { scenarioOf } from "./EspnScript.ts"
 
@@ -221,19 +221,7 @@ describe("scenarioOf", () => {
           ),
           []
         )
-        const empty: { readonly fold: Fold.LiveGames; readonly reports: ReadonlyArray<Fold.FoldReport> } = {
-          fold: Fold.LiveGames.empty,
-          reports: []
-        }
-        const { reports } = yield* Effect.reduce(
-          decoded,
-          () => empty,
-          ({ fold, reports }, said) =>
-            Effect.map(fold.take(said), ({ next, reports: more }) => ({
-              fold: next,
-              reports: [...reports, ...more]
-            }))
-        )
+        const reports = yield* reportsOf(frames)
         assert.deepStrictEqual(reports.filter(Fold.FoldReport.$is("Dropped")), [])
         assert.strictEqual(
           decoded.flatMap(({ deliveries }) => deliveries.filter(({ _tag }) => _tag === "Plays")).length,

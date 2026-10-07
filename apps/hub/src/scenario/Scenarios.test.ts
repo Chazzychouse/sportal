@@ -2,7 +2,8 @@ import { fileURLToPath } from "node:url"
 import { NodeServices } from "@effect/platform-node"
 import { assert, describe, it } from "@effect/vitest"
 import { DateTime, Effect, FileSystem, Layer, Path } from "effect"
-import { writtenScenarios } from "../TestFeed.ts"
+import * as EspnDecode from "../provider/espn/EspnDecode.ts"
+import { reportsOf, writtenScenarios } from "../TestFeed.ts"
 import { Scenarios } from "./Scenarios.ts"
 import { scripts } from "./written/Scripts.ts"
 
@@ -43,6 +44,32 @@ describe("Scenarios", () => {
       assert.deepStrictEqual([first?.feed, first?.kind], ["poll", "response"])
       assert.deepStrictEqual(scenario.origin(), DateTime.makeUnsafe("2026-10-03T16:00:00Z"))
     }).pipe(Effect.provide(committed))
+  )
+
+  it.effect(
+    "every scenario, written and recorded, folded whole through ESPN's decode, plays a game's plays and drops none before the game is let go",
+    () =>
+      Effect.gen(function* () {
+        const scenarios = yield* Scenarios
+        for (const name of yield* scenarios.names) {
+          const reports = yield* reportsOf((yield* scenarios.load(name)).frames)
+          assert.isAbove(
+            reports.filter((report) => report._tag === "Happened" && report.event._tag === "Played").length,
+            0,
+            `${name} plays`
+          )
+          // ESPN edits a game's plays after it ends; those reach a fold that has let the game go, and are dropped.
+          const dropped = reports.filter(
+            (report, index) =>
+              report._tag === "Dropped" &&
+              !reports
+                .slice(0, index)
+                .some((before) => before._tag === "Stopped" && before.liveGame.snapshot.id === report.game)
+          )
+          assert.deepStrictEqual(dropped, [], `${name} drops none`)
+        }
+      }).pipe(Effect.provide([committed, EspnDecode.layer])),
+    { timeout: 120_000 }
   )
 
   it.effect("a file that is not gzip'd frames is ScenarioUnreadable", () =>
