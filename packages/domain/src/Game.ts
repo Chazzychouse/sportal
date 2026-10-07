@@ -171,6 +171,11 @@ export class GameSnapshot extends Schema.Class<GameSnapshot>("sportal/GameSnapsh
     return Option.none()
   }
 
+  /** Where the ball is: the spot of the situation's team with the ball, at its yard line. */
+  ball(): Option.Option<BallSpot> {
+    return this.spotOf({ team: this.situation?.possession, yardsToEndzone: this.situation?.yardLine })
+  }
+
   /**
    * What happened in this game since `previous`, an earlier snapshot of it: points, the ball changing hands, a
    * drive reaching the 40, the red zone, goal to go, or fourth down, a timeout, and the clock and status. A change

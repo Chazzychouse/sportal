@@ -372,3 +372,17 @@ describe("GameSnapshot#spotOf", () => {
     assert.isTrue(Option.isNone(game.spotOf({ team: game.away.team.id, yardsToEndzone })))
   })
 })
+
+describe("GameSnapshot#ball", () => {
+  it("is the spot of the team with the ball at its yard line", () => {
+    assert.deepStrictEqual(
+      snapshot({ situation: situation({ yardLine: 75 }) }).ball(),
+      Option.some(new BallSpot({ yards: 25, toward: "away" }))
+    )
+  })
+
+  it("is none without a situation or without a team with the ball", () => {
+    assert.isTrue(Option.isNone(snapshot().ball()))
+    assert.isTrue(Option.isNone(snapshot({ situation: situation({ possession: undefined }) }).ball()))
+  })
+})
