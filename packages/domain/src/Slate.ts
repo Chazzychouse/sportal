@@ -131,7 +131,7 @@ export class Slate extends Data.Class<{
 }
 
 /** What one take or tick did: the next slate, the game events it said, and what telemetry tells of it. */
-export type Taken = {
+export interface Taken {
   readonly next: Slate
   readonly events: ReadonlyArray<GameEvent>
   readonly observations: ReadonlyArray<SlateObservation>

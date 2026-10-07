@@ -20,7 +20,7 @@ import {
  * EventSource reconnects by itself, and the Hub replays the current slate and stage on every connection.
  */
 export class LiveStream extends Context.Service<LiveStream, SubscriptionRef.SubscriptionRef<Live>>()(
-  "sportal/web/LiveStream"
+  "sportal/web/hub/LiveStream"
 ) {
   static readonly layer = Layer.effect(
     LiveStream,
@@ -50,7 +50,7 @@ export type Connection = Data.TaggedEnum<{
 }>
 export const Connection = Data.taggedEnum<Connection>()
 
-type Live = {
+interface Live {
   readonly connection: Connection
   readonly slate: ReadonlyArray<GameSnapshot>
   readonly recentPlays: RecentPlays

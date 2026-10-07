@@ -2,25 +2,25 @@ import { Schema } from "effect"
 
 /** A key Sportal acts on, wherever it was pressed: in the web UI, or in a stream view that had focus. */
 export const Hotkey = Object.assign(
-  Schema.Union([
-    Schema.TaggedStruct("FocusAudio", { slot: Schema.Int }),
-    Schema.TaggedStruct("Promote", { slot: Schema.Int }),
+  Schema.TaggedUnion({
+    FocusAudio: { slot: Schema.Int },
+    Promote: { slot: Schema.Int },
     /** Make a tile the one the next dropped game goes to. */
-    Schema.TaggedStruct("SelectTile", { slot: Schema.Int }),
+    SelectTile: { slot: Schema.Int },
     /** Give the selected tile's player the mouse, or take it back. */
-    Schema.TaggedStruct("Interact", {}),
-    Schema.TaggedStruct("ToggleSolo", {}),
-    Schema.TaggedStruct("Unsolo", {}),
-    Schema.TaggedStruct("FullScreen", {}),
-    Schema.TaggedStruct("NextLayout", {}),
-    Schema.TaggedStruct("ToggleSlate", {}),
-    Schema.TaggedStruct("CommandPalette", {}),
+    Interact: {},
+    ToggleSolo: {},
+    Unsolo: {},
+    FullScreen: {},
+    NextLayout: {},
+    ToggleSlate: {},
+    CommandPalette: {},
     /** Move the slate's pick to the previous or next game that can be picked. */
-    Schema.TaggedStruct("StepPick", { step: Schema.Literals([-1, 1]) }),
+    StepPick: { step: Schema.Literals([-1, 1]) },
     /** Put the picked game in the selected tile. */
-    Schema.TaggedStruct("DropPick", {}),
-    Schema.TaggedStruct("ShowKeys", {})
-  ]),
+    DropPick: {},
+    ShowKeys: {}
+  }),
   {
     /**
      * What a key press means, read by its physical `code`; none for a key the page should have. Enter is a

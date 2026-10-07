@@ -26,7 +26,7 @@ export class ProviderSession extends Context.Service<
      */
     readonly openSignIn: Effect.Effect<void>
   }
->()("sportal/desktop/ProviderSession") {
+>()("sportal/desktop/main/ProviderSession") {
   static readonly layer: Layer.Layer<ProviderSession, never, ShellConfig | ShellWindow> = Layer.effect(
     ProviderSession,
     Effect.gen(function* () {

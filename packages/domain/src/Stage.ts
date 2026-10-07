@@ -2,24 +2,24 @@ import { Array as Arr, Option, Record as Rec, Result, Schema } from "effect"
 import { Channel, type ChannelAvailability } from "./Channel.ts"
 import { GameId } from "./Game.ts"
 
-export const Tile = Schema.Union([
-  Schema.TaggedStruct("Empty", {}),
-  Schema.TaggedStruct("StreamTile", { game: GameId, channel: Channel }),
+export const Tile = Schema.TaggedUnion({
+  Empty: {},
+  StreamTile: { game: GameId, channel: Channel },
   /** No stream, and why: none on any source, streaming only, not in the guide, not on yet, or no guide to ask. */
-  Schema.TaggedStruct("DataTile", {
+  DataTile: {
     game: GameId,
-    why: Schema.Union([
-      Schema.TaggedStruct("NoStream", {}),
-      Schema.TaggedStruct("StreamingOnly", {}),
-      Schema.TaggedStruct("NotInGuide", {}),
-      Schema.TaggedStruct("NoGuide", {}),
-      Schema.TaggedStruct("NotYet", {
+    why: Schema.TaggedUnion({
+      NoStream: {},
+      StreamingOnly: {},
+      NotInGuide: {},
+      NoGuide: {},
+      NotYet: {
         channel: Schema.optional(Schema.String),
         begin: Schema.optional(Schema.DateTimeUtcFromString)
-      })
-    ])
-  })
-])
+      }
+    })
+  }
+})
 export type Tile = typeof Tile.Type
 
 const empty: Tile = { _tag: "Empty" }
@@ -195,17 +195,17 @@ export class Stage extends Schema.Class<Stage>("sportal/Stage")({
   }
 }
 
-export const StageCommand = Schema.Union([
-  Schema.TaggedStruct("Assign", { tile: Schema.Int, game: GameId }),
-  Schema.TaggedStruct("Clear", { tile: Schema.Int }),
-  Schema.TaggedStruct("FocusAudio", { tile: Schema.Int }),
-  Schema.TaggedStruct("Swap", { a: Schema.Int, b: Schema.Int }),
-  Schema.TaggedStruct("Promote", { tile: Schema.Int }),
-  Schema.TaggedStruct("SetLayout", { layout: LayoutName }),
-  Schema.TaggedStruct("SetSplit", { split: Split }),
-  Schema.TaggedStruct("Solo", { tile: Schema.Int }),
-  Schema.TaggedStruct("Unsolo", {})
-])
+export const StageCommand = Schema.TaggedUnion({
+  Assign: { tile: Schema.Int, game: GameId },
+  Clear: { tile: Schema.Int },
+  FocusAudio: { tile: Schema.Int },
+  Swap: { a: Schema.Int, b: Schema.Int },
+  Promote: { tile: Schema.Int },
+  SetLayout: { layout: LayoutName },
+  SetSplit: { split: Split },
+  Solo: { tile: Schema.Int },
+  Unsolo: {}
+})
 export type StageCommand = typeof StageCommand.Type
 
 export class StageRejection extends Schema.TaggedError<StageRejection>()(

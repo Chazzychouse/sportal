@@ -2,7 +2,7 @@ import { assert, describe, it } from "@effect/vitest"
 import { DateTime, Option, Result, Schema } from "effect"
 import { ChannelAvailability } from "./Channel.ts"
 import { GameId } from "./Game.ts"
-import { type LayoutName, Stage, type StageCommand, type Tile } from "./Stage.ts"
+import { type LayoutName, Stage, StageCommand, Tile } from "./Stage.ts"
 import { assign, bama, fill, foxChannel, irish, nowhere, onFox } from "./TestStage.ts"
 
 const usc = GameId.make("401856800")
@@ -616,3 +616,75 @@ function unknownUpcoming() {
 function reportingOnly(game: GameId) {
   return (asked: GameId) => (asked === game ? Option.some(onFox()) : Option.none())
 }
+
+const channel = {
+  name: "ABC",
+  source: "YouTube TV",
+  locator: { _tag: "WebView", url: "https://tv.example/abc" }
+}
+
+const tiles: ReadonlyArray<readonly [string, unknown]> = [
+  ["Empty", { _tag: "Empty" }],
+  ["StreamTile", { _tag: "StreamTile", game: "401856800", channel }],
+  ["NoStream", { _tag: "DataTile", game: "401856800", why: { _tag: "NoStream" } }],
+  ["StreamingOnly", { _tag: "DataTile", game: "401856800", why: { _tag: "StreamingOnly" } }],
+  ["NotInGuide", { _tag: "DataTile", game: "401856800", why: { _tag: "NotInGuide" } }],
+  ["NoGuide", { _tag: "DataTile", game: "401856800", why: { _tag: "NoGuide" } }],
+  ["NotYet bare", { _tag: "DataTile", game: "401856800", why: { _tag: "NotYet" } }],
+  [
+    "NotYet with channel and begin",
+    {
+      _tag: "DataTile",
+      game: "401856800",
+      why: { _tag: "NotYet", channel: "ESPN", begin: "2026-10-04T17:00:00.000Z" }
+    }
+  ]
+]
+
+describe("Tile", () => {
+  it.each(tiles)("should decode what it encodes: %s", (_, json) => {
+    const tile = Schema.decodeUnknownSync(Tile)(json)
+
+    const encoded = Schema.encodeSync(Tile)(tile)
+
+    assert.deepStrictEqual(encoded, json)
+  })
+
+  it.each(tiles)("should encode as today: %s", (_, json) => {
+    const tile = Schema.decodeUnknownSync(Tile)(json)
+
+    const encoded = JSON.stringify(Schema.encodeSync(Tile)(tile))
+
+    assert.strictEqual(encoded, JSON.stringify(json))
+  })
+})
+
+const commands: ReadonlyArray<unknown> = [
+  { _tag: "Assign", tile: 1, game: "401856800" },
+  { _tag: "Clear", tile: 2 },
+  { _tag: "FocusAudio", tile: 0 },
+  { _tag: "Swap", a: 0, b: 3 },
+  { _tag: "Promote", tile: 1 },
+  { _tag: "SetLayout", layout: "MainThree" },
+  { _tag: "SetSplit", split: { x: 0.25, y: 0.75 } },
+  { _tag: "Solo", tile: 0 },
+  { _tag: "Unsolo" }
+]
+
+describe("StageCommand", () => {
+  it.each(commands)("should decode what it encodes: %j", (json) => {
+    const command = Schema.decodeUnknownSync(StageCommand)(json)
+
+    const encoded = Schema.encodeSync(StageCommand)(command)
+
+    assert.deepStrictEqual(encoded, json)
+  })
+
+  it.each(commands)("should encode as today: %j", (json) => {
+    const command = Schema.decodeUnknownSync(StageCommand)(json)
+
+    const encoded = JSON.stringify(Schema.encodeSync(StageCommand)(command))
+
+    assert.strictEqual(encoded, JSON.stringify(json))
+  })
+})

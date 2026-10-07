@@ -1,4 +1,5 @@
 import { assert, describe, it } from "@effect/vitest"
+import { Schema } from "effect"
 import { Hotkey } from "./Hotkey.ts"
 
 describe("Hotkey.of", () => {
@@ -104,14 +105,46 @@ describe("Hotkey.keys", () => {
     assert.deepStrictEqual(hotkey, binding.hotkey, binding.does)
   })
 
-  it.each(Hotkey.members.map((member) => member.fields._tag.ast.literal))(
-    "should list the hotkey %s",
-    (tag) => {
-      const listed = new Set<unknown>(Hotkey.keys.map((binding) => binding.hotkey._tag))
+  it.each(Object.keys(Hotkey.cases))("should list the hotkey %s", (tag) => {
+    const listed = new Set<unknown>(Hotkey.keys.map((binding) => binding.hotkey._tag))
 
-      assert.isTrue(listed.has(tag), String(tag))
-    }
-  )
+    assert.isTrue(listed.has(tag), String(tag))
+  })
+})
+
+const wire: ReadonlyArray<unknown> = [
+  { _tag: "FocusAudio", slot: 0 },
+  { _tag: "Promote", slot: 1 },
+  { _tag: "SelectTile", slot: 2 },
+  { _tag: "Interact" },
+  { _tag: "ToggleSolo" },
+  { _tag: "Unsolo" },
+  { _tag: "FullScreen" },
+  { _tag: "NextLayout" },
+  { _tag: "ToggleSlate" },
+  { _tag: "CommandPalette" },
+  { _tag: "StepPick", step: -1 },
+  { _tag: "StepPick", step: 1 },
+  { _tag: "DropPick" },
+  { _tag: "ShowKeys" }
+]
+
+describe("Hotkey wire", () => {
+  it.each(wire)("should decode what it encodes: %j", (json) => {
+    const hotkey = Schema.decodeUnknownSync(Hotkey)(json)
+
+    const encoded = Schema.encodeSync(Hotkey)(hotkey)
+
+    assert.deepStrictEqual(encoded, json)
+  })
+
+  it.each(wire)("should encode as today: %j", (json) => {
+    const hotkey = Schema.decodeUnknownSync(Hotkey)(json)
+
+    const encoded = JSON.stringify(Schema.encodeSync(Hotkey)(hotkey))
+
+    assert.strictEqual(encoded, JSON.stringify(json))
+  })
 })
 
 type Modifiers = Partial<{ shift: boolean; alt: boolean; control: boolean; meta: boolean }>

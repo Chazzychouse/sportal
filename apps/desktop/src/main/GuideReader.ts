@@ -29,7 +29,7 @@ export class GuideReader extends Context.Service<
     /** Asks for a read. The first ask starts a read every 5 minutes; asking while a read waits adds nothing. */
     readonly readSoon: Effect.Effect<void>
   }
->()("sportal/desktop/GuideReader") {
+>()("sportal/desktop/main/GuideReader") {
   static readonly layer = Layer.effect(
     GuideReader,
     Effect.gen(function* () {
@@ -73,43 +73,41 @@ export class GuideReader extends Context.Service<
 class GuideNotRead extends Schema.TaggedError<GuideNotRead>()("GuideNotRead", { reason: Schema.String }) {}
 
 /** Reads the guide page's client config, then sends the guide request it describes, signed as the account. */
-function readGuide() {
-  return Effect.gen(function* () {
-    const { session } = yield* ProviderSession
+const readGuide = Effect.fn("GuideReader.readGuide")(function* () {
+  const { session } = yield* ProviderSession
 
-    const page = yield* send(`${guideOrigin}/live`, {})
-    const context = clientContext(page)
-    if (Option.isNone(context))
-      return yield* new GuideNotRead({ reason: "the guide page has no client config" })
+  const page = yield* send(`${guideOrigin}/live`, {})
+  const context = clientContext(page)
+  if (Option.isNone(context))
+    return yield* new GuideNotRead({ reason: "the guide page has no client config" })
 
-    const cookies = yield* Effect.tryPromise({
-      try: () => session.cookies.get({ url: guideOrigin, name: "SAPISID" }),
-      catch: (cause) =>
-        new GuideNotRead({ reason: `the session's cookies could not be read: ${String(cause)}` })
-    })
-    const sapisid = Arr.head(cookies)
-    if (Option.isNone(sapisid))
-      return yield* new GuideNotRead({ reason: "the session has no YouTube sign-in (SAPISID)" })
-
-    // YouTube's web clients sign each request with the time and the session's SAPISID, as the guide page does.
-    const now = yield* Clock.currentTimeMillis
-    const seconds = Math.floor(now / 1000)
-    const signature = createHash("sha1")
-      .update(`${seconds} ${sapisid.value.value} ${guideOrigin}`)
-      .digest("hex")
-
-    return yield* send(`${guideOrigin}/youtubei/v1/browse?prettyPrint=false`, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        origin: guideOrigin,
-        "x-origin": guideOrigin,
-        authorization: `SAPISIDHASH ${seconds}_${signature}`
-      },
-      body: JSON.stringify({ context: context.value, browseId: guideBrowseId })
-    })
+  const cookies = yield* Effect.tryPromise({
+    try: () => session.cookies.get({ url: guideOrigin, name: "SAPISID" }),
+    catch: (cause) =>
+      new GuideNotRead({ reason: `the session's cookies could not be read: ${String(cause)}` })
   })
-}
+  const sapisid = Arr.head(cookies)
+  if (Option.isNone(sapisid))
+    return yield* new GuideNotRead({ reason: "the session has no YouTube sign-in (SAPISID)" })
+
+  // YouTube's web clients sign each request with the time and the session's SAPISID, as the guide page does.
+  const now = yield* Clock.currentTimeMillis
+  const seconds = Math.floor(now / 1000)
+  const signature = createHash("sha1")
+    .update(`${seconds} ${sapisid.value.value} ${guideOrigin}`)
+    .digest("hex")
+
+  return yield* send(`${guideOrigin}/youtubei/v1/browse?prettyPrint=false`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      origin: guideOrigin,
+      "x-origin": guideOrigin,
+      authorization: `SAPISIDHASH ${seconds}_${signature}`
+    },
+    body: JSON.stringify({ context: context.value, browseId: guideBrowseId })
+  })
+})
 
 /** Sends one request on the session and reads its body. A failed request or a status outside 2xx is `GuideNotRead`. */
 function send(url: string, init: RequestInit) {

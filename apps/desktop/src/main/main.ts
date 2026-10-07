@@ -118,38 +118,37 @@ const serveHub = Effect.gen(function* () {
   )
 })
 
-function forward(channel: string, stream: Stream.Stream<unknown>) {
-  return Effect.gen(function* () {
-    const window = yield* ShellWindow
-    yield* Effect.forkScoped(
-      stream.pipe(
-        Stream.runForEach((value) =>
-          Effect.sync(() => {
-            if (!window.isDestroyed()) window.webContents.send(channel, value)
-          })
-        )
-      ),
-      { startImmediately: true }
-    )
-  })
-}
+const forward = Effect.fn("main.forward")(function* (channel: string, stream: Stream.Stream<unknown>) {
+  const window = yield* ShellWindow
+  yield* Effect.forkScoped(
+    stream.pipe(
+      Stream.runForEach((value) =>
+        Effect.sync(() => {
+          if (!window.isDestroyed()) window.webContents.send(channel, value)
+        })
+      )
+    ),
+    { startImmediately: true }
+  )
+})
 
 /** Hears the shell window's own page on `channel`; a message from any other sender is dropped. */
-function listen(channel: string, handler: (...args: ReadonlyArray<unknown>) => void) {
-  return Effect.gen(function* () {
-    const window = yield* ShellWindow
-    yield* Effect.acquireRelease(
-      Effect.sync(() => {
-        const onMessage = (event: IpcMainEvent, ...args: ReadonlyArray<unknown>) => {
-          if (event.sender === window.webContents) handler(...args)
-        }
-        ipcMain.on(channel, onMessage)
-        return onMessage
-      }),
-      (onMessage) => Effect.sync(() => ipcMain.removeListener(channel, onMessage))
-    )
-  })
-}
+const listen = Effect.fn("main.listen")(function* (
+  channel: string,
+  handler: (...args: ReadonlyArray<unknown>) => void
+) {
+  const window = yield* ShellWindow
+  yield* Effect.acquireRelease(
+    Effect.sync(() => {
+      const onMessage = (event: IpcMainEvent, ...args: ReadonlyArray<unknown>) => {
+        if (event.sender === window.webContents) handler(...args)
+      }
+      ipcMain.on(channel, onMessage)
+      return onMessage
+    }),
+    (onMessage) => Effect.sync(() => ipcMain.removeListener(channel, onMessage))
+  )
+})
 
 const decodePlacements = Schema.decodeUnknownOption(Schema.Array(TilePlacement))
 const decodeTransition = Schema.decodeUnknownOption(Schema.UndefinedOr(StageTransition))

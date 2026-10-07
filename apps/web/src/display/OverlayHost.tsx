@@ -34,7 +34,12 @@ export function useVideoAreas(areas: ReadonlyArray<{ game: GameId; bounds: Rect 
   useLayoutEffect(() => host?.place(areas), [host, areas])
 }
 
-type Rect = { x: number; y: number; width: number; height: number }
+interface Rect {
+  x: number
+  y: number
+  width: number
+  height: number
+}
 type Host = ReturnType<typeof makeHost>
 
 const HostContext = createContext<Host | undefined>(undefined)

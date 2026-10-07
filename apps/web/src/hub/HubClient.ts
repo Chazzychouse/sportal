@@ -14,7 +14,7 @@ export class HubClient extends Context.Service<
     api: HttpApiClient.ForApi<typeof SportalApi>
     stageFailures: PubSub.PubSub<StageRejection | HttpClientError.HttpClientError>
   }
->()("sportal/web/HubClient") {
+>()("sportal/web/hub/HubClient") {
   static readonly layer = Layer.effect(
     HubClient,
     Effect.gen(function* () {

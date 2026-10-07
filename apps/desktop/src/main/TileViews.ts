@@ -29,7 +29,7 @@ export class TileViews extends Context.Service<
     /** Each game whose stream view was pressed with the left button while it was not interactive. The page never receives it. */
     readonly tilePresses: Stream.Stream<GameId>
   }
->()("sportal/desktop/TileViews") {
+>()("sportal/desktop/main/TileViews") {
   static readonly layer: Layer.Layer<TileViews, never, ProviderSession | ShellWindow> = Layer.effect(
     TileViews,
     Effect.gen(function* () {
@@ -181,7 +181,7 @@ export class TileViews extends Context.Service<
 const frame = "16 millis"
 
 /** One game's view, the address last placed in it, whether its player gets the mouse, and where it is now. */
-type Entry = {
+interface Entry {
   view: WebContentsView
   url: Option.Option<string>
   interactive: boolean

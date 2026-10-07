@@ -7,7 +7,7 @@ import { ShellConfig } from "./ShellConfig.ts"
 
 /** The shell's one window, showing the Hub's web UI with the privileged preload, confined to the Hub's origin. */
 export class ShellWindow extends Context.Service<ShellWindow, BrowserWindow>()(
-  "sportal/desktop/ShellWindow"
+  "sportal/desktop/main/ShellWindow"
 ) {
   /** Opens the window with the layer and destroys it with the layer. Built only once Electron is ready. */
   static readonly layer: Layer.Layer<ShellWindow, never, ShellConfig> = Layer.effect(
