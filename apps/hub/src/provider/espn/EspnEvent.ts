@@ -83,6 +83,8 @@ export function EspnEvent(league: LeagueId) {
           displayName: Schema.String,
           location: Schema.optional(Schema.String),
           logo: Schema.optional(Schema.String),
+          color: Schema.optional(Schema.String),
+          alternateColor: Schema.optional(Schema.String),
           rank: Schema.optional(Ranking)
         })
       ),

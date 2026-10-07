@@ -135,6 +135,25 @@ layer(EspnDecode.layer)("EspnDecode", (it) => {
     })
   )
 
+  it("a checkpoint event carries its teams' colors", () => {
+    const events = Schema.decodeSync(
+      Schema.fromJsonString(
+        Schema.Struct({
+          sports: Schema.Tuple([
+            Schema.Struct({
+              leagues: Schema.Tuple([Schema.Struct({ events: Schema.Array(Schema.Unknown) })])
+            })
+          ])
+        })
+      )
+    )(checkpointBody).sports[0].leagues[0].events
+    const decodeEvent = Schema.decodeUnknownSync(EspnEvent("nfl"))
+    const ari = events.map((event) => decodeEvent(event)).find((game) => game.id === "401872966")?.away.team
+
+    assert.strictEqual(ari?.color, "a40227")
+    assert.strictEqual(ari?.alternateColor, "ffffff")
+  })
+
   it.effect("the checkpoint and every message after it end each live game where the scoreboard had it", () =>
     Effect.gen(function* () {
       const pushed = lastPushed(yield* decoded([poll("nfl", scoreboardBody), ...recorded(socketTexts)]))
