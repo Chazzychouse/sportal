@@ -172,6 +172,10 @@ describe("GET /api/live", () => {
       const first = yield* Queue.take(received)
       const second = yield* Queue.take(received)
       assert.sameMembers([first._tag, second._tag], ["SlateChanged", "StageChanged"])
+      assert.deepStrictEqual(
+        [first, second].flatMap((message) => (message._tag === "SlateChanged" ? [message.recentPlays] : [])),
+        [{}]
+      )
 
       yield* api.stage.dispatch({ payload: { command: { _tag: "Assign", tile: 0, game: game.id } } })
       const third = yield* Queue.take(received)
@@ -240,7 +244,7 @@ function firstSlate() {
   return Effect.gen(function* () {
     const slate = yield* Slate
     yield* slate.changes.pipe(
-      Stream.filter((latest) => latest.length > 0),
+      Stream.filter((latest) => latest.games.length > 0),
       Stream.take(1),
       Stream.runDrain
     )

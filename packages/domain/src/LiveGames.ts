@@ -4,6 +4,7 @@ import type { GameId, GameSnapshot } from "./Game.ts"
 import type { GameEvent } from "./GameEvent.ts"
 import type { LeagueId } from "./League.ts"
 import { LiveGame } from "./LiveGame.ts"
+import type { RecentPlays } from "./RecentPlays.ts"
 
 /**
  * The fold of every delivery, in order: the last frame's `seq`, each league's last listing, every current game's live
@@ -56,6 +57,16 @@ export class LiveGames extends Data.Class<{
   /** Each listed game in `leagues`, leagues in order, as the fold has it. */
   slate(leagues: ReadonlyArray<LeagueId>): ReadonlyArray<GameSnapshot> {
     return leagues.flatMap((league) => asFolded(this.listed.get(league) ?? [], this.live))
+  }
+
+  /** The last ten plays of each game `slate(leagues)` lists that has plays in `live`. */
+  recentPlays(leagues: ReadonlyArray<LeagueId>): RecentPlays {
+    return Object.fromEntries(
+      this.slate(leagues).flatMap(({ id }) => {
+        const plays = this.live.get(id)?.plays ?? []
+        return plays.length === 0 ? [] : [[id, plays.slice(-10)] as const]
+      })
+    )
   }
 
   /** Every listed game as the fold has it, then live games no listing holds. */

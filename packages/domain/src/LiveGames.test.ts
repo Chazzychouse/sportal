@@ -4,6 +4,7 @@ import { Delivery, type DeliverySource } from "./Delivery.ts"
 import { GameId, GameSnapshot } from "./Game.ts"
 import { LiveGameState } from "./LiveGame.ts"
 import { FoldReport, LiveGames } from "./LiveGames.ts"
+import { PlayId } from "./Play.ts"
 import { play, snapshot } from "./TestGame.ts"
 
 const t0 = DateTime.makeUnsafe("2026-10-03T16:00:00Z")
@@ -217,6 +218,31 @@ describe("LiveGames", () => {
       })
   )
 
+  it.effect(
+    "recent plays are each asked-for game's last ten plays in sequence order, and only games with plays",
+    () =>
+      Effect.gen(function* () {
+        const three = GameId.make("3")
+        const listedNfl = live(two, "5:00")
+        const fold = yield* taken(
+          LiveGames.empty,
+          [listing("fbs", [live(one, "10:00"), live(three, "9:00")]), listing("nfl", [listedNfl])],
+          t0
+        ).pipe(Effect.flatMap((fold) => taken(fold, [playsOf(one, 12), playsOf(two, 3)], t0)))
+        assert.deepStrictEqual(
+          fold.recentPlays(["fbs"])[one]?.map(({ sequence }) => sequence),
+          [3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+        )
+        assert.deepStrictEqual(Object.keys(fold.recentPlays(["fbs"])), [one])
+        assert.deepStrictEqual(
+          fold.recentPlays(["nfl"])[two]?.map(({ sequence }) => sequence),
+          [1, 2, 3]
+        )
+        assert.deepStrictEqual(Object.keys(fold.recentPlays(["nfl"])), [two])
+        assert.deepStrictEqual(Object.keys(fold.recentPlays(["fbs", "nfl"])).toSorted(), [one, two])
+      })
+  )
+
   it.effect("games include a live game no listing holds", () =>
     Effect.gen(function* () {
       const listed = live(one, "10:00")
@@ -283,6 +309,16 @@ function pushed(game: GameSnapshot) {
 
 function delivered(game: GameSnapshot, from: DeliverySource) {
   return Delivery.cases.Snapshot.make({ snapshot: game, from })
+}
+
+/** A `Plays` delivery of `count` plays for game `id`, sequenced from 1 and handed over out of order. */
+function playsOf(id: GameId, count: number) {
+  return Delivery.cases.Plays.make({
+    game: id,
+    plays: Array.from({ length: count }, (_, index) =>
+      play({ id: PlayId.make(`p${index + 1}`), sequence: index + 1 })
+    ).toReversed()
+  })
 }
 
 function live(id: GameId, clock: string): GameSnapshot {

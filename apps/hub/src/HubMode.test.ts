@@ -13,7 +13,7 @@ describe("HubMode", () => {
     Effect.gen(function* () {
       yield* TestClock.adjust(0)
       yield* TestClock.adjust("1 second")
-      assert.isAbove((yield* (yield* Slate).latest).length, 0)
+      assert.isAbove((yield* (yield* Slate).latest).games.length, 0)
     }).pipe(
       Effect.provide(
         HubMode.layer.pipe(

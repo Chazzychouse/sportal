@@ -67,7 +67,7 @@ describe("LiveStream", () => {
       const live = yield* LiveStream
       const source = yield* opened()
       source.onmessage?.({ data: message({ _tag: "StageChanged", stage: pair }) })
-      source.onmessage?.({ data: message({ _tag: "SlateChanged", slate: [] }) })
+      source.onmessage?.({ data: message({ _tag: "SlateChanged", slate: [], recentPlays: {} }) })
       const state = yield* until(live, (current) => current.stage.layout === "Pair")
       assert.deepStrictEqual(state.slate, [])
     }).pipe(Effect.provide(LiveStream.layer))

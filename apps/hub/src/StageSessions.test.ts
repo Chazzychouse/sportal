@@ -109,7 +109,7 @@ describe("StageSessions", () => {
       const fakeSlate = Slate.of({
         latest: Ref.update(refreshes, (count) => count + 1).pipe(
           Effect.andThen(Deferred.succeed(refreshed, undefined)),
-          Effect.as(slate)
+          Effect.as({ games: slate, recentPlays: {} })
         ),
         changes: Stream.empty
       })
@@ -193,7 +193,7 @@ describe("StageSessions", () => {
     Effect.gen(function* () {
       const onSlate = yield* Ref.make(slate)
       const fakeSlate = Slate.of({
-        latest: Ref.get(onSlate),
+        latest: Effect.map(Ref.get(onSlate), (games) => ({ games, recentPlays: {} })),
         changes: Stream.empty
       })
       yield* Effect.gen(function* () {
@@ -259,7 +259,7 @@ describe("StageSessions", () => {
 
 /** A Slate that lists `games`, with no changes. */
 function slateOf(games: ReadonlyArray<GameSnapshot>) {
-  return Slate.of({ latest: Effect.succeed(games), changes: Stream.empty })
+  return Slate.of({ latest: Effect.succeed({ games, recentPlays: {} }), changes: Stream.empty })
 }
 
 /** StageSessions over a Slate of `games` and YouTube TV with nothing read yet. */
