@@ -38,7 +38,8 @@ export function inArchive<A, E>(
   }) => Effect.Effect<A, E, Archive | CorpusDays | FileSystem.FileSystem | Path.Path>
 ) {
   return Effect.gen(function* () {
-    const dir = yield* (yield* FileSystem.FileSystem).makeTempDirectoryScoped()
+    const fs = yield* FileSystem.FileSystem
+    const dir = yield* fs.makeTempDirectoryScoped()
     const requests = yield* Ref.make<ReadonlyArray<string>>([])
     const client = HttpClient.make((request) =>
       Ref.getAndUpdate(requests, (urls) => [...urls, request.url]).pipe(
