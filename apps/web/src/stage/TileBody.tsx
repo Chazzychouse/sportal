@@ -1,6 +1,5 @@
 import type { GameSnapshot } from "@sportal/domain/Game"
 import type { Tile } from "@sportal/domain/Stage"
-import { Option } from "effect"
 import { Field, noPlays } from "../game/Field.tsx"
 import { GameStatus, localTime } from "../game/GameStatus.tsx"
 import { Score } from "../game/Score.tsx"
@@ -8,8 +7,8 @@ import { useLive } from "../hub/HubRuntime.ts"
 
 /**
  * What a tile's well shows from the web UI. In the shell a provider view covers a stream tile's
- * well; in a plain browser this is what is seen, with a link to watch. A data tile of a game in play, with the
- * ball on the field, shows the field in place of why it has no stream.
+ * well; in a plain browser this is what is seen, with a link to watch. A data tile of a live game (halftime and a
+ * delay during it included) shows the field in place of why it has no stream; the field dims itself out of play.
  */
 export function TileBody(props: { tile: Tile; game: GameSnapshot | undefined }) {
   const { tile, game } = props
@@ -17,7 +16,7 @@ export function TileBody(props: { tile: Tile; game: GameSnapshot | undefined }) 
     case "Empty":
       return <p className="label-caps text-muted-foreground/60 text-sm tracking-[0.2em]">No signal</p>
     case "DataTile":
-      return game?.inPlay() && Option.isSome(game.ball()) ? (
+      return game?.progress() === "live" ? (
         <div className="flex max-h-full min-h-0 w-full flex-col items-center gap-3 p-3">
           <Scoreboard game={game} />
           <GameField key={game.id} game={game} />

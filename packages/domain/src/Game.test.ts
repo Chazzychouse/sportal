@@ -393,10 +393,16 @@ describe("GameSnapshot#inPlay", () => {
     assert.isTrue(snapshot({ status: "live", period: 5, clock: "0:00" }).inPlay())
   })
 
-  it("is not at halftime, between periods, before kickoff, or after the final", () => {
+  it("is not at halftime, between periods, in a delay, before kickoff, or after the final", () => {
     assert.isFalse(snapshot({ status: "halftime", period: 2, clock: "0:00" }).inPlay())
+    assert.isFalse(snapshot({ status: "delayed", period: 3, clock: "6:40" }).inPlay())
     assert.isFalse(snapshot({ status: "live", period: 1, clock: "0:00" }).inPlay())
     assert.isFalse(snapshot({ status: "scheduled" }).inPlay())
     assert.isFalse(snapshot({ status: "final", period: 4, clock: "0:00" }).inPlay())
+  })
+
+  it("is not at 0:00 in an NFL overtime, which runs on a clock", () => {
+    assert.isFalse(snapshot({ league: "nfl", status: "live", period: 5, clock: "0:00" }).inPlay())
+    assert.isTrue(snapshot({ league: "nfl", status: "live", period: 5, clock: "3:20" }).inPlay())
   })
 })
