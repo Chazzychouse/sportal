@@ -17,19 +17,31 @@ describe("LiveStream", () => {
     vi.unstubAllGlobals()
   })
 
-  it.effect("is connecting before the stream first opens, even after an error", () =>
+  it.effect("should be connecting before the stream first opens", () =>
+    Effect.gen(function* () {
+      const live = yield* LiveStream
+
+      yield* opened()
+      const state = yield* SubscriptionRef.get(live)
+
+      assert.strictEqual(state.connection._tag, "Connecting")
+    }).pipe(Effect.provide(LiveStream.layer))
+  )
+
+  it.effect("should stay connecting after an error before the stream first opens", () =>
     Effect.gen(function* () {
       const live = yield* LiveStream
       const source = yield* opened()
-      assert.strictEqual((yield* SubscriptionRef.get(live)).connection._tag, "Connecting")
+
       source.onerror?.()
       source.onmessage?.({ data: message({ _tag: "StageChanged", stage: pair }) })
       const after = yield* until(live, (state) => state.stage.layout === "Pair")
+
       assert.strictEqual(after.connection._tag, "Connecting")
     }).pipe(Effect.provide(LiveStream.layer))
   )
 
-  it.effect("publishes nothing for an error while connecting or already lost", () =>
+  it.effect("should publish nothing for an error while connecting or already lost", () =>
     Effect.gen(function* () {
       const live = yield* LiveStream
       const source = yield* opened()
@@ -41,17 +53,44 @@ describe("LiveStream", () => {
         Effect.forkChild
       )
       yield* Deferred.await(listening)
+
       source.onerror?.()
       source.onopen?.()
       source.onerror?.()
       source.onerror?.()
       source.onmessage?.({ data: message({ _tag: "StageChanged", stage: pair }) })
-      const connections = Array.from(yield* Fiber.join(published), (state) => state.connection._tag)
+      const states = yield* Fiber.join(published)
+
+      const connections = Array.from(states, (state) => state.connection._tag)
       assert.deepStrictEqual(connections, ["Connecting", "Connected", "Lost", "Lost"])
     }).pipe(Effect.provide(LiveStream.layer))
   )
 
-  it.effect("is connected once open, lost after an error, and connected again when it reopens", () =>
+  it.effect("should be connected once open", () =>
+    Effect.gen(function* () {
+      const live = yield* LiveStream
+      const source = yield* opened()
+
+      source.onopen?.()
+
+      yield* until(live, (state) => state.connection._tag === "Connected")
+    }).pipe(Effect.provide(LiveStream.layer))
+  )
+
+  it.effect("should be lost after an error once open", () =>
+    Effect.gen(function* () {
+      const live = yield* LiveStream
+      const source = yield* opened()
+      source.onopen?.()
+      yield* until(live, (state) => state.connection._tag === "Connected")
+
+      source.onerror?.()
+
+      yield* until(live, (state) => state.connection._tag === "Lost")
+    }).pipe(Effect.provide(LiveStream.layer))
+  )
+
+  it.effect("should be connected again when it reopens after it was lost", () =>
     Effect.gen(function* () {
       const live = yield* LiveStream
       const source = yield* opened()
@@ -59,19 +98,23 @@ describe("LiveStream", () => {
       yield* until(live, (state) => state.connection._tag === "Connected")
       source.onerror?.()
       yield* until(live, (state) => state.connection._tag === "Lost")
+
       source.onerror?.()
       source.onopen?.()
+
       yield* until(live, (state) => state.connection._tag === "Connected")
     }).pipe(Effect.provide(LiveStream.layer))
   )
 
-  it.effect("replaces the stage and the slate from their messages", () =>
+  it.effect("should replace the stage and the slate from their messages", () =>
     Effect.gen(function* () {
       const live = yield* LiveStream
       const source = yield* opened()
+
       source.onmessage?.({ data: message({ _tag: "StageChanged", stage: pair }) })
       source.onmessage?.({ data: message({ _tag: "SlateChanged", slate: [], recentPlays: {} }) })
       const state = yield* until(live, (current) => current.stage.layout === "Pair")
+
       assert.deepStrictEqual(state.slate, [])
     }).pipe(Effect.provide(LiveStream.layer))
   )
@@ -82,25 +125,7 @@ describe("LiveStream", () => {
       Effect.gen(function* () {
         const live = yield* LiveStream
         const source = yield* opened()
-        const home = team("HOME").id
-        const away = team("AWAY").id
-        const touchdown = new Completion({
-          id: PlayId.make("2"),
-          sequence: 2,
-          period: 1,
-          clock: "14:30",
-          text: "Pass complete for 1 yard",
-          scoring: true,
-          homeScore: 7,
-          awayScore: 0,
-          start: { down: 1, distance: 10, yardsToEndzone: 1, team: home },
-          end: { team: away },
-          homeWinProbability: 0.62,
-          team: home,
-          yards: 1,
-          touchdown: true
-        })
-        const recentPlays = { [GameId.make("401")]: [play(), touchdown] }
+        const recentPlays = { [GameId.make("401")]: [play(), touchdown()] }
 
         source.onmessage?.({ data: message({ _tag: "SlateChanged", slate: [], recentPlays }) })
         const state = yield* until(live, (current) => Object.keys(current.recentPlays).length > 0)
@@ -110,24 +135,27 @@ describe("LiveStream", () => {
       }).pipe(Effect.provide(LiveStream.layer))
   )
 
-  it.effect("skips a malformed message and keeps reading", () =>
+  it.effect("should skip a malformed message and keep reading", () =>
     Effect.gen(function* () {
       const live = yield* LiveStream
       const source = yield* opened()
       source.onopen?.()
       const before = yield* until(live, (state) => state.connection._tag === "Connected")
+
       source.onmessage?.({ data: "{not json" })
       source.onmessage?.({ data: JSON.stringify({ _tag: "StageChanged", stage: "nope" }) })
       source.onmessage?.({ data: message({ _tag: "StageChanged", stage: pair }) })
       const after = yield* until(live, (state) => state.stage.layout === "Pair")
+
       assert.strictEqual(after.connection, before.connection)
       assert.strictEqual(after.slate, before.slate)
     }).pipe(Effect.provide(LiveStream.layer))
   )
 
-  it.effect("opens /api/live and closes it when the runtime goes", () =>
+  it.effect("should open /api/live and close it when the runtime goes", () =>
     Effect.gen(function* () {
       const source = yield* Effect.scoped(Effect.provide(opened(), LiveStream.layer))
+
       assert.strictEqual(source.url, "/api/live")
       assert.isTrue(source.closed)
     })
@@ -170,4 +198,26 @@ class FakeEventSource {
   close() {
     this.closed = true
   }
+}
+
+/** A one-yard touchdown pass for the home side: a Completion, so a decode has its case to keep. */
+function touchdown() {
+  const home = team("HOME").id
+  const away = team("AWAY").id
+  return new Completion({
+    id: PlayId.make("2"),
+    sequence: 2,
+    period: 1,
+    clock: "14:30",
+    text: "Pass complete for 1 yard",
+    scoring: true,
+    homeScore: 7,
+    awayScore: 0,
+    start: { down: 1, distance: 10, yardsToEndzone: 1, team: home },
+    end: { team: away },
+    homeWinProbability: 0.62,
+    team: home,
+    yards: 1,
+    touchdown: true
+  })
 }
