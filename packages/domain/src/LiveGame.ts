@@ -74,20 +74,13 @@ export class LiveGame extends Data.Class<{
   ): {
     readonly liveGame: Option.Option<LiveGame>
     readonly events: ReadonlyArray<GameEventKind>
-    readonly outcome: "taken" | "behind" | "held"
+    readonly outcome: TookOutcome
   }
   take(
     delivery: Extract<Delivery, { readonly _tag: "Plays" }>,
     now: DateTime.Utc
   ): { readonly liveGame: Option.Option<LiveGame>; readonly events: ReadonlyArray<GameEventKind> }
-  take(
-    delivery: Extract<Delivery, { readonly _tag: "Snapshot" | "Plays" }>,
-    now: DateTime.Utc
-  ): {
-    readonly liveGame: Option.Option<LiveGame>
-    readonly events: ReadonlyArray<GameEventKind>
-    readonly outcome?: "taken" | "behind" | "held"
-  } {
+  take(delivery: Extract<Delivery, { readonly _tag: "Snapshot" | "Plays" }>, now: DateTime.Utc) {
     if (delivery._tag === "Plays") {
       const plays = delivery.plays.toSorted(Play.order)
       if (Equal.equals(plays, this.plays)) return { liveGame: Option.none(), events: [] }
@@ -167,7 +160,6 @@ export class LiveGame extends Data.Class<{
     return LiveGameState.$match(this.state, {
       Upcoming: () => Option.some(DateTime.subtractDuration(this.snapshot.kickoff, LiveGame.currentBefore)),
       Live: ({ updatedAt }) => Option.some(DateTime.addDuration(updatedAt, LiveGame.staleAfter)),
-      // Always before it would go stale: a hold begins with updatedAt, and fallbackAfter is shorter than staleAfter.
       Holding: ({ until }) => Option.some(until),
       Stale: ({ updatedAt }) => Option.some(DateTime.addDuration(updatedAt, LiveGame.staleCurrentFor)),
       Over: () => Option.none()
@@ -211,7 +203,7 @@ export class LiveGame extends Data.Class<{
   ): {
     readonly liveGame: Option.Option<LiveGame>
     readonly events: ReadonlyArray<GameEventKind>
-    readonly outcome: "taken" | "behind" | "held"
+    readonly outcome: TookOutcome
   } {
     const holding = LiveGameState.$is("Holding")(this.state) ? Option.some(this.state) : Option.none()
     const waitingOn = Option.match(holding, { onNone: () => this.snapshot, onSome: ({ held }) => held })
@@ -231,6 +223,9 @@ export class LiveGame extends Data.Class<{
     return { liveGame: Option.some(new LiveGame({ ...this, state })), events: [], outcome: "taken" }
   }
 }
+
+/** What taking a snapshot did: taken, ignored as behind, or held by a covered game. */
+export type TookOutcome = "taken" | "behind" | "held"
 
 /** A snapshot behind the game: nothing changes. */
 const behind: {

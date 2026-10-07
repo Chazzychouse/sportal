@@ -29,6 +29,7 @@ Every exported type name must be a term here, except the wire schemas in `*Paylo
 | **Ahead** | One snapshot of a game past another: later in game time, or at the same game time with more points, or as many points split differently, or a different status. | newer |
 | **Held snapshot** | A poll snapshot ahead of a covered game, held until the push catches it up or `fallbackAfter` passes; `held` on `LiveGameState.Holding`. | pending |
 | **Fallback** | A held snapshot applying as the poll's once the push has not caught it up for `fallbackAfter`, saying its events; the `Took` outcome `fellBack`. | |
+| **Took outcome** | What taking a snapshot did to its game: taken, ignored as behind, or held by a covered game; `TookOutcome` in code. A slate observation's `Took` adds `fellBack`, for a fallback. | result |
 | **Following** | Where the slate is in reading the feed log: replaying the day before the Hub serves, live, or halted by a decode defect, when no new frame is taken but the timer still runs and is told; `Following` in code. | phase, mode |
 | **Taken** | What one take or tick of the slate did: the next slate, the game events it said, in order, and its slate observations; `Taken` in code. | result, report |
 | **Slate observation** | What one take or tick of the slate did to one game, for telemetry only: took a snapshot, started, changed, stopped, dropped, or raised a defect. The game events it said are `Taken.events`, not observations. | fold report, log entry |

@@ -3,7 +3,7 @@ import { Delivery, type DeliverySource } from "./Delivery.ts"
 import type { GameId, GameSnapshot } from "./Game.ts"
 import { GameEvent, type GameEventKind } from "./GameEvent.ts"
 import type { LeagueId } from "./League.ts"
-import { LiveGame } from "./LiveGame.ts"
+import { LiveGame, type TookOutcome } from "./LiveGame.ts"
 import type { RecentPlays } from "./RecentPlays.ts"
 
 /**
@@ -133,7 +133,7 @@ export type SlateObservation = Data.TaggedEnum<{
   Took: {
     readonly snapshot: GameSnapshot
     readonly from: DeliverySource
-    readonly outcome: "taken" | "behind" | "held" | "fellBack"
+    readonly outcome: TookOutcome | "fellBack"
     readonly had: Option.Option<GameSnapshot>
   }
   Started: { readonly liveGame: LiveGame; readonly at: DateTime.Utc }
@@ -236,10 +236,9 @@ function snapshotTaken(
   return guarded(advanced, snapshot, "a delivery", () => {
     const current = Option.fromNullishOr(advanced.live.get(snapshot.id))
     const step = Option.match(current, {
-      onNone: () => ({
+      onNone: (): { readonly liveGame: Option.Option<LiveGame>; readonly outcome: TookOutcome } => ({
         liveGame: Option.some(LiveGame.start(snapshot, from, at)),
-        events: [],
-        outcome: "taken" as const
+        outcome: "taken"
       }),
       onSome: (liveGame) => liveGame.take(Delivery.cases.Snapshot.make({ snapshot, from }), at)
     })
