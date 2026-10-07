@@ -7,30 +7,13 @@ import { DateTime, Effect, Equal, Exit, Schema } from "effect"
 import { Decoded } from "../provider/Provider.ts"
 import { CorpusInput, CorpusLine, Had } from "./CorpusInput.ts"
 
-const game = GameId.make("1")
-const listing = Delivery.cases.Listing.make({
-  league: "fbs",
-  games: [snapshot(), liveSnapshot({ id: GameId.make("2") })]
-})
-const first = play({ id: PlayId.make("a"), sequence: 1 })
-const second = play({ id: PlayId.make("b"), sequence: 2, text: "Rush for 2 yards" })
-const changed = play({ id: PlayId.make("a"), sequence: 1, text: "Rush for 1 yard (corrected)" })
-const third = play({ id: PlayId.make("c"), sequence: 3 })
-
-const decodeds = [
-  decoded(1, [listing]),
-  decoded(2, [Delivery.cases.Listing.make({ league: "fbs", games: [...listing.games] })]),
-  decoded(3, [Delivery.cases.Snapshot.make({ snapshot: liveSnapshot(), from: "push" })]),
-  decoded(4, [Delivery.cases.Plays.make({ game, plays: [first, second] })]),
-  decoded(5, [Delivery.cases.Plays.make({ game, plays: [changed, second, third] })])
-]
-
 describe("CorpusLine", () => {
   it.effect(
-    "says each frame's deliveries against what the day had, listings to poll and the rest to push",
+    "should say each frame's deliveries against what the day had, listings to poll and the rest to push",
     () =>
       Effect.gen(function* () {
         const { lines } = yield* linesOf(decodeds)
+
         assert.deepStrictEqual(
           lines.map(({ file, line }) => [file, line.seq, line.input._tag]),
           [
@@ -53,10 +36,12 @@ describe("CorpusLine", () => {
       })
   )
 
-  it.effect("reads back as exactly the deliveries each frame said", () =>
+  it.effect("should read back as exactly the deliveries each frame said", () =>
     Effect.gen(function* () {
       const { lines } = yield* linesOf(decodeds)
+
       const read = deliveriesOf(lines.map(({ line }) => line))
+
       assert.lengthOf(read, decodeds.length)
       assert.deepStrictEqual(
         read.map((deliveries, index) => Equal.equals(deliveries, decodeds[index]?.deliveries)),
@@ -65,14 +50,16 @@ describe("CorpusLine", () => {
     })
   )
 
-  it.effect("rebuilds a game's whole list in play order from upserts", () =>
+  it.effect("should rebuild a game's whole list in play order from upserts", () =>
     Effect.gen(function* () {
       const plays = [
         decoded(1, [Delivery.cases.Plays.make({ game, plays: [first, third] })]),
         decoded(2, [Delivery.cases.Plays.make({ game, plays: [first, second, third] })])
       ]
       const { lines } = yield* linesOf(plays)
+
       const [, rebuilt] = deliveriesOf(lines.map(({ line }) => line))
+
       assert.deepStrictEqual(
         rebuilt?.flatMap((delivery) => (delivery._tag === "Plays" ? delivery.plays.map(({ id }) => id) : [])),
         ["a", "b", "c"]
@@ -80,38 +67,51 @@ describe("CorpusLine", () => {
     })
   )
 
-  it.effect("a play the game no longer lists is removed, and reads back without it", () =>
+  it.effect("should remove a play the game no longer lists", () =>
     Effect.gen(function* () {
-      const dropping = [
-        decoded(1, [Delivery.cases.Plays.make({ game, plays: [first, second] })]),
-        decoded(2, [Delivery.cases.Plays.make({ game, plays: [second] })])
-      ]
+      const dropping = droppingFirst()
+
       const { lines } = yield* linesOf(dropping)
+
       assert.deepStrictEqual(
         lines[1]?.line.input,
         CorpusInput.cases.PlaysChanged.make({ game, upserts: [], removed: [first.id] })
       )
+    })
+  )
+
+  it.effect("should read a removed play back without it", () =>
+    Effect.gen(function* () {
+      const dropping = droppingFirst()
+      const { lines } = yield* linesOf(dropping)
+
       const read = deliveriesOf(lines.map(({ line }) => line))
+
       assert.isTrue(Equal.equals(read[1], dropping[1]?.deliveries))
     })
   )
 
-  it.effect("a poll snapshot is a defect, so a decoder that sends one fails the build", () =>
+  it.effect("should die on a poll snapshot, so a decoder that sends one fails the build", () =>
     Effect.gen(function* () {
-      const exit = yield* CorpusLine.of(
-        decoded(1, [Delivery.cases.Snapshot.make({ snapshot: liveSnapshot(), from: "poll" })]),
-        Had.empty
-      ).pipe(Effect.exit)
+      const polled = decoded(1, [Delivery.cases.Snapshot.make({ snapshot: liveSnapshot(), from: "poll" })])
+
+      const exit = yield* CorpusLine.of(polled, Had.empty).pipe(Effect.exit)
+
       assert.isTrue(Exit.hasDies(exit))
     })
   )
 
-  it.effect("round-trips each line through its JSON form", () =>
+  it.effect("should round-trip each line through its JSON form", () =>
     Effect.gen(function* () {
       const wire = Schema.fromJsonString(CorpusLine)
       const { lines } = yield* linesOf(decodeds)
-      for (const { line } of lines) {
-        assert.deepStrictEqual(yield* Schema.decodeEffect(wire)(yield* Schema.encodeEffect(wire)(line)), line)
+
+      const backs = yield* Effect.forEach(lines, ({ line }) =>
+        Schema.encodeEffect(wire)(line).pipe(Effect.flatMap(Schema.decodeEffect(wire)))
+      )
+
+      for (const [index, { line }] of lines.entries()) {
+        assert.deepStrictEqual(backs[index], line)
       }
     })
   )
@@ -155,4 +155,30 @@ function deliveriesOf(lines: ReadonlyArray<CorpusLine>): ReadonlyArray<ReadonlyA
     },
     { read: [] as ReadonlyArray<ReadonlyArray<Delivery>>, had: Had.empty }
   ).read
+}
+
+const game = GameId.make("1")
+const listing = Delivery.cases.Listing.make({
+  league: "fbs",
+  games: [snapshot(), liveSnapshot({ id: GameId.make("2") })]
+})
+const first = play({ id: PlayId.make("a"), sequence: 1 })
+const second = play({ id: PlayId.make("b"), sequence: 2, text: "Rush for 2 yards" })
+const changed = play({ id: PlayId.make("a"), sequence: 1, text: "Rush for 1 yard (corrected)" })
+const third = play({ id: PlayId.make("c"), sequence: 3 })
+
+const decodeds = [
+  decoded(1, [listing]),
+  decoded(2, [Delivery.cases.Listing.make({ league: "fbs", games: [...listing.games] })]),
+  decoded(3, [Delivery.cases.Snapshot.make({ snapshot: liveSnapshot(), from: "push" })]),
+  decoded(4, [Delivery.cases.Plays.make({ game, plays: [first, second] })]),
+  decoded(5, [Delivery.cases.Plays.make({ game, plays: [changed, second, third] })])
+]
+
+/** A game's plays, then the same without its first play. */
+function droppingFirst() {
+  return [
+    decoded(1, [Delivery.cases.Plays.make({ game, plays: [first, second] })]),
+    decoded(2, [Delivery.cases.Plays.make({ game, plays: [second] })])
+  ]
 }
