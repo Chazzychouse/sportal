@@ -29,7 +29,7 @@ import * as Gzip from "../Gzip.ts"
 import type { HubConfig } from "../HubConfig.ts"
 import * as Ingest from "../ingest/Ingest.ts"
 import { LiveGames } from "../LiveGames.ts"
-import type { Decoder } from "../provider/Decoder.ts"
+import { Decoder } from "../provider/Decoder.ts"
 import * as EspnDecode from "../provider/espn/EspnDecode.ts"
 import { Provider } from "../provider/Provider.ts"
 import * as SnapshotDecode from "../provider/snapshot/SnapshotDecode.ts"
@@ -133,14 +133,15 @@ describe("ScenarioProvider", () => {
     "a recorded scenario is played with only its settings and the recorded scenarios, read by ESPN's decode",
     () =>
       Effect.gen(function* () {
-        const played = ScenarioProvider.layer(adapters) satisfies Layer.Layer<
+        const provider = ScenarioProvider.layer(SnapshotProvider.layer) satisfies Layer.Layer<
           Provider,
           ScenarioUnknown | ScenarioUnreadable,
           HubConfig | RecordedScenarios
         >
+        const decoder = ScenarioProvider.decoder(decoders) satisfies Layer.Layer<Decoder, never, HubConfig>
         const games = yield* listedBy("fbs").pipe(
           Effect.provide(
-            played.pipe(
+            Layer.merge(provider, decoder).pipe(
               Layer.provide([
                 RecordedScenarios.layer,
                 withEnv({ SPORTAL_SCENARIO: "crowded-fourth-quarter" }).pipe(Layer.orDie)
@@ -151,6 +152,27 @@ describe("ScenarioProvider", () => {
         )
         assert.isNotEmpty(games)
       })
+  )
+
+  it.effect("the decoder is the snapshot feed's for a written name and the recorded one's otherwise", () =>
+    Effect.gen(function* () {
+      const decoderFor = (name: string) =>
+        Layer.build(
+          ScenarioProvider.decoder(decoders).pipe(
+            Layer.provide(withEnv({ SPORTAL_SCENARIO: name }).pipe(Layer.orDie))
+          )
+        ).pipe(Effect.map((built) => Context.get(built, Decoder)))
+      const snapshot = Context.get(yield* Layer.build(SnapshotDecode.layer), Decoder)
+      const espn = Context.get(yield* Layer.build(EspnDecode.layer), Decoder)
+
+      assert.strictEqual(yield* decoderFor("two-minute-drill-tie"), snapshot)
+      assert.strictEqual(yield* decoderFor("crowded-fourth-quarter"), espn)
+      assert.strictEqual(
+        yield* decoderFor("no-such-scenario"),
+        espn,
+        "an unknown name is left to the provider"
+      )
+    }).pipe(Effect.scoped)
   )
 
   it.effect("a written scenario never pushes", () =>
@@ -357,20 +379,21 @@ describe("ScenarioProvider", () => {
  * `decoder` (ESPN's, unless given).
  */
 function scenario(name: string, options: Options = {}) {
-  return ScenarioProvider.layer(
-    options.decoder === undefined ? adapters : { ...adapters, recorded: { decoder: options.decoder } }
+  return Layer.merge(
+    ScenarioProvider.layer(SnapshotProvider.layer).pipe(
+      Layer.provide(options.from === undefined ? RecordedScenarios.layer : RecordedScenarios.in(options.from))
+    ),
+    ScenarioProvider.decoder(
+      options.decoder === undefined ? decoders : { ...decoders, recorded: options.decoder }
+    )
   ).pipe(
-    Layer.provide(options.from === undefined ? RecordedScenarios.layer : RecordedScenarios.in(options.from)),
     Layer.provideMerge(withEnv({ SPORTAL_SCENARIO: name, ...options.env }).pipe(Layer.orDie)),
     Layer.provide(NodeServices.layer)
   )
 }
 
-// The adapters HubMode plays a scenario with.
-const adapters = {
-  written: { provider: SnapshotProvider.layer, decoder: SnapshotDecode.layer },
-  recorded: { decoder: EspnDecode.layer }
-}
+// The decoders HubMode plays a scenario with.
+const decoders = { written: SnapshotDecode.layer, recorded: EspnDecode.layer }
 
 /**
  * Ingest over `scenario(name, options)`, onto a feed log in memory or, with `scenarioFeedLog`, the scenario's own one

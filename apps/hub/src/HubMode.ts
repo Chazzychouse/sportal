@@ -63,10 +63,8 @@ function scripted() {
       Slate.layer,
       Ingest.layer.pipe(
         Layer.provide([
-          ScenarioProvider.layer({
-            written: { provider: SnapshotProvider.layer, decoder: SnapshotDecode.layer },
-            recorded: { decoder: EspnDecode.layer }
-          }).pipe(Layer.provide(RecordedScenarios.layer)),
+          ScenarioProvider.layer(SnapshotProvider.layer).pipe(Layer.provide(RecordedScenarios.layer)),
+          ScenarioProvider.decoder({ written: SnapshotDecode.layer, recorded: EspnDecode.layer }),
           FeedLog.forScenario,
           DateTime.layerCurrentZoneLocal
         ])
