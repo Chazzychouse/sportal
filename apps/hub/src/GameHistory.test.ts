@@ -107,16 +107,18 @@ describe("GameHistory", () => {
       // A fold whose log reached frame 5, then a fresh one whose log numbers its frames again from 1, as a log reopened
       // after a crash does, over the same history.
       yield* Effect.gen(function* () {
+        // Frames 1 to 4 hold the game; frame 5 brings its play.
         yield* delivered(Delivery.cases.Snapshot.make({ snapshot: live, from: "push" }))
-        yield* Effect.repeat(delivered(Delivery.cases.Snapshot.make({ snapshot: live, from: "push" })), {
-          times: 2
-        })
+        yield* delivered(Delivery.cases.Snapshot.make({ snapshot: live, from: "push" }))
+        yield* delivered(Delivery.cases.Snapshot.make({ snapshot: live, from: "push" }))
+        yield* delivered(Delivery.cases.Snapshot.make({ snapshot: live, from: "push" }))
         yield* delivered(
           Delivery.cases.Plays.make({ game: one, plays: [play({ id: first, text: "newer" })] })
         )
         yield* batched
       }).pipe(Effect.provide(following))
       const plays = yield* Effect.gen(function* () {
+        // Frames 1 and 2 hold the game; frame 3 brings the older play.
         yield* delivered(Delivery.cases.Snapshot.make({ snapshot: live, from: "push" }))
         yield* delivered(Delivery.cases.Snapshot.make({ snapshot: live, from: "push" }))
         yield* delivered(

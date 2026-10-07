@@ -24,8 +24,8 @@ export class LiveGames extends Data.Class<{
 
   /**
    * Takes one frame: ticks every game due after `reached` and at or before `at`, then applies each of its deliveries in
-   * order, and sets `seq` to the frame's, even when it has no deliveries. A tick never goes back. A step that raises a
-   * defect keeps the game's last good live game and reports `Raised`.
+   * order, and sets `seq` to the frame's, even when it has no deliveries. A tick never goes back. A game whose take or
+   * tick raises a defect keeps its last good live game and reports `Raised`.
    */
   take(frame: {
     readonly deliveries: ReadonlyArray<Delivery>
@@ -79,7 +79,7 @@ export class LiveGames extends Data.Class<{
   private advance(
     at: DateTime.Utc,
     seq: Option.Option<number>,
-    then: (ticked: Stepped) => Effect.Effect<Folded>
+    then: (ticked: Advanced) => Effect.Effect<Folded>
   ): Effect.Effect<{ readonly next: LiveGames; readonly reports: ReadonlyArray<FoldReport> }> {
     const from = Option.getOrElse(this.reached, () => at)
     return tickTo({ live: this.live, reports: [] }, from, at).pipe(
@@ -111,32 +111,32 @@ export type FoldReport = Data.TaggedEnum<{
   Stopped: { readonly liveGame: LiveGame; readonly at: DateTime.Utc }
   Happened: { readonly snapshot: GameSnapshot; readonly event: GameEvent }
   Dropped: { readonly game: GameId }
-  /** A step raised a defect; the game kept its last good live game. `snapshot` is the one at hand. */
+  /** A game's take or tick raised a defect; the game kept its last good live game. `snapshot` is the one at hand. */
   Raised: { readonly snapshot: GameSnapshot; readonly cause: Cause.Cause<never>; readonly by: string }
 }>
 export const FoldReport = Data.taggedEnum<FoldReport>()
 
-/** Every current game's live game, and what the steps so far did. */
-type Stepped = { readonly live: ReadonlyMap<GameId, LiveGame>; readonly reports: ReadonlyArray<FoldReport> }
+/** Every current game's live game, and what advancing the fold has reported so far. */
+type Advanced = { readonly live: ReadonlyMap<GameId, LiveGame>; readonly reports: ReadonlyArray<FoldReport> }
 
-/** `Stepped`, with each league's last listing. */
-type Folded = Stepped & { readonly listed: ReadonlyMap<LeagueId, ReadonlyArray<GameSnapshot>> }
+/** `Advanced`, with each league's last listing. */
+type Folded = Advanced & { readonly listed: ReadonlyMap<LeagueId, ReadonlyArray<GameSnapshot>> }
 
 /**
  * Ticks, in wake order, every game due after `from` and at or before `at`, each at its own wake instant; games due at
  * the same instant tick together.
  */
-function tickTo(stepped: Stepped, from: DateTime.Utc, at: DateTime.Utc): Effect.Effect<Stepped> {
+function tickTo(advanced: Advanced, from: DateTime.Utc, at: DateTime.Utc): Effect.Effect<Advanced> {
   return Option.match(
-    Option.filter(dueAfter(stepped.live, from), (due) => DateTime.isLessThanOrEqualTo(due, at)),
+    Option.filter(dueAfter(advanced.live, from), (due) => DateTime.isLessThanOrEqualTo(due, at)),
     {
-      onNone: () => Effect.succeed(stepped),
+      onNone: () => Effect.succeed(advanced),
       onSome: (due) =>
         Effect.reduce(
-          [...stepped.live.values()].filter((liveGame) =>
+          [...advanced.live.values()].filter((liveGame) =>
             Option.exists(liveGame.dueAfter(from), (instant) => DateTime.Equivalence(instant, due))
           ),
-          () => stepped,
+          () => advanced,
           (acc, liveGame) =>
             guarded(acc, liveGame.snapshot, "a tick", () =>
               settled(acc, liveGame.snapshot.id, due, Option.some(liveGame), { liveGame: liveGame.tick(due) })
@@ -157,7 +157,7 @@ function applied(folded: Folded, delivery: Delivery, at: DateTime.Utc): Effect.E
     Listing: ({ league, games }) =>
       Effect.reduce(
         games,
-        (): Stepped => folded,
+        (): Advanced => folded,
         (acc, snapshot) => snapshotTaken(acc, snapshot, "poll", at)
       ).pipe(Effect.map((after) => ({ ...after, listed: new Map(listed).set(league, games) }))),
     Snapshot: ({ snapshot, from }) =>
@@ -178,13 +178,13 @@ function applied(folded: Folded, delivery: Delivery, at: DateTime.Utc): Effect.E
 }
 
 function snapshotTaken(
-  stepped: Stepped,
+  advanced: Advanced,
   snapshot: GameSnapshot,
   from: DeliverySource,
   at: DateTime.Utc
-): Effect.Effect<Stepped> {
-  return guarded(stepped, snapshot, "a delivery", () => {
-    const current = Option.fromNullishOr(stepped.live.get(snapshot.id))
+): Effect.Effect<Advanced> {
+  return guarded(advanced, snapshot, "a delivery", () => {
+    const current = Option.fromNullishOr(advanced.live.get(snapshot.id))
     const step = Option.match(current, {
       onNone: () => ({ liveGame: Option.some(LiveGame.start(snapshot, from, at)) }),
       onSome: (liveGame) => liveGame.take(Delivery.cases.Snapshot.make({ snapshot, from }), at)
@@ -198,7 +198,7 @@ function snapshotTaken(
       }),
       had: Option.map(current, (liveGame) => liveGame.snapshot)
     })
-    return settled({ ...stepped, reports: [...stepped.reports, took] }, snapshot.id, at, current, step)
+    return settled({ ...advanced, reports: [...advanced.reports, took] }, snapshot.id, at, current, step)
   })
 }
 
@@ -208,19 +208,19 @@ function snapshotTaken(
  * not held, and nothing is reported of it.
  */
 function settled(
-  stepped: Stepped,
+  advanced: Advanced,
   id: GameId,
   at: DateTime.Utc,
   current: Option.Option<LiveGame>,
   step: { readonly liveGame: Option.Option<LiveGame>; readonly events?: ReadonlyArray<GameEvent> }
-): Stepped {
+): Advanced {
   return Option.match(
     Option.orElse(step.liveGame, () => current),
     {
-      onNone: () => stepped,
+      onNone: () => advanced,
       onSome: (after) => {
         const reports = [
-          ...stepped.reports,
+          ...advanced.reports,
           ...Option.match(step.liveGame, {
             onNone: () => [],
             onSome: () =>
@@ -233,13 +233,13 @@ function settled(
         ]
         if (after.isCurrent(at)) {
           return {
-            live: Option.isSome(step.liveGame) ? new Map(stepped.live).set(id, after) : stepped.live,
+            live: Option.isSome(step.liveGame) ? new Map(advanced.live).set(id, after) : advanced.live,
             reports
           }
         }
-        if (Option.isNone(current)) return stepped
+        if (Option.isNone(current)) return advanced
         return {
-          live: new Map([...stepped.live].filter(([game]) => game !== id)),
+          live: new Map([...advanced.live].filter(([game]) => game !== id)),
           reports: [...reports, FoldReport.Stopped({ liveGame: after, at })]
         }
       }
@@ -249,16 +249,16 @@ function settled(
 
 /** Runs one game's pure step; a defect keeps what came before and reports it with the snapshot at hand. */
 function guarded(
-  stepped: Stepped,
+  advanced: Advanced,
   snapshot: GameSnapshot,
   by: string,
-  step: () => Stepped
-): Effect.Effect<Stepped> {
+  step: () => Advanced
+): Effect.Effect<Advanced> {
   return Effect.sync(step).pipe(
     Effect.catchDefect((defect) =>
       Effect.succeed({
-        ...stepped,
-        reports: [...stepped.reports, FoldReport.Raised({ snapshot, cause: Cause.die(defect), by })]
+        ...advanced,
+        reports: [...advanced.reports, FoldReport.Raised({ snapshot, cause: Cause.die(defect), by })]
       })
     )
   )

@@ -1,21 +1,19 @@
 import {
   Array as Arr,
-  Cause,
   DateTime,
   Duration,
   Effect,
   Equivalence,
-  Exit,
   Layer,
   Metric,
   Option,
-  Pull,
   Result,
   Schedule,
   Stream
 } from "effect"
 import { FeedLog } from "../FeedLog.ts"
 import { HubConfig } from "../HubConfig.ts"
+import { loggedUnlessStopping } from "../HubStopping.ts"
 import { LiveGames } from "../LiveGames.ts"
 import { Provider } from "../provider/Provider.ts"
 
@@ -97,19 +95,6 @@ export const layer = Layer.effectDiscard(
     )
   })
 )
-
-/**
- * Logs at Error that a task which should run until the Hub stops has ended, with its failure or else `ended`, unless
- * it is the Hub stopping: an interruption, or the end a stream over a `PubSub` (the fold's changes) fails with when its
- * subscription is shut down as the Hub's scope closes.
- */
-function loggedUnlessStopping(message: string, ended: string) {
-  return Effect.onExitIf(
-    (exit: Exit.Exit<unknown, unknown>) =>
-      !(Exit.isFailure(exit) && (Cause.hasInterruptsOnly(exit.cause) || Pull.isDoneCause(exit.cause))),
-    (exit) => Effect.logError(message, Exit.isFailure(exit) ? exit.cause : ended)
-  )
-}
 
 const sameIds = Arr.makeEquivalence(Equivalence.String)
 

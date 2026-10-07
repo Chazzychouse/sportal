@@ -177,24 +177,30 @@ describe("LiveGames", () => {
       }).pipe(Effect.provide(liveGames()), withMetrics)
     )
 
-    it.effect("answers with the latest once a decode defect stops the fold, which is logged once", () => {
-      const { logs, layer } = recordingLogs("Debug")
-      return Effect.gen(function* () {
-        const log = yield* FeedLog
-        const liveGames = yield* LiveGames
-        yield* takenSnapshot(liveSnapshot({ id: one }))
-        const dies = yield* log.append(
-          new FeedFrame({ ...(yield* pushed({ _tag: "Resync" }, "x")), body: "die" })
-        )
-        assert.deepStrictEqual((yield* liveGames.through(dies.seq)).seq, Option.some(1))
-        const after = yield* log.append(yield* pushed({ _tag: "Resync" }, "x"))
-        assert.deepStrictEqual((yield* liveGames.through(after.seq)).seq, Option.some(1))
-        const stopped = logs.filter(({ level }) => level === "Error")
-        assert.strictEqual(stopped.length, 1)
-        assert.include(stopped[0]?.message, "frames are no longer taken into the fold until the Hub restarts")
-        assert.include(stopped[0]?.cause, "decode died")
-      }).pipe(Effect.provide(liveGames([], { decoder: dyingAt("die") }).pipe(Layer.provideMerge(layer))))
-    })
+    it.effect(
+      "answers with the latest once a decode defect halts the following, which is logged once",
+      () => {
+        const { logs, layer } = recordingLogs("Debug")
+        return Effect.gen(function* () {
+          const log = yield* FeedLog
+          const liveGames = yield* LiveGames
+          yield* takenSnapshot(liveSnapshot({ id: one }))
+          const dies = yield* log.append(
+            new FeedFrame({ ...(yield* pushed({ _tag: "Resync" }, "x")), body: "die" })
+          )
+          assert.deepStrictEqual((yield* liveGames.through(dies.seq)).seq, Option.some(1))
+          const after = yield* log.append(yield* pushed({ _tag: "Resync" }, "x"))
+          assert.deepStrictEqual((yield* liveGames.through(after.seq)).seq, Option.some(1))
+          const stopped = logs.filter(({ level }) => level === "Error")
+          assert.strictEqual(stopped.length, 1)
+          assert.include(
+            stopped[0]?.message,
+            "frames are no longer taken into the fold until the Hub restarts"
+          )
+          assert.include(stopped[0]?.cause, "decode died")
+        }).pipe(Effect.provide(liveGames([], { decoder: dyingAt("die") }).pipe(Layer.provideMerge(layer))))
+      }
+    )
   })
 
   describe("over time", () => {
@@ -287,22 +293,53 @@ describe("LiveGames", () => {
       }).pipe(Effect.provide(liveGames().pipe(Layer.provideMerge(layer))))
     })
 
-    it.effect("a fold whose report dies commits nothing, and the game still goes stale on time", () =>
-      Effect.gen(function* () {
+    it.effect("a fold whose report dies commits nothing, and the game still goes stale on time", () => {
+      const { logs, layer } = recordingLogs()
+      return Effect.gen(function* () {
         const start = yield* DateTime.now
         yield* takenSnapshot(liveSnapshot({ id: one }))
-        const stopped = yield* delivered(
+        const halted = yield* delivered(
           Delivery.cases.Plays.make({ game: two, plays: [play()] }),
           DateTime.add(start, { seconds: 100 })
         )
-        assert.deepStrictEqual(stopped.seq, Option.some(1), "the frame whose report died is not taken")
+        assert.deepStrictEqual(halted.seq, Option.some(1), "the frame whose report died is not taken")
+        assert.isTrue(
+          logs.some(
+            ({ level, message }) =>
+              level === "Error" &&
+              message.includes("frames are no longer taken into the fold until the Hub restarts")
+          )
+        )
         assert.isTrue(LiveGameState.$is("Live")((yield* liveGameOf(one)).state))
         yield* TestClock.adjust("89 seconds")
         assert.isTrue(LiveGameState.$is("Live")((yield* liveGameOf(one)).state))
         yield* TestClock.adjust("1 second")
         assert.isTrue(LiveGameState.$is("Stale")((yield* liveGameOf(one)).state))
-      }).pipe(Effect.provide(liveGames().pipe(Layer.provideMerge(dyingOnce("Live → Stale")))))
-    )
+      }).pipe(
+        Effect.provide(
+          liveGames().pipe(Layer.provideMerge(dyingOnce("Live → Stale").pipe(Layer.provideMerge(layer))))
+        )
+      )
+    })
+
+    it.effect("once the following has halted, a game going stale is still logged and gauged", () => {
+      const { logs, layer } = recordingLogs()
+      return Effect.gen(function* () {
+        yield* takenSnapshot(liveSnapshot({ id: one }))
+        const dies = yield* (yield* FeedLog).append(
+          new FeedFrame({ ...(yield* pushed({ _tag: "Resync" }, "x")), body: "die" })
+        )
+        yield* (yield* LiveGames).through(dies.seq)
+        yield* TestClock.adjust("90 seconds")
+        assert.isTrue(LiveGameState.$is("Stale")((yield* liveGameOf(one)).state))
+        assert.isTrue(logs.some(({ message }) => message.includes("Live → Stale")))
+        assert.strictEqual(yield* gauged("sportal_game_state", { game: "1" }), 3)
+        assert.strictEqual(yield* gauged("sportal_live_games", { state: "Stale" }), 1)
+      }).pipe(
+        Effect.provide(liveGames([], { decoder: dyingAt("die") }).pipe(Layer.provideMerge(layer))),
+        withMetrics
+      )
+    })
   })
 
   describe("telemetry", () => {
@@ -475,8 +512,9 @@ describe("LiveGames", () => {
         // `through` answers once the state has the frame, which can be before the span around it ends.
         const take = yield* Effect.yieldNow.pipe(
           Effect.andThen(Effect.sync(() => ended.find((span) => span.name === "LiveGames.take"))),
-          Effect.repeat({ until: (span) => span !== undefined })
+          Effect.repeat({ until: (span) => span !== undefined, times: 100 })
         )
+        assert.isDefined(take, "the take's span ended")
         assert.strictEqual(take?.attributes.get("sportal.seq"), 1)
         assert.strictEqual(take?.attributes.get("sportal.deliveries"), 1)
         const duration = (yield* Metric.snapshot).find((metric) => metric.id === "sportal_take_duration")

@@ -1,6 +1,5 @@
 import * as Fold from "@sportal/domain/LiveGames"
 import {
-  Cause,
   Clock,
   Context,
   Data,
@@ -14,12 +13,12 @@ import {
   Layer,
   Option,
   PubSub,
-  Pull,
   Ref,
   Stream,
   SubscriptionRef
 } from "effect"
 import { FeedLog } from "./FeedLog.ts"
+import { isStopping } from "./HubStopping.ts"
 import { countByState, gaugeHeld, takeDuration, timerDefect, told } from "./LiveGamesTelemetry.ts"
 import { Decoder } from "./provider/Decoder.ts"
 import type { Decoded } from "./provider/Provider.ts"
@@ -36,7 +35,7 @@ export class LiveGames extends Context.Service<
     readonly changes: Stream.Stream<Fold.LiveGames>
     readonly events: Stream.Stream<Data.TaggedEnum.Value<Fold.FoldReport, "Happened">>
     /**
-     * The fold once it has taken frame `seq`, or the latest once it has stopped following the log, so a fold that takes
+     * The fold once it has taken frame `seq`, or the latest once it has halted following the log, so a fold that takes
      * no more frames never keeps its caller waiting.
      */
     through(seq: number): Effect.Effect<Fold.LiveGames>
@@ -50,7 +49,7 @@ export class LiveGames extends Context.Service<
   /**
    * Follows the feed log from the start of the game day: replays it quietly, and is built once every frame logged before
    * it started is taken, so nothing is served from a fold still catching up. Then it takes each frame as it is appended,
-   * and its timer runs. A decode defect during the replay fails the build; one after it stops the following, and the
+   * and its timer runs. A decode defect during the replay fails the build; one after it halts the following, and the
    * fold keeps serving what it has.
    */
   static readonly layer: Layer.Layer<LiveGames, never, FeedLog | Decoder | DateTime.CurrentTimeZone> =
@@ -65,10 +64,15 @@ export class LiveGames extends Context.Service<
           readonly folded: Fold.LiveGames
           readonly following: Following
         }>({ folded: Fold.LiveGames.empty, following: Following.Replaying() })
+        const latest = Effect.map(SubscriptionRef.get(state), ({ folded }) => folded)
         const events = yield* PubSub.unbounded<Data.TaggedEnum.Value<Fold.FoldReport, "Happened">>()
         const resyncs = yield* PubSub.unbounded<string>()
         // What the replay took, for its summary.
         const replayed = yield* Ref.make({ frames: 0, deliveries: 0, plays: 0 })
+        // The last `seq` the replay has read, and once it has read them all, that `seq` for good. A frame at or before it
+        // is replayed, whatever a decode that reads ahead has handed on so far.
+        const readTo = yield* Ref.make(0)
+        const replayRead = yield* Deferred.make<number>()
         const caughtUp = yield* Deferred.make<{ readonly frames: number; readonly deliveries: number }>()
 
         // Takes or ticks the fold and tells what it did as the following stands, all under the state's lock; publishes
@@ -85,7 +89,7 @@ export class LiveGames extends Context.Service<
             Effect.gen(function* () {
               const { next, reports } = yield* run(folded)
               yield* told(following, frame, reports)
-              if (Following.$is("Live")(following)) {
+              if (!Following.$is("Replaying")(following)) {
                 yield* PubSub.publishAll(events, reports.filter(Fold.FoldReport.$is("Happened")))
                 if (next.live !== folded.live) yield* countByState(next.live)
               }
@@ -120,72 +124,77 @@ export class LiveGames extends Context.Service<
           yield* PubSub.publishAll(resyncs, decoded.resyncs)
         }, Effect.trackDuration(takeDuration))
 
-        // The boundary: sets every held game's gauges once, logs the summary, and goes live. Gives the replay's last
-        // `seq`, which is the fold's, since every replayed frame is taken by then.
-        const caughtUpTo = Effect.gen(function* () {
-          const { folded } = yield* SubscriptionRef.get(state)
-          yield* Effect.forEach(folded.live.values(), gaugeHeld, { discard: true })
-          yield* countByState(folded.live)
-          const { frames, deliveries, plays } = yield* Ref.get(replayed)
-          const took = Duration.millis((yield* Clock.currentTimeMillis) - started)
-          yield* Effect.logInfo(
-            `LiveGames: replayed ${frames} frames: ${deliveries} deliveries, ${plays} plays; ${folded.live.size} live games, in ${Duration.format(took)}`
-          )
-          yield* SubscriptionRef.update(state, (followed) => ({ ...followed, following: Following.Live() }))
-          yield* Deferred.succeed(caughtUp, { frames, deliveries })
-          return Option.getOrElse(folded.seq, () => 0)
-        })
-
-        // Stops the following on a decode defect, or should the log's stream end, logged first if it was live. An
-        // interruption, or the end the log's stream fails with when its subscription is shut down, is the Hub stopping.
-        const stopped = (exit: Exit.Exit<void>) =>
-          Exit.isFailure(exit) && (Cause.hasInterruptsOnly(exit.cause) || Pull.isDoneCause(exit.cause))
-            ? Effect.void
-            : SubscriptionRef.get(state).pipe(
-                Effect.flatMap(({ following }) =>
-                  Following.$is("Live")(following)
-                    ? Effect.logError(
-                        "LiveGames: frames are no longer taken into the fold until the Hub restarts",
-                        Exit.isFailure(exit) ? exit.cause : "the log's stream ended"
-                      )
-                    : Effect.void
-                ),
-                Effect.andThen(
-                  SubscriptionRef.update(state, (followed) => ({
-                    ...followed,
-                    following: Following.Stopped()
-                  }))
+        // The boundary, once: sets every held game's gauges, logs the summary, and goes live.
+        const goLive = SubscriptionRef.modifySomeEffect(state, (followed) =>
+          Following.$is("Replaying")(followed.following)
+            ? Effect.gen(function* () {
+                yield* Effect.forEach(followed.folded.live.values(), gaugeHeld, { discard: true })
+                yield* countByState(followed.folded.live)
+                const { frames, deliveries, plays } = yield* Ref.get(replayed)
+                const took = Duration.millis((yield* Clock.currentTimeMillis) - started)
+                yield* Effect.logInfo(
+                  `LiveGames: replayed ${frames} frames: ${deliveries} deliveries, ${plays} plays; ${followed.folded.live.size} live games, in ${Duration.format(took)}`
                 )
-              )
+                yield* Deferred.succeed(caughtUp, { frames, deliveries })
+                return [undefined, Option.some({ ...followed, following: Following.Live() })] as const
+              })
+            : Effect.succeed([undefined, Option.none()] as const)
+        )
+
+        // Goes live once the replay is read and the fold has taken its last frame: at once for an empty replay.
+        const caughtUpIfTaken = Effect.all([Deferred.isDone(replayRead), Ref.get(readTo), latest]).pipe(
+          Effect.flatMap(([read, last, folded]) =>
+            read && Option.getOrElse(folded.seq, () => 0) >= last ? goLive : Effect.void
+          )
+        )
 
         // Subscribed before the replay is read, so a frame appended any time after it ends is in `appended`.
         const appended = yield* feedLog.subscribe
-        // One decode over the day's log and then every frame appended after it, so each topic's document carries over
-        // from replay to live. Decoding pulls the next frame only once it has handed on what the last one said, so the
-        // replay's end is reached once every replayed frame is taken.
+        // One decode over the day's log and then every frame appended after its last `seq`, so each topic's document
+        // carries over from replay to live.
         const follower = yield* decoder
           .decode(
-            feedLog
-              .replay(from)
-              .pipe(
-                Stream.concat(
-                  Stream.unwrap(
-                    Effect.map(caughtUpTo, (last) => Stream.filter(appended, (frame) => frame.seq > last))
-                  )
+            feedLog.replay(from).pipe(
+              Stream.tap((frame) => Ref.set(readTo, frame.seq)),
+              Stream.concat(
+                Stream.unwrap(
+                  Effect.gen(function* () {
+                    const last = yield* Ref.get(readTo)
+                    yield* Deferred.succeed(replayRead, last)
+                    yield* caughtUpIfTaken
+                    return Stream.filter(appended, (frame) => frame.seq > last)
+                  })
                 )
               )
+            )
           )
           .pipe(
             Stream.runForEach((decoded) =>
-              Effect.flatMap(SubscriptionRef.get(state), ({ following }) =>
-                Following.$match(following, {
-                  Replaying: () => replay(decoded),
-                  Live: () => take(decoded),
-                  Stopped: () => Effect.void
-                })
+              Effect.flatMap(Ref.get(readTo), (last) =>
+                decoded.seq <= last ? replay(decoded).pipe(Effect.andThen(caughtUpIfTaken)) : take(decoded)
               )
             ),
-            Effect.onExit(stopped),
+            // A decode defect, or the log's stream ending, halts the following, logged first if it was live.
+            Effect.onExitIf(
+              (exit) => !isStopping(exit),
+              (exit) =>
+                SubscriptionRef.get(state).pipe(
+                  Effect.flatMap(({ following }) =>
+                    Following.$is("Live")(following)
+                      ? Effect.logError(
+                          "LiveGames: frames are no longer taken into the fold until the Hub restarts",
+                          Exit.isFailure(exit) ? exit.cause : "the log's stream ended"
+                        )
+                      : Effect.void
+                  ),
+                  Effect.andThen(
+                    SubscriptionRef.update(state, (followed) => ({
+                      ...followed,
+                      following: Following.Halted()
+                    }))
+                  )
+                )
+            ),
             Effect.forkScoped
           )
 
@@ -228,7 +237,6 @@ export class LiveGames extends Context.Service<
           { startImmediately: true }
         )
 
-        const latest = Effect.map(SubscriptionRef.get(state), ({ folded }) => folded)
         return LiveGames.of({
           latest,
           changes: SubscriptionRef.changes(state).pipe(
@@ -240,7 +248,7 @@ export class LiveGames extends Context.Service<
             SubscriptionRef.changes(state).pipe(
               Stream.filter(
                 ({ folded, following }) =>
-                  Following.$is("Stopped")(following) || Option.exists(folded.seq, (at) => at >= seq)
+                  Following.$is("Halted")(following) || Option.exists(folded.seq, (at) => at >= seq)
               ),
               Stream.runHead,
               Effect.flatMap(
@@ -254,10 +262,10 @@ export class LiveGames extends Context.Service<
 }
 
 /**
- * Where the live games are in following the feed log: catching up on the day before the Hub serves, live, or stopped by a
- * decode defect.
+ * Where the live games are in following the feed log: catching up on the day before the Hub serves, live, or halted by a
+ * decode defect, when no new frame is taken but the timer still runs and is told.
  */
-export type Following = Data.TaggedEnum<{ Replaying: object; Live: object; Stopped: object }>
+export type Following = Data.TaggedEnum<{ Replaying: object; Live: object; Halted: object }>
 export const Following = Data.taggedEnum<Following>()
 
 /** The start of the game day `now` is in: 04:00 in its zone, or the day before's when it is earlier than that. */

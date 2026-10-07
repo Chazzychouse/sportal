@@ -5,9 +5,11 @@ import { Delivery } from "@sportal/domain/Delivery"
 import { GameId, type GameSnapshot } from "@sportal/domain/Game"
 import type { GameEvent } from "@sportal/domain/GameEvent"
 import { type LiveGame, LiveGameState } from "@sportal/domain/LiveGame"
+import type * as Fold from "@sportal/domain/LiveGames"
 import { PlayId } from "@sportal/domain/Play"
 import { liveSnapshot, play, snapshot, team } from "@sportal/domain/TestGame"
 import {
+  Context,
   type Crypto,
   DateTime,
   Effect,
@@ -223,6 +225,44 @@ describe("following the feed log", () => {
     }).pipe(Effect.provide([Database.at(":memory:"), NodeCrypto.layer]), withMetrics)
   )
 
+  it.effect(
+    "with a decode that reads ahead, replayed frames are still taken quietly, and the build waits for the last one",
+    () => {
+      const { logs, layer } = recordingLogs()
+      return Effect.gen(function* () {
+        yield* loggedBefore(
+          [1, 2, 3].map((period) =>
+            pushed(
+              Delivery.cases.Snapshot.make({ snapshot: liveSnapshot({ id: one, period }), from: "push" }),
+              "fbs"
+            )
+          )
+        )
+        yield* Effect.gen(function* () {
+          const building = yield* Layer.build(
+            LiveGames.layer.pipe(Layer.provide([inPairs, DateTime.layerCurrentZoneLocal]))
+          ).pipe(Effect.forkScoped)
+          // The pairing decode holds frame 3 until a frame after it is appended, so the build cannot end before then.
+          yield* TestClock.withLive(Effect.sleep("50 millis"))
+          assert.isUndefined(building.pollUnsafe(), "the build waits for the last replayed frame")
+          yield* (yield* FeedLog).append(
+            yield* pushed(
+              Delivery.cases.Snapshot.make({ snapshot: liveSnapshot({ id: one, period: 4 }), from: "push" }),
+              "fbs"
+            )
+          )
+          const folded = yield* Context.get(yield* Fiber.join(building), LiveGames).through(4)
+          assert.strictEqual(folded.live.get(one)?.snapshot.period, 4)
+          assert.include(
+            logs.find(({ message }) => message.includes("replayed"))?.message,
+            "replayed 3 frames"
+          )
+          assert.strictEqual(yield* counted("sportal_snapshots", { outcome: "taken" }), 1)
+        }).pipe(Effect.scoped, Effect.provide(FeedLog.layer))
+      }).pipe(Effect.provide([Database.at(":memory:"), NodeCrypto.layer, layer]), withMetrics)
+    }
+  )
+
   it.effect("no notice is told from a replayed frame; the same notice on a live frame is", () =>
     Effect.gen(function* () {
       assert.isUndefined(yield* counted("sportal_frames_undecoded"))
@@ -422,8 +462,28 @@ describe("a recorded game", () => {
         const second = yield* replayed(frames)
         assert.isTrue(Equal.equals(first, second))
 
-        const once = yield* takenLive(frames)
+        // A few points through the day, each replayed from the frames before it, while the clock is still at its start.
+        const points = [
+          1,
+          Math.floor(frames.length / 4),
+          Math.floor(frames.length / 2),
+          Math.floor((frames.length * 3) / 4)
+        ]
+        const replayedTo = yield* Effect.forEach(points, (point) => replayed(frames.slice(0, point)))
+
+        const once = yield* takenLive(frames, points)
         const again = yield* takenLive(frames)
+        points.forEach((point, index) => {
+          const live = once.sampled.get(point)
+          assert.isTrue(
+            Equal.equals(replayedTo[index]?.live, live?.live),
+            `the live games after ${point} frames`
+          )
+          assert.isTrue(
+            Equal.equals(replayedTo[index]?.listed, live?.listed),
+            `the listings after ${point} frames`
+          )
+        })
         assert.isTrue(Equal.equals(first.live, once.latest.live), "replay ends with the live games live did")
         assert.isTrue(Equal.equals(first.listed, once.latest.listed), "and the listings")
         assert.isTrue(Equal.equals(once.held, again.held))
@@ -488,6 +548,10 @@ describe("a recorded game", () => {
         const uninterrupted = yield* replayed(all)
         assert.isTrue(Equal.equals(after, uninterrupted))
         assert.deepStrictEqual(before.seq, Option.some(half))
+        assert.isTrue(
+          Equal.equals(before, yield* replayed(all.slice(0, half))),
+          "before the restart, as the uninterrupted log was at that point"
+        )
       }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
     { timeout: 60_000 }
   )
@@ -594,13 +658,15 @@ function replayed(frames: ReadonlyArray<FeedFrame>) {
 
 /**
  * Fresh live games taking `frames` decoded as ESPN, each appended once the test clock reaches it, as live: their state
- * at the end, each live game NE at BUF was held as, in order, and every event published. The clock is set to the first
- * frame before the feed log opens, so its writer never wakes through the years before it.
+ * at the end and once each count of frames in `sampling` is taken, each live game NE at BUF was held as, in order, and
+ * every event published. The clock is set to the first frame before the feed log opens, so its writer never wakes
+ * through the years before it.
  */
-function takenLive(frames: ReadonlyArray<FeedFrame>) {
+function takenLive(frames: ReadonlyArray<FeedFrame>, sampling: ReadonlyArray<number> = []) {
   const taking = Effect.gen(function* () {
     const liveGames = yield* LiveGames
     const held = yield* Ref.make<ReadonlyArray<LiveGame>>([])
+    const sampled = yield* Ref.make<ReadonlyMap<number, Fold.LiveGames>>(new Map())
     const events = yield* Ref.make<
       ReadonlyArray<{ readonly snapshot: GameSnapshot; readonly event: GameEvent }>
     >([])
@@ -610,9 +676,14 @@ function takenLive(frames: ReadonlyArray<FeedFrame>) {
     )
     yield* Effect.forEach(
       frames,
-      (frame) =>
+      (frame, index) =>
         takenInTime([frame]).pipe(
           Effect.andThen(liveGames.latest),
+          Effect.tap((latest) =>
+            sampling.includes(index + 1)
+              ? Ref.update(sampled, (all) => new Map(all).set(index + 1, latest))
+              : Effect.void
+          ),
           Effect.flatMap((latest) =>
             Option.match(Option.fromUndefinedOr(latest.live.get(neAtBuf)), {
               onNone: () => Effect.void,
@@ -625,7 +696,12 @@ function takenLive(frames: ReadonlyArray<FeedFrame>) {
     )
     yield* Effect.yieldNow
     yield* Fiber.interrupt(subscriber)
-    return { latest: yield* liveGames.latest, held: yield* Ref.get(held), events: yield* Ref.get(events) }
+    return {
+      latest: yield* liveGames.latest,
+      sampled: yield* Ref.get(sampled),
+      held: yield* Ref.get(held),
+      events: yield* Ref.get(events)
+    }
   }).pipe(Effect.provide(liveGames([], { decoder: EspnDecode.layer })))
   return Option.match(Option.fromUndefinedOr(frames[0]), {
     onNone: () => taking,
@@ -685,6 +761,14 @@ const decodeCounters = [
   "sportal_live_feed_document_resets",
   "sportal_frames_undecoded"
 ]
+
+/** The snapshot feed's decode, handing on what frames said two at a time, so it reads a frame ahead of the last it gave. */
+const inPairs = Layer.effect(
+  Decoder,
+  Effect.map(Decoder, (decoder) =>
+    Decoder.of({ decode: (frames) => decoder.decode(frames).pipe(Stream.grouped(2), Stream.flattenIterable) })
+  )
+).pipe(Layer.provide(SnapshotDecode.layer))
 
 /**
  * A decode that keeps a count of the frames it has read and reads each as a pushed live game with that count for the

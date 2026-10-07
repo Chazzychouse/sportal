@@ -383,7 +383,7 @@ class LiveGames extends Context.Service<LiveGames, {
   readonly latest: Effect<Fold.LiveGames>
   readonly changes: Stream<Fold.LiveGames>          // seq or reached alone is not a change
   readonly events: Stream<Happened>
-  through(seq: number): Effect<Fold.LiveGames>      // the fold once it has taken frame `seq`, or the latest once Stopped
+  through(seq: number): Effect<Fold.LiveGames>      // the fold once it has taken frame `seq`, or the latest once Halted
 }>()("sportal/hub/LiveGames") {}
 ```
 
@@ -393,8 +393,8 @@ class LiveGames extends Context.Service<LiveGames, {
 - The fold's clock is each frame's receive time, so a replay of the log gives the same games and events as live did.
 - It follows the feed log itself: from the game day's start (04:00 local) it replays the day quietly, with no per-game
   telemetry and no events, and its layer is built only then, so the Hub serves no fold still catching up. Then it takes
-  each frame as it is appended, and its timer starts. Its `Following` is `Replaying`, `Live`, or `Stopped` (a decode
-  defect after the replay; the fold keeps serving what it has).
+  each frame as it is appended, and its timer starts. Its `Following` is `Replaying`, `Live`, or `Halted` (a decode
+  defect after the replay: no new frame is taken, but the fold keeps serving and its timer still runs and is told).
 - `Slate` publishes each listed game as the fold has it, within 250 ms of a change; Ingest reads the fold for its polling
   and for the games the live feed should follow.
 - `HubMode` provides it in both modes. A scenario is the provider through the real Ingest, on the scenario clock: polled
