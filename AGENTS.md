@@ -88,7 +88,7 @@ A reader opens a file to see the thing it is named for. Keep it that way.
 |---|---|
 | Service id | `"sportal/<app>/<dir>/Name"`, the folder under `src/` (no `src/` itself), omitted for a file directly in `src/`: `"sportal/hub/provider/Provider"`, `"sportal/hub/LiveSlate"` |
 | Service layer | `static readonly layer: Layer.Layer<…> = …`, type written out |
-| Layer variant | `static readonly layerX`, or `static layerX(args)`; never another word (`layerInDataDir`, `layerFrom(dir)`) |
+| Layer variant | `static readonly layerX`, or `static layerX(args)`, as `FeedLog.layerInDataDir` and `Scenarios.layerFrom(dir)`; never another word (`FeedLog.inDataDir`, `Scenarios.in(dir)`) |
 | Test layer | `static readonly layerTest` or `static layerTest…(args)` on the service it fakes; knip's `ignoreMembers` exempts `^layerTest` |
 | Layer providing nothing | A namespace module's `layer`, or `layerX`. Never `serve`/`listen`, never a zero-argument function returning a layer |
 | Effectful operation | `const f = Effect.fn("Module.f")(…)`, or `Effect.fnUntraced` on a hot path; a service member is `Effect.fn("Service.member")`. Never a `function` that only returns `Effect.gen`, never a hand-added `Effect.withSpan` |
