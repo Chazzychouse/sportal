@@ -13,12 +13,12 @@ import * as Database from "../Database.ts"
 import { FeedLog } from "../FeedLog.ts"
 import * as Ingest from "../Ingest.ts"
 import { LiveGames } from "../LiveGames.ts"
-import * as SnapshotDecode from "../provider/snapshot/SnapshotDecode.ts"
 import { Slate } from "../Slate.ts"
 import { StageSessions } from "../StageSessions.ts"
 import * as YouTubeTv from "../source/youtube-tv/YouTubeTv.ts"
 import { polled } from "../TestFeed.ts"
 import { withEnv } from "../TestHubConfig.ts"
+import * as TestSnapshotFeed from "../TestSnapshotFeed.ts"
 import * as HubServer from "./HubServer.ts"
 
 const espn = Network.make("ESPN")
@@ -172,6 +172,10 @@ describe("GET /api/live", () => {
       const first = yield* Queue.take(received)
       const second = yield* Queue.take(received)
       assert.sameMembers([first._tag, second._tag], ["SlateChanged", "StageChanged"])
+      assert.deepStrictEqual(
+        [first, second].flatMap((message) => (message._tag === "SlateChanged" ? [message.recentPlays] : [])),
+        [{}]
+      )
 
       yield* api.stage.dispatch({ payload: { command: { _tag: "Assign", tile: 0, game: game.id } } })
       const third = yield* Queue.take(received)
@@ -240,7 +244,7 @@ function firstSlate() {
   return Effect.gen(function* () {
     const slate = yield* Slate
     yield* slate.changes.pipe(
-      Stream.filter((latest) => latest.length > 0),
+      Stream.filter((latest) => latest.games.length > 0),
       Stream.take(1),
       Stream.runDrain
     )
@@ -280,7 +284,7 @@ function hubUnderTest() {
     Layer.provide(
       LiveGames.layer.pipe(
         Layer.provideMerge(FeedLog.layer.pipe(Layer.provide([Database.at(":memory:"), NodeCrypto.layer]))),
-        Layer.provide([SnapshotDecode.layer, DateTime.layerCurrentZoneLocal])
+        Layer.provide([TestSnapshotFeed.decoder, DateTime.layerCurrentZoneLocal])
       )
     ),
     Layer.provide(polled(() => Effect.succeed([game]))),

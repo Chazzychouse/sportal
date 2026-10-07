@@ -104,7 +104,13 @@ function liveRoute() {
       const slate = yield* Slate
       const sessions = yield* StageSessions
       const messages: Stream.Stream<LiveMessage> = Stream.merge(
-        slate.changes.pipe(Stream.map((slate) => ({ _tag: "SlateChanged" as const, slate }))),
+        slate.changes.pipe(
+          Stream.map(({ games, recentPlays }) => ({
+            _tag: "SlateChanged" as const,
+            slate: games,
+            recentPlays
+          }))
+        ),
         sessions.changes.pipe(Stream.map((stage) => ({ _tag: "StageChanged" as const, stage })))
       )
       const encode = Schema.encodeEffect(LiveMessageJson)

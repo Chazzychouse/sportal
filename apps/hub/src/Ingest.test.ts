@@ -32,10 +32,9 @@ import { GameHistory } from "./GameHistory.ts"
 import * as Ingest from "./Ingest.ts"
 import { LiveGames } from "./LiveGames.ts"
 import { type LiveFeed, LiveFeedDemand, type Polling, Provider, ProviderError } from "./provider/Provider.ts"
-import * as SnapshotDecode from "./provider/snapshot/SnapshotDecode.ts"
-import * as SnapshotProvider from "./provider/snapshot/SnapshotProvider.ts"
 import { polled, pushed } from "./TestFeed.ts"
 import { withEnv } from "./TestHubConfig.ts"
+import * as TestSnapshotFeed from "./TestSnapshotFeed.ts"
 import { counted, recordingLogs, recordingSpans, withMetrics } from "./TestTelemetry.ts"
 
 describe("Ingest", () => {
@@ -489,7 +488,7 @@ function over(
     Layer.provideMerge(FeedLog.layer),
     Layer.provide([
       provider,
-      SnapshotDecode.layer,
+      TestSnapshotFeed.decoder,
       withEnv({ SPORTAL_LEAGUES: (options.leagues ?? ["fbs"]).join(",") }).pipe(Layer.orDie),
       DateTime.layerCurrentZoneLocal
     ]),
@@ -534,7 +533,7 @@ function scripted(
   const { push } = options
   const snapshotFeed = Layer.unwrap(
     Effect.map(Ref.make(0), (calls) =>
-      SnapshotProvider.layer({
+      TestSnapshotFeed.provider({
         games: (league) =>
           Ref.getAndUpdate(calls, (call) => call + 1).pipe(
             Effect.flatMap((call) => {

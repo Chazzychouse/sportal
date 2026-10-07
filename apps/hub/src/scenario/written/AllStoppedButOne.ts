@@ -1,10 +1,10 @@
-import { Scenario } from "../Scenario.ts"
+import { ScenarioScript } from "../ScenarioScript.ts"
 
 /**
  * Every game stopped but one: a halftime, a timeout, the end of a quarter, and a weather delay, while one game
  * goes for it on fourth down late and scores.
  */
-export const allStoppedButOne = Scenario.build("all-stopped-but-one", [
+export const allStoppedButOne = ScenarioScript.build("all-stopped-but-one", [
   {
     id: "still-aub-ark",
     home: "AUB",
@@ -22,10 +22,40 @@ export const allStoppedButOne = Scenario.build("all-stopped-but-one", [
           ball: { team: "home", yardLine: 33, down: 4, distance: 2 }
         }
       ],
-      ["0:30", { clock: "1:40", ball: { team: "home", yardLine: 29, down: 1, distance: 10 } }],
-      ["1:00", { clock: "1:02", ball: { team: "home", yardLine: 21, down: 2, distance: 2 } }],
-      ["1:30", { clock: "0:40", ball: { team: "home", yardLine: 14, down: 1, distance: 10 } }],
-      ["2:30", { clock: "0:31", score: [27, 23], ball: null, lastPlay: "Touchdown" }]
+      [
+        "0:30",
+        {
+          clock: "1:40",
+          ball: { team: "home", yardLine: 29, down: 1, distance: 10 },
+          play: { kind: "rush", yards: 4 }
+        }
+      ],
+      [
+        "1:00",
+        {
+          clock: "1:02",
+          ball: { team: "home", yardLine: 21, down: 2, distance: 2 },
+          play: { kind: "rush", yards: 8 }
+        }
+      ],
+      [
+        "1:30",
+        {
+          clock: "0:40",
+          ball: { team: "home", yardLine: 14, down: 1, distance: 10 },
+          play: { kind: "pass", yards: 7 }
+        }
+      ],
+      [
+        "2:30",
+        {
+          clock: "0:31",
+          score: [27, 23],
+          ball: null,
+          lastPlay: "Touchdown",
+          play: { kind: "rush", yards: 14 }
+        }
+      ]
     ]
   },
   {
@@ -71,7 +101,8 @@ export const allStoppedButOne = Scenario.build("all-stopped-but-one", [
         {
           clock: "3:40",
           ball: { team: "home", yardLine: 58, down: 1, distance: 10 },
-          lastPlay: "Pass complete"
+          lastPlay: "Pass complete",
+          play: { kind: "pass", yards: 8 }
         }
       ]
     ]

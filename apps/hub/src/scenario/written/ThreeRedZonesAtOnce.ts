@@ -1,10 +1,10 @@
-import { Scenario } from "../Scenario.ts"
+import { ScenarioScript } from "../ScenarioScript.ts"
 
 /**
  * Three red-zone trips at once, of different worth: a one-score fourth quarter, a tie in the third, and a
  * blowout. They end in a go-ahead touchdown, an interception, and a garbage-time field goal.
  */
-export const threeRedZonesAtOnce = Scenario.build("three-red-zones-at-once", [
+export const threeRedZonesAtOnce = ScenarioScript.build("three-red-zones-at-once", [
   {
     id: "rz-psu-iowa",
     home: "PSU",
@@ -22,8 +22,24 @@ export const threeRedZonesAtOnce = Scenario.build("three-red-zones-at-once", [
           ball: { team: "away", yardLine: 34, down: 2, distance: 6 }
         }
       ],
-      ["1:00", { clock: "4:31", ball: { team: "away", yardLine: 12, down: 1, distance: 10 } }],
-      ["2:00", { clock: "3:58", score: [17, 20], ball: null, lastPlay: "Touchdown" }]
+      [
+        "1:00",
+        {
+          clock: "4:31",
+          ball: { team: "away", yardLine: 12, down: 1, distance: 10 },
+          play: { kind: "pass", yards: 22 }
+        }
+      ],
+      [
+        "2:00",
+        {
+          clock: "3:58",
+          score: [17, 20],
+          ball: null,
+          lastPlay: "Touchdown",
+          play: { kind: "pass", yards: 12 }
+        }
+      ]
     ]
   },
   {
@@ -43,13 +59,21 @@ export const threeRedZonesAtOnce = Scenario.build("three-red-zones-at-once", [
           ball: { team: "home", yardLine: 30, down: 1, distance: 10 }
         }
       ],
-      ["1:00", { clock: "7:20", ball: { team: "home", yardLine: 15, down: 2, distance: 5 } }],
+      [
+        "1:00",
+        {
+          clock: "7:20",
+          ball: { team: "home", yardLine: 15, down: 2, distance: 5 },
+          play: { kind: "pass", yards: 15 }
+        }
+      ],
       [
         "2:30",
         {
           clock: "6:02",
           ball: { team: "away", yardLine: 92, down: 1, distance: 10 },
-          lastPlay: "Interception"
+          lastPlay: "Interception",
+          play: { kind: "interception", yards: 7 }
         }
       ]
     ]
@@ -71,8 +95,24 @@ export const threeRedZonesAtOnce = Scenario.build("three-red-zones-at-once", [
           ball: { team: "home", yardLine: 41, down: 1, distance: 10 }
         }
       ],
-      ["1:00", { clock: "8:55", ball: { team: "home", yardLine: 8, down: 1, distance: 8 } }],
-      ["3:00", { clock: "7:10", score: [41, 10], ball: null, lastPlay: "Field goal is good" }]
+      [
+        "1:00",
+        {
+          clock: "8:55",
+          ball: { team: "home", yardLine: 8, down: 1, distance: 8 },
+          play: { kind: "pass", yards: 33 }
+        }
+      ],
+      [
+        "3:00",
+        {
+          clock: "7:10",
+          score: [41, 10],
+          ball: null,
+          lastPlay: "Field goal is good",
+          play: { kind: "fieldGoal", yards: 25 }
+        }
+      ]
     ]
   },
   {
@@ -92,7 +132,14 @@ export const threeRedZonesAtOnce = Scenario.build("three-red-zones-at-once", [
           ball: { team: "away", yardLine: 55, down: 1, distance: 10 }
         }
       ],
-      ["2:00", { clock: "9:30", ball: { team: "away", yardLine: 50, down: 3, distance: 5 } }]
+      [
+        "2:00",
+        {
+          clock: "9:30",
+          ball: { team: "away", yardLine: 50, down: 3, distance: 5 },
+          play: { kind: "rush", yards: 5 }
+        }
+      ]
     ]
   }
 ])

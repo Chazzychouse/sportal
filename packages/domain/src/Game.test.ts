@@ -1,6 +1,6 @@
 import { assert, describe, it } from "@effect/vitest"
-import { DateTime } from "effect"
-import { GameId, GameSnapshot, type GameStatus } from "./Game.ts"
+import { DateTime, Option } from "effect"
+import { BallSpot, GameId, GameSnapshot, type GameStatus } from "./Game.ts"
 import { Situation } from "./Situation.ts"
 import { broadcast, situation, snapshot, team } from "./TestGame.ts"
 
@@ -339,5 +339,70 @@ describe("GameSnapshot#quarterLeft", () => {
     assert.strictEqual(inPlay({ clock: "7:30" }).quarterLeft(), 0.5)
     assert.strictEqual(inPlay({ clock: "0:00" }).quarterLeft(), 0)
     assert.strictEqual(inPlay({ clock: "" }).quarterLeft(), 1)
+  })
+})
+
+describe("GameSnapshot#spotOf", () => {
+  const game = snapshot({ home: { team: team("H"), score: 0 }, away: { team: team("A"), score: 0 } })
+
+  it.each([
+    ["home", 75, 25, "away"],
+    ["away", 75, 75, "home"],
+    ["home", 1, 99, "away"],
+    ["away", 1, 1, "home"],
+    ["home", 99, 1, "away"]
+  ] as const)(
+    "puts %s with %d to go at %d yards from the home goal, going %s",
+    (side, toGo, yards, toward) => {
+      assert.deepStrictEqual(
+        game.spotOf({ team: game[side].team.id, yardsToEndzone: toGo }),
+        Option.some(new BallSpot({ yards, toward }))
+      )
+    }
+  )
+
+  it("is none without a team, without a yard line, or for a team in neither side", () => {
+    assert.isTrue(Option.isNone(game.spotOf({ yardsToEndzone: 40 })))
+    assert.isTrue(Option.isNone(game.spotOf({ team: game.home.team.id })))
+    assert.isTrue(Option.isNone(game.spotOf({ team: team("X").id, yardsToEndzone: 40 })))
+  })
+
+  it.each([105, -3])("is none for %d yards to the goal, off the field", (yardsToEndzone) => {
+    assert.isTrue(Option.isNone(game.spotOf({ team: game.home.team.id, yardsToEndzone })))
+    assert.isTrue(Option.isNone(game.spotOf({ team: game.away.team.id, yardsToEndzone })))
+  })
+})
+
+describe("GameSnapshot#ball", () => {
+  it("is the spot of the team with the ball at its yard line", () => {
+    assert.deepStrictEqual(
+      snapshot({ situation: situation({ yardLine: 75 }) }).ball(),
+      Option.some(new BallSpot({ yards: 25, toward: "away" }))
+    )
+  })
+
+  it("is none without a situation or without a team with the ball", () => {
+    assert.isTrue(Option.isNone(snapshot().ball()))
+    assert.isTrue(Option.isNone(snapshot({ situation: situation({ possession: undefined }) }).ball()))
+  })
+})
+
+describe("GameSnapshot#inPlay", () => {
+  it("is live with time on the clock, or in a college overtime", () => {
+    assert.isTrue(snapshot({ status: "live", period: 2, clock: "4:12" }).inPlay())
+    assert.isTrue(snapshot({ status: "live", period: 5, clock: "0:00" }).inPlay())
+  })
+
+  it("is not at halftime, between periods, in a delay, before kickoff, or after the final", () => {
+    assert.isFalse(snapshot({ status: "halftime", period: 2, clock: "0:00" }).inPlay())
+    assert.isFalse(snapshot({ status: "delayed", period: 3, clock: "6:40" }).inPlay())
+    assert.isFalse(snapshot({ status: "live", period: 1, clock: "0:00" }).inPlay())
+    assert.isFalse(snapshot({ status: "scheduled" }).inPlay())
+    assert.isFalse(snapshot({ status: "final", period: 4, clock: "0:00" }).inPlay())
+  })
+
+  it("is not at 0:00 in an NFL overtime, which runs on a clock", () => {
+    assert.isFalse(snapshot({ league: "nfl", status: "live", period: 5, clock: "0:00" }).inPlay())
+    assert.isTrue(snapshot({ league: "nfl", status: "live", period: 5, clock: "3:20" }).inPlay())
   })
 })

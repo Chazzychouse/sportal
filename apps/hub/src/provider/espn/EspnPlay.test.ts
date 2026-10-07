@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs"
 import { assert, describe, it } from "@effect/vitest"
-import { type Play, PlayId } from "@sportal/domain/Play"
+import { type Play, PlayId, PlayKind } from "@sportal/domain/Play"
 import { TeamId } from "@sportal/domain/Team"
 import { Effect, Schema } from "effect"
 import * as EspnPlay from "./EspnPlay.ts"
@@ -127,6 +127,69 @@ describe("EspnPlay", () => {
       assert.deepStrictEqual(EspnPlay.unknownTypes([unknown, entity("401872966271")]), [
         { id: PlayId.make("999"), text: "Something New" }
       ])
+    })
+  )
+
+  it.effect("an extra point is a try", () =>
+    Effect.gen(function* () {
+      // No recorded game topic lists a try as its own play: ESPN's type for one is as the recorded FBS scoreboard
+      // (fixtures/fbs-scoreboard-2026-10-03T2024Z.json) names a last play's.
+      const play = yield* decodePlay({
+        ...entity("401872966237"),
+        type: { id: "61", text: "Extra Point Good" }
+      })
+
+      assert.strictEqual(play.kind, "extraPoint")
+      assert.deepStrictEqual(EspnPlay.unknownTypes([{ type: { id: "61", text: "Extra Point Good" } }]), [])
+    })
+  )
+
+  it.effect("a two-point try, passed or run, is a two-point try", () =>
+    Effect.gen(function* () {
+      const kinds = yield* Effect.forEach(
+        [
+          { id: "15", text: "Two Point Pass" },
+          { id: "16", text: "Two Point Rush" }
+        ],
+        (type) => Effect.map(decodePlay({ ...entity("401872966237"), type }), (play) => play.kind)
+      )
+
+      assert.deepStrictEqual(kinds, ["twoPoint", "twoPoint"])
+    })
+  )
+
+  it.effect(
+    "the college types the summaries list read as themselves: returns, interceptions, fumbles, the end of regulation",
+    () =>
+      Effect.gen(function* () {
+        // As the 2026-10-03 FBS game summaries name them. A safety stays other: no kind is one.
+        const types = [
+          { id: "14", text: "Punt Return" },
+          { id: "32", text: "Kickoff Return Touchdown" },
+          { id: "63", text: "Interception" },
+          { id: "69", text: "Fumble" },
+          { id: "79", text: "End of Regulation" },
+          { id: "20", text: "Safety" }
+        ]
+        const kinds = yield* Effect.forEach(types, (type) =>
+          Effect.map(decodePlay({ ...entity("401872966237"), type }), (play) => play.kind)
+        )
+
+        assert.deepStrictEqual(kinds, ["punt", "kickoff", "interception", "fumble", "endPeriod", "other"])
+        assert.deepStrictEqual(EspnPlay.unknownTypes(types.map((type) => ({ type }))), [
+          { id: "20", text: "Safety" }
+        ])
+      })
+  )
+
+  it.effect("every kind's ESPN type reads back as that kind, and a field goal's is a good one", () =>
+    Effect.gen(function* () {
+      const read = yield* Effect.forEach(PlayKind.literals, (kind) =>
+        Effect.map(decodePlay({ ...entity("40187297063"), type: EspnPlay.typeOf(kind) }), (play) => play.kind)
+      )
+
+      assert.deepStrictEqual(read, [...PlayKind.literals])
+      assert.deepStrictEqual(EspnPlay.typeOf("fieldGoal"), { id: "59", text: "Field Goal Good" })
     })
   )
 })

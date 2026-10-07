@@ -23,10 +23,9 @@ module.exports = {
     },
     {
       name: "provider-payloads-are-private",
-      comment:
-        "A provider's or source's wire vocabulary stays inside its folder; TestFeed builds the snapshot feed's frames for tests.",
+      comment: "A provider's or source's wire vocabulary stays inside its folder.",
       severity: "error",
-      from: { pathNot: "(^apps/hub/src/(provider|source)/([^/]+)/|^apps/hub/src/TestFeed\\.ts$)" },
+      from: { pathNot: "^apps/hub/src/(provider|source)/([^/]+)/" },
       to: { path: "^apps/hub/src/(provider|source)/[^/]+/([^/]*Payload|FastCastMessage)\\.ts$" }
     },
     {
@@ -62,7 +61,7 @@ module.exports = {
       severity: "error",
       from: {
         pathNot:
-          "(\\.test\\.tsx?$|^apps/web/src/slate/TestSlate\\.ts$|^apps/hub/src/scenario/(Scenario\\.ts|written/))"
+          "(\\.test\\.tsx?$|^apps/web/src/slate/TestSlate\\.ts$|^apps/hub/src/scenario/(ScenarioScript\\.ts|written/))"
       },
       to: { path: "^packages/domain/src/TestGame\\.ts$" }
     },
@@ -94,6 +93,14 @@ module.exports = {
       severity: "error",
       from: { pathNot: "\\.test\\.ts$" },
       to: { path: "^apps/hub/src/TestFeed\\.ts$" }
+    },
+    {
+      name: "test-snapshot-feed-is-for-tests",
+      comment:
+        "The snapshot feed, a provider of our own deliveries, is imported only by test files and TestFeed.",
+      severity: "error",
+      from: { pathNot: "(\\.test\\.ts$|^apps/hub/src/TestFeed\\.ts$)" },
+      to: { path: "^apps/hub/src/TestSnapshotFeed\\.ts$" }
     },
     {
       name: "test-adapter-data-is-for-tests",

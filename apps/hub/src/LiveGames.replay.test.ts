@@ -34,9 +34,9 @@ import { Decoder } from "./provider/Decoder.ts"
 import * as EspnDecode from "./provider/espn/EspnDecode.ts"
 import { fixtures, neAtBufFrames, recordedCheckpoint } from "./provider/espn/TestEspn.ts"
 import { Decoded } from "./provider/Provider.ts"
-import * as SnapshotDecode from "./provider/snapshot/SnapshotDecode.ts"
-import { RecordedScenarios } from "./scenario/RecordedScenarios.ts"
+import { Scenarios } from "./scenario/Scenarios.ts"
 import { dyingAt, framed, liveGames, pushed } from "./TestFeed.ts"
+import * as TestSnapshotFeed from "./TestSnapshotFeed.ts"
 import { counted, gauged, recordingLogs, recordingSpans, withMetrics } from "./TestTelemetry.ts"
 
 const one = GameId.make("1")
@@ -221,7 +221,7 @@ describe("following the feed log", () => {
         const folded = yield* (yield* LiveGames).through(2)
         assert.strictEqual(folded.live.get(one)?.snapshot.period, 3)
         assert.strictEqual(yield* counted("sportal_snapshots", { outcome: "taken" }), 1)
-      }).pipe(Effect.provide(following(appendingAtEnd, SnapshotDecode.layer)))
+      }).pipe(Effect.provide(following(appendingAtEnd, TestSnapshotFeed.decoder)))
     }).pipe(Effect.provide([Database.at(":memory:"), NodeCrypto.layer]), withMetrics)
   )
 
@@ -628,9 +628,9 @@ function loggedBefore(frames: ReadonlyArray<Effect.Effect<FeedFrame>>) {
 }
 
 /** The recorded NE at BUF day's frames. */
-const recorded = RecordedScenarios.use((scenarios) => scenarios.load(neAtBufFrames)).pipe(
+const recorded = Scenarios.use((scenarios) => scenarios.load(neAtBufFrames)).pipe(
   Effect.map(({ frames }) => frames),
-  Effect.provide(RecordedScenarios.in(fixtures).pipe(Layer.provideMerge(NodeServices.layer)))
+  Effect.provide(Scenarios.in(fixtures, []).pipe(Layer.provideMerge(NodeServices.layer)))
 )
 
 /** Fresh live games' latest once they have replayed `frames`, decoded as ESPN. */
@@ -750,7 +750,7 @@ const inPairs = Layer.effect(
   Effect.map(Decoder, (decoder) =>
     Decoder.of({ decode: (frames) => decoder.decode(frames).pipe(Stream.grouped(2), Stream.flattenIterable) })
   )
-).pipe(Layer.provide(SnapshotDecode.layer))
+).pipe(Layer.provide(TestSnapshotFeed.decoder))
 
 /**
  * A decode that keeps a count of the frames it has read and reads each as a pushed live game with that count for the

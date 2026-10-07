@@ -1,4 +1,4 @@
-import { DateTime, Order, Schema } from "effect"
+import { DateTime, Option, Order, Schema } from "effect"
 import { GameEvent } from "./GameEvent.ts"
 import { LeagueId } from "./League.ts"
 import { Situation } from "./Situation.ts"
@@ -156,6 +156,35 @@ export class GameSnapshot extends Schema.Class<GameSnapshot>("sportal/GameSnapsh
   }
 
   /**
+   * Where a spot is on the field, from the team with the ball and the yards it has to the goal it attacks. None
+   * when either is missing, the team plays in neither side, or the yards are off the field.
+   */
+  spotOf(spot: {
+    readonly team?: TeamId | undefined
+    readonly yardsToEndzone?: number | undefined
+  }): Option.Option<BallSpot> {
+    const { team, yardsToEndzone } = spot
+    if (team === undefined || yardsToEndzone === undefined) return Option.none()
+    if (team === this.home.team.id)
+      return BallSpot.makeOption({ yards: 100 - yardsToEndzone, toward: "away" })
+    if (team === this.away.team.id) return BallSpot.makeOption({ yards: yardsToEndzone, toward: "home" })
+    return Option.none()
+  }
+
+  /**
+   * Whether the game is being played right now: live, with time left on a timed period's clock. Halftime, the break
+   * between periods, and everything before kickoff or after the final are not.
+   */
+  inPlay(): boolean {
+    return this.status === "live" && !(this.timed() && this.secondsLeft() === 0)
+  }
+
+  /** Where the ball is: the spot of the situation's team with the ball, at its yard line. */
+  ball(): Option.Option<BallSpot> {
+    return this.spotOf({ team: this.situation?.possession, yardsToEndzone: this.situation?.yardLine })
+  }
+
+  /**
    * What happened in this game since `previous`, an earlier snapshot of it: points, the ball changing hands, a
    * drive reaching the 40, the red zone, goal to go, or fourth down, a timeout, and the clock and status. A change
    * of possession is a turnover only when the last play names an interception or a fumble and nobody scored.
@@ -217,6 +246,12 @@ export class GameSnapshot extends Schema.Class<GameSnapshot>("sportal/GameSnapsh
     ].flat()
   }
 }
+
+/** Where a spot is on the field: yards from the home goal line (0–100), and the way its team is going. */
+export class BallSpot extends Schema.Class<BallSpot>("sportal/BallSpot")({
+  yards: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 100 })),
+  toward: Schema.Literals(["home", "away"])
+}) {}
 
 const watchRank = { live: 0, upcoming: 1, over: 2 } as const
 

@@ -104,3 +104,37 @@
     background-position: 160px 0;
   }
 }
+
+/* A play's arrow on the field, drawn from its start: the offset runs over a path of length 1 (see `Field`). */
+@keyframes field-draw {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+/* The ball arriving at the end of a play, as the arrow reaches it. */
+@keyframes field-arrive {
+  0%,
+  70% {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* An end zone flashing twice on a score. */
+@keyframes field-flash {
+  0%,
+  50%,
+  to {
+    opacity: 0;
+  }
+  25%,
+  75% {
+    opacity: 0.9;
+  }
+}

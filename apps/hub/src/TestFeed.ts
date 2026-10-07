@@ -2,21 +2,22 @@ import { NodeCrypto } from "@effect/platform-node"
 import type { Delivery } from "@sportal/domain/Delivery"
 import type { GameSnapshot } from "@sportal/domain/Game"
 import type { LeagueId } from "@sportal/domain/League"
+import * as Fold from "@sportal/domain/LiveGames"
 import { DateTime, Effect, Layer, Schedule, Schema, Stream } from "effect"
 import * as Database from "./Database.ts"
 import { FeedLog } from "./FeedLog.ts"
 import { FeedFrame, Frame } from "./Frame.ts"
 import { LiveGames } from "./LiveGames.ts"
 import { Decoder } from "./provider/Decoder.ts"
+import * as EspnScript from "./provider/espn/EspnScript.ts"
 import { type Polling, Provider, type ProviderError } from "./provider/Provider.ts"
-import * as SnapshotDecode from "./provider/snapshot/SnapshotDecode.ts"
-import { SnapshotPayload } from "./provider/snapshot/SnapshotPayload.ts"
-import * as SnapshotProvider from "./provider/snapshot/SnapshotProvider.ts"
+import { Scenarios } from "./scenario/Scenarios.ts"
+import * as TestSnapshotFeed from "./TestSnapshotFeed.ts"
 
 /**
  * The snapshot feed as a test's provider: a poll of a league is the games `games` answers. It pushes `options.push`'s
  * frames, none by default, reconnected on `options.reconnect` or the snapshot feed's own, and is polled every 10 seconds
- * unless `options.polling` says otherwise. Tests read its frames with `SnapshotDecode.layer`.
+ * unless `options.polling` says otherwise. Tests read its frames with `TestSnapshotFeed.decoder`.
  */
 export function polled(
   games: (league: LeagueId) => Effect.Effect<ReadonlyArray<GameSnapshot>, ProviderError>,
@@ -26,7 +27,7 @@ export function polled(
     readonly reconnect?: Schedule.Schedule<unknown, ProviderError>
   } = {}
 ): Layer.Layer<Provider> {
-  return SnapshotProvider.layer({
+  return TestSnapshotFeed.provider({
     games,
     polling: options.polling ?? Schedule.spaced("10 seconds"),
     ...(options.push === undefined ? {} : { push: options.push }),
@@ -53,7 +54,7 @@ export function liveGames(
   return LiveGames.layer.pipe(
     Layer.provideMerge(FeedLog.layer.pipe(Layer.provide(logged))),
     Layer.provide([
-      options.decoder ?? SnapshotDecode.layer,
+      options.decoder ?? TestSnapshotFeed.decoder,
       options.zone === undefined ? DateTime.layerCurrentZoneLocal : DateTime.layerCurrentZone(options.zone)
     ]),
     Layer.provide([Database.at(":memory:"), NodeCrypto.layer]),
@@ -75,7 +76,7 @@ export function dyingAt(body: string): Layer.Layer<Decoder> {
           )
       })
     )
-  ).pipe(Layer.provide(SnapshotDecode.layer))
+  ).pipe(Layer.provide(TestSnapshotFeed.decoder))
 }
 
 /**
@@ -100,12 +101,12 @@ export function framed(delivery: Delivery, at: DateTime.Utc): FeedFrame {
 }
 
 /** A snapshot feed frame pushed on `channel`, received at the clock's now, that says `payload`. */
-export function pushed(payload: typeof SnapshotPayload.Type, channel: string) {
+export function pushed(payload: typeof TestSnapshotFeed.SnapshotPayload.Type, channel: string) {
   return Effect.map(DateTime.now, (at) => snapshotFrame(payload, channel, "message", at))
 }
 
 function snapshotFrame(
-  payload: typeof SnapshotPayload.Type,
+  payload: typeof TestSnapshotFeed.SnapshotPayload.Type,
   channel: string,
   kind: FeedFrame["kind"],
   receivedAt: DateTime.Utc
@@ -115,7 +116,7 @@ function snapshotFrame(
     feed: "snapshot",
     channel,
     kind,
-    body: Schema.encodeSync(SnapshotPayload)(payload)
+    body: Schema.encodeSync(TestSnapshotFeed.SnapshotPayload)(payload)
   })
 }
 
@@ -137,3 +138,26 @@ export function decodedFrames(frames: ReadonlyArray<FeedFrame>) {
       .pipe(Stream.runCollect)
   )
 }
+
+/** Every report the domain fold makes taking `frames` whole, in order, as the provided `Decoder` reads them. */
+export function reportsOf(frames: ReadonlyArray<FeedFrame>) {
+  return Effect.gen(function* () {
+    const empty: { readonly fold: Fold.LiveGames; readonly reports: ReadonlyArray<Fold.FoldReport> } = {
+      fold: Fold.LiveGames.empty,
+      reports: []
+    }
+    const { reports } = yield* Effect.reduce(
+      yield* decodedFrames(frames),
+      () => empty,
+      ({ fold, reports }, said) =>
+        Effect.map(fold.take(said), ({ next, reports: more }) => ({
+          fold: next,
+          reports: [...reports, ...more]
+        }))
+    )
+    return reports
+  })
+}
+
+/** The written scenarios as `HubMode` plays them: each script written as ESPN's frames. */
+export const writtenScenarios = Scenarios.written(EspnScript.scenarioOf)

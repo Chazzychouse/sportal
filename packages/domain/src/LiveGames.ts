@@ -4,6 +4,7 @@ import type { GameId, GameSnapshot } from "./Game.ts"
 import type { GameEvent } from "./GameEvent.ts"
 import type { LeagueId } from "./League.ts"
 import { LiveGame } from "./LiveGame.ts"
+import type { RecentPlays } from "./RecentPlays.ts"
 
 /**
  * The fold of every delivery, in order: the last frame's `seq`, each league's last listing, every current game's live
@@ -58,6 +59,16 @@ export class LiveGames extends Data.Class<{
     return leagues.flatMap((league) => asFolded(this.listed.get(league) ?? [], this.live))
   }
 
+  /** The last `recentPlayCount` plays of each of `games` that has plays in `live`. */
+  recentPlays(games: ReadonlyArray<GameSnapshot>): RecentPlays {
+    return Object.fromEntries(
+      games.flatMap(({ id }) => {
+        const plays = this.live.get(id)?.plays ?? []
+        return plays.length === 0 ? [] : [[id, plays.slice(-recentPlayCount)] as const]
+      })
+    )
+  }
+
   /** Every listed game as the fold has it, then live games no listing holds. */
   games(): ReadonlyArray<GameSnapshot> {
     const listed = [...this.listed.values()].flatMap((games) => asFolded(games, this.live))
@@ -96,6 +107,9 @@ export class LiveGames extends Data.Class<{
     )
   }
 }
+
+/** How many of a game's plays `recentPlays` keeps: its last ten. */
+const recentPlayCount = 10
 
 /** What one take or tick did to one game, for telemetry to tell. */
 export type FoldReport = Data.TaggedEnum<{

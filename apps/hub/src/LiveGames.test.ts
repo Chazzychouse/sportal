@@ -25,8 +25,8 @@ import { FeedFrame } from "./Frame.ts"
 import { LiveGames } from "./LiveGames.ts"
 import { Decoder } from "./provider/Decoder.ts"
 import { Decoded, LiveFeedDemand } from "./provider/Provider.ts"
-import * as SnapshotDecode from "./provider/snapshot/SnapshotDecode.ts"
 import { delivered, dyingAt, liveGames, pushed } from "./TestFeed.ts"
+import * as TestSnapshotFeed from "./TestSnapshotFeed.ts"
 import { counted, gauged, recordingLogs, recordingSpans, withMetrics } from "./TestTelemetry.ts"
 
 const one = GameId.make("1")
@@ -724,7 +724,7 @@ const breaking = Layer.effect(
           )
     })
   )
-).pipe(Layer.provide(SnapshotDecode.layer))
+).pipe(Layer.provide(TestSnapshotFeed.decoder))
 
 function brokenIn(delivery: Delivery): Delivery {
   return Delivery.match(delivery, {

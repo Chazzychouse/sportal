@@ -63,7 +63,8 @@ const Spot = Schema.Struct({
 
 const PlayType = Schema.Struct({ id: Schema.String, text: Schema.String })
 
-const Entity = Schema.Struct({
+/** ESPN's play entity as a game package lists it: what `Play` reads of it. */
+export const Entity = Schema.Struct({
   id: Schema.String,
   sequenceNumber: Schema.FiniteFromString.check(Schema.isInt()),
   type: PlayType,
@@ -84,9 +85,16 @@ const Entity = Schema.Struct({
   )
 })
 
+/** The ESPN play type that reads as `kind`: its plain one, as ESPN names it. */
+export function typeOf(kind: PlayKind): typeof PlayType.Type {
+  return types[kind]
+}
+
 const decodeType = Schema.decodeUnknownOption(Schema.Struct({ type: PlayType }))
 
-// ESPN's play type ids, each with its slug, as the 2026-10-04 NFL recording lists them under `/entities/plays`.
+// ESPN's play type ids, each with its slug, as the 2026-10-04 NFL recording lists them under `/entities/plays`; the tries
+// as the recorded scoreboards name a last play's; and, by their text, the college types the 2026-10-03 FBS game summaries
+// list.
 const kinds: Readonly<Record<string, PlayKind>> = {
   "2": "endPeriod", // end-period
   "3": "incompletion", // pass-incompletion
@@ -94,22 +102,50 @@ const kinds: Readonly<Record<string, PlayKind>> = {
   "7": "sack", // sack
   "8": "penalty", // penalty
   "9": "fumble", // fumble-recovery-own
+  "14": "punt", // Punt Return
+  "15": "twoPoint", // two-point-pass
+  "16": "twoPoint", // two-point-rush
   "18": "fieldGoal", // blocked-field-goal
   "21": "timeout", // timeout
   "24": "pass", // pass-reception
   "26": "interception", // pass-interception-return
   "29": "fumbleLost", // fumble-recovery-opponent
+  "32": "kickoff", // Kickoff Return Touchdown
   "36": "interception", // interception-return-touchdown
   "52": "punt", // punt
   "53": "kickoff", // kickoff
   "59": "fieldGoal", // field-goal-good
   "60": "fieldGoal", // field-goal-missed
+  "61": "extraPoint", // extra-point-good
+  "63": "interception", // Interception
   "65": "endPeriod", // end-of-half
   "66": "endPeriod", // end-of-game
   "67": "pass", // passing-touchdown
   "68": "rush", // rushing-touchdown
+  "69": "fumble", // Fumble
   // Stoppages no team called: as `timeout`, the team with the ball would read as having taken one.
   "74": "other", // official-timeout
   "75": "other", // two-minute-warning
+  "79": "endPeriod", // End of Regulation
   "80": "fumbleLost" // sack-opp-fumble-recovery
+}
+
+// The type `typeOf` writes for each kind, as ESPN's recordings name it; `kinds` reads each back as its kind.
+const types: Readonly<Record<PlayKind, typeof PlayType.Type>> = {
+  rush: { id: "5", text: "Rush" },
+  pass: { id: "24", text: "Pass Reception" },
+  incompletion: { id: "3", text: "Pass Incompletion" },
+  sack: { id: "7", text: "Sack" },
+  interception: { id: "26", text: "Pass Interception Return" },
+  fumble: { id: "9", text: "Fumble Recovery (Own)" },
+  fumbleLost: { id: "29", text: "Fumble Recovery (Opponent)" },
+  punt: { id: "52", text: "Punt" },
+  kickoff: { id: "53", text: "Kickoff" },
+  fieldGoal: { id: "59", text: "Field Goal Good" },
+  extraPoint: { id: "61", text: "Extra Point Good" },
+  twoPoint: { id: "16", text: "Two Point Rush" },
+  penalty: { id: "8", text: "Penalty" },
+  timeout: { id: "21", text: "Timeout" },
+  endPeriod: { id: "2", text: "End Period" },
+  other: { id: "74", text: "Official Timeout" }
 }
