@@ -31,12 +31,12 @@ module.exports = {
     {
       name: "only-hub-mode-names-adapters",
       comment:
-        "Only HubMode and tests know which concrete providers and sources exist; main.ts names only the database.",
+        "Only HubMode and tests know which concrete providers and sources exist, and ScenarioProvider, which plays written scenarios as the snapshot feed; main.ts names only the database.",
       severity: "error",
       from: {
         path: "^apps/hub/src/",
         pathNot:
-          "(^apps/hub/src/HubMode\\.ts$|\\.test\\.ts$|^apps/hub/src/provider/[^/]+/|^apps/hub/src/source/youtube-tv/)"
+          "(^apps/hub/src/HubMode\\.ts$|^apps/hub/src/scenario/ScenarioProvider\\.ts$|\\.test\\.ts$|^apps/hub/src/provider/[^/]+/|^apps/hub/src/source/youtube-tv/)"
       },
       to: {
         path: "^apps/hub/src/(provider/[^/]+/|source/youtube-tv/|scenario/Scenario(Provider|Source|Clock)\\.ts$)"

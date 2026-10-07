@@ -500,6 +500,31 @@ const migrations = {
     `
     yield* sql`CREATE INDEX feed_frame_channel_seq ON feed_frame (channel, seq)`
     yield* sql`CREATE INDEX feed_frame_received_at ON feed_frame (received_at)`
+  }),
+  // SQLite cannot change a CHECK in place, so the table is rebuilt to let the snapshot feed's frames in.
+  "2_allow_snapshot_feed": Effect.gen(function* () {
+    const sql = yield* SqlClient.SqlClient
+    yield* sql`ALTER TABLE feed_frame RENAME TO feed_frame_before`
+    yield* sql`DROP INDEX feed_frame_channel_seq`
+    yield* sql`DROP INDEX feed_frame_received_at`
+    yield* sql`
+      CREATE TABLE feed_frame (
+        seq INTEGER PRIMARY KEY,
+        received_at INTEGER NOT NULL,
+        sent_at INTEGER,
+        source_id INTEGER,
+        feed TEXT CHECK (feed IN ('poll', 'fastcast', 'snapshot')),
+        channel TEXT,
+        kind TEXT NOT NULL CHECK (kind IN ('response', 'message', 'checkpoint', 'unchanged', 'gap')),
+        body BLOB,
+        body_hash TEXT,
+        CHECK ((kind = 'gap') = (feed IS NULL AND channel IS NULL))
+      )
+    `
+    yield* sql`INSERT INTO feed_frame SELECT * FROM feed_frame_before`
+    yield* sql`DROP TABLE feed_frame_before`
+    yield* sql`CREATE INDEX feed_frame_channel_seq ON feed_frame (channel, seq)`
+    yield* sql`CREATE INDEX feed_frame_received_at ON feed_frame (received_at)`
   })
 }
 

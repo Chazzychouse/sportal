@@ -1,11 +1,10 @@
-import { Delivery } from "@sportal/domain/Delivery"
-import { GameSnapshot } from "@sportal/domain/Game"
-import { LeagueId } from "@sportal/domain/League"
-import { Array as Arr, DateTime, Duration, Effect, Layer, Option, Schedule, Schema, Stream } from "effect"
+import { Array as Arr, DateTime, Duration, Effect, Layer, Option, Schedule, Stream } from "effect"
 import type { FeedFrame } from "../Frame.ts"
 import { HubConfig } from "../HubConfig.ts"
 import { Decoder } from "../provider/Decoder.ts"
-import { Decoded, type Polling, Provider, type ProviderError } from "../provider/Provider.ts"
+import { type Polling, Provider } from "../provider/Provider.ts"
+import * as SnapshotDecode from "../provider/snapshot/SnapshotDecode.ts"
+import * as SnapshotProvider from "../provider/snapshot/SnapshotProvider.ts"
 import type { RecordedScenario } from "./RecordedScenario.ts"
 import { RecordedScenarios, ScenarioUnknown, type ScenarioUnreadable } from "./RecordedScenarios.ts"
 import type { Scenario } from "./Scenario.ts"
@@ -13,8 +12,8 @@ import { scenarios } from "./written/Scenarios.ts"
 
 /**
  * The scenario `SPORTAL_SCENARIO` names as the provider and its `Decoder`, on whatever clock runs it, from the moment
- * the layer is built. A written scenario polls its slate at that moment as a frame, never pushes, and provides its own
- * decoder, which reads such a poll back as its league's `Listing`. A recorded one polls the recorded poll current at
+ * the layer is built. A written scenario polls its slate at that moment as a snapshot feed frame, never pushes, and provides
+ * the snapshot feed's decoder. A recorded one polls the recorded poll current at
  * that moment, received now, and pushes its recorded live feed frames at their recorded offsets; it needs the
  * `Decoder` of the provider that recorded them and provides that one on, so the layer both needs and provides
  * `Decoder`. Either is polled again at its next frame's time, and at least every 10 seconds, so a live game never goes
@@ -33,8 +32,7 @@ export const layer: Layer.Layer<
     const written = scenarios.get(name)
     if (written !== undefined) {
       yield* Effect.logInfo(`ScenarioProvider: playing ${name}, ${written.frames.length} written frames`)
-      const { provider, decoder } = playedWritten(written, start)
-      return Layer.mergeAll(Layer.succeed(Provider, provider), Layer.succeed(Decoder, decoder))
+      return Layer.mergeAll(playedWritten(written, start), SnapshotDecode.layer)
     }
     const recorded = yield* recordedScenarios
       .load(name)
@@ -52,68 +50,19 @@ export const layer: Layer.Layer<
 )
 
 function playedWritten(scenario: Scenario, start: DateTime.Utc) {
-  return ofSlates(
-    (league) =>
+  return SnapshotProvider.layer({
+    games: (league) =>
       DateTime.now.pipe(
         Effect.map((now) =>
           scenario.slateAt(start, DateTime.distance(start, now)).filter((game) => game.league === league)
         ),
         Effect.withSpan("ScenarioProvider.poll", { attributes: { "sportal.league": league } })
       ),
-    pollingAt(
+    polling: pollingAt(
       scenario.frames.map(({ at }) => at),
       start
     )
-  )
-}
-
-/**
- * A provider whose poll of a league is `games(league)` as a frame, the games as JSON for its body, which never pushes
- * and is polled on `polling`; and the decoder that reads such a poll back as its league's `Listing`.
- */
-function ofSlates(
-  games: (league: LeagueId) => Effect.Effect<ReadonlyArray<GameSnapshot>, ProviderError>,
-  polling: Polling
-) {
-  return {
-    provider: Provider.of({
-      poll: (league) =>
-        Effect.all({ games: games(league), receivedAt: DateTime.now }).pipe(
-          Effect.map(
-            ({ games, receivedAt }): FeedFrame => ({
-              receivedAt,
-              feed: "poll",
-              channel: league,
-              kind: "response",
-              body: encodeGames(games)
-            })
-          )
-        ),
-      push: () => Stream.never,
-      polling
-    }),
-    decoder: Decoder.of({
-      decode: (frames) =>
-        frames.pipe(
-          Stream.map(
-            (frame) =>
-              new Decoded({
-                seq: frame.seq,
-                at: frame.receivedAt,
-                deliveries: Option.match(
-                  Option.all({ league: decodeLeague(frame.channel), games: decodeGames(frame.body) }),
-                  {
-                    onNone: () => [],
-                    onSome: ({ league, games }) => [Delivery.cases.Listing.make({ league, games })]
-                  }
-                ),
-                resyncs: [],
-                notices: []
-              })
-          )
-        )
-    })
-  }
+  })
 }
 
 function playedRecorded(scenario: RecordedScenario, start: DateTime.Utc) {
@@ -190,8 +139,3 @@ const longest = 10_000
 
 // A scoreboard with no games, for a league a recorded scenario never polled.
 const noEvents = JSON.stringify({ events: [] })
-
-const Games = Schema.fromJsonString(Schema.Array(GameSnapshot))
-const encodeGames = Schema.encodeSync(Games)
-const decodeGames = Schema.decodeUnknownOption(Games)
-const decodeLeague = Schema.decodeUnknownOption(LeagueId)

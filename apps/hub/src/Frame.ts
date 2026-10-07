@@ -5,7 +5,7 @@ export class FeedFrame extends Schema.Class<FeedFrame>("sportal/hub/FeedFrame")(
   receivedAt: Schema.DateTimeUtcFromMillis,
   sentAt: Schema.optional(Schema.DateTimeUtcFromMillis),
   sourceId: Schema.optional(Schema.Int),
-  feed: Schema.Literals(["poll", "fastcast"]),
+  feed: Schema.Literals(["poll", "fastcast", "snapshot"]),
   /** The league for a poll; the topic, or `socket`, for FastCast. */
   channel: Schema.String,
   kind: Schema.Literals(["response", "message", "checkpoint"]),

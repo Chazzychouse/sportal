@@ -32,7 +32,7 @@ Every exported type name must be a term here, except the wire schemas in `*Paylo
 | **Notice** | Something a provider's decode noticed in a frame for telemetry to tell: a message received, games pushed, an unlisted game, a document reset, a message of an unknown op, a frame, event, or play that did not decode, or an unknown play type. Told only for frames after a replay. | warning, metric |
 | **Delivery source** | Which feed a snapshot came from: `push` or `poll`. | origin, feed type |
 | **Test game** | A game snapshot built for a test, with defaults for everything the test does not care about. | fixture, mock |
-| **Scenario** | Games a Hub plays as its provider, through the real ingest, feed log, decode, and fold: written as a timeline of game snapshots, or recorded as raw frames. | fixture, simulation |
+| **Scenario** | Games a Hub plays as its provider, through the real ingest, feed log, decode, and fold: written as a timeline of game snapshots, which plays as the snapshot feed, or recorded as raw frames. | fixture, simulation |
 | **Recorded scenario** | A scenario kept as the raw frames of a recorded window, `fixtures/scenarios/<name>.frames.jsonl.gz`, decoded by the provider that recorded them. | slice, recording |
 | **Recorded scenarios** | Where the recorded scenarios are kept, and reading one back by name; `RecordedScenarios` in code. | scenario store |
 | **Scenario unknown** | `SPORTAL_SCENARIO` names no written or recorded scenario; `ScenarioUnknown` in code, with the names there are. | |
@@ -54,6 +54,7 @@ Every exported type name must be a term here, except the wire schemas in `*Paylo
 | **Provider error** | A provider could not supply data: a poll of a league unreachable or refused, or a push refused, closed, or gone silent. | fetch error, live feed error |
 | **Live feed** | A provider's push: the connection carrying updates for live games between polls (ESPN FastCast). `LiveFeed` in code. | socket, stream, webhook |
 | **FastCast** | ESPN's live feed, as the ESPN provider's push: one socket following each league's scoreboard and each wanted game, with FastCast's checkpoint retry. | |
+| **Snapshot feed** | A provider whose frames are our own deliveries, one per frame: what written scenarios play and tests drive. | |
 | **ESPN event** | One game as either ESPN feed spells it, the polled site scoreboard or a FastCast scoreboard topic, read as a GameSnapshot; `EspnEvent` in code. | payload, DTO |
 | **Topic owner** | What a live feed topic carries: one league's scoreboard, or one game's plays; `Owner` in code. | subscription |
 | **Checkpoint error** | A live feed topic's checkpoint could not be loaded or did not decode; retried on FastCast's checkpoint retry, then the game is left to polling. | |

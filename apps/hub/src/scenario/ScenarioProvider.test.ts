@@ -23,11 +23,11 @@ import {
 import { TestClock } from "effect/testing"
 import * as Database from "../Database.ts"
 import { FeedLog } from "../FeedLog.ts"
-import { FeedFrame } from "../Frame.ts"
+import { FeedFrame, Frame } from "../Frame.ts"
 import * as Gzip from "../Gzip.ts"
 import * as Ingest from "../ingest/Ingest.ts"
 import { LiveGames } from "../LiveGames.ts"
-import type { Decoder } from "../provider/Decoder.ts"
+import { Decoder } from "../provider/Decoder.ts"
 import * as EspnDecode from "../provider/espn/EspnDecode.ts"
 import { Provider } from "../provider/Provider.ts"
 import { decoder } from "../provider/TestProvider.ts"
@@ -95,6 +95,32 @@ describe("ScenarioProvider", () => {
         assert.strictEqual((yield* listed("fbs"))[0]?.home.score, 7)
       }).pipe(Effect.provide(playing("seven", { from: dir, decoder })))
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer))
+  )
+
+  it.effect("a written scenario's poll decodes through its decoder to the league's listing", () =>
+    Effect.gen(function* () {
+      const [decoded] = yield* decodedFrames([yield* (yield* Provider).poll("fbs")])
+      const [listing] = decoded?.deliveries ?? []
+      assert.strictEqual(listing?._tag, "Listing")
+      assert.deepStrictEqual(listing?._tag === "Listing" && [listing.league, listing.games.length], [
+        "fbs",
+        4
+      ])
+      assert.deepStrictEqual(decoded?.notices, [])
+    }).pipe(Effect.provide(scenario("two-minute-drill-tie")))
+  )
+
+  it.effect("a written scenario's frame that does not decode is noted, not dropped", () =>
+    Effect.gen(function* () {
+      const [decoded] = yield* decodedFrames([
+        { receivedAt: DateTime.makeUnsafe(0), feed: "snapshot", channel: "fbs", kind: "response", body: "{" }
+      ])
+      assert.deepStrictEqual(decoded?.deliveries, [])
+      assert.deepStrictEqual(
+        decoded?.notices.map((notice) => notice._tag),
+        ["FrameUndecoded"]
+      )
+    }).pipe(Effect.provide(scenario("two-minute-drill-tie")))
   )
 
   it.effect("a written scenario never pushes", () =>
@@ -253,8 +279,8 @@ describe("ScenarioProvider", () => {
       assert.deepStrictEqual(
         logged.map(({ feed, channel }) => [feed, channel]),
         [
-          ["poll", "nfl"],
-          ["poll", "fbs"]
+          ["snapshot", "nfl"],
+          ["snapshot", "fbs"]
         ]
       )
       assert.isFalse(yield* fs.exists(join(dataDir, "feed.sqlite")))
@@ -380,6 +406,15 @@ const encodeGames = Schema.encodeSync(Schema.fromJsonString(Schema.Array(GameSna
 
 function scoring(points: number) {
   return liveSnapshot({ id: GameId.make("1"), home: { team: team("HOME"), score: points } })
+}
+
+/** What the provided `Decoder` says each of `frames` said, numbered from 1. */
+function decodedFrames(frames: ReadonlyArray<FeedFrame>) {
+  return Decoder.use((decoder) =>
+    decoder
+      .decode(Stream.fromIterable(frames.map((frame, index) => new Frame({ ...frame, seq: index + 1 }))))
+      .pipe(Stream.runCollect)
+  )
 }
 
 /** League `league`'s last listing in the fold. */

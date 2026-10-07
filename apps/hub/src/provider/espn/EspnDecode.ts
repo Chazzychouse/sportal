@@ -56,7 +56,7 @@ type State = {
 function listed(state: State, frame: Frame): Effect.Effect<readonly [State, Decoded]> {
   return Effect.all({ league: decodeLeague(frame.channel), scoreboard: decodeScoreboard(frame.body) }).pipe(
     Effect.flatMap(({ league, scoreboard }) =>
-      gamesOf(league, scoreboard.events, frame.feed).pipe(
+      gamesOf(league, scoreboard.events, "poll").pipe(
         Effect.map(
           ({ games, noticed }) =>
             [
@@ -82,7 +82,7 @@ function pushed(state: State, frame: Frame): Effect.Effect<readonly [State, Deco
         onSome: (changed) => {
           switch (changed._tag) {
             case "Scoreboard":
-              return gamesOf(changed.league, changed.events, frame.feed).pipe(
+              return gamesOf(changed.league, changed.events, "fastcast").pipe(
                 Effect.map(({ games, noticed: undecoded }) => {
                   const { deliveries, unlisted } = advancedToListed(state.listings, games)
                   return [
@@ -140,7 +140,7 @@ function said(
 function gamesOf(
   league: LeagueId,
   events: ReadonlyArray<unknown>,
-  feed: Frame["feed"]
+  feed: "poll" | "fastcast"
 ): Effect.Effect<{ readonly games: ReadonlyArray<GameSnapshot>; readonly noticed: ReadonlyArray<Notice> }> {
   return Effect.forEach(events, (event) =>
     decodeEvent[league](event).pipe(
