@@ -11,7 +11,7 @@ import {
 import { type Polling, Provider } from "../Provider.ts"
 
 /**
- * The scenario `SPORTAL_SCENARIO` names as the provider, on whatever clock runs it, from the moment the layer is built.
+ * The scenario `SPORTAL_SCENARIO` names as the provider, on whatever clock runs it, from its first use: its first poll, push or polling step.
  * Its frames play at their offsets from its first: a poll answers the scenario's poll of that league current at the
  * moment, received now, and the scenario is polled again at its next poll's time and at least every 10 seconds; its
  * live feed frames are pushed at their offsets. A name that is unset or unknown fails, listing the scenarios there are.
@@ -22,7 +22,7 @@ export const layer: Layer.Layer<Provider, ScenarioUnknown | ScenarioUnreadable, 
     Effect.gen(function* () {
       const { scenario } = yield* HubConfig
       const scenarios = yield* Scenarios
-      const start = yield* DateTime.now
+      const start = yield* Effect.cached(DateTime.now)
       const name = Option.getOrElse(scenario, () => "")
       const loaded = yield* scenarios.load(name)
       yield* Effect.logInfo(`ScenarioProvider: playing ${name}, ${loaded.frames.length} frames`)
@@ -30,18 +30,19 @@ export const layer: Layer.Layer<Provider, ScenarioUnknown | ScenarioUnreadable, 
     })
   )
 
-function played(scenario: Scenario, start: DateTime.Utc) {
+function played(scenario: Scenario, start: Effect.Effect<DateTime.Utc>) {
   const origin = scenario.origin()
   const offsetOf = (frame: FeedFrame) => DateTime.distance(origin, frame.receivedAt)
-  const playedAt = (frame: FeedFrame) => DateTime.addDuration(start, offsetOf(frame))
+  const playedAt = (frame: FeedFrame) => Effect.map(start, (at) => DateTime.addDuration(at, offsetOf(frame)))
   const polls = scenario.frames.filter((frame) => frame.feed === "poll")
   const pushes = scenario.frames.filter((frame) => frame.feed === push)
   return Provider.of({
     poll: Effect.fn("ScenarioProvider.poll")(function* (league: LeagueId) {
       yield* Effect.annotateCurrentSpan("sportal.league", league)
+      const began = yield* start
       const now = yield* DateTime.now
 
-      const recordedNow = DateTime.addDuration(origin, DateTime.distance(start, now))
+      const recordedNow = DateTime.addDuration(origin, DateTime.distance(began, now))
       const ofLeague = polls.filter((frame) => frame.channel === league)
       const current = Arr.findLast(ofLeague, (frame) =>
         DateTime.isLessThanOrEqualTo(frame.receivedAt, recordedNow)
@@ -55,12 +56,12 @@ function played(scenario: Scenario, start: DateTime.Utc) {
     push: () =>
       Stream.fromIterable(pushes).pipe(
         Stream.mapEffect((frame) =>
-          DateTime.now.pipe(
-            Effect.flatMap((now) =>
-              Effect.sleep(Duration.max(DateTime.distance(now, playedAt(frame)), Duration.zero))
-            ),
-            Effect.as(movedTo(frame, playedAt(frame)))
-          )
+          Effect.gen(function* () {
+            const at = yield* playedAt(frame)
+            const now = yield* DateTime.now
+            yield* Effect.sleep(Duration.max(DateTime.distance(now, at), Duration.zero))
+            return movedTo(frame, at)
+          })
         ),
         Stream.concat(Stream.never)
       ),
@@ -85,13 +86,15 @@ function movedTo(frame: FeedFrame, at: DateTime.Utc): FeedFrame {
 }
 
 /** Polled again at the next of `offsets` (milliseconds from `start`) after now, and at least every `longest`. */
-function pollingAt(offsets: ReadonlyArray<number>, start: DateTime.Utc): Polling {
+function pollingAt(offsets: ReadonlyArray<number>, start: Effect.Effect<DateTime.Utc>): Polling {
   return Schedule.forever.pipe(
-    Schedule.modifyDelay(({ now }) => {
-      const elapsed = now - DateTime.toEpochMillis(start)
-      const next = offsets.find((at) => at > elapsed)
-      return Effect.succeed(Duration.millis(Math.min(longest, next === undefined ? longest : next - elapsed)))
-    })
+    Schedule.modifyDelay(({ now }) =>
+      Effect.map(start, (began) => {
+        const elapsed = now - DateTime.toEpochMillis(began)
+        const next = offsets.find((at) => at > elapsed)
+        return Duration.millis(Math.min(longest, next === undefined ? longest : next - elapsed))
+      })
+    )
   )
 }
 

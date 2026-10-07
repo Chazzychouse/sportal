@@ -51,6 +51,7 @@ export const layer: Layer.Layer<
   })
 )
 
+// The "EspnArchive.*" span names and "Archive: " log prefixes are ids the dashboard is pinned to; keep them as they are.
 const gamesOf = Effect.fn("EspnArchive.games")(function* (
   league: LeagueId,
   date: GameDay,

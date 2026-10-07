@@ -262,9 +262,21 @@ describe("ScenarioProvider", () => {
       }).pipe(Effect.provide(scenarioOfTwoPolls()))
     )
 
+    it.effect("should start the scenario at its first poll, not when its layer is built", () =>
+      Effect.gen(function* () {
+        const context = yield* Layer.build(scenarioOfTwoPolls())
+        yield* TestClock.adjust("35 seconds")
+
+        const first = yield* Provider.use((provider) => provider.poll("fbs")).pipe(Effect.provide(context))
+
+        assert.deepStrictEqual(scoreAndReceipt(first), [3, 35_000])
+      }).pipe(Effect.scoped)
+    )
+
     it.effect("should poll a later recorded poll once it is current, received now", () =>
       Effect.gen(function* () {
         const provider = yield* Provider
+        yield* provider.poll("fbs")
         yield* TestClock.adjust("20 seconds")
         yield* TestClock.adjust("15 seconds")
 
