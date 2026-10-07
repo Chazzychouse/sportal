@@ -23,12 +23,13 @@ import * as EspnSummary from "./EspnSummary.ts"
 /**
  * ESPN's archive: a date's site scoreboard, then each final game's summary, each kept as ESPN sent it, gzip'd, as
  * `archive/<league>/scoreboard/<date>.json.gz` and `archive/<league>/summary/<game>.json.gz` under
- * `HubConfig.corpusDir`. A file archived is never fetched again, and a date's summaries are fetched 500 ms apart. A
- * fetch that does not connect, or is answered 429 or with a status of 500 or more, is `Unreachable` and tried again
+ * `HubConfig.corpusDir`. A file archived is never fetched again, and a date's summaries are fetched 500 ms apart.
+ * A fetch that does not connect, or is answered 429 or with a status of 500 or more, is `Unreachable` and tried again
  * from 1 second later, twice as long each time, jittered, five tries in all; one answered with another status that is
- * not 2xx is `Refused`, and a body that is not JSON is `Unreadable`. A game whose summary is refused is skipped and
- * logged, and its refusal archived as `summary/<game>.refused.json` (the status, and when), so it is never fetched
- * again and the date still reads from the archive; a refused scoreboard fails the date. A fetch that fails writes no file, so the next call fetches it again.
+ * not 2xx is `Refused`, and a body that is not JSON is `Unreadable`. A summary that is gone (404 or 410) is archived
+ * as a refusal, `summary/<game>.refused.json` (the status, and when): its game is skipped and logged, it is never
+ * fetched again, and the date still reads from the archive. Any other refusal, of a summary or a scoreboard, fails
+ * the date. A fetch that fails otherwise writes no file, so the next call fetches it again.
  */
 export const layer: Layer.Layer<
   Archive,
@@ -57,7 +58,9 @@ export const layer: Layer.Layer<
         Effect.flatMap((response) => response.text),
         Effect.tapError((cause) => {
           const { reason } = cause
-          return refusal === undefined || reason._tag !== "StatusCodeError" || reasonOf(cause) !== "Refused"
+          return refusal === undefined ||
+            reason._tag !== "StatusCodeError" ||
+            !gone.includes(reason.response.status)
             ? Effect.void
             : DateTime.now.pipe(
                 Effect.flatMap((refusedAt) => encodeRefusal({ status: reason.response.status, refusedAt })),
@@ -142,10 +145,13 @@ export const layer: Layer.Layer<
                 failed(game.id),
                 files.refusal(game.id)
               ).pipe(
-                // The refusal is archived in its place, and read below.
+                // A gone summary is archived as its refusal, read below; any other refusal fails the date.
                 Effect.catchIf(
                   (error) => error.reason === "Refused",
-                  () => Effect.void
+                  (error) =>
+                    Effect.flatMap(exists(files.refusal(game.id), failed(game.id)), (refused) =>
+                      refused ? Effect.void : Effect.fail(error)
+                    )
                 )
               )
             )
@@ -232,6 +238,9 @@ function reasonOf(cause: HttpClientError.HttpClientError): ArchiveFetchFailed["r
       ? "Unreadable"
       : "Unreachable"
 }
+
+// The statuses that say a summary is gone for good, and is archived as refused.
+const gone: ReadonlyArray<number> = [404, 410]
 
 // A refused summary, archived in its place so the date is never fetched for it again, and still rebuilds.
 const Refusal = Schema.Struct({ status: Schema.Int, refusedAt: Schema.DateTimeUtcFromString })

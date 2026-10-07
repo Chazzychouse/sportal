@@ -148,7 +148,7 @@ describe("EspnArchive", () => {
   )
 
   it.effect(
-    "a refused summary is archived as refused: its game is skipped, the date rebuilds, and it is not fetched again",
+    "a summary that is gone is archived as refused: its game is skipped, the date rebuilds, and it is not fetched again",
     () =>
       inArchive(
         {
@@ -175,6 +175,40 @@ describe("EspnArchive", () => {
             assert.deepStrictEqual(archived, games)
             assert.deepStrictEqual(again, games)
             assert.strictEqual((yield* requests).length, fetched.length)
+          })
+      )
+  )
+
+  it.effect(
+    "a summary refused otherwise fails the date and leaves no marker, so the next call fetches it again",
+    () =>
+      inArchive(
+        {
+          answer: (url, earlier) =>
+            url === `${site}/summary?event=401872965` && earlier === 0
+              ? new Response("", { status: 403 })
+              : undefined
+        },
+        ({ dir, requests }) =>
+          Effect.gen(function* () {
+            const archive = yield* Archive
+            const fs = yield* FileSystem.FileSystem
+            const error = yield* Effect.flip(stepped(archive.games("nfl", "2026-10-04")))
+            const marked = yield* fs.exists(`${dir}/archive/nfl/summary/401872965.refused.json`)
+            const kept = yield* fs.exists(`${dir}/archive/nfl/summary/401872965.json.gz`)
+            const games = yield* stepped(archive.games("nfl", "2026-10-04"))
+
+            assert.deepStrictEqual([error.reason, error.game], ["Refused", GameId.make("401872965")])
+            assert.isFalse(marked)
+            assert.isFalse(kept)
+            assert.deepStrictEqual(
+              games.map((game) => game.final.id),
+              [neBuf]
+            )
+            assert.strictEqual(
+              (yield* requests).filter((url) => url === `${site}/summary?event=401872965`).length,
+              2
+            )
           })
       )
   )
