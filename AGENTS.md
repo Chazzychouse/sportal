@@ -35,21 +35,31 @@ easiest to break.
 - In the Hub, only `HubConfig.ts` reads the environment. A new setting is a field there, with its default.
 - A service is yielded where it is used, never passed as an argument. A layer that needs a setting yields `HubConfig`
   (in the shell, `ShellConfig`); a choice between layers at startup is a `Layer.unwrap` that yields it.
-- A port's member types that other modules need are named and exported beside it (`Polling`, `LiveFeed`). Nothing
-  indexes a service's type with `X["Service"]`.
+- A port's member types that other modules need are named and exported beside it (`Polling`, `LiveFeed`).
+  `S["Service"]` is allowed.
+
+**Module shapes.** Every `.ts` file is exactly one of these.
+
+| Shape | Exports | Imported |
+|---|---|---|
+| Class module | One class named for the file (service, `Schema.Class`, `Data.Class`), and beside it only that concept's member types, errors and the schemas its fields read | By name |
+| Namespace module | No class of its own: an adapter of a port defined elsewhere (`EspnProvider`), a layer that provides no service (`Ingest`, `HubMode`), or a set of functions (`Gzip`). An adapter or layer-only module exports `layer` | `import * as X` |
+| Payload module (`*Payload.ts`) | A provider's wire spelling, with no transform into domain types | By name |
+| Entry point (lowercase) | Nothing; it runs a process (`main.ts`, `corpus/corpus.ts`, `corpus/worker.ts`) | – |
+| Test module (`Test*.ts`) | Fixtures, recorded payloads, builders of domain values, harnesses composing several layers, test-only adapters of a port | As its shape says |
 
 ## Inside a file
 
 A reader opens a file to see the thing it is named for. Keep it that way.
 
 1. The main export comes first. No preamble of types, constants, and small helpers above it.
-2. Private helpers go **below** the code that uses them, as hoisted `function` declarations, in the
-   order they are first used.
+2. Private helpers go **below** the code that uses them, in the order they are first used: pure helpers as hoisted
+   `function` declarations, effectful helpers as `Effect.fn` consts.
 3. A helper used once and a few lines long is inlined. A helper that is really an operation on another
    concept is a method or static of that concept's type.
 4. Do not declare an interface or type alias for an options bag, a return shape, a callback, or
    component props used in one place. Write the shape inline in the signature.
-5. A service file reads: service declaration, its layer, then private helpers.
+5. A class module reads in the order under "Order inside a class module".
 6. A constant lives beside its only user.
 7. When a file needs a table of contents, split it by concept — never into `FooTypes.ts` and
    `FooHelpers.ts`.
@@ -73,6 +83,33 @@ A reader opens a file to see the thing it is named for. Keep it that way.
   exported `apply(stage, …)`. A domain module exports no loose functions over its types; a private
   helper below the class that only the class uses is fine. A schema a class reads when it is defined
   (a field's type) goes above the class, because the class evaluates it then.
+- One spelling per kind:
+
+| Kind | Spelling |
+|---|---|
+| Service id | `"sportal/<app>/<dir>/Name"`, the path from the package root |
+| Service layer | `static readonly layer: Layer.Layer<…> = …`, type written out |
+| Layer variant | `static readonly layerX`, or `static layerX(args)`; never another word (`layerInDataDir`, `layerFrom(dir)`) |
+| Test layer | `static readonly layerTest` or `static layerTest…(args)` on the service it fakes; knip's `ignoreMembers` exempts `^layerTest` |
+| Layer providing nothing | A namespace module's `layer`, or `layerX`. Never `serve`/`listen`, never a zero-argument function returning a layer |
+| Effectful operation | `const f = Effect.fn("Module.f")(…)`, or `Effect.fnUntraced` on a hot path; a service member is `Effect.fn("Service.member")`. Never a `function` that only returns `Effect.gen`, never a hand-added `Effect.withSpan` |
+| Pure helper | A hoisted `function`, below its first user |
+| Wire value | `export const X = Schema.…`, then `export type X = typeof X.Type` |
+| Wire union | `Schema.TaggedUnion({…})` with its type; `X.match`, `X.guards`. Cases with behaviour: one `Schema.TaggedClass` each, then `Schema.Union` (`FootballPlay`) |
+| In-memory value | `Data.Class` |
+| In-memory state | `type X = Data.TaggedEnum<…>` with `const X = Data.taggedEnum<X>()`; `X.$match`, `X.$is`. Never `_tag ===`, never `Match.valueTags` |
+| Expected error | `Schema.TaggedError` named for what happened, never `…Error` (`ProviderUnavailable`) |
+| Object shape | `interface`; `type` stays for functions, schedules, unions and derived types |
+| SQL row | `Model.Class` from `effect/schema`, one per table; queries are `SqlSchema` consts built inside the layer from the `sql` it yields, never per call |
+| Metric | A private const at the end of its file, named for what it measures; its id never changes |
+| Codec | `const decodeX` / `encodeX` below its users |
+
+- An `Effect.fn` const is not hoisted: it may sit below its user only when that user runs it lazily (inside a
+  generator or a layer's effect), never when an eager top-level expression calls it.
+- Order inside a class module: the schemas the class reads when defined; the class (a service: interface, `layer`, the
+  `layer…` variants, then `layerTest…`; a data class: fields, statics, methods); its member types and errors; private
+  helpers in first-use order; codecs; metrics. Storage (rows, queries, migrations) or a second state machine that
+  outgrows its service moves to a sibling file in the concept's folder, never to the bottom of the service file.
 - Expected failures are tagged errors in the error channel. Nothing is caught and ignored.
 - Time comes from Effect's `Clock`. No `Date.now()` in `packages/domain` or the Hub.
 - No `any`, no non-null assertions, no enums, no default exports, no casts outside decoding.
@@ -83,6 +120,8 @@ A reader opens a file to see the thing it is named for. Keep it that way.
 - Tests sit beside the file as `Name.test.ts`. Domain logic and provider decoding are written test-first.
   Provider tests run against recorded real payloads in the adapter's `fixtures/` folder.
 - A `Test*.ts` file is named for the concept it builds or fakes and sits beside its module.
+- A fake of one service is a `layerTest…` static on that service; it takes its data as arguments and imports no
+  fixture or `Test*.ts`. Everything else a test needs stays in `Test*.ts`.
 - One behaviour per test. Several cases are several tests; `it.each` only when the cases are one behaviour over
   different inputs.
 - `it("should …")`; the `describe` names the unit (`describe("Play.eventsSince")`).
