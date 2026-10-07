@@ -202,12 +202,12 @@ function snapshot(
       location: competitor.location ?? competitor.displayName,
       // FastCast has no short name: EspnDecode advances each pushed game's listed game to it, keeping the poll's names.
       shortName: competitor.shortDisplayName ?? competitor.displayName,
-      logo: competitor.logo,
-      color: competitor.color,
-      alternateColor: competitor.alternateColor
+      ...(competitor.logo === undefined ? {} : { logo: competitor.logo }),
+      ...(competitor.color === undefined ? {} : { color: competitor.color }),
+      ...(competitor.alternateColor === undefined ? {} : { alternateColor: competitor.alternateColor })
     }),
     score: competitor.score ?? 0,
-    ranking: competitor.ranking
+    ...(competitor.ranking === undefined ? {} : { ranking: competitor.ranking })
   })
   return Effect.succeed(
     new GameSnapshot({
@@ -220,7 +220,7 @@ function snapshot(
       home: side(home),
       away: side(away),
       broadcasts: event.broadcasts.flatMap(({ medium, network }) => broadcast(medium, network)),
-      situation: event.situation === undefined ? undefined : situation(league, event.situation, home.id)
+      ...(event.situation === undefined ? {} : { situation: situation(league, event.situation, home.id) })
     })
   )
 }

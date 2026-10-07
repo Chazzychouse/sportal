@@ -1,15 +1,18 @@
 import { readFileSync } from "node:fs"
+import { NodeServices } from "@effect/platform-node"
 import { assert, describe, layer } from "@effect/vitest"
 import type { Delivery } from "@sportal/domain/Delivery"
 import { GameId, GameSnapshot } from "@sportal/domain/Game"
-import { PlayId } from "@sportal/domain/Play"
-import { type Data, DateTime, Effect, Metric, Option, Record, Schema } from "effect"
+import { Play, PlayId } from "@sportal/domain/Play"
+import { type Data, DateTime, Effect, Equal, Layer, Metric, Option, Record, Schema } from "effect"
 import type { FeedFrame } from "../../Frame.ts"
+import { Scenarios } from "../../scenario/Scenarios.ts"
 import { decodedFrames } from "../../TestFeed.ts"
 import { recordingLogs, withMetrics } from "../../TestTelemetry.ts"
 import type { DecodeObservation } from "../Provider.ts"
 import * as EspnDecode from "./EspnDecode.ts"
 import { EspnEvent } from "./EspnEvent.ts"
+import { fixtures, neAtBufFrames } from "./TestEspn.ts"
 
 // Recorded from ESPN on 2026-10-04: the NFL checkpoint at 17:52Z, every socket text on its topic after it until
 // 18:00Z, each line one text as it arrived, and the scoreboard polled at 18:00Z.
@@ -40,6 +43,9 @@ const moveRecording = Schema.decodeSync(
     })
   )
 )(fixture("nfl-gp-move-2026-10-04.json"))
+
+const snapshotJson = Schema.fromJsonString(GameSnapshot)
+const playJson = Schema.fromJsonString(Play)
 
 const ariAtNyg = "s:20~l:28~e:401872966~c:401872966"
 const ariAtNygPlays = "gp-football-nfl-401872966"
@@ -759,6 +765,40 @@ layer(EspnDecode.layer)("EspnDecode", (it) => {
       })
     )
   })
+
+  it.effect(
+    "every snapshot and play decoded from the recorded NE at BUF day reads back from its JSON Equal to itself",
+    () =>
+      Effect.gen(function* () {
+        const { frames } = yield* Scenarios.use((scenarios) => scenarios.load(neAtBufFrames)).pipe(
+          Effect.provide(Scenarios.in(fixtures, []).pipe(Layer.provideMerge(NodeServices.layer)))
+        )
+        const deliveries = (yield* decodedFrames(frames)).flatMap(({ deliveries }) => deliveries)
+        const snapshots = deliveries.flatMap((delivery) =>
+          delivery._tag === "Listing"
+            ? delivery.games
+            : delivery._tag === "Snapshot"
+              ? [delivery.snapshot]
+              : []
+        )
+        const plays = deliveries.flatMap((delivery) => (delivery._tag === "Plays" ? delivery.plays : []))
+        assert.isNotEmpty(snapshots)
+        assert.isNotEmpty(plays)
+        for (const snapshot of snapshots) {
+          const back = yield* Schema.encodeEffect(snapshotJson)(snapshot).pipe(
+            Effect.flatMap(Schema.decodeEffect(snapshotJson))
+          )
+          assert.isTrue(Equal.equals(back, snapshot), snapshot.id)
+        }
+        for (const play of plays) {
+          const back = yield* Schema.encodeEffect(playJson)(play).pipe(
+            Effect.flatMap(Schema.decodeEffect(playJson))
+          )
+          assert.isTrue(Equal.equals(back, play), play.id)
+        }
+      }),
+    { timeout: 60_000 }
+  )
 })
 
 /** What `frames` decode to, each numbered by its place from 1: the deliveries, and what decoding observed. */

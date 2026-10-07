@@ -102,7 +102,7 @@ describe("EspnPlay", () => {
         homeScore: 0,
         awayScore: 6,
         start: { down: 1, distance: 10, yardsToEndzone: 12, team: nfl("22") },
-        end: { down: undefined, distance: undefined, yardsToEndzone: 0, team: nfl("22") }
+        end: { yardsToEndzone: 0, team: nfl("22") }
       })
     })
   )

@@ -1,8 +1,7 @@
 import { NodeCrypto, NodeServices } from "@effect/platform-node"
 import { assert, describe, it } from "@effect/vitest"
 import { Delivery } from "@sportal/domain/Delivery"
-import { GameId, GameSnapshot } from "@sportal/domain/Game"
-import { RecentPlays } from "@sportal/domain/RecentPlays"
+import { GameId, type GameSnapshot } from "@sportal/domain/Game"
 import { Slate } from "@sportal/domain/Slate"
 import { liveSnapshot, snapshot } from "@sportal/domain/TestGame"
 import { type Crypto, DateTime, Effect, Equal, FileSystem, Layer, Path, Schema, Stream } from "effect"
@@ -30,44 +29,22 @@ const zone = "America/New_York"
 describe("CorpusBuild.captured", () => {
   it.effect(
     "builds the recorded NE at BUF day: every play in its push file, and read back it takes to the slate the decode does",
-    () =>
-      inCorpus(EspnDecode.layer, (dir) =>
-        Effect.gen(function* () {
-          yield* logged(yield* recorded)
-          const day = yield* built("2026-10-04")
-          assert.deepStrictEqual(
-            [day.date, day.kind, day.format, day.leagues],
-            ["2026-10-04", "captured", CorpusLine.format, ["nfl"]]
-          )
+    () => inCorpus(EspnDecode.layer, (dir) => recordedDayChecked(dir, local("2026-10-04T04:00:00"))),
+    { timeout: 60_000 }
+  )
 
-          const { join } = yield* Path.Path
-          const push = yield* (yield* FileSystem.FileSystem)
-            .readFile(join(dir, "days", day.date, "push.ndjson.gz"))
-            .pipe(Effect.flatMap((bytes) => Gzip.decompress(bytes, "gzip")))
-          const playIds = new Set(
-            push
-              .split("\n")
-              .filter((line) => line.length > 0)
-              .map((line) => decodeLine(line))
-              .flatMap(({ input }) =>
-                input._tag === "PlaysChanged" ? input.upserts.map(({ id }) => id) : []
-              )
-          )
-          assert.strictEqual(playIds.size, recordedPlays)
-
-          const read = yield* (yield* CorpusDays).read(day.date)
-          const fromCorpus = yield* takenAll(yield* Stream.runCollect(read.frames))
-          const decoded = yield* Effect.gen(function* () {
-            const log = yield* FeedLog
-            const decoder = yield* Decoder
-            return yield* Stream.runCollect(decoder.decode(log.replay(local("2026-10-04T04:00:00"))))
-          }).pipe(Effect.provide(FeedLog.layer), Effect.scoped)
-          const fromDecode = yield* takenAll(decoded)
-          // As the slate is sent: a decoded team's absent ranking is a key holding undefined, which a line read back
-          // has not, so the two compare as their wire form.
-          assert.strictEqual(wire(fromCorpus), wire(fromDecode))
-        })
-      ),
+  it.effect(
+    "keeps the checkpoint from before the day's start, so a day that starts mid-patch still reads back whole",
+    () => {
+      // The recording's topic checkpoint is at 16:44:55Z and its first play patch at 17:02:42Z; 04:00 in a zone
+      // 12:56:40 behind UTC falls between them, at 16:56:40Z.
+      const behind = DateTime.zoneMakeOffset(-((12 * 60 + 56) * 60 + 40) * 1000)
+      return inCorpus(
+        EspnDecode.layer,
+        (dir) => recordedDayChecked(dir, DateTime.makeUnsafe("2026-10-04T16:56:40Z")),
+        behind
+      )
+    },
     { timeout: 60_000 }
   )
 
@@ -136,6 +113,21 @@ describe("CorpusBuild.captured", () => {
     )
   )
 
+  it.effect("fails NoFrames for a day the feed log has only a checkpoint from before it of", () =>
+    inCorpus(TestSnapshotFeed.decoder, () =>
+      Effect.gen(function* () {
+        const checkpoint = framed(pushedSnapshot, local("2026-10-04T03:00:00"))
+        yield* logged([
+          new FeedFrame({ ...checkpoint, kind: "checkpoint" }),
+          framed(pushedSnapshot, local("2026-10-05T05:00:00"))
+        ])
+        const error = yield* built("2026-10-04").pipe(Effect.flip)
+        assert.deepStrictEqual([error.date, error.reason], ["2026-10-04", "NoFrames"])
+        assert.deepStrictEqual(yield* (yield* CorpusDays).dates, [])
+      })
+    )
+  )
+
   it.effect("fails NoFrames for a day the feed log has nothing of", () =>
     inCorpus(TestSnapshotFeed.decoder, () =>
       Effect.gen(function* () {
@@ -158,7 +150,10 @@ function local(wallClock: string): DateTime.Utc {
   return DateTime.toUtc(DateTime.makeZonedUnsafe(wallClock, { timeZone: zone, adjustForTimeZone: true }))
 }
 
-/** `test` over an in-memory feed log, `decoder`, and corpus days in a temporary directory it is given, in `zone`. */
+/**
+ * `test` over an in-memory feed log, `decoder`, and corpus days in a temporary directory it is given, in `timeZone`,
+ * the test's `zone` unless given.
+ */
 function inCorpus<A, E>(
   decoder: Layer.Layer<Decoder>,
   test: (
@@ -173,7 +168,8 @@ function inCorpus<A, E>(
     | Path.Path
     | SqlClient.SqlClient
     | Crypto.Crypto
-  >
+  >,
+  timeZone: DateTime.TimeZone = DateTime.zoneMakeNamedUnsafe(zone)
 ) {
   return Effect.gen(function* () {
     const dir = yield* (yield* FileSystem.FileSystem).makeTempDirectoryScoped()
@@ -182,13 +178,58 @@ function inCorpus<A, E>(
         Layer.mergeAll(
           CorpusDays.layer.pipe(Layer.provide(withEnv({ SPORTAL_CORPUS_DIR: dir }))),
           decoder,
-          DateTime.layerCurrentZoneNamed(zone),
+          DateTime.layerCurrentZone(timeZone),
           Database.at(":memory:"),
           NodeCrypto.layer
         )
       )
     )
   }).pipe(Effect.scoped, Effect.provide(NodeServices.layer))
+}
+
+/**
+ * Logs the recorded NE at BUF frames, builds 2026-10-04, which starts at `from`, and checks it: a captured NFL day
+ * whose push file has every play, read back to the same slate as the replay from `from` decoded.
+ */
+function recordedDayChecked(dir: string, from: DateTime.Utc) {
+  return Effect.gen(function* () {
+    yield* logged(yield* recorded)
+    const day = yield* built("2026-10-04")
+    assert.deepStrictEqual(
+      [day.date, day.kind, day.format, day.leagues],
+      ["2026-10-04", "captured", CorpusLine.format, ["nfl"]]
+    )
+
+    const { join } = yield* Path.Path
+    const push = yield* (yield* FileSystem.FileSystem)
+      .readFile(join(dir, "days", day.date, "push.ndjson.gz"))
+      .pipe(Effect.flatMap((bytes) => Gzip.decompress(bytes, "gzip")))
+    const playIds = new Set(
+      push
+        .split("\n")
+        .filter((line) => line.length > 0)
+        .map((line) => decodeLine(line))
+        .flatMap(({ input }) => (input._tag === "PlaysChanged" ? input.upserts.map(({ id }) => id) : []))
+    )
+    assert.strictEqual(playIds.size, recordedPlays)
+
+    const read = yield* (yield* CorpusDays).read(day.date)
+    const fromCorpus = yield* takenAll(yield* Stream.runCollect(read.frames))
+    const decoded = yield* Effect.gen(function* () {
+      const log = yield* FeedLog
+      const decoder = yield* Decoder
+      return yield* Stream.runCollect(decoder.decode(log.replay(from)))
+    }).pipe(Effect.provide(FeedLog.layer), Effect.scoped)
+    const fromDecode = yield* takenAll(decoded)
+    assert.isTrue(Equal.equals(fromCorpus.everyGame(), fromDecode.everyGame()), "the same games")
+    assert.isTrue(
+      Equal.equals(
+        fromCorpus.recentPlays(fromCorpus.everyGame()),
+        fromDecode.recentPlays(fromDecode.everyGame())
+      ),
+      "and the same recent plays"
+    )
+  })
 }
 
 /** Day `date` built from the feed log, opened for the build alone. */
@@ -212,15 +253,6 @@ function takenAll(frames: ReadonlyArray<Parameters<Slate["take"]>[0]>) {
     (slate, frame) => Effect.map(slate.take(frame), ({ next }) => next)
   )
 }
-
-/** The slate's games and recent plays as JSON, the form they are sent in. */
-function wire(slate: Slate) {
-  return encodeSlate({ games: slate.everyGame(), recentPlays: slate.recentPlays(slate.everyGame()) })
-}
-
-const encodeSlate = Schema.encodeSync(
-  Schema.fromJsonString(Schema.Struct({ games: Schema.Array(GameSnapshot), recentPlays: RecentPlays }))
-)
 
 const decodeLine = Schema.decodeSync(Schema.fromJsonString(CorpusLine))
 

@@ -9,21 +9,22 @@ export function Play(league: LeagueId) {
     Schema.decodeTo(Schema.toType(DomainPlay), {
       decode: SchemaGetter.transform((entity) => {
         const team = (ref: typeof TeamRef.Type | undefined) =>
-          ref === undefined ? undefined : TeamId.make(`${league}:${ref.$key}`)
+          ref === undefined ? {} : { team: TeamId.make(`${league}:${ref.$key}`) }
         // ESPN reports down -1, with a meaningless distance, when no down is being played (after a score, at a
         // stoppage).
         const spot = ({ down, distance, yardsToEndzone, team: ref }: typeof Spot.Type) => ({
-          down: down === undefined || down < 1 ? undefined : down,
-          distance: down === undefined || down < 1 ? undefined : distance,
-          yardsToEndzone,
-          team: team(ref)
+          ...(down === undefined || down < 1 ? {} : { down }),
+          ...(down === undefined || down < 1 || distance === undefined ? {} : { distance }),
+          ...(yardsToEndzone === undefined ? {} : { yardsToEndzone }),
+          ...team(ref)
         })
+        const homeWinProbability = entity.probabilities?.winProbability?.homeWinPercentage
         return new DomainPlay({
           id: PlayId.make(entity.id),
           sequence: entity.sequenceNumber,
           period: entity.period.number,
           clock: entity.clock.displayValue,
-          team: team(entity.team),
+          ...team(entity.team),
           kind: Option.getOrElse(Record.get(kinds, entity.type.id), (): PlayKind => "other"),
           text: entity.text,
           yards: entity.statYardage,
@@ -32,7 +33,7 @@ export function Play(league: LeagueId) {
           awayScore: entity.awayScore,
           start: spot(entity.start),
           end: spot(entity.end),
-          homeWinProbability: entity.probabilities?.winProbability?.homeWinPercentage
+          ...(homeWinProbability === undefined ? {} : { homeWinProbability })
         })
       }),
       encode: SchemaGetter.forbidden(() => "A Play cannot be encoded back to an ESPN play entity")
