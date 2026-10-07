@@ -1,4 +1,5 @@
 import { assert, describe, it } from "@effect/vitest"
+import type { GameSnapshot } from "@sportal/domain/Game"
 import { LeagueId } from "@sportal/domain/League"
 import { DateTime, Effect } from "effect"
 import { LiveSlate } from "../../LiveSlate.ts"
@@ -13,72 +14,96 @@ import { threeRedZonesAtOnce } from "./ThreeRedZonesAtOnce.ts"
 import { twoMinuteDrillTie } from "./TwoMinuteDrillTie.ts"
 
 describe("scripts", () => {
-  it("lists every script under its own name", () => {
-    assert.deepStrictEqual(
-      [...scripts.keys()],
-      [
-        "two-minute-drill-tie",
-        "three-red-zones-at-once",
-        "all-stopped-but-one",
-        "blowout-and-upset-brewing",
-        "kickoff-window"
-      ]
-    )
+  it("should list every script under its own name", () => {
+    const names = [...scripts.keys()]
+
+    assert.deepStrictEqual(names, [
+      "two-minute-drill-tie",
+      "three-red-zones-at-once",
+      "all-stopped-but-one",
+      "blowout-and-upset-brewing",
+      "kickoff-window"
+    ])
     for (const [name, script] of scripts) assert.strictEqual(script.name, name)
   })
 
-  it.effect("starts every script with at least three games", () =>
-    Effect.forEach(scripts.values(), (script) =>
-      Effect.map(at(script, 0), (slate) => assert.isAtLeast(slate.length, 3))
-    )
-  )
-
-  it.effect("drives the tied game into the red zone at 2:00 and wins it with a field goal", () =>
+  it.effect.each([...scripts.values()])("should start $name with at least three games", (script) =>
     Effect.gen(function* () {
-      assert.isFalse((yield* game(twoMinuteDrillTie, "tie-uga-ala", 90))?.situation?.inRedZone())
-      assert.isTrue((yield* game(twoMinuteDrillTie, "tie-uga-ala", 120))?.situation?.inRedZone())
-      assert.strictEqual((yield* game(twoMinuteDrillTie, "tie-uga-ala", 180))?.home.score, 27)
-      assert.strictEqual((yield* game(twoMinuteDrillTie, "tie-uga-ala", 240))?.status, "final")
+      const slate = yield* at(script, 0)
+
+      assert.isAtLeast(slate.length, 3)
     })
   )
 
-  it("runs a play at every change that moves the ball for the same team, turns it over, or scores", () => {
-    for (const script of scripts.values())
-      script.steps.forEach((step, index) => {
+  it.each([...scripts.values()])(
+    "should run a play in $name at every change that moves the ball for the same team, turns it over, or scores",
+    (script) => {
+      const changes = script.steps.flatMap((step, index) => {
         const previous = script.steps[index - 1]
-        for (const game of step.slate) {
-          const earlier = previous?.slate.find((candidate) => candidate.id === game.id)
-          const before = earlier?.situation
-          const after = game.situation
-          const ran = step.plays.some((run) => run.game === game.id)
-          const moved =
-            before?.possession !== undefined &&
-            after?.possession !== undefined &&
-            (before.possession !== after.possession || before.yardLine !== after.yardLine)
-          const scored =
-            earlier !== undefined &&
-            (earlier.home.score !== game.home.score || earlier.away.score !== game.away.score)
-          if (moved || scored) assert.isTrue(ran, `${script.name} ${game.id} at ${step.at} has no play`)
-        }
+        return step.slate.flatMap((game) => (needsPlay(game, previous) ? [{ step, game }] : []))
       })
+
+      for (const { step, game } of changes) {
+        const ran = step.plays.some((run) => run.game === game.id)
+        assert.isTrue(ran, `${script.name} ${game.id} at ${step.at} has no play`)
+      }
+    }
+  )
+
+  describe("two-minute-drill-tie", () => {
+    it.effect("should keep the tied game out of the red zone at 1:30", () =>
+      Effect.gen(function* () {
+        const tied = yield* game(twoMinuteDrillTie, "tie-uga-ala", 90)
+
+        assert.isFalse(tied?.situation?.inRedZone())
+      })
+    )
+
+    it.effect("should drive the tied game into the red zone at 2:00", () =>
+      Effect.gen(function* () {
+        const tied = yield* game(twoMinuteDrillTie, "tie-uga-ala", 120)
+
+        assert.isTrue(tied?.situation?.inRedZone())
+      })
+    )
+
+    it.effect("should win the tied game with a field goal by 3:00", () =>
+      Effect.gen(function* () {
+        const tied = yield* game(twoMinuteDrillTie, "tie-uga-ala", 180)
+
+        assert.strictEqual(tied?.home.score, 27)
+      })
+    )
+
+    it.effect("should end the tied game by 4:00", () =>
+      Effect.gen(function* () {
+        const tied = yield* game(twoMinuteDrillTie, "tie-uga-ala", 240)
+
+        assert.strictEqual(tied?.status, "final")
+      })
+    )
   })
 
-  it.effect("has three games in the red zone at once at 1:00", () =>
+  it.effect("should have three games in the red zone at once at 1:00", () =>
     Effect.gen(function* () {
-      assert.strictEqual(
-        (yield* at(threeRedZonesAtOnce, 60)).filter((g) => g.situation?.inRedZone()).length,
-        3
-      )
+      const slate = yield* at(threeRedZonesAtOnce, 60)
+
+      const inRedZone = slate.filter((g) => g.situation?.inRedZone())
+
+      assert.strictEqual(inRedZone.length, 3)
     })
   )
 
-  it.effect("keeps every game but one still for the first two minutes", () =>
+  it.effect("should keep every game but one still for the first two minutes", () =>
     Effect.gen(function* () {
+      const before = yield* at(allStoppedButOne, 0)
       const after = yield* at(allStoppedButOne, 120)
-      const moving = (yield* at(allStoppedButOne, 0)).filter((before) => {
-        const later = after.find((candidate) => candidate.id === before.id)
-        return later?.clock !== before.clock || later?.status !== before.status
+
+      const moving = before.filter((earlier) => {
+        const later = after.find((candidate) => candidate.id === earlier.id)
+        return later?.clock !== earlier.clock || later?.status !== earlier.status
       })
+
       assert.deepStrictEqual(
         moving.map((g) => g.id),
         ["still-aub-ark"]
@@ -86,31 +111,62 @@ describe("scripts", () => {
     })
   )
 
-  it.effect("kicks games off one after another, one of them in the NFL", () =>
-    Effect.gen(function* () {
-      assert.strictEqual((yield* game(kickoffWindow, "ko-mia-unc", 60))?.status, "scheduled")
-      assert.strictEqual((yield* game(kickoffWindow, "ko-mia-unc", 120))?.status, "live")
-      assert.strictEqual((yield* game(kickoffWindow, "ko-kc-buf", 0))?.league, "nfl")
-    })
-  )
+  describe("kickoff-window", () => {
+    it.effect("should have the first game still scheduled at 1:00", () =>
+      Effect.gen(function* () {
+        const first = yield* game(kickoffWindow, "ko-mia-unc", 60)
+
+        assert.strictEqual(first?.status, "scheduled")
+      })
+    )
+
+    it.effect("should kick the first game off by 2:00", () =>
+      Effect.gen(function* () {
+        const first = yield* game(kickoffWindow, "ko-mia-unc", 120)
+
+        assert.strictEqual(first?.status, "live")
+      })
+    )
+
+    it.effect("should have one of its games in the NFL", () =>
+      Effect.gen(function* () {
+        const nfl = yield* game(kickoffWindow, "ko-kc-buf", 0)
+
+        assert.strictEqual(nfl?.league, "nfl")
+      })
+    )
+  })
 })
 
 /** The slate `seconds` into `script`: its ESPN frames up to then, current through ESPN's decode. */
 function at(script: ScenarioScript, seconds: number) {
   const until = DateTime.add(script.origin, { seconds })
+  const frames = EspnScript.scenarioOf(script).frames.filter((frame) =>
+    DateTime.isLessThanOrEqualTo(frame.receivedAt, until)
+  )
+
   return LiveSlate.use((slate) => slate.latest).pipe(
     Effect.map((current) => current.games(LeagueId.literals)),
-    Effect.provide(
-      slateFollowing(
-        EspnScript.scenarioOf(script).frames.filter((frame) =>
-          DateTime.isLessThanOrEqualTo(frame.receivedAt, until)
-        ),
-        { decoder: EspnDecode.layer }
-      )
-    )
+    Effect.provide(slateFollowing(frames, { decoder: EspnDecode.layer }))
   )
 }
 
 function game(script: ScenarioScript, id: string, seconds: number) {
   return Effect.map(at(script, seconds), (slate) => slate.find((candidate) => candidate.id === id))
+}
+
+/** Whether `game` moved the ball for the same team, turned it over, or scored since `previous`, so needs a play. */
+function needsPlay(game: GameSnapshot, previous?: ScenarioScript["steps"][number]) {
+  const earlier = previous?.slate.find((candidate) => candidate.id === game.id)
+  const before = earlier?.situation
+  const after = game.situation
+  const moved =
+    before?.possession !== undefined &&
+    after?.possession !== undefined &&
+    (before.possession !== after.possession || before.yardLine !== after.yardLine)
+  const scored =
+    earlier !== undefined &&
+    (earlier.home.score !== game.home.score || earlier.away.score !== game.away.score)
+
+  return moved || scored
 }
