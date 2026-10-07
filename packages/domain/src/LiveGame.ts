@@ -92,23 +92,16 @@ export class LiveGame extends Data.Class<{
     if (from === "poll" && this.isCovered()) return this.polledWhileCovered(snapshot, now)
     if (GameSnapshot.gameTime(snapshot, this.snapshot) < 0 && !this.resumedBy(snapshot)) return behind
     const state = stateOf(snapshot, now)
-    return {
-      liveGame: Option.some(
-        new LiveGame({
-          snapshot,
-          from,
-          state:
-            LiveGameState.$is("Holding")(this.state) &&
-            LiveGameState.$is("Live")(state) &&
-            this.state.held.isAheadOf(snapshot)
-              ? LiveGameState.Holding({ updatedAt: now, held: this.state.held, until: this.state.until })
-              : state,
-          plays: this.plays
-        })
-      ),
-      events: snapshot.eventsSince(this.snapshot),
-      outcome: "taken"
-    }
+    const holdingStill =
+      LiveGameState.$is("Holding")(this.state) &&
+      LiveGameState.$is("Live")(state) &&
+      this.state.held.isAheadOf(snapshot)
+    const taken = holdingStill
+      ? LiveGameState.Holding({ updatedAt: now, held: this.state.held, until: this.state.until })
+      : state
+    const liveGame = new LiveGame({ snapshot, from, state: taken, plays: this.plays })
+
+    return { liveGame: Option.some(liveGame), events: snapshot.eventsSince(this.snapshot), outcome: "taken" }
   }
 
   /**
@@ -121,24 +114,19 @@ export class LiveGame extends Data.Class<{
     readonly fellBack: boolean
   } {
     const unchanged = { liveGame: Option.none(), events: [], fellBack: false }
+
     return LiveGameState.$match(this.state, {
-      Holding: ({ held, until }) =>
-        DateTime.isGreaterThanOrEqualTo(now, until)
-          ? {
-              liveGame: Option.some(
-                new LiveGame({ ...this, snapshot: held, from: "poll", state: stateOf(held, now) })
-              ),
-              events: held.eventsSince(this.snapshot),
-              fellBack: true
-            }
-          : unchanged,
-      Live: ({ updatedAt }) =>
-        DateTime.isGreaterThanOrEqualTo(now, DateTime.addDuration(updatedAt, LiveGame.staleAfter))
-          ? {
-              ...unchanged,
-              liveGame: Option.some(new LiveGame({ ...this, state: LiveGameState.Stale({ updatedAt }) }))
-            }
-          : unchanged,
+      Holding: ({ held, until }) => {
+        if (DateTime.isLessThan(now, until)) return unchanged
+        const state = stateOf(held, now)
+        const liveGame = new LiveGame({ ...this, snapshot: held, from: "poll", state })
+        return { liveGame: Option.some(liveGame), events: held.eventsSince(this.snapshot), fellBack: true }
+      },
+      Live: ({ updatedAt }) => {
+        if (DateTime.isLessThan(now, DateTime.addDuration(updatedAt, LiveGame.staleAfter))) return unchanged
+        const stale = new LiveGame({ ...this, state: LiveGameState.Stale({ updatedAt }) })
+        return { ...unchanged, liveGame: Option.some(stale) }
+      },
       Upcoming: () => unchanged,
       Stale: () => unchanged,
       Over: () => unchanged
