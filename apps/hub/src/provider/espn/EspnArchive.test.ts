@@ -1,29 +1,17 @@
-import { readFileSync } from "node:fs"
-import { NodeServices } from "@effect/platform-node"
 import { assert, describe, it } from "@effect/vitest"
 import { GameId } from "@sportal/domain/Game"
-import { Effect, Fiber, FileSystem, Layer, type Path, Ref } from "effect"
-import { HttpClient, HttpClientResponse } from "effect/http"
-import { TestClock } from "effect/testing"
+import { Effect, FileSystem } from "effect"
 import { Archive, ArchiveFetchFailed } from "../../corpus/Archive.ts"
+import {
+  inArchive,
+  scoreboardUrl,
+  site,
+  stepped,
+  archivedSummary as summary,
+  summaryUrl
+} from "../../corpus/TestCorpus.ts"
 import * as Gzip from "../../Gzip.ts"
-import { withEnv } from "../../TestHubConfig.ts"
-import * as EspnArchive from "./EspnArchive.ts"
 
-// ESPN's archive of 2026-10-04's NFL games, as fetched once after they were final:
-//   curl -o fixtures/nfl-scoreboard-2026-10-04-dated.json \
-//     'https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?dates=20261004'
-//   curl -o fixtures/nfl-summary-401872971.json \
-//     'https://site.api.espn.com/apis/site/v2/sports/football/nfl/summary?event=401872971'
-// The scoreboard lists 14 final games; only NE–BUF's summary is recorded, and every other game's is answered as a
-// summary without plays, which the archive skips.
-const fixture = (name: string) => readFileSync(new URL(`./fixtures/${name}.json`, import.meta.url), "utf8")
-const scoreboard = fixture("nfl-scoreboard-2026-10-04-dated")
-const summary = fixture("nfl-summary-401872971")
-
-const site = "https://site.api.espn.com/apis/site/v2/sports/football/nfl"
-const scoreboardUrl = `${site}/scoreboard?dates=20261004`
-const summaryUrl = `${site}/summary?event=401872971`
 const neBuf = GameId.make("401872971")
 
 describe("EspnArchive", () => {
@@ -241,54 +229,3 @@ describe("EspnArchive", () => {
     )
   )
 })
-
-/**
- * Runs `test` against ESPN's archive over a temporary corpus, with the URLs it requested. Its HTTP is answered by
- * `answer`, given how many times the URL was requested before, and otherwise from the fixtures.
- */
-function inArchive<A, E>(
-  options: { readonly answer?: (url: string, earlier: number) => Response | undefined },
-  test: (context: {
-    readonly dir: string
-    readonly requests: Effect.Effect<ReadonlyArray<string>>
-  }) => Effect.Effect<A, E, Archive | FileSystem.FileSystem | Path.Path>
-) {
-  return Effect.gen(function* () {
-    const dir = yield* (yield* FileSystem.FileSystem).makeTempDirectoryScoped()
-    const requests = yield* Ref.make<ReadonlyArray<string>>([])
-    const client = HttpClient.make((request) =>
-      Ref.getAndUpdate(requests, (urls) => [...urls, request.url]).pipe(
-        Effect.map((earlier) =>
-          HttpClientResponse.fromWeb(
-            request,
-            options.answer?.(request.url, earlier.filter((url) => url === request.url).length) ??
-              new Response(
-                request.url === scoreboardUrl ? scoreboard : request.url === summaryUrl ? summary : "{}"
-              )
-          )
-        )
-      )
-    )
-    return yield* test({ dir, requests: Ref.get(requests) }).pipe(
-      Effect.provide(
-        EspnArchive.layer.pipe(
-          Layer.provide(withEnv({ SPORTAL_CORPUS_DIR: dir })),
-          Layer.provide(Layer.succeed(HttpClient.HttpClient, client))
-        )
-      )
-    )
-  }).pipe(Effect.scoped, Effect.provide(NodeServices.layer))
-}
-
-/** `effect` run to its end, the test clock stepped past each wait: the archive's pacing, and its retries. */
-function stepped<A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> {
-  return Effect.gen(function* () {
-    const fiber = yield* Effect.forkChild(effect)
-    yield* TestClock.withLive(Effect.sleep("1 millis")).pipe(
-      Effect.andThen(TestClock.adjust("10 seconds")),
-      Effect.andThen(Effect.sync(() => fiber.pollUnsafe())),
-      Effect.repeat({ until: (exit) => exit !== undefined })
-    )
-    return yield* Fiber.join(fiber)
-  })
-}
