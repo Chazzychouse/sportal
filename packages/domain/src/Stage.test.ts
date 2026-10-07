@@ -262,23 +262,30 @@ describe("Stage layouts and the bench", () => {
 })
 
 describe("Stage#apply SetSplit", () => {
-  it("should accept a split at the bounds", () => {
-    const moved = run(Stage.initial, { _tag: "SetSplit", split: { x: 0.2, y: 0.8 } })
+  it.each([
+    { x: 0.2, y: 0.8 },
+    { x: 0.8, y: 0.2 }
+  ])("should accept a split at the bounds: $x,$y", (split) => {
+    const moved = run(Stage.initial, { _tag: "SetSplit", split })
 
-    assert.deepStrictEqual(moved.splits.Quad, { x: 0.2, y: 0.8 })
+    assert.deepStrictEqual(moved.splits.Quad, split)
   })
 
   it.each([
     { x: 0.1, y: 0.5 },
-    { x: 0.19, y: 0.5 }
+    { x: 0.19, y: 0.5 },
+    { x: 0.5, y: 0.19 }
   ])("should reject a split below them: $x,$y", (split) => {
     const reason = rejection(Stage.initial, { _tag: "SetSplit", split })
 
     assert.strictEqual(reason, "split-out-of-range")
   })
 
-  it("should reject a split above them", () => {
-    const reason = rejection(Stage.initial, { _tag: "SetSplit", split: { x: 0.5, y: 0.81 } })
+  it.each([
+    { x: 0.81, y: 0.5 },
+    { x: 0.5, y: 0.81 }
+  ])("should reject a split above them: $x,$y", (split) => {
+    const reason = rejection(Stage.initial, { _tag: "SetSplit", split })
 
     assert.strictEqual(reason, "split-out-of-range")
   })

@@ -109,25 +109,38 @@ describe("Layout.dividers", () => {
 })
 
 describe("Layout.clamp", () => {
-  it("should raise an axis below the bounds", () => {
-    const split = Layout.clamp({ x: 0.1, y: 0.5 })
+  it.each<{ below: Split; raised: Split }>([
+    { below: { x: 0.1, y: 0.5 }, raised: { x: 0.2, y: 0.5 } },
+    { below: { x: 0.19, y: 0.5 }, raised: { x: 0.2, y: 0.5 } }
+  ])("should raise an axis below the bounds: $below.x,$below.y", ({ below, raised }) => {
+    const split = Layout.clamp(below)
 
-    assert.deepStrictEqual(split, { x: 0.2, y: 0.5 })
+    assert.deepStrictEqual(split, raised)
   })
 
   it.each<Split>([
     { x: 0.5, y: 0.3 },
-    { x: 0.2, y: 0.8 }
+    { x: 0.2, y: 0.8 },
+    { x: 0.8, y: 0.5 }
   ])("should keep an axis inside them: $x,$y", (inside) => {
     const split = Layout.clamp(inside)
 
     assert.deepStrictEqual(split, inside)
   })
 
-  it("should lower an axis above them", () => {
-    const split = Layout.clamp({ x: 0.5, y: 0.95 })
+  it.each<{ above: Split; lowered: Split }>([
+    { above: { x: 0.5, y: 0.95 }, lowered: { x: 0.5, y: 0.8 } },
+    { above: { x: 0.81, y: 0.5 }, lowered: { x: 0.8, y: 0.5 } }
+  ])("should lower an axis above them: $above.x,$above.y", ({ above, lowered }) => {
+    const split = Layout.clamp(above)
 
-    assert.deepStrictEqual(split, { x: 0.5, y: 0.8 })
+    assert.deepStrictEqual(split, lowered)
+  })
+
+  it("should clamp each axis on its own", () => {
+    const split = Layout.clamp({ x: 0.1, y: 0.95 })
+
+    assert.deepStrictEqual(split, { x: 0.2, y: 0.8 })
   })
 })
 
