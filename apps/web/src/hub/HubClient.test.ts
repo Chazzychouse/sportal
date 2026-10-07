@@ -4,11 +4,14 @@ import { HttpClient, HttpClientError, HttpClientRequest, HttpClientResponse } fr
 import { dispatch, HubClient } from "./HubClient.ts"
 
 describe("dispatch", () => {
-  it.effect("reports a stage command the Hub refused, with its reason", () =>
+  it.effect("should report a stage command the Hub refused, with its reason", () =>
     Effect.gen(function* () {
-      const failures = yield* PubSub.subscribe((yield* HubClient).stageFailures)
+      const hub = yield* HubClient
+      const failures = yield* PubSub.subscribe(hub.stageFailures)
+
       yield* dispatch({ _tag: "Clear", tile: 0 })
       const failure = yield* PubSub.take(failures)
+
       assert.isTrue(failure._tag === "StageRejection" && failure.reason === "empty-tile")
     }).pipe(
       Effect.scoped,
@@ -18,14 +21,19 @@ describe("dispatch", () => {
     )
   )
 
-  it.effect("reports a stage command that never reached the Hub where refused commands are reported", () =>
-    Effect.gen(function* () {
-      const failures = yield* PubSub.subscribe((yield* HubClient).stageFailures)
-      const sent = yield* Effect.exit(dispatch({ _tag: "Unsolo" }))
-      assert.isTrue(sent._tag === "Success")
-      const failed = yield* PubSub.take(failures)
-      assert.isTrue(failed._tag === "HttpClientError" && failed.reason._tag === "TransportError")
-    }).pipe(Effect.scoped, Effect.provide(HubClient.layer.pipe(Layer.provide(unreachable))))
+  it.effect(
+    "should report a stage command that never reached the Hub where refused commands are reported",
+    () =>
+      Effect.gen(function* () {
+        const hub = yield* HubClient
+        const failures = yield* PubSub.subscribe(hub.stageFailures)
+
+        const sent = yield* Effect.exit(dispatch({ _tag: "Unsolo" }))
+        const failed = yield* PubSub.take(failures)
+
+        assert.isTrue(sent._tag === "Success")
+        assert.isTrue(failed._tag === "HttpClientError" && failed.reason._tag === "TransportError")
+      }).pipe(Effect.scoped, Effect.provide(HubClient.layer.pipe(Layer.provide(unreachable))))
   )
 })
 
