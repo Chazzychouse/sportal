@@ -3,8 +3,10 @@ import { NodeServices } from "@effect/platform-node"
 import { assert, describe, it } from "@effect/vitest"
 import { Array as Arr, DateTime, Effect, FileSystem, Layer, Path } from "effect"
 import * as EspnDecode from "../provider/espn/EspnDecode.ts"
-import { decodedFrames, takenOf, writtenScenarios } from "../TestFeed.ts"
+import { decodedFrames } from "../provider/TestDecoder.ts"
+import { takenOf } from "../TestLiveSlate.ts"
 import { Scenarios } from "./Scenarios.ts"
+import { writtenScenarios } from "./TestScenarios.ts"
 import { scripts } from "./written/Scripts.ts"
 
 describe("Scenarios", () => {

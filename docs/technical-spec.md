@@ -201,7 +201,8 @@ sportal/
 │   │       ├── Guide.ts        Guide, Airing, ChannelId, GuideUnreadable
 │   │       ├── Stream.ts       StreamLocator
 │   │       ├── Stage.ts        Tile, LayoutName, Split, Stage state, slot counts and split bounds, StageCommand, StageRejection, apply, invariants
-│   │       └── TestGame.ts     Game snapshots for tests
+│   │       ├── TestGame.ts     Game snapshots and plays for tests
+│   │       └── TestSlate.ts    A domain slate polled game by game, for tests
 │   │
 │   └── api/                    The contracts between processes.
 │       └── src/
@@ -231,14 +232,15 @@ sportal/
     │       ├── Frame.ts            A feed frame as received, and the frame the log numbered
     │       ├── Gzip.ts             Frame bodies in and out of gzip
     │       ├── TestHubConfig.ts, TestTelemetry.ts   Layers for tests
-    │       ├── TestFeed.ts         The snapshot feed as a test's provider (`polled`), the slate following an in-memory feed log (`slateFollowing`), frames and decodes for tests, and the written scenarios as HubMode plays them
-    │       ├── TestSnapshotFeed.ts The snapshot feed: a provider whose frames are our own deliveries, its decode, and its wire shape; for tests only
+    │       ├── TestLiveSlate.ts    The live slate following an in-memory feed log (`slateFollowing`), and what it takes of a test's frames
+    │       ├── TestSnapshotFeed.ts The snapshot feed: a provider whose frames are our own deliveries, its decode, its wire shape, and the frames tests build of it; for tests only
     │       ├── hub-server/
     │       │   ├── HubServer.ts    Serves the API, the live stream, and the web UI's files
     │       │   └── LanAddresses.ts The addresses a phone on the home network can reach
     │       ├── provider/
     │       │   ├── Provider.ts     The port: poll, push, polling, reconnect; LiveFeed, LiveFeedDemand, Polling, Decoded, DecodeObservation, ProviderError
     │       │   ├── Decoder.ts      A provider's decode, and its only home; a layer of its own, paired with its provider by HubMode
+    │       │   ├── TestDecoder.ts  What the provided `Decoder` says of a test's frames
     │       │   └── espn/
     │       │       ├── EspnProvider.ts     Implements the port: polls, pushes through the FastCast service, and its polling Schedule
     │       │       ├── EspnDecode.ts       Frames to deliveries: listings, snapshots, plays, resyncs
@@ -249,6 +251,7 @@ sportal/
     │       │       ├── FastCastDocument.ts A topic's document, rebuilt from checkpoints and patches
     │       │       ├── FastCastMessage.ts  FastCast's wire shapes
     │       │       ├── TestEspn.ts         Recorded frames for tests of other modules
+    │       │       ├── TestEspnArchive.ts  ESPN's archive answered from recorded payloads, for the corpus's tests
     │       │       └── fixtures/           Recorded real payloads
     │       ├── source/
     │       │   ├── Source.ts       The port
@@ -261,6 +264,7 @@ sportal/
     │           ├── Scenario.ts         A scenario: a name and ESPN's frames, recorded or written
     │           ├── ScenarioScript.ts   A written scenario before it is written as frames: each offset's slate and plays
     │           ├── Scenarios.ts        Every scenario by name, recorded and written, and reading one back
+    │           ├── TestScenarios.ts    The written scenarios as HubMode plays them, for tests
     │           ├── ScenarioProvider.ts A scenario as the provider: its frames polled, pushed, and polled again at their times
     │           ├── ScenarioClock.ts    Scenario time: the Hub's clock at HubConfig's scenario speed
     │           ├── ScenarioSource.ts   Every game carried on a synthetic stream page

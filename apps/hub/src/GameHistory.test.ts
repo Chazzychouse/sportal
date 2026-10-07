@@ -9,7 +9,7 @@ import { TestClock } from "effect/testing"
 import * as Database from "./Database.ts"
 import { GameHistory } from "./GameHistory.ts"
 import { LiveSlate } from "./LiveSlate.ts"
-import { delivered, slateFollowing } from "./TestFeed.ts"
+import { delivered, slateFollowing } from "./TestLiveSlate.ts"
 import { counted, withMetrics } from "./TestTelemetry.ts"
 
 const one = GameId.make("1")

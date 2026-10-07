@@ -31,12 +31,12 @@ module.exports = {
     {
       name: "only-hub-mode-names-adapters",
       comment:
-        "Only HubMode, the corpus command's composition, and tests, TestFeed and TestCorpus among them, know which concrete providers and sources exist; main.ts names only the database.",
+        "Only HubMode, the corpus command's composition, and tests, TestCorpus and TestScenarios among them, know which concrete providers and sources exist; main.ts names only the database.",
       severity: "error",
       from: {
         path: "^apps/hub/src/",
         pathNot:
-          "(^apps/hub/src/HubMode\\.ts$|^apps/hub/src/corpus/corpus\\.ts$|^apps/hub/src/TestFeed\\.ts$|^apps/hub/src/corpus/TestCorpus\\.ts$|\\.test\\.ts$|^apps/hub/src/provider/[^/]+/|^apps/hub/src/source/youtube-tv/)"
+          "(^apps/hub/src/HubMode\\.ts$|^apps/hub/src/corpus/corpus\\.ts$|^apps/hub/src/corpus/TestCorpus\\.ts$|^apps/hub/src/scenario/TestScenarios\\.ts$|\\.test\\.ts$|^apps/hub/src/provider/[^/]+/|^apps/hub/src/source/youtube-tv/)"
       },
       to: {
         path: "^apps/hub/src/(provider/[^/]+/|source/youtube-tv/|scenario/Scenario(Provider|Source|Clock)\\.ts$)"
@@ -45,12 +45,12 @@ module.exports = {
     {
       name: "only-main-opens-the-database",
       comment:
-        "The composition root provides the database; stores reach it through SqlClient. The feed log opens its own file; the game history only migrates its tables; TestFeed and TestCorpus keep a test's feed log in memory.",
+        "The composition root provides the database; stores reach it through SqlClient. The feed log opens its own file; the game history only migrates its tables; TestLiveSlate and TestCorpus keep a test's feed log in memory.",
       severity: "error",
       from: {
         path: "^apps/hub/src/",
         pathNot:
-          "(^apps/hub/src/main\\.ts$|\\.test\\.ts$|^apps/hub/src/source/ChannelStore\\.ts$|^apps/hub/src/Database\\.ts$|^apps/hub/src/FeedLog\\.ts$|^apps/hub/src/GameHistory\\.ts$|^apps/hub/src/TestFeed\\.ts$|^apps/hub/src/corpus/TestCorpus\\.ts$)"
+          "(^apps/hub/src/main\\.ts$|\\.test\\.ts$|^apps/hub/src/source/ChannelStore\\.ts$|^apps/hub/src/Database\\.ts$|^apps/hub/src/FeedLog\\.ts$|^apps/hub/src/GameHistory\\.ts$|^apps/hub/src/TestLiveSlate\\.ts$|^apps/hub/src/corpus/TestCorpus\\.ts$)"
       },
       to: { path: "^apps/hub/src/Database\\.ts$" }
     },
@@ -67,9 +67,13 @@ module.exports = {
     },
     {
       name: "test-hub-config-is-for-tests",
-      comment: "HubConfig read from a test's own variables is imported only by test files and TestCorpus.",
+      comment:
+        "HubConfig read from a test's own variables is imported only by test files, TestCorpus and TestEspnArchive.",
       severity: "error",
-      from: { pathNot: "(\\.test\\.ts$|^apps/hub/src/corpus/TestCorpus\\.ts$)" },
+      from: {
+        pathNot:
+          "(\\.test\\.ts$|^apps/hub/src/corpus/TestCorpus\\.ts$|^apps/hub/src/provider/espn/TestEspnArchive\\.ts$)"
+      },
       to: { path: "^apps/hub/src/TestHubConfig\\.ts$" }
     },
     {
@@ -80,19 +84,39 @@ module.exports = {
       to: { path: "^apps/hub/src/TestTelemetry\\.ts$" }
     },
     {
-      name: "test-database-is-for-tests",
-      comment: "An in-memory or scratch SQLite database is imported only by test files.",
+      name: "test-decoder-is-for-tests",
+      comment: "What a decode reads in a test's frames is imported only by test files and TestLiveSlate.",
       severity: "error",
-      from: { pathNot: "\\.test\\.ts$" },
-      to: { path: "^apps/hub/src/TestDatabase\\.ts$" }
+      from: { pathNot: "(\\.test\\.ts$|^apps/hub/src/TestLiveSlate\\.ts$)" },
+      to: { path: "^apps/hub/src/provider/TestDecoder\\.ts$" }
     },
     {
-      name: "test-feed-is-for-tests",
-      comment:
-        "The snapshot feed set up for a test, and what a decode reads in it, are imported only by test files.",
+      name: "test-live-slate-is-for-tests",
+      comment: "The live slate following a feed log in memory is imported only by test files.",
       severity: "error",
       from: { pathNot: "\\.test\\.ts$" },
-      to: { path: "^apps/hub/src/TestFeed\\.ts$" }
+      to: { path: "^apps/hub/src/TestLiveSlate\\.ts$" }
+    },
+    {
+      name: "test-scenarios-is-for-tests",
+      comment: "The written scenarios as HubMode plays them are imported only by test files.",
+      severity: "error",
+      from: { pathNot: "\\.test\\.ts$" },
+      to: { path: "^apps/hub/src/scenario/TestScenarios\\.ts$" }
+    },
+    {
+      name: "test-espn-archive-is-for-tests",
+      comment: "ESPN's archive answered from recorded payloads is imported only by test files.",
+      severity: "error",
+      from: { pathNot: "\\.test\\.ts$" },
+      to: { path: "^apps/hub/src/provider/espn/TestEspnArchive\\.ts$" }
+    },
+    {
+      name: "test-slate-is-for-tests",
+      comment: "A domain slate built poll by poll is imported only by test files.",
+      severity: "error",
+      from: { pathNot: "\\.test\\.tsx?$" },
+      to: { path: "^packages/domain/src/TestSlate\\.ts$" }
     },
     {
       name: "test-corpus-is-for-tests",
@@ -104,17 +128,22 @@ module.exports = {
     {
       name: "test-snapshot-feed-is-for-tests",
       comment:
-        "The snapshot feed, a provider of our own deliveries, is imported only by test files and TestFeed.",
+        "The snapshot feed, a provider of our own deliveries, is imported only by test files, TestDecoder and TestLiveSlate.",
       severity: "error",
-      from: { pathNot: "(\\.test\\.ts$|^apps/hub/src/TestFeed\\.ts$)" },
+      from: {
+        pathNot: "(\\.test\\.ts$|^apps/hub/src/provider/TestDecoder\\.ts$|^apps/hub/src/TestLiveSlate\\.ts$)"
+      },
       to: { path: "^apps/hub/src/TestSnapshotFeed\\.ts$" }
     },
     {
       name: "test-adapter-data-is-for-tests",
       comment:
-        "An adapter's recorded payloads, read for tests of other modules, are imported only by test files and TestCorpus.",
+        "An adapter's recorded payloads, read for tests of other modules, are imported only by test files, TestCorpus and TestEspnArchive.",
       severity: "error",
-      from: { pathNot: "(\\.test\\.ts$|^apps/hub/src/corpus/TestCorpus\\.ts$)" },
+      from: {
+        pathNot:
+          "(\\.test\\.ts$|^apps/hub/src/corpus/TestCorpus\\.ts$|^apps/hub/src/provider/espn/TestEspnArchive\\.ts$)"
+      },
       to: { path: "^apps/hub/src/(provider/espn/TestEspn|source/youtube-tv/TestYouTubeTv)\\.ts$" }
     },
     {

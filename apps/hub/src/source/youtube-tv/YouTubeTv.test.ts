@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs"
+import { join } from "node:path"
 import { assert, describe, it } from "@effect/vitest"
 import { ChannelAvailability } from "@sportal/domain/Channel"
 import { Network } from "@sportal/domain/Game"
@@ -9,8 +11,8 @@ import { TestClock } from "effect/testing"
 import * as EspnDecode from "../../provider/espn/EspnDecode.ts"
 import * as EspnProvider from "../../provider/espn/EspnProvider.ts"
 import { FastCast } from "../../provider/espn/FastCast.ts"
-import { noSocket, recordedScoreboard } from "../../provider/espn/TestEspn.ts"
-import { listedBy } from "../../TestFeed.ts"
+import { fixtures, noSocket } from "../../provider/espn/TestEspn.ts"
+import { listedBy } from "../../provider/TestDecoder.ts"
 import { withEnv } from "../../TestHubConfig.ts"
 import { Source } from "../Source.ts"
 import { recordedGuide } from "./TestYouTubeTv.ts"
@@ -305,4 +307,9 @@ function matchingLayer() {
     ),
     EspnDecode.layer
   )
+}
+
+/** A recorded ESPN site scoreboard from the ESPN adapter's fixtures. */
+function recordedScoreboard(name: "fbs-scoreboard-2026-10-03T2024Z" | "nfl-scoreboard-pregame") {
+  return readFileSync(join(fixtures, `${name}.json`), "utf8")
 }

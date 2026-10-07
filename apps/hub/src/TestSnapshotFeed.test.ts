@@ -5,7 +5,7 @@ import { liveSnapshot, play, snapshot } from "@sportal/domain/TestGame"
 import { DateTime, Effect, Exit, Schedule, Schema } from "effect"
 import type { FeedFrame } from "./Frame.ts"
 import { Provider, ProviderError } from "./provider/Provider.ts"
-import { decodedFrames } from "./TestFeed.ts"
+import { decodedFrames } from "./provider/TestDecoder.ts"
 import * as TestSnapshotFeed from "./TestSnapshotFeed.ts"
 
 const received = DateTime.makeUnsafe("2026-10-06T18:00:00Z")

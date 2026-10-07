@@ -2,7 +2,7 @@ import { Delivery } from "@sportal/domain/Delivery"
 import type { GameSnapshot } from "@sportal/domain/Game"
 import type { LeagueId } from "@sportal/domain/League"
 import { DateTime, Effect, Layer, Schedule, Schema, Stream } from "effect"
-import type { FeedFrame } from "./Frame.ts"
+import { FeedFrame } from "./Frame.ts"
 import { Decoder } from "./provider/Decoder.ts"
 import { Decoded, type Polling, Provider, type ProviderError } from "./provider/Provider.ts"
 
@@ -73,6 +73,57 @@ export const decoder = Layer.succeed(
 export const SnapshotPayload = Schema.fromJsonString(
   Schema.Union([Delivery, Schema.TaggedStruct("Resync", {})])
 )
+
+/**
+ * The snapshot feed as a test's provider: a poll of a league is the games `games` answers. It pushes `options.push`'s
+ * frames, none by default, reconnected on `options.reconnect` or the snapshot feed's own, and is polled every 10 seconds
+ * unless `options.polling` says otherwise. Tests read its frames with `decoder`.
+ */
+export function polled(
+  games: (league: LeagueId) => Effect.Effect<ReadonlyArray<GameSnapshot>, ProviderError>,
+  options: {
+    readonly polling?: Polling
+    readonly push?: Stream.Stream<FeedFrame, ProviderError>
+    readonly reconnect?: Schedule.Schedule<unknown, ProviderError>
+  } = {}
+): Layer.Layer<Provider> {
+  return provider({
+    games,
+    polling: options.polling ?? Schedule.spaced("10 seconds"),
+    ...(options.push === undefined ? {} : { push: options.push }),
+    ...(options.reconnect === undefined ? {} : { reconnect: options.reconnect })
+  })
+}
+
+/**
+ * A snapshot feed frame, received at `at`, that says only `delivery`: a listing as its league's poll response, anything
+ * else pushed.
+ */
+export function framed(delivery: Delivery, at: DateTime.Utc): FeedFrame {
+  return delivery._tag === "Listing"
+    ? snapshotFrame(delivery, delivery.league, "response", at)
+    : snapshotFrame(delivery, "snapshot", "message", at)
+}
+
+/** A snapshot feed frame pushed on `channel`, received at the clock's now, that says `payload`. */
+export function pushed(payload: typeof SnapshotPayload.Type, channel: string) {
+  return Effect.map(DateTime.now, (at) => snapshotFrame(payload, channel, "message", at))
+}
+
+function snapshotFrame(
+  payload: typeof SnapshotPayload.Type,
+  channel: string,
+  kind: FeedFrame["kind"],
+  receivedAt: DateTime.Utc
+): FeedFrame {
+  return new FeedFrame({
+    receivedAt,
+    feed: "snapshot",
+    channel,
+    kind,
+    body: Schema.encodeSync(SnapshotPayload)(payload)
+  })
+}
 
 const encodePayload = Schema.encodeEffect(SnapshotPayload)
 

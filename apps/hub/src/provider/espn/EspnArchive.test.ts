@@ -2,6 +2,7 @@ import { assert, describe, it } from "@effect/vitest"
 import { GameId } from "@sportal/domain/Game"
 import { Effect, FileSystem } from "effect"
 import { Archive, ArchiveFetchFailed } from "../../corpus/Archive.ts"
+import * as Gzip from "../../Gzip.ts"
 import {
   inArchive,
   scoreboardUrl,
@@ -9,8 +10,7 @@ import {
   stepped,
   archivedSummary as summary,
   summaryUrl
-} from "../../corpus/TestCorpus.ts"
-import * as Gzip from "../../Gzip.ts"
+} from "./TestEspnArchive.ts"
 
 const neBuf = GameId.make("401872971")
 

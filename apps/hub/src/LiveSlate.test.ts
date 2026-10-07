@@ -27,8 +27,10 @@ import { Following, LiveSlate } from "./LiveSlate.ts"
 import { told } from "./LiveSlateTelemetry.ts"
 import { Decoder } from "./provider/Decoder.ts"
 import { Decoded, LiveFeedDemand } from "./provider/Provider.ts"
-import { delivered, dyingAt, pushed, slateFollowing } from "./TestFeed.ts"
+import { dyingAt } from "./provider/TestDecoder.ts"
+import { delivered, slateFollowing } from "./TestLiveSlate.ts"
 import * as TestSnapshotFeed from "./TestSnapshotFeed.ts"
+import { pushed } from "./TestSnapshotFeed.ts"
 import { counted, gauged, recordingLogs, recordingSpans, withMetrics } from "./TestTelemetry.ts"
 
 const one = GameId.make("1")

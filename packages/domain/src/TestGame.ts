@@ -1,10 +1,8 @@
-import { DateTime, Effect, Option } from "effect"
-import { Delivery } from "./Delivery.ts"
+import { DateTime } from "effect"
 import { type Broadcast, GameId, GameSnapshot, Network } from "./Game.ts"
-import { LeagueId } from "./League.ts"
+import type { LeagueId } from "./League.ts"
 import { Completion, PlayId, Rush } from "./Play.ts"
 import { Situation } from "./Situation.ts"
-import type { Slate } from "./Slate.ts"
 import { Team, TeamId } from "./Team.ts"
 
 /** A game snapshot for a test: an FBS scheduled game unless the overrides say otherwise. */
@@ -61,72 +59,35 @@ export function broadcast(network: string, medium: Broadcast["medium"] = "tv"): 
   return { network: Network.make(network), medium }
 }
 
+const home = team("HOME").id
+
+/** The fields a one-yard first-quarter play by the home team shares, whichever way it was made. */
+const oneYardPlay = {
+  id: PlayId.make("1"),
+  sequence: 1,
+  period: 1,
+  clock: "15:00",
+  team: home,
+  yards: 1,
+  touchdown: false,
+  scoring: false,
+  homeScore: 0,
+  awayScore: 0,
+  start: { down: 1, distance: 10, yardsToEndzone: 75, team: home },
+  end: { down: 2, distance: 9, yardsToEndzone: 74, team: home }
+}
+
 /**
  * A play for a test: a one-yard rush by the home team in the first quarter unless the overrides say otherwise. A test
  * that needs another case constructs it.
  */
 export function play(overrides: Partial<Rush> = {}): Rush {
-  const home = team("HOME").id
-  return new Rush({
-    id: PlayId.make("1"),
-    sequence: 1,
-    period: 1,
-    clock: "15:00",
-    team: home,
-    text: "Rush for 1 yard",
-    yards: 1,
-    touchdown: false,
-    scoring: false,
-    homeScore: 0,
-    awayScore: 0,
-    start: { down: 1, distance: 10, yardsToEndzone: 75, team: home },
-    end: { down: 2, distance: 9, yardsToEndzone: 74, team: home },
-    ...overrides
-  })
+  return new Rush({ ...oneYardPlay, text: "Rush for 1 yard", ...overrides })
 }
 
 /**
  * A pass for a test: a one-yard completion by the home team in the first quarter unless the overrides say otherwise.
  */
 export function completion(overrides: Partial<Completion> = {}): Completion {
-  const home = team("HOME").id
-  return new Completion({
-    id: PlayId.make("1"),
-    sequence: 1,
-    period: 1,
-    clock: "15:00",
-    team: home,
-    text: "Pass complete for 1 yard",
-    yards: 1,
-    touchdown: false,
-    scoring: false,
-    homeScore: 0,
-    awayScore: 0,
-    start: { down: 1, distance: 10, yardsToEndzone: 75, team: home },
-    end: { down: 2, distance: 9, yardsToEndzone: 74, team: home },
-    ...overrides
-  })
-}
-
-/**
- * `before` after `slate` is polled at `now`: each league's games as one listing in a frame of its own, as Ingest polls.
- * For tests that play a scenario poll by poll.
- */
-export function polled(before: Slate, slate: ReadonlyArray<GameSnapshot>, now: DateTime.Utc): Slate {
-  return Effect.runSync(
-    Effect.reduce(
-      LeagueId.literals,
-      () => before,
-      (held, league) =>
-        held
-          .take({
-            deliveries: [
-              Delivery.cases.Listing.make({ league, games: slate.filter((game) => game.league === league) })
-            ],
-            at: now,
-            seq: Option.getOrElse(held.seq, () => 0) + 1
-          })
-          .pipe(Effect.map(({ next }) => next))
-    )
-  )
+  return new Completion({ ...oneYardPlay, text: "Pass complete for 1 yard", ...overrides })
 }

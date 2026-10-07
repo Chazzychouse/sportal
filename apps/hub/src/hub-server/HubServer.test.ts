@@ -15,9 +15,9 @@ import * as Ingest from "../Ingest.ts"
 import { LiveSlate } from "../LiveSlate.ts"
 import { LiveStage } from "../LiveStage.ts"
 import * as YouTubeTv from "../source/youtube-tv/YouTubeTv.ts"
-import { polled } from "../TestFeed.ts"
 import { withEnv } from "../TestHubConfig.ts"
 import * as TestSnapshotFeed from "../TestSnapshotFeed.ts"
+import { polled } from "../TestSnapshotFeed.ts"
 import * as HubServer from "./HubServer.ts"
 
 const espn = Network.make("ESPN")

@@ -10,12 +10,13 @@ import { FeedFrame } from "../Frame.ts"
 import * as Gzip from "../Gzip.ts"
 import { Decoder } from "../provider/Decoder.ts"
 import * as EspnDecode from "../provider/espn/EspnDecode.ts"
-import { framed } from "../TestFeed.ts"
+import { inArchive, site, stepped } from "../provider/espn/TestEspnArchive.ts"
 import * as TestSnapshotFeed from "../TestSnapshotFeed.ts"
+import { framed } from "../TestSnapshotFeed.ts"
 import * as CorpusBuild from "./CorpusBuild.ts"
 import { CorpusDay, CorpusDays } from "./CorpusDay.ts"
 import { CorpusLine } from "./CorpusInput.ts"
-import { built, inArchive, inCorpus, local, logged, recorded, site, stepped } from "./TestCorpus.ts"
+import { built, inCorpus, local, logged, recorded } from "./TestCorpus.ts"
 
 // As LiveSlate.replay.test.ts measured it: every play id the recording's patches add.
 const recordedPlays = 182

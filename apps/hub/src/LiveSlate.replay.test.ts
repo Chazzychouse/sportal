@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { NodeCrypto, NodeServices } from "@effect/platform-node"
 import { assert, describe, it } from "@effect/vitest"
@@ -32,11 +33,13 @@ import { FeedFrame } from "./Frame.ts"
 import { LiveSlate } from "./LiveSlate.ts"
 import { Decoder } from "./provider/Decoder.ts"
 import * as EspnDecode from "./provider/espn/EspnDecode.ts"
-import { fixtures, neAtBufFrames, recordedCheckpoint } from "./provider/espn/TestEspn.ts"
+import { fixtures, neAtBufFrames } from "./provider/espn/TestEspn.ts"
 import { Decoded } from "./provider/Provider.ts"
+import { dyingAt } from "./provider/TestDecoder.ts"
 import { Scenarios } from "./scenario/Scenarios.ts"
-import { delivered, dyingAt, framed, pushed, slateFollowing } from "./TestFeed.ts"
+import { delivered, slateFollowing } from "./TestLiveSlate.ts"
 import * as TestSnapshotFeed from "./TestSnapshotFeed.ts"
+import { framed, pushed } from "./TestSnapshotFeed.ts"
 import { counted, gauged, recordingLogs, recordingSpans, withMetrics } from "./TestTelemetry.ts"
 
 const one = GameId.make("1")
@@ -820,3 +823,8 @@ const counting = Layer.succeed(
       )
   })
 )
+
+/** ESPN's NFL FastCast scoreboard checkpoint of 2026-10-04 at 17:52Z (mid 4286637), as its checkpoint frame's body. */
+function recordedCheckpoint() {
+  return readFileSync(join(fixtures, "nfl-fastcast-checkpoint-2026-10-04T1752Z.json"), "utf8")
+}

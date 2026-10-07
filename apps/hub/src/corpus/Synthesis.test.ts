@@ -3,13 +3,14 @@ import { assert, describe, it } from "@effect/vitest"
 import type { GameEvent } from "@sportal/domain/GameEvent"
 import type { SlateObservation } from "@sportal/domain/SlateObservation"
 import { Chunk, Effect, Schema, Stream } from "effect"
+import { inArchive, stepped } from "../provider/espn/TestEspnArchive.ts"
 import * as TestSnapshotFeed from "../TestSnapshotFeed.ts"
 import { Archive } from "./Archive.ts"
 import { CorpusDay, CorpusDays } from "./CorpusDay.ts"
 import { CorpusLine } from "./CorpusInput.ts"
 import * as CorpusRun from "./CorpusRun.ts"
 import * as Synthesis from "./Synthesis.ts"
-import { inArchive, inCorpus, local, stepped } from "./TestCorpus.ts"
+import { inCorpus, local } from "./TestCorpus.ts"
 
 // NE–BUF of 2026-10-04 from ESPN's archive (its recorded scoreboard and summary), the only game of the day with plays.
 const archived = inArchive({}, () => stepped(Archive.use((archive) => archive.games("nfl", "2026-10-04"))))

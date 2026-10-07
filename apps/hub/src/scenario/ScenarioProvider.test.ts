@@ -33,9 +33,10 @@ import type { Decoder } from "../provider/Decoder.ts"
 import * as EspnDecode from "../provider/espn/EspnDecode.ts"
 import * as EspnScript from "../provider/espn/EspnScript.ts"
 import { Provider } from "../provider/Provider.ts"
-import { decodedFrames, listedBy, pushed, writtenScenarios } from "../TestFeed.ts"
+import { decodedFrames, listedBy } from "../provider/TestDecoder.ts"
 import { withEnv } from "../TestHubConfig.ts"
 import * as TestSnapshotFeed from "../TestSnapshotFeed.ts"
+import { pushed } from "../TestSnapshotFeed.ts"
 import { recordingSpans } from "../TestTelemetry.ts"
 import type { Scenario } from "./Scenario.ts"
 import * as ScenarioClock from "./ScenarioClock.ts"
@@ -47,6 +48,7 @@ import {
   type ScenarioUnknown,
   type ScenarioUnreadable
 } from "./Scenarios.ts"
+import { writtenScenarios } from "./TestScenarios.ts"
 
 describe("ScenarioProvider", () => {
   it.effect("each league's listing reaches the slate at its scenario time", () =>
