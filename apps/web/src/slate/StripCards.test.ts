@@ -2,16 +2,20 @@ import { assert, describe, it } from "@effect/vitest"
 import { GameId } from "@sportal/domain/Game"
 import { Stage } from "@sportal/domain/Stage"
 import { StripCard } from "./StripCards.ts"
-import { slate } from "./TestSlate.ts"
+import { slate, withTiles } from "./TestSlate.ts"
 
 describe("StripCard.of", () => {
-  it("orders the slate live, upcoming by kickoff, then over", () => {
-    assert.deepStrictEqual(ids(StripCard.of(Stage.initial, slate)), ["live", "soon", "later", "done"])
+  it("should order the slate live, upcoming by kickoff, then over", () => {
+    const cards = StripCard.of(Stage.initial, slate)
+
+    assert.deepStrictEqual(ids(cards), ["live", "soon", "later", "done"])
   })
 
-  it("puts benched games first, once, with their tile, and marks games on stage with their slot", () => {
+  it("should put benched games first, once, with their tile, marking games on stage with their slot", () => {
     const stage = withTiles(["soon", undefined, undefined, undefined, "done"])
+
     const cards = StripCard.of(stage, slate)
+
     assert.deepStrictEqual(ids(cards), ["done", "live", "soon", "later"])
     assert.deepStrictEqual(cards[0]?.place, { _tag: "Bench", tile: 4 })
     assert.deepStrictEqual(cards[2]?.place, { _tag: "Slot", slot: 0 })
@@ -22,60 +26,103 @@ describe("StripCard.of", () => {
     )
   })
 
-  it("keeps a benched game that left the slate, with no snapshot", () => {
+  it("should keep a benched game that left the slate, with no snapshot", () => {
     const stage = withTiles([undefined, undefined, undefined, undefined, "gone"])
+
     const [first] = StripCard.of(stage, slate)
+
     assert.strictEqual(first?.id, "gone")
     assert.isUndefined(first?.game)
   })
-})
 
-describe("StripCard.pickable", () => {
-  it("is true for a free game and a benched one, false for a game on stage", () => {
-    const cards = StripCard.of(withTiles(["soon", undefined, undefined, undefined, "done"]), slate)
-    assert.deepStrictEqual(
-      cards.map((card) => card.pickable()),
-      [true, true, false, true]
-    )
+  it("should make StripCards", () => {
+    const [card] = StripCard.of(Stage.initial, slate)
+
+    assert.instanceOf(card, StripCard)
   })
 
-  it("is a StripCard with value equality", () => {
+  it("should make cards equal by value to the same cards made again", () => {
     const [card] = StripCard.of(Stage.initial, slate)
-    assert.instanceOf(card, StripCard)
-    assert.deepStrictEqual(StripCard.of(Stage.initial, slate)[0], card)
+
+    const [again] = StripCard.of(Stage.initial, slate)
+
+    assert.deepStrictEqual(again, card)
+  })
+})
+
+describe("StripCard#pickable", () => {
+  it("should be true for a free game and a benched one, false for a game on stage", () => {
+    const cards = StripCard.of(withTiles(["soon", undefined, undefined, undefined, "done"]), slate)
+
+    const pickable = cards.map((card) => card.pickable())
+
+    assert.deepStrictEqual(pickable, [true, true, false, true])
   })
 })
 
 describe("StripCard.nextPick", () => {
-  it("starts on the first live game nobody is watching, whichever way it steps", () => {
+  it.each([1, -1] as const)("should start on the first live game nobody is watching, stepping %d", (step) => {
     const cards = StripCard.of(withTiles([undefined, undefined, undefined, undefined, "done"]), slate)
-    assert.strictEqual(StripCard.nextPick(cards, undefined, 1), "live")
-    assert.strictEqual(StripCard.nextPick(cards, undefined, -1), "live")
+
+    const pick = StripCard.nextPick(cards, undefined, step)
+
+    assert.strictEqual(pick, "live")
   })
 
-  it("starts on the first pickable card when nothing is live and free", () => {
+  it("should start on the first pickable card when nothing is live and free", () => {
     const cards = StripCard.of(withTiles(["live"]), slate)
-    assert.strictEqual(StripCard.nextPick(cards, undefined, 1), "soon")
+
+    const pick = StripCard.nextPick(cards, undefined, 1)
+
+    assert.strictEqual(pick, "soon")
   })
 
-  it("steps over games on stage, onto bench cards, and wraps", () => {
-    const cards = StripCard.of(withTiles(["soon", undefined, undefined, undefined, "done"]), slate)
-    // Cards: done (bench), live, soon (T1), later.
-    assert.strictEqual(StripCard.nextPick(cards, GameId.make("live"), 1), "later")
-    assert.strictEqual(StripCard.nextPick(cards, GameId.make("later"), 1), "done")
-    assert.strictEqual(StripCard.nextPick(cards, GameId.make("done"), -1), "later")
+  it("should step over a game on stage", () => {
+    const cards = benchedAndOnStage()
+
+    const pick = StripCard.nextPick(cards, GameId.make("live"), 1)
+
+    assert.strictEqual(pick, "later")
   })
 
-  it("steps on from a pick that was just placed", () => {
+  it("should wrap from the last card onto a bench card", () => {
+    const cards = benchedAndOnStage()
+
+    const pick = StripCard.nextPick(cards, GameId.make("later"), 1)
+
+    assert.strictEqual(pick, "done")
+  })
+
+  it("should wrap back from the first card to the last", () => {
+    const cards = benchedAndOnStage()
+
+    const pick = StripCard.nextPick(cards, GameId.make("done"), -1)
+
+    assert.strictEqual(pick, "later")
+  })
+
+  it("should step on from a pick that was just placed", () => {
     const cards = StripCard.of(withTiles(["live"]), slate)
-    assert.strictEqual(StripCard.nextPick(cards, GameId.make("live"), 1), "soon")
+
+    const pick = StripCard.nextPick(cards, GameId.make("live"), 1)
+
+    assert.strictEqual(pick, "soon")
   })
 
-  it("starts over when the pick has left the strip, and has nothing when nothing is pickable", () => {
-    assert.strictEqual(StripCard.nextPick(StripCard.of(Stage.initial, slate), GameId.make("gone"), 1), "live")
-    assert.isUndefined(
-      StripCard.nextPick(StripCard.of(withTiles(["live", "soon", "later", "done"]), slate), undefined, 1)
-    )
+  it("should start over when the pick has left the strip", () => {
+    const cards = StripCard.of(Stage.initial, slate)
+
+    const pick = StripCard.nextPick(cards, GameId.make("gone"), 1)
+
+    assert.strictEqual(pick, "live")
+  })
+
+  it("should have no pick when nothing is pickable", () => {
+    const cards = StripCard.of(withTiles(["live", "soon", "later", "done"]), slate)
+
+    const pick = StripCard.nextPick(cards, undefined, 1)
+
+    assert.isUndefined(pick)
   })
 })
 
@@ -83,12 +130,7 @@ function ids(cards: ReadonlyArray<StripCard>) {
   return cards.map((card) => card.id)
 }
 
-/** A Quad with these games in its tiles, in order; past the fourth they are benched. */
-function withTiles(games: ReadonlyArray<string | undefined>) {
-  const tiles = games.map((game) =>
-    game === undefined
-      ? { _tag: "Empty" as const }
-      : { _tag: "DataTile" as const, game: GameId.make(game), why: { _tag: "NoStream" as const } }
-  )
-  return new Stage({ ...Stage.initial, tiles: [...tiles, ...Stage.initial.tiles.slice(tiles.length)] })
+/** The cards done (bench), live, soon (on tile 0), later. */
+function benchedAndOnStage() {
+  return StripCard.of(withTiles(["soon", undefined, undefined, undefined, "done"]), slate)
 }
