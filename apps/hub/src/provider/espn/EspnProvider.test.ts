@@ -20,6 +20,10 @@ const fixture = (name: string) => readFileSync(new URL(`./fixtures/${name}.json`
 const fbsLive = fixture("fbs-scoreboard-live")
 const fbsMidday = fixture("fbs-scoreboard-2026-10-03T2024Z")
 const nflPregame = fixture("nfl-scoreboard-pregame")
+const withoutColors = (body: string) =>
+  JSON.stringify(JSON.parse(body), (key, value) =>
+    key === "color" || key === "alternateColor" ? undefined : value
+  )
 
 const recordedEspn = (fbs: string) =>
   Layer.merge(
@@ -94,6 +98,24 @@ describe("EspnProvider", () => {
       assert.strictEqual(game?.home.team.shortName, "Charlotte")
       assert.strictEqual(game?.home.team.name, "Charlotte 49ers")
     }).pipe(Effect.provide(TestLayer))
+  )
+
+  it.effect("keeps each team's colors", () =>
+    Effect.gen(function* () {
+      const game = (yield* listedBy("fbs")).find((g) => g.id === "401862787")
+
+      assert.strictEqual(game?.home.team.color, "005035")
+      assert.strictEqual(game?.home.team.alternateColor, "a49665")
+    }).pipe(Effect.provide(TestLayer))
+  )
+
+  it.effect("leaves a team without colors with neither", () =>
+    Effect.gen(function* () {
+      const game = (yield* listedBy("fbs")).find((g) => g.id === "401862787")
+
+      assert.strictEqual(game?.home.team.color, undefined)
+      assert.strictEqual(game?.home.team.alternateColor, undefined)
+    }).pipe(Effect.provide(recordedEspn(withoutColors(fbsLive))))
   )
 
   it.effect("leaves out what ESPN reports with placeholder values", () =>

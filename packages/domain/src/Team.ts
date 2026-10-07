@@ -11,5 +11,9 @@ export class Team extends Schema.Class<Team>("sportal/Team")({
   location: Schema.String,
   /** The team's short name ("Patriots", or for some colleges the place: "Charlotte"). */
   shortName: Schema.String,
-  logo: Schema.optional(Schema.String)
+  logo: Schema.optional(Schema.String),
+  /** The team's main color: six hex digits without `#`, as ESPN sends it. */
+  color: Schema.optional(Schema.String),
+  /** The team's second color, in the same spelling. */
+  alternateColor: Schema.optional(Schema.String)
 }) {}

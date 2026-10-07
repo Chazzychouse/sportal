@@ -37,7 +37,9 @@ export function EspnEvent(league: LeagueId) {
                 displayName: Schema.String,
                 location: Schema.optional(Schema.String),
                 shortDisplayName: Schema.optional(Schema.String),
-                logo: Schema.optional(Schema.String)
+                logo: Schema.optional(Schema.String),
+                color: Schema.optional(Schema.String),
+                alternateColor: Schema.optional(Schema.String)
               })
             })
           )
@@ -168,6 +170,8 @@ function snapshot(
       readonly location?: string | undefined
       readonly shortDisplayName?: string | undefined
       readonly logo?: string | undefined
+      readonly color?: string | undefined
+      readonly alternateColor?: string | undefined
       readonly score?: number | undefined
       readonly ranking?: number | undefined
     }>
@@ -190,7 +194,9 @@ function snapshot(
       location: competitor.location ?? competitor.displayName,
       // FastCast has no short name: EspnDecode advances each pushed game's listed game to it, keeping the poll's names.
       shortName: competitor.shortDisplayName ?? competitor.displayName,
-      logo: competitor.logo
+      logo: competitor.logo,
+      color: competitor.color,
+      alternateColor: competitor.alternateColor
     }),
     score: competitor.score ?? 0,
     ranking: competitor.ranking

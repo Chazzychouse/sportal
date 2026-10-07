@@ -19,7 +19,9 @@
               "name": "Charlotte 49ers",
               "location": "Charlotte",
               "shortName": "Charlotte",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2429.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2429.png",
+              "color": "005035",
+              "alternateColor": "a49665"
             },
             "score": 0
           },
@@ -30,7 +32,9 @@
               "name": "Memphis Tigers",
               "location": "Memphis",
               "shortName": "Memphis",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/235.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/235.png",
+              "color": "004991",
+              "alternateColor": "8e908f"
             },
             "score": 27
           },
@@ -61,7 +65,9 @@
               "name": "North Carolina Tar Heels",
               "location": "North Carolina",
               "shortName": "North Carolina",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/153.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/153.png",
+              "color": "7bafd4",
+              "alternateColor": "13294b"
             },
             "score": 0
           },
@@ -72,7 +78,9 @@
               "name": "Notre Dame Fighting Irish",
               "location": "Notre Dame",
               "shortName": "Notre Dame",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/87.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/87.png",
+              "color": "062340",
+              "alternateColor": "c99700"
             },
             "score": 0,
             "ranking": 3
@@ -109,7 +117,9 @@
               "name": "Mississippi State Bulldogs",
               "location": "Mississippi State",
               "shortName": "Mississippi St",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/344.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/344.png",
+              "color": "5d1725",
+              "alternateColor": "c1c6c8"
             },
             "score": 0,
             "ranking": 16
@@ -121,7 +131,9 @@
               "name": "Alabama Crimson Tide",
               "location": "Alabama",
               "shortName": "Alabama",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/333.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/333.png",
+              "color": "9e1b32",
+              "alternateColor": "ffffff"
             },
             "score": 0,
             "ranking": 7
@@ -154,7 +166,9 @@
               "name": "Houston Cougars",
               "location": "Houston",
               "shortName": "Houston",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/248.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/248.png",
+              "color": "c8102e",
+              "alternateColor": "ffffff"
             },
             "score": 0,
             "ranking": 20
@@ -166,7 +180,9 @@
               "name": "UCF Knights",
               "location": "UCF",
               "shortName": "UCF",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2116.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2116.png",
+              "color": "000000",
+              "alternateColor": "b4a169"
             },
             "score": 0
           },
@@ -200,7 +216,9 @@
               "name": "SMU Mustangs",
               "location": "SMU",
               "shortName": "SMU",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2567.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2567.png",
+              "color": "a80000",
+              "alternateColor": "0033a1"
             },
             "score": 0,
             "ranking": 21
@@ -212,7 +230,9 @@
               "name": "Boston College Eagles",
               "location": "Boston College",
               "shortName": "Boston College",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/103.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/103.png",
+              "color": "8c2232",
+              "alternateColor": "dbcca6"
             },
             "score": 0
           },
@@ -237,7 +257,9 @@
               "name": "Kansas Jayhawks",
               "location": "Kansas",
               "shortName": "Kansas",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2305.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2305.png",
+              "color": "0051ba",
+              "alternateColor": "e8000d"
             },
             "score": 0
           },
@@ -248,7 +270,9 @@
               "name": "Middle Tennessee Blue Raiders",
               "location": "Middle Tennessee",
               "shortName": "MTSU",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2393.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2393.png",
+              "color": "036eb7",
+              "alternateColor": "ffffff"
             },
             "score": 0
           },
@@ -280,7 +304,9 @@
               "name": "Iowa State Cyclones",
               "location": "Iowa State",
               "shortName": "Iowa State",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/66.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/66.png",
+              "color": "ae192d",
+              "alternateColor": "ffc72a"
             },
             "score": 0
           },
@@ -291,7 +317,9 @@
               "name": "West Virginia Mountaineers",
               "location": "West Virginia",
               "shortName": "West Virginia",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/277.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/277.png",
+              "color": "eaaa00",
+              "alternateColor": "002855"
             },
             "score": 0
           },
@@ -322,7 +350,9 @@
               "name": "Wake Forest Demon Deacons",
               "location": "Wake Forest",
               "shortName": "Wake Forest",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/154.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/154.png",
+              "color": "ceb888",
+              "alternateColor": "2c2a29"
             },
             "score": 0
           },
@@ -333,7 +363,9 @@
               "name": "Stanford Cardinal",
               "location": "Stanford",
               "shortName": "Stanford",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/24.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/24.png",
+              "color": "8c1515",
+              "alternateColor": "ffffff"
             },
             "score": 0
           },
@@ -367,7 +399,9 @@
               "name": "UConn Huskies",
               "location": "UConn",
               "shortName": "UConn",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/41.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/41.png",
+              "color": "0c2340",
+              "alternateColor": "a2aaad"
             },
             "score": 0
           },
@@ -378,7 +412,9 @@
               "name": "Syracuse Orange",
               "location": "Syracuse",
               "shortName": "Syracuse",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/183.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/183.png",
+              "color": "000e54",
+              "alternateColor": "ff431b"
             },
             "score": 0
           },
@@ -412,7 +448,9 @@
               "name": "Minnesota Golden Gophers",
               "location": "Minnesota",
               "shortName": "Minnesota",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/135.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/135.png",
+              "color": "5e0a2f",
+              "alternateColor": "fab41c"
             },
             "score": 0
           },
@@ -423,7 +461,9 @@
               "name": "Michigan Wolverines",
               "location": "Michigan",
               "shortName": "Michigan",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/130.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/130.png",
+              "color": "00274c",
+              "alternateColor": "ffcb05"
             },
             "score": 0
           },
@@ -448,7 +488,9 @@
               "name": "Air Force Falcons",
               "location": "Air Force",
               "shortName": "Air Force",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2005.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2005.png",
+              "color": "003594",
+              "alternateColor": "ffffff"
             },
             "score": 0
           },
@@ -459,7 +501,9 @@
               "name": "Navy Midshipmen",
               "location": "Navy",
               "shortName": "Navy",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2426.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2426.png",
+              "color": "00225b",
+              "alternateColor": "b5a67c"
             },
             "score": 0
           },
@@ -484,7 +528,9 @@
               "name": "Wisconsin Badgers",
               "location": "Wisconsin",
               "shortName": "Wisconsin",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/275.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/275.png",
+              "color": "a00000",
+              "alternateColor": "ffffff"
             },
             "score": 0
           },
@@ -495,7 +541,9 @@
               "name": "Michigan State Spartans",
               "location": "Michigan State",
               "shortName": "Michigan St",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/127.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/127.png",
+              "color": "173f35",
+              "alternateColor": "ffffff"
             },
             "score": 0
           },
@@ -520,7 +568,9 @@
               "name": "Georgia Bulldogs",
               "location": "Georgia",
               "shortName": "Georgia",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/61.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/61.png",
+              "color": "ba0c2f",
+              "alternateColor": "2c2a29"
             },
             "score": 0,
             "ranking": 2
@@ -532,7 +582,9 @@
               "name": "Vanderbilt Commodores",
               "location": "Vanderbilt",
               "shortName": "Vanderbilt",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/238.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/238.png",
+              "color": "000000",
+              "alternateColor": "cfae70"
             },
             "score": 0
           },
@@ -557,7 +609,9 @@
               "name": "Buffalo Bulls",
               "location": "Buffalo",
               "shortName": "Buffalo",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2084.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2084.png",
+              "color": "005bbb",
+              "alternateColor": "ffffff"
             },
             "score": 0
           },
@@ -568,7 +622,9 @@
               "name": "Western Michigan Broncos",
               "location": "Western Michigan",
               "shortName": "W Michigan",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2711.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2711.png",
+              "color": "532e1f",
+              "alternateColor": "f1c500"
             },
             "score": 0
           },
@@ -593,7 +649,9 @@
               "name": "Ball State Cardinals",
               "location": "Ball State",
               "shortName": "Ball State",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2050.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2050.png",
+              "color": "ba0c2f",
+              "alternateColor": "ffffff"
             },
             "score": 0
           },
@@ -604,7 +662,9 @@
               "name": "Toledo Rockets",
               "location": "Toledo",
               "shortName": "Toledo",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2649.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2649.png",
+              "color": "0b2240",
+              "alternateColor": "ffcd00"
             },
             "score": 0
           },
@@ -629,7 +689,9 @@
               "name": "Iowa Hawkeyes",
               "location": "Iowa",
               "shortName": "Iowa",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2294.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2294.png",
+              "color": "231f20",
+              "alternateColor": "fcd116"
             },
             "score": 0,
             "ranking": 14
@@ -641,7 +703,9 @@
               "name": "Ohio State Buckeyes",
               "location": "Ohio State",
               "shortName": "Ohio State",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/194.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/194.png",
+              "color": "ba0c2f",
+              "alternateColor": "a8adb4"
             },
             "score": 0,
             "ranking": 5
@@ -667,7 +731,9 @@
               "name": "Missouri Tigers",
               "location": "Missouri",
               "shortName": "Missouri",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/142.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/142.png",
+              "color": "f1b82d",
+              "alternateColor": "000000"
             },
             "score": 0,
             "ranking": 25
@@ -679,7 +745,9 @@
               "name": "Florida Gators",
               "location": "Florida",
               "shortName": "Florida",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/57.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/57.png",
+              "color": "0021a5",
+              "alternateColor": "fa4616"
             },
             "score": 0,
             "ranking": 8
@@ -705,7 +773,9 @@
               "name": "Tennessee Volunteers",
               "location": "Tennessee",
               "shortName": "Tennessee",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2633.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2633.png",
+              "color": "ff8200",
+              "alternateColor": "ffffff"
             },
             "score": 0,
             "ranking": 17
@@ -717,7 +787,9 @@
               "name": "Auburn Tigers",
               "location": "Auburn",
               "shortName": "Auburn",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2.png",
+              "color": "002b5c",
+              "alternateColor": "f26522"
             },
             "score": 0
           },
@@ -742,7 +814,9 @@
               "name": "UNLV Rebels",
               "location": "UNLV",
               "shortName": "UNLV",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2439.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2439.png",
+              "color": "cf0a2c",
+              "alternateColor": "cac8c8"
             },
             "score": 0
           },
@@ -753,7 +827,9 @@
               "name": "California Golden Bears",
               "location": "California",
               "shortName": "California",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/25.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/25.png",
+              "color": "041e42",
+              "alternateColor": "ffc72c"
             },
             "score": 0
           },
@@ -778,7 +854,9 @@
               "name": "NC State Wolfpack",
               "location": "NC State",
               "shortName": "NC State",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/152.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/152.png",
+              "color": "cc0000",
+              "alternateColor": "ffffff"
             },
             "score": 0
           },
@@ -789,7 +867,9 @@
               "name": "Louisville Cardinals",
               "location": "Louisville",
               "shortName": "Louisville",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/97.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/97.png",
+              "color": "c9001f",
+              "alternateColor": "ffffff"
             },
             "score": 0
           },
@@ -814,7 +894,9 @@
               "name": "Florida State Seminoles",
               "location": "Florida State",
               "shortName": "Florida St",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/52.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/52.png",
+              "color": "782f40",
+              "alternateColor": "ceb888"
             },
             "score": 0
           },
@@ -825,7 +907,9 @@
               "name": "Virginia Cavaliers",
               "location": "Virginia",
               "shortName": "Virginia",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/258.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/258.png",
+              "color": "232d4b",
+              "alternateColor": "f84c1e"
             },
             "score": 0
           },
@@ -850,7 +934,9 @@
               "name": "UAB Blazers",
               "location": "UAB",
               "shortName": "UAB",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/5.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/5.png",
+              "color": "1a5632",
+              "alternateColor": "fdb913"
             },
             "score": 0
           },
@@ -861,7 +947,9 @@
               "name": "Samford Bulldogs",
               "location": "Samford",
               "shortName": "Samford",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2535.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2535.png",
+              "color": "005485",
+              "alternateColor": "bc0023"
             },
             "score": 0
           },
@@ -886,7 +974,9 @@
               "name": "North Dakota State Bison",
               "location": "North Dakota State",
               "shortName": "N Dakota St",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2449.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2449.png",
+              "color": "01402A",
+              "alternateColor": "ffffff"
             },
             "score": 0
           },
@@ -897,7 +987,9 @@
               "name": "Wyoming Cowboys",
               "location": "Wyoming",
               "shortName": "Wyoming",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2751.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2751.png",
+              "color": "492f24",
+              "alternateColor": "ffc425"
             },
             "score": 0
           },
@@ -922,7 +1014,9 @@
               "name": "Central Michigan Chippewas",
               "location": "Central Michigan",
               "shortName": "C Michigan",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2117.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2117.png",
+              "color": "4c0027",
+              "alternateColor": "fbab18"
             },
             "score": 0
           },
@@ -933,7 +1027,9 @@
               "name": "Akron Zips",
               "location": "Akron",
               "shortName": "Akron",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2006.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2006.png",
+              "color": "041e42",
+              "alternateColor": "c5b783"
             },
             "score": 0
           },
@@ -958,7 +1054,9 @@
               "name": "Massachusetts Minutemen",
               "location": "Massachusetts",
               "shortName": "UMass",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/113.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/113.png",
+              "color": "881c1c",
+              "alternateColor": "ffffff"
             },
             "score": 0
           },
@@ -969,7 +1067,9 @@
               "name": "Eastern Michigan Eagles",
               "location": "Eastern Michigan",
               "shortName": "E Michigan",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2199.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2199.png",
+              "color": "006938",
+              "alternateColor": "ffffff"
             },
             "score": 0
           },
@@ -994,7 +1094,9 @@
               "name": "Kent State Golden Flashes",
               "location": "Kent State",
               "shortName": "Kent State",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2309.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2309.png",
+              "color": "002664",
+              "alternateColor": "eaab00"
             },
             "score": 0
           },
@@ -1005,7 +1107,9 @@
               "name": "Ohio Bobcats",
               "location": "Ohio",
               "shortName": "Ohio",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/195.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/195.png",
+              "color": "154734",
+              "alternateColor": "ffffff"
             },
             "score": 0
           },
@@ -1030,7 +1134,9 @@
               "name": "Miami (OH) RedHawks",
               "location": "Miami (OH)",
               "shortName": "Miami OH",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/193.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/193.png",
+              "color": "c41230",
+              "alternateColor": "ffffff"
             },
             "score": 0
           },
@@ -1041,7 +1147,9 @@
               "name": "Bowling Green Falcons",
               "location": "Bowling Green",
               "shortName": "Bowling Green",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/189.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/189.png",
+              "color": "fd5000",
+              "alternateColor": "4f2c1d"
             },
             "score": 0
           },
@@ -1066,7 +1174,9 @@
               "name": "Georgia State Panthers",
               "location": "Georgia State",
               "shortName": "Georgia St",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2247.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2247.png",
+              "color": "0039a6",
+              "alternateColor": "ffffff"
             },
             "score": 0
           },
@@ -1077,7 +1187,9 @@
               "name": "Old Dominion Monarchs",
               "location": "Old Dominion",
               "shortName": "Old Dominion",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/295.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/295.png",
+              "color": "003768",
+              "alternateColor": "a1d2f1"
             },
             "score": 0
           },
@@ -1102,7 +1214,9 @@
               "name": "James Madison Dukes",
               "location": "James Madison",
               "shortName": "James Madison",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/256.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/256.png",
+              "color": "450084",
+              "alternateColor": "cbb677"
             },
             "score": 0
           },
@@ -1113,7 +1227,9 @@
               "name": "Marshall Thundering Herd",
               "location": "Marshall",
               "shortName": "Marshall",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/276.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/276.png",
+              "color": "00b140",
+              "alternateColor": "000000"
             },
             "score": 0
           },
@@ -1138,7 +1254,9 @@
               "name": "Nebraska Cornhuskers",
               "location": "Nebraska",
               "shortName": "Nebraska",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/158.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/158.png",
+              "color": "e31937",
+              "alternateColor": "ffffff"
             },
             "score": 0
           },
@@ -1149,7 +1267,9 @@
               "name": "Maryland Terrapins",
               "location": "Maryland",
               "shortName": "Maryland",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/120.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/120.png",
+              "color": "ce1126",
+              "alternateColor": "ffffff"
             },
             "score": 0
           },
@@ -1174,7 +1294,9 @@
               "name": "New Mexico Lobos",
               "location": "New Mexico",
               "shortName": "New Mexico",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/167.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/167.png",
+              "color": "ba0c2f",
+              "alternateColor": "a7a8aa"
             },
             "score": 0
           },
@@ -1185,7 +1307,9 @@
               "name": "UTEP Miners",
               "location": "UTEP",
               "shortName": "UTEP",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2638.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2638.png",
+              "color": "ff8200",
+              "alternateColor": "041e42"
             },
             "score": 0
           },
@@ -1210,7 +1334,9 @@
               "name": "South Carolina Gamecocks",
               "location": "South Carolina",
               "shortName": "South Carolina",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2579.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2579.png",
+              "color": "73000a",
+              "alternateColor": "000000"
             },
             "score": 0
           },
@@ -1221,7 +1347,9 @@
               "name": "Kentucky Wildcats",
               "location": "Kentucky",
               "shortName": "Kentucky",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/96.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/96.png",
+              "color": "0033a0",
+              "alternateColor": "ffffff"
             },
             "score": 0,
             "ranking": 24
@@ -1247,7 +1375,9 @@
               "name": "Illinois Fighting Illini",
               "location": "Illinois",
               "shortName": "Illinois",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/356.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/356.png",
+              "color": "ff5f05",
+              "alternateColor": "13294b"
             },
             "score": 0
           },
@@ -1258,7 +1388,9 @@
               "name": "Purdue Boilermakers",
               "location": "Purdue",
               "shortName": "Purdue",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2509.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2509.png",
+              "color": "ceb888",
+              "alternateColor": "000000"
             },
             "score": 0
           },
@@ -1283,7 +1415,9 @@
               "name": "Colorado State Rams",
               "location": "Colorado State",
               "shortName": "Colorado St",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/36.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/36.png",
+              "color": "004c23",
+              "alternateColor": "c8c372"
             },
             "score": 0
           },
@@ -1294,7 +1428,9 @@
               "name": "Oregon State Beavers",
               "location": "Oregon State",
               "shortName": "Oregon St",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/204.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/204.png",
+              "color": "dc4405",
+              "alternateColor": "000000"
             },
             "score": 0
           },
@@ -1319,7 +1455,9 @@
               "name": "Florida Atlantic Owls",
               "location": "Florida Atlantic",
               "shortName": "FAU",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2226.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2226.png",
+              "color": "003366",
+              "alternateColor": "cc0000"
             },
             "score": 0
           },
@@ -1330,7 +1468,9 @@
               "name": "Texas Southern Tigers",
               "location": "Texas Southern",
               "shortName": "Texas Southern",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2640.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2640.png",
+              "color": "860038",
+              "alternateColor": "ffffff"
             },
             "score": 0
           },
@@ -1355,7 +1495,9 @@
               "name": "TCU Horned Frogs",
               "location": "TCU",
               "shortName": "TCU",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2628.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2628.png",
+              "color": "4d1979",
+              "alternateColor": "ffffff"
             },
             "score": 0
           },
@@ -1366,7 +1508,9 @@
               "name": "BYU Cougars",
               "location": "BYU",
               "shortName": "BYU",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/252.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/252.png",
+              "color": "0047ba",
+              "alternateColor": "002e5d"
             },
             "score": 0,
             "ranking": 10
@@ -1396,7 +1540,9 @@
               "name": "Texas A&M Aggies",
               "location": "Texas A&M",
               "shortName": "Texas A&M",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/245.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/245.png",
+              "color": "500000",
+              "alternateColor": "ffffff"
             },
             "score": 0
           },
@@ -1407,7 +1553,9 @@
               "name": "Arkansas Razorbacks",
               "location": "Arkansas",
               "shortName": "Arkansas",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/8.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/8.png",
+              "color": "a32136",
+              "alternateColor": "ffffff"
             },
             "score": 0
           },
@@ -1432,7 +1580,9 @@
               "name": "Rice Owls",
               "location": "Rice",
               "shortName": "Rice",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/242.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/242.png",
+              "color": "00205b",
+              "alternateColor": "c1c6c8"
             },
             "score": 0
           },
@@ -1443,7 +1593,9 @@
               "name": "UTSA Roadrunners",
               "location": "UTSA",
               "shortName": "UTSA",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2636.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2636.png",
+              "color": "0c2340",
+              "alternateColor": "f15a22"
             },
             "score": 0
           },
@@ -1468,7 +1620,9 @@
               "name": "Coastal Carolina Chanticleers",
               "location": "Coastal Carolina",
               "shortName": "Coastal",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/324.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/324.png",
+              "color": "006f71",
+              "alternateColor": "a27752"
             },
             "score": 0
           },
@@ -1479,7 +1633,9 @@
               "name": "Georgia Southern Eagles",
               "location": "Georgia Southern",
               "shortName": "GA Southern",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/290.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/290.png",
+              "color": "041e42",
+              "alternateColor": "a3aaae"
             },
             "score": 0
           },
@@ -1504,7 +1660,9 @@
               "name": "South Alabama Jaguars",
               "location": "South Alabama",
               "shortName": "South Alabama",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/6.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/6.png",
+              "color": "00205b",
+              "alternateColor": "bf0d3e"
             },
             "score": 0
           },
@@ -1515,7 +1673,9 @@
               "name": "UL Monroe Warhawks",
               "location": "UL Monroe",
               "shortName": "UL Monroe",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2433.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2433.png",
+              "color": "840029",
+              "alternateColor": "fdb913"
             },
             "score": 0
           },
@@ -1540,7 +1700,9 @@
               "name": "Clemson Tigers",
               "location": "Clemson",
               "shortName": "Clemson",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/228.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/228.png",
+              "color": "f56600",
+              "alternateColor": "ffffff"
             },
             "score": 0
           },
@@ -1551,7 +1713,9 @@
               "name": "Miami Hurricanes",
               "location": "Miami",
               "shortName": "Miami",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2390.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2390.png",
+              "color": "f47423",
+              "alternateColor": "035131"
             },
             "score": 0,
             "ranking": 4
@@ -1577,7 +1741,9 @@
               "name": "Colorado Buffaloes",
               "location": "Colorado",
               "shortName": "Colorado",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/38.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/38.png",
+              "color": "cfb87c",
+              "alternateColor": "000000"
             },
             "score": 0
           },
@@ -1588,7 +1754,9 @@
               "name": "Texas Tech Red Raiders",
               "location": "Texas Tech",
               "shortName": "Texas Tech",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2641.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2641.png",
+              "color": "da291c",
+              "alternateColor": "000000"
             },
             "score": 0,
             "ranking": 12
@@ -1614,7 +1782,9 @@
               "name": "USC Trojans",
               "location": "USC",
               "shortName": "USC",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/30.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/30.png",
+              "color": "9d2235",
+              "alternateColor": "ffc72c"
             },
             "score": 0,
             "ranking": 18
@@ -1626,7 +1796,9 @@
               "name": "Washington Huskies",
               "location": "Washington",
               "shortName": "Washington",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/264.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/264.png",
+              "color": "33006f",
+              "alternateColor": "e8d3a2"
             },
             "score": 0
           },
@@ -1651,7 +1823,9 @@
               "name": "Boise State Broncos",
               "location": "Boise State",
               "shortName": "Boise St",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/68.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/68.png",
+              "color": "0033a0",
+              "alternateColor": "d64309"
             },
             "score": 0,
             "ranking": 22
@@ -1663,7 +1837,9 @@
               "name": "Utah State Aggies",
               "location": "Utah State",
               "shortName": "Utah State",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/328.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/328.png",
+              "color": "0f2439",
+              "alternateColor": "ffffff"
             },
             "score": 0
           },
@@ -1688,7 +1864,9 @@
               "name": "South Florida Bulls",
               "location": "South Florida",
               "shortName": "South Florida",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/58.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/58.png",
+              "color": "006747",
+              "alternateColor": "cfc493"
             },
             "score": 0
           },
@@ -1699,7 +1877,9 @@
               "name": "Temple Owls",
               "location": "Temple",
               "shortName": "Temple",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/218.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/218.png",
+              "color": "a41e35",
+              "alternateColor": "ffffff"
             },
             "score": 0
           },
@@ -1724,7 +1904,9 @@
               "name": "Louisiana Tech Bulldogs",
               "location": "Louisiana Tech",
               "shortName": "Louisiana Tech",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2348.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2348.png",
+              "color": "003087",
+              "alternateColor": "cb333b"
             },
             "score": 0
           },
@@ -1735,7 +1917,9 @@
               "name": "Army Black Knights",
               "location": "Army",
               "shortName": "Army",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/349.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/349.png",
+              "color": "000000",
+              "alternateColor": "d3bc8d"
             },
             "score": 0
           },
@@ -1760,7 +1944,9 @@
               "name": "LSU Tigers",
               "location": "LSU",
               "shortName": "LSU",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/99.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/99.png",
+              "color": "461d76",
+              "alternateColor": "fdd023"
             },
             "score": 0,
             "ranking": 11
@@ -1772,7 +1958,8 @@
               "name": "McNeese Cowboys",
               "location": "McNeese",
               "shortName": "McNeese",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2377.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2377.png",
+              "color": "00529C"
             },
             "score": 0
           },
@@ -1797,7 +1984,9 @@
               "name": "Rutgers Scarlet Knights",
               "location": "Rutgers",
               "shortName": "Rutgers",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/164.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/164.png",
+              "color": "ce0e2d",
+              "alternateColor": "ffffff"
             },
             "score": 0
           },
@@ -1808,7 +1997,9 @@
               "name": "Indiana Hoosiers",
               "location": "Indiana",
               "shortName": "Indiana",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/84.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/84.png",
+              "color": "970310",
+              "alternateColor": "ffffff"
             },
             "score": 0,
             "ranking": 6
@@ -1834,7 +2025,9 @@
               "name": "Louisiana Ragin' Cajuns",
               "location": "Louisiana",
               "shortName": "Louisiana",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/309.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/309.png",
+              "color": "ce181e",
+              "alternateColor": "000000"
             },
             "score": 0
           },
@@ -1845,7 +2038,9 @@
               "name": "Arkansas State Red Wolves",
               "location": "Arkansas State",
               "shortName": "Arkansas St",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2032.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2032.png",
+              "color": "cc092f",
+              "alternateColor": "000000"
             },
             "score": 0
           },
@@ -1870,7 +2065,9 @@
               "name": "Washington State Cougars",
               "location": "Washington State",
               "shortName": "Washington St",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/265.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/265.png",
+              "color": "a60f2d",
+              "alternateColor": "4d4d4d"
             },
             "score": 0
           },
@@ -1881,7 +2078,9 @@
               "name": "Fresno State Bulldogs",
               "location": "Fresno State",
               "shortName": "Fresno St",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/278.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/278.png",
+              "color": "b1102b",
+              "alternateColor": "13284c"
             },
             "score": 0
           },
@@ -1906,7 +2105,9 @@
               "name": "Arizona State Sun Devils",
               "location": "Arizona State",
               "shortName": "Arizona St",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/9.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/9.png",
+              "color": "ffc627",
+              "alternateColor": "8c1d40"
             },
             "score": 0
           },
@@ -1917,7 +2118,9 @@
               "name": "Baylor Bears",
               "location": "Baylor",
               "shortName": "Baylor",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/239.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/239.png",
+              "color": "154734",
+              "alternateColor": "ffb81c"
             },
             "score": 0
           },
@@ -1942,7 +2145,9 @@
               "name": "San Diego State Aztecs",
               "location": "San Diego State",
               "shortName": "San Diego St",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/21.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/21.png",
+              "color": "a6192e",
+              "alternateColor": "000000"
             },
             "score": 0
           },
@@ -1953,7 +2158,9 @@
               "name": "Texas State Bobcats",
               "location": "Texas State",
               "shortName": "Texas St",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/326.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/326.png",
+              "color": "501214",
+              "alternateColor": "6a5638"
             },
             "score": 0
           },
@@ -1978,7 +2185,9 @@
               "name": "Arizona Wildcats",
               "location": "Arizona",
               "shortName": "Arizona",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/12.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/12.png",
+              "color": "cc0033",
+              "alternateColor": "003366"
             },
             "score": 0
           },
@@ -1989,7 +2198,9 @@
               "name": "Cincinnati Bearcats",
               "location": "Cincinnati",
               "shortName": "Cincinnati",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2132.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2132.png",
+              "color": "000000",
+              "alternateColor": "e00122"
             },
             "score": 0
           },
@@ -2014,7 +2225,9 @@
               "name": "Hawai'i Rainbow Warriors",
               "location": "Hawai'i",
               "shortName": "Hawai'i",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/62.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/62.png",
+              "color": "005737",
+              "alternateColor": "000000"
             },
             "score": 0
           },
@@ -2025,7 +2238,9 @@
               "name": "San José State Spartans",
               "location": "San José State",
               "shortName": "San José St",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/23.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/23.png",
+              "color": "0038a8",
+              "alternateColor": "ffb81a"
             },
             "score": 0
           },
@@ -2050,7 +2265,9 @@
               "name": "New Mexico State Aggies",
               "location": "New Mexico State",
               "shortName": "New Mexico St",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/166.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/166.png",
+              "color": "7e141b",
+              "alternateColor": "231f20"
             },
             "score": 34
           },
@@ -2061,7 +2278,9 @@
               "name": "Western Kentucky Hilltoppers",
               "location": "Western Kentucky",
               "shortName": "Western KY",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/98.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/98.png",
+              "color": "e13a3e",
+              "alternateColor": "ffffff"
             },
             "score": 13
           },
@@ -2086,7 +2305,9 @@
               "name": "Tulsa Golden Hurricane",
               "location": "Tulsa",
               "shortName": "Tulsa",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/202.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/202.png",
+              "color": "003595",
+              "alternateColor": "d0b787"
             },
             "score": 44
           },
@@ -2097,7 +2318,9 @@
               "name": "North Texas Mean Green",
               "location": "North Texas",
               "shortName": "North Texas",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/249.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/249.png",
+              "color": "068f33",
+              "alternateColor": "ffffff"
             },
             "score": 45
           },
@@ -2122,7 +2345,9 @@
               "name": "Virginia Tech Hokies",
               "location": "Virginia Tech",
               "shortName": "Virginia Tech",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/259.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/259.png",
+              "color": "6a2c3e",
+              "alternateColor": "cf4520"
             },
             "score": 33
           },
@@ -2133,7 +2358,9 @@
               "name": "Pittsburgh Panthers",
               "location": "Pittsburgh",
               "shortName": "Pitt",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/221.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/221.png",
+              "color": "003594",
+              "alternateColor": "ffb81c"
             },
             "score": 35
           },
@@ -2158,7 +2385,9 @@
               "name": "Delaware Blue Hens",
               "location": "Delaware",
               "shortName": "Delaware",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/48.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/48.png",
+              "color": "00539f",
+              "alternateColor": "ffd200"
             },
             "score": 14
           },
@@ -2169,7 +2398,9 @@
               "name": "Liberty Flames",
               "location": "Liberty",
               "shortName": "Liberty",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2335.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2335.png",
+              "color": "0a254e",
+              "alternateColor": "b72025"
             },
             "score": 30
           },
@@ -2194,7 +2425,9 @@
               "name": "Northwestern Wildcats",
               "location": "Northwestern",
               "shortName": "Northwestern",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/77.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/77.png",
+              "color": "492f92",
+              "alternateColor": "ffffff"
             },
             "score": 34
           },
@@ -2205,7 +2438,9 @@
               "name": "Penn State Nittany Lions",
               "location": "Penn State",
               "shortName": "Penn State",
-              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/213.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/213.png",
+              "color": "061440",
+              "alternateColor": "ffffff"
             },
             "score": 13
           },
@@ -2237,7 +2472,9 @@
               "name": "Buffalo Bills",
               "location": "Buffalo",
               "shortName": "Bills",
-              "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/buf.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/buf.png",
+              "color": "00338d",
+              "alternateColor": "d50a0a"
             },
             "score": 7
           },
@@ -2248,7 +2485,9 @@
               "name": "New England Patriots",
               "location": "New England",
               "shortName": "Patriots",
-              "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/ne.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/ne.png",
+              "color": "002a5c",
+              "alternateColor": "c60c30"
             },
             "score": 14
           },
@@ -2282,7 +2521,9 @@
               "name": "Chicago Bears",
               "location": "Chicago",
               "shortName": "Bears",
-              "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/chi.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/chi.png",
+              "color": "0b1c3a",
+              "alternateColor": "e64100"
             },
             "score": 7
           },
@@ -2293,7 +2534,9 @@
               "name": "New York Jets",
               "location": "New York",
               "shortName": "Jets",
-              "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/nyj.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/nyj.png",
+              "color": "115740",
+              "alternateColor": "ffffff"
             },
             "score": 3
           },
@@ -2325,7 +2568,9 @@
               "name": "Cincinnati Bengals",
               "location": "Cincinnati",
               "shortName": "Bengals",
-              "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/cin.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/cin.png",
+              "color": "fb4f14",
+              "alternateColor": "000000"
             },
             "score": 3
           },
@@ -2336,7 +2581,9 @@
               "name": "Jacksonville Jaguars",
               "location": "Jacksonville",
               "shortName": "Jaguars",
-              "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/jax.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/jax.png",
+              "color": "007487",
+              "alternateColor": "d7a22a"
             },
             "score": 3
           },
@@ -2370,7 +2617,9 @@
               "name": "New York Giants",
               "location": "New York",
               "shortName": "Giants",
-              "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/nyg.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/nyg.png",
+              "color": "003c7f",
+              "alternateColor": "c9243f"
             },
             "score": 6
           },
@@ -2381,7 +2630,9 @@
               "name": "Arizona Cardinals",
               "location": "Arizona",
               "shortName": "Cardinals",
-              "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/ari.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/ari.png",
+              "color": "a40227",
+              "alternateColor": "ffffff"
             },
             "score": 14
           },
@@ -2415,7 +2666,9 @@
               "name": "Philadelphia Eagles",
               "location": "Philadelphia",
               "shortName": "Eagles",
-              "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/phi.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/phi.png",
+              "color": "06424d",
+              "alternateColor": "000000"
             },
             "score": 6
           },
@@ -2426,7 +2679,9 @@
               "name": "Los Angeles Rams",
               "location": "Los Angeles",
               "shortName": "Rams",
-              "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/lar.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/lar.png",
+              "color": "003594",
+              "alternateColor": "ffd100"
             },
             "score": 3
           },
@@ -2460,7 +2715,9 @@
               "name": "Tampa Bay Buccaneers",
               "location": "Tampa Bay",
               "shortName": "Buccaneers",
-              "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/tb.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/tb.png",
+              "color": "bd1c36",
+              "alternateColor": "3e3a35"
             },
             "score": 7
           },
@@ -2471,7 +2728,9 @@
               "name": "Green Bay Packers",
               "location": "Green Bay",
               "shortName": "Packers",
-              "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/gb.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/gb.png",
+              "color": "204e32",
+              "alternateColor": "ffb612"
             },
             "score": 7
           },
@@ -2502,7 +2761,9 @@
               "name": "Baltimore Ravens",
               "location": "Baltimore",
               "shortName": "Ravens",
-              "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/bal.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/bal.png",
+              "color": "29126f",
+              "alternateColor": "000000"
             },
             "score": 14
           },
@@ -2513,7 +2774,9 @@
               "name": "Tennessee Titans",
               "location": "Tennessee",
               "shortName": "Titans",
-              "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/ten.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/ten.png",
+              "color": "4495d2",
+              "alternateColor": "001532"
             },
             "score": 7
           },
@@ -2547,7 +2810,9 @@
               "name": "Houston Texans",
               "location": "Houston",
               "shortName": "Texans",
-              "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/hou.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/hou.png",
+              "color": "021018",
+              "alternateColor": "eb0028"
             },
             "score": 10
           },
@@ -2558,7 +2823,9 @@
               "name": "Dallas Cowboys",
               "location": "Dallas",
               "shortName": "Cowboys",
-              "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/dal.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/dal.png",
+              "color": "002a5c",
+              "alternateColor": "b0b7bc"
             },
             "score": 6
           },
@@ -2592,7 +2859,9 @@
               "name": "Washington Commanders",
               "location": "Washington",
               "shortName": "Commanders",
-              "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/wsh.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/wsh.png",
+              "color": "5a1414",
+              "alternateColor": "ffb612"
             },
             "score": 13
           },
@@ -2603,7 +2872,9 @@
               "name": "Indianapolis Colts",
               "location": "Indianapolis",
               "shortName": "Colts",
-              "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/ind.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/ind.png",
+              "color": "003b75",
+              "alternateColor": "ffffff"
             },
             "score": 30
           },
@@ -2628,7 +2899,9 @@
               "name": "Minnesota Vikings",
               "location": "Minnesota",
               "shortName": "Vikings",
-              "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/min.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/min.png",
+              "color": "4f2683",
+              "alternateColor": "ffc62f"
             },
             "score": 0
           },
@@ -2639,7 +2912,9 @@
               "name": "Miami Dolphins",
               "location": "Miami",
               "shortName": "Dolphins",
-              "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/mia.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/mia.png",
+              "color": "008e97",
+              "alternateColor": "fc4c02"
             },
             "score": 0
           },
@@ -2664,7 +2939,9 @@
               "name": "Las Vegas Raiders",
               "location": "Las Vegas",
               "shortName": "Raiders",
-              "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/lv.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/lv.png",
+              "color": "000000",
+              "alternateColor": "a5acaf"
             },
             "score": 0
           },
@@ -2675,7 +2952,9 @@
               "name": "Kansas City Chiefs",
               "location": "Kansas City",
               "shortName": "Chiefs",
-              "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/kc.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/kc.png",
+              "color": "e31837",
+              "alternateColor": "ffb612"
             },
             "score": 0
           },
@@ -2700,7 +2979,9 @@
               "name": "San Francisco 49ers",
               "location": "San Francisco",
               "shortName": "49ers",
-              "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/sf.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/sf.png",
+              "color": "aa0000",
+              "alternateColor": "b3995d"
             },
             "score": 0
           },
@@ -2711,7 +2992,9 @@
               "name": "Denver Broncos",
               "location": "Denver",
               "shortName": "Broncos",
-              "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/den.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/den.png",
+              "color": "0a2343",
+              "alternateColor": "fc4c02"
             },
             "score": 0
           },
@@ -2736,7 +3019,9 @@
               "name": "Seattle Seahawks",
               "location": "Seattle",
               "shortName": "Seahawks",
-              "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/sea.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/sea.png",
+              "color": "002a5c",
+              "alternateColor": "69be28"
             },
             "score": 0
           },
@@ -2747,7 +3032,9 @@
               "name": "Los Angeles Chargers",
               "location": "Los Angeles",
               "shortName": "Chargers",
-              "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/lac.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/lac.png",
+              "color": "0080c6",
+              "alternateColor": "ffc20e"
             },
             "score": 0
           },
@@ -2772,7 +3059,9 @@
               "name": "Carolina Panthers",
               "location": "Carolina",
               "shortName": "Panthers",
-              "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/car.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/car.png",
+              "color": "0085ca",
+              "alternateColor": "000000"
             },
             "score": 0
           },
@@ -2783,7 +3072,9 @@
               "name": "Detroit Lions",
               "location": "Detroit",
               "shortName": "Lions",
-              "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/det.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/det.png",
+              "color": "0076b6",
+              "alternateColor": "bbbbbb"
             },
             "score": 0
           },
@@ -2808,7 +3099,9 @@
               "name": "Cleveland Browns",
               "location": "Cleveland",
               "shortName": "Browns",
-              "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/cle.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/cle.png",
+              "color": "472a08",
+              "alternateColor": "ff3c00"
             },
             "score": 27
           },
@@ -2819,7 +3112,9 @@
               "name": "Pittsburgh Steelers",
               "location": "Pittsburgh",
               "shortName": "Steelers",
-              "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/pit.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/pit.png",
+              "color": "000000",
+              "alternateColor": "ffb612"
             },
             "score": 24
           },
@@ -2844,7 +3139,9 @@
               "name": "New Orleans Saints",
               "location": "New Orleans",
               "shortName": "Saints",
-              "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/no.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/no.png",
+              "color": "d3bc8d",
+              "alternateColor": "000000"
             },
             "score": 0
           },
@@ -2855,7 +3152,9 @@
               "name": "Atlanta Falcons",
               "location": "Atlanta",
               "shortName": "Falcons",
-              "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/atl.png"
+              "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/atl.png",
+              "color": "a71930",
+              "alternateColor": "000000"
             },
             "score": 0
           },
@@ -2886,7 +3185,9 @@
             "name": "New York Giants",
             "location": "New York",
             "shortName": "Giants",
-            "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/nyg.png"
+            "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/nyg.png",
+            "color": "003c7f",
+            "alternateColor": "c9243f"
           },
           "score": 6
         },
@@ -2897,7 +3198,9 @@
             "name": "Arizona Cardinals",
             "location": "Arizona",
             "shortName": "Cardinals",
-            "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/ari.png"
+            "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/ari.png",
+            "color": "a40227",
+            "alternateColor": "ffffff"
           },
           "score": 14
         },
@@ -2936,7 +3239,9 @@
             "name": "Houston Texans",
             "location": "Houston",
             "shortName": "Texans",
-            "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/hou.png"
+            "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/hou.png",
+            "color": "021018",
+            "alternateColor": "eb0028"
           },
           "score": 10
         },
@@ -2947,7 +3252,9 @@
             "name": "Dallas Cowboys",
             "location": "Dallas",
             "shortName": "Cowboys",
-            "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/dal.png"
+            "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/dal.png",
+            "color": "002a5c",
+            "alternateColor": "b0b7bc"
           },
           "score": 6
         },
@@ -2986,7 +3293,9 @@
             "name": "Tampa Bay Buccaneers",
             "location": "Tampa Bay",
             "shortName": "Buccaneers",
-            "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/tb.png"
+            "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/tb.png",
+            "color": "bd1c36",
+            "alternateColor": "3e3a35"
           },
           "score": 0
         },
@@ -2997,7 +3306,9 @@
             "name": "Green Bay Packers",
             "location": "Green Bay",
             "shortName": "Packers",
-            "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/gb.png"
+            "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/gb.png",
+            "color": "204e32",
+            "alternateColor": "ffb612"
           },
           "score": 7
         },
@@ -3036,7 +3347,9 @@
             "name": "Cincinnati Bengals",
             "location": "Cincinnati",
             "shortName": "Bengals",
-            "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/cin.png"
+            "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/cin.png",
+            "color": "fb4f14",
+            "alternateColor": "000000"
           },
           "score": 3
         },
@@ -3047,7 +3360,9 @@
             "name": "Jacksonville Jaguars",
             "location": "Jacksonville",
             "shortName": "Jaguars",
-            "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/jax.png"
+            "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/jax.png",
+            "color": "007487",
+            "alternateColor": "d7a22a"
           },
           "score": 3
         },
@@ -3086,7 +3401,9 @@
             "name": "Philadelphia Eagles",
             "location": "Philadelphia",
             "shortName": "Eagles",
-            "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/phi.png"
+            "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/phi.png",
+            "color": "06424d",
+            "alternateColor": "000000"
           },
           "score": 6
         },
@@ -3097,7 +3414,9 @@
             "name": "Los Angeles Rams",
             "location": "Los Angeles",
             "shortName": "Rams",
-            "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/lar.png"
+            "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/lar.png",
+            "color": "003594",
+            "alternateColor": "ffd100"
           },
           "score": 3
         },
@@ -3136,7 +3455,9 @@
             "name": "Buffalo Bills",
             "location": "Buffalo",
             "shortName": "Bills",
-            "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/buf.png"
+            "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/buf.png",
+            "color": "00338d",
+            "alternateColor": "d50a0a"
           },
           "score": 7
         },
@@ -3147,7 +3468,9 @@
             "name": "New England Patriots",
             "location": "New England",
             "shortName": "Patriots",
-            "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/ne.png"
+            "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/ne.png",
+            "color": "002a5c",
+            "alternateColor": "c60c30"
           },
           "score": 7
         },
@@ -3186,7 +3509,9 @@
             "name": "Chicago Bears",
             "location": "Chicago",
             "shortName": "Bears",
-            "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/chi.png"
+            "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/chi.png",
+            "color": "0b1c3a",
+            "alternateColor": "e64100"
           },
           "score": 7
         },
@@ -3197,7 +3522,9 @@
             "name": "New York Jets",
             "location": "New York",
             "shortName": "Jets",
-            "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/nyj.png"
+            "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/nyj.png",
+            "color": "115740",
+            "alternateColor": "ffffff"
           },
           "score": 0
         },
@@ -3236,7 +3563,9 @@
             "name": "Baltimore Ravens",
             "location": "Baltimore",
             "shortName": "Ravens",
-            "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/bal.png"
+            "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/bal.png",
+            "color": "29126f",
+            "alternateColor": "000000"
           },
           "score": 14
         },
@@ -3247,7 +3576,9 @@
             "name": "Tennessee Titans",
             "location": "Tennessee",
             "shortName": "Titans",
-            "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/ten.png"
+            "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/ten.png",
+            "color": "4495d2",
+            "alternateColor": "001532"
           },
           "score": 7
         },
@@ -3286,7 +3617,9 @@
             "name": "Washington Commanders",
             "location": "Washington",
             "shortName": "Commanders",
-            "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/wsh.png"
+            "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/wsh.png",
+            "color": "5a1414",
+            "alternateColor": "ffb612"
           },
           "score": 13
         },
@@ -3297,7 +3630,9 @@
             "name": "Indianapolis Colts",
             "location": "Indianapolis",
             "shortName": "Colts",
-            "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/ind.png"
+            "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/ind.png",
+            "color": "003b75",
+            "alternateColor": "ffffff"
           },
           "score": 30
         },
@@ -3327,7 +3662,9 @@
             "name": "Minnesota Vikings",
             "location": "Minnesota",
             "shortName": "Vikings",
-            "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/min.png"
+            "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/min.png",
+            "color": "4f2683",
+            "alternateColor": "ffc62f"
           },
           "score": 0
         },
@@ -3338,7 +3675,9 @@
             "name": "Miami Dolphins",
             "location": "Miami",
             "shortName": "Dolphins",
-            "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/mia.png"
+            "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/mia.png",
+            "color": "008e97",
+            "alternateColor": "fc4c02"
           },
           "score": 0
         },
@@ -3368,7 +3707,9 @@
             "name": "San Francisco 49ers",
             "location": "San Francisco",
             "shortName": "49ers",
-            "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/sf.png"
+            "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/sf.png",
+            "color": "aa0000",
+            "alternateColor": "b3995d"
           },
           "score": 0
         },
@@ -3379,7 +3720,9 @@
             "name": "Denver Broncos",
             "location": "Denver",
             "shortName": "Broncos",
-            "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/den.png"
+            "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/den.png",
+            "color": "0a2343",
+            "alternateColor": "fc4c02"
           },
           "score": 0
         },
@@ -3409,7 +3752,9 @@
             "name": "Las Vegas Raiders",
             "location": "Las Vegas",
             "shortName": "Raiders",
-            "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/lv.png"
+            "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/lv.png",
+            "color": "000000",
+            "alternateColor": "a5acaf"
           },
           "score": 0
         },
@@ -3420,7 +3765,9 @@
             "name": "Kansas City Chiefs",
             "location": "Kansas City",
             "shortName": "Chiefs",
-            "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/kc.png"
+            "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/kc.png",
+            "color": "e31837",
+            "alternateColor": "ffb612"
           },
           "score": 0
         },
@@ -3450,7 +3797,9 @@
             "name": "Seattle Seahawks",
             "location": "Seattle",
             "shortName": "Seahawks",
-            "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/sea.png"
+            "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/sea.png",
+            "color": "002a5c",
+            "alternateColor": "69be28"
           },
           "score": 0
         },
@@ -3461,7 +3810,9 @@
             "name": "Los Angeles Chargers",
             "location": "Los Angeles",
             "shortName": "Chargers",
-            "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/lac.png"
+            "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/lac.png",
+            "color": "0080c6",
+            "alternateColor": "ffc20e"
           },
           "score": 0
         },
@@ -3491,7 +3842,9 @@
             "name": "Carolina Panthers",
             "location": "Carolina",
             "shortName": "Panthers",
-            "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/car.png"
+            "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/car.png",
+            "color": "0085ca",
+            "alternateColor": "000000"
           },
           "score": 0
         },
@@ -3502,7 +3855,9 @@
             "name": "Detroit Lions",
             "location": "Detroit",
             "shortName": "Lions",
-            "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/det.png"
+            "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/det.png",
+            "color": "0076b6",
+            "alternateColor": "bbbbbb"
           },
           "score": 0
         },
@@ -3532,7 +3887,9 @@
             "name": "Cleveland Browns",
             "location": "Cleveland",
             "shortName": "Browns",
-            "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/cle.png"
+            "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/cle.png",
+            "color": "472a08",
+            "alternateColor": "ff3c00"
           },
           "score": 27
         },
@@ -3543,7 +3900,9 @@
             "name": "Pittsburgh Steelers",
             "location": "Pittsburgh",
             "shortName": "Steelers",
-            "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/pit.png"
+            "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/pit.png",
+            "color": "000000",
+            "alternateColor": "ffb612"
           },
           "score": 24
         },
@@ -3573,7 +3932,9 @@
             "name": "New Orleans Saints",
             "location": "New Orleans",
             "shortName": "Saints",
-            "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/no.png"
+            "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/no.png",
+            "color": "d3bc8d",
+            "alternateColor": "000000"
           },
           "score": 0
         },
@@ -3584,7 +3945,9 @@
             "name": "Atlanta Falcons",
             "location": "Atlanta",
             "shortName": "Falcons",
-            "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/atl.png"
+            "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/atl.png",
+            "color": "a71930",
+            "alternateColor": "000000"
           },
           "score": 0
         },

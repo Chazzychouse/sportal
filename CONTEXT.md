@@ -10,6 +10,7 @@ Every exported type name must be a term here, except the wire schemas in `*Paylo
 | **League** | An organized competition (NFL, FBS). | association, division |
 | **Team** | A league member. | club, competitor, franchise |
 | **Ranking** | A team's position in a poll (college). | seed |
+| **Team colors** | The two colors a team plays in: `color` and `alternateColor` on `Team`, six hex digits without `#`, as ESPN sends them. The Hub reads them from the scoreboard; a team ESPN sends none for has neither. | |
 | **Game** | One scheduled contest between two teams. | event, match, competition, fixture |
 | **Slate** | The games in a time window (a Saturday, an NFL week). Shown as a strip under the Stage. The Hub's `Slate` publishes it: each listed game as the fold has it. | schedule, scoreboard |
 | **Kickoff** | A game's scheduled start instant. | start time, date |
