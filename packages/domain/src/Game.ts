@@ -46,6 +46,12 @@ export class GameSnapshot extends Schema.Class<GameSnapshot>("sportal/GameSnapsh
     Order.mapInput(DateTime.Order, (game: GameSnapshot) => game.kickoff)
   )
 
+  /** The period, then less time left on the clock, whatever the status. */
+  private static readonly clockTime: Order.Order<GameSnapshot> = Order.combine(
+    Order.mapInput(Order.Number, (game: GameSnapshot) => game.period),
+    Order.mapInput(Order.flip(Order.Number), (game: GameSnapshot) => game.secondsLeft())
+  )
+
   /**
    * How far a game has got: before kickoff, in play, or over; then the period; then less time left on the clock; then,
    * at the same clock, halftime after play. Any other statuses at the same clock tie. Orders two snapshots of one game.
@@ -53,10 +59,7 @@ export class GameSnapshot extends Schema.Class<GameSnapshot>("sportal/GameSnapsh
   static readonly gameTime: Order.Order<GameSnapshot> = Order.combine(
     Order.mapInput(Order.Number, (game: GameSnapshot) => gameTimeRank[game.progress()]),
     Order.combine(
-      Order.combine(
-        Order.mapInput(Order.Number, (game: GameSnapshot) => game.period),
-        Order.mapInput(Order.flip(Order.Number), (game: GameSnapshot) => game.secondsLeft())
-      ),
+      GameSnapshot.clockTime,
       Order.mapInput(Order.Number, (game: GameSnapshot) => (game.status === "halftime" ? 1 : 0))
     )
   )
@@ -88,9 +91,24 @@ export class GameSnapshot extends Schema.Class<GameSnapshot>("sportal/GameSnapsh
   isAheadOf(that: GameSnapshot): boolean {
     const order = GameSnapshot.gameTime(this, that)
     if (order !== 0) return order > 0
-    const points = this.home.score + this.away.score - (that.home.score + that.away.score)
+    const points = this.points() - that.points()
     if (points !== 0) return points > 0
     return this.home.score !== that.home.score
+  }
+
+  /**
+   * Ahead of `over`, a snapshot of this game once it was over (a final, a postponement): later in the period or on the
+   * clock whatever either's status, or at the same clock with more points. So overtime after a spurious final, or a
+   * postponed game resuming, is ahead, and a poll lagging the end of the game is not.
+   */
+  isAheadOfOver(over: GameSnapshot): boolean {
+    const order = GameSnapshot.clockTime(this, over)
+    return order !== 0 ? order > 0 : this.points() > over.points()
+  }
+
+  /** Both teams' points together. */
+  private points(): number {
+    return this.home.score + this.away.score
   }
 
   /** The points between the teams. */

@@ -113,6 +113,12 @@ describe("LiveGame#take, a snapshot", () => {
   it("Over + live snapshot: none (behind)", () => {
     assert.deepStrictEqual(taken(overGame, live, "poll", later), Option.none())
   })
+  it("Over + a snapshot ahead of it, overtime after a final: Live", () => {
+    const overtime = snapshot({ status: "live", period: 5, clock: "15:00" })
+    const next = taken(overGame, overtime, "poll", later)
+    assert.deepStrictEqual(next.pipe(Option.map((game) => game.state)), Option.some(liveAt(later)))
+    assert.deepStrictEqual(next.pipe(Option.map((game) => game.snapshot)), Option.some(overtime))
+  })
   it("Over + final snapshot: Over, new snapshot", () => {
     const corrected = snapshot({
       status: "final",

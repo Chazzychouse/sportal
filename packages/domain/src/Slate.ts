@@ -17,7 +17,8 @@ export class Slate extends Data.Class<{
   readonly live: ReadonlyMap<GameId, LiveGame>
   /**
    * Each game the slate stopped as over, as its final snapshot, while a league's last listing names it: a snapshot of
-   * one not ahead of its final is behind, so a poll lagging the push does not start it again.
+   * one not ahead of its end (`GameSnapshot#isAheadOfOver`) is behind, so a poll lagging the push does not start it
+   * again, while overtime after a spurious final, or a postponed game resuming, does.
    */
   readonly finished: ReadonlyMap<GameId, GameSnapshot>
   readonly reached: Option.Option<DateTime.Utc>
@@ -251,7 +252,7 @@ function snapshotTaken(
 ): Effect.Effect<Advanced> {
   return guarded(advanced, snapshot, "a delivery", () => {
     const final = Option.fromNullishOr(advanced.finished.get(snapshot.id))
-    if (Option.isSome(final) && !snapshot.isAheadOf(final.value)) {
+    if (Option.isSome(final) && !snapshot.isAheadOfOver(final.value)) {
       const ignored = SlateObservation.Took({ snapshot, from, outcome: "behind", had: final })
       return { ...advanced, observations: [...advanced.observations, ignored] }
     }

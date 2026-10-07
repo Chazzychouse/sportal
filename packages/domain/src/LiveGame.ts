@@ -65,7 +65,8 @@ export class LiveGame extends Data.Class<{
    * A snapshot's `outcome` is `taken`, `behind` (ignored), or `held`. A covered game takes a poll only ahead of it,
    * and only by holding it for `fallbackAfter`: a poll ahead of the held one replaces it, one equal to the game's
    * snapshot refreshes it, and any other is behind. A push applies unless behind in game time, and ends a hold unless
-   * the held snapshot is still ahead of it; on any other game, so does a poll. A snapshot gives the events of its
+   * the held snapshot is still ahead of it; on any other game, so does a poll. An over game also takes a snapshot ahead
+   * of its end (`GameSnapshot#isAheadOfOver`), and is live again. A snapshot gives the events of its
    * changes; a `Plays` delivery replaces the list and gives only the play events of its new plays.
    */
   take(
@@ -89,7 +90,7 @@ export class LiveGame extends Data.Class<{
     }
     const { snapshot, from } = delivery
     if (from === "poll" && this.isCovered()) return this.polledWhileCovered(snapshot, now)
-    if (GameSnapshot.gameTime(snapshot, this.snapshot) < 0) return behind
+    if (GameSnapshot.gameTime(snapshot, this.snapshot) < 0 && !this.resumedBy(snapshot)) return behind
     const state = stateOf(snapshot, now)
     return {
       liveGame: Option.some(
@@ -191,6 +192,11 @@ export class LiveGame extends Data.Class<{
         DateTime.isLessThan(now, DateTime.addDuration(updatedAt, LiveGame.staleCurrentFor)),
       Over: () => false
     })
+  }
+
+  /** Over, and `snapshot` is ahead of its end: overtime after a spurious final, or a postponed game resuming. */
+  private resumedBy(snapshot: GameSnapshot): boolean {
+    return LiveGameState.$is("Over")(this.state) && snapshot.isAheadOfOver(this.snapshot)
   }
 
   /**

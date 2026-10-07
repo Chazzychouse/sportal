@@ -28,7 +28,9 @@ week.
   once; summary plays take their team from `end.team`, as FastCast does.
 - **The fold is the slate.** The pure `Slate` is the only thing that combines the two feeds; it returns its game
   events and, apart, observations for telemetry. It remembers each game it saw finish, so a lagging poll cannot
-  start it again; the final is forgotten when no listing names it. The Hub's one `Slate` service runs it live.
+  start it again: only a snapshot later on the clock than the final, whatever its status, or at the same clock with
+  more points, is past it, so overtime after a spurious final or a postponed game resuming starts it again. The final
+  is forgotten when no listing names it. The Hub's one `Slate` service runs it live.
 - **Corpus days are build products, rebuilt rather than migrated.** A day is two typed files, poll and push lines,
   built from the feed log (captured) or synthesized from the archive of ESPN's finished games (backfilled), and played
   through the slate on virtual time by `corpus run`. A decoder or format change rebuilds days; nothing is migrated.

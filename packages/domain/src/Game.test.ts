@@ -300,6 +300,30 @@ describe("GameSnapshot#advancedTo", () => {
   })
 })
 
+describe("GameSnapshot#isAheadOfOver", () => {
+  const final = liveSnapshot({ status: "final", period: 4, clock: "0:00" })
+  const scored = (home: number, overrides: Partial<GameSnapshot> = {}) =>
+    snapshot({ ...final, ...overrides, home: { ...final.home, score: home } })
+
+  it("play lagging the end of the game is not ahead", () => {
+    assert.isFalse(snapshot({ ...final, status: "live", clock: "0:03" }).isAheadOfOver(final))
+    assert.isFalse(snapshot({ ...final, status: "live" }).isAheadOfOver(final))
+  })
+  it("overtime after a final is ahead", () => {
+    assert.isTrue(snapshot({ ...final, status: "live", period: 5, clock: "15:00" }).isAheadOfOver(final))
+  })
+  it("at the same clock, more points is ahead and as many is not", () => {
+    assert.isTrue(scored(final.home.score + 1).isAheadOfOver(final))
+    assert.isFalse(scored(final.home.score).isAheadOfOver(final))
+    assert.isFalse(scored(final.home.score - 1).isAheadOfOver(final))
+  })
+  it("a postponed game resuming is ahead once its clock runs", () => {
+    const postponed = liveSnapshot({ status: "postponed", period: 2, clock: "8:00" })
+    assert.isTrue(snapshot({ ...postponed, status: "live", clock: "7:40" }).isAheadOfOver(postponed))
+    assert.isFalse(snapshot({ ...postponed, status: "live" }).isAheadOfOver(postponed))
+  })
+})
+
 function game(id: string, status: GameStatus, kickoff: string) {
   return snapshot({ id: GameId.make(id), status, kickoff: DateTime.makeUnsafe(kickoff) })
 }

@@ -200,6 +200,17 @@ describe("Slate", () => {
       })
     )
 
+    it.effect("is started again, live, by overtime after a final", () =>
+      Effect.gen(function* () {
+        const overtime = snapshot({ ...playing, period: 5, clock: "15:00" })
+        const { next, observations } = yield* took(yield* finished, [listing("nfl", [overtime])], later(5))
+
+        assert.deepStrictEqual(outcomes(observations), ["taken"])
+        assert.deepStrictEqual(next.live.get(one)?.state, LiveGameState.Live({ updatedAt: later(5) }))
+        assert.deepStrictEqual(next.games(["nfl"]), [overtime])
+      })
+    )
+
     it.effect("says nothing new when the poll catches up to the final", () =>
       Effect.gen(function* () {
         const lagged = yield* taken(yield* finished, [listing("nfl", [playing])], later(5))
