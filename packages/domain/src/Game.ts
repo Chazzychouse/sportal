@@ -223,52 +223,77 @@ export class GameSnapshot extends Schema.Class<GameSnapshot>("sportal/GameSnapsh
    * of possession is a turnover only when the last play names an interception or a fumble and nobody scored.
    */
   eventsSince(previous: GameSnapshot): ReadonlyArray<GameEventKind> {
-    const scores = (["home", "away"] as const).flatMap((side) => {
+    return [
+      this.scoreEventsSince(previous),
+      this.possessionEventsSince(previous),
+      this.driveEventsSince(previous),
+      this.timeoutEventsSince(previous),
+      this.clockEventsSince(previous)
+    ].flat()
+  }
+
+  private scoreEventsSince(previous: GameSnapshot): ReadonlyArray<GameEventKind> {
+    return (["home", "away"] as const).flatMap((side) => {
       const points = this[side].score - previous[side].score
       return points > 0 ? [GameEventKind.ScoreChanged({ team: this[side].team.id, points })] : []
     })
+  }
+
+  private possessionEventsSince(previous: GameSnapshot): ReadonlyArray<GameEventKind> {
+    const team = this.situation?.possession
+    const before = previous.situation?.possession
+    if (team === undefined || before === undefined || team === before) return []
+
+    const scored = this.scoreEventsSince(previous).length > 0
+    const turnedOver = !scored && /intercept|fumble/i.test(this.situation?.lastPlay ?? "")
+    return [turnedOver ? GameEventKind.Turnover({ team }) : GameEventKind.PossessionChanged({ team })]
+  }
+
+  private driveEventsSince(previous: GameSnapshot): ReadonlyArray<GameEventKind> {
     const before = previous.situation
     const after = this.situation
     const team = after?.possession
+    if (team === undefined || after === undefined) return []
+
     // Only a change on the same team's drive is news, except that a new drive starting inside the 40 (a turnover
     // on a short field) is reported: a short field is what the Director should anticipate.
     const already = (test: (situation: Situation) => boolean) =>
       before !== undefined && before.possession === team && test(before)
+
+    return [
+      ...(after.inScoringRange() && !already((s) => s.inScoringRange())
+        ? [GameEventKind.ReachedScoringRange({ team })]
+        : []),
+      ...(after.inRedZone() && !already((s) => s.inRedZone())
+        ? [GameEventKind.EnteredRedZone({ team })]
+        : []),
+      ...(after.goalToGo() && !already((s) => s.goalToGo()) ? [GameEventKind.GoalToGo({ team })] : []),
+      ...(after.down === 4 && !already((s) => s.down === 4 && s.yardLine === after.yardLine)
+        ? [GameEventKind.FourthDown({ team })]
+        : [])
+    ]
+  }
+
+  private timeoutEventsSince(previous: GameSnapshot): ReadonlyArray<GameEventKind> {
+    const before = previous.situation
+    const after = this.situation
+    if (before === undefined || after === undefined) return []
+
     // One fewer in the same period only: a new period resets counts, and a poll without counts reads as zero.
     const tookOne = (was: number, now: number) => this.period === previous.period && was - now === 1
+
     return [
-      scores,
-      team !== undefined && before?.possession !== undefined && team !== before.possession
-        ? [
-            scores.length === 0 && /intercept|fumble/i.test(after?.lastPlay ?? "")
-              ? GameEventKind.Turnover({ team })
-              : GameEventKind.PossessionChanged({ team })
-          ]
-        : [],
-      team !== undefined && after !== undefined
-        ? [
-            ...(after.inScoringRange() && !already((s) => s.inScoringRange())
-              ? [GameEventKind.ReachedScoringRange({ team })]
-              : []),
-            ...(after.inRedZone() && !already((s) => s.inRedZone())
-              ? [GameEventKind.EnteredRedZone({ team })]
-              : []),
-            ...(after.goalToGo() && !already((s) => s.goalToGo()) ? [GameEventKind.GoalToGo({ team })] : []),
-            ...(after.down === 4 && !already((s) => s.down === 4 && s.yardLine === after.yardLine)
-              ? [GameEventKind.FourthDown({ team })]
-              : [])
-          ]
-        : [],
-      before !== undefined && after !== undefined
-        ? [
-            ...(tookOne(before.homeTimeouts, after.homeTimeouts)
-              ? [GameEventKind.TimeoutTaken({ team: this.home.team.id })]
-              : []),
-            ...(tookOne(before.awayTimeouts, after.awayTimeouts)
-              ? [GameEventKind.TimeoutTaken({ team: this.away.team.id })]
-              : [])
-          ]
-        : [],
+      ...(tookOne(before.homeTimeouts, after.homeTimeouts)
+        ? [GameEventKind.TimeoutTaken({ team: this.home.team.id })]
+        : []),
+      ...(tookOne(before.awayTimeouts, after.awayTimeouts)
+        ? [GameEventKind.TimeoutTaken({ team: this.away.team.id })]
+        : [])
+    ]
+  }
+
+  private clockEventsSince(previous: GameSnapshot): ReadonlyArray<GameEventKind> {
+    return [
       this.inTwoMinuteDrill() && !previous.inTwoMinuteDrill() ? [GameEventKind.TwoMinuteDrill()] : [],
       this.inOvertime() && !previous.inOvertime() ? [GameEventKind.Overtime()] : [],
       this.period > previous.period && previous.period >= 1
