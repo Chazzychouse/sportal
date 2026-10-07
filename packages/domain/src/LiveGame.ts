@@ -13,7 +13,7 @@ export type LiveGameState = Data.TaggedEnum<{
 }>
 export const LiveGameState = Data.taggedEnum<LiveGameState>()
 
-/** One game as the Hub follows it: its latest snapshot, the feed that gave it, its state, and its plays. Folded from deliveries. */
+/** One game as the Hub follows it: its latest snapshot, the feed that gave it, its state, and its plays. Built from deliveries. */
 export class LiveGame extends Data.Class<{
   readonly snapshot: GameSnapshot
   readonly from: DeliverySource
@@ -52,8 +52,8 @@ export class LiveGame extends Data.Class<{
    * The live game after a `Snapshot` or `Plays` delivery at `now`, and what happened; none when nothing changes.
    *
    * A snapshot behind in game time is none. A poll at the same game time as a live game's pushed snapshot only
-   * refreshes it: the push wins a tie, since the poll lags it. Once the game has plays, they decide the events they
-   * cover (`fromPlays`), and a snapshot gives only the rest. A `Plays` delivery replaces the list.
+   * refreshes it: the push wins a tie, since the poll lags it. A snapshot gives the events of its changes, whether or
+   * not the game has plays; a `Plays` delivery replaces the list and gives only the play events of its new plays.
    */
   take(
     delivery: Extract<Delivery, { readonly _tag: "Snapshot" | "Plays" }>,
@@ -62,10 +62,7 @@ export class LiveGame extends Data.Class<{
     if (delivery._tag === "Plays") {
       const plays = delivery.plays.toSorted(Play.order)
       if (Equal.equals(plays, this.plays)) return { liveGame: Option.none(), events: [] }
-      const events = Play.eventsSince(this.plays, plays, {
-        home: this.snapshot.home.team.id,
-        away: this.snapshot.away.team.id
-      })
+      const events = Play.eventsSince(this.plays, plays)
       return { liveGame: Option.some(new LiveGame({ ...this, plays })), events }
     }
     const { snapshot, from } = delivery
@@ -77,9 +74,7 @@ export class LiveGame extends Data.Class<{
         events: []
       }
     }
-    const events = snapshot
-      .eventsSince(this.snapshot)
-      .filter((event) => this.plays.length === 0 || !fromPlays.has(event._tag))
+    const events = snapshot.eventsSince(this.snapshot)
     return {
       liveGame: Option.some(
         new LiveGame({
@@ -152,16 +147,3 @@ function stateOf(snapshot: GameSnapshot, now: DateTime.Utc): LiveGameState {
       return LiveGameState.Over()
   }
 }
-
-/** The tags a game's plays decide once it has any; its snapshots decide them only before. */
-const fromPlays: ReadonlySet<GameEventKind["_tag"]> = new Set([
-  "ScoreChanged",
-  "Turnover",
-  "PossessionChanged",
-  "TimeoutTaken",
-  "PeriodEnded",
-  "FourthDown",
-  "Played",
-  "BigPlay",
-  "Sack"
-])

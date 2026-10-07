@@ -156,6 +156,7 @@ describe("following the feed log", () => {
         taken.map(({ game, what }) => [game, what._tag]),
         [
           [one, "Played"],
+          [one, "ScoreChanged"],
           [one, "Played"]
         ]
       )

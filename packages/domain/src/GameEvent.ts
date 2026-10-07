@@ -4,8 +4,8 @@ import type { Play } from "./Play.ts"
 import type { TeamId } from "./Team.ts"
 
 /**
- * What happened in a game: from its plays when it has them (`Play.eventsSince`), from comparing two snapshots otherwise
- * (`GameSnapshot#eventsSince`). Derived, never stored as truth. `team` is the team that scored, has the ball, gained it,
+ * What happened in a game: a play event (`Played`, `BigPlay`, `Sack`) from its plays (`Play.eventsSince`), any other
+ * from comparing two snapshots (`GameSnapshot#eventsSince`), each said once. Derived, never stored as truth. `team` is the team that scored, has the ball, gained it,
  * or called the timeout.
  */
 export type GameEventKind = Data.TaggedEnum<{

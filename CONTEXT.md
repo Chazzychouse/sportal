@@ -51,8 +51,8 @@ Every exported type name must be a term here, except the wire schemas in `*Paylo
 | **Recent plays** | Each game's last ten plays, in sequence order, sent to the web with the slate; `RecentPlays` in code. A game with no plays is absent. | |
 | **Play id** | The feed's own id for one play; `PlayId` in code. Not ordered: plays are ordered by their sequence. | |
 | **Play kind** | What a play was: a rush, a pass or incompletion, a sack, an interception, a fumble the offense kept or one it lost, a kick, a try, a penalty, a timeout, or the end of a period; `PlayKind` in code. | play type |
-| **GameEvent** | Something that happened in a game, stamped with the game, the instant it was told, and what happened (a **Game event kind**). Derived, never stored. | alert, update |
-| **Game event kind** | What happened, without when or where: a score, a turnover, a play, a period ending. From a game's plays when it has them, from comparing two snapshots otherwise. | event |
+| **GameEvent** | Something that happened in a game, stamped with the game, the instant it was told, and what happened (a **Game event kind**). Derived, never stored: from its snapshot's changes, or from its plays for a play event. | alert, update |
+| **Game event kind** | What happened, without when or where: a score, a turnover, a play, a period ending. A play event (a play, a big play, a sack) from a game's plays; every other from comparing two snapshots. | event |
 
 ### Data and video
 

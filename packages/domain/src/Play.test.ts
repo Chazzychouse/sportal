@@ -37,10 +37,8 @@ describe("Play", () => {
 
 const home = team("HOME").id
 const away = team("AWAY").id
-const teams = { home, away }
 const next = (overrides: Partial<Play>) => play({ id: PlayId.make("2"), sequence: 2, ...overrides })
-const since = (before: ReadonlyArray<Play>, after: ReadonlyArray<Play>) =>
-  Play.eventsSince(before, after, teams)
+const since = (before: ReadonlyArray<Play>, after: ReadonlyArray<Play>) => Play.eventsSince(before, after)
 const tags = (events: ReadonlyArray<GameEventKind>) => events.map((event) => event._tag)
 
 describe("Play.eventsSince", () => {
@@ -51,54 +49,25 @@ describe("Play.eventsSince", () => {
     assert.deepStrictEqual(since([first], [new Play({ ...first, text: "Rush for 1 yard (revised)" })]), [])
   })
 
-  it("reports a touchdown pass as played, scored, and big", () => {
+  it("reports a touchdown pass as played and big, and leaves the score to the snapshot", () => {
     const touchdown = next({ kind: "pass", yards: 25, scoring: true, homeScore: 6 })
     const events = since([play()], [play(), touchdown])
     assert.deepStrictEqual(events, [
       GameEventKind.Played({ play: touchdown }),
-      GameEventKind.ScoreChanged({ team: home, points: 6 }),
       GameEventKind.BigPlay({ team: home, yards: 25 })
     ])
   })
 
-  it("credits a defensive score to the side whose score rose", () => {
-    const pickSix = next({
-      kind: "interception",
-      scoring: true,
-      awayScore: 6,
-      end: { team: away }
-    })
-    const events = since([], [play(), pickSix])
-    assert.deepStrictEqual(
-      events.filter((event) => event._tag === "ScoreChanged"),
-      [GameEventKind.ScoreChanged({ team: away, points: 6 })]
-    )
+  it("reports a defensive score as played only", () => {
+    const pickSix = next({ kind: "interception", scoring: true, awayScore: 6, end: { team: away } })
+    assert.deepStrictEqual(tags(since([], [play(), pickSix])), ["Played", "Played"])
   })
 
-  it("reports an interception as a turnover for the team that took the ball, not a change of possession", () => {
-    const picked = next({ kind: "interception", end: { team: away } })
-    const events = since([play()], [play(), picked])
-    assert.deepStrictEqual(tags(events), ["Played", "Turnover"])
-    assert.deepStrictEqual(events[1], GameEventKind.Turnover({ team: away }))
-  })
-
-  it("reports a lost fumble as a turnover", () => {
-    const lost = next({ kind: "fumbleLost", end: { team: away } })
-    assert.deepStrictEqual(tags(since([play()], [play(), lost])), ["Played", "Turnover"])
-  })
-
-  it("reports a punt as a change of possession, and a fumble the offense kept as nothing but played", () => {
-    const punt = next({ kind: "punt", end: { team: away } })
-    assert.deepStrictEqual(since([play()], [play(), punt]).slice(1), [
-      GameEventKind.PossessionChanged({ team: away })
-    ])
-    const kept = next({ kind: "fumble" })
-    assert.deepStrictEqual(tags(since([play()], [play(), kept])), ["Played"])
-  })
-
-  it("reports no change of possession when the play's start has no team", () => {
-    const unknown = next({ kind: "punt", start: {}, end: { team: away } })
-    assert.deepStrictEqual(tags(since([play()], [play(), unknown])), ["Played"])
+  it("reports an interception, a lost fumble, a punt, and a kept fumble as played only", () => {
+    for (const kind of ["interception", "fumbleLost", "punt", "fumble"] as const) {
+      const turned = next({ kind, end: { team: away } })
+      assert.deepStrictEqual(since([play()], [play(), turned]), [GameEventKind.Played({ play: turned })])
+    }
   })
 
   it("reports a long punt or penalty as played, not a big play", () => {
@@ -108,24 +77,13 @@ describe("Play.eventsSince", () => {
     assert.deepStrictEqual(tags(since([play()], [play(), penalty])), ["Played"])
   })
 
-  it("reports a team timeout, and an official timeout as nothing but played", () => {
+  it("reports a timeout, an end of period, and a fourth-down play as played only", () => {
     const called = next({ kind: "timeout", team: away })
-    assert.deepStrictEqual(since([play()], [play(), called]).slice(1), [
-      GameEventKind.TimeoutTaken({ team: away })
-    ])
-    const official = next({ kind: "timeout", team: undefined })
-    assert.deepStrictEqual(tags(since([play()], [play(), official])), ["Played"])
-  })
-
-  it("reports the end of a period with its period, and fourth down", () => {
     const ended = next({ kind: "endPeriod", period: 2 })
-    assert.deepStrictEqual(since([play()], [play(), ended]).slice(1), [
-      GameEventKind.PeriodEnded({ period: 2 })
-    ])
     const stopped = next({ end: { down: 4, distance: 3, yardsToEndzone: 40, team: home } })
-    assert.deepStrictEqual(since([play()], [play(), stopped]).slice(1), [
-      GameEventKind.FourthDown({ team: home })
-    ])
+    for (const one of [called, ended, stopped]) {
+      assert.deepStrictEqual(since([play()], [play(), one]), [GameEventKind.Played({ play: one })])
+    }
   })
 
   it("reports a sack for the team sacked", () => {
@@ -136,11 +94,6 @@ describe("Play.eventsSince", () => {
   it("reports two new plays at once in sequence order", () => {
     const late = play({ id: PlayId.make("3"), sequence: 3, kind: "sack" })
     const early = next({ kind: "punt", end: { team: away } })
-    assert.deepStrictEqual(tags(since([play()], [late, play(), early])), [
-      "Played",
-      "PossessionChanged",
-      "Played",
-      "Sack"
-    ])
+    assert.deepStrictEqual(tags(since([play()], [late, play(), early])), ["Played", "Played", "Sack"])
   })
 })

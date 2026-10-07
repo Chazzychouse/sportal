@@ -305,10 +305,7 @@ describe("LiveGame#take, plays", () => {
   const take = (game: LiveGame, plays: ReadonlyArray<Play>) =>
     game.take(Delivery.cases.Plays.make({ game: live.id, plays }), later)
   const withFirst = Option.getOrThrow(take(liveGame, [first]).liveGame)
-  const secondsEvents = [
-    GameEventKind.Played({ play: second }),
-    GameEventKind.ScoreChanged({ team: live.home.team.id, points: 7 })
-  ]
+  const secondsEvents = [GameEventKind.Played({ play: second })]
 
   it("replaces the list, in Play.order, and gives the new plays' events", () => {
     const { liveGame: next, events } = take(withFirst, [second, first])
@@ -355,7 +352,7 @@ describe("LiveGame#take, a snapshot's events", () => {
       "WentFinal"
     )
   })
-  it("once plays exist, the plays own the score change, and the snapshot still goes final", () => {
+  it("once plays exist, the snapshot still gives the score change, and goes final", () => {
     const withPlay = Option.getOrThrow(
       liveGame.take(Delivery.cases.Plays.make({ game: live.id, plays: [play()] }), later).liveGame
     )
@@ -363,7 +360,7 @@ describe("LiveGame#take, a snapshot's events", () => {
       Delivery.cases.Snapshot.make({ snapshot: scoredFinal, from: "poll" }),
       later
     )
-    assert.notInclude(
+    assert.include(
       events.map((event) => event._tag),
       "ScoreChanged"
     )
@@ -371,6 +368,41 @@ describe("LiveGame#take, a snapshot's events", () => {
       events.map((event) => event._tag),
       "WentFinal"
     )
+  })
+  it("a snapshot's score change, then the touchdown play: ScoreChanged once, then Played only", () => {
+    const scored = snapshot({ status: "live", period: 2, clock: "9:00", home: { ...live.home, score: 7 } })
+    const touchdown = play({ id: PlayId.make("2"), sequence: 2, scoring: true, homeScore: 7, kind: "pass" })
+    const withPlay = Option.getOrThrow(
+      liveGame.take(Delivery.cases.Plays.make({ game: live.id, plays: [play()] }), later).liveGame
+    )
+    const byScore = withPlay.take(Delivery.cases.Snapshot.make({ snapshot: scored, from: "poll" }), later)
+    assert.deepStrictEqual(byScore.events, [
+      GameEventKind.ScoreChanged({ team: live.home.team.id, points: 7 })
+    ])
+    const byPlay = Option.getOrThrow(byScore.liveGame).take(
+      Delivery.cases.Plays.make({ game: live.id, plays: [play(), touchdown] }),
+      later
+    )
+    assert.deepStrictEqual(byPlay.events, [GameEventKind.Played({ play: touchdown })])
+  })
+  it("the touchdown play, then the snapshot's score change: Played, then ScoreChanged, once each", () => {
+    const scored = snapshot({ status: "live", period: 2, clock: "9:00", home: { ...live.home, score: 7 } })
+    const touchdown = play({ id: PlayId.make("2"), sequence: 2, scoring: true, homeScore: 7, kind: "pass" })
+    const withPlay = Option.getOrThrow(
+      liveGame.take(Delivery.cases.Plays.make({ game: live.id, plays: [play()] }), later).liveGame
+    )
+    const byPlay = withPlay.take(
+      Delivery.cases.Plays.make({ game: live.id, plays: [play(), touchdown] }),
+      later
+    )
+    assert.deepStrictEqual(byPlay.events, [GameEventKind.Played({ play: touchdown })])
+    const bySnapshot = Option.getOrThrow(byPlay.liveGame).take(
+      Delivery.cases.Snapshot.make({ snapshot: scored, from: "poll" }),
+      later
+    )
+    assert.deepStrictEqual(bySnapshot.events, [
+      GameEventKind.ScoreChanged({ team: live.home.team.id, points: 7 })
+    ])
   })
   it("keeps the plays", () => {
     const withPlay = Option.getOrThrow(

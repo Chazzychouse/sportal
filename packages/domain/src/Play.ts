@@ -54,55 +54,25 @@ export class Play extends Schema.Class<Play>("sportal/Play")({
   static readonly order: Order.Order<Play> = Order.mapInput(Order.Number, (play: Play) => play.sequence)
 
   /**
-   * The events of the plays in `after` that `before` does not have, in `Play.order`. `teams` say which side is which,
-   * since a play's own `team` is not always the side that scored.
+   * The events of the plays in `after` that `before` does not have, in `Play.order`: each play is `Played`, and a
+   * big play or a sack says so. What a play changed (the score, the ball, the clock) is the snapshot's to say.
    */
-  static eventsSince(
-    before: ReadonlyArray<Play>,
-    after: ReadonlyArray<Play>,
-    teams: { readonly home: TeamId; readonly away: TeamId }
-  ): ReadonlyArray<GameEventKind> {
+  static eventsSince(before: ReadonlyArray<Play>, after: ReadonlyArray<Play>): ReadonlyArray<GameEventKind> {
     const known = new Set(before.map((play) => play.id))
-    const ordered = after.toSorted(Play.order)
-    return ordered.flatMap((play, index) =>
-      known.has(play.id) ? [] : eventsOf(play, ordered[index - 1], teams)
-    )
+    return after
+      .toSorted(Play.order)
+      .filter((play) => !known.has(play.id))
+      .flatMap(eventsOf)
   }
 }
 
 /** A play of at least this many yards is a big play. */
 const bigPlayYards = 20
 
-function eventsOf(
-  play: Play,
-  previous: Play | undefined,
-  teams: { readonly home: TeamId; readonly away: TeamId }
-): ReadonlyArray<GameEventKind> {
-  const rises = play.scoring
-    ? [
-        { team: teams.home, points: play.homeScore - (previous?.homeScore ?? 0) },
-        { team: teams.away, points: play.awayScore - (previous?.awayScore ?? 0) }
-      ].filter((rise) => rise.points > 0)
-    : []
-  const taker = play.end.team
-  const turnedOver = play.kind === "interception" || play.kind === "fumbleLost"
+function eventsOf(play: Play): ReadonlyArray<GameEventKind> {
   const sacked = play.team ?? play.start.team
   return [
     [GameEventKind.Played({ play })],
-    rises.map(GameEventKind.ScoreChanged),
-    taker !== undefined && turnedOver ? [GameEventKind.Turnover({ team: taker })] : [],
-    taker !== undefined &&
-    !turnedOver &&
-    !play.scoring &&
-    play.start.team !== undefined &&
-    play.start.team !== taker
-      ? [GameEventKind.PossessionChanged({ team: taker })]
-      : [],
-    play.kind === "timeout" && play.team !== undefined
-      ? [GameEventKind.TimeoutTaken({ team: play.team })]
-      : [],
-    play.kind === "endPeriod" ? [GameEventKind.PeriodEnded({ period: play.period })] : [],
-    play.end.down === 4 && taker !== undefined ? [GameEventKind.FourthDown({ team: taker })] : [],
     (play.kind === "rush" || play.kind === "pass") && play.yards >= bigPlayYards && play.team !== undefined
       ? [GameEventKind.BigPlay({ team: play.team, yards: play.yards })]
       : [],
