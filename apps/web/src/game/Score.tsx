@@ -14,6 +14,7 @@ export function Score(props: { game: GameSnapshot; side: "home" | "away"; size?:
   const muted = scored && team.score < game[props.side === "home" ? "away" : "home"].score
   const mute = muted ? "text-muted-foreground" : ""
   const score = scored ? team.score : null
+
   if (props.size === "board")
     return (
       <>

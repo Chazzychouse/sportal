@@ -19,8 +19,10 @@ export function Field(props: { game: GameSnapshot; plays: ReadonlyArray<Play>; c
     Drawing.Settled({ last: Math.max(-1, ...initial.map((play) => play.sequence)) })
   )
   useEffect(() => dispatch({ _tag: "Arrived", plays, game }), [plays, game])
+
   const ball = game.inPlay() ? game.ball() : Option.none()
   const situation = game.situation
+
   return (
     <svg
       viewBox={`0 0 ${length} ${width}`}
@@ -190,6 +192,7 @@ function Scrimmage(props: { game: GameSnapshot; situation: Situation; spot: Ball
     situation.distance === undefined || situation.goalToGo()
       ? undefined
       : Math.min(110, Math.max(10, x + direction * situation.distance))
+
   return (
     <g>
       {situation.inRedZone() && (
@@ -226,11 +229,13 @@ function PlayArrow(props: {
   useEffect(() => {
     if (missing) onDrawn()
   }, [missing, onDrawn])
+
   return Option.match(spots, {
     onNone: () => null,
     onSome: ({ start, end }) => {
       const scorer = play.scoring ? scorerOf(game, props.plays, play) : undefined
       const losing = Play.gainsYards(play) && play.lostYards()
+
       return (
         <g>
           {scorer !== undefined && (

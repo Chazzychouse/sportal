@@ -11,6 +11,7 @@ export function ScenarioStrip(props: { game: GameSnapshot }) {
   const { game } = props
   const situation = game.situation
   const down = situation?.down
+
   return (
     <div className="flex items-center justify-between gap-[3vmin] px-[4vmin] py-[2vmin] font-sans">
       <Side game={game} side="away" />

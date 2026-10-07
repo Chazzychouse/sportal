@@ -14,6 +14,7 @@ export function ScenarioStream(props: { game: GameId }) {
   const plays = usePlays(props.game)
   const game = slate.find((candidate) => candidate.id === props.game)
   useTone(props.game)
+
   return (
     <div className="flex h-screen w-screen flex-col overflow-hidden bg-black text-white">
       {game === undefined ? (
