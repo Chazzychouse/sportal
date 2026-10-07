@@ -59,12 +59,12 @@ export class LiveGames extends Data.Class<{
     return leagues.flatMap((league) => asFolded(this.listed.get(league) ?? [], this.live))
   }
 
-  /** The last ten plays of each game `slate(leagues)` lists that has plays in `live`. */
-  recentPlays(leagues: ReadonlyArray<LeagueId>): RecentPlays {
+  /** The last `recentPlayCount` plays of each of `games` that has plays in `live`. */
+  recentPlays(games: ReadonlyArray<GameSnapshot>): RecentPlays {
     return Object.fromEntries(
-      this.slate(leagues).flatMap(({ id }) => {
+      games.flatMap(({ id }) => {
         const plays = this.live.get(id)?.plays ?? []
-        return plays.length === 0 ? [] : [[id, plays.slice(-10)] as const]
+        return plays.length === 0 ? [] : [[id, plays.slice(-recentPlayCount)] as const]
       })
     )
   }
@@ -107,6 +107,9 @@ export class LiveGames extends Data.Class<{
     )
   }
 }
+
+/** How many of a game's plays `recentPlays` keeps: its last ten. */
+const recentPlayCount = 10
 
 /** What one take or tick did to one game, for telemetry to tell. */
 export type FoldReport = Data.TaggedEnum<{

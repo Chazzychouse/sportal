@@ -13,34 +13,23 @@ import { LiveGames } from "./LiveGames.ts"
 export class Slate extends Context.Service<
   Slate,
   {
-    readonly latest: Effect.Effect<{
-      readonly games: ReadonlyArray<GameSnapshot>
-      readonly recentPlays: RecentPlays
-    }>
+    readonly latest: Effect.Effect<Published>
     /** The latest first, then each new one. */
-    readonly changes: Stream.Stream<{
-      readonly games: ReadonlyArray<GameSnapshot>
-      readonly recentPlays: RecentPlays
-    }>
+    readonly changes: Stream.Stream<Published>
   }
 >()("sportal/hub/Slate") {
   static readonly layer: Layer.Layer<Slate, never, LiveGames> = Layer.effect(
     Slate,
     Effect.gen(function* () {
       const liveGames = yield* LiveGames
-      const state = yield* SubscriptionRef.make<{
-        readonly games: ReadonlyArray<GameSnapshot>
-        readonly recentPlays: RecentPlays
-      }>({ games: [], recentPlays: {} })
+      const state = yield* SubscriptionRef.make<Published>({ games: [], recentPlays: {} })
       yield* Effect.forkScoped(
         liveGames.changes.pipe(
           Stream.debounce("250 millis"),
-          Stream.runForEach((folded) =>
-            SubscriptionRef.set(state, {
-              games: folded.slate(LeagueId.literals),
-              recentPlays: folded.recentPlays(LeagueId.literals)
-            })
-          )
+          Stream.runForEach((folded) => {
+            const games = folded.slate(LeagueId.literals)
+            return SubscriptionRef.set(state, { games, recentPlays: folded.recentPlays(games) })
+          })
         ),
         { startImmediately: true }
       )
@@ -48,3 +37,6 @@ export class Slate extends Context.Service<
     })
   )
 }
+
+/** What the slate publishes: the games and their recent plays. */
+type Published = { readonly games: ReadonlyArray<GameSnapshot>; readonly recentPlays: RecentPlays }

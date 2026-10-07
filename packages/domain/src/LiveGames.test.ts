@@ -230,16 +230,19 @@ describe("LiveGames", () => {
           t0
         ).pipe(Effect.flatMap((fold) => taken(fold, [playsOf(one, 12), playsOf(two, 3)], t0)))
         assert.deepStrictEqual(
-          fold.recentPlays(["fbs"])[one]?.map(({ sequence }) => sequence),
+          fold.recentPlays(fold.slate(["fbs"]))[one]?.map(({ sequence }) => sequence),
           [3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
         )
-        assert.deepStrictEqual(Object.keys(fold.recentPlays(["fbs"])), [one])
+        assert.deepStrictEqual(Object.keys(fold.recentPlays(fold.slate(["fbs"]))), [one])
         assert.deepStrictEqual(
-          fold.recentPlays(["nfl"])[two]?.map(({ sequence }) => sequence),
+          fold.recentPlays(fold.slate(["nfl"]))[two]?.map(({ sequence }) => sequence),
           [1, 2, 3]
         )
-        assert.deepStrictEqual(Object.keys(fold.recentPlays(["nfl"])), [two])
-        assert.deepStrictEqual(Object.keys(fold.recentPlays(["fbs", "nfl"])).toSorted(), [one, two])
+        assert.deepStrictEqual(Object.keys(fold.recentPlays(fold.slate(["nfl"]))), [two])
+        assert.deepStrictEqual(Object.keys(fold.recentPlays(fold.slate(["fbs", "nfl"]))).toSorted(), [
+          one,
+          two
+        ])
       })
   )
 
