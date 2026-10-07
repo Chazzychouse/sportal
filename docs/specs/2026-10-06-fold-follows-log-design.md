@@ -108,27 +108,27 @@ LiveGames.layer: Layer<LiveGames, never, FeedLog | Decoder | DateTime.CurrentTim
 
 ```
            build                                  catch-up ends                 decode dies
- ──────▶ Replaying ───────────────────────────────▶ Live ─────────────────────────▶ Stopped
+ ──────▶ Replaying ───────────────────────────────▶ Live ─────────────────────────▶ Halted
           (layer build waits here)          (layer build returns,            (logged at Error;
-                                             timer starts)                     fold frozen)
+                                             timer starts)                     no more frames)
 ```
 
 - The layer computes the day start (04:00 in the current zone, or the day before's: today's `dayStart`, which moves
   here from Ingest), subscribes to the log, then decodes one stream: the replay from the day start, then every
   appended frame after the replay's last `seq`. One decode, so each FastCast topic's document carries from replay to
   live, as today.
-- **Replaying** ends at the replay's last frame. Each `Decoded` is taken quietly (§6). At the boundary the layer
+- **Replaying** ends at the replay's last frame, decided by `seq`: a frame at or before the last `seq` the replay read is replayed, whatever a decode that reads ahead has handed on so far. Each `Decoded` is taken quietly (§6). At the boundary the layer
   sets every held game's gauges once and logs the summary line (frames, deliveries, plays, live games, duration), and
   the build returns. Nothing is served from a fold that is still catching up, as today, and no member is needed to
   say so: layer order says it.
 - **Live**: each `Decoded` is taken loudly, and its resyncs go to `demand`.
-- **Stopped**: a decode defect after the catch-up is logged at Error once ("frames are no longer taken into the fold
-  until the Hub restarts"); the fold keeps serving what it has. Polls and pushes still reach the log, so a restart
+- **Halted** (as built; first drafted as Stopped): a decode defect after the catch-up is logged at Error once ("frames are no longer taken into the fold
+  until the Hub restarts"); the fold keeps serving what it has, and its timer keeps ticking and is told and gauged, so a game still goes stale or over. Polls and pushes still reach the log, so a restart
   replays them. A decode that dies during Replaying fails the layer, as today.
 - The timer forks when the build returns, so nothing ticks a replayed game between two recorded frames. The
   `replaying` semaphore goes. The timer and the follower write through the state's lock, as today; a frame received
   just before a timer tick cannot move `reached` back, as today.
-- `through(seq)` returns the first state whose `seq` is at or past `seq`, or the latest once the fold is Stopped,
+- `through(seq)` returns the first state whose `seq` is at or past `seq`, or the latest once the fold is Halted,
   so a dead fold never stalls Ingest's polling. It waits on the state itself, not on `changes`.
 - One span per frame, `LiveGames.take`, annotated with the frame's `seq` and its delivery count;
   `sportal_take_duration` becomes *How long the fold takes to apply one frame*, and its dashboard panel's title says
@@ -191,18 +191,23 @@ provider/snapshot/
 - `SnapshotProvider.layer` takes, as data: the games a poll of a league answers (an Effect that may fail with
   `ProviderError`), an optional push of frames, its `polling`, and its `reconnect`. A poll's frame is a `Listing`.
 - **Written scenarios** become `SnapshotProvider` driven by `Scenario.slateAt` on scenario time, polled at each written
-  frame's time and at least every 10 s (today's `pollingAt`).
+  frame's time and at least every 10 s (today's `pollingAt`). As built, they moved in the snapshot-feed task, not the
+  provider/decoder one, and `ScenarioProvider.layer(written)` hands the feed to `SnapshotProvider.layer`.
+- **Migration (as built):** the feed log's migration `2_allow_snapshot_feed` rebuilds `feed_frame` (SQLite cannot change a
+  CHECK in place) so `feed` also allows `'snapshot'`, keeping every row and index; a test populates a log first.
 - **`TestProvider.ts` is deleted.** What tests need beyond the adapter goes in `TestFeed.ts` (a `Test*` file, so knip
   keeps it out of production), and none of it decodes: `delivered(delivery)` appends a snapshot frame to the feed
   log and returns the fold `through` it; `pushed(...)` builds a snapshot push frame; `listedBy(league)` polls and
-  decodes with the provided pair. A scripted-responses provider is a few lines in `Ingest.test.ts`, its only user.
+  decodes with the provided pair. As built, `TestFeed` also has `polled(games, options)` (the snapshot feed as a test's
+  provider), `liveGames(frames, options)` (the live games over an in-memory feed log, replaying `frames`), `framed`,
+  `dyingAt(body)` (a decode that dies at a body), and `decodedFrames`. A scripted-responses provider is a few lines in `Ingest.test.ts`, its only user.
 - Glossary: new row **Snapshot feed** — *A provider whose frames are our own deliveries, one per frame: what written
   scenarios play and tests drive.* **Scenario** says a written one plays as the snapshot feed.
 
 ## 6. One telling, told the phase
 
 ```
-Following = Data.TaggedEnum<{ Replaying: {}; Live: {}; Stopped: {} }>   // §3's states, exported from LiveGames.ts
+Following = Data.TaggedEnum<{ Replaying: {}; Live: {}; Halted: {} }>   // §3's states, exported from LiveGames.ts
 
 LiveGamesTelemetry.told(following, decoded, reports): Effect<void>
 ```
@@ -214,7 +219,7 @@ LiveGamesTelemetry.told(following, decoded, reports): Effect<void>
 - `reported` and `quiet` merge into the one `$match`, whose `Replaying` arm is today's `quiet` arm. Notice gating
   leaves Ingest.
 - Glossary: new row **Following** — *Where the live games are in reading the feed log: replaying the day before
-  the Hub serves, live, or stopped by a decode defect; `Following` in code.*
+  the Hub serves, live, or halted by a decode defect; `Following` in code.*
 - `DecodeTelemetry.ts` moves from `ingest/` to `apps/hub/src/` beside `LiveGamesTelemetry.ts`, which calls it. Its
   doc comment says LiveGames tells notices only from frames after the replay.
 
@@ -241,11 +246,11 @@ No layer provides `Provider | Decoder`. Each adapter exports one layer per port.
 |---|---|---|
 | ESPN | `EspnProvider.layer: Layer<Provider, never, FastCast \| HttpClient>` | `EspnDecode.layer` |
 | Snapshot feed | `SnapshotProvider.layer(options)` | `SnapshotDecode.layer` |
-| Written scenario | `ScenarioProvider.written: Layer<Provider, ScenarioUnknown, HubConfig>` | `SnapshotDecode.layer` |
-| Recorded scenario | `ScenarioProvider.recorded: Layer<Provider, ScenarioUnknown \| ScenarioUnreadable, HubConfig \| RecordedScenarios>` | the recording provider's: `EspnDecode.layer` |
+| Scenario, provider | `ScenarioProvider.layer(written): Layer<Provider, ScenarioUnknown \| ScenarioUnreadable, HubConfig \| RecordedScenarios>`, given how a written scenario is played (`SnapshotProvider.layer`) | |
+| Scenario, decoder | | `ScenarioProvider.decoder({ written, recorded }): Layer<Decoder, never, HubConfig>`: `SnapshotDecode.layer` for a written scenario, `EspnDecode.layer` for a recorded one |
 
 - `HubMode` is still the only module naming providers. It gives `Provider` to Ingest and `Decoder` to `LiveGames`, and
-  one `FeedLog` to both (`Layer.provideMerge`). For a scenario it picks the written or the recorded pair by whether
+  one `FeedLog` to both (`Layer.provideMerge`). For a scenario, `ScenarioProvider.layer` and `ScenarioProvider.decoder` make one written-or-recorded choice, by whether
   `SPORTAL_SCENARIO` names a written scenario. The recorded scenario stops needing and providing `Decoder`.
 - `HubMode`'s compile-time check that a scenario provides what the live day does stays.
 - Tests of the fold (`LiveGames`, `Slate`, `GameHistory`, `HubServer`) provide an in-memory `FeedLog` and
@@ -260,7 +265,7 @@ Replace, don't layer: each test moves to the interface it now has, and the helpe
   read `latest`, `changes`, `events`, `through`. `deliveriesOf` and the hand-built replay pipeline go. New: the build
   returns only after the log's last frame at subscription is taken; a frame appended during the build is taken live,
   after the boundary, and told loudly; replaying a recorded day gives the same live games as taking it live;
-  `through(n)` answers for a frame that decodes only to a notice; `through` answers once Stopped; no notice is told
+  `through(n)` answers for a frame that decodes only to a notice; `through` answers once Halted; no notice is told
   from a replayed frame; `demand` starts with the current games, follows a change of which games are current, and
   carries a resync of a live frame but not of a replayed one.
 - **`Ingest.test.ts`:** a poll whose frame is undecodable does not delay the next poll (fails today: the regression
