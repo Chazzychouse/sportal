@@ -229,22 +229,20 @@ sportal/
     │       ├── Frame.ts            A feed frame as received, and the frame the log numbered
     │       ├── Gzip.ts             Frame bodies in and out of gzip
     │       ├── TestHubConfig.ts, TestTelemetry.ts   Layers for tests
-    │       ├── TestFeed.ts         The snapshot feed as a test's provider (`polled`), the live games over an in-memory feed log (`liveGames`), and frames and decodes for tests
+    │       ├── TestFeed.ts         The snapshot feed as a test's provider (`polled`), the live games over an in-memory feed log (`liveGames`), frames and decodes for tests, and the written scenarios as HubMode plays them
+    │       ├── TestSnapshotFeed.ts The snapshot feed: a provider whose frames are our own deliveries, its decode, and its wire shape; for tests only
     │       ├── hub-server/
     │       │   ├── HubServer.ts    Serves the API, the live stream, and the web UI's files
     │       │   └── LanAddresses.ts The addresses a phone on the home network can reach
     │       ├── provider/
     │       │   ├── Provider.ts     The port: poll, push, polling, reconnect; LiveFeed, LiveFeedDemand, Polling, Decoded, Notice, ProviderError
     │       │   ├── Decoder.ts      A provider's decode, and its only home; a layer of its own, paired with its provider by HubMode
-    │       │   ├── snapshot/       The snapshot feed: frames that are our own deliveries, played by written scenarios and tests
-    │       │   │   ├── SnapshotProvider.ts  A provider over a function from league to games, with its push and polling
-    │       │   │   ├── SnapshotDecode.ts    Its decode, a `Decoder`
-    │       │   │   └── SnapshotPayload.ts   Its wire shape
     │       │   └── espn/
     │       │       ├── EspnProvider.ts     Implements the port: polls, pushes through the FastCast service, and its polling Schedule
     │       │       ├── EspnDecode.ts       Frames to deliveries: listings, snapshots, plays, resyncs
     │       │       ├── EspnEvent.ts        One game as either ESPN feed spells it, as a GameSnapshot
     │       │       ├── EspnPlay.ts         ESPN's plays and their type ids, as Play
+    │       │       ├── EspnScript.ts       A scenario script written as the frames ESPN would have sent
     │       │       ├── FastCast.ts         ESPN's push, a service: the socket, as frames; its checkpoint retry is the schedule `FastCast.layer` builds it with
     │       │       ├── FastCastDocument.ts A topic's document, rebuilt from checkpoints and patches
     │       │       ├── FastCastMessage.ts  FastCast's wire shapes
@@ -258,13 +256,13 @@ sportal/
     │       │       ├── TestYouTubeTv.ts     A recorded guide for tests of other modules
     │       │       └── fixtures/            Recorded real payloads
     │       └── scenario/
-    │           ├── Scenario.ts         A written scenario: a timeline of game snapshots
-    │           ├── RecordedScenario.ts A recorded scenario: the raw frames of a recorded window
-    │           ├── RecordedScenarios.ts  Where recorded scenarios are kept, and reading one back
-    │           ├── ScenarioProvider.ts A scenario as the provider and its decoder: `layer(written)` and `decoder({ written, recorded })` make one written-or-recorded choice; polled, pushed, and polled again at its frames' times
+    │           ├── Scenario.ts         A scenario: a name and ESPN's frames, recorded or written
+    │           ├── ScenarioScript.ts   A written scenario before it is written as frames: each offset's slate and plays
+    │           ├── Scenarios.ts        Every scenario by name, recorded and written, and reading one back
+    │           ├── ScenarioProvider.ts A scenario as the provider: its frames polled, pushed, and polled again at their times
     │           ├── ScenarioClock.ts    Scenario time: the Hub's clock at HubConfig's scenario speed
     │           ├── ScenarioSource.ts   Every game carried on a synthetic stream page
-    │           └── written/            Scenarios written by hand, and their registry
+    │           └── written/            Scenario scripts written by hand, and their registry (`Scripts.ts`)
     │
     ├── web/
     │   └── src/
@@ -351,7 +349,7 @@ class Decoder extends Context.Service<Decoder, {
 }>()("sportal/hub/Decoder") {}
 ```
 
-- `poll` returns a league's scoreboard as received; the Hub logs it before anything decodes it. A provider's adapter provides its `Decoder` as a layer of its own, the only home of its decode, and `HubMode` pairs the two, so a recorded scenario decodes its frames as the provider that recorded them would. `decode` turns frames, polled or pushed, into exactly one `Decoded` per frame, carrying the frame's `seq` and receive time, its `Delivery`s (`Listing`, `Snapshot`, or `Plays`), the channels whose document had to be dropped (`resyncs`), and the `Notice`s decode made for telemetry. A frame that said nothing is a `Decoded` with three empty arrays. It never logs or counts. The snapshot feed (`provider/snapshot/`) is the provider written scenarios and tests play: its frames are our own deliveries.
+- `poll` returns a league's scoreboard as received; the Hub logs it before anything decodes it. A provider's adapter provides its `Decoder` as a layer of its own, the only home of its decode, and `HubMode` pairs the two, so a recorded scenario decodes its frames as the provider that recorded them would. `decode` turns frames, polled or pushed, into exactly one `Decoded` per frame, carrying the frame's `seq` and receive time, its `Delivery`s (`Listing`, `Snapshot`, or `Plays`), the channels whose document had to be dropped (`resyncs`), and the `Notice`s decode made for telemetry. A frame that said nothing is a `Decoded` with three empty arrays. It never logs or counts. The snapshot feed (`TestSnapshotFeed.ts`) is the provider tests play: its frames are our own deliveries. Every scenario, recorded or written, plays through ESPN's decode.
 - `push` is the live feed: one element per frame, raw, on a `demand` stream (`LiveFeedDemand`: `Games`, the current games whenever which they are changes, and `Resync`, a channel to read again from its checkpoint). ESPN's FastCast implements it (`docs/adr/0007-fastcast-live-feed.md`), a service the ESPN provider yields, whose checkpoint retry is the schedule `FastCast.layer` builds it with, and subscribes to the scoreboard topics (the leagues from `HubConfig`) and to a `gp-` topic for each game in `Games`. `reconnect` is the Schedule Ingest subscribes to the push again on when it fails.
 - `polling` is when to poll again, given the fold's slate after the last poll and the leagues that failed. Ingest runs `poll` repeated on it, once the fold has taken the poll's last frame; the adapter owns the rules.
 - Provider vocabulary stops at the folder edge. ESPN's "event", "competition", and "competitor" exist only in `EspnEvent.ts`, `FastCastMessage.ts`, and `EspnPlay.ts`.

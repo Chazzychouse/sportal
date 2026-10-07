@@ -1,10 +1,10 @@
-import { Scenario } from "../Scenario.ts"
+import { ScenarioScript } from "../ScenarioScript.ts"
 
 /**
  * Three red-zone trips at once, of different worth: a one-score fourth quarter, a tie in the third, and a
  * blowout. They end in a go-ahead touchdown, an interception, and a garbage-time field goal.
  */
-export const threeRedZonesAtOnce = Scenario.build("three-red-zones-at-once", [
+export const threeRedZonesAtOnce = ScenarioScript.build("three-red-zones-at-once", [
   {
     id: "rz-psu-iowa",
     home: "PSU",

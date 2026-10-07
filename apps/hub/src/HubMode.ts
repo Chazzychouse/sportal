@@ -7,14 +7,15 @@ import * as Ingest from "./Ingest.ts"
 import { LiveGames } from "./LiveGames.ts"
 import * as EspnDecode from "./provider/espn/EspnDecode.ts"
 import * as EspnProvider from "./provider/espn/EspnProvider.ts"
+import * as EspnScript from "./provider/espn/EspnScript.ts"
 import { FastCast } from "./provider/espn/FastCast.ts"
-import * as SnapshotDecode from "./provider/snapshot/SnapshotDecode.ts"
-import * as SnapshotProvider from "./provider/snapshot/SnapshotProvider.ts"
 import { Slate } from "./Slate.ts"
-import { RecordedScenarios } from "./scenario/RecordedScenarios.ts"
+import { Scenario } from "./scenario/Scenario.ts"
 import * as ScenarioClock from "./scenario/ScenarioClock.ts"
 import * as ScenarioProvider from "./scenario/ScenarioProvider.ts"
 import * as ScenarioSource from "./scenario/ScenarioSource.ts"
+import { Scenarios } from "./scenario/Scenarios.ts"
+import { scripts } from "./scenario/written/Scripts.ts"
 import * as YouTubeTv from "./source/youtube-tv/YouTubeTv.ts"
 
 /** What the Hub plays: the live day from ESPN and YouTube TV, or a scenario in their place, on scenario time. */
@@ -57,25 +58,21 @@ function live() {
   )
 }
 
-// The scenario plays as the provider through the real Ingest, onto a feed log of its own: a written one as the snapshot
-// feed, a recorded one decoded as ESPN, which recorded it. Ingest, the fold, and the Slate share the scenario's clock;
-// the rest of the Hub keeps the real one. The game history stays out of a scenario.
+// The scenario plays as the provider through the real Ingest, onto a feed log of its own, decoded as ESPN: a recorded
+// one as ESPN recorded it, a written one as ESPN's writer writes its script. Ingest, the fold, and the Slate share the
+// scenario's clock; the rest of the Hub keeps the real one. The game history stays out of a scenario.
 function scripted() {
+  const written = [...scripts.values()].map(
+    (script) => new Scenario({ name: script.name, frames: EspnScript.framesOf(script) })
+  )
   return Layer.mergeAll(
     Layer.mergeAll(
       Slate.layer,
-      Ingest.layer.pipe(
-        Layer.provide(
-          ScenarioProvider.layer(SnapshotProvider.layer).pipe(Layer.provide(RecordedScenarios.layer))
-        )
-      )
+      Ingest.layer.pipe(Layer.provide(ScenarioProvider.layer.pipe(Layer.provide(Scenarios.layer(written)))))
     ).pipe(
       Layer.provide(LiveGames.layer),
       Layer.provide(FeedLog.forScenario),
-      Layer.provide([
-        ScenarioProvider.decoder({ written: SnapshotDecode.layer, recorded: EspnDecode.layer }),
-        DateTime.layerCurrentZoneLocal
-      ]),
+      Layer.provide([EspnDecode.layer, DateTime.layerCurrentZoneLocal]),
       Layer.provide(ScenarioClock.layer)
     ),
     ScenarioSource.layer

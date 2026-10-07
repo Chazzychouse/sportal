@@ -1,10 +1,10 @@
-import { Scenario } from "../Scenario.ts"
+import { ScenarioScript } from "../ScenarioScript.ts"
 
 /**
  * Every game stopped but one: a halftime, a timeout, the end of a quarter, and a weather delay, while one game
  * goes for it on fourth down late and scores.
  */
-export const allStoppedButOne = Scenario.build("all-stopped-but-one", [
+export const allStoppedButOne = ScenarioScript.build("all-stopped-but-one", [
   {
     id: "still-aub-ark",
     home: "AUB",

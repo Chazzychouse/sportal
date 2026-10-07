@@ -34,11 +34,12 @@ Every exported type name must be a term here, except the wire schemas in `*Paylo
 | **Notice** | Something a provider's decode noticed in a frame for telemetry to tell: a message received, games pushed, an unlisted game, a document reset, a message of an unknown op, a frame, event, or play that did not decode, or an unknown play type. Told only for frames after a replay. | warning, metric |
 | **Delivery source** | Which feed a snapshot came from: `push` or `poll`. | origin, feed type |
 | **Test game** | A game snapshot built for a test, with defaults for everything the test does not care about. | fixture, mock |
-| **Scenario** | Games a Hub plays as its provider, through the real ingest, feed log, decode, and fold: written as a timeline of game snapshots, which plays as the snapshot feed, or recorded as raw frames. | fixture, simulation |
+| **Scenario** | Games a Hub plays as its provider, through the real ingest, feed log, decode, and fold: a name and ESPN's frames, recorded from a game day or written from a scenario script; `Scenario` in code. Every scenario plays through ESPN's decode. | fixture, simulation |
 | **Scenario script** | A written scenario before it is written as frames: games and a timeline of changes, some with a play; `ScenarioScript` in code, each offset's slate and the plays run then. The ESPN adapter writes it as ESPN's frames. | |
 | **Recorded scenario** | A scenario kept as the raw frames of a recorded window, `fixtures/scenarios/<name>.frames.jsonl.gz`, decoded by the provider that recorded them. | slice, recording |
-| **Recorded scenarios** | Where the recorded scenarios are kept, and reading one back by name; `RecordedScenarios` in code. | scenario store |
+| **Scenarios** | Every scenario there is, by name: the recorded ones where they are kept, and the written ones as ESPN's writer writes their scripts; reading one back by name. `Scenarios` in code. | scenario store, catalogue |
 | **Scenario unknown** | `SPORTAL_SCENARIO` names no written or recorded scenario; `ScenarioUnknown` in code, with the names there are. | |
+| **Scenario duplicate** | A recorded scenario and a written one share a name, which stops the Hub at startup; `ScenarioDuplicate` in code. | |
 | **Scenario unreadable** | A recorded scenario's file could not be read as gzip'd frames; `ScenarioUnreadable` in code. | |
 | **Scenario time** | The clock a scenario plays on: from the Hub's start, at the scenario's speed. Ingest, the fold, and the Slate run on it. | |
 | **Situation** | Live football state: possession, down, distance, field position, red zone (the 20 and in), timeouts. | context |
@@ -60,7 +61,7 @@ Every exported type name must be a term here, except the wire schemas in `*Paylo
 | **Live feed** | A provider's push: the connection carrying updates for live games between polls (ESPN FastCast). `LiveFeed` in code. | socket, stream, webhook |
 | **Live feed demand** | What the live feed should follow: the current games whenever which games they are changes, and each channel whose document must be read again from a checkpoint; `LiveFeedDemand` in code. | wanted, subscriptions |
 | **FastCast** | ESPN's live feed, as the ESPN provider's push: one socket following each league's scoreboard and each game its demand names, with FastCast's checkpoint retry. | |
-| **Snapshot feed** | A provider whose frames are our own deliveries, one per frame: what written scenarios play and tests drive. | |
+| **Snapshot feed** | A provider whose frames are our own deliveries, one per frame, and its decode: what tests drive, in `TestSnapshotFeed.ts`. | |
 | **ESPN event** | One game as either ESPN feed spells it, the polled site scoreboard or a FastCast scoreboard topic, read as a GameSnapshot; `EspnEvent` in code. | payload, DTO |
 | **Topic owner** | What a live feed topic carries: one league's scoreboard, or one game's plays; `Owner` in code. | subscription |
 | **Checkpoint error** | A live feed topic's checkpoint could not be loaded or did not decode; retried on FastCast's checkpoint retry, then the game is left to polling. | |

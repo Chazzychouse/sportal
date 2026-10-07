@@ -21,9 +21,6 @@
   },
   "ignoreDependencies": ["@effect/language-service"],
   "ignoreIssues": {
-    "apps/web/src/design/**": ["exports", "types"],
-    "apps/hub/src/provider/espn/EspnScript.ts": ["files"],
-    "apps/hub/src/provider/espn/EspnEvent.ts": ["exports"],
-    "apps/hub/src/provider/espn/EspnPlay.ts": ["exports"]
+    "apps/web/src/design/**": ["exports", "types"]
   }
 }

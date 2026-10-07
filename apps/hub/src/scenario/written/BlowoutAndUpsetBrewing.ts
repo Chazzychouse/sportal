@@ -1,7 +1,7 @@
-import { Scenario } from "../Scenario.ts"
+import { ScenarioScript } from "../ScenarioScript.ts"
 
 /** An unranked team leading the No. 3 team late, beside a No. 1 team's blowout and an even first half. */
-export const blowoutAndUpsetBrewing = Scenario.build("blowout-and-upset-brewing", [
+export const blowoutAndUpsetBrewing = ScenarioScript.build("blowout-and-upset-brewing", [
   {
     id: "upset-ala-van",
     home: "ALA",

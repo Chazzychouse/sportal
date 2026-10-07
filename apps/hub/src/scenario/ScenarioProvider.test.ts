@@ -29,17 +29,21 @@ import * as Gzip from "../Gzip.ts"
 import type { HubConfig } from "../HubConfig.ts"
 import * as Ingest from "../Ingest.ts"
 import { LiveGames } from "../LiveGames.ts"
-import { Decoder } from "../provider/Decoder.ts"
+import type { Decoder } from "../provider/Decoder.ts"
 import * as EspnDecode from "../provider/espn/EspnDecode.ts"
 import { Provider } from "../provider/Provider.ts"
-import * as SnapshotDecode from "../provider/snapshot/SnapshotDecode.ts"
-import * as SnapshotProvider from "../provider/snapshot/SnapshotProvider.ts"
-import { decodedFrames, listedBy, pushed } from "../TestFeed.ts"
+import { decodedFrames, listedBy, pushed, writtenScenarios } from "../TestFeed.ts"
 import { withEnv } from "../TestHubConfig.ts"
+import * as TestSnapshotFeed from "../TestSnapshotFeed.ts"
 import { recordingSpans } from "../TestTelemetry.ts"
-import { RecordedScenarios, type ScenarioUnknown, type ScenarioUnreadable } from "./RecordedScenarios.ts"
 import * as ScenarioClock from "./ScenarioClock.ts"
 import * as ScenarioProvider from "./ScenarioProvider.ts"
+import {
+  type ScenarioDuplicate,
+  Scenarios,
+  type ScenarioUnknown,
+  type ScenarioUnreadable
+} from "./Scenarios.ts"
 
 describe("ScenarioProvider", () => {
   it.effect("each league's listing reaches the fold at its scenario time", () =>
@@ -97,29 +101,27 @@ describe("ScenarioProvider", () => {
         assert.strictEqual((yield* listed("fbs"))[0]?.home.score, 0)
         yield* TestClock.adjust("1 second")
         assert.strictEqual((yield* listed("fbs"))[0]?.home.score, 7)
-      }).pipe(Effect.provide(playing("seven", { from: dir, decoder: SnapshotDecode.layer })))
+      }).pipe(Effect.provide(playing("seven", { from: dir, decoder: TestSnapshotFeed.decoder })))
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer))
   )
 
-  it.effect(
-    "a written scenario's poll decodes through the snapshot feed's decode to the league's listing",
-    () =>
-      Effect.gen(function* () {
-        const [decoded] = yield* decodedFrames([yield* (yield* Provider).poll("fbs")])
-        const [listing] = decoded?.deliveries ?? []
-        assert.strictEqual(listing?._tag, "Listing")
-        assert.deepStrictEqual(listing?._tag === "Listing" && [listing.league, listing.games.length], [
-          "fbs",
-          4
-        ])
-        assert.deepStrictEqual(decoded?.notices, [])
-      }).pipe(Effect.provide(scenario("two-minute-drill-tie")))
+  it.effect("a written scenario's poll decodes through ESPN's decode to the league's listing", () =>
+    Effect.gen(function* () {
+      const [decoded] = yield* decodedFrames([yield* (yield* Provider).poll("fbs")])
+      const [listing] = decoded?.deliveries ?? []
+      assert.strictEqual(listing?._tag, "Listing")
+      assert.deepStrictEqual(listing?._tag === "Listing" && [listing.league, listing.games.length], [
+        "fbs",
+        4
+      ])
+      assert.deepStrictEqual(decoded?.notices, [])
+    }).pipe(Effect.provide(scenario("two-minute-drill-tie")))
   )
 
   it.effect("a written scenario's frame that does not decode is noted, not dropped", () =>
     Effect.gen(function* () {
       const [decoded] = yield* decodedFrames([
-        { receivedAt: DateTime.makeUnsafe(0), feed: "snapshot", channel: "fbs", kind: "response", body: "{" }
+        { receivedAt: DateTime.makeUnsafe(0), feed: "poll", channel: "fbs", kind: "response", body: "{" }
       ])
       assert.deepStrictEqual(decoded?.deliveries, [])
       assert.deepStrictEqual(
@@ -130,20 +132,19 @@ describe("ScenarioProvider", () => {
   )
 
   it.effect(
-    "a recorded scenario is played with only its settings and the recorded scenarios, read by ESPN's decode",
+    "a recorded scenario is played with only its settings and the scenarios, read by ESPN's decode",
     () =>
       Effect.gen(function* () {
-        const provider = ScenarioProvider.layer(SnapshotProvider.layer) satisfies Layer.Layer<
+        const provider = ScenarioProvider.layer satisfies Layer.Layer<
           Provider,
-          ScenarioUnknown | ScenarioUnreadable,
-          HubConfig | RecordedScenarios
+          ScenarioUnknown | ScenarioUnreadable | ScenarioDuplicate,
+          HubConfig | Scenarios
         >
-        const decoder = ScenarioProvider.decoder(decoders) satisfies Layer.Layer<Decoder, never, HubConfig>
         const games = yield* listedBy("fbs").pipe(
           Effect.provide(
-            Layer.merge(provider, decoder).pipe(
+            Layer.merge(provider, EspnDecode.layer).pipe(
               Layer.provide([
-                RecordedScenarios.layer,
+                Scenarios.layer(writtenScenarios),
                 withEnv({ SPORTAL_SCENARIO: "crowded-fourth-quarter" }).pipe(Layer.orDie)
               ]),
               Layer.provide(NodeServices.layer)
@@ -152,38 +153,6 @@ describe("ScenarioProvider", () => {
         )
         assert.isNotEmpty(games)
       })
-  )
-
-  it.effect("the decoder is the snapshot feed's for a written name and the recorded one's otherwise", () =>
-    Effect.gen(function* () {
-      const decoderFor = (name: string) =>
-        Layer.build(
-          ScenarioProvider.decoder(decoders).pipe(
-            Layer.provide(withEnv({ SPORTAL_SCENARIO: name }).pipe(Layer.orDie))
-          )
-        ).pipe(Effect.map((built) => Context.get(built, Decoder)))
-      const snapshot = Context.get(yield* Layer.build(SnapshotDecode.layer), Decoder)
-      const espn = Context.get(yield* Layer.build(EspnDecode.layer), Decoder)
-
-      assert.strictEqual(yield* decoderFor("two-minute-drill-tie"), snapshot)
-      assert.strictEqual(yield* decoderFor("crowded-fourth-quarter"), espn)
-      assert.strictEqual(
-        yield* decoderFor("no-such-scenario"),
-        espn,
-        "an unknown name is left to the provider"
-      )
-    }).pipe(Effect.scoped)
-  )
-
-  it.effect("a written scenario never pushes", () =>
-    Effect.gen(function* () {
-      const provider = yield* Provider
-      const pushed = yield* provider
-        .push(Stream.never)
-        .pipe(Stream.runHead, Effect.forkChild({ startImmediately: true }))
-      yield* TestClock.adjust("1 hour")
-      assert.isUndefined(pushed.pollUnsafe())
-    }).pipe(Effect.provide(scenario("two-minute-drill-tie")))
   )
 
   it.effect("a recorded scenario polls the recorded poll current at that moment, received now", () =>
@@ -255,7 +224,7 @@ describe("ScenarioProvider", () => {
           7,
           "the tied poll only refreshed the pushed snapshot"
         )
-      }).pipe(Effect.provide(playing("tie", { from: dir, decoder: SnapshotDecode.layer })))
+      }).pipe(Effect.provide(playing("tie", { from: dir, decoder: TestSnapshotFeed.decoder })))
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer))
   )
 
@@ -263,7 +232,7 @@ describe("ScenarioProvider", () => {
     "every committed recorded scenario plays to a non-empty final slate",
     () =>
       Effect.gen(function* () {
-        const recorded = yield* RecordedScenarios
+        const recorded = yield* Scenarios
         const names = yield* recorded.names
         assert.isAbove(names.length, 0)
         for (const name of names) {
@@ -277,7 +246,10 @@ describe("ScenarioProvider", () => {
           }).pipe(Effect.provide(playing(name)), Effect.scoped)
         }
       }).pipe(
-        Effect.provide([RecordedScenarios.layer.pipe(Layer.provide(NodeServices.layer)), NodeServices.layer])
+        Effect.provide([
+          Scenarios.layer(writtenScenarios).pipe(Layer.provide(NodeServices.layer)),
+          NodeServices.layer
+        ])
       ),
     120_000
   )
@@ -317,7 +289,7 @@ describe("ScenarioProvider", () => {
         yield* TestClock.adjust("100 millis")
         // The log compresses and writes on the event loop, so this waits in real time.
         return yield* Stream.runCollect((yield* FeedLog).replay(DateTime.makeUnsafe(0))).pipe(
-          Effect.repeat({ until: (frames) => frames.length >= 2, schedule: Schedule.spaced("5 millis") }),
+          Effect.repeat({ until: (frames) => frames.length >= 6, schedule: Schedule.spaced("5 millis") }),
           Effect.timeout("1 second"),
           TestClock.withLive
         )
@@ -331,8 +303,12 @@ describe("ScenarioProvider", () => {
       assert.deepStrictEqual(
         logged.map(({ feed, channel }) => [feed, channel]),
         [
-          ["snapshot", "nfl"],
-          ["snapshot", "fbs"]
+          ["poll", "nfl"],
+          ["poll", "fbs"],
+          ...["tie-uga-ala", "tie-osu-mich", "tie-tex-ou", "tie-lsu-miss"].map((game) => [
+            "fastcast",
+            `gp-football-college-football-${game}`
+          ])
         ]
       )
       assert.isFalse(yield* fs.exists(join(dataDir, "feed.sqlite")))
@@ -380,26 +356,25 @@ describe("ScenarioProvider", () => {
 })
 
 /**
- * Scenario `name` as the provider and its decoder, played with the adapters `HubMode` plays it with and configured by
- * `env` beside its name: a recorded one read from `from` (the committed ones, unless given), its frames decoded by
+ * Scenario `name` as the provider and its decoder, played as `HubMode` plays it and configured by `env` beside its
+ * name: a written one, or a recorded one read from `from` (the committed ones, unless given), its frames decoded by
  * `decoder` (ESPN's, unless given).
  */
 function scenario(name: string, options: Options = {}) {
   return Layer.merge(
-    ScenarioProvider.layer(SnapshotProvider.layer).pipe(
-      Layer.provide(options.from === undefined ? RecordedScenarios.layer : RecordedScenarios.in(options.from))
+    ScenarioProvider.layer.pipe(
+      Layer.provide(
+        options.from === undefined
+          ? Scenarios.layer(writtenScenarios)
+          : Scenarios.in(options.from, writtenScenarios)
+      )
     ),
-    ScenarioProvider.decoder(
-      options.decoder === undefined ? decoders : { ...decoders, recorded: options.decoder }
-    )
+    options.decoder ?? EspnDecode.layer
   ).pipe(
     Layer.provideMerge(withEnv({ SPORTAL_SCENARIO: name, ...options.env }).pipe(Layer.orDie)),
     Layer.provide(NodeServices.layer)
   )
 }
-
-// The decoders HubMode plays a scenario with.
-const decoders = { written: SnapshotDecode.layer, recorded: EspnDecode.layer }
 
 /**
  * Ingest over `scenario(name, options)`, onto a feed log in memory or, with `scenarioFeedLog`, the scenario's own one
@@ -470,7 +445,7 @@ function pushedAt(seconds: number, game: GameSnapshot) {
 
 /**
  * `said` as a recording from `feed` holds it, received `seconds` into the recording. The frame is synthetic: a snapshot
- * feed body under an ESPN feed's name, for a recorded scenario decoded by `SnapshotDecode`.
+ * feed body under an ESPN feed's name, for a recorded scenario decoded by `TestSnapshotFeed.decoder`.
  */
 function recordedAs(seconds: number, feed: "poll" | "fastcast", said: Effect.Effect<FeedFrame>) {
   return Effect.map(

@@ -1,7 +1,7 @@
-import { Scenario } from "../Scenario.ts"
+import { ScenarioScript } from "../ScenarioScript.ts"
 
 /** A tied top-five game decided by a two-minute drill, beside a blowout, a halftime, and a quiet first half. */
-export const twoMinuteDrillTie = Scenario.build("two-minute-drill-tie", [
+export const twoMinuteDrillTie = ScenarioScript.build("two-minute-drill-tie", [
   {
     id: "tie-uga-ala",
     home: "UGA",

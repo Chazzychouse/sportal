@@ -1,7 +1,7 @@
-import { Scenario } from "../Scenario.ts"
+import { ScenarioScript } from "../ScenarioScript.ts"
 
 /** Games kicking off two minutes apart, one of them in the NFL, the first scoring early. */
-export const kickoffWindow = Scenario.build("kickoff-window", [
+export const kickoffWindow = ScenarioScript.build("kickoff-window", [
   {
     id: "ko-ala-msst",
     home: "ALA",

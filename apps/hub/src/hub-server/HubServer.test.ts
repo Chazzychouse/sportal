@@ -13,12 +13,12 @@ import * as Database from "../Database.ts"
 import { FeedLog } from "../FeedLog.ts"
 import * as Ingest from "../Ingest.ts"
 import { LiveGames } from "../LiveGames.ts"
-import * as SnapshotDecode from "../provider/snapshot/SnapshotDecode.ts"
 import { Slate } from "../Slate.ts"
 import { StageSessions } from "../StageSessions.ts"
 import * as YouTubeTv from "../source/youtube-tv/YouTubeTv.ts"
 import { polled } from "../TestFeed.ts"
 import { withEnv } from "../TestHubConfig.ts"
+import * as TestSnapshotFeed from "../TestSnapshotFeed.ts"
 import * as HubServer from "./HubServer.ts"
 
 const espn = Network.make("ESPN")
@@ -284,7 +284,7 @@ function hubUnderTest() {
     Layer.provide(
       LiveGames.layer.pipe(
         Layer.provideMerge(FeedLog.layer.pipe(Layer.provide([Database.at(":memory:"), NodeCrypto.layer]))),
-        Layer.provide([SnapshotDecode.layer, DateTime.layerCurrentZoneLocal])
+        Layer.provide([TestSnapshotFeed.decoder, DateTime.layerCurrentZoneLocal])
       )
     ),
     Layer.provide(polled(() => Effect.succeed([game]))),

@@ -1,25 +1,23 @@
-import { assert, layer } from "@effect/vitest"
+import { assert, describe, it, layer } from "@effect/vitest"
 import { Delivery } from "@sportal/domain/Delivery"
 import { GameId } from "@sportal/domain/Game"
 import { liveSnapshot, play, snapshot } from "@sportal/domain/TestGame"
-import { DateTime, Effect, Schedule, Schema } from "effect"
-import type { FeedFrame } from "../../Frame.ts"
-import { decodedFrames } from "../../TestFeed.ts"
-import { Provider } from "../Provider.ts"
-import * as SnapshotDecode from "./SnapshotDecode.ts"
-import { SnapshotPayload } from "./SnapshotPayload.ts"
-import * as SnapshotProvider from "./SnapshotProvider.ts"
+import { DateTime, Effect, Exit, Schedule, Schema } from "effect"
+import type { FeedFrame } from "./Frame.ts"
+import { Provider, ProviderError } from "./provider/Provider.ts"
+import { decodedFrames } from "./TestFeed.ts"
+import * as TestSnapshotFeed from "./TestSnapshotFeed.ts"
 
 const received = DateTime.makeUnsafe("2026-10-06T18:00:00Z")
-const encode = Schema.encodeSync(SnapshotPayload)
+const encode = Schema.encodeSync(TestSnapshotFeed.SnapshotPayload)
 
-layer(SnapshotDecode.layer)("SnapshotDecode", (it) => {
+layer(TestSnapshotFeed.decoder)("TestSnapshotFeed.decoder", (it) => {
   it.effect("a poll of the snapshot provider decodes to the listing it answered", () =>
     Effect.gen(function* () {
       const games = [snapshot(), liveSnapshot()]
       const frame = yield* Provider.use((provider) => provider.poll("fbs")).pipe(
         Effect.provide(
-          SnapshotProvider.layer({
+          TestSnapshotFeed.provider({
             games: () => Effect.succeed(games),
             polling: Schedule.spaced("10 seconds")
           })
@@ -77,6 +75,50 @@ layer(SnapshotDecode.layer)("SnapshotDecode", (it) => {
       )
     })
   )
+})
+
+describe("TestSnapshotFeed.provider", () => {
+  it.effect("a poll's frame is a Listing of the games of that league, on its channel", () =>
+    Effect.gen(function* () {
+      const nfl = [liveSnapshot()]
+      const provider = yield* Provider
+      const frame = yield* provider.poll("nfl")
+      assert.deepStrictEqual([frame.feed, frame.kind, frame.channel], ["snapshot", "response", "nfl"])
+      assert.deepStrictEqual(
+        yield* Schema.decodeEffect(TestSnapshotFeed.SnapshotPayload)(frame.body),
+        Delivery.cases.Listing.make({ league: "nfl", games: nfl })
+      )
+    }).pipe(
+      Effect.provide(
+        TestSnapshotFeed.provider({
+          games: (league) => Effect.succeed(league === "nfl" ? [liveSnapshot()] : [snapshot()]),
+          polling: Schedule.spaced("10 seconds")
+        })
+      )
+    )
+  )
+
+  it.effect("`games` that fails fails the poll with its ProviderError", () =>
+    Effect.gen(function* () {
+      const error = new ProviderError({ reason: "Refused", league: "fbs", cause: "no" })
+      const exit = yield* Effect.exit(Provider.use((provider) => provider.poll("fbs"))).pipe(
+        Effect.provide(
+          TestSnapshotFeed.provider({
+            games: () => Effect.fail(error),
+            polling: Schedule.spaced("10 seconds")
+          })
+        )
+      )
+      assert.deepStrictEqual(exit, Exit.fail(error))
+    })
+  )
+
+  it.effect("its polling is the given Schedule", () => {
+    const polling = Schedule.spaced("3 seconds")
+    return Effect.gen(function* () {
+      assert.strictEqual((yield* Provider).polling, polling)
+    }).pipe(Effect.provide(TestSnapshotFeed.provider({ games: () => Effect.succeed([]), polling })))
+  })
 })
 
 function said(body: string, channel = "event", kind: FeedFrame["kind"] = "message"): FeedFrame {

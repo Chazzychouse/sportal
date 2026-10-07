@@ -1,5 +1,6 @@
 import { assert, describe, it } from "@effect/vitest"
 import { TeamId } from "@sportal/domain/Team"
+import { DateTime } from "effect"
 import { ScenarioScript } from "./ScenarioScript.ts"
 
 const uga = TeamId.make("fbs:UGA")
@@ -105,3 +106,90 @@ describe("ScenarioScript.build", () => {
     )
   })
 })
+
+const twoGames = ScenarioScript.build("two games", [
+  {
+    id: "1",
+    home: "UGA",
+    away: "ALA",
+    network: "CBS",
+    timeline: [
+      [
+        "0:00",
+        {
+          status: "live",
+          period: 4,
+          clock: "2:10",
+          score: [24, 24],
+          ball: { team: "home", yardLine: 75, down: 1, distance: 10 }
+        }
+      ],
+      ["1:00", { clock: "0:41", ball: { team: "home", yardLine: 17, down: 1, distance: 10 } }],
+      // Out of order on purpose: changes apply in time order whatever order they are written in.
+      ["0:30", { clock: "1:30" }],
+      ["2:00", { clock: "0:03", score: [27, 24], ball: null, lastPlay: "Field goal is good" }]
+    ]
+  },
+  {
+    id: "2",
+    home: "TEX",
+    away: "OU",
+    kickoff: "1:30",
+    timeline: [["1:30", { status: "live", period: 1, clock: "15:00" }]]
+  }
+])
+
+describe("ScenarioScript.build, as slates", () => {
+  it("makes one step per distinct offset, in time order", () => {
+    assert.deepStrictEqual(
+      twoGames.steps.map((step) => step.at),
+      [0, 30_000, 60_000, 90_000, 120_000]
+    )
+  })
+
+  it("merges each change onto the game as it was before it", () => {
+    const tie = game("1", 60)
+    assert.strictEqual(tie?.clock, "0:41")
+    assert.strictEqual(tie?.home.score, 24)
+    assert.strictEqual(tie?.period, 4)
+    assert.strictEqual(tie?.situation?.possession, "fbs:UGA")
+    assert.strictEqual(tie?.situation?.down, 1)
+  })
+
+  it("marks the red zone from the yard line", () => {
+    assert.isFalse(game("1", 0)?.situation?.inRedZone())
+    assert.isTrue(game("1", 60)?.situation?.inRedZone())
+  })
+
+  it("takes the ball away between plays but keeps the timeouts and the last play", () => {
+    const situation = game("1", 120)?.situation
+    assert.isUndefined(situation?.possession)
+    assert.isFalse(situation?.inRedZone())
+    assert.strictEqual(situation?.homeTimeouts, 3)
+    assert.strictEqual(situation?.lastPlay, "Field goal is good")
+  })
+
+  it("keeps a game scheduled at its kickoff until its first change", () => {
+    assert.strictEqual(game("2", 60)?.status, "scheduled")
+    assert.strictEqual(game("2", 90)?.status, "live")
+    assert.strictEqual(
+      DateTime.toEpochMillis(game("2", 0)?.kickoff ?? twoGames.origin),
+      DateTime.toEpochMillis(twoGames.origin) + 90_000
+    )
+  })
+
+  it("lists the networks it is given", () => {
+    assert.deepStrictEqual(
+      game("1", 0)?.broadcasts.map((broadcast) => broadcast.network),
+      ["CBS"]
+    )
+    assert.deepStrictEqual(game("2", 0)?.broadcasts, [])
+  })
+})
+
+/** Game `id` in the slate of `twoGames`'s latest step by `seconds`. */
+function game(id: string, seconds: number) {
+  return twoGames.steps
+    .findLast((step) => step.at <= seconds * 1000)
+    ?.slate.find((candidate) => candidate.id === id)
+}
