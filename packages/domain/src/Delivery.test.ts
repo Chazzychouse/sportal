@@ -11,19 +11,23 @@ describe("Delivery", () => {
     ["Listing", Delivery.cases.Listing.make({ league: "fbs", games: [snapshot(), liveSnapshot()] })],
     ["Snapshot", Delivery.cases.Snapshot.make({ snapshot: liveSnapshot(), from: "push" })],
     ["Plays", Delivery.cases.Plays.make({ game: GameId.make("401"), plays: [play()] })]
-  ])("round-trips a %s through its wire form", (_name, delivery) => {
-    assert.deepStrictEqual(Schema.decodeSync(wire)(Schema.encodeSync(wire)(delivery)), delivery)
+  ])("should round-trip a %s through its wire form", (_name, delivery) => {
+    const encoded = Schema.encodeSync(wire)(delivery)
+
+    const decoded = Schema.decodeSync(wire)(encoded)
+
+    assert.deepStrictEqual(decoded, delivery)
   })
 
-  it("matches on its tag", () => {
+  it("should match on its tag", () => {
     const delivery = Delivery.cases.Plays.make({ game: GameId.make("401"), plays: [play()] })
-    assert.strictEqual(
-      Delivery.match(delivery, {
-        Listing: () => "listing",
-        Snapshot: () => "snapshot",
-        Plays: () => "plays"
-      }),
-      "plays"
-    )
+
+    const matched = Delivery.match(delivery, {
+      Listing: () => "listing",
+      Snapshot: () => "snapshot",
+      Plays: () => "plays"
+    })
+
+    assert.strictEqual(matched, "plays")
   })
 })
