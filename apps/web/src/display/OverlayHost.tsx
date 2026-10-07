@@ -10,6 +10,7 @@ import { coveredGames } from "../stage/TileRects.ts"
 export function OverlayHost(props: { children: ReactNode }) {
   const host = useRef<Host | undefined>(undefined)
   host.current ??= makeHost()
+
   return <HostContext.Provider value={host.current}>{props.children}</HostContext.Provider>
 }
 

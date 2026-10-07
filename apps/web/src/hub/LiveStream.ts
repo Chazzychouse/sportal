@@ -31,10 +31,12 @@ export class LiveStream extends Context.Service<LiveStream, SubscriptionRef.Subs
         recentPlays: {},
         stage: Stage.initial
       })
+
       yield* sourceEvents().pipe(
         Stream.runForEach((event) => step(live, event)),
         Effect.forkScoped
       )
+
       return live
     })
   )

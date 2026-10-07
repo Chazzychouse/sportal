@@ -50,6 +50,7 @@ export function SlateView(props: {
             const section = card.section
             const starts = index === 0 || props.cards[index - 1]?.section !== section
             const dropped = props.display.drop(card, props.stage)
+
             return (
               <Fragment key={card.id}>
                 {starts && (
@@ -87,6 +88,7 @@ function Card(props: { card: StripCard; picked: boolean; droppable: boolean; onD
   const { game, place } = props.card
   const bench = place?._tag === "Bench" ? place.tile : undefined
   const networks = game?.networks()
+
   return (
     <button
       type="button"
