@@ -1,4 +1,3 @@
-import type { Delivery } from "@sportal/domain/Delivery"
 import {
   Array as Arr,
   Cause,
@@ -40,31 +39,23 @@ export const layer = Layer.effectDiscard(
     const liveGames = yield* LiveGames
     const from = dayStart(yield* DateTime.nowInCurrentZone)
 
-    const replayed = yield* Queue.unbounded<
-      { delivery: Delivery; at: DateTime.Utc; seq: number },
-      Cause.Done
-    >()
+    const replayed = yield* Queue.unbounded<Decoded, Cause.Done>()
     const replayedUpTo = yield* Ref.make(0)
     const frames = yield* Ref.make(0)
     const resyncs = yield* PubSub.unbounded<string>()
     // Subscribed before the replay is read, so a frame appended any time after it ends is in `appended`.
     const appended = yield* feedLog.subscribe
 
-    // Nothing a replayed frame says goes live: its deliveries go to the replay, and a resync or a notice is dropped,
+    // Nothing a replayed frame says goes live: it goes to the replay, and its resyncs and notices are dropped,
     // since no socket follows a topic yet (one that does starts it from a fresh checkpoint anyway) and its notices
     // were told when the frame first arrived.
     const route = (decoded: Decoded) =>
       Effect.flatMap(Ref.get(replayedUpTo), (last) =>
         decoded.seq <= last
-          ? Queue.offerAll(
-              replayed,
-              decoded.deliveries.map((delivery) => ({ delivery, at: decoded.at, seq: decoded.seq }))
-            )
+          ? Queue.offer(replayed, decoded)
           : Effect.all(
               [
-                ...decoded.deliveries.map((delivery) =>
-                  liveGames.take(delivery, decoded.at, Option.some(decoded.seq))
-                ),
+                liveGames.take(decoded),
                 ...decoded.resyncs.map((channel) => PubSub.publish(resyncs, channel)),
                 ...decoded.notices.map((notice) => DecodeTelemetry.noticed(notice, decoded.seq))
               ],
@@ -74,7 +65,7 @@ export const layer = Layer.effectDiscard(
 
     // One decode over the day's log and then every frame appended after it, so each topic's document carries over
     // from replay to live. Decoding pulls the next frame only once it has handed on what the last one said, so
-    // when it ends the replay's queue every replayed delivery is in it.
+    // when it ends the replay's queue every replayed frame is in it.
     const decoding = yield* decoder
       .decode(
         feedLog.replay(from).pipe(
@@ -201,8 +192,9 @@ function loggedUnlessStopping(message: string, ended: string) {
 }
 
 /**
- * Waits for the fold to have taken frame `seq`, so the polling Schedule reads the listing it gave. A frame that gives no
- * delivery (one that does not decode) moves no `seq`, so the wait ends after `takenWithin` regardless.
+ * Waits for the fold to have taken frame `seq`, so the polling Schedule reads the listing it gave. Every frame moves the
+ * fold's `seq`, one that does not decode too; the wait ends after `takenWithin` regardless, should the fold stop taking
+ * frames.
  */
 function taken(seq: number): Effect.Effect<void, never, LiveGames> {
   return Effect.gen(function* () {

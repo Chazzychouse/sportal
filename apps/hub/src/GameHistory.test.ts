@@ -3,7 +3,7 @@ import { Delivery } from "@sportal/domain/Delivery"
 import { GameId } from "@sportal/domain/Game"
 import { PlayId } from "@sportal/domain/Play"
 import { play, snapshot } from "@sportal/domain/TestGame"
-import { DateTime, Effect, Layer, Option } from "effect"
+import { Effect, Layer, Option } from "effect"
 import { SqlClient } from "effect/sql"
 import { TestClock } from "effect/testing"
 import * as Database from "./Database.ts"
@@ -116,28 +116,6 @@ describe("GameHistory", () => {
         plays.map(({ text }) => text),
         ["newer"]
       )
-    }).pipe(Effect.provide(history))
-  )
-
-  it.effect("a delivery with no seq writes nothing", () =>
-    Effect.gen(function* () {
-      const at = yield* DateTime.now
-      yield* LiveGames.use((liveGames) =>
-        liveGames
-          .take(Delivery.cases.Snapshot.make({ snapshot: live, from: "push" }), at, Option.none())
-          .pipe(
-            Effect.andThen(
-              liveGames.take(
-                Delivery.cases.Plays.make({ game: one, plays: [play({ id: first })] }),
-                at,
-                Option.none()
-              )
-            )
-          )
-      )
-      yield* batched
-      assert.deepStrictEqual(yield* playIds, [])
-      assert.deepStrictEqual(yield* GameHistory.use((gameHistory) => gameHistory.latest(one)), Option.none())
     }).pipe(Effect.provide(history))
   )
 

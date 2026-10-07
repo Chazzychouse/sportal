@@ -24,7 +24,8 @@ import {
 } from "effect"
 import { TestClock } from "effect/testing"
 import { LiveGames } from "./LiveGames.ts"
-import { taken } from "./provider/TestProvider.ts"
+import type { Decoded } from "./provider/Provider.ts"
+import { delivered, taken } from "./provider/TestProvider.ts"
 import { counted, gauged, recordingLogs, recordingSpans, withMetrics } from "./TestTelemetry.ts"
 
 const one = GameId.make("1")
@@ -52,9 +53,11 @@ describe("LiveGames", () => {
       const at = yield* DateTime.now
       yield* LiveGames.use((liveGames) =>
         liveGames.take(
-          Delivery.cases.Snapshot.make({ snapshot: liveSnapshot({ id: one }), from: "push" }),
-          at,
-          Option.some(7)
+          delivered(
+            Delivery.cases.Snapshot.make({ snapshot: liveSnapshot({ id: one }), from: "push" }),
+            at,
+            7
+          )
         )
       )
       const folded = yield* LiveGames.use((liveGames) => liveGames.latest)
@@ -97,7 +100,11 @@ describe("LiveGames", () => {
       const second = liveSnapshot({ id: one, clock: "9:00" })
       yield* takenSnapshot(first)
       yield* takenSnapshot(second)
-      yield* takenSnapshot(liveSnapshot({ id: one, clock: "11:00" }))
+      // Frame 2 again, so `seq` stays put: a frame that moves only `seq` still publishes, for Ingest's wait on it.
+      yield* taken(
+        Delivery.cases.Snapshot.make({ snapshot: liveSnapshot({ id: one, clock: "11:00" }), from: "poll" }),
+        2
+      )
       yield* Effect.yieldNow
       assert.deepStrictEqual(yield* Ref.get(published), [
         Option.none(),
@@ -225,14 +232,21 @@ describe("LiveGames", () => {
         const liveGames = yield* LiveGames
         const start = yield* DateTime.now
         yield* liveGames.take(
-          Delivery.cases.Snapshot.make({ snapshot: liveSnapshot({ id: one }), from: "poll" }),
-          start,
-          Option.none()
+          delivered(
+            Delivery.cases.Snapshot.make({ snapshot: liveSnapshot({ id: one }), from: "poll" }),
+            start,
+            1
+          )
         )
         yield* liveGames.take(
-          Delivery.cases.Snapshot.make({ snapshot: liveSnapshot({ id: one, clock: "9:00" }), from: "poll" }),
-          DateTime.add(start, { minutes: 2 }),
-          Option.none()
+          delivered(
+            Delivery.cases.Snapshot.make({
+              snapshot: liveSnapshot({ id: one, clock: "9:00" }),
+              from: "poll"
+            }),
+            DateTime.add(start, { minutes: 2 }),
+            2
+          )
         )
         const transitions = logs
           .map(({ message }) => /(\w+) → (\w+)/.exec(message)?.[0])
@@ -253,9 +267,11 @@ describe("LiveGames", () => {
         yield* takenSnapshot(liveSnapshot({ id: one }))
         const died = yield* liveGames
           .take(
-            Delivery.cases.Plays.make({ game: two, plays: [play()] }),
-            DateTime.add(start, { seconds: 100 }),
-            Option.none()
+            delivered(
+              Delivery.cases.Plays.make({ game: two, plays: [play()] }),
+              DateTime.add(start, { seconds: 100 }),
+              2
+            )
           )
           .pipe(Effect.exit)
         assert.isTrue(Exit.hasDies(died))
@@ -422,9 +438,7 @@ describe("LiveGames", () => {
         const at = yield* DateTime.now
         yield* takenSnapshot(home("9:00"))
         yield* liveGames.take(
-          Delivery.cases.Snapshot.make({ snapshot: broken(one), from: "poll" }),
-          at,
-          Option.some(42)
+          delivered(Delivery.cases.Snapshot.make({ snapshot: broken(one), from: "poll" }), at, 42)
         )
         const errors = logs.filter(({ level }) => level === "Error")
         assert.strictEqual(errors.length, 1)
@@ -448,7 +462,8 @@ describe("LiveGames", () => {
           ),
           caller?.spanId
         )
-        assert.strictEqual(take?.attributes.get("sportal.delivery"), "Snapshot")
+        assert.strictEqual(take?.attributes.get("sportal.seq"), 1)
+        assert.strictEqual(take?.attributes.get("sportal.deliveries"), 1)
         const duration = (yield* Metric.snapshot).find((metric) => metric.id === "sportal_take_duration")
         assert.strictEqual(duration?.type === "Histogram" ? duration.state.count : undefined, 1)
       }).pipe(Effect.provide(LiveGames.layer.pipe(Layer.provideMerge(recordingSpans(ended)))), withMetrics)
@@ -574,24 +589,24 @@ describe("LiveGames", () => {
           const start = yield* DateTime.now
           yield* liveGames.replay(
             Stream.make(
-              {
-                delivery: Delivery.cases.Snapshot.make({ snapshot: liveSnapshot({ id: one }), from: "poll" }),
-                at: start,
-                seq: 1
-              },
-              {
-                delivery: Delivery.cases.Plays.make({ game: one, plays: [play()] }),
-                at: DateTime.add(start, { seconds: 10 }),
-                seq: 2
-              },
-              {
-                delivery: Delivery.cases.Snapshot.make({
+              delivered(
+                Delivery.cases.Snapshot.make({ snapshot: liveSnapshot({ id: one }), from: "poll" }),
+                start,
+                1
+              ),
+              delivered(
+                Delivery.cases.Plays.make({ game: one, plays: [play()] }),
+                DateTime.add(start, { seconds: 10 }),
+                2
+              ),
+              delivered(
+                Delivery.cases.Snapshot.make({
                   snapshot: liveSnapshot({ id: one, clock: "9:00" }),
                   from: "poll"
                 }),
-                at: DateTime.add(start, { minutes: 3 }),
-                seq: 3
-              }
+                DateTime.add(start, { minutes: 3 }),
+                3
+              )
             )
           )
           yield* Effect.yieldNow
@@ -626,12 +641,12 @@ describe("LiveGames", () => {
         const taken = yield* LiveGames.use((liveGames) =>
           liveGames.replay(
             Stream.make(
-              {
-                delivery: Delivery.cases.Snapshot.make({ snapshot: liveSnapshot({ id: one }), from: "poll" }),
-                at: start,
-                seq: 1
-              },
-              { delivery: Delivery.cases.Plays.make({ game: one, plays: [play()] }), at: start, seq: 2 }
+              delivered(
+                Delivery.cases.Snapshot.make({ snapshot: liveSnapshot({ id: one }), from: "poll" }),
+                start,
+                1
+              ),
+              delivered(Delivery.cases.Plays.make({ game: one, plays: [play()] }), start, 2)
             )
           )
         )
@@ -653,16 +668,16 @@ describe("LiveGames", () => {
         yield* TestClock.adjust("1 hour")
         yield* liveGames.replay(
           Stream.make(
-            {
-              delivery: Delivery.cases.Snapshot.make({ snapshot: liveSnapshot({ id: one }), from: "poll" }),
-              at: start,
-              seq: 1
-            },
-            {
-              delivery: Delivery.cases.Plays.make({ game: one, plays: [play()] }),
-              at: DateTime.add(start, { seconds: 10 }),
-              seq: 2
-            }
+            delivered(
+              Delivery.cases.Snapshot.make({ snapshot: liveSnapshot({ id: one }), from: "poll" }),
+              start,
+              1
+            ),
+            delivered(
+              Delivery.cases.Plays.make({ game: one, plays: [play()] }),
+              DateTime.add(start, { seconds: 10 }),
+              2
+            )
           ).pipe(
             // As a stream read from the log does, between deliveries.
             Stream.tap(() => Effect.yieldNow)
@@ -717,11 +732,13 @@ describe("LiveGames", () => {
         const liveGames = yield* LiveGames
         const at = yield* DateTime.now
         yield* liveGames.replay(
-          Stream.make({
-            delivery: Delivery.cases.Snapshot.make({ snapshot: liveSnapshot({ id: one }), from: "poll" }),
-            at,
-            seq: 1
-          })
+          Stream.make(
+            delivered(
+              Delivery.cases.Snapshot.make({ snapshot: liveSnapshot({ id: one }), from: "poll" }),
+              at,
+              1
+            )
+          )
         )
         assert.isDefined(ended.find((span) => span.name === "LiveGames.replay"))
       }).pipe(Effect.provide(LiveGames.layer.pipe(Layer.provideMerge(recordingSpans(ended)))))
@@ -739,43 +756,43 @@ const day = DateTime.now.pipe(
       snapshot({ id: one, status: "live", period: 1, clock, home: { team: team("HOME"), score: 7 } })
     const second = play({ id: PlayId.make("2"), sequence: 2, clock: "14:30" })
     return [
-      {
-        delivery: Delivery.cases.Snapshot.make({ snapshot: liveSnapshot({ id: one }), from: "poll" }),
-        at: start,
-        seq: 1
-      },
-      {
-        delivery: Delivery.cases.Plays.make({ game: one, plays: [play()] }),
-        at: DateTime.add(start, { seconds: 10 }),
-        seq: 2
-      },
-      {
-        delivery: Delivery.cases.Snapshot.make({ snapshot: scored("9:00"), from: "push" }),
-        at: DateTime.add(start, { minutes: 3 }),
-        seq: 3
-      },
-      {
-        delivery: Delivery.cases.Plays.make({ game: one, plays: [play(), second] }),
-        at: DateTime.add(start, { minutes: 3, seconds: 5 }),
-        seq: 4
-      },
-      {
-        delivery: Delivery.cases.Snapshot.make({ snapshot: scored("8:00"), from: "poll" }),
-        at: DateTime.add(start, { minutes: 4, seconds: 30 }),
-        seq: 5
-      }
+      delivered(
+        Delivery.cases.Snapshot.make({ snapshot: liveSnapshot({ id: one }), from: "poll" }),
+        start,
+        1
+      ),
+      delivered(
+        Delivery.cases.Plays.make({ game: one, plays: [play()] }),
+        DateTime.add(start, { seconds: 10 }),
+        2
+      ),
+      delivered(
+        Delivery.cases.Snapshot.make({ snapshot: scored("9:00"), from: "push" }),
+        DateTime.add(start, { minutes: 3 }),
+        3
+      ),
+      delivered(
+        Delivery.cases.Plays.make({ game: one, plays: [play(), second] }),
+        DateTime.add(start, { minutes: 3, seconds: 5 }),
+        4
+      ),
+      delivered(
+        Delivery.cases.Snapshot.make({ snapshot: scored("8:00"), from: "poll" }),
+        DateTime.add(start, { minutes: 4, seconds: 30 }),
+        5
+      )
     ]
   })
 )
 
-/** Takes each of `deliveries` once the test clock reaches its `at`, so the timer runs between them as it would live. */
-function takenInTime(deliveries: ReadonlyArray<{ delivery: Delivery; at: DateTime.Utc; seq: number }>) {
+/** Takes each of `frames` once the test clock reaches its `at`, so the timer runs between them as it would live. */
+function takenInTime(frames: ReadonlyArray<Decoded>) {
   return Effect.forEach(
-    deliveries,
-    ({ delivery, at, seq }) =>
+    frames,
+    (decoded) =>
       DateTime.now.pipe(
-        Effect.flatMap((now) => TestClock.adjust(DateTime.distance(now, at))),
-        Effect.andThen(LiveGames.use((liveGames) => liveGames.take(delivery, at, Option.some(seq))))
+        Effect.flatMap((now) => TestClock.adjust(DateTime.distance(now, decoded.at))),
+        Effect.andThen(LiveGames.use((liveGames) => liveGames.take(decoded)))
       ),
     { discard: true }
   )

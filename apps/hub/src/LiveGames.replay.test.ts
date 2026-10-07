@@ -153,7 +153,7 @@ function replayedFrom(from: DateTime.Utc) {
     // `liveGames.replay` takes a stream with no requirements, so the stream gets the services it reads here.
     const services = yield* Effect.context<FeedLog | Decoder | LiveGames>()
     yield* liveGames.replay(
-      deliveriesOf(from).pipe(
+      decodedOf(from).pipe(
         Stream.tap(() => heldAs(held)),
         Stream.provideContext(services)
       )
@@ -167,12 +167,12 @@ function replayedFrom(from: DateTime.Utc) {
 const replayed = replayedFrom(DateTime.makeUnsafe(0))
 
 /**
- * A fresh fold of the whole log taken delivery by delivery, each once the test clock reaches it, as live: its state at
+ * A fresh fold of the whole log taken frame by frame, each once the test clock reaches it, as live: its state at
  * the end, each live game NE at BUF was held as, and every event published. The log is read first and closed, so the
  * clock moves only the fold's timer.
  */
 const takenLive = Effect.gen(function* () {
-  const all = yield* Stream.runCollect(deliveriesOf()).pipe(Effect.provide(FeedLog.layer))
+  const all = yield* Stream.runCollect(decodedOf()).pipe(Effect.provide(FeedLog.layer))
   const liveGames = yield* LiveGames
   const held = yield* Ref.make<ReadonlyArray<LiveGame>>([])
   const events = yield* Ref.make<
@@ -184,10 +184,10 @@ const takenLive = Effect.gen(function* () {
   )
   yield* Effect.forEach(
     all,
-    ({ delivery, at, seq }) =>
+    (decoded) =>
       DateTime.now.pipe(
-        Effect.flatMap((now) => TestClock.adjust(DateTime.distance(now, at))),
-        Effect.andThen(liveGames.take(delivery, at, Option.some(seq))),
+        Effect.flatMap((now) => TestClock.adjust(DateTime.distance(now, decoded.at))),
+        Effect.andThen(liveGames.take(decoded)),
         Effect.andThen(heldAs(held))
       ),
     { discard: true }
@@ -197,22 +197,13 @@ const takenLive = Effect.gen(function* () {
   return { latest: yield* liveGames.latest, held: yield* Ref.get(held), events: yield* Ref.get(events) }
 }).pipe(Effect.provide(LiveGames.layer))
 
-/**
- * Every frame in the `FeedLog` replayed from `from` (all of them, unless given), decoded by the `Decoder`, as the
- * deliveries it said.
- */
-function deliveriesOf(from = DateTime.makeUnsafe(0)) {
+/** Every frame in the `FeedLog` replayed from `from` (all of them, unless given), decoded by the `Decoder`. */
+function decodedOf(from = DateTime.makeUnsafe(0)) {
   return Stream.unwrap(
     Effect.gen(function* () {
       const log = yield* FeedLog
       const decoder = yield* Decoder
-      return decoder
-        .decode(log.replay(from))
-        .pipe(
-          Stream.flatMap(({ deliveries, at, seq }) =>
-            Stream.fromIterable(deliveries.map((delivery) => ({ delivery, at, seq })))
-          )
-        )
+      return decoder.decode(log.replay(from))
     })
   )
 }

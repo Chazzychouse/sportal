@@ -23,33 +23,29 @@ export class LiveGames extends Data.Class<{
   })
 
   /**
-   * Ticks every game due after `reached` and at or before `at`, then applies `delivery` if any, as frame `seq`
-   * (none keeps the last). A tick never goes back. A step that raises a defect keeps the game's last good live game
-   * and reports `Raised`.
+   * Takes one frame: ticks every game due after `reached` and at or before `at`, then applies each of its deliveries in
+   * order, and sets `seq` to the frame's, even when it has no deliveries. A tick never goes back. A step that raises a
+   * defect keeps the game's last good live game and reports `Raised`.
    */
-  step(
-    delivery: Option.Option<Delivery>,
-    at: DateTime.Utc,
-    seq: Option.Option<number>
-  ): Effect.Effect<{ readonly next: LiveGames; readonly reports: ReadonlyArray<FoldReport> }> {
-    const from = Option.getOrElse(this.reached, () => at)
-    return tickTo({ live: this.live, reports: [] }, from, at).pipe(
-      Effect.flatMap((ticked) =>
-        Option.match(delivery, {
-          onNone: () => Effect.succeed({ listed: this.listed, ...ticked }),
-          onSome: (delivery) => applied(this.listed, ticked, delivery, at)
-        })
-      ),
-      Effect.map((stepped) => ({
-        next: new LiveGames({
-          seq: Option.orElse(seq, () => this.seq),
-          listed: stepped.listed,
-          live: stepped.live,
-          reached: Option.some(DateTime.max(from, at))
-        }),
-        reports: stepped.reports
-      }))
+  take(frame: {
+    readonly deliveries: ReadonlyArray<Delivery>
+    readonly at: DateTime.Utc
+    readonly seq: number
+  }): Effect.Effect<{ readonly next: LiveGames; readonly reports: ReadonlyArray<FoldReport> }> {
+    return this.stepped(frame.at, Option.some(frame.seq), (ticked) =>
+      Effect.reduce(
+        frame.deliveries,
+        () => ({ listed: this.listed, ...ticked }),
+        (acc, delivery) => applied(acc, delivery, frame.at)
+      )
     )
+  }
+
+  /** Ticks every game due after `reached` and at or before `now`, with no frame: `seq` stays as it was. */
+  tick(
+    now: DateTime.Utc
+  ): Effect.Effect<{ readonly next: LiveGames; readonly reports: ReadonlyArray<FoldReport> }> {
+    return this.stepped(now, Option.none(), (ticked) => Effect.succeed({ listed: this.listed, ...ticked }))
   }
 
   /** The earliest instant after `reached` at which a live game changes with no new frame. */
@@ -75,6 +71,27 @@ export class LiveGames extends Data.Class<{
   publishesSameAs(that: LiveGames): boolean {
     return this.live === that.live && this.listed === that.listed && Equal.equals(this.seq, that.seq)
   }
+
+  /** Ticks to `at`, then runs `then` on what the ticks left, as frame `seq` (none keeps the last). */
+  private stepped(
+    at: DateTime.Utc,
+    seq: Option.Option<number>,
+    then: (ticked: Stepped) => Effect.Effect<Folded>
+  ): Effect.Effect<{ readonly next: LiveGames; readonly reports: ReadonlyArray<FoldReport> }> {
+    const from = Option.getOrElse(this.reached, () => at)
+    return tickTo({ live: this.live, reports: [] }, from, at).pipe(
+      Effect.flatMap(then),
+      Effect.map((folded) => ({
+        next: new LiveGames({
+          seq: Option.orElse(seq, () => this.seq),
+          listed: folded.listed,
+          live: folded.live,
+          reached: Option.some(DateTime.max(from, at))
+        }),
+        reports: folded.reports
+      }))
+    )
+  }
 }
 
 /** What one step did to one game, for telemetry to tell. */
@@ -98,6 +115,9 @@ export const FoldReport = Data.taggedEnum<FoldReport>()
 
 /** Every current game's live game, and what the steps so far did. */
 type Stepped = { readonly live: ReadonlyMap<GameId, LiveGame>; readonly reports: ReadonlyArray<FoldReport> }
+
+/** `Stepped`, with each league's last listing. */
+type Folded = Stepped & { readonly listed: ReadonlyMap<LeagueId, ReadonlyArray<GameSnapshot>> }
 
 /**
  * Ticks, in wake order, every game due after `from` and at or before `at`, each at its own wake instant; games due at
@@ -128,32 +148,27 @@ function dueAfter(live: ReadonlyMap<GameId, LiveGame>, from: DateTime.Utc): Opti
   return LiveGame.earliest([...live.values()].map((liveGame) => liveGame.dueAfter(from)))
 }
 
-function applied(
-  listed: ReadonlyMap<LeagueId, ReadonlyArray<GameSnapshot>>,
-  stepped: Stepped,
-  delivery: Delivery,
-  at: DateTime.Utc
-): Effect.Effect<Stepped & { readonly listed: ReadonlyMap<LeagueId, ReadonlyArray<GameSnapshot>> }> {
+function applied(folded: Folded, delivery: Delivery, at: DateTime.Utc): Effect.Effect<Folded> {
+  const { listed } = folded
   return Delivery.match(delivery, {
     Listing: ({ league, games }) =>
       Effect.reduce(
         games,
-        () => stepped,
+        (): Stepped => folded,
         (acc, snapshot) => snapshotTaken(acc, snapshot, "poll", at)
       ).pipe(Effect.map((after) => ({ ...after, listed: new Map(listed).set(league, games) }))),
     Snapshot: ({ snapshot, from }) =>
-      snapshotTaken(stepped, snapshot, from, at).pipe(Effect.map((after) => ({ ...after, listed }))),
+      snapshotTaken(folded, snapshot, from, at).pipe(Effect.map((after) => ({ ...after, listed }))),
     Plays: (plays) =>
-      Option.match(Option.fromNullishOr(stepped.live.get(plays.game)), {
+      Option.match(Option.fromNullishOr(folded.live.get(plays.game)), {
         onNone: () =>
           Effect.succeed({
-            ...stepped,
-            listed,
-            reports: [...stepped.reports, FoldReport.Dropped({ game: plays.game })]
+            ...folded,
+            reports: [...folded.reports, FoldReport.Dropped({ game: plays.game })]
           }),
         onSome: (liveGame) =>
-          guarded(stepped, liveGame.snapshot, "a delivery", () =>
-            settled(stepped, plays.game, at, Option.some(liveGame), liveGame.take(plays, at))
+          guarded(folded, liveGame.snapshot, "a delivery", () =>
+            settled(folded, plays.game, at, Option.some(liveGame), liveGame.take(plays, at))
           ).pipe(Effect.map((after) => ({ ...after, listed })))
       })
   })

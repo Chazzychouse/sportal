@@ -74,11 +74,22 @@ export const decoder = Layer.succeed(
   })
 )
 
-/** `delivery` taken into the fold at the test clock's now, as the delivery of frame `seq` when given. */
+/**
+ * `delivery` taken into the fold at the test clock's now, as the only delivery of frame `seq`, or of the frame after the
+ * fold's last when no `seq` is given.
+ */
 export function taken(delivery: Delivery, seq?: number) {
-  return Effect.flatMap(DateTime.now, (at) =>
-    LiveGames.use((liveGames) => liveGames.take(delivery, at, Option.fromNullishOr(seq)))
+  return LiveGames.use((liveGames) =>
+    Effect.gen(function* () {
+      const last = Option.getOrElse((yield* liveGames.latest).seq, () => 0)
+      yield* liveGames.take(delivered(delivery, yield* DateTime.now, seq ?? last + 1))
+    })
   )
+}
+
+/** Frame `seq`, received at `at`, that said only `delivery`. */
+export function delivered(delivery: Delivery, at: DateTime.Utc, seq: number): Decoded {
+  return new Decoded({ seq, at, deliveries: [delivery], resyncs: [], notices: [] })
 }
 
 /** The games one poll of `league` lists, as the provider's `Decoder` reads it. */

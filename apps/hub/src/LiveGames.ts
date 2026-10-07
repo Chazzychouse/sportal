@@ -1,4 +1,3 @@
-import type { Delivery } from "@sportal/domain/Delivery"
 import * as Fold from "@sportal/domain/LiveGames"
 import {
   Context,
@@ -16,24 +15,24 @@ import {
   SubscriptionRef
 } from "effect"
 import { countByState, gaugeHeld, quiet, reported, takeDuration, timerDefect } from "./LiveGamesTelemetry.ts"
+import type { Decoded } from "./provider/Provider.ts"
 
-/** The live games, run: the domain fold of every delivery in order, its timer, its telemetry, and its game events. */
+/** The live games, run: the domain fold of every frame in order, its timer, its telemetry, and its game events. */
 export class LiveGames extends Context.Service<
   LiveGames,
   {
     /**
-     * Applies `delivery`, received at `at` as frame `seq` (scripted deliveries have none), first ticking every game
-     * whose wake time is at or before `at`. Callers must stamp `at` in the order they call `take` (Ingest takes from
-     * one stream): a tick never goes back. A take during a replay waits for the replay to end.
+     * Takes what frame `decoded.seq` said, received at `decoded.at`: first ticks every game whose wake time is at or
+     * before it, then applies its deliveries in order, and moves the fold's `seq` to the frame's even when it said
+     * none. Callers must take frames in the order they were received (Ingest takes from one stream): a tick never
+     * goes back. A take during a replay waits for the replay to end.
      */
-    take(delivery: Delivery, at: DateTime.Utc, seq: Option.Option<number>): Effect.Effect<void>
+    take(decoded: Decoded): Effect.Effect<void>
     /**
-     * Runs `deliveries` through `take` with no per-game telemetry and no `events`, then sets each held game's gauges
-     * once and logs one summary line. Returns how many deliveries it took.
+     * Takes each of `decoded` with no per-game telemetry and no `events`, then sets each held game's gauges once and
+     * logs one summary line. Returns how many deliveries it took.
      */
-    replay(
-      deliveries: Stream.Stream<{ delivery: Delivery; at: DateTime.Utc; seq: number }>
-    ): Effect.Effect<number>
+    replay(decoded: Stream.Stream<Decoded>): Effect.Effect<number>
     readonly latest: Effect.Effect<Fold.LiveGames>
     /** The latest first, then each change. `reached` alone changing is not a change. */
     readonly changes: Stream.Stream<Fold.LiveGames>
@@ -47,16 +46,17 @@ export class LiveGames extends Context.Service<
       const state = yield* SubscriptionRef.make(Fold.LiveGames.empty)
       const events = yield* PubSub.unbounded<Data.TaggedEnum.Value<Fold.FoldReport, "Happened">>()
       // Held by a replay for its whole run, so neither the timer nor a live take moves a replayed game between two
-      // recorded deliveries.
+      // recorded frames.
       const replaying = yield* Semaphore.make(1)
 
       // Steps the fold and hands what happened to `report`, all under the state's lock; publishes only when the fold
       // changed. Uninterruptible, so an interrupted caller never leaves telemetry without its state; a report that
       // dies leaves the state as it was, to be stepped again.
       const fold = (
-        delivery: Option.Option<Delivery>,
-        at: DateTime.Utc,
-        seq: Option.Option<number>,
+        step: (folded: Fold.LiveGames) => Effect.Effect<{
+          readonly next: Fold.LiveGames
+          readonly reports: ReadonlyArray<Fold.FoldReport>
+        }>,
         report: (
           reports: ReadonlyArray<Fold.FoldReport>,
           before: Fold.LiveGames,
@@ -65,7 +65,7 @@ export class LiveGames extends Context.Service<
       ) =>
         SubscriptionRef.modifySomeEffect(state, (folded) =>
           Effect.gen(function* () {
-            const { next, reports } = yield* folded.step(delivery, at, seq)
+            const { next, reports } = yield* step(folded)
             yield* report(reports, folded, next)
             const changed = !next.publishesSameAs(folded) || !Equal.equals(next.reached, folded.reached)
             return [undefined, changed ? Option.some(next) : Option.none()] as const
@@ -90,7 +90,7 @@ export class LiveGames extends Context.Service<
             sleepUntil(due).pipe(
               Effect.andThen(
                 DateTime.now.pipe(
-                  Effect.flatMap((now) => fold(Option.none(), now, Option.none(), live(Option.none()))),
+                  Effect.flatMap((now) => fold((folded) => folded.tick(now), live(Option.none()))),
                   Semaphore.withPermit(replaying)
                 )
               )
@@ -109,25 +109,28 @@ export class LiveGames extends Context.Service<
       )
 
       return LiveGames.of({
-        take: Effect.fn("LiveGames.take")(function* (
-          delivery: Delivery,
-          at: DateTime.Utc,
-          seq: Option.Option<number>
-        ) {
-          yield* Effect.annotateCurrentSpan({ "sportal.delivery": delivery._tag })
-          yield* fold(Option.some(delivery), at, seq, live(seq)).pipe(Semaphore.withPermit(replaying))
+        take: Effect.fn("LiveGames.take")(function* (decoded: Decoded) {
+          yield* Effect.annotateCurrentSpan({
+            "sportal.seq": decoded.seq,
+            "sportal.deliveries": decoded.deliveries.length
+          })
+          yield* fold((folded) => folded.take(decoded), live(Option.some(decoded.seq))).pipe(
+            Semaphore.withPermit(replaying)
+          )
         }, Effect.trackDuration(takeDuration)),
-        replay: Effect.fn("LiveGames.replay")(function* (deliveries) {
+        replay: Effect.fn("LiveGames.replay")(function* (frames) {
           const plays = yield* Ref.make(0)
-          const [duration, taken] = yield* deliveries.pipe(
+          const [duration, taken] = yield* frames.pipe(
             Stream.runFoldEffect(
               () => 0,
-              (count, { delivery, at, seq }) =>
-                fold(Option.some(delivery), at, Option.some(seq), (reports) =>
-                  Effect.forEach(reports, (report) => quiet(report, Option.some(seq), plays), {
-                    discard: true
-                  })
-                ).pipe(Effect.as(count + 1))
+              (count, decoded) =>
+                fold(
+                  (folded) => folded.take(decoded),
+                  (reports) =>
+                    Effect.forEach(reports, (report) => quiet(report, Option.some(decoded.seq), plays), {
+                      discard: true
+                    })
+                ).pipe(Effect.as(count + decoded.deliveries.length))
             ),
             Effect.timed
           )

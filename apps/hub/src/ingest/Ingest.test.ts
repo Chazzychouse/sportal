@@ -35,7 +35,7 @@ import { Decoder } from "../provider/Decoder.ts"
 import * as EspnDecode from "../provider/espn/EspnDecode.ts"
 import { recordedCheckpoint } from "../provider/espn/TestEspn.ts"
 import { Decoded, type Polling, Provider, ProviderError } from "../provider/Provider.ts"
-import { polling, pushed, scripted } from "../provider/TestProvider.ts"
+import { decoder, polling, pushed, scripted } from "../provider/TestProvider.ts"
 import { withEnv } from "../TestHubConfig.ts"
 import { counted, recordingLogs, recordingSpans, withMetrics } from "../TestTelemetry.ts"
 import * as Ingest from "./Ingest.ts"
@@ -129,6 +129,38 @@ describe("Ingest", () => {
       yield* TestClock.adjust("10 seconds")
       assert.strictEqual((yield* slateOf())[0]?.home.score, 7)
     }).pipe(Effect.provide(ingesting(scripted([[scoring(0)], [scoring(7)]]))))
+  )
+
+  it.effect("a poll that does not decode does not hold up the next one", () =>
+    Effect.gen(function* () {
+      const polls = yield* Ref.make(0)
+      const provider = Layer.merge(
+        Layer.succeed(
+          Provider,
+          Provider.of({
+            push: () => Stream.never,
+            polling: Schedule.spaced("1 second"),
+            poll: () =>
+              Ref.getAndUpdate(polls, (n) => n + 1).pipe(
+                Effect.flatMap((call) =>
+                  call === 1
+                    ? Effect.map(pollOf([]), (frame) => ({ ...frame, body: "not json" }))
+                    : pollOf([scoring(call)])
+                )
+              )
+          })
+        ),
+        decoder
+      )
+      yield* Effect.gen(function* () {
+        yield* TestClock.adjust(0)
+        yield* TestClock.adjust("1 second")
+        assert.strictEqual(yield* Ref.get(polls), 2)
+
+        yield* TestClock.adjust("1 second")
+        assert.strictEqual(yield* Ref.get(polls), 3)
+      }).pipe(Effect.provide(ingesting(provider)))
+    })
   )
 
   it.effect("a failed league appends nothing and keeps its last listing in the fold", () =>
