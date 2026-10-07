@@ -4,11 +4,11 @@ import { FeedLog } from "./FeedLog.ts"
 import { GameHistory } from "./GameHistory.ts"
 import { HubConfig } from "./HubConfig.ts"
 import * as Ingest from "./Ingest.ts"
+import { LiveSlate } from "./LiveSlate.ts"
 import * as EspnDecode from "./provider/espn/EspnDecode.ts"
 import * as EspnProvider from "./provider/espn/EspnProvider.ts"
 import * as EspnScript from "./provider/espn/EspnScript.ts"
 import { FastCast } from "./provider/espn/FastCast.ts"
-import { Slate } from "./Slate.ts"
 import * as ScenarioClock from "./scenario/ScenarioClock.ts"
 import * as ScenarioProvider from "./scenario/ScenarioProvider.ts"
 import * as ScenarioSource from "./scenario/ScenarioSource.ts"
@@ -29,8 +29,8 @@ export const layer = Layer.unwrap(
   })
 )
 
-// The Slate is built once it has replayed the day's frames, so the Hub serves only after that. It and Ingest share one
-// feed log: Ingest appends to it, and the Slate follows it. Only the Slate is provided onward: nothing outside the
+// The LiveSlate is built once it has replayed the day's frames, so the Hub serves only after that. It and Ingest share one
+// feed log: Ingest appends to it, and the LiveSlate follows it. Only the LiveSlate is provided onward: nothing outside the
 // Hub's own layers needs the log.
 function live() {
   return Layer.mergeAll(
@@ -46,7 +46,7 @@ function live() {
         )
       )
     ).pipe(
-      Layer.provideMerge(Slate.layer),
+      Layer.provideMerge(LiveSlate.layer),
       Layer.provide(FeedLog.inDataDir),
       Layer.provide([EspnDecode.layer, DateTime.layerCurrentZoneLocal])
     ),
@@ -55,7 +55,7 @@ function live() {
 }
 
 // The scenario plays as the provider through the real Ingest, onto a feed log of its own, decoded as ESPN: a recorded
-// one as ESPN recorded it, a written one as ESPN's writer writes its script. Ingest and the Slate share the
+// one as ESPN recorded it, a written one as ESPN's writer writes its script. Ingest and the LiveSlate share the
 // scenario's clock; the rest of the Hub keeps the real one. The game history stays out of a scenario.
 function scripted() {
   return Layer.mergeAll(
@@ -68,7 +68,7 @@ function scripted() {
         )
       )
     ).pipe(
-      Layer.provideMerge(Slate.layer),
+      Layer.provideMerge(LiveSlate.layer),
       Layer.provide(FeedLog.forScenario),
       Layer.provide([EspnDecode.layer, DateTime.layerCurrentZoneLocal]),
       Layer.provide(ScenarioClock.layer)

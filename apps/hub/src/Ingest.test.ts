@@ -30,8 +30,8 @@ import { FeedLog } from "./FeedLog.ts"
 import type { FeedFrame } from "./Frame.ts"
 import { GameHistory } from "./GameHistory.ts"
 import * as Ingest from "./Ingest.ts"
+import { LiveSlate } from "./LiveSlate.ts"
 import { type LiveFeed, LiveFeedDemand, type Polling, Provider, ProviderError } from "./provider/Provider.ts"
-import { Slate } from "./Slate.ts"
 import { polled, pushed } from "./TestFeed.ts"
 import { withEnv } from "./TestHubConfig.ts"
 import * as TestSnapshotFeed from "./TestSnapshotFeed.ts"
@@ -41,7 +41,7 @@ describe("Ingest", () => {
   it.effect("each poll appends one frame per league, then its listing reaches the slate", () =>
     Effect.gen(function* () {
       yield* TestClock.adjust(0)
-      const current = yield* (yield* Slate).latest
+      const current = yield* (yield* LiveSlate).latest
       yield* TestClock.adjust("100 millis")
       const logged = yield* logOf(2)
 
@@ -171,7 +171,7 @@ describe("Ingest", () => {
 
   it.effect("a failed league's game goes stale in the slate, its listing kept", () =>
     Effect.gen(function* () {
-      const slate = yield* Slate
+      const slate = yield* LiveSlate
       yield* TestClock.adjust(0)
       yield* TestClock.adjust("90 seconds")
       const current = yield* slate.latest
@@ -446,17 +446,17 @@ describe("Ingest", () => {
         ])
 
         yield* Effect.gen(function* () {
-          const replayed = yield* (yield* Slate).latest
+          const replayed = yield* (yield* LiveSlate).latest
           assert.deepStrictEqual(replayed.seq, Option.some(2))
           assert.strictEqual(replayed.live.get(GameId.make("1"))?.snapshot.period, 3)
           assert.isUndefined(yield* counted("sportal_snapshots"))
           assert.isFalse(logs.some((log) => log.message.includes("started")))
-          const replay = ended.find((span) => span.name === "Slate.replay")
+          const replay = ended.find((span) => span.name === "LiveSlate.replay")
           assert.strictEqual(replay?.attributes.get("sportal.frames"), 2)
           assert.strictEqual(replay?.attributes.get("sportal.deliveries"), 2)
 
           yield* TestClock.adjust(0)
-          const polled = yield* (yield* Slate).latest
+          const polled = yield* (yield* LiveSlate).latest
           assert.deepStrictEqual(polled.seq, Option.some(3))
           assert.strictEqual(polled.live.get(GameId.make("1"))?.snapshot.period, 4)
         }).pipe(
@@ -485,7 +485,7 @@ function over(
   options: { readonly leagues?: ReadonlyArray<LeagueId>; readonly ended?: Array<Tracer.Span> } = {}
 ) {
   return Ingest.layer.pipe(
-    Layer.provideMerge(Slate.layer),
+    Layer.provideMerge(LiveSlate.layer),
     Layer.provideMerge(FeedLog.layer),
     Layer.provide([
       provider,
@@ -590,7 +590,7 @@ function pollOf(games: ReadonlyArray<GameSnapshot>) {
 /** The fbs listing as the slate has it. */
 function slateOf() {
   return Effect.gen(function* () {
-    return (yield* (yield* Slate).latest).games(["fbs"])
+    return (yield* (yield* LiveSlate).latest).games(["fbs"])
   })
 }
 

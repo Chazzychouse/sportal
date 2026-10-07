@@ -1,9 +1,9 @@
 import { assert, describe, it } from "@effect/vitest"
 import { LeagueId } from "@sportal/domain/League"
 import { DateTime, Effect } from "effect"
+import { LiveSlate } from "../../LiveSlate.ts"
 import * as EspnDecode from "../../provider/espn/EspnDecode.ts"
 import * as EspnScript from "../../provider/espn/EspnScript.ts"
-import { Slate } from "../../Slate.ts"
 import { slateFollowing } from "../../TestFeed.ts"
 import type { ScenarioScript } from "../ScenarioScript.ts"
 import { allStoppedButOne } from "./AllStoppedButOne.ts"
@@ -98,7 +98,7 @@ describe("scripts", () => {
 /** The slate `seconds` into `script`: its ESPN frames up to then, current through ESPN's decode. */
 function at(script: ScenarioScript, seconds: number) {
   const until = DateTime.add(script.origin, { seconds })
-  return Slate.use((slate) => slate.latest).pipe(
+  return LiveSlate.use((slate) => slate.latest).pipe(
     Effect.map((current) => current.games(LeagueId.literals)),
     Effect.provide(
       slateFollowing(

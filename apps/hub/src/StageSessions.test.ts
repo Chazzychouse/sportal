@@ -1,12 +1,12 @@
 import { assert, describe, it } from "@effect/vitest"
 import { ChannelAvailability } from "@sportal/domain/Channel"
 import { GameId, type GameSnapshot, Network } from "@sportal/domain/Game"
-import { Slate as DomainSlate } from "@sportal/domain/Slate"
+import { Slate } from "@sportal/domain/Slate"
 import type { Tile } from "@sportal/domain/Stage"
 import { broadcast, liveSnapshot, snapshot, team } from "@sportal/domain/TestGame"
 import { DateTime, Deferred, Effect, Fiber, Layer, Option, Ref, Stream } from "effect"
 import { TestClock } from "effect/testing"
-import { type Published, Slate } from "./Slate.ts"
+import { LiveSlate, type Published } from "./LiveSlate.ts"
 import { StageSessions } from "./StageSessions.ts"
 import { Source } from "./source/Source.ts"
 import { recordedGuide } from "./source/youtube-tv/TestYouTubeTv.ts"
@@ -129,7 +129,7 @@ describe("StageSessions", () => {
         Effect.provide(
           readAtOnce.pipe(
             Layer.provideMerge(StageSessions.layer),
-            Layer.provide(Layer.succeed(Slate, fakeSlate)),
+            Layer.provide(Layer.succeed(LiveSlate, fakeSlate)),
             Layer.provide(YouTubeTv.layer)
           )
         )
@@ -181,7 +181,9 @@ describe("StageSessions", () => {
       }).pipe(
         Effect.provide(
           StageSessions.layer.pipe(
-            Layer.provide(Layer.succeed(Slate, slateOf(Effect.succeed({ games: slate, recentPlays: {} })))),
+            Layer.provide(
+              Layer.succeed(LiveSlate, slateOf(Effect.succeed({ games: slate, recentPlays: {} })))
+            ),
             Layer.provideMerge(gated)
           )
         )
@@ -214,7 +216,7 @@ describe("StageSessions", () => {
       }).pipe(
         Effect.provide(
           StageSessions.layer.pipe(
-            Layer.provide(Layer.succeed(Slate, fakeSlate)),
+            Layer.provide(Layer.succeed(LiveSlate, fakeSlate)),
             Layer.provideMerge(YouTubeTv.layer)
           )
         )
@@ -254,23 +256,23 @@ describe("StageSessions", () => {
   )
 })
 
-/** A Slate that publishes what `published` gives, with no changes, and holds nothing else. */
+/** A LiveSlate that publishes what `published` gives, with no changes, and holds nothing else. */
 function slateOf(published: Effect.Effect<Published>) {
-  return Slate.of({
-    latest: Effect.succeed(DomainSlate.empty),
+  return LiveSlate.of({
+    latest: Effect.succeed(Slate.empty),
     changes: Stream.empty,
     events: Stream.empty,
-    through: () => Effect.succeed(DomainSlate.empty),
+    through: () => Effect.succeed(Slate.empty),
     demand: Stream.empty,
     published,
     publishedChanges: Stream.empty
   })
 }
 
-/** StageSessions over a Slate of `games` and YouTube TV with nothing read yet. */
+/** StageSessions over a LiveSlate of `games` and YouTube TV with nothing read yet. */
 function sessionsOver(games: ReadonlyArray<GameSnapshot>) {
   return StageSessions.layer.pipe(
-    Layer.provide(Layer.succeed(Slate, slateOf(Effect.succeed({ games, recentPlays: {} })))),
+    Layer.provide(Layer.succeed(LiveSlate, slateOf(Effect.succeed({ games, recentPlays: {} })))),
     Layer.provideMerge(YouTubeTv.layer)
   )
 }

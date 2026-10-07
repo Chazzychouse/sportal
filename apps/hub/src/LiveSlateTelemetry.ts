@@ -5,8 +5,8 @@ import type { Taken } from "@sportal/domain/Slate"
 import { SlateObservation } from "@sportal/domain/SlateObservation"
 import { Cause, DateTime, Duration, Effect, Exit, Match, Metric, Option, Schema } from "effect"
 import { observed } from "./DecodeTelemetry.ts"
+import type { Following } from "./LiveSlate.ts"
 import type { Decoded } from "./provider/Provider.ts"
-import type { Following } from "./Slate.ts"
 
 /**
  * What one take or tick of the slate did, told as its following stands. During the replay, only a defect is logged:
@@ -59,7 +59,7 @@ export function countByState(games: ReadonlyMap<GameId, LiveGame>): Effect.Effec
 
 /** A defect in the slate's timer, logged and counted. */
 export function timerDefect(defect: unknown): Effect.Effect<void> {
-  return Effect.logError("Slate: the timer raised a defect", Cause.die(defect)).pipe(
+  return Effect.logError("LiveSlate: the timer raised a defect", Cause.die(defect)).pipe(
     Effect.andThen(Metric.update(gameDefects, 1))
   )
 }
@@ -68,7 +68,7 @@ export function timerDefect(defect: unknown): Effect.Effect<void> {
 function toldInReplay(observation: SlateObservation, seq: Option.Option<number>): Effect.Effect<void> {
   return SlateObservation.$is("Raised")(observation)
     ? logDefect(
-        `Slate: ${observation.by} raised a defect in replay; keeping the last good live game`,
+        `LiveSlate: ${observation.by} raised a defect in replay; keeping the last good live game`,
         observation.cause,
         observation.snapshot,
         seq
@@ -82,7 +82,7 @@ function toldLive(observation: SlateObservation, seq: Option.Option<number>): Ef
     Took: ({ snapshot, from, outcome, had }) =>
       // A hold and a fallback are rare, and each says the push fell behind the scoreboard.
       Effect.logWithLevel(outcome === "held" || outcome === "fellBack" ? "Info" : "Debug")(
-        `Slate: ${snapshot.matchup()}: ${outcome} ${from} ${snapshot.statusLine()}${Option.match(had, {
+        `LiveSlate: ${snapshot.matchup()}: ${outcome} ${from} ${snapshot.statusLine()}${Option.match(had, {
           onNone: () => "",
           onSome: (had) => ` (had ${had.statusLine()})`
         })}`
@@ -116,11 +116,11 @@ function toldLive(observation: SlateObservation, seq: Option.Option<number>): Ef
         Effect.annotateLogs(annotationsOf(liveGame.snapshot))
       ),
     Dropped: ({ game }) =>
-      Effect.logDebug(`Slate: plays for game ${game} dropped: no live game holds it`).pipe(
+      Effect.logDebug(`LiveSlate: plays for game ${game} dropped: no live game holds it`).pipe(
         Effect.andThen(Metric.update(deliveriesDropped, 1))
       ),
     Raised: ({ snapshot, cause, by }) =>
-      logDefect(`Slate: ${by} raised a defect; keeping the last good live game`, cause, snapshot, seq)
+      logDefect(`LiveSlate: ${by} raised a defect; keeping the last good live game`, cause, snapshot, seq)
   })
 }
 
@@ -141,7 +141,7 @@ function toldEvent(event: GameEvent, observations: ReadonlyArray<SlateObservatio
   return Option.match(Option.fromNullishOr(step), {
     onNone: () =>
       Effect.logError(
-        `Slate: ${event.what._tag} for game ${event.game} has no started or changed observation in its take`
+        `LiveSlate: ${event.what._tag} for game ${event.game} has no started or changed observation in its take`
       ),
     onSome: ({ snapshot }) =>
       logEvent(event.what, snapshot).pipe(
@@ -171,7 +171,7 @@ function logLifecycle(
   now: DateTime.Utc
 ): Effect.Effect<void> {
   return Effect.logWithLevel(liveGame.isCurrent(now) ? "Info" : "Debug")(
-    `Slate: ${liveGame.snapshot.matchup()}: ${what}, ${liveGame.state._tag} at ${liveGame.snapshot.statusLine()}`
+    `LiveSlate: ${liveGame.snapshot.matchup()}: ${what}, ${liveGame.state._tag} at ${liveGame.snapshot.statusLine()}`
   )
 }
 
@@ -189,7 +189,7 @@ function logTransition(before: LiveGame, after: LiveGame, now: DateTime.Utc): Ef
     onSome: (duration) => `, ${Math.round(Duration.toSeconds(duration))} s since the last update`
   })
   return Effect.logInfo(
-    `Slate: ${after.snapshot.matchup()}: ${from} → ${to} at ${after.snapshot.statusLine()}${since}`
+    `LiveSlate: ${after.snapshot.matchup()}: ${from} → ${to} at ${after.snapshot.statusLine()}${since}`
   ).pipe(
     Effect.andThen(Metric.update(Metric.withAttributes(transitions, { from, to }), 1)),
     Effect.andThen(
@@ -208,7 +208,7 @@ function logTransition(before: LiveGame, after: LiveGame, now: DateTime.Utc): Ef
 function logEvent(event: GameEventKind, snapshot: GameSnapshot): Effect.Effect<void> {
   const { _tag, ...fields } = event
   const team = "team" in event ? ` ${snapshot.abbreviationOf(event.team)}` : ""
-  return Effect.logInfo(`Slate: ${snapshot.matchup()}: ${_tag}${team} at ${snapshot.statusLine()}`).pipe(
+  return Effect.logInfo(`LiveSlate: ${snapshot.matchup()}: ${_tag}${team} at ${snapshot.statusLine()}`).pipe(
     Effect.andThen(
       Metric.update(Metric.withAttributes(gameEvents, { ...annotationsOf(snapshot), event: _tag }), 1)
     ),

@@ -5,7 +5,7 @@ import { Play } from "@sportal/domain/Play"
 import { SlateObservation } from "@sportal/domain/SlateObservation"
 import { DateTime, Effect, Schema } from "effect"
 import type { FeedFrame } from "../../Frame.ts"
-import { Slate } from "../../Slate.ts"
+import { LiveSlate } from "../../LiveSlate.ts"
 import { ScenarioScript } from "../../scenario/ScenarioScript.ts"
 import { decodedFrames, slateFollowing, takenOf } from "../../TestFeed.ts"
 import * as EspnDecode from "./EspnDecode.ts"
@@ -184,7 +184,7 @@ describe("scenarioOf", () => {
         script.steps,
         (step, index) =>
           Effect.gen(function* () {
-            const slate = yield* Slate
+            const slate = yield* LiveSlate
             const current = yield* slate.latest
 
             assert.deepStrictEqual(

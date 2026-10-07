@@ -17,7 +17,7 @@ import { CorpusDay, CorpusDays } from "./CorpusDay.ts"
 import { CorpusLine } from "./CorpusInput.ts"
 import { built, inArchive, inCorpus, local, logged, recorded, site, stepped } from "./TestCorpus.ts"
 
-// As Slate.replay.test.ts measured it: every play id the recording's patches add.
+// As LiveSlate.replay.test.ts measured it: every play id the recording's patches add.
 const recordedPlays = 182
 
 describe("CorpusBuild.captured", () => {

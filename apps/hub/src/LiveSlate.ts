@@ -2,7 +2,7 @@ import type { GameSnapshot } from "@sportal/domain/Game"
 import type { GameEvent } from "@sportal/domain/GameEvent"
 import { LeagueId } from "@sportal/domain/League"
 import type { RecentPlays } from "@sportal/domain/RecentPlays"
-import { Slate as DomainSlate, type Taken } from "@sportal/domain/Slate"
+import { Slate, type Taken } from "@sportal/domain/Slate"
 import {
   Array as Arr,
   Clock,
@@ -26,26 +26,26 @@ import {
 } from "effect"
 import { FeedLog } from "./FeedLog.ts"
 import { isStopping } from "./HubStopping.ts"
+import { countByState, gaugeHeld, takeDuration, timerDefect, told } from "./LiveSlateTelemetry.ts"
 import { Decoder } from "./provider/Decoder.ts"
 import { type Decoded, LiveFeedDemand } from "./provider/Provider.ts"
-import { countByState, gaugeHeld, takeDuration, timerDefect, told } from "./SlateTelemetry.ts"
 
 /**
  * The slate, run: the domain slate taking every frame in the feed log, in order, with its timer, its telemetry, and its
  * game events. It follows the log on its own, from the game day's start: nothing writes to it.
  */
-export class Slate extends Context.Service<
-  Slate,
+export class LiveSlate extends Context.Service<
+  LiveSlate,
   {
-    readonly latest: Effect.Effect<DomainSlate>
+    readonly latest: Effect.Effect<Slate>
     /** The latest first, then each change. `seq` or `reached` alone changing is not a change. */
-    readonly changes: Stream.Stream<DomainSlate>
+    readonly changes: Stream.Stream<Slate>
     readonly events: Stream.Stream<GameEvent>
     /**
      * The slate once it has taken frame `seq`, or the latest once it has halted following the log, so a slate that takes
      * no more frames never keeps its caller waiting.
      */
-    through(seq: number): Effect.Effect<DomainSlate>
+    through(seq: number): Effect.Effect<Slate>
     /**
      * What the live feed should follow, afresh on each run: the current games first, then each change of which games
      * they are, and each channel whose document a live frame's decode dropped.
@@ -56,7 +56,7 @@ export class Slate extends Context.Service<
     /** `published` first, then each new one. */
     readonly publishedChanges: Stream.Stream<Published>
   }
->()("sportal/hub/Slate") {
+>()("sportal/hub/LiveSlate") {
   /**
    * Follows the feed log from the start of the game day: replays it quietly, and is built once every frame logged before
    * it started is taken, so nothing is served from a slate still catching up. Then it takes each frame as it is appended,
@@ -65,18 +65,18 @@ export class Slate extends Context.Service<
    * clock, and is then published: changes arriving more often than that, without a pause, publish nothing until they
    * pause.
    */
-  static readonly layer: Layer.Layer<Slate, never, FeedLog | Decoder | DateTime.CurrentTimeZone> =
+  static readonly layer: Layer.Layer<LiveSlate, never, FeedLog | Decoder | DateTime.CurrentTimeZone> =
     Layer.effect(
-      Slate,
+      LiveSlate,
       Effect.gen(function* () {
         const feedLog = yield* FeedLog
         const decoder = yield* Decoder
-        const from = DomainSlate.dayStart(yield* DateTime.nowInCurrentZone)
+        const from = Slate.dayStart(yield* DateTime.nowInCurrentZone)
         const started = yield* Clock.currentTimeMillis
         const state = yield* SubscriptionRef.make<{
-          readonly slate: DomainSlate
+          readonly slate: Slate
           readonly following: Following
-        }>({ slate: DomainSlate.empty, following: Following.Replaying() })
+        }>({ slate: Slate.empty, following: Following.Replaying() })
         const latest = Effect.map(SubscriptionRef.get(state), ({ slate }) => slate)
         const events = yield* PubSub.unbounded<GameEvent>()
         const resyncs = yield* PubSub.unbounded<string>()
@@ -91,7 +91,7 @@ export class Slate extends Context.Service<
         // Takes or ticks the slate and tells what it did as the following stands, all under the state's lock; publishes
         // whenever the slate or its watermarks moved, so `through` sees every frame. Uninterruptible, so an interrupted
         // caller never leaves telemetry without its state; an observation that dies leaves the state as it was.
-        const step = (frame: Option.Option<Decoded>, run: (slate: DomainSlate) => Effect.Effect<Taken>) =>
+        const step = (frame: Option.Option<Decoded>, run: (slate: Slate) => Effect.Effect<Taken>) =>
           SubscriptionRef.modifySomeEffect(state, ({ slate, following }) =>
             Effect.gen(function* () {
               const taken = yield* run(slate)
@@ -120,7 +120,7 @@ export class Slate extends Context.Service<
             )
           )
 
-        const take = Effect.fn("Slate.take")(function* (decoded: Decoded) {
+        const take = Effect.fn("LiveSlate.take")(function* (decoded: Decoded) {
           yield* Effect.annotateCurrentSpan({
             "sportal.seq": decoded.seq,
             "sportal.deliveries": decoded.deliveries.length
@@ -138,7 +138,7 @@ export class Slate extends Context.Service<
                 const { frames, deliveries, plays } = yield* Ref.get(replayed)
                 const took = Duration.millis((yield* Clock.currentTimeMillis) - started)
                 yield* Effect.logInfo(
-                  `Slate: replayed ${frames} frames: ${deliveries} deliveries, ${plays} plays; ${followed.slate.live.size} live games, in ${Duration.format(took)}`
+                  `LiveSlate: replayed ${frames} frames: ${deliveries} deliveries, ${plays} plays; ${followed.slate.live.size} live games, in ${Duration.format(took)}`
                 )
                 yield* Deferred.succeed(caughtUp, { frames, deliveries })
                 return [undefined, Option.some({ ...followed, following: Following.Live() })] as const
@@ -187,7 +187,7 @@ export class Slate extends Context.Service<
                   Effect.flatMap(({ following }) =>
                     Following.$is("Live")(following)
                       ? Effect.logError(
-                          "Slate: frames are no longer taken into the slate until the Hub restarts",
+                          "LiveSlate: frames are no longer taken into the slate until the Hub restarts",
                           Exit.isFailure(exit) ? exit.cause : "the log's stream ended"
                         )
                       : Effect.void
@@ -211,7 +211,7 @@ export class Slate extends Context.Service<
           Effect.flatMap(({ frames, deliveries }) =>
             Effect.annotateCurrentSpan({ "sportal.frames": frames, "sportal.deliveries": deliveries })
           ),
-          Effect.withSpan("Slate.replay")
+          Effect.withSpan("LiveSlate.replay")
         )
 
         // The timer, from the end of the replay, so nothing ticks a replayed game between two recorded frames: on each
@@ -277,7 +277,7 @@ export class Slate extends Context.Service<
           { startImmediately: true }
         )
 
-        return Slate.of({
+        return LiveSlate.of({
           latest,
           changes,
           published: SubscriptionRef.get(publication),

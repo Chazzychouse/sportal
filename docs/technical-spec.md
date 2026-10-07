@@ -220,8 +220,8 @@ sportal/
     │       ├── HubConfig.ts        Every environment setting, in one place
     │       ├── Telemetry.ts        Log level and format; OTLP export when configured
     │       ├── Database.ts         The SQLite client; each store migrates its own tables in it
-    │       ├── Slate.ts            The domain slate, run over the feed log: the day's replay, then each appended frame; its `Following`, timer, telemetry, game events, the live feed's demand, and the listed games it publishes with their recent plays
-    │       ├── SlateTelemetry.ts  What a take or tick did, as logs and metrics, told as the following stands
+    │       ├── LiveSlate.ts        The domain slate, run over the feed log: the day's replay, then each appended frame; its `Following`, timer, telemetry, game events, the live feed's demand, and the listed games it publishes with their recent plays
+    │       ├── LiveSlateTelemetry.ts  What a take or tick did, as logs and metrics, told as the following stands
     │       ├── DecodeTelemetry.ts  What decode observed, as logs and metrics, for frames after the replay (moved here from `ingest/`)
     │       ├── GameHistory.ts      Past plays and each game's latest snapshot, derived from the slate
     │       ├── corpus/             Typed game days built from the feed log or the archive, run through the slate on virtual time: `CorpusDay`, `CorpusInput`, `CorpusBuild`, `CorpusRun`, `Archive`, `Synthesis`, the `corpus` CLI and its worker
@@ -380,19 +380,19 @@ class FeedLog extends Context.Service<FeedLog, {
   whole shutdown bound is about 5 s: the HTTP server's 3 s for connected Displays, then the feed log's 1 s, then
   telemetry's 1 s to export what it holds.
 
-**Slate** — the domain's slate run, between decoding and everything that reads games. Not a port: one implementation
+**LiveSlate** — the domain slate, run over the feed log, between decoding and everything that reads games. Not a port: one implementation
 (`docs/adr/0009-one-fold-not-actors.md`, amended by `docs/adr/0010-the-poll-falls-back-and-corpus-days-are-built.md`):
 
 ```ts
-class Slate extends Context.Service<Slate, {
-  readonly latest: Effect<DomainSlate>
-  readonly changes: Stream<DomainSlate>              // seq or reached alone is not a change
+class LiveSlate extends Context.Service<LiveSlate, {
+  readonly latest: Effect<Slate>
+  readonly changes: Stream<Slate>                    // seq or reached alone is not a change
   readonly events: Stream<GameEvent>
   readonly demand: Stream<LiveFeedDemand>            // what the live feed should follow: the current games, and each channel to resync
   readonly published: Effect<Published>              // the listed games and their recent plays, debounced 250 ms
   readonly publishedChanges: Stream<Published>
-  through(seq: number): Effect<DomainSlate>          // the slate once it has taken frame `seq`, or the latest once Halted
-}>()("sportal/hub/Slate") {}
+  through(seq: number): Effect<Slate>                // the slate once it has taken frame `seq`, or the latest once Halted
+}>()("sportal/hub/LiveSlate") {}
 ```
 
 - One fiber takes each delivery, in `seq` order, into the domain `Slate`: every current game's `LiveGame`, each league's
@@ -444,13 +444,13 @@ A source's channels are found in its own guide, read by the shell (`docs/history
 
 - Polling is an Effect `Schedule` on the provider's port, which its adapter declares; ESPN's polls about every 10 seconds while any game is live, every minute near kickoff, every 15 minutes otherwise. One slate request per league covers every game; detail is fetched only for games someone has open or on a Stage.
 - A college Saturday is one request for 50+ games, not 50 requests.
-- `Slate` follows the feed log itself, so Ingest does not replay: from the game day's start (04:00 local) it replays the log quietly before the Hub serves. It subscribes to new frames first, then decodes the replay and every frame appended after as one stream, and decides where the replay ends by `seq` (the last frame logged when it started), not by a count or a timeout.
-- Each poll response and each live-feed frame is appended to the feed log, raw, before anything decodes it. The provider's `Decoder` turns frames into deliveries; the slate takes them in `seq` order. A frame that will not decode is noted and says nothing; `Slate` tells what decode observed only for frames after the replay. A decode defect after the replay halts the following. Ingest only polls, pushes, and appends, then waits for the slate to take a poll's last frame (`through`) before its polling Schedule reads the slate.
+- `LiveSlate` follows the feed log itself, so Ingest does not replay: from the game day's start (04:00 local) it replays the log quietly before the Hub serves. It subscribes to new frames first, then decodes the replay and every frame appended after as one stream, and decides where the replay ends by `seq` (the last frame logged when it started), not by a count or a timeout.
+- Each poll response and each live-feed frame is appended to the feed log, raw, before anything decodes it. The provider's `Decoder` turns frames into deliveries; the slate takes them in `seq` order. A frame that will not decode is noted and says nothing; `LiveSlate` tells what decode observed only for frames after the replay. A decode defect after the replay halts the following. Ingest only polls, pushes, and appends, then waits for the slate to take a poll's last frame (`through`) before its polling Schedule reads the slate.
 - The live feed pushes snapshots between polls, and, for each current game, its plays. A pushed game is advanced onto its listed game; one no poll has listed yet is counted and not delivered. The poll and the push have separate roles: the push gives a live game's snapshots and plays, and the poll gives listings. A game the push covers takes a poll snapshot only when it is ahead of the game (later in game time, halftime counting after play at the same clock, or at the same game time more total points, or at equal points a different split), and holds it for `fallbackAfter` (15 s) while the push can catch up; then the held snapshot applies and says its events (`sportal_poll_fallbacks`). A covered game ignores a poll behind it, and the slate remembers a game it saw finish, so a lagging poll cannot start it again; a snapshot later on the clock than the final, whatever its status, or at the same clock with more points, does (overtime after a spurious final, a postponed game resuming). There is no tie rule.
 - A decoder reset (a missed message, a patch that will not apply) is a resync of that topic: the socket asks for its checkpoint again.
 - Each event kind has one origin: state events come from snapshot changes and play events from plays (see `GameEvent`), including the leading signals the Director anticipates with, and events are never stored.
 - The feed log is the truth (`docs/adr/0008-the-feed-log-is-the-truth.md`); the slate's games, plays, and events are all derived from it (and a corpus day is built from it or from the archive), and a restart or a missed poll cannot corrupt anything.
-- Events are published on an in-process hub (`Slate.events`); nothing reads it yet. The Director and client live streams will subscribe to it.
+- Events are published on an in-process hub (`LiveSlate.events`); nothing reads it yet. The Director and client live streams will subscribe to it.
 
 ### 5.3 Stage
 

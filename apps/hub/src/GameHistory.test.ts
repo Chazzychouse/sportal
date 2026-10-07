@@ -8,7 +8,7 @@ import { SqlClient } from "effect/sql"
 import { TestClock } from "effect/testing"
 import * as Database from "./Database.ts"
 import { GameHistory } from "./GameHistory.ts"
-import { Slate } from "./Slate.ts"
+import { LiveSlate } from "./LiveSlate.ts"
 import { delivered, slateFollowing } from "./TestFeed.ts"
 import { counted, withMetrics } from "./TestTelemetry.ts"
 
@@ -69,7 +69,7 @@ describe("GameHistory", () => {
       yield* batched
       yield* delivered(Delivery.cases.Snapshot.make({ snapshot: over, from: "push" }))
       yield* batched
-      assert.isFalse((yield* Slate.use((slate) => slate.latest)).live.has(one))
+      assert.isFalse((yield* LiveSlate.use((slate) => slate.latest)).live.has(one))
       assert.deepStrictEqual(yield* playIds, [first])
     }).pipe(Effect.provide(history))
   )
@@ -93,7 +93,7 @@ describe("GameHistory", () => {
     Effect.gen(function* () {
       yield* delivered(Delivery.cases.Listing.make({ league: "fbs", games: [over] }))
       yield* batched
-      assert.isFalse((yield* Slate.use((slate) => slate.latest)).live.has(one))
+      assert.isFalse((yield* LiveSlate.use((slate) => slate.latest)).live.has(one))
       const latest = yield* GameHistory.use((gameHistory) => gameHistory.latest(one))
       assert.deepStrictEqual(
         Option.map(latest, ({ status }) => status),

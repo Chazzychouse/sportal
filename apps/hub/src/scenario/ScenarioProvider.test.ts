@@ -28,11 +28,11 @@ import { FeedFrame } from "../Frame.ts"
 import * as Gzip from "../Gzip.ts"
 import type { HubConfig } from "../HubConfig.ts"
 import * as Ingest from "../Ingest.ts"
+import { LiveSlate } from "../LiveSlate.ts"
 import type { Decoder } from "../provider/Decoder.ts"
 import * as EspnDecode from "../provider/espn/EspnDecode.ts"
 import * as EspnScript from "../provider/espn/EspnScript.ts"
 import { Provider } from "../provider/Provider.ts"
-import { Slate } from "../Slate.ts"
 import { decodedFrames, listedBy, pushed, writtenScenarios } from "../TestFeed.ts"
 import { withEnv } from "../TestHubConfig.ts"
 import * as TestSnapshotFeed from "../TestSnapshotFeed.ts"
@@ -51,7 +51,7 @@ import {
 describe("ScenarioProvider", () => {
   it.effect("each league's listing reaches the slate at its scenario time", () =>
     Effect.gen(function* () {
-      const slate = yield* Slate
+      const slate = yield* LiveSlate
       yield* TestClock.adjust(0)
       assert.lengthOf(yield* listed("fbs"), 4)
       assert.deepStrictEqual(yield* listed("nfl"), [])
@@ -371,7 +371,7 @@ describe("ScenarioProvider", () => {
         scope
       )
       const events = yield* Ref.make(0)
-      yield* Context.get(context, Slate).events.pipe(
+      yield* Context.get(context, LiveSlate).events.pipe(
         Stream.runForEach(() => Ref.update(events, (count) => count + 1)),
         Effect.forkIn(scope, { startImmediately: true })
       )
@@ -384,7 +384,7 @@ describe("ScenarioProvider", () => {
       )
 
       assert.isTrue(
-        Option.isSome((yield* Context.get(context, Slate).latest).seq),
+        Option.isSome((yield* Context.get(context, LiveSlate).latest).seq),
         "the frames were replayed"
       )
       assert.strictEqual(yield* Ref.get(events), 0)
@@ -431,7 +431,7 @@ function playing(name: string, options: Options & { readonly ended?: Array<Trace
  * which is provided too.
  */
 function following(options: Options) {
-  return Slate.layer.pipe(
+  return LiveSlate.layer.pipe(
     Layer.provideMerge(
       options.scenarioFeedLog === true
         ? FeedLog.forScenario
@@ -545,14 +545,14 @@ function scoring(points: number) {
 /** League `league`'s last listing in the slate. */
 function listed(league: LeagueId) {
   return Effect.map(
-    Slate.use((slate) => slate.latest),
+    LiveSlate.use((slate) => slate.latest),
     (held) => held.listed.get(league) ?? []
   )
 }
 
 /** The slate's games, leagues in order. */
 const slateGames = Effect.map(
-  Slate.use((slate) => slate.latest),
+  LiveSlate.use((slate) => slate.latest),
   (held) => held.games(LeagueId.literals)
 )
 

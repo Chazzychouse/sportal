@@ -7,7 +7,7 @@ import { DateTime, Effect, Layer, Option, Schema, Stream } from "effect"
 import { HttpRouter, HttpServerResponse, HttpStaticServer } from "effect/http"
 import { HttpApiBuilder } from "effect/http-api"
 import { HubConfig } from "../HubConfig.ts"
-import { Slate } from "../Slate.ts"
+import { LiveSlate } from "../LiveSlate.ts"
 import { StageSessions } from "../StageSessions.ts"
 import { Source } from "../source/Source.ts"
 import { lanAddresses } from "./LanAddresses.ts"
@@ -101,7 +101,7 @@ function liveRoute() {
     "GET",
     "/api/live",
     Effect.gen(function* () {
-      const slate = yield* Slate
+      const slate = yield* LiveSlate
       const sessions = yield* StageSessions
       const messages: Stream.Stream<LiveMessage> = Stream.merge(
         slate.publishedChanges.pipe(

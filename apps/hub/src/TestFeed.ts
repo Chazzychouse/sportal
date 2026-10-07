@@ -3,16 +3,16 @@ import type { Delivery } from "@sportal/domain/Delivery"
 import type { GameSnapshot } from "@sportal/domain/Game"
 import type { GameEvent } from "@sportal/domain/GameEvent"
 import type { LeagueId } from "@sportal/domain/League"
-import { Slate as DomainSlate } from "@sportal/domain/Slate"
+import { Slate } from "@sportal/domain/Slate"
 import type { SlateObservation } from "@sportal/domain/SlateObservation"
 import { DateTime, Effect, Layer, Schedule, Schema, Stream } from "effect"
 import * as Database from "./Database.ts"
 import { FeedLog } from "./FeedLog.ts"
 import { FeedFrame, Frame } from "./Frame.ts"
+import { LiveSlate } from "./LiveSlate.ts"
 import { Decoder } from "./provider/Decoder.ts"
 import * as EspnScript from "./provider/espn/EspnScript.ts"
 import { type Polling, Provider, type ProviderError } from "./provider/Provider.ts"
-import { Slate } from "./Slate.ts"
 import { Scenarios } from "./scenario/Scenarios.ts"
 import * as TestSnapshotFeed from "./TestSnapshotFeed.ts"
 
@@ -45,7 +45,7 @@ export function polled(
 export function slateFollowing(
   frames: ReadonlyArray<FeedFrame> = [],
   options: { readonly decoder?: Layer.Layer<Decoder>; readonly zone?: DateTime.TimeZone } = {}
-): Layer.Layer<Slate | FeedLog> {
+): Layer.Layer<LiveSlate | FeedLog> {
   // Appended through a log of their own, closed before the slate's log opens, so every one is written.
   const logged = Layer.effectDiscard(
     FeedLog.use((log) => Effect.forEach(frames, log.append, { discard: true })).pipe(
@@ -53,7 +53,7 @@ export function slateFollowing(
       Effect.scoped
     )
   )
-  return Slate.layer.pipe(
+  return LiveSlate.layer.pipe(
     Layer.provideMerge(FeedLog.layer.pipe(Layer.provide(logged))),
     Layer.provide([
       options.decoder ?? TestSnapshotFeed.decoder,
@@ -88,7 +88,7 @@ export function dyingAt(body: string): Layer.Layer<Decoder> {
 export function delivered(delivery: Delivery, at?: DateTime.Utc) {
   return Effect.gen(function* () {
     const frame = yield* (yield* FeedLog).append(framed(delivery, at ?? (yield* DateTime.now)))
-    return yield* (yield* Slate).through(frame.seq)
+    return yield* (yield* LiveSlate).through(frame.seq)
   })
 }
 
@@ -145,10 +145,10 @@ export function decodedFrames(frames: ReadonlyArray<FeedFrame>) {
 export function takenOf(frames: ReadonlyArray<FeedFrame>) {
   return Effect.gen(function* () {
     const empty: {
-      readonly slate: DomainSlate
+      readonly slate: Slate
       readonly events: ReadonlyArray<GameEvent>
       readonly observations: ReadonlyArray<SlateObservation>
-    } = { slate: DomainSlate.empty, events: [], observations: [] }
+    } = { slate: Slate.empty, events: [], observations: [] }
     const { events, observations } = yield* Effect.reduce(
       yield* decodedFrames(frames),
       () => empty,

@@ -5,15 +5,15 @@ import { FetchHttpClient } from "effect/http"
 import { TestClock } from "effect/testing"
 import * as Database from "./Database.ts"
 import * as HubMode from "./HubMode.ts"
-import { Slate } from "./Slate.ts"
+import { LiveSlate } from "./LiveSlate.ts"
 import { withEnv } from "./TestHubConfig.ts"
 
 describe("HubMode", () => {
-  it.effect("a scenario's polls, appended by Ingest, reach the Slate", () =>
+  it.effect("a scenario's polls, appended by Ingest, reach the LiveSlate", () =>
     Effect.gen(function* () {
       yield* TestClock.adjust(0)
       yield* TestClock.adjust("1 second")
-      assert.isAbove((yield* (yield* Slate).published).games.length, 0)
+      assert.isAbove((yield* (yield* LiveSlate).published).games.length, 0)
     }).pipe(
       Effect.provide(
         HubMode.layer.pipe(

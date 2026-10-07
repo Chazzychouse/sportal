@@ -1,10 +1,10 @@
 import { type GameId, GameSnapshot } from "@sportal/domain/Game"
 import { Play, type PlayId } from "@sportal/domain/Play"
-import type { Slate as DomainSlate } from "@sportal/domain/Slate"
+import type { Slate } from "@sportal/domain/Slate"
 import { Array as Arr, Context, Effect, Equal, Filter, Layer, Metric, Option, Schema, Stream } from "effect"
 import { SqlClient, SqlSchema } from "effect/sql"
 import * as Database from "./Database.ts"
-import { Slate } from "./Slate.ts"
+import { LiveSlate } from "./LiveSlate.ts"
 
 /** Past plays and each game's latest snapshot, derived from the slate into the Hub's database. Rebuildable from the feed log. */
 export class GameHistory extends Context.Service<
@@ -17,7 +17,7 @@ export class GameHistory extends Context.Service<
   }
 >()("sportal/hub/GameHistory") {
   /**
-   * Follows `Slate.changes`, writing what changed since the last write, in batches every 250 ms. Every listed game
+   * Follows `LiveSlate.changes`, writing what changed since the last write, in batches every 250 ms. Every listed game
    * gets its latest snapshot written (a final game is often only listed), plus any live game not listed; plays come
    * from live games only. A game that leaves `live` and is never listed again keeps its last written snapshot. Only the
    * latest snapshot is kept: the changes are sampled by the batch, so a per-status history could not be rebuilt from
@@ -25,12 +25,12 @@ export class GameHistory extends Context.Service<
    * the history may hold seqs the feed log never wrote, which a reopened log numbers again; it is rebuilt by deleting
    * its tables and replaying the log again.
    */
-  static readonly layer: Layer.Layer<GameHistory, never, SqlClient.SqlClient | Slate> = Layer.effect(
+  static readonly layer: Layer.Layer<GameHistory, never, SqlClient.SqlClient | LiveSlate> = Layer.effect(
     GameHistory,
     Effect.gen(function* () {
       yield* Database.migrate("history", migrations).pipe(Effect.orDie)
       const sql = yield* SqlClient.SqlClient
-      const slate = yield* Slate
+      const slate = yield* LiveSlate
 
       const playRows = SqlSchema.findAll({
         Request: Schema.String,
@@ -98,7 +98,7 @@ export class GameHistory extends Context.Service<
         })
 
       // A change that cannot be written leaves `written` as it was, so the next change diffs from the last success.
-      const write = (written: Written, { seq, slate }: { seq: number; slate: DomainSlate }) => {
+      const write = (written: Written, { seq, slate }: { seq: number; slate: Slate }) => {
         const next = writtenOf(slate)
         return store(stepFrom(written, next), seq).pipe(
           Effect.as(next),
@@ -165,7 +165,7 @@ type Step = {
 }
 
 /** The slate as the history keeps it: every listed game as the slate has it, plus live games not listed. */
-function writtenOf(slate: DomainSlate): Written {
+function writtenOf(slate: Slate): Written {
   return {
     snapshots: new Map(slate.everyGame().map((snapshot) => [snapshot.id, snapshot])),
     plays: new Map([...slate.live].map(([game, liveGame]) => [game, liveGame.plays]))

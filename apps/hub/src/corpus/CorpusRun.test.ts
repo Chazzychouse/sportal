@@ -1,7 +1,7 @@
 import { assert, describe, it } from "@effect/vitest"
 import { type GameEvent, GameEventKind } from "@sportal/domain/GameEvent"
 import { LiveGame } from "@sportal/domain/LiveGame"
-import type { Slate as DomainSlate } from "@sportal/domain/Slate"
+import type { Slate } from "@sportal/domain/Slate"
 import { liveSnapshot, team } from "@sportal/domain/TestGame"
 import {
   Array as Arr,
@@ -20,9 +20,9 @@ import { TestClock } from "effect/testing"
 import { FeedLog } from "../FeedLog.ts"
 import type { FeedFrame } from "../Frame.ts"
 import * as Ingest from "../Ingest.ts"
+import { LiveSlate } from "../LiveSlate.ts"
 import * as EspnDecode from "../provider/espn/EspnDecode.ts"
 import { fixtures, neAtBufFrames } from "../provider/espn/TestEspn.ts"
-import { Slate } from "../Slate.ts"
 import * as ScenarioProvider from "../scenario/ScenarioProvider.ts"
 import { Scenarios } from "../scenario/Scenarios.ts"
 import { withEnv } from "../TestHubConfig.ts"
@@ -32,7 +32,7 @@ import { CorpusInput, CorpusLine } from "./CorpusInput.ts"
 import * as CorpusRun from "./CorpusRun.ts"
 import { built, inCorpus, local, logged, recorded } from "./TestCorpus.ts"
 
-// As Slate.replay.test.ts measured it: every play id the recording's patches add.
+// As LiveSlate.replay.test.ts measured it: every play id the recording's patches add.
 const recordedPlays = 182
 
 describe("CorpusRun.day", () => {
@@ -149,7 +149,7 @@ function playedLive(frames: ReadonlyArray<FeedFrame>, until: DateTime.Utc) {
     onSome: (last) => DateTime.addDuration(last, LiveGame.fallbackAfter)
   })
   const playing = Effect.gen(function* () {
-    const slate = yield* Slate
+    const slate = yield* LiveSlate
     const seen = yield* Ref.make(Chunk.empty<GameEvent>())
     const subscriber = yield* slate.events.pipe(
       Stream.runForEach((published) => Ref.update(seen, Chunk.append(published))),
@@ -186,7 +186,7 @@ function playedLive(frames: ReadonlyArray<FeedFrame>, until: DateTime.Utc) {
 
     yield* steppedTo(ended).pipe(Effect.provide(ingesting(appended)), Effect.scoped)
     yield* TestClock.setTime(DateTime.toEpochMillis(until))
-    const tickedThrough = (latest: DomainSlate) =>
+    const tickedThrough = (latest: Slate) =>
       Option.match(latest.earliestDue(), {
         onNone: () => true,
         onSome: (due) => DateTime.isGreaterThan(due, until)
@@ -202,7 +202,7 @@ function playedLive(frames: ReadonlyArray<FeedFrame>, until: DateTime.Utc) {
     yield* TestClock.adjust(0)
     yield* Fiber.interrupt(subscriber)
     return Chunk.toReadonlyArray(yield* Ref.get(seen))
-  }).pipe(Effect.provide(Slate.layer.pipe(Layer.provideMerge(FeedLog.layer))), Effect.scoped)
+  }).pipe(Effect.provide(LiveSlate.layer.pipe(Layer.provideMerge(FeedLog.layer))), Effect.scoped)
   // Set before the feed log opens, so its writer never wakes through the years before the first frame.
   return TestClock.setTime(DateTime.toEpochMillis(first)).pipe(Effect.andThen(playing))
 }

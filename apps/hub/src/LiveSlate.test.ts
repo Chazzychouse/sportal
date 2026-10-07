@@ -3,7 +3,7 @@ import { Delivery } from "@sportal/domain/Delivery"
 import { GameId, GameSnapshot } from "@sportal/domain/Game"
 import { type LiveGame, LiveGameState } from "@sportal/domain/LiveGame"
 import { PlayId } from "@sportal/domain/Play"
-import { Slate as DomainSlate } from "@sportal/domain/Slate"
+import { Slate } from "@sportal/domain/Slate"
 import { liveSnapshot, play, snapshot, team } from "@sportal/domain/TestGame"
 import {
   Clock,
@@ -23,10 +23,10 @@ import {
 import { TestClock } from "effect/testing"
 import { FeedLog } from "./FeedLog.ts"
 import { FeedFrame } from "./Frame.ts"
+import { Following, LiveSlate } from "./LiveSlate.ts"
+import { told } from "./LiveSlateTelemetry.ts"
 import { Decoder } from "./provider/Decoder.ts"
 import { Decoded, LiveFeedDemand } from "./provider/Provider.ts"
-import { Following, Slate } from "./Slate.ts"
-import { told } from "./SlateTelemetry.ts"
 import { delivered, dyingAt, pushed, slateFollowing } from "./TestFeed.ts"
 import * as TestSnapshotFeed from "./TestSnapshotFeed.ts"
 import { counted, gauged, recordingLogs, recordingSpans, withMetrics } from "./TestTelemetry.ts"
@@ -34,7 +34,7 @@ import { counted, gauged, recordingLogs, recordingSpans, withMetrics } from "./T
 const one = GameId.make("1")
 const two = GameId.make("2")
 
-describe("Slate", () => {
+describe("LiveSlate", () => {
   it.effect("a listing's games become live games, and the slate keeps the listing", () =>
     Effect.gen(function* () {
       const now = yield* DateTime.now
@@ -42,7 +42,7 @@ describe("Slate", () => {
       const soon = snapshot({ id: two, kickoff: DateTime.add(now, { minutes: 20 }) })
       const later = snapshot({ id: GameId.make("3"), kickoff: DateTime.add(now, { hours: 3 }) })
       yield* delivered(Delivery.cases.Listing.make({ league: "fbs", games: [live, soon, later] }))
-      const current = yield* Slate.use((slate) => slate.latest)
+      const current = yield* LiveSlate.use((slate) => slate.latest)
       assert.deepStrictEqual(current.listed.get("fbs"), [live, soon, later])
       assert.deepStrictEqual(current.live.get(one)?.snapshot, live)
       assert.strictEqual(current.live.get(one)?.from, "poll")
@@ -55,7 +55,7 @@ describe("Slate", () => {
     Effect.gen(function* () {
       yield* delivered(Delivery.cases.Snapshot.make({ snapshot: liveSnapshot({ id: one }), from: "push" }))
       yield* delivered(Delivery.cases.Snapshot.make({ snapshot: liveSnapshot({ id: one }), from: "push" }))
-      const current = yield* Slate.use((slate) => slate.latest)
+      const current = yield* LiveSlate.use((slate) => slate.latest)
       assert.deepStrictEqual(current.seq, Option.some(2))
       assert.isTrue(LiveGameState.$is("Live")(current.live.get(one)?.state ?? LiveGameState.Over()))
       assert.strictEqual(current.live.get(one)?.from, "push")
@@ -83,7 +83,7 @@ describe("Slate", () => {
 
   it.effect("changes publishes the latest, then each new state once", () =>
     Effect.gen(function* () {
-      const slate = yield* Slate
+      const slate = yield* LiveSlate
       const published = yield* Ref.make<ReadonlyArray<Option.Option<GameSnapshot>>>([])
       yield* slate.changes.pipe(
         Stream.runForEach((current) =>
@@ -107,7 +107,7 @@ describe("Slate", () => {
 
   it.effect("changes does not publish a frame that moves only seq", () =>
     Effect.gen(function* () {
-      const slate = yield* Slate
+      const slate = yield* LiveSlate
       const published = yield* Ref.make(0)
       yield* slate.changes.pipe(
         Stream.runForEach(() => Ref.update(published, (count) => count + 1)),
@@ -124,7 +124,7 @@ describe("Slate", () => {
 
   it.effect("a game's plays reach it, and each new play is an event", () =>
     Effect.gen(function* () {
-      const slate = yield* Slate
+      const slate = yield* LiveSlate
       const events = yield* slate.events.pipe(
         Stream.take(1),
         Stream.runCollect,
@@ -145,7 +145,7 @@ describe("Slate", () => {
   it.effect("plays for a game with no live game are dropped and counted", () =>
     Effect.gen(function* () {
       yield* delivered(Delivery.cases.Plays.make({ game: one, plays: [play()] }))
-      assert.strictEqual((yield* Slate.use((slate) => slate.latest)).live.size, 0)
+      assert.strictEqual((yield* LiveSlate.use((slate) => slate.latest)).live.size, 0)
       assert.strictEqual(yield* counted("sportal_deliveries_dropped"), 1)
     }).pipe(Effect.provide(slateFollowing()), withMetrics)
   )
@@ -176,7 +176,7 @@ describe("Slate", () => {
         const frame = yield* (yield* FeedLog).append(
           new FeedFrame({ ...(yield* pushed({ _tag: "Resync" }, "nfl")), kind: "response", body: "not json" })
         )
-        const current = yield* (yield* Slate).through(frame.seq)
+        const current = yield* (yield* LiveSlate).through(frame.seq)
         assert.deepStrictEqual(current.seq, Option.some(frame.seq))
         assert.strictEqual(yield* counted("sportal_frames_undecoded", { feed: "snapshot" }), 1)
       }).pipe(Effect.provide(slateFollowing()), withMetrics)
@@ -188,7 +188,7 @@ describe("Slate", () => {
         const { logs, layer } = recordingLogs("Debug")
         return Effect.gen(function* () {
           const log = yield* FeedLog
-          const slate = yield* Slate
+          const slate = yield* LiveSlate
           yield* takenSnapshot(liveSnapshot({ id: one }))
           const dies = yield* log.append(
             new FeedFrame({ ...(yield* pushed({ _tag: "Resync" }, "x")), body: "die" })
@@ -219,7 +219,7 @@ describe("Slate", () => {
         const later = snapshot({ id: GameId.make("3"), kickoff: DateTime.add(now, { hours: 3 }) })
         yield* delivered(Delivery.cases.Listing.make({ league: "fbs", games: [live, soon, later] }))
 
-        const first = yield* (yield* Slate).demand.pipe(Stream.runHead)
+        const first = yield* (yield* LiveSlate).demand.pipe(Stream.runHead)
         assert.deepStrictEqual(first, Option.some(LiveFeedDemand.Games({ games: [live, soon] })))
       }).pipe(Effect.provide(slateFollowing()))
     )
@@ -245,7 +245,7 @@ describe("Slate", () => {
         const demanded = yield* demandOf()
         assert.deepStrictEqual(yield* Queue.take(demanded), LiveFeedDemand.Games({ games: [] }))
         const frame = yield* (yield* FeedLog).append(yield* pushed({ _tag: "Resync" }, "live-topic"))
-        yield* (yield* Slate).through(frame.seq)
+        yield* (yield* LiveSlate).through(frame.seq)
         assert.deepStrictEqual(yield* Queue.take(demanded), LiveFeedDemand.Resync({ channel: "live-topic" }))
         assert.isTrue(Option.isNone(yield* Queue.poll(demanded)))
       }).pipe(Effect.provide(slateFollowing()))
@@ -253,7 +253,7 @@ describe("Slate", () => {
 
     it.effect("a second subscription starts with the current games again", () =>
       Effect.gen(function* () {
-        const slate = yield* Slate
+        const slate = yield* LiveSlate
         yield* takenSnapshot(liveSnapshot({ id: one }))
         assert.deepStrictEqual(
           yield* Stream.runHead(slate.demand),
@@ -394,7 +394,7 @@ describe("Slate", () => {
         const dies = yield* (yield* FeedLog).append(
           new FeedFrame({ ...(yield* pushed({ _tag: "Resync" }, "x")), body: "die" })
         )
-        yield* (yield* Slate).through(dies.seq)
+        yield* (yield* LiveSlate).through(dies.seq)
         yield* TestClock.adjust("90 seconds")
         assert.isTrue(LiveGameState.$is("Stale")((yield* liveGameOf(one)).state))
         assert.isTrue(logs.some(({ message }) => message.includes("Live → Stale")))
@@ -422,7 +422,7 @@ describe("Slate", () => {
         assert.strictEqual(transitions[0]?.level, "Info")
         assert.include(
           transitions[0]?.message,
-          "Slate: AWAY at HOME: Upcoming → Live at live, period 1, 15:00"
+          "LiveSlate: AWAY at HOME: Upcoming → Live at live, period 1, 15:00"
         )
         assert.include(transitions[0]?.annotations, { game: "1", league: "fbs", matchup: "AWAY at HOME" })
         assert.strictEqual(yield* counted("sportal_transitions", { from: "Upcoming", to: "Live" }), 1)
@@ -437,7 +437,7 @@ describe("Slate", () => {
         const stale = logs.filter(({ message }) => message.includes("Live → Stale"))
         assert.strictEqual(stale.length, 1)
         assert.strictEqual(stale[0]?.level, "Info")
-        assert.include(stale[0]?.message, "Slate: AWAY at HOME: Live → Stale at ")
+        assert.include(stale[0]?.message, "LiveSlate: AWAY at HOME: Live → Stale at ")
         assert.include(stale[0]?.annotations, { game: "1", league: "fbs", matchup: "AWAY at HOME" })
       }).pipe(Effect.provide(slateFollowing().pipe(Layer.provideMerge(layer))))
     })
@@ -491,7 +491,7 @@ describe("Slate", () => {
         return Effect.gen(function* () {
           const at = yield* DateTime.now
           const final = snapshot({ id: one, status: "final", period: 4, clock: "0:00" })
-          const taken = yield* DomainSlate.empty.take({
+          const taken = yield* Slate.empty.take({
             deliveries: [
               Delivery.cases.Snapshot.make({ snapshot: liveSnapshot({ id: one }), from: "push" }),
               Delivery.cases.Snapshot.make({ snapshot: final, from: "push" })
@@ -520,7 +520,7 @@ describe("Slate", () => {
         const { logs, layer } = recordingLogs("Debug")
         return Effect.gen(function* () {
           const at = yield* DateTime.now
-          const held = (yield* DomainSlate.empty.take({
+          const held = (yield* Slate.empty.take({
             deliveries: [Delivery.cases.Snapshot.make({ snapshot: liveSnapshot({ id: one }), from: "push" })],
             at,
             seq: 1
@@ -544,7 +544,7 @@ describe("Slate", () => {
     it.effect("a game event is logged at Info with the game's annotations, counted, and published", () => {
       const { logs, layer } = recordingLogs("Debug")
       return Effect.gen(function* () {
-        const slate = yield* Slate
+        const slate = yield* LiveSlate
         const events = yield* slate.events.pipe(
           Stream.take(1),
           Stream.runCollect,
@@ -563,7 +563,10 @@ describe("Slate", () => {
         const scored = logs.filter(({ message }) => message.includes("ScoreChanged"))
         assert.strictEqual(scored.length, 1)
         assert.strictEqual(scored[0]?.level, "Info")
-        assert.include(scored[0]?.message, "Slate: AWAY at HOME: ScoreChanged HOME at live, period 1, 9:00")
+        assert.include(
+          scored[0]?.message,
+          "LiveSlate: AWAY at HOME: ScoreChanged HOME at live, period 1, 9:00"
+        )
         assert.include(scored[0]?.annotations, {
           game: "1",
           matchup: "AWAY at HOME",
@@ -638,7 +641,7 @@ describe("Slate", () => {
         yield* takenSnapshot(home("10:00"))
         // `through` answers once the state has the frame, which can be before the span around it ends.
         const take = yield* Effect.yieldNow.pipe(
-          Effect.andThen(Effect.sync(() => ended.find((span) => span.name === "Slate.take"))),
+          Effect.andThen(Effect.sync(() => ended.find((span) => span.name === "LiveSlate.take"))),
           Effect.repeat({ until: (span) => span !== undefined, times: 100 })
         )
         assert.isDefined(take, "the take's span ended")
@@ -674,7 +677,7 @@ describe("Slate", () => {
             ["Debug", "stopped"]
           ]
         )
-        assert.include(lifecycle[1]?.message, "Slate: AWAY at HOME: stopped, Over at final")
+        assert.include(lifecycle[1]?.message, "LiveSlate: AWAY at HOME: stopped, Over at final")
         assert.include(lifecycle[1]?.annotations, { game: "1", league: "fbs", matchup: "AWAY at HOME" })
       }).pipe(Effect.provide(slateFollowing().pipe(Layer.provideMerge(layer))))
     })
@@ -722,7 +725,7 @@ describe("Slate", () => {
 
     it.effect("a timer that wakes early changes nothing until the game is due", () =>
       Effect.gen(function* () {
-        const slate = yield* Slate
+        const slate = yield* LiveSlate
         const seen = yield* Ref.make<ReadonlyArray<LiveGameState["_tag"]>>([])
         yield* slate.changes.pipe(
           Stream.runForEach((current) =>
@@ -758,7 +761,7 @@ describe("Slate", () => {
 describe("the published slate", () => {
   it.effect("keeps the listing's order, leagues in their order", () =>
     Effect.gen(function* () {
-      const slate = yield* Slate
+      const slate = yield* LiveSlate
       yield* listing("fbs", [
         liveSnapshot({ id: GameId.make("3") }),
         liveSnapshot({ id: GameId.make("1") }),
@@ -775,7 +778,7 @@ describe("the published slate", () => {
 
   it.effect("a live game's snapshot wins over its listing", () =>
     Effect.gen(function* () {
-      const slate = yield* Slate
+      const slate = yield* LiveSlate
       yield* listing("fbs", [liveSnapshot({ id: GameId.make("1"), period: 1 })])
       yield* push(liveSnapshot({ id: GameId.make("1"), period: 2 }))
       yield* TestClock.adjust("250 millis")
@@ -785,7 +788,7 @@ describe("the published slate", () => {
 
   it.effect("carries each listed game's plays beside it", () =>
     Effect.gen(function* () {
-      const slate = yield* Slate
+      const slate = yield* LiveSlate
       const one = GameId.make("1")
       const recorded = play({ id: PlayId.make("p1"), sequence: 1 })
       yield* listing("fbs", [liveSnapshot({ id: one })])
@@ -802,7 +805,7 @@ describe("the published slate", () => {
 
   it.effect("publishes a burst of changes once", () =>
     Effect.gen(function* () {
-      const slate = yield* Slate
+      const slate = yield* LiveSlate
       const published = yield* Ref.make<ReadonlyArray<number>>([])
       yield* slate.publishedChanges.pipe(
         Stream.runForEach((latest) => Ref.update(published, (all) => [...all, latest.games.length])),
@@ -825,7 +828,7 @@ describe("the published slate", () => {
 
   it.effect("lists a game the slate does not hold as listed", () =>
     Effect.gen(function* () {
-      const slate = yield* Slate
+      const slate = yield* LiveSlate
       const final = snapshot({ id: GameId.make("1"), status: "final" })
       yield* listing("fbs", [final])
       yield* TestClock.adjust("250 millis")
@@ -836,7 +839,7 @@ describe("the published slate", () => {
 
   it.effect("leaves off a game no listing has", () =>
     Effect.gen(function* () {
-      const slate = yield* Slate
+      const slate = yield* LiveSlate
       yield* listing("fbs", [liveSnapshot({ id: GameId.make("1") })])
       yield* push(liveSnapshot({ id: GameId.make("9") }))
       yield* TestClock.adjust("250 millis")
@@ -914,7 +917,7 @@ function takenSnapshot(snapshot: GameSnapshot, from: "push" | "poll" = "poll") {
 function demandOf() {
   return Effect.gen(function* () {
     const demanded = yield* Queue.unbounded<LiveFeedDemand>()
-    yield* (yield* Slate).demand.pipe(
+    yield* (yield* LiveSlate).demand.pipe(
       Stream.runForEach((demand) => Queue.offer(demanded, demand)),
       Effect.forkScoped
     )
@@ -922,9 +925,9 @@ function demandOf() {
   })
 }
 
-const liveNow = Slate.use((slate) => slate.latest).pipe(Effect.map(({ live }) => live))
+const liveNow = LiveSlate.use((slate) => slate.latest).pipe(Effect.map(({ live }) => live))
 
-function liveGameOf(id: GameId): Effect.Effect<LiveGame, never, Slate> {
+function liveGameOf(id: GameId): Effect.Effect<LiveGame, never, LiveSlate> {
   return liveNow.pipe(
     Effect.flatMap((live) => Effect.fromNullishOr(live.get(id))),
     Effect.orDie

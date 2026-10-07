@@ -12,7 +12,7 @@ import { TestClock } from "effect/testing"
 import * as Database from "../Database.ts"
 import { FeedLog } from "../FeedLog.ts"
 import * as Ingest from "../Ingest.ts"
-import { Slate } from "../Slate.ts"
+import { LiveSlate } from "../LiveSlate.ts"
 import { StageSessions } from "../StageSessions.ts"
 import * as YouTubeTv from "../source/youtube-tv/YouTubeTv.ts"
 import { polled } from "../TestFeed.ts"
@@ -238,10 +238,10 @@ describe("GET /api/live", () => {
   )
 })
 
-/** Waits until the Slate has published its first games. */
+/** Waits until the LiveSlate has published its first games. */
 function firstSlate() {
   return Effect.gen(function* () {
-    const slate = yield* Slate
+    const slate = yield* LiveSlate
     yield* slate.publishedChanges.pipe(
       Stream.filter((latest) => latest.games.length > 0),
       Stream.take(1),
@@ -250,7 +250,7 @@ function firstSlate() {
   })
 }
 
-/** `firstSlate` on the test clock, moved on through the first poll and the Slate's 250 ms to settle. */
+/** `firstSlate` on the test clock, moved on through the first poll and the LiveSlate's 250 ms to settle. */
 function firstSlateOnTestClock() {
   return TestClock.adjust(0).pipe(
     Effect.andThen(TestClock.adjust("250 millis")),
@@ -281,7 +281,7 @@ function hubUnderTest() {
     Layer.provideMerge(YouTubeTv.layer),
     Layer.provideMerge(Ingest.layer),
     Layer.provideMerge(
-      Slate.layer.pipe(
+      LiveSlate.layer.pipe(
         Layer.provideMerge(FeedLog.layer.pipe(Layer.provide([Database.at(":memory:"), NodeCrypto.layer]))),
         Layer.provide([TestSnapshotFeed.decoder, DateTime.layerCurrentZoneLocal])
       )
