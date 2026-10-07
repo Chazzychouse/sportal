@@ -124,6 +124,22 @@ describe("CorpusDays", () => {
   )
 })
 
+describe("CorpusDay.dates", () => {
+  it("lists every day from one to another, both included, across a month's end", () => {
+    assert.deepStrictEqual(CorpusDay.dates("2026-09-29", "2026-10-02"), [
+      "2026-09-29",
+      "2026-09-30",
+      "2026-10-01",
+      "2026-10-02"
+    ])
+  })
+
+  it("is the one day when both are the same, and none when the last is before the first", () => {
+    assert.deepStrictEqual(CorpusDay.dates("2026-10-04", "2026-10-04"), ["2026-10-04"])
+    assert.deepStrictEqual(CorpusDay.dates("2026-10-04", "2026-10-03"), [])
+  })
+})
+
 /** `test` with corpus days in a temporary corpus directory, which it is given. */
 function inCorpus<A, E>(
   test: (dir: string) => Effect.Effect<A, E, CorpusDays | FileSystem.FileSystem | Path.Path>

@@ -47,6 +47,16 @@ export class CorpusDay extends Schema.Class<CorpusDay>("sportal/hub/CorpusDay")(
       return { from: Slate.dayStart(noon), until: Slate.dayStart(DateTime.add(noon, { days: 1 })) }
     })
   }
+
+  /** Every game day (YYYY-MM-DD) from `from` to `to`, both included; none when `to` is before `from`. */
+  static dates(from: string, to: string): ReadonlyArray<string> {
+    const last = DateTime.makeUnsafe(`${to}T00:00:00Z`)
+    return Arr.unfold(DateTime.makeUnsafe(`${from}T00:00:00Z`), (day) =>
+      DateTime.isGreaterThan(day, last)
+        ? Option.none()
+        : Option.some([DateTime.formatIsoDateUtc(day), DateTime.add(day, { days: 1 })] as const)
+    )
+  }
 }
 
 /**

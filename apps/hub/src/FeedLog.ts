@@ -1,3 +1,4 @@
+import { Slate } from "@sportal/domain/Slate"
 import {
   Array as Arr,
   type Cause,
@@ -48,6 +49,8 @@ export class FeedLog extends Context.Service<
      * first, in `seq` order, so a patch after `from` applies to the document it was sent against.
      */
     replay(from: DateTime.Utc): Stream.Stream<Frame>
+    /** The game days (YYYY-MM-DD) it has frames received on, each from 04:00 local in the current zone, sorted. */
+    readonly days: Effect.Effect<ReadonlyArray<string>, never, DateTime.CurrentTimeZone>
   }
 >()("sportal/hub/FeedLog") {
   static readonly layer: Layer.Layer<FeedLog, never, SqlClient.SqlClient | Crypto.Crypto> = Layer.effect(
@@ -98,7 +101,8 @@ export class FeedLog extends Context.Service<
       return FeedLog.of({
         append,
         subscribe: Effect.map(PubSub.subscribe(intake.published), Stream.fromSubscription),
-        replay: (from) => replay(from).pipe(Stream.provideService(SqlClient.SqlClient, sql))
+        replay: (from) => replay(from).pipe(Stream.provideService(SqlClient.SqlClient, sql)),
+        days: days.pipe(Effect.provideService(SqlClient.SqlClient, sql))
       })
     })
   )
@@ -424,6 +428,39 @@ function warnOfGap(body: Uint8Array) {
         `FeedLog: replay passes ${gap.count} frames that were never written (seq ${gap.from} to ${gap.to})`
       ).pipe(Effect.annotateLogs(gap))
     )
+  )
+}
+
+// Skips from one game day to the next through the received_at index: one query a day, never a scan of the frames.
+const days = Effect.gen(function* () {
+  const zone = yield* DateTime.CurrentTimeZone
+  return yield* Stream.paginate(0, (after) =>
+    Effect.map(firstReceived(after), (received) =>
+      Option.match(Option.fromNullishOr(received), {
+        onNone: () => [[], Option.none()] as const,
+        onSome: (millis) => {
+          const start = DateTime.setZone(
+            Slate.dayStart(DateTime.makeZonedUnsafe(millis, { timeZone: zone })),
+            zone
+          )
+          return [
+            [DateTime.formatIsoDate(start)],
+            Option.some(DateTime.toEpochMillis(Slate.dayStart(DateTime.add(start, { days: 1 }))))
+          ] as const
+        }
+      })
+    )
+  ).pipe(Stream.runCollect)
+}).pipe(Effect.orDie)
+
+function firstReceived(atOrAfter: number) {
+  return Effect.flatMap(SqlClient.SqlClient, (sql) =>
+    SqlSchema.findOne({
+      Request: Schema.Int,
+      Result: Schema.Struct({ received: Schema.NullOr(Schema.Int) }),
+      execute: (at) =>
+        sql`SELECT MIN(received_at) AS received FROM feed_frame WHERE received_at >= ${at} AND kind != 'gap'`
+    })(atOrAfter).pipe(Effect.map(({ received }) => received))
   )
 }
 

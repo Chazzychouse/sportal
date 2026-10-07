@@ -101,6 +101,8 @@ Every exported type name must be a term here, except the wire schemas in `*Paylo
 | **Corpus run** | A corpus day played through the slate on virtual time: each frame taken at its arrival instant, which first ticks every instant due before it, then a tick to the next day's start; no clock runs. `CorpusRun.day` in code. A captured day's run gives the events the Hub's slate published live. | replay, simulation |
 | **Subject** | What a corpus run plays a day through: a pure step over each take or tick of the slate, and what it gives at the end; `Subject` in code. `CorpusRun.events`, the day's game events in order, is the only one so far. | consumer, reducer |
 | **Corpus build failed** | A corpus day that could not be built: the feed log has no frame received in it, or a frame of it does not decode; `CorpusBuildFailed` in code. Nothing of the day is written. | |
+| **Run day** | A worker thread's request to run one corpus day with the events subject; `RunDay` in code. `corpus run` sends one per day, one day to a worker at a time. | job, task |
+| **Day run** | A worker's reply to a run day: how many events the day's run gave and how long it took; `DayRun` in code. A failed day crosses back as its failure instead. | result, report |
 | **Live channel URL** | A source's address for a channel, reduced to the one that plays it live. | canonical URL |
 | **Stream** | One playing instance of a game from a source. | feed, video |
 | **StreamLocator** | What a Display must load to play a stream. | URL, link |
