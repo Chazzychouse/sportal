@@ -1,4 +1,5 @@
 import type { GameSnapshot } from "@sportal/domain/Game"
+import { cn } from "@/design/ClassName"
 import { statusText } from "./game/GameStatus.tsx"
 import { TeamLogo } from "./game/TeamLogo.tsx"
 
@@ -32,15 +33,19 @@ function Side(props: { game: GameSnapshot; side: "home" | "away" }) {
   const { team, score } = game[props.side]
   return (
     <div
-      className={`flex items-center gap-[2vmin] font-semibold text-[7vmin] tabular-nums leading-none ${
-        props.side === "home" ? "flex-row-reverse" : ""
-      }`}
+      className={cn(
+        "flex items-center gap-[2vmin] font-semibold text-[7vmin] tabular-nums leading-none",
+        props.side === "home" && "flex-row-reverse"
+      )}
     >
       <TeamLogo team={team} size={56} />
       <span>{team.abbreviation}</span>
       <span>{game.scored() ? score : null}</span>
       <span
-        className={`text-[3.5vmin] text-yellow-300 ${game.situation?.possession === team.id ? "" : "invisible"}`}
+        className={cn(
+          "text-[3.5vmin] text-yellow-300",
+          game.situation?.possession !== team.id && "invisible"
+        )}
       >
         ●
       </span>
