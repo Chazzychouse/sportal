@@ -8,10 +8,10 @@ import { cn } from "@/design/ClassName"
 
 /**
  * A game's field from above, one SVG in yards: the end zones in their teams' colors, the ball and the lines of its
- * situation, and each new play drawn as an arrow from where it started to where it ended, one after another. The
- * plays on hand when it first draws are taken as drawn, and so are all of them again when the plays go back to an
- * earlier sequence (the feed started over). Out of play, or with no ball on the field, it is dimmed and shows no
- * ball. The away team defends the left end zone and the home team the right.
+ * situation, and each new play drawn as an arrow from where it started to where it ended, one after another (only the
+ * newest few when many arrive at once). The plays on hand when it first draws are taken as drawn, and so are all of
+ * them again when the plays go back to an earlier sequence (the feed started over). Out of play, or with no ball on
+ * the field, it is dimmed and shows no ball. The away team defends the left end zone and the home team the right.
  */
 export function Field(props: { game: GameSnapshot; plays: ReadonlyArray<Play>; className?: string }) {
   const { game, plays } = props
@@ -73,7 +73,7 @@ export function Field(props: { game: GameSnapshot; plays: ReadonlyArray<Play>; c
             onNone: () => null,
             onSome: (spot) => <Scrimmage game={game} situation={situation} spot={spot} />
           }),
-        Drawing: ({ play }) => (
+        Animating: ({ play }) => (
           <PlayArrow
             key={play.id}
             game={game}
@@ -98,14 +98,20 @@ const middle = width / 2
 const drawSeconds = 0.6
 
 /**
- * Which plays this field has drawn: settled on the situation after the play with sequence `last`, or drawing `play`
- * with `queued` to follow. `last` is the newest play taken in, drawn or queued.
+ * Which plays this field has drawn: settled on the situation after the play with sequence `last`, or animating `play`
+ * with `queued` to follow. `last` is the newest play taken in, drawn, queued, or dropped from a full queue.
  */
 type Drawing = Data.TaggedEnum<{
   Settled: { readonly last: number }
-  Drawing: { readonly play: Play; readonly queued: ReadonlyArray<Play>; readonly last: number }
+  Animating: { readonly play: Play; readonly queued: ReadonlyArray<Play>; readonly last: number }
 }>
 const Drawing = Data.taggedEnum<Drawing>()
+
+/**
+ * The most plays a field waits to draw: a page that was hidden while plays arrived draws only the newest few, not the
+ * whole backlog.
+ */
+const queueLength = 3
 
 function step(
   drawing: Drawing,
@@ -121,15 +127,19 @@ function step(
       const newest = fresh.at(-1)
       if (newest === undefined) return drawing
       return Drawing.$match(drawing, {
-        Settled: () => nextOf(fresh, newest.sequence, event.game),
-        Drawing: (current) =>
-          Drawing.Drawing({ ...current, queued: [...current.queued, ...fresh], last: newest.sequence })
+        Settled: () => nextOf(fresh.slice(-queueLength), newest.sequence, event.game),
+        Animating: (current) =>
+          Drawing.Animating({
+            ...current,
+            queued: [...current.queued, ...fresh].slice(-queueLength),
+            last: newest.sequence
+          })
       })
     }
     case "Drawn":
       return Drawing.$match(drawing, {
         Settled: () => drawing,
-        Drawing: ({ play, queued, last }) =>
+        Animating: ({ play, queued, last }) =>
           play.id === event.play ? nextOf(queued, last, event.game) : drawing
       })
   }
@@ -141,7 +151,7 @@ function nextOf(queue: ReadonlyArray<Play>, last: number, game: GameSnapshot): D
   const play = queue[index]
   return play === undefined
     ? Drawing.Settled({ last })
-    : Drawing.Drawing({ play, queued: queue.slice(index + 1), last })
+    : Drawing.Animating({ play, queued: queue.slice(index + 1), last })
 }
 
 function spotsOf(game: GameSnapshot, play: Play) {
