@@ -1,18 +1,7 @@
 import { Delivery } from "@sportal/domain/Delivery"
 import { GameSnapshot } from "@sportal/domain/Game"
 import { LeagueId } from "@sportal/domain/League"
-import {
-  Array as Arr,
-  DateTime,
-  Duration,
-  Effect,
-  Layer,
-  Option,
-  Result,
-  Schedule,
-  Schema,
-  Stream
-} from "effect"
+import { Array as Arr, DateTime, Duration, Effect, Layer, Option, Schedule, Schema, Stream } from "effect"
 import type { FeedFrame } from "../Frame.ts"
 import { HubConfig } from "../HubConfig.ts"
 import { Decoder } from "../provider/Decoder.ts"
@@ -106,21 +95,21 @@ function ofSlates(
     decoder: Decoder.of({
       decode: (frames) =>
         frames.pipe(
-          Stream.filterMap((frame) =>
-            Option.match(
-              Option.all({ league: decodeLeague(frame.channel), games: decodeGames(frame.body) }),
-              {
-                onNone: () => Result.failVoid,
-                onSome: ({ league, games }) =>
-                  Result.succeed(
-                    Decoded.Delivered({
-                      delivery: Delivery.cases.Listing.make({ league, games }),
-                      at: frame.receivedAt,
-                      seq: frame.seq
-                    })
-                  )
-              }
-            )
+          Stream.map(
+            (frame) =>
+              new Decoded({
+                seq: frame.seq,
+                at: frame.receivedAt,
+                deliveries: Option.match(
+                  Option.all({ league: decodeLeague(frame.channel), games: decodeGames(frame.body) }),
+                  {
+                    onNone: () => [],
+                    onSome: ({ league, games }) => [Delivery.cases.Listing.make({ league, games })]
+                  }
+                ),
+                resyncs: [],
+                notices: []
+              })
           )
         )
     })

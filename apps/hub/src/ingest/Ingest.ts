@@ -1,3 +1,4 @@
+import type { Delivery } from "@sportal/domain/Delivery"
 import {
   Array as Arr,
   Cause,
@@ -22,7 +23,7 @@ import { FeedLog } from "../FeedLog.ts"
 import { HubConfig } from "../HubConfig.ts"
 import { LiveGames } from "../LiveGames.ts"
 import { Decoder } from "../provider/Decoder.ts"
-import { Decoded, Provider } from "../provider/Provider.ts"
+import { type Decoded, Provider } from "../provider/Provider.ts"
 import * as DecodeTelemetry from "./DecodeTelemetry.ts"
 
 /**
@@ -39,7 +40,10 @@ export const layer = Layer.effectDiscard(
     const liveGames = yield* LiveGames
     const from = dayStart(yield* DateTime.nowInCurrentZone)
 
-    const replayed = yield* Queue.unbounded<Extract<Decoded, { readonly _tag: "Delivered" }>, Cause.Done>()
+    const replayed = yield* Queue.unbounded<
+      { delivery: Delivery; at: DateTime.Utc; seq: number },
+      Cause.Done
+    >()
     const replayedUpTo = yield* Ref.make(0)
     const frames = yield* Ref.make(0)
     const resyncs = yield* PubSub.unbounded<string>()
@@ -49,17 +53,23 @@ export const layer = Layer.effectDiscard(
     // Nothing a replayed frame says goes live: its deliveries go to the replay, and a resync or a notice is dropped,
     // since no socket follows a topic yet (one that does starts it from a fresh checkpoint anyway) and its notices
     // were told when the frame first arrived.
-    const route = (said: Decoded) =>
+    const route = (decoded: Decoded) =>
       Effect.flatMap(Ref.get(replayedUpTo), (last) =>
-        said.seq <= last
-          ? said._tag === "Delivered"
-            ? Queue.offer(replayed, said)
-            : Effect.void
-          : Decoded.$match(said, {
-              Delivered: ({ delivery, at, seq }) => liveGames.take(delivery, at, Option.some(seq)),
-              Resync: ({ channel }) => PubSub.publish(resyncs, channel),
-              Noted: ({ notice, seq }) => DecodeTelemetry.noticed(notice, seq)
-            })
+        decoded.seq <= last
+          ? Queue.offerAll(
+              replayed,
+              decoded.deliveries.map((delivery) => ({ delivery, at: decoded.at, seq: decoded.seq }))
+            )
+          : Effect.all(
+              [
+                ...decoded.deliveries.map((delivery) =>
+                  liveGames.take(delivery, decoded.at, Option.some(decoded.seq))
+                ),
+                ...decoded.resyncs.map((channel) => PubSub.publish(resyncs, channel)),
+                ...decoded.notices.map((notice) => DecodeTelemetry.noticed(notice, decoded.seq))
+              ],
+              { discard: true }
+            )
       )
 
     // One decode over the day's log and then every frame appended after it, so each topic's document carries over

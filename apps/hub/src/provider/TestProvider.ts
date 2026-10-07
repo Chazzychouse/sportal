@@ -56,8 +56,8 @@ export function polling(
 
 /**
  * The decode of the test providers: a poll read back as its league's `Listing`, and a live feed frame as a pushed
- * `Snapshot` of each game in it, or, when it holds none, as a `Resync` of its channel. A frame that does not decode is
- * skipped.
+ * `Snapshot` of each game in it, or, when it holds none, as a resync of its channel. A frame that does not decode says
+ * nothing.
  */
 export const decoder = Layer.succeed(
   Decoder,
@@ -65,9 +65,11 @@ export const decoder = Layer.succeed(
     decode: (frames) =>
       frames.pipe(
         Stream.map((frame) =>
-          Option.match(decodeGames(frame.body), { onNone: () => [], onSome: (games) => said(frame, games) })
-        ),
-        Stream.flattenIterable
+          Option.match(decodeGames(frame.body), {
+            onNone: () => said(frame, [], []),
+            onSome: (games) => said(frame, ...told(frame, games))
+          })
+        )
       )
   })
 )
@@ -87,7 +89,7 @@ export function listedBy(league: LeagueId) {
     const frame = new Frame({ ...(yield* provider.poll(league)), seq: 1 })
     const said = yield* decoding.decode(Stream.make(frame)).pipe(Stream.runCollect)
     return said.flatMap((one) =>
-      one._tag === "Delivered" && one.delivery._tag === "Listing" ? one.delivery.games : []
+      one.deliveries.flatMap((delivery) => (delivery._tag === "Listing" ? delivery.games : []))
     )
   })
 }
@@ -126,18 +128,23 @@ function polled(
   })
 }
 
-function said(frame: Frame, games: ReadonlyArray<GameSnapshot>): ReadonlyArray<Decoded> {
-  const delivered = (delivery: Delivery) =>
-    Decoded.Delivered({ delivery, at: frame.receivedAt, seq: frame.seq })
+function said(frame: Frame, deliveries: ReadonlyArray<Delivery>, resyncs: ReadonlyArray<string>) {
+  return new Decoded({ seq: frame.seq, at: frame.receivedAt, deliveries, resyncs, notices: [] })
+}
+
+function told(
+  frame: Frame,
+  games: ReadonlyArray<GameSnapshot>
+): readonly [ReadonlyArray<Delivery>, ReadonlyArray<string>] {
   if (frame.feed === "poll") {
     return Option.match(decodeLeague(frame.channel), {
-      onNone: () => [],
-      onSome: (league) => [delivered(Delivery.cases.Listing.make({ league, games }))]
+      onNone: () => [[], []],
+      onSome: (league) => [[Delivery.cases.Listing.make({ league, games })], []]
     })
   }
   return games.length === 0
-    ? [Decoded.Resync({ channel: frame.channel, seq: frame.seq })]
-    : games.map((snapshot) => delivered(Delivery.cases.Snapshot.make({ snapshot, from: "push" })))
+    ? [[], [frame.channel]]
+    : [games.map((snapshot) => Delivery.cases.Snapshot.make({ snapshot, from: "push" })), []]
 }
 
 const Games = Schema.fromJsonString(Schema.Array(GameSnapshot))

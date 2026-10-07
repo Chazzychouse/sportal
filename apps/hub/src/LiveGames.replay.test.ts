@@ -209,10 +209,8 @@ function deliveriesOf(from = DateTime.makeUnsafe(0)) {
       return decoder
         .decode(log.replay(from))
         .pipe(
-          Stream.flatMap((said) =>
-            said._tag === "Delivered"
-              ? Stream.make({ delivery: said.delivery, at: said.at, seq: said.seq })
-              : Stream.empty
+          Stream.flatMap(({ deliveries, at, seq }) =>
+            Stream.fromIterable(deliveries.map((delivery) => ({ delivery, at, seq })))
           )
         )
     })

@@ -676,13 +676,14 @@ const counting = Layer.mergeAll(
               [
                 count + 1,
                 [
-                  Decoded.Delivered({
-                    delivery: Delivery.cases.Snapshot.make({
-                      snapshot: scoring(count + 1),
-                      from: "push"
-                    }),
+                  new Decoded({
+                    seq: frame.seq,
                     at: frame.receivedAt,
-                    seq: frame.seq
+                    deliveries: [
+                      Delivery.cases.Snapshot.make({ snapshot: scoring(count + 1), from: "push" })
+                    ],
+                    resyncs: [],
+                    notices: []
                   })
                 ]
               ] as const

@@ -49,13 +49,19 @@ export type Polling = Schedule.Schedule<
   { readonly slate: ReadonlyArray<GameSnapshot>; readonly failed: ReadonlyArray<LeagueId> }
 >
 
-/** What one frame said: a delivery, a live feed channel to resync, or something decode noticed. */
-export type Decoded = Data.TaggedEnum<{
-  Delivered: { readonly delivery: Delivery; readonly at: DateTime.Utc; readonly seq: number }
-  Resync: { readonly channel: string; readonly seq: number }
-  Noted: { readonly notice: Notice; readonly seq: number }
-}>
-export const Decoded = Data.taggedEnum<Decoded>()
+/**
+ * What one frame said, as its provider decodes it, one per frame: the deliveries in the order the frame said them, the
+ * live feed channels whose document was dropped and so are to be checkpointed again, and what decode noticed. A frame
+ * that said nothing is a `Decoded` with three empty arrays. It never crosses the wire.
+ */
+export class Decoded extends Data.Class<{
+  readonly seq: number
+  /** When the frame was received. */
+  readonly at: DateTime.Utc
+  readonly deliveries: ReadonlyArray<Delivery>
+  readonly resyncs: ReadonlyArray<string>
+  readonly notices: ReadonlyArray<Notice>
+}> {}
 
 /**
  * Something decode noticed in a frame, for telemetry to tell: a live feed message received, games pushed, a pushed
@@ -79,7 +85,7 @@ export type Notice = Data.TaggedEnum<{
     readonly detail: string
   }
   FrameUndecoded: {
-    readonly feed: "poll" | "fastcast"
+    readonly feed: FeedFrame["feed"]
     readonly channel: string
     readonly kind: string
     readonly cause: unknown

@@ -28,7 +28,7 @@ Every exported type name must be a term here, except the wire schemas in `*Paylo
 | **Stale** | A live game no snapshot has reached for 90 seconds. It stays current for 30 minutes after its last update. | |
 | **Delivery** | What a frame said: a league's listing, one game's snapshot, or one game's whole list of plays. | input, update |
 | **Decoder** | The one home of a provider's decode, which its adapter provides beside it, so a recorded scenario decodes its frames as the provider that recorded them would. | parser |
-| **Decoded** | What one frame said, as a provider decodes it: a `Delivered` delivery with the instant and `seq` of its frame, a `Resync` of a live feed channel, or a `Noted` notice. | decoded frame, said |
+| **Decoded** | What one frame said, one per frame: its deliveries, the live feed channels to resync, and its notices, with the frame's `seq` and receive time. | decoded frame, said |
 | **Notice** | Something a provider's decode noticed in a frame for telemetry to tell: a message received, games pushed, an unlisted game, a document reset, a message of an unknown op, a frame, event, or play that did not decode, or an unknown play type. Told only for frames after a replay. | warning, metric |
 | **Delivery source** | Which feed a snapshot came from: `push` or `poll`. | origin, feed type |
 | **Test game** | A game snapshot built for a test, with defaults for everything the test does not care about. | fixture, mock |
