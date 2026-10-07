@@ -12,10 +12,11 @@ import * as EspnSummary from "./EspnSummary.ts"
 /**
  * ESPN's archive: a date's site scoreboard, then each final game's summary, each kept as ESPN sent it, gzip'd, as
  * `archive/<league>/scoreboard/<date>.json.gz` and `archive/<league>/summary/<game>.json.gz` under
- * `HubConfig.corpusDir`. A file archived is never fetched again. Fetches are 500 ms apart. A fetch that does not
- * connect, or is answered with a status of 500 or more, is `Unreachable` and tried again from 1 second later, twice as
- * long each time, jittered, five tries in all; one answered with another status that is not 2xx is `Refused`. A fetch
- * that fails after its tries writes no file, so the next call fetches it again.
+ * `HubConfig.corpusDir`. A file archived is never fetched again, and a date's summaries are fetched 500 ms apart. A
+ * fetch that does not connect, or is answered 429 or with a status of 500 or more, is `Unreachable` and tried again
+ * from 1 second later, twice as long each time, jittered, five tries in all; one answered with another status that is
+ * not 2xx is `Refused`, and a body that is not JSON is `Unreadable`. A game whose summary is refused is skipped and
+ * logged; a refused scoreboard fails the date. A fetch that fails writes no file, so the next call fetches it again.
  */
 export const layer: Layer.Layer<
   Archive,
@@ -29,12 +30,13 @@ export const layer: Layer.Layer<
     const path = yield* Path.Path
     const archive = path.join((yield* HubConfig).corpusDir, "archive")
 
-    // Fetches `url` and keeps its body at `file`, written whole or not at all.
+    // Fetches `url` and keeps its body at `file`, written whole or not at all, and only once it reads as JSON.
     const fetch = (url: string, file: string, failed: Failed) =>
       client.get(url).pipe(
         Effect.flatMap((response) => response.text),
         Effect.mapError((cause) => failed(reasonOf(cause), cause)),
         Effect.retry(retry),
+        Effect.tap((body) => decodeJson(body).pipe(Effect.mapError((cause) => failed("Unreadable", cause)))),
         Effect.flatMap((body) =>
           Effect.gen(function* () {
             const bytes = yield* Gzip.compress(body)
@@ -95,40 +97,60 @@ export const layer: Layer.Layer<
         )
 
         const summaryUrl = (game: GameId) => `${EspnProvider.siteUrl(league)}/summary?event=${game}`
-        if (how === "fetch") {
-          yield* Stream.fromIterable(
-            yield* Effect.filter(finals, (game) =>
-              Effect.map(exists(files.summary(game.id), failed(game.id)), (archived) => !archived)
-            )
-          ).pipe(
-            Stream.schedule(pacing),
-            Stream.runForEach((game) => missing(summaryUrl(game.id), files.summary(game.id), game.id))
-          )
-        }
-
-        return yield* Effect.forEach(finals, (final) =>
-          kept(
-            files.summary(final.id),
-            failed(final.id),
-            missing(summaryUrl(final.id), files.summary(final.id), final.id)
-          ).pipe(
-            Effect.flatMap((body) =>
-              decodeJson(body).pipe(
-                Effect.flatMap((summary) => EspnSummary.plays(league, summary)),
-                Effect.mapError((cause) => failed(final.id)("Unreadable", cause))
-              )
-            ),
-            Effect.flatMap((plays) =>
-              plays.length === 0
-                ? Effect.as(
-                    Effect.logWarning(
-                      `Archive: ${league} game ${final.id} (${final.away.team.abbreviation} at ${final.home.team.abbreviation}) has no plays with wallclocks; skipped`
-                    ),
-                    Option.none()
+        const refused =
+          how === "fetch"
+            ? yield* Stream.fromIterable(
+                yield* Effect.filter(finals, (game) =>
+                  Effect.map(exists(files.summary(game.id), failed(game.id)), (archived) => !archived)
+                )
+              ).pipe(
+                Stream.schedule(pacing),
+                Stream.mapEffect((game) =>
+                  missing(summaryUrl(game.id), files.summary(game.id), game.id).pipe(
+                    Effect.as(Option.none<GameId>()),
+                    Effect.catchIf(
+                      (error) => error.reason === "Refused",
+                      (error) =>
+                        Effect.as(
+                          Effect.logWarning(
+                            `Archive: ${league} game ${game.id} (${game.away.team.abbreviation} at ${game.home.team.abbreviation}) has its summary refused; skipped`,
+                            error
+                          ),
+                          Option.some(game.id)
+                        )
+                    )
                   )
-                : Effect.succeedSome(new ArchivedGame({ scheduled: scheduled(final), final, plays }))
+                ),
+                Stream.runCollect,
+                Effect.map(Arr.getSomes)
+              )
+            : []
+
+        return yield* Effect.forEach(
+          finals.filter((final) => !refused.includes(final.id)),
+          (final) =>
+            kept(
+              files.summary(final.id),
+              failed(final.id),
+              missing(summaryUrl(final.id), files.summary(final.id), final.id)
+            ).pipe(
+              Effect.flatMap((body) =>
+                decodeJson(body).pipe(
+                  Effect.flatMap((summary) => EspnSummary.plays(league, summary)),
+                  Effect.mapError((cause) => failed(final.id)("Unreadable", cause))
+                )
+              ),
+              Effect.flatMap((plays) =>
+                plays.length === 0
+                  ? Effect.as(
+                      Effect.logWarning(
+                        `Archive: ${league} game ${final.id} (${final.away.team.abbreviation} at ${final.home.team.abbreviation}) has no plays with wallclocks; skipped`
+                      ),
+                      Option.none()
+                    )
+                  : Effect.succeedSome(new ArchivedGame({ scheduled: scheduled(final), final, plays }))
+              )
             )
-          )
         ).pipe(Effect.map(Arr.getSomes))
       }).pipe(
         Effect.withSpan("EspnArchive.games", {
@@ -147,7 +169,7 @@ export const layer: Layer.Layer<
 
 const pacing = Schedule.spaced("500 millis")
 
-// Five tries in all: the first, then four more after 1, 2, 4, and 8 seconds, each jittered.
+// Unreachable only, five tries in all: the first, then four more after 1, 2, 4, and 8 seconds, each jittered.
 const retry = Schedule.max([Schedule.exponential("1 second"), Schedule.recurs(4)]).pipe(
   Schedule.jittered,
   Schedule.setInputType<ArchiveFetchFailed>(),
@@ -158,7 +180,7 @@ type Failed = (reason: ArchiveFetchFailed["reason"], cause: unknown) => ArchiveF
 
 function reasonOf(cause: HttpClientError.HttpClientError): ArchiveFetchFailed["reason"] {
   return cause.reason._tag === "StatusCodeError"
-    ? cause.reason.response.status >= 500
+    ? cause.reason.response.status >= 500 || cause.reason.response.status === 429
       ? "Unreachable"
       : "Refused"
     : cause.reason._tag === "DecodeError" || cause.reason._tag === "EmptyBodyError"

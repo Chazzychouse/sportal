@@ -254,7 +254,7 @@ Checked against ESPN, 2026-10-07:
 ### Synthesis
 
 - **Plays:** `EspnSummary` (in `provider/espn/`) reads a summary's plays as `Play`s, sharing `EspnPlay`'s kind table
-  and spot rules; team from `start.team.id`, win probability from `winprobability` by play id.
+  and spot rules; team from `end.team.id` (FastCast's entity names the team with the ball as the play ended, as on a kickoff, punt, or turnover), win probability from `winprobability` by play id.
 - **Push file:** each game's scoreboard snapshot (status scheduled) at kickoff less 30 minutes; then, for each play at
   `wallclock + pushLag`, a `PlaysChanged` and a `Snapshot` read from the play: period, clock, scores, situation from
   its end spot, timeouts counted from the half's timeout plays, `halftime` after period 2 ends, `final` after the last

@@ -59,15 +59,39 @@ describe("EspnSummary", () => {
     })
   )
 
-  it.effect("a play's team is the team that had the ball when it started", () =>
+  it.effect(
+    "a play's team is FastCast's: the team with the ball as it ended, so a lost fumble's is the recovering team",
+    () =>
+      Effect.gen(function* () {
+        const play = (yield* EspnSummary.plays("nfl", summary)).find(
+          ({ play }) => play.id === PlayId.make("4018729712179")
+        )?.play
+
+        assert.deepStrictEqual(
+          [play?.kind, play?.team, play?.start.team, play?.end.team],
+          ["fumbleLost", nfl("17"), nfl("2"), nfl("17")]
+        )
+      })
+  )
+
+  it.effect("every play FastCast's entities also have reads with the entity's team", () =>
     Effect.gen(function* () {
-      const play = (yield* EspnSummary.plays("nfl", summary)).find(
-        ({ play }) => play.id === PlayId.make("4018729712179")
-      )?.play
+      const decodeEntity = Schema.decodeUnknownEffect(EspnPlay.Play("nfl"))
+      const both = (yield* EspnSummary.plays("nfl", summary)).flatMap(({ play }) => {
+        const entity = fastCast[play.id]
+        return entity === undefined ? [] : [{ play, entity }]
+      })
+      const teams = yield* Effect.forEach(both, ({ play, entity }) =>
+        Effect.map(decodeEntity(entity), (pushed) => [play.id, play.team, pushed.team])
+      )
 
       assert.deepStrictEqual(
-        [play?.kind, play?.team, play?.start.team, play?.end.team],
-        ["fumbleLost", nfl("2"), nfl("2"), nfl("17")]
+        teams.map(([id]) => id),
+        ["401872971330", "401872971484", "4018729712179"].map((id) => PlayId.make(id))
+      )
+      assert.deepStrictEqual(
+        teams.map(([id, team]) => [id, team]),
+        teams.map(([id, , pushed]) => [id, pushed])
       )
     })
   )

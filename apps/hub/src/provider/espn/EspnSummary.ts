@@ -1,16 +1,14 @@
 import type { LeagueId } from "@sportal/domain/League"
 import { Play } from "@sportal/domain/Play"
-import { type DateTime, type Effect, Schema, SchemaGetter } from "effect"
+import { type Effect, Schema, SchemaGetter } from "effect"
+import type { ArchivedPlay } from "../../corpus/Archive.ts"
 import * as EspnPlay from "./EspnPlay.ts"
 
 /** ESPN's game summary, read as its plays with their wallclocks; a play without one is not read. */
 export function plays(
   league: LeagueId,
   summary: unknown
-): Effect.Effect<
-  ReadonlyArray<{ readonly play: Play; readonly wallclock: DateTime.Utc }>,
-  Schema.SchemaError
-> {
+): Effect.Effect<ReadonlyArray<ArchivedPlay>, Schema.SchemaError> {
   return decodeSummary[league](summary)
 }
 
@@ -22,7 +20,7 @@ const TeamRef = Schema.Struct({ id: Schema.String }).pipe(
   })
 )
 
-// A play as a summary's drive lists it: its team is the one with the ball as it started.
+// A play as a summary's drive lists it: its team is the one with the ball as it ended, as FastCast's entity has it.
 const SummaryPlay = Schema.Struct({
   ...EspnPlay.fields(TeamRef),
   wallclock: Schema.optional(Schema.DateTimeUtcFromString)
@@ -61,7 +59,7 @@ function Summary(league: LeagueId) {
                   {
                     play: EspnPlay.read(league, {
                       ...play,
-                      team: play.start.team,
+                      team: play.end.team,
                       homeWinProbability: probabilities.get(play.id)
                     }),
                     wallclock

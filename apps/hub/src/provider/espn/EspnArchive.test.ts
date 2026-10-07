@@ -90,26 +90,106 @@ describe("EspnArchive", () => {
   )
 
   it.effect("a summary that keeps failing is Unreachable after five tries, and is not kept", () =>
-    inArchive({ summaryStatus: 503 }, ({ dir, requests }) =>
-      Effect.gen(function* () {
-        const error = yield* Effect.flip(stepped((yield* Archive).games("nfl", "2026-10-04")))
+    inArchive(
+      { answer: (url) => (url === summaryUrl ? new Response("", { status: 503 }) : undefined) },
+      ({ dir, requests }) =>
+        Effect.gen(function* () {
+          const error = yield* Effect.flip(stepped((yield* Archive).games("nfl", "2026-10-04")))
 
-        assert.deepStrictEqual([error.reason, error.game], ["Unreachable", neBuf])
-        assert.strictEqual((yield* requests).filter((url) => url === summaryUrl).length, 5)
-        assert.isFalse(
-          yield* (yield* FileSystem.FileSystem).exists(`${dir}/archive/nfl/summary/401872971.json.gz`)
-        )
-      })
+          assert.deepStrictEqual([error.reason, error.game], ["Unreachable", neBuf])
+          assert.strictEqual((yield* requests).filter((url) => url === summaryUrl).length, 5)
+          assert.isFalse(
+            yield* (yield* FileSystem.FileSystem).exists(`${dir}/archive/nfl/summary/401872971.json.gz`)
+          )
+        })
+    )
+  )
+
+  it.effect("a body that is not JSON is Unreadable and is not kept, so the next call fetches it again", () =>
+    inArchive(
+      {
+        answer: (url, earlier) =>
+          url === summaryUrl && earlier === 0 ? new Response("<html>Service Unavailable</html>") : undefined
+      },
+      ({ dir, requests }) =>
+        Effect.gen(function* () {
+          const archive = yield* Archive
+          const error = yield* Effect.flip(stepped(archive.games("nfl", "2026-10-04")))
+          const kept = yield* (yield* FileSystem.FileSystem).exists(
+            `${dir}/archive/nfl/summary/401872971.json.gz`
+          )
+          const games = yield* stepped(archive.games("nfl", "2026-10-04"))
+
+          assert.deepStrictEqual([error.reason, error.game], ["Unreadable", neBuf])
+          assert.isFalse(kept)
+          assert.deepStrictEqual(
+            games.map((game) => game.final.id),
+            [neBuf]
+          )
+          assert.strictEqual((yield* requests).filter((url) => url === summaryUrl).length, 2)
+        })
+    )
+  )
+
+  it.effect("a 429 is tried again", () =>
+    inArchive(
+      {
+        answer: (url, earlier) =>
+          url === summaryUrl && earlier === 0 ? new Response("", { status: 429 }) : undefined
+      },
+      ({ requests }) =>
+        Effect.gen(function* () {
+          const games = yield* stepped((yield* Archive).games("nfl", "2026-10-04"))
+
+          assert.strictEqual(games.length, 1)
+          assert.strictEqual((yield* requests).filter((url) => url === summaryUrl).length, 2)
+        })
+    )
+  )
+
+  it.effect("a game whose summary is refused is skipped, the rest still read, and nothing kept for it", () =>
+    inArchive(
+      { answer: (url) => (url === summaryUrl ? new Response("", { status: 404 }) : undefined) },
+      ({ dir, requests }) =>
+        Effect.gen(function* () {
+          const games = yield* stepped((yield* Archive).games("nfl", "2026-10-04"))
+
+          assert.deepStrictEqual(games, [])
+          assert.strictEqual(
+            (yield* requests).length,
+            15,
+            "the scoreboard and every summary, the refused one once"
+          )
+          assert.isFalse(
+            yield* (yield* FileSystem.FileSystem).exists(`${dir}/archive/nfl/summary/401872971.json.gz`)
+          )
+          assert.isTrue(
+            yield* (yield* FileSystem.FileSystem).exists(`${dir}/archive/nfl/summary/401872965.json.gz`)
+          )
+        })
+    )
+  )
+
+  it.effect("a refused scoreboard fails the date", () =>
+    inArchive(
+      { answer: (url) => (url === scoreboardUrl ? new Response("", { status: 404 }) : undefined) },
+      ({ requests }) =>
+        Effect.gen(function* () {
+          const error = yield* Effect.flip(stepped((yield* Archive).games("nfl", "2026-10-04")))
+
+          assert.deepStrictEqual([error.reason, error.game], ["Refused", undefined])
+          assert.deepStrictEqual(yield* requests, [scoreboardUrl])
+        })
     )
   )
 })
 
 /**
- * Runs `test` against ESPN's archive over a temporary corpus, its HTTP answered from the fixtures, with the URLs it
- * requested.
+ * Runs `test` against ESPN's archive over a temporary corpus, with the URLs it requested. Its HTTP is answered by
+ * `answer`, given how many times the URL was requested before, and otherwise from the fixtures.
  */
 function inArchive<A, E>(
-  options: { readonly summaryStatus?: number },
+  options: { readonly answer?: (url: string, earlier: number) => Response | undefined },
   test: (context: {
     readonly dir: string
     readonly requests: Effect.Effect<ReadonlyArray<string>>
@@ -119,15 +199,14 @@ function inArchive<A, E>(
     const dir = yield* (yield* FileSystem.FileSystem).makeTempDirectoryScoped()
     const requests = yield* Ref.make<ReadonlyArray<string>>([])
     const client = HttpClient.make((request) =>
-      Ref.update(requests, (urls) => [...urls, request.url]).pipe(
-        Effect.as(
+      Ref.getAndUpdate(requests, (urls) => [...urls, request.url]).pipe(
+        Effect.map((earlier) =>
           HttpClientResponse.fromWeb(
             request,
-            request.url === scoreboardUrl
-              ? new Response(scoreboard)
-              : request.url === summaryUrl
-                ? new Response(summary, { status: options.summaryStatus ?? 200 })
-                : new Response("{}")
+            options.answer?.(request.url, earlier.filter((url) => url === request.url).length) ??
+              new Response(
+                request.url === scoreboardUrl ? scoreboard : request.url === summaryUrl ? summary : "{}"
+              )
           )
         )
       )

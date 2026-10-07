@@ -23,8 +23,11 @@ export class ArchivedGame extends Data.Class<{
   /** The scoreboard's event, its status set to scheduled. */
   readonly scheduled: GameSnapshot
   readonly final: GameSnapshot
-  readonly plays: ReadonlyArray<{ readonly play: Play; readonly wallclock: DateTime.Utc }>
+  readonly plays: ReadonlyArray<ArchivedPlay>
 }> {}
+
+/** A play of an archived game, with the wallclock instant it was run at. */
+export type ArchivedPlay = { readonly play: Play; readonly wallclock: DateTime.Utc }
 
 /**
  * The archive could not give `league`'s games on `date` (or one game of them): a fetch did not connect or was answered
