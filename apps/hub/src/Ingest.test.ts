@@ -290,14 +290,15 @@ describe("Ingest", () => {
     Effect.gen(function* () {
       const wanted = yield* Ref.make<ReadonlyArray<ReadonlyArray<string>>>([])
       const now = yield* DateTime.now
+      // Two minutes before it is current, no further: each minute of test clock is six polls and 600 feed log wakes.
       const scheduled = snapshot({
         id: GameId.make("1"),
         status: "scheduled",
-        kickoff: DateTime.add(now, { hours: 2 })
+        kickoff: DateTime.add(now, { minutes: 32 })
       })
       yield* Effect.gen(function* () {
         yield* TestClock.adjust(0)
-        yield* TestClock.adjust("89 minutes")
+        yield* TestClock.adjust("1 minute")
         assert.deepStrictEqual(yield* Ref.get(wanted), [[]])
 
         yield* TestClock.adjust("1 minute")
