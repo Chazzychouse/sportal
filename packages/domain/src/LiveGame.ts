@@ -1,7 +1,7 @@
 import { Array as Arr, Data, DateTime, Duration, Equal, Option } from "effect"
 import type { Delivery, DeliverySource } from "./Delivery.ts"
 import { GameSnapshot } from "./Game.ts"
-import type { GameEvent } from "./GameEvent.ts"
+import type { GameEventKind } from "./GameEvent.ts"
 import { Play } from "./Play.ts"
 
 /** Where a live game is: upcoming, live (last updated at), stale (last updated at), or over. */
@@ -58,7 +58,7 @@ export class LiveGame extends Data.Class<{
   take(
     delivery: Extract<Delivery, { readonly _tag: "Snapshot" | "Plays" }>,
     now: DateTime.Utc
-  ): { readonly liveGame: Option.Option<LiveGame>; readonly events: ReadonlyArray<GameEvent> } {
+  ): { readonly liveGame: Option.Option<LiveGame>; readonly events: ReadonlyArray<GameEventKind> } {
     if (delivery._tag === "Plays") {
       const plays = delivery.plays.toSorted(Play.order)
       if (Equal.equals(plays, this.plays)) return { liveGame: Option.none(), events: [] }
@@ -154,7 +154,7 @@ function stateOf(snapshot: GameSnapshot, now: DateTime.Utc): LiveGameState {
 }
 
 /** The tags a game's plays decide once it has any; its snapshots decide them only before. */
-const fromPlays: ReadonlySet<GameEvent["_tag"]> = new Set([
+const fromPlays: ReadonlySet<GameEventKind["_tag"]> = new Set([
   "ScoreChanged",
   "Turnover",
   "PossessionChanged",

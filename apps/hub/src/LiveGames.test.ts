@@ -129,11 +129,14 @@ describe("LiveGames", () => {
         Effect.forkScoped({ startImmediately: true })
       )
       yield* takenSnapshot(liveSnapshot({ id: one }))
-      yield* delivered(Delivery.cases.Plays.make({ game: one, plays: [play()] }))
+      const frameAt = DateTime.add(yield* DateTime.now, { seconds: 5 })
+      yield* delivered(Delivery.cases.Plays.make({ game: one, plays: [play()] }), frameAt)
       assert.strictEqual((yield* liveGameOf(one)).plays.length, 1)
       const [first] = yield* Fiber.join(events)
       assert.strictEqual(first?.snapshot.id, one)
-      assert.strictEqual(first?.event._tag, "Played")
+      assert.strictEqual(first?.event.game, one)
+      assert.deepStrictEqual(first?.event.at, frameAt)
+      assert.strictEqual(first?.event.what._tag, "Played")
       assert.strictEqual(yield* counted("sportal_plays", { league: "fbs" }), 1)
     }).pipe(Effect.provide(liveGames()), withMetrics)
   )
@@ -514,7 +517,7 @@ describe("LiveGames", () => {
         const published: ReadonlyArray<{ readonly snapshot: GameSnapshot; readonly event: GameEvent }> =
           yield* Fiber.join(events)
         assert.deepStrictEqual(
-          published.map((published) => [published.snapshot.id, published.event._tag]),
+          published.map((published) => [published.snapshot.id, published.event.what._tag]),
           [[one, "ScoreChanged"]]
         )
       }).pipe(Effect.provide(liveGames().pipe(Layer.provideMerge(layer))), withMetrics)

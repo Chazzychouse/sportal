@@ -2,7 +2,7 @@ import { assert, describe, it } from "@effect/vitest"
 import { DateTime, Duration, Option } from "effect"
 import { Delivery, type DeliverySource } from "./Delivery.ts"
 import type { GameSnapshot } from "./Game.ts"
-import { GameEvent } from "./GameEvent.ts"
+import { GameEventKind } from "./GameEvent.ts"
 import { LiveGame, LiveGameState } from "./LiveGame.ts"
 import { type Play, PlayId } from "./Play.ts"
 import { play, snapshot } from "./TestGame.ts"
@@ -306,8 +306,8 @@ describe("LiveGame#take, plays", () => {
     game.take(Delivery.cases.Plays.make({ game: live.id, plays }), later)
   const withFirst = Option.getOrThrow(take(liveGame, [first]).liveGame)
   const secondsEvents = [
-    GameEvent.Played({ play: second }),
-    GameEvent.ScoreChanged({ team: live.home.team.id, points: 7 })
+    GameEventKind.Played({ play: second }),
+    GameEventKind.ScoreChanged({ team: live.home.team.id, points: 7 })
   ]
 
   it("replaces the list, in Play.order, and gives the new plays' events", () => {

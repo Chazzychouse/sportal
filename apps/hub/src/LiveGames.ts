@@ -112,8 +112,9 @@ export class LiveGames extends Context.Service<
                 deliveries: deliveries + decoded.deliveries.length,
                 plays:
                   plays +
-                  reports.filter((report) => report._tag === "Happened" && report.event._tag === "Played")
-                    .length
+                  reports.filter(
+                    (report) => report._tag === "Happened" && report.event.what._tag === "Played"
+                  ).length
               }))
             )
           )

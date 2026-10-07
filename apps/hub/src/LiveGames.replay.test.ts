@@ -156,7 +156,7 @@ describe("following the feed log", () => {
       assert.isUndefined(yield* counted("sportal_game_events"))
       const taken = yield* eventsWhile(takenInTime(day))
       assert.deepStrictEqual(
-        taken.map((published) => [published.snapshot.id, published.event._tag]),
+        taken.map((published) => [published.snapshot.id, published.event.what._tag]),
         [
           [one, "Played"],
           [one, "Played"]
@@ -470,7 +470,7 @@ describe("a recorded game", () => {
         assert.isTrue(Equal.equals(first.listed, once.latest.listed), "and the listings")
         assert.isTrue(Equal.equals(once.held, again.held))
         assert.isTrue(Equal.equals(once.events, again.events))
-        const played = once.events.filter(({ event }) => event._tag === "Played").length
+        const played = once.events.filter(({ event }) => event.what._tag === "Played").length
         assert.strictEqual(played, recordedPlays, "each play is played once")
         const summary = logs.find(({ message }) => message.includes("replayed"))
         assert.include(summary?.message, ` ${played} plays`, "and the replay took each play live did")

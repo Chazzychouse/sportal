@@ -65,8 +65,8 @@ describe("Scenarios", () => {
           )
           const reports = yield* reportsOf(frames)
           const played = reports.flatMap((report) =>
-            report._tag === "Happened" && report.event._tag === "Played"
-              ? [{ game: report.snapshot.id, play: report.event.play.id }]
+            report._tag === "Happened" && report.event.what._tag === "Played"
+              ? [{ game: report.snapshot.id, play: report.event.what.play.id }]
               : []
           )
           assert.isAbove(played.length, 0, `${name} plays`)

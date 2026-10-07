@@ -1,5 +1,5 @@
 import { type GameId, GameSnapshot } from "@sportal/domain/Game"
-import type { GameEvent } from "@sportal/domain/GameEvent"
+import type { GameEventKind } from "@sportal/domain/GameEvent"
 import type { LiveGame, LiveGameState } from "@sportal/domain/LiveGame"
 import { FoldReport } from "@sportal/domain/LiveGames"
 import { Cause, DateTime, Duration, Effect, Exit, Match, Metric, Option, Schema } from "effect"
@@ -103,9 +103,9 @@ function toldLive(report: FoldReport, seq: Option.Option<number>): Effect.Effect
         Effect.annotateLogs(annotationsOf(liveGame.snapshot))
       ),
     Happened: (happened) =>
-      logEvent(happened.event, happened.snapshot).pipe(
+      logEvent(happened.event.what, happened.snapshot).pipe(
         Effect.andThen(
-          happened.event._tag === "Played"
+          happened.event.what._tag === "Played"
             ? Metric.update(Metric.withAttributes(plays, { league: happened.snapshot.league }), 1)
             : Effect.void
         ),
@@ -166,7 +166,7 @@ function logTransition(before: LiveGame, after: LiveGame, now: DateTime.Utc): Ef
 }
 
 /** Info, with the event's fields as annotations, so the dashboard can mark it on the game's timeline. */
-function logEvent(event: GameEvent, snapshot: GameSnapshot): Effect.Effect<void> {
+function logEvent(event: GameEventKind, snapshot: GameSnapshot): Effect.Effect<void> {
   const { _tag, ...fields } = event
   const team = "team" in event ? ` ${snapshot.abbreviationOf(event.team)}` : ""
   return Effect.logInfo(`LiveGames: ${snapshot.matchup()}: ${_tag}${team} at ${snapshot.statusLine()}`).pipe(

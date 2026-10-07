@@ -1,7 +1,7 @@
 import { Cause, Data, DateTime, Effect, Option } from "effect"
 import { Delivery, type DeliverySource } from "./Delivery.ts"
 import type { GameId, GameSnapshot } from "./Game.ts"
-import type { GameEvent } from "./GameEvent.ts"
+import { GameEvent, type GameEventKind } from "./GameEvent.ts"
 import type { LeagueId } from "./League.ts"
 import { LiveGame } from "./LiveGame.ts"
 import type { RecentPlays } from "./RecentPlays.ts"
@@ -226,7 +226,7 @@ function settled(
   id: GameId,
   at: DateTime.Utc,
   current: Option.Option<LiveGame>,
-  step: { readonly liveGame: Option.Option<LiveGame>; readonly events?: ReadonlyArray<GameEvent> }
+  step: { readonly liveGame: Option.Option<LiveGame>; readonly events?: ReadonlyArray<GameEventKind> }
 ): Advanced {
   return Option.match(
     Option.orElse(step.liveGame, () => current),
@@ -243,7 +243,9 @@ function settled(
                 onSome: (before) => [FoldReport.Changed({ before, after, at })]
               })
           }),
-          ...(step.events ?? []).map((event) => FoldReport.Happened({ snapshot: after.snapshot, event }))
+          ...(step.events ?? []).map((what) =>
+            FoldReport.Happened({ snapshot: after.snapshot, event: new GameEvent({ game: id, at, what }) })
+          )
         ]
         if (after.isCurrent(at)) {
           return {

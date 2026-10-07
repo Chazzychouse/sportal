@@ -1,5 +1,5 @@
 import { DateTime, Option, Order, Schema } from "effect"
-import { GameEvent } from "./GameEvent.ts"
+import { GameEventKind } from "./GameEvent.ts"
 import { LeagueId } from "./League.ts"
 import { Situation } from "./Situation.ts"
 import { Team, type TeamId } from "./Team.ts"
@@ -189,10 +189,10 @@ export class GameSnapshot extends Schema.Class<GameSnapshot>("sportal/GameSnapsh
    * drive reaching the 40, the red zone, goal to go, or fourth down, a timeout, and the clock and status. A change
    * of possession is a turnover only when the last play names an interception or a fumble and nobody scored.
    */
-  eventsSince(previous: GameSnapshot): ReadonlyArray<GameEvent> {
+  eventsSince(previous: GameSnapshot): ReadonlyArray<GameEventKind> {
     const scores = (["home", "away"] as const).flatMap((side) => {
       const points = this[side].score - previous[side].score
-      return points > 0 ? [GameEvent.ScoreChanged({ team: this[side].team.id, points })] : []
+      return points > 0 ? [GameEventKind.ScoreChanged({ team: this[side].team.id, points })] : []
     })
     const before = previous.situation
     const after = this.situation
@@ -208,41 +208,41 @@ export class GameSnapshot extends Schema.Class<GameSnapshot>("sportal/GameSnapsh
       team !== undefined && before?.possession !== undefined && team !== before.possession
         ? [
             scores.length === 0 && /intercept|fumble/i.test(after?.lastPlay ?? "")
-              ? GameEvent.Turnover({ team })
-              : GameEvent.PossessionChanged({ team })
+              ? GameEventKind.Turnover({ team })
+              : GameEventKind.PossessionChanged({ team })
           ]
         : [],
       team !== undefined && after !== undefined
         ? [
             ...(after.inScoringRange() && !already((s) => s.inScoringRange())
-              ? [GameEvent.ReachedScoringRange({ team })]
+              ? [GameEventKind.ReachedScoringRange({ team })]
               : []),
             ...(after.inRedZone() && !already((s) => s.inRedZone())
-              ? [GameEvent.EnteredRedZone({ team })]
+              ? [GameEventKind.EnteredRedZone({ team })]
               : []),
-            ...(after.goalToGo() && !already((s) => s.goalToGo()) ? [GameEvent.GoalToGo({ team })] : []),
+            ...(after.goalToGo() && !already((s) => s.goalToGo()) ? [GameEventKind.GoalToGo({ team })] : []),
             ...(after.down === 4 && !already((s) => s.down === 4 && s.yardLine === after.yardLine)
-              ? [GameEvent.FourthDown({ team })]
+              ? [GameEventKind.FourthDown({ team })]
               : [])
           ]
         : [],
       before !== undefined && after !== undefined
         ? [
             ...(tookOne(before.homeTimeouts, after.homeTimeouts)
-              ? [GameEvent.TimeoutTaken({ team: this.home.team.id })]
+              ? [GameEventKind.TimeoutTaken({ team: this.home.team.id })]
               : []),
             ...(tookOne(before.awayTimeouts, after.awayTimeouts)
-              ? [GameEvent.TimeoutTaken({ team: this.away.team.id })]
+              ? [GameEventKind.TimeoutTaken({ team: this.away.team.id })]
               : [])
           ]
         : [],
-      this.inTwoMinuteDrill() && !previous.inTwoMinuteDrill() ? [GameEvent.TwoMinuteDrill()] : [],
-      this.inOvertime() && !previous.inOvertime() ? [GameEvent.Overtime()] : [],
+      this.inTwoMinuteDrill() && !previous.inTwoMinuteDrill() ? [GameEventKind.TwoMinuteDrill()] : [],
+      this.inOvertime() && !previous.inOvertime() ? [GameEventKind.Overtime()] : [],
       this.period > previous.period && previous.period >= 1
-        ? [GameEvent.PeriodEnded({ period: previous.period })]
+        ? [GameEventKind.PeriodEnded({ period: previous.period })]
         : [],
-      this.status === "halftime" && previous.status !== "halftime" ? [GameEvent.WentToHalftime()] : [],
-      this.status === "final" && previous.status !== "final" ? [GameEvent.WentFinal()] : []
+      this.status === "halftime" && previous.status !== "halftime" ? [GameEventKind.WentToHalftime()] : [],
+      this.status === "final" && previous.status !== "final" ? [GameEventKind.WentFinal()] : []
     ].flat()
   }
 }

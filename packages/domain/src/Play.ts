@@ -1,5 +1,5 @@
 import { Order, Schema } from "effect"
-import { GameEvent } from "./GameEvent.ts"
+import { GameEventKind } from "./GameEvent.ts"
 import { TeamId } from "./Team.ts"
 
 /** The feed's own id. Not ordered: order plays by `Play.sequence`. */
@@ -61,7 +61,7 @@ export class Play extends Schema.Class<Play>("sportal/Play")({
     before: ReadonlyArray<Play>,
     after: ReadonlyArray<Play>,
     teams: { readonly home: TeamId; readonly away: TeamId }
-  ): ReadonlyArray<GameEvent> {
+  ): ReadonlyArray<GameEventKind> {
     const known = new Set(before.map((play) => play.id))
     const ordered = after.toSorted(Play.order)
     return ordered.flatMap((play, index) =>
@@ -77,7 +77,7 @@ function eventsOf(
   play: Play,
   previous: Play | undefined,
   teams: { readonly home: TeamId; readonly away: TeamId }
-): ReadonlyArray<GameEvent> {
+): ReadonlyArray<GameEventKind> {
   const rises = play.scoring
     ? [
         { team: teams.home, points: play.homeScore - (previous?.homeScore ?? 0) },
@@ -88,22 +88,24 @@ function eventsOf(
   const turnedOver = play.kind === "interception" || play.kind === "fumbleLost"
   const sacked = play.team ?? play.start.team
   return [
-    [GameEvent.Played({ play })],
-    rises.map(GameEvent.ScoreChanged),
-    taker !== undefined && turnedOver ? [GameEvent.Turnover({ team: taker })] : [],
+    [GameEventKind.Played({ play })],
+    rises.map(GameEventKind.ScoreChanged),
+    taker !== undefined && turnedOver ? [GameEventKind.Turnover({ team: taker })] : [],
     taker !== undefined &&
     !turnedOver &&
     !play.scoring &&
     play.start.team !== undefined &&
     play.start.team !== taker
-      ? [GameEvent.PossessionChanged({ team: taker })]
+      ? [GameEventKind.PossessionChanged({ team: taker })]
       : [],
-    play.kind === "timeout" && play.team !== undefined ? [GameEvent.TimeoutTaken({ team: play.team })] : [],
-    play.kind === "endPeriod" ? [GameEvent.PeriodEnded({ period: play.period })] : [],
-    play.end.down === 4 && taker !== undefined ? [GameEvent.FourthDown({ team: taker })] : [],
+    play.kind === "timeout" && play.team !== undefined
+      ? [GameEventKind.TimeoutTaken({ team: play.team })]
+      : [],
+    play.kind === "endPeriod" ? [GameEventKind.PeriodEnded({ period: play.period })] : [],
+    play.end.down === 4 && taker !== undefined ? [GameEventKind.FourthDown({ team: taker })] : [],
     (play.kind === "rush" || play.kind === "pass") && play.yards >= bigPlayYards && play.team !== undefined
-      ? [GameEvent.BigPlay({ team: play.team, yards: play.yards })]
+      ? [GameEventKind.BigPlay({ team: play.team, yards: play.yards })]
       : [],
-    play.kind === "sack" && sacked !== undefined ? [GameEvent.Sack({ team: sacked })] : []
+    play.kind === "sack" && sacked !== undefined ? [GameEventKind.Sack({ team: sacked })] : []
   ].flat()
 }
