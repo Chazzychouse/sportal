@@ -196,18 +196,18 @@ function snapshot(
   }
   const side = (competitor: typeof home) => ({
     team: new Team({
-      id: TeamId.make(`${league}:${competitor.id}`),
+      id: teamId(league, competitor.id),
       abbreviation: competitor.abbreviation,
       name: competitor.displayName,
       location: competitor.location ?? competitor.displayName,
       // FastCast has no short name: EspnDecode advances each pushed game's listed game to it, keeping the poll's names.
       shortName: competitor.shortDisplayName ?? competitor.displayName,
-      logo: competitor.logo,
-      color: competitor.color,
-      alternateColor: competitor.alternateColor
+      ...(competitor.logo === undefined ? {} : { logo: competitor.logo }),
+      ...(competitor.color === undefined ? {} : { color: competitor.color }),
+      ...(competitor.alternateColor === undefined ? {} : { alternateColor: competitor.alternateColor })
     }),
     score: competitor.score ?? 0,
-    ranking: competitor.ranking
+    ...(competitor.ranking === undefined ? {} : { ranking: competitor.ranking })
   })
   return Effect.succeed(
     new GameSnapshot({
@@ -220,7 +220,7 @@ function snapshot(
       home: side(home),
       away: side(away),
       broadcasts: event.broadcasts.flatMap(({ medium, network }) => broadcast(medium, network)),
-      situation: event.situation === undefined ? undefined : situation(league, event.situation, home.id)
+      ...(event.situation === undefined ? {} : { situation: situation(league, event.situation, home.id) })
     })
   )
 }
@@ -239,7 +239,7 @@ function situation(league: LeagueId, raw: typeof Situation.Type, homeTeamId: str
   return new DomainSituation({
     homeTimeouts: raw.homeTimeouts ?? 0,
     awayTimeouts: raw.awayTimeouts ?? 0,
-    ...(raw.possession === undefined ? {} : { possession: TeamId.make(`${league}:${raw.possession}`) }),
+    ...(raw.possession === undefined ? {} : { possession: teamId(league, raw.possession) }),
     // ESPN reports down -1 between plays (after a score, before a kickoff).
     ...(raw.down === undefined || raw.down < 1 ? {} : { down: raw.down }),
     ...(raw.distance === undefined ? {} : { distance: raw.distance }),
@@ -277,4 +277,12 @@ const espnStatuses: Readonly<
   final: { name: "STATUS_FINAL", state: "post" },
   postponed: { name: "STATUS_POSTPONED", state: "post" },
   canceled: { name: "STATUS_CANCELED", state: "post" }
+}
+
+/** The site scoreboard, as polled or as fetched for a past date: its events, each for `EspnEvent` to read. */
+export const Scoreboard = Schema.Struct({ events: Schema.Array(Schema.Unknown) })
+
+/** The `TeamId` of ESPN's team `id` in `league`: ESPN's ids are only unique within a league. */
+export function teamId(league: LeagueId, id: string): TeamId {
+  return TeamId.make(`${league}:${id}`)
 }

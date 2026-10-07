@@ -1,13 +1,13 @@
 import { assert, describe, it } from "@effect/vitest"
 import { GameSnapshot } from "@sportal/domain/Game"
 import { LeagueId } from "@sportal/domain/League"
-import * as Fold from "@sportal/domain/LiveGames"
 import { Play } from "@sportal/domain/Play"
+import { SlateObservation } from "@sportal/domain/Slate"
 import { DateTime, Effect, Schema } from "effect"
 import type { FeedFrame } from "../../Frame.ts"
-import { LiveGames } from "../../LiveGames.ts"
+import { Slate } from "../../Slate.ts"
 import { ScenarioScript } from "../../scenario/ScenarioScript.ts"
-import { decodedFrames, liveGames, reportsOf } from "../../TestFeed.ts"
+import { decodedFrames, slateFollowing, takenOf } from "../../TestFeed.ts"
 import * as EspnDecode from "./EspnDecode.ts"
 import { scenarioOf } from "./EspnScript.ts"
 
@@ -139,15 +139,15 @@ describe("scenarioOf", () => {
   })
 
   it.effect(
-    "folds, through the ESPN decoder, to each step's slate and each game's plays so far",
+    "plays, through the ESPN decoder, to each step's slate and each game's plays so far",
     () =>
       Effect.forEach(
         script.steps,
         (step, index) =>
           Effect.gen(function* () {
-            const folded = yield* (yield* LiveGames).latest
+            const current = yield* (yield* Slate).latest
             assert.deepStrictEqual(
-              onWire(slateOnWire(folded.slate(LeagueId.literals))),
+              onWire(slateOnWire(current.games(LeagueId.literals))),
               onWire(slateOnWire(step.slate)),
               `the slate at ${step.at}`
             )
@@ -155,8 +155,8 @@ describe("scenarioOf", () => {
               const written = script.steps
                 .slice(0, index + 1)
                 .flatMap(({ plays }) => plays.filter((play) => play.game === game.id).map(({ play }) => play))
-              const held = folded.live.get(game.id)
-              // The fold lets a game go once it is over, and its plays with it.
+              const held = current.live.get(game.id)
+              // The slate lets a game go once it is over, and its plays with it.
               if (held === undefined) assert.strictEqual(game.progress(), "over", `${game.id} at ${step.at}`)
               else
                 assert.deepStrictEqual(
@@ -165,7 +165,7 @@ describe("scenarioOf", () => {
                   `${game.id}'s plays at ${step.at}`
                 )
             }
-          }).pipe(Effect.provide(liveGames(throughStep(index), { decoder: EspnDecode.layer }))),
+          }).pipe(Effect.provide(slateFollowing(throughStep(index), { decoder: EspnDecode.layer }))),
         { discard: true }
       ),
     { timeout: 30_000 }
@@ -216,13 +216,15 @@ describe("scenarioOf", () => {
       Effect.gen(function* () {
         const decoded = yield* decodedFrames(frames)
         assert.deepStrictEqual(
-          decoded.flatMap(({ notices }) =>
-            notices.filter(({ _tag }) => _tag !== "Received" && _tag !== "Pushed").map(({ _tag }) => _tag)
+          decoded.flatMap(({ observations }) =>
+            observations
+              .filter(({ _tag }) => _tag !== "Received" && _tag !== "Pushed")
+              .map(({ _tag }) => _tag)
           ),
           []
         )
-        const reports = yield* reportsOf(frames)
-        assert.deepStrictEqual(reports.filter(Fold.FoldReport.$is("Dropped")), [])
+        const { observations } = yield* takenOf(frames)
+        assert.deepStrictEqual(observations.filter(SlateObservation.$is("Dropped")), [])
         assert.strictEqual(
           decoded.flatMap(({ deliveries }) => deliveries.filter(({ _tag }) => _tag === "Plays")).length,
           // One per game's checkpoint, and one per play.

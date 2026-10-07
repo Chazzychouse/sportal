@@ -30,7 +30,7 @@ easiest to break.
   `shadcn add` and `shadcn diff` keep working. Nothing else goes there.
 - No mirror types. There is no `GameDto`, `GameRow`, `GameResponse`, or `GameProps`. The domain schema is
   the wire format. Derive a variant at the point of use; do not name it.
-- In the Hub, only `HubMode.ts` and tests name concrete providers and sources, and `main.ts` is only the layer pipe and how the process runs it.
+- In the Hub, only `HubMode.ts`, `corpus/corpus.ts`, and tests name concrete providers and sources, and `main.ts` is only the layer pipe and how the process runs it.
   Everything else depends on the port.
 - In the Hub, only `HubConfig.ts` reads the environment. A new setting is a field there, with its default.
 - A service is yielded where it is used, never passed as an argument. A layer that needs a setting yields `HubConfig`
@@ -86,7 +86,7 @@ A reader opens a file to see the thing it is named for. Keep it that way.
 - `SPORTAL_SCENARIO=<name> SPORTAL_SCENARIO_SPEED=10 pnpm dev` — play a scenario instead of ESPN and YouTube TV, ten
   times faster: a written one (a script in `apps/hub/src/scenario/written/Scripts.ts`, written as ESPN's frames) or a
   recorded one, `fixtures/scenarios/<name>.frames.jsonl.gz`. Every scenario plays through ESPN's decode. A name that is
-  both stops the Hub. It plays as the provider through the real ingest and fold, on a feed log
+  both stops the Hub. It plays as the provider through the real ingest and slate, on a feed log
   in memory (`SPORTAL_SCENARIO_FEED_LOG` names a file in the data directory instead). Every game plays as a synthetic
   stream page. The feed log records every game day.
 - `pnpm dev:golden` — the same, with the golden scenario: the recorded `crowded-fourth-quarter` at ten times speed.

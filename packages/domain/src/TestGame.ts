@@ -2,9 +2,9 @@ import { DateTime, Effect, Option } from "effect"
 import { Delivery } from "./Delivery.ts"
 import { type Broadcast, GameId, GameSnapshot, Network } from "./Game.ts"
 import { LeagueId } from "./League.ts"
-import type { LiveGames } from "./LiveGames.ts"
 import { Play, PlayId } from "./Play.ts"
 import { Situation } from "./Situation.ts"
+import type { Slate } from "./Slate.ts"
 import { Team, TeamId } from "./Team.ts"
 
 /** A game snapshot for a test: an FBS scheduled game unless the overrides say otherwise. */
@@ -83,22 +83,22 @@ export function play(overrides: Partial<Play> = {}): Play {
 }
 
 /**
- * `fold` after `slate` is polled at `now`: each league's games as one listing in a frame of its own, as Ingest polls.
+ * `before` after `slate` is polled at `now`: each league's games as one listing in a frame of its own, as Ingest polls.
  * For tests that play a scenario poll by poll.
  */
-export function polled(fold: LiveGames, slate: ReadonlyArray<GameSnapshot>, now: DateTime.Utc): LiveGames {
+export function polled(before: Slate, slate: ReadonlyArray<GameSnapshot>, now: DateTime.Utc): Slate {
   return Effect.runSync(
     Effect.reduce(
       LeagueId.literals,
-      () => fold,
-      (folded, league) =>
-        folded
+      () => before,
+      (held, league) =>
+        held
           .take({
             deliveries: [
               Delivery.cases.Listing.make({ league, games: slate.filter((game) => game.league === league) })
             ],
             at: now,
-            seq: Option.getOrElse(folded.seq, () => 0) + 1
+            seq: Option.getOrElse(held.seq, () => 0) + 1
           })
           .pipe(Effect.map(({ next }) => next))
     )

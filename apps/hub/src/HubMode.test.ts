@@ -9,11 +9,11 @@ import { Slate } from "./Slate.ts"
 import { withEnv } from "./TestHubConfig.ts"
 
 describe("HubMode", () => {
-  it.effect("a scenario's polls, appended by Ingest, reach the fold the Slate reads", () =>
+  it.effect("a scenario's polls, appended by Ingest, reach the Slate", () =>
     Effect.gen(function* () {
       yield* TestClock.adjust(0)
       yield* TestClock.adjust("1 second")
-      assert.isAbove((yield* (yield* Slate).latest).games.length, 0)
+      assert.isAbove((yield* (yield* Slate).published).games.length, 0)
     }).pipe(
       Effect.provide(
         HubMode.layer.pipe(

@@ -379,5 +379,72 @@
     "priority": false,
     "wallclock": "2026-10-04T18:23:06Z",
     "afterCatchYardage": 8
+  },
+  "401872971484": {
+    "id": "401872971484",
+    "type": {
+      "id": "67",
+      "slug": "passing-touchdown",
+      "abbreviation": "TD",
+      "text": "Passing Touchdown"
+    },
+    "text": "(Shotgun) D.Maye pass short middle to R.Doubs for 14 yards, TOUCHDOWN [G.Rousseau]. A.Borregales extra point is GOOD, Center-J.Ashby, Holder-M.Wishnowsky.",
+    "shortText": "Romeo Doubs 14 Yd pass from Drake Maye (Andy Borregales Kick)",
+    "period": {
+      "number": 1
+    },
+    "clock": {
+      "value": 421,
+      "displayValue": "7:01"
+    },
+    "team": {
+      "$key": "17"
+    },
+    "scoreValue": 6,
+    "scoringPlay": true,
+    "start": {
+      "team": {
+        "$key": "17"
+      },
+      "yardLine": 14,
+      "down": 1,
+      "distance": 10,
+      "yardsToEndzone": 14,
+      "downDistanceText": "1st & 10 at BUF 14",
+      "shortDownDistanceText": "1st & 10",
+      "possessionText": "BUF 14"
+    },
+    "end": {
+      "team": {
+        "$key": "17"
+      },
+      "yardLine": 0,
+      "down": -1,
+      "distance": 10,
+      "yardsToEndzone": 0
+    },
+    "statYardage": 14,
+    "sequenceNumber": "48400",
+    "shortDescription": "14-yd Touchdown Pass",
+    "homeScore": 0,
+    "awayScore": 7,
+    "scoringType": {
+      "name": "touchdown",
+      "abbreviation": "TD",
+      "displayName": "Touchdown"
+    },
+    "probabilities": {
+      "winProbability": {
+        "homeWinPercentage": 0.5311
+      },
+      "coverProbability": {
+        "homeCoverPercentage": 0.313,
+        "totalOverPercentage": 0.5278,
+        "spreadPushPercentage": 0.0484
+      }
+    },
+    "priority": false,
+    "wallclock": "2026-10-04T17:14:12Z",
+    "afterCatchYardage": 0
   }
 }

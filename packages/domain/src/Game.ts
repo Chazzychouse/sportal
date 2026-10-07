@@ -1,5 +1,5 @@
 import { DateTime, Option, Order, Schema } from "effect"
-import { GameEvent } from "./GameEvent.ts"
+import { GameEventKind } from "./GameEvent.ts"
 import { LeagueId } from "./League.ts"
 import { Situation } from "./Situation.ts"
 import { Team, type TeamId } from "./Team.ts"
@@ -46,15 +46,21 @@ export class GameSnapshot extends Schema.Class<GameSnapshot>("sportal/GameSnapsh
     Order.mapInput(DateTime.Order, (game: GameSnapshot) => game.kickoff)
   )
 
+  /** The period, then less time left on the clock, whatever the status. */
+  private static readonly clockTime: Order.Order<GameSnapshot> = Order.combine(
+    Order.mapInput(Order.Number, (game: GameSnapshot) => game.period),
+    Order.mapInput(Order.flip(Order.Number), (game: GameSnapshot) => game.secondsLeft())
+  )
+
   /**
-   * How far a game has got: before kickoff, in play, or over; then the period; then less time left on the clock.
-   * Orders two snapshots of one game.
+   * How far a game has got: before kickoff, in play, or over; then the period; then less time left on the clock; then,
+   * at the same clock, halftime after play. Any other statuses at the same clock tie. Orders two snapshots of one game.
    */
   static readonly gameTime: Order.Order<GameSnapshot> = Order.combine(
     Order.mapInput(Order.Number, (game: GameSnapshot) => gameTimeRank[game.progress()]),
     Order.combine(
-      Order.mapInput(Order.Number, (game: GameSnapshot) => game.period),
-      Order.mapInput(Order.flip(Order.Number), (game: GameSnapshot) => game.secondsLeft())
+      GameSnapshot.clockTime,
+      Order.mapInput(Order.Number, (game: GameSnapshot) => (game.status === "halftime" ? 1 : 0))
     )
   )
 
@@ -76,6 +82,33 @@ export class GameSnapshot extends Schema.Class<GameSnapshot>("sportal/GameSnapsh
       case "canceled":
         return "over"
     }
+  }
+
+  /**
+   * Later in game time, or at the same game time with more points, or with as many points split differently. The clock
+   * stops on a score, so at the same game time only the points say which is newer.
+   */
+  isAheadOf(that: GameSnapshot): boolean {
+    const order = GameSnapshot.gameTime(this, that)
+    if (order !== 0) return order > 0
+    const points = this.points() - that.points()
+    if (points !== 0) return points > 0
+    return this.home.score !== that.home.score
+  }
+
+  /**
+   * Ahead of `over`, a snapshot of this game once it was over (a final, a postponement): later in the period or on the
+   * clock whatever either's status, or at the same clock with more points. So overtime after a spurious final, or a
+   * postponed game resuming, is ahead, and a poll lagging the end of the game is not.
+   */
+  isAheadOfOver(over: GameSnapshot): boolean {
+    const order = GameSnapshot.clockTime(this, over)
+    return order !== 0 ? order > 0 : this.points() > over.points()
+  }
+
+  /** Both teams' points together. */
+  private points(): number {
+    return this.home.score + this.away.score
   }
 
   /** The points between the teams. */
@@ -189,10 +222,10 @@ export class GameSnapshot extends Schema.Class<GameSnapshot>("sportal/GameSnapsh
    * drive reaching the 40, the red zone, goal to go, or fourth down, a timeout, and the clock and status. A change
    * of possession is a turnover only when the last play names an interception or a fumble and nobody scored.
    */
-  eventsSince(previous: GameSnapshot): ReadonlyArray<GameEvent> {
+  eventsSince(previous: GameSnapshot): ReadonlyArray<GameEventKind> {
     const scores = (["home", "away"] as const).flatMap((side) => {
       const points = this[side].score - previous[side].score
-      return points > 0 ? [GameEvent.ScoreChanged({ team: this[side].team.id, points })] : []
+      return points > 0 ? [GameEventKind.ScoreChanged({ team: this[side].team.id, points })] : []
     })
     const before = previous.situation
     const after = this.situation
@@ -208,41 +241,41 @@ export class GameSnapshot extends Schema.Class<GameSnapshot>("sportal/GameSnapsh
       team !== undefined && before?.possession !== undefined && team !== before.possession
         ? [
             scores.length === 0 && /intercept|fumble/i.test(after?.lastPlay ?? "")
-              ? GameEvent.Turnover({ team })
-              : GameEvent.PossessionChanged({ team })
+              ? GameEventKind.Turnover({ team })
+              : GameEventKind.PossessionChanged({ team })
           ]
         : [],
       team !== undefined && after !== undefined
         ? [
             ...(after.inScoringRange() && !already((s) => s.inScoringRange())
-              ? [GameEvent.ReachedScoringRange({ team })]
+              ? [GameEventKind.ReachedScoringRange({ team })]
               : []),
             ...(after.inRedZone() && !already((s) => s.inRedZone())
-              ? [GameEvent.EnteredRedZone({ team })]
+              ? [GameEventKind.EnteredRedZone({ team })]
               : []),
-            ...(after.goalToGo() && !already((s) => s.goalToGo()) ? [GameEvent.GoalToGo({ team })] : []),
+            ...(after.goalToGo() && !already((s) => s.goalToGo()) ? [GameEventKind.GoalToGo({ team })] : []),
             ...(after.down === 4 && !already((s) => s.down === 4 && s.yardLine === after.yardLine)
-              ? [GameEvent.FourthDown({ team })]
+              ? [GameEventKind.FourthDown({ team })]
               : [])
           ]
         : [],
       before !== undefined && after !== undefined
         ? [
             ...(tookOne(before.homeTimeouts, after.homeTimeouts)
-              ? [GameEvent.TimeoutTaken({ team: this.home.team.id })]
+              ? [GameEventKind.TimeoutTaken({ team: this.home.team.id })]
               : []),
             ...(tookOne(before.awayTimeouts, after.awayTimeouts)
-              ? [GameEvent.TimeoutTaken({ team: this.away.team.id })]
+              ? [GameEventKind.TimeoutTaken({ team: this.away.team.id })]
               : [])
           ]
         : [],
-      this.inTwoMinuteDrill() && !previous.inTwoMinuteDrill() ? [GameEvent.TwoMinuteDrill()] : [],
-      this.inOvertime() && !previous.inOvertime() ? [GameEvent.Overtime()] : [],
+      this.inTwoMinuteDrill() && !previous.inTwoMinuteDrill() ? [GameEventKind.TwoMinuteDrill()] : [],
+      this.inOvertime() && !previous.inOvertime() ? [GameEventKind.Overtime()] : [],
       this.period > previous.period && previous.period >= 1
-        ? [GameEvent.PeriodEnded({ period: previous.period })]
+        ? [GameEventKind.PeriodEnded({ period: previous.period })]
         : [],
-      this.status === "halftime" && previous.status !== "halftime" ? [GameEvent.WentToHalftime()] : [],
-      this.status === "final" && previous.status !== "final" ? [GameEvent.WentFinal()] : []
+      this.status === "halftime" && previous.status !== "halftime" ? [GameEventKind.WentToHalftime()] : [],
+      this.status === "final" && previous.status !== "final" ? [GameEventKind.WentFinal()] : []
     ].flat()
   }
 }

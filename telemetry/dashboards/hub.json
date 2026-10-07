@@ -237,7 +237,7 @@
     {
       "id": 8,
       "type": "timeseries",
-      "title": "Snapshots taken, kept, and behind",
+      "title": "Snapshots taken, behind, held, and fallen back",
       "gridPos": {
         "x": 12,
         "y": 25,

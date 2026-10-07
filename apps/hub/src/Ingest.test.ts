@@ -30,18 +30,18 @@ import { FeedLog } from "./FeedLog.ts"
 import type { FeedFrame } from "./Frame.ts"
 import { GameHistory } from "./GameHistory.ts"
 import * as Ingest from "./Ingest.ts"
-import { LiveGames } from "./LiveGames.ts"
 import { type LiveFeed, LiveFeedDemand, type Polling, Provider, ProviderError } from "./provider/Provider.ts"
+import { Slate } from "./Slate.ts"
 import { polled, pushed } from "./TestFeed.ts"
 import { withEnv } from "./TestHubConfig.ts"
 import * as TestSnapshotFeed from "./TestSnapshotFeed.ts"
 import { counted, recordingLogs, recordingSpans, withMetrics } from "./TestTelemetry.ts"
 
 describe("Ingest", () => {
-  it.effect("each poll appends one frame per league, then its listing reaches the fold", () =>
+  it.effect("each poll appends one frame per league, then its listing reaches the slate", () =>
     Effect.gen(function* () {
       yield* TestClock.adjust(0)
-      const folded = yield* (yield* LiveGames).latest
+      const current = yield* (yield* Slate).latest
       yield* TestClock.adjust("100 millis")
       const logged = yield* logOf(2)
 
@@ -52,9 +52,9 @@ describe("Ingest", () => {
           [2, "snapshot", "fbs"]
         ]
       )
-      assert.deepStrictEqual(folded.seq, Option.some(2))
+      assert.deepStrictEqual(current.seq, Option.some(2))
       assert.deepStrictEqual(
-        [...folded.listed].map(([league, games]) => [league, games.map((listed) => listed.id)]),
+        [...current.listed].map(([league, games]) => [league, games.map((listed) => listed.id)]),
         [
           ["nfl", ["1"]],
           ["fbs", ["1"]]
@@ -92,7 +92,7 @@ describe("Ingest", () => {
   )
 
   it.effect(
-    "the Schedule's input is the fold's slate after the poll's listing was taken, and the failed leagues",
+    "the Schedule's input is the slate's games after the poll's listing was taken, and the failed leagues",
     () =>
       Effect.gen(function* () {
         const inputs = yield* Ref.make<
@@ -118,7 +118,7 @@ describe("Ingest", () => {
       })
   )
 
-  it.effect("polls again after the live cadence, and the new listing reaches the fold", () =>
+  it.effect("polls again after the live cadence, and the new listing reaches the slate", () =>
     Effect.gen(function* () {
       yield* TestClock.adjust(0)
       assert.strictEqual((yield* slateOf())[0]?.home.score, 0)
@@ -158,7 +158,7 @@ describe("Ingest", () => {
     })
   )
 
-  it.effect("a failed league appends nothing and keeps its last listing in the fold", () =>
+  it.effect("a failed league appends nothing and keeps its last listing in the slate", () =>
     Effect.gen(function* () {
       yield* TestClock.adjust(0)
       yield* TestClock.adjust("10 seconds")
@@ -169,15 +169,15 @@ describe("Ingest", () => {
     }).pipe(Effect.provide(ingesting(scripted([[scoring(7)], "fail"]))))
   )
 
-  it.effect("a failed league's game goes stale in the fold, its listing kept", () =>
+  it.effect("a failed league's game goes stale in the slate, its listing kept", () =>
     Effect.gen(function* () {
-      const liveGames = yield* LiveGames
+      const slate = yield* Slate
       yield* TestClock.adjust(0)
       yield* TestClock.adjust("90 seconds")
-      const folded = yield* liveGames.latest
+      const current = yield* slate.latest
 
       assert.isTrue(
-        Option.exists(Option.fromNullishOr(folded.live.get(GameId.make("1"))), (liveGame) =>
+        Option.exists(Option.fromNullishOr(current.live.get(GameId.make("1"))), (liveGame) =>
           LiveGameState.$is("Stale")(liveGame.state)
         )
       )
@@ -434,7 +434,7 @@ describe("Ingest", () => {
   )
 
   it.effect(
-    "its first poll is appended after the frames the live games replayed, quietly, before Ingest started",
+    "its first poll is appended after the frames the slate replayed, quietly, before Ingest started",
     () => {
       const ended: Array<Tracer.Span> = []
       const { logs, layer: logged } = recordingLogs()
@@ -445,17 +445,17 @@ describe("Ingest", () => {
         ])
 
         yield* Effect.gen(function* () {
-          const replayed = yield* (yield* LiveGames).latest
+          const replayed = yield* (yield* Slate).latest
           assert.deepStrictEqual(replayed.seq, Option.some(2))
           assert.strictEqual(replayed.live.get(GameId.make("1"))?.snapshot.period, 3)
           assert.isUndefined(yield* counted("sportal_snapshots"))
           assert.isFalse(logs.some((log) => log.message.includes("started")))
-          const replay = ended.find((span) => span.name === "LiveGames.replay")
+          const replay = ended.find((span) => span.name === "Slate.replay")
           assert.strictEqual(replay?.attributes.get("sportal.frames"), 2)
           assert.strictEqual(replay?.attributes.get("sportal.deliveries"), 2)
 
           yield* TestClock.adjust(0)
-          const polled = yield* (yield* LiveGames).latest
+          const polled = yield* (yield* Slate).latest
           assert.deepStrictEqual(polled.seq, Option.some(3))
           assert.strictEqual(polled.live.get(GameId.make("1"))?.snapshot.period, 4)
         }).pipe(
@@ -484,7 +484,7 @@ function over(
   options: { readonly leagues?: ReadonlyArray<LeagueId>; readonly ended?: Array<Tracer.Span> } = {}
 ) {
   return Ingest.layer.pipe(
-    Layer.provideMerge(LiveGames.layer),
+    Layer.provideMerge(Slate.layer),
     Layer.provideMerge(FeedLog.layer),
     Layer.provide([
       provider,
@@ -523,7 +523,7 @@ function stopsAndPollsOn(frames: Stream.Stream<FeedFrame>, why: string) {
 /**
  * The snapshot feed answering each poll with the next scripted response, and the last one after that, inside a
  * `provider.poll` span. A `"fail"` response fails the poll, and an empty script fails every poll. Its push is `push`,
- * which, unlike the snapshot feed's, reads the live games' demand; it never pushes unless given one. It is polled
+ * which, unlike the snapshot feed's, reads the slate's demand; it never pushes unless given one. It is polled
  * every 10 seconds unless `polling` says otherwise.
  */
 function scripted(
@@ -586,10 +586,10 @@ function pollOf(games: ReadonlyArray<GameSnapshot>) {
   )
 }
 
-/** The fbs listing as the fold has it. */
+/** The fbs listing as the slate has it. */
 function slateOf() {
   return Effect.gen(function* () {
-    return (yield* (yield* LiveGames).latest).slate(["fbs"])
+    return (yield* (yield* Slate).latest).games(["fbs"])
   })
 }
 

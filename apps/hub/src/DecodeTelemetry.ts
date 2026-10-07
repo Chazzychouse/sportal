@@ -1,9 +1,9 @@
 import { Effect, Metric, Option, Record } from "effect"
-import { Notice } from "./provider/Provider.ts"
+import { DecodeObservation } from "./provider/Provider.ts"
 
-/** What decode noticed in frame `seq`, as logs and metrics. LiveGames tells notices only from frames after the replay. */
-export function noticed(notice: Notice, seq: number): Effect.Effect<void> {
-  return Notice.$match(notice, {
+/** What decode observed in frame `seq`, as logs and metrics. The slate tells decode observations only from frames after the replay. */
+export function observed(observation: DecodeObservation, seq: number): Effect.Effect<void> {
+  return DecodeObservation.$match(observation, {
     Received: ({ league, op, topic, mid }) =>
       Effect.logDebug(
         `Decode: received ${op}${Option.match(mid, { onNone: () => "", onSome: (n) => ` ${n}` })}`

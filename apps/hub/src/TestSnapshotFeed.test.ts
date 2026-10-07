@@ -25,7 +25,7 @@ layer(TestSnapshotFeed.decoder)("TestSnapshotFeed.decoder", (it) => {
       )
       const [decoded] = yield* decodedFrames([frame])
       assert.deepStrictEqual(decoded?.deliveries, [Delivery.cases.Listing.make({ league: "fbs", games })])
-      assert.deepStrictEqual([decoded?.resyncs, decoded?.notices], [[], []])
+      assert.deepStrictEqual([decoded?.resyncs, decoded?.observations], [[], []])
     })
   )
 
@@ -47,7 +47,7 @@ layer(TestSnapshotFeed.decoder)("TestSnapshotFeed.decoder", (it) => {
     Effect.gen(function* () {
       const [decoded] = yield* decodedFrames([said(encode({ _tag: "Resync" }), "topic-one")])
       assert.deepStrictEqual(
-        [decoded?.deliveries, decoded?.resyncs, decoded?.notices],
+        [decoded?.deliveries, decoded?.resyncs, decoded?.observations],
         [[], ["topic-one"], []]
       )
     })
@@ -57,9 +57,12 @@ layer(TestSnapshotFeed.decoder)("TestSnapshotFeed.decoder", (it) => {
     Effect.gen(function* () {
       const all = yield* decodedFrames([said("not json", "nfl", "response")])
       assert.lengthOf(all, 1)
-      const [notice] = all[0]?.notices ?? []
+      const [observation] = all[0]?.observations ?? []
       assert.deepStrictEqual(
-        [notice?._tag, notice?._tag === "FrameUndecoded" && [notice.feed, notice.channel, notice.kind]],
+        [
+          observation?._tag,
+          observation?._tag === "FrameUndecoded" && [observation.feed, observation.channel, observation.kind]
+        ],
         ["FrameUndecoded", ["snapshot", "nfl", "response"]]
       )
       assert.deepStrictEqual(all[0]?.deliveries, [])

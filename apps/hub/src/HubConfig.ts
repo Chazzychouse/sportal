@@ -19,6 +19,8 @@ export class HubConfig extends Context.Service<
     readonly host: string
     readonly webRoot: Option.Option<string>
     readonly dataDir: string
+    /** Where the corpus keeps its days, from SPORTAL_CORPUS_DIR; `corpus` in the data directory when it is unset. */
+    readonly corpusDir: string
     readonly scenario: Option.Option<string>
     readonly scenarioSpeed: number
     /** A file in the data directory for a scenario's feed log; none keeps it in memory. Never the game day's log. */
@@ -34,13 +36,18 @@ export class HubConfig extends Context.Service<
   static readonly layer = Layer.effect(
     HubConfig,
     Effect.gen(function* () {
-      const dataDir = yield* Config.String("SPORTAL_DATA_DIR").pipe(Config.option)
+      const dataDirSetting = yield* Config.String("SPORTAL_DATA_DIR").pipe(Config.option)
+      const dataDir = Option.isSome(dataDirSetting)
+        ? dataDirSetting.value
+        : yield* HubConfig.defaultDataDir(process.platform)
+      const corpusDir = yield* Config.String("SPORTAL_CORPUS_DIR").pipe(Config.option)
       return HubConfig.of({
         port: yield* Config.Port("SPORTAL_PORT").pipe(Config.withDefault(4400)),
         // Every interface, so a Remote on the home network can reach the Hub.
         host: yield* Config.String("SPORTAL_HOST").pipe(Config.withDefault("0.0.0.0")),
         webRoot: yield* Config.String("SPORTAL_WEB_ROOT").pipe(Config.option),
-        dataDir: Option.isSome(dataDir) ? dataDir.value : yield* HubConfig.defaultDataDir(process.platform),
+        dataDir,
+        corpusDir: Option.isSome(corpusDir) ? corpusDir.value : (yield* Path.Path).join(dataDir, "corpus"),
         scenario: yield* Config.String("SPORTAL_SCENARIO").pipe(Config.option),
         // Zero, a negative speed, or NaN would stall or break the scenario clock.
         scenarioSpeed: yield* Config.schema(

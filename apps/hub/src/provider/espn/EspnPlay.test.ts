@@ -6,7 +6,7 @@ import { Effect, Schema } from "effect"
 import * as EspnPlay from "./EspnPlay.ts"
 
 // Play entities from the 2026-10-04 NFL recording, each as its game's `gp-` topic first added it, without its
-// participants.
+// participants; NE–BUF's first score, 401872971484, as the topic last had it, after its extra point.
 const recorded = Schema.decodeSync(
   Schema.fromJsonString(Schema.Record(Schema.String, Schema.Record(Schema.String, Schema.Json)))
 )(readFileSync(new URL("./fixtures/nfl-plays-2026-10-04.json", import.meta.url), "utf8"))
@@ -102,7 +102,7 @@ describe("EspnPlay", () => {
         homeScore: 0,
         awayScore: 6,
         start: { down: 1, distance: 10, yardsToEndzone: 12, team: nfl("22") },
-        end: { down: undefined, distance: undefined, yardsToEndzone: 0, team: nfl("22") }
+        end: { yardsToEndzone: 0, team: nfl("22") }
       })
     })
   )

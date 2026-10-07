@@ -3,7 +3,7 @@ import { NodeServices } from "@effect/platform-node"
 import { assert, describe, it } from "@effect/vitest"
 import { Array as Arr, DateTime, Effect, FileSystem, Layer, Path } from "effect"
 import * as EspnDecode from "../provider/espn/EspnDecode.ts"
-import { decodedFrames, reportsOf, writtenScenarios } from "../TestFeed.ts"
+import { decodedFrames, takenOf, writtenScenarios } from "../TestFeed.ts"
 import { Scenarios } from "./Scenarios.ts"
 import { scripts } from "./written/Scripts.ts"
 
@@ -47,7 +47,7 @@ describe("Scenarios", () => {
   )
 
   it.effect(
-    "every scenario, written and recorded, folded whole through ESPN's decode, plays a game's plays and drops none before the game is let go",
+    "every scenario, written and recorded, taken whole through ESPN's decode, plays a game's plays and drops none before the game is let go",
     () =>
       Effect.gen(function* () {
         const scenarios = yield* Scenarios
@@ -55,19 +55,17 @@ describe("Scenarios", () => {
           const { frames } = yield* scenarios.load(name)
           const decoded = yield* decodedFrames(frames)
           assert.deepStrictEqual(
-            decoded.flatMap(({ notices }) =>
-              notices
+            decoded.flatMap(({ observations }) =>
+              observations
                 .filter(({ _tag }) => _tag !== "Received" && _tag !== "Pushed" && _tag !== "PlayTypeUnknown")
                 .map(({ _tag }) => _tag)
             ),
             [],
             `${name} decodes`
           )
-          const reports = yield* reportsOf(frames)
-          const played = reports.flatMap((report) =>
-            report._tag === "Happened" && report.event._tag === "Played"
-              ? [{ game: report.snapshot.id, play: report.event.play.id }]
-              : []
+          const { events, observations } = yield* takenOf(frames)
+          const played = events.flatMap(({ game, what }) =>
+            what._tag === "Played" ? [{ game, play: what.play.id }] : []
           )
           assert.isAbove(played.length, 0, `${name} plays`)
           const delivered = decoded.flatMap(({ deliveries }) =>
@@ -77,11 +75,14 @@ describe("Scenarios", () => {
                 : []
             )
           )
-          // ESPN edits a game's plays after it ends; those reach a fold that has let the game go, and are dropped.
-          const [stopped, dropped] = Arr.mapAccum(reports, new Set<string>(), (stopped, report) =>
-            report._tag === "Stopped"
-              ? [new Set([...stopped, report.liveGame.snapshot.id]), []]
-              : [stopped, report._tag === "Dropped" && !stopped.has(report.game) ? [report] : []]
+          // ESPN edits a game's plays after it ends; those reach a slate that has let the game go, and are dropped.
+          const [stopped, dropped] = Arr.mapAccum(observations, new Set<string>(), (stopped, observation) =>
+            observation._tag === "Stopped"
+              ? [new Set([...stopped, observation.liveGame.snapshot.id]), []]
+              : [
+                  stopped,
+                  observation._tag === "Dropped" && !stopped.has(observation.game) ? [observation] : []
+                ]
           )
           for (const game of new Set(delivered.map(({ game }) => game))) {
             const playedIds = played.filter((one) => one.game === game).map(({ play }) => play)

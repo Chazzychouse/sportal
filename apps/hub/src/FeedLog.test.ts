@@ -354,6 +354,34 @@ describe("FeedLog", () => {
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer))
   )
 
+  it.effect("gives the game days its frames were received on, 04:00 to 04:00 in the current zone", () =>
+    Effect.gen(function* () {
+      const log = yield* FeedLog
+      assert.deepStrictEqual(yield* log.days, [])
+
+      const local = (wallClock: string) =>
+        DateTime.toEpochMillis(
+          DateTime.makeZonedUnsafe(wallClock, { timeZone: "America/New_York", adjustForTimeZone: true })
+        )
+      yield* Effect.forEach(
+        [
+          poll("nfl", "late", local("2026-10-04T03:59:00")),
+          poll("nfl", "start", local("2026-10-04T04:00:00")),
+          message("socket", "evening", local("2026-10-04T23:00:00"), 1),
+          message("socket", "after midnight", local("2026-10-05T02:00:00"), 2),
+          poll("nfl", "later", local("2026-10-07T12:00:00"))
+        ],
+        log.append
+      )
+      yield* TestClock.adjust("100 millis")
+      yield* written(5)
+
+      assert.deepStrictEqual(yield* log.days, ["2026-10-03", "2026-10-04", "2026-10-07"])
+    }).pipe(
+      Effect.provide([feedLog, DateTime.layerCurrentZone(DateTime.zoneMakeNamedUnsafe("America/New_York"))])
+    )
+  )
+
   it.effect("keeps its own feed.sqlite in the Hub's data directory", () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem

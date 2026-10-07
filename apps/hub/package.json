@@ -4,7 +4,8 @@
   "type": "module",
   "scripts": {
     "dev": "SPORTAL_OTLP_URL=${SPORTAL_OTLP_URL:-http://localhost:4318} SPORTAL_DATA_DIR=${SPORTAL_DATA_DIR:-../../.sportal} node --watch src/main.ts",
-    "start": "node src/main.ts"
+    "start": "node src/main.ts",
+    "corpus": "node src/corpus/corpus.ts"
   },
   "dependencies": {
     "@effect/platform-node": "4.0.0",

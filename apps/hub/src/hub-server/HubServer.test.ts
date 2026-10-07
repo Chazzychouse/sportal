@@ -12,7 +12,6 @@ import { TestClock } from "effect/testing"
 import * as Database from "../Database.ts"
 import { FeedLog } from "../FeedLog.ts"
 import * as Ingest from "../Ingest.ts"
-import { LiveGames } from "../LiveGames.ts"
 import { Slate } from "../Slate.ts"
 import { StageSessions } from "../StageSessions.ts"
 import * as YouTubeTv from "../source/youtube-tv/YouTubeTv.ts"
@@ -183,7 +182,7 @@ describe("GET /api/live", () => {
     }).pipe(Effect.scoped, Effect.provide(serverUnderTest()))
   )
 
-  it.effect("sends each listed game as its snapshot, and none of what the fold remembers", () =>
+  it.effect("sends each listed game as its snapshot, and none of what the slate remembers", () =>
     Effect.gen(function* () {
       const http = yield* HttpClient.HttpClient
       yield* firstSlateOnTestClock()
@@ -243,7 +242,7 @@ describe("GET /api/live", () => {
 function firstSlate() {
   return Effect.gen(function* () {
     const slate = yield* Slate
-    yield* slate.changes.pipe(
+    yield* slate.publishedChanges.pipe(
       Stream.filter((latest) => latest.games.length > 0),
       Stream.take(1),
       Stream.runDrain
@@ -280,9 +279,9 @@ function tileOnceItIs(tag: Tile["_tag"]) {
 function hubUnderTest() {
   return StageSessions.layer.pipe(
     Layer.provideMerge(YouTubeTv.layer),
-    Layer.provideMerge(Layer.mergeAll(Slate.layer, Ingest.layer)),
-    Layer.provide(
-      LiveGames.layer.pipe(
+    Layer.provideMerge(Ingest.layer),
+    Layer.provideMerge(
+      Slate.layer.pipe(
         Layer.provideMerge(FeedLog.layer.pipe(Layer.provide([Database.at(":memory:"), NodeCrypto.layer]))),
         Layer.provide([TestSnapshotFeed.decoder, DateTime.layerCurrentZoneLocal])
       )

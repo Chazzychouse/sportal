@@ -1,12 +1,12 @@
 import { type GameId, GameSnapshot } from "@sportal/domain/Game"
-import type * as Fold from "@sportal/domain/LiveGames"
 import { Play, type PlayId } from "@sportal/domain/Play"
+import type { Slate as DomainSlate } from "@sportal/domain/Slate"
 import { Array as Arr, Context, Effect, Equal, Filter, Layer, Metric, Option, Schema, Stream } from "effect"
 import { SqlClient, SqlSchema } from "effect/sql"
 import * as Database from "./Database.ts"
-import { LiveGames } from "./LiveGames.ts"
+import { Slate } from "./Slate.ts"
 
-/** Past plays and each game's latest snapshot, derived from the fold into the Hub's database. Rebuildable from the feed log. */
+/** Past plays and each game's latest snapshot, derived from the slate into the Hub's database. Rebuildable from the feed log. */
 export class GameHistory extends Context.Service<
   GameHistory,
   {
@@ -17,20 +17,20 @@ export class GameHistory extends Context.Service<
   }
 >()("sportal/hub/GameHistory") {
   /**
-   * Follows `LiveGames.changes`, writing what changed since the last write, in batches every 250 ms. Every listed game
+   * Follows `Slate.changes`, writing what changed since the last write, in batches every 250 ms. Every listed game
    * gets its latest snapshot written (a final game is often only listed), plus any live game not listed; plays come
    * from live games only. A game that leaves `live` and is never listed again keeps its last written snapshot. Only the
    * latest snapshot is kept: the changes are sampled by the batch, so a per-status history could not be rebuilt from
    * the feed log. A write that fails is logged and counted, and the next change writes what it missed. After a crash
    * the history may hold seqs the feed log never wrote, which a reopened log numbers again; it is rebuilt by deleting
-   * its tables and folding the log again.
+   * its tables and replaying the log again.
    */
-  static readonly layer: Layer.Layer<GameHistory, never, SqlClient.SqlClient | LiveGames> = Layer.effect(
+  static readonly layer: Layer.Layer<GameHistory, never, SqlClient.SqlClient | Slate> = Layer.effect(
     GameHistory,
     Effect.gen(function* () {
       yield* Database.migrate("history", migrations).pipe(Effect.orDie)
       const sql = yield* SqlClient.SqlClient
-      const liveGames = yield* LiveGames
+      const slate = yield* Slate
 
       const playRows = SqlSchema.findAll({
         Request: Schema.String,
@@ -98,8 +98,8 @@ export class GameHistory extends Context.Service<
         })
 
       // A change that cannot be written leaves `written` as it was, so the next change diffs from the last success.
-      const write = (written: Written, { seq, folded }: { seq: number; folded: Fold.LiveGames }) => {
-        const next = writtenOf(folded)
+      const write = (written: Written, { seq, slate }: { seq: number; slate: DomainSlate }) => {
+        const next = writtenOf(slate)
         return store(stepFrom(written, next), seq).pipe(
           Effect.as(next),
           Effect.catch((error) =>
@@ -111,9 +111,9 @@ export class GameHistory extends Context.Service<
         )
       }
 
-      yield* liveGames.changes.pipe(
+      yield* slate.changes.pipe(
         Stream.filterMap(
-          Filter.fromPredicateOption((folded) => Option.map(folded.seq, (seq) => ({ seq, folded })))
+          Filter.fromPredicateOption((held) => Option.map(held.seq, (seq) => ({ seq, slate: held })))
         ),
         Stream.groupedWithin(1024, "250 millis"),
         Stream.runFoldEffect(
@@ -164,11 +164,11 @@ type Step = {
   }>
 }
 
-/** The folded state as the history keeps it: every listed game as the fold has it, plus live games not listed. */
-function writtenOf(folded: Fold.LiveGames): Written {
+/** The slate as the history keeps it: every listed game as the slate has it, plus live games not listed. */
+function writtenOf(slate: DomainSlate): Written {
   return {
-    snapshots: new Map(folded.games().map((snapshot) => [snapshot.id, snapshot])),
-    plays: new Map([...folded.live].map(([game, liveGame]) => [game, liveGame.plays]))
+    snapshots: new Map(slate.everyGame().map((snapshot) => [snapshot.id, snapshot])),
+    plays: new Map([...slate.live].map(([game, liveGame]) => [game, liveGame.plays]))
   }
 }
 

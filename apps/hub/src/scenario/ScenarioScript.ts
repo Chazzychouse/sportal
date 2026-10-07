@@ -221,17 +221,17 @@ function playOf(
         ? after.away.team.id
         : undefined)
   const spot = (situation: Situation | undefined) => ({
-    team: situation?.possession,
-    yardsToEndzone: situation?.yardLine,
-    down: situation?.down,
-    distance: situation?.distance
+    ...(situation?.possession === undefined ? {} : { team: situation.possession }),
+    ...(situation?.yardLine === undefined ? {} : { yardsToEndzone: situation.yardLine }),
+    ...(situation?.down === undefined ? {} : { down: situation.down }),
+    ...(situation?.distance === undefined ? {} : { distance: situation.distance })
   })
   return new Play({
     id: PlayId.make(`${before.id}-${sequence}`),
     sequence,
     period: after.period,
     clock: after.clock,
-    team,
+    ...(team === undefined ? {} : { team }),
     kind: play.kind,
     text: textOf(play),
     yards: play.yards,
@@ -239,7 +239,8 @@ function playOf(
     homeScore: after.home.score,
     awayScore: after.away.score,
     start: spot(before.situation),
-    end: after.situation?.possession === undefined ? { team } : spot(after.situation)
+    end:
+      after.situation?.possession === undefined ? (team === undefined ? {} : { team }) : spot(after.situation)
   })
 }
 
