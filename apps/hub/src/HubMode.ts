@@ -14,7 +14,6 @@ import * as ScenarioClock from "./scenario/ScenarioClock.ts"
 import * as ScenarioProvider from "./scenario/ScenarioProvider.ts"
 import * as ScenarioSource from "./scenario/ScenarioSource.ts"
 import { Scenarios } from "./scenario/Scenarios.ts"
-import { scripts } from "./scenario/written/Scripts.ts"
 import * as YouTubeTv from "./source/youtube-tv/YouTubeTv.ts"
 
 /** What the Hub plays: the live day from ESPN and YouTube TV, or a scenario in their place, on scenario time. */
@@ -61,11 +60,16 @@ function live() {
 // one as ESPN recorded it, a written one as ESPN's writer writes its script. Ingest, the fold, and the Slate share the
 // scenario's clock; the rest of the Hub keeps the real one. The game history stays out of a scenario.
 function scripted() {
-  const written = [...scripts.values()].map(EspnScript.scenarioOf)
   return Layer.mergeAll(
     Layer.mergeAll(
       Slate.layer,
-      Ingest.layer.pipe(Layer.provide(ScenarioProvider.layer.pipe(Layer.provide(Scenarios.layer(written)))))
+      Ingest.layer.pipe(
+        Layer.provide(
+          ScenarioProvider.layer.pipe(
+            Layer.provide(Scenarios.layer(Scenarios.written(EspnScript.scenarioOf)))
+          )
+        )
+      )
     ).pipe(
       Layer.provide(LiveGames.layer),
       Layer.provide(FeedLog.forScenario),

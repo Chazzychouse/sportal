@@ -3,6 +3,8 @@ import { Array as Arr, Context, Effect, FileSystem, Layer, Option, Path, Schema 
 import { FeedFrame } from "../Frame.ts"
 import * as Gzip from "../Gzip.ts"
 import { Scenario } from "./Scenario.ts"
+import type { ScenarioScript } from "./ScenarioScript.ts"
+import { scripts } from "./written/Scripts.ts"
 
 /**
  * Every scenario a Hub can play, by name: the recorded ones, each kept as `<name>.frames.jsonl.gz`, and the written
@@ -72,6 +74,11 @@ export class Scenarios extends Context.Service<
     written: ReadonlyArray<Scenario>
   ): Layer.Layer<Scenarios, never, FileSystem.FileSystem | Path.Path> {
     return Scenarios.in(fileURLToPath(new URL("../../../../fixtures/scenarios/", import.meta.url)), written)
+  }
+
+  /** Every committed written script as a scenario, written as frames by `write`, a provider's writer. */
+  static written(write: (script: ScenarioScript) => Scenario): ReadonlyArray<Scenario> {
+    return [...scripts.values()].map(write)
   }
 }
 
