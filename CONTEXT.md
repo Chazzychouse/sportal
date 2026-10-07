@@ -90,6 +90,15 @@ Every exported type name must be a term here, except the wire schemas in `*Paylo
 | **Game history error** | The game history could not read. | database error |
 | **Feed log** | Every frame the feeds delivered, raw, in the order the Hub received it. The truth the Hub's game state is folded from. | event store, journal |
 | **Frame** | One thing a feed delivered: a poll response, a FastCast message, or a FastCast checkpoint. | message, payload |
+| **Corpus** | Game days kept typed for runs to play through the slate, in `HubConfig.corpusDir`: each day's corpus inputs, read back as the deliveries the live decode handed over. | dataset, fixtures |
+| **Corpus day** | One game day of the corpus: its kind, format, leagues, game count, and when it was built, beside its poll and push files of corpus lines; `CorpusDay` in code. `CorpusDays` writes and reads them. A day without its `day.json` has not been built. | |
+| **Captured day** | A corpus day built from the feed log's frames for the day, through the provider's decode. | recorded day |
+| **Backfilled day** | A corpus day synthesized from the archive, for a day the feed log does not have. | |
+| **Corpus input** | One line's input in a corpus day: a listing changed or unchanged since its league's last, a pushed snapshot, or a game's plays added, changed, and removed; `CorpusInput` in code. | |
+| **Corpus line** | A corpus input as a day stores it, with its frame's `seq` and arrival instant; `CorpusLine` in code, which says a frame's lines from its deliveries and the deliveries back from its lines. | row, record |
+| **Had** | What a corpus day had delivered so far, threaded across its frames: each league's last listing and each game's last plays. | state, cache |
+| **Corpus frame** | One frame of a corpus day as the slate takes it: its `seq`, arrival instant, and deliveries; `CorpusFrame` in code. | |
+| **Corpus day unreadable** | A corpus day that has not been built, does not decode, or was built to another format and must be built again; `CorpusDayUnreadable` in code. | |
 | **Live channel URL** | A source's address for a channel, reduced to the one that plays it live. | canonical URL |
 | **Stream** | One playing instance of a game from a source. | feed, video |
 | **StreamLocator** | What a Display must load to play a stream. | URL, link |

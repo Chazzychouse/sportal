@@ -16,6 +16,7 @@ describe("HubConfig", () => {
         Effect.provide(inEnv(home, NodePath.layer))
       )
       assert.strictEqual(config.dataDir, expected)
+      assert.strictEqual(config.corpusDir, `${expected}/corpus`)
       assert.isTrue(Option.isNone(config.scenario))
       assert.strictEqual(config.scenarioSpeed, 1)
       assert.isTrue(Option.isNone(config.scenarioFeedLog), "a scenario's feed log is in memory")
@@ -34,6 +35,7 @@ describe("HubConfig", () => {
       assert.strictEqual(config.host, "127.0.0.1")
       assert.deepStrictEqual(config.webRoot, Option.some("/srv/web"))
       assert.strictEqual(config.dataDir, "/data")
+      assert.strictEqual(config.corpusDir, "/srv/corpus")
       assert.deepStrictEqual(config.scenario, Option.some("two-minute-drill-tie"))
       assert.strictEqual(config.scenarioSpeed, 10)
       assert.deepStrictEqual(config.scenarioFeedLog, Option.some("scenario.sqlite"))
@@ -52,6 +54,7 @@ describe("HubConfig", () => {
           SPORTAL_HOST: "127.0.0.1",
           SPORTAL_WEB_ROOT: "/srv/web",
           SPORTAL_DATA_DIR: "/data",
+          SPORTAL_CORPUS_DIR: "/srv/corpus",
           SPORTAL_SCENARIO: "two-minute-drill-tie",
           SPORTAL_SCENARIO_SPEED: "10",
           SPORTAL_SCENARIO_FEED_LOG: "scenario.sqlite",
@@ -63,6 +66,13 @@ describe("HubConfig", () => {
         })
       )
     )
+  )
+
+  it.effect("keeps the corpus in the data directory it is given", () =>
+    Effect.gen(function* () {
+      const config = yield* HubConfig
+      assert.strictEqual(config.corpusDir, "/data/corpus")
+    }).pipe(Effect.provide(withEnv({ SPORTAL_DATA_DIR: "/data" })))
   )
 
   it.effect("reads a list of leagues, ignoring the spaces around each", () =>
