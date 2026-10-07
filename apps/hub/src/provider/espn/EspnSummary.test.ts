@@ -1,18 +1,16 @@
 import { readFileSync } from "node:fs"
-import { NodeServices } from "@effect/platform-node"
 import { assert, describe, it } from "@effect/vitest"
 import { GameId } from "@sportal/domain/Game"
 import { Play, PlayId } from "@sportal/domain/Play"
 import { TeamId } from "@sportal/domain/Team"
-import { DateTime, Effect, Equal, Layer, Logger, Order, Schema } from "effect"
+import { DateTime, Effect, Equal, Logger, Order, Schema } from "effect"
 import type { ArchivedPlay } from "../../corpus/Archive.ts"
 import * as Gzip from "../../Gzip.ts"
-import { Scenarios } from "../../scenario/Scenarios.ts"
 import { decodedFrames } from "../TestDecoder.ts"
 import * as EspnDecode from "./EspnDecode.ts"
 import * as EspnPlay from "./EspnPlay.ts"
 import * as EspnSummary from "./EspnSummary.ts"
-import { fixtures, neAtBufFrames } from "./TestEspn.ts"
+import { recordedNeAtBuf } from "./TestEspn.ts"
 
 // NE–BUF's summary, the game the frames fixture records, recorded once after it was final:
 //   curl -o fixtures/nfl-summary-401872971.json \
@@ -34,9 +32,7 @@ const decodeEntity = Schema.decodeUnknownEffect(EspnPlay.Play("nfl"))
 
 // The plays NE–BUF's recorded FastCast topic last had.
 const lastPushed = Effect.gen(function* () {
-  const { frames } = yield* Scenarios.use((scenarios) => scenarios.load(neAtBufFrames)).pipe(
-    Effect.provide(Scenarios.in(fixtures, []).pipe(Layer.provideMerge(NodeServices.layer)))
-  )
+  const frames = yield* recordedNeAtBuf
   const decoded = yield* decodedFrames(frames).pipe(Effect.provide(EspnDecode.layer))
 
   const lists = decoded

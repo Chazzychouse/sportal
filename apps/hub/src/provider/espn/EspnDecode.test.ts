@@ -1,18 +1,16 @@
 import { readFileSync } from "node:fs"
-import { NodeServices } from "@effect/platform-node"
 import { assert, describe, layer } from "@effect/vitest"
 import type { Delivery } from "@sportal/domain/Delivery"
 import { GameId, GameSnapshot } from "@sportal/domain/Game"
 import { Play, PlayId } from "@sportal/domain/Play"
-import { type Data, DateTime, Effect, Equal, Layer, Metric, Option, Record, Schema } from "effect"
+import { type Data, DateTime, Effect, Equal, Metric, Option, Record, Schema } from "effect"
 import type { FeedFrame } from "../../Frame.ts"
-import { Scenarios } from "../../scenario/Scenarios.ts"
 import { recordingLogs, withMetrics } from "../../TestTelemetry.ts"
 import type { DecodeObservation } from "../Provider.ts"
 import { decodedFrames } from "../TestDecoder.ts"
 import * as EspnDecode from "./EspnDecode.ts"
 import { EspnEvent } from "./EspnEvent.ts"
-import { fixtures, neAtBufFrames } from "./TestEspn.ts"
+import { recordedNeAtBuf } from "./TestEspn.ts"
 
 // Recorded from ESPN on 2026-10-04: the NFL checkpoint at 17:52Z, every socket text on its topic after it until
 // 18:00Z, each line one text as it arrived, and the scoreboard polled at 18:00Z.
@@ -770,9 +768,7 @@ layer(EspnDecode.layer)("EspnDecode", (it) => {
     "every snapshot and play decoded from the recorded NE at BUF day reads back from its JSON Equal to itself",
     () =>
       Effect.gen(function* () {
-        const { frames } = yield* Scenarios.use((scenarios) => scenarios.load(neAtBufFrames)).pipe(
-          Effect.provide(Scenarios.in(fixtures, []).pipe(Layer.provideMerge(NodeServices.layer)))
-        )
+        const frames = yield* recordedNeAtBuf
         const deliveries = (yield* decodedFrames(frames)).flatMap(({ deliveries }) => deliveries)
         const snapshots = deliveries.flatMap((delivery) =>
           delivery._tag === "Listing"

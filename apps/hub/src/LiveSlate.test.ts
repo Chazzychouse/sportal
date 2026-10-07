@@ -29,7 +29,6 @@ import {
   type Tracer
 } from "effect"
 import { TestClock } from "effect/testing"
-import { logged, recorded } from "./corpus/TestCorpus.ts"
 import * as Database from "./Database.ts"
 import { FeedLog } from "./FeedLog.ts"
 import { FeedFrame } from "./Frame.ts"
@@ -37,15 +36,16 @@ import { Following, LiveSlate } from "./LiveSlate.ts"
 import { told } from "./LiveSlateTelemetry.ts"
 import { Decoder } from "./provider/Decoder.ts"
 import * as EspnDecode from "./provider/espn/EspnDecode.ts"
-import { fixtures } from "./provider/espn/TestEspn.ts"
+import { fixtures, recordedNeAtBuf } from "./provider/espn/TestEspn.ts"
 import { Decoded, LiveFeedDemand } from "./provider/Provider.ts"
 import { dyingAt } from "./provider/TestDecoder.ts"
+import { logged } from "./TestFeedLog.ts"
 import {
   appended,
   delivered,
   latestOf,
   slateFollowing,
-  slateFollowingMade,
+  slateFollowingFramesFrom,
   slateOn,
   takenInTime
 } from "./TestLiveSlate.ts"
@@ -1285,7 +1285,10 @@ describe("LiveSlate following the feed log", () => {
       const undecoded = yield* counted("sportal_frames_undecoded")
 
       assert.isUndefined(undecoded)
-    }).pipe(Effect.provide(slateFollowingMade(Effect.map(undecodable, (frame) => [frame]))), withMetrics)
+    }).pipe(
+      Effect.provide(slateFollowingFramesFrom(Effect.map(undecodable, (frame) => [frame]))),
+      withMetrics
+    )
   )
 
   it.effect("should tell the same decode observation from a frame after the replay", () =>
@@ -1296,7 +1299,10 @@ describe("LiveSlate following the feed log", () => {
       const undecoded = yield* counted("sportal_frames_undecoded", { feed: "snapshot" })
 
       assert.strictEqual(undecoded, 1)
-    }).pipe(Effect.provide(slateFollowingMade(Effect.map(undecodable, (frame) => [frame]))), withMetrics)
+    }).pipe(
+      Effect.provide(slateFollowingFramesFrom(Effect.map(undecodable, (frame) => [frame]))),
+      withMetrics
+    )
   )
 
   it.effect("should neither count nor log ESPN's observations on replayed frames", () => {
@@ -1309,7 +1315,7 @@ describe("LiveSlate following the feed log", () => {
       assert.deepStrictEqual(decodeLogs, [])
     }).pipe(
       Effect.provide(
-        slateFollowingMade(Effect.all(noticeable), { decoder: EspnDecode.layer }).pipe(
+        slateFollowingFramesFrom(Effect.all(noticeable), { decoder: EspnDecode.layer }).pipe(
           Layer.provideMerge(layer)
         )
       ),
@@ -1358,7 +1364,7 @@ describe("LiveSlate following the feed log", () => {
       assert.deepStrictEqual(scores, [3])
     }).pipe(
       Effect.provide(
-        slateFollowingMade(
+        slateFollowingFramesFrom(
           Effect.all([pushed({ _tag: "Resync" }, "fbs"), pushed({ _tag: "Resync" }, "fbs")]),
           {
             decoder: counting
@@ -1371,7 +1377,7 @@ describe("LiveSlate following the feed log", () => {
   it.effect("should fail the build on a decode that dies during the replay", () =>
     Effect.gen(function* () {
       const built = yield* Layer.build(
-        slateFollowingMade(
+        slateFollowingFramesFrom(
           Effect.map(dyingFrame, (frame) => [frame]),
           { decoder: dyingAt("die") }
         )
@@ -1390,20 +1396,14 @@ describe("LiveSlate following the feed log", () => {
       })
     )
 
-    it.effect("should start the replay at today's 04:00 from 04:00", () =>
-      Effect.gen(function* () {
-        const frames = yield* replayedAt("2026-10-04T04:00:00")
+    it.effect.each(["2026-10-04T04:00:00", "2026-10-04T23:59:00"])(
+      "should start the replay at today's 04:00 from 04:00, at %s",
+      (chicago) =>
+        Effect.gen(function* () {
+          const frames = yield* replayedAt(chicago)
 
-        assert.strictEqual(frames, 1)
-      })
-    )
-
-    it.effect("should still start the replay at today's 04:00 at 23:59", () =>
-      Effect.gen(function* () {
-        const frames = yield* replayedAt("2026-10-04T23:59:00")
-
-        assert.strictEqual(frames, 1)
-      })
+          assert.strictEqual(frames, 1)
+        })
     )
   })
 })
@@ -1468,7 +1468,9 @@ describe("LiveSlate, a recorded game", () => {
         assert.deepStrictEqual(errors, [])
       }).pipe(
         Effect.provide(
-          slateFollowingMade(recorded, { decoder: EspnDecode.layer }).pipe(Layer.provideMerge(layer))
+          slateFollowingFramesFrom(recordedNeAtBuf, { decoder: EspnDecode.layer }).pipe(
+            Layer.provideMerge(layer)
+          )
         ),
         withMetrics
       )
@@ -1481,7 +1483,7 @@ describe("LiveSlate, a recorded game", () => {
     () => {
       const { logs, layer } = recordingLogs()
       return Effect.gen(function* () {
-        const frames = yield* recorded
+        const frames = yield* recordedNeAtBuf
         // A few points through the day, each replayed from the frames before it, while the clock is still at its start.
         const points = [
           1,
@@ -1527,7 +1529,7 @@ describe("LiveSlate, a recorded game", () => {
     () => {
       const { logs, layer } = recordingLogs()
       return Effect.gen(function* () {
-        const frames = yield* recorded
+        const frames = yield* recordedNeAtBuf
         // The game day starts after the topic's checkpoint (16:44:55Z) and before the first play's patch (17:02:42Z),
         // as it falls for a socket subscribed the night before: 04:00 in a zone 12:56:40 behind UTC is 16:56:40Z.
         const zone = DateTime.zoneMakeOffset(-((12 * 60 + 56) * 60 + 40) * 1000)
@@ -1551,7 +1553,7 @@ describe("LiveSlate, a recorded game", () => {
     "should come back the same after a restart halfway through the day",
     () =>
       Effect.gen(function* () {
-        const all = yield* recorded
+        const all = yield* recordedNeAtBuf
         const half = Math.floor(all.length / 2)
         const fs = yield* FileSystem.FileSystem
         const dir = yield* fs.makeTempDirectoryScoped()

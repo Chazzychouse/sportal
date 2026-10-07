@@ -10,13 +10,15 @@ import { FeedFrame } from "../Frame.ts"
 import * as Gzip from "../Gzip.ts"
 import { Decoder } from "../provider/Decoder.ts"
 import * as EspnDecode from "../provider/espn/EspnDecode.ts"
+import { recordedNeAtBuf } from "../provider/espn/TestEspn.ts"
 import { inArchive, site, stepped } from "../provider/espn/TestEspnArchive.ts"
+import { logged } from "../TestFeedLog.ts"
 import * as TestSnapshotFeed from "../TestSnapshotFeed.ts"
 import { framed } from "../TestSnapshotFeed.ts"
 import * as CorpusBuild from "./CorpusBuild.ts"
 import { CorpusDay, CorpusDays } from "./CorpusDay.ts"
 import { CorpusLine } from "./CorpusInput.ts"
-import { built, inCorpus, local, logged, recorded } from "./TestCorpus.ts"
+import { built, inCorpus, local } from "./TestCorpus.ts"
 
 // As LiveSlate.test.ts measured it: every play id the recording's patches add.
 const recordedPlays = 182
@@ -319,7 +321,7 @@ function listing(games: ReadonlyArray<GameSnapshot>) {
  */
 function recordedDayChecked(dir: string, from: DateTime.Utc) {
   return Effect.gen(function* () {
-    yield* logged(yield* recorded)
+    yield* logged(yield* recordedNeAtBuf)
     const day = yield* built("2026-10-04")
     assert.deepStrictEqual(
       [day.date, day.kind, day.format, day.leagues],

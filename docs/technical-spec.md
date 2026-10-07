@@ -231,6 +231,7 @@ sportal/
     │       ├── Frame.ts            A feed frame as received, and the frame the log numbered
     │       ├── Gzip.ts             Frame bodies in and out of gzip
     │       ├── TestHubConfig.ts, TestTelemetry.ts   Layers for tests
+    │       ├── TestFeedLog.ts      A test's frames logged through a feed log of their own, before what reads them opens it
     │       ├── TestLiveSlate.ts    The live slate following an in-memory feed log (`slateFollowing`), and what it takes of a test's frames
     │       ├── TestSnapshotFeed.ts The snapshot feed: a provider whose frames are our own deliveries, its decode, its wire shape, and the frames tests build of it; for tests only
     │       ├── hub-server/
@@ -249,7 +250,7 @@ sportal/
     │       │       ├── FastCast.ts         ESPN's push, a service: the socket, as frames; its checkpoint retry is the schedule `FastCast.layer` builds it with
     │       │       ├── FastCastDocument.ts A topic's document, rebuilt from checkpoints and patches
     │       │       ├── FastCastMessage.ts  FastCast's wire shapes
-    │       │       ├── TestEspn.ts         Recorded frames for tests of other modules
+    │       │       ├── TestEspn.ts         Recorded frames for tests of other modules, NE at BUF's day among them (`recordedNeAtBuf`)
     │       │       ├── TestEspnArchive.ts  ESPN's archive answered from recorded payloads, for the corpus's tests
     │       │       └── fixtures/           Recorded real payloads
     │       ├── source/

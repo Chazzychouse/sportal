@@ -22,15 +22,16 @@ import type { FeedFrame } from "../Frame.ts"
 import * as Ingest from "../Ingest.ts"
 import { LiveSlate } from "../LiveSlate.ts"
 import * as EspnDecode from "../provider/espn/EspnDecode.ts"
-import { fixtures, neAtBufFrames } from "../provider/espn/TestEspn.ts"
+import { fixtures, neAtBufFrames, recordedNeAtBuf } from "../provider/espn/TestEspn.ts"
 import * as ScenarioProvider from "../scenario/ScenarioProvider.ts"
 import { Scenarios } from "../scenario/Scenarios.ts"
+import { logged } from "../TestFeedLog.ts"
 import { withEnv } from "../TestHubConfig.ts"
 import * as TestSnapshotFeed from "../TestSnapshotFeed.ts"
 import { CorpusDay, CorpusDays } from "./CorpusDay.ts"
 import { CorpusInput, CorpusLine } from "./CorpusInput.ts"
 import * as CorpusRun from "./CorpusRun.ts"
-import { built, inCorpus, local, logged, recorded } from "./TestCorpus.ts"
+import { built, inCorpus, local } from "./TestCorpus.ts"
 
 // As LiveSlate.test.ts measured it: every play id the recording's patches add.
 const recordedPlays = 182
@@ -41,7 +42,7 @@ describe("CorpusRun.day", () => {
     () =>
       inCorpus(EspnDecode.layer, () =>
         Effect.gen(function* () {
-          yield* logged(yield* recorded)
+          yield* logged(yield* recordedNeAtBuf)
           yield* built("2026-10-04")
           const first = yield* CorpusRun.day("2026-10-04", CorpusRun.events)
           const second = yield* CorpusRun.day("2026-10-04", CorpusRun.events)
@@ -57,7 +58,7 @@ describe("CorpusRun.day", () => {
     () =>
       inCorpus(EspnDecode.layer, () =>
         Effect.gen(function* () {
-          const frames = yield* recorded
+          const frames = yield* recordedNeAtBuf
           const live = yield* playedLive(frames, (yield* CorpusDay.bounds("2026-10-04")).until)
           yield* built("2026-10-04")
           const run = yield* CorpusRun.day("2026-10-04", CorpusRun.events)

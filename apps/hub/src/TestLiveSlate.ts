@@ -12,6 +12,7 @@ import type { FeedFrame } from "./Frame.ts"
 import { LiveSlate } from "./LiveSlate.ts"
 import type { Decoder } from "./provider/Decoder.ts"
 import { decodedFrames } from "./provider/TestDecoder.ts"
+import { logged } from "./TestFeedLog.ts"
 import * as TestSnapshotFeed from "./TestSnapshotFeed.ts"
 
 /**
@@ -23,15 +24,8 @@ export function slateFollowing(
   frames: ReadonlyArray<FeedFrame> = [],
   options: { readonly decoder?: Layer.Layer<Decoder>; readonly zone?: DateTime.TimeZone } = {}
 ): Layer.Layer<LiveSlate | FeedLog> {
-  // Appended through a log of their own, closed before the slate's log opens, so every one is written.
-  const logged = Layer.effectDiscard(
-    FeedLog.use((log) => Effect.forEach(frames, log.append, { discard: true })).pipe(
-      Effect.provide(FeedLog.layer),
-      Effect.scoped
-    )
-  )
   return LiveSlate.layer.pipe(
-    Layer.provideMerge(FeedLog.layer.pipe(Layer.provide(logged))),
+    Layer.provideMerge(FeedLog.layer.pipe(Layer.provide(Layer.effectDiscard(logged(frames))))),
     Layer.provide([
       options.decoder ?? TestSnapshotFeed.decoder,
       options.zone === undefined ? DateTime.layerCurrentZoneLocal : DateTime.layerCurrentZone(options.zone)
@@ -41,8 +35,11 @@ export function slateFollowing(
   )
 }
 
-/** `slateFollowing` the frames `frames` makes when the layer is built, received at the clock's now if they are made so. */
-export function slateFollowingMade<E>(
+/**
+ * `slateFollowing` the frames `frames` gives when the layer is built. For frames made on the test clock, such as a frame
+ * received now.
+ */
+export function slateFollowingFramesFrom<E>(
   frames: Effect.Effect<ReadonlyArray<FeedFrame>, E>,
   options: { readonly decoder?: Layer.Layer<Decoder>; readonly zone?: DateTime.TimeZone } = {}
 ) {

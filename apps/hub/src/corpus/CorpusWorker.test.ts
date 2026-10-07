@@ -2,10 +2,12 @@ import { assert, describe, it } from "@effect/vitest"
 import { Cause, Effect, Exit, Layer, Option, Queue, Ref, Schema } from "effect"
 import { Worker, WorkerError } from "effect/workers"
 import * as EspnDecode from "../provider/espn/EspnDecode.ts"
+import { recordedNeAtBuf } from "../provider/espn/TestEspn.ts"
+import { logged } from "../TestFeedLog.ts"
 import { CorpusDayUnreadable, DaysFailed } from "./CorpusDay.ts"
 import * as CorpusRun from "./CorpusRun.ts"
 import { DayRun, RunDay, runDays } from "./CorpusWorker.ts"
-import { built, inCorpus, logged, recorded } from "./TestCorpus.ts"
+import { built, inCorpus } from "./TestCorpus.ts"
 
 describe("RunDay.run", () => {
   it.effect(
@@ -13,7 +15,7 @@ describe("RunDay.run", () => {
     () =>
       inCorpus(EspnDecode.layer, () =>
         Effect.gen(function* () {
-          yield* logged(yield* recorded)
+          yield* logged(yield* recordedNeAtBuf)
           yield* built("2026-10-04")
           const run = yield* new RunDay({ date: "2026-10-04" }).run()
           const events = yield* CorpusRun.day("2026-10-04", CorpusRun.events)

@@ -31,12 +31,12 @@ module.exports = {
     {
       name: "only-hub-mode-names-adapters",
       comment:
-        "Only HubMode, the corpus command's composition, and tests, TestCorpus and TestScenarios among them, know which concrete providers and sources exist; main.ts names only the database.",
+        "Only HubMode, the corpus command's composition, and tests, TestScenarios among them, know which concrete providers and sources exist; main.ts names only the database.",
       severity: "error",
       from: {
         path: "^apps/hub/src/",
         pathNot:
-          "(^apps/hub/src/HubMode\\.ts$|^apps/hub/src/corpus/corpus\\.ts$|^apps/hub/src/corpus/TestCorpus\\.ts$|^apps/hub/src/scenario/TestScenarios\\.ts$|\\.test\\.ts$|^apps/hub/src/provider/[^/]+/|^apps/hub/src/source/youtube-tv/)"
+          "(^apps/hub/src/HubMode\\.ts$|^apps/hub/src/corpus/corpus\\.ts$|^apps/hub/src/scenario/TestScenarios\\.ts$|\\.test\\.ts$|^apps/hub/src/provider/[^/]+/|^apps/hub/src/source/youtube-tv/)"
       },
       to: {
         path: "^apps/hub/src/(provider/[^/]+/|source/youtube-tv/|scenario/Scenario(Provider|Source|Clock)\\.ts$)"
@@ -91,6 +91,14 @@ module.exports = {
       to: { path: "^apps/hub/src/provider/TestDecoder\\.ts$" }
     },
     {
+      name: "test-feed-log-is-for-tests",
+      comment:
+        "Frames logged through a feed log of their own are imported only by test files and TestLiveSlate.",
+      severity: "error",
+      from: { pathNot: "(\\.test\\.ts$|^apps/hub/src/TestLiveSlate\\.ts$)" },
+      to: { path: "^apps/hub/src/TestFeedLog\\.ts$" }
+    },
+    {
       name: "test-live-slate-is-for-tests",
       comment: "The live slate following a feed log in memory is imported only by test files.",
       severity: "error",
@@ -131,12 +139,9 @@ module.exports = {
     {
       name: "test-adapter-data-is-for-tests",
       comment:
-        "An adapter's recorded payloads, read for tests of other modules, are imported only by test files, TestCorpus and TestEspnArchive.",
+        "An adapter's recorded payloads, read for tests of other modules, are imported only by test files and TestEspnArchive.",
       severity: "error",
-      from: {
-        pathNot:
-          "(\\.test\\.ts$|^apps/hub/src/corpus/TestCorpus\\.ts$|^apps/hub/src/provider/espn/TestEspnArchive\\.ts$)"
-      },
+      from: { pathNot: "(\\.test\\.ts$|^apps/hub/src/provider/espn/TestEspnArchive\\.ts$)" },
       to: { path: "^apps/hub/src/(provider/espn/TestEspn|source/youtube-tv/TestYouTubeTv)\\.ts$" }
     },
     {

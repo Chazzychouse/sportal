@@ -3,10 +3,7 @@ import { type Crypto, DateTime, Effect, FileSystem, Layer, type Path } from "eff
 import type { SqlClient } from "effect/sql"
 import * as Database from "../Database.ts"
 import { FeedLog } from "../FeedLog.ts"
-import type { FeedFrame } from "../Frame.ts"
 import type { Decoder } from "../provider/Decoder.ts"
-import { fixtures, neAtBufFrames } from "../provider/espn/TestEspn.ts"
-import { Scenarios } from "../scenario/Scenarios.ts"
 import { withEnv } from "../TestHubConfig.ts"
 import * as CorpusBuild from "./CorpusBuild.ts"
 import { CorpusDays } from "./CorpusDay.ts"
@@ -60,17 +57,3 @@ export function inCorpus<A, E>(
 export function built(date: string) {
   return CorpusBuild.captured(date).pipe(Effect.provide(FeedLog.layer), Effect.scoped)
 }
-
-/** `frames` appended through a feed log of their own, closed before the test goes on, so every one is written. */
-export function logged(frames: ReadonlyArray<FeedFrame>) {
-  return FeedLog.use((log) => Effect.forEach(frames, log.append, { discard: true })).pipe(
-    Effect.provide(FeedLog.layer),
-    Effect.scoped
-  )
-}
-
-/** The recorded NE at BUF day's frames. */
-export const recorded = Scenarios.use((scenarios) => scenarios.load(neAtBufFrames)).pipe(
-  Effect.map(({ frames }) => frames),
-  Effect.provide(Scenarios.in(fixtures, []).pipe(Layer.provideMerge(NodeServices.layer)))
-)

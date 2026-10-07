@@ -1,16 +1,14 @@
 import { existsSync, readFileSync } from "node:fs"
-import { NodeServices } from "@effect/platform-node"
 import { assert, describe, it } from "@effect/vitest"
 import { FootballPlay, Other, type Play, PlayId, Rush } from "@sportal/domain/Play"
 import { TeamId } from "@sportal/domain/Team"
-import { Effect, Layer, Schema } from "effect"
+import { Effect, Schema } from "effect"
 import * as Gzip from "../../Gzip.ts"
-import { Scenarios } from "../../scenario/Scenarios.ts"
 import { decodedFrames } from "../TestDecoder.ts"
 import * as EspnDecode from "./EspnDecode.ts"
 import * as EspnPlay from "./EspnPlay.ts"
 import * as EspnSummary from "./EspnSummary.ts"
-import { fixtures, neAtBufFrames } from "./TestEspn.ts"
+import { recordedNeAtBuf } from "./TestEspn.ts"
 
 // Play entities from the 2026-10-04 NFL recording, each as its game's `gp-` topic first added it, without its
 // participants; NE–BUF's first score, 401872971484, as the topic last had it, after its extra point.
@@ -232,9 +230,7 @@ describe("EspnPlay.Play", () => {
     "should read every play in the recorded fixtures without falling back to Other",
     () =>
       Effect.gen(function* () {
-        const { frames } = yield* Scenarios.use((scenarios) => scenarios.load(neAtBufFrames)).pipe(
-          Effect.provide(Scenarios.in(fixtures, []).pipe(Layer.provideMerge(NodeServices.layer)))
-        )
+        const frames = yield* recordedNeAtBuf
         const decoded = yield* decodedFrames(frames).pipe(Effect.provide(EspnDecode.layer))
         const pushed = decoded
           .flatMap(({ deliveries }) => deliveries)
