@@ -32,7 +32,7 @@ import { CorpusInput, CorpusLine } from "./CorpusInput.ts"
 import * as CorpusRun from "./CorpusRun.ts"
 import { built, inCorpus, local, logged, recorded } from "./TestCorpus.ts"
 
-// As LiveSlate.replay.test.ts measured it: every play id the recording's patches add.
+// As LiveSlate.test.ts measured it: every play id the recording's patches add.
 const recordedPlays = 182
 
 describe("CorpusRun.day", () => {
