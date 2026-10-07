@@ -1,3 +1,5 @@
+import type { GameId } from "@sportal/domain/Game"
+import type { Play } from "@sportal/domain/Play"
 import { Effect, Fiber, Layer, ManagedRuntime, Stream, SubscriptionRef } from "effect"
 import { FetchHttpClient } from "effect/http"
 import { useSyncExternalStore } from "react"
@@ -14,6 +16,14 @@ export function useLive() {
   return useSyncExternalStore(subscribe, () => runtime.runSync(LiveStream.use(SubscriptionRef.get)))
 }
 
+/**
+ * A game's recent plays, kept current. A game with none gets the same empty array every time, so a `plays` prop keeps
+ * its identity between renders.
+ */
+export function usePlays(game: GameId): ReadonlyArray<Play> {
+  return useLive().recentPlays[game] ?? noPlays
+}
+
 function subscribe(listener: () => void) {
   const fiber = runtime.runFork(
     LiveStream.use((live) =>
@@ -24,3 +34,5 @@ function subscribe(listener: () => void) {
     runtime.runFork(Fiber.interrupt(fiber))
   }
 }
+
+const noPlays: ReadonlyArray<Play> = []

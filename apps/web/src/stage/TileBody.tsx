@@ -1,9 +1,9 @@
 import type { GameSnapshot } from "@sportal/domain/Game"
 import type { Tile } from "@sportal/domain/Stage"
-import { Field, noPlays } from "../game/Field.tsx"
+import { Field } from "../game/Field.tsx"
 import { GameStatus, localTime } from "../game/GameStatus.tsx"
 import { Score } from "../game/Score.tsx"
-import { useLive } from "../hub/HubRuntime.ts"
+import { usePlays } from "../hub/HubRuntime.ts"
 
 /**
  * What a tile's well shows from the web UI. In the shell a provider view covers a stream tile's
@@ -55,14 +55,7 @@ function Scoreboard(props: { game: GameSnapshot }) {
 
 /** A game's field with its recent plays, under a data tile's scoreboard. */
 function GameField(props: { game: GameSnapshot }) {
-  const { recentPlays } = useLive()
-  return (
-    <Field
-      game={props.game}
-      plays={recentPlays[props.game.id] ?? noPlays}
-      className="min-h-0 w-full max-w-xl"
-    />
-  )
+  return <Field game={props.game} plays={usePlays(props.game.id)} className="min-h-0 w-full max-w-xl" />
 }
 
 function noStream(why: Extract<Tile, { _tag: "DataTile" }>["why"]): string {

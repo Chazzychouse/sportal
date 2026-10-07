@@ -87,9 +87,6 @@ export function Field(props: { game: GameSnapshot; plays: ReadonlyArray<Play>; c
   )
 }
 
-/** No plays yet: one array for every game without any, so a `plays` prop keeps its identity between renders. */
-export const noPlays: ReadonlyArray<Play> = []
-
 /** The field's length and width in yards, end line to end line and sideline to sideline. */
 const length = 120
 const width = 53.3

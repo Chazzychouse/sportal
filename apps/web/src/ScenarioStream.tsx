@@ -1,7 +1,7 @@
 import type { GameId } from "@sportal/domain/Game"
 import { useEffect } from "react"
-import { Field, noPlays } from "./game/Field.tsx"
-import { useLive } from "./hub/HubRuntime.ts"
+import { Field } from "./game/Field.tsx"
+import { useLive, usePlays } from "./hub/HubRuntime.ts"
 import { ScenarioStrip } from "./ScenarioStrip.tsx"
 
 /**
@@ -10,7 +10,8 @@ import { ScenarioStrip } from "./ScenarioStrip.tsx"
  * audio focus can be heard moving. The shell mutes it like any stream.
  */
 export function ScenarioStream(props: { game: GameId }) {
-  const { slate, connection, recentPlays } = useLive()
+  const { slate, connection } = useLive()
+  const plays = usePlays(props.game)
   const game = slate.find((candidate) => candidate.id === props.game)
   useTone(props.game)
   return (
@@ -23,12 +24,7 @@ export function ScenarioStream(props: { game: GameId }) {
         <>
           <ScenarioStrip game={game} />
           <figure className="flex min-h-0 flex-1 flex-col items-center gap-[2vmin] px-[4vmin] pb-[2vmin]">
-            <Field
-              key={game.id}
-              game={game}
-              plays={recentPlays[game.id] ?? noPlays}
-              className="min-h-0 w-full flex-1"
-            />
+            <Field key={game.id} game={game} plays={plays} className="min-h-0 w-full flex-1" />
             {game.situation?.lastPlay !== undefined && (
               <figcaption className="text-center text-[3.5vmin] opacity-80">
                 {game.situation.lastPlay}
