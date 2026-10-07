@@ -8,6 +8,7 @@ import { GameStatus } from "../game/GameStatus.tsx"
 import { Score, scoreline } from "../game/Score.tsx"
 import { dispatch } from "../hub/HubClient.ts"
 import { runtime } from "../hub/HubRuntime.ts"
+import { Layout } from "../layout/Layout.ts"
 import { tileActions } from "../stage/TileActions.tsx"
 
 /**
@@ -46,8 +47,7 @@ export function StageMap(props: {
   return (
     <>
       <div className="relative aspect-video w-full overflow-hidden rounded-md border bg-well">
-        {props.stage
-          .currentLayout()
+        {Layout.of(props.stage)
           .slots()
           .map((slot, index) => {
             const at = tiles[index]

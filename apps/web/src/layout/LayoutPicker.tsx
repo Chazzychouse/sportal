@@ -1,4 +1,4 @@
-import { Layout, LayoutName } from "@sportal/domain/Layout"
+import { LayoutName, Stage } from "@sportal/domain/Stage"
 import { cn } from "@/design/ClassName"
 import { ToggleGroup, ToggleGroupItem } from "@/design/toggle-group"
 import { dispatch } from "../hub/HubClient.ts"
@@ -27,7 +27,7 @@ export function LayoutPicker(props: { current: LayoutName; fill?: boolean }) {
           key={name}
           value={name}
           aria-label={layoutLabel(name)}
-          title={`${layoutLabel(name)} · ${Layout.slotCount(name) === 1 ? "1 tile" : `${Layout.slotCount(name)} tiles`}`}
+          title={`${layoutLabel(name)} · ${Stage.slotCount(name) === 1 ? "1 tile" : `${Stage.slotCount(name)} tiles`}`}
           className={cn(
             "text-muted-foreground data-[state=on]:bg-accent data-[state=on]:text-on-air",
             props.fill === true && "min-h-10 flex-1"

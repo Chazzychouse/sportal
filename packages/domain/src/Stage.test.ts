@@ -2,8 +2,7 @@ import { assert, describe, it } from "@effect/vitest"
 import { DateTime, Option, Result, Schema } from "effect"
 import { ChannelAvailability } from "./Channel.ts"
 import { GameId } from "./Game.ts"
-import { Layout } from "./Layout.ts"
-import { Stage, type StageCommand, type Tile } from "./Stage.ts"
+import { type LayoutName, Stage, type StageCommand, type Tile } from "./Stage.ts"
 
 const bama = GameId.make("401856707")
 const irish = GameId.make("401858250")
@@ -198,7 +197,7 @@ describe("Stage layouts and the bench", () => {
   it("starts as an empty Quad with default splits", () => {
     assert.strictEqual(Stage.initial.layout, "Quad")
     assert.strictEqual(Stage.initial.tiles.length, 4)
-    assert.deepStrictEqual(Stage.initial.splits.MainFive, Layout.defaultSplit("MainFive"))
+    assert.deepStrictEqual(Stage.initial.splits.MainFive, { x: 2 / 3, y: 2 / 3 })
   })
 
   it("encodes the initial Stage as it always has", () => {
@@ -257,15 +256,53 @@ describe("Stage layouts and the bench", () => {
   it("sets the current layout's split and remembers each layout's own", () => {
     const moved = run(Stage.initial, { _tag: "SetSplit", split: { x: 0.3, y: 0.7 } })
     assert.deepStrictEqual(moved.splits.Quad, { x: 0.3, y: 0.7 })
-    assert.deepStrictEqual(moved.splits.Pair, Layout.defaultSplit("Pair"))
-    assert.deepStrictEqual(moved.currentLayout().split, { x: 0.3, y: 0.7 })
+    assert.deepStrictEqual(moved.splits.Pair, Stage.initial.splits.Pair)
+    assert.deepStrictEqual(moved.splits[moved.layout], { x: 0.3, y: 0.7 })
+  })
+})
+
+describe("Stage#apply SetSplit", () => {
+  it("should accept a split at the bounds", () => {
+    const moved = run(Stage.initial, { _tag: "SetSplit", split: { x: 0.2, y: 0.8 } })
+
+    assert.deepStrictEqual(moved.splits.Quad, { x: 0.2, y: 0.8 })
   })
 
-  it("rejects a split outside 0.2–0.8", () => {
-    assert.strictEqual(
-      rejection(Stage.initial, { _tag: "SetSplit", split: { x: 0.1, y: 0.5 } }),
-      "split-out-of-range"
-    )
+  it.each([
+    { x: 0.1, y: 0.5 },
+    { x: 0.19, y: 0.5 }
+  ])("should reject a split below them: $x,$y", (split) => {
+    const reason = rejection(Stage.initial, { _tag: "SetSplit", split })
+
+    assert.strictEqual(reason, "split-out-of-range")
+  })
+
+  it("should reject a split above them", () => {
+    const reason = rejection(Stage.initial, { _tag: "SetSplit", split: { x: 0.5, y: 0.81 } })
+
+    assert.strictEqual(reason, "split-out-of-range")
+  })
+})
+
+describe("Stage.slotCount", () => {
+  it.each<[LayoutName, number]>([
+    ["Single", 1],
+    ["Pair", 2],
+    ["Quad", 4],
+    ["MainThree", 4],
+    ["MainFive", 6]
+  ])("should give %s a slot count of %i", (name, slots) => {
+    const count = Stage.slotCount(name)
+
+    assert.strictEqual(count, slots)
+  })
+})
+
+describe("Stage.splitBounds", () => {
+  it("should keep dividers between 0.2 and 0.8", () => {
+    const bounds = Stage.splitBounds
+
+    assert.deepStrictEqual(bounds, { min: 0.2, max: 0.8 })
   })
 })
 
@@ -285,7 +322,7 @@ describe("Stage#withSplit", () => {
   it("replaces only the current layout's split", () => {
     const moved = Stage.initial.withSplit({ x: 0.3, y: 0.7 })
     assert.deepStrictEqual(moved.splits.Quad, { x: 0.3, y: 0.7 })
-    assert.deepStrictEqual(moved.splits.Pair, Layout.defaultSplit("Pair"))
+    assert.deepStrictEqual(moved.splits.Pair, Stage.initial.splits.Pair)
     assert.strictEqual(moved.layout, "Quad")
     assert.deepStrictEqual(moved.tiles, Stage.initial.tiles)
   })

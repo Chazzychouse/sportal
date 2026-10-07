@@ -150,10 +150,10 @@ Provider and Source are the two words most likely to be swapped. Provider is alw
 | --- | --- | --- |
 | **Stage** | A Display's multi-view surface and its state. | grid, multiview, wall |
 | **Stage command** | An instruction to change a Stage: assign, clear, swap, promote, solo, change layout or split, or focus audio. Issued by people and by the Director alike. | action, event |
-| **Layout name** | A layout's own name, as the Stage and the layout picker name it; `LayoutName` in code. | |
+| **Layout name** | A layout's own name, as the Stage and the layout picker name it; `LayoutName` in `Stage.ts`, beside each layout's slot count. | |
 | **Stage rejection** | The reason a stage command was refused. | error |
-| **Layout** | A named arrangement of tile slots whose dividers can be moved. | grid, template |
-| **Split** | Where a layout's dividers sit, as fractions of the Stage area. | ratio, sizes |
+| **Layout** | A named arrangement of tile slots whose dividers can be moved. The geometry is the web's: `Layout` in `apps/web/src/layout/Layout.ts` gives the slots, dividers, next layout, and clamped split. | grid, template |
+| **Split** | Where a layout's dividers sit, as fractions of the Stage area; `Split` in `Stage.ts`, which keeps it within `Stage.splitBounds`. | ratio, sizes |
 | **Tile** | One slot's content: a **stream tile**, a **data tile**, or empty. | pane, cell, window |
 | **Main tile** | The largest slot of a layout. | hero, primary |
 | **Bench** | The tiles a layout has no slot for, kept in order and not played. | queue, reserve |

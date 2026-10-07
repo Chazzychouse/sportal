@@ -200,8 +200,7 @@ sportal/
 │   │       ├── Channel.ts      SourceName, Channel, ChannelAvailability
 │   │       ├── Guide.ts        Guide, Airing, ChannelId, GuideUnreadable
 │   │       ├── Stream.ts       StreamLocator
-│   │       ├── Layout.ts       Layouts, splits, and their tile slots
-│   │       ├── Stage.ts        Tile, Stage state, StageCommand, StageRejection, apply, invariants
+│   │       ├── Stage.ts        Tile, LayoutName, Split, Stage state, slot counts and split bounds, StageCommand, StageRejection, apply, invariants
 │   │       └── TestGame.ts     Game snapshots for tests
 │   │
 │   └── api/                    The contracts between processes.
@@ -278,7 +277,7 @@ sportal/
     │       ├── hub/                HubClient (typed client from SportalApi), LiveStream (the live stream), HubRuntime
     │       ├── slate/              The slate strip and its cards
     │       ├── stage/              The Stage: tiles, dividers, tile actions, rejections
-    │       ├── layout/             Layout picker and glyphs
+    │       ├── layout/             Layout (the geometry: slots, dividers, next, clamp), its picker and glyphs
     │       ├── game/               A game's status, score, and logo, as slate and tiles show them; the field, which draws a game's plays
     │       └── remote/             The phone Remote: stage map, join QR code
     │
@@ -456,10 +455,10 @@ A source's channels are found in its own guide, read by the shell (`docs/history
 
 `stage.apply(command, availabilityOf)` is a pure method returning the new Stage or a typed rejection.
 
-- State: a layout (`Single`, `Pair`, `Quad`, `MainThree`, `MainFive`), each layout's split, the tiles (each empty, stream, or data), audio focus, and solo. The first `Layout.slotCount(layout)` tiles are on stage, main tile first; the rest are the **bench**, kept in order and not played. Audio focus and solo name a game, so they follow it when tiles move.
+- State: a layout (`Single`, `Pair`, `Quad`, `MainThree`, `MainFive`), each layout's split, the tiles (each empty, stream, or data), audio focus, and solo. The first `Stage.slotCount(layout)` tiles are on stage, main tile first; the rest are the **bench**, kept in order and not played. Audio focus and solo name a game, so they follow it when tiles move.
 - Commands: `Assign`, `Clear`, `Swap`, `Promote`, `SetLayout`, `SetSplit`, `Solo`, `Unsolo`, `FocusAudio`. `LoadPreset` comes with presets.
 - Invariants, enforced only here: a game appears in at most one tile, on stage or benched; audio focus is an on-stage game (the focused one while it is on stage, else the first), or none on an empty stage; solo is an on-stage game; dividers stay within 0.2–0.8. Still to come: stream tiles per source across **all** Displays never exceed that source's budget, and an assignment beyond it becomes a data tile.
-- Geometry: `Layout#slots` gives each slot as fractions of the Stage area. The web UI turns them into pixels once and uses the same numbers for its tile chrome and the shell's tile placements, so the two move together along one **Stage transition** (280 ms, `cubic-bezier(0.2, 0, 0, 1)`), which the shell follows by moving each view's bounds.
+- Geometry: the web's `Layout#slots` gives each slot as fractions of the Stage area. The web UI turns them into pixels once and uses the same numbers for its tile chrome and the shell's tile placements, so the two move together along one **Stage transition** (280 ms, `cubic-bezier(0.2, 0, 0, 1)`), which the shell follows by moving each view's bounds.
 - Full screen is the Display's window, local to it, and is not Stage state.
 
 `LiveStage` in the Hub holds the one Stage in memory, applies commands from any origin, and broadcasts it. Nothing is persisted: a restart starts an empty Stage, and a second Display would need a keyed session.

@@ -1,7 +1,6 @@
-import { Array as Arr, Option, Result, Schema } from "effect"
+import { Array as Arr, Option, Record as Rec, Result, Schema } from "effect"
 import { Channel, type ChannelAvailability } from "./Channel.ts"
 import { GameId } from "./Game.ts"
-import { Layout, LayoutName, Split } from "./Layout.ts"
 
 export const Tile = Schema.Union([
   Schema.TaggedStruct("Empty", {}),
@@ -25,8 +24,25 @@ export type Tile = typeof Tile.Type
 
 const empty: Tile = { _tag: "Empty" }
 
+/** The layouts a Stage can take, in the order the next-layout hotkey cycles through them. */
+export const LayoutName = Schema.Literals(["Single", "Pair", "Quad", "MainThree", "MainFive"])
+export type LayoutName = typeof LayoutName.Type
+
+/** Where a layout's dividers sit, as fractions of the Stage area. */
+export const Split = Schema.Struct({ x: Schema.Finite, y: Schema.Finite })
+export type Split = typeof Split.Type
+
+/** Each layout's slot count and the split a new Stage gives it. */
+const layouts = {
+  Single: { slots: 1, split: { x: 0.5, y: 0.5 } },
+  Pair: { slots: 2, split: { x: 0.5, y: 0.5 } },
+  Quad: { slots: 4, split: { x: 0.5, y: 0.5 } },
+  MainThree: { slots: 4, split: { x: 0.75, y: 0.5 } },
+  MainFive: { slots: 6, split: { x: 2 / 3, y: 2 / 3 } }
+} as const satisfies Record<LayoutName, { slots: number; split: Split }>
+
 export class Stage extends Schema.Class<Stage>("sportal/Stage")({
-  /** The first `Layout.slotCount(layout)` tiles are on stage, main tile first; the rest are the bench. */
+  /** The first `Stage.slotCount(layout)` tiles are on stage, main tile first; the rest are the bench. */
   tiles: Schema.Array(Tile),
   layout: LayoutName,
   /** Each layout's own split, kept while another layout is shown. */
@@ -40,8 +56,15 @@ export class Stage extends Schema.Class<Stage>("sportal/Stage")({
   static readonly initial = new Stage({
     tiles: [empty, empty, empty, empty],
     layout: "Quad",
-    splits: Layout.defaultSplits()
+    splits: Rec.map(layouts, ({ split }) => split)
   })
+
+  /** The range each divider stays within, so every tile stays watchable. */
+  static readonly splitBounds = { min: 0.2, max: 0.8 } as const
+
+  static slotCount(layout: LayoutName): number {
+    return layouts[layout].slots
+  }
 
   /** Whether the game's sound is on. */
   hears(game: GameId): boolean {
@@ -58,18 +81,14 @@ export class Stage extends Schema.Class<Stage>("sportal/Stage")({
     return new Stage({ ...this, splits: { ...this.splits, [this.layout]: split } })
   }
 
-  currentLayout(): Layout {
-    return new Layout({ name: this.layout, split: this.splits[this.layout] })
-  }
-
   /** The tiles in the layout's slots, main tile first. */
   onStage(): ReadonlyArray<Tile> {
-    return this.tiles.slice(0, Layout.slotCount(this.layout))
+    return this.tiles.slice(0, Stage.slotCount(this.layout))
   }
 
   /** The games on the bench, in order, each with its tile. Empty tiles past the slots are skipped. */
   benched(): ReadonlyArray<{ tile: number; game: GameId }> {
-    const first = Layout.slotCount(this.layout)
+    const first = Stage.slotCount(this.layout)
     return this.tiles.flatMap((tile, index) =>
       index < first || tile._tag === "Empty" ? [] : [{ tile: index, game: tile.game }]
     )
@@ -104,10 +123,11 @@ export class Stage extends Schema.Class<Stage>("sportal/Stage")({
     switch (command._tag) {
       case "SetLayout":
         return Result.succeed(settle({ ...this, layout: command.layout }))
-      case "SetSplit":
-        return Layout.holds(command.split)
-          ? Result.succeed(settle(this.withSplit(command.split)))
-          : reject("split-out-of-range")
+      case "SetSplit": {
+        const { min, max } = Stage.splitBounds
+        const holds = [command.split.x, command.split.y].every((at) => at >= min && at <= max)
+        return holds ? Result.succeed(settle(this.withSplit(command.split))) : reject("split-out-of-range")
+      }
       case "Unsolo":
         return Result.succeed(settle({ ...this, solo: undefined }))
       case "Swap":
@@ -146,7 +166,7 @@ export class Stage extends Schema.Class<Stage>("sportal/Stage")({
             )
       case "FocusAudio":
       case "Solo":
-        if (command.tile >= Layout.slotCount(this.layout)) return reject("offstage-tile")
+        if (command.tile >= Stage.slotCount(this.layout)) return reject("offstage-tile")
         if (tile._tag === "Empty") return reject("empty-tile")
         return Result.succeed(
           settle({ ...this, audioFocus: tile.game, ...(command._tag === "Solo" ? { solo: tile.game } : {}) })
@@ -233,7 +253,7 @@ function settle(fields: {
   audioFocus?: GameId | undefined
   solo?: GameId | undefined
 }): Stage {
-  const slots = Layout.slotCount(fields.layout)
+  const slots = Stage.slotCount(fields.layout)
   const kept = Option.getOrElse(
     Option.map(
       Arr.findLastIndex(fields.tiles, (tile) => tile._tag !== "Empty"),

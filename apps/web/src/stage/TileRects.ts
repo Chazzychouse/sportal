@@ -1,6 +1,7 @@
 import type { TilePlacement } from "@sportal/api/ShellBridge"
 import type { GameId } from "@sportal/domain/Game"
 import type { Stage } from "@sportal/domain/Stage"
+import { Layout } from "../layout/Layout.ts"
 
 /**
  * Each on-stage tile's rectangle in the Stage area, in whole pixels, main tile first. Slot edges are rounded
@@ -13,8 +14,7 @@ export function tileRects(
 ): ReadonlyArray<{ x: number; y: number; width: number; height: number }> {
   const whole = inset({ x: 0, y: 0, width: area.width, height: area.height })
   const solo = stage.solo === undefined ? undefined : stage.slotOf(stage.solo)
-  return stage
-    .currentLayout()
+  return Layout.of(stage)
     .slots()
     .map((slot, index) => {
       const left = Math.round(slot.x * area.width)

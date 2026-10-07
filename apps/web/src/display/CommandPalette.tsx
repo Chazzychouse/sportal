@@ -1,6 +1,5 @@
 import { type GameId, GameSnapshot } from "@sportal/domain/Game"
-import { LayoutName } from "@sportal/domain/Layout"
-import type { Stage, StageCommand } from "@sportal/domain/Stage"
+import { LayoutName, type Stage, type StageCommand } from "@sportal/domain/Stage"
 import {
   CommandDialog,
   CommandEmpty,

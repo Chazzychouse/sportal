@@ -1,8 +1,9 @@
-import { Layout, type LayoutName } from "@sportal/domain/Layout"
+import type { LayoutName } from "@sportal/domain/Stage"
+import { Layout } from "./Layout.ts"
 
 /** A small drawing of a layout at its default split, main tile lit. */
 export function LayoutGlyph(props: { name: LayoutName }) {
-  const slots = new Layout({ name: props.name, split: Layout.defaultSplit(props.name) }).slots()
+  const slots = Layout.ofDefault(props.name).slots()
   return (
     <svg viewBox="0 0 32 18" className="h-3.5 w-6" aria-hidden="true">
       {slots.map((slot, index) => (

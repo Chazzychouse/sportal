@@ -1,7 +1,6 @@
 import type { StageTransition } from "@sportal/api/ShellBridge"
 import type { GameId, GameSnapshot } from "@sportal/domain/Game"
-import type { Split } from "@sportal/domain/Layout"
-import type { Stage } from "@sportal/domain/Stage"
+import type { Split, Stage } from "@sportal/domain/Stage"
 import { Effect } from "effect"
 import { useEffect, useLayoutEffect, useRef, useState } from "react"
 import { useVideoAreas } from "../display/OverlayHost.tsx"
