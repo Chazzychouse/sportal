@@ -76,9 +76,12 @@ class GuideNotRead extends Schema.TaggedError<GuideNotRead>()("GuideNotRead", { 
 function readGuide() {
   return Effect.gen(function* () {
     const { session } = yield* ProviderSession
-    const context = clientContext(yield* send(`${guideOrigin}/live`, {}))
+
+    const page = yield* send(`${guideOrigin}/live`, {})
+    const context = clientContext(page)
     if (Option.isNone(context))
       return yield* new GuideNotRead({ reason: "the guide page has no client config" })
+
     const cookies = yield* Effect.tryPromise({
       try: () => session.cookies.get({ url: guideOrigin, name: "SAPISID" }),
       catch: (cause) =>
@@ -87,11 +90,14 @@ function readGuide() {
     const sapisid = Arr.head(cookies)
     if (Option.isNone(sapisid))
       return yield* new GuideNotRead({ reason: "the session has no YouTube sign-in (SAPISID)" })
+
     // YouTube's web clients sign each request with the time and the session's SAPISID, as the guide page does.
-    const seconds = Math.floor((yield* Clock.currentTimeMillis) / 1000)
+    const now = yield* Clock.currentTimeMillis
+    const seconds = Math.floor(now / 1000)
     const signature = createHash("sha1")
       .update(`${seconds} ${sapisid.value.value} ${guideOrigin}`)
       .digest("hex")
+
     return yield* send(`${guideOrigin}/youtubei/v1/browse?prettyPrint=false`, {
       method: "POST",
       headers: {
@@ -110,6 +116,7 @@ function send(url: string, init: RequestInit) {
   const path = new URL(url).pathname
   return Effect.gen(function* () {
     const { session } = yield* ProviderSession
+
     const { status, body } = yield* Effect.tryPromise({
       try: () =>
         session
@@ -117,6 +124,7 @@ function send(url: string, init: RequestInit) {
           .then((response) => response.text().then((body) => ({ status: response.status, body }))),
       catch: (cause) => new GuideNotRead({ reason: `${path} could not be reached: ${String(cause)}` })
     })
+
     if (status >= 200 && status < 300) return body
     return yield* new GuideNotRead({
       reason: `${path} answered ${status}${status === 401 || status === 403 ? " (signed out of YouTube TV?)" : ""}`

@@ -38,11 +38,12 @@ export class TileViews extends Context.Service<
       const scope = yield* Effect.scope
       const hotkeys = yield* PubSub.unbounded<Hotkey>()
       const presses = yield* PubSub.unbounded<GameId>()
+      const animation = yield* FiberHandle.make<void>()
+
       const views = new Map<GameId, Entry>()
       let hidden: ReadonlySet<GameId> = new Set()
       // Views created during a transition, kept out of sight until it ends.
       const arriving = new Set<GameId>()
-      const animation = yield* FiberHandle.make<void>()
 
       const showWhereDue = () => {
         for (const [game, { view }] of views) view.setVisible(!hidden.has(game) && !arriving.has(game))
@@ -64,8 +65,9 @@ export class TileViews extends Context.Service<
       )
 
       const create = Effect.fn("TileViews.create")(function* (game: GameId) {
+        const view = yield* providers.createView
         const entry: Entry = {
-          view: yield* providers.createView,
+          view,
           url: Option.none(),
           interactive: false,
           bounds: { x: 0, y: 0, width: 0, height: 0 }
@@ -149,7 +151,8 @@ export class TileViews extends Context.Service<
           let t = 0
           while (t < 1) {
             yield* Effect.sleep(frame)
-            t = ((yield* Clock.currentTimeMillis) - start) / transition.durationMs
+            const now = yield* Clock.currentTimeMillis
+            t = (now - start) / transition.durationMs
             const eased = Transition.progress(transition.easing, t)
             for (const { game, entry, from, to } of moves)
               if (views.get(game) === entry) place(entry, Transition.between(from, to, eased))

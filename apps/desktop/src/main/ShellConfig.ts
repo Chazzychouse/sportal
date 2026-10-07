@@ -8,9 +8,9 @@ export class ShellConfig extends Context.Service<ShellConfig, { readonly hubUrl:
   static readonly layer: Layer.Layer<ShellConfig, Config.ConfigError> = Layer.effect(
     ShellConfig,
     Effect.gen(function* () {
-      return ShellConfig.of({
-        hubUrl: yield* Config.String("SPORTAL_HUB_URL").pipe(Config.withDefault("http://127.0.0.1:4400"))
-      })
+      const hubUrl = yield* Config.String("SPORTAL_HUB_URL").pipe(Config.withDefault("http://127.0.0.1:4400"))
+
+      return ShellConfig.of({ hubUrl })
     })
   )
 }
