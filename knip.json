@@ -6,7 +6,12 @@
       "project": ["src/**/*.ts!", "!src/**/Test*.ts!"]
     },
     "apps/hub": {
-      "entry": ["src/main.ts!", "src/corpus/CorpusDay.ts!", "src/corpus/CorpusBuild.ts!"],
+      "entry": [
+        "src/main.ts!",
+        "src/corpus/CorpusDay.ts!",
+        "src/corpus/CorpusBuild.ts!",
+        "src/corpus/CorpusRun.ts!"
+      ],
       "project": ["src/**/*.ts!", "!src/**/Test*.ts!"]
     },
     "apps/web": {

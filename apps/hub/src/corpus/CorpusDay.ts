@@ -1,10 +1,13 @@
 import { LeagueId } from "@sportal/domain/League"
+import { Slate } from "@sportal/domain/Slate"
 import {
   Array as Arr,
   Context,
+  DateTime,
   Effect,
   FileSystem,
   Layer,
+  Option,
   Path,
   type PlatformError,
   Schema,
@@ -24,7 +27,27 @@ export class CorpusDay extends Schema.Class<CorpusDay>("sportal/hub/CorpusDay")(
   leagues: Schema.Array(LeagueId),
   games: Schema.Int,
   built: Schema.DateTimeUtcFromString
-}) {}
+}) {
+  /** The game day `date` (YYYY-MM-DD) in the current zone: from 04:00 local on it until 04:00 the next day. */
+  static bounds(
+    date: string
+  ): Effect.Effect<
+    { readonly from: DateTime.Utc; readonly until: DateTime.Utc },
+    never,
+    DateTime.CurrentTimeZone
+  > {
+    return Effect.gen(function* () {
+      const noon = yield* Option.match(
+        DateTime.makeZoned(DateTime.makeUnsafe(`${date}T12:00:00Z`), {
+          timeZone: yield* DateTime.CurrentTimeZone,
+          adjustForTimeZone: true
+        }),
+        { onSome: Effect.succeed, onNone: () => Effect.die(new Error(`${date} is not a day in this zone`)) }
+      )
+      return { from: Slate.dayStart(noon), until: Slate.dayStart(DateTime.add(noon, { days: 1 })) }
+    })
+  }
+}
 
 /**
  * The corpus's days, each in `days/<date>/` under `HubConfig.corpusDir`: its `day.json`, and its poll and push lines as

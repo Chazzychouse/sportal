@@ -1,30 +1,22 @@
-import { NodeCrypto, NodeServices } from "@effect/platform-node"
 import { assert, describe, it } from "@effect/vitest"
 import { Delivery } from "@sportal/domain/Delivery"
 import { GameId, type GameSnapshot } from "@sportal/domain/Game"
 import { Slate } from "@sportal/domain/Slate"
 import { liveSnapshot, snapshot } from "@sportal/domain/TestGame"
-import { type Crypto, DateTime, Effect, Equal, FileSystem, Layer, Path, Schema, Stream } from "effect"
-import type { SqlClient } from "effect/sql"
-import * as Database from "../Database.ts"
+import { DateTime, Effect, Equal, FileSystem, Path, Schema, Stream } from "effect"
 import { FeedLog } from "../FeedLog.ts"
 import { FeedFrame } from "../Frame.ts"
 import * as Gzip from "../Gzip.ts"
 import { Decoder } from "../provider/Decoder.ts"
 import * as EspnDecode from "../provider/espn/EspnDecode.ts"
-import { fixtures, neAtBufFrames } from "../provider/espn/TestEspn.ts"
-import { Scenarios } from "../scenario/Scenarios.ts"
 import { framed } from "../TestFeed.ts"
-import { withEnv } from "../TestHubConfig.ts"
 import * as TestSnapshotFeed from "../TestSnapshotFeed.ts"
-import * as CorpusBuild from "./CorpusBuild.ts"
 import { CorpusDays } from "./CorpusDay.ts"
 import { CorpusLine } from "./CorpusInput.ts"
+import { built, inCorpus, local, logged, recorded } from "./TestCorpus.ts"
 
 // As Slate.replay.test.ts measured it: every play id the recording's patches add.
 const recordedPlays = 182
-
-const zone = "America/New_York"
 
 describe("CorpusBuild.captured", () => {
   it.effect(
@@ -145,48 +137,6 @@ function listing(games: ReadonlyArray<GameSnapshot>) {
   return Delivery.cases.Listing.make({ league: "fbs", games })
 }
 
-/** A wall-clock instant in the test's zone. */
-function local(wallClock: string): DateTime.Utc {
-  return DateTime.toUtc(DateTime.makeZonedUnsafe(wallClock, { timeZone: zone, adjustForTimeZone: true }))
-}
-
-/**
- * `test` over an in-memory feed log, `decoder`, and corpus days in a temporary directory it is given, in `timeZone`,
- * the test's `zone` unless given.
- */
-function inCorpus<A, E>(
-  decoder: Layer.Layer<Decoder>,
-  test: (
-    dir: string
-  ) => Effect.Effect<
-    A,
-    E,
-    | CorpusDays
-    | Decoder
-    | DateTime.CurrentTimeZone
-    | FileSystem.FileSystem
-    | Path.Path
-    | SqlClient.SqlClient
-    | Crypto.Crypto
-  >,
-  timeZone: DateTime.TimeZone = DateTime.zoneMakeNamedUnsafe(zone)
-) {
-  return Effect.gen(function* () {
-    const dir = yield* (yield* FileSystem.FileSystem).makeTempDirectoryScoped()
-    return yield* test(dir).pipe(
-      Effect.provide(
-        Layer.mergeAll(
-          CorpusDays.layer.pipe(Layer.provide(withEnv({ SPORTAL_CORPUS_DIR: dir }))),
-          decoder,
-          DateTime.layerCurrentZone(timeZone),
-          Database.at(":memory:"),
-          NodeCrypto.layer
-        )
-      )
-    )
-  }).pipe(Effect.scoped, Effect.provide(NodeServices.layer))
-}
-
 /**
  * Logs the recorded NE at BUF frames, builds 2026-10-04, which starts at `from`, and checks it: a captured NFL day
  * whose push file has every play, read back to the same slate as the replay from `from` decoded.
@@ -232,19 +182,6 @@ function recordedDayChecked(dir: string, from: DateTime.Utc) {
   })
 }
 
-/** Day `date` built from the feed log, opened for the build alone. */
-function built(date: string) {
-  return CorpusBuild.captured(date).pipe(Effect.provide(FeedLog.layer), Effect.scoped)
-}
-
-/** `frames` appended through a feed log of their own, closed before the test goes on, so every one is written. */
-function logged(frames: ReadonlyArray<FeedFrame>) {
-  return FeedLog.use((log) => Effect.forEach(frames, log.append, { discard: true })).pipe(
-    Effect.provide(FeedLog.layer),
-    Effect.scoped
-  )
-}
-
 /** The domain slate once it has taken every one of `frames`, in order. */
 function takenAll(frames: ReadonlyArray<Parameters<Slate["take"]>[0]>) {
   return Effect.reduce(
@@ -255,9 +192,3 @@ function takenAll(frames: ReadonlyArray<Parameters<Slate["take"]>[0]>) {
 }
 
 const decodeLine = Schema.decodeSync(Schema.fromJsonString(CorpusLine))
-
-/** The recorded NE at BUF day's frames. */
-const recorded = Scenarios.use((scenarios) => scenarios.load(neAtBufFrames)).pipe(
-  Effect.map(({ frames }) => frames),
-  Effect.provide(Scenarios.in(fixtures, []).pipe(Layer.provideMerge(NodeServices.layer)))
-)

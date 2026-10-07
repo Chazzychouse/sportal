@@ -1,5 +1,4 @@
 import { Delivery } from "@sportal/domain/Delivery"
-import { Slate } from "@sportal/domain/Slate"
 import { Array as Arr, DateTime, Effect, Option, Schema, Stream } from "effect"
 import { FeedLog } from "../FeedLog.ts"
 import { Decoder } from "../provider/Decoder.ts"
@@ -17,15 +16,7 @@ export function captured(
   date: string
 ): Effect.Effect<CorpusDay, CorpusBuildFailed, FeedLog | Decoder | CorpusDays | DateTime.CurrentTimeZone> {
   return Effect.gen(function* () {
-    const noon = yield* Option.match(
-      DateTime.makeZoned(DateTime.makeUnsafe(`${date}T12:00:00Z`), {
-        timeZone: yield* DateTime.CurrentTimeZone,
-        adjustForTimeZone: true
-      }),
-      { onSome: Effect.succeed, onNone: () => Effect.die(new Error(`${date} is not a day in this zone`)) }
-    )
-    const from = Slate.dayStart(noon)
-    const until = Slate.dayStart(DateTime.add(noon, { days: 1 }))
+    const { from, until } = yield* CorpusDay.bounds(date)
     const decoder = yield* Decoder
     const decoded = yield* decoder
       .decode(

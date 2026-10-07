@@ -98,6 +98,8 @@ Every exported type name must be a term here, except the wire schemas in `*Paylo
 | **Corpus line** | A corpus input as a day stores it, with its frame's `seq` and arrival instant; `CorpusLine` in code, which says a frame's lines from its deliveries and the deliveries back from its lines. | row, record |
 | **Had** | What a corpus day had delivered so far, threaded across its frames: each league's last listing and each game's last plays. | state, cache |
 | **Corpus day unreadable** | A corpus day that has not been built, does not decode, or was built to another format and must be built again; `CorpusDayUnreadable` in code. | |
+| **Corpus run** | A corpus day played through the slate on virtual time: each frame taken at its arrival instant, which first ticks every instant due before it, then a tick to the next day's start; no clock runs. `CorpusRun.day` in code. A captured day's run gives the events the Hub's slate published live. | replay, simulation |
+| **Subject** | What a corpus run plays a day through: a pure step over each take or tick of the slate, and what it gives at the end; `Subject` in code. `CorpusRun.events`, the day's game events in order, is the only one so far. | consumer, reducer |
 | **Corpus build failed** | A corpus day that could not be built: the feed log has no frame received in it, or a frame of it does not decode; `CorpusBuildFailed` in code. Nothing of the day is written. | |
 | **Live channel URL** | A source's address for a channel, reduced to the one that plays it live. | canonical URL |
 | **Stream** | One playing instance of a game from a source. | feed, video |
