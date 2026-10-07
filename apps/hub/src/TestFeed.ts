@@ -87,8 +87,11 @@ export function dyingAt(body: string): Layer.Layer<Decoder> {
  */
 export function delivered(delivery: Delivery, at?: DateTime.Utc) {
   return Effect.gen(function* () {
-    const frame = yield* (yield* FeedLog).append(framed(delivery, at ?? (yield* DateTime.now)))
-    return yield* (yield* LiveSlate).through(frame.seq)
+    const feedLog = yield* FeedLog
+    const liveSlate = yield* LiveSlate
+    const received = yield* at === undefined ? DateTime.now : Effect.succeed(at)
+    const frame = yield* feedLog.append(framed(delivery, received))
+    return yield* liveSlate.through(frame.seq)
   })
 }
 
@@ -125,7 +128,9 @@ function snapshotFrame(
 /** The games one poll of `league` lists, as the provided `Decoder` reads it. */
 export function listedBy(league: LeagueId) {
   return Effect.gen(function* () {
-    const said = yield* decodedFrames([yield* (yield* Provider).poll(league)])
+    const provider = yield* Provider
+    const polled = yield* provider.poll(league)
+    const said = yield* decodedFrames([polled])
     return said.flatMap((one) =>
       one.deliveries.flatMap((delivery) => (delivery._tag === "Listing" ? delivery.games : []))
     )

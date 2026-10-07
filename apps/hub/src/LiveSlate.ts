@@ -71,7 +71,8 @@ export class LiveSlate extends Context.Service<
       Effect.gen(function* () {
         const feedLog = yield* FeedLog
         const decoder = yield* Decoder
-        const from = Slate.dayStart(yield* DateTime.nowInCurrentZone)
+        const now = yield* DateTime.nowInCurrentZone
+        const from = Slate.dayStart(now)
         const started = yield* Clock.currentTimeMillis
         const state = yield* SubscriptionRef.make<{
           readonly slate: Slate
@@ -99,7 +100,9 @@ export class LiveSlate extends Context.Service<
               yield* told(following, frame, taken)
               if (!Following.$is("Replaying")(following)) {
                 yield* PubSub.publishAll(events, taken.events)
-                if (next.live !== slate.live) yield* countByState(next.live)
+                if (next.live !== slate.live) {
+                  yield* countByState(next.live)
+                }
               }
               const moved =
                 !next.publishesSameAs(slate) ||
@@ -136,7 +139,8 @@ export class LiveSlate extends Context.Service<
                 yield* Effect.forEach(followed.slate.live.values(), gaugeHeld, { discard: true })
                 yield* countByState(followed.slate.live)
                 const { frames, deliveries, plays } = yield* Ref.get(replayed)
-                const took = Duration.millis((yield* Clock.currentTimeMillis) - started)
+                const finished = yield* Clock.currentTimeMillis
+                const took = Duration.millis(finished - started)
                 yield* Effect.logInfo(
                   `LiveSlate: replayed ${frames} frames: ${deliveries} deliveries, ${plays} plays; ${followed.slate.live.size} live games, in ${Duration.format(took)}`
                 )
