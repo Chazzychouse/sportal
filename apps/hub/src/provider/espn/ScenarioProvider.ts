@@ -35,7 +35,7 @@ function played(scenario: Scenario, start: Effect.Effect<DateTime.Utc>) {
   const offsetOf = (frame: FeedFrame) => DateTime.distance(origin, frame.receivedAt)
   const playedAt = (frame: FeedFrame) => Effect.map(start, (at) => DateTime.addDuration(at, offsetOf(frame)))
   const polls = scenario.frames.filter((frame) => frame.feed === "poll")
-  const pushes = scenario.frames.filter((frame) => frame.feed === push)
+  const pushes = scenario.frames.filter((frame) => frame.feed === pushFeed)
   return Provider.of({
     poll: Effect.fn("ScenarioProvider.poll")(function* (league: LeagueId) {
       yield* Effect.annotateCurrentSpan("sportal.league", league)
@@ -77,12 +77,8 @@ function played(scenario: Scenario, start: Effect.Effect<DateTime.Utc>) {
 /** `frame` received at `at` instead, the instant it was sent moved with it. */
 function movedTo(frame: FeedFrame, at: DateTime.Utc): FeedFrame {
   const moved = DateTime.distance(frame.receivedAt, at)
-  const { sentAt, ...rest } = frame
-  return {
-    ...rest,
-    receivedAt: at,
-    ...(sentAt === undefined ? {} : { sentAt: DateTime.addDuration(sentAt, moved) })
-  }
+  const sentAt = frame.sentAt === undefined ? undefined : DateTime.addDuration(frame.sentAt, moved)
+  return new FeedFrame({ ...frame, receivedAt: at, sentAt })
 }
 
 /** Polled again at the next of `offsets` (milliseconds from `start`) after now, and at least every `longest`. */
@@ -102,8 +98,8 @@ function pollingAt(offsets: ReadonlyArray<number>, start: Effect.Effect<DateTime
 const longest = 10_000
 
 /**
- * ESPN's spelling, which every scenario is recorded in and played through: `push`, the feed of a push, and `noEvents`,
+ * ESPN's spelling, which every scenario is recorded in and played through: `pushFeed`, the feed of a push, and `noEvents`,
  * an empty scoreboard, answered for a league a scenario never polled.
  */
-const push = "fastcast"
+const pushFeed = "fastcast"
 const noEvents = JSON.stringify({ events: [] })

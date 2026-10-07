@@ -30,14 +30,14 @@ export const summaryUrl = `${site}/summary?event=401872971`
  * Runs `test` against ESPN's archive and the corpus's days over a temporary corpus, with the URLs it requested. Its
  * HTTP is answered by `answer`, given how many times the URL was requested before, and otherwise from the fixtures.
  */
-export function inArchive<A, E>(
-  options: { readonly answer?: (url: string, earlier: number) => Response | undefined },
-  test: (context: {
-    readonly dir: string
-    readonly requests: Effect.Effect<ReadonlyArray<string>>
-  }) => Effect.Effect<A, E, Archiver | CorpusDays | FileSystem.FileSystem | Path.Path>
-) {
-  return Effect.gen(function* () {
+export const inArchive = Effect.fnUntraced(
+  function* <A, E>(
+    options: { readonly answer?: (url: string, earlier: number) => Response | undefined },
+    test: (context: {
+      readonly dir: string
+      readonly requests: Effect.Effect<ReadonlyArray<string>>
+    }) => Effect.Effect<A, E, Archiver | CorpusDays | FileSystem.FileSystem | Path.Path>
+  ) {
     const fs = yield* FileSystem.FileSystem
     const dir = yield* fs.makeTempDirectoryScoped()
     const requests = yield* Ref.make<ReadonlyArray<string>>([])
@@ -66,18 +66,18 @@ export function inArchive<A, E>(
         )
       )
     )
-  }).pipe(Effect.scoped, Effect.provide(NodeServices.layer))
-}
+  },
+  Effect.scoped,
+  Effect.provide(NodeServices.layer)
+)
 
 /** `effect` run to its end, the test clock stepped past each wait: the archive's pacing, and its retries. */
-export function stepped<A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> {
-  return Effect.gen(function* () {
-    const fiber = yield* Effect.forkChild(effect)
-    yield* TestClock.withLive(Effect.sleep("1 millis")).pipe(
-      Effect.andThen(TestClock.adjust("10 seconds")),
-      Effect.andThen(Effect.sync(() => fiber.pollUnsafe())),
-      Effect.repeat({ until: (exit) => exit !== undefined })
-    )
-    return yield* Fiber.join(fiber)
-  })
-}
+export const stepped = Effect.fnUntraced(function* <A, E, R>(effect: Effect.Effect<A, E, R>) {
+  const fiber = yield* Effect.forkChild(effect)
+  yield* TestClock.withLive(Effect.sleep("1 millis")).pipe(
+    Effect.andThen(TestClock.adjust("10 seconds")),
+    Effect.andThen(Effect.sync(() => fiber.pollUnsafe())),
+    Effect.repeat({ until: (exit) => exit !== undefined })
+  )
+  return yield* Fiber.join(fiber)
+})

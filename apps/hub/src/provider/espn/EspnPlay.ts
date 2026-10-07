@@ -1,6 +1,6 @@
 import type { LeagueId } from "@sportal/domain/League"
 import { Play, type PlayOutcome } from "@sportal/domain/Play"
-import { Array as Arr, Effect, Option, Schema, SchemaGetter, type SchemaIssue } from "effect"
+import { Array as Arr, Effect, Option, Predicate, Schema, SchemaGetter } from "effect"
 import { teamId } from "./EspnEvent.ts"
 import { PlayEntity, type PlayFields, PlayType } from "./EspnPayload.ts"
 
@@ -26,14 +26,14 @@ export function FootballPlay(league: LeagueId) {
  * ids, and its win probability. A timeout's team is its `caller`: ESPN's own `team` on one is the team with the ball.
  * It fails when its start spot has no team.
  */
-export function read(
+export const read = Effect.fnUntraced(function* (
   league: LeagueId,
   play: Schema.Struct.Type<ReturnType<typeof PlayFields<Schema.String>>> & {
     readonly team?: string | undefined
     readonly caller?: string | undefined
     readonly homeWinProbability?: number | undefined
   }
-): Effect.Effect<Play, SchemaIssue.Issue> {
+) {
   const outcome = outcomeOf(play.type)
   // ESPN reports down -1, with a meaningless distance, when no down is being played (after a score, at a stoppage).
   const spot = ({ down, distance, yardsToEndzone, team }: typeof play.start) => ({
@@ -60,10 +60,10 @@ export function read(
 
   const wire = Play.gainsYards(outcome)
     ? { ...outcome, ...shared, ...team(play.team), yards: play.statYardage }
-    : { ...outcome, ...shared, ...(outcome._tag === "Timeout" ? team(play.caller) : {}) }
+    : { ...outcome, ...shared, ...(Predicate.isTagged(outcome, "Timeout") ? team(play.caller) : {}) }
 
-  return decodeCase(wire).pipe(Effect.mapError(({ issue }) => issue))
-}
+  return yield* decodeCase(wire).pipe(Effect.mapError(({ issue }) => issue))
+})
 
 /** The types of `entities` that the table does not know, each once. */
 export function unknownTypes(

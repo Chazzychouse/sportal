@@ -74,7 +74,7 @@ describe("ScenarioProvider", () => {
       const inRedZone = yield* tieInRedZone
       const latest = yield* slate.latest
       assert.isTrue(inRedZone)
-      assert.isTrue(latest.seq._tag === "Some", "its frames went through the feed log")
+      assert.isTrue(Option.isSome(latest.seq), "its frames went through the feed log")
     }).pipe(Effect.provide(playing("two-minute-drill-tie")))
   )
 

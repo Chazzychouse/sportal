@@ -1,13 +1,13 @@
 import { readFileSync } from "node:fs"
 import { assert, describe, it, layer } from "@effect/vitest"
-import type { Delivery } from "@sportal/domain/Delivery"
+import { Delivery } from "@sportal/domain/Delivery"
 import { GameId, GameSnapshot } from "@sportal/domain/Game"
 import { LeagueId } from "@sportal/domain/League"
 import { Play, PlayId } from "@sportal/domain/Play"
 import { type Data, DateTime, Effect, Equal, Layer, Metric, Option, Record, Schema } from "effect"
 import type { FeedFrame } from "../../Frame.ts"
 import { recordingLogs, withMetrics } from "../../TestTelemetry.ts"
-import type { DecodeObservation } from "../Decoder.ts"
+import { DecodeObservation } from "../Decoder.ts"
 import { decodedFrames, FramesDecoded } from "../TestDecoder.ts"
 import * as EspnDecoder from "./EspnDecoder.ts"
 import { EspnEvent } from "./EspnEvent.ts"
@@ -79,14 +79,14 @@ layer(EspnDecoder.layer)("EspnDecoder", (it) => {
         assert.deepStrictEqual(
           encoded(
             all.map((output) =>
-              output.delivery._tag === "Listing"
+              Delivery.guards.Listing(output.delivery)
                 ? {
                     seq: output.seq,
                     tag: "Listing",
                     league: output.delivery.league,
                     games: output.delivery.games.map((game) => encode(game))
                   }
-                : output.delivery._tag === "Snapshot"
+                : Delivery.guards.Snapshot(output.delivery)
                   ? {
                       seq: output.seq,
                       tag: "Snapshot",
@@ -117,7 +117,12 @@ layer(EspnDecoder.layer)("EspnDecoder", (it) => {
 
       assert.strictEqual(listing?.seq, 1)
       assert.strictEqual(listing?.delivery._tag, "Listing")
-      assert.strictEqual(listing?.delivery._tag === "Listing" ? listing.delivery.games.length : 0, 16)
+      assert.strictEqual(
+        listing !== undefined && Delivery.guards.Listing(listing.delivery)
+          ? listing.delivery.games.length
+          : 0,
+        16
+      )
     })
   )
 
@@ -125,7 +130,9 @@ layer(EspnDecoder.layer)("EspnDecoder", (it) => {
     Effect.gen(function* () {
       const deliveries = yield* decoded(synced())
 
-      const pushed = deliveries.flatMap(({ delivery }) => (delivery._tag === "Snapshot" ? [delivery] : []))
+      const pushed = deliveries.flatMap(({ delivery }) =>
+        Delivery.guards.Snapshot(delivery) ? [delivery] : []
+      )
       // FastCast has no short names: each pushed game keeps its listed game's.
       const nyg = pushed.find((delivery) => delivery.snapshot.id === "401872966")?.snapshot
       assert.strictEqual(pushed.length, 16)
@@ -150,7 +157,9 @@ layer(EspnDecoder.layer)("EspnDecoder", (it) => {
     () =>
       Effect.gen(function* () {
         const listings = yield* decoded([poll("nfl", scoreboardBody)])
-        const polled = listings.flatMap(({ delivery }) => (delivery._tag === "Listing" ? delivery.games : []))
+        const polled = listings.flatMap(({ delivery }) =>
+          Delivery.guards.Listing(delivery) ? delivery.games : []
+        )
         const live = polled.filter((game) => game.progress() === "live")
 
         const all = yield* decoded([poll("nfl", scoreboardBody), ...recorded(socketTexts)])
@@ -199,7 +208,7 @@ layer(EspnDecoder.layer)("EspnDecoder", (it) => {
         deliveries
           .filter(({ seq }) => seq === 6)
           .flatMap(({ delivery }) =>
-            delivery._tag === "Snapshot"
+            Delivery.guards.Snapshot(delivery)
               ? [[delivery.snapshot.id, delivery.snapshot.away.score, delivery.snapshot.home.score]]
               : []
           ),
@@ -222,7 +231,7 @@ layer(EspnDecoder.layer)("EspnDecoder", (it) => {
 
         // Frames 2–5 are C, S, H, and its checkpoint, so text 21, the first after the gap, is frame 23.
         const snapshotSeqs = deliveries.flatMap(({ seq, delivery }) =>
-          delivery._tag === "Snapshot" ? [seq] : []
+          Delivery.guards.Snapshot(delivery) ? [seq] : []
         )
         assert.strictEqual(count(noted, "Reset", { league: "nfl", reason: "Gap" }), 1)
         assert.isNotEmpty(snapshotSeqs)
@@ -369,7 +378,9 @@ layer(EspnDecoder.layer)("EspnDecoder", (it) => {
         all.flatMap((output) =>
           output.seq === 4
             ? output.deliveries.flatMap((delivery) =>
-                delivery._tag === "Snapshot" ? [[delivery.snapshot.id, delivery.snapshot.away.score]] : []
+                Delivery.guards.Snapshot(delivery)
+                  ? [[delivery.snapshot.id, delivery.snapshot.away.score]]
+                  : []
               )
             : []
         ),
@@ -425,12 +436,14 @@ layer(EspnDecoder.layer)("EspnDecoder", (it) => {
       const { noted } = yield* said([poll("nfl", scoreboardBody), ...recorded(socketTexts)])
 
       const received = noted.flatMap(({ observation }) =>
-        observation._tag === "Received"
+        DecodeObservation.$is("Received")(observation)
           ? [`${Option.getOrElse(observation.league, () => "none")} ${observation.op}`]
           : []
       )
       const pushed = noted.flatMap(({ observation }) =>
-        observation._tag === "Pushed" && observation.league === "nfl" ? [observation.games] : []
+        DecodeObservation.$is("Pushed")(observation) && observation.league === "nfl"
+          ? [observation.games]
+          : []
       )
       assert.deepStrictEqual(
         Object.fromEntries(
@@ -459,7 +472,9 @@ layer(EspnDecoder.layer)("EspnDecoder", (it) => {
 
         const [listing] = deliveries
         assert.strictEqual(
-          listing?.delivery._tag === "Listing" ? listing.delivery.games.length : 0,
+          listing !== undefined && Delivery.guards.Listing(listing.delivery)
+            ? listing.delivery.games.length
+            : 0,
           events.length
         )
         assert.strictEqual(count(noted, "EventUndecoded", { league: "nfl", feed: "poll" }), 1)
@@ -476,7 +491,7 @@ layer(EspnDecoder.layer)("EspnDecoder", (it) => {
       )
       assert.deepStrictEqual(
         noted.flatMap(({ observation, seq }) =>
-          observation._tag === "FrameUndecoded"
+          DecodeObservation.$is("FrameUndecoded")(observation)
             ? [[seq, observation.feed, observation.channel, observation.kind]]
             : []
         ),
@@ -506,7 +521,7 @@ layer(EspnDecoder.layer)("EspnDecoder", (it) => {
             ["40187297063", "401872966237", "401872966271"]
           ])
           assert.deepStrictEqual(
-            deliveries.map(({ delivery }) => (delivery._tag === "Plays" ? delivery.game : undefined)),
+            deliveries.map(({ delivery }) => (Delivery.guards.Plays(delivery) ? delivery.game : undefined)),
             [GameId.make("401872966"), GameId.make("401872966")]
           )
         })
@@ -531,7 +546,7 @@ layer(EspnDecoder.layer)("EspnDecoder", (it) => {
 
         assert.deepStrictEqual(
           deliveries.map(({ delivery }) =>
-            delivery._tag === "Plays" ? delivery.plays.map((play) => play.text) : []
+            Delivery.guards.Plays(delivery) ? delivery.plays.map((play) => play.text) : []
           ),
           [
             [
@@ -573,7 +588,7 @@ layer(EspnDecoder.layer)("EspnDecoder", (it) => {
           const { deliveries, noted } = yield* said(frames)
 
           const penalty =
-            deliveries[1]?.delivery._tag === "Plays"
+            deliveries[1] !== undefined && Delivery.guards.Plays(deliveries[1].delivery)
               ? deliveries[1].delivery.plays.find((play) => play.id === "401872971792")?.text
               : undefined
           assert.isTrue(
@@ -713,10 +728,10 @@ layer(EspnDecoder.layer)("EspnDecoder", (it) => {
         const all = yield* decodedFrames(synced())
 
         const pushing = all.find((one) =>
-          one.observations.some((observation) => observation._tag === "Pushed")
+          one.observations.some((observation) => DecodeObservation.$is("Pushed")(observation))
         )
         assert.strictEqual(pushing?.deliveries.length, 16)
-        assert.isTrue(pushing?.deliveries.every((delivery) => delivery._tag === "Snapshot"))
+        assert.isTrue(pushing?.deliveries.every((delivery) => Delivery.guards.Snapshot(delivery)))
       })
     )
 
@@ -750,9 +765,9 @@ layer(EspnDecoder.layer)("EspnDecoder", (it) => {
         const decoded = yield* FramesDecoded
         const deliveries = decoded.flatMap(({ deliveries }) => deliveries)
         const snapshots = deliveries.flatMap((delivery) =>
-          delivery._tag === "Listing"
+          Delivery.guards.Listing(delivery)
             ? delivery.games
-            : delivery._tag === "Snapshot"
+            : Delivery.guards.Snapshot(delivery)
               ? [delivery.snapshot]
               : []
         )
@@ -774,7 +789,9 @@ layer(EspnDecoder.layer)("EspnDecoder", (it) => {
         Effect.gen(function* () {
           const decoded = yield* FramesDecoded
           const deliveries = decoded.flatMap(({ deliveries }) => deliveries)
-          const plays = deliveries.flatMap((delivery) => (delivery._tag === "Plays" ? delivery.plays : []))
+          const plays = deliveries.flatMap((delivery) =>
+            Delivery.guards.Plays(delivery) ? delivery.plays : []
+          )
 
           const backs = yield* Effect.forEach(plays, (play) =>
             Schema.encodeEffect(playJson)(play).pipe(Effect.flatMap(Schema.decodeEffect(playJson)))
@@ -898,7 +915,7 @@ const decodeEnvelope = Schema.decodeUnknownSync(FastCastMessage.Envelope)
 function lastPushed(deliveries: ReadonlyArray<{ readonly delivery: Delivery }>) {
   return new Map<string, GameSnapshot>(
     deliveries.flatMap(({ delivery }) =>
-      delivery._tag === "Snapshot" ? [[delivery.snapshot.id, delivery.snapshot] as const] : []
+      Delivery.guards.Snapshot(delivery) ? [[delivery.snapshot.id, delivery.snapshot] as const] : []
     )
   )
 }
@@ -923,7 +940,7 @@ function tags(deliveries: ReadonlyArray<{ readonly delivery: Delivery }>) {
 }
 
 function playIds({ delivery }: { readonly delivery: Delivery }) {
-  return delivery._tag === "Plays" ? delivery.plays.map((play) => play.id) : []
+  return Delivery.guards.Plays(delivery) ? delivery.plays.map((play) => play.id) : []
 }
 
 /** The NFL listed, then FastCast's C, S, H, and the H's checkpoint: frames 1 to 5, the scoreboard topic synced. */

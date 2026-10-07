@@ -382,7 +382,7 @@ function waitAfter(slate: ReadonlyArray<GameSnapshot>, failed: ReadonlyArray<Lea
 class PushCloses extends Context.Service<
   PushCloses,
   { readonly closes: Queue.Queue<ProviderUnavailable>; readonly subscriptions: Ref.Ref<number> }
->()("test/PushCloses") {}
+>()("sportal/hub/provider/espn/PushCloses") {}
 
 /** ESPN's provider over a FastCast whose push fails with each close offered, counting each subscription. */
 function closingPush() {

@@ -1,3 +1,4 @@
+import { Delivery } from "@sportal/domain/Delivery"
 import type { LeagueId } from "@sportal/domain/League"
 import { Context, Effect, Layer, Stream } from "effect"
 import { type FeedFrame, Frame } from "../Frame.ts"
@@ -11,7 +12,7 @@ export const listedBy = Effect.fn("TestDecoder.listedBy")(function* (league: Lea
   const said = yield* decodedFrames([polled])
 
   return said.flatMap((one) =>
-    one.deliveries.flatMap((delivery) => (delivery._tag === "Listing" ? delivery.games : []))
+    one.deliveries.flatMap((delivery) => (Delivery.guards.Listing(delivery) ? delivery.games : []))
   )
 })
 

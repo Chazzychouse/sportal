@@ -22,7 +22,7 @@ import {
 } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/http"
 import * as Socket from "effect/socket/Socket"
-import type { FeedFrame } from "../../Frame.ts"
+import { FeedFrame } from "../../Frame.ts"
 import { HubConfig } from "../../HubConfig.ts"
 import { type LiveFeed, LiveFeedDemand, ProviderUnavailable } from "../Provider.ts"
 import * as FastCastMessage from "./FastCastMessage.ts"
@@ -240,13 +240,13 @@ function subscriptions(
  * A socket text as its frame, an `H`'s followed by its checkpoint once it loads and decodes. Either way the `H`'s
  * outcome is handed to `published`; a checkpoint that fails is logged and counted, and only its `H` is framed.
  */
-function framed(
+const framed = Effect.fnUntraced(function* (
   received: { readonly text: string; readonly receivedAt: DateTime.Utc },
   published: (outcome: Result.Result<string, CheckpointUnread>) => Effect.Effect<boolean>
-): Effect.Effect<ReadonlyArray<FeedFrame>, never, HttpClient.HttpClient> {
+) {
   const { text, receivedAt } = received
   const envelope = Option.getOrUndefined(decodeEnvelope(text))
-  const frame: FeedFrame = {
+  const frame = new FeedFrame({
     receivedAt,
     feed: "fastcast",
     channel: envelope?.channel ?? "socket",
@@ -254,38 +254,35 @@ function framed(
     body: text,
     sourceId: envelope?.sourceId,
     sentAt: envelope?.sentAt
-  }
+  })
   if (envelope === undefined) {
-    return Effect.logDebug("FastCast: framed a text of an unknown op", text).pipe(Effect.as([frame]))
+    yield* Effect.logDebug("FastCast: framed a text of an unknown op", text)
+    return [frame]
   }
   const { message } = envelope
-  if (message.op !== "H") return Effect.succeed([frame])
-  return checkpoint(message).pipe(
-    Effect.tap(() => published(Result.succeed(message.tc))),
-    Effect.map((body): ReadonlyArray<FeedFrame> => [frame, { ...frame, kind: "checkpoint", body }]),
-    Effect.catch((error) =>
-      Effect.logWarning(
-        `FastCast: the checkpoint of ${message.tc} at ${message.mid} failed`,
-        error.cause
-      ).pipe(
-        Effect.annotateLogs({ topic: message.tc, reason: error.reason }),
-        Effect.andThen(
-          Metric.update(
-            Metric.withAttributes(
-              checkpointFailures,
-              Record.getSomes({
-                league: Option.map(ownerOf(message.tc), (owner) => owner.league)
-              })
-            ),
-            1
-          )
-        ),
-        Effect.andThen(published(Result.fail(error))),
-        Effect.as([frame])
-      )
-    )
+  if (message.op !== "H") return [frame]
+
+  const loaded = yield* checkpoint(message).pipe(Effect.result)
+  if (Result.isSuccess(loaded)) {
+    yield* published(Result.succeed(message.tc))
+    return [frame, new FeedFrame({ ...frame, kind: "checkpoint", body: loaded.success })]
+  }
+
+  const error = loaded.failure
+  yield* Effect.logWarning(
+    `FastCast: the checkpoint of ${message.tc} at ${message.mid} failed`,
+    error.cause
+  ).pipe(Effect.annotateLogs({ topic: message.tc, reason: error.reason }))
+  yield* Metric.update(
+    Metric.withAttributes(
+      checkpointFailures,
+      Record.getSomes({ league: Option.map(ownerOf(message.tc), (owner) => owner.league) })
+    ),
+    1
   )
-}
+  yield* published(Result.fail(error))
+  return [frame]
+})
 
 /** The body of the checkpoint an `H` points to, as served, once it decodes as its topic's checkpoint. */
 function checkpoint(envelope: { readonly tc: string; readonly pl: string }) {

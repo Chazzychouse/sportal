@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs"
 import { assert, describe, it, layer } from "@effect/vitest"
+import { Delivery } from "@sportal/domain/Delivery"
 import { GameId } from "@sportal/domain/Game"
 import { Play, PlayId } from "@sportal/domain/Play"
 import { TeamId } from "@sportal/domain/Team"
@@ -402,7 +403,7 @@ function lastPushedOf(decoded: ReadonlyArray<Decoded>): ReadonlyArray<Play> {
   const lists = decoded
     .flatMap(({ deliveries }) => deliveries)
     .flatMap((delivery) =>
-      delivery._tag === "Plays" && delivery.game === GameId.make("401872971") ? [delivery.plays] : []
+      Delivery.guards.Plays(delivery) && delivery.game === GameId.make("401872971") ? [delivery.plays] : []
     )
   return lists.at(-1) ?? []
 }

@@ -31,7 +31,7 @@ const PatchesPayload = Schema.Union([
   Schema.fromJsonString(Patches),
   Schema.Uint8ArrayFromBase64.pipe(
     Schema.decodeTo(Schema.String, {
-      decode: SchemaGetter.transformEffect(inflate),
+      decode: SchemaGetter.transformEffect((compressed) => inflate(compressed)),
       encode: SchemaGetter.forbidden(() => "FastCast patches are never compressed again")
     }),
     Schema.decodeTo(Schema.fromJsonString(Patches))
@@ -139,10 +139,11 @@ const GameCheckpoint = Schema.Struct({
   )
 })
 
-function inflate(compressed: Uint8Array): Effect.Effect<string, SchemaIssue.Issue> {
-  return Gzip.decompress(compressed, "deflate").pipe(
+const inflate = Effect.fnUntraced(function* (compressed: Uint8Array) {
+  const text = yield* Gzip.decompress(compressed, "deflate").pipe(
     Effect.mapError(
       (cause) => new SchemaIssue.InvalidValue({ message: `Not zlib-deflated: ${String(cause)}` }, compressed)
     )
   )
-}
+  return text
+})

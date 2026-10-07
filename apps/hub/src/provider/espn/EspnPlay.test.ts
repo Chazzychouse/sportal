@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from "node:fs"
 import { assert, describe, it } from "@effect/vitest"
+import { Delivery } from "@sportal/domain/Delivery"
 import { FootballPlay, Other, type Play, PlayId, Rush } from "@sportal/domain/Play"
 import { TeamId } from "@sportal/domain/Team"
 import { Effect, Schema } from "effect"
@@ -233,7 +234,7 @@ describe("EspnPlay.FootballPlay", () => {
         const decoded = yield* decodedFrames(frames).pipe(Effect.provide(EspnDecoder.layer))
         const pushed = decoded
           .flatMap(({ deliveries }) => deliveries)
-          .flatMap((delivery) => (delivery._tag === "Plays" ? delivery.plays : []))
+          .flatMap((delivery) => (Delivery.guards.Plays(delivery) ? delivery.plays : []))
         const entities = yield* Effect.forEach(Object.values(recorded), (one) => decodePlay(one))
         const summaries = yield* Effect.forEach(
           [

@@ -58,7 +58,7 @@ export function EspnEvent(league: LeagueId) {
 }
 
 /** The snapshot an event says, once each feed's spelling is read into one shape. */
-function snapshot(
+const snapshot = Effect.fnUntraced(function* (
   league: LeagueId,
   event: {
     readonly id: string
@@ -80,11 +80,11 @@ function snapshot(
     readonly broadcasts: ReadonlyArray<{ readonly medium: string; readonly network: string }>
     readonly situation: EspnSituation | undefined
   }
-): Effect.Effect<GameSnapshot, SchemaIssue.Issue> {
+) {
   const home = event.competitors.find((competitor) => competitor.homeAway === "home")
   const away = event.competitors.find((competitor) => competitor.homeAway === "away")
   if (home === undefined || away === undefined) {
-    return Effect.fail(
+    return yield* Effect.fail(
       new SchemaIssue.InvalidValue({ message: "An event needs a home and an away team" }, event)
     )
   }
@@ -105,21 +105,19 @@ function snapshot(
     // ESPN ranks an unranked team 99, which reads as no ranking.
     ...(competitor.rank === undefined || competitor.rank > 25 ? {} : { ranking: competitor.rank })
   })
-  return Effect.succeed(
-    new GameSnapshot({
-      id: GameId.make(event.id),
-      league,
-      kickoff: event.kickoff,
-      status: statusOf(event.status.type),
-      period: event.status.period,
-      clock: event.status.displayClock,
-      home: side(home),
-      away: side(away),
-      broadcasts: event.broadcasts.flatMap(({ medium, network }) => broadcast(medium, network)),
-      ...(event.situation === undefined ? {} : { situation: situation(league, event.situation, home.id) })
-    })
-  )
-}
+  return new GameSnapshot({
+    id: GameId.make(event.id),
+    league,
+    kickoff: event.kickoff,
+    status: statusOf(event.status.type),
+    period: event.status.period,
+    clock: event.status.displayClock,
+    home: side(home),
+    away: side(away),
+    broadcasts: event.broadcasts.flatMap(({ medium, network }) => broadcast(medium, network)),
+    ...(event.situation === undefined ? {} : { situation: situation(league, event.situation, home.id) })
+  })
+})
 
 // ESPN also lists radio, which no source plays.
 function broadcast(medium: string, network: string): Array<Broadcast> {

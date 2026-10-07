@@ -12,13 +12,13 @@ import * as EspnSummary from "./EspnSummary.ts"
 import * as FastCastDocument from "./FastCastDocument.ts"
 
 /**
- * ESPN's decode as the `Decoder`. A poll response is its league's `Listing`. A scoreboard topic's change is a pushed `Snapshot` of each game it touched, advanced to the game
- * its league last listed (FastCast has no short names); a game no listing has is noted `Unlisted` and not delivered. A
- * game topic's change is a `Plays` of the game's whole list, in `Play.order`. A topic whose document was sent back to
- * waiting for a checkpoint is a resync of it. A frame that does not decode is noted `FrameUndecoded` and says no
- * deliveries. Logs and counts nothing.
+ * ESPN's decode as the `Decoder`. A poll response is its league's `Listing`. A scoreboard topic's change is a pushed
+ * `Snapshot` of each game it touched, advanced to the game its league last listed (FastCast has no short names); a
+ * game no listing has is noted `Unlisted` and not delivered. A game topic's change is a `Plays` of the game's whole
+ * list, in `Play.order`. A topic whose document was sent back to waiting for a checkpoint is a resync of it. A frame
+ * that does not decode is noted `FrameUndecoded` and says no deliveries. Logs and counts nothing.
  */
-export const layer = Layer.succeed(
+export const layer: Layer.Layer<Decoder> = Layer.succeed(
   Decoder,
   Decoder.of({
     decode: (frames) =>
@@ -61,112 +61,92 @@ function leagueDecode(league: LeagueId) {
  * Each league's last listing, the FastCast topics' documents, the unknown play types already noted, and the plays
  * already noted as not decoding.
  */
-type State = {
+interface State {
   readonly listings: ReadonlyMap<LeagueId, ReadonlyArray<GameSnapshot>>
   readonly documents: typeof FastCastDocument.empty
   readonly notedTypes: ReadonlySet<string>
   readonly notedPlays: ReadonlySet<string>
 }
 
-function listed(state: State, frame: Frame): Effect.Effect<readonly [State, Decoded]> {
-  return decodeLeague(frame.channel).pipe(
-    Effect.flatMap((league) =>
-      Effect.map(byLeague[league].decodeScoreboard(frame.body), (scoreboard) => ({ league, scoreboard }))
-    ),
-    Effect.flatMap(({ league, scoreboard }) =>
-      gamesOf(league, scoreboard.events, "poll").pipe(
-        Effect.map(
-          ({ games, observed }) =>
-            [
-              { ...state, listings: new Map([...state.listings, [league, games]]) },
-              Decoded.of(frame, {
-                deliveries: [Delivery.cases.Listing.make({ league, games })],
-                observations: observed
-              })
-            ] as const
-        )
-      )
-    ),
-    Effect.catch((cause) => Effect.succeed([state, Decoded.undecodable(frame, cause)] as const))
-  )
-}
+const listed = Effect.fnUntraced(
+  function* (state: State, frame: Frame) {
+    const league = yield* decodeLeague(frame.channel)
+    const scoreboard = yield* byLeague[league].decodeScoreboard(frame.body)
+    const { games, observed } = yield* gamesOf(league, scoreboard.events, "poll")
+
+    const next: State = { ...state, listings: new Map([...state.listings, [league, games]]) }
+    const decoded = Decoded.of(frame, {
+      deliveries: [Delivery.cases.Listing.make({ league, games })],
+      observations: observed
+    })
+    return [next, decoded] as const
+  },
+  (listing, state, frame) =>
+    Effect.catch(listing, (cause) => Effect.succeed([state, Decoded.undecodable(frame, cause)] as const))
+)
 
 const decodeLeague = Schema.decodeUnknownEffect(LeagueId)
 
-function pushed(state: State, frame: Frame): Effect.Effect<readonly [State, Decoded]> {
-  return FastCastDocument.advance(state.documents, frame).pipe(
-    Effect.flatMap(({ documents, change, observed }): Effect.Effect<readonly [State, Decoded]> => {
-      const moved = { ...state, documents }
-      return Option.match(change, {
-        onNone: () => Effect.succeed([moved, Decoded.of(frame, { observations: observed })] as const),
-        onSome: (changed) => {
-          switch (changed._tag) {
-            case "Scoreboard":
-              return gamesOf(changed.league, changed.events, "fastcast").pipe(
-                Effect.map(({ games, observed: undecoded }) => {
-                  const { deliveries, unlisted } = advancedToListed(state.listings, games)
-                  return [
-                    moved,
-                    Decoded.of(frame, {
-                      deliveries,
-                      observations: [
-                        ...observed,
-                        ...undecoded,
-                        DecodeObservation.Pushed({ league: changed.league, games: games.length }),
-                        ...unlisted.map((game) =>
-                          DecodeObservation.Unlisted({ league: game.league, game: game.id })
-                        )
-                      ]
-                    })
-                  ] as const
-                })
-              )
-            case "Game":
-              return playsOf(moved, changed.league, changed.game, changed.plays).pipe(
-                Effect.map(
-                  ({ state: next, observed: notes, plays }) =>
-                    [
-                      next,
-                      Decoded.of(frame, { deliveries: [plays], observations: [...observed, ...notes] })
-                    ] as const
-                )
-              )
-            case "Reset":
-              return Effect.succeed([
-                moved,
-                Decoded.of(frame, { resyncs: [frame.channel], observations: observed })
-              ] as const)
-          }
-        }
-      })
-    }),
-    Effect.catch((cause) => Effect.succeed([state, Decoded.undecodable(frame, cause)] as const))
-  )
-}
+const pushed = Effect.fnUntraced(
+  function* (state: State, frame: Frame) {
+    const { documents, change, observed } = yield* FastCastDocument.advance(state.documents, frame)
+    const moved: State = { ...state, documents }
+    if (Option.isNone(change)) {
+      return [moved, Decoded.of(frame, { observations: observed })] as const
+    }
+
+    const changed = change.value
+    switch (changed._tag) {
+      case "Scoreboard": {
+        const { games, observed: undecoded } = yield* gamesOf(changed.league, changed.events, "fastcast")
+        const { deliveries, unlisted } = advancedToListed(state.listings, games)
+        const unlistedNotes = unlisted.map((game) =>
+          DecodeObservation.Unlisted({ league: game.league, game: game.id })
+        )
+        const decoded = Decoded.of(frame, {
+          deliveries,
+          observations: [
+            ...observed,
+            ...undecoded,
+            DecodeObservation.Pushed({ league: changed.league, games: games.length }),
+            ...unlistedNotes
+          ]
+        })
+        return [moved, decoded] as const
+      }
+      case "Game": {
+        const played = yield* playsOf(moved, changed.league, changed.game, changed.plays)
+        const decoded = Decoded.of(frame, {
+          deliveries: [played.plays],
+          observations: [...observed, ...played.observed]
+        })
+        return [played.state, decoded] as const
+      }
+      case "Reset":
+        return [moved, Decoded.of(frame, { resyncs: [frame.channel], observations: observed })] as const
+    }
+  },
+  (advancing, state, frame) =>
+    Effect.catch(advancing, (cause) => Effect.succeed([state, Decoded.undecodable(frame, cause)] as const))
+)
 
 /** The events as games; an event that does not decode is noted and skipped, and the rest still delivered. */
-function gamesOf(
+const gamesOf = Effect.fnUntraced(function* (
   league: LeagueId,
   events: ReadonlyArray<unknown>,
   feed: FeedFrame["feed"]
-): Effect.Effect<{
-  readonly games: ReadonlyArray<GameSnapshot>
-  readonly observed: ReadonlyArray<DecodeObservation>
-}> {
-  return Effect.forEach(events, (event) =>
+) {
+  const decoded = yield* Effect.forEach(events, (event) =>
     byLeague[league].decodeEvent(event).pipe(
       Effect.map(Result.succeed),
       Effect.catch((cause) =>
         Effect.succeed(Result.fail(DecodeObservation.EventUndecoded({ league, feed, cause })))
       )
     )
-  ).pipe(
-    Effect.map((decoded) => {
-      const [games, observed] = Arr.separate(decoded)
-      return { games, observed }
-    })
   )
-}
+  const [games, observed] = Arr.separate(decoded)
+  return { games, observed }
+})
 
 /** Each pushed game as its league's listed game advanced to it; a game no listing has is unlisted. */
 function advancedToListed(
@@ -192,41 +172,37 @@ function advancedToListed(
  * The game's plays, in `Play.order`. A play that does not decode is skipped, and noted the first time; a play type
  * the table does not know is noted once.
  */
-function playsOf(
+const playsOf = Effect.fnUntraced(function* (
   state: State,
   league: LeagueId,
   game: GameId,
   entities: Readonly<Record<string, Schema.Json>>
-): Effect.Effect<{
-  readonly state: State
-  readonly observed: ReadonlyArray<DecodeObservation>
-  readonly plays: Delivery
-}> {
+) {
   const unknown = EspnPlay.unknownTypes(Record.values(entities)).filter(
     (type) => !state.notedTypes.has(type.id)
   )
-  return Effect.forEach(Record.toEntries(entities), ([id, entity]) =>
+  const decoded = yield* Effect.forEach(Record.toEntries(entities), ([id, entity]) =>
     byLeague[league].decodePlay(entity).pipe(
       Effect.map(Result.succeed),
       Effect.catch((cause) => Effect.succeed(Result.fail({ id, cause })))
     )
-  ).pipe(
-    Effect.map((decoded) => {
-      const [plays, skipped] = Arr.separate(decoded)
-      return {
-        state: {
-          ...state,
-          notedTypes: new Set([...state.notedTypes, ...unknown.map((type) => type.id)]),
-          notedPlays: new Set([...state.notedPlays, ...skipped.map(({ id }) => id)])
-        },
-        observed: [
-          ...skipped
-            .filter(({ id }) => !state.notedPlays.has(id))
-            .map(({ id, cause }) => DecodeObservation.PlayUndecoded({ league, game, play: id, cause })),
-          ...unknown.map((type) => DecodeObservation.PlayTypeUnknown(type))
-        ],
-        plays: Delivery.cases.Plays.make({ game, plays: plays.toSorted(Play.order) })
-      }
-    })
   )
-}
+  const [plays, skipped] = Arr.separate(decoded)
+
+  const next: State = {
+    ...state,
+    notedTypes: new Set([...state.notedTypes, ...unknown.map((type) => type.id)]),
+    notedPlays: new Set([...state.notedPlays, ...skipped.map(({ id }) => id)])
+  }
+  const observed = [
+    ...skipped
+      .filter(({ id }) => !state.notedPlays.has(id))
+      .map(({ id, cause }) => DecodeObservation.PlayUndecoded({ league, game, play: id, cause })),
+    ...unknown.map((type) => DecodeObservation.PlayTypeUnknown(type))
+  ]
+  return {
+    state: next,
+    observed,
+    plays: Delivery.cases.Plays.make({ game, plays: plays.toSorted(Play.order) })
+  }
+})

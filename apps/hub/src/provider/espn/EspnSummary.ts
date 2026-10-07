@@ -12,15 +12,15 @@ import * as EspnPlay from "./EspnPlay.ts"
 export function SummaryPlays(league: LeagueId) {
   return Summary.pipe(
     Schema.decodeTo(Read, {
-      decode: SchemaGetter.transformEffect(({ drives, winprobability }) => {
-        const probabilities = new Map(
-          (winprobability ?? []).map(({ playId, homeWinPercentage }) => [playId, homeWinPercentage])
-        )
-        const wallclocked = (drives?.previous ?? [])
-          .flatMap((drive) => drive.plays ?? [])
-          .flatMap(({ wallclock, ...play }) => (wallclock === undefined ? [] : [{ play, wallclock }]))
+      decode: SchemaGetter.transformEffect(
+        Effect.fnUntraced(function* ({ drives, winprobability }) {
+          const probabilities = new Map(
+            (winprobability ?? []).map(({ playId, homeWinPercentage }) => [playId, homeWinPercentage])
+          )
+          const wallclocked = (drives?.previous ?? [])
+            .flatMap((drive) => drive.plays ?? [])
+            .flatMap(({ wallclock, ...play }) => (wallclock === undefined ? [] : [{ play, wallclock }]))
 
-        return Effect.gen(function* () {
           const read = yield* Effect.forEach(wallclocked, ({ play, wallclock }) =>
             Effect.map(
               EspnPlay.read(league, {
@@ -44,7 +44,7 @@ export function SummaryPlays(league: LeagueId) {
 
           return read.toSorted((a, b) => Play.order(a.play, b.play))
         })
-      }),
+      ),
       encode: SchemaGetter.forbidden(() => "Plays cannot be encoded back to an ESPN game summary")
     })
   )
