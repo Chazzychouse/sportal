@@ -1,8 +1,8 @@
 import { describe, expect, it } from "@effect/vitest"
-import { Context, Effect, Layer, Logger } from "effect"
+import { Context, Effect, Layer } from "effect"
 import { afterEach, vi } from "vitest"
+import { fakeContents, navigation } from "./TestWebContents.ts"
 
-const ui = "http://127.0.0.1:4401"
 const providerSession = { setPermissionRequestHandler: vi.fn() }
 const windows: Array<{
   options: { width: number; height: number; parent?: unknown; webPreferences: Record<string, unknown> }
@@ -11,12 +11,14 @@ const windows: Array<{
   focus: ReturnType<typeof vi.fn>
   close: ReturnType<typeof vi.fn>
 }> = []
+/** What the next sign-in window's load fails with; none loads. */
+let loadFailure: Error | undefined
 
 vi.mock("electron", () => ({
   session: { fromPartition: vi.fn(() => providerSession) },
   WebContentsView: vi.fn(),
   BrowserWindow: class {
-    readonly webContents = fakeContents()
+    readonly webContents = fakeContents(() => (loadFailure ? Promise.reject(loadFailure) : Promise.resolve()))
     destroyed = false
     readonly focus = vi.fn()
     readonly close = vi.fn(() => {
@@ -44,14 +46,21 @@ vi.mock("electron", () => ({
 }))
 
 const { ProviderSession } = await import("./ProviderSession.ts")
-const { ShellConfig } = await import("./ShellConfig.ts")
-const { ShellWindow } = await import("./ShellWindow.ts")
+const { shellOf } = await import("./TestShell.ts")
+const { BrowserWindow } = await import("electron")
+const shell = new BrowserWindow()
 
 describe("ProviderSession.openSignIn", () => {
-  it.effect("opens a window on the shared provider session at YouTube TV, without a preload", () =>
+  afterEach(() => {
+    loadFailure = undefined
+  })
+
+  it.effect("should open a window on the shared provider session at YouTube TV, without a preload", () =>
     Effect.gen(function* () {
       const providers = yield* built()
+
       yield* providers.openSignIn
+
       expect(windows).toHaveLength(1)
       const [signIn] = windows
       expect(signIn?.options.webPreferences).toEqual({
@@ -66,76 +75,101 @@ describe("ProviderSession.openSignIn", () => {
     }).pipe(Effect.scoped)
   )
 
-  it.effect("makes the window a child of the shell window, so it closes with it", () =>
+  it.effect("should make the window a child of the shell window, so it closes with it", () =>
     Effect.gen(function* () {
       const providers = yield* built()
+
       yield* providers.openSignIn
+
       expect(windows[0]?.options.parent).toBe(shell)
     }).pipe(Effect.scoped)
   )
 
-  it.effect("confines the window to the provider's addresses", () =>
+  it.effect("should refuse a navigation in the window off the provider's addresses", () =>
     Effect.gen(function* () {
       const providers = yield* built()
       yield* providers.openSignIn
       const refused = navigation("https://evil.example/", true)
+
       windows[0]?.webContents.emit("will-navigate", refused)
+
       expect(refused.preventDefault).toHaveBeenCalled()
+    }).pipe(Effect.scoped)
+  )
+
+  it.effect("should let a navigation in the window to the provider's sign-in through", () =>
+    Effect.gen(function* () {
+      const providers = yield* built()
+      yield* providers.openSignIn
       const allowed = navigation("https://accounts.google.com/signin", true)
+
       windows[0]?.webContents.emit("will-navigate", allowed)
+
       expect(allowed.preventDefault).not.toHaveBeenCalled()
     }).pipe(Effect.scoped)
   )
 
-  it.effect("focuses the open window instead of opening a second", () =>
+  it.effect("should focus the open window instead of opening a second", () =>
     Effect.gen(function* () {
       const providers = yield* built()
       yield* providers.openSignIn
+
       yield* providers.openSignIn
+
       expect(windows).toHaveLength(1)
       expect(windows[0]?.focus).toHaveBeenCalledTimes(1)
     }).pipe(Effect.scoped)
   )
 
-  it.effect("opens a new window once the user has closed the last", () =>
+  it.effect("should open a new window once the user has closed the last", () =>
     Effect.gen(function* () {
       const providers = yield* built()
       yield* providers.openSignIn
       if (windows[0]) windows[0].destroyed = true
+
       yield* providers.openSignIn
+
       expect(windows).toHaveLength(2)
     }).pipe(Effect.scoped)
   )
 
-  it.effect("closes an open window when the layer is released", () =>
+  it.effect("should keep an open window open while the layer lives", () =>
     Effect.gen(function* () {
-      yield* Effect.scoped(
-        Effect.gen(function* () {
-          const providers = yield* built()
-          yield* providers.openSignIn
-          expect(windows[0]?.close).not.toHaveBeenCalled()
-        })
-      )
+      const providers = yield* built()
+
+      yield* providers.openSignIn
+
+      expect(windows[0]?.close).not.toHaveBeenCalled()
+    }).pipe(Effect.scoped)
+  )
+
+  it.effect("should close an open window when the layer is released", () =>
+    Effect.gen(function* () {
+      const opened = Effect.gen(function* () {
+        const providers = yield* built()
+        yield* providers.openSignIn
+      })
+
+      yield* Effect.scoped(opened)
+
       expect(windows[0]?.close).toHaveBeenCalled()
     })
   )
 
-  it.effect("logs a failed load by its code, never its message", () =>
+  it.effect("should log a failed load by its code, never its message", () =>
     Effect.gen(function* () {
       const logs: Array<string> = []
       const providers = yield* built(logs)
       loadFailure = Object.assign(new Error("ERR_FAILED loading 'https://tv.youtube.com/?t=1'"), {
         code: "ERR_FAILED"
       })
+
       yield* providers.openSignIn
       yield* Effect.yieldNow
+
       expect(logs).toEqual(["ProviderSession: the sign-in window did not load: ERR_FAILED"])
     }).pipe(Effect.scoped)
   )
-
-  afterEach(() => {
-    loadFailure = undefined
-  })
 })
 
 describe("ProviderSession.allows", () => {
@@ -144,8 +178,10 @@ describe("ProviderSession.allows", () => {
     "https://www.youtube.com/",
     "https://accounts.youtube.com/",
     "https://accounts.google.com/signin"
-  ])("allows %s", (url) => {
-    expect(allowed(url)).toBe(true)
+  ])("should allow %s", (url) => {
+    const allows = allowed(url)
+
+    expect(allows).toBe(true)
   })
 
   it.each([
@@ -156,15 +192,19 @@ describe("ProviderSession.allows", () => {
     "https://tv.youtube.com.evil.com/",
     "https://tv.youtube.com@evil.com/",
     "not a url"
-  ])("refuses %s", (url) => {
-    expect(allowed(url)).toBe(false)
+  ])("should refuse %s", (url) => {
+    const allows = allowed(url)
+
+    expect(allows).toBe(false)
   })
 
   it.each([
     "http://127.0.0.1:4401/scenario-stream/401856707",
     "http://127.0.0.1:4401/scenario-stream/tie-uga-ala"
-  ])("allows the UI's own scenario stream %s", (url) => {
-    expect(allowed(url)).toBe(true)
+  ])("should allow the UI's own scenario stream %s", (url) => {
+    const allows = allowed(url)
+
+    expect(allows).toBe(true)
   })
 
   it.each([
@@ -175,25 +215,37 @@ describe("ProviderSession.allows", () => {
     "http://127.0.0.1:4402/scenario-stream/1",
     "http://localhost:4401/scenario-stream/1",
     "https://evil.example/scenario-stream/1"
-  ])("refuses %s, which is not the UI's scenario stream", (url) => {
-    expect(allowed(url)).toBe(false)
+  ])("should refuse %s, which is not the UI's scenario stream", (url) => {
+    const allows = allowed(url)
+
+    expect(allows).toBe(false)
   })
 })
 
 describe("ProviderSession permission requests", () => {
-  it.each(["mediaKeySystem", "fullscreen", "screen-wake-lock"])("grants %s", (permission) => {
-    expect(granted(permission)).toBe(true)
+  it.each(["mediaKeySystem", "fullscreen", "screen-wake-lock"])("should grant %s", (permission) => {
+    const answer = granted(permission)
+
+    expect(answer).toBe(true)
   })
 
   it.each(["media", "geolocation", "notifications", "clipboard-read", "openExternal", "unknown"])(
-    "denies %s",
+    "should deny %s",
     (permission) => {
-      expect(granted(permission)).toBe(false)
+      const answer = granted(permission)
+
+      expect(answer).toBe(false)
     }
   )
 })
 
-let loadFailure: Error | undefined
+/** The provider session over the mocked shell window, with every log's message pushed to `logs`. */
+function built(logs: Array<string> = []) {
+  windows.length = 0
+  return Layer.build(ProviderSession.layer.pipe(Layer.provide(shellOf(shell, logs)))).pipe(
+    Effect.map((context) => Context.get(context, ProviderSession))
+  )
+}
 
 function allowed(url: string) {
   return Effect.runSync(
@@ -221,46 +273,4 @@ function granted(permission: string) {
     )
   )
   return answers[0]
-}
-
-const { BrowserWindow } = await import("electron")
-const shell = new BrowserWindow()
-
-function navigation(url: string, isMainFrame: boolean) {
-  return { url, isMainFrame, preventDefault: vi.fn() }
-}
-
-/** A page's contents that records its listeners, so a test can `emit` what Electron would. */
-function fakeContents() {
-  const listeners = new Map<string, Array<(details: ReturnType<typeof navigation>) => void>>()
-  let openHandler: () => unknown = () => undefined
-  return {
-    loadURL: vi.fn(() => (loadFailure ? Promise.reject(loadFailure) : Promise.resolve())),
-    on: (event: string, listener: (details: ReturnType<typeof navigation>) => void) => {
-      listeners.set(event, [...(listeners.get(event) ?? []), listener])
-    },
-    setWindowOpenHandler: (handler: () => unknown) => {
-      openHandler = handler
-    },
-    emit: (event: string, details: ReturnType<typeof navigation>) => {
-      for (const listener of listeners.get(event) ?? []) listener(details)
-    },
-    openWindow: () => openHandler()
-  }
-}
-
-function built(logs: Array<string> = []) {
-  windows.length = 0
-  const capture = Logger.make<unknown, void>(({ message }) => {
-    logs.push(String(Array.isArray(message) ? message[0] : message))
-  })
-  return Layer.build(
-    ProviderSession.layer.pipe(
-      Layer.provide([
-        Layer.succeed(ShellConfig, ShellConfig.of({ hubUrl: ui })),
-        Layer.succeed(ShellWindow, shell),
-        Logger.layer([capture])
-      ])
-    )
-  ).pipe(Effect.map((context) => Context.get(context, ProviderSession)))
 }
