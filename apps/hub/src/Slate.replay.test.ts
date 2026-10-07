@@ -511,7 +511,8 @@ describe("a recorded game", () => {
         assert.include(summary?.message, ` ${played} plays`, "and the replay took each play live did")
       }).pipe(Effect.provide(layer))
     },
-    { timeout: 60_000 }
+    // The recorded day five and a half times over, two of them live: well over a minute beside the rest of the suite.
+    { timeout: 120_000 }
   )
 
   it.effect(
