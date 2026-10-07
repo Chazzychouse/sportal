@@ -389,7 +389,7 @@ class LiveSlate extends Context.Service<LiveSlate, {
   readonly latest: Effect<Slate>
   readonly changes: Stream<Slate>                    // seq or reached alone is not a change
   readonly events: Stream<GameEvent>
-  readonly resyncs: Stream<string>                   // each channel a frame taken live asked to resync; subscribed once made a pull
+  readonly resyncs: Effect<Stream<string>, never, Scope>  // subscribes at once: each channel a frame taken live asks to resync
   readonly published: Effect<Published>              // the listed games and their recent plays, debounced 250 ms
   readonly publishedChanges: Stream<Published>
   through(seq: number): Effect<Slate>                // the slate once it has taken frame `seq`, or the latest once Halted

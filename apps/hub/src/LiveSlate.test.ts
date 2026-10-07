@@ -271,44 +271,21 @@ describe("LiveSlate#through", () => {
 })
 
 describe("LiveSlate#resyncs", () => {
-  it.effect("should emit each resync a live frame asks for", () =>
-    Effect.gen(function* () {
-      const slate = yield* LiveSlate
-      const resyncs = yield* slate.resyncs.pipe(
-        Stream.take(2),
-        Stream.runCollect,
-        Effect.forkScoped({ startImmediately: true })
-      )
-      const first = yield* pushed({ _tag: "Resync" }, "first-topic")
-      const second = yield* pushed({ _tag: "Resync" }, "second-topic")
+  it.effect(
+    "should emit each resync a live frame asks for from when it subscribed, however late it is run",
+    () =>
+      Effect.gen(function* () {
+        const slate = yield* LiveSlate
+        const resyncs = yield* slate.resyncs
+        const first = yield* pushed({ _tag: "Resync" }, "first-topic")
+        const second = yield* pushed({ _tag: "Resync" }, "second-topic")
 
-      yield* appended(first)
-      yield* appended(second)
-      const channels = yield* Fiber.join(resyncs)
+        yield* appended(first)
+        yield* appended(second)
+        const channels = yield* resyncs.pipe(Stream.take(2), Stream.runCollect)
 
-      assert.deepStrictEqual(channels, ["first-topic", "second-topic"])
-    }).pipe(Effect.provide(slateFollowing()))
-  )
-
-  it.effect("should emit no resync during replay", () =>
-    Effect.gen(function* () {
-      const slate = yield* LiveSlate
-      const resyncs = yield* slate.resyncs.pipe(
-        Stream.take(1),
-        Stream.runCollect,
-        Effect.forkScoped({ startImmediately: true })
-      )
-      const live = yield* pushed({ _tag: "Resync" }, "live-topic")
-
-      yield* appended(live)
-      const channels = yield* Fiber.join(resyncs)
-
-      assert.deepStrictEqual(channels, ["live-topic"])
-    }).pipe(
-      Effect.provide(
-        slateFollowingFramesFrom(Effect.map(pushed({ _tag: "Resync" }, "replayed-topic"), (frame) => [frame]))
-      )
-    )
+        assert.deepStrictEqual(channels, ["first-topic", "second-topic"])
+      }).pipe(Effect.provide(slateFollowing()))
   )
 })
 
@@ -1282,6 +1259,22 @@ describe("LiveSlate following the feed log", () => {
       assert.isTrue(Exit.hasDies(built))
     })
   )
+
+  it.effect("should log nothing at Error from the slate when a decode dies during replay", () => {
+    const { logs, layer } = recordingLogs("Debug")
+    return Effect.gen(function* () {
+      yield* Layer.build(
+        slateFollowingFramesFrom(
+          Effect.map(dyingFrame, (frame) => [frame]),
+          { decoder: dyingDecoder }
+        ).pipe(Layer.provideMerge(layer))
+      ).pipe(Effect.scoped, Effect.exit)
+
+      const errors = logs.filter(({ level, message }) => level === "Error" && message.includes("LiveSlate:"))
+
+      assert.deepStrictEqual(errors, [])
+    })
+  })
 
   describe("the game day", () => {
     it.effect("should start the replay at yesterday's 04:00 before 04:00", () =>

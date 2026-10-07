@@ -11,11 +11,13 @@ import {
   Duration,
   Effect,
   Equal,
+  Exit,
   Fiber,
   Layer,
   Option,
   PubSub,
   Ref,
+  type Scope,
   Stream,
   SubscriptionRef
 } from "effect"
@@ -37,11 +39,10 @@ export class LiveSlate extends Context.Service<
     readonly changes: Stream.Stream<Slate>
     readonly events: Stream.Stream<GameEvent>
     /**
-     * Each channel a frame taken live asked to resync, as the frame was taken; a replayed frame's are not emitted. It is
-     * subscribed to once it is made a pull (`Stream.toPull`), not when first read, so a reader can subscribe to it before
-     * it reads anything else.
+     * Subscribes at once, for as long as the scope is open: the stream is each channel a frame taken live asked to resync
+     * from then on, as the frame was taken, however late it is run. A replayed frame's are never published.
      */
-    readonly resyncs: Stream.Stream<string>
+    readonly resyncs: Effect.Effect<Stream.Stream<string>, never, Scope.Scope>
     /**
      * The slate once it has taken frame `seq`, or the latest once it has halted following the log, so a slate that takes
      * no more frames never keeps its caller waiting.
@@ -178,15 +179,26 @@ export class LiveSlate extends Context.Service<
                 : take(decoded)
             )
           ),
-          // A decode defect, or the log's stream ending, halts the following, logged first.
-          HubStopping.loggedUnlessStopping(
-            "LiveSlate: frames are no longer taken into the slate until the Hub restarts",
-            "the log's stream ended"
-          ),
+          // A decode defect, or the log's stream ending, halts the following, logged first if it was live.
           Effect.onExitIf(
             (exit) => !HubStopping.isStopping(exit),
-            () =>
-              SubscriptionRef.update(state, (followed) => ({ ...followed, following: Following.Halted() }))
+            (exit) =>
+              SubscriptionRef.get(state).pipe(
+                Effect.flatMap(({ following }) =>
+                  Following.$is("Live")(following)
+                    ? Effect.logError(
+                        "LiveSlate: frames are no longer taken into the slate until the Hub restarts",
+                        Exit.isFailure(exit) ? exit.cause : "the log's stream ended"
+                      )
+                    : Effect.void
+                ),
+                Effect.andThen(
+                  SubscriptionRef.update(state, (followed) => ({
+                    ...followed,
+                    following: Following.Halted()
+                  }))
+                )
+              )
           ),
           Effect.forkScoped
         )
@@ -261,7 +273,7 @@ export class LiveSlate extends Context.Service<
           latest,
           changes,
           events: Stream.fromPubSub(events),
-          resyncs: subscribedOnPull(resyncs),
+          resyncs: Effect.map(PubSub.subscribe(resyncs), Stream.fromSubscription),
           through,
           published: SubscriptionRef.get(publication),
           publishedChanges: SubscriptionRef.changes(publication)
@@ -272,14 +284,6 @@ export class LiveSlate extends Context.Service<
 
 /** What the slate publishes to the live stream: the listed games and their recent plays. */
 export type Published = { readonly games: ReadonlyArray<GameSnapshot>; readonly recentPlays: RecentPlays }
-
-/** What is published to `pubsub` from the moment the stream is made a pull, rather than from its first read. */
-function subscribedOnPull<A>(pubsub: PubSub.PubSub<A>): Stream.Stream<A> {
-  const subscribed = Effect.flatMap(PubSub.subscribe(pubsub), (subscription) =>
-    Stream.toPull(Stream.fromSubscription(subscription))
-  )
-  return Stream.scoped(Stream.fromPull(subscribed))
-}
 
 // How long the timer waits after a defect before it tries again.
 const timerBackoff = Duration.seconds(1)

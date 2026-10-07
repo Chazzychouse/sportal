@@ -94,11 +94,9 @@ export const layer: Layer.Layer<never, never, HubConfig | Provider | FeedLog | L
 const demandOf = Effect.fnUntraced(function* (slate: LiveSlate["Service"]) {
   // Subscribed to the resyncs before the first games are peeled off, so the games come first and every resync after
   // them is in the demand.
-  const resyncs = yield* Stream.toPull(slate.resyncs)
+  const resyncs = yield* slate.resyncs
   const [first, rest] = yield* Stream.peel(currentGames(slate.changes), Sink.head())
-  const resynced = Stream.fromPull(Effect.succeed(resyncs)).pipe(
-    Stream.map((channel) => LiveFeedDemand.Resync({ channel }))
-  )
+  const resynced = Stream.map(resyncs, (channel) => LiveFeedDemand.Resync({ channel }))
   return Stream.fromIterable(Option.toArray(first)).pipe(Stream.concat(Stream.merge(rest, resynced)))
 })
 
