@@ -1,6 +1,6 @@
 import type { GameId } from "@sportal/domain/Game"
 import { useEffect } from "react"
-import { Field } from "./game/Field.tsx"
+import { Field, noPlays } from "./game/Field.tsx"
 import { useLive } from "./hub/HubRuntime.ts"
 import { ScenarioStrip } from "./ScenarioStrip.tsx"
 
@@ -23,10 +23,17 @@ export function ScenarioStream(props: { game: GameId }) {
         <>
           <ScenarioStrip game={game} />
           <figure className="flex min-h-0 flex-1 flex-col items-center gap-[2vmin] px-[4vmin] pb-[2vmin]">
-            <Field game={game} plays={recentPlays[game.id] ?? []} className="min-h-0 w-full flex-1" />
-            <figcaption className="text-center text-[3.5vmin] opacity-80">
-              {game.situation?.lastPlay}
-            </figcaption>
+            <Field
+              key={game.id}
+              game={game}
+              plays={recentPlays[game.id] ?? noPlays}
+              className="min-h-0 w-full flex-1"
+            />
+            {game.situation?.lastPlay !== undefined && (
+              <figcaption className="text-center text-[3.5vmin] opacity-80">
+                {game.situation.lastPlay}
+              </figcaption>
+            )}
           </figure>
         </>
       )}

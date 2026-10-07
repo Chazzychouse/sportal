@@ -386,3 +386,17 @@ describe("GameSnapshot#ball", () => {
     assert.isTrue(Option.isNone(snapshot({ situation: situation({ possession: undefined }) }).ball()))
   })
 })
+
+describe("GameSnapshot#inPlay", () => {
+  it("is live with time on the clock, or in a college overtime", () => {
+    assert.isTrue(snapshot({ status: "live", period: 2, clock: "4:12" }).inPlay())
+    assert.isTrue(snapshot({ status: "live", period: 5, clock: "0:00" }).inPlay())
+  })
+
+  it("is not at halftime, between periods, before kickoff, or after the final", () => {
+    assert.isFalse(snapshot({ status: "halftime", period: 2, clock: "0:00" }).inPlay())
+    assert.isFalse(snapshot({ status: "live", period: 1, clock: "0:00" }).inPlay())
+    assert.isFalse(snapshot({ status: "scheduled" }).inPlay())
+    assert.isFalse(snapshot({ status: "final", period: 4, clock: "0:00" }).inPlay())
+  })
+})

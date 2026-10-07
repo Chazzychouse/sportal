@@ -171,6 +171,14 @@ export class GameSnapshot extends Schema.Class<GameSnapshot>("sportal/GameSnapsh
     return Option.none()
   }
 
+  /**
+   * Whether the game is being played right now: live, with time left on a timed period's clock. Halftime, the break
+   * between periods, and everything before kickoff or after the final are not.
+   */
+  inPlay(): boolean {
+    return this.status === "live" && !(this.timed() && this.secondsLeft() === 0)
+  }
+
   /** Where the ball is: the spot of the situation's team with the ball, at its yard line. */
   ball(): Option.Option<BallSpot> {
     return this.spotOf({ team: this.situation?.possession, yardsToEndzone: this.situation?.yardLine })

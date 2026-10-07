@@ -1,5 +1,5 @@
 import type { BallSpot, GameSnapshot } from "@sportal/domain/Game"
-import { Play } from "@sportal/domain/Play"
+import { Play, type PlayId } from "@sportal/domain/Play"
 import type { Situation } from "@sportal/domain/Situation"
 import type { Team, TeamId } from "@sportal/domain/Team"
 import { Data, Option } from "effect"
@@ -9,8 +9,9 @@ import { cn } from "@/design/ClassName"
 /**
  * A game's field from above, one SVG in yards: the end zones in their teams' colors, the ball and the lines of its
  * situation, and each new play drawn as an arrow from where it started to where it ended, one after another. The
- * plays on hand when it first draws are taken as drawn. With no ball on the field it is dimmed and shows no ball.
- * The away team defends the left end zone and the home team the right.
+ * plays on hand when it first draws are taken as drawn, and so are all of them again when the plays go back to an
+ * earlier sequence (the feed started over). Out of play, or with no ball on the field, it is dimmed and shows no
+ * ball. The away team defends the left end zone and the home team the right.
  */
 export function Field(props: { game: GameSnapshot; plays: ReadonlyArray<Play>; className?: string }) {
   const { game, plays } = props
@@ -18,7 +19,7 @@ export function Field(props: { game: GameSnapshot; plays: ReadonlyArray<Play>; c
     Drawing.Settled({ last: Math.max(-1, ...initial.map((play) => play.sequence)) })
   )
   useEffect(() => dispatch({ _tag: "Arrived", plays, game }), [plays, game])
-  const ball = game.ball()
+  const ball = game.inPlay() ? game.ball() : Option.none()
   const situation = game.situation
   return (
     <svg
@@ -78,13 +79,16 @@ export function Field(props: { game: GameSnapshot; plays: ReadonlyArray<Play>; c
             game={game}
             plays={plays}
             play={play}
-            onDrawn={() => dispatch({ _tag: "Drawn", game })}
+            onDrawn={() => dispatch({ _tag: "Drawn", play: play.id, game })}
           />
         )
       })}
     </svg>
   )
 }
+
+/** No plays yet: one array for every game without any, so a `plays` prop keeps its identity between renders. */
+export const noPlays: ReadonlyArray<Play> = []
 
 /** The field's length and width in yards, end line to end line and sideline to sideline. */
 const length = 120
@@ -110,10 +114,12 @@ function step(
   drawing: Drawing,
   event:
     | { readonly _tag: "Arrived"; readonly plays: ReadonlyArray<Play>; readonly game: GameSnapshot }
-    | { readonly _tag: "Drawn"; readonly game: GameSnapshot }
+    | { readonly _tag: "Drawn"; readonly play: PlayId; readonly game: GameSnapshot }
 ): Drawing {
   switch (event._tag) {
     case "Arrived": {
+      const newestSent = Math.max(-1, ...event.plays.map((play) => play.sequence))
+      if (newestSent < drawing.last) return Drawing.Settled({ last: newestSent })
       const fresh = event.plays.filter((play) => play.sequence > drawing.last).toSorted(Play.order)
       const newest = fresh.at(-1)
       if (newest === undefined) return drawing
@@ -126,7 +132,8 @@ function step(
     case "Drawn":
       return Drawing.$match(drawing, {
         Settled: () => drawing,
-        Drawing: ({ queued, last }) => nextOf(queued, last, event.game)
+        Drawing: ({ play, queued, last }) =>
+          play.id === event.play ? nextOf(queued, last, event.game) : drawing
       })
   }
 }
@@ -205,8 +212,14 @@ function PlayArrow(props: {
   play: Play
   onDrawn: () => void
 }) {
-  const { game, play } = props
-  return Option.match(spotsOf(game, play), {
+  const { game, play, onDrawn } = props
+  const spots = spotsOf(game, play)
+  const missing = Option.isNone(spots)
+  // A play dequeued with both spots always has them, but should one go missing no animation would end the play.
+  useEffect(() => {
+    if (missing) onDrawn()
+  }, [missing, onDrawn])
+  return Option.match(spots, {
     onNone: () => null,
     onSome: ({ start, end }) => {
       const scorer = play.scoring ? scorerOf(game, props.plays, play) : undefined
@@ -219,6 +232,8 @@ function PlayArrow(props: {
               width={10}
               height={width}
               fill={colorOf(scorer, "var(--foreground)")}
+              stroke="var(--foreground)"
+              strokeWidth={0.5}
               style={{ animation: `field-flash ${drawSeconds}s ease-in-out both` }}
             />
           )}
@@ -231,7 +246,7 @@ function PlayArrow(props: {
             strokeLinecap="round"
             strokeDasharray={dashesOf(play)}
             style={{ animation: `field-draw ${drawSeconds}s ease-out both` }}
-            onAnimationEnd={props.onDrawn}
+            onAnimationEnd={onDrawn}
           />
           <Ball x={xOf(start)} color={ballColorOf(game, play.start.team)} opacity={0.5} />
           <Ball
@@ -273,12 +288,16 @@ function pathOf(play: Play, start: BallSpot, end: BallSpot): string {
 }
 
 /**
- * The arrow's dashes on a path of length 1, followed by a gap of 1, so `field-draw` (the offset from 1 to 0)
- * reveals them from the start: dashed for a penalty, dotted for an incompletion, solid otherwise.
+ * The arrow's dashes on a path of length 1, then a gap of 1, so `field-draw` (the offset from 1 to 0) reveals them
+ * from the start: dashed for a penalty, dotted for an incompletion, solid otherwise. The list has an even length,
+ * since SVG repeats an odd one twice and that would show the dashes before they are drawn.
  */
 function dashesOf(play: Play): string {
   const pattern = (count: number, dash: number) =>
-    `${Array.from({ length: count }, () => `${dash} ${1 / count - dash}`).join(" ")} 1`
+    Array.from(
+      { length: count },
+      (_, index) => `${dash} ${1 / count - dash + (index === count - 1 ? 1 : 0)}`
+    ).join(" ")
   switch (play.kind) {
     case "penalty":
       return pattern(12, 0.05)

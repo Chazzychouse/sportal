@@ -1,31 +1,31 @@
 import type { GameSnapshot } from "@sportal/domain/Game"
 import type { Tile } from "@sportal/domain/Stage"
 import { Option } from "effect"
-import { Field } from "../game/Field.tsx"
+import { Field, noPlays } from "../game/Field.tsx"
 import { GameStatus, localTime } from "../game/GameStatus.tsx"
 import { Score } from "../game/Score.tsx"
 import { useLive } from "../hub/HubRuntime.ts"
 
 /**
  * What a tile's well shows from the web UI. In the shell a provider view covers a stream tile's
- * well; in a plain browser this is what is seen, with a link to watch. A data tile of a game in play with the
- * ball on the field shows the field in place of why it has no stream.
+ * well; in a plain browser this is what is seen, with a link to watch. A data tile of a game in play, with the
+ * ball on the field, shows the field in place of why it has no stream.
  */
 export function TileBody(props: { tile: Tile; game: GameSnapshot | undefined }) {
   const { tile, game } = props
-  const { recentPlays } = useLive()
   switch (tile._tag) {
     case "Empty":
       return <p className="label-caps text-muted-foreground/60 text-sm tracking-[0.2em]">No signal</p>
     case "DataTile":
-      return (
+      return game?.inPlay() && Option.isSome(game.ball()) ? (
         <div className="flex max-h-full min-h-0 w-full flex-col items-center gap-3 p-3">
+          <Scoreboard game={game} />
+          <GameField key={game.id} game={game} />
+        </div>
+      ) : (
+        <div className="flex flex-col items-center gap-3">
           {game !== undefined && <Scoreboard game={game} />}
-          {game !== undefined && game.progress() === "live" && Option.isSome(game.ball()) ? (
-            <Field game={game} plays={recentPlays[game.id] ?? []} className="min-h-0 w-full max-w-xl" />
-          ) : (
-            <p className="text-muted-foreground text-sm">{noStream(tile.why)}</p>
-          )}
+          <p className="text-muted-foreground text-sm">{noStream(tile.why)}</p>
         </div>
       )
     case "StreamTile":
@@ -51,6 +51,18 @@ function Scoreboard(props: { game: GameSnapshot }) {
       <Score game={game} side="home" size="board" />
       <GameStatus game={game} className="col-span-4 text-center text-xs" />
     </div>
+  )
+}
+
+/** A game's field with its recent plays, under a data tile's scoreboard. */
+function GameField(props: { game: GameSnapshot }) {
+  const { recentPlays } = useLive()
+  return (
+    <Field
+      game={props.game}
+      plays={recentPlays[props.game.id] ?? noPlays}
+      className="min-h-0 w-full max-w-xl"
+    />
   )
 }
 
