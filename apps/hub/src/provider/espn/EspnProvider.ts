@@ -1,7 +1,8 @@
 import type { GameSnapshot } from "@sportal/domain/Game"
 import type { LeagueId } from "@sportal/domain/League"
 import { DateTime, Duration, Effect, Layer, Option, Schedule } from "effect"
-import { Headers, HttpClient } from "effect/http"
+import { Headers, HttpClient, HttpClientError } from "effect/http"
+import { FeedFrame } from "../../Frame.ts"
 import { type Polling, Provider, ProviderUnavailable } from "../Provider.ts"
 import { FastCast } from "./FastCast.ts"
 
@@ -15,34 +16,33 @@ import { FastCast } from "./FastCast.ts"
 export const layer: Layer.Layer<Provider, never, FastCast | HttpClient.HttpClient> = Layer.effect(
   Provider,
   Effect.gen(function* () {
-    const client = (yield* HttpClient.HttpClient).pipe(HttpClient.filterStatusOk)
+    const http = yield* HttpClient.HttpClient
     const fastCast = yield* FastCast
+    const client = http.pipe(HttpClient.filterStatusOk)
 
-    const poll = (league: LeagueId) =>
-      Effect.gen(function* () {
+    const poll = Effect.fn("EspnProvider.poll")(
+      function* (league: LeagueId) {
+        yield* Effect.annotateCurrentSpan("sportal.league", league)
         const response = yield* client.get(scoreboardUrl(league))
         const body = yield* response.text
-        return {
-          receivedAt: yield* DateTime.now,
-          sentAt: Option.getOrUndefined(
-            Option.flatMap(Headers.get(response.headers, "date"), (date) => DateTime.make(date))
-          ),
-          feed: "poll",
-          channel: league,
-          kind: "response",
-          body
-        } as const
-      }).pipe(
+        const receivedAt = yield* DateTime.now
+
+        const sentAt = Option.getOrUndefined(
+          Option.flatMap(Headers.get(response.headers, "date"), (date) => DateTime.make(date))
+        )
+        return new FeedFrame({ receivedAt, sentAt, feed: "poll", channel: league, kind: "response", body })
+      },
+      (effect, league) =>
         Effect.mapError(
+          effect,
           (cause) =>
             new ProviderUnavailable({
-              reason: cause.reason._tag === "StatusCodeError" ? "Refused" : "Unreachable",
+              reason: cause.reason instanceof HttpClientError.StatusCodeError ? "Refused" : "Unreachable",
               league,
               cause
             })
-        ),
-        Effect.withSpan("EspnProvider.poll", { attributes: { "sportal.league": league } })
-      )
+        )
+    )
 
     return Provider.of({
       poll,

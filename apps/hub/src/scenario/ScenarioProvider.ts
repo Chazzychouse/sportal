@@ -1,5 +1,6 @@
+import type { LeagueId } from "@sportal/domain/League"
 import { Array as Arr, DateTime, Duration, Effect, Layer, Option, Schedule, Stream } from "effect"
-import type { FeedFrame } from "../Frame.ts"
+import { FeedFrame } from "../Frame.ts"
 import { HubConfig } from "../HubConfig.ts"
 import { type Polling, Provider } from "../provider/Provider.ts"
 import { type Scenario, Scenarios, type ScenarioUnknown, type ScenarioUnreadable } from "./Scenarios.ts"
@@ -29,29 +30,23 @@ function played(scenario: Scenario, start: DateTime.Utc) {
   const offsetOf = (frame: FeedFrame) => DateTime.distance(origin, frame.receivedAt)
   const playedAt = (frame: FeedFrame) => DateTime.addDuration(start, offsetOf(frame))
   const polls = scenario.frames.filter((frame) => frame.feed === "poll")
-  const pushes = scenario.frames.filter((frame) => frame.feed === "fastcast")
+  const pushes = scenario.frames.filter((frame) => frame.feed === push)
   return Provider.of({
-    poll: (league) =>
-      DateTime.now.pipe(
-        Effect.map((now): FeedFrame => {
-          const recordedNow = DateTime.addDuration(origin, DateTime.distance(start, now))
-          const ofLeague = polls.filter((frame) => frame.channel === league)
-          const current = Arr.findLast(ofLeague, (frame) =>
-            DateTime.isLessThanOrEqualTo(frame.receivedAt, recordedNow)
-          ).pipe(Option.orElse(() => Arr.head(ofLeague)))
-          return Option.match(current, {
-            onNone: () => ({
-              receivedAt: now,
-              feed: "poll",
-              channel: league,
-              kind: "response",
-              body: noEvents
-            }),
-            onSome: (frame) => movedTo(frame, now)
-          })
-        }),
-        Effect.withSpan("ScenarioProvider.poll", { attributes: { "sportal.league": league } })
-      ),
+    poll: Effect.fn("ScenarioProvider.poll")(function* (league: LeagueId) {
+      yield* Effect.annotateCurrentSpan("sportal.league", league)
+      const now = yield* DateTime.now
+
+      const recordedNow = DateTime.addDuration(origin, DateTime.distance(start, now))
+      const ofLeague = polls.filter((frame) => frame.channel === league)
+      const current = Arr.findLast(ofLeague, (frame) =>
+        DateTime.isLessThanOrEqualTo(frame.receivedAt, recordedNow)
+      ).pipe(Option.orElse(() => Arr.head(ofLeague)))
+      return Option.match(current, {
+        onNone: () =>
+          new FeedFrame({ receivedAt: now, feed: "poll", channel: league, kind: "response", body: noEvents }),
+        onSome: (frame) => movedTo(frame, now)
+      })
+    }),
     push: () =>
       Stream.fromIterable(pushes).pipe(
         Stream.mapEffect((frame) =>
@@ -98,5 +93,9 @@ function pollingAt(offsets: ReadonlyArray<number>, start: DateTime.Utc): Polling
 // The longest a scenario goes without being polled, so a live game never goes stale between its frames.
 const longest = 10_000
 
-// A scoreboard with no games, for a league a scenario never polled.
+/**
+ * ESPN's spelling, which every scenario is recorded in and played through: `push`, the feed of a push, and `noEvents`,
+ * an empty scoreboard, answered for a league a scenario never polled.
+ */
+const push = "fastcast"
 const noEvents = JSON.stringify({ events: [] })

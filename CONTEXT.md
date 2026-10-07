@@ -70,8 +70,8 @@ Every exported type name must be a term here, except the wire schemas in `*Paylo
 | **FastCast** | ESPN's live feed, as the ESPN provider's push: one socket following each league's scoreboard and each game its demand names, with FastCast's checkpoint retry. | |
 | **Snapshot feed** | A provider whose frames are our own deliveries, one per frame, and its decode: what tests drive, in `TestSnapshotFeed.ts`. | |
 | **ESPN event** | One game as either ESPN feed spells it, the polled site scoreboard or a FastCast scoreboard topic, read as a GameSnapshot; `EspnEvent` in code. | payload, DTO |
-| **Topic owner** | What a live feed topic carries: one league's scoreboard, or one game's plays; `Owner` in code. | subscription |
-| **Checkpoint error** | A live feed topic's checkpoint could not be loaded or did not decode; retried on FastCast's checkpoint retry, then the game is left to polling. | |
+| **Topic owner** | What a live feed topic carries: one league's scoreboard, or one game's plays; `Owner` in code, in `FastCastTopic.ts`. | subscription |
+| **Checkpoint unread** | A live feed topic's checkpoint could not be loaded or did not decode; retried on FastCast's checkpoint retry, then the game is left to polling; `CheckpointUnread` in code. | checkpoint error |
 | **Ingesting** | The Hub's loop that polls the provider on its polling and runs its push, retried on its reconnect, appending every frame to the feed log; the slate takes what it appends. | poller, sync, fetcher |
 | **Polling** | When a provider is polled again, given the slate the last poll left and the leagues that failed: a Schedule its adapter declares. ESPN's is 10 s while a game is live, 1 min within 30 minutes of a kickoff, 15 min otherwise. | cadence, interval |
 | **Source** | A way you obtain **video** (YouTube TV). | provider, service |

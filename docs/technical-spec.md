@@ -250,6 +250,7 @@ sportal/
     │       │       ├── FastCast.ts         ESPN's push, a service: the socket, as frames; its checkpoint retry is the schedule `FastCast.layer` builds it with
     │       │       ├── FastCastDocument.ts A topic's document, rebuilt from checkpoints and patches
     │       │       ├── FastCastMessage.ts  FastCast's wire shapes
+    │       │       ├── FastCastTopic.ts    A topic's owner, and the topic of a scoreboard or a game
     │       │       ├── TestEspn.ts         Recorded frames for tests of other modules, NE at BUF's day among them (`recordedNeAtBuf`)
     │       │       ├── TestEspnArchive.ts  ESPN's archive answered from recorded payloads, for the corpus's tests
     │       │       └── fixtures/           Recorded real payloads

@@ -1,18 +1,6 @@
-import { GameId } from "@sportal/domain/Game"
-import { LeagueId } from "@sportal/domain/League"
-import {
-  Array as Arr,
-  Data,
-  DateTime,
-  Effect,
-  Option,
-  Schema,
-  SchemaGetter,
-  SchemaIssue,
-  Struct,
-  Tuple
-} from "effect"
+import { DateTime, Effect, Schema, SchemaGetter, SchemaIssue, Struct, Tuple } from "effect"
 import * as Gzip from "../../Gzip.ts"
+import { Owner } from "./FastCastTopic.ts"
 
 // A patch's path. On a scoreboard topic: the uid of the event it changes (`s:20~l:28~e:<id>~c:<id>`), then a JSON
 // Pointer into that event, where no pointer means the whole event. On a game topic: a JSON Pointer alone, with no uid.
@@ -61,7 +49,7 @@ const PatchedPayload = Schema.fromJsonString(Schema.Struct({ pl: PatchesPayload 
 const Connected = Schema.Struct({ op: Schema.Literal("C"), sid: Schema.String })
 const Subscribed = Schema.Struct({ op: Schema.Literal("S"), tc: Schema.String })
 // `pl` is the URL of the topic's whole document as of `mid`.
-const Checkpoint = Schema.Struct({
+const Checkpointed = Schema.Struct({
   op: Schema.Literal("H"),
   tc: Schema.String,
   mid: Schema.Int,
@@ -77,7 +65,7 @@ const Idle = Schema.Struct({ op: Schema.Literal("I"), tc: Schema.String, mid: Sc
 const Heartbeat = Schema.Struct({ op: Schema.Literal("B") })
 
 /** One FastCast socket message. */
-export const Message = Schema.Union([Patched, Connected, Subscribed, Checkpoint, Idle, Heartbeat])
+export const Message = Schema.Union([Patched, Connected, Subscribed, Checkpointed, Idle, Heartbeat])
 
 // A message as framing reads it: an `R` or `P`'s `pl` only as far as the time it was sent.
 const Framed = Message.mapMembers(
@@ -119,6 +107,14 @@ export const Envelope = Schema.fromJsonString(Framed).pipe(
 /** Where to open the socket, and the token it takes, as `public/websockethost` answers. */
 export const Host = Schema.Struct({ ip: Schema.String, securePort: Schema.Int, token: Schema.String })
 
+/** The checkpoint body of a topic `owner` carries, read by its schema: a scoreboard's events, or a game's plays. */
+export function Checkpoint(owner: Owner) {
+  return Owner.$match(owner, {
+    Scoreboard: () => Schema.fromJsonString(ScoreboardCheckpoint),
+    Game: () => Schema.fromJsonString(GameCheckpoint)
+  })
+}
+
 /** A scoreboard topic's whole document, as a checkpoint URL serves it; each event stays JSON, to be patched. */
 const ScoreboardCheckpoint = Schema.Struct({
   sports: Schema.Array(
@@ -142,42 +138,6 @@ const GameCheckpoint = Schema.Struct({
     Schema.Struct({ plays: Schema.optional(Schema.Record(Schema.String, Schema.Json)) })
   )
 })
-
-/** The checkpoint body of a topic `owner` carries, read by its schema: a scoreboard's events, or a game's plays. */
-export function checkpointOf(owner: Owner) {
-  return Owner.$match(owner, {
-    Scoreboard: () => Schema.fromJsonString(ScoreboardCheckpoint),
-    Game: () => Schema.fromJsonString(GameCheckpoint)
-  })
-}
-
-/** What a FastCast topic carries: one league's scoreboard, or one game's package. */
-export type Owner = Data.TaggedEnum<{
-  Scoreboard: { readonly league: LeagueId }
-  Game: { readonly league: LeagueId; readonly game: GameId }
-}>
-export const Owner = Data.taggedEnum<Owner>()
-
-/**
- * The FastCast topic of `league`'s scoreboard, or of one game's package. A college game's topic is assumed to follow
- * its scoreboard's, unverified until a live college day.
- */
-export function topic(league: LeagueId, game?: GameId): string {
-  const sport = league === "nfl" ? "football-nfl" : "football-college-football"
-  return game === undefined ? `event-${sport}` : `gp-${sport}-${game}`
-}
-
-/** What the FastCast topic `tc` carries, when it is a scoreboard's or a game's topic. */
-export function owner(tc: string): Option.Option<Owner> {
-  return Arr.findFirst(LeagueId.literals, (league) => {
-    const gamePrefix = topic(league, GameId.make(""))
-    return tc === topic(league)
-      ? Option.some(Owner.Scoreboard({ league }))
-      : tc.startsWith(gamePrefix) && tc.length > gamePrefix.length
-        ? Option.some(Owner.Game({ league, game: GameId.make(tc.slice(gamePrefix.length)) }))
-        : Option.none()
-  })
-}
 
 function inflate(compressed: Uint8Array): Effect.Effect<string, SchemaIssue.Issue> {
   return Gzip.decompress(compressed, "deflate").pipe(
