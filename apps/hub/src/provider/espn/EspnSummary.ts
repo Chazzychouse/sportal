@@ -7,9 +7,9 @@ import * as EspnPlay from "./EspnPlay.ts"
 
 /**
  * ESPN's game summary, read as its plays with their wallclocks; a play without one is not read. A timeout says who
- * called it when its text names one of the header's teams ("Timeout #1 by NE at 03:27."), by its abbreviation or, for
- * the one team the game's timeouts never name so, by the one other code they use; one that names neither is logged
- * and says no caller.
+ * called it when its text names one of the header's teams: by a code ("Timeout #1 by NE at 03:27.") or a school's name
+ * ("Timeout Georgia, clock 02:05"), matched across the game (`callers`). One that names neither is logged and says no
+ * caller; one no team called (an official's) says none, unlogged.
  */
 export function plays(
   league: LeagueId,
@@ -41,6 +41,19 @@ const SummaryPlay = Schema.Struct({
   wallclock: Schema.optional(Schema.DateTimeUtcFromString)
 })
 
+// A team as a summary's header lists it: ESPN's id, its abbreviation, and the names its timeouts may call it by.
+const Competitor = Schema.Struct({
+  id: Schema.String,
+  team: Schema.Struct({
+    abbreviation: Schema.String,
+    location: Schema.optional(Schema.String),
+    nickname: Schema.optional(Schema.String),
+    shortDisplayName: Schema.optional(Schema.String),
+    displayName: Schema.optional(Schema.String),
+    name: Schema.optional(Schema.String)
+  })
+})
+
 // What a summary has of its plays: each drive's, and each play's win probability by its id. A summary without drives
 // has no plays.
 const Raw = Schema.Struct({
@@ -56,9 +69,7 @@ const Raw = Schema.Struct({
     Schema.Struct({
       competitions: Schema.Array(
         Schema.Struct({
-          competitors: Schema.Array(
-            Schema.Struct({ id: Schema.String, team: Schema.Struct({ abbreviation: Schema.String }) })
-          )
+          competitors: Schema.Array(Competitor)
         })
       )
     })
@@ -103,21 +114,22 @@ function Summary(league: LeagueId) {
           .toSorted((a, b) => Play.order(a.play, b.play))
           .map((read) => ({
             read,
-            code: read.play.kind === "timeout" ? callerOf.exec(read.play.text)?.[1] : undefined
+            caller: read.play.kind === "timeout" ? callerOf(read.play.text) : undefined
           }))
-        const teams = callers(
+        const teamOf = callers(
           league,
           (header?.competitions ?? []).flatMap(({ competitors }) => competitors),
-          new Set(plays.flatMap(({ code }) => (code === undefined ? [] : [code])))
+          plays.flatMap(({ caller }) => (caller === undefined ? [] : [caller]))
         )
-        const read = plays.map(({ read, code }) => {
-          const timeoutBy = code === undefined ? undefined : teams.get(code)
-          return timeoutBy === undefined ? read : { ...read, timeoutBy }
+        const read = plays.map(({ read, caller }) => {
+          const timeoutBy = caller === undefined ? undefined : teamOf(caller)
+          return { read: timeoutBy === undefined ? read : { ...read, timeoutBy }, caller }
         })
         return {
-          plays: read,
-          uncalled: read.flatMap(({ play, ...read }) =>
-            play.kind === "timeout" && !("timeoutBy" in read) ? [play.id] : []
+          plays: read.map(({ read }) => read),
+          // A timeout no team called (an official's) is not one a caller is missing from.
+          uncalled: read.flatMap(({ read, caller }) =>
+            caller !== undefined && caller._tag !== "Nobody" && !("timeoutBy" in read) ? [read.play.id] : []
           )
         }
       }),
@@ -126,33 +138,80 @@ function Summary(league: LeagueId) {
   )
 }
 
-// A called timeout's text names its caller by a code: "Timeout #1 by NE at 03:27."
-const callerOf = /\bby ([A-Z0-9&]+)\b/
+// Who a timeout's text says called it: a code ("Timeout #1 by NE at 03:27."), a school or club by name ("Timeout
+// Georgia, clock 02:05"), no team (an official or TV timeout), or none of those.
+type Caller =
+  | { readonly _tag: "Code"; readonly code: string }
+  | { readonly _tag: "Name"; readonly name: string }
+  | { readonly _tag: "Nobody" }
+  | { readonly _tag: "Unread" }
+
+function callerOf(text: string): Caller {
+  const code = /\bby ([A-Z0-9&]+)\b/.exec(text)?.[1]
+  if (code !== undefined) return { _tag: "Code", code }
+  const name = /^Timeout ([^,#]+?), clock\b/.exec(text)?.[1]
+  if (name !== undefined) return { _tag: "Name", name }
+  return /\b(official|tv|media)\b/i.test(text) ? { _tag: "Nobody" } : { _tag: "Unread" }
+}
 
 /**
- * The team each of a game's caller `codes` names. A code that is a header team's abbreviation is that team. The text
- * may use another code for a team (the NFL's BLT for the header's BAL, HST for HOU), so when exactly one code is left
- * and exactly one header team was never named, they are the same team. Any other code names no team.
+ * The header team each of a game's callers names, where one step gives a unique answer, in order: a code that is a
+ * team's abbreviation; a name that is a team's place or name, in any case; when exactly one code is left and exactly
+ * one team was never named, the one is the other (the NFL's BLT for the header's BAL, HST for HOU); and a code still
+ * left whose letters are in order in exactly one team's place (CLV in Cleveland). Any other caller names no team.
  */
 function callers(
   league: LeagueId,
-  competitors: ReadonlyArray<{ readonly id: string; readonly team: { readonly abbreviation: string } }>,
-  codes: ReadonlySet<string>
-): ReadonlyMap<string, TeamId> {
-  const team = ({ id }: { readonly id: string }) => TeamId.make(`${league}:${id}`)
-  const named = competitors.filter(({ team }) => codes.has(team.abbreviation))
-  const unnamed = competitors.filter(({ team }) => !codes.has(team.abbreviation))
-  const left = [...codes].filter((code) => !named.some(({ team }) => team.abbreviation === code))
-  const [code] = left
-  const [rest] = unnamed
-  return new Map([
-    ...named.map(({ team: { abbreviation }, ...competitor }) => [abbreviation, team(competitor)] as const),
-    ...(left.length === 1 && unnamed.length === 1 && code !== undefined && rest !== undefined
-      ? [[code, team(rest)] as const]
-      : [])
+  competitors: ReadonlyArray<typeof Competitor.Type>,
+  said: ReadonlyArray<Caller>
+): (caller: Caller) => TeamId | undefined {
+  const teams = competitors.map(({ id, team }) => ({
+    id: TeamId.make(`${league}:${id}`),
+    abbreviation: team.abbreviation,
+    place: (team.location ?? "").toLowerCase(),
+    names: [team.location, team.nickname, team.shortDisplayName, team.displayName, team.name].flatMap(
+      (name) => (name === undefined ? [] : [name.toLowerCase()])
+    )
+  }))
+  const only = <A>(found: ReadonlyArray<A>) => (found.length === 1 ? found[0] : undefined)
+  const byName = (name: string) => only(teams.filter(({ names }) => names.includes(name.toLowerCase())))
+  const placed = (
+    codes: ReadonlyArray<string>,
+    teamOf: (code: string) => (typeof teams)[number] | undefined
+  ) =>
+    codes.flatMap((code) => {
+      const team = teamOf(code)
+      return team === undefined ? [] : [[code, team] as const]
+    })
+
+  const codes = [...new Set(said.flatMap((caller) => (caller._tag === "Code" ? [caller.code] : [])))]
+  const abbreviated = placed(codes, (code) => only(teams.filter(({ abbreviation }) => abbreviation === code)))
+  const named = new Set([
+    ...abbreviated.map(([, team]) => team),
+    ...said.flatMap((caller) => (caller._tag === "Name" ? [byName(caller.name)] : []))
   ])
+  const left = codes.filter((code) => !abbreviated.some(([placedCode]) => placedCode === code))
+  const unnamed = teams.filter((team) => !named.has(team))
+  const eliminated = left.length === 1 && unnamed.length === 1 ? placed(left, () => unnamed[0]) : []
+  const spelled = placed(
+    left.filter((code) => !eliminated.some(([placedCode]) => placedCode === code)),
+    (code) => only(teams.filter(({ place }) => inOrder(code.toLowerCase(), place)))
+  )
+  const byCode = new Map([...abbreviated, ...eliminated, ...spelled])
+  return (caller) =>
+    caller._tag === "Code"
+      ? byCode.get(caller.code)?.id
+      : caller._tag === "Name"
+        ? byName(caller.name)?.id
+        : undefined
 }
 
+// Whether every letter of `letters` is in `word`, in order.
+function inOrder(letters: string, word: string): boolean {
+  return (
+    [...letters].reduce((from, letter) => (from < 0 ? from : word.indexOf(letter, from) + 1 || -1), 0) >= 0
+  )
+}
 const decodeSummary = {
   nfl: Schema.decodeUnknownEffect(Summary("nfl")),
   fbs: Schema.decodeUnknownEffect(Summary("fbs"))

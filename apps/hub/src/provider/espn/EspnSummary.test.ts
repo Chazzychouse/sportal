@@ -4,7 +4,8 @@ import { assert, describe, it } from "@effect/vitest"
 import { GameId } from "@sportal/domain/Game"
 import { Play, PlayId } from "@sportal/domain/Play"
 import { TeamId } from "@sportal/domain/Team"
-import { DateTime, Effect, Equal, Layer, Order, Schema } from "effect"
+import { DateTime, Effect, Equal, Layer, Logger, Order, Schema } from "effect"
+import type { ArchivedPlay } from "../../corpus/Archive.ts"
 import * as Gzip from "../../Gzip.ts"
 import { Scenarios } from "../../scenario/Scenarios.ts"
 import { decodedFrames } from "../../TestFeed.ts"
@@ -165,12 +166,7 @@ describe("EspnSummary", () => {
         //   curl 'https://site.api.espn.com/apis/site/v2/sports/football/nfl/summary?event=401872929' | gzip \
         //     > fixtures/nfl-summary-401872929.json.gz
         // Its timeouts name PHI, and WAS for Washington, which its header calls WSH.
-        const washingtonAtPhiladelphia = yield* Gzip.decompress(
-          readFileSync(new URL("./fixtures/nfl-summary-401872929.json.gz", import.meta.url)),
-          "gzip"
-        ).pipe(Effect.map((text): unknown => JSON.parse(text)))
-
-        const plays = yield* EspnSummary.plays("nfl", washingtonAtPhiladelphia)
+        const plays = yield* EspnSummary.plays("nfl", yield* gzipped("nfl-summary-401872929"))
 
         assert.deepStrictEqual(
           plays.flatMap(({ play, ...archived }) =>
@@ -185,6 +181,56 @@ describe("EspnSummary", () => {
           ]
         )
       })
+  )
+
+  it.effect(
+    "a timeout's caller is the one team whose place has the code's letters in order: CLV for Cleveland",
+    () =>
+      Effect.gen(function* () {
+        // CLE at JAX of 2026-09-13, as the archive fetched it:
+        //   curl 'https://site.api.espn.com/apis/site/v2/sports/football/nfl/summary?event=401872922' | gzip \
+        //     > fixtures/nfl-summary-401872922.json.gz
+        // Only Cleveland called timeouts, each "by CLV", which no header abbreviation is and no elimination places.
+        const plays = yield* EspnSummary.plays("nfl", yield* gzipped("nfl-summary-401872922"))
+
+        assert.deepStrictEqual(timeoutsOf(plays), [
+          [2, "4:52", nfl("5")],
+          [2, "1:45", nfl("5")],
+          [3, "0:50", nfl("5")]
+        ])
+      })
+  )
+
+  it.effect('a college timeout\'s caller is the school its text names: "Timeout Georgia, clock 02:05"', () =>
+    Effect.gen(function* () {
+      // VAN at UGA of 2026-10-03, once it was final:
+      //   curl 'https://site.api.espn.com/apis/site/v2/sports/football/college-football/summary?event=401856705' \
+      //     | gzip > fixtures/fbs-summary-401856705.json.gz
+      // Its timeouts name each school by its place, two of them at 2:00.
+      const plays = yield* EspnSummary.plays("fbs", yield* gzipped("fbs-summary-401856705"))
+      const fbs = (team: string) => TeamId.make(`fbs:${team}`)
+
+      assert.deepStrictEqual(timeoutsOf(plays), [
+        [2, "2:05", fbs("61")],
+        [2, "2:00", fbs("238")],
+        [2, "0:35", fbs("238")],
+        [3, "1:37", fbs("238")],
+        [4, "2:00", fbs("61")]
+      ])
+    })
+  )
+
+  it.effect("a timeout no team called says no caller, and is not warned of", () =>
+    Effect.gen(function* () {
+      const logs: Array<string> = []
+      const plays = yield* EspnSummary.plays(
+        "nfl",
+        edited("Timeout #1 by NE at 03:27.", "Official timeout at 03:27.")
+      ).pipe(Effect.provide(captured(logs)))
+
+      assert.deepStrictEqual(timeoutsOf(plays)[0], [1, "3:27", undefined])
+      assert.deepStrictEqual(logs, [])
+    })
   )
 
   it.effect("a code left over once both teams are named names no caller", () =>
@@ -223,11 +269,15 @@ describe("EspnSummary", () => {
 
   it.effect("a timeout whose caller does not read says none, and the game still reads", () =>
     Effect.gen(function* () {
+      const logs: Array<string> = []
       const plays = yield* EspnSummary.plays(
         "nfl",
         edited("Timeout #1 by NE at 03:27.", "Timeout #1 at 03:27.")
-      )
+      ).pipe(Effect.provide(captured(logs)))
       const timeout = plays.find(({ play }) => play.kind === "timeout")
+
+      assert.strictEqual(logs.length, 1)
+      assert.include(logs[0], "name neither team")
 
       assert.strictEqual(plays.length, recordedPlays)
       assert.strictEqual(timeout?.play.clock, "3:27")
@@ -267,6 +317,29 @@ describe("EspnSummary", () => {
 })
 
 /** The recorded summary with its one `from` replaced by `to`. */
+// A recorded summary kept gzip'd in `fixtures/`.
+function gzipped(name: string) {
+  return Gzip.decompress(readFileSync(new URL(`./fixtures/${name}.json.gz`, import.meta.url)), "gzip").pipe(
+    Effect.map((text): unknown => JSON.parse(text))
+  )
+}
+
+// Each timeout's period, clock, and caller.
+function timeoutsOf(plays: ReadonlyArray<ArchivedPlay>) {
+  return plays.flatMap(({ play, ...archived }) =>
+    play.kind === "timeout" ? [[play.period, play.clock, archived.timeoutBy]] : []
+  )
+}
+
+// A logger that keeps each message logged in `logs`, in place of the default.
+function captured(logs: Array<string>) {
+  return Logger.layer([
+    Logger.make<unknown, void>(({ message }) => {
+      logs.push(String(Array.isArray(message) ? message[0] : message))
+    })
+  ])
+}
+
 function edited(from: string, to: string): unknown {
   assert.include(recorded, from)
   return JSON.parse(recorded.replace(from, to))
