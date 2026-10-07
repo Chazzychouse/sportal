@@ -221,5 +221,9 @@ const migrations = {
         body TEXT NOT NULL
       )
     `
+  }),
+  "2_drop_plays": Effect.gen(function* () {
+    const sql = yield* SqlClient.SqlClient
+    yield* sql`DELETE FROM play`
   })
 }
