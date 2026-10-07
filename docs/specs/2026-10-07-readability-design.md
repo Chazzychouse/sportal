@@ -1,13 +1,16 @@
 # Readability pass — design
 
-Status: approved in brainstorming, 2026-10-07. One branch, `readability`, in `../sportal-readability`, with two units
-run in order:
+Status: approved in brainstorming, 2026-10-07; the code layout standard and Unit 3 added the same day at the user's
+request. One branch, `readability`, in `../sportal-readability`, with three units run in order:
 
 1. **Code**: plays as a tagged union that keeps ESPN's outcome, the domain slate's internals, the Hub's `LiveSlate` and
    `LiveStage` renames, and layout geometry moved to the web. Every test file these touch is rewritten to the testing
-   standard (Unit 2) as part of the same change.
+   standard (Unit 2), and every source file they touch is laid out to the code layout standard (Unit 3), as part of
+   the same change.
 2. **Tests**: the testing standard written into `AGENTS.md`, every remaining test file rewritten to it, the `Test*.ts`
    helpers reorganized, and Vitest split into projects.
+3. **Code layout**: every remaining source file laid out to the code layout standard, which is written into
+   `AGENTS.md` before Unit 1 starts.
 
 The source is `docs/Scratch.md`'s list under "Readability pass": improve Play/PlayKind, rework Slate, make Layout a UI
 concern, clean up the tests.
@@ -29,6 +32,35 @@ concern, clean up the tests.
 - **Metric names stay the same,** so the Grafana dashboard keeps working after the renames.
 - **The testing standard applies to every test this branch writes or touches.** Unit 1 follows it before Unit 2
   writes it into `AGENTS.md`.
+- **The code layout standard applies to every source file this branch writes or touches,** and is in `AGENTS.md`
+  from the branch's first commit.
+
+## The code layout standard
+
+The source is dense, and not only for lack of blank lines. The share of blank lines in the densest Effect files is
+2–5%: `HubConfig.ts` 1.7%, `CorpusBuild.ts` 3.4%, then `CorpusDay.ts`, `FastCast.ts`, `HubServer.ts` and `Slate.ts`.
+Most TypeScript sits at 10–15%. `apps/hub/src/corpus/CorpusBuild.ts:21-80` shows the three causes:
+
+- **A `yield*` buried in an argument.** `decoder.decode((yield* FeedLog).replay(from).pipe(...))` is read inside out to
+  find the order of the steps.
+- **A big calculation inside a constructor.** `new CorpusDay({ leagues: [...new Set(deliveries.flatMap(...
+  Delivery.match ...))].toSorted(), games: ... })` makes the reader work out each field's meaning mid-construction.
+- **No breaks between phases.** The function reads the services, decodes, checks, and assembles, with no gap between
+  them.
+
+The rules, written into `AGENTS.md`'s "Inside a file":
+
+1. **A blank line between the phases of a generator block** (or any function body), not between every `yield*`.
+2. **Each `yield*` on its own line, bound to its own `const`** (or standing alone as a statement), never nested inside
+   another expression: `const feedLog = yield* FeedLog`, then `feedLog.replay(from)`. Every `yield*` then sits at the
+   left margin and the block reads as a list of steps.
+3. **Name a value that takes a calculation to build,** or a pipe more than two levels deep: `const leagues = …` and
+   `const games = …` before the constructor, so the constructor is a plain list of fields.
+4. **A long chain of steps that does one thing is a named function** that says what it does, as `CorpusLine.of`
+   already is. It is a private helper below its user, or a method of the concept it operates on.
+
+Rule 2 is checked mechanically: no `yield*` follows `(`, `[`, `{`, `,`, `.`, an operator, or another `yield*` on its
+line. The others are checked in review. The blank-line share is a symptom, not a target, and is not checked.
 
 ## Unit 1: code
 
@@ -205,9 +237,21 @@ The existing rules stay: tests beside the file, written test-first, providers te
 
 - Before Unit 2 starts, record v8 coverage (`vitest run --coverage`). After it, no file's line or branch coverage
   is lower.
-- Every assertion of an old test exists in some new test. The plan lists the mapping from old test to new tests per
-  file, so the review can check it.
+- Every assertion of an old test exists in some new test. Each commit's body lists, for each file it rewrites, the
+  old test names and the new tests that carry their assertions, so the review can check it.
 - One commit per test file, or per small group of related files. `pnpm check` passes on every commit.
+
+## Unit 3: code layout
+
+Every source file (`apps/*/src/**`, `packages/*/src/**`, excluding tests, `apps/web/src/design/`, and the wire
+schemas' field lists) is laid out to the code layout standard. The densest files go first: `HubConfig.ts`,
+`CorpusBuild.ts`, `CorpusDay.ts`, `FastCast.ts`, `HubServer.ts`, then the rest of the Hub, the domain, the web, and the
+desktop shell.
+
+- Behaviour is unchanged. The tests are not touched in this unit; they pass unchanged on every commit.
+- A helper extracted under rule 4 follows "Inside a file": below its user, a hoisted `function`, or a method of its
+  concept when it operates on one.
+- One commit per file, or per group of small files in one folder.
 
 ## Physical changes
 
@@ -227,13 +271,13 @@ apps/hub/src/
 apps/web/src/layout/
   Layout.ts, Layout.test.ts   new: the geometry
 vitest.config.ts          projects
-AGENTS.md                 Tests section
+AGENTS.md                 Tests section; code layout rules in "Inside a file"
 CONTEXT.md                Football play, Live slate, Live stage; Slate and Play rows updated
 ```
 
 ## Out of scope
 
-- The Hub `LiveSlate` service's internals (beyond the rename) and the telemetry's structure.
+- The Hub `LiveSlate` service's internals and the telemetry's structure, beyond the rename and Unit 3's layout.
 - The `web-one-command-path` goal.
 - Any change to behaviour other than Play's wire shape.
 
@@ -245,4 +289,5 @@ CONTEXT.md                Football play, Live slate, Live stage; Slate and Play 
   section says.
 - No `PlayKind`, `DomainSlate`, `StageSessions` or domain `Layout` remains.
 - Every test follows the standard, and no file's coverage dropped.
+- No source file has a nested `yield*`, and every source file has been through Unit 3's review.
 - `pnpm check` passes on every commit, `plannotator review` on the branch is approved, and the branch is merged.
