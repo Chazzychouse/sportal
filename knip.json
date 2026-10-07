@@ -20,7 +20,7 @@
         "electron.vite.config.ts",
         "WaitForElectron.ts"
       ],
-      "project": ["src/**/*.ts!"],
+      "project": ["src/**/*.ts!", "!src/**/Test*.ts!"],
       "ignoreBinaries": ["electron", "electron-vite"]
     }
   },

@@ -2,111 +2,109 @@ import { describe, expect, it } from "@effect/vitest"
 import { Effect } from "effect"
 import { vi } from "vitest"
 import { confine, hostOf, load } from "./Navigation.ts"
+import { fakeContents, navigation } from "./TestWebContents.ts"
 
 describe("hostOf", () => {
-  it("keeps only the hostname, dropping any path or query that could carry a token", () => {
-    expect(hostOf("https://tv.youtube.com/watch/abc?token=secret")).toBe("tv.youtube.com")
+  it("should keep only the hostname, dropping any path or query that could carry a token", () => {
+    const host = hostOf("https://tv.youtube.com/watch/abc?token=secret")
+
+    expect(host).toBe("tv.youtube.com")
   })
 
-  it("names an address it cannot parse without repeating it", () => {
-    expect(hostOf("not a url")).toBe("(unparseable address)")
+  it("should name an address it cannot parse without repeating it", () => {
+    const host = hostOf("not a url")
+
+    expect(host).toBe("(unparseable address)")
   })
 })
 
 describe("load", () => {
-  it.effect("fails with the code Electron attaches to a failed load, never its message", () =>
+  it.effect("should fail with the code Electron attaches to a failed load, never its message", () =>
     Effect.gen(function* () {
-      const failure = yield* load(
-        failing(
-          Object.assign(new Error("ERR_ABORTED (-3) loading 'https://x/?t=1'"), { code: "ERR_ABORTED" })
-        ),
-        "https://x/?t=1"
-      ).pipe(Effect.flip)
+      const error = Object.assign(new Error("ERR_ABORTED (-3) loading 'https://x/?t=1'"), {
+        code: "ERR_ABORTED"
+      })
+
+      const failure = yield* load(failing(error), "https://x/?t=1").pipe(Effect.flip)
+
       expect(failure.code).toBe("ERR_ABORTED")
     })
   )
 
   it.effect.each([new Error("no code"), "a string", undefined])(
-    "fails with an unknown code for %s",
+    "should fail with an unknown code for %s",
     (error) =>
       Effect.gen(function* () {
         const failure = yield* load(failing(error), "https://x/").pipe(Effect.flip)
+
         expect(failure.code).toBe("unknown")
       })
   )
 
-  it.effect("succeeds when the page loads", () => load({ loadURL: () => Promise.resolve() }, "https://x/"))
-
-  function failing(error: unknown) {
-    return { loadURL: () => Promise.reject(error) }
-  }
+  it.effect("should succeed when the page loads", () =>
+    load({ loadURL: () => Promise.resolve() }, "https://x/")
+  )
 })
 
 describe("confine", () => {
-  const onHub = (url: string) => url.startsWith("http://hub/")
-
   it.each(["will-navigate", "will-redirect"])(
-    "refuses a %s off the permitted addresses, saying where",
+    "should refuse a %s off the permitted addresses, saying where",
     (event) => {
       const { contents, warn } = confined({ subframes: false })
       const refused = navigation("https://evil.example/path?token=secret", true)
+
       contents.emit(event, refused)
+
       expect(refused.preventDefault).toHaveBeenCalled()
       expect(warn).toHaveBeenCalledWith("refused navigation to evil.example")
     }
   )
 
-  it("lets a permitted navigation through", () => {
+  it("should let a permitted navigation through", () => {
     const { contents, warn } = confined({ subframes: false })
     const allowed = navigation("http://hub/stage", true)
+
     contents.emit("will-navigate", allowed)
+
     expect(allowed.preventDefault).not.toHaveBeenCalled()
     expect(warn).not.toHaveBeenCalled()
   })
 
-  it("never opens a new window", () => {
+  it("should never open a new window", () => {
     const { contents } = confined({ subframes: false })
-    expect(contents.openWindow()).toEqual({ action: "deny" })
+
+    const opened = contents.openWindow()
+
+    expect(opened).toEqual({ action: "deny" })
   })
 
-  it("refuses a subframe navigation off the permitted addresses only when asked to", () => {
-    const guarded = confined({ subframes: true })
+  it("should refuse a subframe navigation off the permitted addresses when asked to", () => {
+    const { contents } = confined({ subframes: true })
     const inFrame = navigation("https://evil.example/", false)
-    guarded.contents.emit("will-frame-navigate", inFrame)
-    expect(inFrame.preventDefault).toHaveBeenCalled()
 
-    const unguarded = confined({ subframes: false })
+    contents.emit("will-frame-navigate", inFrame)
+
+    expect(inFrame.preventDefault).toHaveBeenCalled()
+  })
+
+  it("should let a subframe navigation off the permitted addresses through when not asked to", () => {
+    const { contents } = confined({ subframes: false })
     const elsewhere = navigation("https://evil.example/", false)
-    unguarded.contents.emit("will-frame-navigate", elsewhere)
+
+    contents.emit("will-frame-navigate", elsewhere)
+
     expect(elsewhere.preventDefault).not.toHaveBeenCalled()
   })
-
-  function confined(options: { subframes: boolean }) {
-    const contents = fakeContents()
-    const warn = vi.fn()
-    confine(contents, onHub, warn, options)
-    return { contents, warn }
-  }
 })
 
-function navigation(url: string, isMainFrame: boolean) {
-  return { url, isMainFrame, preventDefault: vi.fn() }
+function failing(error: unknown) {
+  return { loadURL: () => Promise.reject(error) }
 }
 
-/** A page's contents that records its listeners, so a test can `emit` what Electron would. */
-function fakeContents() {
-  const listeners = new Map<string, Array<(details: ReturnType<typeof navigation>) => void>>()
-  let openHandler: () => unknown = () => undefined
-  return {
-    on: (event: string, listener: (details: ReturnType<typeof navigation>) => void) => {
-      listeners.set(event, [...(listeners.get(event) ?? []), listener])
-    },
-    setWindowOpenHandler: (handler: () => unknown) => {
-      openHandler = handler
-    },
-    emit: (event: string, details: ReturnType<typeof navigation>) => {
-      for (const listener of listeners.get(event) ?? []) listener(details)
-    },
-    openWindow: () => openHandler()
-  }
+/** Page contents confined to the Hub's addresses, with a spy for the warnings. */
+function confined(options: { subframes: boolean }) {
+  const contents = fakeContents()
+  const warn = vi.fn()
+  confine(contents, (url) => url.startsWith("http://hub/"), warn, options)
+  return { contents, warn }
 }
