@@ -27,6 +27,8 @@ import { bounds, GameDay } from "./GameDay.ts"
  * instant due before it, then a tick to the next day's start. No clock runs: the slate's now is always the input's.
  * `subject` steps over each take and the last tick, a `Raised` observation among the rest, and gives what it has at
  * the end.
+ *
+ * @public Read outside this file by the corpus tests and the events dump script.
  */
 export const day = Effect.fn("CorpusRun.day")(function* <S, A>(
   date: GameDay,
@@ -47,14 +49,22 @@ export const day = Effect.fn("CorpusRun.day")(function* <S, A>(
   return subject.done(subject.step(taken.state, ended))
 })
 
-/** What a run plays a day through: a pure step over each take or tick of the slate, and what it gives at the end. */
+/**
+ * What a run plays a day through: a pure step over each take or tick of the slate, and what it gives at the end.
+ *
+ * @public Named by the Synthesis tests' own subject.
+ */
 export interface Subject<S, A> {
   readonly initial: S
   readonly step: (state: S, taken: Taken) => S
   readonly done: (state: S) => A
 }
 
-/** The subject this spec runs: the day's game events, in order. */
+/**
+ * The subject this spec runs: the day's game events, in order.
+ *
+ * @public Read outside this file by the corpus tests and the events dump script.
+ */
 export const events: Subject<Chunk.Chunk<GameEvent>, ReadonlyArray<GameEvent>> = {
   initial: Chunk.empty(),
   step: (seen, { events }) =>
@@ -100,7 +110,7 @@ export class DayRun extends Schema.Class<DayRun>("sportal/hub/DayRun")({
  * the run with `DaysFailed` once every day has run. A thread that crashes fails its day alone: a fresh one takes its
  * place. Only a thread that cannot be spawned stops the run.
  */
-export const runDays = Effect.fnUntraced(function* (
+export const runDays = Effect.fn("CorpusRun.runDays")(function* (
   dates: ReadonlyArray<GameDay>,
   workers: number
 ): Effect.fn.Return<
@@ -164,7 +174,7 @@ export class DaysFailed extends Schema.TaggedError<DaysFailed>()("DaysFailed", {
 }
 
 // A worker thread of the pool, numbered by `next`, asked one day at a time; its thread closes with the pool.
-const spawned = Effect.fnUntraced(function* (next: Ref.Ref<number>) {
+const spawned = Effect.fn("CorpusRun.spawned")(function* (next: Ref.Ref<number>) {
   const id = yield* Ref.getAndUpdate(next, (id) => id + 1)
   const platform = yield* Worker.WorkerPlatform
   const worker = yield* platform.spawn<unknown, unknown>(id)

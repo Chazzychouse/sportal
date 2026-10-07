@@ -25,7 +25,6 @@
     }
   },
   "ignoreMembers": ["^layerTest"],
-  "ignoreExportsUsedInFile": true,
   "ignoreDependencies": ["@effect/language-service"],
   "ignoreIssues": {
     "apps/web/src/design/**": ["exports", "types"]

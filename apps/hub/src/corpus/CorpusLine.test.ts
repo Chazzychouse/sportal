@@ -148,7 +148,7 @@ describe("CorpusLine.ofDecoded", () => {
     })
   )
 
-  it.effect("should write a line only for what changed since the last", () =>
+  it.effect("should write an unchanged listing and an empty plays change for what did not change", () =>
     Effect.gen(function* () {
       const frames = [
         decoded(1, [listing]),

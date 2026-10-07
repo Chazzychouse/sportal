@@ -164,6 +164,7 @@ function everyDay(chosen: {
     return unchosen("Name a date, --from and --to, or --all alone")
   }
   return Effect.all([
+    // A feed-log day that does not decode means the log itself is broken, so a defect, not a failure to report.
     FeedLog.use((feedLog) => feedLog.days).pipe(Effect.flatMap(decodeDays), Effect.orDie),
     CorpusDays.use((corpusDays) => corpusDays.dates)
   ]).pipe(Effect.map(([logged, built]) => [...new Set([...logged, ...built])].toSorted()))

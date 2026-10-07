@@ -8,6 +8,8 @@ import type { Decoded } from "../provider/Decoder.ts"
 /**
  * One line of a corpus day's poll or push file: a listing changed or unchanged since its league's last, a pushed
  * snapshot, or the plays a game added, changed, and removed since its last.
+ *
+ * @public The corpus tests build lines from its cases.
  */
 export const CorpusInput = Schema.TaggedUnion({
   ListingChanged: { league: LeagueId, games: Schema.Array(GameSnapshot) },

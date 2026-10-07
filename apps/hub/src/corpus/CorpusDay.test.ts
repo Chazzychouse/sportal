@@ -58,6 +58,22 @@ describe("CorpusDays", () => {
     )
   )
 
+  it.effect("should leave out a directory that is not a game day", () =>
+    inCorpus(TestSnapshotFeed.decoder, (dir) =>
+      Effect.gen(function* () {
+        const days = yield* CorpusDays
+        const fs = yield* FileSystem.FileSystem
+        const { join } = yield* Path.Path
+        yield* writtenDay
+        yield* fs.makeDirectory(join(dir, "days", "scratch"), { recursive: true })
+
+        const dates = yield* days.dates
+
+        assert.deepStrictEqual(dates, [day.date])
+      })
+    )
+  )
+
   it.effect("should replace the day there with a day written again", () =>
     inCorpus(TestSnapshotFeed.decoder, () =>
       Effect.gen(function* () {
