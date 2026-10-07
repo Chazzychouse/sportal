@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs"
 import { assert, describe, it } from "@effect/vitest"
 import type { GameEvent } from "@sportal/domain/GameEvent"
-import type { SlateObservation } from "@sportal/domain/Slate"
+import type { SlateObservation } from "@sportal/domain/SlateObservation"
 import { Chunk, Effect, Schema, Stream } from "effect"
 import * as TestSnapshotFeed from "../TestSnapshotFeed.ts"
 import { Archive } from "./Archive.ts"

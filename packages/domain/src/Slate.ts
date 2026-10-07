@@ -5,6 +5,7 @@ import { GameEvent, type GameEventKind } from "./GameEvent.ts"
 import type { LeagueId } from "./League.ts"
 import { LiveGame, LiveGameState, type TookOutcome } from "./LiveGame.ts"
 import type { RecentPlays } from "./RecentPlays.ts"
+import { SlateObservation } from "./SlateObservation.ts"
 
 /**
  * The slate: the last frame's `seq`, each league's last listing, every current game's live game, taken from push and
@@ -131,28 +132,6 @@ export type Taken = {
   readonly events: ReadonlyArray<GameEvent>
   readonly observations: ReadonlyArray<SlateObservation>
 }
-
-/** What one take or tick did to one game, for telemetry only. */
-export type SlateObservation = Data.TaggedEnum<{
-  /**
-   * A snapshot was taken, ignored as behind, or held by a covered game; or a held one fell back, applying as the
-   * poll's once the push had not caught it up for `LiveGame.fallbackAfter`. A snapshot equal to a finished game's
-   * final is not observed at all: every poll of a game still listed repeats it.
-   */
-  Took: {
-    readonly snapshot: GameSnapshot
-    readonly from: DeliverySource
-    readonly outcome: TookOutcome | "fellBack"
-    readonly had: Option.Option<GameSnapshot>
-  }
-  Started: { readonly liveGame: LiveGame; readonly at: DateTime.Utc }
-  Changed: { readonly before: LiveGame; readonly after: LiveGame; readonly at: DateTime.Utc }
-  Stopped: { readonly liveGame: LiveGame; readonly at: DateTime.Utc }
-  Dropped: { readonly game: GameId }
-  /** A game's take or tick raised a defect; the game kept its last good live game. `snapshot` is the one at hand. */
-  Raised: { readonly snapshot: GameSnapshot; readonly cause: Cause.Cause<never>; readonly by: string }
-}>
-export const SlateObservation = Data.taggedEnum<SlateObservation>()
 
 /**
  * Every current game's live game, each game seen to finish, and the events and observations advancing the slate has

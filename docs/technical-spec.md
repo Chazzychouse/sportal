@@ -195,7 +195,8 @@ sportal/
 │   │       ├── GameEvent.ts    GameEvent, stamped with its game and instant, and GameEventKind: state events from snapshot changes, play events from plays
 │   │       ├── Delivery.ts     What a frame said: a listing, a snapshot, or a game's plays; DeliverySource
 │   │       ├── LiveGame.ts     One game as the Hub follows it: LiveGame, LiveGameState; take and tick
-│   │       ├── Slate.ts        The pure slate: every delivery taken in order, with the games it saw finish; Taken, SlateObservation
+│   │       ├── Slate.ts        The pure slate: every delivery taken in order, with the games it saw finish; Taken
+│   │       ├── SlateObservation.ts  What one take or tick did to one game, for telemetry only
 │   │       ├── Channel.ts      SourceName, Channel, ChannelAvailability
 │   │       ├── Guide.ts        Guide, Airing, ChannelId, GuideUnreadable
 │   │       ├── Stream.ts       StreamLocator

@@ -5,7 +5,8 @@ import { GameId, GameSnapshot } from "./Game.ts"
 import { GameEvent, GameEventKind } from "./GameEvent.ts"
 import { LiveGame, LiveGameState } from "./LiveGame.ts"
 import { PlayId } from "./Play.ts"
-import { Slate, SlateObservation } from "./Slate.ts"
+import { Slate } from "./Slate.ts"
+import { SlateObservation } from "./SlateObservation.ts"
 import { liveSnapshot, play, snapshot, team } from "./TestGame.ts"
 
 const t0 = DateTime.makeUnsafe("2026-10-03T16:00:00Z")
