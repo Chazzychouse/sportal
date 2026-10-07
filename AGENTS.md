@@ -53,6 +53,15 @@ A reader opens a file to see the thing it is named for. Keep it that way.
 6. A constant lives beside its only user.
 7. When a file needs a table of contents, split it by concept — never into `FooTypes.ts` and
    `FooHelpers.ts`.
+8. A blank line between the phases of a generator block or function body, not between every `yield*`.
+9. Each `yield*` is on its own line, bound to its own `const` (or a statement alone), never nested in another
+   expression. Not `decoder.decode((yield* FeedLog).replay(from))`, but
+   `const feedLog = yield* FeedLog` then `decoder.decode(feedLog.replay(from))`.
+10. A value that takes a calculation to build, or a pipe more than two levels deep, gets a name before it is used;
+    a constructor is a plain list of fields. Not `new CorpusDay({ leagues: [...new Set(deliveries.flatMap(…))].toSorted(), … })`,
+    but `const leagues = leaguesOf(deliveries)` then `new CorpusDay({ date, kind, leagues, … })`.
+11. A long chain of steps that does one thing is a named function (a private helper below its user, or a method of
+    its concept), as `CorpusLine.of` is.
 
 ## How code is written
 
