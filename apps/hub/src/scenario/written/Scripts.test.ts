@@ -43,6 +43,7 @@ describe("scripts", () => {
         return step.slate.flatMap((game) => (needsPlay(game, previous) ? [{ step, game }] : []))
       })
 
+      assert.isNotEmpty(changes, `${script.name} has no change that moves the ball or scores`)
       for (const { step, game } of changes) {
         const ran = step.plays.some((run) => run.game === game.id)
         assert.isTrue(ran, `${script.name} ${game.id} at ${step.at} has no play`)

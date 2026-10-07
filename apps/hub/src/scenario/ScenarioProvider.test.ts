@@ -72,19 +72,7 @@ describe("ScenarioProvider", () => {
     }).pipe(Effect.provide(playing("two-minute-drill-tie")))
   )
 
-  it.effect("should bring a change to the slate at its scenario time", () =>
-    Effect.gen(function* () {
-      yield* TestClock.adjust(0)
-      yield* TestClock.adjust("119 seconds")
-
-      yield* TestClock.adjust("1 second")
-
-      const inRedZone = yield* tieInRedZone
-      assert.isTrue(inRedZone)
-    }).pipe(Effect.provide(playing("two-minute-drill-tie")))
-  )
-
-  it.effect("should bring its frames to the slate through the feed log", () =>
+  it.effect("should bring a change to the slate at its scenario time, through the feed log", () =>
     Effect.gen(function* () {
       const slate = yield* LiveSlate
       yield* TestClock.adjust(0)
@@ -92,7 +80,9 @@ describe("ScenarioProvider", () => {
 
       yield* TestClock.adjust("1 second")
 
+      const inRedZone = yield* tieInRedZone
       const latest = yield* slate.latest
+      assert.isTrue(inRedZone)
       assert.isTrue(latest.seq._tag === "Some", "its frames went through the feed log")
     }).pipe(Effect.provide(playing("two-minute-drill-tie")))
   )

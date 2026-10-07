@@ -1,4 +1,3 @@
-import { readFileSync } from "node:fs"
 import { assert, describe, it } from "@effect/vitest"
 import { Delivery } from "@sportal/domain/Delivery"
 import { GameId, type GameSnapshot } from "@sportal/domain/Game"
@@ -22,7 +21,7 @@ import { FeedFrame } from "../Frame.ts"
 import * as Gzip from "../Gzip.ts"
 import { Decoder } from "../provider/Decoder.ts"
 import * as EspnDecode from "../provider/espn/EspnDecode.ts"
-import { recordedNeAtBuf } from "../provider/espn/TestEspn.ts"
+import { recordedNeAtBuf, recordedPlays } from "../provider/espn/TestEspn.ts"
 import { inArchive, site, stepped } from "../provider/espn/TestEspnArchive.ts"
 import { logged } from "../TestFeedLog.ts"
 import * as TestSnapshotFeed from "../TestSnapshotFeed.ts"
@@ -30,7 +29,7 @@ import { framed } from "../TestSnapshotFeed.ts"
 import * as CorpusBuild from "./CorpusBuild.ts"
 import { CorpusDay, CorpusDays } from "./CorpusDay.ts"
 import { CorpusLine } from "./CorpusInput.ts"
-import { built, inCorpus, local } from "./TestCorpus.ts"
+import { built, golden, inCorpus, local } from "./TestCorpus.ts"
 
 describe.each([
   { name: "from 04:00 local", from: () => local("2026-10-04T04:00:00"), zone: () => undefined },
@@ -64,30 +63,19 @@ describe.each([
       })
     )
 
-    it.effect(
-      "should read back to the games the decode's replay from the day's start takes the slate to",
-      () =>
-        Effect.gen(function* () {
-          const { fromCorpus, fromDecode } = yield* RecordedDayBuilt
+    it.effect("should read back to the slate the decode's replay from the day's start takes", () =>
+      Effect.gen(function* () {
+        const { fromCorpus, fromDecode } = yield* RecordedDayBuilt
 
-          assert.isTrue(Equal.equals(fromCorpus.everyGame(), fromDecode.everyGame()), "the same games")
-        })
-    )
-
-    it.effect(
-      "should read back to the recent plays the decode's replay from the day's start takes the slate to",
-      () =>
-        Effect.gen(function* () {
-          const { fromCorpus, fromDecode } = yield* RecordedDayBuilt
-
-          assert.isTrue(
-            Equal.equals(
-              fromCorpus.recentPlays(fromCorpus.everyGame()),
-              fromDecode.recentPlays(fromDecode.everyGame())
-            ),
-            "and the same recent plays"
-          )
-        })
+        assert.isTrue(Equal.equals(fromCorpus.everyGame(), fromDecode.everyGame()), "the same games")
+        assert.isTrue(
+          Equal.equals(
+            fromCorpus.recentPlays(fromCorpus.everyGame()),
+            fromDecode.recentPlays(fromDecode.everyGame())
+          ),
+          "and the same recent plays"
+        )
+      })
     )
   })
 })
@@ -373,13 +361,6 @@ describe("CorpusBuild.backfilled", () => {
   )
 })
 
-// NE–BUF's backfilled day, as Synthesis.test.ts commits it.
-function golden(file: "poll" | "push") {
-  return readFileSync(new URL(`./fixtures/2026-10-04-ne-buf.${file}.ndjson`, import.meta.url), "utf8")
-    .split("\n")
-    .filter((line) => line.length > 0)
-}
-
 // The lines of day `date`'s two files, as written.
 function dayFiles(dir: string, date: string) {
   return Effect.gen(function* () {
@@ -402,9 +383,6 @@ const pushedSnapshot = Delivery.cases.Snapshot.make({ snapshot: liveSnapshot(), 
 function listing(games: ReadonlyArray<GameSnapshot>) {
   return Delivery.cases.Listing.make({ league: "fbs", games })
 }
-
-// As LiveSlate.test.ts measured it: every play id the recording's patches add.
-const recordedPlays = 182
 
 /**
  * The recorded NE at BUF day built: the day, every play id in its push file, and the slate it reads back to beside the

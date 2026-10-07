@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs"
 import { NodeCrypto, NodeServices } from "@effect/platform-node"
 import { type Crypto, DateTime, Effect, FileSystem, Layer, type Path } from "effect"
 import type { SqlClient } from "effect/sql"
@@ -58,4 +59,14 @@ export function inCorpus<A, E>(
 /** Day `date` built from the feed log, opened for the build alone. */
 export function built(date: string) {
   return CorpusBuild.captured(date).pipe(Effect.provide(FeedLog.layer), Effect.scoped)
+}
+
+/**
+ * The lines of NE–BUF's 2026-10-04 day synthesized from ESPN's archive, as committed in `fixtures/`: read by eye
+ * against the synthesis's rules before it was. The backfilled golden.
+ */
+export function golden(file: "poll" | "push") {
+  return readFileSync(new URL(`./fixtures/2026-10-04-ne-buf.${file}.ndjson`, import.meta.url), "utf8")
+    .split("\n")
+    .filter((line) => line.length > 0)
 }

@@ -11,7 +11,7 @@ import { FramesDecoded } from "../TestDecoder.ts"
 import * as EspnDecode from "./EspnDecode.ts"
 import * as EspnPlay from "./EspnPlay.ts"
 import * as EspnSummary from "./EspnSummary.ts"
-import { recordedNeAtBuf } from "./TestEspn.ts"
+import { recordedNeAtBuf, recordedPlays } from "./TestEspn.ts"
 
 // NE–BUF's summary, the game the frames fixture records, recorded once after it was final:
 //   curl -o fixtures/nfl-summary-401872971.json \
@@ -19,7 +19,6 @@ import { recordedNeAtBuf } from "./TestEspn.ts"
 // Its drives list 182 plays, each with a wallclock; its win probability also has the coin toss, which no drive lists.
 const recorded = readFileSync(new URL("./fixtures/nfl-summary-401872971.json", import.meta.url), "utf8")
 const summary: unknown = JSON.parse(recorded)
-const recordedPlays = 182
 
 // The same game's play entities, as FastCast's game topic lists them.
 const fastCast = Schema.decodeSync(

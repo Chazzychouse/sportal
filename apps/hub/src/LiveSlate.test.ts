@@ -36,7 +36,7 @@ import { Following, LiveSlate } from "./LiveSlate.ts"
 import { told } from "./LiveSlateTelemetry.ts"
 import { Decoder } from "./provider/Decoder.ts"
 import * as EspnDecode from "./provider/espn/EspnDecode.ts"
-import { fixtures, recordedNeAtBuf } from "./provider/espn/TestEspn.ts"
+import { fixtures, recordedNeAtBuf, recordedPlays } from "./provider/espn/TestEspn.ts"
 import { Decoded, LiveFeedDemand } from "./provider/Provider.ts"
 import { dyingAt } from "./provider/TestDecoder.ts"
 import { logged } from "./TestFeedLog.ts"
@@ -57,14 +57,6 @@ const one = GameId.make("1")
 const two = GameId.make("2")
 const three = GameId.make("3")
 const neAtBuf = GameId.make("401872971")
-
-// Measured once over the fixture: every play id its topic's patches add, whole or one at a time (none is removed,
-// moved, or copied), counted with
-//   zcat nfl-2026-10-04-ne-buf.frames.jsonl.gz | jq -r 'select(.kind=="message") | .body | fromjson
-//     | select(.op=="P" or .op=="R") | .pl | fromjson | .pl | fromjson | .[]
-//     | select(.path|test("^/entities/plays(/[^/]+)?$"))
-//     | if .path=="/entities/plays" then (.value|keys[]) else (.path|ltrimstr("/entities/plays/")) end' | sort -u | wc -l
-const recordedPlays = 182
 
 describe("LiveSlate, a frame taken live", () => {
   it.effect("should start a live game for each current game a listing names, keeping the listing", () =>

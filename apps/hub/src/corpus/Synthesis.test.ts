@@ -1,4 +1,3 @@
-import { readFileSync } from "node:fs"
 import { assert, describe, it } from "@effect/vitest"
 import type { GameEvent } from "@sportal/domain/GameEvent"
 import type { SlateObservation } from "@sportal/domain/SlateObservation"
@@ -10,7 +9,7 @@ import { CorpusDay, CorpusDays } from "./CorpusDay.ts"
 import { CorpusLine } from "./CorpusInput.ts"
 import * as CorpusRun from "./CorpusRun.ts"
 import * as Synthesis from "./Synthesis.ts"
-import { inCorpus, local } from "./TestCorpus.ts"
+import { golden, inCorpus, local } from "./TestCorpus.ts"
 
 describe("Synthesis.day", () => {
   // NE–BUF's archived day is synthesized once for every test, and run once for the tests of its run.
@@ -158,13 +157,6 @@ function neBufSynthesizedLayer() {
 
 // NE–BUF of 2026-10-04 from ESPN's archive (its recorded scoreboard and summary), the only game of the day with plays.
 const archived = inArchive({}, () => stepped(Archive.use((archive) => archive.games("nfl", "2026-10-04"))))
-
-// The day synthesized from it, as committed: read by eye against the synthesis's rules before it was.
-function golden(file: "poll" | "push") {
-  return readFileSync(new URL(`./fixtures/2026-10-04-ne-buf.${file}.ndjson`, import.meta.url), "utf8")
-    .split("\n")
-    .filter((line) => line.length > 0)
-}
 
 const encodeLine = Schema.encodeSync(Schema.fromJsonString(CorpusLine))
 

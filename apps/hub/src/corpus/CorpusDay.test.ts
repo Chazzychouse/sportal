@@ -1,17 +1,17 @@
-import { NodeServices } from "@effect/platform-node"
 import { assert, describe, it } from "@effect/vitest"
 import { Delivery } from "@sportal/domain/Delivery"
 import { GameId } from "@sportal/domain/Game"
 import { liveSnapshot, play, snapshot } from "@sportal/domain/TestGame"
-import { DateTime, Effect, Equal, FileSystem, Layer, Option, Path, Stream } from "effect"
+import { DateTime, Effect, Equal, FileSystem, Option, Path, Stream } from "effect"
 import * as Gzip from "../Gzip.ts"
-import { withEnv } from "../TestHubConfig.ts"
+import * as TestSnapshotFeed from "../TestSnapshotFeed.ts"
 import { CorpusDay, CorpusDays } from "./CorpusDay.ts"
 import { CorpusInput, CorpusLine } from "./CorpusInput.ts"
+import { inCorpus } from "./TestCorpus.ts"
 
 describe("CorpusDays", () => {
   it.effect("should read a written day back: its day and its frames merged by arrival, then seq", () =>
-    inCorpus(() =>
+    inCorpus(TestSnapshotFeed.decoder, () =>
       Effect.gen(function* () {
         const days = yield* CorpusDays
         yield* writtenDay
@@ -45,7 +45,7 @@ describe("CorpusDays", () => {
   )
 
   it.effect("should list a written day's date", () =>
-    inCorpus(() =>
+    inCorpus(TestSnapshotFeed.decoder, () =>
       Effect.gen(function* () {
         const days = yield* CorpusDays
         yield* writtenDay
@@ -58,7 +58,7 @@ describe("CorpusDays", () => {
   )
 
   it.effect("should replace the day there with a day written again", () =>
-    inCorpus(() =>
+    inCorpus(TestSnapshotFeed.decoder, () =>
       Effect.gen(function* () {
         const days = yield* CorpusDays
         yield* writtenDay
@@ -76,7 +76,7 @@ describe("CorpusDays", () => {
   )
 
   it.effect("should fail reading a day built to another format as CorpusDayUnreadable Format", () =>
-    inCorpus(() =>
+    inCorpus(TestSnapshotFeed.decoder, () =>
       Effect.gen(function* () {
         const days = yield* CorpusDays
         yield* days.write(new CorpusDay({ ...day, format: 0 }), { poll: Stream.empty, push: Stream.empty })
@@ -92,7 +92,7 @@ describe("CorpusDays", () => {
   )
 
   it.effect("should fail reading a day without its day.json as CorpusDayUnreadable Missing", () =>
-    inCorpus(() =>
+    inCorpus(TestSnapshotFeed.decoder, () =>
       Effect.gen(function* () {
         const days = yield* CorpusDays
 
@@ -103,10 +103,11 @@ describe("CorpusDays", () => {
     )
   )
 
-  it.effect("should list no date for a day without its day.json", () =>
-    inCorpus(() =>
+  it.effect("should list no date for a day without its day.json, once reading it has failed", () =>
+    inCorpus(TestSnapshotFeed.decoder, () =>
       Effect.gen(function* () {
         const days = yield* CorpusDays
+        yield* days.read(day.date).pipe(Effect.flip)
 
         const dates = yield* days.dates
 
@@ -118,7 +119,7 @@ describe("CorpusDays", () => {
 
 describe("CorpusDays#day", () => {
   it.effect("should give none for a day not built", () =>
-    inCorpus(() =>
+    inCorpus(TestSnapshotFeed.decoder, () =>
       Effect.gen(function* () {
         const days = yield* CorpusDays
 
@@ -130,7 +131,7 @@ describe("CorpusDays#day", () => {
   )
 
   it.effect("should give the day.json as built, whatever its format", () =>
-    inCorpus(() =>
+    inCorpus(TestSnapshotFeed.decoder, () =>
       Effect.gen(function* () {
         const days = yield* CorpusDays
         const stale = new CorpusDay({ ...day, format: 0 })
@@ -144,7 +145,7 @@ describe("CorpusDays#day", () => {
   )
 
   it.effect("should give none for a day.json that does not decode, so a build replaces it", () =>
-    inCorpus((dir) =>
+    inCorpus(TestSnapshotFeed.decoder, (dir) =>
       Effect.gen(function* () {
         const days = yield* CorpusDays
         const fs = yield* FileSystem.FileSystem
@@ -160,7 +161,7 @@ describe("CorpusDays#day", () => {
   )
 
   it.effect("should fail for a day.json that cannot be read, rather than giving none", () =>
-    inCorpus((dir) =>
+    inCorpus(TestSnapshotFeed.decoder, (dir) =>
       Effect.gen(function* () {
         const days = yield* CorpusDays
         const fs = yield* FileSystem.FileSystem
@@ -178,7 +179,7 @@ describe("CorpusDays#day", () => {
 
 describe("CorpusDays#read", () => {
   it.effect("should fail the frames as CorpusDayUnreadable Invalid at a line that does not decode", () =>
-    inCorpus((dir) =>
+    inCorpus(TestSnapshotFeed.decoder, (dir) =>
       Effect.gen(function* () {
         const days = yield* CorpusDays
         const fs = yield* FileSystem.FileSystem
@@ -215,20 +216,6 @@ describe("CorpusDay.dates", () => {
     assert.deepStrictEqual(dates, [])
   })
 })
-
-/** `test` with corpus days in a temporary corpus directory, which it is given. */
-function inCorpus<A, E>(
-  test: (dir: string) => Effect.Effect<A, E, CorpusDays | FileSystem.FileSystem | Path.Path>
-) {
-  return Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem
-    const dir = yield* fs.makeTempDirectoryScoped()
-
-    return yield* test(dir).pipe(
-      Effect.provide(CorpusDays.layer.pipe(Layer.provide(withEnv({ SPORTAL_CORPUS_DIR: dir }))))
-    )
-  }).pipe(Effect.scoped, Effect.provide(NodeServices.layer))
-}
 
 const game = GameId.make("1")
 const day = new CorpusDay({

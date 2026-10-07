@@ -23,7 +23,7 @@ import type { FeedFrame } from "../Frame.ts"
 import * as Ingest from "../Ingest.ts"
 import { LiveSlate } from "../LiveSlate.ts"
 import * as EspnDecode from "../provider/espn/EspnDecode.ts"
-import { fixtures, neAtBufFrames, recordedNeAtBuf } from "../provider/espn/TestEspn.ts"
+import { fixtures, neAtBufFrames, recordedNeAtBuf, recordedPlays } from "../provider/espn/TestEspn.ts"
 import * as ScenarioProvider from "../scenario/ScenarioProvider.ts"
 import { Scenarios } from "../scenario/Scenarios.ts"
 import { logged } from "../TestFeedLog.ts"
@@ -142,9 +142,6 @@ describe("CorpusRun.day", () => {
     )
   )
 })
-
-// As LiveSlate.test.ts measured it: every play id the recording's patches add.
-const recordedPlays = 182
 
 /** The events of two corpus runs of NE at BUF's recorded day, logged and built once. */
 class NeAtBufRunTwice extends Context.Service<
