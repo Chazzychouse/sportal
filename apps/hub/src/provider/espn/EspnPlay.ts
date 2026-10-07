@@ -63,7 +63,8 @@ const Spot = Schema.Struct({
 
 const PlayType = Schema.Struct({ id: Schema.String, text: Schema.String })
 
-const Entity = Schema.Struct({
+/** ESPN's play entity as a game package lists it: what `Play` reads of it. */
+export const Entity = Schema.Struct({
   id: Schema.String,
   sequenceNumber: Schema.FiniteFromString.check(Schema.isInt()),
   type: PlayType,
@@ -83,6 +84,17 @@ const Entity = Schema.Struct({
     })
   )
 })
+
+/**
+ * The ESPN type id that reads as `kind`: the first the table lists for it, or, for a kind no recorded type has (a try),
+ * an official timeout's, which reads as `other`.
+ */
+export function typeIdOf(kind: PlayKind): string {
+  return Option.getOrElse(
+    Arr.findFirst(Record.toEntries(kinds), ([, read]) => read === kind).pipe(Option.map(([id]) => id)),
+    () => "74"
+  )
+}
 
 const decodeType = Schema.decodeUnknownOption(Schema.Struct({ type: PlayType }))
 

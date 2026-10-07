@@ -62,7 +62,7 @@ module.exports = {
       severity: "error",
       from: {
         pathNot:
-          "(\\.test\\.tsx?$|^apps/web/src/slate/TestSlate\\.ts$|^apps/hub/src/scenario/(Scenario\\.ts|written/))"
+          "(\\.test\\.tsx?$|^apps/web/src/slate/TestSlate\\.ts$|^apps/hub/src/scenario/(ScenarioScript\\.ts|written/))"
       },
       to: { path: "^packages/domain/src/TestGame\\.ts$" }
     },

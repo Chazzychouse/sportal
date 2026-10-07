@@ -11,41 +11,7 @@ import { type DateTime, Effect, Schema, SchemaGetter, SchemaIssue } from "effect
  */
 export function EspnEvent(league: LeagueId) {
   return Schema.Union([
-    Schema.Struct({
-      id: Schema.String,
-      date: Schema.DateTimeUtcFromString,
-      status: Status,
-      competitions: Schema.NonEmptyArray(
-        Schema.Struct({
-          geoBroadcasts: Schema.optional(
-            Schema.Array(
-              Schema.Struct({
-                type: Schema.Struct({ shortName: Schema.String }),
-                media: Schema.Struct({ shortName: Schema.String })
-              })
-            )
-          ),
-          situation: Schema.optional(Situation),
-          competitors: Schema.Array(
-            Schema.Struct({
-              homeAway: Schema.Literals(["home", "away"]),
-              score: Schema.optional(Score),
-              curatedRank: Schema.optional(Schema.Struct({ current: Ranking })),
-              team: Schema.Struct({
-                id: Schema.String,
-                abbreviation: Schema.String,
-                displayName: Schema.String,
-                location: Schema.optional(Schema.String),
-                shortDisplayName: Schema.optional(Schema.String),
-                logo: Schema.optional(Schema.String),
-                color: Schema.optional(Schema.String),
-                alternateColor: Schema.optional(Schema.String)
-              })
-            })
-          )
-        })
-      )
-    }).pipe(
+    Raw.pipe(
       Schema.decodeTo(Schema.toType(GameSnapshot), {
         decode: SchemaGetter.transformEffect((event) => {
           const [competition] = event.competitions
@@ -126,7 +92,7 @@ const Status = Schema.Struct({
   }).pipe(
     Schema.decodeTo(GameStatus, {
       decode: SchemaGetter.transform(statusOf),
-      encode: SchemaGetter.forbidden(() => "A GameStatus cannot be encoded back to ESPN's status type")
+      encode: SchemaGetter.transform((status) => espnStatuses[status])
     })
   )
 })
@@ -155,6 +121,46 @@ const Situation = Schema.Struct({
   homeTimeouts: Schema.optional(Schema.Int),
   awayTimeouts: Schema.optional(Schema.Int),
   lastPlay: Schema.optional(Schema.Struct({ text: Schema.optional(Schema.String) }))
+})
+
+/**
+ * One event of the site scoreboard, as ESPN spells it: what the decoder reads of it, each field read into the domain's
+ * words. Encoding one writes those words back in ESPN's.
+ */
+export const Raw = Schema.Struct({
+  id: Schema.String,
+  date: Schema.DateTimeUtcFromString,
+  status: Status,
+  competitions: Schema.NonEmptyArray(
+    Schema.Struct({
+      geoBroadcasts: Schema.optional(
+        Schema.Array(
+          Schema.Struct({
+            type: Schema.Struct({ shortName: Schema.String }),
+            media: Schema.Struct({ shortName: Schema.String })
+          })
+        )
+      ),
+      situation: Schema.optional(Situation),
+      competitors: Schema.Array(
+        Schema.Struct({
+          homeAway: Schema.Literals(["home", "away"]),
+          score: Schema.optional(Score),
+          curatedRank: Schema.optional(Schema.Struct({ current: Ranking })),
+          team: Schema.Struct({
+            id: Schema.String,
+            abbreviation: Schema.String,
+            displayName: Schema.String,
+            location: Schema.optional(Schema.String),
+            shortDisplayName: Schema.optional(Schema.String),
+            logo: Schema.optional(Schema.String),
+            color: Schema.optional(Schema.String),
+            alternateColor: Schema.optional(Schema.String)
+          })
+        })
+      )
+    })
+  )
 })
 
 /** The snapshot an event says, once each feed's spelling is read into one shape. */
@@ -258,4 +264,17 @@ function statusOf(type: { readonly name: string; readonly state: "pre" | "in" | 
       return "canceled"
   }
   return type.state === "pre" ? "scheduled" : type.state === "in" ? "live" : "final"
+}
+
+// Each status as ESPN spells it, for `statusOf` to read back.
+const espnStatuses: Readonly<
+  Record<GameStatus, { readonly name: string; readonly state: "pre" | "in" | "post" }>
+> = {
+  scheduled: { name: "STATUS_SCHEDULED", state: "pre" },
+  live: { name: "STATUS_IN_PROGRESS", state: "in" },
+  halftime: { name: "STATUS_HALFTIME", state: "in" },
+  delayed: { name: "STATUS_DELAYED", state: "in" },
+  final: { name: "STATUS_FINAL", state: "post" },
+  postponed: { name: "STATUS_POSTPONED", state: "post" },
+  canceled: { name: "STATUS_CANCELED", state: "post" }
 }
