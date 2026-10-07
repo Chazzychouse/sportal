@@ -10,7 +10,6 @@ import { LiveGames } from "./LiveGames.ts"
 import { Decoder } from "./provider/Decoder.ts"
 import * as EspnScript from "./provider/espn/EspnScript.ts"
 import { type Polling, Provider, type ProviderError } from "./provider/Provider.ts"
-import { Scenario } from "./scenario/Scenario.ts"
 import { scripts } from "./scenario/written/Scripts.ts"
 import * as TestSnapshotFeed from "./TestSnapshotFeed.ts"
 
@@ -140,6 +139,4 @@ export function decodedFrames(frames: ReadonlyArray<FeedFrame>) {
 }
 
 /** The written scenarios as `HubMode` plays them: each script written as ESPN's frames. */
-export const writtenScenarios = [...scripts.values()].map(
-  (script) => new Scenario({ name: script.name, frames: EspnScript.framesOf(script) })
-)
+export const writtenScenarios = [...scripts.values()].map(EspnScript.scenarioOf)

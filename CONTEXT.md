@@ -41,7 +41,7 @@ Every exported type name must be a term here, except the wire schemas in `*Paylo
 | **Scenario unknown** | `SPORTAL_SCENARIO` names no written or recorded scenario; `ScenarioUnknown` in code, with the names there are. | |
 | **Scenario duplicate** | A recorded scenario and a written one share a name, which stops the Hub at startup; `ScenarioDuplicate` in code. | |
 | **Scenario unreadable** | A recorded scenario's file could not be read as gzip'd frames; `ScenarioUnreadable` in code. | |
-| **Scenario time** | The clock a scenario plays on: from the Hub's start, at the scenario's speed. Ingest, the fold, and the Slate run on it. | |
+| **Scenario time** | The clock a scenario plays on: from the Hub's start, at the scenario's speed. Ingest, the fold, and the Slate run on it. A scenario's frames are received at their offsets on it, but what they say, kickoffs among them, stays as recorded or written. | |
 | **Situation** | Live football state: possession, down, distance, field position, red zone (the 20 and in), timeouts. | context |
 | **Ball spot** | Where a spot is on the field: yards from the home goal line (0–100) and the way its team is going, from a team and its yards to the goal it attacks. | context |
 | **Period** | A quarter or an overtime. | quarter (in code) |

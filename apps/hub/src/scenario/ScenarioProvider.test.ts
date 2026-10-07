@@ -31,13 +31,16 @@ import * as Ingest from "../Ingest.ts"
 import { LiveGames } from "../LiveGames.ts"
 import type { Decoder } from "../provider/Decoder.ts"
 import * as EspnDecode from "../provider/espn/EspnDecode.ts"
+import * as EspnScript from "../provider/espn/EspnScript.ts"
 import { Provider } from "../provider/Provider.ts"
 import { decodedFrames, listedBy, pushed, writtenScenarios } from "../TestFeed.ts"
 import { withEnv } from "../TestHubConfig.ts"
 import * as TestSnapshotFeed from "../TestSnapshotFeed.ts"
 import { recordingSpans } from "../TestTelemetry.ts"
+import type { Scenario } from "./Scenario.ts"
 import * as ScenarioClock from "./ScenarioClock.ts"
 import * as ScenarioProvider from "./ScenarioProvider.ts"
+import { ScenarioScript } from "./ScenarioScript.ts"
 import {
   type ScenarioDuplicate,
   Scenarios,
@@ -118,7 +121,7 @@ describe("ScenarioProvider", () => {
     }).pipe(Effect.provide(scenario("two-minute-drill-tie")))
   )
 
-  it.effect("a written scenario's frame that does not decode is noted, not dropped", () =>
+  it.effect("a scenario's poll that does not decode is noted by ESPN's decode, not dropped", () =>
     Effect.gen(function* () {
       const [decoded] = yield* decodedFrames([
         { receivedAt: DateTime.makeUnsafe(0), feed: "poll", channel: "fbs", kind: "response", body: "{" }
@@ -153,6 +156,38 @@ describe("ScenarioProvider", () => {
         )
         assert.isNotEmpty(games)
       })
+  )
+
+  it.effect("holds a written scenario's last slate once it has ended", () =>
+    Effect.gen(function* () {
+      yield* TestClock.adjust(0)
+      yield* TestClock.adjust("1 hour")
+      const tie = (yield* listed("fbs")).find((game) => game.id === "tie-uga-ala")
+      assert.deepStrictEqual([tie?.status, tie?.home.score], ["final", 27])
+    }).pipe(Effect.provide(playing("two-minute-drill-tie")))
+  )
+
+  it.effect("a written scenario pushes each play's message at its offset", () =>
+    Effect.gen(function* () {
+      const dir = yield* (yield* FileSystem.FileSystem).makeTempDirectoryScoped()
+      yield* Effect.gen(function* () {
+        const provider = yield* Provider
+        const received = yield* Ref.make<ReadonlyArray<number>>([])
+        yield* provider.push(Stream.never).pipe(
+          Stream.filter((frame) => frame.kind === "message"),
+          Stream.runForEach((frame) =>
+            Ref.update(received, (all) => [...all, frame.receivedAt.epochMilliseconds])
+          ),
+          Effect.forkScoped({ startImmediately: true })
+        )
+        yield* TestClock.adjust("30 seconds")
+        assert.deepStrictEqual(yield* Ref.get(received), [])
+        yield* TestClock.adjust("2 millis")
+        assert.deepStrictEqual(yield* Ref.get(received), [30_002])
+        yield* TestClock.adjust("30 seconds")
+        assert.deepStrictEqual(yield* Ref.get(received), [30_002, 60_002])
+      }).pipe(Effect.provide(scenario("a-drive", { from: dir, written: [EspnScript.scenarioOf(aDrive)] })))
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer))
   )
 
   it.effect("a recorded scenario polls the recorded poll current at that moment, received now", () =>
@@ -229,7 +264,7 @@ describe("ScenarioProvider", () => {
   )
 
   it.effect(
-    "every committed recorded scenario plays to a non-empty final slate",
+    "every committed scenario, recorded or written, plays to a non-empty final slate",
     () =>
       Effect.gen(function* () {
         const recorded = yield* Scenarios
@@ -366,7 +401,7 @@ function scenario(name: string, options: Options = {}) {
       Layer.provide(
         options.from === undefined
           ? Scenarios.layer(writtenScenarios)
-          : Scenarios.in(options.from, writtenScenarios)
+          : Scenarios.in(options.from, options.written ?? writtenScenarios)
       )
     ),
     options.decoder ?? EspnDecode.layer
@@ -404,12 +439,16 @@ function following(options: Options) {
   )
 }
 
-/** How a test sets a scenario up; one HubConfig, from `env`, serves the whole Hub under test. */
+/**
+ * How a test sets a scenario up; one HubConfig, from `env`, serves the whole Hub under test. `written` replaces the
+ * written scenarios beside the recorded ones in `from`.
+ */
 type Options = {
   readonly from?: string
   readonly decoder?: Layer.Layer<Decoder>
   readonly env?: Record<string, string>
   readonly scenarioFeedLog?: boolean
+  readonly written?: ReadonlyArray<Scenario>
 }
 
 /** Writes recorded scenario `name`, of `frames`, to a fresh folder, and gives the folder. */
@@ -425,6 +464,42 @@ function recorded(name: string, frames: ReadonlyArray<Effect.Effect<FeedFrame>>)
     return dir
   })
 }
+
+// A written scenario of one drive, with a play at 0:30 and another at 1:00.
+const aDrive = ScenarioScript.build("a-drive", [
+  {
+    id: "drive-uga-ala",
+    home: "UGA",
+    away: "ALA",
+    timeline: [
+      [
+        "0:00",
+        {
+          status: "live",
+          period: 1,
+          clock: "15:00",
+          ball: { team: "home", yardLine: 75, down: 1, distance: 10 }
+        }
+      ],
+      [
+        "0:30",
+        {
+          clock: "14:30",
+          ball: { team: "home", yardLine: 71, down: 2, distance: 6 },
+          play: { kind: "rush", yards: 4 }
+        }
+      ],
+      [
+        "1:00",
+        {
+          clock: "14:00",
+          ball: { team: "home", yardLine: 59, down: 1, distance: 10 },
+          play: { kind: "pass", yards: 12 }
+        }
+      ]
+    ]
+  }
+])
 
 // When the recorded scenarios here were recorded.
 const recordedAt = DateTime.makeUnsafe("2026-10-04T18:00:00Z")

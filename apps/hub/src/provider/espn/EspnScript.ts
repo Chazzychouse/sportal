@@ -4,17 +4,26 @@ import type { Play } from "@sportal/domain/Play"
 import type { TeamId } from "@sportal/domain/Team"
 import { Array as Arr, DateTime, Schema } from "effect"
 import { FeedFrame } from "../../Frame.ts"
+import { Scenario } from "../../scenario/Scenario.ts"
 import type { ScenarioScript } from "../../scenario/ScenarioScript.ts"
 import * as EspnEvent from "./EspnEvent.ts"
 import * as EspnPlay from "./EspnPlay.ts"
 import * as FastCastMessage from "./FastCastMessage.ts"
 
 /**
+ * `script` as a scenario of the frames ESPN would have sent, under the script's name, starting at its origin. Instants
+ * stay as written, kickoffs among them: playing the scenario moves when each frame is received, not what it says.
+ */
+export function scenarioOf(script: ScenarioScript): Scenario {
+  return new Scenario({ name: script.name, frames: framesOf(script) })
+}
+
+/**
  * `script` as the frames ESPN would have sent, in the order received: at each step, a scoreboard poll per league on the
  * slate; 1 ms later, an empty checkpoint of each game's play-by-play topic the first time a poll lists the game; and
  * 2 ms after the polls, one message per play on its game's topic, numbered from 1 per topic.
  */
-export function framesOf(script: ScenarioScript): ReadonlyArray<FeedFrame> {
+function framesOf(script: ScenarioScript): ReadonlyArray<FeedFrame> {
   const [, frames] = Arr.mapAccum(
     script.steps,
     { listed: new Set<GameId>(), mids: new Map<string, number>() },

@@ -9,7 +9,7 @@ import { LiveGames } from "../../LiveGames.ts"
 import { ScenarioScript } from "../../scenario/ScenarioScript.ts"
 import { decodedFrames, liveGames } from "../../TestFeed.ts"
 import * as EspnDecode from "./EspnDecode.ts"
-import { framesOf } from "./EspnScript.ts"
+import { scenarioOf } from "./EspnScript.ts"
 
 // An NFL game that scores a touchdown and its extra point and goes to halftime, and a ranked FBS game that kicks off,
 // runs a rush, a sack, a punt, an interception, a touchdown and a two-point try, and goes final.
@@ -102,7 +102,8 @@ const script = ScenarioScript.build("written-as-espn", [
   }
 ])
 
-const frames = framesOf(script)
+const scenario = scenarioOf(script)
+const { frames } = scenario
 
 /** The frames up to and including step `index`'s: every one before the next step's polls. */
 const throughStep = (index: number): ReadonlyArray<FeedFrame> => {
@@ -122,7 +123,13 @@ const Listed = Schema.fromJsonString(
   Schema.Struct({ events: Schema.Array(Schema.Struct({ id: Schema.String })) })
 )
 
-describe("framesOf", () => {
+describe("scenarioOf", () => {
+  it("writes a scenario of the script's name, starting with a poll at the script's origin", () => {
+    assert.strictEqual(scenario.name, "written-as-espn")
+    assert.deepStrictEqual([frames[0]?.feed, frames[0]?.kind], ["poll", "response"])
+    assert.deepStrictEqual(scenario.origin(), script.origin)
+  })
+
   it("writes frames in the order they were received", () => {
     const received = frames.map((frame) => DateTime.toEpochMillis(frame.receivedAt))
     assert.deepStrictEqual(

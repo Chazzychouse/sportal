@@ -5,7 +5,10 @@ import { Situation } from "@sportal/domain/Situation"
 import { broadcast, snapshot, team } from "@sportal/domain/TestGame"
 import { Array as Arr, Data, DateTime } from "effect"
 
-/** A written scenario before it is written as frames: each offset's slate, and the plays run at that offset. */
+/**
+ * A written scenario before it is written as frames: each offset's slate, and the plays run at that offset. Its instants,
+ * kickoffs among them, stay as written when it is played: only when its frames are received moves to scenario time.
+ */
 export class ScenarioScript extends Data.Class<{
   readonly name: string
   /** When the scenario starts, as written. */

@@ -81,7 +81,9 @@ function at(script: ScenarioScript, seconds: number) {
     Effect.map((folded) => folded.slate(LeagueId.literals)),
     Effect.provide(
       liveGames(
-        EspnScript.framesOf(script).filter((frame) => DateTime.isLessThanOrEqualTo(frame.receivedAt, until)),
+        EspnScript.scenarioOf(script).frames.filter((frame) =>
+          DateTime.isLessThanOrEqualTo(frame.receivedAt, until)
+        ),
         { decoder: EspnDecode.layer }
       )
     )

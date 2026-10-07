@@ -10,7 +10,6 @@ import * as EspnProvider from "./provider/espn/EspnProvider.ts"
 import * as EspnScript from "./provider/espn/EspnScript.ts"
 import { FastCast } from "./provider/espn/FastCast.ts"
 import { Slate } from "./Slate.ts"
-import { Scenario } from "./scenario/Scenario.ts"
 import * as ScenarioClock from "./scenario/ScenarioClock.ts"
 import * as ScenarioProvider from "./scenario/ScenarioProvider.ts"
 import * as ScenarioSource from "./scenario/ScenarioSource.ts"
@@ -62,9 +61,7 @@ function live() {
 // one as ESPN recorded it, a written one as ESPN's writer writes its script. Ingest, the fold, and the Slate share the
 // scenario's clock; the rest of the Hub keeps the real one. The game history stays out of a scenario.
 function scripted() {
-  const written = [...scripts.values()].map(
-    (script) => new Scenario({ name: script.name, frames: EspnScript.framesOf(script) })
-  )
+  const written = [...scripts.values()].map(EspnScript.scenarioOf)
   return Layer.mergeAll(
     Layer.mergeAll(
       Slate.layer,
