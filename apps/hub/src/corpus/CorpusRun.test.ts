@@ -1,5 +1,5 @@
 import { assert, describe, it } from "@effect/vitest"
-import { bounds, GameDay } from "@sportal/domain/GameDay"
+import { GameDay } from "@sportal/domain/GameDay"
 import { type GameEvent, GameEventKind } from "@sportal/domain/GameEvent"
 import { LiveGame } from "@sportal/domain/LiveGame"
 import type { Slate } from "@sportal/domain/Slate"
@@ -73,7 +73,7 @@ describe("CorpusRun.day", () => {
         Effect.gen(function* () {
           const frames = yield* recordedNeAtBuf
           const zone = yield* DateTime.CurrentTimeZone
-          const { until } = bounds(recordedDay, zone)
+          const { until } = GameDay.bounds(recordedDay, zone)
           const live = yield* playedLive(frames, until)
           yield* built(recordedDay)
 

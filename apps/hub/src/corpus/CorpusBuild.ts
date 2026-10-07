@@ -1,5 +1,5 @@
 import { Delivery } from "@sportal/domain/Delivery"
-import { bounds, GameDay } from "@sportal/domain/GameDay"
+import { GameDay } from "@sportal/domain/GameDay"
 import type { LeagueId } from "@sportal/domain/League"
 import { Array as Arr, DateTime, Effect, Option, Result, Schema, Stream } from "effect"
 import { FeedLog } from "../feed-log/FeedLog.ts"
@@ -19,7 +19,7 @@ export const captured = Effect.fn("CorpusBuild.captured")(function* (
   date: GameDay
 ): Effect.fn.Return<CorpusDay, CorpusBuildFailed, FeedLog | Decoder | CorpusDays | DateTime.CurrentTimeZone> {
   const zone = yield* DateTime.CurrentTimeZone
-  const { from, until } = bounds(date, zone)
+  const { from, until } = GameDay.bounds(date, zone)
   const decoder = yield* Decoder
   const feedLog = yield* FeedLog
   const corpusDays = yield* CorpusDays

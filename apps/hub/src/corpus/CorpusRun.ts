@@ -1,4 +1,4 @@
-import { bounds, GameDay } from "@sportal/domain/GameDay"
+import { GameDay } from "@sportal/domain/GameDay"
 import type { GameEvent } from "@sportal/domain/GameEvent"
 import { Slate, type Taken } from "@sportal/domain/Slate"
 import {
@@ -35,7 +35,7 @@ export const day = Effect.fn("CorpusRun.day")(function* <S, A>(
   subject: Subject<S, A>
 ): Effect.fn.Return<A, CorpusDayUnreadable, CorpusDays | DateTime.CurrentTimeZone> {
   const zone = yield* DateTime.CurrentTimeZone
-  const { until } = bounds(date, zone)
+  const { until } = GameDay.bounds(date, zone)
   const corpusDays = yield* CorpusDays
   const { frames } = yield* corpusDays.read(date)
 

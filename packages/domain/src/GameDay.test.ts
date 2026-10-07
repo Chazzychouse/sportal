@@ -1,6 +1,6 @@
 import { assert, describe, it } from "@effect/vitest"
 import { DateTime, Effect, Exit, Schema } from "effect"
-import { bounds, dates, GameDay } from "./GameDay.ts"
+import { GameDay } from "./GameDay.ts"
 
 describe("GameDay", () => {
   it.effect("should accept a YYYY-MM-DD date", () =>
@@ -26,7 +26,7 @@ describe("GameDay.bounds", () => {
   it("should run from 04:00 local on the day until 04:00 the next, across a change of clocks", () => {
     const zone = DateTime.zoneMakeNamedUnsafe("America/New_York")
 
-    const { from, until } = bounds(GameDay.make("2026-10-31"), zone)
+    const { from, until } = GameDay.bounds(GameDay.make("2026-10-31"), zone)
 
     assert.deepStrictEqual(
       [DateTime.formatIso(from), DateTime.formatIso(until)],
@@ -37,19 +37,28 @@ describe("GameDay.bounds", () => {
 
 describe("GameDay.dates", () => {
   it("should list every day from one to another, both included, across a month's end", () => {
-    const listed: ReadonlyArray<string> = dates(GameDay.make("2026-09-29"), GameDay.make("2026-10-02"))
+    const listed: ReadonlyArray<string> = GameDay.dates(
+      GameDay.make("2026-09-29"),
+      GameDay.make("2026-10-02")
+    )
 
     assert.deepStrictEqual(listed, ["2026-09-29", "2026-09-30", "2026-10-01", "2026-10-02"])
   })
 
   it("should list the one day when both are the same", () => {
-    const listed: ReadonlyArray<string> = dates(GameDay.make("2026-10-04"), GameDay.make("2026-10-04"))
+    const listed: ReadonlyArray<string> = GameDay.dates(
+      GameDay.make("2026-10-04"),
+      GameDay.make("2026-10-04")
+    )
 
     assert.deepStrictEqual(listed, ["2026-10-04"])
   })
 
   it("should list none when the last is before the first", () => {
-    const listed: ReadonlyArray<string> = dates(GameDay.make("2026-10-04"), GameDay.make("2026-10-03"))
+    const listed: ReadonlyArray<string> = GameDay.dates(
+      GameDay.make("2026-10-04"),
+      GameDay.make("2026-10-03")
+    )
 
     assert.deepStrictEqual(listed, [])
   })

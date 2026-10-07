@@ -1,7 +1,7 @@
 import { availableParallelism } from "node:os"
 import { Worker } from "node:worker_threads"
 import { NodeRuntime, NodeServices, NodeWorker } from "@effect/platform-node"
-import { bounds, dates, GameDay } from "@sportal/domain/GameDay"
+import { GameDay } from "@sportal/domain/GameDay"
 import { LeagueId } from "@sportal/domain/League"
 import { Array as Arr, DateTime, Duration, Effect, Layer, Option, Result, Schema, Stream } from "effect"
 import { Argument, CliError, Command, Flag } from "effect/cli"
@@ -85,12 +85,12 @@ const backfill = Command.make(
     if (to < from) {
       return yield* unchosen(`--to ${to} is before --from ${from}`)
     }
-    const span = dates(from, to)
+    const span = GameDay.dates(from, to)
     // An archived scoreboard is never fetched again, so a day not over yet would be kept part way for good.
     const now = yield* DateTime.now
     const zone = yield* DateTime.CurrentTimeZone
     const unended = Arr.filterMap(span, (date) => {
-      const { until } = bounds(date, zone)
+      const { until } = GameDay.bounds(date, zone)
       return DateTime.isGreaterThan(until, now) ? Result.succeed({ date, until }) : Result.failVoid
     })
     if (Arr.isReadonlyArrayNonEmpty(unended)) {
@@ -183,7 +183,7 @@ function named({
   if (Option.isNone(date) && Option.isSome(from) && Option.isSome(to)) {
     return to.value < from.value
       ? unchosen(`--to ${to.value} is before --from ${from.value}`)
-      : Effect.succeed(dates(from.value, to.value))
+      : Effect.succeed(GameDay.dates(from.value, to.value))
   }
   return unchosen("Name a date, or --from and --to")
 }
