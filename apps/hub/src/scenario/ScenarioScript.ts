@@ -14,7 +14,7 @@ export class ScenarioScript extends Data.Class<{
   readonly steps: ReadonlyArray<{
     readonly at: number
     readonly slate: ReadonlyArray<GameSnapshot>
-    readonly plays: ReadonlyArray<{ readonly game: GameId; readonly play: Play }>
+    readonly plays: ReadonlyArray<{ readonly game: GameId; readonly league: LeagueId; readonly play: Play }>
   }>
 }> {
   /**
@@ -63,7 +63,7 @@ export class ScenarioScript extends Data.Class<{
         plays: written.flatMap(({ first, moments }) =>
           moments
             .filter((moment) => moment.at === at)
-            .flatMap(({ plays }) => plays.map((play) => ({ game: first.id, play })))
+            .flatMap(({ plays }) => plays.map((play) => ({ game: first.id, league: first.league, play })))
         )
       }))
     })

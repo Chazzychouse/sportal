@@ -89,6 +89,14 @@ describe("ScenarioScript.build", () => {
     assert.deepStrictEqual(touchdown?.end, { team: ala })
   })
 
+  it("writes each play with its game and league", () => {
+    const step = drive.steps.find(({ at }) => at === 30_000)
+    assert.deepStrictEqual(
+      step?.plays.map(({ game, league }) => [game, league]),
+      [["1", "fbs"]]
+    )
+  })
+
   it("writes no plays for a step with no play", () => {
     assert.deepStrictEqual(drive.steps[0]?.plays, [])
     assert.deepStrictEqual(

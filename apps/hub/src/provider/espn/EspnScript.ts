@@ -2,7 +2,7 @@ import type { GameId, GameSnapshot } from "@sportal/domain/Game"
 import { LeagueId } from "@sportal/domain/League"
 import type { Play } from "@sportal/domain/Play"
 import type { TeamId } from "@sportal/domain/Team"
-import { Array as Arr, DateTime, Option, Schema } from "effect"
+import { Array as Arr, DateTime, Schema } from "effect"
 import { FeedFrame } from "../../Frame.ts"
 import type { ScenarioScript } from "../../scenario/ScenarioScript.ts"
 import * as EspnEvent from "./EspnEvent.ts"
@@ -48,14 +48,7 @@ export function framesOf(script: ScenarioScript): ReadonlyArray<FeedFrame> {
             })
         )
       const [numbered, messages] = Arr.mapAccum(
-        step.plays.flatMap(({ game, play }) =>
-          Option.toArray(Arr.findFirst(step.slate, (listedGame) => listedGame.id === game)).map(
-            (listedGame) => ({
-              topic: FastCastMessage.topic(listedGame.league, game),
-              play
-            })
-          )
-        ),
+        step.plays.map(({ game, league, play }) => ({ topic: FastCastMessage.topic(league, game), play })),
         mids,
         (soFar, { topic, play }) => {
           const mid = (soFar.get(topic) ?? 0) + 1
@@ -144,7 +137,7 @@ function entityOf(play: Play): typeof EspnPlay.Entity.Encoded {
   return encodeEntity({
     id: play.id,
     sequenceNumber: play.sequence,
-    type: { id: EspnPlay.typeIdOf(play.kind), text: play.kind },
+    type: EspnPlay.typeOf(play.kind),
     text: play.text,
     period: { number: play.period },
     clock: { displayValue: play.clock },

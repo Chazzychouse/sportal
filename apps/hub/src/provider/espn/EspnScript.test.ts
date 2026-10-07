@@ -11,8 +11,8 @@ import { decodedFrames, liveGames } from "../../TestFeed.ts"
 import * as EspnDecode from "./EspnDecode.ts"
 import { framesOf } from "./EspnScript.ts"
 
-// An NFL game that scores on a play and goes to halftime, and a ranked FBS game that kicks off, runs a rush, a sack, a
-// punt, and an interception, and goes final.
+// An NFL game that scores a touchdown and its extra point and goes to halftime, and a ranked FBS game that kicks off,
+// runs a rush, a sack, a punt, an interception, a touchdown and a two-point try, and goes final.
 const script = ScenarioScript.build("written-as-espn", [
   {
     id: "401000001",
@@ -37,11 +37,12 @@ const script = ScenarioScript.build("written-as-espn", [
         "0:40",
         {
           clock: "0:52",
-          score: [7, 10],
+          score: [7, 9],
           ball: null,
           play: { kind: "pass", yards: 30, text: "Allen pass to Kincaid for 30 yards, touchdown" }
         }
       ],
+      ["0:50", { score: [7, 10], play: { kind: "extraPoint", yards: 0 } }],
       ["1:20", { status: "halftime", clock: "0:00" }]
     ]
   },
@@ -94,6 +95,8 @@ const script = ScenarioScript.build("written-as-espn", [
           play: { kind: "interception", yards: 0 }
         }
       ],
+      ["1:50", { clock: "10:40", score: [6, 0], ball: null, play: { kind: "rush", yards: 58 } }],
+      ["1:55", { score: [8, 0], play: { kind: "twoPoint", yards: 3 } }],
       ["2:00", { status: "final", period: 4, clock: "0:00", score: [31, 17], ball: null }]
     ]
   }
@@ -227,7 +230,9 @@ describe("framesOf", () => {
         assert.deepStrictEqual(reports.filter(Fold.FoldReport.$is("Dropped")), [])
         assert.strictEqual(
           decoded.flatMap(({ deliveries }) => deliveries.filter(({ _tag }) => _tag === "Plays")).length,
-          7
+          // One per game's checkpoint, and one per play.
+          new Set(script.steps.flatMap(({ slate }) => slate.map(({ id }) => id))).size +
+            script.steps.flatMap(({ plays }) => plays).length
         )
       }).pipe(Effect.provide(EspnDecode.layer))
   )
