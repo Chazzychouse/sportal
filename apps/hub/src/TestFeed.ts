@@ -94,27 +94,29 @@ export function delivered(delivery: Delivery, at?: DateTime.Utc) {
  * else pushed.
  */
 export function framed(delivery: Delivery, at: DateTime.Utc): FeedFrame {
-  return new FeedFrame({
-    receivedAt: at,
-    feed: "snapshot",
-    channel: delivery._tag === "Listing" ? delivery.league : "snapshot",
-    kind: delivery._tag === "Listing" ? "response" : "message",
-    body: Schema.encodeSync(SnapshotPayload)(delivery)
-  })
+  return delivery._tag === "Listing"
+    ? snapshotFrame(delivery, delivery.league, "response", at)
+    : snapshotFrame(delivery, "snapshot", "message", at)
 }
 
 /** A snapshot feed frame pushed on `channel`, received at the clock's now, that says `payload`. */
 export function pushed(payload: typeof SnapshotPayload.Type, channel: string) {
-  return Effect.map(
-    DateTime.now,
-    (receivedAt): FeedFrame => ({
-      receivedAt,
-      feed: "snapshot",
-      channel,
-      kind: "message",
-      body: Schema.encodeSync(SnapshotPayload)(payload)
-    })
-  )
+  return Effect.map(DateTime.now, (at) => snapshotFrame(payload, channel, "message", at))
+}
+
+function snapshotFrame(
+  payload: typeof SnapshotPayload.Type,
+  channel: string,
+  kind: FeedFrame["kind"],
+  receivedAt: DateTime.Utc
+): FeedFrame {
+  return new FeedFrame({
+    receivedAt,
+    feed: "snapshot",
+    channel,
+    kind,
+    body: Schema.encodeSync(SnapshotPayload)(payload)
+  })
 }
 
 /** The games one poll of `league` lists, as the provided `Decoder` reads it. */

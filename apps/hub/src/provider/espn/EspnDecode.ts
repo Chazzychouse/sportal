@@ -61,12 +61,15 @@ function listed(state: State, frame: Frame): Effect.Effect<readonly [State, Deco
           ({ games, noticed }) =>
             [
               { ...state, listings: new Map([...state.listings, [league, games]]) },
-              said(frame, { deliveries: [Delivery.cases.Listing.make({ league, games })], notices: noticed })
+              Decoded.of(frame, {
+                deliveries: [Delivery.cases.Listing.make({ league, games })],
+                notices: noticed
+              })
             ] as const
         )
       )
     ),
-    Effect.catch((cause) => Effect.succeed([state, undecodable(frame, cause)] as const))
+    Effect.catch((cause) => Effect.succeed([state, Decoded.undecodable(frame, cause)] as const))
   )
 }
 
@@ -78,7 +81,7 @@ function pushed(state: State, frame: Frame): Effect.Effect<readonly [State, Deco
     Effect.flatMap(({ documents, change, noticed }): Effect.Effect<readonly [State, Decoded]> => {
       const moved = { ...state, documents }
       return Option.match(change, {
-        onNone: () => Effect.succeed([moved, said(frame, { notices: noticed })] as const),
+        onNone: () => Effect.succeed([moved, Decoded.of(frame, { notices: noticed })] as const),
         onSome: (changed) => {
           switch (changed._tag) {
             case "Scoreboard":
@@ -87,7 +90,7 @@ function pushed(state: State, frame: Frame): Effect.Effect<readonly [State, Deco
                   const { deliveries, unlisted } = advancedToListed(state.listings, games)
                   return [
                     moved,
-                    said(frame, {
+                    Decoded.of(frame, {
                       deliveries,
                       notices: [
                         ...noticed,
@@ -103,37 +106,23 @@ function pushed(state: State, frame: Frame): Effect.Effect<readonly [State, Deco
               return playsOf(moved, changed.league, changed.game, changed.plays).pipe(
                 Effect.map(
                   ({ state: next, noticed: notes, plays }) =>
-                    [next, said(frame, { deliveries: [plays], notices: [...noticed, ...notes] })] as const
+                    [
+                      next,
+                      Decoded.of(frame, { deliveries: [plays], notices: [...noticed, ...notes] })
+                    ] as const
                 )
               )
             case "Reset":
               return Effect.succeed([
                 moved,
-                said(frame, { resyncs: [frame.channel], notices: noticed })
+                Decoded.of(frame, { resyncs: [frame.channel], notices: noticed })
               ] as const)
           }
         }
       })
     }),
-    Effect.catch((cause) => Effect.succeed([state, undecodable(frame, cause)] as const))
+    Effect.catch((cause) => Effect.succeed([state, Decoded.undecodable(frame, cause)] as const))
   )
-}
-
-function said(
-  frame: Frame,
-  of: {
-    readonly deliveries?: ReadonlyArray<Delivery>
-    readonly resyncs?: ReadonlyArray<string>
-    readonly notices?: ReadonlyArray<Notice>
-  }
-): Decoded {
-  return new Decoded({
-    seq: frame.seq,
-    at: frame.receivedAt,
-    deliveries: of.deliveries ?? [],
-    resyncs: of.resyncs ?? [],
-    notices: of.notices ?? []
-  })
 }
 
 /** The events as games; an event that does not decode is noted and skipped, and the rest still delivered. */
@@ -226,10 +215,4 @@ function playsOf(
 const decodePlay = {
   nfl: Schema.decodeUnknownEffect(EspnPlay.Play("nfl")),
   fbs: Schema.decodeUnknownEffect(EspnPlay.Play("fbs"))
-}
-
-function undecodable(frame: Frame, cause: unknown): Decoded {
-  return said(frame, {
-    notices: [Notice.FrameUndecoded({ feed: frame.feed, channel: frame.channel, kind: frame.kind, cause })]
-  })
 }

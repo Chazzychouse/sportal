@@ -22,14 +22,20 @@ export function layer(options: {
     Provider.of({
       poll: (league) =>
         Effect.all({ games: options.games(league), receivedAt: DateTime.now }).pipe(
-          Effect.map(
-            ({ games, receivedAt }): FeedFrame => ({
-              receivedAt,
-              feed: "snapshot",
-              channel: league,
-              kind: "response",
-              body: encodePayload(Delivery.cases.Listing.make({ league, games }))
-            })
+          Effect.flatMap(({ games, receivedAt }) =>
+            encodePayload(Delivery.cases.Listing.make({ league, games })).pipe(
+              // Our own listing always encodes.
+              Effect.orDie,
+              Effect.map(
+                (body): FeedFrame => ({
+                  receivedAt,
+                  feed: "snapshot",
+                  channel: league,
+                  kind: "response",
+                  body
+                })
+              )
+            )
           )
         ),
       push: () => options.push ?? Stream.never,
@@ -39,4 +45,4 @@ export function layer(options: {
   )
 }
 
-const encodePayload = Schema.encodeSync(SnapshotPayload)
+const encodePayload = Schema.encodeEffect(SnapshotPayload)

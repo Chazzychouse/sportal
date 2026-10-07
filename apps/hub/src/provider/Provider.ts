@@ -11,7 +11,7 @@ import {
   Schema,
   type Stream
 } from "effect"
-import type { FeedFrame } from "../Frame.ts"
+import type { FeedFrame, Frame } from "../Frame.ts"
 
 /**
  * A provider of game data: its scoreboard polled as frames, its live feed pushing frames between polls, when it is
@@ -70,7 +70,32 @@ export class Decoded extends Data.Class<{
   readonly deliveries: ReadonlyArray<Delivery>
   readonly resyncs: ReadonlyArray<string>
   readonly notices: ReadonlyArray<Notice>
-}> {}
+}> {
+  /** What `frame` said: `of`'s deliveries, resyncs, and notices, each none unless given. */
+  static of(
+    frame: Frame,
+    of: {
+      readonly deliveries?: ReadonlyArray<Delivery>
+      readonly resyncs?: ReadonlyArray<string>
+      readonly notices?: ReadonlyArray<Notice>
+    } = {}
+  ): Decoded {
+    return new Decoded({
+      seq: frame.seq,
+      at: frame.receivedAt,
+      deliveries: of.deliveries ?? [],
+      resyncs: of.resyncs ?? [],
+      notices: of.notices ?? []
+    })
+  }
+
+  /** A frame that did not decode: it says nothing but a `FrameUndecoded` notice of `cause`. */
+  static undecodable(frame: Frame, cause: unknown): Decoded {
+    return Decoded.of(frame, {
+      notices: [Notice.FrameUndecoded({ feed: frame.feed, channel: frame.channel, kind: frame.kind, cause })]
+    })
+  }
+}
 
 /**
  * Something decode noticed in a frame, for telemetry to tell: a live feed message received, games pushed, a pushed

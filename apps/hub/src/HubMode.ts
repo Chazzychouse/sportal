@@ -32,7 +32,8 @@ export const layer = Layer.unwrap(
 )
 
 // The live games are built once they have replayed the day's frames, so the Hub serves only after that. They and
-// Ingest share one feed log: Ingest appends to it, and the live games follow it.
+// Ingest share one feed log: Ingest appends to it, and the live games follow it. Neither is
+// provided onward: nothing outside the Hub's own layers needs them.
 function live() {
   return Layer.mergeAll(
     Layer.mergeAll(
@@ -48,8 +49,8 @@ function live() {
         )
       )
     ).pipe(
-      Layer.provideMerge(LiveGames.layer),
-      Layer.provideMerge(FeedLog.inDataDir),
+      Layer.provide(LiveGames.layer),
+      Layer.provide(FeedLog.inDataDir),
       Layer.provide([EspnDecode.layer, DateTime.layerCurrentZoneLocal])
     ),
     YouTubeTv.layer
@@ -69,8 +70,8 @@ function scripted() {
         )
       )
     ).pipe(
-      Layer.provideMerge(LiveGames.layer),
-      Layer.provideMerge(FeedLog.forScenario),
+      Layer.provide(LiveGames.layer),
+      Layer.provide(FeedLog.forScenario),
       Layer.provide([
         ScenarioProvider.decoder({ written: SnapshotDecode.layer, recorded: EspnDecode.layer }),
         DateTime.layerCurrentZoneLocal

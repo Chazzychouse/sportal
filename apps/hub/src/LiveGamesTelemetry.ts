@@ -9,8 +9,8 @@ import type { Decoded } from "./provider/Provider.ts"
 
 /**
  * What one take or tick of the live games did, told as their following stands. During the replay, only a defect is
- * logged: every report and notice was told when its frame first arrived. Otherwise each report is logged and counted,
- * and each notice of the frame taken is told. `frame` is the frame taken; a tick has none.
+ * logged: every report and notice was told when its frame first arrived. Otherwise each notice of the frame taken is told,
+ * then each report is logged and counted. `frame` is the frame taken; a tick has none.
  */
 export function told(
   following: Following,
@@ -19,15 +19,11 @@ export function told(
 ): Effect.Effect<void> {
   const seq = Option.map(frame, ({ seq }) => seq)
   const loudly = () =>
-    Effect.forEach(reports, (report) => toldLive(report, seq), { discard: true }).pipe(
-      Effect.andThen(
-        Option.match(frame, {
-          onNone: () => Effect.void,
-          onSome: ({ notices, seq }) =>
-            Effect.forEach(notices, (notice) => noticed(notice, seq), { discard: true })
-        })
-      )
-    )
+    Option.match(frame, {
+      onNone: () => Effect.void,
+      onSome: ({ notices, seq }) =>
+        Effect.forEach(notices, (notice) => noticed(notice, seq), { discard: true })
+    }).pipe(Effect.andThen(Effect.forEach(reports, (report) => toldLive(report, seq), { discard: true })))
   return Match.valueTags(following, {
     Replaying: () => Effect.forEach(reports, (report) => toldInReplay(report, seq), { discard: true }),
     Live: loudly,

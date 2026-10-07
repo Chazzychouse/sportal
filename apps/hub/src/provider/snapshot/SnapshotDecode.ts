@@ -1,7 +1,6 @@
 import { Effect, Layer, Schema, Stream } from "effect"
-import type { Frame } from "../../Frame.ts"
 import { Decoder } from "../Decoder.ts"
-import { Decoded, Notice } from "../Provider.ts"
+import { Decoded } from "../Provider.ts"
 import { SnapshotPayload } from "./SnapshotPayload.ts"
 
 /**
@@ -17,23 +16,10 @@ export const layer = Layer.succeed(
           decodePayload(frame.body).pipe(
             Effect.map((payload) =>
               payload._tag === "Resync"
-                ? said(frame, { resyncs: [frame.channel] })
-                : said(frame, { deliveries: [payload] })
+                ? Decoded.of(frame, { resyncs: [frame.channel] })
+                : Decoded.of(frame, { deliveries: [payload] })
             ),
-            Effect.catch((cause) =>
-              Effect.succeed(
-                said(frame, {
-                  notices: [
-                    Notice.FrameUndecoded({
-                      feed: frame.feed,
-                      channel: frame.channel,
-                      kind: frame.kind,
-                      cause
-                    })
-                  ]
-                })
-              )
-            )
+            Effect.catch((cause) => Effect.succeed(Decoded.undecodable(frame, cause)))
           )
         )
       )
@@ -41,13 +27,3 @@ export const layer = Layer.succeed(
 )
 
 const decodePayload = Schema.decodeUnknownEffect(SnapshotPayload)
-
-function said(frame: Frame, of: Partial<Pick<Decoded, "deliveries" | "resyncs" | "notices">>): Decoded {
-  return new Decoded({
-    seq: frame.seq,
-    at: frame.receivedAt,
-    deliveries: of.deliveries ?? [],
-    resyncs: of.resyncs ?? [],
-    notices: of.notices ?? []
-  })
-}
