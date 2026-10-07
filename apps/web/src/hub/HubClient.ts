@@ -18,10 +18,10 @@ export class HubClient extends Context.Service<
   static readonly layer = Layer.effect(
     HubClient,
     Effect.gen(function* () {
-      return {
-        api: yield* HttpApiClient.make(SportalApi),
-        stageFailures: yield* PubSub.unbounded<StageRejection | HttpClientError.HttpClientError>()
-      }
+      const api = yield* HttpApiClient.make(SportalApi)
+      const stageFailures = yield* PubSub.unbounded<StageRejection | HttpClientError.HttpClientError>()
+
+      return { api, stageFailures }
     })
   )
 }
@@ -42,7 +42,9 @@ export function dispatch(command: StageCommand) {
 /** Each stage command that failed, from when the stream starts. */
 export const stageFailures = Stream.unwrap(
   Effect.gen(function* () {
-    return Stream.fromPubSub((yield* HubClient).stageFailures)
+    const hub = yield* HubClient
+
+    return Stream.fromPubSub(hub.stageFailures)
   })
 )
 
