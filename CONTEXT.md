@@ -36,16 +36,15 @@ Every exported type name must be a term here, except the wire schemas in `*Paylo
 | **Slate observation** | What one take or tick of the slate did to one game, for telemetry only: took a snapshot, started, changed, stopped, dropped, or raised a defect. The game events it said are `Taken.events`, not observations. | report, log entry |
 | **Stale** | A live game no snapshot has reached for 90 seconds. It stays current for 30 minutes after its last update. | |
 | **Delivery** | What a frame said: a league's listing, one game's snapshot, or one game's whole list of plays. | input, update |
-| **Decoder** | The one home of a provider's decode, provided by its adapter as a layer of its own; `HubMode` pairs it with its provider, so a recorded scenario decodes its frames as the provider that recorded them would. | parser |
+| **Decoder** | The one home of a provider's decode, provided by its adapter as a layer of its own; `HubMode` pairs it with its provider, so a scenario decodes its frames as the provider that recorded them would. | parser |
 | **Decoded** | What one frame said, one per frame: its deliveries, the live feed channels to resync, and its decode observations, with the frame's `seq` and receive time. | decoded frame, said |
 | **Decode observation** | Something a provider's decode observed in a frame for telemetry to tell: a message received, games pushed, an unlisted game, a document reset, a message of an unknown op, a frame, event, or play that did not decode, or an unknown play type; `DecodeObservation` in code. Told only for frames after a replay. | notice, warning, metric |
 | **Delivery source** | Which feed a snapshot came from: `push` or `poll`. | origin, feed type |
 | **Test game** | A game snapshot built for a test, with defaults for everything the test does not care about. | fixture, mock |
-| **Scenario** | Games a Hub plays as its provider, through the real ingest, feed log, decode, and slate: a name and ESPN's frames, recorded from a game day; `Scenario` in code. Every scenario plays through ESPN's decode. | fixture, simulation |
-| **Recorded scenario** | A scenario kept as the raw frames of a recorded window, `fixtures/scenarios/<name>.frames.jsonl.gz`, decoded by the provider that recorded them. | slice, recording |
+| **Scenario** | Games a Hub plays as its provider, through the real ingest, feed log, decode, and slate: a name and the raw frames of a recorded window of a game day, kept as `fixtures/scenarios/<name>.frames.jsonl.gz` and decoded by the provider that recorded them; `Scenario` in code. Every scenario plays through ESPN's decode. | fixture, simulation, recorded scenario, slice |
 | **Scenarios** | Every scenario there is, by name: the recordings in a folder, the committed ones in `fixtures/scenarios/` unless a test names another; reading one back by name. `Scenarios` in code. | scenario store, catalogue |
-| **Scenario unknown** | `SPORTAL_SCENARIO` names no recorded scenario; `ScenarioUnknown` in code, with the names there are. | |
-| **Scenario unreadable** | A recorded scenario's file could not be read as gzip'd frames; `ScenarioUnreadable` in code. | |
+| **Scenario unknown** | `SPORTAL_SCENARIO` names no scenario; `ScenarioUnknown` in code, with the names there are. | |
+| **Scenario unreadable** | A scenario's file could not be read as gzip'd frames; `ScenarioUnreadable` in code. | |
 | **Scenario time** | The clock a scenario plays on: from the Hub's start, at the scenario's speed. Ingest and the live slate run on it. A scenario's frames are received at their offsets on it, but what they say, kickoffs among them, stays as recorded. | |
 | **Situation** | Live football state: possession, down, distance, field position, red zone (the 20 and in), timeouts. | context |
 | **Ball spot** | Where a spot is on the field: yards from the home goal line (0–100) and the way its team is going, from a team and its yards to the goal it attacks. | |

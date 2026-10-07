@@ -138,49 +138,45 @@ function outcomeOf(type: typeof PlayType.Type): PlayOutcome {
 }
 
 // Every ESPN play type id the recordings have (fixtures/espn-recordings, this adapter's fixtures, and the recorded
-// scenarios, tallied 2026-10-07), with its text as ESPN spells it and the case and outcome it reads as.
+// scenarios, tallied 2026-10-07), with the case and outcome it reads as and, after it, its text as ESPN spells it.
 const types = {
-  "5": { text: "Rush", play: { _tag: "Rush", touchdown: false } },
-  "68": { text: "Rushing Touchdown", play: { _tag: "Rush", touchdown: true } },
-  "24": { text: "Pass Reception", play: { _tag: "Completion", touchdown: false } },
-  "4": { text: "Pass Completion", play: { _tag: "Completion", touchdown: false } },
-  "67": { text: "Passing Touchdown", play: { _tag: "Completion", touchdown: true } },
-  "3": { text: "Pass Incompletion", play: { _tag: "Incompletion" } },
-  "63": { text: "Interception", play: { _tag: "Interception", return: "none" } },
-  "26": { text: "Pass Interception Return", play: { _tag: "Interception", return: "returned" } },
-  "36": { text: "Interception Return Touchdown", play: { _tag: "Interception", return: "touchdown" } },
-  "7": { text: "Sack", play: { _tag: "Sack", fumbleLost: false } },
-  "80": { text: "Sack Opp Fumble Recovery", play: { _tag: "Sack", fumbleLost: true } },
-  "69": { text: "Fumble", play: { _tag: "Fumble", recovery: "unknown" } },
-  "9": { text: "Fumble Recovery (Own)", play: { _tag: "Fumble", recovery: "own" } },
-  "29": { text: "Fumble Recovery (Opponent)", play: { _tag: "Fumble", recovery: "opponent" } },
-  "39": { text: "Fumble Return Touchdown", play: { _tag: "Fumble", recovery: "touchdown" } },
-  "15": { text: "Two Point Pass", play: { _tag: "TwoPointTry", by: "pass" } },
-  "16": { text: "Two Point Rush", play: { _tag: "TwoPointTry", by: "rush" } },
-  "53": { text: "Kickoff", play: { _tag: "Kickoff", returnTouchdown: false } },
-  "32": { text: "Kickoff Return Touchdown", play: { _tag: "Kickoff", returnTouchdown: true } },
-  "52": { text: "Punt", play: { _tag: "Punt", return: "none" } },
-  "14": { text: "Punt Return", play: { _tag: "Punt", return: "returned" } },
-  "34": { text: "Punt Return Touchdown", play: { _tag: "Punt", return: "touchdown" } },
-  "59": { text: "Field Goal Good", play: { _tag: "FieldGoal", result: "good" } },
-  "60": { text: "Field Goal Missed", play: { _tag: "FieldGoal", result: "missed" } },
-  "18": { text: "Blocked Field Goal", play: { _tag: "FieldGoal", result: "blocked" } },
-  "61": { text: "Extra Point Good", play: { _tag: "ExtraPoint", good: true } },
-  "62": { text: "Extra Point Missed", play: { _tag: "ExtraPoint", good: false } },
-  "20": { text: "Safety", play: { _tag: "Safety" } },
-  "8": { text: "Penalty", play: { _tag: "Penalty" } },
-  "21": { text: "Timeout", play: { _tag: "Timeout" } },
-  "74": { text: "Official Timeout", play: { _tag: "Stoppage", kind: "officialTimeout" } },
-  "75": { text: "Two-minute warning", play: { _tag: "Stoppage", kind: "twoMinuteWarning" } },
-  "70": { text: "Coin Toss", play: { _tag: "Stoppage", kind: "coinToss" } },
-  "2": { text: "End Period", play: { _tag: "PeriodEnd", ends: "period" } },
-  "65": { text: "End of Half", play: { _tag: "PeriodEnd", ends: "half" } },
-  "79": { text: "End of Regulation", play: { _tag: "PeriodEnd", ends: "regulation" } },
-  "66": { text: "End of Game", play: { _tag: "PeriodEnd", ends: "game" } }
-} as const satisfies Readonly<
-  Record<string, { readonly text: string; readonly play: Exclude<PlayOutcome, { readonly _tag: "Other" }> }>
->
+  "5": { _tag: "Rush", touchdown: false }, // Rush
+  "68": { _tag: "Rush", touchdown: true }, // Rushing Touchdown
+  "24": { _tag: "Completion", touchdown: false }, // Pass Reception
+  "4": { _tag: "Completion", touchdown: false }, // Pass Completion
+  "67": { _tag: "Completion", touchdown: true }, // Passing Touchdown
+  "3": { _tag: "Incompletion" }, // Pass Incompletion
+  "63": { _tag: "Interception", return: "none" }, // Interception
+  "26": { _tag: "Interception", return: "returned" }, // Pass Interception Return
+  "36": { _tag: "Interception", return: "touchdown" }, // Interception Return Touchdown
+  "7": { _tag: "Sack", fumbleLost: false }, // Sack
+  "80": { _tag: "Sack", fumbleLost: true }, // Sack Opp Fumble Recovery
+  "69": { _tag: "Fumble", recovery: "unknown" }, // Fumble
+  "9": { _tag: "Fumble", recovery: "own" }, // Fumble Recovery (Own)
+  "29": { _tag: "Fumble", recovery: "opponent" }, // Fumble Recovery (Opponent)
+  "39": { _tag: "Fumble", recovery: "touchdown" }, // Fumble Return Touchdown
+  "15": { _tag: "TwoPointTry", by: "pass" }, // Two Point Pass
+  "16": { _tag: "TwoPointTry", by: "rush" }, // Two Point Rush
+  "53": { _tag: "Kickoff", returnTouchdown: false }, // Kickoff
+  "32": { _tag: "Kickoff", returnTouchdown: true }, // Kickoff Return Touchdown
+  "52": { _tag: "Punt", return: "none" }, // Punt
+  "14": { _tag: "Punt", return: "returned" }, // Punt Return
+  "34": { _tag: "Punt", return: "touchdown" }, // Punt Return Touchdown
+  "59": { _tag: "FieldGoal", result: "good" }, // Field Goal Good
+  "60": { _tag: "FieldGoal", result: "missed" }, // Field Goal Missed
+  "18": { _tag: "FieldGoal", result: "blocked" }, // Blocked Field Goal
+  "61": { _tag: "ExtraPoint", good: true }, // Extra Point Good
+  "62": { _tag: "ExtraPoint", good: false }, // Extra Point Missed
+  "20": { _tag: "Safety" }, // Safety
+  "8": { _tag: "Penalty" }, // Penalty
+  "21": { _tag: "Timeout" }, // Timeout
+  "74": { _tag: "Stoppage", kind: "officialTimeout" }, // Official Timeout
+  "75": { _tag: "Stoppage", kind: "twoMinuteWarning" }, // Two-minute warning
+  "70": { _tag: "Stoppage", kind: "coinToss" }, // Coin Toss
+  "2": { _tag: "PeriodEnd", ends: "period" }, // End Period
+  "65": { _tag: "PeriodEnd", ends: "half" }, // End of Half
+  "79": { _tag: "PeriodEnd", ends: "regulation" }, // End of Regulation
+  "66": { _tag: "PeriodEnd", ends: "game" } // End of Game
+} as const satisfies Readonly<Record<string, Exclude<PlayOutcome, { readonly _tag: "Other" }>>>
 
-const byId: ReadonlyMap<string, PlayOutcome> = new Map(
-  Object.entries(types).map(([id, { play }]) => [id, play])
-)
+const byId: ReadonlyMap<string, PlayOutcome> = new Map(Object.entries(types))
