@@ -699,11 +699,6 @@
           "refId": "B",
           "expr": "sum (increase(sportal_feed_frames_lost_total[$__rate_interval]) * on (job, instance) group_left target_info{sportal_mode=\"$mode\"}) or vector(0)",
           "legendFormat": "frames lost"
-        },
-        {
-          "refId": "C",
-          "expr": "sum (increase(sportal_history_write_failures_total[$__rate_interval]) * on (job, instance) group_left target_info{sportal_mode=\"$mode\"}) or vector(0)",
-          "legendFormat": "history write failures"
         }
       ],
       "description": "A lost frame is part of a gap row in the log."

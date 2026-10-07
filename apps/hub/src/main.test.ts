@@ -7,13 +7,14 @@ import { ChildProcess, ChildProcessSpawner } from "effect/process"
 describe("the Hub process", () => {
   // Windows cannot send a child SIGTERM. Ctrl-C there is SIGINT, which NodeRuntime.runMain handles the same way.
   it.live.skipIf(process.platform === "win32")(
-    "should stop within seconds of SIGTERM with a Display connected, exiting 0",
+    "should stop within seconds of SIGTERM with a Display connected, exiting 0 with its feed log written",
     () =>
       Effect.gen(function* () {
         const stopped = yield* sigtermed({})
 
         assert.strictEqual(stopped.code, ChildProcessSpawner.ExitCode(0))
         assert.isBelow(stopped.took, 5_000)
+        assert.isTrue(stopped.feedLogWritten)
       }),
     30_000
   )
@@ -24,7 +25,7 @@ describe("the Hub process", () => {
       Effect.gen(function* () {
         const stopped = yield* sigtermed({})
 
-        assert.isFalse(stopped.sportalOpened)
+        assert.isFalse(stopped.sportalSqliteExists)
       }),
     30_000
   )
@@ -40,6 +41,7 @@ describe("the Hub process", () => {
 
         assert.strictEqual(stopped.code, ChildProcessSpawner.ExitCode(0))
         assert.isBelow(stopped.took, 5_000)
+        assert.isTrue(stopped.feedLogWritten)
       }),
     30_000
   )
@@ -64,7 +66,7 @@ describe("the Hub process", () => {
 
 /**
  * Starts the Hub with `settings`, connects a Display, and sends the Hub SIGTERM: its exit code, how long it took to
- * stop in milliseconds, and whether it opened a `sportal.sqlite` in its data directory.
+ * stop in milliseconds, whether it left a `sportal.sqlite` in its data directory, and whether the scenario's feed log file was written there.
  */
 function sigtermed(settings: Record<string, string>) {
   return Effect.gen(function* () {
@@ -75,7 +77,12 @@ function sigtermed(settings: Record<string, string>) {
     const port = yield* freePort()
     const base = `http://127.0.0.1:${port}`
 
-    const hub = yield* spawnHub({ ...settings, SPORTAL_PORT: String(port), SPORTAL_DATA_DIR: dataDir })
+    const hub = yield* spawnHub({
+      ...settings,
+      SPORTAL_PORT: String(port),
+      SPORTAL_DATA_DIR: dataDir,
+      SPORTAL_SCENARIO_FEED_LOG: "scenario.sqlite"
+    })
     // Unread output would fill the pipe and block the Hub.
     yield* hub.all.pipe(Stream.runDrain, Effect.exit, Effect.forkScoped)
 
@@ -91,8 +98,9 @@ function sigtermed(settings: Record<string, string>) {
     const code = yield* hub.exitCode
     const stopped = yield* Clock.currentTimeMillis
 
-    const sportalOpened = yield* fs.exists(path.join(dataDir, "sportal.sqlite"))
-    return { code, took: stopped - stopping, sportalOpened }
+    const sportalSqliteExists = yield* fs.exists(path.join(dataDir, "sportal.sqlite"))
+    const feedLogWritten = yield* fs.exists(path.join(dataDir, "scenario.sqlite"))
+    return { code, took: stopped - stopping, sportalSqliteExists, feedLogWritten }
   }).pipe(Effect.scoped, Effect.provide([NodeServices.layer, FetchHttpClient.layer]))
 }
 
