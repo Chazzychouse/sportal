@@ -766,21 +766,25 @@ layer(EspnDecode.layer)("EspnDecode", (it) => {
       })
     )
 
-    it.effect("should decode every play so it reads back from its JSON Equal to itself", () =>
-      Effect.gen(function* () {
-        const decoded = yield* FramesDecoded
-        const deliveries = decoded.flatMap(({ deliveries }) => deliveries)
-        const plays = deliveries.flatMap((delivery) => (delivery._tag === "Plays" ? delivery.plays : []))
+    it.effect(
+      "should decode every play so it reads back from its JSON Equal to itself",
+      () =>
+        Effect.gen(function* () {
+          const decoded = yield* FramesDecoded
+          const deliveries = decoded.flatMap(({ deliveries }) => deliveries)
+          const plays = deliveries.flatMap((delivery) => (delivery._tag === "Plays" ? delivery.plays : []))
 
-        const backs = yield* Effect.forEach(plays, (play) =>
-          Schema.encodeEffect(playJson)(play).pipe(Effect.flatMap(Schema.decodeEffect(playJson)))
-        )
+          const backs = yield* Effect.forEach(plays, (play) =>
+            Schema.encodeEffect(playJson)(play).pipe(Effect.flatMap(Schema.decodeEffect(playJson)))
+          )
 
-        assert.isNotEmpty(plays)
-        for (const [index, play] of plays.entries()) {
-          assert.isTrue(Equal.equals(backs[index], play), play.id)
-        }
-      })
+          assert.isNotEmpty(plays)
+          for (const [index, play] of plays.entries()) {
+            assert.isTrue(Equal.equals(backs[index], play), play.id)
+          }
+        }),
+      // Round-tripping every recorded play through JSON takes about 5 s under coverage, the default timeout's edge.
+      { timeout: 30_000 }
     )
   })
 })
