@@ -24,7 +24,7 @@ export function slateFollowing(
   return LiveSlate.layer.pipe(
     Layer.provideMerge(FeedLog.layerTest(frames)),
     Layer.provide([
-      options.decoder ?? TestSnapshotFeed.decoder,
+      options.decoder ?? TestSnapshotFeed.layerDecoder,
       options.zone === undefined ? DateTime.layerCurrentZoneLocal : DateTime.layerCurrentZone(options.zone)
     ]),
     Layer.provide([Database.layerMemory, NodeCrypto.layer]),

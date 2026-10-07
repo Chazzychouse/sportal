@@ -10,7 +10,7 @@ import { Provider, ProviderUnavailable } from "./provider/Provider.ts"
 import { decodedFrames } from "./provider/TestDecoder.ts"
 import * as TestSnapshotFeed from "./TestSnapshotFeed.ts"
 
-layer(TestSnapshotFeed.decoder)("TestSnapshotFeed.decoder", (it) => {
+layer(TestSnapshotFeed.layerDecoder)("TestSnapshotFeed.layerDecoder", (it) => {
   it.effect("should decode a poll of the snapshot provider to the listing it answered", () =>
     Effect.gen(function* () {
       const games = [snapshot(), liveSnapshot()]

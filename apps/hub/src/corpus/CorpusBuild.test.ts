@@ -82,7 +82,7 @@ describe.each([
 
 describe("CorpusBuild.captured", () => {
   it.effect("should keep a frame before the next day's 04:00 local and leave out one at 05:00", () =>
-    inCorpus(TestSnapshotFeed.decoder, () =>
+    inCorpus(TestSnapshotFeed.layerDecoder, () =>
       Effect.gen(function* () {
         const logged = [
           framed(listing([snapshot()]), local("2026-10-04T10:00:00")),
@@ -104,7 +104,7 @@ describe("CorpusBuild.captured", () => {
   it.effect(
     "should thread the day by arrival, then seq, so an unchanged listing reads back as the one before it in arrival",
     () =>
-      inCorpus(TestSnapshotFeed.decoder, () =>
+      inCorpus(TestSnapshotFeed.layerDecoder, () =>
         Effect.gen(function* () {
           const a = listing([snapshot()])
           const b = listing([snapshot({ id: GameId.make("2") })])
@@ -128,7 +128,7 @@ describe("CorpusBuild.captured", () => {
   )
 
   it.effect("should fail Undecodable at a frame that does not decode, writing no day", () =>
-    inCorpus(TestSnapshotFeed.decoder, () =>
+    inCorpus(TestSnapshotFeed.layerDecoder, () =>
       Effect.gen(function* () {
         const days = yield* CorpusDays
         const logged = [
@@ -155,7 +155,7 @@ describe("CorpusBuild.captured", () => {
   )
 
   it.effect("should fail NoFrames for a day the feed log has only a checkpoint from before it of", () =>
-    inCorpus(TestSnapshotFeed.decoder, () =>
+    inCorpus(TestSnapshotFeed.layerDecoder, () =>
       Effect.gen(function* () {
         const days = yield* CorpusDays
         const checkpoint = framed(pushedSnapshot, local("2026-10-04T03:00:00"))
@@ -174,7 +174,7 @@ describe("CorpusBuild.captured", () => {
   )
 
   it.effect("should fail NoFrames for a day the feed log has nothing of", () =>
-    inCorpus(TestSnapshotFeed.decoder, () =>
+    inCorpus(TestSnapshotFeed.layerDecoder, () =>
       Effect.gen(function* () {
         const days = yield* CorpusDays
 

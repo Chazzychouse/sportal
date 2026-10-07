@@ -400,7 +400,7 @@ function hubUnderTest() {
     Layer.provideMerge(
       LiveSlate.layer.pipe(
         Layer.provideMerge(FeedLog.layer.pipe(Layer.provide([Database.layerMemory, NodeCrypto.layer]))),
-        Layer.provide([TestSnapshotFeed.decoder, DateTime.layerCurrentZoneLocal])
+        Layer.provide([TestSnapshotFeed.layerDecoder, DateTime.layerCurrentZoneLocal])
       )
     ),
     Layer.provide(TestSnapshotFeed.layer({ games: () => Effect.succeed([game]) })),

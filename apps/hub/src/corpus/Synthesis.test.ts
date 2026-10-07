@@ -175,7 +175,7 @@ function neBufRunLayer() {
     Effect.gen(function* () {
       const { poll, push } = yield* NeBufSynthesized
 
-      return yield* inCorpus(TestSnapshotFeed.decoder, () =>
+      return yield* inCorpus(TestSnapshotFeed.layerDecoder, () =>
         Effect.gen(function* () {
           const days = yield* CorpusDays
           const day = new CorpusDay({

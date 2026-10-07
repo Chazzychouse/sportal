@@ -97,7 +97,7 @@ describe("CorpusRun.day", () => {
   )
 
   it.effect("should fall a hold with nothing after it back at its deadline, in the day's last tick", () =>
-    inCorpus(TestSnapshotFeed.decoder, () =>
+    inCorpus(TestSnapshotFeed.layerDecoder, () =>
       Effect.gen(function* () {
         const days = yield* CorpusDays
         const pushedAt = local("2026-10-04T13:00:00")
@@ -136,7 +136,7 @@ describe("CorpusRun.day", () => {
   )
 
   it.effect("should fail a day that is not there as CorpusDayUnreadable, Missing", () =>
-    inCorpus(TestSnapshotFeed.decoder, () =>
+    inCorpus(TestSnapshotFeed.layerDecoder, () =>
       Effect.gen(function* () {
         const error = yield* CorpusRun.day(recordedDay, CorpusRun.events).pipe(Effect.flip)
 

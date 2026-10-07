@@ -7,7 +7,7 @@ import { Decoded, Decoder } from "./provider/Decoder.ts"
 import { type Polling, Provider, type ProviderUnavailable } from "./provider/Provider.ts"
 
 /**
- * The snapshot feed, which tests drive, as the provider: its frames are our own deliveries, read back by `decoder`. A
+ * The snapshot feed, which tests drive, as the provider: its frames are our own deliveries, read back by `layerDecoder`. A
  * poll of a league is `games(league)` as a frame on that league's channel whose body is its `Listing`. It is polled on
  * `polling` (every 10 seconds by default), pushes `push`'s frames, none by default, whatever the demand, and is
  * subscribed to again on `reconnect` (every second by default).
@@ -37,7 +37,7 @@ export function layer(options: {
  * The snapshot feed's decode as the `Decoder`: each frame is its one delivery, or a resync of its channel, one
  * `Decoded` per frame. A body that does not decode is noted `FrameUndecoded` and says nothing.
  */
-export const decoder = Layer.succeed(
+export const layerDecoder = Layer.succeed(
   Decoder,
   Decoder.of({
     decode: (frames) =>

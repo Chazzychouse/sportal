@@ -1100,7 +1100,7 @@ describe("LiveSlate following the feed log", () => {
       )
 
       const current = yield* LiveSlate.use((slate) => slate.through(2)).pipe(
-        Effect.provide(slateOn(appendingAtEnd([first]), TestSnapshotFeed.decoder))
+        Effect.provide(slateOn(appendingAtEnd([first]), TestSnapshotFeed.layerDecoder))
       )
       const taken = yield* counted("sportal_snapshots", { outcome: "taken" })
 
@@ -1526,7 +1526,7 @@ const breaking = Layer.effect(
           )
     })
   )
-).pipe(Layer.provide(TestSnapshotFeed.decoder))
+).pipe(Layer.provide(TestSnapshotFeed.layerDecoder))
 
 function brokenIn(delivery: Delivery): Delivery {
   return Delivery.match(delivery, {
@@ -1554,7 +1554,7 @@ const undecodable = Effect.map(
 )
 
 /** The snapshot feed's decode, which dies at a frame whose body is `"die"`. */
-const dyingDecoder = Decoder.layerTestDying("die").pipe(Layer.provide(TestSnapshotFeed.decoder))
+const dyingDecoder = Decoder.layerTestDying("die").pipe(Layer.provide(TestSnapshotFeed.layerDecoder))
 
 /** A snapshot feed frame, received now, whose decode `dyingDecoder` dies on. */
 const dyingFrame = Effect.map(
@@ -1768,7 +1768,7 @@ const inPairs = Layer.effect(
   Effect.map(Decoder, (decoder) =>
     Decoder.of({ decode: (frames) => decoder.decode(frames).pipe(Stream.grouped(2), Stream.flattenIterable) })
   )
-).pipe(Layer.provide(TestSnapshotFeed.decoder))
+).pipe(Layer.provide(TestSnapshotFeed.layerDecoder))
 
 /** Each of `counters` with its count, if it has counted. */
 function countsOf(counters: ReadonlyArray<string>) {

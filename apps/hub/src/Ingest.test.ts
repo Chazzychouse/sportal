@@ -618,7 +618,7 @@ function over(
     Layer.provideMerge(FeedLog.layer),
     Layer.provide([
       provider,
-      TestSnapshotFeed.decoder,
+      TestSnapshotFeed.layerDecoder,
       HubConfig.layerTest({ SPORTAL_LEAGUES: (options.leagues ?? ["fbs"]).join(",") }).pipe(Layer.orDie),
       DateTime.layerCurrentZoneLocal
     ]),

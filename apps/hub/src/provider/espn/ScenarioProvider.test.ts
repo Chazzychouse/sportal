@@ -534,7 +534,7 @@ const tieInRedZone = Effect.map(
 /** Playing a recording whose only game scores 7 at 0:07, read by the snapshot feed's decode. */
 function playingChangedAtSeven() {
   return fromRecording("seven", [polledAt(0, [scoring(0)]), polledAt(7, [scoring(7)])], (from) =>
-    playing("seven", { from, decoder: TestSnapshotFeed.decoder })
+    playing("seven", { from, decoder: TestSnapshotFeed.layerDecoder })
   )
 }
 
@@ -570,7 +570,7 @@ function polledAt(seconds: number, games: ReadonlyArray<GameSnapshot>) {
 
 /**
  * `said` as a recording from `feed` holds it, received `seconds` into the recording. The frame is synthetic: a snapshot
- * feed body under an ESPN feed's name, for a recorded scenario decoded by `TestSnapshotFeed.decoder`.
+ * feed body under an ESPN feed's name, for a recorded scenario decoded by `TestSnapshotFeed.layerDecoder`.
  */
 function recordedAs(seconds: number, feed: "poll" | "fastcast", said: Effect.Effect<FeedFrame>) {
   return Effect.map(
@@ -648,7 +648,7 @@ function playingPushTiedByPoll() {
   return fromRecording(
     "tie",
     [polledAt(0, [scoring(0)]), pushedAt(1, scoring(7)), polledAt(10, [scoring(0)])],
-    (from) => playing("tie", { from, decoder: TestSnapshotFeed.decoder })
+    (from) => playing("tie", { from, decoder: TestSnapshotFeed.layerDecoder })
   )
 }
 
