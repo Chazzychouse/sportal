@@ -14,35 +14,33 @@ import { type Decoded, DecodeObservation } from "./provider/Decoder.ts"
  * the live games are counted by state when the take changed which games are live. `frame` is the frame taken; a tick
  * has none. `before` is the slate the take started from.
  */
-export function told(
+export const told = Effect.fnUntraced(function* (
   following: Following,
   frame: Option.Option<Decoded>,
   before: Slate,
   taken: Taken
-): Effect.Effect<void> {
+) {
   const seq = Option.map(frame, ({ seq }) => seq)
   const loudly = () => toldLive(frame, before, taken)
-  return Following.$match(following, {
+  yield* Following.$match(following, {
     Replaying: () =>
       Effect.forEach(taken.observations, (observation) => toldInReplay(observation, seq), { discard: true }),
     Live: loudly,
     Halted: loudly
   })
-}
+})
 
 /** The boundary out of the replay: every held game's state gauge, and the live games counted by state. */
-export function wentLive(slate: Slate): Effect.Effect<void> {
-  return Effect.forEach(slate.live.values(), (liveGame) => gaugeState(liveGame), { discard: true }).pipe(
-    Effect.andThen(gaugeByState(slate.live))
-  )
-}
+export const wentLive = Effect.fnUntraced(function* (slate: Slate) {
+  yield* Effect.forEach(slate.live.values(), (liveGame) => gaugeState(liveGame), { discard: true })
+  yield* gaugeByState(slate.live)
+})
 
 /** A defect in the slate's timer, logged and counted. */
-export function timerDefect(defect: unknown): Effect.Effect<void> {
-  return Effect.logError("LiveSlate: the timer raised a defect", Cause.die(defect)).pipe(
-    Effect.andThen(Metric.update(gameDefects, 1))
-  )
-}
+export const timerDefect = Effect.fnUntraced(function* (defect: unknown) {
+  yield* Effect.logError("LiveSlate: the timer raised a defect", Cause.die(defect))
+  yield* Metric.update(gameDefects, 1)
+})
 
 /** `take`, its duration recorded as how long the slate took to apply one frame. */
 export function timedTake<A, E, R>(take: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> {
@@ -50,39 +48,37 @@ export function timedTake<A, E, R>(take: Effect.Effect<A, E, R>): Effect.Effect<
 }
 
 /** A take or tick told live: the frame's decode observations, then each slate observation, each event, and the counts. */
-function toldLive(frame: Option.Option<Decoded>, before: Slate, taken: Taken): Effect.Effect<void> {
+const toldLive = Effect.fnUntraced(function* (frame: Option.Option<Decoded>, before: Slate, taken: Taken) {
   const { next, observations, events } = taken
   const seq = Option.map(frame, ({ seq }) => seq)
-  return Option.match(frame, {
-    onNone: () => Effect.void,
-    onSome: (decoded) =>
-      Effect.forEach(decoded.observations, (observation) => observed(observation, decoded.seq), {
-        discard: true
-      })
-  }).pipe(
-    Effect.andThen(
-      Effect.forEach(observations, (observation) => toldObservation(observation, seq), { discard: true })
-    ),
-    Effect.andThen(Effect.forEach(events, (event) => toldEvent(event, observations), { discard: true })),
-    Effect.andThen(next.live !== before.live ? gaugeByState(next.live) : Effect.void)
-  )
-}
+
+  if (Option.isSome(frame)) {
+    const decoded = frame.value
+    yield* Effect.forEach(decoded.observations, (observation) => observed(observation, decoded.seq), {
+      discard: true
+    })
+  }
+  yield* Effect.forEach(observations, (observation) => toldObservation(observation, seq), { discard: true })
+  yield* Effect.forEach(events, (event) => toldEvent(event, observations), { discard: true })
+  if (next.live !== before.live) {
+    yield* gaugeByState(next.live)
+  }
+})
 
 /** An observation as a replay tells it: only a defect is logged. */
-function toldInReplay(observation: SlateObservation, seq: Option.Option<number>): Effect.Effect<void> {
-  return SlateObservation.$is("Raised")(observation)
-    ? logDefect(
-        `LiveSlate: ${observation.by} raised a defect in replay; keeping the last good live game`,
-        observation.cause,
-        observation.snapshot,
-        seq
-      )
-    : Effect.void
-}
+const toldInReplay = Effect.fnUntraced(function* (observation: SlateObservation, seq: Option.Option<number>) {
+  if (!SlateObservation.$is("Raised")(observation)) return
+  yield* logDefect(
+    `LiveSlate: ${observation.by} raised a defect in replay; keeping the last good live game`,
+    observation.cause,
+    observation.snapshot,
+    seq
+  )
+})
 
 /** What decode observed in frame `seq`, as logs and metrics. */
-function observed(observation: DecodeObservation, seq: number): Effect.Effect<void> {
-  return DecodeObservation.$match(observation, {
+const observed = Effect.fnUntraced(function* (observation: DecodeObservation, seq: number) {
+  yield* DecodeObservation.$match(observation, {
     Received: ({ league, op, topic, mid }) =>
       Effect.logDebug(
         `Decode: received ${op}${Option.match(mid, { onNone: () => "", onSome: (n) => ` ${n}` })}`
@@ -118,11 +114,14 @@ function observed(observation: DecodeObservation, seq: number): Effect.Effect<vo
     PlayTypeUnknown: ({ id, text }) =>
       Effect.logInfo(`Decode: play type ${id} (${text}) is not in the table; read as other`)
   }).pipe(Effect.annotateLogs({ seq }))
-}
+})
 
 /** An observation's logs and metrics, as a live slate tells them. */
-function toldObservation(observation: SlateObservation, seq: Option.Option<number>): Effect.Effect<void> {
-  return SlateObservation.$match(observation, {
+const toldObservation = Effect.fnUntraced(function* (
+  observation: SlateObservation,
+  seq: Option.Option<number>
+) {
+  yield* SlateObservation.$match(observation, {
     Took: ({ snapshot, from, outcome, had }) =>
       // A hold and a fallback are rare, and each says the push fell behind the scoreboard.
       Effect.logWithLevel(outcome === "held" || outcome === "fellBack" ? "Info" : "Debug")(
@@ -166,14 +165,17 @@ function toldObservation(observation: SlateObservation, seq: Option.Option<numbe
     Raised: ({ snapshot, cause, by }) =>
       logDefect(`LiveSlate: ${by} raised a defect; keeping the last good live game`, cause, snapshot, seq)
   })
-}
+})
 
 /**
  * A game event's log and metrics, with the snapshot its step left its game with: the last `Started` or `Changed` of
  * that game at the event's instant in the same take, which every step that says events reports. An event with none is
  * a defect, logged at Error.
  */
-function toldEvent(event: GameEvent, observations: ReadonlyArray<SlateObservation>): Effect.Effect<void> {
+const toldEvent = Effect.fnUntraced(function* (
+  event: GameEvent,
+  observations: ReadonlyArray<SlateObservation>
+) {
   const stepped = observations.flatMap((observation) =>
     SlateObservation.$is("Started")(observation) || SlateObservation.$is("Changed")(observation)
       ? [{ at: observation.at, snapshot: observation.after.snapshot }]
@@ -182,22 +184,23 @@ function toldEvent(event: GameEvent, observations: ReadonlyArray<SlateObservatio
   const step = stepped.findLast(
     ({ at, snapshot }) => snapshot.id === event.game && DateTime.Equivalence(at, event.at)
   )
-  return Option.match(Option.fromNullishOr(step), {
-    onNone: () =>
-      Effect.logError(
-        `LiveSlate: ${event.what._tag} for game ${event.game} has no started or changed observation in its take`
-      ),
-    onSome: ({ snapshot }) =>
-      logEvent(event.what, snapshot).pipe(
-        Effect.andThen(
-          GameEventKind.$is("Played")(event.what)
-            ? Metric.update(Metric.withAttributes(playsCounted, { league: snapshot.league }), 1)
-            : Effect.void
-        ),
-        Effect.annotateLogs(annotationsOf(snapshot))
-      )
-  })
-}
+  if (step === undefined) {
+    yield* Effect.logError(
+      `LiveSlate: ${event.what._tag} for game ${event.game} has no started or changed observation in its take`
+    )
+    return
+  }
+
+  const { snapshot } = step
+  yield* logEvent(event.what, snapshot).pipe(
+    Effect.andThen(
+      GameEventKind.$is("Played")(event.what)
+        ? Metric.update(Metric.withAttributes(playsCounted, { league: snapshot.league }), 1)
+        : Effect.void
+    ),
+    Effect.annotateLogs(annotationsOf(snapshot))
+  )
+})
 
 /** Game `snapshot`'s log annotations and metric attributes. */
 function annotationsOf(snapshot: GameSnapshot) {
@@ -205,25 +208,28 @@ function annotationsOf(snapshot: GameSnapshot) {
 }
 
 /** Info for a game that is current, Debug otherwise. */
-function logLifecycle(
+const logLifecycle = Effect.fnUntraced(function* (
   what: "started" | "stopped",
   liveGame: LiveGame,
   now: DateTime.Utc
-): Effect.Effect<void> {
-  return Effect.logWithLevel(liveGame.isCurrent(now) ? "Info" : "Debug")(
+) {
+  yield* Effect.logWithLevel(liveGame.isCurrent(now) ? "Info" : "Debug")(
     `LiveSlate: ${liveGame.snapshot.matchup()}: ${what}, ${liveGame.state._tag} at ${liveGame.snapshot.statusLine()}`
   )
-}
+})
 
 /** A game's state gauge: its state's value while the slate holds it, unless `value` says otherwise. */
-function gaugeState(liveGame: LiveGame, value = stateValues[liveGame.state._tag]): Effect.Effect<void> {
-  return Metric.update(Metric.withAttributes(gameStateGauge, annotationsOf(liveGame.snapshot)), value)
-}
+const gaugeState = Effect.fnUntraced(function* (
+  liveGame: LiveGame,
+  value = stateValues[liveGame.state._tag]
+) {
+  yield* Metric.update(Metric.withAttributes(gameStateGauge, annotationsOf(liveGame.snapshot)), value)
+})
 
 /** Gauges how many live games are in each state; a state with none reads 0. */
-function gaugeByState(games: ReadonlyMap<GameId, LiveGame>): Effect.Effect<void> {
+const gaugeByState = Effect.fnUntraced(function* (games: ReadonlyMap<GameId, LiveGame>) {
   const states = [...games.values()].map(({ state }) => state._tag)
-  return Effect.forEach(
+  yield* Effect.forEach(
     everyState,
     (state) =>
       Metric.update(
@@ -232,56 +238,50 @@ function gaugeByState(games: ReadonlyMap<GameId, LiveGame>): Effect.Effect<void>
       ),
     { discard: true }
   )
-}
+})
 
-function logTransition(before: LiveGame, after: LiveGame, now: DateTime.Utc): Effect.Effect<void> {
+const logTransition = Effect.fnUntraced(function* (before: LiveGame, after: LiveGame, now: DateTime.Utc) {
   const from = before.state._tag
   const to = after.state._tag
-  if (from === to) return Effect.void
+  if (from === to) return
+
   const silent = Option.map(before.updatedAt(), (at) => DateTime.distance(at, now))
   const since = Option.match(silent, {
     onNone: () => "",
     onSome: (duration) => `, ${Math.round(Duration.toSeconds(duration))} s since the last update`
   })
-  return Effect.logInfo(
+  yield* Effect.logInfo(
     `LiveSlate: ${after.snapshot.matchup()}: ${from} → ${to} at ${after.snapshot.statusLine()}${since}`
-  ).pipe(
-    Effect.andThen(Metric.update(Metric.withAttributes(transitionsCounted, { from, to }), 1)),
-    Effect.andThen(
-      Option.match(silent, {
-        onNone: () => Effect.void,
-        onSome: (duration) =>
-          from === "Stale"
-            ? Metric.update(Metric.withAttributes(staleDuration, annotationsOf(after.snapshot)), duration)
-            : Effect.void
-      })
-    )
   )
-}
+  yield* Metric.update(Metric.withAttributes(transitionsCounted, { from, to }), 1)
+  if (from === "Stale" && Option.isSome(silent)) {
+    yield* Metric.update(Metric.withAttributes(staleDuration, annotationsOf(after.snapshot)), silent.value)
+  }
+})
 
 /** Info, with the event's fields as annotations, so the dashboard can mark it on the game's timeline. */
-function logEvent(event: GameEventKind, snapshot: GameSnapshot): Effect.Effect<void> {
+const logEvent = Effect.fnUntraced(function* (event: GameEventKind, snapshot: GameSnapshot) {
   const { _tag, ...fields } = event
   const team = "team" in event ? ` ${snapshot.abbreviationOf(event.team)}` : ""
-  return Effect.logInfo(`LiveSlate: ${snapshot.matchup()}: ${_tag}${team} at ${snapshot.statusLine()}`).pipe(
+  yield* Effect.logInfo(`LiveSlate: ${snapshot.matchup()}: ${_tag}${team} at ${snapshot.statusLine()}`).pipe(
     Effect.andThen(
       Metric.update(Metric.withAttributes(gameEventsCounted, { ...annotationsOf(snapshot), event: _tag }), 1)
     ),
     Effect.annotateLogs({ ...fields, event: _tag })
   )
-}
+})
 
 /**
  * Logs a defect at Error with the game's annotations, the frame's `seq`, and `snapshot` encoded, and counts it. A
  * snapshot that cannot be encoded is logged by its id, so the log itself never raises a defect.
  */
-function logDefect(
+const logDefect = Effect.fnUntraced(function* (
   message: string,
   cause: Cause.Cause<never>,
   snapshot: GameSnapshot,
   seq: Option.Option<number>
-): Effect.Effect<void> {
-  return Effect.logError(message, cause).pipe(
+) {
+  yield* Effect.logError(message, cause).pipe(
     Effect.andThen(Metric.update(gameDefects, 1)),
     Effect.annotateLogs({
       ...annotationsOf(snapshot),
@@ -292,7 +292,7 @@ function logDefect(
     }),
     Effect.annotateLogs(Option.match(seq, { onNone: () => ({}), onSome: (seq) => ({ seq }) }))
   )
-}
+})
 
 // Each state's value on `sportal_game_state`, where 0 is a game the slate has let go. Written as a record so that a new
 // state fails to compile here.

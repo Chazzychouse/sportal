@@ -3,9 +3,9 @@ import { LiveMessage, type SlateChanged } from "@sportal/api/LiveMessage"
 import { ChannelAvailability } from "@sportal/domain/Channel"
 import { GameId, type GameSnapshot, Network } from "@sportal/domain/Game"
 import { Slate } from "@sportal/domain/Slate"
-import type { Stage, Tile } from "@sportal/domain/Stage"
+import { type Stage, Tile } from "@sportal/domain/Stage"
 import { broadcast, liveSnapshot, snapshot, team } from "@sportal/domain/TestGame"
-import { DateTime, Deferred, Effect, Fiber, Layer, Option, Ref, Stream } from "effect"
+import { DateTime, Deferred, Effect, Fiber, Layer, Option, Predicate, Ref, Stream } from "effect"
 import { TestClock } from "effect/testing"
 import { LiveSlate } from "./LiveSlate.ts"
 import { LiveStage } from "./LiveStage.ts"
@@ -49,7 +49,7 @@ describe("LiveStage", () => {
       )
 
       const stage = yield* liveStage.stage
-      assert.isTrue(stage.tiles.every((tile) => tile._tag !== "Empty"))
+      assert.isTrue(stage.tiles.every((tile) => !Tile.guards.Empty(tile)))
     }).pipe(Effect.provide(liveStageOver(slate)))
   )
 
@@ -118,7 +118,10 @@ describe("LiveStage", () => {
 
       const stage = yield* firstStageWhere(liveStage.changes, (stage) => !isNoGuideTile(stage.tiles[0]))
       const tile = Option.getOrThrow(stage).tiles[0]
-      assert.deepStrictEqual(tile === undefined || tile._tag === "Empty" ? tile : tile.game, GameId.make("5"))
+      assert.deepStrictEqual(
+        tile === undefined || Tile.guards.Empty(tile) ? tile : tile.game,
+        GameId.make("5")
+      )
     }).pipe(Effect.provide(liveStageOver(slate)))
   )
 
@@ -328,5 +331,5 @@ function noGuideTile(game: GameId) {
 
 /** Whether `tile` is the data tile of a game while the source has no guide. */
 function isNoGuideTile(tile: Tile | undefined) {
-  return tile?._tag === "DataTile" && tile.why._tag === "NoGuide"
+  return tile !== undefined && Tile.guards.DataTile(tile) && Predicate.isTagged(tile.why, "NoGuide")
 }

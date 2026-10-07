@@ -25,9 +25,11 @@ export const layer: Layer.Layer<
     const warnOnce = yield* Effect.cached(
       Effect.logWarning(`Telemetry cannot reach the collector at ${otlpUrl.value.href}`)
     )
-    const client = HttpClient.tapError(yield* HttpClient.HttpClient, () => warnOnce)
+    const httpClient = yield* HttpClient.HttpClient
+    const client = HttpClient.tapError(httpClient, () => warnOnce)
+    const crypto = yield* Crypto.Crypto
     // Prometheus keys series by instance, so two Hubs at once (a live one and a scenario) stay apart.
-    const instanceId = yield* (yield* Crypto.Crypto).randomUUIDv4
+    const instanceId = yield* crypto.randomUUIDv4
     return Otlp.layerJson({
       baseUrl: otlpUrl.value.href,
       resource: {

@@ -41,7 +41,7 @@ import {
 } from "./provider/Provider.ts"
 import { appended, delivered } from "./TestLiveSlate.ts"
 import * as TestSnapshotFeed from "./TestSnapshotFeed.ts"
-import { polled, pushed } from "./TestSnapshotFeed.ts"
+import { pushed } from "./TestSnapshotFeed.ts"
 import { counted, recordingLogs, recordingSpans, withMetrics } from "./TestTelemetry.ts"
 
 describe("Ingest", () => {
@@ -79,12 +79,10 @@ describe("Ingest", () => {
   it.effect("should poll again when the provider's Schedule says, whatever the slate", () =>
     Effect.gen(function* () {
       const calls = yield* Ref.make<ReadonlyArray<number>>([])
-      const provider = polled(
-        () => timeRecorded(calls).pipe(Effect.as([liveSnapshot({ id: GameId.make("1") })])),
-        {
-          polling: Schedule.spaced("7 seconds")
-        }
-      )
+      const provider = TestSnapshotFeed.layer({
+        games: () => timeRecorded(calls).pipe(Effect.as([liveSnapshot({ id: GameId.make("1") })])),
+        polling: Schedule.spaced("7 seconds")
+      })
 
       yield* Effect.gen(function* () {
         yield* TestClock.adjust(0)
@@ -632,7 +630,8 @@ function over(
 function polledFor20SecondsOver(frames: Stream.Stream<FeedFrame>) {
   return Effect.gen(function* () {
     const polls = yield* Ref.make(0)
-    const provider = polled(() => Ref.update(polls, (n) => n + 1).pipe(Effect.as([scoring(0)])), {
+    const provider = TestSnapshotFeed.layer({
+      games: () => Ref.update(polls, (n) => n + 1).pipe(Effect.as([scoring(0)])),
       push: frames
     })
 
@@ -750,7 +749,8 @@ function reconnectingOnce(
   subscriptions: Ref.Ref<number>,
   polls: Ref.Ref<number>
 ) {
-  return polled(() => Ref.update(polls, (n) => n + 1).pipe(Effect.as([scoring(0)])), {
+  return TestSnapshotFeed.layer({
+    games: () => Ref.update(polls, (n) => n + 1).pipe(Effect.as([scoring(0)])),
     push: feeding(feed, subscriptions),
     reconnect: Schedule.recurs(1)
   })
@@ -773,10 +773,10 @@ function scripted(
   responses: ReadonlyArray<ReadonlyArray<GameSnapshot> | "fail">,
   options: { readonly polling?: Polling; readonly push?: LiveFeed } = {}
 ): Layer.Layer<Provider> {
-  const { push } = options
+  const { polling, push } = options
   const snapshotFeed = Layer.unwrap(
     Effect.map(Ref.make(0), (calls) =>
-      TestSnapshotFeed.provider({
+      TestSnapshotFeed.layer({
         games: (league) =>
           Ref.getAndUpdate(calls, (call) => call + 1).pipe(
             Effect.flatMap((call) => {
@@ -787,7 +787,7 @@ function scripted(
             }),
             Effect.withSpan("provider.poll")
           ),
-        polling: options.polling ?? Schedule.spaced("10 seconds")
+        ...(polling === undefined ? {} : { polling })
       })
     )
   )
@@ -859,7 +859,7 @@ function scoring(n: number) {
 
 function pollOf(games: ReadonlyArray<GameSnapshot>) {
   return Provider.use((provider) => provider.poll("fbs")).pipe(
-    Effect.provide(polled(() => Effect.succeed(games))),
+    Effect.provide(TestSnapshotFeed.layer({ games: () => Effect.succeed(games) })),
     Effect.orDie
   )
 }

@@ -17,10 +17,10 @@ export const layer = Layer.unwrap(
     const config = yield* HubConfig
     // Annotated so the compiler checks that a scenario provides everything the live day does.
     const chosen: Layer.Layer<
-      Layer.Success<ReturnType<typeof live>>,
-      Layer.Error<ReturnType<typeof live>> | Layer.Error<ReturnType<typeof scenario>>,
-      Layer.Services<ReturnType<typeof live>> | Layer.Services<ReturnType<typeof scenario>>
-    > = Option.match(config.scenario, { onNone: live, onSome: scenario })
+      Layer.Success<typeof live>,
+      Layer.Error<typeof live> | Layer.Error<typeof scenario>,
+      Layer.Services<typeof live> | Layer.Services<typeof scenario>
+    > = Option.match(config.scenario, { onNone: () => live, onSome: () => scenario })
     return chosen
   })
 )
@@ -28,36 +28,17 @@ export const layer = Layer.unwrap(
 // The LiveSlate is built once it has replayed the day's frames, so the Hub serves only after that. It and Ingest share one
 // feed log: Ingest appends to it, and the LiveSlate follows it. Only the LiveSlate is provided onward: nothing outside the
 // Hub's own layers needs the log.
-function live() {
-  return Layer.mergeAll(
-    Ingest.layer.pipe(
-      Layer.provideMerge(LiveSlate.layer),
-      Layer.provide(FeedLog.layerInDataDir),
-      Layer.provide([
-        Espn.layer.pipe(Layer.provide(NodeSocket.layerWebSocketConstructorWS)),
-        DateTime.layerCurrentZoneLocal
-      ])
-    ),
-    YouTubeTv.layer
-  )
-}
-
-// The scenario plays as the provider through the real Ingest, onto a feed log of its own, decoded as ESPN recorded it.
-// Ingest and the LiveSlate share the scenario's clock; the rest of the Hub keeps the real one.
-function scenario() {
-  return Layer.mergeAll(
-    Ingest.layer.pipe(
-      Layer.provideMerge(LiveSlate.layer),
-      Layer.provide(scenarioFeedLog),
-      Layer.provide([
-        Espn.layerScenario.pipe(Layer.provide(Scenarios.layer)),
-        DateTime.layerCurrentZoneLocal
-      ]),
-      Layer.provide(ScenarioClock.layer)
-    ),
-    ScenarioSource.layer
-  )
-}
+const live = Layer.mergeAll(
+  Ingest.layer.pipe(
+    Layer.provideMerge(LiveSlate.layer),
+    Layer.provide(FeedLog.layerInDataDir),
+    Layer.provide([
+      Espn.layer.pipe(Layer.provide(NodeSocket.layerWebSocketConstructorWS)),
+      DateTime.layerCurrentZoneLocal
+    ])
+  ),
+  YouTubeTv.layer
+)
 
 // A scenario's feed log: in memory, or on the file `SPORTAL_SCENARIO_FEED_LOG` names in the data directory. Never on the
 // game day's `feed.sqlite`.
@@ -70,4 +51,16 @@ const scenarioFeedLog = Layer.unwrap(
       onSome: (name) => FeedLog.layer.pipe(Layer.provide(Database.layerFile(name)), Layer.orDie)
     })
   })
+)
+
+// The scenario plays as the provider through the real Ingest, onto a feed log of its own, decoded as ESPN recorded it.
+// Ingest and the LiveSlate share the scenario's clock; the rest of the Hub keeps the real one.
+const scenario = Layer.mergeAll(
+  Ingest.layer.pipe(
+    Layer.provideMerge(LiveSlate.layer),
+    Layer.provide(scenarioFeedLog),
+    Layer.provide([Espn.layerScenario.pipe(Layer.provide(Scenarios.layer)), DateTime.layerCurrentZoneLocal]),
+    Layer.provide(ScenarioClock.layer)
+  ),
+  ScenarioSource.layer
 )

@@ -1,4 +1,4 @@
-import { Cause, type Effect, Stream } from "effect"
+import { Cause, Effect, Stream } from "effect"
 
 /**
  * Gzip for the bodies the feed log stores and the recordings the importer writes, and the zlib-deflated patches
@@ -7,17 +7,16 @@ import { Cause, type Effect, Stream } from "effect"
  */
 
 /** `text` as gzip'd UTF-8 bytes. */
-export function compress(text: string): Effect.Effect<Uint8Array, Cause.UnknownError> {
-  return Stream.mkUint8Array(through(new TextEncoder().encode(text), () => new CompressionStream("gzip")))
-}
+export const compress = Effect.fnUntraced(function* (text: string) {
+  return yield* Stream.mkUint8Array(
+    through(new TextEncoder().encode(text), () => new CompressionStream("gzip"))
+  )
+})
 
 /** The text a gzip'd or zlib-deflated body holds. */
-export function decompress(
-  bytes: Uint8Array,
-  format: "gzip" | "deflate"
-): Effect.Effect<string, Cause.UnknownError> {
-  return through(bytes, () => new DecompressionStream(format)).pipe(Stream.decodeText, Stream.mkString)
-}
+export const decompress = Effect.fnUntraced(function* (bytes: Uint8Array, format: "gzip" | "deflate") {
+  return yield* through(bytes, () => new DecompressionStream(format)).pipe(Stream.decodeText, Stream.mkString)
+})
 
 function through(bytes: Uint8Array, transform: () => CompressionStream | DecompressionStream) {
   return Stream.fromReadableStream({

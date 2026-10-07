@@ -3,9 +3,7 @@ import type { Delivery } from "@sportal/domain/Delivery"
 import type { GameEvent } from "@sportal/domain/GameEvent"
 import { Slate } from "@sportal/domain/Slate"
 import type { SlateObservation } from "@sportal/domain/SlateObservation"
-import { type Crypto, DateTime, Effect, Layer } from "effect"
-import type { SqlClient } from "effect/sql"
-import { TestClock } from "effect/testing"
+import { DateTime, Effect, Layer } from "effect"
 import * as Database from "./Database.ts"
 import type { FeedFrame } from "./Frame.ts"
 import { FeedLog } from "./feed-log/FeedLog.ts"
@@ -34,90 +32,45 @@ export function slateFollowing(
   )
 }
 
-/**
- * `slateFollowing` the frames `frames` gives when the layer is built. For frames made on the test clock, such as a frame
- * received now.
- */
-export function slateFollowingFramesFrom<E>(
-  frames: Effect.Effect<ReadonlyArray<FeedFrame>, E>,
-  options: { readonly decoder?: Layer.Layer<Decoder>; readonly zone?: DateTime.TimeZone } = {}
-) {
-  return Layer.unwrap(Effect.map(frames, (made) => slateFollowing(made, options)))
-}
-
-/** The slate following `feedLog`, which is provided too, read by `decoder`, in the local zone. */
-export function slateOn(
-  feedLog: Layer.Layer<FeedLog, never, SqlClient.SqlClient | Crypto.Crypto>,
-  decoder: Layer.Layer<Decoder>
-) {
-  return LiveSlate.layer.pipe(
-    Layer.provideMerge(feedLog),
-    Layer.provide([decoder, DateTime.layerCurrentZoneLocal])
-  )
-}
-
 /** The slate's latest once `layer` is built. */
 export function latestOf<E, R>(layer: Layer.Layer<LiveSlate, E, R>) {
   return LiveSlate.use((slate) => slate.latest).pipe(Effect.provide(layer))
 }
 
 /** Appends `frame` to the feed log and gives the slate once it has taken it. */
-export function appended(frame: FeedFrame) {
-  return Effect.gen(function* () {
-    const feedLog = yield* FeedLog
-    const liveSlate = yield* LiveSlate
-    const logged = yield* feedLog.append(frame)
-    return yield* liveSlate.through(logged.seq)
-  })
-}
+export const appended = Effect.fnUntraced(function* (frame: FeedFrame) {
+  const feedLog = yield* FeedLog
+  const liveSlate = yield* LiveSlate
+  const logged = yield* feedLog.append(frame)
+  return yield* liveSlate.through(logged.seq)
+})
 
 /**
  * Appends a snapshot feed frame that says only `delivery`, received at `at` (the clock's now, unless given), and gives
  * the slate once it has taken it.
  */
-export function delivered(delivery: Delivery, at?: DateTime.Utc) {
-  return Effect.gen(function* () {
-    const received = yield* at === undefined ? DateTime.now : Effect.succeed(at)
-    return yield* appended(TestSnapshotFeed.framed(delivery, received))
-  })
-}
-
-/**
- * Appends each of `frames` once the test clock reaches it and waits for the slate to take it, so the timer runs
- * between them as it would live.
- */
-export function takenInTime(frames: ReadonlyArray<FeedFrame>) {
-  return Effect.forEach(
-    frames,
-    (frame) =>
-      Effect.gen(function* () {
-        const now = yield* DateTime.now
-        yield* TestClock.adjust(DateTime.distance(now, frame.receivedAt))
-        yield* appended(frame)
-      }),
-    { discard: true }
-  )
-}
+export const delivered = Effect.fnUntraced(function* (delivery: Delivery, at?: DateTime.Utc) {
+  const now = yield* DateTime.now
+  return yield* appended(TestSnapshotFeed.framed(delivery, at ?? now))
+})
 
 /** Every game event and observation the domain slate makes taking `frames` whole, in order, as the provided `Decoder` reads them. */
-export function takenOf(frames: ReadonlyArray<FeedFrame>) {
-  return Effect.gen(function* () {
-    const empty: {
-      readonly slate: Slate
-      readonly events: ReadonlyArray<GameEvent>
-      readonly observations: ReadonlyArray<SlateObservation>
-    } = { slate: Slate.empty, events: [], observations: [] }
-    const decoded = yield* decodedFrames(frames)
-    const { events, observations } = yield* Effect.reduce(
-      decoded,
-      () => empty,
-      ({ slate, events, observations }, said) =>
-        Effect.map(slate.take(said), (taken) => ({
-          slate: taken.next,
-          events: [...events, ...taken.events],
-          observations: [...observations, ...taken.observations]
-        }))
-    )
-    return { events, observations }
-  })
-}
+export const takenOf = Effect.fnUntraced(function* (frames: ReadonlyArray<FeedFrame>) {
+  const empty: {
+    readonly slate: Slate
+    readonly events: ReadonlyArray<GameEvent>
+    readonly observations: ReadonlyArray<SlateObservation>
+  } = { slate: Slate.empty, events: [], observations: [] }
+  const decoded = yield* decodedFrames(frames)
+  const { events, observations } = yield* Effect.reduce(
+    decoded,
+    () => empty,
+    ({ slate, events, observations }, said) =>
+      Effect.map(slate.take(said), (taken) => ({
+        slate: taken.next,
+        events: [...events, ...taken.events],
+        observations: [...observations, ...taken.observations]
+      }))
+  )
+  return { events, observations }
+})

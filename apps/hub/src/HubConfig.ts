@@ -35,62 +35,77 @@ export class HubConfig extends Context.Service<
     readonly leagues: ReadonlyArray<LeagueId>
   }
 >()("sportal/hub/HubConfig") {
-  static readonly layer = Layer.effect(
+  static readonly layer: Layer.Layer<HubConfig, Config.ConfigError, Path.Path> = Layer.effect(
     HubConfig,
     Effect.gen(function* () {
+      const path = yield* Path.Path
       const dataDirSetting = yield* Config.String("SPORTAL_DATA_DIR").pipe(Config.option)
-      const dataDir = Option.isSome(dataDirSetting)
-        ? dataDirSetting.value
-        : yield* HubConfig.defaultDataDir(process.platform)
-      const corpusDir = yield* Config.String("SPORTAL_CORPUS_DIR").pipe(Config.option)
-      return HubConfig.of({
-        port: yield* Config.Port("SPORTAL_PORT").pipe(Config.withDefault(4400)),
-        // Every interface, so a Remote on the home network can reach the Hub.
-        host: yield* Config.String("SPORTAL_HOST").pipe(Config.withDefault("0.0.0.0")),
-        webRoot: yield* Config.String("SPORTAL_WEB_ROOT").pipe(Config.option),
-        dataDir,
-        corpusDir: Option.isSome(corpusDir) ? corpusDir.value : (yield* Path.Path).join(dataDir, "corpus"),
-        scenario: yield* Config.String("SPORTAL_SCENARIO").pipe(Config.option),
-        // Zero, a negative speed, or NaN would stall or break the scenario clock.
-        scenarioSpeed: yield* Config.schema(
-          Schema.Finite.check(Schema.isGreaterThan(0)),
-          "SPORTAL_SCENARIO_SPEED"
-        ).pipe(Config.withDefault(1)),
-        scenarioFeedLog: yield* Config.schema(
-          Schema.String.check(
-            Schema.makeFilter((name) => /^[^/\\]+$/.test(name) && name !== "feed.sqlite", {
-              expected: "a file name in the data directory other than feed.sqlite, the game day's feed log"
-            })
-          ),
-          "SPORTAL_SCENARIO_FEED_LOG"
-        ).pipe(Config.option),
-        logLevel: yield* Config.LogLevel("SPORTAL_LOG_LEVEL").pipe(Config.withDefault("Info")),
-        logFormat: yield* Config.Literals(["pretty", "json"], "SPORTAL_LOG_FORMAT").pipe(
-          Config.withDefault("pretty")
+      const dataDir = yield* Option.match(dataDirSetting, {
+        onSome: Effect.succeed,
+        onNone: () => HubConfig.defaultDataDir(process.platform)
+      })
+      const corpusDirSetting = yield* Config.String("SPORTAL_CORPUS_DIR").pipe(Config.option)
+      const port = yield* Config.Port("SPORTAL_PORT").pipe(Config.withDefault(4400))
+      // Every interface, so a Remote on the home network can reach the Hub.
+      const host = yield* Config.String("SPORTAL_HOST").pipe(Config.withDefault("0.0.0.0"))
+      const webRoot = yield* Config.String("SPORTAL_WEB_ROOT").pipe(Config.option)
+      const scenario = yield* Config.String("SPORTAL_SCENARIO").pipe(Config.option)
+      // Zero, a negative speed, or NaN would stall or break the scenario clock.
+      const scenarioSpeed = yield* Config.schema(
+        Schema.Finite.check(Schema.isGreaterThan(0)),
+        "SPORTAL_SCENARIO_SPEED"
+      ).pipe(Config.withDefault(1))
+      const scenarioFeedLog = yield* Config.schema(
+        Schema.String.check(
+          Schema.makeFilter((name) => /^[^/\\]+$/.test(name) && name !== "feed.sqlite", {
+            expected: "a file name in the data directory other than feed.sqlite, the game day's feed log"
+          })
         ),
-        version: yield* Config.String("SPORTAL_VERSION").pipe(Config.withDefault("dev")),
-        // "localhost:4318" parses as a URL with scheme "localhost:", so the scheme is checked.
-        otlpUrl: yield* Config.schema(
-          Schema.URLFromString.check(
-            Schema.makeFilter((url) => url.protocol === "http:" || url.protocol === "https:", {
-              expected: "an http: or https: URL"
+        "SPORTAL_SCENARIO_FEED_LOG"
+      ).pipe(Config.option)
+      const logLevel = yield* Config.LogLevel("SPORTAL_LOG_LEVEL").pipe(Config.withDefault("Info"))
+      const logFormat = yield* Config.Literals(["pretty", "json"], "SPORTAL_LOG_FORMAT").pipe(
+        Config.withDefault("pretty")
+      )
+      const version = yield* Config.String("SPORTAL_VERSION").pipe(Config.withDefault("dev"))
+      // "localhost:4318" parses as a URL with scheme "localhost:", so the scheme is checked.
+      const otlpUrl = yield* Config.schema(
+        Schema.URLFromString.check(
+          Schema.makeFilter((url) => url.protocol === "http:" || url.protocol === "https:", {
+            expected: "an http: or https: URL"
+          })
+        ),
+        "SPORTAL_OTLP_URL"
+      ).pipe(Config.option)
+      const leagues = yield* Config.schema(
+        Schema.String.pipe(
+          Schema.decodeTo(
+            Schema.Array(Schema.String),
+            SchemaTransformation.transform<ReadonlyArray<string>, string>({
+              decode: (list) => list.split(",").map((league) => league.trim()),
+              encode: (leagues) => leagues.join(",")
             })
           ),
-          "SPORTAL_OTLP_URL"
-        ).pipe(Config.option),
-        leagues: yield* Config.schema(
-          Schema.String.pipe(
-            Schema.decodeTo(
-              Schema.Array(Schema.String),
-              SchemaTransformation.transform<ReadonlyArray<string>, string>({
-                decode: (list) => list.split(",").map((league) => league.trim()),
-                encode: (leagues) => leagues.join(",")
-              })
-            ),
-            Schema.decodeTo(Schema.Array(LeagueId).check(Schema.isMinLength(1)))
-          ),
-          "SPORTAL_LEAGUES"
-        ).pipe(Config.withDefault(LeagueId.literals))
+          Schema.decodeTo(Schema.Array(LeagueId).check(Schema.isMinLength(1)))
+        ),
+        "SPORTAL_LEAGUES"
+      ).pipe(Config.withDefault(LeagueId.literals))
+      const corpusDir = Option.getOrElse(corpusDirSetting, () => path.join(dataDir, "corpus"))
+
+      return HubConfig.of({
+        port,
+        host,
+        webRoot,
+        dataDir,
+        corpusDir,
+        scenario,
+        scenarioSpeed,
+        scenarioFeedLog,
+        logLevel,
+        logFormat,
+        version,
+        otlpUrl,
+        leagues
       })
     })
   )
@@ -102,29 +117,31 @@ export class HubConfig extends Context.Service<
   }
 
   /** Where the OS keeps an application's own data. On Windows it is the local folder, so the database never roams. */
-  static defaultDataDir(platform: NodeJS.Platform) {
-    return Effect.gen(function* () {
-      const path = yield* Path.Path
-      switch (platform) {
-        case "win32": {
-          const local = yield* Config.String("LOCALAPPDATA").pipe(Config.option)
-          const base = Option.isSome(local)
-            ? local.value
-            : path.join(yield* Config.String("USERPROFILE"), "AppData", "Local")
-          return path.join(base, "Sportal")
-        }
-        case "darwin":
-          return path.join(yield* Config.String("HOME"), "Library", "Application Support", "Sportal")
-        default: {
-          const xdg = yield* Config.String("XDG_DATA_HOME").pipe(Config.option)
-          const base = Option.isSome(xdg)
-            ? xdg.value
-            : path.join(yield* Config.String("HOME"), ".local", "share")
-          return path.join(base, "sportal")
-        }
+  static readonly defaultDataDir = Effect.fn("HubConfig.defaultDataDir")(function* (
+    platform: NodeJS.Platform
+  ) {
+    const path = yield* Path.Path
+    switch (platform) {
+      case "win32": {
+        const local = yield* Config.String("LOCALAPPDATA").pipe(Config.option)
+        if (Option.isSome(local)) return path.join(local.value, "Sportal")
+
+        const profile = yield* Config.String("USERPROFILE")
+        return path.join(profile, "AppData", "Local", "Sportal")
       }
-    })
-  }
+      case "darwin": {
+        const home = yield* Config.String("HOME")
+        return path.join(home, "Library", "Application Support", "Sportal")
+      }
+      default: {
+        const xdg = yield* Config.String("XDG_DATA_HOME").pipe(Config.option)
+        if (Option.isSome(xdg)) return path.join(xdg.value, "sportal")
+
+        const home = yield* Config.String("HOME")
+        return path.join(home, ".local", "share", "sportal")
+      }
+    }
+  })
 }
 
 // A fan's home folder on every OS, so the default data directory resolves without the test machine's own.

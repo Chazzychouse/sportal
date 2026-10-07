@@ -1,6 +1,6 @@
 import { NodeCrypto, NodeHttpServer } from "@effect/platform-node"
 import { assert, describe, it } from "@effect/vitest"
-import { type LiveMessage, LiveMessageJson } from "@sportal/api/LiveMessage"
+import { LiveMessage, LiveMessageJson } from "@sportal/api/LiveMessage"
 import { SportalApi } from "@sportal/api/SportalApi"
 import { GameId, Network } from "@sportal/domain/Game"
 import type { Tile } from "@sportal/domain/Stage"
@@ -19,7 +19,6 @@ import { LiveSlate } from "./LiveSlate.ts"
 import { LiveStage } from "./LiveStage.ts"
 import * as YouTubeTv from "./source/youtube-tv/YouTubeTv.ts"
 import * as TestSnapshotFeed from "./TestSnapshotFeed.ts"
-import { polled } from "./TestSnapshotFeed.ts"
 
 type Interfaces = Record<
   string,
@@ -206,7 +205,9 @@ describe("GET /api/live", () => {
       assert.isTrue(secondLine.startsWith("data: "))
       assert.sameMembers([first._tag, second._tag], ["SlateChanged", "StageChanged"])
       assert.deepStrictEqual(
-        [first, second].flatMap((message) => (message._tag === "SlateChanged" ? [message.recentPlays] : [])),
+        [first, second].flatMap((message) =>
+          LiveMessage.guards.SlateChanged(message) ? [message.recentPlays] : []
+        ),
         [{}]
       )
     }).pipe(Effect.scoped, Effect.provide(serverUnderTest()))
@@ -223,7 +224,7 @@ describe("GET /api/live", () => {
 
       const third = messageOf(thirdLine)
       assert.isTrue(thirdLine.startsWith("data: "))
-      assert.deepStrictEqual(third._tag === "StageChanged" ? third.stage.tiles[0] : third, noGuide)
+      assert.deepStrictEqual(LiveMessage.guards.StageChanged(third) ? third.stage.tiles[0] : third, noGuide)
     }).pipe(Effect.scoped, Effect.provide(serverUnderTest()))
   )
 
@@ -402,7 +403,7 @@ function hubUnderTest() {
         Layer.provide([TestSnapshotFeed.decoder, DateTime.layerCurrentZoneLocal])
       )
     ),
-    Layer.provide(polled(() => Effect.succeed([game]))),
+    Layer.provide(TestSnapshotFeed.layer({ games: () => Effect.succeed([game]) })),
     Layer.provideMerge(
       HubConfig.layerTest({ SPORTAL_VERSION: "1.2.3", SPORTAL_DATA_DIR: "unused", SPORTAL_LEAGUES: "fbs" })
     )

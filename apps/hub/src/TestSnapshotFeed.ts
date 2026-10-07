@@ -8,39 +8,26 @@ import { type Polling, Provider, type ProviderUnavailable } from "./provider/Pro
 
 /**
  * The snapshot feed, which tests drive, as the provider: its frames are our own deliveries, read back by `decoder`. A
- * poll of a league is `games(league)` as a frame on that league's channel whose body is its `Listing`. It pushes
- * `push`'s frames, none by default, whatever the demand, subscribed to again on `reconnect` (every second by default),
- * and is polled on `polling`.
+ * poll of a league is `games(league)` as a frame on that league's channel whose body is its `Listing`. It is polled on
+ * `polling` (every 10 seconds by default), pushes `push`'s frames, none by default, whatever the demand, and is
+ * subscribed to again on `reconnect` (every second by default).
  */
-export function provider(options: {
+export function layer(options: {
   readonly games: (league: LeagueId) => Effect.Effect<ReadonlyArray<GameSnapshot>, ProviderUnavailable>
+  readonly polling?: Polling
   readonly push?: Stream.Stream<FeedFrame, ProviderUnavailable>
-  readonly polling: Polling
   readonly reconnect?: Schedule.Schedule<unknown, ProviderUnavailable>
 }): Layer.Layer<Provider> {
   return Layer.succeed(
     Provider,
     Provider.of({
-      poll: (league) =>
-        Effect.all({ games: options.games(league), receivedAt: DateTime.now }).pipe(
-          Effect.flatMap(({ games, receivedAt }) =>
-            encodePayload(Delivery.cases.Listing.make({ league, games })).pipe(
-              // Our own listing always encodes.
-              Effect.orDie,
-              Effect.map(
-                (body): FeedFrame => ({
-                  receivedAt,
-                  feed: "snapshot",
-                  channel: league,
-                  kind: "response",
-                  body
-                })
-              )
-            )
-          )
-        ),
+      poll: Effect.fnUntraced(function* (league: LeagueId) {
+        const games = yield* options.games(league)
+        const receivedAt = yield* DateTime.now
+        return framed(Delivery.cases.Listing.make({ league, games }), receivedAt)
+      }),
       push: () => options.push ?? Stream.never,
-      polling: options.polling,
+      polling: options.polling ?? Schedule.spaced("10 seconds"),
       reconnect: options.reconnect ?? Schedule.spaced("1 second")
     })
   )
@@ -58,7 +45,7 @@ export const decoder = Layer.succeed(
         Stream.mapEffect((frame) =>
           decodePayload(frame.body).pipe(
             Effect.map((payload) =>
-              payload._tag === "Resync"
+              isResync(payload)
                 ? Decoded.of(frame, { resyncs: [frame.channel] })
                 : Decoded.of(frame, { deliveries: [payload] })
             ),
@@ -70,48 +57,27 @@ export const decoder = Layer.succeed(
 )
 
 /** The body of a snapshot feed frame, as JSON: one `Delivery`, or a `Resync` of the frame's channel. */
-export const SnapshotPayload = Schema.fromJsonString(
-  Schema.Union([Delivery, Schema.TaggedStruct("Resync", {})])
-)
-
-/**
- * The snapshot feed as a test's provider: a poll of a league is the games `games` answers. It pushes `options.push`'s
- * frames, none by default, reconnected on `options.reconnect` or the snapshot feed's own, and is polled every 10 seconds
- * unless `options.polling` says otherwise. Tests read its frames with `decoder`.
- */
-export function polled(
-  games: (league: LeagueId) => Effect.Effect<ReadonlyArray<GameSnapshot>, ProviderUnavailable>,
-  options: {
-    readonly polling?: Polling
-    readonly push?: Stream.Stream<FeedFrame, ProviderUnavailable>
-    readonly reconnect?: Schedule.Schedule<unknown, ProviderUnavailable>
-  } = {}
-): Layer.Layer<Provider> {
-  return provider({
-    games,
-    polling: options.polling ?? Schedule.spaced("10 seconds"),
-    ...(options.push === undefined ? {} : { push: options.push }),
-    ...(options.reconnect === undefined ? {} : { reconnect: options.reconnect })
-  })
-}
+const Resync = Schema.TaggedStruct("Resync", {})
+export const SnapshotPayload = Schema.fromJsonString(Schema.Union([Delivery, Resync]))
+export type SnapshotPayload = typeof SnapshotPayload.Type
 
 /**
  * A snapshot feed frame, received at `at`, that says only `delivery`: a listing as its league's poll response, anything
  * else pushed.
  */
 export function framed(delivery: Delivery, at: DateTime.Utc): FeedFrame {
-  return delivery._tag === "Listing"
+  return Delivery.guards.Listing(delivery)
     ? snapshotFrame(delivery, delivery.league, "response", at)
     : snapshotFrame(delivery, "snapshot", "message", at)
 }
 
 /** A snapshot feed frame pushed on `channel`, received at the clock's now, that says `payload`. */
-export function pushed(payload: typeof SnapshotPayload.Type, channel: string) {
+export function pushed(payload: SnapshotPayload, channel: string) {
   return Effect.map(DateTime.now, (at) => snapshotFrame(payload, channel, "message", at))
 }
 
 function snapshotFrame(
-  payload: typeof SnapshotPayload.Type,
+  payload: SnapshotPayload,
   channel: string,
   kind: FeedFrame["kind"],
   receivedAt: DateTime.Utc
@@ -125,6 +91,6 @@ function snapshotFrame(
   })
 }
 
-const encodePayload = Schema.encodeEffect(SnapshotPayload)
+const isResync = Schema.is(Resync)
 
 const decodePayload = Schema.decodeUnknownEffect(SnapshotPayload)

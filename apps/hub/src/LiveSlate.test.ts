@@ -4,7 +4,7 @@ import { NodeCrypto, NodeServices } from "@effect/platform-node"
 import { assert, describe, it } from "@effect/vitest"
 import { Delivery } from "@sportal/domain/Delivery"
 import { GameId, GameSnapshot } from "@sportal/domain/Game"
-import type { GameEvent } from "@sportal/domain/GameEvent"
+import { type GameEvent, GameEventKind } from "@sportal/domain/GameEvent"
 import { LiveGame, LiveGameState } from "@sportal/domain/LiveGame"
 import { PlayId } from "@sportal/domain/Play"
 import type { Slate } from "@sportal/domain/Slate"
@@ -12,6 +12,7 @@ import { liveSnapshot, play, snapshot, team } from "@sportal/domain/TestGame"
 import {
   Clock,
   Context,
+  type Crypto,
   DateTime,
   Duration,
   Effect,
@@ -27,6 +28,7 @@ import {
   Stream,
   type Tracer
 } from "effect"
+import type { SqlClient } from "effect/sql"
 import { TestClock } from "effect/testing"
 import * as Database from "./Database.ts"
 import { FeedFrame } from "./Frame.ts"
@@ -36,15 +38,7 @@ import { LiveSlate } from "./LiveSlate.ts"
 import { Decoded, Decoder } from "./provider/Decoder.ts"
 import * as EspnDecoder from "./provider/espn/EspnDecoder.ts"
 import { fixtures, recordedNeAtBuf, recordedPlays } from "./provider/espn/TestEspn.ts"
-import {
-  appended,
-  delivered,
-  latestOf,
-  slateFollowing,
-  slateFollowingFramesFrom,
-  slateOn,
-  takenInTime
-} from "./TestLiveSlate.ts"
+import { appended, delivered, latestOf, slateFollowing } from "./TestLiveSlate.ts"
 import * as TestSnapshotFeed from "./TestSnapshotFeed.ts"
 import { framed, pushed } from "./TestSnapshotFeed.ts"
 import { counted, gauged, recordingLogs, recordingSpans, withMetrics } from "./TestTelemetry.ts"
@@ -1386,7 +1380,7 @@ describe("LiveSlate, a recorded game", () => {
         const replayedTo = yield* Effect.forEach(points, (point) => replayed(frames.slice(0, point)))
         const once = yield* takenLive(frames, points)
         const again = yield* takenLive(frames)
-        const played = once.events.filter(({ what }) => what._tag === "Played").length
+        const played = once.events.filter(({ what }) => GameEventKind.$is("Played")(what)).length
         const summary = logs.find(({ message }) => message.includes("replayed"))
 
         assert.isTrue(Equal.equals(first, second))
@@ -1953,3 +1947,34 @@ function takenLive(frames: ReadonlyArray<FeedFrame>, sampling: ReadonlyArray<num
       TestClock.setTime(DateTime.toEpochMillis(first.receivedAt)).pipe(Effect.andThen(taking))
   })
 }
+
+/** `slateFollowing` the frames `frames` gives when the layer is built. For frames made on the test clock, such as a frame received now. */
+function slateFollowingFramesFrom<E>(
+  frames: Effect.Effect<ReadonlyArray<FeedFrame>, E>,
+  options?: Parameters<typeof slateFollowing>[1]
+) {
+  return Layer.unwrap(Effect.map(frames, (made) => slateFollowing(made, options)))
+}
+
+/** The slate following `feedLog`, which is provided too, read by `decoder`, in the local zone. */
+function slateOn(
+  feedLog: Layer.Layer<FeedLog, never, SqlClient.SqlClient | Crypto.Crypto>,
+  decoder: Layer.Layer<Decoder>
+) {
+  return LiveSlate.layer.pipe(
+    Layer.provideMerge(feedLog),
+    Layer.provide([decoder, DateTime.layerCurrentZoneLocal])
+  )
+}
+
+/**
+ * Appends each of `frames` once the test clock reaches it and waits for the slate to take it, so the timer runs
+ * between them as it would live.
+ */
+const takenInTime = Effect.fnUntraced(function* (frames: ReadonlyArray<FeedFrame>) {
+  for (const frame of frames) {
+    const now = yield* DateTime.now
+    yield* TestClock.adjust(DateTime.distance(now, frame.receivedAt))
+    yield* appended(frame)
+  }
+})

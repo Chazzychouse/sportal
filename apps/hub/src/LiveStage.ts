@@ -5,6 +5,10 @@ import { Context, Effect, Layer, Option, Stream, SubscriptionRef } from "effect"
 import { LiveSlate } from "./LiveSlate.ts"
 import { Source } from "./source/Source.ts"
 
+/**
+ * The Stage the Hub serves: what every Display shows, changed by commands. A command is applied against where each game
+ * can be streamed now, and the Stage is refreshed whenever the source's answers change.
+ */
 export class LiveStage extends Context.Service<
   LiveStage,
   {
@@ -13,7 +17,7 @@ export class LiveStage extends Context.Service<
     dispatch(command: StageCommand): Effect.Effect<Stage, StageRejection>
   }
 >()("sportal/hub/LiveStage") {
-  static readonly layer = Layer.effect(
+  static readonly layer: Layer.Layer<LiveStage, never, LiveSlate | Source> = Layer.effect(
     LiveStage,
     Effect.gen(function* () {
       const slate = yield* LiveSlate

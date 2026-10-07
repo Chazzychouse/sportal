@@ -1,10 +1,28 @@
 import { createServer } from "node:http"
 import { networkInterfaces } from "node:os"
-import { NodeHttpServer } from "@effect/platform-node"
+import { NodeHttpServer, type NodeServices } from "@effect/platform-node"
 import { LiveMessage, LiveMessageJson } from "@sportal/api/LiveMessage"
 import { SportalApi } from "@sportal/api/SportalApi"
-import { DateTime, Effect, Layer, Option, Schema, Stream } from "effect"
-import { HttpRouter, HttpServerResponse, HttpStaticServer } from "effect/http"
+import {
+  DateTime,
+  Effect,
+  type FileSystem,
+  Layer,
+  Option,
+  type Path,
+  type PlatformError,
+  Schema,
+  Stream
+} from "effect"
+import {
+  type Etag,
+  type HttpPlatform,
+  HttpRouter,
+  type HttpServer,
+  type HttpServerError,
+  HttpServerResponse,
+  HttpStaticServer
+} from "effect/http"
 import { HttpApiBuilder } from "effect/http-api"
 import { HubConfig } from "./HubConfig.ts"
 import { LiveSlate } from "./LiveSlate.ts"
@@ -14,7 +32,19 @@ import { Source } from "./source/Source.ts"
 /**
  * The Hub's routes on the HTTP server in context: the API, the live stream, and the built web UI when there is one.
  */
-export const layer = Layer.unwrap(
+export const layer: Layer.Layer<
+  never,
+  PlatformError.PlatformError,
+  | HubConfig
+  | LiveSlate
+  | LiveStage
+  | Source
+  | HttpServer.HttpServer
+  | HttpPlatform.HttpPlatform
+  | Etag.Generator
+  | FileSystem.FileSystem
+  | Path.Path
+> = Layer.unwrap(
   Effect.gen(function* () {
     const { webRoot } = yield* HubConfig
     const api = HttpApiBuilder.layer(SportalApi).pipe(
@@ -29,7 +59,11 @@ export const layer = Layer.unwrap(
 )
 
 /** An HTTP server on the configured address, for `layer` to put the Hub's routes on. */
-export const layerListen = Layer.unwrap(
+export const layerListen: Layer.Layer<
+  HttpServer.HttpServer | HttpPlatform.HttpPlatform | Etag.Generator | NodeServices.NodeServices,
+  HttpServerError.ServeError,
+  HubConfig
+> = Layer.unwrap(
   Effect.gen(function* () {
     const { port, host } = yield* HubConfig
     // Connected Displays hold live streams open. By default shutdown waits 20 seconds for them, and Docker kills at 10.
