@@ -5,9 +5,8 @@ import { Play } from "@sportal/domain/Play"
 import { SlateObservation } from "@sportal/domain/SlateObservation"
 import { DateTime, Effect, Schema } from "effect"
 import type { FeedFrame } from "../../Frame.ts"
-import { LiveSlate } from "../../LiveSlate.ts"
 import { ScenarioScript } from "../../scenario/ScenarioScript.ts"
-import { slateFollowing, takenOf } from "../../TestLiveSlate.ts"
+import { latestOf, slateFollowing, takenOf } from "../../TestLiveSlate.ts"
 import { decodedFrames } from "../TestDecoder.ts"
 import * as EspnDecode from "./EspnDecode.ts"
 import { scenarioOf } from "./EspnScript.ts"
@@ -111,16 +110,176 @@ const script = ScenarioScript.build("written-as-espn", [
   }
 ])
 
-const scenario = scenarioOf(script)
-const { frames } = scenario
+const gameTopics = ["gp-football-nfl-401000001", "gp-football-college-football-402000001"]
 
-/** The frames up to and including step `index`'s: every one before the next step's polls. */
-const throughStep = (index: number): ReadonlyArray<FeedFrame> => {
-  const next = script.steps[index + 1]
-  if (next === undefined) return frames
-  const before = DateTime.toEpochMillis(script.origin) + next.at
-  return frames.filter((frame) => DateTime.toEpochMillis(frame.receivedAt) < before)
-}
+describe("scenarioOf", () => {
+  it("should write a scenario of the script's name", () => {
+    const scenario = scenarioOf(script)
+
+    assert.strictEqual(scenario.name, "written-as-espn")
+  })
+
+  it("should start with a poll", () => {
+    const { frames } = scenarioOf(script)
+
+    assert.deepStrictEqual([frames[0]?.feed, frames[0]?.kind], ["poll", "response"])
+  })
+
+  it("should start at the script's origin", () => {
+    const scenario = scenarioOf(script)
+
+    assert.deepStrictEqual(scenario.origin(), script.origin)
+  })
+
+  it("should write frames in the order they were received", () => {
+    const { frames } = scenarioOf(script)
+
+    const received = frames.map((frame) => DateTime.toEpochMillis(frame.receivedAt))
+    assert.deepStrictEqual(
+      received,
+      received.toSorted((a, b) => a - b)
+    )
+  })
+
+  it.effect.each(script.steps.map((step, index) => ({ at: step.at, index, step })))(
+    "should play, through the ESPN decoder, to the slate and each game's plays so far at $at ms",
+    ({ at, index, step }) =>
+      Effect.gen(function* () {
+        const { frames } = scenarioOf(script)
+        const following = slateFollowing(throughStep(frames, index), { decoder: EspnDecode.layer })
+
+        const current = yield* latestOf(following)
+
+        assert.deepStrictEqual(
+          onWire(slateOnWire(current.games(LeagueId.literals))),
+          onWire(slateOnWire(step.slate)),
+          `the slate at ${at}`
+        )
+        for (const game of step.slate) {
+          const held = current.live.get(game.id)
+          // The slate lets a game go once it is over, and its plays with it.
+          if (held === undefined) assert.strictEqual(game.progress(), "over", `${game.id} at ${at}`)
+          else
+            assert.deepStrictEqual(
+              onWire(playsOnWire(held.plays)),
+              onWire(playsOnWire(writtenPlaysThrough(index, game.id))),
+              `${game.id}'s plays at ${at}`
+            )
+        }
+      }),
+    { timeout: 30_000 }
+  )
+
+  it("should write each game's plays on its own topic", () => {
+    const { frames } = scenarioOf(script)
+
+    const channels = new Set(messagesOf(frames).map((frame) => frame.channel))
+    assert.deepStrictEqual([...channels], gameTopics)
+  })
+
+  it("should number each topic's messages 1, 2, 3 … in their bodies", () => {
+    const { frames } = scenarioOf(script)
+
+    const topics = topicsOf(frames)
+    const numbered = topics.map((onTopic) => onTopic.map((frame) => Schema.decodeSync(Mid)(frame.body).mid))
+    assert.deepStrictEqual(numbered, countedFromOne(topics))
+  })
+
+  it("should number each topic's messages 1, 2, 3 … as their source ids", () => {
+    const { frames } = scenarioOf(script)
+
+    const topics = topicsOf(frames)
+    const numbered = topics.map((onTopic) => onTopic.map((frame) => frame.sourceId))
+    assert.deepStrictEqual(numbered, countedFromOne(topics))
+  })
+
+  it("should checkpoint each game's topic once", () => {
+    const { frames } = scenarioOf(script)
+
+    assert.strictEqual(checkpointsOf(frames).length, 2)
+  })
+
+  it.each(gameTopics)("should checkpoint %s after the first poll that lists its game", (topic) => {
+    const { frames } = scenarioOf(script)
+
+    const checkpointAt = frames.findIndex((frame) => frame.kind === "checkpoint" && frame.channel === topic)
+    const game = topic.split("-").at(-1) ?? ""
+    const firstPoll = frames.findIndex(
+      (frame) =>
+        frame.feed === "poll" &&
+        Schema.decodeSync(Listed)(frame.body).events.some((event) => event.id === game)
+    )
+    assert.isAtLeast(firstPoll, 0, `a poll lists ${game}`)
+    assert.isAbove(checkpointAt, firstPoll, topic)
+  })
+
+  it.each(gameTopics)("should checkpoint %s before its first play", (topic) => {
+    const { frames } = scenarioOf(script)
+
+    const checkpointAt = frames.findIndex((frame) => frame.kind === "checkpoint" && frame.channel === topic)
+    const firstPlay = frames.findIndex((frame) => frame.kind === "message" && frame.channel === topic)
+    assert.isBelow(checkpointAt, firstPlay, topic)
+  })
+
+  it("should give each checkpoint source id 0", () => {
+    const { frames } = scenarioOf(script)
+
+    assert.deepStrictEqual(
+      checkpointsOf(frames).map((checkpoint) => checkpoint.sourceId),
+      [0, 0]
+    )
+  })
+
+  it.effect("should decode without a frame, event, or play that does not decode, or a reset", () =>
+    Effect.gen(function* () {
+      const { frames } = scenarioOf(script)
+
+      const decoded = yield* decodedFrames(frames)
+
+      assert.deepStrictEqual(
+        decoded.flatMap(({ observations }) =>
+          observations.filter(({ _tag }) => _tag !== "Received" && _tag !== "Pushed").map(({ _tag }) => _tag)
+        ),
+        []
+      )
+    }).pipe(Effect.provide(EspnDecode.layer))
+  )
+
+  it.effect("should decode with no game dropped", () =>
+    Effect.gen(function* () {
+      const { frames } = scenarioOf(script)
+
+      const { observations } = yield* takenOf(frames)
+
+      assert.deepStrictEqual(observations.filter(SlateObservation.$is("Dropped")), [])
+    }).pipe(Effect.provide(EspnDecode.layer))
+  )
+
+  it.effect("should decode one plays delivery per game's checkpoint and per play", () =>
+    Effect.gen(function* () {
+      const { frames } = scenarioOf(script)
+      const games = new Set(script.steps.flatMap(({ slate }) => slate.map(({ id }) => id))).size
+      const plays = script.steps.flatMap(({ plays }) => plays).length
+
+      const decoded = yield* decodedFrames(frames)
+
+      assert.strictEqual(
+        decoded.flatMap(({ deliveries }) => deliveries.filter(({ _tag }) => _tag === "Plays")).length,
+        games + plays
+      )
+    }).pipe(Effect.provide(EspnDecode.layer))
+  )
+
+  it("should write a script's Kickoff return touchdown as ESPN's type 32", () => {
+    const returned = scenarioOf(kickoffReturnScript())
+
+    const message = returned.frames.find((frame) => frame.kind === "message")
+    assert.deepStrictEqual(Schema.decodeUnknownSync(Added)(message?.body).pl.pl[0]?.value.type, {
+      id: "32",
+      text: "Kickoff Return Touchdown"
+    })
+  })
+})
 
 // Compared as they go on the wire, where a field that is undefined is not there, as it is not in ESPN's JSON.
 const slateOnWire = Schema.encodeSync(Schema.fromJsonString(Schema.Array(GameSnapshot)))
@@ -146,198 +305,70 @@ const Listed = Schema.fromJsonString(
   Schema.Struct({ events: Schema.Array(Schema.Struct({ id: Schema.String })) })
 )
 
-const messages = frames.filter((frame) => frame.kind === "message")
-const topics = [...new Set(messages.map((frame) => frame.channel))].map((channel) =>
-  messages.filter((frame) => frame.channel === channel)
-)
-const checkpoints = frames.filter((frame) => frame.kind === "checkpoint")
-// 1, 2, 3 … on each topic.
-const countedFromOne: ReadonlyArray<ReadonlyArray<number | undefined>> = topics.map((onTopic) =>
-  onTopic.map((_, index) => index + 1)
-)
+/** `frames` up to and including step `index`'s: every one before the next step's polls. */
+function throughStep(frames: ReadonlyArray<FeedFrame>, index: number): ReadonlyArray<FeedFrame> {
+  const next = script.steps[index + 1]
+  if (next === undefined) return frames
+  const before = DateTime.toEpochMillis(script.origin) + next.at
+  return frames.filter((frame) => DateTime.toEpochMillis(frame.receivedAt) < before)
+}
 
-describe("scenarioOf", () => {
-  it("should write a scenario of the script's name", () => {
-    assert.strictEqual(scenario.name, "written-as-espn")
-  })
+/** The plays the script ran for `game` through step `index`. */
+function writtenPlaysThrough(index: number, game: string) {
+  return script.steps
+    .slice(0, index + 1)
+    .flatMap(({ plays }) => plays.filter((play) => play.game === game).map(({ play }) => play))
+}
 
-  it("should start with a poll", () => {
-    assert.deepStrictEqual([frames[0]?.feed, frames[0]?.kind], ["poll", "response"])
-  })
+function messagesOf(frames: ReadonlyArray<FeedFrame>) {
+  return frames.filter((frame) => frame.kind === "message")
+}
 
-  it("should start at the script's origin", () => {
-    assert.deepStrictEqual(scenario.origin(), script.origin)
-  })
+/** The messages of each topic, a list per topic, in the order the topics first appear. */
+function topicsOf(frames: ReadonlyArray<FeedFrame>) {
+  const messages = messagesOf(frames)
+  const channels = [...new Set(messages.map((frame) => frame.channel))]
+  return channels.map((channel) => messages.filter((frame) => frame.channel === channel))
+}
 
-  it("should write frames in the order they were received", () => {
-    const received = frames.map((frame) => DateTime.toEpochMillis(frame.receivedAt))
+function checkpointsOf(frames: ReadonlyArray<FeedFrame>) {
+  return frames.filter((frame) => frame.kind === "checkpoint")
+}
 
-    assert.deepStrictEqual(
-      received,
-      received.toSorted((a, b) => a - b)
-    )
-  })
+/** 1, 2, 3 … on each topic. */
+function countedFromOne(
+  topics: ReadonlyArray<ReadonlyArray<FeedFrame>>
+): ReadonlyArray<ReadonlyArray<number | undefined>> {
+  return topics.map((onTopic) => onTopic.map((_, index) => index + 1))
+}
 
-  it.effect(
-    "should play, through the ESPN decoder, to each step's slate and each game's plays so far",
-    () =>
-      Effect.forEach(
-        script.steps,
-        (step, index) =>
-          Effect.gen(function* () {
-            const slate = yield* LiveSlate
-            const current = yield* slate.latest
-
-            assert.deepStrictEqual(
-              onWire(slateOnWire(current.games(LeagueId.literals))),
-              onWire(slateOnWire(step.slate)),
-              `the slate at ${step.at}`
-            )
-            for (const game of step.slate) {
-              const written = script.steps
-                .slice(0, index + 1)
-                .flatMap(({ plays }) => plays.filter((play) => play.game === game.id).map(({ play }) => play))
-              const held = current.live.get(game.id)
-              // The slate lets a game go once it is over, and its plays with it.
-              if (held === undefined) assert.strictEqual(game.progress(), "over", `${game.id} at ${step.at}`)
-              else
-                assert.deepStrictEqual(
-                  onWire(playsOnWire(held.plays)),
-                  onWire(playsOnWire(written)),
-                  `${game.id}'s plays at ${step.at}`
-                )
-            }
-          }).pipe(Effect.provide(slateFollowing(throughStep(index), { decoder: EspnDecode.layer }))),
-        { discard: true }
-      ),
-    { timeout: 30_000 }
-  )
-
-  it("should write each game's plays on its own topic", () => {
-    const channels = new Set(messages.map((frame) => frame.channel))
-
-    assert.deepStrictEqual(
-      [...channels],
-      ["gp-football-nfl-401000001", "gp-football-college-football-402000001"]
-    )
-  })
-
-  it("should number each topic's messages 1, 2, 3 … in their bodies", () => {
-    const numbered = topics.map((onTopic) => onTopic.map((frame) => Schema.decodeSync(Mid)(frame.body).mid))
-
-    assert.deepStrictEqual(numbered, countedFromOne)
-  })
-
-  it("should number each topic's messages 1, 2, 3 … as their source ids", () => {
-    const numbered = topics.map((onTopic) => onTopic.map((frame) => frame.sourceId))
-
-    assert.deepStrictEqual(numbered, countedFromOne)
-  })
-
-  it("should checkpoint each game's topic once", () => {
-    assert.strictEqual(checkpoints.length, 2)
-  })
-
-  it("should checkpoint each game's topic after the first poll that lists it", () => {
-    for (const checkpoint of checkpoints) {
-      const game = checkpoint.channel.split("-").at(-1) ?? ""
-      const firstPoll = frames.findIndex(
-        (frame) =>
-          frame.feed === "poll" &&
-          Schema.decodeSync(Listed)(frame.body).events.some((event) => event.id === game)
-      )
-
-      assert.isAtLeast(firstPoll, 0, `a poll lists ${game}`)
-      assert.isAbove(frames.indexOf(checkpoint), firstPoll, checkpoint.channel)
+/** A college game whose opening kickoff is returned for a touchdown. */
+function kickoffReturnScript() {
+  return ScenarioScript.build("kickoff-return", [
+    {
+      id: "402000002",
+      home: "UGA",
+      away: "ALA",
+      timeline: [
+        [
+          "0:00",
+          {
+            status: "live",
+            period: 1,
+            clock: "15:00",
+            ball: { team: "away", yardLine: 35, down: 1, distance: 10 }
+          }
+        ],
+        [
+          "0:30",
+          {
+            clock: "14:48",
+            score: [0, 6],
+            ball: null,
+            play: { _tag: "Kickoff", returnTouchdown: true, yards: 98 }
+          }
+        ]
+      ]
     }
-  })
-
-  it("should checkpoint each game's topic before its first play", () => {
-    for (const checkpoint of checkpoints) {
-      const firstPlay = frames.findIndex(
-        (frame) => frame.kind === "message" && frame.channel === checkpoint.channel
-      )
-
-      assert.isBelow(frames.indexOf(checkpoint), firstPlay, checkpoint.channel)
-    }
-  })
-
-  it("should give each checkpoint source id 0", () => {
-    assert.deepStrictEqual(
-      checkpoints.map((checkpoint) => checkpoint.sourceId),
-      [0, 0]
-    )
-  })
-
-  it.effect("should decode with no frame, event, or play that does not decode, and no reset", () =>
-    Effect.gen(function* () {
-      const decoded = yield* decodedFrames(frames)
-
-      assert.deepStrictEqual(
-        decoded.flatMap(({ observations }) =>
-          observations.filter(({ _tag }) => _tag !== "Received" && _tag !== "Pushed").map(({ _tag }) => _tag)
-        ),
-        []
-      )
-    }).pipe(Effect.provide(EspnDecode.layer))
-  )
-
-  it.effect("should decode with no game dropped", () =>
-    Effect.gen(function* () {
-      const { observations } = yield* takenOf(frames)
-
-      assert.deepStrictEqual(observations.filter(SlateObservation.$is("Dropped")), [])
-    }).pipe(Effect.provide(EspnDecode.layer))
-  )
-
-  it.effect("should decode one plays delivery per game's checkpoint and per play", () =>
-    Effect.gen(function* () {
-      const decoded = yield* decodedFrames(frames)
-
-      assert.strictEqual(
-        decoded.flatMap(({ deliveries }) => deliveries.filter(({ _tag }) => _tag === "Plays")).length,
-        new Set(script.steps.flatMap(({ slate }) => slate.map(({ id }) => id))).size +
-          script.steps.flatMap(({ plays }) => plays).length
-      )
-    }).pipe(Effect.provide(EspnDecode.layer))
-  )
-
-  it("should write a script's Kickoff return touchdown as ESPN's type 32", () => {
-    const returned = scenarioOf(
-      ScenarioScript.build("kickoff-return", [
-        {
-          id: "402000002",
-          home: "UGA",
-          away: "ALA",
-          timeline: [
-            [
-              "0:00",
-              {
-                status: "live",
-                period: 1,
-                clock: "15:00",
-                ball: { team: "away", yardLine: 35, down: 1, distance: 10 }
-              }
-            ],
-            [
-              "0:30",
-              {
-                clock: "14:48",
-                score: [0, 6],
-                ball: null,
-                play: { _tag: "Kickoff", returnTouchdown: true, yards: 98 }
-              }
-            ]
-          ]
-        }
-      ])
-    )
-
-    const message = returned.frames.find((frame) => frame.kind === "message")
-
-    assert.deepStrictEqual(Schema.decodeUnknownSync(Added)(message?.body).pl.pl[0]?.value.type, {
-      id: "32",
-      text: "Kickoff Return Touchdown"
-    })
-  })
-})
+  ])
+}
