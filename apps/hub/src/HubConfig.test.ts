@@ -3,7 +3,7 @@ import { assert, describe, it } from "@effect/vitest"
 import { LeagueId } from "@sportal/domain/League"
 import { ConfigProvider, Effect, Layer, Option } from "effect"
 import { HubConfig } from "./HubConfig.ts"
-import { withEnv } from "./TestHubConfig.ts"
+import { home, withEnv } from "./TestHubConfig.ts"
 
 describe("HubConfig", () => {
   it.effect("has a default for every setting", () =>
@@ -155,9 +155,6 @@ describe("HubConfig.defaultDataDir", () => {
     })
   )
 })
-
-/** A fan's home folder on every OS, so the default data directory resolves without the test machine's own. */
-const home = { HOME: "/home/fan", USERPROFILE: "C:\\Users\\fan" }
 
 /** Exactly these variables as the configuration, beside `path`, and nothing from the machine running the test. */
 function inEnv(env: Record<string, string>, path: typeof NodePath.layer) {

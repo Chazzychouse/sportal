@@ -112,13 +112,6 @@ module.exports = {
       to: { path: "^apps/hub/src/provider/espn/TestEspnArchive\\.ts$" }
     },
     {
-      name: "test-slate-is-for-tests",
-      comment: "A domain slate built poll by poll is imported only by test files.",
-      severity: "error",
-      from: { pathNot: "\\.test\\.tsx?$" },
-      to: { path: "^packages/domain/src/TestSlate\\.ts$" }
-    },
-    {
       name: "test-corpus-is-for-tests",
       comment: "Corpus days set up for a test, over a feed log in memory, are imported only by test files.",
       severity: "error",

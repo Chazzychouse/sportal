@@ -520,7 +520,7 @@ the web UI", which nothing uses; `:171` the config files).
 | `TestFeed.ts` | `decodedFrames`, `listedBy`, `dyingAt` | `provider/TestDecoder.ts` (beside `Decoder.ts`) |
 | `TestFeed.ts` | `slateFollowing`, `delivered`, `takenOf` | `TestLiveSlate.ts` (beside `LiveSlate.ts`) |
 | `TestFeed.ts` | `writtenScenarios` | `scenario/TestScenarios.ts` |
-| `TestGame.ts` | `polled` | `packages/domain/src/TestSlate.ts` |
+| `TestGame.ts` | `polled` | deleted: no user |
 | `TestCorpus.ts` | `inArchive`, `stepped`, `site`, `archivedSummary`, `scoreboardUrl`, `summaryUrl` | `provider/espn/TestEspnArchive.ts` |
 | `TestHubConfig.ts` | `home`, `inEnv` | bottom of `HubConfig.test.ts` (one user) |
 | `TestSnapshotFeed.ts` | `SnapshotPayload` | stays (also used by `pushed`) |

@@ -201,8 +201,7 @@ sportal/
 │   │       ├── Guide.ts        Guide, Airing, ChannelId, GuideUnreadable
 │   │       ├── Stream.ts       StreamLocator
 │   │       ├── Stage.ts        Tile, LayoutName, Split, Stage state, slot counts and split bounds, StageCommand, StageRejection, apply, invariants
-│   │       ├── TestGame.ts     Game snapshots and plays for tests
-│   │       └── TestSlate.ts    A domain slate polled game by game, for tests
+│   │       └── TestGame.ts     Game snapshots and plays for tests
 │   │
 │   └── api/                    The contracts between processes.
 │       └── src/
