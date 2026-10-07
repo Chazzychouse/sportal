@@ -278,3 +278,6 @@ const espnStatuses: Readonly<
   postponed: { name: "STATUS_POSTPONED", state: "post" },
   canceled: { name: "STATUS_CANCELED", state: "post" }
 }
+
+/** The site scoreboard, as polled or as fetched for a past date: its events, each for `EspnEvent` to read. */
+export const Scoreboard = Schema.Struct({ events: Schema.Array(Schema.Unknown) })

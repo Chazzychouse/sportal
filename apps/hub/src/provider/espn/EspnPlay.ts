@@ -7,38 +7,79 @@ import { Array as Arr, Option, Record, Schema, SchemaGetter } from "effect"
 export function Play(league: LeagueId) {
   return Entity.pipe(
     Schema.decodeTo(Schema.toType(DomainPlay), {
-      decode: SchemaGetter.transform((entity) => {
-        const team = (ref: typeof TeamRef.Type | undefined) =>
-          ref === undefined ? {} : { team: TeamId.make(`${league}:${ref.$key}`) }
-        // ESPN reports down -1, with a meaningless distance, when no down is being played (after a score, at a
-        // stoppage).
-        const spot = ({ down, distance, yardsToEndzone, team: ref }: typeof Spot.Type) => ({
-          ...(down === undefined || down < 1 ? {} : { down }),
-          ...(down === undefined || down < 1 || distance === undefined ? {} : { distance }),
-          ...(yardsToEndzone === undefined ? {} : { yardsToEndzone }),
-          ...team(ref)
+      decode: SchemaGetter.transform((entity) =>
+        read(league, {
+          ...entity,
+          homeWinProbability: entity.probabilities?.winProbability?.homeWinPercentage
         })
-        const homeWinProbability = entity.probabilities?.winProbability?.homeWinPercentage
-        return new DomainPlay({
-          id: PlayId.make(entity.id),
-          sequence: entity.sequenceNumber,
-          period: entity.period.number,
-          clock: entity.clock.displayValue,
-          ...team(entity.team),
-          kind: Option.getOrElse(Record.get(kinds, entity.type.id), (): PlayKind => "other"),
-          text: entity.text,
-          yards: entity.statYardage,
-          scoring: entity.scoringPlay,
-          homeScore: entity.homeScore,
-          awayScore: entity.awayScore,
-          start: spot(entity.start),
-          end: spot(entity.end),
-          ...(homeWinProbability === undefined ? {} : { homeWinProbability })
-        })
-      }),
+      ),
       encode: SchemaGetter.forbidden(() => "A Play cannot be encoded back to an ESPN play entity")
     })
   )
+}
+
+/**
+ * The `Play` of `league` that an ESPN play says, as either of ESPN's feeds spells it: the fields both spell alike, its
+ * teams by ESPN's own ids, and its win probability.
+ */
+export function read(
+  league: LeagueId,
+  play: typeof Alike.Type & {
+    readonly team?: string | undefined
+    readonly homeWinProbability?: number | undefined
+  }
+): DomainPlay {
+  const team = (id: string | undefined) => (id === undefined ? {} : { team: TeamId.make(`${league}:${id}`) })
+  // ESPN reports down -1, with a meaningless distance, when no down is being played (after a score, at a stoppage).
+  const spot = ({ down, distance, yardsToEndzone, team: id }: typeof Alike.Type.start) => ({
+    ...(down === undefined || down < 1 ? {} : { down }),
+    ...(down === undefined || down < 1 || distance === undefined ? {} : { distance }),
+    ...(yardsToEndzone === undefined ? {} : { yardsToEndzone }),
+    ...team(id)
+  })
+  return new DomainPlay({
+    id: PlayId.make(play.id),
+    sequence: play.sequenceNumber,
+    period: play.period.number,
+    clock: play.clock.displayValue,
+    ...team(play.team),
+    kind: Option.getOrElse(Record.get(kinds, play.type.id), (): PlayKind => "other"),
+    text: play.text,
+    yards: play.statYardage,
+    scoring: play.scoringPlay,
+    homeScore: play.homeScore,
+    awayScore: play.awayScore,
+    start: spot(play.start),
+    end: spot(play.end),
+    ...(play.homeWinProbability === undefined ? {} : { homeWinProbability: play.homeWinProbability })
+  })
+}
+
+/**
+ * The fields of a play that both of ESPN's feeds spell alike, a spot's team read by `team`: FastCast's entity refers to
+ * a team by `$key`, a game summary's play by `id`.
+ */
+export function fields<Team extends Schema.Top>(team: Team) {
+  const spot = Schema.Struct({
+    team: Schema.optional(team),
+    down: Schema.optional(Schema.Int),
+    distance: Schema.optional(Schema.Int),
+    yardsToEndzone: Schema.optional(Schema.Int)
+  })
+  return {
+    id: Schema.String,
+    sequenceNumber: Schema.FiniteFromString.check(Schema.isInt()),
+    type: PlayType,
+    text: Schema.String,
+    period: Schema.Struct({ number: Schema.Int }),
+    clock: Schema.Struct({ displayValue: Schema.String }),
+    statYardage: Schema.Int,
+    scoringPlay: Schema.Boolean,
+    homeScore: Schema.Int,
+    awayScore: Schema.Int,
+    start: spot,
+    end: spot
+  }
 }
 
 /** The types of `entities` that the `PlayKind` table does not know, each once. */
@@ -53,38 +94,29 @@ export function unknownTypes(
   )
 }
 
-const TeamRef = Schema.Struct({ $key: Schema.String })
-
-const Spot = Schema.Struct({
-  team: Schema.optional(TeamRef),
-  down: Schema.optional(Schema.Int),
-  distance: Schema.optional(Schema.Int),
-  yardsToEndzone: Schema.optional(Schema.Int)
-})
-
 const PlayType = Schema.Struct({ id: Schema.String, text: Schema.String })
+
+// FastCast refers to a team by its `$key`, ESPN's id for it.
+const Key = Schema.Struct({ $key: Schema.String }).pipe(
+  Schema.decodeTo(Schema.String, {
+    decode: SchemaGetter.transform(({ $key }) => $key),
+    encode: SchemaGetter.transform(($key) => ({ $key }))
+  })
+)
 
 /** ESPN's play entity as a game package lists it: what `Play` reads of it. */
 export const Entity = Schema.Struct({
-  id: Schema.String,
-  sequenceNumber: Schema.FiniteFromString.check(Schema.isInt()),
-  type: PlayType,
-  text: Schema.String,
-  period: Schema.Struct({ number: Schema.Int }),
-  clock: Schema.Struct({ displayValue: Schema.String }),
-  team: Schema.optional(TeamRef),
-  statYardage: Schema.Int,
-  scoringPlay: Schema.Boolean,
-  homeScore: Schema.Int,
-  awayScore: Schema.Int,
-  start: Spot,
-  end: Spot,
+  ...fields(Key),
+  team: Schema.optional(Key),
   probabilities: Schema.optional(
     Schema.Struct({
       winProbability: Schema.optional(Schema.Struct({ homeWinPercentage: Schema.Finite }))
     })
   )
 })
+
+// What `read` takes of either feed's play, its teams read to ESPN's ids.
+const Alike = Schema.Struct(fields(Schema.String))
 
 /** The ESPN play type that reads as `kind`: its plain one, as ESPN names it. */
 export function typeOf(kind: PlayKind): typeof PlayType.Type {

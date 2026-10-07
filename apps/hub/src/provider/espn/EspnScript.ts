@@ -136,7 +136,7 @@ const encodeEntity = Schema.encodeSync(EspnPlay.Entity)
 
 /** The play as a game package lists it, its teams by ESPN's own ids. */
 function entityOf(play: Play): typeof EspnPlay.Entity.Encoded {
-  const ref = (team: TeamId | undefined) => (team === undefined ? undefined : { $key: espnId(team) })
+  const ref = (team: TeamId | undefined) => (team === undefined ? undefined : espnId(team))
   const spot = ({ team, down, distance, yardsToEndzone }: Play["start"]) => ({
     team: ref(team),
     down,

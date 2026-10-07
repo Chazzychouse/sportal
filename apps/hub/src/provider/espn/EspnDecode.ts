@@ -6,7 +6,7 @@ import { Array as Arr, Effect, Layer, Option, Record, Result, Schema, Stream } f
 import type { Frame } from "../../Frame.ts"
 import { Decoder } from "../Decoder.ts"
 import { Decoded, DecodeObservation } from "../Provider.ts"
-import { EspnEvent } from "./EspnEvent.ts"
+import { EspnEvent, Scoreboard } from "./EspnEvent.ts"
 import * as EspnPlay from "./EspnPlay.ts"
 import * as FastCastDocument from "./FastCastDocument.ts"
 
@@ -38,9 +38,6 @@ export const layer = Layer.succeed(
       )
   })
 )
-
-/** The site scoreboard as polled: its events, each read by `EspnEvent`. */
-const Scoreboard = Schema.Struct({ events: Schema.Array(Schema.Unknown) })
 
 /**
  * Each league's last listing, the FastCast topics' documents, the unknown play types already noted, and the plays
