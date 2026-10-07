@@ -6,6 +6,7 @@ import { liveSnapshot, team } from "@sportal/domain/TestGame"
 import {
   Array as Arr,
   Chunk,
+  Context,
   DateTime,
   Effect,
   Equal,
@@ -33,34 +34,43 @@ import { CorpusInput, CorpusLine } from "./CorpusInput.ts"
 import * as CorpusRun from "./CorpusRun.ts"
 import { built, inCorpus, local } from "./TestCorpus.ts"
 
-// As LiveSlate.test.ts measured it: every play id the recording's patches add.
-const recordedPlays = 182
-
 describe("CorpusRun.day", () => {
-  it.effect(
-    "runs the recorded NE at BUF day to the same events twice, every play played once",
-    () =>
-      inCorpus(EspnDecode.layer, () =>
+  // NE at BUF's recorded day is logged, built and run twice once for both tests: seconds alone, more under a full
+  // suite's load.
+  it.layer(neAtBufRunTwiceLayer(), { timeout: "60 seconds" })(
+    "the recorded NE at BUF day, run twice",
+    (it) => {
+      it.effect("should play every recorded play once", () =>
         Effect.gen(function* () {
-          yield* logged(yield* recordedNeAtBuf)
-          yield* built("2026-10-04")
-          const first = yield* CorpusRun.day("2026-10-04", CorpusRun.events)
-          const second = yield* CorpusRun.day("2026-10-04", CorpusRun.events)
-          assert.strictEqual(first.filter(({ what }) => what._tag === "Played").length, recordedPlays)
+          const { first } = yield* NeAtBufRunTwice
+
+          const played = first.filter(({ what }) => what._tag === "Played")
+
+          assert.strictEqual(played.length, recordedPlays)
+        })
+      )
+
+      it.effect("should run to the same events twice", () =>
+        Effect.gen(function* () {
+          const { first, second } = yield* NeAtBufRunTwice
+
           assert.isTrue(Equal.equals(first, second))
         })
-      ),
-    { timeout: 60_000 }
+      )
+    }
   )
 
+  // Plays NE at BUF's whole recorded day through Ingest, then builds and runs it: many seconds under a full suite.
   it.effect(
-    "gives the events the Hub's slate published live, the day played through Ingest on the test clock",
+    "should give the events the Hub's slate published live, the day played through Ingest on the test clock",
     () =>
       inCorpus(EspnDecode.layer, () =>
         Effect.gen(function* () {
           const frames = yield* recordedNeAtBuf
-          const live = yield* playedLive(frames, (yield* CorpusDay.bounds("2026-10-04")).until)
+          const { until } = yield* CorpusDay.bounds("2026-10-04")
+          const live = yield* playedLive(frames, until)
           yield* built("2026-10-04")
+
           const run = yield* CorpusRun.day("2026-10-04", CorpusRun.events)
 
           assert.strictEqual(live.filter(({ what }) => what._tag === "Played").length, recordedPlays)
@@ -80,39 +90,35 @@ describe("CorpusRun.day", () => {
     { timeout: 120_000 }
   )
 
-  it.effect("a hold with nothing after it falls back at its deadline, in the day's last tick", () =>
+  it.effect("should fall a hold with nothing after it back at its deadline, in the day's last tick", () =>
     inCorpus(TestSnapshotFeed.decoder, () =>
       Effect.gen(function* () {
+        const days = yield* CorpusDays
         const pushedAt = local("2026-10-04T13:00:00")
         const polledAt = local("2026-10-04T13:00:05")
         const scored = (score: number) => liveSnapshot({ home: { team: team("HOME"), score } })
-        yield* (yield* CorpusDays).write(
-          new CorpusDay({
-            date: "2026-10-04",
-            kind: "captured",
-            format: CorpusLine.format,
-            leagues: ["fbs"],
-            games: 1,
-            built: polledAt
-          }),
-          {
-            push: Stream.make(
-              new CorpusLine({
-                seq: 1,
-                at: pushedAt,
-                input: CorpusInput.cases.Snapshot.make({ snapshot: scored(7) })
-              })
-            ),
-            poll: Stream.make(
-              new CorpusLine({
-                seq: 2,
-                at: polledAt,
-                input: CorpusInput.cases.ListingChanged.make({ league: "fbs", games: [scored(14)] })
-              })
-            )
-          }
-        )
+        const day = new CorpusDay({
+          date: "2026-10-04",
+          kind: "captured",
+          format: CorpusLine.format,
+          leagues: ["fbs"],
+          games: 1,
+          built: polledAt
+        })
+        const pushed = new CorpusLine({
+          seq: 1,
+          at: pushedAt,
+          input: CorpusInput.cases.Snapshot.make({ snapshot: scored(7) })
+        })
+        const polled = new CorpusLine({
+          seq: 2,
+          at: polledAt,
+          input: CorpusInput.cases.ListingChanged.make({ league: "fbs", games: [scored(14)] })
+        })
+        yield* days.write(day, { push: Stream.make(pushed), poll: Stream.make(polled) })
+
         const events = yield* CorpusRun.day("2026-10-04", CorpusRun.events)
+
         const last = Arr.last(events)
         assert.isTrue(Option.exists(last, ({ what }) => GameEventKind.$is("ScoreChanged")(what)))
         assert.deepStrictEqual(
@@ -123,10 +129,11 @@ describe("CorpusRun.day", () => {
     )
   )
 
-  it.effect("a day that is not there is CorpusDayUnreadable, Missing", () =>
+  it.effect("should fail a day that is not there as CorpusDayUnreadable, Missing", () =>
     inCorpus(TestSnapshotFeed.decoder, () =>
       Effect.gen(function* () {
         const error = yield* CorpusRun.day("2026-10-04", CorpusRun.events).pipe(Effect.flip)
+
         assert.deepStrictEqual(
           [error._tag, error.date, error.reason],
           ["CorpusDayUnreadable", "2026-10-04", "Missing"]
@@ -135,6 +142,33 @@ describe("CorpusRun.day", () => {
     )
   )
 })
+
+// As LiveSlate.test.ts measured it: every play id the recording's patches add.
+const recordedPlays = 182
+
+/** The events of two corpus runs of NE at BUF's recorded day, logged and built once. */
+class NeAtBufRunTwice extends Context.Service<
+  NeAtBufRunTwice,
+  { readonly first: ReadonlyArray<GameEvent>; readonly second: ReadonlyArray<GameEvent> }
+>()("test/NeAtBufRunTwice") {}
+
+function neAtBufRunTwiceLayer() {
+  return Layer.effect(
+    NeAtBufRunTwice,
+    inCorpus(EspnDecode.layer, () =>
+      Effect.gen(function* () {
+        const frames = yield* recordedNeAtBuf
+        yield* logged(frames)
+        yield* built("2026-10-04")
+
+        const first = yield* CorpusRun.day("2026-10-04", CorpusRun.events)
+        const second = yield* CorpusRun.day("2026-10-04", CorpusRun.events)
+
+        return { first, second }
+      })
+    )
+  )
+}
 
 /**
  * The game events the Hub's slate publishes while Ingest plays `frames` as the recorded scenario, live on the test
@@ -166,7 +200,8 @@ function playedLive(frames: ReadonlyArray<FeedFrame>, until: DateTime.Utc) {
         const { seq } = yield* Ref.get(appended)
         if (seq > 0) yield* slate.through(seq)
         yield* TestClock.adjust(0)
-        if ((yield* Ref.get(appended)).seq !== seq) yield* settled(rounds - 1)
+        const after = yield* Ref.get(appended)
+        if (after.seq !== seq) yield* settled(rounds - 1)
       })
     // ScenarioProvider pushes each frame at its instant and polls at a poll's instant or 10 s after the last, its
     // `longest`.
@@ -202,7 +237,8 @@ function playedLive(frames: ReadonlyArray<FeedFrame>, until: DateTime.Utc) {
     }
     yield* TestClock.adjust(0)
     yield* Fiber.interrupt(subscriber)
-    return Chunk.toReadonlyArray(yield* Ref.get(seen))
+    const published = yield* Ref.get(seen)
+    return Chunk.toReadonlyArray(published)
   }).pipe(Effect.provide(LiveSlate.layer.pipe(Layer.provideMerge(FeedLog.layer))), Effect.scoped)
   // Set before the feed log opens, so its writer never wakes through the years before the first frame.
   return TestClock.setTime(DateTime.toEpochMillis(first)).pipe(Effect.andThen(playing))
