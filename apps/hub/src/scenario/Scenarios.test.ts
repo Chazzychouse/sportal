@@ -75,11 +75,14 @@ describe("Scenarios", () => {
                 : []
             )
           )
-          // ESPN edits a game's plays after it ends; those reach a fold that has let the game go, and are dropped.
-          const [stopped, dropped] = Arr.mapAccum(observations, new Set<string>(), (stopped, report) =>
-            report._tag === "Stopped"
-              ? [new Set([...stopped, report.liveGame.snapshot.id]), []]
-              : [stopped, report._tag === "Dropped" && !stopped.has(report.game) ? [report] : []]
+          // ESPN edits a game's plays after it ends; those reach a slate that has let the game go, and are dropped.
+          const [stopped, dropped] = Arr.mapAccum(observations, new Set<string>(), (stopped, observation) =>
+            observation._tag === "Stopped"
+              ? [new Set([...stopped, observation.liveGame.snapshot.id]), []]
+              : [
+                  stopped,
+                  observation._tag === "Dropped" && !stopped.has(observation.game) ? [observation] : []
+                ]
           )
           for (const game of new Set(delivered.map(({ game }) => game))) {
             const playedIds = played.filter((one) => one.game === game).map(({ play }) => play)

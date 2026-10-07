@@ -33,7 +33,7 @@ export class Slate extends Data.Class<{
   /**
    * Takes one frame: ticks every game due after `reached` and at or before `at`, then applies each of its deliveries in
    * order, and sets `seq` to the frame's, even when it has no deliveries. A tick never goes back. A game whose take or
-   * tick raises a defect keeps its last good live game and reports `Raised`.
+   * tick raises a defect keeps its last good live game and observes `Raised`.
    */
   take(frame: {
     readonly deliveries: ReadonlyArray<Delivery>

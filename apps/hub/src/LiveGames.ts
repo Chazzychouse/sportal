@@ -79,15 +79,15 @@ export class LiveGames extends Context.Service<
         const replayRead = yield* Deferred.make<number>()
         const caughtUp = yield* Deferred.make<{ readonly frames: number; readonly deliveries: number }>()
 
-        // Takes or ticks the fold and tells what it did as the following stands, all under the state's lock; publishes
+        // Takes or ticks the slate and tells what it did as the following stands, all under the state's lock; publishes
         // whenever the fold or its watermarks moved, so `through` sees every frame. Uninterruptible, so an interrupted
-        // caller never leaves telemetry without its state; a report that dies leaves the state as it was.
+        // caller never leaves telemetry without its state; an observation that dies leaves the state as it was.
         const step = (frame: Option.Option<Decoded>, run: (folded: DomainSlate) => Effect.Effect<Taken>) =>
           SubscriptionRef.modifySomeEffect(state, ({ folded, following }) =>
             Effect.gen(function* () {
               const taken = yield* run(folded)
               const { next } = taken
-              yield* told(following, frame, taken, folded)
+              yield* told(following, frame, taken)
               if (!Following.$is("Replaying")(following)) {
                 yield* PubSub.publishAll(events, taken.events)
                 if (next.live !== folded.live) yield* countByState(next.live)

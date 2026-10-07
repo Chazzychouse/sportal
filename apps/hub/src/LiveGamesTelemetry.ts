@@ -1,7 +1,7 @@
 import { type GameId, GameSnapshot } from "@sportal/domain/Game"
 import type { GameEvent, GameEventKind } from "@sportal/domain/GameEvent"
 import type { LiveGame, LiveGameState } from "@sportal/domain/LiveGame"
-import { type Slate, SlateObservation, type Taken } from "@sportal/domain/Slate"
+import { SlateObservation, type Taken } from "@sportal/domain/Slate"
 import { Cause, DateTime, Duration, Effect, Exit, Match, Metric, Option, Schema } from "effect"
 import { noticed } from "./DecodeTelemetry.ts"
 import type { Following } from "./LiveGames.ts"
@@ -10,15 +10,10 @@ import type { Decoded } from "./provider/Provider.ts"
 /**
  * What one take or tick of the live games did, told as their following stands. During the replay, only a defect is
  * logged: every observation and notice was told when its frame first arrived. Otherwise each notice of the frame taken
- * is told, then each observation and each game event is logged and counted. `before` is the slate taken from, which
- * holds the snapshot of a game the next slate has let go. `frame` is the frame taken; a tick has none.
+ * is told, then each observation and each game event is logged and counted. `frame` is the frame taken; a tick has
+ * none.
  */
-export function told(
-  following: Following,
-  frame: Option.Option<Decoded>,
-  taken: Taken,
-  before: Slate
-): Effect.Effect<void> {
+export function told(following: Following, frame: Option.Option<Decoded>, taken: Taken): Effect.Effect<void> {
   const { observations, events } = taken
   const seq = Option.map(frame, ({ seq }) => seq)
   const loudly = () =>
@@ -30,9 +25,7 @@ export function told(
       Effect.andThen(
         Effect.forEach(observations, (observation) => toldLive(observation, seq), { discard: true })
       ),
-      Effect.andThen(
-        Effect.forEach(events, (event) => toldEvent(event, taken.next, before), { discard: true })
-      )
+      Effect.andThen(Effect.forEach(events, (event) => toldEvent(event, observations), { discard: true }))
     )
   return Match.valueTags(following, {
     Replaying: () =>
@@ -123,27 +116,38 @@ function toldLive(observation: SlateObservation, seq: Option.Option<number>): Ef
 }
 
 /**
- * A game event's log and metrics, with the snapshot of its game: the next slate's, or the one before it for a game
- * the next has let go. An event of a game neither holds is not told.
+ * A game event's log and metrics, with the snapshot its step left its game with: the last `Started` or `Changed` of
+ * that game at the event's instant in the same take, which every step that says events reports. An event with none is
+ * a defect, logged at Error.
  */
-function toldEvent(event: GameEvent, next: Slate, before: Slate): Effect.Effect<void> {
-  return Option.match(
-    Option.orElse(Option.fromNullishOr(next.live.get(event.game)), () =>
-      Option.fromNullishOr(before.live.get(event.game))
-    ),
-    {
-      onNone: () => Effect.void,
-      onSome: ({ snapshot }) =>
-        logEvent(event.what, snapshot).pipe(
-          Effect.andThen(
-            event.what._tag === "Played"
-              ? Metric.update(Metric.withAttributes(plays, { league: snapshot.league }), 1)
-              : Effect.void
-          ),
-          Effect.annotateLogs(annotationsOf(snapshot))
-        )
-    }
+function toldEvent(event: GameEvent, observations: ReadonlyArray<SlateObservation>): Effect.Effect<void> {
+  const stepped = observations.flatMap((observation) =>
+    SlateObservation.$is("Started")(observation) || SlateObservation.$is("Changed")(observation)
+      ? [{ at: observation.at, snapshot: afterOf(observation).snapshot }]
+      : []
   )
+  const step = stepped.findLast(
+    ({ at, snapshot }) => snapshot.id === event.game && DateTime.Equivalence(at, event.at)
+  )
+  return Option.match(Option.fromNullishOr(step), {
+    onNone: () =>
+      Effect.logError(
+        `LiveGames: ${event.what._tag} for game ${event.game} has no started or changed observation in its take`
+      ),
+    onSome: ({ snapshot }) =>
+      logEvent(event.what, snapshot).pipe(
+        Effect.andThen(
+          event.what._tag === "Played"
+            ? Metric.update(Metric.withAttributes(plays, { league: snapshot.league }), 1)
+            : Effect.void
+        ),
+        Effect.annotateLogs(annotationsOf(snapshot))
+      )
+  })
+}
+
+function afterOf(observation: Extract<SlateObservation, { readonly _tag: "Started" | "Changed" }>): LiveGame {
+  return observation._tag === "Started" ? observation.liveGame : observation.after
 }
 
 /** Game `snapshot`'s log annotations and metric attributes. */

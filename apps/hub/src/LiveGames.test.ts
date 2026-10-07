@@ -2,6 +2,7 @@ import { assert, describe, it } from "@effect/vitest"
 import { Delivery } from "@sportal/domain/Delivery"
 import { GameId, GameSnapshot } from "@sportal/domain/Game"
 import { type LiveGame, LiveGameState } from "@sportal/domain/LiveGame"
+import { Slate } from "@sportal/domain/Slate"
 import { liveSnapshot, play, snapshot, team } from "@sportal/domain/TestGame"
 import {
   Clock,
@@ -21,7 +22,8 @@ import {
 import { TestClock } from "effect/testing"
 import { FeedLog } from "./FeedLog.ts"
 import { FeedFrame } from "./Frame.ts"
-import { LiveGames } from "./LiveGames.ts"
+import { Following, LiveGames } from "./LiveGames.ts"
+import { told } from "./LiveGamesTelemetry.ts"
 import { Decoder } from "./provider/Decoder.ts"
 import { Decoded, LiveFeedDemand } from "./provider/Provider.ts"
 import { delivered, dyingAt, liveGames, pushed } from "./TestFeed.ts"
@@ -477,6 +479,63 @@ describe("LiveGames", () => {
           [1, 120_000]
         )
       }).pipe(Effect.provide(liveGames()), withMetrics)
+    )
+
+    it.effect(
+      "an event of a game started and stopped within one take is logged and counted with that step's snapshot",
+      () => {
+        const { logs, layer } = recordingLogs("Debug")
+        return Effect.gen(function* () {
+          const at = yield* DateTime.now
+          const final = snapshot({ id: one, status: "final", period: 4, clock: "0:00" })
+          const taken = yield* Slate.empty.take({
+            deliveries: [
+              Delivery.cases.Snapshot.make({ snapshot: liveSnapshot({ id: one }), from: "push" }),
+              Delivery.cases.Snapshot.make({ snapshot: final, from: "push" })
+            ],
+            at,
+            seq: 1
+          })
+          assert.isFalse(taken.next.live.has(one))
+          assert.deepStrictEqual(
+            taken.events.map(({ what }) => what._tag),
+            ["PeriodEnded", "WentFinal"]
+          )
+          yield* told(Following.Live(), Option.none(), taken)
+          const went = logs.filter(({ message }) => message.includes("WentFinal"))
+          assert.strictEqual(went.length, 1)
+          assert.strictEqual(went[0]?.level, "Info")
+          assert.include(went[0]?.message, "at final")
+          assert.strictEqual(yield* counted("sportal_game_events", { game: "1", event: "WentFinal" }), 1)
+        }).pipe(Effect.provide(layer), withMetrics)
+      }
+    )
+
+    it.effect(
+      "an event of a game changed and stopped within one take is annotated with the step's snapshot",
+      () => {
+        const { logs, layer } = recordingLogs("Debug")
+        return Effect.gen(function* () {
+          const at = yield* DateTime.now
+          const held = (yield* Slate.empty.take({
+            deliveries: [Delivery.cases.Snapshot.make({ snapshot: liveSnapshot({ id: one }), from: "push" })],
+            at,
+            seq: 1
+          })).next
+          const final = snapshot({ id: one, status: "final", period: 4, clock: "0:00" })
+          const taken = yield* held.take({
+            deliveries: [Delivery.cases.Snapshot.make({ snapshot: final, from: "push" })],
+            at: DateTime.add(at, { seconds: 1 }),
+            seq: 2
+          })
+          assert.isFalse(taken.next.live.has(one))
+          yield* told(Following.Live(), Option.none(), taken)
+          const went = logs.filter(({ message }) => message.includes("WentFinal"))
+          assert.strictEqual(went.length, 1)
+          assert.include(went[0]?.message, "at final")
+          assert.strictEqual(yield* counted("sportal_game_events", { game: "1", event: "WentFinal" }), 1)
+        }).pipe(Effect.provide(layer), withMetrics)
+      }
     )
 
     it.effect("a game event is logged at Info with the game's annotations, counted, and published", () => {

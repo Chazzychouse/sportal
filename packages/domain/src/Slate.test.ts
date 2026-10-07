@@ -36,7 +36,7 @@ describe("Slate", () => {
     assert.deepStrictEqual(Slate.empty.games(["fbs", "nfl"]), [])
   })
 
-  it.effect("a listing with a live game starts it, and the fold keeps the listing", () =>
+  it.effect("a listing with a live game starts it, and the slate keeps the listing", () =>
     Effect.gen(function* () {
       const game = live(one, "10:00")
       const { next, observations } = yield* took(Slate.empty, [listing("fbs", [game])], t0)
@@ -47,7 +47,7 @@ describe("Slate", () => {
     })
   )
 
-  it.effect("an upcoming game far from kickoff is listed but not held, and only its take is reported", () =>
+  it.effect("an upcoming game far from kickoff is listed but not held, and only its take is observed", () =>
     Effect.gen(function* () {
       const later = snapshot({ id: two, kickoff: DateTime.add(t0, { hours: 3 }) })
       const { next, observations } = yield* took(Slate.empty, [listing("fbs", [later])], t0)
@@ -106,8 +106,14 @@ describe("Slate", () => {
       const held = yield* taken(Slate.empty, [polled(live(one, "10:00"))], t0)
       const at = DateTime.add(t0, { seconds: 5 })
       const { events } = yield* took(held, [playsOf(one, 3)], at)
-      assert.isAbove(events.length, 0)
-      assert.isTrue(events.every((event) => event.game === one && DateTime.Equivalence(event.at, at)))
+      assert.deepStrictEqual(
+        events.map(({ game, at, what }) => [game, at, what._tag, what._tag === "Played" ? what.play.id : ""]),
+        [
+          [one, at, "Played", "p1"],
+          [one, at, "Played", "p2"],
+          [one, at, "Played", "p3"]
+        ]
+      )
     })
   )
 
@@ -116,7 +122,7 @@ describe("Slate", () => {
       const held = yield* taken(Slate.empty, [polled(live(one, "10:00"))], t0)
       const { next, observations } = yield* held.tick(DateTime.add(t0, { seconds: 100 }))
       assert.isTrue(LiveGameState.$is("Stale")(next.live.get(one)?.state ?? LiveGameState.Over()))
-      const changed = observations.filter((report) => report._tag === "Changed")
+      const changed = observations.filter((observation) => observation._tag === "Changed")
       assert.isTrue(
         changed.some(
           ({ before, after }) =>
@@ -148,7 +154,7 @@ describe("Slate", () => {
     })
   )
 
-  it.effect("a take that raises a defect is reported, and the game keeps its last good live game", () =>
+  it.effect("a take that raises a defect is observed, and the game keeps its last good live game", () =>
     Effect.gen(function* () {
       const held = yield* taken(Slate.empty, [polled(live(one, "9:00"))], t0)
       const { next, observations } = yield* took(held, [polled(broken(one))], t0)
@@ -195,8 +201,10 @@ describe("Slate", () => {
         )
         assert.strictEqual(next.live.get(one)?.snapshot, pushedGame)
         assert.deepStrictEqual(
-          observations.flatMap((report) =>
-            report._tag === "Took" ? [[report.snapshot, report.from, report.outcome] as const] : []
+          observations.flatMap((observation) =>
+            observation._tag === "Took"
+              ? [[observation.snapshot, observation.from, observation.outcome] as const]
+              : []
           ),
           [
             [listedGame, "poll", "taken"],
