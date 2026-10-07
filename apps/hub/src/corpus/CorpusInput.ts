@@ -2,7 +2,7 @@ import { Delivery } from "@sportal/domain/Delivery"
 import { GameId, GameSnapshot } from "@sportal/domain/Game"
 import { LeagueId } from "@sportal/domain/League"
 import { Play, PlayId } from "@sportal/domain/Play"
-import { Array as Arr, Data, Effect, Equal, Schema } from "effect"
+import { Array as Arr, Data, DateTime, Effect, Equal, Order, Schema } from "effect"
 import type { Decoded } from "../provider/Provider.ts"
 
 /**
@@ -25,6 +25,12 @@ export class CorpusLine extends Schema.Class<CorpusLine>("sportal/hub/CorpusLine
 }) {
   /** This corpus format; a day built to another does not load. */
   static readonly format: number = 1
+
+  /** A corpus day's order: by arrival, then by `seq`, so a frame's lines sit together and `Had` threads one way. */
+  static readonly byArrival: Order.Order<{ readonly at: DateTime.Utc; readonly seq: number }> = Order.Struct({
+    at: DateTime.Order,
+    seq: Order.Number
+  })
 
   /**
    * Each frame's lines from what it delivered, against what the day had before it (each league's last listing,

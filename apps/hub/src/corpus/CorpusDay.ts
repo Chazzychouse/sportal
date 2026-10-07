@@ -1,13 +1,10 @@
-import type { Delivery } from "@sportal/domain/Delivery"
 import { LeagueId } from "@sportal/domain/League"
 import {
   Array as Arr,
   Context,
-  DateTime,
   Effect,
   FileSystem,
   Layer,
-  Order,
   Path,
   type PlatformError,
   Schema,
@@ -15,6 +12,7 @@ import {
 } from "effect"
 import * as Gzip from "../Gzip.ts"
 import { HubConfig } from "../HubConfig.ts"
+import type { Decoded } from "../provider/Provider.ts"
 import { CorpusLine, Had } from "./CorpusInput.ts"
 
 /** A day of the corpus: what kind it is and the inputs it holds, by arrival. */
@@ -41,10 +39,11 @@ export class CorpusDays extends Context.Service<
       lines: { readonly poll: Stream.Stream<CorpusLine>; readonly push: Stream.Stream<CorpusLine> }
     ): Effect.Effect<void, PlatformError.PlatformError>
     /** The day's frames' deliveries in arrival order (`at`, then `seq`), one `Decoded`-shaped step per frame. */
-    read(
-      date: string
-    ): Effect.Effect<
-      { readonly day: CorpusDay; readonly frames: Stream.Stream<CorpusFrame, CorpusDayUnreadable> },
+    read(date: string): Effect.Effect<
+      {
+        readonly day: CorpusDay
+        readonly frames: Stream.Stream<Pick<Decoded, "seq" | "at" | "deliveries">, CorpusDayUnreadable>
+      },
       CorpusDayUnreadable
     >
     /** The dates of the days there are, sorted; none when the corpus has no days yet. */
@@ -118,11 +117,14 @@ export class CorpusDays extends Context.Service<
               const frames = Stream.unwrap(
                 Effect.all([readLines(date, at.poll), readLines(date, at.push)], { concurrency: 2 }).pipe(
                   Effect.map(([poll, push]) =>
-                    Stream.fromIterable([...poll, ...push].toSorted(byArrival)).pipe(
+                    Stream.fromIterable([...poll, ...push].toSorted(CorpusLine.byArrival)).pipe(
                       Stream.groupAdjacentBy((line) => line.seq),
                       Stream.mapAccum(
                         () => Had.empty,
-                        (had, [seq, lines]): readonly [Had, ReadonlyArray<CorpusFrame>] => {
+                        (
+                          had,
+                          [seq, lines]
+                        ): readonly [Had, ReadonlyArray<Pick<Decoded, "seq" | "at" | "deliveries">>] => {
                           const read = CorpusLine.deliveries(lines, had)
                           return [
                             read.had,
@@ -146,13 +148,6 @@ export class CorpusDays extends Context.Service<
         })
       })
     )
-}
-
-/** One frame of a corpus day, as the slate takes it. */
-export type CorpusFrame = {
-  readonly seq: number
-  readonly at: DateTime.Utc
-  readonly deliveries: ReadonlyArray<Delivery>
 }
 
 /**
@@ -180,12 +175,6 @@ const decodeLine = Schema.decodeEffect(Schema.fromJsonString(CorpusLine))
 const encodeDay = Schema.encodeEffect(Schema.fromJsonString(CorpusDay))
 
 const decodeDay = Schema.decodeEffect(Schema.fromJsonString(CorpusDay))
-
-/** By arrival, then by `seq`, so a frame's lines from both files sit together. */
-const byArrival: Order.Order<CorpusLine> = Order.combine(
-  Order.mapInput(DateTime.Order, (line: CorpusLine) => line.at),
-  Order.mapInput(Order.Number, (line: CorpusLine) => line.seq)
-)
 
 function unreadable(date: string, reason: CorpusDayUnreadable["reason"]) {
   return (cause: unknown) => new CorpusDayUnreadable({ date, reason, cause })
