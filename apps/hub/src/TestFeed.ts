@@ -3,15 +3,15 @@ import type { Delivery } from "@sportal/domain/Delivery"
 import type { GameSnapshot } from "@sportal/domain/Game"
 import type { GameEvent } from "@sportal/domain/GameEvent"
 import type { LeagueId } from "@sportal/domain/League"
-import { Slate, type SlateObservation } from "@sportal/domain/Slate"
+import { Slate as DomainSlate, type SlateObservation } from "@sportal/domain/Slate"
 import { DateTime, Effect, Layer, Schedule, Schema, Stream } from "effect"
 import * as Database from "./Database.ts"
 import { FeedLog } from "./FeedLog.ts"
 import { FeedFrame, Frame } from "./Frame.ts"
-import { LiveGames } from "./LiveGames.ts"
 import { Decoder } from "./provider/Decoder.ts"
 import * as EspnScript from "./provider/espn/EspnScript.ts"
 import { type Polling, Provider, type ProviderError } from "./provider/Provider.ts"
+import { Slate } from "./Slate.ts"
 import { Scenarios } from "./scenario/Scenarios.ts"
 import * as TestSnapshotFeed from "./TestSnapshotFeed.ts"
 
@@ -37,22 +37,22 @@ export function polled(
 }
 
 /**
- * The live games following a feed log in memory, which is provided too, for a test to append to. `frames` are logged
- * before the live games start, so they are replayed. Frames are read by the snapshot feed's decode unless
+ * The slate following a feed log in memory, which is provided too, for a test to append to. `frames` are logged
+ * before the slate starts, so they are replayed. Frames are read by the snapshot feed's decode unless
  * `options.decoder` is given, and the game day is read in `options.zone`, the local one unless given.
  */
-export function liveGames(
+export function slateFollowing(
   frames: ReadonlyArray<FeedFrame> = [],
   options: { readonly decoder?: Layer.Layer<Decoder>; readonly zone?: DateTime.TimeZone } = {}
-): Layer.Layer<LiveGames | FeedLog> {
-  // Appended through a log of their own, closed before the live games' log opens, so every one is written.
+): Layer.Layer<Slate | FeedLog> {
+  // Appended through a log of their own, closed before the slate's log opens, so every one is written.
   const logged = Layer.effectDiscard(
     FeedLog.use((log) => Effect.forEach(frames, log.append, { discard: true })).pipe(
       Effect.provide(FeedLog.layer),
       Effect.scoped
     )
   )
-  return LiveGames.layer.pipe(
+  return Slate.layer.pipe(
     Layer.provideMerge(FeedLog.layer.pipe(Layer.provide(logged))),
     Layer.provide([
       options.decoder ?? TestSnapshotFeed.decoder,
@@ -82,12 +82,12 @@ export function dyingAt(body: string): Layer.Layer<Decoder> {
 
 /**
  * Appends a snapshot feed frame that says only `delivery`, received at `at` (the clock's now, unless given), and gives
- * the live games once they have taken it.
+ * the slate once it has taken it.
  */
 export function delivered(delivery: Delivery, at?: DateTime.Utc) {
   return Effect.gen(function* () {
     const frame = yield* (yield* FeedLog).append(framed(delivery, at ?? (yield* DateTime.now)))
-    return yield* (yield* LiveGames).through(frame.seq)
+    return yield* (yield* Slate).through(frame.seq)
   })
 }
 
@@ -144,10 +144,10 @@ export function decodedFrames(frames: ReadonlyArray<FeedFrame>) {
 export function takenOf(frames: ReadonlyArray<FeedFrame>) {
   return Effect.gen(function* () {
     const empty: {
-      readonly slate: Slate
+      readonly slate: DomainSlate
       readonly events: ReadonlyArray<GameEvent>
       readonly observations: ReadonlyArray<SlateObservation>
-    } = { slate: Slate.empty, events: [], observations: [] }
+    } = { slate: DomainSlate.empty, events: [], observations: [] }
     const { events, observations } = yield* Effect.reduce(
       yield* decodedFrames(frames),
       () => empty,

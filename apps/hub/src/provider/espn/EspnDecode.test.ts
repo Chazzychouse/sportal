@@ -7,7 +7,7 @@ import { type Data, DateTime, Effect, Metric, Option, Record, Schema } from "eff
 import type { FeedFrame } from "../../Frame.ts"
 import { decodedFrames } from "../../TestFeed.ts"
 import { recordingLogs, withMetrics } from "../../TestTelemetry.ts"
-import type { Notice } from "../Provider.ts"
+import type { DecodeObservation } from "../Provider.ts"
 import * as EspnDecode from "./EspnDecode.ts"
 import { EspnEvent } from "./EspnEvent.ts"
 
@@ -418,7 +418,7 @@ layer(EspnDecode.layer)("EspnDecode", (it) => {
       ]).pipe(Effect.provide(layer))
 
       assert.sameMembers(
-        [...new Set(noted.map(({ notice }) => notice._tag))],
+        [...new Set(noted.map(({ observation }) => observation._tag))],
         [
           "FrameUndecoded",
           "EventUndecoded",
@@ -438,11 +438,13 @@ layer(EspnDecode.layer)("EspnDecode", (it) => {
   it.effect("notes each message by league and op, and the games pushed", () =>
     Effect.gen(function* () {
       const { noted } = yield* said([poll("nfl", scoreboardBody), ...recorded(socketTexts)])
-      const received = noted.flatMap(({ notice }) =>
-        notice._tag === "Received" ? [`${Option.getOrElse(notice.league, () => "none")} ${notice.op}`] : []
+      const received = noted.flatMap(({ observation }) =>
+        observation._tag === "Received"
+          ? [`${Option.getOrElse(observation.league, () => "none")} ${observation.op}`]
+          : []
       )
-      const pushed = noted.flatMap(({ notice }) =>
-        notice._tag === "Pushed" && notice.league === "nfl" ? [notice.games] : []
+      const pushed = noted.flatMap(({ observation }) =>
+        observation._tag === "Pushed" && observation.league === "nfl" ? [observation.games] : []
       )
 
       assert.deepStrictEqual(
@@ -488,8 +490,10 @@ layer(EspnDecode.layer)("EspnDecode", (it) => {
         [2]
       )
       assert.deepStrictEqual(
-        noted.flatMap(({ notice, seq }) =>
-          notice._tag === "FrameUndecoded" ? [[seq, notice.feed, notice.channel, notice.kind]] : []
+        noted.flatMap(({ observation, seq }) =>
+          observation._tag === "FrameUndecoded"
+            ? [[seq, observation.feed, observation.channel, observation.kind]]
+            : []
         ),
         [[1, "poll", "nfl", "response"]]
       )
@@ -689,7 +693,7 @@ layer(EspnDecode.layer)("EspnDecode", (it) => {
   })
 
   describe("one Decoded per frame", () => {
-    it.effect("a message that changes no document is a Decoded with only its Received notice", () =>
+    it.effect("a message that changes no document is a Decoded with only its Received observation", () =>
       Effect.gen(function* () {
         const [only, ...rest] = yield* decodedFrames([
           message("event-football-nfl", 1, [{ op: "replace", path: "/x", value: "1" }])
@@ -700,7 +704,7 @@ layer(EspnDecode.layer)("EspnDecode", (it) => {
         assert.deepStrictEqual(only?.deliveries, [])
         assert.deepStrictEqual(only?.resyncs, [])
         assert.deepStrictEqual(
-          only?.notices.map((notice) => notice._tag),
+          only?.observations.map((observation) => observation._tag),
           ["Received"]
         )
       })
@@ -713,7 +717,7 @@ layer(EspnDecode.layer)("EspnDecode", (it) => {
         assert.strictEqual(all.length, 1)
         assert.deepStrictEqual(all[0]?.deliveries, [])
         assert.deepStrictEqual(
-          all[0]?.notices.map((notice) => notice._tag),
+          all[0]?.observations.map((observation) => observation._tag),
           ["FrameUndecoded"]
         )
       })
@@ -722,7 +726,9 @@ layer(EspnDecode.layer)("EspnDecode", (it) => {
     it.effect("a scoreboard push is a Decoded of each pushed game's Snapshot, noted Pushed", () =>
       Effect.gen(function* () {
         const all = yield* decodedFrames([poll("nfl", scoreboardBody), ...recorded(socketTexts.slice(0, 3))])
-        const pushing = all.find((one) => one.notices.some((notice) => notice._tag === "Pushed"))
+        const pushing = all.find((one) =>
+          one.observations.some((observation) => observation._tag === "Pushed")
+        )
 
         assert.strictEqual(pushing?.deliveries.length, 16)
         assert.isTrue(pushing?.deliveries.every((delivery) => delivery._tag === "Snapshot"))
@@ -755,27 +761,29 @@ layer(EspnDecode.layer)("EspnDecode", (it) => {
   })
 })
 
-/** What `frames` decode to, each numbered by its place from 1: the deliveries, and what decoding noticed. */
+/** What `frames` decode to, each numbered by its place from 1: the deliveries, and what decoding observed. */
 function said(frames: ReadonlyArray<FeedFrame>) {
   return decodedFrames(frames).pipe(
     Effect.map((all) => ({
       deliveries: all.flatMap(({ seq, at, deliveries }) =>
         deliveries.map((delivery) => ({ seq, at, delivery }))
       ),
-      noted: all.flatMap(({ seq, notices }) => notices.map((notice) => ({ seq, notice })))
+      noted: all.flatMap(({ seq, observations }) => observations.map((observation) => ({ seq, observation })))
     }))
   )
 }
 
-/** How many of `noted` are `tag` notices with `fields`. */
-function count<T extends Notice["_tag"]>(
-  noted: ReadonlyArray<{ readonly notice: Notice }>,
+/** How many of `noted` are `tag` observations with `fields`. */
+function count<T extends DecodeObservation["_tag"]>(
+  noted: ReadonlyArray<{ readonly observation: DecodeObservation }>,
   tag: T,
-  fields: Partial<Data.TaggedEnum.Value<Notice, T>> = {}
+  fields: Partial<Data.TaggedEnum.Value<DecodeObservation, T>> = {}
 ) {
-  return noted.filter(({ notice }) => {
-    const values = new Map(Object.entries(notice))
-    return notice._tag === tag && Object.entries(fields).every(([key, value]) => values.get(key) === value)
+  return noted.filter(({ observation }) => {
+    const values = new Map(Object.entries(observation))
+    return (
+      observation._tag === tag && Object.entries(fields).every(([key, value]) => values.get(key) === value)
+    )
   }).length
 }
 

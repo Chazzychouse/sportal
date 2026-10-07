@@ -1,10 +1,10 @@
 import { assert, describe, it } from "@effect/vitest"
 import { LeagueId } from "@sportal/domain/League"
 import { DateTime, Effect } from "effect"
-import { LiveGames } from "../../LiveGames.ts"
 import * as EspnDecode from "../../provider/espn/EspnDecode.ts"
 import * as EspnScript from "../../provider/espn/EspnScript.ts"
-import { liveGames } from "../../TestFeed.ts"
+import { Slate } from "../../Slate.ts"
+import { slateFollowing } from "../../TestFeed.ts"
 import type { ScenarioScript } from "../ScenarioScript.ts"
 import { allStoppedButOne } from "./AllStoppedButOne.ts"
 import { kickoffWindow } from "./KickoffWindow.ts"
@@ -95,13 +95,13 @@ describe("scripts", () => {
   )
 })
 
-/** The slate `seconds` into `script`: its ESPN frames up to then, folded through ESPN's decode. */
+/** The slate `seconds` into `script`: its ESPN frames up to then, current through ESPN's decode. */
 function at(script: ScenarioScript, seconds: number) {
   const until = DateTime.add(script.origin, { seconds })
-  return LiveGames.use((live) => live.latest).pipe(
-    Effect.map((folded) => folded.games(LeagueId.literals)),
+  return Slate.use((slate) => slate.latest).pipe(
+    Effect.map((current) => current.games(LeagueId.literals)),
     Effect.provide(
-      liveGames(
+      slateFollowing(
         EspnScript.scenarioOf(script).frames.filter((frame) =>
           DateTime.isLessThanOrEqualTo(frame.receivedAt, until)
         ),

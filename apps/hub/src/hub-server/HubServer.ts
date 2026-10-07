@@ -104,7 +104,7 @@ function liveRoute() {
       const slate = yield* Slate
       const sessions = yield* StageSessions
       const messages: Stream.Stream<LiveMessage> = Stream.merge(
-        slate.changes.pipe(
+        slate.publishedChanges.pipe(
           Stream.map(({ games, recentPlays }) => ({
             _tag: "SlateChanged" as const,
             slate: games,

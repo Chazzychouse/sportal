@@ -26,7 +26,7 @@ export class Provider extends Context.Service<
     /** Its live feed. */
     readonly push: LiveFeed
     /**
-     * When to poll again, given what the last poll left: the fold's slate for the polled leagues, and the leagues that
+     * When to poll again, given what the last poll left: the slate's games for the polled leagues, and the leagues that
      * failed. Ingest runs `poll` for each league repeated on it, and nothing else decides when.
      */
     readonly polling: Polling
@@ -60,7 +60,7 @@ export type Polling = Schedule.Schedule<
 
 /**
  * What one frame said, as its provider decodes it, one per frame: the deliveries in the order the frame said them, the
- * live feed channels whose document was dropped and so are to be checkpointed again, and what decode noticed. A frame
+ * live feed channels whose document was dropped and so are to be checkpointed again, and what decode observed. A frame
  * that said nothing is a `Decoded` with three empty arrays. It never crosses the wire.
  */
 export class Decoded extends Data.Class<{
@@ -69,15 +69,15 @@ export class Decoded extends Data.Class<{
   readonly at: DateTime.Utc
   readonly deliveries: ReadonlyArray<Delivery>
   readonly resyncs: ReadonlyArray<string>
-  readonly notices: ReadonlyArray<Notice>
+  readonly observations: ReadonlyArray<DecodeObservation>
 }> {
-  /** What `frame` said: `of`'s deliveries, resyncs, and notices, each none unless given. */
+  /** What `frame` said: `of`'s deliveries, resyncs, and observations, each none unless given. */
   static of(
     frame: Frame,
     of: {
       readonly deliveries?: ReadonlyArray<Delivery>
       readonly resyncs?: ReadonlyArray<string>
-      readonly notices?: ReadonlyArray<Notice>
+      readonly observations?: ReadonlyArray<DecodeObservation>
     } = {}
   ): Decoded {
     return new Decoded({
@@ -85,24 +85,31 @@ export class Decoded extends Data.Class<{
       at: frame.receivedAt,
       deliveries: of.deliveries ?? [],
       resyncs: of.resyncs ?? [],
-      notices: of.notices ?? []
+      observations: of.observations ?? []
     })
   }
 
-  /** A frame that did not decode: it says nothing but a `FrameUndecoded` notice of `cause`. */
+  /** A frame that did not decode: it says nothing but a `FrameUndecoded` observation of `cause`. */
   static undecodable(frame: Frame, cause: unknown): Decoded {
     return Decoded.of(frame, {
-      notices: [Notice.FrameUndecoded({ feed: frame.feed, channel: frame.channel, kind: frame.kind, cause })]
+      observations: [
+        DecodeObservation.FrameUndecoded({
+          feed: frame.feed,
+          channel: frame.channel,
+          kind: frame.kind,
+          cause
+        })
+      ]
     })
   }
 }
 
 /**
- * Something decode noticed in a frame, for telemetry to tell: a live feed message received, games pushed, a pushed
+ * Something decode observed in a frame, for telemetry to tell: a live feed message received, games pushed, a pushed
  * game no listing has, a topic's document reset, a message of an op it does not know, or a frame, an event, or a play
  * that did not decode, or a play type it does not know. Nothing in it is particular to a sport.
  */
-export type Notice = Data.TaggedEnum<{
+export type DecodeObservation = Data.TaggedEnum<{
   Received: {
     readonly league: Option.Option<LeagueId>
     readonly op: string
@@ -133,7 +140,7 @@ export type Notice = Data.TaggedEnum<{
   }
   PlayTypeUnknown: { readonly id: string; readonly text: string }
 }>
-export const Notice = Data.taggedEnum<Notice>()
+export const DecodeObservation = Data.taggedEnum<DecodeObservation>()
 
 /**
  * A provider could not supply data: unreachable or refused for a poll of `league`, or a push refused, closed, or gone

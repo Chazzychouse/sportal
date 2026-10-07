@@ -214,14 +214,14 @@ describe("Slate", () => {
       })
   )
 
-  it.effect("two deliveries in one frame fold as the same two in two frames at the same instant", () =>
+  it.effect("two deliveries in one frame are taken as the same two in two frames at the same instant", () =>
     Effect.gen(function* () {
       const deliveries = [listing("fbs", [live(one, "10:00"), live(two, "5:00")]), pushed(live(one, "9:00"))]
       const together = yield* taken(Slate.empty, deliveries, t0)
       const apart = yield* Effect.reduce(
         deliveries,
         () => Slate.empty,
-        (fold, delivery) => taken(fold, [delivery], t0)
+        (held, delivery) => taken(held, [delivery], t0)
       )
       assert.deepStrictEqual(together.live, apart.live)
       assert.deepStrictEqual(together.listed, apart.listed)
@@ -236,13 +236,13 @@ describe("Slate", () => {
         const listedNfl = snapshot({ id: two, league: "nfl", kickoff: DateTime.add(t0, { hours: 3 }) })
         const later = live(one, "9:00")
         const unlisted = live(GameId.make("3"), "5:00")
-        const fold = yield* taken(Slate.empty, [listing("fbs", [listedFbs])], t0).pipe(
-          Effect.flatMap((fold) => taken(fold, [listing("nfl", [listedNfl])], t0)),
-          Effect.flatMap((fold) => taken(fold, [polled(later)], t0)),
-          Effect.flatMap((fold) => taken(fold, [polled(unlisted)], t0))
+        const slate = yield* taken(Slate.empty, [listing("fbs", [listedFbs])], t0).pipe(
+          Effect.flatMap((held) => taken(held, [listing("nfl", [listedNfl])], t0)),
+          Effect.flatMap((held) => taken(held, [polled(later)], t0)),
+          Effect.flatMap((held) => taken(held, [polled(unlisted)], t0))
         )
-        assert.deepStrictEqual(fold.games(["fbs"]), [later])
-        assert.deepStrictEqual(fold.games(["nfl", "fbs"]), [listedNfl, later])
+        assert.deepStrictEqual(slate.games(["fbs"]), [later])
+        assert.deepStrictEqual(slate.games(["nfl", "fbs"]), [listedNfl, later])
       })
   )
 
@@ -252,22 +252,22 @@ describe("Slate", () => {
       Effect.gen(function* () {
         const three = GameId.make("3")
         const listedNfl = live(two, "5:00")
-        const fold = yield* taken(
+        const slate = yield* taken(
           Slate.empty,
           [listing("fbs", [live(one, "10:00"), live(three, "9:00")]), listing("nfl", [listedNfl])],
           t0
-        ).pipe(Effect.flatMap((fold) => taken(fold, [playsOf(one, 12), playsOf(two, 3)], t0)))
+        ).pipe(Effect.flatMap((held) => taken(held, [playsOf(one, 12), playsOf(two, 3)], t0)))
         assert.deepStrictEqual(
-          fold.recentPlays(fold.games(["fbs"]))[one]?.map(({ sequence }) => sequence),
+          slate.recentPlays(slate.games(["fbs"]))[one]?.map(({ sequence }) => sequence),
           [3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
         )
-        assert.deepStrictEqual(Object.keys(fold.recentPlays(fold.games(["fbs"]))), [one])
+        assert.deepStrictEqual(Object.keys(slate.recentPlays(slate.games(["fbs"]))), [one])
         assert.deepStrictEqual(
-          fold.recentPlays(fold.games(["nfl"]))[two]?.map(({ sequence }) => sequence),
+          slate.recentPlays(slate.games(["nfl"]))[two]?.map(({ sequence }) => sequence),
           [1, 2, 3]
         )
-        assert.deepStrictEqual(Object.keys(fold.recentPlays(fold.games(["nfl"]))), [two])
-        assert.deepStrictEqual(Object.keys(fold.recentPlays(fold.games(["fbs", "nfl"]))).toSorted(), [
+        assert.deepStrictEqual(Object.keys(slate.recentPlays(slate.games(["nfl"]))), [two])
+        assert.deepStrictEqual(Object.keys(slate.recentPlays(slate.games(["fbs", "nfl"]))).toSorted(), [
           one,
           two
         ])
@@ -278,10 +278,10 @@ describe("Slate", () => {
     Effect.gen(function* () {
       const listed = live(one, "10:00")
       const unlisted = live(two, "5:00")
-      const fold = yield* taken(Slate.empty, [listing("fbs", [listed])], t0).pipe(
-        Effect.flatMap((fold) => taken(fold, [polled(unlisted)], t0))
+      const slate = yield* taken(Slate.empty, [listing("fbs", [listed])], t0).pipe(
+        Effect.flatMap((held) => taken(held, [polled(unlisted)], t0))
       )
-      assert.deepStrictEqual(fold.everyGame(), [listed, unlisted])
+      assert.deepStrictEqual(slate.everyGame(), [listed, unlisted])
     })
   )
 
@@ -309,13 +309,13 @@ describe("Slate", () => {
   )
 })
 
-/** `fold` taking `deliveries` as one frame received at `at`, the frame after its last. */
-function took(fold: Slate, deliveries: ReadonlyArray<Delivery>, at: DateTime.Utc) {
-  return fold.take({ deliveries, at, seq: Option.getOrElse(fold.seq, () => 0) + 1 })
+/** `before` taking `deliveries` as one frame received at `at`, the frame after its last. */
+function took(before: Slate, deliveries: ReadonlyArray<Delivery>, at: DateTime.Utc) {
+  return before.take({ deliveries, at, seq: Option.getOrElse(before.seq, () => 0) + 1 })
 }
 
-function taken(fold: Slate, deliveries: ReadonlyArray<Delivery>, at: DateTime.Utc) {
-  return Effect.map(took(fold, deliveries, at), ({ next }) => next)
+function taken(before: Slate, deliveries: ReadonlyArray<Delivery>, at: DateTime.Utc) {
+  return Effect.map(took(before, deliveries, at), ({ next }) => next)
 }
 
 function tags(observations: ReadonlyArray<SlateObservation>): ReadonlyArray<SlateObservation["_tag"]> {

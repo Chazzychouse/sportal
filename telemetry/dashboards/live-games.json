@@ -501,7 +501,7 @@
           "refId": "A",
           "queryType": "traceql",
           "limit": 20,
-          "query": "{resource.service.name=\"sportal-hub\" && resource.sportal.mode=\"$mode\" && name=\"LiveGames.take\"}"
+          "query": "{resource.service.name=\"sportal-hub\" && resource.sportal.mode=\"$mode\" && name=\"Slate.take\"}"
         }
       ],
       "id": 12,

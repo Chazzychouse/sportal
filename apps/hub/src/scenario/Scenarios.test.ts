@@ -47,7 +47,7 @@ describe("Scenarios", () => {
   )
 
   it.effect(
-    "every scenario, written and recorded, folded whole through ESPN's decode, plays a game's plays and drops none before the game is let go",
+    "every scenario, written and recorded, taken whole through ESPN's decode, plays a game's plays and drops none before the game is let go",
     () =>
       Effect.gen(function* () {
         const scenarios = yield* Scenarios
@@ -55,8 +55,8 @@ describe("Scenarios", () => {
           const { frames } = yield* scenarios.load(name)
           const decoded = yield* decodedFrames(frames)
           assert.deepStrictEqual(
-            decoded.flatMap(({ notices }) =>
-              notices
+            decoded.flatMap(({ observations }) =>
+              observations
                 .filter(({ _tag }) => _tag !== "Received" && _tag !== "Pushed" && _tag !== "PlayTypeUnknown")
                 .map(({ _tag }) => _tag)
             ),

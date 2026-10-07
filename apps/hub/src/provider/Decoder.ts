@@ -15,8 +15,8 @@ export class Decoder extends Context.Service<
      * ahead of what it has emitted, but emits a frame's `Decoded` without waiting on a later frame: Ingest's `through`
      * has no timeout, so polling depends on it): a poll response is a `Listing`, a pushed game a `Snapshot`, a plays document
      * change a `Plays`. A live feed topic whose document had to be dropped (a missed message, a patch that will not
-     * apply) is a resync of its channel, so the live feed can ask for its checkpoint again. Anything decode noticed, a
-     * frame that does not decode among it, is a notice. A frame that said nothing is a `Decoded` with three empty
+     * apply) is a resync of its channel, so the live feed can ask for its checkpoint again. Anything decode observed, a
+     * frame that does not decode among it, is a decode observation. A frame that said nothing is a `Decoded` with three empty
      * arrays. Never fails, logs, or counts.
      */
     decode(frames: Stream.Stream<Frame>): Stream.Stream<Decoded>

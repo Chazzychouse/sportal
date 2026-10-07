@@ -61,7 +61,7 @@ export class Slate extends Data.Class<{
 
   /** Each listed game in `leagues`, leagues in order, as the slate has it. */
   games(leagues: ReadonlyArray<LeagueId>): ReadonlyArray<GameSnapshot> {
-    return leagues.flatMap((league) => asFolded(this.listed.get(league) ?? [], this.live))
+    return leagues.flatMap((league) => asHeld(this.listed.get(league) ?? [], this.live))
   }
 
   /** The last `recentPlayCount` plays of each of `games` that has plays in `live`. */
@@ -76,7 +76,7 @@ export class Slate extends Data.Class<{
 
   /** Every listed game as the slate has it, then live games no listing holds. */
   everyGame(): ReadonlyArray<GameSnapshot> {
-    const listed = [...this.listed.values()].flatMap((games) => asFolded(games, this.live))
+    const listed = [...this.listed.values()].flatMap((games) => asHeld(games, this.live))
     const unlisted = [...this.live.values()]
       .map(({ snapshot }) => snapshot)
       .filter((snapshot) => !listed.some(({ id }) => id === snapshot.id))
@@ -95,20 +95,20 @@ export class Slate extends Data.Class<{
   private advance(
     at: DateTime.Utc,
     seq: Option.Option<number>,
-    then: (ticked: Advanced) => Effect.Effect<Folded>
+    then: (ticked: Advanced) => Effect.Effect<Listed>
   ): Effect.Effect<Taken> {
     const from = Option.getOrElse(this.reached, () => at)
     return tickTo({ live: this.live, events: [], observations: [] }, from, at).pipe(
       Effect.flatMap(then),
-      Effect.map((folded) => ({
+      Effect.map((step) => ({
         next: new Slate({
           seq: Option.orElse(seq, () => this.seq),
-          listed: folded.listed,
-          live: folded.live,
+          listed: step.listed,
+          live: step.live,
           reached: Option.some(DateTime.max(from, at))
         }),
-        events: folded.events,
-        observations: folded.observations
+        events: step.events,
+        observations: step.observations
       }))
     )
   }
@@ -150,7 +150,7 @@ type Advanced = {
 }
 
 /** `Advanced`, with each league's last listing. */
-type Folded = Advanced & { readonly listed: ReadonlyMap<LeagueId, ReadonlyArray<GameSnapshot>> }
+type Listed = Advanced & { readonly listed: ReadonlyMap<LeagueId, ReadonlyArray<GameSnapshot>> }
 
 /**
  * Ticks, in wake order, every game due after `from` and at or before `at`, each at its own wake instant; games due at
@@ -181,27 +181,27 @@ function dueAfter(live: ReadonlyMap<GameId, LiveGame>, from: DateTime.Utc): Opti
   return LiveGame.earliest([...live.values()].map((liveGame) => liveGame.dueAfter(from)))
 }
 
-function applied(folded: Folded, delivery: Delivery, at: DateTime.Utc): Effect.Effect<Folded> {
-  const { listed } = folded
+function applied(step: Listed, delivery: Delivery, at: DateTime.Utc): Effect.Effect<Listed> {
+  const { listed } = step
   return Delivery.match(delivery, {
     Listing: ({ league, games }) =>
       Effect.reduce(
         games,
-        (): Advanced => folded,
+        (): Advanced => step,
         (acc, snapshot) => snapshotTaken(acc, snapshot, "poll", at)
       ).pipe(Effect.map((after) => ({ ...after, listed: new Map(listed).set(league, games) }))),
     Snapshot: ({ snapshot, from }) =>
-      snapshotTaken(folded, snapshot, from, at).pipe(Effect.map((after) => ({ ...after, listed }))),
+      snapshotTaken(step, snapshot, from, at).pipe(Effect.map((after) => ({ ...after, listed }))),
     Plays: (plays) =>
-      Option.match(Option.fromNullishOr(folded.live.get(plays.game)), {
+      Option.match(Option.fromNullishOr(step.live.get(plays.game)), {
         onNone: () =>
           Effect.succeed({
-            ...folded,
-            observations: [...folded.observations, SlateObservation.Dropped({ game: plays.game })]
+            ...step,
+            observations: [...step.observations, SlateObservation.Dropped({ game: plays.game })]
           }),
         onSome: (liveGame) =>
-          guarded(folded, liveGame.snapshot, "a delivery", () =>
-            settled(folded, plays.game, at, Option.some(liveGame), liveGame.take(plays, at))
+          guarded(step, liveGame.snapshot, "a delivery", () =>
+            settled(step, plays.game, at, Option.some(liveGame), liveGame.take(plays, at))
           ).pipe(Effect.map((after) => ({ ...after, listed })))
       })
   })
@@ -309,7 +309,7 @@ function guarded(
 }
 
 /** Each listed game, in listed order, as the slate has it, or as listed when it has none. */
-function asFolded(
+function asHeld(
   listed: ReadonlyArray<GameSnapshot>,
   live: ReadonlyMap<GameId, LiveGame>
 ): ReadonlyArray<GameSnapshot> {

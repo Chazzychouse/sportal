@@ -28,11 +28,11 @@ import { FeedFrame } from "../Frame.ts"
 import * as Gzip from "../Gzip.ts"
 import type { HubConfig } from "../HubConfig.ts"
 import * as Ingest from "../Ingest.ts"
-import { LiveGames } from "../LiveGames.ts"
 import type { Decoder } from "../provider/Decoder.ts"
 import * as EspnDecode from "../provider/espn/EspnDecode.ts"
 import * as EspnScript from "../provider/espn/EspnScript.ts"
 import { Provider } from "../provider/Provider.ts"
+import { Slate } from "../Slate.ts"
 import { decodedFrames, listedBy, pushed, writtenScenarios } from "../TestFeed.ts"
 import { withEnv } from "../TestHubConfig.ts"
 import * as TestSnapshotFeed from "../TestSnapshotFeed.ts"
@@ -49,9 +49,9 @@ import {
 } from "./Scenarios.ts"
 
 describe("ScenarioProvider", () => {
-  it.effect("each league's listing reaches the fold at its scenario time", () =>
+  it.effect("each league's listing reaches the slate at its scenario time", () =>
     Effect.gen(function* () {
-      const liveGames = yield* LiveGames
+      const slate = yield* Slate
       yield* TestClock.adjust(0)
       assert.lengthOf(yield* listed("fbs"), 4)
       assert.deepStrictEqual(yield* listed("nfl"), [])
@@ -60,7 +60,7 @@ describe("ScenarioProvider", () => {
       assert.isFalse(yield* tieInRedZone)
       yield* TestClock.adjust("1 second")
       assert.isTrue(yield* tieInRedZone)
-      assert.isTrue((yield* liveGames.latest).seq._tag === "Some", "its frames went through the feed log")
+      assert.isTrue((yield* slate.latest).seq._tag === "Some", "its frames went through the feed log")
     }).pipe(Effect.provide(playing("two-minute-drill-tie")))
   )
 
@@ -117,7 +117,7 @@ describe("ScenarioProvider", () => {
         "fbs",
         4
       ])
-      assert.deepStrictEqual(decoded?.notices, [])
+      assert.deepStrictEqual(decoded?.observations, [])
     }).pipe(Effect.provide(scenario("two-minute-drill-tie")))
   )
 
@@ -128,7 +128,7 @@ describe("ScenarioProvider", () => {
       ])
       assert.deepStrictEqual(decoded?.deliveries, [])
       assert.deepStrictEqual(
-        decoded?.notices.map((notice) => notice._tag),
+        decoded?.observations.map((observation) => observation._tag),
         ["FrameUndecoded"]
       )
     }).pipe(Effect.provide(scenario("two-minute-drill-tie")))
@@ -252,10 +252,10 @@ describe("ScenarioProvider", () => {
       yield* Effect.gen(function* () {
         yield* TestClock.adjust(0)
         yield* TestClock.adjust("2 seconds")
-        assert.strictEqual((yield* slate)[0]?.home.score, 7)
+        assert.strictEqual((yield* slateGames)[0]?.home.score, 7)
         yield* TestClock.adjust("10 seconds")
         assert.strictEqual(
-          (yield* slate)[0]?.home.score,
+          (yield* slateGames)[0]?.home.score,
           7,
           "the tied poll only refreshed the pushed snapshot"
         )
@@ -277,7 +277,7 @@ describe("ScenarioProvider", () => {
           yield* Effect.gen(function* () {
             yield* TestClock.adjust(0)
             yield* TestClock.adjust(length)
-            assert.isNotEmpty(yield* slate, name)
+            assert.isNotEmpty(yield* slateGames, name)
           }).pipe(Effect.provide(playing(name)), Effect.scoped)
         }
       }).pipe(
@@ -363,25 +363,25 @@ describe("ScenarioProvider", () => {
       }).pipe(Effect.provide(playing("two-minute-drill-tie", onFile)), Effect.scoped)
 
       const scope = yield* Scope.make()
-      const fold = yield* Layer.buildWithScope(
+      const context = yield* Layer.buildWithScope(
         following(onFile).pipe(Layer.provide(scenario("two-minute-drill-tie", onFile))),
         scope
       )
       const events = yield* Ref.make(0)
-      yield* Context.get(fold, LiveGames).events.pipe(
+      yield* Context.get(context, Slate).events.pipe(
         Stream.runForEach(() => Ref.update(events, (count) => count + 1)),
         Effect.forkIn(scope, { startImmediately: true })
       )
       yield* Layer.buildWithScope(
         Ingest.layer.pipe(
           Layer.provide(scenario("two-minute-drill-tie", onFile)),
-          Layer.provide(Layer.succeedContext(fold))
+          Layer.provide(Layer.succeedContext(context))
         ),
         scope
       )
 
       assert.isTrue(
-        Option.isSome((yield* Context.get(fold, LiveGames).latest).seq),
+        Option.isSome((yield* Context.get(context, Slate).latest).seq),
         "the frames were replayed"
       )
       assert.strictEqual(yield* Ref.get(events), 0)
@@ -413,7 +413,7 @@ function scenario(name: string, options: Options = {}) {
 
 /**
  * Ingest over `scenario(name, options)`, onto a feed log in memory or, with `scenarioFeedLog`, the scenario's own one
- * as its settings say, with the fold provided to the test.
+ * as its settings say, with the slate provided to the test.
  */
 function playing(name: string, options: Options & { readonly ended?: Array<Tracer.Span> } = {}) {
   return Ingest.layer.pipe(
@@ -424,11 +424,11 @@ function playing(name: string, options: Options & { readonly ended?: Array<Trace
 }
 
 /**
- * The live games following a feed log in memory or, with `scenarioFeedLog`, the scenario's own one as its settings say,
+ * The slate following a feed log in memory or, with `scenarioFeedLog`, the scenario's own one as its settings say,
  * which is provided too.
  */
 function following(options: Options) {
-  return LiveGames.layer.pipe(
+  return Slate.layer.pipe(
     Layer.provideMerge(
       options.scenarioFeedLog === true
         ? FeedLog.forScenario
@@ -539,18 +539,18 @@ function scoring(points: number) {
   return liveSnapshot({ id: GameId.make("1"), home: { team: team("HOME"), score: points } })
 }
 
-/** League `league`'s last listing in the fold. */
+/** League `league`'s last listing in the slate. */
 function listed(league: LeagueId) {
   return Effect.map(
-    LiveGames.use((liveGames) => liveGames.latest),
-    (folded) => folded.listed.get(league) ?? []
+    Slate.use((slate) => slate.latest),
+    (held) => held.listed.get(league) ?? []
   )
 }
 
-/** The slate as the fold has it. */
-const slate = Effect.map(
-  LiveGames.use((liveGames) => liveGames.latest),
-  (folded) => folded.games(LeagueId.literals)
+/** The slate's games, leagues in order. */
+const slateGames = Effect.map(
+  Slate.use((slate) => slate.latest),
+  (held) => held.games(LeagueId.literals)
 )
 
 const tieInRedZone = Effect.map(

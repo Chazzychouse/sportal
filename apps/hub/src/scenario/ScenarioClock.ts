@@ -3,8 +3,8 @@ import { HubConfig } from "../HubConfig.ts"
 
 /**
  * Scenario time: a clock that starts where the one it replaces is and runs `SPORTAL_SCENARIO_SPEED` times faster, its
- * sleeps shortened to match. The scenario's ingest, the fold, and the Slate run on it, so a scenario plays faster
- * without any of them waiting differently.
+ * sleeps shortened to match. The scenario's ingest and the Slate run on it, so a scenario plays faster
+ * without either waiting differently.
  */
 export const layer = Layer.effect(
   Clock.Clock,

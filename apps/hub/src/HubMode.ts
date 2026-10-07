@@ -4,7 +4,6 @@ import { FeedLog } from "./FeedLog.ts"
 import { GameHistory } from "./GameHistory.ts"
 import { HubConfig } from "./HubConfig.ts"
 import * as Ingest from "./Ingest.ts"
-import { LiveGames } from "./LiveGames.ts"
 import * as EspnDecode from "./provider/espn/EspnDecode.ts"
 import * as EspnProvider from "./provider/espn/EspnProvider.ts"
 import * as EspnScript from "./provider/espn/EspnScript.ts"
@@ -30,14 +29,13 @@ export const layer = Layer.unwrap(
   })
 )
 
-// The live games are built once they have replayed the day's frames, so the Hub serves only after that. They and
-// Ingest share one feed log: Ingest appends to it, and the live games follow it. Neither is
-// provided onward: nothing outside the Hub's own layers needs them.
+// The Slate is built once it has replayed the day's frames, so the Hub serves only after that. It and Ingest share one
+// feed log: Ingest appends to it, and the Slate follows it. Only the Slate is provided onward: nothing outside the
+// Hub's own layers needs the log.
 function live() {
   return Layer.mergeAll(
     Layer.mergeAll(
-      Slate.layer,
-      // Nothing reads the history yet; it only follows the fold.
+      // Nothing reads the history yet; it only follows the slate.
       Layer.effectDiscard(Layer.build(GameHistory.layer)),
       Ingest.layer.pipe(
         Layer.provide(
@@ -48,7 +46,7 @@ function live() {
         )
       )
     ).pipe(
-      Layer.provide(LiveGames.layer),
+      Layer.provideMerge(Slate.layer),
       Layer.provide(FeedLog.inDataDir),
       Layer.provide([EspnDecode.layer, DateTime.layerCurrentZoneLocal])
     ),
@@ -57,12 +55,11 @@ function live() {
 }
 
 // The scenario plays as the provider through the real Ingest, onto a feed log of its own, decoded as ESPN: a recorded
-// one as ESPN recorded it, a written one as ESPN's writer writes its script. Ingest, the fold, and the Slate share the
+// one as ESPN recorded it, a written one as ESPN's writer writes its script. Ingest and the Slate share the
 // scenario's clock; the rest of the Hub keeps the real one. The game history stays out of a scenario.
 function scripted() {
   return Layer.mergeAll(
     Layer.mergeAll(
-      Slate.layer,
       Ingest.layer.pipe(
         Layer.provide(
           ScenarioProvider.layer.pipe(
@@ -71,7 +68,7 @@ function scripted() {
         )
       )
     ).pipe(
-      Layer.provide(LiveGames.layer),
+      Layer.provideMerge(Slate.layer),
       Layer.provide(FeedLog.forScenario),
       Layer.provide([EspnDecode.layer, DateTime.layerCurrentZoneLocal]),
       Layer.provide(ScenarioClock.layer)

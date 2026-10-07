@@ -8,8 +8,8 @@ import { SqlClient } from "effect/sql"
 import { TestClock } from "effect/testing"
 import * as Database from "./Database.ts"
 import { GameHistory } from "./GameHistory.ts"
-import { LiveGames } from "./LiveGames.ts"
-import { delivered, liveGames } from "./TestFeed.ts"
+import { Slate } from "./Slate.ts"
+import { delivered, slateFollowing } from "./TestFeed.ts"
 import { counted, withMetrics } from "./TestTelemetry.ts"
 
 const one = GameId.make("1")
@@ -69,7 +69,7 @@ describe("GameHistory", () => {
       yield* batched
       yield* delivered(Delivery.cases.Snapshot.make({ snapshot: over, from: "push" }))
       yield* batched
-      assert.isFalse((yield* LiveGames.use((liveGames) => liveGames.latest)).live.has(one))
+      assert.isFalse((yield* Slate.use((slate) => slate.latest)).live.has(one))
       assert.deepStrictEqual(yield* playIds, [first])
     }).pipe(Effect.provide(history))
   )
@@ -93,7 +93,7 @@ describe("GameHistory", () => {
     Effect.gen(function* () {
       yield* delivered(Delivery.cases.Listing.make({ league: "fbs", games: [over] }))
       yield* batched
-      assert.isFalse((yield* LiveGames.use((liveGames) => liveGames.latest)).live.has(one))
+      assert.isFalse((yield* Slate.use((slate) => slate.latest)).live.has(one))
       const latest = yield* GameHistory.use((gameHistory) => gameHistory.latest(one))
       assert.deepStrictEqual(
         Option.map(latest, ({ status }) => status),
@@ -104,7 +104,7 @@ describe("GameHistory", () => {
 
   it.effect("a play taken again at an older seq changes nothing", () =>
     Effect.gen(function* () {
-      // A fold whose log reached frame 5, then a fresh one whose log numbers its frames again from 1, as a log reopened
+      // A slate whose log reached frame 5, then a fresh one whose log numbers its frames again from 1, as a log reopened
       // after a crash does, over the same history.
       yield* Effect.gen(function* () {
         // Frames 1 to 4 hold the game; frame 5 brings its play.
@@ -161,10 +161,10 @@ describe("GameHistory", () => {
 const live = snapshot({ id: one, status: "live", period: 1, clock: "10:00" })
 const over = snapshot({ id: one, status: "final", period: 4, clock: "0:00" })
 
-// The history over fresh live games, writing to the Hub's database.
-const following = GameHistory.layer.pipe(Layer.provideMerge(liveGames()))
+// The history over a fresh slate, writing to the Hub's database.
+const following = GameHistory.layer.pipe(Layer.provideMerge(slateFollowing()))
 
-// The fold, the Hub's database in memory, and the history that follows the one and writes the other.
+// The slate, the Hub's database in memory, and the history that follows the one and writes the other.
 const history = following.pipe(Layer.provideMerge(Database.at(":memory:")))
 
 // Past the writer's 250 ms batch window, then lets the write finish.

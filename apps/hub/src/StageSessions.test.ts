@@ -1,11 +1,12 @@
 import { assert, describe, it } from "@effect/vitest"
 import { ChannelAvailability } from "@sportal/domain/Channel"
 import { GameId, type GameSnapshot, Network } from "@sportal/domain/Game"
+import { Slate as DomainSlate } from "@sportal/domain/Slate"
 import type { Tile } from "@sportal/domain/Stage"
 import { broadcast, liveSnapshot, snapshot, team } from "@sportal/domain/TestGame"
 import { DateTime, Deferred, Effect, Fiber, Layer, Option, Ref, Stream } from "effect"
 import { TestClock } from "effect/testing"
-import { Slate } from "./Slate.ts"
+import { type Published, Slate } from "./Slate.ts"
 import { StageSessions } from "./StageSessions.ts"
 import { Source } from "./source/Source.ts"
 import { recordedGuide } from "./source/youtube-tv/TestYouTubeTv.ts"
@@ -106,13 +107,12 @@ describe("StageSessions", () => {
       const refreshed = yield* Deferred.make<void>()
       const refreshes = yield* Ref.make(0)
       // Reading the slate is the first step of every refresh, so it counts them.
-      const fakeSlate = Slate.of({
-        latest: Ref.update(refreshes, (count) => count + 1).pipe(
+      const fakeSlate = slateOf(
+        Ref.update(refreshes, (count) => count + 1).pipe(
           Effect.andThen(Deferred.succeed(refreshed, undefined)),
           Effect.as({ games: slate, recentPlays: {} })
-        ),
-        changes: Stream.empty
-      })
+        )
+      )
       // Depending on StageSessions orders this after the layer has built.
       const readAtOnce = Layer.effectDiscard(
         Effect.gen(function* () {
@@ -181,7 +181,7 @@ describe("StageSessions", () => {
       }).pipe(
         Effect.provide(
           StageSessions.layer.pipe(
-            Layer.provide(Layer.succeed(Slate, slateOf(slate))),
+            Layer.provide(Layer.succeed(Slate, slateOf(Effect.succeed({ games: slate, recentPlays: {} })))),
             Layer.provideMerge(gated)
           )
         )
@@ -192,10 +192,7 @@ describe("StageSessions", () => {
   it.live("keeps a tile whose game has left the slate as it was when the source reads a guide", () =>
     Effect.gen(function* () {
       const onSlate = yield* Ref.make(slate)
-      const fakeSlate = Slate.of({
-        latest: Effect.map(Ref.get(onSlate), (games) => ({ games, recentPlays: {} })),
-        changes: Stream.empty
-      })
+      const fakeSlate = slateOf(Effect.map(Ref.get(onSlate), (games) => ({ games, recentPlays: {} })))
       yield* Effect.gen(function* () {
         const sessions = yield* StageSessions
         yield* sessions.dispatch({ _tag: "Assign", tile: 0, game: GameId.make("1") })
@@ -257,15 +254,23 @@ describe("StageSessions", () => {
   )
 })
 
-/** A Slate that lists `games`, with no changes. */
-function slateOf(games: ReadonlyArray<GameSnapshot>) {
-  return Slate.of({ latest: Effect.succeed({ games, recentPlays: {} }), changes: Stream.empty })
+/** A Slate that publishes what `published` gives, with no changes, and holds nothing else. */
+function slateOf(published: Effect.Effect<Published>) {
+  return Slate.of({
+    latest: Effect.succeed(DomainSlate.empty),
+    changes: Stream.empty,
+    events: Stream.empty,
+    through: () => Effect.succeed(DomainSlate.empty),
+    demand: Stream.empty,
+    published,
+    publishedChanges: Stream.empty
+  })
 }
 
 /** StageSessions over a Slate of `games` and YouTube TV with nothing read yet. */
 function sessionsOver(games: ReadonlyArray<GameSnapshot>) {
   return StageSessions.layer.pipe(
-    Layer.provide(Layer.succeed(Slate, slateOf(games))),
+    Layer.provide(Layer.succeed(Slate, slateOf(Effect.succeed({ games, recentPlays: {} })))),
     Layer.provideMerge(YouTubeTv.layer)
   )
 }
