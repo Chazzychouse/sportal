@@ -9,7 +9,7 @@ import { DateTime, Effect, Layer, Option, Queue, Result, Schema, Stream } from "
 import { HttpClient } from "effect/http"
 import { HttpApiClient } from "effect/http-api"
 import { TestClock } from "effect/testing"
-import { vi } from "vitest"
+import { afterEach, vi } from "vitest"
 import * as Database from "./Database.ts"
 import { FeedLog } from "./feed-log/FeedLog.ts"
 import * as HubServer from "./HubServer.ts"
@@ -21,18 +21,20 @@ import { withEnv } from "./TestHubConfig.ts"
 import * as TestSnapshotFeed from "./TestSnapshotFeed.ts"
 import { polled } from "./TestSnapshotFeed.ts"
 
-const network = vi.hoisted(
-  (): {
-    interfaces: Record<
-      string,
-      ReadonlyArray<{ address: string; family: string; internal: boolean }> | undefined
-    >
-  } => ({ interfaces: {} })
-)
-vi.mock("node:os", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("node:os")>()),
-  networkInterfaces: () => network.interfaces
-}))
+type Interfaces = Record<
+  string,
+  ReadonlyArray<{ address: string; family: string; internal: boolean }> | undefined
+>
+
+const network = vi.hoisted((): { interfaces: Interfaces | undefined } => ({ interfaces: undefined }))
+vi.mock("node:os", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:os")>()
+  return { ...actual, networkInterfaces: () => network.interfaces ?? actual.networkInterfaces() }
+})
+
+afterEach(() => {
+  network.interfaces = undefined
+})
 
 const espn = Network.make("ESPN")
 const game = snapshot({
