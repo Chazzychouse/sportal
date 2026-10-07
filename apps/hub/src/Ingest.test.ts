@@ -29,6 +29,7 @@ import { TestClock } from "effect/testing"
 import * as Database from "./Database.ts"
 import type { FeedFrame } from "./Frame.ts"
 import { FeedLog } from "./feed-log/FeedLog.ts"
+import { HubConfig } from "./HubConfig.ts"
 import * as Ingest from "./Ingest.ts"
 import { LiveSlate } from "./LiveSlate.ts"
 import {
@@ -38,7 +39,6 @@ import {
   Provider,
   ProviderUnavailable
 } from "./provider/Provider.ts"
-import { withEnv } from "./TestHubConfig.ts"
 import { appended, delivered } from "./TestLiveSlate.ts"
 import * as TestSnapshotFeed from "./TestSnapshotFeed.ts"
 import { polled, pushed } from "./TestSnapshotFeed.ts"
@@ -621,7 +621,7 @@ function over(
     Layer.provide([
       provider,
       TestSnapshotFeed.decoder,
-      withEnv({ SPORTAL_LEAGUES: (options.leagues ?? ["fbs"]).join(",") }).pipe(Layer.orDie),
+      HubConfig.layerTest({ SPORTAL_LEAGUES: (options.leagues ?? ["fbs"]).join(",") }).pipe(Layer.orDie),
       DateTime.layerCurrentZoneLocal
     ]),
     Layer.provideMerge(recordingSpans(options.ended ?? []))

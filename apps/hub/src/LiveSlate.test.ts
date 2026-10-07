@@ -31,11 +31,11 @@ import { TestClock } from "effect/testing"
 import * as Database from "./Database.ts"
 import { FeedFrame } from "./Frame.ts"
 import { FeedLog } from "./feed-log/FeedLog.ts"
+import { HubConfig } from "./HubConfig.ts"
 import { LiveSlate } from "./LiveSlate.ts"
 import { Decoded, Decoder } from "./provider/Decoder.ts"
 import * as EspnDecoder from "./provider/espn/EspnDecoder.ts"
 import { fixtures, recordedNeAtBuf, recordedPlays } from "./provider/espn/TestEspn.ts"
-import { withEnv } from "./TestHubConfig.ts"
 import {
   appended,
   delivered,
@@ -1447,7 +1447,7 @@ describe("LiveSlate, a recorded game", () => {
         const fs = yield* FileSystem.FileSystem
         const dir = yield* fs.makeTempDirectoryScoped()
         const feedFile = Database.layerFile("feed.sqlite").pipe(
-          Layer.provide(withEnv({ SPORTAL_DATA_DIR: dir }))
+          Layer.provide(HubConfig.layerTest({ SPORTAL_DATA_DIR: dir }))
         )
         const onDisk = Layer.merge(feedFile, NodeCrypto.layer)
 

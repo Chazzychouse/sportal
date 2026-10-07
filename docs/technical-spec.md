@@ -230,7 +230,7 @@ sportal/
     │       │   └── FeedFrameTable.ts The `feed_frame` table: its row, its queries, and its migrations
     │       ├── Frame.ts            A feed frame as received, and the frame the log numbered
     │       ├── Gzip.ts             Frame bodies in and out of gzip
-    │       ├── TestHubConfig.ts, TestTelemetry.ts   Layers for tests
+    │       ├── TestTelemetry.ts    Layers for tests
     │       ├── TestLiveSlate.ts    The live slate following an in-memory feed log (`slateFollowing`), and what it takes of a test's frames
     │       ├── TestSnapshotFeed.ts The snapshot feed: a provider whose frames are our own deliveries, its decode, its wire shape, and the frames tests build of it; for tests only
     │       ├── HubServer.ts        Serves the API, the live stream, the addresses a phone can reach, and the web UI's files

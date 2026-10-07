@@ -1,6 +1,8 @@
+import { NodePath } from "@effect/platform-node"
 import { LeagueId } from "@sportal/domain/League"
 import {
   Config,
+  ConfigProvider,
   Context,
   Effect,
   Layer,
@@ -93,6 +95,12 @@ export class HubConfig extends Context.Service<
     })
   )
 
+  /** HubConfig for a test, read from exactly `env` over a fan's home folder, and nothing from the machine running it. */
+  static readonly layerTest = (env: Record<string, string>): Layer.Layer<HubConfig, Config.ConfigError> => {
+    const variables = ConfigProvider.layer(ConfigProvider.fromEnv({ env: { ...fanHome, ...env } }))
+    return HubConfig.layer.pipe(Layer.provide(Layer.mergeAll(variables, NodePath.layer)))
+  }
+
   /** Where the OS keeps an application's own data. On Windows it is the local folder, so the database never roams. */
   static defaultDataDir(platform: NodeJS.Platform) {
     return Effect.gen(function* () {
@@ -118,3 +126,6 @@ export class HubConfig extends Context.Service<
     })
   }
 }
+
+// A fan's home folder on every OS, so the default data directory resolves without the test machine's own.
+const fanHome = { HOME: "/home/fan", USERPROFILE: "C:\\Users\\fan" }

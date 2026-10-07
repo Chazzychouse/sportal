@@ -1,7 +1,7 @@
 import { assert, describe, it } from "@effect/vitest"
 import { Clock, Context, Duration, Effect, Layer } from "effect"
 import { TestClock } from "effect/testing"
-import { withEnv } from "../TestHubConfig.ts"
+import { HubConfig } from "../HubConfig.ts"
 import * as ScenarioClock from "./ScenarioClock.ts"
 
 describe("ScenarioClock", () => {
@@ -49,7 +49,7 @@ describe("ScenarioClock", () => {
 })
 
 const tenTimesFaster = ScenarioClock.layer.pipe(
-  Layer.provide(withEnv({ SPORTAL_SCENARIO_SPEED: "10" }).pipe(Layer.orDie))
+  Layer.provide(HubConfig.layerTest({ SPORTAL_SCENARIO_SPEED: "10" }).pipe(Layer.orDie))
 )
 
 /** The scenario clock at ten times the speed of the clock it replaces, built now. */

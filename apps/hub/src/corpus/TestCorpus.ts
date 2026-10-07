@@ -6,8 +6,8 @@ import type { SqlClient } from "effect/sql"
 import * as Database from "../Database.ts"
 import type { FeedFrame } from "../Frame.ts"
 import { FeedLog } from "../feed-log/FeedLog.ts"
+import { HubConfig } from "../HubConfig.ts"
 import type { Decoder } from "../provider/Decoder.ts"
-import { withEnv } from "../TestHubConfig.ts"
 import * as CorpusBuild from "./CorpusBuild.ts"
 import { CorpusDays } from "./CorpusDay.ts"
 
@@ -47,7 +47,7 @@ export function inCorpus<A, E>(
     return yield* test(dir).pipe(
       Effect.provide(
         Layer.mergeAll(
-          CorpusDays.layer.pipe(Layer.provide(withEnv({ SPORTAL_CORPUS_DIR: dir }))),
+          CorpusDays.layer.pipe(Layer.provide(HubConfig.layerTest({ SPORTAL_CORPUS_DIR: dir }))),
           decoder,
           DateTime.layerCurrentZone(timeZone),
           Database.layerMemory,

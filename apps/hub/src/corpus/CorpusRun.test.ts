@@ -26,13 +26,13 @@ import { TestClock } from "effect/testing"
 import { Worker, WorkerError } from "effect/workers"
 import type { FeedFrame } from "../Frame.ts"
 import { FeedLog } from "../feed-log/FeedLog.ts"
+import { HubConfig } from "../HubConfig.ts"
 import * as Ingest from "../Ingest.ts"
 import { LiveSlate } from "../LiveSlate.ts"
 import * as EspnDecoder from "../provider/espn/EspnDecoder.ts"
 import * as ScenarioProvider from "../provider/espn/ScenarioProvider.ts"
 import { fixtures, neAtBufFrames, recordedNeAtBuf, recordedPlays } from "../provider/espn/TestEspn.ts"
 import { Scenarios } from "../scenario/Scenarios.ts"
-import { withEnv } from "../TestHubConfig.ts"
 import * as TestSnapshotFeed from "../TestSnapshotFeed.ts"
 import { CorpusDay, CorpusDays, CorpusDayUnreadable } from "./CorpusDay.ts"
 import { CorpusInput, CorpusLine } from "./CorpusLine.ts"
@@ -374,7 +374,9 @@ function ingesting(appended: Ref.Ref<{ readonly seq: number; readonly polled: Da
     Layer.provide(tracked),
     Layer.provide(ScenarioProvider.layer.pipe(Layer.provide(Scenarios.layerFrom(fixtures)))),
     // Fresh, or HubConfig.layer is the one the corpus days were built with, memoized, which names no scenario.
-    Layer.provide(Layer.fresh(withEnv({ SPORTAL_SCENARIO: neAtBufFrames, SPORTAL_LEAGUES: "nfl" }))),
+    Layer.provide(
+      Layer.fresh(HubConfig.layerTest({ SPORTAL_SCENARIO: neAtBufFrames, SPORTAL_LEAGUES: "nfl" }))
+    ),
     Layer.orDie
   )
 }

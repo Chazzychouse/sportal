@@ -3,8 +3,8 @@ import { assert, describe, it } from "@effect/vitest"
 import { Array as Arr, Effect, Layer, Metric, Ref, References, Schema } from "effect"
 import { HttpClient, HttpClientError, HttpClientResponse } from "effect/http"
 import { TestClock, TestConsole } from "effect/testing"
+import { HubConfig } from "./HubConfig.ts"
 import * as Telemetry from "./Telemetry.ts"
-import { withEnv } from "./TestHubConfig.ts"
 import { recordingLogs } from "./TestTelemetry.ts"
 
 describe("Telemetry", () => {
@@ -108,7 +108,7 @@ describe("Telemetry", () => {
       const { logs, layer } = recordingLogs()
       const telemetry = Telemetry.layer.pipe(
         Layer.provide([
-          withEnv({ SPORTAL_OTLP_URL: "http://collector:4318" }),
+          HubConfig.layerTest({ SPORTAL_OTLP_URL: "http://collector:4318" }),
           unreachableCollector(),
           NodeCrypto.layer,
           layer
@@ -130,7 +130,7 @@ function telemetryWithoutCollector(env: Record<string, string>) {
     HttpClient.HttpClient,
     HttpClient.make(() => Effect.die("Telemetry made a request with no SPORTAL_OTLP_URL"))
   )
-  return Telemetry.layer.pipe(Layer.provide([withEnv(env), unused, NodeCrypto.layer]))
+  return Telemetry.layer.pipe(Layer.provide([HubConfig.layerTest(env), unused, NodeCrypto.layer]))
 }
 
 /** A collector whose every request fails as connection refused. */
@@ -206,7 +206,7 @@ function exported<A, E>(env: Record<string, string>, work: Effect.Effect<A, E>) 
     )
     yield* Effect.gen(function* () {
       const context = yield* Layer.build(
-        Telemetry.layer.pipe(Layer.provide([withEnv(env), collector, NodeCrypto.layer]))
+        Telemetry.layer.pipe(Layer.provide([HubConfig.layerTest(env), collector, NodeCrypto.layer]))
       )
       yield* work.pipe(Effect.provideContext(context))
     }).pipe(Effect.scoped)

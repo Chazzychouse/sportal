@@ -3,7 +3,6 @@ import { assert, describe, it } from "@effect/vitest"
 import { LeagueId } from "@sportal/domain/League"
 import { ConfigProvider, Effect, Layer, Option } from "effect"
 import { HubConfig } from "./HubConfig.ts"
-import { home, withEnv } from "./TestHubConfig.ts"
 
 describe("HubConfig", () => {
   it.effect("should have a default for every setting", () =>
@@ -25,7 +24,7 @@ describe("HubConfig", () => {
       assert.strictEqual(config.version, "dev")
       assert.isTrue(Option.isNone(config.otlpUrl))
       assert.deepStrictEqual(config.leagues, LeagueId.literals)
-    }).pipe(Effect.provide(withEnv({})))
+    }).pipe(Effect.provide(HubConfig.layerTest(home)))
   )
 
   it.effect("should read each setting", () =>
@@ -48,7 +47,7 @@ describe("HubConfig", () => {
         Option.some("http://localhost:4318/")
       )
       assert.deepStrictEqual(config.leagues, ["fbs"])
-    }).pipe(Effect.provide(withEnv(everySetting)))
+    }).pipe(Effect.provide(HubConfig.layerTest(everySetting)))
   )
 
   it.effect("should keep the corpus in the data directory it is given", () =>
@@ -56,7 +55,7 @@ describe("HubConfig", () => {
       const config = yield* HubConfig
 
       assert.strictEqual(config.corpusDir, "/data/corpus")
-    }).pipe(Effect.provide(withEnv({ SPORTAL_DATA_DIR: "/data" })))
+    }).pipe(Effect.provide(HubConfig.layerTest({ SPORTAL_DATA_DIR: "/data" })))
   )
 
   it.effect("should read a list of leagues, ignoring the spaces around each", () =>
@@ -64,7 +63,7 @@ describe("HubConfig", () => {
       const config = yield* HubConfig
 
       assert.deepStrictEqual(config.leagues, ["nfl", "fbs"])
-    }).pipe(Effect.provide(withEnv({ SPORTAL_LEAGUES: " nfl , fbs " })))
+    }).pipe(Effect.provide(HubConfig.layerTest({ SPORTAL_LEAGUES: " nfl , fbs " })))
   )
 
   it.effect.each([
@@ -81,7 +80,7 @@ describe("HubConfig", () => {
     ["SPORTAL_LEAGUES", " , "]
   ] as const)("should refuse %s=%s, naming the setting", ([name, value]) =>
     Effect.gen(function* () {
-      const config = Effect.service(HubConfig).pipe(Effect.provide(withEnv({ [name]: value })))
+      const config = Effect.service(HubConfig).pipe(Effect.provide(HubConfig.layerTest({ [name]: value })))
 
       const error = yield* Effect.flip(config)
 
@@ -179,3 +178,6 @@ function dataDirOn(platform: NodeJS.Platform, env: Record<string, string>, path:
 function inEnv(env: Record<string, string>, path: typeof NodePath.layer) {
   return Layer.mergeAll(ConfigProvider.layer(ConfigProvider.fromEnv({ env })), path)
 }
+
+// A fan's home folder on every OS, given explicitly so the default data directory is the one expected.
+const home = { HOME: "/home/fan", USERPROFILE: "C:\\Users\\fan" }

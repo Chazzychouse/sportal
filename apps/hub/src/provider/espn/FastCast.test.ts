@@ -7,7 +7,7 @@ import { HttpClient, HttpClientResponse } from "effect/http"
 import * as Socket from "effect/socket/Socket"
 import { TestClock } from "effect/testing"
 import type { FeedFrame } from "../../Frame.ts"
-import { withEnv } from "../../TestHubConfig.ts"
+import { HubConfig } from "../../HubConfig.ts"
 import { counted, recordingLogs, withMetrics } from "../../TestTelemetry.ts"
 import { LiveFeedDemand, type ProviderUnavailable } from "../Provider.ts"
 import { FastCast } from "./FastCast.ts"
@@ -515,7 +515,7 @@ function fastCastOver(
 ) {
   const fastCast =
     checkpointRetry === undefined ? FastCast.layer : Layer.effect(FastCast, FastCast.make(checkpointRetry))
-  const nflOnly = withEnv({ SPORTAL_LEAGUES: "nfl" }).pipe(Layer.orDie)
+  const nflOnly = HubConfig.layerTest({ SPORTAL_LEAGUES: "nfl" }).pipe(Layer.orDie)
   return fastCast.pipe(Layer.provide([fastCastHost(server), nflOnly]))
 }
 

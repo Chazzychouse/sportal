@@ -5,9 +5,9 @@ import { FetchHttpClient } from "effect/http"
 import { TestClock } from "effect/testing"
 import * as Database from "./Database.ts"
 import { FeedLog } from "./feed-log/FeedLog.ts"
+import { HubConfig } from "./HubConfig.ts"
 import * as HubMode from "./HubMode.ts"
 import { LiveSlate } from "./LiveSlate.ts"
-import { withEnv } from "./TestHubConfig.ts"
 
 describe("HubMode", () => {
   it.effect("should bring a scenario's polls, appended by Ingest, to the LiveSlate", () =>
@@ -76,7 +76,7 @@ const playedForASecond = Effect.gen(function* () {
 function replayedFrom(dataDir: string, name: string) {
   const onFile = FeedLog.layer.pipe(
     Layer.provide([Database.layerFile(name), NodeCrypto.layer]),
-    Layer.provide(withEnv({ SPORTAL_DATA_DIR: dataDir })),
+    Layer.provide(HubConfig.layerTest({ SPORTAL_DATA_DIR: dataDir })),
     Layer.orDie
   )
   return FeedLog.use((log) => Stream.runCollect(log.replay(DateTime.makeUnsafe(0)))).pipe(
@@ -89,7 +89,7 @@ function replayedFrom(dataDir: string, name: string) {
 function scenarioHub(name: string, env: Record<string, string> = {}) {
   return HubMode.layer.pipe(
     Layer.provide([Database.layerMemory, NodeCrypto.layer, FetchHttpClient.layer]),
-    Layer.provide(withEnv({ SPORTAL_SCENARIO: name, ...env }).pipe(Layer.orDie)),
+    Layer.provide(HubConfig.layerTest({ SPORTAL_SCENARIO: name, ...env }).pipe(Layer.orDie)),
     Layer.provide(NodeServices.layer)
   )
 }

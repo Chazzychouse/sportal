@@ -5,7 +5,7 @@ import { Effect, Fiber, FileSystem, Layer, type Path, Ref } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/http"
 import { TestClock } from "effect/testing"
 import { CorpusDays } from "../../corpus/CorpusDay.ts"
-import { withEnv } from "../../TestHubConfig.ts"
+import { HubConfig } from "../../HubConfig.ts"
 import type { Archiver } from "../Archiver.ts"
 import * as EspnArchiver from "./EspnArchiver.ts"
 import { fixtures } from "./TestEspn.ts"
@@ -61,7 +61,7 @@ export function inArchive<A, E>(
     return yield* test({ dir, requests: Ref.get(requests) }).pipe(
       Effect.provide(
         Layer.mergeAll(EspnArchiver.layer, CorpusDays.layer).pipe(
-          Layer.provide(withEnv({ SPORTAL_CORPUS_DIR: dir })),
+          Layer.provide(HubConfig.layerTest({ SPORTAL_CORPUS_DIR: dir })),
           Layer.provide(Layer.succeed(HttpClient.HttpClient, client))
         )
       )

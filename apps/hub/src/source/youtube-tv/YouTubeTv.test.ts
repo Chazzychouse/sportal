@@ -8,12 +8,12 @@ import { broadcast, snapshot, team } from "@sportal/domain/TestGame"
 import { DateTime, Effect, Fiber, Layer, Logger, Option, Ref, Stream } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/http"
 import { TestClock } from "effect/testing"
+import { HubConfig } from "../../HubConfig.ts"
 import * as EspnDecoder from "../../provider/espn/EspnDecoder.ts"
 import * as EspnProvider from "../../provider/espn/EspnProvider.ts"
 import { FastCast } from "../../provider/espn/FastCast.ts"
 import { fixtures, noSocket } from "../../provider/espn/TestEspn.ts"
 import { listedBy } from "../../provider/TestDecoder.ts"
-import { withEnv } from "../../TestHubConfig.ts"
 import { Source } from "../Source.ts"
 import { recordedGuide } from "./TestYouTubeTv.ts"
 import * as YouTubeTv from "./YouTubeTv.ts"
@@ -351,7 +351,7 @@ function matchingLayer() {
     YouTubeTv.layer,
     EspnProvider.layer.pipe(
       Layer.provide(FastCast.layer),
-      Layer.provide([recorded, noSocket, withEnv({}).pipe(Layer.orDie)])
+      Layer.provide([recorded, noSocket, HubConfig.layerTest({}).pipe(Layer.orDie)])
     ),
     EspnDecoder.layer
   )

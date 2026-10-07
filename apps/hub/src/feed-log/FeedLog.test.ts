@@ -5,7 +5,7 @@ import { SqlClient, SqlError } from "effect/sql"
 import { TestClock } from "effect/testing"
 import * as Database from "../Database.ts"
 import type { FeedFrame } from "../Frame.ts"
-import { withEnv } from "../TestHubConfig.ts"
+import { HubConfig } from "../HubConfig.ts"
 import { counted, recordingLogs, recordingSpans, withMetrics } from "../TestTelemetry.ts"
 import { FeedLog } from "./FeedLog.ts"
 
@@ -401,7 +401,9 @@ describe("FeedLog", () => {
       const path = yield* Path.Path
       const temp = yield* fs.makeTempDirectoryScoped()
       const dataDir = path.join(temp, "sportal")
-      const inDataDir = FeedLog.layerInDataDir.pipe(Layer.provide(withEnv({ SPORTAL_DATA_DIR: dataDir })))
+      const inDataDir = FeedLog.layerInDataDir.pipe(
+        Layer.provide(HubConfig.layerTest({ SPORTAL_DATA_DIR: dataDir }))
+      )
 
       yield* FeedLog.use((log) => log.append(poll("nfl", "{}", 0))).pipe(Effect.provide(inDataDir))
 

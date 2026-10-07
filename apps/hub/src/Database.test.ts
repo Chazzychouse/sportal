@@ -3,7 +3,7 @@ import { assert, describe, it } from "@effect/vitest"
 import { Effect, FileSystem, Layer, Path } from "effect"
 import { SqlClient } from "effect/sql"
 import * as Database from "./Database.ts"
-import { withEnv } from "./TestHubConfig.ts"
+import { HubConfig } from "./HubConfig.ts"
 
 describe("Database.migrate", () => {
   it.effect("should keep each store's migrations in its own table, so stores number them independently", () =>
@@ -43,7 +43,7 @@ describe("Database.layerFile", () => {
       const dataDir = yield* fs.makeTempDirectoryScoped()
       const file = path.join(dataDir, "x.sqlite")
       const database = Database.layerFile("x.sqlite").pipe(
-        Layer.provide(withEnv({ SPORTAL_DATA_DIR: dataDir }))
+        Layer.provide(HubConfig.layerTest({ SPORTAL_DATA_DIR: dataDir }))
       )
 
       const walWhileOpen = yield* writtenThenWal(file).pipe(Effect.provide(database))

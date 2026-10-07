@@ -12,12 +12,12 @@ import { TestClock } from "effect/testing"
 import { afterEach, vi } from "vitest"
 import * as Database from "./Database.ts"
 import { FeedLog } from "./feed-log/FeedLog.ts"
+import { HubConfig } from "./HubConfig.ts"
 import * as HubServer from "./HubServer.ts"
 import * as Ingest from "./Ingest.ts"
 import { LiveSlate } from "./LiveSlate.ts"
 import { LiveStage } from "./LiveStage.ts"
 import * as YouTubeTv from "./source/youtube-tv/YouTubeTv.ts"
-import { withEnv } from "./TestHubConfig.ts"
 import * as TestSnapshotFeed from "./TestSnapshotFeed.ts"
 import { polled } from "./TestSnapshotFeed.ts"
 
@@ -404,7 +404,7 @@ function hubUnderTest() {
     ),
     Layer.provide(polled(() => Effect.succeed([game]))),
     Layer.provideMerge(
-      withEnv({ SPORTAL_VERSION: "1.2.3", SPORTAL_DATA_DIR: "unused", SPORTAL_LEAGUES: "fbs" })
+      HubConfig.layerTest({ SPORTAL_VERSION: "1.2.3", SPORTAL_DATA_DIR: "unused", SPORTAL_LEAGUES: "fbs" })
     )
   )
 }

@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Layer } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/http"
-import { withEnv } from "../../TestHubConfig.ts"
+import { HubConfig } from "../../HubConfig.ts"
 import { listedBy } from "../TestDecoder.ts"
 import * as Espn from "./Espn.ts"
 import { noSocket } from "./TestEspn.ts"
@@ -27,7 +27,7 @@ function recordedEspn() {
     return Effect.succeed(HttpClientResponse.fromWeb(request, response))
   })
   return Espn.layer.pipe(
-    Layer.provide([noSocket, withEnv({}).pipe(Layer.orDie)]),
+    Layer.provide([noSocket, HubConfig.layerTest({}).pipe(Layer.orDie)]),
     Layer.provide(Layer.succeed(HttpClient.HttpClient, recordedHttp))
   )
 }

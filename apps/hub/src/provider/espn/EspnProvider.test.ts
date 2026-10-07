@@ -7,7 +7,7 @@ import { liveSnapshot, snapshot } from "@sportal/domain/TestGame"
 import { Cause, Context, DateTime, Duration, Effect, Layer, Queue, Ref, Schedule, Stream } from "effect"
 import { HttpClient, HttpClientError, HttpClientResponse } from "effect/http"
 import { TestClock } from "effect/testing"
-import { withEnv } from "../../TestHubConfig.ts"
+import { HubConfig } from "../../HubConfig.ts"
 import { Provider, ProviderUnavailable } from "../Provider.ts"
 import { listedBy } from "../TestDecoder.ts"
 import * as EspnDecoder from "./EspnDecoder.ts"
@@ -354,7 +354,7 @@ function answering(respond: () => Effect.Effect<Response, Cause.UnknownError>) {
 
 /** ESPN's provider over `client`, with FastCast that opens no socket and the default Hub config. */
 function espnOver(client: HttpClient.HttpClient) {
-  const hubConfig = withEnv({}).pipe(Layer.orDie)
+  const hubConfig = HubConfig.layerTest({}).pipe(Layer.orDie)
   return EspnProvider.layer.pipe(
     Layer.provide(FastCast.layer),
     Layer.provide([noSocket, hubConfig]),
