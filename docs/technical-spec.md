@@ -234,7 +234,7 @@ sportal/
     │       │   ├── HubServer.ts    Serves the API, the live stream, and the web UI's files
     │       │   └── LanAddresses.ts The addresses a phone on the home network can reach
     │       ├── provider/
-    │       │   ├── Provider.ts     The port: poll, push, polling; LiveFeed, Polling, Decoded, Notice, ProviderError
+    │       │   ├── Provider.ts     The port: poll, push, polling, reconnect; LiveFeed, LiveFeedDemand, Polling, Decoded, Notice, ProviderError
     │       │   ├── Decoder.ts      A provider's decode, and its only home; a layer of its own, paired with its provider by HubMode
     │       │   ├── snapshot/       The snapshot feed: frames that are our own deliveries, played by written scenarios and tests
     │       │   │   ├── SnapshotProvider.ts  A provider over a function from league to games, with its push and polling
@@ -386,6 +386,7 @@ class LiveGames extends Context.Service<LiveGames, {
   readonly latest: Effect<Fold.LiveGames>
   readonly changes: Stream<Fold.LiveGames>          // seq or reached alone is not a change
   readonly events: Stream<Happened>
+  readonly demand: Stream<LiveFeedDemand>           // what the live feed should follow: the current games, and each channel to resync
   through(seq: number): Effect<Fold.LiveGames>      // the fold once it has taken frame `seq`, or the latest once Halted
 }>()("sportal/hub/LiveGames") {}
 ```
@@ -398,8 +399,8 @@ class LiveGames extends Context.Service<LiveGames, {
   telemetry and no events, and its layer is built only then, so the Hub serves no fold still catching up. Then it takes
   each frame as it is appended, and its timer starts. Its `Following` is `Replaying`, `Live`, or `Halted` (a decode
   defect after the replay: no new frame is taken, but the fold keeps serving and its timer still runs and is told).
-- `Slate` publishes each listed game as the fold has it, within 250 ms of a change; Ingest reads the fold for its polling
-  and for the games the live feed should follow.
+- `Slate` publishes each listed game as the fold has it, within 250 ms of a change; Ingest reads the fold for its polling,
+  and `LiveGames.demand` names the games the live feed should follow.
 - `HubMode` provides it in both modes. A scenario is the provider through the real Ingest, on the scenario clock: polled
   at each of its frames' times and at least every 10 seconds, its recorded live feed pushed at its recorded offsets, and
   every frame appended to a feed log of its own, in memory unless `SPORTAL_SCENARIO_FEED_LOG` names a file.

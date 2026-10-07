@@ -213,8 +213,8 @@ LiveGamesTelemetry.told(following, decoded, reports): Effect<void>
 ```
 
 - One entry point for everything a step tells, reports and notices both, told which state the following is in.
-  Replaying: counts plays for the summary and
-  logs a `Raised` defect, as `quiet` does; tells no notice (each was told when its frame first arrived). Live: what
+  Replaying: logs a `Raised` defect, as `quiet` does (as built, the replay's play count for the summary lives in
+  LiveGames' replay, not in `told`); tells no notice (each was told when its frame first arrived). Live: what
   `reported` does today, and each notice through `DecodeTelemetry`'s table.
 - `reported` and `quiet` merge into the one `$match`, whose `Replaying` arm is today's `quiet` arm. Notice gating
   leaves Ingest.
@@ -250,7 +250,7 @@ No layer provides `Provider | Decoder`. Each adapter exports one layer per port.
 | Scenario, decoder | | `ScenarioProvider.decoder({ written, recorded }): Layer<Decoder, never, HubConfig>`: `SnapshotDecode.layer` for a written scenario, `EspnDecode.layer` for a recorded one |
 
 - `HubMode` is still the only module naming providers. It gives `Provider` to Ingest and `Decoder` to `LiveGames`, and
-  one `FeedLog` to both (`Layer.provideMerge`). For a scenario, `ScenarioProvider.layer` and `ScenarioProvider.decoder` make one written-or-recorded choice, by whether
+  one `FeedLog` to both (`Layer.provide`, so `HubMode.layer` does not leak `LiveGames` or `FeedLog`). For a scenario, `ScenarioProvider.layer` and `ScenarioProvider.decoder` make one written-or-recorded choice, by whether
   `SPORTAL_SCENARIO` names a written scenario. The recorded scenario stops needing and providing `Decoder`.
 - `HubMode`'s compile-time check that a scenario provides what the live day does stays.
 - Tests of the fold (`LiveGames`, `Slate`, `GameHistory`, `HubServer`) provide an in-memory `FeedLog` and
