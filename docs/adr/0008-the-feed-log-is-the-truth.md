@@ -1,5 +1,7 @@
 # 8. The feed log is the truth
 
+Amended by ADR 0010: the truth is the feed log and, for days the Hub did not see, the archive.
+
 Date: 2026-10-05
 Status: Accepted
 

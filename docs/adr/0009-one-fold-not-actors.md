@@ -1,5 +1,7 @@
 # 9. One fold over the feed log, not actors
 
+Amended by ADR 0010: the fold is the slate, and a covered game holds a poll ahead of its push for `fallbackAfter`.
+
 Date: 2026-10-05
 Status: Accepted
 
