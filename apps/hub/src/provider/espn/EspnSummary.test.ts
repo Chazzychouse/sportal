@@ -4,7 +4,7 @@ import { assert, describe, it } from "@effect/vitest"
 import { GameId } from "@sportal/domain/Game"
 import { Play, PlayId } from "@sportal/domain/Play"
 import { TeamId } from "@sportal/domain/Team"
-import { DateTime, Effect, Equal, Layer, Order, Schema } from "effect"
+import { DateTime, Effect, Equal, Layer, Logger, Order, Schema } from "effect"
 import type { ArchivedPlay } from "../../corpus/Archive.ts"
 import * as Gzip from "../../Gzip.ts"
 import { Scenarios } from "../../scenario/Scenarios.ts"
@@ -290,6 +290,33 @@ describe("EspnSummary.plays", () => {
     })
   )
 
+  it.effect("should warn naming a timeout no participant is marked as calling", () =>
+    Effect.gen(function* () {
+      const warnings: Array<string> = []
+
+      const plays = yield* EspnSummary.plays("nfl", withoutFirstCaller()).pipe(
+        Effect.provide(collecting(warnings))
+      )
+
+      const uncalled = plays
+        .map(({ play }) => play)
+        .filter((play) => Play.guards.Timeout(play) && play.team === undefined)
+      assert.deepStrictEqual(warnings, [
+        `EspnSummary: nfl timeouts ${uncalled.map(({ id }) => id).join(", ")} have no caller marked; counted for neither`
+      ])
+    })
+  )
+
+  it.effect("should not warn when every timeout has its caller marked", () =>
+    Effect.gen(function* () {
+      const warnings: Array<string> = []
+
+      yield* EspnSummary.plays("nfl", summary).pipe(Effect.provide(collecting(warnings)))
+
+      assert.deepStrictEqual(warnings, [])
+    })
+  )
+
   it.effect("should still read the game when a timeout has no caller", () =>
     Effect.gen(function* () {
       const plays = yield* EspnSummary.plays("nfl", withoutFirstCaller())
@@ -344,6 +371,18 @@ function timeoutsOf(plays: ReadonlyArray<ArchivedPlay>) {
     .map(({ play }) => play)
     .filter(Play.guards.Timeout)
     .map((timeout) => [timeout.period, timeout.clock, timeout.team])
+}
+
+// A layer beside the default logger that collects each warning's message into `warnings`.
+function collecting(warnings: Array<string>) {
+  return Logger.layer(
+    [
+      Logger.make(({ logLevel, message }) => {
+        if (logLevel === "Warn") warnings.push(String(message))
+      })
+    ],
+    { mergeWithExisting: true }
+  )
 }
 
 // A completion's team; none for another case.
