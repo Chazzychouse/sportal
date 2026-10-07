@@ -1,6 +1,6 @@
 import type { GameEvent } from "@sportal/domain/GameEvent"
 import { Slate, type Taken } from "@sportal/domain/Slate"
-import { type DateTime, Effect, Stream } from "effect"
+import { Chunk, type DateTime, Effect, Stream } from "effect"
 import { CorpusDay, CorpusDays, type CorpusDayUnreadable } from "./CorpusDay.ts"
 
 /**
@@ -35,8 +35,9 @@ export type Subject<S, A> = {
 }
 
 /** The subject this spec runs: the day's game events, in order. */
-export const events: Subject<ReadonlyArray<GameEvent>, ReadonlyArray<GameEvent>> = {
-  initial: [],
-  step: (seen, { events }) => (events.length === 0 ? seen : [...seen, ...events]),
-  done: (seen) => seen
+export const events: Subject<Chunk.Chunk<GameEvent>, ReadonlyArray<GameEvent>> = {
+  initial: Chunk.empty(),
+  step: (seen, { events }) =>
+    events.length === 0 ? seen : Chunk.appendAll(seen, Chunk.fromIterable(events)),
+  done: Chunk.toReadonlyArray
 }

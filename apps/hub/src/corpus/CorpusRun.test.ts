@@ -1,8 +1,21 @@
 import { assert, describe, it } from "@effect/vitest"
 import { type GameEvent, GameEventKind } from "@sportal/domain/GameEvent"
 import { LiveGame } from "@sportal/domain/LiveGame"
+import type { Slate as DomainSlate } from "@sportal/domain/Slate"
 import { liveSnapshot, team } from "@sportal/domain/TestGame"
-import { Array as Arr, DateTime, Effect, Equal, Fiber, Layer, Option, Ref, Schedule, Stream } from "effect"
+import {
+  Array as Arr,
+  Chunk,
+  DateTime,
+  Effect,
+  Equal,
+  Fiber,
+  Layer,
+  Option,
+  Ref,
+  Schedule,
+  Stream
+} from "effect"
 import { TestClock } from "effect/testing"
 import { FeedLog } from "../FeedLog.ts"
 import type { FeedFrame } from "../Frame.ts"
@@ -137,25 +150,28 @@ function playedLive(frames: ReadonlyArray<FeedFrame>, until: DateTime.Utc) {
   })
   const playing = Effect.gen(function* () {
     const slate = yield* Slate
-    const seen = yield* Ref.make<ReadonlyArray<GameEvent>>([])
+    const seen = yield* Ref.make(Chunk.empty<GameEvent>())
     const subscriber = yield* slate.events.pipe(
-      Stream.runForEach((published) => Ref.update(seen, (all) => [...all, published])),
+      Stream.runForEach((published) => Ref.update(seen, Chunk.append(published))),
       Effect.forkChild({ startImmediately: true })
     )
     const appended = yield* Ref.make({ seq: 0, polled: first })
 
-    // Until no fiber woken at this instant appends anything the slate has not taken.
-    const settled: Effect.Effect<void> = Effect.gen(function* () {
-      yield* TestClock.adjust(0)
-      const { seq } = yield* Ref.get(appended)
-      if (seq > 0) yield* slate.through(seq)
-      yield* TestClock.adjust(0)
-      if ((yield* Ref.get(appended)).seq !== seq) yield* settled
-    })
-    // ScenarioProvider pushes each frame at its instant and polls at a poll's instant or 10 s after the last.
+    // Until no fiber woken at this instant appends anything the slate has not taken, for at most `rounds` rounds.
+    const settled = (rounds: number): Effect.Effect<void> =>
+      Effect.gen(function* () {
+        if (rounds === 0) return yield* Effect.die(new Error("frames kept being appended at one instant"))
+        yield* TestClock.adjust(0)
+        const { seq } = yield* Ref.get(appended)
+        if (seq > 0) yield* slate.through(seq)
+        yield* TestClock.adjust(0)
+        if ((yield* Ref.get(appended)).seq !== seq) yield* settled(rounds - 1)
+      })
+    // ScenarioProvider pushes each frame at its instant and polls at a poll's instant or 10 s after the last, its
+    // `longest`.
     const steppedTo = (to: DateTime.Utc): Effect.Effect<void> =>
       Effect.gen(function* () {
-        yield* settled
+        yield* settled(100)
         const now = yield* DateTime.now
         if (DateTime.isGreaterThanOrEqualTo(now, to)) return
         const { polled } = yield* Ref.get(appended)
@@ -170,20 +186,22 @@ function playedLive(frames: ReadonlyArray<FeedFrame>, until: DateTime.Utc) {
 
     yield* steppedTo(ended).pipe(Effect.provide(ingesting(appended)), Effect.scoped)
     yield* TestClock.setTime(DateTime.toEpochMillis(until))
-    yield* slate.latest.pipe(
-      Effect.repeat({
-        until: (latest) =>
-          Option.match(latest.earliestDue(), {
-            onNone: () => true,
-            onSome: (due) => DateTime.isGreaterThan(due, until)
-          }),
-        schedule: Schedule.spaced("1 millis")
-      }),
+    const tickedThrough = (latest: DomainSlate) =>
+      Option.match(latest.earliestDue(), {
+        onNone: () => true,
+        onSome: (due) => DateTime.isGreaterThan(due, until)
+      })
+    // For at most 5 s of real time.
+    const ticked = yield* slate.latest.pipe(
+      Effect.repeat({ until: tickedThrough, schedule: Schedule.spaced("1 millis"), times: 5000 }),
       TestClock.withLive
     )
+    if (!tickedThrough(ticked)) {
+      return yield* Effect.die(new Error("the slate's timer did not tick to the next day's start"))
+    }
     yield* TestClock.adjust(0)
     yield* Fiber.interrupt(subscriber)
-    return yield* Ref.get(seen)
+    return Chunk.toReadonlyArray(yield* Ref.get(seen))
   }).pipe(Effect.provide(Slate.layer.pipe(Layer.provideMerge(FeedLog.layer))), Effect.scoped)
   // Set before the feed log opens, so its writer never wakes through the years before the first frame.
   return TestClock.setTime(DateTime.toEpochMillis(first)).pipe(Effect.andThen(playing))
