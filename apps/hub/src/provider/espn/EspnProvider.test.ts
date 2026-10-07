@@ -4,10 +4,12 @@ import type { GameSnapshot } from "@sportal/domain/Game"
 import { Network } from "@sportal/domain/Game"
 import type { LeagueId } from "@sportal/domain/League"
 import { liveSnapshot, snapshot } from "@sportal/domain/TestGame"
-import { Cause, DateTime, Duration, Effect, Layer, Schedule } from "effect"
+import { Cause, DateTime, Duration, Effect, Layer, Queue, Ref, Schedule, Stream } from "effect"
 import { HttpClient, HttpClientError, HttpClientResponse } from "effect/http"
+import { TestClock } from "effect/testing"
 import { listedBy } from "../../TestFeed.ts"
-import { Provider } from "../Provider.ts"
+import { withEnv } from "../../TestHubConfig.ts"
+import { Provider, ProviderError } from "../Provider.ts"
 import * as EspnDecode from "./EspnDecode.ts"
 import * as EspnProvider from "./EspnProvider.ts"
 import { FastCast } from "./FastCast.ts"
@@ -23,7 +25,7 @@ const recordedEspn = (fbs: string) =>
   Layer.merge(
     EspnProvider.layer.pipe(
       Layer.provide(FastCast.layer),
-      Layer.provide(noSocket),
+      Layer.provide([noSocket, hubConfig]),
       Layer.provide(
         Layer.succeed(
           HttpClient.HttpClient,
@@ -42,6 +44,8 @@ const recordedEspn = (fbs: string) =>
     ),
     EspnDecode.layer
   )
+
+const hubConfig = withEnv({}).pipe(Layer.orDie)
 
 const TestLayer = recordedEspn(fbsLive)
 
@@ -175,12 +179,62 @@ describe("EspnProvider", () => {
     }
   })
 
+  it.effect("a closed push is subscribed again after about 1 s, then about 2 s", () =>
+    Effect.gen(function* () {
+      const closes = yield* Queue.unbounded<ProviderError>()
+      const subscriptions = yield* Ref.make(0)
+      const pushing = Layer.succeed(
+        FastCast,
+        FastCast.of({
+          push: () =>
+            Stream.unwrap(
+              Ref.update(subscriptions, (n) => n + 1).pipe(
+                Effect.as(Stream.fromQueue(closes).pipe(Stream.mapEffect(Effect.fail)))
+              )
+            )
+        })
+      )
+      const closed = new ProviderError({ reason: "Closed", cause: "socket closed" })
+      yield* Effect.gen(function* () {
+        const provider = yield* Provider
+        yield* provider
+          .push(Stream.never)
+          .pipe(Stream.retry(provider.reconnect), Stream.runDrain, Effect.forkScoped)
+        yield* TestClock.adjust(0)
+        assert.strictEqual(yield* Ref.get(subscriptions), 1)
+        // Jitter scales each delay by 0.8 to 1.2: the first is within 0.8 s to 1.2 s, the second 1.6 s to 2.4 s.
+        yield* Queue.offer(closes, closed)
+        yield* TestClock.adjust("700 millis")
+        assert.strictEqual(yield* Ref.get(subscriptions), 1)
+        yield* TestClock.adjust("600 millis")
+        assert.strictEqual(yield* Ref.get(subscriptions), 2)
+        yield* Queue.offer(closes, closed)
+        yield* TestClock.adjust("1500 millis")
+        assert.strictEqual(yield* Ref.get(subscriptions), 2)
+        yield* TestClock.adjust("1 second")
+        assert.strictEqual(yield* Ref.get(subscriptions), 3)
+      }).pipe(
+        Effect.provide(
+          EspnProvider.layer.pipe(
+            Layer.provide([
+              pushing,
+              Layer.succeed(
+                HttpClient.HttpClient,
+                HttpClient.make(() => Effect.never)
+              )
+            ])
+          )
+        )
+      )
+    })
+  )
+
   it.effect("a poll that fails to connect is Unreachable for its league; a non-2xx is Refused", () =>
     Effect.gen(function* () {
       const failing = (respond: () => Effect.Effect<Response, Cause.UnknownError>) =>
         EspnProvider.layer.pipe(
           Layer.provide(FastCast.layer),
-          Layer.provide(noSocket),
+          Layer.provide([noSocket, hubConfig]),
           Layer.provide(
             Layer.succeed(
               HttpClient.HttpClient,

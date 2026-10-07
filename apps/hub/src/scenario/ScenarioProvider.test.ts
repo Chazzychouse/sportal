@@ -27,7 +27,7 @@ import { FeedLog } from "../FeedLog.ts"
 import { FeedFrame } from "../Frame.ts"
 import * as Gzip from "../Gzip.ts"
 import type { HubConfig } from "../HubConfig.ts"
-import * as Ingest from "../ingest/Ingest.ts"
+import * as Ingest from "../Ingest.ts"
 import { LiveGames } from "../LiveGames.ts"
 import { Decoder } from "../provider/Decoder.ts"
 import * as EspnDecode from "../provider/espn/EspnDecode.ts"
@@ -179,7 +179,7 @@ describe("ScenarioProvider", () => {
     Effect.gen(function* () {
       const provider = yield* Provider
       const pushed = yield* provider
-        .push(LeagueId.literals, Stream.never, Stream.never)
+        .push(Stream.never)
         .pipe(Stream.runHead, Effect.forkChild({ startImmediately: true }))
       yield* TestClock.adjust("1 hour")
       assert.isUndefined(pushed.pollUnsafe())
@@ -222,7 +222,7 @@ describe("ScenarioProvider", () => {
       yield* Effect.gen(function* () {
         const provider = yield* Provider
         const received = yield* Ref.make<ReadonlyArray<number>>([])
-        yield* provider.push(LeagueId.literals, Stream.never, Stream.never).pipe(
+        yield* provider.push(Stream.never).pipe(
           Stream.runForEach((frame) =>
             Ref.update(received, (all) => [...all, frame.receivedAt.epochMilliseconds])
           ),

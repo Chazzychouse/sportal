@@ -9,7 +9,8 @@ import { FastCast } from "./FastCast.ts"
  * ESPN as the provider: the site scoreboard polled and FastCast pushing, their frames read by `EspnDecode`. A poll
  * that does not connect is `Unreachable` for its league, and one answered with a status other than 2xx `Refused`.
  * Polled every 10 seconds while a game is live, every minute within 30 minutes of a kickoff, and every 15 minutes
- * otherwise; at most 30 seconds after a poll in which a league failed.
+ * otherwise; at most 30 seconds after a poll in which a league failed. FastCast is subscribed to again after about 1
+ * second, then twice as long each time, up to a minute.
  */
 export const layer: Layer.Layer<Provider, never, FastCast | HttpClient.HttpClient> = Layer.effect(
   Provider,
@@ -51,9 +52,16 @@ export const layer: Layer.Layer<Provider, never, FastCast | HttpClient.HttpClien
         Schedule.modifyDelay(({ input, now }) =>
           Effect.succeed(interval(input.slate, DateTime.makeUnsafe(now), input.failed.length > 0))
         )
-      )
+      ),
+      reconnect
     })
   })
+)
+
+// Backoff from 1 s, each delay jittered and capped at a minute; Stream.retry resets it once the feed delivers again.
+const reconnect = Schedule.exponential("1 second").pipe(
+  Schedule.jittered,
+  Schedule.modifyDelay(({ duration }) => Effect.succeed(Duration.min(duration, Duration.minutes(1))))
 )
 
 function scoreboardUrl(league: LeagueId): string {

@@ -14,8 +14,9 @@ import {
 import type { FeedFrame } from "../Frame.ts"
 
 /**
- * A provider of game data: its scoreboard polled as frames, its live feed pushing frames between polls, and when it is
- * polled again. What those frames say is its `Decoder`'s, which its adapter provides beside it.
+ * A provider of game data: its scoreboard polled as frames, its live feed pushing frames between polls, when it is
+ * polled again, and how its push is reconnected. What those frames say is its `Decoder`'s, which its adapter provides
+ * beside it.
  */
 export class Provider extends Context.Service<
   Provider,
@@ -29,19 +30,27 @@ export class Provider extends Context.Service<
      * failed. Ingest runs `poll` for each league repeated on it, and nothing else decides when.
      */
     readonly polling: Polling
+    /** How its push is subscribed to again after it fails. Ingest retries the push on it, and nothing else does. */
+    readonly reconnect: Schedule.Schedule<unknown, ProviderError>
   }
 >()("sportal/hub/Provider") {}
 
 /**
- * A provider's push: every pushed frame, as received, for the leagues' scoreboards and for each game in `wanted` (the
- * current games), with each channel in `resync` asked for its checkpoint again if the push follows it. Fails when the
- * push cannot go on.
+ * A provider's push: every pushed frame, as received, for its leagues' scoreboards and for each game `demand` last
+ * named, with each channel it resyncs asked for its checkpoint again if the push follows it. Fails when the push cannot
+ * go on.
  */
-export type LiveFeed = (
-  leagues: ReadonlyArray<LeagueId>,
-  wanted: Stream.Stream<ReadonlyArray<GameSnapshot>>,
-  resync: Stream.Stream<string>
-) => Stream.Stream<FeedFrame, ProviderError>
+export type LiveFeed = (demand: Stream.Stream<LiveFeedDemand>) => Stream.Stream<FeedFrame, ProviderError>
+
+/**
+ * What the live feed should follow: the current games, whenever which games they are changes, and each channel whose
+ * document must be read again from a checkpoint.
+ */
+export type LiveFeedDemand = Data.TaggedEnum<{
+  Games: { readonly games: ReadonlyArray<GameSnapshot> }
+  Resync: { readonly channel: string }
+}>
+export const LiveFeedDemand = Data.taggedEnum<LiveFeedDemand>()
 
 /** When a provider is polled again, given the slate the last poll left and the leagues that failed in it. */
 export type Polling = Schedule.Schedule<

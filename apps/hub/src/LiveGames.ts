@@ -1,5 +1,6 @@
 import * as Fold from "@sportal/domain/LiveGames"
 import {
+  Array as Arr,
   Clock,
   Context,
   Data,
@@ -8,6 +9,7 @@ import {
   Duration,
   Effect,
   Equal,
+  Equivalence,
   Exit,
   Fiber,
   Layer,
@@ -21,7 +23,7 @@ import { FeedLog } from "./FeedLog.ts"
 import { isStopping } from "./HubStopping.ts"
 import { countByState, gaugeHeld, takeDuration, timerDefect, told } from "./LiveGamesTelemetry.ts"
 import { Decoder } from "./provider/Decoder.ts"
-import type { Decoded } from "./provider/Provider.ts"
+import { type Decoded, LiveFeedDemand } from "./provider/Provider.ts"
 
 /**
  * The live games, run: the domain fold of every frame in the feed log, in order, with its timer, its telemetry, and its
@@ -40,10 +42,10 @@ export class LiveGames extends Context.Service<
      */
     through(seq: number): Effect.Effect<Fold.LiveGames>
     /**
-     * Each live feed channel whose document a live frame's decode dropped, to be read again from a checkpoint. Task 7
-     * folds it into the live feed's demand.
+     * What the live feed should follow, afresh on each run: the current games first, then each change of which games
+     * they are, and each channel whose document a live frame's decode dropped.
      */
-    readonly resyncs: Stream.Stream<string>
+    readonly demand: Stream.Stream<LiveFeedDemand>
   }
 >()("sportal/hub/LiveGames") {
   /**
@@ -237,12 +239,32 @@ export class LiveGames extends Context.Service<
           { startImmediately: true }
         )
 
+        const changes = SubscriptionRef.changes(state).pipe(
+          Stream.map(({ folded }) => folded),
+          Stream.changesWith((a, b) => a.publishesSameAs(b))
+        )
+
+        // The current games, again on each change of which games they are.
+        const currentGames = changes.pipe(
+          Stream.mapEffect((folded) =>
+            Effect.map(DateTime.now, (now) =>
+              [...folded.live.values()]
+                .filter((liveGame) => liveGame.isCurrent(now))
+                .map((liveGame) => liveGame.snapshot)
+            )
+          ),
+          Stream.changesWith((self, that) =>
+            sameIds(
+              self.map((game) => game.id),
+              that.map((game) => game.id)
+            )
+          ),
+          Stream.map((games) => LiveFeedDemand.Games({ games }))
+        )
+
         return LiveGames.of({
           latest,
-          changes: SubscriptionRef.changes(state).pipe(
-            Stream.map(({ folded }) => folded),
-            Stream.changesWith((a, b) => a.publishesSameAs(b))
-          ),
+          changes,
           events: Stream.fromPubSub(events),
           through: (seq) =>
             SubscriptionRef.changes(state).pipe(
@@ -255,7 +277,17 @@ export class LiveGames extends Context.Service<
                 Option.match({ onNone: () => latest, onSome: ({ folded }) => Effect.succeed(folded) })
               )
             ),
-          resyncs: Stream.fromPubSub(resyncs)
+          // Subscribed to the resyncs before the first games are given, so every resync after them is in the demand.
+          demand: Stream.unwrap(
+            Effect.map(PubSub.subscribe(resyncs), (subscription) =>
+              Stream.merge(
+                currentGames,
+                Stream.fromSubscription(subscription).pipe(
+                  Stream.map((channel) => LiveFeedDemand.Resync({ channel }))
+                )
+              )
+            )
+          )
         })
       })
     )
@@ -282,3 +314,5 @@ function sleepUntil(at: DateTime.Utc): Effect.Effect<void> {
 
 // How long the timer waits after a defect before it tries again.
 const timerBackoff = Duration.seconds(1)
+
+const sameIds = Arr.makeEquivalence(Equivalence.String)

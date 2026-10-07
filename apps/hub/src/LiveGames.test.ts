@@ -14,6 +14,7 @@ import {
   Logger,
   Metric,
   Option,
+  Queue,
   Ref,
   Stream,
   type Tracer
@@ -23,7 +24,7 @@ import { FeedLog } from "./FeedLog.ts"
 import { FeedFrame } from "./Frame.ts"
 import { LiveGames } from "./LiveGames.ts"
 import { Decoder } from "./provider/Decoder.ts"
-import { Decoded } from "./provider/Provider.ts"
+import { Decoded, LiveFeedDemand } from "./provider/Provider.ts"
 import * as SnapshotDecode from "./provider/snapshot/SnapshotDecode.ts"
 import { delivered, dyingAt, liveGames, pushed } from "./TestFeed.ts"
 import { counted, gauged, recordingLogs, recordingSpans, withMetrics } from "./TestTelemetry.ts"
@@ -200,6 +201,70 @@ describe("LiveGames", () => {
           assert.include(stopped[0]?.cause, "decode died")
         }).pipe(Effect.provide(liveGames([], { decoder: dyingAt("die") }).pipe(Layer.provideMerge(layer))))
       }
+    )
+  })
+
+  describe("demand", () => {
+    it.effect("starts with the current games", () =>
+      Effect.gen(function* () {
+        const now = yield* DateTime.now
+        const live = liveSnapshot({ id: one })
+        const soon = snapshot({ id: two, kickoff: DateTime.add(now, { minutes: 20 }) })
+        const later = snapshot({ id: GameId.make("3"), kickoff: DateTime.add(now, { hours: 3 }) })
+        yield* delivered(Delivery.cases.Listing.make({ league: "fbs", games: [live, soon, later] }))
+
+        const first = yield* (yield* LiveGames).demand.pipe(Stream.runHead)
+        assert.deepStrictEqual(first, Option.some(LiveFeedDemand.Games({ games: [live, soon] })))
+      }).pipe(Effect.provide(liveGames()))
+    )
+
+    it.effect("follows a change of which games are current, not a change of their snapshots", () =>
+      Effect.gen(function* () {
+        yield* takenSnapshot(liveSnapshot({ id: one }))
+        const demanded = yield* demandOf()
+        const ids = Queue.take(demanded).pipe(
+          Effect.map((demand) =>
+            LiveFeedDemand.$is("Games")(demand) ? demand.games.map((game) => game.id) : []
+          )
+        )
+        assert.deepStrictEqual(yield* ids, [one])
+        yield* takenSnapshot(liveSnapshot({ id: one, clock: "8:00" }))
+        yield* takenSnapshot(liveSnapshot({ id: two }))
+        assert.deepStrictEqual(yield* ids, [one, two])
+      }).pipe(Effect.provide(liveGames()))
+    )
+
+    it.effect("carries a live frame's resync, and not a replayed one's", () =>
+      Effect.gen(function* () {
+        const demanded = yield* demandOf()
+        assert.deepStrictEqual(yield* Queue.take(demanded), LiveFeedDemand.Games({ games: [] }))
+        const frame = yield* (yield* FeedLog).append(yield* pushed({ _tag: "Resync" }, "live-topic"))
+        yield* (yield* LiveGames).through(frame.seq)
+        assert.deepStrictEqual(yield* Queue.take(demanded), LiveFeedDemand.Resync({ channel: "live-topic" }))
+        assert.isTrue(Option.isNone(yield* Queue.poll(demanded)))
+      }).pipe(
+        Effect.provide(
+          Layer.unwrap(
+            Effect.map(pushed({ _tag: "Resync" }, "replayed-topic"), (frame) => liveGames([frame]))
+          )
+        )
+      )
+    )
+
+    it.effect("a second subscription starts with the current games again", () =>
+      Effect.gen(function* () {
+        const liveGames = yield* LiveGames
+        yield* takenSnapshot(liveSnapshot({ id: one }))
+        assert.deepStrictEqual(
+          yield* Stream.runHead(liveGames.demand),
+          Option.some(LiveFeedDemand.Games({ games: [liveSnapshot({ id: one })] }))
+        )
+        yield* takenSnapshot(liveSnapshot({ id: two }))
+        assert.deepStrictEqual(
+          yield* Stream.runHead(liveGames.demand),
+          Option.some(LiveFeedDemand.Games({ games: [liveSnapshot({ id: one }), liveSnapshot({ id: two })] }))
+        )
+      }).pipe(Effect.provide(liveGames()))
     )
   })
 
@@ -688,6 +753,18 @@ function brokenIfMarked(snapshot: GameSnapshot): GameSnapshot {
 
 function takenSnapshot(snapshot: GameSnapshot, from: "push" | "poll" = "poll") {
   return delivered(Delivery.cases.Snapshot.make({ snapshot, from }))
+}
+
+/** The live games' demand, run in a fiber of its own, each element offered as it comes. */
+function demandOf() {
+  return Effect.gen(function* () {
+    const demanded = yield* Queue.unbounded<LiveFeedDemand>()
+    yield* (yield* LiveGames).demand.pipe(
+      Stream.runForEach((demand) => Queue.offer(demanded, demand)),
+      Effect.forkScoped
+    )
+    return demanded
+  })
 }
 
 const liveNow = LiveGames.use((liveGames) => liveGames.latest).pipe(Effect.map(({ live }) => live))

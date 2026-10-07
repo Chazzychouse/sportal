@@ -12,11 +12,11 @@ export class Decoder extends Context.Service<
   {
     /**
      * What each frame said, exactly one `Decoded` per frame, each emitted in the frames' order (a decode may read frames
-     * ahead of what it has emitted): a poll response is a `Listing`, a pushed game a
-     * `Snapshot`, a plays document change a `Plays`. A live feed topic whose document had to be dropped (a missed
-     * message, a patch that will not apply) is a resync of its channel, so the live feed can ask for its checkpoint
-     * again. Anything decode noticed, a frame that does not decode among it, is a notice. A frame that said nothing is
-     * a `Decoded` with three empty arrays. Never fails, logs, or counts.
+     * ahead of what it has emitted): a poll response is a `Listing`, a pushed game a `Snapshot`, a plays document
+     * change a `Plays`. A live feed topic whose document had to be dropped (a missed message, a patch that will not
+     * apply) is a resync of its channel, so the live feed can ask for its checkpoint again. Anything decode noticed, a
+     * frame that does not decode among it, is a notice. A frame that said nothing is a `Decoded` with three empty
+     * arrays. Never fails, logs, or counts.
      */
     decode(frames: Stream.Stream<Frame>): Stream.Stream<Decoded>
   }

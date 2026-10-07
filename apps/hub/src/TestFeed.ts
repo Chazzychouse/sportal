@@ -15,20 +15,22 @@ import * as SnapshotProvider from "./provider/snapshot/SnapshotProvider.ts"
 
 /**
  * The snapshot feed as a test's provider: a poll of a league is the games `games` answers. It pushes `options.push`'s
- * frames, none by default, and is polled every 10 seconds unless `options.polling` says otherwise. Tests read its frames
- * with `SnapshotDecode.layer`.
+ * frames, none by default, reconnected on `options.reconnect` or the snapshot feed's own, and is polled every 10 seconds
+ * unless `options.polling` says otherwise. Tests read its frames with `SnapshotDecode.layer`.
  */
 export function polled(
   games: (league: LeagueId) => Effect.Effect<ReadonlyArray<GameSnapshot>, ProviderError>,
   options: {
     readonly polling?: Polling
     readonly push?: Stream.Stream<FeedFrame, ProviderError>
+    readonly reconnect?: Schedule.Schedule<unknown, ProviderError>
   } = {}
 ): Layer.Layer<Provider> {
   return SnapshotProvider.layer({
     games,
     polling: options.polling ?? Schedule.spaced("10 seconds"),
-    ...(options.push === undefined ? {} : { push: options.push })
+    ...(options.push === undefined ? {} : { push: options.push }),
+    ...(options.reconnect === undefined ? {} : { reconnect: options.reconnect })
   })
 }
 

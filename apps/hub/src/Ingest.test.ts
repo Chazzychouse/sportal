@@ -25,18 +25,18 @@ import {
 } from "effect"
 import { SqlClient } from "effect/sql"
 import { TestClock } from "effect/testing"
-import * as Database from "../Database.ts"
-import { FeedLog } from "../FeedLog.ts"
-import type { FeedFrame } from "../Frame.ts"
-import { GameHistory } from "../GameHistory.ts"
-import { LiveGames } from "../LiveGames.ts"
-import { type LiveFeed, type Polling, Provider, ProviderError } from "../provider/Provider.ts"
-import * as SnapshotDecode from "../provider/snapshot/SnapshotDecode.ts"
-import * as SnapshotProvider from "../provider/snapshot/SnapshotProvider.ts"
-import { polled, pushed } from "../TestFeed.ts"
-import { withEnv } from "../TestHubConfig.ts"
-import { counted, recordingLogs, recordingSpans, withMetrics } from "../TestTelemetry.ts"
+import * as Database from "./Database.ts"
+import { FeedLog } from "./FeedLog.ts"
+import type { FeedFrame } from "./Frame.ts"
+import { GameHistory } from "./GameHistory.ts"
 import * as Ingest from "./Ingest.ts"
+import { LiveGames } from "./LiveGames.ts"
+import { type LiveFeed, LiveFeedDemand, type Polling, Provider, ProviderError } from "./provider/Provider.ts"
+import * as SnapshotDecode from "./provider/snapshot/SnapshotDecode.ts"
+import * as SnapshotProvider from "./provider/snapshot/SnapshotProvider.ts"
+import { polled, pushed } from "./TestFeed.ts"
+import { withEnv } from "./TestHubConfig.ts"
+import { counted, recordingLogs, recordingSpans, withMetrics } from "./TestTelemetry.ts"
 
 describe("Ingest", () => {
   it.effect("each poll appends one frame per league, then its listing reaches the fold", () =>
@@ -137,6 +137,7 @@ describe("Ingest", () => {
         Provider.of({
           push: () => Stream.never,
           polling: Schedule.spaced("1 second"),
+          reconnect: Schedule.spaced("1 second"),
           poll: () =>
             Ref.getAndUpdate(polls, (n) => n + 1).pipe(
               Effect.flatMap((call) =>
@@ -266,14 +267,15 @@ describe("Ingest", () => {
         Effect.provide(
           ingesting(
             scripted([[scoring(0)]], {
-              push: (_leagues, _wanted, resync) =>
+              push: (demand) =>
                 Stream.fromQueue(feed).pipe(
                   Stream.filterMap((offered) =>
                     Schema.is(ProviderError)(offered) ? Result.failVoid : Result.succeed(offered)
                   ),
                   Stream.merge(
-                    resync.pipe(
-                      Stream.mapEffect((channel) => Ref.update(resynced, (all) => [...all, channel])),
+                    demand.pipe(
+                      Stream.filter(LiveFeedDemand.$is("Resync")),
+                      Stream.mapEffect(({ channel }) => Ref.update(resynced, (all) => [...all, channel])),
                       Stream.drain
                     )
                   )
@@ -305,9 +307,10 @@ describe("Ingest", () => {
         Effect.provide(
           ingesting(
             scripted([[scheduled]], {
-              push: (_leagues, current) =>
-                current.pipe(
-                  Stream.mapEffect((games) =>
+              push: (demand) =>
+                demand.pipe(
+                  Stream.filter(LiveFeedDemand.$is("Games")),
+                  Stream.mapEffect(({ games }) =>
                     Ref.update(wanted, (all) => [...all, games.map((wantedGame) => wantedGame.id)])
                   ),
                   Stream.drain,
@@ -321,35 +324,38 @@ describe("Ingest", () => {
   )
 
   it.effect(
-    "a closed feed is subscribed again after about 1 s, then about 2 s, while the poll carries on",
-    () =>
-      Effect.gen(function* () {
+    "a failing push is subscribed again on the provider's reconnect, and once that is done the feed ends logged",
+    () => {
+      const { logs, layer } = recordingLogs()
+      return Effect.gen(function* () {
         const feed = yield* Queue.unbounded<Offered>()
         const subscriptions = yield* Ref.make(0)
         const polls = yield* Ref.make(0)
         const provider = polled(() => Ref.update(polls, (n) => n + 1).pipe(Effect.as([scoring(0)])), {
-          push: feeding(feed, subscriptions)
+          push: feeding(feed, subscriptions),
+          reconnect: Schedule.recurs(1)
         })
         const closed = new ProviderError({ reason: "Closed", cause: "socket closed" })
+        const stopped = () =>
+          logs.filter((log) => log.level === "Error" && log.message.includes("the live feed stopped"))
         yield* Effect.gen(function* () {
           yield* TestClock.adjust(0)
           assert.strictEqual(yield* Ref.get(subscriptions), 1)
-          // Jitter scales each delay by 0.8 to 1.2: the first is within 0.8 s to 1.2 s, the second 1.6 s to 2.4 s.
           yield* Queue.offer(feed, closed)
-          yield* TestClock.adjust("700 millis")
-          assert.strictEqual(yield* Ref.get(subscriptions), 1)
-          yield* TestClock.adjust("600 millis")
+          yield* TestClock.adjust(0)
           assert.strictEqual(yield* Ref.get(subscriptions), 2)
+          assert.lengthOf(stopped(), 0)
+
           yield* Queue.offer(feed, closed)
-          yield* TestClock.adjust("1500 millis")
-          assert.strictEqual(yield* Ref.get(subscriptions), 2)
-          yield* TestClock.adjust("1 second")
-          assert.strictEqual(yield* Ref.get(subscriptions), 3)
           yield* TestClock.adjust("20 seconds")
-          assert.isAtLeast(yield* Ref.get(polls), 3)
+          assert.strictEqual(yield* Ref.get(subscriptions), 2)
+          assert.lengthOf(stopped(), 1)
+          assert.include(String(stopped()[0]?.cause), "socket closed")
           assert.strictEqual(yield* counted("sportal_live_feed_errors", { reason: "Closed" }), 2)
+          assert.isAtLeast(yield* Ref.get(polls), 3)
         }).pipe(Effect.provide(ingesting(provider)))
-      }).pipe(withMetrics)
+      }).pipe(Effect.provide(layer), withMetrics)
+    }
   )
 
   it.effect("a push that fails with Silent is counted by reason and subscribed again", () =>
@@ -517,8 +523,8 @@ function stopsAndPollsOn(frames: Stream.Stream<FeedFrame>, why: string) {
 /**
  * The snapshot feed answering each poll with the next scripted response, and the last one after that, inside a
  * `provider.poll` span. A `"fail"` response fails the poll, and an empty script fails every poll. Its push is `push`,
- * which, unlike the snapshot feed's, reads the games Ingest wants and the channels it resyncs; it never pushes unless
- * given one. It is polled every 10 seconds unless `polling` says otherwise.
+ * which, unlike the snapshot feed's, reads the live games' demand; it never pushes unless given one. It is polled
+ * every 10 seconds unless `polling` says otherwise.
  */
 function scripted(
   responses: ReadonlyArray<ReadonlyArray<GameSnapshot> | "fail">,

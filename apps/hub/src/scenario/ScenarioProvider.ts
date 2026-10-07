@@ -142,7 +142,9 @@ function playedRecorded(scenario: RecordedScenario, start: DateTime.Utc) {
     polling: pollingAt(
       polls.map((frame) => Duration.toMillis(offsetOf(frame))),
       start
-    )
+    ),
+    // Its push never fails.
+    reconnect: Schedule.spaced("1 second")
   })
 }
 

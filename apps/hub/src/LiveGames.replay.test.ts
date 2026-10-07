@@ -339,24 +339,6 @@ describe("following the feed log", () => {
     )
   )
 
-  it.effect("a live frame's resync is published; a replayed one's is not", () =>
-    Effect.gen(function* () {
-      const liveGames = yield* LiveGames
-      const resynced = yield* liveGames.resyncs.pipe(
-        Stream.take(1),
-        Stream.runCollect,
-        Effect.forkScoped({ startImmediately: true })
-      )
-      const frame = yield* (yield* FeedLog).append(yield* pushed({ _tag: "Resync" }, "live-topic"))
-      yield* liveGames.through(frame.seq)
-      assert.deepStrictEqual(yield* Fiber.join(resynced), ["live-topic"])
-    }).pipe(
-      Effect.provide(
-        Layer.unwrap(Effect.map(pushed({ _tag: "Resync" }, "replayed-topic"), (frame) => liveGames([frame])))
-      )
-    )
-  )
-
   it.effect("a decode that dies during the catch-up fails the build", () =>
     Effect.gen(function* () {
       const built = yield* Layer.build(

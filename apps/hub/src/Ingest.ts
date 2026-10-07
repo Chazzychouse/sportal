@@ -1,25 +1,13 @@
-import {
-  Array as Arr,
-  DateTime,
-  Duration,
-  Effect,
-  Equivalence,
-  Layer,
-  Metric,
-  Option,
-  Result,
-  Schedule,
-  Stream
-} from "effect"
-import { FeedLog } from "../FeedLog.ts"
-import { HubConfig } from "../HubConfig.ts"
-import { loggedUnlessStopping } from "../HubStopping.ts"
-import { LiveGames } from "../LiveGames.ts"
-import { Provider } from "../provider/Provider.ts"
+import { Array as Arr, Effect, Layer, Metric, Option, Result, Stream } from "effect"
+import { FeedLog } from "./FeedLog.ts"
+import { HubConfig } from "./HubConfig.ts"
+import { loggedUnlessStopping } from "./HubStopping.ts"
+import { LiveGames } from "./LiveGames.ts"
+import { Provider } from "./provider/Provider.ts"
 
 /**
- * Polls each league on the provider's polling Schedule and runs its push, appending every frame to the feed log; the
- * live games fold what it appends.
+ * Polls each league on the provider's polling Schedule and runs its push on the live games' demand, subscribed to again
+ * on its reconnect Schedule, appending every frame to the feed log; the live games fold what it appends.
  */
 export const layer = Layer.effectDiscard(
   Effect.gen(function* () {
@@ -59,34 +47,16 @@ export const layer = Layer.effectDiscard(
     })
     yield* Effect.forkScoped(Effect.repeat(polled, provider.polling))
 
-    // The current games' snapshots, again on each change to which games they are. Each subscriber gets the
-    // current ones first, so a reconnecting push subscribes to them all again.
-    const wanted = liveGames.changes.pipe(
-      Stream.mapEffect((folded) =>
-        Effect.map(DateTime.now, (now) =>
-          [...folded.live.values()]
-            .filter((liveGame) => liveGame.isCurrent(now))
-            .map((liveGame) => liveGame.snapshot)
-        )
-      ),
-      Stream.changesWith((self, that) =>
-        sameIds(
-          self.map((game) => game.id),
-          that.map((game) => game.id)
-        )
-      )
-    )
-
     yield* Effect.forkScoped(
-      provider.push(leagues, wanted, liveGames.resyncs).pipe(
+      provider.push(liveGames.demand).pipe(
         Stream.tapError((error) =>
           Effect.logWarning(`Ingest: the live feed failed (${error.reason}); subscribing again`, error).pipe(
             Effect.andThen(Metric.update(Metric.withAttributes(liveFeedErrors, { reason: error.reason }), 1))
           )
         ),
-        Stream.retry(reconnect),
+        Stream.retry(provider.reconnect),
         Stream.runForEach(feedLog.append),
-        // Every failure is retried, so the feed ends only by completing or by a defect, and nothing pushes again.
+        // The feed ends by completing, by a defect, or by a failure once `reconnect` is done, and nothing pushes again.
         loggedUnlessStopping(
           "Ingest: the live feed stopped; only the poll reaches the fold until the Hub restarts",
           "the feed's stream ended"
@@ -95,8 +65,6 @@ export const layer = Layer.effectDiscard(
     )
   })
 )
-
-const sameIds = Arr.makeEquivalence(Equivalence.String)
 
 const pollDuration = Metric.timer("sportal_poll_duration", {
   description: "How long one poll of every league takes"
@@ -111,9 +79,3 @@ const liveFeedErrors = Metric.counter("sportal_live_feed_errors", {
   description: "Times the live feed failed and was subscribed to again, by why it failed",
   incremental: true
 })
-
-// Backoff from 1 s, each delay jittered and capped at a minute; Stream.retry resets it once the feed delivers again.
-const reconnect = Schedule.exponential("1 second").pipe(
-  Schedule.jittered,
-  Schedule.modifyDelay(({ duration }) => Effect.succeed(Duration.min(duration, Duration.minutes(1))))
-)

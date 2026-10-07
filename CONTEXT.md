@@ -51,15 +51,16 @@ Every exported type name must be a term here, except the wire schemas in `*Paylo
 
 | Term | Meaning | Not |
 | --- | --- | --- |
-| **Provider** | An adapter that supplies **game data** (ESPN, CollegeFootballData): its poll, its push (the live feed), and its polling Schedule. | source, feed |
+| **Provider** | An adapter that supplies **game data** (ESPN, CollegeFootballData): its poll, its push (the live feed), its polling Schedule, and how its push is reconnected. | source, feed |
 | **Provider error** | A provider could not supply data: a poll of a league unreachable or refused, or a push refused, closed, or gone silent. | fetch error, live feed error |
 | **Live feed** | A provider's push: the connection carrying updates for live games between polls (ESPN FastCast). `LiveFeed` in code. | socket, stream, webhook |
-| **FastCast** | ESPN's live feed, as the ESPN provider's push: one socket following each league's scoreboard and each wanted game, with FastCast's checkpoint retry. | |
+| **Live feed demand** | What the live feed should follow: the current games whenever which games they are changes, and each channel whose document must be read again from a checkpoint; `LiveFeedDemand` in code. | wanted, subscriptions |
+| **FastCast** | ESPN's live feed, as the ESPN provider's push: one socket following each league's scoreboard and each game its demand names, with FastCast's checkpoint retry. | |
 | **Snapshot feed** | A provider whose frames are our own deliveries, one per frame: what written scenarios play and tests drive. | |
 | **ESPN event** | One game as either ESPN feed spells it, the polled site scoreboard or a FastCast scoreboard topic, read as a GameSnapshot; `EspnEvent` in code. | payload, DTO |
 | **Topic owner** | What a live feed topic carries: one league's scoreboard, or one game's plays; `Owner` in code. | subscription |
 | **Checkpoint error** | A live feed topic's checkpoint could not be loaded or did not decode; retried on FastCast's checkpoint retry, then the game is left to polling. | |
-| **Ingesting** | The Hub's loop, in `ingest/`, that polls the provider on its polling and runs its push, appending every frame to the feed log; the live games fold what it appends. | poller, sync, fetcher |
+| **Ingesting** | The Hub's loop that polls the provider on its polling and runs its push, retried on its reconnect, appending every frame to the feed log; the live games fold what it appends. | poller, sync, fetcher |
 | **Polling** | When a provider is polled again, given the slate the last poll left and the leagues that failed: a Schedule its adapter declares. ESPN's is 10 s while a game is live, 1 min within 30 minutes of a kickoff, 15 min otherwise. | cadence, interval |
 | **Source** | A way you obtain **video** (YouTube TV). | provider, service |
 | **Source name** | A source as people know it ("YouTube TV"); how code and the UI name a source. | source id |
