@@ -17,9 +17,14 @@ export function isStopping(exit: Exit.Exit<unknown, unknown>): boolean {
  * Logs at Error that a task which should run until the Hub stops has ended, with its failure or else `ended`, unless
  * the Hub is stopping.
  */
-export function loggedUnlessStopping(message: string, ended: string) {
-  return Effect.onExitIf(
-    (exit: Exit.Exit<unknown, unknown>) => !isStopping(exit),
-    (exit) => Effect.logError(message, Exit.isFailure(exit) ? exit.cause : ended)
-  )
+export function loggedUnlessStopping(
+  message: string,
+  ended: string
+): <A, E, R>(self: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R> {
+  return (self) =>
+    Effect.onExitIf(
+      self,
+      (exit) => !isStopping(exit),
+      (exit) => Effect.logError(message, Exit.isFailure(exit) ? exit.cause : ended)
+    )
 }

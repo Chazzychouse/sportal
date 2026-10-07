@@ -8,6 +8,7 @@ import { liveSnapshot, snapshot, team } from "@sportal/domain/TestGame"
 import {
   Clock,
   DateTime,
+  Deferred,
   Duration,
   Effect,
   Exit,
@@ -38,6 +39,7 @@ import {
   ProviderUnavailable
 } from "./provider/Provider.ts"
 import { withEnv } from "./TestHubConfig.ts"
+import { appended, delivered } from "./TestLiveSlate.ts"
 import * as TestSnapshotFeed from "./TestSnapshotFeed.ts"
 import { polled, pushed } from "./TestSnapshotFeed.ts"
 import { counted, recordingLogs, recordingSpans, withMetrics } from "./TestTelemetry.ts"
@@ -499,6 +501,107 @@ describe("Ingest", () => {
   })
 })
 
+describe("Ingest.layer", () => {
+  it.effect("should ask the live feed to follow the current games", () =>
+    Effect.gen(function* () {
+      const asks = yield* Queue.unbounded<void>()
+      const heads = yield* Queue.unbounded<Option.Option<LiveFeedDemand>>()
+
+      const now = yield* DateTime.now
+      const live = liveSnapshot({ id: one })
+      const soon = snapshot({ id: two, kickoff: DateTime.add(now, { minutes: 20 }) })
+      const later = snapshot({ id: three, kickoff: DateTime.add(now, { hours: 3 }) })
+
+      const first = yield* Effect.gen(function* () {
+        yield* listing([live, soon, later])
+        yield* Queue.offer(asks, undefined)
+        return yield* Queue.take(heads)
+      }).pipe(Effect.provide(ingesting(scripted([], { push: demandHeads(asks, heads) }))))
+
+      assert.deepStrictEqual(first, Option.some(LiveFeedDemand.Games({ games: [live, soon] })))
+    })
+  )
+
+  it.effect("should ask again only when the games' ids change", () =>
+    Effect.gen(function* () {
+      const subscribed = yield* Deferred.make<void>()
+      const demanded = yield* Queue.unbounded<LiveFeedDemand>()
+      const ids = Queue.take(demanded).pipe(
+        Effect.map((demand) =>
+          LiveFeedDemand.$is("Games")(demand) ? demand.games.map((game) => game.id) : []
+        )
+      )
+
+      const { first, next } = yield* Effect.gen(function* () {
+        yield* takenSnapshot(liveSnapshot({ id: one }))
+        yield* Deferred.succeed(subscribed, undefined)
+        const first = yield* ids
+
+        yield* takenSnapshot(liveSnapshot({ id: one, clock: "8:00" }))
+        yield* takenSnapshot(liveSnapshot({ id: two }))
+        const next = yield* ids
+
+        return { first, next }
+      }).pipe(Effect.provide(ingesting(scripted([], { push: demandOnceSubscribed(subscribed, demanded) }))))
+
+      assert.deepStrictEqual(first, [one])
+      assert.deepStrictEqual(next, [one, two])
+    })
+  )
+
+  it.effect("should ask the live feed to resync a channel the decoder dropped", () =>
+    Effect.gen(function* () {
+      const subscribed = yield* Deferred.make<void>()
+      const demanded = yield* Queue.unbounded<LiveFeedDemand>()
+      yield* Deferred.succeed(subscribed, undefined)
+
+      const { current, carried, rest } = yield* Effect.gen(function* () {
+        const current = yield* Queue.take(demanded)
+        const resync = yield* pushed({ _tag: "Resync" }, "live-topic")
+
+        yield* appended(resync)
+        const carried = yield* Queue.take(demanded)
+        const rest = yield* Queue.poll(demanded)
+
+        return { current, carried, rest }
+      }).pipe(Effect.provide(ingesting(scripted([], { push: demandOnceSubscribed(subscribed, demanded) }))))
+
+      assert.deepStrictEqual(current, LiveFeedDemand.Games({ games: [] }))
+      assert.deepStrictEqual(carried, LiveFeedDemand.Resync({ channel: "live-topic" }))
+      assert.isTrue(Option.isNone(rest))
+    })
+  )
+
+  it.effect("should ask a live feed subscribed again for the current games again", () =>
+    Effect.gen(function* () {
+      const asks = yield* Queue.unbounded<void>()
+      const heads = yield* Queue.unbounded<Option.Option<LiveFeedDemand>>()
+
+      const { first, second } = yield* Effect.gen(function* () {
+        yield* takenSnapshot(liveSnapshot({ id: one }))
+        yield* Queue.offer(asks, undefined)
+        const first = yield* Queue.take(heads)
+        yield* takenSnapshot(liveSnapshot({ id: two }))
+
+        yield* Queue.offer(asks, undefined)
+        const second = yield* Queue.take(heads)
+
+        return { first, second }
+      }).pipe(Effect.provide(ingesting(scripted([], { push: demandHeads(asks, heads) }))))
+
+      assert.deepStrictEqual(first, Option.some(LiveFeedDemand.Games({ games: [liveSnapshot({ id: one })] })))
+      assert.deepStrictEqual(
+        second,
+        Option.some(LiveFeedDemand.Games({ games: [liveSnapshot({ id: one }), liveSnapshot({ id: two })] }))
+      )
+    })
+  )
+})
+
+const one = GameId.make("1")
+const two = GameId.make("2")
+const three = GameId.make("3")
+
 /** `over`, on a fresh in-memory database. */
 function ingesting(provider: Layer.Layer<Provider>, options: Parameters<typeof over>[1] = {}) {
   return over(provider, options).pipe(Layer.provide([Database.layerMemory, NodeCrypto.layer]))
@@ -694,6 +797,38 @@ function scripted(
         Provider,
         Effect.map(Provider, (provider) => Provider.of({ ...provider, push }))
       ).pipe(Layer.provide(snapshotFeed))
+}
+
+/** A push that never pushes, offering to `heads` the first thing its demand asks each time `asks` is offered to. */
+function demandHeads(asks: Queue.Queue<void>, heads: Queue.Queue<Option.Option<LiveFeedDemand>>): LiveFeed {
+  return (demand) =>
+    Stream.fromQueue(asks).pipe(
+      Stream.mapEffect(() => Stream.runHead(demand).pipe(Effect.flatMap((head) => Queue.offer(heads, head)))),
+      Stream.drain
+    )
+}
+
+/** A push that never pushes, offering to `demanded` everything its demand asks once `subscribed` is done. */
+function demandOnceSubscribed(
+  subscribed: Deferred.Deferred<void>,
+  demanded: Queue.Queue<LiveFeedDemand>
+): LiveFeed {
+  return (demand) =>
+    Stream.fromEffect(Deferred.await(subscribed)).pipe(
+      Stream.flatMap(() => demand),
+      Stream.mapEffect((asked) => Queue.offer(demanded, asked)),
+      Stream.drain
+    )
+}
+
+/** An fbs listing of `games`, received now, once the slate has taken it. */
+function listing(games: ReadonlyArray<GameSnapshot>) {
+  return delivered(Delivery.cases.Listing.make({ league: "fbs", games }))
+}
+
+/** A poll snapshot of `game`, received now, once the slate has taken it. */
+function takenSnapshot(game: GameSnapshot) {
+  return delivered(Delivery.cases.Snapshot.make({ snapshot: game, from: "poll" }))
 }
 
 /** The error that ends a push's stream as the socket closing. */

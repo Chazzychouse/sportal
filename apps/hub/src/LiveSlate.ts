@@ -1,35 +1,29 @@
 import type { GameSnapshot } from "@sportal/domain/Game"
-import type { GameEvent } from "@sportal/domain/GameEvent"
+import { type GameEvent, GameEventKind } from "@sportal/domain/GameEvent"
 import { LeagueId } from "@sportal/domain/League"
 import type { RecentPlays } from "@sportal/domain/RecentPlays"
 import { Slate, type Taken } from "@sportal/domain/Slate"
 import {
-  Array as Arr,
   Clock,
   Context,
-  Data,
   DateTime,
   Deferred,
   Duration,
   Effect,
   Equal,
-  Equivalence,
-  Exit,
   Fiber,
   Layer,
   Option,
   PubSub,
   Ref,
-  Sink,
   Stream,
   SubscriptionRef
 } from "effect"
+import { Following } from "./Following.ts"
 import { FeedLog } from "./feed-log/FeedLog.ts"
-import { isStopping } from "./HubStopping.ts"
-import { countByState, gaugeHeld, takeDuration, timerDefect, told } from "./LiveSlateTelemetry.ts"
-import type { Decoded } from "./provider/Decoder.ts"
-import { Decoder } from "./provider/Decoder.ts"
-import { LiveFeedDemand } from "./provider/Provider.ts"
+import * as HubStopping from "./HubStopping.ts"
+import * as LiveSlateTelemetry from "./LiveSlateTelemetry.ts"
+import { type Decoded, Decoder } from "./provider/Decoder.ts"
 
 /**
  * The live slate: the domain slate taking every frame in the feed log, in order, with its timer, its telemetry, and its
@@ -43,15 +37,16 @@ export class LiveSlate extends Context.Service<
     readonly changes: Stream.Stream<Slate>
     readonly events: Stream.Stream<GameEvent>
     /**
+     * Each channel a frame taken live asked to resync, as the frame was taken; a replayed frame's are not emitted. It is
+     * subscribed to once it is made a pull (`Stream.toPull`), not when first read, so a reader can subscribe to it before
+     * it reads anything else.
+     */
+    readonly resyncs: Stream.Stream<string>
+    /**
      * The slate once it has taken frame `seq`, or the latest once it has halted following the log, so a slate that takes
      * no more frames never keeps its caller waiting.
      */
     through(seq: number): Effect.Effect<Slate>
-    /**
-     * What the live feed should follow, afresh on each run: the current games first, then each change of which games
-     * they are, and each channel whose document a live frame's decode dropped.
-     */
-    readonly demand: Stream.Stream<LiveFeedDemand>
     /** The listed games and their recent plays, debounced 250 ms: what the live stream sends. */
     readonly published: Effect.Effect<Published>
     /** `published` first, then each new one. */
@@ -93,17 +88,17 @@ export class LiveSlate extends Context.Service<
         // Takes or ticks the slate and tells what it did as the following stands, all under the state's lock; publishes
         // whenever the slate or its watermarks moved, so `through` sees every frame. Uninterruptible, so an interrupted
         // caller never leaves telemetry without its state; an observation that dies leaves the state as it was.
-        const step = (frame: Option.Option<Decoded>, run: (slate: Slate) => Effect.Effect<Taken>) =>
-          SubscriptionRef.modifySomeEffect(state, ({ slate, following }) =>
+        const step = Effect.fnUntraced(function* (
+          frame: Option.Option<Decoded>,
+          run: (slate: Slate) => Effect.Effect<Taken>
+        ) {
+          return yield* SubscriptionRef.modifySomeEffect(state, ({ slate, following }) =>
             Effect.gen(function* () {
               const taken = yield* run(slate)
               const { next } = taken
-              yield* told(following, frame, taken)
+              yield* LiveSlateTelemetry.told(following, frame, slate, taken)
               if (!Following.$is("Replaying")(following)) {
                 yield* PubSub.publishAll(events, taken.events)
-                if (next.live !== slate.live) {
-                  yield* countByState(next.live)
-                }
               }
               const moved =
                 !next.publishesSameAs(slate) ||
@@ -111,15 +106,16 @@ export class LiveSlate extends Context.Service<
                 !Equal.equals(next.reached, slate.reached)
               return [taken, moved ? Option.some({ slate: next, following }) : Option.none()] as const
             })
-          ).pipe(Effect.uninterruptible)
+          )
+        }, Effect.uninterruptible)
 
-        const replay = (decoded: Decoded) =>
+        const takeReplayed = (decoded: Decoded) =>
           step(Option.some(decoded), (slate) => slate.take(decoded)).pipe(
             Effect.flatMap(({ events }) =>
               Ref.update(replayed, ({ frames, deliveries, plays }) => ({
                 frames: frames + 1,
                 deliveries: deliveries + decoded.deliveries.length,
-                plays: plays + events.filter(({ what }) => what._tag === "Played").length
+                plays: plays + events.filter(({ what }) => GameEventKind.$is("Played")(what)).length
               }))
             )
           )
@@ -131,14 +127,13 @@ export class LiveSlate extends Context.Service<
           })
           yield* step(Option.some(decoded), (slate) => slate.take(decoded))
           yield* PubSub.publishAll(resyncs, decoded.resyncs)
-        }, Effect.trackDuration(takeDuration))
+        }, LiveSlateTelemetry.timedTake)
 
         // The boundary, once: sets every held game's gauges, logs the summary, and goes live.
         const goLive = SubscriptionRef.modifySomeEffect(state, (followed) =>
           Following.$is("Replaying")(followed.following)
             ? Effect.gen(function* () {
-                yield* Effect.forEach(followed.slate.live.values(), gaugeHeld, { discard: true })
-                yield* countByState(followed.slate.live)
+                yield* LiveSlateTelemetry.wentLive(followed.slate)
                 const { frames, deliveries, plays } = yield* Ref.get(replayed)
                 const finished = yield* Clock.currentTimeMillis
                 const took = Duration.millis(finished - started)
@@ -160,64 +155,63 @@ export class LiveSlate extends Context.Service<
 
         // Subscribed before the replay is read, so a frame appended any time after it ends is in `appended`.
         const appended = yield* feedLog.subscribe
-        // One decode over the day's log and then every frame appended after its last `seq`, so each topic's document
+        // The day's log and then every frame appended after its last `seq`, read by one decode, so each topic's document
         // carries over from replay to live.
-        const follower = yield* decoder
-          .decode(
-            feedLog.replay(from).pipe(
-              Stream.tap((frame) => Ref.set(readTo, frame.seq)),
-              Stream.concat(
-                Stream.unwrap(
-                  Effect.gen(function* () {
-                    const last = yield* Ref.get(readTo)
-                    yield* Deferred.succeed(replayRead, last)
-                    yield* caughtUpIfTaken
-                    return Stream.filter(appended, (frame) => frame.seq > last)
-                  })
-                )
-              )
+        const dayThenAppended = feedLog.replay(from).pipe(
+          Stream.tap((frame) => Ref.set(readTo, frame.seq)),
+          Stream.concat(
+            Stream.unwrap(
+              Effect.gen(function* () {
+                const last = yield* Ref.get(readTo)
+                yield* Deferred.succeed(replayRead, last)
+                yield* caughtUpIfTaken
+                return Stream.filter(appended, (frame) => frame.seq > last)
+              })
             )
           )
-          .pipe(
-            Stream.runForEach((decoded) =>
-              Effect.flatMap(Ref.get(readTo), (last) =>
-                decoded.seq <= last ? replay(decoded).pipe(Effect.andThen(caughtUpIfTaken)) : take(decoded)
-              )
-            ),
-            // A decode defect, or the log's stream ending, halts the following, logged first if it was live.
-            Effect.onExitIf(
-              (exit) => !isStopping(exit),
-              (exit) =>
-                SubscriptionRef.get(state).pipe(
-                  Effect.flatMap(({ following }) =>
-                    Following.$is("Live")(following)
-                      ? Effect.logError(
-                          "LiveSlate: frames are no longer taken into the slate until the Hub restarts",
-                          Exit.isFailure(exit) ? exit.cause : "the log's stream ended"
-                        )
-                      : Effect.void
-                  ),
-                  Effect.andThen(
-                    SubscriptionRef.update(state, (followed) => ({
-                      ...followed,
-                      following: Following.Halted()
-                    }))
-                  )
-                )
-            ),
-            Effect.forkScoped
-          )
+        )
+        const follower = yield* decoder.decode(dayThenAppended).pipe(
+          Stream.runForEach((decoded) =>
+            Effect.flatMap(Ref.get(readTo), (last) =>
+              decoded.seq <= last
+                ? takeReplayed(decoded).pipe(Effect.andThen(caughtUpIfTaken))
+                : take(decoded)
+            )
+          ),
+          // A decode defect, or the log's stream ending, halts the following, logged first.
+          HubStopping.loggedUnlessStopping(
+            "LiveSlate: frames are no longer taken into the slate until the Hub restarts",
+            "the log's stream ended"
+          ),
+          Effect.onExitIf(
+            (exit) => !HubStopping.isStopping(exit),
+            () =>
+              SubscriptionRef.update(state, (followed) => ({ ...followed, following: Following.Halted() }))
+          ),
+          Effect.forkScoped
+        )
 
         // A decode that dies during the replay fails the build, rather than leaving it waiting.
-        yield* Effect.raceFirst(
-          Deferred.await(caughtUp),
-          Fiber.join(follower).pipe(Effect.andThen(Effect.never))
-        ).pipe(
-          Effect.flatMap(({ frames, deliveries }) =>
-            Effect.annotateCurrentSpan({ "sportal.frames": frames, "sportal.deliveries": deliveries })
-          ),
-          Effect.withSpan("LiveSlate.replay")
-        )
+        const replay = Effect.fn("LiveSlate.replay")(function* () {
+          const { frames, deliveries } = yield* Effect.raceFirst(
+            Deferred.await(caughtUp),
+            Fiber.join(follower).pipe(Effect.andThen(Effect.never))
+          )
+          yield* Effect.annotateCurrentSpan({ "sportal.frames": frames, "sportal.deliveries": deliveries })
+        })
+        yield* replay()
+
+        const through = (seq: number) =>
+          SubscriptionRef.changes(state).pipe(
+            Stream.filter(
+              ({ slate, following }) =>
+                Following.$is("Halted")(following) || Option.exists(slate.seq, (at) => at >= seq)
+            ),
+            Stream.runHead,
+            Effect.flatMap(
+              Option.match({ onNone: () => latest, onSome: ({ slate }) => Effect.succeed(slate) })
+            )
+          )
 
         // The timer, from the end of the replay, so nothing ticks a replayed game between two recorded frames: on each
         // change, sleeps until the earliest game is due, then ticks to the clock's now. A tick that changes nothing (a
@@ -225,17 +219,17 @@ export class LiveSlate extends Context.Service<
         // and the timer tries again after a moment.
         const wake = Effect.gen(function* () {
           const { slate } = yield* SubscriptionRef.get(state)
-          yield* Option.match(slate.earliestDue(), {
-            onNone: () => Effect.never,
-            onSome: (due) =>
-              sleepUntil(due).pipe(
-                Effect.andThen(DateTime.now),
-                Effect.flatMap((now) => step(Option.none(), (held) => held.tick(now)))
-              )
-          })
+          const due = slate.earliestDue()
+          if (Option.isNone(due)) {
+            return yield* Effect.never
+          }
+          const sleeping = yield* DateTime.now
+          yield* Effect.sleep(Duration.max(DateTime.distance(sleeping, due.value), Duration.zero))
+          const woke = yield* DateTime.now
+          yield* step(Option.none(), (held) => held.tick(woke))
         }).pipe(
           Effect.catchDefect((defect) =>
-            timerDefect(defect).pipe(Effect.andThen(Effect.sleep(timerBackoff)))
+            LiveSlateTelemetry.timerDefect(defect).pipe(Effect.andThen(Effect.sleep(timerBackoff)))
           ),
           Effect.forever
         )
@@ -251,25 +245,6 @@ export class LiveSlate extends Context.Service<
           Stream.map(({ slate }) => slate),
           Stream.changesWith((a, b) => a.publishesSameAs(b))
         )
-
-        // The current games, again on each change of which games they are.
-        const currentGames = changes.pipe(
-          Stream.mapEffect((slate) =>
-            Effect.map(DateTime.now, (now) =>
-              [...slate.live.values()]
-                .filter((liveGame) => liveGame.isCurrent(now))
-                .map((liveGame) => liveGame.snapshot)
-            )
-          ),
-          Stream.changesWith((self, that) =>
-            sameIds(
-              self.map((game) => game.id),
-              that.map((game) => game.id)
-            )
-          ),
-          Stream.map((games) => LiveFeedDemand.Games({ games }))
-        )
-
         const publication = yield* SubscriptionRef.make<Published>({ games: [], recentPlays: {} })
         yield* Effect.forkScoped(
           changes.pipe(
@@ -285,38 +260,11 @@ export class LiveSlate extends Context.Service<
         return LiveSlate.of({
           latest,
           changes,
-          published: SubscriptionRef.get(publication),
-          publishedChanges: SubscriptionRef.changes(publication),
           events: Stream.fromPubSub(events),
-          through: (seq) =>
-            SubscriptionRef.changes(state).pipe(
-              Stream.filter(
-                ({ slate, following }) =>
-                  Following.$is("Halted")(following) || Option.exists(slate.seq, (at) => at >= seq)
-              ),
-              Stream.runHead,
-              Effect.flatMap(
-                Option.match({ onNone: () => latest, onSome: ({ slate }) => Effect.succeed(slate) })
-              )
-            ),
-          // Subscribed to the resyncs before the first games are peeled off, so the games come first and every resync
-          // after them is in the demand.
-          demand: Stream.unwrap(
-            Effect.gen(function* () {
-              const subscription = yield* PubSub.subscribe(resyncs)
-              const [first, rest] = yield* Stream.peel(currentGames, Sink.head())
-              return Stream.fromIterable(Option.toArray(first)).pipe(
-                Stream.concat(
-                  Stream.merge(
-                    rest,
-                    Stream.fromSubscription(subscription).pipe(
-                      Stream.map((channel) => LiveFeedDemand.Resync({ channel }))
-                    )
-                  )
-                )
-              )
-            })
-          )
+          resyncs: subscribedOnPull(resyncs),
+          through,
+          published: SubscriptionRef.get(publication),
+          publishedChanges: SubscriptionRef.changes(publication)
         })
       })
     )
@@ -325,20 +273,13 @@ export class LiveSlate extends Context.Service<
 /** What the slate publishes to the live stream: the listed games and their recent plays. */
 export type Published = { readonly games: ReadonlyArray<GameSnapshot>; readonly recentPlays: RecentPlays }
 
-/**
- * Where the slate is in following the feed log: catching up on the day before the Hub serves, live, or halted by a
- * decode defect, when no new frame is taken but the timer still runs and is told.
- */
-export type Following = Data.TaggedEnum<{ Replaying: object; Live: object; Halted: object }>
-export const Following = Data.taggedEnum<Following>()
-
-function sleepUntil(at: DateTime.Utc): Effect.Effect<void> {
-  return DateTime.now.pipe(
-    Effect.flatMap((now) => Effect.sleep(Duration.max(DateTime.distance(now, at), Duration.zero)))
+/** What is published to `pubsub` from the moment the stream is made a pull, rather than from its first read. */
+function subscribedOnPull<A>(pubsub: PubSub.PubSub<A>): Stream.Stream<A> {
+  const subscribed = Effect.flatMap(PubSub.subscribe(pubsub), (subscription) =>
+    Stream.toPull(Stream.fromSubscription(subscription))
   )
+  return Stream.scoped(Stream.fromPull(subscribed))
 }
 
 // How long the timer waits after a defect before it tries again.
 const timerBackoff = Duration.seconds(1)
-
-const sameIds = Arr.makeEquivalence(Equivalence.String)

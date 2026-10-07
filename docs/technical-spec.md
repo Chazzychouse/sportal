@@ -90,7 +90,7 @@ flowchart LR
   feedlog -- frames in seq order --> decode
   prov --> decode
   decode -- deliveries --> slate
-  slate -- live games for the polling Schedule, and the live feed's demand --> ingest
+  slate -- live games for the polling Schedule, and the changes and resyncs of the live feed's demand --> ingest
   slate -- listed games, recent plays --> api
   feedlog -- build --> corpus
   corpus -- days --> slate
@@ -216,12 +216,12 @@ sportal/
     │       ├── HubConfig.ts        Every environment setting, in one place
     │       ├── Telemetry.ts        Log level and format; OTLP export when configured
     │       ├── Database.ts         The SQLite plumbing the feed log needs: a file or memory client layer, and migrations per store
-    │       ├── LiveSlate.ts        The domain slate, run over the feed log: the day's replay, then each appended frame; its `Following`, timer, telemetry, game events, the live feed's demand, and the listed games it publishes with their recent plays
-    │       ├── LiveSlateTelemetry.ts  What a take or tick did, as logs and metrics, told as the following stands
-    │       ├── DecodeTelemetry.ts  What decode observed, as logs and metrics, for frames after the replay (moved here from `ingest/`)
+    │       ├── LiveSlate.ts        The domain slate, run over the feed log: the day's replay, then each appended frame; following the log, its timer, game events, the resyncs live frames ask for, and the listed games it publishes with their recent plays
+    │       ├── Following.ts        Where the live slate is in following the feed log: `Replaying`, `Live`, or `Halted`
+    │       ├── LiveSlateTelemetry.ts  The slate's telemetry moments: what a take or tick told (decode and slate observations, events, state counts) as the following stands, going live, a timer defect, and a take's duration
     │       ├── corpus/             Typed game days built from the feed log or the archive, run through the slate on virtual time: `CorpusDay`, `CorpusInput`, `CorpusBuild`, `CorpusRun`, `Archive`, `Synthesis`, the `corpus` CLI and its worker
     │       ├── LiveStage.ts        The one authoritative Stage, held in memory
-    │       ├── Ingest.ts           Polls HubConfig's leagues, runs the push on the slate's demand, appends every frame to the feed log, and waits on `through`
+    │       ├── Ingest.ts           Polls HubConfig's leagues, runs the push on the live feed's demand (the slate's current games and resyncs), appends every frame to the feed log, and waits on `through`
     │       ├── HubStopping.ts      Whether a task that should run until the Hub stops ended because it is stopping, and the Error log unless it did
     │       ├── feed-log/
     │       │   ├── FeedLog.ts      The append-only log of every frame, in feed.sqlite: the port, its layers, and replay
@@ -389,7 +389,7 @@ class LiveSlate extends Context.Service<LiveSlate, {
   readonly latest: Effect<Slate>
   readonly changes: Stream<Slate>                    // seq or reached alone is not a change
   readonly events: Stream<GameEvent>
-  readonly demand: Stream<LiveFeedDemand>            // what the live feed should follow: the current games, and each channel to resync
+  readonly resyncs: Stream<string>                   // each channel a frame taken live asked to resync; subscribed once made a pull
   readonly published: Effect<Published>              // the listed games and their recent plays, debounced 250 ms
   readonly publishedChanges: Stream<Published>
   through(seq: number): Effect<Slate>                // the slate once it has taken frame `seq`, or the latest once Halted
@@ -406,8 +406,8 @@ class LiveSlate extends Context.Service<LiveSlate, {
   each frame as it is appended, and its timer starts. Its `Following` is `Replaying`, `Live`, or `Halted` (a decode
   defect after the replay: no new frame is taken, but the slate keeps serving and its timer still runs and is told).
 - `published` is each listed game as the slate has it, with each game's last ten plays (`recentPlays`, on `SlateChanged`),
-  within 250 ms of a change; Ingest reads the slate for its polling, and `demand` names the games the live feed should
-  follow.
+  within 250 ms of a change; Ingest reads the slate for its polling, and builds the live feed's demand from its `changes`
+  (the current games, again whenever which games they are changes) and its `resyncs`.
 - `HubMode` provides it in both modes. A scenario is the provider through the real Ingest, on the scenario clock: polled
   at each of its frames' times and at least every 10 seconds, its recorded live feed pushed at its recorded offsets, and
   every frame appended to a feed log of its own, in memory unless `SPORTAL_SCENARIO_FEED_LOG` names a file.

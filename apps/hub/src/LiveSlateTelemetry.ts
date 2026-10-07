@@ -1,59 +1,39 @@
 import { type GameId, GameSnapshot } from "@sportal/domain/Game"
-import type { GameEvent, GameEventKind } from "@sportal/domain/GameEvent"
+import { type GameEvent, GameEventKind } from "@sportal/domain/GameEvent"
 import type { LiveGame, LiveGameState } from "@sportal/domain/LiveGame"
-import type { Taken } from "@sportal/domain/Slate"
+import type { Slate, Taken } from "@sportal/domain/Slate"
 import { SlateObservation } from "@sportal/domain/SlateObservation"
-import { Cause, DateTime, Duration, Effect, Exit, Match, Metric, Option, Schema } from "effect"
-import { observed } from "./DecodeTelemetry.ts"
-import type { Following } from "./LiveSlate.ts"
-import type { Decoded } from "./provider/Decoder.ts"
+import { Cause, DateTime, Duration, Effect, Exit, Metric, Option, Record as Rec, Schema } from "effect"
+import { Following } from "./Following.ts"
+import { type Decoded, DecodeObservation } from "./provider/Decoder.ts"
 
 /**
  * What one take or tick of the slate did, told as its following stands. During the replay, only a defect is logged:
- * every decode observation and slate observation was told when its frame first arrived. Otherwise each decode
- * observation of the frame taken is told, then each slate observation and each game event is logged and counted. `frame` is the frame taken; a tick has
- * none.
+ * every decode observation, slate observation and event was told when its frame first arrived. Otherwise each decode
+ * observation of the frame taken is told, then each slate observation and each game event is logged and counted, and
+ * the live games are counted by state when the take changed which games are live. `frame` is the frame taken; a tick
+ * has none. `before` is the slate the take started from.
  */
-export function told(following: Following, frame: Option.Option<Decoded>, taken: Taken): Effect.Effect<void> {
-  const { observations, events } = taken
+export function told(
+  following: Following,
+  frame: Option.Option<Decoded>,
+  before: Slate,
+  taken: Taken
+): Effect.Effect<void> {
   const seq = Option.map(frame, ({ seq }) => seq)
-  const loudly = () =>
-    Option.match(frame, {
-      onNone: () => Effect.void,
-      onSome: (decoded) =>
-        Effect.forEach(decoded.observations, (observation) => observed(observation, decoded.seq), {
-          discard: true
-        })
-    }).pipe(
-      Effect.andThen(
-        Effect.forEach(observations, (observation) => toldLive(observation, seq), { discard: true })
-      ),
-      Effect.andThen(Effect.forEach(events, (event) => toldEvent(event, observations), { discard: true }))
-    )
-  return Match.valueTags(following, {
+  const loudly = () => toldLive(frame, before, taken)
+  return Following.$match(following, {
     Replaying: () =>
-      Effect.forEach(observations, (observation) => toldInReplay(observation, seq), { discard: true }),
+      Effect.forEach(taken.observations, (observation) => toldInReplay(observation, seq), { discard: true }),
     Live: loudly,
     Halted: loudly
   })
 }
 
-/** A held game's state gauge. */
-export function gaugeHeld(liveGame: LiveGame): Effect.Effect<void> {
-  return gaugeState(liveGame, stateValues[liveGame.state._tag])
-}
-
-/** Gauges how many live games are in each state; a state with none reads 0. */
-export function countByState(games: ReadonlyMap<GameId, LiveGame>): Effect.Effect<void> {
-  const states = [...games.values()].map(({ state }) => state._tag)
-  return Effect.forEach(
-    everyState,
-    (state) =>
-      Metric.update(
-        Metric.withAttributes(liveGamesByState, { state }),
-        states.filter((other) => other === state).length
-      ),
-    { discard: true }
+/** The boundary out of the replay: every held game's state gauge, and the live games counted by state. */
+export function wentLive(slate: Slate): Effect.Effect<void> {
+  return Effect.forEach(slate.live.values(), (liveGame) => gaugeState(liveGame), { discard: true }).pipe(
+    Effect.andThen(gaugeByState(slate.live))
   )
 }
 
@@ -61,6 +41,30 @@ export function countByState(games: ReadonlyMap<GameId, LiveGame>): Effect.Effec
 export function timerDefect(defect: unknown): Effect.Effect<void> {
   return Effect.logError("LiveSlate: the timer raised a defect", Cause.die(defect)).pipe(
     Effect.andThen(Metric.update(gameDefects, 1))
+  )
+}
+
+/** `take`, its duration recorded as how long the slate took to apply one frame. */
+export function timedTake<A, E, R>(take: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> {
+  return Effect.trackDuration(take, frameTakeDuration)
+}
+
+/** A take or tick told live: the frame's decode observations, then each slate observation, each event, and the counts. */
+function toldLive(frame: Option.Option<Decoded>, before: Slate, taken: Taken): Effect.Effect<void> {
+  const { next, observations, events } = taken
+  const seq = Option.map(frame, ({ seq }) => seq)
+  return Option.match(frame, {
+    onNone: () => Effect.void,
+    onSome: (decoded) =>
+      Effect.forEach(decoded.observations, (observation) => observed(observation, decoded.seq), {
+        discard: true
+      })
+  }).pipe(
+    Effect.andThen(
+      Effect.forEach(observations, (observation) => toldObservation(observation, seq), { discard: true })
+    ),
+    Effect.andThen(Effect.forEach(events, (event) => toldEvent(event, observations), { discard: true })),
+    Effect.andThen(next.live !== before.live ? gaugeByState(next.live) : Effect.void)
   )
 }
 
@@ -76,8 +80,48 @@ function toldInReplay(observation: SlateObservation, seq: Option.Option<number>)
     : Effect.void
 }
 
+/** What decode observed in frame `seq`, as logs and metrics. */
+function observed(observation: DecodeObservation, seq: number): Effect.Effect<void> {
+  return DecodeObservation.$match(observation, {
+    Received: ({ league, op, topic, mid }) =>
+      Effect.logDebug(
+        `Decode: received ${op}${Option.match(mid, { onNone: () => "", onSome: (n) => ` ${n}` })}`
+      ).pipe(
+        Effect.annotateLogs(Rec.getSomes({ league, topic, op: Option.some<string | number>(op), mid })),
+        Effect.andThen(
+          Metric.update(Metric.withAttributes(messages, Rec.getSomes({ league, op: Option.some(op) })), 1)
+        )
+      ),
+    OpUnknown: ({ body }) => Effect.logDebug("Decode: skipped a message of an unknown op", body),
+    Pushed: ({ league, games }) => Metric.update(Metric.withAttributes(gamesPushed, { league }), games),
+    Unlisted: ({ league }) => Metric.update(Metric.withAttributes(unlisted, { league }), 1),
+    Reset: ({ league, topic, reason, detail }) =>
+      Effect.logWarning(`Decode: ${detail}; ${topic} waits for its next checkpoint`).pipe(
+        Effect.annotateLogs({ league, topic, reason }),
+        Effect.andThen(Metric.update(Metric.withAttributes(resets, { league, reason }), 1))
+      ),
+    FrameUndecoded: ({ feed, channel, kind, cause }) =>
+      Effect.logError("Decode: skipped a frame that does not decode", cause).pipe(
+        Effect.annotateLogs({ feed, channel, kind }),
+        Effect.andThen(Metric.update(Metric.withAttributes(framesUndecoded, { feed }), 1))
+      ),
+    EventUndecoded: ({ league, feed, cause }) =>
+      Effect.logWarning("Decode: skipped an event that does not decode", cause).pipe(
+        Effect.annotateLogs({ league, feed }),
+        Effect.andThen(Metric.update(Metric.withAttributes(eventsUndecoded, { league, feed }), 1))
+      ),
+    PlayUndecoded: ({ league, game, play, cause }) =>
+      Effect.logWarning(`Decode: skipped play ${play}, which does not decode`, cause).pipe(
+        Effect.annotateLogs({ league, game }),
+        Effect.andThen(Metric.update(Metric.withAttributes(playsUndecoded, { league }), 1))
+      ),
+    PlayTypeUnknown: ({ id, text }) =>
+      Effect.logInfo(`Decode: play type ${id} (${text}) is not in the table; read as other`)
+  }).pipe(Effect.annotateLogs({ seq }))
+}
+
 /** An observation's logs and metrics, as a live slate tells them. */
-function toldLive(observation: SlateObservation, seq: Option.Option<number>): Effect.Effect<void> {
+function toldObservation(observation: SlateObservation, seq: Option.Option<number>): Effect.Effect<void> {
   return SlateObservation.$match(observation, {
     Took: ({ snapshot, from, outcome, had }) =>
       // A hold and a fallback are rare, and each says the push fell behind the scoreboard.
@@ -89,7 +133,7 @@ function toldLive(observation: SlateObservation, seq: Option.Option<number>): Ef
       ).pipe(
         Effect.andThen(
           Metric.update(
-            Metric.withAttributes(snapshots, { outcome, source: from, ...annotationsOf(snapshot) }),
+            Metric.withAttributes(snapshotsTaken, { outcome, source: from, ...annotationsOf(snapshot) }),
             1
           )
         ),
@@ -102,11 +146,11 @@ function toldLive(observation: SlateObservation, seq: Option.Option<number>): Ef
       ),
     Started: ({ liveGame, at }) =>
       logLifecycle("started", liveGame, at).pipe(
-        Effect.andThen(gaugeHeld(liveGame)),
+        Effect.andThen(gaugeState(liveGame)),
         Effect.annotateLogs(annotationsOf(liveGame.snapshot))
       ),
     Changed: ({ before, after, at }) =>
-      gaugeHeld(after).pipe(
+      gaugeState(after).pipe(
         Effect.andThen(logTransition(before, after, at)),
         Effect.annotateLogs(annotationsOf(after.snapshot))
       ),
@@ -146,8 +190,8 @@ function toldEvent(event: GameEvent, observations: ReadonlyArray<SlateObservatio
     onSome: ({ snapshot }) =>
       logEvent(event.what, snapshot).pipe(
         Effect.andThen(
-          event.what._tag === "Played"
-            ? Metric.update(Metric.withAttributes(plays, { league: snapshot.league }), 1)
+          GameEventKind.$is("Played")(event.what)
+            ? Metric.update(Metric.withAttributes(playsCounted, { league: snapshot.league }), 1)
             : Effect.void
         ),
         Effect.annotateLogs(annotationsOf(snapshot))
@@ -175,8 +219,23 @@ function logLifecycle(
   )
 }
 
-function gaugeState(liveGame: LiveGame, value: number): Effect.Effect<void> {
-  return Metric.update(Metric.withAttributes(gameState, annotationsOf(liveGame.snapshot)), value)
+/** A game's state gauge: its state's value while the slate holds it, unless `value` says otherwise. */
+function gaugeState(liveGame: LiveGame, value = stateValues[liveGame.state._tag]): Effect.Effect<void> {
+  return Metric.update(Metric.withAttributes(gameStateGauge, annotationsOf(liveGame.snapshot)), value)
+}
+
+/** Gauges how many live games are in each state; a state with none reads 0. */
+function gaugeByState(games: ReadonlyMap<GameId, LiveGame>): Effect.Effect<void> {
+  const states = [...games.values()].map(({ state }) => state._tag)
+  return Effect.forEach(
+    everyState,
+    (state) =>
+      Metric.update(
+        Metric.withAttributes(liveGamesByState, { state }),
+        states.filter((other) => other === state).length
+      ),
+    { discard: true }
+  )
 }
 
 function logTransition(before: LiveGame, after: LiveGame, now: DateTime.Utc): Effect.Effect<void> {
@@ -191,7 +250,7 @@ function logTransition(before: LiveGame, after: LiveGame, now: DateTime.Utc): Ef
   return Effect.logInfo(
     `LiveSlate: ${after.snapshot.matchup()}: ${from} → ${to} at ${after.snapshot.statusLine()}${since}`
   ).pipe(
-    Effect.andThen(Metric.update(Metric.withAttributes(transitions, { from, to }), 1)),
+    Effect.andThen(Metric.update(Metric.withAttributes(transitionsCounted, { from, to }), 1)),
     Effect.andThen(
       Option.match(silent, {
         onNone: () => Effect.void,
@@ -210,7 +269,7 @@ function logEvent(event: GameEventKind, snapshot: GameSnapshot): Effect.Effect<v
   const team = "team" in event ? ` ${snapshot.abbreviationOf(event.team)}` : ""
   return Effect.logInfo(`LiveSlate: ${snapshot.matchup()}: ${_tag}${team} at ${snapshot.statusLine()}`).pipe(
     Effect.andThen(
-      Metric.update(Metric.withAttributes(gameEvents, { ...annotationsOf(snapshot), event: _tag }), 1)
+      Metric.update(Metric.withAttributes(gameEventsCounted, { ...annotationsOf(snapshot), event: _tag }), 1)
     ),
     Effect.annotateLogs({ ...fields, event: _tag })
   )
@@ -249,7 +308,7 @@ const stateValues = { Upcoming: 1, Live: 2, Stale: 3, Over: 4, Holding: 5 } sati
 // Every state, so a state with no games reads 0.
 const everyState = Object.keys(stateValues)
 
-const snapshots = Metric.counter("sportal_snapshots", {
+const snapshotsTaken = Metric.counter("sportal_snapshots", {
   description:
     "Snapshots the slate took, ignored as behind its live game, or held by a covered game, and held ones that fell back",
   incremental: true
@@ -260,7 +319,10 @@ const pollFallbacks = Metric.counter("sportal_poll_fallbacks", {
   incremental: true
 })
 
-const plays = Metric.counter("sportal_plays", { description: "New plays, by league", incremental: true })
+const playsCounted = Metric.counter("sportal_plays", {
+  description: "New plays, by league",
+  incremental: true
+})
 
 const deliveriesDropped = Metric.counter("sportal_deliveries_dropped", {
   description: "Plays the slate dropped, since no live game held their game",
@@ -276,12 +338,12 @@ const gameDefects = Metric.counter("sportal_game_defects", {
   incremental: true
 })
 
-const gameState = Metric.gauge("sportal_game_state", {
+const gameStateGauge = Metric.gauge("sportal_game_state", {
   description:
     "A game's state, by game: 1 Upcoming, 2 Live, 3 Stale, 4 Over, 5 Holding, 0 once the slate lets it go"
 })
 
-const transitions = Metric.counter("sportal_transitions", {
+const transitionsCounted = Metric.counter("sportal_transitions", {
   description: "Changes of a live game's state, by the state before and after",
   incremental: true
 })
@@ -291,11 +353,47 @@ const staleDuration = Metric.timer("sportal_stale_duration", {
   boundaries: [90, 120, 180, 300, 600, 900, 1800, 3600].map((seconds) => seconds * 1000)
 })
 
-const gameEvents = Metric.counter("sportal_game_events", {
+const gameEventsCounted = Metric.counter("sportal_game_events", {
   description: "Events in a game, by game and event",
   incremental: true
 })
 
-export const takeDuration = Metric.timer("sportal_take_duration", {
+const frameTakeDuration = Metric.timer("sportal_take_duration", {
   description: "How long the slate takes to apply one frame"
+})
+
+const messages = Metric.counter("sportal_live_feed_messages", {
+  description: "Live feed messages received, by league and op",
+  incremental: true
+})
+
+const gamesPushed = Metric.counter("sportal_live_feed_games", {
+  description: "Game snapshots the live feed delivered, by league",
+  incremental: true
+})
+
+const unlisted = Metric.counter("sportal_live_feed_unlisted", {
+  description: "Pushed games no poll has listed yet, so not sent",
+  incremental: true
+})
+
+const resets = Metric.counter("sportal_live_feed_document_resets", {
+  description:
+    "Times a live feed topic's document missed a message or could not apply one, by league and reason",
+  incremental: true
+})
+
+const framesUndecoded = Metric.counter("sportal_frames_undecoded", {
+  description: "Frames that did not decode and were skipped, by feed",
+  incremental: true
+})
+
+const eventsUndecoded = Metric.counter("sportal_events_undecoded", {
+  description: "Events, polled or pushed, that did not decode and were skipped, by league and feed",
+  incremental: true
+})
+
+const playsUndecoded = Metric.counter("sportal_live_feed_undecoded_plays", {
+  description: "Plays that did not decode and were left out of their game's list, each once, by league",
+  incremental: true
 })

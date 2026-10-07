@@ -7,7 +7,7 @@ import { GameId, GameSnapshot } from "@sportal/domain/Game"
 import type { GameEvent } from "@sportal/domain/GameEvent"
 import { LiveGame, LiveGameState } from "@sportal/domain/LiveGame"
 import { PlayId } from "@sportal/domain/Play"
-import { Slate } from "@sportal/domain/Slate"
+import type { Slate } from "@sportal/domain/Slate"
 import { liveSnapshot, play, snapshot, team } from "@sportal/domain/TestGame"
 import {
   Clock,
@@ -23,7 +23,6 @@ import {
   Logger,
   Metric,
   Option,
-  Queue,
   Ref,
   Stream,
   type Tracer
@@ -32,12 +31,10 @@ import { TestClock } from "effect/testing"
 import * as Database from "./Database.ts"
 import { FeedFrame } from "./Frame.ts"
 import { FeedLog } from "./feed-log/FeedLog.ts"
-import { Following, LiveSlate } from "./LiveSlate.ts"
-import { told } from "./LiveSlateTelemetry.ts"
+import { LiveSlate } from "./LiveSlate.ts"
 import { Decoded, Decoder } from "./provider/Decoder.ts"
 import * as EspnDecode from "./provider/espn/EspnDecode.ts"
 import { fixtures, recordedNeAtBuf, recordedPlays } from "./provider/espn/TestEspn.ts"
-import { LiveFeedDemand } from "./provider/Provider.ts"
 import { withEnv } from "./TestHubConfig.ts"
 import {
   appended,
@@ -273,73 +270,45 @@ describe("LiveSlate#through", () => {
   )
 })
 
-describe("LiveSlate#demand", () => {
-  it.effect("should start with the current games", () =>
+describe("LiveSlate#resyncs", () => {
+  it.effect("should emit each resync a live frame asks for", () =>
     Effect.gen(function* () {
       const slate = yield* LiveSlate
-      const now = yield* DateTime.now
-      const live = liveSnapshot({ id: one })
-      const soon = snapshot({ id: two, kickoff: DateTime.add(now, { minutes: 20 }) })
-      const later = snapshot({ id: three, kickoff: DateTime.add(now, { hours: 3 }) })
-      yield* listing("fbs", [live, soon, later])
-
-      const first = yield* Stream.runHead(slate.demand)
-
-      assert.deepStrictEqual(first, Option.some(LiveFeedDemand.Games({ games: [live, soon] })))
-    }).pipe(Effect.provide(slateFollowing()))
-  )
-
-  it.effect("should follow a change of which games are current, not a change of their snapshots", () =>
-    Effect.gen(function* () {
-      yield* takenSnapshot(liveSnapshot({ id: one }))
-      const demanded = yield* demandOf()
-      const ids = Queue.take(demanded).pipe(
-        Effect.map((demand) =>
-          LiveFeedDemand.$is("Games")(demand) ? demand.games.map((game) => game.id) : []
-        )
+      const resyncs = yield* slate.resyncs.pipe(
+        Stream.take(2),
+        Stream.runCollect,
+        Effect.forkScoped({ startImmediately: true })
       )
-      const first = yield* ids
+      const first = yield* pushed({ _tag: "Resync" }, "first-topic")
+      const second = yield* pushed({ _tag: "Resync" }, "second-topic")
 
-      yield* takenSnapshot(liveSnapshot({ id: one, clock: "8:00" }))
-      yield* takenSnapshot(liveSnapshot({ id: two }))
-      const next = yield* ids
+      yield* appended(first)
+      yield* appended(second)
+      const channels = yield* Fiber.join(resyncs)
 
-      assert.deepStrictEqual(first, [one])
-      assert.deepStrictEqual(next, [one, two])
+      assert.deepStrictEqual(channels, ["first-topic", "second-topic"])
     }).pipe(Effect.provide(slateFollowing()))
   )
 
-  it.effect("should carry a live frame's resync, after the current games", () =>
-    Effect.gen(function* () {
-      const demanded = yield* demandOf()
-      const current = yield* Queue.take(demanded)
-      const resync = yield* pushed({ _tag: "Resync" }, "live-topic")
-
-      yield* appended(resync)
-      const carried = yield* Queue.take(demanded)
-      const rest = yield* Queue.poll(demanded)
-
-      assert.deepStrictEqual(current, LiveFeedDemand.Games({ games: [] }))
-      assert.deepStrictEqual(carried, LiveFeedDemand.Resync({ channel: "live-topic" }))
-      assert.isTrue(Option.isNone(rest))
-    }).pipe(Effect.provide(slateFollowing()))
-  )
-
-  it.effect("should start a second subscription with the current games again", () =>
+  it.effect("should emit no resync during replay", () =>
     Effect.gen(function* () {
       const slate = yield* LiveSlate
-      yield* takenSnapshot(liveSnapshot({ id: one }))
-      const first = yield* Stream.runHead(slate.demand)
-      yield* takenSnapshot(liveSnapshot({ id: two }))
-
-      const second = yield* Stream.runHead(slate.demand)
-
-      assert.deepStrictEqual(first, Option.some(LiveFeedDemand.Games({ games: [liveSnapshot({ id: one })] })))
-      assert.deepStrictEqual(
-        second,
-        Option.some(LiveFeedDemand.Games({ games: [liveSnapshot({ id: one }), liveSnapshot({ id: two })] }))
+      const resyncs = yield* slate.resyncs.pipe(
+        Stream.take(1),
+        Stream.runCollect,
+        Effect.forkScoped({ startImmediately: true })
       )
-    }).pipe(Effect.provide(slateFollowing()))
+      const live = yield* pushed({ _tag: "Resync" }, "live-topic")
+
+      yield* appended(live)
+      const channels = yield* Fiber.join(resyncs)
+
+      assert.deepStrictEqual(channels, ["live-topic"])
+    }).pipe(
+      Effect.provide(
+        slateFollowingFramesFrom(Effect.map(pushed({ _tag: "Resync" }, "replayed-topic"), (frame) => [frame]))
+      )
+    )
   )
 })
 
@@ -663,67 +632,6 @@ describe("LiveSlate's telemetry", () => {
         [1, 120_000]
       )
     }).pipe(Effect.provide(slateFollowing()), withMetrics)
-  )
-
-  it.effect(
-    "should log and count an event of a game started and stopped within one take with that step's snapshot",
-    () => {
-      const { logs, layer } = recordingLogs("Debug")
-      return Effect.gen(function* () {
-        const at = yield* DateTime.now
-        const final = snapshot({ id: one, status: "final", period: 4, clock: "0:00" })
-        const taken = yield* Slate.empty.take({
-          deliveries: [
-            Delivery.cases.Snapshot.make({ snapshot: liveSnapshot({ id: one }), from: "push" }),
-            Delivery.cases.Snapshot.make({ snapshot: final, from: "push" })
-          ],
-          at,
-          seq: 1
-        })
-        const said = taken.events.map(({ what }) => what._tag)
-
-        yield* told(Following.Live(), Option.none(), taken)
-        const went = logs.filter(({ message }) => message.includes("WentFinal"))
-        const wentFinal = yield* counted("sportal_game_events", { game: "1", event: "WentFinal" })
-
-        assert.isFalse(taken.next.live.has(one))
-        assert.deepStrictEqual(said, ["PeriodEnded", "WentFinal"])
-        assert.strictEqual(went.length, 1)
-        assert.strictEqual(went[0]?.level, "Info")
-        assert.include(went[0]?.message, "at final")
-        assert.strictEqual(wentFinal, 1)
-      }).pipe(Effect.provide(layer), withMetrics)
-    }
-  )
-
-  it.effect(
-    "should annotate an event of a game changed and stopped within one take with that step's snapshot",
-    () => {
-      const { logs, layer } = recordingLogs("Debug")
-      return Effect.gen(function* () {
-        const at = yield* DateTime.now
-        const first = yield* Slate.empty.take({
-          deliveries: [Delivery.cases.Snapshot.make({ snapshot: liveSnapshot({ id: one }), from: "push" })],
-          at,
-          seq: 1
-        })
-        const final = snapshot({ id: one, status: "final", period: 4, clock: "0:00" })
-        const taken = yield* first.next.take({
-          deliveries: [Delivery.cases.Snapshot.make({ snapshot: final, from: "push" })],
-          at: DateTime.add(at, { seconds: 1 }),
-          seq: 2
-        })
-
-        yield* told(Following.Live(), Option.none(), taken)
-        const went = logs.filter(({ message }) => message.includes("WentFinal"))
-        const wentFinal = yield* counted("sportal_game_events", { game: "1", event: "WentFinal" })
-
-        assert.isFalse(taken.next.live.has(one))
-        assert.strictEqual(went.length, 1)
-        assert.include(went[0]?.message, "at final")
-        assert.strictEqual(wentFinal, 1)
-      }).pipe(Effect.provide(layer), withMetrics)
-    }
   )
 
   it.effect("should log a game event at Info with the game's annotations, count it, and publish it", () => {
@@ -1666,19 +1574,6 @@ const dyingFrame = Effect.map(
   pushed({ _tag: "Resync" }, "x"),
   (frame) => new FeedFrame({ ...frame, body: "die" })
 )
-
-/** The slate's demand, run in a fiber of its own, each element offered as it comes. */
-function demandOf() {
-  return Effect.gen(function* () {
-    const slate = yield* LiveSlate
-    const demanded = yield* Queue.unbounded<LiveFeedDemand>()
-    yield* slate.demand.pipe(
-      Stream.runForEach((demand) => Queue.offer(demanded, demand)),
-      Effect.forkScoped
-    )
-    return demanded
-  })
-}
 
 /** Game one taken live, then taken again at 9:00 a minute later. */
 const refreshedAfterAMinute = Effect.gen(function* () {

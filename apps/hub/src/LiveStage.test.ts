@@ -305,8 +305,8 @@ function slateOf(published: Effect.Effect<Published>) {
     latest: Effect.succeed(Slate.empty),
     changes: Stream.empty,
     events: Stream.empty,
+    resyncs: Stream.empty,
     through: () => Effect.succeed(Slate.empty),
-    demand: Stream.empty,
     published,
     publishedChanges: Stream.empty
   })
