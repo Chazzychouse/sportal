@@ -15,9 +15,12 @@ import { fixtures } from "../provider/espn/TestEspn.ts"
 import { listedBy } from "../provider/TestProvider.ts"
 import { GuideReader } from "./GuideReader.ts"
 import { Source } from "./Source.ts"
-import { readRecordedGuide } from "./youtube-tv/TestYouTubeTv.ts"
+import { readRecordedGuide, recordedAt } from "./youtube-tv/TestYouTubeTv.ts"
 
 const youTubeTv = Source.layerYouTubeTv.pipe(Layer.provideMerge(GuideReader.layerYouTubeTv))
+const youTubeTvAndTwitch = Source.layerAll([Source.layerYouTubeTv, Source.layerTwitch]).pipe(
+  Layer.provideMerge(GuideReader.layerYouTubeTv)
+)
 
 const espn = Network.make("ESPN")
 const onEspn = snapshot({ broadcasts: [broadcast(espn)] })
@@ -30,6 +33,20 @@ describe("Source.layerYouTubeTv", () => {
       const availabilityOf = yield* source.availability
 
       assert.deepStrictEqual(availabilityOf(onEspn), ChannelAvailability.NoGuide({ source: "YouTube TV" }))
+    }).pipe(Effect.provide(youTubeTv))
+  )
+
+  it.effect("should answer streaming only for a Prime Video game the guide does not list", () =>
+    Effect.gen(function* () {
+      yield* readRecordedGuide
+      const source = yield* Source
+
+      const availabilityOf = yield* source.availability
+
+      assert.deepStrictEqual(
+        availabilityOf(primeVideoSoonAfterRecording),
+        ChannelAvailability.NotCarried({ why: "StreamingOnly" })
+      )
     }).pipe(Effect.provide(youTubeTv))
   )
 })
@@ -152,13 +169,11 @@ function recordedScoreboard(name: "fbs-scoreboard-2026-10-03T2024Z" | "nfl-score
 }
 
 const thursdayKickoff = DateTime.makeUnsafe("2026-10-09T00:15:00Z")
-const thursdayNight = snapshot({
-  league: "nfl",
-  kickoff: thursdayKickoff,
-  away: { team: team("NYJ", "nfl", { name: "New York Jets", shortName: "Jets" }), score: 0 },
-  home: { team: team("DEN", "nfl", { name: "Denver Broncos", shortName: "Broncos" }), score: 0 },
-  broadcasts: [broadcast("Prime Video", "streaming")]
-})
+const thursdayNight = primeVideoGame(thursdayKickoff)
+// A Prime Video game whose teams the recorded guide does not list, kicking off 20 minutes after it was read.
+const primeVideoSoonAfterRecording = primeVideoGame(
+  DateTime.add(DateTime.makeUnsafe(recordedAt), { minutes: 20 })
+)
 const onPrimeVideo = ChannelAvailability.Carried({
   channel: {
     name: "Prime Video",
@@ -275,24 +290,26 @@ describe("Source.layerAll", () => {
     })
   )
 
-  it.effect(
-    "should carry Thursday's Prime Video game on Twitch while YouTube TV's guide has it nowhere",
-    () =>
-      Effect.gen(function* () {
-        yield* readRecordedGuide
-        yield* TestClock.setTime(DateTime.toEpochMillis(DateTime.subtract(thursdayKickoff, { minutes: 10 })))
-        const source = yield* Source
+  it.effect("should carry Thursday's Prime Video game on Twitch while YouTube TV has no guide", () =>
+    Effect.gen(function* () {
+      yield* TestClock.setTime(DateTime.toEpochMillis(DateTime.subtract(thursdayKickoff, { minutes: 10 })))
+      const source = yield* Source
 
-        const availabilityOf = yield* source.availability
+      const availabilityOf = yield* source.availability
 
-        assert.deepStrictEqual(availabilityOf(thursdayNight), onPrimeVideo)
-      }).pipe(
-        Effect.provide(
-          Source.layerAll([Source.layerYouTubeTv, Source.layerTwitch]).pipe(
-            Layer.provideMerge(GuideReader.layerYouTubeTv)
-          )
-        )
-      )
+      assert.deepStrictEqual(availabilityOf(thursdayNight), onPrimeVideo)
+    }).pipe(Effect.provide(youTubeTvAndTwitch))
+  )
+
+  it.effect("should carry a Prime Video game on Twitch over YouTube TV's streaming only", () =>
+    Effect.gen(function* () {
+      yield* readRecordedGuide
+      const source = yield* Source
+
+      const availabilityOf = yield* source.availability
+
+      assert.deepStrictEqual(availabilityOf(primeVideoSoonAfterRecording), onPrimeVideo)
+    }).pipe(Effect.provide(youTubeTvAndTwitch))
   )
 })
 
@@ -305,4 +322,15 @@ function answerOf(answers: ReadonlyArray<ChannelAvailability>) {
     const availabilityOf = yield* source.availability
     return availabilityOf(thursdayNight)
   }).pipe(Effect.provide(all))
+}
+
+/** An NFL game, Jets at Broncos, streaming only on Prime Video, kicking off at `kickoff`. */
+function primeVideoGame(kickoff: DateTime.Utc) {
+  return snapshot({
+    league: "nfl",
+    kickoff,
+    away: { team: team("NYJ", "nfl", { name: "New York Jets", shortName: "Jets" }), score: 0 },
+    home: { team: team("DEN", "nfl", { name: "Denver Broncos", shortName: "Broncos" }), score: 0 },
+    broadcasts: [broadcast("Prime Video", "streaming")]
+  })
 }
