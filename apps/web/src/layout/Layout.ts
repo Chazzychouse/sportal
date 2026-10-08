@@ -29,26 +29,7 @@ export class Layout extends Schema.Class<Layout>("sportal/web/Layout")({ name: L
   }
 
   slots(): ReadonlyArray<{ x: number; y: number; width: number; height: number }> {
-    const { x, y } = this.split
-    switch (this.name) {
-      case "Single":
-        return [rect(0, 0, 1, 1)]
-      case "Pair":
-        return [rect(0, 0, x, 1), rect(x, 0, 1, 1)]
-      case "Quad":
-        return [rect(0, 0, x, y), rect(x, 0, 1, y), rect(0, y, x, 1), rect(x, y, 1, 1)]
-      case "MainThree":
-        return [rect(0, 0, x, 1), rect(x, 0, 1, 1 / 3), rect(x, 1 / 3, 1, 2 / 3), rect(x, 2 / 3, 1, 1)]
-      case "MainFive":
-        return [
-          rect(0, 0, x, y),
-          rect(x, 0, 1, y / 2),
-          rect(x, y / 2, 1, y),
-          rect(0, y, x / 2, 1),
-          rect(x / 2, y, x, 1),
-          rect(x, y, 1, 1)
-        ]
-    }
+    return slotsOf[this.name](this.split)
   }
 }
 
@@ -60,6 +41,27 @@ const dividers = {
   MainThree: ["x"],
   MainFive: ["x", "y"]
 } as const satisfies Record<LayoutName, ReadonlyArray<"x" | "y">>
+
+/** Each layout's slots at a split, main slot first. */
+const slotsOf: Record<LayoutName, (split: Split) => ReadonlyArray<ReturnType<typeof rect>>> = {
+  Single: () => [rect(0, 0, 1, 1)],
+  Pair: ({ x }) => [rect(0, 0, x, 1), rect(x, 0, 1, 1)],
+  Quad: ({ x, y }) => [rect(0, 0, x, y), rect(x, 0, 1, y), rect(0, y, x, 1), rect(x, y, 1, 1)],
+  MainThree: ({ x }) => [
+    rect(0, 0, x, 1),
+    rect(x, 0, 1, 1 / 3),
+    rect(x, 1 / 3, 1, 2 / 3),
+    rect(x, 2 / 3, 1, 1)
+  ],
+  MainFive: ({ x, y }) => [
+    rect(0, 0, x, y),
+    rect(x, 0, 1, y / 2),
+    rect(x, y / 2, 1, y),
+    rect(0, y, x / 2, 1),
+    rect(x / 2, y, x, 1),
+    rect(x, y, 1, 1)
+  ]
+}
 
 function within(at: number): number {
   return Math.min(Stage.splitBounds.max, Math.max(Stage.splitBounds.min, at))
