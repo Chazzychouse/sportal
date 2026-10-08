@@ -1,8 +1,11 @@
 import { assert, describe, it } from "@effect/vitest"
+import type { GameSnapshot } from "@sportal/domain/Game"
 import { snapshot } from "@sportal/domain/TestGame"
-import { localTime, statusText } from "./GameStatus.tsx"
+import { createElement } from "react"
+import { renderToStaticMarkup } from "react-dom/server"
+import { GameStatus, localTime } from "./GameStatus.tsx"
 
-describe("statusText", () => {
+describe("GameStatus", () => {
   it.each([
     [{ status: "live", period: 2, clock: "7:31" }, "Q2 7:31"],
     [{ status: "live", period: 5, clock: "10:00" }, "OT 10:00"],
@@ -17,7 +20,7 @@ describe("statusText", () => {
   ] as const)("should read %j as %s", (overrides, text) => {
     const game = snapshot(overrides)
 
-    const status = statusText(game)
+    const status = shownStatus(game)
 
     assert.strictEqual(status, text)
   })
@@ -25,8 +28,13 @@ describe("statusText", () => {
   it("should read a scheduled game as its local kickoff time", () => {
     const game = snapshot({ status: "scheduled" })
 
-    const status = statusText(game)
+    const status = shownStatus(game)
 
     assert.strictEqual(status, localTime(game.kickoff))
   })
 })
+
+/** The text `GameStatus` shows for `game`. */
+function shownStatus(game: GameSnapshot): string {
+  return renderToStaticMarkup(createElement(GameStatus, { game })).replace(/<[^>]*>/g, "")
+}

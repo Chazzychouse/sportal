@@ -11,7 +11,7 @@ export function withTiles(games: ReadonlyArray<string | undefined>) {
           game: GameId.make(game),
           channel: {
             name: game,
-            source: "Scenario" as const,
+            source: "YouTube TV" as const,
             locator: { _tag: "WebView" as const, url: `https://example.test/${game}` }
           }
         }

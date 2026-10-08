@@ -18,7 +18,7 @@ export function GameStatus(props: { game: GameSnapshot; className?: string }) {
 }
 
 /** A game's status as a slate row or a tile shows it: the period and clock, the kickoff, or the status in a word. */
-export function statusText(game: GameSnapshot): string {
+function statusText(game: GameSnapshot): string {
   return statusTexts[game.status](game)
 }
 
