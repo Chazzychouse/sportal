@@ -7,14 +7,16 @@ import {
   Effect,
   FileSystem,
   Layer,
+  Match,
   Option,
   Path,
+  Predicate,
   Result,
   Schedule,
   Schema,
   Stream
 } from "effect"
-import { HttpClient, HttpClientError } from "effect/http"
+import { HttpClient, type HttpClientError } from "effect/http"
 import * as Gzip from "../../Gzip.ts"
 import { HubConfig } from "../../HubConfig.ts"
 import { ArchiveFetchFailed, Archiver, GameArchive } from "../Archiver.ts"
@@ -75,7 +77,7 @@ const gamesOf = Effect.fn("EspnArchive.games")(function* (
   const failed =
     (game?: GameId) =>
     (reason: ArchiveFetchFailed["reason"], cause: unknown): ArchiveFetchFailed =>
-      new ArchiveFetchFailed({ league, date, ...(game === undefined ? {} : { game }), reason, cause })
+      new ArchiveFetchFailed({ league, date, game, reason, cause })
   const missing = (url: string, file: string, game?: GameId) =>
     how === "fetch"
       ? download(url, file, failed(game))
@@ -205,7 +207,7 @@ const download = Effect.fn("EspnArchive.fetch")(function* (
     Effect.tapError((cause) => {
       const { reason } = cause
       return refusal === undefined ||
-        !(reason instanceof HttpClientError.StatusCodeError) ||
+        !Predicate.isTagged(reason, "StatusCodeError") ||
         !gone.includes(reason.response.status)
         ? Effect.void
         : DateTime.now.pipe(
@@ -257,14 +259,13 @@ const retry = Schedule.max([Schedule.exponential("1 second"), Schedule.recurs(4)
 )
 
 function reasonOf(cause: HttpClientError.HttpClientError): ArchiveFetchFailed["reason"] {
-  const { reason } = cause
-  return reason instanceof HttpClientError.StatusCodeError
-    ? reason.response.status >= 500 || reason.response.status === 429
-      ? "Unreachable"
-      : "Refused"
-    : reason instanceof HttpClientError.DecodeError || reason instanceof HttpClientError.EmptyBodyError
-      ? "Unreadable"
-      : "Unreachable"
+  return Match.value(cause.reason).pipe(
+    Match.tag("StatusCodeError", ({ response }) =>
+      response.status >= 500 || response.status === 429 ? "Unreachable" : "Refused"
+    ),
+    Match.tag("DecodeError", "EmptyBodyError", () => "Unreadable" as const),
+    Match.orElse(() => "Unreachable" as const)
+  )
 }
 
 // The statuses that say a summary is gone for good, and is archived as refused.
