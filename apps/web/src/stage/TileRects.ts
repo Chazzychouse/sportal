@@ -1,6 +1,6 @@
 import type { TilePlacement } from "@sportal/api/ShellBridge"
 import type { GameId } from "@sportal/domain/Game"
-import type { Stage } from "@sportal/domain/Stage"
+import { type Stage, Tile } from "@sportal/domain/Stage"
 import { Option } from "effect"
 import { Layout } from "../layout/Layout.ts"
 
@@ -46,7 +46,7 @@ export function placements(
 ): Array<TilePlacement> {
   return stage.onStage().flatMap((tile, index) => {
     const rect = rects[index]
-    if (rect === undefined || rect.width === 0 || tile._tag !== "StreamTile") return []
+    if (rect === undefined || rect.width === 0 || !Tile.guards.StreamTile(tile)) return []
     const view = {
       url: tile.channel.locator.url.startsWith("/")
         ? new URL(tile.channel.locator.url, page).href
