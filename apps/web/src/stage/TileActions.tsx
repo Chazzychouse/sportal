@@ -1,4 +1,4 @@
-import type { Stage, StageCommand } from "@sportal/domain/Stage"
+import { type Stage, type StageCommand, Tile } from "@sportal/domain/Stage"
 import { ArrowUpLeft, Shrink, SquareDashed, Volume2, VolumeX, X } from "lucide-react"
 import type { ReactNode } from "react"
 
@@ -22,7 +22,7 @@ export function tileActions(
   key: string | undefined
 }> {
   const tile = stage.onStage()[slot]
-  if (tile === undefined || tile._tag === "Empty") return []
+  if (tile === undefined || Tile.guards.Empty(tile)) return []
   const hearing = stage.hears(tile.game)
   return [
     {
