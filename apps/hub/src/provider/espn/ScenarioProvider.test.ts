@@ -24,10 +24,12 @@ import { FeedLog } from "../../feed-log/FeedLog.ts"
 import * as Gzip from "../../Gzip.ts"
 import { HubConfig } from "../../HubConfig.ts"
 import * as Ingest from "../../Ingest.ts"
-import { LiveSlate } from "../../LiveSlate.ts"
 import * as ScenarioClock from "../../scenario/ScenarioClock.ts"
 import { Scenarios, type ScenarioUnknown, type ScenarioUnreadable } from "../../scenario/Scenarios.ts"
+import { Board } from "../../slate/Board.ts"
+import { BoardTelemetry } from "../../slate/BoardTelemetry.ts"
 import { Delivery } from "../../slate/Delivery.ts"
+import { liveEvents } from "../../TestBoard.ts"
 import * as TestSnapshotFeed from "../../TestSnapshotFeed.ts"
 import { pushed } from "../../TestSnapshotFeed.ts"
 import { Provider } from "../Provider.ts"
@@ -60,14 +62,21 @@ describe("ScenarioProvider", () => {
 
   it.effect("should bring a change to the slate at its scenario time, through the feed log", () =>
     Effect.gen(function* () {
-      const _slate = yield* LiveSlate
+      const board = yield* Board
+      const taken = yield* Ref.make(0)
+      yield* board.taken.pipe(
+        Stream.runForEach(() => Ref.update(taken, (count) => count + 1)),
+        Effect.forkScoped({ startImmediately: true })
+      )
       yield* TestClock.adjust(0)
       yield* TestClock.adjust("119 seconds")
 
       yield* TestClock.adjust("1 second")
 
       const inRedZone = yield* tieInRedZone
+      const takes = yield* Ref.get(taken)
       assert.isTrue(inRedZone)
+      assert.isAbove(takes, 0, "the board took the scenario's frames from the feed log")
     }).pipe(Effect.provide(playing("two-minute-drill-tie")))
   )
 
@@ -414,6 +423,7 @@ describe("ScenarioProvider", () => {
 
       const events = yield* Ref.get(restarted.events)
       assert.strictEqual(events, 0)
+      assert.isAbove(restarted.replayed.listed.size, 0, "the frames were replayed")
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer))
   )
 })
@@ -446,17 +456,17 @@ function playing(name: string, options: Options = {}) {
 }
 
 /**
- * The slate following a feed log in memory or on the file `scenarioFeedLog` names in the data directory, which is
+ * The board following a feed log in memory or on the file `scenarioFeedLog` names in the data directory, which is
  * provided too.
  */
 function following(options: Options) {
-  return LiveSlate.layer.pipe(
+  return Board.layer.pipe(
     Layer.provideMerge(
       options.scenarioFeedLog === undefined
         ? FeedLog.layer.pipe(Layer.provide([Database.layerMemory, NodeCrypto.layer]))
         : FeedLog.layer.pipe(Layer.provide(Database.layerFile(options.scenarioFeedLog)), Layer.orDie)
     ),
-    Layer.provide(DateTime.layerCurrentZoneLocal),
+    Layer.provide([BoardTelemetry.layer, DateTime.layerCurrentZoneLocal]),
     Layer.provide([NodeServices.layer, NodeCrypto.layer])
   )
 }
@@ -478,7 +488,7 @@ const committed = fileURLToPath(new URL("../../../../../fixtures/scenarios/", im
 /** League `league`'s last listing in the slate. */
 function listed(league: LeagueId) {
   return Effect.map(
-    LiveSlate.use((slate) => slate.latest),
+    Board.use((board) => board.latest),
     (held) => held.listed.get(league) ?? []
   )
 }
@@ -614,7 +624,7 @@ function playingPushTiedByPoll() {
 
 /** The slate's games, leagues in order. */
 const slateGames = Effect.map(
-  LiveSlate.use((slate) => slate.latest),
+  Board.use((board) => board.latest),
   (held) => held.listedGames(LeagueId.literals)
 )
 
@@ -651,18 +661,20 @@ const playedForThreeMinutes = Effect.gen(function* () {
 })
 
 /**
- * The slate following the scenario's feed log `onFile` again, its events counted from the start, with Ingest playing
- * two-minute-drill-tie onto it: the Hub restarted, for as long as the scope lives.
+ * The board following the scenario's feed log `onFile` again, what it replayed, and its events counted from the start,
+ * with Ingest playing two-minute-drill-tie onto it: the Hub restarted, for as long as the scope lives.
  */
 function restartedOn(onFile: Options) {
   return Effect.gen(function* () {
     const context = yield* Layer.build(
       following(onFile).pipe(Layer.provide(scenario("two-minute-drill-tie", onFile)))
     )
-    const slate = Context.get(context, LiveSlate)
+    const board = Context.get(context, Board)
+    const replayed = yield* board.latest
     const events = yield* Ref.make(0)
 
-    yield* slate.events.pipe(
+    yield* liveEvents.pipe(
+      Stream.provideContext(context),
       Stream.runForEach(() => Ref.update(events, (count) => count + 1)),
       Effect.forkScoped({ startImmediately: true })
     )
@@ -673,6 +685,6 @@ function restartedOn(onFile: Options) {
       )
     )
 
-    return { slate, events }
+    return { replayed, events }
   })
 }

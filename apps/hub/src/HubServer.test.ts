@@ -15,10 +15,12 @@ import { FeedLog } from "./feed-log/FeedLog.ts"
 import { HubConfig } from "./HubConfig.ts"
 import * as HubServer from "./HubServer.ts"
 import * as Ingest from "./Ingest.ts"
-import { LiveSlate } from "./LiveSlate.ts"
 import { LiveStage } from "./LiveStage.ts"
+import { Board } from "./slate/Board.ts"
+import { BoardTelemetry } from "./slate/BoardTelemetry.ts"
 import { Delivery } from "./slate/Delivery.ts"
 import * as YouTubeTv from "./source/youtube-tv/YouTubeTv.ts"
+import { takingAfter } from "./TestBoard.ts"
 import * as TestSnapshotFeed from "./TestSnapshotFeed.ts"
 
 type Interfaces = Record<
@@ -229,6 +231,33 @@ describe("GET /api/live", () => {
     }).pipe(Effect.scoped, Effect.provide(serverUnderTest()))
   )
 
+  it.effect("should send a burst of slate changes once, when it settles", () =>
+    Effect.gen(function* () {
+      const feedLog = yield* FeedLog
+      yield* firstSlateOnTestClock()
+      const lines = yield* pastInitialMessages()
+      const now = yield* DateTime.now
+      const pushes = [2, 3, 4].map((period) =>
+        TestSnapshotFeed.framed(
+          Delivery.cases.Snapshot.make({ snapshot: inPeriod(period), from: "push" }),
+          now
+        )
+      )
+
+      yield* takingAfter(pushes.length, Effect.forEach(pushes, feedLog.append))
+      yield* TestClock.adjust("250 millis")
+      const line = yield* Queue.take(lines)
+      const waiting = yield* Queue.size(lines)
+
+      const message = messageOf(line)
+      assert.deepStrictEqual(
+        LiveMessage.guards.SlateChanged(message) ? message.games.map(({ period }) => period) : message,
+        [4]
+      )
+      assert.strictEqual(waiting, 0)
+    }).pipe(Effect.scoped, Effect.provide(serverUnderTest()))
+  )
+
   it.effect("should send each listed game as its snapshot, and none of what the slate remembers", () =>
     Effect.gen(function* () {
       yield* firstSlateOnTestClock()
@@ -274,19 +303,19 @@ describe("GET /api/live", () => {
   )
 })
 
-/** Waits until the LiveSlate has published its first games. */
+/** Waits until the board has its first games to publish. */
 function firstSlate() {
   return Effect.gen(function* () {
-    const slate = yield* LiveSlate
-    yield* slate.publishedChanges.pipe(
-      Stream.filter((latest) => latest.games.length > 0),
+    const board = yield* Board
+    yield* board.changes.pipe(
+      Stream.filter((latest) => latest.published().games.length > 0),
       Stream.take(1),
       Stream.runDrain
     )
   })
 }
 
-/** `firstSlate` on the test clock, moved on through the first poll and the LiveSlate's 250 ms to settle. */
+/** `firstSlate` on the test clock, moved on through the first poll and 250 ms for it to settle. */
 function firstSlateOnTestClock() {
   return TestClock.adjust(0).pipe(
     Effect.andThen(TestClock.adjust("250 millis")),
@@ -383,6 +412,18 @@ function pastInitialMessages() {
   })
 }
 
+/** `game` live in `period`. */
+function inPeriod(period: number) {
+  return snapshot({
+    id: game.id,
+    status: "live",
+    period,
+    home: { team: team("MSST"), score: 0 },
+    away: { team: team("ALA"), score: 0 },
+    broadcasts: [broadcast(espn)]
+  })
+}
+
 /** The live message a `data: <json>` line carries. */
 function messageOf(line: string): LiveMessage {
   return Schema.decodeSync(LiveMessageJson)(line.slice("data: ".length))
@@ -407,9 +448,9 @@ function hubUnderTest() {
     Layer.provideMerge(YouTubeTv.layer),
     Layer.provideMerge(Ingest.layer),
     Layer.provideMerge(
-      LiveSlate.layer.pipe(
+      Board.layer.pipe(
         Layer.provideMerge(FeedLog.layer.pipe(Layer.provide([Database.layerMemory, NodeCrypto.layer]))),
-        Layer.provide([TestSnapshotFeed.layer, DateTime.layerCurrentZoneLocal])
+        Layer.provide([TestSnapshotFeed.layer, BoardTelemetry.layer, DateTime.layerCurrentZoneLocal])
       )
     ),
     Layer.provide(TestSnapshotFeed.layerFrom(listedEvery10Seconds)),

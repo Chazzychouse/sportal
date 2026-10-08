@@ -1,25 +1,23 @@
 import { NodeCrypto, NodeServices } from "@effect/platform-node"
 import { assert, describe, it } from "@effect/vitest"
-import { DateTime, Effect, FileSystem, Layer, Stream } from "effect"
+import { DateTime, Effect, Fiber, FileSystem, Layer, Ref, Stream } from "effect"
 import { FetchHttpClient } from "effect/http"
 import { TestClock } from "effect/testing"
 import * as Database from "./Database.ts"
 import { FeedLog } from "./feed-log/FeedLog.ts"
 import { HubConfig } from "./HubConfig.ts"
 import * as HubMode from "./HubMode.ts"
-import { LiveSlate } from "./LiveSlate.ts"
+import { Board } from "./slate/Board.ts"
 
 describe("HubMode", () => {
-  it.effect("should bring a scenario's polls, appended by Ingest, to the LiveSlate", () =>
+  it.effect("should bring a scenario's polls, appended by Ingest, to the Board", () =>
     Effect.gen(function* () {
-      const liveSlate = yield* LiveSlate
-
-      yield* TestClock.adjust(0)
-      yield* TestClock.adjust("1 second")
-      const published = yield* liveSlate.published
+      const { published } = yield* playedForASecond.pipe(
+        Effect.provide(scenarioHub("bogus-clock-two-minute"))
+      )
 
       assert.isAbove(published.games.length, 0)
-    }).pipe(Effect.provide(scenarioHub("bogus-clock-two-minute")))
+    })
   )
 
   it.effect(
@@ -29,12 +27,13 @@ describe("HubMode", () => {
         const fs = yield* FileSystem.FileSystem
         const dataDir = yield* fs.makeTempDirectoryScoped()
 
-        const { published } = yield* playedForASecond.pipe(
+        const { published, taken } = yield* playedForASecond.pipe(
           Effect.provide(scenarioHub("bogus-clock-two-minute", { SPORTAL_DATA_DIR: dataDir }))
         )
 
         const files = yield* fs.readDirectory(dataDir)
         assert.isAbove(published.games.length, 0)
+        assert.isAbove(taken, 0, "the board took the scenario's frames from the feed log")
         assert.deepStrictEqual(files, [])
       }).pipe(Effect.scoped, Effect.provide(NodeServices.layer))
   )
@@ -58,16 +57,22 @@ describe("HubMode", () => {
   )
 })
 
-/** The slate's latest and published once the scenario has played for a second of the test clock. */
+/** What the board publishes once the scenario has played for a second of the test clock, and how many takes it took. */
 const playedForASecond = Effect.gen(function* () {
-  const liveSlate = yield* LiveSlate
+  const board = yield* Board
+  const taken = yield* Ref.make(0)
+  const counting = yield* board.taken.pipe(
+    Stream.runForEach(() => Ref.update(taken, (count) => count + 1)),
+    Effect.forkChild({ startImmediately: true })
+  )
 
   yield* TestClock.adjust(0)
   yield* TestClock.adjust("1 second")
-  const published = yield* liveSlate.published
-  const latest = yield* liveSlate.latest
+  const latest = yield* board.latest
+  yield* Fiber.interrupt(counting)
+  const takes = yield* Ref.get(taken)
 
-  return { published, latest }
+  return { published: latest.published(), taken: takes }
 })
 
 /** Every frame the feed log in the file `name` in `dataDir` holds, replayed from the start. */

@@ -9,7 +9,7 @@ import * as EspnDecoder from "../provider/espn/EspnDecoder.ts"
 import { type Decoded, Provider } from "../provider/Provider.ts"
 import { decodedFrames } from "../provider/TestProvider.ts"
 import type { SlateObservation } from "../slate/SlateObservation.ts"
-import { takenOf } from "../TestLiveSlate.ts"
+import { takenOf } from "../TestBoard.ts"
 import { Scenarios } from "./Scenarios.ts"
 
 describe("Scenarios", () => {

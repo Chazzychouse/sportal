@@ -54,12 +54,12 @@ module.exports = {
     {
       name: "only-main-opens-the-database",
       comment:
-        "The composition root provides the database; stores reach it through SqlClient. The feed log opens its own file, and HubMode a scenario's; TestLiveSlate and TestCorpus keep a test's feed log in memory.",
+        "The composition root provides the database; stores reach it through SqlClient. The feed log opens its own file, and HubMode a scenario's; TestBoard and TestCorpus keep a test's feed log in memory.",
       severity: "error",
       from: {
         path: "^apps/hub/src/",
         pathNot:
-          "(^apps/hub/src/main\\.ts$|\\.test\\.ts$|^apps/hub/src/Database\\.ts$|^apps/hub/src/feed-log/FeedLog\\.ts$|^apps/hub/src/HubMode\\.ts$|^apps/hub/src/TestLiveSlate\\.ts$|^apps/hub/src/corpus/TestCorpus\\.ts$)"
+          "(^apps/hub/src/main\\.ts$|\\.test\\.ts$|^apps/hub/src/Database\\.ts$|^apps/hub/src/feed-log/FeedLog\\.ts$|^apps/hub/src/HubMode\\.ts$|^apps/hub/src/TestBoard\\.ts$|^apps/hub/src/corpus/TestCorpus\\.ts$)"
       },
       to: { path: "^apps/hub/src/Database\\.ts$" }
     },
@@ -81,17 +81,17 @@ module.exports = {
     },
     {
       name: "test-decoder-is-for-tests",
-      comment: "What a decode reads in a test's frames is imported only by test files and TestLiveSlate.",
+      comment: "What a decode reads in a test's frames is imported only by test files and TestBoard.",
       severity: "error",
-      from: { pathNot: "(\\.test\\.ts$|^apps/hub/src/TestLiveSlate\\.ts$)" },
+      from: { pathNot: "(\\.test\\.ts$|^apps/hub/src/TestBoard\\.ts$)" },
       to: { path: "^apps/hub/src/provider/TestDecoder\\.ts$" }
     },
     {
-      name: "test-live-slate-is-for-tests",
-      comment: "The live slate following a feed log in memory is imported only by test files.",
+      name: "test-board-is-for-tests",
+      comment: "The board following a feed log in memory is imported only by test files.",
       severity: "error",
       from: { pathNot: "\\.test\\.ts$" },
-      to: { path: "^apps/hub/src/TestLiveSlate\\.ts$" }
+      to: { path: "^apps/hub/src/TestBoard\\.ts$" }
     },
     {
       name: "test-espn-archiver-is-for-tests",
@@ -110,10 +110,10 @@ module.exports = {
     {
       name: "test-snapshot-feed-is-for-tests",
       comment:
-        "The snapshot feed, a provider of our own deliveries, is imported only by test files, TestDecoder and TestLiveSlate.",
+        "The snapshot feed, a provider of our own deliveries, is imported only by test files, TestDecoder and TestBoard.",
       severity: "error",
       from: {
-        pathNot: "(\\.test\\.ts$|^apps/hub/src/provider/TestDecoder\\.ts$|^apps/hub/src/TestLiveSlate\\.ts$)"
+        pathNot: "(\\.test\\.ts$|^apps/hub/src/provider/TestDecoder\\.ts$|^apps/hub/src/TestBoard\\.ts$)"
       },
       to: { path: "^apps/hub/src/TestSnapshotFeed\\.ts$" }
     },

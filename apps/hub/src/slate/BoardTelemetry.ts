@@ -1,37 +1,99 @@
 import { GameSnapshot } from "@sportal/domain/Game"
 import { type GameEvent, GameEventKind } from "@sportal/domain/GameEvent"
-import { Cause, DateTime, Duration, Effect, Exit, Metric, Option, Record as Rec, Schema } from "effect"
-import { Following } from "./Following.ts"
-import { type Decoded, DecodeObservation } from "./provider/Provider.ts"
-import type { Acknowledgement } from "./slate/Acknowledgement.ts"
-import type { Slate, Taken } from "./slate/Slate.ts"
-import { SlateObservation } from "./slate/SlateObservation.ts"
+import {
+  Cause,
+  Clock,
+  Context,
+  DateTime,
+  Duration,
+  Effect,
+  Exit,
+  Layer,
+  Metric,
+  Option,
+  Record as Rec,
+  Schema
+} from "effect"
+import { type Decoded, DecodeObservation } from "../provider/Provider.ts"
+import type { Acknowledgement } from "./Acknowledgement.ts"
+import type { Slate, Taken } from "./Slate.ts"
+import { SlateObservation } from "./SlateObservation.ts"
 
-/**
- * What one take or tick of the slate did, told as its following stands. During the replay, only a defect is logged:
- * every decode observation, slate observation and event was told when its frame first arrived. Otherwise each decode
- * observation of the frame taken is told, then each slate observation and each game event is logged and counted, and
- * the current games are counted by state when the take changed a game or its state. `frame` is the frame taken; a tick
- * has none. `before` is the slate the take started from.
- */
-export const told = Effect.fnUntraced(function* (
-  following: Following,
+/** The board's telemetry: every log and metric of what the board took, told by the board as it takes it. */
+export class BoardTelemetry extends Context.Service<
+  BoardTelemetry,
+  {
+    /**
+     * What one take or tick did, told as its item says: quiet in replay, loud after. `before` is the slate it started
+     * from. In replay only a defect is logged: every decode observation, slate observation and event was told when its
+     * frame first arrived. Otherwise each decode observation of `frame` is told, then each slate observation and each
+     * game event is logged and counted, and the current games are counted by state when the take changed a game or its
+     * state. A tick has no `frame`.
+     */
+    told(
+      item: { readonly taken: Taken; readonly replayed: boolean },
+      frame: Option.Option<Decoded>,
+      before: Slate
+    ): Effect.Effect<void>
+    /** The boundary out of the replay: the state gauges, and the summary log with today's text. */
+    wentLive(
+      slate: Slate,
+      replayed: { readonly frames: number; readonly deliveries: number; readonly plays: number }
+    ): Effect.Effect<void>
+    /** A defect in the board's timer, logged and counted. */
+    timerDefect(defect: unknown): Effect.Effect<void>
+    /** `take`, its duration recorded as how long the slate took to apply one frame. */
+    timedTake<A, E, R>(take: Effect.Effect<A, E, R>): Effect.Effect<A, E, R>
+  }
+>()("sportal/hub/slate/BoardTelemetry") {
+  /** Telemetry that tells the summary how long the replay took from when this layer is built. */
+  static readonly layer: Layer.Layer<BoardTelemetry> = Layer.effect(
+    BoardTelemetry,
+    Effect.gen(function* () {
+      const started = yield* Clock.currentTimeMillis
+
+      return BoardTelemetry.of({
+        told,
+        wentLive: (slate, replayed) => wentLive(slate, replayed, started),
+        timerDefect,
+        timedTake: (take) => Effect.trackDuration(take, frameTakeDuration)
+      })
+    })
+  )
+
+  /** Telemetry that tells nothing. */
+  static readonly layerTest: Layer.Layer<BoardTelemetry> = Layer.succeed(
+    BoardTelemetry,
+    BoardTelemetry.of({
+      told: () => Effect.void,
+      wentLive: () => Effect.void,
+      timerDefect: () => Effect.void,
+      timedTake: (take) => take
+    })
+  )
+}
+
+const told = Effect.fnUntraced(function* (
+  { taken, replayed }: { readonly taken: Taken; readonly replayed: boolean },
   frame: Option.Option<Decoded>,
-  before: Slate,
-  taken: Taken
+  before: Slate
 ) {
   const seq = Option.map(frame, ({ seq }) => seq)
-  const loudly = () => toldLive(frame, before, taken)
-  yield* Following.$match(following, {
-    Replaying: () =>
-      Effect.forEach(taken.observations, (observation) => toldInReplay(observation, seq), { discard: true }),
-    Live: loudly,
-    Halted: loudly
-  })
+  yield* replayed
+    ? Effect.forEach(taken.observations, (observation) => toldInReplay(observation, seq), { discard: true })
+    : toldLive(frame, before, taken)
 })
 
-/** The boundary out of the replay: every held game's state gauge, and the current games counted by state. */
-export const wentLive = Effect.fnUntraced(function* (slate: Slate) {
+/** Every held game's state gauge, the current games counted by state, and the replay's summary. */
+const wentLive = Effect.fnUntraced(function* (
+  slate: Slate,
+  {
+    frames,
+    deliveries,
+    plays
+  }: { readonly frames: number; readonly deliveries: number; readonly plays: number },
+  started: number
+) {
   yield* Effect.forEach(
     slate.games.values(),
     (snapshot) =>
@@ -42,18 +104,18 @@ export const wentLive = Effect.fnUntraced(function* (slate: Slate) {
     { discard: true }
   )
   yield* gaugeByState(slate)
+
+  const finished = yield* Clock.currentTimeMillis
+  const took = Duration.millis(finished - started)
+  yield* Effect.logInfo(
+    `LiveSlate: replayed ${frames} frames: ${deliveries} deliveries, ${plays} plays; ${slate.games.size} live games, in ${Duration.format(took)}`
+  )
 })
 
-/** A defect in the slate's timer, logged and counted. */
-export const timerDefect = Effect.fnUntraced(function* (defect: unknown) {
+const timerDefect = Effect.fnUntraced(function* (defect: unknown) {
   yield* Effect.logError("LiveSlate: the timer raised a defect", Cause.die(defect))
   yield* Metric.update(gameDefects, 1)
 })
-
-/** `take`, its duration recorded as how long the slate took to apply one frame. */
-export function timedTake<A, E, R>(take: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> {
-  return Effect.trackDuration(take, frameTakeDuration)
-}
 
 /** A take or tick told live: the frame's decode observations, then each slate observation, each event, and the counts. */
 const toldLive = Effect.fnUntraced(function* (frame: Option.Option<Decoded>, before: Slate, taken: Taken) {

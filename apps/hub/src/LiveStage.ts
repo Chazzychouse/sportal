@@ -2,7 +2,7 @@ import { ChannelAvailability } from "@sportal/domain/Channel"
 import type { GameId } from "@sportal/domain/Game"
 import { Stage, type StageCommand, type StageRejection } from "@sportal/domain/Stage"
 import { Context, Effect, Layer, Option, Stream, SubscriptionRef } from "effect"
-import { LiveSlate } from "./LiveSlate.ts"
+import { Board } from "./slate/Board.ts"
 import { Source } from "./source/Source.ts"
 
 /**
@@ -17,15 +17,16 @@ export class LiveStage extends Context.Service<
     dispatch(command: StageCommand): Effect.Effect<Stage, StageRejection>
   }
 >()("sportal/hub/LiveStage") {
-  static readonly layer: Layer.Layer<LiveStage, never, LiveSlate | Source> = Layer.effect(
+  static readonly layer: Layer.Layer<LiveStage, never, Board | Source> = Layer.effect(
     LiveStage,
     Effect.gen(function* () {
-      const slate = yield* LiveSlate
+      const board = yield* Board
       const source = yield* Source
       const current = yield* SubscriptionRef.make(Stage.initial)
       // Where each game on the current slate can be streamed; a game no longer on the slate has none.
       const availabilityOnSlate = Effect.gen(function* () {
-        const { games } = yield* slate.published
+        const slate = yield* board.latest
+        const { games } = slate.published()
         const availabilityOf = yield* source.availability
         return (id: GameId): Option.Option<ChannelAvailability> =>
           Option.fromNullishOr(games.find((game) => game.id === id)).pipe(Option.map(availabilityOf))

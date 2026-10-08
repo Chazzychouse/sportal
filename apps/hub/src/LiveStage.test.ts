@@ -1,13 +1,13 @@
 import { assert, describe, it } from "@effect/vitest"
-import { LiveMessage, type SlateChanged } from "@sportal/api/LiveMessage"
 import { ChannelAvailability } from "@sportal/domain/Channel"
 import { GameId, type GameSnapshot, Network } from "@sportal/domain/Game"
 import { type Stage, Tile } from "@sportal/domain/Stage"
 import { broadcast, liveSnapshot, snapshot, team } from "@sportal/domain/TestGame"
 import { DateTime, Deferred, Effect, Fiber, Layer, Option, Predicate, Ref, Stream } from "effect"
 import { TestClock } from "effect/testing"
-import { LiveSlate } from "./LiveSlate.ts"
 import { LiveStage } from "./LiveStage.ts"
+import { Board } from "./slate/Board.ts"
+import { Delivery } from "./slate/Delivery.ts"
 import { Slate } from "./slate/Slate.ts"
 import { Source } from "./source/Source.ts"
 import { recordedGuide } from "./source/youtube-tv/TestYouTubeTv.ts"
@@ -130,15 +130,15 @@ describe("LiveStage", () => {
       const refreshed = yield* Deferred.make<void>()
       const refreshes = yield* Ref.make(0)
       // Reading the slate is the first step of every refresh, so it counts them.
-      const countingSlate = slateOf(
+      const countingBoard = boardOf(
         Ref.update(refreshes, (count) => count + 1).pipe(
           Effect.andThen(Deferred.succeed(refreshed, undefined)),
-          Effect.as({ games: slate, recentPlays: {} })
+          Effect.as(slate)
         )
       )
       const guideReadAtOnce = readAtOnce().pipe(
         Layer.provideMerge(LiveStage.layer),
-        Layer.provide(Layer.succeed(LiveSlate, countingSlate)),
+        Layer.provide(Layer.succeed(Board, countingBoard)),
         Layer.provide(YouTubeTv.layer)
       )
 
@@ -160,7 +160,7 @@ describe("LiveStage", () => {
         const reading = yield* Deferred.make<void>()
         const release = yield* Deferred.make<void>()
         const liveStageOnStaleRead = LiveStage.layer.pipe(
-          Layer.provide(Layer.succeed(LiveSlate, slateOf(Effect.succeed({ games: slate, recentPlays: {} })))),
+          Layer.provide(listingBoard(slate)),
           Layer.provideMerge(availabilityHeldOnce(reading, release))
         )
 
@@ -187,9 +187,9 @@ describe("LiveStage", () => {
   it.live("should keep a tile whose game has left the slate as it was when the source reads a guide", () =>
     Effect.gen(function* () {
       const onSlate = yield* Ref.make(slate)
-      const changingSlate = slateOf(Effect.map(Ref.get(onSlate), (games) => ({ games, recentPlays: {} })))
+      const changingBoard = boardOf(Ref.get(onSlate))
       const liveStageOverChangingSlate = LiveStage.layer.pipe(
-        Layer.provide(Layer.succeed(LiveSlate, changingSlate)),
+        Layer.provide(Layer.succeed(Board, changingBoard)),
         Layer.provideMerge(YouTubeTv.layer)
       )
 
@@ -303,24 +303,28 @@ function firstStageWhere(changes: Stream.Stream<Stage>, test: (stage: Stage) => 
   return changes.pipe(Stream.filter(test), Stream.take(1), Stream.runHead, Effect.timeout("2 seconds"))
 }
 
-/** A LiveSlate that publishes what `published` gives, with no changes, and holds nothing else. */
-function slateOf(published: Effect.Effect<Omit<SlateChanged, "_tag">>) {
-  return LiveSlate.of({
-    latest: Effect.succeed(Slate.empty),
-    changes: Stream.empty,
-    events: Stream.empty,
-    through: () => Effect.succeed(Slate.empty),
-    published: Effect.map(published, LiveMessage.cases.SlateChanged.make),
-    publishedChanges: Stream.empty
-  })
+/** A board whose latest lists what `listed` gives each time it is read, with no changes or takes. */
+function boardOf(listed: Effect.Effect<ReadonlyArray<GameSnapshot>>) {
+  return Board.of({ latest: Effect.flatMap(listed, listing), changes: Stream.empty, taken: Stream.empty })
 }
 
-/** LiveStage over a LiveSlate of `games` and YouTube TV with nothing read yet. */
-function liveStageOver(games: ReadonlyArray<GameSnapshot>) {
-  return LiveStage.layer.pipe(
-    Layer.provide(Layer.succeed(LiveSlate, slateOf(Effect.succeed({ games, recentPlays: {} })))),
-    Layer.provideMerge(YouTubeTv.layer)
+/** A still board listing `games`. */
+function listingBoard(games: ReadonlyArray<GameSnapshot>) {
+  return Layer.unwrap(Effect.map(listing(games), Board.layerTest))
+}
+
+/** The empty slate once it has taken a listing of `games` in each of their leagues, in their order. */
+function listing(games: ReadonlyArray<GameSnapshot>) {
+  const leagues = [...new Set(games.map(({ league }) => league))]
+  const deliveries = leagues.map((league) =>
+    Delivery.cases.Listing.make({ league, games: games.filter((game) => game.league === league) })
   )
+  return Effect.map(Slate.empty.take({ deliveries, at: DateTime.makeUnsafe(0) }), ({ next }) => next)
+}
+
+/** LiveStage over a board listing `games` and YouTube TV with nothing read yet. */
+function liveStageOver(games: ReadonlyArray<GameSnapshot>) {
+  return LiveStage.layer.pipe(Layer.provide(listingBoard(games)), Layer.provideMerge(YouTubeTv.layer))
 }
 
 /** The data tile a game gets while the source has no guide. */

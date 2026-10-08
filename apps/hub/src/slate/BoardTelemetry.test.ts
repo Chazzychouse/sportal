@@ -2,14 +2,13 @@ import { assert, describe, it } from "@effect/vitest"
 import { GameId } from "@sportal/domain/Game"
 import { liveSnapshot, snapshot } from "@sportal/domain/TestGame"
 import { DateTime, Effect, Option, References } from "effect"
-import { Following } from "./Following.ts"
-import * as LiveSlateTelemetry from "./LiveSlateTelemetry.ts"
-import { Decoded, DecodeObservation } from "./provider/Provider.ts"
-import { Delivery } from "./slate/Delivery.ts"
-import { Slate } from "./slate/Slate.ts"
-import { counted, recordingLogs, withMetrics } from "./TestTelemetry.ts"
+import { Decoded, DecodeObservation } from "../provider/Provider.ts"
+import { counted, recordingLogs, withMetrics } from "../TestTelemetry.ts"
+import { BoardTelemetry } from "./BoardTelemetry.ts"
+import { Delivery } from "./Delivery.ts"
+import { Slate, type Taken } from "./Slate.ts"
 
-describe("LiveSlateTelemetry.told", () => {
+describe("BoardTelemetry#told", () => {
   it.effect("should count a message received by league and op, logging it at Debug", () =>
     Effect.gen(function* () {
       const received = DecodeObservation.Received({
@@ -152,7 +151,7 @@ describe("LiveSlateTelemetry.told", () => {
         })
         const said = taken.events.map(({ what }) => what._tag)
 
-        yield* LiveSlateTelemetry.told(Following.Live(), Option.none(), Slate.empty, taken)
+        yield* toldLive(taken, Option.none(), Slate.empty)
         const went = logs.filter(({ message }) => message.includes("WentFinal"))
         const wentFinal = yield* counted("sportal_game_events", { game: "1", event: "WentFinal" })
 
@@ -182,7 +181,7 @@ describe("LiveSlateTelemetry.told", () => {
           at: DateTime.add(at, { seconds: 1 })
         })
 
-        yield* LiveSlateTelemetry.told(Following.Live(), Option.none(), first.next, taken)
+        yield* toldLive(taken, Option.none(), first.next)
         const went = logs.filter(({ message }) => message.includes("WentFinal"))
         const wentFinal = yield* counted("sportal_game_events", { game: "1", event: "WentFinal" })
 
@@ -207,10 +206,17 @@ function toldOf(observation: DecodeObservation) {
     observations: [observation]
   })
   const taken = { next: Slate.empty, events: [], observations: [] }
-  return LiveSlateTelemetry.told(Following.Live(), Option.some(frame), Slate.empty, taken).pipe(
+  return toldLive(taken, Option.some(frame), Slate.empty).pipe(
     Effect.provide(layer),
     Effect.provideService(References.MinimumLogLevel, "Debug"),
     Effect.as(logs)
+  )
+}
+
+/** `taken` told live by the board's telemetry, from `before`, `frame` its frame. */
+function toldLive(taken: Taken, frame: Option.Option<Decoded>, before: Slate) {
+  return BoardTelemetry.use((telemetry) => telemetry.told({ taken, replayed: false }, frame, before)).pipe(
+    Effect.provide(BoardTelemetry.layer)
   )
 }
 

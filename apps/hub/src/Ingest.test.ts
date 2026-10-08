@@ -10,8 +10,10 @@ import * as Database from "./Database.ts"
 import type { Frame } from "./Frame.ts"
 import { FeedLog } from "./feed-log/FeedLog.ts"
 import * as Ingest from "./Ingest.ts"
-import { LiveSlate } from "./LiveSlate.ts"
+import { Board } from "./slate/Board.ts"
+import { BoardTelemetry } from "./slate/BoardTelemetry.ts"
 import { Delivery } from "./slate/Delivery.ts"
+import { takingAfter } from "./TestBoard.ts"
 import * as TestSnapshotFeed from "./TestSnapshotFeed.ts"
 import { pushed } from "./TestSnapshotFeed.ts"
 import { counted, recordingLogs, recordingSpans, withMetrics } from "./TestTelemetry.ts"
@@ -37,10 +39,7 @@ describe("Ingest", () => {
 
   it.effect("should bring every frame it appends to the slate", () =>
     Effect.gen(function* () {
-      const liveSlate = yield* LiveSlate
-
-      yield* TestClock.adjust(0)
-      const current = yield* liveSlate.through(3)
+      const current = yield* takingAfter(3, TestClock.adjust(0))
 
       assert.deepStrictEqual(
         [...current.listed].map(([league, games]) => [league, games.map((listed) => listed.id)]),
@@ -119,7 +118,7 @@ describe("Ingest", () => {
         listedNow("fbs", [liveSnapshot({ id: GameId.make("1"), period: 3 })])
       ])
 
-      const replayed = yield* LiveSlate.use((liveSlate) => liveSlate.latest).pipe(
+      const replayed = yield* Board.use((board) => board.latest).pipe(
         Effect.provide(over(Stream.never, { ended }).pipe(Layer.provideMerge(logged)))
       )
 
@@ -142,15 +141,18 @@ describe("Ingest", () => {
       ])
       const next = framesOf([listedNow("fbs", [liveSnapshot({ id: GameId.make("1"), period: 4 })])])
 
-      const polledSlate = yield* Effect.gen(function* () {
-        const liveSlate = yield* LiveSlate
+      const polledSlate = yield* takingAfter(1, TestClock.adjust(0)).pipe(
+        Effect.provide(over(next).pipe(Layer.provideMerge(logged)))
+      )
 
-        yield* TestClock.adjust(0)
-
-        return yield* liveSlate.through(3)
-      }).pipe(Effect.provide(over(next).pipe(Layer.provideMerge(logged))))
-
+      const seqs = yield* FeedLog.use((log) =>
+        log.replay(DateTime.makeUnsafe(0)).pipe(
+          Stream.map(({ seq }) => seq),
+          Stream.runCollect
+        )
+      ).pipe(Effect.provide(FeedLog.layer))
       assert.strictEqual(polledSlate.games.get(GameId.make("1"))?.period, 4)
+      assert.deepStrictEqual(seqs, [1, 2, 3])
     }).pipe(Effect.provide([Database.layerMemory, NodeCrypto.layer]), withMetrics)
   })
 })
@@ -161,13 +163,14 @@ function ingesting(frames: Stream.Stream<Frame>) {
 }
 
 /**
- * Ingest over the snapshot feed delivering `frames`, with the live slate and the feed log they share also provided to
+ * Ingest over the snapshot feed delivering `frames`, with the board and the feed log they share also provided to
  * the test, and each span that ends recorded in `ended`.
  */
 function over(frames: Stream.Stream<Frame>, options: { readonly ended?: Array<Tracer.Span> } = {}) {
   return Ingest.layer.pipe(
-    Layer.provideMerge(LiveSlate.layer),
+    Layer.provideMerge(Board.layer),
     Layer.provideMerge(FeedLog.layer),
+    Layer.provide(BoardTelemetry.layer),
     Layer.provide([TestSnapshotFeed.layerFrom(frames), DateTime.layerCurrentZoneLocal]),
     Layer.provideMerge(recordingSpans(options.ended ?? []))
   )

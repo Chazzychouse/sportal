@@ -12,6 +12,7 @@ import {
   type Path,
   type PlatformError,
   Schema,
+  Sink,
   Stream
 } from "effect"
 import {
@@ -25,8 +26,8 @@ import {
 } from "effect/http"
 import { HttpApiBuilder } from "effect/http-api"
 import { HubConfig } from "./HubConfig.ts"
-import { LiveSlate } from "./LiveSlate.ts"
 import { LiveStage } from "./LiveStage.ts"
+import { Board } from "./slate/Board.ts"
 import { Source } from "./source/Source.ts"
 
 /**
@@ -36,7 +37,7 @@ export const layer: Layer.Layer<
   never,
   PlatformError.PlatformError,
   | HubConfig
-  | LiveSlate
+  | Board
   | LiveStage
   | Source
   | HttpServer.HttpServer
@@ -122,12 +123,16 @@ const liveRoute = HttpRouter.add(
   "GET",
   "/api/live",
   Effect.gen(function* () {
-    const slate = yield* LiveSlate
+    const board = yield* Board
     const stage = yield* LiveStage
     const stageChanges = stage.changes.pipe(
       Stream.map((next) => LiveMessage.cases.StageChanged.make({ stage: next }))
     )
-    const messages: Stream.Stream<LiveMessage> = Stream.merge(slate.publishedChanges, stageChanges)
+    const slateChanges = board.changes.pipe(
+      settled,
+      Stream.map((slate) => slate.published())
+    )
+    const messages: Stream.Stream<LiveMessage> = Stream.merge(slateChanges, stageChanges)
     const encode = Schema.encodeEffect(LiveMessageJson)
     const events = messages.pipe(
       Stream.mapEffect((message) => Effect.map(encode(message), (json) => `data: ${json}\n\n`))
@@ -143,6 +148,18 @@ const liveRoute = HttpRouter.add(
     })
   })
 )
+
+/**
+ * The slate as it is, then each burst of changes once it settles 250 ms after the last, so changes arriving more often
+ * than that, without a pause, send nothing until they pause.
+ */
+function settled<A>(changes: Stream.Stream<A>): Stream.Stream<A> {
+  return Stream.unwrap(
+    Effect.map(Stream.peel(changes, Sink.head()), ([current, rest]) =>
+      Stream.concat(Stream.fromIterable(Option.toArray(current)), rest.pipe(Stream.debounce("250 millis")))
+    )
+  )
+}
 
 /**
  * The addresses a phone on the home network can reach this machine at: its external IPv4 addresses, home

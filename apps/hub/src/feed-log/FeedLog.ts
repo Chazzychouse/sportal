@@ -37,11 +37,6 @@ export class FeedLog extends Context.Service<
     /** Numbers `frame`, publishes it to subscribers, and queues it to be written. Never waits on disk, never fails. */
     append(frame: Frame): Effect.Effect<LoggedFrame>
     /**
-     * Subscribes at once, for as long as the scope is open: the stream is every frame appended from then on, in `seq`
-     * order, however late it is run.
-     */
-    readonly subscribe: Effect.Effect<Stream.Stream<LoggedFrame>, never, Scope.Scope>
-    /**
      * Subscribes, then reads where the log stands. The frames from `from` up to `last` are logged already, and each frame
      * after `last` follows as it is appended. `last` is none when nothing at or after `from` is logged.
      */
@@ -122,7 +117,6 @@ export class FeedLog extends Context.Service<
 
       return FeedLog.of({
         append,
-        subscribe: Effect.map(PubSub.subscribe(published), Stream.fromSubscription),
         follow,
         replay: (from) => replay(table, from),
         days: days(table)
