@@ -5,7 +5,7 @@ import { HttpClient, HttpClientResponse } from "effect/http"
 import * as Socket from "effect/socket/Socket"
 import { TestClock } from "effect/testing"
 import { HubConfig } from "../../HubConfig.ts"
-import { counted, gauged, recordingLogs, withMetrics } from "../../TestTelemetry.ts"
+import { counted, gauged, observed, recordingLogs, withMetrics } from "../../TestTelemetry.ts"
 import { FastCast } from "./FastCast.ts"
 import type { Frame } from "./Frame.ts"
 
@@ -164,6 +164,20 @@ describe("FastCast", () => {
       )
       assert.isTrue(firstFour.every((frame) => frame.source === "push"))
     })
+  )
+
+  it.effect("should time a checkpoint it loads", () =>
+    Effect.gen(function* () {
+      const server = fakeServer()
+      const { frames } = yield* nflFrames(server)
+      yield* frames.until(atLeast(2))
+
+      yield* Effect.sync(() => server.send(checkpointMessage(7)))
+
+      yield* frames.until(wholeAt(7))
+      const timed = yield* observed("sportal_checkpoint_duration")
+      assert.strictEqual(timed, 1)
+    }).pipe(withMetrics)
   )
 
   it.effect("should give a patch's frame its mid", () =>

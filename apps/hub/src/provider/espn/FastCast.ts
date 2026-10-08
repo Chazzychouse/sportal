@@ -303,8 +303,9 @@ function followedAt(
 }
 
 /**
- * A socket text as its frame, an `H`'s followed by its checkpoint once it loads and decodes. Either way the `H`'s
- * outcome is handed to `published`; a checkpoint that fails is logged and counted, and only its `H` is framed. Every text is counted by its op.
+ * A socket text as its frame, an `H`'s followed by its checkpoint once it loads and decodes. Either way
+ * the `H`'s outcome is handed to `published`; a checkpoint that fails is logged and counted, and only
+ * its `H` is framed. Every text is counted by its op.
  */
 const framed = Effect.fnUntraced(function* (
   received: { readonly text: string; readonly receivedAt: DateTime.Utc },
@@ -366,7 +367,8 @@ function checkpoint(envelope: { readonly tc: string; readonly pl: string }) {
             )
           )
       })
-    )
+    ),
+    Effect.trackDuration(checkpointDuration)
   )
 }
 
@@ -441,4 +443,8 @@ const steersTaken = Metric.counter("sportal_live_feed_steers", {
   description:
     "Times the live feed followed a game topic, left one, or followed one again after its document reset",
   incremental: true
+})
+
+const checkpointDuration = Metric.timer("sportal_checkpoint_duration", {
+  description: "How long a FastCast checkpoint took to load and decode, whether or not it succeeded"
 })

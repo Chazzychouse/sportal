@@ -60,6 +60,13 @@ export function gauged(id: string, attributes: Readonly<Record<string, string>> 
   )
 }
 
+/** The number of samples histogram or timer `id` with `attributes` among its others has recorded, if any. */
+export function observed(id: string, attributes: Readonly<Record<string, string>> = {}) {
+  return Effect.map(metricOf(id, attributes), (metric) =>
+    metric?.type === "Histogram" ? metric.state.count : undefined
+  )
+}
+
 function metricOf(id: string, attributes: Readonly<Record<string, string>>) {
   return Effect.map(Metric.snapshot, (metrics) =>
     metrics.find((candidate) => candidate.id === id && matches(candidate.attributes, attributes))
