@@ -13,7 +13,7 @@ Every exported type name must be a term here, except the wire schemas in `*Paylo
 | **Team colors** | The two colors a team plays in: `color` and `alternateColor` on `Team`, six hex digits without `#`, as ESPN sends them. The Hub reads them from the scoreboard; a team ESPN sends none for has neither. | |
 | **Game** | One scheduled contest between two teams. As the slate holds it, `Game` (`packages/domain/src/Game.ts`): its latest snapshot and its plays, in sequence order. | event, match, competition, fixture |
 | **Slate** | The Hub's `Slate` (`apps/hub/src/slate/Slate.ts`): an ordered list of games: each league's last listing, leagues in `LeagueId` order, each game with its latest snapshot and its plays, taken from push and poll deliveries in arrival order. A snapshot behind its game (earlier in game time, or at the same game time with fewer points, as a poll lagging a pushed score) is ignored, except that an over game takes one ahead of its end (overtime after a spurious final, a postponed game resuming); a snapshot or plays of a game no listing names are dropped. Pure; `take` returns the next slate, or this one when nothing changed. | schedule, scoreboard, live games |
-| **Director** | The Hub's `Director` service (`apps/hub/src/Director.ts`), the one holder of what is going on. From an empty slate it takes each frame's deliveries from its provider as they arrive, logs a take that raised a defect, and gauges each game's progress (`sportal_game_state`). It holds the one Screen shared by every Display, applies screen commands one at a time against where each game on the slate can be streamed, and refreshes the Screen when the source changes. It offers the slate and the Screen, and each change of either. Its rules, which will issue screen commands from game events, are planned. For now nothing is kept between runs: a restarted Hub starts empty and the next poll fills it. | board, switcher, producer, autopilot, tracker, stage manager |
+| **Director** | The Hub's `Director` service (`apps/hub/src/Director.ts`), the one holder of what is going on. From an empty slate it takes each frame's deliveries from its provider as they arrive, logs a take that raised a defect, and gauges each game's progress (`sportal_game_state`). It holds the one Screen shared by every Display, applies screen commands one at a time against where each game on the slate can be streamed, and refreshes the Screen when a source changes, publishing only when a tile changed. It offers the slate and the Screen, and each change of either. Its rules, which will issue screen commands from game events, are planned. For now nothing is kept between runs: a restarted Hub starts empty and the next poll fills it. | board, switcher, producer, autopilot, tracker, stage manager |
 | **Slate changed** | The live message that carries the listed games as the slate has them, each with its recent plays, settled 250 ms after a change; `SlateChanged` in code, and what `Slate#published` builds; the live stream sends the current one, then one for each burst of the Director's slate changes once it settles. | slate payload, snapshot, published |
 | **Kickoff** | A game's scheduled start instant. | start time, date |
 
@@ -51,15 +51,15 @@ Every exported type name must be a term here, except the wire schemas in `*Paylo
 | **ESPN event** | One game as either ESPN feed spells it, the polled site scoreboard or a FastCast scoreboard topic, read as a GameSnapshot; `EspnEvent` in code. | payload, DTO |
 | **Topic owner** | What a live feed topic carries: one league's scoreboard, or one game's plays; `Owner` in code, in `FastCastTopic.ts`. | subscription |
 | **Checkpoint unread** | A live feed topic's checkpoint could not be loaded or did not decode; retried on FastCast's checkpoint retry, then the topic is left to polling until the socket reconnects; `CheckpointUnread` in code. | checkpoint error |
-| **Source** | A way you obtain **video** (YouTube TV). | provider, service |
+| **Source** | A way you obtain **video** (YouTube TV, Twitch). | provider, service |
 | **Source name** | A source as people know it ("YouTube TV"); how code and the UI name a source. | source id |
 | **Broadcast** | The fact that a network is airing a game, on television or streaming only. | channel, stream |
 | **Network** | A network's name as a provider reports it ("CBS", "ESPN"). | channel, station |
-| **Channel** | A station as a source names it ("News 3", "ESPN2"), with the address that plays it live. | network |
+| **Channel** | A station as a source names it ("News 3", "ESPN2"), with the address that plays it live, and, for a channel that is one network's stream (Twitch's Prime Video), the network whose every broadcast it carries. | network |
 | **Channel id** | A source's own id for one of its channels (YouTube TV's station id); `ChannelId` in code. | station id |
 | **Channel availability** | Whether and where a source can show a game: carried, upcoming, no guide (the source has no fresh guide to say), or not carried, with why. | availability |
 | **No guide** | A source's answer while it has no fresh guide: before the first read, and once the last is stale. | unknown |
-| **Guide** | One reading of a source's listing of the channels this account gets, with their live addresses, and what each airs. | schedule, EPG |
+| **Guide** | One reading of a source's listing of the channels this account gets, with their live addresses, and what each airs. Twitch's is a fixed lineup, never read. | schedule, EPG |
 | **Airing** | One programme on a channel, with its begin and end. | listing, show |
 | **Guide unreadable** | A guide response the source could not read. | |
 | **Frame** | One thing a provider delivered, as received, before its decode reads it: its delivery source, its channel, its body, and whether it is the `whole` document or a `change` to one (a poll response and a pushed checkpoint are whole; a pushed message is a change), with the provider's own `number` for it when it has one; `Frame` in code. | message, payload, feed frame |
@@ -92,7 +92,7 @@ Provider and Source are the two words most likely to be swapped. Provider is alw
 | **Provider session** | The shell's single persistent browser session shared by every provider view, with its navigation allowlist and permissions. | partition, profile |
 | **Tile views** | The shell component that keeps one provider web view per stream tile, placed where the web UI says. | view manager |
 | **Tile bounds** | A tile view's rectangle in the web UI's window, in whole CSS pixels; `TileBounds` in code. | rect, frame |
-| **Guide reader** | The shell component that reads a source's guide with the source's own guide request, sent on the provider session. | scraper, EPG fetcher |
+| **Guide reader** | What reads a source's guide. The shell's (`GuideReader` in the desktop app) fetches it with the source's own request, sent on the provider session. The Hub's (`GuideReader` in `source/`) reads what the shell fetched and keeps the latest guide while it is fresh. | scraper, EPG fetcher |
 
 ### Viewing
 
