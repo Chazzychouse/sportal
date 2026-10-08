@@ -1,9 +1,9 @@
-import type { Hotkey } from "@sportal/api/Hotkey"
+import { Hotkey } from "@sportal/api/Hotkey"
 import type { GameId } from "@sportal/domain/Game"
-import type { Stage, StageCommand } from "@sportal/domain/Stage"
+import { type Stage, type StageCommand, Tile } from "@sportal/domain/Stage"
 import { Data, Option } from "effect"
 import { Layout } from "../layout/Layout.ts"
-import { StripCard } from "../slate/StripCards.ts"
+import { Place, StripCard } from "../slate/StripCards.ts"
 
 type Overlay = Data.TaggedEnum<{ None: object; Keys: object; Palette: object; JoinRemote: object }>
 const Overlay = Data.taggedEnum<Overlay>()
@@ -41,33 +41,26 @@ export class Display extends Data.Class<{
    */
   interactingOn(stage: Stage): GameId | undefined {
     const tile = stage.onStage()[this.selectedOn(stage)]
-    return tile?._tag === "StreamTile" && tile.game === this.interacting ? this.interacting : undefined
+    return Tile.guards.StreamTile(tile) && tile.game === this.interacting ? this.interacting : undefined
   }
 
   /** What a hotkey does. `FullScreen` does nothing here: it is the shell's or browser's, not the Display's. */
   press(hotkey: Hotkey, stage: Stage, cards: ReadonlyArray<StripCard>): DisplayStep {
-    switch (hotkey._tag) {
-      case "SelectTile":
-        return this.select(hotkey.slot, stage)
-      case "ToggleSolo": {
-        if (Option.isSome(stage.solo))
-          return new DisplayStep({ display: this, commands: [{ _tag: "Unsolo" }] })
+    const stay = (commands: ReadonlyArray<StageCommand>) => new DisplayStep({ display: this, commands })
+    return Hotkey.match(hotkey, {
+      SelectTile: ({ slot }) => this.select(slot, stage),
+      ToggleSolo: () => {
+        if (Option.isSome(stage.solo)) return stay([{ _tag: "Unsolo" }])
         const slot = this.selectedOn(stage)
-        return new DisplayStep({
-          display: this,
-          commands: stage.onStage()[slot]?._tag === "Empty" ? [] : [{ _tag: "Solo", tile: slot }]
-        })
-      }
-      case "Unsolo":
-        if (!Overlay.$is("None")(this.overlay))
-          return new DisplayStep({ display: this.close(), commands: [] })
-        return new DisplayStep({
-          display: this,
-          commands: Option.isNone(stage.solo) ? [] : [{ _tag: "Unsolo" }]
-        })
-      case "Interact": {
+        return stay(Tile.guards.Empty(stage.onStage()[slot]) ? [] : [{ _tag: "Solo", tile: slot }])
+      },
+      Unsolo: () =>
+        !Overlay.$is("None")(this.overlay)
+          ? new DisplayStep({ display: this.close(), commands: [] })
+          : stay(Option.isNone(stage.solo) ? [] : [{ _tag: "Unsolo" }]),
+      Interact: () => {
         const tile = stage.onStage()[this.selectedOn(stage)]
-        if (tile?._tag !== "StreamTile") return new DisplayStep({ display: this, commands: [] })
+        if (!Tile.guards.StreamTile(tile)) return stay([])
         return new DisplayStep({
           display: new Display({
             ...this,
@@ -75,40 +68,32 @@ export class Display extends Data.Class<{
           }),
           commands: []
         })
-      }
-      case "StepPick":
-        return new DisplayStep({
-          display: new Display({ ...this, pick: StripCard.nextPick(cards, this.pick, hotkey.step) }),
+      },
+      StepPick: ({ step }) =>
+        new DisplayStep({
+          display: new Display({ ...this, pick: StripCard.nextPick(cards, this.pick, step) }),
           commands: []
-        })
-      case "DropPick": {
+        }),
+      DropPick: () => {
         const card = cards.find((card) => card.id === this.pick)
-        return card === undefined ? new DisplayStep({ display: this, commands: [] }) : this.drop(card, stage)
-      }
-      case "ToggleSlate":
-        return new DisplayStep({ display: this.toggleSlate(), commands: [] })
-      case "ShowKeys":
-        return new DisplayStep({
+        return card === undefined ? stay([]) : this.drop(card, stage)
+      },
+      ToggleSlate: () => new DisplayStep({ display: this.toggleSlate(), commands: [] }),
+      ShowKeys: () =>
+        new DisplayStep({
           display: Overlay.$is("Keys")(this.overlay) ? this.close() : this.open("Keys"),
           commands: []
-        })
-      case "CommandPalette":
-        return new DisplayStep({
+        }),
+      CommandPalette: () =>
+        new DisplayStep({
           display: Overlay.$is("Palette")(this.overlay) ? this.close() : this.open("Palette"),
           commands: []
-        })
-      case "FocusAudio":
-        return new DisplayStep({ display: this, commands: [{ _tag: "FocusAudio", tile: hotkey.slot }] })
-      case "Promote":
-        return new DisplayStep({ display: this, commands: [{ _tag: "Promote", tile: hotkey.slot }] })
-      case "NextLayout":
-        return new DisplayStep({
-          display: this,
-          commands: [{ _tag: "SetLayout", layout: Layout.next(stage.layout) }]
-        })
-      case "FullScreen":
-        return new DisplayStep({ display: this, commands: [] })
-    }
+        }),
+      FocusAudio: ({ slot }) => stay([{ _tag: "FocusAudio", tile: slot }]),
+      Promote: ({ slot }) => stay([{ _tag: "Promote", tile: slot }]),
+      NextLayout: () => stay([{ _tag: "SetLayout", layout: Layout.next(stage.layout) }]),
+      FullScreen: () => stay([])
+    })
   }
 
   /** Selects a slot on stage, ending interacting when the slot changes. A slot past the last is ignored. */
@@ -140,7 +125,7 @@ export class Display extends Data.Class<{
     return new DisplayStep({
       display,
       commands: [
-        place?._tag === "Bench"
+        Place.$is("Bench")(place)
           ? { _tag: "Swap", a: place.tile, b: slot }
           : { _tag: "Assign", tile: slot, game: card.id },
         ...commands
