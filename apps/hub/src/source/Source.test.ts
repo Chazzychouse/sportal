@@ -4,9 +4,10 @@ import { assert, describe, it } from "@effect/vitest"
 import { ChannelAvailability } from "@sportal/domain/Channel"
 import { Network } from "@sportal/domain/Game"
 import type { LeagueId } from "@sportal/domain/League"
-import { broadcast, snapshot } from "@sportal/domain/TestGame"
-import { Effect, Layer, Option, Stream } from "effect"
+import { broadcast, snapshot, team } from "@sportal/domain/TestGame"
+import { DateTime, Effect, Layer, Option, Ref, Stream } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/http"
+import { TestClock } from "effect/testing"
 import { HubConfig } from "../HubConfig.ts"
 import * as EspnProvider from "../provider/espn/EspnProvider.ts"
 import { FastCast } from "../provider/espn/FastCast.ts"
@@ -148,4 +149,160 @@ function matchingLayer() {
 /** A recorded ESPN site scoreboard from the ESPN adapter's fixtures. */
 function recordedScoreboard(name: "fbs-scoreboard-2026-10-03T2024Z" | "nfl-scoreboard-pregame") {
   return readFileSync(join(fixtures, `${name}.json`), "utf8")
+}
+
+const thursdayKickoff = DateTime.makeUnsafe("2026-10-09T00:15:00Z")
+const thursdayNight = snapshot({
+  league: "nfl",
+  kickoff: thursdayKickoff,
+  away: { team: team("NYJ", "nfl", { name: "New York Jets", shortName: "Jets" }), score: 0 },
+  home: { team: team("DEN", "nfl", { name: "Denver Broncos", shortName: "Broncos" }), score: 0 },
+  broadcasts: [broadcast("Prime Video", "streaming")]
+})
+const onPrimeVideo = ChannelAvailability.Carried({
+  channel: {
+    name: "Prime Video",
+    source: "Twitch",
+    locator: {
+      _tag: "WebView",
+      url: "https://player.twitch.tv/?channel=primevideo&parent=twitch.tv&player=popout"
+    }
+  }
+})
+
+describe("Source.layerTwitch", () => {
+  it.effect("should carry a Prime Video game on primevideo from 30 minutes before kickoff", () =>
+    Effect.gen(function* () {
+      yield* TestClock.setTime(DateTime.toEpochMillis(DateTime.subtract(thursdayKickoff, { minutes: 30 })))
+      const source = yield* Source
+
+      const availabilityOf = yield* source.availability
+
+      assert.deepStrictEqual(availabilityOf(thursdayNight), onPrimeVideo)
+    }).pipe(Effect.provide(Source.layerTwitch))
+  )
+
+  it.effect("should say it may have changed once a minute", () =>
+    Effect.gen(function* () {
+      const source = yield* Source
+      const changes = yield* Ref.make(0)
+      yield* source.changes.pipe(
+        Stream.runForEach(() => Ref.update(changes, (n) => n + 1)),
+        Effect.forkChild
+      )
+      yield* Effect.yieldNow
+
+      yield* TestClock.adjust("1 minute")
+
+      const signalled = yield* Ref.get(changes)
+      assert.strictEqual(signalled, 1)
+    }).pipe(Effect.provide(Source.layerTwitch))
+  )
+})
+
+describe("Source.layerAll", () => {
+  const carried = (source: "YouTube TV" | "Twitch") =>
+    ChannelAvailability.Carried({
+      channel: { name: source, source, locator: { _tag: "WebView", url: `https://example.test/${source}` } }
+    })
+  const upcomingOn = ChannelAvailability.Upcoming({
+    channel: Option.some("Prime Video"),
+    begin: Option.some(thursdayKickoff)
+  })
+  const upcomingUnknown = ChannelAvailability.Upcoming({ channel: Option.none(), begin: Option.none() })
+  const noGuide = ChannelAvailability.NoGuide({ source: "YouTube TV" })
+  const streamingOnly = ChannelAvailability.NotCarried({ why: "StreamingOnly" })
+  const notInGuide = ChannelAvailability.NotCarried({ why: "NotInGuide" })
+
+  it.effect("should answer a later source's carried over an earlier source's not carried", () =>
+    Effect.gen(function* () {
+      const answer = yield* answerOf([streamingOnly, carried("Twitch")])
+
+      assert.deepStrictEqual(answer, carried("Twitch"))
+    })
+  )
+
+  it.effect("should answer carried over upcoming", () =>
+    Effect.gen(function* () {
+      const answer = yield* answerOf([upcomingOn, carried("Twitch")])
+
+      assert.deepStrictEqual(answer, carried("Twitch"))
+    })
+  )
+
+  it.effect("should answer upcoming on a named channel over upcoming with nothing known", () =>
+    Effect.gen(function* () {
+      const answer = yield* answerOf([upcomingUnknown, upcomingOn])
+
+      assert.deepStrictEqual(answer, upcomingOn)
+    })
+  )
+
+  it.effect("should answer upcoming over no guide", () =>
+    Effect.gen(function* () {
+      const answer = yield* answerOf([noGuide, upcomingUnknown])
+
+      assert.deepStrictEqual(answer, upcomingUnknown)
+    })
+  )
+
+  it.effect("should answer no guide over not carried", () =>
+    Effect.gen(function* () {
+      const answer = yield* answerOf([streamingOnly, noGuide])
+
+      assert.deepStrictEqual(answer, noGuide)
+    })
+  )
+
+  it.effect("should answer streaming only over not in the guide", () =>
+    Effect.gen(function* () {
+      const answer = yield* answerOf([notInGuide, streamingOnly])
+
+      assert.deepStrictEqual(answer, streamingOnly)
+    })
+  )
+
+  it.effect("should change whenever any of its sources changes", () =>
+    Effect.gen(function* () {
+      const all = Source.layerAll([
+        Source.layerTest(() => notInGuide, Stream.make(undefined)),
+        Source.layerTest(() => notInGuide, Stream.make(undefined))
+      ])
+
+      const changes = yield* Source.use(({ changes }) => Stream.runCount(changes)).pipe(Effect.provide(all))
+
+      assert.strictEqual(changes, 2)
+    })
+  )
+
+  it.effect(
+    "should carry Thursday's Prime Video game on Twitch while YouTube TV's guide has it nowhere",
+    () =>
+      Effect.gen(function* () {
+        yield* readRecordedGuide
+        yield* TestClock.setTime(DateTime.toEpochMillis(DateTime.subtract(thursdayKickoff, { minutes: 10 })))
+        const source = yield* Source
+
+        const availabilityOf = yield* source.availability
+
+        assert.deepStrictEqual(availabilityOf(thursdayNight), onPrimeVideo)
+      }).pipe(
+        Effect.provide(
+          Source.layerAll([Source.layerYouTubeTv, Source.layerTwitch]).pipe(
+            Layer.provideMerge(GuideReader.layerYouTubeTv)
+          )
+        )
+      )
+  )
+})
+
+/** What every source answering one of `answers`, in order, answers as one. */
+function answerOf(answers: ReadonlyArray<ChannelAvailability>) {
+  const all = Source.layerAll(answers.map((answer) => Source.layerTest(() => answer)))
+  return Effect.gen(function* () {
+    const source = yield* Source
+
+    const availabilityOf = yield* source.availability
+    return availabilityOf(thursdayNight)
+  }).pipe(Effect.provide(all))
 }

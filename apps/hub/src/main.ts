@@ -14,7 +14,7 @@ const Hub = HubServer.layer.pipe(
   Layer.provide(HubServer.layerListen),
   Layer.provide(Director.layer),
   Layer.provide(Espn.layer),
-  Layer.provide(Source.layerYouTubeTv),
+  Layer.provide(Source.layerAll([Source.layerYouTubeTv, Source.layerTwitch])),
   Layer.provide(GuideReader.layerYouTubeTv),
   Layer.provide(Telemetry.layer),
   Layer.provide([HubConfig.layer, FetchHttpClient.layer, NodeSocket.layerWebSocketConstructorWS]),
