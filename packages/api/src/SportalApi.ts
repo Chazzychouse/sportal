@@ -1,16 +1,16 @@
 import { GuideUnreadable } from "@sportal/domain/Guide"
-import { Stage, StageCommand, StageRejection } from "@sportal/domain/Stage"
+import { Screen, ScreenCommand, ScreenRejection } from "@sportal/domain/Screen"
 import { Schema } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "effect/http-api"
 
 export class SportalApi extends HttpApi.make("sportal")
   .add(
-    HttpApiGroup.make("stage").add(
-      HttpApiEndpoint.get("current", "/stage", { success: Stage }),
-      HttpApiEndpoint.post("dispatch", "/stage/commands", {
-        payload: Schema.Struct({ command: StageCommand }),
-        success: Stage,
-        error: StageRejection
+    HttpApiGroup.make("screen").add(
+      HttpApiEndpoint.get("current", "/screen", { success: Screen }),
+      HttpApiEndpoint.post("dispatch", "/screen/commands", {
+        payload: Schema.Struct({ command: ScreenCommand }),
+        success: Screen,
+        error: ScreenRejection
       })
     )
   )

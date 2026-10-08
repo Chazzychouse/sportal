@@ -1,9 +1,9 @@
-import type { StageTransition, TileBounds } from "@sportal/api/ShellBridge"
+import type { ScreenTransition, TileBounds } from "@sportal/api/ShellBridge"
 
-/** The arithmetic of a Stage transition: how far along its curve a moment is, and where a view is then. */
+/** The arithmetic of a Screen transition: how far along its curve a moment is, and where a view is then. */
 export const Transition = {
   /** The eased progress at `t` (0–1 of the duration), as CSS computes `cubic-bezier(x1, y1, x2, y2)`. */
-  progress(easing: StageTransition["easing"], t: number): number {
+  progress(easing: ScreenTransition["easing"], t: number): number {
     if (t <= 0) return 0
     if (t >= 1) return 1
     const [x1, y1, x2, y2] = easing

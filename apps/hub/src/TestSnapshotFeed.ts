@@ -4,7 +4,7 @@ import type { Delivery } from "./slate/Delivery.ts"
 
 /**
  * The snapshot feed, which tests drive: a provider whose frames say what a test delivers. `deliver` returns once the
- * provider's reader has taken the frame and asked for the next, so a Board has taken it.
+ * provider's reader has taken the frame and asked for the next, so the Director has taken it.
  */
 export class SnapshotFeed extends Context.Service<
   SnapshotFeed,

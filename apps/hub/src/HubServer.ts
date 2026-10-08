@@ -25,9 +25,8 @@ import {
   HttpStaticServer
 } from "effect/http"
 import { HttpApiBuilder } from "effect/http-api"
+import { Director } from "./Director.ts"
 import { HubConfig } from "./HubConfig.ts"
-import { Switcher } from "./Switcher.ts"
-import { Board } from "./slate/Board.ts"
 import { Source } from "./source/Source.ts"
 
 /**
@@ -37,8 +36,7 @@ export const layer: Layer.Layer<
   never,
   PlatformError.PlatformError,
   | HubConfig
-  | Board
-  | Switcher
+  | Director
   | Source
   | HttpServer.HttpServer
   | HttpPlatform.HttpPlatform
@@ -49,7 +47,7 @@ export const layer: Layer.Layer<
   Effect.gen(function* () {
     const { webRoot } = yield* HubConfig
     const api = HttpApiBuilder.layer(SportalApi).pipe(
-      Layer.provide(Layer.mergeAll(stageHandlers, guideHandlers, hostHandlers))
+      Layer.provide(Layer.mergeAll(screenHandlers, guideHandlers, hostHandlers))
     )
     const web = Option.match(webRoot, {
       onNone: () => Layer.empty,
@@ -72,14 +70,14 @@ export const layerListen: Layer.Layer<
   })
 )
 
-const stageHandlers = HttpApiBuilder.group(
+const screenHandlers = HttpApiBuilder.group(
   SportalApi,
-  "stage",
+  "screen",
   Effect.fn(function* (handlers) {
-    const stage = yield* Switcher
+    const director = yield* Director
     return handlers.handleAll({
-      current: () => stage.stage,
-      dispatch: ({ payload }) => stage.dispatch(payload.command)
+      current: () => director.screen,
+      dispatch: ({ payload }) => director.dispatch(payload.command)
     })
   })
 )
@@ -116,23 +114,22 @@ const hostHandlers = HttpApiBuilder.group(
 )
 
 /**
- * GET /api/live — the current slate and the stage, then every change, as server-sent events,
+ * GET /api/live — the current slate and the screen, then every change, as server-sent events,
  * with a comment every 20 seconds so proxies that close idle connections leave a quiet stream open.
  */
 const liveRoute = HttpRouter.add(
   "GET",
   "/api/live",
   Effect.gen(function* () {
-    const board = yield* Board
-    const stage = yield* Switcher
-    const stageChanges = stage.changes.pipe(
-      Stream.map((next) => LiveMessage.cases.StageChanged.make({ stage: next }))
+    const director = yield* Director
+    const screenChanges = director.screenChanges.pipe(
+      Stream.map((next) => LiveMessage.cases.ScreenChanged.make({ screen: next }))
     )
-    const slateChanges = board.changes.pipe(
+    const slateChanges = director.slateChanges.pipe(
       settled,
       Stream.map((slate) => slate.published())
     )
-    const messages: Stream.Stream<LiveMessage> = Stream.merge(slateChanges, stageChanges)
+    const messages: Stream.Stream<LiveMessage> = Stream.merge(slateChanges, screenChanges)
     const encode = Schema.encodeEffect(LiveMessageJson)
     const events = messages.pipe(
       Stream.mapEffect((message) => Effect.map(encode(message), (json) => `data: ${json}\n\n`))

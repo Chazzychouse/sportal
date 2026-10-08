@@ -2,9 +2,10 @@ import { fileURLToPath } from "node:url"
 import { gzipSync } from "node:zlib"
 import { NodeServices } from "@effect/platform-node"
 import { assert, describe, it } from "@effect/vitest"
-import { LeagueId } from "@sportal/domain/League"
+import type { LeagueId } from "@sportal/domain/League"
 import { Clock, DateTime, Effect, FileSystem, Layer, Option, Path, Ref, Schema, Stream } from "effect"
 import { TestClock } from "effect/testing"
+import { Director } from "../../Director.ts"
 import { Frame } from "../../Frame.ts"
 import { HubConfig } from "../../HubConfig.ts"
 import * as ScenarioClock from "../../scenario/ScenarioClock.ts"
@@ -14,8 +15,8 @@ import {
   type ScenarioUnknown,
   type ScenarioUnreadable
 } from "../../scenario/Scenarios.ts"
-import { Board } from "../../slate/Board.ts"
 import { Delivery } from "../../slate/Delivery.ts"
+import * as YouTubeTv from "../../source/youtube-tv/YouTubeTv.ts"
 import { recordingLogs } from "../../TestTelemetry.ts"
 import { Provider } from "../Provider.ts"
 import { listedBy } from "../TestProvider.ts"
@@ -400,9 +401,9 @@ function readAhead(from: string) {
   ).pipe(Layer.provide(Scenarios.layerFrom(from)))
 }
 
-/** The board taking `scenario(name, options)`, its slate provided to the test. */
+/** The Director taking `scenario(name, options)`, its slate provided to the test. */
 function playing(name: string, options: Options = {}) {
-  return Board.layer.pipe(Layer.provide(scenario(name, options)))
+  return Director.layer.pipe(Layer.provide(scenario(name, options)), Layer.provide(YouTubeTv.layer))
 }
 
 /** How a test sets a scenario up; one HubConfig, from `env`, serves the whole Hub under test. */
@@ -423,8 +424,8 @@ const committedScenarios = Scenarios.layer.pipe(Layer.provide(NodeServices.layer
 /** League `league`'s listed games in the slate. */
 function listed(league: LeagueId) {
   return Effect.map(
-    Board.use((board) => board.latest),
-    (slate) => slate.listedGames([league])
+    Director.use((director) => director.slate),
+    (slate) => slate.games.flatMap(({ snapshot }) => (snapshot.league === league ? [snapshot] : []))
   )
 }
 
@@ -596,8 +597,8 @@ function playingPushTiedByPoll() {
 
 /** The slate's games, leagues in order. */
 const slateGames = Effect.map(
-  Board.use((board) => board.latest),
-  (held) => held.listedGames(LeagueId.literals)
+  Director.use((director) => director.slate),
+  (held) => held.games.map(({ snapshot }) => snapshot)
 )
 
 /** The slate's games once the scenario of `frames` has played from its first frame to its last. */

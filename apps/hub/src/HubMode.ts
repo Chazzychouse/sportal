@@ -1,11 +1,11 @@
 import { NodeSocket } from "@effect/platform-node"
 import { Effect, Layer, Option } from "effect"
+import { Director } from "./Director.ts"
 import { HubConfig } from "./HubConfig.ts"
 import * as Espn from "./provider/espn/Espn.ts"
 import * as ScenarioClock from "./scenario/ScenarioClock.ts"
 import * as ScenarioSource from "./scenario/ScenarioSource.ts"
 import { Scenarios } from "./scenario/Scenarios.ts"
-import { Board } from "./slate/Board.ts"
 import * as YouTubeTv from "./source/youtube-tv/YouTubeTv.ts"
 
 /** What the Hub plays: the live day from ESPN and YouTube TV, or a scenario in their place, on scenario time. */
@@ -22,18 +22,16 @@ export const layer = Layer.unwrap(
   })
 )
 
-// The Board takes what ESPN decodes.
-const live = Layer.mergeAll(
-  Board.layer.pipe(Layer.provide(Espn.layer.pipe(Layer.provide(NodeSocket.layerWebSocketConstructorWS)))),
-  YouTubeTv.layer
+// The Director takes what ESPN decodes, against YouTube TV.
+const live = Director.layer.pipe(
+  Layer.provide(Espn.layer.pipe(Layer.provide(NodeSocket.layerWebSocketConstructorWS))),
+  Layer.provideMerge(YouTubeTv.layer)
 )
 
-// The scenario plays as the provider, decoded as ESPN recorded it. The provider and the Board share the scenario's
-// clock; the rest of the Hub keeps the real one.
-const scenario = Layer.mergeAll(
-  Board.layer.pipe(
-    Layer.provide(Espn.layerScenario.pipe(Layer.provide(Scenarios.layer))),
-    Layer.provide(ScenarioClock.layer)
-  ),
-  ScenarioSource.layer
+// The scenario plays as the provider, decoded as ESPN recorded it. Its frames play on the clock of the Director that
+// runs them, so the Director runs on the scenario's clock; the rest of the Hub keeps the real one.
+const scenario = Director.layer.pipe(
+  Layer.provide(Espn.layerScenario.pipe(Layer.provide(Scenarios.layer))),
+  Layer.provide(ScenarioClock.layer),
+  Layer.provideMerge(ScenarioSource.layer)
 )

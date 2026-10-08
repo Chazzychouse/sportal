@@ -1,5 +1,5 @@
-import { type GameId, GameSnapshot } from "@sportal/domain/Game"
-import { LayoutName, type Stage, type StageCommand, Tile } from "@sportal/domain/Stage"
+import { type Game, type GameId, GameSnapshot } from "@sportal/domain/Game"
+import { LayoutName, type Screen, type ScreenCommand, Tile } from "@sportal/domain/Screen"
 import { Option } from "effect"
 import {
   CommandDialog,
@@ -16,24 +16,25 @@ import { TeamLogo } from "../game/TeamLogo.tsx"
 import { dispatch } from "../hub/HubClient.ts"
 import { runtime } from "../hub/HubRuntime.ts"
 import { LayoutGlyph, layoutLabel } from "../layout/LayoutGlyph.tsx"
-import { keyText, tileActions } from "../stage/TileActions.tsx"
+import { keyText, tileActions } from "../screen/TileActions.tsx"
 
-/** Every Stage command by name: watch a game, act on a tile, change layout, go full screen. */
+/** Every Screen command by name: watch a game, act on a tile, change layout, go full screen. */
 export function CommandPalette(props: {
   open: boolean
   onOpenChange: (open: boolean) => void
-  stage: Stage
-  slate: ReadonlyArray<GameSnapshot>
+  screen: Screen
+  slate: ReadonlyArray<Game>
   selected: number
   onFullScreen: () => void
   onKeys: () => void
 }) {
-  const run = (command: StageCommand) => {
+  const run = (command: ScreenCommand) => {
     runtime.runFork(dispatch(command))
     props.onOpenChange(false)
   }
-  const gameOn = (id: GameId) => props.slate.find((game) => game.id === id)
-  const occupied = props.stage.onStage().flatMap((tile, slot) => {
+  const snapshots = props.slate.map(({ snapshot }) => snapshot)
+  const gameOn = (id: GameId) => snapshots.find((game) => game.id === id)
+  const occupied = props.screen.onScreen().flatMap((tile, slot) => {
     if (Tile.guards.Empty(tile)) return []
     const game = gameOn(tile.game)
     return [{ slot, name: game === undefined ? `Tile ${slot + 1}` : scoreline(game) }]
@@ -52,7 +53,7 @@ export function CommandPalette(props: {
       <CommandList className="max-h-[min(60vh,28rem)]">
         <CommandEmpty>Nothing matches.</CommandEmpty>
         <CommandGroup heading={`Watch in tile ${props.selected + 1}`}>
-          {[...props.slate].sort(GameSnapshot.watchOrder).map((game) => (
+          {snapshots.toSorted(GameSnapshot.watchOrder).map((game) => (
             <CommandItem
               key={game.id}
               value={`watch ${scoreline(game)} ${game.away.team.name} ${game.home.team.name} ${game.networks()} ${game.id}`}
@@ -70,7 +71,7 @@ export function CommandPalette(props: {
           <CommandGroup heading="Tiles">
             {occupied.flatMap(({ slot, name }) =>
               // The Display group below has the Unsolo.
-              tileActions(props.stage, slot, slot === props.selected)
+              tileActions(props.screen, slot, slot === props.selected)
                 .filter((action) => action.id !== "unsolo")
                 .map((action) => {
                   return (
@@ -96,12 +97,12 @@ export function CommandPalette(props: {
             >
               <LayoutGlyph name={layout} />
               {layoutLabel(layout)}
-              {props.stage.layout === layout && <CommandShortcut>current</CommandShortcut>}
+              {props.screen.layout === layout && <CommandShortcut>current</CommandShortcut>}
             </CommandItem>
           ))}
         </CommandGroup>
         <CommandGroup heading="Display">
-          {Option.isSome(props.stage.solo) && (
+          {Option.isSome(props.screen.solo) && (
             <CommandItem value="unsolo" onSelect={() => run({ _tag: "Unsolo" })}>
               Unsolo
               <CommandShortcut>Esc</CommandShortcut>

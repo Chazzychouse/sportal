@@ -130,28 +130,28 @@ export const Hotkey = Object.assign(
         hotkey: { _tag: "Unsolo" }
       },
       {
-        group: "Stage",
+        group: "Screen",
         keys: ["L"],
         does: "Next layout",
         press: { code: "KeyL", from: "stream" },
         hotkey: { _tag: "NextLayout" }
       },
       {
-        group: "Stage",
+        group: "Screen",
         keys: ["F11"],
         does: "Full screen",
         press: { code: "F11", from: "stream" },
         hotkey: { _tag: "FullScreen" }
       },
       {
-        group: "Stage",
+        group: "Screen",
         keys: ["Ctrl", "K"],
         does: "Command palette",
         press: { code: "KeyK", control: true, from: "stream" },
         hotkey: { _tag: "CommandPalette" }
       },
       {
-        group: "Stage",
+        group: "Screen",
         keys: ["?"],
         does: "These keys",
         press: { code: "Slash", shift: true, from: "stream" },

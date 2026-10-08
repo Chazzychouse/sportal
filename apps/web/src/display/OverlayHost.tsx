@@ -1,6 +1,6 @@
 import type { GameId } from "@sportal/domain/Game"
 import { createContext, type ReactNode, useCallback, useContext, useLayoutEffect, useRef } from "react"
-import { coveredGames } from "../stage/TileRects.ts"
+import { coveredGames } from "../screen/TileRects.ts"
 
 /**
  * Where overlays meet native video. Provider views draw above the web UI, so an overlay (a dialog, the command

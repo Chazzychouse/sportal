@@ -62,7 +62,7 @@ describe("confine", () => {
 
   it("should let a permitted navigation through", () => {
     const { contents, warn } = confined({ subframes: false })
-    const allowed = navigation("http://hub/stage", true)
+    const allowed = navigation("http://hub/screen", true)
 
     contents.emit("will-navigate", allowed)
 

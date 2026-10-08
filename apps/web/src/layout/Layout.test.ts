@@ -1,5 +1,5 @@
 import { assert, describe, it } from "@effect/vitest"
-import { LayoutName, type Split, Stage } from "@sportal/domain/Stage"
+import { LayoutName, Screen, type Split } from "@sportal/domain/Screen"
 import { Layout } from "./Layout.ts"
 
 describe("Layout#slots", () => {
@@ -71,11 +71,11 @@ describe("Layout#slots", () => {
   )
 
   it.each(layoutsAtSplits())(
-    "should give as many slots as Stage.slotCount: $name at $split.x,$split.y",
+    "should give as many slots as Screen.slotCount: $name at $split.x,$split.y",
     (layout) => {
       const slots = layout.slots()
 
-      assert.strictEqual(slots.length, Stage.slotCount(layout.name))
+      assert.strictEqual(slots.length, Screen.slotCount(layout.name))
     }
   )
 })
@@ -147,7 +147,7 @@ describe("Layout.clamp", () => {
 /** Every layout at its default split and at each end of the bounds. */
 function layoutsAtSplits(): ReadonlyArray<Layout> {
   return LayoutName.literals.flatMap((name) =>
-    [Stage.initial.splits[name], { x: 0.2, y: 0.2 }, { x: 0.8, y: 0.8 }].map(
+    [Screen.initial.splits[name], { x: 0.2, y: 0.2 }, { x: 0.8, y: 0.8 }].map(
       (split) => new Layout({ name, split })
     )
   )

@@ -9,13 +9,13 @@ import { Score } from "../game/Score.tsx"
 import { dispatch } from "../hub/HubClient.ts"
 import { runtime, useLive } from "../hub/HubRuntime.ts"
 import { LayoutPicker } from "../layout/LayoutPicker.tsx"
+import { useScreenFailureToasts } from "../screen/Rejections.ts"
 import { PlaceBadge } from "../slate/PlaceBadge.tsx"
 import { StripCard } from "../slate/StripCards.ts"
-import { useStageFailureToasts } from "../stage/Rejections.ts"
-import { StageMap } from "./StageMap.tsx"
+import { ScreenMap } from "./ScreenMap.tsx"
 
 /**
- * The Remote: a phone's view of the Stage. The layout in miniature on top, the slate below in tabs; tapping a
+ * The Remote: a phone's view of the Screen. The layout in miniature on top, the slate below in tabs; tapping a
  * game puts it in the selected tile and selects the next empty one.
  */
 export function RemoteView() {
@@ -24,9 +24,9 @@ export function RemoteView() {
   // handler's `display` is current.
   const { display, run } = useDisplay()
   const [tab, setTab] = useState<StripCard["section"]>("Live")
-  useStageFailureToasts()
+  useScreenFailureToasts()
 
-  const cards = StripCard.of(live.stage, live.slate)
+  const cards = StripCard.of(live.screen, live.slate)
   const shown = Arr.dedupe(cards.map((card) => card.section))
   // A tab with no games is hidden; if it was the open one, the first with games opens instead.
   const open = shown.includes(tab) ? tab : shown[0]
@@ -37,7 +37,7 @@ export function RemoteView() {
         <header className="flex items-center gap-2">
           <BrandMark />
           <ConnectionPill connection={live.connection} />
-          {Option.isSome(live.stage.solo) && (
+          {Option.isSome(live.screen.solo) && (
             <button
               type="button"
               onClick={() => runtime.runFork(dispatch({ _tag: "Unsolo" }))}
@@ -48,12 +48,12 @@ export function RemoteView() {
             </button>
           )}
         </header>
-        <LayoutPicker current={live.stage.layout} fill />
-        <StageMap
-          stage={live.stage}
+        <LayoutPicker current={live.screen.layout} fill />
+        <ScreenMap
+          screen={live.screen}
           slate={live.slate}
-          selected={display.selectedOn(live.stage)}
-          onSelect={(slot) => run(display.select(slot, live.stage))}
+          selected={display.selectedOn(live.screen)}
+          onSelect={(slot) => run(display.select(slot, live.screen))}
         />
       </div>
 
@@ -81,7 +81,7 @@ export function RemoteView() {
           .filter((card) => card.section === open)
           .map((card) => {
             const { game, place } = card
-            const dropped = display.drop(card, live.stage)
+            const dropped = display.drop(card, live.screen)
             const networks = game?.networks()
 
             return (

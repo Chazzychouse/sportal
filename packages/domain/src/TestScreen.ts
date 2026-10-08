@@ -1,11 +1,11 @@
 import { Result } from "effect"
 import { ChannelAvailability } from "./Channel.ts"
 import { GameId } from "./Game.ts"
-import { Stage } from "./Stage.ts"
+import { Screen } from "./Screen.ts"
 
-/** A game the stage tests put in a tile, by an ESPN event id. */
+/** A game the screen tests put in a tile, by an ESPN event id. */
 export const bama = GameId.make("401856707")
-/** A second game for the stage tests, by another ESPN event id. */
+/** A second game for the screen tests, by another ESPN event id. */
 export const irish = GameId.make("401858250")
 
 /** FOX on YouTube TV, a channel a carried game is watched on. */
@@ -25,16 +25,21 @@ export function nowhere() {
   return ChannelAvailability.NotCarried({ why: "NoStream" })
 }
 
-/** `stage` with `game` assigned to `tile`, its channel from `availabilityOf`. */
-export function assign(stage: Stage, tile: number, game: GameId, availabilityOf: () => ChannelAvailability) {
-  return Result.getOrThrow(stage.apply({ _tag: "Assign", tile, game }, availabilityOf))
+/** `screen` with `game` assigned to `tile`, its channel from `availabilityOf`. */
+export function assign(
+  screen: Screen,
+  tile: number,
+  game: GameId,
+  availabilityOf: () => ChannelAvailability
+) {
+  return Result.getOrThrow(screen.apply({ _tag: "Assign", tile, game }, availabilityOf))
 }
 
 /** A Quad holding these games as stream tiles on FOX, in order; `undefined` leaves a tile empty. */
 export function fill(games: ReadonlyArray<GameId | undefined>) {
-  return games.reduce<Stage>(
-    (stage, game, tile) => (game === undefined ? stage : assign(stage, tile, game, onFox)),
-    Stage.initial
+  return games.reduce<Screen>(
+    (screen, game, tile) => (game === undefined ? screen : assign(screen, tile, game, onFox)),
+    Screen.initial
   )
 }
 

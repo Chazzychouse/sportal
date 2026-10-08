@@ -1,20 +1,20 @@
 import { assert, describe, it } from "@effect/vitest"
 import type { GameId } from "@sportal/domain/Game"
-import { Stage } from "@sportal/domain/Stage"
-import { bama, fill, irish, soloed } from "@sportal/domain/TestStage"
+import { Screen } from "@sportal/domain/Screen"
+import { bama, fill, irish, soloed } from "@sportal/domain/TestScreen"
 import { tileActions } from "./TileActions.tsx"
 
 describe("tileActions", () => {
   it("should offer nothing for an empty tile", () => {
-    const actions = tileActions(Stage.initial, 0, true)
+    const actions = tileActions(Screen.initial, 0, true)
 
     assert.deepStrictEqual(actions, [])
   })
 
   it("should offer hear, solo, and clear for the main tile, with no promote", () => {
-    const stage = fill([bama, irish])
+    const screen = fill([bama, irish])
 
-    const actions = tileActions(stage, 0, true)
+    const actions = tileActions(screen, 0, true)
 
     assert.deepStrictEqual(
       actions.map((action) => action.id),
@@ -23,18 +23,18 @@ describe("tileActions", () => {
   })
 
   it("should offer promote for any other tile, sending it that tile", () => {
-    const stage = fill([bama, irish])
+    const screen = fill([bama, irish])
 
-    const promote = tileActions(stage, 1, true).find((action) => action.id === "promote")
+    const promote = tileActions(screen, 1, true).find((action) => action.id === "promote")
 
     assert.deepStrictEqual(promote?.command, { _tag: "Promote", tile: 1 })
     assert.strictEqual(promote?.key, "Shift+2")
   })
 
   it("should swap solo for unsolo on the soloed tile", () => {
-    const stage = soloed([bama, irish], 1)
+    const screen = soloed([bama, irish], 1)
 
-    const actions = tileActions(stage, 1, true)
+    const actions = tileActions(screen, 1, true)
 
     assert.deepStrictEqual(
       actions.map((action) => action.id),
@@ -44,39 +44,39 @@ describe("tileActions", () => {
   })
 
   it("should give solo its key on the selected tile", () => {
-    const stage = fill([bama, irish])
+    const screen = fill([bama, irish])
 
-    const key = actionOf(stage, 1, true, "solo")?.key
+    const key = actionOf(screen, 1, true, "solo")?.key
 
     assert.strictEqual(key, "F")
   })
 
   it("should give solo no key on a tile that is not selected", () => {
-    const stage = fill([bama, irish])
+    const screen = fill([bama, irish])
 
-    const key = actionOf(stage, 1, false, "solo")?.key
+    const key = actionOf(screen, 1, false, "solo")?.key
 
     assert.strictEqual(key, undefined)
   })
 
   it("should show unsolo's key on the soloed tile whether or not it is selected", () => {
-    const stage = soloed([bama, irish], 1)
+    const screen = soloed([bama, irish], 1)
 
-    const key = actionOf(stage, 1, false, "unsolo")?.key
+    const key = actionOf(screen, 1, false, "unsolo")?.key
 
     assert.strictEqual(key, "Escape")
   })
 
   it("should word hear by whether the tile's sound is already on", () => {
-    const stage = fill([bama, irish])
-    const wording = (game: GameId) => (stage.hears(game) ? "Sound on" : "Hear this game")
+    const screen = fill([bama, irish])
+    const wording = (game: GameId) => (screen.hears(game) ? "Sound on" : "Hear this game")
 
-    const labels = [actionOf(stage, 0, true, "hear")?.label, actionOf(stage, 1, true, "hear")?.label]
+    const labels = [actionOf(screen, 0, true, "hear")?.label, actionOf(screen, 1, true, "hear")?.label]
 
     assert.deepStrictEqual(labels, [wording(bama), wording(irish)])
   })
 })
 
-function actionOf(stage: Stage, slot: number, selected: boolean, id: string) {
-  return tileActions(stage, slot, selected).find((action) => action.id === id)
+function actionOf(screen: Screen, slot: number, selected: boolean, id: string) {
+  return tileActions(screen, slot, selected).find((action) => action.id === id)
 }

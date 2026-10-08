@@ -1,7 +1,7 @@
 import type { GameId } from "@sportal/domain/Game"
 import { useEffect } from "react"
 import { Field } from "./game/Field.tsx"
-import { useLive, usePlays } from "./hub/HubRuntime.ts"
+import { useLive } from "./hub/HubRuntime.ts"
 import { Connection } from "./hub/LiveStream.ts"
 import { ScenarioStrip } from "./ScenarioStrip.tsx"
 
@@ -12,8 +12,7 @@ import { ScenarioStrip } from "./ScenarioStrip.tsx"
  */
 export function ScenarioStream(props: { game: GameId }) {
   const { slate, connection } = useLive()
-  const plays = usePlays(props.game)
-  const game = slate.find((candidate) => candidate.id === props.game)
+  const game = slate.find(({ snapshot }) => snapshot.id === props.game)
   useTone(props.game)
 
   return (
@@ -26,12 +25,17 @@ export function ScenarioStream(props: { game: GameId }) {
         </p>
       ) : (
         <>
-          <ScenarioStrip game={game} />
+          <ScenarioStrip game={game.snapshot} />
           <figure className="flex min-h-0 flex-1 flex-col items-center gap-[2vmin] px-[4vmin] pb-[2vmin]">
-            <Field key={game.id} game={game} plays={plays} className="min-h-0 w-full flex-1" />
-            {game.situation?.lastPlay !== undefined && (
+            <Field
+              key={game.snapshot.id}
+              game={game.snapshot}
+              plays={game.plays}
+              className="min-h-0 w-full flex-1"
+            />
+            {game.snapshot.situation?.lastPlay !== undefined && (
               <figcaption className="text-center text-[3.5vmin] opacity-80">
-                {game.situation.lastPlay}
+                {game.snapshot.situation.lastPlay}
               </figcaption>
             )}
           </figure>

@@ -4,10 +4,10 @@ import { Toaster } from "@/design/sonner"
 import { dispatch } from "../hub/HubClient.ts"
 import { runtime, useLive } from "../hub/HubRuntime.ts"
 import { JoinRemote } from "../remote/JoinRemote.tsx"
+import { useScreenFailureToasts } from "../screen/Rejections.ts"
+import { ScreenView } from "../screen/ScreenView.tsx"
 import { SlateView } from "../slate/SlateView.tsx"
 import { StripCard } from "../slate/StripCards.ts"
-import { useStageFailureToasts } from "../stage/Rejections.ts"
-import { StageView } from "../stage/StageView.tsx"
 import { CommandPalette } from "./CommandPalette.tsx"
 import { Display, type DisplayStep } from "./Display.ts"
 import { useFullScreen } from "./FullScreen.ts"
@@ -23,14 +23,14 @@ export function DisplayView() {
     if (!open) setDisplay(display.close())
   }
   const fullScreen = useFullScreen()
-  const cards = StripCard.of(live.stage, live.slate)
-  const selected = display.selectedOn(live.stage)
-  const toggleSolo = display.press({ _tag: "ToggleSolo" }, live.stage, cards)
-  const liveCount = live.slate.filter((game) => game.progress() === "live").length
-  useStageFailureToasts()
+  const cards = StripCard.of(live.screen, live.slate)
+  const selected = display.selectedOn(live.screen)
+  const toggleSolo = display.press({ _tag: "ToggleSolo" }, live.screen, cards)
+  const liveCount = live.slate.filter(({ snapshot }) => snapshot.progress() === "live").length
+  useScreenFailureToasts()
 
   useHotkeys((hotkey: Hotkey) =>
-    Hotkey.guards.FullScreen(hotkey) ? fullScreen.toggle() : run(display.press(hotkey, live.stage, cards))
+    Hotkey.guards.FullScreen(hotkey) ? fullScreen.toggle() : run(display.press(hotkey, live.screen, cards))
   )
 
   return (
@@ -38,7 +38,7 @@ export function DisplayView() {
       <div className={`grid h-screen ${fullScreen.on ? "grid-rows-[1fr]" : "grid-rows-[auto_1fr_auto]"}`}>
         {fullScreen.on ? null : (
           <TopBar
-            stage={live.stage}
+            screen={live.screen}
             connection={live.connection}
             fullScreen={fullScreen}
             slate={{
@@ -54,16 +54,16 @@ export function DisplayView() {
             onRemote={() => setDisplay(display.open("JoinRemote"))}
           />
         )}
-        <StageView
-          stage={live.stage}
+        <ScreenView
+          screen={live.screen}
           slate={live.slate}
           connection={live.connection}
           selected={selected}
-          interacting={display.interactingOn(live.stage)}
-          onSelect={(slot) => run(display.select(slot, live.stage))}
+          interacting={display.interactingOn(live.screen)}
+          onSelect={(slot) => run(display.select(slot, live.screen))}
         />
         {fullScreen.on || !display.slateOpen ? null : (
-          <SlateView cards={cards} display={display} stage={live.stage} onDrop={run} />
+          <SlateView cards={cards} display={display} screen={live.screen} onDrop={run} />
         )}
       </div>
       <KeysDialog open={display.shows("Keys")} onOpenChange={closeOverlay} />
@@ -71,7 +71,7 @@ export function DisplayView() {
       <CommandPalette
         open={display.shows("Palette")}
         onOpenChange={closeOverlay}
-        stage={live.stage}
+        screen={live.screen}
         slate={live.slate}
         selected={selected}
         onFullScreen={fullScreen.toggle}

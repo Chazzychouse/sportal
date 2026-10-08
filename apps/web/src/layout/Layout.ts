@@ -1,16 +1,16 @@
-import { LayoutName, Split, Stage } from "@sportal/domain/Stage"
+import { LayoutName, Screen, Split } from "@sportal/domain/Screen"
 import { Schema } from "effect"
 
-/** A layout with its dividers: the slots it arranges, main tile first, as fractions of the Stage area. */
+/** A layout with its dividers: the slots it arranges, main tile first, as fractions of the Screen area. */
 export class Layout extends Schema.Class<Layout>("sportal/web/Layout")({ name: LayoutName, split: Split }) {
-  /** The Stage's current layout at its split. */
-  static of(stage: Stage): Layout {
-    return new Layout({ name: stage.layout, split: stage.splits[stage.layout] })
+  /** The Screen's current layout at its split. */
+  static of(screen: Screen): Layout {
+    return new Layout({ name: screen.layout, split: screen.splits[screen.layout] })
   }
 
-  /** A layout at the split a new Stage gives it. */
+  /** A layout at the split a new Screen gives it. */
   static ofDefault(name: LayoutName): Layout {
-    return new Layout({ name, split: Stage.initial.splits[name] })
+    return new Layout({ name, split: Screen.initial.splits[name] })
   }
 
   /** The axes of the dividers a layout uses. */
@@ -23,7 +23,7 @@ export class Layout extends Schema.Class<Layout>("sportal/web/Layout")({ name: L
     return names[(names.indexOf(name) + 1) % names.length] ?? "Single"
   }
 
-  /** The split with each divider brought into the Stage's split bounds. */
+  /** The split with each divider brought into the Screen's split bounds. */
   static clamp(split: Split): Split {
     return { x: within(split.x), y: within(split.y) }
   }
@@ -64,7 +64,7 @@ const slotsOf: Record<LayoutName, (split: Split) => ReadonlyArray<ReturnType<typ
 }
 
 function within(at: number): number {
-  return Math.min(Stage.splitBounds.max, Math.max(Stage.splitBounds.min, at))
+  return Math.min(Screen.splitBounds.max, Math.max(Screen.splitBounds.min, at))
 }
 
 /** The rectangle between two corners. */

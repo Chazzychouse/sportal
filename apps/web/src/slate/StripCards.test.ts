@@ -1,21 +1,21 @@
 import { assert, describe, it } from "@effect/vitest"
 import { GameId } from "@sportal/domain/Game"
-import { Stage } from "@sportal/domain/Stage"
-import { withTiles } from "../stage/TestStage.ts"
+import { Screen } from "@sportal/domain/Screen"
+import { withTiles } from "../screen/TestScreen.ts"
 import { StripCard } from "./StripCards.ts"
 import { slate } from "./TestSlate.ts"
 
 describe("StripCard.of", () => {
   it("should order the slate live, upcoming by kickoff, then over", () => {
-    const cards = StripCard.of(Stage.initial, slate)
+    const cards = StripCard.of(Screen.initial, slate)
 
     assert.deepStrictEqual(ids(cards), ["live", "soon", "later", "done"])
   })
 
-  it("should put benched games first, once, with their tile, marking games on stage with their slot", () => {
-    const stage = withTiles(["soon", undefined, undefined, undefined, "done"])
+  it("should put benched games first, once, with their tile, marking games on screen with their slot", () => {
+    const screen = withTiles(["soon", undefined, undefined, undefined, "done"])
 
-    const cards = StripCard.of(stage, slate)
+    const cards = StripCard.of(screen, slate)
 
     assert.deepStrictEqual(ids(cards), ["done", "live", "soon", "later"])
     assert.deepStrictEqual(cards[0]?.place, { _tag: "Bench", tile: 4 })
@@ -28,31 +28,31 @@ describe("StripCard.of", () => {
   })
 
   it("should keep a benched game that left the slate, with no snapshot", () => {
-    const stage = withTiles([undefined, undefined, undefined, undefined, "gone"])
+    const screen = withTiles([undefined, undefined, undefined, undefined, "gone"])
 
-    const [first] = StripCard.of(stage, slate)
+    const [first] = StripCard.of(screen, slate)
 
     assert.strictEqual(first?.id, "gone")
     assert.isUndefined(first?.game)
   })
 
   it("should make StripCards", () => {
-    const [card] = StripCard.of(Stage.initial, slate)
+    const [card] = StripCard.of(Screen.initial, slate)
 
     assert.instanceOf(card, StripCard)
   })
 
   it("should make cards equal by value to the same cards made again", () => {
-    const [card] = StripCard.of(Stage.initial, slate)
+    const [card] = StripCard.of(Screen.initial, slate)
 
-    const [again] = StripCard.of(Stage.initial, slate)
+    const [again] = StripCard.of(Screen.initial, slate)
 
     assert.deepStrictEqual(again, card)
   })
 })
 
 describe("StripCard#pickable", () => {
-  it("should be true for a free game and a benched one, false for a game on stage", () => {
+  it("should be true for a free game and a benched one, false for a game on screen", () => {
     const cards = StripCard.of(withTiles(["soon", undefined, undefined, undefined, "done"]), slate)
 
     const pickable = cards.map((card) => card.pickable())
@@ -78,8 +78,8 @@ describe("StripCard.nextPick", () => {
     assert.strictEqual(pick, "soon")
   })
 
-  it("should step over a game on stage", () => {
-    const cards = benchedAndOnStage()
+  it("should step over a game on screen", () => {
+    const cards = benchedAndOnScreen()
 
     const pick = StripCard.nextPick(cards, GameId.make("live"), 1)
 
@@ -87,7 +87,7 @@ describe("StripCard.nextPick", () => {
   })
 
   it("should wrap from the last card onto a bench card", () => {
-    const cards = benchedAndOnStage()
+    const cards = benchedAndOnScreen()
 
     const pick = StripCard.nextPick(cards, GameId.make("later"), 1)
 
@@ -95,7 +95,7 @@ describe("StripCard.nextPick", () => {
   })
 
   it("should wrap back from the first card to the last", () => {
-    const cards = benchedAndOnStage()
+    const cards = benchedAndOnScreen()
 
     const pick = StripCard.nextPick(cards, GameId.make("done"), -1)
 
@@ -111,7 +111,7 @@ describe("StripCard.nextPick", () => {
   })
 
   it("should start over when the pick has left the strip", () => {
-    const cards = StripCard.of(Stage.initial, slate)
+    const cards = StripCard.of(Screen.initial, slate)
 
     const pick = StripCard.nextPick(cards, GameId.make("gone"), 1)
 
@@ -132,6 +132,6 @@ function ids(cards: ReadonlyArray<StripCard>) {
 }
 
 /** The cards done (bench), live, soon (on tile 0), later. */
-function benchedAndOnStage() {
+function benchedAndOnScreen() {
   return StripCard.of(withTiles(["soon", undefined, undefined, undefined, "done"]), slate)
 }

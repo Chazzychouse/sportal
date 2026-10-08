@@ -24,15 +24,15 @@ export type Tile = typeof Tile.Type
 
 const empty: Tile = { _tag: "Empty" }
 
-/** The layouts a Stage can take, in the order the next-layout hotkey cycles through them. */
+/** The layouts a Screen can take, in the order the next-layout hotkey cycles through them. */
 export const LayoutName = Schema.Literals(["Single", "Pair", "Quad", "MainThree", "MainFive"])
 export type LayoutName = typeof LayoutName.Type
 
-/** Where a layout's dividers sit, as fractions of the Stage area. */
+/** Where a layout's dividers sit, as fractions of the Screen area. */
 export const Split = Schema.Struct({ x: Schema.Finite, y: Schema.Finite })
 export type Split = typeof Split.Type
 
-/** Each layout's slot count and the split a new Stage gives it. */
+/** Each layout's slot count and the split a new Screen gives it. */
 const layouts = {
   Single: { slots: 1, split: { x: 0.5, y: 0.5 } },
   Pair: { slots: 2, split: { x: 0.5, y: 0.5 } },
@@ -41,19 +41,19 @@ const layouts = {
   MainFive: { slots: 6, split: { x: 2 / 3, y: 2 / 3 } }
 } as const satisfies Record<LayoutName, { slots: number; split: Split }>
 
-export class Stage extends Schema.Class<Stage>("sportal/Stage")({
-  /** The first `Stage.slotCount(layout)` tiles are on stage, main tile first; the rest are the bench. */
+export class Screen extends Schema.Class<Screen>("sportal/Screen")({
+  /** The first `Screen.slotCount(layout)` tiles are on screen, main tile first; the rest are the bench. */
   tiles: Schema.Array(Tile),
   layout: LayoutName,
   /** Each layout's own split, kept while another layout is shown. */
   splits: Schema.Record(LayoutName, Split),
-  /** The game whose sound is on: always an on-stage game, or none when the stage is empty. */
+  /** The game whose sound is on: always an on-screen game, or none when the screen is empty. */
   audioFocus: Schema.OptionFromOptionalKey(GameId),
-  /** The game filling the Stage: always an on-stage game. */
+  /** The game filling the Screen: always an on-screen game. */
   solo: Schema.OptionFromOptionalKey(GameId)
 }) {
   /** An empty Quad, every layout at its default split. */
-  static readonly initial = new Stage({
+  static readonly initial = new Screen({
     tiles: [empty, empty, empty, empty],
     layout: "Quad",
     splits: Rec.map(layouts, ({ split }) => split),
@@ -73,38 +73,38 @@ export class Stage extends Schema.Class<Stage>("sportal/Stage")({
     return Option.contains(this.audioFocus, game)
   }
 
-  /** Whether the game fills the Stage. */
+  /** Whether the game fills the Screen. */
   soloes(game: GameId): boolean {
     return Option.contains(this.solo, game)
   }
 
-  /** The Stage with the current layout's split replaced: the preview of a divider drag. */
-  withSplit(split: Split): Stage {
-    return new Stage({ ...this, splits: { ...this.splits, [this.layout]: split } })
+  /** The Screen with the current layout's split replaced: the preview of a divider drag. */
+  withSplit(split: Split): Screen {
+    return new Screen({ ...this, splits: { ...this.splits, [this.layout]: split } })
   }
 
   /** The tiles in the layout's slots, main tile first. */
-  onStage(): ReadonlyArray<Tile> {
-    return this.tiles.slice(0, Stage.slotCount(this.layout))
+  onScreen(): ReadonlyArray<Tile> {
+    return this.tiles.slice(0, Screen.slotCount(this.layout))
   }
 
   /** The games on the bench, in order, each with its tile. Empty tiles past the slots are skipped. */
   benched(): ReadonlyArray<{ tile: number; game: GameId }> {
-    const first = Stage.slotCount(this.layout)
+    const first = Screen.slotCount(this.layout)
     return this.tiles.flatMap((tile, index) =>
       index < first || Tile.guards.Empty(tile) ? [] : [{ tile: index, game: tile.game }]
     )
   }
 
-  /** The slot a game is in, if it is on stage. */
+  /** The slot a game is in, if it is on screen. */
   slotOf(game: GameId): number | undefined {
-    const slot = this.onStage().findIndex((tile) => !Tile.guards.Empty(tile) && tile.game === game)
+    const slot = this.onScreen().findIndex((tile) => !Tile.guards.Empty(tile) && tile.game === game)
     return slot === -1 ? undefined : slot
   }
 
-  /** The first empty on-stage slot after `slot`, wrapping round; never `slot` itself. */
+  /** The first empty on-screen slot after `slot`, wrapping round; never `slot` itself. */
   nextEmptySlot(slot: number): number | undefined {
-    const slots = this.onStage()
+    const slots = this.onScreen()
     if (slots.length < 2) return undefined
     return Option.getOrUndefined(
       Arr.findFirst(
@@ -119,13 +119,13 @@ export class Stage extends Schema.Class<Stage>("sportal/Stage")({
    * becomes a stream tile and any other a data tile.
    */
   apply(
-    command: StageCommand,
+    command: ScreenCommand,
     availabilityOf: (game: GameId) => ChannelAvailability
-  ): Result.Result<Stage, StageRejection> {
-    return StageCommand.match<Result.Result<Stage, StageRejection>>(command, {
+  ): Result.Result<Screen, ScreenRejection> {
+    return ScreenCommand.match<Result.Result<Screen, ScreenRejection>>(command, {
       SetLayout: ({ layout }) => Result.succeed(settle({ ...this, layout })),
       SetSplit: ({ split }) => {
-        const { min, max } = Stage.splitBounds
+        const { min, max } = Screen.splitBounds
         const holds = [split.x, split.y].every((at) => at >= min && at <= max)
         return holds ? Result.succeed(settle(this.withSplit(split))) : reject("split-out-of-range")
       },
@@ -137,7 +137,7 @@ export class Stage extends Schema.Class<Stage>("sportal/Stage")({
       Assign: ({ tile, game }) =>
         tileAt(this, tile, () => {
           const assigned = tileFor(game, availabilityOf(game))
-          // A game appears in at most one tile, on stage or benched: assigning it elsewhere moves it.
+          // A game appears in at most one tile, on screen or benched: assigning it elsewhere moves it.
           const tiles = this.tiles.map((existing, index) =>
             index === tile
               ? assigned
@@ -165,25 +165,25 @@ export class Stage extends Schema.Class<Stage>("sportal/Stage")({
           )
         ),
       FocusAudio: ({ tile }) =>
-        onStageAt(this, tile, ({ game }) =>
+        onScreenAt(this, tile, ({ game }) =>
           Result.succeed(settle({ ...this, audioFocus: Option.some(game) }))
         ),
       Solo: ({ tile }) =>
-        onStageAt(this, tile, ({ game }) =>
+        onScreenAt(this, tile, ({ game }) =>
           Result.succeed(settle({ ...this, audioFocus: Option.some(game), solo: Option.some(game) }))
         )
     })
   }
 
   /**
-   * Re-resolves every occupied tile, on stage and benched, after what a source knows has changed. A game
+   * Re-resolves every occupied tile, on screen and benched, after what a source knows has changed. A game
    * `availabilityOf` knows nothing about keeps its tile as it was: the change did not concern it.
    *
    * A stream tile is replaced only when the guide carries its game on another channel. Any other answer
    * (a game running past its listing, no guide, a failed or stale read) never stops it. Every other occupied
    * tile becomes what the answer says.
    */
-  refresh(availabilityOf: (game: GameId) => Option.Option<ChannelAvailability>): Stage {
+  refresh(availabilityOf: (game: GameId) => Option.Option<ChannelAvailability>): Screen {
     const tiles = this.tiles.map((tile) =>
       Tile.guards.Empty(tile)
         ? tile
@@ -198,7 +198,7 @@ export class Stage extends Schema.Class<Stage>("sportal/Stage")({
   }
 }
 
-export const StageCommand = Schema.TaggedUnion({
+export const ScreenCommand = Schema.TaggedUnion({
   Assign: { tile: Schema.Int, game: GameId },
   Clear: { tile: Schema.Int },
   FocusAudio: { tile: Schema.Int },
@@ -209,11 +209,11 @@ export const StageCommand = Schema.TaggedUnion({
   Solo: { tile: Schema.Int },
   Unsolo: {}
 })
-export type StageCommand = typeof StageCommand.Type
+export type ScreenCommand = typeof ScreenCommand.Type
 
-export class StageRejection extends Schema.TaggedError<StageRejection>()(
-  "StageRejection",
-  { reason: Schema.Literals(["no-such-tile", "empty-tile", "offstage-tile", "split-out-of-range"]) },
+export class ScreenRejection extends Schema.TaggedError<ScreenRejection>()(
+  "ScreenRejection",
+  { reason: Schema.Literals(["no-such-tile", "empty-tile", "offscreen-tile", "split-out-of-range"]) },
   { httpApiStatus: 422 }
 ) {}
 
@@ -222,28 +222,28 @@ type Occupied = Exclude<Tile, { readonly _tag: "Empty" }>
 
 /** Runs `f` on the tile at `index`, or rejects a tile that does not exist. */
 function tileAt(
-  stage: Stage,
+  screen: Screen,
   index: number,
-  f: (tile: Tile) => Result.Result<Stage, StageRejection>
-): Result.Result<Stage, StageRejection> {
-  return Option.match(Arr.get(stage.tiles, index), { onNone: () => reject("no-such-tile"), onSome: f })
+  f: (tile: Tile) => Result.Result<Screen, ScreenRejection>
+): Result.Result<Screen, ScreenRejection> {
+  return Option.match(Arr.get(screen.tiles, index), { onNone: () => reject("no-such-tile"), onSome: f })
 }
 
-/** Runs `f` on the occupied on-stage tile at `index`, or says why there is none. */
-function onStageAt(
-  stage: Stage,
+/** Runs `f` on the occupied on-screen tile at `index`, or says why there is none. */
+function onScreenAt(
+  screen: Screen,
   index: number,
-  f: (tile: Occupied) => Result.Result<Stage, StageRejection>
-): Result.Result<Stage, StageRejection> {
-  return tileAt(stage, index, (tile) =>
-    index >= Stage.slotCount(stage.layout) ? reject("offstage-tile") : occupied(tile, f)
+  f: (tile: Occupied) => Result.Result<Screen, ScreenRejection>
+): Result.Result<Screen, ScreenRejection> {
+  return tileAt(screen, index, (tile) =>
+    index >= Screen.slotCount(screen.layout) ? reject("offscreen-tile") : occupied(tile, f)
   )
 }
 
 function occupied(
   tile: Tile,
-  f: (tile: Occupied) => Result.Result<Stage, StageRejection>
-): Result.Result<Stage, StageRejection> {
+  f: (tile: Occupied) => Result.Result<Screen, ScreenRejection>
+): Result.Result<Screen, ScreenRejection> {
   return Tile.guards.Empty(tile) ? reject("empty-tile") : f(tile)
 }
 
@@ -261,17 +261,17 @@ function tileFor(game: GameId, availability: ChannelAvailability): Tile {
 }
 
 /**
- * Builds a Stage that keeps the invariants: the layout's slots exist, the bench ends in a game, audio is on
- * an on-stage game (the focused one while it is on stage, else the first), and solo is on an on-stage game.
+ * Builds a Screen that keeps the invariants: the layout's slots exist, the bench ends in a game, audio is on
+ * an on-screen game (the focused one while it is on screen, else the first), and solo is on an on-screen game.
  */
 function settle(fields: {
   tiles: ReadonlyArray<Tile>
   layout: LayoutName
-  splits: Stage["splits"]
+  splits: Screen["splits"]
   audioFocus: Option.Option<GameId>
   solo: Option.Option<GameId>
-}): Stage {
-  const slots = Stage.slotCount(fields.layout)
+}): Screen {
+  const slots = Screen.slotCount(fields.layout)
   const kept = Option.getOrElse(
     Option.map(
       Arr.findLastIndex(fields.tiles, (tile) => !Tile.guards.Empty(tile)),
@@ -280,14 +280,14 @@ function settle(fields: {
     () => 0
   )
   const tiles = Arr.makeBy(Math.max(slots, kept), (index) => fields.tiles[index] ?? empty)
-  const onStage = tiles.slice(0, slots).flatMap((tile) => (Tile.guards.Empty(tile) ? [] : [tile.game]))
-  const isOnStage = (game: GameId) => onStage.includes(game)
-  return new Stage({
+  const onScreen = tiles.slice(0, slots).flatMap((tile) => (Tile.guards.Empty(tile) ? [] : [tile.game]))
+  const isOnScreen = (game: GameId) => onScreen.includes(game)
+  return new Screen({
     tiles,
     layout: fields.layout,
     splits: fields.splits,
-    audioFocus: Option.orElse(Option.filter(fields.audioFocus, isOnStage), () => Arr.head(onStage)),
-    solo: Option.filter(fields.solo, isOnStage)
+    audioFocus: Option.orElse(Option.filter(fields.audioFocus, isOnScreen), () => Arr.head(onScreen)),
+    solo: Option.filter(fields.solo, isOnScreen)
   })
 }
 
@@ -300,8 +300,8 @@ function keepsStream(tile: Occupied, availability: ChannelAvailability): boolean
   )
 }
 
-function reject(reason: StageRejection["reason"]) {
-  return Result.fail(new StageRejection({ reason }))
+function reject(reason: ScreenRejection["reason"]) {
+  return Result.fail(new ScreenRejection({ reason }))
 }
 
 function swapped(tiles: ReadonlyArray<Tile>, a: number, b: number): ReadonlyArray<Tile> {

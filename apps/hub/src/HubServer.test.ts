@@ -3,19 +3,19 @@ import { assert, describe, it } from "@effect/vitest"
 import { LiveMessage, LiveMessageJson } from "@sportal/api/LiveMessage"
 import { SportalApi } from "@sportal/api/SportalApi"
 import { GameId, Network } from "@sportal/domain/Game"
-import type { Tile } from "@sportal/domain/Stage"
+import type { Tile } from "@sportal/domain/Screen"
 import { broadcast, snapshot, team } from "@sportal/domain/TestGame"
 import { DateTime, Effect, Layer, Option, Queue, Result, Schema, Stream } from "effect"
 import { HttpClient } from "effect/http"
 import { HttpApiClient } from "effect/http-api"
 import { TestClock } from "effect/testing"
 import { afterEach, vi } from "vitest"
+import { Director } from "./Director.ts"
 import { HubConfig } from "./HubConfig.ts"
 import * as HubServer from "./HubServer.ts"
-import { Switcher } from "./Switcher.ts"
 import { Delivery } from "./slate/Delivery.ts"
 import * as YouTubeTv from "./source/youtube-tv/YouTubeTv.ts"
-import { boardOver, delivered } from "./TestBoard.ts"
+import { delivered, directorOver } from "./TestDirector.ts"
 
 type Interfaces = Record<
   string,
@@ -50,11 +50,11 @@ describe("Hub API", () => {
       const client = yield* makeClient
       yield* firstSlateOnTestClock()
 
-      const stage = yield* client.stage.dispatch({
+      const screen = yield* client.screen.dispatch({
         payload: { command: { _tag: "Assign", tile: 0, game: game.id } }
       })
 
-      assert.deepStrictEqual(stage.tiles[0], noGuide)
+      assert.deepStrictEqual(screen.tiles[0], noGuide)
     }).pipe(Effect.provide(serverUnderTest()))
   )
 
@@ -63,11 +63,11 @@ describe("Hub API", () => {
       const client = yield* makeClient
       yield* firstSlateOnTestClock()
 
-      const rejected = yield* client.stage
+      const rejected = yield* client.screen
         .dispatch({ payload: { command: { _tag: "Clear", tile: 9 } } })
         .pipe(Effect.flip)
 
-      assert.strictEqual(rejected._tag, "StageRejection")
+      assert.strictEqual(rejected._tag, "ScreenRejection")
     }).pipe(Effect.provide(serverUnderTest()))
   )
 
@@ -96,7 +96,7 @@ describe("Hub API", () => {
     Effect.gen(function* () {
       const client = yield* makeClient
       yield* firstSlate()
-      yield* client.stage.dispatch({ payload: { command: { _tag: "Assign", tile: 0, game: game.id } } })
+      yield* client.screen.dispatch({ payload: { command: { _tag: "Assign", tile: 0, game: game.id } } })
       const now = yield* DateTime.now
       const guide = realSizedGuideAiring(now)
 
@@ -185,7 +185,7 @@ describe("GET /api/slate", () => {
 })
 
 describe("GET /api/live", () => {
-  it.effect("should stream the current slate and stage first, as server-sent events", () =>
+  it.effect("should stream the current slate and screen first, as server-sent events", () =>
     Effect.gen(function* () {
       yield* firstSlateOnTestClock()
 
@@ -200,28 +200,28 @@ describe("GET /api/live", () => {
       // Each event is one line, `data: <json>`, followed by a blank line.
       assert.isTrue(firstLine.startsWith("data: "))
       assert.isTrue(secondLine.startsWith("data: "))
-      assert.sameMembers([first._tag, second._tag], ["SlateChanged", "StageChanged"])
+      assert.sameMembers([first._tag, second._tag], ["SlateChanged", "ScreenChanged"])
       assert.deepStrictEqual(
         [first, second].flatMap((message) =>
-          LiveMessage.guards.SlateChanged(message) ? [message.recentPlays] : []
+          LiveMessage.guards.SlateChanged(message) ? message.games.map(({ plays }) => plays) : []
         ),
-        [{}]
+        [[]]
       )
     }).pipe(Effect.scoped, Effect.provide(serverUnderTest()))
   )
 
-  it.effect("should stream each change after the current slate and stage", () =>
+  it.effect("should stream each change after the current slate and screen", () =>
     Effect.gen(function* () {
       const api = yield* makeClient
       yield* firstSlateOnTestClock()
       const lines = yield* pastInitialMessages()
 
-      yield* api.stage.dispatch({ payload: { command: { _tag: "Assign", tile: 0, game: game.id } } })
+      yield* api.screen.dispatch({ payload: { command: { _tag: "Assign", tile: 0, game: game.id } } })
       const thirdLine = yield* Queue.take(lines)
 
       const third = messageOf(thirdLine)
       assert.isTrue(thirdLine.startsWith("data: "))
-      assert.deepStrictEqual(LiveMessage.guards.StageChanged(third) ? third.stage.tiles[0] : third, noGuide)
+      assert.deepStrictEqual(LiveMessage.guards.ScreenChanged(third) ? third.screen.tiles[0] : third, noGuide)
     }).pipe(Effect.scoped, Effect.provide(serverUnderTest()))
   )
 
@@ -238,26 +238,31 @@ describe("GET /api/live", () => {
 
       const message = messageOf(line)
       assert.deepStrictEqual(
-        LiveMessage.guards.SlateChanged(message) ? message.games.map(({ period }) => period) : message,
+        LiveMessage.guards.SlateChanged(message)
+          ? message.games.map(({ snapshot }) => snapshot.period)
+          : message,
         [4]
       )
       assert.strictEqual(waiting, 0)
     }).pipe(Effect.scoped, Effect.provide(serverUnderTest()))
   )
 
-  it.effect("should send each listed game as its snapshot, and none of what the slate remembers", () =>
-    Effect.gen(function* () {
-      yield* firstSlateOnTestClock()
+  it.effect(
+    "should send each listed game as its snapshot and plays, and nothing else the slate remembers",
+    () =>
+      Effect.gen(function* () {
+        yield* firstSlateOnTestClock()
 
-      const { lines } = yield* liveLines()
-      const line = yield* Queue.take(lines).pipe(
-        Effect.repeat({ until: (line) => line.includes("SlateChanged") })
-      )
+        const { lines } = yield* liveLines()
+        const line = yield* Queue.take(lines).pipe(
+          Effect.repeat({ until: (line) => line.includes("SlateChanged") })
+        )
 
-      const [entry] = JSON.parse(line.slice("data: ".length)).games
-      assert.strictEqual(entry.id, game.id)
-      assert.notMatch(line, /"plays"|"state"|"updatedAt"|"from"/)
-    }).pipe(Effect.scoped, Effect.provide(serverUnderTest()))
+        const [entry] = JSON.parse(line.slice("data: ".length)).games
+        assert.strictEqual(entry.snapshot.id, game.id)
+        assert.deepStrictEqual(Object.keys(entry), ["snapshot", "plays"])
+        assert.notMatch(line, /"state"|"updatedAt"|"from"/)
+      }).pipe(Effect.scoped, Effect.provide(serverUnderTest()))
   )
 
   it.effect("should send a comment every 20 seconds, so a proxy does not close a quiet stream", () =>
@@ -280,9 +285,9 @@ describe("GET /api/live", () => {
       yield* TestClock.adjust("20 seconds")
       yield* nextComment(lines)
 
-      yield* api.stage.dispatch({ payload: { command: { _tag: "Assign", tile: 0, game: game.id } } })
+      yield* api.screen.dispatch({ payload: { command: { _tag: "Assign", tile: 0, game: game.id } } })
       const change = yield* Queue.take(lines).pipe(
-        Effect.repeat({ until: (line) => line.includes("StageChanged") })
+        Effect.repeat({ until: (line) => line.includes("ScreenChanged") })
       )
 
       assert.isTrue(change.startsWith("data: "))
@@ -290,7 +295,7 @@ describe("GET /api/live", () => {
   )
 })
 
-/** Delivers the fbs listing of `game`, so the board has its first games to publish. */
+/** Delivers the fbs listing of `game`, so the Director has its first games to publish. */
 function firstSlate() {
   return delivered(Delivery.cases.Listing.make({ league: "fbs", games: [game] }))
 }
@@ -340,14 +345,14 @@ function realSizedGuideAiring(now: DateTime.Utc) {
   })
 }
 
-/** The first tile 0 the Stage shows that has the given kind; the current Stage is replayed, so this may not wait. */
+/** The first tile 0 the Screen shows that has the given kind; the current Screen is replayed, so this may not wait. */
 function tileOnceItIs(tag: Tile["_tag"]) {
   return Effect.gen(function* () {
-    const switcher = yield* Switcher
+    const director = yield* Director
 
-    return yield* switcher.changes.pipe(
-      Stream.filterMap((stage) => {
-        const tile = stage.tiles[0]
+    return yield* director.screenChanges.pipe(
+      Stream.filterMap((screen) => {
+        const tile = screen.tiles[0]
         return tile?._tag === tag ? Result.succeed(tile) : Result.failVoid
       }),
       Stream.take(1),
@@ -377,7 +382,7 @@ function liveLines() {
   })
 }
 
-/** Opens the live stream and takes its first two messages, the current slate and stage: the lines after them. */
+/** Opens the live stream and takes its first two messages, the current slate and screen: the lines after them. */
 function pastInitialMessages() {
   return Effect.gen(function* () {
     const { lines } = yield* liveLines()
@@ -413,9 +418,8 @@ function nextComment(lines: Queue.Queue<string>) {
 
 /** Everything behind the API, over a snapshot feed the test delivers to. */
 function hubUnderTest() {
-  return Switcher.layer.pipe(
+  return directorOver.pipe(
     Layer.provideMerge(YouTubeTv.layer),
-    Layer.provideMerge(boardOver),
     Layer.provideMerge(HubConfig.layerTest({ SPORTAL_VERSION: "1.2.3" }))
   )
 }

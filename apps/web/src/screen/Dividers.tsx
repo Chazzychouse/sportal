@@ -1,4 +1,4 @@
-import { type LayoutName, type Split, Stage } from "@sportal/domain/Stage"
+import { type LayoutName, Screen, type Split } from "@sportal/domain/Screen"
 import { useRef } from "react"
 import { Layout } from "../layout/Layout.ts"
 import { gap } from "./TileRects.ts"
@@ -25,8 +25,8 @@ export function Dividers(props: {
         key={axis}
         role="separator"
         aria-orientation={axis === "x" ? "vertical" : "horizontal"}
-        aria-valuemin={Math.round(Stage.splitBounds.min * 100)}
-        aria-valuemax={Math.round(Stage.splitBounds.max * 100)}
+        aria-valuemin={Math.round(Screen.splitBounds.min * 100)}
+        aria-valuemax={Math.round(Screen.splitBounds.max * 100)}
         aria-valuenow={Math.round(props.split[axis] * 100)}
         tabIndex={-1}
         className={`group absolute z-10 flex touch-none items-center justify-center ${
