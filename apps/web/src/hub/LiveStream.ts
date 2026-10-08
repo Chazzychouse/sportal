@@ -1,4 +1,4 @@
-import { type LiveMessage, LiveMessageJson } from "@sportal/api/LiveMessage"
+import { LiveMessage, LiveMessageJson } from "@sportal/api/LiveMessage"
 import type { GameSnapshot } from "@sportal/domain/Game"
 import type { RecentPlays } from "@sportal/domain/RecentPlays"
 import { Stage } from "@sportal/domain/Stage"
@@ -57,16 +57,21 @@ interface Live {
   readonly stage: Stage
 }
 
-type SourceEvent = { _tag: "Opened" } | { _tag: "Errored" } | { _tag: "Received"; data: unknown }
+type SourceEvent = Data.TaggedEnum<{
+  Opened: object
+  Errored: object
+  Received: { readonly data: unknown }
+}>
+const SourceEvent = Data.taggedEnum<SourceEvent>()
 
 function sourceEvents() {
   return Stream.callback<SourceEvent>((queue) =>
     Effect.acquireRelease(
       Effect.sync(() => {
         const source = new EventSource("/api/live")
-        source.onopen = () => Queue.offerUnsafe(queue, { _tag: "Opened" })
-        source.onerror = () => Queue.offerUnsafe(queue, { _tag: "Errored" })
-        source.onmessage = (event) => Queue.offerUnsafe(queue, { _tag: "Received", data: event.data })
+        source.onopen = () => Queue.offerUnsafe(queue, SourceEvent.Opened())
+        source.onerror = () => Queue.offerUnsafe(queue, SourceEvent.Errored())
+        source.onmessage = (event) => Queue.offerUnsafe(queue, SourceEvent.Received({ data: event.data }))
         return source
       }),
       (source) => Effect.sync(() => source.close())
@@ -75,38 +80,36 @@ function sourceEvents() {
 }
 
 function step(live: SubscriptionRef.SubscriptionRef<Live>, event: SourceEvent) {
-  switch (event._tag) {
-    case "Opened":
-      return SubscriptionRef.update(live, (current) => ({ ...current, connection: Connection.Connected() }))
-    case "Errored":
-      // Only a stream that was up is lost; one that never connected is still connecting, and one already lost
-      // keeps the instant it was lost. Either way, nothing changed, so nothing is published.
-      return DateTime.now.pipe(
+  return SourceEvent.$match(event, {
+    Opened: () =>
+      SubscriptionRef.update(live, (current) => ({ ...current, connection: Connection.Connected() })),
+    // Only a stream that was up is lost; one that never connected is still connecting, and one already lost
+    // keeps the instant it was lost. Either way, nothing changed, so nothing is published.
+    Errored: () =>
+      DateTime.now.pipe(
         Effect.flatMap((now) =>
           SubscriptionRef.updateSome(live, (current) =>
-            current.connection._tag === "Connected"
+            Connection.$is("Connected")(current.connection)
               ? Option.some({ ...current, connection: Connection.Lost({ since: now }) })
               : Option.none()
           )
         )
-      )
-    case "Received":
-      return decodeLiveMessage(event.data).pipe(
+      ),
+    Received: ({ data }) =>
+      decodeLiveMessage(data).pipe(
         Effect.flatMap((message) => SubscriptionRef.update(live, (current) => received(current, message))),
         Effect.catchTag("SchemaError", (error) =>
           Effect.logWarning("Skipped a live message that did not decode", error)
         )
       )
-  }
+  })
 }
 
 function received(live: Live, message: LiveMessage): Live {
-  switch (message._tag) {
-    case "SlateChanged":
-      return { ...live, slate: message.games, recentPlays: message.recentPlays }
-    case "StageChanged":
-      return { ...live, stage: message.stage }
-  }
+  return LiveMessage.match(message, {
+    SlateChanged: ({ games, recentPlays }): Live => ({ ...live, slate: games, recentPlays }),
+    StageChanged: ({ stage }): Live => ({ ...live, stage })
+  })
 }
 
 const decodeLiveMessage = Schema.decodeUnknownEffect(LiveMessageJson)
