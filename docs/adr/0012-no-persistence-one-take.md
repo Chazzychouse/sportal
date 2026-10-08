@@ -1,7 +1,7 @@
 # 12. No persistence for now; the slate takes each frame as it arrives
 
 Date: 2026-10-08
-Status: Accepted
+Status: Accepted; its scenario decision superseded by ADR 0013
 
 Supersedes ADR 0008, the poll fallback of ADR 0010, and the feed-log half of ADR 0011. Amends ADR 0009.
 

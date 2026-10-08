@@ -9,20 +9,7 @@
   "refresh": "30s",
   "links": [],
   "templating": {
-    "list": [
-      {
-        "name": "mode",
-        "label": "Mode",
-        "type": "query",
-        "datasource": {
-          "type": "prometheus",
-          "uid": "prometheus"
-        },
-        "query": "label_values(target_info{service_name=\"sportal-hub\"}, sportal_mode)",
-        "refresh": 2,
-        "sort": 1
-      }
-    ]
+    "list": []
   },
   "panels": [
     {
@@ -37,7 +24,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "max by (game, league, matchup) (sportal_game_state_ratio * on (job, instance) group_left target_info{sportal_mode=\"$mode\"})",
+          "expr": "max by (game, league, matchup) (sportal_game_state_ratio)",
           "instant": true,
           "range": false,
           "format": "table"
@@ -161,7 +148,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by (detected_level) (count_over_time({service_name=\"sportal-hub\"} | sportal_mode=\"$mode\" [$__interval]))",
+          "expr": "sum by (detected_level) (count_over_time({service_name=\"sportal-hub\"} [$__interval]))",
           "legendFormat": "{{detected_level}}"
         }
       ]
@@ -183,7 +170,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "{service_name=\"sportal-hub\"} | sportal_mode=\"$mode\" | detected_level=~\"warn|error|fatal|critical\""
+          "expr": "{service_name=\"sportal-hub\"} | detected_level=~\"warn|error|fatal|critical\""
         }
       ]
     },
@@ -210,12 +197,12 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "histogram_quantile(0.5, sum by (le) (rate(sportal_poll_duration_milliseconds_bucket[$__rate_interval]) * on (job, instance) group_left target_info{sportal_mode=\"$mode\"}))",
+          "expr": "histogram_quantile(0.5, sum by (le) (rate(sportal_poll_duration_milliseconds_bucket[$__rate_interval])))",
           "legendFormat": "p50"
         },
         {
           "refId": "B",
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(sportal_poll_duration_milliseconds_bucket[$__rate_interval]) * on (job, instance) group_left target_info{sportal_mode=\"$mode\"}))",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(sportal_poll_duration_milliseconds_bucket[$__rate_interval])))",
           "legendFormat": "p95"
         }
       ]
@@ -249,7 +236,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by (league) (increase(sportal_provider_errors_total[$__rate_interval]) * on (job, instance) group_left target_info{sportal_mode=\"$mode\"})",
+          "expr": "sum by (league) (increase(sportal_provider_errors_total[$__rate_interval]))",
           "legendFormat": "{{league}}"
         }
       ]
@@ -349,7 +336,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "max(sportal_live_feed_connected_ratio * on (job, instance) group_left target_info{sportal_mode=\"$mode\"})",
+          "expr": "max(sportal_live_feed_connected_ratio)",
           "legendFormat": "connected"
         }
       ]
@@ -383,7 +370,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by (reason) (increase(sportal_live_feed_errors_total[$__rate_interval]) * on (job, instance) group_left target_info{sportal_mode=\"$mode\"})",
+          "expr": "sum by (reason) (increase(sportal_live_feed_errors_total[$__rate_interval]))",
           "legendFormat": "{{reason}}"
         }
       ]
@@ -417,7 +404,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum (increase(sportal_live_feed_checkpoint_failures_total[$__rate_interval]) * on (job, instance) group_left target_info{sportal_mode=\"$mode\"}) or vector(0)",
+          "expr": "sum (increase(sportal_live_feed_checkpoint_failures_total[$__rate_interval])) or vector(0)",
           "legendFormat": "checkpoint failures"
         }
       ],
@@ -447,7 +434,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum(increase(sportal_live_feed_connects_total[$__range]) * on (job, instance) group_left target_info{sportal_mode=\"$mode\"}) or vector(0)",
+          "expr": "sum(increase(sportal_live_feed_connects_total[$__range])) or vector(0)",
           "legendFormat": "connects"
         }
       ]
@@ -473,7 +460,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "{service_name=\"sportal-hub\"} | sportal_mode=\"$mode\" |~ \"FastCast|EspnProvider|EspnDecoder|Director: the provider's frames\""
+          "expr": "{service_name=\"sportal-hub\"} |~ \"FastCast|EspnProvider|EspnDecoder|Director: the provider's frames\""
         }
       ]
     }

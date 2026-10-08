@@ -35,7 +35,7 @@ easiest to break.
 - In the Hub, only `HubConfig.ts` reads the environment. A new setting is a field there, with its default.
 - A service is yielded where it is used, never passed as an argument. A layer that needs a setting yields `HubConfig`
   (in the shell, `ShellConfig`); a choice between layers at startup is a `Layer.unwrap` that yields it.
-- A port's member types that other modules need are named and exported beside it (`Scenario`, `ScenarioUnknown` beside `Scenarios`).
+- A port's member types that other modules need are named and exported beside it (`CheckpointUnread` beside `FastCast`).
   Indexing a service's type (`Foo["Service"]`) is allowed; a port still names the member types other modules need.
 
 **Module shapes.** Every `.ts` file is exactly one of these.
@@ -88,7 +88,7 @@ A reader opens a file to see the thing it is named for. Keep it that way.
 |---|---|
 | Service id | `"sportal/<app>/<dir>/Name"`, the folder under `src/` (no `src/` itself), omitted for a file directly in `src/`: `"sportal/hub/provider/Provider"`, `"sportal/hub/Director"` |
 | Service layer | `static readonly layer: Layer.Layer<…> = …`, type written out |
-| Layer variant | `static readonly layerX`, or `static layerX(args)`, as `Scenarios.layerFrom(dir)`; never another word (`Scenarios.in(dir)`) |
+| Layer variant | `static readonly layerX`, or `static layerX(args)`, as `FramesDecoded.layerOf(frames)`; never another word (`FramesDecoded.from(frames)`) |
 | Test layer | `static readonly layerTest` or `static layerTest…(args)` on the service it fakes; knip's `ignoreMembers` exempts `^layerTest` |
 | Layer providing nothing | A namespace module's `layer`, or `layerX`. Never `serve`/`listen`, never a zero-argument function returning a layer |
 | Effectful operation | `const f = Effect.fn("Module.f")(…)`, or `Effect.fnUntraced` on a hot path; a service member is `Effect.fn("Service.member")`. Never a `function` that only returns `Effect.gen`, never a hand-added `Effect.withSpan` |
@@ -141,10 +141,6 @@ A reader opens a file to see the thing it is named for. Keep it that way.
 - `pnpm dev` — start the local Grafana (`pnpm telemetry`), then run the Hub, the web dev server, and the desktop shell
   together, each reloading on change. Without Docker it says telemetry is off and runs the rest. The shell
   waits for the UI to come up. Use `pnpm dev:x11` to run the shell through XWayland.
-- `SPORTAL_SCENARIO=<name> SPORTAL_SCENARIO_SPEED=10 pnpm dev` — play a scenario instead of ESPN and YouTube TV, ten
-  times faster. The name is a recording, `fixtures/scenarios/<name>.frames.jsonl.gz`; it plays as the provider through
-  ESPN's real decode and the slate. Every game plays as a synthetic stream page.
-- `pnpm dev:golden` — the same, with the golden scenario: the recorded `crowded-fourth-quarter` at ten times speed.
 - `pnpm --filter @sportal/hub dev` — run only the Hub on port 4400 (API and live stream), on every interface so a phone Remote can reach it (`SPORTAL_HOST` narrows it). For
   now it keeps nothing between runs: a restarted Hub starts from an empty slate and the next poll fills it.
 - Hub settings: every one is a field of `apps/hub/src/HubConfig.ts`, with its variable and default. A bad value stops

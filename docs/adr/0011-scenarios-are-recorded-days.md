@@ -1,7 +1,7 @@
 # 11. Scenarios are recorded days; the corpus is gone
 
 Date: 2026-10-07
-Status: Accepted; its feed-log half superseded by ADR 0012
+Status: Superseded: its feed-log half by ADR 0012, the rest by ADR 0013
 
 Supersedes the corpus decision of ADR 0010 and its amendment to ADR 0008, "the truth is the feed log and the archive".
 ADR 0010's poll fallback stays in force.
