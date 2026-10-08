@@ -19,22 +19,17 @@ export function GameStatus(props: { game: GameSnapshot; className?: string }) {
 
 /** A game's status as a slate row or a tile shows it: the period and clock, the kickoff, or the status in a word. */
 export function statusText(game: GameSnapshot): string {
-  switch (game.status) {
-    case "live":
-      return `${periodName(game.period)} ${game.clock}`
-    case "scheduled":
-      return localTime(game.kickoff)
-    case "halftime":
-      return "Half"
-    case "delayed":
-      return "Delayed"
-    case "final":
-      return game.inOvertime() ? "Final/OT" : "Final"
-    case "postponed":
-      return "Postponed"
-    case "canceled":
-      return "Canceled"
-  }
+  return statusTexts[game.status](game)
+}
+
+const statusTexts: Record<GameSnapshot["status"], (game: GameSnapshot) => string> = {
+  live: (game) => `${periodName(game.period)} ${game.clock}`,
+  scheduled: (game) => localTime(game.kickoff),
+  halftime: () => "Half",
+  delayed: () => "Delayed",
+  final: (game) => (game.inOvertime() ? "Final/OT" : "Final"),
+  postponed: () => "Postponed",
+  canceled: () => "Canceled"
 }
 
 /** A time of day as this browser shows it ("1:00 PM"). */
