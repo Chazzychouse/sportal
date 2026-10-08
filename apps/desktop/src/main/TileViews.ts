@@ -93,14 +93,13 @@ export class TileViews extends Context.Service<
         placements: ReadonlyArray<TilePlacement>,
         transition?: StageTransition
       ) {
-        const permitted: Array<TilePlacement> = []
-        for (const placement of placements) {
-          if (providers.allows(placement.url)) permitted.push(placement)
-          else
-            yield* Effect.logWarning(
-              `TileViews: refused the address for game ${placement.game} on ${hostOf(placement.url)}`
-            )
-        }
+        const permitted = yield* Effect.filter(placements, (placement) =>
+          providers.allows(placement.url)
+            ? Effect.succeed(true)
+            : Effect.logWarning(
+                `TileViews: refused the address for game ${placement.game} on ${hostOf(placement.url)}`
+              ).pipe(Effect.as(false))
+        )
 
         for (const [game, entry] of views) {
           if (permitted.some((placement) => placement.game === game)) continue
@@ -148,15 +147,19 @@ export class TileViews extends Context.Service<
       ) =>
         Effect.gen(function* () {
           const start = yield* Clock.currentTimeMillis
-          let t = 0
-          while (t < 1) {
-            yield* Effect.sleep(frame)
-            const now = yield* Clock.currentTimeMillis
-            t = (now - start) / transition.durationMs
-            const eased = Transition.progress(transition.easing, t)
-            for (const { game, entry, from, to } of moves)
-              if (views.get(game) === entry) place(entry, Transition.between(from, to, eased))
-          }
+          const step = Effect.sleep(frame).pipe(
+            Effect.andThen(Clock.currentTimeMillis),
+            Effect.map((now) => (now - start) / transition.durationMs),
+            Effect.tap((t) =>
+              Effect.sync(() => {
+                const eased = Transition.progress(transition.easing, t)
+                moves.forEach(({ game, entry, from, to }) => {
+                  if (views.get(game) === entry) place(entry, Transition.between(from, to, eased))
+                })
+              })
+            )
+          )
+          yield* Effect.repeat(step, { while: (t) => t < 1 })
           arriving.clear()
           showWhereDue()
         })
