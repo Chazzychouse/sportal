@@ -2,6 +2,7 @@ import type { GameId } from "@sportal/domain/Game"
 import { useEffect } from "react"
 import { Field } from "./game/Field.tsx"
 import { useLive, usePlays } from "./hub/HubRuntime.ts"
+import { Connection } from "./hub/LiveStream.ts"
 import { ScenarioStrip } from "./ScenarioStrip.tsx"
 
 /**
@@ -19,7 +20,9 @@ export function ScenarioStream(props: { game: GameId }) {
     <div className="flex h-screen w-screen flex-col overflow-hidden bg-black text-white">
       {game === undefined ? (
         <p className="grid flex-1 place-items-center font-mono text-[4vmin]">
-          {connection._tag === "Connected" ? `No game ${props.game} in this scenario` : "Waiting for the Hub"}
+          {Connection.$is("Connected")(connection)
+            ? `No game ${props.game} in this scenario`
+            : "Waiting for the Hub"}
         </p>
       ) : (
         <>
