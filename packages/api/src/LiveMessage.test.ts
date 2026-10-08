@@ -1,5 +1,5 @@
 import { assert, describe, it } from "@effect/vitest"
-import { Stage } from "@sportal/domain/Stage"
+import { Screen } from "@sportal/domain/Screen"
 import { Schema } from "effect"
 import { LiveMessage, LiveMessageJson } from "./LiveMessage.ts"
 
@@ -12,14 +12,14 @@ describe("LiveMessage", () => {
     assert.strictEqual(json, '{"_tag":"SlateChanged","games":[]}')
   })
 
-  it("should encode StageChanged as {_tag, stage}", () => {
-    const message = LiveMessage.cases.StageChanged.make({ stage: Stage.initial })
+  it("should encode ScreenChanged as {_tag, screen}", () => {
+    const message = LiveMessage.cases.ScreenChanged.make({ screen: Screen.initial })
 
     const json = Schema.encodeSync(LiveMessageJson)(message)
 
     assert.strictEqual(
       json,
-      `{"_tag":"StageChanged","stage":${JSON.stringify(Schema.encodeSync(Stage)(Stage.initial))}}`
+      `{"_tag":"ScreenChanged","screen":${JSON.stringify(Schema.encodeSync(Screen)(Screen.initial))}}`
     )
   })
 })

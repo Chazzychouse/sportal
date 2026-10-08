@@ -2,7 +2,7 @@ import { afterEach, assert, beforeEach, describe, it } from "@effect/vitest"
 import { LiveMessageJson } from "@sportal/api/LiveMessage"
 import { Game, GameId } from "@sportal/domain/Game"
 import { Completion, PlayId } from "@sportal/domain/Play"
-import { Stage } from "@sportal/domain/Stage"
+import { Screen } from "@sportal/domain/Screen"
 import { play, snapshot, team } from "@sportal/domain/TestGame"
 import { Deferred, Effect, Fiber, Schema, Stream, SubscriptionRef } from "effect"
 import { vi } from "vitest"
@@ -34,8 +34,8 @@ describe("LiveStream", () => {
       const source = yield* opened()
 
       source.onerror?.()
-      source.onmessage?.({ data: message({ _tag: "StageChanged", stage: pair }) })
-      const after = yield* until(live, (state) => state.stage.layout === "Pair")
+      source.onmessage?.({ data: message({ _tag: "ScreenChanged", screen: pair }) })
+      const after = yield* until(live, (state) => state.screen.layout === "Pair")
 
       assert.strictEqual(after.connection._tag, "Connecting")
     }).pipe(Effect.provide(LiveStream.layer))
@@ -48,7 +48,7 @@ describe("LiveStream", () => {
       const listening = yield* Deferred.make<void>()
       const published = yield* SubscriptionRef.changes(live).pipe(
         Stream.tap(() => Deferred.succeed(listening, undefined)),
-        Stream.takeUntil((state) => state.stage.layout === "Pair"),
+        Stream.takeUntil((state) => state.screen.layout === "Pair"),
         Stream.runCollect,
         Effect.forkChild
       )
@@ -58,7 +58,7 @@ describe("LiveStream", () => {
       source.onopen?.()
       source.onerror?.()
       source.onerror?.()
-      source.onmessage?.({ data: message({ _tag: "StageChanged", stage: pair }) })
+      source.onmessage?.({ data: message({ _tag: "ScreenChanged", screen: pair }) })
       const states = yield* Fiber.join(published)
 
       const connections = Array.from(states, (state) => state.connection._tag)
@@ -106,14 +106,14 @@ describe("LiveStream", () => {
     }).pipe(Effect.provide(LiveStream.layer))
   )
 
-  it.effect("should replace the stage and the slate from their messages", () =>
+  it.effect("should replace the screen and the slate from their messages", () =>
     Effect.gen(function* () {
       const live = yield* LiveStream
       const source = yield* opened()
 
-      source.onmessage?.({ data: message({ _tag: "StageChanged", stage: pair }) })
+      source.onmessage?.({ data: message({ _tag: "ScreenChanged", screen: pair }) })
       source.onmessage?.({ data: message({ _tag: "SlateChanged", games: [] }) })
-      const state = yield* until(live, (current) => current.stage.layout === "Pair")
+      const state = yield* until(live, (current) => current.screen.layout === "Pair")
 
       assert.deepStrictEqual(state.slate, [])
     }).pipe(Effect.provide(LiveStream.layer))
@@ -146,9 +146,9 @@ describe("LiveStream", () => {
       const before = yield* until(live, (state) => state.connection._tag === "Connected")
 
       source.onmessage?.({ data: "{not json" })
-      source.onmessage?.({ data: JSON.stringify({ _tag: "StageChanged", stage: "nope" }) })
-      source.onmessage?.({ data: message({ _tag: "StageChanged", stage: pair }) })
-      const after = yield* until(live, (state) => state.stage.layout === "Pair")
+      source.onmessage?.({ data: JSON.stringify({ _tag: "ScreenChanged", screen: "nope" }) })
+      source.onmessage?.({ data: message({ _tag: "ScreenChanged", screen: pair }) })
+      const after = yield* until(live, (state) => state.screen.layout === "Pair")
 
       assert.strictEqual(after.connection, before.connection)
       assert.strictEqual(after.slate, before.slate)
@@ -165,7 +165,7 @@ describe("LiveStream", () => {
   )
 })
 
-const pair = new Stage({ ...Stage.initial, layout: "Pair" })
+const pair = new Screen({ ...Screen.initial, layout: "Pair" })
 const message = Schema.encodeSync(LiveMessageJson)
 
 function until<A>(live: SubscriptionRef.SubscriptionRef<A>, predicate: (state: A) => boolean) {

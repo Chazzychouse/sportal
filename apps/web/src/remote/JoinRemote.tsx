@@ -38,7 +38,7 @@ export function JoinRemote(props: { open: boolean; onOpenChange: (open: boolean)
         <div>
           <DialogTitle className="label-caps text-xs">Remote</DialogTitle>
           <DialogDescription className="text-xs">
-            Scan with a phone on the same network to control this Stage.
+            Scan with a phone on the same network to control this Screen.
           </DialogDescription>
         </div>
         {Answer.$is("Asking")(answer) ? (

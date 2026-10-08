@@ -22,7 +22,7 @@ easiest to break.
   contract between the Hub and its clients. Apps never import each other.
 - A package exists only when two apps need the same code. A folder exists only when a concept has
   several files private to it. Do not add either for symmetry or for later.
-- A module is a file named for the concept it owns (`Game.ts`, `Stage.ts`), in one of the shapes under
+- A module is a file named for the concept it owns (`Game.ts`, `Screen.ts`), in one of the shapes under
   "Module shapes". Organize by concept, never by kind: no `components/`, `hooks/`, `services/`, `schemas/`.
 - Banned file and folder names: `utils`, `helpers`, `common`, `shared`, `misc`, `lib`, `types`,
   `constants`, `models`, `interfaces`, and `index.ts` barrels.
@@ -79,8 +79,8 @@ A reader opens a file to see the thing it is named for. Keep it that way.
   handlers, Electron callbacks).
 - An operation on a domain type lives on the type: a method or static of its class (`Schema.Class`,
   `Schema.TaggedClass`), or, for a union that never crosses the wire, the constructors and `$match` of
-  its `Data.taggedEnum`. Write `stage.apply(command, …)` and `GameSnapshot.watchOrder`, never an
-  exported `apply(stage, …)`. A domain module exports no loose functions over its types; a private
+  its `Data.taggedEnum`. Write `screen.apply(command, …)` and `GameSnapshot.watchOrder`, never an
+  exported `apply(screen, …)`. A domain module exports no loose functions over its types; a private
   helper below the class that only the class uses is fine.
 - One spelling per kind:
 

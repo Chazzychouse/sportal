@@ -1,4 +1,4 @@
-import { StageTransition, TilePlacement } from "@sportal/api/ShellBridge"
+import { ScreenTransition, TilePlacement } from "@sportal/api/ShellBridge"
 import { ShellChannel } from "@sportal/api/ShellChannel"
 import { GameId } from "@sportal/domain/Game"
 import { Cause, Effect, FiberSet, Layer, Option, Queue, Schedule, Schema, Stream } from "effect"
@@ -45,9 +45,9 @@ const serveHub = Effect.gen(function* () {
   // Placements are applied one at a time, and only the newest waiting set matters: each replaces all before it.
   const pending = yield* Queue.sliding<{
     placements: ReadonlyArray<TilePlacement>
-    transition: StageTransition | undefined
+    transition: ScreenTransition | undefined
   }>(1)
-  const syncTiles = (placements: ReadonlyArray<TilePlacement>, transition: StageTransition | undefined) =>
+  const syncTiles = (placements: ReadonlyArray<TilePlacement>, transition: ScreenTransition | undefined) =>
     tiles.sync(placements, transition).pipe(
       Effect.catchCauseIf(
         (cause) => !Cause.hasInterrupts(cause),
@@ -151,7 +151,7 @@ const listen = Effect.fn("main.listen")(function* (
 })
 
 const decodePlacements = Schema.decodeUnknownOption(Schema.Array(TilePlacement))
-const decodeTransition = Schema.decodeUnknownOption(Schema.UndefinedOr(StageTransition))
+const decodeTransition = Schema.decodeUnknownOption(Schema.UndefinedOr(ScreenTransition))
 const decodeGames = Schema.decodeUnknownOption(Schema.Array(GameId))
 
 function allWindowsClosed() {

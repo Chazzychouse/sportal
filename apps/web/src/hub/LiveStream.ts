@@ -1,6 +1,6 @@
 import { LiveMessage, LiveMessageJson } from "@sportal/api/LiveMessage"
 import type { Game } from "@sportal/domain/Game"
-import { Stage } from "@sportal/domain/Stage"
+import { Screen } from "@sportal/domain/Screen"
 import {
   Context,
   Data,
@@ -16,7 +16,7 @@ import {
 
 /**
  * Everything the Hub has told this client over the live stream at /api/live, and whether the stream is up. The
- * EventSource reconnects by itself, and the Hub replays the current slate and stage on every connection.
+ * EventSource reconnects by itself, and the Hub replays the current slate and screen on every connection.
  */
 export class LiveStream extends Context.Service<LiveStream, SubscriptionRef.SubscriptionRef<Live>>()(
   "sportal/web/hub/LiveStream"
@@ -27,7 +27,7 @@ export class LiveStream extends Context.Service<LiveStream, SubscriptionRef.Subs
       const live = yield* SubscriptionRef.make<Live>({
         connection: Connection.Connecting(),
         slate: [],
-        stage: Stage.initial
+        screen: Screen.initial
       })
 
       yield* sourceEvents().pipe(
@@ -51,7 +51,7 @@ export const Connection = Data.taggedEnum<Connection>()
 interface Live {
   readonly connection: Connection
   readonly slate: ReadonlyArray<Game>
-  readonly stage: Stage
+  readonly screen: Screen
 }
 
 type SourceEvent = Data.TaggedEnum<{
@@ -105,7 +105,7 @@ function step(live: SubscriptionRef.SubscriptionRef<Live>, event: SourceEvent) {
 function received(live: Live, message: LiveMessage): Live {
   return LiveMessage.match(message, {
     SlateChanged: ({ games }): Live => ({ ...live, slate: games }),
-    StageChanged: ({ stage }): Live => ({ ...live, stage })
+    ScreenChanged: ({ screen }): Live => ({ ...live, screen })
   })
 }
 

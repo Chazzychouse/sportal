@@ -26,11 +26,11 @@ export const TilePlacement = Schema.Struct({
 export type TilePlacement = typeof TilePlacement.Type
 
 /** How the shell moves provider views to new bounds: over `durationMs`, along a CSS cubic-bezier. */
-export const StageTransition = Schema.Struct({
+export const ScreenTransition = Schema.Struct({
   durationMs: Schema.Int,
   easing: Schema.Tuple([Schema.Finite, Schema.Finite, Schema.Finite, Schema.Finite])
 })
-export type StageTransition = typeof StageTransition.Type
+export type ScreenTransition = typeof ScreenTransition.Type
 
 /** What the desktop shell exposes to the web UI as `window.sportalShell`. Absent in a plain browser. */
 export interface ShellBridge {
@@ -38,7 +38,7 @@ export interface ShellBridge {
    * Replaces the full set of provider views: views not listed are closed. With a transition, views move to
    * their new bounds over its duration; without one, at once.
    */
-  syncTiles(placements: ReadonlyArray<TilePlacement>, transition?: StageTransition): void
+  syncTiles(placements: ReadonlyArray<TilePlacement>, transition?: ScreenTransition): void
   /** Hides exactly these games' views, without unloading or muting them, and shows the rest. */
   setHidden(games: ReadonlyArray<GameId>): void
   /** Puts the shell window in or out of full screen. */

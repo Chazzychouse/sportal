@@ -1,5 +1,5 @@
 import type { GameSnapshot } from "@sportal/domain/Game"
-import { type Stage, Tile } from "@sportal/domain/Stage"
+import { type Screen, Tile } from "@sportal/domain/Screen"
 import { Button } from "@/design/button"
 import { cn } from "@/design/ClassName"
 import { GameStatus } from "../game/GameStatus.tsx"
@@ -14,7 +14,7 @@ import { tileHeader } from "./TileRects.ts"
  * It is a drop target for another tile or a benched game, which swaps in; and it can itself be dragged.
  */
 export function TileChrome(props: {
-  stage: Stage
+  screen: Screen
   slot: number
   tile: Tile
   game: GameSnapshot | undefined
@@ -22,7 +22,7 @@ export function TileChrome(props: {
   onSelect: () => void
 }) {
   const { tile, slot } = props
-  const onAir = !Tile.guards.Empty(tile) && props.stage.hears(tile.game)
+  const onAir = !Tile.guards.Empty(tile) && props.screen.hears(tile.game)
 
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: dragging is a shortcut; every swap is also in the command palette.
@@ -75,7 +75,7 @@ export function TileChrome(props: {
         </span>
       </button>
       <span className="flex shrink-0 items-center">
-        {tileActions(props.stage, slot, props.selected).map((action) => (
+        {tileActions(props.screen, slot, props.selected).map((action) => (
           <Button
             key={action.id}
             variant="ghost"
@@ -98,5 +98,5 @@ export function TileChrome(props: {
   )
 }
 
-/** The drag data type of a tile or benched game being dragged: its index in the Stage's tiles. */
+/** The drag data type of a tile or benched game being dragged: its index in the Screen's tiles. */
 export const tileDrag = "application/x-sportal-tile"

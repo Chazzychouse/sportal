@@ -92,11 +92,11 @@ module.exports = {
       to: { path: "^apps/hub/src/TestSnapshotFeed\\.ts$" }
     },
     {
-      name: "test-stage-is-for-tests",
-      comment: "Stages of the domain's test games, on FOX or nowhere, are imported only by test files.",
+      name: "test-screen-is-for-tests",
+      comment: "Screens of the domain's test games, on FOX or nowhere, are imported only by test files.",
       severity: "error",
       from: { pathNot: "\\.test\\.tsx?$" },
-      to: { path: "^packages/domain/src/TestStage\\.ts$" }
+      to: { path: "^packages/domain/src/TestScreen\\.ts$" }
     },
     {
       name: "test-slate-is-for-tests",
@@ -106,11 +106,11 @@ module.exports = {
       to: { path: "^apps/web/src/slate/TestSlate\\.ts$" }
     },
     {
-      name: "web-test-stage-is-for-tests",
-      comment: "Stages of the test slate's games in the web's tiles are imported only by test files.",
+      name: "web-test-screen-is-for-tests",
+      comment: "Screens of the test slate's games in the web's tiles are imported only by test files.",
       severity: "error",
       from: { pathNot: "\\.test\\.tsx?$" },
-      to: { path: "^apps/web/src/stage/TestStage\\.ts$" }
+      to: { path: "^apps/web/src/screen/TestScreen\\.ts$" }
     },
     {
       name: "test-shell-is-for-tests",

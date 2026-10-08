@@ -13,7 +13,7 @@ Every exported type name must be a term here, except the wire schemas in `*Paylo
 | **Team colors** | The two colors a team plays in: `color` and `alternateColor` on `Team`, six hex digits without `#`, as ESPN sends them. The Hub reads them from the scoreboard; a team ESPN sends none for has neither. | |
 | **Game** | One scheduled contest between two teams. As the slate holds it, `Game` (`packages/domain/src/Game.ts`): its latest snapshot and its plays, in sequence order. | event, match, competition, fixture |
 | **Slate** | The Hub's `Slate` (`apps/hub/src/slate/Slate.ts`): an ordered list of games: each league's last listing, leagues in `LeagueId` order, each game with its latest snapshot and its plays, taken from push and poll deliveries in arrival order. A snapshot behind its game (earlier in game time, or at the same game time with fewer points, as a poll lagging a pushed score) is ignored, except that an over game takes one ahead of its end (overtime after a spurious final, a postponed game resuming); a snapshot or plays of a game no listing names are dropped. Pure; `take` returns the next slate, or this one when nothing changed. | schedule, scoreboard, live games |
-| **Director** | The Hub's `Director` service (`apps/hub/src/Director.ts`), the one holder of what is going on. From an empty slate it takes each frame's deliveries from its provider as they arrive, logs a take that raised a defect, and gauges each game's progress (`sportal_game_state`). It holds the one Stage shared by every Display, applies stage commands one at a time against where each game on the slate can be streamed, and refreshes the Stage when the source changes. It offers the slate and the Stage, and each change of either. Its rules, which will issue stage commands from game events, are planned. For now nothing is kept between runs: a restarted Hub starts empty and the next poll fills it. | board, switcher, producer, autopilot, tracker, stage manager |
+| **Director** | The Hub's `Director` service (`apps/hub/src/Director.ts`), the one holder of what is going on. From an empty slate it takes each frame's deliveries from its provider as they arrive, logs a take that raised a defect, and gauges each game's progress (`sportal_game_state`). It holds the one Screen shared by every Display, applies screen commands one at a time against where each game on the slate can be streamed, and refreshes the Screen when the source changes. It offers the slate and the Screen, and each change of either. Its rules, which will issue screen commands from game events, are planned. For now nothing is kept between runs: a restarted Hub starts empty and the next poll fills it. | board, switcher, producer, autopilot, tracker, stage manager |
 | **Slate changed** | The live message that carries the listed games as the slate has them, each with its recent plays, settled 250 ms after a change; `SlateChanged` in code, and what `Slate#published` builds; the live stream sends the current one, then one for each burst of the Director's slate changes once it settles. | slate payload, snapshot, published |
 | **Kickoff** | A game's scheduled start instant. | start time, date |
 
@@ -82,17 +82,17 @@ Provider and Source are the two words most likely to be swapped. Provider is alw
 | **Hub API** | The Hub's HTTP API, declared once as `SportalApi`: the Hub serves it and every client derives its typed client from it. | REST layer |
 | **Hub config** | Every setting a Hub reads from its environment, decoded once at startup; `HubConfig` in code. | settings, env |
 | **Hub mode** | What a Hub plays: the live day from its providers and sources, or a scenario in their place. | scenario mode, profile |
-| **Live message** | One update the Hub pushes to clients on the live stream: the slate changed, or the Stage changed; `LiveMessage`, and `LiveMessageJson` its JSON form. | event, notification |
+| **Live message** | One update the Hub pushes to clients on the live stream: the slate changed, or the Screen changed; `LiveMessage`, and `LiveMessageJson` its JSON form. | event, notification |
 | **Live stream** | The Hub's server-sent events at `/api/live` that carry live messages; in the web UI, `LiveStream` holds what they said and the connection. | event stream, socket |
 | **Connection** | Whether a client's live stream is up: connecting (never yet connected), connected, or lost (since an instant, retrying). | online, status |
-| **Hub client** | The web UI's way to the Hub's API, `HubClient` in code: stage commands, and the stage commands that failed: refused by the Hub, or never reaching it. It runs in the web UI's one runtime (`HubRuntime.ts`), with the live stream. | API client, fetcher |
+| **Hub client** | The web UI's way to the Hub's API, `HubClient` in code: screen commands, and the screen commands that failed: refused by the Hub, or never reaching it. It runs in the web UI's one runtime (`HubRuntime.ts`), with the live stream. | API client, fetcher |
 | **Telemetry** | The traces, logs, and metrics the Hub exports for people to read in Grafana. | monitoring, observability stack |
-| **Display** | A device running the shell and presenting a Stage. Its local state (selected tile, interacting tile, pick, slate drawer, and the one open overlay) is the web UI's `Display`. | screen, client, player |
-| **Remote** | A client controlling a Display's Stage without presenting it. | controller |
+| **Display** | A device running the shell and presenting a Screen. Its local state (selected tile, interacting tile, pick, slate drawer, and the one open overlay) is the web UI's `Display`. | screen, client, player |
+| **Remote** | A client controlling a Display's Screen without presenting it. | controller |
 | **Shell config** | Every setting the desktop shell reads from its environment: the Hub's address; `ShellConfig` in code. | settings, env |
 | **Shell window** | The shell's one window, showing the Hub's web UI, confined to the Hub's origin; `ShellWindow` in code. | main window, BrowserWindow |
 | **Shell bridge** | The small interface the desktop shell exposes to the web UI; its IPC channel names are `ShellChannel`. | IPC, native API |
-| **Full screen** | A Display's window filling its monitor with only the Stage; local to the Display, not a Stage state. | solo |
+| **Full screen** | A Display's window filling its monitor with only the Screen: the window's state, not the Screen's, and local to the Display. | solo |
 | **Hotkey** | A key Sportal acts on, wherever it was pressed: in the web UI or in a stream view with focus. | shortcut, keybind |
 | **Provider session** | The shell's single persistent browser session shared by every provider view, with its navigation allowlist and permissions. | partition, profile |
 | **Tile views** | The shell component that keeps one provider web view per stream tile, placed where the web UI says. | view manager |
@@ -103,25 +103,25 @@ Provider and Source are the two words most likely to be swapped. Provider is alw
 
 | Term | Meaning | Not |
 | --- | --- | --- |
-| **Stage** | A Display's multi-view surface and its state. | grid, multiview, wall |
-| **Stage command** | An instruction to change a Stage: assign, clear, swap, promote, solo, change layout or split, or focus audio. Issued by people and, once its rules are built, by the Director alike. | action, event |
-| **Layout name** | A layout's own name, as the Stage and the layout picker name it; `LayoutName` in `Stage.ts`, beside each layout's slot count. | |
-| **Stage rejection** | The reason a stage command was refused. | error |
+| **Screen** | What a Display shows: its multi-view surface and its state (layout, split, tiles, bench, solo, audio focus); `Screen` in `packages/domain/src/Screen.ts`. Called the Stage until 2026-10-08. | stage, grid, multiview, wall |
+| **Screen command** | An instruction to change a Screen: assign, clear, swap, promote, solo, change layout or split, or focus audio. Issued by people and, once its rules are built, by the Director alike. | action, event |
+| **Layout name** | A layout's own name, as the Screen and the layout picker name it; `LayoutName` in `Screen.ts`, beside each layout's slot count. | |
+| **Screen rejection** | The reason a screen command was refused. | error |
 | **Layout** | A named arrangement of tile slots whose dividers can be moved. The geometry is the web's: `Layout` in `apps/web/src/layout/Layout.ts` gives the slots, dividers, next layout, and clamped split. | grid, template |
-| **Split** | Where a layout's dividers sit, as fractions of the Stage area; `Split` in `Stage.ts`, which keeps it within `Stage.splitBounds`. | ratio, sizes |
+| **Split** | Where a layout's dividers sit, as fractions of the Screen area; `Split` in `Screen.ts`, which keeps it within `Screen.splitBounds`. | ratio, sizes |
 | **Tile** | One slot's content: a **stream tile**, a **data tile**, or empty. | pane, cell, window |
 | **Main tile** | The largest slot of a layout. | hero, primary |
 | **Bench** | The tiles a layout has no slot for, kept in order and not played. | queue, reserve |
 | **Pick** | The slate game a Display has stepped to with `[` `]`, ready to drop into the selected tile with Enter. Local to the Display, like the selected tile. | highlight, cursor |
-| **Solo** | One on-stage game filling the whole Stage. | fullscreen, maximize |
-| **Swap** | Exchange two tiles, on stage or benched. | move |
+| **Solo** | One on-screen game filling the whole Screen. | fullscreen, maximize |
+| **Swap** | Exchange two tiles, on screen or benched. | move |
 | **Audio focus** | The single game whose sound is on; it follows the game when tiles move. | active, unmuted |
-| **Strip card** | One card in the slate strip: a benched game, or a slate game in its section (Bench, Live, Next, Final), marked with its slot when it is on stage or its tile when benched; `StripCard` in code, its place a `Place` (Slot or Bench). | tile, slate item |
-| **Display step** | A Display after an input, and the stage commands that input sends; `DisplayStep` in code. | result, update |
+| **Strip card** | One card in the slate strip: a benched game, or a slate game in its section (Bench, Live, Next, Final), marked with its slot when it is on screen or its tile when benched; `StripCard` in code, its place a `Place` (Slot or Bench). | tile, slate item |
+| **Display step** | A Display after an input, and the screen commands that input sends; `DisplayStep` in code. | result, update |
 | **Interacting tile** | The one stream tile whose player gets the mouse, after `I`; every other stream tile's player never sees the pointer. Local to the Display, like the selected tile. | active, unlocked |
 | **Promote** | Move a game into the main tile. | feature |
 | **Tile placement** | Where a game's stream tile sits in a Display's window, what it loads, and whether it is muted or interactive, as told to the shell. | bounds, rect |
-| **Stage transition** | How tiles move to new places: one duration and easing, shared by the web UI and the shell. | animation |
+| **Screen transition** | How tiles move to new places: one duration and easing, shared by the web UI and the shell. | animation |
 
 ## Planned
 
@@ -143,6 +143,6 @@ Names the design uses that no code has yet. Move a row up, into its table, in th
 | **Persistence** | What the Hub keeps between runs: none for now, added back on top of the simplified model. | storage, database |
 | **Game event** | Something that happened in a game (a score, a turnover, a play, a period ending), derived from a game's snapshot changes and plays. The code had it and dropped it while nothing read it; the Director's rules derive it again. | alert, update |
 | **Trigger** | A condition over game events and snapshots. | |
-| **Rule** | A trigger bound to a stage command and a revert condition. | automation |
+| **Rule** | A trigger bound to a screen command and a revert condition. | automation |
 | **Alert** | A user-facing notification produced by a rule. | event |
 | **Ticket** | A bet you have placed, tracked by the betting lens (later). | bet, wager |

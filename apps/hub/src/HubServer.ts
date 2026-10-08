@@ -47,7 +47,7 @@ export const layer: Layer.Layer<
   Effect.gen(function* () {
     const { webRoot } = yield* HubConfig
     const api = HttpApiBuilder.layer(SportalApi).pipe(
-      Layer.provide(Layer.mergeAll(stageHandlers, guideHandlers, hostHandlers))
+      Layer.provide(Layer.mergeAll(screenHandlers, guideHandlers, hostHandlers))
     )
     const web = Option.match(webRoot, {
       onNone: () => Layer.empty,
@@ -70,13 +70,13 @@ export const layerListen: Layer.Layer<
   })
 )
 
-const stageHandlers = HttpApiBuilder.group(
+const screenHandlers = HttpApiBuilder.group(
   SportalApi,
-  "stage",
+  "screen",
   Effect.fn(function* (handlers) {
     const director = yield* Director
     return handlers.handleAll({
-      current: () => director.stage,
+      current: () => director.screen,
       dispatch: ({ payload }) => director.dispatch(payload.command)
     })
   })
@@ -114,7 +114,7 @@ const hostHandlers = HttpApiBuilder.group(
 )
 
 /**
- * GET /api/live — the current slate and the stage, then every change, as server-sent events,
+ * GET /api/live — the current slate and the screen, then every change, as server-sent events,
  * with a comment every 20 seconds so proxies that close idle connections leave a quiet stream open.
  */
 const liveRoute = HttpRouter.add(
@@ -122,14 +122,14 @@ const liveRoute = HttpRouter.add(
   "/api/live",
   Effect.gen(function* () {
     const director = yield* Director
-    const stageChanges = director.stageChanges.pipe(
-      Stream.map((next) => LiveMessage.cases.StageChanged.make({ stage: next }))
+    const screenChanges = director.screenChanges.pipe(
+      Stream.map((next) => LiveMessage.cases.ScreenChanged.make({ screen: next }))
     )
     const slateChanges = director.slateChanges.pipe(
       settled,
       Stream.map((slate) => slate.published())
     )
-    const messages: Stream.Stream<LiveMessage> = Stream.merge(slateChanges, stageChanges)
+    const messages: Stream.Stream<LiveMessage> = Stream.merge(slateChanges, screenChanges)
     const encode = Schema.encodeEffect(LiveMessageJson)
     const events = messages.pipe(
       Stream.mapEffect((message) => Effect.map(encode(message), (json) => `data: ${json}\n\n`))

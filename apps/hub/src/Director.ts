@@ -1,6 +1,6 @@
 import { ChannelAvailability } from "@sportal/domain/Channel"
 import type { Game, GameId, GameSnapshot } from "@sportal/domain/Game"
-import { Stage, type StageCommand, type StageRejection } from "@sportal/domain/Stage"
+import { Screen, type ScreenCommand, type ScreenRejection } from "@sportal/domain/Screen"
 import { Cause, Context, Effect, Layer, Metric, Option, Stream, SubscriptionRef } from "effect"
 import * as HubStopping from "./HubStopping.ts"
 import { Provider } from "./provider/Provider.ts"
@@ -10,7 +10,7 @@ import { Source } from "./source/Source.ts"
 
 /**
  * The Hub's one holder of what is going on: the day's slate, taken from each frame its provider decodes as it
- * arrives, and the Stage every Display shows, changed by commands against where each game on the slate can be
+ * arrives, and the Screen every Display shows, changed by commands against where each game on the slate can be
  * streamed now.
  */
 export class Director extends Context.Service<
@@ -19,16 +19,16 @@ export class Director extends Context.Service<
     readonly slate: Effect.Effect<Slate>
     /** The latest slate first, then each change. */
     readonly slateChanges: Stream.Stream<Slate>
-    readonly stage: Effect.Effect<Stage>
-    /** The latest Stage first, then each change. */
-    readonly stageChanges: Stream.Stream<Stage>
-    dispatch(command: StageCommand): Effect.Effect<Stage, StageRejection>
+    readonly screen: Effect.Effect<Screen>
+    /** The latest Screen first, then each change. */
+    readonly screenChanges: Stream.Stream<Screen>
+    dispatch(command: ScreenCommand): Effect.Effect<Screen, ScreenRejection>
   }
 >()("sportal/hub/Director") {
   /**
    * Takes what the provider decodes, from an empty slate, gauging each game a take changed by its progress. A take that
    * raises a defect is logged, and the slate keeps what it had; if the provider's frames ever end other than by the
-   * Hub stopping, that is logged. Applies each command to the Stage one at a time, and refreshes the Stage whenever
+   * Hub stopping, that is logged. Applies each command to the Screen one at a time, and refreshes the Screen whenever
    * the source's answers change.
    */
   static readonly layer: Layer.Layer<Director, never, Provider | Source> = Layer.effect(
@@ -37,7 +37,7 @@ export class Director extends Context.Service<
       const provider = yield* Provider
       const source = yield* Source
       const slate = yield* SubscriptionRef.make(Slate.empty)
-      const stage = yield* SubscriptionRef.make(Stage.initial)
+      const screen = yield* SubscriptionRef.make(Screen.initial)
 
       const take = Effect.fn("Director.take")(
         function* (deliveries: ReadonlyArray<Delivery>) {
@@ -73,10 +73,10 @@ export class Director extends Context.Service<
           Option.map(current.game(id), ({ snapshot }) => availabilityOf(snapshot))
       })
 
-      const dispatch = Effect.fn("Director.dispatch")(function* (command: StageCommand) {
-        // One atomic step: concurrent dispatches queue up, and a rejection leaves the Stage as it was.
+      const dispatch = Effect.fn("Director.dispatch")(function* (command: ScreenCommand) {
+        // One atomic step: concurrent dispatches queue up, and a rejection leaves the Screen as it was.
         // Availability is read inside it, so a refresh that lands first is never overwritten with a stale read.
-        return yield* SubscriptionRef.modifyEffect(stage, (current) =>
+        return yield* SubscriptionRef.modifyEffect(screen, (current) =>
           Effect.gen(function* () {
             const availabilityOf = yield* availabilityOnSlate
             const result = current.apply(command, (id) =>
@@ -89,7 +89,7 @@ export class Director extends Context.Service<
       })
 
       // When what the source answers changes, every tile it affects changes on every Display.
-      const refresh = SubscriptionRef.updateEffect(stage, (current) =>
+      const refresh = SubscriptionRef.updateEffect(screen, (current) =>
         availabilityOnSlate.pipe(Effect.map((availabilityOf) => current.refresh(availabilityOf)))
       )
       yield* Effect.forkScoped(source.changes.pipe(Stream.runForEach(() => refresh)), {
@@ -99,8 +99,8 @@ export class Director extends Context.Service<
       return Director.of({
         slate: SubscriptionRef.get(slate),
         slateChanges: SubscriptionRef.changes(slate),
-        stage: SubscriptionRef.get(stage),
-        stageChanges: SubscriptionRef.changes(stage),
+        screen: SubscriptionRef.get(screen),
+        screenChanges: SubscriptionRef.changes(screen),
         dispatch
       })
     })

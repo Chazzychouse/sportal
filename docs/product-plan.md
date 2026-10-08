@@ -32,9 +32,9 @@ To verify by spike before building on it: YouTube TV's simultaneous-stream cap (
 
 | Role | Device | What it does |
 | --- | --- | --- |
-| **Hub** | One machine on the network (later, optionally, a cloud host) | Polls game data, holds your follows/presets/rules, owns the state of every Stage, serves all other devices |
-| **Display** | Desk PC with monitors; PC or mini-PC attached to a TV | Runs the desktop shell and shows a Stage with real video |
-| **Remote** | Phone, tablet, or any browser | Full tracker; controls a Display's Stage (assign, swap, audio, layout) |
+| **Hub** | One machine on the network (later, optionally, a cloud host) | Polls game data, holds your follows/presets/rules, owns the state of every Screen, serves all other devices |
+| **Display** | Desk PC with monitors; PC or mini-PC attached to a TV | Runs the desktop shell and shows a Screen with real video |
+| **Remote** | Phone, tablet, or any browser | Full tracker; controls a Display's Screen (assign, swap, audio, layout) |
 
 Desk and TV are equal citizens, so the interface has two presentation modes over the same features:
 
@@ -63,7 +63,7 @@ Desk and TV are equal citizens, so the interface has two presentation modes over
 - **Presets** — saved layouts with assignments ("Saturday noon", "Sunday early window").
 - **Keyboard-first control** — number keys for tiles; hotkeys for swap, mute, fullscreen, layout.
 - **Stream budget** — knows each source's concurrent-stream limit and fills remaining tiles with data tiles instead of failing.
-- **Multiple displays** — desk and TV can each run their own Stage at once (sharing one stream budget per source).
+- **Multiple displays** — desk and TV can each run their own Screen at once (sharing one stream budget per source).
 
 ### 4.3 Automation ("Director")
 
@@ -76,7 +76,7 @@ Desk and TV are equal citizens, so the interface has two presentation modes over
 
 Kept on the roadmap:
 
-- **Phone as remote** — control any Display's Stage from the phone.
+- **Phone as remote** — control any Display's Screen from the phone.
 - **More sources** — ESPN, Peacock, Paramount+, Prime Video as additional web-player sources, so games not on YouTube TV still get a tile.
 - **Betting lens** — enter your tickets; see them live across games; let them feed watchability and alerts.
 
@@ -97,7 +97,7 @@ Each phase ends in something usable on a game day.
 | **0 — Spikes** | Kill the unknowns cheaply | Shell playback of several YouTube TV channels; stream-cap behaviour; feed fidelity across a live FBS Saturday and an NFL Sunday; broadcast-to-channel mapping |
 | **1 — Thin vertical** | One click from slate to picture | Minimal NFL + FBS slate with live scores; click a game; it plays in a tile in the shell |
 | **2 — Tracker** | Know what is happening | Full slate, live game state, game detail, standings, follows, watchability, availability; works on every device in a browser |
-| **3 — Stage** | Watch several games properly | Layouts, audio focus, hotkeys, presets, score strips, stream budget, data tiles, desk and couch modes |
+| **3 — Screen** | Watch several games properly | Layouts, audio focus, hotkeys, presets, score strips, stream budget, data tiles, desk and couch modes |
 | **4 — Director** | Let it drive | Alerts, auto-promote rules, auto-fill, spoiler shield with per-tile delay |
 | **5 — Reach** | More control, more games | Phone remote; additional streaming sources; betting lens |
 
@@ -109,7 +109,7 @@ The order of phases 1–3 is a recommendation and is asked about in the technica
 
 - On a game day, the slate shows every NFL and FBS game with live state no more than about 15 seconds stale.
 - A game goes from the slate to a tile in one action — from the desk, the couch, or the phone.
-- A four-tile Stage runs through a full game window without babysitting, within the stream budget.
+- A four-tile Screen runs through a full game window without babysitting, within the stream budget.
 - An auto-promote rule fires correctly on a real red-zone trip and reverts.
 - Moving the Hub to another machine or a cloud host is configuration, not code.
 

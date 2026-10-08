@@ -1,5 +1,5 @@
 import type { Game } from "@sportal/domain/Game"
-import { type Stage, type StageCommand, Tile } from "@sportal/domain/Stage"
+import { type Screen, type ScreenCommand, Tile } from "@sportal/domain/Screen"
 import { Data } from "effect"
 import { ArrowLeftRight, Volume2 } from "lucide-react"
 import { Fragment, type ReactNode, useState } from "react"
@@ -9,20 +9,20 @@ import { Score, scoreline } from "../game/Score.tsx"
 import { dispatch } from "../hub/HubClient.ts"
 import { runtime } from "../hub/HubRuntime.ts"
 import { Layout } from "../layout/Layout.ts"
-import { tileActions } from "../stage/TileActions.tsx"
+import { tileActions } from "../screen/TileActions.tsx"
 
 /**
- * The Stage's layout in miniature, every tile shown even while one is soloed. Tapping a tile selects it; tapping
+ * The Screen's layout in miniature, every tile shown even while one is soloed. Tapping a tile selects it; tapping
  * the selected one opens its actions. "Swap with…" waits for the next tile tapped.
  */
-export function StageMap(props: {
-  stage: Stage
+export function ScreenMap(props: {
+  screen: Screen
   slate: ReadonlyArray<Game>
   selected: number
   onSelect: (slot: number) => void
 }) {
   const [mode, setMode] = useState<Mode>(Mode.Idle())
-  const tiles = props.stage.onStage()
+  const tiles = props.screen.onScreen()
   const gameIn = (slot: number) => {
     const at = tiles[slot]
     return at === undefined || Tile.guards.Empty(at)
@@ -30,7 +30,7 @@ export function StageMap(props: {
       : props.slate.find(({ snapshot }) => snapshot.id === at.game)?.snapshot
   }
   const selectedGame = gameIn(props.selected)
-  const run = (command: StageCommand) => {
+  const run = (command: ScreenCommand) => {
     runtime.runFork(dispatch(command))
     setMode(Mode.Idle())
   }
@@ -47,13 +47,13 @@ export function StageMap(props: {
   return (
     <>
       <div className="relative aspect-video w-full overflow-hidden rounded-md border bg-well">
-        {Layout.of(props.stage)
+        {Layout.of(props.screen)
           .slots()
           .map((slot, index) => {
             const at = tiles[index]
             const game = gameIn(index)
-            const onAir = at !== undefined && !Tile.guards.Empty(at) && props.stage.hears(at.game)
-            const soloed = at !== undefined && !Tile.guards.Empty(at) && props.stage.soloes(at.game)
+            const onAir = at !== undefined && !Tile.guards.Empty(at) && props.screen.hears(at.game)
+            const soloed = at !== undefined && !Tile.guards.Empty(at) && props.screen.soloes(at.game)
 
             return (
               <button
@@ -136,7 +136,7 @@ export function StageMap(props: {
             </SheetDescription>
           </div>
           <div className="flex flex-col pb-2">
-            {tileActions(props.stage, props.selected, true).map((action) => (
+            {tileActions(props.screen, props.selected, true).map((action) => (
               <Fragment key={action.id}>
                 {action.id === "clear" && (
                   <Action

@@ -2,7 +2,7 @@ import { assert, describe, it } from "@effect/vitest"
 import { ChannelAvailability } from "@sportal/domain/Channel"
 import { GameId, GameSnapshot, Network } from "@sportal/domain/Game"
 import type { Play } from "@sportal/domain/Play"
-import { type Stage, Tile } from "@sportal/domain/Stage"
+import { type Screen, Tile } from "@sportal/domain/Screen"
 import { broadcast, liveSnapshot, play, snapshot, team } from "@sportal/domain/TestGame"
 import { DateTime, Deferred, Effect, Fiber, Layer, Option, Predicate, Ref, Stream, type Tracer } from "effect"
 import { TestClock } from "effect/testing"
@@ -324,7 +324,7 @@ const ohioStateAtIowa = snapshot({
 const recordedAt = DateTime.toEpochMillis(DateTime.makeUnsafe("2026-10-03T20:24:45Z"))
 const news3Live = "https://tv.youtube.com/watch/y6zFA17zDsw?vp=0gEEEgIwAQ%3D%3D"
 
-describe("Director, the Stage", () => {
+describe("Director, the Screen", () => {
   it.effect("should apply concurrent commands without losing any", () =>
     Effect.gen(function* () {
       const director = yield* Director
@@ -335,20 +335,20 @@ describe("Director, the Stage", () => {
         { concurrency: "unbounded" }
       )
 
-      const stage = yield* director.stage
-      assert.isTrue(stage.tiles.every((tile) => !Tile.guards.Empty(tile)))
+      const screen = yield* director.screen
+      assert.isTrue(screen.tiles.every((tile) => !Tile.guards.Empty(tile)))
     }).pipe(Effect.provide(directing(games)))
   )
 
-  it.effect("should reject a command for a missing tile, leaving the stage unchanged", () =>
+  it.effect("should reject a command for a missing tile, leaving the screen unchanged", () =>
     Effect.gen(function* () {
       const director = yield* Director
       yield* director.dispatch({ _tag: "Assign", tile: 0, game: GameId.make("1") })
-      const before = yield* director.stage
+      const before = yield* director.screen
 
       const rejection = yield* director.dispatch({ _tag: "FocusAudio", tile: 9 }).pipe(Effect.flip)
 
-      const after = yield* director.stage
+      const after = yield* director.screen
       assert.strictEqual(rejection.reason, "no-such-tile")
       assert.deepStrictEqual(after, before)
     }).pipe(Effect.provide(directing(games)))
@@ -359,9 +359,9 @@ describe("Director, the Stage", () => {
       const director = yield* Director
       yield* guideReadAtRecording()
 
-      const stage = yield* director.dispatch({ _tag: "Assign", tile: 0, game: ohioStateAtIowa.id })
+      const screen = yield* director.dispatch({ _tag: "Assign", tile: 0, game: ohioStateAtIowa.id })
 
-      assert.deepStrictEqual(stage.tiles[0], {
+      assert.deepStrictEqual(screen.tiles[0], {
         _tag: "StreamTile",
         game: ohioStateAtIowa.id,
         channel: { name: "News 3", source: "YouTube TV", locator: { _tag: "WebView", url: news3Live } }
@@ -375,9 +375,9 @@ describe("Director, the Stage", () => {
       yield* guideReadAtRecording()
       yield* director.dispatch({ _tag: "Assign", tile: 0, game: ohioStateAtIowa.id })
 
-      const stage = yield* director.dispatch({ _tag: "Assign", tile: 1, game: GameId.make("4") })
+      const screen = yield* director.dispatch({ _tag: "Assign", tile: 1, game: GameId.make("4") })
 
-      assert.deepStrictEqual(stage.tiles[1], {
+      assert.deepStrictEqual(screen.tiles[1], {
         _tag: "DataTile",
         game: GameId.make("4"),
         why: { _tag: "NotInGuide" }
@@ -389,13 +389,13 @@ describe("Director, the Stage", () => {
     Effect.gen(function* () {
       const director = yield* Director
 
-      const stage = yield* director.dispatch({ _tag: "Assign", tile: 0, game: GameId.make("5") })
+      const screen = yield* director.dispatch({ _tag: "Assign", tile: 0, game: GameId.make("5") })
 
-      assert.deepStrictEqual(stage.tiles[0], noGuideTile(GameId.make("5")))
+      assert.deepStrictEqual(screen.tiles[0], noGuideTile(GameId.make("5")))
     }).pipe(Effect.provide(directing(games)))
   )
 
-  it.live("should refresh the stage when the source reads a guide", () =>
+  it.live("should refresh the screen when the source reads a guide", () =>
     Effect.gen(function* () {
       const director = yield* Director
       const source = yield* Source
@@ -403,8 +403,11 @@ describe("Director, the Stage", () => {
 
       yield* source.readGuide(recordedGuide)
 
-      const stage = yield* firstStageWhere(director.stageChanges, (stage) => !isNoGuideTile(stage.tiles[0]))
-      const tile = Option.getOrThrow(stage).tiles[0]
+      const screen = yield* firstScreenWhere(
+        director.screenChanges,
+        (screen) => !isNoGuideTile(screen.tiles[0])
+      )
+      const tile = Option.getOrThrow(screen).tiles[0]
       assert.deepStrictEqual(
         tile === undefined || Tile.guards.Empty(tile) ? tile : tile.game,
         GameId.make("5")
@@ -457,7 +460,7 @@ describe("Director, the Stage", () => {
           Layer.provideMerge(availabilityHeldOnce(reading, release))
         )
 
-        const { assigned, stage } = yield* Effect.gen(function* () {
+        const { assigned, screen } = yield* Effect.gen(function* () {
           const director = yield* Director
           const source = yield* Source
           const assigning = yield* director
@@ -468,21 +471,21 @@ describe("Director, the Stage", () => {
           yield* Deferred.succeed(release, undefined)
 
           const assigned = yield* Fiber.join(assigning)
-          const stage = yield* firstStageWhere(
-            director.stageChanges,
-            (stage) => !isNoGuideTile(stage.tiles[0])
+          const screen = yield* firstScreenWhere(
+            director.screenChanges,
+            (screen) => !isNoGuideTile(screen.tiles[0])
           )
-          return { assigned, stage }
+          return { assigned, screen }
         }).pipe(Effect.provide(directorOnStaleRead))
 
         assert.deepStrictEqual(assigned.tiles[0], noGuideTile(GameId.make("5")))
-        assert.isTrue(Option.isSome(stage))
+        assert.isTrue(Option.isSome(screen))
       })
   )
 
   it.live("should keep a tile whose game has left the slate as it was when the source reads a guide", () =>
     Effect.gen(function* () {
-      const stage = yield* Effect.gen(function* () {
+      const screen = yield* Effect.gen(function* () {
         const director = yield* Director
         const source = yield* Source
         const feed = yield* SnapshotFeed
@@ -492,11 +495,11 @@ describe("Director, the Stage", () => {
 
         yield* source.readGuide(recordedGuide)
 
-        return yield* firstStageWhere(director.stageChanges, (stage) => !isNoGuideTile(stage.tiles[1]))
+        return yield* firstScreenWhere(director.screenChanges, (screen) => !isNoGuideTile(screen.tiles[1]))
       }).pipe(Effect.provide(directing(games)))
 
       // Off the slate it would be a data tile with no stream; the refresh leaves it alone instead.
-      assert.deepStrictEqual(Option.getOrThrow(stage).tiles[0], noGuideTile(GameId.make("1")))
+      assert.deepStrictEqual(Option.getOrThrow(screen).tiles[0], noGuideTile(GameId.make("1")))
     })
   )
 
@@ -511,13 +514,13 @@ describe("Director, the Stage", () => {
       for (let turn = 0; turn < 10; turn++) yield* Effect.yieldNow
 
       const availability = yield* source.availability
-      const stage = yield* director.stage
+      const screen = yield* director.screen
       assert.strictEqual(playing.tiles[0]?._tag, "StreamTile")
       assert.deepStrictEqual(
         availability(ohioStateAtIowa),
         ChannelAvailability.NoGuide({ source: "YouTube TV" })
       )
-      assert.deepStrictEqual(stage.tiles[0], playing.tiles[0])
+      assert.deepStrictEqual(screen.tiles[0], playing.tiles[0])
     }).pipe(Effect.provide(directing([ohioStateAtIowa])))
   )
 
@@ -525,9 +528,9 @@ describe("Director, the Stage", () => {
     Effect.gen(function* () {
       const director = yield* Director
 
-      const stage = yield* director.dispatch({ _tag: "Assign", tile: 0, game: GameId.make("gone") })
+      const screen = yield* director.dispatch({ _tag: "Assign", tile: 0, game: GameId.make("gone") })
 
-      assert.deepStrictEqual(stage.tiles[0], {
+      assert.deepStrictEqual(screen.tiles[0], {
         _tag: "DataTile",
         game: GameId.make("gone"),
         why: { _tag: "NoStream" }
@@ -583,10 +586,10 @@ function availabilityHeldOnce(reading: Deferred.Deferred<void>, release: Deferre
 }
 
 /**
- * The first stage of `changes` that passes `test`, within two seconds. The current stage is replayed to a new
- * subscriber, so a test waits for a stage only the change it awaits makes.
+ * The first screen of `changes` that passes `test`, within two seconds. The current screen is replayed to a new
+ * subscriber, so a test waits for a screen only the change it awaits makes.
  */
-function firstStageWhere(changes: Stream.Stream<Stage>, test: (stage: Stage) => boolean) {
+function firstScreenWhere(changes: Stream.Stream<Screen>, test: (screen: Screen) => boolean) {
   return changes.pipe(Stream.filter(test), Stream.take(1), Stream.runHead, Effect.timeout("2 seconds"))
 }
 

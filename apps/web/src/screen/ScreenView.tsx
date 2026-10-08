@@ -1,6 +1,6 @@
-import type { StageTransition } from "@sportal/api/ShellBridge"
+import type { ScreenTransition } from "@sportal/api/ShellBridge"
 import type { Game, GameId } from "@sportal/domain/Game"
-import { type Split, type Stage, Tile } from "@sportal/domain/Stage"
+import { type Screen, type Split, Tile } from "@sportal/domain/Screen"
 import { Effect, Option } from "effect"
 import { useEffect, useLayoutEffect, useRef, useState } from "react"
 import { useVideoAreas } from "../display/OverlayHost.tsx"
@@ -13,11 +13,11 @@ import { TileChrome } from "./TileChrome.tsx"
 import { placements, tileRects } from "./TileRects.ts"
 
 /**
- * The Stage: each on-stage tile positioned from the layout, with the shell's provider views laid over their
+ * The Screen: each on-screen tile positioned from the layout, with the shell's provider views laid over their
  * wells at the same pixels. When tiles move, the chrome and the video move together along one transition.
  */
-export function StageView(props: {
-  stage: Stage
+export function ScreenView(props: {
+  screen: Screen
   slate: ReadonlyArray<Game>
   connection: Connection
   selected: number
@@ -26,10 +26,10 @@ export function StageView(props: {
 }) {
   const areaRef = useRef<HTMLDivElement | null>(null)
   const area = useArea(areaRef)
-  // The split being dragged, shown in place of the Stage's until the drag is committed.
+  // The split being dragged, shown in place of the Screen's until the drag is committed.
   const [dragged, setDragged] = useState<Split | undefined>(undefined)
 
-  const shown = dragged === undefined ? props.stage : props.stage.withSplit(dragged)
+  const shown = dragged === undefined ? props.screen : props.screen.withSplit(dragged)
   const rects = tileRects(shown, area)
   const placed = placements(shown, rects, area, window.location.origin, props.interacting)
   useVideoAreas(placed)
@@ -41,21 +41,21 @@ export function StageView(props: {
     if (area.width === 0) return
     const key = JSON.stringify(placed)
     if (key === synced.current.placements) return
-    const arrangement = arrangementOf(props.stage)
+    const arrangement = arrangementOf(props.screen)
     const moved =
       synced.current.arrangement !== "" && synced.current.arrangement !== arrangement && dragged === undefined
     synced.current = { placements: key, arrangement }
-    window.sportalShell?.syncTiles(placed, moved ? stageTransition : undefined)
+    window.sportalShell?.syncTiles(placed, moved ? screenTransition : undefined)
   })
 
   // A click on a video reaches the shell, not this page: the shell reports which game's view it was.
   useEffect(
     () =>
       window.sportalShell?.onTilePressed((game) => {
-        const slot = props.stage.slotOf(game)
+        const slot = props.screen.slotOf(game)
         if (slot !== undefined) props.onSelect(slot)
       }),
-    [props.stage, props.onSelect]
+    [props.screen, props.onSelect]
   )
 
   const connected = Connection.$is("Connected")(props.connection)
@@ -79,7 +79,7 @@ export function StageView(props: {
 
   return (
     <main ref={areaRef} className="relative min-h-0 overflow-hidden bg-background">
-      {shown.onStage().map((tile, index) => {
+      {shown.onScreen().map((tile, index) => {
         const rect = rects[index]
         if (rect === undefined) return null
         const game = Tile.guards.Empty(tile)
@@ -103,7 +103,7 @@ export function StageView(props: {
             }}
           >
             <TileChrome
-              stage={props.stage}
+              screen={props.screen}
               slot={index}
               tile={tile}
               game={game?.snapshot}
@@ -132,17 +132,17 @@ export function StageView(props: {
   )
 }
 
-/** How tiles move when the Stage's arrangement changes; the shell moves the video along the same curve. */
-const stageTransition: StageTransition = { durationMs: 280, easing: [0.2, 0, 0, 1] }
+/** How tiles move when the Screen's arrangement changes; the shell moves the video along the same curve. */
+const screenTransition: ScreenTransition = { durationMs: 280, easing: [0.2, 0, 0, 1] }
 
 const cssTransition = ["left", "top", "width", "height", "opacity"]
   .map(
     (property) =>
-      `${property} ${stageTransition.durationMs}ms cubic-bezier(${stageTransition.easing.join(",")})`
+      `${property} ${screenTransition.durationMs}ms cubic-bezier(${screenTransition.easing.join(",")})`
   )
   .join(", ")
 
-/** The Stage area's size and its position in the window, kept current as it resizes. */
+/** The Screen area's size and its position in the window, kept current as it resizes. */
 function useArea(ref: { current: HTMLElement | null }) {
   const [area, setArea] = useState({ x: 0, y: 0, width: 0, height: 0 })
   useLayoutEffect(() => {
@@ -169,11 +169,11 @@ function useArea(ref: { current: HTMLElement | null }) {
 }
 
 /** What decides where tiles are: the layout, its split, solo, and which game is in which slot. */
-function arrangementOf(stage: Stage) {
+function arrangementOf(screen: Screen) {
   return JSON.stringify([
-    stage.layout,
-    stage.splits[stage.layout],
-    stage.solo,
-    stage.onStage().map((tile) => (Tile.guards.Empty(tile) ? null : tile.game))
+    screen.layout,
+    screen.splits[screen.layout],
+    screen.solo,
+    screen.onScreen().map((tile) => (Tile.guards.Empty(tile) ? null : tile.game))
   ])
 }

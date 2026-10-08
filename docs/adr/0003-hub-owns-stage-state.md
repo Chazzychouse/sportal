@@ -3,6 +3,9 @@
 Date: 2026-10-03
 Status: Accepted
 
+Note, 2026-10-08: the Stage is now called the Screen (`Screen`, `ScreenCommand`, `/api/screen`), and the Hub's
+`Director` holds it beside the slate. The decision stands.
+
 ## Context
 
 A phone must be able to change what a TV shows, and automation must be able to change the Stage

@@ -1,5 +1,5 @@
 import type { Game, GameSnapshot } from "@sportal/domain/Game"
-import { Tile } from "@sportal/domain/Stage"
+import { Tile } from "@sportal/domain/Screen"
 import { Option } from "effect"
 import { Field } from "../game/Field.tsx"
 import { GameStatus, localTime } from "../game/GameStatus.tsx"

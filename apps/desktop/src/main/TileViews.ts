@@ -1,5 +1,5 @@
 import { Hotkey } from "@sportal/api/Hotkey"
-import type { StageTransition, TileBounds, TilePlacement } from "@sportal/api/ShellBridge"
+import type { ScreenTransition, TileBounds, TilePlacement } from "@sportal/api/ShellBridge"
 import type { GameId } from "@sportal/domain/Game"
 import { Clock, Context, Effect, FiberHandle, Layer, Option, PubSub, Stream } from "effect"
 import type { WebContentsView } from "electron"
@@ -21,7 +21,7 @@ export class TileViews extends Context.Service<
      * Makes the views match the placements: views for games not listed are closed. With a transition, views
      * move from where they are to their new bounds along it, and views new in it appear when it ends.
      */
-    sync(placements: ReadonlyArray<TilePlacement>, transition?: StageTransition): Effect.Effect<void>
+    sync(placements: ReadonlyArray<TilePlacement>, transition?: ScreenTransition): Effect.Effect<void>
     /** Hides exactly these games' views, now and through later syncs, until a later call no longer names them. */
     hide(games: ReadonlyArray<GameId>): Effect.Effect<void>
     /** Each hotkey pressed while a stream view had keyboard focus. The page never receives it. */
@@ -94,7 +94,7 @@ export class TileViews extends Context.Service<
 
       const sync = Effect.fn("TileViews.sync")(function* (
         placements: ReadonlyArray<TilePlacement>,
-        transition?: StageTransition
+        transition?: ScreenTransition
       ) {
         const permitted = yield* Effect.filter(placements, (placement) =>
           providers.allows(placement.url)
@@ -146,7 +146,7 @@ export class TileViews extends Context.Service<
 
       const animate = (
         moves: ReadonlyArray<{ game: GameId; entry: Entry; from: TileBounds; to: TileBounds }>,
-        transition: StageTransition
+        transition: ScreenTransition
       ) =>
         Effect.gen(function* () {
           const start = yield* Clock.currentTimeMillis

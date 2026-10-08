@@ -1,4 +1,4 @@
-import { type Stage, type StageCommand, Tile } from "@sportal/domain/Stage"
+import { type Screen, type ScreenCommand, Tile } from "@sportal/domain/Screen"
 import { ArrowUpLeft, Shrink, SquareDashed, Volume2, VolumeX, X } from "lucide-react"
 import type { ReactNode } from "react"
 
@@ -10,7 +10,7 @@ import type { ReactNode } from "react"
  * `selected` (whether `slot` is it) gives it one; Escape unsolos from anywhere.
  */
 export function tileActions(
-  stage: Stage,
+  screen: Screen,
   slot: number,
   selected: boolean
 ): ReadonlyArray<{
@@ -18,12 +18,12 @@ export function tileActions(
   verb: string
   label: string
   icon: ReactNode
-  command: StageCommand
+  command: ScreenCommand
   key: string | undefined
 }> {
-  const tile = stage.onStage()[slot]
+  const tile = screen.onScreen()[slot]
   if (tile === undefined || Tile.guards.Empty(tile)) return []
-  const hearing = stage.hears(tile.game)
+  const hearing = screen.hears(tile.game)
   return [
     {
       id: "hear",
@@ -41,11 +41,11 @@ export function tileActions(
             verb: "Promote",
             label: "Promote to the main tile",
             icon: <ArrowUpLeft />,
-            command: { _tag: "Promote", tile: slot } satisfies StageCommand,
+            command: { _tag: "Promote", tile: slot } satisfies ScreenCommand,
             key: `Shift+${slot + 1}`
           }
         ]),
-    stage.soloes(tile.game)
+    screen.soloes(tile.game)
       ? {
           id: "unsolo",
           verb: "Unsolo",
