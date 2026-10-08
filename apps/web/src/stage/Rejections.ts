@@ -1,6 +1,6 @@
 import type { StageRejection } from "@sportal/domain/Stage"
 import { Effect, Fiber, Stream } from "effect"
-import type { HttpClientError } from "effect/http"
+import { HttpClientError } from "effect/http"
 import { useEffect } from "react"
 import { toast } from "sonner"
 import { stageFailures } from "../hub/HubClient.ts"
@@ -21,15 +21,14 @@ export function useStageFailureToasts() {
 }
 
 function failureText(failure: StageRejection | HttpClientError.HttpClientError): string {
-  if (failure._tag === "HttpClientError") return "The Hub did not get that. Is it running?"
-  switch (failure.reason) {
-    case "no-such-tile":
-      return "There is no tile there."
-    case "empty-tile":
-      return "That tile is empty."
-    case "offstage-tile":
-      return "That game is on the bench. Swap it in first."
-    case "split-out-of-range":
-      return "Every tile needs some room."
-  }
+  return HttpClientError.isHttpClientError(failure)
+    ? "The Hub did not get that. Is it running?"
+    : rejectionText[failure.reason]
+}
+
+const rejectionText: Record<StageRejection["reason"], string> = {
+  "no-such-tile": "There is no tile there.",
+  "empty-tile": "That tile is empty.",
+  "offstage-tile": "That game is on the bench. Swap it in first.",
+  "split-out-of-range": "Every tile needs some room."
 }
