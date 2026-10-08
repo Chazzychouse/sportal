@@ -1,12 +1,12 @@
 import type { StageTransition } from "@sportal/api/ShellBridge"
 import type { GameId, GameSnapshot } from "@sportal/domain/Game"
-import type { Split, Stage } from "@sportal/domain/Stage"
+import { type Split, type Stage, Tile } from "@sportal/domain/Stage"
 import { Effect, Option } from "effect"
 import { useEffect, useLayoutEffect, useRef, useState } from "react"
 import { useVideoAreas } from "../display/OverlayHost.tsx"
 import { dispatch, sendGuide } from "../hub/HubClient.ts"
 import { runtime } from "../hub/HubRuntime.ts"
-import type { Connection } from "../hub/LiveStream.ts"
+import { Connection } from "../hub/LiveStream.ts"
 import { Dividers } from "./Dividers.tsx"
 import { TileBody } from "./TileBody.tsx"
 import { TileChrome } from "./TileChrome.tsx"
@@ -58,7 +58,7 @@ export function StageView(props: {
     [props.stage, props.onSelect]
   )
 
-  const connected = props.connection._tag === "Connected"
+  const connected = Connection.$is("Connected")(props.connection)
   // Listening first, then asking: the shell's first read waits for the web UI to ask.
   useEffect(
     () =>
@@ -82,12 +82,12 @@ export function StageView(props: {
       {shown.onStage().map((tile, index) => {
         const rect = rects[index]
         if (rect === undefined) return null
-        const game = tile._tag === "Empty" ? undefined : props.slate.find((g) => g.id === tile.game)
+        const game = Tile.guards.Empty(tile) ? undefined : props.slate.find((g) => g.id === tile.game)
         const hidden = rect.width === 0
 
         return (
           <section
-            key={tile._tag === "Empty" ? `slot-${index}` : tile.game}
+            key={Tile.guards.Empty(tile) ? `slot-${index}` : tile.game}
             aria-hidden={hidden}
             className={`absolute flex flex-col overflow-hidden rounded-sm border ${
               props.selected === index ? "border-foreground/60" : "border-border"
@@ -172,6 +172,6 @@ function arrangementOf(stage: Stage) {
     stage.layout,
     stage.splits[stage.layout],
     stage.solo,
-    stage.onStage().map((tile) => (tile._tag === "Empty" ? null : tile.game))
+    stage.onStage().map((tile) => (Tile.guards.Empty(tile) ? null : tile.game))
   ])
 }
