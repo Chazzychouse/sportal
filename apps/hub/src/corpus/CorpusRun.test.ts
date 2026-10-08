@@ -30,6 +30,7 @@ import { LiveSlate } from "../LiveSlate.ts"
 import * as EspnDecoder from "../provider/espn/EspnDecoder.ts"
 import * as ScenarioProvider from "../provider/espn/ScenarioProvider.ts"
 import { fixtures, neAtBufFrames, recordedNeAtBuf, recordedPlays } from "../provider/espn/TestEspn.ts"
+import { Provider } from "../provider/Provider.ts"
 import { Scenarios } from "../scenario/Scenarios.ts"
 import { Acknowledgement } from "../slate/Acknowledgement.ts"
 import type { Slate } from "../slate/Slate.ts"
@@ -38,6 +39,9 @@ import { CorpusDay, CorpusDays, CorpusDayUnreadable } from "./CorpusDay.ts"
 import { CorpusInput, CorpusLine } from "./CorpusLine.ts"
 import * as CorpusRun from "./CorpusRun.ts"
 import { built, inCorpus, local } from "./TestCorpus.ts"
+
+/** A provider that delivers nothing, read by ESPN's decode. */
+const espnDecoding = Provider.layerTest(EspnDecoder.decode)
 
 describe("CorpusRun.day", () => {
   // NE at BUF's recorded day is logged, built and run twice once for both tests: seconds alone, more under a full
@@ -69,7 +73,7 @@ describe("CorpusRun.day", () => {
   it.effect(
     "should give the events the Hub's slate published live, the day played through Ingest on the test clock",
     () =>
-      inCorpus(EspnDecoder.layer, () =>
+      inCorpus(espnDecoding, () =>
         Effect.gen(function* () {
           const frames = yield* recordedNeAtBuf
           const zone = yield* DateTime.CurrentTimeZone
@@ -97,7 +101,7 @@ describe("CorpusRun.day", () => {
   )
 
   it.effect("should fall a hold with nothing after it back at its deadline, in the day's last tick", () =>
-    inCorpus(TestSnapshotFeed.layerDecoder, () =>
+    inCorpus(TestSnapshotFeed.layer, () =>
       Effect.gen(function* () {
         const days = yield* CorpusDays
         const pushedAt = local("2026-10-04T13:00:00")
@@ -136,7 +140,7 @@ describe("CorpusRun.day", () => {
   )
 
   it.effect("should fail a day that is not there as CorpusDayUnreadable, Missing", () =>
-    inCorpus(TestSnapshotFeed.layerDecoder, () =>
+    inCorpus(TestSnapshotFeed.layer, () =>
       Effect.gen(function* () {
         const error = yield* CorpusRun.day(recordedDay, CorpusRun.events).pipe(Effect.flip)
 
@@ -154,7 +158,7 @@ describe("RunDay.run", () => {
   it.effect(
     "should answer RunDay for the recorded NE at BUF day with the event count its run gives",
     () =>
-      inCorpus(EspnDecoder.layer, () =>
+      inCorpus(espnDecoding, () =>
         Effect.gen(function* () {
           const frames = yield* recordedNeAtBuf
           yield* built(recordedDay, frames)
@@ -172,7 +176,7 @@ describe("RunDay.run", () => {
   )
 
   it.effect("should fail a day that has not been built as CorpusDayUnreadable Missing", () =>
-    inCorpus(EspnDecoder.layer, () =>
+    inCorpus(espnDecoding, () =>
       Effect.gen(function* () {
         const error = yield* new CorpusRun.RunDay({ date: recordedDay }).run().pipe(Effect.flip)
 
@@ -260,7 +264,7 @@ class NeAtBufRunTwice extends Context.Service<
 function neAtBufRunTwiceLayer() {
   return Layer.effect(
     NeAtBufRunTwice,
-    inCorpus(EspnDecoder.layer, () =>
+    inCorpus(espnDecoding, () =>
       Effect.gen(function* () {
         const frames = yield* recordedNeAtBuf
         yield* built(recordedDay, frames)
@@ -278,7 +282,7 @@ function neAtBufRunTwiceLayer() {
  * The game events the Hub's slate publishes while Ingest plays `frames` as the recorded scenario, live on the test
  * clock from the first frame, onto a feed log on the provided database: until `Acknowledgement.fallbackAfter` past the last
  * frame, then, Ingest stopped, until `until`. The clock moves only once the slate has taken every frame appended so
- * far, and stops at each frame's instant and each poll's, so the timer never ticks past a frame still to be taken.
+ * far, and stops at each frame's instant, so the timer never ticks past a frame still to be taken.
  */
 function playedLive(frames: ReadonlyArray<Frame>, until: DateTime.Utc) {
   const instants = frames.map(({ receivedAt }) => receivedAt)
@@ -294,30 +298,27 @@ function playedLive(frames: ReadonlyArray<Frame>, until: DateTime.Utc) {
       Stream.runForEach((published) => Ref.update(seen, Chunk.append(published))),
       Effect.forkChild({ startImmediately: true })
     )
-    const appended = yield* Ref.make({ seq: 0, polled: first })
+    const appended = yield* Ref.make(0)
 
     // Until no fiber woken at this instant appends anything the slate has not taken, for at most `rounds` rounds.
     const settled = (rounds: number): Effect.Effect<void> =>
       Effect.gen(function* () {
         if (rounds === 0) return yield* Effect.die(new Error("frames kept being appended at one instant"))
         yield* TestClock.adjust(0)
-        const { seq } = yield* Ref.get(appended)
+        const seq = yield* Ref.get(appended)
         if (seq > 0) yield* slate.through(seq)
         yield* TestClock.adjust(0)
         const after = yield* Ref.get(appended)
-        if (after.seq !== seq) yield* settled(rounds - 1)
+        if (after !== seq) yield* settled(rounds - 1)
       })
-    // ScenarioProvider pushes each frame at its instant and polls at a poll's instant or 10 s after the last, its
-    // `longest`.
+    // ScenarioProvider plays each frame at its instant.
     const steppedTo = (to: DateTime.Utc): Effect.Effect<void> =>
       Effect.gen(function* () {
         yield* settled(100)
         const now = yield* DateTime.now
         if (DateTime.isGreaterThanOrEqualTo(now, to)) return
-        const { polled } = yield* Ref.get(appended)
         const next = [
           ...Option.toArray(Arr.findFirst(instants, (instant) => DateTime.isGreaterThan(instant, now))),
-          DateTime.add(polled, { seconds: 10 }),
           to
         ].reduce((a, b) => DateTime.min(a, b))
         yield* TestClock.setTime(DateTime.toEpochMillis(next))
@@ -348,25 +349,14 @@ function playedLive(frames: ReadonlyArray<Frame>, until: DateTime.Utc) {
   return TestClock.setTime(DateTime.toEpochMillis(first)).pipe(Effect.andThen(playing))
 }
 
-/**
- * Ingest playing the recorded NE at BUF scenario, NFL only, onto the provided feed log, keeping the last `seq` it
- * appended and when it last polled in `appended`.
- */
-function ingesting(appended: Ref.Ref<{ readonly seq: number; readonly polled: DateTime.Utc }>) {
+/** Ingest playing the recorded NE at BUF scenario onto the provided feed log, keeping the last `seq` it appended in `appended`. */
+function ingesting(appended: Ref.Ref<number>) {
   const tracked = Layer.effect(
     FeedLog,
     Effect.map(FeedLog, (log) =>
       FeedLog.of({
         ...log,
-        append: (frame) =>
-          log.append(frame).pipe(
-            Effect.tap((logged) =>
-              Ref.update(appended, ({ polled }) => ({
-                seq: logged.seq,
-                polled: logged.source === "poll" ? logged.receivedAt : polled
-              }))
-            )
-          )
+        append: (frame) => log.append(frame).pipe(Effect.tap((logged) => Ref.set(appended, logged.seq)))
       })
     )
   )
@@ -374,9 +364,7 @@ function ingesting(appended: Ref.Ref<{ readonly seq: number; readonly polled: Da
     Layer.provide(tracked),
     Layer.provide(ScenarioProvider.layer.pipe(Layer.provide(Scenarios.layerFrom(fixtures)))),
     // Fresh, or HubConfig.layer is the one the corpus days were built with, memoized, which names no scenario.
-    Layer.provide(
-      Layer.fresh(HubConfig.layerTest({ SPORTAL_SCENARIO: neAtBufFrames, SPORTAL_LEAGUES: "nfl" }))
-    ),
+    Layer.provide(Layer.fresh(HubConfig.layerTest({ SPORTAL_SCENARIO: neAtBufFrames }))),
     Layer.orDie
   )
 }

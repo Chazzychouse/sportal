@@ -309,7 +309,6 @@ function slateOf(published: Effect.Effect<Omit<SlateChanged, "_tag">>) {
     latest: Effect.succeed(Slate.empty),
     changes: Stream.empty,
     events: Stream.empty,
-    resyncs: Effect.succeed(Stream.empty),
     through: () => Effect.succeed(Slate.empty),
     published: Effect.map(published, LiveMessage.cases.SlateChanged.make),
     publishedChanges: Stream.empty

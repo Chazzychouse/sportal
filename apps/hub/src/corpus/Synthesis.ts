@@ -5,7 +5,7 @@ import { Situation } from "@sportal/domain/Situation"
 import type { TeamId } from "@sportal/domain/Team"
 import { Array as Arr, DateTime, Duration, type Effect, Option, Order, Stream } from "effect"
 import type { GameArchive, PlayArchive } from "../provider/Archiver.ts"
-import { Decoded } from "../provider/Decoder.ts"
+import { Decoded } from "../provider/Provider.ts"
 import { Delivery } from "../slate/Delivery.ts"
 import { CorpusLine } from "./CorpusLine.ts"
 
@@ -67,9 +67,7 @@ export function day(games: ReadonlyArray<GameArchive>): Effect.Effect<{
   }))
   const frames = [...pushes, ...polls]
     .toSorted(pushFirst)
-    .map(
-      ({ at, deliveries }, i) => new Decoded({ seq: i + 1, at, deliveries, resyncs: [], observations: [] })
-    )
+    .map(({ at, deliveries }, i) => new Decoded({ seq: i + 1, at, deliveries, observations: [] }))
   return CorpusLine.ofDecoded(Stream.fromIterable(frames))
 }
 

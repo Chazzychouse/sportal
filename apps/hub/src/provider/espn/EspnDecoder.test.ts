@@ -7,8 +7,8 @@ import { type Data, DateTime, Effect, Equal, Layer, Metric, Option, Record, Sche
 import type { Frame } from "../../Frame.ts"
 import { Delivery } from "../../slate/Delivery.ts"
 import { recordingLogs, withMetrics } from "../../TestTelemetry.ts"
-import { DecodeObservation } from "../Decoder.ts"
-import { decodedFrames, FramesDecoded } from "../TestDecoder.ts"
+import { type Decoded, DecodeObservation, Provider } from "../Provider.ts"
+import { decodedFrames, FramesDecoded } from "../TestProvider.ts"
 import * as EspnDecoder from "./EspnDecoder.ts"
 import { EspnEvent } from "./EspnEvent.ts"
 import * as FastCastMessage from "./FastCastMessage.ts"
@@ -51,9 +51,11 @@ const ariAtNyg = "s:20~l:28~e:401872966~c:401872966"
 const ariAtNygPlays = "gp-football-nfl-401872966"
 
 // NE at BUF's recorded frames, decoded once by ESPN's decode for the tests that read them.
-const neAtBufDecoded = FramesDecoded.layerOf(recordedNeAtBuf).pipe(Layer.provide(EspnDecoder.layer))
+const neAtBufDecoded = FramesDecoded.layerOf(recordedNeAtBuf).pipe(
+  Layer.provide(Provider.layerTest(EspnDecoder.decode))
+)
 
-layer(EspnDecoder.layer)("EspnDecoder", (it) => {
+layer(Provider.layerTest(EspnDecoder.decode))("EspnDecoder", (it) => {
   // Each recorded feed as it decoded when both feeds' events were read by one transform: the poll's listings, the
   // checkpoint's pushes, and the checkpoint's events each read alone.
   describe("the recorded feeds decode to the same games", () => {
@@ -322,24 +324,24 @@ layer(EspnDecoder.layer)("EspnDecoder", (it) => {
       ],
       expected: [ariAtNygPlays]
     }
-  ])("should ask for a topic's checkpoint again, once, after $reset", ({ frames, expected }) =>
+  ])("should note a topic's document Reset, once, after $reset", ({ frames, expected }) =>
     Effect.gen(function* () {
-      const { resynced } = yield* said(frames())
+      const { reset } = yield* said(frames())
 
-      assert.deepStrictEqual(resynced, expected)
+      assert.deepStrictEqual(reset, expected)
     })
   )
 
-  it.effect("should ask for nothing for a topic that was never synced", () =>
+  it.effect("should note no Reset for a topic that was never synced", () =>
     Effect.gen(function* () {
-      const { resynced } = yield* said([poll("nfl", scoreboardBody), ...beforeAnyCheckpoint()])
+      const { reset } = yield* said([poll("nfl", scoreboardBody), ...beforeAnyCheckpoint()])
 
-      assert.deepStrictEqual(resynced, [])
+      assert.deepStrictEqual(reset, [])
     })
   )
 
   it.effect(
-    "should leave a topic waiting on a checkpoint that does not decode, noting FrameUndecoded, with no Resync",
+    "should leave a topic waiting on a checkpoint that does not decode, noting FrameUndecoded, with no Reset",
     () =>
       Effect.gen(function* () {
         const unreadable = [
@@ -348,9 +350,9 @@ layer(EspnDecoder.layer)("EspnDecoder", (it) => {
           scoreReplaced(8)
         ]
 
-        const { deliveries, noted, resynced } = yield* said(unreadable)
+        const { deliveries, noted, reset } = yield* said(unreadable)
 
-        assert.deepStrictEqual(resynced, [])
+        assert.deepStrictEqual(reset, [])
         assert.deepStrictEqual(
           deliveries.map(({ seq }) => seq),
           [1],
@@ -386,10 +388,7 @@ layer(EspnDecoder.layer)("EspnDecoder", (it) => {
         ),
         [["401872966", 6]]
       )
-      assert.deepStrictEqual(
-        all.flatMap(({ resyncs }) => resyncs),
-        []
-      )
+      assert.deepStrictEqual(all.flatMap(resetTopics), [])
     })
   )
 
@@ -700,7 +699,6 @@ layer(EspnDecoder.layer)("EspnDecoder", (it) => {
           assert.deepStrictEqual(rest, [])
           assert.strictEqual(only?.seq, 1)
           assert.deepStrictEqual(only?.deliveries, [])
-          assert.deepStrictEqual(only?.resyncs, [])
           assert.deepStrictEqual(
             only?.observations.map((observation) => observation._tag),
             ["Received"]
@@ -735,11 +733,11 @@ layer(EspnDecoder.layer)("EspnDecoder", (it) => {
       })
     )
 
-    it.effect("should give a dropped document a Decoded whose resyncs are its topic", () =>
+    it.effect("should give a dropped document a Decoded noting its topic Reset", () =>
       Effect.gen(function* () {
         const all = yield* decodedFrames([...synced(), undecodablePatch(4286638)])
 
-        assert.deepStrictEqual(all.at(-1)?.resyncs, ["event-football-nfl"])
+        assert.deepStrictEqual(all.slice(-1).flatMap(resetTopics), ["event-football-nfl"])
       })
     )
 
@@ -817,8 +815,8 @@ describe("EspnDecoder.byLeague", () => {
 })
 
 /**
- * What `frames` decode to, each numbered by its place from 1: the deliveries, what decoding observed, and the channels
- * it asked to have checkpointed again, in order.
+ * What `frames` decode to, each numbered by its place from 1: the deliveries, what decoding observed, and the topics
+ * whose document it noted `Reset`, in order.
  */
 function said(frames: ReadonlyArray<Frame>) {
   return decodedFrames(frames).pipe(
@@ -829,9 +827,14 @@ function said(frames: ReadonlyArray<Frame>) {
       noted: all.flatMap(({ seq, observations }) =>
         observations.map((observation) => ({ seq, observation }))
       ),
-      resynced: all.flatMap(({ resyncs }) => resyncs)
+      reset: all.flatMap(resetTopics)
     }))
   )
+}
+
+/** The topics whose document `decoded` notes `Reset`. */
+function resetTopics(decoded: Decoded): ReadonlyArray<string> {
+  return decoded.observations.filter(DecodeObservation.$is("Reset")).map(({ topic }) => topic)
 }
 
 /** How many of `noted` are `tag` observations with `fields`. */

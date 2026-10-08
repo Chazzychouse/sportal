@@ -3,14 +3,14 @@ import { assert, describe, it } from "@effect/vitest"
 import { Effect, Layer } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/http"
 import { HubConfig } from "../../HubConfig.ts"
-import { listedBy } from "../TestDecoder.ts"
+import { listedBy } from "../TestProvider.ts"
 import * as Espn from "./Espn.ts"
 import { noSocket } from "./TestEspn.ts"
 
 const fbsLive = readFileSync(new URL("./fixtures/fbs-scoreboard-live.json", import.meta.url), "utf8")
 
 describe("Espn.layer", () => {
-  it.effect("should provide a provider and a decoder that decodes its frames", () =>
+  it.effect("should provide a provider that decodes its own frames", () =>
     Effect.gen(function* () {
       const slate = yield* listedBy("fbs")
 

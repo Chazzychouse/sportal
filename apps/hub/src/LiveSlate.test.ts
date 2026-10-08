@@ -32,9 +32,9 @@ import { Frame } from "./Frame.ts"
 import { FeedLog } from "./feed-log/FeedLog.ts"
 import { HubConfig } from "./HubConfig.ts"
 import { LiveSlate } from "./LiveSlate.ts"
-import { Decoded, Decoder } from "./provider/Decoder.ts"
 import * as EspnDecoder from "./provider/espn/EspnDecoder.ts"
 import { fixtures, recordedNeAtBuf, recordedPlays } from "./provider/espn/TestEspn.ts"
+import { Decoded, Provider } from "./provider/Provider.ts"
 import { Acknowledgement } from "./slate/Acknowledgement.ts"
 import { Delivery } from "./slate/Delivery.ts"
 import type { Slate } from "./slate/Slate.ts"
@@ -153,7 +153,7 @@ describe("LiveSlate, a frame taken live", () => {
 
         assert.deepStrictEqual(firstGame.snapshot, first)
         assert.strictEqual(secondGame.snapshot.clock, "8:00")
-      }).pipe(Effect.provide(slateFollowing([], { decoder: breaking })))
+      }).pipe(Effect.provide(slateFollowing([], { provider: breaking })))
   )
 
   it.effect("should take a game's next snapshot after a defect in its delivery", () =>
@@ -166,7 +166,7 @@ describe("LiveSlate, a frame taken live", () => {
       const liveGame = yield* gameOf(one)
 
       assert.deepStrictEqual(liveGame.snapshot, next)
-    }).pipe(Effect.provide(slateFollowing([], { decoder: breaking })))
+    }).pipe(Effect.provide(slateFollowing([], { provider: breaking })))
   )
 })
 
@@ -203,7 +203,7 @@ describe("LiveSlate#changes", () => {
         Effect.forkScoped({ startImmediately: true })
       )
       yield* takenSnapshot(liveSnapshot({ id: one }))
-      const resync = yield* pushed({ _tag: "Resync" }, "topic")
+      const resync = yield* pushed({ _tag: "Nothing" }, "topic")
 
       const current = yield* appended(resync)
       yield* Effect.yieldNow
@@ -236,7 +236,7 @@ describe("LiveSlate#through", () => {
       const current = yield* appended(frame)
 
       assert.deepStrictEqual(current.seq, Option.some(1))
-    }).pipe(Effect.provide(slateFollowing([], { decoder: dyingDecoder })))
+    }).pipe(Effect.provide(slateFollowing([], { provider: dyingProvider })))
   )
 
   it.effect(
@@ -247,7 +247,7 @@ describe("LiveSlate#through", () => {
         yield* takenSnapshot(liveSnapshot({ id: one }))
         const frame = yield* dyingFrame
         yield* appended(frame)
-        const after = yield* pushed({ _tag: "Resync" }, "x")
+        const after = yield* pushed({ _tag: "Nothing" }, "x")
 
         const current = yield* appended(after)
         const stopped = logs.filter(({ level }) => level === "Error")
@@ -259,27 +259,8 @@ describe("LiveSlate#through", () => {
           "frames are no longer taken into the slate until the Hub restarts"
         )
         assert.include(stopped[0]?.cause, "decode died")
-      }).pipe(Effect.provide(slateFollowing([], { decoder: dyingDecoder }).pipe(Layer.provideMerge(layer))))
+      }).pipe(Effect.provide(slateFollowing([], { provider: dyingProvider }).pipe(Layer.provideMerge(layer))))
     }
-  )
-})
-
-describe("LiveSlate#resyncs", () => {
-  it.effect(
-    "should emit each resync a live frame asks for from when it subscribed, however late it is run",
-    () =>
-      Effect.gen(function* () {
-        const slate = yield* LiveSlate
-        const resyncs = yield* slate.resyncs
-        const first = yield* pushed({ _tag: "Resync" }, "first-topic")
-        const second = yield* pushed({ _tag: "Resync" }, "second-topic")
-
-        yield* appended(first)
-        yield* appended(second)
-        const channels = yield* resyncs.pipe(Stream.take(2), Stream.runCollect)
-
-        assert.deepStrictEqual(channels, ["first-topic", "second-topic"])
-      }).pipe(Effect.provide(slateFollowing()))
   )
 })
 
@@ -483,7 +464,7 @@ describe("LiveSlate over time", () => {
       assert.strictEqual(gameState, 3)
       assert.strictEqual(staleGames, 1)
     }).pipe(
-      Effect.provide(slateFollowing([], { decoder: dyingDecoder }).pipe(Layer.provideMerge(layer))),
+      Effect.provide(slateFollowing([], { provider: dyingProvider }).pipe(Layer.provideMerge(layer))),
       withMetrics
     )
   })
@@ -698,7 +679,7 @@ describe("LiveSlate's telemetry", () => {
       assert.include(errors[0]?.annotations, { game: "1", seq: 2 })
       assert.strictEqual(defects, 1)
     }).pipe(
-      Effect.provide(slateFollowing([], { decoder: breaking }).pipe(Layer.provideMerge(layer))),
+      Effect.provide(slateFollowing([], { provider: breaking }).pipe(Layer.provideMerge(layer))),
       withMetrics
     )
   })
@@ -1105,7 +1086,7 @@ describe("LiveSlate following the feed log", () => {
       )
 
       const current = yield* LiveSlate.use((slate) => slate.through(2)).pipe(
-        Effect.provide(slateOn(appendingAtEnd([first]), TestSnapshotFeed.layerDecoder))
+        Effect.provide(slateOn(appendingAtEnd([first]), TestSnapshotFeed.layer))
       )
       const taken = yield* counted("sportal_snapshots", { outcome: "taken" })
 
@@ -1187,7 +1168,7 @@ describe("LiveSlate following the feed log", () => {
       assert.deepStrictEqual(decodeLogs, [])
     }).pipe(
       Effect.provide(
-        slateFollowingFramesFrom(Effect.all(noticeable), { decoder: EspnDecoder.layer }).pipe(
+        slateFollowingFramesFrom(Effect.all(noticeable), { provider: espnDecoding }).pipe(
           Layer.provideMerge(layer)
         )
       ),
@@ -1221,14 +1202,14 @@ describe("LiveSlate following the feed log", () => {
       assert.strictEqual(waits.length, 1)
       assert.isTrue(logs.some(({ level, message }) => level === "Error" && message.includes("Decode:")))
     }).pipe(
-      Effect.provide(slateFollowing([], { decoder: EspnDecoder.layer }).pipe(Layer.provideMerge(layer))),
+      Effect.provide(slateFollowing([], { provider: espnDecoding }).pipe(Layer.provideMerge(layer))),
       withMetrics
     )
   })
 
   it.effect("should keep the decoder's state from the replayed frames for the first live frame", () =>
     Effect.gen(function* () {
-      const resync = yield* pushed({ _tag: "Resync" }, "fbs")
+      const resync = yield* pushed({ _tag: "Nothing" }, "fbs")
 
       const current = yield* appended(resync)
       const scores = [...current.games.values()].map((held) => held.home.score)
@@ -1237,9 +1218,9 @@ describe("LiveSlate following the feed log", () => {
     }).pipe(
       Effect.provide(
         slateFollowingFramesFrom(
-          Effect.all([pushed({ _tag: "Resync" }, "fbs"), pushed({ _tag: "Resync" }, "fbs")]),
+          Effect.all([pushed({ _tag: "Nothing" }, "fbs"), pushed({ _tag: "Nothing" }, "fbs")]),
           {
-            decoder: counting
+            provider: counting
           }
         )
       )
@@ -1251,7 +1232,7 @@ describe("LiveSlate following the feed log", () => {
       const built = yield* Layer.build(
         slateFollowingFramesFrom(
           Effect.map(dyingFrame, (frame) => [frame]),
-          { decoder: dyingDecoder }
+          { provider: dyingProvider }
         )
       ).pipe(Effect.scoped, Effect.exit)
 
@@ -1265,7 +1246,7 @@ describe("LiveSlate following the feed log", () => {
       yield* Layer.build(
         slateFollowingFramesFrom(
           Effect.map(dyingFrame, (frame) => [frame]),
-          { decoder: dyingDecoder }
+          { provider: dyingProvider }
         ).pipe(Layer.provideMerge(layer))
       ).pipe(Effect.scoped, Effect.exit)
 
@@ -1356,7 +1337,7 @@ describe("LiveSlate, a recorded game", () => {
         assert.deepStrictEqual(errors, [])
       }).pipe(
         Effect.provide(
-          slateFollowingFramesFrom(recordedNeAtBuf, { decoder: EspnDecoder.layer }).pipe(
+          slateFollowingFramesFrom(recordedNeAtBuf, { provider: espnDecoding }).pipe(
             Layer.provideMerge(layer)
           )
         ),
@@ -1439,7 +1420,7 @@ describe("LiveSlate, a recorded game", () => {
         const zone = DateTime.zoneMakeOffset(-((12 * 60 + 56) * 60 + 40) * 1000)
         yield* TestClock.setTime(DateTime.toEpochMillis(DateTime.makeUnsafe("2026-10-04T20:00:00Z")))
 
-        yield* latestOf(slateFollowing(frames, { decoder: EspnDecoder.layer, zone }))
+        yield* latestOf(slateFollowing(frames, { provider: espnDecoding, zone }))
         const summary = logs.find(({ message }) => message.includes("replayed"))
 
         assert.notInclude(
@@ -1468,10 +1449,10 @@ describe("LiveSlate, a recorded game", () => {
 
         // Half the day logged and followed, then every layer closed; reopened on the same file, the rest logged, and
         // the whole log followed, as a Hub starting again would.
-        const before = yield* latestOf(
-          slateOn(FeedLog.layerTest(all.slice(0, half)), EspnDecoder.layer)
-        ).pipe(Effect.provide(onDisk))
-        const after = yield* latestOf(slateOn(FeedLog.layerTest(all.slice(half)), EspnDecoder.layer)).pipe(
+        const before = yield* latestOf(slateOn(FeedLog.layerTest(all.slice(0, half)), espnDecoding)).pipe(
+          Effect.provide(onDisk)
+        )
+        const after = yield* latestOf(slateOn(FeedLog.layerTest(all.slice(half)), espnDecoding)).pipe(
           Effect.provide(onDisk)
         )
         const uninterrupted = yield* replayed(all)
@@ -1546,19 +1527,11 @@ function broken(id: GameId): GameSnapshot {
  * The snapshot feed's decode, reading each snapshot at home to BRK as one whose events raise a defect, since a snapshot
  * that does so cannot cross the feed log.
  */
-const breaking = Layer.effect(
-  Decoder,
-  Effect.map(Decoder, (decoder) =>
-    Decoder.of({
-      decode: (frames) =>
-        decoder
-          .decode(frames)
-          .pipe(
-            Stream.map((decoded) => new Decoded({ ...decoded, deliveries: decoded.deliveries.map(brokenIn) }))
-          )
-    })
+const breaking = Provider.layerTest((frames) =>
+  TestSnapshotFeed.decode(frames).pipe(
+    Stream.map((decoded) => new Decoded({ ...decoded, deliveries: decoded.deliveries.map(brokenIn) }))
   )
-).pipe(Layer.provide(TestSnapshotFeed.layerDecoder))
+)
 
 function brokenIn(delivery: Delivery): Delivery {
   return Delivery.match(delivery, {
@@ -1581,16 +1554,19 @@ function brokenIfMarked(snapshot: GameSnapshot): GameSnapshot {
 
 /** A snapshot feed frame, received now, whose body does not decode. */
 const undecodable = Effect.map(
-  pushed({ _tag: "Resync" }, "fbs"),
+  pushed({ _tag: "Nothing" }, "fbs"),
   (frame) => new Frame({ ...frame, kind: "whole", body: "not json" })
 )
 
-/** The snapshot feed's decode, which dies at a frame whose body is `"die"`. */
-const dyingDecoder = Decoder.layerTestDying("die").pipe(Layer.provide(TestSnapshotFeed.layerDecoder))
+/** A provider that delivers nothing, read by ESPN's decode. */
+const espnDecoding = Provider.layerTest(EspnDecoder.decode)
 
-/** A snapshot feed frame, received now, whose decode `dyingDecoder` dies on. */
+/** The snapshot feed's decode, which dies at a frame whose body is `"die"`. */
+const dyingProvider = Provider.layerTestDying("die").pipe(Layer.provide(TestSnapshotFeed.layer))
+
+/** A snapshot feed frame, received now, whose decode `dyingProvider` dies on. */
 const dyingFrame = Effect.map(
-  pushed({ _tag: "Resync" }, "x"),
+  pushed({ _tag: "Nothing" }, "x"),
   (frame) => new Frame({ ...frame, body: "die" })
 )
 
@@ -1795,12 +1771,9 @@ function inPairsThen(logged: ReadonlyArray<Frame>, frame: Frame) {
 }
 
 /** The snapshot feed's decode, handing on what frames said two at a time, so it reads a frame ahead of the last it gave. */
-const inPairs = Layer.effect(
-  Decoder,
-  Effect.map(Decoder, (decoder) =>
-    Decoder.of({ decode: (frames) => decoder.decode(frames).pipe(Stream.grouped(2), Stream.flattenIterable) })
-  )
-).pipe(Layer.provide(TestSnapshotFeed.layerDecoder))
+const inPairs = Provider.layerTest((frames) =>
+  TestSnapshotFeed.decode(frames).pipe(Stream.grouped(2), Stream.flattenIterable)
+)
 
 /** Each of `counters` with its count, if it has counted. */
 function countsOf(counters: ReadonlyArray<string>) {
@@ -1864,34 +1837,29 @@ function recordedCheckpoint() {
  * A decode that keeps a count of the frames it has read and reads each as a pushed live game with that count for the
  * home score.
  */
-const counting = Layer.succeed(
-  Decoder,
-  Decoder.of({
-    decode: (frames) =>
-      frames.pipe(
-        Stream.mapAccum(
-          () => 0,
-          (count, frame) =>
-            [
-              count + 1,
-              [
-                new Decoded({
-                  seq: frame.seq,
-                  at: frame.receivedAt,
-                  deliveries: [
-                    Delivery.cases.Snapshot.make({
-                      snapshot: liveSnapshot({ home: { team: team("HOME"), score: count + 1 } }),
-                      from: "push"
-                    })
-                  ],
-                  resyncs: [],
-                  observations: []
+const counting = Provider.layerTest((frames) =>
+  frames.pipe(
+    Stream.mapAccum(
+      () => 0,
+      (count, frame) =>
+        [
+          count + 1,
+          [
+            new Decoded({
+              seq: frame.seq,
+              at: frame.receivedAt,
+              deliveries: [
+                Delivery.cases.Snapshot.make({
+                  snapshot: liveSnapshot({ home: { team: team("HOME"), score: count + 1 } }),
+                  from: "push"
                 })
-              ]
-            ] as const
-        )
-      )
-  })
+              ],
+              observations: []
+            })
+          ]
+        ] as const
+    )
+  )
 )
 
 /**
@@ -1926,7 +1894,7 @@ const aheadOfCovered = liveSnapshot({ id: one, clock: "4:30", home: { team: team
 
 /** A fresh slate's latest once it has replayed `frames`, decoded as ESPN. */
 function replayed(frames: ReadonlyArray<Frame>) {
-  return latestOf(slateFollowing(frames, { decoder: EspnDecoder.layer }))
+  return latestOf(slateFollowing(frames, { provider: espnDecoding }))
 }
 
 /** Whether `game` is the very game `last` was: the same snapshot, acknowledgement and plays. */
@@ -1983,7 +1951,7 @@ function takenLive(frames: ReadonlyArray<Frame>, sampling: ReadonlyArray<number>
     const heldAs = yield* Ref.get(held)
     const published = yield* Ref.get(events)
     return { latest: end, sampled: samples, held: heldAs, events: published }
-  }).pipe(Effect.provide(slateFollowing([], { decoder: EspnDecoder.layer })))
+  }).pipe(Effect.provide(slateFollowing([], { provider: espnDecoding })))
   return Option.match(Option.fromUndefinedOr(frames[0]), {
     onNone: () => taking,
     onSome: (first) =>
@@ -1999,14 +1967,14 @@ function slateFollowingFramesFrom<E>(
   return Layer.unwrap(Effect.map(frames, (made) => slateFollowing(made, options)))
 }
 
-/** The slate following `feedLog`, which is provided too, read by `decoder`, in the local zone. */
+/** The slate following `feedLog`, which is provided too, read by `provider`'s decode, in the local zone. */
 function slateOn(
   feedLog: Layer.Layer<FeedLog, never, SqlClient.SqlClient | Crypto.Crypto>,
-  decoder: Layer.Layer<Decoder>
+  provider: Layer.Layer<Provider>
 ) {
   return LiveSlate.layer.pipe(
     Layer.provideMerge(feedLog),
-    Layer.provide([decoder, DateTime.layerCurrentZoneLocal])
+    Layer.provide([provider, DateTime.layerCurrentZoneLocal])
   )
 }
 

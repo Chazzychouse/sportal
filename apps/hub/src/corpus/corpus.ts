@@ -1,6 +1,6 @@
 import { availableParallelism } from "node:os"
 import { Worker } from "node:worker_threads"
-import { NodeRuntime, NodeServices, NodeWorker } from "@effect/platform-node"
+import { NodeRuntime, NodeServices, NodeSocket, NodeWorker } from "@effect/platform-node"
 import { GameDay } from "@sportal/domain/GameDay"
 import { LeagueId } from "@sportal/domain/League"
 import { Array as Arr, DateTime, Duration, Effect, Layer, Option, Result, Schema, Stream } from "effect"
@@ -32,8 +32,11 @@ const days = {
   )
 }
 
-// ESPN's archiver and decode, over the network: only the commands that read or fetch the archive are given it.
-const archival = Espn.layerArchival.pipe(Layer.provide(FetchHttpClient.layer))
+// ESPN's archiver and provider, over the network: only the commands that read or fetch the archive are given it. The
+// provider is there for its decode; its frames never run, so it polls nothing and opens no socket.
+const archival = Espn.layerArchival.pipe(
+  Layer.provide([FetchHttpClient.layer, NodeSocket.layerWebSocketConstructorWS])
+)
 
 const build = Command.make(
   "build",

@@ -7,7 +7,7 @@ import * as Database from "../Database.ts"
 import type { Frame } from "../Frame.ts"
 import { FeedLog } from "../feed-log/FeedLog.ts"
 import { HubConfig } from "../HubConfig.ts"
-import type { Decoder } from "../provider/Decoder.ts"
+import type { Provider } from "../provider/Provider.ts"
 import * as CorpusBuild from "./CorpusBuild.ts"
 import { CorpusDays } from "./CorpusDay.ts"
 
@@ -20,19 +20,19 @@ export function local(wallClock: string): DateTime.Utc {
 }
 
 /**
- * `test` over an in-memory feed log's database, `decoder`, and corpus days in a temporary directory it is given, in
+ * `test` over an in-memory feed log's database, `provider`, and corpus days in a temporary directory it is given, in
  * `timeZone`, `zone` unless given.
  */
 export const inCorpus = Effect.fn("TestCorpus.inCorpus")(
   function* <A, E>(
-    decoder: Layer.Layer<Decoder>,
+    provider: Layer.Layer<Provider>,
     test: (
       dir: string
     ) => Effect.Effect<
       A,
       E,
       | CorpusDays
-      | Decoder
+      | Provider
       | DateTime.CurrentTimeZone
       | FileSystem.FileSystem
       | Path.Path
@@ -48,7 +48,7 @@ export const inCorpus = Effect.fn("TestCorpus.inCorpus")(
       Effect.provide(
         Layer.mergeAll(
           CorpusDays.layer.pipe(Layer.provide(HubConfig.layerTest({ SPORTAL_CORPUS_DIR: dir }))),
-          decoder,
+          provider,
           DateTime.layerCurrentZone(timeZone),
           Database.layerMemory,
           NodeCrypto.layer

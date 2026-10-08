@@ -1,18 +1,34 @@
 import { readFileSync } from "node:fs"
 import { assert, describe, it } from "@effect/vitest"
-import type { GameSnapshot } from "@sportal/domain/Game"
 import { Network } from "@sportal/domain/Game"
-import type { LeagueId } from "@sportal/domain/League"
-import { liveSnapshot, snapshot } from "@sportal/domain/TestGame"
-import { Cause, DateTime, Duration, Effect, Layer, Schedule } from "effect"
+import { LeagueId } from "@sportal/domain/League"
+import {
+  Array as Arr,
+  Cause,
+  Clock,
+  DateTime,
+  type Duration,
+  Effect,
+  Exit,
+  Layer,
+  Metric,
+  Option,
+  Queue,
+  Ref,
+  Schema,
+  Stream,
+  type Tracer
+} from "effect"
 import { HttpClient, HttpClientError, HttpClientResponse } from "effect/http"
+import { TestClock } from "effect/testing"
+import type { Frame } from "../../Frame.ts"
 import { HubConfig } from "../../HubConfig.ts"
+import { counted, recordingLogs, recordingSpans, withMetrics } from "../../TestTelemetry.ts"
 import { Provider } from "../Provider.ts"
-import { listedBy } from "../TestDecoder.ts"
-import * as EspnDecoder from "./EspnDecoder.ts"
+import { listedBy } from "../TestProvider.ts"
 import * as EspnProvider from "./EspnProvider.ts"
 import { FastCast } from "./FastCast.ts"
-import { noSocket } from "./TestEspn.ts"
+import { ProviderUnavailable } from "./ProviderUnavailable.ts"
 
 // Real payloads recorded from ESPN. A payload that breaks decoding gets added here before the fix.
 const fixture = (name: string) => readFileSync(new URL(`./fixtures/${name}.json`, import.meta.url), "utf8")
@@ -25,12 +41,16 @@ describe("EspnProvider", () => {
     Effect.gen(function* () {
       const provider = yield* Provider
 
-      const frame = yield* provider.poll("nfl")
+      const polled = yield* provider.frames.pipe(
+        Stream.filter((frame) => frame.channel === "nfl"),
+        Stream.runHead
+      )
 
-      assert.strictEqual(frame.body, nflPregame)
-      assert.deepStrictEqual([frame.source, frame.channel, frame.kind], ["poll", "nfl", "whole"])
+      const frame = Option.getOrUndefined(polled)
+      assert.strictEqual(frame?.body, nflPregame)
+      assert.deepStrictEqual([frame?.source, frame?.channel, frame?.kind], ["poll", "nfl", "whole"])
       assert.strictEqual(
-        frame.sentAt?.epochMilliseconds,
+        frame?.sentAt?.epochMilliseconds,
         DateTime.makeUnsafe("2026-10-04T18:00:00Z").epochMilliseconds
       )
     }).pipe(Effect.provide(recordedEspn(fbsLive)))
@@ -131,103 +151,221 @@ describe("EspnProvider", () => {
       }).pipe(Effect.provide(recordedEspn(fbsMidday)))
   )
 
-  it.effect("should fail a poll that cannot connect as Unreachable for its league", () =>
-    Effect.gen(function* () {
-      const provider = yield* Provider
+  it.effect("should take a poll that cannot connect as Unreachable for its league", () => {
+    const ended: Array<Tracer.Span> = []
+    return Effect.gen(function* () {
+      yield* polledOnce(
+        answering(() => Effect.fail(new Cause.UnknownError("ECONNREFUSED"))),
+        {
+          ended,
+          leagues: "nfl"
+        }
+      )
 
-      const unreachable = yield* Effect.flip(provider.poll("nfl"))
+      const unreachable = pollFailures(ended)
+      assert.deepStrictEqual(unreachable, [["Unreachable", "nfl"]])
+    })
+  })
 
-      assert.deepStrictEqual([unreachable.reason, unreachable.league], ["Unreachable", "nfl"])
-    }).pipe(Effect.provide(answering(() => Effect.fail(new Cause.UnknownError("ECONNREFUSED")))))
-  )
+  it.effect("should take a poll answered with a non-2xx as Refused for its league", () => {
+    const ended: Array<Tracer.Span> = []
+    return Effect.gen(function* () {
+      yield* polledOnce(
+        answering(() => Effect.succeed(new Response("busy", { status: 503 }))),
+        {
+          ended,
+          leagues: "fbs"
+        }
+      )
 
-  it.effect("should fail a poll answered with a non-2xx as Refused for its league", () =>
-    Effect.gen(function* () {
-      const provider = yield* Provider
-
-      const refused = yield* Effect.flip(provider.poll("fbs"))
-
-      assert.deepStrictEqual([refused.reason, refused.league], ["Refused", "fbs"])
-    }).pipe(Effect.provide(answering(() => Effect.succeed(new Response("busy", { status: 503 })))))
-  )
+      const refused = pollFailures(ended)
+      assert.deepStrictEqual(refused, [["Refused", "fbs"]])
+    })
+  })
 })
 
-describe("EspnProvider polling", () => {
-  it.effect("should wait 10 s while a game is live", () =>
+describe("EspnProvider.frames", () => {
+  it.effect("should poll every 10 seconds while a game is live", () =>
     Effect.gen(function* () {
-      const slate = [liveSnapshot({ kickoff: at("2026-10-03T11:00:00Z") })]
+      const live = scoreboardOf([{ state: "in", period: 2 }])
 
-      const delay = yield* waitAfter(slate, [])
+      const polled = yield* polledOver("10 seconds", { fbs: live })
 
-      assert.deepStrictEqual(delay, Duration.seconds(10))
+      assert.deepStrictEqual(polled, [0, 10_000])
     })
   )
 
-  it.effect("should wait 10 s while the only game is delayed in the second quarter", () =>
+  it.effect("should poll every 10 seconds while the only game is delayed in the second quarter", () =>
     Effect.gen(function* () {
-      const slate = [snapshot({ status: "delayed", period: 2, kickoff: at("2026-10-03T11:00:00Z") })]
+      const delayed = scoreboardOf([{ state: "in", name: "STATUS_DELAYED", period: 2 }])
 
-      const delay = yield* waitAfter(slate, [])
+      const polled = yield* polledOver("10 seconds", { fbs: delayed })
 
-      assert.deepStrictEqual(delay, Duration.seconds(10))
+      assert.deepStrictEqual(polled, [0, 10_000])
     })
   )
 
-  it.effect("should wait 1 min when a kickoff is within 30 minutes", () =>
+  it.effect("should poll every minute within 30 minutes of a kickoff", () =>
     Effect.gen(function* () {
-      const slate = [snapshot({ kickoff: at("2026-10-03T12:20:00Z") })]
+      const soon = scoreboardOf([{ state: "pre", period: 0, kickoff: "2026-10-03T12:20Z" }])
 
-      const delay = yield* waitAfter(slate, [])
+      const polled = yield* polledOver("1 minute", { fbs: soon })
 
-      assert.deepStrictEqual(delay, Duration.minutes(1))
+      assert.deepStrictEqual(polled, [0, 60_000])
     })
   )
 
-  it.effect("should wait 1 min when a game delayed before kickoff is within 30 minutes", () =>
+  it.effect("should poll every minute when a game delayed before kickoff is within 30 minutes", () =>
     Effect.gen(function* () {
-      const slate = [snapshot({ status: "delayed", kickoff: at("2026-10-03T12:20:00Z") })]
+      const delayed = scoreboardOf([
+        { state: "pre", name: "STATUS_DELAYED", period: 0, kickoff: "2026-10-03T12:20Z" }
+      ])
 
-      const delay = yield* waitAfter(slate, [])
+      const polled = yield* polledOver("1 minute", { fbs: delayed })
 
-      assert.deepStrictEqual(delay, Duration.minutes(1))
+      assert.deepStrictEqual(polled, [0, 60_000])
     })
   )
 
-  it.effect("should wait 15 min when the next kickoff is more than 30 minutes away", () =>
+  it.effect("should poll every 15 minutes otherwise", () =>
     Effect.gen(function* () {
-      const slate = [snapshot({ kickoff: at("2026-10-03T13:00:00Z") })]
+      const later = scoreboardOf([{ state: "pre", period: 0, kickoff: "2026-10-03T13:00Z" }])
 
-      const delay = yield* waitAfter(slate, [])
+      const polled = yield* polledOver("15 minutes", { fbs: later })
 
-      assert.deepStrictEqual(delay, Duration.minutes(15))
+      assert.deepStrictEqual(polled, [0, 900_000])
     })
   )
 
-  it.effect("should wait 15 min when a game delayed before kickoff is more than 30 minutes away", () =>
+  it.effect(
+    "should poll every 15 minutes when a game delayed before kickoff is more than 30 minutes away",
+    () =>
+      Effect.gen(function* () {
+        const delayed = scoreboardOf([
+          { state: "pre", name: "STATUS_DELAYED", period: 0, kickoff: "2026-10-03T13:00Z" }
+        ])
+
+        const polled = yield* polledOver("15 minutes", { fbs: delayed })
+
+        assert.deepStrictEqual(polled, [0, 900_000])
+      })
+  )
+
+  it.effect("should poll again within 30 seconds after a league fails", () =>
     Effect.gen(function* () {
-      const slate = [snapshot({ status: "delayed", kickoff: at("2026-10-03T13:00:00Z") })]
+      const polled = yield* polledOver("30 seconds", { fbs: down })
 
-      const delay = yield* waitAfter(slate, [])
-
-      assert.deepStrictEqual(delay, Duration.minutes(15))
+      assert.deepStrictEqual(polled, [0, 30_000])
     })
   )
 
-  it.effect("should wait 30 s after a failed poll with an empty slate", () =>
+  it.effect("should poll every 10 seconds after a league fails during a live game", () =>
     Effect.gen(function* () {
-      const delay = yield* waitAfter([], ["fbs"])
+      const live = scoreboardOf([{ state: "in", period: 2 }])
 
-      assert.deepStrictEqual(delay, Duration.seconds(30))
+      const polled = yield* polledOver("10 seconds", { nfl: live, fbs: down })
+
+      assert.deepStrictEqual(polled, [0, 10_000])
     })
   )
 
-  it.effect("should wait 10 s after a failed poll during a live game", () =>
+  it.effect("should poll again within 30 seconds after a scoreboard that does not decode", () =>
     Effect.gen(function* () {
-      const slate = [liveSnapshot({ kickoff: at("2026-10-03T11:00:00Z") })]
+      const polled = yield* polledOver("30 seconds", { fbs: "not json" })
 
-      const delay = yield* waitAfter(slate, ["fbs"])
+      assert.deepStrictEqual(polled, [0, 30_000])
+    })
+  )
 
-      assert.deepStrictEqual(delay, Duration.seconds(10))
+  it.effect("should log and count a league that fails", () => {
+    const ended: Array<Tracer.Span> = []
+    const { logs, layer } = recordingLogs()
+    return Effect.gen(function* () {
+      yield* polledOnce(
+        answering(() => Effect.fail(new Cause.UnknownError("ECONNREFUSED"))),
+        {
+          ended,
+          leagues: "fbs"
+        }
+      )
+
+      const poll = ended.find((span) => span.name === "Ingest.poll")
+      const errors = yield* counted("sportal_provider_errors", { league: "fbs" })
+      const warned = logs.filter(
+        ({ level, message }) =>
+          level === "Warn" &&
+          message.includes("Ingest: provider failed; keeping the last good listing for this league, if any")
+      )
+      assert.deepStrictEqual(poll?.attributes.get("sportal.failed_leagues"), ["fbs"])
+      assert.strictEqual(errors, 1)
+      assert.lengthOf(warned, 1)
+    }).pipe(Effect.provide(layer), withMetrics)
+  })
+
+  it.effect("should deliver no frame for a league that fails", () =>
+    Effect.gen(function* () {
+      const nflDown = HttpClient.make((request) =>
+        request.url.includes("/nfl/") ? transportFailure(request) : Effect.succeed(answered(request, fbsLive))
+      )
+
+      const frames = yield* polledOnce(nflDown)
+
+      assert.deepStrictEqual(
+        frames.map(({ channel }) => channel),
+        ["fbs"]
+      )
+    })
+  )
+
+  it.effect("should make a poll of every league one span, with each league's poll inside it", () => {
+    const ended: Array<Tracer.Span> = []
+    return Effect.gen(function* () {
+      yield* polledOnce(recordedHttp(fbsLive), { ended })
+
+      const polls = ended.filter((span) => span.name === "Ingest.poll")
+      const inside = ended.filter(
+        (span) =>
+          span.name === "EspnProvider.poll" &&
+          Option.exists(span.parent, (parent) => parent.spanId === polls[0]?.spanId)
+      )
+      assert.strictEqual(polls.length, 1)
+      assert.deepStrictEqual(polls[0]?.attributes.get("sportal.leagues"), ["nfl", "fbs"])
+      assert.deepStrictEqual(polls[0]?.attributes.get("sportal.failed_leagues"), [])
+      assert.deepStrictEqual(
+        inside.map((span) => span.attributes.get("sportal.league")),
+        ["nfl", "fbs"]
+      )
+    })
+  })
+
+  it.effect("should record each poll's duration", () =>
+    Effect.gen(function* () {
+      const live = scoreboardOf([{ state: "in", period: 2 }])
+      yield* polledOver("10 seconds", { fbs: live })
+
+      const metrics = yield* Metric.snapshot
+
+      const duration = metrics.find((metric) => metric.id === "sportal_poll_duration")
+      assert.strictEqual(duration?.type === "Histogram" ? duration.state.count : undefined, 2)
+    }).pipe(withMetrics)
+  )
+
+  it.effect("should deliver FastCast's frames beside its polls", () =>
+    Effect.gen(function* () {
+      const pushed: Frame = {
+        receivedAt: DateTime.makeUnsafe(0),
+        source: "push",
+        channel: "event-football-nfl",
+        kind: "change",
+        body: "{}"
+      }
+      const espn = espnOver(recordedHttp(fbsLive), { leagues: "fbs", pushing: Stream.make(pushed) })
+
+      const frames = yield* Provider.use((provider) =>
+        provider.frames.pipe(Stream.take(2), Stream.runCollect)
+      ).pipe(Effect.provide(espn))
+
+      assert.deepStrictEqual(frames.map(({ source }) => source).toSorted(), ["poll", "push"])
     })
   )
 })
@@ -240,57 +378,168 @@ function withoutColors(body: string) {
 }
 
 /**
- * ESPN's provider and decode over recorded scoreboards: an NFL poll answered with the pregame scoreboard, an FBS poll
- * with `fbs`, each sent at 18:00Z on 2026-10-04 by its Date header.
+ * ESPN's provider over recorded scoreboards: an NFL poll answered with the pregame scoreboard, an FBS poll with `fbs`,
+ * each sent at 18:00Z on 2026-10-04 by its Date header.
  */
 function recordedEspn(fbs: string) {
-  const recordedHttp = HttpClient.make((request) => {
-    const body = request.url.includes("/nfl/") ? nflPregame : fbs
-    const response = new Response(body, { headers: { date: "Sun, 04 Oct 2026 18:00:00 GMT" } })
-    return Effect.succeed(HttpClientResponse.fromWeb(request, response))
-  })
-  return Layer.merge(espnOver(recordedHttp), EspnDecoder.layer)
+  return espnOver(recordedHttp(fbs))
 }
 
-/** ESPN's provider whose every request is answered by `respond`, a failure as a transport error. */
+/** ESPN's site answering an NFL request with the pregame scoreboard and any other with `fbs`. */
+function recordedHttp(fbs: string) {
+  return HttpClient.make((request) =>
+    Effect.succeed(answered(request, request.url.includes("/nfl/") ? nflPregame : fbs))
+  )
+}
+
+/** `body`, sent at 18:00Z on 2026-10-04 by its Date header, as the answer to `request`. */
+function answered(request: Parameters<typeof HttpClientResponse.fromWeb>[0], body: string) {
+  const response = new Response(body, { headers: { date: "Sun, 04 Oct 2026 18:00:00 GMT" } })
+  return HttpClientResponse.fromWeb(request, response)
+}
+
+/** ESPN's site, every request answered by `respond`, a failure as a transport error. */
 function answering(respond: () => Effect.Effect<Response, Cause.UnknownError>) {
-  return espnOver(
-    HttpClient.make((request) =>
-      respond().pipe(
-        Effect.map((response) => HttpClientResponse.fromWeb(request, response)),
-        Effect.mapError(
-          (cause) =>
-            new HttpClientError.HttpClientError({
-              reason: new HttpClientError.TransportError({ request, cause })
-            })
-        )
+  return HttpClient.make((request) =>
+    respond().pipe(
+      Effect.map((response) => HttpClientResponse.fromWeb(request, response)),
+      Effect.mapError(
+        (cause) =>
+          new HttpClientError.HttpClientError({
+            reason: new HttpClientError.TransportError({ request, cause })
+          })
       )
     )
   )
 }
 
-/** ESPN's provider over `client`, with FastCast that opens no socket and the default Hub config. */
-function espnOver(client: HttpClient.HttpClient) {
-  const hubConfig = HubConfig.layerTest({}).pipe(Layer.orDie)
-  return EspnProvider.layer.pipe(
-    Layer.provide(FastCast.layer),
-    Layer.provide([noSocket, hubConfig]),
-    Layer.provide(Layer.succeed(HttpClient.HttpClient, client))
+/** `request` failing to connect. */
+function transportFailure(request: Parameters<typeof HttpClientResponse.fromWeb>[0]) {
+  return Effect.fail(
+    new HttpClientError.HttpClientError({
+      reason: new HttpClientError.TransportError({ request, cause: new Cause.UnknownError("ECONNREFUSED") })
+    })
   )
 }
 
-function at(iso: string) {
-  return DateTime.makeUnsafe(iso)
+/**
+ * ESPN's provider over `client`, polling `leagues` (every league, unless given), with FastCast pushing `pushing`
+ * (nothing, unless given), and each span that ends recorded in `ended`.
+ */
+function espnOver(
+  client: HttpClient.HttpClient,
+  options: {
+    readonly leagues?: string
+    readonly pushing?: Stream.Stream<Frame>
+    readonly ended?: Array<Tracer.Span>
+  } = {}
+) {
+  return EspnProvider.layer.pipe(
+    Layer.provide([
+      FastCast.layerTest(options.pushing ?? Stream.never),
+      HubConfig.layerTest({ SPORTAL_LEAGUES: options.leagues ?? "nfl,fbs" }).pipe(Layer.orDie),
+      Layer.succeed(HttpClient.HttpClient, client)
+    ]),
+    Layer.provideMerge(recordingSpans(options.ended ?? []))
+  )
 }
 
-/** The wait ESPN's polling Schedule gives at noon on 2026-10-03, after a poll that left `slate` and `failed`. */
-function waitAfter(slate: ReadonlyArray<GameSnapshot>, failed: ReadonlyArray<LeagueId>) {
+/** The frames of ESPN's provider's first poll over `client`, each span that ends recorded in `ended`. */
+function polledOnce(
+  client: HttpClient.HttpClient,
+  options: { readonly leagues?: string; readonly ended?: Array<Tracer.Span> } = {}
+) {
   return Effect.gen(function* () {
-    const now = at("2026-10-03T12:00:00Z")
     const provider = yield* Provider
-    const step = yield* Schedule.toStep(provider.polling)
+    const frames = yield* Queue.unbounded<Frame>()
+    yield* provider.frames.pipe(
+      Stream.runForEach((frame) => Queue.offer(frames, frame)),
+      Effect.forkScoped({ startImmediately: true })
+    )
 
-    const [, delay] = yield* step(now.epochMilliseconds, { slate, failed })
-    return delay
-  }).pipe(Effect.provide(recordedEspn(fbsLive)))
+    yield* TestClock.adjust(0)
+
+    return yield* Queue.clear(frames)
+  }).pipe(Effect.provide(espnOver(client, options)), Effect.scoped)
+}
+
+/** The reason and league of the error each failed `EspnProvider.poll` span among `ended` ended with. */
+function pollFailures(ended: ReadonlyArray<Tracer.Span>) {
+  return ended
+    .filter((span) => span.name === "EspnProvider.poll")
+    .flatMap((span) => ("exit" in span.status ? Option.toArray(Exit.findErrorOption(span.status.exit)) : []))
+    .filter(Schema.is(ProviderUnavailable))
+    .map(({ reason, league }) => [reason, league])
+}
+
+// What a league answers when its every poll cannot connect.
+const down = "down"
+
+/**
+ * The instants, in milliseconds from noon on 2026-10-03, at which ESPN's provider polls over `span` of the test clock
+ * from then, each league of `answers` answered with its scoreboard body, or unable to connect when it is `down`.
+ */
+function polledOver(span: Duration.Input, answers: Partial<Record<LeagueId, string>>) {
+  return Effect.gen(function* () {
+    const start = DateTime.makeUnsafe("2026-10-03T12:00:00Z").epochMilliseconds
+    yield* TestClock.setTime(start)
+    const requests = yield* Ref.make<ReadonlyArray<number>>([])
+    const client = HttpClient.make((request) =>
+      Effect.gen(function* () {
+        const now = yield* Clock.currentTimeMillis
+        yield* Ref.update(requests, (all) => [...all, now - start])
+        const body = answers[request.url.includes("/nfl/") ? "nfl" : "fbs"]
+        return body === undefined || body === down
+          ? yield* transportFailure(request)
+          : HttpClientResponse.fromWeb(request, new Response(body))
+      })
+    )
+    const leagues = LeagueId.literals.filter((league) => answers[league] !== undefined)
+    const answeredLeagues = leagues.filter((league) => answers[league] !== down).length
+
+    yield* Effect.gen(function* () {
+      const provider = yield* Provider
+      const frames = yield* Queue.unbounded<Frame>()
+      yield* provider.frames.pipe(
+        Stream.runForEach((frame) => Queue.offer(frames, frame)),
+        Effect.forkScoped({ startImmediately: true })
+      )
+      yield* Queue.takeBetween(frames, answeredLeagues, answeredLeagues)
+
+      yield* TestClock.adjust(span)
+
+      yield* Queue.takeBetween(frames, answeredLeagues, answeredLeagues)
+      yield* TestClock.adjust(0)
+    }).pipe(Effect.provide(espnOver(client, { leagues: leagues.join(",") })), Effect.scoped)
+
+    const polled = yield* Ref.get(requests)
+    return Arr.dedupe(polled)
+  })
+}
+
+/**
+ * An ESPN scoreboard of one game per entry, each the pregame scoreboard's second event kicking off at `kickoff` (the
+ * recorded kickoff, unless given), in ESPN's status `state`, named `name` (the recorded name, unless given), in `period`.
+ */
+function scoreboardOf(
+  games: ReadonlyArray<{
+    readonly state: "pre" | "in" | "post"
+    readonly name?: string
+    readonly period: number
+    readonly kickoff?: string
+  }>
+) {
+  const scoreboard = JSON.parse(nflPregame)
+  const template = scoreboard.events[1]
+  const events = games.map(({ state, name, period, kickoff }, index) => ({
+    ...template,
+    id: `${template.id}${index}`,
+    date: kickoff ?? template.date,
+    status: {
+      ...template.status,
+      period,
+      type: { ...template.status.type, state, name: name ?? template.status.type.name }
+    }
+  }))
+  return JSON.stringify({ ...scoreboard, events })
 }

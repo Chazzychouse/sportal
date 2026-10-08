@@ -5,7 +5,8 @@ import { TeamId } from "@sportal/domain/Team"
 import { Effect, Schema } from "effect"
 import * as Gzip from "../../Gzip.ts"
 import { Delivery } from "../../slate/Delivery.ts"
-import { decodedFrames } from "../TestDecoder.ts"
+import { Provider } from "../Provider.ts"
+import { decodedFrames } from "../TestProvider.ts"
 import * as EspnDecoder from "./EspnDecoder.ts"
 import * as EspnPlay from "./EspnPlay.ts"
 import { recordedNeAtBuf } from "./TestEspn.ts"
@@ -231,7 +232,9 @@ describe("EspnPlay.FootballPlay", () => {
     () =>
       Effect.gen(function* () {
         const frames = yield* recordedNeAtBuf
-        const decoded = yield* decodedFrames(frames).pipe(Effect.provide(EspnDecoder.layer))
+        const decoded = yield* decodedFrames(frames).pipe(
+          Effect.provide(Provider.layerTest(EspnDecoder.decode))
+        )
         const pushed = decoded
           .flatMap(({ deliveries }) => deliveries)
           .flatMap((delivery) => (Delivery.guards.Plays(delivery) ? delivery.plays : []))

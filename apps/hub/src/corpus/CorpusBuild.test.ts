@@ -18,10 +18,10 @@ import {
 import { Frame } from "../Frame.ts"
 import { FeedLog } from "../feed-log/FeedLog.ts"
 import * as Gzip from "../Gzip.ts"
-import { Decoder } from "../provider/Decoder.ts"
 import * as EspnDecoder from "../provider/espn/EspnDecoder.ts"
 import { recordedNeAtBuf, recordedPlays } from "../provider/espn/TestEspn.ts"
 import { inArchive, site, stepped } from "../provider/espn/TestEspnArchiver.ts"
+import { Provider } from "../provider/Provider.ts"
 import { Delivery } from "../slate/Delivery.ts"
 import { Slate } from "../slate/Slate.ts"
 import * as TestSnapshotFeed from "../TestSnapshotFeed.ts"
@@ -82,7 +82,7 @@ describe.each([
 
 describe("CorpusBuild.captured", () => {
   it.effect("should keep a frame before the next day's 04:00 local and leave out one at 05:00", () =>
-    inCorpus(TestSnapshotFeed.layerDecoder, () =>
+    inCorpus(TestSnapshotFeed.layer, () =>
       Effect.gen(function* () {
         const logged = [
           framed(listing([snapshot()]), local("2026-10-04T10:00:00")),
@@ -104,7 +104,7 @@ describe("CorpusBuild.captured", () => {
   it.effect(
     "should thread the day by arrival, then seq, so an unchanged listing reads back as the one before it in arrival",
     () =>
-      inCorpus(TestSnapshotFeed.layerDecoder, () =>
+      inCorpus(TestSnapshotFeed.layer, () =>
         Effect.gen(function* () {
           const a = listing([snapshot()])
           const b = listing([snapshot({ id: GameId.make("2") })])
@@ -128,7 +128,7 @@ describe("CorpusBuild.captured", () => {
   )
 
   it.effect("should fail Undecodable at a frame that does not decode, writing no day", () =>
-    inCorpus(TestSnapshotFeed.layerDecoder, () =>
+    inCorpus(TestSnapshotFeed.layer, () =>
       Effect.gen(function* () {
         const days = yield* CorpusDays
         const logged = [
@@ -155,7 +155,7 @@ describe("CorpusBuild.captured", () => {
   )
 
   it.effect("should fail NoFrames for a day the feed log has only a checkpoint from before it of", () =>
-    inCorpus(TestSnapshotFeed.layerDecoder, () =>
+    inCorpus(TestSnapshotFeed.layer, () =>
       Effect.gen(function* () {
         const days = yield* CorpusDays
         const checkpoint = framed(pushedSnapshot, local("2026-10-04T03:00:00"))
@@ -174,7 +174,7 @@ describe("CorpusBuild.captured", () => {
   )
 
   it.effect("should fail NoFrames for a day the feed log has nothing of", () =>
-    inCorpus(TestSnapshotFeed.layerDecoder, () =>
+    inCorpus(TestSnapshotFeed.layer, () =>
       Effect.gen(function* () {
         const days = yield* CorpusDays
 
@@ -401,7 +401,7 @@ function recordedDayBuilt(from: DateTime.Utc, zone: DateTime.TimeZone | undefine
   return Layer.effect(
     RecordedDayBuilt,
     inCorpus(
-      EspnDecoder.layer,
+      Provider.layerTest(EspnDecoder.decode),
       (dir) =>
         Effect.gen(function* () {
           const fs = yield* FileSystem.FileSystem
@@ -433,13 +433,13 @@ function recordedDayBuilt(from: DateTime.Utc, zone: DateTime.TimeZone | undefine
   )
 }
 
-/** What the provided decoder says of the feed log's frames from `from`, the log opened for the replay alone. */
+/** What the provided provider's decode says of the feed log's frames from `from`, the log opened for the replay alone. */
 function replayedFrom(from: DateTime.Utc) {
   return Effect.gen(function* () {
     const log = yield* FeedLog
-    const decoder = yield* Decoder
+    const provider = yield* Provider
 
-    return yield* Stream.runCollect(decoder.decode(log.replay(from)))
+    return yield* Stream.runCollect(provider.decode(log.replay(from)))
   }).pipe(Effect.provide(FeedLog.layer), Effect.scoped)
 }
 

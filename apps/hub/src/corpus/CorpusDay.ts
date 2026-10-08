@@ -3,7 +3,7 @@ import { LeagueId } from "@sportal/domain/League"
 import { Context, Effect, FileSystem, Layer, Option, Path, type PlatformError, Schema, Stream } from "effect"
 import * as Gzip from "../Gzip.ts"
 import { HubConfig } from "../HubConfig.ts"
-import type { Decoded } from "../provider/Decoder.ts"
+import type { Decoded } from "../provider/Provider.ts"
 import { CorpusLine } from "./CorpusLine.ts"
 
 /** A day of the corpus: what kind it is and the inputs it holds, by arrival. */

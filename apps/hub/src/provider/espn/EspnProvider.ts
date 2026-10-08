@@ -1,21 +1,25 @@
 import type { GameSnapshot } from "@sportal/domain/Game"
 import type { LeagueId } from "@sportal/domain/League"
-import { DateTime, Duration, Effect, Layer, Option, Schedule } from "effect"
+import { DateTime, Duration, Effect, Layer, Metric, Option, Schedule, Stream } from "effect"
 import { Headers, HttpClient, HttpClientError } from "effect/http"
 import { Frame } from "../../Frame.ts"
-import { type Polling, Provider, ProviderUnavailable } from "../Provider.ts"
+import { HubConfig } from "../../HubConfig.ts"
+import { Provider } from "../Provider.ts"
+import * as EspnDecoder from "./EspnDecoder.ts"
 import { FastCast } from "./FastCast.ts"
+import { ProviderUnavailable } from "./ProviderUnavailable.ts"
 
 /**
- * ESPN as the provider: the site scoreboard polled and FastCast pushing, their frames read by `EspnDecoder`. A poll
- * that does not connect is `Unreachable` for its league, and one answered with a status other than 2xx `Refused`.
- * Polled every 10 seconds while a game is live, every minute within 30 minutes of a kickoff, and every 15 minutes
- * otherwise; at most 30 seconds after a poll in which a league failed. FastCast decides what it follows and reconnects
- * itself, so its push ignores the demand and is never subscribed to again.
+ * ESPN as the provider: the site scoreboard of each league `HubConfig` names, polled, and FastCast pushing, their
+ * frames read by `EspnDecoder`. It polls every league, then waits by the games those scoreboards show: 10 seconds while
+ * a game is live, a minute within 30 minutes of a kickoff, and 15 minutes otherwise; at most 30 seconds after a poll in
+ * which a league failed or its scoreboard did not decode. A poll that does not connect is `Unreachable` for its league,
+ * and one answered with a status other than 2xx `Refused`; either is logged and counted, and delivers no frame.
  */
-export const layer: Layer.Layer<Provider, never, FastCast | HttpClient.HttpClient> = Layer.effect(
+export const layer: Layer.Layer<Provider, never, FastCast | HttpClient.HttpClient | HubConfig> = Layer.effect(
   Provider,
   Effect.gen(function* () {
+    const { leagues } = yield* HubConfig
     const http = yield* HttpClient.HttpClient
     const fastCast = yield* FastCast
     const client = http.pipe(HttpClient.filterStatusOk)
@@ -44,16 +48,21 @@ export const layer: Layer.Layer<Provider, never, FastCast | HttpClient.HttpClien
         )
     )
 
+    // Its span and timer keep the names they had in Ingest, which the dashboards read.
+    const pollEveryLeague = Effect.fn("Ingest.poll")(function* () {
+      const polled = yield* Effect.forEach(leagues, (league) => polledOf(league, poll(league)))
+      const failed = polled.flatMap(({ league, frame }) => (Option.isNone(frame) ? [league] : []))
+      yield* Effect.annotateCurrentSpan({ "sportal.leagues": leagues, "sportal.failed_leagues": failed })
+      return polled
+    }, Effect.trackDuration(pollDuration))
+
+    const polls = Stream.fromEffectSchedule(pollEveryLeague(), polling).pipe(
+      Stream.flatMap((polled) => Stream.fromIterable(polled.flatMap(({ frame }) => Option.toArray(frame))))
+    )
+
     return Provider.of({
-      poll,
-      push: () => fastCast.frames,
-      polling: Schedule.forever.pipe(
-        Schedule.setInputType<Schedule.Input<Polling>>(),
-        Schedule.modifyDelay(({ input, now }) =>
-          Effect.succeed(interval(input.slate, DateTime.makeUnsafe(now), input.failed.length > 0))
-        )
-      ),
-      reconnect: Schedule.recurs(0)
+      frames: Stream.merge(polls, fastCast.frames),
+      decode: EspnDecoder.decode
     })
   })
 )
@@ -72,19 +81,71 @@ export function siteUrl(league: LeagueId): string {
 }
 
 /**
- * How long to wait before the next poll, given the slate the last one left. When a league failed in it (`anyFailed`),
- * the wait is capped at 30 seconds so a missing or stale slate is retried soon; a live slate still polls every 10
- * seconds. Reads only each game's progress and kickoff, so any league polls by it.
+ * One league's part of a poll: its frame, none when the poll failed, and the games its scoreboard shows, none when the
+ * poll failed or the scoreboard did not decode.
  */
-function interval(
-  slate: ReadonlyArray<GameSnapshot>,
-  now: DateTime.Utc,
-  anyFailed: boolean
-): Duration.Duration {
-  const normal = slate.some((game) => game.progress() === "live")
+interface Polled {
+  readonly league: LeagueId
+  readonly frame: Option.Option<Frame>
+  readonly games: Option.Option<ReadonlyArray<GameSnapshot>>
+}
+
+/** `league`'s part of a poll by `polling`, whose failure is logged and counted. */
+const polledOf = Effect.fnUntraced(function* (
+  league: LeagueId,
+  polling: Effect.Effect<Frame, ProviderUnavailable>
+) {
+  const frame = yield* polling.pipe(
+    Effect.tapError((error) =>
+      Effect.logWarning(
+        "Ingest: provider failed; keeping the last good listing for this league, if any",
+        error
+      ).pipe(Effect.andThen(Metric.update(Metric.withAttributes(providerErrors, { league }), 1)))
+    ),
+    Effect.option
+  )
+  const games = yield* Option.match(frame, {
+    onNone: () => Effect.succeedNone,
+    onSome: ({ body }) => Effect.option(gamesShown(league, body))
+  })
+  const polled: Polled = { league, frame, games }
+  return polled
+})
+
+/** The games `league`'s scoreboard `body` shows, as its listing reads them; an event that does not decode is left out. */
+const gamesShown = Effect.fnUntraced(function* (league: LeagueId, body: string) {
+  const scoreboard = yield* EspnDecoder.byLeague[league].decodeScoreboard(body)
+  const { games } = yield* EspnDecoder.gamesOf(league, scoreboard.events, "poll")
+  return games
+})
+
+/** Every poll after the first waits as `interval` says of the poll before it. */
+const polling = Schedule.forever.pipe(
+  Schedule.setInputType<ReadonlyArray<Polled>>(),
+  Schedule.modifyDelay(({ input, now }) => Effect.succeed(interval(input, DateTime.makeUnsafe(now))))
+)
+
+/**
+ * How long to wait before the next poll, given what the last one showed. When a league failed in it or its scoreboard
+ * did not decode, the wait is capped at 30 seconds so that scoreboard is read again soon; a live game still polls every
+ * 10 seconds. Reads only each game's progress and kickoff, so any league polls by it.
+ */
+function interval(polled: ReadonlyArray<Polled>, now: DateTime.Utc): Duration.Duration {
+  const games = polled.flatMap(({ games }) => Option.getOrElse(games, () => []))
+  const anyUnread = polled.some(({ games }) => Option.isNone(games))
+  const normal = games.some((game) => game.progress() === "live")
     ? Duration.seconds(10)
-    : slate.some((game) => game.isLiveOrKicksOffWithin(FastCast.kickoffWindow, now))
+    : games.some((game) => game.isLiveOrKicksOffWithin(FastCast.kickoffWindow, now))
       ? Duration.minutes(1)
       : Duration.minutes(15)
-  return anyFailed ? Duration.min(normal, Duration.seconds(30)) : normal
+  return anyUnread ? Duration.min(normal, Duration.seconds(30)) : normal
 }
+
+const pollDuration = Metric.timer("sportal_poll_duration", {
+  description: "How long one poll of every league takes"
+})
+
+const providerErrors = Metric.counter("sportal_provider_errors", {
+  description: "Polls in which a league's provider failed",
+  incremental: true
+})

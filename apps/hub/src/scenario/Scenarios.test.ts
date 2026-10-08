@@ -5,9 +5,9 @@ import type { GameEvent } from "@sportal/domain/GameEvent"
 import { Array as Arr, type Cause, Context, DateTime, Effect, FileSystem, Layer, Path, Schema } from "effect"
 import { Frame } from "../Frame.ts"
 import * as Gzip from "../Gzip.ts"
-import type { Decoded } from "../provider/Decoder.ts"
 import * as EspnDecoder from "../provider/espn/EspnDecoder.ts"
-import { decodedFrames } from "../provider/TestDecoder.ts"
+import { type Decoded, Provider } from "../provider/Provider.ts"
+import { decodedFrames } from "../provider/TestProvider.ts"
 import type { SlateObservation } from "../slate/SlateObservation.ts"
 import { takenOf } from "../TestLiveSlate.ts"
 import { Scenarios } from "./Scenarios.ts"
@@ -204,7 +204,7 @@ const everyScenarioPlayed = Layer.effect(
       })
     )
   })
-).pipe(Layer.provide([committed, EspnDecoder.layer]))
+).pipe(Layer.provide([committed, Provider.layerTest(EspnDecoder.decode)]))
 
 /** The scenarios `Scenarios.layerFrom` reads from a fresh directory holding only `file`, written as `contents`. */
 function scenariosRecording(file: string, contents: Effect.Effect<Uint8Array, Cause.UnknownError>) {

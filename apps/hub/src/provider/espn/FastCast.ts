@@ -27,12 +27,12 @@ import * as Socket from "effect/socket/Socket"
 import { Frame } from "../../Frame.ts"
 import { HubConfig } from "../../HubConfig.ts"
 import * as HubStopping from "../../HubStopping.ts"
-import { DecodeObservation } from "../Decoder.ts"
-import { ProviderUnavailable } from "../Provider.ts"
+import { DecodeObservation } from "../Provider.ts"
 import * as EspnDecoder from "./EspnDecoder.ts"
 import * as FastCastDocument from "./FastCastDocument.ts"
 import * as FastCastMessage from "./FastCastMessage.ts"
 import { ownerOf, topicOf } from "./FastCastTopic.ts"
+import { ProviderUnavailable } from "./ProviderUnavailable.ts"
 
 /**
  * ESPN FastCast as the ESPN provider's push: one socket that decides what it follows from its own scoreboard topics,
@@ -105,6 +105,11 @@ export class FastCast extends Context.Service<
       )
     })
   )
+
+  /** FastCast as a test drives it: `frames`, whatever it would follow. */
+  static layerTest(frames: Stream.Stream<Frame>): Layer.Layer<FastCast> {
+    return Layer.succeed(FastCast, FastCast.of({ frames }))
+  }
 }
 
 /** A topic's checkpoint was not read: it could not be loaded (unreachable, refused, timed out) or did not decode. */
@@ -267,7 +272,10 @@ const steered = Effect.fnUntraced(function* (
   const games = yield* Option.match(shown, {
     onNone: () => Effect.succeed(following.games),
     onSome: ({ league, events }) =>
-      Effect.map(gamesOf(league, events), (shownGames) => new Map([...following.games, [league, shownGames]]))
+      Effect.map(
+        EspnDecoder.gamesOf(league, events, "push"),
+        ({ games: shownGames }) => new Map([...following.games, [league, shownGames]])
+      )
   })
   const now = yield* DateTime.now
 
@@ -280,14 +288,6 @@ const steered = Effect.fnUntraced(function* (
   ]
   const next: Following = { documents: advanced.documents, games, followed }
   return [next, steers] as const
-})
-
-/** The events as `league`'s games; an event that does not decode is left out. */
-const gamesOf = Effect.fnUntraced(function* (league: LeagueId, events: ReadonlyArray<Schema.Json>) {
-  const decoded = yield* Effect.forEach(events, (event) =>
-    Effect.option(EspnDecoder.byLeague[league].decodeEvent(event))
-  )
-  return Arr.getSomes(decoded)
 })
 
 /** The topic of each game live at `now`, or upcoming with its kickoff within `FastCast.kickoffWindow` of it. */

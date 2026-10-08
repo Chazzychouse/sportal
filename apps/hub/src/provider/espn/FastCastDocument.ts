@@ -13,7 +13,7 @@ import {
   Schema
 } from "effect"
 import type { Frame } from "../../Frame.ts"
-import { DecodeObservation, type ResetReason } from "../Decoder.ts"
+import { DecodeObservation, type ResetReason } from "../Provider.ts"
 import * as FastCastMessage from "./FastCastMessage.ts"
 import { Owner, ownerOf } from "./FastCastTopic.ts"
 

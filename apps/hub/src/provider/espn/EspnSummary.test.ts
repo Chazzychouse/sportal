@@ -7,8 +7,8 @@ import { DateTime, Effect, Equal, Layer, Logger, Order, Schema } from "effect"
 import * as Gzip from "../../Gzip.ts"
 import { Delivery } from "../../slate/Delivery.ts"
 import type { PlayArchive } from "../Archiver.ts"
-import type { Decoded } from "../Decoder.ts"
-import { FramesDecoded } from "../TestDecoder.ts"
+import { type Decoded, Provider } from "../Provider.ts"
+import { FramesDecoded } from "../TestProvider.ts"
 import * as EspnDecoder from "./EspnDecoder.ts"
 import * as EspnPlay from "./EspnPlay.ts"
 import { recordedNeAtBuf, recordedPlays } from "./TestEspn.ts"
@@ -31,7 +31,9 @@ const fbs = (team: string) => TeamId.make(`fbs:${team}`)
 const decodeEntity = Schema.decodeUnknownEffect(EspnPlay.FootballPlay("nfl"))
 
 // NE at BUF's recorded frames, decoded once by ESPN's decode for the tests that read them.
-const neAtBufDecoded = FramesDecoded.layerOf(recordedNeAtBuf).pipe(Layer.provide(EspnDecoder.layer))
+const neAtBufDecoded = FramesDecoded.layerOf(recordedNeAtBuf).pipe(
+  Layer.provide(Provider.layerTest(EspnDecoder.decode))
+)
 
 describe("EspnDecoder.byLeague.decodeSummary", () => {
   it.effect("should read every play a drive lists", () =>

@@ -3,31 +3,35 @@ import type { LeagueId } from "@sportal/domain/League"
 import { Array as Arr, DateTime, Effect, Option, Result, Schema, Stream } from "effect"
 import { FeedLog } from "../feed-log/FeedLog.ts"
 import { type ArchiveFetchFailed, Archiver } from "../provider/Archiver.ts"
-import { type Decoded, DecodeObservation, Decoder } from "../provider/Decoder.ts"
+import { type Decoded, DecodeObservation, Provider } from "../provider/Provider.ts"
 import { Delivery } from "../slate/Delivery.ts"
 import { CorpusDay, CorpusDays } from "./CorpusDay.ts"
 import { CorpusLine } from "./CorpusLine.ts"
 import * as Synthesis from "./Synthesis.ts"
 
 /**
- * Builds the captured day `date` from the feed log: its frames through the decoder, split by feed. The day runs from
+ * Builds the captured day `date` from the feed log: its frames through the provider's decode, split by feed. The day runs from
  * 04:00 local on `date` to 04:00 the next day, and keeps each topic's checkpoint from before it, as the Hub's replay
  * does. Its frames are threaded in the corpus day's order, by arrival then `seq`, the order `CorpusDays` reads them
  * back in. A frame that does not decode fails the build: a day is never built from a partial decode.
  */
 export const captured = Effect.fn("CorpusBuild.captured")(function* (
   date: GameDay
-): Effect.fn.Return<CorpusDay, CorpusBuildFailed, FeedLog | Decoder | CorpusDays | DateTime.CurrentTimeZone> {
+): Effect.fn.Return<
+  CorpusDay,
+  CorpusBuildFailed,
+  FeedLog | Provider | CorpusDays | DateTime.CurrentTimeZone
+> {
   const zone = yield* DateTime.CurrentTimeZone
   const { from, until } = GameDay.bounds(date, zone)
-  const decoder = yield* Decoder
+  const provider = yield* Provider
   const feedLog = yield* FeedLog
   const corpusDays = yield* CorpusDays
 
   const frames = feedLog
     .replay(from)
     .pipe(Stream.takeWhile((frame) => DateTime.isLessThan(frame.receivedAt, until)))
-  const decoded = yield* decoder
+  const decoded = yield* provider
     .decode(frames)
     .pipe(Stream.mapEffect(failIfUndecoded(date)), Stream.runCollect)
   if (!decoded.some(({ at }) => DateTime.isGreaterThanOrEqualTo(at, from))) {
@@ -132,7 +136,7 @@ export class CorpusBuildFailed extends Schema.TaggedError<CorpusBuildFailed>()("
   }
 }
 
-/** A step of the decoder as it is, or the build's failure when it holds a frame that did not decode. */
+/** A step of the decode as it is, or the build's failure when it holds a frame that did not decode. */
 function failIfUndecoded(date: GameDay) {
   return (said: Decoded) =>
     Option.match(Arr.findFirst(said.observations, DecodeObservation.$is("FrameUndecoded")), {

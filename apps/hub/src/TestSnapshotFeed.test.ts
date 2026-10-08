@@ -1,27 +1,23 @@
 import { assert, describe, it, layer } from "@effect/vitest"
-import { GameId, type GameSnapshot } from "@sportal/domain/Game"
-import type { LeagueId } from "@sportal/domain/League"
+import { GameId } from "@sportal/domain/Game"
 import { liveSnapshot, play, snapshot } from "@sportal/domain/TestGame"
-import { DateTime, Effect, Exit, Schedule, Schema } from "effect"
+import { DateTime, Effect, Schema, Stream } from "effect"
 import type { Frame } from "./Frame.ts"
-import { DecodeObservation } from "./provider/Decoder.ts"
-import { Provider, ProviderUnavailable } from "./provider/Provider.ts"
-import { decodedFrames } from "./provider/TestDecoder.ts"
+import { DecodeObservation, Provider } from "./provider/Provider.ts"
+import { decodedFrames } from "./provider/TestProvider.ts"
 import { Delivery } from "./slate/Delivery.ts"
 import * as TestSnapshotFeed from "./TestSnapshotFeed.ts"
 
-layer(TestSnapshotFeed.layerDecoder)("TestSnapshotFeed.layerDecoder", (it) => {
+layer(TestSnapshotFeed.layer)("TestSnapshotFeed.decode", (it) => {
   it.effect("should decode a poll of the snapshot provider to the listing it answered", () =>
     Effect.gen(function* () {
       const games = [snapshot(), liveSnapshot()]
-      const frame = yield* Provider.use((provider) => provider.poll("fbs")).pipe(
-        Effect.provide(providerListing(() => games))
-      )
+      const frame = TestSnapshotFeed.framed(Delivery.cases.Listing.make({ league: "fbs", games }), received)
 
       const [decoded] = yield* decodedFrames([frame])
 
       assert.deepStrictEqual(decoded?.deliveries, [Delivery.cases.Listing.make({ league: "fbs", games })])
-      assert.deepStrictEqual([decoded?.resyncs, decoded?.observations], [[], []])
+      assert.deepStrictEqual(decoded?.observations, [])
     })
   )
 
@@ -42,16 +38,13 @@ layer(TestSnapshotFeed.layerDecoder)("TestSnapshotFeed.layerDecoder", (it) => {
     })
   )
 
-  it.effect("should resync the frame's channel on a Resync", () =>
+  it.effect("should say nothing for a Nothing", () =>
     Effect.gen(function* () {
-      const frame = said(encode({ _tag: "Resync" }), "topic-one")
+      const frame = said(encode({ _tag: "Nothing" }), "topic-one")
 
       const [decoded] = yield* decodedFrames([frame])
 
-      assert.deepStrictEqual(
-        [decoded?.deliveries, decoded?.resyncs, decoded?.observations],
-        [[], ["topic-one"], []]
-      )
+      assert.deepStrictEqual([decoded?.deliveries, decoded?.observations], [[], []])
     })
   )
 
@@ -81,7 +74,7 @@ layer(TestSnapshotFeed.layerDecoder)("TestSnapshotFeed.layerDecoder", (it) => {
 
   it.effect("should give one Decoded per frame, with each frame's seq and receive time", () =>
     Effect.gen(function* () {
-      const frames = [said("bad"), said(encode({ _tag: "Resync" })), said("worse")]
+      const frames = [said("bad"), said(encode({ _tag: "Nothing" })), said("worse")]
 
       const all = yield* decodedFrames(frames)
 
@@ -93,42 +86,35 @@ layer(TestSnapshotFeed.layerDecoder)("TestSnapshotFeed.layerDecoder", (it) => {
   )
 })
 
-describe("TestSnapshotFeed.layer", () => {
-  it.effect("should give a poll's frame as a Listing of the games of that league, on its channel", () =>
+describe("TestSnapshotFeed.framed", () => {
+  it.effect("should frame a Listing as its league's poll, on its channel", () =>
     Effect.gen(function* () {
       const nfl = [liveSnapshot()]
-      const provider = yield* Provider
 
-      const frame = yield* provider.poll("nfl")
+      const frame = TestSnapshotFeed.framed(
+        Delivery.cases.Listing.make({ league: "nfl", games: nfl }),
+        received
+      )
 
       const payload = yield* Schema.decodeEffect(TestSnapshotFeed.SnapshotPayload)(frame.body)
       assert.deepStrictEqual([frame.source, frame.kind, frame.channel], ["poll", "whole", "nfl"])
       assert.deepStrictEqual(payload, Delivery.cases.Listing.make({ league: "nfl", games: nfl }))
-    }).pipe(Effect.provide(providerListing((league) => (league === "nfl" ? [liveSnapshot()] : [snapshot()]))))
-  )
-
-  it.effect("should fail the poll with the ProviderUnavailable `games` fails with", () =>
-    Effect.gen(function* () {
-      const error = new ProviderUnavailable({ reason: "Refused", league: "fbs", cause: "no" })
-      const failing = TestSnapshotFeed.layer({ games: () => Effect.fail(error) })
-
-      const exit = yield* Effect.exit(Provider.use((provider) => provider.poll("fbs"))).pipe(
-        Effect.provide(failing)
-      )
-
-      assert.deepStrictEqual(exit, Exit.fail(error))
     })
   )
+})
 
-  it.effect("should poll on the given Schedule", () => {
-    const polling = Schedule.spaced("3 seconds")
+describe("TestSnapshotFeed.layerFrom", () => {
+  it.effect("should deliver the frames it is given, in order", () =>
+    Effect.gen(function* () {
+      const given = [said("first"), said("second")]
 
-    return Effect.gen(function* () {
-      const provider = yield* Provider
+      const frames = yield* Provider.use((provider) => Stream.runCollect(provider.frames)).pipe(
+        Effect.provide(TestSnapshotFeed.layerFrom(Stream.fromIterable(given)))
+      )
 
-      assert.strictEqual(provider.polling, polling)
-    }).pipe(Effect.provide(TestSnapshotFeed.layer({ games: () => Effect.succeed([]), polling })))
-  })
+      assert.deepStrictEqual(frames, given)
+    })
+  )
 })
 
 const received = DateTime.makeUnsafe("2026-10-06T18:00:00Z")
@@ -136,9 +122,4 @@ const encode = Schema.encodeSync(TestSnapshotFeed.SnapshotPayload)
 
 function said(body: string, channel = "event", kind: Frame["kind"] = "change"): Frame {
   return { receivedAt: received, source: "push", channel, kind, body }
-}
-
-/** The snapshot provider listing `games` of each league. */
-function providerListing(games: (league: LeagueId) => ReadonlyArray<GameSnapshot>) {
-  return TestSnapshotFeed.layer({ games: (league) => Effect.succeed(games(league)) })
 }

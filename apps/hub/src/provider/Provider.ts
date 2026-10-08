@@ -1,59 +1,130 @@
-import type { GameSnapshot } from "@sportal/domain/Game"
-import { LeagueId } from "@sportal/domain/League"
-import { Context, Data, type Effect, type Schedule, Schema, type Stream } from "effect"
-import type { Frame } from "../Frame.ts"
+import type { GameId } from "@sportal/domain/Game"
+import type { LeagueId } from "@sportal/domain/League"
+import { Context, Data, type DateTime, Effect, Layer, type Option, Stream } from "effect"
+import type { Frame, LoggedFrame } from "../Frame.ts"
+import type { Delivery } from "../slate/Delivery.ts"
 
 /**
- * A provider of game data: its scoreboard polled as frames, its live feed pushing frames between polls, when it is
- * polled again, and how its push is reconnected. What those frames say is its `Decoder`'s, which its adapter provides
- * beside it.
+ * A provider of game data. It runs itself: it decides when to poll, what to follow on its push, when to reconnect, and
+ * when to read a channel again. Nothing tells it what to do, and what its frames say is its own `decode`'s, so a
+ * recorded scenario decodes its frames as the provider that recorded them would.
  */
 export class Provider extends Context.Service<
   Provider,
   {
-    /** One poll of `league`, as received. */
-    poll(league: LeagueId): Effect.Effect<Frame, ProviderUnavailable>
-    /** Its live feed. */
-    readonly push: LiveFeed
+    /** Every frame it delivers, as received, for as long as it runs. Never fails. */
+    readonly frames: Stream.Stream<Frame>
     /**
-     * When to poll again, given what the last poll left: the slate's games for the polled leagues, and the leagues that
-     * failed. Ingest runs `poll` for each league repeated on it, and nothing else decides when.
+     * What each logged frame said: exactly one `Decoded` per frame, in the frames' order, never waiting on a later
+     * frame, and never failing, logging or counting. A decode may read frames ahead of what it has emitted. A poll
+     * response is a `Listing`, a pushed game a `Snapshot`, a plays document change a `Plays`.
      */
-    readonly polling: Polling
-    /** How its push is subscribed to again after it fails. Ingest retries the push on it, and nothing else does. */
-    readonly reconnect: Schedule.Schedule<unknown, ProviderUnavailable>
+    decode(frames: Stream.Stream<LoggedFrame>): Stream.Stream<Decoded>
   }
->()("sportal/hub/provider/Provider") {}
+>()("sportal/hub/provider/Provider") {
+  /** A provider that delivers no frame, its frames read by `decode`. */
+  static layerTest(decode: Provider["Service"]["decode"]): Layer.Layer<Provider> {
+    return Layer.succeed(Provider, Provider.of({ frames: Stream.never, decode }))
+  }
+
+  /** The `Provider` provided beside it, its decode dying at a frame whose body is `body`. */
+  static layerTestDying(body: string): Layer.Layer<Provider, never, Provider> {
+    return Layer.effect(
+      Provider,
+      Effect.map(Provider, (provider) =>
+        Provider.of({
+          frames: provider.frames,
+          decode: (frames) =>
+            provider.decode(
+              frames.pipe(
+                Stream.tap((frame) => (frame.body === body ? Effect.die("decode died") : Effect.void))
+              )
+            )
+        })
+      )
+    )
+  }
+}
 
 /**
- * A provider's push: every pushed frame, as received, for its leagues' scoreboards and for each game `demand` last
- * named, with each channel it resyncs asked for its checkpoint again if the push follows it. Fails when the push cannot
- * go on.
+ * What one frame said: the deliveries in the order the frame said them, and what decode observed. A frame that said
+ * nothing is a `Decoded` with two empty arrays. It never crosses the wire.
  */
-export type LiveFeed = (demand: Stream.Stream<LiveFeedDemand>) => Stream.Stream<Frame, ProviderUnavailable>
+export class Decoded extends Data.Class<{
+  readonly seq: number
+  /** When the frame was received. */
+  readonly at: DateTime.Utc
+  readonly deliveries: ReadonlyArray<Delivery>
+  readonly observations: ReadonlyArray<DecodeObservation>
+}> {
+  /** What `frame` said: `of`'s deliveries and observations, each none unless given. */
+  static of(
+    frame: LoggedFrame,
+    of: {
+      readonly deliveries?: ReadonlyArray<Delivery>
+      readonly observations?: ReadonlyArray<DecodeObservation>
+    } = {}
+  ): Decoded {
+    return new Decoded({
+      seq: frame.seq,
+      at: frame.receivedAt,
+      deliveries: of.deliveries ?? [],
+      observations: of.observations ?? []
+    })
+  }
+
+  /** A frame that did not decode: it says nothing but a `FrameUndecoded` observation of `cause`. */
+  static undecodable(frame: LoggedFrame, cause: unknown): Decoded {
+    return Decoded.of(frame, {
+      observations: [
+        DecodeObservation.FrameUndecoded({
+          source: frame.source,
+          channel: frame.channel,
+          kind: frame.kind,
+          cause
+        })
+      ]
+    })
+  }
+}
 
 /**
- * What the live feed should follow: the current games, whenever which games they are changes, and each channel whose
- * document must be read again from a checkpoint.
+ * Something decode observed in a frame, for telemetry to tell: a live feed message received, games pushed, a pushed
+ * game no listing has, a topic's document reset, a message of an op it does not know, or a frame, an event, or a play
+ * that did not decode, or a play type it does not know. Nothing in it is particular to a sport.
  */
-export type LiveFeedDemand = Data.TaggedEnum<{
-  Games: { readonly games: ReadonlyArray<GameSnapshot> }
-  Resync: { readonly channel: string }
+export type DecodeObservation = Data.TaggedEnum<{
+  Received: {
+    readonly league: Option.Option<LeagueId>
+    readonly op: string
+    readonly topic: Option.Option<string>
+    readonly mid: Option.Option<number>
+  }
+  OpUnknown: { readonly body: string }
+  Pushed: { readonly league: LeagueId; readonly games: number }
+  Unlisted: { readonly league: LeagueId; readonly game: GameId }
+  Reset: {
+    readonly league: LeagueId
+    readonly topic: string
+    readonly reason: ResetReason
+    readonly detail: string
+  }
+  FrameUndecoded: {
+    readonly source: Frame["source"]
+    readonly channel: string
+    readonly kind: string
+    readonly cause: unknown
+  }
+  EventUndecoded: { readonly league: LeagueId; readonly source: Frame["source"]; readonly cause: unknown }
+  PlayUndecoded: {
+    readonly league: LeagueId
+    readonly game: GameId
+    readonly play: string
+    readonly cause: unknown
+  }
+  PlayTypeUnknown: { readonly id: string; readonly text: string }
 }>
-export const LiveFeedDemand = Data.taggedEnum<LiveFeedDemand>()
+export const DecodeObservation = Data.taggedEnum<DecodeObservation>()
 
-/** When a provider is polled again, given the slate the last poll left and the leagues that failed in it. */
-export type Polling = Schedule.Schedule<
-  unknown,
-  { readonly slate: ReadonlyArray<GameSnapshot>; readonly failed: ReadonlyArray<LeagueId> }
->
-
-/**
- * A provider could not supply data: unreachable or refused for a poll of `league`, or a push refused, closed, or gone
- * silent (a push serves every league, so it has none).
- */
-export class ProviderUnavailable extends Schema.TaggedError<ProviderUnavailable>()("ProviderUnavailable", {
-  reason: Schema.Literals(["Unreachable", "Refused", "Closed", "Silent"]),
-  league: Schema.optional(LeagueId),
-  cause: Schema.Defect()
-}) {}
+/** Why a live feed topic's document was reset: a message was missed, or one would not apply to it. */
+export type ResetReason = "Gap" | "Unapplicable"

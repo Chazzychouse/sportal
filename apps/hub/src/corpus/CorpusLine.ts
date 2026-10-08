@@ -2,7 +2,7 @@ import { GameId, GameSnapshot } from "@sportal/domain/Game"
 import { LeagueId } from "@sportal/domain/League"
 import { Play, PlayId } from "@sportal/domain/Play"
 import { Array as Arr, Data, DateTime, Effect, Equal, Order, Schema, Stream } from "effect"
-import type { Decoded } from "../provider/Decoder.ts"
+import type { Decoded } from "../provider/Provider.ts"
 import { Delivery } from "../slate/Delivery.ts"
 
 /**

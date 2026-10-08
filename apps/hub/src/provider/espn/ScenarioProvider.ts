@@ -1,5 +1,4 @@
-import type { LeagueId } from "@sportal/domain/League"
-import { Array as Arr, DateTime, Duration, Effect, Layer, Option, Schedule, Stream } from "effect"
+import { DateTime, Duration, Effect, Layer, Option, Stream } from "effect"
 import { Frame } from "../../Frame.ts"
 import { HubConfig } from "../../HubConfig.ts"
 import {
@@ -8,13 +7,13 @@ import {
   type ScenarioUnknown,
   type ScenarioUnreadable
 } from "../../scenario/Scenarios.ts"
-import { type Polling, Provider } from "../Provider.ts"
+import { Provider } from "../Provider.ts"
+import * as EspnDecoder from "./EspnDecoder.ts"
 
 /**
- * The scenario `SPORTAL_SCENARIO` names as the provider, on whatever clock runs it, from its first use: its first poll, push or polling step.
- * Its frames play at their offsets from its first: a poll answers the scenario's poll of that league current at the
- * moment, received now, and the scenario is polled again at its next poll's time and at least every 10 seconds; its
- * live feed frames are pushed at their offsets. A name that is unset or unknown fails, listing the scenarios there are.
+ * The scenario `SPORTAL_SCENARIO` names as the provider, on whatever clock runs it, read by ESPN's decode. Its frames,
+ * polls and pushes alike, play in the order they were received, each at its offset from the first, from when its frames
+ * are first run; then it delivers nothing more. A name that is unset or unknown fails, listing the scenarios there are.
  */
 export const layer: Layer.Layer<Provider, ScenarioUnknown | ScenarioUnreadable, HubConfig | Scenarios> =
   Layer.effect(
@@ -22,56 +21,33 @@ export const layer: Layer.Layer<Provider, ScenarioUnknown | ScenarioUnreadable, 
     Effect.gen(function* () {
       const { scenario } = yield* HubConfig
       const scenarios = yield* Scenarios
-      const start = yield* Effect.cached(DateTime.now)
       const name = Option.getOrElse(scenario, () => "")
       const loaded = yield* scenarios.load(name)
       yield* Effect.logInfo(`ScenarioProvider: playing ${name}, ${loaded.frames.length} frames`)
-      return played(loaded, start)
+
+      return Provider.of({ frames: played(loaded), decode: EspnDecoder.decode })
     })
   )
 
-function played(scenario: Scenario, start: Effect.Effect<DateTime.Utc>) {
+/** `scenario`'s frames, each received at its offset from the first, counted from when the stream is run. */
+function played(scenario: Scenario): Stream.Stream<Frame> {
   const origin = scenario.origin()
-  const offsetOf = (frame: Frame) => DateTime.distance(origin, frame.receivedAt)
-  const playedAt = (frame: Frame) => Effect.map(start, (at) => DateTime.addDuration(at, offsetOf(frame)))
-  const polls = scenario.frames.filter((frame) => frame.source === "poll")
-  const pushes = scenario.frames.filter((frame) => frame.source === "push")
-  return Provider.of({
-    poll: Effect.fn("ScenarioProvider.poll")(function* (league: LeagueId) {
-      yield* Effect.annotateCurrentSpan("sportal.league", league)
-      const began = yield* start
-      const now = yield* DateTime.now
-
-      const recordedNow = DateTime.addDuration(origin, DateTime.distance(began, now))
-      const ofLeague = polls.filter((frame) => frame.channel === league)
-      const current = Arr.findLast(ofLeague, (frame) =>
-        DateTime.isLessThanOrEqualTo(frame.receivedAt, recordedNow)
-      ).pipe(Option.orElse(() => Arr.head(ofLeague)))
-      return Option.match(current, {
-        onNone: () =>
-          new Frame({ receivedAt: now, source: "poll", channel: league, kind: "whole", body: noEvents }),
-        onSome: (frame) => movedTo(frame, now)
-      })
-    }),
-    push: () =>
-      Stream.fromIterable(pushes).pipe(
+  return Stream.unwrap(
+    Effect.map(DateTime.now, (start) =>
+      Stream.fromIterable(scenario.frames).pipe(
         Stream.mapEffect((frame) =>
           Effect.gen(function* () {
-            const at = yield* playedAt(frame)
+            const at = DateTime.addDuration(start, DateTime.distance(origin, frame.receivedAt))
             const now = yield* DateTime.now
+
             yield* Effect.sleep(Duration.max(DateTime.distance(now, at), Duration.zero))
             return movedTo(frame, at)
           })
         ),
         Stream.concat(Stream.never)
-      ),
-    polling: pollingAt(
-      polls.map((frame) => Duration.toMillis(offsetOf(frame))),
-      start
-    ),
-    // Its push never fails.
-    reconnect: Schedule.spaced("1 second")
-  })
+      )
+    )
+  )
 }
 
 /** `frame` received at `at` instead, the instant it was sent moved with it. */
@@ -80,22 +56,3 @@ function movedTo(frame: Frame, at: DateTime.Utc): Frame {
   const sentAt = frame.sentAt === undefined ? undefined : DateTime.addDuration(frame.sentAt, moved)
   return new Frame({ ...frame, receivedAt: at, sentAt })
 }
-
-/** Polled again at the next of `offsets` (milliseconds from `start`) after now, and at least every `longest`. */
-function pollingAt(offsets: ReadonlyArray<number>, start: Effect.Effect<DateTime.Utc>): Polling {
-  return Schedule.forever.pipe(
-    Schedule.modifyDelay(({ now }) =>
-      Effect.map(start, (began) => {
-        const elapsed = now - DateTime.toEpochMillis(began)
-        const next = offsets.find((at) => at > elapsed)
-        return Duration.millis(Math.min(longest, next === undefined ? longest : next - elapsed))
-      })
-    )
-  )
-}
-
-// The longest a scenario goes without being polled, so a live game never goes stale between its frames.
-const longest = 10_000
-
-/** ESPN's spelling, which every scenario is recorded in and played through: an empty scoreboard, answered for a league a scenario never polled. */
-const noEvents = JSON.stringify({ events: [] })

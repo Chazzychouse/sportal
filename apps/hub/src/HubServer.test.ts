@@ -5,7 +5,7 @@ import { SportalApi } from "@sportal/api/SportalApi"
 import { GameId, Network } from "@sportal/domain/Game"
 import type { Tile } from "@sportal/domain/Stage"
 import { broadcast, snapshot, team } from "@sportal/domain/TestGame"
-import { DateTime, Effect, Layer, Option, Queue, Result, Schema, Stream } from "effect"
+import { DateTime, Effect, Layer, Option, Queue, Result, Schedule, Schema, Stream } from "effect"
 import { HttpClient } from "effect/http"
 import { HttpApiClient } from "effect/http-api"
 import { TestClock } from "effect/testing"
@@ -17,6 +17,7 @@ import * as HubServer from "./HubServer.ts"
 import * as Ingest from "./Ingest.ts"
 import { LiveSlate } from "./LiveSlate.ts"
 import { LiveStage } from "./LiveStage.ts"
+import { Delivery } from "./slate/Delivery.ts"
 import * as YouTubeTv from "./source/youtube-tv/YouTubeTv.ts"
 import * as TestSnapshotFeed from "./TestSnapshotFeed.ts"
 
@@ -387,12 +388,20 @@ function messageOf(line: string): LiveMessage {
   return Schema.decodeSync(LiveMessageJson)(line.slice("data: ".length))
 }
 
-/** The next line of `lines` that is not data. Ingest polls while the clock moves, so data lines come between. */
+/** The next line of `lines` that is not data. Ingest appends a poll every 10 s while the clock moves, so data lines come between. */
 function nextComment(lines: Queue.Queue<string>) {
   return Queue.take(lines).pipe(Effect.repeat({ until: (line) => !line.startsWith("data: ") }))
 }
 
-/** Everything behind the API, over a feed log in memory and a provider that always returns `game`. */
+/** The snapshot feed's fbs poll listing `game`, received now, every 10 seconds. */
+const listedEvery10Seconds = Stream.fromEffectSchedule(
+  Effect.map(DateTime.now, (at) =>
+    TestSnapshotFeed.framed(Delivery.cases.Listing.make({ league: "fbs", games: [game] }), at)
+  ),
+  Schedule.spaced("10 seconds")
+)
+
+/** Everything behind the API, over a feed log in memory and a provider that lists `game` every 10 seconds. */
 function hubUnderTest() {
   return LiveStage.layer.pipe(
     Layer.provideMerge(YouTubeTv.layer),
@@ -400,10 +409,10 @@ function hubUnderTest() {
     Layer.provideMerge(
       LiveSlate.layer.pipe(
         Layer.provideMerge(FeedLog.layer.pipe(Layer.provide([Database.layerMemory, NodeCrypto.layer]))),
-        Layer.provide([TestSnapshotFeed.layerDecoder, DateTime.layerCurrentZoneLocal])
+        Layer.provide([TestSnapshotFeed.layer, DateTime.layerCurrentZoneLocal])
       )
     ),
-    Layer.provide(TestSnapshotFeed.layer({ games: () => Effect.succeed([game]) })),
+    Layer.provide(TestSnapshotFeed.layerFrom(listedEvery10Seconds)),
     Layer.provideMerge(
       HubConfig.layerTest({ SPORTAL_VERSION: "1.2.3", SPORTAL_DATA_DIR: "unused", SPORTAL_LEAGUES: "fbs" })
     )

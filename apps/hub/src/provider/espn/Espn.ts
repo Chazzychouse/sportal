@@ -4,31 +4,32 @@ import type * as Socket from "effect/socket/Socket"
 import type { HubConfig } from "../../HubConfig.ts"
 import type { Scenarios, ScenarioUnknown, ScenarioUnreadable } from "../../scenario/Scenarios.ts"
 import type { Archiver } from "../Archiver.ts"
-import type { Decoder } from "../Decoder.ts"
 import type { Provider } from "../Provider.ts"
 import * as EspnArchiver from "./EspnArchiver.ts"
-import * as EspnDecoder from "./EspnDecoder.ts"
 import * as EspnProvider from "./EspnProvider.ts"
 import { FastCast } from "./FastCast.ts"
 import * as ScenarioProvider from "./ScenarioProvider.ts"
 
-/** ESPN live: the provider, its push FastCast, and ESPN's decode. */
+/** ESPN live: the provider, polling its scoreboards and pushing through FastCast, read by ESPN's decode. */
 export const layer: Layer.Layer<
-  Provider | Decoder,
+  Provider,
   never,
   HttpClient.HttpClient | Socket.WebSocketConstructor | HubConfig
-> = Layer.merge(EspnProvider.layer.pipe(Layer.provide(FastCast.layer)), EspnDecoder.layer)
+> = EspnProvider.layer.pipe(Layer.provide(FastCast.layer))
 
-/** A scenario's ESPN frames replayed as the provider, and ESPN's decode. */
+/** A scenario's ESPN frames replayed as the provider, read by ESPN's decode. */
 export const layerScenario: Layer.Layer<
-  Provider | Decoder,
+  Provider,
   ScenarioUnknown | ScenarioUnreadable,
   HubConfig | Scenarios
-> = Layer.merge(ScenarioProvider.layer, EspnDecoder.layer)
+> = ScenarioProvider.layer
 
-/** The corpus's ESPN: its decode, and its archiver of finished games. No provider. */
+/**
+ * The corpus's ESPN: the provider, for its decode, and its archiver of finished games. The corpus never runs the
+ * provider's frames, so nothing is polled and no socket opens.
+ */
 export const layerArchival: Layer.Layer<
-  Decoder | Archiver,
+  Provider | Archiver,
   never,
-  HttpClient.HttpClient | HubConfig | FileSystem.FileSystem | Path.Path
-> = Layer.merge(EspnDecoder.layer, EspnArchiver.layer)
+  HttpClient.HttpClient | Socket.WebSocketConstructor | HubConfig | FileSystem.FileSystem | Path.Path
+> = Layer.merge(layer, EspnArchiver.layer)

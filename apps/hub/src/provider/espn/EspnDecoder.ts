@@ -1,10 +1,10 @@
 import type { GameId, GameSnapshot } from "@sportal/domain/Game"
 import { LeagueId } from "@sportal/domain/League"
 import { Play } from "@sportal/domain/Play"
-import { Array as Arr, Effect, Layer, Option, Record, Result, Schema, Stream } from "effect"
+import { Array as Arr, Effect, Option, Record, Result, Schema, Stream } from "effect"
 import type { Frame, LoggedFrame } from "../../Frame.ts"
 import { Delivery } from "../../slate/Delivery.ts"
-import { Decoded, DecodeObservation, Decoder } from "../Decoder.ts"
+import { Decoded, DecodeObservation } from "../Provider.ts"
 import { EspnEvent } from "./EspnEvent.ts"
 import { Scoreboard } from "./EspnPayload.ts"
 import * as EspnPlay from "./EspnPlay.ts"
@@ -12,32 +12,29 @@ import * as EspnSummary from "./EspnSummary.ts"
 import * as FastCastDocument from "./FastCastDocument.ts"
 
 /**
- * ESPN's decode as the `Decoder`. A poll response is its league's `Listing`. A scoreboard topic's change is a pushed
- * `Snapshot` of each game it touched, advanced to the game its league last listed (FastCast has no short names); a
- * game no listing has is noted `Unlisted` and not delivered. A game topic's change is a `Plays` of the game's whole
- * list, in `Play.order`. A topic whose document was sent back to waiting for a checkpoint is a resync of it. A frame
- * that does not decode is noted `FrameUndecoded` and says no deliveries. Logs and counts nothing.
+ * ESPN's decode, the `decode` of every ESPN provider. A poll response is its league's `Listing`. A scoreboard topic's
+ * change is a pushed `Snapshot` of each game it touched, advanced to the game its league last listed (FastCast has no
+ * short names); a game no listing has is noted `Unlisted` and not delivered. A game topic's change is a `Plays` of the
+ * game's whole list, in `Play.order`. A topic whose document was sent back to waiting for a checkpoint is noted
+ * `Reset`, and FastCast reads its checkpoint again on its own. A frame that does not decode is noted `FrameUndecoded`
+ * and says no deliveries. Logs and counts nothing.
  */
-export const layer: Layer.Layer<Decoder> = Layer.succeed(
-  Decoder,
-  Decoder.of({
-    decode: (frames) =>
-      frames.pipe(
-        Stream.mapAccumEffect(
-          (): State => ({
-            listings: new Map(),
-            documents: FastCastDocument.empty,
-            notedTypes: new Set(),
-            notedPlays: new Set()
-          }),
-          (state, frame) =>
-            (frame.source === "poll" ? listed(state, frame) : pushed(state, frame)).pipe(
-              Effect.map(([next, decoded]) => [next, [decoded]] as const)
-            )
+export function decode(frames: Stream.Stream<LoggedFrame>): Stream.Stream<Decoded> {
+  return frames.pipe(
+    Stream.mapAccumEffect(
+      (): State => ({
+        listings: new Map(),
+        documents: FastCastDocument.empty,
+        notedTypes: new Set(),
+        notedPlays: new Set()
+      }),
+      (state, frame) =>
+        (frame.source === "poll" ? listed(state, frame) : pushed(state, frame)).pipe(
+          Effect.map(([next, decoded]) => [next, [decoded]] as const)
         )
-      )
-  })
-)
+    )
+  )
+}
 
 /**
  * Each league's decode of what ESPN sends for it: an event of either feed, a play entity, a game summary, and the
@@ -123,7 +120,7 @@ const pushed = Effect.fnUntraced(
         return [played.state, decoded] as const
       }
       case "Reset":
-        return [moved, Decoded.of(frame, { resyncs: [frame.channel], observations: observed })] as const
+        return [moved, Decoded.of(frame, { observations: observed })] as const
     }
   },
   (advancing, state, frame) =>
@@ -131,7 +128,7 @@ const pushed = Effect.fnUntraced(
 )
 
 /** The events as games; an event that does not decode is noted and skipped, and the rest still delivered. */
-const gamesOf = Effect.fnUntraced(function* (
+export const gamesOf = Effect.fnUntraced(function* (
   league: LeagueId,
   events: ReadonlyArray<unknown>,
   source: Frame["source"]

@@ -16,7 +16,6 @@ import {
   Option,
   PubSub,
   Ref,
-  type Scope,
   Stream,
   SubscriptionRef
 } from "effect"
@@ -24,7 +23,7 @@ import { Following } from "./Following.ts"
 import { FeedLog } from "./feed-log/FeedLog.ts"
 import * as HubStopping from "./HubStopping.ts"
 import * as LiveSlateTelemetry from "./LiveSlateTelemetry.ts"
-import { type Decoded, Decoder } from "./provider/Decoder.ts"
+import { type Decoded, Provider } from "./provider/Provider.ts"
 import { Slate, type Taken } from "./slate/Slate.ts"
 
 /**
@@ -38,11 +37,6 @@ export class LiveSlate extends Context.Service<
     /** The latest first, then each change. `seq` or `reached` alone changing is not a change. */
     readonly changes: Stream.Stream<Slate>
     readonly events: Stream.Stream<GameEvent>
-    /**
-     * Subscribes at once, for as long as the scope is open: the stream is each channel a frame taken live asked to resync
-     * from then on, as the frame was taken, however late it is run. A replayed frame's are never published.
-     */
-    readonly resyncs: Effect.Effect<Stream.Stream<string>, never, Scope.Scope>
     /**
      * The slate once it has taken frame `seq`, or the latest once it has halted following the log, so a slate that takes
      * no more frames never keeps its caller waiting.
@@ -62,12 +56,12 @@ export class LiveSlate extends Context.Service<
    * clock, and is then published: changes arriving more often than that, without a pause, publish nothing until they
    * pause.
    */
-  static readonly layer: Layer.Layer<LiveSlate, never, FeedLog | Decoder | DateTime.CurrentTimeZone> =
+  static readonly layer: Layer.Layer<LiveSlate, never, FeedLog | Provider | DateTime.CurrentTimeZone> =
     Layer.effect(
       LiveSlate,
       Effect.gen(function* () {
         const feedLog = yield* FeedLog
-        const decoder = yield* Decoder
+        const provider = yield* Provider
         const now = yield* DateTime.nowInCurrentZone
         const from = GameDay.dayStart(now)
         const started = yield* Clock.currentTimeMillis
@@ -77,7 +71,6 @@ export class LiveSlate extends Context.Service<
         }>({ slate: Slate.empty, following: Following.Replaying() })
         const latest = Effect.map(SubscriptionRef.get(state), ({ slate }) => slate)
         const events = yield* PubSub.unbounded<GameEvent>()
-        const resyncs = yield* PubSub.unbounded<string>()
         // What the replay took, for its summary.
         const replayed = yield* Ref.make({ frames: 0, deliveries: 0, plays: 0 })
         // The last `seq` the replay has read, and once it has read them all, that `seq` for good. A frame at or before it
@@ -127,7 +120,6 @@ export class LiveSlate extends Context.Service<
             "sportal.deliveries": decoded.deliveries.length
           })
           yield* step(Option.some(decoded), (slate) => slate.take(decoded))
-          yield* PubSub.publishAll(resyncs, decoded.resyncs)
         }, LiveSlateTelemetry.timedTake)
 
         // The boundary, once: sets every held game's gauges, logs the summary, and goes live.
@@ -171,7 +163,7 @@ export class LiveSlate extends Context.Service<
             )
           )
         )
-        const follower = yield* decoder.decode(dayThenAppended).pipe(
+        const follower = yield* provider.decode(dayThenAppended).pipe(
           Stream.runForEach((decoded) =>
             Effect.flatMap(Ref.get(readTo), (last) =>
               decoded.seq <= last
@@ -279,7 +271,6 @@ export class LiveSlate extends Context.Service<
           latest,
           changes,
           events: Stream.fromPubSub(events),
-          resyncs: Effect.map(PubSub.subscribe(resyncs), Stream.fromSubscription),
           through,
           published: SubscriptionRef.get(publication),
           publishedChanges: SubscriptionRef.changes(publication)

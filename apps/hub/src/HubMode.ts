@@ -26,8 +26,8 @@ export const layer = Layer.unwrap(
 )
 
 // The LiveSlate is built once it has replayed the day's frames, so the Hub serves only after that. It and Ingest share one
-// feed log: Ingest appends to it, and the LiveSlate follows it. Only the LiveSlate is provided onward: nothing outside the
-// Hub's own layers needs the log.
+// feed log and one provider: Ingest appends the provider's frames, and the LiveSlate follows the log through the
+// provider's decode. Only the LiveSlate is provided onward: nothing outside the Hub's own layers needs the log.
 const live = Layer.mergeAll(
   Ingest.layer.pipe(
     Layer.provideMerge(LiveSlate.layer),

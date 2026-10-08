@@ -4,7 +4,7 @@ import { liveSnapshot, snapshot } from "@sportal/domain/TestGame"
 import { DateTime, Effect, Option, References } from "effect"
 import { Following } from "./Following.ts"
 import * as LiveSlateTelemetry from "./LiveSlateTelemetry.ts"
-import { Decoded, DecodeObservation } from "./provider/Decoder.ts"
+import { Decoded, DecodeObservation } from "./provider/Provider.ts"
 import { Delivery } from "./slate/Delivery.ts"
 import { Slate } from "./slate/Slate.ts"
 import { counted, recordingLogs, withMetrics } from "./TestTelemetry.ts"
@@ -207,7 +207,6 @@ function toldOf(observation: DecodeObservation) {
     seq: 7,
     at: DateTime.makeUnsafe(0),
     deliveries: [],
-    resyncs: [],
     observations: [observation]
   })
   const taken = { next: Slate.empty, events: [], observations: [] }

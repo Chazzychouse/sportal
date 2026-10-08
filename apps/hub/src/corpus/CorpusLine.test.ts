@@ -3,7 +3,7 @@ import { GameId } from "@sportal/domain/Game"
 import { PlayId } from "@sportal/domain/Play"
 import { liveSnapshot, play, snapshot } from "@sportal/domain/TestGame"
 import { DateTime, Effect, Equal, Exit, Schema, Stream } from "effect"
-import { Decoded } from "../provider/Decoder.ts"
+import { Decoded } from "../provider/Provider.ts"
 import { Delivery } from "../slate/Delivery.ts"
 import { CorpusInput, CorpusLine } from "./CorpusLine.ts"
 
@@ -182,7 +182,6 @@ function decoded(seq: number, deliveries: ReadonlyArray<Delivery>): Decoded {
     seq,
     at: DateTime.makeUnsafe(Date.UTC(2026, 9, 3, 16, 0, seq)),
     deliveries,
-    resyncs: [],
     observations: []
   })
 }
