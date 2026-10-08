@@ -30,13 +30,8 @@ function bezier(p1: number, p2: number, s: number) {
 }
 
 /** The parameter at which the curve's x is `x`, found by bisection: x rises monotonically for CSS curves. */
-function solveX(x1: number, x2: number, x: number) {
-  let low = 0
-  let high = 1
-  while (high - low > 1e-7) {
-    const middle = (low + high) / 2
-    if (bezier(x1, x2, middle) < x) low = middle
-    else high = middle
-  }
-  return (low + high) / 2
+function solveX(x1: number, x2: number, x: number, low = 0, high = 1): number {
+  const middle = (low + high) / 2
+  if (high - low <= 1e-7) return middle
+  return bezier(x1, x2, middle) < x ? solveX(x1, x2, x, middle, high) : solveX(x1, x2, x, low, middle)
 }
