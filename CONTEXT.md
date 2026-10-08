@@ -45,7 +45,7 @@ Every exported type name must be a term here, except the wire schemas in `*Paylo
 | **Scenarios** | Every scenario there is, by name: the recordings in a folder, the committed ones in `fixtures/scenarios/` unless a test names another; reading one back by name. `Scenarios` in code. | scenario store, catalogue |
 | **Scenario unknown** | `SPORTAL_SCENARIO` names no scenario; `ScenarioUnknown` in code, with the names there are. | |
 | **Scenario unreadable** | A scenario's file could not be read as gzip'd frames; `ScenarioUnreadable` in code. | |
-| **Scenario time** | The clock a scenario plays on: from the Hub's start, at the scenario's speed. Ingest and the live slate run on it. A scenario's frames are received at their offsets on it, but what they say, kickoffs among them, stays as recorded. | |
+| **Scenario time** | The clock a scenario plays on: from the Hub's start, at the scenario's speed. Ingest and the Board run on it. A scenario's frames are received at their offsets on it, but what they say, kickoffs among them, stays as recorded. | |
 | **Situation** | Live football state: possession, down, distance, field position, red zone (the 20 and in), timeouts. | context |
 | **Ball spot** | Where a spot is on the field: yards from the home goal line (0–100) and the way its team is going, from a team and its yards to the goal it attacks. | |
 | **Period** | A quarter or an overtime. | quarter (in code) |
@@ -128,7 +128,7 @@ Provider and Source are the two words most likely to be swapped. Provider is alw
 | **Live stream** | The Hub's server-sent events at `/api/live` that carry live messages; in the web UI, `LiveStream` holds what they said and the connection. | event stream, socket |
 | **Connection** | Whether a client's live stream is up: connecting (never yet connected), connected, or lost (since an instant, retrying). | online, status |
 | **Hub client** | The web UI's way to the Hub's API, `HubClient` in code: stage commands, and the stage commands that failed: refused by the Hub, or never reaching it. It runs in the web UI's one runtime (`HubRuntime.ts`), with the live stream. | API client, fetcher |
-| **Live stage** | The Hub's one Stage, shared by every Display: applies stage commands one at a time and refreshes channel availability when the source changes. | stage store, stage manager, stage sessions |
+| **Switcher** | The Hub's `Switcher` service (`apps/hub/src/Switcher.ts`), holder of the one Stage, shared by every Display: applies stage commands one at a time and refreshes channel availability when the source changes. | live stage, stage store, stage manager, stage sessions |
 | **Telemetry** | The traces, logs, and metrics the Hub exports for people to read in Grafana. | monitoring, observability stack |
 | **Display** | A device running the shell and presenting a Stage. Its local state (selected tile, interacting tile, pick, slate drawer, and the one open overlay) is the web UI's `Display`. | screen, client, player |
 | **Remote** | A client controlling a Display's Stage without presenting it. | controller |
@@ -147,7 +147,7 @@ Provider and Source are the two words most likely to be swapped. Provider is alw
 | Term | Meaning | Not |
 | --- | --- | --- |
 | **Stage** | A Display's multi-view surface and its state. | grid, multiview, wall |
-| **Stage command** | An instruction to change a Stage: assign, clear, swap, promote, solo, change layout or split, or focus audio. Issued by people and by the Director alike. | action, event |
+| **Stage command** | An instruction to change a Stage: assign, clear, swap, promote, solo, change layout or split, or focus audio. Issued by people and by the Producer alike. | action, event |
 | **Layout name** | A layout's own name, as the Stage and the layout picker name it; `LayoutName` in `Stage.ts`, beside each layout's slot count. | |
 | **Stage rejection** | The reason a stage command was refused. | error |
 | **Layout** | A named arrangement of tile slots whose dividers can be moved. The geometry is the web's: `Layout` in `apps/web/src/layout/Layout.ts` gives the slots, dividers, next layout, and clamped split. | grid, template |
@@ -185,6 +185,6 @@ Names the design uses that no code has yet. Move a row up, into its table, in th
 | **Follow** | Your declared interest in a team, conference, league, or game. | favourite, subscription |
 | **Trigger** | A condition over events and snapshots. | |
 | **Rule** | A trigger bound to a stage command and a revert condition. | automation |
-| **Director** | The Hub component that evaluates rules and issues stage commands. | autopilot |
+| **Producer** | Planned. The Hub component that evaluates rules and issues stage commands: the Producer switches the Slate of games on the Board. | director, autopilot |
 | **Alert** | A user-facing notification produced by a rule. | event |
 | **Ticket** | A bet you have placed, tracked by the betting lens (later). | bet, wager |

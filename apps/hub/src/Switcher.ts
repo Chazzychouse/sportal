@@ -9,16 +9,16 @@ import { Source } from "./source/Source.ts"
  * The Stage the Hub serves: what every Display shows, changed by commands. A command is applied against where each game
  * can be streamed now, and the Stage is refreshed whenever the source's answers change.
  */
-export class LiveStage extends Context.Service<
-  LiveStage,
+export class Switcher extends Context.Service<
+  Switcher,
   {
     readonly stage: Effect.Effect<Stage>
     readonly changes: Stream.Stream<Stage>
     dispatch(command: StageCommand): Effect.Effect<Stage, StageRejection>
   }
->()("sportal/hub/LiveStage") {
-  static readonly layer: Layer.Layer<LiveStage, never, Board | Source> = Layer.effect(
-    LiveStage,
+>()("sportal/hub/Switcher") {
+  static readonly layer: Layer.Layer<Switcher, never, Board | Source> = Layer.effect(
+    Switcher,
     Effect.gen(function* () {
       const board = yield* Board
       const source = yield* Source
@@ -32,7 +32,7 @@ export class LiveStage extends Context.Service<
           Option.fromNullishOr(games.find((game) => game.id === id)).pipe(Option.map(availabilityOf))
       })
 
-      const dispatch = Effect.fn("LiveStage.dispatch")(function* (command: StageCommand) {
+      const dispatch = Effect.fn("Switcher.dispatch")(function* (command: StageCommand) {
         // One atomic step: concurrent dispatches queue up, and a rejection leaves the Stage as it was.
         // Availability is read inside it, so a refresh that lands first is never overwritten with a stale read.
         return yield* SubscriptionRef.modifyEffect(current, (stage) =>
@@ -55,7 +55,7 @@ export class LiveStage extends Context.Service<
         startImmediately: true
       })
 
-      return LiveStage.of({
+      return Switcher.of({
         stage: SubscriptionRef.get(current),
         changes: SubscriptionRef.changes(current),
         dispatch

@@ -35,7 +35,7 @@ easiest to break.
 - In the Hub, only `HubConfig.ts` reads the environment. A new setting is a field there, with its default.
 - A service is yielded where it is used, never passed as an argument. A layer that needs a setting yields `HubConfig`
   (in the shell, `ShellConfig`); a choice between layers at startup is a `Layer.unwrap` that yields it.
-- A port's member types that other modules need are named and exported beside it (`Polling`, `LiveFeed`).
+- A port's member types that other modules need are named and exported beside it (`Decoded`, `DecodeObservation`).
   Indexing a service's type (`Foo["Service"]`) is allowed; a port still names the member types other modules need.
 
 **Module shapes.** Every `.ts` file is exactly one of these.
@@ -86,7 +86,7 @@ A reader opens a file to see the thing it is named for. Keep it that way.
 
 | Kind | Spelling |
 |---|---|
-| Service id | `"sportal/<app>/<dir>/Name"`, the folder under `src/` (no `src/` itself), omitted for a file directly in `src/`: `"sportal/hub/provider/Provider"`, `"sportal/hub/LiveStage"` |
+| Service id | `"sportal/<app>/<dir>/Name"`, the folder under `src/` (no `src/` itself), omitted for a file directly in `src/`: `"sportal/hub/provider/Provider"`, `"sportal/hub/slate/Board"` |
 | Service layer | `static readonly layer: Layer.Layer<…> = …`, type written out |
 | Layer variant | `static readonly layerX`, or `static layerX(args)`, as `FeedLog.layerInDataDir` and `Scenarios.layerFrom(dir)`; never another word (`FeedLog.inDataDir`, `Scenarios.in(dir)`) |
 | Test layer | `static readonly layerTest` or `static layerTest…(args)` on the service it fakes; knip's `ignoreMembers` exempts `^layerTest` |

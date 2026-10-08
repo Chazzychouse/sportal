@@ -15,7 +15,7 @@ import { FeedLog } from "./feed-log/FeedLog.ts"
 import { HubConfig } from "./HubConfig.ts"
 import * as HubServer from "./HubServer.ts"
 import * as Ingest from "./Ingest.ts"
-import { LiveStage } from "./LiveStage.ts"
+import { Switcher } from "./Switcher.ts"
 import { Board } from "./slate/Board.ts"
 import { BoardTelemetry } from "./slate/BoardTelemetry.ts"
 import { Delivery } from "./slate/Delivery.ts"
@@ -366,9 +366,9 @@ function realSizedGuideAiring(now: DateTime.Utc) {
 /** The first tile 0 the Stage shows that has the given kind; the current Stage is replayed, so this may not wait. */
 function tileOnceItIs(tag: Tile["_tag"]) {
   return Effect.gen(function* () {
-    const liveStage = yield* LiveStage
+    const switcher = yield* Switcher
 
-    return yield* liveStage.changes.pipe(
+    return yield* switcher.changes.pipe(
       Stream.filterMap((stage) => {
         const tile = stage.tiles[0]
         return tile?._tag === tag ? Result.succeed(tile) : Result.failVoid
@@ -444,7 +444,7 @@ const listedEvery10Seconds = Stream.fromEffectSchedule(
 
 /** Everything behind the API, over a feed log in memory and a provider that lists `game` every 10 seconds. */
 function hubUnderTest() {
-  return LiveStage.layer.pipe(
+  return Switcher.layer.pipe(
     Layer.provideMerge(YouTubeTv.layer),
     Layer.provideMerge(Ingest.layer),
     Layer.provideMerge(

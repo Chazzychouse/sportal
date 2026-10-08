@@ -26,7 +26,7 @@ import {
 } from "effect/http"
 import { HttpApiBuilder } from "effect/http-api"
 import { HubConfig } from "./HubConfig.ts"
-import { LiveStage } from "./LiveStage.ts"
+import { Switcher } from "./Switcher.ts"
 import { Board } from "./slate/Board.ts"
 import { Source } from "./source/Source.ts"
 
@@ -38,7 +38,7 @@ export const layer: Layer.Layer<
   PlatformError.PlatformError,
   | HubConfig
   | Board
-  | LiveStage
+  | Switcher
   | Source
   | HttpServer.HttpServer
   | HttpPlatform.HttpPlatform
@@ -76,7 +76,7 @@ const stageHandlers = HttpApiBuilder.group(
   SportalApi,
   "stage",
   Effect.fn(function* (handlers) {
-    const stage = yield* LiveStage
+    const stage = yield* Switcher
     return handlers.handleAll({
       current: () => stage.stage,
       dispatch: ({ payload }) => stage.dispatch(payload.command)
@@ -124,7 +124,7 @@ const liveRoute = HttpRouter.add(
   "/api/live",
   Effect.gen(function* () {
     const board = yield* Board
-    const stage = yield* LiveStage
+    const stage = yield* Switcher
     const stageChanges = stage.changes.pipe(
       Stream.map((next) => LiveMessage.cases.StageChanged.make({ stage: next }))
     )
