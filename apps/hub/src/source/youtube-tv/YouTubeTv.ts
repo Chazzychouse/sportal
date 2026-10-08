@@ -38,7 +38,7 @@ export const layer: Layer.Layer<Source> = Layer.effect(
       return (game: GameSnapshot) =>
         Option.match(fresh, {
           onNone: () => ChannelAvailability.NoGuide({ source }),
-          onSome: (guide) => guide.availabilityOf(game)
+          onSome: (guide) => guide.availabilityOf(game, now)
         })
     })
 
