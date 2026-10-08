@@ -1,7 +1,18 @@
 import { GameSnapshot } from "@sportal/domain/Game"
 import type { LeagueId } from "@sportal/domain/League"
-import { DateTime, Duration, Effect, HashMap, Layer, Metric, Option, Schedule, Stream } from "effect"
-import { Headers, HttpClient, HttpClientError } from "effect/http"
+import {
+  DateTime,
+  Duration,
+  Effect,
+  HashMap,
+  Layer,
+  Metric,
+  Option,
+  Predicate,
+  Schedule,
+  Stream
+} from "effect"
+import { Headers, HttpClient } from "effect/http"
 import { Frame } from "../../Frame.ts"
 import { HubConfig } from "../../HubConfig.ts"
 import { Provider } from "../Provider.ts"
@@ -13,8 +24,9 @@ import { ProviderUnavailable } from "./ProviderUnavailable.ts"
  * ESPN as the provider: the site scoreboard of each league `HubConfig` names, polled, and FastCast pushing, their
  * frames read by `EspnDecoder`. It polls every league, then waits by the games those scoreboards last showed (a league
  * that failed or did not decode keeps its last good games): 10 seconds while a game is live, a minute within 30 minutes
- * of a kickoff, and 15 minutes otherwise; at most 30 seconds after a poll in which a league failed or did not decode. A poll that does not connect is `Unreachable` for its league,
- * and one answered with a status other than 2xx `Refused`; either is logged and counted, and delivers no frame.
+ * of a kickoff, and 15 minutes otherwise; at most 30 seconds after a poll in which a league failed or did not decode.
+ * A poll that does not connect is `Unreachable` for its league, and one answered with a status other than 2xx
+ * `Refused`; either is logged and counted, and delivers no frame.
  */
 export const layer: Layer.Layer<Provider, never, FastCast | HttpClient.HttpClient | HubConfig> = Layer.effect(
   Provider,
@@ -41,7 +53,7 @@ export const layer: Layer.Layer<Provider, never, FastCast | HttpClient.HttpClien
           effect,
           (cause) =>
             new ProviderUnavailable({
-              reason: cause.reason instanceof HttpClientError.StatusCodeError ? "Refused" : "Unreachable",
+              reason: Predicate.isTagged(cause.reason, "StatusCodeError") ? "Refused" : "Unreachable",
               league,
               cause
             })
@@ -112,7 +124,9 @@ const polledOf = Effect.fnUntraced(function* (
   return polled
 })
 
-/** The games `league`'s scoreboard `body` shows, as its listing reads them; an event that does not decode is left out. */
+/**
+ * The games `league`'s scoreboard `body` shows, as its listing reads them; an event that does not decode is left out.
+ */
 const gamesShown = Effect.fnUntraced(function* (league: LeagueId, body: string) {
   const scoreboard = yield* EspnDecoder.byLeague[league].decodeScoreboard(body)
   const { games } = yield* EspnDecoder.gamesOf(league, scoreboard.events, "poll")
