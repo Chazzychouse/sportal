@@ -9,7 +9,6 @@ import {
   DateTime,
   Duration,
   Effect,
-  Exit,
   FiberMap,
   Layer,
   Metric,
@@ -53,6 +52,12 @@ export class FastCast extends Context.Service<
     readonly frames: Stream.Stream<Frame>
   }
 >()("sportal/hub/FastCast") {
+  /**
+   * How long before its kickoff an upcoming game counts with the live ones: FastCast follows its topic, and ESPN's
+   * scoreboard is polled every minute.
+   */
+  static readonly kickoffWindow = Duration.minutes(30)
+
   /**
    * FastCast for the leagues `HubConfig` names, following a topic whose checkpoint failed again on `retry.checkpoint`,
    * then leaving it to polling, and opening the socket again on `retry.reconnect` after each failure, which it logs and
@@ -254,7 +259,7 @@ const steered = Effect.fnUntraced(function* (
   scoreboards: ReadonlyArray<string>
 ) {
   const advanced = yield* FastCastDocument.advance(following.documents, frame).pipe(
-    Effect.orElseSucceed(() => ({ documents: following.documents, change: Option.none(), observed: [] }))
+    Effect.orElseSucceed(() => FastCastDocument.unchanged(following.documents))
   )
   const shown = Option.flatMap(advanced.change, () =>
     FastCastDocument.scoreboard(advanced.documents, frame.channel)
@@ -285,19 +290,14 @@ const gamesOf = Effect.fnUntraced(function* (league: LeagueId, events: ReadonlyA
   return Arr.getSomes(decoded)
 })
 
-/** The topic of each game live at `now`, or upcoming with its kickoff within 30 minutes of it. */
+/** The topic of each game live at `now`, or upcoming with its kickoff within `FastCast.kickoffWindow` of it. */
 function followedAt(
   games: ReadonlyMap<LeagueId, ReadonlyArray<GameSnapshot>>,
   now: DateTime.Utc
 ): ReadonlyArray<string> {
-  const soon = DateTime.add(now, { minutes: 30 })
   return [...games.values()]
     .flat()
-    .filter(
-      (game) =>
-        game.progress() === "live" ||
-        (game.progress() === "upcoming" && DateTime.isLessThanOrEqualTo(game.kickoff, soon))
-    )
+    .filter((game) => game.isLiveOrKicksOffWithin(FastCast.kickoffWindow, now))
     .map((game) => topicOf(game.league, game.id))
 }
 
@@ -383,7 +383,7 @@ function silent(): ProviderUnavailable {
   return new ProviderUnavailable({ reason: "Silent", cause: `No FastCast message for ${silence}` })
 }
 
-/** A failure of the live feed, logged and counted by its reason, before the socket opens again. */
+/** A failure of the live feed, logged and counted by its reason. */
 const failed = Effect.fnUntraced(function* (error: ProviderUnavailable) {
   yield* Effect.logWarning(`Ingest: the live feed failed (${error.reason}); subscribing again`, error)
   yield* Metric.update(Metric.withAttributes(liveFeedErrors, { reason: error.reason }), 1)
@@ -391,13 +391,14 @@ const failed = Effect.fnUntraced(function* (error: ProviderUnavailable) {
 
 /** The end of the live feed, logged unless the Hub is stopping; nothing follows it, so `frames` never ends. */
 function stopped(cause: Cause.Cause<ProviderUnavailable>): Stream.Stream<never> {
-  const logged = HubStopping.isStopping(Exit.failCause(cause))
-    ? Effect.void
-    : Effect.logError(
-        "Ingest: the live feed stopped; only the poll reaches the slate until the Hub restarts",
-        cause
-      )
-  return Stream.fromEffectDrain(logged).pipe(Stream.concat(Stream.never))
+  const logged = Effect.failCause(cause).pipe(
+    HubStopping.loggedUnlessStopping(
+      "Ingest: the live feed stopped; only the poll reaches the slate until the Hub restarts",
+      "the feed's stream ended"
+    ),
+    Effect.catchCause(() => Effect.never)
+  )
+  return Stream.fromEffectDrain(logged)
 }
 
 const websocketHost = HttpClient.get("https://fastcast.semfs.engsvc.go.com/public/websockethost").pipe(

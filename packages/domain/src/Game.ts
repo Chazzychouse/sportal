@@ -1,4 +1,4 @@
-import { DateTime, Option, Order, Schema } from "effect"
+import { DateTime, type Duration, Option, Order, Schema } from "effect"
 import { GameEventKind } from "./GameEvent.ts"
 import { LeagueId } from "./League.ts"
 import { Situation } from "./Situation.ts"
@@ -82,6 +82,16 @@ export class GameSnapshot extends Schema.Class<GameSnapshot>("sportal/GameSnapsh
       case "canceled":
         return "over"
     }
+  }
+
+  /** Whether the game is live at `now`, or upcoming with its kickoff no later than `window` after `now`. */
+  isLiveOrKicksOffWithin(window: Duration.Duration, now: DateTime.Utc): boolean {
+    const progress = this.progress()
+    return (
+      progress === "live" ||
+      (progress === "upcoming" &&
+        DateTime.isLessThanOrEqualTo(this.kickoff, DateTime.addDuration(now, window)))
+    )
   }
 
   /**

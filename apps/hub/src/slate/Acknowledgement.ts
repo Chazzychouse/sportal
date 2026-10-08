@@ -139,9 +139,7 @@ export class Acknowledgement extends Data.Class<{
   /** Live or holding, stale for less than `staleCurrentFor`, or upcoming with kickoff within `currentBefore` of `now`. */
   isCurrent(game: GameSnapshot, now: DateTime.Utc): boolean {
     return Match.value(this.state(game, now)).pipe(
-      Match.when("Upcoming", () =>
-        DateTime.isLessThanOrEqualTo(game.kickoff, DateTime.addDuration(now, Acknowledgement.currentBefore))
-      ),
+      Match.when("Upcoming", () => game.isLiveOrKicksOffWithin(Acknowledgement.currentBefore, now)),
       Match.when("Live", () => true),
       Match.when("Holding", () => true),
       Match.when("Stale", () =>

@@ -81,7 +81,8 @@ interface Advanced {
   readonly observed: ReadonlyArray<DecodeObservation>
 }
 
-function unchanged(documents: Documents): Advanced {
+/** The documents after a frame that changed nothing and observed nothing. */
+export function unchanged(documents: Documents): Advanced {
   return { documents, change: Option.none(), observed: [] }
 }
 

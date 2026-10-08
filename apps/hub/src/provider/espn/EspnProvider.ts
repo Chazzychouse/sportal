@@ -81,12 +81,9 @@ function interval(
   now: DateTime.Utc,
   anyFailed: boolean
 ): Duration.Duration {
-  const kickoffSoon = (game: GameSnapshot) =>
-    game.progress() === "upcoming" &&
-    DateTime.isLessThanOrEqualTo(game.kickoff, DateTime.add(now, { minutes: 30 }))
   const normal = slate.some((game) => game.progress() === "live")
     ? Duration.seconds(10)
-    : slate.some(kickoffSoon)
+    : slate.some((game) => game.isLiveOrKicksOffWithin(FastCast.kickoffWindow, now))
       ? Duration.minutes(1)
       : Duration.minutes(15)
   return anyFailed ? Duration.min(normal, Duration.seconds(30)) : normal

@@ -1,5 +1,5 @@
 import { assert, describe, it } from "@effect/vitest"
-import { DateTime, Option } from "effect"
+import { DateTime, Duration, Option } from "effect"
 import { BallSpot, GameId, GameSnapshot, type GameStatus } from "./Game.ts"
 import { Situation } from "./Situation.ts"
 import { broadcast, liveSnapshot, situation, snapshot, team } from "./TestGame.ts"
@@ -29,6 +29,39 @@ describe("GameSnapshot#progress", () => {
     const game = snapshot({ status: "delayed", period: 2 })
 
     assert.strictEqual(game.progress(), "live")
+  })
+})
+
+describe("GameSnapshot#isLiveOrKicksOffWithin", () => {
+  const window = Duration.minutes(30)
+  const now = DateTime.makeUnsafe("2026-10-03T15:30:00Z")
+
+  it("should be true for a live game", () => {
+    const game = liveSnapshot({ kickoff: DateTime.makeUnsafe("2026-10-03T12:00:00Z") })
+
+    assert.isTrue(game.isLiveOrKicksOffWithin(window, now))
+  })
+
+  it("should be true for an upcoming game kicking off within the window", () => {
+    const game = snapshot({ kickoff: DateTime.makeUnsafe("2026-10-03T16:00:00Z") })
+
+    assert.isTrue(game.isLiveOrKicksOffWithin(window, now))
+  })
+
+  it("should be false for an upcoming game kicking off after the window", () => {
+    const game = snapshot({ kickoff: DateTime.makeUnsafe("2026-10-03T16:00:01Z") })
+
+    assert.isFalse(game.isLiveOrKicksOffWithin(window, now))
+  })
+
+  it("should be false for a game that is over", () => {
+    const game = snapshot({
+      status: "final",
+      period: 4,
+      kickoff: DateTime.makeUnsafe("2026-10-03T15:45:00Z")
+    })
+
+    assert.isFalse(game.isLiveOrKicksOffWithin(window, now))
   })
 })
 
