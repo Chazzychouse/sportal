@@ -1,4 +1,4 @@
-import type { Hotkey } from "@sportal/api/Hotkey"
+import { Hotkey } from "@sportal/api/Hotkey"
 import { useState } from "react"
 import { Toaster } from "@/design/sonner"
 import { dispatch } from "../hub/HubClient.ts"
@@ -30,7 +30,7 @@ export function DisplayView() {
   useStageFailureToasts()
 
   useHotkeys((hotkey: Hotkey) =>
-    hotkey._tag === "FullScreen" ? fullScreen.toggle() : run(display.press(hotkey, live.stage, cards))
+    Hotkey.guards.FullScreen(hotkey) ? fullScreen.toggle() : run(display.press(hotkey, live.stage, cards))
   )
 
   return (
@@ -66,10 +66,10 @@ export function DisplayView() {
           <SlateView cards={cards} display={display} stage={live.stage} onDrop={run} />
         )}
       </div>
-      <KeysDialog open={display.overlay._tag === "Keys"} onOpenChange={closeOverlay} />
-      <JoinRemote open={display.overlay._tag === "JoinRemote"} onOpenChange={closeOverlay} />
+      <KeysDialog open={display.shows("Keys")} onOpenChange={closeOverlay} />
+      <JoinRemote open={display.shows("JoinRemote")} onOpenChange={closeOverlay} />
       <CommandPalette
-        open={display.overlay._tag === "Palette"}
+        open={display.shows("Palette")}
         onOpenChange={closeOverlay}
         stage={live.stage}
         slate={live.slate}

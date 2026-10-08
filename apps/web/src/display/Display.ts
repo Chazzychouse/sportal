@@ -137,6 +137,11 @@ export class Display extends Data.Class<{
     return new Display({ ...this, slateOpen: !this.slateOpen })
   }
 
+  /** Whether this overlay is the one open. */
+  shows(overlay: Exclude<Overlay["_tag"], "None">): boolean {
+    return Overlay.$is(overlay)(this.overlay)
+  }
+
   /** Opens an overlay, closing any other: at most one is open. */
   open(overlay: Exclude<Overlay["_tag"], "None">): Display {
     return new Display({ ...this, overlay: Overlay[overlay]() })
