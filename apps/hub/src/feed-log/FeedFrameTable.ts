@@ -143,7 +143,7 @@ export function queries(sql: SqlClient.SqlClient) {
       Request: Schema.Struct({ channel: Schema.String, seq: Schema.Int }),
       Result: Schema.Struct({ body: Schema.Uint8Array }),
       execute: ({ channel, seq }) => sql`
-        SELECT body FROM feed_frame WHERE channel = ${channel} AND kind = 'whole' AND seq < ${seq}
+        SELECT body FROM feed_frame WHERE channel = ${channel} AND source = 'poll' AND kind = 'whole' AND seq < ${seq}
         ORDER BY seq DESC LIMIT 1
       `
     }),
