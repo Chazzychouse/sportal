@@ -1,11 +1,10 @@
 import { readFileSync } from "node:fs"
 import { fileURLToPath } from "node:url"
 import { gunzipSync } from "node:zlib"
-import { Context, Effect, Layer, Schema, Stream } from "effect"
+import { Effect, Layer, Schema, Stream } from "effect"
 import * as Socket from "effect/socket/Socket"
-import { Frame } from "../../Frame.ts"
-import type { Delivery } from "../../slate/Delivery.ts"
 import * as EspnDecoder from "./EspnDecoder.ts"
+import { Frame } from "./Frame.ts"
 
 /** A WebSocket constructor for tests that never push: opening a socket throws. */
 export const noSocket = Layer.succeed(Socket.WebSocketConstructor, () => {
@@ -42,15 +41,5 @@ export const recordedNeAtBuf = Effect.gen(function* () {
 export const decodedFrames = Effect.fn("TestEspn.decodedFrames")(function* (frames: ReadonlyArray<Frame>) {
   return yield* EspnDecoder.decode(Stream.fromIterable(frames)).pipe(Stream.runCollect)
 })
-
-/** What ESPN's decode says each of some frames said. */
-export class FramesDecoded extends Context.Service<FramesDecoded, ReadonlyArray<ReadonlyArray<Delivery>>>()(
-  "sportal/hub/provider/espn/FramesDecoded"
-) {
-  /** Decodes the frames `frames` gives once, for every test the layer is provided to: a recording takes seconds. */
-  static layerOf<E>(frames: Effect.Effect<ReadonlyArray<Frame>, E>) {
-    return Layer.effect(FramesDecoded, Effect.flatMap(frames, decodedFrames))
-  }
-}
 
 const decodeFrame = Schema.decodeEffect(Schema.fromJsonString(Frame))

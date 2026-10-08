@@ -4,14 +4,14 @@ import { GameId, GameSnapshot } from "@sportal/domain/Game"
 import { LeagueId } from "@sportal/domain/League"
 import { Play, PlayId } from "@sportal/domain/Play"
 import { DateTime, Effect, Equal, Metric, Option, Record, Schema } from "effect"
-import type { Frame } from "../../Frame.ts"
 import { Delivery } from "../../slate/Delivery.ts"
 import { recordingLogs, withMetrics } from "../../TestTelemetry.ts"
 import * as EspnDecoder from "./EspnDecoder.ts"
 import { EspnEvent } from "./EspnEvent.ts"
 import * as FastCastDocument from "./FastCastDocument.ts"
 import * as FastCastMessage from "./FastCastMessage.ts"
-import { decodedFrames, FramesDecoded, recordedNeAtBuf } from "./TestEspn.ts"
+import type { Frame } from "./Frame.ts"
+import { decodedFrames, recordedNeAtBuf } from "./TestEspn.ts"
 
 // Recorded from ESPN on 2026-10-04: the NFL checkpoint at 17:52Z, every socket text on its topic after it until
 // 18:00Z, each line one text as it arrived, and the scoreboard polled at 18:00Z.
@@ -49,8 +49,8 @@ const playJson = Schema.fromJsonString(Play)
 const ariAtNyg = "s:20~l:28~e:401872966~c:401872966"
 const ariAtNygPlays = "gp-football-nfl-401872966"
 
-// NE at BUF's recorded frames, decoded once by ESPN's decode for the tests that read them.
-const neAtBufDecoded = FramesDecoded.layerOf(recordedNeAtBuf)
+// NE at BUF's recorded frames, decoded by ESPN's decode once, by the first test that reads them.
+const neAtBufDecoded = Effect.runSync(Effect.cached(Effect.flatMap(recordedNeAtBuf, decodedFrames)))
 
 describe("EspnDecoder", () => {
   // Each recorded feed as it decoded when both feeds' events were read by one transform: the poll's listings, the
@@ -672,37 +672,42 @@ describe("EspnDecoder", () => {
     )
   })
 
-  // Decoding NE at BUF's whole recorded day takes seconds alone, and many under a full suite's load: the layer decodes
-  // it once for both tests, with a timeout to match.
-  it.layer(neAtBufDecoded, { timeout: "60 seconds" })("the recorded NE at BUF day", (it) => {
-    it.effect("should decode every snapshot so it reads back from its JSON Equal to itself", () =>
-      Effect.gen(function* () {
-        const decoded = yield* FramesDecoded
-        const deliveries = decoded.flat()
-        const snapshots = deliveries.flatMap((delivery) =>
-          Delivery.guards.Listing(delivery)
-            ? delivery.games
-            : Delivery.guards.Snapshot(delivery)
-              ? [delivery.snapshot]
-              : []
-        )
+  // Decoding NE at BUF's whole recorded day takes seconds alone, and many under a full suite's load: whichever test
+  // runs first decodes it, so each has a timeout to match.
+  describe("the recorded NE at BUF day", () => {
+    it.effect(
+      "should decode every snapshot so it reads back from its JSON Equal to itself",
+      () =>
+        Effect.gen(function* () {
+          const decoded = yield* neAtBufDecoded
+          const deliveries = decoded.flat()
+          const snapshots = deliveries.flatMap((delivery) =>
+            Delivery.guards.Listing(delivery)
+              ? delivery.games
+              : Delivery.guards.Snapshot(delivery)
+                ? [delivery.snapshot]
+                : []
+          )
 
-        const backs = yield* Effect.forEach(snapshots, (snapshot) =>
-          Schema.encodeEffect(snapshotJson)(snapshot).pipe(Effect.flatMap(Schema.decodeEffect(snapshotJson)))
-        )
+          const backs = yield* Effect.forEach(snapshots, (snapshot) =>
+            Schema.encodeEffect(snapshotJson)(snapshot).pipe(
+              Effect.flatMap(Schema.decodeEffect(snapshotJson))
+            )
+          )
 
-        assert.isNotEmpty(snapshots)
-        for (const [index, snapshot] of snapshots.entries()) {
-          assert.isTrue(Equal.equals(backs[index], snapshot), snapshot.id)
-        }
-      })
+          assert.isNotEmpty(snapshots)
+          for (const [index, snapshot] of snapshots.entries()) {
+            assert.isTrue(Equal.equals(backs[index], snapshot), snapshot.id)
+          }
+        }),
+      { timeout: 60_000 }
     )
 
     it.effect(
       "should decode every play so it reads back from its JSON Equal to itself",
       () =>
         Effect.gen(function* () {
-          const decoded = yield* FramesDecoded
+          const decoded = yield* neAtBufDecoded
           const deliveries = decoded.flat()
           const plays = deliveries.flatMap((delivery) =>
             Delivery.guards.Plays(delivery) ? delivery.plays : []
@@ -717,8 +722,8 @@ describe("EspnDecoder", () => {
             assert.isTrue(Equal.equals(backs[index], play), play.id)
           }
         }),
-      // Round-tripping every recorded play through JSON takes about 5 s under coverage, the default timeout's edge.
-      { timeout: 30_000 }
+      // Round-tripping every recorded play through JSON takes about 5 s more under coverage.
+      { timeout: 60_000 }
     )
   })
 })

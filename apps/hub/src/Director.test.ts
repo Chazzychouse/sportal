@@ -8,14 +8,13 @@ import { DateTime, Deferred, Effect, Fiber, Layer, Option, Predicate, Ref, Strea
 import { TestClock } from "effect/testing"
 import { Director } from "./Director.ts"
 import { decodedFrames, recordedNeAtBuf, recordedPlays } from "./provider/espn/TestEspn.ts"
-import { Provider } from "./provider/Provider.ts"
+import { Provider, ProviderFeed } from "./provider/Provider.ts"
 import { Delivery } from "./slate/Delivery.ts"
 import { Slate } from "./slate/Slate.ts"
 import { Source } from "./source/Source.ts"
 import { recordedGuide } from "./source/youtube-tv/TestYouTubeTv.ts"
 import * as YouTubeTv from "./source/youtube-tv/YouTubeTv.ts"
 import { delivered, directorOver } from "./TestDirector.ts"
-import { SnapshotFeed } from "./TestSnapshotFeed.ts"
 import { gauged, recordingLogs, recordingSpans, withMetrics } from "./TestTelemetry.ts"
 
 const one = GameId.make("1")
@@ -92,7 +91,7 @@ describe("Director, the slate", () => {
 
   it.effect("should take every delivery of a frame", () =>
     Effect.gen(function* () {
-      const feed = yield* SnapshotFeed
+      const feed = yield* ProviderFeed
       const next = liveSnapshot({ id: one, clock: "9:00" })
 
       yield* feed.deliver([
@@ -229,7 +228,7 @@ describe("Director, a recorded game", () => {
       return Effect.gen(function* () {
         const frames = yield* recordedNeAtBuf
         const decoded = yield* decodedFrames(frames)
-        const feed = yield* SnapshotFeed
+        const feed = yield* ProviderFeed
 
         yield* Effect.forEach(decoded, (deliveries) => feed.deliver(deliveries), { discard: true })
         const current = yield* latest
@@ -433,7 +432,7 @@ describe("Director, the Screen", () => {
       ).pipe(Layer.provide(YouTubeTv.layer))
       const guideReadAtOnce = readAtOnce().pipe(
         Layer.provideMerge(Director.layer),
-        Layer.provide(SnapshotFeed.layer),
+        Layer.provide(Provider.layerTestFed),
         Layer.provide(countingSource)
       )
 
@@ -456,7 +455,7 @@ describe("Director, the Screen", () => {
         const release = yield* Deferred.make<void>()
         const directorOnStaleRead = listed(games).pipe(
           Layer.provideMerge(Director.layer),
-          Layer.provideMerge(SnapshotFeed.layer),
+          Layer.provideMerge(Provider.layerTestFed),
           Layer.provideMerge(availabilityHeldOnce(reading, release))
         )
 
@@ -488,7 +487,7 @@ describe("Director, the Screen", () => {
       const screen = yield* Effect.gen(function* () {
         const director = yield* Director
         const source = yield* Source
-        const feed = yield* SnapshotFeed
+        const feed = yield* ProviderFeed
         yield* director.dispatch({ _tag: "Assign", tile: 0, game: GameId.make("1") })
         yield* director.dispatch({ _tag: "Assign", tile: 1, game: GameId.make("5") })
         yield* feed.deliver(listings(games.filter((snapshot) => snapshot.id !== GameId.make("1"))))
@@ -605,14 +604,14 @@ function listings(games: ReadonlyArray<GameSnapshot>) {
 function listed(games: ReadonlyArray<GameSnapshot>) {
   return Layer.effectDiscard(
     Effect.gen(function* () {
-      const feed = yield* SnapshotFeed
+      const feed = yield* ProviderFeed
 
       yield* feed.deliver(listings(games))
     })
   )
 }
 
-/** The Director over the snapshot feed and YouTube TV with nothing read yet, its slate listing `games`. */
+/** The Director over a fed provider and YouTube TV with nothing read yet, its slate listing `games`. */
 function directing(games: ReadonlyArray<GameSnapshot>) {
   return listed(games).pipe(Layer.provideMerge(directed))
 }
@@ -627,5 +626,5 @@ function isNoGuideTile(tile: Tile | undefined) {
   return tile !== undefined && Tile.guards.DataTile(tile) && Predicate.isTagged(tile.why, "NoGuide")
 }
 
-/** The Director over the snapshot feed, against YouTube TV with nothing read yet; both provided too. */
+/** The Director over a fed provider, against YouTube TV with nothing read yet; both provided too. */
 const directed = directorOver.pipe(Layer.provideMerge(YouTubeTv.layer))

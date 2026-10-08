@@ -2,12 +2,12 @@ import type { GameSnapshot } from "@sportal/domain/Game"
 import { LeagueId } from "@sportal/domain/League"
 import { Play } from "@sportal/domain/Play"
 import { Array as Arr, Effect, HashMap, Option, Record, Schema, Stream } from "effect"
-import type { Frame } from "../../Frame.ts"
 import { Delivery } from "../../slate/Delivery.ts"
 import { EspnEvent } from "./EspnEvent.ts"
 import { Scoreboard } from "./EspnPayload.ts"
 import * as EspnPlay from "./EspnPlay.ts"
 import * as FastCastDocument from "./FastCastDocument.ts"
+import type { Frame } from "./Frame.ts"
 
 /**
  * ESPN's decode, read by every ESPN provider. A poll response is its league's `Listing`. A scoreboard topic's change is

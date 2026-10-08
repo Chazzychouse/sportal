@@ -1,6 +1,6 @@
 import { Effect, Schema, SchemaGetter, SchemaIssue, Struct, Tuple } from "effect"
-import * as Gzip from "../../Gzip.ts"
 import { Owner } from "./FastCastTopic.ts"
+import * as Gzip from "./Gzip.ts"
 
 // A patch's path. On a scoreboard topic: the uid of the event it changes (`s:20~l:28~e:<id>~c:<id>`), then a JSON
 // Pointer into that event, where no pointer means the whole event. On a game topic: a JSON Pointer alone, with no uid.

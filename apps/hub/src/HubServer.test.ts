@@ -416,7 +416,7 @@ function nextComment(lines: Queue.Queue<string>) {
   return Queue.take(lines).pipe(Effect.repeat({ until: (line) => !line.startsWith("data: ") }))
 }
 
-/** Everything behind the API, over a snapshot feed the test delivers to. */
+/** Everything behind the API, over a provider the test feeds. */
 function hubUnderTest() {
   return directorOver.pipe(
     Layer.provideMerge(YouTubeTv.layer),
