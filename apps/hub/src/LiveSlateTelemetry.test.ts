@@ -157,7 +157,7 @@ describe("LiveSlateTelemetry.told", () => {
         const went = logs.filter(({ message }) => message.includes("WentFinal"))
         const wentFinal = yield* counted("sportal_game_events", { game: "1", event: "WentFinal" })
 
-        assert.isFalse(taken.next.live.has(one))
+        assert.isFalse(taken.next.games.has(one))
         assert.deepStrictEqual(said, ["PeriodEnded", "WentFinal"])
         assert.strictEqual(went.length, 1)
         assert.strictEqual(went[0]?.level, "Info")
@@ -189,7 +189,7 @@ describe("LiveSlateTelemetry.told", () => {
         const went = logs.filter(({ message }) => message.includes("WentFinal"))
         const wentFinal = yield* counted("sportal_game_events", { game: "1", event: "WentFinal" })
 
-        assert.isFalse(taken.next.live.has(one))
+        assert.isFalse(taken.next.games.has(one))
         assert.strictEqual(went.length, 1)
         assert.include(went[0]?.message, "at final")
         assert.strictEqual(wentFinal, 1)

@@ -59,7 +59,7 @@ export const layer: Layer.Layer<never, never, HubConfig | Provider | FeedLog | L
           onNone: () => slate.latest,
           onSome: slate.through
         })
-        return { slate: taken.games(leagues), failed }
+        return { slate: taken.listedGames(leagues), failed }
       })
       yield* Effect.forkScoped(Effect.repeat(polled, provider.polling))
 
@@ -103,13 +103,7 @@ const demandOf = Effect.fnUntraced(function* (slate: LiveSlate["Service"]) {
 /** The current games of each of `changes`, again on each change of which games they are. */
 function currentGames(changes: Stream.Stream<Slate>): Stream.Stream<LiveFeedDemand> {
   return changes.pipe(
-    Stream.mapEffect((slate) =>
-      Effect.map(DateTime.now, (now) =>
-        [...slate.live.values()]
-          .filter((liveGame) => liveGame.isCurrent(now))
-          .map((liveGame) => liveGame.snapshot)
-      )
-    ),
+    Stream.mapEffect((slate) => Effect.map(DateTime.now, (now) => slate.current(now))),
     Stream.changesWith((self, that) =>
       sameIds(
         self.map((game) => game.id),

@@ -37,8 +37,8 @@ import {
   Provider,
   ProviderUnavailable
 } from "./provider/Provider.ts"
+import { Acknowledgement } from "./slate/Acknowledgement.ts"
 import { Delivery } from "./slate/Delivery.ts"
-import { LiveGame, LiveGameState } from "./slate/LiveGame.ts"
 import { appended, delivered } from "./TestLiveSlate.ts"
 import * as TestSnapshotFeed from "./TestSnapshotFeed.ts"
 import { pushed } from "./TestSnapshotFeed.ts"
@@ -188,11 +188,7 @@ describe("Ingest", () => {
 
       const current = yield* liveSlate.latest
       const listed = yield* slateOf()
-      assert.isTrue(
-        Option.exists(Option.fromNullishOr(current.live.get(GameId.make("1"))), (liveGame) =>
-          LiveGameState.$is("Stale")(liveGame.state)
-        )
-      )
+      assert.deepStrictEqual(current.state(GameId.make("1")), Option.some("Stale"))
       assert.strictEqual(listed[0]?.period, 2)
     }).pipe(
       Effect.provide(ingesting(scripted([[liveSnapshot({ id: GameId.make("1"), period: 2 })], "fail"])))
@@ -469,7 +465,7 @@ describe("Ingest", () => {
       const snapshots = yield* counted("sportal_snapshots")
       const replay = ended.find((span) => span.name === "LiveSlate.replay")
       assert.deepStrictEqual(replayed.seq, Option.some(2))
-      assert.strictEqual(replayed.live.get(GameId.make("1"))?.snapshot.period, 3)
+      assert.strictEqual(replayed.games.get(GameId.make("1"))?.period, 3)
       assert.isUndefined(snapshots)
       assert.isFalse(logs.some((log) => log.message.includes("started")))
       assert.strictEqual(replay?.attributes.get("sportal.frames"), 2)
@@ -494,7 +490,7 @@ describe("Ingest", () => {
       }).pipe(Effect.provide(nextPollOver([], logged)))
 
       assert.deepStrictEqual(polledSlate.seq, Option.some(3))
-      assert.strictEqual(polledSlate.live.get(GameId.make("1"))?.snapshot.period, 4)
+      assert.strictEqual(polledSlate.games.get(GameId.make("1"))?.period, 4)
     }).pipe(Effect.provide([Database.layerMemory, NodeCrypto.layer]), withMetrics)
   })
 })
@@ -713,7 +709,10 @@ function resyncsRecorded(feed: Queue.Queue<Offered>, resynced: Ref.Ref<ReadonlyA
 function scheduledJustBeforeCurrent() {
   return Effect.gen(function* () {
     const now = yield* DateTime.now
-    const kickoff = DateTime.addDuration(now, Duration.sum(LiveGame.currentBefore, Duration.minutes(2)))
+    const kickoff = DateTime.addDuration(
+      now,
+      Duration.sum(Acknowledgement.currentBefore, Duration.minutes(2))
+    )
 
     return snapshot({ id: GameId.make("1"), status: "scheduled", kickoff })
   })
@@ -870,7 +869,7 @@ function slateOf() {
     const liveSlate = yield* LiveSlate
     const latest = yield* liveSlate.latest
 
-    return latest.games(["fbs"])
+    return latest.listedGames(["fbs"])
   })
 }
 

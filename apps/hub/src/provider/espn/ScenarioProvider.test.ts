@@ -655,7 +655,7 @@ function playingPushTiedByPoll() {
 /** The slate's games, leagues in order. */
 const slateGames = Effect.map(
   LiveSlate.use((slate) => slate.latest),
-  (held) => held.games(LeagueId.literals)
+  (held) => held.listedGames(LeagueId.literals)
 )
 
 /** The slate's games once the scenario of `frames` has played from its first frame to its last. */

@@ -31,7 +31,7 @@ import * as EspnDecoder from "../provider/espn/EspnDecoder.ts"
 import * as ScenarioProvider from "../provider/espn/ScenarioProvider.ts"
 import { fixtures, neAtBufFrames, recordedNeAtBuf, recordedPlays } from "../provider/espn/TestEspn.ts"
 import { Scenarios } from "../scenario/Scenarios.ts"
-import { LiveGame } from "../slate/LiveGame.ts"
+import { Acknowledgement } from "../slate/Acknowledgement.ts"
 import type { Slate } from "../slate/Slate.ts"
 import * as TestSnapshotFeed from "../TestSnapshotFeed.ts"
 import { CorpusDay, CorpusDays, CorpusDayUnreadable } from "./CorpusDay.ts"
@@ -129,7 +129,7 @@ describe("CorpusRun.day", () => {
         assert.isTrue(Option.exists(last, ({ what }) => GameEventKind.$is("ScoreChanged")(what)))
         assert.deepStrictEqual(
           Option.map(last, ({ at }) => at),
-          Option.some(DateTime.addDuration(polledAt, LiveGame.fallbackAfter))
+          Option.some(DateTime.addDuration(polledAt, Acknowledgement.fallbackAfter))
         )
       })
     )
@@ -276,7 +276,7 @@ function neAtBufRunTwiceLayer() {
 
 /**
  * The game events the Hub's slate publishes while Ingest plays `frames` as the recorded scenario, live on the test
- * clock from the first frame, onto a feed log on the provided database: until `LiveGame.fallbackAfter` past the last
+ * clock from the first frame, onto a feed log on the provided database: until `Acknowledgement.fallbackAfter` past the last
  * frame, then, Ingest stopped, until `until`. The clock moves only once the slate has taken every frame appended so
  * far, and stops at each frame's instant and each poll's, so the timer never ticks past a frame still to be taken.
  */
@@ -285,7 +285,7 @@ function playedLive(frames: ReadonlyArray<Frame>, until: DateTime.Utc) {
   const first = Option.getOrElse(Arr.head(instants), () => until)
   const ended = Option.match(Arr.last(instants), {
     onNone: () => until,
-    onSome: (last) => DateTime.addDuration(last, LiveGame.fallbackAfter)
+    onSome: (last) => DateTime.addDuration(last, Acknowledgement.fallbackAfter)
   })
   const playing = Effect.gen(function* () {
     const slate = yield* LiveSlate

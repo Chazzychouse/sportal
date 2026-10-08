@@ -1,9 +1,9 @@
-import { type GameId, GameSnapshot } from "@sportal/domain/Game"
+import { GameSnapshot } from "@sportal/domain/Game"
 import { type GameEvent, GameEventKind } from "@sportal/domain/GameEvent"
 import { Cause, DateTime, Duration, Effect, Exit, Metric, Option, Record as Rec, Schema } from "effect"
 import { Following } from "./Following.ts"
 import { type Decoded, DecodeObservation } from "./provider/Decoder.ts"
-import type { LiveGame, LiveGameState } from "./slate/LiveGame.ts"
+import type { Acknowledgement } from "./slate/Acknowledgement.ts"
 import type { Slate, Taken } from "./slate/Slate.ts"
 import { SlateObservation } from "./slate/SlateObservation.ts"
 
@@ -11,7 +11,7 @@ import { SlateObservation } from "./slate/SlateObservation.ts"
  * What one take or tick of the slate did, told as its following stands. During the replay, only a defect is logged:
  * every decode observation, slate observation and event was told when its frame first arrived. Otherwise each decode
  * observation of the frame taken is told, then each slate observation and each game event is logged and counted, and
- * the live games are counted by state when the take changed which games are live. `frame` is the frame taken; a tick
+ * the current games are counted by state when the take changed a game or its state. `frame` is the frame taken; a tick
  * has none. `before` is the slate the take started from.
  */
 export const told = Effect.fnUntraced(function* (
@@ -30,10 +30,18 @@ export const told = Effect.fnUntraced(function* (
   })
 })
 
-/** The boundary out of the replay: every held game's state gauge, and the live games counted by state. */
+/** The boundary out of the replay: every held game's state gauge, and the current games counted by state. */
 export const wentLive = Effect.fnUntraced(function* (slate: Slate) {
-  yield* Effect.forEach(slate.live.values(), (liveGame) => gaugeState(liveGame), { discard: true })
-  yield* gaugeByState(slate.live)
+  yield* Effect.forEach(
+    slate.games.values(),
+    (snapshot) =>
+      Option.match(slate.state(snapshot.id), {
+        onNone: () => Effect.void,
+        onSome: (state) => gaugeState(snapshot, stateValues[state])
+      }),
+    { discard: true }
+  )
+  yield* gaugeByState(slate)
 })
 
 /** A defect in the slate's timer, logged and counted. */
@@ -60,8 +68,8 @@ const toldLive = Effect.fnUntraced(function* (frame: Option.Option<Decoded>, bef
   }
   yield* Effect.forEach(observations, (observation) => toldObservation(observation, seq), { discard: true })
   yield* Effect.forEach(events, (event) => toldEvent(event, observations), { discard: true })
-  if (next.live !== before.live) {
-    yield* gaugeByState(next.live)
+  if (!next.publishesSameAs(before)) {
+    yield* gaugeByState(next)
   }
 })
 
@@ -145,17 +153,17 @@ const toldObservation = Effect.fnUntraced(function* (
       ),
     Started: ({ after, at }) =>
       logLifecycle("started", after, at).pipe(
-        Effect.andThen(gaugeState(after)),
+        Effect.andThen(gaugeState(after.snapshot, stateValues[stateOf(after, at)])),
         Effect.annotateLogs(annotationsOf(after.snapshot))
       ),
-    Changed: ({ before, after, at }) =>
-      gaugeState(after).pipe(
-        Effect.andThen(logTransition(before, after, at)),
+    Changed: ({ before, after, since, at }) =>
+      gaugeState(after.snapshot, stateValues[stateOf(after, at)]).pipe(
+        Effect.andThen(logTransition(before, after, since, at)),
         Effect.annotateLogs(annotationsOf(after.snapshot))
       ),
     Stopped: ({ after, at }) =>
       logLifecycle("stopped", after, at).pipe(
-        Effect.andThen(gaugeState(after, 0)),
+        Effect.andThen(gaugeState(after.snapshot, 0)),
         Effect.annotateLogs(annotationsOf(after.snapshot))
       ),
     Dropped: ({ game }) =>
@@ -207,28 +215,37 @@ function annotationsOf(snapshot: GameSnapshot) {
   return { game: snapshot.id, league: snapshot.league, matchup: snapshot.matchup() }
 }
 
+/** Game `game`'s state at `at`. */
+function stateOf(
+  {
+    snapshot,
+    acknowledgement
+  }: { readonly snapshot: GameSnapshot; readonly acknowledgement: Acknowledgement },
+  at: DateTime.Utc
+): GameState {
+  return acknowledgement.state(snapshot, at)
+}
+
 /** Info for a game that is current, Debug otherwise. */
 const logLifecycle = Effect.fnUntraced(function* (
   what: "started" | "stopped",
-  liveGame: LiveGame,
+  game: { readonly snapshot: GameSnapshot; readonly acknowledgement: Acknowledgement },
   now: DateTime.Utc
 ) {
-  yield* Effect.logWithLevel(liveGame.isCurrent(now) ? "Info" : "Debug")(
-    `LiveSlate: ${liveGame.snapshot.matchup()}: ${what}, ${liveGame.state._tag} at ${liveGame.snapshot.statusLine()}`
+  const { snapshot, acknowledgement } = game
+  yield* Effect.logWithLevel(acknowledgement.isCurrent(snapshot, now) ? "Info" : "Debug")(
+    `LiveSlate: ${snapshot.matchup()}: ${what}, ${stateOf(game, now)} at ${snapshot.statusLine()}`
   )
 })
 
-/** A game's state gauge: its state's value while the slate holds it, unless `value` says otherwise. */
-const gaugeState = Effect.fnUntraced(function* (
-  liveGame: LiveGame,
-  value = stateValues[liveGame.state._tag]
-) {
-  yield* Metric.update(Metric.withAttributes(gameStateGauge, annotationsOf(liveGame.snapshot)), value)
+/** Game `snapshot`'s state gauge: its state's value while the slate holds it, 0 once it lets it go. */
+const gaugeState = Effect.fnUntraced(function* (snapshot: GameSnapshot, value: number) {
+  yield* Metric.update(Metric.withAttributes(gameStateGauge, annotationsOf(snapshot)), value)
 })
 
-/** Gauges how many live games are in each state; a state with none reads 0. */
-const gaugeByState = Effect.fnUntraced(function* (games: ReadonlyMap<GameId, LiveGame>) {
-  const states = [...games.values()].map(({ state }) => state._tag)
+/** Gauges how many of `slate`'s games are in each state; a state with none reads 0. */
+const gaugeByState = Effect.fnUntraced(function* (slate: Slate) {
+  const states = [...slate.games.keys()].flatMap((id) => Option.toArray(slate.state(id)))
   yield* Effect.forEach(
     everyState,
     (state) =>
@@ -240,18 +257,26 @@ const gaugeByState = Effect.fnUntraced(function* (games: ReadonlyMap<GameId, Liv
   )
 })
 
-const logTransition = Effect.fnUntraced(function* (before: LiveGame, after: LiveGame, now: DateTime.Utc) {
-  const from = before.state._tag
-  const to = after.state._tag
+/** A change of game state, from `before` at `since` to `after` at `now`, logged and counted; nothing when it is none. */
+const logTransition = Effect.fnUntraced(function* (
+  before: { readonly snapshot: GameSnapshot; readonly acknowledgement: Acknowledgement },
+  after: { readonly snapshot: GameSnapshot; readonly acknowledgement: Acknowledgement },
+  since: DateTime.Utc,
+  now: DateTime.Utc
+) {
+  const from = stateOf(before, since)
+  const to = stateOf(after, now)
   if (from === to) return
 
-  const silent = Option.map(before.updatedAt(), (at) => DateTime.distance(at, now))
-  const since = Option.match(silent, {
+  const silent = Option.map(before.acknowledgement.updatedAt(before.snapshot), (at) =>
+    DateTime.distance(at, now)
+  )
+  const quiet = Option.match(silent, {
     onNone: () => "",
     onSome: (duration) => `, ${Math.round(Duration.toSeconds(duration))} s since the last update`
   })
   yield* Effect.logInfo(
-    `LiveSlate: ${after.snapshot.matchup()}: ${from} → ${to} at ${after.snapshot.statusLine()}${since}`
+    `LiveSlate: ${after.snapshot.matchup()}: ${from} → ${to} at ${after.snapshot.statusLine()}${quiet}`
   )
   yield* Metric.update(Metric.withAttributes(transitionsCounted, { from, to }), 1)
   if (from === "Stale" && Option.isSome(silent)) {
@@ -294,10 +319,12 @@ const logDefect = Effect.fnUntraced(function* (
   )
 })
 
+type GameState = ReturnType<Acknowledgement["state"]>
+
 // Each state's value on `sportal_game_state`, where 0 is a game the slate has let go. Written as a record so that a new
 // state fails to compile here.
 const stateValues = { Upcoming: 1, Live: 2, Stale: 3, Over: 4, Holding: 5 } satisfies Record<
-  LiveGameState["_tag"],
+  GameState,
   number
 >
 

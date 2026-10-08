@@ -1,34 +1,42 @@
 import type { GameId, GameSnapshot } from "@sportal/domain/Game"
 import { GameEvent, type GameEventKind } from "@sportal/domain/GameEvent"
 import type { LeagueId } from "@sportal/domain/League"
+import { Play } from "@sportal/domain/Play"
 import type { RecentPlays } from "@sportal/domain/RecentPlays"
 import { Cause, Data, DateTime, Effect, Equal, Option } from "effect"
+import { Acknowledgement } from "./Acknowledgement.ts"
 import { Delivery, type DeliverySource } from "./Delivery.ts"
-import { LiveGame, LiveGameState, type TookOutcome } from "./LiveGame.ts"
-import { SlateObservation } from "./SlateObservation.ts"
+import { SlateObservation, type TookOutcome } from "./SlateObservation.ts"
 
 /**
- * The slate: the last frame's `seq`, each league's last listing, every current game's live game, taken from push and
- * poll deliveries in arrival order, each game it saw finish, and `reached`, the instant it has ticked to: every wake
- * time at or before it has been ticked.
+ * The slate: each league's last listing, every current game as its snapshot, its plays and its acknowledgement, taken
+ * from push and poll deliveries in arrival order, each game it saw finish, the last frame's `seq`, and `reached`, the
+ * instant it has ticked to: every wake time at or before it has been ticked.
  */
 export class Slate extends Data.Class<{
-  readonly seq: Option.Option<number>
   readonly listed: ReadonlyMap<LeagueId, ReadonlyArray<GameSnapshot>>
-  readonly live: ReadonlyMap<GameId, LiveGame>
+  /** Each current game, as the slate has it. */
+  readonly games: ReadonlyMap<GameId, GameSnapshot>
+  /** Each current game's plays, in `Play.order`. */
+  readonly plays: ReadonlyMap<GameId, ReadonlyArray<Play>>
+  /** Each current game's acknowledgement: the same games as `games`. */
+  readonly acknowledged: ReadonlyMap<GameId, Acknowledgement>
   /**
    * Each game the slate stopped as over, as its final snapshot, while a league's last listing names it: a snapshot of
    * one not ahead of its end (`GameSnapshot#isAheadOfOver`) is behind, so a poll lagging the push does not start it
    * again, while overtime after a spurious final, or a postponed game resuming, does.
    */
   readonly finished: ReadonlyMap<GameId, GameSnapshot>
+  readonly seq: Option.Option<number>
   readonly reached: Option.Option<DateTime.Utc>
 }> {
   static readonly empty: Slate = new Slate({
-    seq: Option.none(),
     listed: new Map(),
-    live: new Map(),
+    games: new Map(),
+    plays: new Map(),
+    acknowledged: new Map(),
     finished: new Map(),
+    seq: Option.none(),
     reached: Option.none()
   })
 
@@ -38,7 +46,7 @@ export class Slate extends Data.Class<{
   /**
    * Takes one frame: ticks every game due after `reached` and at or before `at`, then applies each of its deliveries in
    * order, and sets `seq` to the frame's, even when it has no deliveries. A tick never goes back. A game whose take or
-   * tick raises a defect keeps its last good live game and observes `Raised`.
+   * tick raises a defect keeps what it had and observes `Raised`.
    */
   take(frame: {
     readonly deliveries: ReadonlyArray<Delivery>
@@ -59,41 +67,62 @@ export class Slate extends Data.Class<{
     return this.advance(now, Option.none(), Effect.succeed)
   }
 
-  /** The earliest instant after `reached` at which a live game changes with no new frame. */
+  /** The earliest instant after `reached` at which a current game changes, or its state turns, with no new frame. */
   earliestDue(): Option.Option<DateTime.Utc> {
-    return Option.flatMap(this.reached, (from) => dueAfter(this.live, from))
+    return Option.flatMap(this.reached, (from) => dueAfter(this, from))
+  }
+
+  /** Game `id`'s state at `reached`; none when the slate does not hold it. */
+  state(id: GameId): Option.Option<ReturnType<Acknowledgement["state"]>> {
+    return Option.flatMap(this.reached, (at) =>
+      Option.map(heldIn(this, id), ({ snapshot, acknowledgement }) => acknowledgement.state(snapshot, at))
+    )
+  }
+
+  /** Each game the slate holds that is current at `now`. */
+  current(now: DateTime.Utc): ReadonlyArray<GameSnapshot> {
+    return everyHeld(this)
+      .filter(({ snapshot, acknowledgement }) => acknowledgement.isCurrent(snapshot, now))
+      .map(({ snapshot }) => snapshot)
   }
 
   /** Each listed game in `leagues`, leagues in order, as the slate has it. */
-  games(leagues: ReadonlyArray<LeagueId>): ReadonlyArray<GameSnapshot> {
+  listedGames(leagues: ReadonlyArray<LeagueId>): ReadonlyArray<GameSnapshot> {
     return leagues.flatMap((league) => asHeld(this.listed.get(league) ?? [], this))
   }
 
-  /** The last `recentPlayCount` plays of each of `games` that has plays in `live`. */
+  /** The last `recentPlayCount` plays of each of `games` that has plays. */
   recentPlays(games: ReadonlyArray<GameSnapshot>): RecentPlays {
     return Object.fromEntries(
       games.flatMap(({ id }) => {
-        const plays = this.live.get(id)?.plays ?? []
+        const plays = this.plays.get(id) ?? []
         return plays.length === 0 ? [] : [[id, plays.slice(-Slate.recentPlayCount)] as const]
       })
     )
   }
 
-  /** Every listed game as the slate has it, then live games no listing holds. */
+  /** Every listed game as the slate has it, then current games no listing holds. */
   everyGame(): ReadonlyArray<GameSnapshot> {
     const listed = [...this.listed.values()].flatMap((games) => asHeld(games, this))
-    const unlisted = [...this.live.values()]
-      .map(({ snapshot }) => snapshot)
-      .filter((snapshot) => !listed.some(({ id }) => id === snapshot.id))
+    const unlisted = [...this.games.values()].filter(
+      (snapshot) => !listed.some(({ id }) => id === snapshot.id)
+    )
     return [...listed, ...unlisted]
   }
 
   /**
-   * Whether `that` publishes the same: a take or tick that changed nothing hands back the same maps. `seq` and `reached`
-   * are ignored, since moving only them changes no game.
+   * Whether `that` publishes the same: a take or tick that changed nothing hands back the same maps, and leaves each game
+   * in the same state. `seq` and `reached` alone are ignored, since moving only them changes no game.
    */
   publishesSameAs(that: Slate): boolean {
-    return this.live === that.live && this.listed === that.listed && this.finished === that.finished
+    return (
+      this.listed === that.listed &&
+      this.games === that.games &&
+      this.plays === that.plays &&
+      this.acknowledged === that.acknowledged &&
+      this.finished === that.finished &&
+      [...this.games.keys()].every((id) => Equal.equals(this.state(id), that.state(id)))
+    )
   }
 
   /** Ticks to `at`, then runs `then` on what the ticks left, as frame `seq` (none keeps the last). */
@@ -107,7 +136,9 @@ export class Slate extends Data.Class<{
     const lastSeq = Option.orElse(seq, () => this.seq)
     const start = new Advancing({
       listed: this.listed,
-      live: this.live,
+      games: this.games,
+      plays: this.plays,
+      acknowledged: this.acknowledged,
       finished: this.finished,
       events: [],
       observations: []
@@ -115,8 +146,8 @@ export class Slate extends Data.Class<{
 
     return tickTo(start, from, at).pipe(
       Effect.flatMap(then),
-      Effect.map(({ listed, live, finished, events, observations }) => ({
-        next: new Slate({ seq: lastSeq, listed, live, finished, reached }),
+      Effect.map(({ listed, games, plays, acknowledged, finished, events, observations }) => ({
+        next: new Slate({ listed, games, plays, acknowledged, finished, seq: lastSeq, reached }),
         events,
         observations
       }))
@@ -131,10 +162,21 @@ export interface Taken {
   readonly observations: ReadonlyArray<SlateObservation>
 }
 
-/** A take or tick under way: what the slate holds so far, and what it has said. */
+/** A game as the slate holds it: its snapshot and its acknowledgement. */
+interface Held {
+  readonly snapshot: GameSnapshot
+  readonly acknowledgement: Acknowledgement
+}
+
+/**
+ * A take or tick under way: what the slate holds so far, and what it has said. `games`, `plays` and `acknowledged` hold
+ * the same games, and only `hold` and `release` write them.
+ */
 class Advancing extends Data.Class<{
   readonly listed: ReadonlyMap<LeagueId, ReadonlyArray<GameSnapshot>>
-  readonly live: ReadonlyMap<GameId, LiveGame>
+  readonly games: ReadonlyMap<GameId, GameSnapshot>
+  readonly plays: ReadonlyMap<GameId, ReadonlyArray<Play>>
+  readonly acknowledged: ReadonlyMap<GameId, Acknowledgement>
   readonly finished: ReadonlyMap<GameId, GameSnapshot>
   readonly events: ReadonlyArray<GameEvent>
   readonly observations: ReadonlyArray<SlateObservation>
@@ -156,27 +198,36 @@ class Advancing extends Data.Class<{
     return new Advancing({ ...this, listed, finished })
   }
 
+  /** Game `id`'s plays so far, in `Play.order`; none for a game the slate does not hold. */
+  playsOf(id: GameId): ReadonlyArray<Play> {
+    return this.plays.get(id) ?? []
+  }
+
   /**
-   * Game `id` after a step at `at` from `current` (none for a game the slate does not hold): holds the step's new live
-   * game, if any, while it is current, and lets it go once it is not, remembering it as finished when it is over. A game
-   * that was never held and is not current is not held, and nothing is said of it.
+   * Game `id` after a step at `at` from `current` (none for a game the slate does not hold), as it stood at `since`:
+   * holds the step's next game, if any, with `plays`, while it is current, and lets it go once it is not, remembering it
+   * as finished when it is over. A game whose state only turned is observed as changed, and held as it was. A game that
+   * was never held and is not current is not held, and nothing is said of it.
    */
   settle(
     id: GameId,
-    at: DateTime.Utc,
-    current: Option.Option<LiveGame>,
-    step: { readonly liveGame: Option.Option<LiveGame>; readonly events: ReadonlyArray<GameEventKind> }
+    instants: { readonly since: DateTime.Utc; readonly at: DateTime.Utc },
+    current: Option.Option<Held>,
+    step: { readonly next: Option.Option<Held>; readonly events: ReadonlyArray<GameEventKind> },
+    plays: ReadonlyArray<Play>
   ): Advancing {
-    const gameStep = gameStepOf(current, step, at)
+    const { since, at } = instants
+    const gameStep = gameStepOf(current, step, instants)
     const said = this.say(id, at, step.events)
 
     return GameStep.$match(gameStep, {
-      Started: ({ after }) => said.hold(id, after).observe(SlateObservation.Started({ after, at })),
+      Started: ({ after }) => said.hold(id, after, plays).observe(SlateObservation.Started({ after, at })),
       Changed: ({ before, after }) =>
-        said.hold(id, after).observe(SlateObservation.Changed({ before, after, at })),
+        said.hold(id, after, plays).observe(SlateObservation.Changed({ before, after, since, at })),
+      Turned: ({ game }) => said.observe(SlateObservation.Changed({ before: game, after: game, since, at })),
       Kept: () => said,
       Stopped: ({ before, after, changed }) => {
-        const observed = changed ? said.observe(SlateObservation.Changed({ before, after, at })) : said
+        const observed = changed ? said.observe(SlateObservation.Changed({ before, after, since, at })) : said
         return observed.release(id, after).observe(SlateObservation.Stopped({ after, at }))
       },
       Unheld: (): Advancing => this
@@ -196,33 +247,44 @@ class Advancing extends Data.Class<{
     )
   }
 
-  private hold(id: GameId, liveGame: LiveGame): Advancing {
-    return new Advancing({ ...this, live: new Map(this.live).set(id, liveGame) })
+  private hold(id: GameId, { snapshot, acknowledgement }: Held, plays: ReadonlyArray<Play>): Advancing {
+    return new Advancing({
+      ...this,
+      games: new Map(this.games).set(id, snapshot),
+      plays: new Map(this.plays).set(id, plays),
+      acknowledged: new Map(this.acknowledged).set(id, acknowledgement)
+    })
   }
 
-  /** Lets game `id` go, remembering it as finished when `after` is over. */
-  private release(id: GameId, after: LiveGame): Advancing {
-    const live = new Map([...this.live].filter(([game]) => game !== id))
-    const finished = LiveGameState.$is("Over")(after.state)
-      ? new Map(this.finished).set(id, after.snapshot)
-      : this.finished
-    return new Advancing({ ...this, live, finished })
+  /** Lets game `id` go, with its plays, remembering it as finished when `after` is over. */
+  private release(id: GameId, after: Held): Advancing {
+    const finished =
+      after.snapshot.progress() === "over" ? new Map(this.finished).set(id, after.snapshot) : this.finished
+    return new Advancing({
+      ...this,
+      games: without(this.games, id),
+      plays: without(this.plays, id),
+      acknowledged: without(this.acknowledged, id),
+      finished
+    })
   }
 }
 
 /** What one step did to one game's place in the slate. */
 type GameStep = Data.TaggedEnum<{
   /** Not held before, current now: held and observed as started. */
-  Started: { readonly after: LiveGame }
-  /** Held, still current, and the step made a new live game: held and observed as changed. */
-  Changed: { readonly before: LiveGame; readonly after: LiveGame }
-  /** Held, still current, and the step made nothing new: only its events are said. */
-  Kept: { readonly before: LiveGame }
+  Started: { readonly after: Held }
+  /** Held, still current, and the step made a next game: held and observed as changed. */
+  Changed: { readonly before: Held; readonly after: Held }
+  /** Held, still current, the step made nothing new, but its state turned (it went stale): observed as changed. */
+  Turned: { readonly game: Held }
+  /** Held, still current, its state as it was, and the step made nothing new: only its events are said. */
+  Kept: { readonly before: Held }
   /**
-   * Held, no longer current: let go and observed as stopped, after a change when the step made a new live game
-   * (`after` is then the new one, else the held one).
+   * Held, no longer current: let go and observed as stopped, after a change when the step made a next game (`after` is
+   * then the next one, else the held one).
    */
-  Stopped: { readonly before: LiveGame; readonly after: LiveGame; readonly changed: boolean }
+  Stopped: { readonly before: Held; readonly after: Held; readonly changed: boolean }
   /** Not held, not current: nothing happens, nothing is said. */
   Unheld: object
 }>
@@ -238,31 +300,89 @@ function applied(advancing: Advancing, delivery: Delivery, at: DateTime.Utc): Ef
         (acc, snapshot) => snapshotTaken(acc, snapshot, "poll", at)
       ).pipe(Effect.map((taken) => taken.relist(league, games))),
     Snapshot: ({ snapshot, from }) => snapshotTaken(advancing, snapshot, from, at),
-    Plays: (plays) =>
-      Option.match(Option.fromNullishOr(advancing.live.get(plays.game)), {
-        onNone: () => Effect.succeed(advancing.observe(SlateObservation.Dropped({ game: plays.game }))),
-        onSome: (liveGame) =>
-          advancing.guard(liveGame.snapshot, "a delivery", (guarded) =>
-            guarded.settle(plays.game, at, Option.some(liveGame), liveGame.take(plays, at))
-          )
+    Plays: ({ game, plays }) =>
+      Option.match(heldIn(advancing, game), {
+        onNone: () => Effect.succeed(advancing.observe(SlateObservation.Dropped({ game }))),
+        onSome: (held) =>
+          advancing.guard(held.snapshot, "a delivery", (guarded) => playsTaken(guarded, held, plays, at))
       })
   })
 }
 
-/** The earliest instant after `from` at which a live game changes with no new frame. */
-function dueAfter(live: ReadonlyMap<GameId, LiveGame>, from: DateTime.Utc): Option.Option<DateTime.Utc> {
-  return LiveGame.earliest([...live.values()].map((liveGame) => liveGame.dueAfter(from)))
+/**
+ * Game `held` once its whole list of plays is `plays`, at `at`: the list replaced, in `Play.order`, saying only the new
+ * plays' events; nothing for an equal list. Plays are not acknowledged: the game's acknowledgement stays as it was.
+ */
+function playsTaken(
+  advancing: Advancing,
+  held: Held,
+  plays: ReadonlyArray<Play>,
+  at: DateTime.Utc
+): Advancing {
+  const id = held.snapshot.id
+  const had = advancing.playsOf(id)
+  const changed = Option.liftPredicate(plays.toSorted(Play.order), (sorted) => !Equal.equals(sorted, had))
+  const step = Option.match(changed, {
+    onNone: () => ({ next: Option.none<Held>(), events: [] }),
+    onSome: (sorted) => ({ next: Option.some(held), events: Play.eventsSince(had, sorted) })
+  })
+
+  return advancing.settle(
+    id,
+    { since: at, at },
+    Option.some(held),
+    step,
+    Option.getOrElse(changed, () => had)
+  )
 }
 
-/** Each listed game, in listed order, as the slate has it (live, or as its final once finished), or as listed. */
+/** The earliest instant after `from` at which a game `holding` holds changes, or its state turns, with no new frame. */
+function dueAfter(
+  holding: {
+    readonly games: ReadonlyMap<GameId, GameSnapshot>
+    readonly acknowledged: ReadonlyMap<GameId, Acknowledgement>
+  },
+  from: DateTime.Utc
+): Option.Option<DateTime.Utc> {
+  return Acknowledgement.earliest(
+    everyHeld(holding).map(({ snapshot, acknowledgement }) => acknowledgement.dueAfter(snapshot, from))
+  )
+}
+
+/** Every game `holding` holds, in the order it first held them. */
+function everyHeld(holding: {
+  readonly games: ReadonlyMap<GameId, GameSnapshot>
+  readonly acknowledged: ReadonlyMap<GameId, Acknowledgement>
+}): ReadonlyArray<Held> {
+  return [...holding.acknowledged.keys()].flatMap((id) => Option.toArray(heldIn(holding, id)))
+}
+
+/** Game `id` as `holding` holds it; none when it holds none. */
+function heldIn(
+  holding: {
+    readonly games: ReadonlyMap<GameId, GameSnapshot>
+    readonly acknowledged: ReadonlyMap<GameId, Acknowledgement>
+  },
+  id: GameId
+): Option.Option<Held> {
+  return Option.all({
+    snapshot: Option.fromNullishOr(holding.games.get(id)),
+    acknowledgement: Option.fromNullishOr(holding.acknowledged.get(id))
+  })
+}
+
+/** Each listed game, in listed order, as the slate has it (current, or as its final once finished), or as listed. */
 function asHeld(
   listed: ReadonlyArray<GameSnapshot>,
   {
-    live,
+    games,
     finished
-  }: { readonly live: ReadonlyMap<GameId, LiveGame>; readonly finished: ReadonlyMap<GameId, GameSnapshot> }
+  }: {
+    readonly games: ReadonlyMap<GameId, GameSnapshot>
+    readonly finished: ReadonlyMap<GameId, GameSnapshot>
+  }
 ): ReadonlyArray<GameSnapshot> {
-  return listed.map((game) => live.get(game.id)?.snapshot ?? finished.get(game.id) ?? game)
+  return listed.map((game) => games.get(game.id) ?? finished.get(game.id) ?? game)
 }
 
 /**
@@ -270,20 +390,21 @@ function asHeld(
  * the same instant tick together.
  */
 function tickTo(advancing: Advancing, from: DateTime.Utc, at: DateTime.Utc): Effect.Effect<Advancing> {
-  const due = Option.filter(dueAfter(advancing.live, from), (instant) =>
-    DateTime.isLessThanOrEqualTo(instant, at)
-  )
+  const due = Option.filter(dueAfter(advancing, from), (instant) => DateTime.isLessThanOrEqualTo(instant, at))
 
   return Option.match(due, {
     onNone: () => Effect.succeed(advancing),
     onSome: (due) => {
-      const dueNow = [...advancing.live.values()].filter((liveGame) =>
-        Option.exists(liveGame.dueAfter(from), (instant) => DateTime.Equivalence(instant, due))
+      const dueNow = everyHeld(advancing).filter(({ snapshot, acknowledgement }) =>
+        Option.exists(acknowledgement.dueAfter(snapshot, from), (instant) =>
+          DateTime.Equivalence(instant, due)
+        )
       )
       return Effect.reduce(
         dueNow,
         () => advancing,
-        (acc, liveGame) => acc.guard(liveGame.snapshot, "a tick", (guarded) => ticked(guarded, liveGame, due))
+        (acc, held) =>
+          acc.guard(held.snapshot, "a tick", (guarded) => ticked(guarded, held, { since: from, at: due }))
       ).pipe(Effect.flatMap((after) => tickTo(after, due, at)))
     }
   })
@@ -300,34 +421,48 @@ function stillListed(
     : new Map([...finished].filter(([id]) => named.has(id)))
 }
 
+function without<A>(map: ReadonlyMap<GameId, A>, id: GameId): ReadonlyMap<GameId, A> {
+  return new Map([...map].filter(([game]) => game !== id))
+}
+
 /**
- * What a step did to a game's place: `current` is the live game the slate holds (none when it holds none), and the
- * step's new live game, if any, replaces it.
+ * What a step did to a game's place: `current` is the game the slate holds (none when it holds none), as it stood at
+ * `since`, and the step's next game, if any, replaces it at `at`.
  */
 function gameStepOf(
-  current: Option.Option<LiveGame>,
-  step: { readonly liveGame: Option.Option<LiveGame> },
-  at: DateTime.Utc
+  current: Option.Option<Held>,
+  step: { readonly next: Option.Option<Held> },
+  { since, at }: { readonly since: DateTime.Utc; readonly at: DateTime.Utc }
 ): GameStep {
   return Option.match(current, {
     onNone: () =>
-      Option.match(step.liveGame, {
+      Option.match(step.next, {
         onNone: () => GameStep.Unheld(),
-        onSome: (after) => (after.isCurrent(at) ? GameStep.Started({ after }) : GameStep.Unheld())
+        onSome: (after) =>
+          after.acknowledgement.isCurrent(after.snapshot, at)
+            ? GameStep.Started({ after })
+            : GameStep.Unheld()
       }),
     onSome: (before) => {
-      const after = Option.getOrElse(step.liveGame, () => before)
-      const changed = Option.isSome(step.liveGame)
+      const after = Option.getOrElse(step.next, () => before)
+      if (!after.acknowledgement.isCurrent(after.snapshot, at)) {
+        return GameStep.Stopped({ before, after, changed: Option.isSome(step.next) })
+      }
 
-      if (!after.isCurrent(at)) return GameStep.Stopped({ before, after, changed })
-      return changed ? GameStep.Changed({ before, after }) : GameStep.Kept({ before })
+      const turned =
+        before.acknowledgement.state(before.snapshot, since) !==
+        before.acknowledgement.state(before.snapshot, at)
+      return Option.match(step.next, {
+        onSome: (after) => GameStep.Changed({ before, after }),
+        onNone: () => (turned ? GameStep.Turned({ game: before }) : GameStep.Kept({ before }))
+      })
     }
   })
 }
 
 /**
  * A snapshot taken by the slate: a repeat of a finished game's final is not observed, one behind it is observed as
- * behind, and any other is taken by the game's live game, or starts one.
+ * behind, and any other is taken by the game's acknowledgement, or starts one.
  */
 function snapshotTaken(
   advancing: Advancing,
@@ -344,40 +479,57 @@ function snapshotTaken(
     }
 
     // A finished game is taken as the over game it was, so a correction ahead of its final says what it changed.
-    const current = Option.orElse(Option.fromNullishOr(guarded.live.get(snapshot.id)), () =>
-      Option.map(final, (over) => LiveGame.start(over, from, at))
+    const current = Option.orElse(heldIn(guarded, snapshot.id), () =>
+      Option.map(
+        final,
+        (over): Held => ({ snapshot: over, acknowledgement: Acknowledgement.first(from, at) })
+      )
     )
     const step = Option.match(current, {
       onNone: (): {
-        readonly liveGame: Option.Option<LiveGame>
+        readonly next: Option.Option<Held>
         readonly events: ReadonlyArray<GameEventKind>
         readonly outcome: TookOutcome
-      } => ({ liveGame: Option.some(LiveGame.start(snapshot, from, at)), events: [], outcome: "taken" }),
-      onSome: (liveGame) => liveGame.take(Delivery.cases.Snapshot.make({ snapshot, from }), at)
+      } => ({
+        next: Option.some({ snapshot, acknowledgement: Acknowledgement.first(from, at) }),
+        events: [],
+        outcome: "taken"
+      }),
+      onSome: (held) => held.acknowledgement.took(held.snapshot, { snapshot, from }, at)
     })
-    const had = Option.map(current, (liveGame) => liveGame.snapshot)
+    const had = Option.map(current, (held) => held.snapshot)
     const took = SlateObservation.Took({ snapshot, from, outcome: step.outcome, had })
 
-    return guarded.observe(took).settle(snapshot.id, at, current, step)
+    return guarded
+      .observe(took)
+      .settle(snapshot.id, { since: at, at }, current, step, guarded.playsOf(snapshot.id))
   })
 }
 
-/** A game's tick at its wake instant `due`: a fall back is observed as a take of the held snapshot, as the poll's. */
-function ticked(advancing: Advancing, liveGame: LiveGame, due: DateTime.Utc): Advancing {
-  const step = liveGame.tick(due)
-  const fellBack = Option.filter(step.liveGame, () => step.fellBack)
+/**
+ * Game `held`'s tick at its wake instant `at`, as it stood at the last wake `since`: a fall back is observed as a take
+ * of the held snapshot, as the poll's.
+ */
+function ticked(
+  advancing: Advancing,
+  held: Held,
+  instants: { readonly since: DateTime.Utc; readonly at: DateTime.Utc }
+): Advancing {
+  const id = held.snapshot.id
+  const step = held.acknowledgement.ticked(held.snapshot, instants.at)
+  const fellBack = Option.filter(step.next, () => step.fellBack)
   const observed = Option.match(fellBack, {
     onNone: () => advancing,
     onSome: (after) =>
       advancing.observe(
         SlateObservation.Took({
           snapshot: after.snapshot,
-          from: after.from,
+          from: after.acknowledgement.from,
           outcome: "fellBack",
-          had: Option.some(liveGame.snapshot)
+          had: Option.some(held.snapshot)
         })
       )
   })
 
-  return observed.settle(liveGame.snapshot.id, due, Option.some(liveGame), step)
+  return observed.settle(id, instants, Option.some(held), step, advancing.playsOf(id))
 }

@@ -139,7 +139,7 @@ export class LiveSlate extends Context.Service<
                 const finished = yield* Clock.currentTimeMillis
                 const took = Duration.millis(finished - started)
                 yield* Effect.logInfo(
-                  `LiveSlate: replayed ${frames} frames: ${deliveries} deliveries, ${plays} plays; ${followed.slate.live.size} live games, in ${Duration.format(took)}`
+                  `LiveSlate: replayed ${frames} frames: ${deliveries} deliveries, ${plays} plays; ${followed.slate.games.size} live games, in ${Duration.format(took)}`
                 )
                 yield* Deferred.succeed(caughtUp, { frames, deliveries })
                 return [undefined, Option.some({ ...followed, following: Following.Live() })] as const
@@ -264,7 +264,7 @@ export class LiveSlate extends Context.Service<
           changes.pipe(
             Stream.debounce("250 millis"),
             Stream.runForEach((slate) => {
-              const games = slate.games(LeagueId.literals)
+              const games = slate.listedGames(LeagueId.literals)
               const recentPlays = slate.recentPlays(games)
               return SubscriptionRef.set(
                 publication,

@@ -35,8 +35,8 @@ import { LiveSlate } from "./LiveSlate.ts"
 import { Decoded, Decoder } from "./provider/Decoder.ts"
 import * as EspnDecoder from "./provider/espn/EspnDecoder.ts"
 import { fixtures, recordedNeAtBuf, recordedPlays } from "./provider/espn/TestEspn.ts"
+import { Acknowledgement } from "./slate/Acknowledgement.ts"
 import { Delivery } from "./slate/Delivery.ts"
-import { LiveGame, LiveGameState } from "./slate/LiveGame.ts"
 import type { Slate } from "./slate/Slate.ts"
 import { appended, delivered, latestOf, slateFollowing } from "./TestLiveSlate.ts"
 import * as TestSnapshotFeed from "./TestSnapshotFeed.ts"
@@ -60,10 +60,10 @@ describe("LiveSlate, a frame taken live", () => {
       const current = yield* latest
 
       assert.deepStrictEqual(current.listed.get("fbs"), [live, soon, later])
-      assert.deepStrictEqual(current.live.get(one)?.snapshot, live)
-      assert.strictEqual(current.live.get(one)?.from, "poll")
-      assert.deepStrictEqual(current.live.get(two)?.snapshot, soon)
-      assert.isFalse(current.live.has(three))
+      assert.deepStrictEqual(current.games.get(one), live)
+      assert.strictEqual(current.acknowledged.get(one)?.from, "poll")
+      assert.deepStrictEqual(current.games.get(two), soon)
+      assert.isFalse(current.games.has(three))
     }).pipe(Effect.provide(slateFollowing()))
   )
 
@@ -74,8 +74,8 @@ describe("LiveSlate, a frame taken live", () => {
       const current = yield* latest
 
       assert.deepStrictEqual(current.seq, Option.some(2))
-      assert.isTrue(LiveGameState.$is("Live")(current.live.get(one)?.state ?? LiveGameState.Over()))
-      assert.strictEqual(current.live.get(one)?.from, "push")
+      assert.deepStrictEqual(current.state(one), Option.some("Live"))
+      assert.strictEqual(current.acknowledged.get(one)?.from, "push")
     }).pipe(Effect.provide(slateFollowing()))
   )
 
@@ -84,7 +84,7 @@ describe("LiveSlate, a frame taken live", () => {
       yield* takenSnapshot(snapshot({ id: one, status: "live", period: 2, clock: "5:00" }))
 
       yield* takenSnapshot(snapshot({ id: one, status: "live", period: 1, clock: "5:00" }))
-      const liveGame = yield* liveGameOf(one)
+      const liveGame = yield* gameOf(one)
 
       assert.strictEqual(liveGame.snapshot.period, 2)
     }).pipe(Effect.provide(slateFollowing()))
@@ -97,8 +97,8 @@ describe("LiveSlate, a frame taken live", () => {
 
       yield* takenSnapshot(first)
       yield* takenSnapshot(second)
-      const firstGame = yield* liveGameOf(one)
-      const secondGame = yield* liveGameOf(two)
+      const firstGame = yield* gameOf(one)
+      const secondGame = yield* gameOf(two)
 
       assert.deepStrictEqual(firstGame.snapshot, first)
       assert.deepStrictEqual(secondGame.snapshot, second)
@@ -118,7 +118,7 @@ describe("LiveSlate, a frame taken live", () => {
       const frameAt = DateTime.add(now, { seconds: 5 })
 
       yield* delivered(Delivery.cases.Plays.make({ game: one, plays: [play()] }), frameAt)
-      const liveGame = yield* liveGameOf(one)
+      const liveGame = yield* gameOf(one)
       const [first] = yield* Fiber.join(events)
       const plays = yield* counted("sportal_plays", { league: "fbs" })
 
@@ -136,7 +136,7 @@ describe("LiveSlate, a frame taken live", () => {
       const current = yield* latest
       const dropped = yield* counted("sportal_deliveries_dropped")
 
-      assert.strictEqual(current.live.size, 0)
+      assert.strictEqual(current.games.size, 0)
       assert.strictEqual(dropped, 1)
     }).pipe(Effect.provide(slateFollowing()), withMetrics)
   )
@@ -148,8 +148,8 @@ describe("LiveSlate, a frame taken live", () => {
         const first = yield* twoLiveGames
 
         yield* brokenListing
-        const firstGame = yield* liveGameOf(one)
-        const secondGame = yield* liveGameOf(two)
+        const firstGame = yield* gameOf(one)
+        const secondGame = yield* gameOf(two)
 
         assert.deepStrictEqual(firstGame.snapshot, first)
         assert.strictEqual(secondGame.snapshot.clock, "8:00")
@@ -163,7 +163,7 @@ describe("LiveSlate, a frame taken live", () => {
       const next = liveSnapshot({ id: one, clock: "8:00" })
 
       yield* takenSnapshot(next)
-      const liveGame = yield* liveGameOf(one)
+      const liveGame = yield* gameOf(one)
 
       assert.deepStrictEqual(liveGame.snapshot, next)
     }).pipe(Effect.provide(slateFollowing([], { decoder: breaking })))
@@ -177,7 +177,7 @@ describe("LiveSlate#changes", () => {
       const published = yield* Ref.make<ReadonlyArray<Option.Option<GameSnapshot>>>([])
       yield* slate.changes.pipe(
         Stream.runForEach((current) =>
-          Ref.update(published, (all) => [...all, Option.fromNullishOr(current.live.get(one)?.snapshot)])
+          Ref.update(published, (all) => [...all, Option.fromNullishOr(current.games.get(one))])
         ),
         Effect.forkScoped({ startImmediately: true })
       )
@@ -289,9 +289,9 @@ describe("LiveSlate over time", () => {
       yield* takenSnapshot(liveSnapshot({ id: one }))
 
       yield* TestClock.adjust("89 seconds")
-      const liveGame = yield* liveGameOf(one)
+      const liveGame = yield* gameOf(one)
 
-      assert.isTrue(LiveGameState.$is("Live")(liveGame.state))
+      assert.strictEqual(liveGame.state, "Live")
     }).pipe(Effect.provide(slateFollowing()))
   )
 
@@ -301,9 +301,10 @@ describe("LiveSlate over time", () => {
       yield* takenSnapshot(liveSnapshot({ id: one }))
 
       yield* TestClock.adjust("90 seconds")
-      const { state } = yield* liveGameOf(one)
+      const { state, acknowledgement } = yield* gameOf(one)
 
-      assert.isTrue(LiveGameState.$is("Stale")(state) && DateTime.Equivalence(state.updatedAt, takenAt))
+      assert.strictEqual(state, "Stale")
+      assert.deepStrictEqual(acknowledgement.heardAt, takenAt)
     }).pipe(Effect.provide(slateFollowing()))
   )
 
@@ -312,9 +313,9 @@ describe("LiveSlate over time", () => {
       yield* refreshedAfterAMinute
 
       yield* TestClock.adjust("60 seconds")
-      const liveGame = yield* liveGameOf(one)
+      const liveGame = yield* gameOf(one)
 
-      assert.isTrue(LiveGameState.$is("Live")(liveGame.state))
+      assert.strictEqual(liveGame.state, "Live")
     }).pipe(Effect.provide(slateFollowing()))
   )
 
@@ -323,9 +324,9 @@ describe("LiveSlate over time", () => {
       yield* refreshedAfterAMinute
 
       yield* TestClock.adjust("90 seconds")
-      const liveGame = yield* liveGameOf(one)
+      const liveGame = yield* gameOf(one)
 
-      assert.isTrue(LiveGameState.$is("Stale")(liveGame.state))
+      assert.strictEqual(liveGame.state, "Stale")
     }).pipe(Effect.provide(slateFollowing()))
   )
 
@@ -333,14 +334,15 @@ describe("LiveSlate over time", () => {
     Effect.gen(function* () {
       yield* takenSnapshot(liveSnapshot({ id: one }))
       yield* TestClock.adjust("100 seconds")
-      const stale = yield* liveGameOf(one)
+      const stale = yield* gameOf(one)
       const takenAt = yield* DateTime.now
 
       yield* takenSnapshot(liveSnapshot({ id: one, clock: "9:00" }))
-      const { state } = yield* liveGameOf(one)
+      const { state, acknowledgement } = yield* gameOf(one)
 
-      assert.isTrue(LiveGameState.$is("Stale")(stale.state))
-      assert.isTrue(LiveGameState.$is("Live")(state) && DateTime.Equivalence(state.updatedAt, takenAt))
+      assert.strictEqual(stale.state, "Stale")
+      assert.strictEqual(state, "Live")
+      assert.deepStrictEqual(acknowledgement.heardAt, takenAt)
     }).pipe(Effect.provide(slateFollowing()))
   )
 
@@ -350,9 +352,9 @@ describe("LiveSlate over time", () => {
       yield* takenSnapshot(snapshot({ id: one, kickoff: DateTime.add(now, { minutes: 20 }) }))
 
       yield* TestClock.adjust("10 minutes")
-      const liveGame = yield* liveGameOf(one)
+      const liveGame = yield* gameOf(one)
 
-      assert.isTrue(LiveGameState.$is("Upcoming")(liveGame.state))
+      assert.strictEqual(liveGame.state, "Upcoming")
     }).pipe(Effect.provide(slateFollowing()))
   )
 
@@ -360,12 +362,12 @@ describe("LiveSlate over time", () => {
     Effect.gen(function* () {
       yield* takenSnapshot(liveSnapshot({ id: one }))
       yield* TestClock.adjust("90 seconds")
-      const stale = yield* liveGameOf(one)
+      const stale = yield* gameOf(one)
 
       yield* TestClock.adjust("1709 seconds")
       const live = yield* liveNow
 
-      assert.isTrue(LiveGameState.$is("Stale")(stale.state))
+      assert.strictEqual(stale.state, "Stale")
       assert.isTrue(live.has(one))
     }).pipe(Effect.provide(slateFollowing()))
   )
@@ -407,13 +409,14 @@ describe("LiveSlate over time", () => {
         Delivery.cases.Snapshot.make({ snapshot: liveSnapshot({ id: one, clock: "9:00" }), from: "poll" }),
         later
       )
-      const { state } = yield* liveGameOf(one)
+      const { state, acknowledgement } = yield* gameOf(one)
       const transitions = logs
         .map(({ message }) => /(\w+) → (\w+)/.exec(message)?.[0])
         .filter((transition) => transition !== undefined)
 
       assert.deepStrictEqual(transitions, ["Live → Stale", "Stale → Live"])
-      assert.isTrue(LiveGameState.$is("Live")(state) && DateTime.Equivalence(state.updatedAt, later))
+      assert.strictEqual(state, "Live")
+      assert.deepStrictEqual(acknowledgement.heardAt, later)
     }).pipe(Effect.provide(slateFollowing().pipe(Layer.provideMerge(layer))))
   })
 
@@ -423,7 +426,7 @@ describe("LiveSlate over time", () => {
       yield* takenSnapshot(liveSnapshot({ id: one }))
 
       const halted = yield* tellingDies
-      const liveGame = yield* liveGameOf(one)
+      const liveGame = yield* gameOf(one)
       const haltLogged = logs.some(
         ({ level, message }) =>
           level === "Error" &&
@@ -432,7 +435,7 @@ describe("LiveSlate over time", () => {
 
       assert.deepStrictEqual(halted.seq, Option.some(1), "the frame whose report died is not taken")
       assert.isTrue(haltLogged)
-      assert.isTrue(LiveGameState.$is("Live")(liveGame.state))
+      assert.strictEqual(liveGame.state, "Live")
     }).pipe(Effect.provide(slateDyingOnStale(layer)))
   })
 
@@ -443,9 +446,9 @@ describe("LiveSlate over time", () => {
       yield* tellingDies
 
       yield* TestClock.adjust("89 seconds")
-      const liveGame = yield* liveGameOf(one)
+      const liveGame = yield* gameOf(one)
 
-      assert.isTrue(LiveGameState.$is("Live")(liveGame.state))
+      assert.strictEqual(liveGame.state, "Live")
     }).pipe(Effect.provide(slateDyingOnStale(layer)))
   })
 
@@ -457,9 +460,9 @@ describe("LiveSlate over time", () => {
       yield* TestClock.adjust("89 seconds")
 
       yield* TestClock.adjust("1 second")
-      const liveGame = yield* liveGameOf(one)
+      const liveGame = yield* gameOf(one)
 
-      assert.isTrue(LiveGameState.$is("Stale")(liveGame.state))
+      assert.strictEqual(liveGame.state, "Stale")
     }).pipe(Effect.provide(slateDyingOnStale(layer)))
   })
 
@@ -471,11 +474,11 @@ describe("LiveSlate over time", () => {
       yield* appended(frame)
 
       yield* TestClock.adjust("90 seconds")
-      const liveGame = yield* liveGameOf(one)
+      const liveGame = yield* gameOf(one)
       const gameState = yield* gauged("sportal_game_state", { game: "1" })
       const staleGames = yield* gauged("sportal_live_games", { state: "Stale" })
 
-      assert.isTrue(LiveGameState.$is("Stale")(liveGame.state))
+      assert.strictEqual(liveGame.state, "Stale")
       assert.isTrue(logs.some(({ message }) => message.includes("Live → Stale")))
       assert.strictEqual(gameState, 3)
       assert.strictEqual(staleGames, 1)
@@ -667,7 +670,7 @@ describe("LiveSlate's telemetry", () => {
         yield* takenSnapshot(withHomeScore(14), "push")
 
         yield* takenSnapshot(withHomeScore(13), "poll")
-        const liveGame = yield* liveGameOf(one)
+        const liveGame = yield* gameOf(one)
         const behindPolls = yield* counted("sportal_snapshots", { outcome: "behind", source: "poll" })
         const takenPushes = yield* counted("sportal_snapshots", { outcome: "taken", source: "push" })
         const takenPolls = yield* counted("sportal_snapshots", { outcome: "taken", source: "poll" })
@@ -788,9 +791,9 @@ describe("LiveSlate's telemetry", () => {
       yield* TestClock.adjust("10 seconds")
 
       yield* TestClock.adjust("79 seconds")
-      const liveGame = yield* liveGameOf(one)
+      const liveGame = yield* gameOf(one)
 
-      assert.isTrue(LiveGameState.$is("Live")(liveGame.state))
+      assert.strictEqual(liveGame.state, "Live")
     }).pipe(Effect.provide(slateWithDyingTimer(layer)), withMetrics)
   })
 
@@ -804,10 +807,10 @@ describe("LiveSlate's telemetry", () => {
         yield* TestClock.adjust("79 seconds")
 
         yield* TestClock.adjust("1 second")
-        const liveGame = yield* liveGameOf(one)
+        const liveGame = yield* gameOf(one)
         const defects = yield* counted("sportal_game_defects")
 
-        assert.isTrue(LiveGameState.$is("Stale")(liveGame.state))
+        assert.strictEqual(liveGame.state, "Stale")
         assert.strictEqual(defects, 1)
       }).pipe(Effect.provide(slateWithDyingTimer(layer)), withMetrics)
     }
@@ -816,12 +819,12 @@ describe("LiveSlate's telemetry", () => {
   it.effect("should change nothing on a timer that wakes early until the game is due", () =>
     Effect.gen(function* () {
       const slate = yield* LiveSlate
-      const seen = yield* Ref.make<ReadonlyArray<LiveGameState["_tag"]>>([])
+      const seen = yield* Ref.make<ReadonlyArray<string>>([])
       yield* slate.changes.pipe(
         Stream.runForEach((current) =>
-          Option.match(Option.fromNullishOr(current.live.get(one)), {
+          Option.match(current.state(one), {
             onNone: () => Effect.void,
-            onSome: (liveGame) => Ref.update(seen, (states) => [...states, liveGame.state._tag])
+            onSome: (state) => Ref.update(seen, (states) => [...states, state])
           })
         ),
         Effect.forkScoped({ startImmediately: true })
@@ -932,7 +935,7 @@ describe("LiveSlate#published", () => {
       const current = yield* slate.latest
       const published = yield* slate.published
 
-      assert.isFalse(current.live.has(one))
+      assert.isFalse(current.games.has(one))
       assert.deepStrictEqual(published.games, [final])
     }).pipe(Effect.provide(slateFollowing()))
   )
@@ -974,8 +977,8 @@ describe("LiveSlate following the feed log", () => {
           .map(({ id }) => id)
 
         assert.deepStrictEqual(current.seq, Option.some(3))
-        assert.strictEqual(current.live.get(one)?.plays.length, 1)
-        assert.strictEqual(current.live.get(one)?.snapshot.clock, "9:00")
+        assert.strictEqual(current.plays.get(one)?.length, 1)
+        assert.strictEqual(current.games.get(one)?.clock, "9:00")
         assert.isFalse(logs.some(({ message }) => /→|started|ScoreChanged|Played/.test(message)))
         assert.strictEqual(info.length, 1)
         assert.include(
@@ -1047,7 +1050,7 @@ describe("LiveSlate following the feed log", () => {
         Effect.provide(slateFollowing(liveThenPlayed))
       )
 
-      assert.isFalse(current.live.has(one))
+      assert.isFalse(current.games.has(one))
     })
   )
 
@@ -1084,9 +1087,11 @@ describe("LiveSlate following the feed log", () => {
       const taken = yield* takenInTime(day).pipe(Effect.andThen(latest), Effect.provide(slateFollowing()))
       const summary = logs.find(({ message }) => message.includes("replayed"))
 
-      assert.isTrue(Equal.equals(replayed.live, taken.live))
+      assert.isTrue(Equal.equals(replayed.games, taken.games))
+      assert.isTrue(Equal.equals(replayed.plays, taken.plays))
+      assert.isTrue(Equal.equals(replayed.acknowledged, taken.acknowledged))
       assert.deepStrictEqual(replayed.seq, taken.seq)
-      assert.isTrue(LiveGameState.$is("Live")(taken.live.get(one)?.state ?? LiveGameState.Over()))
+      assert.deepStrictEqual(taken.state(one), Option.some("Live"))
       assert.isTrue(logs.some(({ message }) => message.includes("Live → Stale")))
       assert.include(summary?.message, "replayed 5 frames: 5 deliveries, 2 plays; 1 live games")
     }).pipe(Effect.provide(layer))
@@ -1104,7 +1109,7 @@ describe("LiveSlate following the feed log", () => {
       )
       const taken = yield* counted("sportal_snapshots", { outcome: "taken" })
 
-      assert.strictEqual(current.live.get(one)?.snapshot.period, 3)
+      assert.strictEqual(current.games.get(one)?.period, 3)
       assert.strictEqual(taken, 1)
     }).pipe(Effect.provide([Database.layerMemory, NodeCrypto.layer]), withMetrics)
   )
@@ -1140,7 +1145,7 @@ describe("LiveSlate following the feed log", () => {
         const summary = logs.find(({ message }) => message.includes("replayed"))
         const taken = yield* counted("sportal_snapshots", { outcome: "taken" })
 
-        assert.strictEqual(current.live.get(one)?.snapshot.period, 4)
+        assert.strictEqual(current.games.get(one)?.period, 4)
         assert.include(summary?.message, "replayed 3 frames")
         assert.strictEqual(taken, 1)
       }).pipe(Effect.provide([Database.layerMemory, NodeCrypto.layer, layer]), withMetrics)
@@ -1226,7 +1231,7 @@ describe("LiveSlate following the feed log", () => {
       const resync = yield* pushed({ _tag: "Resync" }, "fbs")
 
       const current = yield* appended(resync)
-      const scores = [...current.live.values()].map((held) => held.snapshot.home.score)
+      const scores = [...current.games.values()].map((held) => held.home.score)
 
       assert.deepStrictEqual(scores, [3])
     }).pipe(
@@ -1297,10 +1302,10 @@ describe("LiveSlate, a covered game's fallback", () => {
       yield* push(liveSnapshot({ id: one, clock: "5:00" }))
 
       yield* listing("fbs", [aheadOfCovered])
-      const { state } = yield* liveGameOf(one)
+      const { state } = yield* gameOf(one)
       const fallbacks = yield* counted("sportal_poll_fallbacks")
 
-      assert.isTrue(LiveGameState.$is("Holding")(state))
+      assert.strictEqual(state, "Holding")
       assert.isUndefined(fallbacks)
     }).pipe(Effect.provide(slateFollowing()), withMetrics)
   )
@@ -1311,8 +1316,8 @@ describe("LiveSlate, a covered game's fallback", () => {
       yield* push(liveSnapshot({ id: one, clock: "5:00" }))
       yield* listing("fbs", [aheadOfCovered])
 
-      yield* TestClock.adjust(LiveGame.fallbackAfter)
-      const liveGame = yield* liveGameOf(one)
+      yield* TestClock.adjust(Acknowledgement.fallbackAfter)
+      const liveGame = yield* gameOf(one)
       const fallbacks = yield* counted("sportal_poll_fallbacks", { league: "fbs" })
       const info = logs.filter(({ level }) => level === "Info").map(({ message }) => message)
 
@@ -1345,7 +1350,7 @@ describe("LiveSlate, a recorded game", () => {
         const errors = logs.filter(({ level }) => level === "Error")
 
         assert.strictEqual(listed?.status, "final")
-        assert.isFalse(current.live.has(neAtBuf), "a final game is let go")
+        assert.isFalse(current.games.has(neAtBuf), "a final game is let go")
         assert.include(summary?.message, ` ${recordedPlays} plays`)
         for (const [counter, count] of counts) assert.isUndefined(count, counter)
         assert.deepStrictEqual(errors, [])
@@ -1387,15 +1392,31 @@ describe("LiveSlate, a recorded game", () => {
         points.forEach((point, index) => {
           const live = once.sampled.get(point)
           assert.isTrue(
-            Equal.equals(replayedTo[index]?.live, live?.live),
+            Equal.equals(replayedTo[index]?.games, live?.games),
             `the live games after ${point} frames`
+          )
+          assert.isTrue(
+            Equal.equals(replayedTo[index]?.plays, live?.plays),
+            `their plays after ${point} frames`
+          )
+          assert.isTrue(
+            Equal.equals(replayedTo[index]?.acknowledged, live?.acknowledged),
+            `their acknowledgements after ${point} frames`
           )
           assert.isTrue(
             Equal.equals(replayedTo[index]?.listed, live?.listed),
             `the listings after ${point} frames`
           )
         })
-        assert.isTrue(Equal.equals(first.live, once.latest.live), "replay ends with the live games live did")
+        assert.isTrue(
+          Equal.equals(first.games, once.latest.games),
+          "replay ends with the live games live did"
+        )
+        assert.isTrue(Equal.equals(first.plays, once.latest.plays), "and their plays")
+        assert.isTrue(
+          Equal.equals(first.acknowledged, once.latest.acknowledged),
+          "and their acknowledgements"
+        )
         assert.isTrue(Equal.equals(first.listed, once.latest.listed), "and the listings")
         assert.isTrue(Equal.equals(once.held, again.held))
         assert.isTrue(Equal.equals(once.events, again.events))
@@ -1482,13 +1503,24 @@ function takenSnapshot(snapshot: GameSnapshot, from: "push" | "poll" = "poll") {
   return delivered(Delivery.cases.Snapshot.make({ snapshot, from }))
 }
 
-const liveNow = Effect.map(latest, ({ live }) => live)
+const liveNow = Effect.map(latest, ({ games }) => games)
 
-function liveGameOf(id: GameId): Effect.Effect<LiveGame, never, LiveSlate> {
-  return liveNow.pipe(
-    Effect.flatMap((live) => Effect.fromNullishOr(live.get(id))),
+/** Game `id` as the latest slate holds it, with its state at the instant the slate has ticked to. */
+function gameOf(id: GameId) {
+  return latest.pipe(
+    Effect.flatMap((slate) => Effect.fromOption(heldIn(slate, id))),
     Effect.orDie
   )
+}
+
+/** Game `id` as `slate` holds it: its snapshot, acknowledgement and plays, and its state at `reached`. */
+function heldIn(slate: Slate, id: GameId) {
+  return Option.all({
+    snapshot: Option.fromNullishOr(slate.games.get(id)),
+    acknowledgement: Option.fromNullishOr(slate.acknowledged.get(id)),
+    plays: Option.fromNullishOr(slate.plays.get(id)),
+    state: slate.state(id)
+  })
 }
 
 /** Game one live at 9:00 and game two live at 9:00 in the second period, taken; gives game one's snapshot. */
@@ -1897,6 +1929,18 @@ function replayed(frames: ReadonlyArray<Frame>) {
   return latestOf(slateFollowing(frames, { decoder: EspnDecoder.layer }))
 }
 
+/** Whether `game` is the very game `last` was: the same snapshot, acknowledgement and plays. */
+function sameHeld(
+  last: Option.Option.Value<ReturnType<typeof heldIn>> | undefined,
+  game: Option.Option.Value<ReturnType<typeof heldIn>>
+): boolean {
+  return (
+    last?.snapshot === game.snapshot &&
+    last.acknowledgement === game.acknowledgement &&
+    last.plays === game.plays
+  )
+}
+
 /**
  * A fresh slate taking `frames` decoded as ESPN, each appended once the test clock reaches it, as live: their state
  * at the end and once each count of frames in `sampling` is taken, each live game NE at BUF was held as, in order, and
@@ -1906,7 +1950,7 @@ function replayed(frames: ReadonlyArray<Frame>) {
 function takenLive(frames: ReadonlyArray<Frame>, sampling: ReadonlyArray<number> = []) {
   const taking = Effect.gen(function* () {
     const slate = yield* LiveSlate
-    const held = yield* Ref.make<ReadonlyArray<LiveGame>>([])
+    const held = yield* Ref.make<ReadonlyArray<Option.Option.Value<ReturnType<typeof heldIn>>>>([])
     const sampled = yield* Ref.make<ReadonlyMap<number, Slate>>(new Map())
     const events = yield* Ref.make<ReadonlyArray<GameEvent>>([])
     const subscriber = yield* slate.events.pipe(
@@ -1924,10 +1968,9 @@ function takenLive(frames: ReadonlyArray<Frame>, sampling: ReadonlyArray<number>
               : Effect.void
           ),
           Effect.flatMap((current) =>
-            Option.match(Option.fromUndefinedOr(current.live.get(neAtBuf)), {
+            Option.match(heldIn(current, neAtBuf), {
               onNone: () => Effect.void,
-              onSome: (liveGame) =>
-                Ref.update(held, (all) => (all.at(-1) === liveGame ? all : [...all, liveGame]))
+              onSome: (game) => Ref.update(held, (all) => (sameHeld(all.at(-1), game) ? all : [...all, game]))
             })
           )
         ),
