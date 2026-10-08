@@ -88,9 +88,15 @@ export class Director extends Context.Service<
         )
       })
 
-      // When what the source answers changes, every tile it affects changes on every Display.
-      const refresh = SubscriptionRef.updateEffect(screen, (current) =>
-        availabilityOnSlate.pipe(Effect.map((availabilityOf) => current.refresh(availabilityOf)))
+      // When what the source answers changes, every tile it affects changes on every Display; nothing is published
+      // when no tile changed.
+      const refresh = SubscriptionRef.updateSomeEffect(screen, (current) =>
+        availabilityOnSlate.pipe(
+          Effect.map((availabilityOf) => {
+            const next = current.refresh(availabilityOf)
+            return next === current ? Option.none() : Option.some(next)
+          })
+        )
       )
       yield* Effect.forkScoped(source.changes.pipe(Stream.runForEach(() => refresh)), {
         startImmediately: true

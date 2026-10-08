@@ -4,7 +4,19 @@ import { GameId, GameSnapshot, Network } from "@sportal/domain/Game"
 import type { Play } from "@sportal/domain/Play"
 import { type Screen, Tile } from "@sportal/domain/Screen"
 import { broadcast, liveSnapshot, play, snapshot, team } from "@sportal/domain/TestGame"
-import { DateTime, Deferred, Effect, Fiber, Layer, Option, Predicate, Ref, Stream, type Tracer } from "effect"
+import {
+  DateTime,
+  Deferred,
+  Effect,
+  Fiber,
+  Layer,
+  Option,
+  Predicate,
+  Queue,
+  Ref,
+  Stream,
+  type Tracer
+} from "effect"
 import { TestClock } from "effect/testing"
 import { Director } from "./Director.ts"
 import { decodedFrames, recordedNeAtBuf, recordedPlays } from "./provider/espn/TestEspn.ts"
@@ -412,6 +424,36 @@ describe("Director, the Screen", () => {
         GameId.make("5")
       )
     }).pipe(Effect.provide(directing(games)))
+  )
+
+  it.live("should publish no Screen change when a refresh changes no tile", () =>
+    Effect.gen(function* () {
+      const pulses = yield* Queue.unbounded<void>()
+      const answering = Source.layerTest(
+        () => ChannelAvailability.NoGuide({ source: "YouTube TV" }),
+        Stream.fromQueue(pulses)
+      )
+
+      const published = yield* Effect.gen(function* () {
+        const director = yield* Director
+        yield* director.dispatch({ _tag: "Assign", tile: 0, game: GameId.make("5") })
+        const next = yield* director.screenChanges.pipe(
+          Stream.drop(1),
+          Stream.runHead,
+          Effect.timeoutOption("200 millis"),
+          Effect.forkScoped
+        )
+        yield* Effect.yieldNow
+
+        yield* Queue.offer(pulses, undefined)
+
+        return yield* Fiber.join(next)
+      }).pipe(
+        Effect.provide(listed(games).pipe(Layer.provideMerge(directorOver), Layer.provideMerge(answering)))
+      )
+
+      assert.isTrue(Option.isNone(published))
+    })
   )
 
   it.live("should not miss a change made the moment the layer has built", () =>

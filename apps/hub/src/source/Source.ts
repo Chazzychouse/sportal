@@ -1,7 +1,7 @@
 import type { ChannelAvailability } from "@sportal/domain/Channel"
 import type { GameSnapshot } from "@sportal/domain/Game"
 import type { GuideUnreadable } from "@sportal/domain/Guide"
-import { Context, type Effect, type Stream } from "effect"
+import { Context, Effect, Layer, Stream } from "effect"
 
 /**
  * A way to obtain video for a game. It says whether and where each game can be shown, from a guide the shell reads,
@@ -20,4 +20,15 @@ export class Source extends Context.Service<
     /** Reads a guide response as the source's guide page received it; availability comes from it next. */
     readGuide(guide: string): Effect.Effect<void, GuideUnreadable>
   }
->()("sportal/hub/source/Source") {}
+>()("sportal/hub/source/Source") {
+  /** A source answering `availabilityOf` for every game, which changes whenever `changes` emits. */
+  static layerTest(
+    availabilityOf: (game: GameSnapshot) => ChannelAvailability,
+    changes: Stream.Stream<void> = Stream.never
+  ): Layer.Layer<Source> {
+    return Layer.succeed(
+      Source,
+      Source.of({ availability: Effect.succeed(availabilityOf), changes, readGuide: () => Effect.void })
+    )
+  }
+}

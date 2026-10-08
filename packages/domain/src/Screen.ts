@@ -181,7 +181,7 @@ export class Screen extends Schema.Class<Screen>("sportal/Screen")({
    *
    * A stream tile is replaced only when the guide carries its game on another channel. Any other answer
    * (a game running past its listing, no guide, a failed or stale read) never stops it. Every other occupied
-   * tile becomes what the answer says.
+   * tile becomes what the answer says. When no tile changes, it is this Screen.
    */
   refresh(availabilityOf: (game: GameId) => Option.Option<ChannelAvailability>): Screen {
     const tiles = this.tiles.map((tile) =>
@@ -194,7 +194,7 @@ export class Screen extends Schema.Class<Screen>("sportal/Screen")({
           })
     )
 
-    return settle({ ...this, tiles })
+    return Arr.makeEquivalence(tileEquivalence)(tiles, this.tiles) ? this : settle({ ...this, tiles })
   }
 }
 
@@ -309,3 +309,6 @@ function swapped(tiles: ReadonlyArray<Tile>, a: number, b: number): ReadonlyArra
     index === a ? (tiles[b] ?? tile) : index === b ? (tiles[a] ?? tile) : tile
   )
 }
+
+/** Whether two tiles say the same: a refreshed data tile is a new object even when nothing in it changed. */
+const tileEquivalence = Schema.toEquivalence(Tile)

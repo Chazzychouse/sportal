@@ -149,6 +149,14 @@ describe("Screen#apply", () => {
 })
 
 describe("Screen#refresh", () => {
+  it("should return the same Screen when no tile changes", () => {
+    const screen = assign(Screen.initial, 0, bama, noGuide)
+
+    const refreshed = screen.refresh(() => Option.some(noGuide()))
+
+    assert.strictEqual(refreshed, screen)
+  })
+
   it("should re-resolve only the tiles whose game has an availability to report", () => {
     const streaming = assign(fill([bama]), 1, irish, nowhere)
 
