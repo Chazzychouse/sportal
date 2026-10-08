@@ -277,16 +277,19 @@ describe("Source.layerAll", () => {
     })
   )
 
-  it.effect("should change whenever any of its sources changes", () =>
+  it.live("should change whenever any of its sources changes", () =>
     Effect.gen(function* () {
       const all = Source.layerAll([
-        Source.layerTest(() => notInGuide, Stream.make(undefined)),
+        Source.layerTest(() => notInGuide, Stream.never),
         Source.layerTest(() => notInGuide, Stream.make(undefined))
       ])
 
-      const changes = yield* Source.use(({ changes }) => Stream.runCount(changes)).pipe(Effect.provide(all))
+      const changes = yield* Source.use(({ changes }) => Stream.runCount(Stream.take(changes, 1))).pipe(
+        Effect.provide(all),
+        Effect.timeout("1 second")
+      )
 
-      assert.strictEqual(changes, 2)
+      assert.strictEqual(changes, 1)
     })
   )
 
