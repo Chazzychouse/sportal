@@ -159,7 +159,7 @@ Provider and Source are the two words most likely to be swapped. Provider is alw
 | **Solo** | One on-stage game filling the whole Stage. | fullscreen, maximize |
 | **Swap** | Exchange two tiles, on stage or benched. | move |
 | **Audio focus** | The single game whose sound is on; it follows the game when tiles move. | active, unmuted |
-| **Strip card** | One card in the slate strip: a benched game, or a slate game in its section (Bench, Live, Next, Final), marked with its slot when it is on stage; `StripCard` in code. | tile, slate item |
+| **Strip card** | One card in the slate strip: a benched game, or a slate game in its section (Bench, Live, Next, Final), marked with its slot when it is on stage or its tile when benched; `StripCard` in code, its place a `Place` (Slot or Bench). | tile, slate item |
 | **Display step** | A Display after an input, and the stage commands that input sends; `DisplayStep` in code. | result, update |
 | **Interacting tile** | The one stream tile whose player gets the mouse, after `I`; every other stream tile's player never sees the pointer. Local to the Display, like the selected tile. | active, unlocked |
 | **Promote** | Move a game into the main tile. | feature |

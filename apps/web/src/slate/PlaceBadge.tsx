@@ -1,5 +1,5 @@
 import { cn } from "@/design/ClassName"
-import type { StripCard } from "./StripCards.ts"
+import { Place, type StripCard } from "./StripCards.ts"
 
 /** Where a card's game is: its tile number, tinted on air, or "Bench". `className` sizes it. */
 export function PlaceBadge(props: { place: StripCard["place"]; className?: string }) {
@@ -9,11 +9,11 @@ export function PlaceBadge(props: { place: StripCard["place"]; className?: strin
     <span
       className={cn(
         "label-caps shrink-0 rounded-sm border px-1",
-        place._tag === "Slot" ? "border-on-air/50 text-on-air" : "text-muted-foreground",
+        Place.$is("Slot")(place) ? "border-on-air/50 text-on-air" : "text-muted-foreground",
         props.className
       )}
     >
-      {place._tag === "Slot" ? `T${place.slot + 1}` : "Bench"}
+      {Place.$is("Slot")(place) ? `T${place.slot + 1}` : "Bench"}
     </span>
   )
 }

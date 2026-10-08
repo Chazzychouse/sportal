@@ -5,7 +5,7 @@ import { GameStatus } from "../game/GameStatus.tsx"
 import { Score } from "../game/Score.tsx"
 import { tileDrag } from "../stage/TileChrome.tsx"
 import { PlaceBadge } from "./PlaceBadge.tsx"
-import type { StripCard } from "./StripCards.ts"
+import { Place, type StripCard } from "./StripCards.ts"
 
 /**
  * The slate as a strip under the Stage: the bench, then live, upcoming, and final games, scrolling sideways. It
@@ -86,7 +86,7 @@ export function SlateView(props: {
  */
 function Card(props: { card: StripCard; picked: boolean; droppable: boolean; onDrop: () => void }) {
   const { game, place } = props.card
-  const bench = place?._tag === "Bench" ? place.tile : undefined
+  const bench = Place.$is("Bench")(place) ? place.tile : undefined
   const networks = game?.networks()
 
   return (

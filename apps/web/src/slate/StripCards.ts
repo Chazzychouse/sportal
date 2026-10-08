@@ -2,11 +2,18 @@ import { type GameId, GameSnapshot } from "@sportal/domain/Game"
 import type { Stage } from "@sportal/domain/Stage"
 import { Array as Arr, Data } from "effect"
 
+/** Where a strip card's game is: in a slot on stage, or on the bench at a tile. */
+export type Place = Data.TaggedEnum<{
+  Slot: { readonly slot: number }
+  Bench: { readonly tile: number }
+}>
+export const Place = Data.taggedEnum<Place>()
+
 /** One card in the slate strip: a benched game, or a slate game in its section, marked with its slot if on stage. */
 export class StripCard extends Data.Class<{
   readonly id: GameId
   readonly game: GameSnapshot | undefined
-  readonly place: { _tag: "Slot"; slot: number } | { _tag: "Bench"; tile: number } | undefined
+  readonly place: Place | undefined
   readonly section: "Bench" | "Live" | "Next" | "Final"
 }> {
   /**
@@ -20,7 +27,7 @@ export class StripCard extends Data.Class<{
         new StripCard({
           id: game,
           game: slate.find((snapshot) => snapshot.id === game),
-          place: { _tag: "Bench", tile },
+          place: Place.Bench({ tile }),
           section: "Bench"
         })
     )
@@ -32,7 +39,7 @@ export class StripCard extends Data.Class<{
         return new StripCard({
           id: game.id,
           game,
-          place: slot === undefined ? undefined : { _tag: "Slot", slot },
+          place: slot === undefined ? undefined : Place.Slot({ slot }),
           section: sections[game.progress()]
         })
       })
@@ -62,7 +69,7 @@ export class StripCard extends Data.Class<{
 
   /** A card not on stage can be picked and dropped. */
   pickable(): boolean {
-    return this.place?._tag !== "Slot"
+    return !Place.$is("Slot")(this.place)
   }
 }
 
