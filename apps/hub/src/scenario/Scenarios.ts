@@ -27,13 +27,10 @@ export class Scenarios extends Context.Service<
         const names = fileNames(folder).pipe(Effect.provideContext(context))
 
         const load = Effect.fn("Scenarios.load")(function* (name: string) {
-          const loaded = yield* fileScenario(folder, name)
-          if (Option.isNone(loaded)) {
-            const known = yield* names
-            return yield* new ScenarioUnknown({ name, known })
-          }
+          const known = yield* names
+          if (!known.includes(name)) return yield* new ScenarioUnknown({ name, known })
 
-          return loaded.value
+          return yield* fileScenario(folder, name)
         }, Effect.provideContext(context))
 
         return Scenarios.of({ names, load })
@@ -84,13 +81,10 @@ const fileNames = Effect.fn("Scenarios.fileNames")(
   (listing, folder) => Effect.mapError(listing, unreadable(folder))
 )
 
-// The recording `name` in `folder`, if it is listed there.
+// The recording `name` in `folder`.
 const fileScenario = Effect.fn("Scenarios.fileScenario")(function* (folder: string, name: string) {
   const fs = yield* FileSystem.FileSystem
   const { join } = yield* Path.Path
-
-  const files = yield* fileNames(folder)
-  if (!files.includes(name)) return Option.none<Scenario>()
 
   const file = join(folder, `${name}${suffix}`)
   const frames = Gzip.decompressStream(fs.stream(file), "gzip").pipe(
@@ -104,7 +98,7 @@ const fileScenario = Effect.fn("Scenarios.fileScenario")(function* (folder: stri
     return yield* new ScenarioUnreadable({ path: file, cause: "It holds no frames" })
   }
 
-  return Option.some(new Scenario({ name, origin: first.value.receivedAt, frames }))
+  return new Scenario({ name, origin: first.value.receivedAt, frames })
 })
 
 const suffix = ".frames.jsonl.gz"

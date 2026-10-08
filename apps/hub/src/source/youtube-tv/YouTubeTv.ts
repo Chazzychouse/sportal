@@ -101,11 +101,6 @@ const staleAfter = Duration.minutes(45)
 
 const source: SourceName = "YouTube TV"
 
-const decodeLiveChannelUrlOption = Schema.decodeOption(LiveChannelUrl)
-
-const decodeBegin = Schema.decodeOption(Schema.FiniteFromString.check(Schema.isGreaterThanOrEqualTo(0)))
-const decodeEnd = Schema.decodeOption(Schema.FiniteFromString)
-
 /**
  * A guide response as the channels and airings it lists. Rows without an id or a name are skipped; a row whose
  * live id is not a channel id keeps its channel without a live address; an airing with no title or a time that is
@@ -117,8 +112,6 @@ const GuideListing = YouTubeTvPayload.GuideResponseJson.pipe(
     encode: SchemaGetter.forbidden(() => "A guide is never written back as a response")
   })
 )
-
-const decodeGuide = Schema.decodeEffect(GuideListing)
 
 function listingOf(response: typeof YouTubeTvPayload.GuideResponse.Type) {
   const stations = Arr.flatMap(
@@ -140,11 +133,14 @@ function listingOf(response: typeof YouTubeTvPayload.GuideResponse.Type) {
     })),
     airings: stations.flatMap(({ row, id }) =>
       Arr.flatMap(row.airings ?? [], ({ epgAiringRenderer: airing }) =>
-        Option.all({
-          title: Option.fromNullishOr(airing?.title?.runs[0].text),
-          begin: Option.flatMap(Option.fromNullishOr(airing), (listed) => decodeBegin(listed.beginTimeMs)),
-          end: Option.flatMap(Option.fromNullishOr(airing), (listed) => decodeEnd(listed.endTimeMs))
-        }).pipe(
+        Option.fromNullishOr(airing).pipe(
+          Option.flatMap((listed) =>
+            Option.all({
+              title: Option.fromNullishOr(listed.title?.runs[0].text),
+              begin: decodeBegin(listed.beginTimeMs),
+              end: decodeEnd(listed.endTimeMs)
+            })
+          ),
           Option.map(({ title, begin, end }) => ({
             channel: id,
             title,
@@ -167,3 +163,10 @@ function liveOf(videoId: string | undefined) {
     Option.match({ onNone: () => ({}), onSome: (url) => ({ live: { _tag: "WebView" as const, url } }) })
   )
 }
+
+const decodeGuide = Schema.decodeEffect(GuideListing)
+
+const decodeLiveChannelUrlOption = Schema.decodeOption(LiveChannelUrl)
+
+const decodeBegin = Schema.decodeOption(Schema.FiniteFromString.check(Schema.isGreaterThanOrEqualTo(0)))
+const decodeEnd = Schema.decodeOption(Schema.FiniteFromString)

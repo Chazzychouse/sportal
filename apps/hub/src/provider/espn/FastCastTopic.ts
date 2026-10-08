@@ -10,19 +10,15 @@ export type Owner = Data.TaggedEnum<{
 export const Owner = Data.taggedEnum<Owner>()
 
 /**
- * The FastCast topic of `league`'s scoreboard, or of one game's package: with `ownerOf`, an operation of `Owner`, a
- * function beside it because a `Data.taggedEnum` carries no statics. A college game's topic is assumed to follow its
- * scoreboard's, unverified until a live college day.
+ * The FastCast topic of `league`'s scoreboard, or of one game's package. A college game's topic is assumed to follow
+ * its scoreboard's, unverified until a live college day.
  */
 export function topicOf(league: LeagueId, game?: GameId): string {
   const sport = league === "nfl" ? "football-nfl" : "football-college-football"
   return game === undefined ? `event-${sport}` : `gp-${sport}-${game}`
 }
 
-/**
- * What the FastCast topic `tc` carries, when it is a scoreboard's or a game's topic: with `topicOf`, an operation of
- * `Owner`, a function beside it because a `Data.taggedEnum` carries no statics.
- */
+/** What the FastCast topic `tc` carries, when it is a scoreboard's or a game's topic. */
 export function ownerOf(tc: string): Option.Option<Owner> {
   return Arr.findFirst(LeagueId.literals, (league) => {
     const gamePrefix = topicOf(league, GameId.make(""))

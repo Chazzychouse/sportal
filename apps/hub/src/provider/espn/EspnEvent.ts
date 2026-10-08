@@ -96,9 +96,9 @@ const snapshot = Effect.fnUntraced(function* (
       location: competitor.location ?? competitor.displayName,
       // FastCast has no short name: EspnDecoder advances each pushed game's listed game to it, keeping the poll's names.
       shortName: competitor.shortDisplayName ?? competitor.displayName,
-      ...(competitor.logo === undefined ? {} : { logo: competitor.logo }),
-      ...(competitor.color === undefined ? {} : { color: competitor.color }),
-      ...(competitor.alternateColor === undefined ? {} : { alternateColor: competitor.alternateColor })
+      logo: competitor.logo,
+      color: competitor.color,
+      alternateColor: competitor.alternateColor
     }),
     // A score is digits, or nothing before kickoff, which reads as 0.
     score: Number.parseInt(competitor.score ?? "", 10) || 0,
@@ -136,13 +136,13 @@ function situation(league: LeagueId, raw: EspnSituation, homeTeamId: string): Si
     ...(raw.possession === undefined ? {} : { possession: teamId(league, raw.possession) }),
     // ESPN reports down -1 between plays (after a score, before a kickoff).
     ...(raw.down === undefined || raw.down < 1 ? {} : { down: raw.down }),
-    ...(raw.distance === undefined ? {} : { distance: raw.distance }),
+    distance: raw.distance,
     // ESPN counts the yard line from the home goal line; the domain counts it to the goal the team with
     // the ball attacks. Without a team on the ball it cannot be oriented.
     ...(raw.yardLine === undefined || raw.possession === undefined
       ? {}
       : { yardLine: raw.possession === homeTeamId ? 100 - raw.yardLine : raw.yardLine }),
-    ...(raw.lastPlay?.text === undefined ? {} : { lastPlay: raw.lastPlay.text })
+    lastPlay: raw.lastPlay?.text
   })
 }
 

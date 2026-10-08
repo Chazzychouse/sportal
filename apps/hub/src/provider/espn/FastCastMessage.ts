@@ -127,10 +127,9 @@ const GameCheckpoint = Schema.Struct({
 })
 
 const inflate = Effect.fnUntraced(function* (compressed: Uint8Array) {
-  const text = yield* Gzip.decompress(compressed, "deflate").pipe(
+  return yield* Gzip.decompress(compressed, "deflate").pipe(
     Effect.mapError(
       (cause) => new SchemaIssue.InvalidValue({ message: `Not zlib-deflated: ${String(cause)}` }, compressed)
     )
   )
-  return text
 })
