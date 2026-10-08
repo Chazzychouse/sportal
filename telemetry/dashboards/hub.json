@@ -295,7 +295,7 @@
         {
           "refId": "A",
           "queryType": "traceql",
-          "query": "{resource.service.name=\"sportal-hub\" && resource.sportal.mode=\"$mode\" && name=\"Board.take\"}",
+          "query": "{resource.service.name=\"sportal-hub\" && resource.sportal.mode=\"$mode\" && name=\"Director.take\"}",
           "limit": 20
         }
       ]
@@ -473,7 +473,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "{service_name=\"sportal-hub\"} | sportal_mode=\"$mode\" |~ \"FastCast|EspnProvider|EspnDecoder|Board: the provider's frames\""
+          "expr": "{service_name=\"sportal-hub\"} | sportal_mode=\"$mode\" |~ \"FastCast|EspnProvider|EspnDecoder|Director: the provider's frames\""
         }
       ]
     }

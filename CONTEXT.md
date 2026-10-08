@@ -13,8 +13,8 @@ Every exported type name must be a term here, except the wire schemas in `*Paylo
 | **Team colors** | The two colors a team plays in: `color` and `alternateColor` on `Team`, six hex digits without `#`, as ESPN sends them. The Hub reads them from the scoreboard; a team ESPN sends none for has neither. | |
 | **Game** | One scheduled contest between two teams. As the slate holds it, `Game` (`packages/domain/src/Game.ts`): its latest snapshot and its plays, in sequence order. | event, match, competition, fixture |
 | **Slate** | The Hub's `Slate` (`apps/hub/src/slate/Slate.ts`): an ordered list of games: each league's last listing, leagues in `LeagueId` order, each game with its latest snapshot and its plays, taken from push and poll deliveries in arrival order. A snapshot behind its game (earlier in game time, or at the same game time with fewer points, as a poll lagging a pushed score) is ignored, except that an over game takes one ahead of its end (overtime after a spurious final, a postponed game resuming); a snapshot or plays of a game no listing names are dropped. Pure; `take` returns the next slate, or this one when nothing changed. | schedule, scoreboard, live games |
-| **Board** | The Hub's `Board` service (`apps/hub/src/slate/Board.ts`), the one holder of the day's slate: from an empty slate, it takes each frame's deliveries from its provider as they arrive, logs a take that raised a defect, gauges each game's progress (`sportal_game_state`), and offers the latest slate and each change. For now nothing is kept between runs: a restarted Hub starts empty and the next poll fills it. | live slate, slate service, tracker |
-| **Slate changed** | The live message that carries the listed games as the slate has them, each with its recent plays, settled 250 ms after a change; `SlateChanged` in code, and what `Slate#published` builds; the live stream sends the current one, then one for each burst of the Board's changes once it settles. | slate payload, snapshot, published |
+| **Director** | The Hub's `Director` service (`apps/hub/src/Director.ts`), the one holder of what is going on. From an empty slate it takes each frame's deliveries from its provider as they arrive, logs a take that raised a defect, and gauges each game's progress (`sportal_game_state`). It holds the one Stage shared by every Display, applies stage commands one at a time against where each game on the slate can be streamed, and refreshes the Stage when the source changes. It offers the slate and the Stage, and each change of either. Its rules, which will issue stage commands from game events, are planned. For now nothing is kept between runs: a restarted Hub starts empty and the next poll fills it. | board, switcher, producer, autopilot, tracker, stage manager |
+| **Slate changed** | The live message that carries the listed games as the slate has them, each with its recent plays, settled 250 ms after a change; `SlateChanged` in code, and what `Slate#published` builds; the live stream sends the current one, then one for each burst of the Director's slate changes once it settles. | slate payload, snapshot, published |
 | **Kickoff** | A game's scheduled start instant. | start time, date |
 
 ### Game state
@@ -33,7 +33,7 @@ Every exported type name must be a term here, except the wire schemas in `*Paylo
 | **Scenarios** | Every scenario there is, by name: the recordings in a folder, the committed ones in `fixtures/scenarios/` unless a test names another, and reading one back by name; `Scenarios` in code. | scenario store, catalogue |
 | **Scenario unknown** | `SPORTAL_SCENARIO` names no recording; `ScenarioUnknown` in code, with the names there are. | |
 | **Scenario unreadable** | A scenario's file could not be read as gzip'd frames; `ScenarioUnreadable` in code. | |
-| **Scenario time** | The clock a scenario plays on: from the Hub's start, at the scenario's speed. The provider and the Board run on it. A scenario's frames are received at their offsets on it, but what they say, kickoffs among them, stays as recorded. | |
+| **Scenario time** | The clock a scenario plays on: from the Hub's start, at the scenario's speed. The provider and the Director run on it. A scenario's frames are received at their offsets on it, but what they say, kickoffs among them, stays as recorded. | |
 | **Situation** | Live football state: possession, down, distance, field position, red zone (the 20 and in), timeouts. | context |
 | **Ball spot** | Where a spot is on the field: yards from the home goal line (0–100) and the way its team is going, from a team and its yards to the goal it attacks. | |
 | **Period** | A quarter or an overtime. | quarter (in code) |
@@ -86,7 +86,6 @@ Provider and Source are the two words most likely to be swapped. Provider is alw
 | **Live stream** | The Hub's server-sent events at `/api/live` that carry live messages; in the web UI, `LiveStream` holds what they said and the connection. | event stream, socket |
 | **Connection** | Whether a client's live stream is up: connecting (never yet connected), connected, or lost (since an instant, retrying). | online, status |
 | **Hub client** | The web UI's way to the Hub's API, `HubClient` in code: stage commands, and the stage commands that failed: refused by the Hub, or never reaching it. It runs in the web UI's one runtime (`HubRuntime.ts`), with the live stream. | API client, fetcher |
-| **Switcher** | The Hub's `Switcher` service (`apps/hub/src/Switcher.ts`), holder of the one Stage, shared by every Display: applies stage commands one at a time and refreshes channel availability when the source changes. | live stage, stage store, stage manager, stage sessions |
 | **Telemetry** | The traces, logs, and metrics the Hub exports for people to read in Grafana. | monitoring, observability stack |
 | **Display** | A device running the shell and presenting a Stage. Its local state (selected tile, interacting tile, pick, slate drawer, and the one open overlay) is the web UI's `Display`. | screen, client, player |
 | **Remote** | A client controlling a Display's Stage without presenting it. | controller |
@@ -105,7 +104,7 @@ Provider and Source are the two words most likely to be swapped. Provider is alw
 | Term | Meaning | Not |
 | --- | --- | --- |
 | **Stage** | A Display's multi-view surface and its state. | grid, multiview, wall |
-| **Stage command** | An instruction to change a Stage: assign, clear, swap, promote, solo, change layout or split, or focus audio. Issued by people and by the Producer alike. | action, event |
+| **Stage command** | An instruction to change a Stage: assign, clear, swap, promote, solo, change layout or split, or focus audio. Issued by people and, once its rules are built, by the Director alike. | action, event |
 | **Layout name** | A layout's own name, as the Stage and the layout picker name it; `LayoutName` in `Stage.ts`, beside each layout's slot count. | |
 | **Stage rejection** | The reason a stage command was refused. | error |
 | **Layout** | A named arrangement of tile slots whose dividers can be moved. The geometry is the web's: `Layout` in `apps/web/src/layout/Layout.ts` gives the slots, dividers, next layout, and clamped split. | grid, template |
@@ -142,9 +141,8 @@ Names the design uses that no code has yet. Move a row up, into its table, in th
 | **Spoiler shield** | Hiding or delaying scores for chosen games. | |
 | **Follow** | Your declared interest in a team, conference, league, or game. | favourite, subscription |
 | **Persistence** | What the Hub keeps between runs: none for now, added back on top of the simplified model. | storage, database |
-| **Game event** | Something that happened in a game (a score, a turnover, a play, a period ending), derived from a game's snapshot changes and plays. The code had it and dropped it while nothing read it; the Producer derives it again. | alert, update |
+| **Game event** | Something that happened in a game (a score, a turnover, a play, a period ending), derived from a game's snapshot changes and plays. The code had it and dropped it while nothing read it; the Director's rules derive it again. | alert, update |
 | **Trigger** | A condition over game events and snapshots. | |
 | **Rule** | A trigger bound to a stage command and a revert condition. | automation |
-| **Producer** | Planned. The Hub component that evaluates rules and issues stage commands: the Producer switches the Slate of games on the Board. | director, autopilot |
 | **Alert** | A user-facing notification produced by a rule. | event |
 | **Ticket** | A bet you have placed, tracked by the betting lens (later). | bet, wager |

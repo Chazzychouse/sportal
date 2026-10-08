@@ -86,7 +86,7 @@ A reader opens a file to see the thing it is named for. Keep it that way.
 
 | Kind | Spelling |
 |---|---|
-| Service id | `"sportal/<app>/<dir>/Name"`, the folder under `src/` (no `src/` itself), omitted for a file directly in `src/`: `"sportal/hub/provider/Provider"`, `"sportal/hub/slate/Board"` |
+| Service id | `"sportal/<app>/<dir>/Name"`, the folder under `src/` (no `src/` itself), omitted for a file directly in `src/`: `"sportal/hub/provider/Provider"`, `"sportal/hub/Director"` |
 | Service layer | `static readonly layer: Layer.Layer<…> = …`, type written out |
 | Layer variant | `static readonly layerX`, or `static layerX(args)`, as `Scenarios.layerFrom(dir)`; never another word (`Scenarios.in(dir)`) |
 | Test layer | `static readonly layerTest` or `static layerTest…(args)` on the service it fakes; knip's `ignoreMembers` exempts `^layerTest` |

@@ -63,9 +63,7 @@ flowchart LR
 
   subgraph hub[Hub — one server process]
     prov[Providers]
-    board[Board: every game's latest snapshot and plays, from both feeds]
-    producer[Producer: switches the Slate of games on the Board, not built]
-    stages[Switcher: the one Stage, in memory]
+    director[Director: the slate of games and the one Stage, in memory; its rules not built]
     api[HTTP API + live stream]
   end
 
@@ -81,28 +79,25 @@ flowchart LR
 
   espn --> prov
   cfbd --> prov
-  prov -- decoded frames --> board
-  board -- listed games, recent plays --> api
-  board -- the Slate --> stages
-  board -- the Slate --> producer
-  producer -- stage commands --> stages
+  prov -- decoded frames --> director
+  director -- listed games with recent plays, the Stage --> api
+  api -- stage commands --> director
   api <--> ui1
   api <--> ui2
-  stages --> api
   ui1 -- tile rectangles --> main --> views
   yttv --> views
 ```
 
-- **Hub** — takes what its providers' frames say, as they arrive, into the Board's slate (the listed games, each with its latest snapshot and plays), will run the Producer, and holds the authoritative **Stage** in memory (one, until a second Display needs its own). Serves the web UI's static files, the HTTP API, and one live stream per client.
+- **Hub** — takes what its providers' frames say, as they arrive, into the Director's slate (the listed games, each with its latest snapshot and plays), and the Director holds the authoritative **Stage** in memory beside it, and will run its rules (one, until a second Display needs its own). Serves the web UI's static files, the HTTP API, and one live stream per client.
 - **Web UI** — one codebase for desk, couch, and phone. It renders Hub state and sends commands. It contains no business rules.
 - **Desktop shell** — loads the web UI from the Hub, registers as a Display, and mirrors that Display's stream tiles into native provider web views. It is told the Hub's address by configuration (`SPORTAL_HUB_URL`, read once into `ShellConfig`) and never starts a Hub.
 
 ### 3.1 Why Stage state lives in the Hub
 
-The phone must be able to change what the TV shows, and the Producer must be able to promote a game while no one is touching anything. If each client owned its Stage, both would need client-to-client messaging. With the Hub as owner there is one path for everyone:
+The phone must be able to change what the TV shows, and the Director's rules must be able to promote a game while no one is touching anything. If each client owned its Stage, both would need client-to-client messaging. With the Hub as owner there is one path for everyone:
 
 ```
-command (from UI, remote, hotkey, or Producer)
+command (from UI, remote, hotkey, or the Director's rules)
   -> Hub applies it to the pure Stage state machine
   -> new Stage state is stored and broadcast
   -> the Display's UI re-renders; the shell re-syncs its views
@@ -132,7 +127,7 @@ This section is binding in the same way the type checker is. `AGENTS.md` carries
 
 1. **A boundary must earn its place.** A workspace package exists only when two or more apps need the same code. A folder exists only when a concept has several files that belong to it and nothing else. Nothing is created for symmetry, for future use, or to look like an architecture.
 2. **One concept, one home.** Every type, schema, and function has exactly one obvious file. If you cannot say which concept a file owns in one noun, the file is wrong.
-3. **Name files for what they own.** A module is a file named for its concept — `Game.ts`, `Stage.ts`, `Board.ts` — exporting that concept's schema or class. Operations on a domain type are methods and statics of its class (`game.progress()`, `GameSnapshot.watchOrder`, `stage.apply(command, …)`), not loose functions beside it. The tree reads as a table of contents of the domain, and each type reads as the list of what it can do.
+3. **Name files for what they own.** A module is a file named for its concept — `Game.ts`, `Stage.ts`, `Director.ts` — exporting that concept's schema or class. Operations on a domain type are methods and statics of its class (`game.progress()`, `GameSnapshot.watchOrder`, `stage.apply(command, …)`), not loose functions beside it. The tree reads as a table of contents of the domain, and each type reads as the list of what it can do.
 4. **No junk drawers.** These file and folder names are banned by lint: `utils`, `helpers`, `common`, `shared`, `misc`, `lib`, `types`, `constants`, `models`, `interfaces`. A function that seems to belong in one belongs with the concept it operates on; if it operates on none, it is probably already in Effect.
 5. **No barrels.** No `index.ts` re-export files. Packages expose modules through `package.json` `exports`; inside an app, import the module file directly.
 6. **No mirror types.** There is no `GameDto`, `GameRow`, `GameResponse`, `GameProps`. The domain schema is the wire format. A variant is derived from the original (`pick`, `omit`, `extend`) at the point of use and is not given a name unless it is itself a domain concept with a glossary entry.
@@ -199,16 +194,15 @@ sportal/
     │       ├── HubMode.ts          What the Hub plays: the live day or a scenario; the only file that names providers and sources, ESPN's through `Espn`
     │       ├── HubConfig.ts        Every environment setting, in one place
     │       ├── Telemetry.ts        Log level and format; OTLP export when configured
-    │       ├── Switcher.ts         The one authoritative Stage, held in memory; applies stage commands, refreshes availability, and broadcasts
+    │       ├── Director.ts         The one holder of the slate and the Stage: takes each frame's deliveries as they arrive, applies stage commands, refreshes availability
     │       ├── slate/
     │       │   ├── Slate.ts        The fold: every delivery taken in order into an ordered list of games, each with its latest snapshot and its plays
-    │       │   ├── Delivery.ts     What a frame said: a listing, a snapshot, or a game's plays
-    │       │   └── Board.ts        The one holder of the day's slate: takes each frame's deliveries as they arrive, offers `latest` and `changes`
+    │       │   └── Delivery.ts     What a frame said: a listing, a snapshot, or a game's plays
     │       ├── HubStopping.ts      Whether a task that should run until the Hub stops ended because it is stopping, and the Error log unless it did
     │       ├── Frame.ts            A frame as received, and its DeliverySource
     │       ├── Gzip.ts             Recordings in and out of gzip
     │       ├── TestTelemetry.ts    Layers for tests
-    │       ├── TestBoard.ts        The board taking the snapshot feed, and what it takes of a test's frames
+    │       ├── TestDirector.ts     The Director taking the snapshot feed, and what it takes of a test's frames
     │       ├── TestSnapshotFeed.ts The snapshot feed: a provider whose frames say what a test delivers; for tests only
     │       ├── HubServer.ts        Serves the API, the live stream, the addresses a phone can reach, and the web UI's files
     │       ├── provider/
@@ -278,7 +272,7 @@ Tests sit beside the file they test as `Game.test.ts`. A module grows into a fol
 
 ### 4.3 Inside a file
 
-The same standard applies within a file as across the tree: a file is not a junk drawer either. Someone opens `Board.ts` to read how the board takes its provider's frames, and that is what they should see first.
+The same standard applies within a file as across the tree: a file is not a junk drawer either. Someone opens `Director.ts` to read how the Director takes its provider's frames and applies stage commands, and that is what they should see first.
 
 1. **The main thing comes first.** A file leads with the concept it is named for — the schema, the service, the component. A reader should reach the main behaviour without scrolling past anything.
 2. **Supporting code goes below, not above.** Private helpers are written as hoisted `function` declarations beneath the code that uses them, in the order they are first used. No stack of small helpers piled on top of the thing the file exists for.
@@ -317,24 +311,28 @@ class Provider extends Context.Service<Provider, {
 - Each element is one frame's `Delivery`s (`Listing`, `Snapshot`, or `Plays`), in the order it said them. ESPN's decode (`EspnDecoder.decode`) skips an event or a play that does not decode and delivers the rest; a frame that does not decode says nothing and is a Warning log. A recorded scenario plays its frames through the same decode. The snapshot feed (`TestSnapshotFeed.ts`) is the provider tests play: its frames say our own deliveries.
 - ESPN's cadence is `EspnProvider`'s: it sets each next delay from the scoreboards it just fetched, about every 10 seconds while any game is live, every minute near kickoff, every 15 minutes otherwise. FastCast (`docs/adr/0007-fastcast-live-feed.md`) is the service its push reads from: it follows a game topic while its own scoreboard topic shows the game live or near kickoff, re-checkpoints a topic itself when a patch will not apply, and retries its socket on a jittered exponential backoff.
 - Provider vocabulary stops at the folder edge. ESPN's "event", "competition", and "competitor" exist only in `EspnPayload.ts`, `EspnEvent.ts`, `FastCastMessage.ts`, and `EspnPlay.ts`.
-- The Hub composes providers per league: ESPN for NFL; ESPN with CollegeFootballData filling gaps for FBS. The composition is itself a `Provider`, so the Board sees one.
+- The Hub composes providers per league: ESPN for NFL; ESPN with CollegeFootballData filling gaps for FBS. The composition is itself a `Provider`, so the Director sees one.
 - Each adapter's tests are "this recorded frame decodes to this delivery".
 
-**Board** — the one holder of the day's slate, between the provider and everything that reads games. Not a port: one implementation
-(`docs/adr/0009-one-fold-not-actors.md`, amended by [ADR 0012](./adr/0012-no-persistence-one-take.md)):
+**Director** — the one holder of the day's slate and the Stage, between the provider and everything that reads games
+or changes the Stage. Not a port: one implementation (`docs/adr/0009-one-fold-not-actors.md`, amended by
+[ADR 0012](./adr/0012-no-persistence-one-take.md)):
 
 ```ts
-class Board extends Context.Service<Board, {
-  readonly latest: Effect<Slate>
-  readonly changes: Stream<Slate>                    // the latest first, then each change
-}>()("sportal/hub/slate/Board") {}
+class Director extends Context.Service<Director, {
+  readonly slate: Effect<Slate>
+  readonly slateChanges: Stream<Slate>               // the latest first, then each change
+  readonly stage: Effect<Stage>
+  readonly stageChanges: Stream<Stage>               // the latest first, then each change
+  dispatch(command: StageCommand): Effect<Stage, StageRejection>
+}>()("sportal/hub/Director") {}
 ```
 
 - The `Slate` (`slate/Slate.ts`) is the fold: an ordered list of `Game`s, leagues in `LeagueId` order and each league's in its listing's order, each with its latest `GameSnapshot` and its plays. `take(deliveries)` on it is pure and returns the next slate; a take that changes nothing gives back the same slate.
-- The board starts from an empty slate and takes each frame's deliveries as they arrive, in one `Board.take` span carrying its `sportal.deliveries` count, and gauges each game whose snapshot changed by its progress (`sportal_game_state`: 1 upcoming, 2 live, 3 over, 0 once no listing names it), which the Hub dashboard's Games table reads. For now nothing is kept between runs: a restarted Hub serves an empty slate until its provider's next poll lists the day's games.
+- The Director starts from an empty slate and takes each frame's deliveries as they arrive, in one `Director.take` span carrying its `sportal.deliveries` count, and gauges each game whose snapshot changed by its progress (`sportal_game_state`: 1 upcoming, 2 live, 3 over, 0 once no listing names it), which the Hub dashboard's Games table reads. For now nothing is kept between runs: a restarted Hub serves an empty slate until its provider's next poll lists the day's games.
 - A take that raises a defect is an Error log; the slate keeps what it had and takes the next frame. If the provider's frames end other than by the Hub stopping, that is an Error log and the slate stays as it is.
-- `Slate.published()` is each listed game as the slate has it, carrying only its last ten plays (`Game#recent`, on `SlateChanged`); the Hub server sends it within 250 ms of a change, and the Switcher reads the listed games from `latest`.
-- `HubMode` provides it in both modes. A scenario is the provider on the scenario clock: its recorded frames, polls and pushes alike, each received at its offset from the first, through ESPN's decode. Its names are the recordings in `fixtures/scenarios/`.
+- `Slate.published()` is each listed game as the slate has it, carrying only its last ten plays (`Game#recent`, on `SlateChanged`); the Hub server sends it within 250 ms of a change, and `dispatch` reads the slate's games for where each can be streamed.
+- `HubMode` provides it in both modes, over that mode's provider and source. A scenario is the provider, and the Director runs on the scenario clock, since a provider's frames play on the clock of what runs them: its recorded frames, polls and pushes alike, each received at its offset from the first, through ESPN's decode. Its names are the recordings in `fixtures/scenarios/`.
 - The Hub's whole shutdown bound is about 4 s: the HTTP server's 3 s for connected Displays, then telemetry's 1 s to export what it holds.
 
 **Source** — video out:
@@ -358,10 +356,10 @@ A source's channels are found in its own guide, read by the shell (`docs/history
 
 - Polling is the provider's own: ESPN polls about every 10 seconds while any game is live, every minute near kickoff, every 15 minutes otherwise. One slate request per league covers every game; detail is fetched only for games someone has open or on a Stage.
 - A college Saturday is one request for 50+ games, not 50 requests.
-- The provider decodes its own frames; the Board takes each frame's deliveries as they arrive, in the order the provider received its frames. Nothing is logged raw or replayed.
+- The provider decodes its own frames; the Director takes each frame's deliveries as they arrive, in the order the provider received its frames. Nothing is logged raw or replayed.
 - The live feed pushes snapshots between polls, and, for each current game, its plays. A pushed game is advanced onto its listed game; one no poll has listed yet is not delivered. The poll gives listings: a listing takes each of its games as a snapshot and forgets the league's games it no longer names. A snapshot of a listed game, polled or pushed, is taken unless it is behind the game: earlier in game time, or at the same game time with fewer points (a poll lagging a pushed score, `isAheadOf`); an over game takes one ahead of its end (overtime after a spurious final, a postponed game resuming), so a lagging poll cannot start a finished game again. There is no tie rule and no hold.
 - A FastCast topic that loses its document (a missed message, a patch that will not apply) is a Warning log, and the push follows the topic again from its checkpoint.
-- Game events are gone: nothing read them (ADR 0012). The Producer will derive them again from snapshot changes and plays when it is built.
+- Game events are gone: nothing read them (ADR 0012). The Director's rules will derive them again from snapshot changes and plays when they are built.
 - The slate's games and plays are the latest the feeds gave; a missed poll is filled by the next one, and a restart starts from empty until persistence is added back (ADR 0012).
 
 ### 5.3 Stage
@@ -374,7 +372,7 @@ A source's channels are found in its own guide, read by the shell (`docs/history
 - Geometry: the web's `Layout#slots` gives each slot as fractions of the Stage area. The web UI turns them into pixels once and uses the same numbers for its tile chrome and the shell's tile placements, so the two move together along one **Stage transition** (280 ms, `cubic-bezier(0.2, 0, 0, 1)`), which the shell follows by moving each view's bounds.
 - Full screen is the Display's window, local to it, and is not Stage state.
 
-The `Switcher` in the Hub holds the one Stage in memory, applies commands from any origin, and broadcasts it. Nothing is persisted: a restart starts an empty Stage, and a second Display would need a keyed session.
+The `Director` in the Hub holds the one Stage in memory, applies commands from any origin, and broadcasts it. Nothing is persisted: a restart starts an empty Stage, and a second Display would need a keyed session.
 
 ### 5.4 Director
 

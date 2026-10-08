@@ -3,12 +3,12 @@ import { assert, describe, it } from "@effect/vitest"
 import { Effect, Layer } from "effect"
 import { FetchHttpClient } from "effect/http"
 import { TestClock } from "effect/testing"
+import { Director } from "./Director.ts"
 import { HubConfig } from "./HubConfig.ts"
 import * as HubMode from "./HubMode.ts"
-import { Board } from "./slate/Board.ts"
 
 describe("HubMode", () => {
-  it.effect("should bring a scenario's polls to the Board", () =>
+  it.effect("should bring a scenario's polls to the Director", () =>
     Effect.gen(function* () {
       const published = yield* playedUntilPublished.pipe(
         Effect.provide(scenarioHub("bogus-clock-two-minute"))
@@ -20,16 +20,16 @@ describe("HubMode", () => {
 })
 
 /**
- * What the board publishes once it publishes games. A scenario's frames are read from disk as they play, which the test
+ * What the Director publishes once it publishes games. A scenario's frames are read from disk as they play, which the test
  * clock does not wait for, so it moves on a second at a time, a moment of real time apart, up to five minutes; a
- * scenario that publishes nothing by then gives what the board has.
+ * scenario that publishes nothing by then gives what the Director has.
  */
 const playedUntilPublished = Effect.gen(function* () {
-  const board = yield* Board
+  const director = yield* Director
 
   const latest = yield* TestClock.adjust("1 second").pipe(
     Effect.andThen(TestClock.withLive(Effect.sleep("10 millis"))),
-    Effect.andThen(board.latest),
+    Effect.andThen(director.slate),
     Effect.repeat({ until: (slate) => slate.published().games.length > 0, times: 300 })
   )
 

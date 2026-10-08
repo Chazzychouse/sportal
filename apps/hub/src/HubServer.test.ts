@@ -10,12 +10,12 @@ import { HttpClient } from "effect/http"
 import { HttpApiClient } from "effect/http-api"
 import { TestClock } from "effect/testing"
 import { afterEach, vi } from "vitest"
+import { Director } from "./Director.ts"
 import { HubConfig } from "./HubConfig.ts"
 import * as HubServer from "./HubServer.ts"
-import { Switcher } from "./Switcher.ts"
 import { Delivery } from "./slate/Delivery.ts"
 import * as YouTubeTv from "./source/youtube-tv/YouTubeTv.ts"
-import { boardOver, delivered } from "./TestBoard.ts"
+import { delivered, directorOver } from "./TestDirector.ts"
 
 type Interfaces = Record<
   string,
@@ -295,7 +295,7 @@ describe("GET /api/live", () => {
   )
 })
 
-/** Delivers the fbs listing of `game`, so the board has its first games to publish. */
+/** Delivers the fbs listing of `game`, so the Director has its first games to publish. */
 function firstSlate() {
   return delivered(Delivery.cases.Listing.make({ league: "fbs", games: [game] }))
 }
@@ -348,9 +348,9 @@ function realSizedGuideAiring(now: DateTime.Utc) {
 /** The first tile 0 the Stage shows that has the given kind; the current Stage is replayed, so this may not wait. */
 function tileOnceItIs(tag: Tile["_tag"]) {
   return Effect.gen(function* () {
-    const switcher = yield* Switcher
+    const director = yield* Director
 
-    return yield* switcher.changes.pipe(
+    return yield* director.stageChanges.pipe(
       Stream.filterMap((stage) => {
         const tile = stage.tiles[0]
         return tile?._tag === tag ? Result.succeed(tile) : Result.failVoid
@@ -418,9 +418,8 @@ function nextComment(lines: Queue.Queue<string>) {
 
 /** Everything behind the API, over a snapshot feed the test delivers to. */
 function hubUnderTest() {
-  return Switcher.layer.pipe(
+  return directorOver.pipe(
     Layer.provideMerge(YouTubeTv.layer),
-    Layer.provideMerge(boardOver),
     Layer.provideMerge(HubConfig.layerTest({ SPORTAL_VERSION: "1.2.3" }))
   )
 }

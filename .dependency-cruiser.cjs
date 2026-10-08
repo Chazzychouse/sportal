@@ -69,25 +69,25 @@ module.exports = {
     },
     {
       name: "test-decoder-is-for-tests",
-      comment: "What a decode reads in a test's frames is imported only by test files and TestBoard.",
+      comment: "What a decode reads in a test's frames is imported only by test files and TestDirector.",
       severity: "error",
-      from: { pathNot: "(\\.test\\.ts$|^apps/hub/src/TestBoard\\.ts$)" },
+      from: { pathNot: "(\\.test\\.ts$|^apps/hub/src/TestDirector\\.ts$)" },
       to: { path: "^apps/hub/src/provider/TestDecoder\\.ts$" }
     },
     {
-      name: "test-board-is-for-tests",
-      comment: "The board following a feed log in memory is imported only by test files.",
+      name: "test-director-is-for-tests",
+      comment: "The Director over the snapshot feed is imported only by test files.",
       severity: "error",
       from: { pathNot: "\\.test\\.ts$" },
-      to: { path: "^apps/hub/src/TestBoard\\.ts$" }
+      to: { path: "^apps/hub/src/TestDirector\\.ts$" }
     },
     {
       name: "test-snapshot-feed-is-for-tests",
       comment:
-        "The snapshot feed, a provider of our own deliveries, is imported only by test files, TestDecoder and TestBoard.",
+        "The snapshot feed, a provider of our own deliveries, is imported only by test files, TestDecoder and TestDirector.",
       severity: "error",
       from: {
-        pathNot: "(\\.test\\.ts$|^apps/hub/src/provider/TestDecoder\\.ts$|^apps/hub/src/TestBoard\\.ts$)"
+        pathNot: "(\\.test\\.ts$|^apps/hub/src/provider/TestDecoder\\.ts$|^apps/hub/src/TestDirector\\.ts$)"
       },
       to: { path: "^apps/hub/src/TestSnapshotFeed\\.ts$" }
     },

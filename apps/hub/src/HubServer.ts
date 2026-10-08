@@ -25,9 +25,8 @@ import {
   HttpStaticServer
 } from "effect/http"
 import { HttpApiBuilder } from "effect/http-api"
+import { Director } from "./Director.ts"
 import { HubConfig } from "./HubConfig.ts"
-import { Switcher } from "./Switcher.ts"
-import { Board } from "./slate/Board.ts"
 import { Source } from "./source/Source.ts"
 
 /**
@@ -37,8 +36,7 @@ export const layer: Layer.Layer<
   never,
   PlatformError.PlatformError,
   | HubConfig
-  | Board
-  | Switcher
+  | Director
   | Source
   | HttpServer.HttpServer
   | HttpPlatform.HttpPlatform
@@ -76,10 +74,10 @@ const stageHandlers = HttpApiBuilder.group(
   SportalApi,
   "stage",
   Effect.fn(function* (handlers) {
-    const stage = yield* Switcher
+    const director = yield* Director
     return handlers.handleAll({
-      current: () => stage.stage,
-      dispatch: ({ payload }) => stage.dispatch(payload.command)
+      current: () => director.stage,
+      dispatch: ({ payload }) => director.dispatch(payload.command)
     })
   })
 )
@@ -123,12 +121,11 @@ const liveRoute = HttpRouter.add(
   "GET",
   "/api/live",
   Effect.gen(function* () {
-    const board = yield* Board
-    const stage = yield* Switcher
-    const stageChanges = stage.changes.pipe(
+    const director = yield* Director
+    const stageChanges = director.stageChanges.pipe(
       Stream.map((next) => LiveMessage.cases.StageChanged.make({ stage: next }))
     )
-    const slateChanges = board.changes.pipe(
+    const slateChanges = director.slateChanges.pipe(
       settled,
       Stream.map((slate) => slate.published())
     )

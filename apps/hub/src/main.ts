@@ -5,12 +5,10 @@ import { HubConfig } from "./HubConfig.ts"
 import * as HubMode from "./HubMode.ts"
 import * as HubServer from "./HubServer.ts"
 import { isStopping } from "./HubStopping.ts"
-import { Switcher } from "./Switcher.ts"
 import * as Telemetry from "./Telemetry.ts"
 
 const Hub = HubServer.layer.pipe(
   Layer.provide(HubServer.layerListen),
-  Layer.provide(Switcher.layer),
   Layer.provide(HubMode.layer),
   Layer.provide(Telemetry.layer),
   Layer.provide([HubConfig.layer, FetchHttpClient.layer]),
