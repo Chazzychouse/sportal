@@ -10,8 +10,8 @@ import { FastCast } from "./FastCast.ts"
  * ESPN as the provider: the site scoreboard polled and FastCast pushing, their frames read by `EspnDecoder`. A poll
  * that does not connect is `Unreachable` for its league, and one answered with a status other than 2xx `Refused`.
  * Polled every 10 seconds while a game is live, every minute within 30 minutes of a kickoff, and every 15 minutes
- * otherwise; at most 30 seconds after a poll in which a league failed. FastCast is subscribed to again after about 1
- * second, then twice as long each time, up to a minute.
+ * otherwise; at most 30 seconds after a poll in which a league failed. FastCast decides what it follows and reconnects
+ * itself, so its push ignores the demand and is never subscribed to again.
  */
 export const layer: Layer.Layer<Provider, never, FastCast | HttpClient.HttpClient> = Layer.effect(
   Provider,
@@ -46,22 +46,16 @@ export const layer: Layer.Layer<Provider, never, FastCast | HttpClient.HttpClien
 
     return Provider.of({
       poll,
-      push: fastCast.push,
+      push: () => fastCast.frames,
       polling: Schedule.forever.pipe(
         Schedule.setInputType<Schedule.Input<Polling>>(),
         Schedule.modifyDelay(({ input, now }) =>
           Effect.succeed(interval(input.slate, DateTime.makeUnsafe(now), input.failed.length > 0))
         )
       ),
-      reconnect
+      reconnect: Schedule.recurs(0)
     })
   })
-)
-
-// Backoff from 1 s, each delay jittered and capped at a minute; Stream.retry resets it once the feed delivers again.
-const reconnect = Schedule.exponential("1 second").pipe(
-  Schedule.jittered,
-  Schedule.modifyDelay(({ duration }) => Effect.succeed(Duration.min(duration, Duration.minutes(1))))
 )
 
 /** The site scoreboard of `league` the Hub polls: today's games, every FBS game for college. */

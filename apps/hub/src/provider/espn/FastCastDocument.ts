@@ -12,7 +12,7 @@ import {
   Result,
   Schema
 } from "effect"
-import type { LoggedFrame } from "../../Frame.ts"
+import type { Frame } from "../../Frame.ts"
 import { DecodeObservation, type ResetReason } from "../Decoder.ts"
 import * as FastCastMessage from "./FastCastMessage.ts"
 import { Owner, ownerOf } from "./FastCastTopic.ts"
@@ -28,7 +28,7 @@ import { Owner, ownerOf } from "./FastCastTopic.ts"
  */
 export const advance = Effect.fnUntraced(function* (
   documents: Documents,
-  frame: LoggedFrame
+  frame: Frame
 ): Effect.fn.Return<Advanced, Schema.SchemaError> {
   const owned = ownerOf(frame.channel)
   return yield* Match.value(frame.kind).pipe(
@@ -40,6 +40,27 @@ export const advance = Effect.fnUntraced(function* (
 
 /** No topic has a document yet. */
 export const empty: Documents = new Map()
+
+/**
+ * The league and every event of scoreboard topic `tc`'s document, while it is synced: none for a game's topic, or one
+ * waiting for its checkpoint.
+ */
+export function scoreboard(
+  documents: Documents,
+  tc: string
+): Option.Option<{ readonly league: LeagueId; readonly events: ReadonlyArray<Schema.Json> }> {
+  return Option.flatMap(
+    ownerOf(tc),
+    Owner.$match({
+      Scoreboard: ({ league }) =>
+        Option.fromUndefinedOr(documents.get(tc)).pipe(
+          Option.filter(Topic.$is("Synced")),
+          Option.map(({ document }) => ({ league, events: Record.values(objectAt(document, [])) }))
+        ),
+      Game: () => Option.none()
+    })
+  )
+}
 
 /**
  * Where one topic's document is: waiting for a checkpoint, or synced as of a message. A scoreboard topic's document is
@@ -81,7 +102,7 @@ const Change = Data.taggedEnum<Change>()
 
 const synced = Effect.fnUntraced(function* (
   documents: Documents,
-  frame: LoggedFrame,
+  frame: Frame,
   owned: Option.Option<Owner>
 ): Effect.fn.Return<Advanced> {
   if (Option.isNone(owned)) return unchanged(documents)
@@ -113,7 +134,7 @@ const synced = Effect.fnUntraced(function* (
 
 const moveOn = Effect.fnUntraced(function* (
   documents: Documents,
-  frame: LoggedFrame,
+  frame: Frame,
   owned: Option.Option<Owner>
 ): Effect.fn.Return<Advanced, Schema.SchemaError> {
   const decoded = yield* decodeMessage(frame.body).pipe(Effect.result)
@@ -132,7 +153,7 @@ const moveOn = Effect.fnUntraced(function* (
   return { ...advanced, observed: [received(message, owned), ...advanced.observed] }
 })
 
-const checkpoint = Effect.fnUntraced(function* (owner: Owner, frame: LoggedFrame) {
+const checkpoint = Effect.fnUntraced(function* (owner: Owner, frame: Frame) {
   const mid = yield* decodeMid(frame.number)
   const body = yield* Schema.decodeEffect(FastCastMessage.Checkpoint(owner))(frame.body)
 
@@ -326,7 +347,7 @@ function objectAt(json: Schema.Json, path: ReadonlyArray<string>): Readonly<Reco
  */
 function undecoded(
   documents: Documents,
-  frame: LoggedFrame,
+  frame: Frame,
   owned: Option.Option<Owner>,
   error: Schema.SchemaError
 ): Effect.Effect<Advanced, Schema.SchemaError> {

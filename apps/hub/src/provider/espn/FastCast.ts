@@ -2,10 +2,14 @@ import type { GameSnapshot } from "@sportal/domain/Game"
 import type { LeagueId } from "@sportal/domain/League"
 import {
   Array as Arr,
+  type Cause,
   Channel,
   Context,
+  Data,
   DateTime,
+  Duration,
   Effect,
+  Exit,
   FiberMap,
   Layer,
   Metric,
@@ -13,7 +17,6 @@ import {
   PubSub,
   Queue,
   Record,
-  Ref,
   Result,
   Schedule,
   Schema,
@@ -24,65 +27,78 @@ import { HttpClient, HttpClientResponse } from "effect/http"
 import * as Socket from "effect/socket/Socket"
 import { Frame } from "../../Frame.ts"
 import { HubConfig } from "../../HubConfig.ts"
-import { type LiveFeed, LiveFeedDemand, ProviderUnavailable } from "../Provider.ts"
+import * as HubStopping from "../../HubStopping.ts"
+import { DecodeObservation } from "../Decoder.ts"
+import { ProviderUnavailable } from "../Provider.ts"
+import * as EspnDecoder from "./EspnDecoder.ts"
+import * as FastCastDocument from "./FastCastDocument.ts"
 import * as FastCastMessage from "./FastCastMessage.ts"
 import { ownerOf, topicOf } from "./FastCastTopic.ts"
 
 /**
- * ESPN FastCast as the ESPN provider's push: one socket subscribed to each league's scoreboard topic, and to the game
- * topic of each game its demand names while it is open, each channel its demand resyncs followed again. Every socket
- * text is a frame, each `H` followed by its checkpoint; fails when the socket closes, ends, or goes quiet. A topic whose
- * checkpoint fails is followed again on the retry `FastCast.make` is given; `FastCast.layer` gives it `layer`'s own.
+ * ESPN FastCast as the ESPN provider's push: one socket that decides what it follows from its own scoreboard topics,
+ * reads a topic's checkpoint again when its document resets, and opens again when it closes, ends or goes quiet. Every
+ * socket text is a frame, each `H` followed by its checkpoint. A topic whose checkpoint fails is followed again on the
+ * checkpoint retry `FastCast.make` is given; `FastCast.layer` gives it `layer`'s own.
  */
 export class FastCast extends Context.Service<
   FastCast,
   {
-    readonly push: LiveFeed
+    /**
+     * Every socket text and checkpoint, as frames, for as long as it runs. It follows each league's scoreboard topic.
+     * It follows a game's topic while that scoreboard shows the game live or within 30 minutes of kickoff, and leaves
+     * it at final. When a topic's document resets (`Gap`, `Unapplicable`), it reads the checkpoint again. When the
+     * socket closes, ends or goes silent, it reconnects on its backoff. Never fails.
+     */
+    readonly frames: Stream.Stream<Frame>
   }
 >()("sportal/hub/FastCast") {
   /**
-   * FastCast for the leagues `HubConfig` names, following a topic whose checkpoint failed again on `checkpointRetry`,
-   * then leaving it to polling.
+   * FastCast for the leagues `HubConfig` names, following a topic whose checkpoint failed again on `retry.checkpoint`,
+   * then leaving it to polling, and opening the socket again on `retry.reconnect` after each failure, which it logs and
+   * counts by its reason. Once `retry.reconnect` is done, it logs that the live feed stopped and emits nothing more.
    */
-  static readonly make = (checkpointRetry: Schedule.Schedule<unknown, CheckpointUnread>) =>
+  static readonly make = (retry: {
+    readonly checkpoint: Schedule.Schedule<unknown, CheckpointUnread>
+    readonly reconnect: Schedule.Schedule<unknown, ProviderUnavailable>
+  }) =>
     Effect.gen(function* () {
       const { leagues } = yield* HubConfig
       const context = yield* Effect.context<HttpClient.HttpClient | Socket.WebSocketConstructor>()
-      const provide = Stream.provideContext(context)
-      return FastCast.of({
-        push: (demand) =>
-          Stream.unwrap(
-            Stream.partition(
-              demand,
-              LiveFeedDemand.$match({
-                Games: ({ games }) => Result.succeed(games),
-                Resync: ({ channel }) => Result.fail(channel)
-              }),
-              { capacity: "unbounded" }
-            ).pipe(Effect.flatMap(([wanted, resync]) => connect(leagues, wanted, resync, checkpointRetry)))
-          ).pipe(
-            Stream.concat(
-              Stream.fail(new ProviderUnavailable({ reason: "Closed", cause: "FastCast ended the stream" }))
-            ),
-            Stream.timeoutOrElse({ duration: silence, orElse: () => Stream.fail(silent()) }),
-            provide
-          )
-      })
+      const frames = Stream.unwrap(connect(leagues, retry.checkpoint)).pipe(
+        Stream.concat(
+          Stream.fail(new ProviderUnavailable({ reason: "Closed", cause: "FastCast ended the stream" }))
+        ),
+        Stream.timeoutOrElse({ duration: silence, orElse: () => Stream.fail(silent()) }),
+        Stream.tapError(failed),
+        Stream.retry(retry.reconnect),
+        Stream.catchCause(stopped),
+        Stream.provideContext(context)
+      )
+      return FastCast.of({ frames })
     })
 
-  /** FastCast whose `checkpointRetry` is every 30 s, five tries in all, then the topic is left to polling. */
+  /**
+   * FastCast whose checkpoint retry is every 30 s, five tries in all, then the topic is left to polling; it opens the
+   * socket again after about 1 second, then twice as long each time, jittered, up to a minute. `Stream.retry` resets
+   * that backoff once the socket delivers again.
+   */
   static readonly layer: Layer.Layer<
     FastCast,
     never,
     HttpClient.HttpClient | Socket.WebSocketConstructor | HubConfig
   > = Layer.effect(
     FastCast,
-    FastCast.make(
-      Schedule.spaced("30 seconds").pipe(
+    FastCast.make({
+      checkpoint: Schedule.spaced("30 seconds").pipe(
         Schedule.setInputType<CheckpointUnread>(),
         Schedule.upTo({ times: 4 })
+      ),
+      reconnect: Schedule.exponential("1 second").pipe(
+        Schedule.jittered,
+        Schedule.modifyDelay(({ duration }) => Effect.succeed(Duration.min(duration, Duration.minutes(1))))
       )
-    )
+    })
   )
 }
 
@@ -94,15 +110,13 @@ export class CheckpointUnread extends Schema.TaggedError<CheckpointUnread>()("Ch
 }) {}
 
 /**
- * Opens the socket and follows each league's topic, returning the frames that follow, the handshake's first. Each
- * game newly in `wanted` is followed beside them, once per socket, and each followed topic in `resync` again. To follow
- * a topic is to subscribe to it and wait for its checkpoint; one that fails is followed again on `retry`, one follow
- * per topic at a time, and once `retry` is done the topic is left to polling until the socket reconnects.
+ * Opens the socket and follows each league's topic, returning the frames that follow, the handshake's first. What else
+ * it follows comes from those frames, as `steered` says. To follow a topic is to subscribe to it and wait for its
+ * checkpoint; one that fails is followed again on `retry`, one follow per topic at a time, and once `retry` is done the
+ * topic is left to polling until the socket reconnects.
  */
 const connect = Effect.fn("FastCast.connect")(function* (
   leagues: ReadonlyArray<LeagueId>,
-  wanted: Stream.Stream<ReadonlyArray<GameSnapshot>>,
-  resync: Stream.Stream<string>,
   retry: Schedule.Schedule<unknown, CheckpointUnread>
 ) {
   const topics = leagues.map((league) => topicOf(league))
@@ -145,8 +159,6 @@ const connect = Effect.fn("FastCast.connect")(function* (
   // Each checkpoint's outcome, by topic: its topic on success, or why it failed.
   const outcomes = yield* PubSub.unbounded<Result.Result<string, CheckpointUnread>>()
   const follows = yield* FiberMap.make<string>()
-  const followed = yield* Ref.make<ReadonlySet<string>>(new Set())
-  const leftToPolling = yield* Ref.make<ReadonlySet<string>>(new Set())
   const attempt = Effect.fnUntraced(function* (tc: string) {
     const outcome = yield* PubSub.subscribe(outcomes)
     yield* subscribe(tc)
@@ -164,39 +176,33 @@ const connect = Effect.fn("FastCast.connect")(function* (
       onSome: (one) => Effect.asVoid(Effect.fromResult(one))
     })
   }, Effect.scoped)
-  const follow = Effect.fnUntraced(function* (tc: string) {
-    const left = yield* Ref.get(leftToPolling)
-    if (left.has(tc)) return
-    yield* Ref.update(followed, (topics) => new Set([...topics, tc]))
-    yield* FiberMap.run(
-      follows,
-      tc,
-      attempt(tc).pipe(
-        Effect.retry(retry),
-        Effect.catch((error) =>
-          Ref.update(leftToPolling, (topics) => new Set([...topics, tc])).pipe(
-            Effect.andThen(
-              Effect.logWarning(
-                `FastCast: ${tc} is left to polling until the socket reconnects; its checkpoint kept failing`,
-                error
-              )
-            ),
-            Effect.annotateLogs({ topic: tc })
+  // A topic left to polling keeps its place in `follows` until the socket reconnects, so nothing follows it before.
+  const follow = (tc: string) =>
+    Effect.asVoid(
+      FiberMap.run(
+        follows,
+        tc,
+        attempt(tc).pipe(
+          Effect.retry(retry),
+          Effect.catch((error) =>
+            Effect.logWarning(
+              `FastCast: ${tc} is left to polling until the socket reconnects; its checkpoint kept failing`,
+              error
+            ).pipe(Effect.annotateLogs({ topic: tc }), Effect.andThen(Effect.never))
           )
-        )
+        ),
+        { onlyIfMissing: true }
+      )
+    )
+  const steer = Steer.$match({
+    Follow: ({ tc }) => Effect.logInfo(`FastCast: subscribed to ${tc}`).pipe(Effect.andThen(follow(tc))),
+    Leave: ({ tc }) =>
+      Effect.logInfo(`FastCast: left ${tc}; its scoreboard shows it neither live nor about to kick off`).pipe(
+        Effect.andThen(FiberMap.remove(follows, tc))
       ),
-      { onlyIfMissing: true }
-    )
+    FollowAgain: ({ tc }) =>
+      Effect.logInfo(`FastCast: ${tc} lost its document; following it again`).pipe(Effect.andThen(follow(tc)))
   })
-  // A topic its decoder resyncs is followed again only if this socket follows it.
-  const followAgain = (tc: string) =>
-    Effect.flatMap(Ref.get(followed), (topics) =>
-      topics.has(tc)
-        ? Effect.logInfo(`FastCast: ${tc} lost its document; following it again`).pipe(
-            Effect.andThen(follow(tc))
-          )
-        : Effect.void
-    )
 
   yield* Effect.forEach(topics, follow, { discard: true })
   yield* Metric.update(connected, 1)
@@ -207,33 +213,92 @@ const connect = Effect.fn("FastCast.connect")(function* (
   return Stream.concat(Stream.make(opened), rest).pipe(
     Stream.mapEffect((received) => framed(received, (outcome) => PubSub.publish(outcomes, outcome))),
     Stream.flattenIterable,
-    Stream.merge(resync.pipe(Stream.mapEffect(followAgain), Stream.drain), { haltStrategy: "left" }),
-    Stream.merge(subscriptions(wanted, follow), { haltStrategy: "left" })
+    Stream.mapAccumEffect(
+      (): Following => ({ documents: FastCastDocument.empty, games: new Map(), followed: [] }),
+      (following, frame) =>
+        steered(following, frame, topics).pipe(
+          Effect.tap(([, steers]) => Effect.forEach(steers, steer, { discard: true })),
+          Effect.map(([next]) => [next, [frame]] as const)
+        )
+    )
   )
 })
 
-/** Follows the game topic of each game in `wanted` not yet followed on this socket. */
-function subscriptions(
-  wanted: Stream.Stream<ReadonlyArray<GameSnapshot>>,
-  follow: (tc: string) => Effect.Effect<void>
-): Stream.Stream<never> {
-  return wanted.pipe(
-    Stream.mapAccumEffect(
-      (): ReadonlySet<string> => new Set(),
-      (subscribed, games) => {
-        const fresh = Arr.dedupe(games.map((game) => topicOf(game.league, game.id))).filter(
-          (tc) => !subscribed.has(tc)
-        )
-        return Effect.forEach(fresh, follow, { discard: true }).pipe(
-          Effect.tap(() =>
-            fresh.length === 0 ? Effect.void : Effect.logInfo(`FastCast: subscribed to ${fresh.join(", ")}`)
-          ),
-          Effect.as([new Set([...subscribed, ...fresh]), []] as const)
-        )
-      }
-    ),
-    Stream.drain
+/**
+ * What the socket follows, as its own frames say: each topic's document, each league's games as its scoreboard last
+ * showed them, and the game topics it follows. Kept only to steer the socket; the Hub decodes the frames on its own.
+ */
+interface Following {
+  readonly documents: typeof FastCastDocument.empty
+  readonly games: ReadonlyMap<LeagueId, ReadonlyArray<GameSnapshot>>
+  readonly followed: ReadonlyArray<string>
+}
+
+/** One turn of the socket: follow a game's topic, leave it, or follow again a topic whose document reset. */
+type Steer = Data.TaggedEnum<{
+  Follow: { readonly tc: string }
+  Leave: { readonly tc: string }
+  FollowAgain: { readonly tc: string }
+}>
+const Steer = Data.taggedEnum<Steer>()
+
+/**
+ * What the socket follows after `frame`, and how to steer it there. Each game topic is followed while its scoreboard
+ * shows the game live, or upcoming within 30 minutes of kickoff by the time the frame is read, and left once it does
+ * not; a followed topic whose document reset is followed again. A scoreboard is read again only when the frame changed
+ * it, and one waiting for its checkpoint keeps the games it last showed. A frame that does not decode changes nothing.
+ */
+const steered = Effect.fnUntraced(function* (
+  following: Following,
+  frame: Frame,
+  scoreboards: ReadonlyArray<string>
+) {
+  const advanced = yield* FastCastDocument.advance(following.documents, frame).pipe(
+    Effect.orElseSucceed(() => ({ documents: following.documents, change: Option.none(), observed: [] }))
   )
+  const shown = Option.flatMap(advanced.change, () =>
+    FastCastDocument.scoreboard(advanced.documents, frame.channel)
+  )
+  const games = yield* Option.match(shown, {
+    onNone: () => Effect.succeed(following.games),
+    onSome: ({ league, events }) =>
+      Effect.map(gamesOf(league, events), (shownGames) => new Map([...following.games, [league, shownGames]]))
+  })
+  const now = yield* DateTime.now
+
+  const followed = followedAt(games, now)
+  const reset = Arr.filter(advanced.observed, DecodeObservation.$is("Reset")).map(({ topic }) => topic)
+  const steers = [
+    ...Arr.difference(followed, following.followed).map((tc) => Steer.Follow({ tc })),
+    ...Arr.difference(following.followed, followed).map((tc) => Steer.Leave({ tc })),
+    ...Arr.intersection(reset, [...scoreboards, ...followed]).map((tc) => Steer.FollowAgain({ tc }))
+  ]
+  const next: Following = { documents: advanced.documents, games, followed }
+  return [next, steers] as const
+})
+
+/** The events as `league`'s games; an event that does not decode is left out. */
+const gamesOf = Effect.fnUntraced(function* (league: LeagueId, events: ReadonlyArray<Schema.Json>) {
+  const decoded = yield* Effect.forEach(events, (event) =>
+    Effect.option(EspnDecoder.byLeague[league].decodeEvent(event))
+  )
+  return Arr.getSomes(decoded)
+})
+
+/** The topic of each game live at `now`, or upcoming with its kickoff within 30 minutes of it. */
+function followedAt(
+  games: ReadonlyMap<LeagueId, ReadonlyArray<GameSnapshot>>,
+  now: DateTime.Utc
+): ReadonlyArray<string> {
+  const soon = DateTime.add(now, { minutes: 30 })
+  return [...games.values()]
+    .flat()
+    .filter(
+      (game) =>
+        game.progress() === "live" ||
+        (game.progress() === "upcoming" && DateTime.isLessThanOrEqualTo(game.kickoff, soon))
+    )
+    .map((game) => topicOf(game.league, game.id))
 }
 
 /**
@@ -318,6 +383,23 @@ function silent(): ProviderUnavailable {
   return new ProviderUnavailable({ reason: "Silent", cause: `No FastCast message for ${silence}` })
 }
 
+/** A failure of the live feed, logged and counted by its reason, before the socket opens again. */
+const failed = Effect.fnUntraced(function* (error: ProviderUnavailable) {
+  yield* Effect.logWarning(`Ingest: the live feed failed (${error.reason}); subscribing again`, error)
+  yield* Metric.update(Metric.withAttributes(liveFeedErrors, { reason: error.reason }), 1)
+})
+
+/** The end of the live feed, logged unless the Hub is stopping; nothing follows it, so `frames` never ends. */
+function stopped(cause: Cause.Cause<ProviderUnavailable>): Stream.Stream<never> {
+  const logged = HubStopping.isStopping(Exit.failCause(cause))
+    ? Effect.void
+    : Effect.logError(
+        "Ingest: the live feed stopped; only the poll reaches the slate until the Hub restarts",
+        cause
+      )
+  return Stream.fromEffectDrain(logged).pipe(Stream.concat(Stream.never))
+}
+
 const websocketHost = HttpClient.get("https://fastcast.semfs.engsvc.go.com/public/websockethost").pipe(
   Effect.flatMap(HttpClientResponse.filterStatusOk),
   Effect.flatMap(HttpClientResponse.schemaBodyJson(FastCastMessage.Host)),
@@ -335,5 +417,10 @@ const checkpointFailures = Metric.counter("sportal_live_feed_checkpoint_failures
 
 const connects = Metric.counter("sportal_live_feed_connects", {
   description: "Times the live feed connected and subscribed",
+  incremental: true
+})
+
+const liveFeedErrors = Metric.counter("sportal_live_feed_errors", {
+  description: "Times the live feed failed and was subscribed to again, by why it failed",
   incremental: true
 })

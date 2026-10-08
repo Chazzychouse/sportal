@@ -67,11 +67,11 @@ Every exported type name must be a term here, except the wire schemas in `*Paylo
 | **Provider unavailable** | A provider could not supply data: a poll of a league unreachable or refused, or a push refused, closed, or gone silent; `ProviderUnavailable` in code. | provider error, fetch error, live feed error |
 | **Live feed** | A provider's push: the connection carrying updates for live games between polls (ESPN FastCast). `LiveFeed` in code. | socket, stream, webhook |
 | **Live feed demand** | What the live feed should follow: the current games whenever which games they are changes, and each channel whose document must be read again from a checkpoint; `LiveFeedDemand` in code. Ingest builds it from the live slate's changes and resyncs. | wanted, subscriptions |
-| **FastCast** | ESPN's live feed, as the ESPN provider's push: one socket following each league's scoreboard and each game its demand names, with FastCast's checkpoint retry. | |
+| **FastCast** | ESPN's live feed, as the ESPN provider's push: one socket following each league's scoreboard, and each game while that scoreboard shows it live or within 30 minutes of kickoff, reading a topic's checkpoint again when its document resets and reconnecting itself; its `frames` never fail. | |
 | **Snapshot feed** | A provider whose frames are our own deliveries, one per frame, and its decode: what tests drive, in `TestSnapshotFeed.ts`. | |
 | **ESPN event** | One game as either ESPN feed spells it, the polled site scoreboard or a FastCast scoreboard topic, read as a GameSnapshot; `EspnEvent` in code. | payload, DTO |
 | **Topic owner** | What a live feed topic carries: one league's scoreboard, or one game's plays; `Owner` in code, in `FastCastTopic.ts`. | subscription |
-| **Checkpoint unread** | A live feed topic's checkpoint could not be loaded or did not decode; retried on FastCast's checkpoint retry, then the game is left to polling; `CheckpointUnread` in code. | checkpoint error |
+| **Checkpoint unread** | A live feed topic's checkpoint could not be loaded or did not decode; retried on FastCast's checkpoint retry, then the topic is left to polling until the socket reconnects; `CheckpointUnread` in code. | checkpoint error |
 | **Ingesting** | The Hub's loop that polls the provider on its polling and runs its push, retried on its reconnect, appending every frame to the feed log; the slate takes what it appends. | poller, sync, fetcher |
 | **Polling** | When a provider is polled again, given the slate the last poll left and the leagues that failed: a Schedule its adapter declares. ESPN's is 10 s while a game is live, 1 min within 30 minutes of a kickoff, 15 min otherwise. | cadence, interval |
 | **Source** | A way you obtain **video** (YouTube TV). | provider, service |

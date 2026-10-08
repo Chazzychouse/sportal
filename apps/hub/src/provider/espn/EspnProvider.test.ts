@@ -4,11 +4,10 @@ import type { GameSnapshot } from "@sportal/domain/Game"
 import { Network } from "@sportal/domain/Game"
 import type { LeagueId } from "@sportal/domain/League"
 import { liveSnapshot, snapshot } from "@sportal/domain/TestGame"
-import { Cause, Context, DateTime, Duration, Effect, Layer, Queue, Ref, Schedule, Stream } from "effect"
+import { Cause, DateTime, Duration, Effect, Layer, Schedule } from "effect"
 import { HttpClient, HttpClientError, HttpClientResponse } from "effect/http"
-import { TestClock } from "effect/testing"
 import { HubConfig } from "../../HubConfig.ts"
-import { Provider, ProviderUnavailable } from "../Provider.ts"
+import { Provider } from "../Provider.ts"
 import { listedBy } from "../TestDecoder.ts"
 import * as EspnDecoder from "./EspnDecoder.ts"
 import * as EspnProvider from "./EspnProvider.ts"
@@ -233,88 +232,6 @@ describe("EspnProvider polling", () => {
   )
 })
 
-// Jitter scales each reconnect delay by 0.8 to 1.2: the first is within 0.8 s to 1.2 s of the close, the second
-// 1.6 s to 2.4 s.
-describe("EspnProvider reconnect", () => {
-  it.effect("should subscribe the push at once", () =>
-    Effect.gen(function* () {
-      const { subscriptions } = yield* PushCloses
-
-      yield* pushRetried()
-      yield* TestClock.adjust(0)
-
-      const subscribed = yield* Ref.get(subscriptions)
-      assert.strictEqual(subscribed, 1)
-    }).pipe(Effect.provide(closingPush()))
-  )
-
-  it.effect("should not subscribe a closed push again within 0.7 s", () =>
-    Effect.gen(function* () {
-      const { closes, subscriptions } = yield* PushCloses
-      yield* pushRetried()
-      yield* TestClock.adjust(0)
-      yield* Queue.offer(closes, closed)
-
-      yield* TestClock.adjust("700 millis")
-
-      const subscribed = yield* Ref.get(subscriptions)
-      assert.strictEqual(subscribed, 1)
-    }).pipe(Effect.provide(closingPush()))
-  )
-
-  it.effect("should subscribe a closed push again within 1.3 s", () =>
-    Effect.gen(function* () {
-      const { closes, subscriptions } = yield* PushCloses
-      yield* pushRetried()
-      yield* TestClock.adjust(0)
-      yield* Queue.offer(closes, closed)
-      yield* TestClock.adjust("700 millis")
-
-      yield* TestClock.adjust("600 millis")
-
-      const subscribed = yield* Ref.get(subscriptions)
-      assert.strictEqual(subscribed, 2)
-    }).pipe(Effect.provide(closingPush()))
-  )
-
-  it.effect("should not subscribe a push closed a second time again within 1.5 s", () =>
-    Effect.gen(function* () {
-      const { closes, subscriptions } = yield* PushCloses
-      yield* pushRetried()
-      yield* TestClock.adjust(0)
-      yield* Queue.offer(closes, closed)
-      yield* TestClock.adjust("700 millis")
-      yield* TestClock.adjust("600 millis")
-      yield* Queue.offer(closes, closed)
-
-      yield* TestClock.adjust("1500 millis")
-
-      const subscribed = yield* Ref.get(subscriptions)
-      assert.strictEqual(subscribed, 2)
-    }).pipe(Effect.provide(closingPush()))
-  )
-
-  it.effect("should subscribe a push closed a second time again within 2.5 s", () =>
-    Effect.gen(function* () {
-      const { closes, subscriptions } = yield* PushCloses
-      yield* pushRetried()
-      yield* TestClock.adjust(0)
-      yield* Queue.offer(closes, closed)
-      yield* TestClock.adjust("700 millis")
-      yield* TestClock.adjust("600 millis")
-      yield* Queue.offer(closes, closed)
-      yield* TestClock.adjust("1500 millis")
-
-      yield* TestClock.adjust("1 second")
-
-      const subscribed = yield* Ref.get(subscriptions)
-      assert.strictEqual(subscribed, 3)
-    }).pipe(Effect.provide(closingPush()))
-  )
-})
-
-const closed = new ProviderUnavailable({ reason: "Closed", cause: "socket closed" })
-
 /** `body` without any team's colors. */
 function withoutColors(body: string) {
   return JSON.stringify(JSON.parse(body), (key, value) =>
@@ -376,54 +293,4 @@ function waitAfter(slate: ReadonlyArray<GameSnapshot>, failed: ReadonlyArray<Lea
     const [, delay] = yield* step(now.epochMilliseconds, { slate, failed })
     return delay
   }).pipe(Effect.provide(recordedEspn(fbsLive)))
-}
-
-/** What `closingPush` fails its push with, and how many times its push was subscribed. */
-class PushCloses extends Context.Service<
-  PushCloses,
-  { readonly closes: Queue.Queue<ProviderUnavailable>; readonly subscriptions: Ref.Ref<number> }
->()("sportal/hub/provider/espn/PushCloses") {}
-
-/** ESPN's provider over a FastCast whose push fails with each close offered, counting each subscription. */
-function closingPush() {
-  const state = Layer.effect(
-    PushCloses,
-    Effect.gen(function* () {
-      const closes = yield* Queue.unbounded<ProviderUnavailable>()
-      const subscriptions = yield* Ref.make(0)
-
-      return { closes, subscriptions }
-    })
-  )
-  const pushing = Layer.effect(
-    FastCast,
-    Effect.gen(function* () {
-      const { closes, subscriptions } = yield* PushCloses
-
-      return FastCast.of({
-        push: () =>
-          Stream.unwrap(
-            Ref.update(subscriptions, (n) => n + 1).pipe(
-              Effect.as(Stream.fromQueue(closes).pipe(Stream.mapEffect(Effect.fail)))
-            )
-          )
-      })
-    })
-  )
-  const unanswered = Layer.succeed(
-    HttpClient.HttpClient,
-    HttpClient.make(() => Effect.never)
-  )
-  return EspnProvider.layer.pipe(Layer.provide([pushing, unanswered]), Layer.provideMerge(state))
-}
-
-/** The provider's push, retried on its reconnect, run in the background. */
-function pushRetried() {
-  return Effect.gen(function* () {
-    const provider = yield* Provider
-
-    yield* provider
-      .push(Stream.never)
-      .pipe(Stream.retry(provider.reconnect), Stream.runDrain, Effect.forkScoped)
-  })
 }
