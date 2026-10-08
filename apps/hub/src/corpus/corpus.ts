@@ -3,12 +3,23 @@ import { Worker } from "node:worker_threads"
 import { NodeRuntime, NodeServices, NodeSocket, NodeWorker } from "@effect/platform-node"
 import { GameDay } from "@sportal/domain/GameDay"
 import { LeagueId } from "@sportal/domain/League"
-import { Array as Arr, DateTime, Duration, Effect, Layer, Option, Result, Schema, Stream } from "effect"
+import {
+  Array as Arr,
+  DateTime,
+  Duration,
+  Effect,
+  Layer,
+  Option,
+  Predicate,
+  Result,
+  Schema,
+  Stream
+} from "effect"
 import { Argument, CliError, Command, Flag } from "effect/cli"
 import { FetchHttpClient } from "effect/http"
 import { FeedLog } from "../feed-log/FeedLog.ts"
 import { HubConfig } from "../HubConfig.ts"
-import { ArchiveFetchFailed, Archiver } from "../provider/Archiver.ts"
+import { type ArchiveFetchFailed, Archiver } from "../provider/Archiver.ts"
 import * as Espn from "../provider/espn/Espn.ts"
 import * as CorpusBuild from "./CorpusBuild.ts"
 import { type CorpusDay, CorpusDays } from "./CorpusDay.ts"
@@ -223,7 +234,9 @@ const reported = Effect.fn("Corpus.reported")(function* <R>(
   if (
     failed.reason === "NoFrames" ||
     failed.reason === "NoGames" ||
-    (failed instanceof ArchiveFetchFailed && failed.reason === "NotArchived" && failed.game === undefined)
+    (Predicate.isTagged(failed, "ArchiveFetchFailed") &&
+      failed.reason === "NotArchived" &&
+      failed.game === undefined)
   ) {
     yield* Effect.logWarning(failed.message)
     return { date, outcome: "absent", games: 0 }
