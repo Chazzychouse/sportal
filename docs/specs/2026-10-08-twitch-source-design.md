@@ -15,8 +15,10 @@ abstraction.
   don't show whatever it airs at 3 PM.
 - **Same abstraction for both sources.** `Source` is `{ availability, changes }` and nothing else. Reading a pushed
   guide is YouTube TV's alone, so it moves off the port.
-- **Source variants live on the port:** `Source.layerYouTubeTv`, `Source.layerTwitch`, `Source.layerAll([...])`.
-- **Imports point one way:** `Source.ts` → adapter folders → domain. No adapter imports `Source`, not even its type.
+- **Source variants live on the port:** `Source.layerYouTubeTv`, `Source.layerTwitch`, `Source.layerAll([...])`, and
+  `GuideReader.layerYouTubeTv`.
+- **Imports point one way:** the port modules (`Source.ts`, `GuideReader.ts`) → adapter folders → domain. No adapter
+  imports a port, not even its type.
 
 ## Domain (`packages/domain`)
 
@@ -47,8 +49,10 @@ class Guide extends Schema.Class<Guide>("sportal/Guide")({
 `availabilityOf` keeps today's airing rules unchanged. When no airing matches, a channel whose `network` is one of the
 game's networks answers:
 - **Carried** from `kickoff − 30 min` while the game is not over;
-- **Upcoming** before that, with the channel's name and `kickoff − 30 min` as its begin;
-- otherwise today's no-match answers (past the guide's reach, streaming only, not in the guide).
+- **Upcoming** before that, with the channel's name and the kickoff as its begin;
+- otherwise today's no-match answers (streaming only, not in the guide). The "past the guide's reach" answer applies
+  only to a guide that lists airings: reach is how far a guide's listings go, and a lineup with none has nothing still
+  to list.
 
 `availabilityOf` takes `now`, and every rule that reads `readAt` as "now" today (an airing not yet ended, on now,
 starting soon) reads `now` instead. That is what a guide that is never read (Twitch's lineup) needs. It is also more
@@ -64,18 +68,19 @@ Becomes `Schema.Literals(["YouTube TV", "Twitch"])`.
 So a source can say "something may have changed" every minute and the Displays hear only real changes. The Director's
 `refresh` skips the `set` when `refresh` returns the Screen it was given, the way `take` already does for the slate.
 
-### Data tiles name their source
+### Data tiles name a source only when waiting for its guide
 
-`NoGuide`, `NotInGuide` and `StreamingOnly` carry the `SourceName` they are about. The web copy reads "Waiting for the
-YouTube TV guide" from the source, not from a hard-coded string. With no preferred source, the copy cannot assume
-which one answered.
+With no preferred source, a "not carried" answer could come from either source, so naming one would be arbitrary.
+Only "no guide" is about one source. The `NoGuide` data tile carries its `SourceName`, and its copy reads "Waiting for
+the YouTube TV guide" from that field. The other copy speaks of "your sources": "Streaming only: not on your sources",
+"Not on your sources' channels".
 
 ## Hub (`apps/hub/src/source/`)
 
 ```
 source/
 ├── Source.ts            The port, its variants, and the rule that combines several sources
-├── GuideReader.ts       The port HubServer's /guide hands a guide response to
+├── GuideReader.ts       Reads the guide the shell fetches and keeps it while fresh; /guide feeds it
 ├── youtube-tv/
 │   ├── YouTubeTvGuide.ts      Namespace module: a guide response → channels and airings (today's decode)
 │   ├── YouTubeTvPayload.ts    Unchanged
@@ -92,42 +97,46 @@ export class Source extends Context.Service<Source, {
   readonly availability: Effect.Effect<(game: GameSnapshot) => ChannelAvailability>
   readonly changes: Stream.Stream<void>
 }>()("sportal/hub/source/Source") {
-  /** YouTube TV: a guide the shell pushes through GuideReader, answering until it is 45 minutes old. */
-  static readonly layerYouTubeTv: Layer.Layer<Source | GuideReader>
+  /** YouTube TV: from the latest guide its reader keeps while it is fresh; otherwise no guide. */
+  static readonly layerYouTubeTv: Layer.Layer<Source, never, GuideReader>
   /** Twitch: its fixed lineup, which never goes stale; says it may have changed once a minute. */
   static readonly layerTwitch: Layer.Layer<Source>
-  /** Every source given, as one. Keeps the other services each provides. */
-  static layerAll(sources: …): Layer.Layer<Source | …>
+  /** Every source given, as one. */
+  static layerAll<R>(sources: ReadonlyArray<Layer.Layer<Source, never, R>>): Layer.Layer<Source, never, R>
 }
 ```
 
 The adapter modules know nothing about `Source`. `YouTubeTvGuide` decodes a response into channels and airings, and
-`Twitch.lineup` is a `Guide`. Holding the latest guide, retiring it when stale, and answering availability is the
-same for every source, so it lives once in `Source.ts`, private below the class. Each variant is that machinery given
-its guide's origin and staleness:
+`Twitch.lineup` is a `Guide`. Answering from a guide is `Guide.availabilityOf`, shared by both.
 
 | Variant | Where its guide comes from | Stale after | `changes` |
 |---|---|---|---|
-| `layerYouTubeTv` | `GuideReader.readGuide`, decoded by `YouTubeTvGuide` | 45 minutes | each read, and when the guide goes stale |
-| `layerTwitch` | `Twitch.lineup`, constant | never | a `Schedule.spaced("1 minute")` tick |
+| `layerYouTubeTv` | `GuideReader`'s latest, decoded by `YouTubeTvGuide` | 45 minutes (the reader's) | the reader's: each read, and when the guide goes stale |
+| `layerTwitch` | `Twitch.lineup`, constant | never | a one-minute tick |
 
 **The combining rule** (`layerAll`), one place, pure and tested on its own:
-- **`availability`:** the most useful answer any source gives: carried, then upcoming, then no guide (it may yet be
-  carried once the guide arrives), then not carried (streaming only before not in the guide). The order of the list
+- **`availability`:** the most useful answer any source gives: carried, then upcoming on a known channel, then
+  upcoming with nothing known, then no guide (it may yet be carried once the guide arrives), then not carried
+  (streaming only before not in the guide). The order of the list
   given to `layerAll` never decides between two sources: when two answer alike (two carry the same game), the answer
   is the same kind and either one is right.
 - **`changes`:** the merge of every source's changes.
 
-`layerAll` builds each layer, keeps everything each provides (so `GuideReader` from YouTube TV reaches HubServer),
-and provides the combined `Source` over theirs.
+`layerAll` builds each layer and provides the combined `Source`. YouTube TV's `GuideReader` is a requirement of
+`layerYouTubeTv` provided below it in `main.ts`, so HubServer and the source share one reader.
 
 ### `GuideReader.ts`
 
 ```ts
-/** Reads a guide response the shell fetched from a source's guide page; that source answers from it next. */
+/** Reads the guide responses the shell fetches from a source's guide page, and keeps the latest while fresh. */
 export class GuideReader extends Context.Service<GuideReader, {
+  readonly latest: Effect.Effect<Option.Option<Guide>>
+  readonly changes: Stream.Stream<void>
   readGuide(guide: string): Effect.Effect<void, GuideUnreadable>
-}>()("sportal/hub/source/GuideReader") {}
+}>()("sportal/hub/source/GuideReader") {
+  /** YouTube TV's guide: decoded by YouTubeTvGuide, fresh for 45 minutes after its reading. */
+  static readonly layerYouTubeTv: Layer.Layer<GuideReader>
+}
 ```
 
 HubServer's `/guide` handler yields `GuideReader` instead of `Source`. The API contract and the shell are unchanged.
@@ -137,6 +146,7 @@ HubServer's `/guide` handler yields `GuideReader` instead of `Source`. The API c
 ```ts
 Layer.provide(Director.layer),
 Layer.provide(Source.layerAll([Source.layerYouTubeTv, Source.layerTwitch])),
+Layer.provide(GuideReader.layerYouTubeTv),
 ```
 
 ### Twitch's lineup
@@ -173,9 +183,10 @@ The `Prime Video → twitch.tv/primevideo` mapping is this one channel. Another 
 ## Rules and docs that change with it
 
 - **AGENTS.md / technical-spec rule 9:** "only `main.ts` names concrete sources" becomes "only `main.ts` and
-  `Source.ts` name concrete sources, and only `Source.ts` imports a source's folder".
-- **`.dependency-cruiser.cjs`:** the adapter-folder rule allows `source/Source.ts` to import `source/<name>/`, and
-  `source/twitch/` joins `source/youtube-tv/` in it.
+  the source ports' layer variants (`Source.ts`, `GuideReader.ts`) name concrete sources, and only they import a
+  source's folder".
+- **`.dependency-cruiser.cjs`:** the adapter-folder rule allows `source/Source.ts` and `source/GuideReader.ts` to
+  import `source/<name>/`, and `source/twitch/` joins `source/youtube-tv/` in it.
 - **CONTEXT.md:** Source's example gains Twitch. **Channel** gains "and, on a source with no listings, the network
   whose every broadcast it carries". **Guide reader** today names only the shell component that fetches the guide; it
   widens to both halves: the shell's fetches a source's guide with the source's own request, the Hub's reads what the
@@ -190,8 +201,8 @@ The `Prime Video → twitch.tv/primevideo` mapping is this one channel. Another 
 - `Source.test.ts`: the combining rule (carried beats upcoming, no guide and not carried from any source; upcoming
   beats no guide; no guide beats not carried; streaming only beats not in guide; the kind of answer is the same whichever
   order the sources are given), and changes merge.
-- YouTube TV's existing tests move with the decode to `YouTubeTvGuide.test.ts` and to the `layerYouTubeTv` tests,
-  every assertion kept.
+- YouTube TV's existing tests move to `GuideReader.test.ts` (reading, staleness) and `Source.test.ts` (no guide,
+  slate matching), every assertion kept.
 - `Screen.test.ts`: `refresh` returns the same Screen when nothing changed.
 - `Director.test.ts`: a refresh that changes nothing publishes no Screen change.
 
