@@ -189,6 +189,7 @@ describe("ProviderSession.allows", () => {
     "http://tv.youtube.com/",
     "https://www.twitch.tv/primevideo",
     "http://player.twitch.tv/",
+    "https://player.twitch.tv.evil.com/",
     "https://www.google.com/url?q=https://evil.example",
     "https://sites.google.com/",
     "https://evilyoutube.com/",
