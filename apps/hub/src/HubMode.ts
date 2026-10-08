@@ -41,15 +41,16 @@ const live = Layer.mergeAll(
   YouTubeTv.layer
 )
 
-// The scenario plays as the provider through the real Ingest, onto a feed log of its own, decoded as ESPN recorded it.
+// The scenario plays as the provider through the real Ingest, onto a feed log of its own, decoded as ESPN recorded it: a
+// recorded game day is read from the data directory's feed log, which only Scenarios opens.
 // Ingest and the Board share the scenario's clock; the rest of the Hub keeps the real one.
 const scenario = Layer.mergeAll(
   Ingest.layer.pipe(
     Layer.provideMerge(Board.layer),
     Layer.provide(BoardTelemetry.layer),
     Layer.provide(FeedLog.layerMemory),
-    Layer.provide([Espn.layerScenario.pipe(Layer.provide(Scenarios.layer)), DateTime.layerCurrentZoneLocal]),
-    Layer.provide(ScenarioClock.layer)
+    Layer.provide(Espn.layerScenario.pipe(Layer.provide(Scenarios.layer))),
+    Layer.provide([DateTime.layerCurrentZoneLocal, ScenarioClock.layer])
   ),
   ScenarioSource.layer
 )

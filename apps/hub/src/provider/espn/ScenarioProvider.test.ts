@@ -146,10 +146,10 @@ describe("ScenarioProvider", () => {
           HubConfig | Scenarios
         >
         const crowded = provider.pipe(
-          Layer.provide([
-            Scenarios.layer,
+          Layer.provide(Scenarios.layer.pipe(Layer.provide(DateTime.layerCurrentZoneLocal))),
+          Layer.provideMerge(
             HubConfig.layerTest({ SPORTAL_SCENARIO: "crowded-fourth-quarter" }).pipe(Layer.orDie)
-          ]),
+          ),
           Layer.provide(NodeServices.layer)
         )
 
@@ -341,13 +341,16 @@ describe("ScenarioProvider", () => {
     "should play every committed scenario to a non-empty final slate",
     () =>
       Effect.gen(function* () {
-        const scenarios = yield* Scenarios
-        const names = yield* scenarios.names
+        const names = yield* Scenarios.use((scenarios) => scenarios.names).pipe(
+          Effect.provide(committedScenarios)
+        )
 
         const finals = yield* Effect.forEach(names, (name) =>
           Effect.gen(function* () {
-            const loaded = yield* scenarios.load(name)
-            const frames = yield* Stream.runCollect(loaded.frames)
+            const frames = yield* Scenarios.use((scenarios) => scenarios.load(name)).pipe(
+              Effect.flatMap((loaded) => Stream.runCollect(loaded.frames)),
+              Effect.provide(committedScenarios)
+            )
             const games = yield* playedToItsEnd(frames).pipe(
               Effect.provide(playing(name, { from: committed })),
               Effect.scoped
@@ -359,7 +362,7 @@ describe("ScenarioProvider", () => {
 
         assert.isAbove(names.length, 0)
         for (const { name, games } of finals) assert.isNotEmpty(games, name)
-      }).pipe(Effect.provide([Scenarios.layer.pipe(Layer.provide(NodeServices.layer)), NodeServices.layer])),
+      }).pipe(Effect.provide(NodeServices.layer)),
     120_000
   )
 
@@ -431,7 +434,7 @@ function readAhead(from: string) {
 
       return Scenarios.of({ names: scenarios.names, load })
     })
-  ).pipe(Layer.provide(Scenarios.layerFrom(from)))
+  ).pipe(Layer.provide(Scenarios.layerFrom(from).pipe(Layer.provide(DateTime.layerCurrentZoneLocal))))
 }
 
 /**
@@ -464,6 +467,13 @@ const fixtures = fileURLToPath(new URL("./fixtures/", import.meta.url))
 
 // The committed recordings, in fixtures/scenarios/ at the repository's root.
 const committed = fileURLToPath(new URL("../../../../../fixtures/scenarios/", import.meta.url))
+
+// The committed recordings as Scenarios reads them, beside a data directory that does not exist. Provided apart from a
+// Hub under test, which builds HubConfig from its own variables.
+const committedScenarios = Scenarios.layer.pipe(
+  Layer.provide([HubConfig.layerTest({}).pipe(Layer.orDie), DateTime.layerCurrentZoneLocal]),
+  Layer.provide(NodeServices.layer)
+)
 
 /** League `league`'s last listing in the slate. */
 function listed(league: LeagueId) {

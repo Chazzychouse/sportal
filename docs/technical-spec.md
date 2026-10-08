@@ -165,7 +165,7 @@ sportal/
 ├── vitest.config.ts            Vitest projects and coverage; each workspace has its own vitest.config.ts
 ├── .dependency-cruiser.cjs     Import-direction and banned-name rules
 ├── lefthook.yml
-├── fixtures/scenarios/         Recorded scenarios: the raw frames of recorded game-day windows
+├── fixtures/scenarios/         Recorded scenarios: the raw frames of recorded game-day windows; whole game days play from the feed log
 ├── telemetry/                  Local Grafana: compose file and the Hub's dashboards
 │
 ├── docs/
@@ -256,7 +256,7 @@ sportal/
     │       │       ├── TestYouTubeTv.ts     A recorded guide for tests of other modules
     │       │       └── fixtures/            Recorded real payloads
     │       └── scenario/
-    │           ├── Scenarios.ts        Every recording by name, and reading one back as a Scenario: a name and ESPN's frames
+    │           ├── Scenarios.ts        Every recording and recorded game day by name, and reading one back as a Scenario: a name and a stream of ESPN's frames
     │           ├── ScenarioClock.ts    Scenario time: the Hub's clock at HubConfig's scenario speed
     │           └── ScenarioSource.ts   Every game carried on a synthetic stream page
     │
@@ -377,6 +377,7 @@ class Board extends Context.Service<Board, {
 - `BoardTelemetry` is the service the board tells of every take and tick, in order; the board itself logs and counts nothing.
 - `Slate.published()` is each listed game as the slate has it, with each game's last ten plays (`recentPlays`, on `SlateChanged`); the Hub server sends it within 250 ms of a change, and the Switcher reads the listed games from `latest`. Game events ride on `taken`.
 - `HubMode` provides it in both modes. A scenario is the provider through the real Ingest, on the scenario clock: polled at each of its frames' times and at least every 10 seconds, its recorded live feed pushed at its recorded offsets, and every frame appended to a feed log of its own, in memory.
+- A scenario named for a game day, `YYYY-MM-DD`, is that day as the data directory's `feed.sqlite` recorded it: the feed log's `replay` from the day's start, while a frame was received before the next day's start, each without its `seq`. What the replay looks back for, a topic's checkpoint from before 04:00 and its frames after it, is received at 04:00 instead. `Scenarios` opens that feed log only while it lists the days or reads a day's frames, and only when the file is there; nothing appends to it, and the rest of the Hub never sees it. Any other name is a recording in `fixtures/scenarios/`.
 
 **Source** — video out:
 

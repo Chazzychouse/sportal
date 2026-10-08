@@ -45,7 +45,7 @@ function played(scenario: Scenario): Stream.Stream<Frame> {
             const now = yield* DateTime.now
 
             yield* Effect.sleep(Duration.max(DateTime.distance(now, at), Duration.zero))
-            return movedTo(frame, at)
+            return Frame.movedTo(frame, at)
           })
         ),
         Stream.tapError(({ path, cause }) =>
@@ -56,11 +56,4 @@ function played(scenario: Scenario): Stream.Stream<Frame> {
       )
     )
   )
-}
-
-/** `frame` received at `at` instead, the instant it was sent moved with it. */
-function movedTo(frame: Frame, at: DateTime.Utc): Frame {
-  const moved = DateTime.distance(frame.receivedAt, at)
-  const sentAt = frame.sentAt === undefined ? undefined : DateTime.addDuration(frame.sentAt, moved)
-  return new Frame({ ...frame, receivedAt: at, sentAt })
 }

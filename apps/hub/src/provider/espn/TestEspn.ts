@@ -1,7 +1,8 @@
 import { fileURLToPath } from "node:url"
 import { NodeServices } from "@effect/platform-node"
-import { Effect, Layer, Stream } from "effect"
+import { DateTime, Effect, Layer, Stream } from "effect"
 import * as Socket from "effect/socket/Socket"
+import { HubConfig } from "../../HubConfig.ts"
 import { Scenarios } from "../../scenario/Scenarios.ts"
 
 /** A WebSocket constructor for tests that never push: opening a socket throws. */
@@ -31,5 +32,10 @@ export const recordedPlays = 182
 /** NE at BUF's recorded frames, read back as the recorded scenario `neAtBufFrames`. */
 export const recordedNeAtBuf = Scenarios.use((scenarios) => scenarios.load(neAtBufFrames)).pipe(
   Effect.flatMap(({ frames }) => Stream.runCollect(frames)),
-  Effect.provide(Scenarios.layerFrom(fixtures).pipe(Layer.provideMerge(NodeServices.layer)))
+  Effect.provide(
+    Scenarios.layerFrom(fixtures).pipe(
+      Layer.provide([HubConfig.layerTest({}).pipe(Layer.orDie), DateTime.layerCurrentZoneLocal]),
+      Layer.provideMerge(NodeServices.layer)
+    )
+  )
 )
