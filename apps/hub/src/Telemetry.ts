@@ -14,7 +14,7 @@ export const layer: Layer.Layer<
   HubConfig | HttpClient.HttpClient | Crypto.Crypto
 > = Layer.unwrap(
   Effect.gen(function* () {
-    const { logLevel, logFormat, otlpUrl, version, scenario } = yield* HubConfig
+    const { logLevel, logFormat, otlpUrl, version } = yield* HubConfig
     const console = Layer.mergeAll(
       Layer.succeed(References.MinimumLogLevel, logLevel),
       logFormat === "json" ? Logger.layer([Logger.consoleJson]) : Layer.empty
@@ -28,20 +28,14 @@ export const layer: Layer.Layer<
     const httpClient = yield* HttpClient.HttpClient
     const client = HttpClient.tapError(httpClient, () => warnOnce)
     const crypto = yield* Crypto.Crypto
-    // Prometheus keys series by instance, so two Hubs at once (a live one and a scenario) stay apart.
+    // Prometheus keys series by instance, so two Hubs at once stay apart.
     const instanceId = yield* crypto.randomUUIDv4
     return Otlp.layerJson({
       baseUrl: otlpUrl.value.href,
       resource: {
         serviceName: "sportal-hub",
         serviceVersion: version,
-        attributes: {
-          "service.instance.id": instanceId,
-          "sportal.mode": Option.match(scenario, {
-            onNone: () => "live",
-            onSome: (name) => `scenario:${name}`
-          })
-        }
+        attributes: { "service.instance.id": instanceId }
       },
       shutdownTimeout: "1 second"
     }).pipe(Layer.provide(Layer.succeed(HttpClient.HttpClient, client)), Layer.provideMerge(console))

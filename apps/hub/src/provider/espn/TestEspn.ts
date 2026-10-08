@@ -1,9 +1,9 @@
+import { readFileSync } from "node:fs"
 import { fileURLToPath } from "node:url"
-import { NodeServices } from "@effect/platform-node"
-import { Context, Effect, Layer, Stream } from "effect"
+import { gunzipSync } from "node:zlib"
+import { Context, Effect, Layer, Schema, Stream } from "effect"
 import * as Socket from "effect/socket/Socket"
-import type { Frame } from "../../Frame.ts"
-import { Scenarios } from "../../scenario/Scenarios.ts"
+import { Frame } from "../../Frame.ts"
 import type { Delivery } from "../../slate/Delivery.ts"
 import * as EspnDecoder from "./EspnDecoder.ts"
 
@@ -12,13 +12,8 @@ export const noSocket = Layer.succeed(Socket.WebSocketConstructor, () => {
   throw new Error("this test opens no socket")
 })
 
-/**
- * This adapter's fixtures folder, where NE at BUF's frames on 2026-10-04 are kept as the recorded scenario
- * `neAtBufFrames`: imported from the recording, its game topic's frames and every scoreboard poll of the day, trimmed
- * to it.
- */
+/** This adapter's fixtures folder. */
 export const fixtures = fileURLToPath(new URL("./fixtures/", import.meta.url))
-const neAtBufFrames = "nfl-2026-10-04-ne-buf"
 
 /**
  * Every play id NE at BUF's recorded frames add, the same plays its summary's drives list. Measured once over the
@@ -31,11 +26,17 @@ const neAtBufFrames = "nfl-2026-10-04-ne-buf"
  */
 export const recordedPlays = 182
 
-/** NE at BUF's recorded frames, read back as the recorded scenario `neAtBufFrames`. */
-export const recordedNeAtBuf = Scenarios.use((scenarios) => scenarios.load(neAtBufFrames)).pipe(
-  Effect.flatMap(({ frames }) => Stream.runCollect(frames)),
-  Effect.provide(Scenarios.layerFrom(fixtures).pipe(Layer.provideMerge(NodeServices.layer)))
-)
+/**
+ * NE at BUF's frames on 2026-10-04, one JSON frame a line in a gzip'd file: imported from the recording, its game
+ * topic's frames and every scoreboard poll of the day, trimmed to it.
+ */
+export const recordedNeAtBuf = Effect.gen(function* () {
+  const file = new URL("./fixtures/nfl-2026-10-04-ne-buf.frames.jsonl.gz", import.meta.url)
+  const lines = gunzipSync(readFileSync(file)).toString("utf8").split("\n")
+
+  const frames = lines.filter((line) => line !== "")
+  return yield* Effect.forEach(frames, (frame) => decodeFrame(frame))
+})
 
 /** What ESPN's decode says each of `frames` said. */
 export const decodedFrames = Effect.fn("TestEspn.decodedFrames")(function* (frames: ReadonlyArray<Frame>) {
@@ -51,3 +52,5 @@ export class FramesDecoded extends Context.Service<FramesDecoded, ReadonlyArray<
     return Layer.effect(FramesDecoded, Effect.flatMap(frames, decodedFrames))
   }
 }
+
+const decodeFrame = Schema.decodeEffect(Schema.fromJsonString(Frame))

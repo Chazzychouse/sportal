@@ -1,4 +1,4 @@
-import { type DateTime, Schema } from "effect"
+import { Schema } from "effect"
 
 /** One thing a provider delivered, as received, before its decode reads it. */
 export class Frame extends Schema.Class<Frame>("sportal/hub/Frame")({
@@ -10,9 +10,4 @@ export class Frame extends Schema.Class<Frame>("sportal/hub/Frame")({
   kind: Schema.Literals(["whole", "change"]),
   number: Schema.optional(Schema.Int),
   body: Schema.String
-}) {
-  /** `frame` received at `at` instead. */
-  static movedTo(frame: Frame, at: DateTime.Utc): Frame {
-    return new Frame({ ...frame, receivedAt: at })
-  }
-}
+}) {}

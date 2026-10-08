@@ -11,8 +11,6 @@ describe("HubConfig", () => {
       assert.strictEqual(config.port, 4400)
       assert.strictEqual(config.host, "0.0.0.0")
       assert.isTrue(Option.isNone(config.webRoot))
-      assert.isTrue(Option.isNone(config.scenario))
-      assert.strictEqual(config.scenarioSpeed, 1)
       assert.strictEqual(config.logLevel, "Info")
       assert.strictEqual(config.logFormat, "pretty")
       assert.strictEqual(config.version, "dev")
@@ -28,8 +26,6 @@ describe("HubConfig", () => {
       assert.strictEqual(config.port, 5000)
       assert.strictEqual(config.host, "127.0.0.1")
       assert.deepStrictEqual(config.webRoot, Option.some("/srv/web"))
-      assert.deepStrictEqual(config.scenario, Option.some("bogus-clock-two-minute"))
-      assert.strictEqual(config.scenarioSpeed, 10)
       assert.strictEqual(config.logLevel, "Debug")
       assert.strictEqual(config.logFormat, "json")
       assert.strictEqual(config.version, "1.2.3")
@@ -51,8 +47,6 @@ describe("HubConfig", () => {
 
   it.effect.each([
     ["SPORTAL_PORT", "eighty"],
-    ["SPORTAL_SCENARIO_SPEED", "0"],
-    ["SPORTAL_SCENARIO_SPEED", "NaN"],
     ["SPORTAL_LOG_LEVEL", "Loud"],
     ["SPORTAL_LOG_FORMAT", "xml"],
     ["SPORTAL_OTLP_URL", "not a url"],
@@ -75,8 +69,6 @@ const everySetting = {
   SPORTAL_PORT: "5000",
   SPORTAL_HOST: "127.0.0.1",
   SPORTAL_WEB_ROOT: "/srv/web",
-  SPORTAL_SCENARIO: "bogus-clock-two-minute",
-  SPORTAL_SCENARIO_SPEED: "10",
   SPORTAL_LOG_LEVEL: "Debug",
   SPORTAL_LOG_FORMAT: "json",
   SPORTAL_VERSION: "1.2.3",
