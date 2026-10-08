@@ -23,7 +23,7 @@ export function useHotkeys(handle: (hotkey: Hotkey) => void) {
         "page"
       )
       if (hotkey === undefined || event.repeat) return
-      if (hotkey._tag !== "CommandPalette" && (isTyping(event.target) || event.defaultPrevented)) return
+      if (!Hotkey.guards.CommandPalette(hotkey) && (isTyping(event.target) || event.defaultPrevented)) return
       event.preventDefault()
       latest.current(hotkey)
     }
