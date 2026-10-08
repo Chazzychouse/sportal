@@ -4,7 +4,7 @@
 {
   "languages": {
     "TypeScript": {
-      "language_servers": ["effect-tsgo", "!vtsls", "!typescript-language-server", "!typescript-ls", "..."]
+      "language_servers": ["effect-tsgo", "!vtsls"]
     },
     "TSX": {
       "language_servers": ["effect-tsgo", "!vtsls", "!typescript-language-server", "!typescript-ls", "..."]

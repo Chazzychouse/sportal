@@ -2,20 +2,16 @@ node_modules/
 dist/
 out/
 *.tsbuildinfo
+
+fixtures/**
+
+# dotfiles
+.sportal/
+.worktrees/
+**/docs/.**
 .env
 .env.*
 !.env.example
-
-# Raw feed recordings (large, uncurated); curated fixtures live beside their adapter
-fixtures/espn-recordings/*/
-
-spikes/
-
-# Where earlier Hubs kept their feed log (SPORTAL_DATA_DIR)
-.sportal/
-
-# Git worktrees for isolated work
-.worktrees/
 
 # Coverage reports (pnpm coverage)
 coverage/
