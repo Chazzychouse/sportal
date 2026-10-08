@@ -1,5 +1,5 @@
 import { type GameId, GameSnapshot } from "@sportal/domain/Game"
-import { LayoutName, type Stage, type StageCommand } from "@sportal/domain/Stage"
+import { LayoutName, type Stage, type StageCommand, Tile } from "@sportal/domain/Stage"
 import { Option } from "effect"
 import {
   CommandDialog,
@@ -34,7 +34,7 @@ export function CommandPalette(props: {
   }
   const gameOn = (id: GameId) => props.slate.find((game) => game.id === id)
   const occupied = props.stage.onStage().flatMap((tile, slot) => {
-    if (tile._tag === "Empty") return []
+    if (Tile.guards.Empty(tile)) return []
     const game = gameOn(tile.game)
     return [{ slot, name: game === undefined ? `Tile ${slot + 1}` : scoreline(game) }]
   })
