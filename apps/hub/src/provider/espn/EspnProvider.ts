@@ -1,6 +1,6 @@
 import type { GameSnapshot } from "@sportal/domain/Game"
 import type { LeagueId } from "@sportal/domain/League"
-import { DateTime, Duration, Effect, Layer, Metric, Option, Schedule, Stream } from "effect"
+import { DateTime, Duration, Effect, HashMap, Layer, Metric, Option, Stream } from "effect"
 import { Headers, HttpClient, HttpClientError } from "effect/http"
 import { Frame } from "../../Frame.ts"
 import { HubConfig } from "../../HubConfig.ts"
@@ -11,9 +11,9 @@ import { ProviderUnavailable } from "./ProviderUnavailable.ts"
 
 /**
  * ESPN as the provider: the site scoreboard of each league `HubConfig` names, polled, and FastCast pushing, their
- * frames read by `EspnDecoder`. It polls every league, then waits by the games those scoreboards show: 10 seconds while
- * a game is live, a minute within 30 minutes of a kickoff, and 15 minutes otherwise; at most 30 seconds after a poll in
- * which a league failed or its scoreboard did not decode. A poll that does not connect is `Unreachable` for its league,
+ * frames read by `EspnDecoder`. It polls every league, then waits by the games those scoreboards last showed (a league
+ * that failed or did not decode keeps its last good games): 10 seconds while a game is live, a minute within 30 minutes
+ * of a kickoff, and 15 minutes otherwise; at most 30 seconds after a poll in which a league failed or did not decode. A poll that does not connect is `Unreachable` for its league,
  * and one answered with a status other than 2xx `Refused`; either is logged and counted, and delivers no frame.
  */
 export const layer: Layer.Layer<Provider, never, FastCast | HttpClient.HttpClient | HubConfig> = Layer.effect(
@@ -56,8 +56,21 @@ export const layer: Layer.Layer<Provider, never, FastCast | HttpClient.HttpClien
       return polled
     }, Effect.trackDuration(pollDuration))
 
-    const polls = Stream.fromEffectSchedule(pollEveryLeague(), polling).pipe(
-      Stream.flatMap((polled) => Stream.fromIterable(polled.flatMap(({ frame }) => Option.toArray(frame))))
+    // Each poll waits as the one before it left, then carries each league's last good games on.
+    const polls = Stream.fromEffectRepeat(Effect.void).pipe(
+      Stream.mapAccumEffect(
+        (): LastPoll => ({ shown: HashMap.empty(), wait: Duration.zero }),
+        (last) =>
+          Effect.gen(function* () {
+            yield* Effect.sleep(last.wait)
+            const polled = yield* pollEveryLeague()
+            const now = yield* DateTime.now
+
+            const shown = shownAfter(last.shown, polled)
+            const next: LastPoll = { shown, wait: interval(shown, polled, now) }
+            return [next, polled.flatMap(({ frame }) => Option.toArray(frame))] as const
+          })
+      )
     )
 
     return Provider.of({
@@ -119,19 +132,39 @@ const gamesShown = Effect.fnUntraced(function* (league: LeagueId, body: string) 
   return games
 })
 
-/** Every poll after the first waits as `interval` says of the poll before it. */
-const polling = Schedule.forever.pipe(
-  Schedule.setInputType<ReadonlyArray<Polled>>(),
-  Schedule.modifyDelay(({ input, now }) => Effect.succeed(interval(input, DateTime.makeUnsafe(now))))
-)
+/**
+ * What the last poll left: the games each league's scoreboard last showed, kept from an earlier poll for a league that
+ * failed or did not decode since, and how long to wait before the next poll.
+ */
+interface LastPoll {
+  readonly shown: HashMap.HashMap<LeagueId, ReadonlyArray<GameSnapshot>>
+  readonly wait: Duration.Duration
+}
+
+/** `shown`, with each league `polled` read again replaced by what its scoreboard shows now. */
+function shownAfter(
+  shown: HashMap.HashMap<LeagueId, ReadonlyArray<GameSnapshot>>,
+  polled: ReadonlyArray<Polled>
+): HashMap.HashMap<LeagueId, ReadonlyArray<GameSnapshot>> {
+  return polled.reduce(
+    (carried, { league, games }) =>
+      Option.match(games, { onNone: () => carried, onSome: (read) => HashMap.set(carried, league, read) }),
+    shown
+  )
+}
 
 /**
- * How long to wait before the next poll, given what the last one showed. When a league failed in it or its scoreboard
- * did not decode, the wait is capped at 30 seconds so that scoreboard is read again soon; a live game still polls every
- * 10 seconds. Reads only each game's progress and kickoff, so any league polls by it.
+ * How long to wait before the next poll, given the games each league last showed. When a league failed in the last
+ * poll or its scoreboard did not decode, the wait is capped at 30 seconds so that scoreboard is read again soon; a live
+ * game, its own league's included, still polls every 10 seconds. Reads only each game's progress and kickoff, so any
+ * league polls by it.
  */
-function interval(polled: ReadonlyArray<Polled>, now: DateTime.Utc): Duration.Duration {
-  const games = polled.flatMap(({ games }) => Option.getOrElse(games, () => []))
+function interval(
+  shown: HashMap.HashMap<LeagueId, ReadonlyArray<GameSnapshot>>,
+  polled: ReadonlyArray<Polled>,
+  now: DateTime.Utc
+): Duration.Duration {
+  const games = [...HashMap.values(shown)].flat()
   const anyUnread = polled.some(({ games }) => Option.isNone(games))
   const normal = games.some((game) => game.progress() === "live")
     ? Duration.seconds(10)

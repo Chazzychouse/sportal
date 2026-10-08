@@ -269,6 +269,26 @@ describe("EspnProvider.frames", () => {
     })
   )
 
+  it.effect("should poll every 10 seconds after a league fails during its own live game", () =>
+    Effect.gen(function* () {
+      const live = scoreboardOf([{ state: "in", period: 2 }])
+
+      const polled = yield* polledOver(["10 seconds", "10 seconds"], { fbs: [live, down] })
+
+      assert.deepStrictEqual(polled, [0, 10_000, 20_000])
+    })
+  )
+
+  it.effect("should poll every 10 seconds after its own live game's scoreboard does not decode", () =>
+    Effect.gen(function* () {
+      const live = scoreboardOf([{ state: "in", period: 2 }])
+
+      const polled = yield* polledOver(["10 seconds", "10 seconds"], { fbs: [live, "not json"] })
+
+      assert.deepStrictEqual(polled, [0, 10_000, 20_000])
+    })
+  )
+
   it.effect("should poll again within 30 seconds after a scoreboard that does not decode", () =>
     Effect.gen(function* () {
       const polled = yield* polledOver("30 seconds", { fbs: "not json" })
@@ -476,26 +496,36 @@ function pollFailures(ended: ReadonlyArray<Tracer.Span>) {
 const down = "down"
 
 /**
- * The instants, in milliseconds from noon on 2026-10-03, at which ESPN's provider polls over `span` of the test clock
- * from then, each league of `answers` answered with its scoreboard body, or unable to connect when it is `down`.
+ * The instants, in milliseconds from noon on 2026-10-03, at which ESPN's provider polls as the test clock moves from
+ * then by each of `spans`. Each league of `answers` answers its polls in turn (the last answer again once they run
+ * out) with a scoreboard body, or cannot connect when the answer is `down`.
  */
-function polledOver(span: Duration.Input, answers: Partial<Record<LeagueId, string>>) {
+function polledOver(
+  spans: Duration.Input | ReadonlyArray<Duration.Input>,
+  answers: Partial<Record<LeagueId, string | ReadonlyArray<string>>>
+) {
   return Effect.gen(function* () {
     const start = DateTime.makeUnsafe("2026-10-03T12:00:00Z").epochMilliseconds
     yield* TestClock.setTime(start)
-    const requests = yield* Ref.make<ReadonlyArray<number>>([])
+    const requests = yield* Ref.make<ReadonlyArray<{ readonly league: LeagueId; readonly at: number }>>([])
+    const answerOf = (league: LeagueId, poll: number) => {
+      const answered = Arr.ensure(answers[league] ?? [])
+      return answered[Math.min(poll, answered.length - 1)]
+    }
     const client = HttpClient.make((request) =>
       Effect.gen(function* () {
         const now = yield* Clock.currentTimeMillis
-        yield* Ref.update(requests, (all) => [...all, now - start])
-        const body = answers[request.url.includes("/nfl/") ? "nfl" : "fbs"]
+        const league: LeagueId = request.url.includes("/nfl/") ? "nfl" : "fbs"
+        const earlier = yield* Ref.getAndUpdate(requests, (all) => [...all, { league, at: now - start }])
+
+        const body = answerOf(league, earlier.filter((one) => one.league === league).length)
         return body === undefined || body === down
           ? yield* transportFailure(request)
           : HttpClientResponse.fromWeb(request, new Response(body))
       })
     )
     const leagues = LeagueId.literals.filter((league) => answers[league] !== undefined)
-    const answeredLeagues = leagues.filter((league) => answers[league] !== down).length
+    const framesOfPoll = (poll: number) => leagues.filter((league) => answerOf(league, poll) !== down).length
 
     yield* Effect.gen(function* () {
       const provider = yield* Provider
@@ -504,16 +534,18 @@ function polledOver(span: Duration.Input, answers: Partial<Record<LeagueId, stri
         Stream.runForEach((frame) => Queue.offer(frames, frame)),
         Effect.forkScoped({ startImmediately: true })
       )
-      yield* Queue.takeBetween(frames, answeredLeagues, answeredLeagues)
+      yield* Queue.takeBetween(frames, framesOfPoll(0), framesOfPoll(0))
 
-      yield* TestClock.adjust(span)
-
-      yield* Queue.takeBetween(frames, answeredLeagues, answeredLeagues)
+      yield* Effect.forEach(Arr.ensure(spans), (span, index) =>
+        TestClock.adjust(span).pipe(
+          Effect.andThen(Queue.takeBetween(frames, framesOfPoll(index + 1), framesOfPoll(index + 1)))
+        )
+      )
       yield* TestClock.adjust(0)
     }).pipe(Effect.provide(espnOver(client, { leagues: leagues.join(",") })), Effect.scoped)
 
     const polled = yield* Ref.get(requests)
-    return Arr.dedupe(polled)
+    return Arr.dedupe(polled.map(({ at }) => at))
   })
 }
 

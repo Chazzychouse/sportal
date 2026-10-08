@@ -1,15 +1,25 @@
 import type { LeagueId } from "@sportal/domain/League"
 import { Context, Effect, Layer, Option, Stream } from "effect"
+import { TestClock } from "effect/testing"
 import { type Frame, LoggedFrame } from "../Frame.ts"
 import { Delivery } from "../slate/Delivery.ts"
 import { type Decoded, Provider } from "./Provider.ts"
 
-/** The games the provided `Provider`'s first frame polled from `league` lists, as its own decode reads it. */
+/**
+ * The games the provided `Provider`'s first frame polled from `league` lists, as its own decode reads it. It waits on
+ * the live clock for at most 2 seconds, so a provider whose first poll of `league` failed fails the test, saying so,
+ * rather than hanging it.
+ */
 export const listedBy = Effect.fn("TestProvider.listedBy")(function* (league: LeagueId) {
   const provider = yield* Provider
   const polled = yield* provider.frames.pipe(
     Stream.filter((frame) => frame.source === "poll" && frame.channel === league),
-    Stream.runHead
+    Stream.runHead,
+    Effect.timeoutOrElse({
+      duration: "2 seconds",
+      orElse: () => Effect.die(new Error(`the provider delivered no poll of ${league} within 2 seconds`))
+    }),
+    TestClock.withLive
   )
   const said = yield* decodedFrames(Option.toArray(polled))
 

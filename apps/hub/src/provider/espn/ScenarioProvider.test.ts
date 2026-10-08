@@ -355,7 +355,7 @@ describe("ScenarioProvider", () => {
     }).pipe(Effect.scoped)
   )
 
-  it.effect("should play at the scenario's speed", () =>
+  it.effect("should play at the scenario's speed, while the rest of the Hub keeps real time", () =>
     Effect.gen(function* () {
       // The clock and the scenario share one HubConfig, so the same variables build it.
       const env = { SPORTAL_SCENARIO: "two-minute-drill-tie", SPORTAL_SCENARIO_SPEED: "10" }

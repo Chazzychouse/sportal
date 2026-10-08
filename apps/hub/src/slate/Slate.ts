@@ -79,13 +79,6 @@ export class Slate extends Data.Class<{
     )
   }
 
-  /** Each game the slate holds that is current at `now`. */
-  current(now: DateTime.Utc): ReadonlyArray<GameSnapshot> {
-    return everyHeld(this)
-      .filter(({ snapshot, acknowledgement }) => acknowledgement.isCurrent(snapshot, now))
-      .map(({ snapshot }) => snapshot)
-  }
-
   /** Each listed game in `leagues`, leagues in order, as the slate has it. */
   listedGames(leagues: ReadonlyArray<LeagueId>): ReadonlyArray<GameSnapshot> {
     return leagues.flatMap((league) => asHeld(this.listed.get(league) ?? [], this))

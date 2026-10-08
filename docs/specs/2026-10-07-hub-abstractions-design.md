@@ -258,6 +258,9 @@ the push until it goes final, even when the push has been silent for 30 minutes;
 follows ESPN's last scoreboard instead of the slate's games. The two differ only when the push leads the scoreboard, at
 a kickoff, by at most one 1-minute poll.
 
+Scenarios play only their recorded frames: nothing polls a scenario again between them. A game still live when a
+recording ends goes stale 90 s after its last frame, the golden scenario's included.
+
 The corpus runs the fold, not the providers, so neither change can move the events comparison.
 
 ## Effect idiom sweep

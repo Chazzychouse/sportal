@@ -577,7 +577,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "{service_name=\"sportal-hub\"} | sportal_mode=\"$mode\" |~ \"FastCast|Ingest: the live feed\""
+          "expr": "{service_name=\"sportal-hub\"} | sportal_mode=\"$mode\" |~ \"FastCast|Ingest: the (live feed|provider's frames)\""
         }
       ]
     },
