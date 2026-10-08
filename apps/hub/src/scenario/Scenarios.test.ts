@@ -2,7 +2,18 @@ import { fileURLToPath } from "node:url"
 import { NodeServices } from "@effect/platform-node"
 import { assert, describe, it } from "@effect/vitest"
 import type { GameEvent } from "@sportal/domain/GameEvent"
-import { Array as Arr, type Cause, Context, DateTime, Effect, FileSystem, Layer, Path, Schema } from "effect"
+import {
+  Array as Arr,
+  type Cause,
+  Context,
+  DateTime,
+  Effect,
+  FileSystem,
+  Layer,
+  Path,
+  Schema,
+  Stream
+} from "effect"
 import { Frame } from "../Frame.ts"
 import * as Gzip from "../Gzip.ts"
 import * as EspnDecoder from "../provider/espn/EspnDecoder.ts"
@@ -35,14 +46,15 @@ describe("Scenarios", () => {
       const scenarios = yield* Scenarios
 
       const scenario = yield* scenarios.load("late-go-ahead-cascade")
+      const frames = yield* Stream.runCollect(scenario.frames)
 
-      const received = scenario.frames.map(({ receivedAt }) => receivedAt.epochMilliseconds)
-      assert.isAbove(scenario.frames.length, 100)
+      const received = frames.map(({ receivedAt }) => receivedAt.epochMilliseconds)
+      assert.isAbove(frames.length, 100)
       assert.deepStrictEqual(
         received,
         received.toSorted((a, b) => a - b)
       )
-      assert.deepStrictEqual(scenario.origin(), DateTime.makeUnsafe("2026-10-04T20:00:07.418Z"))
+      assert.deepStrictEqual(scenario.origin, DateTime.makeUnsafe("2026-10-04T20:00:07.418Z"))
     }).pipe(Effect.provide(committed))
   )
 
@@ -51,12 +63,43 @@ describe("Scenarios", () => {
       const scenarios = yield* Scenarios
 
       const scenario = yield* scenarios.load("two-polls")
+      const [first] = yield* Stream.runCollect(scenario.frames)
 
-      const [first] = scenario.frames
       assert.strictEqual(scenario.name, "two-polls")
       assert.deepStrictEqual([first?.source, first?.kind], ["poll", "whole"])
-      assert.deepStrictEqual(scenario.origin(), DateTime.makeUnsafe("2026-10-03T16:00:00Z"))
+      assert.deepStrictEqual(scenario.origin, DateTime.makeUnsafe("2026-10-03T16:00:00Z"))
     }).pipe(Effect.provide(scenariosRecording("two-polls.frames.jsonl.gz", gzipped(twoPolls))))
+  )
+
+  it.effect("should give origin without running the frames", () =>
+    Effect.gen(function* () {
+      const scenarios = yield* Scenarios
+
+      const scenario = yield* scenarios.load("bad-line")
+
+      assert.deepStrictEqual(scenario.origin, DateTime.makeUnsafe("2026-10-03T16:00:00Z"))
+    }).pipe(Effect.provide(scenariosRecording("bad-line.frames.jsonl.gz", gzippedThenBadLine(twoPolls))))
+  )
+
+  it.effect("should fail the stream partway on a bad line", () =>
+    Effect.gen(function* () {
+      const scenarios = yield* Scenarios
+      const scenario = yield* scenarios.load("bad-line")
+
+      const error = yield* Stream.runCollect(scenario.frames).pipe(Effect.flip)
+
+      assert.strictEqual(error._tag, "ScenarioUnreadable")
+    }).pipe(Effect.provide(scenariosRecording("bad-line.frames.jsonl.gz", gzippedThenBadLine(twoPolls))))
+  )
+
+  it.effect("should fail ScenarioUnreadable for a file with no frames", () =>
+    Effect.gen(function* () {
+      const scenarios = yield* Scenarios
+
+      const error = yield* scenarios.load("empty").pipe(Effect.flip)
+
+      assert.strictEqual(error._tag, "ScenarioUnreadable")
+    }).pipe(Effect.provide(scenariosRecording("empty.frames.jsonl.gz", gzipped([]))))
   )
 
   // Every committed scenario, decoded and taken whole through ESPN's decode once for these
@@ -196,7 +239,8 @@ const everyScenarioPlayed = Layer.effect(
 
     return yield* Effect.forEach(names, (name) =>
       Effect.gen(function* () {
-        const { frames } = yield* scenarios.load(name)
+        const scenario = yield* scenarios.load(name)
+        const frames = yield* Stream.runCollect(scenario.frames)
         const decoded = yield* decodedFrames(frames)
         const { events, observations } = yield* takenOf(frames)
 
@@ -225,6 +269,11 @@ function scenariosRecording(file: string, contents: Effect.Effect<Uint8Array, Ca
 /** `frames` as a recording's file holds them: JSON lines, gzip'd. */
 function gzipped(frames: ReadonlyArray<Frame>) {
   return Gzip.compress(frames.map((frame) => `${encodeFrame(frame)}\n`).join(""))
+}
+
+/** `frames` as a recording's file holds them, then a line that is not a frame. */
+function gzippedThenBadLine(frames: ReadonlyArray<Frame>) {
+  return Gzip.compress([...frames.map((frame) => encodeFrame(frame)), "not a frame"].join("\n"))
 }
 
 // A recording polled at its start and again 40 s later.

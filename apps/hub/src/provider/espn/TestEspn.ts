@@ -1,6 +1,6 @@
 import { fileURLToPath } from "node:url"
 import { NodeServices } from "@effect/platform-node"
-import { Effect, Layer } from "effect"
+import { Effect, Layer, Stream } from "effect"
 import * as Socket from "effect/socket/Socket"
 import { Scenarios } from "../../scenario/Scenarios.ts"
 
@@ -30,6 +30,6 @@ export const recordedPlays = 182
 
 /** NE at BUF's recorded frames, read back as the recorded scenario `neAtBufFrames`. */
 export const recordedNeAtBuf = Scenarios.use((scenarios) => scenarios.load(neAtBufFrames)).pipe(
-  Effect.map(({ frames }) => frames),
+  Effect.flatMap(({ frames }) => Stream.runCollect(frames)),
   Effect.provide(Scenarios.layerFrom(fixtures).pipe(Layer.provideMerge(NodeServices.layer)))
 )

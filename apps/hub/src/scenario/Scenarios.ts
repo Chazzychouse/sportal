@@ -1,5 +1,5 @@
 import { fileURLToPath } from "node:url"
-import { Context, Data, DateTime, Effect, FileSystem, Layer, Path, Schema } from "effect"
+import { Context, Data, type DateTime, Effect, FileSystem, Layer, Option, Path, Schema, Stream } from "effect"
 import { Frame } from "../Frame.ts"
 import * as Gzip from "../Gzip.ts"
 
@@ -42,15 +42,19 @@ export class Scenarios extends Context.Service<
           }
 
           const file = join(folder, `${name}${suffix}`)
-          const text = yield* fs.readFile(file).pipe(
-            Effect.flatMap((bytes) => Gzip.decompress(bytes, "gzip")),
-            Effect.mapError(unreadable(file))
+          const frames = Gzip.decompressStream(fs.stream(file), "gzip").pipe(
+            Stream.splitLines,
+            Stream.filter((line) => line.length > 0),
+            Stream.mapEffect((line) => decodeFrame(line)),
+            Stream.mapError(unreadable(file))
           )
-          const frames = yield* Effect.forEach(
-            text.split("\n").filter((line) => line.length > 0),
-            (line) => decodeFrame(line).pipe(Effect.mapError(unreadable(file)))
-          )
-          return new Scenario({ name, frames })
+
+          const first = yield* Stream.runHead(frames)
+          if (Option.isNone(first)) {
+            return yield* new ScenarioUnreadable({ path: file, cause: "It holds no frames" })
+          }
+
+          return new Scenario({ name, origin: first.value.receivedAt, frames })
         })
 
         return Scenarios.of({ names, load })
@@ -59,16 +63,16 @@ export class Scenarios extends Context.Service<
   }
 }
 
-/** Games a Hub plays as its provider: a provider's raw frames, in order of receipt, recorded from a window of a game day. */
+/**
+ * Games a Hub plays as its provider: a provider's raw frames, in order of receipt, recorded from a window of a game day.
+ * Its frames are read as they are run, each run from the start.
+ */
 export class Scenario extends Data.Class<{
   readonly name: string
-  readonly frames: ReadonlyArray<Frame>
-}> {
   /** When it starts: its first frame's receipt. */
-  origin(): DateTime.Utc {
-    return this.frames[0]?.receivedAt ?? DateTime.makeUnsafe(0)
-  }
-}
+  readonly origin: DateTime.Utc
+  readonly frames: Stream.Stream<Frame, ScenarioUnreadable>
+}> {}
 
 /** `SPORTAL_SCENARIO` names no recording; `known` are the names there are. */
 export class ScenarioUnknown extends Schema.TaggedError<ScenarioUnknown>()("ScenarioUnknown", {
@@ -80,7 +84,7 @@ export class ScenarioUnknown extends Schema.TaggedError<ScenarioUnknown>()("Scen
   }
 }
 
-/** A recording's folder or file could not be read as gzip'd frames. */
+/** A recording's folder or file could not be read as gzip'd frames, at its start or partway. */
 export class ScenarioUnreadable extends Schema.TaggedError<ScenarioUnreadable>()("ScenarioUnreadable", {
   path: Schema.String,
   cause: Schema.Defect()

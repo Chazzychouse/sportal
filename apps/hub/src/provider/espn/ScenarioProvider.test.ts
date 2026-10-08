@@ -25,13 +25,19 @@ import * as Gzip from "../../Gzip.ts"
 import { HubConfig } from "../../HubConfig.ts"
 import * as Ingest from "../../Ingest.ts"
 import * as ScenarioClock from "../../scenario/ScenarioClock.ts"
-import { Scenarios, type ScenarioUnknown, type ScenarioUnreadable } from "../../scenario/Scenarios.ts"
+import {
+  Scenario,
+  Scenarios,
+  type ScenarioUnknown,
+  type ScenarioUnreadable
+} from "../../scenario/Scenarios.ts"
 import { Board } from "../../slate/Board.ts"
 import { BoardTelemetry } from "../../slate/BoardTelemetry.ts"
 import { Delivery } from "../../slate/Delivery.ts"
 import { liveEvents } from "../../TestBoard.ts"
 import * as TestSnapshotFeed from "../../TestSnapshotFeed.ts"
 import { pushed } from "../../TestSnapshotFeed.ts"
+import { recordingLogs } from "../../TestTelemetry.ts"
 import { Provider } from "../Provider.ts"
 import { decodedFrames, listedBy } from "../TestProvider.ts"
 import * as ScenarioProvider from "./ScenarioProvider.ts"
@@ -233,6 +239,22 @@ describe("ScenarioProvider", () => {
       }).pipe(Effect.provide(scenarioOfTwoPolls()), Effect.scoped)
     )
 
+    it.effect("should end its frames, logged, when the scenario's stream fails partway", () => {
+      const { logs, layer } = recordingLogs()
+      return Effect.gen(function* () {
+        const received = yield* playedFrames(() => true)
+
+        yield* TestClock.adjust(0)
+        yield* TestClock.adjust("1 minute")
+
+        const frames = yield* Ref.get(received)
+        const errors = logs.filter(({ level }) => level === "Error")
+        assert.deepStrictEqual(frames.map(scoreAndReceipt), [[3, 0]])
+        assert.lengthOf(errors, 1)
+        assert.include(errors[0]?.message, "broken.frames.jsonl.gz")
+      }).pipe(Effect.provide([scenarioBrokenAfterAPoll(), layer]), Effect.scoped)
+    })
+
     it.effect("should start the scenario when its frames are first run, not when its layer is built", () =>
       Effect.gen(function* () {
         const context = yield* Layer.build(scenarioOfTwoPolls())
@@ -337,7 +359,8 @@ describe("ScenarioProvider", () => {
 
         const finals = yield* Effect.forEach(names, (name) =>
           Effect.gen(function* () {
-            const { frames } = yield* scenarios.load(name)
+            const loaded = yield* scenarios.load(name)
+            const frames = yield* Stream.runCollect(loaded.frames)
             const games = yield* playedToItsEnd(frames).pipe(
               Effect.provide(playing(name, { from: committed })),
               Effect.scoped
@@ -433,7 +456,7 @@ describe("ScenarioProvider", () => {
  * read from `from` (this folder's `fixtures/`, unless given), its frames read by `decode` (ESPN's, unless given).
  */
 function scenario(name: string, options: Options = {}) {
-  const played = ScenarioProvider.layer.pipe(Layer.provide(Scenarios.layerFrom(options.from ?? fixtures)))
+  const played = ScenarioProvider.layer.pipe(Layer.provide(readAhead(options.from ?? fixtures)))
   return Option.match(Option.fromUndefinedOr(options.decode), {
     onNone: () => played,
     onSome: (decode) =>
@@ -445,6 +468,28 @@ function scenario(name: string, options: Options = {}) {
     Layer.provideMerge(HubConfig.layerTest({ SPORTAL_SCENARIO: name, ...options.env }).pipe(Layer.orDie)),
     Layer.provide(NodeServices.layer)
   )
+}
+
+/**
+ * The recordings in `from`, each read whole when it is loaded, a failure partway kept in its place: its frames then play
+ * on the test clock alone, with no file read waiting on real time.
+ */
+function readAhead(from: string) {
+  return Layer.effect(
+    Scenarios,
+    Effect.gen(function* () {
+      const scenarios = yield* Scenarios
+
+      const load = Effect.fnUntraced(function* (name: string) {
+        const loaded = yield* scenarios.load(name)
+        const read = yield* Stream.runCollect(Stream.result(loaded.frames))
+        const frames = Stream.fromIterable(read).pipe(Stream.mapEffect(Effect.fromResult))
+        return new Scenario({ ...loaded, frames })
+      })
+
+      return Scenarios.of({ names: scenarios.names, load })
+    })
+  ).pipe(Layer.provide(Scenarios.layerFrom(from)))
 }
 
 /**
@@ -505,24 +550,30 @@ function playingChangedAtSeven() {
   )
 }
 
-/** `layerOf` the folder that recorded scenario `name`, of `frames`, is written to, for as long as the layer lives. */
+/**
+ * `layerOf` the folder that recorded scenario `name`, of `frames` and then the lines `after`, is written to, for as long
+ * as the layer lives.
+ */
 function fromRecording<A, E, R>(
   name: string,
   frames: ReadonlyArray<Effect.Effect<Frame>>,
-  layerOf: (from: string) => Layer.Layer<A, E, R>
+  layerOf: (from: string) => Layer.Layer<A, E, R>,
+  after: ReadonlyArray<string> = []
 ) {
-  return Layer.unwrap(Effect.map(recorded(name, frames), layerOf)).pipe(Layer.provide(NodeServices.layer))
+  return Layer.unwrap(Effect.map(recorded(name, frames, after), layerOf)).pipe(
+    Layer.provide(NodeServices.layer)
+  )
 }
 
-/** Writes recorded scenario `name`, of `frames`, to a fresh folder, and gives the folder. */
-function recorded(name: string, frames: ReadonlyArray<Effect.Effect<Frame>>) {
+/** Writes recorded scenario `name`, of `frames` and then the lines `after`, to a fresh folder, and gives the folder. */
+function recorded(name: string, frames: ReadonlyArray<Effect.Effect<Frame>>, after: ReadonlyArray<string>) {
   return Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem
     const path = yield* Path.Path
     const dir = yield* fs.makeTempDirectoryScoped()
     const made = yield* Effect.all(frames)
-    const lines = made.map((frame) => `${Schema.encodeSync(Schema.fromJsonString(Frame))(frame)}\n`)
-    const bytes = yield* Gzip.compress(lines.join(""))
+    const lines = [...made.map((frame) => Schema.encodeSync(Schema.fromJsonString(Frame))(frame)), ...after]
+    const bytes = yield* Gzip.compress(lines.map((line) => `${line}\n`).join(""))
 
     yield* fs.writeFile(path.join(dir, `${name}.frames.jsonl.gz`), bytes)
 
@@ -585,6 +636,13 @@ function scenarioOfTwoPolls() {
   return fromRecording("two-polls", [polledAt(0, [scoring(3)]), polledAt(30, [scoring(10)])], (from) =>
     scenario("two-polls", { from })
   )
+}
+
+/** A recording polled at 0:00 with its game at 3 points, then a line that is not a frame, as the provider. */
+function scenarioBrokenAfterAPoll() {
+  return fromRecording("broken", [polledAt(0, [scoring(3)])], (from) => scenario("broken", { from }), [
+    "not a frame"
+  ])
 }
 
 /** A snapshot feed listing frame's first game's home score and its receive instant. */
