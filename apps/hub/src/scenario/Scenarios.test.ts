@@ -319,6 +319,22 @@ describe("Scenarios", () => {
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer))
   )
 
+  it.effect("should fail ScenarioUnknown for a day between recorded days", () =>
+    Effect.gen(function* () {
+      const dataDir = yield* dataDirLogging([
+        checkpoint("gp-1", "2026-10-04T12:00:00"),
+        poll("two days on", "2026-10-06T12:00:00")
+      ])
+
+      const error = yield* Scenarios.use((scenarios) => scenarios.load("2026-10-05")).pipe(
+        Effect.provide(scenariosIn(dataDir)),
+        Effect.flip
+      )
+
+      assert.strictEqual(error._tag, "ScenarioUnknown")
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer))
+  )
+
   it.effect("should append nothing to the day's feed log", () =>
     Effect.gen(function* () {
       const dataDir = yield* dataDirLogging([
@@ -361,7 +377,7 @@ function dataDirLogging(frames: ReadonlyArray<Frame>) {
     const fs = yield* FileSystem.FileSystem
     const dataDir = yield* fs.makeTempDirectoryScoped()
     const logged = FeedLog.layerTest(frames).pipe(
-      Layer.provide(Database.layerFile("feed.sqlite")),
+      Layer.provide(Database.layerFile(FeedLog.file)),
       Layer.provide([configIn(dataDir), NodeServices.layer]),
       Layer.orDie
     )

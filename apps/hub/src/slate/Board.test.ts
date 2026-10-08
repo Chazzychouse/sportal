@@ -1391,7 +1391,7 @@ describe("Board, a recorded game", () => {
         const half = Math.floor(all.length / 2)
         const fs = yield* FileSystem.FileSystem
         const dir = yield* fs.makeTempDirectoryScoped()
-        const feedFile = Database.layerFile("feed.sqlite").pipe(
+        const feedFile = Database.layerFile(FeedLog.file).pipe(
           Layer.provide(HubConfig.layerTest({ SPORTAL_DATA_DIR: dir }))
         )
         const onDisk = Layer.merge(feedFile, NodeCrypto.layer)

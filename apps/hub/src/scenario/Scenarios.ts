@@ -109,7 +109,7 @@ export class ScenarioUnknown extends Schema.TaggedError<ScenarioUnknown>()("Scen
 
 /**
  * A recording's folder or file could not be read as gzip'd frames, at its start or partway, or the data directory could
- * not be looked in for its feed log.
+ * not be checked for a feed log's file.
  */
 export class ScenarioUnreadable extends Schema.TaggedError<ScenarioUnreadable>()("ScenarioUnreadable", {
   path: Schema.String,
@@ -146,18 +146,21 @@ function fromDataDirLog<A, R>(
       const { join } = yield* Path.Path
       const { dataDir } = yield* HubConfig
 
-      const file = join(dataDir, "feed.sqlite")
+      const file = join(dataDir, FeedLog.file)
       const recorded = yield* fs.exists(file).pipe(Effect.mapError(unreadable(file)))
       return recorded ? opened : Stream.empty
     })
   )
 }
 
-// Game day `day` from the data directory's feed log, if it has frames on it. What the replay looks back for, a topic's
-// checkpoint before the day starts and its frames after it, is received at the day's start instead.
+// Game day `day` from the data directory's feed log, if it has frames received on it. What the replay looks back for, a
+// topic's checkpoint before the day starts and its frames after it, is received at the day's start instead.
 const dayScenario = Effect.fn("Scenarios.dayScenario")(function* (day: GameDay) {
   const zone = yield* DateTime.CurrentTimeZone
   const context = yield* Effect.context<HubConfig | FileSystem.FileSystem | Path.Path | Crypto.Crypto>()
+
+  const days = yield* recordedDays
+  if (!days.includes(day)) return Option.none<Scenario>()
 
   const { from, until } = GameDay.bounds(day, zone)
   const frames = fromDataDirLog((log) => log.replay(from)).pipe(

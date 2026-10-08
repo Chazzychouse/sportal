@@ -49,13 +49,14 @@ describe("HubMode", () => {
         Effect.provide(Scenarios.layer.pipe(Layer.provide([config, DateTime.layerCurrentZoneLocal])))
       )
       const logged = FeedLog.layerTest(recorded).pipe(
-        Layer.provide(Database.layerFile("feed.sqlite")),
+        Layer.provide(Database.layerFile(FeedLog.file)),
         Layer.provide(config),
         Layer.orDie
       )
-      const [day = ""] = yield* FeedLog.use((log) => log.days).pipe(
+      const [day] = yield* FeedLog.use((log) => log.days).pipe(
         Effect.provide([logged, DateTime.layerCurrentZoneLocal])
       )
+      assert.isDefined(day, "the feed log recorded the scenario's day")
 
       const { published } = yield* playedUntilPublished.pipe(
         Effect.provide(scenarioHub(day, { SPORTAL_DATA_DIR: dataDir }))
@@ -67,8 +68,9 @@ describe("HubMode", () => {
 })
 
 /**
- * What the board publishes once it publishes games, the test clock moved on a second at a time until then, and how many
- * takes it took. A scenario's frames are read from disk as they play, which the test clock does not wait for.
+ * What the board publishes once it publishes games, and how many takes it took. A scenario's frames are read from disk
+ * as they play, which the test clock does not wait for, so it moves on a second at a time, a moment of real time
+ * apart, up to five minutes; a scenario that publishes nothing by then gives what the board has.
  */
 const playedUntilPublished = Effect.gen(function* () {
   const board = yield* Board
@@ -79,8 +81,9 @@ const playedUntilPublished = Effect.gen(function* () {
   )
 
   const latest = yield* TestClock.adjust("1 second").pipe(
+    Effect.andThen(TestClock.withLive(Effect.sleep("10 millis"))),
     Effect.andThen(board.latest),
-    Effect.repeat({ until: (slate) => slate.published().games.length > 0 })
+    Effect.repeat({ until: (slate) => slate.published().games.length > 0, times: 300 })
   )
   yield* Fiber.interrupt(counting)
   const takes = yield* Ref.get(taken)

@@ -59,6 +59,9 @@ export class FeedLog extends Context.Service<
     readonly days: Effect.Effect<ReadonlyArray<string>, never, DateTime.CurrentTimeZone>
   }
 >()("sportal/hub/feed-log/FeedLog") {
+  /** The feed log's file in the data directory. */
+  static readonly file = "feed.sqlite"
+
   static readonly layer: Layer.Layer<FeedLog, never, SqlClient.SqlClient | Crypto.Crypto> = Layer.effect(
     FeedLog,
     Effect.gen(function* () {
@@ -126,12 +129,12 @@ export class FeedLog extends Context.Service<
     })
   )
 
-  /** On `feed.sqlite` in the data directory, its own client. */
+  /** On `FeedLog.file` in the data directory, its own client. */
   static readonly layerInDataDir: Layer.Layer<
     FeedLog,
     never,
     HubConfig | FileSystem.FileSystem | Path.Path | Crypto.Crypto
-  > = FeedLog.layer.pipe(Layer.provide(Database.layerFile("feed.sqlite")), Layer.orDie)
+  > = FeedLog.layer.pipe(Layer.provide(Database.layerFile(FeedLog.file)), Layer.orDie)
 
   /** In memory, its own client. */
   static readonly layerMemory: Layer.Layer<FeedLog, never, Crypto.Crypto> = FeedLog.layer.pipe(
