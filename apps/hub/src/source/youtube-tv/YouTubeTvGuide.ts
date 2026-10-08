@@ -3,9 +3,7 @@ import { ChannelId, Guide } from "@sportal/domain/Guide"
 import { Array as Arr, DateTime, Option, Schema, SchemaGetter, SchemaTransformation } from "effect"
 import * as YouTubeTvPayload from "./YouTubeTvPayload.ts"
 
-/** YouTube TV's guide: its responses, read as the channels and airings they list. */
-
-/** YouTube TV, as its guide names it. */
+/** YouTube TV, as its guide names it. Its guide's responses are read here as the channels and airings they list. */
 export const source: SourceName = "YouTube TV"
 
 /**

@@ -143,7 +143,7 @@ function tallied(league: LeagueId) {
   })
 }
 
-/** The source over a fresh database, and ESPN answering from its 2026-10-03 recordings. */
+/** YouTube TV, and ESPN answering from its 2026-10-03 recordings. */
 function matchingLayer() {
   const fbs = recordedScoreboard("fbs-scoreboard-2026-10-03T2024Z")
   const nfl = recordedScoreboard("nfl-scoreboard-pregame")
