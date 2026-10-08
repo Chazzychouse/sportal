@@ -18,7 +18,7 @@ export function Field(props: { game: GameSnapshot; plays: ReadonlyArray<Play>; c
   const [drawing, dispatch] = useReducer(step, plays, (initial) =>
     Drawing.Settled({ last: Math.max(-1, ...initial.map((play) => play.sequence)) })
   )
-  useEffect(() => dispatch({ _tag: "Arrived", plays, game }), [plays, game])
+  useEffect(() => dispatch(FieldEvent.Arrived({ plays, game })), [plays, game])
 
   const ball = game.inPlay() ? game.ball() : Option.none()
   const situation = game.situation
@@ -30,7 +30,7 @@ export function Field(props: { game: GameSnapshot; plays: ReadonlyArray<Play>; c
       aria-label={`The field, ${game.matchup()}`}
       className={cn(
         "transition-opacity duration-500",
-        drawing._tag === "Settled" && Option.isNone(ball) && "opacity-40",
+        Drawing.$is("Settled")(drawing) && Option.isNone(ball) && "opacity-40",
         props.className
       )}
     >
@@ -81,7 +81,7 @@ export function Field(props: { game: GameSnapshot; plays: ReadonlyArray<Play>; c
             game={game}
             plays={plays}
             play={play}
-            onDrawn={() => dispatch({ _tag: "Drawn", play: play.id, game })}
+            onDrawn={() => dispatch(FieldEvent.Drawn({ play: play.id, game }))}
           />
         )
       })}
@@ -115,21 +115,23 @@ const Drawing = Data.taggedEnum<Drawing>()
  */
 const queueLength = 3
 
-function step(
-  drawing: Drawing,
-  event:
-    | { readonly _tag: "Arrived"; readonly plays: ReadonlyArray<Play>; readonly game: GameSnapshot }
-    | { readonly _tag: "Drawn"; readonly play: PlayId; readonly game: GameSnapshot }
-): Drawing {
-  switch (event._tag) {
-    case "Arrived": {
-      const newestSent = Math.max(-1, ...event.plays.map((play) => play.sequence))
+/** What a field hears: plays arrived from the Hub, or a play finished drawing. */
+type FieldEvent = Data.TaggedEnum<{
+  Arrived: { readonly plays: ReadonlyArray<Play>; readonly game: GameSnapshot }
+  Drawn: { readonly play: PlayId; readonly game: GameSnapshot }
+}>
+const FieldEvent = Data.taggedEnum<FieldEvent>()
+
+function step(drawing: Drawing, event: FieldEvent): Drawing {
+  return FieldEvent.$match(event, {
+    Arrived: ({ plays, game }) => {
+      const newestSent = Math.max(-1, ...plays.map((play) => play.sequence))
       if (newestSent < drawing.last) return Drawing.Settled({ last: newestSent })
-      const fresh = event.plays.filter((play) => play.sequence > drawing.last).toSorted(Play.order)
+      const fresh = plays.filter((play) => play.sequence > drawing.last).toSorted(Play.order)
       const newest = fresh.at(-1)
       if (newest === undefined) return drawing
       return Drawing.$match(drawing, {
-        Settled: () => nextOf(fresh.slice(-queueLength), newest.sequence, event.game),
+        Settled: () => nextOf(fresh.slice(-queueLength), newest.sequence, game),
         Animating: (current) =>
           Drawing.Animating({
             ...current,
@@ -137,14 +139,14 @@ function step(
             last: newest.sequence
           })
       })
-    }
-    case "Drawn":
-      return Drawing.$match(drawing, {
+    },
+    Drawn: (drawn) =>
+      Drawing.$match(drawing, {
         Settled: () => drawing,
         Animating: ({ play, queued, last }) =>
-          play.id === event.play ? nextOf(queued, last, event.game) : drawing
+          play.id === drawn.play ? nextOf(queued, last, drawn.game) : drawing
       })
-  }
+  })
 }
 
 /** The first play in `queue` with both spots on the field, drawing; the plays before it are skipped. */
