@@ -1,4 +1,5 @@
 import type { Stage } from "@sportal/domain/Stage"
+import { Option } from "effect"
 import { Expand, Keyboard, List, LogIn, Minimize2, Shrink, Smartphone, SquareDashed } from "lucide-react"
 import { Button } from "@/design/button"
 import type { Connection } from "../hub/LiveStream.ts"
@@ -49,8 +50,8 @@ export function TopBar(props: {
         disabled={!props.solo.enabled}
         onClick={props.solo.toggle}
       >
-        {props.stage.solo === undefined ? <SquareDashed /> : <Shrink />}
-        {props.stage.solo === undefined ? "Solo" : "Unsolo"}
+        {Option.isNone(props.stage.solo) ? <SquareDashed /> : <Shrink />}
+        {Option.isNone(props.stage.solo) ? "Solo" : "Unsolo"}
         <kbd className="ml-1 font-mono text-[10px] text-muted-foreground">F</kbd>
       </Button>
 

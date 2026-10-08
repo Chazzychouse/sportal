@@ -1,4 +1,4 @@
-import { Array as Arr } from "effect"
+import { Array as Arr, Option } from "effect"
 import { Shrink } from "lucide-react"
 import { useState } from "react"
 import { Toaster } from "@/design/sonner"
@@ -37,7 +37,7 @@ export function RemoteView() {
         <header className="flex items-center gap-2">
           <BrandMark />
           <ConnectionPill connection={live.connection} />
-          {live.stage.solo !== undefined && (
+          {Option.isSome(live.stage.solo) && (
             <button
               type="button"
               onClick={() => runtime.runFork(dispatch({ _tag: "Unsolo" }))}

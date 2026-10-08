@@ -1,5 +1,6 @@
 import type { GameSnapshot } from "@sportal/domain/Game"
 import type { Tile } from "@sportal/domain/Stage"
+import { Option } from "effect"
 import { Field } from "../game/Field.tsx"
 import { GameStatus, localTime } from "../game/GameStatus.tsx"
 import { Score } from "../game/Score.tsx"
@@ -69,8 +70,10 @@ function noStream(why: Extract<Tile, { _tag: "DataTile" }>["why"]): string {
     case "NoGuide":
       return "Waiting for the YouTube TV guide"
     case "NotYet":
-      return why.channel === undefined
-        ? "Not in your YouTube TV guide yet"
-        : `On ${why.channel}${why.begin === undefined ? "" : ` at ${localTime(why.begin)}`}`
+      return Option.match(why.channel, {
+        onNone: () => "Not in your YouTube TV guide yet",
+        onSome: (channel) =>
+          `On ${channel}${Option.match(why.begin, { onNone: () => "", onSome: (begin) => ` at ${localTime(begin)}` })}`
+      })
   }
 }

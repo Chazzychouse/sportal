@@ -1,6 +1,7 @@
 import { assert, describe, it } from "@effect/vitest"
 import { GameId } from "@sportal/domain/Game"
 import { Stage, type StageCommand } from "@sportal/domain/Stage"
+import { Option } from "effect"
 import { StripCard } from "../slate/StripCards.ts"
 import { slate } from "../slate/TestSlate.ts"
 import { withTiles } from "../stage/TestStage.ts"
@@ -237,7 +238,7 @@ describe("Display#press", () => {
   it("should unsolo with ToggleSolo while soloed", () => {
     const stage = withTiles(["live", "soon"])
     const selected = Display.initial.select(1, stage).display
-    const soloed = new Stage({ ...stage, solo: GameId.make("soon") })
+    const soloed = new Stage({ ...stage, solo: Option.some(GameId.make("soon")) })
 
     const { commands } = press(selected, { _tag: "ToggleSolo" }, soloed)
 
@@ -255,7 +256,7 @@ describe("Display#press", () => {
   })
 
   it("should unsolo with ToggleSolo on an Empty tile while soloed", () => {
-    const soloed = new Stage({ ...withTiles(["live"]), solo: GameId.make("live") })
+    const soloed = new Stage({ ...withTiles(["live"]), solo: Option.some(GameId.make("live")) })
     const selected = Display.initial.select(1, soloed).display
 
     const { commands } = press(selected, { _tag: "ToggleSolo" }, soloed)
@@ -274,7 +275,7 @@ describe("Display#press", () => {
   })
 
   it("should close the key help with Esc and send no Unsolo, even while soloed", () => {
-    const soloed = new Stage({ ...withTiles(["live"]), solo: GameId.make("live") })
+    const soloed = new Stage({ ...withTiles(["live"]), solo: Option.some(GameId.make("live")) })
     const keys = Display.initial.open("Keys")
 
     const { display, commands } = press(keys, { _tag: "Unsolo" }, soloed)
@@ -296,7 +297,7 @@ describe("Display#press", () => {
   )
 
   it("should unsolo with Esc and no overlay while soloed", () => {
-    const soloed = new Stage({ ...withTiles(["live"]), solo: GameId.make("live") })
+    const soloed = new Stage({ ...withTiles(["live"]), solo: Option.some(GameId.make("live")) })
 
     const { display, commands } = press(Display.initial, { _tag: "Unsolo" }, soloed)
 

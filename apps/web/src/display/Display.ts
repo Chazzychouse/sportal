@@ -1,7 +1,7 @@
 import type { Hotkey } from "@sportal/api/Hotkey"
 import type { GameId } from "@sportal/domain/Game"
 import type { Stage, StageCommand } from "@sportal/domain/Stage"
-import { Data } from "effect"
+import { Data, Option } from "effect"
 import { Layout } from "../layout/Layout.ts"
 import { StripCard } from "../slate/StripCards.ts"
 
@@ -50,7 +50,7 @@ export class Display extends Data.Class<{
       case "SelectTile":
         return this.select(hotkey.slot, stage)
       case "ToggleSolo": {
-        if (stage.solo !== undefined)
+        if (Option.isSome(stage.solo))
           return new DisplayStep({ display: this, commands: [{ _tag: "Unsolo" }] })
         const slot = this.selectedOn(stage)
         return new DisplayStep({
@@ -63,7 +63,7 @@ export class Display extends Data.Class<{
           return new DisplayStep({ display: this.close(), commands: [] })
         return new DisplayStep({
           display: this,
-          commands: stage.solo === undefined ? [] : [{ _tag: "Unsolo" }]
+          commands: Option.isNone(stage.solo) ? [] : [{ _tag: "Unsolo" }]
         })
       case "Interact": {
         const tile = stage.onStage()[this.selectedOn(stage)]

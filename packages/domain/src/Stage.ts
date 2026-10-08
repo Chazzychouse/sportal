@@ -1,5 +1,5 @@
 import { Array as Arr, Option, Record as Rec, Result, Schema } from "effect"
-import { Channel, type ChannelAvailability } from "./Channel.ts"
+import { Channel, ChannelAvailability } from "./Channel.ts"
 import { GameId } from "./Game.ts"
 
 export const Tile = Schema.TaggedUnion({
@@ -14,8 +14,8 @@ export const Tile = Schema.TaggedUnion({
       NotInGuide: {},
       NoGuide: {},
       NotYet: {
-        channel: Schema.optional(Schema.String),
-        begin: Schema.optional(Schema.DateTimeUtcFromString)
+        channel: Schema.OptionFromOptionalKey(Schema.String),
+        begin: Schema.OptionFromOptionalKey(Schema.DateTimeUtcFromString)
       }
     })
   }
@@ -48,15 +48,17 @@ export class Stage extends Schema.Class<Stage>("sportal/Stage")({
   /** Each layout's own split, kept while another layout is shown. */
   splits: Schema.Record(LayoutName, Split),
   /** The game whose sound is on: always an on-stage game, or none when the stage is empty. */
-  audioFocus: Schema.optional(GameId),
+  audioFocus: Schema.OptionFromOptionalKey(GameId),
   /** The game filling the Stage: always an on-stage game. */
-  solo: Schema.optional(GameId)
+  solo: Schema.OptionFromOptionalKey(GameId)
 }) {
   /** An empty Quad, every layout at its default split. */
   static readonly initial = new Stage({
     tiles: [empty, empty, empty, empty],
     layout: "Quad",
-    splits: Rec.map(layouts, ({ split }) => split)
+    splits: Rec.map(layouts, ({ split }) => split),
+    audioFocus: Option.none(),
+    solo: Option.none()
   })
 
   /** The range each divider stays within, so every tile stays watchable. */
@@ -68,12 +70,12 @@ export class Stage extends Schema.Class<Stage>("sportal/Stage")({
 
   /** Whether the game's sound is on. */
   hears(game: GameId): boolean {
-    return this.audioFocus === game
+    return Option.contains(this.audioFocus, game)
   }
 
   /** Whether the game fills the Stage. */
   soloes(game: GameId): boolean {
-    return this.solo === game
+    return Option.contains(this.solo, game)
   }
 
   /** The Stage with the current layout's split replaced: the preview of a divider drag. */
@@ -90,13 +92,13 @@ export class Stage extends Schema.Class<Stage>("sportal/Stage")({
   benched(): ReadonlyArray<{ tile: number; game: GameId }> {
     const first = Stage.slotCount(this.layout)
     return this.tiles.flatMap((tile, index) =>
-      index < first || tile._tag === "Empty" ? [] : [{ tile: index, game: tile.game }]
+      index < first || Tile.guards.Empty(tile) ? [] : [{ tile: index, game: tile.game }]
     )
   }
 
   /** The slot a game is in, if it is on stage. */
   slotOf(game: GameId): number | undefined {
-    const slot = this.onStage().findIndex((tile) => tile._tag !== "Empty" && tile.game === game)
+    const slot = this.onStage().findIndex((tile) => !Tile.guards.Empty(tile) && tile.game === game)
     return slot === -1 ? undefined : slot
   }
 
@@ -107,7 +109,7 @@ export class Stage extends Schema.Class<Stage>("sportal/Stage")({
     return Option.getOrUndefined(
       Arr.findFirst(
         Arr.range(1, slots.length - 1).map((offset) => (slot + offset) % slots.length),
-        (next) => slots[next]?._tag === "Empty"
+        (next) => Option.exists(Arr.get(slots, next), Tile.guards.Empty)
       )
     )
   }
@@ -120,58 +122,57 @@ export class Stage extends Schema.Class<Stage>("sportal/Stage")({
     command: StageCommand,
     availabilityOf: (game: GameId) => ChannelAvailability
   ): Result.Result<Stage, StageRejection> {
-    switch (command._tag) {
-      case "SetLayout":
-        return Result.succeed(settle({ ...this, layout: command.layout }))
-      case "SetSplit": {
+    return StageCommand.match<Result.Result<Stage, StageRejection>>(command, {
+      SetLayout: ({ layout }) => Result.succeed(settle({ ...this, layout })),
+      SetSplit: ({ split }) => {
         const { min, max } = Stage.splitBounds
-        const holds = [command.split.x, command.split.y].every((at) => at >= min && at <= max)
-        return holds ? Result.succeed(settle(this.withSplit(command.split))) : reject("split-out-of-range")
-      }
-      case "Unsolo":
-        return Result.succeed(settle({ ...this, solo: undefined }))
-      case "Swap":
-        return this.tiles[command.a] === undefined || this.tiles[command.b] === undefined
+        const holds = [split.x, split.y].every((at) => at >= min && at <= max)
+        return holds ? Result.succeed(settle(this.withSplit(split))) : reject("split-out-of-range")
+      },
+      Unsolo: () => Result.succeed(settle({ ...this, solo: Option.none() })),
+      Swap: ({ a, b }) =>
+        Option.isNone(Arr.get(this.tiles, a)) || Option.isNone(Arr.get(this.tiles, b))
           ? reject("no-such-tile")
-          : Result.succeed(settle({ ...this, tiles: swapped(this.tiles, command.a, command.b) }))
-    }
-    // Every other command names one tile.
-    const tile = this.tiles[command.tile]
-    if (tile === undefined) return reject("no-such-tile")
-    switch (command._tag) {
-      case "Assign": {
-        const assigned = tileFor(command.game, availabilityOf(command.game))
-        // A game appears in at most one tile, on stage or benched: assigning it elsewhere moves it.
-        const tiles = this.tiles.map((existing, index) =>
-          index === command.tile
-            ? assigned
-            : existing._tag !== "Empty" && existing.game === command.game
-              ? empty
-              : existing
-        )
-        return Result.succeed(settle({ ...this, tiles }))
-      }
-      case "Clear":
-        return Result.succeed(
-          settle({
-            ...this,
-            tiles: this.tiles.map((existing, index) => (index === command.tile ? empty : existing))
-          })
-        )
-      case "Promote":
-        return tile._tag === "Empty"
-          ? reject("empty-tile")
-          : Result.succeed(
-              settle({ ...this, tiles: swapped(this.tiles, 0, command.tile), audioFocus: tile.game })
+          : Result.succeed(settle({ ...this, tiles: swapped(this.tiles, a, b) })),
+      Assign: ({ tile, game }) =>
+        tileAt(this, tile, () => {
+          const assigned = tileFor(game, availabilityOf(game))
+          // A game appears in at most one tile, on stage or benched: assigning it elsewhere moves it.
+          const tiles = this.tiles.map((existing, index) =>
+            index === tile
+              ? assigned
+              : !Tile.guards.Empty(existing) && existing.game === game
+                ? empty
+                : existing
+          )
+          return Result.succeed(settle({ ...this, tiles }))
+        }),
+      Clear: ({ tile }) =>
+        tileAt(this, tile, () =>
+          Result.succeed(
+            settle({
+              ...this,
+              tiles: this.tiles.map((existing, index) => (index === tile ? empty : existing))
+            })
+          )
+        ),
+      Promote: ({ tile }) =>
+        tileAt(this, tile, (found) =>
+          occupied(found, ({ game }) =>
+            Result.succeed(
+              settle({ ...this, tiles: swapped(this.tiles, 0, tile), audioFocus: Option.some(game) })
             )
-      case "FocusAudio":
-      case "Solo":
-        if (command.tile >= Stage.slotCount(this.layout)) return reject("offstage-tile")
-        if (tile._tag === "Empty") return reject("empty-tile")
-        return Result.succeed(
-          settle({ ...this, audioFocus: tile.game, ...(command._tag === "Solo" ? { solo: tile.game } : {}) })
+          )
+        ),
+      FocusAudio: ({ tile }) =>
+        onStageAt(this, tile, ({ game }) =>
+          Result.succeed(settle({ ...this, audioFocus: Option.some(game) }))
+        ),
+      Solo: ({ tile }) =>
+        onStageAt(this, tile, ({ game }) =>
+          Result.succeed(settle({ ...this, audioFocus: Option.some(game), solo: Option.some(game) }))
         )
-    }
+    })
   }
 
   /**
@@ -183,13 +184,15 @@ export class Stage extends Schema.Class<Stage>("sportal/Stage")({
    * tile becomes what the answer says.
    */
   refresh(availabilityOf: (game: GameId) => Option.Option<ChannelAvailability>): Stage {
-    const tiles = this.tiles.map((tile) => {
-      if (tile._tag === "Empty") return tile
-      return Option.match(availabilityOf(tile.game), {
-        onNone: () => tile,
-        onSome: (availability) => (keepsStream(tile, availability) ? tile : tileFor(tile.game, availability))
-      })
-    })
+    const tiles = this.tiles.map((tile) =>
+      Tile.guards.Empty(tile)
+        ? tile
+        : Option.match(availabilityOf(tile.game), {
+            onNone: () => tile,
+            onSome: (availability) =>
+              keepsStream(tile, availability) ? tile : tileFor(tile.game, availability)
+          })
+    )
 
     return settle({ ...this, tiles })
   }
@@ -214,25 +217,47 @@ export class StageRejection extends Schema.TaggedError<StageRejection>()(
   { httpApiStatus: 422 }
 ) {}
 
+/** A tile that holds a game. */
+type Occupied = Exclude<Tile, { readonly _tag: "Empty" }>
+
+/** Runs `f` on the tile at `index`, or rejects a tile that does not exist. */
+function tileAt(
+  stage: Stage,
+  index: number,
+  f: (tile: Tile) => Result.Result<Stage, StageRejection>
+): Result.Result<Stage, StageRejection> {
+  return Option.match(Arr.get(stage.tiles, index), { onNone: () => reject("no-such-tile"), onSome: f })
+}
+
+/** Runs `f` on the occupied on-stage tile at `index`, or says why there is none. */
+function onStageAt(
+  stage: Stage,
+  index: number,
+  f: (tile: Occupied) => Result.Result<Stage, StageRejection>
+): Result.Result<Stage, StageRejection> {
+  return tileAt(stage, index, (tile) =>
+    index >= Stage.slotCount(stage.layout) ? reject("offstage-tile") : occupied(tile, f)
+  )
+}
+
+function occupied(
+  tile: Tile,
+  f: (tile: Occupied) => Result.Result<Stage, StageRejection>
+): Result.Result<Stage, StageRejection> {
+  return Tile.guards.Empty(tile) ? reject("empty-tile") : f(tile)
+}
+
 function tileFor(game: GameId, availability: ChannelAvailability): Tile {
-  switch (availability._tag) {
-    case "Carried":
-      return { _tag: "StreamTile", game, channel: availability.channel }
-    case "Upcoming":
-      return {
-        _tag: "DataTile",
-        game,
-        why: {
-          _tag: "NotYet",
-          ...(Option.isSome(availability.channel) ? { channel: availability.channel.value } : {}),
-          ...(Option.isSome(availability.begin) ? { begin: availability.begin.value } : {})
-        }
-      }
-    case "NoGuide":
-      return { _tag: "DataTile", game, why: { _tag: "NoGuide" } }
-    case "NotCarried":
-      return { _tag: "DataTile", game, why: { _tag: availability.why } }
-  }
+  return ChannelAvailability.$match(availability, {
+    Carried: ({ channel }): Tile => ({ _tag: "StreamTile", game, channel }),
+    Upcoming: ({ channel, begin }): Tile => ({
+      _tag: "DataTile",
+      game,
+      why: { _tag: "NotYet", channel, begin }
+    }),
+    NoGuide: (): Tile => ({ _tag: "DataTile", game, why: { _tag: "NoGuide" } }),
+    NotCarried: ({ why }): Tile => ({ _tag: "DataTile", game, why: { _tag: why } })
+  })
 }
 
 /**
@@ -243,35 +268,35 @@ function settle(fields: {
   tiles: ReadonlyArray<Tile>
   layout: LayoutName
   splits: Stage["splits"]
-  audioFocus?: GameId | undefined
-  solo?: GameId | undefined
+  audioFocus: Option.Option<GameId>
+  solo: Option.Option<GameId>
 }): Stage {
   const slots = Stage.slotCount(fields.layout)
   const kept = Option.getOrElse(
     Option.map(
-      Arr.findLastIndex(fields.tiles, (tile) => tile._tag !== "Empty"),
+      Arr.findLastIndex(fields.tiles, (tile) => !Tile.guards.Empty(tile)),
       (last) => last + 1
     ),
     () => 0
   )
   const tiles = Arr.makeBy(Math.max(slots, kept), (index) => fields.tiles[index] ?? empty)
-  const onStage = tiles.slice(0, slots).flatMap((tile) => (tile._tag === "Empty" ? [] : [tile.game]))
-  const audioFocus = onStage.find((game) => game === fields.audioFocus) ?? onStage[0]
-  const solo = onStage.find((game) => game === fields.solo)
+  const onStage = tiles.slice(0, slots).flatMap((tile) => (Tile.guards.Empty(tile) ? [] : [tile.game]))
+  const isOnStage = (game: GameId) => onStage.includes(game)
   return new Stage({
     tiles,
     layout: fields.layout,
     splits: fields.splits,
-    ...(audioFocus === undefined ? {} : { audioFocus }),
-    ...(solo === undefined ? {} : { solo })
+    audioFocus: Option.orElse(Option.filter(fields.audioFocus, isOnStage), () => Arr.head(onStage)),
+    solo: Option.filter(fields.solo, isOnStage)
   })
 }
 
 /** Whether a stream tile stays as it is: only a guide that carries its game on another channel replaces it. */
-function keepsStream(tile: Exclude<Tile, { _tag: "Empty" }>, availability: ChannelAvailability): boolean {
+function keepsStream(tile: Occupied, availability: ChannelAvailability): boolean {
   return (
-    tile._tag === "StreamTile" &&
-    (availability._tag !== "Carried" || availability.channel.locator.url === tile.channel.locator.url)
+    Tile.guards.StreamTile(tile) &&
+    (!ChannelAvailability.$is("Carried")(availability) ||
+      availability.channel.locator.url === tile.channel.locator.url)
   )
 }
 

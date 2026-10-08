@@ -1,7 +1,7 @@
 import type { StageTransition } from "@sportal/api/ShellBridge"
 import type { GameId, GameSnapshot } from "@sportal/domain/Game"
 import type { Split, Stage } from "@sportal/domain/Stage"
-import { Effect } from "effect"
+import { Effect, Option } from "effect"
 import { useEffect, useLayoutEffect, useRef, useState } from "react"
 import { useVideoAreas } from "../display/OverlayHost.tsx"
 import { dispatch, sendGuide } from "../hub/HubClient.ts"
@@ -114,7 +114,7 @@ export function StageView(props: {
           </section>
         )
       })}
-      {shown.solo === undefined && (
+      {Option.isNone(shown.solo) && (
         <Dividers
           layout={shown.layout}
           split={shown.splits[shown.layout]}

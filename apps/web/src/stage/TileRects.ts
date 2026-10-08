@@ -1,6 +1,7 @@
 import type { TilePlacement } from "@sportal/api/ShellBridge"
 import type { GameId } from "@sportal/domain/Game"
 import type { Stage } from "@sportal/domain/Stage"
+import { Option } from "effect"
 import { Layout } from "../layout/Layout.ts"
 
 /**
@@ -13,7 +14,7 @@ export function tileRects(
   area: { width: number; height: number }
 ): ReadonlyArray<{ x: number; y: number; width: number; height: number }> {
   const whole = inset({ x: 0, y: 0, width: area.width, height: area.height })
-  const solo = stage.solo === undefined ? undefined : stage.slotOf(stage.solo)
+  const solo = Option.getOrUndefined(Option.map(stage.solo, (game) => stage.slotOf(game)))
 
   return Layout.of(stage)
     .slots()

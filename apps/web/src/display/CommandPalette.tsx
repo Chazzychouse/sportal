@@ -1,5 +1,6 @@
 import { type GameId, GameSnapshot } from "@sportal/domain/Game"
 import { LayoutName, type Stage, type StageCommand } from "@sportal/domain/Stage"
+import { Option } from "effect"
 import {
   CommandDialog,
   CommandEmpty,
@@ -100,7 +101,7 @@ export function CommandPalette(props: {
           ))}
         </CommandGroup>
         <CommandGroup heading="Display">
-          {props.stage.solo !== undefined && (
+          {Option.isSome(props.stage.solo) && (
             <CommandItem value="unsolo" onSelect={() => run({ _tag: "Unsolo" })}>
               Unsolo
               <CommandShortcut>Esc</CommandShortcut>

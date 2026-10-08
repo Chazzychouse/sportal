@@ -70,7 +70,7 @@ describe("Stage#apply", () => {
   it("should give audio to the first game on stage when no game has it", () => {
     const stage = assign(Stage.initial, 2, bama, onFox)
 
-    assert.strictEqual(stage.audioFocus, bama)
+    assert.deepStrictEqual(stage.audioFocus, Option.some(bama))
   })
 
   it("should move audio focus to a tile's game", () => {
@@ -78,7 +78,7 @@ describe("Stage#apply", () => {
 
     const focused = run(two, { _tag: "FocusAudio", tile: 1 })
 
-    assert.strictEqual(focused.audioFocus, irish)
+    assert.deepStrictEqual(focused.audioFocus, Option.some(irish))
   })
 
   it("should keep audio focus where it is when another game is assigned", () => {
@@ -86,7 +86,7 @@ describe("Stage#apply", () => {
 
     const assigned = assign(focused, 2, usc, onFox)
 
-    assert.strictEqual(assigned.audioFocus, irish)
+    assert.deepStrictEqual(assigned.audioFocus, Option.some(irish))
   })
 
   it("should move audio to the main tile's game when the focused game is cleared", () => {
@@ -94,7 +94,7 @@ describe("Stage#apply", () => {
 
     const cleared = run(focused, { _tag: "Clear", tile: 1 })
 
-    assert.strictEqual(cleared.audioFocus, bama)
+    assert.deepStrictEqual(cleared.audioFocus, Option.some(bama))
   })
 
   it("should reject audio for an empty tile", () => {
@@ -125,14 +125,18 @@ describe("Stage#apply", () => {
     assert.deepStrictEqual(stage.tiles[0], {
       _tag: "DataTile",
       game: bama,
-      why: { _tag: "NotYet", channel: "NFL ST - CBS", begin }
+      why: { _tag: "NotYet", channel: Option.some("NFL ST - CBS"), begin: Option.some(begin) }
     })
   })
 
   it("should assign a game whose time and channel are unknown as a data tile with neither", () => {
     const stage = assign(Stage.initial, 0, bama, unknownUpcoming)
 
-    assert.deepStrictEqual(stage.tiles[0], { _tag: "DataTile", game: bama, why: { _tag: "NotYet" } })
+    assert.deepStrictEqual(stage.tiles[0], {
+      _tag: "DataTile",
+      game: bama,
+      why: { _tag: "NotYet", channel: Option.none(), begin: Option.none() }
+    })
   })
 
   it("should say why a game is not carried", () => {
@@ -174,7 +178,7 @@ describe("Stage#refresh", () => {
 
     const refreshed = focused.refresh(some(onFox))
 
-    assert.strictEqual(refreshed.audioFocus, irish)
+    assert.deepStrictEqual(refreshed.audioFocus, Option.some(irish))
   })
 
   it("should re-resolve benched tiles too", () => {
@@ -312,7 +316,7 @@ describe("Stage layouts and the bench", () => {
 
     const single = run(focused, { _tag: "SetLayout", layout: "Single" })
 
-    assert.strictEqual(single.audioFocus, bama)
+    assert.deepStrictEqual(single.audioFocus, Option.some(bama))
   })
 
   it("should keep a game in one tile across stage and bench", () => {
@@ -517,7 +521,7 @@ describe("Stage swap and promote", () => {
   it("should keep audio with its game through a swap", () => {
     const swapped = run(fill([bama, irish]), { _tag: "Swap", a: 0, b: 1 })
 
-    assert.strictEqual(swapped.audioFocus, bama)
+    assert.deepStrictEqual(swapped.audioFocus, Option.some(bama))
   })
 
   it("should promote a tile into the main tile and give it audio", () => {
@@ -526,7 +530,7 @@ describe("Stage swap and promote", () => {
     const promoted = run(stage, { _tag: "Promote", tile: 3 })
 
     assert.deepStrictEqual(promoted.tiles.map(gameOf), [irish, undefined, undefined, bama])
-    assert.strictEqual(promoted.audioFocus, irish)
+    assert.deepStrictEqual(promoted.audioFocus, Option.some(irish))
   })
 
   it("should promote a benched game", () => {
@@ -548,8 +552,8 @@ describe("Stage solo", () => {
   it("should solo a tile's game and give it audio", () => {
     const solo = run(fill([bama, irish]), { _tag: "Solo", tile: 1 })
 
-    assert.strictEqual(solo.solo, irish)
-    assert.strictEqual(solo.audioFocus, irish)
+    assert.deepStrictEqual(solo.solo, Option.some(irish))
+    assert.deepStrictEqual(solo.audioFocus, Option.some(irish))
   })
 
   it("should follow its game through a swap", () => {
@@ -557,7 +561,7 @@ describe("Stage solo", () => {
 
     const swapped = run(solo, { _tag: "Swap", a: 0, b: 1 })
 
-    assert.strictEqual(swapped.solo, irish)
+    assert.deepStrictEqual(swapped.solo, Option.some(irish))
   })
 
   it("should end when the game is cleared", () => {
@@ -565,7 +569,7 @@ describe("Stage solo", () => {
 
     const cleared = run(solo, { _tag: "Clear", tile: 1 })
 
-    assert.isUndefined(cleared.solo)
+    assert.isTrue(Option.isNone(cleared.solo))
   })
 
   it("should end when the game is benched", () => {
@@ -573,7 +577,7 @@ describe("Stage solo", () => {
 
     const benched = run(solo, { _tag: "SetLayout", layout: "Single" })
 
-    assert.isUndefined(benched.solo)
+    assert.isTrue(Option.isNone(benched.solo))
   })
 
   it("should end on Unsolo", () => {
@@ -581,7 +585,7 @@ describe("Stage solo", () => {
 
     const unsoloed = run(solo, { _tag: "Unsolo" })
 
-    assert.isUndefined(unsoloed.solo)
+    assert.isTrue(Option.isNone(unsoloed.solo))
   })
 
   it("should reject soloing an empty tile", () => {
