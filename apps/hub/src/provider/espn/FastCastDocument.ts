@@ -1,9 +1,9 @@
 import type { GameId } from "@sportal/domain/Game"
 import type { LeagueId } from "@sportal/domain/League"
 import { Array as Arr, Data, Effect, JsonPatch, JsonPointer, Option, Record, Result, Schema } from "effect"
-import type { Frame } from "../../Frame.ts"
 import * as FastCastMessage from "./FastCastMessage.ts"
 import { Owner, ownerOf } from "./FastCastTopic.ts"
+import type { Frame } from "./Frame.ts"
 
 /**
  * The FastCast topics' documents after `frame`, and what it changed: a scoreboard topic's touched events (every event,

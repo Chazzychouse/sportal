@@ -1,22 +1,21 @@
 import { assert, describe, it } from "@effect/vitest"
 import { liveSnapshot } from "@sportal/domain/TestGame"
 import { Effect, Ref, Stream } from "effect"
-import { Provider } from "./provider/Provider.ts"
-import { Delivery } from "./slate/Delivery.ts"
-import { SnapshotFeed } from "./TestSnapshotFeed.ts"
+import { Delivery } from "../slate/Delivery.ts"
+import { Provider, ProviderFeed } from "./Provider.ts"
 
-describe("SnapshotFeed#deliver", () => {
+describe("ProviderFeed#deliver", () => {
   it.effect("should return once the provider's reader has taken the frame", () =>
     Effect.gen(function* () {
       const taken = yield* reading
-      const feed = yield* SnapshotFeed
+      const feed = yield* ProviderFeed
       const deliveries = [Delivery.cases.Snapshot.make({ snapshot: liveSnapshot() })]
 
       yield* feed.deliver(deliveries)
       const all = yield* Ref.get(taken)
 
       assert.deepStrictEqual(all, [deliveries])
-    }).pipe(Effect.provide(SnapshotFeed.layer))
+    }).pipe(Effect.provide(Provider.layerTestFed))
   )
 })
 

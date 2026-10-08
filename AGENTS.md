@@ -30,7 +30,7 @@ easiest to break.
   `shadcn add` and `shadcn diff` keep working. Nothing else goes there.
 - No mirror types. There is no `GameDto`, `GameRow`, `GameResponse`, or `GameProps`. The domain schema is
   the wire format. Derive a variant at the point of use; do not name it.
-- In the Hub, only `HubMode.ts` and tests name concrete providers and sources (ESPN's only through `provider/espn/Espn.ts`), and `main.ts` is only the layer pipe and how the process runs it.
+- In the Hub, only `main.ts` and tests name concrete providers and sources (ESPN's only through `provider/espn/Espn.ts`), and `main.ts` is only the layer pipe and how the process runs it.
   Everything else depends on the port.
 - In the Hub, only `HubConfig.ts` reads the environment. A new setting is a field there, with its default.
 - A service is yielded where it is used, never passed as an argument. A layer that needs a setting yields `HubConfig`
@@ -43,7 +43,7 @@ easiest to break.
 | Shape | Exports | Imported |
 |---|---|---|
 | Class module | One class named for the file (service, `Schema.Class`, `Data.Class`), and beside it only that concept's member types, errors and the schemas its fields read | By name |
-| Namespace module | No class of its own: an adapter of a port defined elsewhere (`EspnProvider`), a layer that provides no service (`HubMode`), or a set of functions (`Gzip`). An adapter or layer-only module exports `layer` | `import * as X` |
+| Namespace module | No class of its own: an adapter of a port defined elsewhere (`EspnProvider`), a layer that provides no service (`Telemetry`), or a set of functions (`Gzip`). An adapter or layer-only module exports `layer` | `import * as X` |
 | Payload module (`*Payload.ts`) | A provider's wire spelling, with no transform into domain types | By name |
 | Entry point (lowercase) | Nothing; it runs a process (`main.ts`) | – |
 | Test module (`Test*.ts`) | Fixtures, recorded payloads, builders of domain values, harnesses composing several layers, test-only adapters of a port | As its shape says |
@@ -88,7 +88,7 @@ A reader opens a file to see the thing it is named for. Keep it that way.
 |---|---|
 | Service id | `"sportal/<app>/<dir>/Name"`, the folder under `src/` (no `src/` itself), omitted for a file directly in `src/`: `"sportal/hub/provider/Provider"`, `"sportal/hub/Director"` |
 | Service layer | `static readonly layer: Layer.Layer<…> = …`, type written out |
-| Layer variant | `static readonly layerX`, or `static layerX(args)`, as `FramesDecoded.layerOf(frames)`; never another word (`FramesDecoded.from(frames)`) |
+| Layer variant | `static readonly layerX`, or `static layerX(args)`, as `HubConfig.layerTest(env)`; never another word (`HubConfig.from(env)`) |
 | Test layer | `static readonly layerTest` or `static layerTest…(args)` on the service it fakes; knip's `ignoreMembers` exempts `^layerTest` |
 | Layer providing nothing | A namespace module's `layer`, or `layerX`. Never `serve`/`listen`, never a zero-argument function returning a layer |
 | Effectful operation | `const f = Effect.fn("Module.f")(…)`, or `Effect.fnUntraced` on a hot path; a service member is `Effect.fn("Service.member")`. Never a `function` that only returns `Effect.gen`, never a hand-added `Effect.withSpan` |

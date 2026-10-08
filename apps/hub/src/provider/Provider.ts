@@ -1,4 +1,4 @@
-import { Context, Layer, type Stream } from "effect"
+import { Context, Deferred, Effect, Layer, Option, Queue, Ref, Stream } from "effect"
 import type { Delivery } from "../slate/Delivery.ts"
 
 /**
@@ -19,4 +19,43 @@ export class Provider extends Context.Service<
   static layerTest(deliveries: Stream.Stream<ReadonlyArray<Delivery>>): Layer.Layer<Provider> {
     return Layer.succeed(Provider, Provider.of({ deliveries }))
   }
+
+  /** A provider whose frames say what a test gives its `ProviderFeed`, and that feed. */
+  static readonly layerTestFed: Layer.Layer<Provider | ProviderFeed> = Layer.effectContext(
+    Effect.gen(function* () {
+      const frames = yield* Queue.unbounded<{
+        readonly deliveries: ReadonlyArray<Delivery>
+        readonly taken: Deferred.Deferred<void>
+      }>()
+      const reading = yield* Ref.make(Option.none<Deferred.Deferred<void>>())
+
+      // Each pull first marks the frame before it taken: the reader asks for the next only once it has taken that one.
+      const next = Effect.gen(function* () {
+        const previous = yield* Ref.get(reading)
+        yield* Effect.forEach(Option.toArray(previous), (taken) => Deferred.succeed(taken, undefined))
+        const frame = yield* Queue.take(frames)
+        yield* Ref.set(reading, Option.some(frame.taken))
+        return frame.deliveries
+      })
+
+      const deliver = Effect.fnUntraced(function* (deliveries: ReadonlyArray<Delivery>) {
+        const taken = yield* Deferred.make<void>()
+        yield* Queue.offer(frames, { deliveries, taken })
+        yield* Deferred.await(taken)
+      })
+
+      return Context.make(ProviderFeed, ProviderFeed.of({ deliver })).pipe(
+        Context.add(Provider, Provider.of({ deliveries: Stream.fromEffectRepeat(next) }))
+      )
+    })
+  )
 }
+
+/** What a test gives `Provider.layerTestFed`'s provider to say. */
+export class ProviderFeed extends Context.Service<
+  ProviderFeed,
+  {
+    /** One frame saying `deliveries`; returns once the provider's reader has taken it and asked for the next. */
+    deliver(deliveries: ReadonlyArray<Delivery>): Effect.Effect<void>
+  }
+>()("sportal/hub/provider/ProviderFeed") {}

@@ -133,7 +133,7 @@ This section is binding in the same way the type checker is. `AGENTS.md` carries
 6. **No mirror types.** There is no `GameDto`, `GameRow`, `GameResponse`, `GameProps`. The domain schema is the wire format. A variant is derived from the original (`pick`, `omit`, `extend`) at the point of use and is not given a name unless it is itself a domain concept with a glossary entry.
 7. **Search before you write.** Before adding a function, type, or file, look for the existing one. Duplicating logic that already exists is a defect even when the code works.
 8. **Organize by concept, not by kind.** No top-level `components/`, `hooks/`, `services/`, `schemas/` folders. Code for the slate lives under `slate/`, whatever kind of code it is.
-9. **Dependencies point one way.** `domain` imports only Effect. `api` imports `domain`. Apps import packages. Nothing imports an app. Within the Hub, only `HubMode.ts` knows which concrete providers and sources exist, and it reaches ESPN's only through `provider/espn/Espn.ts`.
+9. **Dependencies point one way.** `domain` imports only Effect. `api` imports `domain`. Apps import packages. Nothing imports an app. Within the Hub, only `main.ts` knows which concrete providers and sources exist, and it reaches ESPN's only through `provider/espn/Espn.ts`.
 
 ### 4.2 The tree
 
@@ -189,8 +189,7 @@ sportal/
 └── apps/
     ├── hub/
     │   └── src/
-    │       ├── main.ts             Composition root: the Hub's layer pipe, run until a signal stops it
-    │       ├── HubMode.ts          What the Hub plays: the live day; the only file that names providers and sources, ESPN's through `Espn`
+    │       ├── main.ts             Composition root: the Hub's layer pipe, run until a signal stops it; the only file that names providers and sources, ESPN's through `Espn`
     │       ├── HubConfig.ts        Every environment setting, in one place
     │       ├── Telemetry.ts        Log level and format; OTLP export when configured
     │       ├── Director.ts         The one holder of the slate and the Screen: takes each frame's deliveries as they arrive, applies screen commands, refreshes availability
@@ -198,14 +197,11 @@ sportal/
     │       │   ├── Slate.ts        The fold: every delivery taken in order into an ordered list of games, each with its latest snapshot and its plays
     │       │   └── Delivery.ts     What a frame said: a listing, a snapshot, or a game's plays
     │       ├── HubStopping.ts      Whether a task that should run until the Hub stops ended because it is stopping, and the Error log unless it did
-    │       ├── Frame.ts            A frame as received, and its DeliverySource
-    │       ├── Gzip.ts             The text a gzip'd or deflated body holds, as FastCast's patches are
     │       ├── TestTelemetry.ts    Layers for tests
-    │       ├── TestDirector.ts     The Director taking the snapshot feed, and what it takes of a test's frames
-    │       ├── TestSnapshotFeed.ts The snapshot feed: a provider whose frames say what a test delivers; for tests only
+    │       ├── TestDirector.ts     The Director taking a fed provider, and what it takes of a test's frames
     │       ├── HubServer.ts        Serves the API, the live stream, the addresses a phone can reach, and the web UI's files
     │       ├── provider/
-    │       │   ├── Provider.ts     The port: `deliveries`, each frame's in order
+    │       │   ├── Provider.ts     The port: `deliveries`, each frame's in order; `layerTestFed`, the provider tests feed
     │       │   ├── TestProvider.ts What the provided `Provider` lists, and what ESPN's decode says of a test's frames
     │       │   └── espn/
     │       │       ├── Espn.ts             ESPN's one front door: the live provider (`layer`), polling and pushing through FastCast
@@ -218,6 +214,8 @@ sportal/
     │       │       ├── FastCastDocument.ts A topic's document, rebuilt from checkpoints and patches
     │       │       ├── FastCastMessage.ts  FastCast's wire shapes
     │       │       ├── FastCastTopic.ts    A topic's owner, and the topic of a scoreboard or a game
+    │       │       ├── Frame.ts            A frame as received, before ESPN's decode reads it
+    │       │       ├── Gzip.ts             The text a gzip'd or deflated body holds, as FastCast's patches are
     │       │       ├── TestEspn.ts         Recorded frames for tests of other modules, NE at BUF's day among them (`recordedNeAtBuf`)
     │       │       └── fixtures/           Recorded real payloads, NE at BUF's frames among them
     │       └── source/
@@ -289,7 +287,7 @@ Rules 2, 6, and 7 of section 4.1 and all of section 4.3 need judgement and are r
 
 ### 5.1 Ports
 
-Ports are Effect services; implementations are Layers; `HubMode` wires them. Signatures are indicative.
+Ports are Effect services; implementations are Layers; `main.ts` wires them. Signatures are indicative.
 
 **Provider** — game data in, as each frame's deliveries:
 
@@ -300,7 +298,7 @@ class Provider extends Context.Service<Provider, {
 ```
 
 - A provider runs itself. It polls, follows its push, reconnects, and reads each frame it receives with its own decode, for as long as it runs; nothing tells it what to do. Its failures are logged and counted inside its folder, where they happen.
-- Each element is one frame's `Delivery`s (`Listing`, `Snapshot`, or `Plays`), in the order it said them. ESPN's decode (`EspnDecoder.decode`) skips an event or a play that does not decode and delivers the rest; a frame that does not decode says nothing and is a Warning log. The snapshot feed (`TestSnapshotFeed.ts`) is the provider tests play: its frames say our own deliveries.
+- Each element is one frame's `Delivery`s (`Listing`, `Snapshot`, or `Plays`), in the order it said them. ESPN's decode (`EspnDecoder.decode`) skips an event or a play that does not decode and delivers the rest; a frame that does not decode says nothing and is a Warning log. `Provider.layerTestFed` is the provider tests feed: its frames say our own deliveries, given through `ProviderFeed`.
 - ESPN's cadence is `EspnProvider`'s: it sets each next delay from the scoreboards it just fetched, about every 10 seconds while any game is live, every minute near kickoff, every 15 minutes otherwise. FastCast (`docs/adr/0007-fastcast-live-feed.md`) is the service its push reads from: it follows a game topic while its own scoreboard topic shows the game live or near kickoff, re-checkpoints a topic itself when a patch will not apply, and retries its socket on a jittered exponential backoff.
 - Provider vocabulary stops at the folder edge. ESPN's "event", "competition", and "competitor" exist only in `EspnPayload.ts`, `EspnEvent.ts`, `FastCastMessage.ts`, and `EspnPlay.ts`.
 - The Hub composes providers per league: ESPN for NFL; ESPN with CollegeFootballData filling gaps for FBS. The composition is itself a `Provider`, so the Director sees one.
@@ -324,7 +322,7 @@ class Director extends Context.Service<Director, {
 - The Director starts from an empty slate and takes each frame's deliveries as they arrive, in one `Director.take` span carrying its `sportal.deliveries` count, and gauges each game whose snapshot changed by its progress (`sportal_game_state`: 1 upcoming, 2 live, 3 over, 0 once no listing names it), which the Hub dashboard's Games table reads. For now nothing is kept between runs: a restarted Hub serves an empty slate until its provider's next poll lists the day's games.
 - A take that raises a defect is an Error log; the slate keeps what it had and takes the next frame. If the provider's frames end other than by the Hub stopping, that is an Error log and the slate stays as it is.
 - `Slate.published()` is each listed game as the slate has it, carrying only its last ten plays (`Game#recent`, on `SlateChanged`); the Hub server sends it within 250 ms of a change, and `dispatch` reads the slate's games for where each can be streamed.
-- `HubMode` provides it over ESPN as the provider and YouTube TV as the source.
+- `main.ts` provides it over ESPN as the provider and YouTube TV as the source.
 - The Hub's whole shutdown bound is about 4 s: the HTTP server's 3 s for connected Displays, then telemetry's 1 s to export what it holds.
 
 **Source** — video out:

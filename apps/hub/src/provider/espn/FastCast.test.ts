@@ -4,10 +4,10 @@ import { DateTime, Deferred, Effect, Layer, Schedule, Schema, Stream } from "eff
 import { HttpClient, HttpClientResponse } from "effect/http"
 import * as Socket from "effect/socket/Socket"
 import { TestClock } from "effect/testing"
-import type { Frame } from "../../Frame.ts"
 import { HubConfig } from "../../HubConfig.ts"
 import { counted, recordingLogs, withMetrics } from "../../TestTelemetry.ts"
 import { FastCast } from "./FastCast.ts"
+import type { Frame } from "./Frame.ts"
 
 // Games of the recorded checkpoint: the first two live, the third scheduled for 20:05Z.
 const firstGame = "401872971"

@@ -21,7 +21,6 @@ import {
 } from "effect"
 import { HttpClient, HttpClientError, HttpClientResponse } from "effect/http"
 import { TestClock } from "effect/testing"
-import type { Frame } from "../../Frame.ts"
 import { HubConfig } from "../../HubConfig.ts"
 import { Delivery } from "../../slate/Delivery.ts"
 import { counted, recordingLogs, recordingSpans, withMetrics } from "../../TestTelemetry.ts"
@@ -29,6 +28,7 @@ import { Provider } from "../Provider.ts"
 import { listedBy } from "../TestProvider.ts"
 import * as EspnProvider from "./EspnProvider.ts"
 import { FastCast } from "./FastCast.ts"
+import type { Frame } from "./Frame.ts"
 import { ProviderUnavailable } from "./ProviderUnavailable.ts"
 
 // Real payloads recorded from ESPN. A payload that breaks decoding gets added here before the fix.

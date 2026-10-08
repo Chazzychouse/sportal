@@ -29,14 +29,14 @@ module.exports = {
       to: { path: "^apps/hub/src/(provider|source)/[^/]+/([^/]*Payload|FastCastMessage)\\.ts$" }
     },
     {
-      name: "only-hub-mode-names-adapters",
+      name: "only-main-names-adapters",
       comment:
-        "Only HubMode and tests know which concrete providers and sources exist, ESPN's through Espn.ts; main.ts names only the database.",
+        "Only main.ts and tests know which concrete providers and sources exist, ESPN's through Espn.ts.",
       severity: "error",
       from: {
         path: "^apps/hub/src/",
         pathNot:
-          "(^apps/hub/src/HubMode\\.ts$|\\.test\\.ts$|^apps/hub/src/provider/[^/]+/|^apps/hub/src/source/youtube-tv/)"
+          "(^apps/hub/src/main\\.ts$|\\.test\\.ts$|^apps/hub/src/provider/[^/]+/|^apps/hub/src/source/youtube-tv/)"
       },
       to: {
         path: "^apps/hub/src/(provider/[^/]+/|source/youtube-tv/)"
@@ -68,28 +68,11 @@ module.exports = {
       to: { path: "^apps/hub/src/TestTelemetry\\.ts$" }
     },
     {
-      name: "test-decoder-is-for-tests",
-      comment: "What a decode reads in a test's frames is imported only by test files and TestDirector.",
-      severity: "error",
-      from: { pathNot: "(\\.test\\.ts$|^apps/hub/src/TestDirector\\.ts$)" },
-      to: { path: "^apps/hub/src/provider/TestDecoder\\.ts$" }
-    },
-    {
       name: "test-director-is-for-tests",
-      comment: "The Director over the snapshot feed is imported only by test files.",
+      comment: "The Director over a fed provider is imported only by test files.",
       severity: "error",
       from: { pathNot: "\\.test\\.ts$" },
       to: { path: "^apps/hub/src/TestDirector\\.ts$" }
-    },
-    {
-      name: "test-snapshot-feed-is-for-tests",
-      comment:
-        "The snapshot feed, a provider of our own deliveries, is imported only by test files, TestDecoder and TestDirector.",
-      severity: "error",
-      from: {
-        pathNot: "(\\.test\\.ts$|^apps/hub/src/provider/TestDecoder\\.ts$|^apps/hub/src/TestDirector\\.ts$)"
-      },
-      to: { path: "^apps/hub/src/TestSnapshotFeed\\.ts$" }
     },
     {
       name: "test-screen-is-for-tests",

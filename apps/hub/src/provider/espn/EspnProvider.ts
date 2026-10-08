@@ -13,11 +13,11 @@ import {
   Stream
 } from "effect"
 import { HttpClient } from "effect/http"
-import { Frame } from "../../Frame.ts"
 import { HubConfig } from "../../HubConfig.ts"
 import { Provider } from "../Provider.ts"
 import * as EspnDecoder from "./EspnDecoder.ts"
 import { FastCast } from "./FastCast.ts"
+import { Frame } from "./Frame.ts"
 import { ProviderUnavailable } from "./ProviderUnavailable.ts"
 
 /**
