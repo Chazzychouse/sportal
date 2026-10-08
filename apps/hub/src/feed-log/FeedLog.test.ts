@@ -1,6 +1,6 @@
 import { NodeCrypto, NodeServices } from "@effect/platform-node"
 import { assert, describe, it } from "@effect/vitest"
-import { DateTime, Effect, Fiber, FileSystem, Layer, Path, Ref, Stream, type Tracer } from "effect"
+import { DateTime, Effect, Fiber, FileSystem, Layer, Option, Path, Ref, Stream, type Tracer } from "effect"
 import { SqlClient, SqlError } from "effect/sql"
 import { TestClock } from "effect/testing"
 import * as Database from "../Database.ts"
@@ -11,11 +11,11 @@ import { FeedLog } from "./FeedLog.ts"
 
 describe("FeedLog", () => {
   it.effect(
-    "should number appended frames consecutively, emitting them in that order to a subscription made before",
+    "should number appended frames consecutively, emitting them in that order to a follower from before",
     () =>
       Effect.gen(function* () {
         const log = yield* FeedLog
-        const frames = yield* log.subscribe
+        const { frames } = yield* log.follow(at(0))
 
         const appended = yield* Effect.forEach(
           [poll("nfl", "{}", 0), message("event-football-nfl", "[]", 1, 7), poll("fbs", "{}", 2)],
@@ -30,6 +30,32 @@ describe("FeedLog", () => {
         )
         assert.deepStrictEqual(emitted, appended)
       }).pipe(Effect.scoped, Effect.provide(feedLog))
+  )
+
+  it.effect("should deliver a frame appended while following begins exactly once", () =>
+    Effect.gen(function* () {
+      const log = yield* FeedLog
+      const logged = yield* appendedAndWritten([poll("nfl", "{}", 0), message("socket", "B", 10, 1)])
+      const { last, frames } = yield* log.follow(at(0))
+
+      const appended = yield* appendedAndWritten([message("socket", "C", 20, 2)])
+      const after = yield* log.append(message("socket", "D", 30, 3))
+      const followed = yield* frames.pipe(Stream.take(4), Stream.runCollect)
+
+      assert.deepStrictEqual(last, Option.some(2))
+      assert.deepStrictEqual(followed, [...logged, ...appended, after])
+    }).pipe(Effect.scoped, Effect.provide(feedLog))
+  )
+
+  it.effect("should report no last frame for a day with nothing logged", () =>
+    Effect.gen(function* () {
+      const log = yield* FeedLog
+      yield* appendedAndWritten(pollMessagePoll)
+
+      const { last } = yield* log.follow(at(5_000))
+
+      assert.deepStrictEqual(last, Option.none())
+    }).pipe(Effect.scoped, Effect.provide(feedLog))
   )
 
   it.effect("should not write appended frames before 100 ms", () =>
@@ -337,7 +363,7 @@ describe("FeedLog", () => {
         const sql = yield* SqlClient.SqlClient
         const log = yield* FeedLog
         const emitted = yield* Ref.make<ReadonlyArray<number>>([])
-        const frames = yield* log.subscribe
+        const { frames } = yield* log.follow(at(0))
         const listening = yield* frames.pipe(
           Stream.runForEach((frame) => Ref.update(emitted, (seqs) => [...seqs, frame.seq])),
           Effect.forkChild({ startImmediately: true })

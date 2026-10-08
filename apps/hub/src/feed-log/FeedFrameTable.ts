@@ -110,6 +110,15 @@ export function queries(sql: SqlClient.SqlClient) {
       Result: Schema.Struct({ seq: Schema.NullOr(Schema.Int) }),
       execute: (at) => sql`SELECT MIN(seq) AS seq FROM feed_frame WHERE received_at >= ${at}`
     }),
+    // The last frame's seq, a gap aside, from the first received at or after `at` on: what a replay from `at` reads to.
+    lastFrom: SqlSchema.findOne({
+      Request: Schema.Int,
+      Result: Schema.Struct({ seq: Schema.NullOr(Schema.Int) }),
+      execute: (at) => sql`
+        SELECT MAX(seq) AS seq FROM feed_frame
+        WHERE kind != 'gap' AND seq >= (SELECT MIN(seq) FROM feed_frame WHERE received_at >= ${at})
+      `
+    }),
     // Each topic's latest checkpoint before `before`, and that topic's frames after it and before `before`.
     lookback: SqlSchema.findAll({
       Request: Schema.Int,

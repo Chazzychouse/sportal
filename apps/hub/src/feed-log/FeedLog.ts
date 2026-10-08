@@ -42,6 +42,17 @@ export class FeedLog extends Context.Service<
      */
     readonly subscribe: Effect.Effect<Stream.Stream<LoggedFrame>, never, Scope.Scope>
     /**
+     * Subscribes, then reads where the log stands. The frames from `from` up to `last` are logged already, and each frame
+     * after `last` follows as it is appended. `last` is none when nothing at or after `from` is logged.
+     */
+    follow(
+      from: DateTime.Utc
+    ): Effect.Effect<
+      { readonly last: Option.Option<number>; readonly frames: Stream.Stream<LoggedFrame> },
+      never,
+      Scope.Scope
+    >
+    /**
      * Every logged frame received at or after `from`, in `seq` order, an unchanged poll with its channel's last body.
      * Each topic starts from its latest whole push before then: that frame and the topic's frames after it come
      * first, in `seq` order, so a patch after `from` applies to the document it was sent against.
@@ -93,9 +104,26 @@ export class FeedLog extends Context.Service<
         )
       })
 
+      // Subscribed before `last` is read, so a frame appended after it is read is in `appended`, and one written before is
+      // in the replay: each comes once.
+      const follow = Effect.fnUntraced(function* (from: DateTime.Utc) {
+        const appended = yield* PubSub.subscribe(published)
+        const { seq } = yield* table.lastFrom(DateTime.toEpochMillis(from)).pipe(Effect.orDie)
+
+        const last = Option.fromNullishOr(seq)
+        const through = Option.getOrElse(last, () => 0)
+        const logged = Option.match(last, {
+          onNone: () => Stream.empty,
+          onSome: () => replay(table, from).pipe(Stream.takeWhile((frame) => frame.seq <= through))
+        })
+        const after = Stream.fromSubscription(appended).pipe(Stream.filter((frame) => frame.seq > through))
+        return { last, frames: Stream.concat(logged, after) }
+      })
+
       return FeedLog.of({
         append,
         subscribe: Effect.map(PubSub.subscribe(published), Stream.fromSubscription),
+        follow,
         replay: (from) => replay(table, from),
         days: days(table)
       })
