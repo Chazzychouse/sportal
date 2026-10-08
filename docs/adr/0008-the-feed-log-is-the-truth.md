@@ -3,7 +3,7 @@
 Amended by ADR 0010, whose archive half ADR 0011 superseded: the truth is the feed log alone.
 
 Date: 2026-10-05
-Status: Accepted
+Status: Superseded by ADR 0012
 
 Supersedes ADR 0004.
 

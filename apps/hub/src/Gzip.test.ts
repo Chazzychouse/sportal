@@ -1,3 +1,4 @@
+import { gzipSync } from "node:zlib"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Stream } from "effect"
 import * as Gzip from "./Gzip.ts"
@@ -5,7 +6,7 @@ import * as Gzip from "./Gzip.ts"
 describe("Gzip.decompressStream", () => {
   it.effect("should give back the text a chunked gzip stream holds", () =>
     Effect.gen(function* () {
-      const bytes = yield* Gzip.compress("first line\nsecond line\n")
+      const bytes = gzipSync("first line\nsecond line\n")
       const chunks = Stream.fromIterable([bytes.subarray(0, 5), bytes.subarray(5, 12), bytes.subarray(12)])
 
       const text = yield* Stream.mkString(Gzip.decompressStream(chunks, "gzip"))

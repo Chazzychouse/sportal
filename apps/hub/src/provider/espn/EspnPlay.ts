@@ -1,8 +1,8 @@
 import type { LeagueId } from "@sportal/domain/League"
 import { Play, type PlayOutcome } from "@sportal/domain/Play"
-import { Array as Arr, Effect, Option, Predicate, Schema, SchemaGetter } from "effect"
+import { Effect, Predicate, Schema, SchemaGetter } from "effect"
 import { teamId } from "./EspnEvent.ts"
-import { PlayEntity, type PlayFields, PlayType } from "./EspnPayload.ts"
+import { PlayEntity, type PlayFields, type PlayType } from "./EspnPayload.ts"
 
 /** ESPN's play entity, as a game package lists it under `entities.plays`, read as a `Play` of `league`. */
 export function FootballPlay(league: LeagueId) {
@@ -65,19 +65,6 @@ const read = Effect.fnUntraced(function* (
   return yield* decodeCase(wire).pipe(Effect.mapError(({ issue }) => issue))
 })
 
-/** The types of `entities` that the table does not know, each once. */
-export function unknownTypes(
-  entities: ReadonlyArray<unknown>
-): ReadonlyArray<{ readonly id: string; readonly text: string }> {
-  return Arr.dedupeWith(
-    entities.flatMap((entity) =>
-      Option.toArray(decodeType(entity)).flatMap(({ type }) => (byId.has(type.id) ? [] : [type]))
-    ),
-    (a, b) => a.id === b.id
-  )
-}
-
-const decodeType = Schema.decodeUnknownOption(Schema.Struct({ type: PlayType }))
 const decodeCase = Schema.decodeUnknownEffect(Play)
 
 function outcomeOf(type: PlayType): PlayOutcome {

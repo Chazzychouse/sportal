@@ -1,29 +1,18 @@
-import { DateTime, Schema } from "effect"
-import { DeliverySource } from "./slate/Delivery.ts"
+import { type DateTime, Schema } from "effect"
 
-/** One thing a provider delivered, as received, before the log numbers it. */
+/** One thing a provider delivered, as received, before its decode reads it. */
 export class Frame extends Schema.Class<Frame>("sportal/hub/Frame")({
   receivedAt: Schema.DateTimeUtcFromMillis,
-  sentAt: Schema.optional(Schema.DateTimeUtcFromMillis),
-  source: DeliverySource,
+  /** Which way the provider delivered it: pushed on its live feed, or polled. */
+  source: Schema.Literals(["push", "poll"]),
   /** The league for a poll; the topic, or `socket`, for a push. */
   channel: Schema.String,
   kind: Schema.Literals(["whole", "change"]),
   number: Schema.optional(Schema.Int),
   body: Schema.String
 }) {
-  /** `frame` received at `at` instead, the instant it was sent moved with it. */
+  /** `frame` received at `at` instead. */
   static movedTo(frame: Frame, at: DateTime.Utc): Frame {
-    const moved = DateTime.distance(frame.receivedAt, at)
-    return new Frame({
-      ...frame,
-      receivedAt: at,
-      ...(frame.sentAt === undefined ? {} : { sentAt: DateTime.addDuration(frame.sentAt, moved) })
-    })
+    return new Frame({ ...frame, receivedAt: at })
   }
 }
-
-/** A frame as the feed log numbered it. */
-export class LoggedFrame extends Frame.extend<LoggedFrame>("sportal/hub/LoggedFrame")({
-  seq: Schema.Int
-}) {}

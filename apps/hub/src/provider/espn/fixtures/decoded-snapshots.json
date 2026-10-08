@@ -1,7 +1,7 @@
 {
   "deliveries": [
     {
-      "seq": 1,
+      "frame": 1,
       "tag": "Listing",
       "league": "fbs",
       "games": [
@@ -2454,7 +2454,7 @@
       ]
     },
     {
-      "seq": 2,
+      "frame": 2,
       "tag": "Listing",
       "league": "nfl",
       "games": [
@@ -3168,9 +3168,8 @@
       ]
     },
     {
-      "seq": 3,
+      "frame": 3,
       "tag": "Snapshot",
-      "from": "push",
       "snapshot": {
         "id": "401872966",
         "league": "nfl",
@@ -3222,9 +3221,8 @@
       }
     },
     {
-      "seq": 3,
+      "frame": 3,
       "tag": "Snapshot",
-      "from": "push",
       "snapshot": {
         "id": "401872967",
         "league": "nfl",
@@ -3276,9 +3274,8 @@
       }
     },
     {
-      "seq": 3,
+      "frame": 3,
       "tag": "Snapshot",
-      "from": "push",
       "snapshot": {
         "id": "401872968",
         "league": "nfl",
@@ -3330,9 +3327,8 @@
       }
     },
     {
-      "seq": 3,
+      "frame": 3,
       "tag": "Snapshot",
-      "from": "push",
       "snapshot": {
         "id": "401872969",
         "league": "nfl",
@@ -3384,9 +3380,8 @@
       }
     },
     {
-      "seq": 3,
+      "frame": 3,
       "tag": "Snapshot",
-      "from": "push",
       "snapshot": {
         "id": "401872970",
         "league": "nfl",
@@ -3438,9 +3433,8 @@
       }
     },
     {
-      "seq": 3,
+      "frame": 3,
       "tag": "Snapshot",
-      "from": "push",
       "snapshot": {
         "id": "401872971",
         "league": "nfl",
@@ -3492,9 +3486,8 @@
       }
     },
     {
-      "seq": 3,
+      "frame": 3,
       "tag": "Snapshot",
-      "from": "push",
       "snapshot": {
         "id": "401872972",
         "league": "nfl",
@@ -3546,9 +3539,8 @@
       }
     },
     {
-      "seq": 3,
+      "frame": 3,
       "tag": "Snapshot",
-      "from": "push",
       "snapshot": {
         "id": "401872973",
         "league": "nfl",
@@ -3600,9 +3592,8 @@
       }
     },
     {
-      "seq": 3,
+      "frame": 3,
       "tag": "Snapshot",
-      "from": "push",
       "snapshot": {
         "id": "401872965",
         "league": "nfl",
@@ -3645,9 +3636,8 @@
       }
     },
     {
-      "seq": 3,
+      "frame": 3,
       "tag": "Snapshot",
-      "from": "push",
       "snapshot": {
         "id": "401872974",
         "league": "nfl",
@@ -3690,9 +3680,8 @@
       }
     },
     {
-      "seq": 3,
+      "frame": 3,
       "tag": "Snapshot",
-      "from": "push",
       "snapshot": {
         "id": "401872975",
         "league": "nfl",
@@ -3735,9 +3724,8 @@
       }
     },
     {
-      "seq": 3,
+      "frame": 3,
       "tag": "Snapshot",
-      "from": "push",
       "snapshot": {
         "id": "401872976",
         "league": "nfl",
@@ -3780,9 +3768,8 @@
       }
     },
     {
-      "seq": 3,
+      "frame": 3,
       "tag": "Snapshot",
-      "from": "push",
       "snapshot": {
         "id": "401872977",
         "league": "nfl",
@@ -3825,9 +3812,8 @@
       }
     },
     {
-      "seq": 3,
+      "frame": 3,
       "tag": "Snapshot",
-      "from": "push",
       "snapshot": {
         "id": "401872978",
         "league": "nfl",
@@ -3870,9 +3856,8 @@
       }
     },
     {
-      "seq": 3,
+      "frame": 3,
       "tag": "Snapshot",
-      "from": "push",
       "snapshot": {
         "id": "401872964",
         "league": "nfl",
@@ -3915,9 +3900,8 @@
       }
     },
     {
-      "seq": 3,
+      "frame": 3,
       "tag": "Snapshot",
-      "from": "push",
       "snapshot": {
         "id": "401872979",
         "league": "nfl",

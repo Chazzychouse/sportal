@@ -303,14 +303,14 @@ function firstStageWhere(changes: Stream.Stream<Stage>, test: (stage: Stage) => 
   return changes.pipe(Stream.filter(test), Stream.take(1), Stream.runHead, Effect.timeout("2 seconds"))
 }
 
-/** A board whose latest lists what `listed` gives each time it is read, with no changes or takes. */
+/** A board whose latest lists what `listed` gives each time it is read, with no changes. */
 function boardOf(listed: Effect.Effect<ReadonlyArray<GameSnapshot>>) {
-  return Board.of({ latest: Effect.flatMap(listed, listing), changes: Stream.empty, taken: Stream.empty })
+  return Board.of({ latest: Effect.map(listed, listing), changes: Stream.empty })
 }
 
 /** A still board listing `games`. */
 function listingBoard(games: ReadonlyArray<GameSnapshot>) {
-  return Layer.unwrap(Effect.map(listing(games), Board.layerTest))
+  return Board.layerTest(listing(games))
 }
 
 /** The empty slate once it has taken a listing of `games` in each of their leagues, in their order. */
@@ -319,7 +319,7 @@ function listing(games: ReadonlyArray<GameSnapshot>) {
   const deliveries = leagues.map((league) =>
     Delivery.cases.Listing.make({ league, games: games.filter((game) => game.league === league) })
   )
-  return Effect.map(Slate.empty.take({ deliveries, at: DateTime.makeUnsafe(0) }), ({ next }) => next)
+  return Slate.empty.take(deliveries)
 }
 
 /** Switcher over a board listing `games` and YouTube TV with nothing read yet. */

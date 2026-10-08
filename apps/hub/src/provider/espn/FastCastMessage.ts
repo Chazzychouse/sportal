@@ -1,4 +1,4 @@
-import { DateTime, Effect, Schema, SchemaGetter, SchemaIssue, Struct, Tuple } from "effect"
+import { Effect, Schema, SchemaGetter, SchemaIssue, Struct, Tuple } from "effect"
 import * as Gzip from "../../Gzip.ts"
 import { Owner } from "./FastCastTopic.ts"
 
@@ -67,37 +67,24 @@ const Heartbeat = Schema.Struct({ op: Schema.Literal("B") })
 /** One FastCast socket message. */
 export const Message = Schema.Union([Patched, Connected, Subscribed, Checkpointed, Idle, Heartbeat])
 
-// A message as framing reads it: an `R` or `P`'s `pl` only as far as the time it was sent.
+// A message as framing reads it: an `R` or `P`'s `pl` left unread.
 const Framed = Message.mapMembers(
-  Tuple.evolve([
-    (patched) =>
-      patched.mapFields(
-        Struct.assign({ pl: Schema.fromJsonString(Schema.Struct({ ts: Schema.optional(Schema.Finite) })) })
-      )
-  ])
+  Tuple.evolve([(patched) => patched.mapFields(Struct.assign({ pl: Schema.String }))])
 )
 
-/**
- * One FastCast socket message read only as far as framing it needs, and where it goes in the feed log: its topic as
- * the frame's channel, its mid, and when FastCast sent it.
- */
+/** One FastCast socket message read only as far as framing it needs: its topic as the frame's channel, and its mid. */
 export const Envelope = Schema.fromJsonString(Framed).pipe(
   Schema.decodeTo(
     Schema.Struct({
       message: Schema.toType(Framed),
       channel: Schema.UndefinedOr(Schema.String),
-      mid: Schema.UndefinedOr(Schema.Int),
-      sentAt: Schema.UndefinedOr(Schema.DateTimeUtc)
+      mid: Schema.UndefinedOr(Schema.Int)
     }),
     {
       decode: SchemaGetter.transform((message) => ({
         message,
         channel: "tc" in message ? message.tc : undefined,
-        mid: "mid" in message ? message.mid : undefined,
-        sentAt:
-          (message.op === "R" || message.op === "P") && message.pl.ts !== undefined
-            ? DateTime.makeUnsafe(message.pl.ts)
-            : undefined
+        mid: "mid" in message ? message.mid : undefined
       })),
       encode: SchemaGetter.forbidden(() => "A framed message is never sent again")
     }

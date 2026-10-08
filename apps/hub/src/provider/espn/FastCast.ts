@@ -28,7 +28,6 @@ import * as Socket from "effect/socket/Socket"
 import { Frame } from "../../Frame.ts"
 import { HubConfig } from "../../HubConfig.ts"
 import * as HubStopping from "../../HubStopping.ts"
-import { DecodeObservation } from "../Provider.ts"
 import * as EspnDecoder from "./EspnDecoder.ts"
 import * as FastCastDocument from "./FastCastDocument.ts"
 import * as FastCastMessage from "./FastCastMessage.ts"
@@ -47,7 +46,7 @@ export class FastCast extends Context.Service<
     /**
      * Every socket text and checkpoint, as frames, for as long as it runs. It follows each league's scoreboard topic.
      * It follows a game's topic while that scoreboard shows the game live or within 30 minutes of kickoff, and leaves
-     * it at final. When a topic's document resets (`Gap`, `Unapplicable`), it reads the checkpoint again. When the
+     * it at final. When a topic's document resets (a message missed, or one that will not apply), it reads the checkpoint again. When the
      * socket closes, ends or goes silent, it reconnects on its backoff. Never fails.
      */
     readonly frames: Stream.Stream<Frame>
@@ -205,8 +204,10 @@ const connect = Effect.fn("FastCast.connect")(function* (
       Effect.logInfo(`FastCast: left ${tc}; its scoreboard shows it neither live nor about to kick off`).pipe(
         Effect.andThen(FiberMap.remove(follows, tc))
       ),
-    FollowAgain: ({ tc }) =>
-      Effect.logInfo(`FastCast: ${tc} lost its document; following it again`).pipe(Effect.andThen(follow(tc)))
+    FollowAgain: ({ tc, detail }) =>
+      Effect.logWarning(`FastCast: ${tc} lost its document (${detail}); following it again`).pipe(
+        Effect.andThen(follow(tc))
+      )
   })
 
   yield* Effect.forEach(topics, follow, { discard: true })
@@ -243,7 +244,7 @@ interface Following {
 type Steer = Data.TaggedEnum<{
   Follow: { readonly tc: string }
   Leave: { readonly tc: string }
-  FollowAgain: { readonly tc: string }
+  FollowAgain: { readonly tc: string; readonly detail: string }
 }>
 const Steer = Data.taggedEnum<Steer>()
 
@@ -267,18 +268,20 @@ const steered = Effect.fnUntraced(function* (
   const games = yield* Option.match(shown, {
     onNone: () => Effect.succeed(following.games),
     onSome: ({ league, events }) =>
-      Effect.map(EspnDecoder.gamesOf(league, events, "push"), ({ games: shownGames }) =>
+      Effect.map(EspnDecoder.gamesOf(league, events), (shownGames) =>
         HashMap.set(following.games, league, shownGames)
       )
   })
   const now = yield* DateTime.now
 
   const followed = followedAt(games, now)
-  const reset = Arr.filter(advanced.observed, DecodeObservation.$is("Reset")).map(({ topic }) => topic)
+  const reset = Option.filter(advanced.change, FastCastDocument.Change.$is("Reset")).pipe(
+    Option.filter(({ topic }) => [...scoreboards, ...followed].includes(topic))
+  )
   const steers = [
     ...Arr.difference(followed, following.followed).map((tc) => Steer.Follow({ tc })),
     ...Arr.difference(following.followed, followed).map((tc) => Steer.Leave({ tc })),
-    ...Arr.intersection(reset, [...scoreboards, ...followed]).map((tc) => Steer.FollowAgain({ tc }))
+    ...Option.toArray(reset).map(({ topic, detail }) => Steer.FollowAgain({ tc: topic, detail }))
   ]
   const next: Following = { documents: advanced.documents, games, followed }
   return [next, steers] as const
@@ -311,8 +314,7 @@ const framed = Effect.fnUntraced(function* (
     channel: envelope?.channel ?? "socket",
     kind: "change",
     body: text,
-    number: envelope?.mid,
-    sentAt: envelope?.sentAt
+    number: envelope?.mid
   })
   if (envelope === undefined) {
     yield* Effect.logDebug("FastCast: framed a text of an unknown op", text)
@@ -379,7 +381,7 @@ function silent(): ProviderUnavailable {
 
 /** A failure of the live feed, logged and counted by its reason. */
 const failed = Effect.fnUntraced(function* (error: ProviderUnavailable) {
-  yield* Effect.logWarning(`Ingest: the live feed failed (${error.reason}); subscribing again`, error)
+  yield* Effect.logWarning(`FastCast: the live feed failed (${error.reason}); subscribing again`, error)
   yield* Metric.update(Metric.withAttributes(liveFeedErrors, { reason: error.reason }), 1)
 })
 
@@ -387,7 +389,7 @@ const failed = Effect.fnUntraced(function* (error: ProviderUnavailable) {
 function stopped(cause: Cause.Cause<ProviderUnavailable>): Stream.Stream<never> {
   const logged = Effect.failCause(cause).pipe(
     HubStopping.loggedUnlessStopping(
-      "Ingest: the live feed stopped; only the poll reaches the slate until the Hub restarts",
+      "FastCast: the live feed stopped; only the poll reaches the slate until the Hub restarts",
       "the feed's stream ended"
     ),
     Effect.catchCause(() => Effect.never)

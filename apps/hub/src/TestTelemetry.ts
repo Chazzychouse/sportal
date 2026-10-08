@@ -53,13 +53,6 @@ export function counted(id: string, attributes: Readonly<Record<string, string>>
   )
 }
 
-/** The value of gauge `id` with `attributes` among its others, if it has been set. */
-export function gauged(id: string, attributes: Readonly<Record<string, string>> = {}) {
-  return Effect.map(metricOf(id, attributes), (metric) =>
-    metric?.type === "Gauge" ? metric.state.value : undefined
-  )
-}
-
 function metricOf(id: string, attributes: Readonly<Record<string, string>>) {
   return Effect.map(Metric.snapshot, (metrics) =>
     metrics.find((candidate) => candidate.id === id && matches(candidate.attributes, attributes))

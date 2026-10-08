@@ -1,63 +1,45 @@
-import { DateTime, Effect, Layer, Schema, Stream } from "effect"
-import { Frame, type LoggedFrame } from "./Frame.ts"
-import { Decoded, Provider } from "./provider/Provider.ts"
-import { Delivery } from "./slate/Delivery.ts"
-
-/** The snapshot feed, which tests drive, as a provider that delivers no frame: a decode of our own deliveries. */
-export const layer: Layer.Layer<Provider> = layerFrom(Stream.never)
-
-/** The snapshot feed as the provider, delivering `frames`, read by `decode`. */
-export function layerFrom(frames: Stream.Stream<Frame>): Layer.Layer<Provider> {
-  return Layer.succeed(Provider, Provider.of({ frames, decode }))
-}
+import { Context, Deferred, Effect, Layer, Option, Queue, Ref, Stream } from "effect"
+import { Provider } from "./provider/Provider.ts"
+import type { Delivery } from "./slate/Delivery.ts"
 
 /**
- * The snapshot feed's decode: each frame is its one delivery, or nothing, one `Decoded` per frame. A body that does not
- * decode is noted `FrameUndecoded` and says nothing.
+ * The snapshot feed, which tests drive: a provider whose frames say what a test delivers. `deliver` returns once the
+ * provider's reader has taken the frame and asked for the next, so a Board has taken it.
  */
-export function decode(frames: Stream.Stream<LoggedFrame>): Stream.Stream<Decoded> {
-  return frames.pipe(
-    Stream.mapEffect((frame) =>
-      decodePayload(frame.body).pipe(
-        Effect.map((payload) =>
-          isNothing(payload) ? Decoded.of(frame) : Decoded.of(frame, { deliveries: [payload] })
-        ),
-        Effect.catch((cause) => Effect.succeed(Decoded.undecodable(frame, cause)))
+export class SnapshotFeed extends Context.Service<
+  SnapshotFeed,
+  {
+    /** One frame saying `deliveries`. */
+    deliver(deliveries: ReadonlyArray<Delivery>): Effect.Effect<void>
+  }
+>()("sportal/hub/SnapshotFeed") {
+  /** The snapshot feed, and it as the provider. */
+  static readonly layer: Layer.Layer<SnapshotFeed | Provider> = Layer.effectContext(
+    Effect.gen(function* () {
+      const frames = yield* Queue.unbounded<{
+        readonly deliveries: ReadonlyArray<Delivery>
+        readonly taken: Deferred.Deferred<void>
+      }>()
+      const reading = yield* Ref.make(Option.none<Deferred.Deferred<void>>())
+
+      // Each pull first marks the frame before it taken: the reader asks for the next only once it has taken that one.
+      const next = Effect.gen(function* () {
+        const previous = yield* Ref.get(reading)
+        yield* Effect.forEach(Option.toArray(previous), (taken) => Deferred.succeed(taken, undefined))
+        const frame = yield* Queue.take(frames)
+        yield* Ref.set(reading, Option.some(frame.taken))
+        return frame.deliveries
+      })
+
+      const deliver = Effect.fnUntraced(function* (deliveries: ReadonlyArray<Delivery>) {
+        const taken = yield* Deferred.make<void>()
+        yield* Queue.offer(frames, { deliveries, taken })
+        yield* Deferred.await(taken)
+      })
+
+      return Context.make(SnapshotFeed, SnapshotFeed.of({ deliver })).pipe(
+        Context.add(Provider, Provider.of({ deliveries: Stream.fromEffectRepeat(next) }))
       )
-    )
+    })
   )
 }
-
-/** The body of a snapshot feed frame, as JSON: one `Delivery`, or `Nothing`, a frame that says nothing. */
-const Nothing = Schema.TaggedStruct("Nothing", {})
-export const SnapshotPayload = Schema.fromJsonString(Schema.Union([Delivery, Nothing]))
-export type SnapshotPayload = typeof SnapshotPayload.Type
-
-/**
- * A snapshot feed frame, received at `at`, that says only `delivery`: a listing as its league's poll response, anything
- * else pushed.
- */
-export function framed(delivery: Delivery, at: DateTime.Utc): Frame {
-  return Delivery.guards.Listing(delivery)
-    ? snapshotFrame(delivery, { source: "poll", channel: delivery.league, kind: "whole" }, at)
-    : snapshotFrame(delivery, { source: "push", channel: "snapshot", kind: "change" }, at)
-}
-
-/** A snapshot feed frame pushed on `channel`, received at the clock's now, that says `payload`. */
-export function pushed(payload: SnapshotPayload, channel: string) {
-  return Effect.map(DateTime.now, (at) =>
-    snapshotFrame(payload, { source: "push", channel, kind: "change" }, at)
-  )
-}
-
-function snapshotFrame(
-  payload: SnapshotPayload,
-  where: Pick<Frame, "source" | "channel" | "kind">,
-  receivedAt: DateTime.Utc
-): Frame {
-  return new Frame({ receivedAt, ...where, body: Schema.encodeSync(SnapshotPayload)(payload) })
-}
-
-const isNothing = Schema.is(Nothing)
-
-const decodePayload = Schema.decodeUnknownEffect(SnapshotPayload)

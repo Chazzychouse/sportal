@@ -35,7 +35,7 @@ easiest to break.
 - In the Hub, only `HubConfig.ts` reads the environment. A new setting is a field there, with its default.
 - A service is yielded where it is used, never passed as an argument. A layer that needs a setting yields `HubConfig`
   (in the shell, `ShellConfig`); a choice between layers at startup is a `Layer.unwrap` that yields it.
-- A port's member types that other modules need are named and exported beside it (`Decoded`, `DecodeObservation`).
+- A port's member types that other modules need are named and exported beside it (`Scenario`, `ScenarioUnknown` beside `Scenarios`).
   Indexing a service's type (`Foo["Service"]`) is allowed; a port still names the member types other modules need.
 
 **Module shapes.** Every `.ts` file is exactly one of these.
@@ -43,7 +43,7 @@ easiest to break.
 | Shape | Exports | Imported |
 |---|---|---|
 | Class module | One class named for the file (service, `Schema.Class`, `Data.Class`), and beside it only that concept's member types, errors and the schemas its fields read | By name |
-| Namespace module | No class of its own: an adapter of a port defined elsewhere (`EspnProvider`), a layer that provides no service (`Ingest`, `HubMode`), or a set of functions (`Gzip`). An adapter or layer-only module exports `layer` | `import * as X` |
+| Namespace module | No class of its own: an adapter of a port defined elsewhere (`EspnProvider`), a layer that provides no service (`HubMode`), or a set of functions (`Gzip`). An adapter or layer-only module exports `layer` | `import * as X` |
 | Payload module (`*Payload.ts`) | A provider's wire spelling, with no transform into domain types | By name |
 | Entry point (lowercase) | Nothing; it runs a process (`main.ts`) | – |
 | Test module (`Test*.ts`) | Fixtures, recorded payloads, builders of domain values, harnesses composing several layers, test-only adapters of a port | As its shape says |
@@ -65,8 +65,8 @@ A reader opens a file to see the thing it is named for. Keep it that way.
    `FooHelpers.ts`.
 8. A blank line between the phases of a generator block or function body, not between every `yield*`.
 9. Each `yield*` is on its own line, bound to its own `const` (or a statement alone), never nested in another
-   expression. Not `decoder.decode((yield* FeedLog).replay(from))`, but
-   `const feedLog = yield* FeedLog` then `decoder.decode(feedLog.replay(from))`.
+   expression. Not `Stream.runForEach((yield* Provider).deliveries, take)`, but
+   `const provider = yield* Provider` then `Stream.runForEach(provider.deliveries, take)`.
 10. A value that takes a calculation to build, or a pipe more than two levels deep, gets a name before it is used;
     a constructor is a plain list of fields. Not `new Frame({ receivedAt, ...where, body: Schema.encodeSync(SnapshotPayload)(payload) })`,
     but `const body = Schema.encodeSync(SnapshotPayload)(payload)` then `new Frame({ receivedAt, ...where, body })`.
@@ -88,7 +88,7 @@ A reader opens a file to see the thing it is named for. Keep it that way.
 |---|---|
 | Service id | `"sportal/<app>/<dir>/Name"`, the folder under `src/` (no `src/` itself), omitted for a file directly in `src/`: `"sportal/hub/provider/Provider"`, `"sportal/hub/slate/Board"` |
 | Service layer | `static readonly layer: Layer.Layer<…> = …`, type written out |
-| Layer variant | `static readonly layerX`, or `static layerX(args)`, as `FeedLog.layerInDataDir` and `Scenarios.layerFrom(dir)`; never another word (`FeedLog.inDataDir`, `Scenarios.in(dir)`) |
+| Layer variant | `static readonly layerX`, or `static layerX(args)`, as `Scenarios.layerFrom(dir)`; never another word (`Scenarios.in(dir)`) |
 | Test layer | `static readonly layerTest` or `static layerTest…(args)` on the service it fakes; knip's `ignoreMembers` exempts `^layerTest` |
 | Layer providing nothing | A namespace module's `layer`, or `layerX`. Never `serve`/`listen`, never a zero-argument function returning a layer |
 | Effectful operation | `const f = Effect.fn("Module.f")(…)`, or `Effect.fnUntraced` on a hot path; a service member is `Effect.fn("Service.member")`. Never a `function` that only returns `Effect.gen`, never a hand-added `Effect.withSpan` |
@@ -99,7 +99,6 @@ A reader opens a file to see the thing it is named for. Keep it that way.
 | In-memory state | `type X = Data.TaggedEnum<…>` with `const X = Data.taggedEnum<X>()`; `X.$match`, `X.$is`. Never `_tag ===`, never `Match.valueTags` |
 | Expected error | `Schema.TaggedError` named for what happened, never `…Error` (`ProviderUnavailable`) |
 | Object shape | `interface`; `type` stays for functions, schedules, unions and derived types |
-| SQL row | `Model.Class` from `effect/schema`, one per table; queries are `SqlSchema` consts built inside the layer from the `sql` it yields, never per call |
 | Metric | A private const at the end of its file, named for what it measures; its id never changes |
 | Codec | `const decodeX` / `encodeX` below its users |
 
@@ -107,8 +106,8 @@ A reader opens a file to see the thing it is named for. Keep it that way.
   generator or a layer's effect), never when an eager top-level expression calls it.
 - Order inside a class module: the schemas the class reads when defined; the class (a service: interface, `layer`, the
   `layer…` variants, then `layerTest…`; a data class: fields, statics, methods); its member types and errors; private
-  helpers in first-use order; codecs; metrics. Storage (rows, queries, migrations) or a second state machine that
-  outgrows its service moves to a sibling file in the concept's folder, never to the bottom of the service file.
+  helpers in first-use order; codecs; metrics. A second state machine that outgrows its service moves to a sibling file
+  in the concept's folder, never to the bottom of the service file.
 - Expected failures are tagged errors in the error channel. Nothing is caught and ignored.
 - Time comes from Effect's `Clock`. No `Date.now()` in `packages/domain` or the Hub.
 - No `any`, no non-null assertions, no enums, no default exports, no casts outside decoding.
@@ -123,11 +122,12 @@ A reader opens a file to see the thing it is named for. Keep it that way.
   fixture or `Test*.ts`. Everything else a test needs stays in `Test*.ts`.
 - One behaviour per test. Several cases are several tests; `it.each` only when the cases are one behaviour over
   different inputs.
-- `it("should …")`; the `describe` names the unit (`describe("Play.eventsSince")`).
+- `it("should …")`; the `describe` names the unit (`describe("GameSnapshot#progress")`).
 - Arrange, Act, Assert, separated by a blank line each, with no `// Arrange` comments. Nothing to arrange: Act, then
   Assert.
-- Rewriting a test keeps every assertion it had. The commit body lists, per rewritten file, each old test name and
-  the new test names that carry its assertions.
+- Rewriting a test keeps every assertion it had, unless the behaviour it asserts was removed: that assertion goes
+  with the behaviour. The commit body lists, per rewritten file, each old test name and the new test names that carry
+  its assertions, or the removed behaviour it went with.
 
 ## Commands
 
@@ -142,16 +142,11 @@ A reader opens a file to see the thing it is named for. Keep it that way.
   together, each reloading on change. Without Docker it says telemetry is off and runs the rest. The shell
   waits for the UI to come up. Use `pnpm dev:x11` to run the shell through XWayland.
 - `SPORTAL_SCENARIO=<name> SPORTAL_SCENARIO_SPEED=10 pnpm dev` — play a scenario instead of ESPN and YouTube TV, ten
-  times faster. A name that is a game day, `YYYY-MM-DD`, plays that day as the feed log recorded it (`feed.sqlite` in
-  the data directory, read and never appended to); any other name is a recording,
-  `fixtures/scenarios/<name>.frames.jsonl.gz`. Every scenario plays through ESPN's decode. It plays as the provider
-  through the real ingest and slate, on a feed log in memory. Every game plays as a synthetic stream page. The feed log
-  records every game day.
+  times faster. The name is a recording, `fixtures/scenarios/<name>.frames.jsonl.gz`; it plays as the provider through
+  ESPN's real decode and the slate. Every game plays as a synthetic stream page.
 - `pnpm dev:golden` — the same, with the golden scenario: the recorded `crowded-fourth-quarter` at ten times speed.
-- `pnpm --filter @sportal/hub dev` — run only the Hub on port 4400 (API and live stream), on every interface so a phone Remote can reach it (`SPORTAL_HOST` narrows it). In
-  dev it keeps its SQLite database in `.sportal/` at the repo root; set `SPORTAL_DATA_DIR` to move it. Started any other
-  way, it keeps it where the OS keeps app data: `$XDG_DATA_HOME/sportal` or `~/.local/share/sportal` on Linux,
-  `~/Library/Application Support/Sportal` on macOS, `%LOCALAPPDATA%\Sportal` on Windows.
+- `pnpm --filter @sportal/hub dev` — run only the Hub on port 4400 (API and live stream), on every interface so a phone Remote can reach it (`SPORTAL_HOST` narrows it). For
+  now it keeps nothing between runs: a restarted Hub starts from an empty slate and the next poll fills it.
 - Hub settings: every one is a field of `apps/hub/src/HubConfig.ts`, with its variable and default. A bad value stops
   the Hub at startup. `GET /api/health` answers while it is up.
 - `pnpm telemetry` / `pnpm telemetry:down` — start or stop a local Grafana (`localhost:3000`) with OTLP on `localhost:4318`

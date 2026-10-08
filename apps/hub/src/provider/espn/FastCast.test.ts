@@ -84,7 +84,7 @@ describe("FastCast", () => {
         logs.some(
           (log) =>
             log.level === "Warn" &&
-            log.message.includes("Ingest: the live feed failed (Closed); subscribing again")
+            log.message.includes("FastCast: the live feed failed (Closed); subscribing again")
         )
       )
     }).pipe(withMetrics)
@@ -129,7 +129,7 @@ describe("FastCast", () => {
       yield* TestClock.adjust("1 minute")
 
       const done = yield* Deferred.isDone(ended)
-      const stopped = logs.filter((log) => log.message.includes("Ingest: the live feed stopped"))
+      const stopped = logs.filter((log) => log.message.includes("FastCast: the live feed stopped"))
       assert.isFalse(done)
       assert.lengthOf(connectsSent(server), 1)
       assert.lengthOf(stopped, 1)
@@ -166,7 +166,7 @@ describe("FastCast", () => {
     })
   )
 
-  it.effect("should give a patch's frame its mid and the time FastCast sent it", () =>
+  it.effect("should give a patch's frame its mid", () =>
     Effect.gen(function* () {
       const server = fakeServer()
       const { frames } = yield* nflFrames(server)
@@ -177,7 +177,6 @@ describe("FastCast", () => {
       const received = yield* frames.until(atLeast(3))
       const patch = received.at(-1)
       assert.strictEqual(patch?.number, 8)
-      assert.strictEqual(patch?.sentAt?.epochMilliseconds, 1791136341731)
     })
   )
 

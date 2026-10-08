@@ -1,57 +1,29 @@
 import type { LeagueId } from "@sportal/domain/League"
-import { Context, Effect, Layer, Option, Stream } from "effect"
+import { Effect, Option, Stream } from "effect"
 import { TestClock } from "effect/testing"
-import { type Frame, LoggedFrame } from "../Frame.ts"
 import { Delivery } from "../slate/Delivery.ts"
-import { type Decoded, Provider } from "./Provider.ts"
+import { Provider } from "./Provider.ts"
 
 /**
- * The games the provided `Provider`'s first frame polled from `league` lists, as its own decode reads it. It waits on
- * the live clock for at most 2 seconds, so a provider whose first poll of `league` failed fails the test, saying so,
- * rather than hanging it.
+ * The games the provided `Provider`'s first listing of `league` lists. It waits on the live clock for at most 2
+ * seconds, so a provider whose first poll of `league` failed fails the test, saying so, rather than hanging it.
  */
 export const listedBy = Effect.fn("TestProvider.listedBy")(function* (league: LeagueId) {
   const provider = yield* Provider
-  const polled = yield* provider.frames.pipe(
-    Stream.filter((frame) => frame.source === "poll" && frame.channel === league),
+  const listing = yield* provider.deliveries.pipe(
+    Stream.flatMap(Stream.fromIterable),
+    Stream.filter(Delivery.guards.Listing),
+    Stream.filter((delivery) => delivery.league === league),
     Stream.runHead,
     Effect.raceFirst(
       Effect.sleep("2 seconds").pipe(
         TestClock.withLive,
-        Effect.andThen(Effect.die(new Error(`the provider delivered no poll of ${league} within 2 seconds`)))
+        Effect.andThen(
+          Effect.die(new Error(`the provider delivered no listing of ${league} within 2 seconds`))
+        )
       )
     )
   )
-  const said = yield* decodedFrames(Option.toArray(polled))
 
-  return said.flatMap((one) =>
-    one.deliveries.flatMap((delivery) => (Delivery.guards.Listing(delivery) ? delivery.games : []))
-  )
+  return Option.match(listing, { onNone: () => [], onSome: ({ games }) => games })
 })
-
-/** What the provided `Provider`'s decode says each of `frames` said, numbered from 1. */
-export const decodedFrames = Effect.fn("TestProvider.decodedFrames")(function* (
-  frames: ReadonlyArray<Frame>
-) {
-  const provider = yield* Provider
-  const numbered = frames.map((frame, index) => new LoggedFrame({ ...frame, seq: index + 1 }))
-
-  return yield* provider.decode(Stream.fromIterable(numbered)).pipe(Stream.runCollect)
-})
-
-/** What the provided `Provider`'s decode says each of some frames said, numbered from 1. */
-export class FramesDecoded extends Context.Service<FramesDecoded, ReadonlyArray<Decoded>>()(
-  "sportal/hub/provider/FramesDecoded"
-) {
-  /** Decodes the frames `frames` gives once, for every test the layer is provided to: a recording takes seconds. */
-  static layerOf<E>(frames: Effect.Effect<ReadonlyArray<Frame>, E>) {
-    return Layer.effect(
-      FramesDecoded,
-      Effect.gen(function* () {
-        const made = yield* frames
-
-        return yield* decodedFrames(made)
-      })
-    )
-  }
-}

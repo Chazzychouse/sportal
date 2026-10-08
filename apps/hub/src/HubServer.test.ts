@@ -1,27 +1,21 @@
-import { NodeCrypto, NodeHttpServer } from "@effect/platform-node"
+import { NodeHttpServer } from "@effect/platform-node"
 import { assert, describe, it } from "@effect/vitest"
 import { LiveMessage, LiveMessageJson } from "@sportal/api/LiveMessage"
 import { SportalApi } from "@sportal/api/SportalApi"
 import { GameId, Network } from "@sportal/domain/Game"
 import type { Tile } from "@sportal/domain/Stage"
 import { broadcast, snapshot, team } from "@sportal/domain/TestGame"
-import { DateTime, Effect, Layer, Option, Queue, Result, Schedule, Schema, Stream } from "effect"
+import { DateTime, Effect, Layer, Option, Queue, Result, Schema, Stream } from "effect"
 import { HttpClient } from "effect/http"
 import { HttpApiClient } from "effect/http-api"
 import { TestClock } from "effect/testing"
 import { afterEach, vi } from "vitest"
-import * as Database from "./Database.ts"
-import { FeedLog } from "./feed-log/FeedLog.ts"
 import { HubConfig } from "./HubConfig.ts"
 import * as HubServer from "./HubServer.ts"
-import * as Ingest from "./Ingest.ts"
 import { Switcher } from "./Switcher.ts"
-import { Board } from "./slate/Board.ts"
-import { BoardTelemetry } from "./slate/BoardTelemetry.ts"
 import { Delivery } from "./slate/Delivery.ts"
 import * as YouTubeTv from "./source/youtube-tv/YouTubeTv.ts"
-import { takingAfter } from "./TestBoard.ts"
-import * as TestSnapshotFeed from "./TestSnapshotFeed.ts"
+import { boardOver, delivered } from "./TestBoard.ts"
 
 type Interfaces = Record<
   string,
@@ -233,18 +227,11 @@ describe("GET /api/live", () => {
 
   it.effect("should send a burst of slate changes once, when it settles", () =>
     Effect.gen(function* () {
-      const feedLog = yield* FeedLog
       yield* firstSlateOnTestClock()
       const lines = yield* pastInitialMessages()
-      const now = yield* DateTime.now
-      const pushes = [2, 3, 4].map((period) =>
-        TestSnapshotFeed.framed(
-          Delivery.cases.Snapshot.make({ snapshot: inPeriod(period), from: "push" }),
-          now
-        )
-      )
+      const pushes = [2, 3, 4].map((period) => Delivery.cases.Snapshot.make({ snapshot: inPeriod(period) }))
 
-      yield* takingAfter(pushes.length, Effect.forEach(pushes, feedLog.append))
+      yield* Effect.forEach(pushes, (push) => delivered(push))
       yield* TestClock.adjust("250 millis")
       const line = yield* Queue.take(lines)
       const waiting = yield* Queue.size(lines)
@@ -303,24 +290,14 @@ describe("GET /api/live", () => {
   )
 })
 
-/** Waits until the board has its first games to publish. */
+/** Delivers the fbs listing of `game`, so the board has its first games to publish. */
 function firstSlate() {
-  return Effect.gen(function* () {
-    const board = yield* Board
-    yield* board.changes.pipe(
-      Stream.filter((latest) => latest.published().games.length > 0),
-      Stream.take(1),
-      Stream.runDrain
-    )
-  })
+  return delivered(Delivery.cases.Listing.make({ league: "fbs", games: [game] }))
 }
 
-/** `firstSlate` on the test clock, moved on through the first poll and 250 ms for it to settle. */
+/** `firstSlate` on the test clock, moved on 250 ms for it to settle. */
 function firstSlateOnTestClock() {
-  return TestClock.adjust(0).pipe(
-    Effect.andThen(TestClock.adjust("250 millis")),
-    Effect.andThen(firstSlate())
-  )
+  return firstSlate().pipe(Effect.andThen(TestClock.adjust("250 millis")))
 }
 
 /**
@@ -429,34 +406,17 @@ function messageOf(line: string): LiveMessage {
   return Schema.decodeSync(LiveMessageJson)(line.slice("data: ".length))
 }
 
-/** The next line of `lines` that is not data. Ingest appends a poll every 10 s while the clock moves, so data lines come between. */
+/** The next line of `lines` that is not data. */
 function nextComment(lines: Queue.Queue<string>) {
   return Queue.take(lines).pipe(Effect.repeat({ until: (line) => !line.startsWith("data: ") }))
 }
 
-/** The snapshot feed's fbs poll listing `game`, received now, every 10 seconds. */
-const listedEvery10Seconds = Stream.fromEffectSchedule(
-  Effect.map(DateTime.now, (at) =>
-    TestSnapshotFeed.framed(Delivery.cases.Listing.make({ league: "fbs", games: [game] }), at)
-  ),
-  Schedule.spaced("10 seconds")
-)
-
-/** Everything behind the API, over a feed log in memory and a provider that lists `game` every 10 seconds. */
+/** Everything behind the API, over a snapshot feed the test delivers to. */
 function hubUnderTest() {
   return Switcher.layer.pipe(
     Layer.provideMerge(YouTubeTv.layer),
-    Layer.provideMerge(Ingest.layer),
-    Layer.provideMerge(
-      Board.layer.pipe(
-        Layer.provideMerge(FeedLog.layer.pipe(Layer.provide([Database.layerMemory, NodeCrypto.layer]))),
-        Layer.provide([TestSnapshotFeed.layer, BoardTelemetry.layer, DateTime.layerCurrentZoneLocal])
-      )
-    ),
-    Layer.provide(TestSnapshotFeed.layerFrom(listedEvery10Seconds)),
-    Layer.provideMerge(
-      HubConfig.layerTest({ SPORTAL_VERSION: "1.2.3", SPORTAL_DATA_DIR: "unused", SPORTAL_LEAGUES: "fbs" })
-    )
+    Layer.provideMerge(boardOver),
+    Layer.provideMerge(HubConfig.layerTest({ SPORTAL_VERSION: "1.2.3" }))
   )
 }
 

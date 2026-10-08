@@ -4,11 +4,8 @@ import { FootballPlay, Other, type Play, PlayId, Rush } from "@sportal/domain/Pl
 import { TeamId } from "@sportal/domain/Team"
 import { Effect, Schema } from "effect"
 import { Delivery } from "../../slate/Delivery.ts"
-import { Provider } from "../Provider.ts"
-import { decodedFrames } from "../TestProvider.ts"
-import * as EspnDecoder from "./EspnDecoder.ts"
 import * as EspnPlay from "./EspnPlay.ts"
-import { recordedNeAtBuf } from "./TestEspn.ts"
+import { decodedFrames, recordedNeAtBuf } from "./TestEspn.ts"
 
 // Play entities from the 2026-10-04 NFL recording, each as its game's `gp-` topic first added it, without its
 // participants; NE–BUF's first score, 401872971484, as the topic last had it, after its extra point.
@@ -231,11 +228,9 @@ describe("EspnPlay.FootballPlay", () => {
     () =>
       Effect.gen(function* () {
         const frames = yield* recordedNeAtBuf
-        const decoded = yield* decodedFrames(frames).pipe(
-          Effect.provide(Provider.layerTest(EspnDecoder.decode))
-        )
+        const decoded = yield* decodedFrames(frames)
         const pushed = decoded
-          .flatMap(({ deliveries }) => deliveries)
+          .flat()
           .flatMap((delivery) => (Delivery.guards.Plays(delivery) ? delivery.plays : []))
         const entities = yield* Effect.forEach(Object.values(recorded), (one) => decodePlay(one))
 
@@ -314,20 +309,4 @@ describe("EspnPlay.FootballPlay", () => {
       assert.deepStrictEqual([timeout?._tag, timeout?.team], ["Timeout", undefined])
     })
   )
-})
-
-describe("EspnPlay.unknownTypes", () => {
-  it("should list an unknown type once", () => {
-    const unknown = { ...entity("40187297063"), type: { id: "999", text: "Something New" } }
-
-    const types = EspnPlay.unknownTypes([unknown, unknown, entity("401872966271")])
-
-    assert.deepStrictEqual(types, [{ id: "999", text: "Something New" }])
-  })
-
-  it("should not list a type the table knows", () => {
-    const types = EspnPlay.unknownTypes([{ type: { id: "61", text: "Extra Point Good" } }])
-
-    assert.deepStrictEqual(types, [])
-  })
 })

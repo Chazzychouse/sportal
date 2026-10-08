@@ -5,15 +5,13 @@ out/
 .env
 .env.*
 !.env.example
-*.sqlite
-*.sqlite-*
 
 # Raw feed recordings (large, uncurated); curated fixtures live beside their adapter
 fixtures/espn-recordings/*/
 
 spikes/
 
-# The Hub's local data directory (SPORTAL_DATA_DIR)
+# Where earlier Hubs kept their feed log (SPORTAL_DATA_DIR)
 .sportal/
 
 # Git worktrees for isolated work

@@ -12,9 +12,8 @@ Every exported type name must be a term here, except the wire schemas in `*Paylo
 | **Ranking** | A team's position in a poll (college). | seed |
 | **Team colors** | The two colors a team plays in: `color` and `alternateColor` on `Team`, six hex digits without `#`, as ESPN sends them. The Hub reads them from the scoreboard; a team ESPN sends none for has neither. | |
 | **Game** | One scheduled contest between two teams. | event, match, competition, fixture |
-| **Slate** | The Hub's `Slate` (`apps/hub/src/slate/Slate.ts`): each league's last listing and every current game as its snapshot, its plays and its acknowledgement, taken from push and poll deliveries in arrival order, each game it saw finish (its final, while a listing names it, so a snapshot not past its end, later on the clock or at the same clock with more points, is behind: a lagging poll neither starts it again nor shows it live, while overtime after a spurious final or a postponed game resuming does), and the instant it has ticked to. Pure; `take` and `tick` return the next slate, the game events it said, and its slate observations. Replaying the log gives the same slate. | schedule, scoreboard, live games |
-| **Board** | The Hub's `Board` service (`apps/hub/src/slate/Board.ts`), the one holder of the day's slate: it follows the feed log from the game day's start, replaying it quietly and then taking each new frame as it is appended, ticks the slate on its timer, tells its telemetry every take and tick, and offers the latest slate, each change, and every take marked replayed or not. | live slate, slate service, tracker |
-| **Board telemetry** | `BoardTelemetry` in code: every log and metric of what the Board took, told by the Board as it takes each frame or ticks, quiet during the replay and loud after it. | slate telemetry, subscriber |
+| **Slate** | The Hub's `Slate` (`apps/hub/src/slate/Slate.ts`): the games each league's last listing names, in its order, each as its latest snapshot, and each game's plays, taken from push and poll deliveries in arrival order. A snapshot behind its game (earlier in game time, or at the same game time with fewer points, as a poll lagging a pushed score) is ignored, except that an over game takes one ahead of its end (overtime after a spurious final, a postponed game resuming); a snapshot or plays of a game no listing names are dropped. Pure; `take` returns the next slate, or this one when nothing changed. | schedule, scoreboard, live games |
+| **Board** | The Hub's `Board` service (`apps/hub/src/slate/Board.ts`), the one holder of the day's slate: from an empty slate, it takes each frame's deliveries from its provider as they arrive, logs a take that raised a defect, and offers the latest slate and each change. For now nothing is kept between runs: a restarted Hub starts empty and the next poll fills it. | live slate, slate service, tracker |
 | **Slate changed** | The live message that carries the listed games as the slate has them and their recent plays, settled 250 ms after a change; `SlateChanged` in code, and what `Slate#published` builds; the live stream sends the current one, then one for each burst of the Board's changes once it settles. | slate payload, snapshot, published |
 | **Kickoff** | A game's scheduled start instant. | start time, date |
 
@@ -26,26 +25,15 @@ Every exported type name must be a term here, except the wire schemas in `*Paylo
 | **GameSnapshot** | The complete normalized state of a game at an instant. | update, payload |
 | **Game time** | How far a game has got: before kickoff, in play, or over; then the period; then the clock running down; then, at the same clock, halftime after play (any other statuses at the same clock tie). Orders two snapshots of one game. | timestamp, version |
 | **Progress** | Where a game is in its day: `upcoming`, `live`, or `over`. A delay before kickoff is upcoming and a delay during the game is live. | phase, state |
-| **Acknowledgement** | The Hub's acknowledgement of a game's latest word, `Acknowledgement` in `apps/hub/src/slate/Acknowledgement.ts`: which delivery source gave the snapshot the slate shows (`from`), when (`heardAt`), and a held snapshot, if any. Never on the wire. A game's state, upcoming, live, holding, stale, or over, is derived from its snapshot, its acknowledgement and the instant (`state`), never stored. A covered game takes a poll only ahead of it, by holding it for 15 seconds (`fallbackAfter`). | live game, game state, entity |
-| **Covered** | A live game followed by the push: live or holding, its acknowledgement from the push (`Acknowledgement#covers`). | |
-| **Ahead** | One snapshot of a game past another: later in game time, or at the same game time with more points, or as many points split differently. A status alone puts a snapshot ahead only where game time orders it (halftime after play at the same clock), so two snapshots are never ahead of each other on their status. | newer |
-| **Held snapshot** | A poll snapshot ahead of a covered game, held until the push catches it up or `fallbackAfter` passes; `held` on `Acknowledgement`. | pending |
-| **Fallback** | A held snapshot applying as the poll's once the push has not caught it up for `fallbackAfter`, saying its events; the `Took` outcome `fellBack`. | |
-| **Took outcome** | What taking a snapshot did to its game: taken, ignored as behind, or held by a covered game; `TookOutcome` in code, beside `SlateObservation`. A slate observation's `Took` adds `fellBack`, for a fallback. | result |
-| **Taken** | What one take or tick of the slate did: the next slate, the game events it said, in order, and its slate observations; `Taken` in code. The Board tells each to its telemetry and offers each, marked replayed or not. | result, report |
-| **Slate observation** | `SlateObservation` in `apps/hub/src/slate/SlateObservation.ts`: what one take or tick of the slate did to one game, for telemetry only: took a snapshot, started, changed (a game's snapshot and acknowledgement before and after, or only its state turned, as going stale does), stopped, dropped, or raised a defect. The game events it said are `Taken.events`, not observations. | report, log entry |
-| **Stale** | A live game the slate has not heard for 90 seconds (`heardAt` + 90 s at or before the instant), derived, never stored. It stays current for 30 minutes after it was last heard. | |
+| **Ahead** | One snapshot of a game past another: later in game time, or at the same game time with more points, or as many points split differently (`isAheadOf`). Ahead of a game's end (`isAheadOfOver`) is later on the clock whatever either's status, or at the same clock with more points. | newer |
 | **Delivery** | `Delivery` in `apps/hub/src/slate/Delivery.ts`: what a frame said: a league's listing, one game's snapshot, or one game's whole list of plays. | input, update |
-| **Decoded** | What one frame said, one per frame, by its provider's `decode`: its deliveries and its decode observations, with the frame's `seq` and receive time; `Decoded` in code, in `Provider.ts`. | decoded frame, said |
-| **Decode observation** | Something a provider's decode observed in a frame for telemetry to tell: a message received, games pushed, an unlisted game, a document reset, a message of an unknown op, a frame, event, or play that did not decode, or an unknown play type; `DecodeObservation` in code, in `Provider.ts`. Told only for frames after a replay. | notice, warning, metric |
-| **Reset reason** | Why a live feed topic's document was reset and waits for its checkpoint again: `Gap`, a message missed, or `Unapplicable`, one that would not apply to it; `ResetReason` in code, in `Provider.ts`. | |
-| **Delivery source** | Which way a provider delivered something: `push` or `poll`. A frame and a snapshot each have one; `DeliverySource` in code, beside `Delivery`. | origin, feed type, feed |
+| **Delivery source** | Which way a provider delivered a frame: `push` or `poll`; a `Frame`'s `source` in code. | origin, feed type, feed |
 | **Test game** | A game snapshot built for a test, with defaults for everything the test does not care about. | fixture, mock |
-| **Scenario** | Games a Hub plays as its provider, through the real ingest, feed log, decode, and slate: a name, when it starts (its first frame's receipt), and a stream of raw frames, decoded by the provider that recorded them; `Scenario` in code. Its name is a game day the feed log recorded, YYYY-MM-DD, whose frames are that day's in the data directory's `feed.sqlite`; or else a recorded window of a game day, kept as `fixtures/scenarios/<name>.frames.jsonl.gz`. Every scenario plays through ESPN's decode. It plays only its recorded frames, so a game still live when it ends goes stale 90 s after its last frame. | fixture, simulation, recorded scenario, slice |
-| **Scenarios** | Every scenario there is, by name: the recordings in a folder, the committed ones in `fixtures/scenarios/` unless a test names another, then every game day the data directory's feed log has frames on; reading one back by name. It opens that feed log only to list or read a day, never creates it, and appends nothing to it. `Scenarios` in code. | scenario store, catalogue |
-| **Scenario unknown** | `SPORTAL_SCENARIO` names no scenario: no recording, or a game day the feed log has no frames on; `ScenarioUnknown` in code, with the names there are. | |
+| **Scenario** | Games a Hub plays as its provider, through the real decode and slate: a name, when it starts (its first frame's receipt), and a stream of a provider's raw frames recorded over a window of a game day, kept as `fixtures/scenarios/<name>.frames.jsonl.gz`; `Scenario` in code. Every scenario plays through ESPN's decode, and only its recorded frames. | fixture, simulation, recorded scenario, slice |
+| **Scenarios** | Every scenario there is, by name: the recordings in a folder, the committed ones in `fixtures/scenarios/` unless a test names another, and reading one back by name; `Scenarios` in code. | scenario store, catalogue |
+| **Scenario unknown** | `SPORTAL_SCENARIO` names no recording; `ScenarioUnknown` in code, with the names there are. | |
 | **Scenario unreadable** | A scenario's file could not be read as gzip'd frames; `ScenarioUnreadable` in code. | |
-| **Scenario time** | The clock a scenario plays on: from the Hub's start, at the scenario's speed. Ingest and the Board run on it. A scenario's frames are received at their offsets on it, but what they say, kickoffs among them, stays as recorded. | |
+| **Scenario time** | The clock a scenario plays on: from the Hub's start, at the scenario's speed. The provider and the Board run on it. A scenario's frames are received at their offsets on it, but what they say, kickoffs among them, stays as recorded. | |
 | **Situation** | Live football state: possession, down, distance, field position, red zone (the 20 and in), timeouts. | context |
 | **Ball spot** | Where a spot is on the field: yards from the home goal line (0–100) and the way its team is going, from a team and its yards to the goal it attacks. | |
 | **Period** | A quarter or an overtime. | quarter (in code) |
@@ -55,22 +43,19 @@ Every exported type name must be a term here, except the wire schemas in `*Paylo
 | **Game id** / **Team id** / **League id** | A provider's own id for a game or a team, and a league's (`nfl` or `fbs`); `GameId`, `TeamId`, `LeagueId` in code. | |
 | **Recent plays** | Each game's last ten plays, in sequence order, sent to the web with the slate; `RecentPlays` in code. A game with no plays is absent. | |
 | **Play id** | The feed's own id for one play; `PlayId` in code. Not ordered: plays are ordered by their sequence. | |
-| **GameEvent** | Something that happened in a game, stamped with the game, the instant it was told, and what happened (a **Game event kind**). Derived, never stored: from its snapshot's changes, or from its plays for a play event. | alert, update |
-| **Game event kind** | What happened, without when or where: a score, a turnover, a play, a period ending. A play event (a play, a big play, a sack) from a game's plays; every other from comparing two snapshots. | event |
 
 ### Data and video
 
 | Term | Meaning | Not |
 | --- | --- | --- |
-| **Provider** | An adapter that supplies **game data** (ESPN, CollegeFootballData) and runs itself: its `frames`, every frame it polls or is pushed, as received, deciding on its own when to poll, what its push follows, and when to reconnect; and its `decode`, what each logged frame said, so a scenario decodes its frames as the provider that recorded them would. | source, feed |
+| **Provider** | An adapter that supplies **game data** (ESPN, CollegeFootballData) and runs itself: it decides when to poll, what its push follows, and when to reconnect, and reads each frame it receives with its own decode; `deliveries` is what each frame said, one array per frame, in the order received. | source, feed |
 | **Provider unavailable** | ESPN could not supply data: a poll of a league unreachable or refused, or FastCast refused, closed, or gone silent; `ProviderUnavailable` in code, in `espn/`. Logged and counted where it happens; the provider's frames go on. | provider error, fetch error, live feed error |
 | **Live feed** | A provider's push: the connection carrying updates for live games between polls (ESPN FastCast). | socket, stream, webhook |
-| **FastCast** | ESPN's live feed, as the ESPN provider's push: one socket following each league's scoreboard, and each game while that scoreboard shows it live or within 30 minutes of kickoff, reading a topic's checkpoint again when its document resets and reconnecting itself; its `frames` never fail. | |
-| **Snapshot feed** | A provider whose frames are our own deliveries, one per frame, and its decode: what tests drive, in `TestSnapshotFeed.ts`. | |
+| **FastCast** | ESPN's live feed, as the ESPN provider's push: one socket following each league's scoreboard, and each game while that scoreboard shows it live or within 30 minutes of kickoff, following a topic again from its checkpoint when it loses its document and reconnecting itself; its `frames` never fail. | |
+| **Snapshot feed** | A provider whose frames say our own deliveries, one per frame: what tests drive, in `TestSnapshotFeed.ts`. | |
 | **ESPN event** | One game as either ESPN feed spells it, the polled site scoreboard or a FastCast scoreboard topic, read as a GameSnapshot; `EspnEvent` in code. | payload, DTO |
 | **Topic owner** | What a live feed topic carries: one league's scoreboard, or one game's plays; `Owner` in code, in `FastCastTopic.ts`. | subscription |
 | **Checkpoint unread** | A live feed topic's checkpoint could not be loaded or did not decode; retried on FastCast's checkpoint retry, then the topic is left to polling until the socket reconnects; `CheckpointUnread` in code. | checkpoint error |
-| **Ingesting** | The Hub appending every frame the provider delivers to the feed log, for as long as it runs; the slate takes what it appends. Nothing flows back to the provider. | poller, sync, fetcher |
 | **Source** | A way you obtain **video** (YouTube TV). | provider, service |
 | **Source name** | A source as people know it ("YouTube TV"); how code and the UI name a source. | source id |
 | **Broadcast** | The fact that a network is airing a game, on television or streaming only. | channel, stream |
@@ -82,14 +67,7 @@ Every exported type name must be a term here, except the wire schemas in `*Paylo
 | **Guide** | One reading of a source's listing of the channels this account gets, with their live addresses, and what each airs. | schedule, EPG |
 | **Airing** | One programme on a channel, with its begin and end. | listing, show |
 | **Guide unreadable** | A guide response the source could not read. | |
-| **Database** | The Hub's SQLite database. Each store migrates its own tables in it. | store, persistence |
-| **Feed log** | Every frame the feeds delivered, raw, in the order the Hub received it. The truth the Hub's game state is derived from. | event store, journal |
-| **Frame** | One thing a provider delivered, as received, before the log numbers it: its delivery source, its channel, its body, and whether it is the `whole` document or a `change` to one (a poll response and a pushed checkpoint are whole; a pushed message is a change), with the provider's own `number` for it when it has one; `Frame` in code. | message, payload, feed frame |
-| **Logged frame** | A frame as the feed log numbered it: a frame with its `seq`; `LoggedFrame` in code. | numbered frame |
-| **Feed frame row** | A logged frame as the feed log keeps it in `feed_frame`: its body gzip'd, or none for an unchanged poll (a whole the same as its channel's last), or a gap; `FeedFrameRow` in code. | record, entry |
-| **Gap** | The frames a failed write lost, kept in the feed log as one row at the last lost `seq` with their range and count, and warned of on replay; `Gap` in code. | hole |
-| **Writer** | The feed log's one fiber that stores what was appended, in batches: current, or behind by the frames failed writes lost; `Writer` in code. | flusher |
-| **Game day** | A date as YYYY-MM-DD, a day that exists, whose games run from 04:00 local on it until 04:00 the next day; `GameDay` in code (`packages/domain/src/GameDay.ts`), with `bounds` (that span in a zone), `dates` (every game day of a span) and `dayStart` (the start of the game day an instant is in) beside it. | date, day string |
+| **Frame** | One thing a provider delivered, as received, before its decode reads it: its delivery source, its channel, its body, and whether it is the `whole` document or a `change` to one (a poll response and a pushed checkpoint are whole; a pushed message is a change), with the provider's own `number` for it when it has one; `Frame` in code. | message, payload, feed frame |
 | **Live channel URL** | A source's address for a channel, reduced to the one that plays it live. | canonical URL |
 | **Stream** | One playing instance of a game from a source. | feed, video |
 | **StreamLocator** | What a Display must load to play a stream. | URL, link |
@@ -163,7 +141,9 @@ Names the design uses that no code has yet. Move a row up, into its table, in th
 | **Tile delay** | Seconds that data is held back for a tile to match its video. | offset, latency |
 | **Spoiler shield** | Hiding or delaying scores for chosen games. | |
 | **Follow** | Your declared interest in a team, conference, league, or game. | favourite, subscription |
-| **Trigger** | A condition over events and snapshots. | |
+| **Persistence** | What the Hub keeps between runs: none for now, added back on top of the simplified model. | storage, database |
+| **Game event** | Something that happened in a game (a score, a turnover, a play, a period ending), derived from a game's snapshot changes and plays. The code had it and dropped it while nothing read it; the Producer derives it again. | alert, update |
+| **Trigger** | A condition over game events and snapshots. | |
 | **Rule** | A trigger bound to a stage command and a revert condition. | automation |
 | **Producer** | Planned. The Hub component that evaluates rules and issues stage commands: the Producer switches the Slate of games on the Board. | director, autopilot |
 | **Alert** | A user-facing notification produced by a rule. | event |

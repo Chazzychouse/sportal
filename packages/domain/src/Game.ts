@@ -1,5 +1,4 @@
 import { DateTime, Duration, Option, Order, Schema } from "effect"
-import { GameEventKind } from "./GameEvent.ts"
 import { LeagueId } from "./League.ts"
 import { Situation } from "./Situation.ts"
 import { Team, type TeamId } from "./Team.ts"
@@ -135,16 +134,6 @@ export class GameSnapshot extends Schema.Class<GameSnapshot>("sportal/GameSnapsh
     return this.broadcasts.map(({ network }) => network).join(" · ")
   }
 
-  /** The status, period, and clock as one line, for a log. */
-  statusLine(): string {
-    return `${this.status}, period ${this.period}, ${this.clock}`
-  }
-
-  /** A team's abbreviation, or its id when it plays in neither side. */
-  abbreviationOf(id: TeamId): string {
-    return [this.home.team, this.away.team].find((team) => team.id === id)?.abbreviation ?? id
-  }
-
   /** "<away abbreviation> at <home abbreviation>", for a title or a log line. */
   matchup(): string {
     return `${this.away.team.abbreviation} at ${this.home.team.abbreviation}`
@@ -186,12 +175,6 @@ export class GameSnapshot extends Schema.Class<GameSnapshot>("sportal/GameSnapsh
     return !(this.league === "fbs" && this.inOvertime())
   }
 
-  /** Live in the last two minutes of the first or second half, with time still on the clock. */
-  inTwoMinuteDrill(): boolean {
-    const left = this.secondsLeft()
-    return this.status === "live" && (this.period === 2 || this.period === 4) && left > 0 && left <= 120
-  }
-
   /**
    * Where a spot is on the field, from the team with the ball and the yards it has to the goal it attacks. None
    * when either is missing, the team plays in neither side, or the yards are off the field.
@@ -219,93 +202,6 @@ export class GameSnapshot extends Schema.Class<GameSnapshot>("sportal/GameSnapsh
   /** Where the ball is: the spot of the situation's team with the ball, at its yard line. */
   ball(): Option.Option<BallSpot> {
     return this.spotOf({ team: this.situation?.possession, yardsToEndzone: this.situation?.yardLine })
-  }
-
-  /**
-   * What happened in this game since `previous`, an earlier snapshot of it: points, the ball changing hands, a
-   * drive reaching the 40, the red zone, goal to go, or fourth down, a timeout, and the clock and status. A change
-   * of possession is a turnover only when the last play names an interception or a fumble and nobody scored.
-   */
-  eventsSince(previous: GameSnapshot): ReadonlyArray<GameEventKind> {
-    return [
-      this.scoreEventsSince(previous),
-      this.possessionEventsSince(previous),
-      this.driveEventsSince(previous),
-      this.timeoutEventsSince(previous),
-      this.clockEventsSince(previous)
-    ].flat()
-  }
-
-  private scoreEventsSince(previous: GameSnapshot): ReadonlyArray<GameEventKind> {
-    return (["home", "away"] as const).flatMap((side) => {
-      const points = this[side].score - previous[side].score
-      return points > 0 ? [GameEventKind.ScoreChanged({ team: this[side].team.id, points })] : []
-    })
-  }
-
-  private possessionEventsSince(previous: GameSnapshot): ReadonlyArray<GameEventKind> {
-    const team = this.situation?.possession
-    const before = previous.situation?.possession
-    if (team === undefined || before === undefined || team === before) return []
-
-    const scored = this.scoreEventsSince(previous).length > 0
-    const turnedOver = !scored && /intercept|fumble/i.test(this.situation?.lastPlay ?? "")
-    return [turnedOver ? GameEventKind.Turnover({ team }) : GameEventKind.PossessionChanged({ team })]
-  }
-
-  private driveEventsSince(previous: GameSnapshot): ReadonlyArray<GameEventKind> {
-    const before = previous.situation
-    const after = this.situation
-    const team = after?.possession
-    if (team === undefined || after === undefined) return []
-
-    // Only a change on the same team's drive is news, except that a new drive starting inside the 40 (a turnover
-    // on a short field) is reported: a short field is what the Director should anticipate.
-    const already = (test: (situation: Situation) => boolean) =>
-      before !== undefined && before.possession === team && test(before)
-
-    return [
-      ...(after.inScoringRange() && !already((s) => s.inScoringRange())
-        ? [GameEventKind.ReachedScoringRange({ team })]
-        : []),
-      ...(after.inRedZone() && !already((s) => s.inRedZone())
-        ? [GameEventKind.EnteredRedZone({ team })]
-        : []),
-      ...(after.goalToGo() && !already((s) => s.goalToGo()) ? [GameEventKind.GoalToGo({ team })] : []),
-      ...(after.down === 4 && !already((s) => s.down === 4 && s.yardLine === after.yardLine)
-        ? [GameEventKind.FourthDown({ team })]
-        : [])
-    ]
-  }
-
-  private timeoutEventsSince(previous: GameSnapshot): ReadonlyArray<GameEventKind> {
-    const before = previous.situation
-    const after = this.situation
-    if (before === undefined || after === undefined) return []
-
-    // One fewer in the same period only: a new period resets counts, and a poll without counts reads as zero.
-    const tookOne = (was: number, now: number) => this.period === previous.period && was - now === 1
-
-    return [
-      ...(tookOne(before.homeTimeouts, after.homeTimeouts)
-        ? [GameEventKind.TimeoutTaken({ team: this.home.team.id })]
-        : []),
-      ...(tookOne(before.awayTimeouts, after.awayTimeouts)
-        ? [GameEventKind.TimeoutTaken({ team: this.away.team.id })]
-        : [])
-    ]
-  }
-
-  private clockEventsSince(previous: GameSnapshot): ReadonlyArray<GameEventKind> {
-    return [
-      this.inTwoMinuteDrill() && !previous.inTwoMinuteDrill() ? [GameEventKind.TwoMinuteDrill()] : [],
-      this.inOvertime() && !previous.inOvertime() ? [GameEventKind.Overtime()] : [],
-      this.period > previous.period && previous.period >= 1
-        ? [GameEventKind.PeriodEnded({ period: previous.period })]
-        : [],
-      this.status === "halftime" && previous.status !== "halftime" ? [GameEventKind.WentToHalftime()] : [],
-      this.status === "final" && previous.status !== "final" ? [GameEventKind.WentFinal()] : []
-    ].flat()
   }
 }
 

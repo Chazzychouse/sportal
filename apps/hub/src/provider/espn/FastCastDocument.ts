@@ -13,7 +13,6 @@ import {
   Schema
 } from "effect"
 import type { Frame } from "../../Frame.ts"
-import { DecodeObservation, type ResetReason } from "../Provider.ts"
 import * as FastCastMessage from "./FastCastMessage.ts"
 import { Owner, ownerOf } from "./FastCastTopic.ts"
 
@@ -21,10 +20,10 @@ import { Owner, ownerOf } from "./FastCastTopic.ts"
  * The FastCast topics' documents after `frame`, and what it changed: a scoreboard topic's touched events (every event,
  * on a checkpoint), or all of a game topic's plays, by id, when they changed. A topic is synced by its checkpoint
  * frame and moved on by each message after it. A missed message, a patch that will not apply, or a message that does
- * not decode on a synced topic sends only that topic back to waiting for a checkpoint, and the change is a `Reset`. A
- * checkpoint that does not decode leaves its topic waiting, observed as a frame that did not decode, and asks for
- * nothing: the live feed already followed it again. Each message received and each reset is observed. Fails only when
- * any other frame does not decode, leaving the documents as they were.
+ * not decode on a synced topic sends only that topic back to waiting for a checkpoint, and the change is a `Reset` of
+ * it. A checkpoint that does not decode leaves its topic waiting, and asks for nothing: the live feed already followed
+ * it again. A message of an op it does not know is skipped. Fails only when any other frame does not decode, leaving
+ * the documents as they were.
  */
 export const advance = Effect.fnUntraced(function* (
   documents: Documents,
@@ -74,21 +73,20 @@ const Topic = Data.taggedEnum<Topic>()
 
 type Documents = ReadonlyMap<string, Topic>
 
-/** The documents after a frame, what it changed, and what was observed. */
+/** The documents after a frame, and what it changed. */
 interface Advanced {
   readonly documents: Documents
   readonly change: Option.Option<Change>
-  readonly observed: ReadonlyArray<DecodeObservation>
 }
 
-/** The documents after a frame that changed nothing and observed nothing. */
+/** The documents after a frame that changed nothing. */
 export function unchanged(documents: Documents): Advanced {
-  return { documents, change: Option.none(), observed: [] }
+  return { documents, change: Option.none() }
 }
 
 /**
  * What a frame changed: a scoreboard topic's touched events, a game topic's whole list of plays, by id, or a topic sent
- * back to waiting for a checkpoint.
+ * back to waiting for a checkpoint, and why.
  */
 export type Change = Data.TaggedEnum<{
   Scoreboard: { readonly league: LeagueId; readonly events: ReadonlyArray<Schema.Json> }
@@ -97,7 +95,7 @@ export type Change = Data.TaggedEnum<{
     readonly game: GameId
     readonly plays: Readonly<Record<string, Schema.Json>>
   }
-  Reset: object
+  Reset: { readonly topic: string; readonly detail: string }
 }>
 export const Change = Data.taggedEnum<Change>()
 
@@ -111,25 +109,13 @@ const synced = Effect.fnUntraced(function* (
   const owner = owned.value
   const loaded = yield* checkpoint(owner, frame).pipe(Effect.result)
   if (Result.isFailure(loaded)) {
-    return {
-      documents: new Map([...documents, [frame.channel, Topic.AwaitingCheckpoint()]]),
-      change: Option.none(),
-      observed: [
-        DecodeObservation.FrameUndecoded({
-          source: frame.source,
-          channel: frame.channel,
-          kind: frame.kind,
-          cause: loaded.failure
-        })
-      ]
-    }
+    return unchanged(new Map([...documents, [frame.channel, Topic.AwaitingCheckpoint()]]))
   }
 
   const { mid, document } = loaded.success
   return {
     documents: new Map([...documents, [frame.channel, Topic.Synced({ mid, document })]]),
-    change: Option.some(changeOf(owner, document, Option.none())),
-    observed: []
+    change: Option.some(changeOf(owner, document, Option.none()))
   }
 })
 
@@ -146,12 +132,9 @@ const moveOn = Effect.fnUntraced(function* (
 
   const message = decoded.success
   const follows = Option.isSome(owned) && (message.op === "R" || message.op === "P" || message.op === "I")
-  if (!follows) {
-    return { ...unchanged(documents), observed: [received(message, owned)] }
-  }
+  if (!follows) return unchanged(documents)
 
-  const advanced = yield* moved(documents, frame.channel, owned.value, message)
-  return { ...advanced, observed: [received(message, owned), ...advanced.observed] }
+  return yield* moved(documents, frame.channel, owned.value, message)
 })
 
 const checkpoint = Effect.fnUntraced(function* (owner: Owner, frame: Frame) {
@@ -207,7 +190,7 @@ const moved = Effect.fnUntraced(function* (
 
   const { mid, document } = current
   if (mid + 1 !== message.mid) {
-    return reset(documents, tc, owner.league, "Gap", `message ${message.mid} came after ${mid}`)
+    return reset(documents, tc, `message ${message.mid} came after ${mid}`)
   }
 
   const patches = message.op === "I" ? [] : relevant(owner, message.pl)
@@ -216,7 +199,7 @@ const moved = Effect.fnUntraced(function* (
     () => document,
     (patchedSoFar, patch) => patched(patchedSoFar, owner, patch)
   ).pipe(Effect.result)
-  if (Result.isFailure(applied)) return reset(documents, tc, owner.league, "Unapplicable", applied.failure)
+  if (Result.isFailure(applied)) return reset(documents, tc, applied.failure)
 
   const next = applied.success
   const synced = new Map([...documents, [tc, Topic.Synced({ mid: message.mid, document: next })]])
@@ -225,8 +208,7 @@ const moved = Effect.fnUntraced(function* (
     : Option.none()
   return {
     documents: synced,
-    change: patches.length === 0 ? Option.none() : Option.some(changeOf(owner, next, touched)),
-    observed: []
+    change: patches.length === 0 ? Option.none() : Option.some(changeOf(owner, next, touched))
   }
 })
 
@@ -242,18 +224,11 @@ function relevant(
     : patches.filter((patch) => inPlays(patch.path) && (!("from" in patch) || inPlays(patch.from)))
 }
 
-/** The documents with topic `tc` sent back to waiting for its checkpoint, the reset that changed, and its observation. */
-function reset(
-  documents: Documents,
-  tc: string,
-  league: LeagueId,
-  reason: ResetReason,
-  detail: string
-): Advanced {
+/** The documents with topic `tc` sent back to waiting for its checkpoint, and the reset that changed, for `detail`. */
+function reset(documents: Documents, tc: string, detail: string): Advanced {
   return {
     documents: new Map([...documents, [tc, Topic.AwaitingCheckpoint()]]),
-    change: Option.some(Change.Reset()),
-    observed: [DecodeObservation.Reset({ league, topic: tc, reason, detail })]
+    change: Option.some(Change.Reset({ topic: tc, detail }))
   }
 }
 
@@ -353,23 +328,13 @@ function undecoded(
   error: Schema.SchemaError
 ): Effect.Effect<Advanced, Schema.SchemaError> {
   return Option.match(decodeKnownOp(frame.body), {
-    onNone: () =>
-      Effect.succeed({
-        ...unchanged(documents),
-        observed: [DecodeObservation.OpUnknown({ body: frame.body })]
-      }),
+    onNone: () => Effect.succeed(unchanged(documents)),
     onSome: ({ op }) =>
       Option.isSome(owned) &&
       (op === "R" || op === "P" || op === "I") &&
       Topic.$is("Synced")(documents.get(frame.channel))
         ? Effect.succeed(
-            reset(
-              documents,
-              frame.channel,
-              owned.value.league,
-              "Unapplicable",
-              `message ${frame.number} does not decode: ${error.message}`
-            )
+            reset(documents, frame.channel, `message ${frame.number} does not decode: ${error.message}`)
           )
         : Effect.fail(error)
   })
@@ -382,15 +347,3 @@ const decodeKnownOp = Schema.decodeUnknownOption(
     Schema.Union(FastCastMessage.Message.members.map((member) => Schema.Struct({ op: member.fields.op })))
   )
 )
-
-function received(
-  message: typeof FastCastMessage.Message.Type,
-  owned: Option.Option<Owner>
-): DecodeObservation {
-  return DecodeObservation.Received({
-    league: Option.map(owned, (owner) => owner.league),
-    op: message.op,
-    topic: "tc" in message ? Option.some(message.tc) : Option.none(),
-    mid: Option.fromUndefinedOr("mid" in message ? message.mid : undefined)
-  })
-}

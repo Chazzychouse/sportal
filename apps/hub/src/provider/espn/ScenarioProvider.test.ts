@@ -1,17 +1,12 @@
 import { fileURLToPath } from "node:url"
-import { NodeCrypto, NodeServices } from "@effect/platform-node"
+import { gzipSync } from "node:zlib"
+import { NodeServices } from "@effect/platform-node"
 import { assert, describe, it } from "@effect/vitest"
-import { GameId, type GameSnapshot } from "@sportal/domain/Game"
 import { LeagueId } from "@sportal/domain/League"
-import { liveSnapshot, team } from "@sportal/domain/TestGame"
-import { DateTime, Effect, FileSystem, Layer, Option, Path, Ref, Schema, Stream } from "effect"
+import { Clock, DateTime, Effect, FileSystem, Layer, Option, Path, Ref, Schema, Stream } from "effect"
 import { TestClock } from "effect/testing"
-import * as Database from "../../Database.ts"
 import { Frame } from "../../Frame.ts"
-import { FeedLog } from "../../feed-log/FeedLog.ts"
-import * as Gzip from "../../Gzip.ts"
 import { HubConfig } from "../../HubConfig.ts"
-import * as Ingest from "../../Ingest.ts"
 import * as ScenarioClock from "../../scenario/ScenarioClock.ts"
 import {
   Scenario,
@@ -20,13 +15,11 @@ import {
   type ScenarioUnreadable
 } from "../../scenario/Scenarios.ts"
 import { Board } from "../../slate/Board.ts"
-import { BoardTelemetry } from "../../slate/BoardTelemetry.ts"
 import { Delivery } from "../../slate/Delivery.ts"
-import * as TestSnapshotFeed from "../../TestSnapshotFeed.ts"
-import { pushed } from "../../TestSnapshotFeed.ts"
 import { recordingLogs } from "../../TestTelemetry.ts"
 import { Provider } from "../Provider.ts"
-import { decodedFrames, listedBy } from "../TestProvider.ts"
+import { listedBy } from "../TestProvider.ts"
+import { topicOf } from "./FastCastTopic.ts"
 import * as ScenarioProvider from "./ScenarioProvider.ts"
 
 describe("ScenarioProvider", () => {
@@ -53,23 +46,15 @@ describe("ScenarioProvider", () => {
     }).pipe(Effect.provide(playing("two-minute-drill-tie")))
   )
 
-  it.effect("should bring a change to the slate at its scenario time, through the feed log", () =>
+  it.effect("should bring a change to the slate at its scenario time", () =>
     Effect.gen(function* () {
-      const board = yield* Board
-      const taken = yield* Ref.make(0)
-      yield* board.taken.pipe(
-        Stream.runForEach(() => Ref.update(taken, (count) => count + 1)),
-        Effect.forkScoped({ startImmediately: true })
-      )
       yield* TestClock.adjust(0)
       yield* TestClock.adjust("119 seconds")
 
       yield* TestClock.adjust("1 second")
 
       const inRedZone = yield* tieInRedZone
-      const takes = yield* Ref.get(taken)
       assert.isTrue(inRedZone)
-      assert.isAbove(takes, 0, "the board took the scenario's frames from the feed log")
     }).pipe(Effect.provide(playing("two-minute-drill-tie")))
   )
 
@@ -99,41 +84,26 @@ describe("ScenarioProvider", () => {
   it.effect("should decode a scenario's poll through ESPN's decode to the league's listing", () =>
     Effect.gen(function* () {
       const provider = yield* Provider
-      const polled = yield* provider.frames.pipe(
-        Stream.filter((frame) => frame.source === "poll"),
-        Stream.runHead
-      )
 
-      const [decoded] = yield* decodedFrames(Option.toArray(polled))
+      const polled = yield* Stream.runHead(provider.deliveries)
 
-      const [listing] = decoded?.deliveries ?? []
+      const [listing] = Option.getOrElse(polled, () => [])
       assert.strictEqual(listing?._tag, "Listing")
       assert.deepStrictEqual(listing?._tag === "Listing" && [listing.league, listing.games.length], [
         "fbs",
         4
       ])
-      assert.deepStrictEqual(decoded?.observations, [])
     }).pipe(Effect.provide(scenario("two-minute-drill-tie")))
   )
 
-  it.effect("should have ESPN's decode note a scenario's poll that does not decode, not drop it", () =>
+  it.effect("should give a scenario's poll that does not decode no deliveries, not drop it", () =>
     Effect.gen(function* () {
-      const broken: Frame = {
-        receivedAt: DateTime.makeUnsafe(0),
-        source: "poll",
-        channel: "fbs",
-        kind: "whole",
-        body: "{"
-      }
+      const provider = yield* Provider
 
-      const [decoded] = yield* decodedFrames([broken])
+      const first = yield* Stream.runHead(provider.deliveries)
 
-      assert.deepStrictEqual(decoded?.deliveries, [])
-      assert.deepStrictEqual(
-        decoded?.observations.map((observation) => observation._tag),
-        ["FrameUndecoded"]
-      )
-    }).pipe(Effect.provide(scenario("two-minute-drill-tie")))
+      assert.deepStrictEqual(first, Option.some([]))
+    }).pipe(Effect.provide(scenarioOfABrokenPoll()))
   )
 
   it.effect(
@@ -146,7 +116,7 @@ describe("ScenarioProvider", () => {
           HubConfig | Scenarios
         >
         const crowded = provider.pipe(
-          Layer.provide(Scenarios.layer.pipe(Layer.provide(DateTime.layerCurrentZoneLocal))),
+          Layer.provide(Scenarios.layer),
           Layer.provideMerge(
             HubConfig.layerTest({ SPORTAL_SCENARIO: "crowded-fourth-quarter" }).pipe(Layer.orDie)
           ),
@@ -175,37 +145,37 @@ describe("ScenarioProvider", () => {
   describe("a scenario's pushed plays", () => {
     it.effect("should push no play's message before the first play's offset", () =>
       Effect.gen(function* () {
-        const received = yield* playedFrames((frame) => frame.source === "push" && frame.kind === "change")
+        const received = yield* played(addsPlays)
 
         yield* TestClock.adjust("30 seconds")
 
-        const pushedFrames = yield* Ref.get(received)
-        assert.deepStrictEqual(pushedFrames.map(receivedMillis), [])
+        const pushes = yield* Ref.get(received)
+        assert.deepStrictEqual(pushes.map(receivedMillis), [])
       }).pipe(Effect.provide(scenario("a-drive")), Effect.scoped)
     )
 
     it.effect("should push a play's message at its offset", () =>
       Effect.gen(function* () {
-        const received = yield* playedFrames((frame) => frame.source === "push" && frame.kind === "change")
+        const received = yield* played(addsPlays)
         yield* TestClock.adjust("30 seconds")
 
         yield* TestClock.adjust("2 millis")
 
-        const pushedFrames = yield* Ref.get(received)
-        assert.deepStrictEqual(pushedFrames.map(receivedMillis), [30_002])
+        const pushes = yield* Ref.get(received)
+        assert.deepStrictEqual(pushes.map(receivedMillis), [30_002])
       }).pipe(Effect.provide(scenario("a-drive")), Effect.scoped)
     )
 
     it.effect("should push each later play's message at its offset", () =>
       Effect.gen(function* () {
-        const received = yield* playedFrames((frame) => frame.source === "push" && frame.kind === "change")
+        const received = yield* played(addsPlays)
         yield* TestClock.adjust("30 seconds")
         yield* TestClock.adjust("2 millis")
 
         yield* TestClock.adjust("30 seconds")
 
-        const pushedFrames = yield* Ref.get(received)
-        assert.deepStrictEqual(pushedFrames.map(receivedMillis), [30_002, 60_002])
+        const pushes = yield* Ref.get(received)
+        assert.deepStrictEqual(pushes.map(receivedMillis), [30_002, 60_002])
       }).pipe(Effect.provide(scenario("a-drive")), Effect.scoped)
     )
   })
@@ -213,7 +183,7 @@ describe("ScenarioProvider", () => {
   describe("a recorded scenario's frames", () => {
     it.effect("should play each recorded frame at its offset", () =>
       Effect.gen(function* () {
-        const received = yield* playedFrames(() => true)
+        const received = yield* played(() => true)
 
         yield* TestClock.adjust(0)
         yield* TestClock.adjust("30 seconds")
@@ -229,7 +199,7 @@ describe("ScenarioProvider", () => {
     it.effect("should end its frames, logged, when the scenario's stream fails partway", () => {
       const { logs, layer } = recordingLogs()
       return Effect.gen(function* () {
-        const received = yield* playedFrames(() => true)
+        const received = yield* played(() => true)
 
         yield* TestClock.adjust(0)
         yield* TestClock.adjust("1 minute")
@@ -247,28 +217,28 @@ describe("ScenarioProvider", () => {
         const context = yield* Layer.build(scenarioOfTwoPolls())
         yield* TestClock.adjust("35 seconds")
 
-        const first = yield* Provider.use((provider) => Stream.runHead(provider.frames)).pipe(
-          Effect.provide(context)
-        )
+        const received = yield* played(() => true).pipe(Effect.provide(context))
+        yield* TestClock.adjust(0)
 
-        assert.deepStrictEqual(Option.map(first, scoreAndReceipt), Option.some([3, 35_000]))
+        const first = yield* Ref.get(received)
+        assert.deepStrictEqual(first.map(scoreAndReceipt), [[3, 35_000]])
       }).pipe(Effect.scoped)
     )
 
     it.effect("should play polls and pushes in their recorded order", () =>
       Effect.gen(function* () {
-        const received = yield* playedFrames(() => true)
+        const received = yield* played(() => true)
 
         yield* TestClock.adjust(0)
         yield* TestClock.adjust("12 seconds")
 
-        const frames = yield* Ref.get(received)
+        const all = yield* Ref.get(received)
         assert.deepStrictEqual(
-          frames.map(({ source, receivedAt }) => [source, receivedAt.epochMilliseconds]),
+          all.map(({ at, deliveries }) => [deliveries.map(({ _tag }) => _tag), at]),
           [
-            ["poll", 0],
-            ["push", 5_000],
-            ["push", 12_000]
+            [["Listing"], 0],
+            [["Snapshot"], 5_000],
+            [["Snapshot"], 12_000]
           ]
         )
       }).pipe(Effect.provide(scenarioOfTwoPushes()), Effect.scoped)
@@ -278,37 +248,37 @@ describe("ScenarioProvider", () => {
   describe("a recorded scenario's live feed frames", () => {
     it.effect("should push none before its first recorded offset", () =>
       Effect.gen(function* () {
-        const received = yield* playedFrames((frame) => frame.source === "push")
+        const received = yield* played(pushesASnapshot)
 
         yield* TestClock.adjust("4 seconds")
 
-        const pushedFrames = yield* Ref.get(received)
-        assert.deepStrictEqual(pushedFrames.map(receivedMillis), [])
+        const pushes = yield* Ref.get(received)
+        assert.deepStrictEqual(pushes.map(receivedMillis), [])
       }).pipe(Effect.provide(scenarioOfTwoPushes()), Effect.scoped)
     )
 
     it.effect("should push a frame at its recorded offset", () =>
       Effect.gen(function* () {
-        const received = yield* playedFrames((frame) => frame.source === "push")
+        const received = yield* played(pushesASnapshot)
         yield* TestClock.adjust("4 seconds")
 
         yield* TestClock.adjust("1 second")
 
-        const pushedFrames = yield* Ref.get(received)
-        assert.deepStrictEqual(pushedFrames.map(receivedMillis), [5_000])
+        const pushes = yield* Ref.get(received)
+        assert.deepStrictEqual(pushes.map(receivedMillis), [5_000])
       }).pipe(Effect.provide(scenarioOfTwoPushes()), Effect.scoped)
     )
 
     it.effect("should push each later frame at its recorded offset", () =>
       Effect.gen(function* () {
-        const received = yield* playedFrames((frame) => frame.source === "push")
+        const received = yield* played(pushesASnapshot)
         yield* TestClock.adjust("4 seconds")
         yield* TestClock.adjust("1 second")
 
         yield* TestClock.adjust("7 seconds")
 
-        const pushedFrames = yield* Ref.get(received)
-        assert.deepStrictEqual(pushedFrames.map(receivedMillis), [5_000, 12_000])
+        const pushes = yield* Ref.get(received)
+        assert.deepStrictEqual(pushes.map(receivedMillis), [5_000, 12_000])
       }).pipe(Effect.provide(scenarioOfTwoPushes()), Effect.scoped)
     )
   })
@@ -332,7 +302,7 @@ describe("ScenarioProvider", () => {
       yield* TestClock.adjust("10 seconds")
 
       const [game] = yield* slateGames
-      assert.strictEqual(game?.home.score, 7, "the tied poll only refreshed the pushed snapshot")
+      assert.strictEqual(game?.home.score, 7, "the tied poll did not replace the pushed snapshot")
     }).pipe(Effect.provide(playingPushTiedByPoll()))
   )
 
@@ -398,18 +368,11 @@ describe("ScenarioProvider", () => {
 
 /**
  * Scenario `name` as the provider, played as `HubMode` plays it and configured by `env` beside its name: a recording
- * read from `from` (this folder's `fixtures/`, unless given), its frames read by `decode` (ESPN's, unless given).
+ * read from `from` (this folder's `fixtures/`, unless given).
  */
 function scenario(name: string, options: Options = {}) {
-  const played = ScenarioProvider.layer.pipe(Layer.provide(readAhead(options.from ?? fixtures)))
-  return Option.match(Option.fromUndefinedOr(options.decode), {
-    onNone: () => played,
-    onSome: (decode) =>
-      Layer.effect(
-        Provider,
-        Effect.map(Provider, (provider) => Provider.of({ frames: provider.frames, decode }))
-      ).pipe(Layer.provide(played))
-  }).pipe(
+  return ScenarioProvider.layer.pipe(
+    Layer.provide(readAhead(options.from ?? fixtures)),
     Layer.provideMerge(HubConfig.layerTest({ SPORTAL_SCENARIO: name, ...options.env }).pipe(Layer.orDie)),
     Layer.provide(NodeServices.layer)
   )
@@ -434,31 +397,17 @@ function readAhead(from: string) {
 
       return Scenarios.of({ names: scenarios.names, load })
     })
-  ).pipe(Layer.provide(Scenarios.layerFrom(from).pipe(Layer.provide(DateTime.layerCurrentZoneLocal))))
+  ).pipe(Layer.provide(Scenarios.layerFrom(from)))
 }
 
-/**
- * Ingest over `scenario(name, options)`, onto a feed log in memory, with the slate provided to the test.
- */
+/** The board taking `scenario(name, options)`, its slate provided to the test. */
 function playing(name: string, options: Options = {}) {
-  return Ingest.layer.pipe(Layer.provideMerge(following()), Layer.provide(scenario(name, options)))
-}
-
-/**
- * The board following a feed log in memory, which is provided too.
- */
-function following() {
-  return Board.layer.pipe(
-    Layer.provideMerge(FeedLog.layer.pipe(Layer.provide([Database.layerMemory, NodeCrypto.layer]))),
-    Layer.provide([BoardTelemetry.layer, DateTime.layerCurrentZoneLocal]),
-    Layer.provide([NodeServices.layer, NodeCrypto.layer])
-  )
+  return Board.layer.pipe(Layer.provide(scenario(name, options)))
 }
 
 /** How a test sets a scenario up; one HubConfig, from `env`, serves the whole Hub under test. */
 type Options = {
   readonly from?: string
-  readonly decode?: Provider["Service"]["decode"]
   readonly env?: Record<string, string>
 }
 
@@ -468,18 +417,14 @@ const fixtures = fileURLToPath(new URL("./fixtures/", import.meta.url))
 // The committed recordings, in fixtures/scenarios/ at the repository's root.
 const committed = fileURLToPath(new URL("../../../../../fixtures/scenarios/", import.meta.url))
 
-// The committed recordings as Scenarios reads them, beside a data directory that does not exist. Provided apart from a
-// Hub under test, which builds HubConfig from its own variables.
-const committedScenarios = Scenarios.layer.pipe(
-  Layer.provide([HubConfig.layerTest({}).pipe(Layer.orDie), DateTime.layerCurrentZoneLocal]),
-  Layer.provide(NodeServices.layer)
-)
+// The committed recordings as Scenarios reads them, apart from a Hub under test.
+const committedScenarios = Scenarios.layer.pipe(Layer.provide(NodeServices.layer))
 
-/** League `league`'s last listing in the slate. */
+/** League `league`'s listed games in the slate. */
 function listed(league: LeagueId) {
   return Effect.map(
     Board.use((board) => board.latest),
-    (held) => held.listed.get(league) ?? []
+    (slate) => slate.listedGames([league])
   )
 }
 
@@ -488,11 +433,9 @@ const tieInRedZone = Effect.map(
   (games) => games.find((game) => game.id === "tie-uga-ala")?.situation?.inRedZone() === true
 )
 
-/** Playing a recording whose only game scores 7 at 0:07, read by the snapshot feed's decode. */
+/** Playing a recording whose only game scores 7 at 0:07. */
 function playingChangedAtSeven() {
-  return fromRecording("seven", [polledAt(0, [scoring(0)]), polledAt(7, [scoring(7)])], (from) =>
-    playing("seven", { from, decode: TestSnapshotFeed.decode })
-  )
+  return fromRecording("seven", [polledAt(0, 0), polledAt(7, 7)], (from) => playing("seven", { from }))
 }
 
 /**
@@ -501,7 +444,7 @@ function playingChangedAtSeven() {
  */
 function fromRecording<A, E, R>(
   name: string,
-  frames: ReadonlyArray<Effect.Effect<Frame>>,
+  frames: ReadonlyArray<Frame>,
   layerOf: (from: string) => Layer.Layer<A, E, R>,
   after: ReadonlyArray<string> = []
 ) {
@@ -511,14 +454,13 @@ function fromRecording<A, E, R>(
 }
 
 /** Writes recorded scenario `name`, of `frames` and then the lines `after`, to a fresh folder, and gives the folder. */
-function recorded(name: string, frames: ReadonlyArray<Effect.Effect<Frame>>, after: ReadonlyArray<string>) {
+function recorded(name: string, frames: ReadonlyArray<Frame>, after: ReadonlyArray<string>) {
   return Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem
     const path = yield* Path.Path
     const dir = yield* fs.makeTempDirectoryScoped()
-    const made = yield* Effect.all(frames)
-    const lines = [...made.map((frame) => Schema.encodeSync(Schema.fromJsonString(Frame))(frame)), ...after]
-    const bytes = yield* Gzip.compress(lines.map((line) => `${line}\n`).join(""))
+    const lines = [...frames.map((frame) => Schema.encodeSync(Schema.fromJsonString(Frame))(frame)), ...after]
+    const bytes = gzipSync(lines.map((line) => `${line}\n`).join(""))
 
     yield* fs.writeFile(path.join(dir, `${name}.frames.jsonl.gz`), bytes)
 
@@ -526,44 +468,63 @@ function recorded(name: string, frames: ReadonlyArray<Effect.Effect<Frame>>, aft
   })
 }
 
-/** An fbs poll of `games` as the snapshot feed says it, as recorded `seconds` into the recording. */
-function polledAt(seconds: number, games: ReadonlyArray<GameSnapshot>) {
-  return recordedAs(seconds, "poll", pushed(Delivery.cases.Listing.make({ league: "fbs", games }), "fbs"))
+/** An FBS scoreboard poll of game 1 with its home team on `points`, as recorded `seconds` into the recording. */
+function polledAt(seconds: number, points: number) {
+  return new Frame({
+    receivedAt: DateTime.add(recordedAt, { seconds }),
+    source: "poll",
+    channel: "fbs",
+    kind: "whole",
+    body: JSON.stringify({ events: [gameOn(points)] })
+  })
 }
 
 /**
- * `said` as a recording from `source` holds it, received `seconds` into the recording. The frame is synthetic: a snapshot
- * feed body under an ESPN source's name, for a recorded scenario read by `TestSnapshotFeed.decode`.
+ * A FastCast checkpoint of the FBS scoreboard topic, its one event game 1 with its home team on `points`, as recorded
+ * `seconds` into the recording.
  */
-function recordedAs(seconds: number, source: "poll" | "push", said: Effect.Effect<Frame>) {
-  return Effect.map(
-    said,
-    (frame) =>
-      new Frame({
-        ...frame,
-        receivedAt: DateTime.add(recordedAt, { seconds }),
-        source,
-        kind: source === "poll" ? "whole" : "change"
-      })
-  )
+function pushedAt(seconds: number, points: number) {
+  return new Frame({
+    receivedAt: DateTime.add(recordedAt, { seconds }),
+    source: "push",
+    channel: topicOf("fbs"),
+    kind: "whole",
+    number: seconds,
+    body: JSON.stringify({ sports: [{ leagues: [{ events: [gameOn(points)] }] }] })
+  })
+}
+
+/** Game 1 as ESPN sends it, in the first quarter at 10:00, its home team on `points`. */
+function gameOn(points: number) {
+  const competitor = (homeAway: "home" | "away", id: string, score: number) => ({
+    homeAway,
+    score: String(score),
+    team: { id, abbreviation: id, displayName: id, location: id, shortDisplayName: id }
+  })
+  return {
+    id: "1",
+    uid: "s:20~l:23~e:1~c:1",
+    date: "2026-10-04T17:45:00.000Z",
+    status: { period: 1, displayClock: "10:00", type: { name: "STATUS_IN_PROGRESS", state: "in" } },
+    competitions: [
+      { geoBroadcasts: [], competitors: [competitor("home", "HOME", points), competitor("away", "AWAY", 0)] }
+    ]
+  }
 }
 
 // When the recorded scenarios here were recorded.
 const recordedAt = DateTime.makeUnsafe("2026-10-04T18:00:00Z")
 
-function scoring(points: number) {
-  return liveSnapshot({ id: GameId.make("1"), home: { team: team("HOME"), score: points } })
-}
-
-/** Forks the provider's frames, keeping each frame `keep` passes in the Ref it gives. */
-function playedFrames(keep: (frame: Frame) => boolean) {
+/** Forks the provider's deliveries, keeping each frame's that `keep` passes, and when they came, in the Ref it gives. */
+function played(keep: (deliveries: ReadonlyArray<Delivery>) => boolean) {
   return Effect.gen(function* () {
     const provider = yield* Provider
-    const received = yield* Ref.make<ReadonlyArray<Frame>>([])
+    const received = yield* Ref.make<ReadonlyArray<Played>>([])
 
-    yield* provider.frames.pipe(
+    yield* provider.deliveries.pipe(
       Stream.filter(keep),
-      Stream.runForEach((frame) => Ref.update(received, (all) => [...all, frame])),
+      Stream.mapEffect((deliveries) => Effect.map(Clock.currentTimeMillis, (at) => ({ at, deliveries }))),
+      Stream.runForEach((one) => Ref.update(received, (all) => [...all, one])),
       Effect.forkScoped({ startImmediately: true })
     )
 
@@ -571,57 +532,65 @@ function playedFrames(keep: (frame: Frame) => boolean) {
   })
 }
 
-/** When `frame` was received, in milliseconds. */
-function receivedMillis(frame: Frame) {
-  return frame.receivedAt.epochMilliseconds
+/** One frame's deliveries, and when, in milliseconds on the test clock, the provider gave them. */
+interface Played {
+  readonly at: number
+  readonly deliveries: ReadonlyArray<Delivery>
+}
+
+/** Whether `deliveries` say a game's plays, with at least one play: a pushed play's message, not its topic's checkpoint. */
+function addsPlays(deliveries: ReadonlyArray<Delivery>) {
+  return deliveries.some((delivery) => Delivery.guards.Plays(delivery) && delivery.plays.length > 0)
+}
+
+/** Whether `deliveries` say a pushed snapshot. */
+function pushesASnapshot(deliveries: ReadonlyArray<Delivery>) {
+  return deliveries.some(Delivery.guards.Snapshot)
+}
+
+/** When the provider gave `played`, in milliseconds. */
+function receivedMillis(played: Played) {
+  return played.at
 }
 
 /** A recording polled at 0:00 with its game at 3 points and at 0:30 with it at 10, as the provider. */
 function scenarioOfTwoPolls() {
-  return fromRecording("two-polls", [polledAt(0, [scoring(3)]), polledAt(30, [scoring(10)])], (from) =>
+  return fromRecording("two-polls", [polledAt(0, 3), polledAt(30, 10)], (from) =>
     scenario("two-polls", { from })
   )
 }
 
 /** A recording polled at 0:00 with its game at 3 points, then a line that is not a frame, as the provider. */
 function scenarioBrokenAfterAPoll() {
-  return fromRecording("broken", [polledAt(0, [scoring(3)])], (from) => scenario("broken", { from }), [
-    "not a frame"
-  ])
+  return fromRecording("broken", [polledAt(0, 3)], (from) => scenario("broken", { from }), ["not a frame"])
 }
 
-/** A snapshot feed listing frame's first game's home score and its receive instant. */
-function scoreAndReceipt({ body, receivedAt }: Frame) {
-  return [JSON.parse(body).games[0].home.score, receivedAt.epochMilliseconds]
+/** A recording polled at 0:00 with a body that is not a scoreboard, then at 0:30 with its game at 10, as the provider. */
+function scenarioOfABrokenPoll() {
+  return fromRecording(
+    "broken-poll",
+    [new Frame({ ...polledAt(0, 0), body: "{" }), polledAt(30, 10)],
+    (from) => scenario("broken-poll", { from })
+  )
+}
+
+/** The home score of the first game a listing `played` says, and when the provider gave it. */
+function scoreAndReceipt({ at, deliveries }: Played) {
+  const [listing] = deliveries.filter(Delivery.guards.Listing)
+  return [listing?.games[0]?.home.score, at]
 }
 
 /** A recording polled at 0:00 and pushed at 0:05 and 0:12, as the provider. */
 function scenarioOfTwoPushes() {
-  return fromRecording(
-    "pushes",
-    [polledAt(0, [scoring(0)]), pushedAt(5, scoring(3)), pushedAt(12, scoring(7))],
-    (from) => scenario("pushes", { from })
+  return fromRecording("pushes", [polledAt(0, 0), pushedAt(5, 3), pushedAt(12, 7)], (from) =>
+    scenario("pushes", { from })
   )
 }
 
-/** A live feed frame of `game` pushed, as the snapshot feed says it, as recorded `seconds` into the recording. */
-function pushedAt(seconds: number, game: GameSnapshot) {
-  return recordedAs(
-    seconds,
-    "push",
-    pushed(Delivery.cases.Snapshot.make({ snapshot: game, from: "push" }), "fbs")
-  )
-}
-
-/**
- * Playing a recording that pushes 7 points at 0:01 and polls 0 points at the same game time at 0:10, read by the
- * snapshot feed's decode.
- */
+/** Playing a recording that pushes 7 points at 0:01 and polls 0 points at the same game time at 0:10. */
 function playingPushTiedByPoll() {
-  return fromRecording(
-    "tie",
-    [polledAt(0, [scoring(0)]), pushedAt(1, scoring(7)), polledAt(10, [scoring(0)])],
-    (from) => playing("tie", { from, decode: TestSnapshotFeed.decode })
+  return fromRecording("tie", [polledAt(0, 0), pushedAt(1, 7), polledAt(10, 0)], (from) =>
+    playing("tie", { from })
   )
 }
 

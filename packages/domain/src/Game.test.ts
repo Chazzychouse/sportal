@@ -142,30 +142,6 @@ describe("GameSnapshot#networks", () => {
   })
 })
 
-describe("GameSnapshot#statusLine", () => {
-  it("should read status, period, and clock", () => {
-    const game = snapshot({ status: "live", period: 3, clock: "4:12" })
-
-    assert.strictEqual(game.statusLine(), "live, period 3, 4:12")
-  })
-})
-
-describe("GameSnapshot#abbreviationOf", () => {
-  const game = snapshot({ home: { team: team("BAMA"), score: 0 }, away: { team: team("UGA"), score: 0 } })
-
-  it("should name the home team by its abbreviation", () => {
-    assert.strictEqual(game.abbreviationOf(team("BAMA").id), "BAMA")
-  })
-
-  it("should name the away team by its abbreviation", () => {
-    assert.strictEqual(game.abbreviationOf(team("UGA").id), "UGA")
-  })
-
-  it("should name an unknown id as itself", () => {
-    assert.strictEqual(game.abbreviationOf(team("XYZ").id), team("XYZ").id)
-  })
-})
-
 describe("GameSnapshot#timed", () => {
   it("should run on a clock in a college fourth period", () => {
     const game = snapshot({ league: "fbs", status: "live", period: 4 })
@@ -550,135 +526,6 @@ describe("GameSnapshot#isAheadOfOver", () => {
   })
 })
 
-describe("GameSnapshot#eventsSince", () => {
-  it("should report each side's points", () => {
-    const before = inPlay()
-    const after = inPlay({ home: { team: team("UGA"), score: 28 } })
-
-    const events = after.eventsSince(before)
-
-    assert.deepStrictEqual(
-      events.map((e) => (e._tag === "ScoreChanged" ? { team: e.team, points: e.points } : e._tag)),
-      [{ team: team("UGA").id, points: 7 }]
-    )
-  })
-
-  it("should report a drive reaching the 40 as reaching scoring range", () => {
-    assert.deepStrictEqual(tags(driveAt(55), driveAt(38)), ["ReachedScoringRange"])
-  })
-
-  it("should not report reaching scoring range again further down the field", () => {
-    assert.deepStrictEqual(tags(driveAt(38), driveAt(30)), [])
-  })
-
-  it("should report a drive reaching the 20 as entering the red zone", () => {
-    assert.deepStrictEqual(tags(driveAt(30), driveAt(18)), ["EnteredRedZone"])
-  })
-
-  it("should report a drive with the distance to the goal line as goal to go", () => {
-    assert.deepStrictEqual(tags(driveAt(18), driveAt(6, 6)), ["GoalToGo"])
-  })
-
-  it("should report fourth down at a new spot", () => {
-    const third = inPlay({ situation: ball("ALA", 34, 3, 3) })
-    const fourth = inPlay({ situation: ball("ALA", 33, 4, 2) })
-
-    assert.deepStrictEqual(tags(third, fourth), ["FourthDown"])
-  })
-
-  it("should report fourth down once per spot", () => {
-    const fourth = inPlay({ situation: ball("ALA", 33, 4, 2) })
-
-    assert.deepStrictEqual(tags(fourth, fourth), [])
-  })
-
-  it("should call a change of possession a turnover when the last play says interception", () => {
-    const before = inPlay({ situation: ball("ALA", 45) })
-    const picked = inPlay({ situation: ball("UGA", 70, 1, 10, { lastPlay: "Pass INTERCEPTED by K.Smith" }) })
-
-    assert.deepStrictEqual(tags(before, picked), ["Turnover"])
-  })
-
-  it("should call a change of possession by a punt a possession change, not a turnover", () => {
-    const before = inPlay({ situation: ball("ALA", 45) })
-    const punted = inPlay({ situation: ball("UGA", 80, 1, 10, { lastPlay: "J.Doe punt 40 yards" }) })
-
-    assert.deepStrictEqual(tags(before, punted), ["PossessionChanged"])
-  })
-
-  it("should call a change of possession with no clear last play a possession change, not a turnover", () => {
-    const before = inPlay({ situation: ball("ALA", 45) })
-    const unclear = inPlay({ situation: ball("UGA", 80) })
-
-    assert.deepStrictEqual(tags(before, unclear), ["PossessionChanged"])
-  })
-
-  it("should not call the ball changing hands after a score a turnover", () => {
-    const before = inPlay({ situation: ball("ALA", 3, 1, 3) })
-    const after = inPlay({
-      away: { team: team("ALA"), score: 24 },
-      situation: ball("UGA", 75, 1, 10, { lastPlay: "Fumble recovered in the end zone, touchdown" })
-    })
-
-    assert.deepStrictEqual(tags(before, after), ["ScoreChanged", "PossessionChanged"])
-  })
-
-  it("should report a timeout from a drop in either side's count", () => {
-    const before = inPlay({ situation: ball("ALA", 45) })
-    const after = inPlay({ situation: ball("ALA", 45, 1, 10, { awayTimeouts: 2 }) })
-
-    assert.deepStrictEqual(tags(before, after), ["TimeoutTaken"])
-  })
-
-  it("should report a timeout as one fewer in the same period", () => {
-    assert.deepStrictEqual(tags(withTimeouts(4, 3, 3), withTimeouts(4, 3, 2)), ["TimeoutTaken"])
-  })
-
-  it("should not report a timeout when the counts drop by more than one", () => {
-    assert.deepStrictEqual(tags(withTimeouts(4, 3, 3), withTimeouts(4, 0, 0)), [])
-  })
-
-  it("should not report a timeout when the period changes", () => {
-    assert.deepStrictEqual(tags(withTimeouts(4, 3, 3), withTimeouts(5, 1, 1)), ["Overtime", "PeriodEnded"])
-  })
-
-  it("should report a new drive starting inside the 40 as reaching scoring range", () => {
-    const before = inPlay({ situation: ball("ALA", 45) })
-    const picked = inPlay({ situation: ball("UGA", 30, 1, 10, { lastPlay: "Pass INTERCEPTED by K.Smith" }) })
-
-    assert.deepStrictEqual(tags(before, picked), ["Turnover", "ReachedScoringRange"])
-  })
-
-  it("should report the two-minute drill", () => {
-    assert.deepStrictEqual(tags(inPlay({ clock: "2:05" }), inPlay({ clock: "1:58" })), ["TwoMinuteDrill"])
-  })
-
-  it("should report the end of a period", () => {
-    const before = inPlay({ period: 1, clock: "0:00" })
-    const after = inPlay({ period: 2, clock: "15:00" })
-
-    assert.deepStrictEqual(tags(before, after), ["PeriodEnded"])
-  })
-
-  it("should report halftime", () => {
-    const before = inPlay({ period: 2, clock: "0:00" })
-    const after = inPlay({ period: 2, status: "halftime" })
-
-    assert.deepStrictEqual(tags(before, after), ["WentToHalftime"])
-  })
-
-  it("should report overtime", () => {
-    const before = inPlay({ clock: "0:00" })
-    const after = inPlay({ period: 5, clock: "" })
-
-    assert.deepStrictEqual(tags(before, after), ["Overtime", "PeriodEnded"])
-  })
-
-  it("should report the final", () => {
-    assert.deepStrictEqual(tags(inPlay(), inPlay({ status: "final" })), ["WentFinal"])
-  })
-})
-
 describe("GameSnapshot#secondsLeft", () => {
   it("should read the clock", () => {
     assert.strictEqual(inPlay({ clock: "2:10" }).secondsLeft(), 130)
@@ -822,7 +669,12 @@ describe("GameSnapshot#inPlay", () => {
 })
 
 function pairs(snapshots: ReadonlyArray<readonly [GameSnapshot, GameSnapshot]>) {
-  return snapshots.map(([a, b]) => [`${a.statusLine()} against ${b.statusLine()}`, a, b] as const)
+  return snapshots.map(([a, b]) => [`${line(a)} against ${line(b)}`, a, b] as const)
+}
+
+/** The status, period, and clock of `game`, to name a case. */
+function line(game: GameSnapshot) {
+  return `${game.status}, period ${game.period}, ${game.clock}`
 }
 
 function withScores(home: number, away: number) {
@@ -860,14 +712,10 @@ function ball(side: "UGA" | "ALA", yardLine: number, down = 1, distance = 10, re
   return situation({ possession: team(side).id, yardLine, down, distance, ...rest })
 }
 
-function driveAt(yardLine: number, distance = 10) {
+function _driveAt(yardLine: number, distance = 10) {
   return inPlay({ situation: ball("ALA", yardLine, 1, distance) })
 }
 
-function withTimeouts(period: number, home: number, away: number) {
+function _withTimeouts(period: number, home: number, away: number) {
   return inPlay({ period, situation: ball("ALA", 45, 1, 10, { homeTimeouts: home, awayTimeouts: away }) })
-}
-
-function tags(before: GameSnapshot, after: GameSnapshot) {
-  return after.eventsSince(before).map((event) => event._tag)
 }

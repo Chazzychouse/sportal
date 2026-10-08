@@ -9,7 +9,7 @@ const wire = Schema.fromJsonString(Delivery)
 describe("Delivery", () => {
   it.each([
     ["Listing", Delivery.cases.Listing.make({ league: "fbs", games: [snapshot(), liveSnapshot()] })],
-    ["Snapshot", Delivery.cases.Snapshot.make({ snapshot: liveSnapshot(), from: "push" })],
+    ["Snapshot", Delivery.cases.Snapshot.make({ snapshot: liveSnapshot() })],
     ["Plays", Delivery.cases.Plays.make({ game: GameId.make("401"), plays: [play()] })]
   ])("should round-trip a %s through its wire form", (_name, delivery) => {
     const encoded = Schema.encodeSync(wire)(delivery)

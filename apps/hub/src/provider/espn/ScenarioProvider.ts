@@ -26,7 +26,7 @@ export const layer: Layer.Layer<Provider, ScenarioUnknown | ScenarioUnreadable, 
       const loaded = yield* scenarios.load(name)
       yield* Effect.logInfo(`ScenarioProvider: playing ${name}`)
 
-      return Provider.of({ frames: played(loaded), decode: EspnDecoder.decode })
+      return Provider.of({ deliveries: EspnDecoder.decode(played(loaded)) })
     })
   )
 

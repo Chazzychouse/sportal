@@ -1,9 +1,11 @@
 import { fileURLToPath } from "node:url"
 import { NodeServices } from "@effect/platform-node"
-import { DateTime, Effect, Layer, Stream } from "effect"
+import { Context, Effect, Layer, Stream } from "effect"
 import * as Socket from "effect/socket/Socket"
-import { HubConfig } from "../../HubConfig.ts"
+import type { Frame } from "../../Frame.ts"
 import { Scenarios } from "../../scenario/Scenarios.ts"
+import type { Delivery } from "../../slate/Delivery.ts"
+import * as EspnDecoder from "./EspnDecoder.ts"
 
 /** A WebSocket constructor for tests that never push: opening a socket throws. */
 export const noSocket = Layer.succeed(Socket.WebSocketConstructor, () => {
@@ -32,10 +34,27 @@ export const recordedPlays = 182
 /** NE at BUF's recorded frames, read back as the recorded scenario `neAtBufFrames`. */
 export const recordedNeAtBuf = Scenarios.use((scenarios) => scenarios.load(neAtBufFrames)).pipe(
   Effect.flatMap(({ frames }) => Stream.runCollect(frames)),
-  Effect.provide(
-    Scenarios.layerFrom(fixtures).pipe(
-      Layer.provide([HubConfig.layerTest({}).pipe(Layer.orDie), DateTime.layerCurrentZoneLocal]),
-      Layer.provideMerge(NodeServices.layer)
-    )
-  )
+  Effect.provide(Scenarios.layerFrom(fixtures).pipe(Layer.provideMerge(NodeServices.layer)))
 )
+
+/** What ESPN's decode says each of `frames` said. */
+export const decodedFrames = Effect.fn("TestEspn.decodedFrames")(function* (frames: ReadonlyArray<Frame>) {
+  return yield* EspnDecoder.decode(Stream.fromIterable(frames)).pipe(Stream.runCollect)
+})
+
+/** What ESPN's decode says each of some frames said. */
+export class FramesDecoded extends Context.Service<FramesDecoded, ReadonlyArray<ReadonlyArray<Delivery>>>()(
+  "sportal/hub/provider/espn/FramesDecoded"
+) {
+  /** Decodes the frames `frames` gives once, for every test the layer is provided to: a recording takes seconds. */
+  static layerOf<E>(frames: Effect.Effect<ReadonlyArray<Frame>, E>) {
+    return Layer.effect(
+      FramesDecoded,
+      Effect.gen(function* () {
+        const made = yield* frames
+
+        return yield* decodedFrames(made)
+      })
+    )
+  }
+}

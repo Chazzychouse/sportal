@@ -1,5 +1,4 @@
 import { Order, Schema } from "effect"
-import { GameEventKind } from "./GameEvent.ts"
 import { TeamId } from "./Team.ts"
 
 /** The feed's own id. Not ordered: order plays by `Play.sequence`. */
@@ -294,12 +293,11 @@ const cases = Schema.Union([
 
 /**
  * Every football play, as the game's play-by-play lists it: a tagged union of its cases, each keeping what the feed's
- * play type says, with `.match`, `.guards`, `.cases`, `order`, `eventsSince`, and `gainsYards`.
+ * play type says, with `.match`, `.guards`, `.cases`, `order`, and `gainsYards`.
  */
 export const FootballPlay = Object.assign(cases, {
   /** By `sequence`. */
   order: Order.mapInput(Order.Number, (play: typeof cases.Type) => play.sequence),
-  eventsSince,
   gainsYards
 })
 export type FootballPlay = typeof FootballPlay.Type
@@ -322,45 +320,11 @@ export type PlayOutcome = typeof cases.Encoded extends infer Case
 export const Play = FootballPlay
 export type Play = FootballPlay
 
-/**
- * The events of the plays in `after` that `before` does not have, in `Play.order`: each play is `Played`, a run or
- * completion of 20 yards or more by a known team is also a `BigPlay`, and a sack is also a `Sack` of the offense. What
- * a play changed (the score, the ball, the clock) is the snapshot's to say.
- */
-function eventsSince(
-  before: ReadonlyArray<FootballPlay>,
-  after: ReadonlyArray<FootballPlay>
-): ReadonlyArray<GameEventKind> {
-  const known = new Set(before.map((play) => play.id))
-
-  return after
-    .toSorted(FootballPlay.order)
-    .filter((play) => !known.has(play.id))
-    .flatMap(eventsOf)
-}
-
 /** Whether `play`'s case gains yards for a team: a snap, a kick, a safety, or a penalty. */
 function gainsYards<P extends { readonly _tag: (typeof cases.Type)["_tag"] }>(
   play: P
 ): play is Extract<P, { readonly _tag: Extract<typeof cases.Type, { readonly yards: number }>["_tag"] }> {
   return "yards" in cases.cases[play._tag].fields
-}
-
-/** A play of at least this many yards is a big play. */
-const bigPlayYards = 20
-
-function eventsOf(play: FootballPlay): ReadonlyArray<GameEventKind> {
-  const played = GameEventKind.Played({ play })
-
-  if (
-    FootballPlay.isAnyOf(["Rush", "Completion"])(play) &&
-    play.yards >= bigPlayYards &&
-    play.team !== undefined
-  ) {
-    return [played, GameEventKind.BigPlay({ team: play.team, yards: play.yards })]
-  }
-  if (FootballPlay.guards.Sack(play)) return [played, GameEventKind.Sack({ team: play.offense() })]
-  return [played]
 }
 
 function offenseOf(play: { readonly team?: TeamId | undefined; readonly start: typeof Spot.Type }): TeamId {

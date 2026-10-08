@@ -7,14 +7,7 @@
     "to": "now"
   },
   "refresh": "30s",
-  "links": [
-    {
-      "title": "Live games",
-      "type": "link",
-      "icon": "dashboard",
-      "url": "/d/sportal-game/live-games?${mode:queryparam}&${__url_time_range}"
-    }
-  ],
+  "links": [],
   "templating": {
     "list": [
       {
@@ -28,17 +21,6 @@
         "query": "label_values(target_info{service_name=\"sportal-hub\"}, sportal_mode)",
         "refresh": 2,
         "sort": 1
-      },
-      {
-        "name": "game",
-        "label": "Game",
-        "type": "textbox",
-        "query": ".+",
-        "current": {
-          "text": ".+",
-          "value": ".+"
-        },
-        "description": "A game id, or a pattern of them. Loki keeps game as structured metadata, not a label, so it has no list of values."
       }
     ]
   },
@@ -183,181 +165,31 @@
         {
           "refId": "A",
           "queryType": "traceql",
-          "query": "{resource.service.name=\"sportal-hub\" && resource.sportal.mode=\"$mode\" && name=\"Ingest.poll\"}",
+          "query": "{resource.service.name=\"sportal-hub\" && resource.sportal.mode=\"$mode\" && name=\"EspnProvider.pollEveryLeague\"}",
           "limit": 20
         }
       ]
     },
     {
-      "id": 6,
-      "type": "row",
-      "title": "Live games",
-      "collapsed": false,
+      "id": 26,
+      "type": "table",
+      "title": "Take traces",
       "gridPos": {
         "x": 0,
         "y": 24,
         "w": 24,
-        "h": 1
-      },
-      "panels": []
-    },
-    {
-      "id": 7,
-      "type": "timeseries",
-      "title": "Live games by state",
-      "gridPos": {
-        "x": 0,
-        "y": 25,
-        "w": 12,
         "h": 8
       },
       "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "custom": {
-            "fillOpacity": 30,
-            "stacking": {
-              "mode": "normal"
-            }
-          }
-        },
-        "overrides": []
+        "type": "tempo",
+        "uid": "tempo"
       },
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by (state) (sportal_live_games_ratio * on (job, instance) group_left target_info{sportal_mode=\"$mode\"})",
-          "legendFormat": "{{state}}"
-        }
-      ]
-    },
-    {
-      "id": 8,
-      "type": "timeseries",
-      "title": "Snapshots taken, behind, held, and fallen back",
-      "gridPos": {
-        "x": 12,
-        "y": 25,
-        "w": 12,
-        "h": 8
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "custom": {
-            "drawStyle": "bars",
-            "fillOpacity": 80,
-            "stacking": {
-              "mode": "normal"
-            }
-          }
-        },
-        "overrides": []
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "sum by (outcome, source) (increase(sportal_snapshots_total[$__rate_interval]) * on (job, instance) group_left target_info{sportal_mode=\"$mode\"})",
-          "legendFormat": "{{source}} {{outcome}}"
-        }
-      ]
-    },
-    {
-      "id": 9,
-      "type": "timeseries",
-      "title": "Game defects",
-      "gridPos": {
-        "x": 0,
-        "y": 33,
-        "w": 12,
-        "h": 8
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "custom": {
-            "drawStyle": "bars",
-            "fillOpacity": 80,
-            "stacking": {
-              "mode": "normal"
-            }
-          }
-        },
-        "overrides": []
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "sum (increase(sportal_game_defects_total[$__rate_interval]) * on (job, instance) group_left target_info{sportal_mode=\"$mode\"}) or vector(0)",
-          "legendFormat": "defects"
-        }
-      ]
-    },
-    {
-      "id": 10,
-      "type": "timeseries",
-      "title": "Frame take latency",
-      "description": "How long the fold takes to apply one frame.",
-      "gridPos": {
-        "x": 12,
-        "y": 33,
-        "w": 12,
-        "h": 8
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "ms"
-        },
-        "overrides": []
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "histogram_quantile(0.5, sum by (le) (rate(sportal_take_duration_milliseconds_bucket[$__rate_interval]) * on (job, instance) group_left target_info{sportal_mode=\"$mode\"}))",
-          "legendFormat": "p50"
-        },
-        {
-          "refId": "B",
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(sportal_take_duration_milliseconds_bucket[$__rate_interval]) * on (job, instance) group_left target_info{sportal_mode=\"$mode\"}))",
-          "legendFormat": "p95"
-        }
-      ]
-    },
-    {
-      "id": 11,
-      "type": "logs",
-      "title": "Transitions of $game",
-      "gridPos": {
-        "x": 0,
-        "y": 41,
-        "w": 24,
-        "h": 10
-      },
-      "datasource": {
-        "type": "loki",
-        "uid": "loki"
-      },
-      "options": {
-        "sortOrder": "Ascending",
-        "showTime": true
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "{service_name=\"sportal-hub\"} | sportal_mode=\"$mode\" | game=~\"$game\" |= \"→\""
+          "queryType": "traceql",
+          "query": "{resource.service.name=\"sportal-hub\" && resource.sportal.mode=\"$mode\" && name=\"Board.take\"}",
+          "limit": 20
         }
       ]
     },
@@ -368,7 +200,7 @@
       "collapsed": false,
       "gridPos": {
         "x": 0,
-        "y": 51,
+        "y": 32,
         "w": 24,
         "h": 1
       },
@@ -380,7 +212,7 @@
       "title": "Connected",
       "gridPos": {
         "x": 0,
-        "y": 52,
+        "y": 33,
         "w": 6,
         "h": 4
       },
@@ -416,76 +248,13 @@
       ]
     },
     {
-      "id": 18,
-      "type": "stat",
-      "title": "Connects in range",
-      "gridPos": {
-        "x": 0,
-        "y": 56,
-        "w": 6,
-        "h": 4
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "custom": {},
-          "decimals": 0
-        },
-        "overrides": []
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "sum(increase(sportal_live_feed_connects_total[$__range]) * on (job, instance) group_left target_info{sportal_mode=\"$mode\"}) or vector(0)",
-          "legendFormat": "connects"
-        }
-      ]
-    },
-    {
-      "id": 14,
-      "type": "timeseries",
-      "title": "Messages by league and op",
-      "gridPos": {
-        "x": 6,
-        "y": 52,
-        "w": 18,
-        "h": 8
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "custom": {
-            "drawStyle": "bars",
-            "fillOpacity": 80,
-            "stacking": {
-              "mode": "normal"
-            }
-          }
-        },
-        "overrides": []
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "sum by (league, op) (increase(sportal_live_feed_messages_total[$__rate_interval]) * on (job, instance) group_left target_info{sportal_mode=\"$mode\"})",
-          "legendFormat": "{{league}} {{op}}"
-        }
-      ]
-    },
-    {
       "id": 15,
       "type": "timeseries",
       "title": "Errors by reason",
       "gridPos": {
-        "x": 0,
-        "y": 60,
-        "w": 12,
+        "x": 6,
+        "y": 33,
+        "w": 9,
         "h": 8
       },
       "datasource": {
@@ -513,13 +282,13 @@
       ]
     },
     {
-      "id": 16,
+      "id": 25,
       "type": "timeseries",
-      "title": "Games pushed, unlisted, and undecoded by league",
+      "title": "Checkpoint failures",
       "gridPos": {
-        "x": 12,
-        "y": 60,
-        "w": 12,
+        "x": 15,
+        "y": 33,
+        "w": 9,
         "h": 8
       },
       "datasource": {
@@ -541,18 +310,38 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by (league) (increase(sportal_live_feed_games_total[$__rate_interval]) * on (job, instance) group_left target_info{sportal_mode=\"$mode\"})",
-          "legendFormat": "pushed {{league}}"
+          "expr": "sum (increase(sportal_live_feed_checkpoint_failures_total[$__rate_interval]) * on (job, instance) group_left target_info{sportal_mode=\"$mode\"}) or vector(0)",
+          "legendFormat": "checkpoint failures"
+        }
+      ],
+      "description": "Checkpoints that did not load or decode; each topic is tried again every 30 s, five tries in all, then left to polling. A lost document is a FastCast Warning in Live feed logs."
+    },
+    {
+      "id": 18,
+      "type": "stat",
+      "title": "Connects in range",
+      "gridPos": {
+        "x": 0,
+        "y": 37,
+        "w": 6,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "decimals": 0
         },
+        "overrides": []
+      },
+      "targets": [
         {
-          "refId": "B",
-          "expr": "sum by (league) (increase(sportal_live_feed_unlisted_total[$__rate_interval]) * on (job, instance) group_left target_info{sportal_mode=\"$mode\"})",
-          "legendFormat": "unlisted {{league}}"
-        },
-        {
-          "refId": "C",
-          "expr": "sum by (league, source) (increase(sportal_events_undecoded_total[$__rate_interval]) * on (job, instance) group_left target_info{sportal_mode=\"$mode\"})",
-          "legendFormat": "undecoded {{league}} ({{source}})"
+          "refId": "A",
+          "expr": "sum(increase(sportal_live_feed_connects_total[$__range]) * on (job, instance) group_left target_info{sportal_mode=\"$mode\"}) or vector(0)",
+          "legendFormat": "connects"
         }
       ]
     },
@@ -562,7 +351,7 @@
       "title": "Live feed logs",
       "gridPos": {
         "x": 0,
-        "y": 68,
+        "y": 41,
         "w": 24,
         "h": 10
       },
@@ -577,280 +366,9 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "{service_name=\"sportal-hub\"} | sportal_mode=\"$mode\" |~ \"FastCast|Ingest: the (live feed|provider's frames)\""
+          "expr": "{service_name=\"sportal-hub\"} | sportal_mode=\"$mode\" |~ \"FastCast|EspnProvider|EspnDecoder|Board: the provider's frames\""
         }
       ]
-    },
-    {
-      "id": 18,
-      "type": "row",
-      "title": "Feed log",
-      "collapsed": false,
-      "gridPos": {
-        "x": 0,
-        "y": 78,
-        "w": 24,
-        "h": 1
-      },
-      "panels": []
-    },
-    {
-      "id": 19,
-      "type": "timeseries",
-      "title": "Frames by source and kind",
-      "gridPos": {
-        "x": 0,
-        "y": 79,
-        "w": 12,
-        "h": 8
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "custom": {
-            "drawStyle": "bars",
-            "fillOpacity": 80,
-            "stacking": {
-              "mode": "normal"
-            }
-          }
-        },
-        "overrides": []
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "sum by (source, kind) (increase(sportal_feed_frames_total[$__rate_interval]) * on (job, instance) group_left target_info{sportal_mode=\"$mode\"})",
-          "legendFormat": "{{source}} {{kind}}"
-        }
-      ],
-      "description": "Frames written to feed.sqlite. Kinds: whole, change, unchanged, gap."
-    },
-    {
-      "id": 20,
-      "type": "timeseries",
-      "title": "Write duration",
-      "gridPos": {
-        "x": 12,
-        "y": 79,
-        "w": 12,
-        "h": 8
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "ms"
-        },
-        "overrides": []
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "histogram_quantile(0.5, sum by (le) (rate(sportal_feed_write_duration_milliseconds_bucket[$__rate_interval]) * on (job, instance) group_left target_info{sportal_mode=\"$mode\"}))",
-          "legendFormat": "p50"
-        },
-        {
-          "refId": "B",
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(sportal_feed_write_duration_milliseconds_bucket[$__rate_interval]) * on (job, instance) group_left target_info{sportal_mode=\"$mode\"}))",
-          "legendFormat": "p95"
-        }
-      ],
-      "description": "How long writing one batch of frames takes."
-    },
-    {
-      "id": 21,
-      "type": "timeseries",
-      "title": "Write failures and frames lost",
-      "gridPos": {
-        "x": 0,
-        "y": 87,
-        "w": 12,
-        "h": 8
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "custom": {
-            "drawStyle": "bars",
-            "fillOpacity": 80,
-            "stacking": {
-              "mode": "normal"
-            }
-          }
-        },
-        "overrides": []
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "sum (increase(sportal_feed_write_failures_total[$__rate_interval]) * on (job, instance) group_left target_info{sportal_mode=\"$mode\"}) or vector(0)",
-          "legendFormat": "feed log write failures"
-        },
-        {
-          "refId": "B",
-          "expr": "sum (increase(sportal_feed_frames_lost_total[$__rate_interval]) * on (job, instance) group_left target_info{sportal_mode=\"$mode\"}) or vector(0)",
-          "legendFormat": "frames lost"
-        }
-      ],
-      "description": "A lost frame is part of a gap row in the log."
-    },
-    {
-      "id": 22,
-      "type": "timeseries",
-      "title": "Decode failures",
-      "gridPos": {
-        "x": 12,
-        "y": 87,
-        "w": 12,
-        "h": 8
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "custom": {
-            "drawStyle": "bars",
-            "fillOpacity": 80,
-            "stacking": {
-              "mode": "normal"
-            }
-          }
-        },
-        "overrides": []
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "sum by (source) (increase(sportal_frames_undecoded_total[$__rate_interval]) * on (job, instance) group_left target_info{sportal_mode=\"$mode\"})",
-          "legendFormat": "frames {{source}}"
-        },
-        {
-          "refId": "B",
-          "expr": "sum by (league) (increase(sportal_live_feed_undecoded_plays_total[$__rate_interval]) * on (job, instance) group_left target_info{sportal_mode=\"$mode\"})",
-          "legendFormat": "plays {{league}}"
-        }
-      ],
-      "description": "Frames and plays that did not decode and were skipped."
-    },
-    {
-      "id": 23,
-      "type": "timeseries",
-      "title": "Plays by league",
-      "gridPos": {
-        "x": 0,
-        "y": 95,
-        "w": 12,
-        "h": 8
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "custom": {
-            "drawStyle": "bars",
-            "fillOpacity": 80,
-            "stacking": {
-              "mode": "normal"
-            }
-          }
-        },
-        "overrides": []
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "sum by (league) (increase(sportal_plays_total[$__rate_interval]) * on (job, instance) group_left target_info{sportal_mode=\"$mode\"})",
-          "legendFormat": "{{league}}"
-        }
-      ]
-    },
-    {
-      "id": 24,
-      "type": "timeseries",
-      "title": "Deliveries dropped",
-      "gridPos": {
-        "x": 12,
-        "y": 95,
-        "w": 12,
-        "h": 8
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "custom": {
-            "drawStyle": "bars",
-            "fillOpacity": 80,
-            "stacking": {
-              "mode": "normal"
-            }
-          }
-        },
-        "overrides": []
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "sum (increase(sportal_deliveries_dropped_total[$__rate_interval]) * on (job, instance) group_left target_info{sportal_mode=\"$mode\"})",
-          "legendFormat": "dropped"
-        }
-      ],
-      "description": "Plays the fold dropped, since no live game held their game."
-    },
-    {
-      "id": 25,
-      "type": "timeseries",
-      "title": "Document resets and checkpoint failures",
-      "gridPos": {
-        "x": 0,
-        "y": 103,
-        "w": 12,
-        "h": 8
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "custom": {
-            "drawStyle": "bars",
-            "fillOpacity": 80,
-            "stacking": {
-              "mode": "normal"
-            }
-          }
-        },
-        "overrides": []
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "sum (increase(sportal_live_feed_document_resets_total[$__rate_interval]) * on (job, instance) group_left target_info{sportal_mode=\"$mode\"}) or vector(0)",
-          "legendFormat": "document resets"
-        },
-        {
-          "refId": "B",
-          "expr": "sum (increase(sportal_live_feed_checkpoint_failures_total[$__rate_interval]) * on (job, instance) group_left target_info{sportal_mode=\"$mode\"}) or vector(0)",
-          "legendFormat": "checkpoint failures"
-        }
-      ],
-      "description": "A document reset triggers a resync of that topic."
     }
   ]
 }

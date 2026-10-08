@@ -12,7 +12,7 @@ import {
   Schedule,
   Stream
 } from "effect"
-import { Headers, HttpClient } from "effect/http"
+import { HttpClient } from "effect/http"
 import { Frame } from "../../Frame.ts"
 import { HubConfig } from "../../HubConfig.ts"
 import { Provider } from "../Provider.ts"
@@ -43,10 +43,7 @@ export const layer: Layer.Layer<Provider, never, FastCast | HttpClient.HttpClien
         const body = yield* response.text
         const receivedAt = yield* DateTime.now
 
-        const sentAt = Option.getOrUndefined(
-          Option.flatMap(Headers.get(response.headers, "date"), (date) => DateTime.make(date))
-        )
-        return new Frame({ receivedAt, sentAt, source: "poll", channel: league, kind: "whole", body })
+        return new Frame({ receivedAt, source: "poll", channel: league, kind: "whole", body })
       },
       (effect, league) =>
         Effect.mapError(
@@ -59,9 +56,8 @@ export const layer: Layer.Layer<Provider, never, FastCast | HttpClient.HttpClien
             })
         )
     )
-
-    // Its span and timer keep the names they had in Ingest, which the dashboards read.
-    const pollEveryLeague = Effect.fn("Ingest.poll")(function* () {
+    // Its timer keeps the name the dashboards read.
+    const pollEveryLeague = Effect.fn("EspnProvider.pollEveryLeague")(function* () {
       const polled = yield* Effect.forEach(leagues, (league) => polledOf(league, poll(league)))
       const failed = polled.flatMap(({ league, frame }) => (Option.isNone(frame) ? [league] : []))
       yield* Effect.annotateCurrentSpan({ "sportal.leagues": leagues, "sportal.failed_leagues": failed })
@@ -72,10 +68,7 @@ export const layer: Layer.Layer<Provider, never, FastCast | HttpClient.HttpClien
       Stream.flatMap((polled) => Stream.fromIterable(polled.flatMap(({ frame }) => Option.toArray(frame))))
     )
 
-    return Provider.of({
-      frames: Stream.merge(polls, fastCast.frames),
-      decode: EspnDecoder.decode
-    })
+    return Provider.of({ deliveries: EspnDecoder.decode(Stream.merge(polls, fastCast.frames)) })
   })
 )
 
@@ -110,7 +103,7 @@ const polledOf = Effect.fnUntraced(function* (
   const frame = yield* polling.pipe(
     Effect.tapError((error) =>
       Effect.logWarning(
-        "Ingest: provider failed; keeping the last good listing for this league, if any",
+        "EspnProvider: a poll failed; keeping the last good listing for this league, if any",
         error
       ).pipe(Effect.andThen(Metric.update(Metric.withAttributes(providerErrors, { league }), 1)))
     ),
@@ -129,8 +122,7 @@ const polledOf = Effect.fnUntraced(function* (
  */
 const gamesShown = Effect.fnUntraced(function* (league: LeagueId, body: string) {
   const scoreboard = yield* EspnDecoder.byLeague[league].decodeScoreboard(body)
-  const { games } = yield* EspnDecoder.gamesOf(league, scoreboard.events, "poll")
-  return games
+  return yield* EspnDecoder.gamesOf(league, scoreboard.events)
 })
 
 /**
