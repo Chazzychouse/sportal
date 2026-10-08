@@ -29,5 +29,5 @@ real path tests what ships.
 
 - A day the Hub did not see cannot be played; there are no backfilled days.
 - Nothing is built, rebuilt or migrated: a decoder change needs no step between the log and a run.
-- The Hub's dependencies on `effect/cli` and `effect/workers` end with the corpus command.
+- The Hub no longer uses `effect/cli` or `effect/workers`; both leave `allowedUnstableApis`.
 - ADR 0010's measurements of corpus runs and backfills no longer describe anything the repository has.

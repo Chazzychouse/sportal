@@ -82,8 +82,8 @@ day's frame count in `feed.sqlite` does not change".
 | `HubConfig.scenarioFeedLog`, `SPORTAL_SCENARIO_FEED_LOG` | see above |
 | the `corpus` script in `apps/hub/package.json` | |
 
-Kept: `EspnSummary.ts` and `EspnPlay.ts`, which the live decode reads; `FeedLog.replay`, which `Board` and scenario
-days read; and `FeedLog.days`, which `Scenarios.names` reads.
+Kept: `EspnPlay.ts`, which the live decode reads (the summary decode went too, its only reader being the archiver);
+`FeedLog.replay`, which `Board` and scenario days read; and `FeedLog.days`, which `Scenarios.names` reads.
 
 ## Docs and rules
 

@@ -8,7 +8,6 @@ import { Decoded, DecodeObservation } from "../Provider.ts"
 import { EspnEvent } from "./EspnEvent.ts"
 import { Scoreboard } from "./EspnPayload.ts"
 import * as EspnPlay from "./EspnPlay.ts"
-import * as EspnSummary from "./EspnSummary.ts"
 import * as FastCastDocument from "./FastCastDocument.ts"
 
 /**
@@ -37,8 +36,7 @@ export function decode(frames: Stream.Stream<LoggedFrame>): Stream.Stream<Decode
 }
 
 /**
- * Each league's decode of what ESPN sends for it: an event of either feed, a play entity, a game summary, and the
- * site scoreboard's JSON.
+ * Each league's decode of what ESPN sends for it: an event of either feed, a play entity, and the site scoreboard's JSON.
  */
 export const byLeague: { readonly [L in LeagueId]: ReturnType<typeof leagueDecode> } = {
   nfl: leagueDecode("nfl"),
@@ -49,7 +47,6 @@ function leagueDecode(league: LeagueId) {
   return {
     decodeEvent: Schema.decodeUnknownEffect(EspnEvent(league)),
     decodePlay: Schema.decodeUnknownEffect(EspnPlay.FootballPlay(league)),
-    decodeSummary: Schema.decodeUnknownEffect(EspnSummary.SummaryPlays(league)),
     decodeScoreboard: Schema.decodeUnknownEffect(Schema.fromJsonString(Scoreboard))
   }
 }

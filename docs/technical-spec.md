@@ -238,10 +238,9 @@ sportal/
     │       │       ├── EspnProvider.ts     Implements the port: polls each league on its own cadence, merges FastCast's push, and decodes
     │       │       ├── EspnDecoder.ts      Frames to deliveries: listings, snapshots, plays; each league's decode (`byLeague`)
     │       │       ├── ScenarioProvider.ts A scenario's ESPN frames as the provider: polled, pushed, and polled again at their times
-    │       │       ├── EspnPayload.ts      ESPN's JSON as ESPN spells it: events, scoreboard, plays, summary
+    │       │       ├── EspnPayload.ts      ESPN's JSON as ESPN spells it: events, scoreboard, plays
     │       │       ├── EspnEvent.ts        One game as either ESPN feed spells it, as a GameSnapshot
     │       │       ├── EspnPlay.ts         ESPN's plays and their type ids, as Play
-    │       │       ├── EspnSummary.ts      A game summary, as its plays with their wallclocks
     │       │       ├── FastCast.ts         ESPN's push, a service: the socket, as frames; its checkpoint retry is the schedule `FastCast.layer` builds it with
     │       │       ├── FastCastDocument.ts A topic's document, rebuilt from checkpoints and patches
     │       │       ├── FastCastMessage.ts  FastCast's wire shapes
@@ -361,7 +360,7 @@ class FeedLog extends Context.Service<FeedLog, {
   telemetry's 1 s to export what it holds.
 
 **Board** — the one holder of the day's slate, between the feed log and everything that reads games. Not a port: one implementation
-(`docs/adr/0009-one-fold-not-actors.md`, amended by ADR 0010):
+(`docs/adr/0009-one-fold-not-actors.md`, amended by [ADR 0010](./adr/0010-the-poll-falls-back-and-corpus-days-are-built.md)):
 
 ```ts
 class Board extends Context.Service<Board, {

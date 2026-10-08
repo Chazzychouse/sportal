@@ -1,7 +1,7 @@
 import { Cause, Effect, Stream } from "effect"
 
 /**
- * Gzip for the bodies the feed log stores and the recordings the importer writes, and the zlib-deflated patches
+ * Gzip for the bodies the feed log stores and the recordings Scenarios reads, and the zlib-deflated patches
  * FastCast sends: the web `CompressionStream` and `DecompressionStream`, as Effect streams. Each fails with an
  * `UnknownError` when the bytes cannot be compressed or read.
  */

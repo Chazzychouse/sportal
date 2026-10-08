@@ -26,7 +26,7 @@ export function FootballPlay(league: LeagueId) {
  * ids, and its win probability. A timeout's team is its `caller`: ESPN's own `team` on one is the team with the ball.
  * It fails when its start spot has no team.
  */
-export const read = Effect.fnUntraced(function* (
+const read = Effect.fnUntraced(function* (
   league: LeagueId,
   play: Schema.Struct.Type<ReturnType<typeof PlayFields<Schema.String>>> & {
     readonly team?: string | undefined

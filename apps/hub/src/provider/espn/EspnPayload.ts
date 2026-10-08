@@ -149,30 +149,3 @@ export const PlayEntity = Schema.Struct({
     })
   )
 })
-
-/**
- * A play as a summary's drive lists it: its team is the one with the ball as it ended, as FastCast's entity has it, and
- * a timeout's caller is the team participant marked `timeout`.
- */
-const SummaryPlay = Schema.Struct({
-  ...PlayFields(TeamRef("id")),
-  teamParticipants: Schema.optional(
-    Schema.Array(Schema.Struct({ id: Schema.String, timeout: Schema.optional(Schema.Boolean) }))
-  ),
-  wallclock: Schema.optional(Schema.DateTimeUtcFromString)
-})
-
-/**
- * What ESPN's game summary has of its plays: each drive's, and each play's win probability by its id. A summary
- * without drives has no plays.
- */
-export const Summary = Schema.Struct({
-  drives: Schema.optional(
-    Schema.Struct({
-      previous: Schema.Array(Schema.Struct({ plays: Schema.optional(Schema.Array(SummaryPlay)) }))
-    })
-  ),
-  winprobability: Schema.optional(
-    Schema.Array(Schema.Struct({ playId: Schema.String, homeWinPercentage: Schema.Finite }))
-  )
-})

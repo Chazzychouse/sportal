@@ -143,10 +143,10 @@ A reader opens a file to see the thing it is named for. Keep it that way.
   waits for the UI to come up. Use `pnpm dev:x11` to run the shell through XWayland.
 - `SPORTAL_SCENARIO=<name> SPORTAL_SCENARIO_SPEED=10 pnpm dev` — play a scenario instead of ESPN and YouTube TV, ten
   times faster. A name that is a game day, `YYYY-MM-DD`, plays that day as the feed log recorded it (`feed.sqlite` in
-  the data directory, read and never appended to); any other name is a recording, `fixtures/scenarios/<name>.frames.jsonl.gz`.
-  Every scenario plays through ESPN's decode.
-  It plays as the provider through the real ingest and slate, on a feed log in memory. Every game plays as a synthetic stream
-  page. The feed log records every game day.
+  the data directory, read and never appended to); any other name is a recording,
+  `fixtures/scenarios/<name>.frames.jsonl.gz`. Every scenario plays through ESPN's decode. It plays as the provider
+  through the real ingest and slate, on a feed log in memory. Every game plays as a synthetic stream page. The feed log
+  records every game day.
 - `pnpm dev:golden` — the same, with the golden scenario: the recorded `crowded-fourth-quarter` at ten times speed.
 - `pnpm --filter @sportal/hub dev` — run only the Hub on port 4400 (API and live stream), on every interface so a phone Remote can reach it (`SPORTAL_HOST` narrows it). In
   dev it keeps its SQLite database in `.sportal/` at the repo root; set `SPORTAL_DATA_DIR` to move it. Started any other

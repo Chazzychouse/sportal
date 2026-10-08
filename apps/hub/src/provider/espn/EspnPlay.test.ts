@@ -1,9 +1,8 @@
-import { existsSync, readFileSync } from "node:fs"
+import { readFileSync } from "node:fs"
 import { assert, describe, it } from "@effect/vitest"
 import { FootballPlay, Other, type Play, PlayId, Rush } from "@sportal/domain/Play"
 import { TeamId } from "@sportal/domain/Team"
 import { Effect, Schema } from "effect"
-import * as Gzip from "../../Gzip.ts"
 import { Delivery } from "../../slate/Delivery.ts"
 import { Provider } from "../Provider.ts"
 import { decodedFrames } from "../TestProvider.ts"
@@ -239,17 +238,8 @@ describe("EspnPlay.FootballPlay", () => {
           .flatMap(({ deliveries }) => deliveries)
           .flatMap((delivery) => (Delivery.guards.Plays(delivery) ? delivery.plays : []))
         const entities = yield* Effect.forEach(Object.values(recorded), (one) => decodePlay(one))
-        const summaries = yield* Effect.forEach(
-          [
-            { league: "nfl", name: "nfl-summary-401872971" },
-            { league: "nfl", name: "nfl-summary-401872922" },
-            { league: "nfl", name: "nfl-summary-401872929" },
-            { league: "fbs", name: "fbs-summary-401856705" }
-          ] as const,
-          ({ league, name }) => Effect.flatMap(summaryOf(name), EspnDecoder.byLeague[league].decodeSummary)
-        )
 
-        const all = [...pushed, ...entities, ...summaries.flat().map(({ play }) => play)]
+        const all = [...pushed, ...entities]
 
         assert.isNotEmpty(pushed)
         assert.deepStrictEqual(
@@ -341,12 +331,3 @@ describe("EspnPlay.unknownTypes", () => {
     assert.deepStrictEqual(types, [])
   })
 })
-
-// A recorded summary in `fixtures/`, as JSON or gzip'd JSON.
-function summaryOf(name: string) {
-  const plain = new URL(`./fixtures/${name}.json`, import.meta.url)
-  const text = existsSync(plain)
-    ? Effect.succeed(readFileSync(plain, "utf8"))
-    : Gzip.decompress(readFileSync(new URL(`./fixtures/${name}.json.gz`, import.meta.url)), "gzip")
-  return Effect.map(text, (json): unknown => JSON.parse(json))
-}
