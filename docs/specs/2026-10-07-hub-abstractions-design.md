@@ -17,7 +17,7 @@ What the user named:
 After this work:
 
 ```
-Provider.frames ─Ingest─▶ FeedLog ─▶ Board (decode ▶ fold, timer) ─▶ HubServer, Switcher, BoardTelemetry
+Provider.frames ─Ingest─▶ FeedLog ─▶ Board (decode ▶ fold, timer; tells BoardTelemetry) ─▶ HubServer, Switcher
 ```
 
 ## Decisions
@@ -55,7 +55,7 @@ apps/hub/src/
     Delivery.ts          moved from domain, with DeliverySource
     SlateObservation.ts  moved from domain
     Board.ts             the one holder of the slate
-    BoardTelemetry.ts    a subscriber of Board.taken (was LiveSlateTelemetry.ts)
+    BoardTelemetry.ts    a service the board tells of every take (was LiveSlateTelemetry.ts)
   Switcher.ts            was LiveStage.ts
   provider/
     Provider.ts          one port: frames and decode; Decoded and DecodeObservation beside it
@@ -236,9 +236,10 @@ follow(from: DateTime.Utc): Effect.Effect<{
 
 ### Outside the board
 
-- **`BoardTelemetry.layer`** subscribes to `taken` and tells each item: its observations, spans and gauges, as
-  `LiveSlateTelemetry` does now. It logs the replay summary when the first item that was not replayed arrives. Its
-  counts come from a `Stream.scan`, not a ref.
+- **`BoardTelemetry`** is a service that `Board.layer` yields and tells of each take and tick: its observations, spans
+  and gauges, as `LiveSlateTelemetry` does now. It also tells the replay summary and the state gauges at the boundary.
+  It is told rather than subscribed, because the replayed takes happen during the board's build, before anything
+  outside could subscribe. The replay counts come from a `Stream.mapAccum`, not a ref.
 - **Game events** are `taken`, without the replayed items, flattened to their `events`. They are derived in `HubServer`,
   their only reader.
 - **`SlateChanged`** is `changes`, debounced 250 ms and mapped through `slate.games` and `slate.recentPlays`. A `GET`,
