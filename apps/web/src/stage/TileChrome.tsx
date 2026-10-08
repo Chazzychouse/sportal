@@ -1,5 +1,5 @@
 import type { GameSnapshot } from "@sportal/domain/Game"
-import type { Stage, Tile } from "@sportal/domain/Stage"
+import { type Stage, Tile } from "@sportal/domain/Stage"
 import { Button } from "@/design/button"
 import { cn } from "@/design/ClassName"
 import { GameStatus } from "../game/GameStatus.tsx"
@@ -22,12 +22,12 @@ export function TileChrome(props: {
   onSelect: () => void
 }) {
   const { tile, slot } = props
-  const onAir = tile._tag !== "Empty" && props.stage.hears(tile.game)
+  const onAir = !Tile.guards.Empty(tile) && props.stage.hears(tile.game)
 
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: dragging is a shortcut; every swap is also in the command palette.
     <div
-      draggable={tile._tag !== "Empty"}
+      draggable={!Tile.guards.Empty(tile)}
       onDragStart={(event) => event.dataTransfer.setData(tileDrag, String(slot))}
       onDragOver={(event) => {
         if (event.dataTransfer.types.includes(tileDrag)) event.preventDefault()
@@ -62,7 +62,7 @@ export function TileChrome(props: {
         <span className="flex min-w-0 items-center gap-1.5 truncate font-mono">
           {props.game === undefined ? (
             <span className="font-sans text-muted-foreground">
-              {tile._tag === "Empty" ? "Empty — pick a game" : "Loading…"}
+              {Tile.guards.Empty(tile) ? "Empty — pick a game" : "Loading…"}
             </span>
           ) : (
             <>
