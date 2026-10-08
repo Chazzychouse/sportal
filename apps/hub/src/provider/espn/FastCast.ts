@@ -1,4 +1,4 @@
-import type { GameSnapshot } from "@sportal/domain/Game"
+import { GameSnapshot } from "@sportal/domain/Game"
 import type { LeagueId } from "@sportal/domain/League"
 import {
   Array as Arr,
@@ -52,12 +52,6 @@ export class FastCast extends Context.Service<
     readonly frames: Stream.Stream<Frame>
   }
 >()("sportal/hub/FastCast") {
-  /**
-   * How long before its kickoff an upcoming game counts with the live ones: FastCast follows its topic, and ESPN's
-   * scoreboard is polled every minute.
-   */
-  static readonly kickoffWindow = Duration.minutes(30)
-
   /**
    * FastCast for the leagues `HubConfig` names, following a topic whose checkpoint failed again on `retry.checkpoint`,
    * then leaving it to polling, and opening the socket again on `retry.reconnect` after each failure, which it logs and
@@ -290,14 +284,14 @@ const steered = Effect.fnUntraced(function* (
   return [next, steers] as const
 })
 
-/** The topic of each game live at `now`, or upcoming with its kickoff within `FastCast.kickoffWindow` of it. */
+/** The topic of each game live at `now`, or upcoming with its kickoff within `GameSnapshot.kickoffWindow` of it. */
 function followedAt(
   games: ReadonlyMap<LeagueId, ReadonlyArray<GameSnapshot>>,
   now: DateTime.Utc
 ): ReadonlyArray<string> {
   return [...games.values()]
     .flat()
-    .filter((game) => game.isLiveOrKicksOffWithin(FastCast.kickoffWindow, now))
+    .filter((game) => game.isLiveOrKicksOffWithin(GameSnapshot.kickoffWindow, now))
     .map((game) => topicOf(game.league, game.id))
 }
 

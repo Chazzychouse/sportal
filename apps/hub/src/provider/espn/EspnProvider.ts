@@ -1,4 +1,4 @@
-import type { GameSnapshot } from "@sportal/domain/Game"
+import { GameSnapshot } from "@sportal/domain/Game"
 import type { LeagueId } from "@sportal/domain/League"
 import { DateTime, Duration, Effect, HashMap, Layer, Metric, Option, Schedule, Stream } from "effect"
 import { Headers, HttpClient, HttpClientError } from "effect/http"
@@ -169,7 +169,7 @@ function interval(
   const anyUnread = polled.some(({ games }) => Option.isNone(games))
   const normal = games.some((game) => game.progress() === "live")
     ? Duration.seconds(10)
-    : games.some((game) => game.isLiveOrKicksOffWithin(FastCast.kickoffWindow, now))
+    : games.some((game) => game.isLiveOrKicksOffWithin(GameSnapshot.kickoffWindow, now))
       ? Duration.minutes(1)
       : Duration.minutes(15)
   return anyUnread ? Duration.min(normal, Duration.seconds(30)) : normal

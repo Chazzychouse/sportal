@@ -1,4 +1,4 @@
-import { DateTime, type Duration, Option, Order, Schema } from "effect"
+import { DateTime, Duration, Option, Order, Schema } from "effect"
 import { GameEventKind } from "./GameEvent.ts"
 import { LeagueId } from "./League.ts"
 import { Situation } from "./Situation.ts"
@@ -40,6 +40,12 @@ export class GameSnapshot extends Schema.Class<GameSnapshot>("sportal/GameSnapsh
   broadcasts: Schema.Array(Broadcast),
   situation: Schema.optional(Situation)
 }) {
+  /**
+   * How long before its kickoff an upcoming game counts with the live ones: the slate holds it as current, FastCast
+   * follows its topic, and ESPN's scoreboard is polled every minute.
+   */
+  static readonly kickoffWindow = Duration.minutes(30)
+
   /** Live games first, then upcoming by kickoff, then everything that is over. */
   static readonly watchOrder: Order.Order<GameSnapshot> = Order.combine(
     Order.mapInput(Order.Number, (game: GameSnapshot) => watchRank[game.progress()]),

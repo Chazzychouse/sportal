@@ -20,9 +20,6 @@ export class Acknowledgement extends Data.Class<{
   /** A live game no snapshot has reached for this long is stale. */
   static readonly staleAfter = Duration.seconds(90)
 
-  /** An upcoming game is current from this long before kickoff. */
-  static readonly currentBefore = Duration.minutes(30)
-
   /** How long a stale game stays current, from when it was last heard. */
   static readonly staleCurrentFor = Duration.minutes(30)
 
@@ -116,7 +113,7 @@ export class Acknowledgement extends Data.Class<{
   dueAfter(game: GameSnapshot, now: DateTime.Utc): Option.Option<DateTime.Utc> {
     const deadlines = Match.value(game.progress()).pipe(
       Match.when("upcoming", () => [
-        Option.some(DateTime.subtractDuration(game.kickoff, Acknowledgement.currentBefore))
+        Option.some(DateTime.subtractDuration(game.kickoff, GameSnapshot.kickoffWindow))
       ]),
       Match.when("live", () => [
         Option.map(this.held, ({ until }) => until),
@@ -136,10 +133,10 @@ export class Acknowledgement extends Data.Class<{
     return game.progress() === "live" ? Option.some(this.heardAt) : Option.none()
   }
 
-  /** Live or holding, stale for less than `staleCurrentFor`, or upcoming with kickoff within `currentBefore` of `now`. */
+  /** Live or holding, stale for less than `staleCurrentFor`, or upcoming with kickoff within `GameSnapshot.kickoffWindow` of `now`. */
   isCurrent(game: GameSnapshot, now: DateTime.Utc): boolean {
     return Match.value(this.state(game, now)).pipe(
-      Match.when("Upcoming", () => game.isLiveOrKicksOffWithin(Acknowledgement.currentBefore, now)),
+      Match.when("Upcoming", () => game.isLiveOrKicksOffWithin(GameSnapshot.kickoffWindow, now)),
       Match.when("Live", () => true),
       Match.when("Holding", () => true),
       Match.when("Stale", () =>
