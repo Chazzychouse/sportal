@@ -1,6 +1,6 @@
 import type { GameSnapshot } from "@sportal/domain/Game"
 import type { LeagueId } from "@sportal/domain/League"
-import { DateTime, Duration, Effect, HashMap, Layer, Metric, Option, Stream } from "effect"
+import { DateTime, Duration, Effect, HashMap, Layer, Metric, Option, Schedule, Stream } from "effect"
 import { Headers, HttpClient, HttpClientError } from "effect/http"
 import { Frame } from "../../Frame.ts"
 import { HubConfig } from "../../HubConfig.ts"
@@ -56,21 +56,8 @@ export const layer: Layer.Layer<Provider, never, FastCast | HttpClient.HttpClien
       return polled
     }, Effect.trackDuration(pollDuration))
 
-    // Each poll waits as the one before it left, then carries each league's last good games on.
-    const polls = Stream.fromEffectRepeat(Effect.void).pipe(
-      Stream.mapAccumEffect(
-        (): LastPoll => ({ shown: HashMap.empty(), wait: Duration.zero }),
-        (last) =>
-          Effect.gen(function* () {
-            yield* Effect.sleep(last.wait)
-            const polled = yield* pollEveryLeague()
-            const now = yield* DateTime.now
-
-            const shown = shownAfter(last.shown, polled)
-            const next: LastPoll = { shown, wait: interval(shown, polled, now) }
-            return [next, polled.flatMap(({ frame }) => Option.toArray(frame))] as const
-          })
-      )
+    const polls = Stream.fromEffectSchedule(pollEveryLeague(), polling).pipe(
+      Stream.flatMap((polled) => Stream.fromIterable(polled.flatMap(({ frame }) => Option.toArray(frame))))
     )
 
     return Provider.of({
@@ -133,13 +120,27 @@ const gamesShown = Effect.fnUntraced(function* (league: LeagueId, body: string) 
 })
 
 /**
- * What the last poll left: the games each league's scoreboard last showed, kept from an earlier poll for a league that
- * failed or did not decode since, and how long to wait before the next poll.
+ * ESPN's polling policy: each poll waits as `interval` says of the games each league's scoreboard last showed. A
+ * league that failed or did not decode keeps the games it last showed, and its failure caps the wait at 30 seconds.
  */
-interface LastPoll {
-  readonly shown: HashMap.HashMap<LeagueId, ReadonlyArray<GameSnapshot>>
-  readonly wait: Duration.Duration
-}
+const polling: Schedule.Schedule<
+  HashMap.HashMap<LeagueId, ReadonlyArray<GameSnapshot>>,
+  ReadonlyArray<Polled>
+> = Schedule.fromStep(
+  Effect.sync(() => {
+    // Effect's `fromStep` gives the step no previous state, so the closure carries it, as Effect's own Schedules do:
+    // fresh for each run, and only ever rebound to a new immutable value.
+    let shown = HashMap.empty<LeagueId, ReadonlyArray<GameSnapshot>>()
+    return (now: number, polled: ReadonlyArray<Polled>) => {
+      shown = shownAfter(shown, polled)
+      const next: [HashMap.HashMap<LeagueId, ReadonlyArray<GameSnapshot>>, Duration.Duration] = [
+        shown,
+        interval(shown, polled, DateTime.makeUnsafe(now))
+      ]
+      return Effect.succeed(next)
+    }
+  })
+)
 
 /** `shown`, with each league `polled` read again replaced by what its scoreboard shows now. */
 function shownAfter(
