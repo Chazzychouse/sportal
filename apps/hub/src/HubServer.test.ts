@@ -14,7 +14,8 @@ import { Director } from "./Director.ts"
 import { HubConfig } from "./HubConfig.ts"
 import * as HubServer from "./HubServer.ts"
 import { Delivery } from "./slate/Delivery.ts"
-import * as YouTubeTv from "./source/youtube-tv/YouTubeTv.ts"
+import { GuideReader } from "./source/GuideReader.ts"
+import { Source } from "./source/Source.ts"
 import { delivered, directorOver } from "./TestDirector.ts"
 
 type Interfaces = Record<
@@ -419,7 +420,8 @@ function nextComment(lines: Queue.Queue<string>) {
 /** Everything behind the API, over a provider the test feeds. */
 function hubUnderTest() {
   return directorOver.pipe(
-    Layer.provideMerge(YouTubeTv.layer),
+    Layer.provideMerge(Source.layerYouTubeTv),
+    Layer.provideMerge(GuideReader.layerYouTubeTv),
     Layer.provideMerge(HubConfig.layerTest({ SPORTAL_VERSION: "1.2.3" }))
   )
 }

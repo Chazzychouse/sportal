@@ -23,9 +23,9 @@ import { decodedFrames, recordedNeAtBuf, recordedPlays } from "./provider/espn/T
 import { Provider, ProviderFeed } from "./provider/Provider.ts"
 import { Delivery } from "./slate/Delivery.ts"
 import { Slate } from "./slate/Slate.ts"
+import { GuideReader } from "./source/GuideReader.ts"
 import { Source } from "./source/Source.ts"
-import { recordedGuide } from "./source/youtube-tv/TestYouTubeTv.ts"
-import * as YouTubeTv from "./source/youtube-tv/YouTubeTv.ts"
+import { readRecordedGuide, recordedGuide } from "./source/youtube-tv/TestYouTubeTv.ts"
 import { delivered, directorOver } from "./TestDirector.ts"
 import { gauged, recordingLogs, recordingSpans, withMetrics } from "./TestTelemetry.ts"
 
@@ -146,7 +146,7 @@ describe("Director, the slate", () => {
       Effect.provide(
         Director.layer.pipe(
           Layer.provide(Provider.layerTest(Stream.empty)),
-          Layer.provide(YouTubeTv.layer),
+          Layer.provide(Source.layerTest(() => ChannelAvailability.NoGuide({ source: "YouTube TV" }))),
           Layer.provideMerge(layer)
         )
       )
@@ -331,8 +331,7 @@ const ohioStateAtIowa = snapshot({
   broadcasts: [broadcast("CBS")]
 })
 
-// When the recorded guide was read, and News 3's live address in it.
-const recordedAt = DateTime.toEpochMillis(DateTime.makeUnsafe("2026-10-03T20:24:45Z"))
+// News 3's live address in the recorded guide.
 const news3Live = "https://tv.youtube.com/watch/y6zFA17zDsw?vp=0gEEEgIwAQ%3D%3D"
 
 describe("Director, the Screen", () => {
@@ -368,7 +367,7 @@ describe("Director, the Screen", () => {
   it.effect("should assign a game the guide carries as a stream tile", () =>
     Effect.gen(function* () {
       const director = yield* Director
-      yield* guideReadAtRecording()
+      yield* readRecordedGuide
 
       const screen = yield* director.dispatch({ _tag: "Assign", tile: 0, game: ohioStateAtIowa.id })
 
@@ -383,7 +382,7 @@ describe("Director, the Screen", () => {
   it.effect("should assign a game the guide does not carry as a data tile, not in the guide", () =>
     Effect.gen(function* () {
       const director = yield* Director
-      yield* guideReadAtRecording()
+      yield* readRecordedGuide
       yield* director.dispatch({ _tag: "Assign", tile: 0, game: ohioStateAtIowa.id })
 
       const screen = yield* director.dispatch({ _tag: "Assign", tile: 1, game: GameId.make("4") })
@@ -409,10 +408,10 @@ describe("Director, the Screen", () => {
   it.live("should refresh the screen when the source reads a guide", () =>
     Effect.gen(function* () {
       const director = yield* Director
-      const source = yield* Source
+      const reader = yield* GuideReader
       yield* director.dispatch({ _tag: "Assign", tile: 0, game: GameId.make("5") })
 
-      yield* source.readGuide(recordedGuide)
+      yield* reader.readGuide(recordedGuide)
 
       const screen = yield* firstScreenWhere(
         director.screenChanges,
@@ -471,11 +470,12 @@ describe("Director, the Screen", () => {
           )
           return Source.of({ ...source, availability })
         })
-      ).pipe(Layer.provide(YouTubeTv.layer))
+      ).pipe(Layer.provide(Source.layerYouTubeTv))
       const guideReadAtOnce = readAtOnce().pipe(
         Layer.provideMerge(Director.layer),
         Layer.provide(Provider.layerTestFed),
-        Layer.provide(countingSource)
+        Layer.provide(countingSource),
+        Layer.provideMerge(GuideReader.layerYouTubeTv)
       )
 
       yield* Effect.gen(function* () {
@@ -498,17 +498,18 @@ describe("Director, the Screen", () => {
         const directorOnStaleRead = listed(games).pipe(
           Layer.provideMerge(Director.layer),
           Layer.provideMerge(Provider.layerTestFed),
-          Layer.provideMerge(availabilityHeldOnce(reading, release))
+          Layer.provideMerge(availabilityHeldOnce(reading, release)),
+          Layer.provideMerge(GuideReader.layerYouTubeTv)
         )
 
         const { assigned, screen } = yield* Effect.gen(function* () {
           const director = yield* Director
-          const source = yield* Source
+          const reader = yield* GuideReader
           const assigning = yield* director
             .dispatch({ _tag: "Assign", tile: 0, game: GameId.make("5") })
             .pipe(Effect.forkScoped)
           yield* Deferred.await(reading)
-          yield* source.readGuide(recordedGuide)
+          yield* reader.readGuide(recordedGuide)
           yield* Deferred.succeed(release, undefined)
 
           const assigned = yield* Fiber.join(assigning)
@@ -528,13 +529,13 @@ describe("Director, the Screen", () => {
     Effect.gen(function* () {
       const screen = yield* Effect.gen(function* () {
         const director = yield* Director
-        const source = yield* Source
+        const reader = yield* GuideReader
         const feed = yield* ProviderFeed
         yield* director.dispatch({ _tag: "Assign", tile: 0, game: GameId.make("1") })
         yield* director.dispatch({ _tag: "Assign", tile: 1, game: GameId.make("5") })
         yield* feed.deliver(listings(games.filter((snapshot) => snapshot.id !== GameId.make("1"))))
 
-        yield* source.readGuide(recordedGuide)
+        yield* reader.readGuide(recordedGuide)
 
         return yield* firstScreenWhere(director.screenChanges, (screen) => !isNoGuideTile(screen.tiles[1]))
       }).pipe(Effect.provide(directing(games)))
@@ -548,7 +549,7 @@ describe("Director, the Screen", () => {
     Effect.gen(function* () {
       const source = yield* Source
       const director = yield* Director
-      yield* guideReadAtRecording()
+      yield* readRecordedGuide
       const playing = yield* director.dispatch({ _tag: "Assign", tile: 0, game: ohioStateAtIowa.id })
 
       yield* TestClock.adjust("45 minutes")
@@ -580,24 +581,14 @@ describe("Director, the Screen", () => {
   )
 })
 
-/** The source reads the recorded guide at the moment it was recorded. */
-function guideReadAtRecording() {
-  return Effect.gen(function* () {
-    const source = yield* Source
-
-    yield* TestClock.setTime(recordedAt)
-    yield* source.readGuide(recordedGuide)
-  })
-}
-
 /** Reads the recorded guide as soon as the Director is built: depending on it orders this after the layer. */
 function readAtOnce() {
   return Layer.effectDiscard(
     Effect.gen(function* () {
       yield* Director
-      const source = yield* Source
+      const reader = yield* GuideReader
 
-      yield* source.readGuide(recordedGuide)
+      yield* reader.readGuide(recordedGuide)
     })
   )
 }
@@ -623,7 +614,7 @@ function availabilityHeldOnce(reading: Deferred.Deferred<void>, release: Deferre
       })
       return Source.of({ ...source, availability })
     })
-  ).pipe(Layer.provide(YouTubeTv.layer))
+  ).pipe(Layer.provide(Source.layerYouTubeTv))
 }
 
 /**
@@ -668,5 +659,8 @@ function isNoGuideTile(tile: Tile | undefined) {
   return tile !== undefined && Tile.guards.DataTile(tile) && Predicate.isTagged(tile.why, "NoGuide")
 }
 
-/** The Director over a fed provider, against YouTube TV with nothing read yet; both provided too. */
-const directed = directorOver.pipe(Layer.provideMerge(YouTubeTv.layer))
+/** The Director over a fed provider, against YouTube TV with nothing read yet; it and the guide reader provided too. */
+const directed = directorOver.pipe(
+  Layer.provideMerge(Source.layerYouTubeTv),
+  Layer.provideMerge(GuideReader.layerYouTubeTv)
+)
