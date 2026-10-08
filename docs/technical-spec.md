@@ -224,7 +224,8 @@ sportal/
     │           ├── youtube-tv/
     │           │   ├── YouTubeTvGuide.ts    A guide response as channels and airings
     │           │   ├── YouTubeTvPayload.ts  The guide response's wire shape
-    │           │   └── TestYouTubeTv.ts     A recorded guide for tests of other modules
+    │           │   ├── TestYouTubeTv.ts     A recorded guide for tests of other modules
+    │           │   └── fixtures/            Recorded real payloads
     │           └── twitch/
     │               └── Twitch.ts            Twitch's lineup
     │

@@ -30,7 +30,7 @@ easiest to break.
   `shadcn add` and `shadcn diff` keep working. Nothing else goes there.
 - No mirror types. There is no `GameDto`, `GameRow`, `GameResponse`, or `GameProps`. The domain schema is
   the wire format. Derive a variant at the point of use; do not name it.
-- In the Hub, only `main.ts` and tests name concrete providers and sources (ESPN's only through `provider/espn/Espn.ts`); a source port's layer variants (`Source.layerYouTubeTv`, `GuideReader.layerYouTubeTv`) name theirs too, and only the port modules import a source's folder, and `main.ts` is only the layer pipe and how the process runs it.
+- In the Hub, only `main.ts` and tests name concrete providers and sources (ESPN's only through `provider/espn/Espn.ts`); a source port's layer variants (`Source.layerYouTubeTv`, `GuideReader.layerYouTubeTv`) name theirs too, and only the port modules import a source's folder. `main.ts` is only the layer pipe and how the process runs it.
   Everything else depends on the port.
 - In the Hub, only `HubConfig.ts` reads the environment. A new setting is a field there, with its default.
 - A service is yielded where it is used, never passed as an argument. A layer that needs a setting yields `HubConfig`
