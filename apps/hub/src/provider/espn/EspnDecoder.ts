@@ -72,13 +72,13 @@ const noDeliveries: ReadonlyArray<Delivery> = []
 const pushed = Effect.fnUntraced(function* (state: State, frame: Frame) {
   const { documents, change } = yield* FastCastDocument.advance(state.documents, frame)
   const said = Option.match(change, {
-    onNone: () => Effect.succeed<ReadonlyArray<Delivery>>([]),
+    onNone: () => Effect.succeed(noDeliveries),
     onSome: FastCastDocument.Change.$match({
       Scoreboard: ({ league, events }) =>
         Effect.map(gamesOf(league, events), (games) => advancedToListed(state.listings, games)),
       Game: ({ league, game, plays }) =>
         Effect.map(playsOf(league, plays), (sorted) => [Delivery.cases.Plays.make({ game, plays: sorted })]),
-      Reset: () => Effect.succeed<ReadonlyArray<Delivery>>([])
+      Reset: () => Effect.succeed(noDeliveries)
     })
   })
   const deliveries = yield* said

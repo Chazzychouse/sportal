@@ -2,7 +2,7 @@ import type { LeagueId } from "@sportal/domain/League"
 import { Play, type PlayOutcome } from "@sportal/domain/Play"
 import { Effect, Predicate, Schema, SchemaGetter } from "effect"
 import { teamId } from "./EspnEvent.ts"
-import { PlayEntity, type PlayFields, type PlayType } from "./EspnPayload.ts"
+import { PlayEntity, type PlayType } from "./EspnPayload.ts"
 
 /** ESPN's play entity, as a game package lists it under `entities.plays`, read as a `Play` of `league`. */
 export function FootballPlay(league: LeagueId) {
@@ -28,8 +28,7 @@ export function FootballPlay(league: LeagueId) {
  */
 const read = Effect.fnUntraced(function* (
   league: LeagueId,
-  play: Schema.Struct.Type<ReturnType<typeof PlayFields<Schema.String>>> & {
-    readonly team?: string | undefined
+  play: typeof PlayEntity.Type & {
     readonly caller?: string | undefined
     readonly homeWinProbability?: number | undefined
   }

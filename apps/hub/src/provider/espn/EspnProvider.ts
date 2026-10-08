@@ -74,15 +74,10 @@ export const layer: Layer.Layer<Provider, never, FastCast | HttpClient.HttpClien
 
 /** The site scoreboard of `league` the Hub polls: today's games, every FBS game for college. */
 function scoreboardUrl(league: LeagueId): string {
-  return league === "nfl"
-    ? `${siteUrl(league)}/scoreboard`
-    : `${siteUrl(league)}/scoreboard?groups=80&limit=300`
-}
-
-/** ESPN's site API for `league`, which its scoreboard and its game summaries are under. */
-function siteUrl(league: LeagueId): string {
   const base = "https://site.api.espn.com/apis/site/v2/sports/football"
-  return league === "nfl" ? `${base}/nfl` : `${base}/college-football`
+  return league === "nfl"
+    ? `${base}/nfl/scoreboard`
+    : `${base}/college-football/scoreboard?groups=80&limit=300`
 }
 
 /**
@@ -113,8 +108,7 @@ const polledOf = Effect.fnUntraced(function* (
     onNone: () => Effect.succeedNone,
     onSome: ({ body }) => Effect.option(gamesShown(league, body))
   })
-  const polled: Polled = { league, frame, games }
-  return polled
+  return { league, frame, games } satisfies Polled
 })
 
 /**

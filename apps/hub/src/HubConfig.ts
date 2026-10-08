@@ -3,13 +3,26 @@ import {
   Config,
   ConfigProvider,
   Context,
-  Effect,
   Layer,
   type LogLevel,
   type Option,
   Schema,
-  SchemaTransformation
+  SchemaGetter
 } from "effect"
+
+// "localhost:4318" parses as a URL with scheme "localhost:", so the scheme is checked.
+const OtlpUrl = Schema.URLFromString.check(
+  Schema.makeFilter((url) => url.protocol === "http:" || url.protocol === "https:", {
+    expected: "an http: or https: URL"
+  })
+)
+
+const LeagueList = Schema.String.pipe(
+  Schema.decodeTo(Schema.Array(Schema.Trim.pipe(Schema.decodeTo(LeagueId))).check(Schema.isMinLength(1)), {
+    decode: SchemaGetter.split(),
+    encode: SchemaGetter.transform((leagues) => leagues.join(","))
+  })
+)
 
 /** Every setting the Hub reads from its environment, decoded once at startup. */
 export class HubConfig extends Context.Service<
@@ -30,57 +43,22 @@ export class HubConfig extends Context.Service<
 >()("sportal/hub/HubConfig") {
   static readonly layer: Layer.Layer<HubConfig, Config.ConfigError> = Layer.effect(
     HubConfig,
-    Effect.gen(function* () {
-      const port = yield* Config.Port("SPORTAL_PORT").pipe(Config.withDefault(4400))
+    Config.all({
+      port: Config.Port("SPORTAL_PORT").pipe(Config.withDefault(4400)),
       // Every interface, so a Remote on the home network can reach the Hub.
-      const host = yield* Config.String("SPORTAL_HOST").pipe(Config.withDefault("0.0.0.0"))
-      const webRoot = yield* Config.String("SPORTAL_WEB_ROOT").pipe(Config.option)
-      const scenario = yield* Config.String("SPORTAL_SCENARIO").pipe(Config.option)
+      host: Config.String("SPORTAL_HOST").pipe(Config.withDefault("0.0.0.0")),
+      webRoot: Config.option(Config.String("SPORTAL_WEB_ROOT")),
+      scenario: Config.option(Config.String("SPORTAL_SCENARIO")),
       // Zero, a negative speed, or NaN would stall or break the scenario clock.
-      const scenarioSpeed = yield* Config.schema(
+      scenarioSpeed: Config.schema(
         Schema.Finite.check(Schema.isGreaterThan(0)),
         "SPORTAL_SCENARIO_SPEED"
-      ).pipe(Config.withDefault(1))
-      const logLevel = yield* Config.LogLevel("SPORTAL_LOG_LEVEL").pipe(Config.withDefault("Info"))
-      const logFormat = yield* Config.Literals(["pretty", "json"], "SPORTAL_LOG_FORMAT").pipe(
-        Config.withDefault("pretty")
-      )
-      const version = yield* Config.String("SPORTAL_VERSION").pipe(Config.withDefault("dev"))
-      // "localhost:4318" parses as a URL with scheme "localhost:", so the scheme is checked.
-      const otlpUrl = yield* Config.schema(
-        Schema.URLFromString.check(
-          Schema.makeFilter((url) => url.protocol === "http:" || url.protocol === "https:", {
-            expected: "an http: or https: URL"
-          })
-        ),
-        "SPORTAL_OTLP_URL"
-      ).pipe(Config.option)
-      const leagues = yield* Config.schema(
-        Schema.String.pipe(
-          Schema.decodeTo(
-            Schema.Array(Schema.String),
-            SchemaTransformation.transform<ReadonlyArray<string>, string>({
-              decode: (list) => list.split(",").map((league) => league.trim()),
-              encode: (leagues) => leagues.join(",")
-            })
-          ),
-          Schema.decodeTo(Schema.Array(LeagueId).check(Schema.isMinLength(1)))
-        ),
-        "SPORTAL_LEAGUES"
-      ).pipe(Config.withDefault(LeagueId.literals))
-
-      return HubConfig.of({
-        port,
-        host,
-        webRoot,
-        scenario,
-        scenarioSpeed,
-        logLevel,
-        logFormat,
-        version,
-        otlpUrl,
-        leagues
-      })
+      ).pipe(Config.withDefault(1)),
+      logLevel: Config.LogLevel("SPORTAL_LOG_LEVEL").pipe(Config.withDefault("Info")),
+      logFormat: Config.Literals(["pretty", "json"], "SPORTAL_LOG_FORMAT").pipe(Config.withDefault("pretty")),
+      version: Config.String("SPORTAL_VERSION").pipe(Config.withDefault("dev")),
+      otlpUrl: Config.option(Config.schema(OtlpUrl, "SPORTAL_OTLP_URL")),
+      leagues: Config.schema(LeagueList, "SPORTAL_LEAGUES").pipe(Config.withDefault(LeagueId.literals))
     })
   )
 

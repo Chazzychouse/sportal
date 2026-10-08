@@ -1,4 +1,4 @@
-import { Record, Schema, SchemaGetter } from "effect"
+import { Schema, SchemaGetter } from "effect"
 
 /** The site scoreboard, as polled or as fetched for a past date: its events, each for `EspnEvent` to read. */
 export const Scoreboard = Schema.Struct({ events: Schema.Array(Schema.Unknown) })
@@ -90,58 +90,42 @@ export const FastCastEvent = Schema.Struct({
   situation: Schema.optional(EspnSituation)
 })
 
-/**
- * A play's reference to a team, read as ESPN's id for it: FastCast's entity spells it `{ $key }`, a game summary's play
- * `{ id }`.
- */
-function TeamRef<Key extends "$key" | "id">(key: Key) {
-  return Schema.Record(Schema.Literal(key), Schema.String).pipe(
-    Schema.decodeTo(Schema.String, {
-      decode: SchemaGetter.transform((ref) => ref[key]),
-      encode: SchemaGetter.transform((id) => Record.singleton(key, id))
-    })
-  )
-}
+/** A play's reference to a team, `{ $key }`, read as ESPN's id for it. */
+const TeamRef = Schema.Struct({ $key: Schema.String }).pipe(
+  Schema.decodeTo(Schema.String, {
+    decode: SchemaGetter.transform(({ $key }) => $key),
+    encode: SchemaGetter.transform(($key) => ({ $key }))
+  })
+)
 
 /** A play's type: ESPN's id for it, and its text. */
 export const PlayType = Schema.Struct({ id: Schema.String, text: Schema.String })
 export type PlayType = typeof PlayType.Type
 
-/**
- * The fields of a play that both of ESPN's feeds spell alike, a spot's team read by `team`: FastCast's entity refers to
- * a team by `$key`, a game summary's play by `id`.
- */
-export function PlayFields<Team extends Schema.Top>(team: Team) {
-  const spot = Schema.Struct({
-    team: Schema.optional(team),
-    down: Schema.optional(Schema.Int),
-    distance: Schema.optional(Schema.Int),
-    yardsToEndzone: Schema.optional(Schema.Int)
-  })
-  return {
-    id: Schema.String,
-    sequenceNumber: Schema.FiniteFromString.check(Schema.isInt()),
-    type: PlayType,
-    text: Schema.String,
-    period: Schema.Struct({ number: Schema.Int }),
-    clock: Schema.Struct({ displayValue: Schema.String }),
-    statYardage: Schema.Int,
-    scoringPlay: Schema.Boolean,
-    homeScore: Schema.Int,
-    awayScore: Schema.Int,
-    start: spot,
-    end: spot
-  }
-}
+const Spot = Schema.Struct({
+  team: Schema.optional(TeamRef),
+  down: Schema.optional(Schema.Int),
+  distance: Schema.optional(Schema.Int),
+  yardsToEndzone: Schema.optional(Schema.Int)
+})
 
 /** ESPN's play entity, as a game package lists it under `entities.plays`. */
 export const PlayEntity = Schema.Struct({
-  ...PlayFields(TeamRef("$key")),
-  team: Schema.optional(TeamRef("$key")),
+  id: Schema.String,
+  sequenceNumber: Schema.FiniteFromString.check(Schema.isInt()),
+  type: PlayType,
+  text: Schema.String,
+  period: Schema.Struct({ number: Schema.Int }),
+  clock: Schema.Struct({ displayValue: Schema.String }),
+  statYardage: Schema.Int,
+  scoringPlay: Schema.Boolean,
+  homeScore: Schema.Int,
+  awayScore: Schema.Int,
+  start: Spot,
+  end: Spot,
+  team: Schema.optional(TeamRef),
   participants: Schema.optional(
-    Schema.Array(
-      Schema.Struct({ type: Schema.optional(Schema.String), team: Schema.optional(TeamRef("$key")) })
-    )
+    Schema.Array(Schema.Struct({ type: Schema.optional(Schema.String), team: Schema.optional(TeamRef) }))
   ),
   probabilities: Schema.optional(
     Schema.Struct({

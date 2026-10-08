@@ -113,22 +113,18 @@ const gaugeChanged = Effect.fnUntraced(function* (before: Slate, next: Slate) {
 
   const had = byId(before.games)
   const has = byId(next.games)
-  yield* Effect.forEach(
-    new Set([...had.keys(), ...has.keys()]),
-    (id) => {
-      const game = has.get(id)
-      const gone = had.get(id)
-      if (game === gone || game?.snapshot === gone?.snapshot) return Effect.void
-      const { snapshot } = game ?? gone ?? {}
-      if (snapshot === undefined) return Effect.void
-
-      const attributes = { game: snapshot.id, league: snapshot.league, matchup: snapshot.matchup() }
-      const value = game === undefined ? 0 : progressValues[snapshot.progress()]
-      return Metric.update(Metric.withAttributes(gameState, attributes), value)
-    },
-    { discard: true }
-  )
+  const changed = next.games.filter((game) => had.get(game.snapshot.id)?.snapshot !== game.snapshot)
+  const gone = before.games.filter((game) => !has.has(game.snapshot.id))
+  yield* Effect.forEach(changed, (game) => gauge(game.snapshot, progressValues[game.snapshot.progress()]), {
+    discard: true
+  })
+  yield* Effect.forEach(gone, (game) => gauge(game.snapshot, 0), { discard: true })
 })
+
+function gauge(snapshot: GameSnapshot, value: number) {
+  const attributes = { game: snapshot.id, league: snapshot.league, matchup: snapshot.matchup() }
+  return Metric.update(Metric.withAttributes(gameState, attributes), value)
+}
 
 function byId(games: ReadonlyArray<Game>): ReadonlyMap<GameId, Game> {
   return new Map(games.map((game) => [game.snapshot.id, game]))

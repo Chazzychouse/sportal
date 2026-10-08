@@ -7,7 +7,6 @@ import {
   Context,
   Data,
   DateTime,
-  Duration,
   Effect,
   FiberMap,
   HashMap,
@@ -93,10 +92,10 @@ export class FastCast extends Context.Service<
         Schedule.setInputType<CheckpointUnread>(),
         Schedule.upTo({ times: 4 })
       ),
-      reconnect: Schedule.exponential("1 second").pipe(
-        Schedule.jittered,
-        Schedule.modifyDelay(({ duration }) => Effect.succeed(Duration.min(duration, Duration.minutes(1))))
-      )
+      reconnect: Schedule.min([
+        Schedule.exponential("1 second").pipe(Schedule.jittered),
+        Schedule.spaced("1 minute")
+      ])
     })
   )
 
@@ -181,23 +180,18 @@ const connect = Effect.fn("FastCast.connect")(function* (
     })
   }, Effect.scoped)
   // A topic left to polling keeps its place in `follows` until the socket reconnects, so nothing follows it before.
-  const follow = (tc: string) =>
-    Effect.asVoid(
-      FiberMap.run(
-        follows,
-        tc,
-        attempt(tc).pipe(
-          Effect.retry(retry),
-          Effect.catch((error) =>
-            Effect.logWarning(
-              `FastCast: ${tc} is left to polling until the socket reconnects; its checkpoint kept failing`,
-              error
-            ).pipe(Effect.annotateLogs({ topic: tc }), Effect.andThen(Effect.never))
-          )
-        ),
-        { onlyIfMissing: true }
+  const follow = (tc: string) => {
+    const followed = attempt(tc).pipe(
+      Effect.retry(retry),
+      Effect.catch((error) =>
+        Effect.logWarning(
+          `FastCast: ${tc} is left to polling until the socket reconnects; its checkpoint kept failing`,
+          error
+        ).pipe(Effect.annotateLogs({ topic: tc }), Effect.andThen(Effect.never))
       )
     )
+    return Effect.asVoid(FiberMap.run(follows, tc, followed, { onlyIfMissing: true }))
+  }
   const steer = Steer.$match({
     Follow: ({ tc }) => Effect.logInfo(`FastCast: subscribed to ${tc}`).pipe(Effect.andThen(follow(tc))),
     Leave: ({ tc }) =>

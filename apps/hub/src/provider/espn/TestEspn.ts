@@ -48,13 +48,6 @@ export class FramesDecoded extends Context.Service<FramesDecoded, ReadonlyArray<
 ) {
   /** Decodes the frames `frames` gives once, for every test the layer is provided to: a recording takes seconds. */
   static layerOf<E>(frames: Effect.Effect<ReadonlyArray<Frame>, E>) {
-    return Layer.effect(
-      FramesDecoded,
-      Effect.gen(function* () {
-        const made = yield* frames
-
-        return yield* decodedFrames(made)
-      })
-    )
+    return Layer.effect(FramesDecoded, Effect.flatMap(frames, decodedFrames))
   }
 }
