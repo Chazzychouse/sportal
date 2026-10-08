@@ -1,5 +1,5 @@
 import type { StageTransition } from "@sportal/api/ShellBridge"
-import type { GameId, GameSnapshot } from "@sportal/domain/Game"
+import type { Game, GameId } from "@sportal/domain/Game"
 import { type Split, type Stage, Tile } from "@sportal/domain/Stage"
 import { Effect, Option } from "effect"
 import { useEffect, useLayoutEffect, useRef, useState } from "react"
@@ -18,7 +18,7 @@ import { placements, tileRects } from "./TileRects.ts"
  */
 export function StageView(props: {
   stage: Stage
-  slate: ReadonlyArray<GameSnapshot>
+  slate: ReadonlyArray<Game>
   connection: Connection
   selected: number
   interacting: GameId | undefined
@@ -82,7 +82,9 @@ export function StageView(props: {
       {shown.onStage().map((tile, index) => {
         const rect = rects[index]
         if (rect === undefined) return null
-        const game = Tile.guards.Empty(tile) ? undefined : props.slate.find((g) => g.id === tile.game)
+        const game = Tile.guards.Empty(tile)
+          ? undefined
+          : props.slate.find(({ snapshot }) => snapshot.id === tile.game)
         const hidden = rect.width === 0
 
         return (
@@ -104,7 +106,7 @@ export function StageView(props: {
               stage={props.stage}
               slot={index}
               tile={tile}
-              game={game}
+              game={game?.snapshot}
               selected={props.selected === index}
               onSelect={() => props.onSelect(index)}
             />

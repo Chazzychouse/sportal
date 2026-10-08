@@ -1,4 +1,4 @@
-import { GameId } from "@sportal/domain/Game"
+import { Game, GameId } from "@sportal/domain/Game"
 import { snapshot } from "@sportal/domain/TestGame"
 import { DateTime } from "effect"
 
@@ -11,4 +11,4 @@ const soon = snapshot({ id: GameId.make("soon") })
 const done = snapshot({ id: GameId.make("done"), status: "final" })
 
 /** Four games in no order: live, soon, later, done are the ids; the strip puts them live, soon, later, done. */
-export const slate = [done, later, live, soon]
+export const slate = [done, later, live, soon].map(Game.of)

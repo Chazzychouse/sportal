@@ -4,12 +4,12 @@ import { Schema } from "effect"
 import { LiveMessage, LiveMessageJson } from "./LiveMessage.ts"
 
 describe("LiveMessage", () => {
-  it("should encode SlateChanged as {_tag, games, recentPlays}", () => {
-    const message = LiveMessage.cases.SlateChanged.make({ games: [], recentPlays: {} })
+  it("should encode SlateChanged as {_tag, games}", () => {
+    const message = LiveMessage.cases.SlateChanged.make({ games: [] })
 
     const json = Schema.encodeSync(LiveMessageJson)(message)
 
-    assert.strictEqual(json, '{"_tag":"SlateChanged","games":[],"recentPlays":{}}')
+    assert.strictEqual(json, '{"_tag":"SlateChanged","games":[]}')
   })
 
   it("should encode StageChanged as {_tag, stage}", () => {

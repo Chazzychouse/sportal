@@ -1,6 +1,5 @@
 import { LiveMessage, LiveMessageJson } from "@sportal/api/LiveMessage"
-import type { GameSnapshot } from "@sportal/domain/Game"
-import type { RecentPlays } from "@sportal/domain/RecentPlays"
+import type { Game } from "@sportal/domain/Game"
 import { Stage } from "@sportal/domain/Stage"
 import {
   Context,
@@ -28,7 +27,6 @@ export class LiveStream extends Context.Service<LiveStream, SubscriptionRef.Subs
       const live = yield* SubscriptionRef.make<Live>({
         connection: Connection.Connecting(),
         slate: [],
-        recentPlays: {},
         stage: Stage.initial
       })
 
@@ -52,8 +50,7 @@ export const Connection = Data.taggedEnum<Connection>()
 
 interface Live {
   readonly connection: Connection
-  readonly slate: ReadonlyArray<GameSnapshot>
-  readonly recentPlays: RecentPlays
+  readonly slate: ReadonlyArray<Game>
   readonly stage: Stage
 }
 
@@ -107,7 +104,7 @@ function step(live: SubscriptionRef.SubscriptionRef<Live>, event: SourceEvent) {
 
 function received(live: Live, message: LiveMessage): Live {
   return LiveMessage.match(message, {
-    SlateChanged: ({ games, recentPlays }): Live => ({ ...live, slate: games, recentPlays }),
+    SlateChanged: ({ games }): Live => ({ ...live, slate: games }),
     StageChanged: ({ stage }): Live => ({ ...live, stage })
   })
 }

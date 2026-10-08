@@ -93,7 +93,7 @@ flowchart LR
   yttv --> views
 ```
 
-- **Hub** — takes what its providers' frames say, as they arrive, into the Board's slate (each game's latest snapshot and plays), will run the Producer, and holds the authoritative **Stage** in memory (one, until a second Display needs its own). Serves the web UI's static files, the HTTP API, and one live stream per client.
+- **Hub** — takes what its providers' frames say, as they arrive, into the Board's slate (the listed games, each with its latest snapshot and plays), will run the Producer, and holds the authoritative **Stage** in memory (one, until a second Display needs its own). Serves the web UI's static files, the HTTP API, and one live stream per client.
 - **Web UI** — one codebase for desk, couch, and phone. It renders Hub state and sends commands. It contains no business rules.
 - **Desktop shell** — loads the web UI from the Hub, registers as a Display, and mirrors that Display's stream tiles into native provider web views. It is told the Hub's address by configuration (`SPORTAL_HUB_URL`, read once into `ShellConfig`) and never starts a Hub.
 
@@ -175,9 +175,8 @@ sportal/
 │   │   └── src/
 │   │       ├── League.ts       LeagueId
 │   │       ├── Team.ts         Team, its colors, Ranking
-│   │       ├── Game.ts         GameId, GameStatus, GameSnapshot, BallSpot, Network, Broadcast
+│   │       ├── Game.ts         Game (a snapshot and its plays), GameId, GameStatus, GameSnapshot, BallSpot, Network, Broadcast
 │   │       ├── Situation.ts    Possession, down, distance, field position, red zone
-│   │       ├── RecentPlays.ts  Each game's last ten plays, sent with the slate
 │   │       ├── Play.ts         A single play, as the game's play-by-play lists it; PlayKind
 │   │       ├── Channel.ts      SourceName, Channel, ChannelAvailability
 │   │       ├── Guide.ts        Guide, Airing, ChannelId, GuideUnreadable
@@ -202,7 +201,7 @@ sportal/
     │       ├── Telemetry.ts        Log level and format; OTLP export when configured
     │       ├── Switcher.ts         The one authoritative Stage, held in memory; applies stage commands, refreshes availability, and broadcasts
     │       ├── slate/
-    │       │   ├── Slate.ts        The fold: every delivery taken in order, each listed game as its latest snapshot and its plays
+    │       │   ├── Slate.ts        The fold: every delivery taken in order into an ordered list of games, each with its latest snapshot and its plays
     │       │   ├── Delivery.ts     What a frame said: a listing, a snapshot, or a game's plays
     │       │   └── Board.ts        The one holder of the day's slate: takes each frame's deliveries as they arrive, offers `latest` and `changes`
     │       ├── HubStopping.ts      Whether a task that should run until the Hub stops ended because it is stopping, and the Error log unless it did
@@ -331,10 +330,10 @@ class Board extends Context.Service<Board, {
 }>()("sportal/hub/slate/Board") {}
 ```
 
-- The `Slate` (`slate/Slate.ts`) is the fold: each league's listed games, in order, each as its latest `GameSnapshot`, and each game's plays. `take(deliveries)` on it is pure and returns the next slate; a take that changes nothing gives back the same slate.
+- The `Slate` (`slate/Slate.ts`) is the fold: an ordered list of `Game`s, leagues in `LeagueId` order and each league's in its listing's order, each with its latest `GameSnapshot` and its plays. `take(deliveries)` on it is pure and returns the next slate; a take that changes nothing gives back the same slate.
 - The board starts from an empty slate and takes each frame's deliveries as they arrive, in one `Board.take` span carrying its `sportal.deliveries` count, and gauges each game whose snapshot changed by its progress (`sportal_game_state`: 1 upcoming, 2 live, 3 over, 0 once no listing names it), which the Hub dashboard's Games table reads. For now nothing is kept between runs: a restarted Hub serves an empty slate until its provider's next poll lists the day's games.
 - A take that raises a defect is an Error log; the slate keeps what it had and takes the next frame. If the provider's frames end other than by the Hub stopping, that is an Error log and the slate stays as it is.
-- `Slate.published()` is each listed game as the slate has it, with each game's last ten plays (`recentPlays`, on `SlateChanged`); the Hub server sends it within 250 ms of a change, and the Switcher reads the listed games from `latest`.
+- `Slate.published()` is each listed game as the slate has it, carrying only its last ten plays (`Game#recent`, on `SlateChanged`); the Hub server sends it within 250 ms of a change, and the Switcher reads the listed games from `latest`.
 - `HubMode` provides it in both modes. A scenario is the provider on the scenario clock: its recorded frames, polls and pushes alike, each received at its offset from the first, through ESPN's decode. Its names are the recordings in `fixtures/scenarios/`.
 - The Hub's whole shutdown bound is about 4 s: the HTTP server's 3 s for connected Displays, then telemetry's 1 s to export what it holds.
 

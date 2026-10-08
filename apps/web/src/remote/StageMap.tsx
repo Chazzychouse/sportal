@@ -1,4 +1,4 @@
-import type { GameSnapshot } from "@sportal/domain/Game"
+import type { Game } from "@sportal/domain/Game"
 import { type Stage, type StageCommand, Tile } from "@sportal/domain/Stage"
 import { Data } from "effect"
 import { ArrowLeftRight, Volume2 } from "lucide-react"
@@ -17,7 +17,7 @@ import { tileActions } from "../stage/TileActions.tsx"
  */
 export function StageMap(props: {
   stage: Stage
-  slate: ReadonlyArray<GameSnapshot>
+  slate: ReadonlyArray<Game>
   selected: number
   onSelect: (slot: number) => void
 }) {
@@ -27,7 +27,7 @@ export function StageMap(props: {
     const at = tiles[slot]
     return at === undefined || Tile.guards.Empty(at)
       ? undefined
-      : props.slate.find((game) => game.id === at.game)
+      : props.slate.find(({ snapshot }) => snapshot.id === at.game)?.snapshot
   }
   const selectedGame = gameIn(props.selected)
   const run = (command: StageCommand) => {

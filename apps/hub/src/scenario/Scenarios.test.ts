@@ -3,7 +3,7 @@ import { gzipSync } from "node:zlib"
 import { NodeServices } from "@effect/platform-node"
 import { assert, describe, it } from "@effect/vitest"
 import { Play } from "@sportal/domain/Play"
-import { Context, DateTime, Effect, FileSystem, Layer, Path, Schema, Stream } from "effect"
+import { Context, DateTime, Effect, FileSystem, Layer, Option, Path, Schema, Stream } from "effect"
 import { Frame } from "../Frame.ts"
 import { decodedFrames } from "../provider/espn/TestEspn.ts"
 import { Delivery } from "../slate/Delivery.ts"
@@ -99,7 +99,7 @@ describe("Scenarios", () => {
           const played = yield* EveryScenarioPlayed
 
           for (const { name, final } of played) {
-            assert.isAbove([...final.plays.values()].flat().length, 0, `${name} plays`)
+            assert.isAbove(final.games.flatMap(({ plays }) => plays).length, 0, `${name} plays`)
           }
         })
       )
@@ -110,9 +110,10 @@ describe("Scenarios", () => {
 
           for (const { name, decoded, final } of played) {
             for (const [game, plays] of lastPlaysOf(decoded)) {
-              if (!final.games.has(game)) continue
+              const held = final.game(game)
+              if (Option.isNone(held)) continue
               assert.deepStrictEqual(
-                (final.plays.get(game) ?? []).map(({ id }) => id),
+                held.value.plays.map(({ id }) => id),
                 plays.toSorted(Play.order).map(({ id }) => id),
                 `${name}: ${game} holds its last delivered plays`
               )

@@ -1,9 +1,9 @@
 import { afterEach, assert, beforeEach, describe, it } from "@effect/vitest"
 import { LiveMessageJson } from "@sportal/api/LiveMessage"
-import { GameId } from "@sportal/domain/Game"
+import { Game, GameId } from "@sportal/domain/Game"
 import { Completion, PlayId } from "@sportal/domain/Play"
 import { Stage } from "@sportal/domain/Stage"
-import { play, team } from "@sportal/domain/TestGame"
+import { play, snapshot, team } from "@sportal/domain/TestGame"
 import { Deferred, Effect, Fiber, Schema, Stream, SubscriptionRef } from "effect"
 import { vi } from "vitest"
 import { LiveStream } from "./LiveStream.ts"
@@ -112,7 +112,7 @@ describe("LiveStream", () => {
       const source = yield* opened()
 
       source.onmessage?.({ data: message({ _tag: "StageChanged", stage: pair }) })
-      source.onmessage?.({ data: message({ _tag: "SlateChanged", games: [], recentPlays: {} }) })
+      source.onmessage?.({ data: message({ _tag: "SlateChanged", games: [] }) })
       const state = yield* until(live, (current) => current.stage.layout === "Pair")
 
       assert.deepStrictEqual(state.slate, [])
@@ -120,18 +120,21 @@ describe("LiveStream", () => {
   )
 
   it.effect(
-    "should keep the recent plays a slate message carries, each read back from its JSON as its case",
+    "should keep the plays each game of a slate message carries, each read back from its JSON as its case",
     () =>
       Effect.gen(function* () {
         const live = yield* LiveStream
         const source = yield* opened()
-        const recentPlays = { [GameId.make("401")]: [play(), touchdown()] }
+        const game = new Game({
+          snapshot: snapshot({ id: GameId.make("401") }),
+          plays: [play(), touchdown()]
+        })
 
-        source.onmessage?.({ data: message({ _tag: "SlateChanged", games: [], recentPlays }) })
-        const state = yield* until(live, (current) => Object.keys(current.recentPlays).length > 0)
+        source.onmessage?.({ data: message({ _tag: "SlateChanged", games: [game] }) })
+        const state = yield* until(live, (current) => current.slate.length > 0)
 
-        assert.deepStrictEqual(state.recentPlays, recentPlays)
-        assert.instanceOf(state.recentPlays[GameId.make("401")]?.[1], Completion)
+        assert.deepStrictEqual(state.slate[0]?.plays, game.plays)
+        assert.instanceOf(state.slate[0]?.plays[1], Completion)
       }).pipe(Effect.provide(LiveStream.layer))
   )
 

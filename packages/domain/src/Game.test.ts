@@ -1,8 +1,9 @@
 import { assert, describe, it } from "@effect/vitest"
 import { DateTime, Duration, Option } from "effect"
-import { BallSpot, GameId, GameSnapshot, type GameStatus } from "./Game.ts"
+import { BallSpot, Game, GameId, GameSnapshot, type GameStatus } from "./Game.ts"
+import { PlayId } from "./Play.ts"
 import { Situation } from "./Situation.ts"
-import { broadcast, liveSnapshot, situation, snapshot, team } from "./TestGame.ts"
+import { broadcast, liveSnapshot, play, situation, snapshot, team } from "./TestGame.ts"
 
 describe("GameSnapshot#progress", () => {
   it.each([
@@ -719,3 +720,71 @@ function _driveAt(yardLine: number, distance = 10) {
 function _withTimeouts(period: number, home: number, away: number) {
   return inPlay({ period, situation: ball("ALA", 45, 1, 10, { homeTimeouts: home, awayTimeouts: away }) })
 }
+
+describe("GameSnapshot#isBehind", () => {
+  it("should be behind a snapshot later in game time", () => {
+    const had = liveSnapshot({ clock: "9:00" })
+
+    const behind = liveSnapshot({ clock: "10:00" }).isBehind(had)
+
+    assert.isTrue(behind)
+  })
+
+  it("should not be behind a snapshot at the same game time and score", () => {
+    const had = liveSnapshot()
+
+    const behind = liveSnapshot().isBehind(had)
+
+    assert.isFalse(behind)
+  })
+
+  it("should not be behind a final when it is ahead of its end", () => {
+    const had = snapshot({ status: "final", period: 4, clock: "0:00" })
+
+    const behind = liveSnapshot({ period: 5, clock: "15:00" }).isBehind(had)
+
+    assert.isFalse(behind)
+  })
+})
+
+describe("GameSnapshot#tiesLive", () => {
+  it("should tie a live snapshot at the same game time", () => {
+    const had = liveSnapshot({ situation: situation({ yardLine: 45 }) })
+
+    const ties = liveSnapshot({ situation: situation({ yardLine: 60 }) }).tiesLive(had)
+
+    assert.isTrue(ties)
+  })
+
+  it("should not tie an upcoming snapshot", () => {
+    const had = snapshot()
+
+    const ties = snapshot({ broadcasts: [broadcast("ESPN")] }).tiesLive(had)
+
+    assert.isFalse(ties)
+  })
+})
+
+describe("Game#recent", () => {
+  it("should keep only the last ten plays", () => {
+    const plays = Array.from({ length: 12 }, (_, index) =>
+      play({ id: PlayId.make(`p${index + 1}`), sequence: index + 1 })
+    )
+    const game = new Game({ snapshot: liveSnapshot(), plays })
+
+    const recent = game.recent()
+
+    assert.deepStrictEqual(
+      recent.plays.map(({ sequence }) => sequence),
+      [3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+    )
+  })
+
+  it("should give back the game itself with ten plays or fewer", () => {
+    const game = new Game({ snapshot: liveSnapshot(), plays: [play()] })
+
+    const recent = game.recent()
+
+    assert.strictEqual(recent, game)
+  })
+})

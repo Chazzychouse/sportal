@@ -1,4 +1,4 @@
-import { type GameId, GameSnapshot } from "@sportal/domain/Game"
+import { type Game, type GameId, GameSnapshot } from "@sportal/domain/Game"
 import { LayoutName, type Stage, type StageCommand, Tile } from "@sportal/domain/Stage"
 import { Option } from "effect"
 import {
@@ -23,7 +23,7 @@ export function CommandPalette(props: {
   open: boolean
   onOpenChange: (open: boolean) => void
   stage: Stage
-  slate: ReadonlyArray<GameSnapshot>
+  slate: ReadonlyArray<Game>
   selected: number
   onFullScreen: () => void
   onKeys: () => void
@@ -32,7 +32,8 @@ export function CommandPalette(props: {
     runtime.runFork(dispatch(command))
     props.onOpenChange(false)
   }
-  const gameOn = (id: GameId) => props.slate.find((game) => game.id === id)
+  const snapshots = props.slate.map(({ snapshot }) => snapshot)
+  const gameOn = (id: GameId) => snapshots.find((game) => game.id === id)
   const occupied = props.stage.onStage().flatMap((tile, slot) => {
     if (Tile.guards.Empty(tile)) return []
     const game = gameOn(tile.game)
@@ -52,7 +53,7 @@ export function CommandPalette(props: {
       <CommandList className="max-h-[min(60vh,28rem)]">
         <CommandEmpty>Nothing matches.</CommandEmpty>
         <CommandGroup heading={`Watch in tile ${props.selected + 1}`}>
-          {[...props.slate].sort(GameSnapshot.watchOrder).map((game) => (
+          {snapshots.toSorted(GameSnapshot.watchOrder).map((game) => (
             <CommandItem
               key={game.id}
               value={`watch ${scoreline(game)} ${game.away.team.name} ${game.home.team.name} ${game.networks()} ${game.id}`}

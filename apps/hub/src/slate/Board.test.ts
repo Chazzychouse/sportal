@@ -1,7 +1,8 @@
 import { assert, describe, it } from "@effect/vitest"
 import { GameId, GameSnapshot } from "@sportal/domain/Game"
+import type { Play } from "@sportal/domain/Play"
 import { liveSnapshot, play, snapshot } from "@sportal/domain/TestGame"
-import { DateTime, Effect, Layer, Ref, Stream, type Tracer } from "effect"
+import { DateTime, Effect, Layer, Option, Ref, Stream, type Tracer } from "effect"
 import { decodedFrames, recordedNeAtBuf, recordedPlays } from "../provider/espn/TestEspn.ts"
 import { Provider } from "../provider/Provider.ts"
 import { boardOver, delivered } from "../TestBoard.ts"
@@ -34,8 +35,10 @@ describe("Board", () => {
 
       const current = yield* listing([live, soon, later])
 
-      assert.deepStrictEqual(current.listed.get("fbs"), [one, two, three])
-      assert.deepStrictEqual(current.listedGames(["fbs"]), [live, soon, later])
+      assert.deepStrictEqual(
+        current.games.map(({ snapshot }) => snapshot),
+        [live, soon, later]
+      )
     }).pipe(Effect.provide(boardOver))
   )
 
@@ -45,7 +48,7 @@ describe("Board", () => {
 
       const current = yield* takenSnapshot(snapshot({ id: one, status: "live", period: 1, clock: "5:00" }))
 
-      assert.strictEqual(current.games.get(one)?.period, 2)
+      assert.strictEqual(snapshotIn(current, one)?.period, 2)
     }).pipe(Effect.provide(boardOver))
   )
 
@@ -58,8 +61,8 @@ describe("Board", () => {
       yield* takenSnapshot(first)
       const current = yield* takenSnapshot(second)
 
-      assert.deepStrictEqual(current.games.get(one), first)
-      assert.deepStrictEqual(current.games.get(two), second)
+      assert.deepStrictEqual(snapshotIn(current, one), first)
+      assert.deepStrictEqual(snapshotIn(current, two), second)
     }).pipe(Effect.provide(boardOver))
   )
 
@@ -69,7 +72,7 @@ describe("Board", () => {
 
       const current = yield* delivered(Delivery.cases.Plays.make({ game: one, plays: [play()] }))
 
-      assert.deepStrictEqual(current.plays.get(one), [play()])
+      assert.deepStrictEqual(playsIn(current, one), [play()])
     }).pipe(Effect.provide(boardOver))
   )
 
@@ -77,8 +80,7 @@ describe("Board", () => {
     Effect.gen(function* () {
       const current = yield* delivered(Delivery.cases.Plays.make({ game: one, plays: [play()] }))
 
-      assert.strictEqual(current.games.size, 0)
-      assert.strictEqual(current.plays.size, 0)
+      assert.deepStrictEqual(current.games, [])
     }).pipe(Effect.provide(boardOver))
   )
 
@@ -93,7 +95,7 @@ describe("Board", () => {
       ])
       const current = yield* latest
 
-      assert.strictEqual(current.games.get(one), next)
+      assert.strictEqual(snapshotIn(current, one), next)
     }).pipe(Effect.provide(boardOver))
   )
 
@@ -137,7 +139,7 @@ describe("Board#changes", () => {
       const board = yield* Board
       const published = yield* Ref.make<ReadonlyArray<GameSnapshot | undefined>>([])
       yield* board.changes.pipe(
-        Stream.runForEach((current) => Ref.update(published, (all) => [...all, current.games.get(one)])),
+        Stream.runForEach((current) => Ref.update(published, (all) => [...all, snapshotIn(current, one)])),
         Effect.forkScoped({ startImmediately: true })
       )
       const first = liveSnapshot({ id: one })
@@ -204,7 +206,7 @@ describe("Board, a take that raises a defect", () => {
 
       const current = yield* takenSnapshot(next)
 
-      assert.strictEqual(current.games.get(one), next)
+      assert.strictEqual(snapshotIn(current, one), next)
     }).pipe(Effect.provide(boardOver))
   )
 })
@@ -223,8 +225,8 @@ describe("Board, a recorded game", () => {
         const current = yield* latest
         const errors = logs.filter(({ level }) => level === "Error")
 
-        assert.strictEqual(current.games.get(neAtBuf)?.status, "final")
-        assert.strictEqual(current.plays.get(neAtBuf)?.length, recordedPlays)
+        assert.strictEqual(snapshotIn(current, neAtBuf)?.status, "final")
+        assert.strictEqual(playsIn(current, neAtBuf).length, recordedPlays)
         assert.deepStrictEqual(errors, [])
       }).pipe(Effect.provide(boardOver.pipe(Layer.provideMerge(layer))))
     },
@@ -257,6 +259,14 @@ describe("Board's game state gauge", () => {
 })
 
 const latest = Board.use((board) => board.latest)
+
+function snapshotIn(slate: Slate, id: GameId): GameSnapshot | undefined {
+  return Option.getOrUndefined(slate.game(id))?.snapshot
+}
+
+function playsIn(slate: Slate, id: GameId): ReadonlyArray<Play> {
+  return Option.match(slate.game(id), { onNone: () => [], onSome: ({ plays }) => plays })
+}
 
 function listingOf(games: ReadonlyArray<GameSnapshot>) {
   return Delivery.cases.Listing.make({ league: "fbs", games })

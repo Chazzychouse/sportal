@@ -26,7 +26,7 @@ export function DisplayView() {
   const cards = StripCard.of(live.stage, live.slate)
   const selected = display.selectedOn(live.stage)
   const toggleSolo = display.press({ _tag: "ToggleSolo" }, live.stage, cards)
-  const liveCount = live.slate.filter((game) => game.progress() === "live").length
+  const liveCount = live.slate.filter(({ snapshot }) => snapshot.progress() === "live").length
   useStageFailureToasts()
 
   useHotkeys((hotkey: Hotkey) =>

@@ -1,6 +1,5 @@
 import { ChannelAvailability } from "@sportal/domain/Channel"
 import type { GameId } from "@sportal/domain/Game"
-import { LeagueId } from "@sportal/domain/League"
 import { Stage, type StageCommand, type StageRejection } from "@sportal/domain/Stage"
 import { Context, Effect, Layer, Option, Stream, SubscriptionRef } from "effect"
 import { Board } from "./slate/Board.ts"
@@ -27,10 +26,9 @@ export class Switcher extends Context.Service<
       // Where each game on the current slate can be streamed; a game no longer on the slate has none.
       const availabilityOnSlate = Effect.gen(function* () {
         const slate = yield* board.latest
-        const games = slate.listedGames(LeagueId.literals)
         const availabilityOf = yield* source.availability
         return (id: GameId): Option.Option<ChannelAvailability> =>
-          Option.fromNullishOr(games.find((game) => game.id === id)).pipe(Option.map(availabilityOf))
+          Option.map(slate.game(id), ({ snapshot }) => availabilityOf(snapshot))
       })
 
       const dispatch = Effect.fn("Switcher.dispatch")(function* (command: StageCommand) {

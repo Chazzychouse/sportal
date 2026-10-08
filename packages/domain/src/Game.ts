@@ -1,5 +1,6 @@
-import { DateTime, Duration, Option, Order, Schema } from "effect"
+import { DateTime, Duration, Equal, Option, Order, Schema } from "effect"
 import { LeagueId } from "./League.ts"
+import { Play } from "./Play.ts"
 import { Situation } from "./Situation.ts"
 import { Team, type TeamId } from "./Team.ts"
 
@@ -109,6 +110,24 @@ export class GameSnapshot extends Schema.Class<GameSnapshot>("sportal/GameSnapsh
     return order !== 0 ? order > 0 : this.points() > over.points()
   }
 
+  /**
+   * Behind `had`, a snapshot of the same game: earlier in game time, or at the same game time with fewer points (a poll
+   * lagging a pushed score), unless `had` is over and this is ahead of its end (overtime after a spurious final, a
+   * postponed game resuming).
+   */
+  isBehind(had: GameSnapshot): boolean {
+    const resumed = had.progress() === "over" && this.isAheadOfOver(had)
+    return had.isAheadOf(this) && !this.isAheadOf(had) && !resumed
+  }
+
+  /**
+   * Whether `had`, a snapshot of the same game, is live at this one's game time and this is not ahead of it: what a
+   * poll lagging the push between plays would be.
+   */
+  tiesLive(had: GameSnapshot): boolean {
+    return had.progress() === "live" && GameSnapshot.gameTime(this, had) === 0 && !this.isAheadOf(had)
+  }
+
   /** Both teams' points together. */
   private points(): number {
     return this.home.score + this.away.score
@@ -202,6 +221,50 @@ export class GameSnapshot extends Schema.Class<GameSnapshot>("sportal/GameSnapsh
   /** Where the ball is: the spot of the situation's team with the ball, at its yard line. */
   ball(): Option.Option<BallSpot> {
     return this.spotOf({ team: this.situation?.possession, yardsToEndzone: this.situation?.yardLine })
+  }
+}
+
+/** A game as the slate has it: its latest snapshot, and its plays in `Play.order`. */
+export class Game extends Schema.Class<Game>("sportal/Game")({
+  snapshot: GameSnapshot,
+  plays: Schema.Array(Play)
+}) {
+  /** How many of its plays `recent` keeps. */
+  private static readonly recentCount = 10
+
+  /** A game first seen as `snapshot`, with no plays yet. */
+  static of(snapshot: GameSnapshot): Game {
+    return new Game({ snapshot, plays: [] })
+  }
+
+  /** This game with `snapshot` taken, unless it equals this game's or is behind it: then this game itself. */
+  snapshotTaken(snapshot: GameSnapshot): Game {
+    if (Equal.equals(this.snapshot, snapshot) || snapshot.isBehind(this.snapshot)) return this
+
+    return new Game({ ...this, snapshot })
+  }
+
+  /**
+   * This game with a listing's `snapshot` taken: as `snapshotTaken`, but a listing is a poll and the push wins a tie,
+   * so a live game keeps its snapshot over one at the same game time not ahead of it.
+   */
+  listed(snapshot: GameSnapshot): Game {
+    return snapshot.tiesLive(this.snapshot) ? this : this.snapshotTaken(snapshot)
+  }
+
+  /** This game with its whole list of plays replaced, in `Play.order`; this game itself when nothing changed. */
+  playsTaken(plays: ReadonlyArray<Play>): Game {
+    const sorted = plays.toSorted(Play.order)
+    if (Equal.equals(sorted, this.plays)) return this
+
+    return new Game({ ...this, plays: sorted })
+  }
+
+  /** This game with only its last ten plays: what the live stream sends. */
+  recent(): Game {
+    if (this.plays.length <= Game.recentCount) return this
+
+    return new Game({ ...this, plays: this.plays.slice(-Game.recentCount) })
   }
 }
 

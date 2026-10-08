@@ -2,7 +2,7 @@ import { fileURLToPath } from "node:url"
 import { gzipSync } from "node:zlib"
 import { NodeServices } from "@effect/platform-node"
 import { assert, describe, it } from "@effect/vitest"
-import { LeagueId } from "@sportal/domain/League"
+import type { LeagueId } from "@sportal/domain/League"
 import { Clock, DateTime, Effect, FileSystem, Layer, Option, Path, Ref, Schema, Stream } from "effect"
 import { TestClock } from "effect/testing"
 import { Frame } from "../../Frame.ts"
@@ -424,7 +424,7 @@ const committedScenarios = Scenarios.layer.pipe(Layer.provide(NodeServices.layer
 function listed(league: LeagueId) {
   return Effect.map(
     Board.use((board) => board.latest),
-    (slate) => slate.listedGames([league])
+    (slate) => slate.games.flatMap(({ snapshot }) => (snapshot.league === league ? [snapshot] : []))
   )
 }
 
@@ -597,7 +597,7 @@ function playingPushTiedByPoll() {
 /** The slate's games, leagues in order. */
 const slateGames = Effect.map(
   Board.use((board) => board.latest),
-  (held) => held.listedGames(LeagueId.literals)
+  (held) => held.games.map(({ snapshot }) => snapshot)
 )
 
 /** The slate's games once the scenario of `frames` has played from its first frame to its last. */

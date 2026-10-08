@@ -203,9 +203,9 @@ describe("GET /api/live", () => {
       assert.sameMembers([first._tag, second._tag], ["SlateChanged", "StageChanged"])
       assert.deepStrictEqual(
         [first, second].flatMap((message) =>
-          LiveMessage.guards.SlateChanged(message) ? [message.recentPlays] : []
+          LiveMessage.guards.SlateChanged(message) ? message.games.map(({ plays }) => plays) : []
         ),
-        [{}]
+        [[]]
       )
     }).pipe(Effect.scoped, Effect.provide(serverUnderTest()))
   )
@@ -238,26 +238,31 @@ describe("GET /api/live", () => {
 
       const message = messageOf(line)
       assert.deepStrictEqual(
-        LiveMessage.guards.SlateChanged(message) ? message.games.map(({ period }) => period) : message,
+        LiveMessage.guards.SlateChanged(message)
+          ? message.games.map(({ snapshot }) => snapshot.period)
+          : message,
         [4]
       )
       assert.strictEqual(waiting, 0)
     }).pipe(Effect.scoped, Effect.provide(serverUnderTest()))
   )
 
-  it.effect("should send each listed game as its snapshot, and none of what the slate remembers", () =>
-    Effect.gen(function* () {
-      yield* firstSlateOnTestClock()
+  it.effect(
+    "should send each listed game as its snapshot and plays, and nothing else the slate remembers",
+    () =>
+      Effect.gen(function* () {
+        yield* firstSlateOnTestClock()
 
-      const { lines } = yield* liveLines()
-      const line = yield* Queue.take(lines).pipe(
-        Effect.repeat({ until: (line) => line.includes("SlateChanged") })
-      )
+        const { lines } = yield* liveLines()
+        const line = yield* Queue.take(lines).pipe(
+          Effect.repeat({ until: (line) => line.includes("SlateChanged") })
+        )
 
-      const [entry] = JSON.parse(line.slice("data: ".length)).games
-      assert.strictEqual(entry.id, game.id)
-      assert.notMatch(line, /"plays"|"state"|"updatedAt"|"from"/)
-    }).pipe(Effect.scoped, Effect.provide(serverUnderTest()))
+        const [entry] = JSON.parse(line.slice("data: ".length)).games
+        assert.strictEqual(entry.snapshot.id, game.id)
+        assert.deepStrictEqual(Object.keys(entry), ["snapshot", "plays"])
+        assert.notMatch(line, /"state"|"updatedAt"|"from"/)
+      }).pipe(Effect.scoped, Effect.provide(serverUnderTest()))
   )
 
   it.effect("should send a comment every 20 seconds, so a proxy does not close a quiet stream", () =>

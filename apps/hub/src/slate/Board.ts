@@ -1,4 +1,4 @@
-import type { GameId, GameSnapshot } from "@sportal/domain/Game"
+import type { Game, GameId, GameSnapshot } from "@sportal/domain/Game"
 import { Cause, Context, Effect, Layer, Metric, Stream, SubscriptionRef } from "effect"
 import * as HubStopping from "../HubStopping.ts"
 import { Provider } from "../provider/Provider.ts"
@@ -60,27 +60,32 @@ export class Board extends Context.Service<
   }
 }
 
-/** Each game's progress gauge where `next` changed its snapshot from `before`; a game no longer listed gauges 0. */
+/** Each game's progress gauge where `next` changed it from `before`; a game no longer listed gauges 0. */
 const gaugeChanged = Effect.fnUntraced(function* (before: Slate, next: Slate) {
   if (next.games === before.games) return
 
-  const ids = new Set<GameId>([...before.games.keys(), ...next.games.keys()])
+  const had = byId(before.games)
+  const has = byId(next.games)
   yield* Effect.forEach(
-    ids,
+    new Set([...had.keys(), ...has.keys()]),
     (id) => {
-      const had = before.games.get(id)
-      const has = next.games.get(id)
-      if (has === had) return Effect.void
-      const game = has ?? had
-      if (game === undefined) return Effect.void
+      const game = has.get(id)
+      const gone = had.get(id)
+      if (game === gone || game?.snapshot === gone?.snapshot) return Effect.void
+      const { snapshot } = game ?? gone ?? {}
+      if (snapshot === undefined) return Effect.void
 
-      const attributes = { game: game.id, league: game.league, matchup: game.matchup() }
-      const value = has === undefined ? 0 : progressValues[has.progress()]
+      const attributes = { game: snapshot.id, league: snapshot.league, matchup: snapshot.matchup() }
+      const value = game === undefined ? 0 : progressValues[snapshot.progress()]
       return Metric.update(Metric.withAttributes(gameState, attributes), value)
     },
     { discard: true }
   )
 })
+
+function byId(games: ReadonlyArray<Game>): ReadonlyMap<GameId, Game> {
+  return new Map(games.map((game) => [game.snapshot.id, game]))
+}
 
 // Each progress's value on `sportal_game_state`. Written as a record so that a new progress fails to compile here.
 const progressValues = { upcoming: 1, live: 2, over: 3 } satisfies Record<

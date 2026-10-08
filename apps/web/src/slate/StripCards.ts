@@ -1,4 +1,4 @@
-import { type GameId, GameSnapshot } from "@sportal/domain/Game"
+import { type Game, type GameId, GameSnapshot } from "@sportal/domain/Game"
 import type { Stage } from "@sportal/domain/Stage"
 import { Array as Arr, Data } from "effect"
 
@@ -20,18 +20,19 @@ export class StripCard extends Data.Class<{
    * The strip's cards, in order: the bench, then the slate live, upcoming, and over. A benched game shows once, on
    * the bench, even when it has left the slate. A game on stage keeps its place in the slate, marked with its slot.
    */
-  static of(stage: Stage, slate: ReadonlyArray<GameSnapshot>): ReadonlyArray<StripCard> {
+  static of(stage: Stage, slate: ReadonlyArray<Game>): ReadonlyArray<StripCard> {
+    const snapshots = slate.map(({ snapshot }) => snapshot)
     const benched = stage.benched()
     const bench = benched.map(
       ({ tile, game }) =>
         new StripCard({
           id: game,
-          game: slate.find((snapshot) => snapshot.id === game),
+          game: snapshots.find((snapshot) => snapshot.id === game),
           place: Place.Bench({ tile }),
           section: "Bench"
         })
     )
-    const rest = [...slate]
+    const rest = snapshots
       .filter((game) => !benched.some((bench) => bench.game === game.id))
       .sort(GameSnapshot.watchOrder)
       .map((game) => {
