@@ -69,19 +69,7 @@ export class GameSnapshot extends Schema.Class<GameSnapshot>("sportal/GameSnapsh
    * before kickoff is upcoming and a delay during the game is live.
    */
   progress(): "upcoming" | "live" | "over" {
-    switch (this.status) {
-      case "scheduled":
-        return "upcoming"
-      case "delayed":
-        return this.period >= 1 ? "live" : "upcoming"
-      case "live":
-      case "halftime":
-        return "live"
-      case "final":
-      case "postponed":
-      case "canceled":
-        return "over"
-    }
+    return progressOf[this.status](this.period)
   }
 
   /** Whether the game is live at `now`, or upcoming with its kickoff no later than `window` after `now`. */
@@ -320,6 +308,17 @@ export class BallSpot extends Schema.Class<BallSpot>("sportal/BallSpot")({
   yards: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 100 })),
   toward: Schema.Literals(["home", "away"])
 }) {}
+
+/** Each status's progress, given the period it is in. */
+const progressOf: Record<GameStatus, (period: number) => "upcoming" | "live" | "over"> = {
+  scheduled: () => "upcoming",
+  delayed: (period) => (period >= 1 ? "live" : "upcoming"),
+  live: () => "live",
+  halftime: () => "live",
+  final: () => "over",
+  postponed: () => "over",
+  canceled: () => "over"
+}
 
 const watchRank = { live: 0, upcoming: 1, over: 2 } as const
 
