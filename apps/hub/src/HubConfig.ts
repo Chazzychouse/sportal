@@ -7,6 +7,7 @@ import {
   Effect,
   Layer,
   type LogLevel,
+  Match,
   Option,
   Path,
   Schema,
@@ -121,26 +122,32 @@ export class HubConfig extends Context.Service<
     platform: NodeJS.Platform
   ) {
     const path = yield* Path.Path
-    switch (platform) {
-      case "win32": {
-        const local = yield* Config.String("LOCALAPPDATA").pipe(Config.option)
-        if (Option.isSome(local)) return path.join(local.value, "Sportal")
+    return yield* Match.value(platform).pipe(
+      Match.when("win32", () =>
+        Effect.gen(function* () {
+          const local = yield* Config.String("LOCALAPPDATA").pipe(Config.option)
+          if (Option.isSome(local)) return path.join(local.value, "Sportal")
 
-        const profile = yield* Config.String("USERPROFILE")
-        return path.join(profile, "AppData", "Local", "Sportal")
-      }
-      case "darwin": {
-        const home = yield* Config.String("HOME")
-        return path.join(home, "Library", "Application Support", "Sportal")
-      }
-      default: {
-        const xdg = yield* Config.String("XDG_DATA_HOME").pipe(Config.option)
-        if (Option.isSome(xdg)) return path.join(xdg.value, "sportal")
+          const profile = yield* Config.String("USERPROFILE")
+          return path.join(profile, "AppData", "Local", "Sportal")
+        })
+      ),
+      Match.when("darwin", () =>
+        Effect.gen(function* () {
+          const home = yield* Config.String("HOME")
+          return path.join(home, "Library", "Application Support", "Sportal")
+        })
+      ),
+      Match.orElse(() =>
+        Effect.gen(function* () {
+          const xdg = yield* Config.String("XDG_DATA_HOME").pipe(Config.option)
+          if (Option.isSome(xdg)) return path.join(xdg.value, "sportal")
 
-        const home = yield* Config.String("HOME")
-        return path.join(home, ".local", "share", "sportal")
-      }
-    }
+          const home = yield* Config.String("HOME")
+          return path.join(home, ".local", "share", "sportal")
+        })
+      )
+    )
   })
 }
 
