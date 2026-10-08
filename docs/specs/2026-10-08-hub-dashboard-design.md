@@ -60,6 +60,22 @@ Each is a private const at the end of `FastCast.ts`, with a description, as the 
 The new counter is `sportal_live_feed_received`, not the old name `sportal_live_feed_messages`. A Hub on an older branch
 was still writing the old series at 01:09 today, so reusing the name would mix two meanings in one series.
 
+### Plays in the logs
+
+Today nothing in Grafana shows what happened in a game: plays reach the slate, but nothing logs or measures them.
+After this change, each play a take adds is one Info log, and the dashboard's Plays row reads those logs.
+
+- **Domain:** a `Game#playsAfter(earlier: Game): ReadonlyArray<Play>` method gives the plays this game has that
+  `earlier` lacks, matched by id and in this game's order. `playsTaken` replaces a game's whole list of plays, so
+  comparing ids is the only way to tell which plays are new. A play the feed corrects keeps its id, so it is not
+  logged again.
+- **Director:** after the gauge update, each take logs every new play:
+  `Director: NE at BUF Q2 4:20 <play text>`. The log is annotated with `game`, `league`, `matchup`, `play` (the play's
+  tag, for example `Rush`) and `scoring`. A game the take did not change is skipped. A game new to the slate counts as
+  having had no plays, so after a Hub restart the first take logs the whole game so far: a burst of up to ~180 lines
+  per live game, once.
+- Period 5 and later print as `Q5`. Naming overtime properly is left for later.
+
 ### Dashboard (`hub.json`), top to bottom
 
 Same uid, same title. The refresh stays at 30 s and the range at 30 min.
@@ -71,6 +87,11 @@ has `or vector(0)`. Connected and "Push messages / min" turn red at 0, but only 
 (`max(sportal_game_state_ratio) == 2`). Otherwise 0 is normal, and they stay grey.
 
 **Games** (table, unchanged)
+
+**Plays** (row)
+A `matchup` variable lists the values of `label_values(sportal_game_state_ratio, matchup)`, multi-select with All.
+- Plays (logs, w 16): `{service_name="sportal-hub"} | play=~".+" | matchup=~"$matchup"`, newest first.
+- Scoring plays (logs, w 8): the same query plus `| scoring="true"`.
 
 **Live feed** (row)
 - Messages by op (timeseries, stacked rate): you can see patches, heartbeats and checkpoints flowing.
@@ -114,6 +135,7 @@ Agent-launched runs are fine here, since this is not a GPU question.
 ## Not doing
 
 - Not removing the stale series from the TSDB (`pnpm telemetry:down -v` would also wipe logs and traces). They expire.
+- No play counter (`sportal_plays`). The play logs already give play volume, through `count_over_time`.
 - No push-vs-poll share panel. It needs a counter on the decoder or the Director, and it can come later if the
   push-message rate turns out not to be enough.
 - No alerts.

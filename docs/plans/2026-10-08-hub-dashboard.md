@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Give FastCast four metrics that show whether push is flowing, and rebuild `telemetry/dashboards/hub.json` so
+**Goal:** Give FastCast four metrics that show whether push is flowing, log each new play with its game, and rebuild `telemetry/dashboards/hub.json` so
 that every panel has data. Dead panels go.
 
 **Architecture:** The metrics are private consts at the end of `apps/hub/src/provider/espn/FastCast.ts`, updated at
@@ -37,6 +37,9 @@ Spec: `docs/specs/2026-10-08-hub-dashboard-design.md` (approved).
 | `apps/hub/src/provider/espn/FastCast.test.ts` | six tests, one behaviour each |
 | `apps/hub/src/TestTelemetry.ts` | `observed(id)`: a timer's sample count |
 | `docs/technical-spec.md` | §5.2 and §5.6 name FastCast's metrics |
+| `packages/domain/src/Game.ts` (+ test) | `Game#playsAfter` |
+| `apps/hub/src/Director.ts` (+ test) | one Info log per new play |
+| `CONTEXT.md` | the Director row mentions the play log |
 | `telemetry/dashboards/hub.json` | rewritten |
 
 ---
@@ -386,19 +389,198 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 ---
 
-### Task 3: Rebuild the Hub dashboard
+### Task 3: Log each new play
+
+**Files:**
+- Modify: `packages/domain/src/Game.ts` (`Game#playsAfter`, after `playsTaken`)
+- Modify: `packages/domain/src/Game.test.ts` (`describe("Game#playsAfter")`)
+- Modify: `apps/hub/src/Director.ts` (`take`; a private `loggedNewPlays` below `gaugeChanged`)
+- Modify: `apps/hub/src/Director.test.ts` (`describe("Director's play log")`, after "Director's game state gauge")
+- Modify: `CONTEXT.md` (the Director row: "…and gauges each game's progress (`sportal_game_state`)" gains ", and logs
+  each play a take adds"), and `docs/technical-spec.md` §5.2 (the Director bullet gains the same clause)
+
+**Interfaces:**
+- Produces: `Game#playsAfter(earlier: Game): ReadonlyArray<Play>`. Each play is an Info log
+  `Director: <matchup> Q<period> <clock> <text>`, annotated with `game`, `league`, `matchup`, `play` (its `_tag`) and
+  `scoring` (a boolean). Task 4's Plays panels filter on `play`, `matchup` and `scoring`.
+
+- [ ] **Step 1: Write the failing domain tests**
+
+In `packages/domain/src/Game.test.ts`, after the last `describe`:
+
+```ts
+describe("Game#playsAfter", () => {
+  it("should give the plays the earlier game lacks, in order", () => {
+    const first = play({ id: PlayId.make("1"), sequence: 1 })
+    const second = play({ id: PlayId.make("2"), sequence: 2 })
+    const third = play({ id: PlayId.make("3"), sequence: 3 })
+    const earlier = Game.of(snapshot()).playsTaken([first])
+    const later = earlier.playsTaken([third, first, second])
+
+    const added = later.playsAfter(earlier)
+
+    assert.deepStrictEqual(
+      added.map(({ id }) => id),
+      [second.id, third.id]
+    )
+  })
+
+  it("should not give a play the earlier game had, though the feed corrected its text", () => {
+    const first = play({ id: PlayId.make("1"), sequence: 1, text: "Rush for 1 yard" })
+    const corrected = play({ id: PlayId.make("1"), sequence: 1, text: "Rush for 2 yards" })
+    const earlier = Game.of(snapshot()).playsTaken([first])
+    const later = earlier.playsTaken([corrected])
+
+    const added = later.playsAfter(earlier)
+
+    assert.deepStrictEqual(added, [])
+  })
+})
+```
+
+- [ ] **Step 2: Run them to see them fail**
+
+Run: `pnpm --filter @sportal/domain exec vitest run src/Game.test.ts -t "Game#playsAfter"`
+Expected: FAIL, because `playsAfter` is not a function (and the typecheck flags it too).
+
+- [ ] **Step 3: Implement `playsAfter`**
+
+In `Game.ts`, after `playsTaken`:
+
+```ts
+  /** The plays this game has that `earlier` lacks, by id, in this game's order. */
+  playsAfter(earlier: Game): ReadonlyArray<Play> {
+    const had = new Set(earlier.plays.map(({ id }) => id))
+    return this.plays.filter(({ id }) => !had.has(id))
+  }
+```
+
+Run the Step 2 command again. Expected: PASS.
+
+- [ ] **Step 4: Write the failing Director test**
+
+In `apps/hub/src/Director.test.ts`, add `PlayId` to the type-only `Play` import, so that it reads
+`import { type Play, PlayId } from "@sportal/domain/Play"`. Then, after `describe("Director's game state gauge", …)`:
+
+```ts
+describe("Director's play log", () => {
+  it.effect("should log each play a take adds once, annotated with its game", () => {
+    const { logs, layer } = recordingLogs()
+    const game = liveSnapshot({ id: one })
+    const first = play({ id: PlayId.make("p1"), sequence: 1, text: "Rush for 1 yard" })
+    const second = play({ id: PlayId.make("p2"), sequence: 2, clock: "14:20", text: "Rush for 4 yards" })
+    return Effect.gen(function* () {
+      yield* listing([game])
+      yield* delivered(Delivery.cases.Plays.make({ game: one, plays: [first] }))
+
+      yield* delivered(Delivery.cases.Plays.make({ game: one, plays: [first, second] }))
+
+      const played = logs.filter(({ annotations }) => annotations.play !== undefined)
+      assert.deepStrictEqual(
+        played.map(({ level, annotations }) => ({ level, game: annotations.game, play: annotations.play })),
+        [
+          { level: "Info", game: one, play: "Rush" },
+          { level: "Info", game: one, play: "Rush" }
+        ]
+      )
+      assert.include(played[1]?.message ?? "", `Director: ${game.matchup()} Q1 14:20 Rush for 4 yards`)
+    }).pipe(Effect.provide(directed.pipe(Layer.provideMerge(layer))))
+  })
+})
+```
+
+This is one behaviour: each play is logged once, with its game. The second take re-sends `first`, and the
+two-entry list proves it is not logged twice.
+
+- [ ] **Step 5: Run it to see it fail**
+
+Run: `pnpm --filter @sportal/hub exec vitest run src/Director.test.ts -t "play log"`
+Expected: FAIL, because `played` is `[]`.
+
+- [ ] **Step 6: Implement the log**
+
+In `Director.ts`, change `import type { Game, GameId, GameSnapshot } from "@sportal/domain/Game"` to
+`import { Game, type GameId, type GameSnapshot } from "@sportal/domain/Game"`, and add
+`import type { Play } from "@sportal/domain/Play"`. In `take`, after `yield* gaugeChanged(before, next)`:
+
+```ts
+          yield* loggedNewPlays(before, next)
+```
+
+Below `gaugeChanged` (and its helpers `gauge` and `byId`, which stay where they are), add:
+
+```ts
+/** An Info log of each play `next` has that `before` lacked, annotated with its game; a game new to the slate had none. */
+const loggedNewPlays = Effect.fnUntraced(function* (before: Slate, next: Slate) {
+  if (next.games === before.games) return
+
+  const had = byId(before.games)
+  const changed = next.games.filter((game) => had.get(game.snapshot.id) !== game)
+  yield* Effect.forEach(
+    changed,
+    (game) => {
+      const earlier = had.get(game.snapshot.id) ?? Game.of(game.snapshot)
+      return Effect.forEach(game.playsAfter(earlier), (play) => loggedPlay(game.snapshot, play), { discard: true })
+    },
+    { discard: true }
+  )
+})
+
+function loggedPlay(snapshot: GameSnapshot, play: Play) {
+  const matchup = snapshot.matchup()
+  return Effect.logInfo(`Director: ${matchup} Q${play.period} ${play.clock} ${play.text}`).pipe(
+    Effect.annotateLogs({
+      game: snapshot.id,
+      league: snapshot.league,
+      matchup,
+      play: play._tag,
+      scoring: play.scoring
+    })
+  )
+}
+```
+
+Update the `Director.layer` doc comment: "…gauging each game a take changed by its progress, and logging each play it
+adds."
+
+- [ ] **Step 7: Run the tests**
+
+Run: `pnpm --filter @sportal/hub exec vitest run src/Director.test.ts`
+Expected: all pass, including "should take NE at BUF's recorded day to its final… logging no error" (the play logs
+are Info, not Error).
+
+- [ ] **Step 8: Docs, check, commit**
+
+Make the `CONTEXT.md` and `technical-spec.md` edits listed under Files. Run `pnpm check` (expected: PASS), then:
+
+```bash
+git add packages/domain/src/Game.ts packages/domain/src/Game.test.ts apps/hub/src/Director.ts apps/hub/src/Director.test.ts CONTEXT.md docs/technical-spec.md
+git commit -m "feat(hub): log each play a take adds, annotated with its game
+
+So the dashboard can show what happened in each game, not only its progress.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
+
+---
+
+### Task 4: Rebuild the Hub dashboard
 
 **Files:**
 - Modify (rewrite): `telemetry/dashboards/hub.json`
 
 **Interfaces:**
-- Consumes: the series from Tasks 1 and 2, and the existing `sportal_game_state_ratio`,
+- Consumes: the series from Tasks 1 and 2; the play logs from Task 3 (annotations `play`, `matchup`, `scoring`); and the existing `sportal_game_state_ratio`,
   `sportal_live_feed_connected_ratio`, `sportal_live_feed_errors_total`,
   `sportal_live_feed_checkpoint_failures_total`, `sportal_poll_duration_milliseconds_*` and
   `sportal_provider_errors_total`.
 
 Keep the top-level keys exactly as they are: `uid "sportal-hub"`, `title "Hub"`, `schemaVersion 41`, `time` now-30m,
-`refresh "30s"`, empty `links` and `templating.list`. Datasource refs are `{ "type": "prometheus", "uid": "prometheus" }`,
+`refresh "30s"` and empty `links`. `templating.list` holds a single variable:
+`{ "name": "matchup", "label": "Game", "type": "query", "datasource": { "type": "prometheus", "uid": "prometheus" },
+"query": { "qryType": 1, "query": "label_values(sportal_game_state_ratio, matchup)", "refId": "PrometheusVariableQueryEditor-VariableQuery" },
+"definition": "label_values(sportal_game_state_ratio, matchup)", "refresh": 2, "multi": true, "includeAll": true,
+"allValue": ".*", "current": { "text": "All", "value": "$__all" }, "sort": 1 }`. Datasource refs are `{ "type": "prometheus", "uid": "prometheus" }`,
 `{ "type": "loki", "uid": "loki" }` and `{ "type": "tempo", "uid": "tempo" }`, set at the panel level, as the current
 file does. Panel `id`s are unique integers. The Games panel (id 27) is copied verbatim, with only its `gridPos.y`
 changed.
@@ -424,28 +606,37 @@ live" as +2, so a single stat can be red only when the socket is down during a g
 
 **Games (y 4)**: id 27, `{x 0, y 4, w 24, h 10}`, verbatim.
 
-**Row "Live feed"**: id 12, `type "row"`, `collapsed false`, `{x 0, y 14, w 24, h 1}`, `panels []`.
+**Row "Plays"**: id 50, `type "row"`, `collapsed false`, `{x 0, y 14, w 24, h 1}`, `panels []`.
 
 | id | gridPos | type | Title | Targets |
 |---|---|---|---|---|
-| 35 | 0,15,12,8 | timeseries | Messages by op (/min) | A `sum by (op) (rate(sportal_live_feed_received_total[$__rate_interval])) * 60`, legend `{{op}}`; `custom.stacking.mode "normal"`, `fillOpacity 30` |
-| 36 | 12,15,12,8 | timeseries | Patches by league (/min) | A `sum by (league) (rate(sportal_live_feed_received_total{op=~"P\|R"}[$__rate_interval])) * 60`, legend `{{league}}` |
-| 37 | 0,23,8,8 | timeseries | Topics followed and steers | A `max(sportal_live_feed_topics_ratio)`, legend `followed`; B `sum by (steer) (increase(sportal_live_feed_steers_total[$__rate_interval]))`, legend `{{steer}}`. Override `byFrameRefID` B: `custom.drawStyle "bars"`, `custom.fillOpacity 80`, `custom.axisPlacement "right"`, `custom.axisLabel "steers"` |
-| 38 | 8,23,8,8 | timeseries | Checkpoint duration | A `histogram_quantile(0.5, sum by (le) (rate(sportal_checkpoint_duration_milliseconds_bucket[$__rate_interval])))`, legend `p50`; B the same at `0.95`, legend `p95`; C `sum(increase(sportal_live_feed_checkpoint_failures_total[$__rate_interval]))`, legend `failures`. Defaults `unit "ms"`. Override `byFrameRefID` C: `custom.drawStyle "points"`, `custom.pointSize 8`, `custom.axisPlacement "right"`, `unit "short"`, `color { mode "fixed", fixedColor "red" }` |
-| 15 | 16,23,8,8 | timeseries | Feed errors by reason | A `sum by (reason) (increase(sportal_live_feed_errors_total[$__rate_interval])) or vector(0)`, legend `{{reason}}`; bars, stacked, `fillOpacity 80` (as today) |
-| 17 | 0,31,24,10 | logs | FastCast logs | A `{service_name="sportal-hub"} \|= "FastCast"`; options `sortOrder "Descending"`, `showTime true` |
+| 51 | 0,15,16,10 | logs | Plays | A `{service_name="sportal-hub"} \| play=~".+" \| matchup=~"$matchup"`; options as panel 17 |
+| 52 | 16,15,8,10 | logs | Scoring plays | A `{service_name="sportal-hub"} \| play=~".+" \| matchup=~"$matchup" \| scoring="true"`; options as panel 17 |
 
-**Row "Poll"**: id 40, `{x 0, y 41, w 24, h 1}`, `collapsed false`, `panels []`.
+The rows below start at y 25.
+
+**Row "Live feed"**: id 12, `type "row"`, `collapsed false`, `{x 0, y 25, w 24, h 1}`, `panels []`.
 
 | id | gridPos | type | Title | Targets |
 |---|---|---|---|---|
-| 3 | 0,42,12,8 | timeseries | Poll duration | the current panel 3, verbatim except `gridPos` |
-| 4 | 12,42,12,8 | timeseries | Provider errors by league | the current panel 4, with its expr followed by ` or vector(0)` |
-| 5 | 0,50,24,8 | table | Poll traces | A `{resource.service.name="sportal-hub" && name="EspnProvider.pollEveryLeague"}`, `queryType "traceql"`, `limit 20` |
-| 41 | 0,58,24,8 | logs | Provider logs | A `{service_name="sportal-hub"} \|~ "EspnProvider\|EspnDecoder"`; options as panel 17 |
+| 35 | 0,26,12,8 | timeseries | Messages by op (/min) | A `sum by (op) (rate(sportal_live_feed_received_total[$__rate_interval])) * 60`, legend `{{op}}`; `custom.stacking.mode "normal"`, `fillOpacity 30` |
+| 36 | 12,26,12,8 | timeseries | Patches by league (/min) | A `sum by (league) (rate(sportal_live_feed_received_total{op=~"P\|R"}[$__rate_interval])) * 60`, legend `{{league}}` |
+| 37 | 0,34,8,8 | timeseries | Topics followed and steers | A `max(sportal_live_feed_topics_ratio)`, legend `followed`; B `sum by (steer) (increase(sportal_live_feed_steers_total[$__rate_interval]))`, legend `{{steer}}`. Override `byFrameRefID` B: `custom.drawStyle "bars"`, `custom.fillOpacity 80`, `custom.axisPlacement "right"`, `custom.axisLabel "steers"` |
+| 38 | 8,34,8,8 | timeseries | Checkpoint duration | A `histogram_quantile(0.5, sum by (le) (rate(sportal_checkpoint_duration_milliseconds_bucket[$__rate_interval])))`, legend `p50`; B the same at `0.95`, legend `p95`; C `sum(increase(sportal_live_feed_checkpoint_failures_total[$__rate_interval]))`, legend `failures`. Defaults `unit "ms"`. Override `byFrameRefID` C: `custom.drawStyle "points"`, `custom.pointSize 8`, `custom.axisPlacement "right"`, `unit "short"`, `color { mode "fixed", fixedColor "red" }` |
+| 15 | 16,34,8,8 | timeseries | Feed errors by reason | A `sum by (reason) (increase(sportal_live_feed_errors_total[$__rate_interval])) or vector(0)`, legend `{{reason}}`; bars, stacked, `fillOpacity 80` (as today) |
+| 17 | 0,42,24,10 | logs | FastCast logs | A `{service_name="sportal-hub"} \|= "FastCast"`; options `sortOrder "Descending"`, `showTime true` |
 
-**Row "Hub"**: id 42, `{x 0, y 66, w 24, h 1}`, `collapsed true`. Its `panels` holds the current panels 1 (Hub log
-volume by level) and 2 (Recent warnings and errors), verbatim except `gridPos.y` 67. Because the row is collapsed,
+**Row "Poll"**: id 40, `{x 0, y 52, w 24, h 1}`, `collapsed false`, `panels []`.
+
+| id | gridPos | type | Title | Targets |
+|---|---|---|---|---|
+| 3 | 0,53,12,8 | timeseries | Poll duration | the current panel 3, verbatim except `gridPos` |
+| 4 | 12,53,12,8 | timeseries | Provider errors by league | the current panel 4, with its expr followed by ` or vector(0)` |
+| 5 | 0,61,24,8 | table | Poll traces | A `{resource.service.name="sportal-hub" && name="EspnProvider.pollEveryLeague"}`, `queryType "traceql"`, `limit 20` |
+| 41 | 0,69,24,8 | logs | Provider logs | A `{service_name="sportal-hub"} \|~ "EspnProvider\|EspnDecoder"`; options as panel 17 |
+
+**Row "Hub"**: id 42, `{x 0, y 77, w 24, h 1}`, `collapsed true`. Its `panels` holds the current panels 1 (Hub log
+volume by level) and 2 (Recent warnings and errors), verbatim except `gridPos.y` 78. Because the row is collapsed,
 they are not repeated in the top-level `panels`.
 
 **Removed:** panels 18 (Connects in range), 25 (Checkpoint failures; now inside 33 and 38) and 26 (Take traces).
@@ -504,7 +695,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 ---
 
-### Task 4: Live check (with the user)
+### Task 5: Live check (with the user)
 
 Not a subagent task.
 
@@ -516,7 +707,8 @@ Not a subagent task.
   - Messages by op shows `P` and `B`;
   - Topics followed shows at least one Follow bar;
   - Checkpoint duration has a p50;
-  - Poll traces lists traces.
+  - Poll traces lists traces;
+  - Plays shows play lines, and the Game picker narrows them to one game.
 - [ ] **Step 3:** Report any empty panel. A rename from OTLP is the likeliest cause, for example a gauge exported
   without `_ratio`. Check the actual name with
   `curl -s -u admin:admin localhost:3000/api/datasources/proxy/uid/prometheus/api/v1/label/__name__/values | grep live_feed`,
