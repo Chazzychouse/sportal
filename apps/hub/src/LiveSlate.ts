@@ -1,7 +1,6 @@
 import { LiveMessage, type SlateChanged } from "@sportal/api/LiveMessage"
 import { GameDay } from "@sportal/domain/GameDay"
 import { type GameEvent, GameEventKind } from "@sportal/domain/GameEvent"
-import { LeagueId } from "@sportal/domain/League"
 import {
   Clock,
   Context,
@@ -34,7 +33,7 @@ export class LiveSlate extends Context.Service<
   LiveSlate,
   {
     readonly latest: Effect.Effect<Slate>
-    /** The latest first, then each change. `seq` or `reached` alone changing is not a change. */
+    /** The latest first, then each change. `reached` alone changing is not a change. */
     readonly changes: Stream.Stream<Slate>
     readonly events: Stream.Stream<GameEvent>
     /**
@@ -68,8 +67,10 @@ export class LiveSlate extends Context.Service<
         const state = yield* SubscriptionRef.make<{
           readonly slate: Slate
           readonly following: Following
-        }>({ slate: Slate.empty, following: Following.Replaying() })
+          readonly seq: Option.Option<number>
+        }>({ slate: Slate.empty, following: Following.Replaying(), seq: Option.none() })
         const latest = Effect.map(SubscriptionRef.get(state), ({ slate }) => slate)
+        const takenSeq = Effect.map(SubscriptionRef.get(state), ({ seq }) => seq)
         const events = yield* PubSub.unbounded<GameEvent>()
         // What the replay took, for its summary.
         const replayed = yield* Ref.make({ frames: 0, deliveries: 0, plays: 0 })
@@ -86,7 +87,7 @@ export class LiveSlate extends Context.Service<
           frame: Option.Option<Decoded>,
           run: (slate: Slate) => Effect.Effect<Taken>
         ) {
-          return yield* SubscriptionRef.modifySomeEffect(state, ({ slate, following }) =>
+          return yield* SubscriptionRef.modifySomeEffect(state, ({ slate, following, seq }) =>
             Effect.gen(function* () {
               const taken = yield* run(slate)
               const { next } = taken
@@ -94,11 +95,18 @@ export class LiveSlate extends Context.Service<
               if (!Following.$is("Replaying")(following)) {
                 yield* PubSub.publishAll(events, taken.events)
               }
+              const nextSeq = Option.orElse(
+                Option.map(frame, (decoded) => decoded.seq),
+                () => seq
+              )
               const moved =
                 !next.publishesSameAs(slate) ||
-                !Equal.equals(next.seq, slate.seq) ||
+                !Equal.equals(nextSeq, seq) ||
                 !Equal.equals(next.reached, slate.reached)
-              return [taken, moved ? Option.some({ slate: next, following }) : Option.none()] as const
+              return [
+                taken,
+                moved ? Option.some({ slate: next, following, seq: nextSeq }) : Option.none()
+              ] as const
             })
           )
         }, Effect.uninterruptible)
@@ -140,9 +148,9 @@ export class LiveSlate extends Context.Service<
         )
 
         // Goes live once the replay is read and the slate has taken its last frame: at once for an empty replay.
-        const caughtUpIfTaken = Effect.all([Deferred.isDone(replayRead), Ref.get(readTo), latest]).pipe(
-          Effect.flatMap(([read, last, slate]) =>
-            read && Option.getOrElse(slate.seq, () => 0) >= last ? goLive : Effect.void
+        const caughtUpIfTaken = Effect.all([Deferred.isDone(replayRead), Ref.get(readTo), takenSeq]).pipe(
+          Effect.flatMap(([read, last, seq]) =>
+            read && Option.getOrElse(seq, () => 0) >= last ? goLive : Effect.void
           )
         )
 
@@ -208,8 +216,8 @@ export class LiveSlate extends Context.Service<
         const through = (seq: number) =>
           SubscriptionRef.changes(state).pipe(
             Stream.filter(
-              ({ slate, following }) =>
-                Following.$is("Halted")(following) || Option.exists(slate.seq, (at) => at >= seq)
+              ({ following, seq: taken }) =>
+                Following.$is("Halted")(following) || Option.exists(taken, (at) => at >= seq)
             ),
             Stream.runHead,
             Effect.flatMap(
@@ -255,14 +263,7 @@ export class LiveSlate extends Context.Service<
         yield* Effect.forkScoped(
           changes.pipe(
             Stream.debounce("250 millis"),
-            Stream.runForEach((slate) => {
-              const games = slate.listedGames(LeagueId.literals)
-              const recentPlays = slate.recentPlays(games)
-              return SubscriptionRef.set(
-                publication,
-                LiveMessage.cases.SlateChanged.make({ games, recentPlays })
-              )
-            })
+            Stream.runForEach((slate) => SubscriptionRef.set(publication, slate.published()))
           ),
           { startImmediately: true }
         )

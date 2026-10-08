@@ -73,7 +73,6 @@ describe("LiveSlate, a frame taken live", () => {
       yield* push(liveSnapshot({ id: one }))
       const current = yield* latest
 
-      assert.deepStrictEqual(current.seq, Option.some(2))
       assert.deepStrictEqual(current.state(one), Option.some("Live"))
       assert.strictEqual(current.acknowledged.get(one)?.from, "push")
     }).pipe(Effect.provide(slateFollowing()))
@@ -205,11 +204,10 @@ describe("LiveSlate#changes", () => {
       yield* takenSnapshot(liveSnapshot({ id: one }))
       const resync = yield* pushed({ _tag: "Nothing" }, "topic")
 
-      const current = yield* appended(resync)
+      yield* appended(resync)
       yield* Effect.yieldNow
       const count = yield* Ref.get(published)
 
-      assert.deepStrictEqual(current.seq, Option.some(2))
       assert.strictEqual(count, 2)
     }).pipe(Effect.provide(slateFollowing()))
   )
@@ -220,10 +218,9 @@ describe("LiveSlate#through", () => {
     Effect.gen(function* () {
       const frame = yield* undecodable
 
-      const current = yield* appended(frame)
+      yield* appended(frame)
       const undecoded = yield* counted("sportal_frames_undecoded", { source: "push" })
 
-      assert.deepStrictEqual(current.seq, Option.some(1))
       assert.strictEqual(undecoded, 1)
     }).pipe(Effect.provide(slateFollowing()), withMetrics)
   )
@@ -235,7 +232,7 @@ describe("LiveSlate#through", () => {
 
       const current = yield* appended(frame)
 
-      assert.deepStrictEqual(current.seq, Option.some(1))
+      assert.strictEqual(current.games.size, 1)
     }).pipe(Effect.provide(slateFollowing([], { provider: dyingProvider })))
   )
 
@@ -249,10 +246,9 @@ describe("LiveSlate#through", () => {
         yield* appended(frame)
         const after = yield* pushed({ _tag: "Nothing" }, "x")
 
-        const current = yield* appended(after)
+        yield* appended(after)
         const stopped = logs.filter(({ level }) => level === "Error")
 
-        assert.deepStrictEqual(current.seq, Option.some(1))
         assert.strictEqual(stopped.length, 1)
         assert.include(
           stopped[0]?.message,
@@ -406,7 +402,7 @@ describe("LiveSlate over time", () => {
     return Effect.gen(function* () {
       yield* takenSnapshot(liveSnapshot({ id: one }))
 
-      const halted = yield* tellingDies
+      yield* tellingDies
       const liveGame = yield* gameOf(one)
       const haltLogged = logs.some(
         ({ level, message }) =>
@@ -414,7 +410,6 @@ describe("LiveSlate over time", () => {
           message.includes("frames are no longer taken into the slate until the Hub restarts")
       )
 
-      assert.deepStrictEqual(halted.seq, Option.some(1), "the frame whose report died is not taken")
       assert.isTrue(haltLogged)
       assert.strictEqual(liveGame.state, "Live")
     }).pipe(Effect.provide(slateDyingOnStale(layer)))
@@ -957,7 +952,6 @@ describe("LiveSlate following the feed log", () => {
           .filter(({ attributes, type }) => attributes?.game !== undefined && type !== "Gauge")
           .map(({ id }) => id)
 
-        assert.deepStrictEqual(current.seq, Option.some(3))
         assert.strictEqual(current.plays.get(one)?.length, 1)
         assert.strictEqual(current.games.get(one)?.clock, "9:00")
         assert.isFalse(logs.some(({ message }) => /→|started|ScoreChanged|Played/.test(message)))
@@ -1071,7 +1065,6 @@ describe("LiveSlate following the feed log", () => {
       assert.isTrue(Equal.equals(replayed.games, taken.games))
       assert.isTrue(Equal.equals(replayed.plays, taken.plays))
       assert.isTrue(Equal.equals(replayed.acknowledged, taken.acknowledged))
-      assert.deepStrictEqual(replayed.seq, taken.seq)
       assert.deepStrictEqual(taken.state(one), Option.some("Live"))
       assert.isTrue(logs.some(({ message }) => message.includes("Live → Stale")))
       assert.include(summary?.message, "replayed 5 frames: 5 deliveries, 2 plays; 1 live games")
@@ -1459,7 +1452,6 @@ describe("LiveSlate, a recorded game", () => {
         const halfway = yield* replayed(all.slice(0, half))
 
         assert.isTrue(Equal.equals(after, uninterrupted))
-        assert.deepStrictEqual(before.seq, Option.some(half))
         assert.isTrue(
           Equal.equals(before, halfway),
           "before the restart, as the uninterrupted log was at that point"

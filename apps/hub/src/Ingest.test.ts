@@ -3,7 +3,7 @@ import { assert, describe, it } from "@effect/vitest"
 import { GameId, type GameSnapshot } from "@sportal/domain/Game"
 import type { LeagueId } from "@sportal/domain/League"
 import { liveSnapshot, team } from "@sportal/domain/TestGame"
-import { DateTime, Duration, Effect, Exit, Layer, Option, Schedule, Scope, Stream, type Tracer } from "effect"
+import { DateTime, Duration, Effect, Exit, Layer, Schedule, Scope, Stream, type Tracer } from "effect"
 import { SqlClient } from "effect/sql"
 import { TestClock } from "effect/testing"
 import * as Database from "./Database.ts"
@@ -42,7 +42,6 @@ describe("Ingest", () => {
       yield* TestClock.adjust(0)
       const current = yield* liveSlate.through(3)
 
-      assert.deepStrictEqual(current.seq, Option.some(3))
       assert.deepStrictEqual(
         [...current.listed].map(([league, games]) => [league, games.map((listed) => listed.id)]),
         [
@@ -126,7 +125,6 @@ describe("Ingest", () => {
 
       const snapshots = yield* counted("sportal_snapshots")
       const replay = ended.find((span) => span.name === "LiveSlate.replay")
-      assert.deepStrictEqual(replayed.seq, Option.some(2))
       assert.strictEqual(replayed.games.get(GameId.make("1"))?.period, 3)
       assert.isUndefined(snapshots)
       assert.isFalse(logs.some((log) => log.message.includes("started")))
@@ -152,7 +150,6 @@ describe("Ingest", () => {
         return yield* liveSlate.through(3)
       }).pipe(Effect.provide(over(next).pipe(Layer.provideMerge(logged))))
 
-      assert.deepStrictEqual(polledSlate.seq, Option.some(3))
       assert.strictEqual(polledSlate.games.get(GameId.make("1"))?.period, 4)
     }).pipe(Effect.provide([Database.layerMemory, NodeCrypto.layer]), withMetrics)
   })

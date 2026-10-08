@@ -172,7 +172,7 @@ describe("Slate#take", () => {
     Effect.gen(function* () {
       const held = yield* taken(Slate.empty, [polled(live(one, "10:00"))], t0)
 
-      const { next } = yield* held.take({ deliveries: [], at: DateTime.add(t0, { seconds: 100 }), seq: 9 })
+      const { next } = yield* held.take({ deliveries: [], at: DateTime.add(t0, { seconds: 100 }) })
 
       assert.deepStrictEqual(next.state(one), Option.some("Stale"))
     })
@@ -638,44 +638,6 @@ describe("Slate#take, a snapshot's events beside its plays", () => {
   )
 })
 
-describe("Slate#take and #tick, seq", () => {
-  it.effect("should replace seq with the frame's on a take", () =>
-    Effect.gen(function* () {
-      const first = yield* Slate.empty.take({ deliveries: [polled(live(one, "10:00"))], at: t0, seq: 7 })
-      const kept = yield* first.next.tick(DateTime.add(t0, { minutes: 31 }))
-
-      const { next } = yield* kept.next.take({
-        deliveries: [],
-        at: DateTime.add(t0, { minutes: 32 }),
-        seq: 8
-      })
-
-      assert.deepStrictEqual(first.next.seq, Option.some(7))
-      assert.deepStrictEqual(next.seq, Option.some(8))
-    })
-  )
-
-  it.effect("should set seq from a frame with no deliveries", () =>
-    Effect.gen(function* () {
-      const held = yield* taken(Slate.empty, [polled(live(one, "10:00"))], t0)
-
-      const { next } = yield* held.take({ deliveries: [], at: DateTime.add(t0, { seconds: 100 }), seq: 9 })
-
-      assert.deepStrictEqual(next.seq, Option.some(9))
-    })
-  )
-
-  it.effect("should keep the last seq on a tick", () =>
-    Effect.gen(function* () {
-      const first = yield* Slate.empty.take({ deliveries: [polled(live(one, "10:00"))], at: t0, seq: 7 })
-
-      const { next } = yield* first.next.tick(DateTime.add(t0, { minutes: 31 }))
-
-      assert.deepStrictEqual(next.seq, Option.some(7))
-    })
-  )
-})
-
 describe("Slate#listedGames", () => {
   const listedFbs = snapshot({ id: one, status: "live", period: 1, clock: "10:00" })
   const listedNfl = snapshot({ id: two, league: "nfl", kickoff: DateTime.add(t0, { hours: 3 }) })
@@ -781,14 +743,91 @@ describe("Slate#everyGame", () => {
   )
 })
 
+describe("Slate#published", () => {
+  const three = GameId.make("3")
+
+  it.effect("should keep the listing's order, leagues in their order", () =>
+    Effect.gen(function* () {
+      const slate = yield* taken(
+        Slate.empty,
+        [
+          listing("fbs", [live(three, "10:00"), live(one, "10:00"), live(two, "10:00")]),
+          listing("nfl", [snapshot({ id: GameId.make("9"), league: "nfl", status: "live" })])
+        ],
+        t0
+      )
+
+      const ids = slate.published().games.map((listed) => listed.id)
+
+      assert.deepStrictEqual(ids, ["9", "3", "1", "2"])
+    })
+  )
+
+  it.effect("should publish a live game's snapshot over its listing's", () =>
+    Effect.gen(function* () {
+      const slate = yield* taken(
+        Slate.empty,
+        [listing("fbs", [live(one, "10:00")]), pushed(snapshot({ id: one, status: "live", period: 2 }))],
+        t0
+      )
+
+      const { games } = slate.published()
+
+      assert.strictEqual(games[0]?.period, 2)
+    })
+  )
+
+  it.effect("should carry each listed game's plays beside it", () =>
+    Effect.gen(function* () {
+      const recordedPlay = play({ id: PlayId.make("p1"), sequence: 1 })
+      const slate = yield* taken(
+        Slate.empty,
+        [listing("fbs", [live(one, "10:00")]), playsFor(one, [recordedPlay])],
+        t0
+      )
+
+      const { games, recentPlays } = slate.published()
+      const ids = games.map((listed) => listed.id)
+
+      assert.deepStrictEqual(ids, [one])
+      assert.deepStrictEqual(recentPlays, { [one]: [recordedPlay] })
+    })
+  )
+
+  it.effect("should list a game the slate does not hold as listed", () =>
+    Effect.gen(function* () {
+      const final = snapshot({ id: one, status: "final" })
+      const slate = yield* taken(Slate.empty, [listing("fbs", [final])], t0)
+
+      const { games } = slate.published()
+
+      assert.isFalse(slate.games.has(one))
+      assert.deepStrictEqual(games, [final])
+    })
+  )
+
+  it.effect("should leave off a game no listing has", () =>
+    Effect.gen(function* () {
+      const slate = yield* taken(
+        Slate.empty,
+        [listing("fbs", [live(one, "10:00")]), pushed(live(GameId.make("9"), "10:00"))],
+        t0
+      )
+
+      const ids = slate.published().games.map((listed) => listed.id)
+
+      assert.deepStrictEqual(ids, ["1"])
+    })
+  )
+})
+
 describe("Slate#publishesSameAs", () => {
-  it.effect("should be the same after a take that moves only seq", () =>
+  it.effect("should be the same after a take that changed nothing", () =>
     Effect.gen(function* () {
       const held = yield* taken(Slate.empty, [polled(live(one, "10:00"))], t0)
 
       const moved = yield* taken(held, [], t0)
 
-      assert.notDeepEqual(moved.seq, held.seq)
       assert.isTrue(moved.publishesSameAs(held))
     })
   )
@@ -816,9 +855,9 @@ describe("Slate#publishesSameAs", () => {
   )
 })
 
-/** `before` taking `deliveries` as one frame received at `at`, the frame after its last. */
+/** `before` taking `deliveries` as one frame received at `at`. */
 function took(before: Slate, deliveries: ReadonlyArray<Delivery>, at: DateTime.Utc) {
-  return before.take({ deliveries, at, seq: Option.getOrElse(before.seq, () => 0) + 1 })
+  return before.take({ deliveries, at })
 }
 
 function taken(before: Slate, deliveries: ReadonlyArray<Delivery>, at: DateTime.Utc) {

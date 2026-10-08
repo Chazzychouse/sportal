@@ -148,8 +148,7 @@ describe("LiveSlateTelemetry.told", () => {
             Delivery.cases.Snapshot.make({ snapshot: liveSnapshot({ id: one }), from: "push" }),
             Delivery.cases.Snapshot.make({ snapshot: final, from: "push" })
           ],
-          at,
-          seq: 1
+          at
         })
         const said = taken.events.map(({ what }) => what._tag)
 
@@ -175,14 +174,12 @@ describe("LiveSlateTelemetry.told", () => {
         const at = yield* DateTime.now
         const first = yield* Slate.empty.take({
           deliveries: [Delivery.cases.Snapshot.make({ snapshot: liveSnapshot({ id: one }), from: "push" })],
-          at,
-          seq: 1
+          at
         })
         const final = snapshot({ id: one, status: "final", period: 4, clock: "0:00" })
         const taken = yield* first.next.take({
           deliveries: [Delivery.cases.Snapshot.make({ snapshot: final, from: "push" })],
-          at: DateTime.add(at, { seconds: 1 }),
-          seq: 2
+          at: DateTime.add(at, { seconds: 1 })
         })
 
         yield* LiveSlateTelemetry.told(Following.Live(), Option.none(), first.next, taken)

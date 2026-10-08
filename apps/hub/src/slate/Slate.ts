@@ -1,6 +1,7 @@
+import { LiveMessage, type SlateChanged } from "@sportal/api/LiveMessage"
 import type { GameId, GameSnapshot } from "@sportal/domain/Game"
 import { GameEvent, type GameEventKind } from "@sportal/domain/GameEvent"
-import type { LeagueId } from "@sportal/domain/League"
+import { LeagueId } from "@sportal/domain/League"
 import { Play } from "@sportal/domain/Play"
 import type { RecentPlays } from "@sportal/domain/RecentPlays"
 import { Cause, Data, DateTime, Effect, Equal, Option } from "effect"
@@ -10,8 +11,8 @@ import { SlateObservation } from "./SlateObservation.ts"
 
 /**
  * The slate: each league's last listing, every current game as its snapshot, its plays and its acknowledgement, taken
- * from push and poll deliveries in arrival order, each game it saw finish, the last frame's `seq`, and `reached`, the
- * instant it has ticked to: every wake time at or before it has been ticked.
+ * from push and poll deliveries in arrival order, each game it saw finish, and `reached`, the instant it has ticked to:
+ * every wake time at or before it has been ticked.
  */
 export class Slate extends Data.Class<{
   readonly listed: ReadonlyMap<LeagueId, ReadonlyArray<GameSnapshot>>
@@ -27,7 +28,6 @@ export class Slate extends Data.Class<{
    * again, while overtime after a spurious final, or a postponed game resuming, does.
    */
   readonly finished: ReadonlyMap<GameId, GameSnapshot>
-  readonly seq: Option.Option<number>
   readonly reached: Option.Option<DateTime.Utc>
 }> {
   static readonly empty: Slate = new Slate({
@@ -36,7 +36,6 @@ export class Slate extends Data.Class<{
     plays: new Map(),
     acknowledged: new Map(),
     finished: new Map(),
-    seq: Option.none(),
     reached: Option.none()
   })
 
@@ -45,15 +44,14 @@ export class Slate extends Data.Class<{
 
   /**
    * Takes one frame: ticks every game due after `reached` and at or before `at`, then applies each of its deliveries in
-   * order, and sets `seq` to the frame's, even when it has no deliveries. A tick never goes back. A game whose take or
+   * order. A tick never goes back. A game whose take or
    * tick raises a defect keeps what it had and observes `Raised`.
    */
   take(frame: {
     readonly deliveries: ReadonlyArray<Delivery>
     readonly at: DateTime.Utc
-    readonly seq: number
   }): Effect.Effect<Taken> {
-    return this.advance(frame.at, Option.some(frame.seq), (ticked) =>
+    return this.advance(frame.at, (ticked) =>
       Effect.reduce(
         frame.deliveries,
         () => ticked,
@@ -62,9 +60,9 @@ export class Slate extends Data.Class<{
     )
   }
 
-  /** Ticks every game due after `reached` and at or before `now`, with no frame: `seq` stays as it was. */
+  /** Ticks every game due after `reached` and at or before `now`, with no frame. */
   tick(now: DateTime.Utc): Effect.Effect<Taken> {
-    return this.advance(now, Option.none(), Effect.succeed)
+    return this.advance(now, Effect.succeed)
   }
 
   /** The earliest instant after `reached` at which a current game changes, or its state turns, with no new frame. */
@@ -94,6 +92,13 @@ export class Slate extends Data.Class<{
     )
   }
 
+  /** What the live stream sends of it: every league's listed games, as the slate has them, and their recent plays. */
+  published(): SlateChanged {
+    const games = this.listedGames(LeagueId.literals)
+    const recentPlays = this.recentPlays(games)
+    return LiveMessage.cases.SlateChanged.make({ games, recentPlays })
+  }
+
   /** Every listed game as the slate has it, then current games no listing holds. */
   everyGame(): ReadonlyArray<GameSnapshot> {
     const listed = [...this.listed.values()].flatMap((games) => asHeld(games, this))
@@ -105,7 +110,7 @@ export class Slate extends Data.Class<{
 
   /**
    * Whether `that` publishes the same: a take or tick that changed nothing hands back the same maps, and leaves each game
-   * in the same state. `seq` and `reached` alone are ignored, since moving only them changes no game.
+   * in the same state. `reached` alone is ignored, since moving only it changes no game.
    */
   publishesSameAs(that: Slate): boolean {
     return (
@@ -118,15 +123,13 @@ export class Slate extends Data.Class<{
     )
   }
 
-  /** Ticks to `at`, then runs `then` on what the ticks left, as frame `seq` (none keeps the last). */
+  /** Ticks to `at`, then runs `then` on what the ticks left. */
   private advance(
     at: DateTime.Utc,
-    seq: Option.Option<number>,
     then: (ticked: Advancing) => Effect.Effect<Advancing>
   ): Effect.Effect<Taken> {
     const from = Option.getOrElse(this.reached, () => at)
     const reached = Option.some(DateTime.max(from, at))
-    const lastSeq = Option.orElse(seq, () => this.seq)
     const start = new Advancing({
       listed: this.listed,
       games: this.games,
@@ -140,7 +143,7 @@ export class Slate extends Data.Class<{
     return tickTo(start, from, at).pipe(
       Effect.flatMap(then),
       Effect.map(({ listed, games, plays, acknowledged, finished, events, observations }) => ({
-        next: new Slate({ listed, games, plays, acknowledged, finished, seq: lastSeq, reached }),
+        next: new Slate({ listed, games, plays, acknowledged, finished, reached }),
         events,
         observations
       }))

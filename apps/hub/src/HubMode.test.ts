@@ -1,6 +1,6 @@
 import { NodeCrypto, NodeServices } from "@effect/platform-node"
 import { assert, describe, it } from "@effect/vitest"
-import { DateTime, Effect, FileSystem, Layer, Option, Stream } from "effect"
+import { DateTime, Effect, FileSystem, Layer, Stream } from "effect"
 import { FetchHttpClient } from "effect/http"
 import { TestClock } from "effect/testing"
 import * as Database from "./Database.ts"
@@ -29,14 +29,12 @@ describe("HubMode", () => {
         const fs = yield* FileSystem.FileSystem
         const dataDir = yield* fs.makeTempDirectoryScoped()
 
-        const { published, latest } = yield* playedForASecond.pipe(
+        const { published } = yield* playedForASecond.pipe(
           Effect.provide(scenarioHub("bogus-clock-two-minute", { SPORTAL_DATA_DIR: dataDir }))
         )
 
         const files = yield* fs.readDirectory(dataDir)
         assert.isAbove(published.games.length, 0)
-        // The slate's seq is the last frame it took from the feed log, so the scenario's frames were logged.
-        assert.isTrue(Option.isSome(latest.seq), "the scenario's frames were logged")
         assert.deepStrictEqual(files, [])
       }).pipe(Effect.scoped, Effect.provide(NodeServices.layer))
   )
