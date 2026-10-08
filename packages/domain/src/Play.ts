@@ -368,5 +368,5 @@ function offenseOf(play: { readonly team?: TeamId | undefined; readonly start: t
 }
 
 function lostYardsOf(play: { readonly _tag: string; readonly yards: number }): boolean {
-  return play._tag === "Sack" || play.yards < 0
+  return FootballPlay.guards.Sack(play) || play.yards < 0
 }
