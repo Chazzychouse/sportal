@@ -6,7 +6,6 @@ import { TeamId } from "@sportal/domain/Team"
 import { DateTime, Effect, Equal, Layer, Logger, Order, Schema } from "effect"
 import * as Gzip from "../../Gzip.ts"
 import { Delivery } from "../../slate/Delivery.ts"
-import type { PlayArchive } from "../Archiver.ts"
 import { type Decoded, Provider } from "../Provider.ts"
 import { FramesDecoded } from "../TestProvider.ts"
 import * as EspnDecoder from "./EspnDecoder.ts"
@@ -160,7 +159,7 @@ describe("EspnDecoder.byLeague.decodeSummary", () => {
 
   it.effect("should give each of WSH at PHI's timeouts, from both teams, its caller", () =>
     Effect.gen(function* () {
-      // WSH at PHI of 2026-09-13, as the archive fetched it:
+      // WSH at PHI of 2026-09-13, as ESPN gave it:
       //   curl 'https://site.api.espn.com/apis/site/v2/sports/football/nfl/summary?event=401872929' | gzip \
       //     > fixtures/nfl-summary-401872929.json.gz
       // Its timeouts' texts call Washington WAS, which its header calls WSH; the caller comes from the participants.
@@ -180,7 +179,7 @@ describe("EspnDecoder.byLeague.decodeSummary", () => {
 
   it.effect("should give each of CLE at JAX's timeouts, all Cleveland's, its caller", () =>
     Effect.gen(function* () {
-      // CLE at JAX of 2026-09-13, as the archive fetched it:
+      // CLE at JAX of 2026-09-13, as ESPN gave it:
       //   curl 'https://site.api.espn.com/apis/site/v2/sports/football/nfl/summary?event=401872922' | gzip \
       //     > fixtures/nfl-summary-401872922.json.gz
       // Only Cleveland called timeouts; their texts say "CLV", which no header abbreviation is.
@@ -360,7 +359,7 @@ function gzipped(name: string) {
 }
 
 // Each timeout's period, clock, and caller.
-function timeoutsOf(plays: ReadonlyArray<PlayArchive>) {
+function timeoutsOf(plays: ReadonlyArray<{ readonly play: Play }>) {
   return plays
     .map(({ play }) => play)
     .filter(Play.guards.Timeout)

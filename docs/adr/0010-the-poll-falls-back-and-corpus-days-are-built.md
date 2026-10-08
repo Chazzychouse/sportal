@@ -1,7 +1,7 @@
 # 10. The poll falls back to the push; corpus days are built
 
 Date: 2026-10-07
-Status: Accepted
+Status: Accepted; its corpus half superseded by ADR 0011
 
 Amends ADR 0008 and ADR 0009.
 

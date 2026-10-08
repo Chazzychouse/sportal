@@ -22,8 +22,6 @@ export class HubConfig extends Context.Service<
     readonly host: string
     readonly webRoot: Option.Option<string>
     readonly dataDir: string
-    /** Where the corpus keeps its days, from SPORTAL_CORPUS_DIR; `corpus` in the data directory when it is unset. */
-    readonly corpusDir: string
     readonly scenario: Option.Option<string>
     readonly scenarioSpeed: number
     /** A file in the data directory for a scenario's feed log; none keeps it in memory. Never the game day's log. */
@@ -39,13 +37,11 @@ export class HubConfig extends Context.Service<
   static readonly layer: Layer.Layer<HubConfig, Config.ConfigError, Path.Path> = Layer.effect(
     HubConfig,
     Effect.gen(function* () {
-      const path = yield* Path.Path
       const dataDirSetting = yield* Config.String("SPORTAL_DATA_DIR").pipe(Config.option)
       const dataDir = yield* Option.match(dataDirSetting, {
         onSome: Effect.succeed,
         onNone: () => HubConfig.defaultDataDir(process.platform)
       })
-      const corpusDirSetting = yield* Config.String("SPORTAL_CORPUS_DIR").pipe(Config.option)
       const port = yield* Config.Port("SPORTAL_PORT").pipe(Config.withDefault(4400))
       // Every interface, so a Remote on the home network can reach the Hub.
       const host = yield* Config.String("SPORTAL_HOST").pipe(Config.withDefault("0.0.0.0"))
@@ -91,14 +87,12 @@ export class HubConfig extends Context.Service<
         ),
         "SPORTAL_LEAGUES"
       ).pipe(Config.withDefault(LeagueId.literals))
-      const corpusDir = Option.getOrElse(corpusDirSetting, () => path.join(dataDir, "corpus"))
 
       return HubConfig.of({
         port,
         host,
         webRoot,
         dataDir,
-        corpusDir,
         scenario,
         scenarioSpeed,
         scenarioFeedLog,

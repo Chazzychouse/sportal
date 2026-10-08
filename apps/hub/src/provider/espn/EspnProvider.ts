@@ -80,14 +80,14 @@ export const layer: Layer.Layer<Provider, never, FastCast | HttpClient.HttpClien
 )
 
 /** The site scoreboard of `league` the Hub polls: today's games, every FBS game for college. */
-export function scoreboardUrl(league: LeagueId): string {
+function scoreboardUrl(league: LeagueId): string {
   return league === "nfl"
     ? `${siteUrl(league)}/scoreboard`
     : `${siteUrl(league)}/scoreboard?groups=80&limit=300`
 }
 
 /** ESPN's site API for `league`, which its scoreboard and its game summaries are under. */
-export function siteUrl(league: LeagueId): string {
+function siteUrl(league: LeagueId): string {
   const base = "https://site.api.espn.com/apis/site/v2/sports/football"
   return league === "nfl" ? `${base}/nfl` : `${base}/college-football`
 }

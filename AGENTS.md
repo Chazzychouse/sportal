@@ -30,7 +30,7 @@ easiest to break.
   `shadcn add` and `shadcn diff` keep working. Nothing else goes there.
 - No mirror types. There is no `GameDto`, `GameRow`, `GameResponse`, or `GameProps`. The domain schema is
   the wire format. Derive a variant at the point of use; do not name it.
-- In the Hub, only `HubMode.ts`, `corpus/corpus.ts`, and tests name concrete providers and sources (ESPN's only through `provider/espn/Espn.ts`), and `main.ts` is only the layer pipe and how the process runs it.
+- In the Hub, only `HubMode.ts` and tests name concrete providers and sources (ESPN's only through `provider/espn/Espn.ts`), and `main.ts` is only the layer pipe and how the process runs it.
   Everything else depends on the port.
 - In the Hub, only `HubConfig.ts` reads the environment. A new setting is a field there, with its default.
 - A service is yielded where it is used, never passed as an argument. A layer that needs a setting yields `HubConfig`
@@ -45,7 +45,7 @@ easiest to break.
 | Class module | One class named for the file (service, `Schema.Class`, `Data.Class`), and beside it only that concept's member types, errors and the schemas its fields read | By name |
 | Namespace module | No class of its own: an adapter of a port defined elsewhere (`EspnProvider`), a layer that provides no service (`Ingest`, `HubMode`), or a set of functions (`Gzip`). An adapter or layer-only module exports `layer` | `import * as X` |
 | Payload module (`*Payload.ts`) | A provider's wire spelling, with no transform into domain types | By name |
-| Entry point (lowercase) | Nothing; it runs a process (`main.ts`, `corpus/corpus.ts`, `corpus/worker.ts`) | – |
+| Entry point (lowercase) | Nothing; it runs a process (`main.ts`) | – |
 | Test module (`Test*.ts`) | Fixtures, recorded payloads, builders of domain values, harnesses composing several layers, test-only adapters of a port | As its shape says |
 
 ## Inside a file
@@ -68,10 +68,10 @@ A reader opens a file to see the thing it is named for. Keep it that way.
    expression. Not `decoder.decode((yield* FeedLog).replay(from))`, but
    `const feedLog = yield* FeedLog` then `decoder.decode(feedLog.replay(from))`.
 10. A value that takes a calculation to build, or a pipe more than two levels deep, gets a name before it is used;
-    a constructor is a plain list of fields. Not `new CorpusDay({ leagues: [...new Set(deliveries.flatMap(…))].toSorted(), … })`,
-    but `const leagues = leaguesOf(deliveries)` then `new CorpusDay({ date, kind, leagues, … })`.
+    a constructor is a plain list of fields. Not `new Frame({ receivedAt, ...where, body: Schema.encodeSync(SnapshotPayload)(payload) })`,
+    but `const body = Schema.encodeSync(SnapshotPayload)(payload)` then `new Frame({ receivedAt, ...where, body })`.
 11. A long chain of steps that does one thing is a named function (a private helper below its user, or a method of
-    its concept), as `CorpusLine.of` is.
+    its concept), as `snapshotTaken` in `Slate.ts` is.
 
 ## How code is written
 

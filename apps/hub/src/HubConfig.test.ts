@@ -15,7 +15,6 @@ describe("HubConfig", () => {
       assert.strictEqual(config.host, "0.0.0.0")
       assert.isTrue(Option.isNone(config.webRoot))
       assert.strictEqual(config.dataDir, expectedDataDir)
-      assert.strictEqual(config.corpusDir, `${expectedDataDir}/corpus`)
       assert.isTrue(Option.isNone(config.scenario))
       assert.strictEqual(config.scenarioSpeed, 1)
       assert.isTrue(Option.isNone(config.scenarioFeedLog), "a scenario's feed log is in memory")
@@ -35,7 +34,6 @@ describe("HubConfig", () => {
       assert.strictEqual(config.host, "127.0.0.1")
       assert.deepStrictEqual(config.webRoot, Option.some("/srv/web"))
       assert.strictEqual(config.dataDir, "/data")
-      assert.strictEqual(config.corpusDir, "/srv/corpus")
       assert.deepStrictEqual(config.scenario, Option.some("bogus-clock-two-minute"))
       assert.strictEqual(config.scenarioSpeed, 10)
       assert.deepStrictEqual(config.scenarioFeedLog, Option.some("scenario.sqlite"))
@@ -48,14 +46,6 @@ describe("HubConfig", () => {
       )
       assert.deepStrictEqual(config.leagues, ["fbs"])
     }).pipe(Effect.provide(HubConfig.layerTest(everySetting)))
-  )
-
-  it.effect("should keep the corpus in the data directory it is given", () =>
-    Effect.gen(function* () {
-      const config = yield* HubConfig
-
-      assert.strictEqual(config.corpusDir, "/data/corpus")
-    }).pipe(Effect.provide(HubConfig.layerTest({ SPORTAL_DATA_DIR: "/data" })))
   )
 
   it.effect("should read a list of leagues, ignoring the spaces around each", () =>
@@ -158,7 +148,6 @@ const everySetting = {
   SPORTAL_HOST: "127.0.0.1",
   SPORTAL_WEB_ROOT: "/srv/web",
   SPORTAL_DATA_DIR: "/data",
-  SPORTAL_CORPUS_DIR: "/srv/corpus",
   SPORTAL_SCENARIO: "bogus-clock-two-minute",
   SPORTAL_SCENARIO_SPEED: "10",
   SPORTAL_SCENARIO_FEED_LOG: "scenario.sqlite",

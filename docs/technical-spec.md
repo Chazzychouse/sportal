@@ -67,7 +67,6 @@ flowchart LR
     feedlog[(Feed log: feed.sqlite)]
     board[Board: decode, then every game's state and plays, from both feeds]
     telemetry[BoardTelemetry: what each take told]
-    corpus[Corpus: typed days, built from the feed log or the archive; run on virtual time]
     producer[Producer: switches the Slate of games on the Board, not built]
     stages[Switcher: the one Stage, in memory]
     api[HTTP API + live stream]
@@ -91,8 +90,6 @@ flowchart LR
   prov -- decode --> board
   board -- every take --> telemetry
   board -- listed games, recent plays --> api
-  feedlog -- build --> corpus
-  corpus -- days --> board
   board -- the Slate --> stages
   board -- game events --> producer
   producer -- stage commands --> stages
@@ -148,7 +145,7 @@ This section is binding in the same way the type checker is. `AGENTS.md` carries
 6. **No mirror types.** There is no `GameDto`, `GameRow`, `GameResponse`, `GameProps`. The domain schema is the wire format and the stored format. A variant is derived from the original (`pick`, `omit`, `extend`) at the point of use and is not given a name unless it is itself a domain concept with a glossary entry.
 7. **Search before you write.** Before adding a function, type, or file, look for the existing one. Duplicating logic that already exists is a defect even when the code works.
 8. **Organize by concept, not by kind.** No top-level `components/`, `hooks/`, `services/`, `schemas/` folders. Code for the slate lives under `slate/`, whatever kind of code it is.
-9. **Dependencies point one way.** `domain` imports only Effect. `api` imports `domain`. Apps import packages. Nothing imports an app. Within the Hub, only `HubMode.ts` (and the corpus CLI) knows which concrete providers and sources exist, and it reaches ESPN's only through `provider/espn/Espn.ts`.
+9. **Dependencies point one way.** `domain` imports only Effect. `api` imports `domain`. Apps import packages. Nothing imports an app. Within the Hub, only `HubMode.ts` knows which concrete providers and sources exist, and it reaches ESPN's only through `provider/espn/Espn.ts`.
 
 ### 4.2 The tree
 
@@ -213,7 +210,6 @@ sportal/
     │       ├── HubConfig.ts        Every environment setting, in one place
     │       ├── Telemetry.ts        Log level and format; OTLP export when configured
     │       ├── Database.ts         The SQLite plumbing the feed log needs: a file or memory client layer, and migrations per store
-    │       ├── corpus/             Typed game days built from the feed log or the archive, run through the slate on virtual time: `CorpusDay`, `CorpusLine`, `CorpusBuild`, `CorpusRun` (with its worker pool), `Synthesis`, the `corpus` CLI and its worker thread
     │       ├── Switcher.ts         The one authoritative Stage, held in memory; applies stage commands, refreshes availability, and broadcasts
     │       ├── slate/
     │       │   ├── Slate.ts        The fold: every delivery taken in order, each game as its snapshot, plays and acknowledgement, the games it saw finish; Taken
@@ -236,13 +232,11 @@ sportal/
     │       ├── HubServer.ts        Serves the API, the live stream, the addresses a phone can reach, and the web UI's files
     │       ├── provider/
     │       │   ├── Provider.ts     The port: `frames` and `decode`; Decoded, DecodeObservation, ResetReason
-    │       │   ├── Archiver.ts     A provider's archiver of finished games: the port, GameArchive, PlayArchive, ArchiveFetchFailed
     │       │   ├── TestProvider.ts What the provided `Provider` says of a test's frames
     │       │   └── espn/
-    │       │       ├── Espn.ts             ESPN's one front door: one layer per mode, live (`layer`), scenario (`layerScenario`), and the corpus's (`layerArchival`), each providing several ports
+    │       │       ├── Espn.ts             ESPN's one front door: one layer per mode, live (`layer`), and scenario (`layerScenario`), each providing several ports
     │       │       ├── EspnProvider.ts     Implements the port: polls each league on its own cadence, merges FastCast's push, and decodes
     │       │       ├── EspnDecoder.ts      Frames to deliveries: listings, snapshots, plays; each league's decode (`byLeague`)
-    │       │       ├── EspnArchiver.ts     ESPN's archiver: scoreboards and summaries fetched into the corpus's `archive/` and read back
     │       │       ├── ScenarioProvider.ts A scenario's ESPN frames as the provider: polled, pushed, and polled again at their times
     │       │       ├── EspnPayload.ts      ESPN's JSON as ESPN spells it: events, scoreboard, plays, summary
     │       │       ├── EspnEvent.ts        One game as either ESPN feed spells it, as a GameSnapshot
@@ -253,7 +247,6 @@ sportal/
     │       │       ├── FastCastMessage.ts  FastCast's wire shapes
     │       │       ├── FastCastTopic.ts    A topic's owner, and the topic of a scoreboard or a game
     │       │       ├── TestEspn.ts         Recorded frames for tests of other modules, NE at BUF's day among them (`recordedNeAtBuf`)
-    │       │       ├── TestEspnArchiver.ts ESPN's archiver answered from recorded payloads, for the corpus's tests
     │       │       └── fixtures/           Recorded real payloads, and the recordings that are test data for the scenario provider's tests
     │       ├── source/
     │       │   ├── Source.ts       The port
@@ -368,7 +361,7 @@ class FeedLog extends Context.Service<FeedLog, {
   telemetry's 1 s to export what it holds.
 
 **Board** — the one holder of the day's slate, between the feed log and everything that reads games. Not a port: one implementation
-(`docs/adr/0009-one-fold-not-actors.md`, amended by `docs/adr/0010-the-poll-falls-back-and-corpus-days-are-built.md`):
+(`docs/adr/0009-one-fold-not-actors.md`, amended by ADR 0010):
 
 ```ts
 class Board extends Context.Service<Board, {
@@ -384,15 +377,6 @@ class Board extends Context.Service<Board, {
 - `BoardTelemetry` is the service the board tells of every take and tick, in order; the board itself logs and counts nothing.
 - `Slate.published()` is each listed game as the slate has it, with each game's last ten plays (`recentPlays`, on `SlateChanged`); the Hub server sends it within 250 ms of a change, and the Switcher reads the listed games from `latest`. Game events ride on `taken`.
 - `HubMode` provides it in both modes. A scenario is the provider through the real Ingest, on the scenario clock: polled at each of its frames' times and at least every 10 seconds, its recorded live feed pushed at its recorded offsets, and every frame appended to a feed log of its own, in memory unless `SPORTAL_SCENARIO_FEED_LOG` names a file.
-
-**Corpus** — typed game days for runs (`docs/adr/0010-the-poll-falls-back-and-corpus-days-are-built.md`). Not a
-port. A day is a directory of `day.json` and two files of typed lines, `poll.ndjson` and `push.ndjson`, under
-`HubConfig.corpusDir`, rebuilt when a decoder or the format changes and never migrated. `corpus build` makes a captured
-day from the feed log and a backfilled day from the archive; `corpus backfill` fetches a date range of a provider's
-finished games into the archive (`GameArchive`, `PlayArchive`, through the `Archiver` port) and builds its days; `corpus run` plays days through
-the slate on virtual time, on worker threads, reading a subject's output over each take and tick. Each command exits
-nonzero (`DaysFailed`) when a day fails. Backfill refuses a date that is not over, never overwrites a captured day, and
-archives a 404 or 410 summary as refused so its game is skipped.
 
 **Source** — video out:
 
@@ -420,7 +404,7 @@ A source's channels are found in its own guide, read by the shell (`docs/history
 - The live feed pushes snapshots between polls, and, for each current game, its plays. A pushed game is advanced onto its listed game; one no poll has listed yet is counted and not delivered. The poll and the push have separate roles: the push gives a live game's snapshots and plays, and the poll gives listings. A game the push covers takes a poll snapshot only when it is ahead of the game (later in game time, halftime counting after play at the same clock, or at the same game time more total points, or at equal points a different split), and holds it for `fallbackAfter` (15 s) while the push can catch up; then the held snapshot applies and says its events (`sportal_poll_fallbacks`). A covered game ignores a poll behind it, and the slate remembers a game it saw finish, so a lagging poll cannot start it again; a snapshot later on the clock than the final, whatever its status, or at the same clock with more points, does (overtime after a spurious final, a postponed game resuming). There is no tie rule.
 - A decode reset (a missed message, a patch that will not apply) is telemetry only: the provider's push re-checkpoints that topic itself.
 - Each event kind has one origin: state events come from snapshot changes and play events from plays (see `GameEvent`), including the leading signals the Producer anticipates with, and events are never stored.
-- The feed log is the truth (`docs/adr/0008-the-feed-log-is-the-truth.md`); the slate's games, plays, and events are all derived from it (and a corpus day is built from it or from the archive), and a restart or a missed poll cannot corrupt anything.
+- The feed log is the truth (`docs/adr/0008-the-feed-log-is-the-truth.md`); the slate's games, plays, and events are all derived from it, and a restart or a missed poll cannot corrupt anything.
 - Events ride on `Board.taken`; nothing reads them yet. The Producer and client live streams will.
 
 ### 5.3 Stage

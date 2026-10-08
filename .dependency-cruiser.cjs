@@ -31,12 +31,12 @@ module.exports = {
     {
       name: "only-hub-mode-names-adapters",
       comment:
-        "Only HubMode, the corpus command's composition, and tests know which concrete providers and sources exist, ESPN's through Espn.ts; main.ts names only the database.",
+        "Only HubMode and tests know which concrete providers and sources exist, ESPN's through Espn.ts; main.ts names only the database.",
       severity: "error",
       from: {
         path: "^apps/hub/src/",
         pathNot:
-          "(^apps/hub/src/HubMode\\.ts$|^apps/hub/src/corpus/corpus\\.ts$|\\.test\\.ts$|^apps/hub/src/provider/[^/]+/|^apps/hub/src/source/youtube-tv/)"
+          "(^apps/hub/src/HubMode\\.ts$|\\.test\\.ts$|^apps/hub/src/provider/[^/]+/|^apps/hub/src/source/youtube-tv/)"
       },
       to: {
         path: "^apps/hub/src/(provider/[^/]+/|source/youtube-tv/|scenario/Scenario(Source|Clock)\\.ts$)"
@@ -48,18 +48,18 @@ module.exports = {
       severity: "error",
       from: { pathNot: "(^apps/hub/src/provider/espn/|\\.test\\.ts$)" },
       to: {
-        path: "^apps/hub/src/provider/espn/(EspnProvider|EspnDecoder|EspnArchiver|FastCast|ScenarioProvider)\\.ts$"
+        path: "^apps/hub/src/provider/espn/(EspnProvider|EspnDecoder|FastCast|ScenarioProvider)\\.ts$"
       }
     },
     {
       name: "only-main-opens-the-database",
       comment:
-        "The composition root provides the database; stores reach it through SqlClient. The feed log opens its own file, and HubMode a scenario's; TestBoard and TestCorpus keep a test's feed log in memory.",
+        "The composition root provides the database; stores reach it through SqlClient. The feed log opens its own file, and HubMode a scenario's; TestBoard keeps a test's feed log in memory.",
       severity: "error",
       from: {
         path: "^apps/hub/src/",
         pathNot:
-          "(^apps/hub/src/main\\.ts$|\\.test\\.ts$|^apps/hub/src/Database\\.ts$|^apps/hub/src/feed-log/FeedLog\\.ts$|^apps/hub/src/HubMode\\.ts$|^apps/hub/src/TestBoard\\.ts$|^apps/hub/src/corpus/TestCorpus\\.ts$)"
+          "(^apps/hub/src/main\\.ts$|\\.test\\.ts$|^apps/hub/src/Database\\.ts$|^apps/hub/src/feed-log/FeedLog\\.ts$|^apps/hub/src/HubMode\\.ts$|^apps/hub/src/TestBoard\\.ts$)"
       },
       to: { path: "^apps/hub/src/Database\\.ts$" }
     },
@@ -92,20 +92,6 @@ module.exports = {
       severity: "error",
       from: { pathNot: "\\.test\\.ts$" },
       to: { path: "^apps/hub/src/TestBoard\\.ts$" }
-    },
-    {
-      name: "test-espn-archiver-is-for-tests",
-      comment: "ESPN's archiver answered from recorded payloads is imported only by test files.",
-      severity: "error",
-      from: { pathNot: "\\.test\\.ts$" },
-      to: { path: "^apps/hub/src/provider/espn/TestEspnArchiver\\.ts$" }
-    },
-    {
-      name: "test-corpus-is-for-tests",
-      comment: "Corpus days set up for a test, over a feed log in memory, are imported only by test files.",
-      severity: "error",
-      from: { pathNot: "\\.test\\.ts$" },
-      to: { path: "^apps/hub/src/corpus/TestCorpus\\.ts$" }
     },
     {
       name: "test-snapshot-feed-is-for-tests",
@@ -155,9 +141,9 @@ module.exports = {
     {
       name: "test-adapter-data-is-for-tests",
       comment:
-        "An adapter's recorded payloads, read for tests of other modules, are imported only by test files and TestEspnArchiver.",
+        "An adapter's recorded payloads, read for tests of other modules, are imported only by test files.",
       severity: "error",
-      from: { pathNot: "(\\.test\\.ts$|^apps/hub/src/provider/espn/TestEspnArchiver\\.ts$)" },
+      from: { pathNot: "\\.test\\.ts$" },
       to: { path: "^apps/hub/src/(provider/espn/TestEspn|source/youtube-tv/TestYouTubeTv)\\.ts$" }
     },
     {

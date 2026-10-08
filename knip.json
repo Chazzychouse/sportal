@@ -6,7 +6,7 @@
       "project": ["src/**/*.ts!", "!src/**/Test*.ts!"]
     },
     "apps/hub": {
-      "entry": ["src/main.ts!", "src/corpus/corpus.ts!", "src/corpus/worker.ts!"],
+      "entry": ["src/main.ts!"],
       "project": ["src/**/*.ts!", "!src/**/Test*.ts!"]
     },
     "apps/web": {

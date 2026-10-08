@@ -15,7 +15,7 @@ export const noSocket = Layer.succeed(Socket.WebSocketConstructor, () => {
  * to it.
  */
 export const fixtures = fileURLToPath(new URL("./fixtures/", import.meta.url))
-export const neAtBufFrames = "nfl-2026-10-04-ne-buf"
+const neAtBufFrames = "nfl-2026-10-04-ne-buf"
 
 /**
  * Every play id NE at BUF's recorded frames add, the same plays its summary's drives list. Measured once over the
