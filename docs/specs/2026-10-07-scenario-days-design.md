@@ -59,7 +59,7 @@ class Scenario extends Data.Class<{
   the feed log's `replay`.
 - `ScenarioProvider` plays `frames` at their offsets from `origin`, as it does today. Its "playing … frames" log line
   drops the count, which would take a second pass.
-- A file that stops reading partway fails the provider's stream with `ScenarioUnreadable`, logged. A day cannot fail
+- A file that stops reading partway is logged at Error, naming the file, and the provider then delivers nothing more. A day cannot fail
   this way: the feed log's replay treats an unreadable row as a defect, as live does.
 
 ### The scenario's own feed log is always in memory
