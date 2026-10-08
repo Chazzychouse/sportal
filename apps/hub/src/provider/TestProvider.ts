@@ -15,11 +15,12 @@ export const listedBy = Effect.fn("TestProvider.listedBy")(function* (league: Le
   const polled = yield* provider.frames.pipe(
     Stream.filter((frame) => frame.source === "poll" && frame.channel === league),
     Stream.runHead,
-    Effect.timeoutOrElse({
-      duration: "2 seconds",
-      orElse: () => Effect.die(new Error(`the provider delivered no poll of ${league} within 2 seconds`))
-    }),
-    TestClock.withLive
+    Effect.raceFirst(
+      Effect.sleep("2 seconds").pipe(
+        TestClock.withLive,
+        Effect.andThen(Effect.die(new Error(`the provider delivered no poll of ${league} within 2 seconds`)))
+      )
+    )
   )
   const said = yield* decodedFrames(Option.toArray(polled))
 
