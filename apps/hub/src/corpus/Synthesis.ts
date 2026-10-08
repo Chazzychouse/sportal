@@ -6,7 +6,7 @@ import type { TeamId } from "@sportal/domain/Team"
 import { Array as Arr, DateTime, Duration, type Effect, Option, Order, Stream } from "effect"
 import type { GameArchive, PlayArchive } from "../provider/Archiver.ts"
 import { Decoded } from "../provider/Provider.ts"
-import { Delivery } from "../slate/Delivery.ts"
+import { Delivery, type DeliverySource } from "../slate/Delivery.ts"
 import { CorpusLine } from "./CorpusLine.ts"
 
 /**
@@ -32,12 +32,12 @@ export function day(games: ReadonlyArray<GameArchive>): Effect.Effect<{
   const pushes = timelines.flatMap(({ game, played }) => [
     {
       at: DateTime.subtractDuration(game.scheduled.kickoff, pregame),
-      feed: "push" as const,
+      source: "push" as const,
       deliveries: [Delivery.cases.Snapshot.make({ snapshot: game.scheduled, from: "push" })]
     },
     ...played.map(({ archived, snapshot }, i) => ({
       at: DateTime.addDuration(archived.wallclock, lag.push),
-      feed: "push" as const,
+      source: "push" as const,
       deliveries: [
         Delivery.cases.Plays.make({
           game: game.final.id,
@@ -50,7 +50,7 @@ export function day(games: ReadonlyArray<GameArchive>): Effect.Effect<{
   const leagues = [...new Set(games.map(({ final }) => final.league))].toSorted()
   const polls = pollInstants(games).map((at) => ({
     at,
-    feed: "poll" as const,
+    source: "poll" as const,
     deliveries: leagues.map((league) =>
       Delivery.cases.Listing.make({
         league,
@@ -81,10 +81,12 @@ const pregame = Duration.minutes(30)
 const pollEvery = Duration.seconds(10)
 
 /** Earlier first, and a push before a poll at one instant; otherwise as made. */
-const pushFirst: Order.Order<{ readonly at: DateTime.Utc; readonly feed: "push" | "poll" }> = Order.Struct({
+const pushFirst: Order.Order<{ readonly at: DateTime.Utc; readonly source: DeliverySource }> = Order.Struct({
   at: DateTime.Order,
-  feed: Order.mapInput(Order.Number, (feed: "push" | "poll") => (feed === "push" ? 0 : 1))
+  source: Order.mapInput(Order.Number, (source: DeliverySource) => sourceRank[source])
 })
+
+const sourceRank: Record<DeliverySource, number> = { push: 0, poll: 1 }
 
 /** Timeouts each team has in a half. */
 const halfTimeouts = 3
@@ -133,10 +135,10 @@ function snapshotAfter(
     home: { ...final.home, score: play.homeScore },
     away: { ...final.away, score: play.awayScore },
     situation: new Situation({
-      ...(end.team === undefined ? {} : { possession: end.team }),
-      ...(end.down === undefined ? {} : { down: end.down }),
-      ...(end.distance === undefined ? {} : { distance: end.distance }),
-      ...(end.yardsToEndzone === undefined ? {} : { yardLine: end.yardsToEndzone }),
+      possession: end.team,
+      down: end.down,
+      distance: end.distance,
+      yardLine: end.yardsToEndzone,
       homeTimeouts: left(final.home.team.id),
       awayTimeouts: left(final.away.team.id),
       lastPlay: play.text
