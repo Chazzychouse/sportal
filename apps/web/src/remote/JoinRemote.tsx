@@ -29,7 +29,7 @@ export function JoinRemote(props: { open: boolean; onOpenChange: (open: boolean)
 
   const port = window.location.port === "" ? "" : `:${window.location.port}`
   const url = (address: string) => `${window.location.protocol}//${address}${port}/remote`
-  const listed = answer._tag === "Answered" ? answer.addresses : []
+  const listed = Answer.$is("Answered")(answer) ? answer.addresses : []
   const shown = listed[chosen]
 
   return (
@@ -41,9 +41,9 @@ export function JoinRemote(props: { open: boolean; onOpenChange: (open: boolean)
             Scan with a phone on the same network to control this Stage.
           </DialogDescription>
         </div>
-        {answer._tag === "Asking" ? (
+        {Answer.$is("Asking")(answer) ? (
           <p className="text-muted-foreground text-sm">Asking the Hub…</p>
-        ) : answer._tag === "NoAnswer" ? (
+        ) : Answer.$is("NoAnswer")(answer) ? (
           <p className="text-muted-foreground text-sm">
             The Hub did not answer. Restart it (<code className="font-mono">pnpm dev</code>) so it runs this
             version.
