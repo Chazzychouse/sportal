@@ -112,7 +112,7 @@ export type DecodeObservation = Data.TaggedEnum<{
   FrameUndecoded: {
     readonly source: Frame["source"]
     readonly channel: string
-    readonly kind: string
+    readonly kind: Frame["kind"]
     readonly cause: unknown
   }
   EventUndecoded: { readonly league: LeagueId; readonly source: Frame["source"]; readonly cause: unknown }
