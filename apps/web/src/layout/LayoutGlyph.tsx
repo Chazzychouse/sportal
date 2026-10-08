@@ -24,16 +24,13 @@ export function LayoutGlyph(props: { name: LayoutName }) {
 
 /** A layout's name as people read it. */
 export function layoutLabel(name: LayoutName): string {
-  switch (name) {
-    case "Single":
-      return "Single"
-    case "Pair":
-      return "Side by side"
-    case "Quad":
-      return "Quad"
-    case "MainThree":
-      return "Main + 3"
-    case "MainFive":
-      return "Main + 5"
-  }
+  return layoutLabels[name]
+}
+
+const layoutLabels: Record<LayoutName, string> = {
+  Single: "Single",
+  Pair: "Side by side",
+  Quad: "Quad",
+  MainThree: "Main + 3",
+  MainFive: "Main + 5"
 }
