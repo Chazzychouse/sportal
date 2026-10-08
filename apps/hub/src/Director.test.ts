@@ -651,7 +651,7 @@ function directing(games: ReadonlyArray<GameSnapshot>) {
 
 /** The data tile a game gets while the source has no guide. */
 function noGuideTile(game: GameId) {
-  return { _tag: "DataTile" as const, game, why: { _tag: "NoGuide" as const } }
+  return { _tag: "DataTile" as const, game, why: { _tag: "NoGuide" as const, source: "YouTube TV" as const } }
 }
 
 /** Whether `tile` is the data tile of a game while the source has no guide. */

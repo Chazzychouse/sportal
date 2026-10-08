@@ -41,7 +41,7 @@ const game = snapshot({
   away: { team: team("ALA"), score: 0 },
   broadcasts: [broadcast(espn)]
 })
-const noGuide = { _tag: "DataTile", game: game.id, why: { _tag: "NoGuide" } } as const
+const noGuide = { _tag: "DataTile", game: game.id, why: { _tag: "NoGuide", source: "YouTube TV" } } as const
 
 const makeClient = HttpApiClient.make(SportalApi)
 

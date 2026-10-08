@@ -29,7 +29,11 @@ describe("Screen#apply", () => {
   it("should assign a game its source has no guide for as a data tile saying so", () => {
     const screen = assign(Screen.initial, 0, bama, noGuide)
 
-    assert.deepStrictEqual(screen.tiles[0], { _tag: "DataTile", game: bama, why: { _tag: "NoGuide" } })
+    assert.deepStrictEqual(screen.tiles[0], {
+      _tag: "DataTile",
+      game: bama,
+      why: { _tag: "NoGuide", source: "YouTube TV" }
+    })
   })
 
   it("should replace whatever an occupied tile held", () => {
@@ -641,7 +645,7 @@ const tiles: ReadonlyArray<readonly [string, unknown]> = [
   ["NoStream", { _tag: "DataTile", game: "401856800", why: { _tag: "NoStream" } }],
   ["StreamingOnly", { _tag: "DataTile", game: "401856800", why: { _tag: "StreamingOnly" } }],
   ["NotInGuide", { _tag: "DataTile", game: "401856800", why: { _tag: "NotInGuide" } }],
-  ["NoGuide", { _tag: "DataTile", game: "401856800", why: { _tag: "NoGuide" } }],
+  ["NoGuide", { _tag: "DataTile", game: "401856800", why: { _tag: "NoGuide", source: "YouTube TV" } }],
   ["NotYet bare", { _tag: "DataTile", game: "401856800", why: { _tag: "NotYet" } }],
   [
     "NotYet with channel and begin",

@@ -1,5 +1,5 @@
 import { Array as Arr, Option, Record as Rec, Result, Schema } from "effect"
-import { Channel, ChannelAvailability } from "./Channel.ts"
+import { Channel, ChannelAvailability, SourceName } from "./Channel.ts"
 import { GameId } from "./Game.ts"
 
 export const Tile = Schema.TaggedUnion({
@@ -12,7 +12,7 @@ export const Tile = Schema.TaggedUnion({
       NoStream: {},
       StreamingOnly: {},
       NotInGuide: {},
-      NoGuide: {},
+      NoGuide: { source: SourceName },
       NotYet: {
         channel: Schema.OptionFromOptionalKey(Schema.String),
         begin: Schema.OptionFromOptionalKey(Schema.DateTimeUtcFromString)
@@ -255,7 +255,7 @@ function tileFor(game: GameId, availability: ChannelAvailability): Tile {
       game,
       why: { _tag: "NotYet", channel, begin }
     }),
-    NoGuide: (): Tile => ({ _tag: "DataTile", game, why: { _tag: "NoGuide" } }),
+    NoGuide: ({ source }): Tile => ({ _tag: "DataTile", game, why: { _tag: "NoGuide", source } }),
     NotCarried: ({ why }): Tile => ({ _tag: "DataTile", game, why: { _tag: why } })
   })
 }
