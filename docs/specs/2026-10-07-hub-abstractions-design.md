@@ -261,7 +261,7 @@ a kickoff, by at most one 1-minute poll.
 Scenarios play only their recorded frames: nothing polls a scenario again between them. A game still live when a
 recording ends goes stale 90 s after its last frame, the golden scenario's included.
 
-The corpus runs the fold, not the providers, so neither change can move the events comparison.
+The corpus runs the fold, not the providers, so none of these changes can move the events comparison.
 
 ## Effect idiom sweep
 

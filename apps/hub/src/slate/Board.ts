@@ -11,6 +11,7 @@ import {
   Layer,
   Option,
   PubSub,
+  Semaphore,
   Stream,
   SubscriptionRef
 } from "effect"
@@ -51,25 +52,31 @@ export class Board extends Context.Service<
       const slate = yield* SubscriptionRef.make(Slate.empty)
       const takes = yield* PubSub.unbounded<{ readonly taken: Taken; readonly replayed: boolean }>()
       const caughtUp = yield* Deferred.make<Replayed>()
+      const commitOrder = yield* Semaphore.make(1)
 
       // Takes or ticks the slate and tells telemetry under the slate's lock, so every take is told in order, then
-      // publishes the take once the slate holds it, so a subscriber that reads `latest` reads it taken. Uninterruptible,
-      // so an interrupted caller never leaves telemetry without its state or a take unpublished; a telling that dies
-      // leaves the slate as it was.
+      // publishes the take once the slate holds it, so a subscriber that reads `latest` reads it taken. The commit and
+      // the publish share one permit, so a take and a tick racing are published in the order they committed.
+      // Uninterruptible, so an interrupted caller never leaves telemetry without its state or a take unpublished; a
+      // telling that dies leaves the slate as it was.
       const step = Effect.fnUntraced(function* (
         frame: Option.Option<Decoded>,
         replayed: boolean,
         run: (slate: Slate) => Effect.Effect<Taken>
       ) {
-        const item = yield* SubscriptionRef.modifyEffect(slate, (before) =>
+        return yield* commitOrder.withPermit(
           Effect.gen(function* () {
-            const taken = yield* run(before)
-            yield* telemetry.told({ taken, replayed }, frame, before)
-            return [{ taken, replayed }, taken.next] as const
+            const item = yield* SubscriptionRef.modifyEffect(slate, (before) =>
+              Effect.gen(function* () {
+                const taken = yield* run(before)
+                yield* telemetry.told({ taken, replayed }, frame, before)
+                return [{ taken, replayed }, taken.next] as const
+              })
+            )
+            yield* PubSub.publish(takes, item)
+            return item
           })
         )
-        yield* PubSub.publish(takes, item)
-        return item
       }, Effect.uninterruptible)
 
       const take = Effect.fn("LiveSlate.take")(
@@ -100,13 +107,13 @@ export class Board extends Context.Service<
             isReplayed(decoded)
               ? step(Option.some(decoded), true, (held) => held.take(decoded))
               : take(decoded),
-            ({ taken }) => ({ decoded, taken })
+            ({ taken, replayed }) => ({ decoded, taken, replayed })
           )
         ),
         Stream.mapAccum(
           () => noneReplayed,
-          (replayed, { decoded, taken }) => {
-            const counted = isReplayed(decoded) ? countedIn(replayed, decoded, taken) : replayed
+          (replayed, { decoded, taken, replayed: wasReplayed }) => {
+            const counted = wasReplayed ? countedIn(replayed, decoded, taken) : replayed
             return [counted, [{ decoded, replayed: counted }]] as const
           }
         ),

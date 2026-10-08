@@ -44,7 +44,10 @@ export function latestOf<E, R>(layer: Layer.Layer<Board, E, R>) {
   return Board.use((board) => board.latest).pipe(Effect.provide(layer))
 }
 
-/** Runs `act`, then waits for the board to take or tick `count` times after the replay, and gives the last slate taken. */
+/**
+ * Runs `act`, then waits for the board to take or tick `count` times after the replay, and gives the last slate
+ * taken.
+ */
 export const takingAfter = Effect.fnUntraced(function* <E, R>(
   count: number,
   act: Effect.Effect<unknown, E, R>
@@ -91,7 +94,10 @@ export const liveEvents: Stream.Stream<GameEvent, never, Board> = Stream.unwrap(
   )
 )
 
-/** Every game event and observation the domain slate makes taking `frames` whole, in order, as the provided `Provider`'s decode reads them. */
+/**
+ * Every game event and observation the slate makes taking `frames` whole, in order, as the provided `Provider`'s
+ * decode reads them.
+ */
 export const takenOf = Effect.fnUntraced(function* (frames: ReadonlyArray<Frame>) {
   const empty: {
     readonly slate: Slate

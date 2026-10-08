@@ -453,7 +453,7 @@ function readBack(date: GameDay) {
   })
 }
 
-/** The domain slate once it has taken every one of `frames`, in order. */
+/** The slate once it has taken every one of `frames`, in order. */
 function takenAll(frames: ReadonlyArray<Parameters<Slate["take"]>[0]>) {
   return Effect.reduce(
     frames,

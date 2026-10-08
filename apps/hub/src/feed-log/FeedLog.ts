@@ -39,6 +39,8 @@ export class FeedLog extends Context.Service<
     /**
      * Subscribes, then reads where the log stands. The frames from `from` up to `last` are logged already, and each frame
      * after `last` follows as it is appended. `last` is none when nothing at or after `from` is logged.
+     * A frame appended before `follow` subscribes, but not yet written by the batching writer, is in neither the replay
+     * nor the subscription, so a follower is built before anything appends.
      */
     follow(
       from: DateTime.Utc

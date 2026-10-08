@@ -122,12 +122,14 @@ const toldLive = Effect.fnUntraced(function* (frame: Option.Option<Decoded>, bef
   const { next, observations, events } = taken
   const seq = Option.map(frame, ({ seq }) => seq)
 
-  if (Option.isSome(frame)) {
-    const decoded = frame.value
-    yield* Effect.forEach(decoded.observations, (observation) => observed(observation, decoded.seq), {
-      discard: true
-    })
-  }
+  yield* Effect.forEach(
+    Option.toArray(frame),
+    (decoded) =>
+      Effect.forEach(decoded.observations, (observation) => observed(observation, decoded.seq), {
+        discard: true
+      }),
+    { discard: true }
+  )
   yield* Effect.forEach(observations, (observation) => toldObservation(observation, seq), { discard: true })
   yield* Effect.forEach(events, (event) => toldEvent(event, observations), { discard: true })
   if (!next.publishesSameAs(before)) {
@@ -137,12 +139,17 @@ const toldLive = Effect.fnUntraced(function* (frame: Option.Option<Decoded>, bef
 
 /** An observation as a replay tells it: only a defect is logged. */
 const toldInReplay = Effect.fnUntraced(function* (observation: SlateObservation, seq: Option.Option<number>) {
-  if (!SlateObservation.$is("Raised")(observation)) return
-  yield* logDefect(
-    `LiveSlate: ${observation.by} raised a defect in replay; keeping the last good live game`,
-    observation.cause,
-    observation.snapshot,
-    seq
+  const raised = Option.liftPredicate(observation, SlateObservation.$is("Raised"))
+  yield* Effect.forEach(
+    Option.toArray(raised),
+    ({ by, cause, snapshot }) =>
+      logDefect(
+        `LiveSlate: ${by} raised a defect in replay; keeping the last good live game`,
+        cause,
+        snapshot,
+        seq
+      ),
+    { discard: true }
   )
 })
 
@@ -388,7 +395,7 @@ const stateValues = { Upcoming: 1, Live: 2, Stale: 3, Over: 4, Holding: 5 } sati
 >
 
 // Every state, so a state with no games reads 0.
-const everyState = Object.keys(stateValues)
+const everyState = Rec.keys(stateValues)
 
 const snapshotsTaken = Metric.counter("sportal_snapshots", {
   description:

@@ -133,7 +133,10 @@ export class Acknowledgement extends Data.Class<{
     return game.progress() === "live" ? Option.some(this.heardAt) : Option.none()
   }
 
-  /** Live or holding, stale for less than `staleCurrentFor`, or upcoming with kickoff within `GameSnapshot.kickoffWindow` of `now`. */
+  /**
+   * Live or holding, stale for less than `staleCurrentFor`, or upcoming with kickoff within
+   * `GameSnapshot.kickoffWindow` of `now`.
+   */
   isCurrent(game: GameSnapshot, now: DateTime.Utc): boolean {
     return Match.value(this.state(game, now)).pipe(
       Match.when("Upcoming", () => game.isLiveOrKicksOffWithin(GameSnapshot.kickoffWindow, now)),

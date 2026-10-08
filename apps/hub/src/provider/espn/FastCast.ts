@@ -10,6 +10,7 @@ import {
   Duration,
   Effect,
   FiberMap,
+  HashMap,
   Layer,
   Metric,
   Option,
@@ -51,7 +52,7 @@ export class FastCast extends Context.Service<
      */
     readonly frames: Stream.Stream<Frame>
   }
->()("sportal/hub/FastCast") {
+>()("sportal/hub/provider/espn/FastCast") {
   /**
    * FastCast for the leagues `HubConfig` names, following a topic whose checkpoint failed again on `retry.checkpoint`,
    * then leaving it to polling, and opening the socket again on `retry.reconnect` after each failure, which it logs and
@@ -218,7 +219,7 @@ const connect = Effect.fn("FastCast.connect")(function* (
     Stream.mapEffect((received) => framed(received, (outcome) => PubSub.publish(outcomes, outcome))),
     Stream.flattenIterable,
     Stream.mapAccumEffect(
-      (): Following => ({ documents: FastCastDocument.empty, games: new Map(), followed: [] }),
+      (): Following => ({ documents: FastCastDocument.empty, games: HashMap.empty(), followed: [] }),
       (following, frame) =>
         steered(following, frame, topics).pipe(
           Effect.tap(([, steers]) => Effect.forEach(steers, steer, { discard: true })),
@@ -234,7 +235,7 @@ const connect = Effect.fn("FastCast.connect")(function* (
  */
 interface Following {
   readonly documents: typeof FastCastDocument.empty
-  readonly games: ReadonlyMap<LeagueId, ReadonlyArray<GameSnapshot>>
+  readonly games: HashMap.HashMap<LeagueId, ReadonlyArray<GameSnapshot>>
   readonly followed: ReadonlyArray<string>
 }
 
@@ -266,9 +267,8 @@ const steered = Effect.fnUntraced(function* (
   const games = yield* Option.match(shown, {
     onNone: () => Effect.succeed(following.games),
     onSome: ({ league, events }) =>
-      Effect.map(
-        EspnDecoder.gamesOf(league, events, "push"),
-        ({ games: shownGames }) => new Map([...following.games, [league, shownGames]])
+      Effect.map(EspnDecoder.gamesOf(league, events, "push"), ({ games: shownGames }) =>
+        HashMap.set(following.games, league, shownGames)
       )
   })
   const now = yield* DateTime.now
@@ -286,10 +286,10 @@ const steered = Effect.fnUntraced(function* (
 
 /** The topic of each game live at `now`, or upcoming with its kickoff within `GameSnapshot.kickoffWindow` of it. */
 function followedAt(
-  games: ReadonlyMap<LeagueId, ReadonlyArray<GameSnapshot>>,
+  games: HashMap.HashMap<LeagueId, ReadonlyArray<GameSnapshot>>,
   now: DateTime.Utc
 ): ReadonlyArray<string> {
-  return [...games.values()]
+  return [...HashMap.values(games)]
     .flat()
     .filter((game) => game.isLiveOrKicksOffWithin(GameSnapshot.kickoffWindow, now))
     .map((game) => topicOf(game.league, game.id))

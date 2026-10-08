@@ -1572,7 +1572,9 @@ function appendedStopping(frame: Frame, logs: ReturnType<typeof recordingLogs>["
     yield* Effect.yieldNow.pipe(
       Effect.repeat({
         until: () => logs.some(({ message }) => message.includes("frames are no longer taken"))
-      })
+      }),
+      Effect.timeout("10 seconds"),
+      Effect.orDie
     )
   })
 }

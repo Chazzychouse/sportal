@@ -26,7 +26,10 @@ export class TileViews extends Context.Service<
     hide(games: ReadonlyArray<GameId>): Effect.Effect<void>
     /** Each hotkey pressed while a stream view had keyboard focus. The page never receives it. */
     readonly hotkeys: Stream.Stream<Hotkey>
-    /** Each game whose stream view was pressed with the left button while it was not interactive. The page never receives it. */
+    /**
+     * Each game whose stream view was pressed with the left button while it was not interactive. The page never
+     * receives it.
+     */
     readonly tilePresses: Stream.Stream<GameId>
   }
 >()("sportal/desktop/main/TileViews") {
