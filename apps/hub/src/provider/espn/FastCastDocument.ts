@@ -90,7 +90,7 @@ export function unchanged(documents: Documents): Advanced {
  * What a frame changed: a scoreboard topic's touched events, a game topic's whole list of plays, by id, or a topic sent
  * back to waiting for a checkpoint.
  */
-type Change = Data.TaggedEnum<{
+export type Change = Data.TaggedEnum<{
   Scoreboard: { readonly league: LeagueId; readonly events: ReadonlyArray<Schema.Json> }
   Game: {
     readonly league: LeagueId
@@ -99,7 +99,7 @@ type Change = Data.TaggedEnum<{
   }
   Reset: object
 }>
-const Change = Data.taggedEnum<Change>()
+export const Change = Data.taggedEnum<Change>()
 
 const synced = Effect.fnUntraced(function* (
   documents: Documents,
