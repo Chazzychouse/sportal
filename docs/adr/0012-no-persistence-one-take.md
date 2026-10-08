@@ -33,7 +33,9 @@ behaviour nobody needed, and each made the model harder to change.
 - **Scenarios are recordings only**: `fixtures/scenarios/<name>.frames.jsonl.gz`. A game day by date is not a scenario.
 - **Telemetry keeps what is solid**: poll duration, provider errors, FastCast's connection, connects, errors and
   checkpoint failures, the `EspnProvider.pollEveryLeague` and `Board.take` spans, and logs. A frame that does not decode and a FastCast topic
-  that loses its document are Warning logs. The Board logs only a take that raised a defect, and frames that stop.
+  that loses its document are Warning logs. The Board logs only a take that raised a defect, and frames that stop; its one metric is each
+  game's progress, `sportal_game_state` (1 upcoming, 2 live, 3 over, 0 once no listing names it), behind the Hub
+  dashboard's Games table.
 
 ## Consequences
 

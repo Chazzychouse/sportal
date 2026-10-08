@@ -332,7 +332,7 @@ class Board extends Context.Service<Board, {
 ```
 
 - The `Slate` (`slate/Slate.ts`) is the fold: each league's listed games, in order, each as its latest `GameSnapshot`, and each game's plays. `take(deliveries)` on it is pure and returns the next slate; a take that changes nothing gives back the same slate.
-- The board starts from an empty slate and takes each frame's deliveries as they arrive, in one `Board.take` span carrying its `sportal.deliveries` count. For now nothing is kept between runs: a restarted Hub serves an empty slate until its provider's next poll lists the day's games.
+- The board starts from an empty slate and takes each frame's deliveries as they arrive, in one `Board.take` span carrying its `sportal.deliveries` count, and gauges each game whose snapshot changed by its progress (`sportal_game_state`: 1 upcoming, 2 live, 3 over, 0 once no listing names it), which the Hub dashboard's Games table reads. For now nothing is kept between runs: a restarted Hub serves an empty slate until its provider's next poll lists the day's games.
 - A take that raises a defect is an Error log; the slate keeps what it had and takes the next frame. If the provider's frames end other than by the Hub stopping, that is an Error log and the slate stays as it is.
 - `Slate.published()` is each listed game as the slate has it, with each game's last ten plays (`recentPlays`, on `SlateChanged`); the Hub server sends it within 250 ms of a change, and the Switcher reads the listed games from `latest`.
 - `HubMode` provides it in both modes. A scenario is the provider on the scenario clock: its recorded frames, polls and pushes alike, each received at its offset from the first, through ESPN's decode. Its names are the recordings in `fixtures/scenarios/`.

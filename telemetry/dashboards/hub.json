@@ -26,12 +26,119 @@
   },
   "panels": [
     {
+      "type": "table",
+      "title": "Games",
+      "id": 27,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Every game the slate has listed, with its progress now: 0 once no listing names it.",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "max by (game, league, matchup) (sportal_game_state_ratio * on (job, instance) group_left target_info{sportal_mode=\"$mode\"})",
+          "instant": true,
+          "range": false,
+          "format": "table"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true
+            },
+            "indexByName": {
+              "matchup": 0,
+              "league": 1,
+              "Value": 2,
+              "game": 3
+            },
+            "renameByName": {
+              "Value": "State",
+              "matchup": "Matchup",
+              "league": "League",
+              "game": "Game id"
+            }
+          }
+        },
+        {
+          "id": "sortBy",
+          "options": {
+            "sort": [
+              {
+                "field": "State",
+                "desc": false
+              }
+            ]
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "State"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "0": {
+                        "text": "Delisted",
+                        "color": "text",
+                        "index": 0
+                      },
+                      "1": {
+                        "text": "Upcoming",
+                        "color": "blue",
+                        "index": 1
+                      },
+                      "2": {
+                        "text": "Live",
+                        "color": "green",
+                        "index": 2
+                      },
+                      "3": {
+                        "text": "Over",
+                        "color": "purple",
+                        "index": 3
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 10
+      }
+    },
+    {
       "id": 1,
       "type": "timeseries",
       "title": "Hub log volume by level",
       "gridPos": {
         "x": 0,
-        "y": 0,
+        "y": 10,
         "w": 12,
         "h": 8
       },
@@ -65,7 +172,7 @@
       "title": "Recent warnings and errors",
       "gridPos": {
         "x": 12,
-        "y": 0,
+        "y": 10,
         "w": 12,
         "h": 8
       },
@@ -86,7 +193,7 @@
       "title": "Poll duration",
       "gridPos": {
         "x": 0,
-        "y": 8,
+        "y": 18,
         "w": 12,
         "h": 8
       },
@@ -119,7 +226,7 @@
       "title": "Provider errors by league",
       "gridPos": {
         "x": 12,
-        "y": 8,
+        "y": 18,
         "w": 12,
         "h": 8
       },
@@ -153,7 +260,7 @@
       "title": "Poll traces",
       "gridPos": {
         "x": 0,
-        "y": 16,
+        "y": 26,
         "w": 24,
         "h": 8
       },
@@ -176,7 +283,7 @@
       "title": "Take traces",
       "gridPos": {
         "x": 0,
-        "y": 24,
+        "y": 34,
         "w": 24,
         "h": 8
       },
@@ -200,7 +307,7 @@
       "collapsed": false,
       "gridPos": {
         "x": 0,
-        "y": 32,
+        "y": 42,
         "w": 24,
         "h": 1
       },
@@ -212,7 +319,7 @@
       "title": "Connected",
       "gridPos": {
         "x": 0,
-        "y": 33,
+        "y": 43,
         "w": 6,
         "h": 4
       },
@@ -253,7 +360,7 @@
       "title": "Errors by reason",
       "gridPos": {
         "x": 6,
-        "y": 33,
+        "y": 43,
         "w": 9,
         "h": 8
       },
@@ -287,7 +394,7 @@
       "title": "Checkpoint failures",
       "gridPos": {
         "x": 15,
-        "y": 33,
+        "y": 43,
         "w": 9,
         "h": 8
       },
@@ -322,7 +429,7 @@
       "title": "Connects in range",
       "gridPos": {
         "x": 0,
-        "y": 37,
+        "y": 47,
         "w": 6,
         "h": 4
       },
@@ -351,7 +458,7 @@
       "title": "Live feed logs",
       "gridPos": {
         "x": 0,
-        "y": 41,
+        "y": 51,
         "w": 24,
         "h": 10
       },

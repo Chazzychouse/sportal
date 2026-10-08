@@ -6,7 +6,7 @@ import { decodedFrames, recordedNeAtBuf, recordedPlays } from "../provider/espn/
 import { Provider } from "../provider/Provider.ts"
 import { boardOver, delivered } from "../TestBoard.ts"
 import { SnapshotFeed } from "../TestSnapshotFeed.ts"
-import { recordingLogs, recordingSpans } from "../TestTelemetry.ts"
+import { gauged, recordingLogs, recordingSpans, withMetrics } from "../TestTelemetry.ts"
 import { Board } from "./Board.ts"
 import { Delivery } from "./Delivery.ts"
 import { Slate } from "./Slate.ts"
@@ -233,6 +233,29 @@ describe("Board, a recorded game", () => {
 })
 
 /** The board's latest. */
+describe("Board's game state gauge", () => {
+  it.effect("should gauge a listed live game as 2", () =>
+    Effect.gen(function* () {
+      yield* listing([liveSnapshot({ id: one })])
+
+      const value = yield* gauged("sportal_game_state", { game: one })
+
+      assert.strictEqual(value, 2)
+    }).pipe(Effect.provide(boardOver), withMetrics)
+  )
+
+  it.effect("should gauge a game no listing names any more as 0", () =>
+    Effect.gen(function* () {
+      yield* listing([liveSnapshot({ id: one }), liveSnapshot({ id: two })])
+
+      yield* listing([liveSnapshot({ id: two })])
+      const value = yield* gauged("sportal_game_state", { game: one })
+
+      assert.strictEqual(value, 0)
+    }).pipe(Effect.provide(boardOver), withMetrics)
+  )
+})
+
 const latest = Board.use((board) => board.latest)
 
 function listingOf(games: ReadonlyArray<GameSnapshot>) {
