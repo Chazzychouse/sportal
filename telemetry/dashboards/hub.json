@@ -551,8 +551,8 @@
         },
         {
           "refId": "C",
-          "expr": "sum by (league, feed) (increase(sportal_events_undecoded_total[$__rate_interval]) * on (job, instance) group_left target_info{sportal_mode=\"$mode\"})",
-          "legendFormat": "undecoded {{league}} ({{feed}})"
+          "expr": "sum by (league, source) (increase(sportal_events_undecoded_total[$__rate_interval]) * on (job, instance) group_left target_info{sportal_mode=\"$mode\"})",
+          "legendFormat": "undecoded {{league}} ({{source}})"
         }
       ]
     },
@@ -597,7 +597,7 @@
     {
       "id": 19,
       "type": "timeseries",
-      "title": "Frames by feed and kind",
+      "title": "Frames by source and kind",
       "gridPos": {
         "x": 0,
         "y": 79,
@@ -623,11 +623,11 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by (feed, kind) (increase(sportal_feed_frames_total[$__rate_interval]) * on (job, instance) group_left target_info{sportal_mode=\"$mode\"})",
-          "legendFormat": "{{feed}} {{kind}}"
+          "expr": "sum by (source, kind) (increase(sportal_feed_frames_total[$__rate_interval]) * on (job, instance) group_left target_info{sportal_mode=\"$mode\"})",
+          "legendFormat": "{{source}} {{kind}}"
         }
       ],
-      "description": "Frames written to feed.sqlite. Kinds: response, message, checkpoint, unchanged, gap."
+      "description": "Frames written to feed.sqlite. Kinds: whole, change, unchanged, gap."
     },
     {
       "id": 20,
@@ -732,8 +732,8 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by (feed) (increase(sportal_frames_undecoded_total[$__rate_interval]) * on (job, instance) group_left target_info{sportal_mode=\"$mode\"})",
-          "legendFormat": "frames {{feed}}"
+          "expr": "sum by (source) (increase(sportal_frames_undecoded_total[$__rate_interval]) * on (job, instance) group_left target_info{sportal_mode=\"$mode\"})",
+          "legendFormat": "frames {{source}}"
         },
         {
           "refId": "B",

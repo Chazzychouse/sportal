@@ -4,7 +4,7 @@ import { DateTime, Effect, Fiber, FileSystem, Layer, Path, Ref, Stream, type Tra
 import { SqlClient, SqlError } from "effect/sql"
 import { TestClock } from "effect/testing"
 import * as Database from "../Database.ts"
-import type { FeedFrame } from "../Frame.ts"
+import type { Frame } from "../Frame.ts"
 import { HubConfig } from "../HubConfig.ts"
 import { counted, recordingLogs, recordingSpans, withMetrics } from "../TestTelemetry.ts"
 import { FeedLog } from "./FeedLog.ts"
@@ -66,30 +66,67 @@ describe("FeedLog", () => {
     }).pipe(Effect.provide(feedLog))
   )
 
-  it.effect("should keep every row of a populated version 1 log as it was on upgrading", () =>
-    Effect.gen(function* () {
-      yield* populatedVersionOneLog()
-      const before = yield* storedRows()
+  it.effect(
+    "should keep every row of a populated version 1 log as it was on upgrading, in the frame's words",
+    () =>
+      Effect.gen(function* () {
+        yield* populatedVersionOneLog()
 
-      const after = yield* FeedLog.use(() => storedRows()).pipe(Effect.provide(feedLogOnDatabase))
+        const after = yield* FeedLog.use(() => storedRows()).pipe(Effect.provide(feedLogOnDatabase))
 
-      assert.deepStrictEqual(after, before)
-    }).pipe(Effect.provide(Database.layerMemory))
+        assert.deepStrictEqual(after, [
+          {
+            seq: 1,
+            received_at: 1000,
+            sent_at: null,
+            number: null,
+            source: "poll",
+            channel: "nfl",
+            kind: "whole",
+            stored: "blob",
+            bytes: "1F8B0800",
+            body_hash: "abc"
+          },
+          {
+            seq: 5,
+            received_at: 2000,
+            sent_at: null,
+            number: null,
+            source: null,
+            channel: null,
+            kind: "gap",
+            stored: "blob",
+            bytes: "05",
+            body_hash: null
+          },
+          {
+            seq: 9,
+            received_at: 3000,
+            sent_at: 2999,
+            number: 41,
+            source: "push",
+            channel: "event-football-nfl",
+            kind: "change",
+            stored: "blob",
+            bytes: "00FF",
+            body_hash: null
+          }
+        ])
+      }).pipe(Effect.provide(Database.layerMemory))
   )
 
-  it.effect("should let snapshot frames into an upgraded version 1 log, numbered after its last row", () =>
+  it.effect("should let a pushed frame into an upgraded version 1 log, numbered after its last row", () =>
     Effect.gen(function* () {
       yield* populatedVersionOneLog()
-      const before = yield* storedRows()
 
       const frame = yield* Effect.gen(function* () {
         const log = yield* FeedLog
 
         const frame = yield* log.append({
           receivedAt: at(4000),
-          feed: "snapshot",
+          source: "push",
           channel: "fbs",
-          kind: "response",
+          kind: "whole",
           body: "{}"
         })
         yield* TestClock.adjust("100 millis")
@@ -101,8 +138,13 @@ describe("FeedLog", () => {
       const after = yield* storedRows()
       assert.strictEqual(frame.seq, 10)
       assert.deepStrictEqual(
-        after.map(({ seq, feed, stored }) => [seq, feed, stored]),
-        [...before.map(({ seq, feed, stored }) => [seq, feed, stored]), [10, "snapshot", "blob"]]
+        after.map(({ seq, source, stored }) => [seq, source, stored]),
+        [
+          [1, "poll", "blob"],
+          [5, null, "blob"],
+          [9, "push", "blob"],
+          [10, "push", "blob"]
+        ]
       )
     }).pipe(Effect.provide(Database.layerMemory))
   )
@@ -154,10 +196,10 @@ describe("FeedLog", () => {
       `
         const replayed = yield* Stream.runCollect(log.replay(at(0)))
         assert.deepStrictEqual(rows, [
-          { channel: "nfl", kind: "response", stored: 1 },
+          { channel: "nfl", kind: "whole", stored: 1 },
           { channel: "nfl", kind: "unchanged", stored: 0 },
           { channel: "nfl", kind: "unchanged", stored: 0 },
-          { channel: "fbs", kind: "response", stored: 1 }
+          { channel: "fbs", kind: "whole", stored: 1 }
         ])
         assert.deepStrictEqual(replayed, appended)
       }).pipe(Effect.provide(feedLog))
@@ -363,7 +405,7 @@ describe("FeedLog", () => {
       assert.strictEqual(reopened.seq, 3)
       assert.deepStrictEqual(
         kinds.map((row) => row.kind),
-        ["response", "message", "unchanged"]
+        ["whole", "change", "unchanged"]
       )
     }).pipe(Effect.provide([Database.layerMemory, NodeCrypto.layer]))
   )
@@ -428,23 +470,23 @@ function at(millis: number) {
 }
 
 function poll(league: string, body: string, receivedAt: number) {
-  return { receivedAt: at(receivedAt), feed: "poll", channel: league, kind: "response", body } as const
+  return { receivedAt: at(receivedAt), source: "poll", channel: league, kind: "whole", body } as const
 }
 
 function message(channel: string, body: string, receivedAt: number, mid: number) {
   return {
     receivedAt: at(receivedAt),
     sentAt: at(receivedAt - 1),
-    sourceId: mid,
-    feed: "fastcast",
+    number: mid,
+    source: "push",
     channel,
-    kind: "message",
+    kind: "change",
     body
   } as const
 }
 
 function checkpoint(topic: string, body: string, receivedAt: number, mid: number) {
-  return { ...message(topic, body, receivedAt, mid), kind: "checkpoint" } as const
+  return { ...message(topic, body, receivedAt, mid), kind: "whole" } as const
 }
 
 function rowCount() {
@@ -492,7 +534,7 @@ function failingTransactions(failures: Ref.Ref<number>) {
 }
 
 /** Appends `frames` in order, then moves the clock past the writer's 100 ms and waits for every one to be written. */
-function appendedAndWritten(frames: ReadonlyArray<FeedFrame>) {
+function appendedAndWritten(frames: ReadonlyArray<Frame>) {
   return Effect.gen(function* () {
     const log = yield* FeedLog
 
@@ -567,7 +609,7 @@ function storedRows() {
   return Effect.gen(function* () {
     const sql = yield* SqlClient.SqlClient
     return yield* sql<Record<string, unknown>>`
-      SELECT seq, received_at, sent_at, source_id, feed, channel, kind, typeof(body) AS stored, hex(body) AS bytes,
+      SELECT seq, received_at, sent_at, number, source, channel, kind, typeof(body) AS stored, hex(body) AS bytes,
         body_hash
       FROM feed_frame ORDER BY seq
     `

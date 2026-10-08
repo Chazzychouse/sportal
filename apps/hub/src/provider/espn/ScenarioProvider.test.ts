@@ -22,7 +22,7 @@ import {
 } from "effect"
 import { TestClock } from "effect/testing"
 import * as Database from "../../Database.ts"
-import { FeedFrame } from "../../Frame.ts"
+import { Frame } from "../../Frame.ts"
 import { FeedLog } from "../../feed-log/FeedLog.ts"
 import * as Gzip from "../../Gzip.ts"
 import { HubConfig } from "../../HubConfig.ts"
@@ -157,11 +157,11 @@ describe("ScenarioProvider", () => {
 
   it.effect("should have ESPN's decode note a scenario's poll that does not decode, not drop it", () =>
     Effect.gen(function* () {
-      const broken: FeedFrame = {
+      const broken: Frame = {
         receivedAt: DateTime.makeUnsafe(0),
-        feed: "poll",
+        source: "poll",
         channel: "fbs",
-        kind: "response",
+        kind: "whole",
         body: "{"
       }
 
@@ -214,7 +214,7 @@ describe("ScenarioProvider", () => {
   describe("a scenario's pushed plays", () => {
     it.effect("should push no play's message before the first play's offset", () =>
       Effect.gen(function* () {
-        const received = yield* pushedInstants((frame) => frame.kind === "message")
+        const received = yield* pushedInstants((frame) => frame.kind === "change")
 
         yield* TestClock.adjust("30 seconds")
 
@@ -225,7 +225,7 @@ describe("ScenarioProvider", () => {
 
     it.effect("should push a play's message at its offset", () =>
       Effect.gen(function* () {
-        const received = yield* pushedInstants((frame) => frame.kind === "message")
+        const received = yield* pushedInstants((frame) => frame.kind === "change")
         yield* TestClock.adjust("30 seconds")
 
         yield* TestClock.adjust("2 millis")
@@ -237,7 +237,7 @@ describe("ScenarioProvider", () => {
 
     it.effect("should push each later play's message at its offset", () =>
       Effect.gen(function* () {
-        const received = yield* pushedInstants((frame) => frame.kind === "message")
+        const received = yield* pushedInstants((frame) => frame.kind === "change")
         yield* TestClock.adjust("30 seconds")
         yield* TestClock.adjust("2 millis")
 
@@ -427,12 +427,12 @@ describe("ScenarioProvider", () => {
 
       const feedSqliteExists = yield* fs.exists(join(dataDir, "feed.sqlite"))
       assert.deepStrictEqual(
-        logged.map(({ feed, channel }) => [feed, channel]),
+        logged.map(({ source, channel }) => [source, channel]),
         [
           ["poll", "nfl"],
           ["poll", "fbs"],
           ...["tie-uga-ala", "tie-osu-mich", "tie-tex-ou", "tie-lsu-miss"].map((game) => [
-            "fastcast",
+            "push",
             `gp-football-college-football-${game}`
           ])
         ]
@@ -541,20 +541,20 @@ function playingChangedAtSeven() {
 /** `layerOf` the folder that recorded scenario `name`, of `frames`, is written to, for as long as the layer lives. */
 function fromRecording<A, E, R>(
   name: string,
-  frames: ReadonlyArray<Effect.Effect<FeedFrame>>,
+  frames: ReadonlyArray<Effect.Effect<Frame>>,
   layerOf: (from: string) => Layer.Layer<A, E, R>
 ) {
   return Layer.unwrap(Effect.map(recorded(name, frames), layerOf)).pipe(Layer.provide(NodeServices.layer))
 }
 
 /** Writes recorded scenario `name`, of `frames`, to a fresh folder, and gives the folder. */
-function recorded(name: string, frames: ReadonlyArray<Effect.Effect<FeedFrame>>) {
+function recorded(name: string, frames: ReadonlyArray<Effect.Effect<Frame>>) {
   return Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem
     const path = yield* Path.Path
     const dir = yield* fs.makeTempDirectoryScoped()
     const made = yield* Effect.all(frames)
-    const lines = made.map((frame) => `${Schema.encodeSync(Schema.fromJsonString(FeedFrame))(frame)}\n`)
+    const lines = made.map((frame) => `${Schema.encodeSync(Schema.fromJsonString(Frame))(frame)}\n`)
     const bytes = yield* Gzip.compress(lines.join(""))
 
     yield* fs.writeFile(path.join(dir, `${name}.frames.jsonl.gz`), bytes)
@@ -569,18 +569,18 @@ function polledAt(seconds: number, games: ReadonlyArray<GameSnapshot>) {
 }
 
 /**
- * `said` as a recording from `feed` holds it, received `seconds` into the recording. The frame is synthetic: a snapshot
- * feed body under an ESPN feed's name, for a recorded scenario decoded by `TestSnapshotFeed.layerDecoder`.
+ * `said` as a recording from `source` holds it, received `seconds` into the recording. The frame is synthetic: a snapshot
+ * feed body under an ESPN source's name, for a recorded scenario decoded by `TestSnapshotFeed.layerDecoder`.
  */
-function recordedAs(seconds: number, feed: "poll" | "fastcast", said: Effect.Effect<FeedFrame>) {
+function recordedAs(seconds: number, source: "poll" | "push", said: Effect.Effect<Frame>) {
   return Effect.map(
     said,
     (frame) =>
-      new FeedFrame({
+      new Frame({
         ...frame,
         receivedAt: DateTime.add(recordedAt, { seconds }),
-        feed,
-        kind: feed === "poll" ? "response" : "message"
+        source,
+        kind: source === "poll" ? "whole" : "change"
       })
   )
 }
@@ -593,7 +593,7 @@ function scoring(points: number) {
 }
 
 /** Forks the provider's push, keeping the receive instant of each frame `keep` passes in the Ref it gives. */
-function pushedInstants(keep: (frame: FeedFrame) => boolean) {
+function pushedInstants(keep: (frame: Frame) => boolean) {
   return Effect.gen(function* () {
     const provider = yield* Provider
     const received = yield* Ref.make<ReadonlyArray<number>>([])
@@ -618,7 +618,7 @@ function scenarioOfTwoPolls() {
 }
 
 /** A polled frame's first game's home score and its receive instant. */
-function scoreAndReceipt({ body, receivedAt }: FeedFrame) {
+function scoreAndReceipt({ body, receivedAt }: Frame) {
   return [JSON.parse(body).games[0].home.score, receivedAt.epochMilliseconds]
 }
 
@@ -635,7 +635,7 @@ function scenarioOfTwoPushes() {
 function pushedAt(seconds: number, game: GameSnapshot) {
   return recordedAs(
     seconds,
-    "fastcast",
+    "push",
     pushed(Delivery.cases.Snapshot.make({ snapshot: game, from: "push" }), "fbs")
   )
 }
@@ -659,7 +659,7 @@ const slateGames = Effect.map(
 )
 
 /** The slate's games once the scenario of `frames` has played from its first frame to its last. */
-function playedToItsEnd(frames: ReadonlyArray<FeedFrame>) {
+function playedToItsEnd(frames: ReadonlyArray<Frame>) {
   return Effect.gen(function* () {
     const last = frames.at(-1)?.receivedAt ?? DateTime.makeUnsafe(0)
     const length = DateTime.distance(frames[0]?.receivedAt ?? last, last)

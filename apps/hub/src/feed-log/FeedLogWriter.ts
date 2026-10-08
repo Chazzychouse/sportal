@@ -13,7 +13,7 @@ import {
 } from "effect"
 import { Hex } from "effect/encoding"
 import { SqlClient } from "effect/sql"
-import { Frame } from "../Frame.ts"
+import type { LoggedFrame } from "../Frame.ts"
 import * as Gzip from "../Gzip.ts"
 import { FeedFrameRow, type queries } from "./FeedFrameTable.ts"
 
@@ -35,7 +35,7 @@ export const Writer = Data.taggedEnum<Writer>()
  * lost is then logged.
  */
 export const start = Effect.fnUntraced(function* (
-  pending: Queue.Queue<Frame, Cause.Done>,
+  pending: Queue.Queue<LoggedFrame, Cause.Done>,
   table: ReturnType<typeof queries>
 ) {
   const stored = yield* table.lastHashes().pipe(Effect.orDie)
@@ -58,7 +58,7 @@ export const start = Effect.fnUntraced(function* (
 })
 
 // A group that cannot be written is lost, and the writer is behind until the next group is written after a gap.
-const write = Effect.fnUntraced(function* (state: Writer, group: Arr.NonEmptyReadonlyArray<Frame>) {
+const write = Effect.fnUntraced(function* (state: Writer, group: Arr.NonEmptyReadonlyArray<LoggedFrame>) {
   return yield* store(state, group).pipe(
     Effect.catch((error) =>
       Effect.logError(
@@ -74,7 +74,7 @@ const write = Effect.fnUntraced(function* (state: Writer, group: Arr.NonEmptyRea
 })
 
 // Writes `group` in one transaction, after a gap row if frames were lost before it.
-const store = Effect.fn("FeedLog.store")(function* (state: Writer, group: ReadonlyArray<Frame>) {
+const store = Effect.fn("FeedLog.store")(function* (state: Writer, group: ReadonlyArray<LoggedFrame>) {
   const sql = yield* SqlClient.SqlClient
   const crypto = yield* Crypto.Crypto
 
@@ -84,13 +84,13 @@ const store = Effect.fn("FeedLog.store")(function* (state: Writer, group: Readon
       .pipe(Effect.map((digest) => ({ frame, hash: Hex.encode(digest) })))
   )
   const [hashes, decided] = Arr.mapAccum(hashed, state.hashes, (seen, { frame, hash }) => {
-    const response = Frame.isPollResponse(frame)
-    const unchanged = response && seen.get(frame.channel) === hash
-    return [response ? new Map(seen).set(frame.channel, hash) : seen, { frame, hash, unchanged }] as const
+    const polled = frame.source === "poll"
+    const unchanged = polled && seen.get(frame.channel) === hash
+    return [polled ? new Map(seen).set(frame.channel, hash) : seen, { frame, hash, unchanged }] as const
   })
   const rows = yield* Effect.forEach(decided, ({ frame, hash, unchanged }) =>
     Effect.map(unchanged ? Effect.succeed(null) : Gzip.compress(frame.body), (body) => ({
-      feed: frame.feed,
+      source: frame.source,
       row: FeedFrameRow.of(frame, hash, body, unchanged)
     }))
   )
@@ -105,14 +105,14 @@ const store = Effect.fn("FeedLog.store")(function* (state: Writer, group: Readon
     .pipe(Effect.trackDuration(writeDuration))
   yield* Effect.forEach(
     rows,
-    ({ feed, row }) => Metric.update(Metric.withAttributes(framesWritten, { feed, kind: row.kind }), 1),
+    ({ source, row }) => Metric.update(Metric.withAttributes(framesWritten, { source, kind: row.kind }), 1),
     { discard: true }
   )
 
   return Writer.Current({ hashes })
 })
 
-function behindBy(state: Writer, group: Arr.NonEmptyReadonlyArray<Frame>) {
+function behindBy(state: Writer, group: Arr.NonEmptyReadonlyArray<LoggedFrame>) {
   return Writer.$match(state, {
     Current: ({ hashes }) =>
       Writer.Behind({
@@ -157,7 +157,7 @@ const closeGap = Effect.fnUntraced(function* (state: Ref.Ref<Writer>) {
 const encodeRow = Schema.encodeEffect(FeedFrameRow.insert)
 
 const framesWritten = Metric.counter("sportal_feed_frames", {
-  description: "Frames written to the feed log, by feed and by how they were stored",
+  description: "Frames written to the feed log, by source and by how they were stored",
   incremental: true
 })
 

@@ -78,31 +78,31 @@ describe("LiveSlateTelemetry.told", () => {
     }).pipe(withMetrics)
   )
 
-  it.effect("should count a frame that does not decode by feed, logging it at Error with its seq", () =>
+  it.effect("should count a frame that does not decode by source, logging it at Error with its seq", () =>
     Effect.gen(function* () {
       const undecoded = DecodeObservation.FrameUndecoded({
-        feed: "poll",
+        source: "poll",
         channel: "nfl",
-        kind: "response",
+        kind: "whole",
         cause: "not json"
       })
 
       const logs = yield* toldOf(undecoded)
 
-      const frames = yield* counted("sportal_frames_undecoded", { feed: "poll" })
+      const frames = yield* counted("sportal_frames_undecoded", { source: "poll" })
       assert.strictEqual(frames, 1)
       assert.deepStrictEqual(levels(logs), ["Error"])
       assert.strictEqual(logs[0]?.annotations.seq, 7)
     }).pipe(withMetrics)
   )
 
-  it.effect("should count an event that does not decode by league and feed, logging it at Warn", () =>
+  it.effect("should count an event that does not decode by league and source, logging it at Warn", () =>
     Effect.gen(function* () {
-      const undecoded = DecodeObservation.EventUndecoded({ league: "fbs", feed: "fastcast", cause: "bad" })
+      const undecoded = DecodeObservation.EventUndecoded({ league: "fbs", source: "push", cause: "bad" })
 
       const logs = yield* toldOf(undecoded)
 
-      const events = yield* counted("sportal_events_undecoded", { league: "fbs", feed: "fastcast" })
+      const events = yield* counted("sportal_events_undecoded", { league: "fbs", source: "push" })
       assert.strictEqual(events, 1)
       assert.deepStrictEqual(levels(logs), ["Warn"])
     }).pipe(withMetrics)

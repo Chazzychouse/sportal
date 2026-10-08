@@ -4,7 +4,7 @@ import { GameId, type GameSnapshot } from "@sportal/domain/Game"
 import type { LeagueId } from "@sportal/domain/League"
 import { liveSnapshot, play, snapshot } from "@sportal/domain/TestGame"
 import { DateTime, Effect, Exit, Schedule, Schema } from "effect"
-import type { FeedFrame } from "./Frame.ts"
+import type { Frame } from "./Frame.ts"
 import { DecodeObservation } from "./provider/Decoder.ts"
 import { Provider, ProviderUnavailable } from "./provider/Provider.ts"
 import { decodedFrames } from "./provider/TestDecoder.ts"
@@ -55,9 +55,9 @@ layer(TestSnapshotFeed.layerDecoder)("TestSnapshotFeed.layerDecoder", (it) => {
     })
   )
 
-  it.effect("should give a body that is not JSON one Decoded, noted FrameUndecoded of feed snapshot", () =>
+  it.effect("should give a body that is not JSON one Decoded, noted FrameUndecoded of source push", () =>
     Effect.gen(function* () {
-      const frame = said("not json", "nfl", "response")
+      const frame = said("not json", "nfl", "whole")
 
       const all = yield* decodedFrames([frame])
 
@@ -68,12 +68,12 @@ layer(TestSnapshotFeed.layerDecoder)("TestSnapshotFeed.layerDecoder", (it) => {
           observation?._tag,
           observation !== undefined &&
             DecodeObservation.$is("FrameUndecoded")(observation) && [
-              observation.feed,
+              observation.source,
               observation.channel,
               observation.kind
             ]
         ],
-        ["FrameUndecoded", ["snapshot", "nfl", "response"]]
+        ["FrameUndecoded", ["push", "nfl", "whole"]]
       )
       assert.deepStrictEqual(all[0]?.deliveries, [])
     })
@@ -102,7 +102,7 @@ describe("TestSnapshotFeed.layer", () => {
       const frame = yield* provider.poll("nfl")
 
       const payload = yield* Schema.decodeEffect(TestSnapshotFeed.SnapshotPayload)(frame.body)
-      assert.deepStrictEqual([frame.feed, frame.kind, frame.channel], ["snapshot", "response", "nfl"])
+      assert.deepStrictEqual([frame.source, frame.kind, frame.channel], ["poll", "whole", "nfl"])
       assert.deepStrictEqual(payload, Delivery.cases.Listing.make({ league: "nfl", games: nfl }))
     }).pipe(Effect.provide(providerListing((league) => (league === "nfl" ? [liveSnapshot()] : [snapshot()]))))
   )
@@ -134,8 +134,8 @@ describe("TestSnapshotFeed.layer", () => {
 const received = DateTime.makeUnsafe("2026-10-06T18:00:00Z")
 const encode = Schema.encodeSync(TestSnapshotFeed.SnapshotPayload)
 
-function said(body: string, channel = "event", kind: FeedFrame["kind"] = "message"): FeedFrame {
-  return { receivedAt: received, feed: "snapshot", channel, kind, body }
+function said(body: string, channel = "event", kind: Frame["kind"] = "change"): Frame {
+  return { receivedAt: received, source: "push", channel, kind, body }
 }
 
 /** The snapshot provider listing `games` of each league. */

@@ -96,15 +96,15 @@ const observed = Effect.fnUntraced(function* (observation: DecodeObservation, se
         Effect.annotateLogs({ league, topic, reason }),
         Effect.andThen(Metric.update(Metric.withAttributes(resets, { league, reason }), 1))
       ),
-    FrameUndecoded: ({ feed, channel, kind, cause }) =>
+    FrameUndecoded: ({ source, channel, kind, cause }) =>
       Effect.logError("Decode: skipped a frame that does not decode", cause).pipe(
-        Effect.annotateLogs({ feed, channel, kind }),
-        Effect.andThen(Metric.update(Metric.withAttributes(framesUndecoded, { feed }), 1))
+        Effect.annotateLogs({ source, channel, kind }),
+        Effect.andThen(Metric.update(Metric.withAttributes(framesUndecoded, { source }), 1))
       ),
-    EventUndecoded: ({ league, feed, cause }) =>
+    EventUndecoded: ({ league, source, cause }) =>
       Effect.logWarning("Decode: skipped an event that does not decode", cause).pipe(
-        Effect.annotateLogs({ league, feed }),
-        Effect.andThen(Metric.update(Metric.withAttributes(eventsUndecoded, { league, feed }), 1))
+        Effect.annotateLogs({ league, source }),
+        Effect.andThen(Metric.update(Metric.withAttributes(eventsUndecoded, { league, source }), 1))
       ),
     PlayUndecoded: ({ league, game, play, cause }) =>
       Effect.logWarning(`Decode: skipped play ${play}, which does not decode`, cause).pipe(
@@ -380,12 +380,12 @@ const resets = Metric.counter("sportal_live_feed_document_resets", {
 })
 
 const framesUndecoded = Metric.counter("sportal_frames_undecoded", {
-  description: "Frames that did not decode and were skipped, by feed",
+  description: "Frames that did not decode and were skipped, by source",
   incremental: true
 })
 
 const eventsUndecoded = Metric.counter("sportal_events_undecoded", {
-  description: "Events, polled or pushed, that did not decode and were skipped, by league and feed",
+  description: "Events, polled or pushed, that did not decode and were skipped, by league and source",
   incremental: true
 })
 

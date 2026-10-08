@@ -86,14 +86,14 @@ export const Envelope = Schema.fromJsonString(Framed).pipe(
     Schema.Struct({
       message: Schema.toType(Framed),
       channel: Schema.UndefinedOr(Schema.String),
-      sourceId: Schema.UndefinedOr(Schema.Int),
+      mid: Schema.UndefinedOr(Schema.Int),
       sentAt: Schema.UndefinedOr(Schema.DateTimeUtc)
     }),
     {
       decode: SchemaGetter.transform((message) => ({
         message,
         channel: "tc" in message ? message.tc : undefined,
-        sourceId: "mid" in message ? message.mid : undefined,
+        mid: "mid" in message ? message.mid : undefined,
         sentAt:
           (message.op === "R" || message.op === "P") && message.pl.ts !== undefined
             ? DateTime.makeUnsafe(message.pl.ts)

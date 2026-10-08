@@ -4,7 +4,7 @@ import { assert, describe, it } from "@effect/vitest"
 import type { GameEvent } from "@sportal/domain/GameEvent"
 import type { SlateObservation } from "@sportal/domain/SlateObservation"
 import { Array as Arr, type Cause, Context, DateTime, Effect, FileSystem, Layer, Path, Schema } from "effect"
-import { FeedFrame } from "../Frame.ts"
+import { Frame } from "../Frame.ts"
 import * as Gzip from "../Gzip.ts"
 import type { Decoded } from "../provider/Decoder.ts"
 import * as EspnDecoder from "../provider/espn/EspnDecoder.ts"
@@ -54,7 +54,7 @@ describe("Scenarios", () => {
 
       const [first] = scenario.frames
       assert.strictEqual(scenario.name, "two-polls")
-      assert.deepStrictEqual([first?.feed, first?.kind], ["poll", "response"])
+      assert.deepStrictEqual([first?.source, first?.kind], ["poll", "whole"])
       assert.deepStrictEqual(scenario.origin(), DateTime.makeUnsafe("2026-10-03T16:00:00Z"))
     }).pipe(Effect.provide(scenariosRecording("two-polls.frames.jsonl.gz", gzipped(twoPolls))))
   )
@@ -223,18 +223,18 @@ function scenariosRecording(file: string, contents: Effect.Effect<Uint8Array, Ca
 }
 
 /** `frames` as a recording's file holds them: JSON lines, gzip'd. */
-function gzipped(frames: ReadonlyArray<FeedFrame>) {
+function gzipped(frames: ReadonlyArray<Frame>) {
   return Gzip.compress(frames.map((frame) => `${encodeFrame(frame)}\n`).join(""))
 }
 
 // A recording polled at its start and again 40 s later.
 const twoPolls = [0, 40].map(
   (seconds) =>
-    new FeedFrame({
+    new Frame({
       receivedAt: DateTime.add(DateTime.makeUnsafe("2026-10-03T16:00:00Z"), { seconds }),
-      feed: "poll",
+      source: "poll",
       channel: "fbs",
-      kind: "response",
+      kind: "whole",
       body: JSON.stringify({ events: [] })
     })
 )
@@ -262,4 +262,4 @@ function letGo(observations: ReadonlyArray<SlateObservation>) {
   return { stopped, droppedEarly: dropped.flat() }
 }
 
-const encodeFrame = Schema.encodeSync(Schema.fromJsonString(FeedFrame))
+const encodeFrame = Schema.encodeSync(Schema.fromJsonString(Frame))

@@ -1,48 +1,48 @@
 import { DateTime, Effect, Schema } from "effect"
 import { Model } from "effect/schema"
 import { SqlClient, SqlSchema } from "effect/sql"
-import { Frame } from "../Frame.ts"
+import { LoggedFrame } from "../Frame.ts"
 import * as Gzip from "../Gzip.ts"
 
 /**
  * A row of `feed_frame`: a frame with its body gzip'd, or with no body for an unchanged poll (a poll response that
- * repeats its channel's last), or the gap a failed write left. Only a gap has no feed or channel.
+ * repeats its channel's last), or the gap a failed write left. Only a gap has no source or channel.
  */
 export class FeedFrameRow extends Model.Class<FeedFrameRow>("sportal/hub/feed-log/FeedFrameRow")({
   seq: Schema.Int,
   received_at: Schema.Int,
   sent_at: Schema.NullOr(Schema.Int),
-  source_id: Schema.NullOr(Schema.Int),
-  feed: Schema.NullOr(Frame.fields.feed),
+  number: Schema.NullOr(Schema.Int),
+  source: Schema.NullOr(LoggedFrame.fields.source),
   channel: Schema.NullOr(Schema.String),
-  kind: Schema.Literals(["response", "message", "checkpoint", "unchanged", "gap"]),
+  kind: Schema.Literals(["whole", "change", "unchanged", "gap"]),
   body: Schema.NullOr(Schema.Uint8Array),
   body_hash: Schema.NullOr(Schema.String)
 }) {
   static readonly columns = Object.keys(FeedFrameRow.fields)
 
-  /** The frame a row other than a gap holds, its body read as `body`; an unchanged poll reads as a response. */
+  /** The frame a row other than a gap holds, its body read as `body`; an unchanged poll reads as a whole. */
   static readonly frame = Effect.fnUntraced(function* (row: FeedFrameRow, body: string) {
     return yield* decodeFrame({
       seq: row.seq,
       receivedAt: row.received_at,
       ...(row.sent_at === null ? {} : { sentAt: row.sent_at }),
-      ...(row.source_id === null ? {} : { sourceId: row.source_id }),
-      feed: row.feed,
+      ...(row.number === null ? {} : { number: row.number }),
+      source: row.source,
       channel: row.channel,
-      kind: row.kind === "unchanged" ? "response" : row.kind,
+      kind: row.kind === "unchanged" ? "whole" : row.kind,
       body
     })
   })
 
   /** `frame`'s row, hashed `hash`, its body gzip'd as `body`, or none when it is an `unchanged` poll. */
-  static of(frame: Frame, hash: string, body: Uint8Array | null, unchanged: boolean): FeedFrameRow {
+  static of(frame: LoggedFrame, hash: string, body: Uint8Array | null, unchanged: boolean): FeedFrameRow {
     return new FeedFrameRow({
       seq: frame.seq,
       received_at: DateTime.toEpochMillis(frame.receivedAt),
       sent_at: frame.sentAt === undefined ? null : DateTime.toEpochMillis(frame.sentAt),
-      source_id: frame.sourceId ?? null,
-      feed: frame.feed,
+      number: frame.number ?? null,
+      source: frame.source,
       channel: frame.channel,
       kind: unchanged ? "unchanged" : frame.kind,
       body,
@@ -71,8 +71,8 @@ export class FeedFrameRow extends Model.Class<FeedFrameRow>("sportal/hub/feed-lo
       seq: to,
       received_at: DateTime.toEpochMillis(receivedAt),
       sent_at: null,
-      source_id: null,
-      feed: null,
+      number: null,
+      source: null,
       channel: null,
       kind: "gap",
       body,
@@ -101,7 +101,7 @@ export function queries(sql: SqlClient.SqlClient) {
       execute: () => sql`
         SELECT channel, body_hash FROM feed_frame WHERE seq IN (
           SELECT MAX(seq) FROM feed_frame
-          WHERE feed = 'poll' AND kind IN ('response', 'unchanged') GROUP BY channel
+          WHERE source = 'poll' AND kind IN ('whole', 'unchanged') GROUP BY channel
         )
       `
     }),
@@ -118,7 +118,7 @@ export function queries(sql: SqlClient.SqlClient) {
         SELECT ${sql.csv(FeedFrameRow.columns)}
         FROM feed_frame JOIN (
           SELECT channel AS topic, MAX(seq) AS since FROM feed_frame
-          WHERE kind = 'checkpoint' AND seq < ${before} GROUP BY channel
+          WHERE kind = 'whole' AND source = 'push' AND seq < ${before} GROUP BY channel
         ) ON channel = topic AND seq >= since
         WHERE seq < ${before} ORDER BY seq
       `
@@ -134,7 +134,7 @@ export function queries(sql: SqlClient.SqlClient) {
       Request: Schema.Struct({ channel: Schema.String, seq: Schema.Int }),
       Result: Schema.Struct({ body: Schema.Uint8Array }),
       execute: ({ channel, seq }) => sql`
-        SELECT body FROM feed_frame WHERE channel = ${channel} AND kind = 'response' AND seq < ${seq}
+        SELECT body FROM feed_frame WHERE channel = ${channel} AND kind = 'whole' AND seq < ${seq}
         ORDER BY seq DESC LIMIT 1
       `
     }),
@@ -192,7 +192,45 @@ export const migrations = {
     yield* sql`DROP TABLE feed_frame_before`
     yield* sql`CREATE INDEX feed_frame_channel_seq ON feed_frame (channel, seq)`
     yield* sql`CREATE INDEX feed_frame_received_at ON feed_frame (received_at)`
+  }),
+  // The frame's own words: `feed` becomes `source` (`push` or `poll`), and `kind` is `whole` or `change`.
+  "3_frame_source": Effect.gen(function* () {
+    const sql = yield* SqlClient.SqlClient
+    yield* sql`ALTER TABLE feed_frame RENAME TO feed_frame_before`
+    yield* sql`DROP INDEX feed_frame_channel_seq`
+    yield* sql`DROP INDEX feed_frame_received_at`
+    yield* sql`
+      CREATE TABLE feed_frame (
+        seq INTEGER PRIMARY KEY,
+        received_at INTEGER NOT NULL,
+        sent_at INTEGER,
+        number INTEGER,
+        source TEXT CHECK (source IN ('push', 'poll')),
+        channel TEXT,
+        kind TEXT NOT NULL CHECK (kind IN ('whole', 'change', 'unchanged', 'gap')),
+        body BLOB,
+        body_hash TEXT,
+        CHECK ((kind = 'gap') = (source IS NULL AND channel IS NULL))
+      )
+    `
+    yield* sql`
+      INSERT INTO feed_frame
+      SELECT
+        seq,
+        received_at,
+        sent_at,
+        source_id,
+        CASE feed WHEN 'poll' THEN 'poll' WHEN 'fastcast' THEN 'push' WHEN 'snapshot' THEN 'push' END,
+        channel,
+        CASE kind WHEN 'response' THEN 'whole' WHEN 'checkpoint' THEN 'whole' WHEN 'message' THEN 'change' ELSE kind END,
+        body,
+        body_hash
+      FROM feed_frame_before
+    `
+    yield* sql`DROP TABLE feed_frame_before`
+    yield* sql`CREATE INDEX feed_frame_channel_seq ON feed_frame (channel, seq)`
+    yield* sql`CREATE INDEX feed_frame_received_at ON feed_frame (received_at)`
   })
 }
 
-const decodeFrame = Schema.decodeUnknownEffect(Frame)
+const decodeFrame = Schema.decodeUnknownEffect(LoggedFrame)

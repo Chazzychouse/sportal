@@ -2,7 +2,7 @@ import type { GameSnapshot } from "@sportal/domain/Game"
 import type { LeagueId } from "@sportal/domain/League"
 import { DateTime, Duration, Effect, Layer, Option, Schedule } from "effect"
 import { Headers, HttpClient, HttpClientError } from "effect/http"
-import { FeedFrame } from "../../Frame.ts"
+import { Frame } from "../../Frame.ts"
 import { type Polling, Provider, ProviderUnavailable } from "../Provider.ts"
 import { FastCast } from "./FastCast.ts"
 
@@ -30,7 +30,7 @@ export const layer: Layer.Layer<Provider, never, FastCast | HttpClient.HttpClien
         const sentAt = Option.getOrUndefined(
           Option.flatMap(Headers.get(response.headers, "date"), (date) => DateTime.make(date))
         )
-        return new FeedFrame({ receivedAt, sentAt, feed: "poll", channel: league, kind: "response", body })
+        return new Frame({ receivedAt, sentAt, source: "poll", channel: league, kind: "whole", body })
       },
       (effect, league) =>
         Effect.mapError(

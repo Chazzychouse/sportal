@@ -1,6 +1,6 @@
 import { fileURLToPath } from "node:url"
 import { Context, Data, DateTime, Effect, FileSystem, Layer, Path, Schema } from "effect"
-import { FeedFrame } from "../Frame.ts"
+import { Frame } from "../Frame.ts"
 import * as Gzip from "../Gzip.ts"
 
 /** Every scenario a Hub can play, by name: the recordings in a folder, each kept as `<name>.frames.jsonl.gz`. */
@@ -62,7 +62,7 @@ export class Scenarios extends Context.Service<
 /** Games a Hub plays as its provider: a provider's raw frames, in order of receipt, recorded from a window of a game day. */
 export class Scenario extends Data.Class<{
   readonly name: string
-  readonly frames: ReadonlyArray<FeedFrame>
+  readonly frames: ReadonlyArray<Frame>
 }> {
   /** When it starts: its first frame's receipt. */
   origin(): DateTime.Utc {
@@ -92,4 +92,4 @@ function unreadable(path: string) {
   return (cause: unknown) => new ScenarioUnreadable({ path, cause })
 }
 
-const decodeFrame = Schema.decodeEffect(Schema.fromJsonString(FeedFrame))
+const decodeFrame = Schema.decodeEffect(Schema.fromJsonString(Frame))

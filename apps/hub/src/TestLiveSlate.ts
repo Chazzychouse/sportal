@@ -5,7 +5,7 @@ import { Slate } from "@sportal/domain/Slate"
 import type { SlateObservation } from "@sportal/domain/SlateObservation"
 import { DateTime, Effect, Layer } from "effect"
 import * as Database from "./Database.ts"
-import type { FeedFrame } from "./Frame.ts"
+import type { Frame } from "./Frame.ts"
 import { FeedLog } from "./feed-log/FeedLog.ts"
 import { LiveSlate } from "./LiveSlate.ts"
 import type { Decoder } from "./provider/Decoder.ts"
@@ -18,7 +18,7 @@ import * as TestSnapshotFeed from "./TestSnapshotFeed.ts"
  * `options.decoder` is given, and the game day is read in `options.zone`, the local one unless given.
  */
 export function slateFollowing(
-  frames: ReadonlyArray<FeedFrame> = [],
+  frames: ReadonlyArray<Frame> = [],
   options: { readonly decoder?: Layer.Layer<Decoder>; readonly zone?: DateTime.TimeZone } = {}
 ): Layer.Layer<LiveSlate | FeedLog> {
   return LiveSlate.layer.pipe(
@@ -38,7 +38,7 @@ export function latestOf<E, R>(layer: Layer.Layer<LiveSlate, E, R>) {
 }
 
 /** Appends `frame` to the feed log and gives the slate once it has taken it. */
-export const appended = Effect.fnUntraced(function* (frame: FeedFrame) {
+export const appended = Effect.fnUntraced(function* (frame: Frame) {
   const feedLog = yield* FeedLog
   const liveSlate = yield* LiveSlate
   const logged = yield* feedLog.append(frame)
@@ -55,7 +55,7 @@ export const delivered = Effect.fnUntraced(function* (delivery: Delivery, at?: D
 })
 
 /** Every game event and observation the domain slate makes taking `frames` whole, in order, as the provided `Decoder` reads them. */
-export const takenOf = Effect.fnUntraced(function* (frames: ReadonlyArray<FeedFrame>) {
+export const takenOf = Effect.fnUntraced(function* (frames: ReadonlyArray<Frame>) {
   const empty: {
     readonly slate: Slate
     readonly events: ReadonlyArray<GameEvent>

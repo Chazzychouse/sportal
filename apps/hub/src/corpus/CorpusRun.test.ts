@@ -24,7 +24,7 @@ import {
 } from "effect"
 import { TestClock } from "effect/testing"
 import { Worker, WorkerError } from "effect/workers"
-import type { FeedFrame } from "../Frame.ts"
+import type { Frame } from "../Frame.ts"
 import { FeedLog } from "../feed-log/FeedLog.ts"
 import { HubConfig } from "../HubConfig.ts"
 import * as Ingest from "../Ingest.ts"
@@ -280,7 +280,7 @@ function neAtBufRunTwiceLayer() {
  * frame, then, Ingest stopped, until `until`. The clock moves only once the slate has taken every frame appended so
  * far, and stops at each frame's instant and each poll's, so the timer never ticks past a frame still to be taken.
  */
-function playedLive(frames: ReadonlyArray<FeedFrame>, until: DateTime.Utc) {
+function playedLive(frames: ReadonlyArray<Frame>, until: DateTime.Utc) {
   const instants = frames.map(({ receivedAt }) => receivedAt)
   const first = Option.getOrElse(Arr.head(instants), () => until)
   const ended = Option.match(Arr.last(instants), {
@@ -363,7 +363,7 @@ function ingesting(appended: Ref.Ref<{ readonly seq: number; readonly polled: Da
             Effect.tap((logged) =>
               Ref.update(appended, ({ polled }) => ({
                 seq: logged.seq,
-                polled: logged.feed === "poll" ? logged.receivedAt : polled
+                polled: logged.source === "poll" ? logged.receivedAt : polled
               }))
             )
           )

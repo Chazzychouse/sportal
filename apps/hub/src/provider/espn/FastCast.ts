@@ -22,7 +22,7 @@ import {
 } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/http"
 import * as Socket from "effect/socket/Socket"
-import { FeedFrame } from "../../Frame.ts"
+import { Frame } from "../../Frame.ts"
 import { HubConfig } from "../../HubConfig.ts"
 import { type LiveFeed, LiveFeedDemand, ProviderUnavailable } from "../Provider.ts"
 import * as FastCastMessage from "./FastCastMessage.ts"
@@ -246,13 +246,13 @@ const framed = Effect.fnUntraced(function* (
 ) {
   const { text, receivedAt } = received
   const envelope = Option.getOrUndefined(decodeEnvelope(text))
-  const frame = new FeedFrame({
+  const frame = new Frame({
     receivedAt,
-    feed: "fastcast",
+    source: "push",
     channel: envelope?.channel ?? "socket",
-    kind: "message",
+    kind: "change",
     body: text,
-    sourceId: envelope?.sourceId,
+    number: envelope?.mid,
     sentAt: envelope?.sentAt
   })
   if (envelope === undefined) {
@@ -265,7 +265,7 @@ const framed = Effect.fnUntraced(function* (
   const loaded = yield* checkpoint(message).pipe(Effect.result)
   if (Result.isSuccess(loaded)) {
     yield* published(Result.succeed(message.tc))
-    return [frame, new FeedFrame({ ...frame, kind: "checkpoint", body: loaded.success })]
+    return [frame, new Frame({ ...frame, kind: "whole", body: loaded.success })]
   }
 
   const error = loaded.failure

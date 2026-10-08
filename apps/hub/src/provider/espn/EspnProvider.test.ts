@@ -29,7 +29,7 @@ describe("EspnProvider", () => {
       const frame = yield* provider.poll("nfl")
 
       assert.strictEqual(frame.body, nflPregame)
-      assert.deepStrictEqual([frame.feed, frame.channel, frame.kind], ["poll", "nfl", "response"])
+      assert.deepStrictEqual([frame.source, frame.channel, frame.kind], ["poll", "nfl", "whole"])
       assert.strictEqual(
         frame.sentAt?.epochMilliseconds,
         DateTime.makeUnsafe("2026-10-04T18:00:00Z").epochMilliseconds

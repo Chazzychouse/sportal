@@ -31,7 +31,7 @@ import {
 import type { SqlClient } from "effect/sql"
 import { TestClock } from "effect/testing"
 import * as Database from "./Database.ts"
-import { FeedFrame } from "./Frame.ts"
+import { Frame } from "./Frame.ts"
 import { FeedLog } from "./feed-log/FeedLog.ts"
 import { HubConfig } from "./HubConfig.ts"
 import { LiveSlate } from "./LiveSlate.ts"
@@ -221,7 +221,7 @@ describe("LiveSlate#through", () => {
       const frame = yield* undecodable
 
       const current = yield* appended(frame)
-      const undecoded = yield* counted("sportal_frames_undecoded", { feed: "snapshot" })
+      const undecoded = yield* counted("sportal_frames_undecoded", { source: "push" })
 
       assert.deepStrictEqual(current.seq, Option.some(1))
       assert.strictEqual(undecoded, 1)
@@ -1020,7 +1020,7 @@ describe("LiveSlate following the feed log", () => {
         slateFollowing([
           framed(Delivery.cases.Snapshot.make({ snapshot: liveSnapshot({ id: one }), from: "poll" }), start),
           framed(Delivery.cases.Plays.make({ game: one, plays: [play()] }), start),
-          new FeedFrame({ ...framed(Delivery.cases.Plays.make({ game: one, plays: [] }), start), body: "{" })
+          new Frame({ ...framed(Delivery.cases.Plays.make({ game: one, plays: [] }), start), body: "{" })
         ]).pipe(Layer.provideMerge(recordingSpans(ended)))
       )
     )
@@ -1163,7 +1163,7 @@ describe("LiveSlate following the feed log", () => {
       const frame = yield* undecodable
 
       yield* appended(frame)
-      const undecoded = yield* counted("sportal_frames_undecoded", { feed: "snapshot" })
+      const undecoded = yield* counted("sportal_frames_undecoded", { source: "push" })
 
       assert.strictEqual(undecoded, 1)
     }).pipe(
@@ -1199,7 +1199,7 @@ describe("LiveSlate following the feed log", () => {
 
       const appendedFrames = yield* Effect.forEach(frames, feedLog.append)
       yield* slate.through(appendedFrames.at(-1)?.seq ?? 0)
-      const undecoded = yield* counted("sportal_frames_undecoded", { feed: "poll" })
+      const undecoded = yield* counted("sportal_frames_undecoded", { source: "poll" })
       const games = yield* counted("sportal_live_feed_games", { league: "nfl" })
       const unlisted = yield* counted("sportal_live_feed_unlisted", { league: "nfl" })
       const messages = yield* counted("sportal_live_feed_messages", { league: "nfl", op: "P" })
@@ -1550,7 +1550,7 @@ function brokenIfMarked(snapshot: GameSnapshot): GameSnapshot {
 /** A snapshot feed frame, received now, whose body does not decode. */
 const undecodable = Effect.map(
   pushed({ _tag: "Resync" }, "fbs"),
-  (frame) => new FeedFrame({ ...frame, kind: "response", body: "not json" })
+  (frame) => new Frame({ ...frame, kind: "whole", body: "not json" })
 )
 
 /** The snapshot feed's decode, which dies at a frame whose body is `"die"`. */
@@ -1559,7 +1559,7 @@ const dyingDecoder = Decoder.layerTestDying("die").pipe(Layer.provide(TestSnapsh
 /** A snapshot feed frame, received now, whose decode `dyingDecoder` dies on. */
 const dyingFrame = Effect.map(
   pushed({ _tag: "Resync" }, "x"),
-  (frame) => new FeedFrame({ ...frame, body: "die" })
+  (frame) => new Frame({ ...frame, body: "die" })
 )
 
 /** Game one taken live, then taken again at 9:00 a minute later. */
@@ -1703,7 +1703,7 @@ function eventsWhile(run: Effect.Effect<void, never, LiveSlate | FeedLog>) {
 }
 
 /** The feed log with `frames` logged, whose replay appends a frame of game one in the third period as it ends. */
-function appendingAtEnd(frames: ReadonlyArray<FeedFrame>) {
+function appendingAtEnd(frames: ReadonlyArray<Frame>) {
   return Layer.effect(
     FeedLog,
     Effect.map(FeedLog, (log) =>
@@ -1751,7 +1751,7 @@ const buildingInPairs = Effect.gen(function* () {
  * The slate built as `buildingInPairs` builds it over `logged`, with `frame` appended while it waits, once it has taken
  * the frame.
  */
-function inPairsThen(logged: ReadonlyArray<FeedFrame>, frame: FeedFrame) {
+function inPairsThen(logged: ReadonlyArray<Frame>, frame: Frame) {
   return Effect.gen(function* () {
     const feedLog = yield* FeedLog
     const building = yield* buildingInPairs
@@ -1791,28 +1791,28 @@ const decodeCounters = [
  * checkpoint before any listing (sixteen games pushed and unlisted), and a game topic's checkpoint and then a message
  * after a gap.
  */
-const noticeable: ReadonlyArray<Effect.Effect<FeedFrame>> = (
+const noticeable: ReadonlyArray<Effect.Effect<Frame>> = (
   [
-    { feed: "poll", channel: "nfl", kind: "response", body: "not json" },
+    { source: "poll", channel: "nfl", kind: "whole", body: "not json" },
     {
-      feed: "fastcast",
+      source: "push",
       channel: "event-football-nfl",
-      kind: "checkpoint",
-      sourceId: 4286637,
+      kind: "whole",
+      number: 4286637,
       body: recordedCheckpoint()
     },
     {
-      feed: "fastcast",
+      source: "push",
       channel: "gp-football-nfl-1",
-      kind: "checkpoint",
-      sourceId: 99,
+      kind: "whole",
+      number: 99,
       body: JSON.stringify({ entities: {} })
     },
     {
-      feed: "fastcast",
+      source: "push",
       channel: "gp-football-nfl-1",
-      kind: "message",
-      sourceId: 101,
+      kind: "change",
+      number: 101,
       body: JSON.stringify({
         op: "P",
         tc: "gp-football-nfl-1",
@@ -1820,8 +1820,8 @@ const noticeable: ReadonlyArray<Effect.Effect<FeedFrame>> = (
         pl: JSON.stringify({ ts: 1, pl: [] })
       })
     }
-  ] satisfies ReadonlyArray<Omit<FeedFrame, "receivedAt">>
-).map((frame) => Effect.map(DateTime.now, (receivedAt) => new FeedFrame({ ...frame, receivedAt })))
+  ] satisfies ReadonlyArray<Omit<Frame, "receivedAt">>
+).map((frame) => Effect.map(DateTime.now, (receivedAt) => new Frame({ ...frame, receivedAt })))
 
 /** ESPN's NFL FastCast scoreboard checkpoint of 2026-10-04 at 17:52Z (mid 4286637), as its checkpoint frame's body. */
 function recordedCheckpoint() {
@@ -1893,7 +1893,7 @@ function replayedAt(chicago: string) {
 const aheadOfCovered = liveSnapshot({ id: one, clock: "4:30", home: { team: team("HOME"), score: 7 } })
 
 /** A fresh slate's latest once it has replayed `frames`, decoded as ESPN. */
-function replayed(frames: ReadonlyArray<FeedFrame>) {
+function replayed(frames: ReadonlyArray<Frame>) {
   return latestOf(slateFollowing(frames, { decoder: EspnDecoder.layer }))
 }
 
@@ -1903,7 +1903,7 @@ function replayed(frames: ReadonlyArray<FeedFrame>) {
  * every event published. The clock is set to the first frame before the feed log opens, so its writer never wakes
  * through the years before it.
  */
-function takenLive(frames: ReadonlyArray<FeedFrame>, sampling: ReadonlyArray<number> = []) {
+function takenLive(frames: ReadonlyArray<Frame>, sampling: ReadonlyArray<number> = []) {
   const taking = Effect.gen(function* () {
     const slate = yield* LiveSlate
     const held = yield* Ref.make<ReadonlyArray<LiveGame>>([])
@@ -1950,7 +1950,7 @@ function takenLive(frames: ReadonlyArray<FeedFrame>, sampling: ReadonlyArray<num
 
 /** `slateFollowing` the frames `frames` gives when the layer is built. For frames made on the test clock, such as a frame received now. */
 function slateFollowingFramesFrom<E>(
-  frames: Effect.Effect<ReadonlyArray<FeedFrame>, E>,
+  frames: Effect.Effect<ReadonlyArray<Frame>, E>,
   options?: Parameters<typeof slateFollowing>[1]
 ) {
   return Layer.unwrap(Effect.map(frames, (made) => slateFollowing(made, options)))
@@ -1971,7 +1971,7 @@ function slateOn(
  * Appends each of `frames` once the test clock reaches it and waits for the slate to take it, so the timer runs
  * between them as it would live.
  */
-const takenInTime = Effect.fnUntraced(function* (frames: ReadonlyArray<FeedFrame>) {
+const takenInTime = Effect.fnUntraced(function* (frames: ReadonlyArray<Frame>) {
   for (const frame of frames) {
     const now = yield* DateTime.now
     yield* TestClock.adjust(DateTime.distance(now, frame.receivedAt))

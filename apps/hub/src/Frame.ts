@@ -1,23 +1,19 @@
+import { DeliverySource } from "@sportal/domain/Delivery"
 import { Schema } from "effect"
 
-/** One thing a feed delivered, as received, before the log numbers it. */
-export class FeedFrame extends Schema.Class<FeedFrame>("sportal/hub/FeedFrame")({
+/** One thing a provider delivered, as received, before the log numbers it. */
+export class Frame extends Schema.Class<Frame>("sportal/hub/Frame")({
   receivedAt: Schema.DateTimeUtcFromMillis,
   sentAt: Schema.optional(Schema.DateTimeUtcFromMillis),
-  sourceId: Schema.optional(Schema.Int),
-  feed: Schema.Literals(["poll", "fastcast", "snapshot"]),
-  /** The league for a poll; the topic, or `socket`, for FastCast. */
+  source: DeliverySource,
+  /** The league for a poll; the topic, or `socket`, for a push. */
   channel: Schema.String,
-  kind: Schema.Literals(["response", "message", "checkpoint"]),
+  kind: Schema.Literals(["whole", "change"]),
+  number: Schema.optional(Schema.Int),
   body: Schema.String
 }) {}
 
-/** A feed frame as the log numbered it. */
-export class Frame extends FeedFrame.extend<Frame>("sportal/hub/Frame")({
+/** A frame as the feed log numbered it. */
+export class LoggedFrame extends Frame.extend<LoggedFrame>("sportal/hub/LoggedFrame")({
   seq: Schema.Int
-}) {
-  /** Whether `frame` is a poll's response, the only kind the log stores without a body when it repeats. */
-  static isPollResponse(frame: Pick<FeedFrame, "feed" | "kind">): boolean {
-    return frame.feed === "poll" && frame.kind === "response"
-  }
-}
+}) {}

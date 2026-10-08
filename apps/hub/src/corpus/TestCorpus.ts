@@ -4,7 +4,7 @@ import type { GameDay } from "@sportal/domain/GameDay"
 import { type Crypto, DateTime, Effect, FileSystem, Layer, type Path } from "effect"
 import type { SqlClient } from "effect/sql"
 import * as Database from "../Database.ts"
-import type { FeedFrame } from "../Frame.ts"
+import type { Frame } from "../Frame.ts"
 import { FeedLog } from "../feed-log/FeedLog.ts"
 import { HubConfig } from "../HubConfig.ts"
 import type { Decoder } from "../provider/Decoder.ts"
@@ -61,7 +61,7 @@ export const inCorpus = Effect.fn("TestCorpus.inCorpus")(
 )
 
 /** Day `date` built from the feed log, opened for the build alone once `frames` are logged to it. */
-export function built(date: GameDay, frames: ReadonlyArray<FeedFrame> = []) {
+export function built(date: GameDay, frames: ReadonlyArray<Frame> = []) {
   return CorpusBuild.captured(date).pipe(Effect.provide(FeedLog.layerTest(frames)), Effect.scoped)
 }
 

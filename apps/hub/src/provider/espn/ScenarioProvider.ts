@@ -1,6 +1,6 @@
 import type { LeagueId } from "@sportal/domain/League"
 import { Array as Arr, DateTime, Duration, Effect, Layer, Option, Schedule, Stream } from "effect"
-import { FeedFrame } from "../../Frame.ts"
+import { Frame } from "../../Frame.ts"
 import { HubConfig } from "../../HubConfig.ts"
 import {
   type Scenario,
@@ -32,10 +32,10 @@ export const layer: Layer.Layer<Provider, ScenarioUnknown | ScenarioUnreadable, 
 
 function played(scenario: Scenario, start: Effect.Effect<DateTime.Utc>) {
   const origin = scenario.origin()
-  const offsetOf = (frame: FeedFrame) => DateTime.distance(origin, frame.receivedAt)
-  const playedAt = (frame: FeedFrame) => Effect.map(start, (at) => DateTime.addDuration(at, offsetOf(frame)))
-  const polls = scenario.frames.filter((frame) => frame.feed === "poll")
-  const pushes = scenario.frames.filter((frame) => frame.feed === pushFeed)
+  const offsetOf = (frame: Frame) => DateTime.distance(origin, frame.receivedAt)
+  const playedAt = (frame: Frame) => Effect.map(start, (at) => DateTime.addDuration(at, offsetOf(frame)))
+  const polls = scenario.frames.filter((frame) => frame.source === "poll")
+  const pushes = scenario.frames.filter((frame) => frame.source === "push")
   return Provider.of({
     poll: Effect.fn("ScenarioProvider.poll")(function* (league: LeagueId) {
       yield* Effect.annotateCurrentSpan("sportal.league", league)
@@ -49,7 +49,7 @@ function played(scenario: Scenario, start: Effect.Effect<DateTime.Utc>) {
       ).pipe(Option.orElse(() => Arr.head(ofLeague)))
       return Option.match(current, {
         onNone: () =>
-          new FeedFrame({ receivedAt: now, feed: "poll", channel: league, kind: "response", body: noEvents }),
+          new Frame({ receivedAt: now, source: "poll", channel: league, kind: "whole", body: noEvents }),
         onSome: (frame) => movedTo(frame, now)
       })
     }),
@@ -75,10 +75,10 @@ function played(scenario: Scenario, start: Effect.Effect<DateTime.Utc>) {
 }
 
 /** `frame` received at `at` instead, the instant it was sent moved with it. */
-function movedTo(frame: FeedFrame, at: DateTime.Utc): FeedFrame {
+function movedTo(frame: Frame, at: DateTime.Utc): Frame {
   const moved = DateTime.distance(frame.receivedAt, at)
   const sentAt = frame.sentAt === undefined ? undefined : DateTime.addDuration(frame.sentAt, moved)
-  return new FeedFrame({ ...frame, receivedAt: at, sentAt })
+  return new Frame({ ...frame, receivedAt: at, sentAt })
 }
 
 /** Polled again at the next of `offsets` (milliseconds from `start`) after now, and at least every `longest`. */
@@ -97,9 +97,5 @@ function pollingAt(offsets: ReadonlyArray<number>, start: Effect.Effect<DateTime
 // The longest a scenario goes without being polled, so a live game never goes stale between its frames.
 const longest = 10_000
 
-/**
- * ESPN's spelling, which every scenario is recorded in and played through: `pushFeed`, the feed of a push, and `noEvents`,
- * an empty scoreboard, answered for a league a scenario never polled.
- */
-const pushFeed = "fastcast"
+/** ESPN's spelling, which every scenario is recorded in and played through: an empty scoreboard, answered for a league a scenario never polled. */
 const noEvents = JSON.stringify({ events: [] })

@@ -228,7 +228,7 @@ sportal/
     │       │   ├── FeedLog.ts      The append-only log of every frame, in feed.sqlite: the port, its layers, and replay
     │       │   ├── FeedLogWriter.ts  The one writer that stores appended frames in batches, and the gaps failed writes leave
     │       │   └── FeedFrameTable.ts The `feed_frame` table: its row, its queries, and its migrations
-    │       ├── Frame.ts            A feed frame as received, and the frame the log numbered
+    │       ├── Frame.ts            A frame as received, and the logged frame the log numbered
     │       ├── Gzip.ts             Frame bodies in and out of gzip
     │       ├── TestTelemetry.ts    Layers for tests
     │       ├── TestLiveSlate.ts    The live slate following an in-memory feed log (`slateFollowing`), and what it takes of a test's frames
@@ -337,20 +337,20 @@ Ports are Effect services; implementations are Layers; `HubMode` chooses them. S
 
 ```ts
 class Provider extends Context.Service<Provider, {
-  poll(league: LeagueId): Effect<FeedFrame, ProviderUnavailable>
+  poll(league: LeagueId): Effect<Frame, ProviderUnavailable>
   readonly push: LiveFeed
   readonly polling: Polling
   readonly reconnect: Schedule<unknown, ProviderUnavailable>   // how Ingest subscribes to the push again after it fails
 }>()("sportal/hub/Provider") {}
 
-type LiveFeed = (demand: Stream<LiveFeedDemand>) => Stream<FeedFrame, ProviderUnavailable>
+type LiveFeed = (demand: Stream<LiveFeedDemand>) => Stream<Frame, ProviderUnavailable>
 
 type LiveFeedDemand = Games { games } | Resync { channel }   // what the push follows; a channel to checkpoint again
 
 type Polling = Schedule<unknown, { slate: ReadonlyArray<GameSnapshot>; failed: ReadonlyArray<LeagueId> }>
 
 class Decoder extends Context.Service<Decoder, {
-  decode(frames: Stream<Frame>): Stream<Decoded>   // exactly one Decoded per frame
+  decode(frames: Stream<LoggedFrame>): Stream<Decoded>   // exactly one Decoded per frame
 }>()("sportal/hub/Decoder") {}
 ```
 
@@ -366,16 +366,15 @@ port: one SQLite implementation over its own `feed.sqlite`:
 
 ```ts
 class FeedLog extends Context.Service<FeedLog, {
-  append(frame: FeedFrame): Effect<Frame>
-  readonly subscribe: Effect<Stream<Frame>, never, Scope>
-  replay(from: DateTime.Utc): Stream<Frame>
+  append(frame: Frame): Effect<LoggedFrame>
+  readonly subscribe: Effect<Stream<LoggedFrame>, never, Scope>
+  replay(from: DateTime.Utc): Stream<LoggedFrame>
 }>()("sportal/hub/feed-log/FeedLog") {}
 ```
 
 - An append numbers the frame and publishes it at once; one writer stores batches every 100 ms. Stored kinds are
-  `response`, `message`, `checkpoint`, `unchanged` (a poll identical to its channel's last), and `gap` (frames a failed
-  write lost).
-- `replay(from)` starts each FastCast topic from its latest checkpoint before `from`: that checkpoint and the topic's
+  `whole`, `change`, `unchanged` (a poll identical to its channel's last), and `gap` (frames a failed write lost).
+- `replay(from)` starts each FastCast topic from its latest whole push before `from`: that frame and the topic's
   frames after it come first, so a patch after `from` applies to the document it was sent against.
 - On shutdown the writer stores what is still queued, for at most 1 s; a frame not stored by then is lost. The Hub's
   whole shutdown bound is about 5 s: the HTTP server's 3 s for connected Displays, then the feed log's 1 s, then

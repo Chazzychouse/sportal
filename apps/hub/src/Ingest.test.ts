@@ -27,7 +27,7 @@ import {
 import { SqlClient } from "effect/sql"
 import { TestClock } from "effect/testing"
 import * as Database from "./Database.ts"
-import type { FeedFrame } from "./Frame.ts"
+import type { Frame } from "./Frame.ts"
 import { FeedLog } from "./feed-log/FeedLog.ts"
 import { HubConfig } from "./HubConfig.ts"
 import * as Ingest from "./Ingest.ts"
@@ -55,10 +55,10 @@ describe("Ingest", () => {
       const logged = yield* logOf(2)
 
       assert.deepStrictEqual(
-        logged.map(({ seq, feed, channel }) => [seq, feed, channel]),
+        logged.map(({ seq, source, channel }) => [seq, source, channel]),
         [
-          [1, "snapshot", "nfl"],
-          [2, "snapshot", "fbs"]
+          [1, "poll", "nfl"],
+          [2, "poll", "fbs"]
         ]
       )
       assert.deepStrictEqual(current.seq, Option.some(2))
@@ -264,10 +264,10 @@ describe("Ingest", () => {
 
       assert.strictEqual(listed[0]?.home.score, 7)
       assert.deepStrictEqual(
-        logged.map(({ seq, feed }) => [seq, feed]),
+        logged.map(({ seq, source }) => [seq, source]),
         [
-          [1, "snapshot"],
-          [2, "snapshot"]
+          [1, "poll"],
+          [2, "push"]
         ]
       )
     })
@@ -445,7 +445,7 @@ describe("Ingest", () => {
         const [took] = yield* Effect.timed(Scope.close(scope, Exit.void))
 
         const [row] = yield* sql<{ count: number }>`
-          SELECT COUNT(*) AS count FROM feed_frame WHERE feed = 'snapshot' AND kind = 'message'
+          SELECT COUNT(*) AS count FROM feed_frame WHERE source = 'push' AND kind = 'change'
         `
         assert.isBelow(Duration.toMillis(took), Duration.toMillis(Duration.seconds(1)))
         assert.strictEqual(row?.count, 200)
@@ -627,7 +627,7 @@ function over(
 }
 
 /** Ingest over a live feed of `frames` that stops without failing, for 20 seconds: how many times it polled. */
-function polledFor20SecondsOver(frames: Stream.Stream<FeedFrame>) {
+function polledFor20SecondsOver(frames: Stream.Stream<Frame>) {
   return Effect.gen(function* () {
     const polls = yield* Ref.make(0)
     const provider = TestSnapshotFeed.layer({
@@ -835,7 +835,7 @@ function takenSnapshot(game: GameSnapshot) {
 const closed = new ProviderUnavailable({ reason: "Closed", cause: "socket closed" })
 
 /** What a test offers its push: a frame, or the error that ends the push's stream. */
-type Offered = FeedFrame | ProviderUnavailable
+type Offered = Frame | ProviderUnavailable
 
 /** A push reading `feed`, counting each subscription to it in `subscriptions`. */
 function feeding(feed: Queue.Queue<Offered>, subscriptions: Ref.Ref<number>) {
@@ -889,7 +889,7 @@ function logOf(count: number) {
 }
 
 /** Frames logged now, before Ingest starts, in a scope of their own. */
-function loggedBefore(frames: ReadonlyArray<Effect.Effect<FeedFrame>>) {
+function loggedBefore(frames: ReadonlyArray<Effect.Effect<Frame>>) {
   return Effect.gen(function* () {
     const log = yield* FeedLog
     yield* Effect.forEach(frames, (frame) => Effect.flatMap(frame, log.append), { discard: true })

@@ -1,7 +1,7 @@
 import type { GameSnapshot } from "@sportal/domain/Game"
 import { LeagueId } from "@sportal/domain/League"
 import { Context, Data, type Effect, type Schedule, Schema, type Stream } from "effect"
-import type { FeedFrame } from "../Frame.ts"
+import type { Frame } from "../Frame.ts"
 
 /**
  * A provider of game data: its scoreboard polled as frames, its live feed pushing frames between polls, when it is
@@ -12,7 +12,7 @@ export class Provider extends Context.Service<
   Provider,
   {
     /** One poll of `league`, as received. */
-    poll(league: LeagueId): Effect.Effect<FeedFrame, ProviderUnavailable>
+    poll(league: LeagueId): Effect.Effect<Frame, ProviderUnavailable>
     /** Its live feed. */
     readonly push: LiveFeed
     /**
@@ -30,9 +30,7 @@ export class Provider extends Context.Service<
  * named, with each channel it resyncs asked for its checkpoint again if the push follows it. Fails when the push cannot
  * go on.
  */
-export type LiveFeed = (
-  demand: Stream.Stream<LiveFeedDemand>
-) => Stream.Stream<FeedFrame, ProviderUnavailable>
+export type LiveFeed = (demand: Stream.Stream<LiveFeedDemand>) => Stream.Stream<Frame, ProviderUnavailable>
 
 /**
  * What the live feed should follow: the current games, whenever which games they are changes, and each channel whose

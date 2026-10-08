@@ -5,7 +5,7 @@ import { GameId, GameSnapshot } from "@sportal/domain/Game"
 import { LeagueId } from "@sportal/domain/League"
 import { Play, PlayId } from "@sportal/domain/Play"
 import { type Data, DateTime, Effect, Equal, Layer, Metric, Option, Record, Schema } from "effect"
-import type { FeedFrame } from "../../Frame.ts"
+import type { Frame } from "../../Frame.ts"
 import { recordingLogs, withMetrics } from "../../TestTelemetry.ts"
 import { DecodeObservation } from "../Decoder.ts"
 import { decodedFrames, FramesDecoded } from "../TestDecoder.ts"
@@ -356,7 +356,7 @@ layer(EspnDecoder.layer)("EspnDecoder", (it) => {
           [1],
           "the message after it is not applied"
         )
-        assert.strictEqual(count(noted, "FrameUndecoded", { feed: "fastcast", kind: "checkpoint" }), 1)
+        assert.strictEqual(count(noted, "FrameUndecoded", { source: "push", kind: "whole" }), 1)
       })
   )
 
@@ -477,7 +477,7 @@ layer(EspnDecoder.layer)("EspnDecoder", (it) => {
             : 0,
           events.length
         )
-        assert.strictEqual(count(noted, "EventUndecoded", { league: "nfl", feed: "poll" }), 1)
+        assert.strictEqual(count(noted, "EventUndecoded", { league: "nfl", source: "poll" }), 1)
       })
   )
 
@@ -492,10 +492,10 @@ layer(EspnDecoder.layer)("EspnDecoder", (it) => {
       assert.deepStrictEqual(
         noted.flatMap(({ observation, seq }) =>
           DecodeObservation.$is("FrameUndecoded")(observation)
-            ? [[seq, observation.feed, observation.channel, observation.kind]]
+            ? [[seq, observation.source, observation.channel, observation.kind]]
             : []
         ),
-        [[1, "poll", "nfl", "response"]]
+        [[1, "poll", "nfl", "whole"]]
       )
     })
   )
@@ -820,7 +820,7 @@ describe("EspnDecoder.byLeague", () => {
  * What `frames` decode to, each numbered by its place from 1: the deliveries, what decoding observed, and the channels
  * it asked to have checkpointed again, in order.
  */
-function said(frames: ReadonlyArray<FeedFrame>) {
+function said(frames: ReadonlyArray<Frame>) {
   return decodedFrames(frames).pipe(
     Effect.map((all) => ({
       deliveries: all.flatMap(({ seq, at, deliveries }) =>
@@ -849,36 +849,36 @@ function count<T extends DecodeObservation["_tag"]>(
 }
 
 /** The deliveries `frames` decode to, each numbered by its place from 1. */
-function decoded(frames: ReadonlyArray<FeedFrame>) {
+function decoded(frames: ReadonlyArray<Frame>) {
   return said(frames).pipe(Effect.map(({ deliveries }) => deliveries))
 }
 
 const at = DateTime.makeUnsafe("2026-10-04T18:00:00Z")
 
-function poll(channel: string, body: string): FeedFrame {
-  return { receivedAt: at, feed: "poll", channel, kind: "response", body }
+function poll(channel: string, body: string): Frame {
+  return { receivedAt: at, source: "poll", channel, kind: "whole", body }
 }
 
-function checkpoint(channel: string, mid: number, document: unknown): FeedFrame {
+function checkpoint(channel: string, mid: number, document: unknown): Frame {
   return {
     receivedAt: at,
-    feed: "fastcast",
+    source: "push",
     channel,
-    kind: "checkpoint",
-    sourceId: mid,
+    kind: "whole",
+    number: mid,
     body: JSON.stringify(document)
   }
 }
 
 /** A `P` on `channel`, its patches sent as an array, one of the three ways FastCast spells them. */
-function message(channel: string, mid: number, patches: ReadonlyArray<object>): FeedFrame {
+function message(channel: string, mid: number, patches: ReadonlyArray<object>): Frame {
   const pl = JSON.stringify({ ts: 1791136341731, pl: patches })
   return {
     receivedAt: at,
-    feed: "fastcast",
+    source: "push",
     channel,
-    kind: "message",
-    sourceId: mid,
+    kind: "change",
+    number: mid,
     body: JSON.stringify({ op: "P", tc: channel, mid, pl })
   }
 }
@@ -892,19 +892,19 @@ function plays(...ids: ReadonlyArray<string>) {
 }
 
 /** The recorded socket texts as FastCast frames them, each `H` followed by the recorded checkpoint. */
-function recorded(texts: ReadonlyArray<string>): ReadonlyArray<FeedFrame> {
+function recorded(texts: ReadonlyArray<string>): ReadonlyArray<Frame> {
   return texts.flatMap((body) => {
-    const { message, channel, sourceId } = decodeEnvelope(body)
-    const frame: FeedFrame = {
+    const { message, channel, mid } = decodeEnvelope(body)
+    const frame: Frame = {
       receivedAt: at,
-      feed: "fastcast",
+      source: "push",
       channel: channel ?? "socket",
-      kind: "message",
+      kind: "change",
       body,
-      ...(sourceId === undefined ? {} : { sourceId })
+      number: mid
     }
-    return message.op === "H" && channel !== undefined && sourceId !== undefined
-      ? [frame, { ...frame, kind: "checkpoint", body: checkpointBody }]
+    return message.op === "H" && channel !== undefined && mid !== undefined
+      ? [frame, { ...frame, kind: "whole", body: checkpointBody }]
       : [frame]
   })
 }
@@ -944,12 +944,12 @@ function playIds({ delivery }: { readonly delivery: Delivery }) {
 }
 
 /** The NFL listed, then FastCast's C, S, H, and the H's checkpoint: frames 1 to 5, the scoreboard topic synced. */
-function synced(): ReadonlyArray<FeedFrame> {
+function synced(): ReadonlyArray<Frame> {
   return [poll("nfl", scoreboardBody), ...recorded(socketTexts.slice(0, 3))]
 }
 
 /** FastCast's C and S, then a patch and an idle message before any checkpoint. */
-function beforeAnyCheckpoint(): ReadonlyArray<FeedFrame> {
+function beforeAnyCheckpoint(): ReadonlyArray<Frame> {
   return recorded([...socketTexts.slice(0, 2), socketTexts[3] ?? "", socketTexts[6] ?? ""])
 }
 
@@ -988,15 +988,15 @@ function checkpointEvents() {
 }
 
 /** BUF at NE's recorded checkpoint and the messages after it, as FastCast frames. */
-function moveRecordingFrames(): ReadonlyArray<FeedFrame> {
+function moveRecordingFrames(): ReadonlyArray<Frame> {
   const game = "gp-football-nfl-401872971"
   const messages = moveRecording.messages.map(
-    ({ op, tc, mid, ts, pl }): FeedFrame => ({
+    ({ op, tc, mid, ts, pl }): Frame => ({
       receivedAt: at,
-      feed: "fastcast",
+      source: "push",
       channel: tc,
-      kind: "message",
-      sourceId: mid,
+      kind: "change",
+      number: mid,
       body: JSON.stringify({ op, tc, mid, pl: JSON.stringify({ ts, pl }) })
     })
   )

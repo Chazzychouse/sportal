@@ -1,7 +1,7 @@
 import { Delivery } from "@sportal/domain/Delivery"
 import type { LeagueId } from "@sportal/domain/League"
 import { Context, Effect, Layer, Stream } from "effect"
-import { type FeedFrame, Frame } from "../Frame.ts"
+import { type Frame, LoggedFrame } from "../Frame.ts"
 import { type Decoded, Decoder } from "./Decoder.ts"
 import { Provider } from "./Provider.ts"
 
@@ -17,11 +17,9 @@ export const listedBy = Effect.fn("TestDecoder.listedBy")(function* (league: Lea
 })
 
 /** What the provided `Decoder` says each of `frames` said, numbered from 1. */
-export const decodedFrames = Effect.fn("TestDecoder.decodedFrames")(function* (
-  frames: ReadonlyArray<FeedFrame>
-) {
+export const decodedFrames = Effect.fn("TestDecoder.decodedFrames")(function* (frames: ReadonlyArray<Frame>) {
   const decoder = yield* Decoder
-  const numbered = frames.map((frame, index) => new Frame({ ...frame, seq: index + 1 }))
+  const numbered = frames.map((frame, index) => new LoggedFrame({ ...frame, seq: index + 1 }))
 
   return yield* decoder.decode(Stream.fromIterable(numbered)).pipe(Stream.runCollect)
 })
@@ -31,7 +29,7 @@ export class FramesDecoded extends Context.Service<FramesDecoded, ReadonlyArray<
   "sportal/hub/provider/FramesDecoded"
 ) {
   /** Decodes the frames `frames` gives once, for every test the layer is provided to: a recording takes seconds. */
-  static layerOf<E>(frames: Effect.Effect<ReadonlyArray<FeedFrame>, E>) {
+  static layerOf<E>(frames: Effect.Effect<ReadonlyArray<Frame>, E>) {
     return Layer.effect(
       FramesDecoded,
       Effect.gen(function* () {

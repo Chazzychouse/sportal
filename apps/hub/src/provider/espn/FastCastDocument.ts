@@ -1,7 +1,18 @@
 import type { GameId } from "@sportal/domain/Game"
 import type { LeagueId } from "@sportal/domain/League"
-import { Array as Arr, Data, Effect, JsonPatch, JsonPointer, Option, Record, Result, Schema } from "effect"
-import type { Frame } from "../../Frame.ts"
+import {
+  Array as Arr,
+  Data,
+  Effect,
+  JsonPatch,
+  JsonPointer,
+  Match,
+  Option,
+  Record,
+  Result,
+  Schema
+} from "effect"
+import type { LoggedFrame } from "../../Frame.ts"
 import { DecodeObservation, type ResetReason } from "../Decoder.ts"
 import * as FastCastMessage from "./FastCastMessage.ts"
 import { Owner, ownerOf } from "./FastCastTopic.ts"
@@ -17,52 +28,14 @@ import { Owner, ownerOf } from "./FastCastTopic.ts"
  */
 export const advance = Effect.fnUntraced(function* (
   documents: Documents,
-  frame: Frame
+  frame: LoggedFrame
 ): Effect.fn.Return<Advanced, Schema.SchemaError> {
   const owned = ownerOf(frame.channel)
-  if (frame.kind === "checkpoint") {
-    if (Option.isNone(owned)) return unchanged(documents)
-
-    const owner = owned.value
-    const loaded = yield* checkpoint(owner, frame).pipe(Effect.result)
-    if (Result.isFailure(loaded)) {
-      return {
-        documents: new Map([...documents, [frame.channel, Topic.AwaitingCheckpoint()]]),
-        change: Option.none(),
-        observed: [
-          DecodeObservation.FrameUndecoded({
-            feed: frame.feed,
-            channel: frame.channel,
-            kind: frame.kind,
-            cause: loaded.failure
-          })
-        ]
-      }
-    }
-
-    const { mid, document } = loaded.success
-    return {
-      documents: new Map([...documents, [frame.channel, Topic.Synced({ mid, document })]]),
-      change: Option.some(changeOf(owner, document, Option.none())),
-      observed: []
-    }
-  }
-  if (frame.kind !== "message") return unchanged(documents)
-
-  const decoded = yield* decodeMessage(frame.body).pipe(Effect.result)
-  if (Result.isFailure(decoded)) {
-    const skipped = yield* undecoded(documents, frame, owned, decoded.failure)
-    return skipped
-  }
-
-  const message = decoded.success
-  const follows = Option.isSome(owned) && (message.op === "R" || message.op === "P" || message.op === "I")
-  if (!follows) {
-    return { ...unchanged(documents), observed: [received(message, owned)] }
-  }
-
-  const advanced = yield* moved(documents, frame.channel, owned.value, message)
-  return { ...advanced, observed: [received(message, owned), ...advanced.observed] }
+  return yield* Match.value(frame.kind).pipe(
+    Match.when("whole", () => synced(documents, frame, owned)),
+    Match.when("change", () => moveOn(documents, frame, owned)),
+    Match.exhaustive
+  )
 })
 
 /** No topic has a document yet. */
@@ -106,8 +79,61 @@ type Change = Data.TaggedEnum<{
 }>
 const Change = Data.taggedEnum<Change>()
 
-const checkpoint = Effect.fnUntraced(function* (owner: Owner, frame: Frame) {
-  const mid = yield* decodeMid(frame.sourceId)
+const synced = Effect.fnUntraced(function* (
+  documents: Documents,
+  frame: LoggedFrame,
+  owned: Option.Option<Owner>
+): Effect.fn.Return<Advanced> {
+  if (Option.isNone(owned)) return unchanged(documents)
+
+  const owner = owned.value
+  const loaded = yield* checkpoint(owner, frame).pipe(Effect.result)
+  if (Result.isFailure(loaded)) {
+    return {
+      documents: new Map([...documents, [frame.channel, Topic.AwaitingCheckpoint()]]),
+      change: Option.none(),
+      observed: [
+        DecodeObservation.FrameUndecoded({
+          source: frame.source,
+          channel: frame.channel,
+          kind: frame.kind,
+          cause: loaded.failure
+        })
+      ]
+    }
+  }
+
+  const { mid, document } = loaded.success
+  return {
+    documents: new Map([...documents, [frame.channel, Topic.Synced({ mid, document })]]),
+    change: Option.some(changeOf(owner, document, Option.none())),
+    observed: []
+  }
+})
+
+const moveOn = Effect.fnUntraced(function* (
+  documents: Documents,
+  frame: LoggedFrame,
+  owned: Option.Option<Owner>
+): Effect.fn.Return<Advanced, Schema.SchemaError> {
+  const decoded = yield* decodeMessage(frame.body).pipe(Effect.result)
+  if (Result.isFailure(decoded)) {
+    const skipped = yield* undecoded(documents, frame, owned, decoded.failure)
+    return skipped
+  }
+
+  const message = decoded.success
+  const follows = Option.isSome(owned) && (message.op === "R" || message.op === "P" || message.op === "I")
+  if (!follows) {
+    return { ...unchanged(documents), observed: [received(message, owned)] }
+  }
+
+  const advanced = yield* moved(documents, frame.channel, owned.value, message)
+  return { ...advanced, observed: [received(message, owned), ...advanced.observed] }
+})
+
+const checkpoint = Effect.fnUntraced(function* (owner: Owner, frame: LoggedFrame) {
+  const mid = yield* decodeMid(frame.number)
   const body = yield* Schema.decodeEffect(FastCastMessage.Checkpoint(owner))(frame.body)
 
   const document: Schema.Json =
@@ -300,7 +326,7 @@ function objectAt(json: Schema.Json, path: ReadonlyArray<string>): Readonly<Reco
  */
 function undecoded(
   documents: Documents,
-  frame: Frame,
+  frame: LoggedFrame,
   owned: Option.Option<Owner>,
   error: Schema.SchemaError
 ): Effect.Effect<Advanced, Schema.SchemaError> {
@@ -320,7 +346,7 @@ function undecoded(
               frame.channel,
               owned.value.league,
               "Unapplicable",
-              `message ${frame.sourceId} does not decode: ${error.message}`
+              `message ${frame.number} does not decode: ${error.message}`
             )
           )
         : Effect.fail(error)

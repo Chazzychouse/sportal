@@ -21,7 +21,7 @@ import {
 } from "effect"
 import { SqlClient } from "effect/sql"
 import * as Database from "../Database.ts"
-import { type FeedFrame, Frame } from "../Frame.ts"
+import { type Frame, LoggedFrame } from "../Frame.ts"
 import * as Gzip from "../Gzip.ts"
 import type { HubConfig } from "../HubConfig.ts"
 import { FeedFrameRow, Gap, migrations, queries } from "./FeedFrameTable.ts"
@@ -35,18 +35,18 @@ export class FeedLog extends Context.Service<
   FeedLog,
   {
     /** Numbers `frame`, publishes it to subscribers, and queues it to be written. Never waits on disk, never fails. */
-    append(frame: FeedFrame): Effect.Effect<Frame>
+    append(frame: Frame): Effect.Effect<LoggedFrame>
     /**
      * Subscribes at once, for as long as the scope is open: the stream is every frame appended from then on, in `seq`
      * order, however late it is run.
      */
-    readonly subscribe: Effect.Effect<Stream.Stream<Frame>, never, Scope.Scope>
+    readonly subscribe: Effect.Effect<Stream.Stream<LoggedFrame>, never, Scope.Scope>
     /**
      * Every logged frame received at or after `from`, in `seq` order, an unchanged poll with its channel's last body.
-     * Each topic starts from its latest checkpoint before then: that checkpoint and the topic's frames after it come
+     * Each topic starts from its latest whole push before then: that frame and the topic's frames after it come
      * first, in `seq` order, so a patch after `from` applies to the document it was sent against.
      */
-    replay(from: DateTime.Utc): Stream.Stream<Frame>
+    replay(from: DateTime.Utc): Stream.Stream<LoggedFrame>
     /** The game days (YYYY-MM-DD) it has frames received on, each from 04:00 local in the current zone, sorted. */
     readonly days: Effect.Effect<ReadonlyArray<string>, never, DateTime.CurrentTimeZone>
   }
@@ -60,8 +60,8 @@ export class FeedLog extends Context.Service<
       const last = yield* table.lastSeq().pipe(Effect.orDie)
       const next = yield* Ref.make((last.seq ?? 0) + 1)
       const permit = yield* Semaphore.make(1)
-      const published = yield* PubSub.unbounded<Frame>()
-      const pending = yield* Queue.unbounded<Frame, Cause.Done>()
+      const published = yield* PubSub.unbounded<LoggedFrame>()
+      const pending = yield* Queue.unbounded<LoggedFrame, Cause.Done>()
 
       const writer = yield* FeedLogWriter.start(pending, table)
       // Added after the writer is forked, so it runs first on close: the frames still queued are written before the
@@ -79,12 +79,12 @@ export class FeedLog extends Context.Service<
       )
 
       // Uninterruptible, so a seq once assigned is always published and queued; every step is non-blocking.
-      const append = Effect.fnUntraced(function* (received: FeedFrame) {
+      const append = Effect.fnUntraced(function* (received: Frame) {
         return yield* permit.withPermit(
           Effect.uninterruptible(
             Effect.gen(function* () {
               const seq = yield* Ref.getAndUpdate(next, (seq) => seq + 1)
-              const frame = new Frame({ ...received, seq })
+              const frame = new LoggedFrame({ ...received, seq })
               yield* PubSub.publish(published, frame)
               yield* Queue.offer(pending, frame)
               return frame
@@ -120,7 +120,7 @@ export class FeedLog extends Context.Service<
    * is closed, so every one is written before the layer is built, and a later log on the same database has them too.
    */
   static layerTest(
-    frames: ReadonlyArray<FeedFrame>
+    frames: ReadonlyArray<Frame>
   ): Layer.Layer<FeedLog, never, SqlClient.SqlClient | Crypto.Crypto> {
     const logged = FeedLog.use((log) => Effect.forEach(frames, log.append, { discard: true })).pipe(
       Effect.provide(FeedLog.layer),
@@ -133,7 +133,7 @@ export class FeedLog extends Context.Service<
 const shutdownBound = "1 second"
 const pageSize = 512
 
-function replay(table: ReturnType<typeof queries>, from: DateTime.Utc): Stream.Stream<Frame> {
+function replay(table: ReturnType<typeof queries>, from: DateTime.Utc): Stream.Stream<LoggedFrame> {
   return Stream.unwrap(
     Effect.map(table.firstAt(DateTime.toEpochMillis(from)), ({ seq }) =>
       seq === null
@@ -177,7 +177,7 @@ const readBack = Effect.fnUntraced(function* (
     : Gzip.decompress(row.body, "gzip")
   const frame = yield* FeedFrameRow.frame(row, body)
 
-  return [Frame.isPollResponse(frame) ? new Map(bodies).set(channel, body) : bodies, [frame]] as const
+  return [frame.source === "poll" ? new Map(bodies).set(channel, body) : bodies, [frame]] as const
 })
 
 // The body an unchanged poll repeats: its channel's last one in this replay, or else the last one stored.

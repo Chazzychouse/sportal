@@ -40,7 +40,7 @@ Every exported type name must be a term here, except the wire schemas in `*Paylo
 | **Decoded** | What one frame said, one per frame: its deliveries, the live feed channels to resync, and its decode observations, with the frame's `seq` and receive time; `Decoded` in code, in `Decoder.ts`. | decoded frame, said |
 | **Decode observation** | Something a provider's decode observed in a frame for telemetry to tell: a message received, games pushed, an unlisted game, a document reset, a message of an unknown op, a frame, event, or play that did not decode, or an unknown play type; `DecodeObservation` in code, in `Decoder.ts`. Told only for frames after a replay. | notice, warning, metric |
 | **Reset reason** | Why a live feed topic's document was reset and waits for its checkpoint again: `Gap`, a message missed, or `Unapplicable`, one that would not apply to it; `ResetReason` in code, in `Decoder.ts`. | |
-| **Delivery source** | Which feed a snapshot came from: `push` or `poll`. | origin, feed type |
+| **Delivery source** | Which way a provider delivered something: `push` or `poll`. A frame and a snapshot each have one; `DeliverySource` in code. | origin, feed type, feed |
 | **Test game** | A game snapshot built for a test, with defaults for everything the test does not care about. | fixture, mock |
 | **Scenario** | Games a Hub plays as its provider, through the real ingest, feed log, decode, and slate: a name and the raw frames of a recorded window of a game day, kept as `fixtures/scenarios/<name>.frames.jsonl.gz` and decoded by the provider that recorded them; `Scenario` in code. Every scenario plays through ESPN's decode. | fixture, simulation, recorded scenario, slice |
 | **Scenarios** | Every scenario there is, by name: the recordings in a folder, the committed ones in `fixtures/scenarios/` unless a test names another; reading one back by name. `Scenarios` in code. | scenario store, catalogue |
@@ -87,8 +87,9 @@ Every exported type name must be a term here, except the wire schemas in `*Paylo
 | **Guide unreadable** | A guide response the source could not read. | |
 | **Database** | The Hub's SQLite database. Each store migrates its own tables in it. | store, persistence |
 | **Feed log** | Every frame the feeds delivered, raw, in the order the Hub received it. The truth the Hub's game state is derived from. | event store, journal |
-| **Frame** | One thing a feed delivered: a poll response, a FastCast message, or a FastCast checkpoint. | message, payload |
-| **Feed frame row** | A frame as the feed log keeps it in `feed_frame`: its body gzip'd, or none for an unchanged poll (a response the same as its channel's last), or a gap; `FeedFrameRow` in code. | record, entry |
+| **Frame** | One thing a provider delivered, as received, before the log numbers it: its delivery source, its channel, its body, and whether it is the `whole` document or a `change` to one (a poll response and a pushed checkpoint are whole; a pushed message is a change), with the provider's own `number` for it when it has one; `Frame` in code. | message, payload, feed frame |
+| **Logged frame** | A frame as the feed log numbered it: a frame with its `seq`; `LoggedFrame` in code. | numbered frame |
+| **Feed frame row** | A logged frame as the feed log keeps it in `feed_frame`: its body gzip'd, or none for an unchanged poll (a whole the same as its channel's last), or a gap; `FeedFrameRow` in code. | record, entry |
 | **Gap** | The frames a failed write lost, kept in the feed log as one row at the last lost `seq` with their range and count, and warned of on replay; `Gap` in code. | hole |
 | **Writer** | The feed log's one fiber that stores what was appended, in batches: current, or behind by the frames failed writes lost; `Writer` in code. | flusher |
 | **Corpus** | Game days kept typed for runs to play through the slate, in `HubConfig.corpusDir`: each day's corpus inputs, read back as the deliveries the live decode handed over. | dataset, fixtures |

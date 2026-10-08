@@ -3,7 +3,7 @@ import type { GameId, GameSnapshot } from "@sportal/domain/Game"
 import { LeagueId } from "@sportal/domain/League"
 import { Play } from "@sportal/domain/Play"
 import { Array as Arr, Effect, Layer, Option, Record, Result, Schema, Stream } from "effect"
-import type { FeedFrame, Frame } from "../../Frame.ts"
+import type { Frame, LoggedFrame } from "../../Frame.ts"
 import { Decoded, DecodeObservation, Decoder } from "../Decoder.ts"
 import { EspnEvent } from "./EspnEvent.ts"
 import { Scoreboard } from "./EspnPayload.ts"
@@ -31,7 +31,7 @@ export const layer: Layer.Layer<Decoder> = Layer.succeed(
             notedPlays: new Set()
           }),
           (state, frame) =>
-            (frame.feed === "poll" ? listed(state, frame) : pushed(state, frame)).pipe(
+            (frame.source === "poll" ? listed(state, frame) : pushed(state, frame)).pipe(
               Effect.map(([next, decoded]) => [next, [decoded]] as const)
             )
         )
@@ -69,7 +69,7 @@ interface State {
 }
 
 const listed = Effect.fnUntraced(
-  function* (state: State, frame: Frame) {
+  function* (state: State, frame: LoggedFrame) {
     const league = yield* decodeLeague(frame.channel)
     const scoreboard = yield* byLeague[league].decodeScoreboard(frame.body)
     const { games, observed } = yield* gamesOf(league, scoreboard.events, "poll")
@@ -88,7 +88,7 @@ const listed = Effect.fnUntraced(
 const decodeLeague = Schema.decodeUnknownEffect(LeagueId)
 
 const pushed = Effect.fnUntraced(
-  function* (state: State, frame: Frame) {
+  function* (state: State, frame: LoggedFrame) {
     const { documents, change, observed } = yield* FastCastDocument.advance(state.documents, frame)
     const moved: State = { ...state, documents }
     if (Option.isNone(change)) {
@@ -98,7 +98,7 @@ const pushed = Effect.fnUntraced(
     const changed = change.value
     switch (changed._tag) {
       case "Scoreboard": {
-        const { games, observed: undecoded } = yield* gamesOf(changed.league, changed.events, "fastcast")
+        const { games, observed: undecoded } = yield* gamesOf(changed.league, changed.events, "push")
         const { deliveries, unlisted } = advancedToListed(state.listings, games)
         const unlistedNotes = unlisted.map((game) =>
           DecodeObservation.Unlisted({ league: game.league, game: game.id })
@@ -134,13 +134,13 @@ const pushed = Effect.fnUntraced(
 const gamesOf = Effect.fnUntraced(function* (
   league: LeagueId,
   events: ReadonlyArray<unknown>,
-  feed: FeedFrame["feed"]
+  source: Frame["source"]
 ) {
   const decoded = yield* Effect.forEach(events, (event) =>
     byLeague[league].decodeEvent(event).pipe(
       Effect.map(Result.succeed),
       Effect.catch((cause) =>
-        Effect.succeed(Result.fail(DecodeObservation.EventUndecoded({ league, feed, cause })))
+        Effect.succeed(Result.fail(DecodeObservation.EventUndecoded({ league, source, cause })))
       )
     )
   )

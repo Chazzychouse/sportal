@@ -17,7 +17,7 @@ import {
   Schema,
   Stream
 } from "effect"
-import { FeedFrame } from "../Frame.ts"
+import { Frame } from "../Frame.ts"
 import { FeedLog } from "../feed-log/FeedLog.ts"
 import * as Gzip from "../Gzip.ts"
 import { Decoder } from "../provider/Decoder.ts"
@@ -133,11 +133,11 @@ describe("CorpusBuild.captured", () => {
         const days = yield* CorpusDays
         const logged = [
           framed(listing([snapshot()]), local("2026-10-04T10:00:00")),
-          new FeedFrame({
+          new Frame({
             receivedAt: local("2026-10-04T10:00:10"),
-            feed: "snapshot",
+            source: "push",
             channel: "snapshot",
-            kind: "message",
+            kind: "change",
             body: "nonsense"
           })
         ]
@@ -160,7 +160,7 @@ describe("CorpusBuild.captured", () => {
         const days = yield* CorpusDays
         const checkpoint = framed(pushedSnapshot, local("2026-10-04T03:00:00"))
         const logged = [
-          new FeedFrame({ ...checkpoint, kind: "checkpoint" }),
+          new Frame({ ...checkpoint, kind: "whole" }),
           framed(pushedSnapshot, local("2026-10-05T05:00:00"))
         ]
 

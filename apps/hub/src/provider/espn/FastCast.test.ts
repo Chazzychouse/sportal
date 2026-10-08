@@ -6,7 +6,7 @@ import { Deferred, Effect, Layer, Queue, Schedule, Schema, Stream } from "effect
 import { HttpClient, HttpClientResponse } from "effect/http"
 import * as Socket from "effect/socket/Socket"
 import { TestClock } from "effect/testing"
-import type { FeedFrame } from "../../Frame.ts"
+import type { Frame } from "../../Frame.ts"
 import { HubConfig } from "../../HubConfig.ts"
 import { counted, recordingLogs, withMetrics } from "../../TestTelemetry.ts"
 import { LiveFeedDemand, type ProviderUnavailable } from "../Provider.ts"
@@ -94,20 +94,20 @@ describe("FastCast", () => {
 
       const received = yield* frames.until(atLeast(4))
       assert.deepStrictEqual(
-        received.map(({ channel, kind, sourceId, body }) => ({
+        received.map(({ channel, kind, number, body }) => ({
           channel,
           kind,
-          sourceId,
-          body: kind === "checkpoint" ? body : decodeSent(body).op
+          number,
+          body: kind === "whole" ? body : decodeSent(body).op
         })),
         [
-          { channel: "socket", kind: "message", sourceId: undefined, body: "C" },
-          { channel: "event-football-nfl", kind: "message", sourceId: undefined, body: "S" },
-          { channel: "event-football-nfl", kind: "message", sourceId: 7, body: "H" },
-          { channel: "event-football-nfl", kind: "checkpoint", sourceId: 7, body: checkpointBody }
+          { channel: "socket", kind: "change", number: undefined, body: "C" },
+          { channel: "event-football-nfl", kind: "change", number: undefined, body: "S" },
+          { channel: "event-football-nfl", kind: "change", number: 7, body: "H" },
+          { channel: "event-football-nfl", kind: "whole", number: 7, body: checkpointBody }
         ]
       )
-      assert.isTrue(received.every((frame) => frame.feed === "fastcast"))
+      assert.isTrue(received.every((frame) => frame.source === "push"))
     })
   )
 
@@ -121,7 +121,7 @@ describe("FastCast", () => {
 
       const received = yield* frames.until(atLeast(3))
       const patch = received.at(-1)
-      assert.strictEqual(patch?.sourceId, 8)
+      assert.strictEqual(patch?.number, 8)
       assert.strictEqual(patch?.sentAt?.epochMilliseconds, 1791136341731)
     })
   )
@@ -174,21 +174,21 @@ describe("FastCast", () => {
         yield* missingCheckpointBesideOther(server)
 
         const received = yield* frames.until((all) =>
-          all.some((frame) => frame.channel === "event-football-nfl" && frame.kind === "checkpoint")
+          all.some((frame) => frame.channel === "event-football-nfl" && frame.kind === "whole")
         )
         const done = yield* Deferred.isDone(ended)
         const failures = yield* counted("sportal_live_feed_checkpoint_failures", { league: "nfl" })
         assert.deepStrictEqual(
-          received.flatMap(({ channel, kind, sourceId }) =>
-            channel.startsWith("gp-") ? [[channel, kind, sourceId]] : []
+          received.flatMap(({ channel, kind, number }) =>
+            channel.startsWith("gp-") ? [[channel, kind, number]] : []
           ),
           [
-            [missingTopic, "message", undefined],
-            [otherTopic, "message", undefined],
-            [missingTopic, "message", 5],
-            [otherTopic, "message", 9],
-            [otherTopic, "checkpoint", 9],
-            [otherTopic, "message", 10]
+            [missingTopic, "change", undefined],
+            [otherTopic, "change", undefined],
+            [missingTopic, "change", 5],
+            [otherTopic, "change", 9],
+            [otherTopic, "whole", 9],
+            [otherTopic, "change", 10]
           ]
         )
         assert.isFalse(done)
@@ -209,7 +209,7 @@ describe("FastCast", () => {
         const { ended, frames } = yield* twoGamesFollowed(server, Layer.empty)
         yield* missingCheckpointBesideOther(server)
         yield* frames.until((all) =>
-          all.some((frame) => frame.channel === "event-football-nfl" && frame.kind === "checkpoint")
+          all.some((frame) => frame.channel === "event-football-nfl" && frame.kind === "whole")
         )
 
         yield* TestClock.adjust("30 seconds")
@@ -236,9 +236,7 @@ describe("FastCast", () => {
         // Waiting for its checkpoint already: a second resync asks for nothing more.
         yield* Queue.offer(demand, LiveFeedDemand.Resync({ channel: "event-football-nfl" }))
         yield* Effect.sync(() => server.send(checkpointMessage(20)))
-        yield* frames.until((all) =>
-          all.some((frame) => frame.kind === "checkpoint" && frame.sourceId === 20)
-        )
+        yield* frames.until((all) => all.some((frame) => frame.kind === "whole" && frame.number === 20))
 
         assert.deepStrictEqual(
           server.sent.all().filter((frame) => frame.op === "S"),
@@ -325,10 +323,10 @@ describe("FastCast", () => {
       const received = yield* frames.until(atLeast(4))
       const failures = yield* counted("sportal_live_feed_checkpoint_failures", { league: "nfl" })
       assert.deepStrictEqual(
-        received.slice(2).map(({ kind, sourceId }) => [kind, sourceId]),
+        received.slice(2).map(({ kind, number }) => [kind, number]),
         [
-          ["message", 7],
-          ["message", 8]
+          ["change", 7],
+          ["change", 8]
         ]
       )
       assert.strictEqual(failures, 1)
@@ -428,7 +426,7 @@ describe("FastCast", () => {
         yield* server.sent.until(subscribed("event-football-nfl", 2))
 
         yield* Effect.sync(() => server.send(missingCheckpoint(2)))
-        yield* frames.until((all) => all.some((frame) => frame.sourceId === 2))
+        yield* frames.until((all) => all.some((frame) => frame.number === 2))
         yield* Queue.offer(demand, LiveFeedDemand.Resync({ channel: "event-football-nfl" }))
         yield* TestClock.adjust("1 minute")
 
@@ -495,7 +493,7 @@ function nflFrames(
 ) {
   return Effect.gen(function* () {
     const ended = yield* Deferred.make<void, ProviderUnavailable>()
-    const frames = watched<FeedFrame>()
+    const frames = watched<Frame>()
     const demand = yield* Queue.unbounded<LiveFeedDemand>()
     const fastCast = yield* FastCast
 

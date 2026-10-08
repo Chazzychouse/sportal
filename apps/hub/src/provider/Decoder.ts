@@ -2,7 +2,7 @@ import type { Delivery } from "@sportal/domain/Delivery"
 import type { GameId } from "@sportal/domain/Game"
 import type { LeagueId } from "@sportal/domain/League"
 import { Context, Data, type DateTime, Effect, Layer, type Option, Stream } from "effect"
-import type { FeedFrame, Frame } from "../Frame.ts"
+import type { Frame, LoggedFrame } from "../Frame.ts"
 
 /**
  * A provider's decode on its own: what each frame it delivered said. Its adapter provides it as a layer of its own, and
@@ -18,7 +18,7 @@ export class Decoder extends Context.Service<
      * read frames ahead of what it has emitted. A poll response is a `Listing`, a pushed game a `Snapshot`, a plays
      * document change a `Plays`; a live feed topic whose document had to be dropped is a resync of its channel.
      */
-    decode(frames: Stream.Stream<Frame>): Stream.Stream<Decoded>
+    decode(frames: Stream.Stream<LoggedFrame>): Stream.Stream<Decoded>
   }
 >()("sportal/hub/provider/Decoder") {
   /** The `Decoder` provided beside it, dying at a frame whose body is `body`. */
@@ -54,7 +54,7 @@ export class Decoded extends Data.Class<{
 }> {
   /** What `frame` said: `of`'s deliveries, resyncs, and observations, each none unless given. */
   static of(
-    frame: Frame,
+    frame: LoggedFrame,
     of: {
       readonly deliveries?: ReadonlyArray<Delivery>
       readonly resyncs?: ReadonlyArray<string>
@@ -71,11 +71,11 @@ export class Decoded extends Data.Class<{
   }
 
   /** A frame that did not decode: it says nothing but a `FrameUndecoded` observation of `cause`. */
-  static undecodable(frame: Frame, cause: unknown): Decoded {
+  static undecodable(frame: LoggedFrame, cause: unknown): Decoded {
     return Decoded.of(frame, {
       observations: [
         DecodeObservation.FrameUndecoded({
-          feed: frame.feed,
+          source: frame.source,
           channel: frame.channel,
           kind: frame.kind,
           cause
@@ -107,12 +107,12 @@ export type DecodeObservation = Data.TaggedEnum<{
     readonly detail: string
   }
   FrameUndecoded: {
-    readonly feed: FeedFrame["feed"]
+    readonly source: Frame["source"]
     readonly channel: string
     readonly kind: string
     readonly cause: unknown
   }
-  EventUndecoded: { readonly league: LeagueId; readonly feed: FeedFrame["feed"]; readonly cause: unknown }
+  EventUndecoded: { readonly league: LeagueId; readonly source: Frame["source"]; readonly cause: unknown }
   PlayUndecoded: {
     readonly league: LeagueId
     readonly game: GameId
