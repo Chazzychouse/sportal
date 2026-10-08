@@ -5,7 +5,7 @@ import { HttpClient, HttpClientResponse } from "effect/http"
 import * as Socket from "effect/socket/Socket"
 import { TestClock } from "effect/testing"
 import { HubConfig } from "../../HubConfig.ts"
-import { counted, recordingLogs, withMetrics } from "../../TestTelemetry.ts"
+import { counted, gauged, recordingLogs, withMetrics } from "../../TestTelemetry.ts"
 import { FastCast } from "./FastCast.ts"
 import type { Frame } from "./Frame.ts"
 
@@ -262,6 +262,82 @@ describe("FastCast", () => {
         logs.some((log) => log.level === "Info" && log.message.includes(`left ${gameTopic(firstGame)}`))
       )
     })
+  )
+
+  it.effect("should count each socket text by its op and its topic's league", () =>
+    Effect.gen(function* () {
+      const server = fakeServer()
+      const { frames } = yield* nflFrames(server)
+      yield* frames.until(atLeast(2))
+
+      yield* Effect.sync(() => server.send(patchMessage(8)))
+
+      yield* frames.until(numbered(8))
+      const patches = yield* counted("sportal_live_feed_received", { op: "P", league: "nfl" })
+      assert.strictEqual(patches, 1)
+    }).pipe(withMetrics)
+  )
+
+  it.effect("should count a socket text of an unknown op as unknown", () =>
+    Effect.gen(function* () {
+      const server = fakeServer()
+      const { frames } = yield* nflFrames(server)
+      yield* frames.until(atLeast(2))
+
+      yield* Effect.sync(() => server.send({ op: "X" }))
+
+      yield* frames.until(atLeast(3))
+      const unknown = yield* counted("sportal_live_feed_received", { op: "unknown" })
+      assert.strictEqual(unknown, 1)
+    }).pipe(withMetrics)
+  )
+
+  it.effect("should gauge one topic followed once a game's scoreboard shows it live", () =>
+    Effect.gen(function* () {
+      const server = fakeServer()
+      const { frames } = yield* nflFrames(server)
+      yield* frames.until(atLeast(2))
+
+      yield* Effect.sync(() => server.send(scoreboardShowing(1, firstGame)))
+
+      yield* server.sent.until(subscribed(gameTopic(firstGame), 1))
+      const topics = yield* gauged("sportal_live_feed_topics")
+      assert.strictEqual(topics, 1)
+    }).pipe(withMetrics)
+  )
+
+  it.effect("should gauge no topic followed once the followed game's scoreboard shows it final", () =>
+    Effect.gen(function* () {
+      const server = fakeServer()
+      const { frames } = yield* nflFrames(server)
+      yield* frames.until(atLeast(2))
+      yield* Effect.sync(() => server.send(scoreboardShowing(1, firstGame)))
+      yield* server.sent.until(subscribed(gameTopic(firstGame), 1))
+
+      yield* Effect.sync(() => server.send(patchMessage(2, [stateOf(firstGame, "post")])))
+
+      yield* frames.until(numbered(2))
+      const topics = yield* gauged("sportal_live_feed_topics")
+      const leaves = yield* counted("sportal_live_feed_steers", { steer: "Leave" })
+      assert.strictEqual(topics, 0)
+      assert.strictEqual(leaves, 1)
+    }).pipe(withMetrics)
+  )
+
+  it.effect("should count a topic followed again after its document reset", () =>
+    Effect.gen(function* () {
+      const server = fakeServer()
+      const { frames } = yield* nflFrames(server)
+      yield* frames.until(atLeast(2))
+      yield* Effect.sync(() => server.send(scoreboardShowing(7)))
+      yield* frames.until(wholeAt(7))
+
+      yield* Effect.sync(() => server.send(patchMessage(9)))
+
+      yield* server.sent.until(subscribed("event-football-nfl", 2))
+      const followedAgain = yield* counted("sportal_live_feed_steers", { steer: "FollowAgain" })
+      assert.strictEqual(followedAgain, 1)
+    }).pipe(withMetrics)
   )
 
   it.effect(

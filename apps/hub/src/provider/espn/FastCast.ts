@@ -192,7 +192,7 @@ const connect = Effect.fn("FastCast.connect")(function* (
     )
     return Effect.asVoid(FiberMap.run(follows, tc, followed, { onlyIfMissing: true }))
   }
-  const steer = Steer.$match({
+  const steerTo = Steer.$match({
     Follow: ({ tc }) => Effect.logInfo(`FastCast: subscribed to ${tc}`).pipe(Effect.andThen(follow(tc))),
     Leave: ({ tc }) =>
       Effect.logInfo(`FastCast: left ${tc}; its scoreboard shows it neither live nor about to kick off`).pipe(
@@ -203,10 +203,16 @@ const connect = Effect.fn("FastCast.connect")(function* (
         Effect.andThen(follow(tc))
       )
   })
+  const steer = (one: Steer) =>
+    Metric.update(Metric.withAttributes(steersTaken, { steer: one._tag }), 1).pipe(
+      Effect.andThen(steerTo(one))
+    )
 
   yield* Effect.forEach(topics, follow, { discard: true })
   yield* Metric.update(connected, 1)
-  yield* Effect.addFinalizer(() => Metric.update(connected, 0))
+  yield* Effect.addFinalizer(() =>
+    Metric.update(connected, 0).pipe(Effect.andThen(Metric.update(topicsFollowed, 0)))
+  )
   yield* Metric.update(connects, 1)
   yield* Effect.logInfo(`FastCast: connected to ${host.ip}, subscribed to ${topics.join(", ")}`)
 
@@ -217,7 +223,11 @@ const connect = Effect.fn("FastCast.connect")(function* (
       (): Following => ({ documents: FastCastDocument.empty, games: HashMap.empty(), followed: [] }),
       (following, frame) =>
         steered(following, frame, topics).pipe(
-          Effect.tap(([, steers]) => Effect.forEach(steers, steer, { discard: true })),
+          Effect.tap(([next, steers]) =>
+            Metric.update(topicsFollowed, next.followed.length).pipe(
+              Effect.andThen(Effect.forEach(steers, steer, { discard: true }))
+            )
+          ),
           Effect.map(([next]) => [next, [frame]] as const)
         )
     )
@@ -294,7 +304,7 @@ function followedAt(
 
 /**
  * A socket text as its frame, an `H`'s followed by its checkpoint once it loads and decodes. Either way the `H`'s
- * outcome is handed to `published`; a checkpoint that fails is logged and counted, and only its `H` is framed.
+ * outcome is handed to `published`; a checkpoint that fails is logged and counted, and only its `H` is framed. Every text is counted by its op.
  */
 const framed = Effect.fnUntraced(function* (
   received: { readonly text: string; readonly receivedAt: DateTime.Utc },
@@ -302,6 +312,12 @@ const framed = Effect.fnUntraced(function* (
 ) {
   const { text, receivedAt } = received
   const envelope = Option.getOrUndefined(decodeEnvelope(text))
+  const league = Option.fromUndefinedOr(envelope?.channel).pipe(
+    Option.flatMap(ownerOf),
+    Option.map((owner) => owner.league)
+  )
+  const op = envelope?.message.op ?? "unknown"
+  yield* Metric.update(Metric.withAttributes(textsReceived, { op, ...Record.getSomes({ league }) }), 1)
   const frame = new Frame({
     receivedAt,
     source: "push",
@@ -328,13 +344,7 @@ const framed = Effect.fnUntraced(function* (
     `FastCast: the checkpoint of ${message.tc} at ${message.mid} failed`,
     error.cause
   ).pipe(Effect.annotateLogs({ topic: message.tc, reason: error.reason }))
-  yield* Metric.update(
-    Metric.withAttributes(
-      checkpointFailures,
-      Record.getSomes({ league: Option.map(ownerOf(message.tc), (owner) => owner.league) })
-    ),
-    1
-  )
+  yield* Metric.update(Metric.withAttributes(checkpointFailures, Record.getSomes({ league })), 1)
   yield* published(Result.fail(error))
   return [frame]
 })
@@ -413,5 +423,22 @@ const connects = Metric.counter("sportal_live_feed_connects", {
 
 const liveFeedErrors = Metric.counter("sportal_live_feed_errors", {
   description: "Times the live feed failed and was subscribed to again, by why it failed",
+  incremental: true
+})
+
+const textsReceived = Metric.counter("sportal_live_feed_received", {
+  description:
+    "FastCast socket texts, by op (unknown when it does not decode) and, when its topic has one, league",
+  incremental: true
+})
+
+const topicsFollowed = Metric.gauge("sportal_live_feed_topics", {
+  description:
+    "Game topics the live feed follows, beside each league's scoreboard; 0 while it is not subscribed"
+})
+
+const steersTaken = Metric.counter("sportal_live_feed_steers", {
+  description:
+    "Times the live feed followed a game topic, left one, or followed one again after its document reset",
   incremental: true
 })
