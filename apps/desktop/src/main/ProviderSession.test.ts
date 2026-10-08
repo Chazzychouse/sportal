@@ -177,7 +177,8 @@ describe("ProviderSession.allows", () => {
     "https://tv.youtube.com/watch",
     "https://www.youtube.com/",
     "https://accounts.youtube.com/",
-    "https://accounts.google.com/signin"
+    "https://accounts.google.com/signin",
+    "https://player.twitch.tv/?channel=primevideo&parent=twitch.tv&player=popout"
   ])("should allow %s", (url) => {
     const allows = allowed(url)
 
@@ -186,6 +187,8 @@ describe("ProviderSession.allows", () => {
 
   it.each([
     "http://tv.youtube.com/",
+    "https://www.twitch.tv/primevideo",
+    "http://player.twitch.tv/",
     "https://www.google.com/url?q=https://evil.example",
     "https://sites.google.com/",
     "https://evilyoutube.com/",
