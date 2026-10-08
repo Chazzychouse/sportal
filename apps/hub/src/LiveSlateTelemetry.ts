@@ -1,11 +1,11 @@
 import { type GameId, GameSnapshot } from "@sportal/domain/Game"
 import { type GameEvent, GameEventKind } from "@sportal/domain/GameEvent"
-import type { LiveGame, LiveGameState } from "@sportal/domain/LiveGame"
-import type { Slate, Taken } from "@sportal/domain/Slate"
-import { SlateObservation } from "@sportal/domain/SlateObservation"
 import { Cause, DateTime, Duration, Effect, Exit, Metric, Option, Record as Rec, Schema } from "effect"
 import { Following } from "./Following.ts"
 import { type Decoded, DecodeObservation } from "./provider/Decoder.ts"
+import type { LiveGame, LiveGameState } from "./slate/LiveGame.ts"
+import type { Slate, Taken } from "./slate/Slate.ts"
+import { SlateObservation } from "./slate/SlateObservation.ts"
 
 /**
  * What one take or tick of the slate did, told as its following stands. During the replay, only a defect is logged:

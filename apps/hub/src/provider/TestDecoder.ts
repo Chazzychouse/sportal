@@ -1,7 +1,7 @@
-import { Delivery } from "@sportal/domain/Delivery"
 import type { LeagueId } from "@sportal/domain/League"
 import { Context, Effect, Layer, Stream } from "effect"
 import { type Frame, LoggedFrame } from "../Frame.ts"
+import { Delivery } from "../slate/Delivery.ts"
 import { type Decoded, Decoder } from "./Decoder.ts"
 import { Provider } from "./Provider.ts"
 

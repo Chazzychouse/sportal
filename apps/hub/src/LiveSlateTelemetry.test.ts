@@ -1,12 +1,12 @@
 import { assert, describe, it } from "@effect/vitest"
-import { Delivery } from "@sportal/domain/Delivery"
 import { GameId } from "@sportal/domain/Game"
-import { Slate } from "@sportal/domain/Slate"
 import { liveSnapshot, snapshot } from "@sportal/domain/TestGame"
 import { DateTime, Effect, Option, References } from "effect"
 import { Following } from "./Following.ts"
 import * as LiveSlateTelemetry from "./LiveSlateTelemetry.ts"
 import { Decoded, DecodeObservation } from "./provider/Decoder.ts"
+import { Delivery } from "./slate/Delivery.ts"
+import { Slate } from "./slate/Slate.ts"
 import { counted, recordingLogs, withMetrics } from "./TestTelemetry.ts"
 
 describe("LiveSlateTelemetry.told", () => {

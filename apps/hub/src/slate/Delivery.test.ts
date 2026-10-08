@@ -1,8 +1,8 @@
 import { assert, describe, it } from "@effect/vitest"
+import { GameId } from "@sportal/domain/Game"
+import { liveSnapshot, play, snapshot } from "@sportal/domain/TestGame"
 import { Schema } from "effect"
 import { Delivery } from "./Delivery.ts"
-import { GameId } from "./Game.ts"
-import { liveSnapshot, play, snapshot } from "./TestGame.ts"
 
 const wire = Schema.fromJsonString(Delivery)
 

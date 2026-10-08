@@ -1,4 +1,3 @@
-import { Slate } from "@sportal/domain/Slate"
 import { Array as Arr, DateTime, Option, Schema } from "effect"
 
 const schema = Schema.String.check(
@@ -16,7 +15,13 @@ function bounds(
   zone: DateTime.TimeZone
 ): { readonly from: DateTime.Utc; readonly until: DateTime.Utc } {
   const noon = DateTime.makeZonedUnsafe(`${gameDay}T12:00:00Z`, { timeZone: zone, adjustForTimeZone: true })
-  return { from: Slate.dayStart(noon), until: Slate.dayStart(DateTime.add(noon, { days: 1 })) }
+  return { from: dayStart(noon), until: dayStart(DateTime.add(noon, { days: 1 })) }
+}
+
+/** The start of the game day `now` is in: 04:00 local, the day before when `now` is earlier. */
+function dayStart(now: DateTime.Zoned): DateTime.Utc {
+  const today = DateTime.setParts(now, { hour: 4, minute: 0, second: 0, millisecond: 0 })
+  return DateTime.toUtc(DateTime.isLessThan(now, today) ? DateTime.subtract(today, { days: 1 }) : today)
 }
 
 /** Every game day from `from` to `to`, both included; none when `to` is before `from`. */
@@ -29,6 +34,6 @@ function dates(from: typeof schema.Type, to: typeof schema.Type): ReadonlyArray<
   )
 }
 
-/** A game day, as YYYY-MM-DD: a date that exists. Its operations are `.bounds` and `.dates`. */
-export const GameDay = Object.assign(schema, { bounds, dates })
+/** A game day, as YYYY-MM-DD: a date that exists. Its operations are `.bounds`, `.dates` and `.dayStart`. */
+export const GameDay = Object.assign(schema, { bounds, dates, dayStart })
 export type GameDay = typeof GameDay.Type

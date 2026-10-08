@@ -1,10 +1,10 @@
+import type { GameId, GameSnapshot } from "@sportal/domain/Game"
+import { GameEvent, type GameEventKind } from "@sportal/domain/GameEvent"
+import type { LeagueId } from "@sportal/domain/League"
+import type { RecentPlays } from "@sportal/domain/RecentPlays"
 import { Cause, Data, DateTime, Effect, Equal, Option } from "effect"
 import { Delivery, type DeliverySource } from "./Delivery.ts"
-import type { GameId, GameSnapshot } from "./Game.ts"
-import { GameEvent, type GameEventKind } from "./GameEvent.ts"
-import type { LeagueId } from "./League.ts"
 import { LiveGame, LiveGameState, type TookOutcome } from "./LiveGame.ts"
-import type { RecentPlays } from "./RecentPlays.ts"
 import { SlateObservation } from "./SlateObservation.ts"
 
 /**
@@ -34,12 +34,6 @@ export class Slate extends Data.Class<{
 
   /** How many of a game's plays `recentPlays` keeps: its last ten. */
   private static readonly recentPlayCount = 10
-
-  /** The start of the game day `now` is in: 04:00 local, the day before when `now` is earlier. */
-  static dayStart(now: DateTime.Zoned): DateTime.Utc {
-    const today = DateTime.setParts(now, { hour: 4, minute: 0, second: 0, millisecond: 0 })
-    return DateTime.toUtc(DateTime.isLessThan(now, today) ? DateTime.subtract(today, { days: 1 }) : today)
-  }
 
   /**
    * Takes one frame: ticks every game due after `reached` and at or before `at`, then applies each of its deliveries in

@@ -1,6 +1,5 @@
 import { GameDay } from "@sportal/domain/GameDay"
 import type { GameEvent } from "@sportal/domain/GameEvent"
-import { Slate, type Taken } from "@sportal/domain/Slate"
 import {
   Array as Arr,
   Cause,
@@ -20,6 +19,7 @@ import {
   Stream
 } from "effect"
 import { Worker, type WorkerError } from "effect/workers"
+import { Slate, type Taken } from "../slate/Slate.ts"
 import { CorpusDays, CorpusDayUnreadable } from "./CorpusDay.ts"
 
 /**

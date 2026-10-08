@@ -1,5 +1,5 @@
-import { DeliverySource } from "@sportal/domain/Delivery"
 import { Schema } from "effect"
+import { DeliverySource } from "./slate/Delivery.ts"
 
 /** One thing a provider delivered, as received, before the log numbers it. */
 export class Frame extends Schema.Class<Frame>("sportal/hub/Frame")({

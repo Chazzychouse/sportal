@@ -1,4 +1,4 @@
-import { Slate } from "@sportal/domain/Slate"
+import { GameDay } from "@sportal/domain/GameDay"
 import {
   Array as Arr,
   type Cause,
@@ -212,12 +212,12 @@ const days = Effect.fnUntraced(function* (table: ReturnType<typeof queries>) {
         onNone: () => [[], Option.none()] as const,
         onSome: (millis) => {
           const start = DateTime.setZone(
-            Slate.dayStart(DateTime.makeZonedUnsafe(millis, { timeZone: zone })),
+            GameDay.dayStart(DateTime.makeZonedUnsafe(millis, { timeZone: zone })),
             zone
           )
           return [
             [DateTime.formatIsoDate(start)],
-            Option.some(DateTime.toEpochMillis(Slate.dayStart(DateTime.add(start, { days: 1 }))))
+            Option.some(DateTime.toEpochMillis(GameDay.dayStart(DateTime.add(start, { days: 1 }))))
           ] as const
         }
       })

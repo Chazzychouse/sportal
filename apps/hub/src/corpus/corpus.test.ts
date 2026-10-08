@@ -1,6 +1,6 @@
 import { NodeServices } from "@effect/platform-node"
 import { assert, describe, it } from "@effect/vitest"
-import { Slate } from "@sportal/domain/Slate"
+import { GameDay } from "@sportal/domain/GameDay"
 import { DateTime, Effect, FileSystem, Path, Stream } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/process"
 
@@ -16,7 +16,7 @@ describe("corpus backfill", () => {
         const today = DateTime.formatIsoDate(now)
         const yesterday = DateTime.formatIsoDate(DateTime.subtract(now, { days: 1 }))
         // The game day now is in: yesterday's until 04:00.
-        const unended = DateTime.formatIsoDate(DateTime.setZone(Slate.dayStart(now), zone))
+        const unended = DateTime.formatIsoDate(DateTime.setZone(GameDay.dayStart(now), zone))
 
         const { output, code, corpus } = yield* backfill(["--from", yesterday, "--to", today])
 

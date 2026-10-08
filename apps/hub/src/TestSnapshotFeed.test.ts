@@ -1,5 +1,4 @@
 import { assert, describe, it, layer } from "@effect/vitest"
-import { Delivery } from "@sportal/domain/Delivery"
 import { GameId, type GameSnapshot } from "@sportal/domain/Game"
 import type { LeagueId } from "@sportal/domain/League"
 import { liveSnapshot, play, snapshot } from "@sportal/domain/TestGame"
@@ -8,6 +7,7 @@ import type { Frame } from "./Frame.ts"
 import { DecodeObservation } from "./provider/Decoder.ts"
 import { Provider, ProviderUnavailable } from "./provider/Provider.ts"
 import { decodedFrames } from "./provider/TestDecoder.ts"
+import { Delivery } from "./slate/Delivery.ts"
 import * as TestSnapshotFeed from "./TestSnapshotFeed.ts"
 
 layer(TestSnapshotFeed.layerDecoder)("TestSnapshotFeed.layerDecoder", (it) => {

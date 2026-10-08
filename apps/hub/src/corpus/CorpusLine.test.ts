@@ -1,10 +1,10 @@
 import { assert, describe, it } from "@effect/vitest"
-import { Delivery } from "@sportal/domain/Delivery"
 import { GameId } from "@sportal/domain/Game"
 import { PlayId } from "@sportal/domain/Play"
 import { liveSnapshot, play, snapshot } from "@sportal/domain/TestGame"
 import { DateTime, Effect, Equal, Exit, Schema, Stream } from "effect"
 import { Decoded } from "../provider/Decoder.ts"
+import { Delivery } from "../slate/Delivery.ts"
 import { CorpusInput, CorpusLine } from "./CorpusLine.ts"
 
 describe("CorpusLine", () => {

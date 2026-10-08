@@ -1,9 +1,7 @@
 import { NodeCrypto } from "@effect/platform-node"
 import { assert, describe, it } from "@effect/vitest"
-import { Delivery } from "@sportal/domain/Delivery"
 import { GameId, type GameSnapshot } from "@sportal/domain/Game"
 import type { LeagueId } from "@sportal/domain/League"
-import { LiveGame, LiveGameState } from "@sportal/domain/LiveGame"
 import { liveSnapshot, snapshot, team } from "@sportal/domain/TestGame"
 import {
   Clock,
@@ -39,6 +37,8 @@ import {
   Provider,
   ProviderUnavailable
 } from "./provider/Provider.ts"
+import { Delivery } from "./slate/Delivery.ts"
+import { LiveGame, LiveGameState } from "./slate/LiveGame.ts"
 import { appended, delivered } from "./TestLiveSlate.ts"
 import * as TestSnapshotFeed from "./TestSnapshotFeed.ts"
 import { pushed } from "./TestSnapshotFeed.ts"

@@ -22,6 +22,33 @@ describe("GameDay", () => {
   )
 })
 
+describe("GameDay.dayStart", () => {
+  const at = (time: string) =>
+    DateTime.makeZonedUnsafe(`2026-10-07T${time}:00`, {
+      timeZone: "America/Chicago",
+      adjustForTimeZone: true
+    })
+  const four = (day: string) =>
+    DateTime.toUtc(
+      DateTime.makeZonedUnsafe(`2026-10-${day}T04:00:00`, {
+        timeZone: "America/Chicago",
+        adjustForTimeZone: true
+      })
+    )
+
+  it("should be today's 04:00 from 04:00", () => {
+    const start = GameDay.dayStart(at("04:00"))
+
+    assert.deepStrictEqual(start, four("07"))
+  })
+
+  it("should be yesterday's 04:00 before 04:00", () => {
+    const start = GameDay.dayStart(at("03:59"))
+
+    assert.deepStrictEqual(start, four("06"))
+  })
+})
+
 describe("GameDay.bounds", () => {
   it("should run from 04:00 local on the day until 04:00 the next, across a change of clocks", () => {
     const zone = DateTime.zoneMakeNamedUnsafe("America/New_York")

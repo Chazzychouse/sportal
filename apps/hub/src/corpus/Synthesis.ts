@@ -1,4 +1,3 @@
-import { Delivery } from "@sportal/domain/Delivery"
 import { GameSnapshot } from "@sportal/domain/Game"
 import type { LeagueId } from "@sportal/domain/League"
 import { Play } from "@sportal/domain/Play"
@@ -7,6 +6,7 @@ import type { TeamId } from "@sportal/domain/Team"
 import { Array as Arr, DateTime, Duration, type Effect, Option, Order, Stream } from "effect"
 import type { GameArchive, PlayArchive } from "../provider/Archiver.ts"
 import { Decoded } from "../provider/Decoder.ts"
+import { Delivery } from "../slate/Delivery.ts"
 import { CorpusLine } from "./CorpusLine.ts"
 
 /**

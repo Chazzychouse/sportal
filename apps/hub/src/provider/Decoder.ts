@@ -1,8 +1,8 @@
-import type { Delivery } from "@sportal/domain/Delivery"
 import type { GameId } from "@sportal/domain/Game"
 import type { LeagueId } from "@sportal/domain/League"
 import { Context, Data, type DateTime, Effect, Layer, type Option, Stream } from "effect"
 import type { Frame, LoggedFrame } from "../Frame.ts"
+import type { Delivery } from "../slate/Delivery.ts"
 
 /**
  * A provider's decode on its own: what each frame it delivered said. Its adapter provides it as a layer of its own, and

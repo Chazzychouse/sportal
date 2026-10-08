@@ -1,4 +1,3 @@
-import type { Slate } from "@sportal/domain/Slate"
 import {
   Array as Arr,
   DateTime,
@@ -16,6 +15,7 @@ import { HubConfig } from "./HubConfig.ts"
 import * as HubStopping from "./HubStopping.ts"
 import { LiveSlate } from "./LiveSlate.ts"
 import { LiveFeedDemand, Provider } from "./provider/Provider.ts"
+import type { Slate } from "./slate/Slate.ts"
 
 /**
  * Polls each league on the provider's polling Schedule and runs its push on the live feed's demand, subscribed to again

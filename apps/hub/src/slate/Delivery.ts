@@ -1,7 +1,7 @@
+import { GameId, GameSnapshot } from "@sportal/domain/Game"
+import { LeagueId } from "@sportal/domain/League"
+import { Play } from "@sportal/domain/Play"
 import { Schema } from "effect"
-import { GameId, GameSnapshot } from "./Game.ts"
-import { LeagueId } from "./League.ts"
-import { Play } from "./Play.ts"
 
 /** Which feed a snapshot came from. */
 export const DeliverySource = Schema.Literals(["push", "poll"])

@@ -1,11 +1,11 @@
 import { assert, describe, it } from "@effect/vitest"
+import { GameSnapshot } from "@sportal/domain/Game"
+import { GameEventKind } from "@sportal/domain/GameEvent"
+import { type Play, PlayId } from "@sportal/domain/Play"
+import { completion, liveSnapshot, play, snapshot, tags } from "@sportal/domain/TestGame"
 import { DateTime, Duration, Option } from "effect"
 import { Delivery, type DeliverySource } from "./Delivery.ts"
-import { GameSnapshot } from "./Game.ts"
-import { GameEventKind } from "./GameEvent.ts"
 import { LiveGame, LiveGameState } from "./LiveGame.ts"
-import { type Play, PlayId } from "./Play.ts"
-import { completion, liveSnapshot, play, snapshot, tags } from "./TestGame.ts"
 
 const t0 = DateTime.makeUnsafe("2026-10-03T16:00:00Z")
 const later = DateTime.addDuration(t0, Duration.seconds(30))

@@ -1,10 +1,10 @@
-import { Delivery } from "@sportal/domain/Delivery"
 import type { GameSnapshot } from "@sportal/domain/Game"
 import type { LeagueId } from "@sportal/domain/League"
 import { DateTime, Effect, Layer, Schedule, Schema, Stream } from "effect"
 import { Frame } from "./Frame.ts"
 import { Decoded, Decoder } from "./provider/Decoder.ts"
 import { type Polling, Provider, type ProviderUnavailable } from "./provider/Provider.ts"
+import { Delivery } from "./slate/Delivery.ts"
 
 /**
  * The snapshot feed, which tests drive, as the provider: its frames are our own deliveries, read back by `layerDecoder`. A

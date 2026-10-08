@@ -1,44 +1,17 @@
 import { assert, describe, it } from "@effect/vitest"
+import { GameId, GameSnapshot } from "@sportal/domain/Game"
+import { GameEvent, GameEventKind } from "@sportal/domain/GameEvent"
+import { PlayId } from "@sportal/domain/Play"
+import { liveSnapshot, play, snapshot, team } from "@sportal/domain/TestGame"
 import { DateTime, Duration, Effect, Option } from "effect"
 import { Delivery, type DeliverySource } from "./Delivery.ts"
-import { GameId, GameSnapshot } from "./Game.ts"
-import { GameEvent, GameEventKind } from "./GameEvent.ts"
 import { LiveGame, LiveGameState } from "./LiveGame.ts"
-import { PlayId } from "./Play.ts"
 import { Slate } from "./Slate.ts"
 import { SlateObservation } from "./SlateObservation.ts"
-import { liveSnapshot, play, snapshot, team } from "./TestGame.ts"
 
 const t0 = DateTime.makeUnsafe("2026-10-03T16:00:00Z")
 const one = GameId.make("1")
 const two = GameId.make("2")
-
-describe("Slate.dayStart", () => {
-  const at = (time: string) =>
-    DateTime.makeZonedUnsafe(`2026-10-07T${time}:00`, {
-      timeZone: "America/Chicago",
-      adjustForTimeZone: true
-    })
-  const four = (day: string) =>
-    DateTime.toUtc(
-      DateTime.makeZonedUnsafe(`2026-10-${day}T04:00:00`, {
-        timeZone: "America/Chicago",
-        adjustForTimeZone: true
-      })
-    )
-
-  it("should be today's 04:00 from 04:00", () => {
-    const start = Slate.dayStart(at("04:00"))
-
-    assert.deepStrictEqual(start, four("07"))
-  })
-
-  it("should be yesterday's 04:00 before 04:00", () => {
-    const start = Slate.dayStart(at("03:59"))
-
-    assert.deepStrictEqual(start, four("06"))
-  })
-})
 
 describe("Slate.empty", () => {
   it("should hold no listing", () => {

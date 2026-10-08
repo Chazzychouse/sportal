@@ -1,7 +1,7 @@
 import { LiveMessage, type SlateChanged } from "@sportal/api/LiveMessage"
+import { GameDay } from "@sportal/domain/GameDay"
 import { type GameEvent, GameEventKind } from "@sportal/domain/GameEvent"
 import { LeagueId } from "@sportal/domain/League"
-import { Slate, type Taken } from "@sportal/domain/Slate"
 import {
   Clock,
   Context,
@@ -25,6 +25,7 @@ import { FeedLog } from "./feed-log/FeedLog.ts"
 import * as HubStopping from "./HubStopping.ts"
 import * as LiveSlateTelemetry from "./LiveSlateTelemetry.ts"
 import { type Decoded, Decoder } from "./provider/Decoder.ts"
+import { Slate, type Taken } from "./slate/Slate.ts"
 
 /**
  * The live slate: the domain slate taking every frame in the feed log, in order, with its timer, its telemetry, and its
@@ -68,7 +69,7 @@ export class LiveSlate extends Context.Service<
         const feedLog = yield* FeedLog
         const decoder = yield* Decoder
         const now = yield* DateTime.nowInCurrentZone
-        const from = Slate.dayStart(now)
+        const from = GameDay.dayStart(now)
         const started = yield* Clock.currentTimeMillis
         const state = yield* SubscriptionRef.make<{
           readonly slate: Slate

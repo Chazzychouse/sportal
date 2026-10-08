@@ -1,9 +1,9 @@
-import { Delivery } from "@sportal/domain/Delivery"
 import { GameId, GameSnapshot } from "@sportal/domain/Game"
 import { LeagueId } from "@sportal/domain/League"
 import { Play, PlayId } from "@sportal/domain/Play"
 import { Array as Arr, Data, DateTime, Effect, Equal, Order, Schema, Stream } from "effect"
 import type { Decoded } from "../provider/Decoder.ts"
+import { Delivery } from "../slate/Delivery.ts"
 
 /**
  * One line of a corpus day's poll or push file: a listing changed or unchanged since its league's last, a pushed

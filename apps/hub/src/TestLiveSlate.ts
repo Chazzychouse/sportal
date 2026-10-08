@@ -1,8 +1,5 @@
 import { NodeCrypto } from "@effect/platform-node"
-import type { Delivery } from "@sportal/domain/Delivery"
 import type { GameEvent } from "@sportal/domain/GameEvent"
-import { Slate } from "@sportal/domain/Slate"
-import type { SlateObservation } from "@sportal/domain/SlateObservation"
 import { DateTime, Effect, Layer } from "effect"
 import * as Database from "./Database.ts"
 import type { Frame } from "./Frame.ts"
@@ -10,6 +7,9 @@ import { FeedLog } from "./feed-log/FeedLog.ts"
 import { LiveSlate } from "./LiveSlate.ts"
 import type { Decoder } from "./provider/Decoder.ts"
 import { decodedFrames } from "./provider/TestDecoder.ts"
+import type { Delivery } from "./slate/Delivery.ts"
+import { Slate } from "./slate/Slate.ts"
+import type { SlateObservation } from "./slate/SlateObservation.ts"
 import * as TestSnapshotFeed from "./TestSnapshotFeed.ts"
 
 /**

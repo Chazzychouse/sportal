@@ -1,7 +1,7 @@
+import type { GameId, GameSnapshot } from "@sportal/domain/Game"
 import type { Cause, DateTime, Option } from "effect"
 import { Data } from "effect"
 import type { DeliverySource } from "./Delivery.ts"
-import type { GameId, GameSnapshot } from "./Game.ts"
 import type { LiveGame, TookOutcome } from "./LiveGame.ts"
 
 /** What one take or tick did to one game, for telemetry only. */

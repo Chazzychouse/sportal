@@ -1,8 +1,6 @@
 import { assert, describe, it } from "@effect/vitest"
 import { GameDay } from "@sportal/domain/GameDay"
 import { type GameEvent, GameEventKind } from "@sportal/domain/GameEvent"
-import { LiveGame } from "@sportal/domain/LiveGame"
-import type { Slate } from "@sportal/domain/Slate"
 import { liveSnapshot, team } from "@sportal/domain/TestGame"
 import {
   Array as Arr,
@@ -33,6 +31,8 @@ import * as EspnDecoder from "../provider/espn/EspnDecoder.ts"
 import * as ScenarioProvider from "../provider/espn/ScenarioProvider.ts"
 import { fixtures, neAtBufFrames, recordedNeAtBuf, recordedPlays } from "../provider/espn/TestEspn.ts"
 import { Scenarios } from "../scenario/Scenarios.ts"
+import { LiveGame } from "../slate/LiveGame.ts"
+import type { Slate } from "../slate/Slate.ts"
 import * as TestSnapshotFeed from "../TestSnapshotFeed.ts"
 import { CorpusDay, CorpusDays, CorpusDayUnreadable } from "./CorpusDay.ts"
 import { CorpusInput, CorpusLine } from "./CorpusLine.ts"

@@ -1,8 +1,8 @@
+import { GameSnapshot } from "@sportal/domain/Game"
+import type { GameEventKind } from "@sportal/domain/GameEvent"
+import { Play } from "@sportal/domain/Play"
 import { Array as Arr, Data, DateTime, Duration, Equal, Option } from "effect"
 import type { Delivery, DeliverySource } from "./Delivery.ts"
-import { GameSnapshot } from "./Game.ts"
-import type { GameEventKind } from "./GameEvent.ts"
-import { Play } from "./Play.ts"
 
 /**
  * Where a live game is: upcoming, live (last updated at), holding (live, with a poll snapshot ahead of it held until
