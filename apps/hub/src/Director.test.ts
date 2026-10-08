@@ -331,6 +331,18 @@ const ohioStateAtIowa = snapshot({
   broadcasts: [broadcast("CBS")]
 })
 
+const streamingOnly = ChannelAvailability.NotCarried({ why: "StreamingOnly" })
+const primeOnTwitch = {
+  name: "Prime Video",
+  source: "Twitch" as const,
+  locator: { _tag: "WebView" as const, url: "https://player.twitch.tv/?channel=primevideo" }
+}
+const primeOnYouTubeTv = {
+  name: "Prime Video",
+  source: "YouTube TV" as const,
+  locator: { _tag: "WebView" as const, url: "https://tv.youtube.com/watch/prime" }
+}
+
 // News 3's live address in the recorded guide.
 const news3Live = "https://tv.youtube.com/watch/y6zFA17zDsw?vp=0gEEEgIwAQ%3D%3D"
 
@@ -452,6 +464,55 @@ describe("Director, the Screen", () => {
       )
 
       assert.isTrue(Option.isNone(published))
+    })
+  )
+
+  it.live("should keep a stream tile on Twitch when YouTube TV's guide then carries its game", () =>
+    Effect.gen(function* () {
+      const pulses = yield* Queue.unbounded<void>()
+      const youTubeTvCarries = yield* Ref.make(false)
+      const youTubeTv = Layer.succeed(
+        Source,
+        Source.of({
+          availability: Ref.get(youTubeTvCarries).pipe(
+            Effect.map(
+              (carries) => () =>
+                carries ? ChannelAvailability.Carried({ channel: primeOnYouTubeTv }) : streamingOnly
+            )
+          ),
+          changes: Stream.fromQueue(pulses)
+        })
+      )
+      const twitch = Source.layerTest((game) =>
+        game.id === GameId.make("5") ? ChannelAvailability.Carried({ channel: primeOnTwitch }) : streamingOnly
+      )
+      // YouTube TV first: were a tile to follow the combined answer, the tie would go to YouTube TV.
+      const bothSources = Source.layerAll([youTubeTv, twitch])
+
+      const { assigned, screen } = yield* Effect.gen(function* () {
+        const director = yield* Director
+        yield* director.dispatch({ _tag: "Assign", tile: 0, game: GameId.make("5") })
+        const assigned = yield* director.dispatch({ _tag: "Assign", tile: 1, game: GameId.make("4") })
+
+        yield* Ref.set(youTubeTvCarries, true)
+        yield* Queue.offer(pulses, undefined)
+
+        // Game 4 turning into a stream tile shows the refresh has run.
+        const screen = yield* firstScreenWhere(director.screenChanges, (screen) => {
+          const second = screen.tiles[1]
+          return second !== undefined && Tile.guards.StreamTile(second)
+        })
+        return { assigned, screen }
+      }).pipe(
+        Effect.provide(listed(games).pipe(Layer.provideMerge(directorOver), Layer.provideMerge(bothSources)))
+      )
+
+      assert.deepStrictEqual(assigned.tiles[0], {
+        _tag: "StreamTile",
+        game: GameId.make("5"),
+        channel: primeOnTwitch
+      })
+      assert.deepStrictEqual(Option.getOrThrow(screen).tiles[0], assigned.tiles[0])
     })
   )
 

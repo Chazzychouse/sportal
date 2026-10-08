@@ -9,7 +9,7 @@ abstraction.
 
 - **Order does not matter.** Sources are a set, not a ranking. Sources rarely overlap (TNF has been Prime Video and
   Twitch only), so the answers combine by what they say: a source that carries a game beats one that does not, with no
-  preferred source.
+  preferred source. A stream tile moves only when the guide carries its game on another channel from its own source.
 - **Twitch carries a Prime Video game from 30 minutes before kickoff**, the same "starting soon" rule YouTube TV's
   guide uses. Before that, the tile reads "On Prime Video at 8:15 PM". Twitch's channel is live around the clock; we
   don't show whatever it airs at 3 PM.

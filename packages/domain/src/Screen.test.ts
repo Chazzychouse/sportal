@@ -243,6 +243,19 @@ describe("Screen#refresh", () => {
     assert.deepStrictEqual(moved.tiles[0], { _tag: "StreamTile", game: bama, channel: elsewhere })
   })
 
+  it("should keep a stream tile when another source carries its game", () => {
+    const streaming = assign(Screen.initial, 0, bama, onFox)
+    const onTwitch = {
+      name: "Prime Video",
+      source: "Twitch" as const,
+      locator: { ...foxChannel.locator, url: "https://player.twitch.tv/?channel=primevideo" }
+    }
+
+    const refreshed = streaming.refresh(some(() => ChannelAvailability.Carried({ channel: onTwitch })))
+
+    assert.deepStrictEqual(refreshed.tiles[0], streaming.tiles[0])
+  })
+
   it("should re-resolve a data tile whose game has left the guide", () => {
     const waiting = assign(Screen.initial, 0, bama, unknownUpcoming)
 

@@ -338,7 +338,7 @@ class Source extends Context.Service<Source, {
 }>()("sportal/hub/source/Source") {}
 ```
 
-`Source.layerAll` runs every source and answers each game with the most useful answer any gives: carried, upcoming, no guide, then not carried; the order sources are listed in never decides between kinds. YouTube TV answers from the guide `GuideReader` keeps; Twitch from its lineup, a guide whose one channel carries Prime Video.
+`Source.layerAll` runs every source and answers each game with the most useful answer any gives: carried, upcoming, no guide, then not carried; the order sources are listed in never decides between kinds. When a source changes, the Director refreshes the Screen: a stream tile moves only when the guide carries its game on another channel from its own source, so a tile never moves to another source. YouTube TV answers from the guide `GuideReader` keeps; Twitch from its lineup, a guide whose one channel carries Prime Video.
 
 YouTube TV's channels are found in its own guide, read by the shell and handed to `GuideReader.readGuide` (`docs/history.md`, "Guide-matched channels"); with no fresh guide (a guide is fresh for 45 minutes), it answers "no guide". Twitch's lineup is fixed and never read.
 
