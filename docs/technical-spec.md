@@ -376,7 +376,7 @@ class Board extends Context.Service<Board, {
 - The board follows the feed log itself: from the game day's start (04:00 local) it replays the day quietly, with no per-game telemetry and no events, and its layer is built only then, so the Hub serves no slate still catching up. The replay ends at the last `seq` logged when it started, not at a count or a timeout. Then it takes each frame as it is appended, and its timer starts. A decode defect after the replay stops the following: no new frame is taken, but the slate keeps serving and its timer still runs and is told.
 - `BoardTelemetry` is the service the board tells of every take and tick, in order; the board itself logs and counts nothing.
 - `Slate.published()` is each listed game as the slate has it, with each game's last ten plays (`recentPlays`, on `SlateChanged`); the Hub server sends it within 250 ms of a change, and the Switcher reads the listed games from `latest`. Game events ride on `taken`.
-- `HubMode` provides it in both modes. A scenario is the provider through the real Ingest, on the scenario clock: polled at each of its frames' times and at least every 10 seconds, its recorded live feed pushed at its recorded offsets, and every frame appended to a feed log of its own, in memory unless `SPORTAL_SCENARIO_FEED_LOG` names a file.
+- `HubMode` provides it in both modes. A scenario is the provider through the real Ingest, on the scenario clock: polled at each of its frames' times and at least every 10 seconds, its recorded live feed pushed at its recorded offsets, and every frame appended to a feed log of its own, in memory.
 
 **Source** — video out:
 

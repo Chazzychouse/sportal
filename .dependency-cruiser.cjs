@@ -54,12 +54,12 @@ module.exports = {
     {
       name: "only-main-opens-the-database",
       comment:
-        "The composition root provides the database; stores reach it through SqlClient. The feed log opens its own file, and HubMode a scenario's; TestBoard keeps a test's feed log in memory.",
+        "The composition root provides the database; stores reach it through SqlClient. The feed log opens its own file; TestBoard keeps a test's feed log in memory.",
       severity: "error",
       from: {
         path: "^apps/hub/src/",
         pathNot:
-          "(^apps/hub/src/main\\.ts$|\\.test\\.ts$|^apps/hub/src/Database\\.ts$|^apps/hub/src/feed-log/FeedLog\\.ts$|^apps/hub/src/HubMode\\.ts$|^apps/hub/src/TestBoard\\.ts$)"
+          "(^apps/hub/src/main\\.ts$|\\.test\\.ts$|^apps/hub/src/Database\\.ts$|^apps/hub/src/feed-log/FeedLog\\.ts$|^apps/hub/src/TestBoard\\.ts$)"
       },
       to: { path: "^apps/hub/src/Database\\.ts$" }
     },

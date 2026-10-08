@@ -24,8 +24,6 @@ export class HubConfig extends Context.Service<
     readonly dataDir: string
     readonly scenario: Option.Option<string>
     readonly scenarioSpeed: number
-    /** A file in the data directory for a scenario's feed log; none keeps it in memory. Never the game day's log. */
-    readonly scenarioFeedLog: Option.Option<string>
     readonly logLevel: LogLevel.LogLevel
     readonly logFormat: "pretty" | "json"
     readonly version: string
@@ -52,14 +50,6 @@ export class HubConfig extends Context.Service<
         Schema.Finite.check(Schema.isGreaterThan(0)),
         "SPORTAL_SCENARIO_SPEED"
       ).pipe(Config.withDefault(1))
-      const scenarioFeedLog = yield* Config.schema(
-        Schema.String.check(
-          Schema.makeFilter((name) => /^[^/\\]+$/.test(name) && name !== "feed.sqlite", {
-            expected: "a file name in the data directory other than feed.sqlite, the game day's feed log"
-          })
-        ),
-        "SPORTAL_SCENARIO_FEED_LOG"
-      ).pipe(Config.option)
       const logLevel = yield* Config.LogLevel("SPORTAL_LOG_LEVEL").pipe(Config.withDefault("Info"))
       const logFormat = yield* Config.Literals(["pretty", "json"], "SPORTAL_LOG_FORMAT").pipe(
         Config.withDefault("pretty")
@@ -95,7 +85,6 @@ export class HubConfig extends Context.Service<
         dataDir,
         scenario,
         scenarioSpeed,
-        scenarioFeedLog,
         logLevel,
         logFormat,
         version,

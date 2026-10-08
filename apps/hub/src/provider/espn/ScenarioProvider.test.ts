@@ -4,19 +4,7 @@ import { assert, describe, it } from "@effect/vitest"
 import { GameId, type GameSnapshot } from "@sportal/domain/Game"
 import { LeagueId } from "@sportal/domain/League"
 import { liveSnapshot, team } from "@sportal/domain/TestGame"
-import {
-  Context,
-  DateTime,
-  Effect,
-  FileSystem,
-  Layer,
-  Option,
-  Path,
-  Ref,
-  Schedule,
-  Schema,
-  Stream
-} from "effect"
+import { DateTime, Effect, FileSystem, Layer, Option, Path, Ref, Schema, Stream } from "effect"
 import { TestClock } from "effect/testing"
 import * as Database from "../../Database.ts"
 import { Frame } from "../../Frame.ts"
@@ -34,7 +22,6 @@ import {
 import { Board } from "../../slate/Board.ts"
 import { BoardTelemetry } from "../../slate/BoardTelemetry.ts"
 import { Delivery } from "../../slate/Delivery.ts"
-import { liveEvents } from "../../TestBoard.ts"
 import * as TestSnapshotFeed from "../../TestSnapshotFeed.ts"
 import { pushed } from "../../TestSnapshotFeed.ts"
 import { recordingLogs } from "../../TestTelemetry.ts"
@@ -404,51 +391,6 @@ describe("ScenarioProvider", () => {
       assert.strictEqual(DateTime.toEpochMillis(now), 13_000)
     }).pipe(Effect.scoped)
   )
-
-  it.effect("should log its frames to the scenario's feed log, and nothing to feed.sqlite", () =>
-    Effect.gen(function* () {
-      const fs = yield* FileSystem.FileSystem
-      const { join } = yield* Path.Path
-      const dataDir = yield* fs.makeTempDirectoryScoped()
-      const onFile = { env: { SPORTAL_DATA_DIR: dataDir }, scenarioFeedLog: "scenario.sqlite" }
-
-      const logged = yield* loggedAfterAMoment.pipe(
-        Effect.provide(playing("two-minute-drill-tie", onFile)),
-        Effect.scoped
-      )
-
-      const feedSqliteExists = yield* fs.exists(join(dataDir, "feed.sqlite"))
-      assert.deepStrictEqual(
-        logged.map(({ source, channel }) => [source, channel]),
-        [
-          ["poll", "fbs"],
-          ...["tie-uga-ala", "tie-osu-mich", "tie-tex-ou", "tie-lsu-miss"].map((game) => [
-            "push",
-            `gp-football-college-football-${game}`
-          ])
-        ]
-      )
-      assert.isFalse(feedSqliteExists)
-    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer))
-  )
-
-  it.effect("should replay the scenario's logged frames on a restart, publishing no events for them", () =>
-    Effect.gen(function* () {
-      const fs = yield* FileSystem.FileSystem
-      const dataDir = yield* fs.makeTempDirectoryScoped()
-      const onFile = { env: { SPORTAL_DATA_DIR: dataDir }, scenarioFeedLog: "scenario.sqlite" }
-      yield* playedForThreeMinutes.pipe(
-        Effect.provide(playing("two-minute-drill-tie", onFile)),
-        Effect.scoped
-      )
-
-      const restarted = yield* restartedOn(onFile)
-
-      const events = yield* Ref.get(restarted.events)
-      assert.strictEqual(events, 0)
-      assert.isAbove(restarted.replayed.listed.size, 0, "the frames were replayed")
-    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer))
-  )
 })
 
 /**
@@ -493,24 +435,18 @@ function readAhead(from: string) {
 }
 
 /**
- * Ingest over `scenario(name, options)`, onto a feed log in memory or on the file `scenarioFeedLog` names in the data
- * directory, with the slate provided to the test.
+ * Ingest over `scenario(name, options)`, onto a feed log in memory, with the slate provided to the test.
  */
 function playing(name: string, options: Options = {}) {
-  return Ingest.layer.pipe(Layer.provideMerge(following(options)), Layer.provide(scenario(name, options)))
+  return Ingest.layer.pipe(Layer.provideMerge(following()), Layer.provide(scenario(name, options)))
 }
 
 /**
- * The board following a feed log in memory or on the file `scenarioFeedLog` names in the data directory, which is
- * provided too.
+ * The board following a feed log in memory, which is provided too.
  */
-function following(options: Options) {
+function following() {
   return Board.layer.pipe(
-    Layer.provideMerge(
-      options.scenarioFeedLog === undefined
-        ? FeedLog.layer.pipe(Layer.provide([Database.layerMemory, NodeCrypto.layer]))
-        : FeedLog.layer.pipe(Layer.provide(Database.layerFile(options.scenarioFeedLog)), Layer.orDie)
-    ),
+    Layer.provideMerge(FeedLog.layer.pipe(Layer.provide([Database.layerMemory, NodeCrypto.layer]))),
     Layer.provide([BoardTelemetry.layer, DateTime.layerCurrentZoneLocal]),
     Layer.provide([NodeServices.layer, NodeCrypto.layer])
   )
@@ -521,7 +457,6 @@ type Options = {
   readonly from?: string
   readonly decode?: Provider["Service"]["decode"]
   readonly env?: Record<string, string>
-  readonly scenarioFeedLog?: string
 }
 
 // Recordings that are test data, not scenarios to play: two-minute-drill-tie and a-drive.
@@ -696,53 +631,5 @@ function playedToItsEnd(frames: ReadonlyArray<Frame>) {
     yield* TestClock.adjust(length)
 
     return yield* slateGames
-  })
-}
-
-/** The feed log's frames 100 ms into the scenario. */
-const loggedAfterAMoment = Effect.gen(function* () {
-  yield* TestClock.adjust(0)
-  yield* TestClock.adjust("100 millis")
-  const feedLog = yield* FeedLog
-
-  // The log compresses and writes on the event loop, so this waits in real time.
-  return yield* Stream.runCollect(feedLog.replay(DateTime.makeUnsafe(0))).pipe(
-    Effect.repeat({ until: (frames) => frames.length >= 5, schedule: Schedule.spaced("5 millis") }),
-    Effect.timeout("1 second"),
-    TestClock.withLive
-  )
-})
-
-const playedForThreeMinutes = Effect.gen(function* () {
-  yield* TestClock.adjust(0)
-  yield* TestClock.adjust("3 minutes")
-})
-
-/**
- * The board following the scenario's feed log `onFile` again, what it replayed, and its events counted from the start,
- * with Ingest playing two-minute-drill-tie onto it: the Hub restarted, for as long as the scope lives.
- */
-function restartedOn(onFile: Options) {
-  return Effect.gen(function* () {
-    const context = yield* Layer.build(
-      following(onFile).pipe(Layer.provide(scenario("two-minute-drill-tie", onFile)))
-    )
-    const board = Context.get(context, Board)
-    const replayed = yield* board.latest
-    const events = yield* Ref.make(0)
-
-    yield* liveEvents.pipe(
-      Stream.provideContext(context),
-      Stream.runForEach(() => Ref.update(events, (count) => count + 1)),
-      Effect.forkScoped({ startImmediately: true })
-    )
-    yield* Layer.build(
-      Ingest.layer.pipe(
-        Layer.provide(scenario("two-minute-drill-tie", onFile)),
-        Layer.provide(Layer.succeedContext(context))
-      )
-    )
-
-    return { replayed, events }
   })
 }

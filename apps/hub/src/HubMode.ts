@@ -1,6 +1,5 @@
 import { NodeSocket } from "@effect/platform-node"
 import { DateTime, Effect, Layer, Option } from "effect"
-import * as Database from "./Database.ts"
 import { FeedLog } from "./feed-log/FeedLog.ts"
 import { HubConfig } from "./HubConfig.ts"
 import * as Ingest from "./Ingest.ts"
@@ -42,26 +41,13 @@ const live = Layer.mergeAll(
   YouTubeTv.layer
 )
 
-// A scenario's feed log: in memory, or on the file `SPORTAL_SCENARIO_FEED_LOG` names in the data directory. Never on the
-// game day's `feed.sqlite`.
-const scenarioFeedLog = Layer.unwrap(
-  Effect.gen(function* () {
-    const config = yield* HubConfig
-
-    return Option.match(config.scenarioFeedLog, {
-      onNone: () => FeedLog.layerMemory,
-      onSome: (name) => FeedLog.layer.pipe(Layer.provide(Database.layerFile(name)), Layer.orDie)
-    })
-  })
-)
-
 // The scenario plays as the provider through the real Ingest, onto a feed log of its own, decoded as ESPN recorded it.
 // Ingest and the Board share the scenario's clock; the rest of the Hub keeps the real one.
 const scenario = Layer.mergeAll(
   Ingest.layer.pipe(
     Layer.provideMerge(Board.layer),
     Layer.provide(BoardTelemetry.layer),
-    Layer.provide(scenarioFeedLog),
+    Layer.provide(FeedLog.layerMemory),
     Layer.provide([Espn.layerScenario.pipe(Layer.provide(Scenarios.layer)), DateTime.layerCurrentZoneLocal]),
     Layer.provide(ScenarioClock.layer)
   ),
