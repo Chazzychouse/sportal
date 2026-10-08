@@ -260,6 +260,12 @@ export class Game extends Schema.Class<Game>("sportal/Game")({
     return new Game({ ...this, plays: sorted })
   }
 
+  /** The plays this game has that `earlier` lacks, by id, in this game's order. */
+  playsAfter(earlier: Game): ReadonlyArray<Play> {
+    const had = new Set(earlier.plays.map(({ id }) => id))
+    return this.plays.filter(({ id }) => !had.has(id))
+  }
+
   /** This game with only its last ten plays: what the live stream sends. */
   recent(): Game {
     if (this.plays.length <= Game.recentCount) return this
