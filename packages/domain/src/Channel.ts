@@ -2,7 +2,7 @@ import { Data, type DateTime, type Option, Schema } from "effect"
 import { StreamLocator } from "./Stream.ts"
 
 /** The sources Sportal can play video from, by the name people know them by. */
-export const SourceName = Schema.Literals(["YouTube TV", "Scenario"])
+export const SourceName = Schema.Literal("YouTube TV")
 export type SourceName = typeof SourceName.Type
 
 /** A channel as a source names it ("News 3", "ESPN2"), and the address that plays it live. */

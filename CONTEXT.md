@@ -29,11 +29,6 @@ Every exported type name must be a term here, except the wire schemas in `*Paylo
 | **Delivery** | `Delivery` in `apps/hub/src/slate/Delivery.ts`: what a frame said: a league's listing, one game's snapshot, or one game's whole list of plays. | input, update |
 | **Delivery source** | Which way a provider delivered a frame: `push` or `poll`; a `Frame`'s `source` in code. | origin, feed type, feed |
 | **Test game** | A game snapshot built for a test, with defaults for everything the test does not care about. | fixture, mock |
-| **Scenario** | Games a Hub plays as its provider, through the real decode and slate: a name, when it starts (its first frame's receipt), and a stream of a provider's raw frames recorded over a window of a game day, kept as `fixtures/scenarios/<name>.frames.jsonl.gz`; `Scenario` in code. Every scenario plays through ESPN's decode, and only its recorded frames. | fixture, simulation, recorded scenario, slice |
-| **Scenarios** | Every scenario there is, by name: the recordings in a folder, the committed ones in `fixtures/scenarios/` unless a test names another, and reading one back by name; `Scenarios` in code. | scenario store, catalogue |
-| **Scenario unknown** | `SPORTAL_SCENARIO` names no recording; `ScenarioUnknown` in code, with the names there are. | |
-| **Scenario unreadable** | A scenario's file could not be read as gzip'd frames; `ScenarioUnreadable` in code. | |
-| **Scenario time** | The clock a scenario plays on: from the Hub's start, at the scenario's speed. The provider and the Director run on it. A scenario's frames are received at their offsets on it, but what they say, kickoffs among them, stays as recorded. | |
 | **Situation** | Live football state: possession, down, distance, field position, red zone (the 20 and in), timeouts. | context |
 | **Ball spot** | Where a spot is on the field: yards from the home goal line (0–100) and the way its team is going, from a team and its yards to the goal it attacks. | |
 | **Period** | A quarter or an overtime. | quarter (in code) |
@@ -81,7 +76,7 @@ Provider and Source are the two words most likely to be swapped. Provider is alw
 | **Hub** | The server process that owns all shared state. | backend, server |
 | **Hub API** | The Hub's HTTP API, declared once as `SportalApi`: the Hub serves it and every client derives its typed client from it. | REST layer |
 | **Hub config** | Every setting a Hub reads from its environment, decoded once at startup; `HubConfig` in code. | settings, env |
-| **Hub mode** | What a Hub plays: the live day from its providers and sources, or a scenario in their place. | scenario mode, profile |
+| **Hub mode** | What a Hub plays: the live day from its providers and sources. | profile |
 | **Live message** | One update the Hub pushes to clients on the live stream: the slate changed, or the Screen changed; `LiveMessage`, and `LiveMessageJson` its JSON form. | event, notification |
 | **Live stream** | The Hub's server-sent events at `/api/live` that carry live messages; in the web UI, `LiveStream` holds what they said and the connection. | event stream, socket |
 | **Connection** | Whether a client's live stream is up: connecting (never yet connected), connected, or lost (since an instant, retrying). | online, status |
@@ -138,6 +133,7 @@ Names the design uses that no code has yet. Move a row up, into its table, in th
 | **Desk mode** / **Couch mode** | The two presentation densities. | desktop/TV layout |
 | **Preset** | A saved layout with tile assignments. | |
 | **Tile delay** | Seconds that data is held back for a tile to match its video. | offset, latency |
+| **Scenario** | A game day a Hub plays offline in place of its providers and sources. Removed to be designed again ([ADR 0013](docs/adr/0013-scenarios-go.md)). | |
 | **Spoiler shield** | Hiding or delaying scores for chosen games. | |
 | **Follow** | Your declared interest in a team, conference, league, or game. | favourite, subscription |
 | **Persistence** | What the Hub keeps between runs: none for now, added back on top of the simplified model. | storage, database |

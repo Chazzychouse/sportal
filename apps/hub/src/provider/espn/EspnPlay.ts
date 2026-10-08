@@ -70,8 +70,8 @@ function outcomeOf(type: PlayType): PlayOutcome {
   return byId.get(type.id) ?? { _tag: "Other", type }
 }
 
-// Every ESPN play type id the recordings have (fixtures/espn-recordings, this adapter's fixtures, and the recorded
-// scenarios, tallied 2026-10-07), with the case and outcome it reads as and, after it, its text as ESPN spells it.
+// Every ESPN play type id the recordings have (fixtures/espn-recordings, this adapter's fixtures, and the recordings
+// then in fixtures/scenarios, tallied 2026-10-07), with the case and outcome it reads as and, after it, its text as ESPN spells it.
 const types = {
   "5": { _tag: "Rush", touchdown: false }, // Rush
   "68": { _tag: "Rush", touchdown: true }, // Rushing Touchdown

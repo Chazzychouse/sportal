@@ -31,8 +31,6 @@ export class HubConfig extends Context.Service<
     readonly port: number
     readonly host: string
     readonly webRoot: Option.Option<string>
-    readonly scenario: Option.Option<string>
-    readonly scenarioSpeed: number
     readonly logLevel: LogLevel.LogLevel
     readonly logFormat: "pretty" | "json"
     readonly version: string
@@ -48,12 +46,6 @@ export class HubConfig extends Context.Service<
       // Every interface, so a Remote on the home network can reach the Hub.
       host: Config.String("SPORTAL_HOST").pipe(Config.withDefault("0.0.0.0")),
       webRoot: Config.option(Config.String("SPORTAL_WEB_ROOT")),
-      scenario: Config.option(Config.String("SPORTAL_SCENARIO")),
-      // Zero, a negative speed, or NaN would stall or break the scenario clock.
-      scenarioSpeed: Config.schema(
-        Schema.Finite.check(Schema.isGreaterThan(0)),
-        "SPORTAL_SCENARIO_SPEED"
-      ).pipe(Config.withDefault(1)),
       logLevel: Config.LogLevel("SPORTAL_LOG_LEVEL").pipe(Config.withDefault("Info")),
       logFormat: Config.Literals(["pretty", "json"], "SPORTAL_LOG_FORMAT").pipe(Config.withDefault("pretty")),
       version: Config.String("SPORTAL_VERSION").pipe(Config.withDefault("dev")),

@@ -34,23 +34,19 @@ export function tileRects(
 
 /**
  * What the shell must show for each stream tile with a size: its game's view, in window pixels.
- * `origin` is where the Screen area sits in the window; `page` is the web UI's own address, which a source's path
- * (a scenario's synthetic stream) is resolved against. Only `interacting`'s stream gets the mouse.
+ * `origin` is where the Screen area sits in the window. Only `interacting`'s stream gets the mouse.
  */
 export function placements(
   screen: Screen,
   rects: ReturnType<typeof tileRects>,
   origin: { x: number; y: number },
-  page: string,
   interacting: GameId | undefined
 ): Array<TilePlacement> {
   return screen.onScreen().flatMap((tile, index) => {
     const rect = rects[index]
     if (rect === undefined || rect.width === 0 || !Tile.guards.StreamTile(tile)) return []
     const view = {
-      url: tile.channel.locator.url.startsWith("/")
-        ? new URL(tile.channel.locator.url, page).href
-        : tile.channel.locator.url,
+      url: tile.channel.locator.url,
       muted: !screen.hears(tile.game),
       interactive: tile.game === interacting
     }

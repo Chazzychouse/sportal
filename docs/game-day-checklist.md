@@ -39,12 +39,12 @@ Setup: Hub serving the built web UI, desktop shell running, signed in to YouTube
 | 30 | Press `F11`, then solo a tile | Top bar and slate hide; the soloed game fills the screen; `Esc` and `F11` undo each in turn |
 | 31 | Open the command palette (`Ctrl`+`K`) | Only the videos under the palette blank, with sound still on; they return when it closes |
 | 32 | Drag a benched game onto a tile's header | The two swap; the benched game's player starts, the other's closes |
-| 33 | Run `pnpm dev:golden` (`SPORTAL_SCENARIO=crowded-fourth-quarter SPORTAL_SCENARIO_SPEED=10 pnpm dev`), fill four tiles from the strip's six live FBS games | Each tile plays a synthetic stream: colour bars moving, its game's score and clock ticking; no sign-in. Moving audio focus (`1`–`4`) moves the tone you hear. WVU at ISU is in the red zone from the start and WVU goes ahead 34–31 about 9 seconds in; HOU scores on UCF about 30 seconds in; NAVY at AFA goes final about 2 minutes 17 seconds in; ISU retakes the lead 45–42 about 2 minutes 53 seconds in, and the recording ends about 3 minutes in with its last slate held. The field draws each play as it arrives: the ball moves and the play's arrow draws on |
+| 33 | Fill four tiles from live games, move audio focus (`1`–`4`), then show a game with a drive under way as a data tile | Sound moves with focus. The data tile's field draws each play as it arrives: the ball moves and the play's arrow draws on |
 | 34 | With two games playing, rest and move the pointer over each video | No YouTube TV title or controls appear on either |
 | 35 | Click a video that is not the selected tile | That tile becomes selected; playback does not pause or change |
 | 36 | Select a playing tile and press `I`, then use the player's controls with the mouse | The controls appear and work on that tile only; the other tiles still show no controls |
 | 37 | Press `I` again, or select another tile | The player stops getting the mouse; hovering it shows nothing again |
-| 38 | With Docker running, run `pnpm telemetry`, then a scenario at 10× with `SPORTAL_OTLP_URL=http://localhost:4318`, and open the Hub dashboard (`localhost:3000`, folder Sportal) | The dashboard fills; a poll's trace shows its provider calls; logs filter by mode |
+| 38 | With Docker running, run `pnpm dev` during live games, and open the Hub dashboard (`localhost:3000`, folder Sportal) | The dashboard fills; a poll's trace shows its provider calls |
 | 39 | Solo a tile, open the key help, press `Ctrl`+`K` | Only the palette is open. `Esc` closes it; a second `Esc` unsolos |
 | 40 | Select tile 4 in Quad, switch to Single from the Remote | The one tile is selected, and a drop goes into it |
 | 41 | Solo a tile, press `?`, then `Esc` | The key help closes and the tile stays soloed |

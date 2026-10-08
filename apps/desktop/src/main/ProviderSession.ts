@@ -2,7 +2,6 @@ import { Context, Effect, FiberSet, Layer } from "effect"
 import { BrowserWindow, type Session, session, WebContentsView } from "electron"
 import { confine, hostOf, load } from "./Navigation.ts"
 import { sandboxed } from "./Sandbox.ts"
-import { ShellConfig } from "./ShellConfig.ts"
 import { ShellWindow } from "./ShellWindow.ts"
 import { allowedHosts, signInUrl } from "./YouTubeTv.ts"
 
@@ -17,7 +16,7 @@ export class ProviderSession extends Context.Service<
     readonly session: Session
     /** A new view on the provider session, guarded so it can only visit addresses `allows` permits. */
     readonly createView: Effect.Effect<WebContentsView>
-    /** Whether a provider view may load `url`: the provider's pages, or the UI's own scenario streams. */
+    /** Whether a provider view may load `url`: the provider's pages. */
     readonly allows: (url: string) => boolean
     /**
      * Opens a normal-sized window on the provider session at YouTube TV, so the user can sign in once for
@@ -27,12 +26,10 @@ export class ProviderSession extends Context.Service<
     readonly openSignIn: Effect.Effect<void>
   }
 >()("sportal/desktop/main/ProviderSession") {
-  static readonly layer: Layer.Layer<ProviderSession, never, ShellConfig | ShellWindow> = Layer.effect(
+  static readonly layer: Layer.Layer<ProviderSession, never, ShellWindow> = Layer.effect(
     ProviderSession,
     Effect.gen(function* () {
-      const { hubUrl } = yield* ShellConfig
       const parent = yield* ShellWindow
-      const permits = (url: string) => allows(url, hubUrl)
       // Electron's callbacks decide synchronously; only their logging runs as an Effect.
       const log = yield* FiberSet.makeRuntime()
       const providers = session.fromPartition("persist:providers")
@@ -54,13 +51,13 @@ export class ProviderSession extends Context.Service<
 
       return ProviderSession.of({
         session: providers,
-        allows: permits,
+        allows,
         createView: Effect.sync(() => {
           const view = new WebContentsView({
             webPreferences: { ...sandboxed, session: providers }
           })
           // Subframes are left alone: provider pages embed frames from hosts the allowlist does not name.
-          confine(view.webContents, permits, warn, { subframes: false })
+          confine(view.webContents, allows, warn, { subframes: false })
           return view
         }),
         openSignIn: Effect.sync(() => {
@@ -76,7 +73,7 @@ export class ProviderSession extends Context.Service<
             webPreferences: { ...sandboxed, session: providers }
           })
           signIn = window
-          confine(window.webContents, permits, warn, { subframes: false })
+          confine(window.webContents, allows, warn, { subframes: false })
 
           log(
             load(window.webContents, signInUrl).pipe(
@@ -91,15 +88,10 @@ export class ProviderSession extends Context.Service<
   )
 }
 
-/**
- * Provider views may visit the provider and its sign-in pages, and the web UI's own synthetic stream pages for a
- * scenario (`ui` is the address the shell loads the UI from).
- */
-function allows(url: string, ui: string): boolean {
+/** Provider views may visit the provider and its sign-in pages. */
+function allows(url: string): boolean {
   if (!URL.canParse(url)) return false
-  const { protocol, hostname, origin, pathname } = new URL(url)
-  if (URL.canParse(ui) && origin === new URL(ui).origin && pathname.startsWith("/scenario-stream/"))
-    return true
+  const { protocol, hostname } = new URL(url)
   return protocol === "https:" && allowedHosts.includes(hostname)
 }
 

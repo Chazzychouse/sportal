@@ -31,7 +31,7 @@ export function ScreenView(props: {
 
   const shown = dragged === undefined ? props.screen : props.screen.withSplit(dragged)
   const rects = tileRects(shown, area)
-  const placed = placements(shown, rects, area, window.location.origin, props.interacting)
+  const placed = placements(shown, rects, area, props.interacting)
   useVideoAreas(placed)
 
   // The shell hears only placements that changed, so a re-render never cuts a transition short. A change of

@@ -191,31 +191,16 @@ describe("ProviderSession.allows", () => {
     "https://evilyoutube.com/",
     "https://tv.youtube.com.evil.com/",
     "https://tv.youtube.com@evil.com/",
-    "not a url"
-  ])("should refuse %s", (url) => {
-    const allows = allowed(url)
-
-    expect(allows).toBe(false)
-  })
-
-  it.each([
-    "http://127.0.0.1:4401/scenario-stream/401856707",
-    "http://127.0.0.1:4401/scenario-stream/tie-uga-ala"
-  ])("should allow the UI's own scenario stream %s", (url) => {
-    const allows = allowed(url)
-
-    expect(allows).toBe(true)
-  })
-
-  it.each([
+    "not a url",
     "http://127.0.0.1:4401/",
     "http://127.0.0.1:4401/remote",
     "http://127.0.0.1:4401/scenario-stream/../remote",
     "http://127.0.0.1:4401/scenario-stream",
     "http://127.0.0.1:4402/scenario-stream/1",
     "http://localhost:4401/scenario-stream/1",
-    "https://evil.example/scenario-stream/1"
-  ])("should refuse %s, which is not the UI's scenario stream", (url) => {
+    "https://evil.example/scenario-stream/1",
+    "http://127.0.0.1:4401/scenario-stream/401856707"
+  ])("should refuse %s", (url) => {
     const allows = allowed(url)
 
     expect(allows).toBe(false)

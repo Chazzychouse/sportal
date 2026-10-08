@@ -39,7 +39,7 @@ module.exports = {
           "(^apps/hub/src/HubMode\\.ts$|\\.test\\.ts$|^apps/hub/src/provider/[^/]+/|^apps/hub/src/source/youtube-tv/)"
       },
       to: {
-        path: "^apps/hub/src/(provider/[^/]+/|source/youtube-tv/|scenario/Scenario(Source|Clock)\\.ts$)"
+        path: "^apps/hub/src/(provider/[^/]+/|source/youtube-tv/)"
       }
     },
     {
@@ -48,7 +48,7 @@ module.exports = {
       severity: "error",
       from: { pathNot: "(^apps/hub/src/provider/espn/|\\.test\\.ts$)" },
       to: {
-        path: "^apps/hub/src/provider/espn/(EspnProvider|EspnDecoder|FastCast|ScenarioProvider)\\.ts$"
+        path: "^apps/hub/src/provider/espn/(EspnProvider|EspnDecoder|FastCast)\\.ts$"
       }
     },
     {

@@ -1,8 +1,7 @@
 import { assert, describe, it } from "@effect/vitest"
-import { ChannelAvailability } from "@sportal/domain/Channel"
 import type { GameId } from "@sportal/domain/Game"
 import { Screen } from "@sportal/domain/Screen"
-import { assign, bama, fill, irish, nowhere, onFox, soloed } from "@sportal/domain/TestScreen"
+import { bama, fill, irish, nowhere, soloed } from "@sportal/domain/TestScreen"
 import { Result } from "effect"
 import { coveredGames, placements, tileRects } from "./TileRects.ts"
 
@@ -36,23 +35,6 @@ describe("tileRects", () => {
 })
 
 describe("placements", () => {
-  it("should resolve a scenario stream's path against the page's origin, leaving full addresses alone", () => {
-    const scenario = {
-      name: "CBS",
-      source: "Scenario" as const,
-      locator: { _tag: "WebView" as const, url: "/scenario-stream/401856707" }
-    }
-    const carriedOnScenario = () => ChannelAvailability.Carried({ channel: scenario })
-    const screen = assign(assign(Screen.initial, 0, bama, carriedOnScenario), 1, irish, onFox)
-
-    const urls = placed(screen).map((placement) => placement.url)
-
-    assert.deepStrictEqual(urls, [
-      "http://127.0.0.1:4401/scenario-stream/401856707",
-      "https://tv.youtube.com/watch/fox"
-    ])
-  })
-
   it("should place a stream tile's video below its header, offset by the Screen area's position", () => {
     const screen = fill([bama, irish])
 
@@ -140,7 +122,7 @@ const area = { width: 1600, height: 900 }
 
 /** The placements of `screen`'s streams in the Screen area, on the dev server's origin. */
 function placed(screen: Screen, interacting?: GameId, offset = { x: 0, y: 0 }) {
-  return placements(screen, tileRects(screen, area), offset, "http://127.0.0.1:4401", interacting)
+  return placements(screen, tileRects(screen, area), offset, interacting)
 }
 
 /** `game`'s video, 200 by 100 at 100,100. */

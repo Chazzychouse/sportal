@@ -73,33 +73,24 @@ describe("Telemetry", () => {
     })
   )
 
-  it.effect("should name the Hub, its version, and the live mode in the resource", () =>
+  it.effect("should name the Hub and its version in the resource", () =>
     Effect.gen(function* () {
       const resource = yield* resourceOf({})
 
       assert.strictEqual(resource.get("service.name"), "sportal-hub")
       assert.strictEqual(resource.get("service.version"), "1.2.3")
-      assert.strictEqual(resource.get("sportal.mode"), "live")
-    })
-  )
-
-  it.effect("should name a scenario's mode in the resource", () =>
-    Effect.gen(function* () {
-      const resource = yield* resourceOf({ SPORTAL_SCENARIO: "bogus-clock-two-minute" })
-
-      assert.strictEqual(resource.get("sportal.mode"), "scenario:bogus-clock-two-minute")
     })
   )
 
   it.effect("should name this process in the resource, a new instance each time the Hub starts", () =>
     Effect.gen(function* () {
-      const live = yield* resourceOf({})
-      const instance = live.get("service.instance.id")
+      const first = yield* resourceOf({})
+      const instance = first.get("service.instance.id")
 
-      const scenario = yield* resourceOf({ SPORTAL_SCENARIO: "bogus-clock-two-minute" })
+      const second = yield* resourceOf({})
 
       assert.isNotEmpty(instance)
-      assert.notStrictEqual(scenario.get("service.instance.id"), instance)
+      assert.notStrictEqual(second.get("service.instance.id"), instance)
     })
   )
 
