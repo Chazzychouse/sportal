@@ -6,7 +6,7 @@ import type { RecentPlays } from "@sportal/domain/RecentPlays"
 import { Cause, Data, DateTime, Effect, Equal, Option } from "effect"
 import { Acknowledgement } from "./Acknowledgement.ts"
 import { Delivery, type DeliverySource } from "./Delivery.ts"
-import { SlateObservation, type TookOutcome } from "./SlateObservation.ts"
+import { SlateObservation } from "./SlateObservation.ts"
 
 /**
  * The slate: each league's last listing, every current game as its snapshot, its plays and its acknowledgement, taken
@@ -73,7 +73,7 @@ export class Slate extends Data.Class<{
   }
 
   /** Game `id`'s state at `reached`; none when the slate does not hold it. */
-  state(id: GameId): Option.Option<ReturnType<Acknowledgement["state"]>> {
+  state(id: GameId) {
     return Option.flatMap(this.reached, (at) =>
       Option.map(heldIn(this, id), ({ snapshot, acknowledgement }) => acknowledgement.state(snapshot, at))
     )
@@ -163,10 +163,7 @@ export interface Taken {
 }
 
 /** A game as the slate holds it: its snapshot and its acknowledgement. */
-interface Held {
-  readonly snapshot: GameSnapshot
-  readonly acknowledgement: Acknowledgement
-}
+type Held = Option.Option.Value<ReturnType<Acknowledgement["took"]>["next"]>
 
 /**
  * A take or tick under way: what the slate holds so far, and what it has said. `games`, `plays` and `acknowledged` hold
@@ -213,7 +210,7 @@ class Advancing extends Data.Class<{
     id: GameId,
     instants: { readonly since: DateTime.Utc; readonly at: DateTime.Utc },
     current: Option.Option<Held>,
-    step: { readonly next: Option.Option<Held>; readonly events: ReadonlyArray<GameEventKind> },
+    step: Pick<ReturnType<Acknowledgement["took"]>, "next" | "events">,
     plays: ReadonlyArray<Play>
   ): Advancing {
     const { since, at } = instants
@@ -338,10 +335,7 @@ function playsTaken(
 
 /** The earliest instant after `from` at which a game `holding` holds changes, or its state turns, with no new frame. */
 function dueAfter(
-  holding: {
-    readonly games: ReadonlyMap<GameId, GameSnapshot>
-    readonly acknowledged: ReadonlyMap<GameId, Acknowledgement>
-  },
+  holding: Pick<Slate, "games" | "acknowledged">,
   from: DateTime.Utc
 ): Option.Option<DateTime.Utc> {
   return Acknowledgement.earliest(
@@ -350,21 +344,12 @@ function dueAfter(
 }
 
 /** Every game `holding` holds, in the order it first held them. */
-function everyHeld(holding: {
-  readonly games: ReadonlyMap<GameId, GameSnapshot>
-  readonly acknowledged: ReadonlyMap<GameId, Acknowledgement>
-}): ReadonlyArray<Held> {
+function everyHeld(holding: Pick<Slate, "games" | "acknowledged">): ReadonlyArray<Held> {
   return [...holding.acknowledged.keys()].flatMap((id) => Option.toArray(heldIn(holding, id)))
 }
 
 /** Game `id` as `holding` holds it; none when it holds none. */
-function heldIn(
-  holding: {
-    readonly games: ReadonlyMap<GameId, GameSnapshot>
-    readonly acknowledged: ReadonlyMap<GameId, Acknowledgement>
-  },
-  id: GameId
-): Option.Option<Held> {
+function heldIn(holding: Pick<Slate, "games" | "acknowledged">, id: GameId): Option.Option<Held> {
   return Option.all({
     snapshot: Option.fromNullishOr(holding.games.get(id)),
     acknowledgement: Option.fromNullishOr(holding.acknowledged.get(id))
@@ -374,13 +359,7 @@ function heldIn(
 /** Each listed game, in listed order, as the slate has it (current, or as its final once finished), or as listed. */
 function asHeld(
   listed: ReadonlyArray<GameSnapshot>,
-  {
-    games,
-    finished
-  }: {
-    readonly games: ReadonlyMap<GameId, GameSnapshot>
-    readonly finished: ReadonlyMap<GameId, GameSnapshot>
-  }
+  { games, finished }: Pick<Slate, "games" | "finished">
 ): ReadonlyArray<GameSnapshot> {
   return listed.map((game) => games.get(game.id) ?? finished.get(game.id) ?? game)
 }
@@ -431,7 +410,7 @@ function without<A>(map: ReadonlyMap<GameId, A>, id: GameId): ReadonlyMap<GameId
  */
 function gameStepOf(
   current: Option.Option<Held>,
-  step: { readonly next: Option.Option<Held> },
+  step: Pick<ReturnType<Acknowledgement["took"]>, "next">,
   { since, at }: { readonly since: DateTime.Utc; readonly at: DateTime.Utc }
 ): GameStep {
   return Option.match(current, {
@@ -486,11 +465,7 @@ function snapshotTaken(
       )
     )
     const step = Option.match(current, {
-      onNone: (): {
-        readonly next: Option.Option<Held>
-        readonly events: ReadonlyArray<GameEventKind>
-        readonly outcome: TookOutcome
-      } => ({
+      onNone: (): ReturnType<Acknowledgement["took"]> => ({
         next: Option.some({ snapshot, acknowledgement: Acknowledgement.first(from, at) }),
         events: [],
         outcome: "taken"

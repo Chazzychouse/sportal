@@ -679,10 +679,7 @@ describe("Acknowledgement.earliest", () => {
 })
 
 /** A game as the slate holds it: its snapshot and its acknowledgement. */
-interface Game {
-  readonly snapshot: GameSnapshot
-  readonly acknowledgement: Acknowledgement
-}
+type Game = Option.Option.Value<ReturnType<Acknowledgement["took"]>["next"]>
 
 /** `snapshot`, first heard from `from` at `now`. */
 function first(snapshot: GameSnapshot, from: DeliverySource, now: DateTime.Utc): Game {

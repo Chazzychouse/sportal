@@ -216,20 +216,14 @@ function annotationsOf(snapshot: GameSnapshot) {
 }
 
 /** Game `game`'s state at `at`. */
-function stateOf(
-  {
-    snapshot,
-    acknowledgement
-  }: { readonly snapshot: GameSnapshot; readonly acknowledgement: Acknowledgement },
-  at: DateTime.Utc
-): GameState {
+function stateOf({ snapshot, acknowledgement }: Held, at: DateTime.Utc): GameState {
   return acknowledgement.state(snapshot, at)
 }
 
 /** Info for a game that is current, Debug otherwise. */
 const logLifecycle = Effect.fnUntraced(function* (
   what: "started" | "stopped",
-  game: { readonly snapshot: GameSnapshot; readonly acknowledgement: Acknowledgement },
+  game: Held,
   now: DateTime.Utc
 ) {
   const { snapshot, acknowledgement } = game
@@ -259,8 +253,8 @@ const gaugeByState = Effect.fnUntraced(function* (slate: Slate) {
 
 /** A change of game state, from `before` at `since` to `after` at `now`, logged and counted; nothing when it is none. */
 const logTransition = Effect.fnUntraced(function* (
-  before: { readonly snapshot: GameSnapshot; readonly acknowledgement: Acknowledgement },
-  after: { readonly snapshot: GameSnapshot; readonly acknowledgement: Acknowledgement },
+  before: Held,
+  after: Held,
   since: DateTime.Utc,
   now: DateTime.Utc
 ) {
@@ -320,6 +314,9 @@ const logDefect = Effect.fnUntraced(function* (
 })
 
 type GameState = ReturnType<Acknowledgement["state"]>
+
+/** A game as the slate holds it: its snapshot and its acknowledgement. */
+type Held = Option.Option.Value<ReturnType<Acknowledgement["took"]>["next"]>
 
 // Each state's value on `sportal_game_state`, where 0 is a game the slate has let go. Written as a record so that a new
 // state fails to compile here.

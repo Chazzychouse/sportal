@@ -89,19 +89,13 @@ export class Acknowledgement extends Data.Class<{
   ticked(
     game: GameSnapshot,
     now: DateTime.Utc
-  ): {
-    readonly next: Option.Option<{
-      readonly snapshot: GameSnapshot
-      readonly acknowledgement: Acknowledgement
-    }>
-    readonly events: ReadonlyArray<GameEventKind>
-    readonly fellBack: boolean
-  } {
+  ): Omit<ReturnType<Acknowledgement["took"]>, "outcome"> & { readonly fellBack: boolean } {
     const due = Option.filter(this.held, ({ until }) => DateTime.isGreaterThanOrEqualTo(now, until))
 
     return Option.match(due, {
       onNone: () => ({ next: Option.none(), events: [], fellBack: false }),
       onSome: ({ snapshot }) => ({
+        // The held snapshot applies as the poll's, heard now: the push is no longer followed, and nothing is held.
         next: Option.some({ snapshot, acknowledgement: Acknowledgement.first("poll", now) }),
         events: snapshot.eventsSince(game),
         fellBack: true
@@ -189,14 +183,7 @@ export class Acknowledgement extends Data.Class<{
     game: GameSnapshot,
     snapshot: GameSnapshot,
     now: DateTime.Utc
-  ): {
-    readonly next: Option.Option<{
-      readonly snapshot: GameSnapshot
-      readonly acknowledgement: Acknowledgement
-    }>
-    readonly events: ReadonlyArray<GameEventKind>
-    readonly outcome: TookOutcome
-  } {
+  ): ReturnType<Acknowledgement["took"]> {
     const waitingOn = Option.match(this.held, { onNone: () => game, onSome: (held) => held.snapshot })
     if (snapshot.isAheadOf(waitingOn)) {
       const until = Option.match(this.held, {
@@ -218,11 +205,7 @@ export class Acknowledgement extends Data.Class<{
 }
 
 /** A snapshot behind the game: nothing changes. */
-const behind: {
-  readonly next: Option.Option<{ readonly snapshot: GameSnapshot; readonly acknowledgement: Acknowledgement }>
-  readonly events: ReadonlyArray<GameEventKind>
-  readonly outcome: "behind"
-} = { next: Option.none(), events: [], outcome: "behind" }
+const behind: ReturnType<Acknowledgement["took"]> = { next: Option.none(), events: [], outcome: "behind" }
 
 /** Over, and `snapshot` is ahead of its end: overtime after a spurious final, or a postponed game resuming. */
 function resumedBy(game: GameSnapshot, snapshot: GameSnapshot): boolean {

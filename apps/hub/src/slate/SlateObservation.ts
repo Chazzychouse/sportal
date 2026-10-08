@@ -18,7 +18,7 @@ export type SlateObservation = Data.TaggedEnum<{
     readonly had: Option.Option<GameSnapshot>
   }
   Started: {
-    readonly after: { readonly snapshot: GameSnapshot; readonly acknowledgement: Acknowledgement }
+    readonly after: Held
     readonly at: DateTime.Utc
   }
   /**
@@ -26,13 +26,13 @@ export type SlateObservation = Data.TaggedEnum<{
    * whose state only turned, as a live game going stale does, is the same before and after.
    */
   Changed: {
-    readonly before: { readonly snapshot: GameSnapshot; readonly acknowledgement: Acknowledgement }
-    readonly after: { readonly snapshot: GameSnapshot; readonly acknowledgement: Acknowledgement }
+    readonly before: Held
+    readonly after: Held
     readonly since: DateTime.Utc
     readonly at: DateTime.Utc
   }
   Stopped: {
-    readonly after: { readonly snapshot: GameSnapshot; readonly acknowledgement: Acknowledgement }
+    readonly after: Held
     readonly at: DateTime.Utc
   }
   Dropped: { readonly game: GameId }
@@ -43,3 +43,6 @@ export const SlateObservation = Data.taggedEnum<SlateObservation>()
 
 /** What taking a snapshot did: taken, ignored as behind, or held by a covered game. */
 export type TookOutcome = "taken" | "behind" | "held"
+
+/** A game as the slate holds it: its snapshot and its acknowledgement. */
+type Held = Option.Option.Value<ReturnType<Acknowledgement["took"]>["next"]>
