@@ -359,6 +359,16 @@ describe("EspnProvider.deliveries", () => {
     }).pipe(withMetrics)
   )
 
+  it.effect("should give each run of its deliveries every frame", () =>
+    Effect.gen(function* () {
+      const first = yield* listedBy("nfl")
+      const second = yield* listedBy("nfl")
+
+      assert.strictEqual(first.length, 16)
+      assert.strictEqual(second.length, 16)
+    }).pipe(Effect.provide(recordedEspn(fbsLive)))
+  )
+
   it.effect("should deliver FastCast's frames beside its polls", () =>
     Effect.gen(function* () {
       const pushed = Frame.Pushed({
@@ -470,6 +480,7 @@ describe("EspnProvider.deliveries", () => {
 })
 
 describe("EspnProvider over FastCast", () => {
+  // Depends on recorded games 401872974/401872976 being upcoming in the 18:00Z scoreboard and the clock staying at epoch.
   it.effect(
     "should subscribe to a listed live game once, and once more only after a gap in its messages",
     () =>
