@@ -46,7 +46,7 @@ Setup: Hub serving the built web UI, desktop shell running, signed in to YouTube
 | 37 | Press `I` again, or select another tile | The player stops getting the mouse; hovering it shows nothing again |
 | 38 | With Docker running, run `pnpm dev` during live games, and open the Hub dashboard (`localhost:3000`, folder Sportal) | The dashboard fills; a poll's trace shows its provider calls |
 | 39 | Solo a tile, open the key help, press `Ctrl`+`K` | Only the palette is open. `Esc` closes it; a second `Esc` unsolos |
-| 40 | Select tile 4 in Quad, switch to Single from the Remote | The one tile is selected, and a drop goes into it |
+| 40 | Select tile 4 in Quad, switch to Single with `L` or the top bar's layout picker | The one tile is selected, and a drop goes into it |
 | 41 | Solo a tile, press `?`, then `Esc` | The key help closes and the tile stays soloed |
 | 42 | During a live NFL game with `pnpm telemetry` and the Hub on `SPORTAL_OTLP_URL=http://localhost:4318`, open the Live feed row of the Hub dashboard (mode `live`) | Connected shows 1; Connects in range stays at 1; Errors by reason is empty; Live feed logs show no refused or empty subscription. Take traces on the same dashboard list `Board.take` spans, each with its `sportal.deliveries` count |
 | 43 | During a live game, note one game's score and its recent plays on the strip, stop the Hub, start it, and look again | The slate is empty until the first poll, then shows the game at its current score; its recent plays come back once FastCast follows its topic again |
@@ -54,5 +54,8 @@ Setup: Hub serving the built web UI, desktop shell running, signed in to YouTube
 | 45 | Once, on a live college Saturday, with the Hub on `SPORTAL_OTLP_URL=http://localhost:4318` | Confirm the college `gp-` topic, `gp-football-college-football-<id>`, is the one ESPN serves: a college game shows `Plays` deliveries and its plays arrive on the strip, and Live feed logs show no refused or empty subscription. Unverified until a live college day; if the topic name is wrong, record it |
 | 46 | Once, while a game is live, make a FastCast topic lose its document (cut the network briefly) | An `EspnState: <topic> lost its document (…)` Warning is logged, then `FastCast: following <topic> again from its checkpoint` (Info). The socket re-sends `S` for that topic and a fresh `H` (checkpoint) arrives. Checkpoint failures on the Hub dashboard does not rise (it counts only checkpoints that fail to load or decode; each topic is followed again every 30 s, five tries in all, then left to polling), and the game's plays carry on. Unverified live: if no `H` comes back, record it |
 | 47 | With a game live, put it on a data tile (a game with no stream) | The tile draws the field with the ball at the game's spot; each new play animates on it, the field dims when the ball is out of play, and a busy stretch of plays does not stall it |
+| 48 | Fill tiles, change the layout, reload the web UI (`Ctrl`+`R` in the shell) | The Screen comes back as it was: the same layout, tiles and audio focus |
+| 49 | Open the web UI in a second browser and change its layout | Each keeps its own Screen; neither follows the other |
+| 50 | The next day, start the shell | Yesterday's tiles are still there: a game no longer on the slate keeps its tile until cleared, and a stream tile may load a channel now showing something else. Clear them by hand (known, until persistence is designed) |
 
 Record the date, the build, and any row that failed.

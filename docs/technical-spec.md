@@ -348,7 +348,7 @@ YouTube TV's channels are found in its own guide, read by the shell and handed t
 
 - State: a layout (`Single`, `Pair`, `Quad`, `MainThree`, `MainFive`), each layout's split, the tiles (each empty, stream, or data), audio focus, and solo. The first `Screen.slotCount(layout)` tiles are on screen, main tile first; the rest are the **bench**, kept in order and not played. Audio focus and solo name a game, so they follow it when tiles move.
 - Commands: `Assign`, `Clear`, `Swap`, `Promote`, `SetLayout`, `SetSplit`, `Solo`, `Unsolo`, `FocusAudio`. `LoadPreset` comes with presets.
-- Invariants, enforced only here: a game appears in at most one tile, on screen or benched; audio focus is an on-screen game (the focused one while it is on screen, else the first), or none on an empty screen; solo is an on-screen game; dividers stay within 0.2–0.8. Still to come: stream tiles per source across **all** Displays never exceed that source's budget, and an assignment beyond it becomes a data tile.
+- Invariants, enforced only here: a game appears in at most one tile, on screen or benched; audio focus is an on-screen game (the focused one while it is on screen, else the first), or none on an empty screen; solo is an on-screen game; dividers stay within 0.2–0.8. A stream budget per source across **all** Displays is not a Screen invariant and is not enforced here: keeping every Display's stream tiles within a source's budget will need the Hub's coordination ([ADR 0015](./adr/0015-each-display-owns-its-screen.md)).
 - Geometry: the web's `Layout#slots` gives each slot as fractions of the Screen area. The web UI turns them into pixels once and uses the same numbers for its tile chrome and the shell's tile placements, so the two move together along one **Screen transition** (280 ms, `cubic-bezier(0.2, 0, 0, 1)`), which the shell follows by moving each view's bounds.
 - Full screen is the Display's window, local to it, and is not Screen state.
 
@@ -360,8 +360,8 @@ Designed in full in `docs/specs/2026-10-03-director-design.md`.
 
 - What makes a game worth watching is still to be designed again: the first watchability score is gone, and the
   Director's rules read game events and plays.
-- A **Trigger** is a condition over events and snapshots; a **Rule** binds a trigger to a screen command and a revert condition.
-- The Director runs in the Hub, so it works with no client focused. It publishes a ranking of games, and each Display decides how its layout shows it ([ADR 0015](./adr/0015-each-display-owns-its-screen.md)).
+- Automation is planned: a **Trigger** is a condition over events and snapshots, and a **Rule** will move games in a ranking by watchability, never send a screen command.
+- The Director runs in the Hub, so it works with no client focused. It will publish a ranking of games, and each Display will decide how its layout shows it ([ADR 0015](./adr/0015-each-display-owns-its-screen.md)).
 - A manual command on a tile suppresses automation on that tile for a cooldown.
 
 ### 5.5 Time and the spoiler shield

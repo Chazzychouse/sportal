@@ -18,6 +18,8 @@ module lives in the web app.
 ## Consequences
 
 Two sources for one game are two answers, not a conflict the Hub settles. A command costs no round trip. A Display's
-Screen lasts as long as its browser keeps it. When automation comes, the Hub delivers a ranking of games by
-watchability, not screen commands, and each Display decides how its layout shows it. A stream budget shared across
-Displays will need the Hub's coordination; the Remote comes back with its own design.
+Screen lasts as long as its browser keeps it. A Display keeps its Screen in its browser until persistence is designed,
+so a Screen outlives the day: a game no longer on the slate keeps its tile until someone clears it. When automation
+comes, the Hub delivers a ranking of games by watchability, not screen commands, and each Display decides how its
+layout shows it. A stream budget shared across Displays will need the Hub's coordination; the Remote comes back with
+its own design.

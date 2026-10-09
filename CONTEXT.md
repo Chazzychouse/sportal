@@ -143,6 +143,6 @@ Names the design uses that no code has yet. Move a row up, into its table, in th
 | **Persistence** | What the Hub keeps between runs: none for now, added back on top of the simplified model. | storage, database |
 | **Game event** | Something that happened in a game (a score, a turnover, a play, a period ending), derived from a game's snapshot changes and plays. The code had it and dropped it while nothing read it; the Director's rules derive it again. | alert, update |
 | **Trigger** | A condition over game events and snapshots. | |
-| **Rule** | A trigger bound to a screen command and a revert condition. | automation |
+| **Rule** | A trigger bound to how it moves games in the Director's ranking by watchability; it sends no screen command. | automation |
 | **Alert** | A user-facing notification produced by a rule. | event |
 | **Ticket** | A bet you have placed, tracked by the betting lens (later). | bet, wager |
