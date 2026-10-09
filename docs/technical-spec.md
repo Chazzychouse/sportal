@@ -7,7 +7,7 @@
 
 1. **Video is not ours.** Provider players are opaque, DRM-protected web pages. Sportal positions, tunes, and mutes them; it never touches the media. Everything about video goes through a narrow **Source** boundary.
 2. **Data is unofficial.** Feeds can change shape without notice. Everything about game data goes through a narrow **Provider** boundary and is decoded on the way in.
-3. **One Hub, many devices.** A desk display, a TV display, and a phone remote must agree on what is on screen. Therefore all shared state — games, follows, and the state of every Screen — lives in the Hub. Clients render and send commands.
+3. **One Hub, many devices.** A desk display and a TV display must agree on the games, their scores, and where each can be streamed. Therefore that shared state lives in the Hub. Each Display owns its own Screen and applies its own commands.
 4. **The Hub is portable.** It is a plain server process configured entirely by environment, keeping nothing between runs for now. Local today, cloud later, same code.
 5. **The tracker stands alone.** Every feature except video playback works in any browser on any device.
 6. **One definition per concept.** A domain concept is declared once, as an Effect Schema, and that one declaration serves as the type, the decoder, and the wire format.
@@ -63,7 +63,7 @@ flowchart LR
 
   subgraph hub[Hub — one server process]
     prov[Providers]
-    director[Director: the slate of games and the one Screen, in memory; its rules not built]
+    director[Director: the slate of games, in memory; its rules not built]
     api[HTTP API + live stream]
   end
 
@@ -73,37 +73,31 @@ flowchart LR
     views[Provider web views]
   end
 
-  subgraph remote[Remote — phone or browser]
-    ui2[Web UI]
-  end
-
   espn --> prov
   cfbd --> prov
   prov -- decoded frames --> director
-  director -- listed games with recent plays, the Screen --> api
-  api -- screen commands --> director
+  director -- listed games with recent plays, each beside every source's availability --> api
   api <--> ui1
-  api <--> ui2
   ui1 -- tile rectangles --> main --> views
   yttv --> views
 ```
 
-- **Hub** — takes what its providers' frames say, as they arrive, into the Director's slate (the listed games, each with its latest snapshot and plays), and the Director holds the authoritative **Screen** in memory beside it (one, until a second Display needs its own) and will run its rules. Serves the web UI's static files, the HTTP API, and one live stream per client.
-- **Web UI** — one codebase for desk, couch, and phone. It renders Hub state and sends commands. It contains no business rules.
+- **Hub** — takes what its providers' frames say, as they arrive, into the Director's slate (the listed games, each with its latest snapshot and plays), and will run its rules. It publishes the slate, each game beside every source's answer for where it can be streamed. Serves the web UI's static files, the HTTP API, and one live stream per client.
+- **Web UI** — one codebase for desk and couch. It renders Hub state, and its Display owns its Screen: it applies screen commands and chooses between sources.
 - **Desktop shell** — loads the web UI from the Hub, registers as a Display, and mirrors that Display's stream tiles into native provider web views. It is told the Hub's address by configuration (`SPORTAL_HUB_URL`, read once into `ShellConfig`) and never starts a Hub.
 
-### 3.1 Why Screen state lives in the Hub
+### 3.1 Why each Display owns its Screen
 
-The phone must be able to change what the TV shows, and the Director's rules must be able to promote a game while no one is touching anything. If each client owned its Screen, both would need client-to-client messaging. With the Hub as owner there is one path for everyone:
+Each Display runs its own Screen, so a command costs no round trip and a second Display needs no keyed session on the Hub ([ADR 0015](./adr/0015-each-display-owns-its-screen.md)). The Hub publishes what every Display shares, and the Display does the rest:
 
 ```
-command (from UI, remote, hotkey, or the Director's rules)
-  -> Hub applies it to the pure Screen state machine
-  -> new Screen state is stored and broadcast
+command (from UI, hotkey, or palette)
+  -> the Display's Screen applies it, against the availability each slate brought
+  -> the new Screen is kept in the browser
   -> the Display's UI re-renders; the shell re-syncs its views
 ```
 
-On a local network the round trip is a few milliseconds. If a cloud-hosted Hub ever makes it noticeable, the client can apply the same pure function optimistically — the function is in the shared package for that reason.
+When automation is built, the Hub publishes a ranking of games by watchability, and each Display decides how its layout shows it. A stream budget shared across Displays will need the Hub's coordination.
 
 ### 3.2 How the shell treats provider players
 
@@ -175,7 +169,6 @@ sportal/
 │   │       ├── Channel.ts      SourceName, Channel, ChannelAvailability
 │   │       ├── Guide.ts        Guide, Airing, ChannelId, GuideUnreadable
 │   │       ├── Stream.ts       StreamLocator
-│   │       ├── Screen.ts        Tile, LayoutName, Split, Screen state, slot counts and split bounds, ScreenCommand, ScreenRejection, apply, invariants
 │   │       └── TestGame.ts     Game snapshots and plays for tests
 │   │
 │   └── api/                    The contracts between processes.
@@ -192,12 +185,12 @@ sportal/
     │       ├── main.ts             Composition root: the Hub's layer pipe, run until a signal stops it; the only file that chooses providers and sources, ESPN's through `Espn`
     │       ├── HubConfig.ts        Every environment setting, in one place
     │       ├── Telemetry.ts        Log level and format; OTLP export when configured
-    │       ├── Director.ts         The one holder of the slate and the Screen: takes each frame's deliveries as they arrive, applies screen commands, refreshes availability
+    │       ├── Director.ts         The one holder of the slate: takes each frame's deliveries as they arrive and publishes it beside each game's availability
     │       ├── Slate.ts            The fold: every delivery taken in order into an ordered list of games, each with its latest snapshot and its plays
     │       ├── HubStopping.ts      Whether a task that should run until the Hub stops ended because it is stopping, and the Error log unless it did
     │       ├── TestTelemetry.ts    Layers for tests
     │       ├── TestDirector.ts     The Director taking a fed provider, and what it takes of a test's frames
-    │       ├── HubServer.ts        Serves the API, the live stream, the addresses a phone can reach, and the web UI's files
+    │       ├── HubServer.ts        Serves the API, the live stream, and the web UI's files
     │       ├── provider/
     │       │   ├── Provider.ts     The port: `deliveries`, each frame's in order, and `Delivery`, what a frame said; `layerTest`, the provider tests feed
     │       │   ├── TestProvider.ts What the provided `Provider` lists, and what ESPN's decode says of a test's frames
@@ -233,11 +226,10 @@ sportal/
     │       ├── display/            This device's Display: state and rules, hotkeys, full screen, overlays, top bar, command palette
     │       ├── hub/                HubClient (typed client from SportalApi), LiveStream (the live stream, as an atom), HubRuntime
     │       ├── slate/              The slate strip and its cards
-    │       ├── screen/              The Screen: tiles, dividers, tile actions, rejections
+    │       ├── screen/             The Screen (state, commands, source choice), this Display's copy of it, tiles, dividers, tile actions, rejections
     │       ├── layout/             Layout (the geometry: slots, dividers, next, clamp), its picker and glyphs
     │       ├── game/               A game's status, score, and logo, as slate and tiles show them; the field, which draws a game's plays
-    │       └── remote/             The phone Remote: screen map, join QR code
-    │
+        │
     └── desktop/
         └── src/
             ├── main/
@@ -262,7 +254,7 @@ Tests sit beside the file they test as `Game.test.ts`. A module grows into a fol
 
 ### 4.3 Inside a file
 
-The same standard applies within a file as across the tree: a file is not a junk drawer either. Someone opens `Director.ts` to read how the Director takes its provider's frames and applies screen commands, and that is what they should see first.
+The same standard applies within a file as across the tree: a file is not a junk drawer either. Someone opens `Director.ts` to read how the Director takes its provider's frames and publishes the slate, and that is what they should see first.
 
 1. **The main thing comes first.** A file leads with the concept it is named for — the schema, the service, the component. A reader should reach the main behaviour without scrolling past anything.
 2. **Supporting code goes below, not above.** Private helpers are written as hoisted `function` declarations beneath the code that uses them, in the order they are first used. No stack of small helpers piled on top of the thing the file exists for.
@@ -304,24 +296,21 @@ class Provider extends Context.Service<Provider, {
 - The Hub composes providers per league: ESPN for NFL; ESPN with CollegeFootballData filling gaps for FBS. The composition is itself a `Provider`, so the Director sees one.
 - Each adapter's tests are "this recorded frame decodes to this delivery".
 
-**Director** — the one holder of the day's slate and the Screen, between the provider and everything that reads games
-or changes the Screen. Not a port: one implementation (`docs/adr/0009-one-fold-not-actors.md`, amended by
+**Director** — the one holder of the day's slate, between the provider and everything that reads games. Not a port: one implementation (`docs/adr/0009-one-fold-not-actors.md`, amended by
 [ADR 0012](./adr/0012-no-persistence-one-take.md)):
 
 ```ts
 class Director extends Context.Service<Director, {
   readonly slate: Effect<Slate>
   readonly slateChanges: Stream<Slate>               // the latest first, then each change
-  readonly screen: Effect<Screen>
-  readonly screenChanges: Stream<Screen>               // the latest first, then each change
-  dispatch(command: ScreenCommand): Effect<Screen, ScreenRejection>
+  readonly published: Stream<SlateChanged>           // the latest first, then each change of the slate or a source
 }>()("sportal/hub/Director") {}
 ```
 
 - The `Slate` (`Slate.ts`) is the fold: an ordered list of `Game`s, leagues in `LeagueId` order and each league's in its listing's order, each with its latest `GameSnapshot` and its plays. `take(deliveries)` on it is pure and returns the next slate and its slate changes; a take that changes nothing gives back the same slate.
 - The Director starts from an empty slate and takes each frame's deliveries as they arrive, in one `Director.take` span carrying its `sportal.deliveries` count, and, from the slate changes each take gives, gauges each game whose snapshot changed by its progress (`sportal_game_state`: 1 upcoming, 2 live, 3 over, 0 once no listing names it), which the Hub dashboard's Games table reads, and logs each play a take adds (Info, annotated with `game`, `league`, `matchup`, `play` and `scoring`). For now nothing is kept between runs: a restarted Hub serves an empty slate until its provider's next poll lists the day's games.
 - A take that raises a defect is an Error log; the slate keeps what it had and takes the next frame. If the provider's frames end other than by the Hub stopping, that is an Error log and the slate stays as it is.
-- `Slate.published()` is each listed game as the slate has it, carrying only its last ten plays (`Game#recent`, on `SlateChanged`); the Hub server sends it within 250 ms of a change, and `dispatch` reads the slate's games for where each can be streamed.
+- `Slate.published(availabilityOf)` is each listed game as the slate has it, carrying only its last ten plays (`Game#recent`), beside every source's answer for it (`SlateChanged`); the Hub server sends it within 250 ms of a change to the slate or to a source.
 - `main.ts` provides it over ESPN as the provider and YouTube TV and Twitch as the sources.
 - The Hub's whole shutdown bound is about 4 s: the HTTP server's 3 s for connected Displays, then telemetry's 1 s to export what it holds.
 
@@ -334,17 +323,17 @@ class Source extends Context.Service<Source, {
 }>()("sportal/hub/source/Source") {}
 ```
 
-`Source.layerAll` runs every source and answers each game with the most useful answer any gives: carried, upcoming, no guide, then not carried; the order sources are listed in never decides between kinds. When a source changes, the Director refreshes the Screen: a stream tile moves only when the guide carries its game on another channel from its own source, so a tile never moves to another source. YouTube TV answers from the guide `GuideReader` keeps; Twitch from its lineup, a guide whose one channel carries Prime Video.
+`Source.layerAll` runs every source and answers each game with every source's answer, in the order the sources are given; it merges nothing. The Display's Screen chooses: the most useful answer (carried, upcoming, no guide, then not carried), and a stream tile moves only when its own source carries its game on another channel, so a tile never moves to another source. YouTube TV answers from the guide `GuideReader` keeps; Twitch from its lineup, a guide whose one channel carries Prime Video.
 
 YouTube TV's channels are found in its own guide, read by the shell and handed to `GuideReader.readGuide` (`docs/history.md`, "Guide-matched channels"); with no fresh guide (a guide is fresh for 45 minutes), it answers "no guide". Twitch's lineup is fixed and never read.
 
 `StreamLocator` is a tagged union. Today it has one member, a web-view address; a new kind is added only when a source needs it.
 
-**Stores** — none, for now. The Hub keeps nothing between runs ([ADR 0012](./adr/0012-no-persistence-one-take.md)); persistence is added back on top of the simplified model. A Screen is not stored either.
+**Stores** — none, for now. The Hub keeps nothing between runs ([ADR 0012](./adr/0012-no-persistence-one-take.md)); persistence is added back on top of the simplified model. A Screen is kept only in its Display's browser.
 
 ### 5.2 Frames and deliveries
 
-- Polling is the provider's own: ESPN polls about every 10 seconds while any game is live, every minute near kickoff, every 15 minutes otherwise. One slate request per league covers every game; detail is fetched only for games someone has open or on a Screen.
+- Polling is the provider's own: ESPN polls about every 10 seconds while any game is live, every minute near kickoff, every 15 minutes otherwise. One slate request per league covers every game; detail is fetched only for games someone has open.
 - A college Saturday is one request for 50+ games, not 50 requests.
 - The provider decodes its own frames; the Director takes each frame's deliveries as they arrive, in the order the provider received its frames. Nothing is logged raw or replayed.
 - The live feed pushes snapshots between polls, and, for each current game, its plays. A pushed game is advanced onto its listed game; one no poll has listed yet is not delivered. The poll gives listings: a listing takes each of its games as a snapshot and forgets the league's games it no longer names. A snapshot of a listed game, polled or pushed, is taken unless it is behind the game: earlier in game time, or at the same game time with fewer points (a poll lagging a pushed score, `isAheadOf`); an over game takes one ahead of its end (overtime after a spurious final, a postponed game resuming), so a lagging poll cannot start a finished game again. There is no tie rule and no hold.
@@ -355,7 +344,7 @@ YouTube TV's channels are found in its own guide, read by the shell and handed t
 
 ### 5.3 Screen
 
-`screen.apply(command, availabilityOf)` is a pure method returning the new Screen or a typed rejection.
+`screen.apply(command, availabilityOf)` (`apps/web/src/screen/Screen.ts`) is a pure method returning the new Screen or a typed rejection; `availabilityOf` gives every source's answer for a game.
 
 - State: a layout (`Single`, `Pair`, `Quad`, `MainThree`, `MainFive`), each layout's split, the tiles (each empty, stream, or data), audio focus, and solo. The first `Screen.slotCount(layout)` tiles are on screen, main tile first; the rest are the **bench**, kept in order and not played. Audio focus and solo name a game, so they follow it when tiles move.
 - Commands: `Assign`, `Clear`, `Swap`, `Promote`, `SetLayout`, `SetSplit`, `Solo`, `Unsolo`, `FocusAudio`. `LoadPreset` comes with presets.
@@ -363,7 +352,7 @@ YouTube TV's channels are found in its own guide, read by the shell and handed t
 - Geometry: the web's `Layout#slots` gives each slot as fractions of the Screen area. The web UI turns them into pixels once and uses the same numbers for its tile chrome and the shell's tile placements, so the two move together along one **Screen transition** (280 ms, `cubic-bezier(0.2, 0, 0, 1)`), which the shell follows by moving each view's bounds.
 - Full screen is the Display's window, local to it, and is not Screen state.
 
-The `Director` in the Hub holds the one Screen in memory, applies commands from any origin, and broadcasts it. Nothing is persisted: a restart starts an empty Screen, and a second Display would need a keyed session.
+Each Display owns its Screen (`DisplayScreen.ts`, an atom kept in localStorage). A screen command written to it is applied against the availability the latest slate brought, and a refused one is published on its `rejected` atom. Each slate from the live stream refreshes its tiles with `screen.refresh`. The Hub holds no Screen.
 
 ### 5.4 Director
 
@@ -372,7 +361,7 @@ Designed in full in `docs/specs/2026-10-03-director-design.md`.
 - What makes a game worth watching is still to be designed again: the first watchability score is gone, and the
   Director's rules read game events and plays.
 - A **Trigger** is a condition over events and snapshots; a **Rule** binds a trigger to a screen command and a revert condition.
-- The Director runs in the Hub, so it works with no client focused and affects every Display consistently.
+- The Director runs in the Hub, so it works with no client focused. It publishes a ranking of games, and each Display decides how its layout shows it ([ADR 0015](./adr/0015-each-display-owns-its-screen.md)).
 - A manual command on a tile suppresses automation on that tile for a cooldown.
 
 ### 5.5 Time and the spoiler shield

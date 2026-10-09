@@ -141,7 +141,7 @@ A reader opens a file to see the thing it is named for. Keep it that way.
 - `pnpm dev` — start the local Grafana (`pnpm telemetry`), then run the Hub, the web dev server, and the desktop shell
   together, each reloading on change. Without Docker it says telemetry is off and runs the rest. The shell
   waits for the UI to come up. Use `pnpm dev:x11` to run the shell through XWayland.
-- `pnpm --filter @sportal/hub dev` — run only the Hub on port 4400 (API and live stream), on every interface so a phone Remote can reach it (`SPORTAL_HOST` narrows it). For
+- `pnpm --filter @sportal/hub dev` — run only the Hub on port 4400 (API and live stream), on every interface (`SPORTAL_HOST` narrows it). For
   now it keeps nothing between runs: a restarted Hub starts from an empty slate and the next poll fills it.
 - Hub settings: every one is a field of `apps/hub/src/HubConfig.ts`, with its variable and default. A bad value stops
   the Hub at startup. `GET /api/health` answers while it is up.
@@ -150,8 +150,8 @@ A reader opens a file to see the thing it is named for. Keep it that way.
   `SPORTAL_OTLP_URL` says otherwise; started any other way, the Hub exports nothing until that is set.
 - Scripts run through pnpm's own shell (`shellEmulator`), so `VAR=x cmd` in a `package.json` script works on every OS.
   Keep scripts to what that shell understands: no bash-only syntax.
-- `pnpm --filter @sportal/web dev` — run only the web UI on port 4401, also on the home network (a phone opens `/remote`), proxying `/api` to the
-  Hub. A firewall must let the home network reach both ports, or a phone loads nothing: on Omarchy,
+- `pnpm --filter @sportal/web dev` — run only the web UI on port 4401, also on the home network, proxying `/api` to the
+  Hub. A firewall must let the home network reach both ports, for another device to load the UI: on Omarchy,
   `sudo ufw allow from 192.168.0.0/24 to any port 4400:4401 proto tcp`.
 - `pnpm --filter @sportal/desktop dev` — run only the desktop shell against the web dev server
   (`SPORTAL_HUB_URL` overrides the address).

@@ -1,10 +1,12 @@
 # 3. The Hub owns Stage state
 
 Date: 2026-10-03
-Status: Accepted
+Status: Superseded by 0015
 
 Note, 2026-10-08: the Stage is now called the Screen (`Screen`, `ScreenCommand`, `/api/screen`), and the Hub's
 `Director` holds it beside the slate. The decision stands.
+
+Note, 2026-10-09: superseded by ADR 0015 (each Display owns its Screen).
 
 ## Context
 

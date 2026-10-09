@@ -43,7 +43,7 @@ export class HubConfig extends Context.Service<
     HubConfig,
     Config.all({
       port: Config.Port("SPORTAL_PORT").pipe(Config.withDefault(4400)),
-      // Every interface, so a Remote on the home network can reach the Hub.
+      // Every interface, so other devices on the home network can reach the Hub.
       host: Config.String("SPORTAL_HOST").pipe(Config.withDefault("0.0.0.0")),
       webRoot: Config.option(Config.String("SPORTAL_WEB_ROOT")),
       logLevel: Config.LogLevel("SPORTAL_LOG_LEVEL").pipe(Config.withDefault("Info")),
