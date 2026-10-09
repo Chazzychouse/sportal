@@ -21,6 +21,7 @@ import {
   type Tracer
 } from "effect"
 import { HttpClient, HttpClientError, HttpClientResponse } from "effect/http"
+import * as Socket from "effect/socket/Socket"
 import { TestClock } from "effect/testing"
 import { HubConfig } from "../../HubConfig.ts"
 import { Delivery } from "../../slate/Delivery.ts"
@@ -31,6 +32,7 @@ import * as EspnProvider from "./EspnProvider.ts"
 import { FastCast, type Wanted } from "./FastCast.ts"
 import { Frame } from "./Frame.ts"
 import { ProviderUnavailable } from "./ProviderUnavailable.ts"
+import { fakeServer, subscribed, watched } from "./TestFastCast.ts"
 import { Topic } from "./Topic.ts"
 
 // Real payloads recorded from ESPN. A payload that breaks decoding gets added here before the fix.
@@ -38,6 +40,7 @@ const fixture = (name: string) => readFileSync(new URL(`./fixtures/${name}.json`
 const fbsLive = fixture("fbs-scoreboard-live")
 const fbsMidday = fixture("fbs-scoreboard-2026-10-03T2024Z")
 const nflPregame = fixture("nfl-scoreboard-pregame")
+const nflLive = fixture("nfl-scoreboard-2026-10-04T1800Z")
 
 describe("EspnProvider", () => {
   it.effect("should decode a live FBS scoreboard into snapshots", () =>
@@ -314,7 +317,7 @@ describe("EspnProvider.deliveries", () => {
         request.url.includes("/nfl/") ? transportFailure(request) : Effect.succeed(answered(request, fbsLive))
       )
 
-      const said = yield* polledOnce(nflDown)
+      const said = yield* polledOnce(nflDown, { frames: 1 })
 
       assert.deepStrictEqual(
         said.flatMap((deliveries) => deliveries.filter(Delivery.guards.Listing).map(({ league }) => league)),
@@ -377,6 +380,42 @@ describe("EspnProvider.deliveries", () => {
     })
   )
 
+  it.effect("should deliver a push taken between two leagues' polls after the first league's listing", () =>
+    Effect.gen(function* () {
+      const live = scoreboardOf([{ state: "in", period: 2 }])
+      const checkpoint = Frame.Checkpoint({
+        topic: Topic.Scoreboard({ league: "nfl" }),
+        mid: 1,
+        body: JSON.stringify({ sports: [{ leagues: [{ events: JSON.parse(live).events }] }] })
+      })
+      const fbsSlow = HttpClient.make((request) =>
+        request.url.includes("/nfl/")
+          ? Effect.succeed(answered(request, live))
+          : Effect.sleep("10 seconds").pipe(Effect.as(answered(request, fbsLive)))
+      )
+      const pushedAt5s = Stream.fromEffect(Effect.sleep("5 seconds")).pipe(Stream.as(checkpoint))
+      const espn = espnOver(fbsSlow, { pushing: pushedAt5s })
+
+      const said = yield* Effect.gen(function* () {
+        const provider = yield* Provider
+        const frames = yield* Queue.unbounded<ReadonlyArray<Delivery>>()
+        yield* provider.deliveries.pipe(
+          Stream.runForEach((deliveries) => Queue.offer(frames, deliveries)),
+          Effect.forkScoped({ startImmediately: true })
+        )
+        yield* TestClock.adjust("10 seconds")
+        return yield* Queue.takeBetween(frames, 3, 3)
+      }).pipe(Effect.provide(espn), Effect.scoped)
+
+      assert.deepStrictEqual(
+        said.map((deliveries) =>
+          deliveries.map((one) => (Delivery.guards.Listing(one) ? `Listing ${one.league}` : one._tag))
+        ),
+        [["Listing nfl"], ["Snapshot"], ["Listing fbs"]]
+      )
+    })
+  )
+
   it.effect(
     "should poll every 10 seconds after a push shows a game live that the poll still shows upcoming",
     () =>
@@ -427,6 +466,43 @@ describe("EspnProvider.deliveries", () => {
       )
       assert.isTrue(Option.exists(Arr.last(told), (one) => HashMap.has(one, game)))
     })
+  )
+})
+
+describe("EspnProvider over FastCast", () => {
+  it.effect(
+    "should subscribe to a listed live game once, and once more only after a gap in its messages",
+    () =>
+      Effect.gen(function* () {
+        const server = fakeServer()
+        const delivered = watched<ReadonlyArray<Delivery>>()
+        const subscriptions = () => server.sent.all().filter((sent) => sent.op === "S" && sent.tc === liveTc)
+
+        const counted = yield* Effect.gen(function* () {
+          const provider = yield* Provider
+          yield* provider.deliveries.pipe(
+            Stream.runForEach((deliveries) => Effect.sync(() => delivered.add(deliveries))),
+            Effect.forkScoped({ startImmediately: true })
+          )
+          yield* server.sent.until(subscribed(liveTc, 1))
+          const listed = subscriptions().length
+
+          yield* Effect.sync(() => server.send(checkpointAt(99)))
+          yield* delivered.until(playsDelivered(1))
+          yield* markedByTheNextPoll(server, laterGames[0])
+          const checkpointed = subscriptions().length
+
+          const gap = JSON.stringify({ ts: 1791132689445, pl: "[]" })
+          yield* Effect.sync(() => server.send({ op: "P", tc: liveTc, mid: 101, pl: gap }))
+          // A checkpoint after the gap, so the gap has been taken once its plays are delivered.
+          yield* Effect.sync(() => server.send(checkpointAt(102)))
+          yield* delivered.until(playsDelivered(2))
+          yield* markedByTheNextPoll(server, laterGames[1])
+          return { listed, checkpointed, afterGap: subscriptions().length }
+        }).pipe(Effect.provide(espnOverFastCast(server)), Effect.scoped)
+
+        assert.deepStrictEqual(counted, { listed: 1, checkpointed: 1, afterGap: 2 })
+      })
   )
 })
 
@@ -506,10 +582,13 @@ function espnOver(
   )
 }
 
-/** What each frame of ESPN's provider's first poll over `client` said, each span that ends recorded in `ended`. */
+/**
+ * What the first `frames` frames (none, unless given) of ESPN's provider's first poll over `client` said, each span that
+ * ends recorded in `ended`.
+ */
 function polledOnce(
   client: HttpClient.HttpClient,
-  options: { readonly leagues?: string; readonly ended?: Array<Tracer.Span> } = {}
+  options: { readonly leagues?: string; readonly frames?: number; readonly ended?: Array<Tracer.Span> } = {}
 ) {
   return Effect.gen(function* () {
     const provider = yield* Provider
@@ -521,7 +600,7 @@ function polledOnce(
 
     yield* TestClock.adjust(0)
 
-    return yield* Queue.clear(said)
+    return yield* Queue.takeBetween(said, options.frames ?? 0, options.frames ?? 0)
   }).pipe(Effect.provide(espnOver(client, options)), Effect.scoped)
 }
 
@@ -618,6 +697,71 @@ function toldOver(client: HttpClient.HttpClient, leagues: string, spans: Readonl
     return yield* Ref.get(told)
   })
 }
+
+/**
+ * ESPN's provider polling the NFL over the real FastCast on `server`. Its first poll is answered with the recorded
+ * scoreboard of 18:00Z on 2026-10-04, in which NE at BUF is live; each poll after it also shows one more of
+ * `laterGames` live. Each checkpoint is an empty game document.
+ */
+function espnOverFastCast(server: ReturnType<typeof fakeServer>) {
+  const polls = Ref.makeUnsafe(0)
+  const http = HttpClient.make((request) => {
+    const url = new URL(request.url)
+    const answer = url.pathname.endsWith("websockethost")
+      ? Effect.succeed(JSON.stringify({ ip: "fastcast.test", securePort: 443, token: "token" }))
+      : url.hostname === "checkpoint.test"
+        ? Effect.succeed(JSON.stringify({ entities: {} }))
+        : Effect.map(
+            Ref.getAndUpdate(polls, (n) => n + 1),
+            (n) => liveWith(laterGames.slice(0, n))
+          )
+    return Effect.map(answer, (body) => HttpClientResponse.fromWeb(request, new Response(body)))
+  })
+  const host = Layer.mergeAll(
+    Layer.succeed(HttpClient.HttpClient, http),
+    Layer.succeed(Socket.WebSocketConstructor, () => server.socket)
+  )
+  return EspnProvider.layer.pipe(
+    Layer.provide([FastCast.layer, HubConfig.layerTest({ SPORTAL_LEAGUES: "nfl" }).pipe(Layer.orDie)]),
+    Layer.provide(host)
+  )
+}
+
+/**
+ * Moves the test clock to the next poll and waits for `game`'s first S, which that poll makes wanted. FastCast steers by
+ * each wanted set in turn, so every S an earlier frame would send has been sent by then.
+ */
+function markedByTheNextPoll(server: ReturnType<typeof fakeServer>, game: string) {
+  return TestClock.adjust("10 seconds").pipe(
+    Effect.andThen(server.sent.until(subscribed(`gp-football-nfl-${game}`, 1)))
+  )
+}
+
+/** NE at BUF's `H` at `mid`. */
+function checkpointAt(mid: number) {
+  return { op: "H", tc: liveTc, mid, pl: `https://checkpoint.test/${mid}` }
+}
+
+/** Whether at least `count` deliveries of plays have arrived. */
+function playsDelivered(count: number) {
+  return (all: ReadonlyArray<ReadonlyArray<Delivery>>) =>
+    all.flat().filter(Delivery.guards.Plays).length >= count
+}
+
+/** The recorded 18:00Z NFL scoreboard with `games`, by id, live as well. */
+function liveWith(games: ReadonlyArray<string>) {
+  const scoreboard = JSON.parse(nflLive)
+  const events = scoreboard.events.map((event: { id: string; status: { type: object } }) =>
+    games.includes(event.id)
+      ? { ...event, status: { ...event.status, type: { ...event.status.type, state: "in" } } }
+      : event
+  )
+  return JSON.stringify({ ...scoreboard, events })
+}
+
+// NE at BUF's game topic, live in the recorded 18:00Z scoreboard, and two games that scoreboard shows upcoming.
+const liveTc = "gp-football-nfl-401872971"
+const laterGames = ["401872974", "401872976"] as const
 
 const decodeEventIds = Schema.decodeUnknownSync(
   Schema.fromJsonString(Schema.Struct({ events: Schema.Tuple([Schema.Struct({ id: GameId })]) }))

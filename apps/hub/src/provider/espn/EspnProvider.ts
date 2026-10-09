@@ -9,6 +9,7 @@ import {
   Metric,
   Option,
   Predicate,
+  Queue,
   Schedule,
   Stream,
   SubscriptionRef
@@ -39,11 +40,16 @@ export const layer: Layer.Layer<Provider, never, FastCast | HttpClient.HttpClien
     const fastCast = yield* FastCast
     const client = http.pipe(HttpClient.filterStatusOk)
     const state = yield* SubscriptionRef.make(EspnState.empty)
+    const said = yield* Queue.unbounded<ReadonlyArray<Delivery>>()
 
-    // One frame at a time into the one state: what it said.
+    // One frame at a time into the one state, what it said offered under the same lock, so deliveries leave in the
+    // order the state took their frames.
     const taken = (frame: Frame) =>
       SubscriptionRef.modifyEffect(state, (current) =>
-        Effect.map(current.take(frame), ([next, deliveries]) => [deliveries, next] as const)
+        current.take(frame).pipe(
+          Effect.tap(([, deliveries]) => Queue.offer(said, deliveries)),
+          Effect.map(([next, deliveries]) => [deliveries, next] as const)
+        )
       )
 
     const poll = Effect.fn("EspnProvider.poll")(
@@ -73,21 +79,30 @@ export const layer: Layer.Layer<Provider, never, FastCast | HttpClient.HttpClien
       return polled
     }, Effect.trackDuration(pollDuration))
 
-    const polls = Stream.fromEffectSchedule(pollEveryLeague(), polling(state)).pipe(
-      Stream.flatMap((polled) => Stream.fromIterable(polled.flatMap(({ said }) => Option.toArray(said))))
-    )
-    // What FastCast follows, read again on each change and once a minute, so a kickoff coming into its window is
-    // followed with no frame to say so.
+    const polls = Stream.fromEffectSchedule(pollEveryLeague(), polling(state))
+    // What FastCast follows, read again on each change and once a minute from the last state seen, so a kickoff coming
+    // into its window is followed with no frame to say so.
     const wanted = Stream.merge(
-      SubscriptionRef.changes(state),
-      Stream.tick("1 minute").pipe(Stream.mapEffect(() => SubscriptionRef.get(state)))
+      SubscriptionRef.changes(state).pipe(Stream.map(Option.some)),
+      Stream.tick("1 minute").pipe(Stream.as(Option.none<EspnState>()))
     ).pipe(
+      Stream.mapAccum(
+        (): Option.Option<EspnState> => Option.none(),
+        (last, seen) => {
+          const current = Option.orElse(seen, () => last)
+          return [current, Option.toArray(current)] as const
+        }
+      ),
       Stream.mapEffect((current) => Effect.map(DateTime.now, (now) => current.wanted(leagues, now))),
       Stream.changesWith((previous, next) => Equal.equals(previous, next))
     )
     const pushes = fastCast.follow(wanted).pipe(Stream.mapEffect(taken))
+    const deliveries = Stream.fromQueue(said).pipe(
+      Stream.merge(Stream.drain(polls)),
+      Stream.merge(Stream.drain(pushes))
+    )
 
-    return Provider.of({ deliveries: Stream.merge(polls, pushes) })
+    return Provider.of({ deliveries })
   })
 )
 
