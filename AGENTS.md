@@ -35,7 +35,7 @@ easiest to break.
 - In the Hub, only `HubConfig.ts` reads the environment. A new setting is a field there, with its default.
 - A service is yielded where it is used, never passed as an argument. A layer that needs a setting yields `HubConfig`
   (in the shell, `ShellConfig`); a choice between layers at startup is a `Layer.unwrap` that yields it.
-- A port's member types that other modules need are named and exported beside it (`CheckpointUnread` beside `FastCast`).
+- A port's member types that other modules need are named and exported beside it (`Wanted` beside `FastCast`).
   Indexing a service's type (`Foo["Service"]`) is allowed; a port still names the member types other modules need.
 
 **Module shapes.** Every `.ts` file is exactly one of these.

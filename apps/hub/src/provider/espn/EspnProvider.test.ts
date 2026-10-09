@@ -138,7 +138,7 @@ describe("EspnProvider", () => {
   it.effect("should take a poll answered with a non-2xx as a failed poll", () =>
     Effect.gen(function* () {
       const said = yield* polledOnce(
-        answering(() => Effect.succeed(new Response("busy", { status: 503 }))),
+        answering(() => Effect.succeed(new Response(fbsLive, { status: 503 }))),
         { leagues: "fbs", frames: 1 }
       )
 
