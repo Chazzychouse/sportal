@@ -28,8 +28,9 @@ import { Provider } from "../Provider.ts"
 import { listedBy } from "../TestProvider.ts"
 import * as EspnProvider from "./EspnProvider.ts"
 import { FastCast } from "./FastCast.ts"
-import type { Frame } from "./Frame.ts"
+import { Frame } from "./Frame.ts"
 import { ProviderUnavailable } from "./ProviderUnavailable.ts"
+import { Topic } from "./Topic.ts"
 
 // Real payloads recorded from ESPN. A payload that breaks decoding gets added here before the fix.
 const fixture = (name: string) => readFileSync(new URL(`./fixtures/${name}.json`, import.meta.url), "utf8")
@@ -356,13 +357,11 @@ describe("EspnProvider.deliveries", () => {
 
   it.effect("should deliver FastCast's frames beside its polls", () =>
     Effect.gen(function* () {
-      const pushed: Frame = {
-        receivedAt: DateTime.makeUnsafe(0),
-        source: "push",
-        channel: "event-football-nfl",
-        kind: "change",
+      const pushed = Frame.Pushed({
+        topic: Option.some(Topic.Scoreboard({ league: "nfl" })),
+        mid: Option.none(),
         body: "{}"
-      }
+      })
       const espn = espnOver(recordedHttp(fbsLive), { leagues: "fbs", pushing: Stream.make(pushed) })
 
       const said = yield* Provider.use((provider) =>

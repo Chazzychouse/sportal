@@ -29,9 +29,9 @@ import * as HubStopping from "../../HubStopping.ts"
 import * as EspnDecoder from "./EspnDecoder.ts"
 import * as FastCastDocument from "./FastCastDocument.ts"
 import * as FastCastMessage from "./FastCastMessage.ts"
-import { ownerOf, topicOf } from "./FastCastTopic.ts"
 import { Frame } from "./Frame.ts"
 import { ProviderUnavailable } from "./ProviderUnavailable.ts"
+import { Topic, tcOf, topicOf } from "./Topic.ts"
 
 /**
  * ESPN FastCast as the ESPN provider's push: one socket that decides what it follows from its own scoreboard topics,
@@ -122,7 +122,7 @@ const connect = Effect.fn("FastCast.connect")(function* (
   leagues: ReadonlyArray<LeagueId>,
   retry: Schedule.Schedule<unknown, CheckpointUnread>
 ) {
-  const topics = leagues.map((league) => topicOf(league))
+  const topics = leagues.map((league) => tcOf(Topic.Scoreboard({ league })))
   yield* Effect.annotateCurrentSpan("sportal.topics", topics)
 
   const host = yield* websocketHost
@@ -137,7 +137,6 @@ const connect = Effect.fn("FastCast.connect")(function* (
     Stream.mapError((cause) => new ProviderUnavailable({ reason: "Closed", cause })),
     // One text per chunk, so peeling the first leaves the rest of its batch in the stream.
     Stream.rechunk(1),
-    Stream.mapEffect((text) => Effect.map(DateTime.now, (receivedAt) => ({ text, receivedAt }))),
     Stream.peel(Sink.head()),
     Effect.timeoutOrElse({ duration: silence, orElse: () => Effect.fail(silent()) })
   )
@@ -145,7 +144,7 @@ const connect = Effect.fn("FastCast.connect")(function* (
     first,
     () => new ProviderUnavailable({ reason: "Closed", cause: "FastCast closed before connecting" })
   )
-  const sid = yield* Option.match(decodeEnvelope(opened.text), {
+  const sid = yield* Option.match(decodeEnvelope(opened), {
     onNone: () =>
       Effect.fail(
         new ProviderUnavailable({ reason: "Refused", cause: "FastCast opened with an unknown op" })
@@ -217,7 +216,7 @@ const connect = Effect.fn("FastCast.connect")(function* (
   yield* Effect.logInfo(`FastCast: connected to ${host.ip}, subscribed to ${topics.join(", ")}`)
 
   return Stream.concat(Stream.make(opened), rest).pipe(
-    Stream.mapEffect((received) => framed(received, (outcome) => PubSub.publish(outcomes, outcome))),
+    Stream.mapEffect((text) => framed(text, (outcome) => PubSub.publish(outcomes, outcome))),
     Stream.flattenIterable,
     Stream.mapAccumEffect(
       (): Following => ({ documents: FastCastDocument.empty, games: HashMap.empty(), followed: [] }),
@@ -267,7 +266,7 @@ const steered = Effect.fnUntraced(function* (
     Effect.orElseSucceed(() => FastCastDocument.unchanged(following.documents))
   )
   const shown = Option.flatMap(advanced.change, () =>
-    FastCastDocument.scoreboard(advanced.documents, frame.channel)
+    Option.flatMap(topicOfFrame(frame), (topic) => FastCastDocument.scoreboard(advanced.documents, topic))
   )
   const games = yield* Option.match(shown, {
     onNone: () => Effect.succeed(following.games),
@@ -280,16 +279,25 @@ const steered = Effect.fnUntraced(function* (
 
   const followed = followedAt(games, now)
   const reset = Option.filter(advanced.change, FastCastDocument.Change.$is("Reset")).pipe(
-    Option.filter(({ topic }) => [...scoreboards, ...followed].includes(topic))
+    Option.filter(({ topic }) => [...scoreboards, ...followed].includes(tcOf(topic)))
   )
   const steers = [
     ...Arr.difference(followed, following.followed).map((tc) => Steer.Follow({ tc })),
     ...Arr.difference(following.followed, followed).map((tc) => Steer.Leave({ tc })),
-    ...Option.toArray(reset).map(({ topic, detail }) => Steer.FollowAgain({ tc: topic, detail }))
+    ...Option.toArray(reset).map(({ topic, detail }) => Steer.FollowAgain({ tc: tcOf(topic), detail }))
   ]
   const next: Following = { documents: advanced.documents, games, followed }
   return [next, steers] as const
 })
+
+/** The topic a frame is on: none for a poll, or for a socket text that names none. */
+function topicOfFrame(frame: Frame): Option.Option<Topic> {
+  return Frame.$match(frame, {
+    Polled: () => Option.none(),
+    Pushed: ({ topic }) => topic,
+    Checkpoint: ({ topic }) => Option.some(topic)
+  })
+}
 
 /** The topic of each game live at `now`, or upcoming with its kickoff within `GameSnapshot.kickoffWindow` of it. */
 function followedAt(
@@ -299,45 +307,35 @@ function followedAt(
   return [...HashMap.values(games)]
     .flat()
     .filter((game) => game.isLiveOrKicksOffWithin(GameSnapshot.kickoffWindow, now))
-    .map((game) => topicOf(game.league, game.id))
+    .map((game) => tcOf(Topic.Game({ league: game.league, game: game.id })))
 }
 
 /**
- * A socket text as its frame, an `H`'s followed by its checkpoint once it loads and decodes. Either way
- * the `H`'s outcome is handed to `published`; a checkpoint that fails is logged and counted, and only
- * its `H` is framed. Every text is counted by its op.
+ * A socket text as its frame, an `H`'s followed by its checkpoint once it loads and decodes. Either way the `H`'s
+ * outcome is handed to `published`; a checkpoint that fails is logged and counted, and only its `H` is framed. An `H`
+ * on a topic FastCast's names do not read loads nothing. Every text is counted by its op.
  */
 const framed = Effect.fnUntraced(function* (
-  received: { readonly text: string; readonly receivedAt: DateTime.Utc },
+  text: string,
   published: (outcome: Result.Result<string, CheckpointUnread>) => Effect.Effect<boolean>
 ) {
-  const { text, receivedAt } = received
   const envelope = Option.getOrUndefined(decodeEnvelope(text))
-  const league = Option.fromUndefinedOr(envelope?.channel).pipe(
-    Option.flatMap(ownerOf),
-    Option.map((owner) => owner.league)
-  )
+  const topic = Option.fromUndefinedOr(envelope?.channel).pipe(Option.flatMap(topicOf))
+  const league = Option.map(topic, (on) => on.league)
   const op = envelope?.message.op ?? "unknown"
   yield* Metric.update(Metric.withAttributes(textsReceived, { op, ...Record.getSomes({ league }) }), 1)
-  const frame = new Frame({
-    receivedAt,
-    source: "push",
-    channel: envelope?.channel ?? "socket",
-    kind: "change",
-    body: text,
-    number: envelope?.mid
-  })
+  const frame = Frame.Pushed({ topic, mid: Option.fromUndefinedOr(envelope?.mid), body: text })
   if (envelope === undefined) {
     yield* Effect.logDebug("FastCast: framed a text of an unknown op", text)
     return [frame]
   }
   const { message } = envelope
-  if (message.op !== "H") return [frame]
+  if (message.op !== "H" || Option.isNone(topic)) return [frame]
 
-  const loaded = yield* checkpoint(message).pipe(Effect.result)
+  const loaded = yield* checkpoint(topic.value, message.pl).pipe(Effect.result)
   if (Result.isSuccess(loaded)) {
     yield* published(Result.succeed(message.tc))
-    return [frame, new Frame({ ...frame, kind: "whole", body: loaded.success })]
+    return [frame, Frame.Checkpoint({ topic: topic.value, mid: message.mid, body: loaded.success })]
   }
 
   const error = loaded.failure
@@ -350,23 +348,18 @@ const framed = Effect.fnUntraced(function* (
   return [frame]
 })
 
-/** The body of the checkpoint an `H` points to, as served, once it decodes as its topic's checkpoint. */
-function checkpoint(envelope: { readonly tc: string; readonly pl: string }) {
-  return HttpClient.get(envelope.pl).pipe(
+/** The body of the checkpoint at `url`, as served, once it decodes as `topic`'s checkpoint. */
+function checkpoint(topic: Topic, url: string) {
+  const tc = tcOf(topic)
+  return HttpClient.get(url).pipe(
     Effect.flatMap(HttpClientResponse.filterStatusOk),
     Effect.flatMap((response) => response.text),
     Effect.timeout(checkpointTimeout),
-    Effect.mapError((cause) => new CheckpointUnread({ topic: envelope.tc, reason: "Unloaded", cause })),
+    Effect.mapError((cause) => new CheckpointUnread({ topic: tc, reason: "Unloaded", cause })),
     Effect.tap((body) =>
-      Option.match(ownerOf(envelope.tc), {
-        onNone: () => Effect.void,
-        onSome: (owner) =>
-          Schema.decodeEffect(FastCastMessage.Checkpoint(owner))(body).pipe(
-            Effect.mapError(
-              (cause) => new CheckpointUnread({ topic: envelope.tc, reason: "Undecodable", cause })
-            )
-          )
-      })
+      Schema.decodeEffect(FastCastMessage.Checkpoint(topic))(body).pipe(
+        Effect.mapError((cause) => new CheckpointUnread({ topic: tc, reason: "Undecodable", cause }))
+      )
     ),
     Effect.trackDuration(checkpointDuration)
   )

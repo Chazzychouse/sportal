@@ -41,9 +41,8 @@ export const layer: Layer.Layer<Provider, never, FastCast | HttpClient.HttpClien
         yield* Effect.annotateCurrentSpan("sportal.league", league)
         const response = yield* client.get(scoreboardUrl(league))
         const body = yield* response.text
-        const receivedAt = yield* DateTime.now
 
-        return new Frame({ receivedAt, source: "poll", channel: league, kind: "whole", body })
+        return Frame.Polled({ league, body })
       },
       (effect, league) =>
         Effect.mapError(

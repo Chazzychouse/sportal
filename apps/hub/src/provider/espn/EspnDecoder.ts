@@ -1,5 +1,5 @@
 import type { GameSnapshot } from "@sportal/domain/Game"
-import { LeagueId } from "@sportal/domain/League"
+import type { LeagueId } from "@sportal/domain/League"
 import { Play } from "@sportal/domain/Play"
 import { Array as Arr, Effect, HashMap, Option, Record, Schema, Stream } from "effect"
 import { Delivery } from "../../slate/Delivery.ts"
@@ -7,7 +7,8 @@ import { EspnEvent } from "./EspnEvent.ts"
 import { Scoreboard } from "./EspnPayload.ts"
 import * as EspnPlay from "./EspnPlay.ts"
 import * as FastCastDocument from "./FastCastDocument.ts"
-import type { Frame } from "./Frame.ts"
+import { Frame } from "./Frame.ts"
+import { tcOf } from "./Topic.ts"
 
 /**
  * ESPN's decode, read by every ESPN provider. A poll response is its league's `Listing`. A scoreboard topic's change is
@@ -21,10 +22,14 @@ export function decode(frames: Stream.Stream<Frame>): Stream.Stream<ReadonlyArra
     Stream.mapAccumEffect(
       (): State => ({ listings: HashMap.empty(), documents: FastCastDocument.empty }),
       (state, frame) =>
-        (frame.source === "poll" ? listed(state, frame) : pushed(state, frame)).pipe(
+        Frame.$match(frame, {
+          Polled: ({ league, body }) => listed(state, league, body),
+          Pushed: () => pushed(state, frame),
+          Checkpoint: () => pushed(state, frame)
+        }).pipe(
           Effect.catch((cause) =>
             Effect.logWarning("EspnDecoder: skipped a frame that does not decode", cause).pipe(
-              Effect.annotateLogs({ source: frame.source, channel: frame.channel, kind: frame.kind }),
+              Effect.annotateLogs(annotationsOf(frame)),
               Effect.as([state, noDeliveries] as const)
             )
           ),
@@ -56,16 +61,22 @@ interface State {
   readonly documents: typeof FastCastDocument.empty
 }
 
-const listed = Effect.fnUntraced(function* (state: State, frame: Frame) {
-  const league = yield* decodeLeague(frame.channel)
-  const scoreboard = yield* byLeague[league].decodeScoreboard(frame.body)
+const listed = Effect.fnUntraced(function* (state: State, league: LeagueId, body: string) {
+  const scoreboard = yield* byLeague[league].decodeScoreboard(body)
   const games = yield* gamesOf(league, scoreboard.events)
 
   const next: State = { ...state, listings: HashMap.set(state.listings, league, games) }
   return [next, [Delivery.cases.Listing.make({ league, games })]] as const
 })
 
-const decodeLeague = Schema.decodeUnknownEffect(LeagueId)
+/** What a log of `frame` is annotated with: its kind, and its league or its topic's name. */
+function annotationsOf(frame: Frame): Readonly<Record<string, string>> {
+  return Frame.$match(frame, {
+    Polled: ({ league }) => ({ frame: "Polled", league }),
+    Pushed: ({ topic }) => ({ frame: "Pushed", ...Record.getSomes({ topic: Option.map(topic, tcOf) }) }),
+    Checkpoint: ({ topic }) => ({ frame: "Checkpoint", topic: tcOf(topic) })
+  })
+}
 
 const noDeliveries: ReadonlyArray<Delivery> = []
 

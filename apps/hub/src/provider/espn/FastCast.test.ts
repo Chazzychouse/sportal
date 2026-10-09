@@ -1,13 +1,14 @@
 import { readFileSync } from "node:fs"
 import { assert, describe, it } from "@effect/vitest"
-import { DateTime, Deferred, Effect, Layer, Schedule, Schema, Stream } from "effect"
+import { DateTime, Deferred, Effect, Layer, Option, Schedule, Schema, Stream } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/http"
 import * as Socket from "effect/socket/Socket"
 import { TestClock } from "effect/testing"
 import { HubConfig } from "../../HubConfig.ts"
 import { counted, gauged, observed, recordingLogs, withMetrics } from "../../TestTelemetry.ts"
 import { FastCast } from "./FastCast.ts"
-import type { Frame } from "./Frame.ts"
+import { Frame } from "./Frame.ts"
+import { tcOf } from "./Topic.ts"
 
 // Games of the recorded checkpoint: the first two live, the third scheduled for 20:05Z.
 const firstGame = "401872971"
@@ -148,21 +149,13 @@ describe("FastCast", () => {
       const received = yield* frames.until(atLeast(4))
       // The first four: the checkpoint's live games are subscribed to after it.
       const firstFour = received.slice(0, 4)
-      assert.deepStrictEqual(
-        firstFour.map(({ channel, kind, number, body }) => ({
-          channel,
-          kind,
-          number,
-          body: kind === "whole" ? body : decodeSent(body).op
-        })),
-        [
-          { channel: "socket", kind: "change", number: undefined, body: "C" },
-          { channel: "event-football-nfl", kind: "change", number: undefined, body: "S" },
-          { channel: "event-football-nfl", kind: "change", number: 7, body: "H" },
-          { channel: "event-football-nfl", kind: "whole", number: 7, body: checkpointBody }
-        ]
-      )
-      assert.isTrue(firstFour.every((frame) => frame.source === "push"))
+      assert.deepStrictEqual(firstFour.map(seen), [
+        { tag: "Pushed", tc: undefined, mid: undefined, body: "C" },
+        { tag: "Pushed", tc: "event-football-nfl", mid: undefined, body: "S" },
+        { tag: "Pushed", tc: "event-football-nfl", mid: 7, body: "H" },
+        { tag: "Checkpoint", tc: "event-football-nfl", mid: 7, body: checkpointBody }
+      ])
+      assert.isFalse(firstFour.some(Frame.$is("Polled")))
     })
   )
 
@@ -190,7 +183,7 @@ describe("FastCast", () => {
 
       const received = yield* frames.until(atLeast(3))
       const patch = received.at(-1)
-      assert.strictEqual(patch?.number, 8)
+      assert.strictEqual(patch === undefined ? undefined : seen(patch).mid, 8)
     })
   )
 
@@ -368,16 +361,14 @@ describe("FastCast", () => {
         const done = yield* Deferred.isDone(ended)
         const failures = yield* counted("sportal_live_feed_checkpoint_failures", { league: "nfl" })
         assert.deepStrictEqual(
-          received.flatMap(({ channel, kind, number }) =>
-            channel.startsWith("gp-") ? [[channel, kind, number]] : []
-          ),
+          received.map(seen).flatMap(({ tag, tc, mid }) => (tc?.startsWith("gp-") ? [[tc, tag, mid]] : [])),
           [
-            [missingTopic, "change", undefined],
-            [otherTopic, "change", undefined],
-            [missingTopic, "change", 5],
-            [otherTopic, "change", 9],
-            [otherTopic, "whole", 9],
-            [otherTopic, "change", 10]
+            [missingTopic, "Pushed", undefined],
+            [otherTopic, "Pushed", undefined],
+            [missingTopic, "Pushed", 5],
+            [otherTopic, "Pushed", 9],
+            [otherTopic, "Checkpoint", 9],
+            [otherTopic, "Pushed", 10]
           ]
         )
         assert.isFalse(done)
@@ -530,10 +521,13 @@ describe("FastCast", () => {
       const received = yield* frames.until(atLeast(4))
       const failures = yield* counted("sportal_live_feed_checkpoint_failures", { league: "nfl" })
       assert.deepStrictEqual(
-        received.slice(2).map(({ kind, number }) => [kind, number]),
+        received
+          .slice(2)
+          .map(seen)
+          .map(({ tag, mid }) => [tag, mid]),
         [
-          ["change", 7],
-          ["change", 8]
+          ["Pushed", 7],
+          ["Pushed", 8]
         ]
       )
       assert.strictEqual(failures, 1)
@@ -852,18 +846,33 @@ function watched<A>() {
   }
 }
 
+/** A frame as a test compares it: its kind, its topic's name, its mid, and its body, a socket text read as its op. */
+function seen(frame: Frame) {
+  return Frame.$match(frame, {
+    Polled: ({ league, body }) => ({ tag: "Polled", tc: league, mid: undefined, body }),
+    Pushed: ({ topic, mid, body }) => ({
+      tag: "Pushed",
+      tc: Option.getOrUndefined(Option.map(topic, tcOf)),
+      mid: Option.getOrUndefined(mid),
+      body: decodeSent(body).op
+    }),
+    Checkpoint: ({ topic, mid, body }) => ({ tag: "Checkpoint", tc: tcOf(topic), mid, body })
+  })
+}
+
 function atLeast(count: number) {
   return (all: ReadonlyArray<unknown>) => all.length >= count
 }
 
 /** Whether a frame of mid `mid` has arrived. */
 function numbered(mid: number) {
-  return (all: ReadonlyArray<Frame>) => all.some((frame) => frame.number === mid)
+  return (all: ReadonlyArray<Frame>) => all.some((frame) => seen(frame).mid === mid)
 }
 
 /** Whether a checkpoint at mid `mid` has been framed. */
 function wholeAt(mid: number) {
-  return (all: ReadonlyArray<Frame>) => all.some((frame) => frame.kind === "whole" && frame.number === mid)
+  return (all: ReadonlyArray<Frame>) =>
+    all.some((frame) => Frame.$is("Checkpoint")(frame) && frame.mid === mid)
 }
 
 function subscribed(tc: string, times: number) {

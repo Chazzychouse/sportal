@@ -3,15 +3,16 @@ import { assert, describe, it } from "@effect/vitest"
 import { GameId, GameSnapshot } from "@sportal/domain/Game"
 import { LeagueId } from "@sportal/domain/League"
 import { Play, PlayId } from "@sportal/domain/Play"
-import { DateTime, Effect, Equal, Metric, Option, Record, Schema } from "effect"
+import { Effect, Equal, Metric, Option, Record, Schema } from "effect"
 import { Delivery } from "../../slate/Delivery.ts"
 import { recordingLogs, withMetrics } from "../../TestTelemetry.ts"
 import * as EspnDecoder from "./EspnDecoder.ts"
 import { EspnEvent } from "./EspnEvent.ts"
 import * as FastCastDocument from "./FastCastDocument.ts"
 import * as FastCastMessage from "./FastCastMessage.ts"
-import type { Frame } from "./Frame.ts"
+import { Frame } from "./Frame.ts"
 import { decodedFrames, recordedNeAtBuf } from "./TestEspn.ts"
+import { type Topic, tcOf, topicOf } from "./Topic.ts"
 
 // Recorded from ESPN on 2026-10-04: the NFL checkpoint at 17:52Z, every socket text on its topic after it until
 // 18:00Z, each line one text as it arrived, and the scoreboard polled at 18:00Z.
@@ -431,7 +432,7 @@ describe("EspnDecoder", () => {
     })
   )
 
-  it.effect("should log a frame that does not decode at Warning, with its source, channel and kind", () =>
+  it.effect("should log a frame that does not decode at Warning, with its kind and league", () =>
     Effect.gen(function* () {
       const { logs, layer } = recordingLogs()
 
@@ -439,7 +440,7 @@ describe("EspnDecoder", () => {
 
       assert.deepStrictEqual(
         logs.map(({ level, annotations }) => [level, annotations]),
-        [["Warn", { source: "poll", channel: "nfl", kind: "whole" }]]
+        [["Warn", { frame: "Polled", league: "nfl" }]]
       )
     })
   )
@@ -748,7 +749,7 @@ function decoded(frames: ReadonlyArray<Frame>) {
 /** The topics whose document FastCast's documents reset over `frames`, in order; a frame that fails changes none. */
 function resetTopics(frames: ReadonlyArray<Frame>) {
   return Effect.reduce(
-    frames.filter(({ source }) => source === "push"),
+    frames.filter((frame) => !Frame.$is("Polled")(frame)),
     (): { readonly documents: typeof FastCastDocument.empty; readonly topics: ReadonlyArray<string> } => ({
       documents: FastCastDocument.empty,
       topics: []
@@ -759,7 +760,9 @@ function resetTopics(frames: ReadonlyArray<Frame>) {
           documents,
           topics: [
             ...state.topics,
-            ...Option.toArray(change).flatMap((one) => (one._tag === "Reset" ? [one.topic] : []))
+            ...Option.toArray(change).flatMap((one) =>
+              FastCastDocument.Change.$is("Reset")(one) ? [tcOf(one.topic)] : []
+            )
           ]
         })),
         Effect.orElseSucceed(() => state)
@@ -767,34 +770,27 @@ function resetTopics(frames: ReadonlyArray<Frame>) {
   ).pipe(Effect.map(({ topics }) => topics))
 }
 
-const at = DateTime.makeUnsafe("2026-10-04T18:00:00Z")
-
-function poll(channel: string, body: string): Frame {
-  return { receivedAt: at, source: "poll", channel, kind: "whole", body }
+function poll(league: LeagueId, body: string): Frame {
+  return Frame.Polled({ league, body })
 }
 
-function checkpoint(channel: string, mid: number, document: unknown): Frame {
-  return {
-    receivedAt: at,
-    source: "push",
-    channel,
-    kind: "whole",
-    number: mid,
-    body: JSON.stringify(document)
-  }
+function checkpoint(tc: string, mid: number, document: unknown): Frame {
+  return Frame.Checkpoint({ topic: topicNamed(tc), mid, body: JSON.stringify(document) })
 }
 
-/** A `P` on `channel`, its patches sent as an array, one of the three ways FastCast spells them. */
-function message(channel: string, mid: number, patches: ReadonlyArray<object>): Frame {
+/** A `P` on `tc`, its patches sent as an array, one of the three ways FastCast spells them. */
+function message(tc: string, mid: number, patches: ReadonlyArray<object>): Frame {
   const pl = JSON.stringify({ ts: 1791136341731, pl: patches })
-  return {
-    receivedAt: at,
-    source: "push",
-    channel,
-    kind: "change",
-    number: mid,
-    body: JSON.stringify({ op: "P", tc: channel, mid, pl })
-  }
+  return Frame.Pushed({
+    topic: topicOf(tc),
+    mid: Option.some(mid),
+    body: JSON.stringify({ op: "P", tc, mid, pl })
+  })
+}
+
+/** The topic `tc` names; a test names only real ones. */
+function topicNamed(tc: string): Topic {
+  return Option.getOrThrow(topicOf(tc))
 }
 
 function playsMessage(mid: number, patches: ReadonlyArray<object>, channel = ariAtNygPlays) {
@@ -809,16 +805,10 @@ function plays(...ids: ReadonlyArray<string>) {
 function recorded(texts: ReadonlyArray<string>): ReadonlyArray<Frame> {
   return texts.flatMap((body) => {
     const { message, channel, mid } = decodeEnvelope(body)
-    const frame: Frame = {
-      receivedAt: at,
-      source: "push",
-      channel: channel ?? "socket",
-      kind: "change",
-      body,
-      number: mid
-    }
-    return message.op === "H" && channel !== undefined && mid !== undefined
-      ? [frame, { ...frame, kind: "whole", body: checkpointBody }]
+    const topic = Option.flatMap(Option.fromUndefinedOr(channel), topicOf)
+    const frame = Frame.Pushed({ topic, mid: Option.fromUndefinedOr(mid), body })
+    return message.op === "H" && Option.isSome(topic) && mid !== undefined
+      ? [frame, Frame.Checkpoint({ topic: topic.value, mid, body: checkpointBody })]
       : [frame]
   })
 }
@@ -905,14 +895,12 @@ function checkpointEvents() {
 function moveRecordingFrames(): ReadonlyArray<Frame> {
   const game = "gp-football-nfl-401872971"
   const messages = moveRecording.messages.map(
-    ({ op, tc, mid, ts, pl }): Frame => ({
-      receivedAt: at,
-      source: "push",
-      channel: tc,
-      kind: "change",
-      number: mid,
-      body: JSON.stringify({ op, tc, mid, pl: JSON.stringify({ ts, pl }) })
-    })
+    ({ op, tc, mid, ts, pl }): Frame =>
+      Frame.Pushed({
+        topic: topicOf(tc),
+        mid: Option.some(mid),
+        body: JSON.stringify({ op, tc, mid, pl: JSON.stringify({ ts, pl }) })
+      })
   )
   return [checkpoint(game, moveRecording.checkpoint.mid, moveRecording.checkpoint.body), ...messages]
 }
