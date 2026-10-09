@@ -473,16 +473,13 @@ describe("Display#press", () => {
 })
 
 describe("Display#open and Display#close", () => {
-  it.each([{ from: "Keys", to: "Palette" }] as const)(
-    "should replace any open overlay: $to over $from",
-    ({ from, to }) => {
-      const open = Display.initial.open(from)
+  it("should replace any open overlay: Palette over Keys", () => {
+    const open = Display.initial.open("Keys")
 
-      const display = open.open(to)
+    const display = open.open("Palette")
 
-      assert.strictEqual(display.overlay._tag, to)
-    }
-  )
+    assert.strictEqual(display.overlay._tag, "Palette")
+  })
 
   it("should close the open overlay", () => {
     const open = Display.initial.open("Palette")

@@ -89,7 +89,10 @@ export function DisplayView() {
   )
 }
 
-/** This device's Display: its state, a step run (its display kept, its commands applied to this Display's Screen), and a Display set. */
+/**
+ * This device's Display: its state, a step run (its display kept, its commands applied to this Display's Screen),
+ * and a Display set.
+ */
 function useDisplay() {
   const [display, set] = useState(Display.initial)
   const dispatch = useAtomSet(DisplayScreen.screen)

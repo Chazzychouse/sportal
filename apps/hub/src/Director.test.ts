@@ -241,6 +241,7 @@ describe("Director#published", () => {
       assert.isTrue(Option.isNone(next))
     })
   )
+
   it.effect("should publish a game the guide carries as carried on its channel", () =>
     Effect.gen(function* () {
       const director = yield* Director

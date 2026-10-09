@@ -1,6 +1,6 @@
 import { NodeHttpServer } from "@effect/platform-node"
 import { assert, describe, it } from "@effect/vitest"
-import { LiveMessage, LiveMessageJson } from "@sportal/api/LiveMessage"
+import { type LiveMessage, LiveMessageJson } from "@sportal/api/LiveMessage"
 import { SportalApi } from "@sportal/api/SportalApi"
 import { GameId, Network } from "@sportal/domain/Game"
 import { broadcast, snapshot, team } from "@sportal/domain/TestGame"
@@ -112,9 +112,7 @@ describe("GET /api/live", () => {
 
       const message = messageOf(line)
       assert.deepStrictEqual(
-        LiveMessage.guards.SlateChanged(message)
-          ? message.games.map(({ game }) => game.snapshot.period)
-          : message,
+        message.games.map(({ game }) => game.snapshot.period),
         [4]
       )
       assert.strictEqual(waiting, 0)
@@ -186,22 +184,19 @@ describe("GET /api/live", () => {
       )
 
       const message = messageOf(line)
-      assert.deepStrictEqual(
-        LiveMessage.guards.SlateChanged(message) ? message.games[0]?.availability : message,
-        [
-          {
-            _tag: "Carried",
-            channel: {
-              name: "ESPN",
-              source: "YouTube TV",
-              locator: {
-                _tag: "WebView",
-                url: "https://tv.youtube.com/watch/PFuNFGzJDE4?vp=0gEEEgIwAQ%3D%3D"
-              }
+      assert.deepStrictEqual(message.games[0]?.availability, [
+        {
+          _tag: "Carried",
+          channel: {
+            name: "ESPN",
+            source: "YouTube TV",
+            locator: {
+              _tag: "WebView",
+              url: "https://tv.youtube.com/watch/PFuNFGzJDE4?vp=0gEEEgIwAQ%3D%3D"
             }
           }
-        ]
-      )
+        }
+      ])
     }).pipe(Effect.scoped, Effect.provide(serverUnderTest()))
   )
 })
