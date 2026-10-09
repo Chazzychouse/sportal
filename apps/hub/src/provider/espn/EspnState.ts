@@ -1,8 +1,11 @@
 import { Game, GameSnapshot } from "@sportal/domain/Game"
 import type { LeagueId } from "@sportal/domain/League"
-import { Array as Arr, Data, type DateTime, Effect, HashMap, Metric, Option, Record } from "effect"
+import { Play } from "@sportal/domain/Play"
+import { Array as Arr, Data, type DateTime, Effect, HashMap, Metric, Option, Record, Schema } from "effect"
 import { Delivery } from "../Provider.ts"
-import * as EspnDecoder from "./EspnDecoder.ts"
+import { EspnEvent } from "./EspnEvent.ts"
+import { Scoreboard } from "./EspnPayload.ts"
+import * as EspnPlay from "./EspnPlay.ts"
 import type { Wanted } from "./FastCast.ts"
 import * as FastCastDocument from "./FastCastDocument.ts"
 import { Frame } from "./Frame.ts"
@@ -74,13 +77,19 @@ const taken = Effect.fnUntraced(
 )
 
 const listed = Effect.fnUntraced(function* (state: EspnState, league: LeagueId, body: string) {
-  const scoreboard = yield* EspnDecoder.byLeague[league].decodeScoreboard(body)
-  const games = yield* EspnDecoder.gamesOf(league, scoreboard.events)
+  const scoreboard = yield* decodeScoreboard(body)
+  const games = yield* gamesOf(league, scoreboard.events)
 
   const had = Option.getOrElse(HashMap.get(state.listings, league), () => [])
   const kept = games.map((game) => keptOver(had, game))
   const next = new EspnState({ ...state, listings: HashMap.set(state.listings, league, kept) })
   return [next, [Delivery.Listing({ league, games })]] as const
+})
+
+/** The events as games; an event that does not decode is skipped, and the rest still delivered. */
+const gamesOf = Effect.fnUntraced(function* (league: LeagueId, events: ReadonlyArray<unknown>) {
+  const decoded = yield* Effect.forEach(events, (event) => Effect.option(decodeEvent[league](event)))
+  return Arr.getSomes(decoded)
 })
 
 /** A polled `game` as its listing keeps it: the one `had` held when a push moved it past the poll (`Game#listed`). */
@@ -104,7 +113,7 @@ const pushed = Effect.fnUntraced(function* (state: EspnState, frame: Frame) {
     onNone: () => Effect.succeed([advanced, noDeliveries] as const),
     onSome: FastCastDocument.Change.$match({
       Scoreboard: ({ league, events }) =>
-        Effect.flatMap(EspnDecoder.gamesOf(league, events), (games) => {
+        Effect.flatMap(gamesOf(league, events), (games) => {
           const [next, deliveries, behind] = movedForward(advanced, league, games)
           return Effect.as(
             Effect.forEach(behind, (game) => pushBehind(league, game), { discard: true }),
@@ -113,7 +122,7 @@ const pushed = Effect.fnUntraced(function* (state: EspnState, frame: Frame) {
         }),
       Game: ({ league, game, plays }) =>
         Effect.map(
-          EspnDecoder.playsOf(league, plays),
+          playsOf(league, plays),
           (sorted) => [advanced, [Delivery.Plays({ game, plays: sorted })]] as const
         ),
       Reset: ({ topic, detail }) =>
@@ -123,6 +132,17 @@ const pushed = Effect.fnUntraced(function* (state: EspnState, frame: Frame) {
         )
     })
   })
+})
+
+/** The game's plays, in `Play.order`; a play that does not decode is skipped. */
+const playsOf = Effect.fnUntraced(function* (
+  league: LeagueId,
+  entities: Readonly<Record<string, Schema.Json>>
+) {
+  const decoded = yield* Effect.forEach(Record.values(entities), (entity) =>
+    Effect.option(decodePlay[league](entity))
+  )
+  return Arr.getSomes(decoded).toSorted(Play.order)
 })
 
 /** Logs and counts a push `game` that is behind the game its `league` lists, which the listing takes anyway. */
@@ -167,6 +187,27 @@ function annotationsOf(frame: Frame): Readonly<Record<string, string>> {
     Pushed: ({ topic }) => ({ frame: "Pushed", ...Record.getSomes({ topic: Option.map(topic, tcOf) }) }),
     Checkpoint: ({ topic }) => ({ frame: "Checkpoint", topic: tcOf(topic) })
   })
+}
+
+const decodeScoreboard = Schema.decodeUnknownEffect(Schema.fromJsonString(Scoreboard))
+
+// Each league's decode, built once: an event of either feed, and a play entity.
+const decodeEvent: { readonly [L in LeagueId]: ReturnType<typeof decodeEventOf> } = {
+  nfl: decodeEventOf("nfl"),
+  fbs: decodeEventOf("fbs")
+}
+
+function decodeEventOf(league: LeagueId) {
+  return Schema.decodeUnknownEffect(EspnEvent(league))
+}
+
+const decodePlay: { readonly [L in LeagueId]: ReturnType<typeof decodePlayOf> } = {
+  nfl: decodePlayOf("nfl"),
+  fbs: decodePlayOf("fbs")
+}
+
+function decodePlayOf(league: LeagueId) {
+  return Schema.decodeUnknownEffect(EspnPlay.FootballPlay(league))
 }
 
 const pushesBehind = Metric.counter("sportal_push_behind_listing", {
