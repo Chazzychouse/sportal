@@ -2,6 +2,7 @@ import { NodeHttpServer } from "@effect/platform-node"
 import { assert, describe, it } from "@effect/vitest"
 import { LiveMessage, LiveMessageJson } from "@sportal/api/LiveMessage"
 import { SportalApi } from "@sportal/api/SportalApi"
+import { ChannelAvailability } from "@sportal/domain/Channel"
 import { GameId, Network } from "@sportal/domain/Game"
 import type { Tile } from "@sportal/domain/Screen"
 import { broadcast, snapshot, team } from "@sportal/domain/TestGame"
@@ -204,7 +205,7 @@ describe("GET /api/live", () => {
       assert.sameMembers([first._tag, second._tag], ["SlateChanged", "ScreenChanged"])
       assert.deepStrictEqual(
         [first, second].flatMap((message) =>
-          LiveMessage.guards.SlateChanged(message) ? message.games.map(({ plays }) => plays) : []
+          LiveMessage.guards.SlateChanged(message) ? message.games.map(({ game }) => game.plays) : []
         ),
         [[]]
       )
@@ -240,7 +241,7 @@ describe("GET /api/live", () => {
       const message = messageOf(line)
       assert.deepStrictEqual(
         LiveMessage.guards.SlateChanged(message)
-          ? message.games.map(({ snapshot }) => snapshot.period)
+          ? message.games.map(({ game }) => game.snapshot.period)
           : message,
         [4]
       )
@@ -249,7 +250,7 @@ describe("GET /api/live", () => {
   )
 
   it.effect(
-    "should send each listed game as its snapshot and plays, and nothing else the slate remembers",
+    "should send each listed game as its snapshot and plays, beside its availability, and nothing else the slate remembers",
     () =>
       Effect.gen(function* () {
         yield* firstSlateOnTestClock()
@@ -260,8 +261,10 @@ describe("GET /api/live", () => {
         )
 
         const [entry] = JSON.parse(line.slice("data: ".length)).games
-        assert.strictEqual(entry.snapshot.id, game.id)
-        assert.deepStrictEqual(Object.keys(entry), ["snapshot", "plays"])
+        assert.strictEqual(entry.game.snapshot.id, game.id)
+        assert.deepStrictEqual(Object.keys(entry), ["game", "availability"])
+        assert.deepStrictEqual(Object.keys(entry.game), ["snapshot", "plays"])
+        assert.deepStrictEqual(entry.availability, [{ _tag: "NoGuide", source: "YouTube TV" }])
         assert.notMatch(line, /"state"|"updatedAt"|"from"/)
       }).pipe(Effect.scoped, Effect.provide(serverUnderTest()))
   )
@@ -292,6 +295,40 @@ describe("GET /api/live", () => {
       )
 
       assert.isTrue(change.startsWith("data: "))
+    }).pipe(Effect.scoped, Effect.provide(serverUnderTest()))
+  )
+
+  it.live("should send the slate again when a guide read carries its game", () =>
+    Effect.gen(function* () {
+      const client = yield* makeClient
+      yield* firstSlate()
+      const lines = yield* pastInitialMessages()
+      const now = yield* DateTime.now
+
+      yield* client.guide.read({ payload: { guide: realSizedGuideAiring(now) } })
+      const line = yield* Queue.take(lines).pipe(
+        Effect.repeat({
+          until: (line) => line.includes("SlateChanged") && line.includes('"_tag":"Carried"')
+        }),
+        Effect.timeout("3 seconds")
+      )
+
+      const message = messageOf(line)
+      assert.deepStrictEqual(
+        LiveMessage.guards.SlateChanged(message) ? message.games[0]?.availability : message,
+        [
+          ChannelAvailability.cases.Carried.make({
+            channel: {
+              name: "ESPN",
+              source: "YouTube TV",
+              locator: {
+                _tag: "WebView",
+                url: "https://tv.youtube.com/watch/PFuNFGzJDE4?vp=0gEEEgIwAQ%3D%3D"
+              }
+            }
+          })
+        ]
+      )
     }).pipe(Effect.scoped, Effect.provide(serverUnderTest()))
   )
 })

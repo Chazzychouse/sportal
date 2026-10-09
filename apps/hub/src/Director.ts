@@ -1,8 +1,9 @@
+import { LiveMessage, type SlateChanged } from "@sportal/api/LiveMessage"
 import type { ChannelAvailability } from "@sportal/domain/Channel"
 import type { GameId, GameSnapshot } from "@sportal/domain/Game"
 import type { Play } from "@sportal/domain/Play"
 import { Screen, type ScreenCommand, type ScreenRejection } from "@sportal/domain/Screen"
-import { Cause, Context, Effect, Layer, Metric, Option, Stream, SubscriptionRef } from "effect"
+import { Cause, Context, Effect, Layer, Metric, Option, Schema, Stream, SubscriptionRef } from "effect"
 import * as HubStopping from "./HubStopping.ts"
 import { type Delivery, Provider } from "./provider/Provider.ts"
 import { Slate, SlateChange } from "./Slate.ts"
@@ -10,15 +11,18 @@ import { Source } from "./source/Source.ts"
 
 /**
  * The Hub's one holder of what is going on: the day's slate, taken from each frame its provider decodes as it
- * arrives, and the Screen every Display shows, changed by commands against where each game on the slate can be
+ * arrives and offered as published with each game's availability, and the Screen every Display shows, changed by commands against where each game on the slate can be
  * streamed now.
  */
 export class Director extends Context.Service<
   Director,
   {
     readonly slate: Effect.Effect<Slate>
-    /** The latest slate first, then each change. */
-    readonly slateChanges: Stream.Stream<Slate>
+    /**
+     * The slate as the live stream sends it, beside each game's availability: the latest first, then again whenever
+     * the slate or any game's availability changes.
+     */
+    readonly published: Stream.Stream<SlateChanged>
     readonly screen: Effect.Effect<Screen>
     /** The latest Screen first, then each change. */
     readonly screenChanges: Stream.Stream<Screen>
@@ -100,9 +104,21 @@ export class Director extends Context.Service<
         startImmediately: true
       })
 
+      // The slate whenever it changes, and again whenever the source's answers may have.
+      const slateOrAnswers = Stream.merge(
+        SubscriptionRef.changes(slate),
+        source.changes.pipe(Stream.mapEffect(() => SubscriptionRef.get(slate)))
+      )
+      const published = slateOrAnswers.pipe(
+        Stream.mapEffect((current) =>
+          Effect.map(source.availability, (availabilityOf) => current.published(availabilityOf))
+        ),
+        Stream.changesWith(samePublished)
+      )
+
       return Director.of({
         slate: SubscriptionRef.get(slate),
-        slateChanges: SubscriptionRef.changes(slate),
+        published,
         screen: SubscriptionRef.get(screen),
         screenChanges: SubscriptionRef.changes(screen),
         dispatch
@@ -137,6 +153,8 @@ function loggedPlay(snapshot: GameSnapshot, play: Play) {
     })
   )
 }
+
+const samePublished = Schema.toEquivalence(LiveMessage.cases.SlateChanged)
 
 // Each progress's value on `sportal_game_state`. Written as a record so that a new progress fails to compile here.
 const progressValues = { upcoming: 1, live: 2, over: 3 } satisfies Record<

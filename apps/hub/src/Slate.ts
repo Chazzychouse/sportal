@@ -1,4 +1,5 @@
 import { LiveMessage, type SlateChanged } from "@sportal/api/LiveMessage"
+import type { ChannelAvailability } from "@sportal/domain/Channel"
 import { Game, type GameId, type GameSnapshot } from "@sportal/domain/Game"
 import { LeagueId } from "@sportal/domain/League"
 import type { Play } from "@sportal/domain/Play"
@@ -37,9 +38,12 @@ export class Slate extends Data.Class<{
     return Arr.findFirst(this.games, ({ snapshot }) => snapshot.id === id)
   }
 
-  /** What the live stream sends of it: every listed game, with its recent plays. */
-  published(): SlateChanged {
-    const games = this.games.map((game) => game.recent())
+  /** What the live stream sends of it: every listed game, with its recent plays, beside `availabilityOf` it. */
+  published(availabilityOf: (game: GameSnapshot) => ReadonlyArray<ChannelAvailability>): SlateChanged {
+    const games = this.games.map((game) => ({
+      game: game.recent(),
+      availability: availabilityOf(game.snapshot)
+    }))
     return LiveMessage.cases.SlateChanged.make({ games })
   }
 

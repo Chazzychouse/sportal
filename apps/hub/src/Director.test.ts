@@ -1,4 +1,5 @@
 import { assert, describe, it } from "@effect/vitest"
+import type { SlateChanged } from "@sportal/api/LiveMessage"
 import { ChannelAvailability } from "@sportal/domain/Channel"
 import { GameId, GameSnapshot, Network } from "@sportal/domain/Game"
 import { type Play, PlayId } from "@sportal/domain/Play"
@@ -153,13 +154,13 @@ describe("Director, the slate", () => {
   })
 })
 
-describe("Director#slateChanges", () => {
+describe("Director#published", () => {
   it.effect("should give the latest, then each change once", () =>
     Effect.gen(function* () {
       const director = yield* Director
       const published = yield* Ref.make<ReadonlyArray<GameSnapshot | undefined>>([])
-      yield* director.slateChanges.pipe(
-        Stream.runForEach((current) => Ref.update(published, (all) => [...all, snapshotIn(current, one)])),
+      yield* director.published.pipe(
+        Stream.runForEach((current) => Ref.update(published, (all) => [...all, snapshotOf(current, one)])),
         Effect.forkScoped({ startImmediately: true })
       )
       const first = liveSnapshot({ id: one })
@@ -178,7 +179,7 @@ describe("Director#slateChanges", () => {
     Effect.gen(function* () {
       const director = yield* Director
       const published = yield* Ref.make(0)
-      yield* director.slateChanges.pipe(
+      yield* director.published.pipe(
         Stream.runForEach(() => Ref.update(published, (count) => count + 1)),
         Effect.forkScoped({ startImmediately: true })
       )
@@ -190,6 +191,70 @@ describe("Director#slateChanges", () => {
 
       assert.strictEqual(count, 2)
     }).pipe(Effect.provide(directed))
+  )
+
+  it.live("should publish again when a source's answers change", () =>
+    Effect.gen(function* () {
+      const carries = yield* Ref.make(false)
+      const youTubeTv = Layer.succeed(
+        Source,
+        Source.of({
+          availability: Ref.get(carries).pipe(
+            Effect.map((on) => () => [
+              on ? ChannelAvailability.cases.Carried.make({ channel: primeOnYouTubeTv }) : streamingOnly
+            ])
+          ),
+          changes: Stream.tick("10 millis")
+        })
+      )
+
+      const availability = yield* Effect.gen(function* () {
+        const director = yield* Director
+        const first = yield* Deferred.make<void>()
+        const waiting = yield* director.published.pipe(
+          Stream.tap(() => Deferred.succeed(first, undefined)),
+          Stream.filter(({ games }) =>
+            games.some(({ availability }) => availability.some(ChannelAvailability.guards.Carried))
+          ),
+          Stream.runHead,
+          Effect.timeout("2 seconds"),
+          Effect.forkScoped
+        )
+        yield* Deferred.await(first)
+
+        yield* Ref.set(carries, true)
+
+        const message = yield* Fiber.join(waiting)
+        return Option.map(message, ({ games }) => games[0]?.availability)
+      }).pipe(
+        Effect.provide(listed(games).pipe(Layer.provideMerge(directorOver), Layer.provideMerge(youTubeTv)))
+      )
+
+      assert.deepStrictEqual(
+        availability,
+        Option.some([ChannelAvailability.cases.Carried.make({ channel: primeOnYouTubeTv })])
+      )
+    })
+  )
+
+  it.live("should publish nothing when a source's change changes no answer", () =>
+    Effect.gen(function* () {
+      const answering = Source.layerTest(() => streamingOnly, Stream.tick("10 millis"))
+
+      const next = yield* Effect.gen(function* () {
+        const director = yield* Director
+
+        return yield* director.published.pipe(
+          Stream.drop(1),
+          Stream.runHead,
+          Effect.timeoutOption("200 millis")
+        )
+      }).pipe(
+        Effect.provide(listed(games).pipe(Layer.provideMerge(directorOver), Layer.provideMerge(answering)))
+      )
+
+      assert.isTrue(Option.isNone(next))
+    })
   )
 })
 
@@ -281,6 +346,11 @@ const latest = Director.use((director) => director.slate)
 
 function snapshotIn(slate: Slate, id: GameId): GameSnapshot | undefined {
   return Option.getOrUndefined(slate.game(id))?.snapshot
+}
+
+/** Game `id`'s snapshot in a published slate, if it is there. */
+function snapshotOf(message: SlateChanged, id: GameId) {
+  return message.games.find(({ game }) => game.snapshot.id === id)?.game.snapshot
 }
 
 function playsIn(slate: Slate, id: GameId): ReadonlyArray<Play> {

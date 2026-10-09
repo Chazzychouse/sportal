@@ -114,8 +114,8 @@ const hostHandlers = HttpApiBuilder.group(
 )
 
 /**
- * GET /api/live — the current slate and the screen, then every change, as server-sent events,
- * with a comment every 20 seconds so proxies that close idle connections leave a quiet stream open.
+ * GET /api/live — the current slate, each game beside its availability, and the screen, then every change, as
+ * server-sent events, with a comment every 20 seconds so proxies that close idle connections leave a quiet stream open.
  */
 const liveRoute = HttpRouter.add(
   "GET",
@@ -125,10 +125,7 @@ const liveRoute = HttpRouter.add(
     const screenChanges = director.screenChanges.pipe(
       Stream.map((next) => LiveMessage.cases.ScreenChanged.make({ screen: next }))
     )
-    const slateChanges = director.slateChanges.pipe(
-      settled,
-      Stream.map((slate) => slate.published())
-    )
+    const slateChanges = director.published.pipe(settled)
     const messages: Stream.Stream<LiveMessage> = Stream.merge(slateChanges, screenChanges)
     const encode = Schema.encodeEffect(LiveMessageJson)
     const events = messages.pipe(

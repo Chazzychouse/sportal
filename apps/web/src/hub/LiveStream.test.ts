@@ -1,5 +1,6 @@
 import { afterEach, assert, beforeEach, describe, it } from "@effect/vitest"
 import { LiveMessageJson } from "@sportal/api/LiveMessage"
+import { ChannelAvailability } from "@sportal/domain/Channel"
 import { Game, GameId } from "@sportal/domain/Game"
 import { Completion, PlayId } from "@sportal/domain/Play"
 import { Screen } from "@sportal/domain/Screen"
@@ -122,12 +123,25 @@ describe("LiveStream.live", () => {
           plays: [play(), touchdown()]
         })
 
-        source.onmessage?.({ data: message({ _tag: "SlateChanged", games: [game] }) })
+        source.onmessage?.({ data: message({ _tag: "SlateChanged", games: [{ game, availability: [] }] }) })
         const state = yield* until((current) => current.slate.length > 0)
 
         assert.deepStrictEqual(state.slate[0]?.plays, game.plays)
         assert.instanceOf(state.slate[0]?.plays[1], Completion)
       }).pipe(Effect.provide(AtomRegistry.layer))
+  )
+
+  it.effect("should keep each game's availability from a slate message, by its id", () =>
+    Effect.gen(function* () {
+      const source = yield* opened()
+      const game = new Game({ snapshot: snapshot({ id: GameId.make("401") }), plays: [] })
+      const availability = [ChannelAvailability.cases.NotCarried.make({ why: "StreamingOnly" })]
+
+      source.onmessage?.({ data: message({ _tag: "SlateChanged", games: [{ game, availability }] }) })
+      const state = yield* until((current) => current.slate.length > 0)
+
+      assert.deepStrictEqual(state.availability.get(GameId.make("401")), availability)
+    }).pipe(Effect.provide(AtomRegistry.layer))
   )
 
   it.effect("should skip a malformed message and keep reading", () =>
