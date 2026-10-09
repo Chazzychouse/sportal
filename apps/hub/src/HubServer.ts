@@ -128,17 +128,16 @@ const liveRoute = HttpRouter.add(
 )
 
 /**
- * The slate as the live stream sends it, each game beside its availability: the current slate first, then again
- * whenever the slate changes or the source's availability may have, unless what it sends is the same.
+ * The slate as the live stream sends it, each game beside its availability as of when it is sent: the current slate
+ * first, then again whenever the slate or the source's availability changes, unless what it sends is the same.
  */
 const published = Effect.gen(function* () {
   const director = yield* Director
   const source = yield* Source
 
-  const slateOrAvailability = Stream.zipLatest(director.slate, Stream.prepend(source.changes, [undefined]))
-  return slateOrAvailability.pipe(
-    Stream.mapEffect(([slate]) =>
-      Effect.map(source.availability, (availabilityOf) => slate.published(availabilityOf))
+  return Stream.zipLatest(director.slate, source.availability).pipe(
+    Stream.mapEffect(([slate, availabilityOf]) =>
+      Effect.map(DateTime.now, (now) => slate.published((game) => availabilityOf(game, now)))
     ),
     Stream.changesWith(samePublished)
   )

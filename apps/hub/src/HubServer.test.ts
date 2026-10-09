@@ -188,6 +188,27 @@ describe("GET /api/live", () => {
     }).pipe(Effect.scoped, Effect.provide(serverUnderTest(changingEverySecond)))
   )
 
+  it.effect(
+    "should send a game as carried once a snapshot says it has kicked off, with nothing else changing",
+    () =>
+      Effect.gen(function* () {
+        const scheduled = snapshot({ id: game.id, broadcasts: [broadcast("Prime Video", "streaming")] })
+        yield* delivered(Delivery.Listing({ league: "fbs", games: [scheduled] }))
+        yield* TestClock.adjust("250 millis")
+        const lines = yield* pastInitialMessages()
+
+        yield* delivered(Delivery.Snapshot({ snapshot: snapshot({ ...scheduled, status: "live" }) }))
+        yield* TestClock.adjust("250 millis")
+        const line = yield* Queue.take(lines)
+
+        const message = messageOf(line)
+        assert.deepStrictEqual(
+          message.games[0]?.availability.map(({ _tag }) => _tag),
+          ["Carried"]
+        )
+      }).pipe(Effect.scoped, Effect.provide(serverUnderTest(Source.layerTwitch)))
+  )
+
   it.live("should send the slate again when a guide read carries its game", () =>
     Effect.gen(function* () {
       const client = yield* makeClient

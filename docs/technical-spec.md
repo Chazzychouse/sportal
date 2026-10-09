@@ -210,8 +210,9 @@ sportal/
     │       │       └── fixtures/           Recorded real payloads, NE at BUF's frames among them
     │       └── source/
     │           ├── Source.ts           The port, its variants, and how several act as one
-    │           ├── GuideReader.ts      Reads the guide the shell fetches, keeps it while fresh
+    │           ├── GuideReader.ts      Reads the guide the shell fetches, offers it while fresh
     │           ├── Twitch.ts           Twitch's lineup
+    │           ├── TestSource.ts       The source's availability now, for tests
     │           └── youtube-tv/
     │               ├── YouTubeTvGuide.ts    A guide response as channels and airings
     │               ├── YouTubeTvPayload.ts  The guide response's wire shape
@@ -316,12 +317,12 @@ class Director extends Context.Service<Director, {
 
 ```ts
 class Source extends Context.Service<Source, {
-  readonly availability: Effect<(game: GameSnapshot) => ReadonlyArray<ChannelAvailability>>
-  readonly changes: Stream<void>
+  // as it is, then again each time what the source knows changes: a guide read, or a guide gone stale
+  readonly availability: Stream<(game: GameSnapshot, now: DateTime.Utc) => ReadonlyArray<ChannelAvailability>>
 }>()("sportal/hub/source/Source") {}
 ```
 
-`Source.layerAll` runs every source and gives each game's availability from every source, in the order the sources are given; it merges nothing. The Display's Screen chooses: the most useful availability (carried, upcoming, no guide, then not carried), and a stream tile moves only when its own source carries its game on another channel, so a tile never moves to another source. YouTube TV's availability comes from the guide `GuideReader` keeps; Twitch from its lineup, a guide whose one channel carries Prime Video.
+`Source.layerAll` runs every source and gives each game's availability from every source, in the order the sources are given, again whenever any of them changes; it merges nothing. A matched channel on the air is carried once the slate says the game has started, and upcoming before, so nothing ticks: the live route reads the time when it sends, only to choose among a guide's airings. The Display's Screen chooses: the most useful availability (carried, upcoming, no guide, then not carried), and a stream tile moves only when its own source carries its game on another channel, so a tile never moves to another source. YouTube TV's availability comes from the guide `GuideReader` offers; Twitch's from its lineup, a guide whose one channel carries Prime Video, given once.
 
 YouTube TV's channels are found in its own guide, read by the shell and handed to `GuideReader.readGuide` (`docs/history.md`, "Guide-matched channels"); with no fresh guide (a guide is fresh for 45 minutes), its availability is "no guide". Twitch's lineup is fixed and never read.
 

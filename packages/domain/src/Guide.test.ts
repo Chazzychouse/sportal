@@ -106,7 +106,7 @@ describe("Guide#availabilityOf", () => {
     })
   })
 
-  it("should be carried on a live channel when the airing begins within 30 minutes of the reading", () => {
+  it("should be upcoming on a live channel while the game has not started, however soon its airing begins", () => {
     const arkansasAtTexasAM = snapshot({
       kickoff: DateTime.makeUnsafe("2026-10-03T20:45:00Z"),
       away: { team: team("ARK", "fbs", { name: "Arkansas Razorbacks", location: "Arkansas" }), score: 0 },
@@ -116,7 +116,7 @@ describe("Guide#availabilityOf", () => {
 
     const availability = guide.availabilityOf(arkansasAtTexasAM, readAt)
 
-    assert.strictEqual(availability._tag, "Carried")
+    assert.strictEqual(availability._tag, "Upcoming")
   })
 
   it("should be upcoming, naming the channel, when the channel is off the air", () => {
@@ -147,7 +147,7 @@ describe("Guide#availabilityOf", () => {
     })
   })
 
-  it("should be upcoming on a live channel when the airing is more than 30 minutes away", () => {
+  it("should be upcoming on a live channel when the airing is hours away", () => {
     const availability = guide.availabilityOf(miamiAtClemson([broadcast("ABC")]), readAt)
 
     assert.deepStrictEqual(availability, {
@@ -285,23 +285,18 @@ describe("Guide#availabilityOf", () => {
     assert.deepStrictEqual(availability, { _tag: "NotCarried", why: "NotInGuide" })
   })
 
-  it("should be carried on a live channel when the airing begins exactly 30 minutes past the reading", () => {
-    const begin = DateTime.add(readAt, { minutes: 30 })
-    const scheduled = snapshot({ ...ohioStateAtIowa, status: "scheduled", kickoff: begin })
+  it("should be carried on a live channel once the game has started", () => {
+    const started = snapshot({ ...ohioStateAtIowa, status: "live", kickoff: readAt })
 
-    const availability = airingBeginning(begin).availabilityOf(scheduled, readAt)
+    const availability = airingBeginning(readAt).availabilityOf(started, readAt)
 
     assert.strictEqual(availability._tag, "Carried")
   })
 
-  it("should be upcoming on a live channel when the airing begins just past 30 minutes after the reading", () => {
-    const begin = DateTime.add(readAt, { minutes: 30 })
-    const scheduled = snapshot({ ...ohioStateAtIowa, status: "scheduled", kickoff: begin })
+  it("should be upcoming on a live channel at its airing's begin while the game has not started", () => {
+    const scheduled = snapshot({ ...ohioStateAtIowa, status: "scheduled", kickoff: readAt })
 
-    const availability = airingBeginning(DateTime.add(begin, { seconds: 1 })).availabilityOf(
-      scheduled,
-      readAt
-    )
+    const availability = airingBeginning(readAt).availabilityOf(scheduled, readAt)
 
     assert.strictEqual(availability._tag, "Upcoming")
   })
@@ -363,10 +358,10 @@ describe("Guide#availabilityOf on a channel that carries a network", () => {
     broadcasts: [broadcast("Prime Video", "streaming")]
   })
 
-  it("should be carried on the network's channel from 30 minutes before kickoff", () => {
-    const now = DateTime.subtract(kickoff, { minutes: 30 })
+  it("should be carried on the network's channel once the game has started", () => {
+    const started = snapshot({ ...thursdayNight, status: "live" })
 
-    const availability = lineup.availabilityOf(thursdayNight, now)
+    const availability = lineup.availabilityOf(started, kickoff)
 
     assert.deepStrictEqual(availability, {
       _tag: "Carried",
@@ -374,8 +369,8 @@ describe("Guide#availabilityOf on a channel that carries a network", () => {
     })
   })
 
-  it("should be upcoming on the network's channel at kickoff until 30 minutes before it", () => {
-    const now = DateTime.subtract(kickoff, { minutes: 30, seconds: 1 })
+  it("should be upcoming on the network's channel at kickoff until the game has started, even past its kickoff", () => {
+    const now = DateTime.add(kickoff, { minutes: 5 })
 
     const availability = lineup.availabilityOf(thursdayNight, now)
 
@@ -423,7 +418,7 @@ describe("Guide#availabilityOf on a channel that carries a network", () => {
       airings: [airing(live, "AWAY at HOME", "2026-10-09T00:15:00Z", "2026-10-09T03:30:00Z")]
     })
 
-    const availability = both.availabilityOf(thursdayNight, kickoff)
+    const availability = both.availabilityOf(snapshot({ ...thursdayNight, status: "live" }), kickoff)
 
     assert.deepStrictEqual(availability, {
       _tag: "Carried",

@@ -46,7 +46,7 @@ export class Guide extends Schema.Class<Guide>("sportal/Guide")({
    * kickoff or is on now while the game is under way. Of several, the one on a channel named for one of the game's
    * networks wins, then the first in the guide. With no such airing, a channel that carries one of the game's networks
    * shows it as if it aired from kickoff, until the game is over. Either is carried once its channel is on the air and
-   * it begins at most half an hour from `now`; until then it is upcoming. With neither, a kickoff past the reach of a
+   * the game has started; until then it is upcoming. With neither, a kickoff past the reach of a
    * guide that lists airings is upcoming, and any other game is not carried.
    */
   availabilityOf(game: GameSnapshot, now: DateTime.Utc): ChannelAvailability {
@@ -57,13 +57,13 @@ export class Guide extends Schema.Class<Guide>("sportal/Guide")({
         matches.find((candidate) =>
           game.broadcasts.some(({ network }) => namesNetwork(this.channelOf(candidate).name, network))
         ) ?? first
-      return this.from(this.channelOf(airing), airing.begin, now)
+      return this.from(this.channelOf(airing), airing.begin, game)
     }
 
     const carrier = this.channels.find((channel) =>
       game.broadcasts.some(({ network }) => channel.network === network)
     )
-    if (carrier !== undefined && game.progress() !== "over") return this.from(carrier, game.kickoff, now)
+    if (carrier !== undefined && game.progress() !== "over") return this.from(carrier, game.kickoff, game)
 
     const pastReach = DateTime.isGreaterThan(game.kickoff, DateTime.addDuration(this.readAt, Guide.reach))
     if (this.airings.length > 0 && pastReach)
@@ -73,14 +73,13 @@ export class Guide extends Schema.Class<Guide>("sportal/Guide")({
     return { _tag: "NotCarried", why: streamingOnly ? "StreamingOnly" : "NotInGuide" }
   }
 
-  /** Carried on `channel` once it is on the air and `begin` is at most half an hour from `now`; else upcoming. */
+  /** Carried on `channel` once it is on the air and `game` has started; else upcoming from `begin`. */
   private from(
     channel: { readonly name: string; readonly live?: StreamLocator | undefined },
     begin: DateTime.Utc,
-    now: DateTime.Utc
+    game: GameSnapshot
   ): ChannelAvailability {
-    const soon = DateTime.isLessThanOrEqualTo(begin, DateTime.addDuration(now, startingSoon))
-    return channel.live !== undefined && soon
+    return channel.live !== undefined && game.progress() !== "upcoming"
       ? { _tag: "Carried", channel: { name: channel.name, source: this.source, locator: channel.live } }
       : { _tag: "Upcoming", channel: Option.some(channel.name), begin: Option.some(begin) }
   }
@@ -111,9 +110,6 @@ export class GuideUnreadable extends Schema.TaggedError<GuideUnreadable>()(
   {},
   { httpApiStatus: 422 }
 ) {}
-
-/** How long before an airing begins its channel is shown for it: the pregame, not another programme. */
-const startingSoon = Duration.minutes(30)
 
 /** How far an airing may begin from kickoff and still be the game: listings round, and kickoffs slip. */
 const kickoffTolerance = Duration.minutes(45)

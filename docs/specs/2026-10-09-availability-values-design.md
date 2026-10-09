@@ -70,11 +70,12 @@ slate changes, which come every few seconds. An airing that ends after its game 
 the next slate or guide change (the shell reads the guide every 15 minutes); a finished game's tile is not worth a
 clock.
 
-### 5. `wanted` uses `zipLatest`
+### 5. `wanted` stays as it is
 
-`Stream.zipLatest(SubscriptionRef.changes(state), Stream.tick("1 minute"))` replaces the merge and `mapAccum`; the
-`DateTime.now` read, `wanted(leagues, now)` and the dedupe stay. The `polling` schedule's `SubscriptionRef.get` stays:
-a schedule step needs the state at that moment.
+Tried and dropped: `zipLatest` (and `switchMap` over a minute tick) start a few scheduler steps later than the merge
+and `mapAccum`, and the provider's tests of following topics from the start and after a gap rely on it starting at
+once. It already carries values, not a signal. The `polling` schedule's `SubscriptionRef.get` stays too: a schedule
+step needs the state at that moment.
 
 ## Not changing
 
@@ -90,8 +91,7 @@ a schedule step needs the state at that moment.
   the time; carried once it is live.
 - `HubServer.test.ts`: the source-change dedupe test uses a source repeating one value; a new test: an upcoming game
   on a carrying channel turns carried when a snapshot says it has kicked off.
-- `EspnProvider.test.ts`: "should want a game's topic once its kickoff is 30 minutes away, with no frame" stays and
-  must pass unchanged.
+- `EspnProvider.test.ts`: unchanged.
 
 ## Docs
 

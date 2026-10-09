@@ -7,7 +7,7 @@ import {
   FiberHandle,
   Layer,
   Option,
-  Stream,
+  type Stream,
   SubscriptionRef
 } from "effect"
 import * as YouTubeTvGuide from "./youtube-tv/YouTubeTvGuide.ts"
@@ -19,10 +19,11 @@ import * as YouTubeTvGuide from "./youtube-tv/YouTubeTvGuide.ts"
 export class GuideReader extends Context.Service<
   GuideReader,
   {
-    /** The latest guide while it is fresh; none before the first read, and once the last is stale. */
-    readonly latest: Effect.Effect<Option.Option<Guide>>
-    /** Emits once after every guide read, and when the latest guide goes stale. */
-    readonly changes: Stream.Stream<void>
+    /**
+     * The latest guide while it is fresh, then again after every guide read and when it goes stale; none before the
+     * first read, and once the last is stale.
+     */
+    readonly guide: Stream.Stream<Option.Option<Guide>>
     /** Reads a guide response as the source's guide page received it; it is the latest guide next. */
     readGuide(guide: string): Effect.Effect<void, GuideUnreadable>
   }
@@ -64,9 +65,7 @@ export class GuideReader extends Context.Service<
       })
 
       return GuideReader.of({
-        latest: SubscriptionRef.get(latest),
-        // The ref's current value comes first on every subscription; only later values are changes.
-        changes: SubscriptionRef.changes(latest).pipe(Stream.drop(1), Stream.as(undefined)),
+        guide: SubscriptionRef.changes(latest),
         readGuide
       })
     })

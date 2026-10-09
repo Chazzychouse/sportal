@@ -6,6 +6,7 @@ import { DateTime, Effect, Fiber, Layer, Logger, Option, Ref, Stream } from "eff
 import { TestClock } from "effect/testing"
 import { GuideReader } from "./GuideReader.ts"
 import { Source } from "./Source.ts"
+import { availabilityNow } from "./TestSource.ts"
 import { readRecordedGuide, recordedAt, recordedGuide } from "./youtube-tv/TestYouTubeTv.ts"
 
 const youTubeTv = Source.layerYouTubeTv.pipe(Layer.provideMerge(GuideReader.layerYouTubeTv))
@@ -32,12 +33,11 @@ describe("GuideReader.layerYouTubeTv", () => {
   it.effect("should read the recorded guide's channels, live addresses, and airings", () =>
     Effect.gen(function* () {
       yield* TestClock.setTime(recordedAt)
-      const source = yield* Source
       const reader = yield* GuideReader
 
       yield* reader.readGuide(recordedGuide)
 
-      const availabilityOf = yield* source.availability
+      const availabilityOf = yield* availabilityNow
       assert.deepStrictEqual(availabilityOf(ohioStateAtIowa), [onNews3])
     }).pipe(Effect.provide(youTubeTv))
   )
@@ -45,7 +45,7 @@ describe("GuideReader.layerYouTubeTv", () => {
   it.effect("should signal a change after a guide is read", () =>
     Effect.gen(function* () {
       const reader = yield* GuideReader
-      const signals = yield* reader.changes.pipe(Stream.take(1), Stream.runCount, Effect.forkChild)
+      const signals = yield* laterGuides.pipe(Stream.take(1), Stream.runCount, Effect.forkChild)
       yield* Effect.yieldNow
 
       yield* reader.readGuide(recordedGuide)
@@ -57,29 +57,27 @@ describe("GuideReader.layerYouTubeTv", () => {
 
   it.effect("should keep its guide 44 minutes after reading it, signalling nothing", () =>
     Effect.gen(function* () {
-      const source = yield* guideReadAtRecording()
-      const reader = yield* GuideReader
-      const changes = yield* counted(reader.changes)
+      yield* readRecordedGuide
+      const changes = yield* counted(laterGuides)
 
       yield* TestClock.adjust("44 minutes")
 
-      const availabilityOf = yield* source.availability
+      const availabilityOf = yield* availabilityNow
       const signalled = yield* Ref.get(changes)
       assert.deepStrictEqual(availabilityOf(ohioStateAtIowa), [onNews3])
       assert.strictEqual(signalled, 0)
     }).pipe(Effect.provide(youTubeTv))
   )
 
-  it.effect("should answer no guide once its guide is 45 minutes old, signalling then", () =>
+  it.effect("should give no guide once its guide is 45 minutes old, signalling then", () =>
     Effect.gen(function* () {
-      const source = yield* guideReadAtRecording()
-      const reader = yield* GuideReader
-      const changes = yield* counted(reader.changes)
+      yield* readRecordedGuide
+      const changes = yield* counted(laterGuides)
       yield* TestClock.adjust("44 minutes")
 
       yield* TestClock.adjust("1 minute")
 
-      const availabilityOf = yield* source.availability
+      const availabilityOf = yield* availabilityNow
       const signalled = yield* Ref.get(changes)
       assert.deepStrictEqual(availabilityOf(ohioStateAtIowa), [{ _tag: "NoGuide", source: "YouTube TV" }])
       assert.strictEqual(signalled, 1)
@@ -88,28 +86,28 @@ describe("GuideReader.layerYouTubeTv", () => {
 
   it.effect("should keep a newer guide when an older one would have gone stale", () =>
     Effect.gen(function* () {
-      const source = yield* guideReadAtRecording()
+      yield* readRecordedGuide
       const reader = yield* GuideReader
       yield* TestClock.adjust("30 minutes")
       yield* reader.readGuide(recordedGuide)
 
       yield* TestClock.adjust("20 minutes")
 
-      const availabilityOf = yield* source.availability
+      const availabilityOf = yield* availabilityNow
       assert.deepStrictEqual(availabilityOf(ohioStateAtIowa), [onNews3])
     }).pipe(Effect.provide(youTubeTv))
   )
 
   it.effect("should keep the guide it has, and signal nothing, when a later response cannot be read", () =>
     Effect.gen(function* () {
-      const source = yield* guideReadAtRecording()
+      yield* readRecordedGuide
       const reader = yield* GuideReader
-      const changes = yield* counted(reader.changes)
+      const changes = yield* counted(laterGuides)
 
       yield* reader.readGuide("{}").pipe(Effect.flip)
       yield* Effect.yieldNow
 
-      const availabilityOf = yield* source.availability
+      const availabilityOf = yield* availabilityNow
       const signalled = yield* Ref.get(changes)
       assert.deepStrictEqual(availabilityOf(ohioStateAtIowa), [onNews3])
       assert.strictEqual(signalled, 0)
@@ -119,12 +117,11 @@ describe("GuideReader.layerYouTubeTv", () => {
   it.effect("should leave a channel without a live address when its row's live id is not one", () =>
     Effect.gen(function* () {
       yield* TestClock.setTime(recordedAt)
-      const source = yield* Source
       const reader = yield* GuideReader
 
       yield* reader.readGuide(oneRowGuide("y6zFA17zDsw?x"))
 
-      const availabilityOf = yield* source.availability
+      const availabilityOf = yield* availabilityNow
       assert.deepStrictEqual(availabilityOf(ohioStateAtIowa), [
         {
           _tag: "Upcoming",
@@ -163,30 +160,24 @@ describe("GuideReader.layerYouTubeTv", () => {
         contents: { epgRenderer: { paginationRenderer: { epgPaginationRenderer: { contents: [] } } } }
       })
     ]
-  ] as const)("should refuse %s, answering no guide still", ([_name, response]) =>
+  ] as const)("should refuse %s, giving no guide still", ([_name, response]) =>
     Effect.gen(function* () {
-      const source = yield* Source
       const reader = yield* GuideReader
 
       const error = yield* reader.readGuide(response).pipe(Effect.flip)
 
-      const availabilityOf = yield* source.availability
+      const availabilityOf = yield* availabilityNow
       assert.strictEqual(error._tag, "GuideUnreadable")
       assert.strictEqual(availabilityOf(onEspn)[0]?._tag, "NoGuide")
     }).pipe(Effect.provide(youTubeTv))
   )
 })
 
-/** The source once its reader has read the recorded guide, on the test clock at the moment it was recorded. */
-function guideReadAtRecording() {
-  return Effect.gen(function* () {
-    yield* readRecordedGuide
-    return yield* Source
-  })
-}
+/** Each guide the reader gives after the one it has now: a change. */
+const laterGuides = Stream.unwrap(GuideReader.use(({ guide }) => Effect.succeed(Stream.drop(guide, 1))))
 
 /** Counts what `stream` emits from now on, in the background. */
-function counted(stream: Stream.Stream<void>) {
+function counted<R>(stream: Stream.Stream<unknown, never, R>) {
   return Effect.gen(function* () {
     const count = yield* Ref.make(0)
     yield* stream.pipe(
