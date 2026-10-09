@@ -23,7 +23,7 @@ const ohioStateAtIowa = snapshot({
   home: { team: team("IOWA", "fbs", { name: "Iowa Hawkeyes", location: "Iowa" }), score: 0 },
   broadcasts: [broadcast("CBS")]
 })
-const onNews3 = ChannelAvailability.Carried({
+const onNews3 = ChannelAvailability.cases.Carried.make({
   channel: { name: "News 3", source: "YouTube TV", locator: { _tag: "WebView", url: cbsLive } }
 })
 
@@ -82,7 +82,7 @@ describe("GuideReader.layerYouTubeTv", () => {
       const signalled = yield* Ref.get(changes)
       assert.deepStrictEqual(
         availabilityOf(ohioStateAtIowa),
-        ChannelAvailability.NoGuide({ source: "YouTube TV" })
+        ChannelAvailability.cases.NoGuide.make({ source: "YouTube TV" })
       )
       assert.strictEqual(signalled, 1)
     }).pipe(Effect.provide(youTubeTv))
@@ -129,7 +129,7 @@ describe("GuideReader.layerYouTubeTv", () => {
       const availabilityOf = yield* source.availability
       assert.deepStrictEqual(
         availabilityOf(ohioStateAtIowa),
-        ChannelAvailability.Upcoming({
+        ChannelAvailability.cases.Upcoming.make({
           channel: Option.some("News 3"),
           begin: Option.some(DateTime.makeUnsafe("2026-10-03T19:35:00Z"))
         })

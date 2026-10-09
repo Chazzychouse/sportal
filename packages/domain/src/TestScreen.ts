@@ -17,12 +17,12 @@ export const foxChannel = {
 
 /** Every game is carried on FOX. */
 export function onFox() {
-  return ChannelAvailability.Carried({ channel: foxChannel })
+  return ChannelAvailability.cases.Carried.make({ channel: foxChannel })
 }
 
 /** No game has a stream. */
 export function nowhere() {
-  return ChannelAvailability.NotCarried({ why: "NoStream" })
+  return ChannelAvailability.cases.NotCarried.make({ why: "NoStream" })
 }
 
 /** `screen` with `game` assigned to `tile`, its channel from `availabilityOf`. */

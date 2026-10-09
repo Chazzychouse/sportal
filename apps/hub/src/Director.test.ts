@@ -143,7 +143,9 @@ describe("Director, the slate", () => {
     }).pipe(
       Effect.provide(
         directorOver.pipe(
-          Layer.provide(Source.layerTest(() => ChannelAvailability.NoGuide({ source: "YouTube TV" }))),
+          Layer.provide(
+            Source.layerTest(() => ChannelAvailability.cases.NoGuide.make({ source: "YouTube TV" }))
+          ),
           Layer.provideMerge(layer)
         )
       )
@@ -328,7 +330,7 @@ const ohioStateAtIowa = snapshot({
   broadcasts: [broadcast("CBS")]
 })
 
-const streamingOnly = ChannelAvailability.NotCarried({ why: "StreamingOnly" })
+const streamingOnly = ChannelAvailability.cases.NotCarried.make({ why: "StreamingOnly" })
 const primeOnTwitch = {
   name: "Prime Video",
   source: "Twitch" as const,
@@ -463,7 +465,7 @@ describe("Director, the Screen", () => {
     Effect.gen(function* () {
       const pulses = yield* Queue.unbounded<void>()
       const answering = Source.layerTest(
-        () => ChannelAvailability.NoGuide({ source: "YouTube TV" }),
+        () => ChannelAvailability.cases.NoGuide.make({ source: "YouTube TV" }),
         Stream.fromQueue(pulses)
       )
 
@@ -499,14 +501,18 @@ describe("Director, the Screen", () => {
           availability: Ref.get(youTubeTvCarries).pipe(
             Effect.map(
               (carries) => () =>
-                carries ? ChannelAvailability.Carried({ channel: primeOnYouTubeTv }) : streamingOnly
+                carries
+                  ? ChannelAvailability.cases.Carried.make({ channel: primeOnYouTubeTv })
+                  : streamingOnly
             )
           ),
           changes: Stream.fromQueue(pulses)
         })
       )
       const twitch = Source.layerTest((game) =>
-        game.id === GameId.make("5") ? ChannelAvailability.Carried({ channel: primeOnTwitch }) : streamingOnly
+        game.id === GameId.make("5")
+          ? ChannelAvailability.cases.Carried.make({ channel: primeOnTwitch })
+          : streamingOnly
       )
       // YouTube TV first: were a tile to follow the combined answer, the tie would go to YouTube TV.
       const bothSources = Source.layerAll([youTubeTv, twitch])
@@ -643,7 +649,7 @@ describe("Director, the Screen", () => {
       assert.strictEqual(playing.tiles[0]?._tag, "StreamTile")
       assert.deepStrictEqual(
         availability(ohioStateAtIowa),
-        ChannelAvailability.NoGuide({ source: "YouTube TV" })
+        ChannelAvailability.cases.NoGuide.make({ source: "YouTube TV" })
       )
       assert.deepStrictEqual(screen.tiles[0], playing.tiles[0])
     }).pipe(Effect.provide(directing([ohioStateAtIowa])))

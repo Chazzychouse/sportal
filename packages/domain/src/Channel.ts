@@ -1,4 +1,4 @@
-import { Data, type DateTime, type Option, Schema } from "effect"
+import { Schema } from "effect"
 import { StreamLocator } from "./Stream.ts"
 
 /** The sources Sportal can play video from, by the name people know them by. */
@@ -13,10 +13,13 @@ export type Channel = typeof Channel.Type
  * Whether and where a source can show one game: carried, upcoming (its airing is still to come, or past what
  * the guide lists), not carried with why, or no guide (the source has no fresh guide to say).
  */
-export type ChannelAvailability = Data.TaggedEnum<{
-  Carried: { readonly channel: Channel }
-  Upcoming: { readonly channel: Option.Option<string>; readonly begin: Option.Option<DateTime.Utc> }
-  NoGuide: { readonly source: SourceName }
-  NotCarried: { readonly why: "NoStream" | "StreamingOnly" | "NotInGuide" }
-}>
-export const ChannelAvailability = Data.taggedEnum<ChannelAvailability>()
+export const ChannelAvailability = Schema.TaggedUnion({
+  Carried: { channel: Channel },
+  Upcoming: {
+    channel: Schema.OptionFromOptionalKey(Schema.String),
+    begin: Schema.OptionFromOptionalKey(Schema.DateTimeUtcFromString)
+  },
+  NoGuide: { source: SourceName },
+  NotCarried: { why: Schema.Literals(["NoStream", "StreamingOnly", "NotInGuide"]) }
+})
+export type ChannelAvailability = typeof ChannelAvailability.Type

@@ -26,7 +26,7 @@ export class Source extends Context.Service<
         const latest = yield* reader.latest
         return (game: GameSnapshot) =>
           Option.match(latest, {
-            onNone: () => ChannelAvailability.NoGuide({ source: YouTubeTvGuide.source }),
+            onNone: () => ChannelAvailability.cases.NoGuide.make({ source: YouTubeTvGuide.source }),
             onSome: (guide) => guide.availabilityOf(game, now)
           })
       })
@@ -95,7 +95,7 @@ export class Source extends Context.Service<
 function mostUseful(answers: ReadonlyArray<ChannelAvailability>): ChannelAvailability {
   return Arr.reduce<ChannelAvailability, ChannelAvailability>(
     answers,
-    ChannelAvailability.NotCarried({ why: "NoStream" }),
+    ChannelAvailability.cases.NotCarried.make({ why: "NoStream" }),
     (best, answer) => (usefulness(answer) > usefulness(best) ? answer : best)
   )
 }
@@ -105,7 +105,7 @@ function mostUseful(answers: ReadonlyArray<ChannelAvailability>): ChannelAvailab
  * carried); streaming only; not in the guide; no stream.
  */
 function usefulness(answer: ChannelAvailability): number {
-  return ChannelAvailability.$match(answer, {
+  return ChannelAvailability.match(answer, {
     Carried: () => 6,
     Upcoming: ({ channel }) => (Option.isSome(channel) ? 5 : 4),
     NoGuide: () => 3,

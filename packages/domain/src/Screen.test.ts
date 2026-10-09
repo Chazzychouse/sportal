@@ -7,7 +7,7 @@ import { assign, bama, fill, foxChannel, irish, nowhere, onFox } from "./TestScr
 
 const usc = GameId.make("401856800")
 const ohio = GameId.make("401858473")
-const noGuide = () => ChannelAvailability.NoGuide({ source: "YouTube TV" })
+const noGuide = () => ChannelAvailability.cases.NoGuide.make({ source: "YouTube TV" })
 
 describe("Screen#apply", () => {
   it("should assign a carried game as a stream tile", () => {
@@ -123,7 +123,10 @@ describe("Screen#apply", () => {
     const begin = DateTime.makeUnsafe("2026-10-04T17:00:00Z")
 
     const screen = assign(Screen.initial, 0, bama, () =>
-      ChannelAvailability.Upcoming({ channel: Option.some("NFL ST - CBS"), begin: Option.some(begin) })
+      ChannelAvailability.cases.Upcoming.make({
+        channel: Option.some("NFL ST - CBS"),
+        begin: Option.some(begin)
+      })
     )
 
     assert.deepStrictEqual(screen.tiles[0], {
@@ -145,7 +148,7 @@ describe("Screen#apply", () => {
 
   it("should say why a game is not carried", () => {
     const screen = assign(Screen.initial, 0, bama, () =>
-      ChannelAvailability.NotCarried({ why: "StreamingOnly" })
+      ChannelAvailability.cases.NotCarried.make({ why: "StreamingOnly" })
     )
 
     assert.deepStrictEqual(screen.tiles[0], { _tag: "DataTile", game: bama, why: { _tag: "StreamingOnly" } })
@@ -204,11 +207,11 @@ describe("Screen#refresh", () => {
   it.each([
     ["no guide", noGuide()],
     ["no stream", nowhere()],
-    ["streaming only", ChannelAvailability.NotCarried({ why: "StreamingOnly" })],
-    ["not in the guide", ChannelAvailability.NotCarried({ why: "NotInGuide" })],
+    ["streaming only", ChannelAvailability.cases.NotCarried.make({ why: "StreamingOnly" })],
+    ["not in the guide", ChannelAvailability.cases.NotCarried.make({ why: "NotInGuide" })],
     [
       "an upcoming game",
-      ChannelAvailability.Upcoming({
+      ChannelAvailability.cases.Upcoming.make({
         channel: Option.some("FOX 43"),
         begin: Option.some(DateTime.makeUnsafe("2026-10-04T17:00:00Z"))
       })
@@ -238,7 +241,9 @@ describe("Screen#refresh", () => {
       locator: { ...foxChannel.locator, url: "https://tv.youtube.com/watch/fox43" }
     }
 
-    const moved = streaming.refresh(some(() => ChannelAvailability.Carried({ channel: elsewhere })))
+    const moved = streaming.refresh(
+      some(() => ChannelAvailability.cases.Carried.make({ channel: elsewhere }))
+    )
 
     assert.deepStrictEqual(moved.tiles[0], { _tag: "StreamTile", game: bama, channel: elsewhere })
   })
@@ -251,7 +256,9 @@ describe("Screen#refresh", () => {
       locator: { ...foxChannel.locator, url: "https://player.twitch.tv/?channel=primevideo" }
     }
 
-    const refreshed = streaming.refresh(some(() => ChannelAvailability.Carried({ channel: onTwitch })))
+    const refreshed = streaming.refresh(
+      some(() => ChannelAvailability.cases.Carried.make({ channel: onTwitch }))
+    )
 
     assert.deepStrictEqual(refreshed.tiles[0], streaming.tiles[0])
   })
@@ -259,7 +266,9 @@ describe("Screen#refresh", () => {
   it("should re-resolve a data tile whose game has left the guide", () => {
     const waiting = assign(Screen.initial, 0, bama, unknownUpcoming)
 
-    const refreshed = waiting.refresh(some(() => ChannelAvailability.NotCarried({ why: "NotInGuide" })))
+    const refreshed = waiting.refresh(
+      some(() => ChannelAvailability.cases.NotCarried.make({ why: "NotInGuide" }))
+    )
 
     assert.deepStrictEqual(refreshed.tiles[0], { _tag: "DataTile", game: bama, why: { _tag: "NotInGuide" } })
   })
@@ -638,7 +647,7 @@ function gameOf(tile: Tile) {
 }
 
 function unknownUpcoming() {
-  return ChannelAvailability.Upcoming({ channel: Option.none(), begin: Option.none() })
+  return ChannelAvailability.cases.Upcoming.make({ channel: Option.none(), begin: Option.none() })
 }
 
 /** An answer for `game` only: the guide says nothing of any other. */

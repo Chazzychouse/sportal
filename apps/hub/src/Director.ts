@@ -80,7 +80,9 @@ export class Director extends Context.Service<
           Effect.gen(function* () {
             const availabilityOf = yield* availabilityOnSlate
             const result = current.apply(command, (id) =>
-              Option.getOrElse(availabilityOf(id), () => ChannelAvailability.NotCarried({ why: "NoStream" }))
+              Option.getOrElse(availabilityOf(id), () =>
+                ChannelAvailability.cases.NotCarried.make({ why: "NoStream" })
+              )
             )
             const next = yield* Effect.fromResult(result)
             return [next, next] as const

@@ -67,10 +67,10 @@ export class Guide extends Schema.Class<Guide>("sportal/Guide")({
 
     const pastReach = DateTime.isGreaterThan(game.kickoff, DateTime.addDuration(this.readAt, Guide.reach))
     if (this.airings.length > 0 && pastReach)
-      return ChannelAvailability.Upcoming({ channel: Option.none(), begin: Option.none() })
+      return ChannelAvailability.cases.Upcoming.make({ channel: Option.none(), begin: Option.none() })
     const streamingOnly =
       game.broadcasts.length > 0 && game.broadcasts.every(({ medium }) => medium === "streaming")
-    return ChannelAvailability.NotCarried({ why: streamingOnly ? "StreamingOnly" : "NotInGuide" })
+    return ChannelAvailability.cases.NotCarried.make({ why: streamingOnly ? "StreamingOnly" : "NotInGuide" })
   }
 
   /** Carried on `channel` once it is on the air and `begin` is at most half an hour from `now`; else upcoming. */
@@ -81,10 +81,13 @@ export class Guide extends Schema.Class<Guide>("sportal/Guide")({
   ): ChannelAvailability {
     const soon = DateTime.isLessThanOrEqualTo(begin, DateTime.addDuration(now, startingSoon))
     return channel.live !== undefined && soon
-      ? ChannelAvailability.Carried({
+      ? ChannelAvailability.cases.Carried.make({
           channel: { name: channel.name, source: this.source, locator: channel.live }
         })
-      : ChannelAvailability.Upcoming({ channel: Option.some(channel.name), begin: Option.some(begin) })
+      : ChannelAvailability.cases.Upcoming.make({
+          channel: Option.some(channel.name),
+          begin: Option.some(begin)
+        })
   }
 
   private airs(airing: Airing, game: GameSnapshot, now: DateTime.Utc): boolean {

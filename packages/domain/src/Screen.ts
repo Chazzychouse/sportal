@@ -248,7 +248,7 @@ function occupied(
 }
 
 function tileFor(game: GameId, availability: ChannelAvailability): Tile {
-  return ChannelAvailability.$match(availability, {
+  return ChannelAvailability.match(availability, {
     Carried: ({ channel }): Tile => ({ _tag: "StreamTile", game, channel }),
     Upcoming: ({ channel, begin }): Tile => ({
       _tag: "DataTile",
@@ -298,7 +298,7 @@ function settle(fields: {
 function keepsStream(tile: Occupied, availability: ChannelAvailability): boolean {
   return (
     Tile.guards.StreamTile(tile) &&
-    (!ChannelAvailability.$is("Carried")(availability) ||
+    (!ChannelAvailability.guards.Carried(availability) ||
       availability.channel.source !== tile.channel.source ||
       availability.channel.locator.url === tile.channel.locator.url)
   )
