@@ -28,10 +28,11 @@ export class FastCastDocuments extends Data.Class<{
 
   /**
    * The documents after `frame`, and what it changed: a scoreboard topic's touched events (every event, on a
-   * checkpoint), or all of a game topic's plays, by id, when they changed. A topic is synced by its checkpoint frame and
-   * moved on by each message after it. A missed message, a patch that will not apply, or a message that does not decode
-   * on a synced topic sends only that topic back to waiting for a checkpoint, and the change is a `Reset` of it. A message of an op it does not know is skipped. Fails only when any other frame does not decode, leaving the
-   * documents as they were.
+   * checkpoint), or all of a game topic's plays, by id, when they changed, with the ids of the plays touched (every
+   * one, on a checkpoint). A topic is synced by its checkpoint frame and moved on by each message after it. A missed
+   * message, a patch that will not apply, or a message that does not decode on a synced topic sends only that topic
+   * back to waiting for a checkpoint, and the change is a `Reset` of it. A message of an op it does not know is
+   * skipped. Fails only when any other frame does not decode, leaving the documents as they were.
    */
   advance(
     frame: Data.TaggedEnum.Value<Frame, "Pushed" | "Checkpoint">

@@ -74,11 +74,10 @@ export const layer: Layer.Layer<Provider, never, FastCast | HttpClient.HttpClien
         // What the fold last took, for `wanted` to read; only the fold sets it.
         const view = yield* SubscriptionRef.make(EspnState.empty)
         // When each league polls next; only the fold sets it, once it has taken that league's poll.
-        const pollAt = new Map(
-          yield* Effect.forEach(leagues, (league) =>
-            Effect.map(SubscriptionRef.make(Option.none<DateTime.Utc>()), (at) => [league, at] as const)
-          )
+        const pollRefs = yield* Effect.forEach(leagues, (league) =>
+          Effect.map(SubscriptionRef.make(Option.none<DateTime.Utc>()), (at) => [league, at] as const)
         )
+        const pollAt = new Map(pollRefs)
 
         const pollsOf = (
           league: LeagueId,
@@ -105,7 +104,7 @@ export const layer: Layer.Layer<Provider, never, FastCast | HttpClient.HttpClien
               SubscriptionRef.set(at, Option.some(DateTime.addDuration(now, interval(next, one, now))))
             )
           )
-          yield* Option.getOrElse(nextPoll, () => Effect.void)
+          yield* Option.match(nextPoll, { onNone: () => Effect.void, onSome: (set) => set })
 
           return [next, [said]] as const
         })

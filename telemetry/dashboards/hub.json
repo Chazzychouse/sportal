@@ -336,7 +336,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Every game the slate has listed, with its progress now: 0 once no listing names it.",
+      "description": "Every game the slate has listed, with its progress now: a game no listing names drops out (its series is removed).",
       "targets": [
         {
           "refId": "A",
@@ -394,11 +394,6 @@
                   {
                     "type": "value",
                     "options": {
-                      "0": {
-                        "text": "Delisted",
-                        "color": "text",
-                        "index": 0
-                      },
                       "1": {
                         "text": "Upcoming",
                         "color": "blue",

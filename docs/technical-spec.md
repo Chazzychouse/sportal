@@ -199,7 +199,7 @@ sportal/
     │       │       ├── EspnProvider.ts     Implements the port: polls each league, folds every frame into one EspnState, tells FastCast what to follow
     │       │       ├── EspnState.ts        The one fold of ESPN's frames, through each league's decode: deliveries, listed games, the topics FastCast follows
     │       │       ├── EspnPayload.ts      ESPN's JSON as ESPN spells it: events, scoreboard, plays
-    │       │       ├── EspnEvent.ts        One game as either ESPN feed spells it, as a GameSnapshot
+    │       │       ├── EspnEvent.ts        The site scoreboard's event as a GameSnapshot; a pushed event as what it moves
     │       │       ├── EspnPlay.ts         ESPN's plays and their type ids, as Play
     │       │       ├── FastCast.ts         ESPN's push, a service: follows the topics it is told to, and gives the socket as frames
     │       │       ├── FastCastDocuments.ts Each topic's document, rebuilt from checkpoints and patches, and what a frame changed of it

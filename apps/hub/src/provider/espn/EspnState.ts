@@ -41,12 +41,11 @@ export class EspnState extends Data.Class<{
   })
 
   /**
-   * This state after `frame`, and what the frame said. A poll is its league's `Listing` of the games it shows; its
-   * listing is the games it shows, as it shows them. A scoreboard topic's
-   * change is a `Snapshot` of each listed game it touched, its listed game advanced to what it moves, and moves that
-   * game forward in its listing; a game no listing has is not delivered. A game topic's change is a `Plays` of the
-   * game's whole list, in `Play.order`. An event or a play that does not decode is skipped. A frame that does not decode
-   * says nothing, leaves the state as it was, and is logged.
+   * This state after `frame`, and what the frame said. A poll is its league's `Listing` of the games it shows, as it
+   * shows them. A scoreboard topic's change is a `Snapshot` of each listed game it touched, its listed game advanced
+   * to what it moves, and moves that game forward in its listing; a game no listing has is not delivered. A game
+   * topic's change is a `Plays` of the game's whole list, in `Play.order`. An event or a play that does not decode is
+   * skipped. A frame that does not decode says nothing, leaves the state as it was, and is logged.
    * A failed poll, or one whose scoreboard does not decode, leaves its league unlisted until a poll of it lists.
    */
   take(frame: Frame): Effect.Effect<readonly [EspnState, ReadonlyArray<Delivery>]> {
@@ -260,7 +259,7 @@ function annotationsOf(frame: Frame): Readonly<Record<string, string>> {
 
 const decodeScoreboard = Schema.decodeUnknownEffect(Schema.fromJsonString(Scoreboard))
 
-// Each league's decode, built once: an event of either feed, and a play entity.
+// Each league's decode, built once: a site event, a pushed event, and a play entity.
 const decodeEvent: { readonly [L in LeagueId]: ReturnType<typeof decodeEventOf> } = {
   nfl: decodeEventOf("nfl"),
   fbs: decodeEventOf("fbs")

@@ -172,7 +172,9 @@ describe("GET /api/live", () => {
         yield* pastInitialMessages()
         yield* pastInitialMessages()
 
-        assert.strictEqual(yield* Ref.get(reads), 1)
+        const read = yield* Ref.get(reads)
+
+        assert.strictEqual(read, 1)
       }).pipe(Effect.scoped, Effect.provide(serverUnderTest(counted)))
     })
   )

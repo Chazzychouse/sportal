@@ -827,10 +827,6 @@ const decodeEventIds = Schema.decodeUnknownSync(
   Schema.fromJsonString(Schema.Struct({ events: Schema.Tuple([Schema.Struct({ id: GameId })]) }))
 )
 
-/**
- * An ESPN scoreboard of one game per entry, each the pregame scoreboard's second event kicking off at `kickoff` (the
- * recorded kickoff, unless given), in ESPN's status `state`, named `name` (the recorded name, unless given), in `period`.
- */
 /** The checkpoint frame FastCast makes of `topic`'s checkpoint of the site `scoreboard`'s games, at mid 1. */
 function checkpointFrame(topic: Topic, scoreboard: string): Frame {
   const document = Schema.decodeSync(FastCastMessage.Checkpoint(topic))(checkpointBodyOf(scoreboard))
@@ -864,6 +860,10 @@ function checkpointBodyOf(scoreboard: string): string {
   })
 }
 
+/**
+ * An ESPN scoreboard of one game per entry, each the pregame scoreboard's second event kicking off at `kickoff` (the
+ * recorded kickoff, unless given), in ESPN's status `state`, named `name` (the recorded name, unless given), in `period`.
+ */
 function scoreboardOf(
   games: ReadonlyArray<{
     readonly state: "pre" | "in" | "post"

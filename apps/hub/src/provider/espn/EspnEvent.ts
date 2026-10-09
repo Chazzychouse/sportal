@@ -49,7 +49,7 @@ export function PushedEvent(league: LeagueId) {
   )
 }
 
-/** The snapshot an event says, once each feed's spelling is read into one shape. */
+/** The snapshot an event says, once the site feed's spelling is read into one shape. */
 const snapshot = Effect.fnUntraced(function* (
   league: LeagueId,
   event: {
