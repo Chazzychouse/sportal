@@ -131,17 +131,18 @@ describe("Director, the slate", () => {
   it.effect("should log at Error when the provider's frames end", () => {
     const { logs, layer } = recordingLogs()
     return Effect.gen(function* () {
-      yield* Director
+      const feed = yield* ProviderFeed
 
+      yield* feed.end
       yield* Effect.yieldNow.pipe(Effect.repeat({ until: () => logs.length > 0, times: 100 }))
+
       const stopped = logs.filter(({ level }) => level === "Error")
       assert.strictEqual(stopped.length, 1)
       assert.include(stopped[0]?.message, "the provider's frames stopped")
       assert.include(stopped[0]?.message, "the provider's frames ended")
     }).pipe(
       Effect.provide(
-        Director.layer.pipe(
-          Layer.provide(Provider.layerTest(Stream.empty)),
+        directorOver.pipe(
           Layer.provide(Source.layerTest(() => ChannelAvailability.NoGuide({ source: "YouTube TV" }))),
           Layer.provideMerge(layer)
         )
@@ -555,7 +556,7 @@ describe("Director, the Screen", () => {
       ).pipe(Layer.provide(Source.layerYouTubeTv))
       const guideReadAtOnce = readAtOnce().pipe(
         Layer.provideMerge(Director.layer),
-        Layer.provide(Provider.layerTestFed),
+        Layer.provide(Provider.layerTest),
         Layer.provide(countingSource),
         Layer.provideMerge(GuideReader.layerYouTubeTv)
       )
@@ -579,7 +580,7 @@ describe("Director, the Screen", () => {
         const release = yield* Deferred.make<void>()
         const directorOnStaleRead = listed(games).pipe(
           Layer.provideMerge(Director.layer),
-          Layer.provideMerge(Provider.layerTestFed),
+          Layer.provideMerge(Provider.layerTest),
           Layer.provideMerge(availabilityHeldOnce(reading, release)),
           Layer.provideMerge(GuideReader.layerYouTubeTv)
         )
