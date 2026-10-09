@@ -7,7 +7,7 @@ import { EspnEvent } from "./EspnEvent.ts"
 import { Scoreboard } from "./EspnPayload.ts"
 import * as EspnPlay from "./EspnPlay.ts"
 import type { Wanted } from "./FastCast.ts"
-import * as FastCastDocument from "./FastCastDocument.ts"
+import { DocumentChange, FastCastDocuments } from "./FastCastDocuments.ts"
 import { Frame } from "./Frame.ts"
 import { Topic, tcOf } from "./Topic.ts"
 
@@ -16,11 +16,11 @@ import { Topic, tcOf } from "./Topic.ts"
  * last poll listed them, and each push since (a push behind its listed game is logged and counted).
  */
 export class EspnState extends Data.Class<{
-  readonly documents: typeof FastCastDocument.empty
+  readonly documents: FastCastDocuments
   readonly listings: HashMap.HashMap<LeagueId, ReadonlyArray<GameSnapshot>>
 }> {
   static readonly empty: EspnState = new EspnState({
-    documents: FastCastDocument.empty,
+    documents: FastCastDocuments.empty,
     listings: HashMap.empty()
   })
 
@@ -52,8 +52,7 @@ export class EspnState extends Data.Class<{
       .map((game) => Topic.Game({ league: game.league, game: game.id }))
     return HashMap.fromIterable(
       [...scoreboards, ...games].map(
-        (topic) =>
-          [topic, FastCastDocument.isSynced(this.documents, topic) ? "Synced" : "AwaitingCheckpoint"] as const
+        (topic) => [topic, this.documents.isSynced(topic) ? "Synced" : "AwaitingCheckpoint"] as const
       )
     )
   }
@@ -106,12 +105,12 @@ function keptOver(had: ReadonlyArray<GameSnapshot>, game: GameSnapshot): GameSna
 const noDeliveries: ReadonlyArray<Delivery> = []
 
 const pushed = Effect.fnUntraced(function* (state: EspnState, frame: Frame) {
-  const { documents, change } = yield* FastCastDocument.advance(state.documents, frame)
+  const { documents, change } = yield* state.documents.advance(frame)
 
   const advanced = new EspnState({ ...state, documents })
   return yield* Option.match(change, {
     onNone: () => Effect.succeed([advanced, noDeliveries] as const),
-    onSome: FastCastDocument.Change.$match({
+    onSome: DocumentChange.$match({
       Scoreboard: ({ league, events }) =>
         Effect.flatMap(gamesOf(league, events), (games) => {
           const [next, deliveries, behind] = movedForward(advanced, league, games)

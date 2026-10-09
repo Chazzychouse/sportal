@@ -8,7 +8,6 @@ import { counted, recordingLogs, withMetrics } from "../../TestTelemetry.ts"
 import { Delivery } from "../Provider.ts"
 import { EspnEvent } from "./EspnEvent.ts"
 import { EspnState } from "./EspnState.ts"
-import * as FastCastDocument from "./FastCastDocument.ts"
 import * as FastCastMessage from "./FastCastMessage.ts"
 import { Frame } from "./Frame.ts"
 import { decodedFrames, recordedNeAtBuf, stateAfter } from "./TestEspn.ts"
@@ -924,12 +923,8 @@ function resetTopics(frames: ReadonlyArray<Frame>) {
 
 /** Each topic synced in `before` that is not in `after`, by name. */
 function lostBetween(before: EspnState, after: EspnState): ReadonlyArray<string> {
-  return [...HashMap.keys(before.documents)]
-    .filter(
-      (topic) =>
-        FastCastDocument.isSynced(before.documents, topic) &&
-        !FastCastDocument.isSynced(after.documents, topic)
-    )
+  return [...HashMap.keys(before.documents.byTopic)]
+    .filter((topic) => before.documents.isSynced(topic) && !after.documents.isSynced(topic))
     .map(tcOf)
 }
 

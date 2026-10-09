@@ -209,7 +209,7 @@ sportal/
     │       │       ├── EspnEvent.ts        One game as either ESPN feed spells it, as a GameSnapshot
     │       │       ├── EspnPlay.ts         ESPN's plays and their type ids, as Play
     │       │       ├── FastCast.ts         ESPN's push, a service: follows the topics it is told to, and gives the socket as frames
-    │       │       ├── FastCastDocument.ts A topic's document, rebuilt from checkpoints and patches
+    │       │       ├── FastCastDocuments.ts Each topic's document, rebuilt from checkpoints and patches, and what a frame changed of it
     │       │       ├── FastCastMessage.ts  FastCast's wire shapes
     │       │       ├── Topic.ts            A FastCast topic, read once from its `tc`
     │       │       ├── Frame.ts            A frame as received, before ESPN's decode reads it
