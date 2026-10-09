@@ -1,4 +1,4 @@
-import { ChannelAvailability } from "@sportal/domain/Channel"
+import type { ChannelAvailability } from "@sportal/domain/Channel"
 import type { GameId, GameSnapshot } from "@sportal/domain/Game"
 import type { Play } from "@sportal/domain/Play"
 import { Screen, type ScreenCommand, type ScreenRejection } from "@sportal/domain/Screen"
@@ -69,7 +69,7 @@ export class Director extends Context.Service<
       const availabilityOnSlate = Effect.gen(function* () {
         const current = yield* SubscriptionRef.get(slate)
         const availabilityOf = yield* source.availability
-        return (id: GameId): Option.Option<ChannelAvailability> =>
+        return (id: GameId): Option.Option<ReadonlyArray<ChannelAvailability>> =>
           Option.map(current.game(id), ({ snapshot }) => availabilityOf(snapshot))
       })
 
@@ -79,11 +79,7 @@ export class Director extends Context.Service<
         return yield* SubscriptionRef.modifyEffect(screen, (current) =>
           Effect.gen(function* () {
             const availabilityOf = yield* availabilityOnSlate
-            const result = current.apply(command, (id) =>
-              Option.getOrElse(availabilityOf(id), () =>
-                ChannelAvailability.cases.NotCarried.make({ why: "NoStream" })
-              )
-            )
+            const result = current.apply(command, (id) => Option.getOrElse(availabilityOf(id), () => []))
             const next = yield* Effect.fromResult(result)
             return [next, next] as const
           })

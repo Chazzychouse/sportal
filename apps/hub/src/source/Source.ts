@@ -1,6 +1,6 @@
 import { ChannelAvailability } from "@sportal/domain/Channel"
 import type { GameSnapshot } from "@sportal/domain/Game"
-import { Array as Arr, Context, DateTime, Effect, Layer, Option, Stream } from "effect"
+import { Context, DateTime, Effect, Layer, Option, Stream } from "effect"
 import { GuideReader } from "./GuideReader.ts"
 import * as Twitch from "./Twitch.ts"
 import * as YouTubeTvGuide from "./youtube-tv/YouTubeTvGuide.ts"
@@ -9,8 +9,8 @@ import * as YouTubeTvGuide from "./youtube-tv/YouTubeTvGuide.ts"
 export class Source extends Context.Service<
   Source,
   {
-    /** Whether and where this source can show a game, as of now. */
-    readonly availability: Effect.Effect<(game: GameSnapshot) => ChannelAvailability>
+    /** Whether and where this source can show a game, as of now: one answer from each source it stands for, in order. */
+    readonly availability: Effect.Effect<(game: GameSnapshot) => ReadonlyArray<ChannelAvailability>>
     /** Emits whenever what this source answers may have changed. */
     readonly changes: Stream.Stream<void>
   }
@@ -24,11 +24,12 @@ export class Source extends Context.Service<
       const availability = Effect.fn("Source.youTubeTvAvailability")(function* () {
         const now = yield* DateTime.now
         const latest = yield* reader.latest
-        return (game: GameSnapshot) =>
+        return (game: GameSnapshot) => [
           Option.match(latest, {
             onNone: () => ChannelAvailability.cases.NoGuide.make({ source: YouTubeTvGuide.source }),
             onSome: (guide) => guide.availabilityOf(game, now)
           })
+        ]
       })
 
       return Source.of({ availability: availability(), changes: reader.changes })
@@ -44,7 +45,7 @@ export class Source extends Context.Service<
     Effect.gen(function* () {
       const availability = Effect.fn("Source.twitchAvailability")(function* () {
         const now = yield* DateTime.now
-        return (game: GameSnapshot) => Twitch.lineup.availabilityOf(game, now)
+        return (game: GameSnapshot) => [Twitch.lineup.availabilityOf(game, now)]
       })
 
       return Source.of({
@@ -55,8 +56,8 @@ export class Source extends Context.Service<
   )
 
   /**
-   * Every source given, as one: for each game the most useful answer any of them gives, whatever their order, and a
-   * change whenever any of them changes.
+   * Every source given, as one: for each game every source's answer, in the order given, and a change whenever any of
+   * them changes.
    */
   static layerAll<R>(sources: ReadonlyArray<Layer.Layer<Source, never, R>>): Layer.Layer<Source, never, R> {
     return Layer.effect(
@@ -68,7 +69,7 @@ export class Source extends Context.Service<
 
         const availability = Effect.fn("Source.availability")(function* () {
           const answers = yield* Effect.forEach(each, (source) => source.availability)
-          return (game: GameSnapshot) => mostUseful(answers.map((availabilityOf) => availabilityOf(game)))
+          return (game: GameSnapshot) => answers.flatMap((availabilityOf) => availabilityOf(game))
         })
 
         return Source.of({
@@ -87,28 +88,9 @@ export class Source extends Context.Service<
     availabilityOf: (game: GameSnapshot) => ChannelAvailability,
     changes: Stream.Stream<void> = Stream.never
   ): Layer.Layer<Source> {
-    return Layer.succeed(Source, Source.of({ availability: Effect.succeed(availabilityOf), changes }))
+    return Layer.succeed(
+      Source,
+      Source.of({ availability: Effect.succeed((game: GameSnapshot) => [availabilityOf(game)]), changes })
+    )
   }
-}
-
-/** The answer that says most of several: ties go to the first, and only ever between answers of one kind. */
-function mostUseful(answers: ReadonlyArray<ChannelAvailability>): ChannelAvailability {
-  return Arr.reduce<ChannelAvailability, ChannelAvailability>(
-    answers,
-    ChannelAvailability.cases.NotCarried.make({ why: "NoStream" }),
-    (best, answer) => (usefulness(answer) > usefulness(best) ? answer : best)
-  )
-}
-
-/**
- * How much an answer tells: carried; upcoming on a known channel; upcoming with nothing known; no guide (it may yet be
- * carried); streaming only; not in the guide; no stream.
- */
-function usefulness(answer: ChannelAvailability): number {
-  return ChannelAvailability.match(answer, {
-    Carried: () => 6,
-    Upcoming: ({ channel }) => (Option.isSome(channel) ? 5 : 4),
-    NoGuide: () => 3,
-    NotCarried: ({ why }) => (why === "StreamingOnly" ? 2 : why === "NotInGuide" ? 1 : 0)
-  })
 }

@@ -115,12 +115,12 @@ export class Screen extends Schema.Class<Screen>("sportal/Screen")({
   }
 
   /**
-   * Applies a command. `availabilityOf` says whether and where a game can be streamed: a carried game
-   * becomes a stream tile and any other a data tile.
+   * Applies a command. `availabilityOf` gives every source's answer for a game: a game is assigned as the most
+   * useful of them says, a carried game as a stream tile and any other as a data tile.
    */
   apply(
     command: ScreenCommand,
-    availabilityOf: (game: GameId) => ChannelAvailability
+    availabilityOf: (game: GameId) => ReadonlyArray<ChannelAvailability>
   ): Result.Result<Screen, ScreenRejection> {
     return ScreenCommand.match<Result.Result<Screen, ScreenRejection>>(command, {
       SetLayout: ({ layout }) => Result.succeed(settle({ ...this, layout })),
@@ -181,16 +181,18 @@ export class Screen extends Schema.Class<Screen>("sportal/Screen")({
    *
    * A stream tile is replaced only when its own source carries its game on another channel. Any other answer
    * (another source carrying it, a game running past its listing, no guide, a failed or stale read) never stops
-   * it. Every other occupied tile becomes what the answer says. When no tile changes, it is this Screen.
+   * it. Every other occupied tile becomes what the most useful answer says. When no tile changes, it is this Screen.
    */
-  refresh(availabilityOf: (game: GameId) => Option.Option<ChannelAvailability>): Screen {
+  refresh(availabilityOf: (game: GameId) => Option.Option<ReadonlyArray<ChannelAvailability>>): Screen {
     const tiles = this.tiles.map((tile) =>
       Tile.guards.Empty(tile)
         ? tile
         : Option.match(availabilityOf(tile.game), {
             onNone: () => tile,
             onSome: (availability) =>
-              keepsStream(tile, availability) ? tile : tileFor(tile.game, availability)
+              Tile.guards.StreamTile(tile)
+                ? movedWithinSource(tile, availability)
+                : tileFor(tile.game, availability)
           })
     )
 
@@ -247,8 +249,8 @@ function occupied(
   return Tile.guards.Empty(tile) ? reject("empty-tile") : f(tile)
 }
 
-function tileFor(game: GameId, availability: ChannelAvailability): Tile {
-  return ChannelAvailability.match(availability, {
+function tileFor(game: GameId, availability: ReadonlyArray<ChannelAvailability>): Tile {
+  return ChannelAvailability.match(mostUseful(availability), {
     Carried: ({ channel }): Tile => ({ _tag: "StreamTile", game, channel }),
     Upcoming: ({ channel, begin }): Tile => ({
       _tag: "DataTile",
@@ -257,6 +259,28 @@ function tileFor(game: GameId, availability: ChannelAvailability): Tile {
     }),
     NoGuide: ({ source }): Tile => ({ _tag: "DataTile", game, why: { _tag: "NoGuide", source } }),
     NotCarried: ({ why }): Tile => ({ _tag: "DataTile", game, why: { _tag: why } })
+  })
+}
+
+/** The answer that says most of several: ties go to the first, and no answer at all is no stream. */
+function mostUseful(availability: ReadonlyArray<ChannelAvailability>): ChannelAvailability {
+  return Arr.reduce<ChannelAvailability, ChannelAvailability>(
+    availability,
+    ChannelAvailability.cases.NotCarried.make({ why: "NoStream" }),
+    (best, answer) => (usefulness(answer) > usefulness(best) ? answer : best)
+  )
+}
+
+/**
+ * How much an answer tells: carried; upcoming on a known channel; upcoming with nothing known; no guide (it may yet be
+ * carried); streaming only; not in the guide; no stream.
+ */
+function usefulness(answer: ChannelAvailability): number {
+  return ChannelAvailability.match(answer, {
+    Carried: () => 6,
+    Upcoming: ({ channel }) => (Option.isSome(channel) ? 5 : 4),
+    NoGuide: () => 3,
+    NotCarried: ({ why }) => (why === "StreamingOnly" ? 2 : why === "NotInGuide" ? 1 : 0)
   })
 }
 
@@ -292,16 +316,19 @@ function settle(fields: {
 }
 
 /**
- * Whether a stream tile stays as it is: only its own source carrying its game on another channel replaces it. A tile
- * never moves to another source.
+ * A stream tile stays as it is unless its own source carries its game on another channel, then it moves there. It never
+ * moves to another source, whatever the other sources say.
  */
-function keepsStream(tile: Occupied, availability: ChannelAvailability): boolean {
-  return (
-    Tile.guards.StreamTile(tile) &&
-    (!ChannelAvailability.guards.Carried(availability) ||
-      availability.channel.source !== tile.channel.source ||
-      availability.channel.locator.url === tile.channel.locator.url)
+function movedWithinSource(
+  tile: Extract<Tile, { _tag: "StreamTile" }>,
+  availability: ReadonlyArray<ChannelAvailability>
+): Tile {
+  const moved = Arr.findFirst(
+    availability.filter(ChannelAvailability.guards.Carried),
+    ({ channel }) =>
+      channel.source === tile.channel.source && channel.locator.url !== tile.channel.locator.url
   )
+  return Option.match(moved, { onNone: () => tile, onSome: ({ channel }) => ({ ...tile, channel }) })
 }
 
 function reject(reason: ScreenRejection["reason"]) {

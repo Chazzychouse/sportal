@@ -16,13 +16,13 @@ export const foxChannel = {
 }
 
 /** Every game is carried on FOX. */
-export function onFox() {
-  return ChannelAvailability.cases.Carried.make({ channel: foxChannel })
+export function onFox(): ReadonlyArray<ChannelAvailability> {
+  return [ChannelAvailability.cases.Carried.make({ channel: foxChannel })]
 }
 
 /** No game has a stream. */
-export function nowhere() {
-  return ChannelAvailability.cases.NotCarried.make({ why: "NoStream" })
+export function nowhere(): ReadonlyArray<ChannelAvailability> {
+  return [ChannelAvailability.cases.NotCarried.make({ why: "NoStream" })]
 }
 
 /** `screen` with `game` assigned to `tile`, its channel from `availabilityOf`. */
@@ -30,7 +30,7 @@ export function assign(
   screen: Screen,
   tile: number,
   game: GameId,
-  availabilityOf: () => ChannelAvailability
+  availabilityOf: () => ReadonlyArray<ChannelAvailability>
 ) {
   return Result.getOrThrow(screen.apply({ _tag: "Assign", tile, game }, availabilityOf))
 }

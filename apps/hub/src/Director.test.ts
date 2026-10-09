@@ -499,12 +499,9 @@ describe("Director, the Screen", () => {
         Source,
         Source.of({
           availability: Ref.get(youTubeTvCarries).pipe(
-            Effect.map(
-              (carries) => () =>
-                carries
-                  ? ChannelAvailability.cases.Carried.make({ channel: primeOnYouTubeTv })
-                  : streamingOnly
-            )
+            Effect.map((carries) => () => [
+              carries ? ChannelAvailability.cases.Carried.make({ channel: primeOnYouTubeTv }) : streamingOnly
+            ])
           ),
           changes: Stream.fromQueue(pulses)
         })
@@ -647,10 +644,9 @@ describe("Director, the Screen", () => {
       const availability = yield* source.availability
       const screen = yield* director.screen
       assert.strictEqual(playing.tiles[0]?._tag, "StreamTile")
-      assert.deepStrictEqual(
-        availability(ohioStateAtIowa),
+      assert.deepStrictEqual(availability(ohioStateAtIowa), [
         ChannelAvailability.cases.NoGuide.make({ source: "YouTube TV" })
-      )
+      ])
       assert.deepStrictEqual(screen.tiles[0], playing.tiles[0])
     }).pipe(Effect.provide(directing([ohioStateAtIowa])))
   )

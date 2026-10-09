@@ -26,10 +26,9 @@ describe("Source.layerYouTubeTv", () => {
 
       const availabilityOf = yield* source.availability
 
-      assert.deepStrictEqual(
-        availabilityOf(onEspn),
+      assert.deepStrictEqual(availabilityOf(onEspn), [
         ChannelAvailability.cases.NoGuide.make({ source: "YouTube TV" })
-      )
+      ])
     }).pipe(Effect.provide(youTubeTv))
   )
 
@@ -40,10 +39,9 @@ describe("Source.layerYouTubeTv", () => {
 
       const availabilityOf = yield* source.availability
 
-      assert.deepStrictEqual(
-        availabilityOf(primeVideoSoonAfterRecording),
+      assert.deepStrictEqual(availabilityOf(primeVideoSoonAfterRecording), [
         ChannelAvailability.cases.NotCarried.make({ why: "StreamingOnly" })
-      )
+      ])
     }).pipe(Effect.provide(youTubeTv))
   )
 })
@@ -115,26 +113,27 @@ function tallied(league: LeagueId) {
     }
     const listed = yield* listedBy(league)
     for (const game of listed) {
-      ChannelAvailability.match(availabilityOf(game), {
-        Carried: ({ channel }) => {
-          tally.carried[game.id] = channel.name
-        },
-        Upcoming: ({ channel }) =>
-          Option.match(channel, {
-            onNone: () => {
-              tally.upcomingUnknown++
-            },
-            onSome: (name) => {
-              tally.upcomingOn[game.id] = name
-            }
-          }),
-        NoGuide: () => assert.fail(`${game.id} had no guide`),
-        NotCarried: ({ why }) => {
-          if (why === "StreamingOnly") tally.streamingOnly++
-          else if (why === "NotInGuide") tally.notInGuide++
-          else assert.fail(`${game.id} is not carried for ${why}`)
-        }
-      })
+      for (const answer of availabilityOf(game))
+        ChannelAvailability.match(answer, {
+          Carried: ({ channel }) => {
+            tally.carried[game.id] = channel.name
+          },
+          Upcoming: ({ channel }) =>
+            Option.match(channel, {
+              onNone: () => {
+                tally.upcomingUnknown++
+              },
+              onSome: (name) => {
+                tally.upcomingOn[game.id] = name
+              }
+            }),
+          NoGuide: () => assert.fail(`${game.id} had no guide`),
+          NotCarried: ({ why }) => {
+            if (why === "StreamingOnly") tally.streamingOnly++
+            else if (why === "NotInGuide") tally.notInGuide++
+            else assert.fail(`${game.id} is not carried for ${why}`)
+          }
+        })
     }
     return tally
   })
@@ -174,7 +173,7 @@ describe("Source.layerTwitch", () => {
 
       const availabilityOf = yield* source.availability
 
-      assert.deepStrictEqual(availabilityOf(thursdayNight), onPrimeVideo)
+      assert.deepStrictEqual(availabilityOf(thursdayNight), [onPrimeVideo])
     }).pipe(Effect.provide(Source.layerTwitch))
   )
 
@@ -201,63 +200,22 @@ describe("Source.layerAll", () => {
     ChannelAvailability.cases.Carried.make({
       channel: { name: source, source, locator: { _tag: "WebView", url: `https://example.test/${source}` } }
     })
-  const upcomingOn = ChannelAvailability.cases.Upcoming.make({
-    channel: Option.some("Prime Video"),
-    begin: Option.some(thursdayKickoff)
-  })
-  const upcomingUnknown = ChannelAvailability.cases.Upcoming.make({
-    channel: Option.none(),
-    begin: Option.none()
-  })
-  const noGuide = ChannelAvailability.cases.NoGuide.make({ source: "YouTube TV" })
   const streamingOnly = ChannelAvailability.cases.NotCarried.make({ why: "StreamingOnly" })
   const notInGuide = ChannelAvailability.cases.NotCarried.make({ why: "NotInGuide" })
 
-  it.effect("should answer a later source's carried over an earlier source's not carried", () =>
+  it.effect("should give every source's answer, in the order given", () =>
     Effect.gen(function* () {
-      const answer = yield* answerOf([streamingOnly, carried("Twitch")])
+      const all = Source.layerAll([
+        Source.layerTest(() => streamingOnly),
+        Source.layerTest(() => carried("Twitch"))
+      ])
 
-      assert.deepStrictEqual(answer, carried("Twitch"))
-    })
-  )
+      const answers = yield* Source.use((source) => source.availability).pipe(
+        Effect.map((availabilityOf) => availabilityOf(thursdayNight)),
+        Effect.provide(all)
+      )
 
-  it.effect("should answer carried over upcoming", () =>
-    Effect.gen(function* () {
-      const answer = yield* answerOf([upcomingOn, carried("Twitch")])
-
-      assert.deepStrictEqual(answer, carried("Twitch"))
-    })
-  )
-
-  it.effect("should answer upcoming on a named channel over upcoming with nothing known", () =>
-    Effect.gen(function* () {
-      const answer = yield* answerOf([upcomingUnknown, upcomingOn])
-
-      assert.deepStrictEqual(answer, upcomingOn)
-    })
-  )
-
-  it.effect("should answer upcoming over no guide", () =>
-    Effect.gen(function* () {
-      const answer = yield* answerOf([noGuide, upcomingUnknown])
-
-      assert.deepStrictEqual(answer, upcomingUnknown)
-    })
-  )
-
-  it.effect("should answer no guide over not carried", () =>
-    Effect.gen(function* () {
-      const answer = yield* answerOf([streamingOnly, noGuide])
-
-      assert.deepStrictEqual(answer, noGuide)
-    })
-  )
-
-  it.effect("should answer streaming only over not in the guide", () =>
-    Effect.gen(function* () {
-      const answer = yield* answerOf([notInGuide, streamingOnly])
-
-      assert.deepStrictEqual(answer, streamingOnly)
+      assert.deepStrictEqual(answers, [streamingOnly, carried("Twitch")])
     })
   )
 
@@ -277,39 +235,36 @@ describe("Source.layerAll", () => {
     })
   )
 
-  it.effect("should carry Thursday's Prime Video game on Twitch while YouTube TV has no guide", () =>
-    Effect.gen(function* () {
-      yield* TestClock.setTime(DateTime.toEpochMillis(DateTime.subtract(thursdayKickoff, { minutes: 10 })))
-      const source = yield* Source
+  it.effect(
+    "should answer no guide from YouTube TV and carried from Twitch for Thursday's Prime Video game",
+    () =>
+      Effect.gen(function* () {
+        yield* TestClock.setTime(DateTime.toEpochMillis(DateTime.subtract(thursdayKickoff, { minutes: 10 })))
+        const source = yield* Source
 
-      const availabilityOf = yield* source.availability
+        const availabilityOf = yield* source.availability
 
-      assert.deepStrictEqual(availabilityOf(thursdayNight), onPrimeVideo)
-    }).pipe(Effect.provide(youTubeTvAndTwitch))
+        assert.deepStrictEqual(availabilityOf(thursdayNight), [
+          ChannelAvailability.cases.NoGuide.make({ source: "YouTube TV" }),
+          onPrimeVideo
+        ])
+      }).pipe(Effect.provide(youTubeTvAndTwitch))
   )
 
-  it.effect("should carry a Prime Video game on Twitch over YouTube TV's streaming only", () =>
+  it.effect("should answer YouTube TV's streaming only and Twitch's carried for a Prime Video game", () =>
     Effect.gen(function* () {
       yield* readRecordedGuide
       const source = yield* Source
 
       const availabilityOf = yield* source.availability
 
-      assert.deepStrictEqual(availabilityOf(primeVideoSoonAfterRecording), onPrimeVideo)
+      assert.deepStrictEqual(availabilityOf(primeVideoSoonAfterRecording), [
+        ChannelAvailability.cases.NotCarried.make({ why: "StreamingOnly" }),
+        onPrimeVideo
+      ])
     }).pipe(Effect.provide(youTubeTvAndTwitch))
   )
 })
-
-/** What every source answering one of `answers`, in order, answers as one. */
-function answerOf(answers: ReadonlyArray<ChannelAvailability>) {
-  const all = Source.layerAll(answers.map((answer) => Source.layerTest(() => answer)))
-  return Effect.gen(function* () {
-    const source = yield* Source
-
-    const availabilityOf = yield* source.availability
-    return availabilityOf(thursdayNight)
-  }).pipe(Effect.provide(all))
-}
 
 /** An NFL game, Jets at Broncos, streaming only on Prime Video, kicking off at `kickoff`. */
 function primeVideoGame(kickoff: DateTime.Utc) {
