@@ -106,6 +106,8 @@ describe("GET /api/live", () => {
       const pushes = [2, 3, 4].map((period) => Delivery.Snapshot({ snapshot: inPeriod(period) }))
 
       yield* Effect.forEach(pushes, (push) => delivered(push))
+      // The live stream reads each slate in turn; it reads the burst before the clock moves on.
+      yield* Effect.yieldNow
       yield* TestClock.adjust("250 millis")
       const line = yield* Queue.take(lines)
       const waiting = yield* Queue.size(lines)
@@ -166,6 +168,24 @@ describe("GET /api/live", () => {
 
       assert.isTrue(change.startsWith("data: "))
     }).pipe(Effect.scoped, Effect.provide(serverUnderTest()))
+  )
+
+  it.effect("should send nothing when the source changes but no game's availability does", () =>
+    Effect.gen(function* () {
+      yield* firstSlateOnTestClock()
+      const lines = yield* pastInitialMessages()
+
+      yield* TestClock.adjust("1250 millis")
+      yield* delivered(Delivery.Snapshot({ snapshot: inPeriod(2) }))
+      yield* TestClock.adjust("250 millis")
+      const line = yield* Queue.take(lines)
+
+      const message = messageOf(line)
+      assert.deepStrictEqual(
+        message.games.map(({ game }) => game.snapshot.period),
+        [2]
+      )
+    }).pipe(Effect.scoped, Effect.provide(serverUnderTest(changingEverySecond)))
   )
 
   it.live("should send the slate again when a guide read carries its game", () =>
@@ -303,19 +323,25 @@ function nextComment(lines: Queue.Queue<string>) {
   return Queue.take(lines).pipe(Effect.repeat({ until: (line) => !line.startsWith("data: ") }))
 }
 
-/** Everything behind the API, over a provider the test feeds. */
-function hubUnderTest() {
+/** A source that says it may have changed every second, though every game is always streaming only. */
+const changingEverySecond = Source.layerTest(
+  () => ({ _tag: "NotCarried", why: "StreamingOnly" }),
+  Stream.tick("1 second")
+)
+
+/** Everything behind the API, over a provider the test feeds, against `source`. */
+function hubUnderTest(source: Layer.Layer<Source, never, GuideReader>) {
   return directorOver.pipe(
-    Layer.provideMerge(Source.layerYouTubeTv),
+    Layer.provideMerge(source),
     Layer.provideMerge(GuideReader.layerYouTubeTv),
     Layer.provideMerge(HubConfig.layerTest({ SPORTAL_VERSION: "1.2.3" }))
   )
 }
 
-/** The Hub's routes served on an ephemeral port, with an HTTP client pointed at them. */
-function serverUnderTest() {
+/** The Hub's routes served on an ephemeral port, with an HTTP client pointed at them; YouTube TV unless `source`. */
+function serverUnderTest(source: Layer.Layer<Source, never, GuideReader> = Source.layerYouTubeTv) {
   return HubServer.layer.pipe(
-    Layer.provideMerge(hubUnderTest()),
+    Layer.provideMerge(hubUnderTest(source)),
     Layer.provideMerge(NodeHttpServer.layerTest)
   )
 }

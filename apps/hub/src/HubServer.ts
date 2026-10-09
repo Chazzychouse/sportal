@@ -1,6 +1,6 @@
 import { createServer } from "node:http"
 import { NodeHttpServer, type NodeServices } from "@effect/platform-node"
-import { LiveMessageJson } from "@sportal/api/LiveMessage"
+import { LiveMessage, LiveMessageJson } from "@sportal/api/LiveMessage"
 import { SportalApi } from "@sportal/api/SportalApi"
 import {
   DateTime,
@@ -27,6 +27,7 @@ import { HttpApiBuilder } from "effect/http-api"
 import { Director } from "./Director.ts"
 import { HubConfig } from "./HubConfig.ts"
 import { GuideReader } from "./source/GuideReader.ts"
+import { Source } from "./source/Source.ts"
 
 /**
  * The Hub's routes on the HTTP server in context: the API, the live stream, and the built web UI when there is one.
@@ -36,6 +37,7 @@ export const layer: Layer.Layer<
   PlatformError.PlatformError,
   | HubConfig
   | Director
+  | Source
   | GuideReader
   | HttpServer.HttpServer
   | HttpPlatform.HttpPlatform
@@ -100,15 +102,15 @@ const hostHandlers = HttpApiBuilder.group(
 )
 
 /**
- * GET /api/live — the current slate, each game beside its availability, then every change, as server-sent events,
- * with a comment every 20 seconds so proxies that close idle connections leave a quiet stream open.
+ * GET /api/live — the current slate, each game beside its availability, then every change to either, as server-sent
+ * events, with a comment every 20 seconds so proxies that close idle connections leave a quiet stream open.
  */
 const liveRoute = HttpRouter.add(
   "GET",
   "/api/live",
   Effect.gen(function* () {
-    const director = yield* Director
-    const messages = director.published.pipe(settled)
+    const changes = yield* published
+    const messages = settled(changes)
     const encode = Schema.encodeEffect(LiveMessageJson)
     const events = messages.pipe(
       Stream.mapEffect((message) => Effect.map(encode(message), (json) => `data: ${json}\n\n`))
@@ -124,6 +126,25 @@ const liveRoute = HttpRouter.add(
     })
   })
 )
+
+/**
+ * The slate as the live stream sends it, each game beside its availability: the current slate first, then again
+ * whenever the slate changes or the source's availability may have, unless what it sends is the same.
+ */
+const published = Effect.gen(function* () {
+  const director = yield* Director
+  const source = yield* Source
+
+  const slateOrAvailability = Stream.zipLatest(director.slate, Stream.prepend(source.changes, [undefined]))
+  return slateOrAvailability.pipe(
+    Stream.mapEffect(([slate]) =>
+      Effect.map(source.availability, (availabilityOf) => slate.published(availabilityOf))
+    ),
+    Stream.changesWith(samePublished)
+  )
+})
+
+const samePublished = Schema.toEquivalence(LiveMessage.cases.SlateChanged)
 
 /**
  * The slate as it is, then each burst of changes once it settles 250 ms after the last, so changes arriving more often

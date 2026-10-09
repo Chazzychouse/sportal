@@ -1,19 +1,13 @@
 import { assert, describe, it } from "@effect/vitest"
-import type { SlateChanged } from "@sportal/api/LiveMessage"
-import { ChannelAvailability } from "@sportal/domain/Channel"
-import { GameId, GameSnapshot, Network } from "@sportal/domain/Game"
+import { GameId, GameSnapshot } from "@sportal/domain/Game"
 import { type Play, PlayId } from "@sportal/domain/Play"
-import { broadcast, liveSnapshot, play, snapshot, team } from "@sportal/domain/TestGame"
-import { DateTime, Deferred, Effect, Fiber, Layer, Option, Ref, Stream, type Tracer } from "effect"
-import { TestClock } from "effect/testing"
+import { liveSnapshot, play, snapshot } from "@sportal/domain/TestGame"
+import { DateTime, Effect, Layer, Option, Ref, Stream, type Tracer } from "effect"
 import { Director } from "./Director.ts"
 import { decodedFrames, recordedNeAtBuf, recordedPlays } from "./provider/espn/TestEspn.ts"
 import { Delivery, ProviderFeed } from "./provider/Provider.ts"
 import { Slate } from "./Slate.ts"
-import { GuideReader } from "./source/GuideReader.ts"
-import { Source } from "./source/Source.ts"
-import { readRecordedGuide } from "./source/youtube-tv/TestYouTubeTv.ts"
-import { delivered, directorOver } from "./TestDirector.ts"
+import { delivered, directorOver, latest } from "./TestDirector.ts"
 import { gauged, recordingLogs, recordingSpans, withMetrics } from "./TestTelemetry.ts"
 
 const one = GameId.make("1")
@@ -27,7 +21,7 @@ describe("Director, the slate", () => {
       const current = yield* latest
 
       assert.strictEqual(current, Slate.empty)
-    }).pipe(Effect.provide(directed))
+    }).pipe(Effect.provide(directorOver))
   )
 
   it.effect("should take a listing delivered, keeping its games in order", () =>
@@ -43,7 +37,7 @@ describe("Director, the slate", () => {
         current.games.map(({ snapshot }) => snapshot),
         [live, soon, later]
       )
-    }).pipe(Effect.provide(directed))
+    }).pipe(Effect.provide(directorOver))
   )
 
   it.effect("should ignore a snapshot behind its game's", () =>
@@ -53,7 +47,7 @@ describe("Director, the slate", () => {
       const current = yield* takenSnapshot(snapshot({ id: one, status: "live", period: 1, clock: "5:00" }))
 
       assert.strictEqual(snapshotIn(current, one)?.period, 2)
-    }).pipe(Effect.provide(directed))
+    }).pipe(Effect.provide(directorOver))
   )
 
   it.effect("should keep a snapshot of its own for each game", () =>
@@ -67,7 +61,7 @@ describe("Director, the slate", () => {
 
       assert.deepStrictEqual(snapshotIn(current, one), first)
       assert.deepStrictEqual(snapshotIn(current, two), second)
-    }).pipe(Effect.provide(directed))
+    }).pipe(Effect.provide(directorOver))
   )
 
   it.effect("should take a listed game's plays", () =>
@@ -77,7 +71,7 @@ describe("Director, the slate", () => {
       const current = yield* delivered(Delivery.Plays({ game: one, plays: [play()] }))
 
       assert.deepStrictEqual(playsIn(current, one), [play()])
-    }).pipe(Effect.provide(directed))
+    }).pipe(Effect.provide(directorOver))
   )
 
   it.effect("should drop plays for a game no listing names", () =>
@@ -85,7 +79,7 @@ describe("Director, the slate", () => {
       const current = yield* delivered(Delivery.Plays({ game: one, plays: [play()] }))
 
       assert.deepStrictEqual(current.games, [])
-    }).pipe(Effect.provide(directed))
+    }).pipe(Effect.provide(directorOver))
   )
 
   it.effect("should take every delivery of a frame", () =>
@@ -97,7 +91,7 @@ describe("Director, the slate", () => {
       const current = yield* latest
 
       assert.strictEqual(snapshotIn(current, one), next)
-    }).pipe(Effect.provide(directed))
+    }).pipe(Effect.provide(directorOver))
   )
 
   it.effect("should span each take with its count of deliveries", () => {
@@ -113,7 +107,7 @@ describe("Director, the slate", () => {
 
       assert.isDefined(take, "the take's span ended")
       assert.strictEqual(take?.attributes.get("sportal.deliveries"), 1)
-    }).pipe(Effect.provide(directed.pipe(Layer.provideMerge(recordingSpans(ended)))))
+    }).pipe(Effect.provide(directorOver.pipe(Layer.provideMerge(recordingSpans(ended)))))
   })
 
   it.effect("should log at Error when the provider's frames end", () => {
@@ -128,24 +122,17 @@ describe("Director, the slate", () => {
       assert.strictEqual(stopped.length, 1)
       assert.include(stopped[0]?.message, "the provider's frames stopped")
       assert.include(stopped[0]?.message, "the provider's frames ended")
-    }).pipe(
-      Effect.provide(
-        directorOver.pipe(
-          Layer.provide(Source.layerTest(() => ({ _tag: "NoGuide", source: "YouTube TV" }))),
-          Layer.provideMerge(layer)
-        )
-      )
-    )
+    }).pipe(Effect.provide(directorOver.pipe(Layer.provideMerge(layer))))
   })
 })
 
-describe("Director#published", () => {
-  it.effect("should give the latest, then each change once", () =>
+describe("Director#slate", () => {
+  it.effect("should give the slate as it is, then each change once", () =>
     Effect.gen(function* () {
       const director = yield* Director
-      const published = yield* Ref.make<ReadonlyArray<GameSnapshot | undefined>>([])
-      yield* director.published.pipe(
-        Stream.runForEach((current) => Ref.update(published, (all) => [...all, snapshotOf(current, one)])),
+      const given = yield* Ref.make<ReadonlyArray<GameSnapshot | undefined>>([])
+      yield* director.slate.pipe(
+        Stream.runForEach((current) => Ref.update(given, (all) => [...all, snapshotIn(current, one)])),
         Effect.forkScoped({ startImmediately: true })
       )
       const first = liveSnapshot({ id: one })
@@ -155,131 +142,28 @@ describe("Director#published", () => {
       yield* Effect.yieldNow
       yield* takenSnapshot(second)
       yield* Effect.yieldNow
-      const all = yield* Ref.get(published)
+      const all = yield* Ref.get(given)
 
       assert.deepStrictEqual(all, [undefined, first, second])
-    }).pipe(Effect.provide(directed))
+    }).pipe(Effect.provide(directorOver))
   )
 
   it.effect("should give no change for a take that changes nothing", () =>
     Effect.gen(function* () {
       const director = yield* Director
-      const published = yield* Ref.make(0)
-      yield* director.published.pipe(
-        Stream.runForEach(() => Ref.update(published, (count) => count + 1)),
+      const given = yield* Ref.make(0)
+      yield* director.slate.pipe(
+        Stream.runForEach(() => Ref.update(given, (count) => count + 1)),
         Effect.forkScoped({ startImmediately: true })
       )
       yield* listing([liveSnapshot({ id: one })])
 
       yield* takenSnapshot(liveSnapshot({ id: one, clock: "11:00" }))
       yield* Effect.yieldNow
-      const count = yield* Ref.get(published)
+      const count = yield* Ref.get(given)
 
       assert.strictEqual(count, 2)
-    }).pipe(Effect.provide(directed))
-  )
-
-  it.effect("should publish again when a source's answers change", () =>
-    Effect.gen(function* () {
-      const carries = yield* Ref.make(false)
-      const youTubeTv = Layer.succeed(
-        Source,
-        Source.of({
-          availability: Ref.get(carries).pipe(
-            Effect.map((on) => () => [on ? { _tag: "Carried", channel: primeOnYouTubeTv } : streamingOnly])
-          ),
-          changes: Stream.tick("10 millis")
-        })
-      )
-
-      const availability = yield* Effect.gen(function* () {
-        const director = yield* Director
-        const first = yield* Deferred.make<void>()
-        const waiting = yield* director.published.pipe(
-          Stream.tap(() => Deferred.succeed(first, undefined)),
-          Stream.filter(({ games }) =>
-            games.some(({ availability }) => availability.some(ChannelAvailability.guards.Carried))
-          ),
-          Stream.runHead,
-          Effect.forkScoped
-        )
-        yield* Deferred.await(first)
-
-        yield* Ref.set(carries, true)
-        yield* TestClock.adjust("10 millis")
-
-        const message = yield* Fiber.join(waiting)
-        return Option.map(message, ({ games }) => games[0]?.availability)
-      }).pipe(
-        Effect.provide(listed(games).pipe(Layer.provideMerge(directorOver), Layer.provideMerge(youTubeTv)))
-      )
-
-      assert.deepStrictEqual(availability, Option.some([{ _tag: "Carried", channel: primeOnYouTubeTv }]))
-    })
-  )
-
-  it.effect("should publish nothing when a source's change changes no answer", () =>
-    Effect.gen(function* () {
-      const answering = Source.layerTest(() => streamingOnly, Stream.tick("10 millis"))
-
-      const next = yield* Effect.gen(function* () {
-        const director = yield* Director
-        const waiting = yield* director.published.pipe(
-          Stream.drop(1),
-          Stream.runHead,
-          Effect.timeoutOption("200 millis"),
-          Effect.forkScoped({ startImmediately: true })
-        )
-
-        yield* TestClock.adjust("200 millis")
-
-        return yield* Fiber.join(waiting)
-      }).pipe(
-        Effect.provide(listed(games).pipe(Layer.provideMerge(directorOver), Layer.provideMerge(answering)))
-      )
-
-      assert.isTrue(Option.isNone(next))
-    })
-  )
-
-  it.effect("should publish a game the guide carries as carried on its channel", () =>
-    Effect.gen(function* () {
-      const director = yield* Director
-      yield* readRecordedGuide
-
-      const message = yield* director.published.pipe(
-        Stream.filter(({ games }) => games.length > 0),
-        Stream.runHead,
-        Effect.map(Option.getOrThrow)
-      )
-
-      assert.deepStrictEqual(
-        message.games.find(({ game }) => game.snapshot.id === ohioStateAtIowa.id)?.availability,
-        [
-          {
-            _tag: "Carried",
-            channel: { name: "News 3", source: "YouTube TV", locator: { _tag: "WebView", url: news3Live } }
-          }
-        ]
-      )
-    }).pipe(Effect.provide(directing([ohioStateAtIowa, ...games])))
-  )
-
-  it.effect("should publish a game as no guide while the source has read none", () =>
-    Effect.gen(function* () {
-      const director = yield* Director
-
-      const message = yield* director.published.pipe(
-        Stream.filter(({ games }) => games.length > 0),
-        Stream.runHead,
-        Effect.map(Option.getOrThrow)
-      )
-
-      assert.deepStrictEqual(
-        message.games.find(({ game }) => game.snapshot.id === GameId.make("5"))?.availability,
-        [{ _tag: "NoGuide", source: "YouTube TV" }]
-      )
-    }).pipe(Effect.provide(directing(games)))
+    }).pipe(Effect.provide(directorOver))
   )
 })
 
@@ -291,7 +175,7 @@ describe("Director, a take that raises a defect", () => {
       const current = yield* takenSnapshot(broken(one))
 
       assert.strictEqual(current, before)
-    }).pipe(Effect.provide(directed))
+    }).pipe(Effect.provide(directorOver))
   )
 
   it.effect("should log the defect at Error with its cause", () => {
@@ -305,7 +189,7 @@ describe("Director, a take that raises a defect", () => {
       assert.strictEqual(errors.length, 1)
       assert.include(errors[0]?.message, "a take raised a defect; the slate keeps what it had")
       assert.include(errors[0]?.cause, "a broken snapshot")
-    }).pipe(Effect.provide(directed.pipe(Layer.provideMerge(layer))))
+    }).pipe(Effect.provide(directorOver.pipe(Layer.provideMerge(layer))))
   })
 
   it.effect("should take the game's next snapshot", () =>
@@ -317,7 +201,7 @@ describe("Director, a take that raises a defect", () => {
       const current = yield* takenSnapshot(next)
 
       assert.strictEqual(snapshotIn(current, one), next)
-    }).pipe(Effect.provide(directed))
+    }).pipe(Effect.provide(directorOver))
   )
 })
 
@@ -338,7 +222,7 @@ describe("Director, a recorded game", () => {
         assert.strictEqual(snapshotIn(current, neAtBuf)?.status, "final")
         assert.strictEqual(playsIn(current, neAtBuf).length, recordedPlays)
         assert.deepStrictEqual(errors, [])
-      }).pipe(Effect.provide(directed.pipe(Layer.provideMerge(layer))))
+      }).pipe(Effect.provide(directorOver.pipe(Layer.provideMerge(layer))))
     },
     { timeout: 60_000 }
   )
@@ -352,7 +236,7 @@ describe("Director's game state gauge", () => {
       const value = yield* gauged("sportal_game_state", { game: one })
 
       assert.strictEqual(value, 2)
-    }).pipe(Effect.provide(directed), withMetrics)
+    }).pipe(Effect.provide(directorOver), withMetrics)
   )
 
   it.effect("should gauge a game no listing names any more as 0", () =>
@@ -363,19 +247,12 @@ describe("Director's game state gauge", () => {
       const value = yield* gauged("sportal_game_state", { game: one })
 
       assert.strictEqual(value, 0)
-    }).pipe(Effect.provide(directed), withMetrics)
+    }).pipe(Effect.provide(directorOver), withMetrics)
   )
 })
 
-const latest = Director.use((director) => director.slate)
-
 function snapshotIn(slate: Slate, id: GameId): GameSnapshot | undefined {
   return Option.getOrUndefined(slate.game(id))?.snapshot
-}
-
-/** Game `id`'s snapshot in a published slate, if it is there. */
-function snapshotOf(message: SlateChanged, id: GameId) {
-  return message.games.find(({ game }) => game.snapshot.id === id)?.game.snapshot
 }
 
 function playsIn(slate: Slate, id: GameId): ReadonlyArray<Play> {
@@ -405,36 +282,6 @@ function broken(id: GameId): GameSnapshot {
   return new Broken({ ...liveSnapshot({ id, clock: "8:00" }) })
 }
 
-const espn = Network.make("ESPN")
-const espnPlus = Network.make("ESPN+")
-const fox = Network.make("FOX")
-const games = [
-  liveSnapshot({ id: GameId.make("1"), broadcasts: [broadcast(espn)] }),
-  liveSnapshot({ id: GameId.make("2"), broadcasts: [broadcast(espn)] }),
-  liveSnapshot({ id: GameId.make("3"), broadcasts: [broadcast(espn)] }),
-  liveSnapshot({ id: GameId.make("4"), broadcasts: [broadcast(espnPlus)] }),
-  liveSnapshot({ id: GameId.make("5"), broadcasts: [broadcast(fox)] })
-]
-
-const ohioStateAtIowa = snapshot({
-  id: GameId.make("401858473"),
-  status: "live",
-  kickoff: DateTime.makeUnsafe("2026-10-03T19:30:00Z"),
-  away: { team: team("OSU", "fbs", { name: "Ohio State Buckeyes", location: "Ohio State" }), score: 0 },
-  home: { team: team("IOWA", "fbs", { name: "Iowa Hawkeyes", location: "Iowa" }), score: 0 },
-  broadcasts: [broadcast("CBS")]
-})
-
-const streamingOnly: ChannelAvailability = { _tag: "NotCarried", why: "StreamingOnly" }
-const primeOnYouTubeTv = {
-  name: "Prime Video",
-  source: "YouTube TV" as const,
-  locator: { _tag: "WebView" as const, url: "https://tv.youtube.com/watch/prime" }
-}
-
-// News 3's live address in the recorded guide.
-const news3Live = "https://tv.youtube.com/watch/y6zFA17zDsw?vp=0gEEEgIwAQ%3D%3D"
-
 describe("Director's play log", () => {
   it.effect("should log each play a take adds once, annotated with its game", () => {
     const { logs, layer } = recordingLogs()
@@ -456,36 +303,6 @@ describe("Director's play log", () => {
         ]
       )
       assert.include(played[1]?.message ?? "", `Director: ${game.matchup()} Q1 14:20 Rush for 4 yards`)
-    }).pipe(Effect.provide(directed.pipe(Layer.provideMerge(layer))))
+    }).pipe(Effect.provide(directorOver.pipe(Layer.provideMerge(layer))))
   })
 })
-
-/** Every league's listing of `games`, in their order. */
-function listings(games: ReadonlyArray<GameSnapshot>) {
-  const leagues = [...new Set(games.map(({ league }) => league))]
-  return leagues.map((league) =>
-    Delivery.Listing({ league, games: games.filter((game) => game.league === league) })
-  )
-}
-
-/** Delivers every league's listing of `games` once the Director is built. */
-function listed(games: ReadonlyArray<GameSnapshot>) {
-  return Layer.effectDiscard(
-    Effect.gen(function* () {
-      const feed = yield* ProviderFeed
-
-      yield* feed.deliver(listings(games))
-    })
-  )
-}
-
-/** The Director over a fed provider and YouTube TV with nothing read yet, its slate listing `games`. */
-function directing(games: ReadonlyArray<GameSnapshot>) {
-  return listed(games).pipe(Layer.provideMerge(directed))
-}
-
-/** The Director over a fed provider, against YouTube TV with nothing read yet; it and the guide reader provided too. */
-const directed = directorOver.pipe(
-  Layer.provideMerge(Source.layerYouTubeTv),
-  Layer.provideMerge(GuideReader.layerYouTubeTv)
-)
