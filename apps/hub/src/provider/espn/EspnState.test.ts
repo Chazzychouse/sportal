@@ -5,7 +5,7 @@ import type { LeagueId } from "@sportal/domain/League"
 import { Play, PlayId } from "@sportal/domain/Play"
 import { Effect, Equal, Metric, Option, Record, Schema } from "effect"
 import { Delivery } from "../../slate/Delivery.ts"
-import { recordingLogs, withMetrics } from "../../TestTelemetry.ts"
+import { counted, recordingLogs, withMetrics } from "../../TestTelemetry.ts"
 import { EspnEvent } from "./EspnEvent.ts"
 import * as FastCastDocument from "./FastCastDocument.ts"
 import * as FastCastMessage from "./FastCastMessage.ts"
@@ -379,7 +379,39 @@ describe("EspnState#take", () => {
     })
   )
 
-  it.effect("should touch no metric", () =>
+  it.effect("should count a push behind its listed game by its league", () =>
+    Effect.gen(function* () {
+      yield* decodedFrames(synced())
+
+      const count = yield* counted("sportal_push_behind_listing", { league: "nfl" })
+      assert.strictEqual(count, 8)
+    }).pipe(withMetrics)
+  )
+
+  it.effect("should log a push behind its listed game at Info, with its game", () =>
+    Effect.gen(function* () {
+      const { logs, layer } = recordingLogs()
+
+      yield* decodedFrames(synced()).pipe(Effect.provide(layer))
+
+      const behind = logs.filter(({ message }) => message.includes("a push is behind its listed game"))
+      assert.deepStrictEqual(
+        behind.map(({ level, annotations }) => [level, typeof annotations.game]),
+        Array.from({ length: 8 }, () => ["Info", "string"])
+      )
+    })
+  )
+
+  it.effect("should count no push that moves its listed game forward", () =>
+    Effect.gen(function* () {
+      yield* decodedFrames([...synced(), scoreReplaced(4286638)])
+
+      const count = yield* counted("sportal_push_behind_listing", { league: "nfl" })
+      assert.strictEqual(count, 8)
+    }).pipe(withMetrics)
+  )
+
+  it.effect("should touch no metric but the count of pushes behind their listed game", () =>
     Effect.gen(function* () {
       const unknownType = { ...playEntities["40187297063"], type: { id: "999", text: "Something New" } }
       const brokenPlay = { ...Record.remove(playEntities["401872966237"] ?? {}, "statYardage"), id: "1" }
@@ -398,7 +430,10 @@ describe("EspnState#take", () => {
       yield* decodedFrames(frames)
 
       const metrics = yield* Metric.snapshot
-      assert.deepStrictEqual(metrics, [])
+      assert.deepStrictEqual(
+        metrics.map(({ id }) => id),
+        ["sportal_push_behind_listing"]
+      )
     }).pipe(withMetrics)
   )
 
@@ -880,7 +915,6 @@ function beforeAnyCheckpoint(): ReadonlyArray<Frame> {
   return recorded([...socketTexts.slice(0, 2), socketTexts[3] ?? "", socketTexts[6] ?? ""])
 }
 
-/** A patch on the scoreboard topic that sets ARI's score at NYG to 17. */
 /** NE at BUF over at the end of the fourth quarter, past the 18:00Z poll, which has it live in the second. */
 function neAtBufFinal(mid: number) {
   return message("event-football-nfl", mid, [
@@ -890,6 +924,7 @@ function neAtBufFinal(mid: number) {
   ])
 }
 
+/** A patch on the scoreboard topic that sets ARI's score at NYG to 17. */
 function scoreReplaced(mid: number) {
   return message("event-football-nfl", mid, [
     { op: "replace", path: `${ariAtNyg}/competitors/0/score`, value: "17" }

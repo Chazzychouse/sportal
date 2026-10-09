@@ -1,6 +1,6 @@
 import { Game, type GameSnapshot } from "@sportal/domain/Game"
 import type { LeagueId } from "@sportal/domain/League"
-import { Array as Arr, Data, Effect, HashMap, Option, Record } from "effect"
+import { Array as Arr, Data, Effect, HashMap, Metric, Option, Record } from "effect"
 import { Delivery } from "../../slate/Delivery.ts"
 import * as EspnDecoder from "./EspnDecoder.ts"
 import * as FastCastDocument from "./FastCastDocument.ts"
@@ -86,7 +86,13 @@ const pushed = Effect.fnUntraced(function* (state: EspnState, frame: Frame) {
     onNone: () => Effect.succeed([advanced, noDeliveries] as const),
     onSome: FastCastDocument.Change.$match({
       Scoreboard: ({ league, events }) =>
-        Effect.map(EspnDecoder.gamesOf(league, events), (games) => movedForward(advanced, league, games)),
+        Effect.flatMap(EspnDecoder.gamesOf(league, events), (games) => {
+          const [next, deliveries, behind] = movedForward(advanced, league, games)
+          return Effect.as(
+            Effect.forEach(behind, (game) => pushBehind(league, game), { discard: true }),
+            [next, deliveries] as const
+          )
+        }),
       Game: ({ league, game, plays }) =>
         Effect.map(
           EspnDecoder.playsOf(league, plays),
@@ -97,12 +103,24 @@ const pushed = Effect.fnUntraced(function* (state: EspnState, frame: Frame) {
   })
 })
 
-/** `state` with each pushed game its league lists moved forward in the listing, and a `Snapshot` of each. */
+/** Logs and counts a push `game` that is behind the game its `league` lists, which the listing takes anyway. */
+function pushBehind(league: LeagueId, game: GameSnapshot) {
+  return Effect.logInfo("EspnState: a push is behind its listed game; the listing takes it").pipe(
+    Effect.annotateLogs({ game: game.id, league, matchup: game.matchup() }),
+    Effect.andThen(Metric.update(Metric.withAttributes(pushesBehind, { league }), 1))
+  )
+}
+
+/**
+ * `state` with each pushed game its league lists moved forward in the listing, a `Snapshot` of each, and the pushed
+ * games that were behind their listed game. A push behind its listed game is still taken: the listing goes back to it.
+ * `pushed` logs and counts those.
+ */
 function movedForward(
   state: EspnState,
   league: LeagueId,
   games: ReadonlyArray<GameSnapshot>
-): readonly [EspnState, ReadonlyArray<Delivery>] {
+): readonly [EspnState, ReadonlyArray<Delivery>, ReadonlyArray<GameSnapshot>] {
   const listing = Option.getOrElse(HashMap.get(state.listings, league), () => [])
   const advanced = games.flatMap((game) =>
     Arr.findFirst(listing, (listedGame) => listedGame.id === game.id).pipe(
@@ -110,11 +128,14 @@ function movedForward(
       Option.toArray
     )
   )
-  if (advanced.length === 0) return [state, noDeliveries]
+  if (advanced.length === 0) return [state, noDeliveries, []]
 
+  const behind = advanced.filter((game) =>
+    listing.some((listedGame) => listedGame.id === game.id && game.isBehind(listedGame))
+  )
   const moved = listing.map((listedGame) => advanced.find((game) => game.id === listedGame.id) ?? listedGame)
   const next = new EspnState({ ...state, listings: HashMap.set(state.listings, league, moved) })
-  return [next, advanced.map((snapshot) => Delivery.cases.Snapshot.make({ snapshot }))]
+  return [next, advanced.map((snapshot) => Delivery.cases.Snapshot.make({ snapshot })), behind]
 }
 
 /** What a log of `frame` is annotated with: its kind, and its league or its topic's name. */
@@ -125,3 +146,8 @@ function annotationsOf(frame: Frame): Readonly<Record<string, string>> {
     Checkpoint: ({ topic }) => ({ frame: "Checkpoint", topic: tcOf(topic) })
   })
 }
+
+const pushesBehind = Metric.counter("sportal_push_behind_listing", {
+  description: "Pushed snapshots behind their listed game, which the listing takes anyway, by league",
+  incremental: true
+})
