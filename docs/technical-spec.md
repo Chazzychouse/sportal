@@ -235,7 +235,7 @@ sportal/
     │       ├── theme.css           Desk and couch density themes
     │       ├── design/             Vendored shadcn primitives, under the CLI's own file names
     │       ├── display/            This device's Display: state and rules, hotkeys, full screen, overlays, top bar, command palette
-    │       ├── hub/                HubClient (typed client from SportalApi), LiveStream (the live stream), HubRuntime
+    │       ├── hub/                HubClient (typed client from SportalApi), LiveStream (the live stream, as an atom), HubRuntime
     │       ├── slate/              The slate strip and its cards
     │       ├── screen/              The Screen: tiles, dividers, tile actions, rejections
     │       ├── layout/             Layout (the geometry: slots, dividers, next, clamp), its picker and glyphs

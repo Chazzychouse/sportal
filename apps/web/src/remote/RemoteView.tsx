@@ -1,3 +1,4 @@
+import { useAtomValue } from "@effect/atom-react"
 import { Array as Arr, Option } from "effect"
 import { Shrink } from "lucide-react"
 import { useState } from "react"
@@ -7,7 +8,8 @@ import { useDisplay } from "../display/DisplayView.tsx"
 import { GameStatus } from "../game/GameStatus.tsx"
 import { Score } from "../game/Score.tsx"
 import { dispatch } from "../hub/HubClient.ts"
-import { runtime, useLive } from "../hub/HubRuntime.ts"
+import { runtime } from "../hub/HubRuntime.ts"
+import * as LiveStream from "../hub/LiveStream.ts"
 import { LayoutPicker } from "../layout/LayoutPicker.tsx"
 import { useScreenFailureToasts } from "../screen/Rejections.ts"
 import { PlaceBadge } from "../slate/PlaceBadge.tsx"
@@ -19,7 +21,7 @@ import { ScreenMap } from "./ScreenMap.tsx"
  * game puts it in the selected tile and selects the next empty one.
  */
 export function RemoteView() {
-  const live = useLive()
+  const live = useAtomValue(LiveStream.live)
   // The phone's own, like each desk's. Its inputs are taps, which React renders before the next one, so each
   // handler's `display` is current.
   const { display, run } = useDisplay()

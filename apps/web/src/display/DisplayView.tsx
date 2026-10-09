@@ -1,8 +1,10 @@
+import { useAtomValue } from "@effect/atom-react"
 import { Hotkey } from "@sportal/api/Hotkey"
 import { useState } from "react"
 import { Toaster } from "@/design/sonner"
 import { dispatch } from "../hub/HubClient.ts"
-import { runtime, useLive } from "../hub/HubRuntime.ts"
+import { runtime } from "../hub/HubRuntime.ts"
+import * as LiveStream from "../hub/LiveStream.ts"
 import { JoinRemote } from "../remote/JoinRemote.tsx"
 import { useScreenFailureToasts } from "../screen/Rejections.ts"
 import { ScreenView } from "../screen/ScreenView.tsx"
@@ -17,7 +19,7 @@ import { OverlayHost } from "./OverlayHost.tsx"
 import { TopBar } from "./TopBar.tsx"
 
 export function DisplayView() {
-  const live = useLive()
+  const live = useAtomValue(LiveStream.live)
   const { display, run, set: setDisplay } = useDisplay()
   const closeOverlay = (open: boolean) => {
     if (!open) setDisplay(display.close())

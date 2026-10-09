@@ -2,14 +2,14 @@ import type { Screen } from "@sportal/domain/Screen"
 import { Option } from "effect"
 import { Expand, Keyboard, List, LogIn, Minimize2, Shrink, Smartphone, SquareDashed } from "lucide-react"
 import { Button } from "@/design/button"
-import type { Connection } from "../hub/LiveStream.ts"
+import type * as LiveStream from "../hub/LiveStream.ts"
 import { LayoutPicker } from "../layout/LayoutPicker.tsx"
 import { BrandMark, ConnectionPill } from "./Brand.tsx"
 
 /** The strip across the top of a Display: the slate, layout, solo, full screen, and whether the Hub is live. */
 export function TopBar(props: {
   screen: Screen
-  connection: Connection
+  connection: LiveStream.Connection
   fullScreen: { on: boolean; toggle: () => void }
   slate: { open: boolean; live: number; toggle: () => void }
   solo: { enabled: boolean; toggle: () => void }

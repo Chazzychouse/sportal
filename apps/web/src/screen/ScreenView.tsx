@@ -6,7 +6,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react"
 import { useVideoAreas } from "../display/OverlayHost.tsx"
 import { dispatch, sendGuide } from "../hub/HubClient.ts"
 import { runtime } from "../hub/HubRuntime.ts"
-import { Connection } from "../hub/LiveStream.ts"
+import * as LiveStream from "../hub/LiveStream.ts"
 import { Dividers } from "./Dividers.tsx"
 import { TileBody } from "./TileBody.tsx"
 import { TileChrome } from "./TileChrome.tsx"
@@ -19,7 +19,7 @@ import { placements, tileRects } from "./TileRects.ts"
 export function ScreenView(props: {
   screen: Screen
   slate: ReadonlyArray<Game>
-  connection: Connection
+  connection: LiveStream.Connection
   selected: number
   interacting: GameId | undefined
   onSelect: (tile: number) => void
@@ -58,7 +58,7 @@ export function ScreenView(props: {
     [props.screen, props.onSelect]
   )
 
-  const connected = Connection.$is("Connected")(props.connection)
+  const connected = LiveStream.Connection.$is("Connected")(props.connection)
   // Listening first, then asking: the shell's first read waits for the web UI to ask.
   useEffect(
     () =>

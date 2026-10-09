@@ -35,14 +35,6 @@ export class GuideReader extends Context.Service<
       const expiry = yield* FiberHandle.make<void>()
       const latest = yield* SubscriptionRef.make(Option.none<Guide>())
 
-      const fresh = Effect.fn("GuideReader.latest")(function* () {
-        const now = yield* DateTime.now
-        const current = yield* SubscriptionRef.get(latest)
-        return Option.filter(current, (guide) =>
-          DateTime.isLessThan(now, DateTime.addDuration(guide.readAt, staleAfter))
-        )
-      })
-
       const readGuide = Effect.fn("GuideReader.readGuide")(function* (response: string) {
         const decoded = yield* YouTubeTvGuide.decode(response).pipe(
           Effect.tapError((error) =>
@@ -62,7 +54,7 @@ export class GuideReader extends Context.Service<
         )
         yield* SubscriptionRef.set(latest, Option.some(read))
 
-        // Retire this guide once it is stale, unless a newer one has replaced it, so tiles hear of it too.
+        // Retire this guide once it is stale, unless a newer one has replaced it; tiles hear of it as a change.
         const retire = SubscriptionRef.updateSome(latest, (current) =>
           Option.exists(current, (guide) => guide === read)
             ? Option.some(Option.none<Guide>())
@@ -72,7 +64,7 @@ export class GuideReader extends Context.Service<
       })
 
       return GuideReader.of({
-        latest: fresh(),
+        latest: SubscriptionRef.get(latest),
         // The ref's current value comes first on every subscription; only later values are changes.
         changes: SubscriptionRef.changes(latest).pipe(Stream.drop(1), Stream.as(undefined)),
         readGuide

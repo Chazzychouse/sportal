@@ -1,44 +1,18 @@
 import { LiveMessage, LiveMessageJson } from "@sportal/api/LiveMessage"
 import type { Game } from "@sportal/domain/Game"
 import { Screen } from "@sportal/domain/Screen"
-import {
-  Context,
-  Data,
-  DateTime,
-  Effect,
-  Layer,
-  Option,
-  Queue,
-  Schema,
-  Stream,
-  SubscriptionRef
-} from "effect"
+import { Data, DateTime, Effect, Queue, Schema, Stream } from "effect"
+import { AsyncResult, Atom } from "effect/reactivity"
 
 /**
  * Everything the Hub has told this client over the live stream at /api/live, and whether the stream is up. The
- * EventSource reconnects by itself, and the Hub replays the current slate and screen on every connection.
+ * EventSource opens when the atom is first read and stays open while its registry lives; it reconnects by itself,
+ * and the Hub replays the current slate and screen on every connection.
  */
-export class LiveStream extends Context.Service<LiveStream, SubscriptionRef.SubscriptionRef<Live>>()(
-  "sportal/web/hub/LiveStream"
-) {
-  static readonly layer = Layer.effect(
-    LiveStream,
-    Effect.gen(function* () {
-      const live = yield* SubscriptionRef.make<Live>({
-        connection: Connection.Connecting(),
-        slate: [],
-        screen: Screen.initial
-      })
-
-      yield* sourceEvents().pipe(
-        Stream.runForEach((event) => step(live, event)),
-        Effect.forkScoped
-      )
-
-      return live
-    })
-  )
-}
+export const live: Atom.Atom<Live> = Atom.make(sourceEvents().pipe(Stream.scanEffect(initial, step))).pipe(
+  Atom.map(AsyncResult.getOrElse(initial)),
+  Atom.keepAlive
+)
 
 /** Whether this client's live stream is up: not connected yet, connected, or lost at an instant and retrying. */
 export type Connection = Data.TaggedEnum<{
@@ -52,6 +26,10 @@ interface Live {
   readonly connection: Connection
   readonly slate: ReadonlyArray<Game>
   readonly screen: Screen
+}
+
+function initial(): Live {
+  return { connection: Connection.Connecting(), slate: [], screen: Screen.initial }
 }
 
 type SourceEvent = Data.TaggedEnum<{
@@ -76,27 +54,21 @@ function sourceEvents() {
   )
 }
 
-function step(live: SubscriptionRef.SubscriptionRef<Live>, event: SourceEvent) {
+/** What `current` becomes on `event`; `current` itself when nothing changed, so nothing is published. */
+function step(current: Live, event: SourceEvent): Effect.Effect<Live> {
   return SourceEvent.$match(event, {
-    Opened: () =>
-      SubscriptionRef.update(live, (current) => ({ ...current, connection: Connection.Connected() })),
+    Opened: () => Effect.succeed({ ...current, connection: Connection.Connected() }),
     // Only a stream that was up is lost; one that never connected is still connecting, and one already lost
-    // keeps the instant it was lost. Either way, nothing changed, so nothing is published.
+    // keeps the instant it was lost.
     Errored: () =>
-      DateTime.now.pipe(
-        Effect.flatMap((now) =>
-          SubscriptionRef.updateSome(live, (current) =>
-            Connection.$is("Connected")(current.connection)
-              ? Option.some({ ...current, connection: Connection.Lost({ since: now }) })
-              : Option.none()
-          )
-        )
-      ),
+      Connection.$is("Connected")(current.connection)
+        ? Effect.map(DateTime.now, (since) => ({ ...current, connection: Connection.Lost({ since }) }))
+        : Effect.succeed(current),
     Received: ({ data }) =>
       decodeLiveMessage(data).pipe(
-        Effect.flatMap((message) => SubscriptionRef.update(live, (current) => received(current, message))),
+        Effect.map((message) => received(current, message)),
         Effect.catchTag("SchemaError", (error) =>
-          Effect.logWarning("Skipped a live message that did not decode", error)
+          Effect.logWarning("Skipped a live message that did not decode", error).pipe(Effect.as(current))
         )
       )
   })
