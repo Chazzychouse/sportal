@@ -166,7 +166,8 @@ dozen checkpoints waits for the slowest, not their sum.
 `DocumentChange.Game` carries the ids its patches touched, as `DocumentChange.Scoreboard` carries uids (every play, on a
 checkpoint), and the plays its patches removed. `EspnState` keeps each followed game's decoded plays,
 `HashMap<GameId, HashMap<PlayId, Play>>`, decodes only the touched entities, and drops the removed. `Delivery.Plays`
-still carries the whole list; `playsOf`'s sort goes, since `Game#playsTaken` sorts.
+still carries the whole list, in `Play.order` (sorting a few hundred decoded plays is cheap; decoding them
+was not).
 
 ## 9. Nothing is kept for a topic that is not followed
 
