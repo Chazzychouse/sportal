@@ -8,7 +8,6 @@ import {
   DateTime,
   type Duration,
   Effect,
-  Exit,
   Fiber,
   HashMap,
   Layer,
@@ -16,14 +15,13 @@ import {
   Queue,
   Ref,
   Schema,
-  Stream,
-  type Tracer
+  Stream
 } from "effect"
 import { HttpClient, HttpClientError, HttpClientResponse } from "effect/http"
 import * as Socket from "effect/socket/Socket"
 import { TestClock } from "effect/testing"
 import { HubConfig } from "../../HubConfig.ts"
-import { counted, observed, recordingLogs, recordingSpans, withMetrics } from "../../TestTelemetry.ts"
+import { recordingLogs } from "../../TestTelemetry.ts"
 import { Delivery, Provider } from "../Provider.ts"
 import { listedBy } from "../TestProvider.ts"
 import { SiteEvent } from "./EspnPayload.ts"
@@ -31,7 +29,6 @@ import * as EspnProvider from "./EspnProvider.ts"
 import { FastCast, type Wanted } from "./FastCast.ts"
 import * as FastCastMessage from "./FastCastMessage.ts"
 import { Frame } from "./Frame.ts"
-import { ProviderUnavailable } from "./ProviderUnavailable.ts"
 import { recordedScoreboard } from "./TestEspn.ts"
 import { fakeServer, subscribed, watched } from "./TestFastCast.ts"
 import { Topic } from "./Topic.ts"
@@ -138,39 +135,16 @@ describe("EspnProvider", () => {
       }).pipe(Effect.provide(recordedEspn(fbsMidday)))
   )
 
-  it.effect("should take a poll that cannot connect as Unreachable for its league", () => {
-    const ended: Array<Tracer.Span> = []
-    return Effect.gen(function* () {
-      yield* polledOnce(
-        answering(() => Effect.fail(new Cause.UnknownError("ECONNREFUSED"))),
-        {
-          ended,
-          leagues: "nfl",
-          frames: 1
-        }
-      )
-
-      const unreachable = pollFailures(ended)
-      assert.deepStrictEqual(unreachable, [["Unreachable", "nfl"]])
-    })
-  })
-
-  it.effect("should take a poll answered with a non-2xx as Refused for its league", () => {
-    const ended: Array<Tracer.Span> = []
-    return Effect.gen(function* () {
-      yield* polledOnce(
+  it.effect("should take a poll answered with a non-2xx as a failed poll", () =>
+    Effect.gen(function* () {
+      const said = yield* polledOnce(
         answering(() => Effect.succeed(new Response("busy", { status: 503 }))),
-        {
-          ended,
-          leagues: "fbs",
-          frames: 1
-        }
+        { leagues: "fbs", frames: 1 }
       )
 
-      const refused = pollFailures(ended)
-      assert.deepStrictEqual(refused, [["Refused", "fbs"]])
+      assert.deepStrictEqual(said, [[]])
     })
-  })
+  )
 })
 
 describe("EspnProvider.deliveries", () => {
@@ -309,20 +283,14 @@ describe("EspnProvider.deliveries", () => {
     })
   )
 
-  it.effect("should log and count a league that fails", () => {
-    const ended: Array<Tracer.Span> = []
+  it.effect("should warn of a league that fails, annotated with its league", () => {
     const { logs, layer } = recordingLogs()
     return Effect.gen(function* () {
       yield* polledOnce(
         answering(() => Effect.fail(new Cause.UnknownError("ECONNREFUSED"))),
-        {
-          ended,
-          leagues: "fbs",
-          frames: 1
-        }
+        { leagues: "fbs", frames: 1 }
       )
 
-      const errors = yield* counted("sportal_provider_errors", { league: "fbs" })
       const warned = logs.filter(
         ({ level, message }) =>
           level === "Warn" &&
@@ -330,9 +298,9 @@ describe("EspnProvider.deliveries", () => {
             "EspnProvider: a poll failed; keeping the last good listing for this league, if any"
           )
       )
-      assert.strictEqual(errors, 1)
       assert.lengthOf(warned, 1)
-    }).pipe(Effect.provide(layer), withMetrics)
+      assert.strictEqual(warned[0]?.annotations.league, "fbs")
+    }).pipe(Effect.provide(layer))
   })
 
   it.effect("should deliver no deliveries for a league that fails", () =>
@@ -353,30 +321,6 @@ describe("EspnProvider.deliveries", () => {
         "the failed poll's frame says nothing"
       )
     })
-  )
-
-  it.effect("should make each league's poll its own span, named for its league", () => {
-    const ended: Array<Tracer.Span> = []
-    return Effect.gen(function* () {
-      yield* polledOnce(recordedHttp(fbsLive), { ended, frames: 2 })
-
-      const polls = ended.filter((span) => span.name === "EspnProvider.poll")
-      assert.deepStrictEqual(polls.map((span) => span.attributes.get("sportal.league")).toSorted(), [
-        "fbs",
-        "nfl"
-      ])
-    })
-  })
-
-  it.effect("should record each poll's duration by league", () =>
-    Effect.gen(function* () {
-      const live = scoreboardOf([{ state: "in", period: 2 }])
-      yield* polledOver("10 seconds", { fbs: live })
-
-      const duration = yield* observed("sportal_poll_duration", { league: "fbs" })
-
-      assert.strictEqual(duration, 2)
-    }).pipe(withMetrics)
   )
 
   it.effect("should give each run of its deliveries every frame", () =>
@@ -612,8 +556,7 @@ function transportFailure(request: Parameters<typeof HttpClientResponse.fromWeb>
 
 /**
  * ESPN's provider over `client`, polling `leagues` (every league, unless given), with FastCast pushing `pushing`
- * (nothing, unless given) or, when given `wanting`, the frames it gives for what FastCast is told to follow, and each
- * span that ends recorded in `ended`.
+ * (nothing, unless given) or, when given `wanting`, the frames it gives for what FastCast is told to follow.
  */
 function espnOver(
   client: HttpClient.HttpClient,
@@ -621,7 +564,6 @@ function espnOver(
     readonly leagues?: string
     readonly pushing?: Stream.Stream<Frame>
     readonly wanting?: (wanted: Stream.Stream<Wanted>) => Stream.Stream<Frame>
-    readonly ended?: Array<Tracer.Span>
   } = {}
 ) {
   return EspnProvider.layer.pipe(
@@ -629,18 +571,16 @@ function espnOver(
       FastCast.layerTest(options.wanting ?? (() => options.pushing ?? Stream.never)),
       HubConfig.layerTest({ SPORTAL_LEAGUES: options.leagues ?? "nfl,fbs" }).pipe(Layer.orDie),
       Layer.succeed(HttpClient.HttpClient, client)
-    ]),
-    Layer.provideMerge(recordingSpans(options.ended ?? []))
+    ])
   )
 }
 
 /**
- * What the first `frames` frames (none, unless given) of ESPN's provider's first poll over `client` said, each span that
- * ends recorded in `ended`.
+ * What the first `frames` frames (none, unless given) of ESPN's provider's first poll over `client` said.
  */
 function polledOnce(
   client: HttpClient.HttpClient,
-  options: { readonly leagues?: string; readonly frames?: number; readonly ended?: Array<Tracer.Span> } = {}
+  options: { readonly leagues?: string; readonly frames?: number } = {}
 ) {
   return Effect.gen(function* () {
     const provider = yield* Provider
@@ -654,15 +594,6 @@ function polledOnce(
 
     return yield* Queue.takeBetween(said, options.frames ?? 0, options.frames ?? 0)
   }).pipe(Effect.provide(espnOver(client, options)), Effect.scoped)
-}
-
-/** The reason and league of the error each failed `EspnProvider.poll` span among `ended` ended with. */
-function pollFailures(ended: ReadonlyArray<Tracer.Span>) {
-  return ended
-    .filter((span) => span.name === "EspnProvider.poll")
-    .flatMap((span) => ("exit" in span.status ? Option.toArray(Exit.findErrorOption(span.status.exit)) : []))
-    .filter(Schema.is(ProviderUnavailable))
-    .map(({ reason, league }) => [reason, league])
 }
 
 // What a league answers when its every poll cannot connect.
