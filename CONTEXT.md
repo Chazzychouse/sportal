@@ -95,7 +95,7 @@ Provider and Source are the two words most likely to be swapped. Provider is alw
 | **Provider session** | The shell's single persistent browser session shared by every provider view, with its navigation allowlist and permissions. | partition, profile |
 | **Tile views** | The shell component that keeps one provider web view per stream tile, placed where the web UI says. | view manager |
 | **Tile bounds** | A tile view's rectangle in the web UI's window, in whole CSS pixels; `TileBounds` in code. | rect, frame |
-| **Guide reader** | What reads a source's guide. The shell's (`GuideReader` in the desktop app) fetches it with the source's own request, sent on the provider session. The Hub's (`GuideReader` in `source/`) reads what the shell fetched and offers the latest guide while it is fresh, then again each time it changes. | scraper, EPG fetcher |
+| **Guide reader** | What reads a source's guide. The shell's (`GuideReader` in the desktop app) fetches it with the source's own request, sent on the provider session. The Hub's (`GuideReader` in `source/`) keeps what the YouTube TV adapter decodes from what the shell fetched (a complete guide, stamped when read) and offers the latest guide while it is fresh, then again each time it changes. | scraper, EPG fetcher |
 
 ### Viewing
 

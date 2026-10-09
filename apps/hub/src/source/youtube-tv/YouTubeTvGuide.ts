@@ -1,10 +1,35 @@
+import { GuideUnreadable } from "@sportal/api/GuideUnreadable"
 import type { SourceName } from "@sportal/domain/Channel"
-import { Array as Arr, DateTime, Option, Schema, SchemaGetter, SchemaTransformation } from "effect"
+import { Array as Arr, DateTime, Effect, Option, Schema, SchemaGetter, SchemaTransformation } from "effect"
 import { ChannelId, Guide } from "../Guide.ts"
 import * as YouTubeTvPayload from "./YouTubeTvPayload.ts"
 
 /** YouTube TV, as its guide names it. Its guide's responses are read here as the channels and airings they list. */
 export const source: SourceName = "YouTube TV"
+
+/**
+ * A guide response as the complete guide it lists, stamped with the time it is read. A response that is not a guide,
+ * or lists no channels, is unreadable; the reason is logged, never carried.
+ */
+export const decode = Effect.fn("YouTubeTvGuide.decode")(function* (response: string) {
+  const decoded = yield* decodeListing(response).pipe(
+    Effect.tapError((error) =>
+      Effect.logWarning("YouTubeTv: a guide response did not decode", error.message)
+    ),
+    Effect.mapError(() => new GuideUnreadable())
+  )
+  const readAt = yield* DateTime.now
+  const guide = new Guide({ source, readAt, ...decoded })
+  if (guide.channels.length === 0) {
+    yield* Effect.logWarning("YouTubeTv: a guide response listed no channels")
+    return yield* new GuideUnreadable()
+  }
+
+  yield* Effect.logInfo(
+    `YouTubeTv: read a guide of ${guide.channels.length} channels and ${guide.airings.length} airings`
+  )
+  return guide
+})
 
 /**
  * A YouTube TV channel address, decoded to the address that plays the channel live. An address can
@@ -85,8 +110,7 @@ function liveOf(videoId: string | undefined) {
   )
 }
 
-/** A guide response as the channels and airings it lists. */
-export const decode = Schema.decodeEffect(GuideListing)
+const decodeListing = Schema.decodeEffect(GuideListing)
 
 const decodeLiveChannelUrlOption = Schema.decodeOption(LiveChannelUrl)
 

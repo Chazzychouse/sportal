@@ -215,7 +215,7 @@ sportal/
     │           ├── Twitch.ts           Twitch's lineup
     │           ├── TestSource.ts       The source's availability now, for tests
     │           └── youtube-tv/
-    │               ├── YouTubeTvGuide.ts    A guide response as channels and airings
+    │               ├── YouTubeTvGuide.ts    A guide response decoded to a complete, validated, stamped Guide
     │               ├── YouTubeTvPayload.ts  The guide response's wire shape
     │               ├── TestYouTubeTv.ts     A recorded guide for tests of other modules
     │               └── fixtures/            Recorded real payloads

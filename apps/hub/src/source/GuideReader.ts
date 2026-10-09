@@ -1,16 +1,6 @@
-import { GuideUnreadable } from "@sportal/api/GuideUnreadable"
-import {
-  Context,
-  DateTime,
-  Duration,
-  Effect,
-  FiberHandle,
-  Layer,
-  Option,
-  type Stream,
-  SubscriptionRef
-} from "effect"
-import { Guide } from "./Guide.ts"
+import type { GuideUnreadable } from "@sportal/api/GuideUnreadable"
+import { Context, Duration, Effect, FiberHandle, Layer, Option, type Stream, SubscriptionRef } from "effect"
+import type { Guide } from "./Guide.ts"
 import * as YouTubeTvGuide from "./youtube-tv/YouTubeTvGuide.ts"
 
 /**
@@ -38,22 +28,7 @@ export class GuideReader extends Context.Service<
       const latest = yield* SubscriptionRef.make(Option.none<Guide>())
 
       const readGuide = Effect.fn("GuideReader.readGuide")(function* (response: string) {
-        const decoded = yield* YouTubeTvGuide.decode(response).pipe(
-          Effect.tapError((error) =>
-            Effect.logWarning("YouTubeTv: a guide response did not decode", error.message)
-          ),
-          Effect.mapError(() => new GuideUnreadable())
-        )
-        const readAt = yield* DateTime.now
-        const read = new Guide({ source: YouTubeTvGuide.source, readAt, ...decoded })
-        if (read.channels.length === 0) {
-          yield* Effect.logWarning("YouTubeTv: a guide response listed no channels")
-          return yield* new GuideUnreadable()
-        }
-
-        yield* Effect.logInfo(
-          `YouTubeTv: read a guide of ${read.channels.length} channels and ${read.airings.length} airings`
-        )
+        const read = yield* YouTubeTvGuide.decode(response)
         yield* SubscriptionRef.set(latest, Option.some(read))
 
         // Retire this guide once it is stale, unless a newer one has replaced it; tiles hear of it as a change.
