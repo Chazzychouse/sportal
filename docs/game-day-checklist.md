@@ -57,5 +57,8 @@ Setup: Hub serving the built web UI, desktop shell running, signed in to YouTube
 | 48 | Fill tiles, change the layout, reload the web UI (`Ctrl`+`R` in the shell) | The Screen comes back as it was: the same layout, tiles and audio focus |
 | 49 | Open the web UI in a second browser and change its layout | Each keeps its own Screen; neither follows the other |
 | 50 | The next day, start the shell | Yesterday's tiles are still there: a game no longer on the slate keeps its tile until cleared, and a stream tile may load a channel now showing something else. Clear them by hand (known, until persistence is designed) |
+| 51 | On an NFL-only window, watch "Poll traces" for a few minutes | NFL polls every 10 s while a game is live; FBS every 15 minutes |
+| 52 | After a game ends and leaves its kickoff window, check the Games panel and the matchup variable | The game's row is gone within a few minutes (Prometheus staleness) |
+| 53 | Reconnect FastCast (cut the network briefly) with several games live | Their checkpoints load together: "Checkpoint duration" shows them overlapping, and plays resume for every game within one checkpoint's time |
 
 Record the date, the build, and any row that failed.
