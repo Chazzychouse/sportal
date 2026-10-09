@@ -20,8 +20,7 @@ import {
 import { TestClock } from "effect/testing"
 import { Director } from "./Director.ts"
 import { decodedFrames, recordedNeAtBuf, recordedPlays } from "./provider/espn/TestEspn.ts"
-import { Provider, ProviderFeed } from "./provider/Provider.ts"
-import { Delivery } from "./slate/Delivery.ts"
+import { Delivery, Provider, ProviderFeed } from "./provider/Provider.ts"
 import { Slate } from "./slate/Slate.ts"
 import { GuideReader } from "./source/GuideReader.ts"
 import { Source } from "./source/Source.ts"
@@ -87,7 +86,7 @@ describe("Director, the slate", () => {
     Effect.gen(function* () {
       yield* listing([liveSnapshot({ id: one })])
 
-      const current = yield* delivered(Delivery.cases.Plays.make({ game: one, plays: [play()] }))
+      const current = yield* delivered(Delivery.Plays({ game: one, plays: [play()] }))
 
       assert.deepStrictEqual(playsIn(current, one), [play()])
     }).pipe(Effect.provide(directed))
@@ -95,7 +94,7 @@ describe("Director, the slate", () => {
 
   it.effect("should drop plays for a game no listing names", () =>
     Effect.gen(function* () {
-      const current = yield* delivered(Delivery.cases.Plays.make({ game: one, plays: [play()] }))
+      const current = yield* delivered(Delivery.Plays({ game: one, plays: [play()] }))
 
       assert.deepStrictEqual(current.games, [])
     }).pipe(Effect.provide(directed))
@@ -106,10 +105,7 @@ describe("Director, the slate", () => {
       const feed = yield* ProviderFeed
       const next = liveSnapshot({ id: one, clock: "9:00" })
 
-      yield* feed.deliver([
-        listingOf([liveSnapshot({ id: one })]),
-        Delivery.cases.Snapshot.make({ snapshot: next })
-      ])
+      yield* feed.deliver([listingOf([liveSnapshot({ id: one })]), Delivery.Snapshot({ snapshot: next })])
       const current = yield* latest
 
       assert.strictEqual(snapshotIn(current, one), next)
@@ -289,7 +285,7 @@ function playsIn(slate: Slate, id: GameId): ReadonlyArray<Play> {
 }
 
 function listingOf(games: ReadonlyArray<GameSnapshot>) {
-  return Delivery.cases.Listing.make({ league: "fbs", games })
+  return Delivery.Listing({ league: "fbs", games })
 }
 
 /** Delivers an FBS listing of `games`, giving the Director's slate once it has taken it. */
@@ -298,7 +294,7 @@ function listing(games: ReadonlyArray<GameSnapshot>) {
 }
 
 function takenSnapshot(game: GameSnapshot) {
-  return delivered(Delivery.cases.Snapshot.make({ snapshot: game }))
+  return delivered(Delivery.Snapshot({ snapshot: game }))
 }
 
 /** A live snapshot of game `id` at 8:00 in the first period whose progress raises a defect. */
@@ -354,9 +350,9 @@ describe("Director's play log", () => {
     const second = play({ id: PlayId.make("p2"), sequence: 2, clock: "14:20", text: "Rush for 4 yards" })
     return Effect.gen(function* () {
       yield* listing([game])
-      yield* delivered(Delivery.cases.Plays.make({ game: one, plays: [first] }))
+      yield* delivered(Delivery.Plays({ game: one, plays: [first] }))
 
-      yield* delivered(Delivery.cases.Plays.make({ game: one, plays: [first, second] }))
+      yield* delivered(Delivery.Plays({ game: one, plays: [first, second] }))
 
       const played = logs.filter(({ annotations }) => annotations.play !== undefined)
       assert.deepStrictEqual(
@@ -715,7 +711,7 @@ function firstScreenWhere(changes: Stream.Stream<Screen>, test: (screen: Screen)
 function listings(games: ReadonlyArray<GameSnapshot>) {
   const leagues = [...new Set(games.map(({ league }) => league))]
   return leagues.map((league) =>
-    Delivery.cases.Listing.make({ league, games: games.filter((game) => game.league === league) })
+    Delivery.Listing({ league, games: games.filter((game) => game.league === league) })
   )
 }
 

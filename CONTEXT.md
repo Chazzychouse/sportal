@@ -27,7 +27,7 @@ Every exported type name must be a term here, except the wire schemas in `*Paylo
 | **Game time** | How far a game has got: before kickoff, in play, or over; then the period; then the clock running down; then, at the same clock, halftime after play (any other statuses at the same clock tie). Orders two snapshots of one game. | timestamp, version |
 | **Progress** | Where a game is in its day: `upcoming`, `live`, or `over`. A delay before kickoff is upcoming and a delay during the game is live. | phase, state |
 | **Ahead** | One snapshot of a game past another: later in game time, or at the same game time with more points, or as many points split differently (`isAheadOf`). Ahead of a game's end (`isAheadOfOver`) is later on the clock whatever either's status, or at the same clock with more points. | newer |
-| **Delivery** | `Delivery` in `apps/hub/src/slate/Delivery.ts`: what a frame said: a league's listing, one game's snapshot, or one game's whole list of plays. | input, update |
+| **Delivery** | `Delivery` in `apps/hub/src/provider/Provider.ts`, beside the port that gives it: what a frame said: a league's listing, one game's snapshot, or one game's whole list of plays. | input, update |
 | **Test game** | A game snapshot built for a test, with defaults for everything the test does not care about. | fixture, mock |
 | **Situation** | Live football state: possession, down, distance, field position, red zone (the 20 and in), timeouts. | context |
 | **Ball spot** | Where a spot is on the field: yards from the home goal line (0–100) and the way its team is going, from a team and its yards to the goal it attacks. | |

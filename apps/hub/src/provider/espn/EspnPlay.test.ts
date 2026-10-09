@@ -3,7 +3,7 @@ import { assert, describe, it } from "@effect/vitest"
 import { FootballPlay, Other, type Play, PlayId, Rush } from "@sportal/domain/Play"
 import { TeamId } from "@sportal/domain/Team"
 import { Effect, Schema } from "effect"
-import { Delivery } from "../../slate/Delivery.ts"
+import { Delivery } from "../Provider.ts"
 import * as EspnPlay from "./EspnPlay.ts"
 import { decodedFrames, recordedNeAtBuf } from "./TestEspn.ts"
 
@@ -231,7 +231,7 @@ describe("EspnPlay.FootballPlay", () => {
         const decoded = yield* decodedFrames(frames)
         const pushed = decoded
           .flat()
-          .flatMap((delivery) => (Delivery.guards.Plays(delivery) ? delivery.plays : []))
+          .flatMap((delivery) => (Delivery.$is("Plays")(delivery) ? delivery.plays : []))
         const entities = yield* Effect.forEach(Object.values(recorded), (one) => decodePlay(one))
 
         const all = [...pushed, ...entities]

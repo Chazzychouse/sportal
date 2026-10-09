@@ -4,7 +4,7 @@ import type { LeagueId } from "@sportal/domain/League"
 import { type Play, PlayId } from "@sportal/domain/Play"
 import { broadcast, completion, play, situation, snapshot, team } from "@sportal/domain/TestGame"
 import { DateTime, Option } from "effect"
-import { Delivery } from "./Delivery.ts"
+import { Delivery } from "../provider/Provider.ts"
 import { Slate, SlateChange } from "./Slate.ts"
 
 const t0 = DateTime.makeUnsafe("2026-10-03T16:00:00Z")
@@ -509,16 +509,16 @@ function listed(...games: ReadonlyArray<GameSnapshot>) {
 }
 
 function listing(league: LeagueId, games: ReadonlyArray<GameSnapshot>) {
-  return Delivery.cases.Listing.make({ league, games })
+  return Delivery.Listing({ league, games })
 }
 
 function snapshotOf(game: GameSnapshot) {
-  return Delivery.cases.Snapshot.make({ snapshot: game })
+  return Delivery.Snapshot({ snapshot: game })
 }
 
 /** A `Plays` delivery of game `id`'s whole list of plays, `plays`. */
 function playsFor(id: GameId, plays: ReadonlyArray<Play>) {
-  return Delivery.cases.Plays.make({ game: id, plays })
+  return Delivery.Plays({ game: id, plays })
 }
 
 /** A `Plays` delivery of `count` plays for game `id`, sequenced from 1 and handed over out of order. */

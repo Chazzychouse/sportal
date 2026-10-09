@@ -1,7 +1,7 @@
 import { Game, GameSnapshot } from "@sportal/domain/Game"
 import type { LeagueId } from "@sportal/domain/League"
 import { Array as Arr, Data, type DateTime, Effect, HashMap, Metric, Option, Record } from "effect"
-import { Delivery } from "../../slate/Delivery.ts"
+import { Delivery } from "../Provider.ts"
 import * as EspnDecoder from "./EspnDecoder.ts"
 import type { Wanted } from "./FastCast.ts"
 import * as FastCastDocument from "./FastCastDocument.ts"
@@ -80,7 +80,7 @@ const listed = Effect.fnUntraced(function* (state: EspnState, league: LeagueId, 
   const had = Option.getOrElse(HashMap.get(state.listings, league), () => [])
   const kept = games.map((game) => keptOver(had, game))
   const next = new EspnState({ ...state, listings: HashMap.set(state.listings, league, kept) })
-  return [next, [Delivery.cases.Listing.make({ league, games })]] as const
+  return [next, [Delivery.Listing({ league, games })]] as const
 })
 
 /** A polled `game` as its listing keeps it: the one `had` held when a push moved it past the poll (`Game#listed`). */
@@ -114,7 +114,7 @@ const pushed = Effect.fnUntraced(function* (state: EspnState, frame: Frame) {
       Game: ({ league, game, plays }) =>
         Effect.map(
           EspnDecoder.playsOf(league, plays),
-          (sorted) => [advanced, [Delivery.cases.Plays.make({ game, plays: sorted })]] as const
+          (sorted) => [advanced, [Delivery.Plays({ game, plays: sorted })]] as const
         ),
       Reset: ({ topic, detail }) =>
         Effect.logWarning(`EspnState: ${tcOf(topic)} lost its document (${detail})`).pipe(
@@ -157,7 +157,7 @@ function movedForward(
   )
   const moved = listing.map((listedGame) => advanced.find((game) => game.id === listedGame.id) ?? listedGame)
   const next = new EspnState({ ...state, listings: HashMap.set(state.listings, league, moved) })
-  return [next, advanced.map((snapshot) => Delivery.cases.Snapshot.make({ snapshot })), behind]
+  return [next, advanced.map((snapshot) => Delivery.Snapshot({ snapshot })), behind]
 }
 
 /** What a log of `frame` is annotated with: its kind, and its league or its topic's name. */

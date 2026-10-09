@@ -4,8 +4,8 @@ import { GameId, GameSnapshot } from "@sportal/domain/Game"
 import type { LeagueId } from "@sportal/domain/League"
 import { Play, PlayId } from "@sportal/domain/Play"
 import { DateTime, Effect, Equal, HashMap, Metric, Option, Record, Schema } from "effect"
-import { Delivery } from "../../slate/Delivery.ts"
 import { counted, recordingLogs, withMetrics } from "../../TestTelemetry.ts"
+import { Delivery } from "../Provider.ts"
 import { EspnEvent } from "./EspnEvent.ts"
 import { EspnState } from "./EspnState.ts"
 import * as FastCastDocument from "./FastCastDocument.ts"
@@ -80,14 +80,14 @@ describe("EspnState#take", () => {
         assert.deepStrictEqual(
           encoded(
             all.map((output) =>
-              Delivery.guards.Listing(output.delivery)
+              Delivery.$is("Listing")(output.delivery)
                 ? {
                     frame: output.frame,
                     tag: "Listing",
                     league: output.delivery.league,
                     games: output.delivery.games.map((game) => encode(game))
                   }
-                : Delivery.guards.Snapshot(output.delivery)
+                : Delivery.$is("Snapshot")(output.delivery)
                   ? {
                       frame: output.frame,
                       tag: "Snapshot",
@@ -118,7 +118,7 @@ describe("EspnState#take", () => {
       assert.strictEqual(listing?.frame, 1)
       assert.strictEqual(listing?.delivery._tag, "Listing")
       assert.strictEqual(
-        listing !== undefined && Delivery.guards.Listing(listing.delivery)
+        listing !== undefined && Delivery.$is("Listing")(listing.delivery)
           ? listing.delivery.games.length
           : 0,
         16
@@ -131,7 +131,7 @@ describe("EspnState#take", () => {
       const deliveries = yield* decoded(synced())
 
       const pushed = deliveries.flatMap(({ delivery }) =>
-        Delivery.guards.Snapshot(delivery) ? [delivery] : []
+        Delivery.$is("Snapshot")(delivery) ? [delivery] : []
       )
       // FastCast has no short names: each pushed game keeps its listed game's.
       const nyg = pushed.find((delivery) => delivery.snapshot.id === "401872966")?.snapshot
@@ -157,7 +157,7 @@ describe("EspnState#take", () => {
       Effect.gen(function* () {
         const listings = yield* decoded([poll("nfl", scoreboardBody)])
         const polled = listings.flatMap(({ delivery }) =>
-          Delivery.guards.Listing(delivery) ? delivery.games : []
+          Delivery.$is("Listing")(delivery) ? delivery.games : []
         )
         const live = polled.filter((game) => game.progress() === "live")
 
@@ -206,7 +206,7 @@ describe("EspnState#take", () => {
         deliveries
           .filter(({ frame }) => frame === 6)
           .flatMap(({ delivery }) =>
-            Delivery.guards.Snapshot(delivery)
+            Delivery.$is("Snapshot")(delivery)
               ? [[delivery.snapshot.id, delivery.snapshot.away.score, delivery.snapshot.home.score]]
               : []
           ),
@@ -224,7 +224,7 @@ describe("EspnState#take", () => {
 
       // Frames 2–5 are C, S, H, and its checkpoint, so text 21, the first after the gap, is frame 23.
       const snapshotFrames = deliveries.flatMap(({ frame, delivery }) =>
-        Delivery.guards.Snapshot(delivery) ? [frame] : []
+        Delivery.$is("Snapshot")(delivery) ? [frame] : []
       )
       const reset = yield* resetTopics(frames)
       assert.deepStrictEqual(reset, ["event-football-nfl"])
@@ -383,7 +383,7 @@ describe("EspnState#take", () => {
       const reset = yield* resetTopics(frames)
       assert.deepStrictEqual(
         deliveries.flatMap(({ frame, delivery }) =>
-          frame === 4 && Delivery.guards.Snapshot(delivery)
+          frame === 4 && Delivery.$is("Snapshot")(delivery)
             ? [[delivery.snapshot.id, delivery.snapshot.away.score]]
             : []
         ),
@@ -462,7 +462,7 @@ describe("EspnState#take", () => {
 
       const [listing] = deliveries
       assert.strictEqual(
-        listing !== undefined && Delivery.guards.Listing(listing.delivery)
+        listing !== undefined && Delivery.$is("Listing")(listing.delivery)
           ? listing.delivery.games.length
           : 0,
         events.length
@@ -518,7 +518,7 @@ describe("EspnState#take", () => {
 
       const relisted = deliveries.at(-1)?.delivery
       const game =
-        relisted !== undefined && Delivery.guards.Listing(relisted)
+        relisted !== undefined && Delivery.$is("Listing")(relisted)
           ? relisted.games.find((each) => each.id === "401872971")
           : undefined
       assert.strictEqual(game?.progress(), "live")
@@ -546,7 +546,7 @@ describe("EspnState#take", () => {
             ["40187297063", "401872966237", "401872966271"]
           ])
           assert.deepStrictEqual(
-            deliveries.map(({ delivery }) => (Delivery.guards.Plays(delivery) ? delivery.game : undefined)),
+            deliveries.map(({ delivery }) => (Delivery.$is("Plays")(delivery) ? delivery.game : undefined)),
             [GameId.make("401872966"), GameId.make("401872966")]
           )
         })
@@ -571,7 +571,7 @@ describe("EspnState#take", () => {
 
         assert.deepStrictEqual(
           deliveries.map(({ delivery }) =>
-            Delivery.guards.Plays(delivery) ? delivery.plays.map((play) => play.text) : []
+            Delivery.$is("Plays")(delivery) ? delivery.plays.map((play) => play.text) : []
           ),
           [
             [
@@ -614,7 +614,7 @@ describe("EspnState#take", () => {
 
           const reset = yield* resetTopics(frames)
           const penalty =
-            deliveries[1] !== undefined && Delivery.guards.Plays(deliveries[1].delivery)
+            deliveries[1] !== undefined && Delivery.$is("Plays")(deliveries[1].delivery)
               ? deliveries[1].delivery.plays.find((play) => play.id === "401872971792")?.text
               : undefined
           assert.isTrue(
@@ -727,7 +727,7 @@ describe("EspnState#take", () => {
 
         const pushing = all.at(-1)
         assert.strictEqual(pushing?.length, 16)
-        assert.isTrue(pushing?.every((delivery) => Delivery.guards.Snapshot(delivery)))
+        assert.isTrue(pushing?.every((delivery) => Delivery.$is("Snapshot")(delivery)))
       })
     )
 
@@ -763,9 +763,9 @@ describe("EspnState#take", () => {
           const decoded = yield* neAtBufDecoded
           const deliveries = decoded.flat()
           const snapshots = deliveries.flatMap((delivery) =>
-            Delivery.guards.Listing(delivery)
+            Delivery.$is("Listing")(delivery)
               ? delivery.games
-              : Delivery.guards.Snapshot(delivery)
+              : Delivery.$is("Snapshot")(delivery)
                 ? [delivery.snapshot]
                 : []
           )
@@ -791,7 +791,7 @@ describe("EspnState#take", () => {
           const decoded = yield* neAtBufDecoded
           const deliveries = decoded.flat()
           const plays = deliveries.flatMap((delivery) =>
-            Delivery.guards.Plays(delivery) ? delivery.plays : []
+            Delivery.$is("Plays")(delivery) ? delivery.plays : []
           )
 
           const backs = yield* Effect.forEach(plays, (play) =>
@@ -982,7 +982,7 @@ const decodeEnvelope = Schema.decodeUnknownSync(FastCastMessage.Envelope)
 function lastPushed(deliveries: ReadonlyArray<{ readonly delivery: Delivery }>) {
   return new Map<string, GameSnapshot>(
     deliveries.flatMap(({ delivery }) =>
-      Delivery.guards.Snapshot(delivery) ? [[delivery.snapshot.id, delivery.snapshot] as const] : []
+      Delivery.$is("Snapshot")(delivery) ? [[delivery.snapshot.id, delivery.snapshot] as const] : []
     )
   )
 }
@@ -1007,7 +1007,7 @@ function tags(deliveries: ReadonlyArray<{ readonly delivery: Delivery }>) {
 }
 
 function playIds({ delivery }: { readonly delivery: Delivery }) {
-  return Delivery.guards.Plays(delivery) ? delivery.plays.map((play) => play.id) : []
+  return Delivery.$is("Plays")(delivery) ? delivery.plays.map((play) => play.id) : []
 }
 
 /** The NFL listed, then FastCast's C, S, H, and the H's checkpoint: frames 1 to 5, the scoreboard topic synced. */

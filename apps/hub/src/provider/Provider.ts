@@ -1,5 +1,7 @@
-import { Context, Deferred, Effect, Layer, Option, Queue, Ref, Stream } from "effect"
-import type { Delivery } from "../slate/Delivery.ts"
+import type { GameId, GameSnapshot } from "@sportal/domain/Game"
+import type { LeagueId } from "@sportal/domain/League"
+import type { Play } from "@sportal/domain/Play"
+import { Context, Data, Deferred, Effect, Layer, Option, Queue, Ref, Stream } from "effect"
 
 /**
  * A provider of game data. It runs itself: it decides when to poll, what to follow on its push, and when to reconnect,
@@ -50,6 +52,14 @@ export class Provider extends Context.Service<
     })
   )
 }
+
+/** What a frame said: a league's listing, one game's snapshot, or one game's whole list of plays. */
+export type Delivery = Data.TaggedEnum<{
+  Listing: { readonly league: LeagueId; readonly games: ReadonlyArray<GameSnapshot> }
+  Snapshot: { readonly snapshot: GameSnapshot }
+  Plays: { readonly game: GameId; readonly plays: ReadonlyArray<Play> }
+}>
+export const Delivery = Data.taggedEnum<Delivery>()
 
 /** What a test gives `Provider.layerTestFed`'s provider to say. */
 export class ProviderFeed extends Context.Service<

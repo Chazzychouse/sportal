@@ -3,7 +3,7 @@ import { Game, type GameId, type GameSnapshot } from "@sportal/domain/Game"
 import { LeagueId } from "@sportal/domain/League"
 import type { Play } from "@sportal/domain/Play"
 import { Array as Arr, Data, type Option } from "effect"
-import { Delivery } from "./Delivery.ts"
+import { Delivery } from "../provider/Provider.ts"
 
 /**
  * The slate: the games each league's last listing names, in its order, each with its latest snapshot not behind the one
@@ -44,7 +44,7 @@ export class Slate extends Data.Class<{
   }
 
   private delivered(delivery: Delivery): Taken {
-    return Delivery.match(delivery, {
+    return Delivery.$match(delivery, {
       Listing: ({ league, games }) => this.relisted(league, games),
       Snapshot: ({ snapshot }) => this.changed(snapshot.id, (game) => game.snapshotTaken(snapshot)),
       Plays: ({ game, plays }) => this.changed(game, (had) => had.playsTaken(plays))

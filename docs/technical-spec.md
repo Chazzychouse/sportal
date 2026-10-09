@@ -194,14 +194,13 @@ sportal/
     │       ├── Telemetry.ts        Log level and format; OTLP export when configured
     │       ├── Director.ts         The one holder of the slate and the Screen: takes each frame's deliveries as they arrive, applies screen commands, refreshes availability
     │       ├── slate/
-    │       │   ├── Slate.ts        The fold: every delivery taken in order into an ordered list of games, each with its latest snapshot and its plays
-    │       │   └── Delivery.ts     What a frame said: a listing, a snapshot, or a game's plays
+    │       │   └── Slate.ts        The fold: every delivery taken in order into an ordered list of games, each with its latest snapshot and its plays
     │       ├── HubStopping.ts      Whether a task that should run until the Hub stops ended because it is stopping, and the Error log unless it did
     │       ├── TestTelemetry.ts    Layers for tests
     │       ├── TestDirector.ts     The Director taking a fed provider, and what it takes of a test's frames
     │       ├── HubServer.ts        Serves the API, the live stream, the addresses a phone can reach, and the web UI's files
     │       ├── provider/
-    │       │   ├── Provider.ts     The port: `deliveries`, each frame's in order; `layerTestFed`, the provider tests feed
+    │       │   ├── Provider.ts     The port: `deliveries`, each frame's in order, and `Delivery`, what a frame said; `layerTestFed`, the provider tests feed
     │       │   ├── TestProvider.ts What the provided `Provider` lists, and what ESPN's decode says of a test's frames
     │       │   └── espn/
     │       │       ├── Espn.ts             ESPN's one front door: the live provider (`layer`), polling and pushing through FastCast
