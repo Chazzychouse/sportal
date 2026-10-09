@@ -1,6 +1,5 @@
 import { useAtomSet } from "@effect/atom-react"
 import { type Game, type GameId, GameSnapshot } from "@sportal/domain/Game"
-import { LayoutName, type Screen, type ScreenCommand, Tile } from "@sportal/domain/Screen"
 import { Option } from "effect"
 import {
   CommandDialog,
@@ -16,6 +15,7 @@ import { scoreline } from "../game/Score.tsx"
 import { TeamLogo } from "../game/TeamLogo.tsx"
 import { LayoutGlyph, layoutLabel } from "../layout/LayoutGlyph.tsx"
 import * as DisplayScreen from "../screen/DisplayScreen.ts"
+import { LayoutName, type Screen, type ScreenCommand, Tile } from "../screen/Screen.ts"
 import { keyText, tileActions } from "../screen/TileActions.tsx"
 
 /** Every Screen command by name: watch a game, act on a tile, change layout, go full screen. */

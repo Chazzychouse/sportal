@@ -1,9 +1,9 @@
 import type { Game, GameSnapshot } from "@sportal/domain/Game"
-import { Tile } from "@sportal/domain/Screen"
 import { Option } from "effect"
 import { Field } from "../game/Field.tsx"
 import { GameStatus, localTime } from "../game/GameStatus.tsx"
 import { Score } from "../game/Score.tsx"
+import { Tile } from "./Screen.ts"
 
 /**
  * What a tile's well shows from the web UI. In the shell a provider view covers a stream tile's

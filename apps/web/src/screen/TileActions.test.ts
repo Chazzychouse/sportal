@@ -1,7 +1,7 @@
 import { assert, describe, it } from "@effect/vitest"
 import type { GameId } from "@sportal/domain/Game"
-import { Screen } from "@sportal/domain/Screen"
-import { bama, fill, irish, soloed } from "@sportal/domain/TestScreen"
+import { Screen } from "./Screen.ts"
+import { bama, fill, irish, soloed } from "./TestScreen.ts"
 import { tileActions } from "./TileActions.tsx"
 
 describe("tileActions", () => {

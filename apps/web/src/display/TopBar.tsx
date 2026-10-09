@@ -1,9 +1,9 @@
-import type { Screen } from "@sportal/domain/Screen"
 import { Option } from "effect"
 import { Expand, Keyboard, List, LogIn, Minimize2, Shrink, SquareDashed } from "lucide-react"
 import { Button } from "@/design/button"
 import type * as LiveStream from "../hub/LiveStream.ts"
 import { LayoutPicker } from "../layout/LayoutPicker.tsx"
+import type { Screen } from "../screen/Screen.ts"
 import { BrandMark, ConnectionPill } from "./Brand.tsx"
 
 /** The strip across the top of a Display: the slate, layout, solo, full screen, and whether the Hub is live. */

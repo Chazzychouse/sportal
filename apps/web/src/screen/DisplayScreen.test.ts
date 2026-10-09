@@ -1,7 +1,6 @@
 import { afterEach, assert, beforeEach, describe, it } from "@effect/vitest"
 import { ChannelAvailability } from "@sportal/domain/Channel"
 import { Game, GameId } from "@sportal/domain/Game"
-import { Screen } from "@sportal/domain/Screen"
 import { snapshot } from "@sportal/domain/TestGame"
 import { Effect, Option, Schema, Stream } from "effect"
 import { Atom, AtomRegistry } from "effect/reactivity"
@@ -9,6 +8,7 @@ import { vi } from "vitest"
 import * as LiveStream from "../hub/LiveStream.ts"
 import { FakeEventSource, opened, slateMessage } from "../hub/TestLiveStream.ts"
 import * as DisplayScreen from "./DisplayScreen.ts"
+import { Screen } from "./Screen.ts"
 
 describe("DisplayScreen.screen", () => {
   beforeEach(() => {

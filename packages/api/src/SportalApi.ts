@@ -1,19 +1,8 @@
 import { GuideUnreadable } from "@sportal/domain/Guide"
-import { Screen, ScreenCommand, ScreenRejection } from "@sportal/domain/Screen"
 import { Schema } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "effect/http-api"
 
 export class SportalApi extends HttpApi.make("sportal")
-  .add(
-    HttpApiGroup.make("screen").add(
-      HttpApiEndpoint.get("current", "/screen", { success: Screen }),
-      HttpApiEndpoint.post("dispatch", "/screen/commands", {
-        payload: Schema.Struct({ command: ScreenCommand }),
-        success: Screen,
-        error: ScreenRejection
-      })
-    )
-  )
   .add(
     // A guide the shell read from the source's guide page, passed on unchanged; the Hub decodes it.
     HttpApiGroup.make("guide").add(

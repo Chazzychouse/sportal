@@ -1,6 +1,6 @@
-import { type LayoutName, Screen, type Split } from "@sportal/domain/Screen"
 import { useRef } from "react"
 import { Layout } from "../layout/Layout.ts"
+import { type LayoutName, Screen, type Split } from "./Screen.ts"
 import { gap } from "./TileRects.ts"
 
 /**

@@ -1,8 +1,8 @@
 import { assert, describe, it } from "@effect/vitest"
 import type { GameId } from "@sportal/domain/Game"
-import { Screen } from "@sportal/domain/Screen"
-import { bama, fill, irish, nowhere, soloed } from "@sportal/domain/TestScreen"
 import { Result } from "effect"
+import { Screen } from "./Screen.ts"
+import { bama, fill, irish, nowhere, soloed } from "./TestScreen.ts"
 import { coveredGames, placements, tileRects } from "./TileRects.ts"
 
 describe("tileRects", () => {

@@ -3,29 +3,15 @@ import type { SlateChanged } from "@sportal/api/LiveMessage"
 import { ChannelAvailability } from "@sportal/domain/Channel"
 import { GameId, GameSnapshot, Network } from "@sportal/domain/Game"
 import { type Play, PlayId } from "@sportal/domain/Play"
-import { type Screen, Tile } from "@sportal/domain/Screen"
 import { broadcast, liveSnapshot, play, snapshot, team } from "@sportal/domain/TestGame"
-import {
-  DateTime,
-  Deferred,
-  Effect,
-  Fiber,
-  Layer,
-  Option,
-  Predicate,
-  Queue,
-  Ref,
-  Stream,
-  type Tracer
-} from "effect"
-import { TestClock } from "effect/testing"
+import { DateTime, Deferred, Effect, Fiber, Layer, Option, Ref, Stream, type Tracer } from "effect"
 import { Director } from "./Director.ts"
 import { decodedFrames, recordedNeAtBuf, recordedPlays } from "./provider/espn/TestEspn.ts"
-import { Delivery, Provider, ProviderFeed } from "./provider/Provider.ts"
+import { Delivery, ProviderFeed } from "./provider/Provider.ts"
 import { Slate } from "./Slate.ts"
 import { GuideReader } from "./source/GuideReader.ts"
 import { Source } from "./source/Source.ts"
-import { readRecordedGuide, recordedGuide } from "./source/youtube-tv/TestYouTubeTv.ts"
+import { readRecordedGuide } from "./source/youtube-tv/TestYouTubeTv.ts"
 import { delivered, directorOver } from "./TestDirector.ts"
 import { gauged, recordingLogs, recordingSpans, withMetrics } from "./TestTelemetry.ts"
 
@@ -256,6 +242,44 @@ describe("Director#published", () => {
       assert.isTrue(Option.isNone(next))
     })
   )
+  it.effect("should publish a game the guide carries as carried on its channel", () =>
+    Effect.gen(function* () {
+      const director = yield* Director
+      yield* readRecordedGuide
+
+      const message = yield* director.published.pipe(
+        Stream.filter(({ games }) => games.length > 0),
+        Stream.runHead,
+        Effect.map(Option.getOrThrow)
+      )
+
+      assert.deepStrictEqual(
+        message.games.find(({ game }) => game.snapshot.id === ohioStateAtIowa.id)?.availability,
+        [
+          ChannelAvailability.cases.Carried.make({
+            channel: { name: "News 3", source: "YouTube TV", locator: { _tag: "WebView", url: news3Live } }
+          })
+        ]
+      )
+    }).pipe(Effect.provide(directing([ohioStateAtIowa, ...games])))
+  )
+
+  it.effect("should publish a game as no guide while the source has read none", () =>
+    Effect.gen(function* () {
+      const director = yield* Director
+
+      const message = yield* director.published.pipe(
+        Stream.filter(({ games }) => games.length > 0),
+        Stream.runHead,
+        Effect.map(Option.getOrThrow)
+      )
+
+      assert.deepStrictEqual(
+        message.games.find(({ game }) => game.snapshot.id === GameId.make("5"))?.availability,
+        [ChannelAvailability.cases.NoGuide.make({ source: "YouTube TV" })]
+      )
+    }).pipe(Effect.provide(directing(games)))
+  )
 })
 
 describe("Director, a take that raises a defect", () => {
@@ -401,11 +425,6 @@ const ohioStateAtIowa = snapshot({
 })
 
 const streamingOnly = ChannelAvailability.cases.NotCarried.make({ why: "StreamingOnly" })
-const primeOnTwitch = {
-  name: "Prime Video",
-  source: "Twitch" as const,
-  locator: { _tag: "WebView" as const, url: "https://player.twitch.tv/?channel=primevideo" }
-}
 const primeOnYouTubeTv = {
   name: "Prime Video",
   source: "YouTube TV" as const,
@@ -440,346 +459,6 @@ describe("Director's play log", () => {
   })
 })
 
-describe("Director, the Screen", () => {
-  it.effect("should apply concurrent commands without losing any", () =>
-    Effect.gen(function* () {
-      const director = yield* Director
-
-      yield* Effect.forEach(
-        games.slice(0, 4),
-        (snapshot, tile) => director.dispatch({ _tag: "Assign", tile, game: snapshot.id }),
-        { concurrency: "unbounded" }
-      )
-
-      const screen = yield* director.screen
-      assert.isTrue(screen.tiles.every((tile) => !Tile.guards.Empty(tile)))
-    }).pipe(Effect.provide(directing(games)))
-  )
-
-  it.effect("should reject a command for a missing tile, leaving the screen unchanged", () =>
-    Effect.gen(function* () {
-      const director = yield* Director
-      yield* director.dispatch({ _tag: "Assign", tile: 0, game: GameId.make("1") })
-      const before = yield* director.screen
-
-      const rejection = yield* director.dispatch({ _tag: "FocusAudio", tile: 9 }).pipe(Effect.flip)
-
-      const after = yield* director.screen
-      assert.strictEqual(rejection.reason, "no-such-tile")
-      assert.deepStrictEqual(after, before)
-    }).pipe(Effect.provide(directing(games)))
-  )
-
-  it.effect("should assign a game the guide carries as a stream tile", () =>
-    Effect.gen(function* () {
-      const director = yield* Director
-      yield* readRecordedGuide
-
-      const screen = yield* director.dispatch({ _tag: "Assign", tile: 0, game: ohioStateAtIowa.id })
-
-      assert.deepStrictEqual(screen.tiles[0], {
-        _tag: "StreamTile",
-        game: ohioStateAtIowa.id,
-        channel: { name: "News 3", source: "YouTube TV", locator: { _tag: "WebView", url: news3Live } }
-      })
-    }).pipe(Effect.provide(directing([ohioStateAtIowa, ...games])))
-  )
-
-  it.effect("should assign a game the guide does not carry as a data tile, not in the guide", () =>
-    Effect.gen(function* () {
-      const director = yield* Director
-      yield* readRecordedGuide
-      yield* director.dispatch({ _tag: "Assign", tile: 0, game: ohioStateAtIowa.id })
-
-      const screen = yield* director.dispatch({ _tag: "Assign", tile: 1, game: GameId.make("4") })
-
-      assert.deepStrictEqual(screen.tiles[1], {
-        _tag: "DataTile",
-        game: GameId.make("4"),
-        why: { _tag: "NotInGuide" }
-      })
-    }).pipe(Effect.provide(directing([ohioStateAtIowa, ...games])))
-  )
-
-  it.effect("should assign a game as a data tile with no guide while the source has read none", () =>
-    Effect.gen(function* () {
-      const director = yield* Director
-
-      const screen = yield* director.dispatch({ _tag: "Assign", tile: 0, game: GameId.make("5") })
-
-      assert.deepStrictEqual(screen.tiles[0], noGuideTile(GameId.make("5")))
-    }).pipe(Effect.provide(directing(games)))
-  )
-
-  it.live("should refresh the screen when the source reads a guide", () =>
-    Effect.gen(function* () {
-      const director = yield* Director
-      const reader = yield* GuideReader
-      yield* director.dispatch({ _tag: "Assign", tile: 0, game: GameId.make("5") })
-
-      yield* reader.readGuide(recordedGuide)
-
-      const screen = yield* firstScreenWhere(
-        director.screenChanges,
-        (screen) => !isNoGuideTile(screen.tiles[0])
-      )
-      const tile = Option.getOrThrow(screen).tiles[0]
-      assert.deepStrictEqual(
-        tile === undefined || Tile.guards.Empty(tile) ? tile : tile.game,
-        GameId.make("5")
-      )
-    }).pipe(Effect.provide(directing(games)))
-  )
-
-  it.live("should publish no Screen change when a refresh changes no tile", () =>
-    Effect.gen(function* () {
-      const pulses = yield* Queue.unbounded<void>()
-      const answering = Source.layerTest(
-        () => ChannelAvailability.cases.NoGuide.make({ source: "YouTube TV" }),
-        Stream.fromQueue(pulses)
-      )
-
-      const published = yield* Effect.gen(function* () {
-        const director = yield* Director
-        yield* director.dispatch({ _tag: "Assign", tile: 0, game: GameId.make("5") })
-        const next = yield* director.screenChanges.pipe(
-          Stream.drop(1),
-          Stream.runHead,
-          Effect.timeoutOption("200 millis"),
-          Effect.forkScoped
-        )
-        yield* Effect.yieldNow
-
-        yield* Queue.offer(pulses, undefined)
-
-        return yield* Fiber.join(next)
-      }).pipe(
-        Effect.provide(listed(games).pipe(Layer.provideMerge(directorOver), Layer.provideMerge(answering)))
-      )
-
-      assert.isTrue(Option.isNone(published))
-    })
-  )
-
-  it.live("should keep a stream tile on Twitch when YouTube TV's guide then carries its game", () =>
-    Effect.gen(function* () {
-      const pulses = yield* Queue.unbounded<void>()
-      const youTubeTvCarries = yield* Ref.make(false)
-      const youTubeTv = Layer.succeed(
-        Source,
-        Source.of({
-          availability: Ref.get(youTubeTvCarries).pipe(
-            Effect.map((carries) => () => [
-              carries ? ChannelAvailability.cases.Carried.make({ channel: primeOnYouTubeTv }) : streamingOnly
-            ])
-          ),
-          changes: Stream.fromQueue(pulses)
-        })
-      )
-      const twitch = Source.layerTest((game) =>
-        game.id === GameId.make("5")
-          ? ChannelAvailability.cases.Carried.make({ channel: primeOnTwitch })
-          : streamingOnly
-      )
-      // YouTube TV first: were a tile to follow the combined answer, the tie would go to YouTube TV.
-      const bothSources = Source.layerAll([youTubeTv, twitch])
-
-      const { assigned, screen } = yield* Effect.gen(function* () {
-        const director = yield* Director
-        yield* director.dispatch({ _tag: "Assign", tile: 0, game: GameId.make("5") })
-        const assigned = yield* director.dispatch({ _tag: "Assign", tile: 1, game: GameId.make("4") })
-
-        yield* Ref.set(youTubeTvCarries, true)
-        yield* Queue.offer(pulses, undefined)
-
-        // Game 4 turning into a stream tile shows the refresh has run.
-        const screen = yield* firstScreenWhere(director.screenChanges, (screen) => {
-          const second = screen.tiles[1]
-          return second !== undefined && Tile.guards.StreamTile(second)
-        })
-        return { assigned, screen }
-      }).pipe(
-        Effect.provide(listed(games).pipe(Layer.provideMerge(directorOver), Layer.provideMerge(bothSources)))
-      )
-
-      assert.deepStrictEqual(assigned.tiles[0], {
-        _tag: "StreamTile",
-        game: GameId.make("5"),
-        channel: primeOnTwitch
-      })
-      assert.deepStrictEqual(Option.getOrThrow(screen).tiles[0], assigned.tiles[0])
-    })
-  )
-
-  it.live("should not miss a change made the moment the layer has built", () =>
-    Effect.gen(function* () {
-      const refreshed = yield* Deferred.make<void>()
-      const refreshes = yield* Ref.make(0)
-      // Reading availability is a step of every refresh, and nothing else here reads it, so it counts them.
-      const countingSource = Layer.effect(
-        Source,
-        Effect.gen(function* () {
-          const source = yield* Source
-          const availability = Ref.update(refreshes, (count) => count + 1).pipe(
-            Effect.andThen(Deferred.succeed(refreshed, undefined)),
-            Effect.andThen(source.availability)
-          )
-          return Source.of({ ...source, availability })
-        })
-      ).pipe(Layer.provide(Source.layerYouTubeTv))
-      const guideReadAtOnce = readAtOnce().pipe(
-        Layer.provideMerge(Director.layer),
-        Layer.provide(Provider.layerTest),
-        Layer.provide(countingSource),
-        Layer.provideMerge(GuideReader.layerYouTubeTv)
-      )
-
-      yield* Effect.gen(function* () {
-        yield* Deferred.await(refreshed).pipe(Effect.timeout("2 seconds"))
-        // Give a second, wrong refresh the chance to happen.
-        yield* Effect.yieldNow.pipe(Effect.repeat({ times: 50 }))
-      }).pipe(Effect.provide(guideReadAtOnce))
-
-      const count = yield* Ref.get(refreshes)
-      assert.strictEqual(count, 1)
-    })
-  )
-
-  it.live(
-    "should apply a command with availability as it is when the command lands, not as it was read",
-    () =>
-      Effect.gen(function* () {
-        const reading = yield* Deferred.make<void>()
-        const release = yield* Deferred.make<void>()
-        const directorOnStaleRead = listed(games).pipe(
-          Layer.provideMerge(Director.layer),
-          Layer.provideMerge(Provider.layerTest),
-          Layer.provideMerge(availabilityHeldOnce(reading, release)),
-          Layer.provideMerge(GuideReader.layerYouTubeTv)
-        )
-
-        const { assigned, screen } = yield* Effect.gen(function* () {
-          const director = yield* Director
-          const reader = yield* GuideReader
-          const assigning = yield* director
-            .dispatch({ _tag: "Assign", tile: 0, game: GameId.make("5") })
-            .pipe(Effect.forkScoped)
-          yield* Deferred.await(reading)
-          yield* reader.readGuide(recordedGuide)
-          yield* Deferred.succeed(release, undefined)
-
-          const assigned = yield* Fiber.join(assigning)
-          const screen = yield* firstScreenWhere(
-            director.screenChanges,
-            (screen) => !isNoGuideTile(screen.tiles[0])
-          )
-          return { assigned, screen }
-        }).pipe(Effect.provide(directorOnStaleRead))
-
-        assert.deepStrictEqual(assigned.tiles[0], noGuideTile(GameId.make("5")))
-        assert.isTrue(Option.isSome(screen))
-      })
-  )
-
-  it.live("should keep a tile whose game has left the slate as it was when the source reads a guide", () =>
-    Effect.gen(function* () {
-      const screen = yield* Effect.gen(function* () {
-        const director = yield* Director
-        const reader = yield* GuideReader
-        const feed = yield* ProviderFeed
-        yield* director.dispatch({ _tag: "Assign", tile: 0, game: GameId.make("1") })
-        yield* director.dispatch({ _tag: "Assign", tile: 1, game: GameId.make("5") })
-        yield* feed.deliver(listings(games.filter((snapshot) => snapshot.id !== GameId.make("1"))))
-
-        yield* reader.readGuide(recordedGuide)
-
-        return yield* firstScreenWhere(director.screenChanges, (screen) => !isNoGuideTile(screen.tiles[1]))
-      }).pipe(Effect.provide(directing(games)))
-
-      // Off the slate it would be a data tile with no stream; the refresh leaves it alone instead.
-      assert.deepStrictEqual(Option.getOrThrow(screen).tiles[0], noGuideTile(GameId.make("1")))
-    })
-  )
-
-  it.effect("should keep a guide-matched tile playing when its guide goes stale", () =>
-    Effect.gen(function* () {
-      const source = yield* Source
-      const director = yield* Director
-      yield* readRecordedGuide
-      const playing = yield* director.dispatch({ _tag: "Assign", tile: 0, game: ohioStateAtIowa.id })
-
-      yield* TestClock.adjust("45 minutes")
-      for (let turn = 0; turn < 10; turn++) yield* Effect.yieldNow
-
-      const availability = yield* source.availability
-      const screen = yield* director.screen
-      assert.strictEqual(playing.tiles[0]?._tag, "StreamTile")
-      assert.deepStrictEqual(availability(ohioStateAtIowa), [
-        ChannelAvailability.cases.NoGuide.make({ source: "YouTube TV" })
-      ])
-      assert.deepStrictEqual(screen.tiles[0], playing.tiles[0])
-    }).pipe(Effect.provide(directing([ohioStateAtIowa])))
-  )
-
-  it.effect("should assign a game missing from the slate as a data tile", () =>
-    Effect.gen(function* () {
-      const director = yield* Director
-
-      const screen = yield* director.dispatch({ _tag: "Assign", tile: 0, game: GameId.make("gone") })
-
-      assert.deepStrictEqual(screen.tiles[0], {
-        _tag: "DataTile",
-        game: GameId.make("gone"),
-        why: { _tag: "NoStream" }
-      })
-    }).pipe(Effect.provide(directing(games)))
-  )
-})
-
-/** Reads the recorded guide as soon as the Director is built: depending on it orders this after the layer. */
-function readAtOnce() {
-  return Layer.effectDiscard(
-    Effect.gen(function* () {
-      yield* Director
-      const reader = yield* GuideReader
-
-      yield* reader.readGuide(recordedGuide)
-    })
-  )
-}
-
-/**
- * YouTube TV whose first availability read returns what it saw, then tells `reading` and waits for `release`: a stale
- * read.
- */
-function availabilityHeldOnce(reading: Deferred.Deferred<void>, release: Deferred.Deferred<void>) {
-  return Layer.effect(
-    Source,
-    Effect.gen(function* () {
-      const source = yield* Source
-      let gate = true
-      const availability = Effect.gen(function* () {
-        const seen = yield* source.availability
-        if (gate) {
-          gate = false
-          yield* Deferred.succeed(reading, undefined)
-          yield* Deferred.await(release)
-        }
-        return seen
-      })
-      return Source.of({ ...source, availability })
-    })
-  ).pipe(Layer.provide(Source.layerYouTubeTv))
-}
-
-/**
- * The first screen of `changes` that passes `test`, within two seconds. The current screen is replayed to a new
- * subscriber, so a test waits for a screen only the change it awaits makes.
- */
-function firstScreenWhere(changes: Stream.Stream<Screen>, test: (screen: Screen) => boolean) {
-  return changes.pipe(Stream.filter(test), Stream.take(1), Stream.runHead, Effect.timeout("2 seconds"))
-}
-
 /** Every league's listing of `games`, in their order. */
 function listings(games: ReadonlyArray<GameSnapshot>) {
   const leagues = [...new Set(games.map(({ league }) => league))]
@@ -802,16 +481,6 @@ function listed(games: ReadonlyArray<GameSnapshot>) {
 /** The Director over a fed provider and YouTube TV with nothing read yet, its slate listing `games`. */
 function directing(games: ReadonlyArray<GameSnapshot>) {
   return listed(games).pipe(Layer.provideMerge(directed))
-}
-
-/** The data tile a game gets while the source has no guide. */
-function noGuideTile(game: GameId) {
-  return { _tag: "DataTile" as const, game, why: { _tag: "NoGuide" as const, source: "YouTube TV" as const } }
-}
-
-/** Whether `tile` is the data tile of a game while the source has no guide. */
-function isNoGuideTile(tile: Tile | undefined) {
-  return tile !== undefined && Tile.guards.DataTile(tile) && Predicate.isTagged(tile.why, "NoGuide")
 }
 
 /** The Director over a fed provider, against YouTube TV with nothing read yet; it and the guide reader provided too. */

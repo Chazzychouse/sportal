@@ -1,6 +1,6 @@
 import { type Game, type GameId, GameSnapshot } from "@sportal/domain/Game"
-import type { Screen } from "@sportal/domain/Screen"
 import { Array as Arr, Data } from "effect"
+import type { Screen } from "../screen/Screen.ts"
 
 /** Where a strip card's game is: in a slot on screen, or on the bench at a tile. */
 export type Place = Data.TaggedEnum<{

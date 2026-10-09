@@ -1,5 +1,5 @@
 import { assert, describe, it } from "@effect/vitest"
-import { LayoutName, Screen, type Split } from "@sportal/domain/Screen"
+import { LayoutName, Screen, type Split } from "../screen/Screen.ts"
 import { Layout } from "./Layout.ts"
 
 describe("Layout#slots", () => {

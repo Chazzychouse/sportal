@@ -1,8 +1,8 @@
 import { useAtomSet } from "@effect/atom-react"
-import { LayoutName, Screen } from "@sportal/domain/Screen"
 import { cn } from "@/design/ClassName"
 import { ToggleGroup, ToggleGroupItem } from "@/design/toggle-group"
 import * as DisplayScreen from "../screen/DisplayScreen.ts"
+import { LayoutName, Screen } from "../screen/Screen.ts"
 import { LayoutGlyph, layoutLabel } from "./LayoutGlyph.tsx"
 
 /** One button per layout, the current one lit; choosing one applies it. */

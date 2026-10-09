@@ -1,6 +1,6 @@
+import { Channel, ChannelAvailability, SourceName } from "@sportal/domain/Channel"
+import { GameId } from "@sportal/domain/Game"
 import { Array as Arr, Option, Record as Rec, Result, Schema } from "effect"
-import { Channel, ChannelAvailability, SourceName } from "./Channel.ts"
-import { GameId } from "./Game.ts"
 
 export const Tile = Schema.TaggedUnion({
   Empty: {},
@@ -213,11 +213,9 @@ export const ScreenCommand = Schema.TaggedUnion({
 })
 export type ScreenCommand = typeof ScreenCommand.Type
 
-export class ScreenRejection extends Schema.TaggedError<ScreenRejection>()(
-  "ScreenRejection",
-  { reason: Schema.Literals(["no-such-tile", "empty-tile", "offscreen-tile", "split-out-of-range"]) },
-  { httpApiStatus: 422 }
-) {}
+export class ScreenRejection extends Schema.TaggedError<ScreenRejection>()("ScreenRejection", {
+  reason: Schema.Literals(["no-such-tile", "empty-tile", "offscreen-tile", "split-out-of-range"])
+}) {}
 
 /** A tile that holds a game. */
 type Occupied = Exclude<Tile, { readonly _tag: "Empty" }>

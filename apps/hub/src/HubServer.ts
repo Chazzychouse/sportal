@@ -1,6 +1,6 @@
 import { createServer } from "node:http"
 import { NodeHttpServer, type NodeServices } from "@effect/platform-node"
-import { LiveMessage, LiveMessageJson } from "@sportal/api/LiveMessage"
+import { LiveMessageJson } from "@sportal/api/LiveMessage"
 import { SportalApi } from "@sportal/api/SportalApi"
 import {
   DateTime,
@@ -46,7 +46,7 @@ export const layer: Layer.Layer<
   Effect.gen(function* () {
     const { webRoot } = yield* HubConfig
     const api = HttpApiBuilder.layer(SportalApi).pipe(
-      Layer.provide(Layer.mergeAll(screenHandlers, guideHandlers, hostHandlers))
+      Layer.provide(Layer.mergeAll(guideHandlers, hostHandlers))
     )
     const web = Option.match(webRoot, {
       onNone: () => Layer.empty,
@@ -66,18 +66,6 @@ export const layerListen: Layer.Layer<
     const { port, host } = yield* HubConfig
     // Connected Displays hold live streams open. By default shutdown waits 20 seconds for them, and Docker kills at 10.
     return NodeHttpServer.layer(createServer, { port, host, gracefulShutdownTimeout: "3 seconds" })
-  })
-)
-
-const screenHandlers = HttpApiBuilder.group(
-  SportalApi,
-  "screen",
-  Effect.fn(function* (handlers) {
-    const director = yield* Director
-    return handlers.handleAll({
-      current: () => director.screen,
-      dispatch: ({ payload }) => director.dispatch(payload.command)
-    })
   })
 )
 
@@ -112,19 +100,15 @@ const hostHandlers = HttpApiBuilder.group(
 )
 
 /**
- * GET /api/live — the current slate, each game beside its availability, and the screen, then every change, as
- * server-sent events, with a comment every 20 seconds so proxies that close idle connections leave a quiet stream open.
+ * GET /api/live — the current slate, each game beside its availability, then every change, as server-sent events,
+ * with a comment every 20 seconds so proxies that close idle connections leave a quiet stream open.
  */
 const liveRoute = HttpRouter.add(
   "GET",
   "/api/live",
   Effect.gen(function* () {
     const director = yield* Director
-    const screenChanges = director.screenChanges.pipe(
-      Stream.map((next) => LiveMessage.cases.ScreenChanged.make({ screen: next }))
-    )
-    const slateChanges = director.published.pipe(settled)
-    const messages: Stream.Stream<LiveMessage> = Stream.merge(slateChanges, screenChanges)
+    const messages = director.published.pipe(settled)
     const encode = Schema.encodeEffect(LiveMessageJson)
     const events = messages.pipe(
       Stream.mapEffect((message) => Effect.map(encode(message), (json) => `data: ${json}\n\n`))

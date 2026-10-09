@@ -1,11 +1,11 @@
 import { useAtomSet } from "@effect/atom-react"
 import type { GameSnapshot } from "@sportal/domain/Game"
-import { type Screen, Tile } from "@sportal/domain/Screen"
 import { Button } from "@/design/button"
 import { cn } from "@/design/ClassName"
 import { GameStatus } from "../game/GameStatus.tsx"
 import { Score } from "../game/Score.tsx"
 import * as DisplayScreen from "./DisplayScreen.ts"
+import { type Screen, Tile } from "./Screen.ts"
 import { keyText, tileActions } from "./TileActions.tsx"
 import { tileHeader } from "./TileRects.ts"
 

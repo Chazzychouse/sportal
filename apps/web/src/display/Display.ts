@@ -1,8 +1,8 @@
 import { Hotkey } from "@sportal/api/Hotkey"
 import type { GameId } from "@sportal/domain/Game"
-import { type Screen, type ScreenCommand, Tile } from "@sportal/domain/Screen"
 import { Data, Option } from "effect"
 import { Layout } from "../layout/Layout.ts"
+import { type Screen, type ScreenCommand, Tile } from "../screen/Screen.ts"
 import { Place, StripCard } from "../slate/StripCards.ts"
 
 type Overlay = Data.TaggedEnum<{ None: object; Keys: object; Palette: object }>

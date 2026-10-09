@@ -1,5 +1,5 @@
-import { LayoutName, Screen, Split } from "@sportal/domain/Screen"
 import { Schema } from "effect"
+import { LayoutName, Screen, Split } from "../screen/Screen.ts"
 
 /** A layout with its dividers: the slots it arranges, main tile first, as fractions of the Screen area. */
 export class Layout extends Schema.Class<Layout>("sportal/web/Layout")({ name: LayoutName, split: Split }) {

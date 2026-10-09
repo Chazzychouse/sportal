@@ -1,7 +1,7 @@
 import { assert, describe, it } from "@effect/vitest"
+import { ChannelAvailability } from "@sportal/domain/Channel"
+import { GameId } from "@sportal/domain/Game"
 import { DateTime, Option, Result, Schema } from "effect"
-import { ChannelAvailability } from "./Channel.ts"
-import { GameId } from "./Game.ts"
 import { type LayoutName, Screen, ScreenCommand, Tile } from "./Screen.ts"
 import { assign, bama, fill, foxChannel, irish, nowhere, onFox } from "./TestScreen.ts"
 

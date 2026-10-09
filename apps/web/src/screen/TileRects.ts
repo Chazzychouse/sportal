@@ -1,8 +1,8 @@
 import type { TilePlacement } from "@sportal/api/ShellBridge"
 import type { GameId } from "@sportal/domain/Game"
-import { type Screen, Tile } from "@sportal/domain/Screen"
 import { Option } from "effect"
 import { Layout } from "../layout/Layout.ts"
+import { type Screen, Tile } from "./Screen.ts"
 
 /**
  * Each on-screen tile's rectangle in the Screen area, in whole pixels, main tile first. Slot edges are rounded

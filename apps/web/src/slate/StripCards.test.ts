@@ -1,6 +1,6 @@
 import { assert, describe, it } from "@effect/vitest"
 import { GameId } from "@sportal/domain/Game"
-import { Screen } from "@sportal/domain/Screen"
+import { Screen } from "../screen/Screen.ts"
 import { withTiles } from "../screen/TestScreen.ts"
 import { StripCard } from "./StripCards.ts"
 import { slate } from "./TestSlate.ts"

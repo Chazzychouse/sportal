@@ -81,8 +81,7 @@ function received(live: Live, message: LiveMessage): Live {
       ...live,
       slate: games.map(({ game }) => game),
       availability: new Map(games.map(({ game, availability }) => [game.snapshot.id, availability]))
-    }),
-    ScreenChanged: (): Live => live
+    })
   })
 }
 

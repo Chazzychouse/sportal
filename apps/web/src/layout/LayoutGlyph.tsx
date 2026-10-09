@@ -1,4 +1,4 @@
-import type { LayoutName } from "@sportal/domain/Screen"
+import type { LayoutName } from "../screen/Screen.ts"
 import { Layout } from "./Layout.ts"
 
 /** A small drawing of a layout at its default split, main tile lit. */

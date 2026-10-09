@@ -1,8 +1,8 @@
-import { Screen, type ScreenCommand, type ScreenRejection } from "@sportal/domain/Screen"
 import { Option, Result } from "effect"
 import { KeyValueStore } from "effect/persistence"
 import { Atom } from "effect/reactivity"
 import * as LiveStream from "../hub/LiveStream.ts"
+import { Screen, type ScreenCommand, type ScreenRejection } from "./Screen.ts"
 
 /**
  * This Display's Screen. A screen command written to it is applied against where each game on the live slate can be

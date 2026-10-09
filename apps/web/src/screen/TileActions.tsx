@@ -1,6 +1,6 @@
-import { type Screen, type ScreenCommand, Tile } from "@sportal/domain/Screen"
 import { ArrowUpLeft, Shrink, SquareDashed, Volume2, VolumeX, X } from "lucide-react"
 import type { ReactNode } from "react"
+import { type Screen, type ScreenCommand, Tile } from "./Screen.ts"
 
 /**
  * What can be done to the tile in `slot`, in the order every host lists it: hear it, promote it unless it is the

@@ -1,8 +1,8 @@
 import { useAtomSubscribe } from "@effect/atom-react"
-import type { ScreenRejection } from "@sportal/domain/Screen"
 import { Option } from "effect"
 import { toast } from "sonner"
 import * as DisplayScreen from "./DisplayScreen.ts"
+import type { ScreenRejection } from "./Screen.ts"
 
 /** Shows each screen command this Display refused as a warning toast, saying why. */
 export function useScreenRejectionToasts() {
