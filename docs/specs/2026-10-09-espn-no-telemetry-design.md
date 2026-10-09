@@ -34,25 +34,21 @@
 
 ### FastCast
 
-**Steering.** `Steer`, `steersBetween`, `steer`, and `steerTo` go. One pure function says what changed:
+**Steering.** `Steer`, `steersBetween`, `steer`, and `steerTo` go. The socket keeps what is wanted now in a `Ref`, and
+one pure function says what to subscribe to as it changes:
 
 ```ts
-function subscriptionsBetween(previous: Wanted, next: Wanted): {
-  readonly subscribe: ReadonlyArray<Topic> // newly wanted, or Synced → AwaitingCheckpoint
-  readonly left: ReadonlyArray<Topic> // no longer wanted
-}
+// Each topic newly wanted, and each whose document went from Synced back to AwaitingCheckpoint.
+function toSubscribe(previous: Wanted, next: Wanted): ReadonlyArray<Topic>
 ```
 
-Each topic in `subscribe` is offered as an `S` to the socket's outgoing queue; each in `left` has its pending
-re-subscribe, if any, removed from the `FiberMap`.
+Each such topic has its pending re-subscribe, if any, removed, and is offered as an `S` to the socket's outgoing queue
+at once. A topic no longer wanted needs nothing: Leave never sent ESPN anything.
 
-**A failed checkpoint.** `framed` logs the warning, then calls `resubscribeLater(topic)`:
-
-```ts
-FiberMap.run(pending, topic, Effect.sleep(refollow).pipe(Effect.andThen(subscribe(topic))), { onlyIfMissing: true })
-```
-
-At most one is pending per topic; a later `H` brings a fresh checkpoint URL. There is no limit: a topic whose checkpoint
+**A failed checkpoint.** `framed` logs the warning, then calls `resubscribeLater(topic)`: a fiber in a `FiberMap` keyed
+by topic (`onlyIfMissing`) that sleeps `refollow`, then sends `S` only if the topic is still in the wanted `Ref`. At most
+one is pending per topic; a later `H` brings a fresh checkpoint URL. A topic whose document is lost while its
+re-subscribe waits is subscribed to at once, and the waiting one is cancelled. There is no limit: a topic whose checkpoint
 never loads costs one request every 30 s while it is wanted. `TopicFollow`, `Deferred`, `attempt`, `answer`, the
 `answer` callback in `framed`, and the `LeftToPolling` state all go. `framed` no longer parses the op or league.
 
@@ -94,9 +90,11 @@ with frames leaving in the texts' order, and `Wanted`.
 ### Tests
 
 - Metric assertions and their `withMetrics` wrappers go, along with tests that only checked a metric.
-- The left-to-polling and Schedule-limit tests are replaced by:
-  - should subscribe to a topic whose checkpoint failed again after 30 s
-  - should not subscribe to it again before 30 s
+- The existing tests for subscribing again after 30 s, and not before, stay, renamed from "the Schedule". The
+  left-to-polling and Schedule-limit tests are replaced by:
+  - should subscribe again every 30 s to a topic whose checkpoints keep failing
+  - should subscribe at once to a topic whose document is lost while its re-subscribe waits, and not again when the
+    wait ends
   - should not subscribe again to a topic left while its re-subscribe waited
 - "should log that the live feed stopped and stay quiet once its reconnect is done" goes.
 - `TestTelemetry.ts` stays: Director, EspnState, and Telemetry tests use it.
