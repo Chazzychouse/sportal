@@ -1,6 +1,6 @@
 import { DateTime, Duration, Option, Schema } from "effect"
 import { ChannelAvailability, SourceName } from "./Channel.ts"
-import type { GameSnapshot, Network } from "./Game.ts"
+import { type GameSnapshot, Network } from "./Game.ts"
 import type { LeagueId } from "./League.ts"
 import { StreamLocator } from "./Stream.ts"
 import type { Team } from "./Team.ts"
@@ -20,64 +20,83 @@ export type Airing = typeof Airing.Type
 
 /**
  * One reading of a source's guide: the channels this account gets, each with its live address while it is
- * on the air, and what each airs.
+ * on the air and, for a channel that is one network's stream, that network; and what each airs.
  */
 export class Guide extends Schema.Class<Guide>("sportal/Guide")({
   source: SourceName,
   readAt: Schema.DateTimeUtc,
   channels: Schema.Array(
-    Schema.Struct({ id: ChannelId, name: Schema.String, live: Schema.optional(StreamLocator) })
+    Schema.Struct({
+      id: ChannelId,
+      name: Schema.String,
+      live: Schema.optional(StreamLocator),
+      network: Schema.optional(Network)
+    })
   ),
   airings: Schema.Array(Airing)
 }) {
   /**
-   * How far past its reading a guide is complete. The first page of YouTube TV's guide reached 3h46m past
+   * How far past its reading a guide's airings are complete. The first page of YouTube TV's guide reached 3h46m past
    * the half hour before the read (spike, 2026-10-03); a later kickoff may not be listed yet.
    */
   static readonly reach = Duration.hours(3)
 
   /**
-   * Where this source shows a game, from the airing that names both its teams, has not ended, and begins near
+   * Where this source shows a game at `now`, from the airing that names both its teams, has not ended, and begins near
    * kickoff or is on now while the game is under way. Of several, the one on a channel named for one of the game's
-   * networks wins, then the first in the guide. It is carried once its channel is on the air and the airing
-   * is at most half an hour off; until then it is upcoming. With no match, a kickoff past the guide's reach
-   * is upcoming, and any other game is not carried.
+   * networks wins, then the first in the guide. With no such airing, a channel that carries one of the game's networks
+   * shows it as if it aired from kickoff, until the game is over. Either is carried once its channel is on the air and
+   * it begins at most half an hour from `now`; until then it is upcoming. With neither, a kickoff past the reach of a
+   * guide that lists airings is upcoming, and any other game is not carried.
    */
-  availabilityOf(game: GameSnapshot): ChannelAvailability {
-    const matches = this.airings.filter((airing) => this.airs(airing, game))
+  availabilityOf(game: GameSnapshot, now: DateTime.Utc): ChannelAvailability {
+    const matches = this.airings.filter((airing) => this.airs(airing, game, now))
     const [first] = matches
-    if (first === undefined) {
-      if (DateTime.isGreaterThan(game.kickoff, DateTime.addDuration(this.readAt, Guide.reach)))
-        return ChannelAvailability.Upcoming({ channel: Option.none(), begin: Option.none() })
-      const streamingOnly =
-        game.broadcasts.length > 0 && game.broadcasts.every(({ medium }) => medium === "streaming")
-      return ChannelAvailability.NotCarried({ why: streamingOnly ? "StreamingOnly" : "NotInGuide" })
+    if (first !== undefined) {
+      const airing =
+        matches.find((candidate) =>
+          game.broadcasts.some(({ network }) => namesNetwork(this.channelOf(candidate).name, network))
+        ) ?? first
+      return this.from(this.channelOf(airing), airing.begin, now)
     }
 
-    const airing =
-      matches.find((candidate) =>
-        game.broadcasts.some(({ network }) => namesNetwork(this.channelOf(candidate).name, network))
-      ) ?? first
-    const channel = this.channelOf(airing)
-    const soon = DateTime.isLessThanOrEqualTo(airing.begin, DateTime.addDuration(this.readAt, startingSoon))
+    const carrier = this.channels.find((channel) =>
+      game.broadcasts.some(({ network }) => channel.network === network)
+    )
+    if (carrier !== undefined && game.progress() !== "over") return this.from(carrier, game.kickoff, now)
+
+    const pastReach = DateTime.isGreaterThan(game.kickoff, DateTime.addDuration(this.readAt, Guide.reach))
+    if (this.airings.length > 0 && pastReach)
+      return ChannelAvailability.Upcoming({ channel: Option.none(), begin: Option.none() })
+    const streamingOnly =
+      game.broadcasts.length > 0 && game.broadcasts.every(({ medium }) => medium === "streaming")
+    return ChannelAvailability.NotCarried({ why: streamingOnly ? "StreamingOnly" : "NotInGuide" })
+  }
+
+  /** Carried on `channel` once it is on the air and `begin` is at most half an hour from `now`; else upcoming. */
+  private from(
+    channel: { readonly name: string; readonly live?: StreamLocator | undefined },
+    begin: DateTime.Utc,
+    now: DateTime.Utc
+  ): ChannelAvailability {
+    const soon = DateTime.isLessThanOrEqualTo(begin, DateTime.addDuration(now, startingSoon))
     return channel.live !== undefined && soon
       ? ChannelAvailability.Carried({
           channel: { name: channel.name, source: this.source, locator: channel.live }
         })
-      : ChannelAvailability.Upcoming({ channel: Option.some(channel.name), begin: Option.some(airing.begin) })
+      : ChannelAvailability.Upcoming({ channel: Option.some(channel.name), begin: Option.some(begin) })
   }
 
-  private airs(airing: Airing, game: GameSnapshot): boolean {
+  private airs(airing: Airing, game: GameSnapshot, now: DateTime.Utc): boolean {
     const nearKickoff = DateTime.between(airing.begin, {
       minimum: DateTime.subtractDuration(game.kickoff, kickoffTolerance),
       maximum: DateTime.addDuration(game.kickoff, kickoffTolerance)
     })
     const onNow =
-      game.progress() === "live" &&
-      DateTime.between(this.readAt, { minimum: airing.begin, maximum: airing.end })
+      game.progress() === "live" && DateTime.between(now, { minimum: airing.begin, maximum: airing.end })
     return (
       (nearKickoff || onNow) &&
-      DateTime.isGreaterThan(airing.end, this.readAt) &&
+      DateTime.isGreaterThan(airing.end, now) &&
       namesTeam(airing.title, game.home.team, game.league) &&
       namesTeam(airing.title, game.away.team, game.league)
     )

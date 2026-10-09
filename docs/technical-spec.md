@@ -133,7 +133,7 @@ This section is binding in the same way the type checker is. `AGENTS.md` carries
 6. **No mirror types.** There is no `GameDto`, `GameRow`, `GameResponse`, `GameProps`. The domain schema is the wire format. A variant is derived from the original (`pick`, `omit`, `extend`) at the point of use and is not given a name unless it is itself a domain concept with a glossary entry.
 7. **Search before you write.** Before adding a function, type, or file, look for the existing one. Duplicating logic that already exists is a defect even when the code works.
 8. **Organize by concept, not by kind.** No top-level `components/`, `hooks/`, `services/`, `schemas/` folders. Code for the slate lives under `slate/`, whatever kind of code it is.
-9. **Dependencies point one way.** `domain` imports only Effect. `api` imports `domain`. Apps import packages. Nothing imports an app. Within the Hub, only `main.ts` knows which concrete providers and sources exist, and it reaches ESPN's only through `provider/espn/Espn.ts`.
+9. **Dependencies point one way.** `domain` imports only Effect. `api` imports `domain`. Apps import packages. Nothing imports an app. Within the Hub, only `main.ts` knows which concrete providers and sources exist, and it reaches ESPN's only through `provider/espn/Espn.ts`; a source port's layer variants (`Source.layerYouTubeTv`, `GuideReader.layerYouTubeTv`) name theirs too, and only the port modules import a source's folder.
 
 ### 4.2 The tree
 
@@ -189,7 +189,7 @@ sportal/
 └── apps/
     ├── hub/
     │   └── src/
-    │       ├── main.ts             Composition root: the Hub's layer pipe, run until a signal stops it; the only file that names providers and sources, ESPN's through `Espn`
+    │       ├── main.ts             Composition root: the Hub's layer pipe, run until a signal stops it; the only file that chooses providers and sources, ESPN's through `Espn`
     │       ├── HubConfig.ts        Every environment setting, in one place
     │       ├── Telemetry.ts        Log level and format; OTLP export when configured
     │       ├── Director.ts         The one holder of the slate and the Screen: takes each frame's deliveries as they arrive, applies screen commands, refreshes availability
@@ -219,12 +219,15 @@ sportal/
     │       │       ├── TestEspn.ts         Recorded frames for tests of other modules, NE at BUF's day among them (`recordedNeAtBuf`)
     │       │       └── fixtures/           Recorded real payloads, NE at BUF's frames among them
     │       └── source/
-    │           ├── Source.ts       The port
-    │           └── youtube-tv/
-    │               ├── YouTubeTv.ts         Guide reading and availability
-    │               ├── YouTubeTvPayload.ts  The guide response's wire shape
-    │               ├── TestYouTubeTv.ts     A recorded guide for tests of other modules
-    │               └── fixtures/            Recorded real payloads
+    │           ├── Source.ts           The port, its variants, and how several answer as one
+    │           ├── GuideReader.ts      Reads the guide the shell fetches, keeps it while fresh
+    │           ├── youtube-tv/
+    │           │   ├── YouTubeTvGuide.ts    A guide response as channels and airings
+    │           │   ├── YouTubeTvPayload.ts  The guide response's wire shape
+    │           │   ├── TestYouTubeTv.ts     A recorded guide for tests of other modules
+    │           │   └── fixtures/            Recorded real payloads
+    │           └── twitch/
+    │               └── Twitch.ts            Twitch's lineup
     │
     ├── web/
     │   └── src/
@@ -251,7 +254,8 @@ sportal/
             │   ├── ProviderSession.ts  The persistent session and its permissions
             │   ├── Navigation.ts       Keeps a page on the addresses allowed
             │   ├── Sandbox.ts          What every window and view runs under
-            │   └── YouTubeTv.ts        YouTube TV's sign-in address, hosts, and origin
+            │   ├── YouTubeTv.ts        YouTube TV's sign-in address, hosts, and origin
+            │   └── Twitch.ts           Twitch's player host
             └── preload/
                 └── ShellBridge.ts      Implements the shell bridge declared in packages/api
 ```
@@ -322,21 +326,21 @@ class Director extends Context.Service<Director, {
 - The Director starts from an empty slate and takes each frame's deliveries as they arrive, in one `Director.take` span carrying its `sportal.deliveries` count, and gauges each game whose snapshot changed by its progress (`sportal_game_state`: 1 upcoming, 2 live, 3 over, 0 once no listing names it), which the Hub dashboard's Games table reads, and logs each play a take adds (Info, annotated with `game`, `league`, `matchup`, `play` and `scoring`). For now nothing is kept between runs: a restarted Hub serves an empty slate until its provider's next poll lists the day's games.
 - A take that raises a defect is an Error log; the slate keeps what it had and takes the next frame. If the provider's frames end other than by the Hub stopping, that is an Error log and the slate stays as it is.
 - `Slate.published()` is each listed game as the slate has it, carrying only its last ten plays (`Game#recent`, on `SlateChanged`); the Hub server sends it within 250 ms of a change, and `dispatch` reads the slate's games for where each can be streamed.
-- `main.ts` provides it over ESPN as the provider and YouTube TV as the source.
+- `main.ts` provides it over ESPN as the provider and YouTube TV and Twitch as the sources.
 - The Hub's whole shutdown bound is about 4 s: the HTTP server's 3 s for connected Displays, then telemetry's 1 s to export what it holds.
 
 **Source** — video out:
 
 ```ts
 class Source extends Context.Service<Source, {
-  readonly budget: StreamBudget
   readonly availability: Effect<(game: GameSnapshot) => ChannelAvailability>
   readonly changes: Stream<void>
-  readGuide(guide: string): Effect<void, GuideUnreadable>
-}>()("sportal/hub/Source") {}
+}>()("sportal/hub/source/Source") {}
 ```
 
-A source's channels are found in its own guide, read by the shell (`docs/history.md`, "Guide-matched channels"); with no fresh guide, a source answers "no guide".
+`Source.layerAll` runs every source and answers each game with the most useful answer any gives: carried, upcoming, no guide, then not carried; the order sources are listed in never decides between kinds. When a source changes, the Director refreshes the Screen: a stream tile moves only when the guide carries its game on another channel from its own source, so a tile never moves to another source. YouTube TV answers from the guide `GuideReader` keeps; Twitch from its lineup, a guide whose one channel carries Prime Video.
+
+YouTube TV's channels are found in its own guide, read by the shell and handed to `GuideReader.readGuide` (`docs/history.md`, "Guide-matched channels"); with no fresh guide (a guide is fresh for 45 minutes), it answers "no guide". Twitch's lineup is fixed and never read.
 
 `StreamLocator` is a tagged union. Today it has one member, a web-view address; a new kind is added only when a source needs it.
 
