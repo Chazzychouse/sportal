@@ -1,5 +1,15 @@
 import type { GuideUnreadable } from "@sportal/api/GuideUnreadable"
-import { Context, Duration, Effect, FiberHandle, Layer, Option, type Stream, SubscriptionRef } from "effect"
+import {
+  Context,
+  Duration,
+  Effect,
+  FiberHandle,
+  Layer,
+  Option,
+  Semaphore,
+  type Stream,
+  SubscriptionRef
+} from "effect"
 import type { Guide } from "./Guide.ts"
 import * as YouTubeTvGuide from "./youtube-tv/YouTubeTvGuide.ts"
 
@@ -26,19 +36,24 @@ export class GuideReader extends Context.Service<
       // At most one fiber waiting to retire the latest guide; a newer read replaces it.
       const expiry = yield* FiberHandle.make<void>()
       const latest = yield* SubscriptionRef.make(Option.none<Guide>())
+      const writes = yield* Semaphore.make(1)
 
       const readGuide = Effect.fn("GuideReader.readGuide")(function* (response: string) {
         const read = yield* YouTubeTvGuide.decode(response)
-        yield* SubscriptionRef.set(latest, Option.some(read))
-
         // Retire this guide once it is stale, unless a newer one has replaced it; tiles hear of it as a change.
         const retire = SubscriptionRef.updateSome(latest, (current) =>
           Option.exists(current, (guide) => guide === read)
             ? Option.some(Option.none<Guide>())
             : Option.none()
         )
-        yield* FiberHandle.run(expiry, Effect.sleep(staleAfter).pipe(Effect.andThen(retire)))
-      })
+        const retirement = Effect.sleep(staleAfter).pipe(Effect.andThen(retire), Effect.interruptible)
+
+        // A published guide always has its retirement scheduled.
+        yield* Effect.gen(function* () {
+          yield* SubscriptionRef.set(latest, Option.some(read))
+          yield* FiberHandle.run(expiry, retirement)
+        }).pipe(Effect.uninterruptible)
+      }, Semaphore.withPermit(writes))
 
       return GuideReader.of({
         guide: SubscriptionRef.changes(latest),
@@ -48,8 +63,5 @@ export class GuideReader extends Context.Service<
   )
 }
 
-/**
- * How long a guide answers after its reading: three missed 15-minute reads. After that a guide may list a
- * channel that has moved on, so it is no longer the latest until the next read.
- */
+/** A guide answers for 45 minutes after its reading. */
 const staleAfter = Duration.minutes(45)

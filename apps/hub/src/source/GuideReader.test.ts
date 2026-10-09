@@ -98,6 +98,60 @@ describe("GuideReader.layerYouTubeTv", () => {
     }).pipe(Effect.provide(youTubeTv))
   )
 
+  it.effect("should not renew freshness when a rejected read arrives near expiry", () =>
+    Effect.gen(function* () {
+      yield* readRecordedGuide
+      const reader = yield* GuideReader
+      yield* TestClock.adjust("44 minutes")
+
+      yield* reader.readGuide("{}").pipe(Effect.flip)
+      yield* TestClock.adjust("1 minute")
+
+      const availabilityOf = yield* availabilityNow
+      assert.deepStrictEqual(availabilityOf(ohioStateAtIowa), [{ _tag: "NoGuide", source: "YouTube TV" }])
+    }).pipe(Effect.provide(youTubeTv))
+  )
+
+  it.effect("should expire the guide surviving overlapping reads exactly once", () =>
+    Effect.gen(function* () {
+      yield* TestClock.setTime(recordedAt)
+      const reader = yield* GuideReader
+
+      yield* Effect.forEach([recordedGuide, recordedGuide], reader.readGuide, {
+        concurrency: "unbounded",
+        discard: true
+      })
+      const changes = yield* counted(laterGuides)
+      yield* TestClock.adjust("45 minutes")
+
+      const current = yield* Stream.runHead(reader.guide)
+      const signalled = yield* Ref.get(changes)
+      assert.deepStrictEqual(current, Option.some(Option.none()))
+      assert.strictEqual(signalled, 1)
+    }).pipe(Effect.provide(youTubeTv))
+  )
+
+  it.effect("should still expire a published guide when its reading fiber is interrupted", () =>
+    Effect.gen(function* () {
+      yield* TestClock.setTime(recordedAt)
+      const reader = yield* GuideReader
+      const published = yield* reader.guide.pipe(
+        Stream.filter(Option.isSome),
+        Stream.take(1),
+        Stream.runDrain,
+        Effect.forkChild({ startImmediately: true })
+      )
+
+      const reading = yield* reader.readGuide(recordedGuide).pipe(Effect.forkChild)
+      yield* Fiber.join(published)
+      yield* Fiber.interrupt(reading)
+      yield* TestClock.adjust("45 minutes")
+
+      const current = yield* Stream.runHead(reader.guide)
+      assert.deepStrictEqual(current, Option.some(Option.none()))
+    }).pipe(Effect.provide(youTubeTv))
+  )
+
   it.effect("should keep the guide it has, and signal nothing, when a later response cannot be read", () =>
     Effect.gen(function* () {
       yield* readRecordedGuide
