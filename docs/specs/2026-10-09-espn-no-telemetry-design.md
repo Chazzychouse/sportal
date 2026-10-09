@@ -56,9 +56,9 @@ never loads costs one request every 30 s while it is wanted. `TopicFollow`, `Def
 is a delay rather than a Schedule because it is now a fixed wait with no limit. `layer` passes `"30 seconds"` and the
 same reconnect backoff as today (1 s doubling, jittered, up to a minute).
 
-**A failed socket.** `failed` is inlined as `Stream.tapError` with the warning. `stopped` and the `HubStopping` import
-go; after `Stream.retry`, `Stream.orDie` keeps `follow`'s stream from failing. Only a test's finite reconnect Schedule
-can reach it.
+**A failed socket.** `failed` is still inlined as `Stream.tapError` with the warning. `stopped` and the `HubStopping`
+import stay, in place of `Stream.orDie`: `Stream.retry` passes defects, and without `stopped` a defect in the push
+would fail the merge of polls and pushes and stop the poll as well.
 
 **Unchanged:** the handshake, the 45 s silence timeout, the 20 s checkpoint timeout, checkpoints loading four at a time
 with frames leaving in the texts' order, and `Wanted`.

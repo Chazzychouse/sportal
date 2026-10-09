@@ -92,6 +92,27 @@ describe("FastCast", () => {
     })
   )
 
+  it.effect("should log that the live feed stopped on a defect, and keep running", () =>
+    Effect.gen(function* () {
+      const { logs, layer } = recordingLogs()
+      const host = Layer.mergeAll(
+        Layer.succeed(
+          HttpClient.HttpClient,
+          HttpClient.make(() => Effect.die("boom"))
+        ),
+        Layer.succeed(Socket.WebSocketConstructor, () => fakeServer().socket)
+      )
+
+      const { ended } = yield* framesOver(host).pipe(Effect.provide(layer))
+      yield* Effect.yieldNow
+
+      const stopped = logs.filter((log) => log.message.includes("FastCast: the live feed stopped"))
+      assert.lengthOf(stopped, 1)
+      assert.strictEqual(stopped[0]?.level, "Error")
+      assert.isFalse(yield* Deferred.isDone(ended))
+    })
+  )
+
   it.effect("should keep running when the socket goes silent", () =>
     Effect.gen(function* () {
       const server = fakeServer()

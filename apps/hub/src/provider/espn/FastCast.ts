@@ -1,4 +1,5 @@
 import {
+  type Cause,
   Channel,
   Context,
   type Duration,
@@ -17,6 +18,7 @@ import {
 } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/http"
 import * as Socket from "effect/socket/Socket"
+import * as HubStopping from "../../HubStopping.ts"
 import * as FastCastMessage from "./FastCastMessage.ts"
 import { Frame } from "./Frame.ts"
 import { ProviderUnavailable } from "./ProviderUnavailable.ts"
@@ -34,14 +36,16 @@ export class FastCast extends Context.Service<
      * Every socket text and checkpoint, as frames, for as long as it runs, following what `wanted` last said. On each
      * socket it subscribes to every wanted topic, then to each topic that becomes wanted, and to each whose document goes
      * from synced back to waiting for its checkpoint. When the socket closes, ends or goes silent, it reconnects on its
-     * backoff and reads `wanted` again. Fails only as a defect, once a reconnect that ends is done.
+     * backoff and reads `wanted` again. It never fails or ends: once a reconnect that ends is done, or on a defect, it logs
+     * at Error (unless the Hub is stopping) that the live feed stopped, and emits nothing more.
      */
     follow(wanted: Stream.Stream<Wanted>): Stream.Stream<Frame>
   }
 >()("sportal/hub/provider/espn/FastCast") {
   /**
    * FastCast subscribing again to a topic whose checkpoint failed once `refollow` has passed, if it is still wanted,
-   * and opening the socket again on `reconnect` after each failure, which it logs with its reason.
+   * and opening the socket again on `reconnect` after each failure, which it logs with its reason. Its `follow` never
+   * fails: where `reconnect` ends or a defect strikes, it logs that the live feed stopped and emits nothing more.
    */
   static readonly make = (retry: {
     readonly refollow: Duration.Input
@@ -59,7 +63,7 @@ export class FastCast extends Context.Service<
             Effect.logWarning(`FastCast: the live feed failed (${error.reason}); subscribing again`, error)
           ),
           Stream.retry(retry.reconnect),
-          Stream.orDie,
+          Stream.catchCause(stopped),
           Stream.provideContext(context)
         )
       return FastCast.of({ follow })
@@ -241,6 +245,18 @@ const decodeEnvelope = Schema.decodeUnknownOption(FastCastMessage.Envelope)
 // FastCast sends `B` itself after 10 s without another frame (it answers a client's `B` with an error, so the client
 // never sends one); live, a subscribed socket went at most 20 s between frames.
 const silence = "45 seconds"
+
+/** The end of the live feed, logged unless the Hub is stopping; nothing follows it, so `frames` never ends. */
+function stopped(cause: Cause.Cause<ProviderUnavailable>): Stream.Stream<never> {
+  const logged = Effect.failCause(cause).pipe(
+    HubStopping.loggedUnlessStopping(
+      "FastCast: the live feed stopped; only the poll reaches the slate until the Hub restarts",
+      "the feed's stream ended"
+    ),
+    Effect.catchCause(() => Effect.never)
+  )
+  return Stream.fromEffectDrain(logged)
+}
 
 function silent(): ProviderUnavailable {
   return new ProviderUnavailable({ reason: "Silent", cause: `No FastCast message for ${silence}` })
