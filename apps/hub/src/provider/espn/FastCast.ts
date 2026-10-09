@@ -92,7 +92,7 @@ export class FastCast extends Context.Service<
 export type Wanted = HashMap.HashMap<Topic, "Synced" | "AwaitingCheckpoint">
 
 /** A topic's checkpoint was not read: it could not be loaded (unreachable, refused, timed out) or did not decode. */
-export class CheckpointUnread extends Schema.TaggedError<CheckpointUnread>()("CheckpointUnread", {
+class CheckpointUnread extends Schema.TaggedError<CheckpointUnread>()("CheckpointUnread", {
   topic: Schema.String,
   reason: Schema.Literals(["Unloaded", "Undecodable"]),
   cause: Schema.Defect()
