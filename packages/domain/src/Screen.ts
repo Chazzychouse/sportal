@@ -1,5 +1,5 @@
 import { Array as Arr, Option, Record as Rec, Result, Schema } from "effect"
-import { Channel, ChannelAvailability } from "./Channel.ts"
+import { Channel, ChannelAvailability, SourceName } from "./Channel.ts"
 import { GameId } from "./Game.ts"
 
 export const Tile = Schema.TaggedUnion({
@@ -12,7 +12,7 @@ export const Tile = Schema.TaggedUnion({
       NoStream: {},
       StreamingOnly: {},
       NotInGuide: {},
-      NoGuide: {},
+      NoGuide: { source: SourceName },
       NotYet: {
         channel: Schema.OptionFromOptionalKey(Schema.String),
         begin: Schema.OptionFromOptionalKey(Schema.DateTimeUtcFromString)
@@ -179,9 +179,9 @@ export class Screen extends Schema.Class<Screen>("sportal/Screen")({
    * Re-resolves every occupied tile, on screen and benched, after what a source knows has changed. A game
    * `availabilityOf` knows nothing about keeps its tile as it was: the change did not concern it.
    *
-   * A stream tile is replaced only when the guide carries its game on another channel. Any other answer
-   * (a game running past its listing, no guide, a failed or stale read) never stops it. Every other occupied
-   * tile becomes what the answer says.
+   * A stream tile is replaced only when its own source carries its game on another channel. Any other answer
+   * (another source carrying it, a game running past its listing, no guide, a failed or stale read) never stops
+   * it. Every other occupied tile becomes what the answer says. When no tile changes, it is this Screen.
    */
   refresh(availabilityOf: (game: GameId) => Option.Option<ChannelAvailability>): Screen {
     const tiles = this.tiles.map((tile) =>
@@ -194,7 +194,7 @@ export class Screen extends Schema.Class<Screen>("sportal/Screen")({
           })
     )
 
-    return settle({ ...this, tiles })
+    return Arr.makeEquivalence(tileEquivalence)(tiles, this.tiles) ? this : settle({ ...this, tiles })
   }
 }
 
@@ -255,7 +255,7 @@ function tileFor(game: GameId, availability: ChannelAvailability): Tile {
       game,
       why: { _tag: "NotYet", channel, begin }
     }),
-    NoGuide: (): Tile => ({ _tag: "DataTile", game, why: { _tag: "NoGuide" } }),
+    NoGuide: ({ source }): Tile => ({ _tag: "DataTile", game, why: { _tag: "NoGuide", source } }),
     NotCarried: ({ why }): Tile => ({ _tag: "DataTile", game, why: { _tag: why } })
   })
 }
@@ -291,11 +291,15 @@ function settle(fields: {
   })
 }
 
-/** Whether a stream tile stays as it is: only a guide that carries its game on another channel replaces it. */
+/**
+ * Whether a stream tile stays as it is: only its own source carrying its game on another channel replaces it. A tile
+ * never moves to another source.
+ */
 function keepsStream(tile: Occupied, availability: ChannelAvailability): boolean {
   return (
     Tile.guards.StreamTile(tile) &&
     (!ChannelAvailability.$is("Carried")(availability) ||
+      availability.channel.source !== tile.channel.source ||
       availability.channel.locator.url === tile.channel.locator.url)
   )
 }
@@ -309,3 +313,6 @@ function swapped(tiles: ReadonlyArray<Tile>, a: number, b: number): ReadonlyArra
     index === a ? (tiles[b] ?? tile) : index === b ? (tiles[a] ?? tile) : tile
   )
 }
+
+/** Whether two tiles say the same: a refreshed data tile is a new object even when nothing in it changed. */
+const tileEquivalence = Schema.toEquivalence(Tile)

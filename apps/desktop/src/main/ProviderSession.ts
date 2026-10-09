@@ -3,7 +3,8 @@ import { BrowserWindow, type Session, session, WebContentsView } from "electron"
 import { confine, hostOf, load } from "./Navigation.ts"
 import { sandboxed } from "./Sandbox.ts"
 import { ShellWindow } from "./ShellWindow.ts"
-import { allowedHosts, signInUrl } from "./YouTubeTv.ts"
+import * as Twitch from "./Twitch.ts"
+import * as YouTubeTv from "./YouTubeTv.ts"
 
 /**
  * The one persistent session every provider view shares, so one sign-in covers every tile and survives
@@ -76,7 +77,7 @@ export class ProviderSession extends Context.Service<
           confine(window.webContents, allows, warn, { subframes: false })
 
           log(
-            load(window.webContents, signInUrl).pipe(
+            load(window.webContents, YouTubeTv.signInUrl).pipe(
               Effect.catchTag("LoadFailed", (failure) =>
                 Effect.logWarning(`ProviderSession: the sign-in window did not load: ${failure.code}`)
               )
@@ -88,11 +89,11 @@ export class ProviderSession extends Context.Service<
   )
 }
 
-/** Provider views may visit the provider and its sign-in pages. */
+/** Provider views may visit each source's pages: YouTube TV and its sign-in, and Twitch's player. */
 function allows(url: string): boolean {
   if (!URL.canParse(url)) return false
   const { protocol, hostname } = new URL(url)
-  return protocol === "https:" && allowedHosts.includes(hostname)
+  return protocol === "https:" && [...YouTubeTv.allowedHosts, ...Twitch.allowedHosts].includes(hostname)
 }
 
 /**

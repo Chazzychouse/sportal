@@ -59,12 +59,12 @@ function Scoreboard(props: { game: GameSnapshot }) {
 function noStream(why: typeof NoStreamWhy.Type): string {
   return NoStreamWhy.match(why, {
     NoStream: () => "No stream for this game on your sources",
-    StreamingOnly: () => "Streaming only: not on YouTube TV",
-    NotInGuide: () => "Not in your YouTube TV guide",
-    NoGuide: () => "Waiting for the YouTube TV guide",
+    StreamingOnly: () => "Streaming only: not on your sources",
+    NotInGuide: () => "Not on your sources' channels",
+    NoGuide: ({ source }) => `Waiting for the ${source} guide`,
     NotYet: ({ channel, begin }) =>
       Option.match(channel, {
-        onNone: () => "Not in your YouTube TV guide yet",
+        onNone: () => "Not in your sources' guides yet",
         onSome: (channel) =>
           `On ${channel}${Option.match(begin, { onNone: () => "", onSome: (begin) => ` at ${localTime(begin)}` })}`
       })

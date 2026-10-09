@@ -29,7 +29,11 @@ describe("Screen#apply", () => {
   it("should assign a game its source has no guide for as a data tile saying so", () => {
     const screen = assign(Screen.initial, 0, bama, noGuide)
 
-    assert.deepStrictEqual(screen.tiles[0], { _tag: "DataTile", game: bama, why: { _tag: "NoGuide" } })
+    assert.deepStrictEqual(screen.tiles[0], {
+      _tag: "DataTile",
+      game: bama,
+      why: { _tag: "NoGuide", source: "YouTube TV" }
+    })
   })
 
   it("should replace whatever an occupied tile held", () => {
@@ -149,6 +153,14 @@ describe("Screen#apply", () => {
 })
 
 describe("Screen#refresh", () => {
+  it("should return the same Screen when no tile changes", () => {
+    const screen = assign(Screen.initial, 0, bama, noGuide)
+
+    const refreshed = screen.refresh(() => Option.some(noGuide()))
+
+    assert.strictEqual(refreshed, screen)
+  })
+
   it("should re-resolve only the tiles whose game has an availability to report", () => {
     const streaming = assign(fill([bama]), 1, irish, nowhere)
 
@@ -229,6 +241,19 @@ describe("Screen#refresh", () => {
     const moved = streaming.refresh(some(() => ChannelAvailability.Carried({ channel: elsewhere })))
 
     assert.deepStrictEqual(moved.tiles[0], { _tag: "StreamTile", game: bama, channel: elsewhere })
+  })
+
+  it("should keep a stream tile when another source carries its game", () => {
+    const streaming = assign(Screen.initial, 0, bama, onFox)
+    const onTwitch = {
+      name: "Prime Video",
+      source: "Twitch" as const,
+      locator: { ...foxChannel.locator, url: "https://player.twitch.tv/?channel=primevideo" }
+    }
+
+    const refreshed = streaming.refresh(some(() => ChannelAvailability.Carried({ channel: onTwitch })))
+
+    assert.deepStrictEqual(refreshed.tiles[0], streaming.tiles[0])
   })
 
   it("should re-resolve a data tile whose game has left the guide", () => {
@@ -633,7 +658,7 @@ const tiles: ReadonlyArray<readonly [string, unknown]> = [
   ["NoStream", { _tag: "DataTile", game: "401856800", why: { _tag: "NoStream" } }],
   ["StreamingOnly", { _tag: "DataTile", game: "401856800", why: { _tag: "StreamingOnly" } }],
   ["NotInGuide", { _tag: "DataTile", game: "401856800", why: { _tag: "NotInGuide" } }],
-  ["NoGuide", { _tag: "DataTile", game: "401856800", why: { _tag: "NoGuide" } }],
+  ["NoGuide", { _tag: "DataTile", game: "401856800", why: { _tag: "NoGuide", source: "YouTube TV" } }],
   ["NotYet bare", { _tag: "DataTile", game: "401856800", why: { _tag: "NotYet" } }],
   [
     "NotYet with channel and begin",

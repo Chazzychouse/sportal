@@ -1,7 +1,7 @@
 /** Where a signed-out user is sent to sign in to YouTube TV. */
 export const signInUrl = "https://tv.youtube.com/"
 
-/** The hosts a provider view may visit: YouTube TV and the pages its sign-in passes through. */
+/** The hosts a provider view may visit for YouTube TV: its pages and the pages its sign-in passes through. */
 export const allowedHosts = [
   "tv.youtube.com",
   "www.youtube.com",

@@ -27,7 +27,7 @@ import {
 import { HttpApiBuilder } from "effect/http-api"
 import { Director } from "./Director.ts"
 import { HubConfig } from "./HubConfig.ts"
-import { Source } from "./source/Source.ts"
+import { GuideReader } from "./source/GuideReader.ts"
 
 /**
  * The Hub's routes on the HTTP server in context: the API, the live stream, and the built web UI when there is one.
@@ -37,7 +37,7 @@ export const layer: Layer.Layer<
   PlatformError.PlatformError,
   | HubConfig
   | Director
-  | Source
+  | GuideReader
   | HttpServer.HttpServer
   | HttpPlatform.HttpPlatform
   | Etag.Generator
@@ -86,10 +86,10 @@ const guideHandlers = HttpApiBuilder.group(
   SportalApi,
   "guide",
   Effect.fn(function* (handlers) {
-    const source = yield* Source
+    const reader = yield* GuideReader
     return handlers.handleAll({
       read: ({ payload }) =>
-        source
+        reader
           .readGuide(payload.guide)
           .pipe(
             Effect.tapError(() =>

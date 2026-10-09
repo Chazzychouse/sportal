@@ -4,16 +4,28 @@ import { GameId, GameSnapshot, Network } from "@sportal/domain/Game"
 import type { Play } from "@sportal/domain/Play"
 import { type Screen, Tile } from "@sportal/domain/Screen"
 import { broadcast, liveSnapshot, play, snapshot, team } from "@sportal/domain/TestGame"
-import { DateTime, Deferred, Effect, Fiber, Layer, Option, Predicate, Ref, Stream, type Tracer } from "effect"
+import {
+  DateTime,
+  Deferred,
+  Effect,
+  Fiber,
+  Layer,
+  Option,
+  Predicate,
+  Queue,
+  Ref,
+  Stream,
+  type Tracer
+} from "effect"
 import { TestClock } from "effect/testing"
 import { Director } from "./Director.ts"
 import { decodedFrames, recordedNeAtBuf, recordedPlays } from "./provider/espn/TestEspn.ts"
 import { Provider, ProviderFeed } from "./provider/Provider.ts"
 import { Delivery } from "./slate/Delivery.ts"
 import { Slate } from "./slate/Slate.ts"
+import { GuideReader } from "./source/GuideReader.ts"
 import { Source } from "./source/Source.ts"
-import { recordedGuide } from "./source/youtube-tv/TestYouTubeTv.ts"
-import * as YouTubeTv from "./source/youtube-tv/YouTubeTv.ts"
+import { readRecordedGuide, recordedGuide } from "./source/youtube-tv/TestYouTubeTv.ts"
 import { delivered, directorOver } from "./TestDirector.ts"
 import { gauged, recordingLogs, recordingSpans, withMetrics } from "./TestTelemetry.ts"
 
@@ -134,7 +146,7 @@ describe("Director, the slate", () => {
       Effect.provide(
         Director.layer.pipe(
           Layer.provide(Provider.layerTest(Stream.empty)),
-          Layer.provide(YouTubeTv.layer),
+          Layer.provide(Source.layerTest(() => ChannelAvailability.NoGuide({ source: "YouTube TV" }))),
           Layer.provideMerge(layer)
         )
       )
@@ -319,8 +331,19 @@ const ohioStateAtIowa = snapshot({
   broadcasts: [broadcast("CBS")]
 })
 
-// When the recorded guide was read, and News 3's live address in it.
-const recordedAt = DateTime.toEpochMillis(DateTime.makeUnsafe("2026-10-03T20:24:45Z"))
+const streamingOnly = ChannelAvailability.NotCarried({ why: "StreamingOnly" })
+const primeOnTwitch = {
+  name: "Prime Video",
+  source: "Twitch" as const,
+  locator: { _tag: "WebView" as const, url: "https://player.twitch.tv/?channel=primevideo" }
+}
+const primeOnYouTubeTv = {
+  name: "Prime Video",
+  source: "YouTube TV" as const,
+  locator: { _tag: "WebView" as const, url: "https://tv.youtube.com/watch/prime" }
+}
+
+// News 3's live address in the recorded guide.
 const news3Live = "https://tv.youtube.com/watch/y6zFA17zDsw?vp=0gEEEgIwAQ%3D%3D"
 
 describe("Director, the Screen", () => {
@@ -356,7 +379,7 @@ describe("Director, the Screen", () => {
   it.effect("should assign a game the guide carries as a stream tile", () =>
     Effect.gen(function* () {
       const director = yield* Director
-      yield* guideReadAtRecording()
+      yield* readRecordedGuide
 
       const screen = yield* director.dispatch({ _tag: "Assign", tile: 0, game: ohioStateAtIowa.id })
 
@@ -371,7 +394,7 @@ describe("Director, the Screen", () => {
   it.effect("should assign a game the guide does not carry as a data tile, not in the guide", () =>
     Effect.gen(function* () {
       const director = yield* Director
-      yield* guideReadAtRecording()
+      yield* readRecordedGuide
       yield* director.dispatch({ _tag: "Assign", tile: 0, game: ohioStateAtIowa.id })
 
       const screen = yield* director.dispatch({ _tag: "Assign", tile: 1, game: GameId.make("4") })
@@ -397,10 +420,10 @@ describe("Director, the Screen", () => {
   it.live("should refresh the screen when the source reads a guide", () =>
     Effect.gen(function* () {
       const director = yield* Director
-      const source = yield* Source
+      const reader = yield* GuideReader
       yield* director.dispatch({ _tag: "Assign", tile: 0, game: GameId.make("5") })
 
-      yield* source.readGuide(recordedGuide)
+      yield* reader.readGuide(recordedGuide)
 
       const screen = yield* firstScreenWhere(
         director.screenChanges,
@@ -412,6 +435,85 @@ describe("Director, the Screen", () => {
         GameId.make("5")
       )
     }).pipe(Effect.provide(directing(games)))
+  )
+
+  it.live("should publish no Screen change when a refresh changes no tile", () =>
+    Effect.gen(function* () {
+      const pulses = yield* Queue.unbounded<void>()
+      const answering = Source.layerTest(
+        () => ChannelAvailability.NoGuide({ source: "YouTube TV" }),
+        Stream.fromQueue(pulses)
+      )
+
+      const published = yield* Effect.gen(function* () {
+        const director = yield* Director
+        yield* director.dispatch({ _tag: "Assign", tile: 0, game: GameId.make("5") })
+        const next = yield* director.screenChanges.pipe(
+          Stream.drop(1),
+          Stream.runHead,
+          Effect.timeoutOption("200 millis"),
+          Effect.forkScoped
+        )
+        yield* Effect.yieldNow
+
+        yield* Queue.offer(pulses, undefined)
+
+        return yield* Fiber.join(next)
+      }).pipe(
+        Effect.provide(listed(games).pipe(Layer.provideMerge(directorOver), Layer.provideMerge(answering)))
+      )
+
+      assert.isTrue(Option.isNone(published))
+    })
+  )
+
+  it.live("should keep a stream tile on Twitch when YouTube TV's guide then carries its game", () =>
+    Effect.gen(function* () {
+      const pulses = yield* Queue.unbounded<void>()
+      const youTubeTvCarries = yield* Ref.make(false)
+      const youTubeTv = Layer.succeed(
+        Source,
+        Source.of({
+          availability: Ref.get(youTubeTvCarries).pipe(
+            Effect.map(
+              (carries) => () =>
+                carries ? ChannelAvailability.Carried({ channel: primeOnYouTubeTv }) : streamingOnly
+            )
+          ),
+          changes: Stream.fromQueue(pulses)
+        })
+      )
+      const twitch = Source.layerTest((game) =>
+        game.id === GameId.make("5") ? ChannelAvailability.Carried({ channel: primeOnTwitch }) : streamingOnly
+      )
+      // YouTube TV first: were a tile to follow the combined answer, the tie would go to YouTube TV.
+      const bothSources = Source.layerAll([youTubeTv, twitch])
+
+      const { assigned, screen } = yield* Effect.gen(function* () {
+        const director = yield* Director
+        yield* director.dispatch({ _tag: "Assign", tile: 0, game: GameId.make("5") })
+        const assigned = yield* director.dispatch({ _tag: "Assign", tile: 1, game: GameId.make("4") })
+
+        yield* Ref.set(youTubeTvCarries, true)
+        yield* Queue.offer(pulses, undefined)
+
+        // Game 4 turning into a stream tile shows the refresh has run.
+        const screen = yield* firstScreenWhere(director.screenChanges, (screen) => {
+          const second = screen.tiles[1]
+          return second !== undefined && Tile.guards.StreamTile(second)
+        })
+        return { assigned, screen }
+      }).pipe(
+        Effect.provide(listed(games).pipe(Layer.provideMerge(directorOver), Layer.provideMerge(bothSources)))
+      )
+
+      assert.deepStrictEqual(assigned.tiles[0], {
+        _tag: "StreamTile",
+        game: GameId.make("5"),
+        channel: primeOnTwitch
+      })
+      assert.deepStrictEqual(Option.getOrThrow(screen).tiles[0], assigned.tiles[0])
+    })
   )
 
   it.live("should not miss a change made the moment the layer has built", () =>
@@ -429,11 +531,12 @@ describe("Director, the Screen", () => {
           )
           return Source.of({ ...source, availability })
         })
-      ).pipe(Layer.provide(YouTubeTv.layer))
+      ).pipe(Layer.provide(Source.layerYouTubeTv))
       const guideReadAtOnce = readAtOnce().pipe(
         Layer.provideMerge(Director.layer),
         Layer.provide(Provider.layerTestFed),
-        Layer.provide(countingSource)
+        Layer.provide(countingSource),
+        Layer.provideMerge(GuideReader.layerYouTubeTv)
       )
 
       yield* Effect.gen(function* () {
@@ -456,17 +559,18 @@ describe("Director, the Screen", () => {
         const directorOnStaleRead = listed(games).pipe(
           Layer.provideMerge(Director.layer),
           Layer.provideMerge(Provider.layerTestFed),
-          Layer.provideMerge(availabilityHeldOnce(reading, release))
+          Layer.provideMerge(availabilityHeldOnce(reading, release)),
+          Layer.provideMerge(GuideReader.layerYouTubeTv)
         )
 
         const { assigned, screen } = yield* Effect.gen(function* () {
           const director = yield* Director
-          const source = yield* Source
+          const reader = yield* GuideReader
           const assigning = yield* director
             .dispatch({ _tag: "Assign", tile: 0, game: GameId.make("5") })
             .pipe(Effect.forkScoped)
           yield* Deferred.await(reading)
-          yield* source.readGuide(recordedGuide)
+          yield* reader.readGuide(recordedGuide)
           yield* Deferred.succeed(release, undefined)
 
           const assigned = yield* Fiber.join(assigning)
@@ -486,13 +590,13 @@ describe("Director, the Screen", () => {
     Effect.gen(function* () {
       const screen = yield* Effect.gen(function* () {
         const director = yield* Director
-        const source = yield* Source
+        const reader = yield* GuideReader
         const feed = yield* ProviderFeed
         yield* director.dispatch({ _tag: "Assign", tile: 0, game: GameId.make("1") })
         yield* director.dispatch({ _tag: "Assign", tile: 1, game: GameId.make("5") })
         yield* feed.deliver(listings(games.filter((snapshot) => snapshot.id !== GameId.make("1"))))
 
-        yield* source.readGuide(recordedGuide)
+        yield* reader.readGuide(recordedGuide)
 
         return yield* firstScreenWhere(director.screenChanges, (screen) => !isNoGuideTile(screen.tiles[1]))
       }).pipe(Effect.provide(directing(games)))
@@ -506,7 +610,7 @@ describe("Director, the Screen", () => {
     Effect.gen(function* () {
       const source = yield* Source
       const director = yield* Director
-      yield* guideReadAtRecording()
+      yield* readRecordedGuide
       const playing = yield* director.dispatch({ _tag: "Assign", tile: 0, game: ohioStateAtIowa.id })
 
       yield* TestClock.adjust("45 minutes")
@@ -538,24 +642,14 @@ describe("Director, the Screen", () => {
   )
 })
 
-/** The source reads the recorded guide at the moment it was recorded. */
-function guideReadAtRecording() {
-  return Effect.gen(function* () {
-    const source = yield* Source
-
-    yield* TestClock.setTime(recordedAt)
-    yield* source.readGuide(recordedGuide)
-  })
-}
-
 /** Reads the recorded guide as soon as the Director is built: depending on it orders this after the layer. */
 function readAtOnce() {
   return Layer.effectDiscard(
     Effect.gen(function* () {
       yield* Director
-      const source = yield* Source
+      const reader = yield* GuideReader
 
-      yield* source.readGuide(recordedGuide)
+      yield* reader.readGuide(recordedGuide)
     })
   )
 }
@@ -581,7 +675,7 @@ function availabilityHeldOnce(reading: Deferred.Deferred<void>, release: Deferre
       })
       return Source.of({ ...source, availability })
     })
-  ).pipe(Layer.provide(YouTubeTv.layer))
+  ).pipe(Layer.provide(Source.layerYouTubeTv))
 }
 
 /**
@@ -618,7 +712,7 @@ function directing(games: ReadonlyArray<GameSnapshot>) {
 
 /** The data tile a game gets while the source has no guide. */
 function noGuideTile(game: GameId) {
-  return { _tag: "DataTile" as const, game, why: { _tag: "NoGuide" as const } }
+  return { _tag: "DataTile" as const, game, why: { _tag: "NoGuide" as const, source: "YouTube TV" as const } }
 }
 
 /** Whether `tile` is the data tile of a game while the source has no guide. */
@@ -626,5 +720,8 @@ function isNoGuideTile(tile: Tile | undefined) {
   return tile !== undefined && Tile.guards.DataTile(tile) && Predicate.isTagged(tile.why, "NoGuide")
 }
 
-/** The Director over a fed provider, against YouTube TV with nothing read yet; both provided too. */
-const directed = directorOver.pipe(Layer.provideMerge(YouTubeTv.layer))
+/** The Director over a fed provider, against YouTube TV with nothing read yet; it and the guide reader provided too. */
+const directed = directorOver.pipe(
+  Layer.provideMerge(Source.layerYouTubeTv),
+  Layer.provideMerge(GuideReader.layerYouTubeTv)
+)
