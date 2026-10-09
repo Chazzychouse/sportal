@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs"
 import { gunzipSync } from "node:zlib"
 import { LeagueId } from "@sportal/domain/League"
-import { Effect, Layer, Option, Schema, Stream } from "effect"
+import { DateTime, Effect, Layer, Option, Schema, Stream } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/http"
 import * as Socket from "effect/socket/Socket"
 import { HubConfig } from "../../HubConfig.ts"
@@ -54,12 +54,22 @@ export const recordedNeAtBuf = Effect.gen(function* () {
   return yield* Effect.forEach(frames, (line) => frameOf(line))
 })
 
+/**
+ * A time during NE at BUF's recorded game, for its recorded day to be folded at: a poll keeps the game's topic until a
+ * poll lists it final.
+ */
+export const duringNeAtBuf = DateTime.makeUnsafe("2026-10-04T18:00:00Z")
+
 /** What ESPN's fold says each of `frames` said, from an empty state. */
 export const decodedFrames = Effect.fn("TestEspn.decodedFrames")(function* (frames: ReadonlyArray<Frame>) {
   return yield* Stream.fromIterable(frames).pipe(
     Stream.mapAccumEffect(
       () => EspnState.empty,
-      (state, frame) => Effect.map(state.take(frame), ([next, deliveries]) => [next, [deliveries]] as const)
+      (state, frame) =>
+        Effect.map(
+          state.take(frame, LeagueId.literals),
+          ([next, deliveries]) => [next, [deliveries]] as const
+        )
     ),
     Stream.runCollect
   )
@@ -70,7 +80,7 @@ export const stateAfter = Effect.fn("TestEspn.stateAfter")(function* (frames: Re
   return yield* Effect.reduce(
     frames,
     () => EspnState.empty,
-    (state, frame) => Effect.map(state.take(frame), ([next]) => next)
+    (state, frame) => Effect.map(state.take(frame, LeagueId.literals), ([next]) => next)
   )
 })
 

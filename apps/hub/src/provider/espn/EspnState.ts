@@ -4,7 +4,8 @@ import { Play } from "@sportal/domain/Play"
 import {
   Array as Arr,
   Data,
-  type DateTime,
+  DateTime,
+  Duration,
   Effect,
   HashMap,
   HashSet,
@@ -31,13 +32,13 @@ export class EspnState extends Data.Class<{
   readonly documents: FastCastDocuments
   readonly listings: HashMap.HashMap<LeagueId, ReadonlyArray<GameSnapshot>>
   readonly plays: HashMap.HashMap<GameId, HashMap.HashMap<string, Play>>
-  readonly unlisted: HashSet.HashSet<LeagueId>
+  readonly failedPolls: HashSet.HashSet<LeagueId>
 }> {
   static readonly empty: EspnState = new EspnState({
     documents: FastCastDocuments.empty,
     listings: HashMap.empty(),
     plays: HashMap.empty(),
-    unlisted: HashSet.empty()
+    failedPolls: HashSet.empty()
   })
 
   /**
@@ -46,10 +47,20 @@ export class EspnState extends Data.Class<{
    * to what it moves, and moves that game forward in its listing; a game no listing has is not delivered. A game
    * topic's change is a `Plays` of the game's whole list, in `Play.order`. An event or a play that does not decode is
    * skipped. A frame that does not decode says nothing, leaves the state as it was, and is logged.
-   * A failed poll, or one whose scoreboard does not decode, leaves its league unlisted until a poll of it lists.
+   * A failed poll, or one whose scoreboard does not decode, marks its league's poll failed until a poll of it lists.
+   * After any poll, failed or not, the state keeps documents and decoded plays only for the topics `leagues` want at
+   * the clock's now; a push or checkpoint prunes nothing.
    */
-  take(frame: Frame): Effect.Effect<readonly [EspnState, ReadonlyArray<Delivery>]> {
-    return taken(this, frame)
+  take(
+    frame: Frame,
+    leagues: ReadonlyArray<LeagueId>
+  ): Effect.Effect<readonly [EspnState, ReadonlyArray<Delivery>]> {
+    return Effect.flatMap(taken(this, frame), ([next, deliveries]) => {
+      const wasPoll = Frame.$is("Polled")(frame) || Frame.$is("PollFailed")(frame)
+      if (!wasPoll) return Effect.succeed([next, deliveries] as const)
+
+      return Effect.map(DateTime.now, (now) => [next.retained(leagues, now), deliveries] as const)
+    })
   }
 
   /** League `league`'s listed games, as the state has them; none before its first poll. */
@@ -78,8 +89,23 @@ export class EspnState extends Data.Class<{
     )
   }
 
+  /**
+   * How long `league` waits after its latest poll has been taken, by its own listed games: 10 seconds while one is
+   * live, a minute while one kicks off within `GameSnapshot.kickoffWindow`, and 15 minutes otherwise; at most 30
+   * seconds while its last poll failed or did not decode, so its scoreboard is read again soon.
+   */
+  pollInterval(league: LeagueId, now: DateTime.Utc): Duration.Duration {
+    const games = this.listing(league)
+    const normal = games.some((game) => game.progress() === "live")
+      ? Duration.seconds(10)
+      : games.some((game) => game.isLiveOrKicksOffWithin(GameSnapshot.kickoffWindow, now))
+        ? Duration.minutes(1)
+        : Duration.minutes(15)
+    return HashSet.has(this.failedPolls, league) ? Duration.min(normal, Duration.seconds(30)) : normal
+  }
+
   /** This state keeping documents and decoded plays only for the topics wanted at `now`. */
-  retained(leagues: ReadonlyArray<LeagueId>, now: DateTime.Utc): EspnState {
+  private retained(leagues: ReadonlyArray<LeagueId>, now: DateTime.Utc): EspnState {
     const wanted = this.wanted(leagues, now)
     const games = new Set(
       [...HashMap.keys(wanted)].flatMap((topic) => (Topic.$is("Game")(topic) ? [topic.game] : []))
@@ -96,7 +122,7 @@ const taken = Effect.fnUntraced(
   function* (state: EspnState, frame: Frame) {
     return yield* Frame.$match(frame, {
       Polled: ({ league, body }) => listed(state, league, body),
-      PollFailed: ({ league }) => Effect.succeed([unlistedBy(state, league), noDeliveries] as const),
+      PollFailed: ({ league }) => Effect.succeed([pollFailed(state, league), noDeliveries] as const),
       Pushed: (each) => pushed(state, each),
       Checkpoint: (each) => pushed(state, each)
     })
@@ -106,16 +132,16 @@ const taken = Effect.fnUntraced(
       Effect.logWarning("EspnState: skipped a frame that does not decode", cause).pipe(
         Effect.annotateLogs(annotationsOf(frame)),
         Effect.as([
-          Frame.$is("Polled")(frame) ? unlistedBy(state, frame.league) : state,
+          Frame.$is("Polled")(frame) ? pollFailed(state, frame.league) : state,
           noDeliveries
         ] as const)
       )
     )
 )
 
-/** `state` with `league` unlisted: its last poll brought nothing it could list. */
-function unlistedBy(state: EspnState, league: LeagueId): EspnState {
-  return new EspnState({ ...state, unlisted: HashSet.add(state.unlisted, league) })
+/** `state` with `league`'s poll failed: its last poll brought nothing it could list. */
+function pollFailed(state: EspnState, league: LeagueId): EspnState {
+  return new EspnState({ ...state, failedPolls: HashSet.add(state.failedPolls, league) })
 }
 
 const listed = Effect.fnUntraced(function* (state: EspnState, league: LeagueId, body: string) {
@@ -125,7 +151,7 @@ const listed = Effect.fnUntraced(function* (state: EspnState, league: LeagueId, 
   const next = new EspnState({
     ...state,
     listings: HashMap.set(state.listings, league, games),
-    unlisted: HashSet.remove(state.unlisted, league)
+    failedPolls: HashSet.remove(state.failedPolls, league)
   })
   return [next, [Delivery.Listing({ league, games })]] as const
 })

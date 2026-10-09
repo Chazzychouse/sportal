@@ -3,8 +3,9 @@ import { GameId, GameSnapshot } from "@sportal/domain/Game"
 import { type Play, PlayId } from "@sportal/domain/Play"
 import { liveSnapshot, play, snapshot } from "@sportal/domain/TestGame"
 import { DateTime, Effect, Layer, Ref, Stream, type Tracer } from "effect"
+import { TestClock } from "effect/testing"
 import { Director } from "./Director.ts"
-import { decodedFrames, recordedNeAtBuf, recordedPlays } from "./provider/espn/TestEspn.ts"
+import { decodedFrames, duringNeAtBuf, recordedNeAtBuf, recordedPlays } from "./provider/espn/TestEspn.ts"
 import { Delivery, ProviderFeed } from "./provider/Provider.ts"
 import { Slate } from "./Slate.ts"
 import { delivered, directorOver, latest } from "./TestDirector.ts"
@@ -211,6 +212,7 @@ describe("Director, a recorded game", () => {
     () => {
       const { logs, layer } = recordingLogs()
       return Effect.gen(function* () {
+        yield* TestClock.setTime(duringNeAtBuf.epochMilliseconds)
         const frames = yield* recordedNeAtBuf
         const decoded = yield* decodedFrames(frames)
         const feed = yield* ProviderFeed

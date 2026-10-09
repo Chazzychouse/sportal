@@ -1,6 +1,5 @@
-import { GameSnapshot } from "@sportal/domain/Game"
 import type { LeagueId } from "@sportal/domain/League"
-import { DateTime, Duration, Effect, HashSet, Layer, Option, Stream, SubscriptionRef } from "effect"
+import { DateTime, Effect, Layer, Option, Stream, SubscriptionRef } from "effect"
 import { HttpClient } from "effect/http"
 import { HubConfig } from "../../HubConfig.ts"
 import { Provider } from "../Provider.ts"
@@ -61,19 +60,16 @@ export const layer: Layer.Layer<Provider, never, FastCast | HttpClient.HttpClien
         const pushes = fastCast.follow(wantedOf(view, leagues))
 
         const takeFrame = Effect.fnUntraced(function* (state: EspnState, frame: Frame) {
-          const [taken, said] = yield* state.take(frame)
+          const [next, said] = yield* state.take(frame, leagues)
           const now = yield* DateTime.now
-
           const league = pollLeagueOf(frame)
-          const next = Option.isSome(league) ? taken.retained(leagues, now) : taken
+
           yield* SubscriptionRef.set(view, next)
           if (Option.isSome(league)) {
             const at = pollAt.get(league.value)
             if (at !== undefined) {
-              yield* SubscriptionRef.set(
-                at,
-                Option.some(DateTime.addDuration(now, interval(next, league.value, now)))
-              )
+              const nextPoll = DateTime.addDuration(now, next.pollInterval(league.value, now))
+              yield* SubscriptionRef.set(at, Option.some(nextPoll))
             }
           }
 
@@ -129,19 +125,4 @@ function pollLeagueOf(frame: Frame): Option.Option<LeagueId> {
     Pushed: () => Option.none(),
     Checkpoint: () => Option.none()
   })
-}
-
-/**
- * How long `league` waits before its next poll, by its own listed games. While its last poll failed or did not
- * decode, the wait is capped at 30 seconds so its scoreboard is read again soon; a live game still polls every 10
- * seconds. Reads only each game's progress and kickoff, so any league polls by it.
- */
-function interval(state: EspnState, league: LeagueId, now: DateTime.Utc): Duration.Duration {
-  const games = state.listing(league)
-  const normal = games.some((game) => game.progress() === "live")
-    ? Duration.seconds(10)
-    : games.some((game) => game.isLiveOrKicksOffWithin(GameSnapshot.kickoffWindow, now))
-      ? Duration.minutes(1)
-      : Duration.minutes(15)
-  return HashSet.has(state.unlisted, league) ? Duration.min(normal, Duration.seconds(30)) : normal
 }

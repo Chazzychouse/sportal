@@ -1,16 +1,17 @@
 import { readFileSync } from "node:fs"
 import { assert, describe, it } from "@effect/vitest"
 import { GameId, GameSnapshot } from "@sportal/domain/Game"
-import type { LeagueId } from "@sportal/domain/League"
+import { LeagueId } from "@sportal/domain/League"
 import { Play, PlayId } from "@sportal/domain/Play"
-import { DateTime, Effect, Equal, HashMap, HashSet, Metric, Option, Record, Schema } from "effect"
+import { DateTime, Duration, Effect, Equal, HashMap, HashSet, Metric, Option, Record, Schema } from "effect"
+import { TestClock } from "effect/testing"
 import { counted, recordingLogs, withMetrics } from "../../TestTelemetry.ts"
 import { Delivery } from "../Provider.ts"
 import { PushedEvent } from "./EspnEvent.ts"
 import { EspnState } from "./EspnState.ts"
 import * as FastCastMessage from "./FastCastMessage.ts"
 import { Frame } from "./Frame.ts"
-import { decodedFrames, recordedNeAtBuf, stateAfter } from "./TestEspn.ts"
+import { decodedFrames, duringNeAtBuf, recordedNeAtBuf, stateAfter } from "./TestEspn.ts"
 import { Topic, tcOf, topicOf } from "./Topic.ts"
 
 // Recorded from ESPN on 2026-10-04: the NFL checkpoint at 17:52Z, every socket text on its topic after it until
@@ -757,6 +758,7 @@ describe("EspnState#take", () => {
       "should decode every snapshot so it reads back from its JSON Equal to itself",
       () =>
         Effect.gen(function* () {
+          yield* TestClock.setTime(duringNeAtBuf.epochMilliseconds)
           const decoded = yield* neAtBufDecoded
           const deliveries = decoded.flat()
           const snapshots = deliveries.flatMap((delivery) =>
@@ -785,6 +787,7 @@ describe("EspnState#take", () => {
       "should decode every play so it reads back from its JSON Equal to itself",
       () =>
         Effect.gen(function* () {
+          yield* TestClock.setTime(duringNeAtBuf.epochMilliseconds)
           const decoded = yield* neAtBufDecoded
           const deliveries = decoded.flat()
           const plays = deliveries.flatMap((delivery) =>
@@ -806,12 +809,12 @@ describe("EspnState#take", () => {
   })
 })
 
-describe("EspnState#unlisted", () => {
+describe("EspnState#failedPolls", () => {
   it.effect("should hold a league whose poll failed", () =>
     Effect.gen(function* () {
       const state = yield* stateAfter([Frame.PollFailed({ league: "fbs" })])
 
-      assert.isTrue(HashSet.has(state.unlisted, "fbs"))
+      assert.isTrue(HashSet.has(state.failedPolls, "fbs"))
     })
   )
 
@@ -819,7 +822,7 @@ describe("EspnState#unlisted", () => {
     Effect.gen(function* () {
       const state = yield* stateAfter([poll("fbs", "not json")])
 
-      assert.isTrue(HashSet.has(state.unlisted, "fbs"))
+      assert.isTrue(HashSet.has(state.failedPolls, "fbs"))
     })
   )
 
@@ -827,12 +830,29 @@ describe("EspnState#unlisted", () => {
     Effect.gen(function* () {
       const state = yield* stateAfter([Frame.PollFailed({ league: "nfl" }), poll("nfl", scoreboardBody)])
 
-      assert.isFalse(HashSet.has(state.unlisted, "nfl"))
+      assert.isFalse(HashSet.has(state.failedPolls, "nfl"))
+    })
+  )
+
+  it.effect("should distinguish a successful empty listing from a failed poll", () =>
+    Effect.gen(function* () {
+      const now = DateTime.makeUnsafe("2026-10-04T18:00:00Z")
+      const failed = yield* stateAfter([Frame.PollFailed({ league: "nfl" })])
+      const empty = yield* stateAfter([
+        Frame.PollFailed({ league: "nfl" }),
+        poll("nfl", JSON.stringify({ events: [] }))
+      ])
+
+      const failedWait = failed.pollInterval("nfl", now)
+      const emptyWait = empty.pollInterval("nfl", now)
+
+      assert.strictEqual(Duration.toMillis(failedWait), 30_000)
+      assert.strictEqual(Duration.toMillis(emptyWait), 900_000)
     })
   )
 })
 
-describe("EspnState#retained", () => {
+describe("EspnState#take, retention", () => {
   it.effect("should drop the document and plays of a game no longer wanted", () =>
     Effect.gen(function* () {
       const neAtBufPlays = "gp-football-nfl-401872971"
@@ -842,8 +862,9 @@ describe("EspnState#retained", () => {
         neAtBufFinal(4286638)
       ])
       const duringTheGames = DateTime.makeUnsafe("2026-10-04T18:00:00Z")
+      yield* TestClock.setTime(duringTheGames.epochMilliseconds)
 
-      const kept = state.retained(["nfl"], duringTheGames)
+      const [kept] = yield* state.take(Frame.PollFailed({ league: "nfl" }), ["nfl"])
 
       assert.isFalse(HashMap.has(kept.documents.byTopic, topicNamed(neAtBufPlays)))
       assert.isFalse(HashMap.has(kept.plays, GameId.make("401872971")))
@@ -854,10 +875,30 @@ describe("EspnState#retained", () => {
     Effect.gen(function* () {
       const state = yield* stateAfter([...synced()])
       const duringTheGames = DateTime.makeUnsafe("2026-10-04T18:00:00Z")
+      yield* TestClock.setTime(duringTheGames.epochMilliseconds)
 
-      const kept = state.retained(["nfl"], duringTheGames)
+      const [kept] = yield* state.take(Frame.PollFailed({ league: "nfl" }), ["nfl"])
 
       assert.isTrue(kept.documents.isSynced(topicNamed("event-football-nfl")))
+    })
+  )
+
+  it.effect("should keep a trailing game checkpoint until the next poll prunes it", () =>
+    Effect.gen(function* () {
+      yield* TestClock.setTime(DateTime.makeUnsafe("2026-10-04T18:00:00Z").epochMilliseconds)
+      const tc = "gp-football-nfl-401872971"
+      const state = yield* stateAfter([...synced(), neAtBufFinal(4286638)])
+
+      const [afterPush, said] = yield* state.take(
+        checkpoint(tc, 99, { entities: { plays: plays("401872971237") } }),
+        ["nfl"]
+      )
+      const [afterPoll] = yield* afterPush.take(Frame.PollFailed({ league: "nfl" }), ["nfl"])
+
+      assert.isTrue(said.some(Delivery.$is("Plays")))
+      assert.isTrue(afterPush.documents.isSynced(topicNamed(tc)))
+      assert.isFalse(HashMap.has(afterPoll.documents.byTopic, topicNamed(tc)))
+      assert.isFalse(HashMap.has(afterPoll.plays, GameId.make("401872971")))
     })
   )
 })
@@ -968,7 +1009,7 @@ function resetTopics(frames: ReadonlyArray<Frame>) {
       topics: []
     }),
     ({ state, topics }, frame) =>
-      Effect.map(state.take(frame), ([next]) => ({
+      Effect.map(state.take(frame, LeagueId.literals), ([next]) => ({
         state: next,
         topics: [...topics, ...lostBetween(state, next)]
       }))
