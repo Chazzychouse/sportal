@@ -44,8 +44,9 @@ export class FastCast extends Context.Service<
 >()("sportal/hub/provider/espn/FastCast") {
   /**
    * FastCast subscribing again to a topic whose checkpoint failed once `refollow` has passed, if it is still wanted
-   * and no later checkpoint of it has succeeded, and opening the socket again on `reconnect` after each failure, which it logs with its reason. Its `follow` never
-   * fails: where `reconnect` ends or a defect strikes, it logs that the live feed stopped and emits nothing more.
+   * and no later checkpoint of it has succeeded, and opening the socket again on `reconnect` after each failure,
+   * which it logs with its reason. Its `follow` never fails: where `reconnect` ends or a defect strikes, it logs that
+   * the live feed stopped and emits nothing more.
    */
   static readonly make = (retry: {
     readonly refollow: Duration.Input
