@@ -5,7 +5,7 @@ import { Screen, type ScreenCommand, type ScreenRejection } from "@sportal/domai
 import { Cause, Context, Effect, Layer, Metric, Option, Stream, SubscriptionRef } from "effect"
 import * as HubStopping from "./HubStopping.ts"
 import { type Delivery, Provider } from "./provider/Provider.ts"
-import { Slate, SlateChange } from "./slate/Slate.ts"
+import { Slate, SlateChange } from "./Slate.ts"
 import { Source } from "./source/Source.ts"
 
 /**

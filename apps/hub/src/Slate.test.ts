@@ -4,7 +4,7 @@ import type { LeagueId } from "@sportal/domain/League"
 import { type Play, PlayId } from "@sportal/domain/Play"
 import { broadcast, completion, play, situation, snapshot, team } from "@sportal/domain/TestGame"
 import { DateTime, Option } from "effect"
-import { Delivery } from "../provider/Provider.ts"
+import { Delivery } from "./provider/Provider.ts"
 import { Slate, SlateChange } from "./Slate.ts"
 
 const t0 = DateTime.makeUnsafe("2026-10-03T16:00:00Z")

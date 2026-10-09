@@ -3,7 +3,7 @@ import { Game, type GameId, type GameSnapshot } from "@sportal/domain/Game"
 import { LeagueId } from "@sportal/domain/League"
 import type { Play } from "@sportal/domain/Play"
 import { Array as Arr, Data, type Option } from "effect"
-import { Delivery } from "../provider/Provider.ts"
+import { Delivery } from "./provider/Provider.ts"
 
 /**
  * The slate: the games each league's last listing names, in its order, each with its latest snapshot not behind the one
