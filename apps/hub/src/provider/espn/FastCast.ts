@@ -8,7 +8,6 @@ import {
   Exit,
   FiberMap,
   HashMap,
-  HashSet,
   Layer,
   Metric,
   Option,
@@ -149,27 +148,28 @@ const connect = Effect.fn("FastCast.connect")(function* (
           )
   })
 
-  // Each follow waiting on its topic's checkpoint, by topic; the `H` that answers it completes it.
-  const pending = yield* Ref.make(HashMap.empty<Topic, Deferred.Deferred<void, CheckpointUnread>>())
-  // The topics left to polling on this socket: nothing follows them until it reconnects.
-  const gaveUp = yield* Ref.make(HashSet.empty<Topic>())
+  // Each topic's follow on this socket: waiting for the `H` that answers it, or left to polling until it reconnects.
+  const topics = yield* Ref.make(HashMap.empty<Topic, TopicFollow>())
   const follows = yield* FiberMap.make<Topic>()
 
   const attempt = Effect.fnUntraced(function* (topic: Topic) {
     const answered = yield* Deferred.make<void, CheckpointUnread>()
-    yield* Ref.update(pending, HashMap.set(topic, answered))
+    yield* Ref.update(topics, HashMap.set<Topic, TopicFollow>(topic, TopicFollow.Awaiting({ answered })))
     yield* Queue.offer(outgoing, JSON.stringify({ op: "S", sid, tc: tcOf(topic) }))
     yield* Deferred.await(answered)
   })
   const answer = Effect.fnUntraced(function* (topic: Topic, outcome: Exit.Exit<void, CheckpointUnread>) {
-    const waiting = yield* Ref.modify(pending, (all) => [HashMap.get(all, topic), HashMap.remove(all, topic)])
-    yield* Effect.forEach(Option.toArray(waiting), (answered) => Deferred.done(answered, outcome), {
+    const waiting = yield* Ref.modify(topics, (all) => {
+      const awaiting = HashMap.get(all, topic).pipe(Option.filter(TopicFollow.$is("Awaiting")))
+      return [awaiting, Option.isSome(awaiting) ? HashMap.remove(all, topic) : all] as const
+    })
+    yield* Effect.forEach(Option.toArray(waiting), ({ answered }) => Deferred.done(answered, outcome), {
       discard: true
     })
   })
   const follow = Effect.fnUntraced(function* (topic: Topic) {
-    const leftToPolling = yield* Ref.get(gaveUp)
-    if (HashSet.has(leftToPolling, topic)) return
+    const all = yield* Ref.get(topics)
+    if (Option.exists(HashMap.get(all, topic), TopicFollow.$is("LeftToPolling"))) return
 
     const followed = attempt(topic).pipe(
       Effect.retry(retry),
@@ -179,7 +179,9 @@ const connect = Effect.fn("FastCast.connect")(function* (
           error
         ).pipe(
           Effect.annotateLogs({ topic: tcOf(topic) }),
-          Effect.andThen(Ref.update(gaveUp, HashSet.add(topic)))
+          Effect.andThen(
+            Ref.update(topics, HashMap.set<Topic, TopicFollow>(topic, TopicFollow.LeftToPolling()))
+          )
         )
       )
     )
@@ -222,8 +224,9 @@ const connect = Effect.fn("FastCast.connect")(function* (
     Effect.forkScoped
   )
 
+  // Up to four at once, so a reconnect's checkpoints load side by side; frames still leave in the texts' order.
   return Stream.concat(Stream.make(opened), rest).pipe(
-    Stream.mapEffect((text) => framed(text, answer)),
+    Stream.mapEffect((text) => framed(text, answer), { concurrency: 4 }),
     Stream.flattenIterable
   )
 })
@@ -256,6 +259,15 @@ function steersBetween(previous: Wanted, next: Wanted): ReadonlyArray<Steer> {
     .map(([topic]) => Steer.FollowAgain({ topic }))
   return [...followed, ...left, ...lost]
 }
+
+/** Where a topic's follow is on one socket; a topic absent from the map is synced, or not followed. */
+type TopicFollow = Data.TaggedEnum<{
+  /** A follow sent its `S` and waits for the `H` that answers it. */
+  Awaiting: { readonly answered: Deferred.Deferred<void, CheckpointUnread> }
+  /** Its checkpoint kept failing: nothing follows it until the socket reconnects. */
+  LeftToPolling: object
+}>
+const TopicFollow = Data.taggedEnum<TopicFollow>()
 
 /**
  * A socket text as its frame, an `H`'s followed by its checkpoint once it loads and decodes. An `H` whose topic has

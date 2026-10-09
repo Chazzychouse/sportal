@@ -58,8 +58,8 @@ describe("FastCast", () => {
   it.effect("should reconnect after the socket closes", () =>
     Effect.gen(function* () {
       const server = fakeServer()
-      const { ended } = yield* nflFrames(server)
-      yield* server.sent.until(subscribed("event-football-nfl", 1))
+      const { ended, frames } = yield* nflFrames(server)
+      yield* frames.until(atLeast(2))
 
       yield* Effect.sync(() => server.close(1000))
       yield* TestClock.adjust("2 seconds")
@@ -75,8 +75,8 @@ describe("FastCast", () => {
     Effect.gen(function* () {
       const { logs, layer } = recordingLogs()
       const server = fakeServer()
-      yield* nflFrames(server).pipe(Effect.provide(layer))
-      yield* server.sent.until(subscribed("event-football-nfl", 1))
+      const { frames } = yield* nflFrames(server).pipe(Effect.provide(layer))
+      yield* frames.until(atLeast(2))
 
       yield* Effect.sync(() => server.close(1000))
       yield* TestClock.adjust("2 seconds")
@@ -199,6 +199,26 @@ describe("FastCast", () => {
 
       yield* server.sent.until(subscribed(gameTopic(laterGame), 1))
       assert.deepStrictEqual(gameTopicsSent(server), [{ op: "S", sid: "sid-1", tc: gameTopic(laterGame) }])
+    })
+  )
+
+  it.effect("should load a second topic's checkpoint while the first still loads", () =>
+    Effect.gen(function* () {
+      const server = fakeServer()
+      const { frames } = yield* nflFrames(server)
+      yield* frames.until(atLeast(2))
+
+      yield* Effect.sync(() => server.send({ ...checkpointMessage(7), pl: "https://checkpoint.test/slow" }))
+      yield* Effect.sync(() =>
+        server.send({ op: "H", tc: gameTopic(firstGame), mid: 3, pl: "https://checkpoint.test/slow" })
+      )
+      yield* TestClock.adjust("5 seconds")
+
+      const received = yield* frames.until(atLeast(6))
+      assert.deepStrictEqual(
+        received.slice(2, 6).map((frame) => frame._tag),
+        ["Pushed", "Checkpoint", "Pushed", "Checkpoint"]
+      )
     })
   )
 
@@ -978,5 +998,13 @@ const espn = HttpClient.make((request) => {
               ? new Response(JSON.stringify({ sports: "not a scoreboard" }))
               : new Response(checkpointBody)
     )
-  ).pipe(Effect.andThen((response) => (url.pathname === "/hang" ? Effect.never : Effect.succeed(response))))
+  ).pipe(
+    Effect.andThen((response) =>
+      url.pathname === "/hang"
+        ? Effect.never
+        : url.pathname === "/slow"
+          ? Effect.sleep("5 seconds").pipe(Effect.as(response))
+          : Effect.succeed(response)
+    )
+  )
 })
