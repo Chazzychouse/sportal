@@ -106,10 +106,11 @@ describe("FastCast", () => {
       const { ended } = yield* framesOver(host).pipe(Effect.provide(layer))
       yield* Effect.yieldNow
 
+      const done = yield* Deferred.isDone(ended)
       const stopped = logs.filter((log) => log.message.includes("FastCast: the live feed stopped"))
       assert.lengthOf(stopped, 1)
       assert.strictEqual(stopped[0]?.level, "Error")
-      assert.isFalse(yield* Deferred.isDone(ended))
+      assert.isFalse(done)
     })
   )
 
