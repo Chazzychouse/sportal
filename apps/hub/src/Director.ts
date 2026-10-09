@@ -24,9 +24,9 @@ export class Director extends Context.Service<
 >()("sportal/hub/Director") {
   /**
    * Takes what the provider decodes, from an empty slate, gauging each game a take changed by its progress, and
-   * logging each play it adds, as the take says. A take that raises a defect is logged, and the slate keeps what it had; if the
-   * provider's frames ever end other than by the Hub stopping, that is logged. Publishes the slate beside every
-   * source's answer for each game whenever either changes.
+   * logging each play it adds, as the take says. A take that raises a defect is logged, and the slate keeps what it
+   * had; if the provider's frames ever end other than by the Hub stopping, that is logged. Publishes the slate beside
+   * every source's answer for each game whenever either changes.
    */
   static readonly layer: Layer.Layer<Director, never, Provider | Source> = Layer.effect(
     Director,
@@ -61,11 +61,11 @@ export class Director extends Context.Service<
         { startImmediately: true }
       )
 
-      // The slate whenever it changes, and again whenever the source's answers may have.
+      // Whenever the slate changes, or the source's answers may have: the slate as it is now.
       const slateOrAnswers = Stream.merge(
-        SubscriptionRef.changes(slate),
-        source.changes.pipe(Stream.mapEffect(() => SubscriptionRef.get(slate)))
-      )
+        SubscriptionRef.changes(slate).pipe(Stream.map(() => undefined)),
+        source.changes
+      ).pipe(Stream.mapEffect(() => SubscriptionRef.get(slate)))
       const published = slateOrAnswers.pipe(
         Stream.mapEffect((current) =>
           Effect.map(source.availability, (availabilityOf) => current.published(availabilityOf))

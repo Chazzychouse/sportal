@@ -5,6 +5,7 @@ import { GameId, GameSnapshot, Network } from "@sportal/domain/Game"
 import { type Play, PlayId } from "@sportal/domain/Play"
 import { broadcast, liveSnapshot, play, snapshot, team } from "@sportal/domain/TestGame"
 import { DateTime, Deferred, Effect, Fiber, Layer, Option, Ref, Stream, type Tracer } from "effect"
+import { TestClock } from "effect/testing"
 import { Director } from "./Director.ts"
 import { decodedFrames, recordedNeAtBuf, recordedPlays } from "./provider/espn/TestEspn.ts"
 import { Delivery, ProviderFeed } from "./provider/Provider.ts"
@@ -151,6 +152,7 @@ describe("Director#published", () => {
       const second = liveSnapshot({ id: one, clock: "9:00" })
 
       yield* listing([first])
+      yield* Effect.yieldNow
       yield* takenSnapshot(second)
       yield* Effect.yieldNow
       const all = yield* Ref.get(published)
@@ -177,7 +179,7 @@ describe("Director#published", () => {
     }).pipe(Effect.provide(directed))
   )
 
-  it.live("should publish again when a source's answers change", () =>
+  it.effect("should publish again when a source's answers change", () =>
     Effect.gen(function* () {
       const carries = yield* Ref.make(false)
       const youTubeTv = Layer.succeed(
@@ -199,12 +201,12 @@ describe("Director#published", () => {
             games.some(({ availability }) => availability.some(ChannelAvailability.guards.Carried))
           ),
           Stream.runHead,
-          Effect.timeout("2 seconds"),
           Effect.forkScoped
         )
         yield* Deferred.await(first)
 
         yield* Ref.set(carries, true)
+        yield* TestClock.adjust("10 millis")
 
         const message = yield* Fiber.join(waiting)
         return Option.map(message, ({ games }) => games[0]?.availability)
@@ -216,18 +218,22 @@ describe("Director#published", () => {
     })
   )
 
-  it.live("should publish nothing when a source's change changes no answer", () =>
+  it.effect("should publish nothing when a source's change changes no answer", () =>
     Effect.gen(function* () {
       const answering = Source.layerTest(() => streamingOnly, Stream.tick("10 millis"))
 
       const next = yield* Effect.gen(function* () {
         const director = yield* Director
-
-        return yield* director.published.pipe(
+        const waiting = yield* director.published.pipe(
           Stream.drop(1),
           Stream.runHead,
-          Effect.timeoutOption("200 millis")
+          Effect.timeoutOption("200 millis"),
+          Effect.forkScoped({ startImmediately: true })
         )
+
+        yield* TestClock.adjust("200 millis")
+
+        return yield* Fiber.join(waiting)
       }).pipe(
         Effect.provide(listed(games).pipe(Layer.provideMerge(directorOver), Layer.provideMerge(answering)))
       )
