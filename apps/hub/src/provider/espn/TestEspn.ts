@@ -17,9 +17,8 @@ export const noSocket = Layer.succeed(Socket.WebSocketConstructor, () => {
 export const fixtures = fileURLToPath(new URL("./fixtures/", import.meta.url))
 
 /**
- * Every play id NE at BUF's recorded frames add, the same plays its summary's drives list. Measured once over the
- * fixture: every play id its topic's patches add, whole or one at a time (none is removed, moved, or copied), counted
- * with
+ * Every play id NE at BUF's recorded frames add. Measured once over the fixture: every play id its topic's patches add,
+ * whole or one at a time (none is removed, moved, or copied), counted with
  *   zcat nfl-2026-10-04-ne-buf.frames.jsonl.gz | jq -r 'select(.kind=="change") | .body | fromjson
  *     | select(.op=="P" or .op=="R") | .pl | fromjson | .pl | fromjson | .[]
  *     | select(.path|test("^/entities/plays(/[^/]+)?$"))

@@ -94,7 +94,7 @@ const snapshot = Effect.fnUntraced(function* (
       abbreviation: competitor.abbreviation,
       name: competitor.displayName,
       location: competitor.location ?? competitor.displayName,
-      // FastCast has no short name: EspnDecoder advances each pushed game's listed game to it, keeping the poll's names.
+      // FastCast has no short name: EspnState advances each pushed game's listed game to it, keeping the poll's names.
       shortName: competitor.shortDisplayName ?? competitor.displayName,
       logo: competitor.logo,
       color: competitor.color,
