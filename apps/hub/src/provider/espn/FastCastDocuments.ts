@@ -30,9 +30,7 @@ export class FastCastDocuments extends Data.Class<{
    * The documents after `frame`, and what it changed: a scoreboard topic's touched events (every event, on a
    * checkpoint), or all of a game topic's plays, by id, when they changed. A topic is synced by its checkpoint frame and
    * moved on by each message after it. A missed message, a patch that will not apply, or a message that does not decode
-   * on a synced topic sends only that topic back to waiting for a checkpoint, and the change is a `Reset` of it. A
-   * checkpoint that does not decode leaves its topic waiting, and asks for nothing: the live feed already followed it
-   * again. A message of an op it does not know is skipped. Fails only when any other frame does not decode, leaving the
+   * on a synced topic sends only that topic back to waiting for a checkpoint, and the change is a `Reset` of it. A message of an op it does not know is skipped. Fails only when any other frame does not decode, leaving the
    * documents as they were.
    */
   advance(
@@ -87,7 +85,7 @@ function advanced(
   documents: Documents,
   frame: Data.TaggedEnum.Value<Frame, "Pushed" | "Checkpoint">
 ): Effect.Effect<Advanced, Schema.SchemaError> {
-  return Frame.$is("Checkpoint")(frame) ? synced(documents, frame) : moveOn(documents, frame)
+  return Frame.$is("Checkpoint")(frame) ? Effect.succeed(synced(documents, frame)) : moveOn(documents, frame)
 }
 
 /** The documents after a frame that changed nothing. */
@@ -95,21 +93,16 @@ function unchanged(documents: Documents): Advanced {
   return { documents, change: Option.none() }
 }
 
-const synced = Effect.fnUntraced(function* (
-  documents: Documents,
-  frame: Data.TaggedEnum.Value<Frame, "Checkpoint">
-): Effect.fn.Return<Advanced> {
-  const loaded = yield* checkpoint(frame).pipe(Effect.result)
-  if (Result.isFailure(loaded)) {
-    return unchanged(HashMap.set(documents, frame.topic, Document.AwaitingCheckpoint()))
-  }
-
-  const document = loaded.success
+function synced(documents: Documents, frame: Data.TaggedEnum.Value<Frame, "Checkpoint">): Advanced {
   return {
-    documents: HashMap.set(documents, frame.topic, Document.Synced({ mid: frame.mid, document })),
-    change: Option.some(changeOf(frame.topic, document, Option.none()))
+    documents: HashMap.set(
+      documents,
+      frame.topic,
+      Document.Synced({ mid: frame.mid, document: frame.document })
+    ),
+    change: Option.some(changeOf(frame.topic, frame.document, Option.none()))
   }
-})
+}
 
 const moveOn = Effect.fnUntraced(function* (
   documents: Documents,
@@ -122,22 +115,6 @@ const moveOn = Effect.fnUntraced(function* (
   if (Option.isNone(frame.topic) || !movesOn(message)) return unchanged(documents)
 
   return yield* moved(documents, frame.topic.value, message)
-})
-
-const checkpoint = Effect.fnUntraced(function* (frame: Data.TaggedEnum.Value<Frame, "Checkpoint">) {
-  const body = yield* Schema.decodeEffect(FastCastMessage.Checkpoint(frame.topic))(frame.body)
-
-  const document: Schema.Json =
-    "sports" in body
-      ? Object.fromEntries(
-          body.sports.flatMap((sport) =>
-            sport.leagues.flatMap((league) => league.events.map((event) => [event.uid, event] as const))
-          )
-        )
-      : JsonPatch.apply([{ op: "add", path: gamePlays, value: body.entities?.plays ?? {} }], {
-          entities: {}
-        })
-  return document
 })
 
 /** Where a game topic's plays are in its document. */

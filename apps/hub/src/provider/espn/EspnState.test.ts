@@ -345,31 +345,10 @@ describe("EspnState#take", () => {
     })
   )
 
-  it.effect("should leave a topic waiting on a checkpoint that does not decode, with no reset", () =>
-    Effect.gen(function* () {
-      const unreadable = [
-        poll("nfl", scoreboardBody),
-        checkpoint("event-football-nfl", 7, { sports: "not a scoreboard" }),
-        scoreReplaced(8)
-      ]
-
-      const deliveries = yield* decoded(unreadable)
-
-      const reset = yield* resetTopics(unreadable)
-      assert.deepStrictEqual(reset, [])
-      assert.deepStrictEqual(
-        deliveries.map(({ frame }) => frame),
-        [1],
-        "the message after it is not applied"
-      )
-    })
-  )
-
   it.effect("should sync a waiting topic on the next checkpoint that decodes", () =>
     Effect.gen(function* () {
       const frames = [
         poll("nfl", scoreboardBody),
-        checkpoint("event-football-nfl", 7, { sports: "not a scoreboard" }),
         checkpoint("event-football-nfl", 4286637, JSON.parse(checkpointBody)),
         // ARI at NYG: the away team (competitor 0) had 14, the home team 6.
         message("event-football-nfl", 4286638, [
@@ -382,7 +361,7 @@ describe("EspnState#take", () => {
       const reset = yield* resetTopics(frames)
       assert.deepStrictEqual(
         deliveries.flatMap(({ frame, delivery }) =>
-          frame === 4 && Delivery.$is("Snapshot")(delivery)
+          frame === 3 && Delivery.$is("Snapshot")(delivery)
             ? [[delivery.snapshot.id, delivery.snapshot.away.score]]
             : []
         ),
@@ -933,7 +912,12 @@ function poll(league: LeagueId, body: string): Frame {
 }
 
 function checkpoint(tc: string, mid: number, document: unknown): Frame {
-  return Frame.Checkpoint({ topic: topicNamed(tc), mid, body: JSON.stringify(document) })
+  const topic = topicNamed(tc)
+  return Frame.Checkpoint({
+    topic,
+    mid,
+    document: Schema.decodeSync(FastCastMessage.Checkpoint(topic))(JSON.stringify(document))
+  })
 }
 
 /** A `P` on `tc`, its patches sent as an array, one of the three ways FastCast spells them. */
@@ -966,7 +950,14 @@ function recorded(texts: ReadonlyArray<string>): ReadonlyArray<Frame> {
     const topic = Option.flatMap(Option.fromUndefinedOr(channel), topicOf)
     const frame = Frame.Pushed({ topic, mid: Option.fromUndefinedOr(mid), body })
     return message.op === "H" && Option.isSome(topic) && mid !== undefined
-      ? [frame, Frame.Checkpoint({ topic: topic.value, mid, body: checkpointBody })]
+      ? [
+          frame,
+          Frame.Checkpoint({
+            topic: topic.value,
+            mid,
+            document: Schema.decodeSync(FastCastMessage.Checkpoint(topic.value))(checkpointBody)
+          })
+        ]
       : [frame]
   })
 }

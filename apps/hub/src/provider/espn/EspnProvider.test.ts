@@ -29,6 +29,7 @@ import { listedBy } from "../TestProvider.ts"
 import { SiteEvent } from "./EspnPayload.ts"
 import * as EspnProvider from "./EspnProvider.ts"
 import { FastCast, type Wanted } from "./FastCast.ts"
+import * as FastCastMessage from "./FastCastMessage.ts"
 import { Frame } from "./Frame.ts"
 import { ProviderUnavailable } from "./ProviderUnavailable.ts"
 import { recordedScoreboard } from "./TestEspn.ts"
@@ -392,11 +393,7 @@ describe("EspnProvider.deliveries", () => {
   it.effect("should deliver a push taken between two leagues' polls after the first league's listing", () =>
     Effect.gen(function* () {
       const live = scoreboardOf([{ state: "in", period: 2 }])
-      const checkpoint = Frame.Checkpoint({
-        topic: Topic.Scoreboard({ league: "nfl" }),
-        mid: 1,
-        body: checkpointBodyOf(live)
-      })
+      const checkpoint = checkpointFrame(Topic.Scoreboard({ league: "nfl" }), live)
       const fbsSlow = HttpClient.make((request) =>
         request.url.includes("/nfl/")
           ? Effect.succeed(answered(request, live))
@@ -431,11 +428,7 @@ describe("EspnProvider.deliveries", () => {
       Effect.gen(function* () {
         const soon = scoreboardOf([{ state: "pre", period: 0, kickoff: "2026-10-03T12:20Z" }])
         const live = scoreboardOf([{ state: "in", period: 2, kickoff: "2026-10-03T12:20Z" }])
-        const checkpoint = Frame.Checkpoint({
-          topic: Topic.Scoreboard({ league: "fbs" }),
-          mid: 1,
-          body: checkpointBodyOf(live)
-        })
+        const checkpoint = checkpointFrame(Topic.Scoreboard({ league: "fbs" }), live)
         const pushedAt30s = Stream.fromEffect(Effect.sleep("30 seconds")).pipe(Stream.as(checkpoint))
 
         const polled = yield* polledOver(["1 minute", "10 seconds"], { fbs: soon }, pushedAt30s)
@@ -781,6 +774,12 @@ const decodeEventIds = Schema.decodeUnknownSync(
  * An ESPN scoreboard of one game per entry, each the pregame scoreboard's second event kicking off at `kickoff` (the
  * recorded kickoff, unless given), in ESPN's status `state`, named `name` (the recorded name, unless given), in `period`.
  */
+/** The checkpoint frame FastCast makes of `topic`'s checkpoint of the site `scoreboard`'s games, at mid 1. */
+function checkpointFrame(topic: Topic, scoreboard: string): Frame {
+  const document = Schema.decodeSync(FastCastMessage.Checkpoint(topic))(checkpointBodyOf(scoreboard))
+  return Frame.Checkpoint({ topic, mid: 1, document })
+}
+
 /** A FastCast scoreboard checkpoint's document of the site `scoreboard`'s games, spelled as FastCast spells them. */
 function checkpointBodyOf(scoreboard: string): string {
   const { events } = Schema.decodeSync(

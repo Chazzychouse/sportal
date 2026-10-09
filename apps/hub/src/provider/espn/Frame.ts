@@ -1,5 +1,5 @@
 import type { LeagueId } from "@sportal/domain/League"
-import { Data, type Option } from "effect"
+import { Data, type Option, type Schema } from "effect"
 import type { Topic } from "./Topic.ts"
 
 /** One thing ESPN delivered, as received, before its decode reads it. */
@@ -12,7 +12,7 @@ export type Frame = Data.TaggedEnum<{
     readonly mid: Option.Option<number>
     readonly body: string
   }
-  /** The checkpoint an `H` pointed to: `topic`'s whole document as of `mid`. */
-  Checkpoint: { readonly topic: Topic; readonly mid: number; readonly body: string }
+  /** The checkpoint an `H` pointed to, decoded: `topic`'s whole document as of `mid`. */
+  Checkpoint: { readonly topic: Topic; readonly mid: number; readonly document: Schema.Json }
 }>
 export const Frame = Data.taggedEnum<Frame>()

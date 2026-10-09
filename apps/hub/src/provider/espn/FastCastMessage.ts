@@ -93,7 +93,7 @@ export const Envelope = Schema.fromJsonString(Framed).pipe(
 /** Where to open the socket, and the token it takes, as `public/websockethost` answers. */
 export const Host = Schema.Struct({ ip: Schema.String, securePort: Schema.Int, token: Schema.String })
 
-/** The checkpoint body of `topic`, read by its schema: a scoreboard's events, or a game's plays. */
+/** The document a checkpoint of `topic` holds, read from its text: a scoreboard's events by uid, or a game's plays. */
 export function Checkpoint(topic: Topic) {
   return Topic.$match(topic, {
     Scoreboard: () => ScoreboardCheckpoint,
@@ -101,7 +101,7 @@ export function Checkpoint(topic: Topic) {
   })
 }
 
-/** A scoreboard topic's whole document, as a checkpoint URL serves it; each event stays JSON, to be patched. */
+/** A scoreboard topic's whole document, as a checkpoint URL serves it, read as its events by uid. */
 const ScoreboardCheckpoint = Schema.fromJsonString(
   Schema.Struct({
     sports: Schema.Array(
@@ -118,14 +118,33 @@ const ScoreboardCheckpoint = Schema.fromJsonString(
       })
     )
   })
+).pipe(
+  Schema.decodeTo(Schema.Json, {
+    decode: SchemaGetter.transform(
+      (body): Schema.Json =>
+        Object.fromEntries(
+          body.sports.flatMap((sport) =>
+            sport.leagues.flatMap((league) => league.events.map((event) => [event.uid, event] as const))
+          )
+        )
+    ),
+    encode: SchemaGetter.forbidden(() => "A checkpoint is never sent back")
+  })
 )
 
-/** A game topic's whole document, ESPN's game package, as a checkpoint URL serves it: only its plays, by id. */
+/** A game topic's whole document, ESPN's game package, as a checkpoint URL serves it, read as only its plays. */
 const GameCheckpoint = Schema.fromJsonString(
   Schema.Struct({
     entities: Schema.optional(
       Schema.Struct({ plays: Schema.optional(Schema.Record(Schema.String, Schema.Json)) })
     )
+  })
+).pipe(
+  Schema.decodeTo(Schema.Json, {
+    decode: SchemaGetter.transform(
+      (body): Schema.Json => ({ entities: { plays: body.entities?.plays ?? {} } })
+    ),
+    encode: SchemaGetter.forbidden(() => "A checkpoint is never sent back")
   })
 )
 

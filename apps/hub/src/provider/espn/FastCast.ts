@@ -282,7 +282,7 @@ const framed = Effect.fnUntraced(function* (
   const loaded = yield* checkpoint(topic.value, message.pl).pipe(Effect.result)
   if (Result.isSuccess(loaded)) {
     yield* answer(topic.value, Exit.void)
-    return [frame, Frame.Checkpoint({ topic: topic.value, mid: message.mid, body: loaded.success })]
+    return [frame, Frame.Checkpoint({ topic: topic.value, mid: message.mid, document: loaded.success })]
   }
 
   const error = loaded.failure
@@ -295,7 +295,7 @@ const framed = Effect.fnUntraced(function* (
   return [frame]
 })
 
-/** The body of the checkpoint at `url`, as served, once it decodes as `topic`'s checkpoint. */
+/** The document of the checkpoint at `url`, decoded as `topic`'s checkpoint. */
 function checkpoint(topic: Topic, url: string) {
   const tc = tcOf(topic)
   return HttpClient.get(url).pipe(
@@ -303,7 +303,7 @@ function checkpoint(topic: Topic, url: string) {
     Effect.flatMap((response) => response.text),
     Effect.timeout(checkpointTimeout),
     Effect.mapError((cause) => new CheckpointUnread({ topic: tc, reason: "Unloaded", cause })),
-    Effect.tap((body) =>
+    Effect.flatMap((body) =>
       Schema.decodeEffect(FastCastMessage.Checkpoint(topic))(body).pipe(
         Effect.mapError((cause) => new CheckpointUnread({ topic: tc, reason: "Undecodable", cause }))
       )

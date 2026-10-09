@@ -7,6 +7,7 @@ import * as Socket from "effect/socket/Socket"
 import { TestClock } from "effect/testing"
 import { counted, gauged, observed, recordingLogs, withMetrics } from "../../TestTelemetry.ts"
 import { FastCast, type Wanted } from "./FastCast.ts"
+import * as FastCastMessage from "./FastCastMessage.ts"
 import { Frame } from "./Frame.ts"
 import { decodeSent, fakeServer, subscribed, watched } from "./TestFastCast.ts"
 import { Topic, tcOf } from "./Topic.ts"
@@ -154,7 +155,7 @@ describe("FastCast", () => {
         { tag: "Pushed", tc: undefined, mid: undefined, body: "C" },
         { tag: "Pushed", tc: "event-football-nfl", mid: undefined, body: "S" },
         { tag: "Pushed", tc: "event-football-nfl", mid: 7, body: "H" },
-        { tag: "Checkpoint", tc: "event-football-nfl", mid: 7, body: checkpointBody }
+        { tag: "Checkpoint", tc: "event-football-nfl", mid: 7, document: checkpointDocument }
       ])
       assert.isFalse(firstFour.some(Frame.$is("Polled")))
     })
@@ -835,7 +836,7 @@ function framesOver(
   }).pipe(Effect.provide(fastCast.pipe(Layer.provide(host))))
 }
 
-/** A frame as a test compares it: its kind, its topic's name, its mid, and its body, a socket text read as its op. */
+/** A frame as a test compares it: its kind, its topic's name, its mid, and its body (a socket text read as its op) or its document. */
 function seen(frame: Frame) {
   return Frame.$match(frame, {
     Polled: ({ league, body }) => ({ tag: "Polled", tc: league, mid: undefined, body }),
@@ -845,7 +846,7 @@ function seen(frame: Frame) {
       mid: Option.getOrUndefined(mid),
       body: decodeSent(body).op
     }),
-    Checkpoint: ({ topic, mid, body }) => ({ tag: "Checkpoint", tc: tcOf(topic), mid, body })
+    Checkpoint: ({ topic, mid, document }) => ({ tag: "Checkpoint", tc: tcOf(topic), mid, document })
   })
 }
 
@@ -926,6 +927,10 @@ function patchMessage(mid: number) {
 const checkpointBody = readFileSync(
   new URL("./fixtures/nfl-fastcast-checkpoint-2026-10-04T1752Z.json", import.meta.url),
   "utf8"
+)
+
+const checkpointDocument = Schema.decodeSync(FastCastMessage.Checkpoint(Topic.Scoreboard({ league: "nfl" })))(
+  checkpointBody
 )
 
 const RecordedScoreboard = Schema.fromJsonString(

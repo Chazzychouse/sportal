@@ -8,6 +8,7 @@ import { HubConfig } from "../../HubConfig.ts"
 import type { Provider } from "../Provider.ts"
 import * as Espn from "./Espn.ts"
 import { EspnState } from "./EspnState.ts"
+import * as FastCastMessage from "./FastCastMessage.ts"
 import { Frame } from "./Frame.ts"
 import { topicOf } from "./Topic.ts"
 
@@ -105,7 +106,8 @@ const frameOf = Effect.fnUntraced(function* (line: string) {
 
   const checkpointTopic = yield* Effect.fromOption(topic)
   const checkpointMid = yield* Effect.fromOption(mid)
-  return Frame.Checkpoint({ topic: checkpointTopic, mid: checkpointMid, body })
+  const document = yield* Schema.decodeEffect(FastCastMessage.Checkpoint(checkpointTopic))(body)
+  return Frame.Checkpoint({ topic: checkpointTopic, mid: checkpointMid, document })
 })
 
 const decodeLeague = Schema.decodeUnknownEffect(LeagueId)
