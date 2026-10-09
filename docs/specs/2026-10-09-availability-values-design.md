@@ -1,4 +1,4 @@
-# Availability as values, one clock in the live route
+# Availability as values, carried from kickoff
 
 2026-10-09. Follows the Director holding only the slate (branch `director-slate-only`).
 
@@ -27,14 +27,12 @@ every source's signal with the slate.
 
 ## Decisions
 
-### 1. A game is carried from a few minutes before its airing begins
+### 1. A game is carried from kickoff, as the slate says
 
-`startingSoon` goes from 30 minutes to 5. The rule is otherwise as it is: carried once the channel is on the air and
-the airing (or kickoff) begins at most 5 minutes from `now`; upcoming before. The wire (`ChannelAvailability`) and
-the Screen do not change; a Display streams a game from 5 minutes before it starts instead of 30.
-
-Streaming exactly at kickoff, from the game's own progress, would need no clock at all; the few minutes of lead are
-what the live route's minute tick below pays for.
+A matched channel on the air is `Carried` once the game's progress is no longer upcoming, and `Upcoming { channel,
+begin }` until then. `startingSoon` goes. The slate changes when ESPN says the game has started, so the flip needs no
+clock; a game delayed past its kickoff stays upcoming until it does start. The wire (`ChannelAvailability`) and the
+Screen do not change; a Display streams a game from kickoff instead of 30 minutes before.
 
 ### 2. A source's availability is a stream of values that take the time
 
@@ -61,14 +59,16 @@ readonly guide: Stream<Option<Guide>>   // SubscriptionRef.changes: the latest g
 
 `latest` and `changes` go. The retire timer stays as it is: staleness is already an event.
 
-### 4. The live route is the one clock
+### 4. The live route reads the time; nothing ticks
 
-`published` in `HubServer.ts` zips the slate, the source's availability and `Stream.tick("1 minute")` (which emits at
-once), reads `DateTime.now` for each, builds `slate.published((game) => availabilityOf(game, now))`, drops a message
-the same as the last, and settles it as today. `Slate#published` keeps its signature.
+`published` in `HubServer.ts` zips the slate with the source's availability, reads `DateTime.now` for each pair,
+builds `slate.published((game) => availabilityOf(game, now))`, drops a message the same as the last, and settles it as
+today. `Slate#published` keeps its signature.
 
-The tick re-evaluates both of the clock's jobs: the 5-minute flip, and an airing ending or a live game running into
-the next one. A live game's slate also changes every few seconds, which re-evaluates it sooner.
+The time is left only for choosing the airing. A live game running into the next airing is re-evaluated by its own
+slate changes, which come every few seconds. An airing that ends after its game is over keeps the game carried until
+the next slate or guide change (the shell reads the guide every 15 minutes); a finished game's tile is not worth a
+clock.
 
 ### 5. `wanted` uses `zipLatest`
 
@@ -86,14 +86,15 @@ a schedule step needs the state at that moment.
 - `Source.test.ts`: read the first value of `availability` and apply it with a `now`; `layerAll` gives every source's
   availability in order, and a new value when any source's changes.
 - `GuideReader.test.ts`: the change counts read `guide` (dropping its first value), as `changes` did.
-- `Guide.test.ts` (domain): the six cases at the 30-minute edge move to 5 minutes.
+- `Guide.test.ts` (domain): the six cases at the 30-minute edge become: upcoming while the game is upcoming, whatever
+  the time; carried once it is live.
 - `HubServer.test.ts`: the source-change dedupe test uses a source repeating one value; a new test: an upcoming game
-  turns carried once the minute tick passes 5 minutes before its airing, with nothing else changing.
+  on a carrying channel turns carried when a snapshot says it has kicked off.
 - `EspnProvider.test.ts`: "should want a game's topic once its kickoff is 30 minutes away, with no frame" stays and
   must pass unchanged.
 
 ## Docs
 
-- CONTEXT: **Channel availability** says carried from 5 minutes before; **Source** and **Guide reader** say what
+- CONTEXT: **Channel availability** says carried from kickoff; **Source** and **Guide reader** say what
   each offers as a stream where they name members.
 - `docs/technical-spec.md`: the `Source` block and the YouTube TV/Twitch paragraph.
