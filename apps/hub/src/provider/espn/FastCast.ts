@@ -206,7 +206,6 @@ const connect = Effect.fn("FastCast.connect")(function* (
   yield* Effect.addFinalizer(() =>
     Metric.update(connected, 0).pipe(Effect.andThen(Metric.update(topicsFollowed, 0)))
   )
-  yield* Metric.update(connects, 1)
   yield* Effect.logInfo(`FastCast: connected to ${host.ip}`)
 
   // From nothing on this socket to what is wanted, then each change after.
@@ -356,11 +355,6 @@ const connected = Metric.gauge("sportal_live_feed_connected", {
 
 const checkpointFailures = Metric.counter("sportal_live_feed_checkpoint_failures", {
   description: "FastCast checkpoints that did not load or did not decode, by league",
-  incremental: true
-})
-
-const connects = Metric.counter("sportal_live_feed_connects", {
-  description: "Times the live feed connected and subscribed",
   incremental: true
 })
 
