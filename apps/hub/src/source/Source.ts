@@ -9,9 +9,12 @@ import * as YouTubeTvGuide from "./youtube-tv/YouTubeTvGuide.ts"
 export class Source extends Context.Service<
   Source,
   {
-    /** Whether and where this source can show a game, as of now: one answer from each source it stands for, in order. */
+    /**
+     * Whether and where this source can show a game, as of now: one availability from each source it stands for, in
+     * order.
+     */
     readonly availability: Effect.Effect<(game: GameSnapshot) => ReadonlyArray<ChannelAvailability>>
-    /** Emits whenever what this source answers may have changed. */
+    /** Emits whenever this source's availability may have changed. */
     readonly changes: Stream.Stream<void>
   }
 >()("sportal/hub/source/Source") {
@@ -56,8 +59,8 @@ export class Source extends Context.Service<
   )
 
   /**
-   * Every source given, as one: for each game every source's answer, in the order given, and a change whenever any of
-   * them changes.
+   * Every source given, as one: for each game every source's availability, in the order given, and a change whenever
+   * any of them changes.
    */
   static layerAll<R>(sources: ReadonlyArray<Layer.Layer<Source, never, R>>): Layer.Layer<Source, never, R> {
     return Layer.effect(
@@ -68,8 +71,8 @@ export class Source extends Context.Service<
         )
 
         const availability = Effect.fn("Source.availability")(function* () {
-          const answers = yield* Effect.forEach(each, (source) => source.availability)
-          return (game: GameSnapshot) => answers.flatMap((availabilityOf) => availabilityOf(game))
+          const availabilities = yield* Effect.forEach(each, (source) => source.availability)
+          return (game: GameSnapshot) => availabilities.flatMap((availabilityOf) => availabilityOf(game))
         })
 
         return Source.of({
@@ -83,7 +86,7 @@ export class Source extends Context.Service<
     )
   }
 
-  /** A source answering `availabilityOf` for every game, which changes whenever `changes` emits. */
+  /** A source giving `availabilityOf` every game, which changes whenever `changes` emits. */
   static layerTest(
     availabilityOf: (game: GameSnapshot) => ChannelAvailability,
     changes: Stream.Stream<void> = Stream.never

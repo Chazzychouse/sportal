@@ -82,7 +82,7 @@ flowchart LR
   yttv --> views
 ```
 
-- **Hub** — takes what its providers' frames say, as they arrive, into the Director's slate (the listed games, each with its latest snapshot and plays), and will run its rules. It publishes the slate, each game beside every source's answer for where it can be streamed. Serves the web UI's static files, the HTTP API, and one live stream per client.
+- **Hub** — takes what its providers' frames say, as they arrive, into the Director's slate (the listed games, each with its latest snapshot and plays), and will run its rules. Its live stream sends the slate, each game beside its availability from every source. Serves the web UI's static files, the HTTP API, and one live stream per client.
 - **Web UI** — one codebase for desk and couch. It renders Hub state, and its Display owns its Screen: it applies screen commands and chooses between sources.
 - **Desktop shell** — loads the web UI from the Hub, registers as a Display, and mirrors that Display's stream tiles into native provider web views. It is told the Hub's address by configuration (`SPORTAL_HUB_URL`, read once into `ShellConfig`) and never starts a Hub.
 
@@ -209,7 +209,7 @@ sportal/
     │       │       ├── TestEspn.ts         Recorded frames and scoreboards for tests of other modules, NE at BUF's day among them (`recordedNeAtBuf`), and ESPN answering from recorded scoreboards (`recordedEspn`)
     │       │       └── fixtures/           Recorded real payloads, NE at BUF's frames among them
     │       └── source/
-    │           ├── Source.ts           The port, its variants, and how several answer as one
+    │           ├── Source.ts           The port, its variants, and how several act as one
     │           ├── GuideReader.ts      Reads the guide the shell fetches, keeps it while fresh
     │           ├── Twitch.ts           Twitch's lineup
     │           └── youtube-tv/
@@ -301,16 +301,14 @@ class Provider extends Context.Service<Provider, {
 
 ```ts
 class Director extends Context.Service<Director, {
-  readonly slate: Effect<Slate>
-  readonly slateChanges: Stream<Slate>               // the latest first, then each change
-  readonly published: Stream<SlateChanged>           // the latest first, then each change of the slate or a source
+  readonly slate: Stream<Slate>                      // the slate as it is, then each change
 }>()("sportal/hub/Director") {}
 ```
 
 - The `Slate` (`Slate.ts`) is the fold: an ordered list of `Game`s, leagues in `LeagueId` order and each league's in its listing's order, each with its latest `GameSnapshot` and its plays. `take(deliveries)` on it is pure and returns the next slate and its slate changes; a take that changes nothing gives back the same slate.
 - The Director starts from an empty slate and takes each frame's deliveries as they arrive, in one `Director.take` span carrying its `sportal.deliveries` count, and, from the slate changes each take gives, gauges each game whose snapshot changed by its progress (`sportal_game_state`: 1 upcoming, 2 live, 3 over, 0 once no listing names it), which the Hub dashboard's Games table reads, and logs each play a take adds (Info, annotated with `game`, `league`, `matchup`, `play` and `scoring`). For now nothing is kept between runs: a restarted Hub serves an empty slate until its provider's next poll lists the day's games.
 - A take that raises a defect is an Error log; the slate keeps what it had and takes the next frame. If the provider's frames end other than by the Hub stopping, that is an Error log and the slate stays as it is.
-- `Slate.published(availabilityOf)` is each listed game as the slate has it, carrying only its last ten plays (`Game#recent`), beside every source's answer for it (`SlateChanged`); the Hub server sends it within 250 ms of a change to the slate or to a source.
+- `Slate.published(availabilityOf)` is each listed game as the slate has it, carrying only its last ten plays (`Game#recent`), beside its availability from every source (`SlateChanged`). The Director knows nothing of sources: the Hub server's live route joins the Director's slate with the source's availability, drops a message that is the same as the last, and sends it within 250 ms of a change to the slate or to a source.
 - `main.ts` provides it over ESPN as the provider and YouTube TV and Twitch as the sources.
 - The Hub's whole shutdown bound is about 4 s: the HTTP server's 3 s for connected Displays, then telemetry's 1 s to export what it holds.
 
@@ -323,9 +321,9 @@ class Source extends Context.Service<Source, {
 }>()("sportal/hub/source/Source") {}
 ```
 
-`Source.layerAll` runs every source and answers each game with every source's answer, in the order the sources are given; it merges nothing. The Display's Screen chooses: the most useful answer (carried, upcoming, no guide, then not carried), and a stream tile moves only when its own source carries its game on another channel, so a tile never moves to another source. YouTube TV answers from the guide `GuideReader` keeps; Twitch from its lineup, a guide whose one channel carries Prime Video.
+`Source.layerAll` runs every source and gives each game's availability from every source, in the order the sources are given; it merges nothing. The Display's Screen chooses: the most useful availability (carried, upcoming, no guide, then not carried), and a stream tile moves only when its own source carries its game on another channel, so a tile never moves to another source. YouTube TV's availability comes from the guide `GuideReader` keeps; Twitch from its lineup, a guide whose one channel carries Prime Video.
 
-YouTube TV's channels are found in its own guide, read by the shell and handed to `GuideReader.readGuide` (`docs/history.md`, "Guide-matched channels"); with no fresh guide (a guide is fresh for 45 minutes), it answers "no guide". Twitch's lineup is fixed and never read.
+YouTube TV's channels are found in its own guide, read by the shell and handed to `GuideReader.readGuide` (`docs/history.md`, "Guide-matched channels"); with no fresh guide (a guide is fresh for 45 minutes), its availability is "no guide". Twitch's lineup is fixed and never read.
 
 `StreamLocator` is a tagged union. Today it has one member, a web-view address; a new kind is added only when a source needs it.
 

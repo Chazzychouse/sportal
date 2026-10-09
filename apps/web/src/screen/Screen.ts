@@ -115,8 +115,8 @@ export class Screen extends Schema.Class<Screen>("sportal/Screen")({
   }
 
   /**
-   * Applies a command. `availabilityOf` gives every source's answer for a game: a game is assigned as the most
-   * useful of them says, a carried game as a stream tile and any other as a data tile.
+   * Applies a command. `availabilityOf` gives a game's availability from every source: a game is assigned as the
+   * most useful of them says, a carried game as a stream tile and any other as a data tile.
    */
   apply(
     command: ScreenCommand,
@@ -179,9 +179,10 @@ export class Screen extends Schema.Class<Screen>("sportal/Screen")({
    * Re-resolves every occupied tile, on screen and benched, after what a source knows has changed. A game
    * `availabilityOf` knows nothing about keeps its tile as it was: the change did not concern it.
    *
-   * A stream tile is replaced only when its own source carries its game on another channel. Any other answer
+   * A stream tile is replaced only when its own source carries its game on another channel. Any other availability
    * (another source carrying it, a game running past its listing, no guide, a failed or stale read) never stops
-   * it. Every other occupied tile becomes what the most useful answer says. When no tile changes, it is this Screen.
+   * it. Every other occupied tile becomes what the most useful availability says. When no tile changes, it is this
+   * Screen.
    */
   refresh(availabilityOf: (game: GameId) => Option.Option<ReadonlyArray<ChannelAvailability>>): Screen {
     const tiles = this.tiles.map((tile) =>
@@ -260,21 +261,21 @@ function tileFor(game: GameId, availability: ReadonlyArray<ChannelAvailability>)
   })
 }
 
-/** The answer that says most of several: ties go to the first, and no answer at all is no stream. */
+/** The availability that says most of several: ties go to the first, and none at all is no stream. */
 function mostUseful(availability: ReadonlyArray<ChannelAvailability>): ChannelAvailability {
   return Arr.reduce<ChannelAvailability, ChannelAvailability>(
     availability,
     { _tag: "NotCarried", why: "NoStream" },
-    (best, answer) => (usefulness(answer) > usefulness(best) ? answer : best)
+    (best, next) => (usefulness(next) > usefulness(best) ? next : best)
   )
 }
 
 /**
- * How much an answer tells: carried; upcoming on a known channel; upcoming with nothing known; no guide (it may yet be
- * carried); streaming only; not in the guide; no stream.
+ * How much an availability tells: carried; upcoming on a known channel; upcoming with nothing known; no guide (it may
+ * yet be carried); streaming only; not in the guide; no stream.
  */
-function usefulness(answer: ChannelAvailability): number {
-  return ChannelAvailability.match(answer, {
+function usefulness(availability: ChannelAvailability): number {
+  return ChannelAvailability.match(availability, {
     Carried: () => 6,
     Upcoming: ({ channel }) => (Option.isSome(channel) ? 5 : 4),
     NoGuide: () => 3,

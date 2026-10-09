@@ -25,7 +25,7 @@ export const Connection = Data.taggedEnum<Connection>()
 interface Live {
   readonly connection: Connection
   readonly slate: ReadonlyArray<Game>
-  /** Every source's answer for each game on the slate, by its id. */
+  /** Each game's availability from every source, by its id. */
   readonly availability: ReadonlyMap<GameId, ReadonlyArray<ChannelAvailability>>
 }
 

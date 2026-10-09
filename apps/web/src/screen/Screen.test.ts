@@ -197,7 +197,7 @@ describe("Screen#apply", () => {
     assert.deepStrictEqual(screen.tiles[0], { _tag: "DataTile", game: bama, why: { _tag: "StreamingOnly" } })
   })
 
-  it("should assign a game no source answers for as a data tile with no stream", () => {
+  it("should assign a game with no availability from any source as a data tile with no stream", () => {
     const screen = assign(Screen.initial, 0, bama, () => [])
 
     assert.deepStrictEqual(screen.tiles[0], { _tag: "DataTile", game: bama, why: { _tag: "NoStream" } })
@@ -269,10 +269,10 @@ describe("Screen#refresh", () => {
       ]
     ],
     ["the same channel", onFox()]
-  ])("should keep a stream tile playing on the answer %s", (_name, answer) => {
+  ])("should keep a stream tile playing on the availability %s", (_name, availability) => {
     const streaming = assign(Screen.initial, 0, bama, onFox)
 
-    const refreshed = streaming.refresh(() => Option.some(answer))
+    const refreshed = streaming.refresh(() => Option.some(availability))
 
     assert.deepStrictEqual(refreshed.tiles[0], streaming.tiles[0])
   })
@@ -702,7 +702,7 @@ function unknownUpcoming(): ReadonlyArray<ChannelAvailability> {
   return [{ _tag: "Upcoming", channel: Option.none(), begin: Option.none() }]
 }
 
-/** An answer for `game` only: the guide says nothing of any other. */
+/** Availability for `game` only: the guide says nothing of any other. */
 function reportingOnly(game: GameId) {
   return (asked: GameId) => (asked === game ? Option.some(onFox()) : Option.none())
 }
