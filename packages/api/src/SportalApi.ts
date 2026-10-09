@@ -1,6 +1,6 @@
-import { GuideUnreadable } from "@sportal/domain/Guide"
 import { Schema } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "effect/http-api"
+import { GuideUnreadable } from "./GuideUnreadable.ts"
 
 export class SportalApi extends HttpApi.make("sportal")
   .add(

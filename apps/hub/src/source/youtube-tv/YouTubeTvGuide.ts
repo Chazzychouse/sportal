@@ -1,6 +1,6 @@
 import type { SourceName } from "@sportal/domain/Channel"
-import { ChannelId, Guide } from "@sportal/domain/Guide"
 import { Array as Arr, DateTime, Option, Schema, SchemaGetter, SchemaTransformation } from "effect"
+import { ChannelId, Guide } from "../Guide.ts"
 import * as YouTubeTvPayload from "./YouTubeTvPayload.ts"
 
 /** YouTube TV, as its guide names it. Its guide's responses are read here as the channels and airings they list. */

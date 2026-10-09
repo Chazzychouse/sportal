@@ -1,4 +1,4 @@
-import { Guide, GuideUnreadable } from "@sportal/domain/Guide"
+import { GuideUnreadable } from "@sportal/api/GuideUnreadable"
 import {
   Context,
   DateTime,
@@ -10,6 +10,7 @@ import {
   type Stream,
   SubscriptionRef
 } from "effect"
+import { Guide } from "./Guide.ts"
 import * as YouTubeTvGuide from "./youtube-tv/YouTubeTvGuide.ts"
 
 /**

@@ -1,9 +1,9 @@
 import { assert, describe, it } from "@effect/vitest"
+import { type Broadcast, Network } from "@sportal/domain/Game"
+import type { Team } from "@sportal/domain/Team"
+import { broadcast, snapshot, team } from "@sportal/domain/TestGame"
 import { DateTime, Option } from "effect"
-import { type Broadcast, Network } from "./Game.ts"
 import { type Airing, ChannelId, Guide } from "./Guide.ts"
-import type { Team } from "./Team.ts"
-import { broadcast, snapshot, team } from "./TestGame.ts"
 
 describe("Guide#availabilityOf", () => {
   const readAt = DateTime.makeUnsafe("2026-10-03T20:25:00Z")

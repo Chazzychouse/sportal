@@ -1,9 +1,9 @@
+import { type ChannelAvailability, SourceName } from "@sportal/domain/Channel"
+import { type GameSnapshot, Network } from "@sportal/domain/Game"
+import type { LeagueId } from "@sportal/domain/League"
+import { StreamLocator } from "@sportal/domain/Stream"
+import type { Team } from "@sportal/domain/Team"
 import { DateTime, Duration, Option, Schema } from "effect"
-import { type ChannelAvailability, SourceName } from "./Channel.ts"
-import { type GameSnapshot, Network } from "./Game.ts"
-import type { LeagueId } from "./League.ts"
-import { StreamLocator } from "./Stream.ts"
-import type { Team } from "./Team.ts"
 
 /** A source's own id for one of its channels (YouTube TV's station id). */
 export const ChannelId = Schema.String.pipe(Schema.brand("ChannelId"))
@@ -108,13 +108,6 @@ export class Guide extends Schema.Class<Guide>("sportal/Guide")({
     return this.channels.find(({ id }) => id === airing.channel) ?? { name: airing.channel }
   }
 }
-
-/** A guide response the source could not read: not the guide, or a shape it no longer knows. */
-export class GuideUnreadable extends Schema.TaggedError<GuideUnreadable>()(
-  "GuideUnreadable",
-  {},
-  { httpApiStatus: 422 }
-) {}
 
 /** How far an airing may begin from kickoff and still be the game: listings round, and kickoffs slip. */
 const kickoffTolerance = Duration.minutes(45)

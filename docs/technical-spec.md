@@ -167,13 +167,13 @@ sportal/
 │   │       ├── Situation.ts    Possession, down, distance, field position, red zone
 │   │       ├── Play.ts         A single play, as the game's play-by-play lists it; PlayKind
 │   │       ├── Channel.ts      SourceName, Channel, ChannelAvailability
-│   │       ├── Guide.ts        Guide, Airing, ChannelId, GuideUnreadable
 │   │       ├── Stream.ts       StreamLocator
 │   │       └── TestGame.ts     Game snapshots and plays for tests
 │   │
 │   └── api/                    The contracts between processes.
 │       └── src/
 │           ├── SportalApi.ts   HttpApi declaration: endpoint groups built from domain schemas
+│           ├── GuideUnreadable.ts  The error for a guide response the source could not read
 │           ├── LiveMessage.ts  The union of messages on the live stream
 │           ├── ShellBridge.ts  What the desktop shell exposes to the web UI; TilePlacement, TileBounds
 │           ├── ShellChannel.ts The IPC channel names, apart so the sandboxed preload bundles only them
@@ -210,6 +210,7 @@ sportal/
     │       │       └── fixtures/           Recorded real payloads, NE at BUF's frames among them
     │       └── source/
     │           ├── Source.ts           The port, its variants, and how several act as one
+    │           ├── Guide.ts            Guide, Airing, ChannelId: a source's channels and what each airs
     │           ├── GuideReader.ts      Reads the guide the shell fetches, offers it while fresh
     │           ├── Twitch.ts           Twitch's lineup
     │           ├── TestSource.ts       The source's availability now, for tests

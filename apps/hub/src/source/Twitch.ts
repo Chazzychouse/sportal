@@ -1,6 +1,6 @@
 import { Network } from "@sportal/domain/Game"
-import { ChannelId, Guide } from "@sportal/domain/Guide"
 import { DateTime } from "effect"
+import { ChannelId, Guide } from "./Guide.ts"
 
 /**
  * Twitch's channels the Hub plays, each with the network whose every broadcast it carries. A lineup is never read,
