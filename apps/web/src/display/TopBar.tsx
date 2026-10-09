@@ -1,6 +1,6 @@
 import type { Screen } from "@sportal/domain/Screen"
 import { Option } from "effect"
-import { Expand, Keyboard, List, LogIn, Minimize2, Shrink, Smartphone, SquareDashed } from "lucide-react"
+import { Expand, Keyboard, List, LogIn, Minimize2, Shrink, SquareDashed } from "lucide-react"
 import { Button } from "@/design/button"
 import type * as LiveStream from "../hub/LiveStream.ts"
 import { LayoutPicker } from "../layout/LayoutPicker.tsx"
@@ -14,7 +14,6 @@ export function TopBar(props: {
   slate: { open: boolean; live: number; toggle: () => void }
   solo: { enabled: boolean; toggle: () => void }
   onKeys: () => void
-  onRemote: () => void
 }) {
   return (
     <header className="flex h-11 items-center gap-4 border-b bg-card/60 px-3">
@@ -68,16 +67,6 @@ export function TopBar(props: {
           </Button>
         )}
         <ConnectionPill connection={props.connection} />
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          aria-label="Remote"
-          title="Control from a phone"
-          className="text-muted-foreground"
-          onClick={props.onRemote}
-        >
-          <Smartphone />
-        </Button>
         <Button
           variant="ghost"
           size="icon-sm"

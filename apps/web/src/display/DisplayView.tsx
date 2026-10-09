@@ -5,7 +5,6 @@ import { Toaster } from "@/design/sonner"
 import { dispatch } from "../hub/HubClient.ts"
 import { runtime } from "../hub/HubRuntime.ts"
 import * as LiveStream from "../hub/LiveStream.ts"
-import { JoinRemote } from "../remote/JoinRemote.tsx"
 import { useScreenFailureToasts } from "../screen/Rejections.ts"
 import { ScreenView } from "../screen/ScreenView.tsx"
 import { SlateView } from "../slate/SlateView.tsx"
@@ -53,7 +52,6 @@ export function DisplayView() {
               toggle: () => run(toggleSolo)
             }}
             onKeys={() => setDisplay(display.open("Keys"))}
-            onRemote={() => setDisplay(display.open("JoinRemote"))}
           />
         )}
         <ScreenView
@@ -69,7 +67,6 @@ export function DisplayView() {
         )}
       </div>
       <KeysDialog open={display.shows("Keys")} onOpenChange={closeOverlay} />
-      <JoinRemote open={display.shows("JoinRemote")} onOpenChange={closeOverlay} />
       <CommandPalette
         open={display.shows("Palette")}
         onOpenChange={closeOverlay}
@@ -93,7 +90,7 @@ export function DisplayView() {
 }
 
 /** This device's Display: its state, a step run (its display kept, its commands sent to the Hub), and a Display set. */
-export function useDisplay() {
+function useDisplay() {
   const [display, set] = useState(Display.initial)
   const run = (step: DisplayStep) => {
     set(step.display)

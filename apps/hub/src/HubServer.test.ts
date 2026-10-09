@@ -10,7 +10,6 @@ import { DateTime, Effect, Layer, Option, Queue, Result, Schema, Stream } from "
 import { HttpClient } from "effect/http"
 import { HttpApiClient } from "effect/http-api"
 import { TestClock } from "effect/testing"
-import { afterEach, vi } from "vitest"
 import { Director } from "./Director.ts"
 import { HubConfig } from "./HubConfig.ts"
 import * as HubServer from "./HubServer.ts"
@@ -18,21 +17,6 @@ import { Delivery } from "./provider/Provider.ts"
 import { GuideReader } from "./source/GuideReader.ts"
 import { Source } from "./source/Source.ts"
 import { delivered, directorOver } from "./TestDirector.ts"
-
-type Interfaces = Record<
-  string,
-  ReadonlyArray<{ address: string; family: string; internal: boolean }> | undefined
->
-
-const network = vi.hoisted((): { interfaces: Interfaces | undefined } => ({ interfaces: undefined }))
-vi.mock("node:os", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("node:os")>()
-  return { ...actual, networkInterfaces: () => network.interfaces ?? actual.networkInterfaces() }
-})
-
-afterEach(() => {
-  network.interfaces = undefined
-})
 
 const espn = Network.make("ESPN")
 const game = snapshot({
@@ -70,16 +54,6 @@ describe("Hub API", () => {
         .pipe(Effect.flip)
 
       assert.strictEqual(rejected._tag, "ScreenRejection")
-    }).pipe(Effect.provide(serverUnderTest()))
-  )
-
-  it.effect("should list the addresses a Remote can reach the Hub at, none of them loopback", () =>
-    Effect.gen(function* () {
-      const client = yield* makeClient
-
-      const addresses = yield* client.host.addresses()
-
-      assert.isFalse(addresses.includes("127.0.0.1"))
     }).pipe(Effect.provide(serverUnderTest()))
   )
 
@@ -124,52 +98,6 @@ describe("Hub API", () => {
       const error = yield* client.guide.read({ payload: { guide: "{}" } }).pipe(Effect.flip)
 
       assert.strictEqual(error._tag, "GuideUnreadable")
-    }).pipe(Effect.provide(serverUnderTest()))
-  )
-})
-
-describe("HubServer.lanAddresses", () => {
-  it.effect("should list external IPv4 addresses, home ranges first, then any other such as a VPN", () =>
-    Effect.gen(function* () {
-      network.interfaces = {
-        lo: [v4("127.0.0.1", true), v6("::1", true)],
-        tailscale0: [v4("100.64.0.9")],
-        eth0: [v4("10.0.0.7")],
-        wlo1: [v4("192.168.0.54"), v6("fe80::1")]
-      }
-      const client = yield* makeClient
-
-      const addresses = yield* client.host.addresses()
-
-      assert.deepStrictEqual(addresses, ["192.168.0.54", "10.0.0.7", "100.64.0.9"])
-    }).pipe(Effect.provide(serverUnderTest()))
-  )
-
-  it.effect("should leave out container and VM bridges", () =>
-    Effect.gen(function* () {
-      network.interfaces = {
-        docker0: [v4("172.17.0.1")],
-        "br-3f2a": [v4("172.18.0.1")],
-        virbr0: [v4("192.168.122.1")],
-        veth12: [v4("169.254.1.1")],
-        enp3s0: [v4("172.20.1.5")]
-      }
-      const client = yield* makeClient
-
-      const addresses = yield* client.host.addresses()
-
-      assert.deepStrictEqual(addresses, ["172.20.1.5"])
-    }).pipe(Effect.provide(serverUnderTest()))
-  )
-
-  it.effect("should be empty with no network", () =>
-    Effect.gen(function* () {
-      network.interfaces = { lo: [v4("127.0.0.1", true)], down: undefined }
-      const client = yield* makeClient
-
-      const addresses = yield* client.host.addresses()
-
-      assert.deepStrictEqual(addresses, [])
     }).pipe(Effect.provide(serverUnderTest()))
   )
 })
@@ -469,12 +397,4 @@ function serverUnderTest() {
     Layer.provideMerge(hubUnderTest()),
     Layer.provideMerge(NodeHttpServer.layerTest)
   )
-}
-
-function v4(address: string, internal = false) {
-  return { address, family: "IPv4", internal }
-}
-
-function v6(address: string, internal = false) {
-  return { address, family: "IPv6", internal }
 }

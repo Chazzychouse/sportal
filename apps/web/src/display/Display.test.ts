@@ -284,17 +284,14 @@ describe("Display#press", () => {
     assert.deepStrictEqual(commands, [])
   })
 
-  it.each(["Palette", "JoinRemote"] as const)(
-    "should close the %s overlay with Esc and send nothing",
-    (overlay) => {
-      const open = Display.initial.open(overlay)
+  it("should close the Palette overlay with Esc and send nothing", () => {
+    const open = Display.initial.open("Palette")
 
-      const { display, commands } = press(open, { _tag: "Unsolo" }, withTiles([]))
+    const { display, commands } = press(open, { _tag: "Unsolo" }, withTiles([]))
 
-      assert.strictEqual(display.overlay._tag, "None")
-      assert.deepStrictEqual(commands, [])
-    }
-  )
+    assert.strictEqual(display.overlay._tag, "None")
+    assert.deepStrictEqual(commands, [])
+  })
 
   it("should unsolo with Esc and no overlay while soloed", () => {
     const soloed = new Screen({ ...withTiles(["live"]), solo: Option.some(GameId.make("live")) })
@@ -476,19 +473,19 @@ describe("Display#press", () => {
 })
 
 describe("Display#open and Display#close", () => {
-  it.each([
-    { from: "Keys", to: "Palette" },
-    { from: "Palette", to: "JoinRemote" }
-  ] as const)("should replace any open overlay: $to over $from", ({ from, to }) => {
-    const open = Display.initial.open(from)
+  it.each([{ from: "Keys", to: "Palette" }] as const)(
+    "should replace any open overlay: $to over $from",
+    ({ from, to }) => {
+      const open = Display.initial.open(from)
 
-    const display = open.open(to)
+      const display = open.open(to)
 
-    assert.strictEqual(display.overlay._tag, to)
-  })
+      assert.strictEqual(display.overlay._tag, to)
+    }
+  )
 
   it("should close the open overlay", () => {
-    const open = Display.initial.open("JoinRemote")
+    const open = Display.initial.open("Palette")
 
     const display = open.close()
 

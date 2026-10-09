@@ -53,12 +53,6 @@ export function sendGuide(guide: string) {
   return HubClient.use((hub) => answerRead(hub.api.guide.read({ payload: { guide } })))
 }
 
-/**
- * The addresses a Remote on the home network can reach the Hub's machine at. It fails when the Hub could not be
- * asked — not running, or older than this UI.
- */
-export const hostAddresses = HubClient.use((hub) => answerRead(hub.api.host.addresses()))
-
 /** An answer this UI cannot read means it and the Hub disagree on the API: a defect, logged where it happens. */
 function answerRead<A, E, R>(request: Effect.Effect<A, E | Schema.SchemaError, R>) {
   return request.pipe(

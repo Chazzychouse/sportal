@@ -5,11 +5,8 @@ import { dispatch } from "../hub/HubClient.ts"
 import { runtime } from "../hub/HubRuntime.ts"
 import { LayoutGlyph, layoutLabel } from "./LayoutGlyph.tsx"
 
-/**
- * One button per layout, the current one lit; choosing one sends it to the Hub. `fill` spreads the buttons across
- * the row at a thumb's height, for the Remote.
- */
-export function LayoutPicker(props: { current: LayoutName; fill?: boolean }) {
+/** One button per layout, the current one lit; choosing one sends it to the Hub. */
+export function LayoutPicker(props: { current: LayoutName }) {
   return (
     <ToggleGroup
       type="single"
@@ -20,7 +17,6 @@ export function LayoutPicker(props: { current: LayoutName; fill?: boolean }) {
         if (layout !== undefined) runtime.runFork(dispatch({ _tag: "SetLayout", layout }))
       }}
       aria-label="Layout"
-      className={props.fill === true ? "w-full justify-between" : undefined}
     >
       {LayoutName.literals.map((name) => (
         <ToggleGroupItem
@@ -28,10 +24,7 @@ export function LayoutPicker(props: { current: LayoutName; fill?: boolean }) {
           value={name}
           aria-label={layoutLabel(name)}
           title={`${layoutLabel(name)} · ${Screen.slotCount(name) === 1 ? "1 tile" : `${Screen.slotCount(name)} tiles`}`}
-          className={cn(
-            "text-muted-foreground data-[state=on]:bg-accent data-[state=on]:text-on-air",
-            props.fill === true && "min-h-10 flex-1"
-          )}
+          className={cn("text-muted-foreground data-[state=on]:bg-accent data-[state=on]:text-on-air")}
         >
           <LayoutGlyph name={name} />
         </ToggleGroupItem>

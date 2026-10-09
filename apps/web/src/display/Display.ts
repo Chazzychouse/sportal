@@ -5,7 +5,7 @@ import { Data, Option } from "effect"
 import { Layout } from "../layout/Layout.ts"
 import { Place, StripCard } from "../slate/StripCards.ts"
 
-type Overlay = Data.TaggedEnum<{ None: object; Keys: object; Palette: object; JoinRemote: object }>
+type Overlay = Data.TaggedEnum<{ None: object; Keys: object; Palette: object }>
 const Overlay = Data.taggedEnum<Overlay>()
 
 /**
