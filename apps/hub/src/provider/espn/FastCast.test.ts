@@ -796,7 +796,7 @@ const scoreboard = Topic.Scoreboard({ league: "nfl" })
 const gameOf = (game: string) => Topic.Game({ league: "nfl", game: GameId.make(game) })
 
 /** A wanted set of `entries`. */
-function wantedOf(...entries: ReadonlyArray<readonly [Topic, "Synced" | "AwaitingCheckpoint"]>): Wanted {
+function wantedOf(...entries: ReadonlyArray<readonly [Topic, HashMap.HashMap.Value<Wanted>]>): Wanted {
   return HashMap.fromIterable(entries)
 }
 
@@ -828,7 +828,7 @@ function framesOver(
       Deferred.into(ended),
       Effect.forkChild({ startImmediately: true })
     )
-    const want = (...entries: ReadonlyArray<readonly [Topic, "Synced" | "AwaitingCheckpoint"]>) =>
+    const want = (...entries: ReadonlyArray<readonly [Topic, HashMap.HashMap.Value<Wanted>]>) =>
       SubscriptionRef.set(wanted, wantedOf(...entries))
     return { ended, frames, want }
   }).pipe(Effect.provide(fastCast.pipe(Layer.provide(host))))

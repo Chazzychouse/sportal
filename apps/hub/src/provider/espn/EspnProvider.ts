@@ -122,7 +122,7 @@ const polledOf = Effect.fnUntraced(function* (
   )
   const said = yield* Option.match(frame, {
     onNone: () => Effect.succeedNone,
-    onSome: (polled) => Effect.map(taken(polled), Option.some)
+    onSome: (polled) => Effect.asSome(taken(polled))
   })
   return { league, said } satisfies Polled
 })

@@ -189,9 +189,9 @@ const connect = Effect.fn("FastCast.connect")(function* (
     Follow: ({ topic }) =>
       Effect.logInfo(`FastCast: subscribed to ${tcOf(topic)}`).pipe(Effect.andThen(follow(topic))),
     Leave: ({ topic }) =>
-      Effect.logInfo(
-        `FastCast: left ${tcOf(topic)}; its scoreboard shows it neither live nor about to kick off`
-      ).pipe(Effect.andThen(FiberMap.remove(follows, topic))),
+      Effect.logInfo(`FastCast: left ${tcOf(topic)}; it is no longer wanted`).pipe(
+        Effect.andThen(FiberMap.remove(follows, topic))
+      ),
     FollowAgain: ({ topic }) =>
       Effect.logInfo(`FastCast: following ${tcOf(topic)} again from its checkpoint`).pipe(
         Effect.andThen(follow(topic))
@@ -382,7 +382,7 @@ const topicsFollowed = Metric.gauge("sportal_live_feed_topics", {
 
 const steersTaken = Metric.counter("sportal_live_feed_steers", {
   description:
-    "Times the live feed followed a game topic, left one, or followed one again after its document reset",
+    "Times the live feed followed a topic, left one, or followed one again after its document was lost",
   incremental: true
 })
 
