@@ -58,11 +58,11 @@ export class Director extends Context.Service<
   )
 }
 
-/** A change the slate took, observed: a game's progress gauged (0 once delisted), or a play it added logged. */
+/** A change the slate took, observed: a game's progress gauged (its series removed once delisted), or a play it added logged. */
 function observed(change: SlateChange) {
   return SlateChange.$match(change, {
     Progressed: ({ game }) => gauge(game.snapshot, progressValues[game.snapshot.progress()]),
-    Delisted: ({ game }) => gauge(game.snapshot, 0),
+    Delisted: ({ game }) => forgotten(game.snapshot),
     Played: ({ game, play }) => loggedPlay(game.snapshot, play)
   })
 }
@@ -70,6 +70,17 @@ function observed(change: SlateChange) {
 function gauge(snapshot: GameSnapshot, value: number) {
   const attributes = { game: snapshot.id, league: snapshot.league, matchup: snapshot.matchup() }
   return Metric.update(Metric.withAttributes(gameState, attributes), value)
+}
+
+/** Removes `snapshot`'s game's series of `sportal_game_state`, so a game no listing names is not exported again. */
+function forgotten(snapshot: GameSnapshot) {
+  return Effect.map(Metric.MetricRegistry, (registry) =>
+    [...registry]
+      .filter(([, metadata]) => metadata.id === gameState.id && metadata.attributes?.["game"] === snapshot.id)
+      .forEach(([key]) => {
+        registry.delete(key)
+      })
+  )
 }
 
 function loggedPlay(snapshot: GameSnapshot, play: Play) {
@@ -89,5 +100,5 @@ function loggedPlay(snapshot: GameSnapshot, play: Play) {
 const progressValues = { upcoming: 1, live: 2, over: 3 } satisfies Record<Progress, number>
 
 const gameState = Metric.gauge("sportal_game_state", {
-  description: "A game's progress, by game: 1 upcoming, 2 live, 3 over, 0 once no listing names it"
+  description: "A game's progress, by game: 1 upcoming, 2 live, 3 over; no series once no listing names it"
 })

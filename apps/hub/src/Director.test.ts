@@ -239,14 +239,26 @@ describe("Director's game state gauge", () => {
     }).pipe(Effect.provide(directorOver), withMetrics)
   )
 
-  it.effect("should gauge a game no listing names any more as 0", () =>
+  it.effect("should drop the series of a game no listing names any more", () =>
     Effect.gen(function* () {
       yield* listing([liveSnapshot({ id: one }), liveSnapshot({ id: two })])
 
       yield* listing([liveSnapshot({ id: two })])
       const value = yield* gauged("sportal_game_state", { game: one })
 
-      assert.strictEqual(value, 0)
+      assert.isUndefined(value)
+    }).pipe(Effect.provide(directorOver), withMetrics)
+  )
+
+  it.effect("should gauge a game listed again after it was delisted", () =>
+    Effect.gen(function* () {
+      yield* listing([liveSnapshot({ id: one }), liveSnapshot({ id: two })])
+      yield* listing([liveSnapshot({ id: two })])
+
+      yield* listing([liveSnapshot({ id: one }), liveSnapshot({ id: two })])
+      const value = yield* gauged("sportal_game_state", { game: one })
+
+      assert.strictEqual(value, 2)
     }).pipe(Effect.provide(directorOver), withMetrics)
   )
 })
