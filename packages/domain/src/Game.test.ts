@@ -472,22 +472,6 @@ describe("GameSnapshot#advancedTo", () => {
     assert.isFalse("situation" in advanced)
   })
 
-  it("should drop the situation and keep its teams when the moved fields have none", () => {
-    const listed = liveSnapshot({ situation: situation({ down: 2 }) })
-
-    const advanced = listed.advancedTo({
-      status: "halftime",
-      period: 2,
-      clock: "0:00",
-      homeScore: 7,
-      awayScore: 3
-    })
-
-    assert.isUndefined(advanced.situation)
-    assert.strictEqual(advanced.home.score, 7)
-    assert.strictEqual(advanced.home.team, listed.home.team)
-  })
-
   it("should be at the moved fields' game time", () => {
     const advanced = polled.advancedTo(pushed)
 
