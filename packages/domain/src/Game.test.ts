@@ -788,3 +788,31 @@ describe("Game#recent", () => {
     assert.strictEqual(recent, game)
   })
 })
+
+describe("Game#playsAfter", () => {
+  it("should give the plays the earlier game lacks, in order", () => {
+    const first = play({ id: PlayId.make("1"), sequence: 1 })
+    const second = play({ id: PlayId.make("2"), sequence: 2 })
+    const third = play({ id: PlayId.make("3"), sequence: 3 })
+    const earlier = Game.of(snapshot()).playsTaken([first])
+    const later = earlier.playsTaken([third, first, second])
+
+    const added = later.playsAfter(earlier)
+
+    assert.deepStrictEqual(
+      added.map(({ id }) => id),
+      [second.id, third.id]
+    )
+  })
+
+  it("should not give a play the earlier game had, though the feed corrected its text", () => {
+    const first = play({ id: PlayId.make("1"), sequence: 1, text: "Rush for 1 yard" })
+    const corrected = play({ id: PlayId.make("1"), sequence: 1, text: "Rush for 2 yards" })
+    const earlier = Game.of(snapshot()).playsTaken([first])
+    const later = earlier.playsTaken([corrected])
+
+    const added = later.playsAfter(earlier)
+
+    assert.deepStrictEqual(added, [])
+  })
+})

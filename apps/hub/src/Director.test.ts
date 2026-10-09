@@ -1,7 +1,7 @@
 import { assert, describe, it } from "@effect/vitest"
 import { ChannelAvailability } from "@sportal/domain/Channel"
 import { GameId, GameSnapshot, Network } from "@sportal/domain/Game"
-import type { Play } from "@sportal/domain/Play"
+import { type Play, PlayId } from "@sportal/domain/Play"
 import { type Screen, Tile } from "@sportal/domain/Screen"
 import { broadcast, liveSnapshot, play, snapshot, team } from "@sportal/domain/TestGame"
 import {
@@ -345,6 +345,31 @@ const primeOnYouTubeTv = {
 
 // News 3's live address in the recorded guide.
 const news3Live = "https://tv.youtube.com/watch/y6zFA17zDsw?vp=0gEEEgIwAQ%3D%3D"
+
+describe("Director's play log", () => {
+  it.effect("should log each play a take adds once, annotated with its game", () => {
+    const { logs, layer } = recordingLogs()
+    const game = liveSnapshot({ id: one })
+    const first = play({ id: PlayId.make("p1"), sequence: 1, text: "Rush for 1 yard" })
+    const second = play({ id: PlayId.make("p2"), sequence: 2, clock: "14:20", text: "Rush for 4 yards" })
+    return Effect.gen(function* () {
+      yield* listing([game])
+      yield* delivered(Delivery.cases.Plays.make({ game: one, plays: [first] }))
+
+      yield* delivered(Delivery.cases.Plays.make({ game: one, plays: [first, second] }))
+
+      const played = logs.filter(({ annotations }) => annotations.play !== undefined)
+      assert.deepStrictEqual(
+        played.map(({ level, annotations }) => ({ level, game: annotations.game, play: annotations.play })),
+        [
+          { level: "Info", game: one, play: "Rush" },
+          { level: "Info", game: one, play: "Rush" }
+        ]
+      )
+      assert.include(played[1]?.message ?? "", `Director: ${game.matchup()} Q1 14:20 Rush for 4 yards`)
+    }).pipe(Effect.provide(directed.pipe(Layer.provideMerge(layer))))
+  })
+})
 
 describe("Director, the Screen", () => {
   it.effect("should apply concurrent commands without losing any", () =>

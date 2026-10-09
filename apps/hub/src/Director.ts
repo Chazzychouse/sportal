@@ -1,5 +1,6 @@
 import { ChannelAvailability } from "@sportal/domain/Channel"
-import type { Game, GameId, GameSnapshot } from "@sportal/domain/Game"
+import { Game, type GameId, type GameSnapshot } from "@sportal/domain/Game"
+import type { Play } from "@sportal/domain/Play"
 import { Screen, type ScreenCommand, type ScreenRejection } from "@sportal/domain/Screen"
 import { Cause, Context, Effect, Layer, Metric, Option, Stream, SubscriptionRef } from "effect"
 import * as HubStopping from "./HubStopping.ts"
@@ -26,10 +27,10 @@ export class Director extends Context.Service<
   }
 >()("sportal/hub/Director") {
   /**
-   * Takes what the provider decodes, from an empty slate, gauging each game a take changed by its progress. A take that
-   * raises a defect is logged, and the slate keeps what it had; if the provider's frames ever end other than by the
-   * Hub stopping, that is logged. Applies each command to the Screen one at a time, and refreshes the Screen whenever
-   * the source's answers change.
+   * Takes what the provider decodes, from an empty slate, gauging each game a take changed by its progress, and
+   * logging each play it adds. A take that raises a defect is logged, and the slate keeps what it had; if the
+   * provider's frames ever end other than by the Hub stopping, that is logged. Applies each command to the Screen
+   * one at a time, and refreshes the Screen whenever the source's answers change.
    */
   static readonly layer: Layer.Layer<Director, never, Provider | Source> = Layer.effect(
     Director,
@@ -48,6 +49,7 @@ export class Director extends Context.Service<
 
           yield* SubscriptionRef.set(slate, next)
           yield* gaugeChanged(before, next)
+          yield* loggedNewPlays(before, next)
         },
         Effect.catchDefect((defect) =>
           Effect.logError("Director: a take raised a defect; the slate keeps what it had", Cause.die(defect))
@@ -134,6 +136,37 @@ function gauge(snapshot: GameSnapshot, value: number) {
 
 function byId(games: ReadonlyArray<Game>): ReadonlyMap<GameId, Game> {
   return new Map(games.map((game) => [game.snapshot.id, game]))
+}
+
+/** An Info log of each play `next` has that `before` lacked, annotated with its game; a game new to the slate had none. */
+const loggedNewPlays = Effect.fnUntraced(function* (before: Slate, next: Slate) {
+  if (next.games === before.games) return
+
+  const had = byId(before.games)
+  const changed = next.games.filter((game) => had.get(game.snapshot.id) !== game)
+  yield* Effect.forEach(
+    changed,
+    (game) => {
+      const earlier = had.get(game.snapshot.id) ?? Game.of(game.snapshot)
+      return Effect.forEach(game.playsAfter(earlier), (play) => loggedPlay(game.snapshot, play), {
+        discard: true
+      })
+    },
+    { discard: true }
+  )
+})
+
+function loggedPlay(snapshot: GameSnapshot, play: Play) {
+  const matchup = snapshot.matchup()
+  return Effect.logInfo(`Director: ${matchup} Q${play.period} ${play.clock} ${play.text}`).pipe(
+    Effect.annotateLogs({
+      game: snapshot.id,
+      league: snapshot.league,
+      matchup,
+      play: play._tag,
+      scoring: play.scoring
+    })
+  )
 }
 
 // Each progress's value on `sportal_game_state`. Written as a record so that a new progress fails to compile here.
