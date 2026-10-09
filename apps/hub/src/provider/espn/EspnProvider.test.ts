@@ -425,7 +425,7 @@ describe("EspnProvider.deliveries", () => {
   )
 
   it.effect(
-    "should poll every 10 seconds after a push shows a game live that the poll still shows upcoming",
+    "should keep polling every minute while the poll still shows a game upcoming that a push showed live",
     () =>
       Effect.gen(function* () {
         const soon = scoreboardOf([{ state: "pre", period: 0, kickoff: "2026-10-03T12:20Z" }])
@@ -439,7 +439,7 @@ describe("EspnProvider.deliveries", () => {
 
         const polled = yield* polledOver(["1 minute", "10 seconds"], { fbs: soon }, pushedAt30s)
 
-        assert.deepStrictEqual(polled, [0, 60_000, 70_000])
+        assert.deepStrictEqual(polled, [0, 60_000])
       })
   )
 

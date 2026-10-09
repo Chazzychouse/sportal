@@ -502,12 +502,12 @@ describe("EspnState#take", () => {
     })
   )
 
-  it.effect("should keep a pushed game's progress over a poll that lags it", () =>
+  it.effect("should list a poll's games as it shows them, even one a push moved past it", () =>
     Effect.gen(function* () {
       const state = yield* stateAfter([...synced(), neAtBufFinal(4286638), poll("nfl", scoreboardBody)])
 
       const game = state.games().find((each) => each.id === "401872971")
-      assert.strictEqual(game?.progress(), "over")
+      assert.strictEqual(game?.progress(), "live")
     })
   )
 

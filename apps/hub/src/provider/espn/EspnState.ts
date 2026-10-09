@@ -1,4 +1,4 @@
-import { Game, GameSnapshot } from "@sportal/domain/Game"
+import { GameSnapshot } from "@sportal/domain/Game"
 import type { LeagueId } from "@sportal/domain/League"
 import { Play } from "@sportal/domain/Play"
 import { Array as Arr, Data, type DateTime, Effect, HashMap, Metric, Option, Record, Schema } from "effect"
@@ -13,7 +13,8 @@ import { Topic, tcOf } from "./Topic.ts"
 
 /**
  * What ESPN has said, every frame folded in once: each FastCast topic's document, and each league's listed games, as its
- * last poll listed them, and each push since (a push behind its listed game is logged and counted).
+ * last poll showed them, each push since advanced in (a push behind its listed game is logged and counted). Which
+ * snapshot wins is the Slate's rule, not the state's.
  */
 export class EspnState extends Data.Class<{
   readonly documents: FastCastDocuments
@@ -25,8 +26,8 @@ export class EspnState extends Data.Class<{
   })
 
   /**
-   * This state after `frame`, and what the frame said. A poll is its league's `Listing` of the games it shows; the
-   * listing it keeps holds, for a game a push moved past the poll, the pushed one (`Game#listed`). A scoreboard topic's
+   * This state after `frame`, and what the frame said. A poll is its league's `Listing` of the games it shows; its
+   * listing is the games it shows, as it shows them. A scoreboard topic's
    * change is a `Snapshot` of each listed game it touched, advanced to it (FastCast has no short names), and moves that
    * game forward in its listing; a game no listing has is not delivered. A game topic's change is a `Plays` of the
    * game's whole list, in `Play.order`. An event or a play that does not decode is skipped. A frame that does not decode
@@ -84,9 +85,7 @@ const listed = Effect.fnUntraced(function* (state: EspnState, league: LeagueId, 
   const scoreboard = yield* decodeScoreboard(body)
   const games = yield* gamesOf(league, scoreboard.events)
 
-  const had = state.listing(league)
-  const kept = games.map((game) => keptOver(had, game))
-  const next = new EspnState({ ...state, listings: HashMap.set(state.listings, league, kept) })
+  const next = new EspnState({ ...state, listings: HashMap.set(state.listings, league, games) })
   return [next, [Delivery.Listing({ league, games })]] as const
 })
 
@@ -95,17 +94,6 @@ const gamesOf = Effect.fnUntraced(function* (league: LeagueId, events: ReadonlyA
   const decoded = yield* Effect.forEach(events, (event) => Effect.option(decodeEvent[league](event)))
   return Arr.getSomes(decoded)
 })
-
-/** A polled `game` as its listing keeps it: the one `had` held when a push moved it past the poll (`Game#listed`). */
-function keptOver(had: ReadonlyArray<GameSnapshot>, game: GameSnapshot): GameSnapshot {
-  return Option.match(
-    Arr.findFirst(had, (each) => each.id === game.id),
-    {
-      onNone: () => game,
-      onSome: (pushed) => Game.of(pushed).listed(game).snapshot
-    }
-  )
-}
 
 const noDeliveries: ReadonlyArray<Delivery> = []
 
