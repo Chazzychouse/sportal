@@ -530,6 +530,25 @@ describe("EspnState#take", () => {
         })
     )
 
+    it.effect("should keep a play no patch touched as it was decoded", () =>
+      Effect.gen(function* () {
+        const deliveries = yield* decoded([
+          checkpoint(ariAtNygPlays, 99, { entities: { plays: plays("401872966237", "401872966271") } }),
+          playsMessage(100, [
+            { op: "replace", path: "/entities/plays/401872966271/text", value: "Corrected" }
+          ])
+        ])
+
+        const [first, second] = deliveries.map(({ delivery }) =>
+          Delivery.$is("Plays")(delivery)
+            ? delivery.plays.find((play) => play.id === "401872966237")
+            : undefined
+        )
+        assert.isDefined(first)
+        assert.strictEqual(second, first)
+      })
+    )
+
     it.effect("should give the new list on each replaced text, removed play, and copy within the plays", () =>
       Effect.gen(function* () {
         const deliveries = yield* decoded([

@@ -1,4 +1,4 @@
-import { GameSnapshot } from "@sportal/domain/Game"
+import { type GameId, GameSnapshot } from "@sportal/domain/Game"
 import type { LeagueId } from "@sportal/domain/League"
 import { Play } from "@sportal/domain/Play"
 import { Array as Arr, Data, type DateTime, Effect, HashMap, Metric, Option, Record, Schema } from "effect"
@@ -19,10 +19,12 @@ import { Topic, tcOf } from "./Topic.ts"
 export class EspnState extends Data.Class<{
   readonly documents: FastCastDocuments
   readonly listings: HashMap.HashMap<LeagueId, ReadonlyArray<GameSnapshot>>
+  readonly plays: HashMap.HashMap<GameId, HashMap.HashMap<string, Play>>
 }> {
   static readonly empty: EspnState = new EspnState({
     documents: FastCastDocuments.empty,
-    listings: HashMap.empty()
+    listings: HashMap.empty(),
+    plays: HashMap.empty()
   })
 
   /**
@@ -121,11 +123,12 @@ const pushed = Effect.fnUntraced(function* (
             [next, deliveries] as const
           )
         }),
-      Game: ({ league, game, plays }) =>
-        Effect.map(
-          playsOf(league, plays),
-          (sorted) => [advanced, [Delivery.Plays({ game, plays: sorted })]] as const
-        ),
+      Game: ({ league, game, plays, touched }) =>
+        Effect.map(playsAfter(advanced, game, league, plays, touched), (byId) => {
+          const next = new EspnState({ ...advanced, plays: HashMap.set(advanced.plays, game, byId) })
+          const list = [...HashMap.values(byId)].toSorted(Play.order)
+          return [next, [Delivery.Plays({ game, plays: list })]] as const
+        }),
       Reset: ({ topic, detail }) =>
         Effect.logWarning(`EspnState: ${tcOf(topic)} lost its document (${detail})`).pipe(
           Effect.annotateLogs({ topic: tcOf(topic) }),
@@ -135,15 +138,37 @@ const pushed = Effect.fnUntraced(function* (
   })
 })
 
-/** The game's plays, in `Play.order`; a play that does not decode is skipped. */
-const playsOf = Effect.fnUntraced(function* (
+/**
+ * Game `game`'s plays by id after a change: each touched entity decoded again, or dropped when it is gone or does
+ * not decode; every entity when nothing says which were touched.
+ */
+const playsAfter = Effect.fnUntraced(function* (
+  state: EspnState,
+  game: GameId,
   league: LeagueId,
-  entities: Readonly<Record<string, Schema.Json>>
+  entities: Readonly<Record<string, Schema.Json>>,
+  touched: Option.Option<ReadonlyArray<string>>
 ) {
-  const decoded = yield* Effect.forEach(Record.values(entities), (entity) =>
-    Effect.option(decodePlay[league](entity))
+  const had = Option.match(touched, {
+    onNone: () => HashMap.empty<string, Play>(),
+    onSome: () => Option.getOrElse(HashMap.get(state.plays, game), () => HashMap.empty<string, Play>())
+  })
+  const ids = Option.getOrElse(touched, () => Record.keys(entities))
+  return yield* Effect.reduce(
+    ids,
+    () => had,
+    (byId, id) =>
+      Option.match(Record.get(entities, id), {
+        onNone: () => Effect.succeed(HashMap.remove(byId, id)),
+        onSome: (entity) =>
+          Effect.map(Effect.option(decodePlay[league](entity)), (play) =>
+            Option.match(play, {
+              onNone: () => HashMap.remove(byId, id),
+              onSome: (decoded) => HashMap.set(byId, id, decoded)
+            })
+          )
+      })
   )
-  return Arr.getSomes(decoded).toSorted(Play.order)
 })
 
 /** Logs and counts a push `game` that is behind the game its `league` lists, which the listing takes anyway. */

@@ -52,8 +52,8 @@ export class FastCastDocuments extends Data.Class<{
 }
 
 /**
- * What a frame changed: a scoreboard topic's touched events, a game topic's whole list of plays, by id, or a topic sent
- * back to waiting for a checkpoint, and why.
+ * What a frame changed: a scoreboard topic's touched events, a game topic's plays, by id, with the ids it touched (every
+ * one, when none), or a topic sent back to waiting for a checkpoint, and why.
  */
 export type DocumentChange = Data.TaggedEnum<{
   Scoreboard: { readonly league: LeagueId; readonly events: ReadonlyArray<Schema.Json> }
@@ -61,6 +61,7 @@ export type DocumentChange = Data.TaggedEnum<{
     readonly league: LeagueId
     readonly game: GameId
     readonly plays: Readonly<Record<string, Schema.Json>>
+    readonly touched: Option.Option<ReadonlyArray<string>>
   }
   Reset: { readonly topic: Topic; readonly detail: string }
 }>
@@ -136,7 +137,7 @@ function changeOf(
         })
       }),
     Game: ({ league, game }) =>
-      DocumentChange.Game({ league, game, plays: objectAt(document, tokens(gamePlays)) })
+      DocumentChange.Game({ league, game, plays: objectAt(document, tokens(gamePlays)), touched })
   })
 }
 
@@ -164,9 +165,10 @@ const moved = Effect.fnUntraced(function* (
 
   const next = applied.success
   const synced = HashMap.set(documents, topic, Document.Synced({ mid: message.mid, document: next }))
-  const touched = Topic.$is("Scoreboard")(topic)
-    ? Option.some(Arr.dedupe(patches.map((patch) => patch.path.uid)))
-    : Option.none()
+  const touched = Topic.$match(topic, {
+    Scoreboard: () => Option.some(Arr.dedupe(patches.map((patch) => patch.path.uid))),
+    Game: () => playsTouched(patches)
+  })
   return {
     documents: synced,
     change: patches.length === 0 ? Option.none() : Option.some(changeOf(topic, next, touched))
@@ -183,6 +185,18 @@ function relevant(
   return Topic.$is("Scoreboard")(topic)
     ? patches
     : patches.filter((patch) => inPlays(patch.path) && (!("from" in patch) || inPlays(patch.from)))
+}
+
+/** The play ids `patches` touch, at their path or their `from`; none when one patches the plays whole. */
+function playsTouched(
+  patches: ReadonlyArray<typeof FastCastMessage.Patch.Type>
+): Option.Option<ReadonlyArray<string>> {
+  const pointers = patches.flatMap((patch) =>
+    "from" in patch ? [patch.path.pointer, patch.from.pointer] : [patch.path.pointer]
+  )
+  if (pointers.includes(gamePlays)) return Option.none()
+
+  return Option.some(Arr.dedupe(pointers.flatMap((pointer) => Option.toArray(Arr.get(tokens(pointer), 2)))))
 }
 
 /** The documents with `topic` sent back to waiting for its checkpoint, and the reset that changed, for `detail`. */
