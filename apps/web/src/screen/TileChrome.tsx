@@ -1,11 +1,11 @@
+import { useAtomSet } from "@effect/atom-react"
 import type { GameSnapshot } from "@sportal/domain/Game"
 import { type Screen, Tile } from "@sportal/domain/Screen"
 import { Button } from "@/design/button"
 import { cn } from "@/design/ClassName"
 import { GameStatus } from "../game/GameStatus.tsx"
 import { Score } from "../game/Score.tsx"
-import { dispatch } from "../hub/HubClient.ts"
-import { runtime } from "../hub/HubRuntime.ts"
+import * as DisplayScreen from "./DisplayScreen.ts"
 import { keyText, tileActions } from "./TileActions.tsx"
 import { tileHeader } from "./TileRects.ts"
 
@@ -21,6 +21,7 @@ export function TileChrome(props: {
   selected: boolean
   onSelect: () => void
 }) {
+  const dispatch = useAtomSet(DisplayScreen.screen)
   const { tile, slot } = props
   const onAir = !Tile.guards.Empty(tile) && props.screen.hears(tile.game)
 
@@ -34,8 +35,7 @@ export function TileChrome(props: {
       }}
       onDrop={(event) => {
         const from = Number(event.dataTransfer.getData(tileDrag))
-        if (Number.isInteger(from) && from !== slot)
-          runtime.runFork(dispatch({ _tag: "Swap", a: from, b: slot }))
+        if (Number.isInteger(from) && from !== slot) dispatch({ _tag: "Swap", a: from, b: slot })
       }}
       style={{ height: tileHeader }}
       className={`flex shrink-0 items-center gap-2 border-b px-1.5 text-xs ${
@@ -88,7 +88,7 @@ export function TileChrome(props: {
               action.id === "hear" && onAir && "text-on-air",
               action.id === "clear" && "hover:text-destructive"
             )}
-            onClick={() => runtime.runFork(dispatch(action.command))}
+            onClick={() => dispatch(action.command)}
           >
             {action.icon}
           </Button>

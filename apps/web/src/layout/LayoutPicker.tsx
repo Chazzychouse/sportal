@@ -1,12 +1,13 @@
+import { useAtomSet } from "@effect/atom-react"
 import { LayoutName, Screen } from "@sportal/domain/Screen"
 import { cn } from "@/design/ClassName"
 import { ToggleGroup, ToggleGroupItem } from "@/design/toggle-group"
-import { dispatch } from "../hub/HubClient.ts"
-import { runtime } from "../hub/HubRuntime.ts"
+import * as DisplayScreen from "../screen/DisplayScreen.ts"
 import { LayoutGlyph, layoutLabel } from "./LayoutGlyph.tsx"
 
-/** One button per layout, the current one lit; choosing one sends it to the Hub. */
+/** One button per layout, the current one lit; choosing one applies it. */
 export function LayoutPicker(props: { current: LayoutName }) {
+  const dispatch = useAtomSet(DisplayScreen.screen)
   return (
     <ToggleGroup
       type="single"
@@ -14,7 +15,7 @@ export function LayoutPicker(props: { current: LayoutName }) {
       value={props.current}
       onValueChange={(value) => {
         const layout = LayoutName.literals.find((name) => name === value)
-        if (layout !== undefined) runtime.runFork(dispatch({ _tag: "SetLayout", layout }))
+        if (layout !== undefined) dispatch({ _tag: "SetLayout", layout })
       }}
       aria-label="Layout"
     >

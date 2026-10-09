@@ -1,11 +1,10 @@
-import { useAtomValue } from "@effect/atom-react"
+import { useAtomSet, useAtomValue } from "@effect/atom-react"
 import { Hotkey } from "@sportal/api/Hotkey"
 import { useState } from "react"
 import { Toaster } from "@/design/sonner"
-import { dispatch } from "../hub/HubClient.ts"
-import { runtime } from "../hub/HubRuntime.ts"
 import * as LiveStream from "../hub/LiveStream.ts"
-import { useScreenFailureToasts } from "../screen/Rejections.ts"
+import * as DisplayScreen from "../screen/DisplayScreen.ts"
+import { useScreenRejectionToasts } from "../screen/Rejections.ts"
 import { ScreenView } from "../screen/ScreenView.tsx"
 import { SlateView } from "../slate/SlateView.tsx"
 import { StripCard } from "../slate/StripCards.ts"
@@ -19,19 +18,20 @@ import { TopBar } from "./TopBar.tsx"
 
 export function DisplayView() {
   const live = useAtomValue(LiveStream.live)
+  const screen = useAtomValue(DisplayScreen.screen)
   const { display, run, set: setDisplay } = useDisplay()
   const closeOverlay = (open: boolean) => {
     if (!open) setDisplay(display.close())
   }
   const fullScreen = useFullScreen()
-  const cards = StripCard.of(live.screen, live.slate)
-  const selected = display.selectedOn(live.screen)
-  const toggleSolo = display.press({ _tag: "ToggleSolo" }, live.screen, cards)
+  const cards = StripCard.of(screen, live.slate)
+  const selected = display.selectedOn(screen)
+  const toggleSolo = display.press({ _tag: "ToggleSolo" }, screen, cards)
   const liveCount = live.slate.filter(({ snapshot }) => snapshot.progress() === "live").length
-  useScreenFailureToasts()
+  useScreenRejectionToasts()
 
   useHotkeys((hotkey: Hotkey) =>
-    Hotkey.guards.FullScreen(hotkey) ? fullScreen.toggle() : run(display.press(hotkey, live.screen, cards))
+    Hotkey.guards.FullScreen(hotkey) ? fullScreen.toggle() : run(display.press(hotkey, screen, cards))
   )
 
   return (
@@ -39,7 +39,7 @@ export function DisplayView() {
       <div className={`grid h-screen ${fullScreen.on ? "grid-rows-[1fr]" : "grid-rows-[auto_1fr_auto]"}`}>
         {fullScreen.on ? null : (
           <TopBar
-            screen={live.screen}
+            screen={screen}
             connection={live.connection}
             fullScreen={fullScreen}
             slate={{
@@ -55,22 +55,22 @@ export function DisplayView() {
           />
         )}
         <ScreenView
-          screen={live.screen}
+          screen={screen}
           slate={live.slate}
           connection={live.connection}
           selected={selected}
-          interacting={display.interactingOn(live.screen)}
-          onSelect={(slot) => run(display.select(slot, live.screen))}
+          interacting={display.interactingOn(screen)}
+          onSelect={(slot) => run(display.select(slot, screen))}
         />
         {fullScreen.on || !display.slateOpen ? null : (
-          <SlateView cards={cards} display={display} screen={live.screen} onDrop={run} />
+          <SlateView cards={cards} display={display} screen={screen} onDrop={run} />
         )}
       </div>
       <KeysDialog open={display.shows("Keys")} onOpenChange={closeOverlay} />
       <CommandPalette
         open={display.shows("Palette")}
         onOpenChange={closeOverlay}
-        screen={live.screen}
+        screen={screen}
         slate={live.slate}
         selected={selected}
         onFullScreen={fullScreen.toggle}
@@ -89,12 +89,13 @@ export function DisplayView() {
   )
 }
 
-/** This device's Display: its state, a step run (its display kept, its commands sent to the Hub), and a Display set. */
+/** This device's Display: its state, a step run (its display kept, its commands applied to this Display's Screen), and a Display set. */
 function useDisplay() {
   const [display, set] = useState(Display.initial)
+  const dispatch = useAtomSet(DisplayScreen.screen)
   const run = (step: DisplayStep) => {
     set(step.display)
-    for (const command of step.commands) runtime.runFork(dispatch(command))
+    for (const command of step.commands) dispatch(command)
   }
   return { display, run, set }
 }

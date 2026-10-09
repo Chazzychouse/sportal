@@ -1,14 +1,13 @@
 import { afterEach, assert, beforeEach, describe, it } from "@effect/vitest"
-import { LiveMessageJson } from "@sportal/api/LiveMessage"
 import { ChannelAvailability } from "@sportal/domain/Channel"
 import { Game, GameId } from "@sportal/domain/Game"
 import { Completion, PlayId } from "@sportal/domain/Play"
-import { Screen } from "@sportal/domain/Screen"
 import { play, snapshot, team } from "@sportal/domain/TestGame"
-import { Deferred, Effect, Fiber, Schema, Stream } from "effect"
+import { Deferred, Effect, Fiber, Stream } from "effect"
 import { Atom, AtomRegistry } from "effect/reactivity"
 import { vi } from "vitest"
 import * as LiveStream from "./LiveStream.ts"
+import { FakeEventSource, opened, slateMessage } from "./TestLiveStream.ts"
 
 describe("LiveStream.live", () => {
   beforeEach(() => {
@@ -33,8 +32,8 @@ describe("LiveStream.live", () => {
       const source = yield* opened()
 
       source.onerror?.()
-      source.onmessage?.({ data: message({ _tag: "ScreenChanged", screen: pair }) })
-      const after = yield* until((state) => state.screen.layout === "Pair")
+      source.onmessage?.({ data: slateMessage([{ game: someGame, availability: [] }]) })
+      const after = yield* until((state) => state.slate.length > 0)
 
       assert.strictEqual(after.connection._tag, "Connecting")
     }).pipe(Effect.provide(AtomRegistry.layer))
@@ -46,7 +45,7 @@ describe("LiveStream.live", () => {
       const listening = yield* Deferred.make<void>()
       const published = yield* Atom.toStream(LiveStream.live).pipe(
         Stream.tap(() => Deferred.succeed(listening, undefined)),
-        Stream.takeUntil((state) => state.screen.layout === "Pair"),
+        Stream.takeUntil((state) => state.slate.length > 0),
         Stream.runCollect,
         Effect.forkChild
       )
@@ -56,7 +55,7 @@ describe("LiveStream.live", () => {
       source.onopen?.()
       source.onerror?.()
       source.onerror?.()
-      source.onmessage?.({ data: message({ _tag: "ScreenChanged", screen: pair }) })
+      source.onmessage?.({ data: slateMessage([{ game: someGame, availability: [] }]) })
       const states = yield* Fiber.join(published)
 
       const connections = Array.from(states, (state) => state.connection._tag)
@@ -101,15 +100,17 @@ describe("LiveStream.live", () => {
     }).pipe(Effect.provide(AtomRegistry.layer))
   )
 
-  it.effect("should replace the screen and the slate from their messages", () =>
+  it.effect("should replace the slate from its message", () =>
     Effect.gen(function* () {
       const source = yield* opened()
 
-      source.onmessage?.({ data: message({ _tag: "ScreenChanged", screen: pair }) })
-      source.onmessage?.({ data: message({ _tag: "SlateChanged", games: [] }) })
-      const state = yield* until((current) => current.screen.layout === "Pair")
+      source.onmessage?.({ data: slateMessage([{ game: someGame, availability: [] }]) })
+      const state = yield* until((current) => current.slate.length > 0)
 
-      assert.deepStrictEqual(state.slate, [])
+      assert.deepStrictEqual(
+        state.slate.map(({ snapshot }) => snapshot.id),
+        [GameId.make("401")]
+      )
     }).pipe(Effect.provide(AtomRegistry.layer))
   )
 
@@ -123,7 +124,7 @@ describe("LiveStream.live", () => {
           plays: [play(), touchdown()]
         })
 
-        source.onmessage?.({ data: message({ _tag: "SlateChanged", games: [{ game, availability: [] }] }) })
+        source.onmessage?.({ data: slateMessage([{ game, availability: [] }]) })
         const state = yield* until((current) => current.slate.length > 0)
 
         assert.deepStrictEqual(state.slate[0]?.plays, game.plays)
@@ -137,7 +138,7 @@ describe("LiveStream.live", () => {
       const game = new Game({ snapshot: snapshot({ id: GameId.make("401") }), plays: [] })
       const availability = [ChannelAvailability.cases.NotCarried.make({ why: "StreamingOnly" })]
 
-      source.onmessage?.({ data: message({ _tag: "SlateChanged", games: [{ game, availability }] }) })
+      source.onmessage?.({ data: slateMessage([{ game, availability }]) })
       const state = yield* until((current) => current.slate.length > 0)
 
       assert.deepStrictEqual(state.availability.get(GameId.make("401")), availability)
@@ -151,12 +152,11 @@ describe("LiveStream.live", () => {
       const before = yield* until((state) => state.connection._tag === "Connected")
 
       source.onmessage?.({ data: "{not json" })
-      source.onmessage?.({ data: JSON.stringify({ _tag: "ScreenChanged", screen: "nope" }) })
-      source.onmessage?.({ data: message({ _tag: "ScreenChanged", screen: pair }) })
-      const after = yield* until((state) => state.screen.layout === "Pair")
+      source.onmessage?.({ data: JSON.stringify({ _tag: "SlateChanged", games: "nope" }) })
+      source.onmessage?.({ data: slateMessage([{ game: someGame, availability: [] }]) })
+      const after = yield* until((state) => state.slate.length > 0)
 
       assert.strictEqual(after.connection, before.connection)
-      assert.strictEqual(after.slate, before.slate)
     }).pipe(Effect.provide(AtomRegistry.layer))
   )
 
@@ -170,8 +170,7 @@ describe("LiveStream.live", () => {
   )
 })
 
-const pair = new Screen({ ...Screen.initial, layout: "Pair" })
-const message = Schema.encodeSync(LiveMessageJson)
+const someGame = new Game({ snapshot: snapshot({ id: GameId.make("401") }), plays: [] })
 
 function until(predicate: (state: Atom.Type<typeof LiveStream.live>) => boolean) {
   return Atom.toStream(LiveStream.live).pipe(
@@ -179,37 +178,6 @@ function until(predicate: (state: Atom.Type<typeof LiveStream.live>) => boolean)
     Stream.runHead,
     Effect.flatMap(Effect.fromOption)
   )
-}
-
-/** The EventSource the live stream opened, once a read of the atom has started it. */
-function opened(): Effect.Effect<FakeEventSource, never, AtomRegistry.AtomRegistry> {
-  return Atom.get(LiveStream.live).pipe(Effect.andThen(eventSource))
-}
-
-function eventSource(): Effect.Effect<FakeEventSource> {
-  return Effect.suspend(() => {
-    const last = FakeEventSource.opened.at(-1)
-    return last === undefined ? Effect.yieldNow.pipe(Effect.flatMap(eventSource)) : Effect.succeed(last)
-  })
-}
-
-class FakeEventSource {
-  static opened: Array<FakeEventSource> = []
-  onopen: (() => void) | null = null
-  onerror: (() => void) | null = null
-  onmessage: ((event: { data: unknown }) => void) | null = null
-  closed = false
-
-  readonly url: string
-
-  constructor(url: string) {
-    this.url = url
-    FakeEventSource.opened.push(this)
-  }
-
-  close() {
-    this.closed = true
-  }
 }
 
 /** A one-yard touchdown pass for the home side: a Completion, so a decode has its case to keep. */

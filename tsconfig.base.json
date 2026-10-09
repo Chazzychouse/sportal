@@ -23,7 +23,8 @@
         // persistence and `effect/observability` for OTLP telemetry; FastCast is ESPN's WebSocket, read through
         // `effect/socket`. The Hub's process test spawns the Hub through Effect's process wrapper, `effect/process`. A SQL
         // row is a `Model.Class` from `effect/schema/Model` (AGENTS.md, "SQL row").
-        // The web UI holds what the live stream said in an atom from `effect/reactivity`.
+        // The web UI holds what the live stream said in an atom from `effect/reactivity`, and keeps each Display's Screen
+        // in the browser through `effect/persistence/KeyValueStore`.
         // Effect marks all of these unstable; they are the house choices, not accidents.
         "allowedUnstableApis": [
           "effect/http",
@@ -33,7 +34,8 @@
           "effect/observability/Otlp",
           "effect/process",
           "effect/schema/Model",
-          "effect/reactivity"
+          "effect/reactivity",
+          "effect/persistence/KeyValueStore"
         ]
       }
     ]

@@ -1,29 +1,14 @@
+import { useAtomSubscribe } from "@effect/atom-react"
 import type { ScreenRejection } from "@sportal/domain/Screen"
-import { Effect, Fiber, Stream } from "effect"
-import { HttpClientError } from "effect/http"
-import { useEffect } from "react"
+import { Option } from "effect"
 import { toast } from "sonner"
-import { screenFailures } from "../hub/HubClient.ts"
-import { runtime } from "../hub/HubRuntime.ts"
+import * as DisplayScreen from "./DisplayScreen.ts"
 
-/** Shows each screen command that failed as a warning toast, saying why: the Hub refused it, or never got it. */
-export function useScreenFailureToasts() {
-  useEffect(() => {
-    const fiber = runtime.runFork(
-      screenFailures.pipe(
-        Stream.runForEach((failure) => Effect.sync(() => toast.warning(failureText(failure))))
-      )
-    )
-    return () => {
-      runtime.runFork(Fiber.interrupt(fiber))
-    }
-  }, [])
-}
-
-function failureText(failure: ScreenRejection | HttpClientError.HttpClientError): string {
-  return HttpClientError.isHttpClientError(failure)
-    ? "The Hub did not get that. Is it running?"
-    : rejectionText[failure.reason]
+/** Shows each screen command this Display refused as a warning toast, saying why. */
+export function useScreenRejectionToasts() {
+  useAtomSubscribe(DisplayScreen.rejected, (rejected) =>
+    Option.map(rejected, ({ reason }) => toast.warning(rejectionText[reason]))
+  )
 }
 
 const rejectionText: Record<ScreenRejection["reason"], string> = {

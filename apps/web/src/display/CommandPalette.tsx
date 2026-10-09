@@ -1,3 +1,4 @@
+import { useAtomSet } from "@effect/atom-react"
 import { type Game, type GameId, GameSnapshot } from "@sportal/domain/Game"
 import { LayoutName, type Screen, type ScreenCommand, Tile } from "@sportal/domain/Screen"
 import { Option } from "effect"
@@ -13,9 +14,8 @@ import {
 import { GameStatus } from "../game/GameStatus.tsx"
 import { scoreline } from "../game/Score.tsx"
 import { TeamLogo } from "../game/TeamLogo.tsx"
-import { dispatch } from "../hub/HubClient.ts"
-import { runtime } from "../hub/HubRuntime.ts"
 import { LayoutGlyph, layoutLabel } from "../layout/LayoutGlyph.tsx"
+import * as DisplayScreen from "../screen/DisplayScreen.ts"
 import { keyText, tileActions } from "../screen/TileActions.tsx"
 
 /** Every Screen command by name: watch a game, act on a tile, change layout, go full screen. */
@@ -28,8 +28,9 @@ export function CommandPalette(props: {
   onFullScreen: () => void
   onKeys: () => void
 }) {
+  const dispatch = useAtomSet(DisplayScreen.screen)
   const run = (command: ScreenCommand) => {
-    runtime.runFork(dispatch(command))
+    dispatch(command)
     props.onOpenChange(false)
   }
   const snapshots = props.slate.map(({ snapshot }) => snapshot)

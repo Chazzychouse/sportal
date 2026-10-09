@@ -1,14 +1,13 @@
 import { LiveMessage, LiveMessageJson } from "@sportal/api/LiveMessage"
 import type { ChannelAvailability } from "@sportal/domain/Channel"
 import type { Game, GameId } from "@sportal/domain/Game"
-import { Screen } from "@sportal/domain/Screen"
 import { Data, DateTime, Effect, Queue, Schema, Stream } from "effect"
 import { AsyncResult, Atom } from "effect/reactivity"
 
 /**
  * Everything the Hub has told this client over the live stream at /api/live, and whether the stream is up. The
  * EventSource opens when the atom is first read and stays open while its registry lives; it reconnects by itself,
- * and the Hub replays the current slate and screen on every connection.
+ * and the Hub replays the current slate on every connection.
  */
 export const live: Atom.Atom<Live> = Atom.make(sourceEvents().pipe(Stream.scanEffect(initial, step))).pipe(
   Atom.map(AsyncResult.getOrElse(initial)),
@@ -28,11 +27,10 @@ interface Live {
   readonly slate: ReadonlyArray<Game>
   /** Every source's answer for each game on the slate, by its id. */
   readonly availability: ReadonlyMap<GameId, ReadonlyArray<ChannelAvailability>>
-  readonly screen: Screen
 }
 
 function initial(): Live {
-  return { connection: Connection.Connecting(), slate: [], availability: new Map(), screen: Screen.initial }
+  return { connection: Connection.Connecting(), slate: [], availability: new Map() }
 }
 
 type SourceEvent = Data.TaggedEnum<{
@@ -84,7 +82,7 @@ function received(live: Live, message: LiveMessage): Live {
       slate: games.map(({ game }) => game),
       availability: new Map(games.map(({ game, availability }) => [game.snapshot.id, availability]))
     }),
-    ScreenChanged: ({ screen }): Live => ({ ...live, screen })
+    ScreenChanged: (): Live => live
   })
 }
 

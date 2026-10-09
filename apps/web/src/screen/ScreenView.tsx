@@ -1,12 +1,14 @@
+import { useAtomSet } from "@effect/atom-react"
 import type { ScreenTransition } from "@sportal/api/ShellBridge"
 import type { Game, GameId } from "@sportal/domain/Game"
 import { type Screen, type Split, Tile } from "@sportal/domain/Screen"
 import { Effect, Option } from "effect"
 import { useEffect, useLayoutEffect, useRef, useState } from "react"
 import { useVideoAreas } from "../display/OverlayHost.tsx"
-import { dispatch, sendGuide } from "../hub/HubClient.ts"
+import { sendGuide } from "../hub/HubClient.ts"
 import { runtime } from "../hub/HubRuntime.ts"
 import * as LiveStream from "../hub/LiveStream.ts"
+import * as DisplayScreen from "./DisplayScreen.ts"
 import { Dividers } from "./Dividers.tsx"
 import { TileBody } from "./TileBody.tsx"
 import { TileChrome } from "./TileChrome.tsx"
@@ -24,6 +26,7 @@ export function ScreenView(props: {
   interacting: GameId | undefined
   onSelect: (tile: number) => void
 }) {
+  const dispatch = useAtomSet(DisplayScreen.screen)
   const areaRef = useRef<HTMLDivElement | null>(null)
   const area = useArea(areaRef)
   // The split being dragged, shown in place of the Screen's until the drag is committed.
@@ -124,7 +127,7 @@ export function ScreenView(props: {
           onDrag={setDragged}
           onDrop={(split) => {
             setDragged(undefined)
-            runtime.runFork(dispatch({ _tag: "SetSplit", split }))
+            dispatch({ _tag: "SetSplit", split })
           }}
         />
       )}
