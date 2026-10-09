@@ -50,7 +50,11 @@ export class Guide extends Schema.Class<Guide>("sportal/Guide")({
    * guide that lists airings is upcoming, and any other game is not carried.
    */
   availabilityOf(game: GameSnapshot, now: DateTime.Utc): ChannelAvailability {
-    const matches = this.airings.filter((airing) => this.airs(airing, game, now))
+    const nearKickoff = {
+      minimum: DateTime.subtractDuration(game.kickoff, kickoffTolerance),
+      maximum: DateTime.addDuration(game.kickoff, kickoffTolerance)
+    }
+    const matches = this.airings.filter((airing) => this.airs(airing, game, now, nearKickoff))
     const [first] = matches
     if (first !== undefined) {
       const airing =
@@ -84,15 +88,16 @@ export class Guide extends Schema.Class<Guide>("sportal/Guide")({
       : { _tag: "Upcoming", channel: Option.some(channel.name), begin: Option.some(begin) }
   }
 
-  private airs(airing: Airing, game: GameSnapshot, now: DateTime.Utc): boolean {
-    const nearKickoff = DateTime.between(airing.begin, {
-      minimum: DateTime.subtractDuration(game.kickoff, kickoffTolerance),
-      maximum: DateTime.addDuration(game.kickoff, kickoffTolerance)
-    })
+  private airs(
+    airing: Airing,
+    game: GameSnapshot,
+    now: DateTime.Utc,
+    nearKickoff: { readonly minimum: DateTime.Utc; readonly maximum: DateTime.Utc }
+  ): boolean {
     const onNow =
       game.progress() === "live" && DateTime.between(now, { minimum: airing.begin, maximum: airing.end })
     return (
-      (nearKickoff || onNow) &&
+      (DateTime.between(airing.begin, nearKickoff) || onNow) &&
       DateTime.isGreaterThan(airing.end, now) &&
       namesTeam(airing.title, game.home.team, game.league) &&
       namesTeam(airing.title, game.away.team, game.league)

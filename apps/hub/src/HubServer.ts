@@ -47,6 +47,7 @@ export const layer: Layer.Layer<
 > = Layer.unwrap(
   Effect.gen(function* () {
     const { webRoot } = yield* HubConfig
+    const events = yield* liveEvents
     const api = HttpApiBuilder.layer(SportalApi).pipe(
       Layer.provide(Layer.mergeAll(guideHandlers, hostHandlers))
     )
@@ -54,7 +55,7 @@ export const layer: Layer.Layer<
       onNone: () => Layer.empty,
       onSome: (root) => HttpStaticServer.layer({ root, spa: true })
     })
-    return HttpRouter.serve(Layer.mergeAll(api, liveRoute, web))
+    return HttpRouter.serve(Layer.mergeAll(api, liveRoute(events), web))
   })
 )
 
@@ -103,43 +104,44 @@ const hostHandlers = HttpApiBuilder.group(
 
 /**
  * GET /api/live — the current slate, each game beside its availability, then every change to either, as server-sent
- * events, with a comment every 20 seconds so proxies that close idle connections leave a quiet stream open.
+ * events, with a comment every 20 seconds so proxies that close idle connections leave a quiet stream open. Every
+ * connection reads the one `events` stream.
  */
-const liveRoute = HttpRouter.add(
-  "GET",
-  "/api/live",
-  Effect.gen(function* () {
-    const changes = yield* published
-    const messages = settled(changes)
-    const encode = Schema.encodeEffect(LiveMessageJson)
-    const events = messages.pipe(
-      Stream.mapEffect((message) => Effect.map(encode(message), (json) => `data: ${json}\n\n`))
-    )
-    // `tick` emits once at the start; only the later ticks are wanted.
-    const keepAlive = Stream.tick("20 seconds").pipe(
-      Stream.drop(1),
-      Stream.map(() => ": keep-alive\n\n")
-    )
-    return HttpServerResponse.stream(Stream.merge(events, keepAlive).pipe(Stream.encodeText), {
-      contentType: "text/event-stream",
-      headers: { "cache-control": "no-cache" }
+function liveRoute(events: Stream.Stream<string, Schema.SchemaError>) {
+  return HttpRouter.add(
+    "GET",
+    "/api/live",
+    Effect.sync(() => {
+      // `tick` emits once at the start; only the later ticks are wanted.
+      const keepAlive = Stream.tick("20 seconds").pipe(
+        Stream.drop(1),
+        Stream.map(() => ": keep-alive\n\n")
+      )
+      return HttpServerResponse.stream(Stream.merge(events, keepAlive).pipe(Stream.encodeText), {
+        contentType: "text/event-stream",
+        headers: { "cache-control": "no-cache" }
+      })
     })
-  })
-)
+  )
+}
 
 /**
- * The slate as the live stream sends it, each game beside its availability as of when it is sent: the current slate
- * first, then again whenever the slate or the source's availability changes, unless what it sends is the same.
+ * The live stream's events, built once for every connection: the slate, each game beside its availability as of when
+ * it is sent, first as it is, then once each burst of changes to the slate or the availability settles, unless what
+ * it sends is the same; each as an SSE `data:` line. A connection joining gets the last one at once.
  */
-const published = Effect.gen(function* () {
+const liveEvents = Effect.gen(function* () {
   const director = yield* Director
   const source = yield* Source
+  const encode = Schema.encodeEffect(LiveMessageJson)
 
-  return Stream.zipLatest(director.slate, source.availability).pipe(
+  return yield* settled(Stream.zipLatest(director.slate, source.availability)).pipe(
     Stream.mapEffect(([slate, availabilityOf]) =>
       Effect.map(DateTime.now, (now) => slate.published((game) => availabilityOf(game, now)))
     ),
-    Stream.changesWith(samePublished)
+    Stream.changesWith(samePublished),
+    Stream.mapEffect((message) => Effect.map(encode(message), (json) => `data: ${json}\n\n`)),
+    Stream.share({ capacity: "unbounded", replay: 1 })
   )
 })
 

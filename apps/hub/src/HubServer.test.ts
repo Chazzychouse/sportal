@@ -4,7 +4,7 @@ import { type LiveMessage, LiveMessageJson } from "@sportal/api/LiveMessage"
 import { SportalApi } from "@sportal/api/SportalApi"
 import { GameId, Network } from "@sportal/domain/Game"
 import { broadcast, snapshot, team } from "@sportal/domain/TestGame"
-import { DateTime, Effect, Layer, Queue, Schema, Stream } from "effect"
+import { DateTime, Effect, Layer, Queue, Ref, Schema, Stream } from "effect"
 import { HttpClient } from "effect/http"
 import { HttpApiClient } from "effect/http-api"
 import { TestClock } from "effect/testing"
@@ -139,6 +139,42 @@ describe("GET /api/live", () => {
         assert.deepStrictEqual(entry.availability, [{ _tag: "NoGuide", source: "YouTube TV" }])
         assert.notMatch(line, /"state"|"updatedAt"|"from"/)
       }).pipe(Effect.scoped, Effect.provide(serverUnderTest()))
+  )
+
+  it.effect("should give a connection that joins later the latest slate at once", () =>
+    Effect.gen(function* () {
+      yield* firstSlateOnTestClock()
+      yield* pastInitialMessages()
+      yield* delivered(Delivery.Snapshot({ snapshot: inPeriod(2) }))
+      yield* TestClock.adjust("250 millis")
+
+      const { lines } = yield* liveLines()
+      const line = yield* Queue.take(lines)
+
+      const message = messageOf(line)
+      assert.deepStrictEqual(
+        message.games.map(({ game }) => game.snapshot.period),
+        [2]
+      )
+    }).pipe(Effect.scoped, Effect.provide(serverUnderTest()))
+  )
+
+  it.effect("should read the source's availability once, however many connections there are", () =>
+    Effect.gen(function* () {
+      const reads = yield* Ref.make(0)
+      const counted = Source.layerTest(
+        () => ({ _tag: "NotCarried", why: "StreamingOnly" }),
+        Stream.never.pipe(Stream.onStart(Ref.update(reads, (count) => count + 1)))
+      )
+
+      yield* Effect.gen(function* () {
+        yield* firstSlateOnTestClock()
+        yield* pastInitialMessages()
+        yield* pastInitialMessages()
+
+        assert.strictEqual(yield* Ref.get(reads), 1)
+      }).pipe(Effect.scoped, Effect.provide(serverUnderTest(counted)))
+    })
   )
 
   it.effect("should send a comment every 20 seconds, so a proxy does not close a quiet stream", () =>
