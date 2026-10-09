@@ -112,7 +112,7 @@ const frameOf = Effect.fnUntraced(function* (line: string) {
 
   const topic = topicOf(channel)
   const mid = Option.fromUndefinedOr(number)
-  if (kind === "change") return Frame.Pushed({ topic, mid, body })
+  if (kind === "change") return Frame.Pushed({ topic, mid, envelope: decodeEnvelope(body) })
 
   const checkpointTopic = yield* Effect.fromOption(topic)
   const checkpointMid = yield* Effect.fromOption(mid)
@@ -121,3 +121,5 @@ const frameOf = Effect.fnUntraced(function* (line: string) {
 })
 
 const decodeLeague = Schema.decodeUnknownEffect(LeagueId)
+
+const decodeEnvelope = Schema.decodeUnknownOption(Schema.fromJsonString(FastCastMessage.Envelope))

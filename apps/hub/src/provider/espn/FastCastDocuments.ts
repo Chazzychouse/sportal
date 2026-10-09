@@ -115,7 +115,8 @@ const moveOn = Effect.fnUntraced(function* (
   documents: Documents,
   frame: Data.TaggedEnum.Value<Frame, "Pushed">
 ): Effect.fn.Return<Advanced, Schema.SchemaError> {
-  const decoded = yield* decodeMessage(frame.body).pipe(Effect.result)
+  if (Option.isNone(frame.envelope)) return unchanged(documents)
+  const decoded = yield* decodeMessage(frame.envelope.value).pipe(Effect.result)
   if (Result.isFailure(decoded)) return yield* undecoded(documents, frame, decoded.failure)
 
   const message = decoded.success
@@ -307,7 +308,7 @@ function undecoded(
   frame: Data.TaggedEnum.Value<Frame, "Pushed">,
   error: Schema.SchemaError
 ): Effect.Effect<Advanced, Schema.SchemaError> {
-  return Option.match(decodeKnownOp(frame.body), {
+  return Option.match(Option.flatMap(frame.envelope, decodeKnownOp), {
     onNone: () => Effect.succeed(unchanged(documents)),
     onSome: (known) =>
       Option.match(frame.topic, {
@@ -333,10 +334,8 @@ function movesOn<M extends { readonly op: string }>(
   return message.op === "R" || message.op === "P" || message.op === "I"
 }
 
-const decodeMessage = Schema.decodeUnknownEffect(Schema.fromJsonString(FastCastMessage.Message))
+const decodeMessage = Schema.decodeUnknownEffect(FastCastMessage.Message)
 
 const decodeKnownOp = Schema.decodeUnknownOption(
-  Schema.fromJsonString(
-    Schema.Union(FastCastMessage.Message.members.map((member) => Schema.Struct({ op: member.fields.op })))
-  )
+  Schema.Union(FastCastMessage.Message.members.map((member) => Schema.Struct({ op: member.fields.op })))
 )

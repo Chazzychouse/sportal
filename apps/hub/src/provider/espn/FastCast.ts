@@ -126,12 +126,14 @@ const connect = Effect.fnUntraced(function* (wanted: Stream.Stream<Wanted>, refo
     first,
     () => new ProviderUnavailable({ reason: "Closed", cause: "FastCast closed before connecting" })
   )
-  const sid = yield* Option.match(decodeEnvelope(opened), {
+  const openingEnvelope = decodeEnvelope(opened)
+  const opening = Option.flatMap(openingEnvelope, decodeFramed)
+  const sid = yield* Option.match(opening, {
     onNone: () =>
       Effect.fail(
         new ProviderUnavailable({ reason: "Refused", cause: "FastCast opened with an unknown op" })
       ),
-    onSome: ({ message }) =>
+    onSome: (message) =>
       message.op === "C"
         ? Effect.succeed(message.sid)
         : Effect.fail(
@@ -171,8 +173,11 @@ const connect = Effect.fnUntraced(function* (wanted: Stream.Stream<Wanted>, refo
   )
 
   // Up to four at once, so a reconnect's checkpoints load side by side; frames still leave in the texts' order.
-  return Stream.concat(Stream.make(opened), rest).pipe(
-    Stream.mapEffect((text) => framed(text, resubscribeLater), { concurrency: 4 }),
+  return Stream.concat(
+    Stream.make({ text: opened, envelope: openingEnvelope }),
+    rest.pipe(Stream.map((text) => ({ text, envelope: decodeEnvelope(text) })))
+  ).pipe(
+    Stream.mapEffect(({ text, envelope }) => framed(text, envelope, resubscribeLater), { concurrency: 4 }),
     Stream.flattenIterable
   )
 })
@@ -189,22 +194,23 @@ function toSubscribe(previous: Wanted, next: Wanted): ReadonlyArray<Topic> {
 }
 
 /**
- * A socket text as its frame, an `H`'s followed by its checkpoint once it loads and decodes. An `H` whose topic has
- * no name FastCast reads loads nothing. A checkpoint that fails is logged, its topic is given to `resubscribeLater`,
- * and only its `H` is framed.
+ * A socket text, read once as `envelope`, as its frame, an `H`'s followed by its checkpoint once it loads and decodes.
+ * An `H` whose topic has no name FastCast reads loads nothing. A checkpoint that fails is logged, its topic is given to
+ * `resubscribeLater`, and only its `H` is framed.
  */
 const framed = Effect.fnUntraced(function* (
   text: string,
+  envelope: Option.Option<FastCastMessage.Envelope>,
   resubscribeLater: (topic: Topic) => Effect.Effect<unknown>
 ) {
-  const envelope = Option.getOrUndefined(decodeEnvelope(text))
-  const topic = Option.fromUndefinedOr(envelope?.channel).pipe(Option.flatMap(topicOf))
-  const frame = Frame.Pushed({ topic, mid: Option.fromUndefinedOr(envelope?.mid), body: text })
-  if (envelope === undefined) {
+  const message = Option.getOrUndefined(Option.flatMap(envelope, decodeFramed))
+  const topic = message !== undefined && "tc" in message ? topicOf(message.tc) : Option.none<Topic>()
+  const mid = message !== undefined && "mid" in message ? Option.some(message.mid) : Option.none<number>()
+  const frame = Frame.Pushed({ topic, mid, envelope })
+  if (message === undefined) {
     yield* Effect.logDebug("FastCast: framed a text of an unknown op", text)
     return [frame]
   }
-  const { message } = envelope
   if (message.op !== "H" || Option.isNone(topic)) return [frame]
 
   const loaded = yield* checkpoint(topic.value, message.pl).pipe(Effect.result)
@@ -240,7 +246,9 @@ function checkpoint(topic: Topic, url: string) {
 // Well inside `silence`, so a checkpoint that hangs fails its topic rather than the whole socket.
 const checkpointTimeout = "20 seconds"
 
-const decodeEnvelope = Schema.decodeUnknownOption(FastCastMessage.Envelope)
+const decodeEnvelope = Schema.decodeUnknownOption(Schema.fromJsonString(FastCastMessage.Envelope))
+
+const decodeFramed = Schema.decodeUnknownOption(FastCastMessage.Framed)
 
 // FastCast sends `B` itself after 10 s without another frame (it answers a client's `B` with an error, so the client
 // never sends one); live, a subscribed socket went at most 20 s between frames.

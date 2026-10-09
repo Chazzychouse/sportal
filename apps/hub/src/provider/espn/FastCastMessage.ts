@@ -66,29 +66,16 @@ const Heartbeat = Schema.Struct({ op: Schema.Literal("B") })
 /** One FastCast socket message. */
 export const Message = Schema.Union([Patched, Connected, Subscribed, Checkpointed, Idle, Heartbeat])
 
-// A message as framing reads it: an `R` or `P`'s `pl` left unread.
-const Framed = Message.mapMembers(
+/** A message as framing reads it: an `R` or `P`'s `pl` left unread. */
+export const Framed = Message.mapMembers(
   Tuple.evolve([(patched) => patched.mapFields(Struct.assign({ pl: Schema.String }))])
 )
 
-/** One FastCast socket message read only as far as framing it needs: its topic, and its mid. */
-export const Envelope = Schema.fromJsonString(Framed).pipe(
-  Schema.decodeTo(
-    Schema.Struct({
-      message: Schema.toType(Framed),
-      channel: Schema.UndefinedOr(Schema.String),
-      mid: Schema.UndefinedOr(Schema.Int)
-    }),
-    {
-      decode: SchemaGetter.transform((message) => ({
-        message,
-        channel: "tc" in message ? message.tc : undefined,
-        mid: "mid" in message ? message.mid : undefined
-      })),
-      encode: SchemaGetter.forbidden(() => "A framed message is never sent again")
-    }
-  )
-)
+/** Outer socket JSON; payload decoding belongs to Message, not framing. */
+export const Envelope = Schema.StructWithRest(Schema.Struct({ op: Schema.String }), [
+  Schema.Record(Schema.String, Schema.Json)
+])
+export type Envelope = typeof Envelope.Type
 
 /** Where to open the socket, and the token it takes, as `public/websockethost` answers. */
 export const Host = Schema.Struct({ ip: Schema.String, securePort: Schema.Int, token: Schema.String })

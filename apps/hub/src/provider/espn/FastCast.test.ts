@@ -1,15 +1,27 @@
 import { readFileSync } from "node:fs"
 import { assert, describe, it } from "@effect/vitest"
 import { GameId } from "@sportal/domain/Game"
-import { Deferred, Effect, HashMap, Layer, Option, Schema, Stream, SubscriptionRef } from "effect"
+import {
+  Array as Arr,
+  Deferred,
+  Effect,
+  HashMap,
+  Layer,
+  Option,
+  Schema,
+  Stream,
+  SubscriptionRef
+} from "effect"
 import { HttpClient, HttpClientResponse } from "effect/http"
 import * as Socket from "effect/socket/Socket"
 import { TestClock } from "effect/testing"
 import { recordingLogs } from "../../TestTelemetry.ts"
+import type { EspnState } from "./EspnState.ts"
 import { FastCast, type Wanted } from "./FastCast.ts"
 import * as FastCastMessage from "./FastCastMessage.ts"
 import { Frame } from "./Frame.ts"
-import { decodeSent, fakeServer, subscribed, watched } from "./TestFastCast.ts"
+import { stateAfter } from "./TestEspn.ts"
+import { fakeServer, subscribed, watched } from "./TestFastCast.ts"
 import { Topic, tcOf } from "./Topic.ts"
 
 // Games of the recorded checkpoint: the first two live, the third scheduled for 20:05Z.
@@ -168,6 +180,108 @@ describe("FastCast", () => {
       const received = yield* frames.until(atLeast(3))
       const patch = received.at(-1)
       assert.strictEqual(patch === undefined ? undefined : seen(patch).mid, 8)
+    })
+  )
+
+  it.effect("should emit an unreadable socket text without ending the feed", () =>
+    Effect.gen(function* () {
+      const server = fakeServer()
+      const { frames } = yield* nflFrames(server)
+      yield* frames.until(atLeast(2))
+
+      yield* Effect.sync(() => server.sendText("not json"))
+      yield* Effect.sync(() => server.send({ op: "B" }))
+      const received = yield* frames.until(atLeast(4))
+
+      const bad = received[2]
+      assert.isTrue(bad !== undefined && Frame.$is("Pushed")(bad) && Option.isNone(bad.envelope))
+      const after = received[3]
+      assert.isTrue(
+        after !== undefined &&
+          Frame.$is("Pushed")(after) &&
+          Option.exists(after.envelope, (envelope) => envelope.op === "B")
+      )
+    })
+  )
+
+  it.effect("should emit a text of an unknown op with its envelope, but no topic or mid", () =>
+    Effect.gen(function* () {
+      const server = fakeServer()
+      const { frames } = yield* nflFrames(server)
+      yield* frames.until(atLeast(2))
+
+      yield* Effect.sync(() => server.send({ op: "X", tc: "event-football-nfl", mid: 8, extra: 1 }))
+      const received = yield* frames.until(atLeast(3))
+
+      const unknown = received[2]
+      assert.deepStrictEqual(unknown === undefined ? undefined : seen(unknown), {
+        tag: "Pushed",
+        tc: undefined,
+        mid: undefined,
+        body: "X"
+      })
+      assert.isTrue(
+        unknown !== undefined &&
+          Frame.$is("Pushed")(unknown) &&
+          Option.exists(unknown.envelope, (envelope) => envelope.extra === 1)
+      )
+    })
+  )
+
+  it.effect("should emit a known op missing its fields with its envelope, but no topic or mid", () =>
+    Effect.gen(function* () {
+      const server = fakeServer()
+      const { frames } = yield* nflFrames(server)
+      yield* frames.until(atLeast(2))
+
+      yield* Effect.sync(() => server.send({ op: "P", tc: "event-football-nfl" }))
+      const received = yield* frames.until(atLeast(3))
+
+      const malformed = received[2]
+      assert.deepStrictEqual(malformed === undefined ? undefined : seen(malformed), {
+        tag: "Pushed",
+        tc: undefined,
+        mid: undefined,
+        body: "P"
+      })
+    })
+  )
+
+  it.effect("should frame a patch whose payload does not decode with its topic and mid", () =>
+    Effect.gen(function* () {
+      const server = fakeServer()
+      const { frames } = yield* nflFrames(server)
+      yield* frames.until(atLeast(2))
+
+      yield* Effect.sync(() => server.send(undecodablePatchMessage(8)))
+      const received = yield* frames.until(atLeast(3))
+
+      const patch = received[2]
+      assert.deepStrictEqual(patch === undefined ? undefined : seen(patch), {
+        tag: "Pushed",
+        tc: "event-football-nfl",
+        mid: 8,
+        body: "P"
+      })
+    })
+  )
+
+  it.effect("should reset only its topic when a patch's payload does not decode on a synced topic", () =>
+    Effect.gen(function* () {
+      const server = fakeServer()
+      const { frames } = yield* nflFrames(server)
+      yield* frames.until(atLeast(2))
+      yield* Effect.sync(() => server.send(checkpointMessage(7)))
+      yield* frames.until(wholeAt(7))
+      yield* Effect.sync(() => server.send(undecodablePatchMessage(8)))
+      const received = yield* frames.until(numbered(8))
+      const before = yield* stateAfter(received.slice(0, -1))
+      const bad = yield* Effect.fromOption(Arr.last(received))
+
+      const [after] = yield* before.take(bad, ["nfl"])
+
+      assert.deepStrictEqual(syncedTopics(before), ["event-football-nfl"])
+      assert.deepStrictEqual(syncedTopics(after), [])
     })
   )
 
@@ -712,11 +826,11 @@ function seen(frame: Frame) {
   return Frame.$match(frame, {
     Polled: ({ league, body }) => ({ tag: "Polled", tc: league, mid: undefined, body }),
     PollFailed: ({ league }) => ({ tag: "PollFailed", tc: league, mid: undefined, body: undefined }),
-    Pushed: ({ topic, mid, body }) => ({
+    Pushed: ({ topic, mid, envelope }) => ({
       tag: "Pushed",
       tc: Option.getOrUndefined(Option.map(topic, tcOf)),
       mid: Option.getOrUndefined(mid),
-      body: decodeSent(body).op
+      body: Option.getOrUndefined(Option.map(envelope, (value) => value.op))
     }),
     Checkpoint: ({ topic, mid, document }) => ({ tag: "Checkpoint", tc: tcOf(topic), mid, document })
   })
@@ -794,6 +908,19 @@ function missingCheckpoint(mid: number) {
 /** A scoreboard `P` at `mid` that patches nothing. */
 function patchMessage(mid: number) {
   return { op: "P", tc: "event-football-nfl", mid, pl: JSON.stringify({ ts: 1791136341731, pl: [] }) }
+}
+
+/** A scoreboard `P` at `mid` whose patches are base64, but not zlib-deflated. */
+function undecodablePatchMessage(mid: number) {
+  const pl = Buffer.from("not deflated").toString("base64")
+  return { op: "P", tc: "event-football-nfl", mid, pl: JSON.stringify({ ts: 1791136341731, pl }) }
+}
+
+/** The topics whose documents `state` has synced, by name. */
+function syncedTopics(state: EspnState) {
+  return [...HashMap.keys(state.documents.byTopic)]
+    .filter((topic) => state.documents.isSynced(topic))
+    .map(tcOf)
 }
 
 const checkpointBody = readFileSync(

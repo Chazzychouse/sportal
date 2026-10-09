@@ -42,6 +42,7 @@ export function fakeServer() {
     socket,
     sent,
     send,
+    sendText: (data: string) => emit("message", { data }),
     close: (code: number) => emit("close", { code, reason: "" })
   }
 }
@@ -91,4 +92,4 @@ export const Sent = Schema.Struct({
 })
 export type Sent = typeof Sent.Type
 
-export const decodeSent = Schema.decodeUnknownSync(Schema.fromJsonString(Sent))
+const decodeSent = Schema.decodeUnknownSync(Schema.fromJsonString(Sent))

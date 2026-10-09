@@ -66,7 +66,7 @@ Every exported type name must be a term here, except the wire schemas in `*Paylo
 | **Guide** | One reading of a source's listing of the channels this account gets, with their live addresses, and what each airs. Twitch's is a fixed lineup, never read. | schedule, EPG |
 | **Airing** | One programme on a channel, with its begin and end. | listing, show |
 | **Guide unreadable** | A guide response the source could not read. | |
-| **Frame** | One thing ESPN delivered, as received, before its decode reads it: a poll's response (`Polled`, its league's whole scoreboard), a poll that brought nothing (`PollFailed`, its league), a socket text (`Pushed`, with its topic and mid when it names them), or the checkpoint an `H` pointed to, decoded into its topic's document (`Checkpoint`, the whole document as of its mid); `Frame` in code. | message, payload, feed frame |
+| **Frame** | One thing ESPN delivered, as received, before its decode reads it: a poll's response (`Polled`, its league's whole scoreboard), a poll that brought nothing (`PollFailed`, its league), a socket text (`Pushed`, read once into its envelope, the JSON object with its op, or none when the text is not one; with its topic and mid when it frames as a known op naming them), or the checkpoint an `H` pointed to, decoded into its topic's document (`Checkpoint`, the whole document as of its mid); `Frame` in code. | message, payload, feed frame |
 | **Live channel URL** | A source's address for a channel, reduced to the one that plays it live. | canonical URL |
 | **Stream** | One playing instance of a game from a source. | feed, video |
 | **StreamLocator** | What a Display must load to play a stream. | URL, link |

@@ -1042,7 +1042,7 @@ function message(tc: string, mid: number, patches: ReadonlyArray<object>): Frame
   return Frame.Pushed({
     topic: topicOf(tc),
     mid: Option.some(mid),
-    body: JSON.stringify({ op: "P", tc, mid, pl })
+    envelope: decodeEnvelope(JSON.stringify({ op: "P", tc, mid, pl }))
   })
 }
 
@@ -1062,15 +1062,17 @@ function plays(...ids: ReadonlyArray<string>) {
 /** The recorded socket texts as FastCast frames them, each `H` followed by the recorded checkpoint. */
 function recorded(texts: ReadonlyArray<string>): ReadonlyArray<Frame> {
   return texts.flatMap((body) => {
-    const { message, channel, mid } = decodeEnvelope(body)
-    const topic = Option.flatMap(Option.fromUndefinedOr(channel), topicOf)
-    const frame = Frame.Pushed({ topic, mid: Option.fromUndefinedOr(mid), body })
-    return message.op === "H" && Option.isSome(topic) && mid !== undefined
+    const envelope = decodeEnvelope(body)
+    const message = Option.getOrThrow(Option.flatMap(envelope, decodeFramed))
+    const topic = "tc" in message ? topicOf(message.tc) : Option.none<Topic>()
+    const mid = "mid" in message ? Option.some(message.mid) : Option.none<number>()
+    const frame = Frame.Pushed({ topic, mid, envelope })
+    return message.op === "H" && Option.isSome(topic)
       ? [
           frame,
           Frame.Checkpoint({
             topic: topic.value,
-            mid,
+            mid: message.mid,
             document: Schema.decodeSync(FastCastMessage.Checkpoint(topic.value))(checkpointBody)
           })
         ]
@@ -1078,7 +1080,9 @@ function recorded(texts: ReadonlyArray<string>): ReadonlyArray<Frame> {
   })
 }
 
-const decodeEnvelope = Schema.decodeUnknownSync(FastCastMessage.Envelope)
+const decodeEnvelope = Schema.decodeUnknownOption(Schema.fromJsonString(FastCastMessage.Envelope))
+
+const decodeFramed = Schema.decodeUnknownOption(FastCastMessage.Framed)
 
 // Each game as the last pushed snapshot of it.
 function lastPushed(deliveries: ReadonlyArray<{ readonly delivery: Delivery }>) {
@@ -1173,7 +1177,7 @@ function moveRecordingFrames(): ReadonlyArray<Frame> {
       Frame.Pushed({
         topic: topicOf(tc),
         mid: Option.some(mid),
-        body: JSON.stringify({ op, tc, mid, pl: JSON.stringify({ ts, pl }) })
+        envelope: decodeEnvelope(JSON.stringify({ op, tc, mid, pl: JSON.stringify({ ts, pl }) }))
       })
   )
   return [checkpoint(game, moveRecording.checkpoint.mid, moveRecording.checkpoint.body), ...messages]

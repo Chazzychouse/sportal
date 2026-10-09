@@ -1,6 +1,6 @@
 import { deflateSync } from "node:zlib"
 import { assert, describe, it } from "@effect/vitest"
-import { Effect, Schema } from "effect"
+import { Effect, Option, Schema } from "effect"
 import * as FastCastMessage from "./FastCastMessage.ts"
 
 describe("FastCastMessage.Message", () => {
@@ -27,6 +27,28 @@ describe("FastCastMessage.Message", () => {
       assert.include(error.message, "Not zlib-deflated")
     })
   )
+})
+
+describe("FastCastMessage.Envelope", () => {
+  it("should retain patch payload text in an outer envelope", () => {
+    const text = patchMessage("not decompressed here")
+
+    const envelope = Schema.decodeSync(Schema.fromJsonString(FastCastMessage.Envelope))(text)
+
+    assert.strictEqual(envelope.op, "P")
+    assert.strictEqual(typeof envelope.pl, "string")
+  })
+
+  it("should retain an unknown operation without accepting it as a framed message", () => {
+    const envelope = Schema.decodeSync(Schema.fromJsonString(FastCastMessage.Envelope))(
+      JSON.stringify({ op: "X", extra: 1 })
+    )
+
+    const framed = Schema.decodeUnknownOption(FastCastMessage.Framed)(envelope)
+
+    assert.strictEqual(envelope.extra, 1)
+    assert.isTrue(Option.isNone(framed))
+  })
 })
 
 /** A patch message on NFL's scoreboard topic whose inner `pl` is `pl`. */

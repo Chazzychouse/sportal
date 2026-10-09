@@ -338,7 +338,7 @@ describe("EspnProvider.deliveries", () => {
       const pushed = Frame.Pushed({
         topic: Option.some(Topic.Scoreboard({ league: "nfl" })),
         mid: Option.none(),
-        body: "{}"
+        envelope: decodeEnvelope("{}")
       })
       const espn = espnOver(recordedHttp(fbsLive), { leagues: "fbs", pushing: Stream.make(pushed) })
 
@@ -363,7 +363,7 @@ describe("EspnProvider.deliveries", () => {
       const heartbeat = Frame.Pushed({
         topic: Option.none(),
         mid: Option.none(),
-        body: JSON.stringify({ op: "B" })
+        envelope: decodeEnvelope(JSON.stringify({ op: "B" }))
       })
       const pushing = Stream.fromEffect(Effect.as(Effect.sleep("1 second"), heartbeat))
 
@@ -753,6 +753,8 @@ function liveWith(games: ReadonlyArray<string>) {
 // NE at BUF's game topic, live in the recorded 18:00Z scoreboard, and two games that scoreboard shows upcoming.
 const liveTc = "gp-football-nfl-401872971"
 const laterGames = ["401872974", "401872976"] as const
+
+const decodeEnvelope = Schema.decodeUnknownOption(Schema.fromJsonString(FastCastMessage.Envelope))
 
 const decodeEventIds = Schema.decodeUnknownSync(
   Schema.fromJsonString(Schema.Struct({ events: Schema.Tuple([Schema.Struct({ id: GameId })]) }))
