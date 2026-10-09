@@ -464,6 +464,7 @@ describe("Slate#take, its changes", () => {
 
     const [, changes] = slate.take([playsOf(one, 1)])
 
+    assert.isTrue(changes.some(SlateChange.$is("Played")))
     assert.isFalse(changes.some(SlateChange.$is("Progressed")))
   })
 

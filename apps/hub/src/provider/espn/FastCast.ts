@@ -259,8 +259,8 @@ function steersBetween(previous: Wanted, next: Wanted): ReadonlyArray<Steer> {
 }
 
 /**
- * A socket text as its frame, an `H`'s followed by its checkpoint once it loads and decodes. An `H` on a topic
- * FastCast's names do not read loads nothing. Every text is counted by its op. Either way the `H`'s outcome answers the
+ * A socket text as its frame, an `H`'s followed by its checkpoint once it loads and decodes. An `H` whose topic has
+ * no name FastCast reads loads nothing. Every text is counted by its op. Either way the `H`'s outcome answers the
  * follow waiting on its topic, if any; a checkpoint that fails is logged and counted, and only its `H` is framed.
  */
 const framed = Effect.fnUntraced(function* (

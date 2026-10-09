@@ -10,7 +10,7 @@ import { Topic, tcOf } from "./Topic.ts"
 
 /**
  * What ESPN has said, every frame folded in once: each FastCast topic's document, and each league's listed games, as its
- * last poll listed them, each moved forward by every push since.
+ * last poll listed them, and each push since (a push behind its listed game is logged and counted).
  */
 export class EspnState extends Data.Class<{
   readonly documents: typeof FastCastDocument.empty
@@ -117,9 +117,10 @@ const pushed = Effect.fnUntraced(function* (state: EspnState, frame: Frame) {
           (sorted) => [advanced, [Delivery.cases.Plays.make({ game, plays: sorted })]] as const
         ),
       Reset: ({ topic, detail }) =>
-        Effect.logWarning(
-          `EspnState: ${tcOf(topic)} lost its document (${detail}); FastCast follows it again`
-        ).pipe(Effect.annotateLogs({ topic: tcOf(topic) }), Effect.as([advanced, noDeliveries] as const))
+        Effect.logWarning(`EspnState: ${tcOf(topic)} lost its document (${detail})`).pipe(
+          Effect.annotateLogs({ topic: tcOf(topic) }),
+          Effect.as([advanced, noDeliveries] as const)
+        )
     })
   })
 })

@@ -25,11 +25,12 @@ import { ProviderUnavailable } from "./ProviderUnavailable.ts"
 
 /**
  * ESPN as the provider: the site scoreboard of each league `HubConfig` names, polled, and FastCast pushing, every frame
- * folded once into one `EspnState`. It polls every league, then waits by every game the state lists (a push moves a
- * listed game forward): 10 seconds while a game is live, a minute within 30 minutes of a kickoff, and 15 minutes
- * otherwise; at most 30 seconds after a poll in which a league failed or did not decode. A poll that does not connect is
- * `Unreachable` for its league, and one answered with a status other than 2xx `Refused`; either is logged and counted,
- * and delivers no frame. It tells FastCast to follow every league's scoreboard topic and each listed game live or within
+ * folded once into one `EspnState`. It polls every league, then waits by every game the state lists, as its last poll
+ * listed them, and each push since (a push behind its listed game is logged and counted): 10 seconds while a game is
+ * live, a minute within 30 minutes of a kickoff, and 15 minutes otherwise; at most 30 seconds after a poll in which a
+ * league failed or did not decode. A poll that does not connect is `Unreachable` for its league, and one answered with a
+ * status other than 2xx `Refused`; either is logged and counted, and delivers no frame. Each frame's deliveries leave in
+ * the order the state took the frames. It tells FastCast to follow every league's scoreboard topic and each listed game live or within
  * 30 minutes of kickoff.
  */
 export const layer: Layer.Layer<Provider, never, FastCast | HttpClient.HttpClient | HubConfig> = Layer.effect(

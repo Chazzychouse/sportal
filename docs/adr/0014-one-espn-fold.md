@@ -15,12 +15,14 @@ pushed frame was patched twice.
 
 ## Decision
 
-- **One fold.** `EspnState` holds each topic's document and each league's listed games, moved forward by every push.
+- **One fold.** `EspnState` holds each topic's document and each league's listed games, as its last poll listed
+  them, and each push since (a push behind its listed game is logged and counted on `sportal_push_behind_listing`).
   `EspnProvider` keeps it in one `SubscriptionRef` and takes every polled and pushed frame into it once. Deliveries,
   the wait after each poll, and the topics FastCast follows are all read from it.
 - **FastCast follows what it is told.** `FastCast.follow(wanted)` reconciles each socket toward the wanted set. It
   follows each topic newly wanted and each whose document went from synced back to waiting for its checkpoint, and
-  leaves each no longer wanted. It no longer decodes anything.
+  leaves each no longer wanted. It decodes only envelopes and checkpoints, to frame them; it no longer folds or decodes
+  games.
 - **Typed at the edge.** Frames (`Polled`, `Pushed`, `Checkpoint`) and topics (`Scoreboard`, `Game`) are tagged
   enums, read once where they arrive.
 
