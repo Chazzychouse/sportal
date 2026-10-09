@@ -4,6 +4,7 @@ import {
   DateTime,
   Duration,
   Effect,
+  Equal,
   Layer,
   Metric,
   Option,
@@ -27,7 +28,8 @@ import { ProviderUnavailable } from "./ProviderUnavailable.ts"
  * listed game forward): 10 seconds while a game is live, a minute within 30 minutes of a kickoff, and 15 minutes
  * otherwise; at most 30 seconds after a poll in which a league failed or did not decode. A poll that does not connect is
  * `Unreachable` for its league, and one answered with a status other than 2xx `Refused`; either is logged and counted,
- * and delivers no frame.
+ * and delivers no frame. It tells FastCast to follow every league's scoreboard topic and each listed game live or within
+ * 30 minutes of kickoff.
  */
 export const layer: Layer.Layer<Provider, never, FastCast | HttpClient.HttpClient | HubConfig> = Layer.effect(
   Provider,
@@ -74,7 +76,16 @@ export const layer: Layer.Layer<Provider, never, FastCast | HttpClient.HttpClien
     const polls = Stream.fromEffectSchedule(pollEveryLeague(), polling(state)).pipe(
       Stream.flatMap((polled) => Stream.fromIterable(polled.flatMap(({ said }) => Option.toArray(said))))
     )
-    const pushes = fastCast.frames.pipe(Stream.mapEffect(taken))
+    // What FastCast follows, read again on each change and once a minute, so a kickoff coming into its window is
+    // followed with no frame to say so.
+    const wanted = Stream.merge(
+      SubscriptionRef.changes(state),
+      Stream.tick("1 minute").pipe(Stream.mapEffect(() => SubscriptionRef.get(state)))
+    ).pipe(
+      Stream.mapEffect((current) => Effect.map(DateTime.now, (now) => current.wanted(leagues, now))),
+      Stream.changesWith((previous, next) => Equal.equals(previous, next))
+    )
+    const pushes = fastCast.follow(wanted).pipe(Stream.mapEffect(taken))
 
     return Provider.of({ deliveries: Stream.merge(polls, pushes) })
   })

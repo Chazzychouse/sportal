@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs"
 import { assert, describe, it } from "@effect/vitest"
-import { Network } from "@sportal/domain/Game"
+import { GameId, Network } from "@sportal/domain/Game"
 import { LeagueId } from "@sportal/domain/League"
 import {
   Array as Arr,
@@ -10,6 +10,7 @@ import {
   type Duration,
   Effect,
   Exit,
+  HashMap,
   Layer,
   Metric,
   Option,
@@ -27,7 +28,7 @@ import { counted, recordingLogs, recordingSpans, withMetrics } from "../../TestT
 import { Provider } from "../Provider.ts"
 import { listedBy } from "../TestProvider.ts"
 import * as EspnProvider from "./EspnProvider.ts"
-import { FastCast } from "./FastCast.ts"
+import { FastCast, type Wanted } from "./FastCast.ts"
 import { Frame } from "./Frame.ts"
 import { ProviderUnavailable } from "./ProviderUnavailable.ts"
 import { Topic } from "./Topic.ts"
@@ -394,6 +395,39 @@ describe("EspnProvider.deliveries", () => {
         assert.deepStrictEqual(polled, [0, 60_000, 70_000])
       })
   )
+
+  it.effect("should tell FastCast to follow every league's scoreboard topic from the start", () =>
+    Effect.gen(function* () {
+      const unanswered = HttpClient.make(() => Effect.never)
+
+      const told = yield* toldOver(unanswered, "fbs", [])
+
+      const [first] = told
+      assert.deepStrictEqual(first === undefined ? [] : [...HashMap.entries(first)], [
+        [Topic.Scoreboard({ league: "fbs" }), "AwaitingCheckpoint"]
+      ])
+    })
+  )
+
+  it.effect("should want a game's topic once its kickoff is 30 minutes away, with no frame", () =>
+    Effect.gen(function* () {
+      yield* TestClock.setTime(DateTime.makeUnsafe("2026-10-03T12:00:00Z").epochMilliseconds)
+      const later = scoreboardOf([{ state: "pre", period: 0, kickoff: "2026-10-03T12:31Z" }])
+      const [event] = decodeEventIds(later).events
+      const game = Topic.Game({ league: "fbs", game: event.id })
+      const answering = HttpClient.make((request) =>
+        Effect.succeed(HttpClientResponse.fromWeb(request, new Response(later)))
+      )
+
+      const told = yield* toldOver(answering, "fbs", ["1 minute"])
+
+      assert.isFalse(
+        told.slice(0, -1).some((one) => HashMap.has(one, game)),
+        "31 minutes out, it is not followed"
+      )
+      assert.isTrue(Option.exists(Arr.last(told), (one) => HashMap.has(one, game)))
+    })
+  )
 })
 
 /** `body` without any team's colors. */
@@ -450,19 +484,21 @@ function transportFailure(request: Parameters<typeof HttpClientResponse.fromWeb>
 
 /**
  * ESPN's provider over `client`, polling `leagues` (every league, unless given), with FastCast pushing `pushing`
- * (nothing, unless given), and each span that ends recorded in `ended`.
+ * (nothing, unless given) or, when given `wanting`, the frames it gives for what FastCast is told to follow, and each
+ * span that ends recorded in `ended`.
  */
 function espnOver(
   client: HttpClient.HttpClient,
   options: {
     readonly leagues?: string
     readonly pushing?: Stream.Stream<Frame>
+    readonly wanting?: (wanted: Stream.Stream<Wanted>) => Stream.Stream<Frame>
     readonly ended?: Array<Tracer.Span>
   } = {}
 ) {
   return EspnProvider.layer.pipe(
     Layer.provide([
-      FastCast.layerTest(options.pushing ?? Stream.never),
+      FastCast.layerTest(options.wanting ?? (() => options.pushing ?? Stream.never)),
       HubConfig.layerTest({ SPORTAL_LEAGUES: options.leagues ?? "nfl,fbs" }).pipe(Layer.orDie),
       Layer.succeed(HttpClient.HttpClient, client)
     ]),
@@ -555,6 +591,37 @@ function polledOver(
     return Arr.dedupe(polled.map(({ at }) => at))
   })
 }
+
+/**
+ * Each wanted set ESPN's provider over `client`, polling `leagues`, tells FastCast as the test clock moves by each of
+ * `spans`.
+ */
+function toldOver(client: HttpClient.HttpClient, leagues: string, spans: ReadonlyArray<Duration.Input>) {
+  return Effect.gen(function* () {
+    const told = yield* Ref.make<ReadonlyArray<Wanted>>([])
+    const espn = espnOver(client, {
+      leagues,
+      wanting: (wanted) =>
+        wanted.pipe(
+          Stream.tap((one) => Ref.update(told, (all) => [...all, one])),
+          Stream.drain
+        )
+    })
+
+    yield* Effect.gen(function* () {
+      const provider = yield* Provider
+      yield* provider.deliveries.pipe(Stream.runDrain, Effect.forkScoped({ startImmediately: true }))
+      yield* TestClock.adjust(0)
+      yield* Effect.forEach(spans, (span) => TestClock.adjust(span), { discard: true })
+    }).pipe(Effect.provide(espn), Effect.scoped)
+
+    return yield* Ref.get(told)
+  })
+}
+
+const decodeEventIds = Schema.decodeUnknownSync(
+  Schema.fromJsonString(Schema.Struct({ events: Schema.Tuple([Schema.Struct({ id: GameId })]) }))
+)
 
 /**
  * An ESPN scoreboard of one game per entry, each the pregame scoreboard's second event kicking off at `kickoff` (the

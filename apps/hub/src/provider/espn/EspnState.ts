@@ -1,11 +1,12 @@
-import { Game, type GameSnapshot } from "@sportal/domain/Game"
+import { Game, GameSnapshot } from "@sportal/domain/Game"
 import type { LeagueId } from "@sportal/domain/League"
-import { Array as Arr, Data, Effect, HashMap, Metric, Option, Record } from "effect"
+import { Array as Arr, Data, type DateTime, Effect, HashMap, Metric, Option, Record } from "effect"
 import { Delivery } from "../../slate/Delivery.ts"
 import * as EspnDecoder from "./EspnDecoder.ts"
+import type { Wanted } from "./FastCast.ts"
 import * as FastCastDocument from "./FastCastDocument.ts"
 import { Frame } from "./Frame.ts"
-import { tcOf } from "./Topic.ts"
+import { Topic, tcOf } from "./Topic.ts"
 
 /**
  * What ESPN has said, every frame folded in once: each FastCast topic's document, and each league's listed games, as its
@@ -35,6 +36,23 @@ export class EspnState extends Data.Class<{
   /** Every listed game, as the state has it. */
   games(): ReadonlyArray<GameSnapshot> {
     return [...HashMap.values(this.listings)].flat()
+  }
+
+  /**
+   * What FastCast follows at `now`: each of `leagues`' scoreboard topics, and the topic of each listed game live or
+   * kicking off within `GameSnapshot.kickoffWindow`, each with whether its document is synced.
+   */
+  wanted(leagues: ReadonlyArray<LeagueId>, now: DateTime.Utc): Wanted {
+    const scoreboards = leagues.map((league) => Topic.Scoreboard({ league }))
+    const games = this.games()
+      .filter((game) => game.isLiveOrKicksOffWithin(GameSnapshot.kickoffWindow, now))
+      .map((game) => Topic.Game({ league: game.league, game: game.id }))
+    return HashMap.fromIterable(
+      [...scoreboards, ...games].map(
+        (topic) =>
+          [topic, FastCastDocument.isSynced(this.documents, topic) ? "Synced" : "AwaitingCheckpoint"] as const
+      )
+    )
   }
 }
 
@@ -98,7 +116,10 @@ const pushed = Effect.fnUntraced(function* (state: EspnState, frame: Frame) {
           EspnDecoder.playsOf(league, plays),
           (sorted) => [advanced, [Delivery.cases.Plays.make({ game, plays: sorted })]] as const
         ),
-      Reset: () => Effect.succeed([advanced, noDeliveries] as const)
+      Reset: ({ topic, detail }) =>
+        Effect.logWarning(
+          `EspnState: ${tcOf(topic)} lost its document (${detail}); FastCast follows it again`
+        ).pipe(Effect.annotateLogs({ topic: tcOf(topic) }), Effect.as([advanced, noDeliveries] as const))
     })
   })
 })

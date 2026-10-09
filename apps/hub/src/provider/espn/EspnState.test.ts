@@ -3,15 +3,16 @@ import { assert, describe, it } from "@effect/vitest"
 import { GameId, GameSnapshot } from "@sportal/domain/Game"
 import type { LeagueId } from "@sportal/domain/League"
 import { Play, PlayId } from "@sportal/domain/Play"
-import { Effect, Equal, Metric, Option, Record, Schema } from "effect"
+import { DateTime, Effect, Equal, HashMap, Metric, Option, Record, Schema } from "effect"
 import { Delivery } from "../../slate/Delivery.ts"
 import { counted, recordingLogs, withMetrics } from "../../TestTelemetry.ts"
 import { EspnEvent } from "./EspnEvent.ts"
+import { EspnState } from "./EspnState.ts"
 import * as FastCastDocument from "./FastCastDocument.ts"
 import * as FastCastMessage from "./FastCastMessage.ts"
 import { Frame } from "./Frame.ts"
 import { decodedFrames, recordedNeAtBuf, stateAfter } from "./TestEspn.ts"
-import { type Topic, tcOf, topicOf } from "./Topic.ts"
+import { Topic, tcOf, topicOf } from "./Topic.ts"
 
 // Recorded from ESPN on 2026-10-04: the NFL checkpoint at 17:52Z, every socket text on its topic after it until
 // 18:00Z, each line one text as it arrived, and the scoreboard polled at 18:00Z.
@@ -289,6 +290,19 @@ describe("EspnState#take", () => {
         "the topic waits for its next checkpoint"
       )
       assert.deepStrictEqual(reset, ["event-football-nfl"])
+    })
+  )
+
+  it.effect("should log a topic that lost its document at Warning, with why and its topic", () =>
+    Effect.gen(function* () {
+      const { logs, layer } = recordingLogs()
+
+      yield* stateAfter([...synced(), unapplicablePatch(4286638)]).pipe(Effect.provide(layer))
+
+      const lost = logs.filter(({ message }) => message.includes("event-football-nfl lost its document"))
+      assert.lengthOf(lost, 1)
+      assert.strictEqual(lost[0]?.level, "Warn")
+      assert.strictEqual(lost[0]?.annotations.topic, "event-football-nfl")
     })
   )
 
@@ -795,6 +809,94 @@ describe("EspnState#take", () => {
   })
 })
 
+describe("EspnState#wanted", () => {
+  const nfl = ["nfl"] as const
+  const scoreboard = Topic.Scoreboard({ league: "nfl" })
+  const gameTopic = (id: string) => Topic.Game({ league: "nfl", game: GameId.make(id) })
+  const at = (iso: string) => DateTime.makeUnsafe(iso)
+
+  it("should want each league's scoreboard topic, waiting for its checkpoint, before any frame", () => {
+    const wanted = EspnState.empty.wanted(["nfl", "fbs"], at("2026-10-04T18:00:00Z"))
+
+    assert.strictEqual(HashMap.size(wanted), 2)
+    assert.deepStrictEqual(HashMap.get(wanted, scoreboard), Option.some("AwaitingCheckpoint"))
+    assert.deepStrictEqual(
+      HashMap.get(wanted, Topic.Scoreboard({ league: "fbs" })),
+      Option.some("AwaitingCheckpoint")
+    )
+  })
+
+  it.effect("should want a listed game's topic while it is live", () =>
+    Effect.gen(function* () {
+      const state = yield* stateAfter([poll("nfl", scoreboardBody)])
+
+      const wanted = state.wanted(nfl, at("2026-10-04T18:00:00Z"))
+
+      assert.isTrue(HashMap.has(wanted, gameTopic("401872971")))
+    })
+  )
+
+  it.effect("should want a listed game's topic from 30 minutes before its kickoff", () =>
+    Effect.gen(function* () {
+      const state = yield* stateAfter([poll("nfl", scoreboardBody)])
+
+      const wanted = state.wanted(nfl, at("2026-10-04T19:35:00Z"))
+
+      assert.isTrue(HashMap.has(wanted, gameTopic("401872974")))
+    })
+  )
+
+  it.effect("should not want a listed game's topic a second before 30 minutes before its kickoff", () =>
+    Effect.gen(function* () {
+      const state = yield* stateAfter([poll("nfl", scoreboardBody)])
+
+      const wanted = state.wanted(nfl, at("2026-10-04T19:34:59Z"))
+
+      assert.isFalse(HashMap.has(wanted, gameTopic("401872974")))
+    })
+  )
+
+  it.effect("should not want the topic of a game a push shows over", () =>
+    Effect.gen(function* () {
+      const state = yield* stateAfter([...synced(), neAtBufFinal(4286638)])
+
+      const wanted = state.wanted(nfl, at("2026-10-04T18:00:00Z"))
+
+      assert.isFalse(HashMap.has(wanted, gameTopic("401872971")))
+    })
+  )
+
+  it.effect("should want no game's topic a push shows before any poll lists it", () =>
+    Effect.gen(function* () {
+      const state = yield* stateAfter(recorded(socketTexts.slice(0, 3)))
+
+      const wanted = state.wanted(nfl, at("2026-10-04T18:00:00Z"))
+
+      assert.deepStrictEqual([...HashMap.keys(wanted)], [scoreboard])
+    })
+  )
+
+  it.effect("should show a synced topic as Synced", () =>
+    Effect.gen(function* () {
+      const state = yield* stateAfter(synced())
+
+      const wanted = state.wanted(nfl, at("2026-10-04T18:00:00Z"))
+
+      assert.deepStrictEqual(HashMap.get(wanted, scoreboard), Option.some("Synced"))
+    })
+  )
+
+  it.effect("should show a topic that lost its document as waiting for its checkpoint", () =>
+    Effect.gen(function* () {
+      const state = yield* stateAfter([...synced(), unapplicablePatch(4286638)])
+
+      const wanted = state.wanted(nfl, at("2026-10-04T18:00:00Z"))
+
+      assert.deepStrictEqual(HashMap.get(wanted, scoreboard), Option.some("AwaitingCheckpoint"))
+    })
+  )
+})
+
 /** The deliveries `frames` decode to, each with the place, from 1, of the frame that said it. */
 function decoded(frames: ReadonlyArray<Frame>) {
   return decodedFrames(frames).pipe(
@@ -804,28 +906,31 @@ function decoded(frames: ReadonlyArray<Frame>) {
   )
 }
 
-/** The topics whose document FastCast's documents reset over `frames`, in order; a frame that fails changes none. */
+/** The topics whose document went from synced back to waiting for a checkpoint over `frames`, in order. */
 function resetTopics(frames: ReadonlyArray<Frame>) {
   return Effect.reduce(
-    frames.filter((frame) => !Frame.$is("Polled")(frame)),
-    (): { readonly documents: typeof FastCastDocument.empty; readonly topics: ReadonlyArray<string> } => ({
-      documents: FastCastDocument.empty,
+    frames,
+    (): { readonly state: EspnState; readonly topics: ReadonlyArray<string> } => ({
+      state: EspnState.empty,
       topics: []
     }),
-    (state, frame) =>
-      FastCastDocument.advance(state.documents, frame).pipe(
-        Effect.map(({ documents, change }) => ({
-          documents,
-          topics: [
-            ...state.topics,
-            ...Option.toArray(change).flatMap((one) =>
-              FastCastDocument.Change.$is("Reset")(one) ? [tcOf(one.topic)] : []
-            )
-          ]
-        })),
-        Effect.orElseSucceed(() => state)
-      )
+    ({ state, topics }, frame) =>
+      Effect.map(state.take(frame), ([next]) => ({
+        state: next,
+        topics: [...topics, ...lostBetween(state, next)]
+      }))
   ).pipe(Effect.map(({ topics }) => topics))
+}
+
+/** Each topic synced in `before` that is not in `after`, by name. */
+function lostBetween(before: EspnState, after: EspnState): ReadonlyArray<string> {
+  return [...HashMap.keys(before.documents)]
+    .filter(
+      (topic) =>
+        FastCastDocument.isSynced(before.documents, topic) &&
+        !FastCastDocument.isSynced(after.documents, topic)
+    )
+    .map(tcOf)
 }
 
 function poll(league: LeagueId, body: string): Frame {

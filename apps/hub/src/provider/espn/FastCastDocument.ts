@@ -39,22 +39,9 @@ export const advance = Effect.fnUntraced(function* (
 /** No topic has a document yet. */
 export const empty: Documents = HashMap.empty()
 
-/**
- * The league and every event of scoreboard `topic`'s document, while it is synced: none for a game's topic, or one
- * waiting for its checkpoint.
- */
-export function scoreboard(
-  documents: Documents,
-  topic: Topic
-): Option.Option<{ readonly league: LeagueId; readonly events: ReadonlyArray<Schema.Json> }> {
-  return Topic.$match(topic, {
-    Scoreboard: ({ league }) =>
-      HashMap.get(documents, topic).pipe(
-        Option.filter(Document.$is("Synced")),
-        Option.map(({ document }) => ({ league, events: Record.values(objectAt(document, [])) }))
-      ),
-    Game: () => Option.none()
-  })
+/** Whether `topic`'s document is synced: its checkpoint read, and every message since applied. */
+export function isSynced(documents: Documents, topic: Topic): boolean {
+  return Option.exists(HashMap.get(documents, topic), Document.$is("Synced"))
 }
 
 /**
@@ -76,7 +63,7 @@ interface Advanced {
 }
 
 /** The documents after a frame that changed nothing. */
-export function unchanged(documents: Documents): Advanced {
+function unchanged(documents: Documents): Advanced {
   return { documents, change: Option.none() }
 }
 
