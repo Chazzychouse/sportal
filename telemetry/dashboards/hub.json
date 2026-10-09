@@ -38,297 +38,6 @@
   },
   "panels": [
     {
-      "id": 13,
-      "type": "stat",
-      "title": "Connected",
-      "gridPos": {
-        "x": 0,
-        "y": 0,
-        "w": 4,
-        "h": 4
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "noValue": "Hub down",
-          "mappings": [
-            {
-              "type": "value",
-              "options": {
-                "0": {
-                  "text": "No",
-                  "color": "red",
-                  "index": 0
-                },
-                "1": {
-                  "text": "Yes",
-                  "color": "green",
-                  "index": 1
-                },
-                "2": {
-                  "text": "No · no game live",
-                  "color": "text",
-                  "index": 2
-                },
-                "3": {
-                  "text": "Yes",
-                  "color": "green",
-                  "index": 3
-                }
-              }
-            }
-          ]
-        },
-        "overrides": []
-      },
-      "options": {
-        "reduceOptions": {
-          "calcs": ["lastNotNull"]
-        },
-        "colorMode": "background",
-        "graphMode": "none"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "max(sportal_live_feed_connected_ratio) + 2 * (1 - (max(sportal_game_state_ratio == bool 2) or vector(0)))"
-        }
-      ]
-    },
-    {
-      "id": 30,
-      "type": "stat",
-      "title": "Game topics followed",
-      "gridPos": {
-        "x": 4,
-        "y": 0,
-        "w": 4,
-        "h": 4
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "noValue": "—",
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "text",
-                "value": null
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "reduceOptions": {
-          "calcs": ["lastNotNull"]
-        },
-        "colorMode": "background",
-        "graphMode": "none"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "max(sportal_live_feed_topics_ratio)"
-        }
-      ]
-    },
-    {
-      "id": 31,
-      "type": "stat",
-      "title": "Push messages / min",
-      "gridPos": {
-        "x": 8,
-        "y": 0,
-        "w": 4,
-        "h": 4
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "noValue": "no game live",
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "red",
-                "value": null
-              },
-              {
-                "color": "green",
-                "value": 1
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "reduceOptions": {
-          "calcs": ["lastNotNull"]
-        },
-        "colorMode": "background",
-        "graphMode": "none"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "(sum(increase(sportal_live_feed_received_total{op=~\"P|R\"}[1m])) or vector(0)) and on() max(sportal_game_state_ratio == 2)"
-        }
-      ]
-    },
-    {
-      "id": 32,
-      "type": "stat",
-      "title": "Polls / 15 min",
-      "gridPos": {
-        "x": 12,
-        "y": 0,
-        "w": 4,
-        "h": 4
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "red",
-                "value": null
-              },
-              {
-                "color": "green",
-                "value": 1
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "reduceOptions": {
-          "calcs": ["lastNotNull"]
-        },
-        "colorMode": "background",
-        "graphMode": "none"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "sum(increase(sportal_poll_duration_milliseconds_count[16m])) or vector(0)"
-        }
-      ]
-    },
-    {
-      "id": 33,
-      "type": "stat",
-      "title": "Feed failures in range",
-      "gridPos": {
-        "x": 16,
-        "y": 0,
-        "w": 4,
-        "h": 4
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "decimals": 0,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "orange",
-                "value": 1
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "reduceOptions": {
-          "calcs": ["lastNotNull"]
-        },
-        "colorMode": "background",
-        "graphMode": "none"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "(sum(increase(sportal_live_feed_errors_total[$__range])) or vector(0)) + (sum(increase(sportal_live_feed_checkpoint_failures_total[$__range])) or vector(0))"
-        }
-      ]
-    },
-    {
-      "id": 34,
-      "type": "stat",
-      "title": "Provider errors in range",
-      "gridPos": {
-        "x": 20,
-        "y": 0,
-        "w": 4,
-        "h": 4
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "decimals": 0,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "orange",
-                "value": 1
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "reduceOptions": {
-          "calcs": ["lastNotNull"]
-        },
-        "colorMode": "background",
-        "graphMode": "none"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "sum(increase(sportal_provider_errors_total[$__range])) or vector(0)"
-        }
-      ]
-    },
-    {
       "type": "table",
       "title": "Games",
       "id": 27,
@@ -425,7 +134,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 4,
+        "y": 0,
         "w": 24,
         "h": 10
       }
@@ -437,7 +146,7 @@
       "collapsed": false,
       "gridPos": {
         "x": 0,
-        "y": 14,
+        "y": 10,
         "w": 24,
         "h": 1
       },
@@ -449,7 +158,7 @@
       "title": "Plays",
       "gridPos": {
         "x": 0,
-        "y": 15,
+        "y": 11,
         "w": 16,
         "h": 10
       },
@@ -474,7 +183,7 @@
       "title": "Scoring plays",
       "gridPos": {
         "x": 16,
-        "y": 15,
+        "y": 11,
         "w": 8,
         "h": 10
       },
@@ -500,230 +209,11 @@
       "collapsed": false,
       "gridPos": {
         "x": 0,
-        "y": 25,
+        "y": 21,
         "w": 24,
         "h": 1
       },
       "panels": []
-    },
-    {
-      "id": 35,
-      "type": "timeseries",
-      "title": "Messages by op (/min)",
-      "gridPos": {
-        "x": 0,
-        "y": 26,
-        "w": 12,
-        "h": 8
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "custom": {
-            "stacking": {
-              "mode": "normal"
-            },
-            "fillOpacity": 30
-          }
-        },
-        "overrides": []
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "sum by (op) (rate(sportal_live_feed_received_total[$__rate_interval])) * 60",
-          "legendFormat": "{{op}}"
-        }
-      ]
-    },
-    {
-      "id": 36,
-      "type": "timeseries",
-      "title": "Patches by league (/min)",
-      "gridPos": {
-        "x": 12,
-        "y": 26,
-        "w": 12,
-        "h": 8
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "sum by (league) (rate(sportal_live_feed_received_total{op=~\"P|R\"}[$__rate_interval])) * 60",
-          "legendFormat": "{{league}}"
-        }
-      ]
-    },
-    {
-      "id": 37,
-      "type": "timeseries",
-      "title": "Topics followed and steers",
-      "gridPos": {
-        "x": 0,
-        "y": 34,
-        "w": 8,
-        "h": 8
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byFrameRefID",
-              "options": "B"
-            },
-            "properties": [
-              {
-                "id": "custom.drawStyle",
-                "value": "bars"
-              },
-              {
-                "id": "custom.fillOpacity",
-                "value": 80
-              },
-              {
-                "id": "custom.axisPlacement",
-                "value": "right"
-              },
-              {
-                "id": "custom.axisLabel",
-                "value": "steers"
-              }
-            ]
-          }
-        ]
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "max(sportal_live_feed_topics_ratio)",
-          "legendFormat": "followed"
-        },
-        {
-          "refId": "B",
-          "expr": "sum by (steer) (increase(sportal_live_feed_steers_total[$__rate_interval]))",
-          "legendFormat": "{{steer}}"
-        }
-      ]
-    },
-    {
-      "id": 38,
-      "type": "timeseries",
-      "title": "Checkpoint duration",
-      "gridPos": {
-        "x": 8,
-        "y": 34,
-        "w": 8,
-        "h": 8
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "ms"
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byFrameRefID",
-              "options": "C"
-            },
-            "properties": [
-              {
-                "id": "custom.drawStyle",
-                "value": "points"
-              },
-              {
-                "id": "custom.pointSize",
-                "value": 8
-              },
-              {
-                "id": "custom.axisPlacement",
-                "value": "right"
-              },
-              {
-                "id": "unit",
-                "value": "short"
-              },
-              {
-                "id": "color",
-                "value": {
-                  "mode": "fixed",
-                  "fixedColor": "red"
-                }
-              }
-            ]
-          }
-        ]
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "histogram_quantile(0.5, sum by (le) (rate(sportal_checkpoint_duration_milliseconds_bucket[$__rate_interval])))",
-          "legendFormat": "p50"
-        },
-        {
-          "refId": "B",
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(sportal_checkpoint_duration_milliseconds_bucket[$__rate_interval])))",
-          "legendFormat": "p95"
-        },
-        {
-          "refId": "C",
-          "expr": "sum(increase(sportal_live_feed_checkpoint_failures_total[$__rate_interval]))",
-          "legendFormat": "failures"
-        }
-      ]
-    },
-    {
-      "id": 15,
-      "type": "timeseries",
-      "title": "Feed errors by reason",
-      "gridPos": {
-        "x": 16,
-        "y": 34,
-        "w": 8,
-        "h": 8
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "custom": {
-            "drawStyle": "bars",
-            "fillOpacity": 80,
-            "stacking": {
-              "mode": "normal"
-            }
-          }
-        },
-        "overrides": []
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "sum by (reason) (increase(sportal_live_feed_errors_total[$__rate_interval])) or vector(0)",
-          "legendFormat": "{{reason}}"
-        }
-      ]
     },
     {
       "id": 17,
@@ -731,7 +221,7 @@
       "title": "FastCast logs",
       "gridPos": {
         "x": 0,
-        "y": 42,
+        "y": 22,
         "w": 24,
         "h": 10
       },
@@ -757,87 +247,20 @@
       "collapsed": false,
       "gridPos": {
         "x": 0,
-        "y": 52,
+        "y": 32,
         "w": 24,
         "h": 1
       },
       "panels": []
     },
     {
-      "id": 3,
-      "type": "timeseries",
-      "title": "Poll duration",
-      "gridPos": {
-        "x": 0,
-        "y": 53,
-        "w": 8,
-        "h": 8
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "ms"
-        },
-        "overrides": []
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "histogram_quantile(0.5, sum by (le) (rate(sportal_poll_duration_milliseconds_bucket[$__rate_interval])))",
-          "legendFormat": "p50"
-        },
-        {
-          "refId": "B",
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(sportal_poll_duration_milliseconds_bucket[$__rate_interval])))",
-          "legendFormat": "p95"
-        }
-      ]
-    },
-    {
-      "id": 4,
-      "type": "timeseries",
-      "title": "Provider errors by league",
-      "gridPos": {
-        "x": 8,
-        "y": 53,
-        "w": 8,
-        "h": 8
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "custom": {
-            "drawStyle": "bars",
-            "fillOpacity": 80,
-            "stacking": {
-              "mode": "normal"
-            }
-          }
-        },
-        "overrides": []
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "sum by (league) (increase(sportal_provider_errors_total[$__rate_interval])) or vector(0)",
-          "legendFormat": "{{league}}"
-        }
-      ]
-    },
-    {
       "id": 53,
       "type": "timeseries",
       "title": "Pushes behind their listing by league",
       "gridPos": {
-        "x": 16,
-        "y": 53,
-        "w": 8,
+        "x": 0,
+        "y": 33,
+        "w": 24,
         "h": 8
       },
       "datasource": {
@@ -866,35 +289,12 @@
       "description": "Pushed snapshots behind the game their league lists, which the listing takes anyway (ADR 0014)"
     },
     {
-      "id": 5,
-      "type": "table",
-      "title": "Poll traces",
-      "gridPos": {
-        "x": 0,
-        "y": 61,
-        "w": 24,
-        "h": 8
-      },
-      "datasource": {
-        "type": "tempo",
-        "uid": "tempo"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "queryType": "traceql",
-          "query": "{resource.service.name=\"sportal-hub\" && name=\"EspnProvider.poll\"}",
-          "limit": 20
-        }
-      ]
-    },
-    {
       "id": 41,
       "type": "logs",
       "title": "Provider logs",
       "gridPos": {
         "x": 0,
-        "y": 69,
+        "y": 41,
         "w": 24,
         "h": 8
       },
@@ -920,7 +320,7 @@
       "collapsed": true,
       "gridPos": {
         "x": 0,
-        "y": 77,
+        "y": 49,
         "w": 24,
         "h": 1
       },

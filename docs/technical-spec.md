@@ -336,8 +336,7 @@ YouTube TV's channels are found in its own guide, read by the shell and handed t
 - A college Saturday is one request for 50+ games, not 50 requests.
 - The provider decodes its own frames; the Director takes each frame's deliveries as they arrive, in the order the provider received its frames. Nothing is logged raw or replayed.
 - The live feed pushes snapshots between polls, and, for each current game, its plays. A pushed game is advanced onto its listed game; one no poll has listed yet is not delivered. The poll gives listings: a listing takes each of its games as a snapshot and forgets the league's games it no longer names. A snapshot of a listed game, polled or pushed, is taken unless it is behind the game: earlier in game time, or at the same game time with fewer points (a poll lagging a pushed score, `isAheadOf`); an over game takes one ahead of its end (overtime after a spurious final, a postponed game resuming), so a lagging poll cannot start a finished game again. There is no tie rule and no hold.
-- A FastCast topic that loses its document (a missed message, a patch that will not apply) is a Warning log from `EspnState`, and the push follows the topic again from its checkpoint, counted as a `FollowAgain` on `sportal_live_feed_steers`. FastCast also counts every socket text by op and league (`sportal_live_feed_received`) and gauges the game topics it is told to follow (`sportal_live_feed_topics`).
-- Each checkpoint's load and decode is timed (`sportal_checkpoint_duration`).
+- A FastCast topic that loses its document (a missed message, a patch that will not apply) is a Warning log from `EspnState`, and the push follows the topic again from its checkpoint. A checkpoint that does not load or decode is a Warning log, and FastCast subscribes to its topic again after 30 s while it is still wanted.
 - Game events are gone: nothing read them (ADR 0012). The Director's rules will derive them again from snapshot changes and plays when they are built.
 - The slate's games and plays are the latest the feeds gave; a missed poll is filled by the next one, and a restart starts from empty until persistence is added back (ADR 0012).
 
@@ -374,12 +373,12 @@ Expected failures are typed errors in the Effect error channel, each handled whe
 
 | Failure | Behaviour |
 | --- | --- |
-| Provider unreachable or refused | Logged and counted by league (`sportal_provider_errors`); the slate keeps each game's last snapshot; that league is polled again within 30 s |
+| Provider unreachable or refused | Logged as a Warning, annotated with its league; the slate keeps each game's last snapshot; that league is polled again within 30 s |
 | Payload fails to decode | Skip that game or play and deliver the rest; a frame that does not decode says nothing and is a Warning log |
 | Stream view fails to load | Tile becomes a data tile with a retry action |
 | Over budget | Assignment becomes a data tile; the UI says why |
 | Client loses the Hub | UI shows disconnected and reconnects; provider views keep playing |
-| Live feed refused, closed, silent, or out of step | Logged and counted by reason (`sportal_live_feed_errors`); resubscribed from a checkpoint with backoff from 1 s to 1 min; the poll carries on, so games go on updating at the poll's pace |
+| Live feed refused, closed, silent, or out of step | Logged as a Warning with its reason; resubscribed from a checkpoint with backoff from 1 s to 1 min; the poll carries on, so games go on updating at the poll's pace |
 | Applying a delivery dies | Error log; the slate keeps what it had and takes the next frame |
 | Telemetry collector unreachable | One warning naming its URL; the exporters drop what they cannot send and the Hub carries on, and still stops within its shutdown bound |
 
