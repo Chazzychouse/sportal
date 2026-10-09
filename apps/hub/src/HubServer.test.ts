@@ -3,7 +3,8 @@ import { assert, describe, it } from "@effect/vitest"
 import { type LiveMessage, LiveMessageJson } from "@sportal/api/LiveMessage"
 import { SportalApi } from "@sportal/api/SportalApi"
 import { GameId, Network } from "@sportal/domain/Game"
-import { broadcast, snapshot, team } from "@sportal/domain/TestGame"
+import { PlayId } from "@sportal/domain/Play"
+import { broadcast, play, snapshot, team } from "@sportal/domain/TestGame"
 import { DateTime, Effect, Layer, Queue, Ref, Schema, Stream } from "effect"
 import { HttpClient } from "effect/http"
 import { HttpApiClient } from "effect/http-api"
@@ -247,6 +248,125 @@ describe("GET /api/live", () => {
       }).pipe(Effect.scoped, Effect.provide(serverUnderTest(Source.layerTwitch)))
   )
 
+  it.effect("should publish the listing order with leagues in their order", () =>
+    Effect.gen(function* () {
+      const fbs = ["3", "1", "2"].map((id) =>
+        snapshot({ id: GameId.make(id), league: "fbs", status: "live", period: 1, clock: "10:00" })
+      )
+      const nfl = snapshot({ id: GameId.make("9"), league: "nfl", status: "live" })
+
+      const message = yield* publishedAfter([
+        Delivery.Listing({ league: "fbs", games: fbs }),
+        Delivery.Listing({ league: "nfl", games: [nfl] })
+      ])
+
+      assert.deepStrictEqual(
+        message.games.map(({ game }) => game.snapshot.id),
+        ["9", "3", "1", "2"]
+      )
+    }).pipe(Effect.scoped, Effect.provide(serverUnderTest()))
+  )
+
+  it.effect("should publish the accepted snapshot rather than the original listing", () =>
+    Effect.gen(function* () {
+      const first = snapshot({ id: GameId.make("1"), status: "live", period: 1, clock: "10:00" })
+      const next = snapshot({ ...first, period: 2 })
+
+      const message = yield* publishedAfter([
+        Delivery.Listing({ league: "fbs", games: [first] }),
+        Delivery.Snapshot({ snapshot: next })
+      ])
+
+      assert.strictEqual(message.games[0]?.game.snapshot.period, 2)
+    }).pipe(Effect.scoped, Effect.provide(serverUnderTest()))
+  )
+
+  it.effect("should publish each listed game's plays", () =>
+    Effect.gen(function* () {
+      const listed = snapshot({ id: GameId.make("1"), status: "live" })
+      const recordedPlay = play({ id: PlayId.make("p1"), sequence: 1 })
+
+      const message = yield* publishedAfter([
+        Delivery.Listing({ league: "fbs", games: [listed] }),
+        Delivery.Plays({ game: listed.id, plays: [recordedPlay] })
+      ])
+
+      assert.deepStrictEqual(message.games[0]?.game.plays, [recordedPlay])
+    }).pipe(Effect.scoped, Effect.provide(serverUnderTest()))
+  )
+
+  it.effect("should publish only the last ten plays in sequence order", () =>
+    Effect.gen(function* () {
+      const listed = snapshot({ id: GameId.make("1"), status: "live" })
+      const plays = Array.from({ length: 12 }, (_, index) =>
+        play({ id: PlayId.make(`p${index + 1}`), sequence: index + 1 })
+      ).toReversed()
+
+      const message = yield* publishedAfter([
+        Delivery.Listing({ league: "fbs", games: [listed] }),
+        Delivery.Plays({ game: listed.id, plays })
+      ])
+
+      assert.deepStrictEqual(
+        message.games[0]?.game.plays.map(({ sequence }) => sequence),
+        [3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+      )
+    }).pipe(Effect.scoped, Effect.provide(serverUnderTest()))
+  )
+
+  it.effect("should publish a listed final game", () =>
+    Effect.gen(function* () {
+      const final = snapshot({ id: GameId.make("1"), status: "final" })
+
+      const message = yield* publishedAfter([Delivery.Listing({ league: "fbs", games: [final] })])
+
+      assert.deepStrictEqual(
+        message.games.map(({ game }) => game.snapshot),
+        [final]
+      )
+    }).pipe(Effect.scoped, Effect.provide(serverUnderTest()))
+  )
+
+  it.effect("should not publish an unlisted game's snapshot", () =>
+    Effect.gen(function* () {
+      const listed = snapshot({ id: GameId.make("1"), status: "live" })
+      const unlisted = snapshot({ id: GameId.make("9"), status: "live" })
+
+      const message = yield* publishedAfter([
+        Delivery.Listing({ league: "fbs", games: [listed] }),
+        Delivery.Snapshot({ snapshot: unlisted })
+      ])
+
+      assert.deepStrictEqual(
+        message.games.map(({ game }) => game.snapshot.id),
+        ["1"]
+      )
+    }).pipe(Effect.scoped, Effect.provide(serverUnderTest()))
+  )
+
+  it.effect("should publish every source's availability beside each game", () =>
+    Effect.gen(function* () {
+      const listed = snapshot({ id: GameId.make("1"), status: "live" })
+
+      const message = yield* publishedAfter([Delivery.Listing({ league: "fbs", games: [listed] })])
+
+      assert.deepStrictEqual(message.games[0]?.availability, [
+        { _tag: "NotCarried", why: "StreamingOnly" },
+        { _tag: "NoGuide", source: "Twitch" }
+      ])
+    }).pipe(
+      Effect.scoped,
+      Effect.provide(
+        serverUnderTest(
+          Source.layerAll([
+            Source.layerTest(() => ({ _tag: "NotCarried", why: "StreamingOnly" })),
+            Source.layerTest(() => ({ _tag: "NoGuide", source: "Twitch" }))
+          ])
+        )
+      )
+    )
+  )
+
   it.live("should send the slate again when a guide read carries its game", () =>
     Effect.gen(function* () {
       const client = yield* makeClient
@@ -371,6 +491,15 @@ function inPeriod(period: number) {
     broadcasts: [broadcast(espn)]
   })
 }
+
+/** The live message first sent after `deliveries`, with no connection open before them. */
+const publishedAfter = Effect.fnUntraced(function* (deliveries: ReadonlyArray<Delivery>) {
+  yield* Effect.forEach(deliveries, delivered, { discard: true })
+  yield* TestClock.adjust("250 millis")
+  const { lines } = yield* liveLines()
+  const line = yield* Queue.take(lines)
+  return messageOf(line)
+})
 
 /** The live message a `data: <json>` line carries. */
 function messageOf(line: string): LiveMessage {

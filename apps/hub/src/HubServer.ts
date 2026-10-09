@@ -1,6 +1,6 @@
 import { createServer } from "node:http"
 import { NodeHttpServer, type NodeServices } from "@effect/platform-node"
-import { LiveMessage, LiveMessageJson } from "@sportal/api/LiveMessage"
+import { LiveMessage, LiveMessageJson, type SlateChanged } from "@sportal/api/LiveMessage"
 import { SportalApi } from "@sportal/api/SportalApi"
 import {
   DateTime,
@@ -137,7 +137,13 @@ const liveEvents = Effect.gen(function* () {
 
   return yield* settled(Stream.zipLatest(director.slate, source.availability)).pipe(
     Stream.mapEffect(([slate, availabilityOf]) =>
-      Effect.map(DateTime.now, (now) => slate.published((game) => availabilityOf(game, now)))
+      Effect.map(DateTime.now, (now): SlateChanged => {
+        const games = slate.games.map((game) => ({
+          game: game.recent(),
+          availability: availabilityOf(game.snapshot, now)
+        }))
+        return { _tag: "SlateChanged", games }
+      })
     ),
     Stream.changesWith(samePublished),
     Stream.mapEffect((message) => Effect.map(encode(message), (json) => `data: ${json}\n\n`)),

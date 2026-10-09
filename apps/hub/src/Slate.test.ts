@@ -1,5 +1,4 @@
 import { assert, describe, it } from "@effect/vitest"
-import type { ChannelAvailability } from "@sportal/domain/Channel"
 import { type Game, GameId, type GameSnapshot } from "@sportal/domain/Game"
 import type { LeagueId } from "@sportal/domain/League"
 import { type Play, PlayId } from "@sportal/domain/Play"
@@ -12,8 +11,6 @@ const t0 = DateTime.makeUnsafe("2026-10-03T16:00:00Z")
 const one = GameId.make("1")
 const two = GameId.make("2")
 const three = GameId.make("3")
-const noAvailability = () => []
-const streamingOnly: ChannelAvailability = { _tag: "NotCarried", why: "StreamingOnly" }
 
 describe("Slate.empty", () => {
   it("should hold no game", () => {
@@ -355,81 +352,6 @@ describe("Slate#games", () => {
     const next = slate.take([snapshotOf(later)])[0]
 
     assert.strictEqual(next.games[0], slate.games[0])
-  })
-})
-
-describe("Slate#published", () => {
-  it("should keep the listing's order, leagues in their order", () => {
-    const slate = Slate.empty.take([
-      listing("fbs", [live(three, "10:00"), live(one, "10:00"), live(two, "10:00")]),
-      listing("nfl", [snapshot({ id: GameId.make("9"), league: "nfl", status: "live" })])
-    ])[0]
-
-    const ids = slate.published(noAvailability).games.map(({ game }) => game.snapshot.id)
-
-    assert.deepStrictEqual(ids, ["9", "3", "1", "2"])
-  })
-
-  it("should publish a game's latest snapshot over its listing's", () => {
-    const slate = Slate.empty.take([
-      listing("fbs", [live(one, "10:00")]),
-      snapshotOf(snapshot({ id: one, status: "live", period: 2 }))
-    ])[0]
-
-    const { games } = slate.published(noAvailability)
-
-    assert.strictEqual(games[0]?.game.snapshot.period, 2)
-  })
-
-  it("should carry each listed game's plays with it", () => {
-    const recordedPlay = play({ id: PlayId.make("p1"), sequence: 1 })
-    const slate = Slate.empty.take([listing("fbs", [live(one, "10:00")]), playsFor(one, [recordedPlay])])[0]
-
-    const { games } = slate.published(noAvailability)
-
-    assert.deepStrictEqual(games[0]?.game.plays, [recordedPlay])
-  })
-
-  it("should carry only a game's last ten plays", () => {
-    const slate = Slate.empty.take([listing("fbs", [live(one, "10:00")]), playsOf(one, 12)])[0]
-
-    const { games } = slate.published(noAvailability)
-
-    assert.deepStrictEqual(
-      games[0]?.game.plays.map(({ sequence }) => sequence),
-      [3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
-    )
-  })
-
-  it("should publish a final game a listing names", () => {
-    const final = snapshot({ id: one, status: "final" })
-    const slate = listed(final)
-
-    const { games } = slate.published(noAvailability)
-
-    assert.deepStrictEqual(
-      games.map(({ game }) => game.snapshot),
-      [final]
-    )
-  })
-
-  it("should leave off a game no listing has", () => {
-    const slate = Slate.empty.take([
-      listing("fbs", [live(one, "10:00")]),
-      snapshotOf(live(GameId.make("9"), "10:00"))
-    ])[0]
-
-    const ids = slate.published(noAvailability).games.map(({ game }) => game.snapshot.id)
-
-    assert.deepStrictEqual(ids, ["1"])
-  })
-
-  it("should put each game's availability from every source beside it", () => {
-    const slate = listed(live(one, "10:00"))
-
-    const { games } = slate.published(() => [streamingOnly])
-
-    assert.deepStrictEqual(games[0]?.availability, [streamingOnly])
   })
 })
 
