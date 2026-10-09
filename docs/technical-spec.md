@@ -213,7 +213,7 @@ sportal/
     │       │       ├── FastCastMessage.ts  FastCast's wire shapes
     │       │       ├── Topic.ts            A FastCast topic, read once from its `tc`
     │       │       ├── Frame.ts            A frame as received, before ESPN's decode reads it
-    │       │       ├── TestEspn.ts         Recorded frames for tests of other modules, NE at BUF's day among them (`recordedNeAtBuf`)
+    │       │       ├── TestEspn.ts         Recorded frames and scoreboards for tests of other modules, NE at BUF's day among them (`recordedNeAtBuf`), and ESPN answering from recorded scoreboards (`recordedEspn`)
     │       │       └── fixtures/           Recorded real payloads, NE at BUF's frames among them
     │       └── source/
     │           ├── Source.ts           The port, its variants, and how several answer as one

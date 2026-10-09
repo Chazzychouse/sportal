@@ -1,20 +1,35 @@
 import { readFileSync } from "node:fs"
-import { fileURLToPath } from "node:url"
 import { gunzipSync } from "node:zlib"
 import { LeagueId } from "@sportal/domain/League"
 import { Effect, Layer, Option, Schema, Stream } from "effect"
+import { HttpClient, HttpClientResponse } from "effect/http"
 import * as Socket from "effect/socket/Socket"
+import { HubConfig } from "../../HubConfig.ts"
+import type { Provider } from "../Provider.ts"
+import * as Espn from "./Espn.ts"
 import { EspnState } from "./EspnState.ts"
 import { Frame } from "./Frame.ts"
 import { topicOf } from "./Topic.ts"
 
-/** A WebSocket constructor for tests that never push: opening a socket throws. */
-export const noSocket = Layer.succeed(Socket.WebSocketConstructor, () => {
-  throw new Error("this test opens no socket")
-})
+/**
+ * ESPN live with the default Hub config, answering each league's poll with its recorded scoreboard in `scoreboards`,
+ * and with FastCast that opens no socket.
+ */
+export function recordedEspn(scoreboards: { readonly [L in LeagueId]: string }): Layer.Layer<Provider> {
+  const recorded = HttpClient.make((request) => {
+    const body = request.url.includes("/nfl/") ? scoreboards.nfl : scoreboards.fbs
+    return Effect.succeed(HttpClientResponse.fromWeb(request, new Response(body)))
+  })
+  return Espn.layer.pipe(
+    Layer.provide([noSocket, HubConfig.layerTest({}).pipe(Layer.orDie)]),
+    Layer.provide(Layer.succeed(HttpClient.HttpClient, recorded))
+  )
+}
 
-/** This adapter's fixtures folder. */
-export const fixtures = fileURLToPath(new URL("./fixtures/", import.meta.url))
+/** A recorded ESPN site scoreboard among this adapter's fixtures. */
+export function recordedScoreboard(name: string): string {
+  return readFileSync(new URL(`./fixtures/${name}.json`, import.meta.url), "utf8")
+}
 
 /**
  * Every play id NE at BUF's recorded frames add. Measured once over the fixture: every play id its topic's patches add,
@@ -56,6 +71,11 @@ export const stateAfter = Effect.fn("TestEspn.stateAfter")(function* (frames: Re
     () => EspnState.empty,
     (state, frame) => Effect.map(state.take(frame), ([next]) => next)
   )
+})
+
+// Opening a socket throws, so FastCast never pushes.
+const noSocket = Layer.succeed(Socket.WebSocketConstructor, () => {
+  throw new Error("this test opens no socket")
 })
 
 /** A line of the recording, as it was recorded: its way, its league or topic, whole or a change, and its mid. */
