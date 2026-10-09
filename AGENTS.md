@@ -43,7 +43,7 @@ easiest to break.
 | Shape | Exports | Imported |
 |---|---|---|
 | Class module | One class named for the file (service, `Schema.Class`, `Data.Class`), and beside it only that concept's member types, errors and the schemas its fields read | By name |
-| Namespace module | No class of its own: an adapter of a port defined elsewhere (`EspnProvider`), a layer that provides no service (`Telemetry`), or a set of functions (`Gzip`). An adapter or layer-only module exports `layer` | `import * as X` |
+| Namespace module | No class of its own: an adapter of a port defined elsewhere (`EspnProvider`), a layer that provides no service (`Telemetry`), or a set of functions (`HubStopping`). An adapter or layer-only module exports `layer` | `import * as X` |
 | Payload module (`*Payload.ts`) | A provider's wire spelling, with no transform into domain types | By name |
 | Entry point (lowercase) | Nothing; it runs a process (`main.ts`) | – |
 | Test module (`Test*.ts`) | Fixtures, recorded payloads, builders of domain values, harnesses composing several layers, test-only adapters of a port | As its shape says |

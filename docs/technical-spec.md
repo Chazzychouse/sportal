@@ -214,7 +214,6 @@ sportal/
     │       │       ├── FastCastMessage.ts  FastCast's wire shapes
     │       │       ├── Topic.ts            A FastCast topic, read once from its `tc`
     │       │       ├── Frame.ts            A frame as received, before ESPN's decode reads it
-    │       │       ├── Gzip.ts             The text a gzip'd or deflated body holds, as FastCast's patches are
     │       │       ├── TestEspn.ts         Recorded frames for tests of other modules, NE at BUF's day among them (`recordedNeAtBuf`)
     │       │       └── fixtures/           Recorded real payloads, NE at BUF's frames among them
     │       └── source/
