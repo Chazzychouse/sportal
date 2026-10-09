@@ -218,13 +218,12 @@ sportal/
     │       └── source/
     │           ├── Source.ts           The port, its variants, and how several answer as one
     │           ├── GuideReader.ts      Reads the guide the shell fetches, keeps it while fresh
-    │           ├── youtube-tv/
-    │           │   ├── YouTubeTvGuide.ts    A guide response as channels and airings
-    │           │   ├── YouTubeTvPayload.ts  The guide response's wire shape
-    │           │   ├── TestYouTubeTv.ts     A recorded guide for tests of other modules
-    │           │   └── fixtures/            Recorded real payloads
-    │           └── twitch/
-    │               └── Twitch.ts            Twitch's lineup
+    │           ├── Twitch.ts           Twitch's lineup
+    │           └── youtube-tv/
+    │               ├── YouTubeTvGuide.ts    A guide response as channels and airings
+    │               ├── YouTubeTvPayload.ts  The guide response's wire shape
+    │               ├── TestYouTubeTv.ts     A recorded guide for tests of other modules
+    │               └── fixtures/            Recorded real payloads
     │
     ├── web/
     │   └── src/
