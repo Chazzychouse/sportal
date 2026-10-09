@@ -11,8 +11,8 @@ import { Frame } from "./Frame.ts"
  * ESPN as the provider: the site scoreboard of each league `HubConfig` names, polled, and FastCast pushing, every frame
  * folded, in the order it arrives, into one `EspnState` by one fold. Each league polls on its own, waiting after each
  * poll by its own listed games: 10 seconds while one is live, a minute within 30 minutes of a kickoff, and 15 minutes
- * otherwise; at most 30 seconds while its last poll failed or did not decode. A poll that fails is logged and is a
- * `PollFailed` frame. It tells FastCast to follow every league's scoreboard topic and each listed game live or within
+ * otherwise; at most 30 seconds while its last poll failed or did not decode. A poll's request and body read are bounded to 20 seconds; a
+ * poll that fails or times out is logged and is a `PollFailed` frame. It tells FastCast to follow every league's scoreboard topic and each listed game live or within
  * 30 minutes of kickoff, and keeps no document of a topic it no longer follows. Each run of `deliveries` polls and
  * follows on its own.
  */
@@ -27,6 +27,7 @@ export const layer: Layer.Layer<Provider, never, FastCast | HttpClient.HttpClien
     const polled = (league: LeagueId) =>
       client.get(scoreboardUrl(league)).pipe(
         Effect.flatMap((response) => response.text),
+        Effect.timeout("20 seconds"),
         Effect.map((body) => Frame.Polled({ league, body })),
         Effect.catch((error) =>
           Effect.logWarning(

@@ -354,6 +354,45 @@ describe("EspnProvider.deliveries", () => {
     })
   )
 
+  it.effect.each(["request", "body"] as const)(
+    "should retry a poll after its %s stalls without stopping the other league",
+    (phase) =>
+      Effect.gen(function* () {
+        const nflRequests = yield* Ref.make<ReadonlyArray<number>>([])
+        const fbsRequests = yield* Ref.make(0)
+        const client = HttpClient.make((request) =>
+          Effect.gen(function* () {
+            if (!request.url.includes("/nfl/")) {
+              yield* Ref.update(fbsRequests, (count) => count + 1)
+              return answered(request, fbsLive)
+            }
+            const at = yield* Clock.currentTimeMillis
+            yield* Ref.update(nflRequests, (all) => [...all, at])
+            if (phase === "request") return yield* Effect.never
+            return HttpClientResponse.fromWeb(request, new Response(new ReadableStream<Uint8Array>()))
+          })
+        )
+        const { logs, layer } = recordingLogs()
+
+        yield* Effect.gen(function* () {
+          const provider = yield* Provider
+          yield* provider.deliveries.pipe(Stream.runDrain, Effect.forkScoped({ startImmediately: true }))
+          yield* TestClock.adjust(0)
+          yield* settled
+          yield* TestClock.adjust("20 seconds")
+          yield* settled
+          yield* TestClock.adjust("30 seconds")
+          yield* settled
+        }).pipe(Effect.provide(espnOver(client).pipe(Layer.provideMerge(layer))), Effect.scoped)
+
+        const nfl = yield* Ref.get(nflRequests)
+        const fbs = yield* Ref.get(fbsRequests)
+        assert.deepStrictEqual(nfl, [0, 50_000])
+        assert.isAtLeast(fbs, 2)
+        assert.isTrue(logs.some((entry) => entry.level === "Warn"))
+      })
+  )
+
   it.effect("should deliver a push that arrives during a slow poll before the poll's frame", () =>
     Effect.gen(function* () {
       const slow = HttpClient.make((request) =>

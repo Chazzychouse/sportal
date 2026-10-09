@@ -374,7 +374,7 @@ Expected failures are typed errors in the Effect error channel, each handled whe
 
 | Failure | Behaviour |
 | --- | --- |
-| Provider unreachable or refused | Logged as a Warning, annotated with its league; the slate keeps each game's last snapshot; that league is polled again within 30 s |
+| Provider unreachable, refused, or stalled | A poll's request and body read are bounded to 20 s; a stall is a failed poll. Logged as a Warning, annotated with its league; the slate keeps each game's last snapshot; that league is polled again 30 s after the failure is folded (10 s while a game is live) |
 | Payload fails to decode | Skip that game or play and deliver the rest; a frame that does not decode says nothing and is a Warning log |
 | Stream view fails to load | Tile becomes a data tile with a retry action |
 | Over budget | Assignment becomes a data tile; the UI says why |
