@@ -362,7 +362,7 @@ Designed in full in `docs/specs/2026-10-03-director-design.md`.
   Director's rules read game events and plays.
 - Automation is planned: a **Trigger** is a condition over events and snapshots, and a **Rule** will move games in a ranking by watchability, never send a screen command.
 - The Director runs in the Hub, so it works with no client focused. It will publish a ranking of games, and each Display will decide how its layout shows it ([ADR 0015](./adr/0015-each-display-owns-its-screen.md)).
-- A manual command on a tile suppresses automation on that tile for a cooldown.
+- A Display will hold off following the ranking on a tile a person just changed.
 
 ### 5.5 Time and the spoiler shield
 

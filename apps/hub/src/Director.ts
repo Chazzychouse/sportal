@@ -16,8 +16,8 @@ export class Director extends Context.Service<
   {
     readonly slate: Effect.Effect<Slate>
     /**
-     * The slate as the live stream sends it, beside each game's availability: the latest first, then again whenever
-     * the slate or any game's availability changes.
+     * The slate as the live stream sends it, beside each game's availability: the latest first, then the latest
+     * again whenever the slate or any game's availability changes.
      */
     readonly published: Stream.Stream<SlateChanged>
   }

@@ -46,7 +46,7 @@ Setup: Hub serving the built web UI, desktop shell running, signed in to YouTube
 | 37 | Press `I` again, or select another tile | The player stops getting the mouse; hovering it shows nothing again |
 | 38 | With Docker running, run `pnpm dev` during live games, and open the Hub dashboard (`localhost:3000`, folder Sportal) | The dashboard fills; a poll's trace shows its provider calls |
 | 39 | Solo a tile, open the key help, press `Ctrl`+`K` | Only the palette is open. `Esc` closes it; a second `Esc` unsolos |
-| 40 | Select tile 4 in Quad, switch to Single with `L` or the top bar's layout picker | The one tile is selected, and a drop goes into it |
+| 40 | Select tile 4 in Quad, press `L` until Single, or choose Single in the top bar's layout picker | The one tile is selected, and a drop goes into it |
 | 41 | Solo a tile, press `?`, then `Esc` | The key help closes and the tile stays soloed |
 | 42 | During a live NFL game with `pnpm telemetry` and the Hub on `SPORTAL_OTLP_URL=http://localhost:4318`, open the Live feed row of the Hub dashboard (mode `live`) | Connected shows 1; Connects in range stays at 1; Errors by reason is empty; Live feed logs show no refused or empty subscription. Take traces on the same dashboard list `Board.take` spans, each with its `sportal.deliveries` count |
 | 43 | During a live game, note one game's score and its recent plays on the strip, stop the Hub, start it, and look again | The slate is empty until the first poll, then shows the game at its current score; its recent plays come back once FastCast follows its topic again |
