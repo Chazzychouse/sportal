@@ -74,7 +74,7 @@ export class GameSnapshot extends Schema.Class<GameSnapshot>("sportal/GameSnapsh
    * Where the game is in its day: not started, being played, or done with (final, postponed, canceled). A delay
    * before kickoff is upcoming and a delay during the game is live.
    */
-  progress(): "upcoming" | "live" | "over" {
+  progress(): Progress {
     return progressOf[this.status](this.period)
   }
 
@@ -280,8 +280,11 @@ export class BallSpot extends Schema.Class<BallSpot>("sportal/BallSpot")({
   toward: Schema.Literals(["home", "away"])
 }) {}
 
+/** Where a game is in its day. */
+export type Progress = "upcoming" | "live" | "over"
+
 /** Each status's progress, given the period it is in. */
-const progressOf: Record<GameStatus, (period: number) => "upcoming" | "live" | "over"> = {
+const progressOf: Record<GameStatus, (period: number) => Progress> = {
   scheduled: () => "upcoming",
   delayed: (period) => (period >= 1 ? "live" : "upcoming"),
   live: () => "live",

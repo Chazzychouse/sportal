@@ -4,7 +4,6 @@ import {
   DateTime,
   Duration,
   Effect,
-  Equal,
   Layer,
   Metric,
   Option,
@@ -75,7 +74,9 @@ export const layer: Layer.Layer<Provider, never, FastCast | HttpClient.HttpClien
     const pollEveryLeague = Effect.fn("EspnProvider.pollEveryLeague")(function* (
       taken: (frame: Frame) => Effect.Effect<ReadonlyArray<Delivery>>
     ) {
-      const polled = yield* Effect.forEach(leagues, (league) => polledOf(league, poll(league), taken))
+      const polled = yield* Effect.forEach(leagues, (league) => polledOf(league, poll(league), taken), {
+        concurrency: "unbounded"
+      })
       const failed = polled.flatMap(({ league, said }) => (Option.isNone(said) ? [league] : []))
       yield* Effect.annotateCurrentSpan({ "sportal.leagues": leagues, "sportal.failed_leagues": failed })
       return polled
@@ -95,7 +96,7 @@ export const layer: Layer.Layer<Provider, never, FastCast | HttpClient.HttpClien
         }
       ),
       Stream.mapEffect((current) => Effect.map(DateTime.now, (now) => current.wanted(leagues, now))),
-      Stream.changesWith((previous, next) => Equal.equals(previous, next))
+      Stream.changes
     )
     // A run of the stream makes its own queue and its own polls and pushes into it, and ends with them.
     const deliveries = Stream.unwrap(
@@ -160,10 +161,9 @@ function polling(
 ): Schedule.Schedule<Duration.Duration, ReadonlyArray<Polled>> {
   return Schedule.fromStep(
     Effect.succeed((now: number, polled: ReadonlyArray<Polled>) =>
-      Effect.map(SubscriptionRef.get(state), (current) => {
+      Effect.map(SubscriptionRef.get(state), (current): [Duration.Duration, Duration.Duration] => {
         const wait = interval(current.games(), polled.some(unlisted), DateTime.makeUnsafe(now))
-        const step: [Duration.Duration, Duration.Duration] = [wait, wait]
-        return step
+        return [wait, wait]
       })
     )
   )

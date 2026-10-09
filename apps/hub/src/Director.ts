@@ -1,4 +1,4 @@
-import type { GameSnapshot } from "@sportal/domain/Game"
+import type { GameSnapshot, Progress } from "@sportal/domain/Game"
 import type { Play } from "@sportal/domain/Play"
 import { Cause, Context, Effect, Layer, Metric, Stream, SubscriptionRef } from "effect"
 import * as HubStopping from "./HubStopping.ts"
@@ -86,10 +86,7 @@ function loggedPlay(snapshot: GameSnapshot, play: Play) {
 }
 
 // Each progress's value on `sportal_game_state`. Written as a record so that a new progress fails to compile here.
-const progressValues = { upcoming: 1, live: 2, over: 3 } satisfies Record<
-  ReturnType<GameSnapshot["progress"]>,
-  number
->
+const progressValues = { upcoming: 1, live: 2, over: 3 } satisfies Record<Progress, number>
 
 const gameState = Metric.gauge("sportal_game_state", {
   description: "A game's progress, by game: 1 upcoming, 2 live, 3 over, 0 once no listing names it"

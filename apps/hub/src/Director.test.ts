@@ -2,7 +2,7 @@ import { assert, describe, it } from "@effect/vitest"
 import { GameId, GameSnapshot } from "@sportal/domain/Game"
 import { type Play, PlayId } from "@sportal/domain/Play"
 import { liveSnapshot, play, snapshot } from "@sportal/domain/TestGame"
-import { DateTime, Effect, Layer, Option, Ref, Stream, type Tracer } from "effect"
+import { DateTime, Effect, Layer, Ref, Stream, type Tracer } from "effect"
 import { Director } from "./Director.ts"
 import { decodedFrames, recordedNeAtBuf, recordedPlays } from "./provider/espn/TestEspn.ts"
 import { Delivery, ProviderFeed } from "./provider/Provider.ts"
@@ -252,11 +252,11 @@ describe("Director's game state gauge", () => {
 })
 
 function snapshotIn(slate: Slate, id: GameId): GameSnapshot | undefined {
-  return Option.getOrUndefined(slate.game(id))?.snapshot
+  return slate.games.find(({ snapshot }) => snapshot.id === id)?.snapshot
 }
 
 function playsIn(slate: Slate, id: GameId): ReadonlyArray<Play> {
-  return Option.match(slate.game(id), { onNone: () => [], onSome: ({ plays }) => plays })
+  return slate.games.find(({ snapshot }) => snapshot.id === id)?.plays ?? []
 }
 
 function listingOf(games: ReadonlyArray<GameSnapshot>) {

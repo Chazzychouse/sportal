@@ -4,7 +4,7 @@ import { type Game, GameId, type GameSnapshot } from "@sportal/domain/Game"
 import type { LeagueId } from "@sportal/domain/League"
 import { type Play, PlayId } from "@sportal/domain/Play"
 import { broadcast, completion, play, situation, snapshot, team } from "@sportal/domain/TestGame"
-import { DateTime, Option } from "effect"
+import { Array as Arr, DateTime, Option } from "effect"
 import { Delivery } from "./provider/Provider.ts"
 import { Slate, SlateChange } from "./Slate.ts"
 
@@ -491,17 +491,17 @@ describe("Slate#take, its changes", () => {
 
 /** Game `id`'s snapshot, as `slate` has it. */
 function snapshotIn(slate: Slate, id: GameId): GameSnapshot | undefined {
-  return Option.getOrUndefined(slate.game(id))?.snapshot
+  return slate.games.find(({ snapshot }) => snapshot.id === id)?.snapshot
 }
 
 /** Game `id`, as `slate` has it; the test fails when the slate lacks it. */
 function gameIn(slate: Slate, id: GameId): Game {
-  return Option.getOrThrow(slate.game(id))
+  return Option.getOrThrow(Arr.findFirst(slate.games, ({ snapshot }) => snapshot.id === id))
 }
 
 /** Game `id`'s plays, as `slate` has them; none for a game it does not have. */
 function playsIn(slate: Slate, id: GameId): ReadonlyArray<Play> {
-  return Option.match(slate.game(id), { onNone: () => [], onSome: ({ plays }) => plays })
+  return slate.games.find(({ snapshot }) => snapshot.id === id)?.plays ?? []
 }
 
 /** League `league`'s games, as `slate` has them, in order. */

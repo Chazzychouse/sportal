@@ -1,4 +1,3 @@
-import { readFileSync } from "node:fs"
 import { assert, describe, it } from "@effect/vitest"
 import { GameId, Network } from "@sportal/domain/Game"
 import { LeagueId } from "@sportal/domain/League"
@@ -31,15 +30,15 @@ import * as EspnProvider from "./EspnProvider.ts"
 import { FastCast, type Wanted } from "./FastCast.ts"
 import { Frame } from "./Frame.ts"
 import { ProviderUnavailable } from "./ProviderUnavailable.ts"
+import { recordedScoreboard } from "./TestEspn.ts"
 import { fakeServer, subscribed, watched } from "./TestFastCast.ts"
 import { Topic } from "./Topic.ts"
 
 // Real payloads recorded from ESPN. A payload that breaks decoding gets added here before the fix.
-const fixture = (name: string) => readFileSync(new URL(`./fixtures/${name}.json`, import.meta.url), "utf8")
-const fbsLive = fixture("fbs-scoreboard-live")
-const fbsMidday = fixture("fbs-scoreboard-2026-10-03T2024Z")
-const nflPregame = fixture("nfl-scoreboard-pregame")
-const nflLive = fixture("nfl-scoreboard-2026-10-04T1800Z")
+const fbsLive = recordedScoreboard("fbs-scoreboard-live")
+const fbsMidday = recordedScoreboard("fbs-scoreboard-2026-10-03T2024Z")
+const nflPregame = recordedScoreboard("nfl-scoreboard-pregame")
+const nflLive = recordedScoreboard("nfl-scoreboard-2026-10-04T1800Z")
 
 describe("EspnProvider", () => {
   it.effect("should decode a live FBS scoreboard into snapshots", () =>

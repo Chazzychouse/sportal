@@ -96,34 +96,38 @@ export const Host = Schema.Struct({ ip: Schema.String, securePort: Schema.Int, t
 /** The checkpoint body of `topic`, read by its schema: a scoreboard's events, or a game's plays. */
 export function Checkpoint(topic: Topic) {
   return Topic.$match(topic, {
-    Scoreboard: () => Schema.fromJsonString(ScoreboardCheckpoint),
-    Game: () => Schema.fromJsonString(GameCheckpoint)
+    Scoreboard: () => ScoreboardCheckpoint,
+    Game: () => GameCheckpoint
   })
 }
 
 /** A scoreboard topic's whole document, as a checkpoint URL serves it; each event stays JSON, to be patched. */
-const ScoreboardCheckpoint = Schema.Struct({
-  sports: Schema.Array(
-    Schema.Struct({
-      leagues: Schema.Array(
-        Schema.Struct({
-          events: Schema.Array(
-            Schema.StructWithRest(Schema.Struct({ uid: Schema.String }), [
-              Schema.Record(Schema.String, Schema.Json)
-            ])
-          )
-        })
-      )
-    })
-  )
-})
+const ScoreboardCheckpoint = Schema.fromJsonString(
+  Schema.Struct({
+    sports: Schema.Array(
+      Schema.Struct({
+        leagues: Schema.Array(
+          Schema.Struct({
+            events: Schema.Array(
+              Schema.StructWithRest(Schema.Struct({ uid: Schema.String }), [
+                Schema.Record(Schema.String, Schema.Json)
+              ])
+            )
+          })
+        )
+      })
+    )
+  })
+)
 
 /** A game topic's whole document, ESPN's game package, as a checkpoint URL serves it: only its plays, by id. */
-const GameCheckpoint = Schema.Struct({
-  entities: Schema.optional(
-    Schema.Struct({ plays: Schema.optional(Schema.Record(Schema.String, Schema.Json)) })
-  )
-})
+const GameCheckpoint = Schema.fromJsonString(
+  Schema.Struct({
+    entities: Schema.optional(
+      Schema.Struct({ plays: Schema.optional(Schema.Record(Schema.String, Schema.Json)) })
+    )
+  })
+)
 
 /** The text zlib-deflated bytes hold, read with the web `DecompressionStream`. */
 const inflate = Effect.fnUntraced(function* (compressed: Uint8Array) {

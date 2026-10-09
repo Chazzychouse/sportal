@@ -36,6 +36,11 @@ export class EspnState extends Data.Class<{
     return taken(this, frame)
   }
 
+  /** League `league`'s listed games, as the state has them; none before its first poll. */
+  listing(league: LeagueId): ReadonlyArray<GameSnapshot> {
+    return Option.getOrElse(HashMap.get(this.listings, league), () => [])
+  }
+
   /** Every listed game, as the state has it. */
   games(): ReadonlyArray<GameSnapshot> {
     return [...HashMap.values(this.listings)].flat()
@@ -62,8 +67,8 @@ const taken = Effect.fnUntraced(
   function* (state: EspnState, frame: Frame) {
     return yield* Frame.$match(frame, {
       Polled: ({ league, body }) => listed(state, league, body),
-      Pushed: () => pushed(state, frame),
-      Checkpoint: () => pushed(state, frame)
+      Pushed: (each) => pushed(state, each),
+      Checkpoint: (each) => pushed(state, each)
     })
   },
   (effect, state, frame) =>
@@ -79,7 +84,7 @@ const listed = Effect.fnUntraced(function* (state: EspnState, league: LeagueId, 
   const scoreboard = yield* decodeScoreboard(body)
   const games = yield* gamesOf(league, scoreboard.events)
 
-  const had = Option.getOrElse(HashMap.get(state.listings, league), () => [])
+  const had = state.listing(league)
   const kept = games.map((game) => keptOver(had, game))
   const next = new EspnState({ ...state, listings: HashMap.set(state.listings, league, kept) })
   return [next, [Delivery.Listing({ league, games })]] as const
@@ -104,7 +109,10 @@ function keptOver(had: ReadonlyArray<GameSnapshot>, game: GameSnapshot): GameSna
 
 const noDeliveries: ReadonlyArray<Delivery> = []
 
-const pushed = Effect.fnUntraced(function* (state: EspnState, frame: Frame) {
+const pushed = Effect.fnUntraced(function* (
+  state: EspnState,
+  frame: Data.TaggedEnum.Value<Frame, "Pushed" | "Checkpoint">
+) {
   const { documents, change } = yield* state.documents.advance(frame)
 
   const advanced = new EspnState({ ...state, documents })
@@ -162,21 +170,23 @@ function movedForward(
   league: LeagueId,
   games: ReadonlyArray<GameSnapshot>
 ): readonly [EspnState, ReadonlyArray<Delivery>, ReadonlyArray<GameSnapshot>] {
-  const listing = Option.getOrElse(HashMap.get(state.listings, league), () => [])
-  const advanced = games.flatMap((game) =>
+  const listing = state.listing(league)
+  const taken = games.flatMap((game) =>
     Arr.findFirst(listing, (listedGame) => listedGame.id === game.id).pipe(
-      Option.map((listedGame) => listedGame.advancedTo(game)),
+      Option.map((listedGame) => ({ listedGame, advanced: listedGame.advancedTo(game) })),
       Option.toArray
     )
   )
-  if (advanced.length === 0) return [state, noDeliveries, []]
+  if (taken.length === 0) return [state, noDeliveries, []]
 
-  const behind = advanced.filter((game) =>
-    listing.some((listedGame) => listedGame.id === game.id && game.isBehind(listedGame))
+  const behind = taken
+    .filter(({ listedGame, advanced }) => advanced.isBehind(listedGame))
+    .map(({ advanced }) => advanced)
+  const moved = listing.map(
+    (listedGame) => taken.find(({ advanced }) => advanced.id === listedGame.id)?.advanced ?? listedGame
   )
-  const moved = listing.map((listedGame) => advanced.find((game) => game.id === listedGame.id) ?? listedGame)
   const next = new EspnState({ ...state, listings: HashMap.set(state.listings, league, moved) })
-  return [next, advanced.map((snapshot) => Delivery.Snapshot({ snapshot })), behind]
+  return [next, taken.map(({ advanced: snapshot }) => Delivery.Snapshot({ snapshot })), behind]
 }
 
 /** What a log of `frame` is annotated with: its kind, and its league or its topic's name. */

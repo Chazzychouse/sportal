@@ -3,7 +3,7 @@ import type { ChannelAvailability } from "@sportal/domain/Channel"
 import { Game, type GameId, type GameSnapshot } from "@sportal/domain/Game"
 import { LeagueId } from "@sportal/domain/League"
 import type { Play } from "@sportal/domain/Play"
-import { Array as Arr, Data, type Option } from "effect"
+import { Data } from "effect"
 import { Delivery } from "./provider/Provider.ts"
 
 /**
@@ -33,11 +33,6 @@ export class Slate extends Data.Class<{
     )
   }
 
-  /** Game `id`, where the slate has it. */
-  game(id: GameId): Option.Option<Game> {
-    return Arr.findFirst(this.games, ({ snapshot }) => snapshot.id === id)
-  }
-
   /** What the live stream sends of it: every listed game, with its recent plays, beside `availabilityOf` it. */
   published(availabilityOf: (game: GameSnapshot) => ReadonlyArray<ChannelAvailability>): SlateChanged {
     const games = this.games.map((game) => ({
@@ -61,11 +56,12 @@ export class Slate extends Data.Class<{
    */
   private relisted(league: LeagueId, snapshots: ReadonlyArray<GameSnapshot>): Taken {
     const had = this.games.filter((game) => game.snapshot.league === league)
-    const listed = snapshots.map((snapshot) => {
-      const game = had.find((each) => each.snapshot.id === snapshot.id)
-      return game === undefined ? Game.of(snapshot) : game.listed(snapshot)
+    const taken = snapshots.map((snapshot) => {
+      const before = had.find((each) => each.snapshot.id === snapshot.id)
+      return { before, game: before === undefined ? Game.of(snapshot) : before.listed(snapshot) }
     })
-    if (sameGames(listed, had)) return [this, []]
+    const listed = taken.map(({ game }) => game)
+    if (listed.length === had.length && listed.every((game, index) => game === had[index])) return [this, []]
 
     const games = LeagueId.literals.flatMap((each) =>
       each === league ? listed : this.games.filter((game) => game.snapshot.league === each)
@@ -73,12 +69,7 @@ export class Slate extends Data.Class<{
     const delisted = had
       .filter((game) => !listed.some((each) => each.snapshot.id === game.snapshot.id))
       .map((game) => SlateChange.Delisted({ game }))
-    const changed = listed.flatMap((game) =>
-      changesOf(
-        had.find((each) => each.snapshot.id === game.snapshot.id),
-        game
-      )
-    )
+    const changed = taken.flatMap(({ before, game }) => changesOf(before, game))
     return [new Slate({ games }), [...delisted, ...changed]]
   }
 
@@ -108,11 +99,6 @@ export const SlateChange = Data.taggedEnum<SlateChange>()
 
 /** The next slate, and what a take changed to reach it. */
 type Taken = readonly [Slate, ReadonlyArray<SlateChange>]
-
-/** Whether `games` are the very games `had`, in the same order. */
-function sameGames(games: ReadonlyArray<Game>, had: ReadonlyArray<Game>): boolean {
-  return games.length === had.length && games.every((game, index) => game === had[index])
-}
 
 /** What `next` changed of `had`, none when the slate did not have it: its snapshot, then each play it added. */
 function changesOf(had: Game | undefined, next: Game): ReadonlyArray<SlateChange> {

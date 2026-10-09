@@ -36,7 +36,7 @@ export class FastCastDocuments extends Data.Class<{
    * documents as they were.
    */
   advance(
-    frame: Frame
+    frame: Data.TaggedEnum.Value<Frame, "Pushed" | "Checkpoint">
   ): Effect.Effect<
     { readonly documents: FastCastDocuments; readonly change: Option.Option<DocumentChange> },
     Schema.SchemaError
@@ -83,16 +83,12 @@ interface Advanced {
   readonly change: Option.Option<DocumentChange>
 }
 
-const advanced = Effect.fnUntraced(function* (
+function advanced(
   documents: Documents,
-  frame: Frame
-): Effect.fn.Return<Advanced, Schema.SchemaError> {
-  return yield* Frame.$match(frame, {
-    Polled: () => Effect.succeed(unchanged(documents)),
-    Checkpoint: (checkpointed) => synced(documents, checkpointed),
-    Pushed: (pushed) => moveOn(documents, pushed)
-  })
-})
+  frame: Data.TaggedEnum.Value<Frame, "Pushed" | "Checkpoint">
+): Effect.Effect<Advanced, Schema.SchemaError> {
+  return Frame.$is("Checkpoint")(frame) ? synced(documents, frame) : moveOn(documents, frame)
+}
 
 /** The documents after a frame that changed nothing. */
 function unchanged(documents: Documents): Advanced {
@@ -101,7 +97,7 @@ function unchanged(documents: Documents): Advanced {
 
 const synced = Effect.fnUntraced(function* (
   documents: Documents,
-  frame: Extract<Frame, { readonly _tag: "Checkpoint" }>
+  frame: Data.TaggedEnum.Value<Frame, "Checkpoint">
 ): Effect.fn.Return<Advanced> {
   const loaded = yield* checkpoint(frame).pipe(Effect.result)
   if (Result.isFailure(loaded)) {
@@ -117,7 +113,7 @@ const synced = Effect.fnUntraced(function* (
 
 const moveOn = Effect.fnUntraced(function* (
   documents: Documents,
-  frame: Extract<Frame, { readonly _tag: "Pushed" }>
+  frame: Data.TaggedEnum.Value<Frame, "Pushed">
 ): Effect.fn.Return<Advanced, Schema.SchemaError> {
   const decoded = yield* decodeMessage(frame.body).pipe(Effect.result)
   if (Result.isFailure(decoded)) return yield* undecoded(documents, frame, decoded.failure)
@@ -128,7 +124,7 @@ const moveOn = Effect.fnUntraced(function* (
   return yield* moved(documents, frame.topic.value, message)
 })
 
-const checkpoint = Effect.fnUntraced(function* (frame: Extract<Frame, { readonly _tag: "Checkpoint" }>) {
+const checkpoint = Effect.fnUntraced(function* (frame: Data.TaggedEnum.Value<Frame, "Checkpoint">) {
   const body = yield* Schema.decodeEffect(FastCastMessage.Checkpoint(frame.topic))(frame.body)
 
   const document: Schema.Json =
@@ -138,14 +134,14 @@ const checkpoint = Effect.fnUntraced(function* (frame: Extract<Frame, { readonly
             sport.leagues.flatMap((league) => league.events.map((event) => [event.uid, event] as const))
           )
         )
-      : JsonPatch.apply([{ op: "add", path: gamePlays.pointer, value: body.entities?.plays ?? {} }], {
+      : JsonPatch.apply([{ op: "add", path: gamePlays, value: body.entities?.plays ?? {} }], {
           entities: {}
         })
   return document
 })
 
 /** Where a game topic's plays are in its document. */
-const gamePlays = { pointer: "/entities/plays", path: ["entities", "plays"] } as const
+const gamePlays = "/entities/plays"
 
 /** What a topic's document says: the events `touched` names (all of them when none), or its whole list of plays. */
 function changeOf(
@@ -163,7 +159,7 @@ function changeOf(
         })
       }),
     Game: ({ league, game }) =>
-      DocumentChange.Game({ league, game, plays: objectAt(document, gamePlays.path) })
+      DocumentChange.Game({ league, game, plays: objectAt(document, tokens(gamePlays)) })
   })
 }
 
@@ -206,7 +202,7 @@ function relevant(
   patches: ReadonlyArray<typeof FastCastMessage.Patch.Type>
 ): ReadonlyArray<typeof FastCastMessage.Patch.Type> {
   const inPlays = (path: { readonly pointer: string }) =>
-    path.pointer === gamePlays.pointer || path.pointer.startsWith(`${gamePlays.pointer}/`)
+    path.pointer === gamePlays || path.pointer.startsWith(`${gamePlays}/`)
   return Topic.$is("Scoreboard")(topic)
     ? patches
     : patches.filter((patch) => inPlays(patch.path) && (!("from" in patch) || inPlays(patch.from)))
@@ -311,7 +307,7 @@ function objectAt(json: Schema.Json, path: ReadonlyArray<string>): Readonly<Reco
  */
 function undecoded(
   documents: Documents,
-  frame: Extract<Frame, { readonly _tag: "Pushed" }>,
+  frame: Data.TaggedEnum.Value<Frame, "Pushed">,
   error: Schema.SchemaError
 ): Effect.Effect<Advanced, Schema.SchemaError> {
   return Option.match(decodeKnownOp(frame.body), {
