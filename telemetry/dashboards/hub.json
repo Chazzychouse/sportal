@@ -191,7 +191,7 @@
     {
       "id": 32,
       "type": "stat",
-      "title": "Polls / min",
+      "title": "Polls / 15 min",
       "gridPos": {
         "x": 12,
         "y": 0,
@@ -213,7 +213,7 @@
               },
               {
                 "color": "green",
-                "value": 0.01
+                "value": 1
               }
             ]
           }
@@ -230,7 +230,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum(increase(sportal_poll_duration_milliseconds_count[1m])) or vector(0)"
+          "expr": "sum(increase(sportal_poll_duration_milliseconds_count[16m])) or vector(0)"
         }
       ]
     },

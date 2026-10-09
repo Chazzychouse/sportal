@@ -597,12 +597,11 @@ Panels in order. `gridPos` is `x, y, w, h`. Every stat has `"options": { "reduce
 | 13 | 0 | Connected | `max(sportal_live_feed_connected_ratio) + 2 * (1 - (max(sportal_game_state_ratio == bool 2) or vector(0)))` | value mappings: 0 → "No" red; 1 → "Yes" green; 2 → "No · no game live" text color; 3 → "Yes" green. `noValue` "Hub down" |
 | 30 | 4 | Game topics followed | `max(sportal_live_feed_topics_ratio)` | thresholds: base text color; `noValue` "—" |
 | 31 | 8 | Push messages / min | `(sum(increase(sportal_live_feed_received_total{op=~"P\|R"}[1m])) or vector(0)) and on() max(sportal_game_state_ratio == 2)` | thresholds: base red, green at 1; `noValue` "no game live" |
-| 32 | 12 | Polls / min | `sum(increase(sportal_poll_duration_milliseconds_count[1m])) or vector(0)` | thresholds: base red, green at 0.01 |
+| 32 | 12 | Polls / 15 min | `sum(increase(sportal_poll_duration_milliseconds_count[16m])) or vector(0)` | thresholds: base red, green at 1 |
 | 33 | 16 | Feed failures in range | `(sum(increase(sportal_live_feed_errors_total[$__range])) or vector(0)) + (sum(increase(sportal_live_feed_checkpoint_failures_total[$__range])) or vector(0))` | thresholds: base green, orange at 1; `decimals` 0 |
 | 34 | 20 | Provider errors in range | `sum(increase(sportal_provider_errors_total[$__range])) or vector(0)` | thresholds: base green, orange at 1; `decimals` 0 |
 
-In JSON the `\|` above is a plain `|`; the backslash is only there for the Markdown table. Connected encodes "a game is
-live" as +2, so a single stat can be red only when the socket is down during a game.
+In JSON the `\|` above is a plain `|`; the backslash is only there for the Markdown table. Connected adds 2 when no game is live, so a single stat can be red only when the socket is down during a game.
 
 **Games (y 4)**: id 27, `{x 0, y 4, w 24, h 10}`, verbatim.
 

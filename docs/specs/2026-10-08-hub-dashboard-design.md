@@ -82,7 +82,7 @@ Same uid, same title. The refresh stays at 30 s and the range at 30 min.
 
 **Top: the Hub at a glance** (stat row, h 4)
 Connected · Game topics followed · Push messages / min (`sum(increase(sportal_live_feed_received_total{op=~"P|R"}[1m]))`) ·
-Polls / min · Feed failures in range (live feed errors + checkpoint failures) · Provider errors in range. Each counter
+Polls / 15 min · Feed failures in range (live feed errors + checkpoint failures) · Provider errors in range. Each counter
 has `or vector(0)`. Connected and "Push messages / min" turn red at 0, but only while a game is live
 (`max(sportal_game_state_ratio) == 2`). Otherwise 0 is normal, and they stay grey.
 

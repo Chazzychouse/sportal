@@ -27,11 +27,10 @@ export class Director extends Context.Service<
   }
 >()("sportal/hub/Director") {
   /**
-   * Takes what the provider decodes, from an empty slate, gauging each game a take changed by its progress, and logging each play it
-   * adds. A take that
-   * raises a defect is logged, and the slate keeps what it had; if the provider's frames ever end other than by the
-   * Hub stopping, that is logged. Applies each command to the Screen one at a time, and refreshes the Screen whenever
-   * the source's answers change.
+   * Takes what the provider decodes, from an empty slate, gauging each game a take changed by its progress, and
+   * logging each play it adds. A take that raises a defect is logged, and the slate keeps what it had; if the
+   * provider's frames ever end other than by the Hub stopping, that is logged. Applies each command to the Screen
+   * one at a time, and refreshes the Screen whenever the source's answers change.
    */
   static readonly layer: Layer.Layer<Director, never, Provider | Source> = Layer.effect(
     Director,
