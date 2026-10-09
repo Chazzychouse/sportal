@@ -26,9 +26,7 @@ describe("Source.layerYouTubeTv", () => {
 
       const availabilityOf = yield* source.availability
 
-      assert.deepStrictEqual(availabilityOf(onEspn), [
-        ChannelAvailability.cases.NoGuide.make({ source: "YouTube TV" })
-      ])
+      assert.deepStrictEqual(availabilityOf(onEspn), [{ _tag: "NoGuide", source: "YouTube TV" }])
     }).pipe(Effect.provide(youTubeTv))
   )
 
@@ -40,7 +38,7 @@ describe("Source.layerYouTubeTv", () => {
       const availabilityOf = yield* source.availability
 
       assert.deepStrictEqual(availabilityOf(primeVideoSoonAfterRecording), [
-        ChannelAvailability.cases.NotCarried.make({ why: "StreamingOnly" })
+        { _tag: "NotCarried", why: "StreamingOnly" }
       ])
     }).pipe(Effect.provide(youTubeTv))
   )
@@ -154,7 +152,8 @@ const thursdayNight = primeVideoGame(thursdayKickoff)
 const primeVideoSoonAfterRecording = primeVideoGame(
   DateTime.add(DateTime.makeUnsafe(recordedAt), { minutes: 20 })
 )
-const onPrimeVideo = ChannelAvailability.cases.Carried.make({
+const onPrimeVideo: ChannelAvailability = {
+  _tag: "Carried",
   channel: {
     name: "Prime Video",
     source: "Twitch",
@@ -163,7 +162,7 @@ const onPrimeVideo = ChannelAvailability.cases.Carried.make({
       url: "https://player.twitch.tv/?channel=primevideo&parent=twitch.tv&player=popout"
     }
   }
-})
+}
 
 describe("Source.layerTwitch", () => {
   it.effect("should carry a Prime Video game on primevideo from 30 minutes before kickoff", () =>
@@ -196,12 +195,12 @@ describe("Source.layerTwitch", () => {
 })
 
 describe("Source.layerAll", () => {
-  const carried = (source: "YouTube TV" | "Twitch") =>
-    ChannelAvailability.cases.Carried.make({
-      channel: { name: source, source, locator: { _tag: "WebView", url: `https://example.test/${source}` } }
-    })
-  const streamingOnly = ChannelAvailability.cases.NotCarried.make({ why: "StreamingOnly" })
-  const notInGuide = ChannelAvailability.cases.NotCarried.make({ why: "NotInGuide" })
+  const carried = (source: "YouTube TV" | "Twitch"): ChannelAvailability => ({
+    _tag: "Carried",
+    channel: { name: source, source, locator: { _tag: "WebView", url: `https://example.test/${source}` } }
+  })
+  const streamingOnly: ChannelAvailability = { _tag: "NotCarried", why: "StreamingOnly" }
+  const notInGuide: ChannelAvailability = { _tag: "NotCarried", why: "NotInGuide" }
 
   it.effect("should give every source's answer, in the order given", () =>
     Effect.gen(function* () {
@@ -245,7 +244,7 @@ describe("Source.layerAll", () => {
         const availabilityOf = yield* source.availability
 
         assert.deepStrictEqual(availabilityOf(thursdayNight), [
-          ChannelAvailability.cases.NoGuide.make({ source: "YouTube TV" }),
+          { _tag: "NoGuide", source: "YouTube TV" },
           onPrimeVideo
         ])
       }).pipe(Effect.provide(youTubeTvAndTwitch))
@@ -259,7 +258,7 @@ describe("Source.layerAll", () => {
       const availabilityOf = yield* source.availability
 
       assert.deepStrictEqual(availabilityOf(primeVideoSoonAfterRecording), [
-        ChannelAvailability.cases.NotCarried.make({ why: "StreamingOnly" }),
+        { _tag: "NotCarried", why: "StreamingOnly" },
         onPrimeVideo
       ])
     }).pipe(Effect.provide(youTubeTvAndTwitch))

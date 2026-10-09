@@ -1,6 +1,5 @@
 import { assert, describe, it } from "@effect/vitest"
 import { DateTime, Option } from "effect"
-import { ChannelAvailability } from "./Channel.ts"
 import { type Broadcast, Network } from "./Game.ts"
 import { type Airing, ChannelId, Guide } from "./Guide.ts"
 import type { Team } from "./Team.ts"
@@ -101,12 +100,10 @@ describe("Guide#availabilityOf", () => {
   it("should be carried on the channel airing the game, at the channel's live address", () => {
     const availability = guide.availabilityOf(ohioStateAtIowa, readAt)
 
-    assert.deepStrictEqual(
-      availability,
-      ChannelAvailability.cases.Carried.make({
-        channel: { name: "News 3", source: "YouTube TV", locator: news3Live }
-      })
-    )
+    assert.deepStrictEqual(availability, {
+      _tag: "Carried",
+      channel: { name: "News 3", source: "YouTube TV", locator: news3Live }
+    })
   })
 
   it("should be carried on a live channel when the airing begins within 30 minutes of the reading", () => {
@@ -143,25 +140,21 @@ describe("Guide#availabilityOf", () => {
 
     const availability = guide.availabilityOf(patriotsAtBills, readAt)
 
-    assert.deepStrictEqual(
-      availability,
-      ChannelAvailability.cases.Upcoming.make({
-        channel: Option.some("NFL ST - CBS"),
-        begin: Option.some(DateTime.makeUnsafe("2026-10-04T17:00:00Z"))
-      })
-    )
+    assert.deepStrictEqual(availability, {
+      _tag: "Upcoming",
+      channel: Option.some("NFL ST - CBS"),
+      begin: Option.some(DateTime.makeUnsafe("2026-10-04T17:00:00Z"))
+    })
   })
 
   it("should be upcoming on a live channel when the airing is more than 30 minutes away", () => {
     const availability = guide.availabilityOf(miamiAtClemson([broadcast("ABC")]), readAt)
 
-    assert.deepStrictEqual(
-      availability,
-      ChannelAvailability.cases.Upcoming.make({
-        channel: Option.some("ABC 13"),
-        begin: Option.some(DateTime.makeUnsafe("2026-10-03T23:30:00Z"))
-      })
-    )
+    assert.deepStrictEqual(availability, {
+      _tag: "Upcoming",
+      channel: Option.some("ABC 13"),
+      begin: Option.some(DateTime.makeUnsafe("2026-10-03T23:30:00Z"))
+    })
   })
 
   it("should take the first matching airing in the guide when no channel is named for the game's networks", () => {
@@ -203,10 +196,7 @@ describe("Guide#availabilityOf", () => {
 
     const availability = guide.availabilityOf(scheduled, readAt)
 
-    assert.deepStrictEqual(
-      availability,
-      ChannelAvailability.cases.Upcoming.make({ channel: Option.none(), begin: Option.none() })
-    )
+    assert.deepStrictEqual(availability, { _tag: "Upcoming", channel: Option.none(), begin: Option.none() })
   })
 
   it("should not match a title naming only one of the teams", () => {
@@ -219,7 +209,7 @@ describe("Guide#availabilityOf", () => {
 
     const availability = guide.availabilityOf(iowaAtKansas, readAt)
 
-    assert.deepStrictEqual(availability, ChannelAvailability.cases.NotCarried.make({ why: "NotInGuide" }))
+    assert.deepStrictEqual(availability, { _tag: "NotCarried", why: "NotInGuide" })
   })
 
   it("should not carry a game, streaming only, when every broadcast streams and no airing matches", () => {
@@ -227,7 +217,7 @@ describe("Guide#availabilityOf", () => {
 
     const availability = guide.availabilityOf(onEspnPlus, readAt)
 
-    assert.deepStrictEqual(availability, ChannelAvailability.cases.NotCarried.make({ why: "StreamingOnly" }))
+    assert.deepStrictEqual(availability, { _tag: "NotCarried", why: "StreamingOnly" })
   })
 
   it("should not carry a television game within reach that no airing matches, as not in the guide", () => {
@@ -235,7 +225,7 @@ describe("Guide#availabilityOf", () => {
 
     const availability = guide.availabilityOf(onCw, readAt)
 
-    assert.deepStrictEqual(availability, ChannelAvailability.cases.NotCarried.make({ why: "NotInGuide" }))
+    assert.deepStrictEqual(availability, { _tag: "NotCarried", why: "NotInGuide" })
   })
 
   it("should not match a baseball airing between teams from the same places as Arizona and Chicago, for the Cardinals at the Bears", () => {
@@ -246,7 +236,7 @@ describe("Guide#availabilityOf", () => {
 
     const availability = baseballGuide().availabilityOf(cardinalsAtBears, readAt)
 
-    assert.deepStrictEqual(availability, ChannelAvailability.cases.NotCarried.make({ why: "NotInGuide" }))
+    assert.deepStrictEqual(availability, { _tag: "NotCarried", why: "NotInGuide" })
   })
 
   it("should not match a baseball airing between teams from the same places as New York and Tampa Bay, for the Jets at the Buccaneers", () => {
@@ -257,7 +247,7 @@ describe("Guide#availabilityOf", () => {
 
     const availability = baseballGuide().availabilityOf(jetsAtBuccaneers, readAt)
 
-    assert.deepStrictEqual(availability, ChannelAvailability.cases.NotCarried.make({ why: "NotInGuide" }))
+    assert.deepStrictEqual(availability, { _tag: "NotCarried", why: "NotInGuide" })
   })
 
   it("should not match an airing that has ended", () => {
@@ -268,7 +258,7 @@ describe("Guide#availabilityOf", () => {
 
     const availability = ended.availabilityOf(earlier, readAt)
 
-    assert.deepStrictEqual(availability, ChannelAvailability.cases.NotCarried.make({ why: "NotInGuide" }))
+    assert.deepStrictEqual(availability, { _tag: "NotCarried", why: "NotInGuide" })
   })
 
   it("should match an airing beginning exactly 45 minutes from kickoff", () => {
@@ -278,13 +268,11 @@ describe("Guide#availabilityOf", () => {
 
     const availability = airingBeginning(atTolerance).availabilityOf(scheduled, readAt)
 
-    assert.deepStrictEqual(
-      availability,
-      ChannelAvailability.cases.Upcoming.make({
-        channel: Option.some("Live 1"),
-        begin: Option.some(atTolerance)
-      })
-    )
+    assert.deepStrictEqual(availability, {
+      _tag: "Upcoming",
+      channel: Option.some("Live 1"),
+      begin: Option.some(atTolerance)
+    })
   })
 
   it("should not match an airing beginning just over 45 minutes from kickoff", () => {
@@ -294,7 +282,7 @@ describe("Guide#availabilityOf", () => {
 
     const availability = airingBeginning(justOver).availabilityOf(scheduled, readAt)
 
-    assert.deepStrictEqual(availability, ChannelAvailability.cases.NotCarried.make({ why: "NotInGuide" }))
+    assert.deepStrictEqual(availability, { _tag: "NotCarried", why: "NotInGuide" })
   })
 
   it("should be carried on a live channel when the airing begins exactly 30 minutes past the reading", () => {
@@ -323,7 +311,7 @@ describe("Guide#availabilityOf", () => {
 
     const availability = guide.availabilityOf(atReach, readAt)
 
-    assert.deepStrictEqual(availability, ChannelAvailability.cases.NotCarried.make({ why: "NotInGuide" }))
+    assert.deepStrictEqual(availability, { _tag: "NotCarried", why: "NotInGuide" })
   })
 
   it("should be upcoming for an unmatched kickoff just past the guide's reach", () => {
@@ -334,10 +322,7 @@ describe("Guide#availabilityOf", () => {
 
     const availability = guide.availabilityOf(pastReach, readAt)
 
-    assert.deepStrictEqual(
-      availability,
-      ChannelAvailability.cases.Upcoming.make({ channel: Option.none(), begin: Option.none() })
-    )
+    assert.deepStrictEqual(availability, { _tag: "Upcoming", channel: Option.none(), begin: Option.none() })
   })
 
   it("should not carry a game with no broadcasts that no airing matches, as not in the guide", () => {
@@ -345,7 +330,7 @@ describe("Guide#availabilityOf", () => {
 
     const availability = guide.availabilityOf(unlisted, readAt)
 
-    assert.deepStrictEqual(availability, ChannelAvailability.cases.NotCarried.make({ why: "NotInGuide" }))
+    assert.deepStrictEqual(availability, { _tag: "NotCarried", why: "NotInGuide" })
   })
 
   it("should be upcoming with nothing known for a kickoff past the guide's reach", () => {
@@ -356,10 +341,7 @@ describe("Guide#availabilityOf", () => {
 
     const availability = guide.availabilityOf(tonight, readAt)
 
-    assert.deepStrictEqual(
-      availability,
-      ChannelAvailability.cases.Upcoming.make({ channel: Option.none(), begin: Option.none() })
-    )
+    assert.deepStrictEqual(availability, { _tag: "Upcoming", channel: Option.none(), begin: Option.none() })
   })
 })
 
@@ -386,12 +368,10 @@ describe("Guide#availabilityOf on a channel that carries a network", () => {
 
     const availability = lineup.availabilityOf(thursdayNight, now)
 
-    assert.deepStrictEqual(
-      availability,
-      ChannelAvailability.cases.Carried.make({
-        channel: { name: "Prime Video", source: "Twitch", locator: primeVideoLive }
-      })
-    )
+    assert.deepStrictEqual(availability, {
+      _tag: "Carried",
+      channel: { name: "Prime Video", source: "Twitch", locator: primeVideoLive }
+    })
   })
 
   it("should be upcoming on the network's channel at kickoff until 30 minutes before it", () => {
@@ -399,13 +379,11 @@ describe("Guide#availabilityOf on a channel that carries a network", () => {
 
     const availability = lineup.availabilityOf(thursdayNight, now)
 
-    assert.deepStrictEqual(
-      availability,
-      ChannelAvailability.cases.Upcoming.make({
-        channel: Option.some("Prime Video"),
-        begin: Option.some(kickoff)
-      })
-    )
+    assert.deepStrictEqual(availability, {
+      _tag: "Upcoming",
+      channel: Option.some("Prime Video"),
+      begin: Option.some(kickoff)
+    })
   })
 
   it("should not carry a game that is over on the network's channel", () => {
@@ -413,7 +391,7 @@ describe("Guide#availabilityOf on a channel that carries a network", () => {
 
     const availability = lineup.availabilityOf(over, DateTime.add(kickoff, { hours: 4 }))
 
-    assert.deepStrictEqual(availability, ChannelAvailability.cases.NotCarried.make({ why: "StreamingOnly" }))
+    assert.deepStrictEqual(availability, { _tag: "NotCarried", why: "StreamingOnly" })
   })
 
   it("should not carry a game of a network no channel carries", () => {
@@ -421,7 +399,7 @@ describe("Guide#availabilityOf on a channel that carries a network", () => {
 
     const availability = lineup.availabilityOf(onPeacock, kickoff)
 
-    assert.deepStrictEqual(availability, ChannelAvailability.cases.NotCarried.make({ why: "StreamingOnly" }))
+    assert.deepStrictEqual(availability, { _tag: "NotCarried", why: "StreamingOnly" })
   })
 
   it("should not be upcoming past its reach when the guide lists no airings", () => {
@@ -429,7 +407,7 @@ describe("Guide#availabilityOf on a channel that carries a network", () => {
 
     const availability = lineup.availabilityOf(tomorrow, kickoff)
 
-    assert.deepStrictEqual(availability, ChannelAvailability.cases.NotCarried.make({ why: "NotInGuide" }))
+    assert.deepStrictEqual(availability, { _tag: "NotCarried", why: "NotInGuide" })
   })
 
   it("should take an airing that names the game over a channel that carries its network", () => {
@@ -447,12 +425,10 @@ describe("Guide#availabilityOf on a channel that carries a network", () => {
 
     const availability = both.availabilityOf(thursdayNight, kickoff)
 
-    assert.deepStrictEqual(
-      availability,
-      ChannelAvailability.cases.Carried.make({
-        channel: { name: "Live 1", source: "YouTube TV", locator: liveAddress }
-      })
-    )
+    assert.deepStrictEqual(availability, {
+      _tag: "Carried",
+      channel: { name: "Live 1", source: "YouTube TV", locator: liveAddress }
+    })
   })
 })
 
@@ -472,7 +448,7 @@ describe("Guide#availabilityOf at a time after its reading", () => {
 
     const availability = guide.availabilityOf(game, DateTime.add(readAt, { minutes: 20 }))
 
-    assert.deepStrictEqual(availability, ChannelAvailability.cases.NotCarried.make({ why: "NotInGuide" }))
+    assert.deepStrictEqual(availability, { _tag: "NotCarried", why: "NotInGuide" })
   })
 })
 

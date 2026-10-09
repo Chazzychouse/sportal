@@ -130,9 +130,7 @@ describe("Director, the slate", () => {
     }).pipe(
       Effect.provide(
         directorOver.pipe(
-          Layer.provide(
-            Source.layerTest(() => ChannelAvailability.cases.NoGuide.make({ source: "YouTube TV" }))
-          ),
+          Layer.provide(Source.layerTest(() => ({ _tag: "NoGuide", source: "YouTube TV" }))),
           Layer.provideMerge(layer)
         )
       )
@@ -186,9 +184,7 @@ describe("Director#published", () => {
         Source,
         Source.of({
           availability: Ref.get(carries).pipe(
-            Effect.map((on) => () => [
-              on ? ChannelAvailability.cases.Carried.make({ channel: primeOnYouTubeTv }) : streamingOnly
-            ])
+            Effect.map((on) => () => [on ? { _tag: "Carried", channel: primeOnYouTubeTv } : streamingOnly])
           ),
           changes: Stream.tick("10 millis")
         })
@@ -216,10 +212,7 @@ describe("Director#published", () => {
         Effect.provide(listed(games).pipe(Layer.provideMerge(directorOver), Layer.provideMerge(youTubeTv)))
       )
 
-      assert.deepStrictEqual(
-        availability,
-        Option.some([ChannelAvailability.cases.Carried.make({ channel: primeOnYouTubeTv })])
-      )
+      assert.deepStrictEqual(availability, Option.some([{ _tag: "Carried", channel: primeOnYouTubeTv }]))
     })
   )
 
@@ -256,9 +249,10 @@ describe("Director#published", () => {
       assert.deepStrictEqual(
         message.games.find(({ game }) => game.snapshot.id === ohioStateAtIowa.id)?.availability,
         [
-          ChannelAvailability.cases.Carried.make({
+          {
+            _tag: "Carried",
             channel: { name: "News 3", source: "YouTube TV", locator: { _tag: "WebView", url: news3Live } }
-          })
+          }
         ]
       )
     }).pipe(Effect.provide(directing([ohioStateAtIowa, ...games])))
@@ -276,7 +270,7 @@ describe("Director#published", () => {
 
       assert.deepStrictEqual(
         message.games.find(({ game }) => game.snapshot.id === GameId.make("5"))?.availability,
-        [ChannelAvailability.cases.NoGuide.make({ source: "YouTube TV" })]
+        [{ _tag: "NoGuide", source: "YouTube TV" }]
       )
     }).pipe(Effect.provide(directing(games)))
   )
@@ -424,7 +418,7 @@ const ohioStateAtIowa = snapshot({
   broadcasts: [broadcast("CBS")]
 })
 
-const streamingOnly = ChannelAvailability.cases.NotCarried.make({ why: "StreamingOnly" })
+const streamingOnly: ChannelAvailability = { _tag: "NotCarried", why: "StreamingOnly" }
 const primeOnYouTubeTv = {
   name: "Prime Video",
   source: "YouTube TV" as const,

@@ -2,7 +2,6 @@ import { NodeHttpServer } from "@effect/platform-node"
 import { assert, describe, it } from "@effect/vitest"
 import { LiveMessage, LiveMessageJson } from "@sportal/api/LiveMessage"
 import { SportalApi } from "@sportal/api/SportalApi"
-import { ChannelAvailability } from "@sportal/domain/Channel"
 import { GameId, Network } from "@sportal/domain/Game"
 import { broadcast, snapshot, team } from "@sportal/domain/TestGame"
 import { DateTime, Effect, Layer, Queue, Schema, Stream } from "effect"
@@ -190,7 +189,8 @@ describe("GET /api/live", () => {
       assert.deepStrictEqual(
         LiveMessage.guards.SlateChanged(message) ? message.games[0]?.availability : message,
         [
-          ChannelAvailability.cases.Carried.make({
+          {
+            _tag: "Carried",
             channel: {
               name: "ESPN",
               source: "YouTube TV",
@@ -199,7 +199,7 @@ describe("GET /api/live", () => {
                 url: "https://tv.youtube.com/watch/PFuNFGzJDE4?vp=0gEEEgIwAQ%3D%3D"
               }
             }
-          })
+          }
         ]
       )
     }).pipe(Effect.scoped, Effect.provide(serverUnderTest()))

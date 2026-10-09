@@ -1,4 +1,4 @@
-import { ChannelAvailability } from "@sportal/domain/Channel"
+import type { ChannelAvailability } from "@sportal/domain/Channel"
 import { GameId } from "@sportal/domain/Game"
 import { Result } from "effect"
 import { Screen } from "./Screen.ts"
@@ -35,12 +35,12 @@ export const foxChannel = {
 
 /** Every game is carried on FOX. */
 export function onFox(): ReadonlyArray<ChannelAvailability> {
-  return [ChannelAvailability.cases.Carried.make({ channel: foxChannel })]
+  return [{ _tag: "Carried", channel: foxChannel }]
 }
 
 /** No game has a stream. */
 export function nowhere(): ReadonlyArray<ChannelAvailability> {
-  return [ChannelAvailability.cases.NotCarried.make({ why: "NoStream" })]
+  return [{ _tag: "NotCarried", why: "NoStream" }]
 }
 
 /** `screen` with `game` assigned to `tile`, its channel from `availabilityOf`. */

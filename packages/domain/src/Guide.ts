@@ -1,5 +1,5 @@
 import { DateTime, Duration, Option, Schema } from "effect"
-import { ChannelAvailability, SourceName } from "./Channel.ts"
+import { type ChannelAvailability, SourceName } from "./Channel.ts"
 import { type GameSnapshot, Network } from "./Game.ts"
 import type { LeagueId } from "./League.ts"
 import { StreamLocator } from "./Stream.ts"
@@ -67,10 +67,10 @@ export class Guide extends Schema.Class<Guide>("sportal/Guide")({
 
     const pastReach = DateTime.isGreaterThan(game.kickoff, DateTime.addDuration(this.readAt, Guide.reach))
     if (this.airings.length > 0 && pastReach)
-      return ChannelAvailability.cases.Upcoming.make({ channel: Option.none(), begin: Option.none() })
+      return { _tag: "Upcoming", channel: Option.none(), begin: Option.none() }
     const streamingOnly =
       game.broadcasts.length > 0 && game.broadcasts.every(({ medium }) => medium === "streaming")
-    return ChannelAvailability.cases.NotCarried.make({ why: streamingOnly ? "StreamingOnly" : "NotInGuide" })
+    return { _tag: "NotCarried", why: streamingOnly ? "StreamingOnly" : "NotInGuide" }
   }
 
   /** Carried on `channel` once it is on the air and `begin` is at most half an hour from `now`; else upcoming. */
@@ -81,13 +81,8 @@ export class Guide extends Schema.Class<Guide>("sportal/Guide")({
   ): ChannelAvailability {
     const soon = DateTime.isLessThanOrEqualTo(begin, DateTime.addDuration(now, startingSoon))
     return channel.live !== undefined && soon
-      ? ChannelAvailability.cases.Carried.make({
-          channel: { name: channel.name, source: this.source, locator: channel.live }
-        })
-      : ChannelAvailability.cases.Upcoming.make({
-          channel: Option.some(channel.name),
-          begin: Option.some(begin)
-        })
+      ? { _tag: "Carried", channel: { name: channel.name, source: this.source, locator: channel.live } }
+      : { _tag: "Upcoming", channel: Option.some(channel.name), begin: Option.some(begin) }
   }
 
   private airs(airing: Airing, game: GameSnapshot, now: DateTime.Utc): boolean {

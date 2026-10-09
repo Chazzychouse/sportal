@@ -1,5 +1,5 @@
 import { afterEach, assert, beforeEach, describe, it } from "@effect/vitest"
-import { ChannelAvailability } from "@sportal/domain/Channel"
+import type { ChannelAvailability } from "@sportal/domain/Channel"
 import { Game, GameId } from "@sportal/domain/Game"
 import { Completion, PlayId } from "@sportal/domain/Play"
 import { play, snapshot, team } from "@sportal/domain/TestGame"
@@ -136,7 +136,7 @@ describe("LiveStream.live", () => {
     Effect.gen(function* () {
       const source = yield* opened()
       const game = new Game({ snapshot: snapshot({ id: GameId.make("401") }), plays: [] })
-      const availability = [ChannelAvailability.cases.NotCarried.make({ why: "StreamingOnly" })]
+      const availability: ReadonlyArray<ChannelAvailability> = [{ _tag: "NotCarried", why: "StreamingOnly" }]
 
       source.onmessage?.({ data: slateMessage([{ game, availability }]) })
       const state = yield* until((current) => current.slate.length > 0)

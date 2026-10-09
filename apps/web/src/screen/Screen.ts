@@ -264,7 +264,7 @@ function tileFor(game: GameId, availability: ReadonlyArray<ChannelAvailability>)
 function mostUseful(availability: ReadonlyArray<ChannelAvailability>): ChannelAvailability {
   return Arr.reduce<ChannelAvailability, ChannelAvailability>(
     availability,
-    ChannelAvailability.cases.NotCarried.make({ why: "NoStream" }),
+    { _tag: "NotCarried", why: "NoStream" },
     (best, answer) => (usefulness(answer) > usefulness(best) ? answer : best)
   )
 }

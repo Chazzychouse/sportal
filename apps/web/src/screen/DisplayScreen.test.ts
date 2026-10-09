@@ -1,5 +1,5 @@
 import { afterEach, assert, beforeEach, describe, it } from "@effect/vitest"
-import { ChannelAvailability } from "@sportal/domain/Channel"
+import type { ChannelAvailability } from "@sportal/domain/Channel"
 import { Game, GameId } from "@sportal/domain/Game"
 import { snapshot } from "@sportal/domain/TestGame"
 import { Effect, Option, Schema, Stream } from "effect"
@@ -107,7 +107,7 @@ const espn = {
   source: "YouTube TV" as const,
   locator: { _tag: "WebView" as const, url: "https://tv.youtube.com/watch/espn" }
 }
-const onEspn = ChannelAvailability.cases.Carried.make({ channel: espn })
+const onEspn: ChannelAvailability = { _tag: "Carried", channel: espn }
 
 function untilLive(predicate: (live: Atom.Type<typeof LiveStream.live>) => boolean) {
   return Atom.toStream(LiveStream.live).pipe(

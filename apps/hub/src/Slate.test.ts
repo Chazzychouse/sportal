@@ -1,5 +1,5 @@
 import { assert, describe, it } from "@effect/vitest"
-import { ChannelAvailability } from "@sportal/domain/Channel"
+import type { ChannelAvailability } from "@sportal/domain/Channel"
 import { type Game, GameId, type GameSnapshot } from "@sportal/domain/Game"
 import type { LeagueId } from "@sportal/domain/League"
 import { type Play, PlayId } from "@sportal/domain/Play"
@@ -13,7 +13,7 @@ const one = GameId.make("1")
 const two = GameId.make("2")
 const three = GameId.make("3")
 const noAnswers = () => []
-const streamingOnly = ChannelAvailability.cases.NotCarried.make({ why: "StreamingOnly" })
+const streamingOnly: ChannelAvailability = { _tag: "NotCarried", why: "StreamingOnly" }
 
 describe("Slate.empty", () => {
   it("should hold no game", () => {

@@ -1,4 +1,4 @@
-import { ChannelAvailability } from "@sportal/domain/Channel"
+import type { ChannelAvailability } from "@sportal/domain/Channel"
 import type { GameSnapshot } from "@sportal/domain/Game"
 import { Context, DateTime, Effect, Layer, Option, Stream } from "effect"
 import { GuideReader } from "./GuideReader.ts"
@@ -26,7 +26,7 @@ export class Source extends Context.Service<
         const latest = yield* reader.latest
         return (game: GameSnapshot) => [
           Option.match(latest, {
-            onNone: () => ChannelAvailability.cases.NoGuide.make({ source: YouTubeTvGuide.source }),
+            onNone: (): ChannelAvailability => ({ _tag: "NoGuide", source: YouTubeTvGuide.source }),
             onSome: (guide) => guide.availabilityOf(game, now)
           })
         ]

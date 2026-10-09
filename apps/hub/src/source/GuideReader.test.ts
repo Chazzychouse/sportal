@@ -1,5 +1,5 @@
 import { assert, describe, it } from "@effect/vitest"
-import { ChannelAvailability } from "@sportal/domain/Channel"
+import type { ChannelAvailability } from "@sportal/domain/Channel"
 import { Network } from "@sportal/domain/Game"
 import { broadcast, snapshot, team } from "@sportal/domain/TestGame"
 import { DateTime, Effect, Fiber, Layer, Logger, Option, Ref, Stream } from "effect"
@@ -23,9 +23,10 @@ const ohioStateAtIowa = snapshot({
   home: { team: team("IOWA", "fbs", { name: "Iowa Hawkeyes", location: "Iowa" }), score: 0 },
   broadcasts: [broadcast("CBS")]
 })
-const onNews3 = ChannelAvailability.cases.Carried.make({
+const onNews3: ChannelAvailability = {
+  _tag: "Carried",
   channel: { name: "News 3", source: "YouTube TV", locator: { _tag: "WebView", url: cbsLive } }
-})
+}
 
 describe("GuideReader.layerYouTubeTv", () => {
   it.effect("should read the recorded guide's channels, live addresses, and airings", () =>
@@ -80,9 +81,7 @@ describe("GuideReader.layerYouTubeTv", () => {
 
       const availabilityOf = yield* source.availability
       const signalled = yield* Ref.get(changes)
-      assert.deepStrictEqual(availabilityOf(ohioStateAtIowa), [
-        ChannelAvailability.cases.NoGuide.make({ source: "YouTube TV" })
-      ])
+      assert.deepStrictEqual(availabilityOf(ohioStateAtIowa), [{ _tag: "NoGuide", source: "YouTube TV" }])
       assert.strictEqual(signalled, 1)
     }).pipe(Effect.provide(youTubeTv))
   )
@@ -127,10 +126,11 @@ describe("GuideReader.layerYouTubeTv", () => {
 
       const availabilityOf = yield* source.availability
       assert.deepStrictEqual(availabilityOf(ohioStateAtIowa), [
-        ChannelAvailability.cases.Upcoming.make({
+        {
+          _tag: "Upcoming",
           channel: Option.some("News 3"),
           begin: Option.some(DateTime.makeUnsafe("2026-10-03T19:35:00Z"))
-        })
+        }
       ])
     }).pipe(Effect.provide(youTubeTv))
   )

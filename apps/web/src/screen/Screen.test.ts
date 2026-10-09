@@ -1,5 +1,5 @@
 import { assert, describe, it } from "@effect/vitest"
-import { ChannelAvailability } from "@sportal/domain/Channel"
+import type { ChannelAvailability } from "@sportal/domain/Channel"
 import { GameId } from "@sportal/domain/Game"
 import { DateTime, Option, Result, Schema } from "effect"
 import { type LayoutName, Screen, ScreenCommand, Tile } from "./Screen.ts"
@@ -7,7 +7,7 @@ import { assign, bama, fill, foxChannel, irish, nowhere, onFox } from "./TestScr
 
 const usc = GameId.make("401856800")
 const ohio = GameId.make("401858473")
-const noGuide = () => [ChannelAvailability.cases.NoGuide.make({ source: "YouTube TV" })]
+const noGuide = (): ReadonlyArray<ChannelAvailability> => [{ _tag: "NoGuide", source: "YouTube TV" }]
 
 describe("Screen#apply", () => {
   it("should assign a carried game as a stream tile", () => {
@@ -123,10 +123,7 @@ describe("Screen#apply", () => {
     const begin = DateTime.makeUnsafe("2026-10-04T17:00:00Z")
 
     const screen = assign(Screen.initial, 0, bama, () => [
-      ChannelAvailability.cases.Upcoming.make({
-        channel: Option.some("NFL ST - CBS"),
-        begin: Option.some(begin)
-      })
+      { _tag: "Upcoming", channel: Option.some("NFL ST - CBS"), begin: Option.some(begin) }
     ])
 
     assert.deepStrictEqual(screen.tiles[0], {
@@ -256,7 +253,7 @@ describe("Screen#refresh", () => {
     assert.strictEqual(refreshed.tiles[1]?._tag, "StreamTile")
   })
 
-  it.each([
+  it.each<[string, ReadonlyArray<ChannelAvailability>]>([
     ["no guide", noGuide()],
     ["no stream", nowhere()],
     ["streaming only", [streamingOnly]],
@@ -264,10 +261,11 @@ describe("Screen#refresh", () => {
     [
       "an upcoming game",
       [
-        ChannelAvailability.cases.Upcoming.make({
+        {
+          _tag: "Upcoming",
           channel: Option.some("FOX 43"),
           begin: Option.some(DateTime.makeUnsafe("2026-10-04T17:00:00Z"))
-        })
+        }
       ]
     ],
     ["the same channel", onFox()]
@@ -290,7 +288,7 @@ describe("Screen#refresh", () => {
   it("should move a stream tile to the channel a later guide carries it on", () => {
     const streaming = assign(Screen.initial, 0, bama, onFox)
 
-    const moved = streaming.refresh(some(() => [ChannelAvailability.cases.Carried.make({ channel: fox43 })]))
+    const moved = streaming.refresh(some(() => [{ _tag: "Carried", channel: fox43 }]))
 
     assert.deepStrictEqual(moved.tiles[0], { _tag: "StreamTile", game: bama, channel: fox43 })
   })
@@ -322,9 +320,7 @@ describe("Screen#refresh", () => {
   it("should move a stream tile when its own source carries it elsewhere, whatever other sources say", () => {
     const streaming = assign(Screen.initial, 0, bama, onFox)
 
-    const moved = streaming.refresh(() =>
-      Option.some([onTwitch, ChannelAvailability.cases.Carried.make({ channel: fox43 })])
-    )
+    const moved = streaming.refresh(() => Option.some([onTwitch, { _tag: "Carried", channel: fox43 }]))
 
     assert.deepStrictEqual(moved.tiles[0], { _tag: "StreamTile", game: bama, channel: fox43 })
   })
@@ -702,8 +698,8 @@ function gameOf(tile: Tile) {
   return tile._tag === "Empty" ? undefined : tile.game
 }
 
-function unknownUpcoming() {
-  return [ChannelAvailability.cases.Upcoming.make({ channel: Option.none(), begin: Option.none() })]
+function unknownUpcoming(): ReadonlyArray<ChannelAvailability> {
+  return [{ _tag: "Upcoming", channel: Option.none(), begin: Option.none() }]
 }
 
 /** An answer for `game` only: the guide says nothing of any other. */
@@ -716,14 +712,15 @@ const twitchChannel = {
   source: "Twitch" as const,
   locator: { _tag: "WebView" as const, url: "https://player.twitch.tv/?channel=primevideo" }
 }
-const onTwitch = ChannelAvailability.cases.Carried.make({ channel: twitchChannel })
+const onTwitch: ChannelAvailability = { _tag: "Carried", channel: twitchChannel }
 const primeBegin = DateTime.makeUnsafe("2026-10-04T00:15:00Z")
-const upcomingOnPrime = ChannelAvailability.cases.Upcoming.make({
+const upcomingOnPrime: ChannelAvailability = {
+  _tag: "Upcoming",
   channel: Option.some("Prime Video"),
   begin: Option.some(primeBegin)
-})
-const streamingOnly = ChannelAvailability.cases.NotCarried.make({ why: "StreamingOnly" })
-const notInGuide = ChannelAvailability.cases.NotCarried.make({ why: "NotInGuide" })
+}
+const streamingOnly: ChannelAvailability = { _tag: "NotCarried", why: "StreamingOnly" }
+const notInGuide: ChannelAvailability = { _tag: "NotCarried", why: "NotInGuide" }
 const fox43 = {
   ...foxChannel,
   name: "FOX 43",

@@ -95,6 +95,7 @@ A reader opens a file to see the thing it is named for. Keep it that way.
 | Pure helper | A hoisted `function`, below its first user |
 | Wire value | `export const X = Schema.…`, then `export type X = typeof X.Type` |
 | Wire union | `Schema.TaggedUnion({…})` with its type; `X.match`, `X.guards`. Cases with behaviour: one `Schema.TaggedClass` each, then `Schema.Union` (`FootballPlay`) |
+| Wire-union value | A literal, `{ _tag: "NotCarried", why: "NotInGuide" }`, typed by where it goes (annotate a bare `const`); `X.cases.Y.make` only when the case has checks or defaults |
 | In-memory value | `Data.Class` |
 | In-memory state | `type X = Data.TaggedEnum<…>` with `const X = Data.taggedEnum<X>()`; `X.$match`, `X.$is`. Never `_tag ===`, never `Match.valueTags` |
 | Expected error | `Schema.TaggedError` named for what happened, never `…Error` (`ProviderUnavailable`) |

@@ -1,4 +1,4 @@
-import { LiveMessage, type SlateChanged } from "@sportal/api/LiveMessage"
+import type { SlateChanged } from "@sportal/api/LiveMessage"
 import type { ChannelAvailability } from "@sportal/domain/Channel"
 import { Game, type GameId, type GameSnapshot } from "@sportal/domain/Game"
 import { LeagueId } from "@sportal/domain/League"
@@ -44,7 +44,7 @@ export class Slate extends Data.Class<{
       game: game.recent(),
       availability: availabilityOf(game.snapshot)
     }))
-    return LiveMessage.cases.SlateChanged.make({ games })
+    return { _tag: "SlateChanged", games }
   }
 
   private delivered(delivery: Delivery): Taken {
