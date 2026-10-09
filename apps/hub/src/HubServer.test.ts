@@ -13,7 +13,7 @@ import { afterEach, vi } from "vitest"
 import { Director } from "./Director.ts"
 import { HubConfig } from "./HubConfig.ts"
 import * as HubServer from "./HubServer.ts"
-import { Delivery } from "./slate/Delivery.ts"
+import { Delivery } from "./provider/Provider.ts"
 import { GuideReader } from "./source/GuideReader.ts"
 import { Source } from "./source/Source.ts"
 import { delivered, directorOver } from "./TestDirector.ts"
@@ -230,7 +230,7 @@ describe("GET /api/live", () => {
     Effect.gen(function* () {
       yield* firstSlateOnTestClock()
       const lines = yield* pastInitialMessages()
-      const pushes = [2, 3, 4].map((period) => Delivery.cases.Snapshot.make({ snapshot: inPeriod(period) }))
+      const pushes = [2, 3, 4].map((period) => Delivery.Snapshot({ snapshot: inPeriod(period) }))
 
       yield* Effect.forEach(pushes, (push) => delivered(push))
       yield* TestClock.adjust("250 millis")
@@ -298,7 +298,7 @@ describe("GET /api/live", () => {
 
 /** Delivers the fbs listing of `game`, so the Director has its first games to publish. */
 function firstSlate() {
-  return delivered(Delivery.cases.Listing.make({ league: "fbs", games: [game] }))
+  return delivered(Delivery.Listing({ league: "fbs", games: [game] }))
 }
 
 /** `firstSlate` on the test clock, moved on 250 ms for it to settle. */

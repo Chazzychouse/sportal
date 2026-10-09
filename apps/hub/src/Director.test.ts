@@ -20,9 +20,8 @@ import {
 import { TestClock } from "effect/testing"
 import { Director } from "./Director.ts"
 import { decodedFrames, recordedNeAtBuf, recordedPlays } from "./provider/espn/TestEspn.ts"
-import { Provider, ProviderFeed } from "./provider/Provider.ts"
-import { Delivery } from "./slate/Delivery.ts"
-import { Slate } from "./slate/Slate.ts"
+import { Delivery, Provider, ProviderFeed } from "./provider/Provider.ts"
+import { Slate } from "./Slate.ts"
 import { GuideReader } from "./source/GuideReader.ts"
 import { Source } from "./source/Source.ts"
 import { readRecordedGuide, recordedGuide } from "./source/youtube-tv/TestYouTubeTv.ts"
@@ -87,7 +86,7 @@ describe("Director, the slate", () => {
     Effect.gen(function* () {
       yield* listing([liveSnapshot({ id: one })])
 
-      const current = yield* delivered(Delivery.cases.Plays.make({ game: one, plays: [play()] }))
+      const current = yield* delivered(Delivery.Plays({ game: one, plays: [play()] }))
 
       assert.deepStrictEqual(playsIn(current, one), [play()])
     }).pipe(Effect.provide(directed))
@@ -95,7 +94,7 @@ describe("Director, the slate", () => {
 
   it.effect("should drop plays for a game no listing names", () =>
     Effect.gen(function* () {
-      const current = yield* delivered(Delivery.cases.Plays.make({ game: one, plays: [play()] }))
+      const current = yield* delivered(Delivery.Plays({ game: one, plays: [play()] }))
 
       assert.deepStrictEqual(current.games, [])
     }).pipe(Effect.provide(directed))
@@ -106,10 +105,7 @@ describe("Director, the slate", () => {
       const feed = yield* ProviderFeed
       const next = liveSnapshot({ id: one, clock: "9:00" })
 
-      yield* feed.deliver([
-        listingOf([liveSnapshot({ id: one })]),
-        Delivery.cases.Snapshot.make({ snapshot: next })
-      ])
+      yield* feed.deliver([listingOf([liveSnapshot({ id: one })]), Delivery.Snapshot({ snapshot: next })])
       const current = yield* latest
 
       assert.strictEqual(snapshotIn(current, one), next)
@@ -135,17 +131,18 @@ describe("Director, the slate", () => {
   it.effect("should log at Error when the provider's frames end", () => {
     const { logs, layer } = recordingLogs()
     return Effect.gen(function* () {
-      yield* Director
+      const feed = yield* ProviderFeed
 
+      yield* feed.end
       yield* Effect.yieldNow.pipe(Effect.repeat({ until: () => logs.length > 0, times: 100 }))
+
       const stopped = logs.filter(({ level }) => level === "Error")
       assert.strictEqual(stopped.length, 1)
       assert.include(stopped[0]?.message, "the provider's frames stopped")
       assert.include(stopped[0]?.message, "the provider's frames ended")
     }).pipe(
       Effect.provide(
-        Director.layer.pipe(
-          Layer.provide(Provider.layerTest(Stream.empty)),
+        directorOver.pipe(
           Layer.provide(Source.layerTest(() => ChannelAvailability.NoGuide({ source: "YouTube TV" }))),
           Layer.provideMerge(layer)
         )
@@ -289,7 +286,7 @@ function playsIn(slate: Slate, id: GameId): ReadonlyArray<Play> {
 }
 
 function listingOf(games: ReadonlyArray<GameSnapshot>) {
-  return Delivery.cases.Listing.make({ league: "fbs", games })
+  return Delivery.Listing({ league: "fbs", games })
 }
 
 /** Delivers an FBS listing of `games`, giving the Director's slate once it has taken it. */
@@ -298,7 +295,7 @@ function listing(games: ReadonlyArray<GameSnapshot>) {
 }
 
 function takenSnapshot(game: GameSnapshot) {
-  return delivered(Delivery.cases.Snapshot.make({ snapshot: game }))
+  return delivered(Delivery.Snapshot({ snapshot: game }))
 }
 
 /** A live snapshot of game `id` at 8:00 in the first period whose progress raises a defect. */
@@ -354,9 +351,9 @@ describe("Director's play log", () => {
     const second = play({ id: PlayId.make("p2"), sequence: 2, clock: "14:20", text: "Rush for 4 yards" })
     return Effect.gen(function* () {
       yield* listing([game])
-      yield* delivered(Delivery.cases.Plays.make({ game: one, plays: [first] }))
+      yield* delivered(Delivery.Plays({ game: one, plays: [first] }))
 
-      yield* delivered(Delivery.cases.Plays.make({ game: one, plays: [first, second] }))
+      yield* delivered(Delivery.Plays({ game: one, plays: [first, second] }))
 
       const played = logs.filter(({ annotations }) => annotations.play !== undefined)
       assert.deepStrictEqual(
@@ -559,7 +556,7 @@ describe("Director, the Screen", () => {
       ).pipe(Layer.provide(Source.layerYouTubeTv))
       const guideReadAtOnce = readAtOnce().pipe(
         Layer.provideMerge(Director.layer),
-        Layer.provide(Provider.layerTestFed),
+        Layer.provide(Provider.layerTest),
         Layer.provide(countingSource),
         Layer.provideMerge(GuideReader.layerYouTubeTv)
       )
@@ -583,7 +580,7 @@ describe("Director, the Screen", () => {
         const release = yield* Deferred.make<void>()
         const directorOnStaleRead = listed(games).pipe(
           Layer.provideMerge(Director.layer),
-          Layer.provideMerge(Provider.layerTestFed),
+          Layer.provideMerge(Provider.layerTest),
           Layer.provideMerge(availabilityHeldOnce(reading, release)),
           Layer.provideMerge(GuideReader.layerYouTubeTv)
         )
@@ -715,7 +712,7 @@ function firstScreenWhere(changes: Stream.Stream<Screen>, test: (screen: Screen)
 function listings(games: ReadonlyArray<GameSnapshot>) {
   const leagues = [...new Set(games.map(({ league }) => league))]
   return leagues.map((league) =>
-    Delivery.cases.Listing.make({ league, games: games.filter((game) => game.league === league) })
+    Delivery.Listing({ league, games: games.filter((game) => game.league === league) })
   )
 }
 

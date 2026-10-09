@@ -3,7 +3,7 @@ import { assert, describe, it } from "@effect/vitest"
 import { Result, Schema } from "effect"
 import { EspnEvent } from "./EspnEvent.ts"
 
-// How each recorded feed's events decode is locked in EspnDecoder's tests; these are the cases a recording lacks.
+// How each recorded feed's events decode is locked in EspnState's tests; these are the cases a recording lacks.
 describe("EspnEvent", () => {
   it("should decode a site scoreboard event", () => {
     const event = siteEvent()

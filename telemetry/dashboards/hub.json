@@ -775,7 +775,7 @@
       "gridPos": {
         "x": 0,
         "y": 53,
-        "w": 12,
+        "w": 8,
         "h": 8
       },
       "datasource": {
@@ -806,9 +806,9 @@
       "type": "timeseries",
       "title": "Provider errors by league",
       "gridPos": {
-        "x": 12,
+        "x": 8,
         "y": 53,
-        "w": 12,
+        "w": 8,
         "h": 8
       },
       "datasource": {
@@ -834,6 +834,41 @@
           "legendFormat": "{{league}}"
         }
       ]
+    },
+    {
+      "id": 53,
+      "type": "timeseries",
+      "title": "Pushes behind their listing by league",
+      "gridPos": {
+        "x": 16,
+        "y": 53,
+        "w": 8,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 80,
+            "stacking": {
+              "mode": "normal"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (league) (increase(sportal_push_behind_listing_total[$__rate_interval])) or vector(0)",
+          "legendFormat": "{{league}}"
+        }
+      ],
+      "description": "Pushed snapshots behind the game their league lists, which the listing takes anyway (ADR 0014)"
     },
     {
       "id": 5,
@@ -879,7 +914,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "{service_name=\"sportal-hub\"} |~ \"EspnProvider|EspnDecoder\""
+          "expr": "{service_name=\"sportal-hub\"} |~ \"EspnProvider|EspnState\""
         }
       ]
     },

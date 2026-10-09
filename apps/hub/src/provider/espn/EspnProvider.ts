@@ -16,8 +16,7 @@ import {
 } from "effect"
 import { HttpClient } from "effect/http"
 import { HubConfig } from "../../HubConfig.ts"
-import { Delivery } from "../../slate/Delivery.ts"
-import { Provider } from "../Provider.ts"
+import { Delivery, Provider } from "../Provider.ts"
 import { EspnState } from "./EspnState.ts"
 import { FastCast } from "./FastCast.ts"
 import { Frame } from "./Frame.ts"
@@ -172,7 +171,7 @@ function polling(
 
 /** Whether a league's part of a poll listed nothing: the poll failed, or its scoreboard did not decode. */
 function unlisted({ said }: Polled): boolean {
-  return !Option.exists(said, (deliveries) => deliveries.some(Delivery.guards.Listing))
+  return !Option.exists(said, (deliveries) => deliveries.some(Delivery.$is("Listing")))
 }
 
 /**

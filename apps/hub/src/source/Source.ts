@@ -2,7 +2,7 @@ import { ChannelAvailability } from "@sportal/domain/Channel"
 import type { GameSnapshot } from "@sportal/domain/Game"
 import { Array as Arr, Context, DateTime, Effect, Layer, Option, Stream } from "effect"
 import { GuideReader } from "./GuideReader.ts"
-import * as Twitch from "./twitch/Twitch.ts"
+import * as Twitch from "./Twitch.ts"
 import * as YouTubeTvGuide from "./youtube-tv/YouTubeTvGuide.ts"
 
 /** A way to obtain video for a game. It says whether and where each game can be shown, and when that may change. */

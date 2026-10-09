@@ -1,6 +1,6 @@
 import { Schema, SchemaGetter } from "effect"
 
-/** The site scoreboard, as polled or as fetched for a past date: its events, each for `EspnEvent` to read. */
+/** The site scoreboard, as polled: its events, each for `EspnEvent` to read. */
 export const Scoreboard = Schema.Struct({ events: Schema.Array(Schema.Unknown) })
 
 /** The game's status as both feeds spell it: the site's `status`, FastCast's `fullStatus`. */

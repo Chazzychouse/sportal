@@ -193,42 +193,37 @@ sportal/
     │       ├── HubConfig.ts        Every environment setting, in one place
     │       ├── Telemetry.ts        Log level and format; OTLP export when configured
     │       ├── Director.ts         The one holder of the slate and the Screen: takes each frame's deliveries as they arrive, applies screen commands, refreshes availability
-    │       ├── slate/
-    │       │   ├── Slate.ts        The fold: every delivery taken in order into an ordered list of games, each with its latest snapshot and its plays
-    │       │   └── Delivery.ts     What a frame said: a listing, a snapshot, or a game's plays
+    │       ├── Slate.ts            The fold: every delivery taken in order into an ordered list of games, each with its latest snapshot and its plays
     │       ├── HubStopping.ts      Whether a task that should run until the Hub stops ended because it is stopping, and the Error log unless it did
     │       ├── TestTelemetry.ts    Layers for tests
     │       ├── TestDirector.ts     The Director taking a fed provider, and what it takes of a test's frames
     │       ├── HubServer.ts        Serves the API, the live stream, the addresses a phone can reach, and the web UI's files
     │       ├── provider/
-    │       │   ├── Provider.ts     The port: `deliveries`, each frame's in order; `layerTestFed`, the provider tests feed
+    │       │   ├── Provider.ts     The port: `deliveries`, each frame's in order, and `Delivery`, what a frame said; `layerTest`, the provider tests feed
     │       │   ├── TestProvider.ts What the provided `Provider` lists, and what ESPN's decode says of a test's frames
     │       │   └── espn/
     │       │       ├── Espn.ts             ESPN's one front door: the live provider (`layer`), polling and pushing through FastCast
     │       │       ├── EspnProvider.ts     Implements the port: polls each league, folds every frame into one EspnState, tells FastCast what to follow
-    │       │       ├── EspnDecoder.ts      Each league's decode of an event, a play and a scoreboard
-    │       │       ├── EspnState.ts        The one fold of ESPN's frames: deliveries, listed games, the topics FastCast follows
+    │       │       ├── EspnState.ts        The one fold of ESPN's frames, through each league's decode: deliveries, listed games, the topics FastCast follows
     │       │       ├── EspnPayload.ts      ESPN's JSON as ESPN spells it: events, scoreboard, plays
     │       │       ├── EspnEvent.ts        One game as either ESPN feed spells it, as a GameSnapshot
     │       │       ├── EspnPlay.ts         ESPN's plays and their type ids, as Play
     │       │       ├── FastCast.ts         ESPN's push, a service: follows the topics it is told to, and gives the socket as frames
-    │       │       ├── FastCastDocument.ts A topic's document, rebuilt from checkpoints and patches
+    │       │       ├── FastCastDocuments.ts Each topic's document, rebuilt from checkpoints and patches, and what a frame changed of it
     │       │       ├── FastCastMessage.ts  FastCast's wire shapes
     │       │       ├── Topic.ts            A FastCast topic, read once from its `tc`
     │       │       ├── Frame.ts            A frame as received, before ESPN's decode reads it
-    │       │       ├── Gzip.ts             The text a gzip'd or deflated body holds, as FastCast's patches are
-    │       │       ├── TestEspn.ts         Recorded frames for tests of other modules, NE at BUF's day among them (`recordedNeAtBuf`)
+    │       │       ├── TestEspn.ts         Recorded frames and scoreboards for tests of other modules, NE at BUF's day among them (`recordedNeAtBuf`), and ESPN answering from recorded scoreboards (`recordedEspn`)
     │       │       └── fixtures/           Recorded real payloads, NE at BUF's frames among them
     │       └── source/
     │           ├── Source.ts           The port, its variants, and how several answer as one
     │           ├── GuideReader.ts      Reads the guide the shell fetches, keeps it while fresh
-    │           ├── youtube-tv/
-    │           │   ├── YouTubeTvGuide.ts    A guide response as channels and airings
-    │           │   ├── YouTubeTvPayload.ts  The guide response's wire shape
-    │           │   ├── TestYouTubeTv.ts     A recorded guide for tests of other modules
-    │           │   └── fixtures/            Recorded real payloads
-    │           └── twitch/
-    │               └── Twitch.ts            Twitch's lineup
+    │           ├── Twitch.ts           Twitch's lineup
+    │           └── youtube-tv/
+    │               ├── YouTubeTvGuide.ts    A guide response as channels and airings
+    │               ├── YouTubeTvPayload.ts  The guide response's wire shape
+    │               ├── TestYouTubeTv.ts     A recorded guide for tests of other modules
+    │               └── fixtures/            Recorded real payloads
     │
     ├── web/
     │   └── src/
@@ -303,7 +298,7 @@ class Provider extends Context.Service<Provider, {
 ```
 
 - A provider runs itself. It polls, follows its push, reconnects, and reads each frame it receives with its own decode, for as long as it runs; nothing tells it what to do. Its failures are logged and counted inside its folder, where they happen.
-- Each element is one frame's `Delivery`s (`Listing`, `Snapshot`, or `Plays`), in the order it said them. ESPN's fold (`EspnState#take`) skips an event or a play that does not decode and delivers the rest; a frame that does not decode says nothing and is a Warning log. `Provider.layerTestFed` is the provider tests feed: its frames say our own deliveries, given through `ProviderFeed`.
+- Each element is one frame's `Delivery`s (`Listing`, `Snapshot`, or `Plays`), in the order it said them. ESPN's fold (`EspnState#take`) skips an event or a play that does not decode and delivers the rest; a frame that does not decode says nothing and is a Warning log. `Provider.layerTest` is the provider tests feed: its frames say our own deliveries, given through `ProviderFeed`, until it ends them.
 - ESPN's cadence is `EspnProvider`'s: after each poll it waits by every game its `EspnState` lists, as its last poll listed them, and each push since (a push behind its listed game is logged and counted), about every 10 seconds while any game is live, every minute near kickoff, every 15 minutes otherwise. FastCast (`docs/adr/0007-fastcast-live-feed.md`, `docs/adr/0014-one-espn-fold.md`) is the service its push reads from: it follows the topics `EspnState#wanted` names (every scoreboard, and each listed game live or near kickoff), follows a topic again when its document goes back to waiting for its checkpoint, and retries its socket on a jittered exponential backoff.
 - Provider vocabulary stops at the folder edge. ESPN's "event", "competition", and "competitor" exist only in `EspnPayload.ts`, `EspnEvent.ts`, `FastCastMessage.ts`, and `EspnPlay.ts`.
 - The Hub composes providers per league: ESPN for NFL; ESPN with CollegeFootballData filling gaps for FBS. The composition is itself a `Provider`, so the Director sees one.
@@ -323,7 +318,7 @@ class Director extends Context.Service<Director, {
 }>()("sportal/hub/Director") {}
 ```
 
-- The `Slate` (`slate/Slate.ts`) is the fold: an ordered list of `Game`s, leagues in `LeagueId` order and each league's in its listing's order, each with its latest `GameSnapshot` and its plays. `take(deliveries)` on it is pure and returns the next slate and its slate changes; a take that changes nothing gives back the same slate.
+- The `Slate` (`Slate.ts`) is the fold: an ordered list of `Game`s, leagues in `LeagueId` order and each league's in its listing's order, each with its latest `GameSnapshot` and its plays. `take(deliveries)` on it is pure and returns the next slate and its slate changes; a take that changes nothing gives back the same slate.
 - The Director starts from an empty slate and takes each frame's deliveries as they arrive, in one `Director.take` span carrying its `sportal.deliveries` count, and, from the slate changes each take gives, gauges each game whose snapshot changed by its progress (`sportal_game_state`: 1 upcoming, 2 live, 3 over, 0 once no listing names it), which the Hub dashboard's Games table reads, and logs each play a take adds (Info, annotated with `game`, `league`, `matchup`, `play` and `scoring`). For now nothing is kept between runs: a restarted Hub serves an empty slate until its provider's next poll lists the day's games.
 - A take that raises a defect is an Error log; the slate keeps what it had and takes the next frame. If the provider's frames end other than by the Hub stopping, that is an Error log and the slate stays as it is.
 - `Slate.published()` is each listed game as the slate has it, carrying only its last ten plays (`Game#recent`, on `SlateChanged`); the Hub server sends it within 250 ms of a change, and `dispatch` reads the slate's games for where each can be streamed.

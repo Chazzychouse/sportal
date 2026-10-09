@@ -24,9 +24,8 @@ import { HttpClient, HttpClientError, HttpClientResponse } from "effect/http"
 import * as Socket from "effect/socket/Socket"
 import { TestClock } from "effect/testing"
 import { HubConfig } from "../../HubConfig.ts"
-import { Delivery } from "../../slate/Delivery.ts"
 import { counted, recordingLogs, recordingSpans, withMetrics } from "../../TestTelemetry.ts"
-import { Provider } from "../Provider.ts"
+import { Delivery, Provider } from "../Provider.ts"
 import { listedBy } from "../TestProvider.ts"
 import * as EspnProvider from "./EspnProvider.ts"
 import { FastCast, type Wanted } from "./FastCast.ts"
@@ -320,7 +319,7 @@ describe("EspnProvider.deliveries", () => {
       const said = yield* polledOnce(nflDown, { frames: 1 })
 
       assert.deepStrictEqual(
-        said.flatMap((deliveries) => deliveries.filter(Delivery.guards.Listing).map(({ league }) => league)),
+        said.flatMap((deliveries) => deliveries.filter(Delivery.$is("Listing")).map(({ league }) => league)),
         ["fbs"]
       )
     })
@@ -419,7 +418,7 @@ describe("EspnProvider.deliveries", () => {
 
       assert.deepStrictEqual(
         said.map((deliveries) =>
-          deliveries.map((one) => (Delivery.guards.Listing(one) ? `Listing ${one.league}` : one._tag))
+          deliveries.map((one) => (Delivery.$is("Listing")(one) ? `Listing ${one.league}` : one._tag))
         ),
         [["Listing nfl"], ["Snapshot"], ["Listing fbs"]]
       )
@@ -756,7 +755,7 @@ function checkpointAt(mid: number) {
 /** Whether at least `count` deliveries of plays have arrived. */
 function playsDelivered(count: number) {
   return (all: ReadonlyArray<ReadonlyArray<Delivery>>) =>
-    all.flat().filter(Delivery.guards.Plays).length >= count
+    all.flat().filter(Delivery.$is("Plays")).length >= count
 }
 
 /** The recorded 18:00Z NFL scoreboard with `games`, by id, live as well. */

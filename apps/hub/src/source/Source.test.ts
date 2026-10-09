@@ -1,17 +1,11 @@
-import { readFileSync } from "node:fs"
-import { join } from "node:path"
 import { assert, describe, it } from "@effect/vitest"
 import { ChannelAvailability } from "@sportal/domain/Channel"
 import { Network } from "@sportal/domain/Game"
 import type { LeagueId } from "@sportal/domain/League"
 import { broadcast, snapshot, team } from "@sportal/domain/TestGame"
 import { DateTime, Effect, Layer, Option, Ref, Stream } from "effect"
-import { HttpClient, HttpClientResponse } from "effect/http"
 import { TestClock } from "effect/testing"
-import { HubConfig } from "../HubConfig.ts"
-import * as EspnProvider from "../provider/espn/EspnProvider.ts"
-import { FastCast } from "../provider/espn/FastCast.ts"
-import { fixtures } from "../provider/espn/TestEspn.ts"
+import { recordedEspn, recordedScoreboard } from "../provider/espn/TestEspn.ts"
 import { listedBy } from "../provider/TestProvider.ts"
 import { GuideReader } from "./GuideReader.ts"
 import { Source } from "./Source.ts"
@@ -145,31 +139,11 @@ function tallied(league: LeagueId) {
 
 /** YouTube TV, and ESPN answering from its 2026-10-03 recordings. */
 function matchingLayer() {
-  const fbs = recordedScoreboard("fbs-scoreboard-2026-10-03T2024Z")
-  const nfl = recordedScoreboard("nfl-scoreboard-pregame")
-  const recorded = Layer.succeed(
-    HttpClient.HttpClient,
-    HttpClient.make((request) =>
-      Effect.succeed(
-        HttpClientResponse.fromWeb(request, new Response(request.url.includes("/nfl/") ? nfl : fbs))
-      )
-    )
-  )
-  return Layer.mergeAll(
-    youTubeTv,
-    EspnProvider.layer.pipe(
-      Layer.provide([
-        FastCast.layerTest(() => Stream.never),
-        recorded,
-        HubConfig.layerTest({}).pipe(Layer.orDie)
-      ])
-    )
-  )
-}
-
-/** A recorded ESPN site scoreboard from the ESPN adapter's fixtures. */
-function recordedScoreboard(name: "fbs-scoreboard-2026-10-03T2024Z" | "nfl-scoreboard-pregame") {
-  return readFileSync(join(fixtures, `${name}.json`), "utf8")
+  const espn = recordedEspn({
+    nfl: recordedScoreboard("nfl-scoreboard-pregame"),
+    fbs: recordedScoreboard("fbs-scoreboard-2026-10-03T2024Z")
+  })
+  return Layer.mergeAll(youTubeTv, espn)
 }
 
 const thursdayKickoff = DateTime.makeUnsafe("2026-10-09T00:15:00Z")

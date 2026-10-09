@@ -1,5 +1,4 @@
-import { Effect, Schema, SchemaGetter, SchemaIssue, Struct, Tuple } from "effect"
-import * as Gzip from "./Gzip.ts"
+import { Effect, Schema, SchemaGetter, SchemaIssue, Stream, Struct, Tuple } from "effect"
 import { Topic } from "./Topic.ts"
 
 // A patch's path. On a scoreboard topic: the uid of the event it changes (`s:20~l:28~e:<id>~c:<id>`), then a JSON
@@ -126,10 +125,13 @@ const GameCheckpoint = Schema.Struct({
   )
 })
 
+/** The text zlib-deflated bytes hold, read with the web `DecompressionStream`. */
 const inflate = Effect.fnUntraced(function* (compressed: Uint8Array) {
-  return yield* Gzip.decompress(compressed, "deflate").pipe(
-    Effect.mapError(
-      (cause) => new SchemaIssue.InvalidValue({ message: `Not zlib-deflated: ${String(cause)}` }, compressed)
-    )
-  )
+  const text = Stream.fromReadableStream({
+    evaluate: () =>
+      Stream.toReadableStream(Stream.make(compressed)).pipeThrough(new DecompressionStream("deflate")),
+    onError: (cause) =>
+      new SchemaIssue.InvalidValue({ message: `Not zlib-deflated: ${String(cause)}` }, compressed)
+  }).pipe(Stream.decodeText)
+  return yield* Stream.mkString(text)
 })

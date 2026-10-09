@@ -1,10 +1,13 @@
 import { Game, GameSnapshot } from "@sportal/domain/Game"
 import type { LeagueId } from "@sportal/domain/League"
-import { Array as Arr, Data, type DateTime, Effect, HashMap, Metric, Option, Record } from "effect"
-import { Delivery } from "../../slate/Delivery.ts"
-import * as EspnDecoder from "./EspnDecoder.ts"
+import { Play } from "@sportal/domain/Play"
+import { Array as Arr, Data, type DateTime, Effect, HashMap, Metric, Option, Record, Schema } from "effect"
+import { Delivery } from "../Provider.ts"
+import { EspnEvent } from "./EspnEvent.ts"
+import { Scoreboard } from "./EspnPayload.ts"
+import * as EspnPlay from "./EspnPlay.ts"
 import type { Wanted } from "./FastCast.ts"
-import * as FastCastDocument from "./FastCastDocument.ts"
+import { DocumentChange, FastCastDocuments } from "./FastCastDocuments.ts"
 import { Frame } from "./Frame.ts"
 import { Topic, tcOf } from "./Topic.ts"
 
@@ -13,11 +16,11 @@ import { Topic, tcOf } from "./Topic.ts"
  * last poll listed them, and each push since (a push behind its listed game is logged and counted).
  */
 export class EspnState extends Data.Class<{
-  readonly documents: typeof FastCastDocument.empty
+  readonly documents: FastCastDocuments
   readonly listings: HashMap.HashMap<LeagueId, ReadonlyArray<GameSnapshot>>
 }> {
   static readonly empty: EspnState = new EspnState({
-    documents: FastCastDocument.empty,
+    documents: FastCastDocuments.empty,
     listings: HashMap.empty()
   })
 
@@ -49,8 +52,7 @@ export class EspnState extends Data.Class<{
       .map((game) => Topic.Game({ league: game.league, game: game.id }))
     return HashMap.fromIterable(
       [...scoreboards, ...games].map(
-        (topic) =>
-          [topic, FastCastDocument.isSynced(this.documents, topic) ? "Synced" : "AwaitingCheckpoint"] as const
+        (topic) => [topic, this.documents.isSynced(topic) ? "Synced" : "AwaitingCheckpoint"] as const
       )
     )
   }
@@ -74,13 +76,19 @@ const taken = Effect.fnUntraced(
 )
 
 const listed = Effect.fnUntraced(function* (state: EspnState, league: LeagueId, body: string) {
-  const scoreboard = yield* EspnDecoder.byLeague[league].decodeScoreboard(body)
-  const games = yield* EspnDecoder.gamesOf(league, scoreboard.events)
+  const scoreboard = yield* decodeScoreboard(body)
+  const games = yield* gamesOf(league, scoreboard.events)
 
   const had = Option.getOrElse(HashMap.get(state.listings, league), () => [])
   const kept = games.map((game) => keptOver(had, game))
   const next = new EspnState({ ...state, listings: HashMap.set(state.listings, league, kept) })
-  return [next, [Delivery.cases.Listing.make({ league, games })]] as const
+  return [next, [Delivery.Listing({ league, games })]] as const
+})
+
+/** The events as games; an event that does not decode is skipped, and the rest still delivered. */
+const gamesOf = Effect.fnUntraced(function* (league: LeagueId, events: ReadonlyArray<unknown>) {
+  const decoded = yield* Effect.forEach(events, (event) => Effect.option(decodeEvent[league](event)))
+  return Arr.getSomes(decoded)
 })
 
 /** A polled `game` as its listing keeps it: the one `had` held when a push moved it past the poll (`Game#listed`). */
@@ -97,14 +105,14 @@ function keptOver(had: ReadonlyArray<GameSnapshot>, game: GameSnapshot): GameSna
 const noDeliveries: ReadonlyArray<Delivery> = []
 
 const pushed = Effect.fnUntraced(function* (state: EspnState, frame: Frame) {
-  const { documents, change } = yield* FastCastDocument.advance(state.documents, frame)
+  const { documents, change } = yield* state.documents.advance(frame)
 
   const advanced = new EspnState({ ...state, documents })
   return yield* Option.match(change, {
     onNone: () => Effect.succeed([advanced, noDeliveries] as const),
-    onSome: FastCastDocument.Change.$match({
+    onSome: DocumentChange.$match({
       Scoreboard: ({ league, events }) =>
-        Effect.flatMap(EspnDecoder.gamesOf(league, events), (games) => {
+        Effect.flatMap(gamesOf(league, events), (games) => {
           const [next, deliveries, behind] = movedForward(advanced, league, games)
           return Effect.as(
             Effect.forEach(behind, (game) => pushBehind(league, game), { discard: true }),
@@ -113,8 +121,8 @@ const pushed = Effect.fnUntraced(function* (state: EspnState, frame: Frame) {
         }),
       Game: ({ league, game, plays }) =>
         Effect.map(
-          EspnDecoder.playsOf(league, plays),
-          (sorted) => [advanced, [Delivery.cases.Plays.make({ game, plays: sorted })]] as const
+          playsOf(league, plays),
+          (sorted) => [advanced, [Delivery.Plays({ game, plays: sorted })]] as const
         ),
       Reset: ({ topic, detail }) =>
         Effect.logWarning(`EspnState: ${tcOf(topic)} lost its document (${detail})`).pipe(
@@ -123,6 +131,17 @@ const pushed = Effect.fnUntraced(function* (state: EspnState, frame: Frame) {
         )
     })
   })
+})
+
+/** The game's plays, in `Play.order`; a play that does not decode is skipped. */
+const playsOf = Effect.fnUntraced(function* (
+  league: LeagueId,
+  entities: Readonly<Record<string, Schema.Json>>
+) {
+  const decoded = yield* Effect.forEach(Record.values(entities), (entity) =>
+    Effect.option(decodePlay[league](entity))
+  )
+  return Arr.getSomes(decoded).toSorted(Play.order)
 })
 
 /** Logs and counts a push `game` that is behind the game its `league` lists, which the listing takes anyway. */
@@ -157,7 +176,7 @@ function movedForward(
   )
   const moved = listing.map((listedGame) => advanced.find((game) => game.id === listedGame.id) ?? listedGame)
   const next = new EspnState({ ...state, listings: HashMap.set(state.listings, league, moved) })
-  return [next, advanced.map((snapshot) => Delivery.cases.Snapshot.make({ snapshot })), behind]
+  return [next, advanced.map((snapshot) => Delivery.Snapshot({ snapshot })), behind]
 }
 
 /** What a log of `frame` is annotated with: its kind, and its league or its topic's name. */
@@ -167,6 +186,27 @@ function annotationsOf(frame: Frame): Readonly<Record<string, string>> {
     Pushed: ({ topic }) => ({ frame: "Pushed", ...Record.getSomes({ topic: Option.map(topic, tcOf) }) }),
     Checkpoint: ({ topic }) => ({ frame: "Checkpoint", topic: tcOf(topic) })
   })
+}
+
+const decodeScoreboard = Schema.decodeUnknownEffect(Schema.fromJsonString(Scoreboard))
+
+// Each league's decode, built once: an event of either feed, and a play entity.
+const decodeEvent: { readonly [L in LeagueId]: ReturnType<typeof decodeEventOf> } = {
+  nfl: decodeEventOf("nfl"),
+  fbs: decodeEventOf("fbs")
+}
+
+function decodeEventOf(league: LeagueId) {
+  return Schema.decodeUnknownEffect(EspnEvent(league))
+}
+
+const decodePlay: { readonly [L in LeagueId]: ReturnType<typeof decodePlayOf> } = {
+  nfl: decodePlayOf("nfl"),
+  fbs: decodePlayOf("fbs")
+}
+
+function decodePlayOf(league: LeagueId) {
+  return Schema.decodeUnknownEffect(EspnPlay.FootballPlay(league))
 }
 
 const pushesBehind = Metric.counter("sportal_push_behind_listing", {

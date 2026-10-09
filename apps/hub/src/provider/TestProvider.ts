@@ -1,8 +1,7 @@
 import type { LeagueId } from "@sportal/domain/League"
 import { Effect, Option, Stream } from "effect"
 import { TestClock } from "effect/testing"
-import { Delivery } from "../slate/Delivery.ts"
-import { Provider } from "./Provider.ts"
+import { Delivery, Provider } from "./Provider.ts"
 
 /**
  * The games the provided `Provider`'s first listing of `league` lists. It waits on the live clock for at most 2
@@ -12,7 +11,7 @@ export const listedBy = Effect.fn("TestProvider.listedBy")(function* (league: Le
   const provider = yield* Provider
   const listing = yield* provider.deliveries.pipe(
     Stream.flatMap(Stream.fromIterable),
-    Stream.filter(Delivery.guards.Listing),
+    Stream.filter(Delivery.$is("Listing")),
     Stream.filter((delivery) => delivery.league === league),
     Stream.runHead,
     Effect.raceFirst(

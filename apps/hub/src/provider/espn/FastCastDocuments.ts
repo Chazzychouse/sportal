@@ -17,37 +17,58 @@ import { Frame } from "./Frame.ts"
 import { Topic } from "./Topic.ts"
 
 /**
- * The FastCast topics' documents after `frame`, and what it changed: a scoreboard topic's touched events (every event,
- * on a checkpoint), or all of a game topic's plays, by id, when they changed. A topic is synced by its checkpoint
- * frame and moved on by each message after it. A missed message, a patch that will not apply, or a message that does
- * not decode on a synced topic sends only that topic back to waiting for a checkpoint, and the change is a `Reset` of
- * it. A checkpoint that does not decode leaves its topic waiting, and asks for nothing: the live feed already followed
- * it again. A message of an op it does not know is skipped. Fails only when any other frame does not decode, leaving
- * the documents as they were.
+ * Each FastCast topic's document: waiting for its checkpoint, or synced as of a message. A scoreboard topic's document is
+ * its events by uid; a game topic's is its plays by id, at `gamePlays`.
  */
-export const advance = Effect.fnUntraced(function* (
-  documents: Documents,
-  frame: Frame
-): Effect.fn.Return<Advanced, Schema.SchemaError> {
-  return yield* Frame.$match(frame, {
-    Polled: () => Effect.succeed(unchanged(documents)),
-    Checkpoint: (checkpointed) => synced(documents, checkpointed),
-    Pushed: (pushed) => moveOn(documents, pushed)
-  })
-})
+export class FastCastDocuments extends Data.Class<{
+  readonly byTopic: HashMap.HashMap<Topic, Document>
+}> {
+  /** No topic has a document yet. */
+  static readonly empty: FastCastDocuments = new FastCastDocuments({ byTopic: HashMap.empty() })
 
-/** No topic has a document yet. */
-export const empty: Documents = HashMap.empty()
+  /**
+   * The documents after `frame`, and what it changed: a scoreboard topic's touched events (every event, on a
+   * checkpoint), or all of a game topic's plays, by id, when they changed. A topic is synced by its checkpoint frame and
+   * moved on by each message after it. A missed message, a patch that will not apply, or a message that does not decode
+   * on a synced topic sends only that topic back to waiting for a checkpoint, and the change is a `Reset` of it. A
+   * checkpoint that does not decode leaves its topic waiting, and asks for nothing: the live feed already followed it
+   * again. A message of an op it does not know is skipped. Fails only when any other frame does not decode, leaving the
+   * documents as they were.
+   */
+  advance(
+    frame: Frame
+  ): Effect.Effect<
+    { readonly documents: FastCastDocuments; readonly change: Option.Option<DocumentChange> },
+    Schema.SchemaError
+  > {
+    return Effect.map(advanced(this.byTopic, frame), ({ documents, change }) => ({
+      documents: new FastCastDocuments({ byTopic: documents }),
+      change
+    }))
+  }
 
-/** Whether `topic`'s document is synced: its checkpoint read, and every message since applied. */
-export function isSynced(documents: Documents, topic: Topic): boolean {
-  return Option.exists(HashMap.get(documents, topic), Document.$is("Synced"))
+  /** Whether `topic`'s document is synced: its checkpoint read, and every message since applied. */
+  isSynced(topic: Topic): boolean {
+    return Option.exists(HashMap.get(this.byTopic, topic), Document.$is("Synced"))
+  }
 }
 
 /**
- * Where one topic's document is: waiting for a checkpoint, or synced as of a message. A scoreboard topic's document is
- * its events by uid; a game topic's is its plays by id, at `gamePlays`.
+ * What a frame changed: a scoreboard topic's touched events, a game topic's whole list of plays, by id, or a topic sent
+ * back to waiting for a checkpoint, and why.
  */
+export type DocumentChange = Data.TaggedEnum<{
+  Scoreboard: { readonly league: LeagueId; readonly events: ReadonlyArray<Schema.Json> }
+  Game: {
+    readonly league: LeagueId
+    readonly game: GameId
+    readonly plays: Readonly<Record<string, Schema.Json>>
+  }
+  Reset: { readonly topic: Topic; readonly detail: string }
+}>
+export const DocumentChange = Data.taggedEnum<DocumentChange>()
+
+/** Where one topic's document is: waiting for a checkpoint, or synced as of a message. */
 type Document = Data.TaggedEnum<{
   AwaitingCheckpoint: object
   Synced: { readonly mid: number; readonly document: Schema.Json }
@@ -59,28 +80,24 @@ type Documents = HashMap.HashMap<Topic, Document>
 /** The documents after a frame, and what it changed. */
 interface Advanced {
   readonly documents: Documents
-  readonly change: Option.Option<Change>
+  readonly change: Option.Option<DocumentChange>
 }
+
+const advanced = Effect.fnUntraced(function* (
+  documents: Documents,
+  frame: Frame
+): Effect.fn.Return<Advanced, Schema.SchemaError> {
+  return yield* Frame.$match(frame, {
+    Polled: () => Effect.succeed(unchanged(documents)),
+    Checkpoint: (checkpointed) => synced(documents, checkpointed),
+    Pushed: (pushed) => moveOn(documents, pushed)
+  })
+})
 
 /** The documents after a frame that changed nothing. */
 function unchanged(documents: Documents): Advanced {
   return { documents, change: Option.none() }
 }
-
-/**
- * What a frame changed: a scoreboard topic's touched events, a game topic's whole list of plays, by id, or a topic sent
- * back to waiting for a checkpoint, and why.
- */
-export type Change = Data.TaggedEnum<{
-  Scoreboard: { readonly league: LeagueId; readonly events: ReadonlyArray<Schema.Json> }
-  Game: {
-    readonly league: LeagueId
-    readonly game: GameId
-    readonly plays: Readonly<Record<string, Schema.Json>>
-  }
-  Reset: { readonly topic: Topic; readonly detail: string }
-}>
-export const Change = Data.taggedEnum<Change>()
 
 const synced = Effect.fnUntraced(function* (
   documents: Documents,
@@ -135,17 +152,18 @@ function changeOf(
   topic: Topic,
   document: Schema.Json,
   touched: Option.Option<ReadonlyArray<string>>
-): Change {
+): DocumentChange {
   return Topic.$match(topic, {
     Scoreboard: ({ league }) =>
-      Change.Scoreboard({
+      DocumentChange.Scoreboard({
         league,
         events: Option.match(touched, {
           onNone: () => Record.values(objectAt(document, [])),
           onSome: (uids) => uids.flatMap((uid) => Option.toArray(valueAt(document, [uid])))
         })
       }),
-    Game: ({ league, game }) => Change.Game({ league, game, plays: objectAt(document, gamePlays.path) })
+    Game: ({ league, game }) =>
+      DocumentChange.Game({ league, game, plays: objectAt(document, gamePlays.path) })
   })
 }
 
@@ -198,7 +216,7 @@ function relevant(
 function reset(documents: Documents, topic: Topic, detail: string): Advanced {
   return {
     documents: HashMap.set(documents, topic, Document.AwaitingCheckpoint()),
-    change: Option.some(Change.Reset({ topic, detail }))
+    change: Option.some(DocumentChange.Reset({ topic, detail }))
   }
 }
 

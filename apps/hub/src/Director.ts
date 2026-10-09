@@ -4,9 +4,8 @@ import type { Play } from "@sportal/domain/Play"
 import { Screen, type ScreenCommand, type ScreenRejection } from "@sportal/domain/Screen"
 import { Cause, Context, Effect, Layer, Metric, Option, Stream, SubscriptionRef } from "effect"
 import * as HubStopping from "./HubStopping.ts"
-import { Provider } from "./provider/Provider.ts"
-import type { Delivery } from "./slate/Delivery.ts"
-import { Slate, SlateChange } from "./slate/Slate.ts"
+import { type Delivery, Provider } from "./provider/Provider.ts"
+import { Slate, SlateChange } from "./Slate.ts"
 import { Source } from "./source/Source.ts"
 
 /**
