@@ -43,8 +43,8 @@ export class FastCast extends Context.Service<
   }
 >()("sportal/hub/provider/espn/FastCast") {
   /**
-   * FastCast subscribing again to a topic whose checkpoint failed once `refollow` has passed, if it is still wanted,
-   * and opening the socket again on `reconnect` after each failure, which it logs with its reason. Its `follow` never
+   * FastCast subscribing again to a topic whose checkpoint failed once `refollow` has passed, if it is still wanted
+   * and no later checkpoint of it has succeeded, and opening the socket again on `reconnect` after each failure, which it logs with its reason. Its `follow` never
    * fails: where `reconnect` ends or a defect strikes, it logs that the live feed stopped and emits nothing more.
    */
   static readonly make = (retry: {
@@ -104,7 +104,8 @@ class CheckpointUnread extends Schema.TaggedError<CheckpointUnread>()("Checkpoin
 
 /**
  * Opens the socket, then subscribes as `wanted` says, returning the frames that follow, the handshake's first. A topic
- * whose checkpoint fails is subscribed to again once `refollow` has passed, if it is still wanted; one wait per topic.
+ * whose checkpoint fails is subscribed to again once `refollow` has passed, if it is still wanted; one wait per topic,
+ * cancelled by a later checkpoint of that topic that succeeds.
  */
 const connect = Effect.fnUntraced(function* (wanted: Stream.Stream<Wanted>, refollow: Duration.Input) {
   const host = yield* websocketHost
@@ -172,12 +173,31 @@ const connect = Effect.fnUntraced(function* (wanted: Stream.Stream<Wanted>, refo
     Effect.forkScoped
   )
 
-  // Up to four at once, so a reconnect's checkpoints load side by side; frames still leave in the texts' order.
+  // Up to four at once, so a reconnect's checkpoints load side by side; frames still leave in the texts' order, and each
+  // checkpoint's outcome is applied in that order too, so a later success cancels an earlier failure's re-subscribe.
   return Stream.concat(
     Stream.make({ text: opened, envelope: openingEnvelope }),
     rest.pipe(Stream.map((text) => ({ text, envelope: decodeEnvelope(text) })))
   ).pipe(
-    Stream.mapEffect(({ text, envelope }) => framed(text, envelope, resubscribeLater), { concurrency: 4 }),
+    Stream.mapEffect(({ text, envelope }) => framed(text, envelope), { concurrency: 4 }),
+    Stream.mapEffect((loaded) =>
+      Effect.gen(function* () {
+        if (Option.isSome(loaded.checkpoint)) {
+          const outcome = loaded.checkpoint.value
+          if (Option.isNone(outcome.unread)) {
+            yield* FiberMap.remove(pending, outcome.topic)
+          } else {
+            const error = outcome.unread.value
+            yield* Effect.logWarning(
+              `FastCast: the checkpoint of ${tcOf(outcome.topic)} failed; subscribing to it again later`,
+              error.cause
+            ).pipe(Effect.annotateLogs({ topic: tcOf(outcome.topic), reason: error.reason }))
+            yield* resubscribeLater(outcome.topic)
+          }
+        }
+        return loaded.frames
+      })
+    ),
     Stream.flattenIterable
   )
 })
@@ -194,37 +214,47 @@ function toSubscribe(previous: Wanted, next: Wanted): ReadonlyArray<Topic> {
 }
 
 /**
- * A socket text, read once as `envelope`, as its frame, an `H`'s followed by its checkpoint once it loads and decodes.
- * An `H` whose topic has no name FastCast reads loads nothing. A checkpoint that fails is logged, its topic is given to
- * `resubscribeLater`, and only its `H` is framed.
+ * A socket text, read once as `envelope`, as its frame, an `H`'s followed by its checkpoint once it loads and decodes,
+ * with that checkpoint's outcome: none unless an `H` names a topic, then whether its checkpoint was unread. An `H` whose
+ * topic has no name FastCast reads loads nothing. It subscribes to nothing and logs no failure: its caller applies the
+ * outcome in the texts' order.
  */
 const framed = Effect.fnUntraced(function* (
   text: string,
-  envelope: Option.Option<FastCastMessage.Envelope>,
-  resubscribeLater: (topic: Topic) => Effect.Effect<unknown>
-) {
+  envelope: Option.Option<FastCastMessage.Envelope>
+): Effect.fn.Return<
+  {
+    readonly frames: ReadonlyArray<Frame>
+    readonly checkpoint: Option.Option<{
+      readonly topic: Topic
+      readonly unread: Option.Option<CheckpointUnread>
+    }>
+  },
+  never,
+  HttpClient.HttpClient
+> {
   const message = Option.getOrUndefined(Option.flatMap(envelope, decodeFramed))
   const topic = message !== undefined && "tc" in message ? topicOf(message.tc) : Option.none<Topic>()
   const mid = message !== undefined && "mid" in message ? Option.some(message.mid) : Option.none<number>()
   const frame = Frame.Pushed({ topic, mid, envelope })
   if (message === undefined) {
     yield* Effect.logDebug("FastCast: framed a text of an unknown op", text)
-    return [frame]
+    return { frames: [frame], checkpoint: Option.none() }
   }
-  if (message.op !== "H" || Option.isNone(topic)) return [frame]
+  if (message.op !== "H" || Option.isNone(topic)) return { frames: [frame], checkpoint: Option.none() }
 
   const loaded = yield* checkpoint(topic.value, message.pl).pipe(Effect.result)
   if (Result.isSuccess(loaded)) {
-    return [frame, Frame.Checkpoint({ topic: topic.value, mid: message.mid, document: loaded.success })]
+    const whole = Frame.Checkpoint({ topic: topic.value, mid: message.mid, document: loaded.success })
+    return {
+      frames: [frame, whole],
+      checkpoint: Option.some({ topic: topic.value, unread: Option.none<CheckpointUnread>() })
+    }
   }
-
-  const error = loaded.failure
-  yield* Effect.logWarning(
-    `FastCast: the checkpoint of ${message.tc} at ${message.mid} failed; subscribing to it again later`,
-    error.cause
-  ).pipe(Effect.annotateLogs({ topic: message.tc, reason: error.reason }))
-  yield* resubscribeLater(topic.value)
-  return [frame]
+  return {
+    frames: [frame],
+    checkpoint: Option.some({ topic: topic.value, unread: Option.some(loaded.failure) })
+  }
 })
 
 /** The document of the checkpoint at `url`, decoded as `topic`'s checkpoint. */

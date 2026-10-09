@@ -599,6 +599,90 @@ describe("FastCast", () => {
     })
   )
 
+  it.effect("should cancel a pending checkpoint retry once its checkpoint succeeds", () =>
+    Effect.gen(function* () {
+      const server = fakeServer()
+      const { frames } = yield* nflFrames(server)
+      yield* frames.until(atLeast(2))
+      yield* Effect.sync(() => server.send(missingCheckpoint(7)))
+      yield* frames.until(numbered(7))
+
+      yield* Effect.sync(() => server.send(checkpointMessage(8)))
+      yield* frames.until(wholeAt(8))
+      yield* TestClock.adjust("30 seconds")
+
+      assert.lengthOf(
+        server.sent.all().filter((frame) => frame.op === "S"),
+        1
+      )
+    })
+  )
+
+  it.effect("should cancel a retry for a slow failed checkpoint once a later checkpoint succeeds first", () =>
+    Effect.gen(function* () {
+      const server = fakeServer()
+      const { frames } = yield* nflFrames(server)
+      yield* frames.until(atLeast(2))
+
+      yield* Effect.sync(() => {
+        server.send({ ...missingCheckpoint(7), pl: "https://checkpoint.test/slow-missing" })
+        server.send(checkpointMessage(8))
+      })
+      yield* TestClock.adjust("5 seconds")
+      const received = yield* frames.until(wholeAt(8))
+      yield* TestClock.adjust("30 seconds")
+
+      assert.deepStrictEqual(
+        received
+          .slice(2)
+          .map(seen)
+          .map(({ tag, mid }) => [tag, mid]),
+        [
+          ["Pushed", 7],
+          ["Pushed", 8],
+          ["Checkpoint", 8]
+        ]
+      )
+      assert.lengthOf(
+        server.sent.all().filter((frame) => frame.op === "S"),
+        1
+      )
+    })
+  )
+
+  it.effect("should keep the retry of a failed checkpoint that follows a slow successful one", () =>
+    Effect.gen(function* () {
+      const server = fakeServer()
+      const { frames } = yield* nflFrames(server)
+      yield* frames.until(atLeast(2))
+
+      yield* Effect.sync(() => {
+        server.send({ ...checkpointMessage(7), pl: "https://checkpoint.test/slow" })
+        server.send(missingCheckpoint(8))
+      })
+      yield* TestClock.adjust("5 seconds")
+      const received = yield* frames.until(numbered(8))
+      yield* TestClock.adjust("30 seconds")
+
+      yield* server.sent.until(subscribed("event-football-nfl", 2))
+      assert.deepStrictEqual(
+        received
+          .slice(2)
+          .map(seen)
+          .map(({ tag, mid }) => [tag, mid]),
+        [
+          ["Pushed", 7],
+          ["Checkpoint", 7],
+          ["Pushed", 8]
+        ]
+      )
+      assert.lengthOf(
+        server.sent.all().filter((frame) => frame.op === "S"),
+        2
+      )
+    })
+  )
+
   it.effect(
     "should subscribe at once to a topic whose document is lost while its re-subscribe waits, and not again when the wait ends",
     () =>
@@ -751,7 +835,7 @@ function hangingCheckpoint(server: ReturnType<typeof fakeServer>, logged: Layer.
 /**
  * NFL frames once the scoreboard topic is due to be followed again: synced at 7, its document lost so it is
  * subscribed to again, that subscription's checkpoint at 10 missing, then a checkpoint at 11 FastCast sent unasked,
- * which synced it.
+ * which synced it and cancelled the wait, then another unasked at 12 missing, which waits to follow it again.
  */
 function dueToBeFollowedAgain(server: ReturnType<typeof fakeServer>) {
   return Effect.gen(function* () {
@@ -768,6 +852,8 @@ function dueToBeFollowedAgain(server: ReturnType<typeof fakeServer>) {
     yield* Effect.sync(() => server.send(scoreboardShowing(11)))
     yield* following.frames.until(wholeAt(11))
     yield* following.want([scoreboard, "Synced"])
+    yield* Effect.sync(() => server.send(missingCheckpoint(12)))
+    yield* following.frames.until(numbered(12))
     return following
   })
 }
@@ -961,7 +1047,8 @@ function scoreboardBody(games: ReadonlyArray<string>) {
 }
 
 // FastCast's host lookup, and any checkpoint, which is the recorded one, except a scoreboard showing only some of its
-// games, a missing one, one that is not a scoreboard, and one that never comes.
+// games, a missing one, one that is not a scoreboard, one that never comes, and a recorded or missing one that comes
+// after 5 s.
 const espn = HttpClient.make((request) => {
   const url = new URL(request.url)
   return Effect.succeed(
@@ -971,7 +1058,7 @@ const espn = HttpClient.make((request) => {
         ? new Response(JSON.stringify({ ip: "fastcast.test", securePort: 443, token: "token" }))
         : url.pathname === "/scoreboard"
           ? new Response(scoreboardBody((url.searchParams.get("games") ?? "").split(",")))
-          : url.pathname === "/missing"
+          : url.pathname === "/missing" || url.pathname === "/slow-missing"
             ? new Response("Not Found", { status: 404 })
             : url.pathname === "/garbled"
               ? new Response(JSON.stringify({ sports: "not a scoreboard" }))
@@ -981,7 +1068,7 @@ const espn = HttpClient.make((request) => {
     Effect.andThen((response) =>
       url.pathname === "/hang"
         ? Effect.never
-        : url.pathname === "/slow"
+        : url.pathname === "/slow" || url.pathname === "/slow-missing"
           ? Effect.sleep("5 seconds").pipe(Effect.as(response))
           : Effect.succeed(response)
     )
