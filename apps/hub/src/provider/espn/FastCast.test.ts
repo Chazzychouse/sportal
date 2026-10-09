@@ -1,11 +1,11 @@
 import { readFileSync } from "node:fs"
 import { assert, describe, it } from "@effect/vitest"
 import { GameId } from "@sportal/domain/Game"
-import { Deferred, Effect, HashMap, Layer, Option, Schedule, Schema, Stream, SubscriptionRef } from "effect"
+import { Deferred, Effect, HashMap, Layer, Option, Schema, Stream, SubscriptionRef } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/http"
 import * as Socket from "effect/socket/Socket"
 import { TestClock } from "effect/testing"
-import { counted, gauged, observed, recordingLogs, withMetrics } from "../../TestTelemetry.ts"
+import { recordingLogs } from "../../TestTelemetry.ts"
 import { FastCast, type Wanted } from "./FastCast.ts"
 import * as FastCastMessage from "./FastCastMessage.ts"
 import { Frame } from "./Frame.ts"
@@ -71,7 +71,7 @@ describe("FastCast", () => {
     })
   )
 
-  it.effect("should count a failed live feed by its reason", () =>
+  it.effect("should warn of a failed live feed with its reason", () =>
     Effect.gen(function* () {
       const { logs, layer } = recordingLogs()
       const server = fakeServer()
@@ -82,8 +82,6 @@ describe("FastCast", () => {
       yield* TestClock.adjust("2 seconds")
 
       yield* server.sent.until(subscribed("event-football-nfl", 2))
-      const failures = yield* counted("sportal_live_feed_errors", { reason: "Closed" })
-      assert.strictEqual(failures, 1)
       assert.isTrue(
         logs.some(
           (log) =>
@@ -91,7 +89,7 @@ describe("FastCast", () => {
             log.message.includes("FastCast: the live feed failed (Closed); subscribing again")
         )
       )
-    }).pipe(withMetrics)
+    })
   )
 
   it.effect("should keep running when the socket goes silent", () =>
@@ -109,35 +107,11 @@ describe("FastCast", () => {
 
       yield* server.sent.until(subscribed("event-football-nfl", 2))
       const done = yield* Deferred.isDone(ended)
-      const silences = yield* counted("sportal_live_feed_errors", { reason: "Silent" })
       assert.isFalse(done)
-      assert.strictEqual(silences, 1)
       assert.isFalse(
         server.sent.all().some((frame) => frame.op === "B"),
         "the client never heartbeats"
       )
-    }).pipe(withMetrics)
-  )
-
-  it.effect("should log that the live feed stopped and stay quiet once its reconnect is done", () =>
-    Effect.gen(function* () {
-      const { logs, layer } = recordingLogs()
-      const server = fakeServer()
-      const { ended } = yield* nflFrames(server, {
-        checkpoint: Schedule.spaced("30 seconds"),
-        reconnect: Schedule.recurs(0)
-      }).pipe(Effect.provide(layer))
-      yield* server.sent.until(subscribed("event-football-nfl", 1))
-
-      yield* Effect.sync(() => server.close(1000))
-      yield* TestClock.adjust("1 minute")
-
-      const done = yield* Deferred.isDone(ended)
-      const stopped = logs.filter((log) => log.message.includes("FastCast: the live feed stopped"))
-      assert.isFalse(done)
-      assert.lengthOf(connectsSent(server), 1)
-      assert.lengthOf(stopped, 1)
-      assert.strictEqual(stopped[0]?.level, "Error")
     })
   )
 
@@ -159,20 +133,6 @@ describe("FastCast", () => {
       ])
       assert.isFalse(firstFour.some(Frame.$is("Polled")))
     })
-  )
-
-  it.effect("should time a checkpoint it loads", () =>
-    Effect.gen(function* () {
-      const server = fakeServer()
-      const { frames } = yield* nflFrames(server)
-      yield* frames.until(atLeast(2))
-
-      yield* Effect.sync(() => server.send(checkpointMessage(7)))
-
-      yield* frames.until(wholeAt(7))
-      const timed = yield* observed("sportal_checkpoint_duration")
-      assert.strictEqual(timed, 1)
-    }).pipe(withMetrics)
   )
 
   it.effect("should give a patch's frame its mid", () =>
@@ -247,11 +207,10 @@ describe("FastCast", () => {
     })
   )
 
-  it.effect("should leave a topic no longer wanted, saying so", () =>
+  it.effect("should send nothing for a topic no longer wanted", () =>
     Effect.gen(function* () {
-      const { logs, layer } = recordingLogs()
       const server = fakeServer()
-      const { frames, want } = yield* nflFrames(server).pipe(Effect.provide(layer))
+      const { frames, want } = yield* nflFrames(server)
       yield* frames.until(atLeast(2))
       yield* want([scoreboard, "AwaitingCheckpoint"], [gameOf(firstGame), "AwaitingCheckpoint"])
       yield* server.sent.until(subscribed(gameTopic(firstGame), 1))
@@ -263,93 +222,11 @@ describe("FastCast", () => {
         server.sent.all().filter((frame) => frame.op === "S" && frame.tc === gameTopic(firstGame)),
         1
       )
-      assert.isTrue(
-        logs.some((log) => log.level === "Info" && log.message.includes(`left ${gameTopic(firstGame)}`))
-      )
     })
   )
 
-  it.effect("should count each socket text by its op and its topic's league", () =>
-    Effect.gen(function* () {
-      const server = fakeServer()
-      const { frames } = yield* nflFrames(server)
-      yield* frames.until(atLeast(2))
-
-      yield* Effect.sync(() => server.send(patchMessage(8)))
-
-      yield* frames.until(numbered(8))
-      const patches = yield* counted("sportal_live_feed_received", { op: "P", league: "nfl" })
-      assert.strictEqual(patches, 1)
-    }).pipe(withMetrics)
-  )
-
-  it.effect("should count a socket text of an unknown op as unknown", () =>
-    Effect.gen(function* () {
-      const server = fakeServer()
-      const { frames } = yield* nflFrames(server)
-      yield* frames.until(atLeast(2))
-
-      yield* Effect.sync(() => server.send({ op: "X" }))
-
-      yield* frames.until(atLeast(3))
-      const unknown = yield* counted("sportal_live_feed_received", { op: "unknown" })
-      assert.strictEqual(unknown, 1)
-    }).pipe(withMetrics)
-  )
-
-  it.effect("should gauge one game topic followed once one is wanted", () =>
-    Effect.gen(function* () {
-      const server = fakeServer()
-      const { frames, want } = yield* nflFrames(server)
-      yield* frames.until(atLeast(2))
-
-      yield* want([scoreboard, "AwaitingCheckpoint"], [gameOf(firstGame), "AwaitingCheckpoint"])
-
-      yield* server.sent.until(subscribed(gameTopic(firstGame), 1))
-      const topics = yield* gauged("sportal_live_feed_topics")
-      assert.strictEqual(topics, 1)
-    }).pipe(withMetrics)
-  )
-
-  it.effect("should gauge no game topic followed, and count the leave, once none is wanted", () =>
-    Effect.gen(function* () {
-      const server = fakeServer()
-      const { frames, want } = yield* nflFrames(server)
-      yield* frames.until(atLeast(2))
-      yield* want([scoreboard, "AwaitingCheckpoint"], [gameOf(firstGame), "AwaitingCheckpoint"])
-      yield* server.sent.until(subscribed(gameTopic(firstGame), 1))
-
-      yield* want([scoreboard, "AwaitingCheckpoint"])
-      yield* TestClock.adjust("1 second")
-
-      const topics = yield* gauged("sportal_live_feed_topics")
-      const leaves = yield* counted("sportal_live_feed_steers", { steer: "Leave" })
-      assert.strictEqual(topics, 0)
-      assert.strictEqual(leaves, 1)
-    }).pipe(withMetrics)
-  )
-
   it.effect(
-    "should count a topic followed again once its document goes back to waiting for its checkpoint",
-    () =>
-      Effect.gen(function* () {
-        const server = fakeServer()
-        const { frames, want } = yield* nflFrames(server)
-        yield* frames.until(atLeast(2))
-        yield* Effect.sync(() => server.send(scoreboardShowing(7)))
-        yield* frames.until(wholeAt(7))
-        yield* want([scoreboard, "Synced"])
-
-        yield* want([scoreboard, "AwaitingCheckpoint"])
-
-        yield* server.sent.until(subscribed("event-football-nfl", 2))
-        const followedAgain = yield* counted("sportal_live_feed_steers", { steer: "FollowAgain" })
-        assert.strictEqual(followedAgain, 1)
-      }).pipe(withMetrics)
-  )
-
-  it.effect(
-    "should keep the socket and the other topics when a checkpoint does not load, counting it and warning of it",
+    "should keep the socket and the other topics when a checkpoint does not load, warning of it",
     () =>
       Effect.gen(function* () {
         const { logs, layer } = recordingLogs()
@@ -360,7 +237,6 @@ describe("FastCast", () => {
 
         const received = yield* frames.until(wholeAt(7))
         const done = yield* Deferred.isDone(ended)
-        const failures = yield* counted("sportal_live_feed_checkpoint_failures", { league: "nfl" })
         assert.deepStrictEqual(
           received.map(seen).flatMap(({ tag, tc, mid }) => (tc?.startsWith("gp-") ? [[tc, tag, mid]] : [])),
           [
@@ -373,13 +249,12 @@ describe("FastCast", () => {
           ]
         )
         assert.isFalse(done)
-        assert.strictEqual(failures, 1)
         assert.isTrue(logs.some((log) => log.level === "Warn" && log.annotations.topic === missingTopic))
         assert.lengthOf(
           server.sent.all().filter((frame) => frame.op === "S" && frame.tc === missingTopic),
           1
         )
-      }).pipe(withMetrics)
+      })
   )
 
   it.effect(
@@ -397,6 +272,24 @@ describe("FastCast", () => {
         const done = yield* Deferred.isDone(ended)
         assert.isFalse(done)
       })
+  )
+
+  it.effect("should not subscribe again to a topic left while its re-subscribe waited", () =>
+    Effect.gen(function* () {
+      const server = fakeServer()
+      const { frames, want } = yield* twoGamesFollowed(server, Layer.empty)
+      yield* missingCheckpointBesideOther(server)
+      yield* frames.until(wholeAt(7))
+
+      yield* want([scoreboard, "Synced"], [gameOf(secondGame), "Synced"])
+      yield* TestClock.adjust("1 second")
+      yield* TestClock.adjust("29 seconds")
+
+      assert.lengthOf(
+        server.sent.all().filter((frame) => frame.op === "S" && frame.tc === missingTopic),
+        1
+      )
+    })
   )
 
   it.effect(
@@ -438,7 +331,7 @@ describe("FastCast", () => {
     })
   )
 
-  it.effect("should fail a checkpoint that hangs for 20 s as Unloaded, counting it and warning of it", () =>
+  it.effect("should fail a checkpoint that hangs for 20 s as Unloaded, warning of it", () =>
     Effect.gen(function* () {
       const { logs, layer } = recordingLogs()
       const server = fakeServer()
@@ -448,13 +341,11 @@ describe("FastCast", () => {
       yield* TestClock.adjust("1 second")
 
       yield* frames.until(atLeast(3))
-      const failures = yield* counted("sportal_live_feed_checkpoint_failures", { league: "nfl" })
-      assert.strictEqual(failures, 1)
       assert.isTrue(logs.some((log) => log.level === "Warn" && log.annotations.reason === "Unloaded"))
-    }).pipe(withMetrics)
+    })
   )
 
-  it.effect("should not follow a topic whose checkpoint hung again before the Schedule says", () =>
+  it.effect("should not subscribe again to a topic whose checkpoint hung before 30 s", () =>
     Effect.gen(function* () {
       const server = fakeServer()
       const { frames } = yield* hangingCheckpoint(server, Layer.empty)
@@ -470,25 +361,23 @@ describe("FastCast", () => {
     })
   )
 
-  it.effect(
-    "should follow a topic whose checkpoint hung again when the Schedule says, keeping the socket",
-    () =>
-      Effect.gen(function* () {
-        const server = fakeServer()
-        const { ended, frames } = yield* hangingCheckpoint(server, Layer.empty)
-        yield* TestClock.adjust("20 seconds")
-        yield* frames.until(atLeast(3))
-        yield* TestClock.adjust("29 seconds")
+  it.effect("should subscribe again to a topic whose checkpoint hung after 30 s, keeping the socket", () =>
+    Effect.gen(function* () {
+      const server = fakeServer()
+      const { ended, frames } = yield* hangingCheckpoint(server, Layer.empty)
+      yield* TestClock.adjust("20 seconds")
+      yield* frames.until(atLeast(3))
+      yield* TestClock.adjust("29 seconds")
 
-        yield* TestClock.adjust("1 second")
+      yield* TestClock.adjust("1 second")
 
-        yield* server.sent.until(subscribed("event-football-nfl", 2))
-        const done = yield* Deferred.isDone(ended)
-        assert.isFalse(done)
-      })
+      yield* server.sent.until(subscribed("event-football-nfl", 2))
+      const done = yield* Deferred.isDone(ended)
+      assert.isFalse(done)
+    })
   )
 
-  it.effect("should emit only the H of a checkpoint that does not decode, counting it as Undecodable", () =>
+  it.effect("should emit only the H of a checkpoint that does not decode, warning of it as Undecodable", () =>
     Effect.gen(function* () {
       const { logs, layer } = recordingLogs()
       const server = fakeServer()
@@ -499,7 +388,6 @@ describe("FastCast", () => {
       yield* Effect.sync(() => server.send(patchMessage(8)))
 
       const received = yield* frames.until(atLeast(4))
-      const failures = yield* counted("sportal_live_feed_checkpoint_failures", { league: "nfl" })
       assert.deepStrictEqual(
         received
           .slice(2)
@@ -510,9 +398,8 @@ describe("FastCast", () => {
           ["Pushed", 8]
         ]
       )
-      assert.strictEqual(failures, 1)
       assert.isTrue(logs.some((log) => log.level === "Warn" && log.annotations.reason === "Undecodable"))
-    }).pipe(withMetrics)
+    })
   )
 
   it.effect("should follow a topic whose checkpoint did not decode again after 30 s", () =>
@@ -532,45 +419,6 @@ describe("FastCast", () => {
         2
       )
     })
-  )
-
-  it.effect(
-    "should send no second S for a topic whose document is lost again while its follow waits to retry",
-    () =>
-      Effect.gen(function* () {
-        const server = fakeServer()
-        const { want } = yield* dueToBeFollowedAgain(server)
-
-        yield* want([scoreboard, "AwaitingCheckpoint"])
-        yield* TestClock.adjust("1 second")
-
-        assert.lengthOf(
-          server.sent.all().filter((frame) => frame.op === "S"),
-          2,
-          "the first gap's S, and none for the second"
-        )
-      })
-  )
-
-  it.effect(
-    "should follow a topic whose document was lost again while its follow waited only once more",
-    () =>
-      Effect.gen(function* () {
-        const server = fakeServer()
-        const { want } = yield* dueToBeFollowedAgain(server)
-        yield* want([scoreboard, "AwaitingCheckpoint"])
-        yield* TestClock.adjust("1 second")
-
-        yield* TestClock.adjust("29 seconds")
-        yield* server.sent.until(subscribed("event-football-nfl", 3))
-        yield* TestClock.adjust("30 seconds")
-
-        assert.lengthOf(
-          server.sent.all().filter((frame) => frame.op === "S"),
-          3,
-          "the first gap's S, then one when the Schedule says"
-        )
-      })
   )
 
   it.effect("should keep one subscription pending at a time for a topic whose checkpoints keep failing", () =>
@@ -595,36 +443,42 @@ describe("FastCast", () => {
     })
   )
 
+  it.effect("should subscribe again every 30 s to a topic whose checkpoints keep failing", () =>
+    Effect.gen(function* () {
+      const server = fakeServer()
+      const { frames } = yield* nflFrames(server)
+      yield* frames.until(atLeast(2))
+
+      for (const mid of [1, 2, 3, 4, 5, 6]) {
+        yield* Effect.sync(() => server.send(missingCheckpoint(mid)))
+        yield* frames.until(numbered(mid))
+        yield* TestClock.adjust("30 seconds")
+        yield* server.sent.until(subscribed("event-football-nfl", mid + 1))
+      }
+
+      assert.lengthOf(
+        server.sent.all().filter((frame) => frame.op === "S"),
+        7
+      )
+    })
+  )
+
   it.effect(
-    "should leave a topic to polling once the Schedule is done, saying so once, and not subscribe it again until the socket reconnects",
+    "should subscribe at once to a topic whose document is lost while its re-subscribe waits, and not again when the wait ends",
     () =>
       Effect.gen(function* () {
-        const { logs, layer } = recordingLogs()
         const server = fakeServer()
-        const { frames, want } = yield* nflFrames(server, {
-          checkpoint: Schedule.recurs(1),
-          reconnect: Schedule.spaced("1 second")
-        }).pipe(Effect.provide(layer))
-        yield* frames.until(atLeast(2))
-        yield* Effect.sync(() => server.send(missingCheckpoint(1)))
-        yield* server.sent.until(subscribed("event-football-nfl", 2))
+        const { want } = yield* dueToBeFollowedAgain(server)
 
-        yield* Effect.sync(() => server.send(missingCheckpoint(2)))
-        yield* frames.until(numbered(2))
-        // A checkpoint FastCast sends unasked syncs the topic; then its document is lost.
-        yield* Effect.sync(() => server.send(scoreboardShowing(3)))
-        yield* frames.until(wholeAt(3))
-        yield* want([scoreboard, "Synced"])
         yield* want([scoreboard, "AwaitingCheckpoint"])
-        yield* TestClock.adjust("1 minute")
+        yield* server.sent.until(subscribed("event-football-nfl", 3))
+        yield* TestClock.adjust("30 seconds")
 
-        const gaveUp = logs.filter((log) => log.message.includes("left to polling"))
         assert.lengthOf(
           server.sent.all().filter((frame) => frame.op === "S"),
-          2
+          3,
+          "the first gap's S, the second gap's at once, and none when the wait ends"
         )
-        assert.lengthOf(gaveUp, 1)
-        assert.strictEqual(gaveUp[0]?.level, "Warn")
       })
   )
 
@@ -645,27 +499,6 @@ describe("FastCast", () => {
         server.sent.all().filter((frame) => frame.op === "S" && frame.tc === "event-football-nfl"),
         2
       )
-    })
-  )
-
-  it.effect("should follow a topic left to polling again once the socket reconnects", () =>
-    Effect.gen(function* () {
-      const server = fakeServer()
-      const { frames } = yield* nflFrames(server, {
-        checkpoint: Schedule.recurs(1),
-        reconnect: Schedule.spaced("1 second")
-      })
-      yield* frames.until(atLeast(2))
-      yield* Effect.sync(() => server.send(missingCheckpoint(1)))
-      yield* server.sent.until(subscribed("event-football-nfl", 2))
-      yield* Effect.sync(() => server.send(missingCheckpoint(2)))
-      yield* frames.until(numbered(2))
-
-      yield* Effect.sync(() => server.close(1000))
-      yield* TestClock.adjust("2 seconds")
-
-      yield* server.sent.until(subscribed("event-football-nfl", 3))
-      assert.lengthOf(connectsSent(server), 2)
     })
   )
 })
@@ -826,19 +659,15 @@ function wantedOf(...entries: ReadonlyArray<readonly [Topic, HashMap.HashMap.Val
  * Runs FastCast's frames over `server` in a fiber of its own, told to follow the NFL's scoreboard until `want` says
  * otherwise, collecting them into `frames` and completing `ended` if they ever end.
  */
-function nflFrames(server: ReturnType<typeof fakeServer>, retry?: Parameters<typeof FastCast.make>[0]) {
-  return framesOver(fastCastHost(server), retry)
+function nflFrames(server: ReturnType<typeof fakeServer>) {
+  return framesOver(fastCastHost(server))
 }
 
 /**
- * Runs FastCast's frames over `host` in a fiber of its own, on its own retries unless given `retry`, told to follow the
- * NFL's scoreboard until `want` says otherwise, collecting them into `frames` and completing `ended` if they ever end.
+ * Runs FastCast's frames over `host` in a fiber of its own, told to follow the NFL's scoreboard until `want` says
+ * otherwise, collecting them into `frames` and completing `ended` if they ever end.
  */
-function framesOver(
-  host: Layer.Layer<HttpClient.HttpClient | Socket.WebSocketConstructor>,
-  retry?: Parameters<typeof FastCast.make>[0]
-) {
-  const fastCast = retry === undefined ? FastCast.layer : Layer.effect(FastCast, FastCast.make(retry))
+function framesOver(host: Layer.Layer<HttpClient.HttpClient | Socket.WebSocketConstructor>) {
   return Effect.gen(function* () {
     const ended = yield* Deferred.make<void>()
     const frames = watched<Frame>()
@@ -853,7 +682,7 @@ function framesOver(
     const want = (...entries: ReadonlyArray<readonly [Topic, HashMap.HashMap.Value<Wanted>]>) =>
       SubscriptionRef.set(wanted, wantedOf(...entries))
     return { ended, frames, want }
-  }).pipe(Effect.provide(fastCast.pipe(Layer.provide(host))))
+  }).pipe(Effect.provide(FastCast.layer.pipe(Layer.provide(host))))
 }
 
 /** A frame as a test compares it: its kind, its topic's name, its mid, and its body (a socket text read as its op) or its document. */
