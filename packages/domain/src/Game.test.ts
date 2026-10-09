@@ -427,16 +427,16 @@ describe("GameSnapshot#advancedTo", () => {
     away: { team: team("AWAY", "fbs", { shortName: "Away" }), score: 0, ranking: 12 },
     broadcasts: [broadcast("CBS")]
   })
-  const pushed = snapshot({
+  const pushed = {
     status: "live",
     period: 3,
     clock: "7:45",
-    home: { team: team("HOME", "fbs", { shortName: "Pushed Home" }), score: 14 },
-    away: { team: team("AWAY", "fbs", { shortName: "Pushed Away" }), score: 10 },
+    homeScore: 14,
+    awayScore: 10,
     situation: situationPushed
-  })
+  } as const
 
-  it("should take the later status, period, clock, scores, and situation", () => {
+  it("should take the moved status, period, clock, scores, and situation", () => {
     const advanced = polled.advancedTo(pushed)
 
     assert.strictEqual(advanced.status, "live")
@@ -458,18 +458,43 @@ describe("GameSnapshot#advancedTo", () => {
     assert.deepStrictEqual(advanced.broadcasts, polled.broadcasts)
   })
 
-  it("should have no situation when the later snapshot has none", () => {
+  it("should have no situation when the moved fields have none", () => {
     const earlier = snapshot({ status: "live", period: 3, situation: situationPushed })
 
-    const advanced = earlier.advancedTo(snapshot({ status: "final", period: 4 }))
+    const advanced = earlier.advancedTo({
+      status: "final",
+      period: 4,
+      clock: "0:00",
+      homeScore: 0,
+      awayScore: 0
+    })
 
     assert.isFalse("situation" in advanced)
   })
 
-  it("should be at the later snapshot's game time", () => {
+  it("should drop the situation and keep its teams when the moved fields have none", () => {
+    const listed = liveSnapshot({ situation: situation({ down: 2 }) })
+
+    const advanced = listed.advancedTo({
+      status: "halftime",
+      period: 2,
+      clock: "0:00",
+      homeScore: 7,
+      awayScore: 3
+    })
+
+    assert.isUndefined(advanced.situation)
+    assert.strictEqual(advanced.home.score, 7)
+    assert.strictEqual(advanced.home.team, listed.home.team)
+  })
+
+  it("should be at the moved fields' game time", () => {
     const advanced = polled.advancedTo(pushed)
 
-    assert.strictEqual(GameSnapshot.gameTime(advanced, pushed), 0)
+    assert.strictEqual(
+      GameSnapshot.gameTime(advanced, snapshot({ status: "live", period: 3, clock: "7:45" })),
+      0
+    )
   })
 })
 

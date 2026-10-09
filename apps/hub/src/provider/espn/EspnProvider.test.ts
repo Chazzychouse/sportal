@@ -26,6 +26,7 @@ import { HubConfig } from "../../HubConfig.ts"
 import { counted, recordingLogs, recordingSpans, withMetrics } from "../../TestTelemetry.ts"
 import { Delivery, Provider } from "../Provider.ts"
 import { listedBy } from "../TestProvider.ts"
+import { SiteEvent } from "./EspnPayload.ts"
 import * as EspnProvider from "./EspnProvider.ts"
 import { FastCast, type Wanted } from "./FastCast.ts"
 import { Frame } from "./Frame.ts"
@@ -394,7 +395,7 @@ describe("EspnProvider.deliveries", () => {
       const checkpoint = Frame.Checkpoint({
         topic: Topic.Scoreboard({ league: "nfl" }),
         mid: 1,
-        body: JSON.stringify({ sports: [{ leagues: [{ events: JSON.parse(live).events }] }] })
+        body: checkpointBodyOf(live)
       })
       const fbsSlow = HttpClient.make((request) =>
         request.url.includes("/nfl/")
@@ -429,11 +430,11 @@ describe("EspnProvider.deliveries", () => {
     () =>
       Effect.gen(function* () {
         const soon = scoreboardOf([{ state: "pre", period: 0, kickoff: "2026-10-03T12:20Z" }])
-        const live = JSON.parse(scoreboardOf([{ state: "in", period: 2, kickoff: "2026-10-03T12:20Z" }]))
+        const live = scoreboardOf([{ state: "in", period: 2, kickoff: "2026-10-03T12:20Z" }])
         const checkpoint = Frame.Checkpoint({
           topic: Topic.Scoreboard({ league: "fbs" }),
           mid: 1,
-          body: JSON.stringify({ sports: [{ leagues: [{ events: live.events }] }] })
+          body: checkpointBodyOf(live)
         })
         const pushedAt30s = Stream.fromEffect(Effect.sleep("30 seconds")).pipe(Stream.as(checkpoint))
 
@@ -780,6 +781,33 @@ const decodeEventIds = Schema.decodeUnknownSync(
  * An ESPN scoreboard of one game per entry, each the pregame scoreboard's second event kicking off at `kickoff` (the
  * recorded kickoff, unless given), in ESPN's status `state`, named `name` (the recorded name, unless given), in `period`.
  */
+/** A FastCast scoreboard checkpoint's document of the site `scoreboard`'s games, spelled as FastCast spells them. */
+function checkpointBodyOf(scoreboard: string): string {
+  const { events } = Schema.decodeSync(
+    Schema.fromJsonString(Schema.Struct({ events: Schema.Array(SiteEvent) }))
+  )(scoreboard)
+  return JSON.stringify({
+    sports: [
+      {
+        leagues: [
+          {
+            events: events.map((event) => ({
+              uid: event.id,
+              id: event.id,
+              fullStatus: event.status,
+              competitors: event.competitions[0].competitors.map(({ homeAway, score, team }) => ({
+                id: team.id,
+                homeAway,
+                score
+              }))
+            }))
+          }
+        ]
+      }
+    ]
+  })
+}
+
 function scoreboardOf(
   games: ReadonlyArray<{
     readonly state: "pre" | "in" | "post"

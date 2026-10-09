@@ -159,18 +159,28 @@ export class GameSnapshot extends Schema.Class<GameSnapshot>("sportal/GameSnapsh
   }
 
   /**
-   * This game moved on to `later`'s status, period, clock, scores, and situation, keeping its own teams, rankings,
-   * kickoff, and broadcasts.
+   * This game moved on to `moved`'s status, period, clock, scores, and situation (none when it has none), keeping its
+   * own teams, rankings, kickoff, and broadcasts.
    */
-  advancedTo(later: GameSnapshot): GameSnapshot {
+  advancedTo(moved: {
+    readonly status: GameStatus
+    readonly period: number
+    readonly clock: string
+    readonly homeScore: number
+    readonly awayScore: number
+    readonly situation?: Situation | undefined
+  }): GameSnapshot {
     return new GameSnapshot({
-      ...later,
       id: this.id,
       league: this.league,
       kickoff: this.kickoff,
       broadcasts: this.broadcasts,
-      home: { ...this.home, score: later.home.score },
-      away: { ...this.away, score: later.away.score }
+      status: moved.status,
+      period: moved.period,
+      clock: moved.clock,
+      home: { ...this.home, score: moved.homeScore },
+      away: { ...this.away, score: moved.awayScore },
+      ...(moved.situation === undefined ? {} : { situation: moved.situation })
     })
   }
 

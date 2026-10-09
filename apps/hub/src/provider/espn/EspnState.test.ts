@@ -6,7 +6,7 @@ import { Play, PlayId } from "@sportal/domain/Play"
 import { DateTime, Effect, Equal, HashMap, Metric, Option, Record, Schema } from "effect"
 import { counted, recordingLogs, withMetrics } from "../../TestTelemetry.ts"
 import { Delivery } from "../Provider.ts"
-import { EspnEvent } from "./EspnEvent.ts"
+import { PushedEvent } from "./EspnEvent.ts"
 import { EspnState } from "./EspnState.ts"
 import * as FastCastMessage from "./FastCastMessage.ts"
 import { Frame } from "./Frame.ts"
@@ -100,13 +100,24 @@ describe("EspnState#take", () => {
       })
     )
 
-    it("should decode each checkpoint event alone", () => {
-      const events = checkpointEvents()
-      const decodeEvent = Schema.decodeUnknownSync(EspnEvent("nfl"))
+    it("should read each checkpoint event as what it moves", () => {
+      const decodePushed = Schema.decodeUnknownSync(PushedEvent("nfl"))
+      const decodeExpected = Schema.decodeUnknownSync(Schema.Array(GameSnapshot))
 
-      const games = events.map((event) => encode(decodeEvent(event)))
+      const read = checkpointEvents().map((event) => decodePushed(event))
 
-      assert.deepStrictEqual(encoded(games), expected.checkpointEvents)
+      assert.deepStrictEqual(
+        read,
+        decodeExpected(expected.checkpointEvents).map((game) => ({
+          id: game.id,
+          status: game.status,
+          period: game.period,
+          clock: game.clock,
+          homeScore: game.home.score,
+          awayScore: game.away.score,
+          ...(game.situation === undefined ? {} : { situation: game.situation })
+        }))
+      )
     })
   })
 
@@ -138,17 +149,6 @@ describe("EspnState#take", () => {
       assert.strictEqual(nyg?.home.team.shortName, "Giants")
     })
   )
-
-  it("should carry a checkpoint event's teams' colors", () => {
-    const events = checkpointEvents()
-    const decodeEvent = Schema.decodeUnknownSync(EspnEvent("nfl"))
-
-    const games = events.map((event) => decodeEvent(event))
-
-    const ari = games.find((game) => game.id === "401872966")?.away.team
-    assert.strictEqual(ari?.color, "a40227")
-    assert.strictEqual(ari?.alternateColor, "ffffff")
-  })
 
   it.effect(
     "should end each live game where the scoreboard had it, after the checkpoint and every message",

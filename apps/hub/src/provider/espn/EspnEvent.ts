@@ -1,4 +1,4 @@
-import { type Broadcast, GameId, GameSnapshot, type GameStatus, Network } from "@sportal/domain/Game"
+import { type Broadcast, GameId, GameSnapshot, GameStatus, Network } from "@sportal/domain/Game"
 import type { LeagueId } from "@sportal/domain/League"
 import { Situation } from "@sportal/domain/Situation"
 import { Team, TeamId } from "@sportal/domain/Team"
@@ -6,55 +6,47 @@ import { type DateTime, Effect, Schema, SchemaGetter, SchemaIssue } from "effect
 import { type EspnSituation, type EspnStatus, FastCastEvent, SiteEvent } from "./EspnPayload.ts"
 
 /**
- * One game as either ESPN feed spells it, read as a `league` `GameSnapshot`: an event of the site scoreboard the Hub
- * polls, or an event of a FastCast scoreboard topic's document. An event without a home and an away team does not
- * decode.
+ * One game as the site scoreboard spells it, read as a `league` `GameSnapshot`. An event without a home and an away
+ * team does not decode.
  */
 export function EspnEvent(league: LeagueId) {
-  return Schema.Union([
-    SiteEvent.pipe(
-      Schema.decodeTo(Schema.toType(GameSnapshot), {
-        decode: SchemaGetter.transformEffect((event) => {
-          const [competition] = event.competitions
-          return snapshot(league, {
-            id: event.id,
-            kickoff: event.date,
-            status: event.status,
-            competitors: competition.competitors.map(({ homeAway, score, curatedRank, team }) => ({
-              ...team,
-              homeAway,
-              score,
-              rank: curatedRank?.current
-            })),
-            broadcasts: (competition.geoBroadcasts ?? []).map(({ type, media }) => ({
-              medium: type.shortName,
-              network: media.shortName
-            })),
-            situation: competition.situation
-          })
-        }),
-        encode: SchemaGetter.forbidden(() => "A GameSnapshot cannot be encoded back to an ESPN event")
-      })
-    ),
-    FastCastEvent.pipe(
-      Schema.decodeTo(Schema.toType(GameSnapshot), {
-        decode: SchemaGetter.transformEffect((event) =>
-          snapshot(league, {
-            id: event.id,
-            kickoff: event.date,
-            status: event.fullStatus,
-            competitors: event.competitors,
-            broadcasts: (event.broadcasts ?? []).map(({ type, shortName }) => ({
-              medium: type,
-              network: shortName
-            })),
-            situation: event.situation
-          })
-        ),
-        encode: SchemaGetter.forbidden(() => "A GameSnapshot cannot be encoded back to an ESPN event")
-      })
-    )
-  ])
+  return SiteEvent.pipe(
+    Schema.decodeTo(Schema.toType(GameSnapshot), {
+      decode: SchemaGetter.transformEffect((event) => {
+        const [competition] = event.competitions
+        return snapshot(league, {
+          id: event.id,
+          kickoff: event.date,
+          status: event.status,
+          competitors: competition.competitors.map(({ homeAway, score, curatedRank, team }) => ({
+            ...team,
+            homeAway,
+            score,
+            rank: curatedRank?.current
+          })),
+          broadcasts: (competition.geoBroadcasts ?? []).map(({ type, media }) => ({
+            medium: type.shortName,
+            network: media.shortName
+          })),
+          situation: competition.situation
+        })
+      }),
+      encode: SchemaGetter.forbidden(() => "A GameSnapshot cannot be encoded back to an ESPN event")
+    })
+  )
+}
+
+/**
+ * One game as a FastCast scoreboard topic's document spells it, read as what it moves: its status, period, clock,
+ * scores, and situation. An event without a home and an away team does not decode.
+ */
+export function PushedEvent(league: LeagueId) {
+  return FastCastEvent.pipe(
+    Schema.decodeTo(Schema.toType(Moved), {
+      decode: SchemaGetter.transformEffect((event) => moved(league, event)),
+      encode: SchemaGetter.forbidden(() => "A pushed event cannot be encoded back to an ESPN event")
+    })
+  )
 }
 
 /** The snapshot an event says, once each feed's spelling is read into one shape. */
@@ -94,14 +86,12 @@ const snapshot = Effect.fnUntraced(function* (
       abbreviation: competitor.abbreviation,
       name: competitor.displayName,
       location: competitor.location ?? competitor.displayName,
-      // FastCast has no short name: EspnState advances each pushed game's listed game to it, keeping the poll's names.
       shortName: competitor.shortDisplayName ?? competitor.displayName,
       logo: competitor.logo,
       color: competitor.color,
       alternateColor: competitor.alternateColor
     }),
-    // A score is digits, or nothing before kickoff, which reads as 0.
-    score: Number.parseInt(competitor.score ?? "", 10) || 0,
+    score: scoreOf(competitor.score),
     // ESPN ranks an unranked team 99, which reads as no ranking.
     ...(competitor.rank === undefined || competitor.rank > 25 ? {} : { ranking: competitor.rank })
   })
@@ -118,6 +108,41 @@ const snapshot = Effect.fnUntraced(function* (
     ...(event.situation === undefined ? {} : { situation: situation(league, event.situation, home.id) })
   })
 })
+
+const Moved = Schema.Struct({
+  id: GameId,
+  status: GameStatus,
+  period: Schema.Int,
+  clock: Schema.String,
+  homeScore: Schema.Int,
+  awayScore: Schema.Int,
+  situation: Schema.optional(Situation)
+})
+
+/** What a FastCast event moves. */
+const moved = Effect.fnUntraced(function* (league: LeagueId, event: typeof FastCastEvent.Type) {
+  const home = event.competitors.find((competitor) => competitor.homeAway === "home")
+  const away = event.competitors.find((competitor) => competitor.homeAway === "away")
+  if (home === undefined || away === undefined) {
+    return yield* Effect.fail(
+      new SchemaIssue.InvalidValue({ message: "An event needs a home and an away team" }, event)
+    )
+  }
+  return {
+    id: GameId.make(event.id),
+    status: statusOf(event.fullStatus.type),
+    period: event.fullStatus.period,
+    clock: event.fullStatus.displayClock,
+    homeScore: scoreOf(home.score),
+    awayScore: scoreOf(away.score),
+    ...(event.situation === undefined ? {} : { situation: situation(league, event.situation, home.id) })
+  }
+})
+
+// A score is digits, or nothing before kickoff, which reads as 0.
+function scoreOf(score: string | undefined): number {
+  return Number.parseInt(score ?? "", 10) || 0
+}
 
 // ESPN also lists radio, which no source plays.
 function broadcast(medium: string, network: string): Array<Broadcast> {

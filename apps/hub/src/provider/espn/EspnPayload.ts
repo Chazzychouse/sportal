@@ -65,28 +65,19 @@ export const SiteEvent = Schema.Struct({
 })
 
 /**
- * One event of a FastCast scoreboard topic's document. Its competitor is the team itself, with its score and rank
- * beside its names, and no short name.
+ * One event of a FastCast scoreboard topic's document: only what the Hub reads of it, its status, its competitors'
+ * scores, and its situation.
  */
 export const FastCastEvent = Schema.Struct({
   id: Schema.String,
-  date: Schema.DateTimeUtcFromString,
   fullStatus: EspnStatus,
   competitors: Schema.Array(
     Schema.Struct({
       id: Schema.String,
       homeAway: Schema.Literals(["home", "away"]),
-      score: Schema.optional(Schema.String),
-      abbreviation: Schema.String,
-      displayName: Schema.String,
-      location: Schema.optional(Schema.String),
-      logo: Schema.optional(Schema.String),
-      color: Schema.optional(Schema.String),
-      alternateColor: Schema.optional(Schema.String),
-      rank: Schema.optional(Schema.Int)
+      score: Schema.optional(Schema.String)
     })
   ),
-  broadcasts: Schema.optional(Schema.Array(Schema.Struct({ type: Schema.String, shortName: Schema.String }))),
   situation: Schema.optional(EspnSituation)
 })
 

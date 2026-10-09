@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs"
 import { assert, describe, it } from "@effect/vitest"
 import { Result, Schema } from "effect"
-import { EspnEvent } from "./EspnEvent.ts"
+import { EspnEvent, PushedEvent } from "./EspnEvent.ts"
 
 // How each recorded feed's events decode is locked in EspnState's tests; these are the cases a recording lacks.
 describe("EspnEvent", () => {
@@ -26,10 +26,10 @@ describe("EspnEvent", () => {
     assert.isTrue(Result.isFailure(decoded))
   })
 
-  it("should decode a FastCast event", () => {
+  it("should decode a FastCast event as what it moves", () => {
     const event = fastCastEvent()
 
-    const decoded = decode(event)
+    const decoded = decodePushed(event)
 
     assert.isTrue(Result.isSuccess(decoded))
   })
@@ -38,13 +38,14 @@ describe("EspnEvent", () => {
     const event = fastCastEvent()
     const homeOnly = { ...event, competitors: event.competitors.filter(isHome) }
 
-    const decoded = decode(homeOnly)
+    const decoded = decodePushed(homeOnly)
 
     assert.isTrue(Result.isFailure(decoded))
   })
 })
 
 const decode = Schema.decodeUnknownResult(EspnEvent("nfl"))
+const decodePushed = Schema.decodeUnknownResult(PushedEvent("nfl"))
 
 const fixture = (name: string) => readFileSync(new URL(`./fixtures/${name}`, import.meta.url), "utf8")
 
