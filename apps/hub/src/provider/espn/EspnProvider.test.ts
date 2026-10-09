@@ -9,9 +9,9 @@ import {
   type Duration,
   Effect,
   Exit,
+  Fiber,
   HashMap,
   Layer,
-  Metric,
   Option,
   Queue,
   Ref,
@@ -23,7 +23,7 @@ import { HttpClient, HttpClientError, HttpClientResponse } from "effect/http"
 import * as Socket from "effect/socket/Socket"
 import { TestClock } from "effect/testing"
 import { HubConfig } from "../../HubConfig.ts"
-import { counted, recordingLogs, recordingSpans, withMetrics } from "../../TestTelemetry.ts"
+import { counted, observed, recordingLogs, recordingSpans, withMetrics } from "../../TestTelemetry.ts"
 import { Delivery, Provider } from "../Provider.ts"
 import { listedBy } from "../TestProvider.ts"
 import { SiteEvent } from "./EspnPayload.ts"
@@ -145,7 +145,8 @@ describe("EspnProvider", () => {
         answering(() => Effect.fail(new Cause.UnknownError("ECONNREFUSED"))),
         {
           ended,
-          leagues: "nfl"
+          leagues: "nfl",
+          frames: 1
         }
       )
 
@@ -161,7 +162,8 @@ describe("EspnProvider", () => {
         answering(() => Effect.succeed(new Response("busy", { status: 503 }))),
         {
           ended,
-          leagues: "fbs"
+          leagues: "fbs",
+          frames: 1
         }
       )
 
@@ -178,7 +180,7 @@ describe("EspnProvider.deliveries", () => {
 
       const polled = yield* polledOver("10 seconds", { fbs: live })
 
-      assert.deepStrictEqual(polled, [0, 10_000])
+      assert.deepStrictEqual(polled.fbs, [0, 10_000])
     })
   )
 
@@ -188,7 +190,7 @@ describe("EspnProvider.deliveries", () => {
 
       const polled = yield* polledOver("10 seconds", { fbs: delayed })
 
-      assert.deepStrictEqual(polled, [0, 10_000])
+      assert.deepStrictEqual(polled.fbs, [0, 10_000])
     })
   )
 
@@ -198,7 +200,7 @@ describe("EspnProvider.deliveries", () => {
 
       const polled = yield* polledOver("1 minute", { fbs: soon })
 
-      assert.deepStrictEqual(polled, [0, 60_000])
+      assert.deepStrictEqual(polled.fbs, [0, 60_000])
     })
   )
 
@@ -210,7 +212,7 @@ describe("EspnProvider.deliveries", () => {
 
       const polled = yield* polledOver("1 minute", { fbs: delayed })
 
-      assert.deepStrictEqual(polled, [0, 60_000])
+      assert.deepStrictEqual(polled.fbs, [0, 60_000])
     })
   )
 
@@ -220,7 +222,7 @@ describe("EspnProvider.deliveries", () => {
 
       const polled = yield* polledOver("15 minutes", { fbs: later })
 
-      assert.deepStrictEqual(polled, [0, 900_000])
+      assert.deepStrictEqual(polled.fbs, [0, 900_000])
     })
   )
 
@@ -234,7 +236,7 @@ describe("EspnProvider.deliveries", () => {
 
         const polled = yield* polledOver("15 minutes", { fbs: delayed })
 
-        assert.deepStrictEqual(polled, [0, 900_000])
+        assert.deepStrictEqual(polled.fbs, [0, 900_000])
       })
   )
 
@@ -242,18 +244,41 @@ describe("EspnProvider.deliveries", () => {
     Effect.gen(function* () {
       const polled = yield* polledOver("30 seconds", { fbs: down })
 
-      assert.deepStrictEqual(polled, [0, 30_000])
+      assert.deepStrictEqual(polled.fbs, [0, 30_000])
     })
   )
 
-  it.effect("should poll every 10 seconds after a league fails during a live game", () =>
+  it.effect("should poll a league with a live game every 10 seconds while the other league fails", () =>
     Effect.gen(function* () {
       const live = scoreboardOf([{ state: "in", period: 2 }])
 
-      const polled = yield* polledOver("10 seconds", { nfl: live, fbs: down })
+      const polled = yield* polledOver(["10 seconds", "10 seconds", "10 seconds"], { nfl: live, fbs: down })
 
-      assert.deepStrictEqual(polled, [0, 10_000])
+      assert.deepStrictEqual(polled.nfl, [0, 10_000, 20_000, 30_000])
     })
+  )
+
+  it.effect("should poll a failing league again within 30 seconds while the other has a live game", () =>
+    Effect.gen(function* () {
+      const live = scoreboardOf([{ state: "in", period: 2 }])
+
+      const polled = yield* polledOver(["10 seconds", "10 seconds", "10 seconds"], { nfl: live, fbs: down })
+
+      assert.deepStrictEqual(polled.fbs, [0, 30_000])
+    })
+  )
+
+  it.effect(
+    "should poll a league with no live game every 15 minutes while the other league's game is live",
+    () =>
+      Effect.gen(function* () {
+        const live = scoreboardOf([{ state: "in", period: 2 }])
+        const later = scoreboardOf([{ state: "pre", period: 0, kickoff: "2026-10-03T20:00Z" }])
+
+        const polled = yield* polledOver(["10 seconds", "15 minutes"], { nfl: live, fbs: later })
+
+        assert.deepStrictEqual(polled.fbs, [0, 900_000])
+      })
   )
 
   it.effect("should poll every 10 seconds after a league fails during its own live game", () =>
@@ -262,7 +287,7 @@ describe("EspnProvider.deliveries", () => {
 
       const polled = yield* polledOver(["10 seconds", "10 seconds"], { fbs: [live, down] })
 
-      assert.deepStrictEqual(polled, [0, 10_000, 20_000])
+      assert.deepStrictEqual(polled.fbs, [0, 10_000, 20_000])
     })
   )
 
@@ -272,7 +297,7 @@ describe("EspnProvider.deliveries", () => {
 
       const polled = yield* polledOver(["10 seconds", "10 seconds"], { fbs: [live, "not json"] })
 
-      assert.deepStrictEqual(polled, [0, 10_000, 20_000])
+      assert.deepStrictEqual(polled.fbs, [0, 10_000, 20_000])
     })
   )
 
@@ -280,7 +305,7 @@ describe("EspnProvider.deliveries", () => {
     Effect.gen(function* () {
       const polled = yield* polledOver("30 seconds", { fbs: "not json" })
 
-      assert.deepStrictEqual(polled, [0, 30_000])
+      assert.deepStrictEqual(polled.fbs, [0, 30_000])
     })
   )
 
@@ -292,11 +317,11 @@ describe("EspnProvider.deliveries", () => {
         answering(() => Effect.fail(new Cause.UnknownError("ECONNREFUSED"))),
         {
           ended,
-          leagues: "fbs"
+          leagues: "fbs",
+          frames: 1
         }
       )
 
-      const poll = ended.find((span) => span.name === "EspnProvider.pollEveryLeague")
       const errors = yield* counted("sportal_provider_errors", { league: "fbs" })
       const warned = logs.filter(
         ({ level, message }) =>
@@ -305,57 +330,52 @@ describe("EspnProvider.deliveries", () => {
             "EspnProvider: a poll failed; keeping the last good listing for this league, if any"
           )
       )
-      assert.deepStrictEqual(poll?.attributes.get("sportal.failed_leagues"), ["fbs"])
       assert.strictEqual(errors, 1)
       assert.lengthOf(warned, 1)
     }).pipe(Effect.provide(layer), withMetrics)
   })
 
-  it.effect("should deliver no frame for a league that fails", () =>
+  it.effect("should deliver no deliveries for a league that fails", () =>
     Effect.gen(function* () {
       const nflDown = HttpClient.make((request) =>
         request.url.includes("/nfl/") ? transportFailure(request) : Effect.succeed(answered(request, fbsLive))
       )
 
-      const said = yield* polledOnce(nflDown, { frames: 1 })
+      const said = yield* polledOnce(nflDown, { frames: 2 })
 
       assert.deepStrictEqual(
         said.flatMap((deliveries) => deliveries.filter(Delivery.$is("Listing")).map(({ league }) => league)),
         ["fbs"]
       )
+      assert.deepStrictEqual(
+        said.filter((deliveries) => !deliveries.some(Delivery.$is("Listing"))),
+        [[]],
+        "the failed poll's frame says nothing"
+      )
     })
   )
 
-  it.effect("should make a poll of every league one span, with each league's poll inside it", () => {
+  it.effect("should make each league's poll its own span, named for its league", () => {
     const ended: Array<Tracer.Span> = []
     return Effect.gen(function* () {
-      yield* polledOnce(recordedHttp(fbsLive), { ended })
+      yield* polledOnce(recordedHttp(fbsLive), { ended, frames: 2 })
 
-      const polls = ended.filter((span) => span.name === "EspnProvider.pollEveryLeague")
-      const inside = ended.filter(
-        (span) =>
-          span.name === "EspnProvider.poll" &&
-          Option.exists(span.parent, (parent) => parent.spanId === polls[0]?.spanId)
-      )
-      assert.strictEqual(polls.length, 1)
-      assert.deepStrictEqual(polls[0]?.attributes.get("sportal.leagues"), ["nfl", "fbs"])
-      assert.deepStrictEqual(polls[0]?.attributes.get("sportal.failed_leagues"), [])
-      assert.deepStrictEqual(
-        inside.map((span) => span.attributes.get("sportal.league")),
-        ["nfl", "fbs"]
-      )
+      const polls = ended.filter((span) => span.name === "EspnProvider.poll")
+      assert.deepStrictEqual(polls.map((span) => span.attributes.get("sportal.league")).toSorted(), [
+        "fbs",
+        "nfl"
+      ])
     })
   })
 
-  it.effect("should record each poll's duration", () =>
+  it.effect("should record each poll's duration by league", () =>
     Effect.gen(function* () {
       const live = scoreboardOf([{ state: "in", period: 2 }])
       yield* polledOver("10 seconds", { fbs: live })
 
-      const metrics = yield* Metric.snapshot
+      const duration = yield* observed("sportal_poll_duration", { league: "fbs" })
 
-      const duration = metrics.find((metric) => metric.id === "sportal_poll_duration")
-      assert.strictEqual(duration?.type === "Histogram" ? duration.state.count : undefined, 2)
+      assert.strictEqual(duration, 2)
     }).pipe(withMetrics)
   )
 
@@ -390,6 +410,34 @@ describe("EspnProvider.deliveries", () => {
     })
   )
 
+  it.effect("should deliver a push that arrives during a slow poll before the poll's frame", () =>
+    Effect.gen(function* () {
+      const slow = HttpClient.make((request) =>
+        Effect.sleep("5 seconds").pipe(Effect.as(answered(request, nflPregame)))
+      )
+      // A heartbeat: a push that says nothing, so its frame is an empty array of deliveries.
+      const heartbeat = Frame.Pushed({
+        topic: Option.none(),
+        mid: Option.none(),
+        body: JSON.stringify({ op: "B" })
+      })
+      const pushing = Stream.fromEffect(Effect.as(Effect.sleep("1 second"), heartbeat))
+
+      const frames = yield* Effect.gen(function* () {
+        const provider = yield* Provider
+        const taken = yield* provider.deliveries.pipe(Stream.take(2), Stream.runCollect, Effect.forkScoped)
+        yield* settled
+        yield* TestClock.adjust("5 seconds")
+        return yield* Fiber.join(taken)
+      }).pipe(Effect.provide(espnOver(slow, { leagues: "nfl", pushing })), Effect.scoped)
+
+      assert.deepStrictEqual(
+        frames.map((deliveries) => deliveries.map(({ _tag }) => _tag)),
+        [[], ["Listing"]]
+      )
+    })
+  )
+
   it.effect("should deliver a push taken between two leagues' polls after the first league's listing", () =>
     Effect.gen(function* () {
       const live = scoreboardOf([{ state: "in", period: 2 }])
@@ -409,6 +457,7 @@ describe("EspnProvider.deliveries", () => {
           Stream.runForEach((deliveries) => Queue.offer(frames, deliveries)),
           Effect.forkScoped({ startImmediately: true })
         )
+        yield* settled
         yield* TestClock.adjust("10 seconds")
         return yield* Queue.takeBetween(frames, 3, 3)
       }).pipe(Effect.provide(espn), Effect.scoped)
@@ -433,7 +482,7 @@ describe("EspnProvider.deliveries", () => {
 
         const polled = yield* polledOver(["1 minute", "10 seconds"], { fbs: soon }, pushedAt30s)
 
-        assert.deepStrictEqual(polled, [0, 60_000])
+        assert.deepStrictEqual(polled.fbs, [0, 60_000])
       })
   )
 
@@ -620,9 +669,16 @@ function pollFailures(ended: ReadonlyArray<Tracer.Span>) {
 const down = "down"
 
 /**
- * The instants, in milliseconds from noon on 2026-10-03, at which ESPN's provider polls as the test clock moves from
- * then by each of `spans`. Each league of `answers` answers its polls in turn (the last answer again once they run
- * out) with a scoreboard body, or cannot connect when the answer is `down`.
+ * Gives every fiber a hundred turns, so what the test clock last woke has run on to its next sleep: a poll's frame is
+ * taken by the fold, and its league's next poll is waiting on the clock. A frame crosses several fibers on its way to
+ * the fold, and the clock moves on after one turn.
+ */
+const settled = Effect.yieldNow.pipe(Effect.repeat({ times: 100 }))
+
+/**
+ * The instants, in milliseconds from noon on 2026-10-03, at which each league polls as the test clock moves from then
+ * by each of `spans`. Each league of `answers` answers its polls in turn (the last answer again once they run out) with
+ * a scoreboard body, or cannot connect when the answer is `down`.
  */
 function polledOver(
   spans: Duration.Input | ReadonlyArray<Duration.Input>,
@@ -650,27 +706,25 @@ function polledOver(
       })
     )
     const leagues = LeagueId.literals.filter((league) => answers[league] !== undefined)
-    const framesOfPoll = (poll: number) => leagues.filter((league) => answerOf(league, poll) !== down).length
 
     yield* Effect.gen(function* () {
       const provider = yield* Provider
-      const frames = yield* Queue.unbounded<ReadonlyArray<Delivery>>()
-      yield* provider.deliveries.pipe(
-        Stream.runForEach((deliveries) => Queue.offer(frames, deliveries)),
-        Effect.forkScoped({ startImmediately: true })
-      )
-      yield* Queue.takeBetween(frames, framesOfPoll(0), framesOfPoll(0))
-
-      yield* Effect.forEach(Arr.ensure(spans), (span, index) =>
-        TestClock.adjust(span).pipe(
-          Effect.andThen(Queue.takeBetween(frames, framesOfPoll(index + 1), framesOfPoll(index + 1)))
-        )
-      )
+      yield* provider.deliveries.pipe(Stream.runDrain, Effect.forkScoped({ startImmediately: true }))
       yield* TestClock.adjust(0)
+      yield* settled
+      yield* Effect.forEach(Arr.ensure(spans), (span) => Effect.andThen(TestClock.adjust(span), settled), {
+        discard: true
+      })
     }).pipe(Effect.provide(espnOver(client, { leagues: leagues.join(","), pushing })), Effect.scoped)
 
     const polled = yield* Ref.get(requests)
-    return Arr.dedupe(polled.map(({ at }) => at))
+    const byLeague: Partial<Record<LeagueId, ReadonlyArray<number>>> = Object.fromEntries(
+      leagues.map((league) => [
+        league,
+        Arr.dedupe(polled.filter((one) => one.league === league).map(({ at }) => at))
+      ])
+    )
+    return byLeague
   })
 }
 
@@ -694,7 +748,10 @@ function toldOver(client: HttpClient.HttpClient, leagues: string, spans: Readonl
       const provider = yield* Provider
       yield* provider.deliveries.pipe(Stream.runDrain, Effect.forkScoped({ startImmediately: true }))
       yield* TestClock.adjust(0)
-      yield* Effect.forEach(spans, (span) => TestClock.adjust(span), { discard: true })
+      yield* settled
+      yield* Effect.forEach(spans, (span) => Effect.andThen(TestClock.adjust(span), settled), {
+        discard: true
+      })
     }).pipe(Effect.provide(espn), Effect.scoped)
 
     return yield* Ref.get(told)

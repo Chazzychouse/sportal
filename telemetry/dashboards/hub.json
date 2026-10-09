@@ -888,7 +888,7 @@
         {
           "refId": "A",
           "queryType": "traceql",
-          "query": "{resource.service.name=\"sportal-hub\" && name=\"EspnProvider.pollEveryLeague\"}",
+          "query": "{resource.service.name=\"sportal-hub\" && name=\"EspnProvider.poll\"}",
           "limit": 20
         }
       ]
