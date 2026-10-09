@@ -4,7 +4,7 @@ import { gunzipSync } from "node:zlib"
 import { LeagueId } from "@sportal/domain/League"
 import { Effect, Layer, Option, Schema, Stream } from "effect"
 import * as Socket from "effect/socket/Socket"
-import * as EspnDecoder from "./EspnDecoder.ts"
+import { EspnState } from "./EspnState.ts"
 import { Frame } from "./Frame.ts"
 import { topicOf } from "./Topic.ts"
 
@@ -39,9 +39,24 @@ export const recordedNeAtBuf = Effect.gen(function* () {
   return yield* Effect.forEach(frames, (line) => frameOf(line))
 })
 
-/** What ESPN's decode says each of `frames` said. */
+/** What ESPN's fold says each of `frames` said, from an empty state. */
 export const decodedFrames = Effect.fn("TestEspn.decodedFrames")(function* (frames: ReadonlyArray<Frame>) {
-  return yield* EspnDecoder.decode(Stream.fromIterable(frames)).pipe(Stream.runCollect)
+  return yield* Stream.fromIterable(frames).pipe(
+    Stream.mapAccumEffect(
+      () => EspnState.empty,
+      (state, frame) => Effect.map(state.take(frame), ([next, deliveries]) => [next, [deliveries]] as const)
+    ),
+    Stream.runCollect
+  )
+})
+
+/** ESPN's state after `frames`, from an empty one. */
+export const stateAfter = Effect.fn("TestEspn.stateAfter")(function* (frames: ReadonlyArray<Frame>) {
+  return yield* Effect.reduce(
+    frames,
+    () => EspnState.empty,
+    (state, frame) => Effect.map(state.take(frame), ([next]) => next)
+  )
 })
 
 /** A line of the recording, as it was recorded: its way, its league or topic, whole or a change, and its mid. */

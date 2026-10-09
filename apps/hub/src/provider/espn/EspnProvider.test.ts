@@ -375,6 +375,25 @@ describe("EspnProvider.deliveries", () => {
       )
     })
   )
+
+  it.effect(
+    "should poll every 10 seconds after a push shows a game live that the poll still shows upcoming",
+    () =>
+      Effect.gen(function* () {
+        const soon = scoreboardOf([{ state: "pre", period: 0, kickoff: "2026-10-03T12:20Z" }])
+        const live = JSON.parse(scoreboardOf([{ state: "in", period: 2, kickoff: "2026-10-03T12:20Z" }]))
+        const checkpoint = Frame.Checkpoint({
+          topic: Topic.Scoreboard({ league: "fbs" }),
+          mid: 1,
+          body: JSON.stringify({ sports: [{ leagues: [{ events: live.events }] }] })
+        })
+        const pushedAt30s = Stream.fromEffect(Effect.sleep("30 seconds")).pipe(Stream.as(checkpoint))
+
+        const polled = yield* polledOver(["1 minute", "10 seconds"], { fbs: soon }, pushedAt30s)
+
+        assert.deepStrictEqual(polled, [0, 60_000, 70_000])
+      })
+  )
 })
 
 /** `body` without any team's colors. */
@@ -489,7 +508,8 @@ const down = "down"
  */
 function polledOver(
   spans: Duration.Input | ReadonlyArray<Duration.Input>,
-  answers: Partial<Record<LeagueId, string | ReadonlyArray<string>>>
+  answers: Partial<Record<LeagueId, string | ReadonlyArray<string>>>,
+  pushing: Stream.Stream<Frame> = Stream.never
 ) {
   return Effect.gen(function* () {
     const start = DateTime.makeUnsafe("2026-10-03T12:00:00Z").epochMilliseconds
@@ -529,7 +549,7 @@ function polledOver(
         )
       )
       yield* TestClock.adjust(0)
-    }).pipe(Effect.provide(espnOver(client, { leagues: leagues.join(",") })), Effect.scoped)
+    }).pipe(Effect.provide(espnOver(client, { leagues: leagues.join(","), pushing })), Effect.scoped)
 
     const polled = yield* Ref.get(requests)
     return Arr.dedupe(polled.map(({ at }) => at))
