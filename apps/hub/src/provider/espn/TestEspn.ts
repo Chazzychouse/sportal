@@ -1,10 +1,12 @@
 import { readFileSync } from "node:fs"
 import { fileURLToPath } from "node:url"
 import { gunzipSync } from "node:zlib"
-import { Effect, Layer, Schema, Stream } from "effect"
+import { LeagueId } from "@sportal/domain/League"
+import { Effect, Layer, Option, Schema, Stream } from "effect"
 import * as Socket from "effect/socket/Socket"
-import * as EspnDecoder from "./EspnDecoder.ts"
+import { EspnState } from "./EspnState.ts"
 import { Frame } from "./Frame.ts"
+import { topicOf } from "./Topic.ts"
 
 /** A WebSocket constructor for tests that never push: opening a socket throws. */
 export const noSocket = Layer.succeed(Socket.WebSocketConstructor, () => {
@@ -34,12 +36,57 @@ export const recordedNeAtBuf = Effect.gen(function* () {
   const lines = gunzipSync(readFileSync(file)).toString("utf8").split("\n")
 
   const frames = lines.filter((line) => line !== "")
-  return yield* Effect.forEach(frames, (frame) => decodeFrame(frame))
+  return yield* Effect.forEach(frames, (line) => frameOf(line))
 })
 
-/** What ESPN's decode says each of `frames` said. */
+/** What ESPN's fold says each of `frames` said, from an empty state. */
 export const decodedFrames = Effect.fn("TestEspn.decodedFrames")(function* (frames: ReadonlyArray<Frame>) {
-  return yield* EspnDecoder.decode(Stream.fromIterable(frames)).pipe(Stream.runCollect)
+  return yield* Stream.fromIterable(frames).pipe(
+    Stream.mapAccumEffect(
+      () => EspnState.empty,
+      (state, frame) => Effect.map(state.take(frame), ([next, deliveries]) => [next, [deliveries]] as const)
+    ),
+    Stream.runCollect
+  )
 })
 
-const decodeFrame = Schema.decodeEffect(Schema.fromJsonString(Frame))
+/** ESPN's state after `frames`, from an empty one. */
+export const stateAfter = Effect.fn("TestEspn.stateAfter")(function* (frames: ReadonlyArray<Frame>) {
+  return yield* Effect.reduce(
+    frames,
+    () => EspnState.empty,
+    (state, frame) => Effect.map(state.take(frame), ([next]) => next)
+  )
+})
+
+/** A line of the recording, as it was recorded: its way, its league or topic, whole or a change, and its mid. */
+const decodeRecorded = Schema.decodeEffect(
+  Schema.fromJsonString(
+    Schema.Struct({
+      source: Schema.Literals(["push", "poll"]),
+      channel: Schema.String,
+      kind: Schema.Literals(["whole", "change"]),
+      number: Schema.optional(Schema.Int),
+      body: Schema.String
+    })
+  )
+)
+
+/** A recorded line as the frame it is. */
+const frameOf = Effect.fnUntraced(function* (line: string) {
+  const { source, channel, kind, number, body } = yield* decodeRecorded(line)
+  if (source === "poll") {
+    const league = yield* decodeLeague(channel)
+    return Frame.Polled({ league, body })
+  }
+
+  const topic = topicOf(channel)
+  const mid = Option.fromUndefinedOr(number)
+  if (kind === "change") return Frame.Pushed({ topic, mid, body })
+
+  const checkpointTopic = yield* Effect.fromOption(topic)
+  const checkpointMid = yield* Effect.fromOption(mid)
+  return Frame.Checkpoint({ topic: checkpointTopic, mid: checkpointMid, body })
+})
+
+const decodeLeague = Schema.decodeUnknownEffect(LeagueId)

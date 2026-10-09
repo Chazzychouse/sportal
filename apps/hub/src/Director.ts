@@ -1,12 +1,12 @@
 import { ChannelAvailability } from "@sportal/domain/Channel"
-import { Game, type GameId, type GameSnapshot } from "@sportal/domain/Game"
+import type { GameId, GameSnapshot } from "@sportal/domain/Game"
 import type { Play } from "@sportal/domain/Play"
 import { Screen, type ScreenCommand, type ScreenRejection } from "@sportal/domain/Screen"
 import { Cause, Context, Effect, Layer, Metric, Option, Stream, SubscriptionRef } from "effect"
 import * as HubStopping from "./HubStopping.ts"
 import { Provider } from "./provider/Provider.ts"
 import type { Delivery } from "./slate/Delivery.ts"
-import { Slate } from "./slate/Slate.ts"
+import { Slate, SlateChange } from "./slate/Slate.ts"
 import { Source } from "./source/Source.ts"
 
 /**
@@ -28,7 +28,7 @@ export class Director extends Context.Service<
 >()("sportal/hub/Director") {
   /**
    * Takes what the provider decodes, from an empty slate, gauging each game a take changed by its progress, and
-   * logging each play it adds. A take that raises a defect is logged, and the slate keeps what it had; if the
+   * logging each play it adds, as the take says. A take that raises a defect is logged, and the slate keeps what it had; if the
    * provider's frames ever end other than by the Hub stopping, that is logged. Applies each command to the Screen
    * one at a time, and refreshes the Screen whenever the source's answers change.
    */
@@ -44,12 +44,11 @@ export class Director extends Context.Service<
         function* (deliveries: ReadonlyArray<Delivery>) {
           yield* Effect.annotateCurrentSpan({ "sportal.deliveries": deliveries.length })
           const before = yield* SubscriptionRef.get(slate)
-          const next = before.take(deliveries)
+          const [next, changes] = before.take(deliveries)
           if (next === before) return
 
           yield* SubscriptionRef.set(slate, next)
-          yield* gaugeChanged(before, next)
-          yield* loggedNewPlays(before, next)
+          yield* Effect.forEach(changes, observed, { discard: true })
         },
         Effect.catchDefect((defect) =>
           Effect.logError("Director: a take raised a defect; the slate keeps what it had", Cause.die(defect))
@@ -115,46 +114,19 @@ export class Director extends Context.Service<
   )
 }
 
-/** Each game's progress gauge where `next` changed it from `before`; a game no longer listed gauges 0. */
-const gaugeChanged = Effect.fnUntraced(function* (before: Slate, next: Slate) {
-  if (next.games === before.games) return
-
-  const had = byId(before.games)
-  const has = byId(next.games)
-  const changed = next.games.filter((game) => had.get(game.snapshot.id)?.snapshot !== game.snapshot)
-  const gone = before.games.filter((game) => !has.has(game.snapshot.id))
-  yield* Effect.forEach(changed, (game) => gauge(game.snapshot, progressValues[game.snapshot.progress()]), {
-    discard: true
+/** A change the slate took, observed: a game's progress gauged (0 once delisted), or a play it added logged. */
+function observed(change: SlateChange) {
+  return SlateChange.$match(change, {
+    Progressed: ({ game }) => gauge(game.snapshot, progressValues[game.snapshot.progress()]),
+    Delisted: ({ game }) => gauge(game.snapshot, 0),
+    Played: ({ game, play }) => loggedPlay(game.snapshot, play)
   })
-  yield* Effect.forEach(gone, (game) => gauge(game.snapshot, 0), { discard: true })
-})
+}
 
 function gauge(snapshot: GameSnapshot, value: number) {
   const attributes = { game: snapshot.id, league: snapshot.league, matchup: snapshot.matchup() }
   return Metric.update(Metric.withAttributes(gameState, attributes), value)
 }
-
-function byId(games: ReadonlyArray<Game>): ReadonlyMap<GameId, Game> {
-  return new Map(games.map((game) => [game.snapshot.id, game]))
-}
-
-/** An Info log of each play `next` has that `before` lacked, annotated with its game; a game new to the slate had none. */
-const loggedNewPlays = Effect.fnUntraced(function* (before: Slate, next: Slate) {
-  if (next.games === before.games) return
-
-  const had = byId(before.games)
-  const changed = next.games.filter((game) => had.get(game.snapshot.id) !== game)
-  yield* Effect.forEach(
-    changed,
-    (game) => {
-      const earlier = had.get(game.snapshot.id) ?? Game.of(game.snapshot)
-      return Effect.forEach(game.playsAfter(earlier), (play) => loggedPlay(game.snapshot, play), {
-        discard: true
-      })
-    },
-    { discard: true }
-  )
-})
 
 function loggedPlay(snapshot: GameSnapshot, play: Play) {
   const matchup = snapshot.matchup()

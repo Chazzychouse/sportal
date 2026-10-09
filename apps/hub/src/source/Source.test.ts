@@ -158,7 +158,11 @@ function matchingLayer() {
   return Layer.mergeAll(
     youTubeTv,
     EspnProvider.layer.pipe(
-      Layer.provide([FastCast.layerTest(Stream.never), recorded, HubConfig.layerTest({}).pipe(Layer.orDie)])
+      Layer.provide([
+        FastCast.layerTest(() => Stream.never),
+        recorded,
+        HubConfig.layerTest({}).pipe(Layer.orDie)
+      ])
     )
   )
 }

@@ -1,9 +1,20 @@
 import type { GameId } from "@sportal/domain/Game"
 import type { LeagueId } from "@sportal/domain/League"
-import { Array as Arr, Data, Effect, JsonPatch, JsonPointer, Option, Record, Result, Schema } from "effect"
+import {
+  Array as Arr,
+  Data,
+  Effect,
+  HashMap,
+  JsonPatch,
+  JsonPointer,
+  Option,
+  Record,
+  Result,
+  Schema
+} from "effect"
 import * as FastCastMessage from "./FastCastMessage.ts"
-import { Owner, ownerOf } from "./FastCastTopic.ts"
-import type { Frame } from "./Frame.ts"
+import { Frame } from "./Frame.ts"
+import { Topic } from "./Topic.ts"
 
 /**
  * The FastCast topics' documents after `frame`, and what it changed: a scoreboard topic's touched events (every event,
@@ -18,45 +29,32 @@ export const advance = Effect.fnUntraced(function* (
   documents: Documents,
   frame: Frame
 ): Effect.fn.Return<Advanced, Schema.SchemaError> {
-  const owned = ownerOf(frame.channel)
-  return yield* frame.kind === "whole" ? synced(documents, frame, owned) : moveOn(documents, frame, owned)
+  return yield* Frame.$match(frame, {
+    Polled: () => Effect.succeed(unchanged(documents)),
+    Checkpoint: (checkpointed) => synced(documents, checkpointed),
+    Pushed: (pushed) => moveOn(documents, pushed)
+  })
 })
 
 /** No topic has a document yet. */
-export const empty: Documents = new Map()
+export const empty: Documents = HashMap.empty()
 
-/**
- * The league and every event of scoreboard topic `tc`'s document, while it is synced: none for a game's topic, or one
- * waiting for its checkpoint.
- */
-export function scoreboard(
-  documents: Documents,
-  tc: string
-): Option.Option<{ readonly league: LeagueId; readonly events: ReadonlyArray<Schema.Json> }> {
-  return Option.flatMap(
-    ownerOf(tc),
-    Owner.$match({
-      Scoreboard: ({ league }) =>
-        Option.fromUndefinedOr(documents.get(tc)).pipe(
-          Option.filter(Topic.$is("Synced")),
-          Option.map(({ document }) => ({ league, events: Record.values(objectAt(document, [])) }))
-        ),
-      Game: () => Option.none()
-    })
-  )
+/** Whether `topic`'s document is synced: its checkpoint read, and every message since applied. */
+export function isSynced(documents: Documents, topic: Topic): boolean {
+  return Option.exists(HashMap.get(documents, topic), Document.$is("Synced"))
 }
 
 /**
  * Where one topic's document is: waiting for a checkpoint, or synced as of a message. A scoreboard topic's document is
  * its events by uid; a game topic's is its plays by id, at `gamePlays`.
  */
-type Topic = Data.TaggedEnum<{
+type Document = Data.TaggedEnum<{
   AwaitingCheckpoint: object
   Synced: { readonly mid: number; readonly document: Schema.Json }
 }>
-const Topic = Data.taggedEnum<Topic>()
+const Document = Data.taggedEnum<Document>()
 
-type Documents = ReadonlyMap<string, Topic>
+type Documents = HashMap.HashMap<Topic, Document>
 
 /** The documents after a frame, and what it changed. */
 interface Advanced {
@@ -65,7 +63,7 @@ interface Advanced {
 }
 
 /** The documents after a frame that changed nothing. */
-export function unchanged(documents: Documents): Advanced {
+function unchanged(documents: Documents): Advanced {
   return { documents, change: Option.none() }
 }
 
@@ -80,47 +78,41 @@ export type Change = Data.TaggedEnum<{
     readonly game: GameId
     readonly plays: Readonly<Record<string, Schema.Json>>
   }
-  Reset: { readonly topic: string; readonly detail: string }
+  Reset: { readonly topic: Topic; readonly detail: string }
 }>
 export const Change = Data.taggedEnum<Change>()
 
 const synced = Effect.fnUntraced(function* (
   documents: Documents,
-  frame: Frame,
-  owned: Option.Option<Owner>
+  frame: Extract<Frame, { readonly _tag: "Checkpoint" }>
 ): Effect.fn.Return<Advanced> {
-  if (Option.isNone(owned)) return unchanged(documents)
-
-  const owner = owned.value
-  const loaded = yield* checkpoint(owner, frame).pipe(Effect.result)
+  const loaded = yield* checkpoint(frame).pipe(Effect.result)
   if (Result.isFailure(loaded)) {
-    return unchanged(withTopic(documents, frame.channel, Topic.AwaitingCheckpoint()))
+    return unchanged(HashMap.set(documents, frame.topic, Document.AwaitingCheckpoint()))
   }
 
-  const { mid, document } = loaded.success
+  const document = loaded.success
   return {
-    documents: withTopic(documents, frame.channel, Topic.Synced({ mid, document })),
-    change: Option.some(changeOf(owner, document, Option.none()))
+    documents: HashMap.set(documents, frame.topic, Document.Synced({ mid: frame.mid, document })),
+    change: Option.some(changeOf(frame.topic, document, Option.none()))
   }
 })
 
 const moveOn = Effect.fnUntraced(function* (
   documents: Documents,
-  frame: Frame,
-  owned: Option.Option<Owner>
+  frame: Extract<Frame, { readonly _tag: "Pushed" }>
 ): Effect.fn.Return<Advanced, Schema.SchemaError> {
   const decoded = yield* decodeMessage(frame.body).pipe(Effect.result)
-  if (Result.isFailure(decoded)) return yield* undecoded(documents, frame, owned, decoded.failure)
+  if (Result.isFailure(decoded)) return yield* undecoded(documents, frame, decoded.failure)
 
   const message = decoded.success
-  if (Option.isNone(owned) || !movesOn(message)) return unchanged(documents)
+  if (Option.isNone(frame.topic) || !movesOn(message)) return unchanged(documents)
 
-  return yield* moved(documents, frame.channel, owned.value, message)
+  return yield* moved(documents, frame.topic.value, message)
 })
 
-const checkpoint = Effect.fnUntraced(function* (owner: Owner, frame: Frame) {
-  const mid = yield* decodeMid(frame.number)
-  const body = yield* Schema.decodeEffect(FastCastMessage.Checkpoint(owner))(frame.body)
+const checkpoint = Effect.fnUntraced(function* (frame: Extract<Frame, { readonly _tag: "Checkpoint" }>) {
+  const body = yield* Schema.decodeEffect(FastCastMessage.Checkpoint(frame.topic))(frame.body)
 
   const document: Schema.Json =
     "sports" in body
@@ -132,25 +124,19 @@ const checkpoint = Effect.fnUntraced(function* (owner: Owner, frame: Frame) {
       : JsonPatch.apply([{ op: "add", path: gamePlays.pointer, value: body.entities?.plays ?? {} }], {
           entities: {}
         })
-  return { mid, document }
+  return document
 })
-
-const decodeMid = Schema.decodeUnknownEffect(Schema.Int)
-
-function withTopic(documents: Documents, tc: string, topic: Topic): Documents {
-  return new Map([...documents, [tc, topic]])
-}
 
 /** Where a game topic's plays are in its document. */
 const gamePlays = { pointer: "/entities/plays", path: ["entities", "plays"] } as const
 
 /** What a topic's document says: the events `touched` names (all of them when none), or its whole list of plays. */
 function changeOf(
-  owner: Owner,
+  topic: Topic,
   document: Schema.Json,
   touched: Option.Option<ReadonlyArray<string>>
 ): Change {
-  return Owner.$match(owner, {
+  return Topic.$match(topic, {
     Scoreboard: ({ league }) =>
       Change.Scoreboard({
         league,
@@ -166,54 +152,53 @@ function changeOf(
 /** The documents after a message on a topic: a missed one, or a patch that will not apply, resets the topic. */
 const moved = Effect.fnUntraced(function* (
   documents: Documents,
-  tc: string,
-  owner: Owner,
+  topic: Topic,
   message: Extract<typeof FastCastMessage.Message.Type, { readonly op: "R" | "P" | "I" }>
 ): Effect.fn.Return<Advanced> {
-  const current = documents.get(tc) ?? Topic.AwaitingCheckpoint()
-  if (Topic.$is("AwaitingCheckpoint")(current)) return unchanged(documents)
+  const current = Option.getOrElse(HashMap.get(documents, topic), () => Document.AwaitingCheckpoint())
+  if (Document.$is("AwaitingCheckpoint")(current)) return unchanged(documents)
 
   const { mid, document } = current
   if (mid + 1 !== message.mid) {
-    return reset(documents, tc, `message ${message.mid} came after ${mid}`)
+    return reset(documents, topic, `message ${message.mid} came after ${mid}`)
   }
 
-  const patches = message.op === "I" ? [] : relevant(owner, message.pl)
+  const patches = message.op === "I" ? [] : relevant(topic, message.pl)
   const applied = yield* Effect.reduce(
     patches,
     () => document,
-    (patchedSoFar, patch) => patched(patchedSoFar, owner, patch)
+    (patchedSoFar, patch) => patched(patchedSoFar, topic, patch)
   ).pipe(Effect.result)
-  if (Result.isFailure(applied)) return reset(documents, tc, applied.failure)
+  if (Result.isFailure(applied)) return reset(documents, topic, applied.failure)
 
   const next = applied.success
-  const synced = withTopic(documents, tc, Topic.Synced({ mid: message.mid, document: next }))
-  const touched = Owner.$is("Scoreboard")(owner)
+  const synced = HashMap.set(documents, topic, Document.Synced({ mid: message.mid, document: next }))
+  const touched = Topic.$is("Scoreboard")(topic)
     ? Option.some(Arr.dedupe(patches.map((patch) => patch.path.uid)))
     : Option.none()
   return {
     documents: synced,
-    change: patches.length === 0 ? Option.none() : Option.some(changeOf(owner, next, touched))
+    change: patches.length === 0 ? Option.none() : Option.some(changeOf(topic, next, touched))
   }
 })
 
 /** On a game topic, only the patches inside its plays: the rest of ESPN's game package is not kept. */
 function relevant(
-  owner: Owner,
+  topic: Topic,
   patches: ReadonlyArray<typeof FastCastMessage.Patch.Type>
 ): ReadonlyArray<typeof FastCastMessage.Patch.Type> {
   const inPlays = (path: { readonly pointer: string }) =>
     path.pointer === gamePlays.pointer || path.pointer.startsWith(`${gamePlays.pointer}/`)
-  return Owner.$is("Scoreboard")(owner)
+  return Topic.$is("Scoreboard")(topic)
     ? patches
     : patches.filter((patch) => inPlays(patch.path) && (!("from" in patch) || inPlays(patch.from)))
 }
 
-/** The documents with topic `tc` sent back to waiting for its checkpoint, and the reset that changed, for `detail`. */
-function reset(documents: Documents, tc: string, detail: string): Advanced {
+/** The documents with `topic` sent back to waiting for its checkpoint, and the reset that changed, for `detail`. */
+function reset(documents: Documents, topic: Topic, detail: string): Advanced {
   return {
-    documents: withTopic(documents, tc, Topic.AwaitingCheckpoint()),
-    change: Option.some(Change.Reset({ topic: tc, detail }))
+    documents: HashMap.set(documents, topic, Document.AwaitingCheckpoint()),
+    change: Option.some(Change.Reset({ topic, detail }))
   }
 }
 
@@ -225,11 +210,11 @@ function reset(documents: Documents, tc: string, detail: string): Advanced {
  */
 function patched(
   document: Schema.Json,
-  owner: Owner,
+  topic: Topic,
   patch: typeof FastCastMessage.Patch.Type
 ): Effect.Effect<Schema.Json, string> {
   const pointer = ({ uid, pointer }: { readonly uid: string; readonly pointer: string }) =>
-    Owner.$is("Scoreboard")(owner) ? `/${JsonPointer.escapeToken(uid)}${pointer}` : pointer
+    Topic.$is("Scoreboard")(topic) ? `/${JsonPointer.escapeToken(uid)}${pointer}` : pointer
   if ("from" in patch) {
     return Option.match(valueAt(document, tokens(pointer(patch.from))), {
       onNone: () => Effect.fail(`${described(patch)}: nothing at ${patch.from.uid}${patch.from.pointer}`),
@@ -246,7 +231,7 @@ function patched(
   }
   if (patch.op === "remove") {
     const wholeEventMissing =
-      Owner.$is("Scoreboard")(owner) &&
+      Topic.$is("Scoreboard")(topic) &&
       patch.path.pointer === "" &&
       Option.isNone(valueAt(document, [patch.path.uid]))
     return wholeEventMissing
@@ -308,18 +293,25 @@ function objectAt(json: Schema.Json, path: ReadonlyArray<string>): Readonly<Reco
  */
 function undecoded(
   documents: Documents,
-  frame: Frame,
-  owned: Option.Option<Owner>,
+  frame: Extract<Frame, { readonly _tag: "Pushed" }>,
   error: Schema.SchemaError
 ): Effect.Effect<Advanced, Schema.SchemaError> {
   return Option.match(decodeKnownOp(frame.body), {
     onNone: () => Effect.succeed(unchanged(documents)),
     onSome: (known) =>
-      Option.isSome(owned) && movesOn(known) && Topic.$is("Synced")(documents.get(frame.channel))
-        ? Effect.succeed(
-            reset(documents, frame.channel, `message ${frame.number} does not decode: ${error.message}`)
-          )
-        : Effect.fail(error)
+      Option.match(frame.topic, {
+        onNone: () => Effect.fail(error),
+        onSome: (topic) =>
+          movesOn(known) && Option.exists(HashMap.get(documents, topic), Document.$is("Synced"))
+            ? Effect.succeed(
+                reset(
+                  documents,
+                  topic,
+                  `message ${Option.getOrUndefined(frame.mid)} does not decode: ${error.message}`
+                )
+              )
+            : Effect.fail(error)
+      })
   })
 }
 

@@ -1,6 +1,6 @@
 import { Effect, Schema, SchemaGetter, SchemaIssue, Struct, Tuple } from "effect"
-import { Owner } from "./FastCastTopic.ts"
 import * as Gzip from "./Gzip.ts"
+import { Topic } from "./Topic.ts"
 
 // A patch's path. On a scoreboard topic: the uid of the event it changes (`s:20~l:28~e:<id>~c:<id>`), then a JSON
 // Pointer into that event, where no pointer means the whole event. On a game topic: a JSON Pointer alone, with no uid.
@@ -72,7 +72,7 @@ const Framed = Message.mapMembers(
   Tuple.evolve([(patched) => patched.mapFields(Struct.assign({ pl: Schema.String }))])
 )
 
-/** One FastCast socket message read only as far as framing it needs: its topic as the frame's channel, and its mid. */
+/** One FastCast socket message read only as far as framing it needs: its topic, and its mid. */
 export const Envelope = Schema.fromJsonString(Framed).pipe(
   Schema.decodeTo(
     Schema.Struct({
@@ -94,9 +94,9 @@ export const Envelope = Schema.fromJsonString(Framed).pipe(
 /** Where to open the socket, and the token it takes, as `public/websockethost` answers. */
 export const Host = Schema.Struct({ ip: Schema.String, securePort: Schema.Int, token: Schema.String })
 
-/** The checkpoint body of a topic `owner` carries, read by its schema: a scoreboard's events, or a game's plays. */
-export function Checkpoint(owner: Owner) {
-  return Owner.$match(owner, {
+/** The checkpoint body of `topic`, read by its schema: a scoreboard's events, or a game's plays. */
+export function Checkpoint(topic: Topic) {
+  return Topic.$match(topic, {
     Scoreboard: () => Schema.fromJsonString(ScoreboardCheckpoint),
     Game: () => Schema.fromJsonString(GameCheckpoint)
   })
