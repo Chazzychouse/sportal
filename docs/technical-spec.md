@@ -229,7 +229,7 @@ sportal/
     │       ├── screen/             The Screen (state, commands, source choice), this Display's copy of it, tiles, dividers, tile actions, rejections
     │       ├── layout/             Layout (the geometry: slots, dividers, next, clamp), its picker and glyphs
     │       ├── game/               A game's status, score, and logo, as slate and tiles show them; the field, which draws a game's plays
-        │
+    │
     └── desktop/
         └── src/
             ├── main/
@@ -318,7 +318,7 @@ class Director extends Context.Service<Director, {
 
 ```ts
 class Source extends Context.Service<Source, {
-  readonly availability: Effect<(game: GameSnapshot) => ChannelAvailability>
+  readonly availability: Effect<(game: GameSnapshot) => ReadonlyArray<ChannelAvailability>>
   readonly changes: Stream<void>
 }>()("sportal/hub/source/Source") {}
 ```
