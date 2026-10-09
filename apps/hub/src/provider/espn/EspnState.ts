@@ -1,7 +1,18 @@
 import { type GameId, GameSnapshot } from "@sportal/domain/Game"
 import type { LeagueId } from "@sportal/domain/League"
 import { Play } from "@sportal/domain/Play"
-import { Array as Arr, Data, type DateTime, Effect, HashMap, Metric, Option, Record, Schema } from "effect"
+import {
+  Array as Arr,
+  Data,
+  type DateTime,
+  Effect,
+  HashMap,
+  HashSet,
+  Metric,
+  Option,
+  Record,
+  Schema
+} from "effect"
 import { Delivery } from "../Provider.ts"
 import { EspnEvent, PushedEvent } from "./EspnEvent.ts"
 import { Scoreboard } from "./EspnPayload.ts"
@@ -20,11 +31,13 @@ export class EspnState extends Data.Class<{
   readonly documents: FastCastDocuments
   readonly listings: HashMap.HashMap<LeagueId, ReadonlyArray<GameSnapshot>>
   readonly plays: HashMap.HashMap<GameId, HashMap.HashMap<string, Play>>
+  readonly unlisted: HashSet.HashSet<LeagueId>
 }> {
   static readonly empty: EspnState = new EspnState({
     documents: FastCastDocuments.empty,
     listings: HashMap.empty(),
-    plays: HashMap.empty()
+    plays: HashMap.empty(),
+    unlisted: HashSet.empty()
   })
 
   /**
@@ -34,6 +47,7 @@ export class EspnState extends Data.Class<{
    * game forward in its listing; a game no listing has is not delivered. A game topic's change is a `Plays` of the
    * game's whole list, in `Play.order`. An event or a play that does not decode is skipped. A frame that does not decode
    * says nothing, leaves the state as it was, and is logged.
+   * A failed poll, or one whose scoreboard does not decode, leaves its league unlisted until a poll of it lists.
    */
   take(frame: Frame): Effect.Effect<readonly [EspnState, ReadonlyArray<Delivery>]> {
     return taken(this, frame)
@@ -64,12 +78,26 @@ export class EspnState extends Data.Class<{
       )
     )
   }
+
+  /** This state keeping documents and decoded plays only for the topics wanted at `now`. */
+  retained(leagues: ReadonlyArray<LeagueId>, now: DateTime.Utc): EspnState {
+    const wanted = this.wanted(leagues, now)
+    const games = new Set(
+      [...HashMap.keys(wanted)].flatMap((topic) => (Topic.$is("Game")(topic) ? [topic.game] : []))
+    )
+    return new EspnState({
+      ...this,
+      documents: this.documents.retained((topic) => HashMap.has(wanted, topic)),
+      plays: HashMap.filter(this.plays, (_, game) => games.has(game))
+    })
+  }
 }
 
 const taken = Effect.fnUntraced(
   function* (state: EspnState, frame: Frame) {
     return yield* Frame.$match(frame, {
       Polled: ({ league, body }) => listed(state, league, body),
+      PollFailed: ({ league }) => Effect.succeed([unlistedBy(state, league), noDeliveries] as const),
       Pushed: (each) => pushed(state, each),
       Checkpoint: (each) => pushed(state, each)
     })
@@ -78,16 +106,28 @@ const taken = Effect.fnUntraced(
     Effect.catch(effect, (cause) =>
       Effect.logWarning("EspnState: skipped a frame that does not decode", cause).pipe(
         Effect.annotateLogs(annotationsOf(frame)),
-        Effect.as([state, noDeliveries] as const)
+        Effect.as([
+          Frame.$is("Polled")(frame) ? unlistedBy(state, frame.league) : state,
+          noDeliveries
+        ] as const)
       )
     )
 )
+
+/** `state` with `league` unlisted: its last poll brought nothing it could list. */
+function unlistedBy(state: EspnState, league: LeagueId): EspnState {
+  return new EspnState({ ...state, unlisted: HashSet.add(state.unlisted, league) })
+}
 
 const listed = Effect.fnUntraced(function* (state: EspnState, league: LeagueId, body: string) {
   const scoreboard = yield* decodeScoreboard(body)
   const games = yield* gamesOf(league, scoreboard.events)
 
-  const next = new EspnState({ ...state, listings: HashMap.set(state.listings, league, games) })
+  const next = new EspnState({
+    ...state,
+    listings: HashMap.set(state.listings, league, games),
+    unlisted: HashSet.remove(state.unlisted, league)
+  })
   return [next, [Delivery.Listing({ league, games })]] as const
 })
 
@@ -212,6 +252,7 @@ function movedForward(
 function annotationsOf(frame: Frame): Readonly<Record<string, string>> {
   return Frame.$match(frame, {
     Polled: ({ league }) => ({ frame: "Polled", league }),
+    PollFailed: ({ league }) => ({ frame: "PollFailed", league }),
     Pushed: ({ topic }) => ({ frame: "Pushed", ...Record.getSomes({ topic: Option.map(topic, tcOf) }) }),
     Checkpoint: ({ topic }) => ({ frame: "Checkpoint", topic: tcOf(topic) })
   })

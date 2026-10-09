@@ -860,6 +860,7 @@ function framesOver(
 function seen(frame: Frame) {
   return Frame.$match(frame, {
     Polled: ({ league, body }) => ({ tag: "Polled", tc: league, mid: undefined, body }),
+    PollFailed: ({ league }) => ({ tag: "PollFailed", tc: league, mid: undefined, body: undefined }),
     Pushed: ({ topic, mid, body }) => ({
       tag: "Pushed",
       tc: Option.getOrUndefined(Option.map(topic, tcOf)),

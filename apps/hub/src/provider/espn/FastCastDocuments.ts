@@ -45,6 +45,11 @@ export class FastCastDocuments extends Data.Class<{
     }))
   }
 
+  /** These documents, keeping only the topics `kept` says. */
+  retained(kept: (topic: Topic) => boolean): FastCastDocuments {
+    return new FastCastDocuments({ byTopic: HashMap.filter(this.byTopic, (_, topic) => kept(topic)) })
+  }
+
   /** Whether `topic`'s document is synced: its checkpoint read, and every message since applied. */
   isSynced(topic: Topic): boolean {
     return Option.exists(HashMap.get(this.byTopic, topic), Document.$is("Synced"))

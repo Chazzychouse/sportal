@@ -6,6 +6,8 @@ import type { Topic } from "./Topic.ts"
 export type Frame = Data.TaggedEnum<{
   /** A poll's response: `league`'s whole site scoreboard. */
   Polled: { readonly league: LeagueId; readonly body: string }
+  /** A poll that brought nothing: it did not connect, or was refused. */
+  PollFailed: { readonly league: LeagueId }
   /** A socket text: a change to its topic's document, or any other op; no topic or mid when the text names none. */
   Pushed: {
     readonly topic: Option.Option<Topic>

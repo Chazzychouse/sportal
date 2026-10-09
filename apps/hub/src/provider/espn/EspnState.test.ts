@@ -3,7 +3,7 @@ import { assert, describe, it } from "@effect/vitest"
 import { GameId, GameSnapshot } from "@sportal/domain/Game"
 import type { LeagueId } from "@sportal/domain/League"
 import { Play, PlayId } from "@sportal/domain/Play"
-import { DateTime, Effect, Equal, HashMap, Metric, Option, Record, Schema } from "effect"
+import { DateTime, Effect, Equal, HashMap, HashSet, Metric, Option, Record, Schema } from "effect"
 import { counted, recordingLogs, withMetrics } from "../../TestTelemetry.ts"
 import { Delivery } from "../Provider.ts"
 import { PushedEvent } from "./EspnEvent.ts"
@@ -804,6 +804,62 @@ describe("EspnState#take", () => {
       { timeout: 60_000 }
     )
   })
+})
+
+describe("EspnState#unlisted", () => {
+  it.effect("should hold a league whose poll failed", () =>
+    Effect.gen(function* () {
+      const state = yield* stateAfter([Frame.PollFailed({ league: "fbs" })])
+
+      assert.isTrue(HashSet.has(state.unlisted, "fbs"))
+    })
+  )
+
+  it.effect("should hold a league whose scoreboard did not decode", () =>
+    Effect.gen(function* () {
+      const state = yield* stateAfter([poll("fbs", "not json")])
+
+      assert.isTrue(HashSet.has(state.unlisted, "fbs"))
+    })
+  )
+
+  it.effect("should let go of a league once its poll lists", () =>
+    Effect.gen(function* () {
+      const state = yield* stateAfter([Frame.PollFailed({ league: "nfl" }), poll("nfl", scoreboardBody)])
+
+      assert.isFalse(HashSet.has(state.unlisted, "nfl"))
+    })
+  )
+})
+
+describe("EspnState#retained", () => {
+  it.effect("should drop the document and plays of a game no longer wanted", () =>
+    Effect.gen(function* () {
+      const neAtBufPlays = "gp-football-nfl-401872971"
+      const state = yield* stateAfter([
+        ...synced(),
+        checkpoint(neAtBufPlays, 99, { entities: { plays: plays("401872971237") } }),
+        neAtBufFinal(4286638)
+      ])
+      const duringTheGames = DateTime.makeUnsafe("2026-10-04T18:00:00Z")
+
+      const kept = state.retained(["nfl"], duringTheGames)
+
+      assert.isFalse(HashMap.has(kept.documents.byTopic, topicNamed(neAtBufPlays)))
+      assert.isFalse(HashMap.has(kept.plays, GameId.make("401872971")))
+    })
+  )
+
+  it.effect("should keep the document of a topic still wanted", () =>
+    Effect.gen(function* () {
+      const state = yield* stateAfter([...synced()])
+      const duringTheGames = DateTime.makeUnsafe("2026-10-04T18:00:00Z")
+
+      const kept = state.retained(["nfl"], duringTheGames)
+
+      assert.isTrue(kept.documents.isSynced(topicNamed("event-football-nfl")))
+    })
+  )
 })
 
 describe("EspnState#wanted", () => {
