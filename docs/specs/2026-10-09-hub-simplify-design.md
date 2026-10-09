@@ -291,6 +291,39 @@ All tests follow AGENTS.md: one behaviour per test, `should …`, AAA, recorded 
 
 There are no offline scenarios, so a game day is the only end-to-end check.
 
+## Amendments while planning (2026-10-09)
+
+Reading the tests and the Effect APIs while writing the plan changed these points. Where they conflict with the
+sections above, they win.
+
+1. **No reset on the `C` handshake.** Sending every document back to `AwaitingCheckpoint` on `C` races with
+   checkpoints already loading for the new socket. FastCast acts on *changes* in the wanted set, not on its level:
+   - it follows a topic newly wanted, or one whose document went from `Synced` to `AwaitingCheckpoint`;
+   - on each new socket it starts from an empty previous set, so it follows every wanted topic.
+
+   A topic just checkpointed stays `AwaitingCheckpoint` in `wanted` until the fold takes its `Checkpoint` frame, and
+   no second follow starts, because no transition happened.
+2. **The wanted set carries document states, not documents.** It is
+   `Wanted = HashMap<Topic, "Synced" | "AwaitingCheckpoint">`, exported beside `FastCast` as a port's member type,
+   so successive sets compare cheaply with `Equal`. `Document` stays private to `FastCastDocument`, which exports
+   `isSynced(documents, topic)`.
+3. **`Change.Reset` stays.** The fold reads it to log why a topic lost its document; FastCast then logs only that it
+   follows the topic again. FastCast no longer knows the reason.
+4. **The poll's wait reads pushes; it does not cut a wait short.** The wait is chosen after each poll, from the
+   state. So a push that shows a game live shortens the *next* wait, not the one already running.
+   - A poll that lags a push must not set the pushed game back in the listing. Relisting keeps, per game, what
+     `Game#listed` keeps: `Game.of(pushed).listed(polled).snapshot`.
+   - The `Listing` delivery still carries the poll's own games, since the Slate applies its own rule.
+5. **Polls are taken into the state inside the poll.** `pollEveryLeague` takes each frame before the schedule
+   steps, so the wait reads this poll's games. The schedule's input is each league's part of the poll (what it
+   said, or none when it failed).
+6. **`Frame` has no `receivedAt`.** Nothing read it.
+7. **An `H` on a topic no name reads loads no checkpoint.** It is framed as `Pushed` only. Before, it loaded the
+   checkpoint and the documents ignored it.
+8. **FastCast no longer needs `HubConfig`.** The wanted set carries the scoreboard topics.
+9. **`Steer` drives the socket.** It is the result of `steersBetween(previous, next)`, and the socket acts on it.
+   "Only as a name" in section 3 understated this.
+
 ## Out of scope
 
 `Source`, `GuideReader`, `HubServer`, `HubStopping`, `HubConfig`, the web app and the shell.
