@@ -1,6 +1,7 @@
 import { assert, describe, it } from "@effect/vitest"
 import { GameId, GameSnapshot, type GameStatus } from "@sportal/domain/Game"
 import { type Play, PlayId } from "@sportal/domain/Play"
+import { Slate } from "@sportal/domain/Slate"
 import { liveSnapshot, play, snapshot, team } from "@sportal/domain/TestGame"
 import { DateTime, Effect, Layer, Metric, Ref, Stream, type Tracer } from "effect"
 import { TestClock } from "effect/testing"
@@ -8,7 +9,6 @@ import { Director } from "./Director.ts"
 import * as TestEspn from "./provider/espn/TestEspn.ts"
 import { Delivery } from "./provider/Provider.ts"
 import { ProviderFeed } from "./provider/ProviderFeed.ts"
-import { Slate } from "./Slate.ts"
 import * as TestDirector from "./TestDirector.ts"
 import { gauged, recordingLogs, recordingSpans, withMetrics } from "./TestTelemetry.ts"
 
@@ -165,6 +165,34 @@ describe("Director#slate", () => {
       const count = yield* Ref.get(given)
 
       assert.strictEqual(count, 2)
+    }).pipe(Effect.provide(TestDirector.directorOver))
+  )
+})
+
+describe("Director, a frame", () => {
+  it.effect("should take two deliveries in one frame as the same two in two frames", () =>
+    Effect.gen(function* () {
+      const feed = yield* ProviderFeed
+      const first = [liveSnapshot({ id: one }), liveSnapshot({ id: two, clock: "5:00" })]
+      const second = [liveSnapshot({ id: one, clock: "9:00" })]
+      const apart = Slate.empty.relisted("fbs", first)[0].relisted("fbs", second)[0]
+
+      yield* feed.deliver([listingOf(first), listingOf(second)])
+      const together = yield* TestDirector.latest
+
+      assert.deepStrictEqual(together.games, apart.games)
+    }).pipe(Effect.provide(TestDirector.directorOver))
+  )
+
+  it.effect("should give back the slate itself for a frame with no deliveries", () =>
+    Effect.gen(function* () {
+      const feed = yield* ProviderFeed
+      const before = yield* listing([liveSnapshot({ id: one })])
+
+      yield* feed.deliver([])
+      const current = yield* TestDirector.latest
+
+      assert.strictEqual(current, before)
     }).pipe(Effect.provide(TestDirector.directorOver))
   )
 })

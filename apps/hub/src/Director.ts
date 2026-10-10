@@ -1,9 +1,9 @@
 import type { GameSnapshot, GameStatus, Progress } from "@sportal/domain/Game"
 import type { Play } from "@sportal/domain/Play"
+import { Slate, SlateChange } from "@sportal/domain/Slate"
 import { Cause, Context, DateTime, Effect, Layer, Metric, Stream, SubscriptionRef } from "effect"
 import * as HubStopping from "./HubStopping.ts"
-import { type Delivery, Provider } from "./provider/Provider.ts"
-import { Slate, SlateChange } from "./Slate.ts"
+import { Delivery, Provider } from "./provider/Provider.ts"
 
 /**
  * The Hub's one holder of what is going on: the day's slate, taken from each frame its provider decodes as it
@@ -31,7 +31,7 @@ export class Director extends Context.Service<
         function* (deliveries: ReadonlyArray<Delivery>) {
           yield* Effect.annotateCurrentSpan({ "sportal.deliveries": deliveries.length })
           const before = yield* SubscriptionRef.get(slate)
-          const [next, changes] = before.take(deliveries)
+          const [next, changes] = taken(before, deliveries)
           if (next === before) return
 
           yield* SubscriptionRef.set(slate, next)
@@ -55,6 +55,23 @@ export class Director extends Context.Service<
 
       return Director.of({ slate: SubscriptionRef.changes(slate) })
     })
+  )
+}
+
+/** `slate` after each of a frame's deliveries in order, and what each changed, in order. */
+function taken(
+  slate: Slate,
+  deliveries: ReadonlyArray<Delivery>
+): readonly [Slate, ReadonlyArray<SlateChange>] {
+  return deliveries.reduce<readonly [Slate, ReadonlyArray<SlateChange>]>(
+    ([current, changes], delivery) => {
+      const [next, changed] = Delivery.$match(delivery, {
+        Listing: ({ league, games }) => current.relisted(league, games),
+        Plays: ({ game, plays }) => current.playsTaken(game, plays)
+      })
+      return [next, [...changes, ...changed]]
+    },
+    [slate, []]
   )
 }
 

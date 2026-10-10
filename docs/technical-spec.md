@@ -164,6 +164,7 @@ sportal/
 │   │       ├── League.ts       LeagueId
 │   │       ├── Team.ts         Team, its colors, Ranking
 │   │       ├── Game.ts         Game (a snapshot and its plays), GameId, GameStatus, GameSnapshot, BallSpot, Network, Broadcast
+│   │       ├── Slate.ts        Slate (the listed games, from listings and play lists), SlateChange
 │   │       ├── Situation.ts    Possession, down, distance, field position, red zone
 │   │       ├── Play.ts         A single play, as the game's play-by-play lists it; PlayKind
 │   │       ├── Channel.ts      SourceName, Channel, ChannelAvailability
@@ -186,7 +187,6 @@ sportal/
     │       ├── HubConfig.ts        Every environment setting, in one place
     │       ├── Telemetry.ts        Log level and format; OTLP export when configured
     │       ├── Director.ts         The one holder of the slate: takes each frame's deliveries as they arrive and publishes it beside each game's availability
-    │       ├── Slate.ts            The fold: every delivery taken in order into an ordered list of games, each with its latest snapshot and its plays
     │       ├── HubStopping.ts      Whether a task that should run until the Hub stops ended because it is stopping, and the Error log unless it did
     │       ├── TestTelemetry.ts    Layers for tests
     │       ├── TestDirector.ts     The Director taking a fed provider, and what it takes of a test's frames
@@ -313,7 +313,7 @@ class Director extends Context.Service<Director, {
 }>()("sportal/hub/Director") {}
 ```
 
-- The `Slate` (`Slate.ts`) is the fold: an ordered list of `Game`s, leagues in `LeagueId` order and each league's in its listing's order, each with its latest `GameSnapshot` and its plays. `take(deliveries)` on it is pure and returns the next slate and its slate changes; a take that changes nothing gives back the same slate.
+- The `Slate` (`packages/domain/src/Slate.ts`) is the fold: an ordered list of `Game`s, leagues in `LeagueId` order and each league's in its listing's order, each with its latest `GameSnapshot` and its plays. `relisted(league, snapshots)` and `playsTaken(game, plays)` on it are pure and return the next slate and its slate changes; one that changes nothing gives back the same slate. The Director takes each frame's deliveries onto them in order.
 - The Director starts from an empty slate and takes each frame's deliveries as they arrive, in one `Director.take` span carrying its `sportal.deliveries` count. From the slate changes each take gives, it gauges each listed game's progress (`sportal_game_state`: 1 upcoming, 2 live, 3 over), status (`sportal_game_status`: 1 scheduled, 2 live, 3 halftime, 4 delayed, 5 final, 6 postponed, 7 canceled), away and home scores (`sportal_game_score`), period (`sportal_game_period`), clock (`sportal_game_clock`), kickoff as Unix seconds (`sportal_game_kickoff`), and accepted-at time as Unix seconds (`sportal_game_updated_at`). Every series carries stable `game`, `league`, and `matchup` attributes; score series also carry `side` and `team`. A changing value updates its series, and a game no listing names has every current-game series removed. The Director logs each play a take adds at Info, annotated with `game`, `league`, `matchup`, `play`, and `scoring`; these logs, rather than a play counter, supply the latest-five, scoring-only, and complete-in-range play panels. For now nothing is kept between runs: a restarted Hub serves an empty slate until its provider's next poll lists the day's games.
 - A take that raises a defect is an Error log; the slate keeps what it had and takes the next frame. If the provider's frames end other than by the Hub stopping, that is an Error log and the slate stays as it is.
 - The Hub server's live route builds `SlateChanged`: each listed game as the slate has it, carrying only its last ten plays (`Game#recent`), beside its availability from every source. The Slate and the Director know nothing of sources or the API: the live route joins the Director's slate with the source's availability, drops a message that is the same as the last, and sends it once 250 ms have passed without a further change to the slate or to a source (a trailing settling, not a maximum latency: continuous updates keep deferring it).
