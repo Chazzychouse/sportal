@@ -2,12 +2,12 @@ import { assert, describe, it } from "@effect/vitest"
 import type { ChannelAvailability } from "@sportal/domain/Channel"
 import { Network } from "@sportal/domain/Game"
 import { broadcast, snapshot, team } from "@sportal/domain/TestGame"
-import { DateTime, Effect, Fiber, Layer, Logger, Option, Ref, Stream } from "effect"
+import { DateTime, Effect, Fiber, Layer, Option, Ref, Stream } from "effect"
 import { TestClock } from "effect/testing"
 import { GuideReader } from "./GuideReader.ts"
 import { Source } from "./Source.ts"
 import { availabilityNow } from "./TestSource.ts"
-import { readRecordedGuide, recordedAt, recordedGuide } from "./youtube-tv/TestYouTubeTv.ts"
+import * as TestYouTubeTv from "./youtube-tv/TestYouTubeTv.ts"
 
 const youTubeTv = Source.layerYouTubeTv.pipe(Layer.provideMerge(GuideReader.layerYouTubeTv))
 
@@ -30,25 +30,13 @@ const onNews3: ChannelAvailability = {
 }
 
 describe("GuideReader.layerYouTubeTv", () => {
-  it.effect("should read the recorded guide's channels, live addresses, and airings", () =>
-    Effect.gen(function* () {
-      yield* TestClock.setTime(recordedAt)
-      const reader = yield* GuideReader
-
-      yield* reader.readGuide(recordedGuide)
-
-      const availabilityOf = yield* availabilityNow
-      assert.deepStrictEqual(availabilityOf(ohioStateAtIowa), [onNews3])
-    }).pipe(Effect.provide(youTubeTv))
-  )
-
   it.effect("should signal a change after a guide is read", () =>
     Effect.gen(function* () {
       const reader = yield* GuideReader
       const signals = yield* laterGuides.pipe(Stream.take(1), Stream.runCount, Effect.forkChild)
       yield* Effect.yieldNow
 
-      yield* reader.readGuide(recordedGuide)
+      yield* reader.readGuide(TestYouTubeTv.recordedGuide)
 
       const signalled = yield* Fiber.join(signals)
       assert.strictEqual(signalled, 1)
@@ -57,7 +45,7 @@ describe("GuideReader.layerYouTubeTv", () => {
 
   it.effect("should keep its guide 44 minutes after reading it, signalling nothing", () =>
     Effect.gen(function* () {
-      yield* readRecordedGuide
+      yield* TestYouTubeTv.readRecordedGuide
       const changes = yield* counted(laterGuides)
 
       yield* TestClock.adjust("44 minutes")
@@ -71,7 +59,7 @@ describe("GuideReader.layerYouTubeTv", () => {
 
   it.effect("should give no guide once its guide is 45 minutes old, signalling then", () =>
     Effect.gen(function* () {
-      yield* readRecordedGuide
+      yield* TestYouTubeTv.readRecordedGuide
       const changes = yield* counted(laterGuides)
       yield* TestClock.adjust("44 minutes")
 
@@ -86,10 +74,10 @@ describe("GuideReader.layerYouTubeTv", () => {
 
   it.effect("should keep a newer guide when an older one would have gone stale", () =>
     Effect.gen(function* () {
-      yield* readRecordedGuide
+      yield* TestYouTubeTv.readRecordedGuide
       const reader = yield* GuideReader
       yield* TestClock.adjust("30 minutes")
-      yield* reader.readGuide(recordedGuide)
+      yield* reader.readGuide(TestYouTubeTv.recordedGuide)
 
       yield* TestClock.adjust("20 minutes")
 
@@ -100,7 +88,7 @@ describe("GuideReader.layerYouTubeTv", () => {
 
   it.effect("should not renew freshness when a rejected read arrives near expiry", () =>
     Effect.gen(function* () {
-      yield* readRecordedGuide
+      yield* TestYouTubeTv.readRecordedGuide
       const reader = yield* GuideReader
       yield* TestClock.adjust("44 minutes")
 
@@ -114,10 +102,10 @@ describe("GuideReader.layerYouTubeTv", () => {
 
   it.effect("should expire the guide surviving overlapping reads exactly once", () =>
     Effect.gen(function* () {
-      yield* TestClock.setTime(recordedAt)
+      yield* TestClock.setTime(TestYouTubeTv.recordedAt)
       const reader = yield* GuideReader
 
-      yield* Effect.forEach([recordedGuide, recordedGuide], reader.readGuide, {
+      yield* Effect.forEach([TestYouTubeTv.recordedGuide, TestYouTubeTv.recordedGuide], reader.readGuide, {
         concurrency: "unbounded",
         discard: true
       })
@@ -133,7 +121,7 @@ describe("GuideReader.layerYouTubeTv", () => {
 
   it.effect("should still expire a published guide when its reading fiber is interrupted", () =>
     Effect.gen(function* () {
-      yield* TestClock.setTime(recordedAt)
+      yield* TestClock.setTime(TestYouTubeTv.recordedAt)
       const reader = yield* GuideReader
       const published = yield* reader.guide.pipe(
         Stream.filter(Option.isSome),
@@ -142,7 +130,7 @@ describe("GuideReader.layerYouTubeTv", () => {
         Effect.forkChild({ startImmediately: true })
       )
 
-      const reading = yield* reader.readGuide(recordedGuide).pipe(Effect.forkChild)
+      const reading = yield* reader.readGuide(TestYouTubeTv.recordedGuide).pipe(Effect.forkChild)
       yield* Fiber.join(published)
       yield* Fiber.interrupt(reading)
       yield* TestClock.adjust("45 minutes")
@@ -154,7 +142,7 @@ describe("GuideReader.layerYouTubeTv", () => {
 
   it.effect("should keep the guide it has, and signal nothing, when a later response cannot be read", () =>
     Effect.gen(function* () {
-      yield* readRecordedGuide
+      yield* TestYouTubeTv.readRecordedGuide
       const reader = yield* GuideReader
       const changes = yield* counted(laterGuides)
 
@@ -166,43 +154,6 @@ describe("GuideReader.layerYouTubeTv", () => {
       assert.deepStrictEqual(availabilityOf(ohioStateAtIowa), [onNews3])
       assert.strictEqual(signalled, 0)
     }).pipe(Effect.provide(youTubeTv))
-  )
-
-  it.effect("should leave a channel without a live address when its row's live id is not one", () =>
-    Effect.gen(function* () {
-      yield* TestClock.setTime(recordedAt)
-      const reader = yield* GuideReader
-
-      yield* reader.readGuide(oneRowGuide("y6zFA17zDsw?x"))
-
-      const availabilityOf = yield* availabilityNow
-      assert.deepStrictEqual(availabilityOf(ohioStateAtIowa), [
-        {
-          _tag: "Upcoming",
-          channel: Option.some("News 3"),
-          begin: Option.some(DateTime.makeUnsafe("2026-10-03T19:35:00Z"))
-        }
-      ])
-    }).pipe(Effect.provide(youTubeTv))
-  )
-
-  it.effect("should log why a response could not be read, without the response", () =>
-    Effect.gen(function* () {
-      const logged: Array<{ readonly level: string; readonly message: string }> = []
-      const collector = Logger.make(({ logLevel, message }) => {
-        logged.push({ level: logLevel, message: JSON.stringify(message) })
-      })
-      const response = JSON.stringify({ contents: { secret: "payload" } })
-
-      yield* GuideReader.use((reader) => Effect.flip(reader.readGuide(response))).pipe(
-        Effect.provide(Layer.merge(youTubeTv, Logger.layer([collector])))
-      )
-
-      const warnings = logged.filter(({ level }) => level === "Warn")
-      assert.strictEqual(warnings.length, 1)
-      assert.include(warnings[0]?.message, "epgRenderer")
-      assert.notInclude(warnings[0]?.message, "secret")
-    })
   )
 
   it.effect.each([
@@ -240,32 +191,5 @@ function counted<R>(stream: Stream.Stream<unknown, never, R>) {
     )
     yield* Effect.yieldNow
     return count
-  })
-}
-
-/** A guide response with one row, News 3 airing Ohio State at Iowa, whose live id is `videoId`. */
-function oneRowGuide(videoId: string) {
-  const row = {
-    station: {
-      epgStationRenderer: {
-        stationId: "UCPc5PkgTSfcJCi3-dJyg3Tg",
-        icon: { accessibility: { accessibilityData: { label: "News 3" } } }
-      }
-    },
-    navigationEndpoint: { watchEndpoint: { videoId } },
-    airings: [
-      {
-        epgAiringRenderer: {
-          beginTimeMs: String(DateTime.toEpochMillis(DateTime.makeUnsafe("2026-10-03T19:35:00Z"))),
-          endTimeMs: String(DateTime.toEpochMillis(DateTime.makeUnsafe("2026-10-03T23:00:00Z"))),
-          title: { runs: [{ text: "Ohio State at Iowa" }] }
-        }
-      }
-    ]
-  }
-  return JSON.stringify({
-    contents: {
-      epgRenderer: { paginationRenderer: { epgPaginationRenderer: { contents: [{ epgRowRenderer: row }] } } }
-    }
   })
 }

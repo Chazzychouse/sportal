@@ -19,3 +19,30 @@ export const readRecordedGuide = Effect.gen(function* () {
 
   yield* reader.readGuide(recordedGuide)
 })
+
+/** A guide response with one row, News 3 airing Ohio State at Iowa, whose live id is `videoId`. */
+export function oneRowGuide(videoId: string) {
+  const row = {
+    station: {
+      epgStationRenderer: {
+        stationId: "UCPc5PkgTSfcJCi3-dJyg3Tg",
+        icon: { accessibility: { accessibilityData: { label: "News 3" } } }
+      }
+    },
+    navigationEndpoint: { watchEndpoint: { videoId } },
+    airings: [
+      {
+        epgAiringRenderer: {
+          beginTimeMs: String(DateTime.toEpochMillis(DateTime.makeUnsafe("2026-10-03T19:35:00Z"))),
+          endTimeMs: String(DateTime.toEpochMillis(DateTime.makeUnsafe("2026-10-03T23:00:00Z"))),
+          title: { runs: [{ text: "Ohio State at Iowa" }] }
+        }
+      }
+    ]
+  }
+  return JSON.stringify({
+    contents: {
+      epgRenderer: { paginationRenderer: { epgPaginationRenderer: { contents: [{ epgRowRenderer: row }] } } }
+    }
+  })
+}
