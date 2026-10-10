@@ -6,9 +6,10 @@ import { DateTime, Effect, Layer, Metric, Ref, Stream, type Tracer } from "effec
 import { TestClock } from "effect/testing"
 import { Director } from "./Director.ts"
 import { duringNeAtBuf, recordedNeAtBuf, recordedPlays, replayed } from "./provider/espn/TestEspn.ts"
-import { Delivery, ProviderFeed } from "./provider/Provider.ts"
+import { Delivery } from "./provider/Provider.ts"
+import { ProviderFeed } from "./provider/ProviderFeed.ts"
 import { Slate } from "./Slate.ts"
-import { delivered, directorOver, latest } from "./TestDirector.ts"
+import * as TestDirector from "./TestDirector.ts"
 import { gauged, recordingLogs, recordingSpans, withMetrics } from "./TestTelemetry.ts"
 
 const one = GameId.make("1")
@@ -19,10 +20,10 @@ const neAtBuf = GameId.make("401872971")
 describe("Director, the slate", () => {
   it.effect("should start from the empty slate", () =>
     Effect.gen(function* () {
-      const current = yield* latest
+      const current = yield* TestDirector.latest
 
       assert.strictEqual(current, Slate.empty)
-    }).pipe(Effect.provide(directorOver))
+    }).pipe(Effect.provide(TestDirector.directorOver))
   )
 
   it.effect("should take a listing delivered, keeping its games in order", () =>
@@ -38,7 +39,7 @@ describe("Director, the slate", () => {
         current.games.map(({ snapshot }) => snapshot),
         [live, soon, later]
       )
-    }).pipe(Effect.provide(directorOver))
+    }).pipe(Effect.provide(TestDirector.directorOver))
   )
 
   it.effect("should ignore a snapshot behind its game's", () =>
@@ -48,7 +49,7 @@ describe("Director, the slate", () => {
       const current = yield* relisted(snapshot({ id: one, status: "live", period: 1, clock: "5:00" }))
 
       assert.strictEqual(snapshotIn(current, one)?.period, 2)
-    }).pipe(Effect.provide(directorOver))
+    }).pipe(Effect.provide(TestDirector.directorOver))
   )
 
   it.effect("should keep a snapshot of its own for each game", () =>
@@ -62,25 +63,25 @@ describe("Director, the slate", () => {
 
       assert.deepStrictEqual(snapshotIn(current, one), first)
       assert.deepStrictEqual(snapshotIn(current, two), second)
-    }).pipe(Effect.provide(directorOver))
+    }).pipe(Effect.provide(TestDirector.directorOver))
   )
 
   it.effect("should take a listed game's plays", () =>
     Effect.gen(function* () {
       yield* listing([liveSnapshot({ id: one })])
 
-      const current = yield* delivered(Delivery.Plays({ game: one, plays: [play()] }))
+      const current = yield* TestDirector.delivered(Delivery.Plays({ game: one, plays: [play()] }))
 
       assert.deepStrictEqual(playsIn(current, one), [play()])
-    }).pipe(Effect.provide(directorOver))
+    }).pipe(Effect.provide(TestDirector.directorOver))
   )
 
   it.effect("should drop plays for a game no listing names", () =>
     Effect.gen(function* () {
-      const current = yield* delivered(Delivery.Plays({ game: one, plays: [play()] }))
+      const current = yield* TestDirector.delivered(Delivery.Plays({ game: one, plays: [play()] }))
 
       assert.deepStrictEqual(current.games, [])
-    }).pipe(Effect.provide(directorOver))
+    }).pipe(Effect.provide(TestDirector.directorOver))
   )
 
   it.effect("should take every delivery of a frame", () =>
@@ -89,10 +90,10 @@ describe("Director, the slate", () => {
       const next = liveSnapshot({ id: one, clock: "9:00" })
 
       yield* feed.deliver([listingOf([liveSnapshot({ id: one })]), listingOf([next])])
-      const current = yield* latest
+      const current = yield* TestDirector.latest
 
       assert.strictEqual(snapshotIn(current, one), next)
-    }).pipe(Effect.provide(directorOver))
+    }).pipe(Effect.provide(TestDirector.directorOver))
   )
 
   it.effect("should span each take with its count of deliveries", () => {
@@ -108,7 +109,7 @@ describe("Director, the slate", () => {
 
       assert.isDefined(take, "the take's span ended")
       assert.strictEqual(take?.attributes.get("sportal.deliveries"), 1)
-    }).pipe(Effect.provide(directorOver.pipe(Layer.provideMerge(recordingSpans(ended)))))
+    }).pipe(Effect.provide(TestDirector.directorOver.pipe(Layer.provideMerge(recordingSpans(ended)))))
   })
 
   it.effect("should log at Error when the provider's frames end", () => {
@@ -123,7 +124,7 @@ describe("Director, the slate", () => {
       assert.strictEqual(stopped.length, 1)
       assert.include(stopped[0]?.message, "the provider's frames stopped")
       assert.include(stopped[0]?.message, "the provider's frames ended")
-    }).pipe(Effect.provide(directorOver.pipe(Layer.provideMerge(layer))))
+    }).pipe(Effect.provide(TestDirector.directorOver.pipe(Layer.provideMerge(layer))))
   })
 })
 
@@ -146,7 +147,7 @@ describe("Director#slate", () => {
       const all = yield* Ref.get(given)
 
       assert.deepStrictEqual(all, [undefined, first, second])
-    }).pipe(Effect.provide(directorOver))
+    }).pipe(Effect.provide(TestDirector.directorOver))
   )
 
   it.effect("should give no change for a take that changes nothing", () =>
@@ -164,7 +165,7 @@ describe("Director#slate", () => {
       const count = yield* Ref.get(given)
 
       assert.strictEqual(count, 2)
-    }).pipe(Effect.provide(directorOver))
+    }).pipe(Effect.provide(TestDirector.directorOver))
   )
 })
 
@@ -176,7 +177,7 @@ describe("Director, a take that raises a defect", () => {
       const current = yield* relisted(broken(one))
 
       assert.strictEqual(current, before)
-    }).pipe(Effect.provide(directorOver))
+    }).pipe(Effect.provide(TestDirector.directorOver))
   )
 
   it.effect("should log the defect at Error with its cause", () => {
@@ -190,7 +191,7 @@ describe("Director, a take that raises a defect", () => {
       assert.strictEqual(errors.length, 1)
       assert.include(errors[0]?.message, "a take raised a defect; the slate keeps what it had")
       assert.include(errors[0]?.cause, "a broken snapshot")
-    }).pipe(Effect.provide(directorOver.pipe(Layer.provideMerge(layer))))
+    }).pipe(Effect.provide(TestDirector.directorOver.pipe(Layer.provideMerge(layer))))
   })
 
   it.effect("should take the game's next snapshot", () =>
@@ -202,7 +203,7 @@ describe("Director, a take that raises a defect", () => {
       const current = yield* relisted(next)
 
       assert.strictEqual(snapshotIn(current, one), next)
-    }).pipe(Effect.provide(directorOver))
+    }).pipe(Effect.provide(TestDirector.directorOver))
   )
 })
 
@@ -218,13 +219,13 @@ describe("Director, a recorded game", () => {
         const feed = yield* ProviderFeed
 
         yield* Effect.forEach(decoded, (deliveries) => feed.deliver(deliveries), { discard: true })
-        const current = yield* latest
+        const current = yield* TestDirector.latest
         const errors = logs.filter(({ level }) => level === "Error")
 
         assert.strictEqual(snapshotIn(current, neAtBuf)?.status, "final")
         assert.strictEqual(playsIn(current, neAtBuf).length, recordedPlays)
         assert.deepStrictEqual(errors, [])
-      }).pipe(Effect.provide(directorOver.pipe(Layer.provideMerge(layer))))
+      }).pipe(Effect.provide(TestDirector.directorOver.pipe(Layer.provideMerge(layer))))
     },
     { timeout: 60_000 }
   )
@@ -238,7 +239,7 @@ describe("Director's game state gauge", () => {
       const value = yield* gauged("sportal_game_state", { game: one })
 
       assert.strictEqual(value, 2)
-    }).pipe(Effect.provide(directorOver), withMetrics)
+    }).pipe(Effect.provide(TestDirector.directorOver), withMetrics)
   )
 
   it.effect("should gauge a progressed game's status, period, clock, kickoff, update time, and scores", () =>
@@ -280,7 +281,7 @@ describe("Director's game state gauge", () => {
       assert.strictEqual(updatedAt, DateTime.toEpochSeconds(acceptedAt))
       assert.strictEqual(away, 17)
       assert.strictEqual(home, 14)
-    }).pipe(Effect.provide(directorOver), withMetrics)
+    }).pipe(Effect.provide(TestDirector.directorOver), withMetrics)
   )
 
   const statuses: ReadonlyArray<readonly [GameStatus, number]> = [
@@ -300,7 +301,7 @@ describe("Director's game state gauge", () => {
       const value = yield* gauged("sportal_game_status", { game: one })
 
       assert.strictEqual(value, expected)
-    }).pipe(Effect.provide(directorOver), withMetrics)
+    }).pipe(Effect.provide(TestDirector.directorOver), withMetrics)
   )
 
   it.effect("should update current values without creating series from changing values", () =>
@@ -337,7 +338,7 @@ describe("Director's game state gauge", () => {
       assert.strictEqual(clocks.length, 1)
       assert.strictEqual(clock, 480)
       assert.strictEqual(away, 14)
-    }).pipe(Effect.provide(directorOver), withMetrics)
+    }).pipe(Effect.provide(TestDirector.directorOver), withMetrics)
   )
 
   it.effect("should drop the series of a game no listing names any more", () =>
@@ -348,7 +349,7 @@ describe("Director's game state gauge", () => {
       const value = yield* gauged("sportal_game_state", { game: one })
 
       assert.isUndefined(value)
-    }).pipe(Effect.provide(directorOver), withMetrics)
+    }).pipe(Effect.provide(TestDirector.directorOver), withMetrics)
   )
 
   it.effect("should drop every current-value series of a game no listing names", () =>
@@ -360,7 +361,7 @@ describe("Director's game state gauge", () => {
       const forgotten = metrics.filter(({ attributes }) => attributes?.game === one)
 
       assert.deepStrictEqual(forgotten, [])
-    }).pipe(Effect.provide(directorOver), withMetrics)
+    }).pipe(Effect.provide(TestDirector.directorOver), withMetrics)
   )
 
   it.effect("should gauge a game listed again after it was delisted", () =>
@@ -372,7 +373,7 @@ describe("Director's game state gauge", () => {
       const value = yield* gauged("sportal_game_state", { game: one })
 
       assert.strictEqual(value, 2)
-    }).pipe(Effect.provide(directorOver), withMetrics)
+    }).pipe(Effect.provide(TestDirector.directorOver), withMetrics)
   )
 })
 
@@ -390,7 +391,7 @@ function listingOf(games: ReadonlyArray<GameSnapshot>) {
 
 /** Delivers an FBS listing of `games`, giving the Director's slate once it has taken it. */
 function listing(games: ReadonlyArray<GameSnapshot>) {
-  return delivered(listingOf(games))
+  return TestDirector.delivered(listingOf(games))
 }
 
 function relisted(game: GameSnapshot) {
@@ -415,9 +416,9 @@ describe("Director's play log", () => {
     const second = play({ id: PlayId.make("p2"), sequence: 2, clock: "14:20", text: "Rush for 4 yards" })
     return Effect.gen(function* () {
       yield* listing([game])
-      yield* delivered(Delivery.Plays({ game: one, plays: [first] }))
+      yield* TestDirector.delivered(Delivery.Plays({ game: one, plays: [first] }))
 
-      yield* delivered(Delivery.Plays({ game: one, plays: [first, second] }))
+      yield* TestDirector.delivered(Delivery.Plays({ game: one, plays: [first, second] }))
 
       const played = logs.filter(({ annotations }) => annotations.play !== undefined)
       assert.deepStrictEqual(
@@ -428,6 +429,6 @@ describe("Director's play log", () => {
         ]
       )
       assert.include(played[1]?.message ?? "", `Director: ${game.matchup()} Q1 14:20 Rush for 4 yards`)
-    }).pipe(Effect.provide(directorOver.pipe(Layer.provideMerge(layer))))
+    }).pipe(Effect.provide(TestDirector.directorOver.pipe(Layer.provideMerge(layer))))
   })
 })

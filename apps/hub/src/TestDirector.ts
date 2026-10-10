@@ -1,6 +1,7 @@
 import { Effect, Layer, Option, Stream } from "effect"
 import { Director } from "./Director.ts"
-import { type Delivery, Provider, ProviderFeed } from "./provider/Provider.ts"
+import { type Delivery, Provider } from "./provider/Provider.ts"
+import { ProviderFeed } from "./provider/ProviderFeed.ts"
 
 /** The Director taking a fed provider, whose feed is provided too, for a test to deliver to. */
 export const directorOver: Layer.Layer<Director | ProviderFeed> = Director.layer.pipe(

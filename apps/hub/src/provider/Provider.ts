@@ -2,6 +2,7 @@ import type { GameId, GameSnapshot } from "@sportal/domain/Game"
 import type { LeagueId } from "@sportal/domain/League"
 import type { Play } from "@sportal/domain/Play"
 import { type Cause, Context, Data, Deferred, Effect, Layer, Option, Queue, Ref, Stream } from "effect"
+import { ProviderFeed } from "./ProviderFeed.ts"
 
 /**
  * A provider of game data. It runs itself: it decides when to poll, what to follow on its push, and when to reconnect,
@@ -56,14 +57,3 @@ export type Delivery = Data.TaggedEnum<{
   Plays: { readonly game: GameId; readonly plays: ReadonlyArray<Play> }
 }>
 export const Delivery = Data.taggedEnum<Delivery>()
-
-/** What a test gives `Provider.layerTest`'s provider to say. */
-export class ProviderFeed extends Context.Service<
-  ProviderFeed,
-  {
-    /** One frame saying `deliveries`; returns once the provider's reader has taken it and asked for the next. */
-    deliver(deliveries: ReadonlyArray<Delivery>): Effect.Effect<void>
-    /** Ends the provider's frames after those already delivered. */
-    readonly end: Effect.Effect<void>
-  }
->()("sportal/hub/provider/ProviderFeed") {}

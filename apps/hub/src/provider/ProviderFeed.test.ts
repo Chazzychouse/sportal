@@ -1,7 +1,8 @@
 import { assert, describe, it } from "@effect/vitest"
 import { liveSnapshot } from "@sportal/domain/TestGame"
 import { Effect, Fiber, Ref, Stream } from "effect"
-import { Delivery, Provider, ProviderFeed } from "./Provider.ts"
+import { Delivery, Provider } from "./Provider.ts"
+import { ProviderFeed } from "./ProviderFeed.ts"
 
 describe("ProviderFeed#deliver", () => {
   it.effect("should return once the provider's reader has taken the frame", () =>

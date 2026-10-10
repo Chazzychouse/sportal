@@ -61,18 +61,13 @@ module.exports = {
       to: { path: "^packages/domain/src/TestGame\\.ts$" }
     },
     {
-      name: "test-telemetry-is-for-tests",
-      comment: "Logs, spans, and metrics recorded for a test are imported only by test files.",
+      name: "hub-test-modules-are-for-tests",
+      comment: "Hub Test modules are imported only by tests and other Hub Test modules.",
       severity: "error",
-      from: { pathNot: "\\.test\\.ts$" },
-      to: { path: "^apps/hub/src/TestTelemetry\\.ts$" }
-    },
-    {
-      name: "test-director-is-for-tests",
-      comment: "The Director over a fed provider is imported only by test files.",
-      severity: "error",
-      from: { pathNot: "\\.test\\.ts$" },
-      to: { path: "^apps/hub/src/TestDirector\\.ts$" }
+      from: {
+        pathNot: "(\\.test\\.tsx?$|^apps/hub/src/.*(?<=/)Test[^/]*\\.ts$)"
+      },
+      to: { path: "^apps/hub/src/.*(?<=/)Test[^/]*\\.ts$" }
     },
     {
       name: "test-screen-is-for-tests",
@@ -108,14 +103,6 @@ module.exports = {
       severity: "error",
       from: { pathNot: "\\.test\\.ts$" },
       to: { path: "^apps/desktop/src/main/TestWebContents\\.ts$" }
-    },
-    {
-      name: "test-adapter-data-is-for-tests",
-      comment:
-        "An adapter's recorded payloads, read for tests of other modules, are imported only by test files.",
-      severity: "error",
-      from: { pathNot: "\\.test\\.ts$" },
-      to: { path: "^apps/hub/src/(provider/espn/TestEspn|source/youtube-tv/TestYouTubeTv)\\.ts$" }
     },
     {
       name: "no-junk-drawers",

@@ -14,7 +14,7 @@ import * as HubServer from "./HubServer.ts"
 import { Delivery } from "./provider/Provider.ts"
 import { GuideReader } from "./source/GuideReader.ts"
 import { Source } from "./source/Source.ts"
-import { delivered, directorOver } from "./TestDirector.ts"
+import * as TestDirector from "./TestDirector.ts"
 
 const espn = Network.make("ESPN")
 const game = snapshot({
@@ -87,7 +87,7 @@ describe("GET /api/live", () => {
       yield* firstSlateOnTestClock()
       const lines = yield* pastInitialMessages()
 
-      yield* delivered(Delivery.Listing({ league: "fbs", games: [inPeriod(2)] }))
+      yield* TestDirector.delivered(Delivery.Listing({ league: "fbs", games: [inPeriod(2)] }))
       yield* TestClock.adjust("250 millis")
       const line = yield* Queue.take(lines)
 
@@ -106,7 +106,7 @@ describe("GET /api/live", () => {
       const lines = yield* pastInitialMessages()
       const pushes = [2, 3, 4].map((period) => Delivery.Listing({ league: "fbs", games: [inPeriod(period)] }))
 
-      yield* Effect.forEach(pushes, (push) => delivered(push))
+      yield* Effect.forEach(pushes, (push) => TestDirector.delivered(push))
       // The live stream reads each slate in turn; it reads the burst before the clock moves on.
       yield* Effect.yieldNow
       yield* TestClock.adjust("250 millis")
@@ -146,7 +146,7 @@ describe("GET /api/live", () => {
     Effect.gen(function* () {
       yield* firstSlateOnTestClock()
       yield* pastInitialMessages()
-      yield* delivered(Delivery.Listing({ league: "fbs", games: [inPeriod(2)] }))
+      yield* TestDirector.delivered(Delivery.Listing({ league: "fbs", games: [inPeriod(2)] }))
       yield* TestClock.adjust("250 millis")
 
       const { lines } = yield* liveLines()
@@ -199,7 +199,7 @@ describe("GET /api/live", () => {
       yield* TestClock.adjust("20 seconds")
       yield* nextComment(lines)
 
-      yield* delivered(Delivery.Listing({ league: "fbs", games: [inPeriod(2)] }))
+      yield* TestDirector.delivered(Delivery.Listing({ league: "fbs", games: [inPeriod(2)] }))
       yield* TestClock.adjust("250 millis")
       const change = yield* Queue.take(lines).pipe(
         Effect.repeat({ until: (line) => line.includes("SlateChanged") })
@@ -215,7 +215,7 @@ describe("GET /api/live", () => {
       const lines = yield* pastInitialMessages()
 
       yield* TestClock.adjust("1250 millis")
-      yield* delivered(Delivery.Listing({ league: "fbs", games: [inPeriod(2)] }))
+      yield* TestDirector.delivered(Delivery.Listing({ league: "fbs", games: [inPeriod(2)] }))
       yield* TestClock.adjust("250 millis")
       const line = yield* Queue.take(lines)
 
@@ -232,11 +232,11 @@ describe("GET /api/live", () => {
     () =>
       Effect.gen(function* () {
         const scheduled = snapshot({ id: game.id, broadcasts: [broadcast("Prime Video", "streaming")] })
-        yield* delivered(Delivery.Listing({ league: "fbs", games: [scheduled] }))
+        yield* TestDirector.delivered(Delivery.Listing({ league: "fbs", games: [scheduled] }))
         yield* TestClock.adjust("250 millis")
         const lines = yield* pastInitialMessages()
 
-        yield* delivered(
+        yield* TestDirector.delivered(
           Delivery.Listing({ league: "fbs", games: [snapshot({ ...scheduled, status: "live" })] })
         )
         yield* TestClock.adjust("250 millis")
@@ -387,7 +387,7 @@ describe("GET /api/live", () => {
 
 /** Delivers the fbs listing of `game`, so the Director has its first games to publish. */
 function firstSlate() {
-  return delivered(Delivery.Listing({ league: "fbs", games: [game] }))
+  return TestDirector.delivered(Delivery.Listing({ league: "fbs", games: [game] }))
 }
 
 /** `firstSlate` on the test clock, moved on 250 ms for it to settle. */
@@ -479,7 +479,7 @@ function inPeriod(period: number) {
 
 /** The live message first sent after `deliveries`, with no connection open before them. */
 const publishedAfter = Effect.fnUntraced(function* (deliveries: ReadonlyArray<Delivery>) {
-  yield* Effect.forEach(deliveries, delivered, { discard: true })
+  yield* Effect.forEach(deliveries, TestDirector.delivered, { discard: true })
   yield* TestClock.adjust("250 millis")
   const { lines } = yield* liveLines()
   const line = yield* Queue.take(lines)
@@ -504,7 +504,7 @@ const changingEverySecond = Source.layerTest(
 
 /** Everything behind the API, over a provider the test feeds, against `source`. */
 function hubUnderTest(source: Layer.Layer<Source, never, GuideReader>) {
-  return directorOver.pipe(
+  return TestDirector.directorOver.pipe(
     Layer.provideMerge(source),
     Layer.provideMerge(GuideReader.layerYouTubeTv),
     Layer.provideMerge(HubConfig.layerTest({ SPORTAL_VERSION: "1.2.3" }))
