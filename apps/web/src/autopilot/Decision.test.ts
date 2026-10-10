@@ -17,7 +17,7 @@ const nameOf = (game: GameId) => (game === dal ? "PHI @ DAL" : "NE @ BUF")
 
 function stayed(why: StayReason) {
   return Decision.Stepped({
-    ranking: [
+    ranked: [
       { game: buf, rank: "redZone", score: 70 },
       { game: dal, rank: "live", score: 50 }
     ],
@@ -30,7 +30,7 @@ function stayed(why: StayReason) {
 describe("explain", () => {
   it("should say which game it promoted over which, and why", () => {
     const decision = Decision.Stepped({
-      ranking: [],
+      ranked: [],
       layout: LayoutDecision.Fitted({ from: "Quad", to: "Pair" }),
       main: MainDecision.Promoted({ game: buf, over: Option.some(dal), why: "outranks" }),
       sound: SoundDecision.OnMain({ game: Option.some(buf) })
@@ -62,7 +62,7 @@ describe("details", () => {
   it("should give the Rank it saw", () => {
     const given = details(stayed(StayReason.Best()))
 
-    assert.strictEqual(given["autopilot.ranking"], "buf redZone 70, dal live 50")
+    assert.strictEqual(given["autopilot.ranked"], "buf redZone 70, dal live 50")
   })
 
   it("should give how long a dwell has left", () => {

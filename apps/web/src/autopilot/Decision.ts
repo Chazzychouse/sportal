@@ -49,13 +49,13 @@ export const SoundDecision = Data.taggedEnum<SoundDecision>()
 
 /**
  * What one step of the autopilot decided and why, for its log: off, frozen (the Screen soloed), or what it did with
- * each part, with the ranking it saw.
+ * each part, with the ranks it saw.
  */
 export type Decision = Data.TaggedEnum<{
   Off: object
   Frozen: object
   Stepped: {
-    readonly ranking: ReadonlyArray<Ranked>
+    readonly ranked: ReadonlyArray<Ranked>
     readonly layout: LayoutDecision
     readonly main: MainDecision
     readonly sound: SoundDecision
@@ -79,13 +79,13 @@ export function explain(decision: Decision, nameOf: (game: GameId) => string): s
 /** A decision's details for its log: the Rank it saw, best first, and how long a dwell has left. */
 export function details(decision: Decision): Record<string, string | number> {
   if (!Decision.$is("Stepped")(decision)) return {}
-  const { ranking, main } = decision
+  const { ranked, main } = decision
   const dwell =
     MainDecision.$is("Stayed")(main) && StayReason.$is("Dwell")(main.why)
       ? { "autopilot.dwellLeftSeconds": Math.ceil(Duration.toSeconds(main.why.left)) }
       : {}
   return {
-    "autopilot.ranking": ranking.map(({ game, rank, score }) => `${game} ${rank} ${score}`).join(", "),
+    "autopilot.ranked": ranked.map(({ game, rank, score }) => `${game} ${rank} ${score}`).join(", "),
     ...dwell
   }
 }

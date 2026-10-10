@@ -30,19 +30,19 @@ export interface Step {
   readonly decision: Decision
 }
 
-const Held = Schema.Struct({ game: GameId, since: Schema.DateTimeUtcFromString })
-type Held = typeof Held.Type
+const Dwelling = Schema.Struct({ game: GameId, since: Schema.DateTimeUtcFromString })
+type Dwelling = typeof Dwelling.Type
 
 /**
  * A Display's autopilot. While on, it fits the layout to the games worth showing, never past the ceiling (the layout
- * you chose), and shows the best game by the ranking in the main tile, the sound on it. The main tile's game holds
+ * you chose), and shows the best game by rank in the main tile, the sound on it. The main tile's game holds
  * the tile for `dwell` against a game in a higher rank, and gives way at once when it stops. Each command you send
  * makes the part it touches yours for `suspension`. Pure.
  */
 export class Autopilot extends Schema.Class<Autopilot>("sportal/Autopilot")({
   on: Schema.Boolean,
-  /** The main tile's game at the last step, and since when it has held the tile. */
-  main: Schema.OptionFromOptionalKey(Held),
+  /** The main tile's game at the last step, and since when it has been there. */
+  main: Schema.OptionFromOptionalKey(Dwelling),
   /** The layout you chose: the most the autopilot fits the layout to. */
   ceiling: Schema.OptionFromOptionalKey(LayoutName),
   /** Until when each part is yours. */
@@ -101,16 +101,16 @@ export class Autopilot extends Schema.Class<Autopilot>("sportal/Autopilot")({
 
     const [layout, fitted] = steerLayout(screen, this.ceiling, suspended.layout, classifications, now)
     const afterFit = afterAll(screen, fitted)
-    const held = heldIn(afterFit, this.main, now)
-    const [main, promoted] = steerMain(afterFit, held, suspended.main, classifications, now)
+    const dwelling = dwellingIn(afterFit, this.main, now)
+    const [main, promoted] = steerMain(afterFit, dwelling, suspended.main, classifications, now)
     const afterMain = afterAll(afterFit, promoted)
     const [sound, focused] = steerSound(afterMain, afterFit.audioFocus, suspended.audio)
 
-    const next = new Autopilot({ ...this, suspended, main: heldIn(afterMain, held, now) })
+    const next = new Autopilot({ ...this, suspended, main: dwellingIn(afterMain, dwelling, now) })
     return {
       next: unchangedOr(this, next),
       commands: [...fitted, ...promoted, ...focused],
-      decision: Decision.Stepped({ ranking: rankingOf(afterFit, classifications), layout, main, sound })
+      decision: Decision.Stepped({ ranked: rankedIn(afterFit, classifications), layout, main, sound })
     }
   }
 
@@ -167,17 +167,17 @@ function steerLayout(
 }
 
 /**
- * The main tile, unless it is yours: the best game by the ranking takes it from a game that has stopped, or, after
+ * The main tile, unless it is yours: the best game by rank takes it from a game that has stopped, or, after
  * the dwell, from a game in a lower rank. With no live game, nothing moves.
  */
 function steerMain(
   screen: Screen,
-  held: Option.Option<Held>,
+  dwelling: Option.Option<Dwelling>,
   yours: Option.Option<DateTime.Utc>,
   classifications: Classifications,
   now: DateTime.Utc
 ): readonly [MainDecision, ReadonlyArray<ScreenCommand>] {
-  const current = Option.map(held, ({ game }) => game)
+  const current = Option.map(dwelling, ({ game }) => game)
   const stay = (why: StayReason): readonly [MainDecision, ReadonlyArray<ScreenCommand>] => [
     MainDecision.Stayed({ game: current, why }),
     []
@@ -194,9 +194,9 @@ function steerMain(
     MainDecision.Promoted({ game, over: current, why }),
     [{ _tag: "Promote", tile }]
   ]
-  if (Option.isNone(held) || !isLive(rank(held.value.game))) return promote("stopped")
-  if (!outranks(rank(game), rank(held.value.game))) return stay(StayReason.SameRank())
-  const dwellEnd = DateTime.addDuration(held.value.since, Autopilot.dwell)
+  if (Option.isNone(dwelling) || !isLive(rank(dwelling.value.game))) return promote("stopped")
+  if (!outranks(rank(game), rank(dwelling.value.game))) return stay(StayReason.SameRank())
+  const dwellEnd = DateTime.addDuration(dwelling.value.since, Autopilot.dwell)
   return DateTime.isLessThan(now, dwellEnd)
     ? stay(StayReason.Dwell({ left: DateTime.distance(now, dwellEnd) }))
     : promote("outranks")
@@ -227,15 +227,19 @@ function steerSound(
   return [SoundDecision.OnMain({ game: Option.fromUndefinedOr(main) }), commands]
 }
 
-/** The main tile's game and since when it has held the tile: `held`'s while it is the same game, else from `now`. */
-function heldIn(screen: Screen, held: Option.Option<Held>, now: DateTime.Utc): Option.Option<Held> {
+/** The main tile's game and since when it has been there: `dwelling`'s while the same game, else from `now`. */
+function dwellingIn(
+  screen: Screen,
+  dwelling: Option.Option<Dwelling>,
+  now: DateTime.Utc
+): Option.Option<Dwelling> {
   const game = gameIn(screen.tiles[0])
   if (game === undefined) return Option.none()
-  return Option.exists(held, (was) => was.game === game) ? held : Option.some({ game, since: now })
+  return Option.exists(dwelling, (was) => was.game === game) ? dwelling : Option.some({ game, since: now })
 }
 
 /** Each occupied tile's game with its rank and score, best first. */
-function rankingOf(screen: Screen, classifications: Classifications): ReadonlyArray<Ranked> {
+function rankedIn(screen: Screen, classifications: Classifications): ReadonlyArray<Ranked> {
   return occupiedIn(screen.tiles)
     .toSorted(byRank(classifications))
     .map(({ game }) => ({
