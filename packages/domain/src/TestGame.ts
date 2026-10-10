@@ -1,7 +1,7 @@
 import { DateTime } from "effect"
 import { type Broadcast, GameId, GameSnapshot, Network, type Odds } from "./Game.ts"
 import type { LeagueId } from "./League.ts"
-import { Completion, type Play, PlayId, Rush } from "./Play.ts"
+import { Completion, type Play, PlayId, Rush, Timeout } from "./Play.ts"
 import { Situation } from "./Situation.ts"
 import type { Slate } from "./Slate.ts"
 import { Team, TeamId } from "./Team.ts"
@@ -92,6 +92,11 @@ export function play(overrides: Partial<Rush> = {}): Rush {
  */
 export function completion(overrides: Partial<Completion> = {}): Completion {
   return new Completion({ ...oneYardPlay, text: "Pass complete for 1 yard", ...overrides })
+}
+
+/** A timeout for a test: the home team's, at 15:00 of the first quarter, unless the overrides say otherwise. */
+export function timeout(overrides: Partial<Timeout> = {}): Timeout {
+  return new Timeout({ ...playFields, text: "Timeout", team: home, ...overrides })
 }
 
 /** Game `id`'s snapshot, as `slate` has it. */

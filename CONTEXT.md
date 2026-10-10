@@ -137,6 +137,7 @@ Provider and Source are the two words most likely to be swapped. Provider is alw
 | **Break** | A live game stopped: a timeout, the end of a period, halftime, a delay, or the gap from a score to the next kickoff; the `Break` moment and its `BreakReason`. Inferred from the data, never the video. | commercial, lull |
 | **Classification** | A game's moment, since when, and its score 0–100 with the points each part gave it; `Classification` in `packages/domain/src/Classification.ts`. | rating, watchability |
 | **Matchup prior** | What a game promises before it starts: the mean of how close its line is, how highly its teams are ranked, and how often they have won. It fades as the game is played. | |
+| **Classifier** | The pure fold that classifies the slate's games, stepped by the Director after each take and when a held moment runs out; it keeps each game's pregame line, its big play for a minute, and its moment, which holds 20 s before a lower one replaces it. `Classifier` in `packages/domain/src/Classifier.ts`. | analyzer, scorer |
 
 ## Planned
 
