@@ -91,6 +91,8 @@ Provider and Source are the two words most likely to be swapped. Provider is alw
 | **Hub client** | The web UI's way to the Hub's API, `HubClient` in code. It runs in the web UI's one runtime (`WebRuntime.ts`), beside the Shell. | API client, fetcher |
 | **Telemetry** | The traces, logs, and metrics the Hub exports for people to read in Grafana. | monitoring, observability stack |
 | **Display** | A device running the shell and presenting a Screen. It owns its Screen (`apps/web/src/screen/DisplayScreen.ts`), kept in its browser. Its local state (selected tile, interacting tile, pick, slate drawer, and the one open overlay) is the web UI's `Display`, held in the `DisplayState.display` atom. | screen, client, player |
+| **Remote** | A phone's view and control of one Display, at /remote/<display id>: its prompt (Watch, Skip, with a chime), its autopilot and prompts toggles, its layout and tiles, and the slate. It sends Remote inputs and follows the Display's Remote report through the Hub; it works only while the page is open. | controller |
+| **Chime** | The Remote's short tone for a new prompt, playable only after a first tap on the page. | notification, alert |
 | **Display id** | A Display's own id, made once and kept in its browser (`sportal/display-id`); a Remote names its Display by it. `DisplayId` in `packages/api`. | display name |
 | **Displays** | The Hub's in-memory relay between each connected Display and its Remotes (`apps/hub/src/Displays.ts`): the Display's latest report and the inputs waiting for it, neither of which the Hub reads. A Display is connected while its input stream is open; when it closes, the Display and its report are forgotten. | registry, sessions |
 | **Display offline** | The Hub's answer to a report or input for a Display that is not connected: `DisplayOffline`, a 404. | |
@@ -173,7 +175,6 @@ Names the design uses that no code has yet. Move a row up, into its table, in th
 
 | Term | Meaning | Not |
 | --- | --- | --- |
-| **Remote** | A client controlling a Display's Screen without presenting it. | controller |
 | **Sport** | A kind of game (football). | |
 | **Conference** | A grouping of teams within a league (SEC, AFC). | |
 | **Season** | One league year, with a **SeasonPhase**: preseason, regular, postseason. | |
@@ -185,7 +186,7 @@ Names the design uses that no code has yet. Move a row up, into its table, in th
 | **Tile delay** | Seconds that data is held back for a tile to match its video. | offset, latency |
 | **Scenario** | A game day a Hub plays offline in place of its providers and sources. Removed to be designed again ([ADR 0013](docs/adr/0013-scenarios-go.md)). | |
 | **Spoiler shield** | Hiding or delaying scores for chosen games. | |
-| **Phone push** | A prompt delivered to a phone. | notification |
+| **Phone push** | A prompt delivered to a phone's lock screen; needs HTTPS (Tailscale or the home box), so the Remote cannot do it over the home network's plain HTTP. | notification |
 | **Follow** | Your declared interest in a team, conference, league, or game. | favourite, subscription |
 | **Persistence** | What the Hub keeps between runs: none for now, added back on top of the simplified model. | storage, database |
 | **Ticket** | A bet you have placed, tracked by the betting lens (later). | bet, wager |

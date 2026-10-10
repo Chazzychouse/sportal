@@ -62,7 +62,10 @@ export function TopBar() {
       </Button>
       <span className="h-5 w-px bg-border" />
 
-      <LayoutPicker current={screen.layout} />
+      <LayoutPicker
+        current={screen.layout}
+        onChoose={(layout) => input(DisplayInput.Commanded({ command: { _tag: "SetLayout", layout } }))}
+      />
 
       <Button
         variant="ghost"
