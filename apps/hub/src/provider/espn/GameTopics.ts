@@ -1,12 +1,12 @@
-import type { GameId } from "@sportal/domain/Game"
+import type { GameId, GameSnapshot } from "@sportal/domain/Game"
 import type { LeagueId } from "@sportal/domain/League"
 import { Play } from "@sportal/domain/Play"
-import { Data, Effect, HashMap, Option, Record, Schema } from "effect"
+import { Data, type DateTime, Effect, HashMap, HashSet, Option, Record, Schema } from "effect"
 import { Delivery } from "../Provider.ts"
 import * as EspnPlay from "./EspnPlay.ts"
 import { DocumentChange, FastCastDocuments } from "./FastCastDocuments.ts"
 import { Frame } from "./Frame.ts"
-import type { Topic } from "./Topic.ts"
+import { Topic } from "./Topic.ts"
 
 /** Each followed FastCast game topic's document, and the plays decoded from it, every frame folded in once. */
 export class GameTopics extends Data.Class<{
@@ -32,6 +32,12 @@ export class GameTopics extends Data.Class<{
     const documents = this.documents.retained(kept)
     const games = new Set([...HashMap.keys(documents.byTopic)].map((topic) => topic.game))
     return new GameTopics({ documents, plays: HashMap.filter(this.plays, (_, game) => games.has(game)) })
+  }
+
+  /** These topics, keeping only those of `games` that `Topic.wantedAt` wants at `now`. */
+  retainedFor(games: Iterable<GameSnapshot>, now: DateTime.Utc): GameTopics {
+    const wanted = Topic.wantedAt(games, now)
+    return this.retained((topic) => HashSet.has(wanted, topic))
   }
 
   /** Whether `topic`'s document is synced: its checkpoint read, and every message since applied. */

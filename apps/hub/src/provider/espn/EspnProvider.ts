@@ -1,17 +1,6 @@
 import { GameSnapshot } from "@sportal/domain/Game"
 import type { LeagueId } from "@sportal/domain/League"
-import {
-  DateTime,
-  Duration,
-  Effect,
-  HashMap,
-  HashSet,
-  Layer,
-  Option,
-  Result,
-  Stream,
-  SubscriptionRef
-} from "effect"
+import { DateTime, Duration, Effect, HashMap, Layer, Option, Result, Stream, SubscriptionRef } from "effect"
 import { HttpClient } from "effect/http"
 import { HubConfig } from "../../HubConfig.ts"
 import { Delivery, Provider } from "../Provider.ts"
@@ -88,10 +77,7 @@ export const layer: Layer.Layer<Provider, never, FastCast | HttpClient.HttpClien
           const [next, said] = yield* Result.match(each, {
             onSuccess: (frame) => Effect.map(topics.take(frame), ([after, one]) => [after, [one]] as const),
             onFailure: (listed) =>
-              Effect.map(DateTime.now, (now) => {
-                const wanted = Topic.wantedAt(gamesOf(listed), now)
-                return [topics.retained((topic) => HashSet.has(wanted, topic)), []] as const
-              })
+              Effect.map(DateTime.now, (now) => [topics.retainedFor(gamesOf(listed), now), []] as const)
           })
 
           yield* SubscriptionRef.set(view, next)

@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs"
 import { gunzipSync } from "node:zlib"
 import type { GameSnapshot } from "@sportal/domain/Game"
 import { LeagueId } from "@sportal/domain/League"
-import { DateTime, Effect, HashMap, HashSet, Layer, Option, Schema, Stream } from "effect"
+import { DateTime, Effect, HashMap, Layer, Option, Schema, Stream } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/http"
 import * as Socket from "effect/socket/Socket"
 import { HubConfig } from "../../HubConfig.ts"
@@ -107,8 +107,7 @@ const replayedLine = Effect.fnUntraced(function* (
   if (Option.isNone(listed)) return [state, noDeliveries] as const
   const games = HashMap.set(state.games, line.league, listed.value)
   const now = yield* DateTime.now
-  const wanted = Topic.wantedAt([...HashMap.values(games)].flat(), now)
-  const topics = state.topics.retained((topic) => HashSet.has(wanted, topic))
+  const topics = state.topics.retainedFor([...HashMap.values(games)].flat(), now)
   return [{ topics, games }, [Delivery.Listing({ league: line.league, games: listed.value })]] as const
 })
 

@@ -568,8 +568,55 @@ describe("EspnProvider.deliveries", () => {
 
       const told = yield* toldOver(recordedNfl, "nfl", ["1 second"], pushing)
 
+      assert.isTrue(
+        told.slice(0, -1).some((one) => Option.contains(HashMap.get(one, neAtBuf), "Synced")),
+        "it was synced before it lost its document"
+      )
       assert.deepStrictEqual(
         Option.flatMap(Arr.last(told), (one) => HashMap.get(one, neAtBuf)),
+        Option.some("AwaitingCheckpoint")
+      )
+    })
+  )
+
+  it.effect("should keep a live game's synced topic across the next listing", () =>
+    Effect.gen(function* () {
+      const live = scoreboardOf([{ state: "in", period: 2 }])
+      const topic = firstTopicOf(live)
+      const pushing = Stream.fromEffect(Effect.sleep("1 second")).pipe(Stream.as(checkpointFrame(topic)))
+      const client = HttpClient.make((request) => Effect.succeed(answered(request, live)))
+
+      const told = yield* toldOver(client, "nfl", ["1 second", "10 seconds"], pushing)
+
+      assert.deepStrictEqual(
+        Option.flatMap(Arr.last(told), (one) => HashMap.get(one, topic)),
+        Option.some("Synced")
+      )
+    })
+  )
+
+  it.effect("should drop a game's document once a listing no longer wants it", () =>
+    Effect.gen(function* () {
+      const live = scoreboardOf([{ state: "in", period: 2 }])
+      const final = scoreboardOf([{ state: "post", period: 4 }])
+      const topic = firstTopicOf(live)
+      const pushing = Stream.fromEffect(Effect.sleep("1 second")).pipe(Stream.as(checkpointFrame(topic)))
+      const polls = Ref.makeUnsafe(0)
+      const client = HttpClient.make((request) =>
+        Effect.map(
+          Ref.getAndUpdate(polls, (n) => n + 1),
+          (n) => answered(request, n === 1 ? final : live)
+        )
+      )
+
+      const told = yield* toldOver(client, "nfl", ["1 second", "10 seconds", "15 minutes"], pushing)
+
+      assert.isTrue(
+        told.some((one) => Option.contains(HashMap.get(one, topic), "Synced")),
+        "it was synced while live"
+      )
+      assert.deepStrictEqual(
+        Option.flatMap(Arr.last(told), (one) => HashMap.get(one, topic)),
         Option.some("AwaitingCheckpoint")
       )
     })
@@ -875,6 +922,12 @@ const laterGames = ["401872974", "401872976"] as const
 
 /** ESPN's site answering every request with the recorded 18:00Z NFL scoreboard. */
 const recordedNfl = HttpClient.make((request) => Effect.succeed(answered(request, nflLive)))
+
+/** The topic of the first game of the NFL scoreboard `body`. */
+function firstTopicOf(body: string) {
+  const [event] = decodeEventIds(body).events
+  return gameTopic(event.id)
+}
 
 /** NFL game `id`'s topic. */
 function gameTopic(id: string) {
