@@ -12,7 +12,7 @@ import { Display, DisplayInput } from "./Display.ts"
 
 /**
  * This Display's local state. An input written to it is applied against the Screen and the slate strip: the next
- * Display is kept, and the step's screen commands go to the Screen and, as yours, to the autopilot.
+ * Display is kept, and the step's screen commands go to the Screen and, each one it applies, as yours to the autopilot.
  */
 export const display: Atom.Writable<Display, DisplayInput> = Atom.writable(
   (get) => get(kept),
@@ -22,10 +22,11 @@ export const display: Atom.Writable<Display, DisplayInput> = Atom.writable(
       ctx.set(kept, step.display)
       for (const command of step.commands) {
         ctx.set(DisplayScreen.screen, command)
-        ctx.set(
-          AutopilotState.autopilot,
-          AutopilotInput.Commanded({ command, screen: ctx.get(DisplayScreen.screen) })
-        )
+        if (Option.isNone(ctx.get(DisplayScreen.rejected)))
+          ctx.set(
+            AutopilotState.autopilot,
+            AutopilotInput.Commanded({ command, screen: ctx.get(DisplayScreen.screen) })
+          )
       }
     })
   }

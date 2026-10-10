@@ -134,6 +134,26 @@ describe("DisplayState", () => {
     })
   )
 
+  it.effect("should leave the autopilot as it was when the Screen refuses your command", () =>
+    Effect.gen(function* () {
+      yield* TestWeb.keep(TestWeb.withTiles(["live", "soon"]))
+      const { registry } = yield* TestWeb.withShell()
+
+      const [before, after] = yield* Effect.gen(function* () {
+        yield* Atom.set(AutopilotState.autopilot, AutopilotInput.Toggled())
+        const before = yield* Atom.get(AutopilotState.autopilot)
+        yield* Atom.set(
+          DisplayState.display,
+          DisplayInput.Commanded({ command: { _tag: "Promote", tile: 2 } })
+        )
+        const after = yield* Atom.get(AutopilotState.autopilot)
+        return [before, after] as const
+      }).pipe(Effect.scoped, Effect.provide(registry))
+
+      assert.strictEqual(after, before)
+    })
+  )
+
   it.effect("should turn the autopilot on for the ToggleAutopilot hotkey", () =>
     Effect.gen(function* () {
       const { registry } = yield* TestWeb.withShell({ hotkeys: Stream.make({ _tag: "ToggleAutopilot" }) })

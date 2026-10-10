@@ -75,6 +75,8 @@ of the autopilot for `suspension` (3 min) from when you sent it, each part on it
 | `FocusAudio`                                  | sound       |
 | `SetLayout`, `SetSplit`, `Unsolo`, any other  | nothing     |
 
+A command the Screen refuses is not yours either; it changes nothing.
+
 A suspension ends any away of its part: the autopilot does not revert what you chose. When it runs out, the next
 step decides from the home you left.
 
