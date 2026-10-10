@@ -1,3 +1,4 @@
+import type { DisplayId } from "@sportal/api/DisplayId"
 import { LiveMessageJson } from "@sportal/api/LiveMessage"
 import type { ChannelAvailability } from "@sportal/domain/Channel"
 import { Classification } from "@sportal/domain/Classification"
@@ -180,21 +181,41 @@ export function mainGame(screen: Screen): GameId | undefined {
 /** The EventSource the live stream opened, once a read of the atom has started it. */
 export const opened: Effect.Effect<FakeEventSource, never, AtomRegistry.AtomRegistry> = Atom.get(
   LiveStream.live
-).pipe(Effect.andThen(eventSource))
+).pipe(Effect.andThen(() => lastOpened(() => true)))
 
-function eventSource(): Effect.Effect<FakeEventSource> {
+/** The EventSource last opened at `url`, once something has opened one. */
+export function openedAt(url: string): Effect.Effect<FakeEventSource> {
+  return lastOpened((source) => source.url === url)
+}
+
+/** The EventSource opened at `source`'s url after it, once one has been. */
+export function reopened(source: FakeEventSource): Effect.Effect<FakeEventSource> {
+  return lastOpened(
+    (each) =>
+      each.url === source.url && FakeEventSource.opened.indexOf(each) > FakeEventSource.opened.indexOf(source)
+  )
+}
+
+function lastOpened(predicate: (source: FakeEventSource) => boolean): Effect.Effect<FakeEventSource> {
   return Effect.suspend(() => {
-    const last = FakeEventSource.opened.at(-1)
-    return last === undefined ? Effect.yieldNow.pipe(Effect.flatMap(eventSource)) : Effect.succeed(last)
+    const last = FakeEventSource.opened.findLast(predicate)
+    return last === undefined
+      ? Effect.yieldNow.pipe(Effect.flatMap(() => lastOpened(predicate)))
+      : Effect.succeed(last)
   })
 }
 
-/** An EventSource a test drives by hand: it records each one opened, and the test calls its handlers. */
+/**
+ * An EventSource a test drives by hand: it records each one opened, and the test calls its handlers. A test sets
+ * `readyState` to `CLOSED` before `onerror` to fail it as the browser does, for good.
+ */
 export class FakeEventSource {
+  static readonly CLOSED = 2
   static opened: Array<FakeEventSource> = []
   onopen: (() => void) | null = null
   onerror: (() => void) | null = null
   onmessage: ((event: { data: unknown }) => void) | null = null
+  readyState = 0
   closed = false
 
   readonly url: string
@@ -256,15 +277,24 @@ export const withShell = Effect.fn("TestWeb.withShell")(function* (
   events: Omit<Parameters<typeof Shell.layerTest>[0], "record"> = {},
   scheduleTask?: (f: () => void) => () => void
 ) {
-  const calls = yield* Queue.unbounded<ShellCall | { readonly _tag: "SendGuide"; readonly guide: string }>()
+  const calls = yield* Queue.unbounded<TestWebCall>()
   const layer = Layer.mergeAll(
     Shell.layerTest({ ...events, record: (call) => Effect.asVoid(Queue.offer(calls, call)) }),
-    HubClient.layerTest((guide) => Effect.asVoid(Queue.offer(calls, { _tag: "SendGuide", guide })))
+    HubClient.layerTest({
+      sendGuide: (guide) => Effect.asVoid(Queue.offer(calls, { _tag: "SendGuide", guide })),
+      report: (id, report) => Effect.asVoid(Queue.offer(calls, { _tag: "Report", id, report })),
+      send: (id, input) => Effect.asVoid(Queue.offer(calls, { _tag: "Send", id, input }))
+    })
   )
   return { registry: registryOf(layer, scheduleTask), calls }
 })
 
-type ShellCall = Parameters<Parameters<typeof Shell.layerTest>[0]["record"]>[0]
+/** A call `withShell` records: one the Shell was asked to make, or one the Hub client was. */
+export type TestWebCall =
+  | Parameters<Parameters<typeof Shell.layerTest>[0]["record"]>[0]
+  | { readonly _tag: "SendGuide"; readonly guide: string }
+  | { readonly _tag: "Report"; readonly id: DisplayId; readonly report: Schema.Json }
+  | { readonly _tag: "Send"; readonly id: DisplayId; readonly input: Schema.Json }
 
 /** Keeps `screen` in this browser, as the Display would have before a reload. */
 export const keep = Effect.fn("TestWeb.keep")(function* (screen: Screen) {

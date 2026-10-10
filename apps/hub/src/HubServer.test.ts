@@ -1,19 +1,38 @@
 import { NodeHttpServer } from "@effect/platform-node"
 import { assert, describe, it } from "@effect/vitest"
+import { DisplayId } from "@sportal/api/DisplayId"
 import { type LiveMessage, LiveMessageJson } from "@sportal/api/LiveMessage"
+import { type RemoteMessage, RemoteMessageJson } from "@sportal/api/RemoteMessage"
 import { SportalApi } from "@sportal/api/SportalApi"
 import { Cause, DateTime, Effect, Exit, Layer, Queue, Schema, Stream } from "effect"
 import { HttpClient, HttpClientRequest } from "effect/http"
 import { HttpApiClient } from "effect/http-api"
 import { TestClock } from "effect/testing"
+import { afterEach, vi } from "vitest"
 import { Broadcast } from "./Broadcast.ts"
 import { Director } from "./Director.ts"
+import { Displays } from "./Displays.ts"
 import { HubConfig } from "./HubConfig.ts"
 import * as HubServer from "./HubServer.ts"
 import { Delivery, Provider } from "./provider/Provider.ts"
 import { isStopping } from "./Shutdown.ts"
 import { Source } from "./source/Source.ts"
 import * as TestHub from "./TestHub.ts"
+
+type Interfaces = Record<
+  string,
+  ReadonlyArray<{ address: string; family: string; internal: boolean }> | undefined
+>
+
+const network = vi.hoisted((): { interfaces: Interfaces | undefined } => ({ interfaces: undefined }))
+vi.mock("node:os", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:os")>()
+  return { ...actual, networkInterfaces: () => network.interfaces ?? actual.networkInterfaces() }
+})
+
+afterEach(() => {
+  network.interfaces = undefined
+})
 
 describe("HubServer", () => {
   describe("HTTP endpoints", () => {
@@ -78,7 +97,7 @@ describe("HubServer", () => {
           Effect.gen(function* () {
             yield* TestHub.alaAtMsstListed(frames)
 
-            const { response, lines } = yield* liveLines()
+            const { response, lines } = yield* sseLines("/api/live")
             const line = yield* Queue.take(lines)
 
             const message = messageOf(line)
@@ -129,7 +148,7 @@ describe("HubServer", () => {
             )
             yield* TestClock.adjust("250 millis")
 
-            const { lines } = yield* liveLines()
+            const { lines } = yield* sseLines("/api/live")
             const line = yield* Queue.take(lines)
 
             const message = messageOf(line)
@@ -188,7 +207,7 @@ describe("HubServer", () => {
             Effect.gen(function* () {
               yield* TestHub.alaAtMsstListed(frames)
 
-              const { lines } = yield* liveLines()
+              const { lines } = yield* sseLines("/api/live")
               const line = yield* Queue.take(lines).pipe(
                 Effect.repeat({ until: (line) => line.includes("SlateChanged") })
               )
@@ -245,6 +264,119 @@ describe("HubServer", () => {
       )
     })
   })
+  describe("HubServer.lanAddresses", () => {
+    it.effect("should list external IPv4 addresses, home ranges first, then any other such as a VPN", () =>
+      served(() =>
+        Effect.gen(function* () {
+          network.interfaces = {
+            lo: [v4("127.0.0.1", true), v6("::1", true)],
+            tailscale0: [v4("100.64.0.9")],
+            eth0: [v4("10.0.0.7")],
+            wlo1: [v4("192.168.0.54"), v6("fe80::1")]
+          }
+          const client = yield* makeClient
+
+          const addresses = yield* client.host.addresses()
+
+          assert.deepStrictEqual(addresses, ["192.168.0.54", "10.0.0.7", "100.64.0.9"])
+        })
+      )
+    )
+
+    it.effect("should leave out container and VM bridges", () =>
+      served(() =>
+        Effect.gen(function* () {
+          network.interfaces = {
+            docker0: [v4("172.17.0.1")],
+            "br-3f2a": [v4("172.18.0.1")],
+            virbr0: [v4("192.168.122.1")],
+            veth12: [v4("169.254.1.1")],
+            enp3s0: [v4("172.20.1.5")]
+          }
+          const client = yield* makeClient
+
+          const addresses = yield* client.host.addresses()
+
+          assert.deepStrictEqual(addresses, ["172.20.1.5"])
+        })
+      )
+    )
+
+    it.effect("should be empty with no network", () =>
+      served(() =>
+        Effect.gen(function* () {
+          network.interfaces = { lo: [v4("127.0.0.1", true)], down: undefined }
+          const client = yield* makeClient
+
+          const addresses = yield* client.host.addresses()
+
+          assert.deepStrictEqual(addresses, [])
+        })
+      )
+    )
+  })
+
+  describe("the displays routes", () => {
+    it.effect("should stream an input a Remote posts to the Display it names", () =>
+      served(() =>
+        Effect.gen(function* () {
+          const client = yield* makeClient
+          const { lines } = yield* sseLines("/api/displays/desk/inputs")
+
+          yield* client.displays.send({ params: { id: desk }, payload: { _tag: "Pressed" } })
+          const line = yield* nextData(lines)
+
+          assert.deepStrictEqual(JSON.parse(line.slice("data: ".length)), { _tag: "Pressed" })
+        })
+      )
+    )
+
+    it.effect("should answer 404 DisplayOffline to an input for a Display that is not connected", () =>
+      served(() =>
+        Effect.gen(function* () {
+          const client = yield* makeClient
+
+          const error = yield* client.displays
+            .send({ params: { id: desk }, payload: { _tag: "Pressed" } })
+            .pipe(Effect.flip)
+
+          assert.strictEqual(error._tag, "DisplayOffline")
+        })
+      )
+    )
+
+    it.effect("should stream a Display's report to a Remote following it", () =>
+      served(() =>
+        Effect.gen(function* () {
+          const client = yield* makeClient
+          yield* sseLines("/api/displays/desk/inputs")
+          yield* client.displays.report({ params: { id: desk }, payload: { screen: 1 } })
+
+          const { lines } = yield* sseLines("/api/displays/desk")
+          const line = yield* nextData(lines)
+
+          assert.deepStrictEqual(remoteMessageOf(line), {
+            _tag: "Reported",
+            report: { screen: 1 }
+          })
+        })
+      )
+    )
+
+    it.effect("should tell a Remote following a Display that is not connected that it is offline", () =>
+      served(() =>
+        Effect.gen(function* () {
+          const { lines } = yield* sseLines("/api/displays/desk")
+
+          const line = yield* nextData(lines)
+
+          assert.deepStrictEqual(remoteMessageOf(line), {
+            _tag: "Offline"
+          })
+        })
+      )
+    )
+  })
 })
 
 describe("isStopping", () => {
@@ -298,18 +430,22 @@ function serverUnderTest(frames: TestHub.Frames, source: Layer.Layer<Source>) {
     Layer.provideMerge(source),
     Layer.provideMerge(HubConfig.layerTest({ SPORTAL_VERSION: "1.2.3" }))
   )
-  return HubServer.layer.pipe(Layer.provideMerge(hub), Layer.provideMerge(NodeHttpServer.layerTest))
+  return HubServer.layer.pipe(
+    Layer.provideMerge(hub),
+    Layer.provideMerge(Displays.layer),
+    Layer.provideMerge(NodeHttpServer.layerTest)
+  )
 }
 
 /** A client of the Hub's API, pointed at the server under test. */
 const makeClient = HttpApiClient.make(SportalApi)
 
-/** Opens the live stream: its response, and a queue of its lines that are not blank, as they arrive. */
-const liveLines = Effect.fn("HubServer.test.liveLines")(function* () {
+/** Opens the server-sent event stream at `path`: its response, and a queue of its lines that are not blank, as they arrive. */
+const sseLines = Effect.fn("HubServer.test.sseLines")(function* (path: string) {
   const http = yield* HttpClient.HttpClient
   const lines = yield* Queue.unbounded<string>()
 
-  const response = yield* http.get("/api/live")
+  const response = yield* http.get(path)
   yield* response.stream.pipe(
     Stream.decodeText,
     Stream.splitLines,
@@ -323,7 +459,7 @@ const liveLines = Effect.fn("HubServer.test.liveLines")(function* () {
 
 /** Opens the live stream and takes its first message, the current slate: the lines after it. */
 const pastInitialMessages = Effect.fn("HubServer.test.pastInitialMessages")(function* () {
-  const { lines } = yield* liveLines()
+  const { lines } = yield* sseLines("/api/live")
 
   yield* Queue.take(lines)
 
@@ -333,6 +469,11 @@ const pastInitialMessages = Effect.fn("HubServer.test.pastInitialMessages")(func
 /** The live message a `data: <json>` line carries. */
 function messageOf(line: string): LiveMessage {
   return Schema.decodeSync(LiveMessageJson)(line.slice("data: ".length))
+}
+
+/** The Remote message a `data: <json>` line carries. */
+function remoteMessageOf(line: string): RemoteMessage {
+  return Schema.decodeSync(RemoteMessageJson)(line.slice("data: ".length))
 }
 
 /** The next line of `lines` that carries a live message, past any keep-alive event. */
@@ -385,4 +526,14 @@ function realSizedGuideAiring(now: DateTime.Utc) {
     },
     padding: "x".repeat(700_000)
   })
+}
+
+const desk = DisplayId.make("desk")
+
+function v4(address: string, internal = false) {
+  return { address, family: "IPv4", internal }
+}
+
+function v6(address: string, internal = false) {
+  return { address, family: "IPv6", internal }
 }

@@ -63,19 +63,20 @@ export const toggleFullScreen = runtime.fn((_: undefined, get) =>
 export const inputs = runtime.atom((get) =>
   Effect.gen(function* () {
     const shell = yield* Shell
-    const keys = Stream.map(shell.hotkeys, (hotkey) => DisplayInput.Pressed({ hotkey }))
-    const videos = Stream.map(shell.tilePressed, (game) => DisplayInput.VideoPressed({ game }))
-
-    yield* Stream.merge(keys, videos).pipe(
-      Stream.runForEach((input) =>
-        Effect.sync(() => {
-          if (DisplayInput.$is("Pressed")(input)) route(get, input.hotkey, input)
-          else get.set(display, input)
-        })
-      )
+    const keys = Stream.runForEach(shell.hotkeys, (hotkey) => Effect.sync(() => get.set(pressed, hotkey)))
+    const videos = Stream.runForEach(shell.tilePressed, (game) =>
+      Effect.sync(() => get.set(display, DisplayInput.VideoPressed({ game })))
     )
+
+    yield* Effect.all([keys, videos], { concurrency: "unbounded", discard: true })
   }).pipe(logDefect("The Display's inputs"))
 )
+
+/** A hotkey pressed anywhere, a Remote's included: routed as the shell's hotkeys are. */
+export const pressed: Atom.Writable<void, Hotkey> = Atom.writable(
+  () => undefined,
+  (ctx, hotkey: Hotkey) => route(ctx, hotkey)
+).pipe(Atom.keepAlive)
 
 /** Whether this Display can open the YouTube TV sign-in: only in the shell. */
 export const signIn: Atom.Atom<boolean> = runtime
@@ -98,13 +99,13 @@ export const openSignIn = runtime.fn((_: undefined) =>
 
 const kept = Atom.make(Display.initial).pipe(Atom.keepAlive)
 
-function route(get: Atom.FnContext, hotkey: Hotkey, pressed: DisplayInput) {
+function route(ctx: Atom.WriteContext<void>, hotkey: Hotkey) {
   Match.value(hotkey).pipe(
-    Match.tag("FullScreen", () => get.set(toggleFullScreen, undefined)),
-    Match.tag("ToggleAutopilot", () => get.set(AutopilotState.autopilot, AutopilotInput.Toggled())),
-    Match.tag("TogglePrompts", () => get.set(PromptsState.prompts, PromptInput.Toggled())),
-    Match.tag("AcceptPrompt", () => get.set(PromptsState.prompts, PromptInput.Accepted())),
-    Match.tag("DismissPrompt", () => get.set(PromptsState.prompts, PromptInput.Dismissed())),
-    Match.orElse(() => get.set(display, pressed))
+    Match.tag("FullScreen", () => ctx.set(toggleFullScreen, undefined)),
+    Match.tag("ToggleAutopilot", () => ctx.set(AutopilotState.autopilot, AutopilotInput.Toggled())),
+    Match.tag("TogglePrompts", () => ctx.set(PromptsState.prompts, PromptInput.Toggled())),
+    Match.tag("AcceptPrompt", () => ctx.set(PromptsState.prompts, PromptInput.Accepted())),
+    Match.tag("DismissPrompt", () => ctx.set(PromptsState.prompts, PromptInput.Dismissed())),
+    Match.orElse(() => ctx.set(display, DisplayInput.Pressed({ hotkey })))
   )
 }

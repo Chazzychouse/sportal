@@ -1,19 +1,19 @@
-import type { GameId } from "@sportal/domain/Game"
-import { Data, type DateTime, Option } from "effect"
-import { label, type Rank } from "../autopilot/Ranking.ts"
+import { GameId } from "@sportal/domain/Game"
+import { Option, Schema } from "effect"
+import { label, Rank } from "../autopilot/Ranking.ts"
 import type { ScreenCommand } from "../screen/Screen.ts"
 
 /**
  * A suggestion to bring `game`, on no tile, into the main tile: in `rank` (a red zone or crunch time) since `since`,
  * by way of the `target` slot, which `replaces` holds, or none when it is empty.
  */
-export class Prompt extends Data.Class<{
-  readonly game: GameId
-  readonly rank: Rank
-  readonly since: DateTime.Utc
-  readonly target: number
-  readonly replaces: Option.Option<{ readonly game: GameId; readonly rank: Rank }>
-}> {
+export class Prompt extends Schema.Class<Prompt>("sportal/Prompt")({
+  game: GameId,
+  rank: Rank,
+  since: Schema.DateTimeUtcFromString,
+  target: Schema.Int,
+  replaces: Schema.OptionFromOptionalKey(Schema.Struct({ game: GameId, rank: Rank }))
+}) {
   /** What accepting it sends: the game into the target slot, then promoted into the main tile with the sound. */
   commands(): ReadonlyArray<ScreenCommand> {
     return [

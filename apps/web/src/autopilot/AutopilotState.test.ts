@@ -96,7 +96,7 @@ describe("AutopilotState", () => {
         const registry = TestWeb.registryOf(
           Layer.mergeAll(
             Shell.layerTest({ record: () => Effect.void }),
-            HubClient.layerTest(() => Effect.void),
+            HubClient.layerTest(),
             Layer.succeed(Clock.Clock, clock)
           )
         )
@@ -123,7 +123,7 @@ describe("AutopilotState", () => {
       const registry = TestWeb.registryOf(
         Layer.mergeAll(
           Shell.layerTest({ record: () => Effect.void }),
-          HubClient.layerTest(() => Effect.void),
+          HubClient.layerTest(),
           Layer.succeed(Clock.Clock, clock)
         )
       )
@@ -150,7 +150,7 @@ describe("AutopilotState", () => {
       const registry = TestWeb.registryOf(
         Layer.mergeAll(
           Shell.layerTest({ record: () => Effect.void }),
-          HubClient.layerTest(() => Effect.void),
+          HubClient.layerTest(),
           Layer.succeed(Clock.Clock, clock)
         )
       )
@@ -364,7 +364,7 @@ function loggingRegistry() {
   const registry = TestWeb.registryOf(
     Layer.mergeAll(
       Shell.layerTest({ record: () => Effect.void }),
-      HubClient.layerTest(() => Effect.void),
+      HubClient.layerTest(),
       Logger.layer([capture])
     )
   )

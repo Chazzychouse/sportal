@@ -84,12 +84,23 @@ Provider and Source are the two words most likely to be swapped. Provider is alw
 | **Hub config** | Every setting a Hub reads from its environment, decoded once at startup; `HubConfig` in code. | settings, env |
 | **Hub mode** | What a Hub plays: the live day from its providers and sources. | profile |
 | **Live message** | One update the Hub pushes to clients on the live stream: the slate changed, each game beside its availability and its classification; `LiveMessage`, and `LiveMessageJson` its JSON form. | event, notification |
+| **Server event** | What a server-sent event stream reported to the web: it opened, it errored (it opens again: the browser retries a dropped connection, and one the browser fails for good is reopened with a backoff), or a message; `ServerEvent` in `apps/web/src/hub/ServerEvents.ts`. | |
+| **Remote message** | One update the Hub pushes to a Remote about its Display: its latest report (`Reported`, passed on unread) or `Offline`; `RemoteMessage`, and `RemoteMessageJson` its JSON form. | event |
 | **Live stream** | The Hub's server-sent events at `/api/live` that carry live messages; in the web UI, the `LiveStream.live` atom holds what they said and the connection. | event stream, socket |
 | **Connection** | Whether a client's live stream is up: connecting (never yet connected), connected, or lost (since an instant, retrying). | online, status |
 | **Hub client** | The web UI's way to the Hub's API, `HubClient` in code. It runs in the web UI's one runtime (`WebRuntime.ts`), beside the Shell. | API client, fetcher |
 | **Telemetry** | The traces, logs, and metrics the Hub exports for people to read in Grafana. | monitoring, observability stack |
 | **Display** | A device running the shell and presenting a Screen. It owns its Screen (`apps/web/src/screen/DisplayScreen.ts`), kept in its browser. Its local state (selected tile, interacting tile, pick, slate drawer, and the one open overlay) is the web UI's `Display`, held in the `DisplayState.display` atom. | screen, client, player |
-| **Overlay** | The one dialog a Display has open — the key help or the command palette — or none; `Overlay` beside `Display` in `apps/web/src/display/Display.ts`. Local to the Display. | modal, popup |
+| **Remote** | A phone's view and control of one Display, at /remote/<display id>: its prompt (Watch, Skip, with a chime), its autopilot and prompts toggles, its layout and tiles, and the slate. It sends Remote inputs and follows the Display's Remote report through the Hub; it works only while the page is open. | controller |
+| **Chime** | The Remote's short tone for a new prompt, playable only after a first tap on the page. | notification, alert |
+| **Display id** | A Display's own id, made once and kept in its browser (`sportal/display-id`); a Remote names its Display by it. `DisplayId` in `packages/api`. | display name |
+| **Displays** | The Hub's in-memory relay between each connected Display and its Remotes (`apps/hub/src/Displays.ts`): the Display's latest report and the inputs waiting for it, neither of which the Hub reads. A Display is connected while its input stream is open; when it closes, the Display and its report are forgotten. | registry, sessions |
+| **Display offline** | The Hub's answer to a report or input for a Display that is not connected: `DisplayOffline`, a 404. | |
+| **Remote report** | What a Display tells its Remotes through the Hub: its Screen, its autopilot, its prompts, and the prompt it shows; `RemoteReport` in `apps/web/src/remote/RemoteReport.ts`. Sent once its input stream opens and again on each change. | state, snapshot |
+| **Remote input** | What a Remote sends a Display: a screen command, applied as yours, or a hotkey, routed as if pressed on the Display; `RemoteInput` in `apps/web/src/remote/RemoteInput.ts`, and `RemoteInputJson` its JSON form. | command, event |
+| **Remote link** | A Display's side of its Remotes (`apps/web/src/remote/RemoteLink.ts`): its input stream at the Hub, its reports, and the inputs it applies. | |
+| **Followed** | The Display as a Remote sees it through the Hub: connecting (not heard from yet), offline, or as it last reported; `Followed` in `apps/web/src/remote/RemoteState.ts`. A report that does not decode reads as offline. | status |
+| **Overlay** | The one dialog a Display has open — the key help, the command palette, or Join Remote — or none; `Overlay` beside `Display` in `apps/web/src/display/Display.ts`. Local to the Display. | modal, popup |
 | **Shell config** | Every setting the desktop shell reads from its environment: the Hub's address; `ShellConfig` in code. | settings, env |
 | **Shell window** | The shell's one window, showing the Hub's web UI, confined to the Hub's origin; `ShellWindow` in code. | main window, BrowserWindow |
 | **Shell bridge** | The small interface the desktop shell exposes to the web UI; its IPC channel names are `ShellChannel`. | IPC, native API |
@@ -164,7 +175,6 @@ Names the design uses that no code has yet. Move a row up, into its table, in th
 
 | Term | Meaning | Not |
 | --- | --- | --- |
-| **Remote** | A client controlling a Display's Screen without presenting it. | controller |
 | **Sport** | A kind of game (football). | |
 | **Conference** | A grouping of teams within a league (SEC, AFC). | |
 | **Season** | One league year, with a **SeasonPhase**: preseason, regular, postseason. | |
@@ -176,7 +186,7 @@ Names the design uses that no code has yet. Move a row up, into its table, in th
 | **Tile delay** | Seconds that data is held back for a tile to match its video. | offset, latency |
 | **Scenario** | A game day a Hub plays offline in place of its providers and sources. Removed to be designed again ([ADR 0013](docs/adr/0013-scenarios-go.md)). | |
 | **Spoiler shield** | Hiding or delaying scores for chosen games. | |
-| **Phone push** | A prompt delivered to a phone. | notification |
+| **Phone push** | A prompt delivered to a phone's lock screen; needs HTTPS (Tailscale or the home box), so the Remote cannot do it over the home network's plain HTTP. | notification |
 | **Follow** | Your declared interest in a team, conference, league, or game. | favourite, subscription |
 | **Persistence** | What the Hub keeps between runs: none for now, added back on top of the simplified model. | storage, database |
 | **Ticket** | A bet you have placed, tracked by the betting lens (later). | bet, wager |
