@@ -35,10 +35,7 @@ export function JoinRemote(props: { open: boolean; onOpenChange: (open: boolean)
         {AsyncResult.isInitial(answer) ? (
           <p className="text-muted-foreground text-sm">Asking the Hub…</p>
         ) : AsyncResult.isFailure(answer) ? (
-          <p className="text-muted-foreground text-sm">
-            The Hub did not answer. Restart it (<code className="font-mono">pnpm dev</code>) so it runs this
-            version.
-          </p>
+          <p className="text-muted-foreground text-sm">Could not reach the Hub.</p>
         ) : shown === undefined ? (
           <p className="text-muted-foreground text-sm">
             The Hub found no home-network address. Is this machine on Wi-Fi or Ethernet?
