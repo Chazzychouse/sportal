@@ -30,6 +30,14 @@ const PatchedPayload = Schema.fromJsonString(Schema.Struct({ pl: PatchesPayload 
   })
 )
 
+/**
+ * The `pl` of an `R` too big to push: JSON text pointing to the checkpoint on ESPN's CDN that holds the topic's whole
+ * document instead.
+ */
+export const Relocated = Schema.fromJsonString(
+  Schema.Struct({ useCDN: Schema.Literal(true), edgeUrl: Schema.String })
+)
+
 const Connected = Schema.Struct({ op: Schema.Literal("C"), sid: Schema.String })
 const Subscribed = Schema.Struct({ op: Schema.Literal("S"), tc: Schema.String })
 // `pl` is the URL of the topic's whole document as of `mid`.

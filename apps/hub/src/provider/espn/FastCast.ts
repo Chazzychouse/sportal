@@ -30,7 +30,8 @@ import * as FastCastMessage from "./FastCastMessage.ts"
 /**
  * ESPN FastCast as the ESPN provider's push: one socket that subscribes to the topics it is told to follow, subscribes
  * to a topic again when told its document was lost or a while after its checkpoint fails, and opens again when it
- * closes, ends or goes quiet. Every socket text is a frame, each `H` followed by its checkpoint.
+ * closes, ends or goes quiet. Every socket text is a frame, each `H` followed by its checkpoint, except an `R` that
+ * points to a checkpoint on ESPN's CDN, which is framed as that checkpoint alone.
  */
 export class FastCast extends Context.Service<
   FastCast,
@@ -38,17 +39,18 @@ export class FastCast extends Context.Service<
     /**
      * Every socket text and checkpoint, as frames, for as long as it runs, following what `wanted` last said. On each
      * socket it subscribes to every wanted topic, then to each topic that becomes wanted, and to each whose document goes
-     * from synced back to waiting for its checkpoint. When the socket closes, ends or goes silent, it reconnects on its
-     * backoff and reads `wanted` again. It never fails or ends: once a reconnect that ends is done, or on a defect, it logs
-     * at Error (unless the Hub is stopping) that the live feed stopped, and emits nothing more.
+     * from synced back to waiting for its checkpoint: at once, or 30 s later when it lost its document less than 30 s
+     * before too. When the socket closes, ends or goes silent, it reconnects on its backoff and reads `wanted` again. It
+     * never fails or ends: once a reconnect that ends is done, or on a defect, it logs at Error (unless the Hub is
+     * stopping) that the live feed stopped, and emits nothing more.
      */
     follow(wanted: Stream.Stream<Wanted>): Stream.Stream<Frame>
   }
 >()("sportal/hub/provider/espn/FastCast") {
   /**
-   * FastCast subscribing again to a topic whose checkpoint failed after 30 s; it opens the socket again after about 1
-   * second, then twice as long each time, jittered, up to a minute, without end. `Stream.retry` resets that backoff once
-   * the socket delivers again.
+   * FastCast subscribing again after 30 s to a topic whose checkpoint failed, or that lost its document twice within
+   * that; it opens the socket again after about 1 second, then twice as long each time, jittered, up to a minute, without
+   * end. `Stream.retry` resets that backoff once the socket delivers again.
    */
   static readonly layer: Layer.Layer<FastCast, never, HttpClient.HttpClient | Socket.WebSocketConstructor> =
     Layer.effect(
@@ -96,7 +98,7 @@ export type Frame = Data.TaggedEnum<{
     readonly mid: Option.Option<number>
     readonly envelope: Option.Option<FastCastMessage.Envelope>
   }
-  /** The checkpoint an `H` pointed to, decoded: `topic`'s whole document as of `mid`. */
+  /** The checkpoint an `H`, or an `R` too big to push, pointed to, decoded: `topic`'s whole document as of `mid`. */
   Checkpoint: { readonly topic: Topic; readonly mid: number; readonly document: Schema.Json }
 }>
 export const Frame = Data.taggedEnum<Frame>()
@@ -147,8 +149,9 @@ function prefixOf(league: LeagueId): string {
 
 /**
  * Opens the socket, then subscribes as `wanted` says, returning the frames that follow, the handshake's first. A topic
- * whose checkpoint fails is subscribed to again once `refollow` has passed, if it is still wanted; one wait per topic,
- * cancelled by a later checkpoint of that topic that succeeds.
+ * whose checkpoint fails, or that loses its document within `refollow` of being subscribed to again for the last loss,
+ * is subscribed to again once `refollow` has passed, if it is still wanted; one wait per topic, cancelled by a later
+ * checkpoint of that topic that succeeds.
  */
 const connect = Effect.fnUntraced(function* (wanted: Stream.Stream<Wanted>, refollow: Duration.Input) {
   const host = yield* websocketHost
@@ -202,15 +205,31 @@ const connect = Effect.fnUntraced(function* (wanted: Stream.Stream<Wanted>, refo
       { onlyIfMissing: true }
     )
 
+  // A topic subscribed to again for a lost document, held for `refollow`: a message FastCast replays after every
+  // checkpoint, that loses the document each time, would otherwise have it subscribed to again without pause.
+  const lostLately = yield* FiberMap.make<Topic>()
+  const subscribeLost = (topic: Topic) =>
+    FiberMap.has(lostLately, topic).pipe(
+      Effect.flatMap((held) =>
+        held
+          ? resubscribeLater(topic)
+          : subscribeNow(topic).pipe(Effect.andThen(FiberMap.run(lostLately, topic, Effect.sleep(refollow))))
+      )
+    )
+
   yield* Effect.logInfo(`FastCast: connected to ${host.ip}`)
 
   // From nothing on this socket to what is wanted, then each change after.
   yield* wanted.pipe(
     Stream.runForEach((next) =>
       Ref.getAndSet(current, next).pipe(
-        Effect.flatMap((previous) =>
-          Effect.forEach(toSubscribe(previous, next), subscribeNow, { discard: true })
-        )
+        Effect.flatMap((previous) => {
+          const { added, lost } = toSubscribe(previous, next)
+          return Effect.andThen(
+            Effect.forEach(added, subscribeNow, { discard: true }),
+            Effect.forEach(lost, subscribeLost, { discard: true })
+          )
+        })
       )
     ),
     Effect.forkScoped
@@ -247,20 +266,29 @@ const connect = Effect.fnUntraced(function* (wanted: Stream.Stream<Wanted>, refo
 
 /**
  * The topics to subscribe to as what is wanted goes from `previous` to `next`: each newly wanted, and each whose
- * document went from synced back to waiting for its checkpoint.
+ * document was lost, going from synced back to waiting for its checkpoint.
  */
-function toSubscribe(previous: Wanted, next: Wanted): ReadonlyArray<Topic> {
-  return [...HashMap.entries(next)].flatMap(([topic, document]) => {
-    const had = HashMap.get(previous, topic)
-    return Option.isNone(had) || (document === "AwaitingCheckpoint" && had.value === "Synced") ? [topic] : []
-  })
+function toSubscribe(
+  previous: Wanted,
+  next: Wanted
+): { readonly added: ReadonlyArray<Topic>; readonly lost: ReadonlyArray<Topic> } {
+  const entries = [...HashMap.entries(next)]
+  return {
+    added: entries.flatMap(([topic]) => (HashMap.has(previous, topic) ? [] : [topic])),
+    lost: entries.flatMap(([topic, document]) =>
+      document === "AwaitingCheckpoint" && Option.contains(HashMap.get(previous, topic), "Synced")
+        ? [topic]
+        : []
+    )
+  }
 }
 
 /**
  * A socket text, read once as `envelope`, as its frame, an `H`'s followed by its checkpoint once it loads and decodes,
- * with that checkpoint's outcome: none unless an `H` names a topic, then whether its checkpoint was unread. An `H` whose
- * topic has no name FastCast reads loads nothing. It subscribes to nothing and logs no failure: its caller applies the
- * outcome in the texts' order.
+ * with that checkpoint's outcome: none unless an `H` names a topic, then whether its checkpoint was unread. An `R` too
+ * big to push is framed only as the checkpoint it points to, at its own mid, or as nothing when that is unread. An `H`
+ * or `R` whose topic has no name FastCast reads loads nothing. It subscribes to nothing and logs no failure: its caller
+ * applies the outcome in the texts' order.
  */
 const framed = Effect.fnUntraced(function* (
   text: string,
@@ -284,21 +312,32 @@ const framed = Effect.fnUntraced(function* (
     yield* Effect.logDebug("FastCast: framed a text of an unknown op", text)
     return { frames: [frame], checkpoint: Option.none() }
   }
-  if (message.op !== "H" || Option.isNone(topic)) return { frames: [frame], checkpoint: Option.none() }
+  const pointed = pointedTo(message)
+  if (Option.isNone(pointed) || Option.isNone(topic)) return { frames: [frame], checkpoint: Option.none() }
 
-  const loaded = yield* checkpoint(topic.value, message.pl).pipe(Effect.result)
+  const told = message.op === "H" ? [frame] : []
+  const loaded = yield* checkpoint(topic.value, pointed.value.url).pipe(Effect.result)
   if (Result.isSuccess(loaded)) {
-    const whole = Frame.Checkpoint({ topic: topic.value, mid: message.mid, document: loaded.success })
+    const whole = Frame.Checkpoint({ topic: topic.value, mid: pointed.value.mid, document: loaded.success })
     return {
-      frames: [frame, whole],
+      frames: [...told, whole],
       checkpoint: Option.some({ topic: topic.value, unread: Option.none<CheckpointUnread>() })
     }
   }
   return {
-    frames: [frame],
+    frames: told,
     checkpoint: Option.some({ topic: topic.value, unread: Option.some(loaded.failure) })
   }
 })
+
+/** The checkpoint a message points to, and the mid it holds the document as of: an `H`'s, or an `R`'s too big to push. */
+function pointedTo(
+  message: typeof FastCastMessage.Framed.Type
+): Option.Option<{ readonly url: string; readonly mid: number }> {
+  if (message.op === "H") return Option.some({ url: message.pl, mid: message.mid })
+  if (message.op !== "R") return Option.none()
+  return Option.map(decodeRelocated(message.pl), ({ edgeUrl }) => ({ url: edgeUrl, mid: message.mid }))
+}
 
 /** The document of the checkpoint at `url`, decoded as `topic`'s checkpoint. */
 function checkpoint(topic: Topic, url: string) {
@@ -322,6 +361,8 @@ const checkpointTimeout = "20 seconds"
 const decodeEnvelope = Schema.decodeUnknownOption(Schema.fromJsonString(FastCastMessage.Envelope))
 
 const decodeFramed = Schema.decodeUnknownOption(FastCastMessage.Framed)
+
+const decodeRelocated = Schema.decodeUnknownOption(FastCastMessage.Relocated)
 
 // FastCast sends `B` itself after 10 s without another frame (it answers a client's `B` with an error, so the client
 // never sends one); live, a subscribed socket went at most 20 s between frames.

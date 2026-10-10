@@ -204,6 +204,23 @@ describe("FastCast", () => {
         })
       })
     )
+
+    it.effect(
+      "should frame an R that points to a checkpoint on ESPN's CDN as that checkpoint, at the R's mid",
+      () =>
+        Effect.gen(function* () {
+          const server = TestHub.fakeServer()
+          const { frames } = yield* TestHub.nflFrames(server)
+          yield* frames.until(atLeast(2))
+
+          yield* Effect.sync(() => server.send(relocatedMessage(8, 7)))
+          const received = yield* frames.until(atLeast(3))
+
+          assert.deepStrictEqual(received.slice(2).map(seen), [
+            { tag: "Checkpoint", tc: TestHub.mainTc, mid: 8, document: TestHub.checkpointDocument }
+          ])
+        })
+    )
   })
 
   describe("wanted topics", () => {
@@ -290,6 +307,32 @@ describe("FastCast", () => {
               { op: "S", sid: "sid-1", tc: TestHub.mainTc }
             ]
           )
+        })
+    )
+
+    it.effect("should not follow a topic again within 30 s of the last time it lost its document", () =>
+      Effect.gen(function* () {
+        const server = TestHub.fakeServer()
+        const following = yield* TestHub.nflFrames(server)
+        yield* lostTwice(server, following)
+
+        yield* TestClock.adjust("29 seconds")
+
+        assert.lengthOf(subscriptionsSent(server), 2)
+      })
+    )
+
+    it.effect(
+      "should follow a topic that lost its document twice within 30 s again 30 s after the first",
+      () =>
+        Effect.gen(function* () {
+          const server = TestHub.fakeServer()
+          const following = yield* TestHub.nflFrames(server)
+          yield* lostTwice(server, following)
+
+          yield* TestClock.adjust("30 seconds")
+
+          yield* server.sent.until(TestHub.subscribed(TestHub.mainTc, 3))
         })
     )
 
@@ -598,20 +641,20 @@ describe("FastCast", () => {
     )
 
     it.effect(
-      "should subscribe at once to a topic whose document is lost while its re-subscribe waits, and not again when the wait ends",
+      "should subscribe only once, when its wait ends, to a topic whose document is lost again while its re-subscribe waits",
       () =>
         Effect.gen(function* () {
           const server = TestHub.fakeServer()
           const { want } = yield* dueToBeFollowedAgain(server)
 
           yield* want([TestHub.main, "AwaitingCheckpoint"])
-          yield* server.sent.until(TestHub.subscribed(TestHub.mainTc, 3))
           yield* TestClock.adjust("30 seconds")
+          yield* server.sent.until(TestHub.subscribed(TestHub.mainTc, 3))
 
           assert.lengthOf(
             server.sent.all().filter((frame) => frame.op === "S"),
             3,
-            "the first gap's S, the second gap's at once, and none when the wait ends"
+            "the first S, the first loss's at once, and one when the wait ends"
           )
         })
     )
@@ -748,6 +791,29 @@ function dueToBeFollowedAgain(server: ReturnType<typeof TestHub.fakeServer>) {
   })
 }
 
+/**
+ * Has the game topic synced at 7 lose its document, so it is subscribed to again at once, then sync at 20 and lose
+ * it again straight away, as a message FastCast replays after each checkpoint would make it.
+ */
+function lostTwice(
+  server: ReturnType<typeof TestHub.fakeServer>,
+  { frames, want }: Effect.Success<ReturnType<typeof TestHub.nflFrames>>
+) {
+  return Effect.gen(function* () {
+    yield* frames.until(atLeast(2))
+    for (const [mid, subscriptions] of [
+      [7, 2],
+      [20, 2]
+    ] as const) {
+      yield* Effect.sync(() => server.send(TestHub.checkpointMessage(mid)))
+      yield* frames.until(wholeAt(mid))
+      yield* want([TestHub.main, "Synced"])
+      yield* want([TestHub.main, "AwaitingCheckpoint"])
+      yield* server.sent.until(TestHub.subscribed(TestHub.mainTc, subscriptions))
+    }
+  })
+}
+
 /** Every subscription the client sent. */
 function subscriptionsSent(server: ReturnType<typeof TestHub.fakeServer>) {
   return server.sent.all().filter((frame) => frame.op === "S")
@@ -792,6 +858,20 @@ function garbledCheckpoint(mid: number) {
 
 function missingCheckpoint(mid: number) {
   return { op: "H", tc: TestHub.mainTc, mid, pl: "https://checkpoint.test/missing" }
+}
+
+/** An `R` at `mid` too big to push, pointing instead to the checkpoint at `checkpointMid` on ESPN's CDN. */
+function relocatedMessage(mid: number, checkpointMid: number) {
+  return {
+    op: "R",
+    tc: TestHub.mainTc,
+    mid,
+    pl: JSON.stringify({
+      useCDN: true,
+      eventId: String(checkpointMid),
+      edgeUrl: `https://checkpoint.test/${checkpointMid}`
+    })
+  }
 }
 
 /** A `P` at `mid` that patches nothing. */
