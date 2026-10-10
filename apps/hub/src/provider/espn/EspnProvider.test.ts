@@ -38,569 +38,580 @@ const nflPregame = TestEspn.recordedScoreboard("nfl-scoreboard-pregame")
 const nflLive = TestEspn.recordedScoreboard("nfl-scoreboard-2026-10-04T1800Z")
 
 describe("EspnProvider", () => {
-  it.effect("should take a poll answered with a non-2xx as a failed poll", () =>
-    Effect.gen(function* () {
-      const said = yield* polledOnce(
-        answering(() => Effect.succeed(new Response(fbsLive, { status: 503 }))),
-        { leagues: "fbs", frames: 1 }
-      )
-
-      assert.deepStrictEqual(said, [[]])
-    })
-  )
-
-  it.effect("should take a poll whose scoreboard does not decode as a failed poll", () =>
-    Effect.gen(function* () {
-      const said = yield* polledOnce(
-        answering(() => Effect.succeed(new Response("not json"))),
-        { leagues: "fbs", frames: 1 }
-      )
-
-      assert.deepStrictEqual(said, [[]])
-    })
-  )
-})
-
-describe("EspnProvider.deliveries", () => {
-  it.effect("should poll every 10 seconds while a game is live", () =>
-    Effect.gen(function* () {
-      const live = scoreboardOf([{ state: "in", period: 2 }])
-
-      const polled = yield* polledOver("10 seconds", { fbs: live })
-
-      assert.deepStrictEqual(polled.fbs, [0, 10_000])
-    })
-  )
-
-  it.effect("should poll every 10 seconds while the only game is delayed in the second quarter", () =>
-    Effect.gen(function* () {
-      const delayed = scoreboardOf([{ state: "in", name: "STATUS_DELAYED", period: 2 }])
-
-      const polled = yield* polledOver("10 seconds", { fbs: delayed })
-
-      assert.deepStrictEqual(polled.fbs, [0, 10_000])
-    })
-  )
-
-  it.effect("should poll every minute within 30 minutes of a kickoff", () =>
-    Effect.gen(function* () {
-      const soon = scoreboardOf([{ state: "pre", period: 0, kickoff: "2026-10-03T12:20Z" }])
-
-      const polled = yield* polledOver("1 minute", { fbs: soon })
-
-      assert.deepStrictEqual(polled.fbs, [0, 60_000])
-    })
-  )
-
-  it.effect("should poll every minute when a game delayed before kickoff is within 30 minutes", () =>
-    Effect.gen(function* () {
-      const delayed = scoreboardOf([
-        { state: "pre", name: "STATUS_DELAYED", period: 0, kickoff: "2026-10-03T12:20Z" }
-      ])
-
-      const polled = yield* polledOver("1 minute", { fbs: delayed })
-
-      assert.deepStrictEqual(polled.fbs, [0, 60_000])
-    })
-  )
-
-  it.effect("should poll every 15 minutes otherwise", () =>
-    Effect.gen(function* () {
-      const later = scoreboardOf([{ state: "pre", period: 0, kickoff: "2026-10-03T13:00Z" }])
-
-      const polled = yield* polledOver("15 minutes", { fbs: later })
-
-      assert.deepStrictEqual(polled.fbs, [0, 900_000])
-    })
-  )
-
-  it.effect(
-    "should poll every 15 minutes when a game delayed before kickoff is more than 30 minutes away",
-    () =>
+  describe("polling", () => {
+    it.effect("should take a poll answered with a non-2xx as a failed poll", () =>
       Effect.gen(function* () {
-        const delayed = scoreboardOf([
-          { state: "pre", name: "STATUS_DELAYED", period: 0, kickoff: "2026-10-03T13:00Z" }
-        ])
+        const said = yield* polledOnce(
+          answering(() => Effect.succeed(new Response(fbsLive, { status: 503 }))),
+          { leagues: "fbs", frames: 1 }
+        )
 
-        const polled = yield* polledOver("15 minutes", { fbs: delayed })
-
-        assert.deepStrictEqual(polled.fbs, [0, 900_000])
+        assert.deepStrictEqual(said, [[]])
       })
-  )
+    )
 
-  it.effect("should poll again within 30 seconds after a league fails", () =>
-    Effect.gen(function* () {
-      const polled = yield* polledOver("30 seconds", { fbs: down })
+    it.effect("should take a poll whose scoreboard does not decode as a failed poll", () =>
+      Effect.gen(function* () {
+        const said = yield* polledOnce(
+          answering(() => Effect.succeed(new Response("not json"))),
+          { leagues: "fbs", frames: 1 }
+        )
 
-      assert.deepStrictEqual(polled.fbs, [0, 30_000])
-    })
-  )
+        assert.deepStrictEqual(said, [[]])
+      })
+    )
 
-  it.effect("should poll a league with a live game every 10 seconds while the other league fails", () =>
-    Effect.gen(function* () {
-      const live = scoreboardOf([{ state: "in", period: 2 }])
-
-      const polled = yield* polledOver(["10 seconds", "10 seconds", "10 seconds"], { nfl: live, fbs: down })
-
-      assert.deepStrictEqual(polled.nfl, [0, 10_000, 20_000, 30_000])
-    })
-  )
-
-  it.effect("should poll a failing league again within 30 seconds while the other has a live game", () =>
-    Effect.gen(function* () {
-      const live = scoreboardOf([{ state: "in", period: 2 }])
-
-      const polled = yield* polledOver(["10 seconds", "10 seconds", "10 seconds"], { nfl: live, fbs: down })
-
-      assert.deepStrictEqual(polled.fbs, [0, 30_000])
-    })
-  )
-
-  it.effect(
-    "should poll a league with no live game every 15 minutes while the other league's game is live",
-    () =>
+    it.effect("should poll every 10 seconds while a game is live", () =>
       Effect.gen(function* () {
         const live = scoreboardOf([{ state: "in", period: 2 }])
-        const later = scoreboardOf([{ state: "pre", period: 0, kickoff: "2026-10-03T20:00Z" }])
 
-        const polled = yield* polledOver(["10 seconds", "15 minutes"], { nfl: live, fbs: later })
+        const polled = yield* polledOver("10 seconds", { fbs: live })
+
+        assert.deepStrictEqual(polled.fbs, [0, 10_000])
+      })
+    )
+
+    it.effect("should poll every 10 seconds while the only game is delayed in the second quarter", () =>
+      Effect.gen(function* () {
+        const delayed = scoreboardOf([{ state: "in", name: "STATUS_DELAYED", period: 2 }])
+
+        const polled = yield* polledOver("10 seconds", { fbs: delayed })
+
+        assert.deepStrictEqual(polled.fbs, [0, 10_000])
+      })
+    )
+
+    it.effect("should poll every minute within 30 minutes of a kickoff", () =>
+      Effect.gen(function* () {
+        const soon = scoreboardOf([{ state: "pre", period: 0, kickoff: "2026-10-03T12:20Z" }])
+
+        const polled = yield* polledOver("1 minute", { fbs: soon })
+
+        assert.deepStrictEqual(polled.fbs, [0, 60_000])
+      })
+    )
+
+    it.effect("should poll every minute when a game delayed before kickoff is within 30 minutes", () =>
+      Effect.gen(function* () {
+        const delayed = scoreboardOf([
+          { state: "pre", name: "STATUS_DELAYED", period: 0, kickoff: "2026-10-03T12:20Z" }
+        ])
+
+        const polled = yield* polledOver("1 minute", { fbs: delayed })
+
+        assert.deepStrictEqual(polled.fbs, [0, 60_000])
+      })
+    )
+
+    it.effect("should poll every 15 minutes otherwise", () =>
+      Effect.gen(function* () {
+        const later = scoreboardOf([{ state: "pre", period: 0, kickoff: "2026-10-03T13:00Z" }])
+
+        const polled = yield* polledOver("15 minutes", { fbs: later })
 
         assert.deepStrictEqual(polled.fbs, [0, 900_000])
       })
-  )
+    )
 
-  it.effect("should poll every 10 seconds after a league fails during its own live game", () =>
-    Effect.gen(function* () {
-      const live = scoreboardOf([{ state: "in", period: 2 }])
+    it.effect(
+      "should poll every 15 minutes when a game delayed before kickoff is more than 30 minutes away",
+      () =>
+        Effect.gen(function* () {
+          const delayed = scoreboardOf([
+            { state: "pre", name: "STATUS_DELAYED", period: 0, kickoff: "2026-10-03T13:00Z" }
+          ])
 
-      const polled = yield* polledOver(["10 seconds", "10 seconds"], { fbs: [live, down] })
+          const polled = yield* polledOver("15 minutes", { fbs: delayed })
 
-      assert.deepStrictEqual(polled.fbs, [0, 10_000, 20_000])
+          assert.deepStrictEqual(polled.fbs, [0, 900_000])
+        })
+    )
+
+    it.effect("should poll again within 30 seconds after a league fails", () =>
+      Effect.gen(function* () {
+        const polled = yield* polledOver("30 seconds", { fbs: down })
+
+        assert.deepStrictEqual(polled.fbs, [0, 30_000])
+      })
+    )
+
+    it.effect("should poll a league with a live game every 10 seconds while the other league fails", () =>
+      Effect.gen(function* () {
+        const live = scoreboardOf([{ state: "in", period: 2 }])
+
+        const polled = yield* polledOver(["10 seconds", "10 seconds", "10 seconds"], { nfl: live, fbs: down })
+
+        assert.deepStrictEqual(polled.nfl, [0, 10_000, 20_000, 30_000])
+      })
+    )
+
+    it.effect("should poll a failing league again within 30 seconds while the other has a live game", () =>
+      Effect.gen(function* () {
+        const live = scoreboardOf([{ state: "in", period: 2 }])
+
+        const polled = yield* polledOver(["10 seconds", "10 seconds", "10 seconds"], { nfl: live, fbs: down })
+
+        assert.deepStrictEqual(polled.fbs, [0, 30_000])
+      })
+    )
+
+    it.effect(
+      "should poll a league with no live game every 15 minutes while the other league's game is live",
+      () =>
+        Effect.gen(function* () {
+          const live = scoreboardOf([{ state: "in", period: 2 }])
+          const later = scoreboardOf([{ state: "pre", period: 0, kickoff: "2026-10-03T20:00Z" }])
+
+          const polled = yield* polledOver(["10 seconds", "15 minutes"], { nfl: live, fbs: later })
+
+          assert.deepStrictEqual(polled.fbs, [0, 900_000])
+        })
+    )
+
+    it.effect("should poll every 10 seconds after a league fails during its own live game", () =>
+      Effect.gen(function* () {
+        const live = scoreboardOf([{ state: "in", period: 2 }])
+
+        const polled = yield* polledOver(["10 seconds", "10 seconds"], { fbs: [live, down] })
+
+        assert.deepStrictEqual(polled.fbs, [0, 10_000, 20_000])
+      })
+    )
+
+    it.effect("should poll every 10 seconds after its own live game's scoreboard does not decode", () =>
+      Effect.gen(function* () {
+        const live = scoreboardOf([{ state: "in", period: 2 }])
+
+        const polled = yield* polledOver(["10 seconds", "10 seconds"], { fbs: [live, "not json"] })
+
+        assert.deepStrictEqual(polled.fbs, [0, 10_000, 20_000])
+      })
+    )
+
+    it.effect("should poll again within 30 seconds after a scoreboard that does not decode", () =>
+      Effect.gen(function* () {
+        const polled = yield* polledOver("30 seconds", { fbs: "not json" })
+
+        assert.deepStrictEqual(polled.fbs, [0, 30_000])
+      })
+    )
+
+    it.effect("should warn of a league that fails, annotated with its league", () => {
+      const { logs, layer } = recordingLogs()
+      return Effect.gen(function* () {
+        yield* polledOnce(
+          answering(() => Effect.fail(new Cause.UnknownError("ECONNREFUSED"))),
+          { leagues: "fbs", frames: 1 }
+        )
+
+        const warned = logs.filter(
+          ({ level, message }) =>
+            level === "Warn" &&
+            message.includes(
+              "EspnProvider: a poll failed; keeping the last good listing for this league, if any"
+            )
+        )
+        assert.lengthOf(warned, 1)
+        assert.strictEqual(warned[0]?.annotations.league, "fbs")
+      }).pipe(Effect.provide(layer))
     })
-  )
 
-  it.effect("should poll every 10 seconds after its own live game's scoreboard does not decode", () =>
-    Effect.gen(function* () {
-      const live = scoreboardOf([{ state: "in", period: 2 }])
+    it.effect("should warn of a scoreboard that does not decode, annotated with its league", () => {
+      const { logs, layer } = recordingLogs()
+      return Effect.gen(function* () {
+        yield* polledOnce(
+          answering(() => Effect.succeed(new Response("not json"))),
+          { leagues: "fbs", frames: 1 }
+        )
 
-      const polled = yield* polledOver(["10 seconds", "10 seconds"], { fbs: [live, "not json"] })
-
-      assert.deepStrictEqual(polled.fbs, [0, 10_000, 20_000])
+        const warned = logs.filter(({ level }) => level === "Warn")
+        assert.lengthOf(warned, 1)
+        assert.strictEqual(warned[0]?.annotations.league, "fbs")
+      }).pipe(Effect.provide(layer))
     })
-  )
 
-  it.effect("should poll again within 30 seconds after a scoreboard that does not decode", () =>
-    Effect.gen(function* () {
-      const polled = yield* polledOver("30 seconds", { fbs: "not json" })
+    it.effect("should poll every 15 minutes once a failed league lists no games", () =>
+      Effect.gen(function* () {
+        const noGames = JSON.stringify({ events: [] })
 
-      assert.deepStrictEqual(polled.fbs, [0, 30_000])
-    })
-  )
+        const polled = yield* polledOver(["30 seconds", "15 minutes"], { fbs: [down, noGames] })
 
-  it.effect("should warn of a league that fails, annotated with its league", () => {
-    const { logs, layer } = recordingLogs()
-    return Effect.gen(function* () {
-      yield* polledOnce(
-        answering(() => Effect.fail(new Cause.UnknownError("ECONNREFUSED"))),
-        { leagues: "fbs", frames: 1 }
-      )
+        assert.deepStrictEqual(polled.fbs, [0, 30_000, 930_000])
+      })
+    )
 
-      const warned = logs.filter(
-        ({ level, message }) =>
-          level === "Warn" &&
-          message.includes(
-            "EspnProvider: a poll failed; keeping the last good listing for this league, if any"
+    it.effect("should deliver no deliveries for a league that fails", () =>
+      Effect.gen(function* () {
+        const nflDown = HttpClient.make((request) =>
+          request.url.includes("/nfl/")
+            ? transportFailure(request)
+            : Effect.succeed(answered(request, fbsLive))
+        )
+
+        const said = yield* polledOnce(nflDown, { frames: 2 })
+
+        assert.deepStrictEqual(
+          said.flatMap((deliveries) =>
+            deliveries.filter(Delivery.$is("Listing")).map(({ league }) => league)
+          ),
+          ["fbs"]
+        )
+        assert.deepStrictEqual(
+          said.filter((deliveries) => !deliveries.some(Delivery.$is("Listing"))),
+          [[]],
+          "the failed poll's frame says nothing"
+        )
+      })
+    )
+
+    it.effect.each(["request", "body"] as const)(
+      "should retry a poll after its %s stalls without stopping the other league",
+      (phase) =>
+        Effect.gen(function* () {
+          const nflRequests = yield* Ref.make<ReadonlyArray<number>>([])
+          const fbsRequests = yield* Ref.make(0)
+          const client = HttpClient.make((request) =>
+            Effect.gen(function* () {
+              if (!request.url.includes("/nfl/")) {
+                yield* Ref.update(fbsRequests, (count) => count + 1)
+                return answered(request, fbsLive)
+              }
+              const at = yield* Clock.currentTimeMillis
+              yield* Ref.update(nflRequests, (all) => [...all, at])
+              if (phase === "request") return yield* Effect.never
+              return HttpClientResponse.fromWeb(request, new Response(new ReadableStream<Uint8Array>()))
+            })
           )
-      )
-      assert.lengthOf(warned, 1)
-      assert.strictEqual(warned[0]?.annotations.league, "fbs")
-    }).pipe(Effect.provide(layer))
+          const { logs, layer } = recordingLogs()
+
+          yield* Effect.gen(function* () {
+            const provider = yield* Provider
+            yield* provider.deliveries.pipe(Stream.runDrain, Effect.forkScoped({ startImmediately: true }))
+            yield* TestClock.adjust(0)
+            yield* settled
+            yield* TestClock.adjust("20 seconds")
+            yield* settled
+            yield* TestClock.adjust("30 seconds")
+            yield* settled
+          }).pipe(Effect.provide(espnOver(client).pipe(Layer.provideMerge(layer))), Effect.scoped)
+
+          const nfl = yield* Ref.get(nflRequests)
+          const fbs = yield* Ref.get(fbsRequests)
+          assert.deepStrictEqual(nfl, [0, 50_000])
+          assert.isAtLeast(fbs, 2)
+          assert.isTrue(logs.some((entry) => entry.level === "Warn"))
+        })
+    )
   })
 
-  it.effect("should warn of a scoreboard that does not decode, annotated with its league", () => {
-    const { logs, layer } = recordingLogs()
-    return Effect.gen(function* () {
-      yield* polledOnce(
-        answering(() => Effect.succeed(new Response("not json"))),
-        { leagues: "fbs", frames: 1 }
-      )
-
-      const warned = logs.filter(({ level }) => level === "Warn")
-      assert.lengthOf(warned, 1)
-      assert.strictEqual(warned[0]?.annotations.league, "fbs")
-    }).pipe(Effect.provide(layer))
-  })
-
-  it.effect("should poll every 15 minutes once a failed league lists no games", () =>
-    Effect.gen(function* () {
-      const noGames = JSON.stringify({ events: [] })
-
-      const polled = yield* polledOver(["30 seconds", "15 minutes"], { fbs: [down, noGames] })
-
-      assert.deepStrictEqual(polled.fbs, [0, 30_000, 930_000])
-    })
-  )
-
-  it.effect("should deliver no deliveries for a league that fails", () =>
-    Effect.gen(function* () {
-      const nflDown = HttpClient.make((request) =>
-        request.url.includes("/nfl/") ? transportFailure(request) : Effect.succeed(answered(request, fbsLive))
-      )
-
-      const said = yield* polledOnce(nflDown, { frames: 2 })
-
-      assert.deepStrictEqual(
-        said.flatMap((deliveries) => deliveries.filter(Delivery.$is("Listing")).map(({ league }) => league)),
-        ["fbs"]
-      )
-      assert.deepStrictEqual(
-        said.filter((deliveries) => !deliveries.some(Delivery.$is("Listing"))),
-        [[]],
-        "the failed poll's frame says nothing"
-      )
-    })
-  )
-
-  it.effect("should give each run of its deliveries every frame", () =>
-    Effect.gen(function* () {
-      const first = yield* listedBy("nfl")
-      const second = yield* listedBy("nfl")
-
-      assert.strictEqual(first.length, 16)
-      assert.strictEqual(second.length, 16)
-    }).pipe(Effect.provide(recordedEspn(fbsLive)))
-  )
-
-  it.effect("should deliver FastCast's frames beside its polls", () =>
-    Effect.gen(function* () {
-      const pushed = Frame.Pushed({
-        topic: Option.some(new Topic({ league: "nfl", game: GameId.make("401872971") })),
-        mid: Option.none(),
-        envelope: decodeEnvelope("{}")
-      })
-      const espn = espnOver(recordedHttp(fbsLive), { leagues: "fbs", pushing: Stream.make(pushed) })
-
-      const said = yield* Provider.use((provider) =>
-        provider.deliveries.pipe(Stream.take(2), Stream.runCollect)
-      ).pipe(Effect.provide(espn))
-
-      assert.deepStrictEqual(
-        said.map((deliveries) => deliveries.map(({ _tag }) => _tag)).toSorted((a, b) => a.length - b.length),
-        [[], ["Listing"]],
-        "the push, which says nothing, beside the poll's listing"
-      )
-    })
-  )
-
-  it.effect.each(["request", "body"] as const)(
-    "should retry a poll after its %s stalls without stopping the other league",
-    (phase) =>
+  describe("merged deliveries", () => {
+    it.effect("should give each run of its deliveries every frame", () =>
       Effect.gen(function* () {
-        const nflRequests = yield* Ref.make<ReadonlyArray<number>>([])
-        const fbsRequests = yield* Ref.make(0)
-        const client = HttpClient.make((request) =>
-          Effect.gen(function* () {
-            if (!request.url.includes("/nfl/")) {
-              yield* Ref.update(fbsRequests, (count) => count + 1)
-              return answered(request, fbsLive)
-            }
-            const at = yield* Clock.currentTimeMillis
-            yield* Ref.update(nflRequests, (all) => [...all, at])
-            if (phase === "request") return yield* Effect.never
-            return HttpClientResponse.fromWeb(request, new Response(new ReadableStream<Uint8Array>()))
-          })
-        )
-        const { logs, layer } = recordingLogs()
+        const first = yield* listedBy("nfl")
+        const second = yield* listedBy("nfl")
 
-        yield* Effect.gen(function* () {
-          const provider = yield* Provider
-          yield* provider.deliveries.pipe(Stream.runDrain, Effect.forkScoped({ startImmediately: true }))
-          yield* TestClock.adjust(0)
-          yield* settled
-          yield* TestClock.adjust("20 seconds")
-          yield* settled
-          yield* TestClock.adjust("30 seconds")
-          yield* settled
-        }).pipe(Effect.provide(espnOver(client).pipe(Layer.provideMerge(layer))), Effect.scoped)
+        assert.strictEqual(first.length, 16)
+        assert.strictEqual(second.length, 16)
+      }).pipe(Effect.provide(recordedEspn(fbsLive)))
+    )
 
-        const nfl = yield* Ref.get(nflRequests)
-        const fbs = yield* Ref.get(fbsRequests)
-        assert.deepStrictEqual(nfl, [0, 50_000])
-        assert.isAtLeast(fbs, 2)
-        assert.isTrue(logs.some((entry) => entry.level === "Warn"))
-      })
-  )
-
-  it.effect("should deliver a push that arrives during a slow poll before the poll's frame", () =>
-    Effect.gen(function* () {
-      const slow = HttpClient.make((request) =>
-        Effect.sleep("5 seconds").pipe(Effect.as(answered(request, nflPregame)))
-      )
-      // A heartbeat: a push that says nothing, so its frame is an empty array of deliveries.
-      const heartbeat = Frame.Pushed({
-        topic: Option.none(),
-        mid: Option.none(),
-        envelope: decodeEnvelope(JSON.stringify({ op: "B" }))
-      })
-      const pushing = Stream.fromEffect(Effect.as(Effect.sleep("1 second"), heartbeat))
-
-      const frames = yield* Effect.gen(function* () {
-        const provider = yield* Provider
-        const taken = yield* provider.deliveries.pipe(Stream.take(2), Stream.runCollect, Effect.forkScoped)
-        yield* settled
-        yield* TestClock.adjust("5 seconds")
-        return yield* Fiber.join(taken)
-      }).pipe(Effect.provide(espnOver(slow, { leagues: "nfl", pushing })), Effect.scoped)
-
-      assert.deepStrictEqual(
-        frames.map((deliveries) => deliveries.map(({ _tag }) => _tag)),
-        [[], ["Listing"]]
-      )
-    })
-  )
-
-  it.effect("should deliver a push taken between two leagues' polls after the first league's listing", () =>
-    Effect.gen(function* () {
-      const live = scoreboardOf([{ state: "in", period: 2 }])
-      const checkpoint = checkpointFrame(new Topic({ league: "nfl", game: GameId.make("401872971") }))
-      const fbsSlow = HttpClient.make((request) =>
-        request.url.includes("/nfl/")
-          ? Effect.succeed(answered(request, live))
-          : Effect.sleep("10 seconds").pipe(Effect.as(answered(request, fbsLive)))
-      )
-      const pushedAt5s = Stream.fromEffect(Effect.sleep("5 seconds")).pipe(Stream.as(checkpoint))
-      const espn = espnOver(fbsSlow, { pushing: pushedAt5s })
-
-      const said = yield* Effect.gen(function* () {
-        const provider = yield* Provider
-        const frames = yield* Queue.unbounded<ReadonlyArray<Delivery>>()
-        yield* provider.deliveries.pipe(
-          Stream.runForEach((deliveries) => Queue.offer(frames, deliveries)),
-          Effect.forkScoped({ startImmediately: true })
-        )
-        yield* settled
-        yield* TestClock.adjust("10 seconds")
-        return yield* Queue.takeBetween(frames, 3, 3)
-      }).pipe(Effect.provide(espn), Effect.scoped)
-
-      assert.deepStrictEqual(
-        said.map((deliveries) =>
-          deliveries.map((one) => (Delivery.$is("Listing")(one) ? `Listing ${one.league}` : one._tag))
-        ),
-        [["Listing nfl"], ["Plays"], ["Listing fbs"]]
-      )
-    })
-  )
-
-  it.effect("should tell FastCast to follow no topic before any game is listed", () =>
-    Effect.gen(function* () {
-      const unanswered = HttpClient.make(() => Effect.never)
-
-      const told = yield* toldOver(unanswered, "fbs", [])
-
-      const [first] = told
-      assert.deepStrictEqual(first === undefined ? [] : [...HashMap.entries(first)], [])
-    })
-  )
-
-  it.effect("should want a game's topic once its kickoff is 30 minutes away, with no frame", () =>
-    Effect.gen(function* () {
-      yield* TestClock.setTime(DateTime.makeUnsafe("2026-10-03T12:00:00Z").epochMilliseconds)
-      const later = scoreboardOf([{ state: "pre", period: 0, kickoff: "2026-10-03T12:31Z" }])
-      const [event] = decodeEventIds(later).events
-      const game = new Topic({ league: "fbs", game: event.id })
-      const answering = HttpClient.make((request) =>
-        Effect.succeed(HttpClientResponse.fromWeb(request, new Response(later)))
-      )
-
-      const told = yield* toldOver(answering, "fbs", ["1 minute"])
-
-      assert.isFalse(
-        told.slice(0, -1).some((one) => HashMap.has(one, game)),
-        "31 minutes out, it is not followed"
-      )
-      assert.isTrue(Option.exists(Arr.last(told), (one) => HashMap.has(one, game)))
-    })
-  )
-
-  it.effect("should want a listed game's topic while it is live", () =>
-    Effect.gen(function* () {
-      const told = yield* toldOver(recordedNfl, "nfl", [])
-
-      assert.isTrue(Option.exists(Arr.last(told), (one) => HashMap.has(one, neAtBuf)))
-    })
-  )
-
-  it.effect("should want a listed game's topic from 30 minutes before its kickoff", () =>
-    Effect.gen(function* () {
-      yield* TestClock.setTime(DateTime.makeUnsafe("2026-10-04T19:35:00Z").epochMilliseconds)
-
-      const told = yield* toldOver(recordedNfl, "nfl", [])
-
-      assert.isTrue(Option.exists(Arr.last(told), (one) => HashMap.has(one, gameTopic("401872974"))))
-    })
-  )
-
-  it.effect("should not want a listed game's topic a second before 30 minutes before its kickoff", () =>
-    Effect.gen(function* () {
-      yield* TestClock.setTime(DateTime.makeUnsafe("2026-10-04T19:34:59Z").epochMilliseconds)
-
-      const told = yield* toldOver(recordedNfl, "nfl", [])
-
-      assert.isFalse(told.some((one) => HashMap.has(one, gameTopic("401872974"))))
-    })
-  )
-
-  it.effect("should not want a listed game's topic once it is final", () =>
-    Effect.gen(function* () {
-      const live = scoreboardOf([{ state: "in", period: 2 }])
-      const final = scoreboardOf([{ state: "post", period: 4 }])
-      const topic = firstTopicOf(live)
-      const polls = Ref.makeUnsafe(0)
-      const client = HttpClient.make((request) =>
-        Effect.map(
-          Ref.getAndUpdate(polls, (n) => n + 1),
-          (n) => answered(request, n === 0 ? live : final)
-        )
-      )
-
-      const told = yield* toldOver(client, "nfl", ["10 seconds"])
-
-      assert.isTrue(
-        told.some((one) => HashMap.has(one, topic)),
-        "it was wanted while live"
-      )
-      assert.isFalse(Option.exists(Arr.last(told), (one) => HashMap.has(one, topic)))
-    })
-  )
-
-  it.effect("should keep one league's wanted topics when the other league lists", () =>
-    Effect.gen(function* () {
-      const live = scoreboardOf([{ state: "in", period: 2 }])
-      const nfl = firstTopicOf(live)
-      const fbs = new Topic({ league: "fbs", game: nfl.game })
-      const client = HttpClient.make((request) => Effect.succeed(answered(request, live)))
-
-      const told = yield* toldOver(client, "nfl,fbs", ["10 seconds"])
-
-      const last = Arr.last(told)
-      assert.isTrue(Option.exists(last, (one) => HashMap.has(one, nfl)))
-      assert.isTrue(Option.exists(last, (one) => HashMap.has(one, fbs)))
-    })
-  )
-
-  it.effect("should show a synced topic as Synced", () =>
-    Effect.gen(function* () {
-      const pushing = Stream.fromEffect(Effect.sleep("1 second")).pipe(Stream.as(checkpointFrame(neAtBuf)))
-
-      const told = yield* toldOver(recordedNfl, "nfl", ["1 second"], pushing)
-
-      assert.deepStrictEqual(
-        Option.flatMap(Arr.last(told), (one) => HashMap.get(one, neAtBuf)),
-        Option.some("Synced")
-      )
-    })
-  )
-
-  it.effect("should show a topic that lost its document as waiting for its checkpoint", () =>
-    Effect.gen(function* () {
-      const pushing = Stream.fromEffect(Effect.sleep("1 second")).pipe(
-        Stream.flatMap(() => Stream.make(checkpointFrame(neAtBuf), unapplicablePatch(neAtBuf)))
-      )
-
-      const told = yield* toldOver(recordedNfl, "nfl", ["1 second"], pushing)
-
-      assert.isTrue(
-        told.slice(0, -1).some((one) => Option.contains(HashMap.get(one, neAtBuf), "Synced")),
-        "it was synced before it lost its document"
-      )
-      assert.deepStrictEqual(
-        Option.flatMap(Arr.last(told), (one) => HashMap.get(one, neAtBuf)),
-        Option.some("AwaitingCheckpoint")
-      )
-    })
-  )
-
-  it.effect("should keep a live game's synced topic across the next listing", () =>
-    Effect.gen(function* () {
-      const live = scoreboardOf([{ state: "in", period: 2 }])
-      const topic = firstTopicOf(live)
-      const pushing = Stream.fromEffect(Effect.sleep("1 second")).pipe(Stream.as(checkpointFrame(topic)))
-      const client = HttpClient.make((request) => Effect.succeed(answered(request, live)))
-
-      const told = yield* toldOver(client, "nfl", ["1 second", "10 seconds"], pushing)
-
-      assert.deepStrictEqual(
-        Option.flatMap(Arr.last(told), (one) => HashMap.get(one, topic)),
-        Option.some("Synced")
-      )
-    })
-  )
-
-  it.effect("should drop a game's document once a listing no longer wants it", () =>
-    Effect.gen(function* () {
-      const live = scoreboardOf([{ state: "in", period: 2 }])
-      const final = scoreboardOf([{ state: "post", period: 4 }])
-      const topic = firstTopicOf(live)
-      const pushing = Stream.fromEffect(Effect.sleep("1 second")).pipe(Stream.as(checkpointFrame(topic)))
-      const polls = Ref.makeUnsafe(0)
-      const client = HttpClient.make((request) =>
-        Effect.map(
-          Ref.getAndUpdate(polls, (n) => n + 1),
-          (n) => answered(request, n === 1 ? final : live)
-        )
-      )
-
-      const told = yield* toldOver(client, "nfl", ["1 second", "10 seconds", "15 minutes"], pushing)
-
-      assert.isTrue(
-        told.some((one) => Option.contains(HashMap.get(one, topic), "Synced")),
-        "it was synced while live"
-      )
-      assert.deepStrictEqual(
-        Option.flatMap(Arr.last(told), (one) => HashMap.get(one, topic)),
-        Option.some("AwaitingCheckpoint")
-      )
-    })
-  )
-})
-
-describe("EspnProvider over FastCast", () => {
-  // Depends on recorded games 401872974/401872976 being upcoming in the 18:00Z scoreboard and the clock staying at epoch.
-  it.effect(
-    "should subscribe to a listed live game once, and once more only after a gap in its messages",
-    () =>
+    it.effect("should deliver FastCast's frames beside its polls", () =>
       Effect.gen(function* () {
-        const server = TestFastCast.fakeServer()
-        const delivered = TestFastCast.watched<ReadonlyArray<Delivery>>()
-        const subscriptions = () => server.sent.all().filter((sent) => sent.op === "S" && sent.tc === liveTc)
+        const pushed = Frame.Pushed({
+          topic: Option.some(new Topic({ league: "nfl", game: GameId.make("401872971") })),
+          mid: Option.none(),
+          envelope: decodeEnvelope("{}")
+        })
+        const espn = espnOver(recordedHttp(fbsLive), { leagues: "fbs", pushing: Stream.make(pushed) })
 
-        const counted = yield* Effect.gen(function* () {
+        const said = yield* Provider.use((provider) =>
+          provider.deliveries.pipe(Stream.take(2), Stream.runCollect)
+        ).pipe(Effect.provide(espn))
+
+        assert.deepStrictEqual(
+          said
+            .map((deliveries) => deliveries.map(({ _tag }) => _tag))
+            .toSorted((a, b) => a.length - b.length),
+          [[], ["Listing"]],
+          "the push, which says nothing, beside the poll's listing"
+        )
+      })
+    )
+
+    it.effect("should deliver a push that arrives during a slow poll before the poll's frame", () =>
+      Effect.gen(function* () {
+        const slow = HttpClient.make((request) =>
+          Effect.sleep("5 seconds").pipe(Effect.as(answered(request, nflPregame)))
+        )
+        // A heartbeat: a push that says nothing, so its frame is an empty array of deliveries.
+        const heartbeat = Frame.Pushed({
+          topic: Option.none(),
+          mid: Option.none(),
+          envelope: decodeEnvelope(JSON.stringify({ op: "B" }))
+        })
+        const pushing = Stream.fromEffect(Effect.as(Effect.sleep("1 second"), heartbeat))
+
+        const frames = yield* Effect.gen(function* () {
           const provider = yield* Provider
+          const taken = yield* provider.deliveries.pipe(Stream.take(2), Stream.runCollect, Effect.forkScoped)
+          yield* settled
+          yield* TestClock.adjust("5 seconds")
+          return yield* Fiber.join(taken)
+        }).pipe(Effect.provide(espnOver(slow, { leagues: "nfl", pushing })), Effect.scoped)
+
+        assert.deepStrictEqual(
+          frames.map((deliveries) => deliveries.map(({ _tag }) => _tag)),
+          [[], ["Listing"]]
+        )
+      })
+    )
+
+    it.effect("should deliver a push taken between two leagues' polls after the first league's listing", () =>
+      Effect.gen(function* () {
+        const live = scoreboardOf([{ state: "in", period: 2 }])
+        const checkpoint = checkpointFrame(new Topic({ league: "nfl", game: GameId.make("401872971") }))
+        const fbsSlow = HttpClient.make((request) =>
+          request.url.includes("/nfl/")
+            ? Effect.succeed(answered(request, live))
+            : Effect.sleep("10 seconds").pipe(Effect.as(answered(request, fbsLive)))
+        )
+        const pushedAt5s = Stream.fromEffect(Effect.sleep("5 seconds")).pipe(Stream.as(checkpoint))
+        const espn = espnOver(fbsSlow, { pushing: pushedAt5s })
+
+        const said = yield* Effect.gen(function* () {
+          const provider = yield* Provider
+          const frames = yield* Queue.unbounded<ReadonlyArray<Delivery>>()
           yield* provider.deliveries.pipe(
-            Stream.runForEach((deliveries) => Effect.sync(() => delivered.add(deliveries))),
+            Stream.runForEach((deliveries) => Queue.offer(frames, deliveries)),
             Effect.forkScoped({ startImmediately: true })
           )
-          yield* server.sent.until(TestFastCast.subscribed(liveTc, 1))
-          const listed = subscriptions().length
+          yield* settled
+          yield* TestClock.adjust("10 seconds")
+          return yield* Queue.takeBetween(frames, 3, 3)
+        }).pipe(Effect.provide(espn), Effect.scoped)
 
-          yield* Effect.sync(() => server.send(checkpointAt(99)))
-          yield* delivered.until(playsDelivered(1))
-          yield* markedByTheNextPoll(server, laterGames[0])
-          const checkpointed = subscriptions().length
-
-          const gap = JSON.stringify({ ts: 1791132689445, pl: "[]" })
-          yield* Effect.sync(() => server.send({ op: "P", tc: liveTc, mid: 101, pl: gap }))
-          // A checkpoint after the gap, so the gap has been taken once its plays are delivered.
-          yield* Effect.sync(() => server.send(checkpointAt(102)))
-          yield* delivered.until(playsDelivered(2))
-          yield* markedByTheNextPoll(server, laterGames[1])
-          return { listed, checkpointed, afterGap: subscriptions().length }
-        }).pipe(Effect.provide(espnOverFastCast(server)), Effect.scoped)
-
-        assert.deepStrictEqual(counted, { listed: 1, checkpointed: 1, afterGap: 2 })
+        assert.deepStrictEqual(
+          said.map((deliveries) =>
+            deliveries.map((one) => (Delivery.$is("Listing")(one) ? `Listing ${one.league}` : one._tag))
+          ),
+          [["Listing nfl"], ["Plays"], ["Listing fbs"]]
+        )
       })
-  )
+    )
+  })
+
+  describe("wanted topics", () => {
+    it.effect("should tell FastCast to follow no topic before any game is listed", () =>
+      Effect.gen(function* () {
+        const unanswered = HttpClient.make(() => Effect.never)
+
+        const told = yield* toldOver(unanswered, "fbs", [])
+
+        const [first] = told
+        assert.deepStrictEqual(first === undefined ? [] : [...HashMap.entries(first)], [])
+      })
+    )
+
+    it.effect("should want a game's topic once its kickoff is 30 minutes away, with no frame", () =>
+      Effect.gen(function* () {
+        yield* TestClock.setTime(DateTime.makeUnsafe("2026-10-03T12:00:00Z").epochMilliseconds)
+        const later = scoreboardOf([{ state: "pre", period: 0, kickoff: "2026-10-03T12:31Z" }])
+        const [event] = decodeEventIds(later).events
+        const game = new Topic({ league: "fbs", game: event.id })
+        const answering = HttpClient.make((request) =>
+          Effect.succeed(HttpClientResponse.fromWeb(request, new Response(later)))
+        )
+
+        const told = yield* toldOver(answering, "fbs", ["1 minute"])
+
+        assert.isFalse(
+          told.slice(0, -1).some((one) => HashMap.has(one, game)),
+          "31 minutes out, it is not followed"
+        )
+        assert.isTrue(Option.exists(Arr.last(told), (one) => HashMap.has(one, game)))
+      })
+    )
+
+    it.effect("should want a listed game's topic while it is live", () =>
+      Effect.gen(function* () {
+        const told = yield* toldOver(recordedNfl, "nfl", [])
+
+        assert.isTrue(Option.exists(Arr.last(told), (one) => HashMap.has(one, neAtBuf)))
+      })
+    )
+
+    it.effect("should want a listed game's topic from 30 minutes before its kickoff", () =>
+      Effect.gen(function* () {
+        yield* TestClock.setTime(DateTime.makeUnsafe("2026-10-04T19:35:00Z").epochMilliseconds)
+
+        const told = yield* toldOver(recordedNfl, "nfl", [])
+
+        assert.isTrue(Option.exists(Arr.last(told), (one) => HashMap.has(one, gameTopic("401872974"))))
+      })
+    )
+
+    it.effect("should not want a listed game's topic a second before 30 minutes before its kickoff", () =>
+      Effect.gen(function* () {
+        yield* TestClock.setTime(DateTime.makeUnsafe("2026-10-04T19:34:59Z").epochMilliseconds)
+
+        const told = yield* toldOver(recordedNfl, "nfl", [])
+
+        assert.isFalse(told.some((one) => HashMap.has(one, gameTopic("401872974"))))
+      })
+    )
+
+    it.effect("should not want a listed game's topic once it is final", () =>
+      Effect.gen(function* () {
+        const live = scoreboardOf([{ state: "in", period: 2 }])
+        const final = scoreboardOf([{ state: "post", period: 4 }])
+        const topic = firstTopicOf(live)
+        const polls = Ref.makeUnsafe(0)
+        const client = HttpClient.make((request) =>
+          Effect.map(
+            Ref.getAndUpdate(polls, (n) => n + 1),
+            (n) => answered(request, n === 0 ? live : final)
+          )
+        )
+
+        const told = yield* toldOver(client, "nfl", ["10 seconds"])
+
+        assert.isTrue(
+          told.some((one) => HashMap.has(one, topic)),
+          "it was wanted while live"
+        )
+        assert.isFalse(Option.exists(Arr.last(told), (one) => HashMap.has(one, topic)))
+      })
+    )
+
+    it.effect("should keep one league's wanted topics when the other league lists", () =>
+      Effect.gen(function* () {
+        const live = scoreboardOf([{ state: "in", period: 2 }])
+        const nfl = firstTopicOf(live)
+        const fbs = new Topic({ league: "fbs", game: nfl.game })
+        const client = HttpClient.make((request) => Effect.succeed(answered(request, live)))
+
+        const told = yield* toldOver(client, "nfl,fbs", ["10 seconds"])
+
+        const last = Arr.last(told)
+        assert.isTrue(Option.exists(last, (one) => HashMap.has(one, nfl)))
+        assert.isTrue(Option.exists(last, (one) => HashMap.has(one, fbs)))
+      })
+    )
+  })
+
+  describe("retention/integration", () => {
+    it.effect("should show a synced topic as Synced", () =>
+      Effect.gen(function* () {
+        const pushing = Stream.fromEffect(Effect.sleep("1 second")).pipe(Stream.as(checkpointFrame(neAtBuf)))
+
+        const told = yield* toldOver(recordedNfl, "nfl", ["1 second"], pushing)
+
+        assert.deepStrictEqual(
+          Option.flatMap(Arr.last(told), (one) => HashMap.get(one, neAtBuf)),
+          Option.some("Synced")
+        )
+      })
+    )
+
+    it.effect("should show a topic that lost its document as waiting for its checkpoint", () =>
+      Effect.gen(function* () {
+        const pushing = Stream.fromEffect(Effect.sleep("1 second")).pipe(
+          Stream.flatMap(() => Stream.make(checkpointFrame(neAtBuf), unapplicablePatch(neAtBuf)))
+        )
+
+        const told = yield* toldOver(recordedNfl, "nfl", ["1 second"], pushing)
+
+        assert.isTrue(
+          told.slice(0, -1).some((one) => Option.contains(HashMap.get(one, neAtBuf), "Synced")),
+          "it was synced before it lost its document"
+        )
+        assert.deepStrictEqual(
+          Option.flatMap(Arr.last(told), (one) => HashMap.get(one, neAtBuf)),
+          Option.some("AwaitingCheckpoint")
+        )
+      })
+    )
+
+    it.effect("should keep a live game's synced topic across the next listing", () =>
+      Effect.gen(function* () {
+        const live = scoreboardOf([{ state: "in", period: 2 }])
+        const topic = firstTopicOf(live)
+        const pushing = Stream.fromEffect(Effect.sleep("1 second")).pipe(Stream.as(checkpointFrame(topic)))
+        const client = HttpClient.make((request) => Effect.succeed(answered(request, live)))
+
+        const told = yield* toldOver(client, "nfl", ["1 second", "10 seconds"], pushing)
+
+        assert.deepStrictEqual(
+          Option.flatMap(Arr.last(told), (one) => HashMap.get(one, topic)),
+          Option.some("Synced")
+        )
+      })
+    )
+
+    it.effect("should drop a game's document once a listing no longer wants it", () =>
+      Effect.gen(function* () {
+        const live = scoreboardOf([{ state: "in", period: 2 }])
+        const final = scoreboardOf([{ state: "post", period: 4 }])
+        const topic = firstTopicOf(live)
+        const pushing = Stream.fromEffect(Effect.sleep("1 second")).pipe(Stream.as(checkpointFrame(topic)))
+        const polls = Ref.makeUnsafe(0)
+        const client = HttpClient.make((request) =>
+          Effect.map(
+            Ref.getAndUpdate(polls, (n) => n + 1),
+            (n) => answered(request, n === 1 ? final : live)
+          )
+        )
+
+        const told = yield* toldOver(client, "nfl", ["1 second", "10 seconds", "15 minutes"], pushing)
+
+        assert.isTrue(
+          told.some((one) => Option.contains(HashMap.get(one, topic), "Synced")),
+          "it was synced while live"
+        )
+        assert.deepStrictEqual(
+          Option.flatMap(Arr.last(told), (one) => HashMap.get(one, topic)),
+          Option.some("AwaitingCheckpoint")
+        )
+      })
+    )
+
+    // Depends on recorded games 401872974/401872976 being upcoming in the 18:00Z scoreboard and the clock staying at epoch.
+    it.effect(
+      "should subscribe to a listed live game once, and once more only after a gap in its messages",
+      () =>
+        Effect.gen(function* () {
+          const server = TestFastCast.fakeServer()
+          const delivered = TestFastCast.watched<ReadonlyArray<Delivery>>()
+          const subscriptions = () =>
+            server.sent.all().filter((sent) => sent.op === "S" && sent.tc === liveTc)
+
+          const counted = yield* Effect.gen(function* () {
+            const provider = yield* Provider
+            yield* provider.deliveries.pipe(
+              Stream.runForEach((deliveries) => Effect.sync(() => delivered.add(deliveries))),
+              Effect.forkScoped({ startImmediately: true })
+            )
+            yield* server.sent.until(TestFastCast.subscribed(liveTc, 1))
+            const listed = subscriptions().length
+
+            yield* Effect.sync(() => server.send(checkpointAt(99)))
+            yield* delivered.until(playsDelivered(1))
+            yield* markedByTheNextPoll(server, laterGames[0])
+            const checkpointed = subscriptions().length
+
+            const gap = JSON.stringify({ ts: 1791132689445, pl: "[]" })
+            yield* Effect.sync(() => server.send({ op: "P", tc: liveTc, mid: 101, pl: gap }))
+            // A checkpoint after the gap, so the gap has been taken once its plays are delivered.
+            yield* Effect.sync(() => server.send(checkpointAt(102)))
+            yield* delivered.until(playsDelivered(2))
+            yield* markedByTheNextPoll(server, laterGames[1])
+            return { listed, checkpointed, afterGap: subscriptions().length }
+          }).pipe(Effect.provide(espnOverFastCast(server)), Effect.scoped)
+
+          assert.deepStrictEqual(counted, { listed: 1, checkpointed: 1, afterGap: 2 })
+        })
+    )
+  })
 })
 
 /**

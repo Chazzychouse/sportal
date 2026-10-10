@@ -377,6 +377,31 @@ describe("Director's game state gauge", () => {
   )
 })
 
+describe("Director's play log", () => {
+  it.effect("should log each play a take adds once, annotated with its game", () => {
+    const { logs, layer } = recordingLogs()
+    const game = liveSnapshot({ id: one })
+    const first = play({ id: PlayId.make("p1"), sequence: 1, text: "Rush for 1 yard" })
+    const second = play({ id: PlayId.make("p2"), sequence: 2, clock: "14:20", text: "Rush for 4 yards" })
+    return Effect.gen(function* () {
+      yield* listing([game])
+      yield* TestDirector.delivered(Delivery.Plays({ game: one, plays: [first] }))
+
+      yield* TestDirector.delivered(Delivery.Plays({ game: one, plays: [first, second] }))
+
+      const played = logs.filter(({ annotations }) => annotations.play !== undefined)
+      assert.deepStrictEqual(
+        played.map(({ level, annotations }) => ({ level, game: annotations.game, play: annotations.play })),
+        [
+          { level: "Info", game: one, play: "Rush" },
+          { level: "Info", game: one, play: "Rush" }
+        ]
+      )
+      assert.include(played[1]?.message ?? "", `Director: ${game.matchup()} Q1 14:20 Rush for 4 yards`)
+    }).pipe(Effect.provide(TestDirector.directorOver.pipe(Layer.provideMerge(layer))))
+  })
+})
+
 function snapshotIn(slate: Slate, id: GameId): GameSnapshot | undefined {
   return slate.games.find(({ snapshot }) => snapshot.id === id)?.snapshot
 }
@@ -407,28 +432,3 @@ function broken(id: GameId): GameSnapshot {
   }
   return new Broken({ ...liveSnapshot({ id, clock: "8:00" }) })
 }
-
-describe("Director's play log", () => {
-  it.effect("should log each play a take adds once, annotated with its game", () => {
-    const { logs, layer } = recordingLogs()
-    const game = liveSnapshot({ id: one })
-    const first = play({ id: PlayId.make("p1"), sequence: 1, text: "Rush for 1 yard" })
-    const second = play({ id: PlayId.make("p2"), sequence: 2, clock: "14:20", text: "Rush for 4 yards" })
-    return Effect.gen(function* () {
-      yield* listing([game])
-      yield* TestDirector.delivered(Delivery.Plays({ game: one, plays: [first] }))
-
-      yield* TestDirector.delivered(Delivery.Plays({ game: one, plays: [first, second] }))
-
-      const played = logs.filter(({ annotations }) => annotations.play !== undefined)
-      assert.deepStrictEqual(
-        played.map(({ level, annotations }) => ({ level, game: annotations.game, play: annotations.play })),
-        [
-          { level: "Info", game: one, play: "Rush" },
-          { level: "Info", game: one, play: "Rush" }
-        ]
-      )
-      assert.include(played[1]?.message ?? "", `Director: ${game.matchup()} Q1 14:20 Rush for 4 yards`)
-    }).pipe(Effect.provide(TestDirector.directorOver.pipe(Layer.provideMerge(layer))))
-  })
-})

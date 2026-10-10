@@ -3,7 +3,8 @@ import { type Broadcast, Network } from "@sportal/domain/Game"
 import type { Team } from "@sportal/domain/Team"
 import { broadcast, snapshot, team } from "@sportal/domain/TestGame"
 import { DateTime, Option } from "effect"
-import { type Airing, ChannelId, Guide } from "./Guide.ts"
+import { ChannelId, Guide } from "./Guide.ts"
+import * as TestGuide from "./TestGuide.ts"
 
 describe("Guide#availabilityOf", () => {
   const readAt = DateTime.makeUnsafe("2026-10-03T20:25:00Z")
@@ -30,17 +31,17 @@ describe("Guide#availabilityOf", () => {
       { id: abc13, name: "ABC 13", live: { _tag: "WebView", url: "https://tv.youtube.com/watch/abc" } }
     ],
     airings: [
-      airing(news3, "Ohio State at Iowa", "2026-10-03T19:35:00Z", "2026-10-03T23:00:00Z"),
-      airing(news3, "Ohio State at Iowa", "2026-10-04T09:00:00Z", "2026-10-04T12:00:00Z"),
-      airing(
+      TestGuide.airing(news3, "Ohio State at Iowa", "2026-10-03T19:35:00Z", "2026-10-03T23:00:00Z"),
+      TestGuide.airing(news3, "Ohio State at Iowa", "2026-10-04T09:00:00Z", "2026-10-04T12:00:00Z"),
+      TestGuide.airing(
         nflStCbs,
         "New England Patriots at Buffalo Bills",
         "2026-10-04T17:00:00Z",
         "2026-10-04T20:00:00Z"
       ),
-      airing(accNetwork, "Miami at Clemson", "2026-10-03T23:30:00Z", "2026-10-04T03:00:00Z"),
-      airing(abc13, "Miami at Clemson", "2026-10-03T23:30:00Z", "2026-10-04T03:00:00Z"),
-      airing(abc13, "Arkansas at Texas A&M", "2026-10-03T20:45:00Z", "2026-10-03T23:30:00Z")
+      TestGuide.airing(accNetwork, "Miami at Clemson", "2026-10-03T23:30:00Z", "2026-10-04T03:00:00Z"),
+      TestGuide.airing(abc13, "Miami at Clemson", "2026-10-03T23:30:00Z", "2026-10-04T03:00:00Z"),
+      TestGuide.airing(abc13, "Arkansas at Texas A&M", "2026-10-03T20:45:00Z", "2026-10-03T23:30:00Z")
     ]
   })
   const ohioStateAtIowa = snapshot({
@@ -61,15 +62,6 @@ describe("Guide#availabilityOf", () => {
     broadcasts: [broadcast("CBS")]
   })
   const live = ChannelId.make("live-1")
-  const onLiveChannel = (airings: Array<Airing>) =>
-    new Guide({
-      source: "YouTube TV",
-      readAt,
-      channels: [
-        { id: live, name: "Live 1", live: { _tag: "WebView", url: "https://tv.youtube.com/watch/live1" } }
-      ],
-      airings
-    })
   const nfl = (away: Team, home: Team) =>
     snapshot({
       league: "nfl",
@@ -86,17 +78,6 @@ describe("Guide#availabilityOf", () => {
       home: { team: team("CLEM", "fbs", { name: "Clemson Tigers", location: "Clemson" }), score: 0 },
       broadcasts
     })
-  const airingBeginning = (begin: DateTime.Utc) =>
-    onLiveChannel([
-      { channel: live, title: "Ohio State at Iowa", begin, end: DateTime.add(begin, { hours: 3 }) }
-    ])
-
-  const baseballGuide = () =>
-    onLiveChannel([
-      airing(live, "St. Louis Cardinals at Chicago Cubs", "2026-10-03T20:30:00Z", "2026-10-03T23:30:00Z"),
-      airing(live, "New York Yankees vs. Tampa Bay Rays", "2026-10-03T20:30:00Z", "2026-10-03T23:30:00Z")
-    ])
-
   it("should be carried on the channel airing the game, at the channel's live address", () => {
     const availability = guide.availabilityOf(ohioStateAtIowa, readAt)
 
@@ -251,8 +232,8 @@ describe("Guide#availabilityOf", () => {
   })
 
   it("should not match an airing that has ended", () => {
-    const ended = onLiveChannel([
-      airing(live, "Ohio State at Iowa", "2026-10-03T17:00:00Z", "2026-10-03T20:25:00Z")
+    const ended = TestGuide.onLiveChannel(readAt, [
+      TestGuide.airing(live, "Ohio State at Iowa", "2026-10-03T17:00:00Z", "2026-10-03T20:25:00Z")
     ])
     const earlier = snapshot({ ...ohioStateAtIowa, kickoff: DateTime.makeUnsafe("2026-10-03T17:00:00Z") })
 
@@ -338,6 +319,29 @@ describe("Guide#availabilityOf", () => {
 
     assert.deepStrictEqual(availability, { _tag: "Upcoming", channel: Option.none(), begin: Option.none() })
   })
+
+  function airingBeginning(begin: DateTime.Utc) {
+    return TestGuide.onLiveChannel(readAt, [
+      { channel: live, title: "Ohio State at Iowa", begin, end: DateTime.add(begin, { hours: 3 }) }
+    ])
+  }
+
+  function baseballGuide() {
+    return TestGuide.onLiveChannel(readAt, [
+      TestGuide.airing(
+        live,
+        "St. Louis Cardinals at Chicago Cubs",
+        "2026-10-03T20:30:00Z",
+        "2026-10-03T23:30:00Z"
+      ),
+      TestGuide.airing(
+        live,
+        "New York Yankees vs. Tampa Bay Rays",
+        "2026-10-03T20:30:00Z",
+        "2026-10-03T23:30:00Z"
+      )
+    ])
+  }
 })
 
 describe("Guide#availabilityOf on a channel that carries a network", () => {
@@ -415,7 +419,7 @@ describe("Guide#availabilityOf on a channel that carries a network", () => {
         { id: primeVideo, name: "Prime Video", live: primeVideoLive, network: Network.make("Prime Video") },
         { id: live, name: "Live 1", live: liveAddress }
       ],
-      airings: [airing(live, "AWAY at HOME", "2026-10-09T00:15:00Z", "2026-10-09T03:30:00Z")]
+      airings: [TestGuide.airing(live, "AWAY at HOME", "2026-10-09T00:15:00Z", "2026-10-09T03:30:00Z")]
     })
 
     const availability = both.availabilityOf(snapshot({ ...thursdayNight, status: "live" }), kickoff)
@@ -431,14 +435,9 @@ describe("Guide#availabilityOf at a time after its reading", () => {
   it("should not match an airing that ended after the guide was read", () => {
     const readAt = DateTime.makeUnsafe("2026-10-03T20:25:00Z")
     const live = ChannelId.make("live-1")
-    const guide = new Guide({
-      source: "YouTube TV",
-      readAt,
-      channels: [
-        { id: live, name: "Live 1", live: { _tag: "WebView", url: "https://tv.youtube.com/watch/live1" } }
-      ],
-      airings: [airing(live, "AWAY at HOME", "2026-10-03T17:00:00Z", "2026-10-03T20:35:00Z")]
-    })
+    const guide = TestGuide.onLiveChannel(readAt, [
+      TestGuide.airing(live, "AWAY at HOME", "2026-10-03T17:00:00Z", "2026-10-03T20:35:00Z")
+    ])
     const game = snapshot({ status: "live", kickoff: DateTime.makeUnsafe("2026-10-03T17:00:00Z") })
 
     const availability = guide.availabilityOf(game, DateTime.add(readAt, { minutes: 20 }))
@@ -446,7 +445,3 @@ describe("Guide#availabilityOf at a time after its reading", () => {
     assert.deepStrictEqual(availability, { _tag: "NotCarried", why: "NotInGuide" })
   })
 })
-
-function airing(channel: ChannelId, title: string, begin: string, end: string): Airing {
-  return { channel, title, begin: DateTime.makeUnsafe(begin), end: DateTime.makeUnsafe(end) }
-}
