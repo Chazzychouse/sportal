@@ -34,6 +34,11 @@ export function recordedScoreboard(name: string): string {
   return readFileSync(new URL(`./fixtures/${name}.json`, import.meta.url), "utf8")
 }
 
+/** Recorded NFL play entities of 2026-10-04 with these ids, by id, as a game topic's document holds them. */
+export function plays(...ids: ReadonlyArray<string>) {
+  return Object.fromEntries(ids.map((id) => [id, playEntities[id] ?? {}]))
+}
+
 /**
  * Every play id NE at BUF's recorded frames add. Measured once over the fixture: every play id its topic's patches add,
  * whole or one at a time (none is removed, moved, or copied), counted with
@@ -66,7 +71,7 @@ export const duringNeAtBuf = DateTime.makeUnsafe("2026-10-04T18:00:00Z")
  * What ESPN says each of `recorded` said, one array of deliveries a line: a poll is its league's `Listing` (nothing,
  * when it does not decode), after which the game topics keep only those wanted at the clock's now; a frame is what
  * `GameTopics#take` gives. It approximates the provider's ordering (retention runs synchronously after each poll), for
- * the recorded-day tests; a test of `GameTopics` alone replays frames with `framesReplayed`.
+ * the recorded-day tests; a test of `GameTopics` alone replays frames with `TestGameTopics.framesReplayed`.
  */
 export const replayed = Effect.fn("TestEspn.replayed")(function* (recorded: ReadonlyArray<Recorded>) {
   return yield* Stream.fromIterable(recorded).pipe(
@@ -76,26 +81,6 @@ export const replayed = Effect.fn("TestEspn.replayed")(function* (recorded: Read
         Effect.map(replayedLine(state, line), ([next, deliveries]) => [next, [deliveries]] as const)
     ),
     Stream.runCollect
-  )
-})
-
-/** What `GameTopics#take` gives for each of `frames` in turn, one array of deliveries a frame, from no topics. */
-export const framesReplayed = Effect.fn("TestEspn.framesReplayed")(function* (frames: ReadonlyArray<Frame>) {
-  return yield* Stream.fromIterable(frames).pipe(
-    Stream.mapAccumEffect(
-      () => GameTopics.empty,
-      (topics, frame) => Effect.map(topics.take(frame), ([next, deliveries]) => [next, [deliveries]] as const)
-    ),
-    Stream.runCollect
-  )
-})
-
-/** The game topics after `frames`, from none. */
-export const topicsAfter = Effect.fn("TestEspn.topicsAfter")(function* (frames: ReadonlyArray<Frame>) {
-  return yield* Effect.reduce(
-    frames,
-    () => GameTopics.empty,
-    (topics, frame) => Effect.map(topics.take(frame), ([next]) => next)
   )
 })
 
@@ -129,6 +114,10 @@ const noDeliveries: ReadonlyArray<Delivery> = []
 const noSocket = Layer.succeed(Socket.WebSocketConstructor, () => {
   throw new Error("this test opens no socket")
 })
+
+const playEntities = Schema.decodeSync(
+  Schema.fromJsonString(Schema.Record(Schema.String, Schema.Record(Schema.String, Schema.Json)))
+)(readFileSync(new URL("./fixtures/nfl-plays-2026-10-04.json", import.meta.url), "utf8"))
 
 /** A line of the recording, as it was recorded: its way, its league or topic, whole or a change, and its mid. */
 const decodeRecorded = Schema.decodeEffect(

@@ -29,7 +29,7 @@ import { FastCast, type Wanted } from "./FastCast.ts"
 import * as FastCastMessage from "./FastCastMessage.ts"
 import { Frame } from "./Frame.ts"
 import * as TestEspn from "./TestEspn.ts"
-import { fakeServer, subscribed, watched } from "./TestFastCast.ts"
+import * as TestFastCast from "./TestFastCast.ts"
 import { Topic } from "./Topic.ts"
 
 // Real payloads recorded from ESPN. A payload that breaks decoding gets added here before the fix.
@@ -667,8 +667,8 @@ describe("EspnProvider over FastCast", () => {
     "should subscribe to a listed live game once, and once more only after a gap in its messages",
     () =>
       Effect.gen(function* () {
-        const server = fakeServer()
-        const delivered = watched<ReadonlyArray<Delivery>>()
+        const server = TestFastCast.fakeServer()
+        const delivered = TestFastCast.watched<ReadonlyArray<Delivery>>()
         const subscriptions = () => server.sent.all().filter((sent) => sent.op === "S" && sent.tc === liveTc)
 
         const counted = yield* Effect.gen(function* () {
@@ -677,7 +677,7 @@ describe("EspnProvider over FastCast", () => {
             Stream.runForEach((deliveries) => Effect.sync(() => delivered.add(deliveries))),
             Effect.forkScoped({ startImmediately: true })
           )
-          yield* server.sent.until(subscribed(liveTc, 1))
+          yield* server.sent.until(TestFastCast.subscribed(liveTc, 1))
           const listed = subscriptions().length
 
           yield* Effect.sync(() => server.send(checkpointAt(99)))
@@ -897,7 +897,7 @@ function toldOver(
  * scoreboard of 18:00Z on 2026-10-04, in which NE at BUF is live; each poll after it also shows one more of
  * `laterGames` live. Each checkpoint is an empty game document.
  */
-function espnOverFastCast(server: ReturnType<typeof fakeServer>) {
+function espnOverFastCast(server: ReturnType<typeof TestFastCast.fakeServer>) {
   const polls = Ref.makeUnsafe(0)
   const http = HttpClient.make((request) => {
     const url = new URL(request.url)
@@ -925,9 +925,9 @@ function espnOverFastCast(server: ReturnType<typeof fakeServer>) {
  * Moves the test clock to the next poll and waits for `game`'s first S, which that poll makes wanted. FastCast steers by
  * each wanted set in turn, so every S an earlier frame would send has been sent by then.
  */
-function markedByTheNextPoll(server: ReturnType<typeof fakeServer>, game: string) {
+function markedByTheNextPoll(server: ReturnType<typeof TestFastCast.fakeServer>, game: string) {
   return TestClock.adjust("10 seconds").pipe(
-    Effect.andThen(server.sent.until(subscribed(`gp-football-nfl-${game}`, 1)))
+    Effect.andThen(server.sent.until(TestFastCast.subscribed(`gp-football-nfl-${game}`, 1)))
   )
 }
 

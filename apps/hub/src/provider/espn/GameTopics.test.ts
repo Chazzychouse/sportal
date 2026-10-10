@@ -2,44 +2,18 @@ import { readFileSync } from "node:fs"
 import { assert, describe, it } from "@effect/vitest"
 import { GameId, GameSnapshot } from "@sportal/domain/Game"
 import { Play, PlayId } from "@sportal/domain/Play"
-import { Effect, Equal, HashMap, Option, Record, Schema } from "effect"
+import { Effect, Equal, HashMap, Record, Schema } from "effect"
 import { TestClock } from "effect/testing"
 import { recordingLogs } from "../../TestTelemetry.ts"
 import { Delivery } from "../Provider.ts"
-import * as FastCastMessage from "./FastCastMessage.ts"
-import { Frame } from "./Frame.ts"
+import type { Frame } from "./Frame.ts"
 import { GameTopics } from "./GameTopics.ts"
 import * as TestEspn from "./TestEspn.ts"
-import { Topic } from "./Topic.ts"
-
-const fixture = (name: string) => readFileSync(new URL(`./fixtures/${name}`, import.meta.url), "utf8")
-const playEntities = Schema.decodeSync(
-  Schema.fromJsonString(Schema.Record(Schema.String, Schema.Record(Schema.String, Schema.Json)))
-)(fixture("nfl-plays-2026-10-04.json"))
-// Recorded from ESPN on 2026-10-04 on BUF at NE's game topic: the two plays its messages 819–822 patch, as they stood
-// after message 818, and those messages as the recorder kept them. Message 819 opens with a `move` outside the plays.
-const moveRecording = Schema.decodeSync(
-  Schema.fromJsonString(
-    Schema.Struct({
-      checkpoint: Schema.Struct({ mid: Schema.Int, body: Schema.Json }),
-      messages: Schema.Array(
-        Schema.Struct({
-          op: Schema.String,
-          tc: Schema.String,
-          mid: Schema.Int,
-          ts: Schema.Finite,
-          pl: Schema.String
-        })
-      )
-    })
-  )
-)(fixture("nfl-gp-move-2026-10-04.json"))
+import * as TestFastCast from "./TestFastCast.ts"
+import * as TestGameTopics from "./TestGameTopics.ts"
 
 const snapshotJson = Schema.fromJsonString(GameSnapshot)
 const playJson = Schema.fromJsonString(Play)
-
-const ariAtNygPlays = "gp-football-nfl-401872966"
-const neAtBufPlays = "gp-football-nfl-401872971"
 
 // NE at BUF's recorded day, replayed once, by the first test that reads it.
 const neAtBufDecoded = Effect.runSync(
@@ -47,25 +21,10 @@ const neAtBufDecoded = Effect.runSync(
 )
 
 describe("GameTopics#take", () => {
-  it.effect("should add the value read at a copy's source", () =>
-    Effect.gen(function* () {
-      const copy = message(neAtBufPlays, 819, [
-        { op: "copy", from: "/entities/plays/401872971917/text", path: "/entities/plays/401872971792/text" }
-      ])
-
-      const deliveries = yield* decoded([neAtBufCheckpoint(), copy])
-
-      const source = textOf(deliveries[0]?.delivery, "401872971917")
-      const copied = textOf(deliveries[1]?.delivery, "401872971792")
-      assert.isDefined(source)
-      assert.strictEqual(copied, source)
-    })
-  )
-
   it.effect("should send a topic that missed a message back to waiting for a checkpoint", () =>
     Effect.gen(function* () {
       // The recording's checkpoint and messages 819 to 822, without message 820.
-      const frames = moveRecordingFrames().filter((_, index) => index !== 2)
+      const frames = TestFastCast.moveRecordingFrames().filter((_, index) => index !== 2)
 
       const deliveries = yield* decoded(frames)
 
@@ -73,15 +32,13 @@ describe("GameTopics#take", () => {
       const playsFrames = deliveries.flatMap(({ frame, delivery }) =>
         Delivery.$is("Plays")(delivery) ? [frame] : []
       )
-      const reset = yield* resetTopics(frames)
-      assert.deepStrictEqual(reset, [neAtBufPlays])
       assert.deepStrictEqual(playsFrames, [1, 2])
     })
   )
 
   it.effect("should give nothing and fail nothing for a patch or an idle message before any checkpoint", () =>
     Effect.gen(function* () {
-      const deliveries = yield* decoded(beforeAnyCheckpoint())
+      const deliveries = yield* decoded(TestFastCast.beforeAnyCheckpoint())
 
       assert.deepStrictEqual(tags(deliveries), [])
     })
@@ -89,35 +46,35 @@ describe("GameTopics#take", () => {
 
   it.effect("should send a topic back to waiting for a checkpoint when a patch will not apply", () =>
     Effect.gen(function* () {
-      const copyFromNothing = message(neAtBufPlays, 820, [
+      const copyFromNothing = TestFastCast.message(TestFastCast.neAtBufPlays, 820, [
         { op: "copy", from: "/entities/plays/no-such-play/text", path: "/entities/plays/401872971792/text" }
       ])
-      const frames = [neAtBufCheckpoint(), unapplicablePatch(819), copyFromNothing]
+      const frames = [TestFastCast.neAtBufCheckpoint(), TestFastCast.unapplicablePatch(819), copyFromNothing]
 
       const deliveries = yield* decoded(frames)
 
-      const reset = yield* resetTopics(frames)
       assert.deepStrictEqual(
         deliveries.filter(({ frame }) => frame > 1),
         []
       )
-      assert.deepStrictEqual(reset, [neAtBufPlays])
     })
   )
 
   it.effect("should reset a synced topic on a message that does not decode", () =>
     Effect.gen(function* () {
-      const frames = [neAtBufCheckpoint(), undecodablePatch(819), textReplaced(820)]
+      const frames = [
+        TestFastCast.neAtBufCheckpoint(),
+        TestFastCast.undecodablePatch(819),
+        TestFastCast.textReplaced(820)
+      ]
 
       const deliveries = yield* decoded(frames)
 
-      const reset = yield* resetTopics(frames)
       assert.deepStrictEqual(
         deliveries.filter(({ frame }) => frame > 1),
         [],
         "the topic waits for its next checkpoint"
       )
-      assert.deepStrictEqual(reset, [neAtBufPlays])
     })
   )
 
@@ -125,65 +82,39 @@ describe("GameTopics#take", () => {
     Effect.gen(function* () {
       const { logs, layer } = recordingLogs()
 
-      yield* TestEspn.topicsAfter([neAtBufCheckpoint(), unapplicablePatch(819)]).pipe(Effect.provide(layer))
+      yield* TestGameTopics.topicsAfter([
+        TestFastCast.neAtBufCheckpoint(),
+        TestFastCast.unapplicablePatch(819)
+      ]).pipe(Effect.provide(layer))
 
-      const lost = logs.filter(({ message }) => message.includes(`${neAtBufPlays} lost its document`))
+      const lost = logs.filter(({ message }) =>
+        message.includes(`${TestFastCast.neAtBufPlays} lost its document`)
+      )
       assert.lengthOf(lost, 1)
       assert.strictEqual(lost[0]?.level, "Warn")
-      assert.strictEqual(lost[0]?.annotations.topic, neAtBufPlays)
-    })
-  )
-
-  it.effect.each([
-    {
-      reset: "a gap",
-      frames: () => [neAtBufCheckpoint(), textReplaced(820)],
-      expected: [neAtBufPlays]
-    },
-    {
-      reset: "a patch that will not apply",
-      frames: () => [neAtBufCheckpoint(), unapplicablePatch(819), textReplaced(820)],
-      expected: [neAtBufPlays]
-    },
-    {
-      reset: "a message that does not decode",
-      frames: () => [neAtBufCheckpoint(), undecodablePatch(819)],
-      expected: [neAtBufPlays]
-    }
-  ])("should reset a topic's document, once, after $reset", ({ frames, expected }) =>
-    Effect.gen(function* () {
-      const reset = yield* resetTopics(frames())
-
-      assert.deepStrictEqual(reset, expected)
-    })
-  )
-
-  it.effect("should reset no topic that was never synced", () =>
-    Effect.gen(function* () {
-      const reset = yield* resetTopics(beforeAnyCheckpoint())
-
-      assert.deepStrictEqual(reset, [])
+      assert.strictEqual(lost[0]?.annotations.topic, TestFastCast.neAtBufPlays)
     })
   )
 
   it.effect("should sync a waiting topic on the next checkpoint that decodes", () =>
     Effect.gen(function* () {
-      const frames = [neAtBufCheckpoint(), textReplaced(819)]
+      const frames = [TestFastCast.neAtBufCheckpoint(), TestFastCast.textReplaced(819)]
 
       const deliveries = yield* decoded(frames)
 
-      const reset = yield* resetTopics(frames)
       assert.deepStrictEqual(
         deliveries.flatMap(({ frame, delivery }) => (frame === 2 ? [textOf(delivery, "401872971792")] : [])),
         ["Corrected"]
       )
-      assert.deepStrictEqual(reset, [])
     })
   )
 
   it.effect("should skip a frame that does not decode, and decode the next", () =>
     Effect.gen(function* () {
-      const deliveries = yield* decoded([undecodablePatch(819), neAtBufCheckpoint()])
+      const deliveries = yield* decoded([
+        TestFastCast.undecodablePatch(819),
+        TestFastCast.neAtBufCheckpoint()
+      ])
 
       assert.deepStrictEqual(
         deliveries.map(({ frame }) => frame),
@@ -196,11 +127,14 @@ describe("GameTopics#take", () => {
     Effect.gen(function* () {
       const { logs, layer } = recordingLogs()
 
-      yield* TestEspn.framesReplayed([undecodablePatch(819), neAtBufCheckpoint()]).pipe(Effect.provide(layer))
+      yield* TestGameTopics.framesReplayed([
+        TestFastCast.undecodablePatch(819),
+        TestFastCast.neAtBufCheckpoint()
+      ]).pipe(Effect.provide(layer))
 
       assert.deepStrictEqual(
         logs.map(({ level, annotations }) => [level, annotations]),
-        [["Warn", { frame: "Pushed", topic: neAtBufPlays }]]
+        [["Warn", { frame: "Pushed", topic: TestFastCast.neAtBufPlays }]]
       )
     })
   )
@@ -211,12 +145,12 @@ describe("GameTopics#take", () => {
       () =>
         Effect.gen(function* () {
           const deliveries = yield* decoded([
-            checkpoint(ariAtNygPlays, 99, { entities: {} }),
+            TestFastCast.checkpoint(TestFastCast.ariAtNygPlays, 99, { entities: {} }),
             playsMessage(100, [
               {
                 op: "add",
                 path: "/entities/plays",
-                value: plays("401872966237", "401872966271", "40187297063")
+                value: TestEspn.plays("401872966237", "401872966271", "40187297063")
               }
             ])
           ])
@@ -235,7 +169,9 @@ describe("GameTopics#take", () => {
     it.effect("should keep a play no patch touched as it was decoded", () =>
       Effect.gen(function* () {
         const deliveries = yield* decoded([
-          checkpoint(ariAtNygPlays, 99, { entities: { plays: plays("401872966237", "401872966271") } }),
+          TestFastCast.checkpoint(TestFastCast.ariAtNygPlays, 99, {
+            entities: { plays: TestEspn.plays("401872966237", "401872966271") }
+          }),
           playsMessage(100, [
             { op: "replace", path: "/entities/plays/401872966271/text", value: "Corrected" }
           ])
@@ -254,7 +190,9 @@ describe("GameTopics#take", () => {
     it.effect("should give the new list on each replaced text, removed play, and copy within the plays", () =>
       Effect.gen(function* () {
         const deliveries = yield* decoded([
-          checkpoint(ariAtNygPlays, 99, { entities: { plays: plays("401872966237", "401872966271") } }),
+          TestFastCast.checkpoint(TestFastCast.ariAtNygPlays, 99, {
+            entities: { plays: TestEspn.plays("401872966237", "401872966271") }
+          }),
           playsMessage(100, [
             { op: "replace", path: "/entities/plays/401872966237/text", value: "Corrected" }
           ]),
@@ -288,7 +226,9 @@ describe("GameTopics#take", () => {
     it.effect("should take a move's value within the plays from its source", () =>
       Effect.gen(function* () {
         const deliveries = yield* decoded([
-          checkpoint(ariAtNygPlays, 99, { entities: { plays: plays("401872966237", "401872966271") } }),
+          TestFastCast.checkpoint(TestFastCast.ariAtNygPlays, 99, {
+            entities: { plays: TestEspn.plays("401872966237", "401872966271") }
+          }),
           playsMessage(100, [
             { op: "move", from: "/entities/plays/401872966271", path: "/entities/plays/moved" }
           ]),
@@ -307,17 +247,16 @@ describe("GameTopics#take", () => {
       "should keep a topic synced through a recorded move outside the plays, still delivering the plays after it",
       () =>
         Effect.gen(function* () {
-          const frames = moveRecordingFrames()
+          const frames = TestFastCast.moveRecordingFrames()
 
           const deliveries = yield* decoded(frames)
 
-          const reset = yield* resetTopics(frames)
           const penalty =
             deliveries[1] !== undefined && Delivery.$is("Plays")(deliveries[1].delivery)
               ? deliveries[1].delivery.plays.find((play) => play.id === "401872971792")?.text
               : undefined
           assert.isTrue(
-            moveRecording.messages[0]?.pl.includes('"op":"move"'),
+            TestFastCast.moveRecording.messages[0]?.pl.includes('"op":"move"'),
             "the first recorded message has a move"
           )
           assert.deepStrictEqual(
@@ -327,19 +266,18 @@ describe("GameTopics#take", () => {
           )
           assert.include(penalty, "PENALTY on BUF-C.McGovern")
           assert.include(deliveries.map(playIds).at(-1) ?? [], PlayId.make("4018729711662"))
-          assert.deepStrictEqual(reset, [])
         })
     )
 
     it.effect("should leave out a play that does not decode, and deliver the rest", () =>
       Effect.gen(function* () {
         const broken = {
-          ...Record.remove(playEntities["401872966237"] ?? {}, "statYardage"),
+          ...Record.remove(TestEspn.plays("401872966237")["401872966237"] ?? {}, "statYardage"),
           id: "401872966999"
         }
         const frames = [
-          checkpoint(ariAtNygPlays, 99, {
-            entities: { plays: { ...plays("401872966237", "401872966271"), "401872966999": broken } }
+          TestFastCast.checkpoint(TestFastCast.ariAtNygPlays, 99, {
+            entities: { plays: { ...TestEspn.plays("401872966237", "401872966271"), "401872966999": broken } }
           }),
           playsMessage(100, [
             { op: "replace", path: "/entities/plays/401872966271/text", value: "Corrected" }
@@ -358,54 +296,52 @@ describe("GameTopics#take", () => {
     it.effect("should give nothing and fail nothing for a patch outside the plays", () =>
       Effect.gen(function* () {
         const frames = [
-          checkpoint(ariAtNygPlays, 99, { entities: {} }),
+          TestFastCast.checkpoint(TestFastCast.ariAtNygPlays, 99, { entities: {} }),
           playsMessage(100, [
             { op: "replace", path: "/boxscore/teams/0/statistics/0/displayValue", value: "12" }
           ]),
-          playsMessage(101, [{ op: "add", path: "/entities/plays", value: plays("40187297063") }])
+          playsMessage(101, [{ op: "add", path: "/entities/plays", value: TestEspn.plays("40187297063") }])
         ]
 
         const deliveries = yield* decoded(frames)
 
-        const reset = yield* resetTopics(frames)
         assert.deepStrictEqual(deliveries.map(playIds), [[], ["40187297063"]])
-        assert.deepStrictEqual(reset, [])
       })
     )
 
     it.effect("should keep the other games decoding after a gap on one game's topic", () =>
       Effect.gen(function* () {
         const frames = [
-          checkpoint(ariAtNygPlays, 99, { entities: {} }),
-          checkpoint(neAtBufPlays, 99, { entities: {} }),
-          playsMessage(101, [{ op: "add", path: "/entities/plays", value: plays("401872966237") }]),
+          TestFastCast.checkpoint(TestFastCast.ariAtNygPlays, 99, { entities: {} }),
+          TestFastCast.checkpoint(TestFastCast.neAtBufPlays, 99, { entities: {} }),
+          playsMessage(101, [{ op: "add", path: "/entities/plays", value: TestEspn.plays("401872966237") }]),
           playsMessage(
             100,
-            [{ op: "add", path: "/entities/plays", value: plays("401872971330") }],
-            neAtBufPlays
+            [{ op: "add", path: "/entities/plays", value: TestEspn.plays("401872971330") }],
+            TestFastCast.neAtBufPlays
           )
         ]
 
         const deliveries = yield* decoded(frames)
 
-        const reset = yield* resetTopics(frames)
         const after = deliveries.filter(({ frame }) => frame > 2)
         assert.deepStrictEqual(
           after.map(({ delivery }) => delivery._tag),
           ["Plays"]
         )
         assert.deepStrictEqual(after.map(playIds)[0], ["401872971330"])
-        assert.deepStrictEqual(reset, [ariAtNygPlays])
       })
     )
 
     // Recorded 2026-10-10 00:22Z: FSU at LOU's game topic checkpoint, live in the second quarter.
     it.effect("should decode a recorded college game's plays", () =>
       Effect.gen(function* () {
-        const document = JSON.parse(fixture("fbs-gp-checkpoint-2026-10-10T0022Z.json"))
+        const document = JSON.parse(
+          readFileSync(new URL("./fixtures/fbs-gp-checkpoint-2026-10-10T0022Z.json", import.meta.url), "utf8")
+        )
 
         const deliveries = yield* decoded([
-          checkpoint("gp-football-college-football-401858254", 386, document)
+          TestFastCast.checkpoint("gp-football-college-football-401858254", 386, document)
         ])
 
         const [plays] = deliveries.map(playIds)
@@ -418,9 +354,9 @@ describe("GameTopics#take", () => {
   describe("one array of deliveries per frame", () => {
     it.effect("should give a message that changes no document no deliveries", () =>
       Effect.gen(function* () {
-        const [, second, ...rest] = yield* TestEspn.framesReplayed([
-          neAtBufCheckpoint(),
-          message(neAtBufPlays, 819, [{ op: "replace", path: "/x", value: "1" }])
+        const [, second, ...rest] = yield* TestGameTopics.framesReplayed([
+          TestFastCast.neAtBufCheckpoint(),
+          TestFastCast.message(TestFastCast.neAtBufPlays, 819, [{ op: "replace", path: "/x", value: "1" }])
         ])
 
         assert.deepStrictEqual(rest, [])
@@ -430,9 +366,9 @@ describe("GameTopics#take", () => {
 
     it.effect("should give a frame that resets its topic no deliveries", () =>
       Effect.gen(function* () {
-        const frames = [neAtBufCheckpoint(), undecodablePatch(819)]
+        const frames = [TestFastCast.neAtBufCheckpoint(), TestFastCast.undecodablePatch(819)]
 
-        const all = yield* TestEspn.framesReplayed(frames)
+        const all = yield* TestGameTopics.framesReplayed(frames)
 
         assert.strictEqual(all.length, frames.length)
         assert.deepStrictEqual(all.at(-1), [])
@@ -441,9 +377,9 @@ describe("GameTopics#take", () => {
 
     it.effect("should give one array of deliveries per frame", () =>
       Effect.gen(function* () {
-        const frames = moveRecordingFrames()
+        const frames = TestFastCast.moveRecordingFrames()
 
-        const all = yield* TestEspn.framesReplayed(frames)
+        const all = yield* TestGameTopics.framesReplayed(frames)
 
         assert.strictEqual(all.length, frames.length)
       })
@@ -507,34 +443,34 @@ describe("GameTopics#take", () => {
 describe("GameTopics#retained", () => {
   it.effect("should drop the document and plays of a game no longer wanted", () =>
     Effect.gen(function* () {
-      const topics = yield* TestEspn.topicsAfter([neAtBufCheckpoint()])
+      const topics = yield* TestGameTopics.topicsAfter([TestFastCast.neAtBufCheckpoint()])
 
-      const kept = topics.retained((topic) => topic.tc() !== neAtBufPlays)
+      const kept = topics.retained((topic) => topic.tc() !== TestFastCast.neAtBufPlays)
 
-      assert.isFalse(HashMap.has(kept.documents.byTopic, topicNamed(neAtBufPlays)))
+      assert.isFalse(HashMap.has(kept.documents.byTopic, TestFastCast.topicNamed(TestFastCast.neAtBufPlays)))
       assert.isFalse(HashMap.has(kept.plays, GameId.make("401872971")))
     })
   )
 
   it.effect("should keep the document of a topic still wanted", () =>
     Effect.gen(function* () {
-      const topics = yield* TestEspn.topicsAfter([neAtBufCheckpoint()])
+      const topics = yield* TestGameTopics.topicsAfter([TestFastCast.neAtBufCheckpoint()])
 
-      const kept = topics.retained((topic) => topic.tc() === neAtBufPlays)
+      const kept = topics.retained((topic) => topic.tc() === TestFastCast.neAtBufPlays)
 
-      assert.isTrue(kept.isSynced(topicNamed(neAtBufPlays)))
+      assert.isTrue(kept.isSynced(TestFastCast.topicNamed(TestFastCast.neAtBufPlays)))
     })
   )
 
   it.effect("should keep a trailing game checkpoint until retention drops it", () =>
     Effect.gen(function* () {
-      const [afterPush, said] = yield* GameTopics.empty.take(neAtBufCheckpoint())
+      const [afterPush, said] = yield* GameTopics.empty.take(TestFastCast.neAtBufCheckpoint())
 
       const kept = afterPush.retained(() => false)
 
       assert.isTrue(said.some(Delivery.$is("Plays")))
-      assert.isTrue(afterPush.isSynced(topicNamed(neAtBufPlays)))
-      assert.isFalse(HashMap.has(kept.documents.byTopic, topicNamed(neAtBufPlays)))
+      assert.isTrue(afterPush.isSynced(TestFastCast.topicNamed(TestFastCast.neAtBufPlays)))
+      assert.isFalse(HashMap.has(kept.documents.byTopic, TestFastCast.topicNamed(TestFastCast.neAtBufPlays)))
       assert.isFalse(HashMap.has(kept.plays, GameId.make("401872971")))
     })
   )
@@ -542,109 +478,15 @@ describe("GameTopics#retained", () => {
 
 /** The deliveries `frames` decode to, each with the place, from 1, of the frame that said it. */
 function decoded(frames: ReadonlyArray<Frame>) {
-  return TestEspn.framesReplayed(frames).pipe(
+  return TestGameTopics.framesReplayed(frames).pipe(
     Effect.map((all) =>
       all.flatMap((deliveries, index) => deliveries.map((delivery) => ({ frame: index + 1, delivery })))
     )
   )
 }
 
-/** The topics whose document went from synced back to waiting for a checkpoint over `frames`, in order. */
-function resetTopics(frames: ReadonlyArray<Frame>) {
-  return Effect.reduce(
-    frames,
-    (): { readonly state: GameTopics; readonly topics: ReadonlyArray<string> } => ({
-      state: GameTopics.empty,
-      topics: []
-    }),
-    ({ state, topics }, frame) =>
-      Effect.map(state.take(frame), ([next]) => ({
-        state: next,
-        topics: [...topics, ...lostBetween(state, next)]
-      }))
-  ).pipe(Effect.map(({ topics }) => topics))
-}
-
-/** Each topic synced in `before` that is not in `after`, by name. */
-function lostBetween(before: GameTopics, after: GameTopics): ReadonlyArray<string> {
-  return [...HashMap.keys(before.documents.byTopic)]
-    .filter((topic) => before.documents.isSynced(topic) && !after.documents.isSynced(topic))
-    .map((topic) => topic.tc())
-}
-
-function checkpoint(tc: string, mid: number, document: unknown): Frame {
-  return Frame.Checkpoint({
-    topic: topicNamed(tc),
-    mid,
-    document: Schema.decodeSync(FastCastMessage.Checkpoint)(JSON.stringify(document))
-  })
-}
-
-/** A `P` on `tc`, its patches sent as an array, one of the three ways FastCast spells them. */
-function message(tc: string, mid: number, patches: ReadonlyArray<object>): Frame {
-  const pl = JSON.stringify({ ts: 1791136341731, pl: patches })
-  return Frame.Pushed({
-    topic: Topic.fromTc(tc),
-    mid: Option.some(mid),
-    envelope: decodeEnvelope(JSON.stringify({ op: "P", tc, mid, pl }))
-  })
-}
-
-/** The topic `tc` names; a test names only real ones. */
-function topicNamed(tc: string): Topic {
-  return Option.getOrThrow(Topic.fromTc(tc))
-}
-
-function playsMessage(mid: number, patches: ReadonlyArray<object>, channel = ariAtNygPlays) {
-  return message(channel, mid, patches)
-}
-
-function plays(...ids: ReadonlyArray<string>) {
-  return Object.fromEntries(ids.map((id) => [id, playEntities[id] ?? {}]))
-}
-
-const decodeEnvelope = Schema.decodeUnknownOption(Schema.fromJsonString(FastCastMessage.Envelope))
-
 function tags(deliveries: ReadonlyArray<{ readonly delivery: Delivery }>) {
   return deliveries.map(({ delivery }) => delivery._tag)
-}
-
-function playIds({ delivery }: { readonly delivery: Delivery }) {
-  return Delivery.$is("Plays")(delivery) ? delivery.plays.map((play) => play.id) : []
-}
-
-/** NE at BUF's game topic synced at the recorded checkpoint, message 818. */
-function neAtBufCheckpoint(): Frame {
-  return checkpoint(neAtBufPlays, moveRecording.checkpoint.mid, moveRecording.checkpoint.body)
-}
-
-/** A patch and an idle message on NE at BUF's game topic, before any checkpoint. */
-function beforeAnyCheckpoint(): ReadonlyArray<Frame> {
-  const idle = Frame.Pushed({
-    topic: Topic.fromTc(neAtBufPlays),
-    mid: Option.some(820),
-    envelope: decodeEnvelope(JSON.stringify({ op: "I", tc: neAtBufPlays, mid: 820 }))
-  })
-  return [textReplaced(819), idle]
-}
-
-/** A patch on NE at BUF's game topic that sets its penalty play's text. */
-function textReplaced(mid: number) {
-  return message(neAtBufPlays, mid, [
-    { op: "replace", path: "/entities/plays/401872971792/text", value: "Corrected" }
-  ])
-}
-
-/** A patch on NE at BUF's game topic that will not apply: it has no such play. */
-function unapplicablePatch(mid: number) {
-  return message(neAtBufPlays, mid, [
-    { op: "replace", path: "/entities/plays/no-such-play/text", value: "Corrected" }
-  ])
-}
-
-/** A message on NE at BUF's game topic that does not decode: FastCast sends no `test` op. */
-function undecodablePatch(mid: number) {
-  return message(neAtBufPlays, mid, [{ op: "test", path: "/entities/plays", value: {} }])
 }
 
 /** The text of play `id` in `delivery`, when it delivers plays. */
@@ -654,15 +496,10 @@ function textOf(delivery: Delivery | undefined, id: string) {
     : undefined
 }
 
-/** BUF at NE's recorded checkpoint and the messages after it, as FastCast frames. */
-function moveRecordingFrames(): ReadonlyArray<Frame> {
-  const messages = moveRecording.messages.map(
-    ({ op, tc, mid, ts, pl }): Frame =>
-      Frame.Pushed({
-        topic: Topic.fromTc(tc),
-        mid: Option.some(mid),
-        envelope: decodeEnvelope(JSON.stringify({ op, tc, mid, pl: JSON.stringify({ ts, pl }) }))
-      })
-  )
-  return [neAtBufCheckpoint(), ...messages]
+function playsMessage(mid: number, patches: ReadonlyArray<object>, channel = TestFastCast.ariAtNygPlays) {
+  return TestFastCast.message(channel, mid, patches)
+}
+
+function playIds({ delivery }: { readonly delivery: Delivery }) {
+  return Delivery.$is("Plays")(delivery) ? delivery.plays.map((play) => play.id) : []
 }
