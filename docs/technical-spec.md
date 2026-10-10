@@ -222,10 +222,12 @@ sportal/
     ├── web/
     │   └── src/
     │       ├── main.tsx
+    │       ├── WebRuntime.ts       The web UI's one runtime
     │       ├── theme.css           Desk and couch density themes
     │       ├── design/             Vendored shadcn primitives, under the CLI's own file names
     │       ├── display/            This device's Display: state and rules, hotkeys, full screen, overlays, top bar, command palette
-    │       ├── hub/                HubClient (typed client from SportalApi), LiveStream (the live stream, as an atom), HubRuntime
+    │       ├── shell/              Shell: the edge to the window and the shell bridge
+    │       ├── hub/                HubClient (typed client from SportalApi), LiveStream (the live stream, as an atom)
     │       ├── slate/              The slate strip and its cards
     │       ├── screen/             The Screen (state, commands, source choice), this Display's copy of it, tiles, dividers, tile actions, rejections
     │       ├── layout/             Layout (the geometry: slots, dividers, next, clamp), its picker and glyphs
