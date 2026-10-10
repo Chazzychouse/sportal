@@ -98,7 +98,7 @@ export class Screen extends Schema.Class<Screen>("sportal/Screen")({
 
   /** The slot a game is in, if it is on screen. */
   slotOf(game: GameId): number | undefined {
-    const slot = this.onScreen().findIndex((tile) => !Tile.guards.Empty(tile) && tile.game === game)
+    const slot = this.onScreen().findIndex((tile) => holds(tile, game))
     return slot === -1 ? undefined : slot
   }
 
@@ -122,57 +122,46 @@ export class Screen extends Schema.Class<Screen>("sportal/Screen")({
     command: ScreenCommand,
     availabilityOf: (game: GameId) => ReadonlyArray<ChannelAvailability>
   ): Result.Result<Screen, ScreenRejection> {
-    return ScreenCommand.match<Result.Result<Screen, ScreenRejection>>(command, {
-      SetLayout: ({ layout }) => Result.succeed(settle({ ...this, layout })),
+    const next = ScreenCommand.match<Result.Result<Unsettled, ScreenRejection>>(command, {
+      SetLayout: ({ layout }) => Result.succeed({ ...this, layout }),
       SetSplit: ({ split }) => {
         const { min, max } = Screen.splitBounds
-        const holds = [split.x, split.y].every((at) => at >= min && at <= max)
-        return holds ? Result.succeed(settle(this.withSplit(split))) : reject("split-out-of-range")
+        const holdsSplit = [split.x, split.y].every((at) => at >= min && at <= max)
+        return holdsSplit ? Result.succeed(this.withSplit(split)) : reject("split-out-of-range")
       },
-      Unsolo: () => Result.succeed(settle({ ...this, solo: Option.none() })),
+      Unsolo: () => Result.succeed({ ...this, solo: Option.none() }),
       Swap: ({ a, b }) =>
         Option.isNone(Arr.get(this.tiles, a)) || Option.isNone(Arr.get(this.tiles, b))
           ? reject("no-such-tile")
-          : Result.succeed(settle({ ...this, tiles: swapped(this.tiles, a, b) })),
+          : Result.succeed({ ...this, tiles: swapped(this.tiles, a, b) }),
       Assign: ({ tile, game }) =>
         tileAt(this, tile, () => {
           const assigned = tileFor(game, availabilityOf(game))
           // A game appears in at most one tile, on screen or benched: assigning it elsewhere moves it.
           const tiles = this.tiles.map((existing, index) =>
-            index === tile
-              ? assigned
-              : !Tile.guards.Empty(existing) && existing.game === game
-                ? empty
-                : existing
+            index === tile ? assigned : holds(existing, game) ? empty : existing
           )
-          return Result.succeed(settle({ ...this, tiles }))
+          return Result.succeed({ ...this, tiles })
         }),
       Clear: ({ tile }) =>
-        tileAt(this, tile, () =>
-          Result.succeed(
-            settle({
-              ...this,
-              tiles: this.tiles.map((existing, index) => (index === tile ? empty : existing))
-            })
-          )
-        ),
+        tileAt(this, tile, () => {
+          const tiles = this.tiles.map((existing, index) => (index === tile ? empty : existing))
+          return Result.succeed({ ...this, tiles })
+        }),
       Promote: ({ tile }) =>
         tileAt(this, tile, (found) =>
           occupied(found, ({ game }) =>
-            Result.succeed(
-              settle({ ...this, tiles: swapped(this.tiles, 0, tile), audioFocus: Option.some(game) })
-            )
+            Result.succeed({ ...this, tiles: swapped(this.tiles, 0, tile), audioFocus: Option.some(game) })
           )
         ),
       FocusAudio: ({ tile }) =>
-        onScreenAt(this, tile, ({ game }) =>
-          Result.succeed(settle({ ...this, audioFocus: Option.some(game) }))
-        ),
+        onScreenAt(this, tile, ({ game }) => Result.succeed({ ...this, audioFocus: Option.some(game) })),
       Solo: ({ tile }) =>
         onScreenAt(this, tile, ({ game }) =>
-          Result.succeed(settle({ ...this, audioFocus: Option.some(game), solo: Option.some(game) }))
+          Result.succeed({ ...this, audioFocus: Option.some(game), solo: Option.some(game) })
         )
     })
+    return Result.map(next, settle)
   }
 
   /**
@@ -221,12 +210,21 @@ export class ScreenRejection extends Schema.TaggedError<ScreenRejection>()("Scre
 /** A tile that holds a game. */
 type Occupied = Exclude<Tile, { readonly _tag: "Empty" }>
 
+/** A Screen's fields before `settle` makes them a Screen that keeps its invariants. */
+interface Unsettled {
+  readonly tiles: ReadonlyArray<Tile>
+  readonly layout: LayoutName
+  readonly splits: Screen["splits"]
+  readonly audioFocus: Option.Option<GameId>
+  readonly solo: Option.Option<GameId>
+}
+
 /** Runs `f` on the tile at `index`, or rejects a tile that does not exist. */
 function tileAt(
   screen: Screen,
   index: number,
-  f: (tile: Tile) => Result.Result<Screen, ScreenRejection>
-): Result.Result<Screen, ScreenRejection> {
+  f: (tile: Tile) => Result.Result<Unsettled, ScreenRejection>
+): Result.Result<Unsettled, ScreenRejection> {
   return Option.match(Arr.get(screen.tiles, index), { onNone: () => reject("no-such-tile"), onSome: f })
 }
 
@@ -234,8 +232,8 @@ function tileAt(
 function onScreenAt(
   screen: Screen,
   index: number,
-  f: (tile: Occupied) => Result.Result<Screen, ScreenRejection>
-): Result.Result<Screen, ScreenRejection> {
+  f: (tile: Occupied) => Result.Result<Unsettled, ScreenRejection>
+): Result.Result<Unsettled, ScreenRejection> {
   return tileAt(screen, index, (tile) =>
     index >= Screen.slotCount(screen.layout) ? reject("offscreen-tile") : occupied(tile, f)
   )
@@ -243,9 +241,13 @@ function onScreenAt(
 
 function occupied(
   tile: Tile,
-  f: (tile: Occupied) => Result.Result<Screen, ScreenRejection>
-): Result.Result<Screen, ScreenRejection> {
+  f: (tile: Occupied) => Result.Result<Unsettled, ScreenRejection>
+): Result.Result<Unsettled, ScreenRejection> {
   return Tile.guards.Empty(tile) ? reject("empty-tile") : f(tile)
+}
+
+function holds(tile: Tile, game: GameId): boolean {
+  return !Tile.guards.Empty(tile) && tile.game === game
 }
 
 function tileFor(game: GameId, availability: ReadonlyArray<ChannelAvailability>): Tile {
@@ -287,13 +289,7 @@ function usefulness(availability: ChannelAvailability): number {
  * Builds a Screen that keeps the invariants: the layout's slots exist, the bench ends in a game, audio is on
  * an on-screen game (the focused one while it is on screen, else the first), and solo is on an on-screen game.
  */
-function settle(fields: {
-  tiles: ReadonlyArray<Tile>
-  layout: LayoutName
-  splits: Screen["splits"]
-  audioFocus: Option.Option<GameId>
-  solo: Option.Option<GameId>
-}): Screen {
+function settle(fields: Unsettled): Screen {
   const slots = Screen.slotCount(fields.layout)
   const kept = Option.getOrElse(
     Option.map(
