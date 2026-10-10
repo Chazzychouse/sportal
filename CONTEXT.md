@@ -129,6 +129,15 @@ Provider and Source are the two words most likely to be swapped. Provider is alw
 | **Tile placement** | Where a game's stream tile sits in a Display's window, what it loads, and whether it is muted or interactive, as told to the shell. | bounds, rect |
 | **Screen transition** | How tiles move to new places: one duration and easing, shared by the web UI and the shell. | animation |
 
+### Automation
+
+| Term | Meaning | Not |
+| --- | --- | --- |
+| **Moment** | What kind of thing is happening in a game now — a scoring threat (red zone), crunch time, a big play, live play, a break, upcoming, or final — one per game, the highest in precedence of those that hold; `Moment` in `packages/domain/src/Moment.ts`. | event, state |
+| **Break** | A live game stopped: a timeout, the end of a period, halftime, a delay, or the gap from a score to the next kickoff; the `Break` moment and its `BreakReason`. Inferred from the data, never the video. | commercial, lull |
+| **Classification** | A game's moment, since when, and its score 0–100 with the points each part gave it; `Classification` in `packages/domain/src/Classification.ts`. | rating, watchability |
+| **Matchup prior** | What a game promises before it starts: the mean of how close its line is, how highly its teams are ranked, and how often they have won. It fades as the game is played. | |
+
 ## Planned
 
 Names the design uses that no code has yet. Move a row up, into its table, in the commit that builds it.
@@ -149,8 +158,4 @@ Names the design uses that no code has yet. Move a row up, into its table, in th
 | **Spoiler shield** | Hiding or delaying scores for chosen games. | |
 | **Follow** | Your declared interest in a team, conference, league, or game. | favourite, subscription |
 | **Persistence** | What the Hub keeps between runs: none for now, added back on top of the simplified model. | storage, database |
-| **Game event** | Something that happened in a game (a score, a turnover, a play, a period ending), derived from a game's snapshot changes and plays. The code had it and dropped it while nothing read it; the Director's rules derive it again. | alert, update |
-| **Trigger** | A condition over game events and snapshots. | |
-| **Rule** | A trigger bound to how it moves games in the Director's ranking by watchability; it sends no screen command. | automation |
-| **Alert** | A user-facing notification produced by a rule. | event |
 | **Ticket** | A bet you have placed, tracked by the betting lens (later). | bet, wager |
