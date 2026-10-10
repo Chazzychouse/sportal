@@ -34,7 +34,6 @@ export function RemoteView(props: { id: DisplayId }) {
   const input = useAtomSet(RemoteState.display(props.id))
   const send = useAtomSet(RemoteState.send(props.id))
   const [soundReady, setSoundReady] = useState(Chime.unlocked)
-  const [tab, setTab] = useState<StripCard["section"]>("Live")
   useAtomSubscribe(RemoteState.promptKey(props.id), (key) => {
     if (key !== undefined) Chime.play()
   })
@@ -57,8 +56,6 @@ export function RemoteView(props: { id: DisplayId }) {
         Offline: () => <Waiting cards={StripCard.of(Screen.initial, live.slate, live.classifications)} />,
         Reported: ({ report }) => {
           const cards = StripCard.of(report.screen, live.slate, live.classifications)
-          const shown = Arr.dedupe(cards.map((card) => card.section))
-          const open = shown.includes(tab) ? tab : shown[0]
           return (
             <>
               <div className="sticky top-0 z-10 flex flex-col gap-2 border-b bg-background/95 px-3 pt-[max(0.75rem,env(safe-area-inset-top))] pb-3 backdrop-blur">
@@ -109,12 +106,7 @@ export function RemoteView(props: { id: DisplayId }) {
                   onCommand={(command) => send({ _tag: "Commanded", command })}
                 />
               </div>
-              <SlateList
-                cards={cards}
-                open={open}
-                onTab={setTab}
-                onDrop={(card) => input(DisplayInput.Dropped({ card }))}
-              />
+              <SlateList cards={cards} onDrop={(card) => input(DisplayInput.Dropped({ card }))} />
             </>
           )
         }
@@ -126,32 +118,28 @@ export function RemoteView(props: { id: DisplayId }) {
 
 /** While the Display is not reporting: say so, and keep the slate readable with nothing to tap. */
 function Waiting(props: { cards: ReadonlyArray<StripCard> }) {
-  const [tab, setTab] = useState<StripCard["section"]>("Live")
-  const shown = Arr.dedupe(props.cards.map((card) => card.section))
   return (
     <>
       <p className="px-3 pt-[max(0.75rem,env(safe-area-inset-top))] pb-1 text-muted-foreground text-sm">
         Display offline, waiting…
       </p>
-      <SlateList
-        cards={props.cards}
-        open={shown.includes(tab) ? tab : shown[0]}
-        onTab={setTab}
-        onDrop={undefined}
-      />
+      <SlateList cards={props.cards} onDrop={undefined} />
     </>
   )
 }
 
-/** The slate in tabs, one per section with games; a row's tap drops its game, or nothing without `onDrop`. */
+/**
+ * The slate in tabs, one per section with games, Live open first, or the first shown while the chosen one has none; a
+ * row's tap drops its game, or nothing without `onDrop`.
+ */
 function SlateList(props: {
   cards: ReadonlyArray<StripCard>
-  open: StripCard["section"] | undefined
-  onTab: (section: StripCard["section"]) => void
   onDrop: ((card: StripCard) => void) | undefined
 }) {
-  const { cards, open, onDrop } = props
+  const { cards, onDrop } = props
+  const [tab, setTab] = useState<StripCard["section"]>("Live")
   const shown = Arr.dedupe(cards.map((card) => card.section))
+  const open = shown.includes(tab) ? tab : shown[0]
   return (
     <>
       <nav className="flex gap-1 px-3 pt-3" aria-label="Slate">
@@ -160,7 +148,7 @@ function SlateList(props: {
             key={section}
             type="button"
             aria-pressed={open === section}
-            onClick={() => props.onTab(section)}
+            onClick={() => setTab(section)}
             className={`label-caps min-h-9 flex-1 rounded-sm text-[11px] ${
               open === section ? "bg-accent text-foreground" : "text-muted-foreground"
             }`}
