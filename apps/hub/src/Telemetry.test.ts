@@ -5,7 +5,7 @@ import { HttpClient, HttpClientError, HttpClientResponse } from "effect/http"
 import { TestClock, TestConsole } from "effect/testing"
 import { HubConfig } from "./HubConfig.ts"
 import * as Telemetry from "./Telemetry.ts"
-import { recordingLogs } from "./TestTelemetry.ts"
+import { gauged, recordingLogs } from "./TestTelemetry.ts"
 
 describe("Telemetry", () => {
   it.effect("should export nothing without SPORTAL_OTLP_URL", () =>
@@ -24,6 +24,24 @@ describe("Telemetry", () => {
 
       assert.strictEqual(minimum, "Warn")
     }).pipe(Effect.provide(telemetryWithoutCollector({ SPORTAL_LOG_LEVEL: "Warn" })))
+  )
+
+  it.effect("should gauge the Hub as up while telemetry is active and down after its graceful stop", () =>
+    Effect.gen(function* () {
+      const registry: Metric.MetricRegistry = new Map()
+      const active = yield* Layer.build(telemetryWithoutCollector({})).pipe(
+        Effect.andThen(gauged("sportal_hub_up")),
+        Effect.scoped,
+        Effect.provideService(Metric.MetricRegistry, registry)
+      )
+
+      const stopped = yield* gauged("sportal_hub_up").pipe(
+        Effect.provideService(Metric.MetricRegistry, registry)
+      )
+
+      assert.strictEqual(active, 1)
+      assert.strictEqual(stopped, 0)
+    })
   )
 
   it.effect("should send spans, logs, and metrics below the base URL", () =>
