@@ -40,16 +40,6 @@ export function plays(...ids: ReadonlyArray<string>) {
 }
 
 /**
- * Every play id NE at BUF's recorded frames add. Measured once over the fixture: every play id its topic's patches add,
- * whole or one at a time (none is removed, moved, or copied), counted with
- *   zcat nfl-2026-10-04-ne-buf.frames.jsonl.gz | jq -r 'select(.kind=="change") | .body | fromjson
- *     | select(.op=="P" or .op=="R") | .pl | fromjson | .pl | fromjson | .[]
- *     | select(.path|test("^/entities/plays(/[^/]+)?$"))
- *     | if .path=="/entities/plays" then (.value|keys[]) else (.path|ltrimstr("/entities/plays/")) end' | sort -u | wc -l
- */
-export const recordedPlays = 182
-
-/**
  * NE at BUF's frames on 2026-10-04, one JSON frame a line in a gzip'd file: imported from the recording, its game
  * topic's frames and every scoreboard poll of the day, trimmed to it.
  */
