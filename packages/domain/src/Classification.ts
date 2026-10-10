@@ -42,7 +42,7 @@ export class Classification extends Schema.Class<Classification>("sportal/Classi
   }
 }
 
-// Every tunable number of the score, in one place.
+// Every tunable number of the score, with `momentBonus` below.
 const weights = {
   /** An upcoming game's share of its prior. */
   upcoming: 0.6,
@@ -54,8 +54,9 @@ const weights = {
   closeMargin: 17,
   /** How much a tie counts at kickoff, rising to all of it at the end of regulation. */
   earlyCloseness: 0.4,
-  /** The win-probability swing that counts in full, and what it is worth. */
+  /** The win-probability swing that counts in full. */
   swingCap: 0.3,
+  /** What a full swing is worth. */
   swing: 0.3,
   /** What an upset brewing in the second half is worth. */
   upset: 0.15

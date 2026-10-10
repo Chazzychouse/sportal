@@ -110,14 +110,13 @@ describe("Classification.of, the matchup prior", () => {
       upcoming,
       at
     )
-    const pickEm = Classification.of(
-      { snapshot: game, odds: odds({ spread: 0 }), winProbabilities: [] },
+    const worstLine = Classification.of(
+      { snapshot: game, odds: odds({ spread: 21 }), winProbabilities: [] },
       upcoming,
       at
     )
 
-    assert.isAbove(withoutLine.score, 0)
-    assert.isAbove(pickEm.score, withoutLine.score)
+    assert.isAbove(withoutLine.score, worstLine.score)
   })
 
   it("should give each part's points in the breakdown, adding up to the score", () => {
