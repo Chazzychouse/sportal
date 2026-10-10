@@ -7,201 +7,18 @@
     "to": "now"
   },
   "refresh": "30s",
-  "links": [],
+  "links": [
+    {
+      "title": "Game Day",
+      "type": "link",
+      "url": "/d/sportal-game-day/game-day?from=${__from}&to=${__to}&refresh=10s",
+      "targetBlank": false
+    }
+  ],
   "templating": {
-    "list": [
-      {
-        "name": "matchup",
-        "label": "Game",
-        "type": "query",
-        "datasource": {
-          "type": "prometheus",
-          "uid": "prometheus"
-        },
-        "query": {
-          "qryType": 1,
-          "query": "label_values(sportal_game_state_ratio, matchup)",
-          "refId": "PrometheusVariableQueryEditor-VariableQuery"
-        },
-        "definition": "label_values(sportal_game_state_ratio, matchup)",
-        "refresh": 2,
-        "multi": true,
-        "includeAll": true,
-        "allValue": ".*",
-        "current": {
-          "text": "All",
-          "value": "$__all"
-        },
-        "sort": 1
-      }
-    ]
+    "list": []
   },
   "panels": [
-    {
-      "type": "table",
-      "title": "Games",
-      "id": 27,
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "description": "Every game the slate has listed, with its progress now: a game no listing names drops out (its series is removed).",
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "max by (game, league, matchup) (sportal_game_state_ratio)",
-          "instant": true,
-          "range": false,
-          "format": "table"
-        }
-      ],
-      "transformations": [
-        {
-          "id": "organize",
-          "options": {
-            "excludeByName": {
-              "Time": true
-            },
-            "indexByName": {
-              "matchup": 0,
-              "league": 1,
-              "Value": 2,
-              "game": 3
-            },
-            "renameByName": {
-              "Value": "State",
-              "matchup": "Matchup",
-              "league": "League",
-              "game": "Game id"
-            }
-          }
-        },
-        {
-          "id": "sortBy",
-          "options": {
-            "sort": [
-              {
-                "field": "State",
-                "desc": false
-              }
-            ]
-          }
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "State"
-            },
-            "properties": [
-              {
-                "id": "mappings",
-                "value": [
-                  {
-                    "type": "value",
-                    "options": {
-                      "1": {
-                        "text": "Upcoming",
-                        "color": "blue",
-                        "index": 1
-                      },
-                      "2": {
-                        "text": "Live",
-                        "color": "green",
-                        "index": 2
-                      },
-                      "3": {
-                        "text": "Over",
-                        "color": "purple",
-                        "index": 3
-                      }
-                    }
-                  }
-                ]
-              },
-              {
-                "id": "custom.cellOptions",
-                "value": {
-                  "type": "color-text"
-                }
-              }
-            ]
-          }
-        ]
-      },
-      "gridPos": {
-        "x": 0,
-        "y": 0,
-        "w": 24,
-        "h": 10
-      }
-    },
-    {
-      "id": 50,
-      "type": "row",
-      "title": "Plays",
-      "collapsed": false,
-      "gridPos": {
-        "x": 0,
-        "y": 10,
-        "w": 24,
-        "h": 1
-      },
-      "panels": []
-    },
-    {
-      "id": 51,
-      "type": "logs",
-      "title": "Plays",
-      "gridPos": {
-        "x": 0,
-        "y": 11,
-        "w": 16,
-        "h": 10
-      },
-      "datasource": {
-        "type": "loki",
-        "uid": "loki"
-      },
-      "options": {
-        "sortOrder": "Descending",
-        "showTime": true
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "{service_name=\"sportal-hub\"} | play=~\".+\" | matchup=~\"$matchup\""
-        }
-      ]
-    },
-    {
-      "id": 52,
-      "type": "logs",
-      "title": "Scoring plays",
-      "gridPos": {
-        "x": 16,
-        "y": 11,
-        "w": 8,
-        "h": 10
-      },
-      "datasource": {
-        "type": "loki",
-        "uid": "loki"
-      },
-      "options": {
-        "sortOrder": "Descending",
-        "showTime": true
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "{service_name=\"sportal-hub\"} | play=~\".+\" | matchup=~\"$matchup\" | scoring=\"true\""
-        }
-      ]
-    },
     {
       "id": 12,
       "type": "row",
@@ -209,7 +26,7 @@
       "collapsed": false,
       "gridPos": {
         "x": 0,
-        "y": 21,
+        "y": 0,
         "w": 24,
         "h": 1
       },
@@ -221,7 +38,7 @@
       "title": "FastCast logs",
       "gridPos": {
         "x": 0,
-        "y": 22,
+        "y": 1,
         "w": 24,
         "h": 10
       },
@@ -247,7 +64,7 @@
       "collapsed": false,
       "gridPos": {
         "x": 0,
-        "y": 32,
+        "y": 11,
         "w": 24,
         "h": 1
       },
@@ -259,7 +76,7 @@
       "title": "Pushes behind their listing by league",
       "gridPos": {
         "x": 0,
-        "y": 33,
+        "y": 12,
         "w": 24,
         "h": 8
       },
@@ -294,7 +111,7 @@
       "title": "Provider logs",
       "gridPos": {
         "x": 0,
-        "y": 41,
+        "y": 20,
         "w": 24,
         "h": 8
       },
@@ -320,7 +137,7 @@
       "collapsed": true,
       "gridPos": {
         "x": 0,
-        "y": 49,
+        "y": 28,
         "w": 24,
         "h": 1
       },
@@ -331,7 +148,7 @@
           "title": "Hub log volume by level",
           "gridPos": {
             "x": 0,
-            "y": 78,
+            "y": 29,
             "w": 12,
             "h": 8
           },
@@ -365,7 +182,7 @@
           "title": "Recent warnings and errors",
           "gridPos": {
             "x": 12,
-            "y": 78,
+            "y": 29,
             "w": 12,
             "h": 8
           },

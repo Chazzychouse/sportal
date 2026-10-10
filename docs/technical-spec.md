@@ -42,7 +42,7 @@ Versions were checked against the registry on 2026-10-03. Effect is at 4.0, whic
 | UI state | Server state mirrored from the Hub's live stream into one store; local-only state in component state | The Hub owns shared state, so the client has little of its own |
 | Styling | Tailwind CSS with two density themes (desk, couch) | Same components, two presentation modes |
 | Desktop shell | Electron (castlabs Widevine build), one `WebContentsView` per stream tile, electron-vite | The only dependable way to play Widevine content in several independent views |
-| Telemetry | Effect's own OTLP exporters (`effect/observability`), over OTLP/HTTP to a collector named by `SPORTAL_OTLP_URL`; without it the Hub only logs to the console | Spans, logs, and metrics with no OpenTelemetry SDK and no new dependency |
+| Telemetry | Effect's own OTLP exporters (`effect/observability`), over OTLP/HTTP to a collector named by `SPORTAL_OTLP_URL`; without it the Hub only logs to the console | Spans, logs, and metrics with no OpenTelemetry SDK and no new dependency; the provisioned Sportal folder contains Game Day, Game Detail, and Hub |
 | Tests | Vitest with `@effect/vitest` | Effect-aware tests with a controllable clock |
 | Lint and format | Biome | One fast tool |
 | Structure enforcement | dependency-cruiser (import boundaries), knip (unused files, exports, dependencies) | The layout rules in section 4 are checked by machine, not by memory |
@@ -147,7 +147,7 @@ sportal/
 ├── vitest.config.ts            Vitest projects and coverage; each workspace has its own vitest.config.ts
 ├── .dependency-cruiser.cjs     Import-direction and banned-name rules
 ├── lefthook.yml
-├── telemetry/                  Local Grafana: compose file and the Hub's dashboards
+├── telemetry/                  Local Grafana: compose file, Game Day, Game Detail, and Hub dashboards
 │
 ├── docs/
 │   ├── product-plan.md
@@ -308,7 +308,7 @@ class Director extends Context.Service<Director, {
 ```
 
 - The `Slate` (`Slate.ts`) is the fold: an ordered list of `Game`s, leagues in `LeagueId` order and each league's in its listing's order, each with its latest `GameSnapshot` and its plays. `take(deliveries)` on it is pure and returns the next slate and its slate changes; a take that changes nothing gives back the same slate.
-- The Director starts from an empty slate and takes each frame's deliveries as they arrive, in one `Director.take` span carrying its `sportal.deliveries` count, and, from the slate changes each take gives, gauges each game whose snapshot changed by its progress (`sportal_game_state`: 1 upcoming, 2 live, 3 over; a game no listing names any more has its series removed), which the Hub dashboard's Games table reads, and logs each play a take adds (Info, annotated with `game`, `league`, `matchup`, `play` and `scoring`). For now nothing is kept between runs: a restarted Hub serves an empty slate until its provider's next poll lists the day's games.
+- The Director starts from an empty slate and takes each frame's deliveries as they arrive, in one `Director.take` span carrying its `sportal.deliveries` count. From the slate changes each take gives, it gauges each listed game's progress (`sportal_game_state`: 1 upcoming, 2 live, 3 over), status (`sportal_game_status`: 1 scheduled, 2 live, 3 halftime, 4 delayed, 5 final, 6 postponed, 7 canceled), away and home scores (`sportal_game_score`), period (`sportal_game_period`), clock (`sportal_game_clock`), kickoff as Unix seconds (`sportal_game_kickoff`), and accepted-at time as Unix seconds (`sportal_game_updated_at`). Every series carries stable `game`, `league`, and `matchup` attributes; score series also carry `side` and `team`. A changing value updates its series, and a game no listing names has every current-game series removed. The Director logs each play a take adds at Info, annotated with `game`, `league`, `matchup`, `play`, and `scoring`; these logs, rather than a play counter, supply the latest-five, scoring-only, and complete-in-range play panels. For now nothing is kept between runs: a restarted Hub serves an empty slate until its provider's next poll lists the day's games.
 - A take that raises a defect is an Error log; the slate keeps what it had and takes the next frame. If the provider's frames end other than by the Hub stopping, that is an Error log and the slate stays as it is.
 - The Hub server's live route builds `SlateChanged`: each listed game as the slate has it, carrying only its last ten plays (`Game#recent`), beside its availability from every source. The Slate and the Director know nothing of sources or the API: the live route joins the Director's slate with the source's availability, drops a message that is the same as the last, and sends it once 250 ms have passed without a further change to the slate or to a source (a trailing settling, not a maximum latency: continuous updates keep deferring it).
 - `main.ts` provides it over ESPN as the provider and YouTube TV and Twitch as the sources.
@@ -382,6 +382,8 @@ Expected failures are typed errors in the Effect error channel, each handled whe
 | Live feed refused, closed, silent, or out of step | Logged as a Warning with its reason; resubscribed from a checkpoint with backoff from 1 s to 1 min; the poll carries on, so games go on updating at the poll's pace |
 | Applying a delivery dies | Error log; the slate keeps what it had and takes the next frame |
 | Telemetry collector unreachable | One warning naming its URL; the exporters drop what they cannot send and the Hub carries on, and still stops within its shutdown bound |
+
+The `sportal_hub_up` gauge is 1 while the Hub telemetry registry is active, so the dashboards distinguish a healthy Hub with an empty slate from an unavailable Hub whose series is absent after Prometheus staleness.
 
 ## 6. Domain language
 
