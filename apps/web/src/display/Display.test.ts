@@ -469,6 +469,13 @@ describe("Display#press", () => {
     assert.strictEqual(display, Display.initial)
     assert.deepStrictEqual(commands, [])
   })
+
+  it("should return the same display with ToggleAutopilot and send nothing", () => {
+    const { display, commands } = press(Display.initial, { _tag: "ToggleAutopilot" }, TestWeb.withTiles([]))
+
+    assert.strictEqual(display, Display.initial)
+    assert.deepStrictEqual(commands, [])
+  })
 })
 
 describe("Display#open and Display#close", () => {

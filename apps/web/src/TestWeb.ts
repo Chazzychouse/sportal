@@ -132,15 +132,27 @@ export class FakeEventSource {
   }
 }
 
-/** A slate message's `data`, as the Hub sends it: the slate of `entries`' games, and each one's availability. */
+/**
+ * A slate message's `data`, as the Hub sends it: the slate of `entries`' games, each one's availability, and the
+ * classification of each that has one.
+ */
 export function slateMessage(
-  entries: ReadonlyArray<{ game: Game; availability: ReadonlyArray<ChannelAvailability> }>
+  entries: ReadonlyArray<{
+    game: Game
+    availability: ReadonlyArray<ChannelAvailability>
+    classification?: Classification
+  }>
 ) {
   const slate = new Slate({ games: entries.map(({ game }) => game) })
   const availability = Record.fromEntries(
     entries.map(({ game, availability }) => [game.snapshot.id, availability] as const)
   )
-  return encodeLiveMessage({ _tag: "SlateChanged", slate, availability, classifications: {} })
+  const classifications = Record.fromEntries(
+    entries.flatMap(({ game, classification }) =>
+      classification === undefined ? [] : [[game.snapshot.id, classification] as const]
+    )
+  )
+  return encodeLiveMessage({ _tag: "SlateChanged", slate, availability, classifications })
 }
 
 /** The first value of `atom` that `predicate` holds for. */
