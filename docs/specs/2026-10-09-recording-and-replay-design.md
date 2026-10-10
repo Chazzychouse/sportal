@@ -13,7 +13,7 @@ Not history queries, retention, or replay of sources: during a replay, tiles sho
 ## Where it records: the `Provider` port
 
 The Hub records what its provider delivers: each batch of `ReadonlyArray<Delivery>`, as domain values. Not raw frames
-(ADR 0008's feed log, removed by ADR 0012: tied to ESPN's wire format, larger, and recovery would rebuild `EspnState`).
+(ADR 0008's feed log, removed by ADR 0012: tied to ESPN's wire format, larger, and recovery would rebuild the game topics).
 Not each `Slate` (replay would bypass `Slate.take`, and every change would store the whole slate).
 
 So `Director`, `Slate`, `HubServer` and the ESPN provider do not change. A replay replaces the whole provider, so
@@ -113,7 +113,7 @@ In `CONTEXT.md`, in the commit that builds it:
 - **Replay** replaces the planned *Scenario*: a Hub playing a recorded day as its provider.
 - **Day**: 5 AM to 5 AM local time, named for the date it starts on.
 
-ADR 0016 records the decision, superseding ADR 0012's "nothing is kept between runs".
+ADR 0017 records the decision, superseding ADR 0012's "nothing is kept between runs".
 
 ## Testing
 
@@ -121,7 +121,7 @@ One thing per test, "should" descriptions, Arrange-Act-Assert; fakes are each se
 
 `Recording.test.ts`, against `Recording.layerTest`, and one suite against SQLite at `:memory:`:
 
-- Reading a day should give back the batches recorded from the NFL Sunday recording (its frames through `EspnState`),
+- Reading a day should give back the batches recorded from the NFL Sunday recording (its frames through `GameTopics`),
   less those that changed nothing.
 - A batch that changes nothing should write nothing.
 - A listing with one game changed should store one snapshot, not the league.

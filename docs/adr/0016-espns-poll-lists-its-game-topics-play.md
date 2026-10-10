@@ -3,7 +3,7 @@
 Date: 2026-10-09
 Status: Accepted
 
-Supersedes ADR 0014 (one ESPN fold).
+Supersedes ADR 0014's one ESPN fold and typed poll frames. ADR 0014's "FastCast follows what it is told" still stands.
 
 ## Context
 
@@ -26,6 +26,10 @@ and for a tie between a poll and a push, a metric and dashboard panel counting h
 - **Listings are the only snapshots.** Nothing pushes a snapshot, so no rule orders a push against a poll:
   `Delivery.Snapshot`, `Game#listed` and `GameSnapshot#tiesLive` are gone. A listing is taken into the slate's game
   unless it is behind it (`Game#snapshotTaken`).
+
+- **FastCast follows what it is told.** (From ADR 0014, unchanged.) `FastCast.follow(wanted)` reconciles each socket
+  toward the wanted set: it follows each topic newly wanted and each whose document went back to waiting for its
+  checkpoint, and leaves each no longer wanted. `GameTopics` logs a lost document when it resets the topic.
 
 ## Consequences
 
