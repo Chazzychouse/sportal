@@ -1,15 +1,17 @@
 import { readFileSync } from "node:fs"
 import { gunzipSync } from "node:zlib"
+import type { GameSnapshot } from "@sportal/domain/Game"
 import { LeagueId } from "@sportal/domain/League"
-import { DateTime, Effect, Layer, Option, Schema, Stream } from "effect"
+import { DateTime, Effect, HashMap, HashSet, Layer, Option, Schema, Stream } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/http"
 import * as Socket from "effect/socket/Socket"
 import { HubConfig } from "../../HubConfig.ts"
-import type { Provider } from "../Provider.ts"
+import { Delivery, type Provider } from "../Provider.ts"
 import * as Espn from "./Espn.ts"
-import { EspnState } from "./EspnState.ts"
+import { listingOf } from "./EspnEvent.ts"
 import * as FastCastMessage from "./FastCastMessage.ts"
 import { Frame } from "./Frame.ts"
+import { GameTopics } from "./GameTopics.ts"
 import { Topic } from "./Topic.ts"
 
 /**
@@ -50,8 +52,8 @@ export const recordedNeAtBuf = Effect.gen(function* () {
   const file = new URL("./fixtures/nfl-2026-10-04-ne-buf.frames.jsonl.gz", import.meta.url)
   const lines = gunzipSync(readFileSync(file)).toString("utf8").split("\n")
 
-  const frames = lines.filter((line) => line !== "")
-  return yield* Effect.forEach(frames, (line) => frameOf(line))
+  const recorded = lines.filter((line) => line !== "")
+  return yield* Effect.forEach(recorded, (line) => recordedOf(line))
 })
 
 /**
@@ -60,25 +62,57 @@ export const recordedNeAtBuf = Effect.gen(function* () {
  */
 export const duringNeAtBuf = DateTime.makeUnsafe("2026-10-04T18:00:00Z")
 
-/** What ESPN's fold says each of `frames` said, from an empty state. */
-export const decodedFrames = Effect.fn("TestEspn.decodedFrames")(function* (frames: ReadonlyArray<Frame>) {
-  return yield* Stream.fromIterable(frames).pipe(
+/**
+ * What ESPN says each of `recorded` said, one array of deliveries a line, as the provider would: a poll is its league's
+ * `Listing` (nothing, when it does not decode), after which the game topics keep only those wanted at the clock's now;
+ * a frame is what `GameTopics#take` gives.
+ */
+export const replayed = Effect.fn("TestEspn.replayed")(function* (recorded: ReadonlyArray<Recorded>) {
+  return yield* Stream.fromIterable(recorded).pipe(
     Stream.mapAccumEffect(
-      () => EspnState.empty,
-      (state, frame) => Effect.map(state.take(frame), ([next, deliveries]) => [next, [deliveries]] as const)
+      () => ({ topics: GameTopics.empty, games: HashMap.empty<LeagueId, ReadonlyArray<GameSnapshot>>() }),
+      (state, line) =>
+        Effect.map(replayedLine(state, line), ([next, deliveries]) => [next, [deliveries]] as const)
     ),
     Stream.runCollect
   )
 })
 
-/** ESPN's state after `frames`, from an empty one. */
-export const stateAfter = Effect.fn("TestEspn.stateAfter")(function* (frames: ReadonlyArray<Frame>) {
+/** The game topics after `frames`, from none. */
+export const topicsAfter = Effect.fn("TestEspn.topicsAfter")(function* (frames: ReadonlyArray<Frame>) {
   return yield* Effect.reduce(
     frames,
-    () => EspnState.empty,
-    (state, frame) => Effect.map(state.take(frame), ([next]) => next)
+    () => GameTopics.empty,
+    (topics, frame) => Effect.map(topics.take(frame), ([next]) => next)
   )
 })
+
+/** A recorded day's line: a poll's body, or a FastCast frame. */
+type Recorded = Frame | { readonly league: LeagueId; readonly body: string }
+
+/** What one recorded line says, and the replay after it: the game topics, and each league's last good listing. */
+const replayedLine = Effect.fnUntraced(function* (
+  state: {
+    readonly topics: GameTopics
+    readonly games: HashMap.HashMap<LeagueId, ReadonlyArray<GameSnapshot>>
+  },
+  line: Recorded
+) {
+  if (!("league" in line)) {
+    const [topics, deliveries] = yield* state.topics.take(line)
+    return [{ ...state, topics }, deliveries] as const
+  }
+
+  const listed = yield* Effect.option(listingOf(line.league, line.body))
+  if (Option.isNone(listed)) return [state, noDeliveries] as const
+  const games = HashMap.set(state.games, line.league, listed.value)
+  const now = yield* DateTime.now
+  const wanted = Topic.wantedAt([...HashMap.values(games)].flat(), now)
+  const topics = state.topics.retained((topic) => HashSet.has(wanted, topic))
+  return [{ topics, games }, [Delivery.Listing({ league: line.league, games: listed.value })]] as const
+})
+
+const noDeliveries: ReadonlyArray<Delivery> = []
 
 // Opening a socket throws, so FastCast never pushes.
 const noSocket = Layer.succeed(Socket.WebSocketConstructor, () => {
@@ -98,12 +132,12 @@ const decodeRecorded = Schema.decodeEffect(
   )
 )
 
-/** A recorded line as the frame it is. */
-const frameOf = Effect.fnUntraced(function* (line: string) {
+/** A recorded line as the poll or the frame it is. */
+const recordedOf = Effect.fnUntraced(function* (line: string) {
   const { source, channel, kind, number, body } = yield* decodeRecorded(line)
   if (source === "poll") {
     const league = yield* decodeLeague(channel)
-    return Frame.Polled({ league, body })
+    return { league, body } satisfies Recorded
   }
 
   const topic = Topic.fromTc(channel)

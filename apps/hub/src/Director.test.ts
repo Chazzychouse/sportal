@@ -5,7 +5,7 @@ import { liveSnapshot, play, snapshot, team } from "@sportal/domain/TestGame"
 import { DateTime, Effect, Layer, Metric, Ref, Stream, type Tracer } from "effect"
 import { TestClock } from "effect/testing"
 import { Director } from "./Director.ts"
-import { decodedFrames, duringNeAtBuf, recordedNeAtBuf, recordedPlays } from "./provider/espn/TestEspn.ts"
+import { duringNeAtBuf, recordedNeAtBuf, recordedPlays, replayed } from "./provider/espn/TestEspn.ts"
 import { Delivery, ProviderFeed } from "./provider/Provider.ts"
 import { Slate } from "./Slate.ts"
 import { delivered, directorOver, latest } from "./TestDirector.ts"
@@ -213,8 +213,8 @@ describe("Director, a recorded game", () => {
       const { logs, layer } = recordingLogs()
       return Effect.gen(function* () {
         yield* TestClock.setTime(duringNeAtBuf.epochMilliseconds)
-        const frames = yield* recordedNeAtBuf
-        const decoded = yield* decodedFrames(frames)
+        const day = yield* recordedNeAtBuf
+        const decoded = yield* replayed(day)
         const feed = yield* ProviderFeed
 
         yield* Effect.forEach(decoded, (deliveries) => feed.deliver(deliveries), { discard: true })

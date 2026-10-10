@@ -144,6 +144,17 @@ describe("EspnProvider", () => {
       assert.deepStrictEqual(said, [[]])
     })
   )
+
+  it.effect("should take a poll whose scoreboard does not decode as a failed poll", () =>
+    Effect.gen(function* () {
+      const said = yield* polledOnce(
+        answering(() => Effect.succeed(new Response("not json"))),
+        { leagues: "fbs", frames: 1 }
+      )
+
+      assert.deepStrictEqual(said, [[]])
+    })
+  )
 })
 
 describe("EspnProvider.deliveries", () => {
@@ -301,6 +312,30 @@ describe("EspnProvider.deliveries", () => {
       assert.strictEqual(warned[0]?.annotations.league, "fbs")
     }).pipe(Effect.provide(layer))
   })
+
+  it.effect("should warn of a scoreboard that does not decode, annotated with its league", () => {
+    const { logs, layer } = recordingLogs()
+    return Effect.gen(function* () {
+      yield* polledOnce(
+        answering(() => Effect.succeed(new Response("not json"))),
+        { leagues: "fbs", frames: 1 }
+      )
+
+      const warned = logs.filter(({ level }) => level === "Warn")
+      assert.lengthOf(warned, 1)
+      assert.strictEqual(warned[0]?.annotations.league, "fbs")
+    }).pipe(Effect.provide(layer))
+  })
+
+  it.effect("should poll every 15 minutes once a failed league lists no games", () =>
+    Effect.gen(function* () {
+      const noGames = JSON.stringify({ events: [] })
+
+      const polled = yield* polledOver(["30 seconds", "15 minutes"], { fbs: [down, noGames] })
+
+      assert.deepStrictEqual(polled.fbs, [0, 30_000, 930_000])
+    })
+  )
 
   it.effect("should deliver no deliveries for a league that fails", () =>
     Effect.gen(function* () {
@@ -481,6 +516,62 @@ describe("EspnProvider.deliveries", () => {
         "31 minutes out, it is not followed"
       )
       assert.isTrue(Option.exists(Arr.last(told), (one) => HashMap.has(one, game)))
+    })
+  )
+
+  it.effect("should want a listed game's topic while it is live", () =>
+    Effect.gen(function* () {
+      const told = yield* toldOver(recordedNfl, "nfl", [])
+
+      assert.isTrue(Option.exists(Arr.last(told), (one) => HashMap.has(one, neAtBuf)))
+    })
+  )
+
+  it.effect("should want a listed game's topic from 30 minutes before its kickoff", () =>
+    Effect.gen(function* () {
+      yield* TestClock.setTime(DateTime.makeUnsafe("2026-10-04T19:35:00Z").epochMilliseconds)
+
+      const told = yield* toldOver(recordedNfl, "nfl", [])
+
+      assert.isTrue(Option.exists(Arr.last(told), (one) => HashMap.has(one, gameTopic("401872974"))))
+    })
+  )
+
+  it.effect("should not want a listed game's topic a second before 30 minutes before its kickoff", () =>
+    Effect.gen(function* () {
+      yield* TestClock.setTime(DateTime.makeUnsafe("2026-10-04T19:34:59Z").epochMilliseconds)
+
+      const told = yield* toldOver(recordedNfl, "nfl", [])
+
+      assert.isFalse(told.some((one) => HashMap.has(one, gameTopic("401872974"))))
+    })
+  )
+
+  it.effect("should show a synced topic as Synced", () =>
+    Effect.gen(function* () {
+      const pushing = Stream.fromEffect(Effect.sleep("1 second")).pipe(Stream.as(checkpointFrame(neAtBuf)))
+
+      const told = yield* toldOver(recordedNfl, "nfl", ["1 second"], pushing)
+
+      assert.deepStrictEqual(
+        Option.flatMap(Arr.last(told), (one) => HashMap.get(one, neAtBuf)),
+        Option.some("Synced")
+      )
+    })
+  )
+
+  it.effect("should show a topic that lost its document as waiting for its checkpoint", () =>
+    Effect.gen(function* () {
+      const pushing = Stream.fromEffect(Effect.sleep("1 second")).pipe(
+        Stream.flatMap(() => Stream.make(checkpointFrame(neAtBuf), unapplicablePatch(neAtBuf)))
+      )
+
+      const told = yield* toldOver(recordedNfl, "nfl", ["1 second"], pushing)
+
+      assert.deepStrictEqual(
+        Option.flatMap(Arr.last(told), (one) => HashMap.get(one, neAtBuf)),
+        Option.some("AwaitingCheckpoint")
+      )
     })
   )
 })
@@ -681,10 +772,15 @@ function polledOver(
 }
 
 /**
- * Each wanted set ESPN's provider over `client`, polling `leagues`, tells FastCast as the test clock moves by each of
- * `spans`.
+ * Each wanted set ESPN's provider over `client`, polling `leagues`, with FastCast pushing `pushing` (nothing, unless
+ * given), tells FastCast as the test clock moves by each of `spans`.
  */
-function toldOver(client: HttpClient.HttpClient, leagues: string, spans: ReadonlyArray<Duration.Input>) {
+function toldOver(
+  client: HttpClient.HttpClient,
+  leagues: string,
+  spans: ReadonlyArray<Duration.Input>,
+  pushing: Stream.Stream<Frame> = Stream.never
+) {
   return Effect.gen(function* () {
     const told = yield* Ref.make<ReadonlyArray<Wanted>>([])
     const espn = espnOver(client, {
@@ -692,7 +788,8 @@ function toldOver(client: HttpClient.HttpClient, leagues: string, spans: Readonl
       wanting: (wanted) =>
         wanted.pipe(
           Stream.tap((one) => Ref.update(told, (all) => [...all, one])),
-          Stream.drain
+          Stream.drain,
+          Stream.merge(pushing)
         )
     })
 
@@ -773,13 +870,35 @@ function liveWith(games: ReadonlyArray<string>) {
 
 // NE at BUF's game topic, live in the recorded 18:00Z scoreboard, and two games that scoreboard shows upcoming.
 const liveTc = "gp-football-nfl-401872971"
+const neAtBuf = gameTopic("401872971")
 const laterGames = ["401872974", "401872976"] as const
+
+/** ESPN's site answering every request with the recorded 18:00Z NFL scoreboard. */
+const recordedNfl = HttpClient.make((request) => Effect.succeed(answered(request, nflLive)))
+
+/** NFL game `id`'s topic. */
+function gameTopic(id: string) {
+  return new Topic({ league: "nfl", game: GameId.make(id) })
+}
 
 const decodeEnvelope = Schema.decodeUnknownOption(Schema.fromJsonString(FastCastMessage.Envelope))
 
 const decodeEventIds = Schema.decodeUnknownSync(
   Schema.fromJsonString(Schema.Struct({ events: Schema.Tuple([Schema.Struct({ id: GameId })]) }))
 )
+
+/** A patch at mid 2 on `topic` that will not apply: it has no such play. */
+function unapplicablePatch(topic: Topic): Frame {
+  const pl = JSON.stringify({
+    ts: 1791136341731,
+    pl: [{ op: "replace", path: "/entities/plays/no-such-play/text", value: "Corrected" }]
+  })
+  return Frame.Pushed({
+    topic: Option.some(topic),
+    mid: Option.some(2),
+    envelope: decodeEnvelope(JSON.stringify({ op: "P", tc: topic.tc(), mid: 2, pl }))
+  })
+}
 
 /** The checkpoint frame FastCast makes of `topic`'s checkpoint, a game with no plays yet, at mid 1. */
 function checkpointFrame(topic: Topic): Frame {

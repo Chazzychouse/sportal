@@ -2,14 +2,21 @@ import { type Broadcast, GameId, GameSnapshot, type GameStatus, Network } from "
 import type { LeagueId } from "@sportal/domain/League"
 import { Situation } from "@sportal/domain/Situation"
 import { Team, TeamId } from "@sportal/domain/Team"
-import { type DateTime, Effect, Schema, SchemaGetter, SchemaIssue } from "effect"
-import { type EspnSituation, type EspnStatus, SiteEvent } from "./EspnPayload.ts"
+import { Array as Arr, type DateTime, Effect, Schema, SchemaGetter, SchemaIssue } from "effect"
+import { type EspnSituation, type EspnStatus, Scoreboard, SiteEvent } from "./EspnPayload.ts"
+
+/** League `league`'s listed games, as a poll's `body`, its whole site scoreboard, shows them; an event that does not decode is skipped. */
+export const listingOf = Effect.fnUntraced(function* (league: LeagueId, body: string) {
+  const scoreboard = yield* decodeScoreboard(body)
+  const games = yield* Effect.forEach(scoreboard.events, (event) => Effect.option(decodeEvent[league](event)))
+  return Arr.getSomes(games)
+})
 
 /**
  * One game as the site scoreboard spells it, read as a `league` `GameSnapshot`. An event without a home and an away
  * team does not decode.
  */
-export function EspnEvent(league: LeagueId) {
+function EspnEvent(league: LeagueId) {
   return SiteEvent.pipe(
     Schema.decodeTo(Schema.toType(GameSnapshot), {
       decode: SchemaGetter.transformEffect((event) => {
@@ -147,4 +154,16 @@ const byState = { pre: "scheduled", in: "live", post: "final" } as const satisfi
 /** The `TeamId` of ESPN's team `id` in `league`: ESPN's ids are only unique within a league. */
 export function teamId(league: LeagueId, id: string): TeamId {
   return TeamId.make(`${league}:${id}`)
+}
+
+const decodeScoreboard = Schema.decodeUnknownEffect(Schema.fromJsonString(Scoreboard))
+
+// Each league's site event decode, built once.
+const decodeEvent: { readonly [L in LeagueId]: ReturnType<typeof decodeEventOf> } = {
+  nfl: decodeEventOf("nfl"),
+  fbs: decodeEventOf("fbs")
+}
+
+function decodeEventOf(league: LeagueId) {
+  return Schema.decodeUnknownEffect(EspnEvent(league))
 }

@@ -33,7 +33,7 @@ export class FastCastDocuments extends Data.Class<{
    * skipped. Fails only when any other frame does not decode, leaving the documents as they were.
    */
   advance(
-    frame: Data.TaggedEnum.Value<Frame, "Pushed" | "Checkpoint">
+    frame: Frame
   ): Effect.Effect<
     { readonly documents: FastCastDocuments; readonly change: Option.Option<DocumentChange> },
     Schema.SchemaError
@@ -85,10 +85,7 @@ interface Advanced {
   readonly change: Option.Option<DocumentChange>
 }
 
-function advanced(
-  documents: Documents,
-  frame: Data.TaggedEnum.Value<Frame, "Pushed" | "Checkpoint">
-): Effect.Effect<Advanced, Schema.SchemaError> {
+function advanced(documents: Documents, frame: Frame): Effect.Effect<Advanced, Schema.SchemaError> {
   return Frame.$is("Checkpoint")(frame) ? Effect.succeed(synced(documents, frame)) : moveOn(documents, frame)
 }
 

@@ -16,11 +16,11 @@ import { HttpClient, HttpClientResponse } from "effect/http"
 import * as Socket from "effect/socket/Socket"
 import { TestClock } from "effect/testing"
 import { recordingLogs } from "../../TestTelemetry.ts"
-import type { EspnState } from "./EspnState.ts"
 import { FastCast, type Wanted } from "./FastCast.ts"
 import * as FastCastMessage from "./FastCastMessage.ts"
 import { Frame } from "./Frame.ts"
-import { stateAfter } from "./TestEspn.ts"
+import type { GameTopics } from "./GameTopics.ts"
+import { topicsAfter } from "./TestEspn.ts"
 import { fakeServer, subscribed, watched } from "./TestFastCast.ts"
 import { Topic } from "./Topic.ts"
 
@@ -162,7 +162,6 @@ describe("FastCast", () => {
         { tag: "Pushed", tc: mainTc, mid: 7, body: "H" },
         { tag: "Checkpoint", tc: mainTc, mid: 7, document: checkpointDocument }
       ])
-      assert.isFalse(firstFour.some(Frame.$is("Polled")))
     })
   )
 
@@ -272,7 +271,7 @@ describe("FastCast", () => {
       yield* frames.until(wholeAt(7))
       yield* Effect.sync(() => server.send(undecodablePatchMessage(8)))
       const received = yield* frames.until(numbered(8))
-      const before = yield* stateAfter(received.slice(0, -1))
+      const before = yield* topicsAfter(received.slice(0, -1))
       const bad = yield* Effect.fromOption(Arr.last(received))
 
       const [after] = yield* before.take(bad)
@@ -901,8 +900,6 @@ function framesOver(host: Layer.Layer<HttpClient.HttpClient | Socket.WebSocketCo
 /** A frame as a test compares it: its kind, its topic's name, its mid, and its body (a socket text read as its op) or its document. */
 function seen(frame: Frame) {
   return Frame.$match(frame, {
-    Polled: ({ league, body }) => ({ tag: "Polled", tc: league, mid: undefined, body }),
-    PollFailed: ({ league }) => ({ tag: "PollFailed", tc: league, mid: undefined, body: undefined }),
     Pushed: ({ topic, mid, envelope }) => ({
       tag: "Pushed",
       tc: Option.getOrUndefined(Option.map(topic, (each) => each.tc())),
@@ -984,7 +981,7 @@ function undecodablePatchMessage(mid: number) {
 }
 
 /** The topics whose documents `state` has synced, by name. */
-function syncedTopics(state: EspnState) {
+function syncedTopics(state: GameTopics) {
   return [...HashMap.keys(state.documents.byTopic)]
     .filter((topic) => state.documents.isSynced(topic))
     .map((topic) => topic.tc())
