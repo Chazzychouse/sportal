@@ -45,7 +45,7 @@ holds:
 | `afterScore` | as today: from a scoring play until the next kickoff | 2:15 |
 | `afterKickoff` | the latest play is the kickoff after a score (the double dip) | 2:00 |
 | `possessionChange` | the latest play is a punt, a turnover, or a turnover on downs | 2:00 |
-| `stall` | nothing above holds, and no new play has arrived for 90 s | 1:30 |
+| `stall` | nothing above holds, and the game has not moved (no new play, the same scoreboard) for 90 s | 1:30 |
 
 The lengths are starting guesses, tuned by eye on game days like the score weights. They live in one table beside
 `BreakReason`, for example as `BreakReason.typicalLength(reason, league)`.
@@ -65,11 +65,13 @@ place to tune.
 
 The fold stays pure and keeps its shape.
 
-- **Stall clock.** `Followed` gains `lastPlayAt`: the `now` of the take that last brought the game a new play, or of
-  the step that first saw the game. It is also restarted when the game comes into play (kickoff, out of halftime, a
-  delay, or a period end), so a game is never stalled before its first play. `stall` holds once `now` reaches `lastPlayAt` plus `Classifier.stallAfter` (90 s).
-  That deadline joins the game's `expiry`, so `nextExpiry` wakes the fold just as the stall begins. Arrival time, not
-  ESPN's `wallclock`, so a feed that runs uniformly behind does not look stalled.
+- **Stall clock.** `Followed` gains `movedAt`: the `now` of the step that last saw the game move, that is a take that
+  brought it a new play, a scoreboard whose status, period, clock or score differs from the last one, or the step that
+  first saw the game. Coming into play (kickoff, out of halftime, a delay, or a period end) changes the scoreboard, so
+  a game is never stalled before its first play; and a running clock or a new score counts, so a quiet play feed does
+  not make every game look stalled while the polled scoreboard moves. `stall` holds once `now` reaches `movedAt` plus
+  `Classifier.stallAfter` (90 s). That deadline joins the game's `expiry`, so `nextExpiry` wakes the fold just as the
+  stall begins. Arrival time, not ESPN's `wallclock`, so a feed that runs uniformly behind does not look stalled.
 - **Leaving a break never waits.** A moment holds `momentHold` (20 s) before a lower one replaces it; leaving a
   `Break` skips the hold, as moving to `Upcoming` or `Final` already does. Entering one is immediate, since it
   outranks every moment it replaces except a big play.
@@ -102,5 +104,5 @@ Football statements, in the classifier's tests:
 ## Glossary
 
 Update **Break** (the ten reasons, `expectedEnd`, `during`, top precedence for a stopped game) and **Moment** (the new
-precedence). Add **Stall** (no new play for 90 s while in play) and **Double dip** (the break after the kickoff that
+precedence). Add **Stall** (90 s in play without moving) and **Double dip** (the break after the kickoff that
 follows a score).
