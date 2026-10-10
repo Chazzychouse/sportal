@@ -2,6 +2,8 @@ import { useAtomMount, useAtomSet, useAtomValue } from "@effect/atom-react"
 import { Toaster } from "@/design/sonner"
 import * as AutopilotState from "../autopilot/AutopilotState.ts"
 import * as GuideRelay from "../hub/GuideRelay.ts"
+import * as PromptsState from "../prompts/PromptsState.ts"
+import { usePromptToast } from "../prompts/PromptToast.ts"
 import { useScreenRejectionToasts } from "../screen/Rejections.ts"
 import { ScreenView } from "../screen/ScreenView.tsx"
 import * as TilePlacements from "../screen/TilePlacements.ts"
@@ -25,7 +27,9 @@ export function DisplayView() {
   useAtomMount(TilePlacements.sync)
   useAtomMount(Covering.sync)
   useAtomMount(AutopilotState.pilot)
+  useAtomMount(PromptsState.log)
   useScreenRejectionToasts()
+  usePromptToast()
 
   return (
     <>
