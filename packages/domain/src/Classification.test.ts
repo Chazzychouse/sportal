@@ -72,7 +72,9 @@ describe("Classification.of, ranking", () => {
   it("should rank a game in a break below the same game live", () => {
     const game = liveSnapshot({ period: 3, clock: "7:30", ...sides(17, 17) })
 
-    const resting = scoreOf(game, { moment: { _tag: "Break", reason: "timeout" } })
+    const resting = scoreOf(game, {
+      moment: { _tag: "Break", reason: "timeout", expectedEnd: DateTime.makeUnsafe("2026-10-10T20:01:00Z") }
+    })
     const live = scoreOf(game)
 
     assert.isBelow(resting, live)

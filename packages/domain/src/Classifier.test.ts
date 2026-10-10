@@ -1,8 +1,10 @@
 import { assert, describe, it } from "@effect/vitest"
 import { DateTime, Duration, Option } from "effect"
+import type { Classification } from "./Classification.ts"
 import { Classifier } from "./Classifier.ts"
 import { Game, GameId, type GameSnapshot } from "./Game.ts"
-import { Kickoff, type Play, PlayId } from "./Play.ts"
+import { BreakReason } from "./Moment.ts"
+import { Kickoff, type Play, PlayId, Punt, Stoppage } from "./Play.ts"
 import { Slate, SlateChange } from "./Slate.ts"
 import {
   completion,
@@ -13,6 +15,7 @@ import {
   sides,
   situation,
   snapshot,
+  team,
   timeout
 } from "./TestGame.ts"
 
@@ -72,7 +75,7 @@ describe("Classifier#step, moments", () => {
   it("should call a game a break after a timeout", () => {
     const [, classified] = Classifier.empty.step(slateOf(liveSnapshot({ id }), [timeout()]), [], at)
 
-    assert.deepStrictEqual(classified.get(id)?.moment, { _tag: "Break", reason: "timeout" })
+    assert.strictEqual(reasonOf(classified), "timeout")
   })
 
   it("should call a game a break from a score until the next kickoff", () => {
@@ -80,7 +83,7 @@ describe("Classifier#step, moments", () => {
 
     const [, classified] = Classifier.empty.step(slateOf(liveSnapshot({ id }), [touchdown]), [], at)
 
-    assert.deepStrictEqual(classified.get(id)?.moment, { _tag: "Break", reason: "afterScore" })
+    assert.strictEqual(reasonOf(classified), "afterScore")
   })
 
   it("should call a game a break after a kickoff returned for a touchdown", () => {
@@ -88,7 +91,7 @@ describe("Classifier#step, moments", () => {
 
     const [, classified] = Classifier.empty.step(slateOf(liveSnapshot({ id }), [returned]), [], at)
 
-    assert.deepStrictEqual(classified.get(id)?.moment, { _tag: "Break", reason: "afterScore" })
+    assert.strictEqual(reasonOf(classified), "afterScore")
   })
 
   it("should call a game at the end of a period a break", () => {
@@ -98,13 +101,156 @@ describe("Classifier#step, moments", () => {
       at
     )
 
-    assert.deepStrictEqual(classified.get(id)?.moment, { _tag: "Break", reason: "periodEnd" })
+    assert.strictEqual(reasonOf(classified), "periodEnd")
+  })
+
+  it("should call a game a break after the two-minute warning", () => {
+    const warning = new Stoppage({ ...playFields, kind: "twoMinuteWarning" })
+
+    const [, classified] = Classifier.empty.step(slateOf(liveSnapshot({ id }), [warning]), [], at)
+
+    assert.strictEqual(reasonOf(classified), "twoMinuteWarning")
+  })
+
+  it("should call a game a break after a punt", () => {
+    const punt = new Punt({ ...playFields, team: home, yards: 40, return: "none" })
+
+    const [, classified] = Classifier.empty.step(slateOf(liveSnapshot({ id }), [punt]), [], at)
+
+    assert.strictEqual(reasonOf(classified), "possessionChange")
+  })
+
+  it("should end a break when the next snap arrives", () => {
+    const punt = new Punt({ ...playFields, team: home, yards: 40, return: "none" })
+    const snap = play({ id: playId(2), sequence: 2 })
+    const [first] = Classifier.empty.step(slateOf(liveSnapshot({ id }), [punt]), [], at)
+
+    const [, classified] = first.step(slateOf(liveSnapshot({ id }), [punt, snap]), [played(snap)], later(5))
+
+    assert.strictEqual(classified.get(id)?.moment._tag, "Live")
+  })
+
+  it("should call a game a break after the kickoff that follows a score", () => {
+    const touchdown = play({ yards: 2, touchdown: true, scoring: true })
+    const kickoff = new Kickoff({
+      ...playFields,
+      id: playId(2),
+      sequence: 2,
+      yards: 40,
+      returnTouchdown: false
+    })
+
+    const [, classified] = Classifier.empty.step(slateOf(liveSnapshot({ id }), [touchdown, kickoff]), [], at)
+
+    assert.strictEqual(reasonOf(classified), "afterKickoff")
+  })
+
+  it("should call the opening kickoff live play", () => {
+    const kickoff = new Kickoff({ ...playFields, yards: 40, returnTouchdown: false })
+
+    const [, classified] = Classifier.empty.step(slateOf(liveSnapshot({ id }), [kickoff]), [], at)
+
+    assert.strictEqual(classified.get(id)?.moment._tag, "Live")
+  })
+
+  it("should call a game a break after a play a player was hurt on", () => {
+    const hurt = play({ text: "Smith rush for 3 yards. Jones was injured during the play." })
+
+    const [, classified] = Classifier.empty.step(slateOf(liveSnapshot({ id }), [hurt]), [], at)
+
+    assert.strictEqual(reasonOf(classified), "injury")
+  })
+
+  it("should call a timeout in the red zone a break during a scoring threat", () => {
+    const [, classified] = Classifier.empty.step(
+      slateOf(liveSnapshot({ id, situation: situation({ yardLine: 15 }) }), [timeout()]),
+      [],
+      at
+    )
+
+    const moment = classified.get(id)?.moment
+    assert.strictEqual(moment?._tag === "Break" ? moment.during?._tag : undefined, "ScoringThreat")
+  })
+
+  it("should put a touchdown's big play before the break after the score", () => {
+    const touchdown = play({ yards: 2, touchdown: true, scoring: true })
+
+    const [, classified] = Classifier.empty.step(
+      slateOf(liveSnapshot({ id }), [touchdown]),
+      [played(touchdown)],
+      at
+    )
+
+    assert.strictEqual(classified.get(id)?.moment._tag, "BigPlay")
+  })
+
+  it("should expect a break back after its reason's typical length for the game's league", () => {
+    const [, classified] = Classifier.empty.step(
+      slateOf(liveSnapshot({ id, league: "nfl" }), [timeout()]),
+      [],
+      at
+    )
+
+    const moment = classified.get(id)?.moment
+    const expected = DateTime.addDuration(at, BreakReason.typicalLength("timeout", "nfl"))
+    assert.isTrue(moment?._tag === "Break" && DateTime.Equivalence(moment.expectedEnd, expected))
   })
 
   it("should call a game live with nothing else going on", () => {
     const moment = momentOf(Classifier.empty, liveSnapshot({ id }))
 
     assert.strictEqual(moment, "Live")
+  })
+})
+
+describe("Classifier#step, a stall", () => {
+  it("should call a game a break when no play has arrived for ninety seconds", () => {
+    const [first] = Classifier.empty.step(slateOf(liveSnapshot({ id }), [play()]), [played(play())], at)
+
+    const [, classified] = first.step(slateOf(liveSnapshot({ id }), [play()]), [], later(90))
+
+    assert.strictEqual(reasonOf(classified), "stall")
+  })
+
+  it("should not call a game stalled at eighty-nine seconds", () => {
+    const [first] = Classifier.empty.step(slateOf(liveSnapshot({ id }), [play()]), [played(play())], at)
+
+    const [, classified] = first.step(slateOf(liveSnapshot({ id }), [play()]), [], later(89))
+
+    assert.strictEqual(classified.get(id)?.moment._tag, "Live")
+  })
+
+  it("should not call a game stalled when it kicks off", () => {
+    const [first] = Classifier.empty.step(slateOf(snapshot({ id })), [], at)
+
+    const [, classified] = first.step(slateOf(liveSnapshot({ id })), [], later(600))
+
+    assert.strictEqual(classified.get(id)?.moment._tag, "Live")
+  })
+
+  it("should not call a game stalled when it comes back from halftime", () => {
+    const [first] = Classifier.empty.step(
+      slateOf(liveSnapshot({ id, status: "halftime", period: 2, clock: "0:00" })),
+      [],
+      at
+    )
+
+    const [, classified] = first.step(
+      slateOf(liveSnapshot({ id, period: 3, clock: "15:00" })),
+      [],
+      later(1200)
+    )
+
+    assert.strictEqual(classified.get(id)?.moment._tag, "Live")
+  })
+
+  it("should call a game stalled ninety seconds after it kicks off with no play", () => {
+    const [first] = Classifier.empty.step(slateOf(snapshot({ id })), [], at)
+    const [second] = first.step(slateOf(liveSnapshot({ id })), [], later(600))
+
+    const [, classified] = second.step(slateOf(liveSnapshot({ id })), [], later(690))
+
+    assert.strictEqual(reasonOf(classified), "stall")
   })
 })
 
@@ -162,13 +308,42 @@ describe("Classifier#step, holding a moment", () => {
 
     assert.strictEqual(classified.get(id)?.moment._tag, "Live")
   })
+
+  it("should leave a break at once when play resumes", () => {
+    const [first] = Classifier.empty.step(slateOf(liveSnapshot({ id }), [timeout()]), [], at)
+    const snap = play({ id: playId(2), sequence: 2 })
+
+    const [, classified] = first.step(
+      slateOf(liveSnapshot({ id }), [timeout(), snap]),
+      [played(snap)],
+      later(1)
+    )
+
+    assert.strictEqual(classified.get(id)?.moment._tag, "Live")
+  })
+
+  it("should keep a break's expected end while it holds", () => {
+    const [first] = Classifier.empty.step(slateOf(liveSnapshot({ id }), [timeout()]), [], at)
+    const expected = DateTime.addDuration(at, BreakReason.typicalLength("timeout", "fbs"))
+
+    const [, classified] = first.step(slateOf(liveSnapshot({ id }), [timeout()]), [], later(30))
+
+    const moment = classified.get(id)?.moment
+    assert.isTrue(moment?._tag === "Break" && DateTime.Equivalence(moment.expectedEnd, expected))
+  })
 })
 
 describe("Classifier#nextExpiry", () => {
-  it("should be none with nothing held", () => {
-    const [classifier] = Classifier.empty.step(slateOf(liveSnapshot({ id })), [], at)
+  it("should be none for a game not yet live", () => {
+    const [classifier] = Classifier.empty.step(slateOf(snapshot({ id })), [], at)
 
     assert.isTrue(Option.isNone(classifier.nextExpiry()))
+  })
+
+  it("should be when a live game with no new play would stall", () => {
+    const [classifier] = Classifier.empty.step(slateOf(liveSnapshot({ id })), [], at)
+
+    assert.deepStrictEqual(classifier.nextExpiry(), Option.some(later(90)))
   })
 
   it("should be when a big play ends", () => {
@@ -236,4 +411,12 @@ function played(play: Play): SlateChange {
 function momentOf(classifier: Classifier, game: GameSnapshot) {
   const [, classified] = classifier.step(slateOf(game), [], at)
   return classified.get(id)?.moment._tag
+}
+
+const home = team("HOME").id
+
+/** Game `id`'s break reason, if it is in a break. */
+function reasonOf(classified: ReadonlyMap<GameId, Classification>) {
+  const moment = classified.get(id)?.moment
+  return moment?._tag === "Break" ? moment.reason : undefined
 }

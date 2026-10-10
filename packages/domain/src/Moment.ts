@@ -1,20 +1,63 @@
-import { Order, Schema } from "effect"
+import { Duration, Order, Schema } from "effect"
+import type { LeagueId } from "./League.ts"
 import { BigPlayKind, PlayId } from "./Play.ts"
 import { TeamId } from "./Team.ts"
 
-/** Why a live game has stopped. */
-export const BreakReason = Schema.Literals(["timeout", "periodEnd", "halftime", "delay", "afterScore"])
-export type BreakReason = typeof BreakReason.Type
+const reasons = Schema.Literals([
+  "halftime",
+  "delay",
+  "periodEnd",
+  "twoMinuteWarning",
+  "timeout",
+  "review",
+  "injury",
+  "afterScore",
+  "afterKickoff",
+  "possessionChange",
+  "stall"
+])
+
+/** Why a live game has stopped, with how long each kind of stop typically lasts. */
+export const BreakReason = Object.assign(reasons, {
+  /** How long a break for `reason` typically lasts in `league`: a guess, tuned on game days. */
+  typicalLength: (reason: typeof reasons.Type, league: LeagueId): Duration.Duration =>
+    Duration.seconds(reason === "halftime" && league === "fbs" ? collegeHalftime : typicalSeconds[reason])
+})
+export type BreakReason = typeof reasons.Type
+
+const typicalSeconds = {
+  halftime: 13 * 60,
+  delay: 10 * 60,
+  periodEnd: 120,
+  twoMinuteWarning: 135,
+  timeout: 60,
+  review: 150,
+  injury: 120,
+  afterScore: 135,
+  afterKickoff: 120,
+  possessionChange: 120,
+  stall: 90
+} satisfies Record<BreakReason, number>
+
+const collegeHalftime = 20 * 60
+
+const ScoringThreat = { team: TeamId, yardsToGo: Schema.Int }
+const CrunchTime = { margin: Schema.Int, secondsLeft: Schema.Int }
+
+/** What was at stake when a game stopped: a scoring threat or crunch time. */
+export const Stakes = Schema.TaggedUnion({ ScoringThreat, CrunchTime })
+export type Stakes = typeof Stakes.Type
 
 const cases = Schema.TaggedUnion({
   /** The team with the ball is in the red zone. */
-  ScoringThreat: { team: TeamId, yardsToGo: Schema.Int },
+  ScoringThreat,
   /** The fourth quarter's last five minutes, or overtime, within one score. */
-  CrunchTime: { margin: Schema.Int, secondsLeft: Schema.Int },
+  CrunchTime,
   /** A big play, for a while after it. */
   BigPlay: { play: PlayId, kind: BigPlayKind },
   Live: {},
-  Break: { reason: BreakReason },
+  /** A live game stopped, when it is likely back, and what was at stake when it stopped. */
+  Break: { reason: reasons, expectedEnd: Schema.DateTimeUtcFromString, during: Schema.optional(Stakes) },
   Upcoming: {},
   Final: {}
 })
@@ -24,17 +67,17 @@ const cases = Schema.TaggedUnion({
  * hold, with what commentary and prompts need of it.
  */
 export const Moment = Object.assign(cases, {
-  /** Higher precedence first: a scoring threat, crunch time, a big play, live play, a break, then not live. */
+  /** Higher precedence first: a big play, a break, a scoring threat, crunch time, live play, then not live. */
   precedence: Order.mapInput(Order.Number, (moment: typeof cases.Type) => rank[moment._tag])
 })
 export type Moment = typeof cases.Type
 
 const rank = {
-  ScoringThreat: 0,
-  CrunchTime: 1,
-  BigPlay: 2,
-  Live: 3,
-  Break: 4,
+  BigPlay: 0,
+  Break: 1,
+  ScoringThreat: 2,
+  CrunchTime: 3,
+  Live: 4,
   Upcoming: 5,
   Final: 6
 } satisfies Record<Moment["_tag"], number>

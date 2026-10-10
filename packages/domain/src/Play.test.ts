@@ -238,3 +238,78 @@ describe("FootballPlay.bigPlay", () => {
     assert.deepStrictEqual(Play.bigPlay(punt), Option.none())
   })
 })
+
+describe("FootballPlay.changesPossession", () => {
+  it.each([
+    ["a punt", new Punt({ ...fields, team: home, yards: 40, return: "none" })],
+    ["an interception", new Interception({ ...fields, team: home, yards: 0, return: "none" })],
+    [
+      "a sack the defense recovers a fumble from",
+      new Sack({ ...fields, team: home, yards: -7, fumbleLost: true })
+    ],
+    [
+      "a fumble the other side recovers",
+      new Fumble({ ...fields, team: home, yards: 3, recovery: "opponent" })
+    ],
+    ["a missed field goal", new FieldGoal({ ...fields, team: home, yards: 0, result: "missed" })],
+    ["a blocked field goal", new FieldGoal({ ...fields, team: home, yards: 0, result: "blocked" })],
+    [
+      "a fourth-down run short of the line to gain",
+      new Rush({
+        ...fields,
+        start: { ...fields.start, down: 4, distance: 2 },
+        team: home,
+        yards: 1,
+        touchdown: false
+      })
+    ],
+    [
+      "a fourth-down incompletion",
+      new Incompletion({ ...fields, start: { ...fields.start, down: 4, distance: 5 }, team: home, yards: 0 })
+    ]
+  ])("should say %s changes possession", (_, given) => {
+    const changes = Play.changesPossession(given)
+
+    assert.isTrue(changes)
+  })
+
+  it.each([
+    ["a first-down run", play()],
+    ["a good field goal", new FieldGoal({ ...fields, team: home, yards: 0, result: "good" })],
+    ["a fumble its own side recovers", new Fumble({ ...fields, team: home, yards: 3, recovery: "own" })],
+    [
+      "a fourth-down run that gains the line to gain",
+      new Rush({
+        ...fields,
+        start: { ...fields.start, down: 4, distance: 2 },
+        team: home,
+        yards: 3,
+        touchdown: false
+      })
+    ]
+  ])("should say %s keeps possession", (_, given) => {
+    const changes = Play.changesPossession(given)
+
+    assert.isFalse(changes)
+  })
+})
+
+describe("FootballPlay.stopInText", () => {
+  it.each([
+    ["Smith rush for 3 yards. Jones was injured during the play.", "injury"],
+    ["Pass complete for 8 yards. Brown was shaken up on the play.", "injury"],
+    ["The ruling on the field was challenged by DAL.", "review"],
+    ["The play is under review.", "review"],
+    ["After further REPLAY, the ruling stands.", "review"]
+  ] as const)("should find %j a stop for %s", (text, stop) => {
+    const found = Play.stopInText(play({ text }))
+
+    assert.deepStrictEqual(found, Option.some(stop))
+  })
+
+  it("should find no stop in a play that names none", () => {
+    const found = Play.stopInText(play({ text: "Smith rush for 3 yards" }))
+
+    assert.isTrue(Option.isNone(found))
+  })
+})
