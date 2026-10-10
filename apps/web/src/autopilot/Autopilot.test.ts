@@ -652,6 +652,18 @@ describe("Autopilot.manual", () => {
     })
   })
 
+  it("should make the layout yours when you clear a tile other than tile 0", () => {
+    const cleared = after(quad, [{ _tag: "Clear", tile: 2 }])
+
+    const pilot = on.manual({ _tag: "Clear", tile: 2 }, cleared, start)
+
+    assert.deepStrictEqual(pilot.suspended, {
+      main: Option.none(),
+      audio: Option.none(),
+      layout: Option.some(at(180))
+    })
+  })
+
   it("should make the layout you set home's", () => {
     const paired = after(quad, [{ _tag: "SetLayout", layout: "Pair" }])
 

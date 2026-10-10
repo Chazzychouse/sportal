@@ -48,7 +48,7 @@ export const pilot = runtime.atom((get) =>
       get.stream(LiveStream.live)
     ).pipe(
       Stream.switchMap(([current, screen, live]) =>
-        Stream.fromEffect(untilDeadline(current, screen, live.classifications))
+        Stream.fromEffect(untilDeadline(current, screen, live.classifications)).pipe(Stream.forever)
       )
     )
 
