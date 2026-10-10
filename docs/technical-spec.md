@@ -63,7 +63,7 @@ flowchart LR
 
   subgraph hub[Hub — one server process]
     prov[Providers]
-    director[Director: the slate of games, in memory; its rules not built]
+    director[Director: the slate of games, in memory; classifies each game]
     api[HTTP API + live stream]
   end
 
@@ -82,7 +82,7 @@ flowchart LR
   yttv --> views
 ```
 
-- **Hub** — takes what its providers' frames say, as they arrive, into the Director's slate (the listed games, each with its latest snapshot and plays), and will run its rules. Its live stream sends the slate, each game beside its availability from every source. Serves the web UI's static files, the HTTP API, and one live stream per client.
+- **Hub** — takes what its providers' frames say, as they arrive, into the Director's slate (the listed games, each with its latest snapshot and plays), and classifies each game (its moment and score). Its live stream sends the slate, each game beside its classification and its availability from every source. Serves the web UI's static files, the HTTP API, and one live stream per client.
 - **Web UI** — one codebase for desk and couch. It renders Hub state, and its Display owns its Screen: it applies screen commands and chooses between sources.
 - **Desktop shell** — loads the web UI from the Hub, registers as a Display, and mirrors that Display's stream tiles into native provider web views. It is told the Hub's address by configuration (`SPORTAL_HUB_URL`, read once into `ShellConfig`) and never starts a Hub.
 
@@ -97,7 +97,7 @@ command (from UI, hotkey, or palette)
   -> the Display's UI re-renders; the shell re-syncs its views
 ```
 
-When automation is built, the Hub publishes a ranking of games by watchability, and each Display decides how its layout shows it. A stream budget shared across Displays will need the Hub's coordination.
+The Hub publishes each game's classification (its moment and score), and each Display will decide how its layout shows it. A stream budget shared across Displays will need the Hub's coordination.
 
 ### 3.2 How the shell treats provider players
 
@@ -250,7 +250,7 @@ sportal/
 
 Tests sit beside the file they test as `Game.test.ts`. A module grows into a folder of the same name only when it genuinely has private parts, as `provider/espn/` does. Regenerate this tree from `git ls-files` when the layout changes.
 
-**Not built:** domain `Follow.ts`, `Rule.ts`; hub `Dockerfile`, `provider/cfbd/`, `director/`, and stores for follows, presets, and rules; web `settings/` and a game's detail view. The Director, follows, presets, rules, the spoiler shield, and cloud hosting in the sections below are designs, not code.
+**Not built:** domain `Follow.ts`; hub `Dockerfile`, `provider/cfbd/`, `director/`, and stores for follows, presets, and rules; web `settings/` and a game's detail view. Follows, presets, rules, the spoiler shield, and cloud hosting in the sections below are designs, not code.
 
 ### 4.3 Inside a file
 
@@ -303,13 +303,15 @@ class Provider extends Context.Service<Provider, {
 ```ts
 class Director extends Context.Service<Director, {
   readonly slate: Stream<Slate>                      // the slate as it is, then each change
+  readonly classifications: Stream<ReadonlyMap<GameId, Classification>>  // each game's classification, then each change
 }>()("sportal/hub/Director") {}
 ```
 
 - The `Slate` (`packages/domain/src/Slate.ts`) is the fold: an ordered list of `Game`s, leagues in `LeagueId` order and each league's in its listing's order, each with its latest `GameSnapshot` and its plays. `relisted(league, snapshots)` and `playsTaken(game, plays)` on it are pure and return the next slate and its slate changes; one that changes nothing gives back the same slate. The Director takes each delivery onto them in order.
 - The Director starts from an empty slate and takes each delivery as it arrives, in one `Director.take` span. From the slate changes each take gives, it gauges each listed game's progress (`sportal_game_state`: 1 upcoming, 2 live, 3 over), status (`sportal_game_status`: 1 scheduled, 2 live, 3 halftime, 4 delayed, 5 final, 6 postponed, 7 canceled), away and home scores (`sportal_game_score`), period (`sportal_game_period`), clock (`sportal_game_clock`), kickoff as Unix seconds (`sportal_game_kickoff`), and accepted-at time as Unix seconds (`sportal_game_updated_at`). Every series carries stable `game`, `league`, and `matchup` attributes; score series also carry `side` and `team`. A changing value updates its series, and a game no listing names has every current-game series removed. The Director logs each play a take adds at Info, annotated with `game`, `league`, `matchup`, `play`, and `scoring`; these logs, rather than a play counter, supply the latest-five, scoring-only, and complete-in-range play panels. For now nothing is kept between runs: a restarted Hub serves an empty slate until its provider's next poll lists the day's games.
-- A take that raises a defect is an Error log; the slate keeps what it had and takes the next frame. If the provider's frames end other than by the Hub stopping, that is an Error log and the slate stays as it is.
-- The Hub server's live route builds `SlateChanged`: the slate with each game carrying only its last ten plays (`Slate#recent`), and each listed game's availability from every source, by its id. The Slate and the Director know nothing of sources or the API: the live route joins the Director's slate with the source's availability, reads the sources' availability again every 30 seconds, drops a message that is the same as the last, and sends a slate change once 250 ms have passed without a further one (a trailing settling, not a maximum latency: continuous updates keep deferring it).
+- The Director runs the Classifier (`packages/domain/src/Classifier.ts`) after a take that changes the slate and when its `nextExpiry` comes, and logs each game's new moment (a game's first classification is not logged).
+- A take that raises a defect is an Error log; what it had not yet set is unchanged and takes the next frame. If the provider's frames end other than by the Hub stopping, that is an Error log and the slate stays as it is.
+- The Hub server's live route builds `SlateChanged`: the slate with each game carrying only its last ten plays (`Slate#recent`), `classifications` by game id (the live route zips the slate with the Director's classifications), and each listed game's availability from every source, by its id. The Slate and the Director know nothing of sources or the API: the live route joins the Director's slate with the source's availability, reads the sources' availability again every 30 seconds, drops a message that is the same as the last, and sends a slate change once 250 ms have passed without a further one (a trailing settling, not a maximum latency: continuous updates keep deferring it).
 - `main.ts` provides it over ESPN as the provider and YouTube TV and Twitch as the sources.
 - The Hub's whole shutdown bound is about 4 s: the HTTP server's 3 s for connected Displays, then telemetry's 1 s to export what it holds.
 
@@ -338,7 +340,7 @@ YouTube TV's channels are found in its own guide, read by the shell and handed t
 - The provider decodes its own frames; the Director takes each delivery as it arrives, in the order the provider received its frames. Nothing is logged raw or replayed.
 - The live feed pushes, for each followed game, its plays; no score is pushed, so a live score moves with the poll. The poll gives listings: a listing takes each of its games as a snapshot and forgets the league's games it no longer names. A listed game takes a snapshot unless it is behind the game (`Game#snapshotTaken`, `GameSnapshot#isBehind`): earlier in game time, or at the same game time with fewer points; an over game takes one ahead of its end (overtime after a spurious final, a postponed game resuming), so a lagging poll cannot start a finished game again.
 - A FastCast topic that loses its document (a missed message, a patch that will not apply) is a Warning log from `GameTopics`, and the push follows the topic again from its checkpoint. A checkpoint that does not load or decode is a Warning log, and FastCast subscribes to its topic again after 30 s while it is still wanted, unless a later checkpoint of that topic succeeds first. FastCast loads up to four checkpoints at once, but emits frames and applies each checkpoint's outcome (a failure's wait, a success's cancelling it) in the order the socket sent them.
-- Game events are gone: nothing read them (ADR 0012). The Director's rules will derive them again from snapshot changes and plays when they are built.
+- Game events are gone: nothing read them (ADR 0012). The Classifier's moments read snapshot changes and plays instead.
 - The slate's games and plays are the latest the feeds gave; a missed poll is filled by the next one, and a restart starts from empty until persistence is added back (ADR 0012).
 
 ### 5.3 Screen
@@ -357,11 +359,9 @@ Each Display owns its Screen (`DisplayScreen.ts`, an atom kept in localStorage).
 
 Designed in full in `docs/specs/2026-10-03-director-design.md`.
 
-- What makes a game worth watching is still to be designed again: the first watchability score is gone, and the
-  Director's rules read game events and plays.
-- Automation is planned: a **Trigger** is a condition over events and snapshots, and a **Rule** will move games in a ranking by watchability, never send a screen command.
-- The Director runs in the Hub, so it works with no client focused. It will publish a ranking of games, and each Display will decide how its layout shows it ([ADR 0015](./adr/0015-each-display-owns-its-screen.md)).
-- A Display will hold off following the ranking on a tile a person just changed.
+- The Director classifies each game as a moment and a score, designed in [`docs/specs/2026-10-10-classification-design.md`](./specs/2026-10-10-classification-design.md); its Roadmap lists what comes next (automation that moves games in a ranking, never a screen command).
+- The Director runs in the Hub, so it works with no client focused. It publishes each game's classification, and each Display will decide how its layout shows it ([ADR 0015](./adr/0015-each-display-owns-its-screen.md)).
+- A Display will hold off following the classifications on a tile a person just changed.
 
 ### 5.5 Time and the spoiler shield
 

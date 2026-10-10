@@ -180,7 +180,12 @@ describe("HubServer", () => {
               const message = JSON.parse(line.slice("data: ".length))
               const [entry] = message.slate.games
               assert.strictEqual(entry.snapshot.id, TestHub.alaAtMsst.id)
-              assert.deepStrictEqual(Object.keys(message), ["_tag", "slate", "availability"])
+              assert.deepStrictEqual(Object.keys(message), [
+                "_tag",
+                "slate",
+                "availability",
+                "classifications"
+              ])
               assert.deepStrictEqual(Object.keys(entry), ["snapshot", "plays"])
               assert.deepStrictEqual(message.availability[TestHub.alaAtMsst.id], [
                 { _tag: "NoGuide", source: "YouTube TV" }

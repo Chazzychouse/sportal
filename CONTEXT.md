@@ -10,11 +10,13 @@ Every exported type name must be a term here, except the wire schemas in `*Paylo
 | **League** | An organized competition (NFL, FBS). | association, division |
 | **Team** | A league member. | club, competitor, franchise |
 | **Ranking** | A team's position in a poll (college). | seed |
+| **Team record** | A team's wins and losses this season, as the scoreboard gives them, ties left out: `TeamRecord`, `record` on a snapshot's side. | standing |
+| **Odds** | A game's pregame betting line: the favored side, the spread in points, and the total expected; `Odds` on `GameSnapshot`. ESPN sends it only before kickoff. | line, betting |
 | **Team colors** | The two colors a team plays in: `color` and `alternateColor` on `Team`, six hex digits without `#`, as ESPN sends them. The Hub reads them from the scoreboard; a team ESPN sends none for has neither. | |
 | **Game** | One scheduled contest between two teams. As the slate holds it, `Game` (`packages/domain/src/Game.ts`): its latest snapshot and its plays, in sequence order. | event, match, competition, fixture |
 | **Slate** | The domain `Slate` (`packages/domain/src/Slate.ts`): an ordered list of games: each league's last listing, leagues in `LeagueId` order, each game with its latest snapshot and its plays. `relisted` takes a league's listing and `playsTaken` a game's whole list of plays; the Director takes each frame's deliveries onto them in arrival order. A snapshot behind its game (earlier in game time, or at the same game time with fewer points) is ignored, except that an over game takes one ahead of its end (overtime after a spurious final, a postponed game resuming); plays of a game no listing names are dropped. Pure; each operation returns the next slate and its slate changes, or this one and none when nothing changed. | schedule, scoreboard, live games |
-| **Director** | The Hub's `Director` service (`apps/hub/src/Director.ts`), the one holder of what is going on. From an empty slate it takes each frame's deliveries from its provider as they arrive, logs a take that raised a defect, gauges each listed game's progress and current dashboard values (`sportal_game_state`, status, scores, period, clock, kickoff, and accepted-at gauges), drops every series when the game is delisted, and logs each play a take adds. It offers the slate as it is, then again each time a take changes it; it knows nothing of sources. Automation, planned, will publish a ranking of games. For now nothing is kept between runs: a restarted Hub starts empty and the next poll fills it. | board, switcher, producer, autopilot, tracker, stage manager |
-| **Slate changed** | The live message that carries the slate, each game with its recent plays (`Slate#recent`), and each listed game's availability from every source by its id, settled 250 ms after a change; `SlateChanged` in code, built by the Hub server's live route, not by the Slate; the live stream joins the Director's slate with the source's availability, and sends the current one, then one for each burst of slate changes once it settles and one when the 30-second availability recheck finds a change. | slate payload, snapshot, published |
+| **Director** | The Hub's `Director` service (`apps/hub/src/Director.ts`), the one holder of what is going on. From an empty slate it takes each frame's deliveries from its provider as they arrive, logs a take that raised a defect, gauges each listed game's progress and current dashboard values (`sportal_game_state`, status, scores, period, clock, kickoff, and accepted-at gauges), drops every series when the game is delisted, and logs each play a take adds. It offers the slate as it is, then again each time a take changes it; it knows nothing of sources. It classifies the slate with its Classifier after each take and when a held moment runs out, logs each game's new moment, and offers the classifications beside the slate. For now nothing is kept between runs: a restarted Hub starts empty and the next poll fills it. | board, switcher, producer, autopilot, tracker, stage manager |
+| **Slate changed** | The live message that carries the slate, each game with its recent plays (`Slate#recent`), and each listed game's availability from every source by its id and its classification by its id, settled 250 ms after a change; `SlateChanged` in code, built by the Hub server's live route, not by the Slate; the live stream joins the Director's slate with the source's availability, and sends the current one, then one for each burst of slate changes once it settles and one when the 30-second availability recheck finds a change. | slate payload, snapshot, published |
 | **Slate change** | One thing a slate operation changed: a game's snapshot (`Progressed`, including a game newly listed), a game no listing names any more (`Delisted`), or a play a game did not have (`Played`); `SlateChange` in `packages/domain/src/Slate.ts`, given by `Slate#relisted` and `Slate#playsTaken` beside the next slate. The Director gauges and logs from them. | diff, delta, event |
 | **Kickoff** | A game's scheduled start instant. | start time, date |
 
@@ -35,6 +37,7 @@ Every exported type name must be a term here, except the wire schemas in `*Paylo
 | **Play** | The plays of every sport, as a game's play-by-play lists them; football's only, for now, so `Play` is `FootballPlay`. | |
 | **Football play** | A single snap, kick, try, penalty, timeout, stoppage, or the end of a period, as the play-by-play lists it: its clock, text, score after, start and end, win probability, and the case its feed's play type says, with what that type says of it; `FootballPlay` in code. The cases: `Rush` and `Completion` (a touchdown or not), `Incompletion`, `Interception` (returned, for a touchdown, or not), `Sack` (the defense recovering a fumble or not), `Fumble` (recovered by its own side, the other, for a touchdown, or not said), `TwoPointTry` (passed or run), `Kickoff` (returned for a touchdown or not), `Punt` (returned, for a touchdown, or not), `FieldGoal` (good, missed, or blocked), `ExtraPoint` (good or not), `Safety`, and `Penalty`, each with the team with the ball and the yards gained; `Timeout`, with the team that called it when the feed marks one; `Stoppage` (an official timeout, the two-minute warning, the coin toss); `PeriodEnd` (of a period, the half, regulation, or the game); and `Other`, a play type no case knows, kept as the feed spells it. | play kind, play type |
 | **Play outcome** | A football play's case and what its feed's play type says of it: its `_tag` and outcome fields, without what every play carries or what it gained, as `{ _tag: "Punt", return: "none" }`; `PlayOutcome` in code. | play type, play kind |
+| **Big play** | A play worth a look by itself: a touchdown, a turnover, a sack, a kick returned past the receiving team's 45, or a run or catch of 25 yards or more; `FootballPlay.bigPlay` gives its `BigPlayKind`. | highlight |
 | **Game id** / **Team id** / **League id** | A provider's own id for a game or a team, and a league's (`nfl` or `fbs`); `GameId`, `TeamId`, `LeagueId` in code. | |
 | **Recent plays** | A game's last ten plays, in sequence order: what each game on `SlateChanged` carries (`Game#recent`, over the slate `Slate#recent`). | |
 | **Play id** | The feed's own id for one play; `PlayId` in code. Not ordered: plays are ordered by their sequence. | |
@@ -79,7 +82,7 @@ Provider and Source are the two words most likely to be swapped. Provider is alw
 | **Hub API** | The Hub's HTTP API, declared once as `SportalApi`: the Hub serves it and every client derives its typed client from it. | REST layer |
 | **Hub config** | Every setting a Hub reads from its environment, decoded once at startup; `HubConfig` in code. | settings, env |
 | **Hub mode** | What a Hub plays: the live day from its providers and sources. | profile |
-| **Live message** | One update the Hub pushes to clients on the live stream: the slate changed, each game beside its availability; `LiveMessage`, and `LiveMessageJson` its JSON form. | event, notification |
+| **Live message** | One update the Hub pushes to clients on the live stream: the slate changed, each game beside its availability and its classification; `LiveMessage`, and `LiveMessageJson` its JSON form. | event, notification |
 | **Live stream** | The Hub's server-sent events at `/api/live` that carry live messages; in the web UI, the `LiveStream.live` atom holds what they said and the connection. | event stream, socket |
 | **Connection** | Whether a client's live stream is up: connecting (never yet connected), connected, or lost (since an instant, retrying). | online, status |
 | **Hub client** | The web UI's way to the Hub's API, `HubClient` in code. It runs in the web UI's one runtime (`WebRuntime.ts`), beside the Shell. | API client, fetcher |
@@ -113,7 +116,7 @@ Provider and Source are the two words most likely to be swapped. Provider is alw
 | **Solo** | One on-screen game filling the whole Screen. | fullscreen, maximize |
 | **Swap** | Exchange two tiles, on screen or benched. | move |
 | **Audio focus** | The single game whose sound is on; it follows the game when tiles move. | active, unmuted |
-| **Strip card** | One card in the slate strip: a benched game, or a slate game in its section (Bench, Live, Next, Final), marked with its slot when it is on screen or its tile when benched; `StripCard` in code, its place a `Place` (Slot or Bench). | tile, slate item |
+| **Strip card** | One card in the slate strip: a benched game, or a slate game in its section (Bench, Live, Next, Final), the Live section ordered by classification score, highest first, each card with its moment badge, marked with its slot when it is on screen or its tile when benched; `StripCard` in code, its place a `Place` (Slot or Bench). | tile, slate item |
 | **Display input** | What a person did on a Display: a hotkey, a click on a tile or a video, a slate card dropped, a screen command, or an overlay opened or closed; `DisplayInput` in `apps/web/src/display/Display.ts`. Written to the Display's atom (`DisplayState.display`), which applies it and sends its screen commands to the Screen. | action, event |
 | **Slot** | A place in a layout: a rectangle as fractions of the Screen area; `Slot` in `apps/web/src/layout/Layout.ts`. | rect, cell |
 | **Shell** | The web UI's edge to its window and the shell bridge: page and stream hotkeys, full screen, presses on a video, the guide the shell reads, and the calls that place and hide videos; `Shell` in `apps/web/src/shell/Shell.ts`, the one reader of `window.sportalShell`. | bridge, native |
@@ -125,6 +128,16 @@ Provider and Source are the two words most likely to be swapped. Provider is alw
 | **Promote** | Move a game into the main tile. | feature |
 | **Tile placement** | Where a game's stream tile sits in a Display's window, what it loads, and whether it is muted or interactive, as told to the shell. | bounds, rect |
 | **Screen transition** | How tiles move to new places: one duration and easing, shared by the web UI and the shell. | animation |
+
+### Automation
+
+| Term | Meaning | Not |
+| --- | --- | --- |
+| **Moment** | What kind of thing is happening in a game now — a scoring threat (red zone), crunch time, a big play, live play, a break, upcoming, or final — one per game, the highest in precedence of those that hold; `Moment` in `packages/domain/src/Moment.ts`. | event, state |
+| **Break** | A live game stopped: a timeout, the end of a period, halftime, a delay, or the gap from a score to the next kickoff; the `Break` moment and its `BreakReason`. Inferred from the data, never the video. | commercial, lull |
+| **Classification** | A game's moment, since when, and its score 0–100 with the points each part gave it; `Classification` in `packages/domain/src/Classification.ts`. | rating, watchability |
+| **Matchup prior** | What a game promises before it starts: the mean of how close its line is, how highly its teams are ranked, and how often they have won. It fades as the game is played. | |
+| **Classifier** | The pure fold that classifies the slate's games, stepped by the Director after each take and when a held moment runs out; it keeps each game's pregame line, its big play for a minute, and its moment, which holds 20 s before a lower one replaces it. `Classifier` in `packages/domain/src/Classifier.ts`. | analyzer, scorer |
 
 ## Planned
 
@@ -146,8 +159,4 @@ Names the design uses that no code has yet. Move a row up, into its table, in th
 | **Spoiler shield** | Hiding or delaying scores for chosen games. | |
 | **Follow** | Your declared interest in a team, conference, league, or game. | favourite, subscription |
 | **Persistence** | What the Hub keeps between runs: none for now, added back on top of the simplified model. | storage, database |
-| **Game event** | Something that happened in a game (a score, a turnover, a play, a period ending), derived from a game's snapshot changes and plays. The code had it and dropped it while nothing read it; the Director's rules derive it again. | alert, update |
-| **Trigger** | A condition over game events and snapshots. | |
-| **Rule** | A trigger bound to how it moves games in the Director's ranking by watchability; it sends no screen command. | automation |
-| **Alert** | A user-facing notification produced by a rule. | event |
 | **Ticket** | A bet you have placed, tracked by the betting lens (later). | bet, wager |

@@ -1,9 +1,17 @@
-import { type Broadcast, GameId, GameSnapshot, type GameStatus, Network } from "@sportal/domain/Game"
+import {
+  type Broadcast,
+  GameId,
+  GameSnapshot,
+  type GameStatus,
+  Network,
+  type Odds,
+  type TeamRecord
+} from "@sportal/domain/Game"
 import type { LeagueId } from "@sportal/domain/League"
 import { Situation } from "@sportal/domain/Situation"
 import { Team, TeamId } from "@sportal/domain/Team"
 import { Array as Arr, type DateTime, Effect, Schema, SchemaGetter, SchemaIssue } from "effect"
-import { type EspnSituation, type EspnStatus, Scoreboard, SiteEvent } from "./EspnPayload.ts"
+import { type EspnOdds, type EspnSituation, type EspnStatus, Scoreboard, SiteEvent } from "./EspnPayload.ts"
 
 /**
  * League `league`'s listed games, as a poll's `body`, its whole site scoreboard, shows them; an event that does not
@@ -28,17 +36,19 @@ function espnEvent(league: LeagueId) {
           id: event.id,
           kickoff: event.date,
           status: event.status,
-          competitors: competition.competitors.map(({ homeAway, score, curatedRank, team }) => ({
+          competitors: competition.competitors.map(({ homeAway, score, curatedRank, records, team }) => ({
             ...team,
             homeAway,
             score,
-            rank: curatedRank?.current
+            rank: curatedRank?.current,
+            record: (records?.find(({ type }) => type === "total") ?? records?.[0])?.summary
           })),
           broadcasts: (competition.geoBroadcasts ?? []).map(({ type, media }) => ({
             medium: type.shortName,
             network: media.shortName
           })),
-          situation: competition.situation
+          situation: competition.situation,
+          odds: competition.odds?.[0]
         })
       }),
       encode: SchemaGetter.forbidden(() => "A GameSnapshot cannot be encoded back to an ESPN event")
@@ -65,9 +75,11 @@ const snapshot = Effect.fnUntraced(function* (
       readonly alternateColor?: string | undefined
       readonly score?: string | undefined
       readonly rank?: number | undefined
+      readonly record?: string | undefined
     }>
     readonly broadcasts: ReadonlyArray<{ readonly medium: string; readonly network: string }>
     readonly situation: EspnSituation | undefined
+    readonly odds: EspnOdds | undefined
   }
 ) {
   const home = event.competitors.find((competitor) => competitor.homeAway === "home")
@@ -90,7 +102,8 @@ const snapshot = Effect.fnUntraced(function* (
     }),
     score: scoreOf(competitor.score),
     // ESPN ranks an unranked team 99, which reads as no ranking.
-    ...(competitor.rank === undefined || competitor.rank > 25 ? {} : { ranking: competitor.rank })
+    ...(competitor.rank === undefined || competitor.rank > 25 ? {} : { ranking: competitor.rank }),
+    ...recordOf(competitor.record)
   })
   return new GameSnapshot({
     id: GameId.make(event.id),
@@ -102,13 +115,36 @@ const snapshot = Effect.fnUntraced(function* (
     home: side(home),
     away: side(away),
     broadcasts: event.broadcasts.flatMap(({ medium, network }) => broadcast(medium, network)),
-    ...(event.situation === undefined ? {} : { situation: situation(league, event.situation, home.id) })
+    ...(event.situation === undefined ? {} : { situation: situation(league, event.situation, home.id) }),
+    ...oddsOf(event.odds)
   })
 })
 
 // A score is digits, or nothing before kickoff, which reads as 0.
 function scoreOf(score: string | undefined): number {
   return Number.parseInt(score ?? "", 10) || 0
+}
+
+// A record reads "wins-losses", or "wins-losses-ties" in the NFL; the ties are left out.
+function recordOf(summary: string | undefined): { record?: TeamRecord } {
+  const [wins, losses] = (summary ?? "").split("-").map((part) => Number.parseInt(part, 10))
+  if (wins === undefined || losses === undefined || !Number.isInteger(wins) || !Number.isInteger(losses))
+    return {}
+  return { record: { wins, losses } }
+}
+
+// ESPN's spread is signed for the home team; the domain keeps its size and the side each team's odds mark favored.
+function oddsOf(odds: EspnOdds | undefined): { odds?: Odds } {
+  if (odds?.spread === undefined) return {}
+  const favorite =
+    odds.homeTeamOdds?.favorite === true ? "home" : odds.awayTeamOdds?.favorite === true ? "away" : undefined
+  return {
+    odds: {
+      spread: Math.abs(odds.spread),
+      ...(favorite === undefined ? {} : { favorite }),
+      ...(odds.overUnder === undefined ? {} : { overUnder: odds.overUnder })
+    }
+  }
 }
 
 // ESPN also lists radio, which no source plays.

@@ -23,7 +23,11 @@
               "color": "005035",
               "alternateColor": "a49665"
             },
-            "score": 0
+            "score": 0,
+            "record": {
+              "wins": 0,
+              "losses": 4
+            }
           },
           "away": {
             "team": {
@@ -36,7 +40,11 @@
               "color": "004991",
               "alternateColor": "8e908f"
             },
-            "score": 27
+            "score": 27,
+            "record": {
+              "wins": 3,
+              "losses": 1
+            }
           },
           "broadcasts": [
             {
@@ -68,7 +76,11 @@
               "color": "7bafd4",
               "alternateColor": "13294b"
             },
-            "score": 0
+            "score": 0,
+            "record": {
+              "wins": 2,
+              "losses": 1
+            }
           },
           "away": {
             "team": {
@@ -82,7 +94,11 @@
               "alternateColor": "c99700"
             },
             "score": 0,
-            "ranking": 3
+            "ranking": 3,
+            "record": {
+              "wins": 4,
+              "losses": 0
+            }
           },
           "broadcasts": [
             {
@@ -120,7 +136,11 @@
               "alternateColor": "c1c6c8"
             },
             "score": 0,
-            "ranking": 16
+            "ranking": 16,
+            "record": {
+              "wins": 4,
+              "losses": 0
+            }
           },
           "away": {
             "team": {
@@ -134,7 +154,11 @@
               "alternateColor": "ffffff"
             },
             "score": 0,
-            "ranking": 7
+            "ranking": 7,
+            "record": {
+              "wins": 4,
+              "losses": 0
+            }
           },
           "broadcasts": [
             {
@@ -168,7 +192,11 @@
               "alternateColor": "ffffff"
             },
             "score": 0,
-            "ranking": 20
+            "ranking": 20,
+            "record": {
+              "wins": 3,
+              "losses": 1
+            }
           },
           "away": {
             "team": {
@@ -181,7 +209,11 @@
               "color": "000000",
               "alternateColor": "b4a169"
             },
-            "score": 0
+            "score": 0,
+            "record": {
+              "wins": 3,
+              "losses": 1
+            }
           },
           "broadcasts": [
             {
@@ -217,7 +249,11 @@
               "alternateColor": "0033a1"
             },
             "score": 0,
-            "ranking": 21
+            "ranking": 21,
+            "record": {
+              "wins": 3,
+              "losses": 1
+            }
           },
           "away": {
             "team": {
@@ -230,14 +266,23 @@
               "color": "8c2232",
               "alternateColor": "dbcca6"
             },
-            "score": 0
+            "score": 0,
+            "record": {
+              "wins": 2,
+              "losses": 2
+            }
           },
           "broadcasts": [
             {
               "network": "CW",
               "medium": "tv"
             }
-          ]
+          ],
+          "odds": {
+            "favorite": "home",
+            "spread": 21.5,
+            "overUnder": 55.5
+          }
         },
         {
           "id": "401856807",
@@ -257,7 +302,11 @@
               "color": "0051ba",
               "alternateColor": "e8000d"
             },
-            "score": 0
+            "score": 0,
+            "record": {
+              "wins": 1,
+              "losses": 2
+            }
           },
           "away": {
             "team": {
@@ -270,7 +319,11 @@
               "color": "036eb7",
               "alternateColor": "ffffff"
             },
-            "score": 0
+            "score": 0,
+            "record": {
+              "wins": 2,
+              "losses": 2
+            }
           },
           "broadcasts": [
             {
@@ -303,7 +356,11 @@
               "color": "ae192d",
               "alternateColor": "ffc72a"
             },
-            "score": 0
+            "score": 0,
+            "record": {
+              "wins": 2,
+              "losses": 2
+            }
           },
           "away": {
             "team": {
@@ -316,7 +373,11 @@
               "color": "eaaa00",
               "alternateColor": "002855"
             },
-            "score": 0
+            "score": 0,
+            "record": {
+              "wins": 3,
+              "losses": 1
+            }
           },
           "broadcasts": [
             {
@@ -348,7 +409,11 @@
               "color": "ceb888",
               "alternateColor": "2c2a29"
             },
-            "score": 0
+            "score": 0,
+            "record": {
+              "wins": 3,
+              "losses": 1
+            }
           },
           "away": {
             "team": {
@@ -361,7 +426,11 @@
               "color": "8c1515",
               "alternateColor": "ffffff"
             },
-            "score": 0
+            "score": 0,
+            "record": {
+              "wins": 2,
+              "losses": 2
+            }
           },
           "broadcasts": [
             {
@@ -396,7 +465,11 @@
               "color": "0c2340",
               "alternateColor": "a2aaad"
             },
-            "score": 0
+            "score": 0,
+            "record": {
+              "wins": 2,
+              "losses": 2
+            }
           },
           "away": {
             "team": {
@@ -409,7 +482,11 @@
               "color": "000e54",
               "alternateColor": "ff431b"
             },
-            "score": 0
+            "score": 0,
+            "record": {
+              "wins": 1,
+              "losses": 2
+            }
           },
           "broadcasts": [
             {
@@ -444,7 +521,11 @@
               "color": "5e0a2f",
               "alternateColor": "fab41c"
             },
-            "score": 0
+            "score": 0,
+            "record": {
+              "wins": 3,
+              "losses": 1
+            }
           },
           "away": {
             "team": {
@@ -457,14 +538,23 @@
               "color": "00274c",
               "alternateColor": "ffcb05"
             },
-            "score": 0
+            "score": 0,
+            "record": {
+              "wins": 3,
+              "losses": 1
+            }
           },
           "broadcasts": [
             {
               "network": "FOX",
               "medium": "tv"
             }
-          ]
+          ],
+          "odds": {
+            "favorite": "away",
+            "spread": 6.5,
+            "overUnder": 41.5
+          }
         },
         {
           "id": "401862791",
@@ -484,7 +574,11 @@
               "color": "003594",
               "alternateColor": "ffffff"
             },
-            "score": 0
+            "score": 0,
+            "record": {
+              "wins": 2,
+              "losses": 1
+            }
           },
           "away": {
             "team": {
@@ -497,14 +591,23 @@
               "color": "00225b",
               "alternateColor": "b5a67c"
             },
-            "score": 0
+            "score": 0,
+            "record": {
+              "wins": 1,
+              "losses": 2
+            }
           },
           "broadcasts": [
             {
               "network": "CBS",
               "medium": "tv"
             }
-          ]
+          ],
+          "odds": {
+            "favorite": "home",
+            "spread": 2.5,
+            "overUnder": 45.5
+          }
         },
         {
           "id": "401858479",
@@ -524,7 +627,11 @@
               "color": "a00000",
               "alternateColor": "ffffff"
             },
-            "score": 0
+            "score": 0,
+            "record": {
+              "wins": 3,
+              "losses": 1
+            }
           },
           "away": {
             "team": {
@@ -537,14 +644,23 @@
               "color": "173f35",
               "alternateColor": "ffffff"
             },
-            "score": 0
+            "score": 0,
+            "record": {
+              "wins": 2,
+              "losses": 2
+            }
           },
           "broadcasts": [
             {
               "network": "BTN",
               "medium": "tv"
             }
-          ]
+          ],
+          "odds": {
+            "favorite": "home",
+            "spread": 8.5,
+            "overUnder": 43.5
+          }
         },
         {
           "id": "401856705",
@@ -565,7 +681,11 @@
               "alternateColor": "2c2a29"
             },
             "score": 0,
-            "ranking": 2
+            "ranking": 2,
+            "record": {
+              "wins": 4,
+              "losses": 0
+            }
           },
           "away": {
             "team": {
@@ -578,14 +698,23 @@
               "color": "000000",
               "alternateColor": "cfae70"
             },
-            "score": 0
+            "score": 0,
+            "record": {
+              "wins": 3,
+              "losses": 1
+            }
           },
           "broadcasts": [
             {
               "network": "SEC Network",
               "medium": "tv"
             }
-          ]
+          ],
+          "odds": {
+            "favorite": "home",
+            "spread": 26.5,
+            "overUnder": 50.5
+          }
         },
         {
           "id": "401866432",
@@ -605,7 +734,11 @@
               "color": "005bbb",
               "alternateColor": "ffffff"
             },
-            "score": 0
+            "score": 0,
+            "record": {
+              "wins": 2,
+              "losses": 2
+            }
           },
           "away": {
             "team": {
@@ -618,14 +751,23 @@
               "color": "532e1f",
               "alternateColor": "f1c500"
             },
-            "score": 0
+            "score": 0,
+            "record": {
+              "wins": 2,
+              "losses": 2
+            }
           },
           "broadcasts": [
             {
               "network": "ESPN+",
               "medium": "streaming"
             }
-          ]
+          ],
+          "odds": {
+            "favorite": "away",
+            "spread": 13.5,
+            "overUnder": 45.5
+          }
         },
         {
           "id": "401866431",
@@ -645,7 +787,11 @@
               "color": "ba0c2f",
               "alternateColor": "ffffff"
             },
-            "score": 0
+            "score": 0,
+            "record": {
+              "wins": 1,
+              "losses": 3
+            }
           },
           "away": {
             "team": {
@@ -658,14 +804,23 @@
               "color": "0b2240",
               "alternateColor": "ffcd00"
             },
-            "score": 0
+            "score": 0,
+            "record": {
+              "wins": 3,
+              "losses": 1
+            }
           },
           "broadcasts": [
             {
               "network": "ESPN+",
               "medium": "streaming"
             }
-          ]
+          ],
+          "odds": {
+            "favorite": "away",
+            "spread": 21,
+            "overUnder": 51.5
+          }
         },
         {
           "id": "401858473",
@@ -686,7 +841,11 @@
               "alternateColor": "fcd116"
             },
             "score": 0,
-            "ranking": 14
+            "ranking": 14,
+            "record": {
+              "wins": 4,
+              "losses": 0
+            }
           },
           "away": {
             "team": {
@@ -700,14 +859,23 @@
               "alternateColor": "a8adb4"
             },
             "score": 0,
-            "ranking": 5
+            "ranking": 5,
+            "record": {
+              "wins": 3,
+              "losses": 1
+            }
           },
           "broadcasts": [
             {
               "network": "CBS",
               "medium": "tv"
             }
-          ]
+          ],
+          "odds": {
+            "favorite": "away",
+            "spread": 14.5,
+            "overUnder": 45.5
+          }
         },
         {
           "id": "401856708",
@@ -728,7 +896,11 @@
               "alternateColor": "000000"
             },
             "score": 0,
-            "ranking": 25
+            "ranking": 25,
+            "record": {
+              "wins": 3,
+              "losses": 1
+            }
           },
           "away": {
             "team": {
@@ -742,14 +914,23 @@
               "alternateColor": "fa4616"
             },
             "score": 0,
-            "ranking": 8
+            "ranking": 8,
+            "record": {
+              "wins": 4,
+              "losses": 0
+            }
           },
           "broadcasts": [
             {
               "network": "ABC",
               "medium": "tv"
             }
-          ]
+          ],
+          "odds": {
+            "favorite": "away",
+            "spread": 5.5,
+            "overUnder": 57.5
+          }
         },
         {
           "id": "401856710",
@@ -770,7 +951,11 @@
               "alternateColor": "ffffff"
             },
             "score": 0,
-            "ranking": 17
+            "ranking": 17,
+            "record": {
+              "wins": 3,
+              "losses": 1
+            }
           },
           "away": {
             "team": {
@@ -783,14 +968,23 @@
               "color": "002b5c",
               "alternateColor": "f26522"
             },
-            "score": 0
+            "score": 0,
+            "record": {
+              "wins": 3,
+              "losses": 1
+            }
           },
           "broadcasts": [
             {
               "network": "ESPN",
               "medium": "tv"
             }
-          ]
+          ],
+          "odds": {
+            "favorite": "home",
+            "spread": 6.5,
+            "overUnder": 53.5
+          }
         },
         {
           "id": "401858247",
@@ -810,7 +1004,11 @@
               "color": "cf0a2c",
               "alternateColor": "cac8c8"
             },
-            "score": 0
+            "score": 0,
+            "record": {
+              "wins": 2,
+              "losses": 2
+            }
           },
           "away": {
             "team": {
@@ -823,14 +1021,23 @@
               "color": "041e42",
               "alternateColor": "ffc72c"
             },
-            "score": 0
+            "score": 0,
+            "record": {
+              "wins": 2,
+              "losses": 2
+            }
           },
           "broadcasts": [
             {
               "network": "CBSSN",
               "medium": "tv"
             }
-          ]
+          ],
+          "odds": {
+            "favorite": "home",
+            "spread": 1.5,
+            "overUnder": 52.5
+          }
         },
         {
           "id": "401858248",
@@ -850,7 +1057,11 @@
               "color": "cc0000",
               "alternateColor": "ffffff"
             },
-            "score": 0
+            "score": 0,
+            "record": {
+              "wins": 2,
+              "losses": 2
+            }
           },
           "away": {
             "team": {
@@ -863,14 +1074,23 @@
               "color": "c9001f",
               "alternateColor": "ffffff"
             },
-            "score": 0
+            "score": 0,
+            "record": {
+              "wins": 2,
+              "losses": 2
+            }
           },
           "broadcasts": [
             {
               "network": "ACC Network",
               "medium": "tv"
             }
-          ]
+          ],
+          "odds": {
+            "favorite": "away",
+            "spread": 3,
+            "overUnder": 56.5
+          }
         },
         {
           "id": "401858253",
@@ -890,7 +1110,11 @@
               "color": "782f40",
               "alternateColor": "ceb888"
             },
-            "score": 0
+            "score": 0,
+            "record": {
+              "wins": 2,
+              "losses": 2
+            }
           },
           "away": {
             "team": {
@@ -903,14 +1127,23 @@
               "color": "232d4b",
               "alternateColor": "f84c1e"
             },
-            "score": 0
+            "score": 0,
+            "record": {
+              "wins": 3,
+              "losses": 1
+            }
           },
           "broadcasts": [
             {
               "network": "ESPN2",
               "medium": "tv"
             }
-          ]
+          ],
+          "odds": {
+            "favorite": "away",
+            "spread": 1.5,
+            "overUnder": 51.5
+          }
         },
         {
           "id": "401862793",
@@ -930,7 +1163,11 @@
               "color": "1a5632",
               "alternateColor": "fdb913"
             },
-            "score": 0
+            "score": 0,
+            "record": {
+              "wins": 2,
+              "losses": 2
+            }
           },
           "away": {
             "team": {
@@ -943,14 +1180,23 @@
               "color": "005485",
               "alternateColor": "bc0023"
             },
-            "score": 0
+            "score": 0,
+            "record": {
+              "wins": 1,
+              "losses": 3
+            }
           },
           "broadcasts": [
             {
               "network": "ESPN+",
               "medium": "streaming"
             }
-          ]
+          ],
+          "odds": {
+            "favorite": "home",
+            "spread": 30.5,
+            "overUnder": 54.5
+          }
         },
         {
           "id": "401864515",
@@ -970,7 +1216,11 @@
               "color": "01402A",
               "alternateColor": "ffffff"
             },
-            "score": 0
+            "score": 0,
+            "record": {
+              "wins": 4,
+              "losses": 0
+            }
           },
           "away": {
             "team": {
@@ -983,14 +1233,23 @@
               "color": "492f24",
               "alternateColor": "ffc425"
             },
-            "score": 0
+            "score": 0,
+            "record": {
+              "wins": 2,
+              "losses": 2
+            }
           },
           "broadcasts": [
             {
               "network": "CW",
               "medium": "tv"
             }
-          ]
+          ],
+          "odds": {
+            "favorite": "home",
+            "spread": 16.5,
+            "overUnder": 44.5
+          }
         },
         {
           "id": "401866430",
@@ -1010,7 +1269,11 @@
               "color": "4c0027",
               "alternateColor": "fbab18"
             },
-            "score": 0
+            "score": 0,
+            "record": {
+              "wins": 2,
+              "losses": 2
+            }
           },
           "away": {
             "team": {
@@ -1023,14 +1286,23 @@
               "color": "041e42",
               "alternateColor": "c5b783"
             },
-            "score": 0
+            "score": 0,
+            "record": {
+              "wins": 1,
+              "losses": 3
+            }
           },
           "broadcasts": [
             {
               "network": "ESPN+",
               "medium": "streaming"
             }
-          ]
+          ],
+          "odds": {
+            "favorite": "home",
+            "spread": 6.5,
+            "overUnder": 47.5
+          }
         },
         {
           "id": "401866433",
@@ -1050,7 +1322,11 @@
               "color": "881c1c",
               "alternateColor": "ffffff"
             },
-            "score": 0
+            "score": 0,
+            "record": {
+              "wins": 4,
+              "losses": 0
+            }
           },
           "away": {
             "team": {
@@ -1063,14 +1339,23 @@
               "color": "006938",
               "alternateColor": "ffffff"
             },
-            "score": 0
+            "score": 0,
+            "record": {
+              "wins": 2,
+              "losses": 3
+            }
           },
           "broadcasts": [
             {
               "network": "ESPN+",
               "medium": "streaming"
             }
-          ]
+          ],
+          "odds": {
+            "favorite": "home",
+            "spread": 5.5,
+            "overUnder": 48.5
+          }
         },
         {
           "id": "401866434",
@@ -1090,7 +1375,11 @@
               "color": "002664",
               "alternateColor": "eaab00"
             },
-            "score": 0
+            "score": 0,
+            "record": {
+              "wins": 2,
+              "losses": 2
+            }
           },
           "away": {
             "team": {
@@ -1103,14 +1392,23 @@
               "color": "154734",
               "alternateColor": "ffffff"
             },
-            "score": 0
+            "score": 0,
+            "record": {
+              "wins": 2,
+              "losses": 2
+            }
           },
           "broadcasts": [
             {
               "network": "ESPN+",
               "medium": "streaming"
             }
-          ]
+          ],
+          "odds": {
+            "favorite": "away",
+            "spread": 3.5,
+            "overUnder": 50.5
+          }
         },
         {
           "id": "401866477",
@@ -1130,7 +1428,11 @@
               "color": "c41230",
               "alternateColor": "ffffff"
             },
-            "score": 0
+            "score": 0,
+            "record": {
+              "wins": 2,
+              "losses": 2
+            }
           },
           "away": {
             "team": {
@@ -1143,14 +1445,23 @@
               "color": "fd5000",
               "alternateColor": "4f2c1d"
             },
-            "score": 0
+            "score": 0,
+            "record": {
+              "wins": 0,
+              "losses": 4
+            }
           },
           "broadcasts": [
             {
               "network": "ESPN+",
               "medium": "streaming"
             }
-          ]
+          ],
+          "odds": {
+            "favorite": "home",
+            "spread": 10.5,
+            "overUnder": 41.5
+          }
         },
         {
           "id": "401869956",
@@ -1170,7 +1481,11 @@
               "color": "0039a6",
               "alternateColor": "ffffff"
             },
-            "score": 0
+            "score": 0,
+            "record": {
+              "wins": 3,
+              "losses": 1
+            }
           },
           "away": {
             "team": {
@@ -1183,14 +1498,23 @@
               "color": "003768",
               "alternateColor": "a1d2f1"
             },
-            "score": 0
+            "score": 0,
+            "record": {
+              "wins": 1,
+              "losses": 3
+            }
           },
           "broadcasts": [
             {
               "network": "ESPN+",
               "medium": "streaming"
             }
-          ]
+          ],
+          "odds": {
+            "favorite": "home",
+            "spread": 2.5,
+            "overUnder": 51.5
+          }
         },
         {
           "id": "401869962",
@@ -1210,7 +1534,11 @@
               "color": "450084",
               "alternateColor": "cbb677"
             },
-            "score": 0
+            "score": 0,
+            "record": {
+              "wins": 4,
+              "losses": 0
+            }
           },
           "away": {
             "team": {
@@ -1223,14 +1551,23 @@
               "color": "00b140",
               "alternateColor": "000000"
             },
-            "score": 0
+            "score": 0,
+            "record": {
+              "wins": 3,
+              "losses": 1
+            }
           },
           "broadcasts": [
             {
               "network": "ESPNU",
               "medium": "tv"
             }
-          ]
+          ],
+          "odds": {
+            "favorite": "home",
+            "spread": 15.5,
+            "overUnder": 55.5
+          }
         },
         {
           "id": "401858475",
@@ -1250,7 +1587,11 @@
               "color": "e31937",
               "alternateColor": "ffffff"
             },
-            "score": 0
+            "score": 0,
+            "record": {
+              "wins": 4,
+              "losses": 0
+            }
           },
           "away": {
             "team": {
@@ -1263,14 +1604,23 @@
               "color": "ce1126",
               "alternateColor": "ffffff"
             },
-            "score": 0
+            "score": 0,
+            "record": {
+              "wins": 2,
+              "losses": 2
+            }
           },
           "broadcasts": [
             {
               "network": "FS1",
               "medium": "tv"
             }
-          ]
+          ],
+          "odds": {
+            "favorite": "home",
+            "spread": 14.5,
+            "overUnder": 52.5
+          }
         },
         {
           "id": "401864514",
@@ -1290,7 +1640,11 @@
               "color": "ba0c2f",
               "alternateColor": "a7a8aa"
             },
-            "score": 0
+            "score": 0,
+            "record": {
+              "wins": 3,
+              "losses": 1
+            }
           },
           "away": {
             "team": {
@@ -1303,14 +1657,23 @@
               "color": "ff8200",
               "alternateColor": "041e42"
             },
-            "score": 0
+            "score": 0,
+            "record": {
+              "wins": 1,
+              "losses": 3
+            }
           },
           "broadcasts": [
             {
               "network": "MW+",
               "medium": "streaming"
             }
-          ]
+          ],
+          "odds": {
+            "favorite": "home",
+            "spread": 23.5,
+            "overUnder": 47.5
+          }
         },
         {
           "id": "401856709",
@@ -1330,7 +1693,11 @@
               "color": "73000a",
               "alternateColor": "000000"
             },
-            "score": 0
+            "score": 0,
+            "record": {
+              "wins": 2,
+              "losses": 2
+            }
           },
           "away": {
             "team": {
@@ -1344,14 +1711,23 @@
               "alternateColor": "ffffff"
             },
             "score": 0,
-            "ranking": 24
+            "ranking": 24,
+            "record": {
+              "wins": 3,
+              "losses": 1
+            }
           },
           "broadcasts": [
             {
               "network": "SEC Network",
               "medium": "tv"
             }
-          ]
+          ],
+          "odds": {
+            "favorite": "home",
+            "spread": 2.5,
+            "overUnder": 52.5
+          }
         },
         {
           "id": "401858472",
@@ -1371,7 +1747,11 @@
               "color": "ff5f05",
               "alternateColor": "13294b"
             },
-            "score": 0
+            "score": 0,
+            "record": {
+              "wins": 2,
+              "losses": 2
+            }
           },
           "away": {
             "team": {
@@ -1384,14 +1764,23 @@
               "color": "ceb888",
               "alternateColor": "000000"
             },
-            "score": 0
+            "score": 0,
+            "record": {
+              "wins": 1,
+              "losses": 3
+            }
           },
           "broadcasts": [
             {
               "network": "BTN",
               "medium": "tv"
             }
-          ]
+          ],
+          "odds": {
+            "favorite": "home",
+            "spread": 10,
+            "overUnder": 61.5
+          }
         },
         {
           "id": "401860899",
@@ -1411,7 +1800,11 @@
               "color": "004c23",
               "alternateColor": "c8c372"
             },
-            "score": 0
+            "score": 0,
+            "record": {
+              "wins": 2,
+              "losses": 2
+            }
           },
           "away": {
             "team": {
@@ -1424,14 +1817,23 @@
               "color": "dc4405",
               "alternateColor": "000000"
             },
-            "score": 0
+            "score": 0,
+            "record": {
+              "wins": 2,
+              "losses": 2
+            }
           },
           "broadcasts": [
             {
               "network": "USA Net",
               "medium": "tv"
             }
-          ]
+          ],
+          "odds": {
+            "favorite": "away",
+            "spread": 7,
+            "overUnder": 62.5
+          }
         },
         {
           "id": "401862790",
@@ -1451,7 +1853,11 @@
               "color": "003366",
               "alternateColor": "cc0000"
             },
-            "score": 0
+            "score": 0,
+            "record": {
+              "wins": 3,
+              "losses": 1
+            }
           },
           "away": {
             "team": {
@@ -1464,14 +1870,23 @@
               "color": "860038",
               "alternateColor": "ffffff"
             },
-            "score": 0
+            "score": 0,
+            "record": {
+              "wins": 1,
+              "losses": 3
+            }
           },
           "broadcasts": [
             {
               "network": "ESPN+",
               "medium": "streaming"
             }
-          ]
+          ],
+          "odds": {
+            "favorite": "home",
+            "spread": 47.5,
+            "overUnder": 62.5
+          }
         },
         {
           "id": "401856818",
@@ -1491,7 +1906,11 @@
               "color": "4d1979",
               "alternateColor": "ffffff"
             },
-            "score": 0
+            "score": 0,
+            "record": {
+              "wins": 2,
+              "losses": 2
+            }
           },
           "away": {
             "team": {
@@ -1505,7 +1924,11 @@
               "alternateColor": "002e5d"
             },
             "score": 0,
-            "ranking": 10
+            "ranking": 10,
+            "record": {
+              "wins": 3,
+              "losses": 0
+            }
           },
           "broadcasts": [
             {
@@ -1516,7 +1939,12 @@
               "network": "Disney+",
               "medium": "streaming"
             }
-          ]
+          ],
+          "odds": {
+            "favorite": "away",
+            "spread": 6,
+            "overUnder": 47.5
+          }
         },
         {
           "id": "401856711",
@@ -1536,7 +1964,11 @@
               "color": "500000",
               "alternateColor": "ffffff"
             },
-            "score": 0
+            "score": 0,
+            "record": {
+              "wins": 2,
+              "losses": 2
+            }
           },
           "away": {
             "team": {
@@ -1549,14 +1981,23 @@
               "color": "a32136",
               "alternateColor": "ffffff"
             },
-            "score": 0
+            "score": 0,
+            "record": {
+              "wins": 2,
+              "losses": 2
+            }
           },
           "broadcasts": [
             {
               "network": "ESPN2",
               "medium": "tv"
             }
-          ]
+          ],
+          "odds": {
+            "favorite": "home",
+            "spread": 14,
+            "overUnder": 50.5
+          }
         },
         {
           "id": "401862788",
@@ -1576,7 +2017,11 @@
               "color": "00205b",
               "alternateColor": "c1c6c8"
             },
-            "score": 0
+            "score": 0,
+            "record": {
+              "wins": 1,
+              "losses": 3
+            }
           },
           "away": {
             "team": {
@@ -1589,14 +2034,23 @@
               "color": "0c2340",
               "alternateColor": "f15a22"
             },
-            "score": 0
+            "score": 0,
+            "record": {
+              "wins": 3,
+              "losses": 1
+            }
           },
           "broadcasts": [
             {
               "network": "ESPN+",
               "medium": "streaming"
             }
-          ]
+          ],
+          "odds": {
+            "favorite": "away",
+            "spread": 12.5,
+            "overUnder": 55.5
+          }
         },
         {
           "id": "401869942",
@@ -1616,7 +2070,11 @@
               "color": "006f71",
               "alternateColor": "a27752"
             },
-            "score": 0
+            "score": 0,
+            "record": {
+              "wins": 1,
+              "losses": 3
+            }
           },
           "away": {
             "team": {
@@ -1629,14 +2087,23 @@
               "color": "041e42",
               "alternateColor": "a3aaae"
             },
-            "score": 0
+            "score": 0,
+            "record": {
+              "wins": 1,
+              "losses": 3
+            }
           },
           "broadcasts": [
             {
               "network": "ESPN+",
               "medium": "streaming"
             }
-          ]
+          ],
+          "odds": {
+            "favorite": "away",
+            "spread": 1.5,
+            "overUnder": 53.5
+          }
         },
         {
           "id": "401871089",
@@ -1656,7 +2123,11 @@
               "color": "00205b",
               "alternateColor": "bf0d3e"
             },
-            "score": 0
+            "score": 0,
+            "record": {
+              "wins": 2,
+              "losses": 2
+            }
           },
           "away": {
             "team": {
@@ -1669,14 +2140,23 @@
               "color": "840029",
               "alternateColor": "fdb913"
             },
-            "score": 0
+            "score": 0,
+            "record": {
+              "wins": 0,
+              "losses": 4
+            }
           },
           "broadcasts": [
             {
               "network": "ESPN+",
               "medium": "streaming"
             }
-          ]
+          ],
+          "odds": {
+            "favorite": "home",
+            "spread": 14,
+            "overUnder": 57.5
+          }
         },
         {
           "id": "401858249",
@@ -1696,7 +2176,11 @@
               "color": "f56600",
               "alternateColor": "ffffff"
             },
-            "score": 0
+            "score": 0,
+            "record": {
+              "wins": 3,
+              "losses": 1
+            }
           },
           "away": {
             "team": {
@@ -1710,14 +2194,23 @@
               "alternateColor": "035131"
             },
             "score": 0,
-            "ranking": 4
+            "ranking": 4,
+            "record": {
+              "wins": 4,
+              "losses": 0
+            }
           },
           "broadcasts": [
             {
               "network": "ABC",
               "medium": "tv"
             }
-          ]
+          ],
+          "odds": {
+            "favorite": "away",
+            "spread": 15.5,
+            "overUnder": 48.5
+          }
         },
         {
           "id": "401856821",
@@ -1737,7 +2230,11 @@
               "color": "cfb87c",
               "alternateColor": "000000"
             },
-            "score": 0
+            "score": 0,
+            "record": {
+              "wins": 2,
+              "losses": 2
+            }
           },
           "away": {
             "team": {
@@ -1751,14 +2248,23 @@
               "alternateColor": "000000"
             },
             "score": 0,
-            "ranking": 12
+            "ranking": 12,
+            "record": {
+              "wins": 4,
+              "losses": 0
+            }
           },
           "broadcasts": [
             {
               "network": "FOX",
               "medium": "tv"
             }
-          ]
+          ],
+          "odds": {
+            "favorite": "away",
+            "spread": 13.5,
+            "overUnder": 49.5
+          }
         },
         {
           "id": "401858478",
@@ -1779,7 +2285,11 @@
               "alternateColor": "ffc72c"
             },
             "score": 0,
-            "ranking": 18
+            "ranking": 18,
+            "record": {
+              "wins": 4,
+              "losses": 1
+            }
           },
           "away": {
             "team": {
@@ -1792,14 +2302,23 @@
               "color": "33006f",
               "alternateColor": "e8d3a2"
             },
-            "score": 0
+            "score": 0,
+            "record": {
+              "wins": 3,
+              "losses": 1
+            }
           },
           "broadcasts": [
             {
               "network": "NBC",
               "medium": "tv"
             }
-          ]
+          ],
+          "odds": {
+            "favorite": "home",
+            "spread": 7.5,
+            "overUnder": 58.5
+          }
         },
         {
           "id": "401860898",
@@ -1820,7 +2339,11 @@
               "alternateColor": "d64309"
             },
             "score": 0,
-            "ranking": 22
+            "ranking": 22,
+            "record": {
+              "wins": 3,
+              "losses": 1
+            }
           },
           "away": {
             "team": {
@@ -1833,14 +2356,23 @@
               "color": "0f2439",
               "alternateColor": "ffffff"
             },
-            "score": 0
+            "score": 0,
+            "record": {
+              "wins": 1,
+              "losses": 3
+            }
           },
           "broadcasts": [
             {
               "network": "CBSSN",
               "medium": "tv"
             }
-          ]
+          ],
+          "odds": {
+            "favorite": "home",
+            "spread": 19.5,
+            "overUnder": 51.5
+          }
         },
         {
           "id": "401862792",
@@ -1860,7 +2392,11 @@
               "color": "006747",
               "alternateColor": "cfc493"
             },
-            "score": 0
+            "score": 0,
+            "record": {
+              "wins": 4,
+              "losses": 0
+            }
           },
           "away": {
             "team": {
@@ -1873,14 +2409,23 @@
               "color": "a41e35",
               "alternateColor": "ffffff"
             },
-            "score": 0
+            "score": 0,
+            "record": {
+              "wins": 1,
+              "losses": 3
+            }
           },
           "broadcasts": [
             {
               "network": "ESPNU",
               "medium": "tv"
             }
-          ]
+          ],
+          "odds": {
+            "favorite": "home",
+            "spread": 5.5,
+            "overUnder": 48.5
+          }
         },
         {
           "id": "401869842",
@@ -1900,7 +2445,11 @@
               "color": "003087",
               "alternateColor": "cb333b"
             },
-            "score": 0
+            "score": 0,
+            "record": {
+              "wins": 1,
+              "losses": 2
+            }
           },
           "away": {
             "team": {
@@ -1913,14 +2462,23 @@
               "color": "000000",
               "alternateColor": "d3bc8d"
             },
-            "score": 0
+            "score": 0,
+            "record": {
+              "wins": 2,
+              "losses": 1
+            }
           },
           "broadcasts": [
             {
               "network": "ESPN+",
               "medium": "streaming"
             }
-          ]
+          ],
+          "odds": {
+            "favorite": "away",
+            "spread": 1.5,
+            "overUnder": 46.5
+          }
         },
         {
           "id": "401856706",
@@ -1941,7 +2499,11 @@
               "alternateColor": "fdd023"
             },
             "score": 0,
-            "ranking": 11
+            "ranking": 11,
+            "record": {
+              "wins": 3,
+              "losses": 1
+            }
           },
           "away": {
             "team": {
@@ -1953,14 +2515,23 @@
               "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2377.png",
               "color": "00529C"
             },
-            "score": 0
+            "score": 0,
+            "record": {
+              "wins": 2,
+              "losses": 3
+            }
           },
           "broadcasts": [
             {
               "network": "SEC Network",
               "medium": "tv"
             }
-          ]
+          ],
+          "odds": {
+            "favorite": "home",
+            "spread": 53.5,
+            "overUnder": 62.5
+          }
         },
         {
           "id": "401858477",
@@ -1980,7 +2551,11 @@
               "color": "ce0e2d",
               "alternateColor": "ffffff"
             },
-            "score": 0
+            "score": 0,
+            "record": {
+              "wins": 1,
+              "losses": 3
+            }
           },
           "away": {
             "team": {
@@ -1994,14 +2569,23 @@
               "alternateColor": "ffffff"
             },
             "score": 0,
-            "ranking": 6
+            "ranking": 6,
+            "record": {
+              "wins": 4,
+              "losses": 0
+            }
           },
           "broadcasts": [
             {
               "network": "BTN",
               "medium": "tv"
             }
-          ]
+          ],
+          "odds": {
+            "favorite": "away",
+            "spread": 24.5,
+            "overUnder": 56.5
+          }
         },
         {
           "id": "401869932",
@@ -2021,7 +2605,11 @@
               "color": "ce181e",
               "alternateColor": "000000"
             },
-            "score": 0
+            "score": 0,
+            "record": {
+              "wins": 3,
+              "losses": 1
+            }
           },
           "away": {
             "team": {
@@ -2034,14 +2622,23 @@
               "color": "cc092f",
               "alternateColor": "000000"
             },
-            "score": 0
+            "score": 0,
+            "record": {
+              "wins": 2,
+              "losses": 2
+            }
           },
           "broadcasts": [
             {
               "network": "ESPN+",
               "medium": "streaming"
             }
-          ]
+          ],
+          "odds": {
+            "favorite": "home",
+            "spread": 6.5,
+            "overUnder": 49.5
+          }
         },
         {
           "id": "401860921",
@@ -2061,7 +2658,11 @@
               "color": "a60f2d",
               "alternateColor": "4d4d4d"
             },
-            "score": 0
+            "score": 0,
+            "record": {
+              "wins": 1,
+              "losses": 3
+            }
           },
           "away": {
             "team": {
@@ -2074,14 +2675,23 @@
               "color": "b1102b",
               "alternateColor": "13284c"
             },
-            "score": 0
+            "score": 0,
+            "record": {
+              "wins": 3,
+              "losses": 1
+            }
           },
           "broadcasts": [
             {
               "network": "USA Net",
               "medium": "tv"
             }
-          ]
+          ],
+          "odds": {
+            "favorite": "home",
+            "spread": 1.5,
+            "overUnder": 44.5
+          }
         },
         {
           "id": "401856817",
@@ -2101,7 +2711,11 @@
               "color": "ffc627",
               "alternateColor": "8c1d40"
             },
-            "score": 0
+            "score": 0,
+            "record": {
+              "wins": 2,
+              "losses": 1
+            }
           },
           "away": {
             "team": {
@@ -2114,14 +2728,23 @@
               "color": "154734",
               "alternateColor": "ffb81c"
             },
-            "score": 0
+            "score": 0,
+            "record": {
+              "wins": 3,
+              "losses": 1
+            }
           },
           "broadcasts": [
             {
               "network": "ESPN",
               "medium": "tv"
             }
-          ]
+          ],
+          "odds": {
+            "favorite": "home",
+            "spread": 4,
+            "overUnder": 48.5
+          }
         },
         {
           "id": "401860900",
@@ -2141,7 +2764,11 @@
               "color": "a6192e",
               "alternateColor": "000000"
             },
-            "score": 0
+            "score": 0,
+            "record": {
+              "wins": 1,
+              "losses": 3
+            }
           },
           "away": {
             "team": {
@@ -2154,14 +2781,23 @@
               "color": "501214",
               "alternateColor": "6a5638"
             },
-            "score": 0
+            "score": 0,
+            "record": {
+              "wins": 2,
+              "losses": 2
+            }
           },
           "broadcasts": [
             {
               "network": "CW",
               "medium": "tv"
             }
-          ]
+          ],
+          "odds": {
+            "favorite": "away",
+            "spread": 9.5,
+            "overUnder": 57.5
+          }
         },
         {
           "id": "401856820",
@@ -2181,7 +2817,11 @@
               "color": "cc0033",
               "alternateColor": "003366"
             },
-            "score": 0
+            "score": 0,
+            "record": {
+              "wins": 3,
+              "losses": 1
+            }
           },
           "away": {
             "team": {
@@ -2194,14 +2834,23 @@
               "color": "000000",
               "alternateColor": "e00122"
             },
-            "score": 0
+            "score": 0,
+            "record": {
+              "wins": 4,
+              "losses": 0
+            }
           },
           "broadcasts": [
             {
               "network": "FOX",
               "medium": "tv"
             }
-          ]
+          ],
+          "odds": {
+            "favorite": "home",
+            "spread": 7,
+            "overUnder": 55.5
+          }
         },
         {
           "id": "401864513",
@@ -2221,7 +2870,11 @@
               "color": "005737",
               "alternateColor": "000000"
             },
-            "score": 0
+            "score": 0,
+            "record": {
+              "wins": 1,
+              "losses": 3
+            }
           },
           "away": {
             "team": {
@@ -2234,14 +2887,23 @@
               "color": "0038a8",
               "alternateColor": "ffb81a"
             },
-            "score": 0
+            "score": 0,
+            "record": {
+              "wins": 2,
+              "losses": 2
+            }
           },
           "broadcasts": [
             {
               "network": "MW+",
               "medium": "streaming"
             }
-          ]
+          ],
+          "odds": {
+            "favorite": "home",
+            "spread": 2.5,
+            "overUnder": 50.5
+          }
         },
         {
           "id": "401871049",
@@ -2261,7 +2923,11 @@
               "color": "7e141b",
               "alternateColor": "231f20"
             },
-            "score": 34
+            "score": 34,
+            "record": {
+              "wins": 2,
+              "losses": 3
+            }
           },
           "away": {
             "team": {
@@ -2274,7 +2940,11 @@
               "color": "e13a3e",
               "alternateColor": "ffffff"
             },
-            "score": 13
+            "score": 13,
+            "record": {
+              "wins": 1,
+              "losses": 4
+            }
           },
           "broadcasts": [
             {
@@ -2301,7 +2971,11 @@
               "color": "003595",
               "alternateColor": "d0b787"
             },
-            "score": 44
+            "score": 44,
+            "record": {
+              "wins": 3,
+              "losses": 2
+            }
           },
           "away": {
             "team": {
@@ -2314,7 +2988,11 @@
               "color": "068f33",
               "alternateColor": "ffffff"
             },
-            "score": 45
+            "score": 45,
+            "record": {
+              "wins": 3,
+              "losses": 2
+            }
           },
           "broadcasts": [
             {
@@ -2341,7 +3019,11 @@
               "color": "6a2c3e",
               "alternateColor": "cf4520"
             },
-            "score": 33
+            "score": 33,
+            "record": {
+              "wins": 4,
+              "losses": 1
+            }
           },
           "away": {
             "team": {
@@ -2354,7 +3036,11 @@
               "color": "003594",
               "alternateColor": "ffb81c"
             },
-            "score": 35
+            "score": 35,
+            "record": {
+              "wins": 5,
+              "losses": 0
+            }
           },
           "broadcasts": [
             {
@@ -2381,7 +3067,11 @@
               "color": "00539f",
               "alternateColor": "ffd200"
             },
-            "score": 14
+            "score": 14,
+            "record": {
+              "wins": 2,
+              "losses": 3
+            }
           },
           "away": {
             "team": {
@@ -2394,7 +3084,11 @@
               "color": "0a254e",
               "alternateColor": "b72025"
             },
-            "score": 30
+            "score": 30,
+            "record": {
+              "wins": 4,
+              "losses": 1
+            }
           },
           "broadcasts": [
             {
@@ -2421,7 +3115,11 @@
               "color": "492f92",
               "alternateColor": "ffffff"
             },
-            "score": 34
+            "score": 34,
+            "record": {
+              "wins": 3,
+              "losses": 1
+            }
           },
           "away": {
             "team": {
@@ -2434,7 +3132,11 @@
               "color": "061440",
               "alternateColor": "ffffff"
             },
-            "score": 13
+            "score": 13,
+            "record": {
+              "wins": 3,
+              "losses": 2
+            }
           },
           "broadcasts": [
             {
@@ -2468,7 +3170,11 @@
               "color": "00338d",
               "alternateColor": "d50a0a"
             },
-            "score": 7
+            "score": 7,
+            "record": {
+              "wins": 3,
+              "losses": 0
+            }
           },
           "away": {
             "team": {
@@ -2481,7 +3187,11 @@
               "color": "002a5c",
               "alternateColor": "c60c30"
             },
-            "score": 14
+            "score": 14,
+            "record": {
+              "wins": 1,
+              "losses": 2
+            }
           },
           "broadcasts": [
             {
@@ -2516,7 +3226,11 @@
               "color": "0b1c3a",
               "alternateColor": "e64100"
             },
-            "score": 7
+            "score": 7,
+            "record": {
+              "wins": 2,
+              "losses": 1
+            }
           },
           "away": {
             "team": {
@@ -2529,7 +3243,11 @@
               "color": "115740",
               "alternateColor": "ffffff"
             },
-            "score": 3
+            "score": 3,
+            "record": {
+              "wins": 1,
+              "losses": 2
+            }
           },
           "broadcasts": [
             {
@@ -2562,7 +3280,11 @@
               "color": "fb4f14",
               "alternateColor": "000000"
             },
-            "score": 3
+            "score": 3,
+            "record": {
+              "wins": 2,
+              "losses": 1
+            }
           },
           "away": {
             "team": {
@@ -2575,7 +3297,11 @@
               "color": "007487",
               "alternateColor": "d7a22a"
             },
-            "score": 3
+            "score": 3,
+            "record": {
+              "wins": 2,
+              "losses": 1
+            }
           },
           "broadcasts": [
             {
@@ -2610,7 +3336,11 @@
               "color": "003c7f",
               "alternateColor": "c9243f"
             },
-            "score": 6
+            "score": 6,
+            "record": {
+              "wins": 2,
+              "losses": 1
+            }
           },
           "away": {
             "team": {
@@ -2623,7 +3353,11 @@
               "color": "a40227",
               "alternateColor": "ffffff"
             },
-            "score": 14
+            "score": 14,
+            "record": {
+              "wins": 1,
+              "losses": 2
+            }
           },
           "broadcasts": [
             {
@@ -2658,7 +3392,11 @@
               "color": "06424d",
               "alternateColor": "000000"
             },
-            "score": 6
+            "score": 6,
+            "record": {
+              "wins": 2,
+              "losses": 1
+            }
           },
           "away": {
             "team": {
@@ -2671,7 +3409,11 @@
               "color": "003594",
               "alternateColor": "ffd100"
             },
-            "score": 3
+            "score": 3,
+            "record": {
+              "wins": 1,
+              "losses": 2
+            }
           },
           "broadcasts": [
             {
@@ -2706,7 +3448,11 @@
               "color": "bd1c36",
               "alternateColor": "3e3a35"
             },
-            "score": 7
+            "score": 7,
+            "record": {
+              "wins": 0,
+              "losses": 3
+            }
           },
           "away": {
             "team": {
@@ -2719,7 +3465,11 @@
               "color": "204e32",
               "alternateColor": "ffb612"
             },
-            "score": 7
+            "score": 7,
+            "record": {
+              "wins": 1,
+              "losses": 2
+            }
           },
           "broadcasts": [
             {
@@ -2751,7 +3501,11 @@
               "color": "29126f",
               "alternateColor": "000000"
             },
-            "score": 14
+            "score": 14,
+            "record": {
+              "wins": 2,
+              "losses": 1
+            }
           },
           "away": {
             "team": {
@@ -2764,7 +3518,11 @@
               "color": "4495d2",
               "alternateColor": "001532"
             },
-            "score": 7
+            "score": 7,
+            "record": {
+              "wins": 0,
+              "losses": 3
+            }
           },
           "broadcasts": [
             {
@@ -2799,7 +3557,11 @@
               "color": "021018",
               "alternateColor": "eb0028"
             },
-            "score": 10
+            "score": 10,
+            "record": {
+              "wins": 0,
+              "losses": 3
+            }
           },
           "away": {
             "team": {
@@ -2812,7 +3574,11 @@
               "color": "002a5c",
               "alternateColor": "b0b7bc"
             },
-            "score": 6
+            "score": 6,
+            "record": {
+              "wins": 1,
+              "losses": 2
+            }
           },
           "broadcasts": [
             {
@@ -2847,7 +3613,11 @@
               "color": "5a1414",
               "alternateColor": "ffb612"
             },
-            "score": 13
+            "score": 13,
+            "record": {
+              "wins": 1,
+              "losses": 3
+            }
           },
           "away": {
             "team": {
@@ -2860,7 +3630,11 @@
               "color": "003b75",
               "alternateColor": "ffffff"
             },
-            "score": 30
+            "score": 30,
+            "record": {
+              "wins": 2,
+              "losses": 2
+            }
           },
           "broadcasts": [
             {
@@ -2887,7 +3661,11 @@
               "color": "4f2683",
               "alternateColor": "ffc62f"
             },
-            "score": 0
+            "score": 0,
+            "record": {
+              "wins": 3,
+              "losses": 0
+            }
           },
           "away": {
             "team": {
@@ -2900,14 +3678,23 @@
               "color": "008e97",
               "alternateColor": "fc4c02"
             },
-            "score": 0
+            "score": 0,
+            "record": {
+              "wins": 0,
+              "losses": 3
+            }
           },
           "broadcasts": [
             {
               "network": "FOX",
               "medium": "tv"
             }
-          ]
+          ],
+          "odds": {
+            "favorite": "home",
+            "spread": 10,
+            "overUnder": 38.5
+          }
         },
         {
           "id": "401872976",
@@ -2927,7 +3714,11 @@
               "color": "000000",
               "alternateColor": "a5acaf"
             },
-            "score": 0
+            "score": 0,
+            "record": {
+              "wins": 3,
+              "losses": 0
+            }
           },
           "away": {
             "team": {
@@ -2940,14 +3731,23 @@
               "color": "e31837",
               "alternateColor": "ffb612"
             },
-            "score": 0
+            "score": 0,
+            "record": {
+              "wins": 3,
+              "losses": 0
+            }
           },
           "broadcasts": [
             {
               "network": "CBS",
               "medium": "tv"
             }
-          ]
+          ],
+          "odds": {
+            "favorite": "away",
+            "spread": 4.5,
+            "overUnder": 47.5
+          }
         },
         {
           "id": "401872975",
@@ -2967,7 +3767,11 @@
               "color": "aa0000",
               "alternateColor": "b3995d"
             },
-            "score": 0
+            "score": 0,
+            "record": {
+              "wins": 3,
+              "losses": 0
+            }
           },
           "away": {
             "team": {
@@ -2980,14 +3784,23 @@
               "color": "0a2343",
               "alternateColor": "fc4c02"
             },
-            "score": 0
+            "score": 0,
+            "record": {
+              "wins": 2,
+              "losses": 1
+            }
           },
           "broadcasts": [
             {
               "network": "CBS",
               "medium": "tv"
             }
-          ]
+          ],
+          "odds": {
+            "favorite": "home",
+            "spread": 3,
+            "overUnder": 48.5
+          }
         },
         {
           "id": "401872977",
@@ -3007,7 +3820,11 @@
               "color": "002a5c",
               "alternateColor": "69be28"
             },
-            "score": 0
+            "score": 0,
+            "record": {
+              "wins": 2,
+              "losses": 1
+            }
           },
           "away": {
             "team": {
@@ -3020,14 +3837,23 @@
               "color": "0080c6",
               "alternateColor": "ffc20e"
             },
-            "score": 0
+            "score": 0,
+            "record": {
+              "wins": 0,
+              "losses": 3
+            }
           },
           "broadcasts": [
             {
               "network": "CBS",
               "medium": "tv"
             }
-          ]
+          ],
+          "odds": {
+            "favorite": "home",
+            "spread": 7,
+            "overUnder": 42.5
+          }
         },
         {
           "id": "401872978",
@@ -3047,7 +3873,11 @@
               "color": "0085ca",
               "alternateColor": "000000"
             },
-            "score": 0
+            "score": 0,
+            "record": {
+              "wins": 1,
+              "losses": 2
+            }
           },
           "away": {
             "team": {
@@ -3060,14 +3890,23 @@
               "color": "0076b6",
               "alternateColor": "bbbbbb"
             },
-            "score": 0
+            "score": 0,
+            "record": {
+              "wins": 2,
+              "losses": 1
+            }
           },
           "broadcasts": [
             {
               "network": "NBC",
               "medium": "tv"
             }
-          ]
+          ],
+          "odds": {
+            "favorite": "away",
+            "spread": 3.5,
+            "overUnder": 51.5
+          }
         },
         {
           "id": "401872964",
@@ -3087,7 +3926,11 @@
               "color": "472a08",
               "alternateColor": "ff3c00"
             },
-            "score": 27
+            "score": 27,
+            "record": {
+              "wins": 3,
+              "losses": 1
+            }
           },
           "away": {
             "team": {
@@ -3100,7 +3943,11 @@
               "color": "000000",
               "alternateColor": "ffb612"
             },
-            "score": 24
+            "score": 24,
+            "record": {
+              "wins": 2,
+              "losses": 2
+            }
           },
           "broadcasts": [
             {
@@ -3127,7 +3974,11 @@
               "color": "d3bc8d",
               "alternateColor": "000000"
             },
-            "score": 0
+            "score": 0,
+            "record": {
+              "wins": 1,
+              "losses": 2
+            }
           },
           "away": {
             "team": {
@@ -3140,14 +3991,23 @@
               "color": "a71930",
               "alternateColor": "000000"
             },
-            "score": 0
+            "score": 0,
+            "record": {
+              "wins": 1,
+              "losses": 2
+            }
           },
           "broadcasts": [
             {
               "network": "ESPN",
               "medium": "tv"
             }
-          ]
+          ],
+          "odds": {
+            "favorite": "home",
+            "spread": 1.5,
+            "overUnder": 47.5
+          }
         }
       ]
     }

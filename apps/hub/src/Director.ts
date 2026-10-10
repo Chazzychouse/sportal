@@ -1,7 +1,22 @@
-import type { GameSnapshot, GameStatus, Progress } from "@sportal/domain/Game"
+import type { Classification } from "@sportal/domain/Classification"
+import { Classifier } from "@sportal/domain/Classifier"
+import type { GameId, GameSnapshot, GameStatus, Progress } from "@sportal/domain/Game"
 import type { Play } from "@sportal/domain/Play"
 import { Slate, SlateChange } from "@sportal/domain/Slate"
-import { Cause, Context, DateTime, Effect, Layer, Metric, Stream, SubscriptionRef } from "effect"
+import {
+  Cause,
+  Context,
+  DateTime,
+  Duration,
+  Effect,
+  Layer,
+  Metric,
+  Option,
+  Ref,
+  Semaphore,
+  Stream,
+  SubscriptionRef
+} from "effect"
 import { Delivery, Provider } from "./provider/Provider.ts"
 import { loggedUnlessStopping } from "./Shutdown.ts"
 
@@ -9,6 +24,8 @@ export class Director extends Context.Service<
   Director,
   {
     readonly slate: Stream.Stream<Slate>
+    /** Each listed game's classification, by its id: the current ones, then each time a take or an expiry changes them. */
+    readonly classifications: Stream.Stream<ReadonlyMap<GameId, Classification>>
   }
 >()("sportal/hub/Director") {
   static readonly layer: Layer.Layer<Director, never, Provider> = Layer.effect(
@@ -16,6 +33,29 @@ export class Director extends Context.Service<
     Effect.gen(function* () {
       const provider = yield* Provider
       const slate = yield* SubscriptionRef.make(Slate.empty)
+      const classifier = yield* Ref.make(Classifier.empty)
+      const classifications = yield* SubscriptionRef.make<ReadonlyMap<GameId, Classification>>(new Map())
+      const expiry = yield* SubscriptionRef.make(Option.none<DateTime.Utc>())
+      const serial = yield* Semaphore.make(1)
+
+      const classify = Effect.fnUntraced(function* (changes: ReadonlyArray<SlateChange>) {
+        const current = yield* SubscriptionRef.get(slate)
+        const now = yield* DateTime.now
+        const had = yield* Ref.get(classifier)
+        const before = yield* SubscriptionRef.get(classifications)
+        const [next, classified] = had.step(current, changes, now)
+
+        yield* Ref.set(classifier, next)
+        yield* SubscriptionRef.set(classifications, classified)
+        yield* SubscriptionRef.set(expiry, next.nextExpiry())
+        const moved = current.games.filter(({ snapshot }) => {
+          const had = before.get(snapshot.id)
+          return had !== undefined && had.moment._tag !== classified.get(snapshot.id)?.moment._tag
+        })
+        yield* Effect.forEach(moved, ({ snapshot }) => loggedMoment(snapshot, classified.get(snapshot.id)), {
+          discard: true
+        })
+      })
 
       const take = Effect.fn("Director.take")(
         function* (delivery: Delivery) {
@@ -28,9 +68,24 @@ export class Director extends Context.Service<
 
           yield* SubscriptionRef.set(slate, next)
           yield* Effect.forEach(changes, observed, { discard: true })
+          yield* classify(changes)
         },
+        serial.withPermits(1),
         Effect.catchDefect((defect) =>
-          Effect.logError("Director: a take raised a defect; the slate keeps what it had", Cause.die(defect))
+          Effect.logError(
+            "Director: a take raised a defect; what it had not yet set is unchanged",
+            Cause.die(defect)
+          )
+        )
+      )
+
+      const expire = Effect.fn("Director.expire")(
+        function* () {
+          yield* classify([])
+        },
+        serial.withPermits(1),
+        Effect.catchDefect((defect) =>
+          Effect.logError("Director: classifying at an expiry raised a defect", Cause.die(defect))
         )
       )
 
@@ -45,7 +100,17 @@ export class Director extends Context.Service<
         { startImmediately: true }
       )
 
-      return Director.of({ slate: SubscriptionRef.changes(slate) })
+      const expiries = SubscriptionRef.changes(expiry).pipe(
+        Stream.switchMap(
+          Option.match({ onNone: () => Stream.never, onSome: (at) => Stream.fromEffect(sleptUntil(at)) })
+        )
+      )
+      yield* Effect.forkScoped(Stream.runForEach(expiries, expire), { startImmediately: true })
+
+      return Director.of({
+        slate: SubscriptionRef.changes(slate),
+        classifications: SubscriptionRef.changes(classifications)
+      })
     })
   )
 }
@@ -76,6 +141,26 @@ const gaugeGame = Effect.fnUntraced(function* (snapshot: GameSnapshot, progress:
   )
   yield* Metric.update(Metric.withAttributes(gameUpdatedAt, attributes), DateTime.toEpochSeconds(now))
 })
+
+/** Sleeps until `at`, at once when it has passed. */
+const sleptUntil = Effect.fnUntraced(function* (at: DateTime.Utc) {
+  const now = yield* DateTime.now
+
+  yield* Effect.sleep(Duration.max(DateTime.distance(now, at), Duration.zero))
+})
+
+function loggedMoment(snapshot: GameSnapshot, classification: Classification | undefined) {
+  if (classification === undefined) return Effect.void
+  const matchup = snapshot.matchup()
+  return Effect.logInfo(`Director: ${matchup} ${classification.moment._tag} (${classification.score})`).pipe(
+    Effect.annotateLogs({
+      game: snapshot.id,
+      league: snapshot.league,
+      matchup,
+      moment: classification.moment._tag
+    })
+  )
+}
 
 /** Removes `snapshot`'s game's current metric series, so a game no listing names is not exported again. */
 function forgotten(snapshot: GameSnapshot) {

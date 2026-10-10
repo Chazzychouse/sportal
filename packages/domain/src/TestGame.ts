@@ -1,7 +1,7 @@
 import { DateTime } from "effect"
-import { type Broadcast, GameId, GameSnapshot, Network } from "./Game.ts"
+import { type Broadcast, GameId, GameSnapshot, Network, type Odds } from "./Game.ts"
 import type { LeagueId } from "./League.ts"
-import { Completion, type Play, PlayId, Rush } from "./Play.ts"
+import { Completion, type Play, PlayId, Rush, Timeout } from "./Play.ts"
 import { Situation } from "./Situation.ts"
 import type { Slate } from "./Slate.ts"
 import { Team, TeamId } from "./Team.ts"
@@ -62,21 +62,22 @@ export function broadcast(network: string, medium: Broadcast["medium"] = "tv"): 
 
 const home = team("HOME").id
 
-/** The fields a one-yard first-quarter play by the home team shares, whichever way it was made. */
-const oneYardPlay = {
+/** What every play in a test carries: the home team's first snap, at 15:00 of the first quarter. */
+export const playFields = {
   id: PlayId.make("1"),
   sequence: 1,
   period: 1,
   clock: "15:00",
-  team: home,
-  yards: 1,
-  touchdown: false,
+  text: "Play",
   scoring: false,
   homeScore: 0,
   awayScore: 0,
   start: { down: 1, distance: 10, yardsToEndzone: 75, team: home },
   end: { down: 2, distance: 9, yardsToEndzone: 74, team: home }
 }
+
+/** The fields a one-yard first-quarter play by the home team shares, whichever way it was made. */
+const oneYardPlay = { ...playFields, team: home, yards: 1, touchdown: false }
 
 /**
  * A play for a test: a one-yard rush by the home team in the first quarter unless the overrides say otherwise. A test
@@ -93,6 +94,11 @@ export function completion(overrides: Partial<Completion> = {}): Completion {
   return new Completion({ ...oneYardPlay, text: "Pass complete for 1 yard", ...overrides })
 }
 
+/** A timeout for a test: the home team's, at 15:00 of the first quarter, unless the overrides say otherwise. */
+export function timeout(overrides: Partial<Timeout> = {}): Timeout {
+  return new Timeout({ ...playFields, text: "Timeout", team: home, ...overrides })
+}
+
 /** Game `id`'s snapshot, as `slate` has it. */
 export function snapshotIn(slate: Slate, id: GameId): GameSnapshot | undefined {
   return slate.games.find(({ snapshot }) => snapshot.id === id)?.snapshot
@@ -101,4 +107,25 @@ export function snapshotIn(slate: Slate, id: GameId): GameSnapshot | undefined {
 /** Game `id`'s plays, as `slate` has them; none when the slate lacks it. */
 export function playsIn(slate: Slate, id: GameId): ReadonlyArray<Play> {
   return slate.games.find(({ snapshot }) => snapshot.id === id)?.plays ?? []
+}
+
+/** A pregame line for a test: the home team favored by 3, unless the overrides say otherwise. */
+export function odds(overrides: Partial<Odds> = {}): Odds {
+  return { favorite: "home", spread: 3, ...overrides }
+}
+
+/** A snapshot's two sides for a test: the home and away teams with these scores, ranked when `rankings` says. */
+export function sides(home: number, away: number, rankings: { home?: number; away?: number } = {}) {
+  return {
+    home: {
+      team: team("HOME"),
+      score: home,
+      ...(rankings.home === undefined ? {} : { ranking: rankings.home })
+    },
+    away: {
+      team: team("AWAY"),
+      score: away,
+      ...(rankings.away === undefined ? {} : { ranking: rankings.away })
+    }
+  }
 }

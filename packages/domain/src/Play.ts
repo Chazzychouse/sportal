@@ -1,4 +1,4 @@
-import { Order, Schema } from "effect"
+import { Option, Order, Schema } from "effect"
 import { TeamId } from "./Team.ts"
 
 /** The feed's own id. Not ordered: order plays by `Play.sequence`. */
@@ -141,6 +141,10 @@ export class Other extends Schema.TaggedClass<Other>()("Other", {
   type: Schema.Struct({ id: Schema.String, text: Schema.String })
 }) {}
 
+/** What kind of big play a play is: see `FootballPlay.bigPlay`. */
+export const BigPlayKind = Schema.Literals(["touchdown", "turnover", "sack", "return", "longGain"])
+export type BigPlayKind = typeof BigPlayKind.Type
+
 const cases = Schema.Union([
   Rush,
   Completion,
@@ -163,14 +167,15 @@ const cases = Schema.Union([
 
 /**
  * Every football play, as the game's play-by-play lists it: a tagged union of its cases, each keeping what the feed's
- * play type says, with `.match`, `.guards`, `.cases`, `order`, `gainsYards`, `offense`, and `lostYards`.
+ * play type says, with `.match`, `.guards`, `.cases`, `order`, `gainsYards`, `offense`, `lostYards`, and `bigPlay`.
  */
 export const FootballPlay = Object.assign(cases, {
   /** By `sequence`. */
   order: Order.mapInput(Order.Number, (play: typeof cases.Type) => play.sequence),
   gainsYards,
   offense,
-  lostYards
+  lostYards,
+  bigPlay
 })
 export type FootballPlay = typeof FootballPlay.Type
 
@@ -208,3 +213,47 @@ function offense(play: typeof cases.Type): TeamId {
 function lostYards(play: typeof cases.Type): boolean {
   return gainsYards(play) && (cases.guards.Sack(play) || play.yards < 0)
 }
+
+/**
+ * The kind of big play `play` is, if it is one, the first that holds of: a touchdown, a turnover, a sack, a kick
+ * returned past the receiving team's 45, a run or catch of 25 yards or more.
+ */
+function bigPlay(play: typeof cases.Type): Option.Option<BigPlayKind> {
+  const none = Option.none<BigPlayKind>()
+  const kind = (found: BigPlayKind) => Option.some(found)
+  const long = (yards: number) => (yards >= longGain ? kind("longGain") : none)
+  const returned = (end: typeof play.end) =>
+    end.yardsToEndzone !== undefined && end.yardsToEndzone <= bigReturnEnd ? kind("return") : none
+
+  return cases.match(play, {
+    Rush: ({ touchdown, yards }) => (touchdown ? kind("touchdown") : long(yards)),
+    Completion: ({ touchdown, yards }) => (touchdown ? kind("touchdown") : long(yards)),
+    Incompletion: () => none,
+    Interception: (pick) => kind(pick.return === "touchdown" ? "touchdown" : "turnover"),
+    Sack: ({ fumbleLost }) => kind(fumbleLost ? "turnover" : "sack"),
+    Fumble: ({ recovery }) =>
+      recovery === "touchdown" ? kind("touchdown") : recovery === "opponent" ? kind("turnover") : none,
+    TwoPointTry: () => none,
+    Kickoff: ({ returnTouchdown, end }) => (returnTouchdown ? kind("touchdown") : returned(end)),
+    Punt: (punt) =>
+      punt.return === "touchdown"
+        ? kind("touchdown")
+        : punt.return === "returned"
+          ? returned(punt.end)
+          : none,
+    FieldGoal: () => none,
+    ExtraPoint: () => none,
+    Safety: () => none,
+    Penalty: () => none,
+    Timeout: () => none,
+    Stoppage: () => none,
+    PeriodEnd: () => none,
+    Other: () => none
+  })
+}
+
+/** Yards from scrimmage at which a run or a catch is a big play. */
+const longGain = 25
+
+/** Yards to the end zone at which a returned kick has passed the receiving team's 45. */
+const bigReturnEnd = 55

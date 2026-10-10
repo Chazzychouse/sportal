@@ -20,7 +20,7 @@ export function ScreenView() {
   const rects = useAtomValue(TilePlacements.rects)
   const dragging = Option.isSome(useAtomValue(TilePlacements.dragged))
   const display = useAtomValue(DisplayState.display)
-  const { slate } = useAtomValue(LiveStream.live)
+  const { slate, classifications } = useAtomValue(LiveStream.live)
   const selected = display.selectedOn(screen)
   const areaRef = useArea()
 
@@ -53,6 +53,7 @@ export function ScreenView() {
               tile={tile}
               game={game?.snapshot}
               selected={selected === index}
+              classification={game === undefined ? undefined : classifications[game.snapshot.id]}
             />
             <div className="flex min-h-0 flex-1 items-center justify-center bg-well">
               <TileBody tile={tile} game={game} />

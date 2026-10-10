@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs"
 import { assert, describe, it } from "@effect/vitest"
-import { GameSnapshot, Network } from "@sportal/domain/Game"
+import { GameId, GameSnapshot, Network } from "@sportal/domain/Game"
 import { Effect, Equal, Result, Schema } from "effect"
 import { TestClock } from "effect/testing"
 import * as TestHub from "../../TestHub.ts"
@@ -31,6 +31,34 @@ describe("EspnEvent.listingOf", () => {
         ]),
         expected.deliveries.map(({ league, games }) => ({ league, games }))
       )
+    })
+  )
+
+  it.effect("should read each team's overall record", () =>
+    Effect.gen(function* () {
+      const games = yield* EspnEvent.listingOf("fbs", fixture("fbs-scoreboard-2026-10-03T2024Z.json"))
+      const game = games.find(({ id }) => id === GameId.make("401860899"))
+
+      assert.deepStrictEqual(game?.home.record, { wins: 2, losses: 2 })
+      assert.deepStrictEqual(game?.away.record, { wins: 2, losses: 2 })
+    })
+  )
+
+  it.effect("should read the pregame line, its spread unsigned and the favored side", () =>
+    Effect.gen(function* () {
+      const games = yield* EspnEvent.listingOf("fbs", fixture("fbs-scoreboard-2026-10-03T2024Z.json"))
+      const game = games.find(({ id }) => id === GameId.make("401860899"))
+
+      assert.deepStrictEqual(game?.odds, { favorite: "away", spread: 7, overUnder: 62.5 })
+    })
+  )
+
+  it.effect("should leave out odds the scoreboard does not send", () =>
+    Effect.gen(function* () {
+      const games = yield* EspnEvent.listingOf("fbs", fixture("fbs-scoreboard-2026-10-03T2024Z.json"))
+      const game = games.find(({ id }) => id === GameId.make("401866431"))
+
+      assert.isUndefined(game?.odds)
     })
   )
 
