@@ -97,7 +97,7 @@ Provider and Source are the two words most likely to be swapped. Provider is alw
 | **Remote report** | What a Display tells its Remotes through the Hub: its Screen, its autopilot, its prompts, and the prompt it shows; `RemoteReport` in `apps/web/src/remote/RemoteReport.ts`. Sent once its input stream opens and again on each change. | state, snapshot |
 | **Remote input** | What a Remote sends a Display: a screen command, applied as yours, or a hotkey, routed as if pressed on the Display; `RemoteInput` in `apps/web/src/remote/RemoteInput.ts`. | command, event |
 | **Remote link** | A Display's side of its Remotes (`apps/web/src/remote/RemoteLink.ts`): its input stream at the Hub, its reports, and the inputs it applies. | |
-| **Overlay** | The one dialog a Display has open — the key help or the command palette — or none; `Overlay` beside `Display` in `apps/web/src/display/Display.ts`. Local to the Display. | modal, popup |
+| **Overlay** | The one dialog a Display has open — the key help, the command palette, or Join Remote — or none; `Overlay` beside `Display` in `apps/web/src/display/Display.ts`. Local to the Display. | modal, popup |
 | **Shell config** | Every setting the desktop shell reads from its environment: the Hub's address; `ShellConfig` in code. | settings, env |
 | **Shell window** | The shell's one window, showing the Hub's web UI, confined to the Hub's origin; `ShellWindow` in code. | main window, BrowserWindow |
 | **Shell bridge** | The small interface the desktop shell exposes to the web UI; its IPC channel names are `ShellChannel`. | IPC, native API |

@@ -284,14 +284,17 @@ describe("Display#press", () => {
     assert.deepStrictEqual(commands, [])
   })
 
-  it("should close the Palette overlay with Esc and send nothing", () => {
-    const open = Display.initial.open("Palette")
+  it.each(["Palette", "JoinRemote"] as const)(
+    "should close the %s overlay with Esc and send nothing",
+    (overlay) => {
+      const open = Display.initial.open(overlay)
 
-    const { display, commands } = press(open, { _tag: "Unsolo" }, TestWeb.withTiles([]))
+      const { display, commands } = press(open, { _tag: "Unsolo" }, TestWeb.withTiles([]))
 
-    assert.strictEqual(display.overlay._tag, "None")
-    assert.deepStrictEqual(commands, [])
-  })
+      assert.strictEqual(display.overlay._tag, "None")
+      assert.deepStrictEqual(commands, [])
+    }
+  )
 
   it("should unsolo with Esc and no overlay while soloed", () => {
     const soloed = new Screen({ ...TestWeb.withTiles(["live"]), solo: Option.some(GameId.make("live")) })

@@ -6,7 +6,7 @@ import { type Screen, type ScreenCommand, Tile } from "../screen/Screen.ts"
 import { Place, StripCard } from "../slate/StripCard.ts"
 
 /** The one overlay a Display has open, or none. Above the class: `Display.initial` reads it when the class is defined. */
-export type Overlay = Data.TaggedEnum<{ None: object; Keys: object; Palette: object }>
+export type Overlay = Data.TaggedEnum<{ None: object; Keys: object; Palette: object; JoinRemote: object }>
 export const Overlay = Data.taggedEnum<Overlay>()
 
 /**
@@ -137,12 +137,12 @@ export class Display extends Data.Class<{
   }
 
   /** Whether this overlay is the one open. */
-  shows(overlay: "Keys" | "Palette"): boolean {
+  shows(overlay: "Keys" | "Palette" | "JoinRemote"): boolean {
     return Overlay.$is(overlay)(this.overlay)
   }
 
   /** Opens an overlay, closing any other: at most one is open. */
-  open(overlay: "Keys" | "Palette"): Display {
+  open(overlay: "Keys" | "Palette" | "JoinRemote"): Display {
     return new Display({ ...this, overlay: Overlay[overlay]() })
   }
 
@@ -169,7 +169,7 @@ export type DisplayInput = Data.TaggedEnum<{
   VideoPressed: { readonly game: GameId }
   Dropped: { readonly card: StripCard }
   Commanded: { readonly command: ScreenCommand }
-  Opened: { readonly overlay: "Keys" | "Palette" }
+  Opened: { readonly overlay: "Keys" | "Palette" | "JoinRemote" }
   Closed: object
   SlateToggled: object
 }>

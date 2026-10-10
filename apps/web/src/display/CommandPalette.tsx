@@ -137,6 +137,12 @@ export function CommandPalette(props: { open: boolean; onOpenChange: (open: bool
             <CommandShortcut>A</CommandShortcut>
           </CommandItem>
           <CommandItem
+            value="remote phone join qr"
+            onSelect={() => input(DisplayInput.Opened({ overlay: "JoinRemote" }))}
+          >
+            Control from a phone
+          </CommandItem>
+          <CommandItem
             value="keys keyboard shortcuts help"
             onSelect={() => input(DisplayInput.Opened({ overlay: "Keys" }))}
           >

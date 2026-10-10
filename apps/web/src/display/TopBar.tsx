@@ -1,6 +1,6 @@
 import { useAtomSet, useAtomValue } from "@effect/atom-react"
 import { Option } from "effect"
-import { Expand, Keyboard, List, LogIn, Minimize2, Shrink, SquareDashed } from "lucide-react"
+import { Expand, Keyboard, List, LogIn, Minimize2, Shrink, Smartphone, SquareDashed } from "lucide-react"
 import { Button } from "@/design/button"
 import * as AutopilotState from "../autopilot/AutopilotState.ts"
 import { AutopilotInput } from "../autopilot/AutopilotState.ts"
@@ -112,6 +112,16 @@ export function TopBar() {
           </Button>
         )}
         <ConnectionPill connection={connection} />
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          aria-label="Remote"
+          title="Control from a phone"
+          className="text-muted-foreground"
+          onClick={() => input(DisplayInput.Opened({ overlay: "JoinRemote" }))}
+        >
+          <Smartphone />
+        </Button>
         <Button
           variant="ghost"
           size="icon-sm"

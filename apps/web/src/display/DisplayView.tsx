@@ -3,6 +3,7 @@ import { Toaster } from "@/design/sonner"
 import * as AutopilotState from "../autopilot/AutopilotState.ts"
 import * as GuideRelay from "../hub/GuideRelay.ts"
 import * as PromptsState from "../prompts/PromptsState.ts"
+import { JoinRemote } from "../remote/JoinRemote.tsx"
 import * as RemoteLink from "../remote/RemoteLink.ts"
 import { useScreenRejectionToasts } from "../screen/Rejections.ts"
 import { ScreenView } from "../screen/ScreenView.tsx"
@@ -39,6 +40,7 @@ export function DisplayView() {
         {fullScreen || !display.slateOpen ? null : <SlateView />}
       </div>
       <KeysDialog open={display.shows("Keys")} onOpenChange={closeOverlay} />
+      {display.shows("JoinRemote") && <JoinRemote open onOpenChange={closeOverlay} />}
       <CommandPalette open={display.shows("Palette")} onOpenChange={closeOverlay} />
       {/* Top center, inside the 44px top bar strip, so a toast never covers a video: a 5px offset, a compact
           one-line toast, and one toast at a time so none stacks below the bar. */}
