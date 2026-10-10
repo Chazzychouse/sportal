@@ -86,6 +86,14 @@ flowchart LR
 - **Web UI** — one codebase for desk and couch. It renders Hub state, and its Display owns its Screen: it applies screen commands and chooses between sources.
 - **Desktop shell** — loads the web UI from the Hub, registers as a Display, and mirrors that Display's stream tiles into native provider web views. It is told the Hub's address by configuration (`SPORTAL_HUB_URL`, read once into `ShellConfig`) and never starts a Hub.
 
+The Hub's routes for Displays and their Remotes:
+
+- `GET /api/displays/:id/inputs` — a Display's input stream (server-sent events); its connection registers the Display under its id.
+- `PUT /api/displays/:id` — the Display's report, which the Hub keeps and passes on unread; 404 when the Display is not connected.
+- `GET /api/displays/:id` — a Remote follows the Display: its latest report, or that it is offline (server-sent events).
+- `POST /api/displays/:id/inputs` — a Remote's input, relayed to the Display; 404 when it is not connected.
+- `GET /api/host/addresses` — the LAN addresses a Remote's join code can point at.
+
 ### 3.1 Why each Display owns its Screen
 
 Each Display runs its own Screen, so a command costs no round trip and a second Display needs no keyed session on the Hub ([ADR 0015](./adr/0015-each-display-owns-its-screen.md)). The Hub publishes what every Display shares, and the Display does the rest:
