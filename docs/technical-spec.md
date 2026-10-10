@@ -189,12 +189,9 @@ sportal/
     │       ├── HubStopping.ts      Whether a task that should run until the Hub stops ended because it is stopping, and the Error log unless it did
     │       ├── TestTelemetry.ts    Layers for tests
     │       ├── TestDirector.ts     The Director taking a fed provider, and what it takes of a test's frames
-    │       ├── TestHubServer.ts    The Hub's routes served on an ephemeral port with a client, the live stream read as messages, and what a test publishes into it
     │       ├── HubServer.ts        Serves the API, the live stream, and the web UI's files
     │       ├── provider/
-    │       │   ├── Provider.ts     The port: `deliveries`, each frame's in order, and `Delivery`, what a frame said; `layerTest`, the provider tests feed
-    │       │   ├── ProviderFeed.ts How a test drives `Provider.layerTest`: `deliver` a frame's deliveries, `end` the frames
-    │       │   ├── TestProvider.ts The games the provided `Provider` first lists for a league
+    │       │   ├── Provider.ts     The port: `deliveries`, in order, and `Delivery`, what a frame said; `layerTest`, the provider tests feed
     │       │   └── espn/
     │       │       ├── Espn.ts             ESPN's one front door: the live provider (`layer`), polling and pushing through FastCast
     │       │       ├── EspnProvider.ts     Implements the port: polls each league on its own, folds FastCast's frames into GameTopics, tells FastCast what to follow
@@ -292,7 +289,7 @@ class Provider extends Context.Service<Provider, {
 ```
 
 - A provider runs itself. It polls, follows its push, reconnects, and reads each frame it receives with its own decode, for as long as it runs; nothing tells it what to do. Its failures are logged and counted inside its folder, where they happen.
-- Each element is one `Delivery` (`Listing` or `Plays`); a frame says at most one, and one that says nothing delivers nothing. ESPN's poll (`EspnEvent.listingOf`) skips an event that does not decode and lists the rest; its fold of FastCast's frames (`GameTopics#take`) does the same for a play. A poll or a frame that does not decode says nothing and is a Warning log. `Provider.layerTest` is the provider tests feed: its frames say our own deliveries, given through `ProviderFeed` (`provider/ProviderFeed.ts`), until it ends them.
+- Each element is one `Delivery` (`Listing` or `Plays`); a frame says at most one, and one that says nothing delivers nothing. ESPN's poll (`EspnEvent.listingOf`) skips an event that does not decode and lists the rest; its fold of FastCast's frames (`GameTopics#take`) does the same for a play. A poll or a frame that does not decode says nothing and is a Warning log. `Provider.layerTest` is the provider tests feed: its frames say our own deliveries, offered through `TestHub.offered`, until the test ends them.
 - ESPN's cadence is each league's own poll loop in `EspnProvider`: each league waits after its poll by its own last good listing: about every 10 seconds while one is live, every minute near kickoff, every 15 minutes otherwise, at most 30 seconds after a poll that failed or did not decode (a successful empty listing is not a failure). The polls and FastCast's game topics run beside each other, with no order between them: they never say the same facts. After each listing, `GameTopics#retainedFor` keeps documents and decoded plays only for the topics still wanted; a push or checkpoint prunes nothing. FastCast (`docs/adr/0007-fastcast-live-feed.md`, `docs/adr/0016-espns-poll-lists-its-game-topics-play.md`) is the service its push reads from: it follows the topics `EspnProvider` names from each league's last good listing (each listed game live or near kickoff, `Topic.wantedAt`), follows a topic again when its document goes back to waiting for its checkpoint, and retries its socket on a jittered exponential backoff. FastCast parses each socket text once, into its envelope (`FastCastMessage.Envelope`), and reads only the framing it needs from it (op, topic, mid, an `H`'s checkpoint URL); `FastCastDocuments` validates and decodes the patch message, payload and all, from that same envelope, so framing and patch validation stay distinct steps.
 - Provider vocabulary stops at the folder edge. ESPN's "event", "competition", and "competitor" exist only in `EspnPayload.ts`, `EspnEvent.ts`, `FastCastMessage.ts`, and `EspnPlay.ts`.
 - The Hub composes providers per league: ESPN for NFL; ESPN with CollegeFootballData filling gaps for FBS. The composition is itself a `Provider`, so the Director sees one.
