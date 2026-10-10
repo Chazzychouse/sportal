@@ -20,7 +20,7 @@ export type Followed = Data.TaggedEnum<{
 }>
 export const Followed = Data.taggedEnum<Followed>()
 
-/** The Display `id`, followed through the Hub; it reconnects by itself and starts again from `Connecting`. */
+/** The Display `id`, followed through the Hub; it reconnects after an error and starts again from `Connecting`. */
 export const followed = Atom.family((id: DisplayId) =>
   Atom.make(ServerEvents.from(`/api/displays/${id}`).pipe(Stream.scanEffect(connecting, step))).pipe(
     Atom.map(AsyncResult.getOrElse(connecting)),

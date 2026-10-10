@@ -7,7 +7,7 @@ import { ServerEvent } from "./ServerEvents.ts"
 
 /**
  * Everything the Hub has told this client over the live stream at /api/live, and whether the stream is up. The
- * EventSource opens when the atom is first read and stays open while its registry lives; it reconnects by itself,
+ * EventSource opens when the atom is first read and stays open while its registry lives; it reconnects after an error,
  * and the Hub replays the current slate on every connection.
  */
 export const live: Atom.Atom<Live> = Atom.make(

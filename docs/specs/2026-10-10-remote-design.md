@@ -92,8 +92,10 @@ The Display's link to its remotes, an atom the Display mounts beside `inputs`, `
 2. Once it is open, `PUT` the current report, then each report that differs from the last one sent
    (`Schema.toEquivalence(RemoteReport)`).
 3. Decode each input and apply it as above. One that does not decode is logged as a warning and dropped.
-4. When the stream drops, the browser's `EventSource` reconnects by itself, as the live stream's does; each time it
-   opens again, step 2 sends the report again, since the Hub forgot it.
+4. When the stream drops, it reconnects, as the live stream's does: the browser's `EventSource` retries a dropped
+   connection by itself, and `ServerEvents.from` closes and reopens one the browser fails for good (a 502 from the dev
+   proxy while the Hub restarts), after an exponential backoff capped at 5 seconds; each time it opens again, step 2 sends the report again, since the
+   Hub forgot it.
 
 ### Join Remote
 

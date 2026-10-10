@@ -181,31 +181,41 @@ export function mainGame(screen: Screen): GameId | undefined {
 /** The EventSource the live stream opened, once a read of the atom has started it. */
 export const opened: Effect.Effect<FakeEventSource, never, AtomRegistry.AtomRegistry> = Atom.get(
   LiveStream.live
-).pipe(Effect.andThen(eventSource))
-
-function eventSource(): Effect.Effect<FakeEventSource> {
-  return Effect.suspend(() => {
-    const last = FakeEventSource.opened.at(-1)
-    return last === undefined ? Effect.yieldNow.pipe(Effect.flatMap(eventSource)) : Effect.succeed(last)
-  })
-}
+).pipe(Effect.andThen(() => lastOpened(() => true)))
 
 /** The EventSource last opened at `url`, once something has opened one. */
 export function openedAt(url: string): Effect.Effect<FakeEventSource> {
+  return lastOpened((source) => source.url === url)
+}
+
+/** The EventSource opened at `source`'s url after it, once one has been. */
+export function reopened(source: FakeEventSource): Effect.Effect<FakeEventSource> {
+  return lastOpened(
+    (each) =>
+      each.url === source.url && FakeEventSource.opened.indexOf(each) > FakeEventSource.opened.indexOf(source)
+  )
+}
+
+function lastOpened(predicate: (source: FakeEventSource) => boolean): Effect.Effect<FakeEventSource> {
   return Effect.suspend(() => {
-    const last = FakeEventSource.opened.findLast((source) => source.url === url)
+    const last = FakeEventSource.opened.findLast(predicate)
     return last === undefined
-      ? Effect.yieldNow.pipe(Effect.flatMap(() => openedAt(url)))
+      ? Effect.yieldNow.pipe(Effect.flatMap(() => lastOpened(predicate)))
       : Effect.succeed(last)
   })
 }
 
-/** An EventSource a test drives by hand: it records each one opened, and the test calls its handlers. */
+/**
+ * An EventSource a test drives by hand: it records each one opened, and the test calls its handlers. A test sets
+ * `readyState` to `CLOSED` before `onerror` to fail it as the browser does, for good.
+ */
 export class FakeEventSource {
+  static readonly CLOSED = 2
   static opened: Array<FakeEventSource> = []
   onopen: (() => void) | null = null
   onerror: (() => void) | null = null
   onmessage: ((event: { data: unknown }) => void) | null = null
+  readyState = 0
   closed = false
 
   readonly url: string
