@@ -7,7 +7,7 @@ import { Delivery } from "../Provider.ts"
 import * as EspnEvent from "./EspnEvent.ts"
 import * as TestEspn from "./TestEspn.ts"
 
-describe("listingOf", () => {
+describe("EspnEvent.listingOf", () => {
   // Each recorded poll as it decoded when both feeds' events were read by one transform.
   it.effect("should decode each listing", () =>
     Effect.gen(function* () {
@@ -192,8 +192,8 @@ describe("listingOf", () => {
   )
 })
 
-// Decoding NE at BUF's whole recorded day takes seconds alone, and many under a full suite's load: whichever test
-// runs first decodes it, so each has a timeout to match.
+// Decoding NE at BUF's whole recorded day takes seconds alone, and many under a full suite's load: the first test in this file to
+// yield the cache pays for the replay, hence the timeout.
 describe("the recorded NE at BUF day", () => {
   it.effect(
     "should decode every snapshot so it reads back from its JSON Equal to itself",

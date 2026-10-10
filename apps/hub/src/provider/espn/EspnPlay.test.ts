@@ -290,8 +290,8 @@ describe("EspnPlay.FootballPlay", () => {
   )
 })
 
-// Decoding NE at BUF's whole recorded day takes seconds alone, and many under a full suite's load: whichever test
-// runs first decodes it, so each has a timeout to match.
+// Decoding NE at BUF's whole recorded day takes seconds alone, and many under a full suite's load: the first test in this file to
+// yield the cache pays for the replay, hence the timeout.
 describe("the recorded NE at BUF day", () => {
   it.effect(
     "should decode every play so it reads back from its JSON Equal to itself",

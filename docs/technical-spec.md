@@ -195,7 +195,7 @@ sportal/
     │       ├── provider/
     │       │   ├── Provider.ts     The port: `deliveries`, each frame's in order, and `Delivery`, what a frame said; `layerTest`, the provider tests feed
     │       │   ├── ProviderFeed.ts How a test drives `Provider.layerTest`: `deliver` a frame's deliveries, `end` the frames
-    │       │   ├── TestProvider.ts What the provided `Provider` lists, and what ESPN's decode says of a test's frames
+    │       │   ├── TestProvider.ts The games the provided `Provider` first lists for a league
     │       │   └── espn/
     │       │       ├── Espn.ts             ESPN's one front door: the live provider (`layer`), polling and pushing through FastCast
     │       │       ├── EspnProvider.ts     Implements the port: polls each league on its own, folds FastCast's frames into GameTopics, tells FastCast what to follow
@@ -209,7 +209,7 @@ sportal/
     │       │       ├── Topic.ts            A FastCast topic, read once from its `tc`
     │       │       ├── Frame.ts            A frame as received, before ESPN's decode reads it
     │       │       ├── TestEspn.ts         Recorded payloads, NE at BUF's day replayed and cached (`recordedNeAtBuf`, `neAtBufDecoded`), and ESPN answering from recorded scoreboards (`recordedEspn`)
-    │       │       ├── TestFastCast.ts     A fake FastCast socket host, and builders of frames, checkpoints and messages
+    │       │       ├── TestFastCast.ts     A fake FastCast socket host, builders of frames, checkpoints and messages, and the real FastCast run over the fake host (`nflFrames`, `framesOver`, `closedSockets`)
     │       │       ├── TestGameTopics.ts   A test's frames replayed through the game topics, and the topics they leave
     │       │       └── fixtures/           Recorded real payloads, NE at BUF's frames among them
     │       └── source/

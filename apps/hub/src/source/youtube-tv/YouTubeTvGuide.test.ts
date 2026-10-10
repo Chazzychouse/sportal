@@ -73,7 +73,7 @@ describe("YouTubeTvGuide.decode", () => {
     })
   )
 
-  it.effect("should give the recorded guide's channels, live addresses, and airings", () =>
+  it.effect("should read the recorded guide's channels, live addresses, and airings", () =>
     Effect.gen(function* () {
       yield* TestClock.setTime(TestYouTubeTv.recordedAt)
 
