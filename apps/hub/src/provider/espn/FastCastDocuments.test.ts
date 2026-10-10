@@ -1,7 +1,7 @@
 import { assert, describe, it } from "@effect/vitest"
 import { Array as Arr, Effect, HashMap, Option, Schema } from "effect"
+import { Frame } from "./FastCast.ts"
 import { DocumentChange, FastCastDocuments } from "./FastCastDocuments.ts"
-import { Frame } from "./Frame.ts"
 import * as TestEspn from "./TestEspn.ts"
 import * as TestFastCast from "./TestFastCast.ts"
 

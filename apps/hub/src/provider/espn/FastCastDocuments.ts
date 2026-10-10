@@ -12,8 +12,8 @@ import {
   Result,
   Schema
 } from "effect"
+import { Frame } from "./FastCast.ts"
 import * as FastCastMessage from "./FastCastMessage.ts"
-import { Frame } from "./Frame.ts"
 import type { Topic } from "./Topic.ts"
 
 /**

@@ -2,6 +2,7 @@ import {
   type Cause,
   Channel,
   Context,
+  Data,
   type Duration,
   Effect,
   FiberMap,
@@ -20,7 +21,6 @@ import { HttpClient, HttpClientResponse } from "effect/http"
 import * as Socket from "effect/socket/Socket"
 import * as HubStopping from "../../HubStopping.ts"
 import * as FastCastMessage from "./FastCastMessage.ts"
-import { Frame } from "./Frame.ts"
 import { Topic } from "./Topic.ts"
 
 /**
@@ -80,6 +80,22 @@ export class FastCast extends Context.Service<
 
 /** The topics FastCast follows, each with whether its document is synced or waits for its checkpoint. */
 export type Wanted = HashMap.HashMap<Topic, "Synced" | "AwaitingCheckpoint">
+
+/** One thing FastCast delivered, as received, before its decode reads it. */
+export type Frame = Data.TaggedEnum<{
+  /**
+   * A socket text, read once as its envelope: a change to its topic's document, or any other op. No envelope when the
+   * text is not JSON with an op; no topic or mid unless it frames as a known op naming them.
+   */
+  Pushed: {
+    readonly topic: Option.Option<Topic>
+    readonly mid: Option.Option<number>
+    readonly envelope: Option.Option<FastCastMessage.Envelope>
+  }
+  /** The checkpoint an `H` pointed to, decoded: `topic`'s whole document as of `mid`. */
+  Checkpoint: { readonly topic: Topic; readonly mid: number; readonly document: Schema.Json }
+}>
+export const Frame = Data.taggedEnum<Frame>()
 
 /** FastCast could not be followed: it refused, closed, or went silent. `FastCast` logs it and opens the socket again. */
 class ProviderUnavailable extends Schema.TaggedError<ProviderUnavailable>()("ProviderUnavailable", {

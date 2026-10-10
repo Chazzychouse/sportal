@@ -1,5 +1,5 @@
 import { Effect, Stream } from "effect"
-import type { Frame } from "./Frame.ts"
+import type { Frame } from "./FastCast.ts"
 import { GameTopics } from "./GameTopics.ts"
 
 /** What GameTopics gives for each frame, one delivery array per frame. */

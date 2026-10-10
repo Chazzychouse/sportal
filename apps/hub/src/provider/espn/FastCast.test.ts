@@ -4,7 +4,7 @@ import { HttpClient } from "effect/http"
 import * as Socket from "effect/socket/Socket"
 import { TestClock } from "effect/testing"
 import { recordingLogs } from "../../TestTelemetry.ts"
-import { Frame } from "./Frame.ts"
+import { Frame } from "./FastCast.ts"
 import * as TestFastCast from "./TestFastCast.ts"
 
 // Games of the recorded checkpoint after `TestFastCast.firstGame`: the second live, the third scheduled for 20:05Z.

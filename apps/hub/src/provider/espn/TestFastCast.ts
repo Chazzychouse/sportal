@@ -3,9 +3,8 @@ import { GameId } from "@sportal/domain/Game"
 import { Deferred, Effect, HashMap, Layer, Option, Schema, Stream, SubscriptionRef } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/http"
 import * as Socket from "effect/socket/Socket"
-import { FastCast, type Wanted } from "./FastCast.ts"
+import { FastCast, Frame, type Wanted } from "./FastCast.ts"
 import * as FastCastMessage from "./FastCastMessage.ts"
-import { Frame } from "./Frame.ts"
 import { Topic } from "./Topic.ts"
 
 /**
