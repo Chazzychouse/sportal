@@ -326,7 +326,7 @@ describe("Autopilot.step", () => {
     assert.deepStrictEqual(commands, [])
   })
 
-  it("should replace crunch time with a red zone once the dwell is out", () => {
+  it("should hand crunch time off to a red zone through home once the dwell is out", () => {
     const { pilot, screen } = awayOnOther(crunch)
 
     const [, commands] = pilot.step(
@@ -339,7 +339,84 @@ describe("Autopilot.step", () => {
       at(31)
     )
 
-    assert.deepStrictEqual(commands, [{ _tag: "Promote", tile: 2 }])
+    assert.deepStrictEqual(commands, [
+      { _tag: "Promote", tile: 1 },
+      { _tag: "Promote", tile: 2 }
+    ])
+  })
+
+  it("should hold an away game that loses its classification through its dwell", () => {
+    const { pilot, screen } = awayOnOther()
+
+    const [, commands] = pilot.step(screen, classified([[home, live]]), at(10))
+
+    assert.deepStrictEqual(commands, [])
+  })
+
+  it("should go home once the dwell is out when home enters a red zone and the away game is in crunch time", () => {
+    const { pilot, screen } = awayOnOther(crunch)
+
+    const [, commands] = pilot.step(
+      screen,
+      classified([
+        [home, redZone],
+        [other, crunch]
+      ]),
+      at(31)
+    )
+
+    assert.deepStrictEqual(commands, [{ _tag: "Promote", tile: 1 }])
+  })
+
+  it("should put every tile back where it was when it goes home after handing off to another away game", () => {
+    const { pilot, screen } = awayOnOther(crunch)
+    const [handedOff, toThird] = pilot.step(
+      screen,
+      classified([
+        [home, live],
+        [other, crunch],
+        [third, redZone]
+      ]),
+      at(31)
+    )
+    const onThird = after(screen, toThird)
+
+    const [, commands] = handedOff.step(
+      onThird,
+      classified([
+        [home, live],
+        [other, live],
+        [third, live]
+      ]),
+      at(62)
+    )
+
+    assert.deepStrictEqual(gamesIn(after(onThird, commands)), gamesIn(quad))
+  })
+
+  it("should keep the sound where you put it when it hands off to another away game", () => {
+    const heard = after(quad, [{ _tag: "FocusAudio", tile: 3 }])
+    const [pilot, went] = on.manual({ _tag: "FocusAudio", tile: 3 }, heard, start).step(
+      heard,
+      classified([
+        [home, live],
+        [other, crunch]
+      ]),
+      at(1)
+    )
+    const away = after(heard, went)
+
+    const [, commands] = pilot.step(
+      away,
+      classified([
+        [home, live],
+        [other, crunch],
+        [third, redZone]
+      ]),
+      at(32)
+    )
+
+    assert.deepStrictEqual(after(away, commands).audioFocus, Option.some(fourth))
   })
 })
 
@@ -407,6 +484,73 @@ describe("Autopilot.manual", () => {
 
     assert.deepStrictEqual(next.home.main, Option.some(home))
   })
+
+  it("should end a revert with the sound where you put it while away", () => {
+    const { pilot, screen } = awayOnOther()
+    const heard = after(screen, [{ _tag: "FocusAudio", tile: 2 }])
+    const yoursToo = pilot.manual({ _tag: "FocusAudio", tile: 2 }, heard, at(5))
+
+    const [, commands] = yoursToo.step(
+      heard,
+      classified([
+        [home, live],
+        [other, live]
+      ]),
+      at(31)
+    )
+
+    assert.deepStrictEqual(commands, [
+      { _tag: "Promote", tile: 1 },
+      { _tag: "FocusAudio", tile: 2 }
+    ])
+  })
+
+  it("should put the sound back on home's sound game when the main tile is no longer yours and nothing is worth chasing", () => {
+    const [soundAway, toOther] = yours.step(
+      promoted,
+      classified([
+        [third, live],
+        [other, redZone]
+      ]),
+      at(10)
+    )
+    const heard = after(promoted, toOther)
+
+    const [, commands] = soundAway.step(
+      heard,
+      classified([
+        [third, live],
+        [other, live]
+      ]),
+      at(181)
+    )
+
+    assert.deepStrictEqual(commands, [{ _tag: "FocusAudio", tile: 0 }])
+  })
+
+  it("should make both the main tile and the sound yours when you solo", () => {
+    const soloed = after(quad, [{ _tag: "Solo", tile: 1 }])
+
+    const pilot = on.manual({ _tag: "Solo", tile: 1 }, soloed, start)
+
+    assert.deepStrictEqual(pilot.suspended, { main: Option.some(at(180)), audio: Option.some(at(180)) })
+  })
+
+  it("should make the main tile yours when you swap tile 0", () => {
+    const swapped = after(quad, [{ _tag: "Swap", a: 0, b: 2 }])
+
+    const pilot = on.manual({ _tag: "Swap", a: 0, b: 2 }, swapped, start)
+
+    assert.deepStrictEqual(pilot.suspended, { main: Option.some(at(180)), audio: Option.none() })
+  })
+
+  it("should make nothing yours when you swap two tiles other than tile 0", () => {
+    const swapped = after(quad, [{ _tag: "Swap", a: 1, b: 2 }])
+
+    const pilot = on.manual({ _tag: "Swap", a: 1, b: 2 }, swapped, start)
+
+    assert.deepStrictEqual(pilot.suspended, { main: Option.none(), audio: Option.none() })
+  })
 })
 
 describe("Autopilot.toggle", () => {
@@ -440,6 +584,12 @@ describe("Autopilot.nextDeadline", () => {
     const deadline = pilot.nextDeadline(at(1))
 
     assert.deepStrictEqual(deadline, Option.some(at(180)))
+  })
+
+  it("should give no deadline while it has nothing away and nothing yours", () => {
+    const deadline = on.nextDeadline(start)
+
+    assert.deepStrictEqual(deadline, Option.none())
   })
 })
 

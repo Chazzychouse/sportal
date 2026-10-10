@@ -1,11 +1,11 @@
 import type { SlateChanged } from "@sportal/api/LiveMessage"
 import { GameId } from "@sportal/domain/Game"
 import type { Moment } from "@sportal/domain/Moment"
-import { Array as Arr, Data, DateTime, Duration, Option, Order, Schema } from "effect"
-import { Screen, type ScreenCommand, Tile } from "../screen/Screen.ts"
+import { Array as Arr, Data, DateTime, Duration, Option, Order, Result, Schema } from "effect"
+import { type Screen, type ScreenCommand, Tile } from "../screen/Screen.ts"
 
 /** The two things the autopilot steers: the main tile and the sound. */
-export type Part = "main" | "audio"
+type Part = "main" | "audio"
 
 /** What the autopilot is doing, for its toggle to say: off, idle, away on a game, or a part yours until a time. */
 export type AutopilotStatus = Data.TaggedEnum<{
@@ -62,7 +62,8 @@ export class Autopilot extends Schema.Class<Autopilot>("sportal/Autopilot")({
 
   /**
    * After `command`, which you sent, left the Screen as `after`: the parts it touches are yours for `suspension` and
-   * no longer away, and home is what `after` shows for each part not away.
+   * no longer away. Home's main game is what `after` shows unless the main tile is still away; home's sound game is
+   * what `after` shows when the command touched the sound or neither part is still away.
    */
   manual(command: ScreenCommand, after: Screen, now: DateTime.Utc): Autopilot {
     if (!this.on) return this
@@ -77,7 +78,10 @@ export class Autopilot extends Schema.Class<Autopilot>("sportal/Autopilot")({
       on: true,
       home: {
         main: Option.isNone(away.main) ? shown.main : this.home.main,
-        audio: Option.isNone(away.main) && Option.isNone(away.audio) ? shown.audio : this.home.audio
+        audio:
+          touched.includes("audio") || (Option.isNone(away.main) && Option.isNone(away.audio))
+            ? shown.audio
+            : this.home.audio
       },
       away,
       suspended: {
@@ -105,45 +109,38 @@ export class Autopilot extends Schema.Class<Autopilot>("sportal/Autopilot")({
       moment: (game) => classifications[game]?.moment,
       score: (game) => classifications[game]?.score ?? 0
     }
-    const soundBack = (promoted: number | undefined) => audioReturn(screen, this.home.audio, promoted)
 
     if (Option.isNone(suspended.main)) {
-      const homeGame = Option.getOrUndefined(this.home.main)
-      const homeTile = screen.tiles.findIndex((tile) => homeGame !== undefined && gameIn(tile) === homeGame)
-      const back: ReadonlyArray<ScreenCommand> =
-        homeTile === -1 ? [] : [{ _tag: "Promote", tile: homeTile }, ...soundBack(homeTile)]
-      const [main, commands] = follow(
+      const [main, move] = follow(
         {
           tiles: occupiedIn(screen.tiles),
           home: this.home.main,
           current: Option.fromUndefinedOr(gameIn(screen.tiles[0])),
-          away: this.away.main,
-          go: (tile) => [
-            { _tag: "Promote", tile },
-            ...(Option.isSome(suspended.audio) ? soundBack(tile) : [])
-          ],
-          back
+          away: this.away.main
         },
         standing,
         now
       )
-      const sent = commands.length === 0 && Option.isSome(this.away.audio) ? soundBack(undefined) : commands
-      return [new Autopilot({ ...this, suspended, away: { main, audio: Option.none() } }), sent]
+      const commands = mainCommands(screen, this, move, Option.isSome(suspended.audio))
+      return [new Autopilot({ ...this, suspended, away: { main, audio: Option.none() } }), commands]
     }
 
     if (Option.isNone(suspended.audio)) {
-      const [audio, commands] = follow(
+      const [audio, move] = follow(
         {
           tiles: occupiedIn(screen.onScreen()),
           home: this.home.audio,
           current: screen.audioFocus,
-          away: this.away.audio,
-          go: (tile) => [{ _tag: "FocusAudio", tile }],
-          back: soundBack(undefined)
+          away: this.away.audio
         },
         standing,
         now
       )
+      const commands = Move.$match(move, {
+        Stay: () => [],
+        Home: () => soundTo(screen, this.home.audio),
+        Go: ({ game }) => soundTo(screen, Option.some(game))
+      })
       return [new Autopilot({ ...this, suspended, away: { main: Option.none(), audio } }), commands]
     }
 
@@ -182,38 +179,46 @@ interface Standing {
   readonly score: (game: GameId) => number
 }
 
-/** One part, to steer: where it may go, home, where it is, where the autopilot moved it, and how to move it. */
+/** One part, to steer: where it may go, home, where it is, and where the autopilot moved it. */
 interface Steering {
   readonly tiles: ReadonlyArray<{ readonly tile: number; readonly game: GameId }>
   readonly home: Option.Option<GameId>
   readonly current: Option.Option<GameId>
   readonly away: Option.Option<Away>
-  readonly go: (tile: number) => ReadonlyArray<ScreenCommand>
-  readonly back: ReadonlyArray<ScreenCommand>
 }
 
+/** Where one part goes: nowhere, back home, or to a game, handing off from another away game. */
+type Move = Data.TaggedEnum<{
+  Stay: object
+  Home: object
+  Go: { readonly game: GameId; readonly handOff: boolean }
+}>
+const Move = Data.taggedEnum<Move>()
+
 /**
- * Where one part goes at `now`: the game it is then away on, if any, and the commands that take it there. An away
- * game holds through its dwell unless it stops, then until it is no longer wanted or a target comes strictly first.
+ * Where one part goes at `now`: the game it is then away on, if any, and the move that takes it there. An away game
+ * holds through its dwell unless it stops, then until it is no longer wanted or a target comes strictly first.
  */
 function follow(
   steering: Steering,
   standing: Standing,
   now: DateTime.Utc
-): readonly [Option.Option<Away>, ReadonlyArray<ScreenCommand>] {
-  const { tiles, current, go, back } = steering
+): readonly [Option.Option<Away>, Move] {
+  const { tiles, current } = steering
   const { moment } = standing
   const home = Option.getOrUndefined(steering.home)
   const homeOnTile = home !== undefined && tiles.some(({ game }) => game === home)
   const homeMoment = homeOnTile ? moment(home) : undefined
-  // A home game with no classification yet counts as live: only a break, a final or no tile is stopped.
-  const homeStopped = !homeOnTile || (homeMoment !== undefined && stopped(homeMoment))
+  const homeStopped = !homeOnTile || stopped(homeMoment)
+  const homeAwayWorthy = !homeStopped && homeMoment !== undefined && awayWorthy(homeMoment)
+  // While home is away-worthy it is the target: another game is wanted only while its moment comes strictly first.
   const wanted = (game: GameId) => {
     const its = moment(game)
-    return its !== undefined && (homeStopped ? interest(its) < Infinity : awayWorthy(its))
+    if (its === undefined) return false
+    if (homeStopped) return isLive(its)
+    return homeAwayWorthy ? interest(its) < interest(homeMoment) : awayWorthy(its)
   }
-  const homeHolds = !homeStopped && homeMoment !== undefined && awayWorthy(homeMoment)
-  const target = homeHolds
+  const target = homeAwayWorthy
     ? undefined
     : Option.getOrUndefined(
         Arr.head(tiles.filter(({ game }) => game !== home && wanted(game)).toSorted(byInterest(standing)))
@@ -224,14 +229,39 @@ function follow(
     const { game, since } = away.value
     const its = moment(game)
     const dwelling = DateTime.isLessThan(now, DateTime.addDuration(since, Autopilot.dwell))
-    if (!stopped(its) && dwelling) return [away, []]
+    if (!stopped(its) && dwelling) return [away, Move.Stay()]
     const outranked = target !== undefined && interest(moment(target.game)) < interest(its)
-    if (!stopped(its) && wanted(game) && !outranked) return [away, []]
+    if (wanted(game) && !outranked) return [away, Move.Stay()]
   }
 
-  if (target === undefined) return [Option.none(), Option.isSome(away) ? back : []]
+  if (target === undefined) return [Option.none(), Option.isSome(away) ? Move.Home() : Move.Stay()]
   const going = Option.some({ game: target.game, since: now })
-  return [going, Option.contains(current, target.game) ? [] : go(target.tile)]
+  if (Option.contains(current, target.game)) return [going, Move.Stay()]
+  return [going, Move.Go({ game: target.game, handOff: Option.isSome(away) })]
+}
+
+/**
+ * The commands for a move of the main tile. A hand-off promotes home first, so a later revert restores every tile; a
+ * revert, a move while the sound is yours, or the end of a sound away puts the sound on home's sound game.
+ */
+function mainCommands(
+  screen: Screen,
+  { home, away }: Autopilot,
+  move: Move,
+  soundYours: boolean
+): ReadonlyArray<ScreenCommand> {
+  return Move.$match(move, {
+    Stay: () => (Option.isSome(away.audio) ? soundTo(screen, home.audio) : []),
+    Home: () => {
+      const back = promoteTo(screen, home.main)
+      return [...back, ...soundTo(afterAll(screen, back), home.audio)]
+    },
+    Go: ({ game, handOff }) => {
+      const back = handOff ? promoteTo(screen, home.main) : []
+      const moved = [...back, ...promoteTo(afterAll(screen, back), Option.some(game))]
+      return soundYours ? [...moved, ...soundTo(afterAll(screen, moved), home.audio)] : moved
+    }
+  })
 }
 
 /** Most worth chasing first: a red zone, crunch time, a big play, plain live play. Anything else is not chased. */
@@ -246,13 +276,17 @@ function interest(moment: Moment | undefined): number {
   return moment === undefined ? Infinity : (interestRank[moment._tag] ?? Infinity)
 }
 
+function isLive(moment: Moment): boolean {
+  return interest(moment) < Infinity
+}
+
 function awayWorthy(moment: Moment): boolean {
   return moment._tag === "ScoringThreat" || moment._tag === "CrunchTime"
 }
 
-/** Whether a game has stopped: on a break, over, or with no classification to say. */
+/** Whether a game has stopped: on a break or over. A game with no classification has not. */
 function stopped(moment: Moment | undefined): boolean {
-  return moment === undefined || moment._tag === "Break" || moment._tag === "Final"
+  return moment !== undefined && (moment._tag === "Break" || moment._tag === "Final")
 }
 
 /** The best first: the most worth chasing, then the higher score, then the lower tile. */
@@ -285,23 +319,33 @@ function suspends(command: ScreenCommand): ReadonlyArray<Part> {
   }
 }
 
-/**
- * The command that puts the sound back on `homeAudio` once the tile `promoted` is promoted (undefined: no promote).
- * None when the sound would already be on it, or it would not be on screen.
- */
-function audioReturn(
-  screen: Screen,
-  homeAudio: Option.Option<GameId>,
-  promoted: number | undefined
-): ReadonlyArray<ScreenCommand> {
-  const audio = Option.getOrUndefined(homeAudio)
-  const heard =
-    promoted === undefined ? Option.getOrUndefined(screen.audioFocus) : gameIn(screen.tiles[promoted])
-  if (audio === undefined || audio === heard) return []
-  const index = screen.tiles.findIndex((tile) => gameIn(tile) === audio)
-  const slot =
-    promoted === undefined || index === -1 ? index : index === 0 ? promoted : index === promoted ? 0 : index
-  return slot === -1 || slot >= Screen.slotCount(screen.layout) ? [] : [{ _tag: "FocusAudio", tile: slot }]
+/** A `Promote` of the tile holding `game`, unless it is already the main tile or on no tile. */
+function promoteTo(screen: Screen, game: Option.Option<GameId>): ReadonlyArray<ScreenCommand> {
+  const tile = screen.tiles.findIndex((tile) => Option.exists(game, (wanted) => wanted === gameIn(tile)))
+  return tile > 0 ? [{ _tag: "Promote", tile }] : []
+}
+
+/** `screen` after the autopilot's own commands; `Promote` and `FocusAudio` never ask a game's availability. */
+function afterAll(screen: Screen, commands: ReadonlyArray<ScreenCommand>): Screen {
+  return commands.reduce(
+    (current, command) =>
+      Result.getOrElse(
+        current.apply(command, () => []),
+        () => current
+      ),
+    screen
+  )
+}
+
+/** A `FocusAudio` that puts the sound on `game`, unless it is already heard or not on screen. */
+function soundTo(screen: Screen, game: Option.Option<GameId>): ReadonlyArray<ScreenCommand> {
+  return Option.match(game, {
+    onNone: () => [],
+    onSome: (heard) => {
+      const slot = screen.slotOf(heard)
+      return screen.hears(heard) || slot === undefined ? [] : [{ _tag: "FocusAudio", tile: slot }]
+    }
+  })
 }
 
 function homeOf(screen: Screen): Autopilot["home"] {
