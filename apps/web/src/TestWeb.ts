@@ -133,9 +133,15 @@ export function until<A>(atom: Atom.Atom<A>, predicate: (value: A) => boolean) {
   return Atom.toStream(atom).pipe(Stream.filter(predicate), Stream.runHead, Effect.flatMap(Effect.fromOption))
 }
 
-/** A registry whose web runtime is `layer` in place of the browser's. */
-export function registryOf(layer: Layer.Layer<Shell | HubClient>) {
-  return AtomRegistry.layerOptions({ initialValues: [[WebRuntime.runtime.layer, layer]] })
+/**
+ * A registry whose web runtime is `layer` in place of the browser's; `scheduleTask`, when given, stands in for
+ * React's scheduler.
+ */
+export function registryOf(
+  layer: Layer.Layer<Shell | HubClient>,
+  scheduleTask?: (f: () => void) => () => void
+) {
+  return AtomRegistry.layerOptions({ initialValues: [[WebRuntime.runtime.layer, layer]], scheduleTask })
 }
 
 /**
@@ -143,14 +149,15 @@ export function registryOf(layer: Layer.Layer<Shell | HubClient>) {
  * Shell and the Hub client are asked to make, in order.
  */
 export const withShell = Effect.fn("TestWeb.withShell")(function* (
-  events: Omit<Parameters<typeof Shell.layerTest>[0], "record"> = {}
+  events: Omit<Parameters<typeof Shell.layerTest>[0], "record"> = {},
+  scheduleTask?: (f: () => void) => () => void
 ) {
   const calls = yield* Queue.unbounded<ShellCall | { readonly _tag: "SendGuide"; readonly guide: string }>()
   const layer = Layer.mergeAll(
     Shell.layerTest({ ...events, record: (call) => Effect.asVoid(Queue.offer(calls, call)) }),
     HubClient.layerTest((guide) => Effect.asVoid(Queue.offer(calls, { _tag: "SendGuide", guide })))
   )
-  return { registry: registryOf(layer), calls }
+  return { registry: registryOf(layer, scheduleTask), calls }
 })
 
 type ShellCall = Parameters<Parameters<typeof Shell.layerTest>[0]["record"]>[0]

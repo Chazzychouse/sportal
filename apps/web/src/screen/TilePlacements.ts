@@ -1,5 +1,5 @@
 import { type ScreenTransition, type TileBounds, TilePlacement } from "@sportal/api/ShellBridge"
-import { Effect, Option, Schema, Stream } from "effect"
+import { Effect, Option, Scheduler, Schema, Stream } from "effect"
 import { Atom } from "effect/reactivity"
 import * as DisplayState from "../display/DisplayState.ts"
 import { Shell } from "../shell/Shell.ts"
@@ -65,7 +65,11 @@ export const sync = runtime.atom((get) =>
       ),
       Stream.runForEach(({ placements, transition }) => shell.syncTiles(placements, transition))
     )
-  })
+  }).pipe(
+    // The registry's scheduler is React's low-priority callback, which can run after paint; on microtasks the
+    // shell moves the videos before the browser paints the tiles that moved.
+    Effect.provideService(Scheduler.Scheduler, new Scheduler.MixedScheduler("sync"))
+  )
 )
 
 /** What a sync reads: the placements, the Screen they arrange (without a dragged split), and whether one is dragged. */

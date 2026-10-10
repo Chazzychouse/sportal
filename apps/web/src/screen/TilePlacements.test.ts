@@ -35,6 +35,22 @@ describe("TilePlacements.sync", () => {
     })
   )
 
+  it.effect("should tell the shell before the registry's scheduler runs a task", () =>
+    Effect.gen(function* () {
+      yield* TestWeb.keep(TestWeb.fill([TestWeb.bama]))
+      const { registry, calls } = yield* TestWeb.withShell({}, () => () => {})
+
+      const call = yield* Effect.gen(function* () {
+        yield* Atom.mount(TilePlacements.sync)
+        yield* Atom.set(TilePlacements.area, sized)
+        yield* Effect.yieldNow
+        return yield* Queue.poll(calls)
+      }).pipe(Effect.scoped, Effect.provide(registry))
+
+      assert.isTrue(Option.exists(call, ({ _tag }) => _tag === "SyncTiles"))
+    })
+  )
+
   it.effect("should move the views along the transition when the arrangement changes", () =>
     Effect.gen(function* () {
       yield* TestWeb.keep(TestWeb.fill([TestWeb.bama, TestWeb.irish]))
