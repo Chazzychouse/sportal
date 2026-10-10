@@ -68,6 +68,23 @@ export class Screen extends Schema.Class<Screen>("sportal/Screen")({
     return layouts[layout].slots
   }
 
+  /**
+   * The tile `game` gets from its availability: a stream tile when the most useful says it is carried, else a data
+   * tile saying why.
+   */
+  static tileFor(game: GameId, availability: ReadonlyArray<ChannelAvailability>): Tile {
+    return ChannelAvailability.match(mostUseful(availability), {
+      Carried: ({ channel }): Tile => ({ _tag: "StreamTile", game, channel }),
+      Upcoming: ({ channel, begin }): Tile => ({
+        _tag: "DataTile",
+        game,
+        why: { _tag: "NotYet", channel, begin }
+      }),
+      NoGuide: ({ source }): Tile => ({ _tag: "DataTile", game, why: { _tag: "NoGuide", source } }),
+      NotCarried: ({ why }): Tile => ({ _tag: "DataTile", game, why: { _tag: why } })
+    })
+  }
+
   /** Whether the game's sound is on. */
   hears(game: GameId): boolean {
     return Option.contains(this.audioFocus, game)
@@ -136,7 +153,7 @@ export class Screen extends Schema.Class<Screen>("sportal/Screen")({
           : Result.succeed({ ...this, tiles: swapped(this.tiles, a, b) }),
       Assign: ({ tile, game }) =>
         tileAt(this, tile, () => {
-          const assigned = tileFor(game, availabilityOf(game))
+          const assigned = Screen.tileFor(game, availabilityOf(game))
           // A game appears in at most one tile, on screen or benched: assigning it elsewhere moves it.
           const tiles = this.tiles.map((existing, index) =>
             index === tile ? assigned : holds(existing, game) ? empty : existing
@@ -182,7 +199,7 @@ export class Screen extends Schema.Class<Screen>("sportal/Screen")({
             onSome: (availability) =>
               Tile.guards.StreamTile(tile)
                 ? movedWithinSource(tile, availability)
-                : tileFor(tile.game, availability)
+                : Screen.tileFor(tile.game, availability)
           })
     )
 
@@ -248,19 +265,6 @@ function occupied(
 
 function holds(tile: Tile, game: GameId): boolean {
   return !Tile.guards.Empty(tile) && tile.game === game
-}
-
-function tileFor(game: GameId, availability: ReadonlyArray<ChannelAvailability>): Tile {
-  return ChannelAvailability.match(mostUseful(availability), {
-    Carried: ({ channel }): Tile => ({ _tag: "StreamTile", game, channel }),
-    Upcoming: ({ channel, begin }): Tile => ({
-      _tag: "DataTile",
-      game,
-      why: { _tag: "NotYet", channel, begin }
-    }),
-    NoGuide: ({ source }): Tile => ({ _tag: "DataTile", game, why: { _tag: "NoGuide", source } }),
-    NotCarried: ({ why }): Tile => ({ _tag: "DataTile", game, why: { _tag: why } })
-  })
 }
 
 /** The availability that says most of several: ties go to the first, and none at all is no stream. */

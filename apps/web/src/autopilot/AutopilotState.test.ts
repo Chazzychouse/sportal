@@ -9,7 +9,6 @@ import { vi } from "vitest"
 import { HubClient } from "../hub/HubClient.ts"
 import * as LiveStream from "../hub/LiveStream.ts"
 import * as DisplayScreen from "../screen/DisplayScreen.ts"
-import type { Screen } from "../screen/Screen.ts"
 import { Shell } from "../shell/Shell.ts"
 import * as TestWeb from "../TestWeb.ts"
 import * as AutopilotState from "./AutopilotState.ts"
@@ -42,11 +41,6 @@ const arranged = (message: unknown) =>
     return source
   })
 
-function mainGame(screen: Screen) {
-  const tile = screen.tiles[0]
-  return tile === undefined || tile._tag === "Empty" ? undefined : tile.game
-}
-
 describe("AutopilotState", () => {
   beforeEach(() => {
     TestWeb.FakeEventSource.opened = []
@@ -67,7 +61,7 @@ describe("AutopilotState", () => {
         yield* Atom.set(AutopilotState.autopilot, AutopilotInput.Toggled())
 
         const screen = yield* Atom.get(DisplayScreen.screen)
-        assert.strictEqual(mainGame(screen), other)
+        assert.strictEqual(TestWeb.mainGame(screen), other)
       }).pipe(Effect.provide(AtomRegistry.layer))
   )
 
@@ -83,10 +77,10 @@ describe("AutopilotState", () => {
         source.onmessage?.({
           data: slate(TestWeb.classified({ _tag: "Live" }), TestWeb.classified(TestWeb.timeout))
         })
-        return yield* TestWeb.until(DisplayScreen.screen, (screen) => mainGame(screen) === other)
+        return yield* TestWeb.until(DisplayScreen.screen, (screen) => TestWeb.mainGame(screen) === other)
       }).pipe(Effect.scoped, Effect.provide(registry))
 
-      assert.strictEqual(mainGame(screen), other)
+      assert.strictEqual(TestWeb.mainGame(screen), other)
     })
   )
 
@@ -112,10 +106,10 @@ describe("AutopilotState", () => {
           yield* Atom.set(AutopilotState.autopilot, AutopilotInput.Toggled())
           yield* Atom.mount(AutopilotState.pilot)
           yield* passing(Duration.seconds(30))
-          return yield* TestWeb.until(DisplayScreen.screen, (screen) => mainGame(screen) === other)
+          return yield* TestWeb.until(DisplayScreen.screen, (screen) => TestWeb.mainGame(screen) === other)
         }).pipe(Effect.scoped, Effect.provide(registry))
 
-        assert.strictEqual(mainGame(screen), other)
+        assert.strictEqual(TestWeb.mainGame(screen), other)
       })
   )
 
@@ -334,6 +328,30 @@ describe("AutopilotState", () => {
         /^Autopilot: promoted \S+ @ \S+ over \S+ @ \S+: the main tile's game stopped; /
       )
     })
+  )
+
+  it.effect("should make the main tile yours for a command of yours while on", () =>
+    Effect.gen(function* () {
+      yield* arranged(slate())
+      yield* Atom.set(AutopilotState.autopilot, AutopilotInput.Toggled())
+
+      yield* Atom.set(AutopilotState.yours, { _tag: "Promote", tile: 1 })
+
+      const pilot = yield* Atom.get(AutopilotState.autopilot)
+      assert.isTrue(Option.isSome(pilot.suspended.main))
+    }).pipe(Effect.provide(AtomRegistry.layer))
+  )
+
+  it.effect("should not make anything yours for a command the Screen refused", () =>
+    Effect.gen(function* () {
+      yield* arranged(slate())
+      yield* Atom.set(AutopilotState.autopilot, AutopilotInput.Toggled())
+
+      yield* Atom.set(AutopilotState.yours, { _tag: "Promote", tile: 3 })
+
+      const pilot = yield* Atom.get(AutopilotState.autopilot)
+      assert.isTrue(Option.isNone(pilot.suspended.main))
+    }).pipe(Effect.provide(AtomRegistry.layer))
   )
 })
 

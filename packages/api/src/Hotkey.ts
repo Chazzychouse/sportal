@@ -15,6 +15,12 @@ export const Hotkey = Object.assign(
     NextLayout: {},
     /** Turn this Display's autopilot on or off. */
     ToggleAutopilot: {},
+    /** Turn this Display's prompts on or off. */
+    TogglePrompts: {},
+    /** Bring the prompted game into the main tile. */
+    AcceptPrompt: {},
+    /** Say no to the prompted game until its next moment. */
+    DismissPrompt: {},
     ToggleSlate: {},
     CommandPalette: {},
     /** Move the slate's pick to the previous or next game that can be picked. */
@@ -47,6 +53,12 @@ export const Hotkey = Object.assign(
           return { _tag: "NextLayout" }
         case "KeyA":
           return { _tag: "ToggleAutopilot" }
+        case "KeyP":
+          return { _tag: "TogglePrompts" }
+        case "KeyY":
+          return { _tag: "AcceptPrompt" }
+        case "KeyN":
+          return { _tag: "DismissPrompt" }
         case "KeyI":
           return { _tag: "Interact" }
         case "KeyS":
@@ -167,6 +179,27 @@ export const Hotkey = Object.assign(
         does: "These keys",
         press: { code: "Slash", shift: true, from: "stream" },
         hotkey: { _tag: "ShowKeys" }
+      },
+      {
+        group: "Prompts",
+        keys: ["P"],
+        does: "Turn prompts on or off",
+        press: { code: "KeyP", from: "stream" },
+        hotkey: { _tag: "TogglePrompts" }
+      },
+      {
+        group: "Prompts",
+        keys: ["Y"],
+        does: "Watch the prompted game",
+        press: { code: "KeyY", from: "stream" },
+        hotkey: { _tag: "AcceptPrompt" }
+      },
+      {
+        group: "Prompts",
+        keys: ["N"],
+        does: "Skip the prompted game",
+        press: { code: "KeyN", from: "stream" },
+        hotkey: { _tag: "DismissPrompt" }
       }
     ] as const
   }

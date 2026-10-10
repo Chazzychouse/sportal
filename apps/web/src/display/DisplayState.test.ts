@@ -5,6 +5,7 @@ import { Atom } from "effect/reactivity"
 import { vi } from "vitest"
 import * as AutopilotState from "../autopilot/AutopilotState.ts"
 import { AutopilotInput } from "../autopilot/AutopilotState.ts"
+import * as PromptsState from "../prompts/PromptsState.ts"
 import * as DisplayScreen from "../screen/DisplayScreen.ts"
 import * as TestWeb from "../TestWeb.ts"
 import { DisplayInput } from "./Display.ts"
@@ -164,6 +165,19 @@ describe("DisplayState", () => {
       }).pipe(Effect.scoped, Effect.provide(registry))
 
       assert.isTrue(pilot.on)
+    })
+  )
+
+  it.effect("should turn prompts off for the TogglePrompts hotkey", () =>
+    Effect.gen(function* () {
+      const { registry } = yield* TestWeb.withShell({ hotkeys: Stream.make({ _tag: "TogglePrompts" }) })
+
+      const prompts = yield* Effect.gen(function* () {
+        yield* Atom.mount(DisplayState.inputs)
+        return yield* TestWeb.until(PromptsState.prompts, (prompts) => !prompts.on)
+      }).pipe(Effect.scoped, Effect.provide(registry))
+
+      assert.isFalse(prompts.on)
     })
   )
 })

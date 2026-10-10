@@ -11,7 +11,7 @@ import type { Autopilot } from "./autopilot/Autopilot.ts"
 import type { Decision } from "./autopilot/Decision.ts"
 import { HubClient } from "./hub/HubClient.ts"
 import * as LiveStream from "./hub/LiveStream.ts"
-import { type LayoutName, Screen, type ScreenCommand } from "./screen/Screen.ts"
+import { type LayoutName, Screen, type ScreenCommand, Tile } from "./screen/Screen.ts"
 import { Shell } from "./shell/Shell.ts"
 import * as WebRuntime from "./WebRuntime.ts"
 
@@ -158,10 +158,9 @@ export function timeline(
         now
       )
       const shown = applied(before.screen, commands)
-      const main = shown.tiles[0]
       const frame: TimelineFrame = {
         at: step.at,
-        main: main === undefined || main._tag === "Empty" ? undefined : main.game,
+        main: mainGame(shown),
         heard: Option.getOrUndefined(shown.audioFocus),
         layout: shown.layout,
         decision
@@ -170,6 +169,12 @@ export function timeline(
     },
     { screen, autopilot, frames: [] as ReadonlyArray<TimelineFrame> }
   ).frames
+}
+
+/** The game in the main tile of `screen`, if it has one. */
+export function mainGame(screen: Screen): GameId | undefined {
+  const tile = screen.tiles[0]
+  return tile === undefined || Tile.guards.Empty(tile) ? undefined : tile.game
 }
 
 /** The EventSource the live stream opened, once a read of the atom has started it. */

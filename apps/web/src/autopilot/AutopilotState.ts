@@ -47,6 +47,19 @@ export const autopilot: Atom.Writable<Autopilot, AutopilotInput> = Atom.writable
   }
 ).pipe(Atom.keepAlive)
 
+/**
+ * A screen command of yours: sent to the Screen and, when the Screen applies it, to the autopilot as yours. It holds
+ * nothing to read.
+ */
+export const yours: Atom.Writable<void, ScreenCommand> = Atom.writable(
+  () => undefined,
+  (ctx, command: ScreenCommand) => {
+    ctx.set(DisplayScreen.screen, command)
+    if (Option.isNone(ctx.get(DisplayScreen.rejected)))
+      ctx.set(autopilot, AutopilotInput.Commanded({ command }))
+  }
+).pipe(Atom.keepAlive)
+
 /** What the autopilot's last step decided, for its log; none before its first step. */
 const decision: Atom.Writable<Option.Option<Decision>> = Atom.make<Option.Option<Decision>>(
   Option.none()
