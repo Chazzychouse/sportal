@@ -219,6 +219,39 @@ describe("Classifier#step, a stall", () => {
 
     assert.strictEqual(classified.get(id)?.moment._tag, "Live")
   })
+
+  it("should not call a game stalled when it kicks off", () => {
+    const [first] = Classifier.empty.step(slateOf(snapshot({ id })), [], at)
+
+    const [, classified] = first.step(slateOf(liveSnapshot({ id })), [], later(600))
+
+    assert.strictEqual(classified.get(id)?.moment._tag, "Live")
+  })
+
+  it("should not call a game stalled when it comes back from halftime", () => {
+    const [first] = Classifier.empty.step(
+      slateOf(liveSnapshot({ id, status: "halftime", period: 2, clock: "0:00" })),
+      [],
+      at
+    )
+
+    const [, classified] = first.step(
+      slateOf(liveSnapshot({ id, period: 3, clock: "15:00" })),
+      [],
+      later(1200)
+    )
+
+    assert.strictEqual(classified.get(id)?.moment._tag, "Live")
+  })
+
+  it("should call a game stalled ninety seconds after it kicks off with no play", () => {
+    const [first] = Classifier.empty.step(slateOf(snapshot({ id })), [], at)
+    const [second] = first.step(slateOf(liveSnapshot({ id })), [], later(600))
+
+    const [, classified] = second.step(slateOf(liveSnapshot({ id })), [], later(690))
+
+    assert.strictEqual(reasonOf(classified), "stall")
+  })
 })
 
 describe("Classifier#step, holding a moment", () => {

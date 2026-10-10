@@ -140,7 +140,7 @@ Provider and Source are the two words most likely to be swapped. Provider is alw
 | **Double dip** | The break after the kickoff that follows a score, the second of the two the score brings. | |
 | **Classification** | A game's moment, since when, and its score 0–100 with the points each part gave it; `Classification` in `packages/domain/src/Classification.ts`. | rating, watchability |
 | **Matchup prior** | What a game promises before it starts: the mean of how close its line is, how highly its teams are ranked, and how often they have won. It fades as the game is played. | |
-| **Classifier** | The pure fold that classifies the slate's games, stepped by the Director after each take and when a held moment runs out; it keeps each game's pregame line, its big play for a minute, and its moment, which holds 20 s before a lower one replaces it. `Classifier` in `packages/domain/src/Classifier.ts`. | analyzer, scorer |
+| **Classifier** | The pure fold that classifies the slate's games, stepped by the Director after each take and when a held moment runs out; it keeps each game's pregame line, its big play for a minute, when each game last got a play (its stall clock), and its moment, which holds 20 s before a lower one replaces it. `Classifier` in `packages/domain/src/Classifier.ts`. | analyzer, scorer |
 
 ## Planned
 

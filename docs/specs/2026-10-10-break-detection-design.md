@@ -66,7 +66,8 @@ place to tune.
 The fold stays pure and keeps its shape.
 
 - **Stall clock.** `Followed` gains `lastPlayAt`: the `now` of the take that last brought the game a new play, or of
-  the step that first saw the game. `stall` holds once `now` reaches `lastPlayAt` plus `Classifier.stallAfter` (90 s).
+  the step that first saw the game. It is also restarted when the game comes into play (kickoff, out of halftime, a
+  delay, or a period end), so a game is never stalled before its first play. `stall` holds once `now` reaches `lastPlayAt` plus `Classifier.stallAfter` (90 s).
   That deadline joins the game's `expiry`, so `nextExpiry` wakes the fold just as the stall begins. Arrival time, not
   ESPN's `wallclock`, so a feed that runs uniformly behind does not look stalled.
 - **Leaving a break never waits.** A moment holds `momentHold` (20 s) before a lower one replaces it; leaving a
