@@ -20,7 +20,7 @@ describe("LiveStream.live", () => {
 
   it.effect("should be connecting before the stream first opens", () =>
     Effect.gen(function* () {
-      yield* opened()
+      yield* opened
       const state = yield* Atom.get(LiveStream.live)
 
       assert.strictEqual(state.connection._tag, "Connecting")
@@ -29,7 +29,7 @@ describe("LiveStream.live", () => {
 
   it.effect("should stay connecting after an error before the stream first opens", () =>
     Effect.gen(function* () {
-      const source = yield* opened()
+      const source = yield* opened
 
       source.onerror?.()
       source.onmessage?.({ data: slateMessage([{ game: someGame, availability: [] }]) })
@@ -41,7 +41,7 @@ describe("LiveStream.live", () => {
 
   it.effect("should publish nothing for an error while connecting or already lost", () =>
     Effect.gen(function* () {
-      const source = yield* opened()
+      const source = yield* opened
       const listening = yield* Deferred.make<void>()
       const published = yield* Atom.toStream(LiveStream.live).pipe(
         Stream.tap(() => Deferred.succeed(listening, undefined)),
@@ -65,7 +65,7 @@ describe("LiveStream.live", () => {
 
   it.effect("should be connected once open", () =>
     Effect.gen(function* () {
-      const source = yield* opened()
+      const source = yield* opened
 
       source.onopen?.()
 
@@ -75,7 +75,7 @@ describe("LiveStream.live", () => {
 
   it.effect("should be lost after an error once open", () =>
     Effect.gen(function* () {
-      const source = yield* opened()
+      const source = yield* opened
       source.onopen?.()
       yield* until((state) => state.connection._tag === "Connected")
 
@@ -87,7 +87,7 @@ describe("LiveStream.live", () => {
 
   it.effect("should be connected again when it reopens after it was lost", () =>
     Effect.gen(function* () {
-      const source = yield* opened()
+      const source = yield* opened
       source.onopen?.()
       yield* until((state) => state.connection._tag === "Connected")
       source.onerror?.()
@@ -102,7 +102,7 @@ describe("LiveStream.live", () => {
 
   it.effect("should replace the slate from its message", () =>
     Effect.gen(function* () {
-      const source = yield* opened()
+      const source = yield* opened
 
       source.onmessage?.({ data: slateMessage([{ game: someGame, availability: [] }]) })
       const state = yield* until((current) => current.slate.games.length > 0)
@@ -118,7 +118,7 @@ describe("LiveStream.live", () => {
     "should keep the plays each game of a slate message carries, each read back from its JSON as its case",
     () =>
       Effect.gen(function* () {
-        const source = yield* opened()
+        const source = yield* opened
         const game = new Game({
           snapshot: snapshot({ id: GameId.make("401") }),
           plays: [play(), touchdown()]
@@ -134,7 +134,7 @@ describe("LiveStream.live", () => {
 
   it.effect("should keep each game's availability from a slate message, by its id", () =>
     Effect.gen(function* () {
-      const source = yield* opened()
+      const source = yield* opened
       const game = new Game({ snapshot: snapshot({ id: GameId.make("401") }), plays: [] })
       const availability: ReadonlyArray<ChannelAvailability> = [{ _tag: "NotCarried", why: "StreamingOnly" }]
 
@@ -147,7 +147,7 @@ describe("LiveStream.live", () => {
 
   it.effect("should skip a malformed message and keep reading", () =>
     Effect.gen(function* () {
-      const source = yield* opened()
+      const source = yield* opened
       source.onopen?.()
       const before = yield* until((state) => state.connection._tag === "Connected")
 
@@ -162,7 +162,7 @@ describe("LiveStream.live", () => {
 
   it.effect("should open /api/live and close it when the registry goes", () =>
     Effect.gen(function* () {
-      const source = yield* Effect.scoped(Effect.provide(opened(), AtomRegistry.layer))
+      const source = yield* Effect.scoped(Effect.provide(opened, AtomRegistry.layer))
 
       assert.strictEqual(source.url, "/api/live")
       assert.isTrue(source.closed)

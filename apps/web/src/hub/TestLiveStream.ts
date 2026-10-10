@@ -7,9 +7,9 @@ import { Atom, type AtomRegistry } from "effect/reactivity"
 import * as LiveStream from "./LiveStream.ts"
 
 /** The EventSource the live stream opened, once a read of the atom has started it. */
-export function opened(): Effect.Effect<FakeEventSource, never, AtomRegistry.AtomRegistry> {
-  return Atom.get(LiveStream.live).pipe(Effect.andThen(eventSource))
-}
+export const opened: Effect.Effect<FakeEventSource, never, AtomRegistry.AtomRegistry> = Atom.get(
+  LiveStream.live
+).pipe(Effect.andThen(eventSource))
 
 function eventSource(): Effect.Effect<FakeEventSource> {
   return Effect.suspend(() => {

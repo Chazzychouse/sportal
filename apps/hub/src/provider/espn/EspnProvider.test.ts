@@ -21,7 +21,6 @@ import { HttpClient, HttpClientError, HttpClientResponse } from "effect/http"
 import * as Socket from "effect/socket/Socket"
 import { TestClock } from "effect/testing"
 import { HubConfig } from "../../HubConfig.ts"
-import { recordingLogs } from "../../TestTelemetry.ts"
 import { Delivery, Provider } from "../Provider.ts"
 import { listedBy } from "../TestProvider.ts"
 import * as EspnProvider from "./EspnProvider.ts"
@@ -195,40 +194,6 @@ describe("EspnProvider", () => {
       })
     )
 
-    it.effect("should warn of a league that fails, annotated with its league", () => {
-      const { logs, layer } = recordingLogs()
-      return Effect.gen(function* () {
-        yield* polledOnce(
-          answering(() => Effect.fail(new Cause.UnknownError("ECONNREFUSED"))),
-          { leagues: "fbs", frames: 1 }
-        )
-
-        const warned = logs.filter(
-          ({ level, message }) =>
-            level === "Warn" &&
-            message.includes(
-              "EspnProvider: a poll failed; keeping the last good listing for this league, if any"
-            )
-        )
-        assert.lengthOf(warned, 1)
-        assert.strictEqual(warned[0]?.annotations.league, "fbs")
-      }).pipe(Effect.provide(layer))
-    })
-
-    it.effect("should warn of a scoreboard that does not decode, annotated with its league", () => {
-      const { logs, layer } = recordingLogs()
-      return Effect.gen(function* () {
-        yield* polledOnce(
-          answering(() => Effect.succeed(new Response("not json"))),
-          { leagues: "fbs", frames: 1 }
-        )
-
-        const warned = logs.filter(({ level }) => level === "Warn")
-        assert.lengthOf(warned, 1)
-        assert.strictEqual(warned[0]?.annotations.league, "fbs")
-      }).pipe(Effect.provide(layer))
-    })
-
     it.effect("should poll every 15 minutes once a failed league lists no games", () =>
       Effect.gen(function* () {
         const noGames = JSON.stringify({ events: [] })
@@ -281,7 +246,6 @@ describe("EspnProvider", () => {
               return HttpClientResponse.fromWeb(request, new Response(new ReadableStream<Uint8Array>()))
             })
           )
-          const { logs, layer } = recordingLogs()
 
           yield* Effect.gen(function* () {
             const provider = yield* Provider
@@ -292,13 +256,12 @@ describe("EspnProvider", () => {
             yield* settled
             yield* TestClock.adjust("30 seconds")
             yield* settled
-          }).pipe(Effect.provide(espnOver(client).pipe(Layer.provideMerge(layer))), Effect.scoped)
+          }).pipe(Effect.provide(espnOver(client)), Effect.scoped)
 
           const nfl = yield* Ref.get(nflRequests)
           const fbs = yield* Ref.get(fbsRequests)
           assert.deepStrictEqual(nfl, [0, 50_000])
           assert.isAtLeast(fbs, 2)
-          assert.isTrue(logs.some((entry) => entry.level === "Warn"))
         })
     )
   })

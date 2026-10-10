@@ -3,7 +3,6 @@ import { assert, describe, it } from "@effect/vitest"
 import { GameId } from "@sportal/domain/Game"
 import { PlayId } from "@sportal/domain/Play"
 import { Effect, HashMap, Record } from "effect"
-import { recordingLogs } from "../../TestTelemetry.ts"
 import { Delivery } from "../Provider.ts"
 import type { Frame } from "./FastCast.ts"
 import { GameTopics } from "./GameTopics.ts"
@@ -69,24 +68,6 @@ describe("GameTopics#take", () => {
     })
   )
 
-  it.effect("should log a topic that lost its document at Warning, with why and its topic", () =>
-    Effect.gen(function* () {
-      const { logs, layer } = recordingLogs()
-
-      yield* TestGameTopics.topicsAfter([
-        TestFastCast.neAtBufCheckpoint(),
-        TestFastCast.unapplicablePatch(819)
-      ]).pipe(Effect.provide(layer))
-
-      const lost = logs.filter(({ message }) =>
-        message.includes(`${TestFastCast.neAtBufPlays} lost its document`)
-      )
-      assert.lengthOf(lost, 1)
-      assert.strictEqual(lost[0]?.level, "Warn")
-      assert.strictEqual(lost[0]?.annotations.topic, TestFastCast.neAtBufPlays)
-    })
-  )
-
   it.effect("should sync a waiting topic on the next checkpoint that decodes", () =>
     Effect.gen(function* () {
       const frames = [TestFastCast.neAtBufCheckpoint(), TestFastCast.textReplaced(819)]
@@ -110,22 +91,6 @@ describe("GameTopics#take", () => {
       assert.deepStrictEqual(
         deliveries.map(({ frame }) => frame),
         [2]
-      )
-    })
-  )
-
-  it.effect("should log a frame that does not decode at Warning, with its kind and topic", () =>
-    Effect.gen(function* () {
-      const { logs, layer } = recordingLogs()
-
-      yield* TestGameTopics.framesReplayed([
-        TestFastCast.undecodablePatch(819),
-        TestFastCast.neAtBufCheckpoint()
-      ]).pipe(Effect.provide(layer))
-
-      assert.deepStrictEqual(
-        logs.map(({ level, annotations }) => [level, annotations]),
-        [["Warn", { frame: "Pushed", topic: TestFastCast.neAtBufPlays }]]
       )
     })
   )

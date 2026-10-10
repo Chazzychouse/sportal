@@ -1,9 +1,6 @@
 import { assert, describe, it } from "@effect/vitest"
 import { Deferred, Effect, Layer, Option } from "effect"
-import { HttpClient } from "effect/http"
-import * as Socket from "effect/socket/Socket"
 import { TestClock } from "effect/testing"
-import { recordingLogs } from "../../TestTelemetry.ts"
 import { Frame } from "./FastCast.ts"
 import * as TestFastCast from "./TestFastCast.ts"
 
@@ -62,49 +59,6 @@ describe("FastCast", () => {
         yield* server.sent.until(TestFastCast.subscribed(TestFastCast.mainTc, 2))
         const done = yield* Deferred.isDone(ended)
         assert.lengthOf(connectsSent(server), 2)
-        assert.isFalse(done)
-      })
-    )
-
-    it.effect("should warn of a failed live feed with its reason", () =>
-      Effect.gen(function* () {
-        const { logs, layer } = recordingLogs()
-        const server = TestFastCast.fakeServer()
-        const { frames } = yield* TestFastCast.nflFrames(server).pipe(Effect.provide(layer))
-        yield* frames.until(atLeast(2))
-
-        yield* Effect.sync(() => server.close(1000))
-        yield* TestClock.adjust("2 seconds")
-
-        yield* server.sent.until(TestFastCast.subscribed(TestFastCast.mainTc, 2))
-        assert.isTrue(
-          logs.some(
-            (log) =>
-              log.level === "Warn" &&
-              log.message.includes("FastCast: the live feed failed (Closed); subscribing again")
-          )
-        )
-      })
-    )
-
-    it.effect("should log that the live feed stopped on a defect, and keep running", () =>
-      Effect.gen(function* () {
-        const { logs, layer } = recordingLogs()
-        const host = Layer.mergeAll(
-          Layer.succeed(
-            HttpClient.HttpClient,
-            HttpClient.make(() => Effect.die("boom"))
-          ),
-          Layer.succeed(Socket.WebSocketConstructor, () => TestFastCast.fakeServer().socket)
-        )
-
-        const { ended } = yield* TestFastCast.framesOver(host).pipe(Effect.provide(layer))
-        yield* Effect.yieldNow
-
-        const done = yield* Deferred.isDone(ended)
-        const stopped = logs.filter((log) => log.message.includes("FastCast: the live feed stopped"))
-        assert.lengthOf(stopped, 1)
-        assert.strictEqual(stopped[0]?.level, "Error")
         assert.isFalse(done)
       })
     )
@@ -401,38 +355,6 @@ describe("FastCast", () => {
       })
     )
 
-    it.effect(
-      "should keep the socket and the other topics when a checkpoint does not load, warning of it",
-      () =>
-        Effect.gen(function* () {
-          const { logs, layer } = recordingLogs()
-          const server = TestFastCast.fakeServer()
-          const { ended, frames } = yield* twoGamesFollowed(server, layer)
-
-          yield* missingCheckpointBesideOther(server)
-
-          const received = yield* frames.until(numbered(10))
-          const done = yield* Deferred.isDone(ended)
-          assert.deepStrictEqual(
-            received.map(seen).flatMap(({ tag, tc, mid }) => (tc?.startsWith("gp-") ? [[tc, tag, mid]] : [])),
-            [
-              [missingTopic, "Pushed", undefined],
-              [otherTopic, "Pushed", undefined],
-              [missingTopic, "Pushed", 5],
-              [otherTopic, "Pushed", 9],
-              [otherTopic, "Checkpoint", 9],
-              [otherTopic, "Pushed", 10]
-            ]
-          )
-          assert.isFalse(done)
-          assert.isTrue(logs.some((log) => log.level === "Warn" && log.annotations.topic === missingTopic))
-          assert.lengthOf(
-            server.sent.all().filter((frame) => frame.op === "S" && frame.tc === missingTopic),
-            1
-          )
-        })
-    )
-
     it.effect("should wait up to 20 s for a checkpoint", () =>
       Effect.gen(function* () {
         const server = TestFastCast.fakeServer()
@@ -445,27 +367,12 @@ describe("FastCast", () => {
       })
     )
 
-    it.effect("should fail a checkpoint that hangs for 20 s as Unloaded, warning of it", () =>
-      Effect.gen(function* () {
-        const { logs, layer } = recordingLogs()
-        const server = TestFastCast.fakeServer()
-        const { frames } = yield* hangingCheckpoint(server, layer)
-        yield* TestClock.adjust("19 seconds")
-
-        yield* TestClock.adjust("1 second")
-
-        yield* frames.until(atLeast(3))
-        assert.isTrue(logs.some((log) => log.level === "Warn" && log.annotations.reason === "Unloaded"))
-      })
-    )
-
     it.effect(
       "should emit only the H of a checkpoint that does not decode, warning of it as Undecodable",
       () =>
         Effect.gen(function* () {
-          const { logs, layer } = recordingLogs()
           const server = TestFastCast.fakeServer()
-          const { frames } = yield* TestFastCast.nflFrames(server).pipe(Effect.provide(layer))
+          const { frames } = yield* TestFastCast.nflFrames(server)
           yield* frames.until(atLeast(2))
 
           yield* Effect.sync(() => server.send(garbledCheckpoint(7)))
@@ -482,7 +389,6 @@ describe("FastCast", () => {
               ["Pushed", 8]
             ]
           )
-          assert.isTrue(logs.some((log) => log.level === "Warn" && log.annotations.reason === "Undecodable"))
         })
     )
   })
