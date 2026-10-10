@@ -1,8 +1,9 @@
 import { assert, describe, it } from "@effect/vitest"
 import { GameId, GameSnapshot } from "@sportal/domain/Game"
 import { Slate } from "@sportal/domain/Slate"
-import { liveSnapshot, play, playsIn, snapshot, snapshotIn } from "@sportal/domain/TestGame"
+import { completion, liveSnapshot, play, playsIn, snapshot, snapshotIn } from "@sportal/domain/TestGame"
 import { type Cause, DateTime, Effect, Layer, Option, Queue, Ref, Stream } from "effect"
+import { TestClock } from "effect/testing"
 import { Director } from "./Director.ts"
 import { Delivery, Provider } from "./provider/Provider.ts"
 import * as TestHub from "./TestHub.ts"
@@ -181,8 +182,44 @@ function fed<A, E, R>(test: (frames: TestHub.Frames) => Effect.Effect<A, E, R>) 
   })
 }
 
+describe("Director#classifications", () => {
+  it.effect("should classify each listed game once it is taken", () =>
+    fed((frames) =>
+      Effect.gen(function* () {
+        yield* listing(frames, [liveSnapshot({ id: one })])
+
+        const classified = yield* classifiedNow
+
+        assert.strictEqual(classified.get(one)?.moment._tag, "Live")
+      })
+    )
+  )
+
+  it.effect("should end a big play a minute later with no new delivery", () =>
+    fed((frames) =>
+      Effect.gen(function* () {
+        yield* listing(frames, [liveSnapshot({ id: one })])
+        yield* delivered(frames, Delivery.Plays({ game: one, plays: [completion({ yards: 40 })] }))
+        const during = yield* classifiedNow
+
+        yield* TestClock.adjust("60 seconds")
+        const after = yield* classifiedNow
+
+        assert.strictEqual(during.get(one)?.moment._tag, "BigPlay")
+        assert.strictEqual(after.get(one)?.moment._tag, "Live")
+      })
+    )
+  )
+})
+
 /** The Director's slate as it is now. */
 const latest = Director.use((director) => Stream.runHead(director.slate)).pipe(Effect.map(Option.getOrThrow))
+
+/** The Director's classifications as they are now. */
+const classifiedNow = Effect.yieldNow.pipe(
+  Effect.andThen(Director.use((director) => Stream.runHead(director.classifications))),
+  Effect.map(Option.getOrThrow)
+)
 
 /**
  * Delivers one frame that says only `delivery`, and gives the Director's slate once it has taken it: the second empty
