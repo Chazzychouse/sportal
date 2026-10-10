@@ -7,7 +7,7 @@ import { Radar } from "lucide-react"
 import { useState } from "react"
 import { Button } from "@/design/button"
 import type { Screen } from "../screen/Screen.ts"
-import { type Autopilot, AutopilotStatus } from "./Autopilot.ts"
+import { type Autopilot, AutopilotStatus, type Part } from "./Autopilot.ts"
 
 /** The top bar's autopilot switch: on or off, with what it is doing as its tooltip. */
 export function AutopilotToggle(props: {
@@ -59,7 +59,7 @@ export function AutopilotToggle(props: {
   )
 }
 
-function partName(part: "main" | "audio" | "layout"): string {
+function partName(part: Part): string {
   return part === "main" ? "main tile" : part === "audio" ? "sound" : "layout"
 }
 

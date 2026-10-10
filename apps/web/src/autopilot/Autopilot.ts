@@ -9,7 +9,7 @@ import { fit, nextFit } from "./Fit.ts"
 type Steered = "main" | "audio"
 
 /** What a command you send can make yours: the main tile, the sound or the layout. */
-type Part = Steered | "layout"
+export type Part = Steered | "layout"
 
 /**
  * What the autopilot is doing, for its toggle to say: off, idle, away on a game, a part yours until a time, or the
@@ -295,7 +295,7 @@ function running(until: Option.Option<DateTime.Utc>, now: DateTime.Utc): Option.
 }
 
 /**
- * The commands for a move of the main tile. A hand-off promotes home first, so a later revert restores every tile; a
+ * The commands for a move of the main tile. A hand-off promotes home first, so a later revert restores every tile (unless a fit moved tiles in between); a
  * revert, a move while the sound is yours, or the end of a sound away puts the sound on home's sound game.
  */
 function mainCommands(

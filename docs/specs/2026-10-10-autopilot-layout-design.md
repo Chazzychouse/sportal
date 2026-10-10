@@ -15,7 +15,8 @@ interest, choosing between Quad and MainThree by the moment, and changing splits
 
 Turning the autopilot on takes the **home layout** from the Screen; a `SetLayout` you send (a palette item or the
 next-layout hotkey) sets it. The home layout is the **ceiling**: the autopilot shrinks the layout when fewer games are
-worth showing and grows it back as they start, never past it. Each home layout has a ladder:
+worth showing and grows it back as they start, never past it. The next-layout hotkey cycles from the layout on screen (a fitted one included), and what it gives becomes
+the ceiling. Each home layout has a ladder:
 
 | Home        | Ladder                                      |
 | ----------- | ------------------------------------------- |
@@ -129,4 +130,5 @@ promote is built on the fitted Screen; a suspended layout is not fitted; `nextDe
 
 `AutopilotToggle.test.ts`: the `Fitted` and layout `Yours` wording.
 
-Then, on a live game day: whether 2 min feels right, and whether fitting and chasing together ever fight.
+Then, on a live game day: whether 2 min feels right, whether fitting and chasing together ever fight, whether next-layout from a fitted layout should lower
+the ceiling, the jump to the full ceiling when every game is over, and the sound moving when a shrink benches its game.

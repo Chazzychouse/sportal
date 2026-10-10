@@ -87,6 +87,23 @@ describe("Autopilot.step", () => {
     ])
   })
 
+  it("should not fit the layout for an autopilot kept before it had a home layout", () => {
+    const old = new Autopilot({ ...on, home: { ...on.home, layout: Option.none() } })
+
+    const [, commands] = old.step(
+      quad,
+      classified([
+        [home, live],
+        [other, final],
+        [third, final],
+        [fourth, final]
+      ]),
+      at(180)
+    )
+
+    assert.deepStrictEqual(commands, [])
+  })
+
   it("should not fit the layout while it is yours", () => {
     const pilot = on.manual({ _tag: "SetLayout", layout: "Quad" }, quad, start)
 

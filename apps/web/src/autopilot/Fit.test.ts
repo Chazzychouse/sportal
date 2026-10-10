@@ -68,6 +68,29 @@ describe("fit", () => {
     assert.deepStrictEqual(commands, [{ _tag: "SetLayout", layout: "Single" }])
   })
 
+  it("should count a game on a break", () => {
+    const screen = screenOf([a, b, c, d])
+    const onBreak: Moment = {
+      _tag: "Break",
+      reason: "timeout",
+      expectedEnd: DateTime.makeUnsafe("2026-10-10T20:05:00Z")
+    }
+
+    const commands = fit(
+      screen,
+      "Quad",
+      classified([
+        [a, live],
+        [b, onBreak],
+        [c, final],
+        [d, final]
+      ]),
+      later
+    )
+
+    assert.deepStrictEqual(commands, [{ _tag: "SetLayout", layout: "Pair" }])
+  })
+
   it("should shrink to a Pair when two games are in progress", () => {
     const screen = screenOf([a, b, c, d])
 
