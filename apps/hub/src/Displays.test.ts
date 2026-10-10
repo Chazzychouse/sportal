@@ -82,19 +82,48 @@ describe("Displays", () => {
     }).pipe(Effect.scoped, Effect.provide(Displays.layer))
   )
 
-  it.effect("should forget a Display's report when it disconnects", () =>
+  it.effect("should refuse an input for a Display that has disconnected", () =>
+    Effect.gen(function* () {
+      const displays = yield* Displays
+      const inputs = yield* displays.connect(desk)
+      const connected = yield* Stream.runDrain(inputs).pipe(Effect.forkScoped)
+      yield* Effect.yieldNow
+      yield* Fiber.interrupt(connected)
+
+      const error = yield* displays.send(desk, { _tag: "Pressed" }).pipe(Effect.flip)
+
+      assert.strictEqual(error._tag, "DisplayOffline")
+    }).pipe(Effect.scoped, Effect.provide(Displays.layer))
+  )
+
+  it.effect("should refuse a report from a Display that has disconnected", () =>
+    Effect.gen(function* () {
+      const displays = yield* Displays
+      const inputs = yield* displays.connect(desk)
+      const connected = yield* Stream.runDrain(inputs).pipe(Effect.forkScoped)
+      yield* Effect.yieldNow
+      yield* Fiber.interrupt(connected)
+
+      const error = yield* displays.report(desk, { screen: 1 }).pipe(Effect.flip)
+
+      assert.strictEqual(error._tag, "DisplayOffline")
+    }).pipe(Effect.scoped, Effect.provide(Displays.layer))
+  )
+
+  it.effect("should keep a Display connected when an earlier connection under its id ends", () =>
     Effect.gen(function* () {
       const displays = yield* Displays
       const first = yield* displays.connect(desk)
-      const connected = yield* Stream.runDrain(first).pipe(Effect.forkScoped)
-      yield* displays.report(desk, { screen: 1 })
-      yield* Fiber.interrupt(connected)
+      const earlier = yield* Stream.runDrain(first).pipe(Effect.forkScoped)
+      yield* Effect.yieldNow
+      const second = yield* displays.connect(desk)
+      const taken = yield* Stream.runHead(second).pipe(Effect.forkScoped)
+      yield* Fiber.interrupt(earlier)
 
-      const again = yield* displays.connect(desk)
-      yield* Stream.runDrain(again).pipe(Effect.forkScoped)
-      const seen = yield* followed(displays)
+      yield* displays.send(desk, { _tag: "Pressed" })
 
-      assert.deepStrictEqual(yield* Queue.take(seen), { _tag: "Offline" })
+      const input = yield* Fiber.join(taken)
+      assert.deepStrictEqual(input._tag === "Some" ? input.value : undefined, { _tag: "Pressed" })
     }).pipe(Effect.scoped, Effect.provide(Displays.layer))
   )
 })

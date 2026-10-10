@@ -38,14 +38,12 @@ export class Displays extends Context.Service<
       })
 
       const report = Effect.fn("Displays.report")(function* (id: DisplayId, json: Schema.Json) {
-        const all = yield* SubscriptionRef.get(connected)
-        const entry = HashMap.get(all, id)
-        if (Option.isNone(entry)) return yield* new DisplayOffline()
-
-        yield* SubscriptionRef.update(
-          connected,
-          HashMap.set(id, { ...entry.value, report: Option.some(json) })
-        )
+        const found = yield* SubscriptionRef.modify(connected, (all) => {
+          const entry = HashMap.get(all, id)
+          if (Option.isNone(entry)) return [false, all] as const
+          return [true, HashMap.set(all, id, { ...entry.value, report: Option.some(json) })] as const
+        })
+        if (!found) return yield* new DisplayOffline()
       })
 
       const follow = (id: DisplayId) =>

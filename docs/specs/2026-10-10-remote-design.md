@@ -25,7 +25,8 @@ A service (`sportal/hub/Displays`) holding in memory, per Display id, the latest
 a queue of inputs waiting for that Display.
 
 - `connect(id)`: the Display's input stream. Opening it registers the Display; closing it removes the Display and its
-  report. It registers the Display when the request arrives, before the stream starts, so a report sent once the stream is open finds it.
+  report. It registers the Display when the request arrives, before the stream starts, so a report sent once the stream
+  is open finds it.
 - `report(id, json)`: keeps the report and passes it to the Display's followers. Fails with `DisplayOffline` when no
   input stream for `id` is open.
 - `follow(id)`: a stream of `Reported { report }` and `Offline`: the current state, then each change. `Offline` while
@@ -91,7 +92,8 @@ The Display's link to its remotes, an atom the Display mounts beside `inputs`, `
 2. Once it is open, `PUT` the current report, then each report that differs from the last one sent
    (`Schema.toEquivalence(RemoteReport)`).
 3. Decode each input and apply it as above. One that does not decode is logged as a warning and dropped.
-4. When the stream drops, the browser's `EventSource` reconnects by itself, as the live stream's does; each time it opens again, step 2 sends the report again, since the Hub forgot it.
+4. When the stream drops, the browser's `EventSource` reconnects by itself, as the live stream's does; each time it
+   opens again, step 2 sends the report again, since the Hub forgot it.
 
 ### Join Remote
 
