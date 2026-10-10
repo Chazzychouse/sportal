@@ -1,0 +1,151 @@
+import { afterEach, assert, beforeEach, describe, it } from "@effect/vitest"
+import { DisplayId } from "@sportal/api/DisplayId"
+import { RemoteMessageJson } from "@sportal/api/RemoteMessage"
+import { GameId } from "@sportal/domain/Game"
+import { DateTime, Effect, Option, Queue, Result, Schema, Stream } from "effect"
+import { Atom } from "effect/reactivity"
+import { vi } from "vitest"
+import { Autopilot } from "../autopilot/Autopilot.ts"
+import { DisplayInput } from "../display/Display.ts"
+import { Prompt } from "../prompts/Prompt.ts"
+import { Prompts } from "../prompts/Prompts.ts"
+import { StripCard } from "../slate/StripCard.ts"
+import * as TestWeb from "../TestWeb.ts"
+import { RemoteReport } from "./RemoteReport.ts"
+import * as RemoteState from "./RemoteState.ts"
+
+const desk = DisplayId.make("desk")
+
+describe("RemoteState", () => {
+  beforeEach(() => {
+    TestWeb.FakeEventSource.opened = []
+    vi.stubGlobal("EventSource", TestWeb.FakeEventSource)
+    vi.stubGlobal("localStorage", new TestWeb.MemoryStorage())
+  })
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it.effect("should follow the Display from reported to offline and back", () =>
+    Effect.gen(function* () {
+      const { registry } = yield* TestWeb.withShell()
+
+      const seen = yield* Effect.gen(function* () {
+        const tags = yield* collected(RemoteState.followed(desk), (each) => each._tag)
+        const source = yield* TestWeb.openedAt("/api/displays/desk")
+
+        source.onmessage?.({ data: reported(reportOf(Option.none())) })
+        source.onmessage?.({ data: offline })
+        source.onmessage?.({ data: reported(reportOf(Option.none())) })
+        return yield* takeN(tags, 4)
+      }).pipe(Effect.scoped, Effect.provide(registry))
+
+      assert.deepStrictEqual(seen, ["Connecting", "Reported", "Offline", "Reported"])
+    })
+  )
+
+  it.effect("should read a report that does not decode as offline", () =>
+    Effect.gen(function* () {
+      const { registry } = yield* TestWeb.withShell()
+
+      const followed = yield* Effect.gen(function* () {
+        yield* Atom.get(RemoteState.followed(desk))
+        const source = yield* TestWeb.openedAt("/api/displays/desk")
+
+        source.onmessage?.({ data: JSON.stringify({ _tag: "Reported", report: { screen: "nonsense" } }) })
+        return yield* TestWeb.until(RemoteState.followed(desk), (each) => each._tag === "Offline")
+      }).pipe(Effect.scoped, Effect.provide(registry))
+
+      assert.strictEqual(followed._tag, "Offline")
+    })
+  )
+
+  it.effect("should send a tapped slate game to the selected tile as Commanded Assign", () =>
+    Effect.gen(function* () {
+      const { registry, calls } = yield* TestWeb.withShell()
+
+      const sent = yield* Effect.gen(function* () {
+        yield* Atom.get(RemoteState.followed(desk))
+        const source = yield* TestWeb.openedAt("/api/displays/desk")
+        source.onmessage?.({ data: reported(reportOf(Option.none())) })
+        yield* TestWeb.until(RemoteState.followed(desk), (each) => each._tag === "Reported")
+        const card = { id: GameId.make("live") }
+
+        yield* Atom.set(RemoteState.display(desk), DisplayInput.Dropped({ card: cardFor(card.id) }))
+        return yield* Queue.take(calls).pipe(Effect.repeat({ until: (call) => call._tag === "Send" }))
+      }).pipe(Effect.scoped, Effect.provide(registry))
+
+      assert.deepStrictEqual(sent._tag === "Send" ? sent.input : undefined, {
+        _tag: "Commanded",
+        command: { _tag: "Assign", tile: 0, game: "live" }
+      })
+    })
+  )
+
+  it.effect("should change the prompt key for a new prompt and not for the same prompt again", () =>
+    Effect.gen(function* () {
+      const { registry } = yield* TestWeb.withShell()
+
+      const keys = yield* Effect.gen(function* () {
+        const keys = yield* collected(RemoteState.promptKey(desk), (each) => each)
+        const source = yield* TestWeb.openedAt("/api/displays/desk")
+
+        source.onmessage?.({ data: reported(reportOf(Option.some(promptOn("phi")))) })
+        source.onmessage?.({ data: reported(reportOf(Option.some(promptOn("phi")), "Single")) })
+        source.onmessage?.({ data: reported(reportOf(Option.some(promptOn("chi")))) })
+        return yield* takeN(keys, 3)
+      }).pipe(Effect.scoped, Effect.provide(registry))
+
+      assert.deepStrictEqual(keys, [
+        undefined,
+        "phi 2026-10-10T20:00:00.000Z",
+        "chi 2026-10-10T20:00:00.000Z"
+      ])
+    })
+  )
+})
+
+const since = DateTime.makeUnsafe("2026-10-10T20:00:00Z")
+
+function promptOn(game: string) {
+  return new Prompt({ game: GameId.make(game), rank: "redZone", since, target: 1, replaces: Option.none() })
+}
+
+function reportOf(prompt: Option.Option<Prompt>, layout: "Quad" | "Single" = "Quad") {
+  const quad = TestWeb.withTiles([])
+  const screen =
+    layout === "Quad" ? quad : Result.getOrThrow(quad.apply({ _tag: "SetLayout", layout }, TestWeb.nowhere))
+  return new RemoteReport({ screen, autopilot: Autopilot.off, prompts: Prompts.initial, prompt })
+}
+
+const encodeMessage = Schema.encodeSync(RemoteMessageJson)
+
+/** A Reported message's data, as the Hub sends it. */
+function reported(report: RemoteReport) {
+  return encodeMessage({ _tag: "Reported", report: Schema.encodeSync(RemoteReport)(report) })
+}
+
+/** An Offline message's data. */
+const offline = encodeMessage({ _tag: "Offline" })
+
+/** Each value of `atom`, mapped by `f`, in a queue, collected while the scope lives. */
+const collected = Effect.fnUntraced(function* <A, B>(atom: Atom.Atom<A>, f: (value: A) => B) {
+  const queue = yield* Queue.unbounded<B>()
+
+  yield* Atom.toStream(atom).pipe(
+    Stream.runForEach((value) => Queue.offer(queue, f(value))),
+    Effect.forkScoped
+  )
+  return queue
+})
+
+function takeN<A>(queue: Queue.Queue<A>, n: number) {
+  return Effect.replicateEffect(Queue.take(queue), n)
+}
+
+/** The strip card of the test slate's game `id`, on a Quad with every tile empty. */
+function cardFor(id: GameId) {
+  const card = StripCard.of(TestWeb.withTiles([]), TestWeb.slate, {}).find((each) => each.id === id)
+  if (card === undefined) throw new Error(`No card for ${id}`)
+  return card
+}
