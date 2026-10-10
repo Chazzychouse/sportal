@@ -37,11 +37,12 @@ describe("GuideRelay.relay", () => {
       const registry = TestWeb.registryOf(
         Layer.merge(
           Shell.layerTest({ guideRead: Stream.make("<first/>", "<second/>"), record: () => Effect.void }),
-          HubClient.layerTest((guide) =>
-            guide === "<first/>"
-              ? Effect.die("The Hub's answer did not decode")
-              : Effect.asVoid(Queue.offer(sent, guide))
-          )
+          HubClient.layerTest({
+            sendGuide: (guide) =>
+              guide === "<first/>"
+                ? Effect.die("The Hub's answer did not decode")
+                : Effect.asVoid(Queue.offer(sent, guide))
+          })
         )
       )
 
@@ -108,12 +109,7 @@ describe("GuideRelay.relay", () => {
           Queue.offerUnsafe(log, "ReadGuide")
         }
       }
-      const registry = TestWeb.registryOf(
-        Layer.merge(
-          Shell.layerBridge(bridge),
-          HubClient.layerTest(() => Effect.void)
-        )
-      )
+      const registry = TestWeb.registryOf(Layer.merge(Shell.layerBridge(bridge), HubClient.layerTest()))
 
       const firstTwo = yield* Effect.gen(function* () {
         yield* Atom.mount(LiveStream.live)

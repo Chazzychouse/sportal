@@ -1,3 +1,4 @@
+import type { DisplayId } from "@sportal/api/DisplayId"
 import { LiveMessageJson } from "@sportal/api/LiveMessage"
 import type { ChannelAvailability } from "@sportal/domain/Channel"
 import { Classification } from "@sportal/domain/Classification"
@@ -189,6 +190,16 @@ function eventSource(): Effect.Effect<FakeEventSource> {
   })
 }
 
+/** The EventSource last opened at `url`, once something has opened one. */
+export function openedAt(url: string): Effect.Effect<FakeEventSource> {
+  return Effect.suspend(() => {
+    const last = FakeEventSource.opened.findLast((source) => source.url === url)
+    return last === undefined
+      ? Effect.yieldNow.pipe(Effect.flatMap(() => openedAt(url)))
+      : Effect.succeed(last)
+  })
+}
+
 /** An EventSource a test drives by hand: it records each one opened, and the test calls its handlers. */
 export class FakeEventSource {
   static opened: Array<FakeEventSource> = []
@@ -256,13 +267,22 @@ export const withShell = Effect.fn("TestWeb.withShell")(function* (
   events: Omit<Parameters<typeof Shell.layerTest>[0], "record"> = {},
   scheduleTask?: (f: () => void) => () => void
 ) {
-  const calls = yield* Queue.unbounded<ShellCall | { readonly _tag: "SendGuide"; readonly guide: string }>()
+  const calls = yield* Queue.unbounded<ShellCall | HubCall>()
   const layer = Layer.mergeAll(
     Shell.layerTest({ ...events, record: (call) => Effect.asVoid(Queue.offer(calls, call)) }),
-    HubClient.layerTest((guide) => Effect.asVoid(Queue.offer(calls, { _tag: "SendGuide", guide })))
+    HubClient.layerTest({
+      sendGuide: (guide) => Effect.asVoid(Queue.offer(calls, { _tag: "SendGuide", guide })),
+      report: (id, report) => Effect.asVoid(Queue.offer(calls, { _tag: "Report", id, report })),
+      send: (id, input) => Effect.asVoid(Queue.offer(calls, { _tag: "Send", id, input }))
+    })
   )
   return { registry: registryOf(layer, scheduleTask), calls }
 })
+
+type HubCall =
+  | { readonly _tag: "SendGuide"; readonly guide: string }
+  | { readonly _tag: "Report"; readonly id: DisplayId; readonly report: Schema.Json }
+  | { readonly _tag: "Send"; readonly id: DisplayId; readonly input: Schema.Json }
 
 type ShellCall = Parameters<Parameters<typeof Shell.layerTest>[0]["record"]>[0]
 

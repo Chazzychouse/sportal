@@ -1,17 +1,18 @@
 import { LiveMessage, LiveMessageJson, type SlateChanged } from "@sportal/api/LiveMessage"
 import { Slate } from "@sportal/domain/Slate"
-import { Data, DateTime, Effect, Queue, Schema, Stream } from "effect"
+import { Data, DateTime, Effect, Schema, Stream } from "effect"
 import { AsyncResult, Atom } from "effect/reactivity"
+import * as ServerEvents from "./ServerEvents.ts"
+import { ServerEvent } from "./ServerEvents.ts"
 
 /**
  * Everything the Hub has told this client over the live stream at /api/live, and whether the stream is up. The
  * EventSource opens when the atom is first read and stays open while its registry lives; it reconnects by itself,
  * and the Hub replays the current slate on every connection.
  */
-export const live: Atom.Atom<Live> = Atom.make(sourceEvents().pipe(Stream.scanEffect(initial, step))).pipe(
-  Atom.map(AsyncResult.getOrElse(initial)),
-  Atom.keepAlive
-)
+export const live: Atom.Atom<Live> = Atom.make(
+  ServerEvents.from("/api/live").pipe(Stream.scanEffect(initial, step))
+).pipe(Atom.map(AsyncResult.getOrElse(initial)), Atom.keepAlive)
 
 /** Whether this client's live stream is up: not connected yet, connected, or lost at an instant and retrying. */
 export type Connection = Data.TaggedEnum<{
@@ -34,31 +35,9 @@ function initial(): Live {
   return { connection: Connection.Connecting(), slate: Slate.empty, availability: {}, classifications: {} }
 }
 
-type SourceEvent = Data.TaggedEnum<{
-  Opened: object
-  Errored: object
-  Received: { readonly data: unknown }
-}>
-const SourceEvent = Data.taggedEnum<SourceEvent>()
-
-function sourceEvents() {
-  return Stream.callback<SourceEvent>((queue) =>
-    Effect.acquireRelease(
-      Effect.sync(() => {
-        const source = new EventSource("/api/live")
-        source.onopen = () => Queue.offerUnsafe(queue, SourceEvent.Opened())
-        source.onerror = () => Queue.offerUnsafe(queue, SourceEvent.Errored())
-        source.onmessage = (event) => Queue.offerUnsafe(queue, SourceEvent.Received({ data: event.data }))
-        return source
-      }),
-      (source) => Effect.sync(() => source.close())
-    )
-  )
-}
-
 /** What `current` becomes on `event`; `current` itself when nothing changed, so nothing is published. */
-function step(current: Live, event: SourceEvent): Effect.Effect<Live> {
-  return SourceEvent.$match(event, {
+function step(current: Live, event: ServerEvent): Effect.Effect<Live> {
+  return ServerEvent.$match(event, {
     Opened: () => Effect.succeed({ ...current, connection: Connection.Connected() }),
     // Only a stream that was up is lost; one that never connected is still connecting, and one already lost
     // keeps the instant it was lost.

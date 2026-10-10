@@ -84,6 +84,7 @@ Provider and Source are the two words most likely to be swapped. Provider is alw
 | **Hub config** | Every setting a Hub reads from its environment, decoded once at startup; `HubConfig` in code. | settings, env |
 | **Hub mode** | What a Hub plays: the live day from its providers and sources. | profile |
 | **Live message** | One update the Hub pushes to clients on the live stream: the slate changed, each game beside its availability and its classification; `LiveMessage`, and `LiveMessageJson` its JSON form. | event, notification |
+| **Server event** | What a server-sent event stream reported to the web: it opened, it errored (the browser retries by itself), or a message; `ServerEvent` in `apps/web/src/hub/ServerEvents.ts`. | |
 | **Remote message** | One update the Hub pushes to a Remote about its Display: its latest report (`Reported`, passed on unread) or `Offline`; `RemoteMessage`, and `RemoteMessageJson` its JSON form. | event |
 | **Live stream** | The Hub's server-sent events at `/api/live` that carry live messages; in the web UI, the `LiveStream.live` atom holds what they said and the connection. | event stream, socket |
 | **Connection** | Whether a client's live stream is up: connecting (never yet connected), connected, or lost (since an instant, retrying). | online, status |
