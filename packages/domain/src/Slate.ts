@@ -1,4 +1,4 @@
-import { Data, Schema } from "effect"
+import { Array as Arr, Data, type Option, Schema } from "effect"
 import { Game, type GameId, type GameSnapshot } from "./Game.ts"
 import { LeagueId } from "./League.ts"
 import type { Play } from "./Play.ts"
@@ -13,6 +13,11 @@ export class Slate extends Schema.Class<Slate>("sportal/Slate")({
   games: Schema.Array(Game)
 }) {
   static readonly empty: Slate = new Slate({ games: [] })
+
+  /** Game `id`, when the slate lists it. */
+  gameOf(id: GameId): Option.Option<Game> {
+    return Arr.findFirst(this.games, (game) => game.snapshot.id === id)
+  }
 
   /**
    * League `league` listing `snapshots`: its games, in their order, each taken into the game the slate had

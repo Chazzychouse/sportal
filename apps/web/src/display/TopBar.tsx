@@ -1,20 +1,28 @@
+import { useAtomSet, useAtomValue } from "@effect/atom-react"
 import { Option } from "effect"
 import { Expand, Keyboard, List, LogIn, Minimize2, Shrink, SquareDashed } from "lucide-react"
 import { Button } from "@/design/button"
-import type * as LiveStream from "../hub/LiveStream.ts"
+import * as LiveStream from "../hub/LiveStream.ts"
 import { LayoutPicker } from "../layout/LayoutPicker.tsx"
-import type { Screen } from "../screen/Screen.ts"
+import * as DisplayScreen from "../screen/DisplayScreen.ts"
 import { BrandMark, ConnectionPill } from "./Brand.tsx"
+import { DisplayInput } from "./Display.ts"
+import * as DisplayState from "./DisplayState.ts"
 
 /** The strip across the top of a Display: the slate, layout, solo, full screen, and whether the Hub is live. */
-export function TopBar(props: {
-  screen: Screen
-  connection: LiveStream.Connection
-  fullScreen: { on: boolean; toggle: () => void }
-  slate: { open: boolean; live: number; toggle: () => void }
-  solo: { enabled: boolean; toggle: () => void }
-  onKeys: () => void
-}) {
+export function TopBar() {
+  const display = useAtomValue(DisplayState.display)
+  const input = useAtomSet(DisplayState.display)
+  const screen = useAtomValue(DisplayScreen.screen)
+  const cards = useAtomValue(DisplayState.cards)
+  const { connection, slate } = useAtomValue(LiveStream.live)
+  const fullScreen = useAtomValue(DisplayState.fullScreen)
+  const toggleFullScreen = useAtomSet(DisplayState.toggleFullScreen)
+  const signIn = useAtomValue(DisplayState.signIn)
+  const openSignIn = useAtomSet(DisplayState.openSignIn)
+  const soloToggles = display.press({ _tag: "ToggleSolo" }, screen, cards).commands.length > 0
+  const live = slate.games.filter(({ snapshot }) => snapshot.progress() === "live").length
+
   return (
     <header className="flex h-11 items-center gap-4 border-b bg-card/60 px-3">
       <BrandMark />
@@ -23,50 +31,50 @@ export function TopBar(props: {
         variant="ghost"
         size="sm"
         aria-keyshortcuts="S"
-        aria-pressed={props.slate.open}
-        className={`label-caps text-xs ${props.slate.open ? "bg-accent" : ""}`}
-        onClick={props.slate.toggle}
+        aria-pressed={display.slateOpen}
+        className={`label-caps text-xs ${display.slateOpen ? "bg-accent" : ""}`}
+        onClick={() => input(DisplayInput.SlateToggled())}
       >
         <List />
         Slate
-        {props.slate.live > 0 && (
+        {live > 0 && (
           <span className="flex items-center gap-1 font-mono text-live">
             <span className="size-1.5 rounded-full bg-live" />
-            {props.slate.live}
+            {live}
           </span>
         )}
         <kbd className="ml-1 font-mono text-[10px] text-muted-foreground">S</kbd>
       </Button>
       <span className="h-5 w-px bg-border" />
 
-      <LayoutPicker current={props.screen.layout} />
+      <LayoutPicker current={screen.layout} />
 
       <Button
         variant="ghost"
         size="sm"
         className="label-caps text-xs"
         aria-keyshortcuts="F"
-        disabled={!props.solo.enabled}
-        onClick={props.solo.toggle}
+        disabled={!soloToggles}
+        onClick={() => input(DisplayInput.Pressed({ hotkey: { _tag: "ToggleSolo" } }))}
       >
-        {Option.isNone(props.screen.solo) ? <SquareDashed /> : <Shrink />}
-        {Option.isNone(props.screen.solo) ? "Solo" : "Unsolo"}
+        {Option.isNone(screen.solo) ? <SquareDashed /> : <Shrink />}
+        {Option.isNone(screen.solo) ? "Solo" : "Unsolo"}
         <kbd className="ml-1 font-mono text-[10px] text-muted-foreground">F</kbd>
       </Button>
 
       <div className="ml-auto flex items-center gap-3">
-        {window.sportalShell && (
+        {signIn && (
           <Button
             variant="ghost"
             size="sm"
             className="label-caps text-xs text-muted-foreground"
-            onClick={() => window.sportalShell?.openSignIn()}
+            onClick={() => openSignIn(undefined)}
           >
             <LogIn />
             YouTube TV
           </Button>
         )}
-        <ConnectionPill connection={props.connection} />
+        <ConnectionPill connection={connection} />
         <Button
           variant="ghost"
           size="icon-sm"
@@ -74,7 +82,7 @@ export function TopBar(props: {
           aria-keyshortcuts="?"
           title="Keys · ?"
           className="text-muted-foreground"
-          onClick={props.onKeys}
+          onClick={() => input(DisplayInput.Opened({ overlay: "Keys" }))}
         >
           <Keyboard />
         </Button>
@@ -84,9 +92,9 @@ export function TopBar(props: {
           aria-label="Full screen"
           aria-keyshortcuts="F11"
           title="Full screen · F11"
-          onClick={props.fullScreen.toggle}
+          onClick={() => toggleFullScreen(undefined)}
         >
-          {props.fullScreen.on ? <Minimize2 /> : <Expand />}
+          {fullScreen ? <Minimize2 /> : <Expand />}
         </Button>
       </div>
     </header>

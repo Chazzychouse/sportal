@@ -1,6 +1,6 @@
 import { assert, describe, it } from "@effect/vitest"
 import { Array as Arr, DateTime, Option } from "effect"
-import { type Game, GameId, type GameSnapshot } from "./Game.ts"
+import { Game, GameId, type GameSnapshot } from "./Game.ts"
 import type { LeagueId } from "./League.ts"
 import { type Play, PlayId } from "./Play.ts"
 import { Slate, SlateChange } from "./Slate.ts"
@@ -14,6 +14,25 @@ const three = GameId.make("3")
 describe("Slate.empty", () => {
   it("should hold no game", () => {
     assert.deepStrictEqual(Slate.empty.games, [])
+  })
+})
+
+describe("Slate#gameOf", () => {
+  it("should find a listed game by its id", () => {
+    const game = Game.of(snapshot({ id: one }))
+    const slate = new Slate({ games: [game] })
+
+    const found = slate.gameOf(one)
+
+    assert.deepStrictEqual(found, Option.some(game))
+  })
+
+  it("should find nothing for an id the slate does not list", () => {
+    const slate = new Slate({ games: [Game.of(snapshot({ id: one }))] })
+
+    const found = slate.gameOf(two)
+
+    assert.isTrue(Option.isNone(found))
   })
 })
 

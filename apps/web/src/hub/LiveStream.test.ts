@@ -33,7 +33,7 @@ describe("LiveStream.live", () => {
 
       source.onerror?.()
       source.onmessage?.({ data: TestWeb.slateMessage([{ game: someGame, availability: [] }]) })
-      const after = yield* until((state) => state.slate.games.length > 0)
+      const after = yield* TestWeb.until(LiveStream.live, (state) => state.slate.games.length > 0)
 
       assert.strictEqual(after.connection._tag, "Connecting")
     }).pipe(Effect.provide(AtomRegistry.layer))
@@ -69,7 +69,7 @@ describe("LiveStream.live", () => {
 
       source.onopen?.()
 
-      yield* until((state) => state.connection._tag === "Connected")
+      yield* TestWeb.until(LiveStream.live, (state) => state.connection._tag === "Connected")
     }).pipe(Effect.provide(AtomRegistry.layer))
   )
 
@@ -77,11 +77,11 @@ describe("LiveStream.live", () => {
     Effect.gen(function* () {
       const source = yield* TestWeb.opened
       source.onopen?.()
-      yield* until((state) => state.connection._tag === "Connected")
+      yield* TestWeb.until(LiveStream.live, (state) => state.connection._tag === "Connected")
 
       source.onerror?.()
 
-      yield* until((state) => state.connection._tag === "Lost")
+      yield* TestWeb.until(LiveStream.live, (state) => state.connection._tag === "Lost")
     }).pipe(Effect.provide(AtomRegistry.layer))
   )
 
@@ -89,14 +89,14 @@ describe("LiveStream.live", () => {
     Effect.gen(function* () {
       const source = yield* TestWeb.opened
       source.onopen?.()
-      yield* until((state) => state.connection._tag === "Connected")
+      yield* TestWeb.until(LiveStream.live, (state) => state.connection._tag === "Connected")
       source.onerror?.()
-      yield* until((state) => state.connection._tag === "Lost")
+      yield* TestWeb.until(LiveStream.live, (state) => state.connection._tag === "Lost")
 
       source.onerror?.()
       source.onopen?.()
 
-      yield* until((state) => state.connection._tag === "Connected")
+      yield* TestWeb.until(LiveStream.live, (state) => state.connection._tag === "Connected")
     }).pipe(Effect.provide(AtomRegistry.layer))
   )
 
@@ -105,7 +105,7 @@ describe("LiveStream.live", () => {
       const source = yield* TestWeb.opened
 
       source.onmessage?.({ data: TestWeb.slateMessage([{ game: someGame, availability: [] }]) })
-      const state = yield* until((current) => current.slate.games.length > 0)
+      const state = yield* TestWeb.until(LiveStream.live, (current) => current.slate.games.length > 0)
 
       assert.deepStrictEqual(
         state.slate.games.map(({ snapshot }) => snapshot.id),
@@ -125,7 +125,7 @@ describe("LiveStream.live", () => {
         })
 
         source.onmessage?.({ data: TestWeb.slateMessage([{ game, availability: [] }]) })
-        const state = yield* until((current) => current.slate.games.length > 0)
+        const state = yield* TestWeb.until(LiveStream.live, (current) => current.slate.games.length > 0)
 
         assert.deepStrictEqual(state.slate.games[0]?.plays, game.plays)
         assert.instanceOf(state.slate.games[0]?.plays[1], Completion)
@@ -139,7 +139,7 @@ describe("LiveStream.live", () => {
       const availability: ReadonlyArray<ChannelAvailability> = [{ _tag: "NotCarried", why: "StreamingOnly" }]
 
       source.onmessage?.({ data: TestWeb.slateMessage([{ game, availability }]) })
-      const state = yield* until((current) => current.slate.games.length > 0)
+      const state = yield* TestWeb.until(LiveStream.live, (current) => current.slate.games.length > 0)
 
       assert.deepStrictEqual(state.availability[GameId.make("401")], availability)
     }).pipe(Effect.provide(AtomRegistry.layer))
@@ -149,12 +149,12 @@ describe("LiveStream.live", () => {
     Effect.gen(function* () {
       const source = yield* TestWeb.opened
       source.onopen?.()
-      const before = yield* until((state) => state.connection._tag === "Connected")
+      const before = yield* TestWeb.until(LiveStream.live, (state) => state.connection._tag === "Connected")
 
       source.onmessage?.({ data: "{not json" })
       source.onmessage?.({ data: JSON.stringify({ _tag: "SlateChanged", slate: "nope", availability: {} }) })
       source.onmessage?.({ data: TestWeb.slateMessage([{ game: someGame, availability: [] }]) })
-      const after = yield* until((state) => state.slate.games.length > 0)
+      const after = yield* TestWeb.until(LiveStream.live, (state) => state.slate.games.length > 0)
 
       assert.strictEqual(after.connection, before.connection)
     }).pipe(Effect.provide(AtomRegistry.layer))
@@ -171,14 +171,6 @@ describe("LiveStream.live", () => {
 })
 
 const someGame = new Game({ snapshot: snapshot({ id: GameId.make("401") }), plays: [] })
-
-function until(predicate: (state: Atom.Type<typeof LiveStream.live>) => boolean) {
-  return Atom.toStream(LiveStream.live).pipe(
-    Stream.filter(predicate),
-    Stream.runHead,
-    Effect.flatMap(Effect.fromOption)
-  )
-}
 
 /** A one-yard touchdown pass for the home side: a Completion, so a decode has its case to keep. */
 function touchdown() {

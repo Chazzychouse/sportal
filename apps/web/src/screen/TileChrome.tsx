@@ -1,13 +1,16 @@
 import { useAtomSet } from "@effect/atom-react"
 import type { GameSnapshot } from "@sportal/domain/Game"
+import { ArrowUpLeft, Shrink, SquareDashed, Volume2, VolumeX, X } from "lucide-react"
+import type { ReactNode } from "react"
 import { Button } from "@/design/button"
 import { cn } from "@/design/ClassName"
+import { DisplayInput } from "../display/Display.ts"
+import * as DisplayState from "../display/DisplayState.ts"
 import { GameStatus } from "../game/GameStatus.tsx"
 import { Score } from "../game/Score.tsx"
-import * as DisplayScreen from "./DisplayScreen.ts"
 import { type Screen, Tile } from "./Screen.ts"
-import { keyText, tileActions } from "./TileActions.tsx"
-import { tileHeader } from "./TileRects.ts"
+import { TileAction } from "./TileAction.ts"
+import * as TileRects from "./TileRects.ts"
 
 /**
  * A tile's header strip: its slot, its game and score, the on-air tally when its sound is on, and its controls.
@@ -19,9 +22,8 @@ export function TileChrome(props: {
   tile: Tile
   game: GameSnapshot | undefined
   selected: boolean
-  onSelect: () => void
 }) {
-  const dispatch = useAtomSet(DisplayScreen.screen)
+  const input = useAtomSet(DisplayState.display)
   const { tile, slot } = props
   const onAir = !Tile.guards.Empty(tile) && props.screen.hears(tile.game)
 
@@ -35,16 +37,17 @@ export function TileChrome(props: {
       }}
       onDrop={(event) => {
         const from = Number(event.dataTransfer.getData(tileDrag))
-        if (Number.isInteger(from) && from !== slot) dispatch({ _tag: "Swap", a: from, b: slot })
+        if (Number.isInteger(from) && from !== slot)
+          input(DisplayInput.Commanded({ command: { _tag: "Swap", a: from, b: slot } }))
       }}
-      style={{ height: tileHeader }}
+      style={{ height: TileRects.tileHeader }}
       className={`flex shrink-0 items-center gap-2 border-b px-1.5 text-xs ${
         onAir ? "border-on-air/60 bg-on-air/10" : "bg-card"
       }`}
     >
       <button
         type="button"
-        onClick={props.onSelect}
+        onClick={() => input(DisplayInput.Selected({ slot }))}
         aria-keyshortcuts={`Alt+${slot + 1}`}
         title={`Select tile ${slot + 1} · Alt ${slot + 1}`}
         className={`flex min-w-0 flex-1 items-center gap-2 text-left ${props.selected ? "" : "opacity-90"}`}
@@ -75,27 +78,46 @@ export function TileChrome(props: {
         </span>
       </button>
       <span className="flex shrink-0 items-center">
-        {tileActions(props.screen, slot, props.selected).map((action) => (
-          <Button
-            key={action.id}
-            variant="ghost"
-            size="icon-xs"
-            aria-label={action.label}
-            aria-keyshortcuts={action.key}
-            title={action.key === undefined ? action.label : `${action.label} · ${keyText(action.key)}`}
-            className={cn(
-              "text-muted-foreground",
-              action.id === "hear" && onAir && "text-on-air",
-              action.id === "clear" && "hover:text-destructive"
-            )}
-            onClick={() => dispatch(action.command)}
-          >
-            {action.icon}
-          </Button>
-        ))}
+        {TileAction.of(props.screen, slot, props.selected).map((action) => {
+          const shortcut = action.shortcut()
+          return (
+            <Button
+              key={action.id}
+              variant="ghost"
+              size="icon-xs"
+              aria-label={action.label}
+              aria-keyshortcuts={action.key}
+              title={shortcut === undefined ? action.label : `${action.label} · ${shortcut}`}
+              className={cn(
+                "text-muted-foreground",
+                action.id === "hear" && onAir && "text-on-air",
+                action.id === "clear" && "hover:text-destructive"
+              )}
+              onClick={() => input(DisplayInput.Commanded({ command: action.command }))}
+            >
+              {iconOf(action, onAir)}
+            </Button>
+          )
+        })}
       </span>
     </div>
   )
+}
+
+/** An action's icon; hear shows whether the tile's sound is on. */
+function iconOf(action: TileAction, hearing: boolean): ReactNode {
+  switch (action.id) {
+    case "hear":
+      return hearing ? <Volume2 /> : <VolumeX />
+    case "promote":
+      return <ArrowUpLeft />
+    case "solo":
+      return <SquareDashed />
+    case "unsolo":
+      return <Shrink />
+    case "clear":
+      return <X />
+  }
 }
 
 /** The drag data type of a tile or benched game being dragged: its index in the Screen's tiles. */

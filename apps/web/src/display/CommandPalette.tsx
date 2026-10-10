@@ -1,5 +1,5 @@
-import { useAtomSet } from "@effect/atom-react"
-import { type Game, type GameId, GameSnapshot } from "@sportal/domain/Game"
+import { useAtomSet, useAtomValue } from "@effect/atom-react"
+import { GameSnapshot } from "@sportal/domain/Game"
 import { Option } from "effect"
 import {
   CommandDialog,
@@ -11,34 +11,36 @@ import {
   CommandShortcut
 } from "@/design/command"
 import { GameStatus } from "../game/GameStatus.tsx"
-import { scoreline } from "../game/Score.tsx"
 import { TeamLogo } from "../game/TeamLogo.tsx"
-import { LayoutGlyph, layoutLabel } from "../layout/LayoutGlyph.tsx"
+import * as LiveStream from "../hub/LiveStream.ts"
+import { Layout } from "../layout/Layout.ts"
+import { LayoutGlyph } from "../layout/LayoutGlyph.tsx"
 import * as DisplayScreen from "../screen/DisplayScreen.ts"
-import { LayoutName, type Screen, type ScreenCommand, Tile } from "../screen/Screen.ts"
-import { keyText, tileActions } from "../screen/TileActions.tsx"
+import { LayoutName, type ScreenCommand, Tile } from "../screen/Screen.ts"
+import { TileAction } from "../screen/TileAction.ts"
+import { DisplayInput } from "./Display.ts"
+import * as DisplayState from "./DisplayState.ts"
 
 /** Every Screen command by name: watch a game, act on a tile, change layout, go full screen. */
-export function CommandPalette(props: {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  screen: Screen
-  slate: ReadonlyArray<Game>
-  selected: number
-  onFullScreen: () => void
-  onKeys: () => void
-}) {
-  const dispatch = useAtomSet(DisplayScreen.screen)
+export function CommandPalette(props: { open: boolean; onOpenChange: (open: boolean) => void }) {
+  const input = useAtomSet(DisplayState.display)
+  const toggleFullScreen = useAtomSet(DisplayState.toggleFullScreen)
+  const display = useAtomValue(DisplayState.display)
+  const screen = useAtomValue(DisplayScreen.screen)
+  const { slate } = useAtomValue(LiveStream.live)
+  const selected = display.selectedOn(screen)
   const run = (command: ScreenCommand) => {
-    dispatch(command)
+    input(DisplayInput.Commanded({ command }))
     props.onOpenChange(false)
   }
-  const snapshots = props.slate.map(({ snapshot }) => snapshot)
-  const gameOn = (id: GameId) => snapshots.find((game) => game.id === id)
-  const occupied = props.screen.onScreen().flatMap((tile, slot) => {
+  const snapshots = slate.games.map(({ snapshot }) => snapshot)
+  const occupied = screen.onScreen().flatMap((tile, slot) => {
     if (Tile.guards.Empty(tile)) return []
-    const game = gameOn(tile.game)
-    return [{ slot, name: game === undefined ? `Tile ${slot + 1}` : scoreline(game) }]
+    const name = Option.match(slate.gameOf(tile.game), {
+      onNone: () => `Tile ${slot + 1}`,
+      onSome: ({ snapshot }) => snapshot.scoreline()
+    })
+    return [{ slot, name }]
   })
 
   return (
@@ -50,18 +52,18 @@ export function CommandPalette(props: {
       showCloseButton={false}
       className="top-20 translate-y-0 border-border bg-popover sm:max-w-xl"
     >
-      <CommandInput placeholder={`Watch a game in tile ${props.selected + 1}, or run a command…`} />
+      <CommandInput placeholder={`Watch a game in tile ${selected + 1}, or run a command…`} />
       <CommandList className="max-h-[min(60vh,28rem)]">
         <CommandEmpty>Nothing matches.</CommandEmpty>
-        <CommandGroup heading={`Watch in tile ${props.selected + 1}`}>
+        <CommandGroup heading={`Watch in tile ${selected + 1}`}>
           {snapshots.toSorted(GameSnapshot.watchOrder).map((game) => (
             <CommandItem
               key={game.id}
-              value={`watch ${scoreline(game)} ${game.away.team.name} ${game.home.team.name} ${game.networks()} ${game.id}`}
-              onSelect={() => run({ _tag: "Assign", tile: props.selected, game: game.id })}
+              value={`watch ${game.scoreline()} ${game.away.team.name} ${game.home.team.name} ${game.networks()} ${game.id}`}
+              onSelect={() => run({ _tag: "Assign", tile: selected, game: game.id })}
             >
               <TeamLogo team={game.away.team} size={16} />
-              <span className="font-mono">{scoreline(game)}</span>
+              <span className="font-mono">{game.scoreline()}</span>
               <TeamLogo team={game.home.team} size={16} />
               <GameStatus game={game} className="text-[11px]" />
               <CommandShortcut>{game.networks()}</CommandShortcut>
@@ -72,9 +74,10 @@ export function CommandPalette(props: {
           <CommandGroup heading="Tiles">
             {occupied.flatMap(({ slot, name }) =>
               // The Display group below has the Unsolo.
-              tileActions(props.screen, slot, slot === props.selected)
+              TileAction.of(screen, slot, slot === selected)
                 .filter((action) => action.id !== "unsolo")
                 .map((action) => {
+                  const shortcut = action.shortcut()
                   return (
                     <CommandItem
                       key={`${action.id}-${slot}`}
@@ -82,7 +85,7 @@ export function CommandPalette(props: {
                       onSelect={() => run(action.command)}
                     >
                       {action.verb} {name}
-                      {action.key !== undefined && <CommandShortcut>{keyText(action.key)}</CommandShortcut>}
+                      {shortcut !== undefined && <CommandShortcut>{shortcut}</CommandShortcut>}
                     </CommandItem>
                   )
                 })
@@ -93,17 +96,17 @@ export function CommandPalette(props: {
           {LayoutName.literals.map((layout) => (
             <CommandItem
               key={layout}
-              value={`layout ${layoutLabel(layout)} ${layout}`}
+              value={`layout ${Layout.label(layout)} ${layout}`}
               onSelect={() => run({ _tag: "SetLayout", layout })}
             >
               <LayoutGlyph name={layout} />
-              {layoutLabel(layout)}
-              {props.screen.layout === layout && <CommandShortcut>current</CommandShortcut>}
+              {Layout.label(layout)}
+              {screen.layout === layout && <CommandShortcut>current</CommandShortcut>}
             </CommandItem>
           ))}
         </CommandGroup>
         <CommandGroup heading="Display">
-          {Option.isSome(props.screen.solo) && (
+          {Option.isSome(screen.solo) && (
             <CommandItem value="unsolo" onSelect={() => run({ _tag: "Unsolo" })}>
               Unsolo
               <CommandShortcut>Esc</CommandShortcut>
@@ -112,14 +115,17 @@ export function CommandPalette(props: {
           <CommandItem
             value="full screen fullscreen"
             onSelect={() => {
-              props.onFullScreen()
+              toggleFullScreen(undefined)
               props.onOpenChange(false)
             }}
           >
             Full screen
             <CommandShortcut>F11</CommandShortcut>
           </CommandItem>
-          <CommandItem value="keys keyboard shortcuts help" onSelect={props.onKeys}>
+          <CommandItem
+            value="keys keyboard shortcuts help"
+            onSelect={() => input(DisplayInput.Opened({ overlay: "Keys" }))}
+          >
             Keys
             <CommandShortcut>?</CommandShortcut>
           </CommandItem>

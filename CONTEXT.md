@@ -82,9 +82,10 @@ Provider and Source are the two words most likely to be swapped. Provider is alw
 | **Live message** | One update the Hub pushes to clients on the live stream: the slate changed, each game beside its availability; `LiveMessage`, and `LiveMessageJson` its JSON form. | event, notification |
 | **Live stream** | The Hub's server-sent events at `/api/live` that carry live messages; in the web UI, the `LiveStream.live` atom holds what they said and the connection. | event stream, socket |
 | **Connection** | Whether a client's live stream is up: connecting (never yet connected), connected, or lost (since an instant, retrying). | online, status |
-| **Hub client** | The web UI's way to the Hub's API, `HubClient` in code. It runs in the web UI's one runtime (`HubRuntime.ts`). | API client, fetcher |
+| **Hub client** | The web UI's way to the Hub's API, `HubClient` in code. It runs in the web UI's one runtime (`WebRuntime.ts`), beside the Shell. | API client, fetcher |
 | **Telemetry** | The traces, logs, and metrics the Hub exports for people to read in Grafana. | monitoring, observability stack |
-| **Display** | A device running the shell and presenting a Screen. It owns its Screen (`apps/web/src/screen/DisplayScreen.ts`), kept in its browser. Its local state (selected tile, interacting tile, pick, slate drawer, and the one open overlay) is the web UI's `Display`. | screen, client, player |
+| **Display** | A device running the shell and presenting a Screen. It owns its Screen (`apps/web/src/screen/DisplayScreen.ts`), kept in its browser. Its local state (selected tile, interacting tile, pick, slate drawer, and the one open overlay) is the web UI's `Display`, held in the `DisplayState.display` atom. | screen, client, player |
+| **Overlay** | The one dialog a Display has open — the key help or the command palette — or none; `Overlay` beside `Display` in `apps/web/src/display/Display.ts`. Local to the Display. | modal, popup |
 | **Shell config** | Every setting the desktop shell reads from its environment: the Hub's address; `ShellConfig` in code. | settings, env |
 | **Shell window** | The shell's one window, showing the Hub's web UI, confined to the Hub's origin; `ShellWindow` in code. | main window, BrowserWindow |
 | **Shell bridge** | The small interface the desktop shell exposes to the web UI; its IPC channel names are `ShellChannel`. | IPC, native API |
@@ -92,7 +93,7 @@ Provider and Source are the two words most likely to be swapped. Provider is alw
 | **Hotkey** | A key Sportal acts on, wherever it was pressed: in the web UI or in a stream view with focus. | shortcut, keybind |
 | **Provider session** | The shell's single persistent browser session shared by every provider view, with its navigation allowlist and permissions. | partition, profile |
 | **Tile views** | The shell component that keeps one provider web view per stream tile, placed where the web UI says. | view manager |
-| **Tile bounds** | A tile view's rectangle in the web UI's window, in whole CSS pixels; `TileBounds` in code. | rect, frame |
+| **Tile bounds** | A rectangle in whole CSS pixels: a tile's within the Screen area, or a tile view's within the window; `TileBounds` in code. | rect, frame |
 | **Guide reader** | What reads a source's guide. The shell's (`GuideReader` in the desktop app) fetches it with the source's own request, sent on the provider session. In the Hub, YouTube TV's source keeps the latest guide it decodes from what the shell fetched (a complete guide, stamped when read) and gives availability from it while it is fresh. | scraper, EPG fetcher |
 
 ### Viewing
@@ -113,6 +114,12 @@ Provider and Source are the two words most likely to be swapped. Provider is alw
 | **Swap** | Exchange two tiles, on screen or benched. | move |
 | **Audio focus** | The single game whose sound is on; it follows the game when tiles move. | active, unmuted |
 | **Strip card** | One card in the slate strip: a benched game, or a slate game in its section (Bench, Live, Next, Final), marked with its slot when it is on screen or its tile when benched; `StripCard` in code, its place a `Place` (Slot or Bench). | tile, slate item |
+| **Display input** | What a person did on a Display: a hotkey, a click on a tile or a video, a slate card dropped, a screen command, or an overlay opened or closed; `DisplayInput` in `apps/web/src/display/Display.ts`. Written to the Display's atom (`DisplayState.display`), which applies it and sends its screen commands to the Screen. | action, event |
+| **Slot** | A place in a layout: a rectangle as fractions of the Screen area; `Slot` in `apps/web/src/layout/Layout.ts`. | rect, cell |
+| **Shell** | The web UI's edge to its window and the shell bridge: page and stream hotkeys, full screen, presses on a video, the guide the shell reads, and the calls that place and hide videos; `Shell` in `apps/web/src/shell/Shell.ts`, the one reader of `window.sportalShell`. | bridge, native |
+| **Tile action** | One thing that can be done to an on-screen tile: hear it, promote it, solo or unsolo it, clear it; its label, hotkey, and the screen command it sends; `TileAction` in `apps/web/src/screen/TileAction.ts`. A host renders it as a button or a palette item. | button, control |
+| **Field drawing** | Which plays a tile's field has drawn: settled after a play, or animating one with the newest few queued; `FieldDrawing` in `apps/web/src/game/FieldDrawing.ts`, moved by `FieldEvent`s (plays arrived, a play drawn). | animation state |
+| **Field event** | What a field's drawing hears: plays arrived from the Hub, or a play finished drawing; `FieldEvent` beside `FieldDrawing`. | |
 | **Display step** | A Display after an input, and the screen commands that input sends; `DisplayStep` in code. | result, update |
 | **Interacting tile** | The one stream tile whose player gets the mouse, after `I`; every other stream tile's player never sees the pointer. Local to the Display, like the selected tile. | active, unlocked |
 | **Promote** | Move a game into the main tile. | feature |

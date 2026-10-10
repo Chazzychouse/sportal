@@ -3,11 +3,11 @@ import type { GameId } from "@sportal/domain/Game"
 import { Result } from "effect"
 import * as TestWeb from "../TestWeb.ts"
 import { Screen } from "./Screen.ts"
-import { coveredGames, placements, tileRects } from "./TileRects.ts"
+import * as TileRects from "./TileRects.ts"
 
 describe("tileRects", () => {
   it("should lay a Quad out in whole pixels with a gap between tiles", () => {
-    const [main, right] = tileRects(Screen.initial, area)
+    const [main, right] = TileRects.tileRects(Screen.initial, area)
 
     assert.deepStrictEqual(main, { x: 3, y: 3, width: 794, height: 444 })
     assert.deepStrictEqual(right, { x: 803, y: 3, width: 794, height: 444 })
@@ -18,7 +18,7 @@ describe("tileRects", () => {
       Screen.initial.apply({ _tag: "SetSplit", split: { x: 0.3333, y: 0.5 } }, TestWeb.nowhere)
     )
 
-    const [main, right] = tileRects(screen, { width: 1001, height: 600 })
+    const [main, right] = TileRects.tileRects(screen, { width: 1001, height: 600 })
 
     const gap = (right?.x ?? 0) - ((main?.x ?? 0) + (main?.width ?? 0))
     assert.strictEqual(gap, 6)
@@ -27,7 +27,7 @@ describe("tileRects", () => {
   it("should give a soloed game the whole area and the others nothing", () => {
     const screen = TestWeb.soloed([TestWeb.bama, TestWeb.irish], 1)
 
-    const rects = tileRects(screen, area)
+    const rects = TileRects.tileRects(screen, area)
 
     assert.deepStrictEqual(rects[1], { x: 3, y: 3, width: 1594, height: 894 })
     assert.strictEqual(rects[0]?.width, 0)
@@ -85,7 +85,7 @@ describe("coveredGames", () => {
   ])("should cover a video an overlay shares area with: $shares", ({ overlay }) => {
     const video = videoOf(TestWeb.bama)
 
-    const covered = coveredGames([overlay], [video])
+    const covered = TileRects.coveredGames([overlay], [video])
 
     assert.deepStrictEqual(covered, [TestWeb.bama])
   })
@@ -96,7 +96,7 @@ describe("coveredGames", () => {
   ])("should leave a video an overlay shares no area with: $is", ({ overlay }) => {
     const video = videoOf(TestWeb.bama)
 
-    const covered = coveredGames([overlay], [video])
+    const covered = TileRects.coveredGames([overlay], [video])
 
     assert.deepStrictEqual(covered, [])
   })
@@ -104,7 +104,7 @@ describe("coveredGames", () => {
   it("should leave a video shown under an overlay flush against its top edge", () => {
     const videos = [videoOf(TestWeb.bama), belowOf(TestWeb.irish)]
 
-    const covered = coveredGames([sheet()], videos)
+    const covered = TileRects.coveredGames([sheet()], videos)
 
     assert.deepStrictEqual(covered, [])
   })
@@ -112,7 +112,7 @@ describe("coveredGames", () => {
   it("should cover every video an overlay reaches", () => {
     const videos = [videoOf(TestWeb.bama), belowOf(TestWeb.irish)]
 
-    const covered = coveredGames([{ ...sheet(), height: 301 }], videos)
+    const covered = TileRects.coveredGames([{ ...sheet(), height: 301 }], videos)
 
     assert.deepStrictEqual(covered, [TestWeb.bama, TestWeb.irish])
   })
@@ -122,7 +122,7 @@ const area = { width: 1600, height: 900 }
 
 /** The placements of `screen`'s streams in the Screen area, on the dev server's origin. */
 function placed(screen: Screen, interacting?: GameId, offset = { x: 0, y: 0 }) {
-  return placements(screen, tileRects(screen, area), offset, interacting)
+  return TileRects.placements(screen, TileRects.tileRects(screen, area), offset, interacting)
 }
 
 /** `game`'s video, 200 by 100 at 100,100. */

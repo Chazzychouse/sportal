@@ -1,23 +1,21 @@
 import type { BallSpot, GameSnapshot } from "@sportal/domain/Game"
-import { Play, type PlayId } from "@sportal/domain/Play"
+import { Play } from "@sportal/domain/Play"
 import type { Situation } from "@sportal/domain/Situation"
 import type { Team, TeamId } from "@sportal/domain/Team"
-import { Data, Option } from "effect"
+import { Option } from "effect"
 import { type CSSProperties, useEffect, useReducer } from "react"
 import { cn } from "@/design/ClassName"
+import { FieldDrawing, FieldEvent } from "./FieldDrawing.ts"
 
 /**
  * A game's field from above, one SVG in yards: the end zones in their teams' colors, the ball and the lines of its
- * situation, and each new play drawn as an arrow from where it started to where it ended, one after another (only the
- * newest few when many arrive at once). The plays on hand when it first draws are taken as drawn, and so are all of
- * them again when the plays go back to an earlier sequence (the feed started over). Out of play, or with no ball on
- * the field, it is dimmed and shows no ball. The away team defends the left end zone and the home team the right.
+ * situation, and each new play drawn as an arrow from where it started to where it ended, as `FieldDrawing` orders
+ * them. Out of play, or with no ball on the field, it is dimmed and shows no ball. The away team defends the left end
+ * zone and the home team the right.
  */
 export function Field(props: { game: GameSnapshot; plays: ReadonlyArray<Play>; className?: string }) {
   const { game, plays } = props
-  const [drawing, dispatch] = useReducer(step, plays, (initial) =>
-    Drawing.Settled({ last: Math.max(-1, ...initial.map((play) => play.sequence)) })
-  )
+  const [drawing, dispatch] = useReducer(FieldDrawing.step, plays, FieldDrawing.initial)
   useEffect(() => dispatch(FieldEvent.Arrived({ plays, game })), [plays, game])
 
   const ball = game.inPlay() ? game.ball() : Option.none()
@@ -30,7 +28,7 @@ export function Field(props: { game: GameSnapshot; plays: ReadonlyArray<Play>; c
       aria-label={`The field, ${game.matchup()}`}
       className={cn(
         "transition-opacity duration-500",
-        Drawing.$is("Settled")(drawing) && Option.isNone(ball) && "opacity-40",
+        FieldDrawing.$is("Settled")(drawing) && Option.isNone(ball) && "opacity-40",
         props.className
       )}
     >
@@ -68,7 +66,7 @@ export function Field(props: { game: GameSnapshot; plays: ReadonlyArray<Play>; c
           </text>
         )
       })}
-      {Drawing.$match(drawing, {
+      {FieldDrawing.$match(drawing, {
         Settled: () =>
           situation !== undefined &&
           Option.match(ball, {
@@ -98,69 +96,6 @@ const middle = width / 2
 
 /** How long one play takes to draw. */
 const drawSeconds = 0.6
-
-/**
- * Which plays this field has drawn: settled on the situation after the play with sequence `last`, or animating `play`
- * with `queued` to follow. `last` is the newest play taken in, drawn, queued, or dropped from a full queue.
- */
-type Drawing = Data.TaggedEnum<{
-  Settled: { readonly last: number }
-  Animating: { readonly play: Play; readonly queued: ReadonlyArray<Play>; readonly last: number }
-}>
-const Drawing = Data.taggedEnum<Drawing>()
-
-/**
- * The most plays a field waits to draw: a page that was hidden while plays arrived draws only the newest few, not the
- * whole backlog.
- */
-const queueLength = 3
-
-/** What a field hears: plays arrived from the Hub, or a play finished drawing. */
-type FieldEvent = Data.TaggedEnum<{
-  Arrived: { readonly plays: ReadonlyArray<Play>; readonly game: GameSnapshot }
-  Drawn: { readonly play: PlayId; readonly game: GameSnapshot }
-}>
-const FieldEvent = Data.taggedEnum<FieldEvent>()
-
-function step(drawing: Drawing, event: FieldEvent): Drawing {
-  return FieldEvent.$match(event, {
-    Arrived: ({ plays, game }) => {
-      const newestSent = Math.max(-1, ...plays.map((play) => play.sequence))
-      if (newestSent < drawing.last) return Drawing.Settled({ last: newestSent })
-      const fresh = plays.filter((play) => play.sequence > drawing.last).toSorted(Play.order)
-      const newest = fresh.at(-1)
-      if (newest === undefined) return drawing
-      return Drawing.$match(drawing, {
-        Settled: () => nextOf(fresh.slice(-queueLength), newest.sequence, game),
-        Animating: (current) =>
-          Drawing.Animating({
-            ...current,
-            queued: [...current.queued, ...fresh].slice(-queueLength),
-            last: newest.sequence
-          })
-      })
-    },
-    Drawn: (drawn) =>
-      Drawing.$match(drawing, {
-        Settled: () => drawing,
-        Animating: ({ play, queued, last }) =>
-          play.id === drawn.play ? nextOf(queued, last, drawn.game) : drawing
-      })
-  })
-}
-
-/** The first play in `queue` with both spots on the field, drawing; the plays before it are skipped. */
-function nextOf(queue: ReadonlyArray<Play>, last: number, game: GameSnapshot): Drawing {
-  const index = queue.findIndex((play) => Option.isSome(spotsOf(game, play)))
-  const play = queue[index]
-  return play === undefined
-    ? Drawing.Settled({ last })
-    : Drawing.Animating({ play, queued: queue.slice(index + 1), last })
-}
-
-function spotsOf(game: GameSnapshot, play: Play) {
-  return Option.all({ start: game.spotOf(play.start), end: game.spotOf(play.end) })
-}
 
 /** A spot's x on the field: the home goal line is at 110 and the away goal line at 10. */
 function xOf(spot: BallSpot): number {
@@ -225,7 +160,7 @@ function PlayArrow(props: {
   onDrawn: () => void
 }) {
   const { game, play, onDrawn } = props
-  const spots = spotsOf(game, play)
+  const spots = FieldDrawing.spotsOf(game, play)
   const missing = Option.isNone(spots)
   // A play dequeued with both spots always has them, but should one go missing no animation would end the play.
   useEffect(() => {

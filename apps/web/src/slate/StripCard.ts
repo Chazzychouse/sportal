@@ -1,5 +1,6 @@
-import { type Game, type GameId, GameSnapshot } from "@sportal/domain/Game"
-import { Array as Arr, Data } from "effect"
+import { type GameId, GameSnapshot } from "@sportal/domain/Game"
+import type { Slate } from "@sportal/domain/Slate"
+import { Array as Arr, Data, Option } from "effect"
 import type { Screen } from "../screen/Screen.ts"
 
 /** Where a strip card's game is: in a slot on screen, or on the bench at a tile. */
@@ -20,29 +21,20 @@ export class StripCard extends Data.Class<{
    * The strip's cards, in order: the bench, then the slate live, upcoming, and over. A benched game shows once, on
    * the bench, even when it has left the slate. A game on screen keeps its place in the slate, marked with its slot.
    */
-  static of(screen: Screen, slate: ReadonlyArray<Game>): ReadonlyArray<StripCard> {
-    const snapshots = slate.map(({ snapshot }) => snapshot)
+  static of(screen: Screen, slate: Slate): ReadonlyArray<StripCard> {
     const benched = screen.benched()
-    const bench = benched.map(
-      ({ tile, game }) =>
-        new StripCard({
-          id: game,
-          game: snapshots.find((snapshot) => snapshot.id === game),
-          place: Place.Bench({ tile }),
-          section: "Bench"
-        })
-    )
-    const rest = snapshots
+    const bench = benched.map(({ tile, game }) => {
+      const snapshot = Option.getOrUndefined(Option.map(slate.gameOf(game), (found) => found.snapshot))
+      return new StripCard({ id: game, game: snapshot, place: Place.Bench({ tile }), section: "Bench" })
+    })
+    const rest = slate.games
+      .map(({ snapshot }) => snapshot)
       .filter((game) => !benched.some((bench) => bench.game === game.id))
-      .sort(GameSnapshot.watchOrder)
+      .toSorted(GameSnapshot.watchOrder)
       .map((game) => {
         const slot = screen.slotOf(game.id)
-        return new StripCard({
-          id: game.id,
-          game,
-          place: slot === undefined ? undefined : Place.Slot({ slot }),
-          section: sections[game.progress()]
-        })
+        const place = slot === undefined ? undefined : Place.Slot({ slot })
+        return new StripCard({ id: game.id, game, place, section: sections[game.progress()] })
       })
     return [...bench, ...rest]
   }

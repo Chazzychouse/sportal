@@ -1,12 +1,14 @@
 import { useAtomSet } from "@effect/atom-react"
 import { ToggleGroup, ToggleGroupItem } from "@/design/toggle-group"
-import * as DisplayScreen from "../screen/DisplayScreen.ts"
+import { DisplayInput } from "../display/Display.ts"
+import * as DisplayState from "../display/DisplayState.ts"
 import { LayoutName, Screen } from "../screen/Screen.ts"
-import { LayoutGlyph, layoutLabel } from "./LayoutGlyph.tsx"
+import { Layout } from "./Layout.ts"
+import { LayoutGlyph } from "./LayoutGlyph.tsx"
 
 /** One button per layout, the current one lit; choosing one applies it. */
 export function LayoutPicker(props: { current: LayoutName }) {
-  const dispatch = useAtomSet(DisplayScreen.screen)
+  const input = useAtomSet(DisplayState.display)
   return (
     <ToggleGroup
       type="single"
@@ -14,7 +16,7 @@ export function LayoutPicker(props: { current: LayoutName }) {
       value={props.current}
       onValueChange={(value) => {
         const layout = LayoutName.literals.find((name) => name === value)
-        if (layout !== undefined) dispatch({ _tag: "SetLayout", layout })
+        if (layout !== undefined) input(DisplayInput.Commanded({ command: { _tag: "SetLayout", layout } }))
       }}
       aria-label="Layout"
     >
@@ -22,8 +24,8 @@ export function LayoutPicker(props: { current: LayoutName }) {
         <ToggleGroupItem
           key={name}
           value={name}
-          aria-label={layoutLabel(name)}
-          title={`${layoutLabel(name)} · ${Screen.slotCount(name) === 1 ? "1 tile" : `${Screen.slotCount(name)} tiles`}`}
+          aria-label={Layout.label(name)}
+          title={`${Layout.label(name)} · ${Screen.slotCount(name) === 1 ? "1 tile" : `${Screen.slotCount(name)} tiles`}`}
           className="text-muted-foreground data-[state=on]:bg-accent data-[state=on]:text-on-air"
         >
           <LayoutGlyph name={name} />
