@@ -21,19 +21,17 @@ import { HttpClient, HttpClientError, HttpClientResponse } from "effect/http"
 import * as Socket from "effect/socket/Socket"
 import { TestClock } from "effect/testing"
 import { HubConfig } from "../../HubConfig.ts"
+import * as TestHub from "../../TestHub.ts"
 import { Delivery, Provider } from "../Provider.ts"
-import { listedBy } from "../TestProvider.ts"
 import * as EspnProvider from "./EspnProvider.ts"
 import { FastCast, Frame, type Wanted } from "./FastCast.ts"
 import * as FastCastMessage from "./FastCastMessage.ts"
-import * as TestEspn from "./TestEspn.ts"
-import * as TestFastCast from "./TestFastCast.ts"
 import { Topic } from "./Topic.ts"
 
 // Real payloads recorded from ESPN. A payload that breaks decoding gets added here before the fix.
-const fbsLive = TestEspn.recordedScoreboard("fbs-scoreboard-live")
-const nflPregame = TestEspn.recordedScoreboard("nfl-scoreboard-pregame")
-const nflLive = TestEspn.recordedScoreboard("nfl-scoreboard-2026-10-04T1800Z")
+const fbsLive = TestHub.recordedScoreboard("fbs-scoreboard-live")
+const nflPregame = TestHub.recordedScoreboard("nfl-scoreboard-pregame")
+const nflLive = TestHub.recordedScoreboard("nfl-scoreboard-2026-10-04T1800Z")
 
 describe("EspnProvider", () => {
   describe("polling", () => {
@@ -269,8 +267,8 @@ describe("EspnProvider", () => {
   describe("merged deliveries", () => {
     it.effect("should give each run of its deliveries every frame", () =>
       Effect.gen(function* () {
-        const first = yield* listedBy("nfl")
-        const second = yield* listedBy("nfl")
+        const first = yield* TestHub.listedBy("nfl")
+        const second = yield* TestHub.listedBy("nfl")
 
         assert.strictEqual(first.length, 16)
         assert.strictEqual(second.length, 16)
@@ -542,8 +540,8 @@ describe("EspnProvider", () => {
       "should subscribe to a listed live game once, and once more only after a gap in its messages",
       () =>
         Effect.gen(function* () {
-          const server = TestFastCast.fakeServer()
-          const delivered = TestFastCast.watched<ReadonlyArray<Delivery>>()
+          const server = TestHub.fakeServer()
+          const delivered = TestHub.watched<ReadonlyArray<Delivery>>()
           const subscriptions = () =>
             server.sent.all().filter((sent) => sent.op === "S" && sent.tc === liveTc)
 
@@ -553,7 +551,7 @@ describe("EspnProvider", () => {
               Stream.runForEach((deliveries) => Effect.sync(() => delivered.add(deliveries))),
               Effect.forkScoped({ startImmediately: true })
             )
-            yield* server.sent.until(TestFastCast.subscribed(liveTc, 1))
+            yield* server.sent.until(TestHub.subscribed(liveTc, 1))
             const listed = subscriptions().length
 
             yield* Effect.sync(() => server.send(checkpointAt(99)))
@@ -767,7 +765,7 @@ function toldOver(
  * scoreboard of 18:00Z on 2026-10-04, in which NE at BUF is live; each poll after it also shows one more of
  * `laterGames` live. Each checkpoint is an empty game document.
  */
-function espnOverFastCast(server: ReturnType<typeof TestFastCast.fakeServer>) {
+function espnOverFastCast(server: ReturnType<typeof TestHub.fakeServer>) {
   const polls = Ref.makeUnsafe(0)
   const http = HttpClient.make((request) => {
     const url = new URL(request.url)
@@ -795,9 +793,9 @@ function espnOverFastCast(server: ReturnType<typeof TestFastCast.fakeServer>) {
  * Moves the test clock to the next poll and waits for `game`'s first S, which that poll makes wanted. FastCast steers by
  * each wanted set in turn, so every S an earlier frame would send has been sent by then.
  */
-function markedByTheNextPoll(server: ReturnType<typeof TestFastCast.fakeServer>, game: string) {
+function markedByTheNextPoll(server: ReturnType<typeof TestHub.fakeServer>, game: string) {
   return TestClock.adjust("10 seconds").pipe(
-    Effect.andThen(server.sent.until(TestFastCast.subscribed(`gp-football-nfl-${game}`, 1)))
+    Effect.andThen(server.sent.until(TestHub.subscribed(`gp-football-nfl-${game}`, 1)))
   )
 }
 

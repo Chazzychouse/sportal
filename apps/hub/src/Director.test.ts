@@ -6,6 +6,7 @@ import { liveSnapshot, play, snapshot } from "@sportal/domain/TestGame"
 import { type Cause, DateTime, Effect, Layer, Option, Queue, Ref, Stream } from "effect"
 import { Director } from "./Director.ts"
 import { Delivery, Provider } from "./provider/Provider.ts"
+import * as TestHub from "./TestHub.ts"
 
 const one = GameId.make("1")
 const two = GameId.make("2")
@@ -179,7 +180,7 @@ function playsIn(slate: Slate, id: GameId): ReadonlyArray<Play> {
  * Runs `test` against a Director over a provider whose frames are what the test offers `frames`. One frame waits in
  * `frames` at a time, so an offer returns only once the Director has pulled the frame before it.
  */
-function fed<A, E, R>(test: (frames: Frames) => Effect.Effect<A, E, R>) {
+function fed<A, E, R>(test: (frames: TestHub.Frames) => Effect.Effect<A, E, R>) {
   return Effect.gen(function* () {
     const frames = yield* Queue.bounded<ReadonlyArray<Delivery>, Cause.Done>(1)
 
@@ -189,8 +190,6 @@ function fed<A, E, R>(test: (frames: Frames) => Effect.Effect<A, E, R>) {
   })
 }
 
-type Frames = Queue.Queue<ReadonlyArray<Delivery>, Cause.Done>
-
 /** The Director's slate as it is now. */
 const latest = Director.use((director) => Stream.runHead(director.slate)).pipe(Effect.map(Option.getOrThrow))
 
@@ -198,20 +197,18 @@ const latest = Director.use((director) => Stream.runHead(director.slate)).pipe(E
  * Delivers one frame that says only `delivery`, and gives the Director's slate once it has taken it: the second empty
  * frame is accepted only once the Director has pulled the first, which it does only after taking `delivery`.
  */
-const delivered = Effect.fnUntraced(function* (frames: Frames, delivery: Delivery) {
-  yield* Queue.offer(frames, [delivery])
-  yield* Queue.offer(frames, [])
-  yield* Queue.offer(frames, [])
+const delivered = Effect.fnUntraced(function* (frames: TestHub.Frames, delivery: Delivery) {
+  yield* TestHub.offered(frames, delivery)
 
   return yield* latest
 })
 
 /** Delivers an FBS listing of `games`, giving the Director's slate once it has taken it. */
-function listing(frames: Frames, games: ReadonlyArray<GameSnapshot>) {
+function listing(frames: TestHub.Frames, games: ReadonlyArray<GameSnapshot>) {
   return delivered(frames, Delivery.Listing({ league: "fbs", games }))
 }
 
-function relisted(frames: Frames, game: GameSnapshot) {
+function relisted(frames: TestHub.Frames, game: GameSnapshot) {
   return listing(frames, [game])
 }
 

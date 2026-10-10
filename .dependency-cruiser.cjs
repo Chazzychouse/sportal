@@ -25,70 +25,24 @@ module.exports = {
       name: "provider-payloads-are-private",
       comment: "A provider's or source's wire vocabulary stays inside its folder.",
       severity: "error",
-      from: { pathNot: "^apps/hub/src/(provider|source)/([^/]+)/" },
+      from: { pathNot: "(^apps/hub/src/(provider|source)/([^/]+)/|^apps/hub/src/TestHub\\.ts$)" },
       to: { path: "^apps/hub/src/(provider|source)/[^/]+/([^/]*Payload|FastCastMessage)\\.ts$" }
     },
     {
       name: "espn-has-one-front-door",
       comment: "Outside ESPN's folder and tests, ESPN's layers are reached only through Espn.ts.",
       severity: "error",
-      from: { pathNot: "(^apps/hub/src/provider/espn/|\\.test\\.ts$)" },
+      from: { pathNot: "(^apps/hub/src/provider/espn/|\\.test\\.ts$|^apps/hub/src/TestHub\\.ts$)" },
       to: {
         path: "^apps/hub/src/provider/espn/(EspnProvider|EspnDecoder|FastCast)\\.ts$"
       }
     },
     {
-      name: "test-game-is-for-tests",
-      comment: "The test snapshot builder is imported by test files and the web's test slate.",
+      name: "test-modules-are-for-tests",
+      comment: "Test modules are imported only by tests and other Test modules.",
       severity: "error",
-      from: {
-        pathNot: "(\\.test\\.tsx?$|^apps/web/src/slate/TestSlate\\.ts$)"
-      },
-      to: { path: "^packages/domain/src/TestGame\\.ts$" }
-    },
-    {
-      name: "hub-test-modules-are-for-tests",
-      comment: "Hub Test modules are imported only by tests and other Hub Test modules.",
-      severity: "error",
-      from: {
-        pathNot: "(\\.test\\.tsx?$|^apps/hub/src/.*(?<=/)Test[^/]*\\.ts$)"
-      },
-      to: { path: "^apps/hub/src/.*(?<=/)Test[^/]*\\.ts$" }
-    },
-    {
-      name: "test-screen-is-for-tests",
-      comment: "Screens of the domain's test games, on FOX or nowhere, are imported only by test files.",
-      severity: "error",
-      from: { pathNot: "\\.test\\.tsx?$" },
-      to: { path: "^packages/domain/src/TestScreen\\.ts$" }
-    },
-    {
-      name: "test-slate-is-for-tests",
-      comment: "The web's test slate is imported only by test files.",
-      severity: "error",
-      from: { pathNot: "\\.test\\.tsx?$" },
-      to: { path: "^apps/web/src/slate/TestSlate\\.ts$" }
-    },
-    {
-      name: "web-test-screen-is-for-tests",
-      comment: "Screens of the test slate's games in the web's tiles are imported only by test files.",
-      severity: "error",
-      from: { pathNot: "\\.test\\.tsx?$" },
-      to: { path: "^apps/web/src/screen/TestScreen\\.ts$" }
-    },
-    {
-      name: "test-shell-is-for-tests",
-      comment: "The shell around a desktop service under test is imported only by test files.",
-      severity: "error",
-      from: { pathNot: "\\.test\\.ts$" },
-      to: { path: "^apps/desktop/src/main/TestShell\\.ts$" }
-    },
-    {
-      name: "test-web-contents-is-for-tests",
-      comment: "Fake page contents and navigations are imported only by test files.",
-      severity: "error",
-      from: { pathNot: "\\.test\\.ts$" },
-      to: { path: "^apps/desktop/src/main/TestWebContents\\.ts$" }
+      from: { pathNot: "(\\.test\\.tsx?$|(^|/)Test[^/]*\\.ts$)" },
+      to: { path: "(^|/)Test[^/]*\\.ts$" }
     },
     {
       name: "no-junk-drawers",

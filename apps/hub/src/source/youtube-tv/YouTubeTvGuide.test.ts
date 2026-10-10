@@ -1,94 +1,25 @@
-import { readFileSync } from "node:fs"
 import { assert, describe, it } from "@effect/vitest"
 import { ChannelAvailability } from "@sportal/domain/Channel"
-import type { GameSnapshot } from "@sportal/domain/Game"
 import type { LeagueId } from "@sportal/domain/League"
-import { broadcast, snapshot, team } from "@sportal/domain/TestGame"
 import { DateTime, Effect, Layer, Logger, Option } from "effect"
 import { TestClock } from "effect/testing"
-import * as TestEspn from "../../provider/espn/TestEspn.ts"
-import * as TestProvider from "../../provider/TestProvider.ts"
+import * as TestHub from "../../TestHub.ts"
 import { Guide } from "../Guide.ts"
 import { Source } from "../Source.ts"
 import * as YouTubeTvGuide from "./YouTubeTvGuide.ts"
 
-export const recordedGuide = readFileSync(
-  new URL("./fixtures/guide-2026-10-03T2024Z.json", import.meta.url),
-  "utf8"
-)
-
-/** When the recorded guide was read, in epoch milliseconds for the test clock. */
-export const recordedAt = DateTime.toEpochMillis(DateTime.makeUnsafe("2026-10-03T20:24:45Z"))
-
-/** Reads the recorded guide on the test clock at the moment it was recorded. */
-export const readRecordedGuide = Effect.gen(function* () {
-  yield* TestClock.setTime(recordedAt)
-  const source = yield* Source
-
-  yield* source.readGuide(recordedGuide)
-})
-
-export function oneRowGuide(videoId: string) {
-  const row = {
-    station: {
-      epgStationRenderer: {
-        stationId: "UCPc5PkgTSfcJCi3-dJyg3Tg",
-        icon: { accessibility: { accessibilityData: { label: "News 3" } } }
-      }
-    },
-    navigationEndpoint: { watchEndpoint: { videoId } },
-    airings: [
-      {
-        epgAiringRenderer: {
-          beginTimeMs: String(DateTime.toEpochMillis(DateTime.makeUnsafe("2026-10-03T19:35:00Z"))),
-          endTimeMs: String(DateTime.toEpochMillis(DateTime.makeUnsafe("2026-10-03T23:00:00Z"))),
-          title: { runs: [{ text: "Ohio State at Iowa" }] }
-        }
-      }
-    ]
-  }
-  return JSON.stringify({
-    contents: {
-      epgRenderer: { paginationRenderer: { epgPaginationRenderer: { contents: [{ epgRowRenderer: row }] } } }
-    }
-  })
-}
-
-const now = Effect.gen(function* () {
-  const source = yield* Source
-  const now = yield* DateTime.now
-
-  const availabilityOf = yield* source.availability
-  return (game: GameSnapshot) => availabilityOf(game, now)
-})
-
 const youTubeTv = Source.layerYouTubeTv
-
-// News 3's live address, recorded from YouTube TV's live guide on 2026-10-03.
-const cbsLive = "https://tv.youtube.com/watch/y6zFA17zDsw?vp=0gEEEgIwAQ%3D%3D"
-
-const ohioStateAtIowa = snapshot({
-  status: "live",
-  kickoff: DateTime.makeUnsafe("2026-10-03T19:30:00Z"),
-  away: { team: team("OSU", "fbs", { name: "Ohio State Buckeyes", location: "Ohio State" }), score: 0 },
-  home: { team: team("IOWA", "fbs", { name: "Iowa Hawkeyes", location: "Iowa" }), score: 0 },
-  broadcasts: [broadcast("CBS")]
-})
-const onNews3: ChannelAvailability = {
-  _tag: "Carried",
-  channel: { name: "News 3", source: "YouTube TV", locator: { _tag: "WebView", url: cbsLive } }
-}
 
 describe("YouTubeTvGuide.decode", () => {
   it.effect("should return a complete guide stamped by the Effect clock", () =>
     Effect.gen(function* () {
-      yield* TestClock.setTime(recordedAt)
+      yield* TestClock.setTime(TestHub.recordedAt)
 
-      const guide = yield* YouTubeTvGuide.decode(recordedGuide)
+      const guide = yield* YouTubeTvGuide.decode(TestHub.recordedGuide)
 
       assert.isTrue(guide instanceof Guide)
       assert.strictEqual(guide.source, "YouTube TV")
-      assert.strictEqual(DateTime.toEpochMillis(guide.readAt), recordedAt)
+      assert.strictEqual(DateTime.toEpochMillis(guide.readAt), TestHub.recordedAt)
       assert.isAbove(guide.channels.length, 0)
       assert.isAbove(guide.airings.length, 0)
     })
@@ -124,21 +55,21 @@ describe("YouTubeTvGuide.decode", () => {
 
   it.effect("should read the recorded guide's channels, live addresses, and airings", () =>
     Effect.gen(function* () {
-      yield* TestClock.setTime(recordedAt)
+      yield* TestClock.setTime(TestHub.recordedAt)
 
-      const guide = yield* YouTubeTvGuide.decode(recordedGuide)
-      const availability = guide.availabilityOf(ohioStateAtIowa, guide.readAt)
+      const guide = yield* YouTubeTvGuide.decode(TestHub.recordedGuide)
+      const availability = guide.availabilityOf(TestHub.ohioStateAtIowa, guide.readAt)
 
-      assert.deepStrictEqual([availability], [onNews3])
+      assert.deepStrictEqual([availability], [TestHub.onNews3])
     })
   )
 
   it.effect("should leave a channel without a live address when its row's live id is not one", () =>
     Effect.gen(function* () {
-      yield* TestClock.setTime(recordedAt)
+      yield* TestClock.setTime(TestHub.recordedAt)
 
-      const guide = yield* YouTubeTvGuide.decode(oneRowGuide("y6zFA17zDsw?x"))
-      const availability = guide.availabilityOf(ohioStateAtIowa, guide.readAt)
+      const guide = yield* YouTubeTvGuide.decode(TestHub.oneRowGuide("y6zFA17zDsw?x"))
+      const availability = guide.availabilityOf(TestHub.ohioStateAtIowa, guide.readAt)
 
       assert.deepStrictEqual(
         [availability],
@@ -225,12 +156,12 @@ describe("matching the 2026-10-03 slates to the guide read at 20:24:45Z", () => 
 
 /** Reads the recorded guide at the moment it was recorded, then sorts a league's slate by availability. */
 const tallied = Effect.fn("YouTubeTvGuide.test.tallied")(function* (league: LeagueId) {
-  yield* readRecordedGuide
-  const availabilityOf = yield* now
+  yield* TestHub.readRecordedGuide
+  const availabilityOf = yield* TestHub.availabilityNow
   const carried: Record<string, string> = {}
   const upcomingOn: Record<string, string> = {}
   const tally = { carried, upcomingOn, upcomingUnknown: 0, streamingOnly: 0, notInGuide: 0 }
-  const listed = yield* TestProvider.listedBy(league)
+  const listed = yield* TestHub.listedBy(league)
   for (const game of listed) {
     for (const availability of availabilityOf(game))
       ChannelAvailability.match(availability, {
@@ -259,9 +190,9 @@ const tallied = Effect.fn("YouTubeTvGuide.test.tallied")(function* (league: Leag
 
 /** YouTube TV, and ESPN giving its 2026-10-03 recordings. */
 function matchingLayer() {
-  const espn = TestEspn.recordedEspn({
-    nfl: TestEspn.recordedScoreboard("nfl-scoreboard-pregame"),
-    fbs: TestEspn.recordedScoreboard("fbs-scoreboard-2026-10-03T2024Z")
+  const espn = TestHub.recordedEspn({
+    nfl: TestHub.recordedScoreboard("nfl-scoreboard-pregame"),
+    fbs: TestHub.recordedScoreboard("fbs-scoreboard-2026-10-03T2024Z")
   })
   return Layer.mergeAll(youTubeTv, espn)
 }

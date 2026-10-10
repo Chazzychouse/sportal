@@ -3,9 +3,9 @@ import { assert, describe, it } from "@effect/vitest"
 import { GameSnapshot, Network } from "@sportal/domain/Game"
 import { Effect, Equal, Result, Schema } from "effect"
 import { TestClock } from "effect/testing"
+import * as TestHub from "../../TestHub.ts"
 import { Delivery } from "../Provider.ts"
 import * as EspnEvent from "./EspnEvent.ts"
-import * as TestEspn from "./TestEspn.ts"
 
 describe("EspnEvent.listingOf", () => {
   // Each recorded poll as it decoded when both feeds' events were read by one transform.
@@ -84,7 +84,7 @@ describe("EspnEvent.listingOf", () => {
 
   it.effect("should decode a live FBS scoreboard into snapshots", () =>
     Effect.gen(function* () {
-      const slate = yield* EspnEvent.listingOf("fbs", TestEspn.recordedScoreboard("fbs-scoreboard-live"))
+      const slate = yield* EspnEvent.listingOf("fbs", TestHub.recordedScoreboard("fbs-scoreboard-live"))
 
       const game = slate.find((g) => g.id === "401862787")
       assert.strictEqual(slate.length, 59)
@@ -98,7 +98,7 @@ describe("EspnEvent.listingOf", () => {
 
   it.effect("should keep television and streaming broadcasts and drop radio", () =>
     Effect.gen(function* () {
-      const slate = yield* EspnEvent.listingOf("fbs", TestEspn.recordedScoreboard("fbs-scoreboard-live"))
+      const slate = yield* EspnEvent.listingOf("fbs", TestHub.recordedScoreboard("fbs-scoreboard-live"))
 
       const game = slate.find((g) => g.id === "401856710")
       assert.deepStrictEqual(game?.broadcasts, [{ network: Network.make("ESPN"), medium: "tv" }])
@@ -107,7 +107,7 @@ describe("EspnEvent.listingOf", () => {
 
   it.effect("should keep each team's location and short name", () =>
     Effect.gen(function* () {
-      const slate = yield* EspnEvent.listingOf("fbs", TestEspn.recordedScoreboard("fbs-scoreboard-live"))
+      const slate = yield* EspnEvent.listingOf("fbs", TestHub.recordedScoreboard("fbs-scoreboard-live"))
 
       const game = slate.find((g) => g.id === "401862787")
       assert.strictEqual(game?.home.team.location, "Charlotte")
@@ -118,7 +118,7 @@ describe("EspnEvent.listingOf", () => {
 
   it.effect("should keep each team's colors", () =>
     Effect.gen(function* () {
-      const slate = yield* EspnEvent.listingOf("fbs", TestEspn.recordedScoreboard("fbs-scoreboard-live"))
+      const slate = yield* EspnEvent.listingOf("fbs", TestHub.recordedScoreboard("fbs-scoreboard-live"))
 
       const game = slate.find((g) => g.id === "401862787")
       assert.strictEqual(game?.home.team.color, "005035")
@@ -130,7 +130,7 @@ describe("EspnEvent.listingOf", () => {
     Effect.gen(function* () {
       const slate = yield* EspnEvent.listingOf(
         "fbs",
-        withoutColors(TestEspn.recordedScoreboard("fbs-scoreboard-live"))
+        withoutColors(TestHub.recordedScoreboard("fbs-scoreboard-live"))
       )
 
       const game = slate.find((g) => g.id === "401862787")
@@ -141,7 +141,7 @@ describe("EspnEvent.listingOf", () => {
 
   it.effect("should leave out what ESPN reports with placeholder values", () =>
     Effect.gen(function* () {
-      const slate = yield* EspnEvent.listingOf("fbs", TestEspn.recordedScoreboard("fbs-scoreboard-live"))
+      const slate = yield* EspnEvent.listingOf("fbs", TestHub.recordedScoreboard("fbs-scoreboard-live"))
 
       const game = slate.find((g) => g.id === "401862787")
       // ESPN sends rank 99 for an unranked team and down -1 between plays.
@@ -152,7 +152,7 @@ describe("EspnEvent.listingOf", () => {
 
   it.effect("should decode an NFL scoreboard, namespacing team ids by league", () =>
     Effect.gen(function* () {
-      const slate = yield* EspnEvent.listingOf("nfl", TestEspn.recordedScoreboard("nfl-scoreboard-pregame"))
+      const slate = yield* EspnEvent.listingOf("nfl", TestHub.recordedScoreboard("nfl-scoreboard-pregame"))
 
       assert.strictEqual(slate.length, 16)
       assert.isTrue(slate.every((game) => game.league === "nfl" && game.home.team.id.startsWith("nfl:")))
@@ -166,7 +166,7 @@ describe("EspnEvent.listingOf", () => {
       Effect.gen(function* () {
         const slate = yield* EspnEvent.listingOf(
           "fbs",
-          TestEspn.recordedScoreboard("fbs-scoreboard-2026-10-03T2024Z")
+          TestHub.recordedScoreboard("fbs-scoreboard-2026-10-03T2024Z")
         )
 
         const yardLine = (id: string) => slate.find((g) => g.id === id)?.situation?.yardLine
@@ -199,8 +199,8 @@ describe("the recorded NE at BUF day", () => {
     "should decode every snapshot so it reads back from its JSON Equal to itself",
     () =>
       Effect.gen(function* () {
-        yield* TestClock.setTime(TestEspn.duringNeAtBuf.epochMilliseconds)
-        const decoded = yield* TestEspn.neAtBufDecoded
+        yield* TestClock.setTime(TestHub.duringNeAtBuf.epochMilliseconds)
+        const decoded = yield* TestHub.neAtBufDecoded
         const deliveries = decoded.flat()
         const snapshots = deliveries.flatMap((delivery) =>
           Delivery.$is("Listing")(delivery) ? delivery.games : []

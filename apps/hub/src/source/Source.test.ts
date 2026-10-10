@@ -1,59 +1,11 @@
-import { readFileSync } from "node:fs"
 import { assert, describe, it } from "@effect/vitest"
 import type { ChannelAvailability } from "@sportal/domain/Channel"
-import { type GameSnapshot, Network } from "@sportal/domain/Game"
+import { Network } from "@sportal/domain/Game"
 import { broadcast, snapshot, team } from "@sportal/domain/TestGame"
 import { DateTime, Effect } from "effect"
 import { TestClock } from "effect/testing"
+import * as TestHub from "../TestHub.ts"
 import { Source } from "./Source.ts"
-
-const recordedGuide = readFileSync(
-  new URL("./youtube-tv/fixtures/guide-2026-10-03T2024Z.json", import.meta.url),
-  "utf8"
-)
-export const recordedAt = DateTime.toEpochMillis(DateTime.makeUnsafe("2026-10-03T20:24:45Z"))
-
-/** Reads the recorded guide on the test clock at the moment it was recorded. */
-export const readRecordedGuide = Effect.gen(function* () {
-  yield* TestClock.setTime(recordedAt)
-  const source = yield* Source
-
-  yield* source.readGuide(recordedGuide)
-})
-
-/** A guide response with one row, News 3 airing Ohio State at Iowa, whose live id is `videoId`. */
-export function oneRowGuide(videoId: string) {
-  const row = {
-    station: {
-      epgStationRenderer: {
-        stationId: "UCPc5PkgTSfcJCi3-dJyg3Tg",
-        icon: { accessibility: { accessibilityData: { label: "News 3" } } }
-      }
-    },
-    navigationEndpoint: { watchEndpoint: { videoId } },
-    airings: [
-      {
-        epgAiringRenderer: {
-          beginTimeMs: String(DateTime.toEpochMillis(DateTime.makeUnsafe("2026-10-03T19:35:00Z"))),
-          endTimeMs: String(DateTime.toEpochMillis(DateTime.makeUnsafe("2026-10-03T23:00:00Z"))),
-          title: { runs: [{ text: "Ohio State at Iowa" }] }
-        }
-      }
-    ]
-  }
-  return JSON.stringify({
-    contents: {
-      epgRenderer: { paginationRenderer: { epgPaginationRenderer: { contents: [{ epgRowRenderer: row }] } } }
-    }
-  })
-}
-const now = Effect.gen(function* () {
-  const source = yield* Source
-  const now = yield* DateTime.now
-
-  const availabilityOf = yield* source.availability
-  return (game: GameSnapshot) => availabilityOf(game, now)
-})
 
 const youTubeTv = Source.layerYouTubeTv
 const youTubeTvAndTwitch = Source.layerAll([Source.layerYouTubeTv, Source.layerTwitch])
@@ -64,7 +16,7 @@ const onEspn = snapshot({ broadcasts: [broadcast(espn)] })
 describe("Source.layerYouTubeTv", () => {
   it.effect("should give no guide before any guide is read", () =>
     Effect.gen(function* () {
-      const availabilityOf = yield* now
+      const availabilityOf = yield* TestHub.availabilityNow
 
       assert.deepStrictEqual(availabilityOf(onEspn), [{ _tag: "NoGuide", source: "YouTube TV" }])
     }).pipe(Effect.provide(youTubeTv))
@@ -72,8 +24,8 @@ describe("Source.layerYouTubeTv", () => {
 
   it.effect("should give streaming only for a Prime Video game the guide does not list", () =>
     Effect.gen(function* () {
-      yield* readRecordedGuide
-      const availabilityOf = yield* now
+      yield* TestHub.readRecordedGuide
+      const availabilityOf = yield* TestHub.availabilityNow
 
       assert.deepStrictEqual(availabilityOf(primeVideoSoonAfterRecording), [
         { _tag: "NotCarried", why: "StreamingOnly" }
@@ -83,12 +35,12 @@ describe("Source.layerYouTubeTv", () => {
 
   it.effect("should keep the guide it has when a later response cannot be read", () =>
     Effect.gen(function* () {
-      yield* readRecordedGuide
+      yield* TestHub.readRecordedGuide
 
       yield* Source.use((source) => source.readGuide("{}")).pipe(Effect.flip)
 
-      const availabilityOf = yield* now
-      assert.deepStrictEqual(availabilityOf(ohioStateAtIowa), [onNews3])
+      const availabilityOf = yield* TestHub.availabilityNow
+      assert.deepStrictEqual(availabilityOf(TestHub.ohioStateAtIowa), [TestHub.onNews3])
     }).pipe(Effect.provide(youTubeTv))
   )
 
@@ -105,7 +57,7 @@ describe("Source.layerYouTubeTv", () => {
     Effect.gen(function* () {
       const error = yield* Source.use((source) => source.readGuide(response)).pipe(Effect.flip)
 
-      const availabilityOf = yield* now
+      const availabilityOf = yield* TestHub.availabilityNow
       assert.strictEqual(error._tag, "GuideUnreadable")
       assert.deepStrictEqual(availabilityOf(onEspn), [{ _tag: "NoGuide", source: "YouTube TV" }])
     }).pipe(Effect.provide(youTubeTv))
@@ -113,61 +65,48 @@ describe("Source.layerYouTubeTv", () => {
 
   it.effect("should carry from a guide 44 minutes after reading it", () =>
     Effect.gen(function* () {
-      yield* readRecordedGuide
+      yield* TestHub.readRecordedGuide
 
       yield* TestClock.adjust("44 minutes")
 
-      const availabilityOf = yield* now
-      assert.deepStrictEqual(availabilityOf(ohioStateAtIowa), [onNews3])
+      const availabilityOf = yield* TestHub.availabilityNow
+      assert.deepStrictEqual(availabilityOf(TestHub.ohioStateAtIowa), [TestHub.onNews3])
     }).pipe(Effect.provide(youTubeTv))
   )
 
   it.effect("should give no guide once its guide is 45 minutes old", () =>
     Effect.gen(function* () {
-      yield* readRecordedGuide
+      yield* TestHub.readRecordedGuide
 
       yield* TestClock.adjust("45 minutes")
 
-      const availabilityOf = yield* now
-      assert.deepStrictEqual(availabilityOf(ohioStateAtIowa), [{ _tag: "NoGuide", source: "YouTube TV" }])
+      const availabilityOf = yield* TestHub.availabilityNow
+      assert.deepStrictEqual(availabilityOf(TestHub.ohioStateAtIowa), [
+        { _tag: "NoGuide", source: "YouTube TV" }
+      ])
     }).pipe(Effect.provide(youTubeTv))
   )
 
   it.effect("should carry from a newer guide when an older one would have gone stale", () =>
     Effect.gen(function* () {
-      yield* readRecordedGuide
+      yield* TestHub.readRecordedGuide
       yield* TestClock.adjust("30 minutes")
-      yield* Source.use((source) => source.readGuide(recordedGuide))
+      yield* Source.use((source) => source.readGuide(TestHub.recordedGuide))
 
       yield* TestClock.adjust("20 minutes")
 
-      const availabilityOf = yield* now
-      assert.deepStrictEqual(availabilityOf(ohioStateAtIowa), [onNews3])
+      const availabilityOf = yield* TestHub.availabilityNow
+      assert.deepStrictEqual(availabilityOf(TestHub.ohioStateAtIowa), [TestHub.onNews3])
     }).pipe(Effect.provide(youTubeTv))
   )
 })
-
-// News 3's live address, recorded from YouTube TV's live guide on 2026-10-03.
-const cbsLive = "https://tv.youtube.com/watch/y6zFA17zDsw?vp=0gEEEgIwAQ%3D%3D"
-
-const ohioStateAtIowa = snapshot({
-  status: "live",
-  kickoff: DateTime.makeUnsafe("2026-10-03T19:30:00Z"),
-  away: { team: team("OSU", "fbs", { name: "Ohio State Buckeyes", location: "Ohio State" }), score: 0 },
-  home: { team: team("IOWA", "fbs", { name: "Iowa Hawkeyes", location: "Iowa" }), score: 0 },
-  broadcasts: [broadcast("CBS")]
-})
-const onNews3: ChannelAvailability = {
-  _tag: "Carried",
-  channel: { name: "News 3", source: "YouTube TV", locator: { _tag: "WebView", url: cbsLive } }
-}
 
 const thursdayKickoff = DateTime.makeUnsafe("2026-10-09T00:15:00Z")
 const thursdayNight = primeVideoGame(thursdayKickoff)
 const thursdayNightStarted = snapshot({ ...thursdayNight, status: "live" })
 // A Prime Video game whose teams the recorded guide does not list, kicking off 20 minutes after it was read.
 const primeVideoSoonAfterRecording = primeVideoGame(
-  DateTime.add(DateTime.makeUnsafe(recordedAt), { minutes: 20 })
+  DateTime.add(DateTime.makeUnsafe(TestHub.recordedAt), { minutes: 20 })
 )
 const onPrimeVideo: ChannelAvailability = {
   _tag: "Carried",
@@ -186,7 +125,7 @@ describe("Source.layerTwitch", () => {
     Effect.gen(function* () {
       yield* TestClock.setTime(DateTime.toEpochMillis(thursdayKickoff))
 
-      const availabilityOf = yield* now
+      const availabilityOf = yield* TestHub.availabilityNow
 
       assert.deepStrictEqual(availabilityOf(thursdayNightStarted), [onPrimeVideo])
     }).pipe(Effect.provide(Source.layerTwitch))
@@ -207,7 +146,7 @@ describe("Source.layerAll", () => {
         Source.layerTest(() => carried("Twitch"))
       ])
 
-      const availabilityOf = yield* now.pipe(Effect.provide(all))
+      const availabilityOf = yield* TestHub.availabilityNow.pipe(Effect.provide(all))
 
       assert.deepStrictEqual(availabilityOf(thursdayNight), [streamingOnly, carried("Twitch")])
     })
@@ -219,7 +158,7 @@ describe("Source.layerAll", () => {
       Effect.gen(function* () {
         yield* TestClock.setTime(DateTime.toEpochMillis(DateTime.add(thursdayKickoff, { minutes: 10 })))
 
-        const availabilityOf = yield* now
+        const availabilityOf = yield* TestHub.availabilityNow
 
         assert.deepStrictEqual(availabilityOf(thursdayNightStarted), [
           { _tag: "NoGuide", source: "YouTube TV" },
@@ -232,8 +171,8 @@ describe("Source.layerAll", () => {
     "should give YouTube TV's streaming only and Twitch's carried for a Prime Video game under way",
     () =>
       Effect.gen(function* () {
-        yield* readRecordedGuide
-        const availabilityOf = yield* now
+        yield* TestHub.readRecordedGuide
+        const availabilityOf = yield* TestHub.availabilityNow
 
         assert.deepStrictEqual(
           availabilityOf(snapshot({ ...primeVideoSoonAfterRecording, status: "live" })),

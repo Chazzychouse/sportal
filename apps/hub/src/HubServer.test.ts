@@ -14,6 +14,7 @@ import { HubConfig } from "./HubConfig.ts"
 import * as HubServer from "./HubServer.ts"
 import { Delivery, Provider } from "./provider/Provider.ts"
 import { Source } from "./source/Source.ts"
+import * as TestHub from "./TestHub.ts"
 
 const espn = Network.make("ESPN")
 const game = snapshot({
@@ -93,7 +94,7 @@ describe("HubServer", () => {
             yield* firstSlateOnTestClock(frames)
             const lines = yield* pastInitialMessages()
 
-            yield* delivered(frames, Delivery.Listing({ league: "fbs", games: [inPeriod(2)] }))
+            yield* TestHub.offered(frames, Delivery.Listing({ league: "fbs", games: [inPeriod(2)] }))
             yield* TestClock.adjust("250 millis")
             const line = yield* Queue.take(lines)
 
@@ -112,7 +113,7 @@ describe("HubServer", () => {
           Effect.gen(function* () {
             yield* firstSlateOnTestClock(frames)
             yield* pastInitialMessages()
-            yield* delivered(frames, Delivery.Listing({ league: "fbs", games: [inPeriod(2)] }))
+            yield* TestHub.offered(frames, Delivery.Listing({ league: "fbs", games: [inPeriod(2)] }))
             yield* TestClock.adjust("250 millis")
 
             const { lines } = yield* liveLines()
@@ -173,7 +174,7 @@ describe("HubServer", () => {
             yield* TestClock.adjust("20 seconds")
             yield* nextComment(lines)
 
-            yield* delivered(frames, Delivery.Listing({ league: "fbs", games: [inPeriod(2)] }))
+            yield* TestHub.offered(frames, Delivery.Listing({ league: "fbs", games: [inPeriod(2)] }))
             yield* TestClock.adjust("250 millis")
             const change = yield* Queue.take(lines).pipe(
               Effect.repeat({ until: (line) => line.includes("SlateChanged") })
@@ -195,7 +196,7 @@ describe("HubServer", () => {
               Delivery.Listing({ league: "fbs", games: [inPeriod(period)] })
             )
 
-            yield* Effect.forEach(pushes, (push) => delivered(frames, push))
+            yield* Effect.forEach(pushes, (push) => TestHub.offered(frames, push))
             // The live stream reads each slate in turn; it reads the burst before the clock moves on.
             yield* Effect.yieldNow
             yield* TestClock.adjust("250 millis")
@@ -219,7 +220,7 @@ describe("HubServer", () => {
             const lines = yield* pastInitialMessages()
 
             yield* TestClock.adjust("30 seconds")
-            yield* delivered(frames, Delivery.Listing({ league: "fbs", games: [inPeriod(2)] }))
+            yield* TestHub.offered(frames, Delivery.Listing({ league: "fbs", games: [inPeriod(2)] }))
             yield* TestClock.adjust("250 millis")
             const line = yield* nextData(lines)
 
@@ -384,11 +385,11 @@ describe("HubServer", () => {
                   id: game.id,
                   broadcasts: [broadcast("Prime Video", "streaming")]
                 })
-                yield* delivered(frames, Delivery.Listing({ league: "fbs", games: [scheduled] }))
+                yield* TestHub.offered(frames, Delivery.Listing({ league: "fbs", games: [scheduled] }))
                 yield* TestClock.adjust("250 millis")
                 const lines = yield* pastInitialMessages()
 
-                yield* delivered(
+                yield* TestHub.offered(
                   frames,
                   Delivery.Listing({ league: "fbs", games: [snapshot({ ...scheduled, status: "live" })] })
                 )
@@ -444,7 +445,7 @@ describe("HubServer", () => {
  * a provider whose frames are what the test offers `frames`, against `source` (YouTube TV unless given).
  */
 function served<A, E, R>(
-  test: (frames: Frames) => Effect.Effect<A, E, R>,
+  test: (frames: TestHub.Frames) => Effect.Effect<A, E, R>,
   source: Layer.Layer<Source> = Source.layerYouTubeTv
 ) {
   return Effect.gen(function* () {
@@ -454,9 +455,7 @@ function served<A, E, R>(
   })
 }
 
-type Frames = Queue.Queue<ReadonlyArray<Delivery>, Cause.Done>
-
-function serverUnderTest(frames: Frames, source: Layer.Layer<Source>) {
+function serverUnderTest(frames: TestHub.Frames, source: Layer.Layer<Source>) {
   const hub = Director.layer.pipe(
     Layer.provide(Provider.layerTest(frames)),
     Layer.provideMerge(source),
@@ -467,16 +466,6 @@ function serverUnderTest(frames: Frames, source: Layer.Layer<Source>) {
 
 /** A client of the Hub's API, pointed at the server under test. */
 const makeClient = HttpApiClient.make(SportalApi)
-
-/**
- * Delivers one frame that says only `delivery`, returning once the Director has taken it: the second empty frame is
- * accepted only once the Director has pulled the first, which it does only after taking `delivery`.
- */
-const delivered = Effect.fnUntraced(function* (frames: Frames, delivery: Delivery) {
-  yield* Queue.offer(frames, [delivery])
-  yield* Queue.offer(frames, [])
-  yield* Queue.offer(frames, [])
-})
 
 /** Opens the live stream: its response, and a queue of its lines that are not blank, as they arrive. */
 const liveLines = Effect.fn("HubServer.test.liveLines")(function* () {
@@ -510,8 +499,11 @@ function messageOf(line: string): LiveMessage {
 }
 
 /** The live message first sent after `deliveries`, with no connection open before them. */
-const publishedAfter = Effect.fnUntraced(function* (frames: Frames, deliveries: ReadonlyArray<Delivery>) {
-  yield* Effect.forEach(deliveries, (delivery) => delivered(frames, delivery), { discard: true })
+const publishedAfter = Effect.fnUntraced(function* (
+  frames: TestHub.Frames,
+  deliveries: ReadonlyArray<Delivery>
+) {
+  yield* Effect.forEach(deliveries, (delivery) => TestHub.offered(frames, delivery), { discard: true })
   yield* TestClock.adjust("250 millis")
   const { lines } = yield* liveLines()
   const line = yield* Queue.take(lines)
@@ -519,13 +511,13 @@ const publishedAfter = Effect.fnUntraced(function* (frames: Frames, deliveries: 
 })
 
 /** `firstSlate` on the test clock, moved on 250 ms for it to settle. */
-function firstSlateOnTestClock(frames: Frames) {
+function firstSlateOnTestClock(frames: TestHub.Frames) {
   return firstSlate(frames).pipe(Effect.andThen(TestClock.adjust("250 millis")))
 }
 
 /** Delivers the fbs listing of `game`, so the Director has its first games to publish. */
-function firstSlate(frames: Frames) {
-  return delivered(frames, Delivery.Listing({ league: "fbs", games: [game] }))
+function firstSlate(frames: TestHub.Frames) {
+  return TestHub.offered(frames, Delivery.Listing({ league: "fbs", games: [game] }))
 }
 
 /** `game` live in `period`. */
