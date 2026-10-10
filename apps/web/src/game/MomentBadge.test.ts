@@ -1,6 +1,7 @@
 import { assert, describe, it } from "@effect/vitest"
 import { Classification } from "@sportal/domain/Classification"
 import type { Moment } from "@sportal/domain/Moment"
+import { PlayId } from "@sportal/domain/Play"
 import { liveSnapshot, team } from "@sportal/domain/TestGame"
 import { DateTime } from "effect"
 import { createElement } from "react"
@@ -24,6 +25,17 @@ describe("MomentBadge", () => {
     const markup = badgeOf({ _tag: "Break", reason: "possessionChange", expectedEnd })
 
     assert.include(markup, `change of possession, back about ${localTime(expectedEnd)}`)
+  })
+
+  it("should mark a break after a big play", () => {
+    const markup = badgeOf({
+      _tag: "Break",
+      reason: "afterScore",
+      expectedEnd,
+      after: { play: PlayId.make("1"), kind: "touchdown" }
+    })
+
+    assert.include(markup, 'aria-label="Big play"')
   })
 })
 

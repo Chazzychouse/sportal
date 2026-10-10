@@ -56,8 +56,13 @@ const cases = Schema.TaggedUnion({
   /** A big play, for a while after it. */
   BigPlay: { play: PlayId, kind: BigPlayKind },
   Live: {},
-  /** A live game stopped, when it is likely back, and what was at stake when it stopped. */
-  Break: { reason: reasons, expectedEnd: Schema.DateTimeUtcFromString, during: Schema.optional(Stakes) },
+  /** A live game stopped, when it is likely back, what was at stake when it stopped, and the big play just before. */
+  Break: {
+    reason: reasons,
+    expectedEnd: Schema.DateTimeUtcFromString,
+    during: Schema.optional(Stakes),
+    after: Schema.optional(Schema.Struct({ play: PlayId, kind: BigPlayKind }))
+  },
   Upcoming: {},
   Final: {}
 })

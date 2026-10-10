@@ -4,7 +4,7 @@ import type { Classification } from "./Classification.ts"
 import { Classifier } from "./Classifier.ts"
 import { Game, GameId, type GameSnapshot } from "./Game.ts"
 import { BreakReason } from "./Moment.ts"
-import { Kickoff, type Play, PlayId, Punt, Stoppage } from "./Play.ts"
+import { Interception, Kickoff, type Play, PlayId, Punt, Stoppage } from "./Play.ts"
 import { Slate, SlateChange } from "./Slate.ts"
 import {
   completion,
@@ -172,7 +172,7 @@ describe("Classifier#step, moments", () => {
     assert.strictEqual(moment?._tag === "Break" ? moment.during?._tag : undefined, "ScoringThreat")
   })
 
-  it("should put a touchdown's big play before the break after the score", () => {
+  it("should call a touchdown a break after the score", () => {
     const touchdown = play({ yards: 2, touchdown: true, scoring: true })
 
     const [, classified] = Classifier.empty.step(
@@ -181,7 +181,60 @@ describe("Classifier#step, moments", () => {
       at
     )
 
-    assert.strictEqual(classified.get(id)?.moment._tag, "BigPlay")
+    assert.strictEqual(reasonOf(classified), "afterScore")
+  })
+
+  it("should carry a touchdown on the break after the score", () => {
+    const touchdown = play({ yards: 2, touchdown: true, scoring: true })
+
+    const [, classified] = Classifier.empty.step(
+      slateOf(liveSnapshot({ id }), [touchdown]),
+      [played(touchdown)],
+      at
+    )
+
+    const moment = classified.get(id)?.moment
+    assert.strictEqual(moment?._tag === "Break" ? moment.after?.kind : undefined, "touchdown")
+  })
+
+  it("should call a turnover a break for the change of possession", () => {
+    const pick = new Interception({
+      ...playFields,
+      team: playFields.start.team,
+      yards: 0,
+      return: "returned"
+    })
+
+    const [, classified] = Classifier.empty.step(slateOf(liveSnapshot({ id }), [pick]), [played(pick)], at)
+
+    assert.strictEqual(reasonOf(classified), "possessionChange")
+  })
+
+  it("should not wait to go from a big play to a break", () => {
+    const big = completion({ yards: 40 })
+    const [first] = Classifier.empty.step(slateOf(liveSnapshot({ id }), [big]), [played(big)], at)
+
+    const [, classified] = first.step(
+      slateOf(liveSnapshot({ id }), [big, timeout({ id: playId(2), sequence: 2 })]),
+      [],
+      later(5)
+    )
+
+    assert.strictEqual(reasonOf(classified), "timeout")
+  })
+
+  it("should let the big play go from a break when it runs out, keeping the break's since", () => {
+    const touchdown = play({ yards: 2, touchdown: true, scoring: true })
+    const [first] = Classifier.empty.step(slateOf(liveSnapshot({ id }), [touchdown]), [played(touchdown)], at)
+
+    const [, classified] = first.step(slateOf(liveSnapshot({ id }), [touchdown]), [], later(61))
+
+    const moment = classified.get(id)?.moment
+    assert.isTrue(
+      moment?._tag === "Break" &&
+        moment.after === undefined &&
+        DateTime.Equivalence(classified.get(id)?.since ?? later(61), at)
+    )
   })
 
   it("should expect a break back after its reason's typical length for the game's league", () => {

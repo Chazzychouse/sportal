@@ -123,13 +123,21 @@ function momentOf(
   const progress = snapshot.progress()
   if (progress === "upcoming") return { _tag: "Upcoming" }
   if (progress === "over") return { _tag: "Final" }
-  if (bigPlay !== undefined) return { _tag: "BigPlay", play: bigPlay.play, kind: bigPlay.kind }
 
   const stakes = stakesOf(snapshot)
   const reason = breakReason(game, DateTime.isGreaterThanOrEqualTo(now, stallAt))
-  if (reason === undefined) return stakes ?? { _tag: "Live" }
+  if (reason === undefined) {
+    if (bigPlay !== undefined) return { _tag: "BigPlay", play: bigPlay.play, kind: bigPlay.kind }
+    return stakes ?? { _tag: "Live" }
+  }
   const expectedEnd = DateTime.addDuration(now, BreakReason.typicalLength(reason, snapshot.league))
-  return { _tag: "Break", reason, expectedEnd, ...(stakes === undefined ? {} : { during: stakes }) }
+  return {
+    _tag: "Break",
+    reason,
+    expectedEnd,
+    ...(stakes === undefined ? {} : { during: stakes }),
+    ...(bigPlay === undefined ? {} : { after: { play: bigPlay.play, kind: bigPlay.kind } })
+  }
 }
 
 /** What is at stake in `snapshot`: the team with the ball in the red zone, else crunch time. */
@@ -173,8 +181,8 @@ function breakReason(game: Game, stalled: boolean): BreakReason | undefined {
 
 /**
  * The moment to show, since when, and whether `candidate` was held back: the moment held, while it is the same kind or
- * outranks `candidate` and has held less than `momentHold`; otherwise `candidate`, from `now`. Leaving a break or
- * going not live never waits. A break for the same reason keeps its expected end; a new reason is a new break.
+ * outranks `candidate` and has held less than `momentHold`; otherwise `candidate`, from `now`. Entering or leaving a break,
+ * or going not live, never waits. A break for the same reason keeps its expected end; a new reason is a new break.
  */
 function settled(
   had: Classification | undefined,
@@ -190,7 +198,11 @@ function settled(
   if (moment._tag === candidate._tag) return [candidate, had.since, false]
 
   const lower = Moment.precedence(candidate, moment) > 0
-  const free = candidate._tag === "Upcoming" || candidate._tag === "Final" || moment._tag === "Break"
+  const free =
+    candidate._tag === "Upcoming" ||
+    candidate._tag === "Final" ||
+    candidate._tag === "Break" ||
+    moment._tag === "Break"
   const holding = DateTime.isLessThan(now, DateTime.addDuration(had.since, Classifier.momentHold))
   return lower && !free && holding ? [moment, had.since, true] : [candidate, now, false]
 }
