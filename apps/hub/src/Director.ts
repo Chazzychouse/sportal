@@ -48,9 +48,10 @@ export class Director extends Context.Service<
         yield* Ref.set(classifier, next)
         yield* SubscriptionRef.set(classifications, classified)
         yield* SubscriptionRef.set(expiry, next.nextExpiry())
-        const moved = current.games.filter(
-          ({ snapshot }) => before.get(snapshot.id)?.moment._tag !== classified.get(snapshot.id)?.moment._tag
-        )
+        const moved = current.games.filter(({ snapshot }) => {
+          const had = before.get(snapshot.id)
+          return had !== undefined && had.moment._tag !== classified.get(snapshot.id)?.moment._tag
+        })
         yield* Effect.forEach(moved, ({ snapshot }) => loggedMoment(snapshot, classified.get(snapshot.id)), {
           discard: true
         })
@@ -71,7 +72,10 @@ export class Director extends Context.Service<
         },
         serial.withPermits(1),
         Effect.catchDefect((defect) =>
-          Effect.logError("Director: a take raised a defect; the slate keeps what it had", Cause.die(defect))
+          Effect.logError(
+            "Director: a take raised a defect; what it had not yet set is unchanged",
+            Cause.die(defect)
+          )
         )
       )
 

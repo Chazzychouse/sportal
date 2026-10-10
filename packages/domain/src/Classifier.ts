@@ -123,7 +123,7 @@ function breakReason(game: Game): BreakReason | undefined {
 
   const scored = plays.findLastIndex(({ scoring }) => scoring)
   const kickedOff = plays.findLastIndex((play) => Play.guards.Kickoff(play))
-  return scored !== -1 && kickedOff < scored ? "afterScore" : undefined
+  return scored !== -1 && kickedOff <= scored ? "afterScore" : undefined
 }
 
 /**

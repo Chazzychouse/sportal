@@ -2,9 +2,19 @@ import { assert, describe, it } from "@effect/vitest"
 import { DateTime, Duration, Option } from "effect"
 import { Classifier } from "./Classifier.ts"
 import { Game, GameId, type GameSnapshot } from "./Game.ts"
-import { type Play, PlayId } from "./Play.ts"
+import { Kickoff, type Play, PlayId } from "./Play.ts"
 import { Slate, SlateChange } from "./Slate.ts"
-import { completion, liveSnapshot, odds, play, sides, situation, snapshot, timeout } from "./TestGame.ts"
+import {
+  completion,
+  liveSnapshot,
+  odds,
+  play,
+  playFields,
+  sides,
+  situation,
+  snapshot,
+  timeout
+} from "./TestGame.ts"
 
 describe("Classifier#step, moments", () => {
   it("should call a scheduled game upcoming", () => {
@@ -69,6 +79,14 @@ describe("Classifier#step, moments", () => {
     const touchdown = play({ yards: 2, touchdown: true, scoring: true })
 
     const [, classified] = Classifier.empty.step(slateOf(liveSnapshot({ id }), [touchdown]), [], at)
+
+    assert.deepStrictEqual(classified.get(id)?.moment, { _tag: "Break", reason: "afterScore" })
+  })
+
+  it("should call a game a break after a kickoff returned for a touchdown", () => {
+    const returned = new Kickoff({ ...playFields, yards: 70, returnTouchdown: true, scoring: true })
+
+    const [, classified] = Classifier.empty.step(slateOf(liveSnapshot({ id }), [returned]), [], at)
 
     assert.deepStrictEqual(classified.get(id)?.moment, { _tag: "Break", reason: "afterScore" })
   })

@@ -46,6 +46,9 @@ Spec: `docs/specs/2026-10-10-classification-design.md`.
 - `Moment.precedence` is an `Order` attached with `Object.assign`, as `Hotkey` does.
 - The classifier reads win probabilities straight from `game.plays` (the Hub keeps every play), so it does not keep
   them itself.
+- The upset term falls back to the scoreboard (the underdog ahead on points) when no play has a win probability.
+- Halftime and a mid-game delay are checked before the other moments, so a delay in crunch time shows `Break(delay)`:
+  the game is stopped.
 - A batch of more than 3 new plays (a game first seen, a backfill) raises no `BigPlay`.
 
 ---
