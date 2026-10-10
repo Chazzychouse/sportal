@@ -134,8 +134,10 @@ Provider and Source are the two words most likely to be swapped. Provider is alw
 
 | Term | Meaning | Not |
 | --- | --- | --- |
-| **Moment** | What kind of thing is happening in a game now — a scoring threat (red zone), crunch time, a big play, live play, a break, upcoming, or final — one per game, the highest in precedence of those that hold; `Moment` in `packages/domain/src/Moment.ts`. | event, state |
-| **Break** | A live game stopped: a timeout, the end of a period, halftime, a delay, or the gap from a score to the next kickoff; the `Break` moment and its `BreakReason`. Inferred from the data, never the video. | commercial, lull |
+| **Moment** | What kind of thing is happening in a game now — a big play, a break, a scoring threat (red zone), crunch time, live play, upcoming, or final — one per game, the highest in precedence of those that hold, in that order; `Moment` in `packages/domain/src/Moment.ts`. | event, state |
+| **Break** | A live game stopped: halftime, a delay, the end of a period, the two-minute warning, a timeout, a review or an injury its latest play names, the gap from a score to the next kickoff, the kickoff after a score (the double dip), a possession change, or a stall; the `Break` moment, with its `BreakReason`, when it is likely back (`expectedEnd`, from the reason's typical length), and what was at stake when it stopped (`during`). Inferred from the data, never the video. | commercial, lull |
+| **Stall** | A live game in play with no new play for 90 s, by when plays reach the Hub; a break of last resort. | lull |
+| **Double dip** | The break after the kickoff that follows a score, the second of the two the score brings. | |
 | **Classification** | A game's moment, since when, and its score 0–100 with the points each part gave it; `Classification` in `packages/domain/src/Classification.ts`. | rating, watchability |
 | **Matchup prior** | What a game promises before it starts: the mean of how close its line is, how highly its teams are ranked, and how often they have won. It fades as the game is played. | |
 | **Classifier** | The pure fold that classifies the slate's games, stepped by the Director after each take and when a held moment runs out; it keeps each game's pregame line, its big play for a minute, and its moment, which holds 20 s before a lower one replaces it. `Classifier` in `packages/domain/src/Classifier.ts`. | analyzer, scorer |
