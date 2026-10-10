@@ -2,33 +2,24 @@ import { GameId } from "@sportal/domain/Game"
 import { LeagueId } from "@sportal/domain/League"
 import { Array as Arr, Data, Option } from "effect"
 
-/** What a FastCast topic carries: one league's scoreboard, or one game's package. */
-export type Topic = Data.TaggedEnum<{
-  Scoreboard: { readonly league: LeagueId }
-  Game: { readonly league: LeagueId; readonly game: GameId }
-}>
-export const Topic = Data.taggedEnum<Topic>()
+/** A FastCast game topic: one game's package, which carries its plays. */
+export class Topic extends Data.Class<{ readonly league: LeagueId; readonly game: GameId }> {
+  /** The topic FastCast's `tc` names, when it is a game's. */
+  static fromTc(tc: string): Option.Option<Topic> {
+    return Arr.findFirst(LeagueId.literals, (league) => {
+      const prefix = prefixOf(league)
+      return tc.startsWith(prefix) && tc.length > prefix.length
+        ? Option.some(new Topic({ league, game: GameId.make(tc.slice(prefix.length)) }))
+        : Option.none()
+    })
+  }
 
-/**
- * `topic` as FastCast's `tc` names it. A college game's topic is assumed to follow its scoreboard's, unverified until a
- * live college day.
- */
-export function tcOf(topic: Topic): string {
-  const sport = topic.league === "nfl" ? "football-nfl" : "football-college-football"
-  return Topic.$match(topic, {
-    Scoreboard: () => `event-${sport}`,
-    Game: ({ game }) => `gp-${sport}-${game}`
-  })
+  /** This topic as FastCast's `tc` names it. */
+  tc(): string {
+    return `${prefixOf(this.league)}${this.game}`
+  }
 }
 
-/** The topic FastCast's `tc` names, when it is a scoreboard's or a game's. */
-export function topicOf(tc: string): Option.Option<Topic> {
-  return Arr.findFirst(LeagueId.literals, (league) => {
-    const gamePrefix = tcOf(Topic.Game({ league, game: GameId.make("") }))
-    return tc === tcOf(Topic.Scoreboard({ league }))
-      ? Option.some(Topic.Scoreboard({ league }))
-      : tc.startsWith(gamePrefix) && tc.length > gamePrefix.length
-        ? Option.some(Topic.Game({ league, game: GameId.make(tc.slice(gamePrefix.length)) }))
-        : Option.none()
-  })
+function prefixOf(league: LeagueId): string {
+  return league === "nfl" ? "gp-football-nfl-" : "gp-football-college-football-"
 }

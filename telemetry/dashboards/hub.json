@@ -71,47 +71,12 @@
       "panels": []
     },
     {
-      "id": 53,
-      "type": "timeseries",
-      "title": "Pushes behind their listing by league",
-      "gridPos": {
-        "x": 0,
-        "y": 12,
-        "w": 24,
-        "h": 8
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "custom": {
-            "drawStyle": "bars",
-            "fillOpacity": 80,
-            "stacking": {
-              "mode": "normal"
-            }
-          }
-        },
-        "overrides": []
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "sum by (league) (increase(sportal_push_behind_listing_total[$__rate_interval])) or vector(0)",
-          "legendFormat": "{{league}}"
-        }
-      ],
-      "description": "Pushed snapshots behind the game their league lists, which the listing takes anyway (ADR 0014)"
-    },
-    {
       "id": 41,
       "type": "logs",
       "title": "Provider logs",
       "gridPos": {
         "x": 0,
-        "y": 20,
+        "y": 12,
         "w": 24,
         "h": 8
       },
@@ -137,7 +102,7 @@
       "collapsed": true,
       "gridPos": {
         "x": 0,
-        "y": 28,
+        "y": 20,
         "w": 24,
         "h": 1
       },

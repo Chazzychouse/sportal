@@ -1,26 +1,20 @@
 import { readFileSync } from "node:fs"
 import { assert, describe, it } from "@effect/vitest"
 import { GameId, GameSnapshot } from "@sportal/domain/Game"
-import { LeagueId } from "@sportal/domain/League"
+import type { LeagueId } from "@sportal/domain/League"
 import { Play, PlayId } from "@sportal/domain/Play"
-import { DateTime, Duration, Effect, Equal, HashMap, HashSet, Metric, Option, Record, Schema } from "effect"
+import { DateTime, Duration, Effect, Equal, HashMap, HashSet, Option, Record, Schema } from "effect"
 import { TestClock } from "effect/testing"
-import { counted, recordingLogs, withMetrics } from "../../TestTelemetry.ts"
+import { recordingLogs } from "../../TestTelemetry.ts"
 import { Delivery } from "../Provider.ts"
-import { PushedEvent } from "./EspnEvent.ts"
 import { EspnState } from "./EspnState.ts"
 import * as FastCastMessage from "./FastCastMessage.ts"
 import { Frame } from "./Frame.ts"
 import { decodedFrames, duringNeAtBuf, recordedNeAtBuf, stateAfter } from "./TestEspn.ts"
-import { Topic, tcOf, topicOf } from "./Topic.ts"
+import { Topic } from "./Topic.ts"
 
-// Recorded from ESPN on 2026-10-04: the NFL checkpoint at 17:52Z, every socket text on its topic after it until
-// 18:00Z, each line one text as it arrived, and the scoreboard polled at 18:00Z.
+// Recorded from ESPN on 2026-10-04: the NFL scoreboard polled at 18:00Z.
 const fixture = (name: string) => readFileSync(new URL(`./fixtures/${name}`, import.meta.url), "utf8")
-const checkpointBody = fixture("nfl-fastcast-checkpoint-2026-10-04T1752Z.json")
-const socketTexts = Schema.decodeSync(Schema.Array(Schema.fromJsonString(Schema.String)))(
-  fixture("nfl-fastcast-messages-2026-10-04T1752Z.jsonl").trim().split("\n")
-)
 const scoreboardBody = fixture("nfl-scoreboard-2026-10-04T1800Z.json")
 const playEntities = Schema.decodeSync(
   Schema.fromJsonString(Schema.Record(Schema.String, Schema.Record(Schema.String, Schema.Json)))
@@ -47,79 +41,47 @@ const moveRecording = Schema.decodeSync(
 const snapshotJson = Schema.fromJsonString(GameSnapshot)
 const playJson = Schema.fromJsonString(Play)
 
-const ariAtNyg = "s:20~l:28~e:401872966~c:401872966"
-const neAtBuf = "s:20~l:28~e:401872971~c:401872971"
 const ariAtNygPlays = "gp-football-nfl-401872966"
+const neAtBufPlays = "gp-football-nfl-401872971"
+const duringTheGames = DateTime.makeUnsafe("2026-10-04T18:00:00Z")
 
 // NE at BUF's recorded frames, decoded by ESPN's decode once, by the first test that reads them.
 const neAtBufDecoded = Effect.runSync(Effect.cached(Effect.flatMap(recordedNeAtBuf, decodedFrames)))
 
 describe("EspnState#take", () => {
-  // Each recorded feed as it decoded when both feeds' events were read by one transform: the poll's listings, the
-  // checkpoint's pushes, and the checkpoint's events each read alone.
-  describe("the recorded feeds decode to the same games", () => {
-    const expected = Schema.decodeSync(
-      Schema.fromJsonString(Schema.Struct({ deliveries: Schema.Json, checkpointEvents: Schema.Json }))
-    )(fixture("decoded-snapshots.json"))
+  // Each recorded poll as it decoded when both feeds' events were read by one transform.
+  describe("the recorded polls decode to the same games", () => {
+    const expected = Schema.decodeSync(Schema.fromJsonString(Schema.Struct({ deliveries: Schema.Json })))(
+      fixture("decoded-snapshots.json")
+    )
     const encoded = (value: unknown) => JSON.parse(JSON.stringify(value))
     const encode = Schema.encodeSync(GameSnapshot)
 
-    it.effect("should decode each listing and push", () =>
+    it.effect("should decode each listing", () =>
       Effect.gen(function* () {
-        const checkpointDocument = yield* Schema.decodeEffect(Schema.fromJsonString(Schema.Json))(
-          checkpointBody
-        )
-        const frames = [
-          poll("fbs", fixture("fbs-scoreboard-live.json")),
-          poll("nfl", scoreboardBody),
-          checkpoint("event-football-nfl", 1, checkpointDocument)
-        ]
+        const frames = [poll("fbs", fixture("fbs-scoreboard-live.json")), poll("nfl", scoreboardBody)]
 
         const all = yield* decoded(frames)
 
         assert.deepStrictEqual(
           encoded(
-            all.map((output) =>
-              Delivery.$is("Listing")(output.delivery)
-                ? {
-                    frame: output.frame,
-                    tag: "Listing",
-                    league: output.delivery.league,
-                    games: output.delivery.games.map((game) => encode(game))
-                  }
-                : Delivery.$is("Snapshot")(output.delivery)
-                  ? {
-                      frame: output.frame,
-                      tag: "Snapshot",
-                      snapshot: encode(output.delivery.snapshot)
+            all.flatMap(({ frame, delivery }) =>
+              Delivery.$is("Listing")(delivery)
+                ? [
+                    {
+                      frame,
+                      tag: "Listing",
+                      league: delivery.league,
+                      games: delivery.games.map((game) => encode(game))
                     }
-                  : { frame: output.frame, tag: output.delivery._tag }
+                  ]
+                : []
             )
           ),
           expected.deliveries
         )
       })
     )
-
-    it("should read each checkpoint event as what it moves", () => {
-      const decodePushed = Schema.decodeUnknownSync(PushedEvent("nfl"))
-      const decodeExpected = Schema.decodeUnknownSync(Schema.Array(GameSnapshot))
-
-      const read = checkpointEvents().map((event) => decodePushed(event))
-
-      assert.deepStrictEqual(
-        read,
-        decodeExpected(expected.checkpointEvents).map((game) => ({
-          id: game.id,
-          status: game.status,
-          period: game.period,
-          clock: game.clock,
-          homeScore: game.home.score,
-          awayScore: game.away.score,
-          ...(game.situation === undefined ? {} : { situation: game.situation })
-        }))
-      )
-    })
   })
 
   it.effect("should read a poll response as its league's listing", () =>
@@ -137,100 +99,37 @@ describe("EspnState#take", () => {
     })
   )
 
-  it.effect("should push a snapshot of every listed game on a checkpoint, advanced to its listed game", () =>
-    Effect.gen(function* () {
-      const deliveries = yield* decoded(synced())
-
-      const pushed = deliveries.flatMap(({ delivery }) =>
-        Delivery.$is("Snapshot")(delivery) ? [delivery] : []
-      )
-      // FastCast has no short names: each pushed game keeps its listed game's.
-      const nyg = pushed.find((delivery) => delivery.snapshot.id === "401872966")?.snapshot
-      assert.strictEqual(pushed.length, 16)
-      assert.strictEqual(nyg?.home.team.shortName, "Giants")
-    })
-  )
-
-  it.effect(
-    "should end each live game where the scoreboard had it, after the checkpoint and every message",
-    () =>
-      Effect.gen(function* () {
-        const listings = yield* decoded([poll("nfl", scoreboardBody)])
-        const polled = listings.flatMap(({ delivery }) =>
-          Delivery.$is("Listing")(delivery) ? delivery.games : []
-        )
-        const live = polled.filter((game) => game.progress() === "live")
-
-        const all = yield* decoded([poll("nfl", scoreboardBody), ...recorded(socketTexts)])
-
-        const pushed = lastPushed(all)
-        assert.strictEqual(live.length, 8)
-        assert.deepStrictEqual(
-          live.map((game) => [game.matchup(), inPlay(pushed.get(game.id))]),
-          live.map((game) => [game.matchup(), inPlay(game)])
-        )
-      })
-  )
-
-  it.effect(
-    "should orient the yard line for the team with the ball, keeping possession where the scoreboard drops it",
-    () =>
-      Effect.gen(function* () {
-        const all = yield* decoded([poll("nfl", scoreboardBody), ...recorded(socketTexts)])
-
-        const pushed = lastPushed(all)
-        assert.strictEqual(pushed.get("401872971")?.situation?.possession, "nfl:2")
-        assert.strictEqual(pushed.get("401872971")?.situation?.yardLine, 58)
-        assert.strictEqual(pushed.get("401872968")?.situation?.possession, "nfl:27")
-      })
-  )
-
-  it.effect("should deliver no pushed game a listing lacks", () =>
-    Effect.gen(function* () {
-      const deliveries = yield* decoded(recorded(socketTexts.slice(0, 3)))
-
-      assert.deepStrictEqual(deliveries, [])
-    })
-  )
-
   it.effect("should add the value read at a copy's source", () =>
     Effect.gen(function* () {
-      // ARI at NYG: the away team (competitor 0) had 14, the home team 6.
-      const copy = message("event-football-nfl", 4286638, [
-        { op: "copy", from: `${ariAtNyg}/competitors/1/score`, path: `${ariAtNyg}/competitors/0/score` }
+      const copy = message(neAtBufPlays, 819, [
+        { op: "copy", from: "/entities/plays/401872971917/text", path: "/entities/plays/401872971792/text" }
       ])
 
-      const deliveries = yield* decoded([...synced(), copy])
+      const deliveries = yield* decoded([neAtBufCheckpoint(), copy])
 
-      assert.deepStrictEqual(
-        deliveries
-          .filter(({ frame }) => frame === 6)
-          .flatMap(({ delivery }) =>
-            Delivery.$is("Snapshot")(delivery)
-              ? [[delivery.snapshot.id, delivery.snapshot.away.score, delivery.snapshot.home.score]]
-              : []
-          ),
-        [["401872966", 6, 6]]
-      )
+      const source = textOf(deliveries[0]?.delivery, "401872971917")
+      const copied = textOf(deliveries[1]?.delivery, "401872971792")
+      assert.isDefined(source)
+      assert.strictEqual(copied, source)
     })
   )
 
   it.effect("should send only the topic that missed a message back to waiting for a checkpoint", () =>
     Effect.gen(function* () {
-      const skipped = [...socketTexts.slice(0, 20), ...socketTexts.slice(21)]
-      const frames = [poll("nfl", scoreboardBody), ...recorded(skipped), poll("nfl", scoreboardBody)]
+      // The recording's checkpoint and messages 819 to 822, without message 820.
+      const withoutMessage820 = moveRecordingFrames().filter((_, index) => index !== 2)
+      const frames = [...withoutMessage820, poll("nfl", scoreboardBody)]
 
       const deliveries = yield* decoded(frames)
 
-      // Frames 2–5 are C, S, H, and its checkpoint, so text 21, the first after the gap, is frame 23.
-      const snapshotFrames = deliveries.flatMap(({ frame, delivery }) =>
-        Delivery.$is("Snapshot")(delivery) ? [frame] : []
+      // Frame 1 is the checkpoint, 2 message 819, and 3 message 821, the first after the gap.
+      const playsFrames = deliveries.flatMap(({ frame, delivery }) =>
+        Delivery.$is("Plays")(delivery) ? [frame] : []
       )
       const reset = yield* resetTopics(frames)
-      assert.deepStrictEqual(reset, ["event-football-nfl"])
-      assert.isNotEmpty(snapshotFrames)
-      assert.isTrue(snapshotFrames.every((frame) => frame < 23))
-      assert.strictEqual(deliveries.at(-1)?.delivery._tag, "Listing", "the scoreboard poll still decodes")
+      assert.deepStrictEqual(reset, [neAtBufPlays])
+      assert.deepStrictEqual(playsFrames, [1, 2])
+      assert.strictEqual(deliveries.at(-1)?.delivery._tag, "Listing", "the poll still decodes")
     })
   )
 
@@ -244,52 +143,35 @@ describe("EspnState#take", () => {
 
   it.effect("should send a topic back to waiting for a checkpoint when a patch will not apply", () =>
     Effect.gen(function* () {
-      const copyFromNothing = message("event-football-nfl", 4286639, [
-        { op: "copy", from: `${ariAtNyg}/competitors/5/score`, path: `${ariAtNyg}/competitors/0/score` }
+      const copyFromNothing = message(neAtBufPlays, 820, [
+        { op: "copy", from: "/entities/plays/no-such-play/text", path: "/entities/plays/401872971792/text" }
       ])
-      const frames = [...synced(), unapplicablePatch(4286638), copyFromNothing]
+      const frames = [neAtBufCheckpoint(), unapplicablePatch(819), copyFromNothing]
 
       const deliveries = yield* decoded(frames)
 
       const reset = yield* resetTopics(frames)
       assert.deepStrictEqual(
-        deliveries.filter(({ frame }) => frame > 5),
+        deliveries.filter(({ frame }) => frame > 1),
         []
       )
-      assert.deepStrictEqual(reset, ["event-football-nfl"])
-    })
-  )
-
-  it.effect("should change nothing when removing a whole event the document does not have", () =>
-    Effect.gen(function* () {
-      const removed = message("event-football-nfl", 4286638, [{ op: "remove", path: "s:20~l:28~e:1~c:1" }])
-
-      const frames = [...synced(), removed, scoreReplaced(4286639)]
-
-      const deliveries = yield* decoded(frames)
-
-      const reset = yield* resetTopics(frames)
-      assert.deepStrictEqual(
-        deliveries.filter(({ frame }) => frame > 5).map(({ frame, delivery }) => [frame, delivery._tag]),
-        [[7, "Snapshot"]]
-      )
-      assert.deepStrictEqual(reset, [])
+      assert.deepStrictEqual(reset, [neAtBufPlays])
     })
   )
 
   it.effect("should reset a synced topic on a message that does not decode", () =>
     Effect.gen(function* () {
-      const frames = [...synced(), undecodablePatch(4286638), scoreReplaced(4286639)]
+      const frames = [neAtBufCheckpoint(), undecodablePatch(819), textReplaced(820)]
 
       const deliveries = yield* decoded(frames)
 
       const reset = yield* resetTopics(frames)
       assert.deepStrictEqual(
-        deliveries.filter(({ frame }) => frame > 5),
+        deliveries.filter(({ frame }) => frame > 1),
         [],
         "the topic waits for its next checkpoint"
       )
-      assert.deepStrictEqual(reset, ["event-football-nfl"])
+      assert.deepStrictEqual(reset, [neAtBufPlays])
     })
   )
 
@@ -297,38 +179,30 @@ describe("EspnState#take", () => {
     Effect.gen(function* () {
       const { logs, layer } = recordingLogs()
 
-      yield* stateAfter([...synced(), unapplicablePatch(4286638)]).pipe(Effect.provide(layer))
+      yield* stateAfter([neAtBufCheckpoint(), unapplicablePatch(819)]).pipe(Effect.provide(layer))
 
-      const lost = logs.filter(({ message }) => message.includes("event-football-nfl lost its document"))
+      const lost = logs.filter(({ message }) => message.includes(`${neAtBufPlays} lost its document`))
       assert.lengthOf(lost, 1)
       assert.strictEqual(lost[0]?.level, "Warn")
-      assert.strictEqual(lost[0]?.annotations.topic, "event-football-nfl")
+      assert.strictEqual(lost[0]?.annotations.topic, neAtBufPlays)
     })
   )
 
   it.effect.each([
     {
       reset: "a gap",
-      frames: () => [...synced(), ...recorded(socketTexts.slice(4, 6))],
-      expected: ["event-football-nfl"]
+      frames: () => [neAtBufCheckpoint(), textReplaced(820)],
+      expected: [neAtBufPlays]
     },
     {
       reset: "a patch that will not apply",
-      frames: () => [...synced(), unapplicablePatch(4286638), scoreReplaced(4286639)],
-      expected: ["event-football-nfl"]
+      frames: () => [neAtBufCheckpoint(), unapplicablePatch(819), textReplaced(820)],
+      expected: [neAtBufPlays]
     },
     {
       reset: "a message that does not decode",
-      frames: () => [...synced(), undecodablePatch(4286638)],
-      expected: ["event-football-nfl"]
-    },
-    {
-      reset: "a gap on a game's topic",
-      frames: () => [
-        checkpoint(ariAtNygPlays, 99, { entities: {} }),
-        playsMessage(101, [{ op: "add", path: "/entities/plays", value: plays("401872966237") }])
-      ],
-      expected: [ariAtNygPlays]
+      frames: () => [neAtBufCheckpoint(), undecodablePatch(819)],
+      expected: [neAtBufPlays]
     }
   ])("should reset a topic's document, once, after $reset", ({ frames, expected }) =>
     Effect.gen(function* () {
@@ -348,86 +222,17 @@ describe("EspnState#take", () => {
 
   it.effect("should sync a waiting topic on the next checkpoint that decodes", () =>
     Effect.gen(function* () {
-      const frames = [
-        poll("nfl", scoreboardBody),
-        checkpoint("event-football-nfl", 4286637, JSON.parse(checkpointBody)),
-        // ARI at NYG: the away team (competitor 0) had 14, the home team 6.
-        message("event-football-nfl", 4286638, [
-          { op: "copy", from: `${ariAtNyg}/competitors/1/score`, path: `${ariAtNyg}/competitors/0/score` }
-        ])
-      ]
+      const frames = [poll("nfl", scoreboardBody), neAtBufCheckpoint(), textReplaced(819)]
 
       const deliveries = yield* decoded(frames)
 
       const reset = yield* resetTopics(frames)
       assert.deepStrictEqual(
-        deliveries.flatMap(({ frame, delivery }) =>
-          frame === 3 && Delivery.$is("Snapshot")(delivery)
-            ? [[delivery.snapshot.id, delivery.snapshot.away.score]]
-            : []
-        ),
-        [["401872966", 6]]
+        deliveries.flatMap(({ frame, delivery }) => (frame === 3 ? [textOf(delivery, "401872971792")] : [])),
+        ["Corrected"]
       )
       assert.deepStrictEqual(reset, [])
     })
-  )
-
-  it.effect("should count a push behind its listed game by its league", () =>
-    Effect.gen(function* () {
-      yield* decodedFrames(synced())
-
-      const count = yield* counted("sportal_push_behind_listing", { league: "nfl" })
-      assert.strictEqual(count, 8)
-    }).pipe(withMetrics)
-  )
-
-  it.effect("should log a push behind its listed game at Info, with its game", () =>
-    Effect.gen(function* () {
-      const { logs, layer } = recordingLogs()
-
-      yield* decodedFrames(synced()).pipe(Effect.provide(layer))
-
-      const behind = logs.filter(({ message }) => message.includes("a push is behind its listed game"))
-      assert.deepStrictEqual(
-        behind.map(({ level, annotations }) => [level, typeof annotations.game]),
-        Array.from({ length: 8 }, () => ["Info", "string"])
-      )
-    })
-  )
-
-  it.effect("should count no push that moves its listed game forward", () =>
-    Effect.gen(function* () {
-      yield* decodedFrames([...synced(), scoreReplaced(4286638)])
-
-      const count = yield* counted("sportal_push_behind_listing", { league: "nfl" })
-      assert.strictEqual(count, 8)
-    }).pipe(withMetrics)
-  )
-
-  it.effect("should touch no metric but the count of pushes behind their listed game", () =>
-    Effect.gen(function* () {
-      const unknownType = { ...playEntities["40187297063"], type: { id: "999", text: "Something New" } }
-      const brokenPlay = { ...Record.remove(playEntities["401872966237"] ?? {}, "statYardage"), id: "1" }
-      const skipped = [...socketTexts.slice(0, 20), ...socketTexts.slice(21)]
-      const frames = [
-        poll("nfl", "not json"),
-        poll("nfl", JSON.stringify({ events: [{ id: "broken" }] })),
-        ...recorded(socketTexts.slice(0, 3)),
-        poll("nfl", scoreboardBody),
-        ...recorded(skipped.slice(3)),
-        checkpoint(ariAtNygPlays, 99, {
-          entities: { plays: { "40187297063": unknownType, "1": brokenPlay } }
-        })
-      ]
-
-      yield* decodedFrames(frames)
-
-      const metrics = yield* Metric.snapshot
-      assert.deepStrictEqual(
-        metrics.map(({ id }) => id),
-        ["sportal_push_behind_listing"]
-      )
-    }).pipe(withMetrics)
   )
 
   it.effect("should skip an event that does not decode, and list the rest", () =>
@@ -470,37 +275,6 @@ describe("EspnState#take", () => {
         logs.map(({ level, annotations }) => [level, annotations]),
         [["Warn", { frame: "Polled", league: "nfl" }]]
       )
-    })
-  )
-
-  it.effect("should move a listed game forward in its listing on a push", () =>
-    Effect.gen(function* () {
-      const state = yield* stateAfter([...synced(), scoreReplaced(4286638)])
-
-      const ari = state.games().find((game) => game.id === "401872966")
-      assert.strictEqual(ari?.away.score, 17)
-    })
-  )
-
-  it.effect("should list a poll's games as it shows them, even one a push moved past it", () =>
-    Effect.gen(function* () {
-      const state = yield* stateAfter([...synced(), neAtBufFinal(4286638), poll("nfl", scoreboardBody)])
-
-      const game = state.games().find((each) => each.id === "401872971")
-      assert.strictEqual(game?.progress(), "live")
-    })
-  )
-
-  it.effect("should deliver a poll's own games in its listing, whatever a push moved forward", () =>
-    Effect.gen(function* () {
-      const deliveries = yield* decoded([...synced(), neAtBufFinal(4286638), poll("nfl", scoreboardBody)])
-
-      const relisted = deliveries.at(-1)?.delivery
-      const game =
-        relisted !== undefined && Delivery.$is("Listing")(relisted)
-          ? relisted.games.find((each) => each.id === "401872971")
-          : undefined
-      assert.strictEqual(game?.progress(), "live")
     })
   )
 
@@ -672,28 +446,44 @@ describe("EspnState#take", () => {
       })
     )
 
-    it.effect("should keep the other games and the scoreboard decoding after a gap on one game's topic", () =>
+    it.effect("should keep the other games decoding after a gap on one game's topic", () =>
       Effect.gen(function* () {
-        const other = "gp-football-nfl-401872971"
         const frames = [
-          ...synced(),
           checkpoint(ariAtNygPlays, 99, { entities: {} }),
-          checkpoint(other, 99, { entities: {} }),
+          checkpoint(neAtBufPlays, 99, { entities: {} }),
           playsMessage(101, [{ op: "add", path: "/entities/plays", value: plays("401872966237") }]),
-          playsMessage(100, [{ op: "add", path: "/entities/plays", value: plays("401872971330") }], other),
-          scoreReplaced(4286638)
+          playsMessage(
+            100,
+            [{ op: "add", path: "/entities/plays", value: plays("401872971330") }],
+            neAtBufPlays
+          )
         ]
 
         const deliveries = yield* decoded(frames)
 
         const reset = yield* resetTopics(frames)
-        const after = deliveries.filter(({ frame }) => frame > 7)
+        const after = deliveries.filter(({ frame }) => frame > 2)
         assert.deepStrictEqual(
           after.map(({ delivery }) => delivery._tag),
-          ["Plays", "Snapshot"]
+          ["Plays"]
         )
         assert.deepStrictEqual(after.map(playIds)[0], ["401872971330"])
         assert.deepStrictEqual(reset, [ariAtNygPlays])
+      })
+    )
+
+    // Recorded 2026-10-10 00:22Z: FSU at LOU's game topic checkpoint, live in the second quarter.
+    it.effect("should decode a recorded college game's plays", () =>
+      Effect.gen(function* () {
+        const document = JSON.parse(fixture("fbs-gp-checkpoint-2026-10-10T0022Z.json"))
+
+        const deliveries = yield* decoded([
+          checkpoint("gp-football-college-football-401858254", 386, document)
+        ])
+
+        const [plays] = deliveries.map(playIds)
+        assert.strictEqual(plays?.length, 66)
+        assert.strictEqual(plays?.at(-1), "401858254288")
       })
     )
   })
@@ -701,12 +491,13 @@ describe("EspnState#take", () => {
   describe("one array of deliveries per frame", () => {
     it.effect("should give a message that changes no document no deliveries", () =>
       Effect.gen(function* () {
-        const [only, ...rest] = yield* decodedFrames([
-          message("event-football-nfl", 1, [{ op: "replace", path: "/x", value: "1" }])
+        const [, second, ...rest] = yield* decodedFrames([
+          neAtBufCheckpoint(),
+          message(neAtBufPlays, 819, [{ op: "replace", path: "/x", value: "1" }])
         ])
 
         assert.deepStrictEqual(rest, [])
-        assert.deepStrictEqual(only, [])
+        assert.deepStrictEqual(second, [])
       })
     )
 
@@ -719,19 +510,9 @@ describe("EspnState#take", () => {
       })
     )
 
-    it.effect("should give a scoreboard checkpoint each pushed game's Snapshot", () =>
-      Effect.gen(function* () {
-        const all = yield* decodedFrames(synced())
-
-        const pushing = all.at(-1)
-        assert.strictEqual(pushing?.length, 16)
-        assert.isTrue(pushing?.every((delivery) => Delivery.$is("Snapshot")(delivery)))
-      })
-    )
-
     it.effect("should give a frame that resets its topic no deliveries", () =>
       Effect.gen(function* () {
-        const frames = [...synced(), undecodablePatch(4286638)]
+        const frames = [neAtBufCheckpoint(), undecodablePatch(819)]
 
         const all = yield* decodedFrames(frames)
 
@@ -742,7 +523,7 @@ describe("EspnState#take", () => {
 
     it.effect("should give one array of deliveries per frame", () =>
       Effect.gen(function* () {
-        const frames = [poll("nfl", scoreboardBody), poll("nfl", "not json"), ...recorded(socketTexts)]
+        const frames = [poll("nfl", scoreboardBody), poll("nfl", "not json"), ...moveRecordingFrames()]
 
         const all = yield* decodedFrames(frames)
 
@@ -855,16 +636,10 @@ describe("EspnState#failedPolls", () => {
 describe("EspnState#take, retention", () => {
   it.effect("should drop the document and plays of a game no longer wanted", () =>
     Effect.gen(function* () {
-      const neAtBufPlays = "gp-football-nfl-401872971"
-      const state = yield* stateAfter([
-        ...synced(),
-        checkpoint(neAtBufPlays, 99, { entities: { plays: plays("401872971237") } }),
-        neAtBufFinal(4286638)
-      ])
-      const duringTheGames = DateTime.makeUnsafe("2026-10-04T18:00:00Z")
+      const state = yield* stateAfter([poll("nfl", scoreboardBody), neAtBufCheckpoint()])
       yield* TestClock.setTime(duringTheGames.epochMilliseconds)
 
-      const [kept] = yield* state.take(Frame.PollFailed({ league: "nfl" }), ["nfl"])
+      const [kept] = yield* state.take(poll("nfl", scoreboardWithNeAtBufOver()))
 
       assert.isFalse(HashMap.has(kept.documents.byTopic, topicNamed(neAtBufPlays)))
       assert.isFalse(HashMap.has(kept.plays, GameId.make("401872971")))
@@ -873,58 +648,40 @@ describe("EspnState#take, retention", () => {
 
   it.effect("should keep the document of a topic still wanted", () =>
     Effect.gen(function* () {
-      const state = yield* stateAfter([...synced()])
-      const duringTheGames = DateTime.makeUnsafe("2026-10-04T18:00:00Z")
+      const state = yield* stateAfter([poll("nfl", scoreboardBody), neAtBufCheckpoint()])
       yield* TestClock.setTime(duringTheGames.epochMilliseconds)
 
-      const [kept] = yield* state.take(Frame.PollFailed({ league: "nfl" }), ["nfl"])
+      const [kept] = yield* state.take(Frame.PollFailed({ league: "nfl" }))
 
-      assert.isTrue(kept.documents.isSynced(topicNamed("event-football-nfl")))
+      assert.isTrue(kept.documents.isSynced(topicNamed(neAtBufPlays)))
     })
   )
 
   it.effect("should keep a trailing game checkpoint until the next poll prunes it", () =>
     Effect.gen(function* () {
-      yield* TestClock.setTime(DateTime.makeUnsafe("2026-10-04T18:00:00Z").epochMilliseconds)
-      const tc = "gp-football-nfl-401872971"
-      const state = yield* stateAfter([...synced(), neAtBufFinal(4286638)])
+      yield* TestClock.setTime(duringTheGames.epochMilliseconds)
+      const state = yield* stateAfter([poll("nfl", scoreboardWithNeAtBufOver())])
 
-      const [afterPush, said] = yield* state.take(
-        checkpoint(tc, 99, { entities: { plays: plays("401872971237") } }),
-        ["nfl"]
-      )
-      const [afterPoll] = yield* afterPush.take(Frame.PollFailed({ league: "nfl" }), ["nfl"])
+      const [afterPush, said] = yield* state.take(neAtBufCheckpoint())
+      const [afterPoll] = yield* afterPush.take(Frame.PollFailed({ league: "nfl" }))
 
       assert.isTrue(said.some(Delivery.$is("Plays")))
-      assert.isTrue(afterPush.documents.isSynced(topicNamed(tc)))
-      assert.isFalse(HashMap.has(afterPoll.documents.byTopic, topicNamed(tc)))
+      assert.isTrue(afterPush.documents.isSynced(topicNamed(neAtBufPlays)))
+      assert.isFalse(HashMap.has(afterPoll.documents.byTopic, topicNamed(neAtBufPlays)))
       assert.isFalse(HashMap.has(afterPoll.plays, GameId.make("401872971")))
     })
   )
 })
 
 describe("EspnState#wanted", () => {
-  const nfl = ["nfl"] as const
-  const scoreboard = Topic.Scoreboard({ league: "nfl" })
-  const gameTopic = (id: string) => Topic.Game({ league: "nfl", game: GameId.make(id) })
+  const gameTopic = (id: string) => new Topic({ league: "nfl", game: GameId.make(id) })
   const at = (iso: string) => DateTime.makeUnsafe(iso)
-
-  it("should want each league's scoreboard topic, waiting for its checkpoint, before any frame", () => {
-    const wanted = EspnState.empty.wanted(["nfl", "fbs"], at("2026-10-04T18:00:00Z"))
-
-    assert.strictEqual(HashMap.size(wanted), 2)
-    assert.deepStrictEqual(HashMap.get(wanted, scoreboard), Option.some("AwaitingCheckpoint"))
-    assert.deepStrictEqual(
-      HashMap.get(wanted, Topic.Scoreboard({ league: "fbs" })),
-      Option.some("AwaitingCheckpoint")
-    )
-  })
 
   it.effect("should want a listed game's topic while it is live", () =>
     Effect.gen(function* () {
       const state = yield* stateAfter([poll("nfl", scoreboardBody)])
 
-      const wanted = state.wanted(nfl, at("2026-10-04T18:00:00Z"))
+      const wanted = state.wanted(at("2026-10-04T18:00:00Z"))
 
       assert.isTrue(HashMap.has(wanted, gameTopic("401872971")))
     })
@@ -934,7 +691,7 @@ describe("EspnState#wanted", () => {
     Effect.gen(function* () {
       const state = yield* stateAfter([poll("nfl", scoreboardBody)])
 
-      const wanted = state.wanted(nfl, at("2026-10-04T19:35:00Z"))
+      const wanted = state.wanted(at("2026-10-04T19:35:00Z"))
 
       assert.isTrue(HashMap.has(wanted, gameTopic("401872974")))
     })
@@ -944,49 +701,33 @@ describe("EspnState#wanted", () => {
     Effect.gen(function* () {
       const state = yield* stateAfter([poll("nfl", scoreboardBody)])
 
-      const wanted = state.wanted(nfl, at("2026-10-04T19:34:59Z"))
+      const wanted = state.wanted(at("2026-10-04T19:34:59Z"))
 
       assert.isFalse(HashMap.has(wanted, gameTopic("401872974")))
     })
   )
 
-  it.effect("should not want the topic of a game a push shows over", () =>
-    Effect.gen(function* () {
-      const state = yield* stateAfter([...synced(), neAtBufFinal(4286638)])
-
-      const wanted = state.wanted(nfl, at("2026-10-04T18:00:00Z"))
-
-      assert.isFalse(HashMap.has(wanted, gameTopic("401872971")))
-    })
-  )
-
-  it.effect("should want no game's topic a push shows before any poll lists it", () =>
-    Effect.gen(function* () {
-      const state = yield* stateAfter(recorded(socketTexts.slice(0, 3)))
-
-      const wanted = state.wanted(nfl, at("2026-10-04T18:00:00Z"))
-
-      assert.deepStrictEqual([...HashMap.keys(wanted)], [scoreboard])
-    })
-  )
-
   it.effect("should show a synced topic as Synced", () =>
     Effect.gen(function* () {
-      const state = yield* stateAfter(synced())
+      const state = yield* stateAfter([poll("nfl", scoreboardBody), neAtBufCheckpoint()])
 
-      const wanted = state.wanted(nfl, at("2026-10-04T18:00:00Z"))
+      const wanted = state.wanted(at("2026-10-04T18:00:00Z"))
 
-      assert.deepStrictEqual(HashMap.get(wanted, scoreboard), Option.some("Synced"))
+      assert.deepStrictEqual(HashMap.get(wanted, gameTopic("401872971")), Option.some("Synced"))
     })
   )
 
   it.effect("should show a topic that lost its document as waiting for its checkpoint", () =>
     Effect.gen(function* () {
-      const state = yield* stateAfter([...synced(), unapplicablePatch(4286638)])
+      const state = yield* stateAfter([
+        poll("nfl", scoreboardBody),
+        neAtBufCheckpoint(),
+        unapplicablePatch(819)
+      ])
 
-      const wanted = state.wanted(nfl, at("2026-10-04T18:00:00Z"))
+      const wanted = state.wanted(at("2026-10-04T18:00:00Z"))
 
-      assert.deepStrictEqual(HashMap.get(wanted, scoreboard), Option.some("AwaitingCheckpoint"))
+      assert.deepStrictEqual(HashMap.get(wanted, gameTopic("401872971")), Option.some("AwaitingCheckpoint"))
     })
   )
 })
@@ -1009,7 +750,7 @@ function resetTopics(frames: ReadonlyArray<Frame>) {
       topics: []
     }),
     ({ state, topics }, frame) =>
-      Effect.map(state.take(frame, LeagueId.literals), ([next]) => ({
+      Effect.map(state.take(frame), ([next]) => ({
         state: next,
         topics: [...topics, ...lostBetween(state, next)]
       }))
@@ -1020,7 +761,7 @@ function resetTopics(frames: ReadonlyArray<Frame>) {
 function lostBetween(before: EspnState, after: EspnState): ReadonlyArray<string> {
   return [...HashMap.keys(before.documents.byTopic)]
     .filter((topic) => before.documents.isSynced(topic) && !after.documents.isSynced(topic))
-    .map(tcOf)
+    .map((topic) => topic.tc())
 }
 
 function poll(league: LeagueId, body: string): Frame {
@@ -1028,11 +769,10 @@ function poll(league: LeagueId, body: string): Frame {
 }
 
 function checkpoint(tc: string, mid: number, document: unknown): Frame {
-  const topic = topicNamed(tc)
   return Frame.Checkpoint({
-    topic,
+    topic: topicNamed(tc),
     mid,
-    document: Schema.decodeSync(FastCastMessage.Checkpoint(topic))(JSON.stringify(document))
+    document: Schema.decodeSync(FastCastMessage.Checkpoint)(JSON.stringify(document))
   })
 }
 
@@ -1040,7 +780,7 @@ function checkpoint(tc: string, mid: number, document: unknown): Frame {
 function message(tc: string, mid: number, patches: ReadonlyArray<object>): Frame {
   const pl = JSON.stringify({ ts: 1791136341731, pl: patches })
   return Frame.Pushed({
-    topic: topicOf(tc),
+    topic: Topic.fromTc(tc),
     mid: Option.some(mid),
     envelope: decodeEnvelope(JSON.stringify({ op: "P", tc, mid, pl }))
   })
@@ -1048,7 +788,7 @@ function message(tc: string, mid: number, patches: ReadonlyArray<object>): Frame
 
 /** The topic `tc` names; a test names only real ones. */
 function topicNamed(tc: string): Topic {
-  return Option.getOrThrow(topicOf(tc))
+  return Option.getOrThrow(Topic.fromTc(tc))
 }
 
 function playsMessage(mid: number, patches: ReadonlyArray<object>, channel = ariAtNygPlays) {
@@ -1059,54 +799,7 @@ function plays(...ids: ReadonlyArray<string>) {
   return Object.fromEntries(ids.map((id) => [id, playEntities[id] ?? {}]))
 }
 
-/** The recorded socket texts as FastCast frames them, each `H` followed by the recorded checkpoint. */
-function recorded(texts: ReadonlyArray<string>): ReadonlyArray<Frame> {
-  return texts.flatMap((body) => {
-    const envelope = decodeEnvelope(body)
-    const message = Option.getOrThrow(Option.flatMap(envelope, decodeFramed))
-    const topic = "tc" in message ? topicOf(message.tc) : Option.none<Topic>()
-    const mid = "mid" in message ? Option.some(message.mid) : Option.none<number>()
-    const frame = Frame.Pushed({ topic, mid, envelope })
-    return message.op === "H" && Option.isSome(topic)
-      ? [
-          frame,
-          Frame.Checkpoint({
-            topic: topic.value,
-            mid: message.mid,
-            document: Schema.decodeSync(FastCastMessage.Checkpoint(topic.value))(checkpointBody)
-          })
-        ]
-      : [frame]
-  })
-}
-
 const decodeEnvelope = Schema.decodeUnknownOption(Schema.fromJsonString(FastCastMessage.Envelope))
-
-const decodeFramed = Schema.decodeUnknownOption(FastCastMessage.Framed)
-
-// Each game as the last pushed snapshot of it.
-function lastPushed(deliveries: ReadonlyArray<{ readonly delivery: Delivery }>) {
-  return new Map<string, GameSnapshot>(
-    deliveries.flatMap(({ delivery }) =>
-      Delivery.$is("Snapshot")(delivery) ? [[delivery.snapshot.id, delivery.snapshot] as const] : []
-    )
-  )
-}
-
-function inPlay(game: GameSnapshot | undefined) {
-  return {
-    status: game?.status,
-    period: game?.period,
-    clock: game?.clock,
-    home: game?.home.score,
-    away: game?.away.score,
-    down: game?.situation?.down,
-    distance: game?.situation?.distance,
-    homeTimeouts: game?.situation?.homeTimeouts,
-    awayTimeouts: game?.situation?.awayTimeouts,
-    lastPlay: game?.situation?.lastPlay
-  }
-}
 
 function tags(deliveries: ReadonlyArray<{ readonly delivery: Delivery }>) {
   return deliveries.map(({ delivery }) => delivery._tag)
@@ -1116,69 +809,67 @@ function playIds({ delivery }: { readonly delivery: Delivery }) {
   return Delivery.$is("Plays")(delivery) ? delivery.plays.map((play) => play.id) : []
 }
 
-/** The NFL listed, then FastCast's C, S, H, and the H's checkpoint: frames 1 to 5, the scoreboard topic synced. */
-function synced(): ReadonlyArray<Frame> {
-  return [poll("nfl", scoreboardBody), ...recorded(socketTexts.slice(0, 3))]
+/** NE at BUF's game topic synced at the recorded checkpoint, message 818. */
+function neAtBufCheckpoint(): Frame {
+  return checkpoint(neAtBufPlays, moveRecording.checkpoint.mid, moveRecording.checkpoint.body)
 }
 
-/** FastCast's C and S, then a patch and an idle message before any checkpoint. */
+/** A patch and an idle message on NE at BUF's game topic, before any checkpoint. */
 function beforeAnyCheckpoint(): ReadonlyArray<Frame> {
-  return recorded([...socketTexts.slice(0, 2), socketTexts[3] ?? "", socketTexts[6] ?? ""])
+  const idle = Frame.Pushed({
+    topic: Topic.fromTc(neAtBufPlays),
+    mid: Option.some(820),
+    envelope: decodeEnvelope(JSON.stringify({ op: "I", tc: neAtBufPlays, mid: 820 }))
+  })
+  return [textReplaced(819), idle]
 }
 
-/** NE at BUF over at the end of the fourth quarter, past the 18:00Z poll, which has it live in the second. */
-function neAtBufFinal(mid: number) {
-  return message("event-football-nfl", mid, [
-    { op: "replace", path: `${neAtBuf}/fullStatus/type/state`, value: "post" },
-    { op: "replace", path: `${neAtBuf}/fullStatus/period`, value: 4 },
-    { op: "replace", path: `${neAtBuf}/fullStatus/displayClock`, value: "0:00" }
+/** A patch on NE at BUF's game topic that sets its penalty play's text. */
+function textReplaced(mid: number) {
+  return message(neAtBufPlays, mid, [
+    { op: "replace", path: "/entities/plays/401872971792/text", value: "Corrected" }
   ])
 }
 
-/** A patch on the scoreboard topic that sets ARI's score at NYG to 17. */
-function scoreReplaced(mid: number) {
-  return message("event-football-nfl", mid, [
-    { op: "replace", path: `${ariAtNyg}/competitors/0/score`, value: "17" }
-  ])
-}
-
-/** A patch on the scoreboard topic that will not apply: ARI at NYG has no sixth competitor. */
+/** A patch on NE at BUF's game topic that will not apply: it has no such play. */
 function unapplicablePatch(mid: number) {
-  return message("event-football-nfl", mid, [
-    { op: "replace", path: `${ariAtNyg}/competitors/5/score`, value: "21" }
+  return message(neAtBufPlays, mid, [
+    { op: "replace", path: "/entities/plays/no-such-play/text", value: "Corrected" }
   ])
 }
 
-/** A message on the scoreboard topic that does not decode: FastCast sends no `test` op. */
+/** A message on NE at BUF's game topic that does not decode: FastCast sends no `test` op. */
 function undecodablePatch(mid: number) {
-  return message("event-football-nfl", mid, [{ op: "test", path: `${ariAtNyg}/clock`, value: "1:00" }])
+  return message(neAtBufPlays, mid, [{ op: "test", path: "/entities/plays", value: {} }])
 }
 
-/** The events of the recorded NFL checkpoint, each as ESPN sent it. */
-function checkpointEvents() {
-  return Schema.decodeSync(
-    Schema.fromJsonString(
-      Schema.Struct({
-        sports: Schema.Tuple([
-          Schema.Struct({
-            leagues: Schema.Tuple([Schema.Struct({ events: Schema.Array(Schema.Unknown) })])
-          })
-        ])
-      })
-    )
-  )(checkpointBody).sports[0].leagues[0].events
+/** The text of play `id` in `delivery`, when it delivers plays. */
+function textOf(delivery: Delivery | undefined, id: string) {
+  return delivery !== undefined && Delivery.$is("Plays")(delivery)
+    ? delivery.plays.find((play) => play.id === id)?.text
+    : undefined
+}
+
+/** NE at BUF over, past the 18:00Z scoreboard, which has it live in the second quarter. */
+function scoreboardWithNeAtBufOver(): string {
+  const board = JSON.parse(scoreboardBody)
+  const events = board.events.map((event: { id: string; status: { type: object } }) =>
+    event.id === "401872971"
+      ? { ...event, status: { ...event.status, type: { ...event.status.type, state: "post" } } }
+      : event
+  )
+  return JSON.stringify({ ...board, events })
 }
 
 /** BUF at NE's recorded checkpoint and the messages after it, as FastCast frames. */
 function moveRecordingFrames(): ReadonlyArray<Frame> {
-  const game = "gp-football-nfl-401872971"
   const messages = moveRecording.messages.map(
     ({ op, tc, mid, ts, pl }): Frame =>
       Frame.Pushed({
-        topic: topicOf(tc),
+        topic: Topic.fromTc(tc),
         mid: Option.some(mid),
         envelope: decodeEnvelope(JSON.stringify({ op, tc, mid, pl: JSON.stringify({ ts, pl }) }))
       })
   )
-  return [checkpoint(game, moveRecording.checkpoint.mid, moveRecording.checkpoint.body), ...messages]
+  return [neAtBufCheckpoint(), ...messages]
 }

@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs"
 import { assert, describe, it } from "@effect/vitest"
 import { Result, Schema } from "effect"
-import { EspnEvent, PushedEvent } from "./EspnEvent.ts"
+import { EspnEvent } from "./EspnEvent.ts"
 
 // How each recorded feed's events decode is locked in EspnState's tests; these are the cases a recording lacks.
 describe("EspnEvent", () => {
@@ -25,27 +25,9 @@ describe("EspnEvent", () => {
 
     assert.isTrue(Result.isFailure(decoded))
   })
-
-  it("should decode a FastCast event as what it moves", () => {
-    const event = fastCastEvent()
-
-    const decoded = decodePushed(event)
-
-    assert.isTrue(Result.isSuccess(decoded))
-  })
-
-  it("should not decode a FastCast event missing a competitor", () => {
-    const event = fastCastEvent()
-    const homeOnly = { ...event, competitors: event.competitors.filter(isHome) }
-
-    const decoded = decodePushed(homeOnly)
-
-    assert.isTrue(Result.isFailure(decoded))
-  })
 })
 
 const decode = Schema.decodeUnknownResult(EspnEvent("nfl"))
-const decodePushed = Schema.decodeUnknownResult(PushedEvent("nfl"))
 
 const fixture = (name: string) => readFileSync(new URL(`./fixtures/${name}`, import.meta.url), "utf8")
 
@@ -72,28 +54,6 @@ function siteEvent() {
       })
     )
   )(fixture("nfl-scoreboard-2026-10-04T1800Z.json")).events[0]
-}
-
-function fastCastEvent() {
-  return Schema.decodeSync(
-    Schema.fromJsonString(
-      Schema.Struct({
-        sports: Schema.NonEmptyArray(
-          Schema.Struct({
-            leagues: Schema.NonEmptyArray(
-              Schema.Struct({
-                events: Schema.NonEmptyArray(
-                  Schema.StructWithRest(Schema.Struct({ competitors: Schema.Array(Competitor) }), [
-                    Schema.Record(Schema.String, Schema.Json)
-                  ])
-                )
-              })
-            )
-          })
-        )
-      })
-    )
-  )(fixture("nfl-fastcast-checkpoint-2026-10-04T1752Z.json")).sports[0].leagues[0].events[0]
 }
 
 function isHome(competitor: { readonly homeAway: string }): boolean {

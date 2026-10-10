@@ -10,7 +10,7 @@ import * as Espn from "./Espn.ts"
 import { EspnState } from "./EspnState.ts"
 import * as FastCastMessage from "./FastCastMessage.ts"
 import { Frame } from "./Frame.ts"
-import { topicOf } from "./Topic.ts"
+import { Topic } from "./Topic.ts"
 
 /**
  * ESPN live with the default Hub config, answering each league's poll with its recorded scoreboard in `scoreboards`,
@@ -65,11 +65,7 @@ export const decodedFrames = Effect.fn("TestEspn.decodedFrames")(function* (fram
   return yield* Stream.fromIterable(frames).pipe(
     Stream.mapAccumEffect(
       () => EspnState.empty,
-      (state, frame) =>
-        Effect.map(
-          state.take(frame, LeagueId.literals),
-          ([next, deliveries]) => [next, [deliveries]] as const
-        )
+      (state, frame) => Effect.map(state.take(frame), ([next, deliveries]) => [next, [deliveries]] as const)
     ),
     Stream.runCollect
   )
@@ -80,7 +76,7 @@ export const stateAfter = Effect.fn("TestEspn.stateAfter")(function* (frames: Re
   return yield* Effect.reduce(
     frames,
     () => EspnState.empty,
-    (state, frame) => Effect.map(state.take(frame, LeagueId.literals), ([next]) => next)
+    (state, frame) => Effect.map(state.take(frame), ([next]) => next)
   )
 })
 
@@ -110,13 +106,13 @@ const frameOf = Effect.fnUntraced(function* (line: string) {
     return Frame.Polled({ league, body })
   }
 
-  const topic = topicOf(channel)
+  const topic = Topic.fromTc(channel)
   const mid = Option.fromUndefinedOr(number)
   if (kind === "change") return Frame.Pushed({ topic, mid, envelope: decodeEnvelope(body) })
 
   const checkpointTopic = yield* Effect.fromOption(topic)
   const checkpointMid = yield* Effect.fromOption(mid)
-  const document = yield* Schema.decodeEffect(FastCastMessage.Checkpoint(checkpointTopic))(body)
+  const document = yield* Schema.decodeEffect(FastCastMessage.Checkpoint)(body)
   return Frame.Checkpoint({ topic: checkpointTopic, mid: checkpointMid, document })
 })
 

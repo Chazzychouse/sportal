@@ -14,11 +14,10 @@ import {
 } from "effect"
 import * as FastCastMessage from "./FastCastMessage.ts"
 import { Frame } from "./Frame.ts"
-import { Topic } from "./Topic.ts"
+import type { Topic } from "./Topic.ts"
 
 /**
- * Each FastCast topic's document: waiting for its checkpoint, or synced as of a message. A scoreboard topic's document is
- * its events by uid; a game topic's is its plays by id, at `gamePlays`.
+ * Each FastCast game topic's document, its plays by id at `gamePlays`: waiting for its checkpoint, or synced as of a message.
  */
 export class FastCastDocuments extends Data.Class<{
   readonly byTopic: HashMap.HashMap<Topic, Document>
@@ -27,8 +26,7 @@ export class FastCastDocuments extends Data.Class<{
   static readonly empty: FastCastDocuments = new FastCastDocuments({ byTopic: HashMap.empty() })
 
   /**
-   * The documents after `frame`, and what it changed: a scoreboard topic's touched events (every event, on a
-   * checkpoint), or all of a game topic's plays, by id, when they changed, with the ids of the plays touched (every
+   * The documents after `frame`, and what it changed: all of a game topic's plays, by id, when they changed, with the ids of the plays touched (every
    * one, on a checkpoint). A topic is synced by its checkpoint frame and moved on by each message after it. A missed
    * message, a patch that will not apply, or a message that does not decode on a synced topic sends only that topic
    * back to waiting for a checkpoint, and the change is a `Reset` of it. A message of an op it does not know is
@@ -58,11 +56,10 @@ export class FastCastDocuments extends Data.Class<{
 }
 
 /**
- * What a frame changed: a scoreboard topic's touched events, a game topic's plays, by id, with the ids it touched (every
- * one, when none), or a topic sent back to waiting for a checkpoint, and why.
+ * What a frame changed: a game topic's plays, by id, with the ids it touched (every one, when none), or a topic sent
+ * back to waiting for a checkpoint, and why.
  */
 export type DocumentChange = Data.TaggedEnum<{
-  Scoreboard: { readonly league: LeagueId; readonly events: ReadonlyArray<Schema.Json> }
   Game: {
     readonly league: LeagueId
     readonly game: GameId
@@ -128,23 +125,17 @@ const moveOn = Effect.fnUntraced(function* (
 /** Where a game topic's plays are in its document. */
 const gamePlays = "/entities/plays"
 
-/** What a topic's document says: the events `touched` names (all of them when none), or its whole list of plays. */
+/** What a game topic's document says: its whole list of plays, with the ones `touched` names. */
 function changeOf(
   topic: Topic,
   document: Schema.Json,
   touched: Option.Option<ReadonlyArray<string>>
 ): DocumentChange {
-  return Topic.$match(topic, {
-    Scoreboard: ({ league }) =>
-      DocumentChange.Scoreboard({
-        league,
-        events: Option.match(touched, {
-          onNone: () => Record.values(objectAt(document, [])),
-          onSome: (uids) => uids.flatMap((uid) => Option.toArray(valueAt(document, [uid])))
-        })
-      }),
-    Game: ({ league, game }) =>
-      DocumentChange.Game({ league, game, plays: objectAt(document, tokens(gamePlays)), touched })
+  return DocumentChange.Game({
+    league: topic.league,
+    game: topic.game,
+    plays: objectAt(document, tokens(gamePlays)),
+    touched
   })
 }
 
@@ -162,45 +153,36 @@ const moved = Effect.fnUntraced(function* (
     return reset(documents, topic, `message ${message.mid} came after ${mid}`)
   }
 
-  const patches = message.op === "I" ? [] : relevant(topic, message.pl)
+  const patches = message.op === "I" ? [] : relevant(message.pl)
   const applied = yield* Effect.reduce(
     patches,
     () => document,
-    (patchedSoFar, patch) => patched(patchedSoFar, topic, patch)
+    (patchedSoFar, patch) => patched(patchedSoFar, patch)
   ).pipe(Effect.result)
   if (Result.isFailure(applied)) return reset(documents, topic, applied.failure)
 
   const next = applied.success
   const synced = HashMap.set(documents, topic, Document.Synced({ mid: message.mid, document: next }))
-  const touched = Topic.$match(topic, {
-    Scoreboard: () => Option.some(Arr.dedupe(patches.map((patch) => patch.path.uid))),
-    Game: () => playsTouched(patches)
-  })
+  const touched = playsTouched(patches)
   return {
     documents: synced,
     change: patches.length === 0 ? Option.none() : Option.some(changeOf(topic, next, touched))
   }
 })
 
-/** On a game topic, only the patches inside its plays: the rest of ESPN's game package is not kept. */
+/** Only the patches inside the plays: the rest of ESPN's game package is not kept. */
 function relevant(
-  topic: Topic,
   patches: ReadonlyArray<typeof FastCastMessage.Patch.Type>
 ): ReadonlyArray<typeof FastCastMessage.Patch.Type> {
-  const inPlays = (path: { readonly pointer: string }) =>
-    path.pointer === gamePlays || path.pointer.startsWith(`${gamePlays}/`)
-  return Topic.$is("Scoreboard")(topic)
-    ? patches
-    : patches.filter((patch) => inPlays(patch.path) && (!("from" in patch) || inPlays(patch.from)))
+  const inPlays = (pointer: string) => pointer === gamePlays || pointer.startsWith(`${gamePlays}/`)
+  return patches.filter((patch) => inPlays(patch.path) && (!("from" in patch) || inPlays(patch.from)))
 }
 
 /** The play ids `patches` touch, at their path or their `from`; none when one patches the plays whole. */
 function playsTouched(
   patches: ReadonlyArray<typeof FastCastMessage.Patch.Type>
 ): Option.Option<ReadonlyArray<string>> {
-  const pointers = patches.flatMap((patch) =>
-    "from" in patch ? [patch.path.pointer, patch.from.pointer] : [patch.path.pointer]
-  )
+  const pointers = patches.flatMap((patch) => ("from" in patch ? [patch.path, patch.from] : [patch.path]))
   if (pointers.includes(gamePlays)) return Option.none()
 
   return Option.some(Arr.dedupe(pointers.flatMap((pointer) => Option.toArray(Arr.get(tokens(pointer), 2)))))
@@ -215,44 +197,30 @@ function reset(documents: Documents, topic: Topic, detail: string): Advanced {
 }
 
 /**
- * The document with `patch` applied. On a scoreboard topic the path's uid is the document's first token, and a path
- * with no pointer adds, replaces, or removes the whole event; removing an event the document lacks changes nothing.
- * `JsonPatch` has no `copy` or `move`: a copy is an add of the value read at `from`, a move a remove of `from` then
- * that add.
+ * The document with `patch` applied. `JsonPatch` has no `copy` or `move`: a copy is an add of the value read at `from`,
+ * a move a remove of `from` then that add.
  */
 function patched(
   document: Schema.Json,
-  topic: Topic,
   patch: typeof FastCastMessage.Patch.Type
 ): Effect.Effect<Schema.Json, string> {
-  const pointer = ({ uid, pointer }: { readonly uid: string; readonly pointer: string }) =>
-    Topic.$is("Scoreboard")(topic) ? `/${JsonPointer.escapeToken(uid)}${pointer}` : pointer
   if ("from" in patch) {
-    return Option.match(valueAt(document, tokens(pointer(patch.from))), {
-      onNone: () => Effect.fail(`${described(patch)}: nothing at ${patch.from.uid}${patch.from.pointer}`),
+    return Option.match(valueAt(document, tokens(patch.from)), {
+      onNone: () => Effect.fail(`${described(patch)}: nothing at ${patch.from}`),
       onSome: (value) =>
         applied(
           document,
           [
-            ...(patch.op === "move" ? [{ op: "remove" as const, path: pointer(patch.from) }] : []),
-            { op: "add", path: pointer(patch.path), value }
+            ...(patch.op === "move" ? [{ op: "remove" as const, path: patch.from }] : []),
+            { op: "add", path: patch.path, value }
           ],
           patch
         )
     })
   }
-  if (patch.op === "remove") {
-    const wholeEventMissing =
-      Topic.$is("Scoreboard")(topic) &&
-      patch.path.pointer === "" &&
-      Option.isNone(valueAt(document, [patch.path.uid]))
-    return wholeEventMissing
-      ? Effect.succeed(document)
-      : applied(document, [{ op: "remove", path: pointer(patch.path) }], patch)
-  }
-  // A whole event replaced is set, whether or not the document had it.
-  const op = patch.op === "replace" && patch.path.pointer === "" ? "add" : patch.op
-  return applied(document, [{ op, path: pointer(patch.path), value: patch.value }], patch)
+  if (patch.op === "remove") return applied(document, [{ op: "remove", path: patch.path }], patch)
+
+  return applied(document, [{ op: patch.op, path: patch.path, value: patch.value }], patch)
 }
 
 function applied(
@@ -268,7 +236,7 @@ function applied(
 }
 
 function described(patch: typeof FastCastMessage.Patch.Type): string {
-  return `${patch.op} at ${patch.path.uid}${patch.path.pointer}`
+  return `${patch.op} at ${patch.path}`
 }
 
 function tokens(pointer: string): ReadonlyArray<string> {

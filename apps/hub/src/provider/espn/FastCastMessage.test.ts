@@ -6,15 +6,13 @@ import * as FastCastMessage from "./FastCastMessage.ts"
 describe("FastCastMessage.Message", () => {
   it.effect("should read the patches of a message whose patches are zlib-deflated", () =>
     Effect.gen(function* () {
-      const patches = [{ op: "remove", path: "s:20~l:28~e:401" }]
+      const patches = [{ op: "remove", path: "/entities/plays/401" }] as const
       const compressed = deflateSync(JSON.stringify(patches)).toString("base64")
       const text = patchMessage(compressed)
 
       const message = yield* decodeMessage(text)
 
-      assert.deepStrictEqual("pl" in message ? message.pl : undefined, [
-        { op: "remove", path: { uid: "s:20~l:28~e:401", pointer: "" } }
-      ])
+      assert.deepStrictEqual("pl" in message ? message.pl : undefined, patches)
     })
   )
 
@@ -51,9 +49,14 @@ describe("FastCastMessage.Envelope", () => {
   })
 })
 
-/** A patch message on NFL's scoreboard topic whose inner `pl` is `pl`. */
+/** A patch message on an NFL game topic whose inner `pl` is `pl`. */
 function patchMessage(pl: string): string {
-  return JSON.stringify({ op: "P", tc: "event-football-nfl", mid: 2, pl: JSON.stringify({ ts: 0, pl }) })
+  return JSON.stringify({
+    op: "P",
+    tc: "gp-football-nfl-401872971",
+    mid: 2,
+    pl: JSON.stringify({ ts: 0, pl })
+  })
 }
 
 const decodeMessage = Schema.decodeUnknownEffect(Schema.fromJsonString(FastCastMessage.Message))

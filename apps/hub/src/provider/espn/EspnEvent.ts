@@ -1,9 +1,9 @@
-import { type Broadcast, GameId, GameSnapshot, GameStatus, Network } from "@sportal/domain/Game"
+import { type Broadcast, GameId, GameSnapshot, type GameStatus, Network } from "@sportal/domain/Game"
 import type { LeagueId } from "@sportal/domain/League"
 import { Situation } from "@sportal/domain/Situation"
 import { Team, TeamId } from "@sportal/domain/Team"
 import { type DateTime, Effect, Schema, SchemaGetter, SchemaIssue } from "effect"
-import { type EspnSituation, type EspnStatus, FastCastEvent, SiteEvent } from "./EspnPayload.ts"
+import { type EspnSituation, type EspnStatus, SiteEvent } from "./EspnPayload.ts"
 
 /**
  * One game as the site scoreboard spells it, read as a `league` `GameSnapshot`. An event without a home and an away
@@ -32,19 +32,6 @@ export function EspnEvent(league: LeagueId) {
         })
       }),
       encode: SchemaGetter.forbidden(() => "A GameSnapshot cannot be encoded back to an ESPN event")
-    })
-  )
-}
-
-/**
- * One game as a FastCast scoreboard topic's document spells it, read as what it moves: its status, period, clock,
- * scores, and situation. An event without a home and an away team does not decode.
- */
-export function PushedEvent(league: LeagueId) {
-  return FastCastEvent.pipe(
-    Schema.decodeTo(Schema.toType(Moved), {
-      decode: SchemaGetter.transformEffect((event) => moved(league, event)),
-      encode: SchemaGetter.forbidden(() => "A pushed event cannot be encoded back to an ESPN event")
     })
   )
 }
@@ -107,36 +94,6 @@ const snapshot = Effect.fnUntraced(function* (
     broadcasts: event.broadcasts.flatMap(({ medium, network }) => broadcast(medium, network)),
     ...(event.situation === undefined ? {} : { situation: situation(league, event.situation, home.id) })
   })
-})
-
-const Moved = Schema.Struct({
-  id: GameId,
-  status: GameStatus,
-  period: Schema.Int,
-  clock: Schema.String,
-  homeScore: Schema.Int,
-  awayScore: Schema.Int,
-  situation: Schema.optional(Situation)
-})
-
-/** What a FastCast event moves. */
-const moved = Effect.fnUntraced(function* (league: LeagueId, event: typeof FastCastEvent.Type) {
-  const home = event.competitors.find((competitor) => competitor.homeAway === "home")
-  const away = event.competitors.find((competitor) => competitor.homeAway === "away")
-  if (home === undefined || away === undefined) {
-    return yield* Effect.fail(
-      new SchemaIssue.InvalidValue({ message: "An event needs a home and an away team" }, event)
-    )
-  }
-  return {
-    id: GameId.make(event.id),
-    status: statusOf(event.fullStatus.type),
-    period: event.fullStatus.period,
-    clock: event.fullStatus.displayClock,
-    homeScore: scoreOf(home.score),
-    awayScore: scoreOf(away.score),
-    ...(event.situation === undefined ? {} : { situation: situation(league, event.situation, home.id) })
-  }
 })
 
 // A score is digits, or nothing before kickoff, which reads as 0.

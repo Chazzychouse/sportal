@@ -22,7 +22,7 @@ import * as HubStopping from "../../HubStopping.ts"
 import * as FastCastMessage from "./FastCastMessage.ts"
 import { Frame } from "./Frame.ts"
 import { ProviderUnavailable } from "./ProviderUnavailable.ts"
-import { type Topic, tcOf, topicOf } from "./Topic.ts"
+import { Topic } from "./Topic.ts"
 
 /**
  * ESPN FastCast as the ESPN provider's push: one socket that subscribes to the topics it is told to follow, subscribes
@@ -146,7 +146,7 @@ const connect = Effect.fnUntraced(function* (wanted: Stream.Stream<Wanted>, refo
   const current = yield* Ref.make<Wanted>(HashMap.empty())
   const pending = yield* FiberMap.make<Topic>()
   const subscribeTo = (topic: Topic) =>
-    Queue.offer(outgoing, JSON.stringify({ op: "S", sid, tc: tcOf(topic) }))
+    Queue.offer(outgoing, JSON.stringify({ op: "S", sid, tc: topic.tc() }))
   const subscribeNow = (topic: Topic) =>
     FiberMap.remove(pending, topic).pipe(Effect.andThen(subscribeTo(topic)))
   const resubscribeLater = (topic: Topic) =>
@@ -190,9 +190,9 @@ const connect = Effect.fnUntraced(function* (wanted: Stream.Stream<Wanted>, refo
           } else {
             const error = outcome.unread.value
             yield* Effect.logWarning(
-              `FastCast: the checkpoint of ${tcOf(outcome.topic)} failed; subscribing to it again later`,
+              `FastCast: the checkpoint of ${outcome.topic.tc()} failed; subscribing to it again later`,
               error.cause
-            ).pipe(Effect.annotateLogs({ topic: tcOf(outcome.topic), reason: error.reason }))
+            ).pipe(Effect.annotateLogs({ topic: outcome.topic.tc(), reason: error.reason }))
             yield* resubscribeLater(outcome.topic)
           }
         }
@@ -235,7 +235,7 @@ const framed = Effect.fnUntraced(function* (
   HttpClient.HttpClient
 > {
   const message = Option.getOrUndefined(Option.flatMap(envelope, decodeFramed))
-  const topic = message !== undefined && "tc" in message ? topicOf(message.tc) : Option.none<Topic>()
+  const topic = message !== undefined && "tc" in message ? Topic.fromTc(message.tc) : Option.none<Topic>()
   const mid = message !== undefined && "mid" in message ? Option.some(message.mid) : Option.none<number>()
   const frame = Frame.Pushed({ topic, mid, envelope })
   if (message === undefined) {
@@ -260,14 +260,14 @@ const framed = Effect.fnUntraced(function* (
 
 /** The document of the checkpoint at `url`, decoded as `topic`'s checkpoint. */
 function checkpoint(topic: Topic, url: string) {
-  const tc = tcOf(topic)
+  const tc = topic.tc()
   return HttpClient.get(url).pipe(
     Effect.flatMap(HttpClientResponse.filterStatusOk),
     Effect.flatMap((response) => response.text),
     Effect.timeout(checkpointTimeout),
     Effect.mapError((cause) => new CheckpointUnread({ topic: tc, reason: "Unloaded", cause })),
     Effect.flatMap((body) =>
-      Schema.decodeEffect(FastCastMessage.Checkpoint(topic))(body).pipe(
+      Schema.decodeEffect(FastCastMessage.Checkpoint)(body).pipe(
         Effect.mapError((cause) => new CheckpointUnread({ topic: tc, reason: "Undecodable", cause }))
       )
     )

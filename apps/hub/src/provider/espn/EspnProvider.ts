@@ -13,7 +13,7 @@ import { Frame } from "./Frame.ts"
  * poll by its own listed games: 10 seconds while one is live, a minute within 30 minutes of a kickoff, and 15 minutes
  * otherwise; at most 30 seconds while its last poll failed or did not decode. A poll's request and body read are
  * bounded to 20 seconds; a poll that fails or times out is logged and is a `PollFailed` frame. It tells FastCast to
- * follow every league's scoreboard topic and each listed game live or within 30 minutes of kickoff, and keeps no
+ * follow each listed game live or within 30 minutes of kickoff, and keeps no
  * document of a topic it no longer follows. Each run of `deliveries` polls and follows on its own.
  */
 export const layer: Layer.Layer<Provider, never, FastCast | HttpClient.HttpClient | HubConfig> = Layer.effect(
@@ -58,10 +58,10 @@ export const layer: Layer.Layer<Provider, never, FastCast | HttpClient.HttpClien
           [...pollAt].map(([league, at]) => pollsOf(league, at)),
           { concurrency: "unbounded" }
         )
-        const pushes = fastCast.follow(wantedOf(view, leagues))
+        const pushes = fastCast.follow(wantedOf(view))
 
         const takeFrame = Effect.fnUntraced(function* (state: EspnState, frame: Frame) {
-          const [next, said] = yield* state.take(frame, leagues)
+          const [next, said] = yield* state.take(frame)
           const now = yield* DateTime.now
           const league = pollLeagueOf(frame)
 
@@ -105,15 +105,12 @@ function sleepUntil(at: Option.Option<DateTime.Utc>): Effect.Effect<void> {
  * What FastCast follows, read from `view` on each change and once a minute, so a kickoff coming into its window is
  * followed with no frame to say so.
  */
-function wantedOf(
-  view: SubscriptionRef.SubscriptionRef<EspnState>,
-  leagues: ReadonlyArray<LeagueId>
-): Stream.Stream<Wanted> {
+function wantedOf(view: SubscriptionRef.SubscriptionRef<EspnState>): Stream.Stream<Wanted> {
   return Stream.merge(
     SubscriptionRef.changes(view),
     Stream.tick("1 minute").pipe(Stream.mapEffect(() => SubscriptionRef.get(view)))
   ).pipe(
-    Stream.mapEffect((state) => Effect.map(DateTime.now, (now) => state.wanted(leagues, now))),
+    Stream.mapEffect((state) => Effect.map(DateTime.now, (now) => state.wanted(now))),
     Stream.changes
   )
 }

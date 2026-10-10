@@ -46,13 +46,6 @@ export function withMetrics<A, E, R>(effect: Effect.Effect<A, E, R>) {
   return Effect.provideService(effect, Metric.MetricRegistry, new Map())
 }
 
-/** The count of counter `id` with `attributes` among its others, if it has counted. */
-export function counted(id: string, attributes: Readonly<Record<string, string>> = {}) {
-  return Effect.map(metricOf(id, attributes), (metric) =>
-    metric?.type === "Counter" ? metric.state.count : undefined
-  )
-}
-
 /** The value of gauge `id` with `attributes` among its others, if it has been set. */
 export function gauged(id: string, attributes: Readonly<Record<string, string>> = {}) {
   return Effect.map(metricOf(id, attributes), (metric) =>

@@ -1,25 +1,10 @@
 import { Effect, Schema, SchemaGetter, SchemaIssue, Stream, Struct, Tuple } from "effect"
-import { Topic } from "./Topic.ts"
 
-// A patch's path. On a scoreboard topic: the uid of the event it changes (`s:20~l:28~e:<id>~c:<id>`), then a JSON
-// Pointer into that event, where no pointer means the whole event. On a game topic: a JSON Pointer alone, with no uid.
-const EventPath = Schema.String.pipe(
-  Schema.decodeTo(Schema.Struct({ uid: Schema.String, pointer: Schema.String }), {
-    decode: SchemaGetter.transform((path) => {
-      const slash = path.indexOf("/")
-      return slash === -1
-        ? { uid: path, pointer: "" }
-        : { uid: path.slice(0, slash), pointer: path.slice(slash) }
-    }),
-    encode: SchemaGetter.transform(({ uid, pointer }) => `${uid}${pointer}`)
-  })
-)
-
-/** One JSON Patch operation on a topic's document. */
+/** One JSON Patch operation on a game topic's document; its paths are JSON Pointers into ESPN's game package. */
 export const Patch = Schema.Union([
-  Schema.Struct({ op: Schema.Literals(["add", "replace"]), path: EventPath, value: Schema.Json }),
-  Schema.Struct({ op: Schema.Literal("remove"), path: EventPath }),
-  Schema.Struct({ op: Schema.Literals(["copy", "move"]), path: EventPath, from: EventPath })
+  Schema.Struct({ op: Schema.Literals(["add", "replace"]), path: Schema.String, value: Schema.Json }),
+  Schema.Struct({ op: Schema.Literal("remove"), path: Schema.String }),
+  Schema.Struct({ op: Schema.Literals(["copy", "move"]), path: Schema.String, from: Schema.String })
 ])
 
 const Patches = Schema.Array(Patch)
@@ -80,47 +65,8 @@ export type Envelope = typeof Envelope.Type
 /** Where to open the socket, and the token it takes, as `public/websockethost` answers. */
 export const Host = Schema.Struct({ ip: Schema.String, securePort: Schema.Int, token: Schema.String })
 
-/** The document a checkpoint of `topic` holds, read from its text: a scoreboard's events by uid, or a game's plays. */
-export function Checkpoint(topic: Topic) {
-  return Topic.$match(topic, {
-    Scoreboard: () => ScoreboardCheckpoint,
-    Game: () => GameCheckpoint
-  })
-}
-
-/** A scoreboard topic's whole document, as a checkpoint URL serves it, read as its events by uid. */
-const ScoreboardCheckpoint = Schema.fromJsonString(
-  Schema.Struct({
-    sports: Schema.Array(
-      Schema.Struct({
-        leagues: Schema.Array(
-          Schema.Struct({
-            events: Schema.Array(
-              Schema.StructWithRest(Schema.Struct({ uid: Schema.String }), [
-                Schema.Record(Schema.String, Schema.Json)
-              ])
-            )
-          })
-        )
-      })
-    )
-  })
-).pipe(
-  Schema.decodeTo(Schema.Json, {
-    decode: SchemaGetter.transform(
-      (body): Schema.Json =>
-        Object.fromEntries(
-          body.sports.flatMap((sport) =>
-            sport.leagues.flatMap((league) => league.events.map((event) => [event.uid, event] as const))
-          )
-        )
-    ),
-    encode: SchemaGetter.forbidden(() => "A checkpoint is never sent back")
-  })
-)
-
 /** A game topic's whole document, ESPN's game package, as a checkpoint URL serves it, read as only its plays. */
-const GameCheckpoint = Schema.fromJsonString(
+export const Checkpoint = Schema.fromJsonString(
   Schema.Struct({
     entities: Schema.optional(
       Schema.Struct({ plays: Schema.optional(Schema.Record(Schema.String, Schema.Json)) })

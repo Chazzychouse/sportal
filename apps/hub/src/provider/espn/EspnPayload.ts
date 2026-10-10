@@ -3,7 +3,7 @@ import { Schema, SchemaGetter } from "effect"
 /** The site scoreboard, as polled: its events, each for `EspnEvent` to read. */
 export const Scoreboard = Schema.Struct({ events: Schema.Array(Schema.Unknown) })
 
-/** The game's status as both feeds spell it: the site's `status`, FastCast's `fullStatus`. */
+/** The game's status as the site scoreboard spells it. */
 export const EspnStatus = Schema.Struct({
   period: Schema.Int,
   displayClock: Schema.String,
@@ -14,7 +14,7 @@ export const EspnStatus = Schema.Struct({
 })
 export type EspnStatus = typeof EspnStatus.Type
 
-/** The down, distance and ball of a game in play, as both feeds spell it. */
+/** The down, distance and ball of a game in play, as the site scoreboard spells it. */
 export const EspnSituation = Schema.Struct({
   possession: Schema.optional(Schema.String),
   down: Schema.optional(Schema.Int),
@@ -62,23 +62,6 @@ export const SiteEvent = Schema.Struct({
       competitors: Schema.Array(Competitor)
     })
   )
-})
-
-/**
- * One event of a FastCast scoreboard topic's document: only what the Hub reads of it, its status, its competitors'
- * scores, and its situation.
- */
-export const FastCastEvent = Schema.Struct({
-  id: Schema.String,
-  fullStatus: EspnStatus,
-  competitors: Schema.Array(
-    Schema.Struct({
-      id: Schema.String,
-      homeAway: Schema.Literals(["home", "away"]),
-      score: Schema.optional(Schema.String)
-    })
-  ),
-  situation: Schema.optional(EspnSituation)
 })
 
 /** A play's reference to a team, `{ $key }`, read as ESPN's id for it. */

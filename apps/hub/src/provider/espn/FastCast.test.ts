@@ -22,7 +22,7 @@ import * as FastCastMessage from "./FastCastMessage.ts"
 import { Frame } from "./Frame.ts"
 import { stateAfter } from "./TestEspn.ts"
 import { fakeServer, subscribed, watched } from "./TestFastCast.ts"
-import { Topic, tcOf } from "./Topic.ts"
+import { Topic } from "./Topic.ts"
 
 // Games of the recorded checkpoint: the first two live, the third scheduled for 20:05Z.
 const firstGame = "401872971"
@@ -34,18 +34,15 @@ const missingTopic = gameTopic(firstGame)
 const otherTopic = gameTopic(secondGame)
 
 describe("FastCast", () => {
-  it.effect("should connect, then subscribe to its league's scoreboard topic", () =>
+  it.effect("should connect, then subscribe to its wanted game topic", () =>
     Effect.gen(function* () {
       const server = fakeServer()
 
       const { frames } = yield* nflFrames(server)
 
       yield* frames.until(atLeast(2))
-      yield* server.sent.until(subscribed("event-football-nfl", 1))
-      assert.deepStrictEqual(server.sent.all(), [
-        { op: "C" },
-        { op: "S", sid: "sid-1", tc: "event-football-nfl" }
-      ])
+      yield* server.sent.until(subscribed(mainTc, 1))
+      assert.deepStrictEqual(server.sent.all(), [{ op: "C" }, { op: "S", sid: "sid-1", tc: mainTc }])
     })
   )
 
@@ -76,7 +73,7 @@ describe("FastCast", () => {
       yield* Effect.sync(() => server.close(1000))
       yield* TestClock.adjust("2 seconds")
 
-      yield* server.sent.until(subscribed("event-football-nfl", 2))
+      yield* server.sent.until(subscribed(mainTc, 2))
       const done = yield* Deferred.isDone(ended)
       assert.lengthOf(connectsSent(server), 2)
       assert.isFalse(done)
@@ -93,7 +90,7 @@ describe("FastCast", () => {
       yield* Effect.sync(() => server.close(1000))
       yield* TestClock.adjust("2 seconds")
 
-      yield* server.sent.until(subscribed("event-football-nfl", 2))
+      yield* server.sent.until(subscribed(mainTc, 2))
       assert.isTrue(
         logs.some(
           (log) =>
@@ -139,7 +136,7 @@ describe("FastCast", () => {
       yield* TestClock.adjust("5 seconds")
       yield* TestClock.adjust("2 seconds")
 
-      yield* server.sent.until(subscribed("event-football-nfl", 2))
+      yield* server.sent.until(subscribed(mainTc, 2))
       const done = yield* Deferred.isDone(ended)
       assert.isFalse(done)
       assert.isFalse(
@@ -161,9 +158,9 @@ describe("FastCast", () => {
       const firstFour = received.slice(0, 4)
       assert.deepStrictEqual(firstFour.map(seen), [
         { tag: "Pushed", tc: undefined, mid: undefined, body: "C" },
-        { tag: "Pushed", tc: "event-football-nfl", mid: undefined, body: "S" },
-        { tag: "Pushed", tc: "event-football-nfl", mid: 7, body: "H" },
-        { tag: "Checkpoint", tc: "event-football-nfl", mid: 7, document: checkpointDocument }
+        { tag: "Pushed", tc: mainTc, mid: undefined, body: "S" },
+        { tag: "Pushed", tc: mainTc, mid: 7, body: "H" },
+        { tag: "Checkpoint", tc: mainTc, mid: 7, document: checkpointDocument }
       ])
       assert.isFalse(firstFour.some(Frame.$is("Polled")))
     })
@@ -210,7 +207,7 @@ describe("FastCast", () => {
       const { frames } = yield* nflFrames(server)
       yield* frames.until(atLeast(2))
 
-      yield* Effect.sync(() => server.send({ op: "X", tc: "event-football-nfl", mid: 8, extra: 1 }))
+      yield* Effect.sync(() => server.send({ op: "X", tc: mainTc, mid: 8, extra: 1 }))
       const received = yield* frames.until(atLeast(3))
 
       const unknown = received[2]
@@ -234,7 +231,7 @@ describe("FastCast", () => {
       const { frames } = yield* nflFrames(server)
       yield* frames.until(atLeast(2))
 
-      yield* Effect.sync(() => server.send({ op: "P", tc: "event-football-nfl" }))
+      yield* Effect.sync(() => server.send({ op: "P", tc: mainTc }))
       const received = yield* frames.until(atLeast(3))
 
       const malformed = received[2]
@@ -259,7 +256,7 @@ describe("FastCast", () => {
       const patch = received[2]
       assert.deepStrictEqual(patch === undefined ? undefined : seen(patch), {
         tag: "Pushed",
-        tc: "event-football-nfl",
+        tc: mainTc,
         mid: 8,
         body: "P"
       })
@@ -278,9 +275,9 @@ describe("FastCast", () => {
       const before = yield* stateAfter(received.slice(0, -1))
       const bad = yield* Effect.fromOption(Arr.last(received))
 
-      const [after] = yield* before.take(bad, ["nfl"])
+      const [after] = yield* before.take(bad)
 
-      assert.deepStrictEqual(syncedTopics(before), ["event-football-nfl"])
+      assert.deepStrictEqual(syncedTopics(before), [mainTc])
       assert.deepStrictEqual(syncedTopics(after), [])
     })
   )
@@ -291,10 +288,13 @@ describe("FastCast", () => {
       const { frames, want } = yield* nflFrames(server)
       yield* frames.until(atLeast(2))
 
-      yield* want([scoreboard, "AwaitingCheckpoint"], [gameOf(laterGame), "AwaitingCheckpoint"])
+      yield* want([main, "AwaitingCheckpoint"], [gameOf(laterGame), "AwaitingCheckpoint"])
 
       yield* server.sent.until(subscribed(gameTopic(laterGame), 1))
-      assert.deepStrictEqual(gameTopicsSent(server), [{ op: "S", sid: "sid-1", tc: gameTopic(laterGame) }])
+      assert.deepStrictEqual(subscriptionsSent(server), [
+        { op: "S", sid: "sid-1", tc: mainTc },
+        { op: "S", sid: "sid-1", tc: gameTopic(laterGame) }
+      ])
     })
   )
 
@@ -306,7 +306,7 @@ describe("FastCast", () => {
 
       yield* Effect.sync(() => server.send({ ...checkpointMessage(7), pl: "https://checkpoint.test/slow" }))
       yield* Effect.sync(() =>
-        server.send({ op: "H", tc: gameTopic(firstGame), mid: 3, pl: "https://checkpoint.test/slow" })
+        server.send({ op: "H", tc: gameTopic(secondGame), mid: 3, pl: "https://checkpoint.test/slow" })
       )
       yield* TestClock.adjust("5 seconds")
 
@@ -323,21 +323,21 @@ describe("FastCast", () => {
       const server = fakeServer()
       const { frames, want } = yield* nflFrames(server)
       yield* frames.until(atLeast(2))
-      yield* want([scoreboard, "AwaitingCheckpoint"], [gameOf(firstGame), "AwaitingCheckpoint"])
-      yield* server.sent.until(subscribed(gameTopic(firstGame), 1))
+      yield* want([main, "AwaitingCheckpoint"], [gameOf(secondGame), "AwaitingCheckpoint"])
+      yield* server.sent.until(subscribed(gameTopic(secondGame), 1))
 
-      yield* want([scoreboard, "AwaitingCheckpoint"], [gameOf(firstGame), "AwaitingCheckpoint"])
+      yield* want([main, "AwaitingCheckpoint"], [gameOf(secondGame), "AwaitingCheckpoint"])
       yield* want(
-        [scoreboard, "AwaitingCheckpoint"],
-        [gameOf(firstGame), "AwaitingCheckpoint"],
-        [gameOf(secondGame), "AwaitingCheckpoint"]
+        [main, "AwaitingCheckpoint"],
+        [gameOf(secondGame), "AwaitingCheckpoint"],
+        [gameOf(laterGame), "AwaitingCheckpoint"]
       )
 
       // Wanted sets are taken in order, so once the third has subscribed, the second has sent all it would.
-      yield* server.sent.until(subscribed(gameTopic(secondGame), 1))
+      yield* server.sent.until(subscribed(gameTopic(laterGame), 1))
       assert.deepStrictEqual(
-        gameTopicsSent(server).map((frame) => frame.tc),
-        [gameTopic(firstGame), gameTopic(secondGame)],
+        subscriptionsSent(server).map((frame) => frame.tc),
+        [mainTc, gameTopic(secondGame), gameTopic(laterGame)],
         "the same topic wanted again sends none"
       )
     })
@@ -348,14 +348,14 @@ describe("FastCast", () => {
       const server = fakeServer()
       const { frames, want } = yield* nflFrames(server)
       yield* frames.until(atLeast(2))
-      yield* want([scoreboard, "AwaitingCheckpoint"], [gameOf(firstGame), "AwaitingCheckpoint"])
-      yield* server.sent.until(subscribed(gameTopic(firstGame), 1))
+      yield* want([main, "AwaitingCheckpoint"], [gameOf(secondGame), "AwaitingCheckpoint"])
+      yield* server.sent.until(subscribed(gameTopic(secondGame), 1))
 
-      yield* want([scoreboard, "AwaitingCheckpoint"])
+      yield* want([main, "AwaitingCheckpoint"])
       yield* TestClock.adjust("1 second")
 
       assert.lengthOf(
-        server.sent.all().filter((frame) => frame.op === "S" && frame.tc === gameTopic(firstGame)),
+        server.sent.all().filter((frame) => frame.op === "S" && frame.tc === gameTopic(secondGame)),
         1
       )
     })
@@ -371,7 +371,7 @@ describe("FastCast", () => {
 
         yield* missingCheckpointBesideOther(server)
 
-        const received = yield* frames.until(wholeAt(7))
+        const received = yield* frames.until(numbered(10))
         const done = yield* Deferred.isDone(ended)
         assert.deepStrictEqual(
           received.map(seen).flatMap(({ tag, tc, mid }) => (tc?.startsWith("gp-") ? [[tc, tag, mid]] : [])),
@@ -400,7 +400,7 @@ describe("FastCast", () => {
         const server = fakeServer()
         const { ended, frames } = yield* twoGamesFollowed(server, Layer.empty)
         yield* missingCheckpointBesideOther(server)
-        yield* frames.until(wholeAt(7))
+        yield* frames.until(numbered(10))
 
         yield* TestClock.adjust("30 seconds")
 
@@ -415,9 +415,9 @@ describe("FastCast", () => {
       const server = fakeServer()
       const { frames, want } = yield* twoGamesFollowed(server, Layer.empty)
       yield* missingCheckpointBesideOther(server)
-      yield* frames.until(wholeAt(7))
+      yield* frames.until(numbered(10))
 
-      yield* want([scoreboard, "Synced"], [gameOf(secondGame), "Synced"])
+      yield* want([gameOf(secondGame), "Synced"])
       yield* TestClock.adjust("1 second")
       yield* TestClock.adjust("29 seconds")
 
@@ -435,21 +435,21 @@ describe("FastCast", () => {
         const server = fakeServer()
         const { frames, want } = yield* nflFrames(server)
         yield* frames.until(atLeast(2))
-        yield* Effect.sync(() => server.send(scoreboardShowing(7)))
+        yield* Effect.sync(() => server.send(checkpointMessage(7)))
         yield* frames.until(wholeAt(7))
-        yield* want([scoreboard, "Synced"])
+        yield* want([main, "Synced"])
 
-        yield* want([scoreboard, "AwaitingCheckpoint"])
-        yield* server.sent.until(subscribed("event-football-nfl", 2))
-        yield* want([scoreboard, "AwaitingCheckpoint"])
-        yield* Effect.sync(() => server.send(scoreboardShowing(20)))
+        yield* want([main, "AwaitingCheckpoint"])
+        yield* server.sent.until(subscribed(mainTc, 2))
+        yield* want([main, "AwaitingCheckpoint"])
+        yield* Effect.sync(() => server.send(checkpointMessage(20)))
         yield* frames.until(wholeAt(20))
 
         assert.deepStrictEqual(
           server.sent.all().filter((frame) => frame.op === "S"),
           [
-            { op: "S", sid: "sid-1", tc: "event-football-nfl" },
-            { op: "S", sid: "sid-1", tc: "event-football-nfl" }
+            { op: "S", sid: "sid-1", tc: mainTc },
+            { op: "S", sid: "sid-1", tc: mainTc }
           ]
         )
       })
@@ -507,7 +507,7 @@ describe("FastCast", () => {
 
       yield* TestClock.adjust("1 second")
 
-      yield* server.sent.until(subscribed("event-football-nfl", 2))
+      yield* server.sent.until(subscribed(mainTc, 2))
       const done = yield* Deferred.isDone(ended)
       assert.isFalse(done)
     })
@@ -549,7 +549,7 @@ describe("FastCast", () => {
 
       yield* TestClock.adjust("30 seconds")
 
-      yield* server.sent.until(subscribed("event-football-nfl", 2))
+      yield* server.sent.until(subscribed(mainTc, 2))
       assert.lengthOf(
         server.sent.all().filter((frame) => frame.op === "S"),
         2
@@ -569,7 +569,7 @@ describe("FastCast", () => {
       })
       yield* frames.until(atLeast(4))
       yield* TestClock.adjust("30 seconds")
-      yield* server.sent.until(subscribed("event-football-nfl", 2))
+      yield* server.sent.until(subscribed(mainTc, 2))
       yield* TestClock.adjust("30 seconds")
 
       assert.lengthOf(
@@ -589,7 +589,7 @@ describe("FastCast", () => {
         yield* Effect.sync(() => server.send(missingCheckpoint(mid)))
         yield* frames.until(numbered(mid))
         yield* TestClock.adjust("30 seconds")
-        yield* server.sent.until(subscribed("event-football-nfl", mid + 1))
+        yield* server.sent.until(subscribed(mainTc, mid + 1))
       }
 
       assert.lengthOf(
@@ -664,7 +664,7 @@ describe("FastCast", () => {
       const received = yield* frames.until(numbered(8))
       yield* TestClock.adjust("30 seconds")
 
-      yield* server.sent.until(subscribed("event-football-nfl", 2))
+      yield* server.sent.until(subscribed(mainTc, 2))
       assert.deepStrictEqual(
         received
           .slice(2)
@@ -690,8 +690,8 @@ describe("FastCast", () => {
         const server = fakeServer()
         const { want } = yield* dueToBeFollowedAgain(server)
 
-        yield* want([scoreboard, "AwaitingCheckpoint"])
-        yield* server.sent.until(subscribed("event-football-nfl", 3))
+        yield* want([main, "AwaitingCheckpoint"])
+        yield* server.sent.until(subscribed(mainTc, 3))
         yield* TestClock.adjust("30 seconds")
 
         assert.lengthOf(
@@ -707,16 +707,16 @@ describe("FastCast", () => {
       const server = fakeServer()
       const { frames, want } = yield* nflFrames(server)
       yield* frames.until(atLeast(2))
-      yield* want([scoreboard, "Synced"], [gameOf(firstGame), "Synced"])
-      yield* server.sent.until(subscribed(gameTopic(firstGame), 1))
+      yield* want([main, "Synced"], [gameOf(secondGame), "Synced"])
+      yield* server.sent.until(subscribed(gameTopic(secondGame), 1))
 
       yield* Effect.sync(() => server.close(1000))
       yield* TestClock.adjust("2 seconds")
 
-      yield* server.sent.until(subscribed(gameTopic(firstGame), 2))
-      yield* server.sent.until(subscribed("event-football-nfl", 2))
+      yield* server.sent.until(subscribed(gameTopic(secondGame), 2))
+      yield* server.sent.until(subscribed(mainTc, 2))
       assert.lengthOf(
-        server.sent.all().filter((frame) => frame.op === "S" && frame.tc === "event-football-nfl"),
+        server.sent.all().filter((frame) => frame.op === "S" && frame.tc === mainTc),
         2
       )
     })
@@ -790,50 +790,40 @@ describe("FastCast reconnect", () => {
   )
 })
 
-/** NFL frames once `missingTopic`'s and `otherTopic`'s games are wanted and both are subscribed. */
+/** NFL frames once `missingTopic`'s and `otherTopic`'s games are wanted and both are subscribed (the first by default). */
 function twoGamesFollowed(server: ReturnType<typeof fakeServer>, logged: Layer.Layer<never>) {
   return Effect.gen(function* () {
     const following = yield* nflFrames(server).pipe(Effect.provide(logged))
 
     yield* following.frames.until(atLeast(2))
-    yield* following.want(
-      [scoreboard, "AwaitingCheckpoint"],
-      [gameOf(firstGame), "AwaitingCheckpoint"],
-      [gameOf(secondGame), "AwaitingCheckpoint"]
-    )
+    yield* following.want([main, "AwaitingCheckpoint"], [gameOf(secondGame), "AwaitingCheckpoint"])
     yield* server.sent.until(subscribed(otherTopic, 1))
     return following
   })
 }
 
-/**
- * Sends an H for each game topic, `missingTopic`'s checkpoint missing, a patch on `otherTopic`, then the scoreboard's
- * H at 7, showing the same two games.
- */
+/** Sends an H for each game topic, `missingTopic`'s checkpoint missing, then a patch on `otherTopic`. */
 function missingCheckpointBesideOther(server: ReturnType<typeof fakeServer>) {
   return Effect.sync(() => {
     server.send({ op: "H", tc: missingTopic, mid: 5, pl: "https://checkpoint.test/missing" })
     server.send({ op: "H", tc: otherTopic, mid: 9, pl: "https://checkpoint.test/9" })
     server.send({ ...patchMessage(10), tc: otherTopic })
-    server.send(scoreboardShowing(7, firstGame, secondGame))
   })
 }
 
-/** NFL frames once the scoreboard topic has an H whose checkpoint never comes, logging to `logged`. */
+/** NFL frames once the game topic has an H whose checkpoint never comes, logging to `logged`. */
 function hangingCheckpoint(server: ReturnType<typeof fakeServer>, logged: Layer.Layer<never>) {
   return Effect.gen(function* () {
     const following = yield* nflFrames(server).pipe(Effect.provide(logged))
 
     yield* following.frames.until(atLeast(2))
-    yield* Effect.sync(() =>
-      server.send({ op: "H", tc: "event-football-nfl", mid: 7, pl: "https://checkpoint.test/hang" })
-    )
+    yield* Effect.sync(() => server.send({ op: "H", tc: mainTc, mid: 7, pl: "https://checkpoint.test/hang" }))
     return following
   })
 }
 
 /**
- * NFL frames once the scoreboard topic is due to be followed again: synced at 7, its document lost so it is
+ * NFL frames once the game topic is due to be followed again: synced at 7, its document lost so it is
  * subscribed to again, that subscription's checkpoint at 10 missing, then a checkpoint at 11 FastCast sent unasked,
  * which synced it and cancelled the wait, then another unasked at 12 missing, which waits to follow it again.
  */
@@ -842,25 +832,25 @@ function dueToBeFollowedAgain(server: ReturnType<typeof fakeServer>) {
     const following = yield* nflFrames(server)
 
     yield* following.frames.until(atLeast(2))
-    yield* Effect.sync(() => server.send(scoreboardShowing(7)))
+    yield* Effect.sync(() => server.send(checkpointMessage(7)))
     yield* following.frames.until(wholeAt(7))
-    yield* following.want([scoreboard, "Synced"])
-    yield* following.want([scoreboard, "AwaitingCheckpoint"])
-    yield* server.sent.until(subscribed("event-football-nfl", 2))
+    yield* following.want([main, "Synced"])
+    yield* following.want([main, "AwaitingCheckpoint"])
+    yield* server.sent.until(subscribed(mainTc, 2))
     yield* Effect.sync(() => server.send(missingCheckpoint(10)))
     yield* following.frames.until(numbered(10))
-    yield* Effect.sync(() => server.send(scoreboardShowing(11)))
+    yield* Effect.sync(() => server.send(checkpointMessage(11)))
     yield* following.frames.until(wholeAt(11))
-    yield* following.want([scoreboard, "Synced"])
+    yield* following.want([main, "Synced"])
     yield* Effect.sync(() => server.send(missingCheckpoint(12)))
     yield* following.frames.until(numbered(12))
     return following
   })
 }
 
-/** Every subscription to a game topic the client sent. */
-function gameTopicsSent(server: ReturnType<typeof fakeServer>) {
-  return server.sent.all().flatMap((frame) => (frame.tc?.startsWith("gp-") ? [frame] : []))
+/** Every subscription the client sent. */
+function subscriptionsSent(server: ReturnType<typeof fakeServer>) {
+  return server.sent.all().filter((frame) => frame.op === "S")
 }
 
 /** Every handshake the client sent: one per socket it opened. */
@@ -868,9 +858,10 @@ function connectsSent(server: ReturnType<typeof fakeServer>) {
   return server.sent.all().filter((frame) => frame.op === "C")
 }
 
-/** The NFL's scoreboard topic, and a game's. */
-const scoreboard = Topic.Scoreboard({ league: "nfl" })
-const gameOf = (game: string) => Topic.Game({ league: "nfl", game: GameId.make(game) })
+/** The NFL game topic followed from the start, and any NFL game's. */
+const gameOf = (game: string) => new Topic({ league: "nfl", game: GameId.make(game) })
+const main = gameOf(firstGame)
+const mainTc = gameTopic(firstGame)
 
 /** A wanted set of `entries`. */
 function wantedOf(...entries: ReadonlyArray<readonly [Topic, HashMap.HashMap.Value<Wanted>]>): Wanted {
@@ -878,7 +869,7 @@ function wantedOf(...entries: ReadonlyArray<readonly [Topic, HashMap.HashMap.Val
 }
 
 /**
- * Runs FastCast's frames over `server` in a fiber of its own, told to follow the NFL's scoreboard until `want` says
+ * Runs FastCast's frames over `server` in a fiber of its own, told to follow the NFL game `main` until `want` says
  * otherwise, collecting them into `frames` and completing `ended` if they ever end.
  */
 function nflFrames(server: ReturnType<typeof fakeServer>) {
@@ -886,14 +877,14 @@ function nflFrames(server: ReturnType<typeof fakeServer>) {
 }
 
 /**
- * Runs FastCast's frames over `host` in a fiber of its own, told to follow the NFL's scoreboard until `want` says
+ * Runs FastCast's frames over `host` in a fiber of its own, told to follow the NFL game `main` until `want` says
  * otherwise, collecting them into `frames` and completing `ended` if they ever end.
  */
 function framesOver(host: Layer.Layer<HttpClient.HttpClient | Socket.WebSocketConstructor>) {
   return Effect.gen(function* () {
     const ended = yield* Deferred.make<void>()
     const frames = watched<Frame>()
-    const wanted = yield* SubscriptionRef.make(wantedOf([scoreboard, "AwaitingCheckpoint"]))
+    const wanted = yield* SubscriptionRef.make(wantedOf([main, "AwaitingCheckpoint"]))
     const running = yield* FastCast
 
     yield* running.follow(SubscriptionRef.changes(wanted)).pipe(
@@ -914,11 +905,11 @@ function seen(frame: Frame) {
     PollFailed: ({ league }) => ({ tag: "PollFailed", tc: league, mid: undefined, body: undefined }),
     Pushed: ({ topic, mid, envelope }) => ({
       tag: "Pushed",
-      tc: Option.getOrUndefined(Option.map(topic, tcOf)),
+      tc: Option.getOrUndefined(Option.map(topic, (each) => each.tc())),
       mid: Option.getOrUndefined(mid),
       body: Option.getOrUndefined(Option.map(envelope, (value) => value.op))
     }),
-    Checkpoint: ({ topic, mid, document }) => ({ tag: "Checkpoint", tc: tcOf(topic), mid, document })
+    Checkpoint: ({ topic, mid, document }) => ({ tag: "Checkpoint", tc: topic.tc(), mid, document })
   })
 }
 
@@ -968,87 +959,46 @@ function gameTopic(game: string) {
   return `gp-football-nfl-${game}`
 }
 
-/** The recorded scoreboard's checkpoint, at `mid`. */
+/** The recorded game package's checkpoint, at `mid`. */
 function checkpointMessage(mid: number) {
-  return { op: "H", tc: "event-football-nfl", mid, pl: `https://checkpoint.test/${mid}` }
-}
-
-/** A scoreboard checkpoint at `mid` showing only `games`, as the recorded checkpoint has them. */
-function scoreboardShowing(mid: number, ...games: ReadonlyArray<string>) {
-  return {
-    op: "H",
-    tc: "event-football-nfl",
-    mid,
-    pl: `https://checkpoint.test/scoreboard?games=${games.join(",")}`
-  }
+  return { op: "H", tc: mainTc, mid, pl: `https://checkpoint.test/${mid}` }
 }
 
 function garbledCheckpoint(mid: number) {
-  return { op: "H", tc: "event-football-nfl", mid, pl: "https://checkpoint.test/garbled" }
+  return { op: "H", tc: mainTc, mid, pl: "https://checkpoint.test/garbled" }
 }
 
 function missingCheckpoint(mid: number) {
-  return { op: "H", tc: "event-football-nfl", mid, pl: "https://checkpoint.test/missing" }
+  return { op: "H", tc: mainTc, mid, pl: "https://checkpoint.test/missing" }
 }
 
-/** A scoreboard `P` at `mid` that patches nothing. */
+/** A `P` at `mid` that patches nothing. */
 function patchMessage(mid: number) {
-  return { op: "P", tc: "event-football-nfl", mid, pl: JSON.stringify({ ts: 1791136341731, pl: [] }) }
+  return { op: "P", tc: mainTc, mid, pl: JSON.stringify({ ts: 1791136341731, pl: [] }) }
 }
 
-/** A scoreboard `P` at `mid` whose patches are base64, but not zlib-deflated. */
+/** A `P` at `mid` whose patches are base64, but not zlib-deflated. */
 function undecodablePatchMessage(mid: number) {
   const pl = Buffer.from("not deflated").toString("base64")
-  return { op: "P", tc: "event-football-nfl", mid, pl: JSON.stringify({ ts: 1791136341731, pl }) }
+  return { op: "P", tc: mainTc, mid, pl: JSON.stringify({ ts: 1791136341731, pl }) }
 }
 
 /** The topics whose documents `state` has synced, by name. */
 function syncedTopics(state: EspnState) {
   return [...HashMap.keys(state.documents.byTopic)]
     .filter((topic) => state.documents.isSynced(topic))
-    .map(tcOf)
+    .map((topic) => topic.tc())
 }
 
-const checkpointBody = readFileSync(
-  new URL("./fixtures/nfl-fastcast-checkpoint-2026-10-04T1752Z.json", import.meta.url),
-  "utf8"
+const checkpointBody = JSON.stringify(
+  JSON.parse(readFileSync(new URL("./fixtures/nfl-gp-move-2026-10-04.json", import.meta.url), "utf8"))
+    .checkpoint.body
 )
 
-const checkpointDocument = Schema.decodeSync(FastCastMessage.Checkpoint(Topic.Scoreboard({ league: "nfl" })))(
-  checkpointBody
-)
+const checkpointDocument = Schema.decodeSync(FastCastMessage.Checkpoint)(checkpointBody)
 
-const RecordedScoreboard = Schema.fromJsonString(
-  Schema.Struct({
-    sports: Schema.Array(
-      Schema.Struct({
-        leagues: Schema.Array(
-          Schema.Struct({
-            events: Schema.Array(
-              Schema.StructWithRest(Schema.Struct({ id: Schema.String }), [
-                Schema.Record(Schema.String, Schema.Json)
-              ])
-            )
-          })
-        )
-      })
-    )
-  })
-)
-
-const recordedEvents = Schema.decodeSync(RecordedScoreboard)(checkpointBody).sports.flatMap((sport) =>
-  sport.leagues.flatMap((league) => league.events)
-)
-
-/** The recorded scoreboard checkpoint with only the events of `games`, by id. */
-function scoreboardBody(games: ReadonlyArray<string>) {
-  const events = recordedEvents.filter((event) => games.includes(event.id))
-  return JSON.stringify({ sports: [{ leagues: [{ events }] }] })
-}
-
-// FastCast's host lookup, and any checkpoint, which is the recorded one, except a scoreboard showing only some of its
-// games, a missing one, one that is not a scoreboard, one that never comes, and a recorded or missing one that comes
-// after 5 s.
+// FastCast's host lookup, and any checkpoint, which is the recorded one, except a missing one, one that is not a game
+// package, one that never comes, and a recorded or missing one that comes after 5 s.
 const espn = HttpClient.make((request) => {
   const url = new URL(request.url)
   return Effect.succeed(
@@ -1056,13 +1006,11 @@ const espn = HttpClient.make((request) => {
       request,
       url.pathname.endsWith("websockethost")
         ? new Response(JSON.stringify({ ip: "fastcast.test", securePort: 443, token: "token" }))
-        : url.pathname === "/scoreboard"
-          ? new Response(scoreboardBody((url.searchParams.get("games") ?? "").split(",")))
-          : url.pathname === "/missing" || url.pathname === "/slow-missing"
-            ? new Response("Not Found", { status: 404 })
-            : url.pathname === "/garbled"
-              ? new Response(JSON.stringify({ sports: "not a scoreboard" }))
-              : new Response(checkpointBody)
+        : url.pathname === "/missing" || url.pathname === "/slow-missing"
+          ? new Response("Not Found", { status: 404 })
+          : url.pathname === "/garbled"
+            ? new Response(JSON.stringify({ entities: "not a game package" }))
+            : new Response(checkpointBody)
     )
   ).pipe(
     Effect.andThen((response) =>

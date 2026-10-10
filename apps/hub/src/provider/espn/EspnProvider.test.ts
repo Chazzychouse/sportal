@@ -24,7 +24,6 @@ import { HubConfig } from "../../HubConfig.ts"
 import { recordingLogs } from "../../TestTelemetry.ts"
 import { Delivery, Provider } from "../Provider.ts"
 import { listedBy } from "../TestProvider.ts"
-import { SiteEvent } from "./EspnPayload.ts"
 import * as EspnProvider from "./EspnProvider.ts"
 import { FastCast, type Wanted } from "./FastCast.ts"
 import * as FastCastMessage from "./FastCastMessage.ts"
@@ -336,7 +335,7 @@ describe("EspnProvider.deliveries", () => {
   it.effect("should deliver FastCast's frames beside its polls", () =>
     Effect.gen(function* () {
       const pushed = Frame.Pushed({
-        topic: Option.some(Topic.Scoreboard({ league: "nfl" })),
+        topic: Option.some(new Topic({ league: "nfl", game: GameId.make("401872971") })),
         mid: Option.none(),
         envelope: decodeEnvelope("{}")
       })
@@ -424,7 +423,7 @@ describe("EspnProvider.deliveries", () => {
   it.effect("should deliver a push taken between two leagues' polls after the first league's listing", () =>
     Effect.gen(function* () {
       const live = scoreboardOf([{ state: "in", period: 2 }])
-      const checkpoint = checkpointFrame(Topic.Scoreboard({ league: "nfl" }), live)
+      const checkpoint = checkpointFrame(new Topic({ league: "nfl", game: GameId.make("401872971") }))
       const fbsSlow = HttpClient.make((request) =>
         request.url.includes("/nfl/")
           ? Effect.succeed(answered(request, live))
@@ -449,36 +448,19 @@ describe("EspnProvider.deliveries", () => {
         said.map((deliveries) =>
           deliveries.map((one) => (Delivery.$is("Listing")(one) ? `Listing ${one.league}` : one._tag))
         ),
-        [["Listing nfl"], ["Snapshot"], ["Listing fbs"]]
+        [["Listing nfl"], ["Plays"], ["Listing fbs"]]
       )
     })
   )
 
-  it.effect(
-    "should keep polling every minute while the poll still shows a game upcoming that a push showed live",
-    () =>
-      Effect.gen(function* () {
-        const soon = scoreboardOf([{ state: "pre", period: 0, kickoff: "2026-10-03T12:20Z" }])
-        const live = scoreboardOf([{ state: "in", period: 2, kickoff: "2026-10-03T12:20Z" }])
-        const checkpoint = checkpointFrame(Topic.Scoreboard({ league: "fbs" }), live)
-        const pushedAt30s = Stream.fromEffect(Effect.sleep("30 seconds")).pipe(Stream.as(checkpoint))
-
-        const polled = yield* polledOver(["1 minute", "10 seconds"], { fbs: soon }, pushedAt30s)
-
-        assert.deepStrictEqual(polled.fbs, [0, 60_000])
-      })
-  )
-
-  it.effect("should tell FastCast to follow every league's scoreboard topic from the start", () =>
+  it.effect("should tell FastCast to follow no topic before any game is listed", () =>
     Effect.gen(function* () {
       const unanswered = HttpClient.make(() => Effect.never)
 
       const told = yield* toldOver(unanswered, "fbs", [])
 
       const [first] = told
-      assert.deepStrictEqual(first === undefined ? [] : [...HashMap.entries(first)], [
-        [Topic.Scoreboard({ league: "fbs" }), "AwaitingCheckpoint"]
-      ])
+      assert.deepStrictEqual(first === undefined ? [] : [...HashMap.entries(first)], [])
     })
   )
 
@@ -487,7 +469,7 @@ describe("EspnProvider.deliveries", () => {
       yield* TestClock.setTime(DateTime.makeUnsafe("2026-10-03T12:00:00Z").epochMilliseconds)
       const later = scoreboardOf([{ state: "pre", period: 0, kickoff: "2026-10-03T12:31Z" }])
       const [event] = decodeEventIds(later).events
-      const game = Topic.Game({ league: "fbs", game: event.id })
+      const game = new Topic({ league: "fbs", game: event.id })
       const answering = HttpClient.make((request) =>
         Effect.succeed(HttpClientResponse.fromWeb(request, new Response(later)))
       )
@@ -799,37 +781,10 @@ const decodeEventIds = Schema.decodeUnknownSync(
   Schema.fromJsonString(Schema.Struct({ events: Schema.Tuple([Schema.Struct({ id: GameId })]) }))
 )
 
-/** The checkpoint frame FastCast makes of `topic`'s checkpoint of the site `scoreboard`'s games, at mid 1. */
-function checkpointFrame(topic: Topic, scoreboard: string): Frame {
-  const document = Schema.decodeSync(FastCastMessage.Checkpoint(topic))(checkpointBodyOf(scoreboard))
+/** The checkpoint frame FastCast makes of `topic`'s checkpoint, a game with no plays yet, at mid 1. */
+function checkpointFrame(topic: Topic): Frame {
+  const document = Schema.decodeSync(FastCastMessage.Checkpoint)(JSON.stringify({ entities: {} }))
   return Frame.Checkpoint({ topic, mid: 1, document })
-}
-
-/** A FastCast scoreboard checkpoint's document of the site `scoreboard`'s games, spelled as FastCast spells them. */
-function checkpointBodyOf(scoreboard: string): string {
-  const { events } = Schema.decodeSync(
-    Schema.fromJsonString(Schema.Struct({ events: Schema.Array(SiteEvent) }))
-  )(scoreboard)
-  return JSON.stringify({
-    sports: [
-      {
-        leagues: [
-          {
-            events: events.map((event) => ({
-              uid: event.id,
-              id: event.id,
-              fullStatus: event.status,
-              competitors: event.competitions[0].competitors.map(({ homeAway, score, team }) => ({
-                id: team.id,
-                homeAway,
-                score
-              }))
-            }))
-          }
-        ]
-      }
-    ]
-  })
 }
 
 /**
