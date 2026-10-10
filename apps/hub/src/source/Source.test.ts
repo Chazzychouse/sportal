@@ -44,7 +44,57 @@ describe("Source.layerYouTubeTv", () => {
       ])
     }).pipe(Effect.provide(youTubeTv))
   )
+
+  it.effect("should carry from a guide 44 minutes after reading it", () =>
+    Effect.gen(function* () {
+      yield* TestYouTubeTv.readRecordedGuide
+
+      yield* TestClock.adjust("44 minutes")
+
+      const availabilityOf = yield* now
+      assert.deepStrictEqual(availabilityOf(ohioStateAtIowa), [onNews3])
+    }).pipe(Effect.provide(youTubeTv))
+  )
+
+  it.effect("should give no guide once its guide is 45 minutes old", () =>
+    Effect.gen(function* () {
+      yield* TestYouTubeTv.readRecordedGuide
+
+      yield* TestClock.adjust("45 minutes")
+
+      const availabilityOf = yield* now
+      assert.deepStrictEqual(availabilityOf(ohioStateAtIowa), [{ _tag: "NoGuide", source: "YouTube TV" }])
+    }).pipe(Effect.provide(youTubeTv))
+  )
+
+  it.effect("should carry from a newer guide when an older one would have gone stale", () =>
+    Effect.gen(function* () {
+      yield* TestYouTubeTv.readRecordedGuide
+      yield* TestClock.adjust("30 minutes")
+      yield* YouTubeTv.use((youTubeTv) => youTubeTv.readGuide(TestYouTubeTv.recordedGuide))
+
+      yield* TestClock.adjust("20 minutes")
+
+      const availabilityOf = yield* now
+      assert.deepStrictEqual(availabilityOf(ohioStateAtIowa), [onNews3])
+    }).pipe(Effect.provide(youTubeTv))
+  )
 })
+
+// News 3's live address, recorded from YouTube TV's live guide on 2026-10-03.
+const cbsLive = "https://tv.youtube.com/watch/y6zFA17zDsw?vp=0gEEEgIwAQ%3D%3D"
+
+const ohioStateAtIowa = snapshot({
+  status: "live",
+  kickoff: DateTime.makeUnsafe("2026-10-03T19:30:00Z"),
+  away: { team: team("OSU", "fbs", { name: "Ohio State Buckeyes", location: "Ohio State" }), score: 0 },
+  home: { team: team("IOWA", "fbs", { name: "Iowa Hawkeyes", location: "Iowa" }), score: 0 },
+  broadcasts: [broadcast("CBS")]
+})
+const onNews3: ChannelAvailability = {
+  _tag: "Carried",
+  channel: { name: "News 3", source: "YouTube TV", locator: { _tag: "WebView", url: cbsLive } }
+}
 
 const thursdayKickoff = DateTime.makeUnsafe("2026-10-09T00:15:00Z")
 const thursdayNight = primeVideoGame(thursdayKickoff)

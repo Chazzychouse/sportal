@@ -1,6 +1,6 @@
 import type { ChannelAvailability } from "@sportal/domain/Channel"
 import { type GameSnapshot, Network } from "@sportal/domain/Game"
-import { Context, DateTime, Effect, Layer, Option, Stream } from "effect"
+import { Context, DateTime, Duration, Effect, Layer, Option, Stream } from "effect"
 import { ChannelId, Guide } from "./Guide.ts"
 import { YouTubeTv } from "./youtube-tv/YouTubeTv.ts"
 
@@ -17,19 +17,22 @@ export class Source extends Context.Service<
     >
   }
 >()("sportal/hub/source/Source") {
-  /** YouTube TV: from the latest guide it keeps while it is fresh; otherwise no guide. */
+  /** YouTube TV: from the latest guide it read while that guide is fresh; otherwise no guide. */
   static readonly layerYouTubeTv: Layer.Layer<Source, never, YouTubeTv> = Layer.effect(
     Source,
     Effect.gen(function* () {
       const youTubeTv = yield* YouTubeTv
 
       const availability = youTubeTv.guide.pipe(
-        Stream.map((latest) => (game: GameSnapshot, now: DateTime.Utc) => [
-          Option.match(latest, {
-            onNone: (): ChannelAvailability => ({ _tag: "NoGuide", source: YouTubeTv.source }),
-            onSome: (guide) => guide.availabilityOf(game, now)
-          })
-        ])
+        Stream.map((latest) => (game: GameSnapshot, now: DateTime.Utc) => {
+          const fresh = Option.filter(latest, (guide) => isFresh(guide, now))
+          return [
+            Option.match(fresh, {
+              onNone: (): ChannelAvailability => ({ _tag: "NoGuide", source: "YouTube TV" }),
+              onSome: (guide) => guide.availabilityOf(game, now)
+            })
+          ]
+        })
       )
 
       return Source.of({ availability })
@@ -96,4 +99,11 @@ export class Source extends Context.Service<
       Source.of({ availability: Stream.concat(Stream.make(value), again.pipe(Stream.as(value))) })
     )
   }
+}
+
+/** A guide answers for 45 minutes after its reading; the shell reads one every 5 minutes while it runs. */
+const staleAfter = Duration.minutes(45)
+
+function isFresh(guide: Guide, now: DateTime.Utc): boolean {
+  return DateTime.isLessThan(now, DateTime.addDuration(guide.readAt, staleAfter))
 }
