@@ -15,12 +15,6 @@ const fourth = GameId.make("fourth")
 const redZone = TestWeb.redZone
 const live: Moment = { _tag: "Live" }
 const final: Moment = { _tag: "Final" }
-const timeout: Moment = {
-  _tag: "Break",
-  reason: "timeout",
-  expectedEnd: DateTime.makeUnsafe("2026-10-10T20:01:00Z")
-}
-
 const start = DateTime.makeUnsafe("2026-10-10T20:00:00Z")
 
 function at(seconds: number) {
@@ -64,7 +58,7 @@ const holding = on.step(
 
 describe("Autopilot.step, the main tile", () => {
   it("should send nothing while off", () => {
-    const { commands } = Autopilot.off.step(quad, classified([[home, timeout]]), start)
+    const { commands } = Autopilot.off.step(quad, classified([[home, TestWeb.timeout]]), start)
 
     assert.deepStrictEqual(commands, [])
   })
@@ -72,7 +66,7 @@ describe("Autopilot.step, the main tile", () => {
   it("should send nothing while the Screen is soloed", () => {
     const soloed = after(quad, [{ _tag: "Solo", tile: 1 }])
 
-    const { commands } = on.step(soloed, classified([[home, timeout]]), start)
+    const { commands } = on.step(soloed, classified([[home, TestWeb.timeout]]), start)
 
     assert.deepStrictEqual(commands, [])
   })
@@ -96,7 +90,7 @@ describe("Autopilot.step, the main tile", () => {
     const { commands } = on.step(
       quad,
       classified([
-        [home, timeout],
+        [home, TestWeb.timeout],
         [other, live, 50],
         [third, live, 70],
         [fourth, live, 10]
@@ -131,7 +125,7 @@ describe("Autopilot.step, the main tile", () => {
     const { commands } = Autopilot.off.toggle(screen).step(
       screen,
       classified([
-        [home, timeout],
+        [home, TestWeb.timeout],
         [other, final],
         [third, final],
         [fourth, final]
@@ -191,8 +185,8 @@ describe("Autopilot.step, the main tile", () => {
     const { commands } = on.step(
       quad,
       classified([
-        [home, timeout],
-        [other, timeout],
+        [home, TestWeb.timeout],
+        [other, TestWeb.timeout],
         [third, final],
         [fourth, { _tag: "Upcoming" }]
       ]),
@@ -208,7 +202,7 @@ describe("Autopilot.step, the main tile", () => {
     const { commands } = yours.step(
       quad,
       classified([
-        [home, timeout],
+        [home, TestWeb.timeout],
         [other, redZone],
         [third, live],
         [fourth, live]
@@ -260,7 +254,7 @@ describe("Autopilot.step, the sound", () => {
     const { commands } = yours.step(
       heard,
       classified([
-        [home, timeout],
+        [home, TestWeb.timeout],
         [other, live],
         [third, live],
         [fourth, live]
@@ -280,7 +274,7 @@ describe("Autopilot.step, the layout", () => {
     const { commands } = on.step(
       quad,
       classified([
-        [home, timeout],
+        [home, TestWeb.timeout],
         [other, redZone],
         [third, final],
         [fourth, final]
@@ -348,7 +342,7 @@ describe("Autopilot.step, the decision", () => {
     const { decision } = on.step(
       quad,
       classified([
-        [home, timeout],
+        [home, TestWeb.timeout],
         [other, live],
         [third, live],
         [fourth, live]
@@ -551,7 +545,7 @@ describe("Autopilot.status", () => {
   })
 
   it("should say nothing is live when the main tile's game is not", () => {
-    const status = on.status(start, quad, classified([[home, timeout]]))
+    const status = on.status(start, quad, classified([[home, TestWeb.timeout]]))
 
     assert.deepStrictEqual(status, AutopilotStatus.NothingLive({ fitted: Option.none() }))
   })

@@ -121,7 +121,7 @@ Rewritten as a `Schema.Class`, kept under `sportal/autopilot`:
 A plain value, built by `step`, for the log:
 
 - `ranking`: each occupied tile's game with its rank and score, best first.
-- `layout`: `Fitted { from, to }`, `Yours { until }`, or `Kept`.
+- `layout`: `Fitted { from, to }`, `Kept { layout }`, `Yours { until }`, or `NoCeiling`.
 - `main`: `Promoted { game, over, why: "outranks" | "stopped" }`, or `Stayed { game, why }` with `why` one of `Best`,
   `SameRank`, `Dwell { left }`, `Yours { until }`, `NothingLive`.
 - `sound`: `Followed { game }`, `Kept`, or `Yours { until }`.

@@ -104,6 +104,13 @@ export function classified(
 /** The home team eight yards from scoring. */
 export const redZone: Moment = { _tag: "ScoringThreat", team: team("HOME").id, yardsToGo: 8 }
 
+/** A timeout, a break that expects to end a minute after 20:00 on 2026-10-10. */
+export const timeout: Moment = {
+  _tag: "Break",
+  reason: "timeout",
+  expectedEnd: DateTime.makeUnsafe("2026-10-10T20:01:00Z")
+}
+
 /** The EventSource the live stream opened, once a read of the atom has started it. */
 export const opened: Effect.Effect<FakeEventSource, never, AtomRegistry.AtomRegistry> = Atom.get(
   LiveStream.live

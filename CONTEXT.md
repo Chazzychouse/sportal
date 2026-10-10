@@ -141,8 +141,15 @@ Provider and Source are the two words most likely to be swapped. Provider is alw
 | **Classification** | A game's moment, since when, and its score 0–100 with the points each part gave it; `Classification` in `packages/domain/src/Classification.ts`. | rating, watchability |
 | **Matchup prior** | What a game promises before it starts: the mean of how close its line is, how highly its teams are ranked, and how often they have won. It fades as the game is played. | |
 | **Classifier** | The pure fold that classifies the slate's games, stepped by the Director after each take and when a held moment runs out; it keeps each game's pregame line, its big play for a minute, when each game last moved (its stall clock), and its moment, which holds 20 s before a lower one replaces it. `Classifier` in `packages/domain/src/Classifier.ts`. | analyzer, scorer |
-| **Autopilot** | A Display's follower of the classifications: shows the best game by its ranking in the main tile, the sound on it, and fits the layout under the ceiling. Off by default; your commands win. | director, auto-switcher |
-| **Ranking** | The autopilot's order of games: a red zone, crunch time, a big play, live play, a break, not live; then score, then tile. | priority |
+| **Autopilot** | A Display's follower of the classifications: shows the best game by its rank in the main tile, the sound on it, and fits the layout under the ceiling. Off by default; your commands win. | director, auto-switcher |
+| **Rank** | How worth showing the autopilot finds a game, best first (`Rank` in `apps/web/src/autopilot/Ranking.ts`): a red zone, crunch time, a big play, live play, a break, not live; ties go to the higher score, then the lower tile. | priority, ranking |
+| **Ranked** | A game on a tile with its rank and score, as a step saw it. | |
+| **Decision** | What one step of the autopilot decided and why, for its log: off, frozen (the Screen soloed), or stepped, with the ranked games it saw and what it did with the layout, the main tile and the sound; `Decision` in `apps/web/src/autopilot/Decision.ts`. | verdict |
+| **LayoutDecision** | What a step did with the layout: fitted it from one to another, kept it, left it to you until a time, or had no ceiling to fit under. | |
+| **MainDecision** | What a step did with the main tile: promoted a game over the one there (it outranks it, or the one there stopped), or kept the one there, for a StayReason. | |
+| **StayReason** | Why the main tile kept its game: it is the best, nothing ranks higher, its dwell has time left, it is yours, or nothing is live. | |
+| **SoundDecision** | Where a step left the sound: on the main tile's game, or yours until a time. | |
+| **Step** | One step of the autopilot: the next autopilot, the commands to send in order, and its Decision; `Step` in `apps/web/src/autopilot/Autopilot.ts`. | tick |
 | **Dwell** | The 30 s the main tile's game holds the tile against a game in a higher rank, unless it stops. | hold |
 | **Suspension** | The 3 min a command you send keeps the autopilot off the main tile, the sound or the layout it touched. | pause, lock |
 | **Ceiling** | The layout you chose (when you turn the autopilot on, and each one you set): the autopilot fits the layout down from it as games end and back up to it as they start, never past. | max layout |

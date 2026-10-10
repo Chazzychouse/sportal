@@ -1,7 +1,6 @@
 import { afterEach, assert, beforeEach, describe, it } from "@effect/vitest"
 import { Classification } from "@sportal/domain/Classification"
 import { Game, GameId } from "@sportal/domain/Game"
-import type { Moment } from "@sportal/domain/Moment"
 import { snapshot } from "@sportal/domain/TestGame"
 import { Clock, DateTime, Duration, Effect, Layer } from "effect"
 import { Atom, AtomRegistry } from "effect/reactivity"
@@ -20,12 +19,6 @@ const home = GameId.make("home")
 const other = GameId.make("other")
 const homeGame = Game.of(snapshot({ id: home, status: "live" }))
 const otherGame = Game.of(snapshot({ id: other, status: "live" }))
-
-const timeout: Moment = {
-  _tag: "Break",
-  reason: "timeout",
-  expectedEnd: DateTime.makeUnsafe("2026-10-10T20:01:00Z")
-}
 
 /** A slate of the two games, both on FOX, each classified as given (plain live play unless given). */
 function slate(
@@ -69,7 +62,7 @@ describe("AutopilotState", () => {
     "should promote a live game as soon as it is turned on while the main tile's game is on a break",
     () =>
       Effect.gen(function* () {
-        yield* arranged(slate(TestWeb.classified({ _tag: "Live" }), TestWeb.classified(timeout)))
+        yield* arranged(slate(TestWeb.classified({ _tag: "Live" }), TestWeb.classified(TestWeb.timeout)))
 
         yield* Atom.set(AutopilotState.autopilot, AutopilotInput.Toggled())
 
@@ -87,7 +80,9 @@ describe("AutopilotState", () => {
         yield* Atom.set(AutopilotState.autopilot, AutopilotInput.Toggled())
         yield* Atom.mount(AutopilotState.pilot)
 
-        source.onmessage?.({ data: slate(TestWeb.classified({ _tag: "Live" }), TestWeb.classified(timeout)) })
+        source.onmessage?.({
+          data: slate(TestWeb.classified({ _tag: "Live" }), TestWeb.classified(TestWeb.timeout))
+        })
         return yield* TestWeb.until(DisplayScreen.screen, (screen) => mainGame(screen) === other)
       }).pipe(Effect.scoped, Effect.provide(registry))
 

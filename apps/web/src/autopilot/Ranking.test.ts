@@ -1,15 +1,8 @@
 import { assert, describe, it } from "@effect/vitest"
 import { GameId } from "@sportal/domain/Game"
-import type { Moment } from "@sportal/domain/Moment"
-import { DateTime, Record } from "effect"
+import { Record } from "effect"
 import * as TestWeb from "../TestWeb.ts"
 import { byRank, isLive, outranks, rankOf } from "./Ranking.ts"
-
-const timeout: Moment = {
-  _tag: "Break",
-  reason: "timeout",
-  expectedEnd: DateTime.makeUnsafe("2026-10-10T20:01:00Z")
-}
 
 describe("rankOf", () => {
   it("should rank a red zone first", () => {
@@ -21,7 +14,7 @@ describe("rankOf", () => {
   })
 
   it("should rank a break below every live rank", () => {
-    assert.isFalse(isLive(rankOf(timeout)))
+    assert.isFalse(isLive(rankOf(TestWeb.timeout)))
   })
 
   it("should rank a final game not live", () => {
@@ -30,7 +23,7 @@ describe("rankOf", () => {
 })
 
 describe("outranks", () => {
-  it("should hold of crunch time over a big play", () => {
+  it("should rank crunch time above a big play", () => {
     assert.isTrue(outranks("crunchTime", "bigPlay"))
   })
 
