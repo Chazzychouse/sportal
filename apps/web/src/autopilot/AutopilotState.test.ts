@@ -2,7 +2,7 @@ import { afterEach, assert, beforeEach, describe, it } from "@effect/vitest"
 import { Classification } from "@sportal/domain/Classification"
 import { Game, GameId } from "@sportal/domain/Game"
 import { snapshot } from "@sportal/domain/TestGame"
-import { Clock, DateTime, Duration, Effect, Layer } from "effect"
+import { Clock, DateTime, Duration, Effect, Layer, Logger } from "effect"
 import { Atom, AtomRegistry } from "effect/reactivity"
 import { TestClock } from "effect/testing"
 import { vi } from "vitest"
@@ -229,7 +229,70 @@ describe("AutopilotState", () => {
       assert.isTrue(pilot.on)
     })
   )
+
+  it.effect("should log a new decision once", () =>
+    Effect.gen(function* () {
+      const { registry, logs } = loggingRegistry()
+
+      yield* Effect.gen(function* () {
+        const source = yield* arranged(slate())
+        yield* Atom.set(AutopilotState.autopilot, AutopilotInput.Toggled())
+        yield* Atom.mount(AutopilotState.pilot)
+        yield* logged(logs, (line) => line.includes("layout Pair"))
+        source.onmessage?.({ data: slate() })
+        source.onmessage?.({ data: slate() })
+        yield* Effect.yieldNow
+      }).pipe(Effect.scoped, Effect.provide(registry))
+
+      assert.strictEqual(logs.filter((line) => line.includes("layout Pair")).length, 1)
+    })
+  )
+
+  it.effect("should log a promote with the matchup's name", () =>
+    Effect.gen(function* () {
+      const { registry, logs } = loggingRegistry()
+
+      yield* Effect.gen(function* () {
+        const source = yield* arranged(slate())
+        yield* Atom.set(AutopilotState.autopilot, AutopilotInput.Toggled())
+        yield* Atom.mount(AutopilotState.pilot)
+        source.onmessage?.({
+          data: slate(TestWeb.classified({ _tag: "Live" }), TestWeb.classified(TestWeb.timeout))
+        })
+        yield* logged(logs, (line) => line.startsWith("Autopilot: promoted"))
+      }).pipe(Effect.scoped, Effect.provide(registry))
+
+      const line = logs.find((line) => line.startsWith("Autopilot: promoted"))
+      assert.match(
+        line ?? "",
+        /^Autopilot: promoted \S+ @ \S+ over \S+ @ \S+: the main tile's game stopped; /
+      )
+    })
+  )
 })
+
+/** A registry for the pilot whose logs, each message, collect in `logs`. */
+function loggingRegistry() {
+  const logs: Array<string> = []
+  const capture = Logger.make<unknown, void>(({ message }) => {
+    logs.push(String(Array.isArray(message) ? message[0] : message))
+  })
+  const registry = TestWeb.registryOf(
+    Layer.mergeAll(
+      Shell.layerTest({ record: () => Effect.void }),
+      HubClient.layerTest(() => Effect.void),
+      Logger.layer([capture])
+    )
+  )
+  return { registry, logs }
+}
+
+/** Yields until a line of `logs` satisfies `predicate`. */
+function logged(logs: ReadonlyArray<string>, predicate: (line: string) => boolean) {
+  return Effect.gen(function* () {
+    for (let attempt = 0; attempt < 500 && !logs.some(predicate); attempt++) yield* Effect.yieldNow
+  })
+}
 
 /** `duration` passing on both the Effect clock and the browser's. */
 function passing(duration: Duration.Duration) {

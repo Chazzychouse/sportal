@@ -1,5 +1,4 @@
 import type { SlateChanged } from "@sportal/api/LiveMessage"
-import type { GameId } from "@sportal/domain/Game"
 import type { Slate } from "@sportal/domain/Slate"
 import { DateTime, Duration, Option } from "effect"
 import { Radar } from "lucide-react"
@@ -7,6 +6,7 @@ import { useState } from "react"
 import { Button } from "@/design/button"
 import type { Screen } from "../screen/Screen.ts"
 import { type Autopilot, AutopilotStatus, type Part } from "./Autopilot.ts"
+import { nameIn } from "./AutopilotState.ts"
 import { label } from "./Ranking.ts"
 
 /** The top bar's autopilot switch: on or off, with what it is doing as its tooltip. */
@@ -19,11 +19,7 @@ export function AutopilotToggle(props: {
 }) {
   const { autopilot, slate, classifications, screen } = props
   const [now, setNow] = useState(DateTime.nowUnsafe)
-  const nameOf = (game: GameId) =>
-    Option.match(slate.gameOf(game), {
-      onNone: () => "a game",
-      onSome: ({ snapshot }) => `${snapshot.away.team.abbreviation} @ ${snapshot.home.team.abbreviation}`
-    })
+  const nameOf = nameIn(slate)
   const doing = AutopilotStatus.$match(autopilot.status(now, screen, classifications), {
     Off: () => "Autopilot off",
     Yours: ({ part, until }) =>
