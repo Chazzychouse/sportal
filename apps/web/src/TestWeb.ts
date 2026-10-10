@@ -125,7 +125,7 @@ export function slateMessage(
   const availability = Record.fromEntries(
     entries.map(({ game, availability }) => [game.snapshot.id, availability] as const)
   )
-  return encodeLiveMessage({ _tag: "SlateChanged", slate, availability })
+  return encodeLiveMessage({ _tag: "SlateChanged", slate, availability, classifications: {} })
 }
 
 /** The first value of `atom` that `predicate` holds for. */
