@@ -62,7 +62,7 @@ export class GameSnapshot extends Schema.Class<GameSnapshot>("sportal/GameSnapsh
    * How far a game has got: before kickoff, in play, or over; then the period; then less time left on the clock; then,
    * at the same clock, halftime after play. Any other statuses at the same clock tie. Orders two snapshots of one game.
    */
-  static readonly gameTime: Order.Order<GameSnapshot> = Order.combine(
+  private static readonly gameTime: Order.Order<GameSnapshot> = Order.combine(
     Order.mapInput(Order.Number, (game: GameSnapshot) => gameTimeRank[game.progress()]),
     Order.combine(
       GameSnapshot.clockTime,
@@ -92,7 +92,7 @@ export class GameSnapshot extends Schema.Class<GameSnapshot>("sportal/GameSnapsh
    * Later in game time, or at the same game time with more points, or with as many points split differently. The clock
    * stops on a score, so at the same game time only the points say which is newer.
    */
-  isAheadOf(that: GameSnapshot): boolean {
+  private isAheadOf(that: GameSnapshot): boolean {
     const order = GameSnapshot.gameTime(this, that)
     if (order !== 0) return order > 0
     const points = this.points() - that.points()
@@ -105,7 +105,7 @@ export class GameSnapshot extends Schema.Class<GameSnapshot>("sportal/GameSnapsh
    * clock whatever either's status, or at the same clock with more points. So overtime after a spurious final, or a
    * postponed game resuming, is ahead, and a poll lagging the end of the game is not.
    */
-  isAheadOfOver(over: GameSnapshot): boolean {
+  private isAheadOfOver(over: GameSnapshot): boolean {
     const order = GameSnapshot.clockTime(this, over)
     return order !== 0 ? order > 0 : this.points() > over.points()
   }
@@ -123,11 +123,6 @@ export class GameSnapshot extends Schema.Class<GameSnapshot>("sportal/GameSnapsh
   /** Both teams' points together. */
   private points(): number {
     return this.home.score + this.away.score
-  }
-
-  /** The points between the teams. */
-  margin(): number {
-    return Math.abs(this.home.score - this.away.score)
   }
 
   /** Whether the game is in overtime, the fifth period or later. */
@@ -150,32 +145,6 @@ export class GameSnapshot extends Schema.Class<GameSnapshot>("sportal/GameSnapsh
     return `${this.away.team.abbreviation} at ${this.home.team.abbreviation}`
   }
 
-  /**
-   * This game moved on to `moved`'s status, period, clock, scores, and situation (none when it has none), keeping its
-   * own teams, rankings, kickoff, and broadcasts.
-   */
-  advancedTo(moved: {
-    readonly status: GameStatus
-    readonly period: number
-    readonly clock: string
-    readonly homeScore: number
-    readonly awayScore: number
-    readonly situation?: Situation | undefined
-  }): GameSnapshot {
-    return new GameSnapshot({
-      id: this.id,
-      league: this.league,
-      kickoff: this.kickoff,
-      broadcasts: this.broadcasts,
-      status: moved.status,
-      period: moved.period,
-      clock: moved.clock,
-      home: { ...this.home, score: moved.homeScore },
-      away: { ...this.away, score: moved.awayScore },
-      ...(moved.situation === undefined ? {} : { situation: moved.situation })
-    })
-  }
-
   /** Seconds left in the period, from the clock ("2:10"). An unreadable clock reads as a full quarter. */
   secondsLeft(): number {
     const [minutes, seconds] = this.clock.split(":").map((part) => Number.parseInt(part, 10))
@@ -183,16 +152,11 @@ export class GameSnapshot extends Schema.Class<GameSnapshot>("sportal/GameSnapsh
     return Number.isFinite(total) ? total : quarterSeconds
   }
 
-  /** The share of the period left on the clock, 0–1. */
-  quarterLeft(): number {
-    return this.secondsLeft() / quarterSeconds
-  }
-
   /**
    * Whether the period runs on a game clock, so 0:00 means it is over. A college overtime has no clock: ESPN shows
    * it as 0:00 throughout. An NFL overtime has one.
    */
-  timed(): boolean {
+  private timed(): boolean {
     return !(this.league === "fbs" && this.inOvertime())
   }
 

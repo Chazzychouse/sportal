@@ -2,7 +2,7 @@ import { assert, describe, it } from "@effect/vitest"
 import { DateTime, Duration, Option } from "effect"
 import { BallSpot, Game, GameId, GameSnapshot, type GameStatus } from "./Game.ts"
 import { PlayId } from "./Play.ts"
-import { Situation } from "./Situation.ts"
+import type { Situation } from "./Situation.ts"
 import { broadcast, liveSnapshot, play, situation, snapshot, team } from "./TestGame.ts"
 
 describe("GameSnapshot#progress", () => {
@@ -66,26 +66,6 @@ describe("GameSnapshot#isLiveOrKicksOffWithin", () => {
   })
 })
 
-describe("GameSnapshot#margin", () => {
-  it("should be the points the home team leads by", () => {
-    const game = withScores(24, 17)
-
-    assert.strictEqual(game.margin(), 7)
-  })
-
-  it("should be the points the away team leads by", () => {
-    const game = withScores(3, 10)
-
-    assert.strictEqual(game.margin(), 7)
-  })
-
-  it("should be zero when the scores are level", () => {
-    const game = withScores(14, 14)
-
-    assert.strictEqual(game.margin(), 0)
-  })
-})
-
 describe("GameSnapshot#inOvertime", () => {
   it("should not be in overtime in the fourth period", () => {
     const game = snapshot({ period: 4 })
@@ -143,256 +123,11 @@ describe("GameSnapshot#networks", () => {
   })
 })
 
-describe("GameSnapshot#timed", () => {
-  it("should run on a clock in a college fourth period", () => {
-    const game = snapshot({ league: "fbs", status: "live", period: 4 })
-
-    assert.isTrue(game.timed())
-  })
-
-  it("should have no clock in a college overtime", () => {
-    const game = snapshot({ league: "fbs", status: "live", period: 5 })
-
-    assert.isFalse(game.timed())
-  })
-
-  it("should run on a clock in an NFL overtime", () => {
-    const game = snapshot({ league: "nfl", status: "live", period: 5 })
-
-    assert.isTrue(game.timed())
-  })
-})
-
 describe("GameSnapshot#matchup", () => {
   it("should name the away team at the home team", () => {
     const game = snapshot({ away: { team: team("UGA"), score: 0 }, home: { team: team("BAMA"), score: 0 } })
 
     assert.strictEqual(game.matchup(), "UGA at BAMA")
-  })
-})
-
-describe("GameSnapshot.gameTime", () => {
-  const compare = GameSnapshot.gameTime
-
-  it("should put upcoming before live", () => {
-    const upcoming = snapshot({ status: "scheduled" })
-    const live = snapshot({ status: "live", period: 1, clock: "10:00" })
-
-    assert.strictEqual(compare(upcoming, live), -1)
-  })
-
-  it("should put live before over", () => {
-    const live = snapshot({ status: "live", period: 1, clock: "10:00" })
-    const over = snapshot({ status: "final", period: 4, clock: "0:00" })
-
-    assert.strictEqual(compare(live, over), -1)
-  })
-
-  it("should put over after upcoming", () => {
-    const upcoming = snapshot({ status: "scheduled" })
-    const over = snapshot({ status: "final", period: 4, clock: "0:00" })
-
-    assert.strictEqual(compare(over, upcoming), 1)
-  })
-
-  it("should put a later period ahead of an earlier one whatever the clock", () => {
-    const later = snapshot({ status: "live", period: 2, clock: "14:00" })
-    const earlier = snapshot({ status: "live", period: 1, clock: "0:30" })
-
-    assert.strictEqual(compare(later, earlier), 1)
-  })
-
-  it("should put less time left ahead within a period", () => {
-    const later = snapshot({ status: "live", period: 3, clock: "2:00" })
-    const earlier = snapshot({ status: "live", period: 3, clock: "9:00" })
-
-    assert.strictEqual(compare(later, earlier), 1)
-  })
-
-  it("should put more time left behind within a period", () => {
-    const later = snapshot({ status: "live", period: 3, clock: "2:00" })
-    const earlier = snapshot({ status: "live", period: 3, clock: "9:00" })
-
-    assert.strictEqual(compare(earlier, later), -1)
-  })
-
-  it("should ignore the score", () => {
-    const scored = snapshot({
-      status: "live",
-      period: 2,
-      clock: "5:00",
-      home: { team: team("HOME"), score: 7 }
-    })
-    const level = snapshot({ status: "live", period: 2, clock: "5:00" })
-
-    assert.strictEqual(compare(scored, level), 0)
-  })
-
-  it("should put halftime after the end of period 2 at the same clock", () => {
-    const halftime = snapshot({ status: "halftime", period: 2, clock: "0:00" })
-    const endOfHalf = snapshot({ status: "live", period: 2, clock: "0:00" })
-
-    assert.strictEqual(compare(halftime, endOfHalf), 1)
-  })
-
-  it("should put the end of period 2 before halftime at the same clock", () => {
-    const halftime = snapshot({ status: "halftime", period: 2, clock: "0:00" })
-    const endOfHalf = snapshot({ status: "live", period: 2, clock: "0:00" })
-
-    assert.strictEqual(compare(endOfHalf, halftime), -1)
-  })
-
-  it("should tie a delay with play at the same clock", () => {
-    const delayed = snapshot({ status: "delayed", period: 3, clock: "8:00" })
-    const playing = snapshot({ status: "live", period: 3, clock: "8:00" })
-
-    assert.strictEqual(compare(delayed, playing), 0)
-  })
-
-  it("should put halftime after play with time left in period 2", () => {
-    const halftime = snapshot({ status: "halftime", period: 2, clock: "0:00" })
-    const playing = snapshot({ status: "live", period: 2, clock: "0:10" })
-
-    assert.strictEqual(compare(halftime, playing), 1)
-  })
-
-  it("should put halftime before the start of period 3", () => {
-    const halftime = snapshot({ status: "halftime", period: 2, clock: "0:00" })
-    const secondHalf = snapshot({ status: "live", period: 3, clock: "15:00" })
-
-    assert.strictEqual(compare(halftime, secondHalf), -1)
-  })
-
-  it("should read a delay during the game as live", () => {
-    const delayed = snapshot({ status: "delayed", period: 2, clock: "5:00" })
-    const earlierPlay = snapshot({ status: "live", period: 1, clock: "1:00" })
-
-    assert.strictEqual(compare(delayed, earlierPlay), 1)
-  })
-
-  it("should read a delay before kickoff as upcoming", () => {
-    const delayed = snapshot({ status: "delayed", period: 0 })
-    const live = snapshot({ status: "live", period: 1 })
-
-    assert.strictEqual(compare(delayed, live), -1)
-  })
-})
-
-describe("GameSnapshot#isAheadOf", () => {
-  it("should be ahead in a later period", () => {
-    const later = at({ period: 3, clock: "15:00" })
-
-    const ahead = later.isAheadOf(at())
-
-    assert.isTrue(ahead)
-  })
-
-  it("should be ahead in the same period with less on the clock", () => {
-    const later = at({ clock: "4:59" })
-
-    const ahead = later.isAheadOf(at())
-
-    assert.isTrue(ahead)
-  })
-
-  it("should be ahead at the same game time with more points", () => {
-    const ahead = scoredAt(7, 0).isAheadOf(scoredAt(6, 0))
-
-    assert.isTrue(ahead)
-  })
-
-  it("should not be ahead at the same game time with fewer points", () => {
-    const ahead = scoredAt(6, 0).isAheadOf(scoredAt(7, 0))
-
-    assert.isFalse(ahead)
-  })
-
-  it("should be ahead at the same game time with equal points split differently", () => {
-    const ahead = scoredAt(7, 3).isAheadOf(scoredAt(3, 7))
-
-    assert.isTrue(ahead)
-  })
-
-  it("should have halftime ahead of play at the end of the second period", () => {
-    const halftime = at({ status: "halftime", clock: "0:00" })
-
-    const ahead = halftime.isAheadOf(at({ clock: "0:00" }))
-
-    assert.isTrue(ahead)
-  })
-
-  it("should not have play at the end of the second period ahead of halftime", () => {
-    const halftime = at({ status: "halftime", clock: "0:00" })
-
-    const ahead = at({ clock: "0:00" }).isAheadOf(halftime)
-
-    assert.isFalse(ahead)
-  })
-
-  it("should have a final ahead of play at the end of the last period", () => {
-    const final = at({ status: "final", period: 4, clock: "0:00" })
-    const endOfGame = at({ period: 4, clock: "0:00" })
-
-    const ahead = final.isAheadOf(endOfGame)
-
-    assert.isTrue(ahead)
-  })
-
-  it("should not have play at the end of the last period ahead of the final", () => {
-    const final = at({ status: "final", period: 4, clock: "0:00" })
-    const endOfGame = at({ period: 4, clock: "0:00" })
-
-    const ahead = endOfGame.isAheadOf(final)
-
-    assert.isFalse(ahead)
-  })
-
-  it("should not have a delay ahead of play at the same clock and points", () => {
-    const delayed = at({ status: "delayed" })
-
-    const ahead = delayed.isAheadOf(at())
-
-    assert.isFalse(ahead)
-  })
-
-  it("should not have play ahead of a delay at the same clock and points", () => {
-    const delayed = at({ status: "delayed" })
-
-    const ahead = at().isAheadOf(delayed)
-
-    assert.isFalse(ahead)
-  })
-
-  it.each(
-    pairs([
-      [at({ status: "halftime", clock: "0:00" }), at({ clock: "0:00" })],
-      [at({ status: "delayed" }), at()],
-      [at({ status: "delayed", clock: "0:00" }), at({ status: "halftime", clock: "0:00" })],
-      [at({ status: "final", period: 4, clock: "0:00" }), at({ period: 4, clock: "0:00" })],
-      [
-        at({ status: "final", period: 4, clock: "0:00" }),
-        at({ status: "canceled", period: 4, clock: "0:00" })
-      ],
-      [at({ status: "postponed" }), at()],
-      [snapshot({ status: "scheduled" }), snapshot({ status: "delayed", period: 0 })],
-      [scoredAt(7, 0), scoredAt(6, 0)],
-      [at({ clock: "4:59" }), at()],
-      [at(), at()]
-    ])
-  )("should never be ahead both ways, %s", (_name, a, b) => {
-    assert.isFalse(a.isAheadOf(b) && b.isAheadOf(a))
-  })
-
-  it("should not have an equal snapshot ahead", () => {
-    const ahead = at().isAheadOf(at())
-
-    assert.isFalse(ahead)
-  })
-
-  it("should not be ahead at an earlier game time whatever its points", () => {
-    const ahead = scoredAt(14, 0).isAheadOf(at({ period: 3 }))
-
-    assert.isFalse(ahead)
   })
 })
 
@@ -415,127 +150,6 @@ describe("GameSnapshot.watchOrder", () => {
   })
 })
 
-describe("GameSnapshot#advancedTo", () => {
-  const situationPushed = new Situation({
-    yardLine: 12,
-    homeTimeouts: 2,
-    awayTimeouts: 3,
-    lastPlay: "Pass complete"
-  })
-  const polled = snapshot({
-    home: { team: team("HOME", "fbs", { shortName: "Home" }), score: 0, ranking: 5 },
-    away: { team: team("AWAY", "fbs", { shortName: "Away" }), score: 0, ranking: 12 },
-    broadcasts: [broadcast("CBS")]
-  })
-  const pushed = {
-    status: "live",
-    period: 3,
-    clock: "7:45",
-    homeScore: 14,
-    awayScore: 10,
-    situation: situationPushed
-  } as const
-
-  it("should take the moved status, period, clock, scores, and situation", () => {
-    const advanced = polled.advancedTo(pushed)
-
-    assert.strictEqual(advanced.status, "live")
-    assert.strictEqual(advanced.period, 3)
-    assert.strictEqual(advanced.clock, "7:45")
-    assert.strictEqual(advanced.home.score, 14)
-    assert.strictEqual(advanced.away.score, 10)
-    assert.deepStrictEqual(advanced.situation, situationPushed)
-  })
-
-  it("should keep its own teams, rankings, kickoff, and broadcasts", () => {
-    const advanced = polled.advancedTo(pushed)
-
-    assert.strictEqual(advanced.home.team.shortName, "Home")
-    assert.strictEqual(advanced.away.team.shortName, "Away")
-    assert.strictEqual(advanced.home.ranking, 5)
-    assert.strictEqual(advanced.away.ranking, 12)
-    assert.isTrue(DateTime.Equivalence(advanced.kickoff, polled.kickoff))
-    assert.deepStrictEqual(advanced.broadcasts, polled.broadcasts)
-  })
-
-  it("should have no situation when the moved fields have none", () => {
-    const earlier = snapshot({ status: "live", period: 3, situation: situationPushed })
-
-    const advanced = earlier.advancedTo({
-      status: "final",
-      period: 4,
-      clock: "0:00",
-      homeScore: 0,
-      awayScore: 0
-    })
-
-    assert.isFalse("situation" in advanced)
-  })
-
-  it("should be at the moved fields' game time", () => {
-    const advanced = polled.advancedTo(pushed)
-
-    assert.strictEqual(
-      GameSnapshot.gameTime(advanced, snapshot({ status: "live", period: 3, clock: "7:45" })),
-      0
-    )
-  })
-})
-
-describe("GameSnapshot#isAheadOfOver", () => {
-  const final = liveSnapshot({ status: "final", period: 4, clock: "0:00" })
-
-  it("should not have play with 0:03 left ahead of the end of the game", () => {
-    const lagging = snapshot({ ...final, status: "live", clock: "0:03" })
-
-    assert.isFalse(lagging.isAheadOfOver(final))
-  })
-
-  it("should not have play at the end of the game ahead of it", () => {
-    const lagging = snapshot({ ...final, status: "live" })
-
-    assert.isFalse(lagging.isAheadOfOver(final))
-  })
-
-  it("should have overtime after a final ahead", () => {
-    const overtime = snapshot({ ...final, status: "live", period: 5, clock: "15:00" })
-
-    assert.isTrue(overtime.isAheadOfOver(final))
-  })
-
-  it("should have more points at the same clock ahead", () => {
-    const moreScored = finalWithHomeScore(final, final.home.score + 1)
-
-    assert.isTrue(moreScored.isAheadOfOver(final))
-  })
-
-  it("should not have as many points at the same clock ahead", () => {
-    const equalScored = finalWithHomeScore(final, final.home.score)
-
-    assert.isFalse(equalScored.isAheadOfOver(final))
-  })
-
-  it("should not have fewer points at the same clock ahead", () => {
-    const fewerScored = finalWithHomeScore(final, final.home.score - 1)
-
-    assert.isFalse(fewerScored.isAheadOfOver(final))
-  })
-
-  it("should have a postponed game resuming ahead once its clock runs", () => {
-    const postponed = liveSnapshot({ status: "postponed", period: 2, clock: "8:00" })
-    const resumed = snapshot({ ...postponed, status: "live", clock: "7:40" })
-
-    assert.isTrue(resumed.isAheadOfOver(postponed))
-  })
-
-  it("should not have a postponed game resuming ahead before its clock runs", () => {
-    const postponed = liveSnapshot({ status: "postponed", period: 2, clock: "8:00" })
-    const resumed = snapshot({ ...postponed, status: "live" })
-
-    assert.isFalse(resumed.isAheadOfOver(postponed))
-  })
-})
-
 describe("GameSnapshot#secondsLeft", () => {
   it("should read the clock", () => {
     assert.strictEqual(inPlay({ clock: "2:10" }).secondsLeft(), 130)
@@ -547,20 +161,6 @@ describe("GameSnapshot#secondsLeft", () => {
 
   it("should read an unreadable clock as a full quarter", () => {
     assert.strictEqual(inPlay({ clock: "" }).secondsLeft(), 900)
-  })
-})
-
-describe("GameSnapshot#quarterLeft", () => {
-  it("should be the share of the quarter left on the clock", () => {
-    assert.strictEqual(inPlay({ clock: "7:30" }).quarterLeft(), 0.5)
-  })
-
-  it("should be zero at 0:00", () => {
-    assert.strictEqual(inPlay({ clock: "0:00" }).quarterLeft(), 0)
-  })
-
-  it("should read an unreadable clock as a full quarter", () => {
-    assert.strictEqual(inPlay({ clock: "" }).quarterLeft(), 1)
   })
 })
 
@@ -647,6 +247,12 @@ describe("GameSnapshot#inPlay", () => {
     assert.isFalse(game.inPlay())
   })
 
+  it("should not be in play at 0:00 in a college fourth period, which runs on a clock", () => {
+    const game = snapshot({ league: "fbs", status: "live", period: 4, clock: "0:00" })
+
+    assert.isFalse(game.inPlay())
+  })
+
   it("should not be in play between periods", () => {
     const game = snapshot({ status: "live", period: 1, clock: "0:00" })
 
@@ -685,10 +291,6 @@ function pairs(snapshots: ReadonlyArray<readonly [GameSnapshot, GameSnapshot]>) 
 /** The status, period, and clock of `game`, to name a case. */
 function line(game: GameSnapshot) {
   return `${game.status}, period ${game.period}, ${game.clock}`
-}
-
-function withScores(home: number, away: number) {
-  return snapshot({ home: { team: team("H"), score: home }, away: { team: team("A"), score: away } })
 }
 
 function at(overrides: Partial<GameSnapshot> = {}) {
@@ -731,12 +333,153 @@ function _withTimeouts(period: number, home: number, away: number) {
 }
 
 describe("GameSnapshot#isBehind", () => {
+  it("should be behind a live snapshot when upcoming", () => {
+    const upcoming = snapshot({ status: "scheduled" })
+    const live = snapshot({ status: "live", period: 1, clock: "10:00" })
+
+    assert.isTrue(upcoming.isBehind(live))
+  })
+
+  it("should be behind an over snapshot when live", () => {
+    const live = snapshot({ status: "live", period: 1, clock: "10:00" })
+    const over = snapshot({ status: "final", period: 4, clock: "0:00" })
+
+    assert.isTrue(live.isBehind(over))
+  })
+
+  it("should be behind an over snapshot when upcoming", () => {
+    const upcoming = snapshot({ status: "scheduled" })
+    const over = snapshot({ status: "final", period: 4, clock: "0:00" })
+
+    assert.isTrue(upcoming.isBehind(over))
+  })
+
+  it("should be behind a later period whatever the clock", () => {
+    const later = snapshot({ status: "live", period: 2, clock: "14:00" })
+    const earlier = snapshot({ status: "live", period: 1, clock: "0:30" })
+
+    assert.isTrue(earlier.isBehind(later))
+  })
+
+  it("should be behind a snapshot with less time left in the period", () => {
+    const later = snapshot({ status: "live", period: 3, clock: "2:00" })
+    const earlier = snapshot({ status: "live", period: 3, clock: "9:00" })
+
+    assert.isTrue(earlier.isBehind(later))
+  })
+
+  it("should not be behind a snapshot with more time left in the period", () => {
+    const later = snapshot({ status: "live", period: 3, clock: "2:00" })
+    const earlier = snapshot({ status: "live", period: 3, clock: "9:00" })
+
+    assert.isFalse(later.isBehind(earlier))
+  })
+
+  it("should be behind a snapshot later in the period whatever its own points", () => {
+    const scored = snapshot({
+      status: "live",
+      period: 2,
+      clock: "5:00",
+      home: { team: team("HOME"), score: 7 }
+    })
+    const level = snapshot({ status: "live", period: 2, clock: "4:59" })
+
+    assert.isTrue(scored.isBehind(level))
+  })
+
+  it("should be behind a later period whatever its own points", () => {
+    const behind = scoredAt(14, 0).isBehind(at({ period: 3 }))
+
+    assert.isTrue(behind)
+  })
+
+  it("should be behind halftime at the end of period 2", () => {
+    const halftime = snapshot({ status: "halftime", period: 2, clock: "0:00" })
+    const endOfHalf = snapshot({ status: "live", period: 2, clock: "0:00" })
+
+    assert.isTrue(endOfHalf.isBehind(halftime))
+  })
+
+  it("should not have halftime behind the end of period 2", () => {
+    const halftime = snapshot({ status: "halftime", period: 2, clock: "0:00" })
+    const endOfHalf = snapshot({ status: "live", period: 2, clock: "0:00" })
+
+    assert.isFalse(halftime.isBehind(endOfHalf))
+  })
+
+  it("should be behind halftime with time left in period 2", () => {
+    const halftime = snapshot({ status: "halftime", period: 2, clock: "0:00" })
+    const playing = snapshot({ status: "live", period: 2, clock: "0:10" })
+
+    assert.isTrue(playing.isBehind(halftime))
+  })
+
+  it("should have halftime behind the start of period 3", () => {
+    const halftime = snapshot({ status: "halftime", period: 2, clock: "0:00" })
+    const secondHalf = snapshot({ status: "live", period: 3, clock: "15:00" })
+
+    assert.isTrue(halftime.isBehind(secondHalf))
+  })
+
+  it("should not have a delay behind play at the same clock and points", () => {
+    const delayed = snapshot({ status: "delayed", period: 3, clock: "8:00" })
+    const playing = snapshot({ status: "live", period: 3, clock: "8:00" })
+
+    assert.isFalse(delayed.isBehind(playing))
+  })
+
+  it("should not have play behind a delay at the same clock and points", () => {
+    const delayed = at({ status: "delayed" })
+
+    const behind = at().isBehind(delayed)
+
+    assert.isFalse(behind)
+  })
+
+  it("should read a delay during the game as live", () => {
+    const delayed = snapshot({ status: "delayed", period: 2, clock: "5:00" })
+    const earlierPlay = snapshot({ status: "live", period: 1, clock: "1:00" })
+
+    assert.isTrue(earlierPlay.isBehind(delayed))
+  })
+
+  it("should read a delay before kickoff as upcoming", () => {
+    const delayed = snapshot({ status: "delayed", period: 0 })
+    const live = snapshot({ status: "live", period: 1 })
+
+    assert.isTrue(delayed.isBehind(live))
+  })
+
   it("should be behind a snapshot later in game time", () => {
     const had = liveSnapshot({ clock: "9:00" })
 
     const behind = liveSnapshot({ clock: "10:00" }).isBehind(had)
 
     assert.isTrue(behind)
+  })
+
+  it("should be behind a later period at its start", () => {
+    const behind = at().isBehind(at({ period: 3, clock: "15:00" }))
+
+    assert.isTrue(behind)
+  })
+
+  it("should be behind the same game time with more points", () => {
+    const behind = scoredAt(6, 0).isBehind(scoredAt(7, 0))
+
+    assert.isTrue(behind)
+  })
+
+  it("should not be behind the same game time with fewer points", () => {
+    const behind = scoredAt(7, 0).isBehind(scoredAt(6, 0))
+
+    assert.isFalse(behind)
+  })
+
+  it("should not be behind the same game time with as many points split differently", () => {
+    const behind = scoredAt(3, 7).isBehind(scoredAt(7, 3))
+
+    assert.isFalse(behind)
   })
 
   it("should not be behind a snapshot at the same game time and score", () => {
@@ -747,12 +490,86 @@ describe("GameSnapshot#isBehind", () => {
     assert.isFalse(behind)
   })
 
-  it("should not be behind a final when it is ahead of its end", () => {
-    const had = snapshot({ status: "final", period: 4, clock: "0:00" })
+  it.each(
+    pairs([
+      [at({ status: "halftime", clock: "0:00" }), at({ clock: "0:00" })],
+      [at({ status: "delayed" }), at()],
+      [at({ status: "delayed", clock: "0:00" }), at({ status: "halftime", clock: "0:00" })],
+      [at({ status: "final", period: 4, clock: "0:00" }), at({ period: 4, clock: "0:00" })],
+      [
+        at({ status: "final", period: 4, clock: "0:00" }),
+        at({ status: "canceled", period: 4, clock: "0:00" })
+      ],
+      [at({ status: "postponed" }), at()],
+      [snapshot({ status: "scheduled" }), snapshot({ status: "delayed", period: 0 })],
+      [scoredAt(7, 0), scoredAt(6, 0)],
+      [at({ clock: "4:59" }), at()],
+      [at(), at()]
+    ])
+  )("should never be behind both ways, %s", (_name, a, b) => {
+    assert.isFalse(a.isBehind(b) && b.isBehind(a))
+  })
 
-    const behind = liveSnapshot({ period: 5, clock: "15:00" }).isBehind(had)
+  describe("a game that is over", () => {
+    const final = liveSnapshot({ status: "final", period: 4, clock: "0:00" })
 
-    assert.isFalse(behind)
+    it("should have play with 0:03 left behind the final", () => {
+      const lagging = snapshot({ ...final, status: "live", clock: "0:03" })
+
+      assert.isTrue(lagging.isBehind(final))
+    })
+
+    it("should have play at the end of the game behind the final", () => {
+      const lagging = snapshot({ ...final, status: "live" })
+
+      assert.isTrue(lagging.isBehind(final))
+    })
+
+    it("should not have the final behind play at the end of the game", () => {
+      const endOfGame = snapshot({ ...final, status: "live" })
+
+      assert.isFalse(final.isBehind(endOfGame))
+    })
+
+    it("should not have overtime after a final behind it", () => {
+      const had = snapshot({ status: "final", period: 4, clock: "0:00" })
+
+      const behind = liveSnapshot({ period: 5, clock: "15:00" }).isBehind(had)
+
+      assert.isFalse(behind)
+    })
+
+    it("should not have more points at the same clock behind it", () => {
+      const moreScored = finalWithHomeScore(final, final.home.score + 1)
+
+      assert.isFalse(moreScored.isBehind(final))
+    })
+
+    it("should not have as many points at the same clock behind it", () => {
+      const equalScored = finalWithHomeScore(final, final.home.score)
+
+      assert.isFalse(equalScored.isBehind(final))
+    })
+
+    it("should have fewer points at the same clock behind it", () => {
+      const fewerScored = finalWithHomeScore(final, final.home.score - 1)
+
+      assert.isTrue(fewerScored.isBehind(final))
+    })
+
+    it("should not have a postponed game resuming behind it once its clock runs", () => {
+      const postponed = liveSnapshot({ status: "postponed", period: 2, clock: "8:00" })
+      const resumed = snapshot({ ...postponed, status: "live", clock: "7:40" })
+
+      assert.isFalse(resumed.isBehind(postponed))
+    })
+
+    it("should have a postponed game resuming behind it before its clock runs", () => {
+      const postponed = liveSnapshot({ status: "postponed", period: 2, clock: "8:00" })
+      const resumed = snapshot({ ...postponed, status: "live" })
+
+      assert.isTrue(resumed.isBehind(postponed))
+    })
   })
 })
 
