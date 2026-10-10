@@ -2,7 +2,6 @@ import { useAtomSet, useAtomValue } from "@effect/atom-react"
 import { Option } from "effect"
 import { useCallback } from "react"
 import * as DisplayState from "../display/DisplayState.ts"
-import { useVideoAreas } from "../display/OverlayHost.tsx"
 import * as LiveStream from "../hub/LiveStream.ts"
 import * as DisplayScreen from "./DisplayScreen.ts"
 import { Dividers } from "./Dividers.tsx"
@@ -19,13 +18,11 @@ export function ScreenView() {
   const screen = useAtomValue(DisplayScreen.screen)
   const shown = useAtomValue(TilePlacements.shown)
   const rects = useAtomValue(TilePlacements.rects)
-  const placements = useAtomValue(TilePlacements.placements)
   const dragging = Option.isSome(useAtomValue(TilePlacements.dragged))
   const display = useAtomValue(DisplayState.display)
   const { slate } = useAtomValue(LiveStream.live)
   const selected = display.selectedOn(screen)
   const areaRef = useArea()
-  useVideoAreas(placements)
 
   return (
     <main ref={areaRef} className="relative min-h-0 overflow-hidden bg-background">

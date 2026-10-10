@@ -6,10 +6,10 @@ import { ScreenView } from "../screen/ScreenView.tsx"
 import * as TilePlacements from "../screen/TilePlacements.ts"
 import { SlateView } from "../slate/SlateView.tsx"
 import { CommandPalette } from "./CommandPalette.tsx"
+import * as Covering from "./Covering.ts"
 import { DisplayInput } from "./Display.ts"
 import * as DisplayState from "./DisplayState.ts"
 import { KeysDialog } from "./KeysDialog.tsx"
-import { OverlayHost } from "./OverlayHost.tsx"
 import { TopBar } from "./TopBar.tsx"
 
 export function DisplayView() {
@@ -22,10 +22,11 @@ export function DisplayView() {
   useAtomMount(DisplayState.inputs)
   useAtomMount(GuideRelay.relay)
   useAtomMount(TilePlacements.sync)
+  useAtomMount(Covering.sync)
   useScreenRejectionToasts()
 
   return (
-    <OverlayHost>
+    <>
       <div className={`grid h-screen ${fullScreen ? "grid-rows-[1fr]" : "grid-rows-[auto_1fr_auto]"}`}>
         {fullScreen ? null : <TopBar />}
         <ScreenView />
@@ -42,6 +43,6 @@ export function DisplayView() {
         visibleToasts={1}
         toastOptions={{ style: { paddingBlock: 6, paddingInline: 12 } }}
       />
-    </OverlayHost>
+    </>
   )
 }
