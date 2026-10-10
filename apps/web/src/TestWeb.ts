@@ -17,7 +17,7 @@ const soon = snapshot({ id: GameId.make("soon") })
 const done = snapshot({ id: GameId.make("done"), status: "final" })
 
 /** Four games in no order: live, soon, later, done are the ids; the strip puts them live, soon, later, done. */
-export const slate = [done, later, live, soon].map(Game.of)
+export const slate = new Slate({ games: [done, later, live, soon].map(Game.of) })
 
 /** A Quad with these games streaming in its tiles, in order; past the fourth they are benched. */
 export function withTiles(games: ReadonlyArray<string | undefined>) {

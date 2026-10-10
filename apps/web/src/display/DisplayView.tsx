@@ -7,7 +7,7 @@ import * as DisplayScreen from "../screen/DisplayScreen.ts"
 import { useScreenRejectionToasts } from "../screen/Rejections.ts"
 import { ScreenView } from "../screen/ScreenView.tsx"
 import { SlateView } from "../slate/SlateView.tsx"
-import { StripCard } from "../slate/StripCards.ts"
+import { StripCard } from "../slate/StripCard.ts"
 import { CommandPalette } from "./CommandPalette.tsx"
 import { Display, type DisplayStep } from "./Display.ts"
 import { useFullScreen } from "./FullScreen.ts"
@@ -24,7 +24,7 @@ export function DisplayView() {
     if (!open) setDisplay(display.close())
   }
   const fullScreen = useFullScreen()
-  const cards = StripCard.of(screen, live.slate.games)
+  const cards = StripCard.of(screen, live.slate)
   const selected = display.selectedOn(screen)
   const toggleSolo = display.press({ _tag: "ToggleSolo" }, screen, cards)
   const liveCount = live.slate.games.filter(({ snapshot }) => snapshot.progress() === "live").length
@@ -56,7 +56,7 @@ export function DisplayView() {
         )}
         <ScreenView
           screen={screen}
-          slate={live.slate.games}
+          slate={live.slate}
           connection={live.connection}
           selected={selected}
           interacting={display.interactingOn(screen)}
@@ -71,7 +71,7 @@ export function DisplayView() {
         open={display.shows("Palette")}
         onOpenChange={closeOverlay}
         screen={screen}
-        slate={live.slate.games}
+        slate={live.slate}
         selected={selected}
         onFullScreen={fullScreen.toggle}
         onKeys={() => setDisplay(display.open("Keys"))}

@@ -1,5 +1,5 @@
 import { cn } from "@/design/ClassName"
-import { Place, type StripCard } from "./StripCards.ts"
+import { Place, type StripCard } from "./StripCard.ts"
 
 /** Where a card's game is: its tile number, tinted on air, or "Bench". `className` sizes it. */
 export function PlaceBadge(props: { place: StripCard["place"]; className?: string }) {

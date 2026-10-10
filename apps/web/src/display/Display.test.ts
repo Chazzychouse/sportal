@@ -2,7 +2,7 @@ import { assert, describe, it } from "@effect/vitest"
 import { GameId } from "@sportal/domain/Game"
 import { Option } from "effect"
 import { Screen, type ScreenCommand } from "../screen/Screen.ts"
-import { StripCard } from "../slate/StripCards.ts"
+import { StripCard } from "../slate/StripCard.ts"
 import * as TestWeb from "../TestWeb.ts"
 import { Display, DisplayStep } from "./Display.ts"
 

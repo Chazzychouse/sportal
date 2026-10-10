@@ -1,6 +1,7 @@
 import { useAtomSet } from "@effect/atom-react"
 import type { ScreenTransition } from "@sportal/api/ShellBridge"
-import type { Game, GameId } from "@sportal/domain/Game"
+import type { GameId } from "@sportal/domain/Game"
+import type { Slate } from "@sportal/domain/Slate"
 import { Effect, Option } from "effect"
 import { useEffect, useLayoutEffect, useRef, useState } from "react"
 import { useVideoAreas } from "../display/OverlayHost.tsx"
@@ -20,7 +21,7 @@ import { placements, tileRects } from "./TileRects.ts"
  */
 export function ScreenView(props: {
   screen: Screen
-  slate: ReadonlyArray<Game>
+  slate: Slate
   connection: LiveStream.Connection
   selected: number
   interacting: GameId | undefined
@@ -87,7 +88,7 @@ export function ScreenView(props: {
         if (rect === undefined) return null
         const game = Tile.guards.Empty(tile)
           ? undefined
-          : props.slate.find(({ snapshot }) => snapshot.id === tile.game)
+          : Option.getOrUndefined(props.slate.gameOf(tile.game))
         const hidden = rect.width === 0
 
         return (

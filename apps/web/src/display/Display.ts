@@ -3,7 +3,7 @@ import type { GameId } from "@sportal/domain/Game"
 import { Data, Option } from "effect"
 import { Layout } from "../layout/Layout.ts"
 import { type Screen, type ScreenCommand, Tile } from "../screen/Screen.ts"
-import { Place, StripCard } from "../slate/StripCards.ts"
+import { Place, StripCard } from "../slate/StripCard.ts"
 
 type Overlay = Data.TaggedEnum<{ None: object; Keys: object; Palette: object }>
 const Overlay = Data.taggedEnum<Overlay>()

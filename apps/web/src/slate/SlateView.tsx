@@ -5,7 +5,7 @@ import { Score } from "../game/Score.tsx"
 import type { Screen } from "../screen/Screen.ts"
 import { tileDrag } from "../screen/TileChrome.tsx"
 import { PlaceBadge } from "./PlaceBadge.tsx"
-import { Place, type StripCard } from "./StripCards.ts"
+import { Place, type StripCard } from "./StripCard.ts"
 
 /**
  * The slate as a strip under the Screen: the bench, then live, upcoming, and final games, scrolling sideways. It

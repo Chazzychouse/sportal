@@ -2,7 +2,7 @@ import { assert, describe, it } from "@effect/vitest"
 import { GameId } from "@sportal/domain/Game"
 import { Screen } from "../screen/Screen.ts"
 import * as TestWeb from "../TestWeb.ts"
-import { StripCard } from "./StripCards.ts"
+import { StripCard } from "./StripCard.ts"
 
 describe("StripCard.of", () => {
   it("should order the slate live, upcoming by kickoff, then over", () => {

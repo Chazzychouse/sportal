@@ -1,5 +1,6 @@
 import { useAtomSet } from "@effect/atom-react"
-import { type Game, type GameId, GameSnapshot } from "@sportal/domain/Game"
+import { GameSnapshot } from "@sportal/domain/Game"
+import type { Slate } from "@sportal/domain/Slate"
 import { Option } from "effect"
 import {
   CommandDialog,
@@ -23,7 +24,7 @@ export function CommandPalette(props: {
   open: boolean
   onOpenChange: (open: boolean) => void
   screen: Screen
-  slate: ReadonlyArray<Game>
+  slate: Slate
   selected: number
   onFullScreen: () => void
   onKeys: () => void
@@ -33,12 +34,14 @@ export function CommandPalette(props: {
     dispatch(command)
     props.onOpenChange(false)
   }
-  const snapshots = props.slate.map(({ snapshot }) => snapshot)
-  const gameOn = (id: GameId) => snapshots.find((game) => game.id === id)
+  const snapshots = props.slate.games.map(({ snapshot }) => snapshot)
   const occupied = props.screen.onScreen().flatMap((tile, slot) => {
     if (Tile.guards.Empty(tile)) return []
-    const game = gameOn(tile.game)
-    return [{ slot, name: game === undefined ? `Tile ${slot + 1}` : scoreline(game) }]
+    const name = Option.match(props.slate.gameOf(tile.game), {
+      onNone: () => `Tile ${slot + 1}`,
+      onSome: ({ snapshot }) => scoreline(snapshot)
+    })
+    return [{ slot, name }]
   })
 
   return (
