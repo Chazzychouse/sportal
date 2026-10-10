@@ -30,6 +30,9 @@ const Competitor = Schema.Struct({
   homeAway: Schema.Literals(["home", "away"]),
   score: Schema.optional(Schema.String),
   curatedRank: Schema.optional(Schema.Struct({ current: Schema.Int })),
+  records: Schema.optional(
+    Schema.Array(Schema.Struct({ type: Schema.optional(Schema.String), summary: Schema.String }))
+  ),
   team: Schema.Struct({
     id: Schema.String,
     abbreviation: Schema.String,
@@ -41,6 +44,15 @@ const Competitor = Schema.Struct({
     alternateColor: Schema.optional(Schema.String)
   })
 })
+
+/** A competition's betting line: ESPN's spread is the home team's, and each side says whether it is favored. */
+export const EspnOdds = Schema.Struct({
+  spread: Schema.optional(Schema.Finite),
+  overUnder: Schema.optional(Schema.Finite),
+  homeTeamOdds: Schema.optional(Schema.Struct({ favorite: Schema.optional(Schema.Boolean) })),
+  awayTeamOdds: Schema.optional(Schema.Struct({ favorite: Schema.optional(Schema.Boolean) }))
+})
+export type EspnOdds = typeof EspnOdds.Type
 
 /** One event of the site scoreboard: what the decoder reads of it. */
 export const SiteEvent = Schema.Struct({
@@ -58,6 +70,7 @@ export const SiteEvent = Schema.Struct({
         )
       ),
       situation: Schema.optional(EspnSituation),
+      odds: Schema.optional(Schema.Array(EspnOdds)),
       competitors: Schema.Array(Competitor)
     })
   )
