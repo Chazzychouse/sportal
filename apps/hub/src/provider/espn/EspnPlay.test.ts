@@ -1,76 +1,12 @@
 import { readFileSync } from "node:fs"
 import { assert, describe, it } from "@effect/vitest"
-import { FootballPlay, Other, type Play, PlayId, Rush } from "@sportal/domain/Play"
+import { FootballPlay, Other, Play, PlayId, Rush } from "@sportal/domain/Play"
 import { TeamId } from "@sportal/domain/Team"
-import { Effect, Schema } from "effect"
+import { Effect, Equal, Schema } from "effect"
 import { TestClock } from "effect/testing"
 import { Delivery } from "../Provider.ts"
 import * as EspnPlay from "./EspnPlay.ts"
 import * as TestEspn from "./TestEspn.ts"
-
-// Play entities from the 2026-10-04 NFL recording, each as its game's `gp-` topic first added it, without its
-// participants; NE–BUF's first score, 401872971484, as the topic last had it, after its extra point.
-const recorded = Schema.decodeSync(
-  Schema.fromJsonString(Schema.Record(Schema.String, Schema.Record(Schema.String, Schema.Json)))
-)(readFileSync(new URL("./fixtures/nfl-plays-2026-10-04.json", import.meta.url), "utf8"))
-const entity = (id: string) => recorded[id] ?? {}
-
-const nfl = (team: string) => TeamId.make(`nfl:${team}`)
-
-const decodePlay = Schema.decodeUnknownEffect(EspnPlay.FootballPlay("nfl"))
-
-// A recorded play read as `type` instead of its own.
-const typed = (type: { readonly id: string; readonly text: string }) =>
-  decodePlay({ ...entity("401872966237"), type })
-
-// `play` as the case `guard` narrows to; none when it is another case.
-const narrowed = <Case extends Play>(guard: (play: Play) => play is Case, play: Play): Case | undefined =>
-  guard(play) ? play : undefined
-
-// A play's wire form, field by field.
-const wireOf = (play: Play): Readonly<Record<string, unknown>> =>
-  Object.fromEntries(Object.entries(Schema.encodeSync(FootballPlay)(play)))
-
-// Every ESPN play type id the recordings have, with its text, and the case and outcome it reads as.
-const recordedTypes = [
-  { id: "5", text: "Rush", play: { _tag: "Rush", touchdown: false } },
-  { id: "68", text: "Rushing Touchdown", play: { _tag: "Rush", touchdown: true } },
-  { id: "24", text: "Pass Reception", play: { _tag: "Completion", touchdown: false } },
-  { id: "4", text: "Pass Completion", play: { _tag: "Completion", touchdown: false } },
-  { id: "67", text: "Passing Touchdown", play: { _tag: "Completion", touchdown: true } },
-  { id: "3", text: "Pass Incompletion", play: { _tag: "Incompletion" } },
-  { id: "63", text: "Interception", play: { _tag: "Interception", return: "none" } },
-  { id: "26", text: "Pass Interception Return", play: { _tag: "Interception", return: "returned" } },
-  { id: "36", text: "Interception Return Touchdown", play: { _tag: "Interception", return: "touchdown" } },
-  { id: "7", text: "Sack", play: { _tag: "Sack", fumbleLost: false } },
-  { id: "80", text: "Sack Opp Fumble Recovery", play: { _tag: "Sack", fumbleLost: true } },
-  { id: "69", text: "Fumble", play: { _tag: "Fumble", recovery: "unknown" } },
-  { id: "9", text: "Fumble Recovery (Own)", play: { _tag: "Fumble", recovery: "own" } },
-  { id: "29", text: "Fumble Recovery (Opponent)", play: { _tag: "Fumble", recovery: "opponent" } },
-  { id: "39", text: "Fumble Return Touchdown", play: { _tag: "Fumble", recovery: "touchdown" } },
-  { id: "15", text: "Two Point Pass", play: { _tag: "TwoPointTry", by: "pass" } },
-  { id: "16", text: "Two Point Rush", play: { _tag: "TwoPointTry", by: "rush" } },
-  { id: "53", text: "Kickoff", play: { _tag: "Kickoff", returnTouchdown: false } },
-  { id: "32", text: "Kickoff Return Touchdown", play: { _tag: "Kickoff", returnTouchdown: true } },
-  { id: "52", text: "Punt", play: { _tag: "Punt", return: "none" } },
-  { id: "14", text: "Punt Return", play: { _tag: "Punt", return: "returned" } },
-  { id: "34", text: "Punt Return Touchdown", play: { _tag: "Punt", return: "touchdown" } },
-  { id: "59", text: "Field Goal Good", play: { _tag: "FieldGoal", result: "good" } },
-  { id: "60", text: "Field Goal Missed", play: { _tag: "FieldGoal", result: "missed" } },
-  { id: "18", text: "Blocked Field Goal", play: { _tag: "FieldGoal", result: "blocked" } },
-  { id: "61", text: "Extra Point Good", play: { _tag: "ExtraPoint", good: true } },
-  { id: "62", text: "Extra Point Missed", play: { _tag: "ExtraPoint", good: false } },
-  { id: "20", text: "Safety", play: { _tag: "Safety" } },
-  { id: "8", text: "Penalty", play: { _tag: "Penalty" } },
-  { id: "21", text: "Timeout", play: { _tag: "Timeout" } },
-  { id: "74", text: "Official Timeout", play: { _tag: "Stoppage", kind: "officialTimeout" } },
-  { id: "75", text: "Two-minute warning", play: { _tag: "Stoppage", kind: "twoMinuteWarning" } },
-  { id: "70", text: "Coin Toss", play: { _tag: "Stoppage", kind: "coinToss" } },
-  { id: "2", text: "End Period", play: { _tag: "PeriodEnd", ends: "period" } },
-  { id: "65", text: "End of Half", play: { _tag: "PeriodEnd", ends: "half" } },
-  { id: "79", text: "End of Regulation", play: { _tag: "PeriodEnd", ends: "regulation" } },
-  { id: "66", text: "End of Game", play: { _tag: "PeriodEnd", ends: "game" } }
-] as const
 
 describe("EspnPlay.FootballPlay", () => {
   it.effect("should read a rush, with its text and win probability", () =>
@@ -209,6 +145,47 @@ describe("EspnPlay.FootballPlay", () => {
     })
   )
 
+  // Every ESPN play type id the recordings have, with its text, and the case and outcome it reads as.
+  const recordedTypes = [
+    { id: "5", text: "Rush", play: { _tag: "Rush", touchdown: false } },
+    { id: "68", text: "Rushing Touchdown", play: { _tag: "Rush", touchdown: true } },
+    { id: "24", text: "Pass Reception", play: { _tag: "Completion", touchdown: false } },
+    { id: "4", text: "Pass Completion", play: { _tag: "Completion", touchdown: false } },
+    { id: "67", text: "Passing Touchdown", play: { _tag: "Completion", touchdown: true } },
+    { id: "3", text: "Pass Incompletion", play: { _tag: "Incompletion" } },
+    { id: "63", text: "Interception", play: { _tag: "Interception", return: "none" } },
+    { id: "26", text: "Pass Interception Return", play: { _tag: "Interception", return: "returned" } },
+    { id: "36", text: "Interception Return Touchdown", play: { _tag: "Interception", return: "touchdown" } },
+    { id: "7", text: "Sack", play: { _tag: "Sack", fumbleLost: false } },
+    { id: "80", text: "Sack Opp Fumble Recovery", play: { _tag: "Sack", fumbleLost: true } },
+    { id: "69", text: "Fumble", play: { _tag: "Fumble", recovery: "unknown" } },
+    { id: "9", text: "Fumble Recovery (Own)", play: { _tag: "Fumble", recovery: "own" } },
+    { id: "29", text: "Fumble Recovery (Opponent)", play: { _tag: "Fumble", recovery: "opponent" } },
+    { id: "39", text: "Fumble Return Touchdown", play: { _tag: "Fumble", recovery: "touchdown" } },
+    { id: "15", text: "Two Point Pass", play: { _tag: "TwoPointTry", by: "pass" } },
+    { id: "16", text: "Two Point Rush", play: { _tag: "TwoPointTry", by: "rush" } },
+    { id: "53", text: "Kickoff", play: { _tag: "Kickoff", returnTouchdown: false } },
+    { id: "32", text: "Kickoff Return Touchdown", play: { _tag: "Kickoff", returnTouchdown: true } },
+    { id: "52", text: "Punt", play: { _tag: "Punt", return: "none" } },
+    { id: "14", text: "Punt Return", play: { _tag: "Punt", return: "returned" } },
+    { id: "34", text: "Punt Return Touchdown", play: { _tag: "Punt", return: "touchdown" } },
+    { id: "59", text: "Field Goal Good", play: { _tag: "FieldGoal", result: "good" } },
+    { id: "60", text: "Field Goal Missed", play: { _tag: "FieldGoal", result: "missed" } },
+    { id: "18", text: "Blocked Field Goal", play: { _tag: "FieldGoal", result: "blocked" } },
+    { id: "61", text: "Extra Point Good", play: { _tag: "ExtraPoint", good: true } },
+    { id: "62", text: "Extra Point Missed", play: { _tag: "ExtraPoint", good: false } },
+    { id: "20", text: "Safety", play: { _tag: "Safety" } },
+    { id: "8", text: "Penalty", play: { _tag: "Penalty" } },
+    { id: "21", text: "Timeout", play: { _tag: "Timeout" } },
+    { id: "74", text: "Official Timeout", play: { _tag: "Stoppage", kind: "officialTimeout" } },
+    { id: "75", text: "Two-minute warning", play: { _tag: "Stoppage", kind: "twoMinuteWarning" } },
+    { id: "70", text: "Coin Toss", play: { _tag: "Stoppage", kind: "coinToss" } },
+    { id: "2", text: "End Period", play: { _tag: "PeriodEnd", ends: "period" } },
+    { id: "65", text: "End of Half", play: { _tag: "PeriodEnd", ends: "half" } },
+    { id: "79", text: "End of Regulation", play: { _tag: "PeriodEnd", ends: "regulation" } },
+    { id: "66", text: "End of Game", play: { _tag: "PeriodEnd", ends: "game" } }
+  ] as const
+
   it.effect.each(recordedTypes)(
     "should read each recorded type id as its table row: $id $text",
     ({ id, text, play }) =>
@@ -312,3 +289,56 @@ describe("EspnPlay.FootballPlay", () => {
     })
   )
 })
+
+// Decoding NE at BUF's whole recorded day takes seconds alone, and many under a full suite's load: whichever test
+// runs first decodes it, so each has a timeout to match.
+describe("the recorded NE at BUF day", () => {
+  it.effect(
+    "should decode every play so it reads back from its JSON Equal to itself",
+    () =>
+      Effect.gen(function* () {
+        yield* TestClock.setTime(TestEspn.duringNeAtBuf.epochMilliseconds)
+        const decoded = yield* TestEspn.neAtBufDecoded
+        const deliveries = decoded.flat()
+        const plays = deliveries.flatMap((delivery) =>
+          Delivery.$is("Plays")(delivery) ? delivery.plays : []
+        )
+
+        const backs = yield* Effect.forEach(plays, (play) =>
+          Schema.encodeEffect(playJson)(play).pipe(Effect.flatMap(Schema.decodeEffect(playJson)))
+        )
+
+        assert.isNotEmpty(plays)
+        for (const [index, play] of plays.entries()) {
+          assert.isTrue(Equal.equals(backs[index], play), play.id)
+        }
+      }),
+    // Round-tripping every recorded play through JSON takes about 5 s more under coverage.
+    { timeout: 60_000 }
+  )
+})
+
+// Play entities from the 2026-10-04 NFL recording, each as its game's `gp-` topic first added it, without its
+// participants; NE–BUF's first score, 401872971484, as the topic last had it, after its extra point.
+const recorded = Schema.decodeSync(
+  Schema.fromJsonString(Schema.Record(Schema.String, Schema.Record(Schema.String, Schema.Json)))
+)(readFileSync(new URL("./fixtures/nfl-plays-2026-10-04.json", import.meta.url), "utf8"))
+const entity = (id: string) => recorded[id] ?? {}
+
+const nfl = (team: string) => TeamId.make(`nfl:${team}`)
+
+const decodePlay = Schema.decodeUnknownEffect(EspnPlay.FootballPlay("nfl"))
+
+// A recorded play read as `type` instead of its own.
+const typed = (type: { readonly id: string; readonly text: string }) =>
+  decodePlay({ ...entity("401872966237"), type })
+
+// `play` as the case `guard` narrows to; none when it is another case.
+const narrowed = <Case extends Play>(guard: (play: Play) => play is Case, play: Play): Case | undefined =>
+  guard(play) ? play : undefined
+
+// A play's wire form, field by field.
+const wireOf = (play: Play): Readonly<Record<string, unknown>> =>
+  Object.fromEntries(Object.entries(Schema.encodeSync(FootballPlay)(play)))
+
+const playJson = Schema.fromJsonString(Play)

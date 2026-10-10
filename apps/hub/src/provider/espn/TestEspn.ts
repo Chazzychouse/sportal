@@ -84,6 +84,9 @@ export const replayed = Effect.fn("TestEspn.replayed")(function* (recorded: Read
   )
 })
 
+/** NE at BUF's recorded day, replayed lazily and cached for this module instance. */
+export const neAtBufDecoded = Effect.runSync(Effect.cached(Effect.flatMap(recordedNeAtBuf, replayed)))
+
 /** A recorded day's line: a poll's body, or a FastCast frame. */
 type Recorded = Frame | { readonly league: LeagueId; readonly body: string }
 

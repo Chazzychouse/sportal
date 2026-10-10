@@ -1,9 +1,8 @@
 import { readFileSync } from "node:fs"
 import { assert, describe, it } from "@effect/vitest"
-import { GameId, GameSnapshot } from "@sportal/domain/Game"
-import { Play, PlayId } from "@sportal/domain/Play"
-import { Effect, Equal, HashMap, Record, Schema } from "effect"
-import { TestClock } from "effect/testing"
+import { GameId } from "@sportal/domain/Game"
+import { PlayId } from "@sportal/domain/Play"
+import { Effect, HashMap, Record } from "effect"
 import { recordingLogs } from "../../TestTelemetry.ts"
 import { Delivery } from "../Provider.ts"
 import type { Frame } from "./Frame.ts"
@@ -11,14 +10,6 @@ import { GameTopics } from "./GameTopics.ts"
 import * as TestEspn from "./TestEspn.ts"
 import * as TestFastCast from "./TestFastCast.ts"
 import * as TestGameTopics from "./TestGameTopics.ts"
-
-const snapshotJson = Schema.fromJsonString(GameSnapshot)
-const playJson = Schema.fromJsonString(Play)
-
-// NE at BUF's recorded day, replayed once, by the first test that reads it.
-const neAtBufDecoded = Effect.runSync(
-  Effect.cached(Effect.flatMap(TestEspn.recordedNeAtBuf, TestEspn.replayed))
-)
 
 describe("GameTopics#take", () => {
   it.effect("should send a topic that missed a message back to waiting for a checkpoint", () =>
@@ -383,59 +374,6 @@ describe("GameTopics#take", () => {
 
         assert.strictEqual(all.length, frames.length)
       })
-    )
-  })
-
-  // Decoding NE at BUF's whole recorded day takes seconds alone, and many under a full suite's load: whichever test
-  // runs first decodes it, so each has a timeout to match.
-  describe("the recorded NE at BUF day", () => {
-    it.effect(
-      "should decode every snapshot so it reads back from its JSON Equal to itself",
-      () =>
-        Effect.gen(function* () {
-          yield* TestClock.setTime(TestEspn.duringNeAtBuf.epochMilliseconds)
-          const decoded = yield* neAtBufDecoded
-          const deliveries = decoded.flat()
-          const snapshots = deliveries.flatMap((delivery) =>
-            Delivery.$is("Listing")(delivery) ? delivery.games : []
-          )
-
-          const backs = yield* Effect.forEach(snapshots, (snapshot) =>
-            Schema.encodeEffect(snapshotJson)(snapshot).pipe(
-              Effect.flatMap(Schema.decodeEffect(snapshotJson))
-            )
-          )
-
-          assert.isNotEmpty(snapshots)
-          for (const [index, snapshot] of snapshots.entries()) {
-            assert.isTrue(Equal.equals(backs[index], snapshot), snapshot.id)
-          }
-        }),
-      { timeout: 60_000 }
-    )
-
-    it.effect(
-      "should decode every play so it reads back from its JSON Equal to itself",
-      () =>
-        Effect.gen(function* () {
-          yield* TestClock.setTime(TestEspn.duringNeAtBuf.epochMilliseconds)
-          const decoded = yield* neAtBufDecoded
-          const deliveries = decoded.flat()
-          const plays = deliveries.flatMap((delivery) =>
-            Delivery.$is("Plays")(delivery) ? delivery.plays : []
-          )
-
-          const backs = yield* Effect.forEach(plays, (play) =>
-            Schema.encodeEffect(playJson)(play).pipe(Effect.flatMap(Schema.decodeEffect(playJson)))
-          )
-
-          assert.isNotEmpty(plays)
-          for (const [index, play] of plays.entries()) {
-            assert.isTrue(Equal.equals(backs[index], play), play.id)
-          }
-        }),
-      // Round-tripping every recorded play through JSON takes about 5 s more under coverage.
-      { timeout: 60_000 }
     )
   })
 })

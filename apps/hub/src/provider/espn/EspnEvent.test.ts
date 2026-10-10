@@ -1,8 +1,11 @@
 import { readFileSync } from "node:fs"
 import { assert, describe, it } from "@effect/vitest"
-import { GameSnapshot } from "@sportal/domain/Game"
-import { Effect, Result, Schema } from "effect"
+import { GameSnapshot, Network } from "@sportal/domain/Game"
+import { Effect, Equal, Result, Schema } from "effect"
+import { TestClock } from "effect/testing"
+import { Delivery } from "../Provider.ts"
 import * as EspnEvent from "./EspnEvent.ts"
+import * as TestEspn from "./TestEspn.ts"
 
 describe("listingOf", () => {
   // Each recorded poll as it decoded when both feeds' events were read by one transform.
@@ -79,12 +82,140 @@ describe("listingOf", () => {
     })
   )
 
+  it.effect("should decode a live FBS scoreboard into snapshots", () =>
+    Effect.gen(function* () {
+      const slate = yield* EspnEvent.listingOf("fbs", TestEspn.recordedScoreboard("fbs-scoreboard-live"))
+
+      const game = slate.find((g) => g.id === "401862787")
+      assert.strictEqual(slate.length, 59)
+      assert.strictEqual(game?.status, "live")
+      assert.strictEqual(game?.away.team.abbreviation, "MEM")
+      assert.strictEqual(game?.away.team.id, "fbs:235")
+      assert.strictEqual(game?.away.score, 27)
+      assert.deepStrictEqual(game?.broadcasts, [{ network: Network.make("ESPN+"), medium: "streaming" }])
+    })
+  )
+
+  it.effect("should keep television and streaming broadcasts and drop radio", () =>
+    Effect.gen(function* () {
+      const slate = yield* EspnEvent.listingOf("fbs", TestEspn.recordedScoreboard("fbs-scoreboard-live"))
+
+      const game = slate.find((g) => g.id === "401856710")
+      assert.deepStrictEqual(game?.broadcasts, [{ network: Network.make("ESPN"), medium: "tv" }])
+    })
+  )
+
+  it.effect("should keep each team's location and short name", () =>
+    Effect.gen(function* () {
+      const slate = yield* EspnEvent.listingOf("fbs", TestEspn.recordedScoreboard("fbs-scoreboard-live"))
+
+      const game = slate.find((g) => g.id === "401862787")
+      assert.strictEqual(game?.home.team.location, "Charlotte")
+      assert.strictEqual(game?.home.team.shortName, "Charlotte")
+      assert.strictEqual(game?.home.team.name, "Charlotte 49ers")
+    })
+  )
+
+  it.effect("should keep each team's colors", () =>
+    Effect.gen(function* () {
+      const slate = yield* EspnEvent.listingOf("fbs", TestEspn.recordedScoreboard("fbs-scoreboard-live"))
+
+      const game = slate.find((g) => g.id === "401862787")
+      assert.strictEqual(game?.home.team.color, "005035")
+      assert.strictEqual(game?.home.team.alternateColor, "a49665")
+    })
+  )
+
+  it.effect("should leave a team without colors with neither", () =>
+    Effect.gen(function* () {
+      const slate = yield* EspnEvent.listingOf(
+        "fbs",
+        withoutColors(TestEspn.recordedScoreboard("fbs-scoreboard-live"))
+      )
+
+      const game = slate.find((g) => g.id === "401862787")
+      assert.strictEqual(game?.home.team.color, undefined)
+      assert.strictEqual(game?.home.team.alternateColor, undefined)
+    })
+  )
+
+  it.effect("should leave out what ESPN reports with placeholder values", () =>
+    Effect.gen(function* () {
+      const slate = yield* EspnEvent.listingOf("fbs", TestEspn.recordedScoreboard("fbs-scoreboard-live"))
+
+      const game = slate.find((g) => g.id === "401862787")
+      // ESPN sends rank 99 for an unranked team and down -1 between plays.
+      assert.strictEqual(game?.home.ranking, undefined)
+      assert.strictEqual(game?.situation?.down, undefined)
+    })
+  )
+
+  it.effect("should decode an NFL scoreboard, namespacing team ids by league", () =>
+    Effect.gen(function* () {
+      const slate = yield* EspnEvent.listingOf("nfl", TestEspn.recordedScoreboard("nfl-scoreboard-pregame"))
+
+      assert.strictEqual(slate.length, 16)
+      assert.isTrue(slate.every((game) => game.league === "nfl" && game.home.team.id.startsWith("nfl:")))
+      assert.isTrue(slate.some((game) => game.status === "scheduled" && game.situation === undefined))
+    })
+  )
+
+  it.effect(
+    "should orient the yard line for the team with the ball: ESPN counts it from the home goal line",
+    () =>
+      Effect.gen(function* () {
+        const slate = yield* EspnEvent.listingOf(
+          "fbs",
+          TestEspn.recordedScoreboard("fbs-scoreboard-2026-10-03T2024Z")
+        )
+
+        const yardLine = (id: string) => slate.find((g) => g.id === id)?.situation?.yardLine
+        // Away ball, "4th & 1 at NCSU 11": Louisville is 11 yards from the goal.
+        assert.strictEqual(yardLine("401858248"), 11)
+        // Home ball, "1st & 10 at MIZ 10": Missouri is at its own 10, 90 yards from the goal.
+        assert.strictEqual(yardLine("401856708"), 90)
+        // Home ball, "1st & 10 at UK 49": South Carolina is 49 yards from the goal.
+        assert.strictEqual(yardLine("401856709"), 49)
+        // Away ball, "2nd & 7 at MD 33": Maryland is at its own 33.
+        assert.strictEqual(yardLine("401858475"), 67)
+        // No one has the ball: the yard line cannot be oriented.
+        assert.strictEqual(yardLine("401856710"), undefined)
+      })
+  )
+
   it.effect("should fail a body that is not a scoreboard", () =>
     Effect.gen(function* () {
       const listed = yield* Effect.result(EspnEvent.listingOf("nfl", "not json"))
 
       assert.isTrue(Result.isFailure(listed))
     })
+  )
+})
+
+// Decoding NE at BUF's whole recorded day takes seconds alone, and many under a full suite's load: whichever test
+// runs first decodes it, so each has a timeout to match.
+describe("the recorded NE at BUF day", () => {
+  it.effect(
+    "should decode every snapshot so it reads back from its JSON Equal to itself",
+    () =>
+      Effect.gen(function* () {
+        yield* TestClock.setTime(TestEspn.duringNeAtBuf.epochMilliseconds)
+        const decoded = yield* TestEspn.neAtBufDecoded
+        const deliveries = decoded.flat()
+        const snapshots = deliveries.flatMap((delivery) =>
+          Delivery.$is("Listing")(delivery) ? delivery.games : []
+        )
+
+        const backs = yield* Effect.forEach(snapshots, (snapshot) =>
+          Schema.encodeEffect(snapshotJson)(snapshot).pipe(Effect.flatMap(Schema.decodeEffect(snapshotJson)))
+        )
+
+        assert.isNotEmpty(snapshots)
+        for (const [index, snapshot] of snapshots.entries()) {
+          assert.isTrue(Equal.equals(backs[index], snapshot), snapshot.id)
+        }
+      }),
+    { timeout: 60_000 }
   )
 })
 
@@ -121,4 +252,13 @@ function siteEvent() {
 
 function isHome(competitor: { readonly homeAway: string }): boolean {
   return competitor.homeAway === "home"
+}
+
+const snapshotJson = Schema.fromJsonString(GameSnapshot)
+
+/** `body` without any team's colors. */
+function withoutColors(body: string) {
+  return JSON.stringify(JSON.parse(body), (key, value) =>
+    key === "color" || key === "alternateColor" ? undefined : value
+  )
 }

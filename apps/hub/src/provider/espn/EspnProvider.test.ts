@@ -1,5 +1,5 @@
 import { assert, describe, it } from "@effect/vitest"
-import { GameId, Network } from "@sportal/domain/Game"
+import { GameId } from "@sportal/domain/Game"
 import { LeagueId } from "@sportal/domain/League"
 import {
   Array as Arr,
@@ -34,106 +34,10 @@ import { Topic } from "./Topic.ts"
 
 // Real payloads recorded from ESPN. A payload that breaks decoding gets added here before the fix.
 const fbsLive = TestEspn.recordedScoreboard("fbs-scoreboard-live")
-const fbsMidday = TestEspn.recordedScoreboard("fbs-scoreboard-2026-10-03T2024Z")
 const nflPregame = TestEspn.recordedScoreboard("nfl-scoreboard-pregame")
 const nflLive = TestEspn.recordedScoreboard("nfl-scoreboard-2026-10-04T1800Z")
 
 describe("EspnProvider", () => {
-  it.effect("should decode a live FBS scoreboard into snapshots", () =>
-    Effect.gen(function* () {
-      const slate = yield* listedBy("fbs")
-
-      const game = slate.find((g) => g.id === "401862787")
-      assert.strictEqual(slate.length, 59)
-      assert.strictEqual(game?.status, "live")
-      assert.strictEqual(game?.away.team.abbreviation, "MEM")
-      assert.strictEqual(game?.away.team.id, "fbs:235")
-      assert.strictEqual(game?.away.score, 27)
-      assert.deepStrictEqual(game?.broadcasts, [{ network: Network.make("ESPN+"), medium: "streaming" }])
-    }).pipe(Effect.provide(recordedEspn(fbsLive)))
-  )
-
-  it.effect("should keep television and streaming broadcasts and drop radio", () =>
-    Effect.gen(function* () {
-      const slate = yield* listedBy("fbs")
-
-      const game = slate.find((g) => g.id === "401856710")
-      assert.deepStrictEqual(game?.broadcasts, [{ network: Network.make("ESPN"), medium: "tv" }])
-    }).pipe(Effect.provide(recordedEspn(fbsLive)))
-  )
-
-  it.effect("should keep each team's location and short name", () =>
-    Effect.gen(function* () {
-      const slate = yield* listedBy("fbs")
-
-      const game = slate.find((g) => g.id === "401862787")
-      assert.strictEqual(game?.home.team.location, "Charlotte")
-      assert.strictEqual(game?.home.team.shortName, "Charlotte")
-      assert.strictEqual(game?.home.team.name, "Charlotte 49ers")
-    }).pipe(Effect.provide(recordedEspn(fbsLive)))
-  )
-
-  it.effect("should keep each team's colors", () =>
-    Effect.gen(function* () {
-      const slate = yield* listedBy("fbs")
-
-      const game = slate.find((g) => g.id === "401862787")
-      assert.strictEqual(game?.home.team.color, "005035")
-      assert.strictEqual(game?.home.team.alternateColor, "a49665")
-    }).pipe(Effect.provide(recordedEspn(fbsLive)))
-  )
-
-  it.effect("should leave a team without colors with neither", () =>
-    Effect.gen(function* () {
-      const slate = yield* listedBy("fbs")
-
-      const game = slate.find((g) => g.id === "401862787")
-      assert.strictEqual(game?.home.team.color, undefined)
-      assert.strictEqual(game?.home.team.alternateColor, undefined)
-    }).pipe(Effect.provide(recordedEspn(withoutColors(fbsLive))))
-  )
-
-  it.effect("should leave out what ESPN reports with placeholder values", () =>
-    Effect.gen(function* () {
-      const slate = yield* listedBy("fbs")
-
-      const game = slate.find((g) => g.id === "401862787")
-      // ESPN sends rank 99 for an unranked team and down -1 between plays.
-      assert.strictEqual(game?.home.ranking, undefined)
-      assert.strictEqual(game?.situation?.down, undefined)
-    }).pipe(Effect.provide(recordedEspn(fbsLive)))
-  )
-
-  it.effect("should decode an NFL scoreboard, namespacing team ids by league", () =>
-    Effect.gen(function* () {
-      const slate = yield* listedBy("nfl")
-
-      assert.strictEqual(slate.length, 16)
-      assert.isTrue(slate.every((game) => game.league === "nfl" && game.home.team.id.startsWith("nfl:")))
-      assert.isTrue(slate.some((game) => game.status === "scheduled" && game.situation === undefined))
-    }).pipe(Effect.provide(recordedEspn(fbsLive)))
-  )
-
-  it.effect(
-    "should orient the yard line for the team with the ball: ESPN counts it from the home goal line",
-    () =>
-      Effect.gen(function* () {
-        const slate = yield* listedBy("fbs")
-
-        const yardLine = (id: string) => slate.find((g) => g.id === id)?.situation?.yardLine
-        // Away ball, "4th & 1 at NCSU 11": Louisville is 11 yards from the goal.
-        assert.strictEqual(yardLine("401858248"), 11)
-        // Home ball, "1st & 10 at MIZ 10": Missouri is at its own 10, 90 yards from the goal.
-        assert.strictEqual(yardLine("401856708"), 90)
-        // Home ball, "1st & 10 at UK 49": South Carolina is 49 yards from the goal.
-        assert.strictEqual(yardLine("401856709"), 49)
-        // Away ball, "2nd & 7 at MD 33": Maryland is at its own 33.
-        assert.strictEqual(yardLine("401858475"), 67)
-        // No one has the ball: the yard line cannot be oriented.
-        assert.strictEqual(yardLine("401856710"), undefined)
-      }).pipe(Effect.provide(recordedEspn(fbsMidday)))
-  )
-
   it.effect("should take a poll answered with a non-2xx as a failed poll", () =>
     Effect.gen(function* () {
       const said = yield* polledOnce(
@@ -698,13 +602,6 @@ describe("EspnProvider over FastCast", () => {
       })
   )
 })
-
-/** `body` without any team's colors. */
-function withoutColors(body: string) {
-  return JSON.stringify(JSON.parse(body), (key, value) =>
-    key === "color" || key === "alternateColor" ? undefined : value
-  )
-}
 
 /**
  * ESPN's provider over recorded scoreboards: an NFL poll answered with the pregame scoreboard, an FBS poll with `fbs`,
