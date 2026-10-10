@@ -1,5 +1,5 @@
 import { assert, describe, it } from "@effect/vitest"
-import { Order, Schema } from "effect"
+import { Option, Order, Schema } from "effect"
 import {
   Completion,
   ExtraPoint,
@@ -21,7 +21,7 @@ import {
   Timeout,
   TwoPointTry
 } from "./Play.ts"
-import { team } from "./TestGame.ts"
+import { completion, play, playFields, team } from "./TestGame.ts"
 
 const home = team("HOME").id
 const away = team("AWAY").id
@@ -131,5 +131,110 @@ describe("FootballPlay.lostYards", () => {
     const stoppage = new Stoppage({ ...fields, kind: "officialTimeout" })
 
     assert.isFalse(Play.lostYards(stoppage))
+  })
+})
+
+describe("FootballPlay.bigPlay", () => {
+  it("should call a touchdown run a touchdown", () => {
+    const run = play({ yards: 3, touchdown: true, scoring: true })
+
+    assert.deepStrictEqual(Play.bigPlay(run), Option.some("touchdown"))
+  })
+
+  it("should call a 25-yard catch a long gain", () => {
+    const catch25 = completion({ yards: 25 })
+
+    assert.deepStrictEqual(Play.bigPlay(catch25), Option.some("longGain"))
+  })
+
+  it("should not call a 24-yard catch a big play", () => {
+    const catch24 = completion({ yards: 24 })
+
+    assert.deepStrictEqual(Play.bigPlay(catch24), Option.none())
+  })
+
+  it("should call any sack a sack", () => {
+    const sack = new Sack({ ...playFields, team: playFields.start.team, yards: -2, fumbleLost: false })
+
+    assert.deepStrictEqual(Play.bigPlay(sack), Option.some("sack"))
+  })
+
+  it("should call a strip sack a turnover", () => {
+    const sack = new Sack({ ...playFields, team: playFields.start.team, yards: -8, fumbleLost: true })
+
+    assert.deepStrictEqual(Play.bigPlay(sack), Option.some("turnover"))
+  })
+
+  it("should call an interception a turnover", () => {
+    const pick = new Interception({
+      ...playFields,
+      team: playFields.start.team,
+      yards: 0,
+      return: "returned"
+    })
+
+    assert.deepStrictEqual(Play.bigPlay(pick), Option.some("turnover"))
+  })
+
+  it("should call a pick-six a touchdown", () => {
+    const pick = new Interception({
+      ...playFields,
+      team: playFields.start.team,
+      yards: 0,
+      return: "touchdown"
+    })
+
+    assert.deepStrictEqual(Play.bigPlay(pick), Option.some("touchdown"))
+  })
+
+  it("should call a fumble the defense recovers a turnover", () => {
+    const fumble = new Fumble({ ...playFields, team: playFields.start.team, yards: 2, recovery: "opponent" })
+
+    assert.deepStrictEqual(Play.bigPlay(fumble), Option.some("turnover"))
+  })
+
+  it("should not call a fumble the offense recovers a big play", () => {
+    const fumble = new Fumble({ ...playFields, team: playFields.start.team, yards: 2, recovery: "own" })
+
+    assert.deepStrictEqual(Play.bigPlay(fumble), Option.none())
+  })
+
+  it("should call a kickoff returned past the receiving team's 45 a return", () => {
+    const kick = new Kickoff({
+      ...playFields,
+      yards: 60,
+      returnTouchdown: false,
+      end: { yardsToEndzone: 52, team: playFields.start.team }
+    })
+
+    assert.deepStrictEqual(Play.bigPlay(kick), Option.some("return"))
+  })
+
+  it("should not call a touchback a big play", () => {
+    const kick = new Kickoff({
+      ...playFields,
+      yards: 65,
+      returnTouchdown: false,
+      end: { yardsToEndzone: 75, team: playFields.start.team }
+    })
+
+    assert.deepStrictEqual(Play.bigPlay(kick), Option.none())
+  })
+
+  it("should call a punt returned for a touchdown a touchdown", () => {
+    const punt = new Punt({ ...playFields, yards: 45, return: "touchdown" })
+
+    assert.deepStrictEqual(Play.bigPlay(punt), Option.some("touchdown"))
+  })
+
+  it("should not call a punt nobody returned a big play, wherever it ended", () => {
+    const punt = new Punt({
+      ...playFields,
+      yards: 30,
+      return: "none",
+      end: { yardsToEndzone: 50, team: playFields.start.team }
+    })
+
+    assert.deepStrictEqual(Play.bigPlay(punt), Option.none())
   })
 })
