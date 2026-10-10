@@ -63,3 +63,13 @@ shape, pre-kickoff headers without period or clock) are in memory, not here.
 - Tests: scoreboard-topic tests go; document tests (gaps, resets, copies, undecodable messages) move to a game topic.
   A recorded college checkpoint (`fixtures/fbs-gp-checkpoint-2026-10-10T0022Z.json`) shows college plays decode.
 - Game-day checklist: row 45's college `gp-` question is answered.
+
+## Follow-on (agreed 2026-10-09)
+
+With no scoreboard topic, nothing pushes a snapshot, and the poll and FastCast never say the same fact. So:
+
+- **Listings are the only snapshots.** `Delivery.Snapshot`, `Game#listed` and `GameSnapshot#tiesLive` go. The tie rule
+  now compared two polls and kept the older one at the same clock and score, hiding a new down and ball.
+- **The poll and the game topics run on their own.** `EspnState`, the one fold that kept two overlapping feeds in order,
+  splits: each league's poll is a loop with its own listing and cadence; `GameTopics` folds FastCast frames into
+  documents and plays. They meet only in the listings that say which topics are wanted. ADR 0014 is superseded.

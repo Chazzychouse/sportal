@@ -318,16 +318,196 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 ---
 
-### Task 3: See it live
+### Task 3: Listings are the only snapshots
+
+Since Task 1 nothing in production delivers `Delivery.Snapshot`: the scoreboard topic was its only source. And
+`Game#listed`'s tie rule ("a listing is a poll and the push wins a tie") now compares one poll with an earlier poll: it
+keeps the older one whenever clock and score are unchanged, which between plays hides a new down, distance and ball.
+Both go.
+
+**Files:**
+- Modify: `apps/hub/src/provider/Provider.ts`, `Provider.test.ts`
+- Modify: `apps/hub/src/Slate.ts`, `Slate.test.ts`
+- Modify: `packages/domain/src/Game.ts`, `Game.test.ts`
+- Modify: `apps/hub/src/Director.test.ts`, `apps/hub/src/HubServer.test.ts`
+- Modify: `CONTEXT.md` (**Delivery**, **Slate** rows)
+
+**Interfaces:**
+- Produces: `Delivery = Data.TaggedEnum<{ Listing: { league; games }; Plays: { game; plays } }>`.
+- Produces: `Slate#take` relists each game with `Game#snapshotTaken` (unchanged rule: a snapshot equal to or behind the
+  game's is ignored, except an over game takes one ahead of its end).
+
+- [ ] **Step 1: Write the failing Slate test**
+
+In `Slate.test.ts`, beside the other listing tests, using the file's `listed`, `listing`, `live` and `withBall` helpers
+(read them first):
+
+```ts
+  it("should take a later listing at the same clock and score, for its new down and ball", () => {
+    const slate = listed(withBall(live(one, "10:00"), 60))
+
+    const next = slate.take([listing("fbs", [withBall(live(one, "10:00"), 45)])])[0]
+
+    assert.strictEqual(next.games[0]?.snapshot.situation?.yardLine, 45)
+  })
+```
+
+If `withBall` doesn't set `yardLine` this way, use whatever the file's helpers do to set the situation; the point is two
+listings at the same game time and score that differ only in situation.
+
+Run: `pnpm vitest run apps/hub/src/Slate.test.ts -t "same clock and score"`. Expected: FAIL (the tie rule keeps 60).
+
+- [ ] **Step 2: Remove `Game#listed`, `GameSnapshot#tiesLive` and `Delivery.Snapshot`**
+
+- `Slate.ts` `relisted`: `before.listed(snapshot)` → `before.snapshotTaken(snapshot)`. Delete the `Snapshot` branch of
+  `take` and fix its doc comment (no "snapshot … of a listed game").
+- `Game.ts`: delete `listed` and `tiesLive` with their doc comments.
+- `Provider.ts`: delete the `Snapshot` case of `Delivery` and fix the doc comment.
+- Run `pnpm typecheck` and follow every error.
+
+- [ ] **Step 3: Rewrite the tests**
+
+- `Game.test.ts`: delete the `listed` and `tiesLive` tests.
+- `Slate.test.ts`: each test that delivered `snapshotOf(…)` delivers the same snapshot as a second `listing(…)` of its
+  league instead, keeping its name and assertion when the behaviour still holds (ahead taken, behind ignored, over game
+  takes one ahead of its end, equal changes nothing). Delete the tests that only existed for the push-wins-a-tie rule
+  and "should take its deliveries in order, so a snapshot of a game just listed is taken". Delete `snapshotOf` if unused.
+- `Director.test.ts`, `HubServer.test.ts`, `Provider.test.ts`: a fed `Delivery.Snapshot` becomes a `Delivery.Listing`
+  of that game's league with the snapshot; a test about snapshot deliveries specifically is deleted.
+- List each deleted or changed test in the commit body.
+
+Run: `pnpm check`. Expected: PASS, including the Step 1 test.
+
+- [ ] **Step 4: Glossary and commit**
+
+`CONTEXT.md`: **Delivery** becomes `… what a frame said: a league's listing, or one game's whole list of plays.` **Slate**:
+drop "push and" from "taken from … deliveries", and replace the tie sentence so it reads: a snapshot behind its game
+(earlier in game time, or at the same game time with fewer points) is ignored, except that an over game takes one ahead
+of its end. Check `grep -n "push wins\|tiesLive\|Game#listed\|Snapshot delivery" CONTEXT.md docs/technical-spec.md` finds nothing.
+
+```bash
+git add apps/hub/src packages/domain/src CONTEXT.md
+git commit -m "refactor: listings are the only snapshots
+
+Nothing delivers a Snapshot since scoreboard topics went; the
+push-wins-a-tie rule now hid a later poll's down and ball.
+
+<test changes, one per line>
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
+
+---
+
+### Task 4: The poll and the game topics run on their own
+
+`EspnState` was one fold so the poll and FastCast, which said the same facts, stayed in order. They no longer overlap:
+the poll gives `Listing`s, FastCast gives `Plays`. Split them.
+
+**Target shape**
+
+- **The poll, per league**, in `EspnProvider.ts`: a loop that polls, decodes the listing, emits `[Listing]` and writes
+  the league's games to a `listings` ref, then waits by its own last good listing and whether this poll failed: 10 s
+  while a game is live, a minute while one kicks off within `GameSnapshot.kickoffWindow`, 15 minutes otherwise, at most
+  30 s after a poll that failed or did not decode. A failed or undecodable poll is logged, emits nothing, and keeps the
+  last good listing. Its state (last good listing, failed) is local to the loop: no frame, no fold.
+- **Decoding a listing**: `listed`, `gamesOf` and `decodeScoreboard` move from `EspnState.ts` to `EspnEvent.ts` as one
+  exported `listingOf(league: LeagueId, body: string): Effect.Effect<ReadonlyArray<GameSnapshot>, Schema.SchemaError>`
+  (an event that does not decode is skipped). `EspnProvider` and `TestEspn` use it.
+- **The game topics**: `EspnState` becomes `GameTopics` (`git mv EspnState.ts GameTopics.ts`, same for the test): a
+  `Data.Class<{ documents: FastCastDocuments; plays: HashMap<GameId, HashMap<string, Play>> }>` with
+  `take(frame: Frame): Effect<readonly [GameTopics, ReadonlyArray<Delivery>]>` (the `pushed`/`playsAfter` logic,
+  unchanged), `retained(kept: (topic: Topic) => boolean): GameTopics` (the old `retained`'s body), and
+  `isSynced(topic)`. No listings, no `failedPolls`, no `pollInterval`, no `wanted`.
+- **`Frame`** loses `Polled` and `PollFailed`: it is FastCast's frames only. `annotationsOf` loses its poll cases.
+- **Wanted** (`wantedOf` in `EspnProvider.ts`): from the `listings` ref and a read-only view of the `GameTopics` fold,
+  on each change of either and once a minute: the topic of each listed game live or within its kickoff window, with
+  `isSynced`. Same rule as today's `EspnState#wanted`.
+- **Retention**: the game-topics fold takes, merged with FastCast's frames, each change of `listings`, and on one keeps
+  only the topics wanted at the clock's now (`retained`). So documents and plays are pruned after each listing, as they
+  were after each poll. Model the fold's input as a private two-case union in `EspnProvider.ts`
+  (`Data.TaggedEnum<{ Frame: { frame: Frame }; Listed: {} }>`), or simpler if Effect offers it.
+- **`deliveries`**: `Stream.merge(polls, gameTopics)`. Order between the two no longer matters: they never carry the same
+  facts, and the Slate drops plays of a game no listing has yet (the next `Plays` is the game's whole list).
+
+**Invariants (these tests pass unchanged except for construction helpers):** every cadence and poll-failure test in
+`EspnProvider.test.ts`; `Espn.test.ts`; `Source.test.ts`; `Director.test.ts`'s recorded-day tests; every plays, reset and
+document test now in `GameTopics.test.ts`.
+
+**Files:**
+- Modify: `apps/hub/src/provider/espn/EspnProvider.ts`, `EspnProvider.test.ts`
+- Move: `EspnState.ts` → `GameTopics.ts`, `EspnState.test.ts` → `GameTopics.test.ts`
+- Modify: `apps/hub/src/provider/espn/EspnEvent.ts`, `EspnEvent.test.ts`, `Frame.ts`, `TestEspn.ts`
+- Modify: tests that use `TestEspn.decodedFrames`/`stateAfter`/`recordedNeAtBuf` (`grep -rln "decodedFrames\|stateAfter\|recordedNeAtBuf" apps`)
+- Modify: `CONTEXT.md` (**ESPN state** → **Game topics**; **Wanted topics**; any row naming `EspnState`, `Polled` or `PollFailed`)
+
+**Interfaces:**
+- Produces: `GameTopics` as above; `EspnEvent.listingOf(league, body)`; `Frame = Data.TaggedEnum<{ Pushed; Checkpoint }>`.
+- Produces in `TestEspn.ts`: a recorded day replays as `ReadonlyArray<Recorded>` where `Recorded` is a poll body
+  (`{ league, body }`) or a FastCast `Frame`; `decodedFrames` becomes `replayed(recorded)`: a poll through `listingOf`
+  to `[Listing]` (nothing when it does not decode), a frame through `GameTopics#take`, with retention after each poll as
+  the provider does. Keep one array of deliveries per recorded line, so the Director's recorded-day tests keep their
+  shape.
+
+- [ ] **Step 1: Move the listing decode** to `EspnEvent.listingOf`, with its tests moved from `EspnState.test.ts`
+  ("should decode each listing", "should read a poll response as its league's listing", "should skip an event that does
+  not decode, and list the rest") into `EspnEvent.test.ts`, asserting on `listingOf`'s result. Run them; commit nothing yet.
+- [ ] **Step 2: Rename and shrink the fold**: `git mv` to `GameTopics`, remove everything poll-related, take the
+  `EspnState#failedPolls`, poll-retention and `wanted` tests out of its test file (they move to `EspnProvider.test.ts`
+  in Step 4 or are already covered there: check each by name and keep one test per behaviour). Rename log prefixes
+  `EspnState:` → `GameTopics:`.
+- [ ] **Step 3: Remove `Polled`/`PollFailed` from `Frame`** and follow every error.
+- [ ] **Step 4: Rewrite `EspnProvider.layer`** to the target shape. Write its doc comment from the target shape. The
+  `wanted` tests (live game wanted, from 30 minutes before kickoff, not a second earlier, synced shown as `Synced`, a
+  reset topic shown waiting) become `EspnProvider.test.ts` tests through `FastCast.layerTest`'s `wanted` stream if they
+  aren't there already; the retention tests ("should drop the document and plays of a game no longer wanted", "should
+  keep the document of a topic still wanted") become `GameTopics.test.ts` tests on `retained`.
+- [ ] **Step 5: Rework `TestEspn.ts`** as in Interfaces and follow its users.
+- [ ] **Step 6: Glossary.** **Game topics**: `Each followed FastCast game topic's document and the plays decoded from it,
+  each frame folded in once; GameTopics in apps/hub/src/provider/espn/GameTopics.ts. Its take gives each frame's Plays;
+  its retained keeps only the topics still wanted.` Delete the **ESPN state** row. Fix **Wanted topics** and any row
+  `grep -n "EspnState\|ESPN state\|Polled\|PollFailed" CONTEXT.md docs/technical-spec.md` finds.
+- [ ] **Step 7: Run and commit.** `pnpm check` passes. `git diff --stat <task base> -- apps` deletes more than it adds;
+  report the numbers. Commit body lists every moved, merged or deleted test.
+
+```bash
+git add -A apps/hub/src CONTEXT.md docs/technical-spec.md
+git commit -m "refactor: run the ESPN poll and game topics on their own
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
+
+---
+
+### Task 5: Docs follow
+
+Task 2's docs (ADR 0016, the ADR 0014 status line) describe Task 1 only.
+
+- [ ] Rewrite ADR 0016 as "ESPN's poll lists, its game topics play": context (two feeds said the same facts; the college
+  scoreboard topic lists only ranked games); decision (FastCast follows only game topics, for plays; the poll is each
+  game's listing, status and score; the two run on their own, joined only by the listings that say which topics are
+  wanted; listings are the only snapshots, so no push-wins-a-tie rule); consequences (scores move with the poll, about
+  10 s; no push-behind metric; `EspnState` and `Delivery.Snapshot` gone). ADR 0014's status: `Superseded by 0016.`
+- [ ] `docs/technical-spec.md`: the provider section matches Tasks 3–4 (`grep -n "EspnState\|fold\|Snapshot" docs/technical-spec.md`).
+- [ ] `pnpm check`; commit `docs: ESPN's poll lists, its game topics play`.
+
+---
+
+### Task 6: See it live
 
 Not a code task; needs a live game (Saturday 2026-10-10 from 16:00Z).
 
-- [ ] Ask the user to run `pnpm dev` (agent-launched Electron misreports on this machine). Check together: scores and clocks move about every 10 s; plays arrive on the strip as they happen, including a college game's; Hub logs show subscriptions only to `gp-…` topics and no `lost its document` warnings in a quiet stretch. Record what was seen in the checklist and commit.
+- [ ] Ask the user to run `pnpm dev` (agent-launched Electron misreports on this machine). Check together: scores,
+  clocks and the field's down and ball move about every 10 s; plays arrive on the strip as they happen, including a
+  college game's; Hub logs show subscriptions only to `gp-…` topics and no `lost its document` warnings in a quiet
+  stretch. Record what was seen in the checklist and commit.
 
 ---
 
 ## Self-review
 
-- Spec coverage: every bullet of "The design" maps to Task 1 Steps 2–5; "Docs and tests" to Task 1 Step 6 and Task 2; the live check to Task 3.
-- No placeholders beyond the commit body's test mapping, which the implementer fills from what they changed.
-- Types: `Topic.fromTc`/`tc()` (Step 2) are what Steps 5–6 use; `FastCastMessage.Checkpoint` (Step 3) is what `FastCast.ts`, `TestEspn.ts` and the tests decode with.
+- Spec coverage: Task 1 is the spec's design; Task 2 its docs; Tasks 3–5 follow from it (no snapshot is pushed, so
+  nothing needs the poll and pushes in one fold or a tie rule) and were agreed with the user on 2026-10-09; Task 6 the
+  live check.
+- Types: `Topic.fromTc`/`tc()` and `FastCastMessage.Checkpoint` (Task 1) are used in Task 4; `Delivery` without
+  `Snapshot` (Task 3) is what `GameTopics#take` and the poll emit in Task 4.
