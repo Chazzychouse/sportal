@@ -16,14 +16,16 @@ export function useOverlayRef() {
         const { x, y, width, height } = element.getBoundingClientRect()
         setOverlays((all) => new Map(all).set(key, { x, y, width, height }))
       }
-      // An overlay grows into place with an animation, which a resize observer does not see.
+      // An overlay grows into place with an animation, which a resize observer does not see, and a fixed overlay can move with the window without resizing.
       const observer = new ResizeObserver(measure)
       observer.observe(element)
       element.addEventListener("animationend", measure)
+      window.addEventListener("resize", measure)
       measure()
       return () => {
         observer.disconnect()
         element.removeEventListener("animationend", measure)
+        window.removeEventListener("resize", measure)
         setOverlays((all) => {
           const rest = new Map(all)
           rest.delete(key)

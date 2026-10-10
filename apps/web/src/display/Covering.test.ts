@@ -45,7 +45,7 @@ describe("Covering.sync", () => {
         return yield* Queue.poll(calls)
       }).pipe(Effect.scoped, Effect.provide(registry))
 
-      assert.isTrue(Option.exists(call, ({ _tag }) => _tag === "SetHidden"))
+      assert.deepStrictEqual(call, Option.some({ _tag: "SetHidden", games: [TestWeb.bama] }))
     })
   )
 
