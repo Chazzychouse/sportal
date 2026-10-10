@@ -1,8 +1,9 @@
 import { DateTime } from "effect"
 import { type Broadcast, GameId, GameSnapshot, Network } from "./Game.ts"
 import type { LeagueId } from "./League.ts"
-import { Completion, PlayId, Rush } from "./Play.ts"
+import { Completion, type Play, PlayId, Rush } from "./Play.ts"
 import { Situation } from "./Situation.ts"
+import type { Slate } from "./Slate.ts"
 import { Team, TeamId } from "./Team.ts"
 
 /** A game snapshot for a test: an FBS scheduled game unless the overrides say otherwise. */
@@ -90,4 +91,14 @@ export function play(overrides: Partial<Rush> = {}): Rush {
  */
 export function completion(overrides: Partial<Completion> = {}): Completion {
   return new Completion({ ...oneYardPlay, text: "Pass complete for 1 yard", ...overrides })
+}
+
+/** Game `id`'s snapshot, as `slate` has it. */
+export function snapshotIn(slate: Slate, id: GameId): GameSnapshot | undefined {
+  return slate.games.find(({ snapshot }) => snapshot.id === id)?.snapshot
+}
+
+/** Game `id`'s plays, as `slate` has them; none when the slate lacks it. */
+export function playsIn(slate: Slate, id: GameId): ReadonlyArray<Play> {
+  return slate.games.find(({ snapshot }) => snapshot.id === id)?.plays ?? []
 }

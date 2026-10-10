@@ -1,8 +1,7 @@
 import { assert, describe, it } from "@effect/vitest"
 import { GameId, GameSnapshot } from "@sportal/domain/Game"
-import type { Play } from "@sportal/domain/Play"
 import { Slate } from "@sportal/domain/Slate"
-import { liveSnapshot, play, snapshot } from "@sportal/domain/TestGame"
+import { liveSnapshot, play, playsIn, snapshot, snapshotIn } from "@sportal/domain/TestGame"
 import { type Cause, DateTime, Effect, Layer, Option, Queue, Ref, Stream } from "effect"
 import { Director } from "./Director.ts"
 import { Delivery, Provider } from "./provider/Provider.ts"
@@ -167,14 +166,6 @@ describe("Director, a take that raises a defect", () => {
     )
   )
 })
-
-function snapshotIn(slate: Slate, id: GameId): GameSnapshot | undefined {
-  return slate.games.find(({ snapshot }) => snapshot.id === id)?.snapshot
-}
-
-function playsIn(slate: Slate, id: GameId): ReadonlyArray<Play> {
-  return slate.games.find(({ snapshot }) => snapshot.id === id)?.plays ?? []
-}
 
 /**
  * Runs `test` against a Director over a provider whose frames are what the test offers `frames`. One frame waits in

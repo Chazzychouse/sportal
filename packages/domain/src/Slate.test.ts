@@ -4,7 +4,7 @@ import { type Game, GameId, type GameSnapshot } from "./Game.ts"
 import type { LeagueId } from "./League.ts"
 import { type Play, PlayId } from "./Play.ts"
 import { Slate, SlateChange } from "./Slate.ts"
-import { broadcast, completion, play, situation, snapshot, team } from "./TestGame.ts"
+import { broadcast, completion, play, playsIn, situation, snapshot, snapshotIn, team } from "./TestGame.ts"
 
 const t0 = DateTime.makeUnsafe("2026-10-03T16:00:00Z")
 const one = GameId.make("1")
@@ -354,19 +354,9 @@ describe("Slate#recent", () => {
   })
 })
 
-/** Game `id`'s snapshot, as `slate` has it. */
-function snapshotIn(slate: Slate, id: GameId): GameSnapshot | undefined {
-  return slate.games.find(({ snapshot }) => snapshot.id === id)?.snapshot
-}
-
 /** Game `id`, as `slate` has it; the test fails when the slate lacks it. */
 function gameIn(slate: Slate, id: GameId): Game {
   return Option.getOrThrow(Arr.findFirst(slate.games, ({ snapshot }) => snapshot.id === id))
-}
-
-/** Game `id`'s plays, as `slate` has them; none for a game it does not have. */
-function playsIn(slate: Slate, id: GameId): ReadonlyArray<Play> {
-  return slate.games.find(({ snapshot }) => snapshot.id === id)?.plays ?? []
 }
 
 /** League `league`'s games, as `slate` has them, in order. */
