@@ -14,7 +14,10 @@ export class Topic extends Data.Class<{ readonly league: LeagueId; readonly game
     })
   }
 
-  /** The topic of each of `games` live or kicking off within `GameSnapshot.kickoffWindow` at `now`: those FastCast follows. */
+  /**
+   * The topic of each of `games` live or kicking off within `GameSnapshot.kickoffWindow` at `now`: those FastCast
+   * follows.
+   */
   static wantedAt(games: Iterable<GameSnapshot>, now: DateTime.Utc): HashSet.HashSet<Topic> {
     const wanted = [...games].filter((game) => game.isLiveOrKicksOffWithin(GameSnapshot.kickoffWindow, now))
     return HashSet.fromIterable(wanted.map((game) => new Topic({ league: game.league, game: game.id })))

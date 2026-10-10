@@ -76,8 +76,8 @@ export const layer: Layer.Layer<Provider, never, FastCast | HttpClient.HttpClien
         const taken = Effect.fnUntraced(function* (topics: GameTopics, each: Result.Result<Frame, Listings>) {
           const [next, said] = yield* Result.match(each, {
             onSuccess: (frame) => Effect.map(topics.take(frame), ([after, one]) => [after, [one]] as const),
-            onFailure: (listed) =>
-              Effect.map(DateTime.now, (now) => [topics.retainedFor(gamesOf(listed), now), []] as const)
+            onFailure: (latest) =>
+              Effect.map(DateTime.now, (now) => [topics.retainedFor(gamesOf(latest), now), []] as const)
           })
 
           yield* SubscriptionRef.set(view, next)

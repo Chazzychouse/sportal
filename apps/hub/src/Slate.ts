@@ -15,9 +15,10 @@ export class Slate extends Data.Class<{
   static readonly empty: Slate = new Slate({ games: [] })
 
   /**
-   * Takes one frame's deliveries, in order, and gives the next slate with what each delivery changed, in order. A listing
-   * replaces its league's games with the ones it names, each taken into the game the slate had (`Game#snapshotTaken`) or
-   * new. Plays of a listed game are taken into it (`Game#playsTaken`); of a game no listing names, dropped. A take that changes nothing gives back this slate itself and no change, and a game it does not
+   * Takes one frame's deliveries, in order, and gives the next slate with what each delivery changed, in order. A
+   * listing replaces its league's games with the ones it names, each taken into the game the slate had
+   * (`Game#snapshotTaken`) or new. Plays of a listed game are taken into it (`Game#playsTaken`); of a game no listing
+   * names, dropped. A take that changes nothing gives back this slate itself and no change, and a game it does not
    * change stays the same `Game`.
    */
   take(deliveries: ReadonlyArray<Delivery>): Taken {

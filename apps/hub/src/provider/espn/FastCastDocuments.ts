@@ -17,7 +17,8 @@ import { Frame } from "./Frame.ts"
 import type { Topic } from "./Topic.ts"
 
 /**
- * Each FastCast game topic's document, its plays by id at `gamePlays`: waiting for its checkpoint, or synced as of a message.
+ * Each FastCast game topic's document, its plays by id at `gamePlays`: waiting for its checkpoint, or synced as of a
+ * message.
  */
 export class FastCastDocuments extends Data.Class<{
   readonly byTopic: HashMap.HashMap<Topic, Document>
@@ -26,8 +27,8 @@ export class FastCastDocuments extends Data.Class<{
   static readonly empty: FastCastDocuments = new FastCastDocuments({ byTopic: HashMap.empty() })
 
   /**
-   * The documents after `frame`, and what it changed: all of a game topic's plays, by id, when they changed, with the ids of the plays touched (every
-   * one, on a checkpoint). A topic is synced by its checkpoint frame and moved on by each message after it. A missed
+   * The documents after `frame`, and what it changed: all of a game topic's plays, by id, when they changed, with the
+   * ids of the plays touched (every one, on a checkpoint). A topic is synced by its checkpoint frame and moved on by each message after it. A missed
    * message, a patch that will not apply, or a message that does not decode on a synced topic sends only that topic
    * back to waiting for a checkpoint, and the change is a `Reset` of it. A message of an op it does not know is
    * skipped. Fails only when any other frame does not decode, leaving the documents as they were.

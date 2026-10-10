@@ -111,9 +111,9 @@ export class GameSnapshot extends Schema.Class<GameSnapshot>("sportal/GameSnapsh
   }
 
   /**
-   * Behind `had`, a snapshot of the same game: earlier in game time, or at the same game time with fewer points (a poll
-   * lagging a pushed score), unless `had` is over and this is ahead of its end (overtime after a spurious final, a
-   * postponed game resuming).
+   * Behind `had`, a snapshot of the same game: earlier in game time, or at the same game time with fewer points (a
+   * listing lagging an earlier one), unless `had` is over and this is ahead of its end (overtime after a spurious
+   * final, a postponed game resuming).
    */
   isBehind(had: GameSnapshot): boolean {
     const resumed = had.progress() === "over" && this.isAheadOfOver(had)

@@ -5,7 +5,10 @@ import { Team, TeamId } from "@sportal/domain/Team"
 import { Array as Arr, type DateTime, Effect, Schema, SchemaGetter, SchemaIssue } from "effect"
 import { type EspnSituation, type EspnStatus, Scoreboard, SiteEvent } from "./EspnPayload.ts"
 
-/** League `league`'s listed games, as a poll's `body`, its whole site scoreboard, shows them; an event that does not decode is skipped. */
+/**
+ * League `league`'s listed games, as a poll's `body`, its whole site scoreboard, shows them; an event that does not
+ * decode is skipped.
+ */
 export const listingOf = Effect.fnUntraced(function* (league: LeagueId, body: string) {
   const scoreboard = yield* decodeScoreboard(body)
   const games = yield* Effect.forEach(scoreboard.events, (event) => Effect.option(decodeEvent[league](event)))

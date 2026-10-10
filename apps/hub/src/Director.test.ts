@@ -45,7 +45,7 @@ describe("Director, the slate", () => {
     Effect.gen(function* () {
       yield* listing([snapshot({ id: one, status: "live", period: 2, clock: "5:00" })])
 
-      const current = yield* takenSnapshot(snapshot({ id: one, status: "live", period: 1, clock: "5:00" }))
+      const current = yield* relisted(snapshot({ id: one, status: "live", period: 1, clock: "5:00" }))
 
       assert.strictEqual(snapshotIn(current, one)?.period, 2)
     }).pipe(Effect.provide(directorOver))
@@ -141,7 +141,7 @@ describe("Director#slate", () => {
 
       yield* listing([first])
       yield* Effect.yieldNow
-      yield* takenSnapshot(second)
+      yield* relisted(second)
       yield* Effect.yieldNow
       const all = yield* Ref.get(given)
 
@@ -159,7 +159,7 @@ describe("Director#slate", () => {
       )
       yield* listing([liveSnapshot({ id: one })])
 
-      yield* takenSnapshot(liveSnapshot({ id: one, clock: "11:00" }))
+      yield* relisted(liveSnapshot({ id: one, clock: "11:00" }))
       yield* Effect.yieldNow
       const count = yield* Ref.get(given)
 
@@ -173,7 +173,7 @@ describe("Director, a take that raises a defect", () => {
     Effect.gen(function* () {
       const before = yield* listing([liveSnapshot({ id: one, clock: "9:00" })])
 
-      const current = yield* takenSnapshot(broken(one))
+      const current = yield* relisted(broken(one))
 
       assert.strictEqual(current, before)
     }).pipe(Effect.provide(directorOver))
@@ -184,7 +184,7 @@ describe("Director, a take that raises a defect", () => {
     return Effect.gen(function* () {
       yield* listing([liveSnapshot({ id: one, clock: "9:00" })])
 
-      yield* takenSnapshot(broken(one))
+      yield* relisted(broken(one))
       const errors = logs.filter(({ level }) => level === "Error")
 
       assert.strictEqual(errors.length, 1)
@@ -196,10 +196,10 @@ describe("Director, a take that raises a defect", () => {
   it.effect("should take the game's next snapshot", () =>
     Effect.gen(function* () {
       yield* listing([liveSnapshot({ id: one, clock: "9:00" })])
-      yield* takenSnapshot(broken(one))
+      yield* relisted(broken(one))
       const next = liveSnapshot({ id: one, clock: "7:00" })
 
-      const current = yield* takenSnapshot(next)
+      const current = yield* relisted(next)
 
       assert.strictEqual(snapshotIn(current, one), next)
     }).pipe(Effect.provide(directorOver))
@@ -318,7 +318,7 @@ describe("Director's game state gauge", () => {
       })
       yield* listing([first])
 
-      yield* takenSnapshot(second)
+      yield* relisted(second)
       const metrics = yield* Metric.snapshot
       const scores = metrics.filter(
         (metric) => metric.id === "sportal_game_score" && metric.attributes?.game === one
@@ -393,7 +393,7 @@ function listing(games: ReadonlyArray<GameSnapshot>) {
   return delivered(listingOf(games))
 }
 
-function takenSnapshot(game: GameSnapshot) {
+function relisted(game: GameSnapshot) {
   return listing([game])
 }
 

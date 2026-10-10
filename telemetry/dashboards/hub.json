@@ -91,7 +91,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "{service_name=\"sportal-hub\"} |~ \"EspnProvider|EspnState\""
+          "expr": "{service_name=\"sportal-hub\"} |~ \"EspnProvider|GameTopics\""
         }
       ]
     },

@@ -63,9 +63,10 @@ export const recordedNeAtBuf = Effect.gen(function* () {
 export const duringNeAtBuf = DateTime.makeUnsafe("2026-10-04T18:00:00Z")
 
 /**
- * What ESPN says each of `recorded` said, one array of deliveries a line, as the provider would: a poll is its league's
- * `Listing` (nothing, when it does not decode), after which the game topics keep only those wanted at the clock's now;
- * a frame is what `GameTopics#take` gives.
+ * What ESPN says each of `recorded` said, one array of deliveries a line: a poll is its league's `Listing` (nothing,
+ * when it does not decode), after which the game topics keep only those wanted at the clock's now; a frame is what
+ * `GameTopics#take` gives. It approximates the provider's ordering (retention runs synchronously after each poll), for
+ * the recorded-day tests; a test of `GameTopics` alone replays frames with `framesReplayed`.
  */
 export const replayed = Effect.fn("TestEspn.replayed")(function* (recorded: ReadonlyArray<Recorded>) {
   return yield* Stream.fromIterable(recorded).pipe(
@@ -73,6 +74,17 @@ export const replayed = Effect.fn("TestEspn.replayed")(function* (recorded: Read
       () => ({ topics: GameTopics.empty, games: HashMap.empty<LeagueId, ReadonlyArray<GameSnapshot>>() }),
       (state, line) =>
         Effect.map(replayedLine(state, line), ([next, deliveries]) => [next, [deliveries]] as const)
+    ),
+    Stream.runCollect
+  )
+})
+
+/** What `GameTopics#take` gives for each of `frames` in turn, one array of deliveries a frame, from no topics. */
+export const framesReplayed = Effect.fn("TestEspn.framesReplayed")(function* (frames: ReadonlyArray<Frame>) {
+  return yield* Stream.fromIterable(frames).pipe(
+    Stream.mapAccumEffect(
+      () => GameTopics.empty,
+      (topics, frame) => Effect.map(topics.take(frame), ([next, deliveries]) => [next, [deliveries]] as const)
     ),
     Stream.runCollect
   )

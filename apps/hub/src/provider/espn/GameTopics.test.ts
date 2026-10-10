@@ -1,7 +1,6 @@
 import { readFileSync } from "node:fs"
 import { assert, describe, it } from "@effect/vitest"
 import { GameId, GameSnapshot } from "@sportal/domain/Game"
-import type { LeagueId } from "@sportal/domain/League"
 import { Play, PlayId } from "@sportal/domain/Play"
 import { Effect, Equal, HashMap, Option, Record, Schema } from "effect"
 import { TestClock } from "effect/testing"
@@ -10,12 +9,10 @@ import { Delivery } from "../Provider.ts"
 import * as FastCastMessage from "./FastCastMessage.ts"
 import { Frame } from "./Frame.ts"
 import { GameTopics } from "./GameTopics.ts"
-import { duringNeAtBuf, recordedNeAtBuf, replayed, topicsAfter } from "./TestEspn.ts"
+import { duringNeAtBuf, framesReplayed, recordedNeAtBuf, replayed, topicsAfter } from "./TestEspn.ts"
 import { Topic } from "./Topic.ts"
 
-// Recorded from ESPN on 2026-10-04: the NFL scoreboard polled at 18:00Z.
 const fixture = (name: string) => readFileSync(new URL(`./fixtures/${name}`, import.meta.url), "utf8")
-const scoreboardBody = fixture("nfl-scoreboard-2026-10-04T1800Z.json")
 const playEntities = Schema.decodeSync(
   Schema.fromJsonString(Schema.Record(Schema.String, Schema.Record(Schema.String, Schema.Json)))
 )(fixture("nfl-plays-2026-10-04.json"))
@@ -63,11 +60,10 @@ describe("GameTopics#take", () => {
     })
   )
 
-  it.effect("should send only the topic that missed a message back to waiting for a checkpoint", () =>
+  it.effect("should send a topic that missed a message back to waiting for a checkpoint", () =>
     Effect.gen(function* () {
       // The recording's checkpoint and messages 819 to 822, without message 820.
-      const withoutMessage820 = moveRecordingFrames().filter((_, index) => index !== 2)
-      const frames = [...withoutMessage820, poll("nfl", scoreboardBody)]
+      const frames = moveRecordingFrames().filter((_, index) => index !== 2)
 
       const deliveries = yield* decoded(frames)
 
@@ -78,15 +74,14 @@ describe("GameTopics#take", () => {
       const reset = yield* resetTopics(frames)
       assert.deepStrictEqual(reset, [neAtBufPlays])
       assert.deepStrictEqual(playsFrames, [1, 2])
-      assert.strictEqual(deliveries.at(-1)?.delivery._tag, "Listing", "the poll still decodes")
     })
   )
 
   it.effect("should give nothing and fail nothing for a patch or an idle message before any checkpoint", () =>
     Effect.gen(function* () {
-      const deliveries = yield* decoded([poll("nfl", scoreboardBody), ...beforeAnyCheckpoint()])
+      const deliveries = yield* decoded(beforeAnyCheckpoint())
 
-      assert.deepStrictEqual(tags(deliveries), ["Listing"])
+      assert.deepStrictEqual(tags(deliveries), [])
     })
   )
 
@@ -163,7 +158,7 @@ describe("GameTopics#take", () => {
 
   it.effect("should reset no topic that was never synced", () =>
     Effect.gen(function* () {
-      const reset = yield* resetTopics([poll("nfl", scoreboardBody), ...beforeAnyCheckpoint()])
+      const reset = yield* resetTopics(beforeAnyCheckpoint())
 
       assert.deepStrictEqual(reset, [])
     })
@@ -171,13 +166,13 @@ describe("GameTopics#take", () => {
 
   it.effect("should sync a waiting topic on the next checkpoint that decodes", () =>
     Effect.gen(function* () {
-      const frames = [poll("nfl", scoreboardBody), neAtBufCheckpoint(), textReplaced(819)]
+      const frames = [neAtBufCheckpoint(), textReplaced(819)]
 
       const deliveries = yield* decoded(frames)
 
       const reset = yield* resetTopics(frames)
       assert.deepStrictEqual(
-        deliveries.flatMap(({ frame, delivery }) => (frame === 3 ? [textOf(delivery, "401872971792")] : [])),
+        deliveries.flatMap(({ frame, delivery }) => (frame === 2 ? [textOf(delivery, "401872971792")] : [])),
         ["Corrected"]
       )
       assert.deepStrictEqual(reset, [])
@@ -199,7 +194,7 @@ describe("GameTopics#take", () => {
     Effect.gen(function* () {
       const { logs, layer } = recordingLogs()
 
-      yield* replayed([undecodablePatch(819), neAtBufCheckpoint()]).pipe(Effect.provide(layer))
+      yield* framesReplayed([undecodablePatch(819), neAtBufCheckpoint()]).pipe(Effect.provide(layer))
 
       assert.deepStrictEqual(
         logs.map(({ level, annotations }) => [level, annotations]),
@@ -421,7 +416,7 @@ describe("GameTopics#take", () => {
   describe("one array of deliveries per frame", () => {
     it.effect("should give a message that changes no document no deliveries", () =>
       Effect.gen(function* () {
-        const [, second, ...rest] = yield* replayed([
+        const [, second, ...rest] = yield* framesReplayed([
           neAtBufCheckpoint(),
           message(neAtBufPlays, 819, [{ op: "replace", path: "/x", value: "1" }])
         ])
@@ -435,7 +430,7 @@ describe("GameTopics#take", () => {
       Effect.gen(function* () {
         const frames = [neAtBufCheckpoint(), undecodablePatch(819)]
 
-        const all = yield* replayed(frames)
+        const all = yield* framesReplayed(frames)
 
         assert.strictEqual(all.length, frames.length)
         assert.deepStrictEqual(all.at(-1), [])
@@ -444,9 +439,9 @@ describe("GameTopics#take", () => {
 
     it.effect("should give one array of deliveries per frame", () =>
       Effect.gen(function* () {
-        const frames = [poll("nfl", scoreboardBody), poll("nfl", "not json"), ...moveRecordingFrames()]
+        const frames = moveRecordingFrames()
 
-        const all = yield* replayed(frames)
+        const all = yield* framesReplayed(frames)
 
         assert.strictEqual(all.length, frames.length)
       })
@@ -544,8 +539,8 @@ describe("GameTopics#retained", () => {
 })
 
 /** The deliveries `frames` decode to, each with the place, from 1, of the frame that said it. */
-function decoded(frames: Parameters<typeof replayed>[0]) {
-  return replayed(frames).pipe(
+function decoded(frames: ReadonlyArray<Frame>) {
+  return framesReplayed(frames).pipe(
     Effect.map((all) =>
       all.flatMap((deliveries, index) => deliveries.map((delivery) => ({ frame: index + 1, delivery })))
     )
@@ -553,8 +548,7 @@ function decoded(frames: Parameters<typeof replayed>[0]) {
 }
 
 /** The topics whose document went from synced back to waiting for a checkpoint over `frames`, in order. */
-function resetTopics(recorded: Parameters<typeof replayed>[0]) {
-  const frames = recorded.filter((line): line is Frame => !("league" in line))
+function resetTopics(frames: ReadonlyArray<Frame>) {
   return Effect.reduce(
     frames,
     (): { readonly state: GameTopics; readonly topics: ReadonlyArray<string> } => ({
@@ -574,11 +568,6 @@ function lostBetween(before: GameTopics, after: GameTopics): ReadonlyArray<strin
   return [...HashMap.keys(before.documents.byTopic)]
     .filter((topic) => before.documents.isSynced(topic) && !after.documents.isSynced(topic))
     .map((topic) => topic.tc())
-}
-
-/** A poll's response, `league`'s whole site scoreboard, as a recorded day replays it. */
-function poll(league: LeagueId, body: string) {
-  return { league, body }
 }
 
 function checkpoint(tc: string, mid: number, document: unknown): Frame {

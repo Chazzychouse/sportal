@@ -547,6 +547,44 @@ describe("EspnProvider.deliveries", () => {
     })
   )
 
+  it.effect("should not want a listed game's topic once it is final", () =>
+    Effect.gen(function* () {
+      const live = scoreboardOf([{ state: "in", period: 2 }])
+      const final = scoreboardOf([{ state: "post", period: 4 }])
+      const topic = firstTopicOf(live)
+      const polls = Ref.makeUnsafe(0)
+      const client = HttpClient.make((request) =>
+        Effect.map(
+          Ref.getAndUpdate(polls, (n) => n + 1),
+          (n) => answered(request, n === 0 ? live : final)
+        )
+      )
+
+      const told = yield* toldOver(client, "nfl", ["10 seconds"])
+
+      assert.isTrue(
+        told.some((one) => HashMap.has(one, topic)),
+        "it was wanted while live"
+      )
+      assert.isFalse(Option.exists(Arr.last(told), (one) => HashMap.has(one, topic)))
+    })
+  )
+
+  it.effect("should keep one league's wanted topics when the other league lists", () =>
+    Effect.gen(function* () {
+      const live = scoreboardOf([{ state: "in", period: 2 }])
+      const nfl = firstTopicOf(live)
+      const fbs = new Topic({ league: "fbs", game: nfl.game })
+      const client = HttpClient.make((request) => Effect.succeed(answered(request, live)))
+
+      const told = yield* toldOver(client, "nfl,fbs", ["10 seconds"])
+
+      const last = Arr.last(told)
+      assert.isTrue(Option.exists(last, (one) => HashMap.has(one, nfl)))
+      assert.isTrue(Option.exists(last, (one) => HashMap.has(one, fbs)))
+    })
+  )
+
   it.effect("should show a synced topic as Synced", () =>
     Effect.gen(function* () {
       const pushing = Stream.fromEffect(Effect.sleep("1 second")).pipe(Stream.as(checkpointFrame(neAtBuf)))

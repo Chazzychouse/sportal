@@ -169,11 +169,6 @@ describe("Slate#take, a game the slate has over", () => {
     const next = finished.take([listing("nfl", [playing])])[0]
 
     assert.deepStrictEqual(snapshotsIn(next, "nfl"), [final])
-  })
-
-  it("should give back the slate itself for a lagging snapshot", () => {
-    const next = finished.take([listing("nfl", [playing])])[0]
-
     assert.strictEqual(next, finished)
   })
 
