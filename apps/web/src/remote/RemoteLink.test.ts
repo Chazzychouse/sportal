@@ -145,11 +145,11 @@ describe("RemoteLink", () => {
     })
   )
 
-  it.effect("should change nothing for an input that does not decode", () =>
+  it.effect("should drop an input that does not decode and apply the next one", () =>
     Effect.gen(function* () {
       const { registry } = yield* TestWeb.withShell()
 
-      const [before, after] = yield* Effect.gen(function* () {
+      const [before, after, prompts] = yield* Effect.gen(function* () {
         yield* Atom.mount(RemoteLink.link)
         const before = yield* Atom.get(DisplayScreen.screen)
         const source = yield* inputStream
@@ -157,10 +157,13 @@ describe("RemoteLink", () => {
         source.onmessage?.({ data: JSON.stringify({ _tag: "Shouted" }) })
         yield* Effect.yieldNow
         const after = yield* Atom.get(DisplayScreen.screen)
-        return [before, after] as const
+        source.onmessage?.({ data: JSON.stringify({ _tag: "Pressed", hotkey: { _tag: "TogglePrompts" } }) })
+        const prompts = yield* TestWeb.until(PromptsState.prompts, (prompts) => !prompts.on)
+        return [before, after, prompts] as const
       }).pipe(Effect.scoped, Effect.provide(registry))
 
       assert.strictEqual(after, before)
+      assert.isFalse(prompts.on)
     })
   )
 
