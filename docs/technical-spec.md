@@ -167,8 +167,7 @@ sportal/
 │   │       ├── Slate.ts        Slate (the listed games, from listings and play lists), SlateChange
 │   │       ├── Situation.ts    Possession, down, distance, field position, red zone
 │   │       ├── Play.ts         A single play, as the game's play-by-play lists it; PlayKind
-│   │       ├── Channel.ts      SourceName, Channel, ChannelAvailability
-│   │       ├── Stream.ts       StreamLocator
+│   │       ├── Channel.ts      SourceName, StreamLocator, Channel, ChannelAvailability
 │   │       └── TestGame.ts     Game snapshots and plays for tests
 │   │
 │   └── api/                    The contracts between processes.

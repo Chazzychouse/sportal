@@ -1,7 +1,6 @@
-import { type ChannelAvailability, SourceName } from "@sportal/domain/Channel"
+import { type ChannelAvailability, SourceName, StreamLocator } from "@sportal/domain/Channel"
 import { type GameSnapshot, Network } from "@sportal/domain/Game"
 import type { LeagueId } from "@sportal/domain/League"
-import { StreamLocator } from "@sportal/domain/Stream"
 import type { Team } from "@sportal/domain/Team"
 import { DateTime, Duration, Option, Schema } from "effect"
 
