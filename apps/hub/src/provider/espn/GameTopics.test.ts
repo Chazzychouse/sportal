@@ -2,10 +2,10 @@ import { readFileSync } from "node:fs"
 import { assert, describe, it } from "@effect/vitest"
 import { GameId } from "@sportal/domain/Game"
 import { PlayId } from "@sportal/domain/Play"
-import { Effect, HashMap, Record } from "effect"
+import { Array as Arr, Effect, HashMap, Logger, Option, Record } from "effect"
 import * as TestHub from "../../TestHub.ts"
 import { Delivery } from "../Provider.ts"
-import type { Frame } from "./FastCast.ts"
+import { Frame } from "./FastCast.ts"
 import { GameTopics } from "./GameTopics.ts"
 
 describe("GameTopics#take", () => {
@@ -15,20 +15,28 @@ describe("GameTopics#take", () => {
       const frames = TestHub.moveRecordingFrames().filter((_, index) => index !== 2)
 
       const deliveries = yield* decoded(frames)
+      const reset = yield* resetTopics(frames)
 
       // Frame 1 is the checkpoint, 2 message 819, and 3 message 821, the first after the gap.
       const playsFrames = deliveries.flatMap(({ frame, delivery }) =>
         Delivery.$is("Plays")(delivery) ? [frame] : []
       )
       assert.deepStrictEqual(playsFrames, [1, 2])
+      assert.deepStrictEqual(reset, [TestHub.neAtBufPlays])
     })
   )
 
   it.effect("should give nothing and fail nothing for a patch or an idle message before any checkpoint", () =>
     Effect.gen(function* () {
-      const deliveries = yield* decoded(TestHub.beforeAnyCheckpoint())
+      const frames = TestHub.beforeAnyCheckpoint()
+
+      const deliveries = yield* decoded(frames)
+      const synced = yield* Effect.forEach(frames, (_, index) =>
+        Effect.map(TestHub.topicsAfter(frames.slice(0, index + 1)), syncedTopics)
+      )
 
       assert.deepStrictEqual(tags(deliveries), [])
+      assert.deepStrictEqual(synced, [[], []])
     })
   )
 
@@ -40,11 +48,13 @@ describe("GameTopics#take", () => {
       const frames = [TestHub.neAtBufCheckpoint(), TestHub.unapplicablePatch(819), copyFromNothing]
 
       const deliveries = yield* decoded(frames)
+      const reset = yield* resetTopics(frames)
 
       assert.deepStrictEqual(
         deliveries.filter(({ frame }) => frame > 1),
         []
       )
+      assert.deepStrictEqual(reset, [TestHub.neAtBufPlays])
     })
   )
 
@@ -53,12 +63,14 @@ describe("GameTopics#take", () => {
       const frames = [TestHub.neAtBufCheckpoint(), TestHub.undecodablePatch(819), TestHub.textReplaced(820)]
 
       const deliveries = yield* decoded(frames)
+      const reset = yield* resetTopics(frames)
 
       assert.deepStrictEqual(
         deliveries.filter(({ frame }) => frame > 1),
         [],
         "the topic waits for its next checkpoint"
       )
+      assert.deepStrictEqual(reset, [TestHub.neAtBufPlays])
     })
   )
 
@@ -67,11 +79,85 @@ describe("GameTopics#take", () => {
       const frames = [TestHub.neAtBufCheckpoint(), TestHub.textReplaced(819)]
 
       const deliveries = yield* decoded(frames)
+      const topics = yield* TestHub.topicsAfter(frames)
+      const reset = yield* resetTopics(frames)
 
       assert.deepStrictEqual(
         deliveries.flatMap(({ frame, delivery }) => (frame === 2 ? [textOf(delivery, "401872971792")] : [])),
         ["Corrected"]
       )
+      assert.isTrue(topics.isSynced(TestHub.topicNamed(TestHub.neAtBufPlays)))
+      assert.deepStrictEqual(reset, [])
+    })
+  )
+
+  it.effect("should sync a topic sent back to waiting again on its next checkpoint", () =>
+    Effect.gen(function* () {
+      const frames = [
+        TestHub.neAtBufCheckpoint(),
+        TestHub.unapplicablePatch(819),
+        TestHub.neAtBufCheckpoint(),
+        TestHub.textReplaced(819)
+      ]
+
+      const topics = yield* TestHub.topicsAfter(frames)
+      const reset = yield* resetTopics(frames)
+
+      assert.isTrue(topics.isSynced(TestHub.topicNamed(TestHub.neAtBufPlays)))
+      assert.deepStrictEqual(reset, [TestHub.neAtBufPlays])
+    })
+  )
+
+  it.effect.each([
+    {
+      reset: "a gap",
+      frames: () => [TestHub.neAtBufCheckpoint(), TestHub.textReplaced(820)],
+      expected: [TestHub.neAtBufPlays]
+    },
+    {
+      reset: "a patch that will not apply",
+      frames: () => [TestHub.neAtBufCheckpoint(), TestHub.unapplicablePatch(819), TestHub.textReplaced(820)],
+      expected: [TestHub.neAtBufPlays]
+    },
+    {
+      reset: "a message that does not decode",
+      frames: () => [TestHub.neAtBufCheckpoint(), TestHub.undecodablePatch(819)],
+      expected: [TestHub.neAtBufPlays]
+    }
+  ])("should reset a topic's document, once, after $reset", ({ frames, expected }) =>
+    Effect.gen(function* () {
+      const reset = yield* resetTopics(frames())
+
+      assert.deepStrictEqual(reset, expected)
+    })
+  )
+
+  it.effect("should reset no topic that was never synced", () =>
+    Effect.gen(function* () {
+      const reset = yield* resetTopics(TestHub.beforeAnyCheckpoint())
+
+      assert.deepStrictEqual(reset, [])
+    })
+  )
+
+  it.effect("should reset only its topic when a patch's payload does not decode on a synced topic", () =>
+    Effect.gen(function* () {
+      const server = TestHub.fakeServer()
+      const { frames } = yield* TestHub.nflFrames(server)
+      yield* frames.until((all) => all.length >= 2)
+      yield* Effect.sync(() => server.send(TestHub.checkpointMessage(7)))
+      yield* frames.until((all) => all.some((frame) => Frame.$is("Checkpoint")(frame) && frame.mid === 7))
+      yield* Effect.sync(() => server.send(TestHub.undecodablePatchMessage(8)))
+      const received = yield* frames.until((all) =>
+        all.some((frame) => Frame.$is("Pushed")(frame) && Option.getOrUndefined(frame.mid) === 8)
+      )
+      const before = yield* TestHub.topicsAfter(received.slice(0, -1))
+      const bad = yield* Effect.fromOption(Arr.last(received))
+
+      const [after] = yield* before.take(bad)
+
+      assert.deepStrictEqual(syncedTopics(before), [TestHub.mainTc])
+      assert.deepStrictEqual(syncedTopics(after), [])
     })
   )
 
@@ -170,6 +256,25 @@ describe("GameTopics#take", () => {
       })
     )
 
+    it.effect("should give a recorded copy's target the value read at its source", () =>
+      Effect.gen(function* () {
+        const copy = TestHub.message(TestHub.neAtBufPlays, 819, [
+          { op: "copy", from: "/entities/plays/401872971917/text", path: "/entities/plays/401872971792/text" }
+        ])
+
+        const deliveries = yield* decoded([TestHub.neAtBufCheckpoint(), copy])
+
+        const [source] = deliveries.flatMap(({ frame, delivery }) =>
+          frame === 1 ? [textOf(delivery, "401872971917")] : []
+        )
+        const [copied] = deliveries.flatMap(({ frame, delivery }) =>
+          frame === 2 ? [textOf(delivery, "401872971792")] : []
+        )
+        assert.isDefined(source)
+        assert.strictEqual(copied, source)
+      })
+    )
+
     it.effect("should take a move's value within the plays from its source", () =>
       Effect.gen(function* () {
         const deliveries = yield* decoded([
@@ -197,6 +302,8 @@ describe("GameTopics#take", () => {
           const frames = TestHub.moveRecordingFrames()
 
           const deliveries = yield* decoded(frames)
+          const topics = yield* TestHub.topicsAfter(frames)
+          const reset = yield* resetTopics(frames)
 
           const penalty =
             deliveries[1] !== undefined && Delivery.$is("Plays")(deliveries[1].delivery)
@@ -213,6 +320,8 @@ describe("GameTopics#take", () => {
           )
           assert.include(penalty, "PENALTY on BUF-C.McGovern")
           assert.include(deliveries.map(playIds).at(-1) ?? [], PlayId.make("4018729711662"))
+          assert.isTrue(topics.isSynced(TestHub.topicNamed(TestHub.neAtBufPlays)))
+          assert.deepStrictEqual(reset, [])
         })
     )
 
@@ -251,8 +360,10 @@ describe("GameTopics#take", () => {
         ]
 
         const deliveries = yield* decoded(frames)
+        const afterOutside = yield* TestHub.topicsAfter(frames.slice(0, 2))
 
         assert.deepStrictEqual(deliveries.map(playIds), [[], ["40187297063"]])
+        assert.isTrue(afterOutside.isSynced(TestHub.topicNamed(TestHub.ariAtNygPlays)))
       })
     )
 
@@ -270,6 +381,8 @@ describe("GameTopics#take", () => {
         ]
 
         const deliveries = yield* decoded(frames)
+        const topics = yield* TestHub.topicsAfter(frames)
+        const reset = yield* resetTopics(frames)
 
         const after = deliveries.filter(({ frame }) => frame > 2)
         assert.deepStrictEqual(
@@ -277,6 +390,8 @@ describe("GameTopics#take", () => {
           ["Plays"]
         )
         assert.deepStrictEqual(after.map(playIds)[0], ["401872971330"])
+        assert.deepStrictEqual(reset, [TestHub.ariAtNygPlays])
+        assert.deepStrictEqual(syncedTopics(topics), [TestHub.neAtBufPlays])
       })
     )
 
@@ -341,7 +456,7 @@ describe("GameTopics#retained", () => {
 
       const kept = topics.retained((topic) => topic.tc() !== TestHub.neAtBufPlays)
 
-      assert.isFalse(HashMap.has(kept.documents.byTopic, TestHub.topicNamed(TestHub.neAtBufPlays)))
+      assert.isFalse(HashMap.has(kept.documents, TestHub.topicNamed(TestHub.neAtBufPlays)))
       assert.isFalse(HashMap.has(kept.plays, GameId.make("401872971")))
     })
   )
@@ -364,7 +479,7 @@ describe("GameTopics#retained", () => {
 
       assert.isTrue(said.some(Delivery.$is("Plays")))
       assert.isTrue(afterPush.isSynced(TestHub.topicNamed(TestHub.neAtBufPlays)))
-      assert.isFalse(HashMap.has(kept.documents.byTopic, TestHub.topicNamed(TestHub.neAtBufPlays)))
+      assert.isFalse(HashMap.has(kept.documents, TestHub.topicNamed(TestHub.neAtBufPlays)))
       assert.isFalse(HashMap.has(kept.plays, GameId.make("401872971")))
     })
   )
@@ -377,6 +492,25 @@ function decoded(frames: ReadonlyArray<Frame>) {
       all.flatMap((deliveries, index) => deliveries.map((delivery) => ({ frame: index + 1, delivery })))
     )
   )
+}
+
+/** The topics `frames` sent back to waiting for a checkpoint, in order, by the warnings that say so. */
+const resetTopics = Effect.fn("GameTopics.test.resetTopics")(function* (frames: ReadonlyArray<Frame>) {
+  const reset: Array<string> = []
+  const collector = Logger.make(({ message }) => {
+    const tc = /GameTopics: (\S+) lost its document/.exec(JSON.stringify(message))?.[1]
+    if (tc !== undefined) reset.push(tc)
+  })
+
+  yield* TestHub.framesReplayed(frames).pipe(Effect.provide(Logger.layer([collector])))
+  return reset
+})
+
+/** The topics whose documents are synced, by name. */
+function syncedTopics(topics: GameTopics) {
+  return [...HashMap.keys(topics.documents)]
+    .filter((topic) => topics.isSynced(topic))
+    .map((topic) => topic.tc())
 }
 
 function tags(deliveries: ReadonlyArray<{ readonly delivery: Delivery }>) {
