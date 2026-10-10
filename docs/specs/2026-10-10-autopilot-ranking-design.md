@@ -49,8 +49,9 @@ starts its dwell clock when it sees a game it did not see last step, so your pro
 ### The sound
 
 The sound follows the main tile: after its own promote, or when the main tile holds a game the sound is not on, it
-puts the sound on the main tile's game with `FocusAudio`. While the sound is yours, it leaves the sound alone (the
-Screen moves it only when its game leaves the screen).
+puts the sound on the main tile's game with `FocusAudio`. While the sound is yours, it does not follow the main tile;
+but after its own promote moved the sound off the game you were hearing, it sends `FocusAudio` back to that game while
+it is still on screen.
 
 ### Manual input
 
@@ -120,26 +121,26 @@ Rewritten as a `Schema.Class`, kept under `sportal/autopilot`:
 
 A plain value, built by `step`, for the log:
 
-- `ranking`: each occupied tile's game with its rank and score, best first.
+- `ranked`: each occupied tile's game with its rank and score, best first.
 - `layout`: `Fitted { from, to }`, `Kept { layout }`, `Yours { until }`, or `NoCeiling`.
 - `main`: `Promoted { game, over, why: "outranks" | "stopped" }`, or `Stayed { game, why }` with `why` one of `Best`,
   `SameRank`, `Dwell { left }`, `Yours { until }`, `NothingLive`.
-- `sound`: `Followed { game }`, `Kept`, or `Yours { until }`.
+- `sound`: `OnMain { game }` or `Yours { until }`.
 - Or `Off`, or `Frozen` (soloed).
 
 ### `apps/web/src/autopilot/AutopilotState.ts`
 
 - The writer, after each step, sets a `decision` atom to the step's decision.
 - The `pilot` atom also streams `decision`, keeps those whose action or reason differs from the last logged (a
-  reordered ranking alone, or a dwell's seconds counting down, is not a new decision), and logs each with
-  `Effect.logInfo("Autopilot …")` and annotations: the parts' actions and reasons, the games, their ranks and scores,
-  and the ranking.
+  reordered Rank alone, or a dwell's seconds counting down, is not a new decision), and logs each with
+  `Effect.logInfo("Autopilot: …")` in words, with annotations from `details`: `autopilot.ranked` (each game's rank
+  and score, best first) and, while a dwell stands, `autopilot.dwellLeftSeconds`.
 
 ### Web telemetry
 
 - `WebRuntime` adds an OTLP logger (`effect/observability`, logs only), service `sportal-web`, a
-  `service.instance.id` per page load, posting to the Hub's `/otlp/v1/logs`.
-- The Hub relays `POST /otlp/v1/logs` unchanged to `SPORTAL_OTLP_URL`'s `/v1/logs` when it is set; without it, it
+  `service.instance.id` per page load, posting to the Hub's `POST /api/telemetry/logs`.
+- The Hub relays `POST /api/telemetry/logs` unchanged to `SPORTAL_OTLP_URL`'s `/v1/logs` when it is set; without it, it
   answers `204` and drops the body. A failed relay warns once, as the Hub's own exporter does.
 
 ### `TestWeb.timeline`

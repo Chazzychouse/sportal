@@ -72,7 +72,10 @@ const cases = Schema.TaggedUnion({
  * hold, with what commentary and prompts need of it.
  */
 export const Moment = Object.assign(cases, {
-  /** Higher precedence first: a big play, a break, a scoring threat, crunch time, live play, then not live. */
+  /**
+   * Higher precedence first: a big play, a break, a scoring threat, crunch time, live play, then not live. It governs
+   * what holds in `settled`; `momentOf` itself lets a break win over a big play and carry it.
+   */
   precedence: Order.mapInput(Order.Number, (moment: typeof cases.Type) => rank[moment._tag])
 })
 export type Moment = typeof cases.Type

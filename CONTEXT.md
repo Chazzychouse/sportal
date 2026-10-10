@@ -134,7 +134,7 @@ Provider and Source are the two words most likely to be swapped. Provider is alw
 
 | Term | Meaning | Not |
 | --- | --- | --- |
-| **Moment** | What kind of thing is happening in a game now — a big play, a break, a scoring threat (red zone), crunch time, live play, upcoming, or final — one per game, the highest in precedence of those that hold, in that order; `Moment` in `packages/domain/src/Moment.ts`. | event, state |
+| **Moment** | What kind of thing is happening in a game now — a big play, a break, a scoring threat (red zone), crunch time, live play, upcoming, or final — one per game, a break winning over a big play (and carrying it) and otherwise the highest in precedence of those that hold; `Moment` in `packages/domain/src/Moment.ts`. | event, state |
 | **Break** | A live game stopped: halftime, a delay, the end of a period, the two-minute warning, a timeout, a review or an injury its latest play names, the gap from a score to the next kickoff, the kickoff after a score (the double dip), a possession change, or a stall; the `Break` moment, with its `BreakReason`, when it is likely back (`expectedEnd`, from the reason's typical length), and what was at stake when it stopped (`during`). Inferred from the data, never the video. | commercial, lull |
 | **Stall** | A live game in play that has not moved for 90 s, by when the Hub sees it: no new play, and the same status, period, clock and score; a break of last resort. | lull |
 | **Double dip** | The break after the kickoff that follows a score, the second of the two the score brings. | |
