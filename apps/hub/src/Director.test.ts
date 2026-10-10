@@ -1,8 +1,8 @@
 import { assert, describe, it } from "@effect/vitest"
-import { GameId, GameSnapshot } from "@sportal/domain/Game"
+import { GameId, GameSnapshot, type GameStatus } from "@sportal/domain/Game"
 import { type Play, PlayId } from "@sportal/domain/Play"
-import { liveSnapshot, play, snapshot } from "@sportal/domain/TestGame"
-import { DateTime, Effect, Layer, Ref, Stream, type Tracer } from "effect"
+import { liveSnapshot, play, snapshot, team } from "@sportal/domain/TestGame"
+import { DateTime, Effect, Layer, Metric, Ref, Stream, type Tracer } from "effect"
 import { TestClock } from "effect/testing"
 import { Director } from "./Director.ts"
 import { decodedFrames, duringNeAtBuf, recordedNeAtBuf, recordedPlays } from "./provider/espn/TestEspn.ts"
@@ -241,6 +241,105 @@ describe("Director's game state gauge", () => {
     }).pipe(Effect.provide(directorOver), withMetrics)
   )
 
+  it.effect("should gauge a progressed game's status, period, clock, kickoff, update time, and scores", () =>
+    Effect.gen(function* () {
+      const acceptedAt = DateTime.makeUnsafe("2026-10-09T20:00:00Z")
+      const kickoff = DateTime.makeUnsafe("2026-10-09T17:00:00Z")
+      const game = liveSnapshot({
+        id: one,
+        status: "halftime",
+        period: 2,
+        clock: "0:00",
+        kickoff,
+        away: { team: team("BUF"), score: 17 },
+        home: { team: team("NE"), score: 14 }
+      })
+      yield* TestClock.setTime(DateTime.toEpochMillis(acceptedAt))
+
+      yield* listing([game])
+      const status = yield* gauged("sportal_game_status", { game: one })
+      const period = yield* gauged("sportal_game_period", { game: one })
+      const clock = yield* gauged("sportal_game_clock", { game: one })
+      const measuredKickoff = yield* gauged("sportal_game_kickoff", { game: one })
+      const updatedAt = yield* gauged("sportal_game_updated_at", { game: one })
+      const away = yield* gauged("sportal_game_score", {
+        game: one,
+        side: "away",
+        team: "BUF"
+      })
+      const home = yield* gauged("sportal_game_score", {
+        game: one,
+        side: "home",
+        team: "NE"
+      })
+
+      assert.strictEqual(status, 3)
+      assert.strictEqual(period, 2)
+      assert.strictEqual(clock, 0)
+      assert.strictEqual(measuredKickoff, DateTime.toEpochSeconds(kickoff))
+      assert.strictEqual(updatedAt, DateTime.toEpochSeconds(acceptedAt))
+      assert.strictEqual(away, 17)
+      assert.strictEqual(home, 14)
+    }).pipe(Effect.provide(directorOver), withMetrics)
+  )
+
+  const statuses: ReadonlyArray<readonly [GameStatus, number]> = [
+    ["scheduled", 1],
+    ["live", 2],
+    ["halftime", 3],
+    ["delayed", 4],
+    ["final", 5],
+    ["postponed", 6],
+    ["canceled", 7]
+  ]
+
+  it.effect.each(statuses)("should gauge %s status as %d", ([status, expected]) =>
+    Effect.gen(function* () {
+      yield* listing([snapshot({ id: one, status })])
+
+      const value = yield* gauged("sportal_game_status", { game: one })
+
+      assert.strictEqual(value, expected)
+    }).pipe(Effect.provide(directorOver), withMetrics)
+  )
+
+  it.effect("should update current values without creating series from changing values", () =>
+    Effect.gen(function* () {
+      const first = liveSnapshot({
+        id: one,
+        away: { team: team("BUF"), score: 7 },
+        home: { team: team("NE"), score: 3 }
+      })
+      const second = liveSnapshot({
+        id: one,
+        clock: "8:00",
+        away: { team: team("BUF"), score: 14 },
+        home: { team: team("NE"), score: 3 }
+      })
+      yield* listing([first])
+
+      yield* takenSnapshot(second)
+      const metrics = yield* Metric.snapshot
+      const scores = metrics.filter(
+        (metric) => metric.id === "sportal_game_score" && metric.attributes?.game === one
+      )
+      const clocks = metrics.filter(
+        (metric) => metric.id === "sportal_game_clock" && metric.attributes?.game === one
+      )
+      const clock = yield* gauged("sportal_game_clock", { game: one })
+      const away = yield* gauged("sportal_game_score", {
+        game: one,
+        side: "away",
+        team: "BUF"
+      })
+
+      assert.strictEqual(scores.length, 2)
+      assert.strictEqual(clocks.length, 1)
+      assert.strictEqual(clock, 480)
+      assert.strictEqual(away, 14)
+    }).pipe(Effect.provide(directorOver), withMetrics)
+  )
+
   it.effect("should drop the series of a game no listing names any more", () =>
     Effect.gen(function* () {
       yield* listing([liveSnapshot({ id: one }), liveSnapshot({ id: two })])
@@ -249,6 +348,18 @@ describe("Director's game state gauge", () => {
       const value = yield* gauged("sportal_game_state", { game: one })
 
       assert.isUndefined(value)
+    }).pipe(Effect.provide(directorOver), withMetrics)
+  )
+
+  it.effect("should drop every current-value series of a game no listing names", () =>
+    Effect.gen(function* () {
+      yield* listing([liveSnapshot({ id: one }), liveSnapshot({ id: two })])
+
+      yield* listing([liveSnapshot({ id: two })])
+      const metrics = yield* Metric.snapshot
+      const forgotten = metrics.filter(({ attributes }) => attributes?.game === one)
+
+      assert.deepStrictEqual(forgotten, [])
     }).pipe(Effect.provide(directorOver), withMetrics)
   )
 
