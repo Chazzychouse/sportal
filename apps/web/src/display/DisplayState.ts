@@ -20,11 +20,7 @@ export const display: Atom.Writable<Display, DisplayInput> = Atom.writable(
     const step = ctx.get(kept).apply(input, ctx.get(DisplayScreen.screen), ctx.get(cards))
     Atom.batch(() => {
       ctx.set(kept, step.display)
-      for (const command of step.commands) {
-        ctx.set(DisplayScreen.screen, command)
-        if (Option.isNone(ctx.get(DisplayScreen.rejected)))
-          ctx.set(AutopilotState.autopilot, AutopilotInput.Commanded({ command }))
-      }
+      for (const command of step.commands) ctx.set(AutopilotState.yours, command)
     })
   }
 ).pipe(Atom.keepAlive)

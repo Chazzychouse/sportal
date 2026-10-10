@@ -335,6 +335,30 @@ describe("AutopilotState", () => {
       )
     })
   )
+
+  it.effect("should make the main tile yours for a command of yours while on", () =>
+    Effect.gen(function* () {
+      yield* arranged(slate())
+      yield* Atom.set(AutopilotState.autopilot, AutopilotInput.Toggled())
+
+      yield* Atom.set(AutopilotState.yours, { _tag: "Promote", tile: 1 })
+
+      const pilot = yield* Atom.get(AutopilotState.autopilot)
+      assert.isTrue(Option.isSome(pilot.suspended.main))
+    }).pipe(Effect.provide(AtomRegistry.layer))
+  )
+
+  it.effect("should not make anything yours for a command the Screen refused", () =>
+    Effect.gen(function* () {
+      yield* arranged(slate())
+      yield* Atom.set(AutopilotState.autopilot, AutopilotInput.Toggled())
+
+      yield* Atom.set(AutopilotState.yours, { _tag: "Promote", tile: 3 })
+
+      const pilot = yield* Atom.get(AutopilotState.autopilot)
+      assert.isTrue(Option.isNone(pilot.suspended.main))
+    }).pipe(Effect.provide(AtomRegistry.layer))
+  )
 })
 
 /** A registry for the pilot whose logs, each message, collect in `logs`. */
