@@ -1,8 +1,8 @@
 import type { ChannelAvailability } from "@sportal/domain/Channel"
-import type { GameSnapshot } from "@sportal/domain/Game"
-import { Context, type DateTime, Effect, Layer, Option, Stream } from "effect"
+import { type GameSnapshot, Network } from "@sportal/domain/Game"
+import { Context, DateTime, Effect, Layer, Option, Stream } from "effect"
+import { ChannelId, Guide } from "./Guide.ts"
 import { GuideReader } from "./GuideReader.ts"
-import * as Twitch from "./Twitch.ts"
 import * as YouTubeTvGuide from "./youtube-tv/YouTubeTvGuide.ts"
 
 /** A way to obtain video for a game. It says whether and where each game can be shown, as of a time. */
@@ -42,7 +42,22 @@ export class Source extends Context.Service<
     Source,
     Source.of({
       availability: Stream.make((game: GameSnapshot, now: DateTime.Utc) => [
-        Twitch.lineup.availabilityOf(game, now)
+        new Guide({
+          source: "Twitch",
+          readAt: DateTime.makeUnsafe(0),
+          channels: [
+            {
+              id: ChannelId.make("primevideo"),
+              name: "Prime Video",
+              live: {
+                _tag: "WebView",
+                url: "https://player.twitch.tv/?channel=primevideo&parent=twitch.tv&player=popout"
+              },
+              network: Network.make("Prime Video")
+            }
+          ],
+          airings: []
+        }).availabilityOf(game, now)
       ])
     })
   )
