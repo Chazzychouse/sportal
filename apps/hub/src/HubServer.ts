@@ -29,9 +29,6 @@ import { Director } from "./Director.ts"
 import { HubConfig } from "./HubConfig.ts"
 import { Source } from "./source/Source.ts"
 
-/**
- * The Hub's routes on the HTTP server in context: the API, the live stream, and the built web UI when there is one.
- */
 export const layer: Layer.Layer<
   never,
   PlatformError.PlatformError,
@@ -58,7 +55,6 @@ export const layer: Layer.Layer<
   })
 )
 
-/** An HTTP server on the configured address, for `layer` to put the Hub's routes on. */
 export const layerListen: Layer.Layer<
   HttpServer.HttpServer | HttpPlatform.HttpPlatform | Etag.Generator | NodeServices.NodeServices,
   HttpServerError.ServeError,
@@ -66,7 +62,6 @@ export const layerListen: Layer.Layer<
 > = Layer.unwrap(
   Effect.gen(function* () {
     const { port, host } = yield* HubConfig
-    // Connected Displays hold live streams open. By default shutdown waits 20 seconds for them, and Docker kills at 10.
     return NodeHttpServer.layer(createServer, { port, host, gracefulShutdownTimeout: "3 seconds" })
   })
 )

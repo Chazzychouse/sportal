@@ -9,21 +9,12 @@ import * as YouTubeTvGuide from "./youtube-tv/YouTubeTvGuide.ts"
 export class Source extends Context.Service<
   Source,
   {
-    /**
-     * Whether and where this source can show a game at a time, from what it knows now: one availability from each
-     * source it stands for, in order.
-     */
     readonly availability: Effect.Effect<
       (game: GameSnapshot, now: DateTime.Utc) => ReadonlyArray<ChannelAvailability>
     >
-    /**
-     * Reads a guide response as the shell received it from YouTube TV's guide page; a source that keeps no guide
-     * ignores it.
-     */
     readGuide(response: string): Effect.Effect<void, GuideUnreadable>
   }
 >()("sportal/hub/source/Source") {
-  /** YouTube TV: from the latest guide it read while that guide is fresh; otherwise no guide. */
   static readonly layerYouTubeTv: Layer.Layer<Source> = Layer.effect(
     Source,
     Effect.gen(function* () {
@@ -50,7 +41,6 @@ export class Source extends Context.Service<
     })
   )
 
-  /** Twitch: its lineup, which never changes. */
   static readonly layerTwitch: Layer.Layer<Source> = Layer.succeed(
     Source,
     Source.of({
@@ -76,10 +66,6 @@ export class Source extends Context.Service<
     })
   )
 
-  /**
-   * Every source given, as one: for each game every source's availability, in the order given. A guide read goes to
-   * every source.
-   */
   static layerAll<R>(sources: ReadonlyArray<Layer.Layer<Source, never, R>>): Layer.Layer<Source, never, R> {
     return Layer.effect(
       Source,
@@ -102,7 +88,6 @@ export class Source extends Context.Service<
     )
   }
 
-  /** A source giving `availabilityOf` every game; it ignores guide reads. */
   static layerTest(availabilityOf: (game: GameSnapshot) => ChannelAvailability): Layer.Layer<Source> {
     return Layer.succeed(
       Source,

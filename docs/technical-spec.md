@@ -216,7 +216,6 @@ sportal/
     │           ├── Guide.ts            Guide, Airing, ChannelId: a source's channels and what each airs
     │           ├── Twitch.ts           Twitch's lineup
     │           ├── TestSource.ts       The source's availability now, for tests
-    │           ├── TestGuide.ts        Guides and airings for tests
     │           └── youtube-tv/
     │               ├── YouTubeTv.ts         Reads the guide the shell fetches, offers it while fresh
     │               ├── YouTubeTvGuide.ts    A guide response decoded to a complete, validated, stamped Guide
