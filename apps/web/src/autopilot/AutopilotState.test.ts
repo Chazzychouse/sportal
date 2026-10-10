@@ -1,4 +1,5 @@
 import { afterEach, assert, beforeEach, describe, it } from "@effect/vitest"
+import { Classification } from "@sportal/domain/Classification"
 import { Game, GameId } from "@sportal/domain/Game"
 import { snapshot } from "@sportal/domain/TestGame"
 import { Clock, DateTime, Duration, Effect, Layer } from "effect"
@@ -108,6 +109,92 @@ describe("AutopilotState", () => {
       }).pipe(Effect.scoped, Effect.provide(registry))
 
       assert.strictEqual(mainGame(screen), home)
+    })
+  )
+
+  it.effect("should shrink the layout once a finished game's hold runs out, with no new slate", () =>
+    Effect.gen(function* () {
+      const start = DateTime.makeUnsafe("2026-10-10T20:00:00Z")
+      vi.useFakeTimers({ toFake: ["Date"] })
+      vi.setSystemTime(DateTime.toDate(start))
+      yield* TestClock.setTime(DateTime.toEpochMillis(start))
+      const clock = yield* Clock.Clock
+      const registry = TestWeb.registryOf(
+        Layer.mergeAll(
+          Shell.layerTest({ record: () => Effect.void }),
+          HubClient.layerTest(() => Effect.void),
+          Layer.succeed(Clock.Clock, clock)
+        )
+      )
+
+      const screen = yield* Effect.gen(function* () {
+        yield* arranged(slate(TestWeb.classified({ _tag: "Final" })))
+        yield* Atom.set(AutopilotState.autopilot, AutopilotInput.Toggled())
+        yield* Atom.mount(AutopilotState.pilot)
+        yield* passing(Duration.minutes(2))
+        return yield* TestWeb.until(DisplayScreen.screen, (screen) => screen.layout === "Single")
+      }).pipe(Effect.scoped, Effect.provide(registry))
+
+      assert.strictEqual(screen.layout, "Single")
+    })
+  )
+
+  it.effect("should shrink the layout at a later hold's end after an earlier one changed nothing", () =>
+    Effect.gen(function* () {
+      const start = DateTime.makeUnsafe("2026-10-10T20:00:00Z")
+      vi.useFakeTimers({ toFake: ["Date"] })
+      vi.setSystemTime(DateTime.toDate(start))
+      yield* TestClock.setTime(DateTime.toEpochMillis(start))
+      const clock = yield* Clock.Clock
+      const registry = TestWeb.registryOf(
+        Layer.mergeAll(
+          Shell.layerTest({ record: () => Effect.void }),
+          HubClient.layerTest(() => Effect.void),
+          Layer.succeed(Clock.Clock, clock)
+        )
+      )
+      const third = GameId.make("third")
+      const fourth = GameId.make("fourth")
+      const finalSince = (time: string) =>
+        new Classification({
+          ...TestWeb.classified({ _tag: "Final" }),
+          since: DateTime.makeUnsafe(time)
+        })
+      const message = TestWeb.slateMessage([
+        {
+          game: homeGame,
+          availability: TestWeb.onFox(),
+          classification: TestWeb.classified({ _tag: "Live" })
+        },
+        {
+          game: otherGame,
+          availability: TestWeb.onFox(),
+          classification: finalSince("2026-10-10T20:00:00Z")
+        },
+        {
+          game: Game.of(snapshot({ id: third, status: "live" })),
+          availability: TestWeb.onFox(),
+          classification: finalSince("2026-10-10T20:01:00Z")
+        },
+        {
+          game: Game.of(snapshot({ id: fourth, status: "live" })),
+          availability: TestWeb.onFox(),
+          classification: TestWeb.classified({ _tag: "Live" })
+        }
+      ])
+
+      const screen = yield* Effect.gen(function* () {
+        yield* arranged(message)
+        yield* Atom.set(DisplayScreen.screen, { _tag: "Assign", tile: 2, game: third })
+        yield* Atom.set(DisplayScreen.screen, { _tag: "Assign", tile: 3, game: fourth })
+        yield* Atom.set(AutopilotState.autopilot, AutopilotInput.Toggled())
+        yield* Atom.mount(AutopilotState.pilot)
+        yield* passing(Duration.minutes(2))
+        yield* passing(Duration.minutes(1))
+        return yield* TestWeb.until(DisplayScreen.screen, (screen) => screen.layout === "Pair")
+      }).pipe(Effect.scoped, Effect.provide(registry))
+
+      assert.strictEqual(screen.layout, "Pair")
     })
   )
 

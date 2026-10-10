@@ -15,6 +15,7 @@ const benched = GameId.make("benched")
 const redZone = TestWeb.redZone
 const crunch: Moment = { _tag: "CrunchTime", margin: 3, secondsLeft: 100 }
 const live: Moment = { _tag: "Live" }
+const final: Moment = { _tag: "Final" }
 const timeout: Moment = {
   _tag: "Break",
   reason: "timeout",
@@ -68,6 +69,58 @@ function awayOnOther(moment: Moment = redZone) {
 }
 
 describe("Autopilot.step", () => {
+  it("should fit the layout before it promotes, and promote on the fitted Screen", () => {
+    const [, commands] = on.step(
+      quad,
+      classified([
+        [home, live],
+        [other, redZone],
+        [third, final],
+        [fourth, final]
+      ]),
+      at(180)
+    )
+
+    assert.deepStrictEqual(commands, [
+      { _tag: "SetLayout", layout: "Pair" },
+      { _tag: "Promote", tile: 1 }
+    ])
+  })
+
+  it("should not fit the layout for an autopilot kept before it had a home layout", () => {
+    const old = new Autopilot({ ...on, home: { ...on.home, layout: Option.none() } })
+
+    const [, commands] = old.step(
+      quad,
+      classified([
+        [home, live],
+        [other, final],
+        [third, final],
+        [fourth, final]
+      ]),
+      at(180)
+    )
+
+    assert.deepStrictEqual(commands, [])
+  })
+
+  it("should not fit the layout while it is yours", () => {
+    const pilot = on.manual({ _tag: "SetLayout", layout: "Quad" }, quad, start)
+
+    const [, commands] = pilot.step(
+      quad,
+      classified([
+        [home, live],
+        [other, final],
+        [third, final],
+        [fourth, final]
+      ]),
+      at(150)
+    )
+
+    assert.deepStrictEqual(commands, [])
+  })
+
   it("should send nothing while off", () => {
     const [, commands] = Autopilot.off.step(
       quad,
@@ -561,7 +614,11 @@ describe("Autopilot.manual", () => {
 
     const pilot = on.manual({ _tag: "Solo", tile: 1 }, soloed, start)
 
-    assert.deepStrictEqual(pilot.suspended, { main: Option.some(at(180)), audio: Option.some(at(180)) })
+    assert.deepStrictEqual(pilot.suspended, {
+      main: Option.some(at(180)),
+      audio: Option.some(at(180)),
+      layout: Option.none()
+    })
   })
 
   it("should make the main tile yours when you swap tile 0", () => {
@@ -569,7 +626,11 @@ describe("Autopilot.manual", () => {
 
     const pilot = on.manual({ _tag: "Swap", a: 0, b: 2 }, swapped, start)
 
-    assert.deepStrictEqual(pilot.suspended, { main: Option.some(at(180)), audio: Option.none() })
+    assert.deepStrictEqual(pilot.suspended, {
+      main: Option.some(at(180)),
+      audio: Option.none(),
+      layout: Option.none()
+    })
   })
 
   it("should make only the sound yours when you focus the sound", () => {
@@ -577,15 +638,67 @@ describe("Autopilot.manual", () => {
 
     const pilot = on.manual({ _tag: "FocusAudio", tile: 1 }, focused, start)
 
-    assert.deepStrictEqual(pilot.suspended, { main: Option.none(), audio: Option.some(at(180)) })
+    assert.deepStrictEqual(pilot.suspended, {
+      main: Option.none(),
+      audio: Option.some(at(180)),
+      layout: Option.none()
+    })
   })
 
-  it("should make nothing yours when you swap two tiles other than tile 0", () => {
+  it("should make the layout yours when you swap two tiles other than tile 0", () => {
     const swapped = after(quad, [{ _tag: "Swap", a: 1, b: 2 }])
 
     const pilot = on.manual({ _tag: "Swap", a: 1, b: 2 }, swapped, start)
 
-    assert.deepStrictEqual(pilot.suspended, { main: Option.none(), audio: Option.none() })
+    assert.deepStrictEqual(pilot.suspended, {
+      main: Option.none(),
+      audio: Option.none(),
+      layout: Option.some(at(180))
+    })
+  })
+
+  it("should make the layout yours when you assign a tile other than tile 0", () => {
+    const assigned = after(quad, [{ _tag: "Assign", tile: 2, game: benched }])
+
+    const pilot = on.manual({ _tag: "Assign", tile: 2, game: benched }, assigned, start)
+
+    assert.deepStrictEqual(pilot.suspended, {
+      main: Option.none(),
+      audio: Option.none(),
+      layout: Option.some(at(180))
+    })
+  })
+
+  it("should make the layout yours when you clear a tile other than tile 0", () => {
+    const cleared = after(quad, [{ _tag: "Clear", tile: 2 }])
+
+    const pilot = on.manual({ _tag: "Clear", tile: 2 }, cleared, start)
+
+    assert.deepStrictEqual(pilot.suspended, {
+      main: Option.none(),
+      audio: Option.none(),
+      layout: Option.some(at(180))
+    })
+  })
+
+  it("should make the layout you set home's", () => {
+    const paired = after(quad, [{ _tag: "SetLayout", layout: "Pair" }])
+
+    const pilot = on.manual({ _tag: "SetLayout", layout: "Pair" }, paired, start)
+
+    assert.deepStrictEqual(pilot.home.layout, Option.some("Pair"))
+  })
+
+  it("should make the layout yours when you set it", () => {
+    const paired = after(quad, [{ _tag: "SetLayout", layout: "Pair" }])
+
+    const pilot = on.manual({ _tag: "SetLayout", layout: "Pair" }, paired, start)
+
+    assert.deepStrictEqual(pilot.suspended, {
+      main: Option.none(),
+      audio: Option.none(),
+      layout: Option.some(at(180))
+    })
   })
 })
 
@@ -593,7 +706,11 @@ describe("Autopilot.toggle", () => {
   it("should take home from the Screen when turned on", () => {
     const pilot = Autopilot.off.toggle(quad)
 
-    assert.deepStrictEqual(pilot.home, { main: Option.some(home), audio: Option.some(home) })
+    assert.deepStrictEqual(pilot.home, {
+      main: Option.some(home),
+      audio: Option.some(home),
+      layout: Option.some("Quad")
+    })
   })
 
   it("should forget the away game when turned off", () => {
@@ -606,10 +723,16 @@ describe("Autopilot.toggle", () => {
 })
 
 describe("Autopilot.nextDeadline", () => {
+  it("should give the end of the hold of a game over on a tile", () => {
+    const deadline = on.nextDeadline(at(1), quad, classified([[third, final]]))
+
+    assert.deepStrictEqual(deadline, Option.some(at(120)))
+  })
+
   it("should give the end of the away game's dwell", () => {
     const { pilot } = awayOnOther()
 
-    const deadline = pilot.nextDeadline(at(1))
+    const deadline = pilot.nextDeadline(at(1), quad, {})
 
     assert.deepStrictEqual(deadline, Option.some(at(30)))
   })
@@ -617,7 +740,7 @@ describe("Autopilot.nextDeadline", () => {
   it("should give the end of your suspension", () => {
     const pilot = on.manual({ _tag: "Promote", tile: 2 }, after(quad, [{ _tag: "Promote", tile: 2 }]), start)
 
-    const deadline = pilot.nextDeadline(at(1))
+    const deadline = pilot.nextDeadline(at(1), quad, {})
 
     assert.deepStrictEqual(deadline, Option.some(at(180)))
   })
@@ -627,13 +750,13 @@ describe("Autopilot.nextDeadline", () => {
     const focused = after(screen, [{ _tag: "FocusAudio", tile: 2 }])
     const yours = pilot.manual({ _tag: "FocusAudio", tile: 2 }, focused, start)
 
-    const deadline = yours.nextDeadline(at(1))
+    const deadline = yours.nextDeadline(at(1), quad, {})
 
     assert.deepStrictEqual(deadline, Option.some(at(30)))
   })
 
   it("should give no deadline while it has nothing away and nothing yours", () => {
-    const deadline = on.nextDeadline(start)
+    const deadline = on.nextDeadline(start, quad, {})
 
     assert.deepStrictEqual(deadline, Option.none())
   })
@@ -643,8 +766,25 @@ describe("Autopilot.status", () => {
   it("should say the main tile is yours until your suspension ends", () => {
     const pilot = on.manual({ _tag: "Promote", tile: 2 }, after(quad, [{ _tag: "Promote", tile: 2 }]), start)
 
-    const status = pilot.status(at(1))
+    const status = pilot.status(at(1), quad)
 
     assert.deepStrictEqual(status, AutopilotStatus.Yours({ part: "main", until: at(180) }))
+  })
+
+  it("should say the layout is yours until your suspension ends", () => {
+    const paired = after(quad, [{ _tag: "SetLayout", layout: "Pair" }])
+    const pilot = on.manual({ _tag: "SetLayout", layout: "Pair" }, paired, start)
+
+    const status = pilot.status(at(1), paired)
+
+    assert.deepStrictEqual(status, AutopilotStatus.Yours({ part: "layout", until: at(180) }))
+  })
+
+  it("should say it fitted the layout while the Screen's layout is not home's", () => {
+    const paired = after(quad, [{ _tag: "SetLayout", layout: "Pair" }])
+
+    const status = on.status(start, paired)
+
+    assert.deepStrictEqual(status, AutopilotStatus.Fitted({ slots: 2 }))
   })
 })

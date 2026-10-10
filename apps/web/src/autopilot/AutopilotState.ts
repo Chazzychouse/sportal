@@ -1,3 +1,4 @@
+import type { SlateChanged } from "@sportal/api/LiveMessage"
 import { Data, DateTime, Effect, Option, Stream } from "effect"
 import { KeyValueStore } from "effect/persistence"
 import { Atom } from "effect/reactivity"
@@ -41,9 +42,15 @@ export const autopilot: Atom.Writable<Autopilot, AutopilotInput> = Atom.writable
 /** Steps the autopilot on each live update and at its next deadline. Mounted once, by the Display. */
 export const pilot = runtime.atom((get) =>
   Effect.gen(function* () {
-    const deadlines = get
-      .stream(autopilot)
-      .pipe(Stream.switchMap((current) => Stream.fromEffect(untilDeadline(current))))
+    const deadlines = Stream.zipLatestAll(
+      get.stream(autopilot),
+      get.stream(DisplayScreen.screen),
+      get.stream(LiveStream.live)
+    ).pipe(
+      Stream.switchMap(([current, screen, live]) =>
+        Stream.fromEffect(untilDeadline(current, screen, live.classifications)).pipe(Stream.forever)
+      )
+    )
 
     yield* Stream.merge(get.stream(LiveStream.live), deadlines).pipe(
       Stream.runForEach(() => Effect.sync(() => get.set(autopilot, AutopilotInput.Ticked())))
@@ -51,11 +58,15 @@ export const pilot = runtime.atom((get) =>
   }).pipe(logDefect("The autopilot"))
 )
 
-/** Waits until `current`'s next deadline; forever, when it has none. */
-function untilDeadline(current: Autopilot): Effect.Effect<void> {
+/** Waits until `current`'s next deadline on `screen`; forever, when it has none. */
+function untilDeadline(
+  current: Autopilot,
+  screen: Screen,
+  classifications: SlateChanged["classifications"]
+): Effect.Effect<void> {
   return Effect.gen(function* () {
     const now = yield* DateTime.now
-    yield* Option.match(current.nextDeadline(now), {
+    yield* Option.match(current.nextDeadline(now, screen, classifications), {
       onNone: () => Effect.never,
       onSome: (at) => Effect.sleep(DateTime.distance(now, at))
     })

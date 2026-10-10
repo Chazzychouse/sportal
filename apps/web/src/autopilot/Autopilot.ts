@@ -2,17 +2,25 @@ import type { SlateChanged } from "@sportal/api/LiveMessage"
 import { GameId } from "@sportal/domain/Game"
 import type { Moment } from "@sportal/domain/Moment"
 import { Array as Arr, Data, DateTime, Duration, Equal, Option, Order, Result, Schema } from "effect"
-import { type Screen, type ScreenCommand, Tile } from "../screen/Screen.ts"
+import { LayoutName, Screen, type ScreenCommand, Tile } from "../screen/Screen.ts"
+import { fit, nextFit } from "./Fit.ts"
 
-/** The two things the autopilot steers: the main tile and the sound. */
-type Part = "main" | "audio"
+/** The two things the autopilot chases with: the main tile and the sound. */
+type Steered = "main" | "audio"
 
-/** What the autopilot is doing, for its toggle to say: off, idle, away on a game, or a part yours until a time. */
+/** What a command you send can make yours: the main tile, the sound or the layout. */
+export type Part = Steered | "layout"
+
+/**
+ * What the autopilot is doing, for its toggle to say: off, idle, away on a game, a part yours until a time, or the
+ * layout fitted to fewer slots than home's.
+ */
 export type AutopilotStatus = Data.TaggedEnum<{
   Off: object
   Idle: object
-  Away: { readonly part: Part; readonly game: GameId }
+  Away: { readonly part: Steered; readonly game: GameId }
   Yours: { readonly part: Part; readonly until: DateTime.Utc }
+  Fitted: { readonly slots: number }
 }>
 export const AutopilotStatus = Data.taggedEnum<AutopilotStatus>()
 
@@ -22,14 +30,15 @@ type Away = typeof Away.Type
 /**
  * A Display's autopilot. While on, it promotes the best moment into the main tile and moves the sound with it, then
  * puts back what you chose (home) when the moment is over. Each command you send sets home and suspends the part it
- * touched for `suspension`. Pure.
+ * touched for `suspension`. It also fits the layout to the games worth showing, never past home's. Pure.
  */
 export class Autopilot extends Schema.Class<Autopilot>("sportal/Autopilot")({
   on: Schema.Boolean,
-  /** What you chose: the main tile's game and the game whose sound is on. */
+  /** What you chose: the main tile's game, the game whose sound is on, and the layout, which is the ceiling. */
   home: Schema.Struct({
     main: Schema.OptionFromOptionalKey(GameId),
-    audio: Schema.OptionFromOptionalKey(GameId)
+    audio: Schema.OptionFromOptionalKey(GameId),
+    layout: Schema.OptionFromOptionalKey(LayoutName)
   }),
   /** The game the autopilot moved each part to, and since when. */
   away: Schema.Struct({
@@ -39,14 +48,15 @@ export class Autopilot extends Schema.Class<Autopilot>("sportal/Autopilot")({
   /** Until when each part is yours. */
   suspended: Schema.Struct({
     main: Schema.OptionFromOptionalKey(Schema.DateTimeUtcFromString),
-    audio: Schema.OptionFromOptionalKey(Schema.DateTimeUtcFromString)
+    audio: Schema.OptionFromOptionalKey(Schema.DateTimeUtcFromString),
+    layout: Schema.OptionFromOptionalKey(Schema.DateTimeUtcFromString)
   })
 }) {
   static readonly off: Autopilot = new Autopilot({
     on: false,
-    home: { main: Option.none(), audio: Option.none() },
+    home: { main: Option.none(), audio: Option.none(), layout: Option.none() },
     away: { main: Option.none(), audio: Option.none() },
-    suspended: { main: Option.none(), audio: Option.none() }
+    suspended: { main: Option.none(), audio: Option.none(), layout: Option.none() }
   })
 
   /** How long an away game holds its part, unless it stops. */
@@ -63,7 +73,8 @@ export class Autopilot extends Schema.Class<Autopilot>("sportal/Autopilot")({
   /**
    * After `command`, which you sent, left the Screen as `after`: the parts it touches are yours for `suspension` and
    * no longer away. Home's main game is what `after` shows unless the main tile is still away; home's sound game is
-   * what `after` shows when the command touched the sound or neither part is still away.
+   * what `after` shows when the command touched the sound or neither part is still away. A `SetLayout` makes its layout
+   * home's.
    */
   manual(command: ScreenCommand, after: Screen, now: DateTime.Utc): Autopilot {
     if (!this.on) return this
@@ -81,20 +92,23 @@ export class Autopilot extends Schema.Class<Autopilot>("sportal/Autopilot")({
         audio:
           touched.includes("audio") || (Option.isNone(away.main) && Option.isNone(away.audio))
             ? shown.audio
-            : this.home.audio
+            : this.home.audio,
+        layout: command._tag === "SetLayout" ? Option.some(command.layout) : this.home.layout
       },
       away,
       suspended: {
         main: touched.includes("main") ? until : this.suspended.main,
-        audio: touched.includes("audio") ? until : this.suspended.audio
+        audio: touched.includes("audio") ? until : this.suspended.audio,
+        layout: touched.includes("layout") ? until : this.suspended.layout
       }
     })
   }
 
   /**
    * One step at `now` on `screen` with each game's classification: the next autopilot and the commands to send, in
-   * order. The main tile is steered unless it is yours, else the sound unless it is yours. Off or soloed, nothing.
-   * When nothing changed, the autopilot is this one.
+   * order. It fits the layout unless the layout is yours, then, on the fitted Screen, steers the main tile unless it
+   * is yours, else the sound unless it is yours. Off or soloed, nothing. When nothing changed, the autopilot is this
+   * one.
    */
   step(
     screen: Screen,
@@ -103,76 +117,54 @@ export class Autopilot extends Schema.Class<Autopilot>("sportal/Autopilot")({
   ): readonly [Autopilot, ReadonlyArray<ScreenCommand>] {
     if (!this.on || Option.isSome(screen.solo)) return [this, []]
     const suspended = {
-      main: Option.filter(this.suspended.main, (until) => DateTime.isLessThan(now, until)),
-      audio: Option.filter(this.suspended.audio, (until) => DateTime.isLessThan(now, until))
+      main: running(this.suspended.main, now),
+      audio: running(this.suspended.audio, now),
+      layout: running(this.suspended.layout, now)
     }
-    const standing: Standing = {
-      moment: (game) => classifications[game]?.moment,
-      score: (game) => classifications[game]?.score ?? 0
-    }
-
-    if (Option.isNone(suspended.main)) {
-      const [main, move] = follow(
-        {
-          tiles: occupiedIn(screen.tiles),
-          home: this.home.main,
-          current: Option.fromUndefinedOr(gameIn(screen.tiles[0])),
-          away: this.away.main
-        },
-        standing,
-        now
-      )
-      const commands = mainCommands(screen, this, move, Option.isSome(suspended.audio))
-      const next = new Autopilot({ ...this, suspended, away: { main, audio: Option.none() } })
-      return [unchangedOr(this, next), commands]
-    }
-
-    if (Option.isNone(suspended.audio)) {
-      const [audio, move] = follow(
-        {
-          tiles: occupiedIn(screen.onScreen()),
-          home: this.home.audio,
-          current: screen.audioFocus,
-          away: this.away.audio
-        },
-        standing,
-        now
-      )
-      const commands = Move.$match(move, {
-        Stay: () => [],
-        Home: () => soundTo(screen, this.home.audio),
-        Go: ({ game }) => soundTo(screen, Option.some(game))
-      })
-      const next = new Autopilot({ ...this, suspended, away: { main: Option.none(), audio } })
-      return [unchangedOr(this, next), commands]
-    }
-
-    const next = new Autopilot({ ...this, suspended, away: { main: Option.none(), audio: Option.none() } })
-    return [unchangedOr(this, next), []]
+    const ceiling = Option.isNone(suspended.layout) ? Option.getOrUndefined(this.home.layout) : undefined
+    const fitted = ceiling === undefined ? [] : fit(screen, ceiling, classifications, now)
+    const [next, chased] = chase(this, afterAll(screen, fitted), suspended, classifications, now)
+    return [unchangedOr(this, next), [...fitted, ...chased]]
   }
 
-  /** When the next step may change something with no new slate: an away game's dwell ending, or a suspension. */
-  nextDeadline(now: DateTime.Utc): Option.Option<DateTime.Utc> {
+  /**
+   * When the next step may change something with no new slate: an away game's dwell ending, a suspension ending, or
+   * the hold of a game over on a tile of `screen` running out.
+   */
+  nextDeadline(
+    now: DateTime.Utc,
+    screen: Screen,
+    classifications: SlateChanged["classifications"]
+  ): Option.Option<DateTime.Utc> {
     const dwellEnd = (away: Option.Option<Away>) =>
       Option.toArray(Option.map(away, ({ since }) => DateTime.addDuration(since, Autopilot.dwell)))
     const times = [
       ...dwellEnd(this.away.main),
       ...dwellEnd(this.away.audio),
       ...Option.toArray(this.suspended.main),
-      ...Option.toArray(this.suspended.audio)
+      ...Option.toArray(this.suspended.audio),
+      ...Option.toArray(this.suspended.layout),
+      ...(Option.isSome(this.home.layout) ? Option.toArray(nextFit(screen, classifications, now)) : [])
     ]
     return Arr.head(times.filter((time) => DateTime.isGreaterThan(time, now)).toSorted(DateTime.Order))
   }
 
-  /** What it is doing at `now`: the main tile before the sound, a part yours before a part away. */
-  status(now: DateTime.Utc): AutopilotStatus {
+  /**
+   * What it is doing at `now` on `screen`: the main tile before the sound, a part yours before a part away, then the
+   * layout yours, then fitted.
+   */
+  status(now: DateTime.Utc, screen: Screen): AutopilotStatus {
     if (!this.on) return AutopilotStatus.Off()
     for (const part of ["main", "audio"] as const) {
-      const until = Option.filter(this.suspended[part], (time) => DateTime.isLessThan(now, time))
+      const until = running(this.suspended[part], now)
       if (Option.isSome(until)) return AutopilotStatus.Yours({ part, until: until.value })
       const away = this.away[part]
       if (Option.isSome(away)) return AutopilotStatus.Away({ part, game: away.value.game })
     }
+    const layoutUntil = running(this.suspended.layout, now)
+    if (Option.isSome(layoutUntil)) return AutopilotStatus.Yours({ part: "layout", until: layoutUntil.value })
+    if (Option.exists(this.home.layout, (layout) => layout !== screen.layout))
+      return AutopilotStatus.Fitted({ slots: Screen.slotCount(screen.layout) })
     return AutopilotStatus.Idle()
   }
 }
@@ -245,7 +237,65 @@ function follow(
 }
 
 /**
- * The commands for a move of the main tile. A hand-off promotes home first, so a later revert restores every tile; a
+ * The chase on `screen`: the main tile unless it is yours, else the sound unless it is yours. The next autopilot, with
+ * `suspended` as its suspensions, and the commands to send.
+ */
+function chase(
+  pilot: Autopilot,
+  screen: Screen,
+  suspended: Autopilot["suspended"],
+  classifications: SlateChanged["classifications"],
+  now: DateTime.Utc
+): readonly [Autopilot, ReadonlyArray<ScreenCommand>] {
+  const standing: Standing = {
+    moment: (game) => classifications[game]?.moment,
+    score: (game) => classifications[game]?.score ?? 0
+  }
+
+  if (Option.isNone(suspended.main)) {
+    const [main, move] = follow(
+      {
+        tiles: occupiedIn(screen.tiles),
+        home: pilot.home.main,
+        current: Option.fromUndefinedOr(gameIn(screen.tiles[0])),
+        away: pilot.away.main
+      },
+      standing,
+      now
+    )
+    const commands = mainCommands(screen, pilot, move, Option.isSome(suspended.audio))
+    return [new Autopilot({ ...pilot, suspended, away: { main, audio: Option.none() } }), commands]
+  }
+
+  if (Option.isNone(suspended.audio)) {
+    const [audio, move] = follow(
+      {
+        tiles: occupiedIn(screen.onScreen()),
+        home: pilot.home.audio,
+        current: screen.audioFocus,
+        away: pilot.away.audio
+      },
+      standing,
+      now
+    )
+    const commands = Move.$match(move, {
+      Stay: () => [],
+      Home: () => soundTo(screen, pilot.home.audio),
+      Go: ({ game }) => soundTo(screen, Option.some(game))
+    })
+    return [new Autopilot({ ...pilot, suspended, away: { main: Option.none(), audio } }), commands]
+  }
+
+  return [new Autopilot({ ...pilot, suspended, away: { main: Option.none(), audio: Option.none() } }), []]
+}
+
+/** A suspension, while it still runs at `now`. */
+function running(until: Option.Option<DateTime.Utc>, now: DateTime.Utc): Option.Option<DateTime.Utc> {
+  return Option.filter(until, (time) => DateTime.isLessThan(now, time))
+}
+
+/**
+ * The commands for a move of the main tile. A hand-off promotes home first, so a later revert restores every tile (unless a fit moved tiles in between); a
  * revert, a move while the sound is yours, or the end of a sound away puts the sound on home's sound game.
  */
 function mainCommands(
@@ -317,12 +367,14 @@ function suspends(command: ScreenCommand): ReadonlyArray<Part> {
     case "Solo":
       return ["main", "audio"]
     case "Swap":
-      return command.a === 0 || command.b === 0 ? ["main"] : []
+      return command.a === 0 || command.b === 0 ? ["main"] : ["layout"]
     case "Assign":
     case "Clear":
-      return command.tile === 0 ? ["main"] : []
+      return command.tile === 0 ? ["main"] : ["layout"]
     case "FocusAudio":
       return ["audio"]
+    case "SetLayout":
+      return ["layout"]
     default:
       return []
   }
@@ -334,7 +386,7 @@ function promoteTo(screen: Screen, game: Option.Option<GameId>): ReadonlyArray<S
   return tile > 0 ? [{ _tag: "Promote", tile }] : []
 }
 
-/** `screen` after the autopilot's own commands; `Promote` and `FocusAudio` never ask a game's availability. */
+/** `screen` after the autopilot's own commands, none of which asks a game's availability. */
 function afterAll(screen: Screen, commands: ReadonlyArray<ScreenCommand>): Screen {
   return commands.reduce(
     (current, command) =>
@@ -358,7 +410,11 @@ function soundTo(screen: Screen, game: Option.Option<GameId>): ReadonlyArray<Scr
 }
 
 function homeOf(screen: Screen): Autopilot["home"] {
-  return { main: Option.fromUndefinedOr(gameIn(screen.tiles[0])), audio: screen.audioFocus }
+  return {
+    main: Option.fromUndefinedOr(gameIn(screen.tiles[0])),
+    audio: screen.audioFocus,
+    layout: Option.some(screen.layout)
+  }
 }
 
 function occupiedIn(tiles: ReadonlyArray<Tile>) {
