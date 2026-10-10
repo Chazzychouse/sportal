@@ -1,4 +1,5 @@
 import { assert, describe, it } from "@effect/vitest"
+import type { Hotkey } from "@sportal/api/Hotkey"
 import { GameId } from "@sportal/domain/Game"
 import { Option } from "effect"
 import { Screen, type ScreenCommand } from "../screen/Screen.ts"
@@ -476,6 +477,16 @@ describe("Display#press", () => {
     assert.strictEqual(display, Display.initial)
     assert.deepStrictEqual(commands, [])
   })
+
+  it.each<Hotkey>([{ _tag: "TogglePrompts" }, { _tag: "AcceptPrompt" }, { _tag: "DismissPrompt" }])(
+    "should return the same display with $_tag and send nothing",
+    (hotkey) => {
+      const { display, commands } = press(Display.initial, hotkey, TestWeb.withTiles([]))
+
+      assert.strictEqual(display, Display.initial)
+      assert.deepStrictEqual(commands, [])
+    }
+  )
 })
 
 describe("Display#open and Display#close", () => {
