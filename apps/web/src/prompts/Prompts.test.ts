@@ -230,10 +230,8 @@ describe("Prompts.dismiss", () => {
   })
 
   it("should prompt a dismissed game again in a new moment", () => {
-    const prompts = Option.match(Prompts.initial.prompt(pair, state), {
-      onNone: () => Prompts.initial,
-      onSome: (prompt) => Prompts.initial.dismiss(prompt, state.classifications)
-    })
+    const first = Option.getOrThrow(Prompts.initial.prompt(pair, state))
+    const prompts = Prompts.initial.dismiss(first, state.classifications)
     const again = {
       ...state,
       classifications: { ...state.classifications, [third]: TestWeb.classified(TestWeb.redZone, 50, later) }

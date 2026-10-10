@@ -1,5 +1,5 @@
-import { Hotkey } from "@sportal/api/Hotkey"
-import { Effect, Option, Stream } from "effect"
+import type { Hotkey } from "@sportal/api/Hotkey"
+import { Effect, Match, Option, Stream } from "effect"
 import { AsyncResult, Atom } from "effect/reactivity"
 import * as AutopilotState from "../autopilot/AutopilotState.ts"
 import { AutopilotInput } from "../autopilot/AutopilotState.ts"
@@ -69,16 +69,7 @@ export const inputs = runtime.atom((get) =>
     yield* Stream.merge(keys, videos).pipe(
       Stream.runForEach((input) =>
         Effect.sync(() => {
-          if (DisplayInput.$is("Pressed")(input) && Hotkey.guards.FullScreen(input.hotkey))
-            get.set(toggleFullScreen, undefined)
-          else if (DisplayInput.$is("Pressed")(input) && Hotkey.guards.ToggleAutopilot(input.hotkey))
-            get.set(AutopilotState.autopilot, AutopilotInput.Toggled())
-          else if (DisplayInput.$is("Pressed")(input) && Hotkey.guards.TogglePrompts(input.hotkey))
-            get.set(PromptsState.prompts, PromptInput.Toggled())
-          else if (DisplayInput.$is("Pressed")(input) && Hotkey.guards.AcceptPrompt(input.hotkey))
-            get.set(PromptsState.prompts, PromptInput.Accepted())
-          else if (DisplayInput.$is("Pressed")(input) && Hotkey.guards.DismissPrompt(input.hotkey))
-            get.set(PromptsState.prompts, PromptInput.Dismissed())
+          if (DisplayInput.$is("Pressed")(input)) route(get, input.hotkey, input)
           else get.set(display, input)
         })
       )
@@ -106,3 +97,14 @@ export const openSignIn = runtime.fn((_: undefined) =>
 )
 
 const kept = Atom.make(Display.initial).pipe(Atom.keepAlive)
+
+function route(get: Atom.FnContext, hotkey: Hotkey, pressed: DisplayInput) {
+  Match.value(hotkey).pipe(
+    Match.tag("FullScreen", () => get.set(toggleFullScreen, undefined)),
+    Match.tag("ToggleAutopilot", () => get.set(AutopilotState.autopilot, AutopilotInput.Toggled())),
+    Match.tag("TogglePrompts", () => get.set(PromptsState.prompts, PromptInput.Toggled())),
+    Match.tag("AcceptPrompt", () => get.set(PromptsState.prompts, PromptInput.Accepted())),
+    Match.tag("DismissPrompt", () => get.set(PromptsState.prompts, PromptInput.Dismissed())),
+    Match.orElse(() => get.set(display, pressed))
+  )
+}

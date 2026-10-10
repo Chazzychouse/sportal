@@ -8,7 +8,6 @@ import * as AutopilotState from "../autopilot/AutopilotState.ts"
 import { AutopilotInput } from "../autopilot/AutopilotState.ts"
 import * as LiveStream from "../hub/LiveStream.ts"
 import * as DisplayScreen from "../screen/DisplayScreen.ts"
-import type { Screen } from "../screen/Screen.ts"
 import * as TestWeb from "../TestWeb.ts"
 import * as PromptsState from "./PromptsState.ts"
 import { PromptInput } from "./PromptsState.ts"
@@ -17,7 +16,7 @@ const home = GameId.make("home")
 const other = GameId.make("other")
 const third = GameId.make("third")
 
-/** Home and other in plain live play, and third on no tile in `thirdMoment`'s classification, all on FOX. */
+/** Home and other in plain live play, and third on no tile in `thirdClassification`, all on FOX. */
 function slate(thirdClassification = TestWeb.classified(TestWeb.redZone)) {
   return TestWeb.slateMessage([
     {
@@ -48,11 +47,6 @@ const arranged = (message: unknown) =>
     yield* Atom.set(DisplayScreen.screen, { _tag: "Assign", tile: 1, game: other })
   })
 
-function mainGame(screen: Screen) {
-  const tile = screen.tiles[0]
-  return tile === undefined || tile._tag === "Empty" ? undefined : tile.game
-}
-
 describe("PromptsState", () => {
   beforeEach(() => {
     TestWeb.FakeEventSource.opened = []
@@ -70,7 +64,7 @@ describe("PromptsState", () => {
       yield* Atom.set(PromptsState.prompts, PromptInput.Accepted())
 
       const screen = yield* Atom.get(DisplayScreen.screen)
-      assert.strictEqual(mainGame(screen), third)
+      assert.strictEqual(TestWeb.mainGame(screen), third)
       assert.isTrue(screen.hears(third))
     }).pipe(Effect.provide(AtomRegistry.layer))
   )
@@ -82,7 +76,7 @@ describe("PromptsState", () => {
       yield* Atom.set(PromptsState.prompts, PromptInput.Accepted())
 
       const screen = yield* Atom.get(DisplayScreen.screen)
-      assert.strictEqual(mainGame(screen), home)
+      assert.strictEqual(TestWeb.mainGame(screen), home)
     }).pipe(Effect.provide(AtomRegistry.layer))
   )
 

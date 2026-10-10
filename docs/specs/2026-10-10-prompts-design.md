@@ -112,7 +112,7 @@ Never closed by a timer.
 ### The toggle
 
 `apps/web/src/prompts/PromptsToggle.tsx`, a bell in the `TopBar` beside the autopilot's toggle. Its tooltip:
-`prompts: off`, `prompts: on`, or `prompts: on — showing PHI @ DAL`.
+`Prompts off`, `Prompts on`, or `Prompts on: showing PHI @ DAL`, each followed by ` · P`.
 
 ### Hotkeys
 

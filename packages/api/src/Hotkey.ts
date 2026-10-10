@@ -160,27 +160,6 @@ export const Hotkey = Object.assign(
         hotkey: { _tag: "ToggleAutopilot" }
       },
       {
-        group: "Prompts",
-        keys: ["P"],
-        does: "Turn prompts on or off",
-        press: { code: "KeyP", from: "stream" },
-        hotkey: { _tag: "TogglePrompts" }
-      },
-      {
-        group: "Prompts",
-        keys: ["Y"],
-        does: "Watch the prompted game",
-        press: { code: "KeyY", from: "stream" },
-        hotkey: { _tag: "AcceptPrompt" }
-      },
-      {
-        group: "Prompts",
-        keys: ["N"],
-        does: "Skip the prompted game",
-        press: { code: "KeyN", from: "stream" },
-        hotkey: { _tag: "DismissPrompt" }
-      },
-      {
         group: "Screen",
         keys: ["F11"],
         does: "Full screen",
@@ -200,6 +179,27 @@ export const Hotkey = Object.assign(
         does: "These keys",
         press: { code: "Slash", shift: true, from: "stream" },
         hotkey: { _tag: "ShowKeys" }
+      },
+      {
+        group: "Prompts",
+        keys: ["P"],
+        does: "Turn prompts on or off",
+        press: { code: "KeyP", from: "stream" },
+        hotkey: { _tag: "TogglePrompts" }
+      },
+      {
+        group: "Prompts",
+        keys: ["Y"],
+        does: "Watch the prompted game",
+        press: { code: "KeyY", from: "stream" },
+        hotkey: { _tag: "AcceptPrompt" }
+      },
+      {
+        group: "Prompts",
+        keys: ["N"],
+        does: "Skip the prompted game",
+        press: { code: "KeyN", from: "stream" },
+        hotkey: { _tag: "DismissPrompt" }
       }
     ] as const
   }

@@ -15,7 +15,10 @@ import { BrandMark, ConnectionPill } from "./Brand.tsx"
 import { DisplayInput } from "./Display.ts"
 import * as DisplayState from "./DisplayState.ts"
 
-/** The strip across the top of a Display: the slate, layout, solo, the autopilot, the prompts, full screen, and whether the Hub is live. */
+/**
+ * The strip across the top of a Display: the slate, layout, solo, the autopilot, the prompts, full screen, and whether
+ * the Hub is live.
+ */
 export function TopBar() {
   const display = useAtomValue(DisplayState.display)
   const input = useAtomSet(DisplayState.display)

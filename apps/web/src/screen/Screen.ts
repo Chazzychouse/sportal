@@ -68,7 +68,10 @@ export class Screen extends Schema.Class<Screen>("sportal/Screen")({
     return layouts[layout].slots
   }
 
-  /** The tile `game` gets from its availability: a stream tile when the most useful says it is carried, else a data tile saying why. */
+  /**
+   * The tile `game` gets from its availability: a stream tile when the most useful says it is carried, else a data
+   * tile saying why.
+   */
   static tileFor(game: GameId, availability: ReadonlyArray<ChannelAvailability>): Tile {
     return ChannelAvailability.match(mostUseful(availability), {
       Carried: ({ channel }): Tile => ({ _tag: "StreamTile", game, channel }),
