@@ -3,7 +3,7 @@ import { DateTime, Duration, Option } from "effect"
 import { BallSpot, Game, GameId, GameSnapshot, type GameStatus } from "./Game.ts"
 import { PlayId } from "./Play.ts"
 import type { Situation } from "./Situation.ts"
-import { broadcast, liveSnapshot, play, situation, snapshot, team } from "./TestGame.ts"
+import { broadcast, liveSnapshot, play, sides, situation, snapshot, team } from "./TestGame.ts"
 
 describe("GameSnapshot#progress", () => {
   it.each([
@@ -641,5 +641,59 @@ describe("Game#playsAfter", () => {
     const added = later.playsAfter(earlier)
 
     assert.deepStrictEqual(added, [])
+  })
+})
+
+describe("GameSnapshot#margin", () => {
+  it("should be the points between the teams, whoever leads", () => {
+    const game = liveSnapshot(sides(10, 17))
+
+    assert.strictEqual(game.margin(), 7)
+  })
+})
+
+describe("GameSnapshot#timePlayed", () => {
+  it("should be none before the first snap", () => {
+    const game = liveSnapshot({ period: 1, clock: "15:00" })
+
+    assert.strictEqual(game.timePlayed(), 0)
+  })
+
+  it("should be half at the end of the second quarter", () => {
+    const game = liveSnapshot({ period: 2, clock: "0:00" })
+
+    assert.strictEqual(game.timePlayed(), 0.5)
+  })
+
+  it("should be all of it in overtime", () => {
+    const game = liveSnapshot({ period: 5, clock: "8:00" })
+
+    assert.strictEqual(game.timePlayed(), 1)
+  })
+})
+
+describe("GameSnapshot#inCrunchTime", () => {
+  it("should hold in the fourth quarter within one score under five minutes", () => {
+    const game = liveSnapshot({ period: 4, clock: "4:59", ...sides(14, 21) })
+
+    assert.isTrue(game.inCrunchTime())
+  })
+
+  it("should not hold with more than five minutes left", () => {
+    const game = liveSnapshot({ period: 4, clock: "5:01", ...sides(14, 21) })
+
+    assert.isFalse(game.inCrunchTime())
+  })
+
+  it("should not hold beyond one score", () => {
+    const game = liveSnapshot({ period: 4, clock: "2:00", ...sides(14, 23) })
+
+    assert.isFalse(game.inCrunchTime())
+  })
+
+  it("should hold in any overtime within one score", () => {
+    const game = liveSnapshot({ league: "fbs", period: 5, clock: "0:00", ...sides(24, 24) })
+
+    assert.isTrue(game.inCrunchTime())
   })
 })

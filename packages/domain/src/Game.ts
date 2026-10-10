@@ -26,7 +26,27 @@ export type Network = typeof Network.Type
 export const Broadcast = Schema.Struct({ network: Network, medium: Schema.Literals(["tv", "streaming"]) })
 export type Broadcast = typeof Broadcast.Type
 
-const Side = Schema.Struct({ team: Team, score: Schema.Int, ranking: Schema.optional(Schema.Int) })
+/** A team's wins and losses this season, as the scoreboard gives them; ties are left out. */
+export const TeamRecord = Schema.Struct({ wins: Schema.Int, losses: Schema.Int })
+export type TeamRecord = typeof TeamRecord.Type
+
+/**
+ * The pregame betting line: the side favored, if either, by how many points (`spread`, never negative), and the
+ * total points expected. The scoreboard sends it only before kickoff.
+ */
+export const Odds = Schema.Struct({
+  favorite: Schema.optional(Schema.Literals(["home", "away"])),
+  spread: Schema.Finite,
+  overUnder: Schema.optional(Schema.Finite)
+})
+export type Odds = typeof Odds.Type
+
+const Side = Schema.Struct({
+  team: Team,
+  score: Schema.Int,
+  ranking: Schema.optional(Schema.Int),
+  record: Schema.optional(TeamRecord)
+})
 
 export class GameSnapshot extends Schema.Class<GameSnapshot>("sportal/GameSnapshot")({
   id: GameId,
@@ -38,7 +58,8 @@ export class GameSnapshot extends Schema.Class<GameSnapshot>("sportal/GameSnapsh
   home: Side,
   away: Side,
   broadcasts: Schema.Array(Broadcast),
-  situation: Schema.optional(Situation)
+  situation: Schema.optional(Situation),
+  odds: Schema.optional(Odds)
 }) {
   /**
    * How long before its kickoff an upcoming game counts with the live ones: the slate holds it as current, FastCast
@@ -128,6 +149,24 @@ export class GameSnapshot extends Schema.Class<GameSnapshot>("sportal/GameSnapsh
   /** Whether the game is in overtime, the fifth period or later. */
   inOvertime(): boolean {
     return this.period >= 5
+  }
+
+  /** The points between the two teams, whoever leads. */
+  margin(): number {
+    return Math.abs(this.home.score - this.away.score)
+  }
+
+  /** How much of regulation has been played, from 0 before the first snap to 1 at its end; overtime is 1. */
+  timePlayed(): number {
+    if (this.inOvertime()) return 1
+    const played = (Math.max(1, this.period) - 1) * quarterSeconds + (quarterSeconds - this.secondsLeft())
+    return Math.min(1, Math.max(0, played / (4 * quarterSeconds)))
+  }
+
+  /** The fourth quarter with five minutes or less left, or any overtime, with the game within one score. */
+  inCrunchTime(): boolean {
+    const late = this.inOvertime() || (this.period === 4 && this.secondsLeft() <= crunchSeconds)
+    return late && this.margin() <= oneScore
   }
 
   /** Whether the game has a score worth showing: it is being played or is final. */
@@ -264,3 +303,9 @@ const gameTimeRank = { upcoming: 0, live: 1, over: 2 } as const
 
 /** Seconds in a quarter, college and NFL alike. */
 const quarterSeconds = 15 * 60
+
+/** Seconds left in the fourth quarter at which a close game is in crunch time. */
+const crunchSeconds = 5 * 60
+
+/** The most points one possession can score: a touchdown and a two-point try. */
+const oneScore = 8
