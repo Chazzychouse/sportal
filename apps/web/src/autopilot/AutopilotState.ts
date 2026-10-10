@@ -9,7 +9,7 @@ import * as DisplayScreen from "../screen/DisplayScreen.ts"
 import type { Screen, ScreenCommand } from "../screen/Screen.ts"
 import { logDefect, runtime } from "../WebRuntime.ts"
 import { Autopilot } from "./Autopilot.ts"
-import { Decision, details, explain } from "./Decision.ts"
+import { type Decision, details, explain } from "./Decision.ts"
 
 /** What moves the autopilot: turned on or off, a command you sent, or time passing. */
 export type AutopilotInput = Data.TaggedEnum<{
@@ -41,14 +41,16 @@ export const autopilot: Atom.Writable<Autopilot, AutopilotInput> = Atom.writable
     } = moved.step(screen, ctx.get(LiveStream.live).classifications, now)
     Atom.batch(() => {
       if (next !== current) ctx.set(kept, next)
-      ctx.set(decision, decided)
+      ctx.set(decision, Option.some(decided))
       for (const command of commands) ctx.set(DisplayScreen.screen, command)
     })
   }
 ).pipe(Atom.keepAlive)
 
-/** What the autopilot's last step decided, for its log. */
-const decision: Atom.Writable<Decision> = Atom.make<Decision>(Decision.Off()).pipe(Atom.keepAlive)
+/** What the autopilot's last step decided, for its log; none before its first step. */
+const decision: Atom.Writable<Option.Option<Decision>> = Atom.make<Option.Option<Decision>>(
+  Option.none()
+).pipe(Atom.keepAlive)
 
 /**
  * Steps the autopilot on each live update and at its next deadline, and logs each new decision in words. Mounted
@@ -70,6 +72,8 @@ export const pilot = runtime.atom((get) =>
       Stream.runForEach(() => Effect.sync(() => get.set(autopilot, AutopilotInput.Ticked())))
     )
     const log = get.stream(decision).pipe(
+      Stream.map(Option.toArray),
+      Stream.flattenIterable,
       Stream.changesWith((a, b) => explain(a, String) === explain(b, String)),
       Stream.runForEach((decided) =>
         Effect.logInfo(`Autopilot: ${explain(decided, nameIn(get.once(LiveStream.live).slate))}`).pipe(

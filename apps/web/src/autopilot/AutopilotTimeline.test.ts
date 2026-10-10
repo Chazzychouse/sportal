@@ -52,7 +52,7 @@ describe("the autopilot over a game day", () => {
     )
   })
 
-  it("should hold a red zone through its dwell before a higher rank takes over", () => {
+  it("should hold crunch time through its dwell before a red zone takes over", () => {
     const frames = TestWeb.timeline(quad, on, [
       { at: 0, classifications: games(live, live, live, live) },
       { at: 31, classifications: games(live, crunch, live, live) },

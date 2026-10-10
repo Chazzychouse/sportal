@@ -2,7 +2,7 @@ import { afterEach, assert, beforeEach, describe, it } from "@effect/vitest"
 import { Classification } from "@sportal/domain/Classification"
 import { Game, GameId } from "@sportal/domain/Game"
 import { snapshot } from "@sportal/domain/TestGame"
-import { Clock, DateTime, Duration, Effect, Layer, Logger } from "effect"
+import { Clock, DateTime, Duration, Effect, Layer, Logger, Option } from "effect"
 import { Atom, AtomRegistry } from "effect/reactivity"
 import { TestClock } from "effect/testing"
 import { vi } from "vitest"
@@ -239,13 +239,79 @@ describe("AutopilotState", () => {
         yield* Atom.set(AutopilotState.autopilot, AutopilotInput.Toggled())
         yield* Atom.mount(AutopilotState.pilot)
         yield* logged(logs, (line) => line.includes("layout Pair"))
-        source.onmessage?.({ data: slate() })
-        source.onmessage?.({ data: slate() })
-        yield* Effect.yieldNow
+        source.onmessage?.({ data: slate(TestWeb.classified({ _tag: "Live" }, 51)) })
+        yield* yielding
+        source.onmessage?.({ data: slate(TestWeb.classified({ _tag: "Live" }, 52)) })
+        yield* yielding
+        source.onmessage?.({
+          data: slate(TestWeb.classified({ _tag: "Live" }), TestWeb.classified(TestWeb.timeout))
+        })
+        yield* logged(logs, (line) => line.startsWith("Autopilot: promoted"))
       }).pipe(Effect.scoped, Effect.provide(registry))
 
-      assert.strictEqual(logs.filter((line) => line.includes("layout Pair")).length, 1)
+      const beforePromote = logs.slice(
+        0,
+        logs.findIndex((line) => line.startsWith("Autopilot: promoted"))
+      )
+      assert.deepStrictEqual(beforePromote, [...new Set(beforePromote)])
     })
+  )
+
+  it.effect("should not log the autopilot off at mount when the kept autopilot is on", () =>
+    Effect.gen(function* () {
+      const { registry, logs } = loggingRegistry()
+      localStorage.setItem(
+        "sportal/autopilot",
+        JSON.stringify({ on: true, home: {}, away: {}, suspended: {} })
+      )
+
+      yield* Effect.gen(function* () {
+        yield* arranged(slate())
+        yield* Atom.mount(AutopilotState.pilot)
+        yield* logged(logs, (line) => line.startsWith("Autopilot: kept"))
+      }).pipe(Effect.scoped, Effect.provide(registry))
+
+      assert.notInclude(logs, "Autopilot: off")
+    })
+  )
+
+  it.effect("should log the autopilot off when it is turned off", () =>
+    Effect.gen(function* () {
+      const { registry, logs } = loggingRegistry()
+
+      yield* Effect.gen(function* () {
+        yield* arranged(slate())
+        yield* Atom.set(AutopilotState.autopilot, AutopilotInput.Toggled())
+        yield* Atom.mount(AutopilotState.pilot)
+        yield* logged(logs, (line) => line.includes("layout Pair"))
+        yield* Atom.set(AutopilotState.autopilot, AutopilotInput.Toggled())
+        yield* logged(logs, (line) => line === "Autopilot: off")
+      }).pipe(Effect.scoped, Effect.provide(registry))
+
+      assert.include(logs, "Autopilot: off")
+    })
+  )
+
+  it.effect(
+    "should read an autopilot kept before the home and away fields went as on, with no main or ceiling",
+    () =>
+      Effect.gen(function* () {
+        localStorage.setItem(
+          "sportal/autopilot",
+          JSON.stringify({
+            on: true,
+            home: { main: "home", audio: "home", layout: "Quad" },
+            away: { main: { game: "other", since: "2026-10-10T20:00:00.000Z" } },
+            suspended: { main: "2026-10-10T20:05:00.000Z" }
+          })
+        )
+
+        const pilot = yield* Atom.get(AutopilotState.autopilot).pipe(Effect.provide(AtomRegistry.layer))
+
+        assert.isTrue(pilot.on)
+        assert.isTrue(Option.isNone(pilot.main))
+        assert.isTrue(Option.isNone(pilot.ceiling))
+      })
   )
 
   it.effect("should log a promote with the matchup's name", () =>
@@ -287,10 +353,15 @@ function loggingRegistry() {
   return { registry, logs }
 }
 
+/** Lets the pilot take what the live stream last said. */
+const yielding = Effect.forEach(Array.from({ length: 20 }), () => Effect.yieldNow, { discard: true })
+
 /** Yields until a line of `logs` satisfies `predicate`. */
 function logged(logs: ReadonlyArray<string>, predicate: (line: string) => boolean) {
   return Effect.gen(function* () {
     for (let attempt = 0; attempt < 500 && !logs.some(predicate); attempt++) yield* Effect.yieldNow
+    if (!logs.some(predicate))
+      return yield* Effect.die(new Error(`No log line matched; logged: ${JSON.stringify(logs)}`))
   })
 }
 
