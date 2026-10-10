@@ -6,13 +6,13 @@ import { play, snapshot, team } from "@sportal/domain/TestGame"
 import { Deferred, Effect, Fiber, Stream } from "effect"
 import { Atom, AtomRegistry } from "effect/reactivity"
 import { vi } from "vitest"
+import * as TestWeb from "../TestWeb.ts"
 import * as LiveStream from "./LiveStream.ts"
-import { FakeEventSource, opened, slateMessage } from "./TestLiveStream.ts"
 
 describe("LiveStream.live", () => {
   beforeEach(() => {
-    FakeEventSource.opened = []
-    vi.stubGlobal("EventSource", FakeEventSource)
+    TestWeb.FakeEventSource.opened = []
+    vi.stubGlobal("EventSource", TestWeb.FakeEventSource)
   })
   afterEach(() => {
     vi.unstubAllGlobals()
@@ -20,7 +20,7 @@ describe("LiveStream.live", () => {
 
   it.effect("should be connecting before the stream first opens", () =>
     Effect.gen(function* () {
-      yield* opened
+      yield* TestWeb.opened
       const state = yield* Atom.get(LiveStream.live)
 
       assert.strictEqual(state.connection._tag, "Connecting")
@@ -29,10 +29,10 @@ describe("LiveStream.live", () => {
 
   it.effect("should stay connecting after an error before the stream first opens", () =>
     Effect.gen(function* () {
-      const source = yield* opened
+      const source = yield* TestWeb.opened
 
       source.onerror?.()
-      source.onmessage?.({ data: slateMessage([{ game: someGame, availability: [] }]) })
+      source.onmessage?.({ data: TestWeb.slateMessage([{ game: someGame, availability: [] }]) })
       const after = yield* until((state) => state.slate.games.length > 0)
 
       assert.strictEqual(after.connection._tag, "Connecting")
@@ -41,7 +41,7 @@ describe("LiveStream.live", () => {
 
   it.effect("should publish nothing for an error while connecting or already lost", () =>
     Effect.gen(function* () {
-      const source = yield* opened
+      const source = yield* TestWeb.opened
       const listening = yield* Deferred.make<void>()
       const published = yield* Atom.toStream(LiveStream.live).pipe(
         Stream.tap(() => Deferred.succeed(listening, undefined)),
@@ -55,7 +55,7 @@ describe("LiveStream.live", () => {
       source.onopen?.()
       source.onerror?.()
       source.onerror?.()
-      source.onmessage?.({ data: slateMessage([{ game: someGame, availability: [] }]) })
+      source.onmessage?.({ data: TestWeb.slateMessage([{ game: someGame, availability: [] }]) })
       const states = yield* Fiber.join(published)
 
       const connections = Array.from(states, (state) => state.connection._tag)
@@ -65,7 +65,7 @@ describe("LiveStream.live", () => {
 
   it.effect("should be connected once open", () =>
     Effect.gen(function* () {
-      const source = yield* opened
+      const source = yield* TestWeb.opened
 
       source.onopen?.()
 
@@ -75,7 +75,7 @@ describe("LiveStream.live", () => {
 
   it.effect("should be lost after an error once open", () =>
     Effect.gen(function* () {
-      const source = yield* opened
+      const source = yield* TestWeb.opened
       source.onopen?.()
       yield* until((state) => state.connection._tag === "Connected")
 
@@ -87,7 +87,7 @@ describe("LiveStream.live", () => {
 
   it.effect("should be connected again when it reopens after it was lost", () =>
     Effect.gen(function* () {
-      const source = yield* opened
+      const source = yield* TestWeb.opened
       source.onopen?.()
       yield* until((state) => state.connection._tag === "Connected")
       source.onerror?.()
@@ -102,9 +102,9 @@ describe("LiveStream.live", () => {
 
   it.effect("should replace the slate from its message", () =>
     Effect.gen(function* () {
-      const source = yield* opened
+      const source = yield* TestWeb.opened
 
-      source.onmessage?.({ data: slateMessage([{ game: someGame, availability: [] }]) })
+      source.onmessage?.({ data: TestWeb.slateMessage([{ game: someGame, availability: [] }]) })
       const state = yield* until((current) => current.slate.games.length > 0)
 
       assert.deepStrictEqual(
@@ -118,13 +118,13 @@ describe("LiveStream.live", () => {
     "should keep the plays each game of a slate message carries, each read back from its JSON as its case",
     () =>
       Effect.gen(function* () {
-        const source = yield* opened
+        const source = yield* TestWeb.opened
         const game = new Game({
           snapshot: snapshot({ id: GameId.make("401") }),
           plays: [play(), touchdown()]
         })
 
-        source.onmessage?.({ data: slateMessage([{ game, availability: [] }]) })
+        source.onmessage?.({ data: TestWeb.slateMessage([{ game, availability: [] }]) })
         const state = yield* until((current) => current.slate.games.length > 0)
 
         assert.deepStrictEqual(state.slate.games[0]?.plays, game.plays)
@@ -134,11 +134,11 @@ describe("LiveStream.live", () => {
 
   it.effect("should keep each game's availability from a slate message, by its id", () =>
     Effect.gen(function* () {
-      const source = yield* opened
+      const source = yield* TestWeb.opened
       const game = new Game({ snapshot: snapshot({ id: GameId.make("401") }), plays: [] })
       const availability: ReadonlyArray<ChannelAvailability> = [{ _tag: "NotCarried", why: "StreamingOnly" }]
 
-      source.onmessage?.({ data: slateMessage([{ game, availability }]) })
+      source.onmessage?.({ data: TestWeb.slateMessage([{ game, availability }]) })
       const state = yield* until((current) => current.slate.games.length > 0)
 
       assert.deepStrictEqual(state.availability[GameId.make("401")], availability)
@@ -147,13 +147,13 @@ describe("LiveStream.live", () => {
 
   it.effect("should skip a malformed message and keep reading", () =>
     Effect.gen(function* () {
-      const source = yield* opened
+      const source = yield* TestWeb.opened
       source.onopen?.()
       const before = yield* until((state) => state.connection._tag === "Connected")
 
       source.onmessage?.({ data: "{not json" })
       source.onmessage?.({ data: JSON.stringify({ _tag: "SlateChanged", slate: "nope", availability: {} }) })
-      source.onmessage?.({ data: slateMessage([{ game: someGame, availability: [] }]) })
+      source.onmessage?.({ data: TestWeb.slateMessage([{ game: someGame, availability: [] }]) })
       const after = yield* until((state) => state.slate.games.length > 0)
 
       assert.strictEqual(after.connection, before.connection)
@@ -162,7 +162,7 @@ describe("LiveStream.live", () => {
 
   it.effect("should open /api/live and close it when the registry goes", () =>
     Effect.gen(function* () {
-      const source = yield* Effect.scoped(Effect.provide(opened, AtomRegistry.layer))
+      const source = yield* Effect.scoped(Effect.provide(TestWeb.opened, AtomRegistry.layer))
 
       assert.strictEqual(source.url, "/api/live")
       assert.isTrue(source.closed)
