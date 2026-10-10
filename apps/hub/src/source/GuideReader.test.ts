@@ -1,13 +1,21 @@
 import { assert, describe, it } from "@effect/vitest"
 import type { ChannelAvailability } from "@sportal/domain/Channel"
-import { Network } from "@sportal/domain/Game"
+import { type GameSnapshot, Network } from "@sportal/domain/Game"
 import { broadcast, snapshot, team } from "@sportal/domain/TestGame"
 import { DateTime, Effect, Fiber, Layer, Option, Ref, Stream } from "effect"
 import { TestClock } from "effect/testing"
 import { GuideReader } from "./GuideReader.ts"
 import { Source } from "./Source.ts"
-import { availabilityNow } from "./TestSource.ts"
 import * as TestYouTubeTv from "./youtube-tv/TestYouTubeTv.ts"
+
+const now = Effect.gen(function* () {
+  const source = yield* Source
+  const now = yield* DateTime.now
+
+  const latest = yield* Stream.runHead(source.availability)
+  const availabilityOf = Option.getOrThrow(latest)
+  return (game: GameSnapshot) => availabilityOf(game, now)
+})
 
 const youTubeTv = Source.layerYouTubeTv.pipe(Layer.provideMerge(GuideReader.layerYouTubeTv))
 
@@ -50,7 +58,7 @@ describe("GuideReader.layerYouTubeTv", () => {
 
       yield* TestClock.adjust("44 minutes")
 
-      const availabilityOf = yield* availabilityNow
+      const availabilityOf = yield* now
       const signalled = yield* Ref.get(changes)
       assert.deepStrictEqual(availabilityOf(ohioStateAtIowa), [onNews3])
       assert.strictEqual(signalled, 0)
@@ -65,7 +73,7 @@ describe("GuideReader.layerYouTubeTv", () => {
 
       yield* TestClock.adjust("1 minute")
 
-      const availabilityOf = yield* availabilityNow
+      const availabilityOf = yield* now
       const signalled = yield* Ref.get(changes)
       assert.deepStrictEqual(availabilityOf(ohioStateAtIowa), [{ _tag: "NoGuide", source: "YouTube TV" }])
       assert.strictEqual(signalled, 1)
@@ -81,7 +89,7 @@ describe("GuideReader.layerYouTubeTv", () => {
 
       yield* TestClock.adjust("20 minutes")
 
-      const availabilityOf = yield* availabilityNow
+      const availabilityOf = yield* now
       assert.deepStrictEqual(availabilityOf(ohioStateAtIowa), [onNews3])
     }).pipe(Effect.provide(youTubeTv))
   )
@@ -95,7 +103,7 @@ describe("GuideReader.layerYouTubeTv", () => {
       yield* reader.readGuide("{}").pipe(Effect.flip)
       yield* TestClock.adjust("1 minute")
 
-      const availabilityOf = yield* availabilityNow
+      const availabilityOf = yield* now
       assert.deepStrictEqual(availabilityOf(ohioStateAtIowa), [{ _tag: "NoGuide", source: "YouTube TV" }])
     }).pipe(Effect.provide(youTubeTv))
   )
@@ -149,7 +157,7 @@ describe("GuideReader.layerYouTubeTv", () => {
       yield* reader.readGuide("{}").pipe(Effect.flip)
       yield* Effect.yieldNow
 
-      const availabilityOf = yield* availabilityNow
+      const availabilityOf = yield* now
       const signalled = yield* Ref.get(changes)
       assert.deepStrictEqual(availabilityOf(ohioStateAtIowa), [onNews3])
       assert.strictEqual(signalled, 0)
@@ -171,7 +179,7 @@ describe("GuideReader.layerYouTubeTv", () => {
 
       const error = yield* reader.readGuide(response).pipe(Effect.flip)
 
-      const availabilityOf = yield* availabilityNow
+      const availabilityOf = yield* now
       assert.strictEqual(error._tag, "GuideUnreadable")
       assert.strictEqual(availabilityOf(onEspn)[0]?._tag, "NoGuide")
     }).pipe(Effect.provide(youTubeTv))

@@ -1,13 +1,21 @@
 import { assert, describe, it } from "@effect/vitest"
 import type { ChannelAvailability } from "@sportal/domain/Channel"
-import { Network } from "@sportal/domain/Game"
+import { type GameSnapshot, Network } from "@sportal/domain/Game"
 import { broadcast, snapshot, team } from "@sportal/domain/TestGame"
-import { DateTime, Effect, Layer, Stream } from "effect"
+import { DateTime, Effect, Layer, Option, Stream } from "effect"
 import { TestClock } from "effect/testing"
 import { GuideReader } from "./GuideReader.ts"
 import { Source } from "./Source.ts"
-import { availabilityNow } from "./TestSource.ts"
 import * as TestYouTubeTv from "./youtube-tv/TestYouTubeTv.ts"
+
+const now = Effect.gen(function* () {
+  const source = yield* Source
+  const now = yield* DateTime.now
+
+  const latest = yield* Stream.runHead(source.availability)
+  const availabilityOf = Option.getOrThrow(latest)
+  return (game: GameSnapshot) => availabilityOf(game, now)
+})
 
 const youTubeTv = Source.layerYouTubeTv.pipe(Layer.provideMerge(GuideReader.layerYouTubeTv))
 const youTubeTvAndTwitch = Source.layerAll([Source.layerYouTubeTv, Source.layerTwitch]).pipe(
@@ -20,7 +28,7 @@ const onEspn = snapshot({ broadcasts: [broadcast(espn)] })
 describe("Source.layerYouTubeTv", () => {
   it.effect("should give no guide before any guide is read", () =>
     Effect.gen(function* () {
-      const availabilityOf = yield* availabilityNow
+      const availabilityOf = yield* now
 
       assert.deepStrictEqual(availabilityOf(onEspn), [{ _tag: "NoGuide", source: "YouTube TV" }])
     }).pipe(Effect.provide(youTubeTv))
@@ -29,7 +37,7 @@ describe("Source.layerYouTubeTv", () => {
   it.effect("should give streaming only for a Prime Video game the guide does not list", () =>
     Effect.gen(function* () {
       yield* TestYouTubeTv.readRecordedGuide
-      const availabilityOf = yield* availabilityNow
+      const availabilityOf = yield* now
 
       assert.deepStrictEqual(availabilityOf(primeVideoSoonAfterRecording), [
         { _tag: "NotCarried", why: "StreamingOnly" }
@@ -62,7 +70,7 @@ describe("Source.layerTwitch", () => {
     Effect.gen(function* () {
       yield* TestClock.setTime(DateTime.toEpochMillis(thursdayKickoff))
 
-      const availabilityOf = yield* availabilityNow
+      const availabilityOf = yield* now
 
       assert.deepStrictEqual(availabilityOf(thursdayNightStarted), [onPrimeVideo])
     }).pipe(Effect.provide(Source.layerTwitch))
@@ -94,7 +102,7 @@ describe("Source.layerAll", () => {
         Source.layerTest(() => carried("Twitch"))
       ])
 
-      const availabilityOf = yield* availabilityNow.pipe(Effect.provide(all))
+      const availabilityOf = yield* now.pipe(Effect.provide(all))
 
       assert.deepStrictEqual(availabilityOf(thursdayNight), [streamingOnly, carried("Twitch")])
     })
@@ -121,7 +129,7 @@ describe("Source.layerAll", () => {
       Effect.gen(function* () {
         yield* TestClock.setTime(DateTime.toEpochMillis(DateTime.add(thursdayKickoff, { minutes: 10 })))
 
-        const availabilityOf = yield* availabilityNow
+        const availabilityOf = yield* now
 
         assert.deepStrictEqual(availabilityOf(thursdayNightStarted), [
           { _tag: "NoGuide", source: "YouTube TV" },
@@ -135,7 +143,7 @@ describe("Source.layerAll", () => {
     () =>
       Effect.gen(function* () {
         yield* TestYouTubeTv.readRecordedGuide
-        const availabilityOf = yield* availabilityNow
+        const availabilityOf = yield* now
 
         assert.deepStrictEqual(
           availabilityOf(snapshot({ ...primeVideoSoonAfterRecording, status: "live" })),

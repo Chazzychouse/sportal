@@ -1,17 +1,26 @@
 import { assert, describe, it } from "@effect/vitest"
 import { ChannelAvailability } from "@sportal/domain/Channel"
+import type { GameSnapshot } from "@sportal/domain/Game"
 import type { LeagueId } from "@sportal/domain/League"
 import { broadcast, snapshot, team } from "@sportal/domain/TestGame"
-import { DateTime, Effect, Layer, Logger, Option } from "effect"
+import { DateTime, Effect, Layer, Logger, Option, Stream } from "effect"
 import { TestClock } from "effect/testing"
 import * as TestEspn from "../../provider/espn/TestEspn.ts"
 import * as TestProvider from "../../provider/TestProvider.ts"
 import { Guide } from "../Guide.ts"
 import { GuideReader } from "../GuideReader.ts"
 import { Source } from "../Source.ts"
-import * as TestSource from "../TestSource.ts"
 import * as TestYouTubeTv from "./TestYouTubeTv.ts"
 import * as YouTubeTvGuide from "./YouTubeTvGuide.ts"
+
+const now = Effect.gen(function* () {
+  const source = yield* Source
+  const now = yield* DateTime.now
+
+  const latest = yield* Stream.runHead(source.availability)
+  const availabilityOf = Option.getOrThrow(latest)
+  return (game: GameSnapshot) => availabilityOf(game, now)
+})
 
 const youTubeTv = Source.layerYouTubeTv.pipe(Layer.provideMerge(GuideReader.layerYouTubeTv))
 
@@ -177,7 +186,7 @@ describe("matching the 2026-10-03 slates to the guide read at 20:24:45Z", () => 
 /** Reads the recorded guide at the moment it was recorded, then sorts a league's slate by availability. */
 const tallied = Effect.fn("YouTubeTvGuide.test.tallied")(function* (league: LeagueId) {
   yield* TestYouTubeTv.readRecordedGuide
-  const availabilityOf = yield* TestSource.availabilityNow
+  const availabilityOf = yield* now
   const carried: Record<string, string> = {}
   const upcomingOn: Record<string, string> = {}
   const tally = { carried, upcomingOn, upcomingUnknown: 0, streamingOnly: 0, notInGuide: 0 }
