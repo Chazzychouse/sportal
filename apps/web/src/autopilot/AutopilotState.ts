@@ -8,10 +8,10 @@ import type { Screen, ScreenCommand } from "../screen/Screen.ts"
 import { logDefect, runtime } from "../WebRuntime.ts"
 import { Autopilot } from "./Autopilot.ts"
 
-/** What moves the autopilot: turned on or off, a command you sent and the Screen after it, or time passing. */
+/** What moves the autopilot: turned on or off, a command you sent, or time passing. */
 export type AutopilotInput = Data.TaggedEnum<{
   Toggled: object
-  Commanded: { readonly command: ScreenCommand; readonly screen: Screen }
+  Commanded: { readonly command: ScreenCommand }
   Ticked: object
 }>
 export const AutopilotInput = Data.taggedEnum<AutopilotInput>()
@@ -26,12 +26,12 @@ export const autopilot: Atom.Writable<Autopilot, AutopilotInput> = Atom.writable
     const now = DateTime.nowUnsafe()
     const current = ctx.get(kept)
     if (AutopilotInput.$is("Commanded")(input)) {
-      ctx.set(kept, current.manual(input.command, input.screen, now))
+      ctx.set(kept, current.manual(input.command, now))
       return
     }
     const screen = ctx.get(DisplayScreen.screen)
     const moved = AutopilotInput.$is("Toggled")(input) ? current.toggle(screen) : current
-    const [next, commands] = moved.step(screen, ctx.get(LiveStream.live).classifications, now)
+    const { next, commands } = moved.step(screen, ctx.get(LiveStream.live).classifications, now)
     Atom.batch(() => {
       if (next !== current) ctx.set(kept, next)
       for (const command of commands) ctx.set(DisplayScreen.screen, command)

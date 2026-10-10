@@ -87,12 +87,16 @@ export function soloed(games: ReadonlyArray<GameId | undefined>, tile: number) {
   return Result.getOrThrow(fill(games).apply({ _tag: "Solo", tile }, nowhere))
 }
 
-/** `moment` classified at 2026-10-10 20:00 UTC with `score`, all of it from closeness. */
-export function classified(moment: Moment, score = 50): Classification {
+/** `moment` classified since `since` (2026-10-10 20:00 UTC unless given) with `score`, all of it from closeness. */
+export function classified(
+  moment: Moment,
+  score = 50,
+  since: DateTime.Utc = DateTime.makeUnsafe("2026-10-10T20:00:00Z")
+): Classification {
   return new Classification({
     moment,
     score,
-    since: DateTime.makeUnsafe("2026-10-10T20:00:00Z"),
+    since,
     breakdown: { prior: 0, closeness: score, swing: 0, upset: 0, momentBonus: 0 }
   })
 }

@@ -107,12 +107,13 @@ Rewritten as a `Schema.Class`, kept under `sportal/autopilot`:
 - Fields: `on`; `main: Option<{ game, since }>`; `ceiling: Option<LayoutName>`; `suspended: { main, audio, layout }`.
   A value kept before this change decodes with no `main` and no `ceiling` (it fits nothing until toggled).
 - `toggle(screen)`: on takes the ceiling from the Screen; off is `Autopilot.off`.
-- `manual(command, after, now)`: the suspensions in the tables; a `SetLayout` sets the ceiling.
+- `manual(command, now)`: the suspensions in the tables; a `SetLayout` sets the ceiling. With no home, it needs no
+  Screen.
 - `step(screen, classifications, now): { next, commands, decision }`: fit, then the main tile, then the sound, each
   on the Screen after the commands before it. Off or soloed: itself, no commands, and a decision saying so.
-- `nextDeadline(now, screen, classifications)`: the main game's dwell end while a game in a higher rank waits, each
-  suspension's end, and `nextFit`.
-- `status(now, screen)`: the tagged union the toggle words.
+- `nextDeadline(now, screen, classifications)`: the main game's dwell end whenever there is one (a wake that changes
+  nothing is harmless), each suspension's end, and `nextFit`.
+- `status(now, screen, classifications)`: the tagged union the toggle words.
 - Gone: `home`, `away`, `follow`, `Move`, `mainCommands`, the sound-only chase.
 
 ### `Decision`

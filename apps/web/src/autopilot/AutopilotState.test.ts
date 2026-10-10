@@ -1,6 +1,7 @@
 import { afterEach, assert, beforeEach, describe, it } from "@effect/vitest"
 import { Classification } from "@sportal/domain/Classification"
 import { Game, GameId } from "@sportal/domain/Game"
+import type { Moment } from "@sportal/domain/Moment"
 import { snapshot } from "@sportal/domain/TestGame"
 import { Clock, DateTime, Duration, Effect, Layer } from "effect"
 import { Atom, AtomRegistry } from "effect/reactivity"
@@ -20,10 +21,19 @@ const other = GameId.make("other")
 const homeGame = Game.of(snapshot({ id: home, status: "live" }))
 const otherGame = Game.of(snapshot({ id: other, status: "live" }))
 
-/** A slate of the two games, both on FOX: home in plain live play, `other` classified as given. */
-function slate(otherClassification = TestWeb.classified({ _tag: "Live" })) {
+const timeout: Moment = {
+  _tag: "Break",
+  reason: "timeout",
+  expectedEnd: DateTime.makeUnsafe("2026-10-10T20:01:00Z")
+}
+
+/** A slate of the two games, both on FOX, each classified as given (plain live play unless given). */
+function slate(
+  otherClassification = TestWeb.classified({ _tag: "Live" }),
+  homeClassification = TestWeb.classified({ _tag: "Live" })
+) {
   return TestWeb.slateMessage([
-    { game: homeGame, availability: TestWeb.onFox(), classification: TestWeb.classified({ _tag: "Live" }) },
+    { game: homeGame, availability: TestWeb.onFox(), classification: homeClassification },
     { game: otherGame, availability: TestWeb.onFox(), classification: otherClassification }
   ])
 }
@@ -55,18 +65,20 @@ describe("AutopilotState", () => {
     vi.useRealTimers()
   })
 
-  it.effect("should promote a red zone on another tile as soon as it is turned on", () =>
-    Effect.gen(function* () {
-      yield* arranged(slate(TestWeb.classified(TestWeb.redZone)))
+  it.effect(
+    "should promote a live game as soon as it is turned on while the main tile's game is on a break",
+    () =>
+      Effect.gen(function* () {
+        yield* arranged(slate(TestWeb.classified({ _tag: "Live" }), TestWeb.classified(timeout)))
 
-      yield* Atom.set(AutopilotState.autopilot, AutopilotInput.Toggled())
+        yield* Atom.set(AutopilotState.autopilot, AutopilotInput.Toggled())
 
-      const screen = yield* Atom.get(DisplayScreen.screen)
-      assert.strictEqual(mainGame(screen), other)
-    }).pipe(Effect.provide(AtomRegistry.layer))
+        const screen = yield* Atom.get(DisplayScreen.screen)
+        assert.strictEqual(mainGame(screen), other)
+      }).pipe(Effect.provide(AtomRegistry.layer))
   )
 
-  it.effect("should promote a red zone a slate brings while it is on", () =>
+  it.effect("should promote a live game when a slate puts the main tile's game on a break", () =>
     Effect.gen(function* () {
       const { registry } = yield* TestWeb.withShell()
 
@@ -75,7 +87,7 @@ describe("AutopilotState", () => {
         yield* Atom.set(AutopilotState.autopilot, AutopilotInput.Toggled())
         yield* Atom.mount(AutopilotState.pilot)
 
-        source.onmessage?.({ data: slate(TestWeb.classified(TestWeb.redZone)) })
+        source.onmessage?.({ data: slate(TestWeb.classified({ _tag: "Live" }), TestWeb.classified(timeout)) })
         return yield* TestWeb.until(DisplayScreen.screen, (screen) => mainGame(screen) === other)
       }).pipe(Effect.scoped, Effect.provide(registry))
 
@@ -83,33 +95,33 @@ describe("AutopilotState", () => {
     })
   )
 
-  it.effect("should promote home again at the end of the dwell with no new slate", () =>
-    Effect.gen(function* () {
-      const start = DateTime.makeUnsafe("2026-10-10T20:00:00Z")
-      vi.useFakeTimers({ toFake: ["Date"] })
-      vi.setSystemTime(DateTime.toDate(start))
-      yield* TestClock.setTime(DateTime.toEpochMillis(start))
-      const clock = yield* Clock.Clock
-      const registry = TestWeb.registryOf(
-        Layer.mergeAll(
-          Shell.layerTest({ record: () => Effect.void }),
-          HubClient.layerTest(() => Effect.void),
-          Layer.succeed(Clock.Clock, clock)
+  it.effect(
+    "should promote a red zone once the main tile's game has held it for the dwell, with no new slate",
+    () =>
+      Effect.gen(function* () {
+        const start = DateTime.makeUnsafe("2026-10-10T20:00:00Z")
+        vi.useFakeTimers({ toFake: ["Date"] })
+        vi.setSystemTime(DateTime.toDate(start))
+        yield* TestClock.setTime(DateTime.toEpochMillis(start))
+        const clock = yield* Clock.Clock
+        const registry = TestWeb.registryOf(
+          Layer.mergeAll(
+            Shell.layerTest({ record: () => Effect.void }),
+            HubClient.layerTest(() => Effect.void),
+            Layer.succeed(Clock.Clock, clock)
+          )
         )
-      )
 
-      const screen = yield* Effect.gen(function* () {
-        const source = yield* arranged(slate(TestWeb.classified(TestWeb.redZone)))
-        yield* Atom.set(AutopilotState.autopilot, AutopilotInput.Toggled())
-        yield* Atom.mount(AutopilotState.pilot)
-        yield* passing(Duration.seconds(10))
-        source.onmessage?.({ data: slate() })
-        yield* passing(Duration.seconds(20))
-        return yield* TestWeb.until(DisplayScreen.screen, (screen) => mainGame(screen) === home)
-      }).pipe(Effect.scoped, Effect.provide(registry))
+        const screen = yield* Effect.gen(function* () {
+          yield* arranged(slate(TestWeb.classified(TestWeb.redZone)))
+          yield* Atom.set(AutopilotState.autopilot, AutopilotInput.Toggled())
+          yield* Atom.mount(AutopilotState.pilot)
+          yield* passing(Duration.seconds(30))
+          return yield* TestWeb.until(DisplayScreen.screen, (screen) => mainGame(screen) === other)
+        }).pipe(Effect.scoped, Effect.provide(registry))
 
-      assert.strictEqual(mainGame(screen), home)
-    })
+        assert.strictEqual(mainGame(screen), other)
+      })
   )
 
   it.effect("should shrink the layout once a finished game's hold runs out, with no new slate", () =>

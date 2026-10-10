@@ -28,22 +28,6 @@ function titleOf(autopilot: Autopilot, classifications = {}, screen: Screen = Sc
   return /title="([^"]*)"/.exec(markup)?.[1]
 }
 
-function awayOn(game: GameId) {
-  return new Autopilot({
-    ...Autopilot.off,
-    on: true,
-    away: { main: Option.some({ game, since: now }), audio: Option.none() }
-  })
-}
-
-function soundAwayOn(game: GameId) {
-  return new Autopilot({
-    ...Autopilot.off,
-    on: true,
-    away: { main: Option.none(), audio: Option.some({ game, since: now }) }
-  })
-}
-
 function classify(classification: ReturnType<typeof TestWeb.classified>) {
   return Record.fromEntries([[dal, classification] as const])
 }
@@ -63,28 +47,29 @@ describe("AutopilotToggle", () => {
     assert.strictEqual(title, "Autopilot off · A")
   })
 
-  it("should name the game it is away on and why", () => {
-    const title = titleOf(awayOn(dal), classify(TestWeb.classified(TestWeb.redZone)))
+  it("should name the game it follows and its rank", () => {
+    const on = Autopilot.off.toggle(Screen.initial)
 
-    assert.strictEqual(title, "Autopilot on: away on PHI @ DAL — red zone · A")
+    const title = titleOf(on, classify(TestWeb.classified(TestWeb.redZone)), TestWeb.withTiles(["dal"]))
+
+    assert.strictEqual(title, "Autopilot on: following PHI @ DAL — red zone · A")
   })
 
-  it("should say when only the sound is away", () => {
-    const title = titleOf(soundAwayOn(dal), classify(TestWeb.classified(TestWeb.redZone)))
+  it("should say nothing is live", () => {
+    const on = Autopilot.off.toggle(Screen.initial)
 
-    assert.strictEqual(title, "Autopilot on: sound away on PHI @ DAL — red zone · A")
+    const title = titleOf(on)
+
+    assert.strictEqual(title, "Autopilot on: following, nothing live · A")
   })
 
-  it("should say a live away game is chased because home is on a break", () => {
-    const title = titleOf(awayOn(dal), classify(TestWeb.classified({ _tag: "Live" })))
+  it("should say it fitted the layout", () => {
+    const on = new Autopilot({ ...Autopilot.off, on: true, ceiling: Option.some("Quad") })
+    const paired = new Screen({ ...TestWeb.withTiles(["dal"]), layout: "Pair" })
 
-    assert.strictEqual(title, "Autopilot on: away on PHI @ DAL — home is on a break · A")
-  })
+    const title = titleOf(on, classify(TestWeb.classified({ _tag: "Live" })), paired)
 
-  it("should give no reason for an away game with no classification", () => {
-    const title = titleOf(awayOn(dal))
-
-    assert.strictEqual(title, "Autopilot on: away on PHI @ DAL · A")
+    assert.strictEqual(title, "Autopilot on: following PHI @ DAL — live, fitted to 2 tiles · A")
   })
 
   it("should say for how long the main tile is yours", () => {
@@ -133,17 +118,5 @@ describe("AutopilotToggle", () => {
     const title = titleOf(yours)
 
     assert.strictEqual(title, "Autopilot on: layout yours for 2:41 · A")
-  })
-
-  it("should say how many tiles it fitted the layout to", () => {
-    const fitted = new Autopilot({
-      ...Autopilot.off,
-      on: true,
-      home: { main: Option.none(), audio: Option.none(), layout: Option.some("Quad") }
-    })
-
-    const title = titleOf(fitted, {}, new Screen({ ...Screen.initial, layout: "Pair" }))
-
-    assert.strictEqual(title, "Autopilot on: fitted to 2 tiles · A")
   })
 })
