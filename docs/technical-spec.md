@@ -220,7 +220,6 @@ sportal/
     │               ├── YouTubeTv.ts         Reads the guide the shell fetches, offers it while fresh
     │               ├── YouTubeTvGuide.ts    A guide response decoded to a complete, validated, stamped Guide
     │               ├── YouTubeTvPayload.ts  The guide response's wire shape
-    │               ├── TestYouTubeTv.ts     A recorded guide, and a response of one row, for tests
     │               └── fixtures/            Recorded real payloads
     │
     ├── web/
