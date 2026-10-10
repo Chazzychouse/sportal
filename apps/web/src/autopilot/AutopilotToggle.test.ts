@@ -26,6 +26,18 @@ function titleOf(autopilot: Autopilot, classifications = {}) {
   return /title="([^"]*)"/.exec(markup)?.[1]
 }
 
+function awayOn(game: GameId) {
+  return new Autopilot({
+    ...Autopilot.off,
+    on: true,
+    away: { main: Option.some({ game, since: now }), audio: Option.none() }
+  })
+}
+
+function classify(classification: ReturnType<typeof TestWeb.classified>) {
+  return Record.fromEntries([[dal, classification] as const])
+}
+
 describe("AutopilotToggle", () => {
   it("should say it is off", () => {
     const title = titleOf(Autopilot.off)
@@ -34,15 +46,21 @@ describe("AutopilotToggle", () => {
   })
 
   it("should name the game it is away on and why", () => {
-    const away = new Autopilot({
-      ...Autopilot.off,
-      on: true,
-      away: { main: Option.some({ game: dal, since: now }), audio: Option.none() }
-    })
-
-    const title = titleOf(away, Record.fromEntries([[dal, TestWeb.classified(TestWeb.redZone)] as const]))
+    const title = titleOf(awayOn(dal), classify(TestWeb.classified(TestWeb.redZone)))
 
     assert.strictEqual(title, "Autopilot on: away on PHI @ DAL — red zone · A")
+  })
+
+  it("should say a live away game is chased because home is on a break", () => {
+    const title = titleOf(awayOn(dal), classify(TestWeb.classified({ _tag: "Live" })))
+
+    assert.strictEqual(title, "Autopilot on: away on PHI @ DAL — home is on a break · A")
+  })
+
+  it("should give no reason for an away game with no classification", () => {
+    const title = titleOf(awayOn(dal))
+
+    assert.strictEqual(title, "Autopilot on: away on PHI @ DAL · A")
   })
 
   it("should say for how long the main tile is yours", () => {
@@ -55,5 +73,17 @@ describe("AutopilotToggle", () => {
     const title = titleOf(yours)
 
     assert.strictEqual(title, "Autopilot on: main tile yours for 2:41 · A")
+  })
+
+  it("should say for how long the sound is yours", () => {
+    const yours = new Autopilot({
+      ...Autopilot.off,
+      on: true,
+      suspended: { main: Option.none(), audio: Option.some(DateTime.addDuration(now, Duration.seconds(75))) }
+    })
+
+    const title = titleOf(yours)
+
+    assert.strictEqual(title, "Autopilot on: sound yours for 1:15 · A")
   })
 })
