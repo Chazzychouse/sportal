@@ -24,8 +24,10 @@ the Screen. After every screen command you send, home becomes what the Screen th
 A game is **away-worthy** when its moment is `ScoringThreat` or `CrunchTime`. A `Break` is never away-worthy, even
 with a `during`; `BigPlay` is not either.
 
-Of several games, the **best** is the one whose moment comes first by `Moment.precedence`, then the highest score;
-ties go to the lower tile index.
+Of several games, the **best** is the one whose moment is most worth chasing (a red zone, then crunch time, then a big
+play, then plain live play), then the highest score; ties go to the lower tile index. "Comes first" below means by
+that order. (`Moment.precedence` puts a big play first, for commentary; the autopilot does not chase a play already
+over.)
 
 ### The main tile
 
@@ -34,7 +36,8 @@ occupied tiles, on screen and benched:
 
 - **Home live** (`Live`, `BigPlay`, `ScoringThreat`, `CrunchTime`): if home is itself away-worthy, the target is home.
   Otherwise it is the best away-worthy game other than home, if any, else home.
-- **Home stopped** (`Break` or `Final`), or no home game on any tile: the best game whose moment is live (any of the
+- **Home stopped** (`Break` or `Final`), or no home game on any tile (a home game with no classification, or
+  upcoming, counts as live but never away-worthy): the best game whose moment is live (any of the
   four above) other than home, if any, else home. This is "no commercials": a stopped home game is left even for a
   plain `Live` game.
 
@@ -42,7 +45,7 @@ While a game is **away** (in the main tile because the autopilot put it there):
 
 - It holds the main tile for at least `dwell` (30 s) from when it was promoted, unless its moment becomes `Break` or
   `Final` or it is on no tile.
-- After that, it is replaced only by a target whose moment comes strictly first by precedence, or when it stops being
+- After that, it is replaced only by a target whose moment comes strictly first, or when it stops being
   a target for its own sake: no longer away-worthy (home live) or no longer live (home stopped). A red zone never
   hands off to another red zone.
 - When it stops being a target, the autopilot goes to the new target; when that is home, this is the **revert**:
@@ -55,7 +58,8 @@ Going away is `Promote` of the target's tile, which also moves the sound.
 
 While the main tile is suspended (you chose the main game) and the sound is not, the autopilot runs the same rules
 for the sound alone: over on-screen tiles only (sound cannot be on a benched game), against home's sound game, with
-`FocusAudio` in place of `Promote`, and the same dwell and precedence. Otherwise the sound follows the main tile.
+`FocusAudio` in place of `Promote`, and the same dwell and order. Otherwise the sound follows the main tile; while
+the sound is yours, a promote is followed by a `FocusAudio` that puts it back on your game.
 
 ### Manual input
 
