@@ -25,7 +25,7 @@ A service (`sportal/hub/Displays`) holding in memory, per Display id, the latest
 a queue of inputs waiting for that Display.
 
 - `connect(id)`: the Display's input stream. Opening it registers the Display; closing it removes the Display and its
-  report.
+  report. It registers the Display when the request arrives, before the stream starts, so a report sent once the stream is open finds it.
 - `report(id, json)`: keeps the report and passes it to the Display's followers. Fails with `DisplayOffline` when no
   input stream for `id` is open.
 - `follow(id)`: a stream of `Reported { report }` and `Offline`: the current state, then each change. `Offline` while
@@ -65,9 +65,11 @@ shell this is the shell's own storage, so the desk and the TV each have their ow
 A `Schema.Class` (`sportal/RemoteReport`): what a Display tells its remotes.
 
 - `screen`: the `Screen`;
-- `autopilot`: whether the autopilot is on;
-- `prompts`: whether prompts are on;
+- `autopilot`: the Display's Autopilot;
+- `prompts`: the Display's Prompts;
 - `prompt`: `Option<Prompt>`.
+
+Whole, so the Remote shows the same toggles, tooltips included.
 
 `Prompt` becomes a `Schema.Class` now that it crosses the wire; its fields, `commands()` and `words(nameOf)` are
 unchanged. The slate is not in the report: the Remote has the live stream.
@@ -89,7 +91,7 @@ The Display's link to its remotes, an atom the Display mounts beside `inputs`, `
 2. Once it is open, `PUT` the current report, then each report that differs from the last one sent
    (`Schema.toEquivalence(RemoteReport)`).
 3. Decode each input and apply it as above. One that does not decode is logged as a warning and dropped.
-4. When the stream drops, reconnect on the live stream's schedule; the Hub forgot the report, so step 2 sends it again.
+4. When the stream drops, the browser's `EventSource` reconnects by itself, as the live stream's does; each time it opens again, step 2 sends the report again, since the Hub forgot it.
 
 ### Join Remote
 
