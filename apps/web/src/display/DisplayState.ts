@@ -4,6 +4,8 @@ import { AsyncResult, Atom } from "effect/reactivity"
 import * as AutopilotState from "../autopilot/AutopilotState.ts"
 import { AutopilotInput } from "../autopilot/AutopilotState.ts"
 import * as LiveStream from "../hub/LiveStream.ts"
+import * as PromptsState from "../prompts/PromptsState.ts"
+import { PromptInput } from "../prompts/PromptsState.ts"
 import * as DisplayScreen from "../screen/DisplayScreen.ts"
 import { Shell } from "../shell/Shell.ts"
 import { StripCard } from "../slate/StripCard.ts"
@@ -56,7 +58,7 @@ export const toggleFullScreen = runtime.fn((_: undefined, get) =>
 
 /**
  * The hotkeys and video presses the Shell reports, as this Display's inputs; the `FullScreen` hotkey toggles full
- * screen and `ToggleAutopilot` the autopilot. Mounted once, by the Display.
+ * screen and `ToggleAutopilot` the autopilot, and the prompt keys the prompts. Mounted once, by the Display.
  */
 export const inputs = runtime.atom((get) =>
   Effect.gen(function* () {
@@ -71,6 +73,12 @@ export const inputs = runtime.atom((get) =>
             get.set(toggleFullScreen, undefined)
           else if (DisplayInput.$is("Pressed")(input) && Hotkey.guards.ToggleAutopilot(input.hotkey))
             get.set(AutopilotState.autopilot, AutopilotInput.Toggled())
+          else if (DisplayInput.$is("Pressed")(input) && Hotkey.guards.TogglePrompts(input.hotkey))
+            get.set(PromptsState.prompts, PromptInput.Toggled())
+          else if (DisplayInput.$is("Pressed")(input) && Hotkey.guards.AcceptPrompt(input.hotkey))
+            get.set(PromptsState.prompts, PromptInput.Accepted())
+          else if (DisplayInput.$is("Pressed")(input) && Hotkey.guards.DismissPrompt(input.hotkey))
+            get.set(PromptsState.prompts, PromptInput.Dismissed())
           else get.set(display, input)
         })
       )
