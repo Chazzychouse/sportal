@@ -30,19 +30,24 @@ export const followed = Atom.family((id: DisplayId) =>
 
 /** Sends one input to the Display `id`; a Display that is offline counts on `offline`. */
 export const send = Atom.family((id: DisplayId) =>
-  runtime.fn((input: RemoteInput, get) =>
-    Effect.gen(function* () {
-      const hub = yield* HubClient
-      const json = yield* encodeInput(input)
+  runtime
+    .fn(
+      (input: RemoteInput, get) =>
+        Effect.gen(function* () {
+          const hub = yield* HubClient
+          const json = yield* encodeInput(input)
 
-      yield* hub.send(id, json)
-    }).pipe(
-      Effect.catchTags({
-        DisplayOffline: () => Effect.sync(() => get.registry.update(offline, (count) => count + 1)),
-        HttpClientError: (error) => Effect.logWarning("Could not reach the Hub", error)
-      })
+          yield* hub.send(id, json)
+        }).pipe(
+          Effect.catchTags({
+            DisplayOffline: () => Effect.sync(() => get.registry.update(offline, (count) => count + 1)),
+            HttpClientError: (error) => Effect.logWarning("Could not reach the Hub", error)
+          })
+        ),
+      // Each input stands alone: a second tap must not cancel the first one's request.
+      { concurrent: true }
     )
-  )
+    .pipe(Atom.keepAlive)
 )
 
 /** How many inputs the Hub refused because the Display was offline; the view toasts on each. */

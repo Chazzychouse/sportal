@@ -1,14 +1,17 @@
 import { afterEach, assert, beforeEach, describe, it } from "@effect/vitest"
 import { DisplayId } from "@sportal/api/DisplayId"
+import { DisplayOffline } from "@sportal/api/DisplayOffline"
 import { RemoteMessageJson } from "@sportal/api/RemoteMessage"
 import { GameId } from "@sportal/domain/Game"
-import { DateTime, Effect, Option, Queue, Result, Schema, Stream } from "effect"
+import { DateTime, Deferred, Effect, Layer, Option, Queue, Result, Schema, Stream } from "effect"
 import { Atom } from "effect/reactivity"
 import { vi } from "vitest"
 import { Autopilot } from "../autopilot/Autopilot.ts"
 import { DisplayInput } from "../display/Display.ts"
+import { HubClient } from "../hub/HubClient.ts"
 import { Prompt } from "../prompts/Prompt.ts"
 import { Prompts } from "../prompts/Prompts.ts"
+import { Shell } from "../shell/Shell.ts"
 import { StripCard } from "../slate/StripCard.ts"
 import * as TestWeb from "../TestWeb.ts"
 import { RemoteReport } from "./RemoteReport.ts"
@@ -69,9 +72,11 @@ describe("RemoteState", () => {
         const source = yield* TestWeb.openedAt("/api/displays/desk")
         source.onmessage?.({ data: reported(reportOf(Option.none())) })
         yield* TestWeb.until(RemoteState.followed(desk), (each) => each._tag === "Reported")
-        const card = { id: GameId.make("live") }
 
-        yield* Atom.set(RemoteState.display(desk), DisplayInput.Dropped({ card: cardFor(card.id) }))
+        yield* Atom.set(
+          RemoteState.display(desk),
+          DisplayInput.Dropped({ card: cardFor(GameId.make("live")) })
+        )
         return yield* Queue.take(calls).pipe(Effect.repeat({ until: (call) => call._tag === "Send" }))
       }).pipe(Effect.scoped, Effect.provide(registry))
 
@@ -79,6 +84,58 @@ describe("RemoteState", () => {
         _tag: "Commanded",
         command: { _tag: "Assign", tile: 0, game: "live" }
       })
+    })
+  )
+
+  it.effect("should count an input the Hub refuses as the Display offline", () =>
+    Effect.gen(function* () {
+      const registry = registryWith({ send: () => Effect.fail(new DisplayOffline()) })
+
+      const count = yield* Effect.gen(function* () {
+        yield* Atom.set(RemoteState.send(desk), toggle)
+
+        return yield* TestWeb.until(RemoteState.offline, (count) => count > 0)
+      }).pipe(Effect.scoped, Effect.provide(registry))
+
+      assert.strictEqual(count, 1)
+    })
+  )
+
+  it.effect("should finish a send with nothing mounted", () =>
+    Effect.gen(function* () {
+      const gate = yield* Deferred.make<void>()
+      const done = yield* Queue.unbounded<Schema.Json>()
+      const registry = registryWith({ send: (_, input) => heldUntil(gate, done, input) })
+
+      const finished = yield* Effect.gen(function* () {
+        yield* Atom.set(RemoteState.send(desk), toggle)
+        yield* afterTasks
+
+        yield* Deferred.succeed(gate, undefined)
+        return yield* Queue.take(done)
+      }).pipe(Effect.scoped, Effect.provide(registry))
+
+      assert.deepStrictEqual(finished, toggle)
+    })
+  )
+
+  it.effect("should finish a send when another follows it", () =>
+    Effect.gen(function* () {
+      const gate = yield* Deferred.make<void>()
+      const done = yield* Queue.unbounded<Schema.Json>()
+      const registry = registryWith({ send: (_, input) => heldUntil(gate, done, input) })
+
+      const finished = yield* Effect.gen(function* () {
+        yield* Atom.mount(RemoteState.send(desk))
+        yield* Atom.set(RemoteState.send(desk), toggle)
+        yield* Atom.set(RemoteState.send(desk), toggle)
+        yield* afterTasks
+
+        yield* Deferred.succeed(gate, undefined)
+        return yield* takeN(done, 2)
+      }).pipe(Effect.scoped, Effect.provide(registry))
+
+      assert.strictEqual(finished.length, 2)
     })
   )
 
@@ -104,6 +161,23 @@ describe("RemoteState", () => {
     })
   )
 })
+
+const toggle = { _tag: "Pressed", hotkey: { _tag: "TogglePrompts" } } as const
+
+/** A registry whose Hub client is `fakes`. */
+function registryWith(fakes: Parameters<typeof HubClient.layerTest>[0]) {
+  return TestWeb.registryOf(
+    Layer.merge(Shell.layerTest({ record: () => Effect.void }), HubClient.layerTest(fakes))
+  )
+}
+
+/** A send held until `gate` opens, then recorded in `done`. */
+function heldUntil(gate: Deferred.Deferred<void>, done: Queue.Queue<Schema.Json>, input: Schema.Json) {
+  return Deferred.await(gate).pipe(Effect.andThen(Queue.offer(done, input)), Effect.asVoid)
+}
+
+/** Waits past the registry's next scheduled tasks, where it removes an atom nothing holds. */
+const afterTasks = Effect.promise(() => new Promise((resolve) => setTimeout(resolve, 10)))
 
 const since = DateTime.makeUnsafe("2026-10-10T20:00:00Z")
 
