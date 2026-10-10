@@ -1,46 +1,50 @@
+import type { GuideUnreadable } from "@sportal/api/GuideUnreadable"
 import type { ChannelAvailability } from "@sportal/domain/Channel"
 import { type GameSnapshot, Network } from "@sportal/domain/Game"
-import { Context, DateTime, Effect, Layer, Option, Stream } from "effect"
+import { Context, DateTime, Duration, Effect, Layer, Option, Ref } from "effect"
 import { ChannelId, Guide } from "./Guide.ts"
-import { YouTubeTv } from "./youtube-tv/YouTubeTv.ts"
+import * as YouTubeTvGuide from "./youtube-tv/YouTubeTvGuide.ts"
 
 /** A way to obtain video for a game. It says whether and where each game can be shown, as of a time. */
 export class Source extends Context.Service<
   Source,
   {
-    /**
-     * Whether and where this source can show a game at a time: one availability from each source it stands for, in
-     * order. As it is, then again each time what the source knows changes.
-     */
-    readonly availability: Stream.Stream<
+    readonly availability: Effect.Effect<
       (game: GameSnapshot, now: DateTime.Utc) => ReadonlyArray<ChannelAvailability>
     >
+    readGuide(response: string): Effect.Effect<void, GuideUnreadable>
   }
 >()("sportal/hub/source/Source") {
-  /** YouTube TV: from the latest guide it keeps while it is fresh; otherwise no guide. */
-  static readonly layerYouTubeTv: Layer.Layer<Source, never, YouTubeTv> = Layer.effect(
+  static readonly layerYouTubeTv: Layer.Layer<Source> = Layer.effect(
     Source,
     Effect.gen(function* () {
-      const youTubeTv = yield* YouTubeTv
+      const latest = yield* Ref.make(Option.none<Guide>())
 
-      const availability = youTubeTv.guide.pipe(
-        Stream.map((latest) => (game: GameSnapshot, now: DateTime.Utc) => [
-          Option.match(latest, {
-            onNone: (): ChannelAvailability => ({ _tag: "NoGuide", source: YouTubeTv.source }),
-            onSome: (guide) => guide.availabilityOf(game, now)
-          })
-        ])
+      const readGuide = Effect.fn("Source.readGuide")(function* (response: string) {
+        const read = yield* YouTubeTvGuide.decode(response)
+        yield* Ref.set(latest, Option.some(read))
+      })
+
+      const availability = Ref.get(latest).pipe(
+        Effect.map((latest) => (game: GameSnapshot, now: DateTime.Utc) => {
+          const fresh = Option.filter(latest, (guide) => isFresh(guide, now))
+          return [
+            Option.match(fresh, {
+              onNone: (): ChannelAvailability => ({ _tag: "NoGuide", source: "YouTube TV" }),
+              onSome: (guide) => guide.availabilityOf(game, now)
+            })
+          ]
+        })
       )
 
-      return Source.of({ availability })
+      return Source.of({ availability, readGuide })
     })
   )
 
-  /** Twitch: its lineup, which never changes. */
   static readonly layerTwitch: Layer.Layer<Source> = Layer.succeed(
     Source,
     Source.of({
-      availability: Stream.make((game: GameSnapshot, now: DateTime.Utc) => [
+      availability: Effect.succeed((game: GameSnapshot, now: DateTime.Utc) => [
         new Guide({
           source: "Twitch",
           readAt: DateTime.makeUnsafe(0),
@@ -57,14 +61,11 @@ export class Source extends Context.Service<
           ],
           airings: []
         }).availabilityOf(game, now)
-      ])
+      ]),
+      readGuide: () => Effect.void
     })
   )
 
-  /**
-   * Every source given, as one: for each game every source's availability, in the order given, again whenever any of
-   * them changes.
-   */
   static layerAll<R>(sources: ReadonlyArray<Layer.Layer<Source, never, R>>): Layer.Layer<Source, never, R> {
     return Layer.effect(
       Source,
@@ -73,27 +74,34 @@ export class Source extends Context.Service<
           Layer.build(source).pipe(Effect.map((context) => Context.get(context, Source)))
         )
 
-        const availability = Stream.zipLatestAll(...each.map((source) => source.availability)).pipe(
-          Stream.map(
+        const availability = Effect.forEach(each, (source) => source.availability).pipe(
+          Effect.map(
             (availabilities) => (game: GameSnapshot, now: DateTime.Utc) =>
               availabilities.flatMap((availabilityOf) => availabilityOf(game, now))
           )
         )
+        const readGuide = (response: string) =>
+          Effect.forEach(each, (source) => source.readGuide(response), { discard: true })
 
-        return Source.of({ availability })
+        return Source.of({ availability, readGuide })
       })
     )
   }
 
-  /** A source giving `availabilityOf` every game, and again each time `again` emits. */
-  static layerTest(
-    availabilityOf: (game: GameSnapshot) => ChannelAvailability,
-    again: Stream.Stream<void> = Stream.empty
-  ): Layer.Layer<Source> {
-    const value = (game: GameSnapshot) => [availabilityOf(game)]
+  static layerTest(availabilityOf: (game: GameSnapshot) => ChannelAvailability): Layer.Layer<Source> {
     return Layer.succeed(
       Source,
-      Source.of({ availability: Stream.concat(Stream.make(value), again.pipe(Stream.as(value))) })
+      Source.of({
+        availability: Effect.succeed((game: GameSnapshot) => [availabilityOf(game)]),
+        readGuide: () => Effect.void
+      })
     )
   }
+}
+
+/** A guide answers for 45 minutes after its reading; the shell reads one every 5 minutes while it runs. */
+const staleAfter = Duration.minutes(45)
+
+function isFresh(guide: Guide, now: DateTime.Utc): boolean {
+  return DateTime.isLessThan(now, DateTime.addDuration(guide.readAt, staleAfter))
 }

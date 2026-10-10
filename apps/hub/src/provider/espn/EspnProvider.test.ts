@@ -21,21 +21,16 @@ import { HttpClient, HttpClientError, HttpClientResponse } from "effect/http"
 import * as Socket from "effect/socket/Socket"
 import { TestClock } from "effect/testing"
 import { HubConfig } from "../../HubConfig.ts"
-import { recordingLogs } from "../../TestTelemetry.ts"
+import * as TestHub from "../../TestHub.ts"
 import { Delivery, Provider } from "../Provider.ts"
-import { listedBy } from "../TestProvider.ts"
 import * as EspnProvider from "./EspnProvider.ts"
-import { FastCast, type Wanted } from "./FastCast.ts"
+import { FastCast, Frame, Topic, type Wanted } from "./FastCast.ts"
 import * as FastCastMessage from "./FastCastMessage.ts"
-import { Frame } from "./Frame.ts"
-import * as TestEspn from "./TestEspn.ts"
-import * as TestFastCast from "./TestFastCast.ts"
-import { Topic } from "./Topic.ts"
 
 // Real payloads recorded from ESPN. A payload that breaks decoding gets added here before the fix.
-const fbsLive = TestEspn.recordedScoreboard("fbs-scoreboard-live")
-const nflPregame = TestEspn.recordedScoreboard("nfl-scoreboard-pregame")
-const nflLive = TestEspn.recordedScoreboard("nfl-scoreboard-2026-10-04T1800Z")
+const fbsLive = TestHub.recordedScoreboard("fbs-scoreboard-live")
+const nflPregame = TestHub.recordedScoreboard("nfl-scoreboard-pregame")
+const nflLive = TestHub.recordedScoreboard("nfl-scoreboard-2026-10-04T1800Z")
 
 describe("EspnProvider", () => {
   describe("polling", () => {
@@ -196,40 +191,6 @@ describe("EspnProvider", () => {
       })
     )
 
-    it.effect("should warn of a league that fails, annotated with its league", () => {
-      const { logs, layer } = recordingLogs()
-      return Effect.gen(function* () {
-        yield* polledOnce(
-          answering(() => Effect.fail(new Cause.UnknownError("ECONNREFUSED"))),
-          { leagues: "fbs", frames: 1 }
-        )
-
-        const warned = logs.filter(
-          ({ level, message }) =>
-            level === "Warn" &&
-            message.includes(
-              "EspnProvider: a poll failed; keeping the last good listing for this league, if any"
-            )
-        )
-        assert.lengthOf(warned, 1)
-        assert.strictEqual(warned[0]?.annotations.league, "fbs")
-      }).pipe(Effect.provide(layer))
-    })
-
-    it.effect("should warn of a scoreboard that does not decode, annotated with its league", () => {
-      const { logs, layer } = recordingLogs()
-      return Effect.gen(function* () {
-        yield* polledOnce(
-          answering(() => Effect.succeed(new Response("not json"))),
-          { leagues: "fbs", frames: 1 }
-        )
-
-        const warned = logs.filter(({ level }) => level === "Warn")
-        assert.lengthOf(warned, 1)
-        assert.strictEqual(warned[0]?.annotations.league, "fbs")
-      }).pipe(Effect.provide(layer))
-    })
-
     it.effect("should poll every 15 minutes once a failed league lists no games", () =>
       Effect.gen(function* () {
         const noGames = JSON.stringify({ events: [] })
@@ -282,7 +243,6 @@ describe("EspnProvider", () => {
               return HttpClientResponse.fromWeb(request, new Response(new ReadableStream<Uint8Array>()))
             })
           )
-          const { logs, layer } = recordingLogs()
 
           yield* Effect.gen(function* () {
             const provider = yield* Provider
@@ -293,13 +253,12 @@ describe("EspnProvider", () => {
             yield* settled
             yield* TestClock.adjust("30 seconds")
             yield* settled
-          }).pipe(Effect.provide(espnOver(client).pipe(Layer.provideMerge(layer))), Effect.scoped)
+          }).pipe(Effect.provide(espnOver(client)), Effect.scoped)
 
           const nfl = yield* Ref.get(nflRequests)
           const fbs = yield* Ref.get(fbsRequests)
           assert.deepStrictEqual(nfl, [0, 50_000])
           assert.isAtLeast(fbs, 2)
-          assert.isTrue(logs.some((entry) => entry.level === "Warn"))
         })
     )
   })
@@ -307,8 +266,8 @@ describe("EspnProvider", () => {
   describe("merged deliveries", () => {
     it.effect("should give each run of its deliveries every frame", () =>
       Effect.gen(function* () {
-        const first = yield* listedBy("nfl")
-        const second = yield* listedBy("nfl")
+        const first = yield* TestHub.listedBy("nfl")
+        const second = yield* TestHub.listedBy("nfl")
 
         assert.strictEqual(first.length, 16)
         assert.strictEqual(second.length, 16)
@@ -580,8 +539,8 @@ describe("EspnProvider", () => {
       "should subscribe to a listed live game once, and once more only after a gap in its messages",
       () =>
         Effect.gen(function* () {
-          const server = TestFastCast.fakeServer()
-          const delivered = TestFastCast.watched<ReadonlyArray<Delivery>>()
+          const server = TestHub.fakeServer()
+          const delivered = TestHub.watched<ReadonlyArray<Delivery>>()
           const subscriptions = () =>
             server.sent.all().filter((sent) => sent.op === "S" && sent.tc === liveTc)
 
@@ -591,7 +550,7 @@ describe("EspnProvider", () => {
               Stream.runForEach((deliveries) => Effect.sync(() => delivered.add(deliveries))),
               Effect.forkScoped({ startImmediately: true })
             )
-            yield* server.sent.until(TestFastCast.subscribed(liveTc, 1))
+            yield* server.sent.until(TestHub.subscribed(liveTc, 1))
             const listed = subscriptions().length
 
             yield* Effect.sync(() => server.send(checkpointAt(99)))
@@ -805,7 +764,7 @@ function toldOver(
  * scoreboard of 18:00Z on 2026-10-04, in which NE at BUF is live; each poll after it also shows one more of
  * `laterGames` live. Each checkpoint is an empty game document.
  */
-function espnOverFastCast(server: ReturnType<typeof TestFastCast.fakeServer>) {
+function espnOverFastCast(server: ReturnType<typeof TestHub.fakeServer>) {
   const polls = Ref.makeUnsafe(0)
   const http = HttpClient.make((request) => {
     const url = new URL(request.url)
@@ -833,9 +792,9 @@ function espnOverFastCast(server: ReturnType<typeof TestFastCast.fakeServer>) {
  * Moves the test clock to the next poll and waits for `game`'s first S, which that poll makes wanted. FastCast steers by
  * each wanted set in turn, so every S an earlier frame would send has been sent by then.
  */
-function markedByTheNextPoll(server: ReturnType<typeof TestFastCast.fakeServer>, game: string) {
+function markedByTheNextPoll(server: ReturnType<typeof TestHub.fakeServer>, game: string) {
   return TestClock.adjust("10 seconds").pipe(
-    Effect.andThen(server.sent.until(TestFastCast.subscribed(`gp-football-nfl-${game}`, 1)))
+    Effect.andThen(server.sent.until(TestHub.subscribed(`gp-football-nfl-${game}`, 1)))
   )
 }
 

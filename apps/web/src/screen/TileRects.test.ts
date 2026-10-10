@@ -1,8 +1,8 @@
 import { assert, describe, it } from "@effect/vitest"
 import type { GameId } from "@sportal/domain/Game"
 import { Result } from "effect"
+import * as TestWeb from "../TestWeb.ts"
 import { Screen } from "./Screen.ts"
-import { bama, fill, irish, nowhere, soloed } from "./TestScreen.ts"
 import { coveredGames, placements, tileRects } from "./TileRects.ts"
 
 describe("tileRects", () => {
@@ -15,7 +15,7 @@ describe("tileRects", () => {
 
   it("should give neighbouring tiles the same gap when the split falls between pixels", () => {
     const screen = Result.getOrThrow(
-      Screen.initial.apply({ _tag: "SetSplit", split: { x: 0.3333, y: 0.5 } }, nowhere)
+      Screen.initial.apply({ _tag: "SetSplit", split: { x: 0.3333, y: 0.5 } }, TestWeb.nowhere)
     )
 
     const [main, right] = tileRects(screen, { width: 1001, height: 600 })
@@ -25,7 +25,7 @@ describe("tileRects", () => {
   })
 
   it("should give a soloed game the whole area and the others nothing", () => {
-    const screen = soloed([bama, irish], 1)
+    const screen = TestWeb.soloed([TestWeb.bama, TestWeb.irish], 1)
 
     const rects = tileRects(screen, area)
 
@@ -36,17 +36,17 @@ describe("tileRects", () => {
 
 describe("placements", () => {
   it("should place a stream tile's video below its header, offset by the Screen area's position", () => {
-    const screen = fill([bama, irish])
+    const screen = TestWeb.fill([TestWeb.bama, TestWeb.irish])
 
     const [placement] = placed(screen, undefined, { x: 352, y: 48 })
 
     assert.deepStrictEqual(placement?.bounds, { x: 355, y: 79, width: 794, height: 416 })
-    assert.strictEqual(placement?.game, bama)
+    assert.strictEqual(placement?.game, TestWeb.bama)
     assert.isFalse(placement?.muted)
   })
 
   it("should mute every stream but the one with audio focus", () => {
-    const screen = fill([bama, irish])
+    const screen = TestWeb.fill([TestWeb.bama, TestWeb.irish])
 
     const muted = placed(screen).map((placement) => placement.muted)
 
@@ -54,15 +54,15 @@ describe("placements", () => {
   })
 
   it("should give the mouse only to the interacting game's stream", () => {
-    const screen = fill([bama, irish])
+    const screen = TestWeb.fill([TestWeb.bama, TestWeb.irish])
 
-    const interactive = placed(screen, irish).map((placement) => placement.interactive)
+    const interactive = placed(screen, TestWeb.irish).map((placement) => placement.interactive)
 
     assert.deepStrictEqual(interactive, [false, true])
   })
 
   it("should give the mouse to no stream while no game is interacting", () => {
-    const screen = fill([bama, irish])
+    const screen = TestWeb.fill([TestWeb.bama, TestWeb.irish])
 
     const interactive = placed(screen).map((placement) => placement.interactive)
 
@@ -70,11 +70,11 @@ describe("placements", () => {
   })
 
   it("should place nothing for a tile with no size", () => {
-    const screen = soloed([bama, irish], 1)
+    const screen = TestWeb.soloed([TestWeb.bama, TestWeb.irish], 1)
 
     const games = placed(screen).map((placement) => placement.game)
 
-    assert.deepStrictEqual(games, [irish])
+    assert.deepStrictEqual(games, [TestWeb.irish])
   })
 })
 
@@ -83,18 +83,18 @@ describe("coveredGames", () => {
     { overlay: { x: 250, y: 150, width: 200, height: 200 }, shares: "a corner" },
     { overlay: { x: 0, y: 0, width: 1000, height: 1000 }, shares: "all" }
   ])("should cover a video an overlay shares area with: $shares", ({ overlay }) => {
-    const video = videoOf(bama)
+    const video = videoOf(TestWeb.bama)
 
     const covered = coveredGames([overlay], [video])
 
-    assert.deepStrictEqual(covered, [bama])
+    assert.deepStrictEqual(covered, [TestWeb.bama])
   })
 
   it.each([
     { overlay: { x: 300, y: 100, width: 50, height: 50 }, is: "touching its edge" },
     { overlay: { x: 0, y: 0, width: 50, height: 50 }, is: "apart from it" }
   ])("should leave a video an overlay shares no area with: $is", ({ overlay }) => {
-    const video = videoOf(bama)
+    const video = videoOf(TestWeb.bama)
 
     const covered = coveredGames([overlay], [video])
 
@@ -102,7 +102,7 @@ describe("coveredGames", () => {
   })
 
   it("should leave a video shown under an overlay flush against its top edge", () => {
-    const videos = [videoOf(bama), belowOf(irish)]
+    const videos = [videoOf(TestWeb.bama), belowOf(TestWeb.irish)]
 
     const covered = coveredGames([sheet()], videos)
 
@@ -110,11 +110,11 @@ describe("coveredGames", () => {
   })
 
   it("should cover every video an overlay reaches", () => {
-    const videos = [videoOf(bama), belowOf(irish)]
+    const videos = [videoOf(TestWeb.bama), belowOf(TestWeb.irish)]
 
     const covered = coveredGames([{ ...sheet(), height: 301 }], videos)
 
-    assert.deepStrictEqual(covered, [bama, irish])
+    assert.deepStrictEqual(covered, [TestWeb.bama, TestWeb.irish])
   })
 })
 

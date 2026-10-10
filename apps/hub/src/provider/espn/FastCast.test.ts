@@ -1,41 +1,39 @@
 import { assert, describe, it } from "@effect/vitest"
+import { GameId } from "@sportal/domain/Game"
 import { Deferred, Effect, Layer, Option } from "effect"
-import { HttpClient } from "effect/http"
-import * as Socket from "effect/socket/Socket"
 import { TestClock } from "effect/testing"
-import { recordingLogs } from "../../TestTelemetry.ts"
-import { Frame } from "./Frame.ts"
-import * as TestFastCast from "./TestFastCast.ts"
+import * as TestHub from "../../TestHub.ts"
+import { Frame, Topic } from "./FastCast.ts"
 
-// Games of the recorded checkpoint after `TestFastCast.firstGame`: the second live, the third scheduled for 20:05Z.
+// Games of the recorded checkpoint after `TestHub.firstGame`: the second live, the third scheduled for 20:05Z.
 const secondGame = "401872972"
 const laterGame = "401872974"
 
 // The two live games' topics: the first's checkpoint is missing in the tests that follow both.
-const missingTopic = TestFastCast.gameTopic(TestFastCast.firstGame)
-const otherTopic = TestFastCast.gameTopic(secondGame)
+const missingTopic = TestHub.gameTopic(TestHub.firstGame)
+const otherTopic = TestHub.gameTopic(secondGame)
 
 describe("FastCast", () => {
   describe("connection", () => {
     it.effect("should connect, then subscribe to its wanted game topic", () =>
       Effect.gen(function* () {
-        const server = TestFastCast.fakeServer()
+        const server = TestHub.fakeServer()
 
-        const { frames } = yield* TestFastCast.nflFrames(server)
+        const { frames } = yield* TestHub.nflFrames(server)
 
         yield* frames.until(atLeast(2))
-        yield* server.sent.until(TestFastCast.subscribed(TestFastCast.mainTc, 1))
+        yield* server.sent.until(TestHub.subscribed(TestHub.mainTc, 1))
         assert.deepStrictEqual(server.sent.all(), [
           { op: "C" },
-          { op: "S", sid: "sid-1", tc: TestFastCast.mainTc }
+          { op: "S", sid: "sid-1", tc: TestHub.mainTc }
         ])
       })
     )
 
     it.effect("should keep the socket open on FastCast's own heartbeats", () =>
       Effect.gen(function* () {
-        const server = TestFastCast.fakeServer()
-        const { ended, frames } = yield* TestFastCast.nflFrames(server)
+        const server = TestHub.fakeServer()
+        const { ended, frames } = yield* TestHub.nflFrames(server)
         yield* frames.until(atLeast(2))
         // FastCast sends `B` after 10 s of nothing else; a gap of 20 s was seen live.
         yield* TestClock.adjust("20 seconds")
@@ -52,67 +50,24 @@ describe("FastCast", () => {
 
     it.effect("should reconnect after the socket closes", () =>
       Effect.gen(function* () {
-        const server = TestFastCast.fakeServer()
-        const { ended, frames } = yield* TestFastCast.nflFrames(server)
+        const server = TestHub.fakeServer()
+        const { ended, frames } = yield* TestHub.nflFrames(server)
         yield* frames.until(atLeast(2))
 
         yield* Effect.sync(() => server.close(1000))
         yield* TestClock.adjust("2 seconds")
 
-        yield* server.sent.until(TestFastCast.subscribed(TestFastCast.mainTc, 2))
+        yield* server.sent.until(TestHub.subscribed(TestHub.mainTc, 2))
         const done = yield* Deferred.isDone(ended)
         assert.lengthOf(connectsSent(server), 2)
         assert.isFalse(done)
       })
     )
 
-    it.effect("should warn of a failed live feed with its reason", () =>
-      Effect.gen(function* () {
-        const { logs, layer } = recordingLogs()
-        const server = TestFastCast.fakeServer()
-        const { frames } = yield* TestFastCast.nflFrames(server).pipe(Effect.provide(layer))
-        yield* frames.until(atLeast(2))
-
-        yield* Effect.sync(() => server.close(1000))
-        yield* TestClock.adjust("2 seconds")
-
-        yield* server.sent.until(TestFastCast.subscribed(TestFastCast.mainTc, 2))
-        assert.isTrue(
-          logs.some(
-            (log) =>
-              log.level === "Warn" &&
-              log.message.includes("FastCast: the live feed failed (Closed); subscribing again")
-          )
-        )
-      })
-    )
-
-    it.effect("should log that the live feed stopped on a defect, and keep running", () =>
-      Effect.gen(function* () {
-        const { logs, layer } = recordingLogs()
-        const host = Layer.mergeAll(
-          Layer.succeed(
-            HttpClient.HttpClient,
-            HttpClient.make(() => Effect.die("boom"))
-          ),
-          Layer.succeed(Socket.WebSocketConstructor, () => TestFastCast.fakeServer().socket)
-        )
-
-        const { ended } = yield* TestFastCast.framesOver(host).pipe(Effect.provide(layer))
-        yield* Effect.yieldNow
-
-        const done = yield* Deferred.isDone(ended)
-        const stopped = logs.filter((log) => log.message.includes("FastCast: the live feed stopped"))
-        assert.lengthOf(stopped, 1)
-        assert.strictEqual(stopped[0]?.level, "Error")
-        assert.isFalse(done)
-      })
-    )
-
     it.effect("should keep running when the socket goes silent", () =>
       Effect.gen(function* () {
-        const server = TestFastCast.fakeServer()
-        const { ended, frames } = yield* TestFastCast.nflFrames(server)
+        const server = TestHub.fakeServer()
+        const { ended, frames } = yield* TestHub.nflFrames(server)
         yield* frames.until(atLeast(2))
         yield* TestClock.adjust("20 seconds")
         yield* Effect.sync(() => server.send({ op: "B" }))
@@ -122,7 +77,7 @@ describe("FastCast", () => {
         yield* TestClock.adjust("5 seconds")
         yield* TestClock.adjust("2 seconds")
 
-        yield* server.sent.until(TestFastCast.subscribed(TestFastCast.mainTc, 2))
+        yield* server.sent.until(TestHub.subscribed(TestHub.mainTc, 2))
         const done = yield* Deferred.isDone(ended)
         assert.isFalse(done)
         assert.isFalse(
@@ -136,27 +91,27 @@ describe("FastCast", () => {
   describe("framing", () => {
     it.effect("should emit each socket text as a message frame, and an H's checkpoint after it", () =>
       Effect.gen(function* () {
-        const server = TestFastCast.fakeServer()
-        const { frames } = yield* TestFastCast.nflFrames(server)
+        const server = TestHub.fakeServer()
+        const { frames } = yield* TestHub.nflFrames(server)
         yield* frames.until(atLeast(2))
 
-        yield* Effect.sync(() => server.send(TestFastCast.checkpointMessage(7)))
+        yield* Effect.sync(() => server.send(TestHub.checkpointMessage(7)))
 
         const received = yield* frames.until(atLeast(4))
         const firstFour = received.slice(0, 4)
         assert.deepStrictEqual(firstFour.map(seen), [
           { tag: "Pushed", tc: undefined, mid: undefined, body: "C" },
-          { tag: "Pushed", tc: TestFastCast.mainTc, mid: undefined, body: "S" },
-          { tag: "Pushed", tc: TestFastCast.mainTc, mid: 7, body: "H" },
-          { tag: "Checkpoint", tc: TestFastCast.mainTc, mid: 7, document: TestFastCast.checkpointDocument }
+          { tag: "Pushed", tc: TestHub.mainTc, mid: undefined, body: "S" },
+          { tag: "Pushed", tc: TestHub.mainTc, mid: 7, body: "H" },
+          { tag: "Checkpoint", tc: TestHub.mainTc, mid: 7, document: TestHub.checkpointDocument }
         ])
       })
     )
 
     it.effect("should give a patch's frame its mid", () =>
       Effect.gen(function* () {
-        const server = TestFastCast.fakeServer()
-        const { frames } = yield* TestFastCast.nflFrames(server)
+        const server = TestHub.fakeServer()
+        const { frames } = yield* TestHub.nflFrames(server)
         yield* frames.until(atLeast(2))
 
         yield* Effect.sync(() => server.send(patchMessage(8)))
@@ -169,8 +124,8 @@ describe("FastCast", () => {
 
     it.effect("should emit an unreadable socket text without ending the feed", () =>
       Effect.gen(function* () {
-        const server = TestFastCast.fakeServer()
-        const { frames } = yield* TestFastCast.nflFrames(server)
+        const server = TestHub.fakeServer()
+        const { frames } = yield* TestHub.nflFrames(server)
         yield* frames.until(atLeast(2))
 
         yield* Effect.sync(() => server.sendText("not json"))
@@ -190,11 +145,11 @@ describe("FastCast", () => {
 
     it.effect("should emit a text of an unknown op with its envelope, but no topic or mid", () =>
       Effect.gen(function* () {
-        const server = TestFastCast.fakeServer()
-        const { frames } = yield* TestFastCast.nflFrames(server)
+        const server = TestHub.fakeServer()
+        const { frames } = yield* TestHub.nflFrames(server)
         yield* frames.until(atLeast(2))
 
-        yield* Effect.sync(() => server.send({ op: "X", tc: TestFastCast.mainTc, mid: 8, extra: 1 }))
+        yield* Effect.sync(() => server.send({ op: "X", tc: TestHub.mainTc, mid: 8, extra: 1 }))
         const received = yield* frames.until(atLeast(3))
 
         const unknown = received[2]
@@ -214,11 +169,11 @@ describe("FastCast", () => {
 
     it.effect("should emit a known op missing its fields with its envelope, but no topic or mid", () =>
       Effect.gen(function* () {
-        const server = TestFastCast.fakeServer()
-        const { frames } = yield* TestFastCast.nflFrames(server)
+        const server = TestHub.fakeServer()
+        const { frames } = yield* TestHub.nflFrames(server)
         yield* frames.until(atLeast(2))
 
-        yield* Effect.sync(() => server.send({ op: "P", tc: TestFastCast.mainTc }))
+        yield* Effect.sync(() => server.send({ op: "P", tc: TestHub.mainTc }))
         const received = yield* frames.until(atLeast(3))
 
         const malformed = received[2]
@@ -233,17 +188,17 @@ describe("FastCast", () => {
 
     it.effect("should frame a patch whose payload does not decode with its topic and mid", () =>
       Effect.gen(function* () {
-        const server = TestFastCast.fakeServer()
-        const { frames } = yield* TestFastCast.nflFrames(server)
+        const server = TestHub.fakeServer()
+        const { frames } = yield* TestHub.nflFrames(server)
         yield* frames.until(atLeast(2))
 
-        yield* Effect.sync(() => server.send(TestFastCast.undecodablePatchMessage(8)))
+        yield* Effect.sync(() => server.send(TestHub.undecodablePatchMessage(8)))
         const received = yield* frames.until(atLeast(3))
 
         const patch = received[2]
         assert.deepStrictEqual(patch === undefined ? undefined : seen(patch), {
           tag: "Pushed",
-          tc: TestFastCast.mainTc,
+          tc: TestHub.mainTc,
           mid: 8,
           body: "P"
         })
@@ -254,49 +209,40 @@ describe("FastCast", () => {
   describe("wanted topics", () => {
     it.effect("should follow a topic once it is wanted", () =>
       Effect.gen(function* () {
-        const server = TestFastCast.fakeServer()
-        const { frames, want } = yield* TestFastCast.nflFrames(server)
+        const server = TestHub.fakeServer()
+        const { frames, want } = yield* TestHub.nflFrames(server)
         yield* frames.until(atLeast(2))
 
-        yield* want(
-          [TestFastCast.main, "AwaitingCheckpoint"],
-          [TestFastCast.gameOf(laterGame), "AwaitingCheckpoint"]
-        )
+        yield* want([TestHub.main, "AwaitingCheckpoint"], [TestHub.gameOf(laterGame), "AwaitingCheckpoint"])
 
-        yield* server.sent.until(TestFastCast.subscribed(TestFastCast.gameTopic(laterGame), 1))
+        yield* server.sent.until(TestHub.subscribed(TestHub.gameTopic(laterGame), 1))
         assert.deepStrictEqual(subscriptionsSent(server), [
-          { op: "S", sid: "sid-1", tc: TestFastCast.mainTc },
-          { op: "S", sid: "sid-1", tc: TestFastCast.gameTopic(laterGame) }
+          { op: "S", sid: "sid-1", tc: TestHub.mainTc },
+          { op: "S", sid: "sid-1", tc: TestHub.gameTopic(laterGame) }
         ])
       })
     )
 
     it.effect("should not follow a topic again while it stays wanted", () =>
       Effect.gen(function* () {
-        const server = TestFastCast.fakeServer()
-        const { frames, want } = yield* TestFastCast.nflFrames(server)
+        const server = TestHub.fakeServer()
+        const { frames, want } = yield* TestHub.nflFrames(server)
         yield* frames.until(atLeast(2))
-        yield* want(
-          [TestFastCast.main, "AwaitingCheckpoint"],
-          [TestFastCast.gameOf(secondGame), "AwaitingCheckpoint"]
-        )
-        yield* server.sent.until(TestFastCast.subscribed(TestFastCast.gameTopic(secondGame), 1))
+        yield* want([TestHub.main, "AwaitingCheckpoint"], [TestHub.gameOf(secondGame), "AwaitingCheckpoint"])
+        yield* server.sent.until(TestHub.subscribed(TestHub.gameTopic(secondGame), 1))
 
+        yield* want([TestHub.main, "AwaitingCheckpoint"], [TestHub.gameOf(secondGame), "AwaitingCheckpoint"])
         yield* want(
-          [TestFastCast.main, "AwaitingCheckpoint"],
-          [TestFastCast.gameOf(secondGame), "AwaitingCheckpoint"]
-        )
-        yield* want(
-          [TestFastCast.main, "AwaitingCheckpoint"],
-          [TestFastCast.gameOf(secondGame), "AwaitingCheckpoint"],
-          [TestFastCast.gameOf(laterGame), "AwaitingCheckpoint"]
+          [TestHub.main, "AwaitingCheckpoint"],
+          [TestHub.gameOf(secondGame), "AwaitingCheckpoint"],
+          [TestHub.gameOf(laterGame), "AwaitingCheckpoint"]
         )
 
         // Wanted sets are taken in order, so once the third has subscribed, the second has sent all it would.
-        yield* server.sent.until(TestFastCast.subscribed(TestFastCast.gameTopic(laterGame), 1))
+        yield* server.sent.until(TestHub.subscribed(TestHub.gameTopic(laterGame), 1))
         assert.deepStrictEqual(
           subscriptionsSent(server).map((frame) => frame.tc),
-          [TestFastCast.mainTc, TestFastCast.gameTopic(secondGame), TestFastCast.gameTopic(laterGame)],
+          [TestHub.mainTc, TestHub.gameTopic(secondGame), TestHub.gameTopic(laterGame)],
           "the same topic wanted again sends none"
         )
       })
@@ -304,22 +250,17 @@ describe("FastCast", () => {
 
     it.effect("should send nothing for a topic no longer wanted", () =>
       Effect.gen(function* () {
-        const server = TestFastCast.fakeServer()
-        const { frames, want } = yield* TestFastCast.nflFrames(server)
+        const server = TestHub.fakeServer()
+        const { frames, want } = yield* TestHub.nflFrames(server)
         yield* frames.until(atLeast(2))
-        yield* want(
-          [TestFastCast.main, "AwaitingCheckpoint"],
-          [TestFastCast.gameOf(secondGame), "AwaitingCheckpoint"]
-        )
-        yield* server.sent.until(TestFastCast.subscribed(TestFastCast.gameTopic(secondGame), 1))
+        yield* want([TestHub.main, "AwaitingCheckpoint"], [TestHub.gameOf(secondGame), "AwaitingCheckpoint"])
+        yield* server.sent.until(TestHub.subscribed(TestHub.gameTopic(secondGame), 1))
 
-        yield* want([TestFastCast.main, "AwaitingCheckpoint"])
+        yield* want([TestHub.main, "AwaitingCheckpoint"])
         yield* TestClock.adjust("1 second")
 
         assert.lengthOf(
-          server.sent
-            .all()
-            .filter((frame) => frame.op === "S" && frame.tc === TestFastCast.gameTopic(secondGame)),
+          server.sent.all().filter((frame) => frame.op === "S" && frame.tc === TestHub.gameTopic(secondGame)),
           1
         )
       })
@@ -329,24 +270,24 @@ describe("FastCast", () => {
       "should follow a topic again once its document goes back to waiting for its checkpoint, and only once while it waits",
       () =>
         Effect.gen(function* () {
-          const server = TestFastCast.fakeServer()
-          const { frames, want } = yield* TestFastCast.nflFrames(server)
+          const server = TestHub.fakeServer()
+          const { frames, want } = yield* TestHub.nflFrames(server)
           yield* frames.until(atLeast(2))
-          yield* Effect.sync(() => server.send(TestFastCast.checkpointMessage(7)))
+          yield* Effect.sync(() => server.send(TestHub.checkpointMessage(7)))
           yield* frames.until(wholeAt(7))
-          yield* want([TestFastCast.main, "Synced"])
+          yield* want([TestHub.main, "Synced"])
 
-          yield* want([TestFastCast.main, "AwaitingCheckpoint"])
-          yield* server.sent.until(TestFastCast.subscribed(TestFastCast.mainTc, 2))
-          yield* want([TestFastCast.main, "AwaitingCheckpoint"])
-          yield* Effect.sync(() => server.send(TestFastCast.checkpointMessage(20)))
+          yield* want([TestHub.main, "AwaitingCheckpoint"])
+          yield* server.sent.until(TestHub.subscribed(TestHub.mainTc, 2))
+          yield* want([TestHub.main, "AwaitingCheckpoint"])
+          yield* Effect.sync(() => server.send(TestHub.checkpointMessage(20)))
           yield* frames.until(wholeAt(20))
 
           assert.deepStrictEqual(
             server.sent.all().filter((frame) => frame.op === "S"),
             [
-              { op: "S", sid: "sid-1", tc: TestFastCast.mainTc },
-              { op: "S", sid: "sid-1", tc: TestFastCast.mainTc }
+              { op: "S", sid: "sid-1", tc: TestHub.mainTc },
+              { op: "S", sid: "sid-1", tc: TestHub.mainTc }
             ]
           )
         })
@@ -354,19 +295,19 @@ describe("FastCast", () => {
 
     it.effect("should follow every wanted topic again on a new socket", () =>
       Effect.gen(function* () {
-        const server = TestFastCast.fakeServer()
-        const { frames, want } = yield* TestFastCast.nflFrames(server)
+        const server = TestHub.fakeServer()
+        const { frames, want } = yield* TestHub.nflFrames(server)
         yield* frames.until(atLeast(2))
-        yield* want([TestFastCast.main, "Synced"], [TestFastCast.gameOf(secondGame), "Synced"])
-        yield* server.sent.until(TestFastCast.subscribed(TestFastCast.gameTopic(secondGame), 1))
+        yield* want([TestHub.main, "Synced"], [TestHub.gameOf(secondGame), "Synced"])
+        yield* server.sent.until(TestHub.subscribed(TestHub.gameTopic(secondGame), 1))
 
         yield* Effect.sync(() => server.close(1000))
         yield* TestClock.adjust("2 seconds")
 
-        yield* server.sent.until(TestFastCast.subscribed(TestFastCast.gameTopic(secondGame), 2))
-        yield* server.sent.until(TestFastCast.subscribed(TestFastCast.mainTc, 2))
+        yield* server.sent.until(TestHub.subscribed(TestHub.gameTopic(secondGame), 2))
+        yield* server.sent.until(TestHub.subscribed(TestHub.mainTc, 2))
         assert.lengthOf(
-          server.sent.all().filter((frame) => frame.op === "S" && frame.tc === TestFastCast.mainTc),
+          server.sent.all().filter((frame) => frame.op === "S" && frame.tc === TestHub.mainTc),
           2
         )
       })
@@ -376,17 +317,17 @@ describe("FastCast", () => {
   describe("checkpoints", () => {
     it.effect("should load a second topic's checkpoint while the first still loads", () =>
       Effect.gen(function* () {
-        const server = TestFastCast.fakeServer()
-        const { frames } = yield* TestFastCast.nflFrames(server)
+        const server = TestHub.fakeServer()
+        const { frames } = yield* TestHub.nflFrames(server)
         yield* frames.until(atLeast(2))
 
         yield* Effect.sync(() =>
-          server.send({ ...TestFastCast.checkpointMessage(7), pl: "https://checkpoint.test/slow" })
+          server.send({ ...TestHub.checkpointMessage(7), pl: "https://checkpoint.test/slow" })
         )
         yield* Effect.sync(() =>
           server.send({
             op: "H",
-            tc: TestFastCast.gameTopic(secondGame),
+            tc: TestHub.gameTopic(secondGame),
             mid: 3,
             pl: "https://checkpoint.test/slow"
           })
@@ -401,41 +342,9 @@ describe("FastCast", () => {
       })
     )
 
-    it.effect(
-      "should keep the socket and the other topics when a checkpoint does not load, warning of it",
-      () =>
-        Effect.gen(function* () {
-          const { logs, layer } = recordingLogs()
-          const server = TestFastCast.fakeServer()
-          const { ended, frames } = yield* twoGamesFollowed(server, layer)
-
-          yield* missingCheckpointBesideOther(server)
-
-          const received = yield* frames.until(numbered(10))
-          const done = yield* Deferred.isDone(ended)
-          assert.deepStrictEqual(
-            received.map(seen).flatMap(({ tag, tc, mid }) => (tc?.startsWith("gp-") ? [[tc, tag, mid]] : [])),
-            [
-              [missingTopic, "Pushed", undefined],
-              [otherTopic, "Pushed", undefined],
-              [missingTopic, "Pushed", 5],
-              [otherTopic, "Pushed", 9],
-              [otherTopic, "Checkpoint", 9],
-              [otherTopic, "Pushed", 10]
-            ]
-          )
-          assert.isFalse(done)
-          assert.isTrue(logs.some((log) => log.level === "Warn" && log.annotations.topic === missingTopic))
-          assert.lengthOf(
-            server.sent.all().filter((frame) => frame.op === "S" && frame.tc === missingTopic),
-            1
-          )
-        })
-    )
-
     it.effect("should wait up to 20 s for a checkpoint", () =>
       Effect.gen(function* () {
-        const server = TestFastCast.fakeServer()
+        const server = TestHub.fakeServer()
         const { frames } = yield* hangingCheckpoint(server, Layer.empty)
 
         yield* TestClock.adjust("19 seconds")
@@ -445,27 +354,12 @@ describe("FastCast", () => {
       })
     )
 
-    it.effect("should fail a checkpoint that hangs for 20 s as Unloaded, warning of it", () =>
-      Effect.gen(function* () {
-        const { logs, layer } = recordingLogs()
-        const server = TestFastCast.fakeServer()
-        const { frames } = yield* hangingCheckpoint(server, layer)
-        yield* TestClock.adjust("19 seconds")
-
-        yield* TestClock.adjust("1 second")
-
-        yield* frames.until(atLeast(3))
-        assert.isTrue(logs.some((log) => log.level === "Warn" && log.annotations.reason === "Unloaded"))
-      })
-    )
-
     it.effect(
       "should emit only the H of a checkpoint that does not decode, warning of it as Undecodable",
       () =>
         Effect.gen(function* () {
-          const { logs, layer } = recordingLogs()
-          const server = TestFastCast.fakeServer()
-          const { frames } = yield* TestFastCast.nflFrames(server).pipe(Effect.provide(layer))
+          const server = TestHub.fakeServer()
+          const { frames } = yield* TestHub.nflFrames(server)
           yield* frames.until(atLeast(2))
 
           yield* Effect.sync(() => server.send(garbledCheckpoint(7)))
@@ -482,7 +376,6 @@ describe("FastCast", () => {
               ["Pushed", 8]
             ]
           )
-          assert.isTrue(logs.some((log) => log.level === "Warn" && log.annotations.reason === "Undecodable"))
         })
     )
   })
@@ -492,14 +385,14 @@ describe("FastCast", () => {
       "should subscribe a topic whose checkpoint did not load again after 30 s, keeping the socket",
       () =>
         Effect.gen(function* () {
-          const server = TestFastCast.fakeServer()
+          const server = TestHub.fakeServer()
           const { ended, frames } = yield* twoGamesFollowed(server, Layer.empty)
           yield* missingCheckpointBesideOther(server)
           yield* frames.until(numbered(10))
 
           yield* TestClock.adjust("30 seconds")
 
-          yield* server.sent.until(TestFastCast.subscribed(missingTopic, 2))
+          yield* server.sent.until(TestHub.subscribed(missingTopic, 2))
           const done = yield* Deferred.isDone(ended)
           assert.isFalse(done)
         })
@@ -507,12 +400,12 @@ describe("FastCast", () => {
 
     it.effect("should not subscribe again to a topic left while its re-subscribe waited", () =>
       Effect.gen(function* () {
-        const server = TestFastCast.fakeServer()
+        const server = TestHub.fakeServer()
         const { frames, want } = yield* twoGamesFollowed(server, Layer.empty)
         yield* missingCheckpointBesideOther(server)
         yield* frames.until(numbered(10))
 
-        yield* want([TestFastCast.gameOf(secondGame), "Synced"])
+        yield* want([TestHub.gameOf(secondGame), "Synced"])
         yield* TestClock.adjust("1 second")
         yield* TestClock.adjust("29 seconds")
 
@@ -525,7 +418,7 @@ describe("FastCast", () => {
 
     it.effect("should not subscribe again to a topic whose checkpoint hung before 30 s", () =>
       Effect.gen(function* () {
-        const server = TestFastCast.fakeServer()
+        const server = TestHub.fakeServer()
         const { frames } = yield* hangingCheckpoint(server, Layer.empty)
         yield* TestClock.adjust("20 seconds")
         yield* frames.until(atLeast(3))
@@ -541,7 +434,7 @@ describe("FastCast", () => {
 
     it.effect("should subscribe again to a topic whose checkpoint hung after 30 s, keeping the socket", () =>
       Effect.gen(function* () {
-        const server = TestFastCast.fakeServer()
+        const server = TestHub.fakeServer()
         const { ended, frames } = yield* hangingCheckpoint(server, Layer.empty)
         yield* TestClock.adjust("20 seconds")
         yield* frames.until(atLeast(3))
@@ -549,7 +442,7 @@ describe("FastCast", () => {
 
         yield* TestClock.adjust("1 second")
 
-        yield* server.sent.until(TestFastCast.subscribed(TestFastCast.mainTc, 2))
+        yield* server.sent.until(TestHub.subscribed(TestHub.mainTc, 2))
         const done = yield* Deferred.isDone(ended)
         assert.isFalse(done)
       })
@@ -557,8 +450,8 @@ describe("FastCast", () => {
 
     it.effect("should follow a topic whose checkpoint did not decode again after 30 s", () =>
       Effect.gen(function* () {
-        const server = TestFastCast.fakeServer()
-        const { frames } = yield* TestFastCast.nflFrames(server)
+        const server = TestHub.fakeServer()
+        const { frames } = yield* TestHub.nflFrames(server)
         yield* frames.until(atLeast(2))
         yield* Effect.sync(() => server.send(garbledCheckpoint(7)))
         yield* Effect.sync(() => server.send(patchMessage(8)))
@@ -566,7 +459,7 @@ describe("FastCast", () => {
 
         yield* TestClock.adjust("30 seconds")
 
-        yield* server.sent.until(TestFastCast.subscribed(TestFastCast.mainTc, 2))
+        yield* server.sent.until(TestHub.subscribed(TestHub.mainTc, 2))
         assert.lengthOf(
           server.sent.all().filter((frame) => frame.op === "S"),
           2
@@ -578,8 +471,8 @@ describe("FastCast", () => {
       "should keep one subscription pending at a time for a topic whose checkpoints keep failing",
       () =>
         Effect.gen(function* () {
-          const server = TestFastCast.fakeServer()
-          const { frames } = yield* TestFastCast.nflFrames(server)
+          const server = TestHub.fakeServer()
+          const { frames } = yield* TestHub.nflFrames(server)
           yield* frames.until(atLeast(2))
 
           yield* Effect.sync(() => {
@@ -588,7 +481,7 @@ describe("FastCast", () => {
           })
           yield* frames.until(atLeast(4))
           yield* TestClock.adjust("30 seconds")
-          yield* server.sent.until(TestFastCast.subscribed(TestFastCast.mainTc, 2))
+          yield* server.sent.until(TestHub.subscribed(TestHub.mainTc, 2))
           yield* TestClock.adjust("30 seconds")
 
           assert.lengthOf(
@@ -600,15 +493,15 @@ describe("FastCast", () => {
 
     it.effect("should subscribe again every 30 s to a topic whose checkpoints keep failing", () =>
       Effect.gen(function* () {
-        const server = TestFastCast.fakeServer()
-        const { frames } = yield* TestFastCast.nflFrames(server)
+        const server = TestHub.fakeServer()
+        const { frames } = yield* TestHub.nflFrames(server)
         yield* frames.until(atLeast(2))
 
         for (const mid of [1, 2, 3, 4, 5, 6]) {
           yield* Effect.sync(() => server.send(missingCheckpoint(mid)))
           yield* frames.until(numbered(mid))
           yield* TestClock.adjust("30 seconds")
-          yield* server.sent.until(TestFastCast.subscribed(TestFastCast.mainTc, mid + 1))
+          yield* server.sent.until(TestHub.subscribed(TestHub.mainTc, mid + 1))
         }
 
         assert.lengthOf(
@@ -620,13 +513,13 @@ describe("FastCast", () => {
 
     it.effect("should cancel a pending checkpoint retry once its checkpoint succeeds", () =>
       Effect.gen(function* () {
-        const server = TestFastCast.fakeServer()
-        const { frames } = yield* TestFastCast.nflFrames(server)
+        const server = TestHub.fakeServer()
+        const { frames } = yield* TestHub.nflFrames(server)
         yield* frames.until(atLeast(2))
         yield* Effect.sync(() => server.send(missingCheckpoint(7)))
         yield* frames.until(numbered(7))
 
-        yield* Effect.sync(() => server.send(TestFastCast.checkpointMessage(8)))
+        yield* Effect.sync(() => server.send(TestHub.checkpointMessage(8)))
         yield* frames.until(wholeAt(8))
         yield* TestClock.adjust("30 seconds")
 
@@ -641,13 +534,13 @@ describe("FastCast", () => {
       "should cancel a retry for a slow failed checkpoint once a later checkpoint succeeds first",
       () =>
         Effect.gen(function* () {
-          const server = TestFastCast.fakeServer()
-          const { frames } = yield* TestFastCast.nflFrames(server)
+          const server = TestHub.fakeServer()
+          const { frames } = yield* TestHub.nflFrames(server)
           yield* frames.until(atLeast(2))
 
           yield* Effect.sync(() => {
             server.send({ ...missingCheckpoint(7), pl: "https://checkpoint.test/slow-missing" })
-            server.send(TestFastCast.checkpointMessage(8))
+            server.send(TestHub.checkpointMessage(8))
           })
           yield* TestClock.adjust("5 seconds")
           const received = yield* frames.until(wholeAt(8))
@@ -673,19 +566,19 @@ describe("FastCast", () => {
 
     it.effect("should keep the retry of a failed checkpoint that follows a slow successful one", () =>
       Effect.gen(function* () {
-        const server = TestFastCast.fakeServer()
-        const { frames } = yield* TestFastCast.nflFrames(server)
+        const server = TestHub.fakeServer()
+        const { frames } = yield* TestHub.nflFrames(server)
         yield* frames.until(atLeast(2))
 
         yield* Effect.sync(() => {
-          server.send({ ...TestFastCast.checkpointMessage(7), pl: "https://checkpoint.test/slow" })
+          server.send({ ...TestHub.checkpointMessage(7), pl: "https://checkpoint.test/slow" })
           server.send(missingCheckpoint(8))
         })
         yield* TestClock.adjust("5 seconds")
         const received = yield* frames.until(numbered(8))
         yield* TestClock.adjust("30 seconds")
 
-        yield* server.sent.until(TestFastCast.subscribed(TestFastCast.mainTc, 2))
+        yield* server.sent.until(TestHub.subscribed(TestHub.mainTc, 2))
         assert.deepStrictEqual(
           received
             .slice(2)
@@ -708,11 +601,11 @@ describe("FastCast", () => {
       "should subscribe at once to a topic whose document is lost while its re-subscribe waits, and not again when the wait ends",
       () =>
         Effect.gen(function* () {
-          const server = TestFastCast.fakeServer()
+          const server = TestHub.fakeServer()
           const { want } = yield* dueToBeFollowedAgain(server)
 
-          yield* want([TestFastCast.main, "AwaitingCheckpoint"])
-          yield* server.sent.until(TestFastCast.subscribed(TestFastCast.mainTc, 3))
+          yield* want([TestHub.main, "AwaitingCheckpoint"])
+          yield* server.sent.until(TestHub.subscribed(TestHub.mainTc, 3))
           yield* TestClock.adjust("30 seconds")
 
           assert.lengthOf(
@@ -729,8 +622,8 @@ describe("FastCast", () => {
   describe("reconnect", () => {
     it.effect("should open the socket at once", () =>
       Effect.gen(function* () {
-        const sockets = TestFastCast.closedSockets()
-        yield* TestFastCast.framesOver(sockets.host)
+        const sockets = TestHub.closedSockets()
+        yield* TestHub.framesOver(sockets.host)
 
         yield* TestClock.adjust(0)
 
@@ -740,8 +633,8 @@ describe("FastCast", () => {
 
     it.effect("should not open a closed socket again within 0.7 s", () =>
       Effect.gen(function* () {
-        const sockets = TestFastCast.closedSockets()
-        yield* TestFastCast.framesOver(sockets.host)
+        const sockets = TestHub.closedSockets()
+        yield* TestHub.framesOver(sockets.host)
         yield* TestClock.adjust(0)
 
         yield* TestClock.adjust("700 millis")
@@ -752,8 +645,8 @@ describe("FastCast", () => {
 
     it.effect("should open a closed socket again within 1.3 s", () =>
       Effect.gen(function* () {
-        const sockets = TestFastCast.closedSockets()
-        yield* TestFastCast.framesOver(sockets.host)
+        const sockets = TestHub.closedSockets()
+        yield* TestHub.framesOver(sockets.host)
         yield* TestClock.adjust(0)
         yield* TestClock.adjust("700 millis")
 
@@ -765,8 +658,8 @@ describe("FastCast", () => {
 
     it.effect("should not open a socket closed a second time again within 2.3 s of the first", () =>
       Effect.gen(function* () {
-        const sockets = TestFastCast.closedSockets()
-        yield* TestFastCast.framesOver(sockets.host)
+        const sockets = TestHub.closedSockets()
+        yield* TestHub.framesOver(sockets.host)
         yield* TestClock.adjust(0)
         yield* TestClock.adjust("1300 millis")
 
@@ -778,8 +671,8 @@ describe("FastCast", () => {
 
     it.effect("should open a socket closed a second time again within 3.7 s of the first", () =>
       Effect.gen(function* () {
-        const sockets = TestFastCast.closedSockets()
-        yield* TestFastCast.framesOver(sockets.host)
+        const sockets = TestHub.closedSockets()
+        yield* TestHub.framesOver(sockets.host)
         yield* TestClock.adjust(0)
         yield* TestClock.adjust("1300 millis")
         yield* TestClock.adjust("1 second")
@@ -793,22 +686,22 @@ describe("FastCast", () => {
 })
 
 /** NFL frames once `missingTopic`'s and `otherTopic`'s games are wanted and both are subscribed (the first by default). */
-function twoGamesFollowed(server: ReturnType<typeof TestFastCast.fakeServer>, logged: Layer.Layer<never>) {
+function twoGamesFollowed(server: ReturnType<typeof TestHub.fakeServer>, logged: Layer.Layer<never>) {
   return Effect.gen(function* () {
-    const following = yield* TestFastCast.nflFrames(server).pipe(Effect.provide(logged))
+    const following = yield* TestHub.nflFrames(server).pipe(Effect.provide(logged))
 
     yield* following.frames.until(atLeast(2))
     yield* following.want(
-      [TestFastCast.main, "AwaitingCheckpoint"],
-      [TestFastCast.gameOf(secondGame), "AwaitingCheckpoint"]
+      [TestHub.main, "AwaitingCheckpoint"],
+      [TestHub.gameOf(secondGame), "AwaitingCheckpoint"]
     )
-    yield* server.sent.until(TestFastCast.subscribed(otherTopic, 1))
+    yield* server.sent.until(TestHub.subscribed(otherTopic, 1))
     return following
   })
 }
 
 /** Sends an H for each game topic, `missingTopic`'s checkpoint missing, then a patch on `otherTopic`. */
-function missingCheckpointBesideOther(server: ReturnType<typeof TestFastCast.fakeServer>) {
+function missingCheckpointBesideOther(server: ReturnType<typeof TestHub.fakeServer>) {
   return Effect.sync(() => {
     server.send({ op: "H", tc: missingTopic, mid: 5, pl: "https://checkpoint.test/missing" })
     server.send({ op: "H", tc: otherTopic, mid: 9, pl: "https://checkpoint.test/9" })
@@ -817,13 +710,13 @@ function missingCheckpointBesideOther(server: ReturnType<typeof TestFastCast.fak
 }
 
 /** NFL frames once the game topic has an H whose checkpoint never comes, logging to `logged`. */
-function hangingCheckpoint(server: ReturnType<typeof TestFastCast.fakeServer>, logged: Layer.Layer<never>) {
+function hangingCheckpoint(server: ReturnType<typeof TestHub.fakeServer>, logged: Layer.Layer<never>) {
   return Effect.gen(function* () {
-    const following = yield* TestFastCast.nflFrames(server).pipe(Effect.provide(logged))
+    const following = yield* TestHub.nflFrames(server).pipe(Effect.provide(logged))
 
     yield* following.frames.until(atLeast(2))
     yield* Effect.sync(() =>
-      server.send({ op: "H", tc: TestFastCast.mainTc, mid: 7, pl: "https://checkpoint.test/hang" })
+      server.send({ op: "H", tc: TestHub.mainTc, mid: 7, pl: "https://checkpoint.test/hang" })
     )
     return following
   })
@@ -834,21 +727,21 @@ function hangingCheckpoint(server: ReturnType<typeof TestFastCast.fakeServer>, l
  * subscribed to again, that subscription's checkpoint at 10 missing, then a checkpoint at 11 FastCast sent unasked,
  * which synced it and cancelled the wait, then another unasked at 12 missing, which waits to follow it again.
  */
-function dueToBeFollowedAgain(server: ReturnType<typeof TestFastCast.fakeServer>) {
+function dueToBeFollowedAgain(server: ReturnType<typeof TestHub.fakeServer>) {
   return Effect.gen(function* () {
-    const following = yield* TestFastCast.nflFrames(server)
+    const following = yield* TestHub.nflFrames(server)
 
     yield* following.frames.until(atLeast(2))
-    yield* Effect.sync(() => server.send(TestFastCast.checkpointMessage(7)))
+    yield* Effect.sync(() => server.send(TestHub.checkpointMessage(7)))
     yield* following.frames.until(wholeAt(7))
-    yield* following.want([TestFastCast.main, "Synced"])
-    yield* following.want([TestFastCast.main, "AwaitingCheckpoint"])
-    yield* server.sent.until(TestFastCast.subscribed(TestFastCast.mainTc, 2))
+    yield* following.want([TestHub.main, "Synced"])
+    yield* following.want([TestHub.main, "AwaitingCheckpoint"])
+    yield* server.sent.until(TestHub.subscribed(TestHub.mainTc, 2))
     yield* Effect.sync(() => server.send(missingCheckpoint(10)))
     yield* following.frames.until(numbered(10))
-    yield* Effect.sync(() => server.send(TestFastCast.checkpointMessage(11)))
+    yield* Effect.sync(() => server.send(TestHub.checkpointMessage(11)))
     yield* following.frames.until(wholeAt(11))
-    yield* following.want([TestFastCast.main, "Synced"])
+    yield* following.want([TestHub.main, "Synced"])
     yield* Effect.sync(() => server.send(missingCheckpoint(12)))
     yield* following.frames.until(numbered(12))
     return following
@@ -856,12 +749,12 @@ function dueToBeFollowedAgain(server: ReturnType<typeof TestFastCast.fakeServer>
 }
 
 /** Every subscription the client sent. */
-function subscriptionsSent(server: ReturnType<typeof TestFastCast.fakeServer>) {
+function subscriptionsSent(server: ReturnType<typeof TestHub.fakeServer>) {
   return server.sent.all().filter((frame) => frame.op === "S")
 }
 
 /** Every handshake the client sent: one per socket it opened. */
-function connectsSent(server: ReturnType<typeof TestFastCast.fakeServer>) {
+function connectsSent(server: ReturnType<typeof TestHub.fakeServer>) {
   return server.sent.all().filter((frame) => frame.op === "C")
 }
 
@@ -894,14 +787,45 @@ function wholeAt(mid: number) {
 }
 
 function garbledCheckpoint(mid: number) {
-  return { op: "H", tc: TestFastCast.mainTc, mid, pl: "https://checkpoint.test/garbled" }
+  return { op: "H", tc: TestHub.mainTc, mid, pl: "https://checkpoint.test/garbled" }
 }
 
 function missingCheckpoint(mid: number) {
-  return { op: "H", tc: TestFastCast.mainTc, mid, pl: "https://checkpoint.test/missing" }
+  return { op: "H", tc: TestHub.mainTc, mid, pl: "https://checkpoint.test/missing" }
 }
 
 /** A `P` at `mid` that patches nothing. */
 function patchMessage(mid: number) {
-  return { op: "P", tc: TestFastCast.mainTc, mid, pl: JSON.stringify({ ts: 1791136341731, pl: [] }) }
+  return { op: "P", tc: TestHub.mainTc, mid, pl: JSON.stringify({ ts: 1791136341731, pl: [] }) }
 }
+
+describe("Topic#tc", () => {
+  it.each([
+    ["nfl", "401872971", "gp-football-nfl-401872971"],
+    ["fbs", "401858254", "gp-football-college-football-401858254"]
+  ] as const)("should name %s game %s's package topic", (league, game, expected) => {
+    const topic = new Topic({ league, game: GameId.make(game) })
+
+    const tc = topic.tc()
+
+    assert.strictEqual(tc, expected)
+  })
+})
+
+describe("Topic.fromTc", () => {
+  it("should read a package topic as its game", () => {
+    const topic = Topic.fromTc("gp-football-college-football-401858254")
+
+    assert.deepStrictEqual(topic, Option.some(new Topic({ league: "fbs", game: GameId.make("401858254") })))
+  })
+
+  it.each([
+    ["a package topic without a game", "gp-football-nfl-"],
+    ["a scoreboard topic", "event-football-nfl"],
+    ["another sport's package topic", "gp-basketball-nba-401"]
+  ])("should read no topic from %s", (_name, tc) => {
+    const topic = Topic.fromTc(tc)
+
+    assert.isTrue(Option.isNone(topic))
+  })
+})

@@ -1,8 +1,7 @@
 import type { GameId, GameSnapshot } from "@sportal/domain/Game"
 import type { LeagueId } from "@sportal/domain/League"
 import type { Play } from "@sportal/domain/Play"
-import { type Cause, Context, Data, Deferred, Effect, Layer, Option, Queue, Ref, Stream } from "effect"
-import { ProviderFeed } from "./ProviderFeed.ts"
+import { type Cause, Context, Data, Layer, Queue, Stream } from "effect"
 
 /**
  * A provider of game data. It runs itself: it decides when to poll, what to follow on its push, and when to reconnect,
@@ -18,37 +17,13 @@ export class Provider extends Context.Service<
     readonly deliveries: Stream.Stream<ReadonlyArray<Delivery>>
   }
 >()("sportal/hub/provider/Provider") {
-  /** A provider whose frames say what a test gives its `ProviderFeed`, and that feed; they end when the feed ends. */
-  static readonly layerTest: Layer.Layer<Provider | ProviderFeed> = Layer.effectContext(
-    Effect.gen(function* () {
-      const frames = yield* Queue.unbounded<
-        { readonly deliveries: ReadonlyArray<Delivery>; readonly taken: Deferred.Deferred<void> },
-        Cause.Done
-      >()
-      const reading = yield* Ref.make(Option.none<Deferred.Deferred<void>>())
-
-      // Each pull first marks the frame before it taken: the reader asks for the next only once it has taken that one. Once
-      // the feed ends, the pull fails with `Done`, which ends the frames.
-      const next = Effect.gen(function* () {
-        const previous = yield* Ref.get(reading)
-        yield* Effect.forEach(Option.toArray(previous), (taken) => Deferred.succeed(taken, undefined))
-        const frame = yield* Queue.take(frames)
-        yield* Ref.set(reading, Option.some(frame.taken))
-        return frame.deliveries
-      })
-
-      const deliver = Effect.fnUntraced(function* (deliveries: ReadonlyArray<Delivery>) {
-        const taken = yield* Deferred.make<void>()
-        yield* Queue.offer(frames, { deliveries, taken })
-        yield* Deferred.await(taken)
-      })
-      const end = Effect.asVoid(Queue.end(frames))
-
-      return Context.make(ProviderFeed, ProviderFeed.of({ deliver, end })).pipe(
-        Context.add(Provider, Provider.of({ deliveries: Stream.fromEffectRepeat(next) }))
-      )
-    })
-  )
+  /**
+   * A provider whose frames are what a test offers `frames`, taken one at a time: it takes the next only once its
+   * reader has taken the one before. They end when `frames` ends.
+   */
+  static layerTest(frames: Queue.Dequeue<ReadonlyArray<Delivery>, Cause.Done>): Layer.Layer<Provider> {
+    return Layer.succeed(Provider, Provider.of({ deliveries: Stream.fromEffectRepeat(Queue.take(frames)) }))
+  }
 }
 
 /** What a frame said: a league's listing, or one game's whole list of plays. */

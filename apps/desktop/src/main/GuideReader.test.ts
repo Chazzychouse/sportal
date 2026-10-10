@@ -3,6 +3,7 @@ import { describe, expect, it } from "@effect/vitest"
 import { Context, Effect, Fiber, Layer } from "effect"
 import { TestClock } from "effect/testing"
 import { vi } from "vitest"
+import * as TestDesktop from "./TestDesktop.ts"
 
 /** What the provider session answers; each test sets what it needs before it asks for a read. */
 const answers = {
@@ -32,14 +33,13 @@ vi.mock("electron", () => ({
 
 const { ProviderSession } = await import("./ProviderSession.ts")
 const { GuideReader } = await import("./GuideReader.ts")
-const { collect, shellOf } = await import("./TestShell.ts")
 const { BrowserWindow } = await import("electron")
 
 describe("GuideReader", () => {
   it.effect("should read when asked, sending the guide request the page would, signed as the account", () =>
     Effect.gen(function* () {
       const reader = yield* attached()
-      const guides = yield* collect(reader.guides, 1)
+      const guides = yield* TestDesktop.collect(reader.guides, 1)
 
       yield* reader.readSoon
       yield* settle
@@ -128,7 +128,7 @@ describe("GuideReader", () => {
   it.effect("should read again 5 minutes after a refused guide request", () =>
     Effect.gen(function* () {
       const reader = yield* attached()
-      const guides = yield* collect(reader.guides, 1)
+      const guides = yield* TestDesktop.collect(reader.guides, 1)
       answers.guide = { status: 401, body: "" }
       yield* reader.readSoon
       yield* settle
@@ -193,7 +193,7 @@ function attached(logs: Array<string> = []) {
   return Layer.build(
     GuideReader.layer.pipe(
       Layer.provide(ProviderSession.layer),
-      Layer.provide(shellOf(new BrowserWindow(), logs))
+      Layer.provide(TestDesktop.shellOf(new BrowserWindow(), logs))
     )
   ).pipe(Effect.map((context) => Context.get(context, GuideReader)))
 }

@@ -6,14 +6,14 @@ import { Effect, Option, Schema, Stream } from "effect"
 import { Atom, AtomRegistry } from "effect/reactivity"
 import { vi } from "vitest"
 import * as LiveStream from "../hub/LiveStream.ts"
-import { FakeEventSource, opened, slateMessage } from "../hub/TestLiveStream.ts"
+import * as TestWeb from "../TestWeb.ts"
 import * as DisplayScreen from "./DisplayScreen.ts"
 import { Screen } from "./Screen.ts"
 
 describe("DisplayScreen.screen", () => {
   beforeEach(() => {
-    FakeEventSource.opened = []
-    vi.stubGlobal("EventSource", FakeEventSource)
+    TestWeb.FakeEventSource.opened = []
+    vi.stubGlobal("EventSource", TestWeb.FakeEventSource)
     vi.stubGlobal("localStorage", new MemoryStorage())
   })
   afterEach(() => {
@@ -22,9 +22,9 @@ describe("DisplayScreen.screen", () => {
 
   it.effect("should assign a game as the slate's availability says", () =>
     Effect.gen(function* () {
-      const source = yield* opened()
-      source.onmessage?.({ data: slateMessage([{ game, availability: [onEspn] }]) })
-      yield* untilLive((live) => live.slate.length > 0)
+      const source = yield* TestWeb.opened
+      source.onmessage?.({ data: TestWeb.slateMessage([{ game, availability: [onEspn] }]) })
+      yield* untilLive((live) => live.slate.games.length > 0)
 
       yield* Atom.set(DisplayScreen.screen, { _tag: "Assign", tile: 0, game: id })
 
@@ -35,7 +35,7 @@ describe("DisplayScreen.screen", () => {
 
   it.effect("should publish a refused command's rejection and keep the Screen", () =>
     Effect.gen(function* () {
-      yield* opened()
+      yield* TestWeb.opened
       const before = yield* Atom.get(DisplayScreen.screen)
 
       yield* Atom.set(DisplayScreen.screen, { _tag: "Clear", tile: 9 })
@@ -52,12 +52,12 @@ describe("DisplayScreen.screen", () => {
 
   it.effect("should refresh a tile when a slate brings its game a stream", () =>
     Effect.gen(function* () {
-      const source = yield* opened()
-      source.onmessage?.({ data: slateMessage([{ game, availability: [] }]) })
-      yield* untilLive((live) => live.slate.length > 0)
+      const source = yield* TestWeb.opened
+      source.onmessage?.({ data: TestWeb.slateMessage([{ game, availability: [] }]) })
+      yield* untilLive((live) => live.slate.games.length > 0)
       yield* Atom.set(DisplayScreen.screen, { _tag: "Assign", tile: 0, game: id })
 
-      source.onmessage?.({ data: slateMessage([{ game, availability: [onEspn] }]) })
+      source.onmessage?.({ data: TestWeb.slateMessage([{ game, availability: [onEspn] }]) })
       const screen = yield* untilScreen((screen) => screen.tiles[0]?._tag === "StreamTile")
 
       assert.deepStrictEqual(screen.tiles[0], { _tag: "StreamTile", game: id, channel: espn })
@@ -67,8 +67,9 @@ describe("DisplayScreen.screen", () => {
   it.effect("should start from the Screen this browser kept", () =>
     Effect.gen(function* () {
       const kept = new Screen({ ...Screen.initial, layout: "Pair" })
-      localStorage.setItem("sportal/screen", JSON.stringify(Schema.encodeSync(Screen)(kept)))
-      yield* opened()
+      const encoded = yield* Schema.encodeEffect(Screen)(kept)
+      localStorage.setItem("sportal/screen", JSON.stringify(encoded))
+      yield* TestWeb.opened
 
       const screen = yield* Atom.get(DisplayScreen.screen)
 
@@ -79,7 +80,7 @@ describe("DisplayScreen.screen", () => {
   it.effect("should start from the initial Screen when what was kept does not read", () =>
     Effect.gen(function* () {
       localStorage.setItem("sportal/screen", "{not a screen")
-      yield* opened()
+      yield* TestWeb.opened
 
       const screen = yield* Atom.get(DisplayScreen.screen)
 
@@ -89,7 +90,7 @@ describe("DisplayScreen.screen", () => {
 
   it.effect("should keep each change in this browser", () =>
     Effect.gen(function* () {
-      yield* opened()
+      yield* TestWeb.opened
 
       yield* Atom.set(DisplayScreen.screen, { _tag: "SetLayout", layout: "Single" })
       yield* untilScreen((screen) => screen.layout === "Single")

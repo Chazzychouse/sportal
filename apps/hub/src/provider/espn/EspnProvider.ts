@@ -5,10 +5,8 @@ import { HttpClient } from "effect/http"
 import { HubConfig } from "../../HubConfig.ts"
 import { Delivery, Provider } from "../Provider.ts"
 import * as EspnEvent from "./EspnEvent.ts"
-import { FastCast, type Wanted } from "./FastCast.ts"
-import type { Frame } from "./Frame.ts"
+import { FastCast, type Frame, Topic, type Wanted } from "./FastCast.ts"
 import { GameTopics } from "./GameTopics.ts"
-import { Topic } from "./Topic.ts"
 
 /**
  * ESPN as the provider: the site scoreboard of each league `HubConfig` names, polled, beside FastCast's game topics,

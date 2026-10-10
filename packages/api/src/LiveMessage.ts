@@ -1,12 +1,14 @@
 import { ChannelAvailability } from "@sportal/domain/Channel"
-import { Game } from "@sportal/domain/Game"
+import { GameId } from "@sportal/domain/Game"
+import { Slate } from "@sportal/domain/Slate"
 import { Schema } from "effect"
 
 /** A message on the live stream at GET /api/live, sent as one JSON object per server-sent event. */
 export const LiveMessage = Schema.TaggedUnion({
-  /** Every listed game, each beside its availability from every source. */
+  /** The slate, each game with its recent plays, and each listed game's availability from every source, by its id. */
   SlateChanged: {
-    games: Schema.Array(Schema.Struct({ game: Game, availability: Schema.Array(ChannelAvailability) }))
+    slate: Slate,
+    availability: Schema.Record(GameId, Schema.Array(ChannelAvailability))
   }
 })
 export type LiveMessage = typeof LiveMessage.Type

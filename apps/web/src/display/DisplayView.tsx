@@ -24,10 +24,10 @@ export function DisplayView() {
     if (!open) setDisplay(display.close())
   }
   const fullScreen = useFullScreen()
-  const cards = StripCard.of(screen, live.slate)
+  const cards = StripCard.of(screen, live.slate.games)
   const selected = display.selectedOn(screen)
   const toggleSolo = display.press({ _tag: "ToggleSolo" }, screen, cards)
-  const liveCount = live.slate.filter(({ snapshot }) => snapshot.progress() === "live").length
+  const liveCount = live.slate.games.filter(({ snapshot }) => snapshot.progress() === "live").length
   useScreenRejectionToasts()
 
   useHotkeys((hotkey: Hotkey) =>
@@ -56,7 +56,7 @@ export function DisplayView() {
         )}
         <ScreenView
           screen={screen}
-          slate={live.slate}
+          slate={live.slate.games}
           connection={live.connection}
           selected={selected}
           interacting={display.interactingOn(screen)}
@@ -71,7 +71,7 @@ export function DisplayView() {
         open={display.shows("Palette")}
         onOpenChange={closeOverlay}
         screen={screen}
-        slate={live.slate}
+        slate={live.slate.games}
         selected={selected}
         onFullScreen={fullScreen.toggle}
         onKeys={() => setDisplay(display.open("Keys"))}

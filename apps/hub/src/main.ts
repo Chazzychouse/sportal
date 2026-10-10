@@ -7,7 +7,6 @@ import * as HubServer from "./HubServer.ts"
 import { isStopping } from "./HubStopping.ts"
 import * as Espn from "./provider/espn/Espn.ts"
 import { Source } from "./source/Source.ts"
-import { YouTubeTv } from "./source/youtube-tv/YouTubeTv.ts"
 import * as Telemetry from "./Telemetry.ts"
 
 const Hub = HubServer.layer.pipe(
@@ -15,7 +14,6 @@ const Hub = HubServer.layer.pipe(
   Layer.provide(Director.layer),
   Layer.provide(Espn.layer),
   Layer.provide(Source.layerAll([Source.layerYouTubeTv, Source.layerTwitch])),
-  Layer.provide(YouTubeTv.layer),
   Layer.provide(Telemetry.layer),
   Layer.provide([HubConfig.layer, FetchHttpClient.layer, NodeSocket.layerWebSocketConstructorWS]),
   Layer.provide(NodeServices.layer)

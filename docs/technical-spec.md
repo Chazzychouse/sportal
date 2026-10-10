@@ -164,6 +164,7 @@ sportal/
 │   │       ├── League.ts       LeagueId
 │   │       ├── Team.ts         Team, its colors, Ranking
 │   │       ├── Game.ts         Game (a snapshot and its plays), GameId, GameStatus, GameSnapshot, BallSpot, Network, Broadcast
+│   │       ├── Slate.ts        Slate (the listed games, from listings and play lists), SlateChange
 │   │       ├── Situation.ts    Possession, down, distance, field position, red zone
 │   │       ├── Play.ts         A single play, as the game's play-by-play lists it; PlayKind
 │   │       ├── Channel.ts      SourceName, Channel, ChannelAvailability
@@ -185,8 +186,7 @@ sportal/
     │       ├── main.ts             Composition root: the Hub's layer pipe, run until a signal stops it; the only file that chooses providers and sources, ESPN's through `Espn`
     │       ├── HubConfig.ts        Every environment setting, in one place
     │       ├── Telemetry.ts        Log level and format; OTLP export when configured
-    │       ├── Director.ts         The one holder of the slate: takes each frame's deliveries as they arrive and publishes it beside each game's availability
-    │       ├── Slate.ts            The fold: every delivery taken in order into an ordered list of games, each with its latest snapshot and its plays
+    │       ├── Director.ts         The one holder of the slate: takes each frame's deliveries as they arrive and offers the slate
     │       ├── HubStopping.ts      Whether a task that should run until the Hub stops ended because it is stopping, and the Error log unless it did
     │       ├── TestTelemetry.ts    Layers for tests
     │       ├── TestDirector.ts     The Director taking a fed provider, and what it takes of a test's frames
@@ -199,15 +199,12 @@ sportal/
     │       │   └── espn/
     │       │       ├── Espn.ts             ESPN's one front door: the live provider (`layer`), polling and pushing through FastCast
     │       │       ├── EspnProvider.ts     Implements the port: polls each league on its own, folds FastCast's frames into GameTopics, tells FastCast what to follow
-    │       │       ├── GameTopics.ts       The fold of FastCast's frames: each game topic's document and its decoded plays
+    │       │       ├── GameTopics.ts       The fold of FastCast's frames: each game topic's document, rebuilt from checkpoints and patches, and its decoded plays
     │       │       ├── EspnPayload.ts      ESPN's JSON as ESPN spells it: events, scoreboard, plays
     │       │       ├── EspnEvent.ts        The site scoreboard's event as a GameSnapshot
     │       │       ├── EspnPlay.ts         ESPN's plays and their type ids, as Play
-    │       │       ├── FastCast.ts         ESPN's push, a service: follows the topics it is told to, and gives the socket as frames
-    │       │       ├── FastCastDocuments.ts Each topic's document, rebuilt from checkpoints and patches, and what a frame changed of it
+    │       │       ├── FastCast.ts         ESPN's push, a service: follows the topics it is told to, and gives the socket as frames (`Frame`, each as received, before ESPN's decode reads it; `Topic`, read once from its `tc`)
     │       │       ├── FastCastMessage.ts  FastCast's wire shapes: the outer envelope, framing, and the patch message
-    │       │       ├── Topic.ts            A FastCast topic, read once from its `tc`
-    │       │       ├── Frame.ts            A frame as received, before ESPN's decode reads it
     │       │       ├── TestEspn.ts         Recorded payloads, NE at BUF's day replayed and cached (`recordedNeAtBuf`, `neAtBufDecoded`), and ESPN answering from recorded scoreboards (`recordedEspn`)
     │       │       ├── TestFastCast.ts     A fake FastCast socket host, builders of frames, checkpoints and messages, and the real FastCast run over the fake host (`nflFrames`, `framesOver`, `closedSockets`)
     │       │       ├── TestGameTopics.ts   A test's frames replayed through the game topics, and the topics they leave
@@ -217,12 +214,10 @@ sportal/
     │           ├── Guide.ts            Guide, Airing, ChannelId: a source's channels and what each airs
     │           ├── Twitch.ts           Twitch's lineup
     │           ├── TestSource.ts       The source's availability now, for tests
-    │           ├── TestGuide.ts        Guides and airings for tests
     │           └── youtube-tv/
     │               ├── YouTubeTv.ts         Reads the guide the shell fetches, offers it while fresh
     │               ├── YouTubeTvGuide.ts    A guide response decoded to a complete, validated, stamped Guide
     │               ├── YouTubeTvPayload.ts  The guide response's wire shape
-    │               ├── TestYouTubeTv.ts     A recorded guide, and a response of one row, for tests
     │               └── fixtures/            Recorded real payloads
     │
     ├── web/
@@ -276,7 +271,7 @@ The same standard applies within a file as across the tree: a file is not a junk
 | Rule | Tool |
 | --- | --- |
 | Import direction (section 4.1, rule 9); provider folders private to themselves | dependency-cruiser |
-| Production code cannot import a Hub `Test*.ts`; tests and other Hub `Test*.ts` harnesses can | dependency-cruiser |
+| Production code cannot import a `Test*.ts`; tests and other `Test*.ts` modules can | dependency-cruiser |
 | Banned file and folder names; no `index.ts` barrels | dependency-cruiser |
 | No unused files, exports, or dependencies | knip |
 | No `any`, no non-null assertions, no default exports | Biome |
@@ -313,10 +308,10 @@ class Director extends Context.Service<Director, {
 }>()("sportal/hub/Director") {}
 ```
 
-- The `Slate` (`Slate.ts`) is the fold: an ordered list of `Game`s, leagues in `LeagueId` order and each league's in its listing's order, each with its latest `GameSnapshot` and its plays. `take(deliveries)` on it is pure and returns the next slate and its slate changes; a take that changes nothing gives back the same slate.
+- The `Slate` (`packages/domain/src/Slate.ts`) is the fold: an ordered list of `Game`s, leagues in `LeagueId` order and each league's in its listing's order, each with its latest `GameSnapshot` and its plays. `relisted(league, snapshots)` and `playsTaken(game, plays)` on it are pure and return the next slate and its slate changes; one that changes nothing gives back the same slate. The Director takes each frame's deliveries onto them in order.
 - The Director starts from an empty slate and takes each frame's deliveries as they arrive, in one `Director.take` span carrying its `sportal.deliveries` count. From the slate changes each take gives, it gauges each listed game's progress (`sportal_game_state`: 1 upcoming, 2 live, 3 over), status (`sportal_game_status`: 1 scheduled, 2 live, 3 halftime, 4 delayed, 5 final, 6 postponed, 7 canceled), away and home scores (`sportal_game_score`), period (`sportal_game_period`), clock (`sportal_game_clock`), kickoff as Unix seconds (`sportal_game_kickoff`), and accepted-at time as Unix seconds (`sportal_game_updated_at`). Every series carries stable `game`, `league`, and `matchup` attributes; score series also carry `side` and `team`. A changing value updates its series, and a game no listing names has every current-game series removed. The Director logs each play a take adds at Info, annotated with `game`, `league`, `matchup`, `play`, and `scoring`; these logs, rather than a play counter, supply the latest-five, scoring-only, and complete-in-range play panels. For now nothing is kept between runs: a restarted Hub serves an empty slate until its provider's next poll lists the day's games.
 - A take that raises a defect is an Error log; the slate keeps what it had and takes the next frame. If the provider's frames end other than by the Hub stopping, that is an Error log and the slate stays as it is.
-- The Hub server's live route builds `SlateChanged`: each listed game as the slate has it, carrying only its last ten plays (`Game#recent`), beside its availability from every source. The Slate and the Director know nothing of sources or the API: the live route joins the Director's slate with the source's availability, drops a message that is the same as the last, and sends it once 250 ms have passed without a further change to the slate or to a source (a trailing settling, not a maximum latency: continuous updates keep deferring it).
+- The Hub server's live route builds `SlateChanged`: the slate with each game carrying only its last ten plays (`Slate#recent`), and each listed game's availability from every source, by its id. The Slate and the Director know nothing of sources or the API: the live route joins the Director's slate with the source's availability, reads the sources' availability again every 30 seconds, drops a message that is the same as the last, and sends a slate change once 250 ms have passed without a further one (a trailing settling, not a maximum latency: continuous updates keep deferring it).
 - `main.ts` provides it over ESPN as the provider and YouTube TV and Twitch as the sources.
 - The Hub's whole shutdown bound is about 4 s: the HTTP server's 3 s for connected Displays, then telemetry's 1 s to export what it holds.
 
@@ -324,14 +319,15 @@ class Director extends Context.Service<Director, {
 
 ```ts
 class Source extends Context.Service<Source, {
-  // as it is, then again each time what the source knows changes: a guide read, or a guide gone stale
-  readonly availability: Stream<(game: GameSnapshot, now: DateTime.Utc) => ReadonlyArray<ChannelAvailability>>
+  // from what the source knows now
+  readonly availability: Effect<(game: GameSnapshot, now: DateTime.Utc) => ReadonlyArray<ChannelAvailability>>
+  readonly readGuide: (response: string) => Effect<void, GuideUnreadable>
 }>()("sportal/hub/source/Source") {}
 ```
 
-`Source.layerAll` runs every source and gives each game's availability from every source, in the order the sources are given, again whenever any of them changes; it merges nothing. A matched channel on the air is carried once the slate says the game has started, and upcoming before, so nothing ticks: the live route reads the time when it sends, only to choose among a guide's airings. The Display's Screen chooses: the most useful availability (carried, upcoming, no guide, then not carried), and a stream tile moves only when its own source carries its game on another channel, so a tile never moves to another source. YouTube TV's availability comes from the guide `YouTubeTv` offers; Twitch's from its lineup, a guide whose one channel carries Prime Video, given once.
+`Source.layerAll` runs every source and gives each game's availability from every source, in the order the sources are given; it merges nothing. A source says nothing when what it knows changes: the live route reads its availability again each time the slate settles and every 30 seconds, so a guide read or a guide gone stale shows within 30 seconds, and reads the time when it sends, to choose among a guide's airings and to judge a guide's freshness. A matched channel on the air is carried once the slate says the game has started, and upcoming before. The Display's Screen chooses: the most useful availability (carried, upcoming, no guide, then not carried), and a stream tile moves only when its own source carries its game on another channel, so a tile never moves to another source. YouTube TV's availability comes from the latest guide it read; Twitch's from its lineup, a guide whose one channel carries Prime Video.
 
-YouTube TV's channels are found in its own guide, read by the shell and handed to `YouTubeTv.readGuide` (`docs/history.md`, "Guide-matched channels"); with no fresh guide (a guide is fresh for 45 minutes), its availability is "no guide". Twitch's lineup is fixed and never read.
+YouTube TV's channels are found in its own guide, read by the shell and handed to `Source.readGuide`, which every source receives and only YouTube TV keeps (`docs/history.md`, "Guide-matched channels"); with no fresh guide (a guide is fresh for 45 minutes), its availability is "no guide". Twitch's lineup is fixed and never read.
 
 `StreamLocator` is a tagged union. Today it has one member, a web-view address; a new kind is added only when a source needs it.
 

@@ -3,16 +3,20 @@ import { GameId } from "@sportal/domain/Game"
 import { Context, Effect, Exit, Fiber, Layer, Scope } from "effect"
 import { TestClock } from "effect/testing"
 import { type Mock, vi } from "vitest"
-import { fakeContents } from "./TestWebContents.ts"
+import * as TestDesktop from "./TestDesktop.ts"
 
-const created: Array<{ setBounds: Mock; setVisible: Mock; webContents: ReturnType<typeof fakeContents> }> = []
+const created: Array<{
+  setBounds: Mock
+  setVisible: Mock
+  webContents: ReturnType<typeof TestDesktop.fakeContents>
+}> = []
 
 vi.mock("electron", () => ({
   session: { fromPartition: () => ({ setPermissionRequestHandler: vi.fn() }) },
   WebContentsView: class {
     readonly setBounds = vi.fn()
     readonly setVisible = vi.fn()
-    readonly webContents = fakeContents()
+    readonly webContents = TestDesktop.fakeContents()
     constructor() {
       created.push(this)
     }
@@ -27,7 +31,6 @@ vi.mock("electron", () => ({
 
 const { ProviderSession } = await import("./ProviderSession.ts")
 const { TileViews } = await import("./TileViews.ts")
-const { collect, shellOf } = await import("./TestShell.ts")
 const { BrowserWindow } = await import("electron")
 
 describe("TileViews.sync", () => {
@@ -300,7 +303,7 @@ describe("TileViews.hotkeys", () => {
     Effect.gen(function* () {
       const { tiles } = yield* attached()
       yield* tiles.sync([placement])
-      const hotkeys = yield* collect(tiles.hotkeys, 1)
+      const hotkeys = yield* TestDesktop.collect(tiles.hotkeys, 1)
 
       press("KeyA")
       press("Digit2", "keyUp")
@@ -376,7 +379,7 @@ describe("TileViews mouse filter", () => {
     Effect.gen(function* () {
       const { tiles } = yield* attached()
       yield* tiles.sync([placement])
-      const presses = yield* collect(tiles.tilePresses, 1)
+      const presses = yield* TestDesktop.collect(tiles.tilePresses, 1)
 
       mouse(0, "mouseDown", "right")
       mouse(0, "mouseUp", "left")
@@ -391,7 +394,7 @@ describe("TileViews mouse filter", () => {
     Effect.gen(function* () {
       const { tiles } = yield* attached()
       yield* tiles.sync([{ ...placement, interactive: true }])
-      const presses = yield* collect(tiles.tilePresses, 1)
+      const presses = yield* TestDesktop.collect(tiles.tilePresses, 1)
 
       mouse(0, "mouseDown", "left")
       yield* tiles.sync([placement])
@@ -421,7 +424,10 @@ const target = { x: 110, y: 20, width: 640, height: 360 }
 function attached() {
   created.length = 0
   const window = new BrowserWindow({})
-  const layer = TileViews.layer.pipe(Layer.provide(ProviderSession.layer), Layer.provide(shellOf(window)))
+  const layer = TileViews.layer.pipe(
+    Layer.provide(ProviderSession.layer),
+    Layer.provide(TestDesktop.shellOf(window))
+  )
   return Layer.build(layer).pipe(
     Effect.map((context) => ({ window, tiles: Context.get(context, TileViews) }))
   )

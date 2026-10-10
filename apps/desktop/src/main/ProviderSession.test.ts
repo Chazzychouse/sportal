@@ -1,12 +1,12 @@
 import { describe, expect, it } from "@effect/vitest"
 import { Context, Effect, Layer } from "effect"
 import { afterEach, vi } from "vitest"
-import { fakeContents, navigation } from "./TestWebContents.ts"
+import * as TestDesktop from "./TestDesktop.ts"
 
 const providerSession = { setPermissionRequestHandler: vi.fn() }
 const windows: Array<{
   options: { width: number; height: number; parent?: unknown; webPreferences: Record<string, unknown> }
-  webContents: ReturnType<typeof fakeContents>
+  webContents: ReturnType<typeof TestDesktop.fakeContents>
   destroyed: boolean
   focus: ReturnType<typeof vi.fn>
   close: ReturnType<typeof vi.fn>
@@ -18,7 +18,9 @@ vi.mock("electron", () => ({
   session: { fromPartition: vi.fn(() => providerSession) },
   WebContentsView: vi.fn(),
   BrowserWindow: class {
-    readonly webContents = fakeContents(() => (loadFailure ? Promise.reject(loadFailure) : Promise.resolve()))
+    readonly webContents = TestDesktop.fakeContents(() =>
+      loadFailure ? Promise.reject(loadFailure) : Promise.resolve()
+    )
     destroyed = false
     readonly focus = vi.fn()
     readonly close = vi.fn(() => {
@@ -46,7 +48,6 @@ vi.mock("electron", () => ({
 }))
 
 const { ProviderSession } = await import("./ProviderSession.ts")
-const { shellOf } = await import("./TestShell.ts")
 const { BrowserWindow } = await import("electron")
 const shell = new BrowserWindow()
 
@@ -89,7 +90,7 @@ describe("ProviderSession.openSignIn", () => {
     Effect.gen(function* () {
       const providers = yield* built()
       yield* providers.openSignIn
-      const refused = navigation("https://evil.example/", true)
+      const refused = TestDesktop.navigation("https://evil.example/", true)
 
       onlyWindow().webContents.emit("will-navigate", refused)
 
@@ -101,7 +102,7 @@ describe("ProviderSession.openSignIn", () => {
     Effect.gen(function* () {
       const providers = yield* built()
       yield* providers.openSignIn
-      const allowed = navigation("https://accounts.google.com/signin", true)
+      const allowed = TestDesktop.navigation("https://accounts.google.com/signin", true)
 
       onlyWindow().webContents.emit("will-navigate", allowed)
 
@@ -231,7 +232,7 @@ describe("ProviderSession permission requests", () => {
 /** The provider session over the mocked shell window, with every log's message pushed to `logs`. */
 function built(logs: Array<string> = []) {
   windows.length = 0
-  return Layer.build(ProviderSession.layer.pipe(Layer.provide(shellOf(shell, logs)))).pipe(
+  return Layer.build(ProviderSession.layer.pipe(Layer.provide(TestDesktop.shellOf(shell, logs)))).pipe(
     Effect.map((context) => Context.get(context, ProviderSession))
   )
 }

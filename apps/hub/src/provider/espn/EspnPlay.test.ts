@@ -4,9 +4,9 @@ import { FootballPlay, Other, Play, PlayId, Rush } from "@sportal/domain/Play"
 import { TeamId } from "@sportal/domain/Team"
 import { Effect, Equal, Schema } from "effect"
 import { TestClock } from "effect/testing"
+import * as TestHub from "../../TestHub.ts"
 import { Delivery } from "../Provider.ts"
 import * as EspnPlay from "./EspnPlay.ts"
-import * as TestEspn from "./TestEspn.ts"
 
 describe("EspnPlay.FootballPlay", () => {
   it.effect("should read a rush, with its text and win probability", () =>
@@ -205,9 +205,9 @@ describe("EspnPlay.FootballPlay", () => {
     "should read every play in the recorded fixtures without falling back to Other",
     () =>
       Effect.gen(function* () {
-        yield* TestClock.setTime(TestEspn.duringNeAtBuf.epochMilliseconds)
-        const day = yield* TestEspn.recordedNeAtBuf
-        const decoded = yield* TestEspn.replayed(day)
+        yield* TestClock.setTime(TestHub.duringNeAtBuf.epochMilliseconds)
+        const day = yield* TestHub.recordedNeAtBuf
+        const decoded = yield* TestHub.replayed(day)
         const pushed = decoded
           .flat()
           .flatMap((delivery) => (Delivery.$is("Plays")(delivery) ? delivery.plays : []))
@@ -297,8 +297,8 @@ describe("the recorded NE at BUF day", () => {
     "should decode every play so it reads back from its JSON Equal to itself",
     () =>
       Effect.gen(function* () {
-        yield* TestClock.setTime(TestEspn.duringNeAtBuf.epochMilliseconds)
-        const decoded = yield* TestEspn.neAtBufDecoded
+        yield* TestClock.setTime(TestHub.duringNeAtBuf.epochMilliseconds)
+        const decoded = yield* TestHub.neAtBufDecoded
         const deliveries = decoded.flat()
         const plays = deliveries.flatMap((delivery) =>
           Delivery.$is("Plays")(delivery) ? delivery.plays : []

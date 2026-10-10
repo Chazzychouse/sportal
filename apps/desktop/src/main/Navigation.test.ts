@@ -2,7 +2,7 @@ import { describe, expect, it } from "@effect/vitest"
 import { Effect } from "effect"
 import { vi } from "vitest"
 import { confine, hostOf, load } from "./Navigation.ts"
-import { fakeContents, navigation } from "./TestWebContents.ts"
+import * as TestDesktop from "./TestDesktop.ts"
 
 describe("hostOf", () => {
   it("should keep only the hostname, dropping any path or query that could carry a token", () => {
@@ -51,7 +51,7 @@ describe("confine", () => {
     "should refuse a %s off the permitted addresses, saying where",
     (event) => {
       const { contents, warn } = confined({ subframes: false })
-      const refused = navigation("https://evil.example/path?token=secret", true)
+      const refused = TestDesktop.navigation("https://evil.example/path?token=secret", true)
 
       contents.emit(event, refused)
 
@@ -62,7 +62,7 @@ describe("confine", () => {
 
   it("should let a permitted navigation through", () => {
     const { contents, warn } = confined({ subframes: false })
-    const allowed = navigation("http://hub/screen", true)
+    const allowed = TestDesktop.navigation("http://hub/screen", true)
 
     contents.emit("will-navigate", allowed)
 
@@ -80,7 +80,7 @@ describe("confine", () => {
 
   it("should refuse a subframe navigation off the permitted addresses when asked to", () => {
     const { contents } = confined({ subframes: true })
-    const inFrame = navigation("https://evil.example/", false)
+    const inFrame = TestDesktop.navigation("https://evil.example/", false)
 
     contents.emit("will-frame-navigate", inFrame)
 
@@ -89,7 +89,7 @@ describe("confine", () => {
 
   it("should let a subframe navigation off the permitted addresses through when not asked to", () => {
     const { contents } = confined({ subframes: false })
-    const elsewhere = navigation("https://evil.example/", false)
+    const elsewhere = TestDesktop.navigation("https://evil.example/", false)
 
     contents.emit("will-frame-navigate", elsewhere)
 
@@ -103,7 +103,7 @@ function failing(error: unknown) {
 
 /** Page contents confined to the Hub's addresses, with a spy for the warnings. */
 function confined(options: { subframes: boolean }) {
-  const contents = fakeContents()
+  const contents = TestDesktop.fakeContents()
   const warn = vi.fn()
   confine(contents, (url) => url.startsWith("http://hub/"), warn, options)
   return { contents, warn }

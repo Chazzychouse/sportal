@@ -10,6 +10,7 @@ import {
   Option,
   type Path,
   type PlatformError,
+  Record,
   Schema,
   Sink,
   Stream
@@ -27,18 +28,13 @@ import { HttpApiBuilder } from "effect/http-api"
 import { Director } from "./Director.ts"
 import { HubConfig } from "./HubConfig.ts"
 import { Source } from "./source/Source.ts"
-import { YouTubeTv } from "./source/youtube-tv/YouTubeTv.ts"
 
-/**
- * The Hub's routes on the HTTP server in context: the API, the live stream, and the built web UI when there is one.
- */
 export const layer: Layer.Layer<
   never,
   PlatformError.PlatformError,
   | HubConfig
   | Director
   | Source
-  | YouTubeTv
   | HttpServer.HttpServer
   | HttpPlatform.HttpPlatform
   | Etag.Generator
@@ -59,7 +55,6 @@ export const layer: Layer.Layer<
   })
 )
 
-/** An HTTP server on the configured address, for `layer` to put the Hub's routes on. */
 export const layerListen: Layer.Layer<
   HttpServer.HttpServer | HttpPlatform.HttpPlatform | Etag.Generator | NodeServices.NodeServices,
   HttpServerError.ServeError,
@@ -67,7 +62,6 @@ export const layerListen: Layer.Layer<
 > = Layer.unwrap(
   Effect.gen(function* () {
     const { port, host } = yield* HubConfig
-    // Connected Displays hold live streams open. By default shutdown waits 20 seconds for them, and Docker kills at 10.
     return NodeHttpServer.layer(createServer, { port, host, gracefulShutdownTimeout: "3 seconds" })
   })
 )
@@ -76,10 +70,10 @@ const guideHandlers = HttpApiBuilder.group(
   SportalApi,
   "guide",
   Effect.fn(function* (handlers) {
-    const youTubeTv = yield* YouTubeTv
+    const source = yield* Source
     return handlers.handleAll({
       read: ({ payload }) =>
-        youTubeTv
+        source
           .readGuide(payload.guide)
           .pipe(
             Effect.tapError(() =>
@@ -103,7 +97,7 @@ const hostHandlers = HttpApiBuilder.group(
 )
 
 /**
- * GET /api/live — the current slate, each game beside its availability, then every change to either, as server-sent
+ * GET /api/live — the slate, and each game's availability, then every change to either, as server-sent
  * events, with a comment every 20 seconds so proxies that close idle connections leave a quiet stream open. Every
  * connection reads the one `events` stream.
  */
@@ -126,23 +120,26 @@ function liveRoute(events: Stream.Stream<string, Schema.SchemaError>) {
 }
 
 /**
- * The live stream's events, built once for every connection: the slate, each game beside its availability as of when
- * it is sent, first as it is, then once each burst of changes to the slate or the availability settles, unless what
- * it sends is the same; each as an SSE `data:` line. A connection joining gets the last one at once.
+ * The live stream's events, built once for every connection: the slate, and each game's availability as of when
+ * it is sent, first as it is, then once each burst of slate changes settles and every 30 seconds, so a guide read or
+ * a guide going stale shows, unless what it sends is the same; each as an SSE `data:` line. A connection joining gets
+ * the last one at once.
  */
 const liveEvents = Effect.gen(function* () {
   const director = yield* Director
   const source = yield* Source
   const encode = Schema.encodeEffect(LiveMessageJson)
 
-  return yield* settled(Stream.zipLatest(director.slate, source.availability)).pipe(
-    Stream.mapEffect(([slate, availabilityOf]) =>
-      Effect.map(DateTime.now, (now): SlateChanged => {
-        const games = slate.games.map((game) => ({
-          game: game.recent(),
-          availability: availabilityOf(game.snapshot, now)
-        }))
-        return { _tag: "SlateChanged", games }
+  return yield* Stream.zipLatest(settled(director.slate), Stream.tick("30 seconds")).pipe(
+    Stream.mapEffect(([slate]) =>
+      Effect.gen(function* () {
+        const availabilityOf = yield* source.availability
+        const now = yield* DateTime.now
+
+        const availability = Record.fromEntries(
+          slate.games.map(({ snapshot }) => [snapshot.id, availabilityOf(snapshot, now)] as const)
+        )
+        return { _tag: "SlateChanged", slate: slate.recent(), availability } satisfies SlateChanged
       })
     ),
     Stream.changesWith(samePublished),
