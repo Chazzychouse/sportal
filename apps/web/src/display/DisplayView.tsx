@@ -3,6 +3,7 @@ import { Toaster } from "@/design/sonner"
 import * as GuideRelay from "../hub/GuideRelay.ts"
 import { useScreenRejectionToasts } from "../screen/Rejections.ts"
 import { ScreenView } from "../screen/ScreenView.tsx"
+import * as TilePlacements from "../screen/TilePlacements.ts"
 import { SlateView } from "../slate/SlateView.tsx"
 import { CommandPalette } from "./CommandPalette.tsx"
 import { DisplayInput } from "./Display.ts"
@@ -20,6 +21,7 @@ export function DisplayView() {
   }
   useAtomMount(DisplayState.inputs)
   useAtomMount(GuideRelay.relay)
+  useAtomMount(TilePlacements.sync)
   useScreenRejectionToasts()
 
   return (

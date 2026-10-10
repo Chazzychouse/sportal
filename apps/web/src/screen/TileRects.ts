@@ -1,4 +1,4 @@
-import type { TilePlacement } from "@sportal/api/ShellBridge"
+import type { TileBounds, TilePlacement } from "@sportal/api/ShellBridge"
 import type { GameId } from "@sportal/domain/Game"
 import { Option } from "effect"
 import { Layout } from "../layout/Layout.ts"
@@ -12,7 +12,7 @@ import { type Screen, Tile } from "./Screen.ts"
 export function tileRects(
   screen: Screen,
   area: { width: number; height: number }
-): ReadonlyArray<{ x: number; y: number; width: number; height: number }> {
+): ReadonlyArray<TileBounds> {
   const whole = inset({ x: 0, y: 0, width: area.width, height: area.height })
   const solo = Option.getOrUndefined(Option.map(screen.solo, (game) => screen.slotOf(game)))
 
@@ -38,7 +38,7 @@ export function tileRects(
  */
 export function placements(
   screen: Screen,
-  rects: ReturnType<typeof tileRects>,
+  rects: ReadonlyArray<TileBounds>,
   origin: { x: number; y: number },
   interacting: GameId | undefined
 ): Array<TilePlacement> {
@@ -60,8 +60,8 @@ export function placements(
  * overlay. An overlay flush against a video, touching only its edge, leaves it shown.
  */
 export function coveredGames(
-  overlays: ReadonlyArray<{ x: number; y: number; width: number; height: number }>,
-  videos: ReadonlyArray<{ game: GameId; bounds: { x: number; y: number; width: number; height: number } }>
+  overlays: ReadonlyArray<TileBounds>,
+  videos: ReadonlyArray<{ game: GameId; bounds: TileBounds }>
 ): ReadonlyArray<GameId> {
   return videos
     .filter((video) => overlays.some((overlay) => overlaps(overlay, video.bounds)))
@@ -69,7 +69,7 @@ export function coveredGames(
 }
 
 /** The part of a tile below its tileHeader, where its video goes. */
-function videoBounds(rect: { x: number; y: number; width: number; height: number }) {
+function videoBounds(rect: TileBounds) {
   return {
     x: rect.x,
     y: rect.y + tileHeader,
@@ -79,10 +79,7 @@ function videoBounds(rect: { x: number; y: number; width: number; height: number
 }
 
 /** Whether two rectangles share any area; touching edges do not. */
-function overlaps(
-  a: { x: number; y: number; width: number; height: number },
-  b: { x: number; y: number; width: number; height: number }
-) {
+function overlaps(a: TileBounds, b: TileBounds) {
   return a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height
 }
 
@@ -92,7 +89,7 @@ export const gap = 6
 /** The height of a tile's header strip, in pixels: the part of a tile above its video. */
 export const tileHeader = 28
 
-function inset(rect: { x: number; y: number; width: number; height: number }) {
+function inset(rect: TileBounds) {
   const half = gap / 2
   return { x: rect.x + half, y: rect.y + half, width: rect.width - gap, height: rect.height - gap }
 }

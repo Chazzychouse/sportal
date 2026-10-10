@@ -10,7 +10,7 @@ import { GameStatus } from "../game/GameStatus.tsx"
 import { Score } from "../game/Score.tsx"
 import { type Screen, Tile } from "./Screen.ts"
 import { TileAction } from "./TileAction.ts"
-import { tileHeader } from "./TileRects.ts"
+import * as TileRects from "./TileRects.ts"
 
 /**
  * A tile's header strip: its slot, its game and score, the on-air tally when its sound is on, and its controls.
@@ -40,7 +40,7 @@ export function TileChrome(props: {
         if (Number.isInteger(from) && from !== slot)
           input(DisplayInput.Commanded({ command: { _tag: "Swap", a: from, b: slot } }))
       }}
-      style={{ height: tileHeader }}
+      style={{ height: TileRects.tileHeader }}
       className={`flex shrink-0 items-center gap-2 border-b px-1.5 text-xs ${
         onAir ? "border-on-air/60 bg-on-air/10" : "bg-card"
       }`}

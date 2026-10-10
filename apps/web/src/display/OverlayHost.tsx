@@ -1,6 +1,6 @@
 import type { GameId } from "@sportal/domain/Game"
 import { createContext, type ReactNode, useCallback, useContext, useLayoutEffect, useRef } from "react"
-import { coveredGames } from "../screen/TileRects.ts"
+import * as TileRects from "../screen/TileRects.ts"
 
 /**
  * Where overlays meet native video. Provider views draw above the web UI, so an overlay (a dialog, the command
@@ -50,7 +50,7 @@ function makeHost() {
   let hidden = ""
 
   const update = () => {
-    const games = coveredGames(
+    const games = TileRects.coveredGames(
       [...overlays].map((element) => element.getBoundingClientRect()),
       videos
     )
