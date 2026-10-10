@@ -1,7 +1,7 @@
 # 14. One ESPN fold; FastCast follows what it is told
 
 Date: 2026-10-09
-Status: Accepted
+Status: Accepted. Refined by 0016 (FastCast follows game topics only).
 
 Amends ADR 0007 (the FastCast live feed).
 
@@ -16,7 +16,7 @@ pushed frame was patched twice.
 ## Decision
 
 - **One fold.** `EspnState` holds each topic's document and each league's listed games, as its last poll listed
-  them, and each push since (a push behind its listed game is logged and counted on `sportal_push_behind_listing`).
+  them, and each push since (a push behind its listed game is logged and counted on `sportal_push_behind_listing`; removed by 0016).
   `EspnProvider` keeps it in one `SubscriptionRef` and takes every polled and pushed frame into it once. Deliveries,
   the wait after each poll, and the topics FastCast follows are all read from it.
 - **FastCast follows what it is told.** `FastCast.follow(wanted)` reconciles each socket toward the wanted set. It
@@ -31,7 +31,7 @@ pushed frame was patched twice.
 - A push that shows a game live paces the next poll's wait. A poll lagging a push does not set the pushed game back in
   the listing (`Game#listed`'s rule).
 - A push behind its listed game is still taken into the listing for now; it is logged and counted
-  (`sportal_push_behind_listing`) so game days show how often it happens.
+  (`sportal_push_behind_listing`) so game days show how often it happens (removed by 0016).
 - FastCast follows only games a poll has listed; before the first poll it follows only the scoreboards.
 - A lost document is logged by the fold, which knows why; FastCast logs only that it follows the topic again.
 - FastCast no longer needs `HubConfig`: the wanted set carries the scoreboards.
