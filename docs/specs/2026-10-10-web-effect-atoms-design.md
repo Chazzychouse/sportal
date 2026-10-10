@@ -39,14 +39,18 @@ apps/web/src/
   design/               unchanged
   hub/      HubClient.ts · LiveStream.ts · GuideRelay.ts* · HubRuntime.ts✗
   shell/*   Shell.ts*
-  display/  Display.ts · DisplayState.ts* · Covering.ts* · DisplayView.tsx · TopBar.tsx · Brand.tsx
+  display/  Display.ts · DisplayState.ts* · Covering.ts* · OverlayRef.ts* · DisplayView.tsx · TopBar.tsx · Brand.tsx
             CommandPalette.tsx · KeysDialog.tsx · OverlayHost.tsx✗ · FullScreen.ts✗ · Hotkeys.ts✗
-  screen/   Screen.ts · DisplayScreen.ts · Rejections.ts · TilePlacements.ts* (was TileRects.ts)
+  screen/   Screen.ts · DisplayScreen.ts · Rejections.ts · TileRects.ts (pure geometry) · TilePlacements.ts* (atoms)
             TileAction.ts* (was TileActions.tsx) · ScreenView.tsx · TileChrome.tsx · TileBody.tsx · Dividers.tsx
   slate/    StripCard.ts* (was StripCards.ts) · SlateView.tsx · PlaceBadge.tsx
   layout/   Layout.ts · LayoutGlyph.tsx · LayoutPicker.tsx
   game/     Field.tsx · FieldDrawing.ts* · GameStatus.tsx · Score.tsx · TeamLogo.tsx
 ```
+
+`knip --production` fails on an export only tests use. So pure functions stay exported from a module the atoms
+import (`TileRects.ts`), and an atom a hook writes is written from a sibling module (`OverlayRef.ts` writes
+`Covering.overlays`), so each export has a production user.
 
 ## 1. Shell
 
@@ -167,8 +171,8 @@ Views:
 ScreenView still measures its element with a `ResizeObserver`, and writes the result to the `area` atom. Dividers write
 the dragged split to `dragged`.
 
-`screen/TilePlacements.ts` (was `TileRects.ts`): the pure `tileRects` and `placements`, `gap`, `tileHeader`,
-`screenTransition`, and:
+`screen/TileRects.ts` stays the pure geometry (`tileRects`, `placements`, `coveredGames`, `gap`, `tileHeader`),
+imported as a namespace, its rectangles typed `TileBounds`. `screen/TilePlacements.ts` holds `screenTransition` and:
 
 | Atom | Value |
 |---|---|
@@ -188,12 +192,13 @@ the dragged split to `dragged`.
   Screen without the dragged split) differs from the one sent with the last placements, there was one, and nothing is
   being dragged. Otherwise none: a resize or a drag moves the views at once.
 
-`display/Covering.ts` replaces `OverlayHost.tsx`, its context, and `makeHost`:
+`display/Covering.ts` and `display/OverlayRef.ts` replace `OverlayHost.tsx`, its context, and `makeHost`:
 
 - `overlays` (writable): each open overlay element's rectangle.
-- `useCovering()` stays the ref callback an overlay's content takes. While the element is mounted, a `ResizeObserver`
+- `useOverlayRef()` (in `OverlayRef.ts`, was `useCovering`) is the ref callback an overlay's content takes. While the element is mounted, a `ResizeObserver`
   and an `animationend` listener write its rectangle; unmounting removes it.
-- `hidden`: `coveredGames(overlays, placements)`. The videos come from `TilePlacements.placements`; `useVideoAreas` goes.
+- `hidden` (private): `TileRects.coveredGames(overlays, placements)`. The videos come from `TilePlacements.placements`;
+  `useVideoAreas` goes.
 - `sync` (mounted): each change of `hidden` to `shell.setHidden`, starting from nothing hidden, so nothing is sent
   until something is covered.
 
@@ -225,13 +230,14 @@ Left alone: `localTime` in `GameStatus.tsx`, `design/`, and `TestWeb`'s builders
 
 ## 6. Glossary
 
-`CONTEXT.md` gains **Display input**, **Slot**, and **Shell** (the web UI's edge to its window and the shell bridge).
+`CONTEXT.md` gains **Display input**, **Slot**, **Shell** (the web UI's edge to its window and the shell bridge),
+**Field drawing**, and **Field event**.
 **Hub client** (its runtime is `WebRuntime.ts`), **Tile bounds**, **Display**, and **Strip card** follow the new files.
 `AGENTS.md`'s mention of `HubRuntime.ts`, if any, follows too.
 
 ## 7. Tests
 
-Moved with their code, every assertion kept: `TileRects.test.ts` → `TilePlacements.test.ts`, `StripCards.test.ts` →
+Moved with their code, every assertion kept: `TileRects.test.ts` stays, `StripCards.test.ts` →
 `StripCard.test.ts`, `TileActions.test.ts` → `TileAction.test.ts`, the `scoreline` tests → `Game.test.ts`.
 
 New:
