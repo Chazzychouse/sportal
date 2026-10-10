@@ -2,11 +2,10 @@ import { assert, describe, it } from "@effect/vitest"
 import type { ChannelAvailability } from "@sportal/domain/Channel"
 import { type GameSnapshot, Network } from "@sportal/domain/Game"
 import { broadcast, snapshot, team } from "@sportal/domain/TestGame"
-import { DateTime, Effect, Layer, Option, Stream } from "effect"
+import { DateTime, Effect, Fiber, Option, Ref, Stream } from "effect"
 import { TestClock } from "effect/testing"
 import { Source } from "./Source.ts"
 import * as TestYouTubeTv from "./youtube-tv/TestYouTubeTv.ts"
-import { YouTubeTv } from "./youtube-tv/YouTubeTv.ts"
 
 const now = Effect.gen(function* () {
   const source = yield* Source
@@ -17,10 +16,8 @@ const now = Effect.gen(function* () {
   return (game: GameSnapshot) => availabilityOf(game, now)
 })
 
-const youTubeTv = Source.layerYouTubeTv.pipe(Layer.provideMerge(YouTubeTv.layer))
-const youTubeTvAndTwitch = Source.layerAll([Source.layerYouTubeTv, Source.layerTwitch]).pipe(
-  Layer.provideMerge(YouTubeTv.layer)
-)
+const youTubeTv = Source.layerYouTubeTv
+const youTubeTvAndTwitch = Source.layerAll([Source.layerYouTubeTv, Source.layerTwitch])
 
 const espn = Network.make("ESPN")
 const onEspn = snapshot({ broadcasts: [broadcast(espn)] })
@@ -42,6 +39,52 @@ describe("Source.layerYouTubeTv", () => {
       assert.deepStrictEqual(availabilityOf(primeVideoSoonAfterRecording), [
         { _tag: "NotCarried", why: "StreamingOnly" }
       ])
+    }).pipe(Effect.provide(youTubeTv))
+  )
+
+  it.effect("should give its availability again after a guide is read", () =>
+    Effect.gen(function* () {
+      const signals = yield* laterAvailability.pipe(Stream.take(1), Stream.runCount, Effect.forkChild)
+      yield* Effect.yieldNow
+
+      yield* TestYouTubeTv.readRecordedGuide
+
+      const signalled = yield* Fiber.join(signals)
+      assert.strictEqual(signalled, 1)
+    }).pipe(Effect.provide(youTubeTv))
+  )
+
+  it.effect("should keep the guide it has, giving nothing again, when a later response cannot be read", () =>
+    Effect.gen(function* () {
+      yield* TestYouTubeTv.readRecordedGuide
+      const changes = yield* counted(laterAvailability)
+
+      yield* Source.use((source) => source.readGuide("{}")).pipe(Effect.flip)
+      yield* Effect.yieldNow
+
+      const availabilityOf = yield* now
+      const signalled = yield* Ref.get(changes)
+      assert.deepStrictEqual(availabilityOf(ohioStateAtIowa), [onNews3])
+      assert.strictEqual(signalled, 0)
+    }).pipe(Effect.provide(youTubeTv))
+  )
+
+  it.effect.each([
+    ["text that is not JSON", "not json"],
+    ["JSON that is not a guide", "{}"],
+    [
+      "a guide without channels",
+      JSON.stringify({
+        contents: { epgRenderer: { paginationRenderer: { epgPaginationRenderer: { contents: [] } } } }
+      })
+    ]
+  ] as const)("should refuse %s, giving no guide still", ([_name, response]) =>
+    Effect.gen(function* () {
+      const error = yield* Source.use((source) => source.readGuide(response)).pipe(Effect.flip)
+
+      const availabilityOf = yield* now
+      assert.strictEqual(error._tag, "GuideUnreadable")
+      assert.deepStrictEqual(availabilityOf(onEspn), [{ _tag: "NoGuide", source: "YouTube TV" }])
     }).pipe(Effect.provide(youTubeTv))
   )
 
@@ -71,7 +114,7 @@ describe("Source.layerYouTubeTv", () => {
     Effect.gen(function* () {
       yield* TestYouTubeTv.readRecordedGuide
       yield* TestClock.adjust("30 minutes")
-      yield* YouTubeTv.use((youTubeTv) => youTubeTv.readGuide(TestYouTubeTv.recordedGuide))
+      yield* Source.use((source) => source.readGuide(TestYouTubeTv.recordedGuide))
 
       yield* TestClock.adjust("20 minutes")
 
@@ -211,5 +254,23 @@ function primeVideoGame(kickoff: DateTime.Utc) {
     away: { team: team("NYJ", "nfl", { name: "New York Jets", shortName: "Jets" }), score: 0 },
     home: { team: team("DEN", "nfl", { name: "Denver Broncos", shortName: "Broncos" }), score: 0 },
     broadcasts: [broadcast("Prime Video", "streaming")]
+  })
+}
+
+/** Each availability the source gives after the one it gives now: a change. */
+const laterAvailability = Stream.unwrap(
+  Source.use(({ availability }) => Effect.succeed(Stream.drop(availability, 1)))
+)
+
+/** Counts what `stream` emits from now on, in the background. */
+function counted<R>(stream: Stream.Stream<unknown, never, R>) {
+  return Effect.gen(function* () {
+    const count = yield* Ref.make(0)
+    yield* stream.pipe(
+      Stream.runForEach(() => Ref.update(count, (n) => n + 1)),
+      Effect.forkChild
+    )
+    yield* Effect.yieldNow
+    return count
   })
 }

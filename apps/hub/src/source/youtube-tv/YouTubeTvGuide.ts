@@ -29,7 +29,7 @@ export const decode = Effect.fn("YouTubeTvGuide.decode")(function* (response: st
 })
 
 /** YouTube TV, as its guide names it. Its guide's responses are read here as the channels and airings they list. */
-export const source: SourceName = "YouTube TV"
+const source: SourceName = "YouTube TV"
 
 /**
  * A YouTube TV channel address, decoded to the address that plays the channel live. An address can

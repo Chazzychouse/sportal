@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs"
 import { DateTime, Effect } from "effect"
 import { TestClock } from "effect/testing"
-import { YouTubeTv } from "./YouTubeTv.ts"
+import { Source } from "../Source.ts"
 
 /** The first page of YouTube TV's live guide, read 2026-10-03T20:24:45Z, for tests of other modules. */
 export const recordedGuide = readFileSync(
@@ -15,9 +15,9 @@ export const recordedAt = DateTime.toEpochMillis(DateTime.makeUnsafe("2026-10-03
 /** Reads the recorded guide on the test clock at the moment it was recorded. */
 export const readRecordedGuide = Effect.gen(function* () {
   yield* TestClock.setTime(recordedAt)
-  const youTubeTv = yield* YouTubeTv
+  const source = yield* Source
 
-  yield* youTubeTv.readGuide(recordedGuide)
+  yield* source.readGuide(recordedGuide)
 })
 
 /** A guide response with one row, News 3 airing Ohio State at Iowa, whose live id is `videoId`. */

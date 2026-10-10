@@ -1,8 +1,9 @@
+import type { GuideUnreadable } from "@sportal/api/GuideUnreadable"
 import type { ChannelAvailability } from "@sportal/domain/Channel"
 import { type GameSnapshot, Network } from "@sportal/domain/Game"
-import { Context, DateTime, Duration, Effect, Layer, Option, Stream } from "effect"
+import { Context, DateTime, Duration, Effect, Layer, Option, Stream, SubscriptionRef } from "effect"
 import { ChannelId, Guide } from "./Guide.ts"
-import { YouTubeTv } from "./youtube-tv/YouTubeTv.ts"
+import * as YouTubeTvGuide from "./youtube-tv/YouTubeTvGuide.ts"
 
 /** A way to obtain video for a game. It says whether and where each game can be shown, as of a time. */
 export class Source extends Context.Service<
@@ -15,15 +16,25 @@ export class Source extends Context.Service<
     readonly availability: Stream.Stream<
       (game: GameSnapshot, now: DateTime.Utc) => ReadonlyArray<ChannelAvailability>
     >
+    /**
+     * Reads a guide response as the shell received it from YouTube TV's guide page; a source that keeps no guide
+     * ignores it.
+     */
+    readGuide(response: string): Effect.Effect<void, GuideUnreadable>
   }
 >()("sportal/hub/source/Source") {
   /** YouTube TV: from the latest guide it read while that guide is fresh; otherwise no guide. */
-  static readonly layerYouTubeTv: Layer.Layer<Source, never, YouTubeTv> = Layer.effect(
+  static readonly layerYouTubeTv: Layer.Layer<Source> = Layer.effect(
     Source,
     Effect.gen(function* () {
-      const youTubeTv = yield* YouTubeTv
+      const latest = yield* SubscriptionRef.make(Option.none<Guide>())
 
-      const availability = youTubeTv.guide.pipe(
+      const readGuide = Effect.fn("Source.readGuide")(function* (response: string) {
+        const read = yield* YouTubeTvGuide.decode(response)
+        yield* SubscriptionRef.set(latest, Option.some(read))
+      })
+
+      const availability = SubscriptionRef.changes(latest).pipe(
         Stream.map((latest) => (game: GameSnapshot, now: DateTime.Utc) => {
           const fresh = Option.filter(latest, (guide) => isFresh(guide, now))
           return [
@@ -35,7 +46,7 @@ export class Source extends Context.Service<
         })
       )
 
-      return Source.of({ availability })
+      return Source.of({ availability, readGuide })
     })
   )
 
@@ -60,13 +71,14 @@ export class Source extends Context.Service<
           ],
           airings: []
         }).availabilityOf(game, now)
-      ])
+      ]),
+      readGuide: () => Effect.void
     })
   )
 
   /**
    * Every source given, as one: for each game every source's availability, in the order given, again whenever any of
-   * them changes.
+   * them changes. A guide read goes to every source.
    */
   static layerAll<R>(sources: ReadonlyArray<Layer.Layer<Source, never, R>>): Layer.Layer<Source, never, R> {
     return Layer.effect(
@@ -82,13 +94,15 @@ export class Source extends Context.Service<
               availabilities.flatMap((availabilityOf) => availabilityOf(game, now))
           )
         )
+        const readGuide = (response: string) =>
+          Effect.forEach(each, (source) => source.readGuide(response), { discard: true })
 
-        return Source.of({ availability })
+        return Source.of({ availability, readGuide })
       })
     )
   }
 
-  /** A source giving `availabilityOf` every game, and again each time `again` emits. */
+  /** A source giving `availabilityOf` every game, and again each time `again` emits; it ignores guide reads. */
   static layerTest(
     availabilityOf: (game: GameSnapshot) => ChannelAvailability,
     again: Stream.Stream<void> = Stream.empty
@@ -96,7 +110,10 @@ export class Source extends Context.Service<
     const value = (game: GameSnapshot) => [availabilityOf(game)]
     return Layer.succeed(
       Source,
-      Source.of({ availability: Stream.concat(Stream.make(value), again.pipe(Stream.as(value))) })
+      Source.of({
+        availability: Stream.concat(Stream.make(value), again.pipe(Stream.as(value))),
+        readGuide: () => Effect.void
+      })
     )
   }
 }

@@ -9,14 +9,13 @@ import { HubConfig } from "./HubConfig.ts"
 import * as HubServer from "./HubServer.ts"
 import type { Delivery } from "./provider/Provider.ts"
 import { Source } from "./source/Source.ts"
-import { YouTubeTv } from "./source/youtube-tv/YouTubeTv.ts"
 import * as TestDirector from "./TestDirector.ts"
 
 /** A client of the Hub's API, pointed at the server under test. */
 export const makeClient = HttpApiClient.make(SportalApi)
 
 /** The Hub's routes served on an ephemeral port, with an HTTP client pointed at them; YouTube TV unless `source`. */
-export function serverUnderTest(source: Layer.Layer<Source, never, YouTubeTv> = Source.layerYouTubeTv) {
+export function serverUnderTest(source: Layer.Layer<Source> = Source.layerYouTubeTv) {
   return HubServer.layer.pipe(
     Layer.provideMerge(hubUnderTest(source)),
     Layer.provideMerge(NodeHttpServer.layerTest)
@@ -24,10 +23,9 @@ export function serverUnderTest(source: Layer.Layer<Source, never, YouTubeTv> = 
 }
 
 /** Everything behind the API, over a provider the test feeds, against `source`. */
-function hubUnderTest(source: Layer.Layer<Source, never, YouTubeTv>) {
+function hubUnderTest(source: Layer.Layer<Source>) {
   return TestDirector.directorOver.pipe(
     Layer.provideMerge(source),
-    Layer.provideMerge(YouTubeTv.layer),
     Layer.provideMerge(HubConfig.layerTest({ SPORTAL_VERSION: "1.2.3" }))
   )
 }
