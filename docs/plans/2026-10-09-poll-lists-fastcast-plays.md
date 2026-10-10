@@ -8,7 +8,7 @@
 
 **Tech Stack:** Effect 4, TypeScript (tsgo), Vitest with `@effect/vitest`, pnpm workspaces.
 
-**Spec:** `docs/specs/2026-10-09-poll-lists-fastcast-plays-design.md`. **Branch:** `poll-lists-fastcast-plays`.
+**Spec:** `docs/specs/2026-10-09-poll-lists-fastcast-plays-design.md`. **Branch:** `poll-lists-fastcast-plays`, based on `feature/game-day-grafana` (385512d), which is about to merge to main; once it has, rebase onto main before merging this.
 
 ## Global Constraints
 
@@ -272,7 +272,7 @@ Run `pnpm typecheck` and fix every test that no longer compiles, as below. In th
 
 Run: `pnpm check`. Expected: PASS.
 Run: `grep -rn "PushedEvent\|FastCastEvent\|push_behind\|tcOf\|topicOf\|Topic.Scoreboard\|Topic.Game" apps telemetry`. Expected: nothing.
-Run: `git diff --stat main -- apps telemetry`. Expected: more lines deleted than added. Report the numbers.
+Run: `git diff --stat feature/game-day-grafana -- apps telemetry` (or `main`, once that branch has merged). Expected: more lines deleted than added. Report the numbers.
 
 - [ ] **Step 8: Commit**
 
