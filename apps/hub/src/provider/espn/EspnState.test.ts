@@ -543,11 +543,7 @@ describe("EspnState#take", () => {
           const decoded = yield* neAtBufDecoded
           const deliveries = decoded.flat()
           const snapshots = deliveries.flatMap((delivery) =>
-            Delivery.$is("Listing")(delivery)
-              ? delivery.games
-              : Delivery.$is("Snapshot")(delivery)
-                ? [delivery.snapshot]
-                : []
+            Delivery.$is("Listing")(delivery) ? delivery.games : []
           )
 
           const backs = yield* Effect.forEach(snapshots, (snapshot) =>

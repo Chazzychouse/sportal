@@ -50,10 +50,9 @@ export class Provider extends Context.Service<
   )
 }
 
-/** What a frame said: a league's listing, one game's snapshot, or one game's whole list of plays. */
+/** What a frame said: a league's listing, or one game's whole list of plays. */
 export type Delivery = Data.TaggedEnum<{
   Listing: { readonly league: LeagueId; readonly games: ReadonlyArray<GameSnapshot> }
-  Snapshot: { readonly snapshot: GameSnapshot }
   Plays: { readonly game: GameId; readonly plays: ReadonlyArray<Play> }
 }>
 export const Delivery = Data.taggedEnum<Delivery>()

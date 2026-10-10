@@ -85,12 +85,12 @@ describe("Slate#take, a listing", () => {
     assert.deepStrictEqual(idsIn(next, "fbs"), [one])
   })
 
-  it("should keep a live game's pushed snapshot over a named one at the same game time, giving back the slate itself", () => {
-    const slate = listed(live(one, "10:00")).take([snapshotOf(withBall(live(one, "10:00"), 45))])[0]
+  it("should take a later listing at the same clock and score, for its new down and ball", () => {
+    const slate = listed(withBall(live(one, "10:00"), 60))
 
-    const next = slate.take([listing("fbs", [withBall(live(one, "10:00"), 60)])])[0]
+    const next = slate.take([listing("fbs", [withBall(live(one, "10:00"), 45)])])[0]
 
-    assert.strictEqual(next, slate)
+    assert.strictEqual(next.games[0]?.snapshot.situation?.yardLine, 45)
   })
 
   it("should take an upcoming game named at the same game time", () => {
@@ -112,37 +112,11 @@ describe("Slate#take, a listing", () => {
   })
 })
 
-describe("Slate#take, a snapshot", () => {
-  it("should take one ahead of a listed game", () => {
-    const slate = listed(live(one, "10:00"))
-    const ahead = live(one, "9:00")
-
-    const next = slate.take([snapshotOf(ahead)])[0]
-
-    assert.strictEqual(snapshotIn(next, one), ahead)
-  })
-
-  it("should give back the slate itself for one behind its game", () => {
-    const slate = listed(snapshot({ id: one, status: "live", period: 2 }))
-    const behind = snapshotOf(snapshot({ id: one, status: "live", period: 1 }))
-
-    const next = slate.take([behind])[0]
-
-    assert.strictEqual(next, slate)
-  })
-
-  it("should give back the slate itself for one equal to its game", () => {
-    const slate = listed(live(one, "10:00"))
-
-    const next = slate.take([snapshotOf(live(one, "10:00"))])[0]
-
-    assert.strictEqual(next, slate)
-  })
-
+describe("Slate#take, a later listing", () => {
   it("should take one at its game's game time with more points", () => {
     const slate = listed(scoredAt("4:12", 13))
 
-    const next = slate.take([snapshotOf(scoredAt("4:12", 14))])[0]
+    const next = slate.take([listing("fbs", [scoredAt("4:12", 14)])])[0]
 
     assert.strictEqual(snapshotIn(next, one)?.home.score, 14)
   })
@@ -150,43 +124,17 @@ describe("Slate#take, a snapshot", () => {
   it("should take a poll at the same game time with fewer points as behind, giving back the slate itself", () => {
     const slate = listed(scoredAt("4:12", 14))
 
-    const next = slate.take([snapshotOf(scoredAt("4:12", 13))])[0]
-
-    assert.strictEqual(next, slate)
-  })
-
-  it("should take a pushed snapshot at the same game time over a polled one", () => {
-    const slate = listed(withBall(live(one, "10:00"), 60))
-    const pushed = withBall(live(one, "10:00"), 45)
-
-    const next = slate.take([snapshotOf(pushed)])[0]
-
-    assert.strictEqual(snapshotIn(next, one), pushed)
-  })
-
-  it("should drop one of a game no listing names, giving back the slate itself", () => {
-    const slate = listed(live(one, "10:00"))
-
-    const next = slate.take([snapshotOf(live(two, "5:00"))])[0]
+    const next = slate.take([listing("fbs", [scoredAt("4:12", 13)])])[0]
 
     assert.strictEqual(next, slate)
   })
 })
 
 describe("Slate#take, a frame", () => {
-  it("should take its deliveries in order, so a snapshot of a game just listed is taken", () => {
-    const listedGame = live(one, "10:00")
-    const pushedGame = live(one, "9:00")
-
-    const next = Slate.empty.take([listing("fbs", [listedGame]), snapshotOf(pushedGame)])[0]
-
-    assert.strictEqual(snapshotIn(next, one), pushedGame)
-  })
-
   it("should take two deliveries in one frame as the same two in two frames", () => {
     const deliveries = [
       listing("fbs", [live(one, "10:00"), live(two, "5:00")]),
-      snapshotOf(live(one, "9:00"))
+      listing("fbs", [live(one, "9:00")])
     ]
 
     const together = Slate.empty.take(deliveries)[0]
@@ -215,7 +163,7 @@ describe("Slate#take, a game the slate has over", () => {
     home: home(26)
   })
   const final = snapshot({ ...playing, status: "final", clock: "0:00" })
-  const finished = Slate.empty.take([listing("nfl", [playing]), snapshotOf(final)])[0]
+  const finished = Slate.empty.take([listing("nfl", [playing]), listing("nfl", [final])])[0]
 
   it("should keep its final over a lagging listing", () => {
     const next = finished.take([listing("nfl", [playing])])[0]
@@ -224,7 +172,7 @@ describe("Slate#take, a game the slate has over", () => {
   })
 
   it("should give back the slate itself for a lagging snapshot", () => {
-    const next = finished.take([snapshotOf(playing)])[0]
+    const next = finished.take([listing("nfl", [playing])])[0]
 
     assert.strictEqual(next, finished)
   })
@@ -250,7 +198,7 @@ describe("Slate#take, a game the slate has over", () => {
   it("should take a corrected score of its final", () => {
     const corrected = snapshot({ ...final, home: home(27) })
 
-    const next = finished.take([snapshotOf(corrected)])[0]
+    const next = finished.take([listing("nfl", [corrected])])[0]
 
     assert.deepStrictEqual(snapshotsIn(next, "nfl"), [corrected])
   })
@@ -259,7 +207,7 @@ describe("Slate#take, a game the slate has over", () => {
     const slate = listed(snapshot({ id: two, status: "postponed" }))
     const resumed = live(two, "15:00")
 
-    const next = slate.take([snapshotOf(resumed)])[0]
+    const next = slate.take([listing("fbs", [resumed])])[0]
 
     assert.strictEqual(snapshotIn(next, two), resumed)
   })
@@ -295,7 +243,7 @@ describe("Slate#take, plays", () => {
   })
 
   it("should keep the plays when it takes a snapshot", () => {
-    const next = withFirst.take([snapshotOf(live(one, "9:00"))])[0]
+    const next = withFirst.take([listing("fbs", [live(one, "9:00")])])[0]
 
     assert.deepStrictEqual(playsIn(next, one), [first])
   })
@@ -333,7 +281,7 @@ describe("Slate#games", () => {
   const later = live(one, "9:00")
 
   it("should hold each game as the slate has it in place of the listed one", () => {
-    const slate = Slate.empty.take([listing("fbs", [listedFbs]), snapshotOf(later)])[0]
+    const slate = Slate.empty.take([listing("fbs", [listedFbs]), listing("fbs", [later])])[0]
 
     assert.deepStrictEqual(snapshotsIn(slate, "fbs"), [later])
   })
@@ -349,7 +297,7 @@ describe("Slate#games", () => {
   it("should keep the same game for one a take does not change", () => {
     const slate = Slate.empty.take([listing("fbs", [listedFbs]), listing("nfl", [listedNfl])])[0]
 
-    const next = slate.take([snapshotOf(later)])[0]
+    const next = slate.take([listing("fbs", [later])])[0]
 
     assert.strictEqual(next.games[0], slate.games[0])
   })
@@ -367,7 +315,7 @@ describe("Slate#take, its changes", () => {
   it("should give a listed game whose snapshot it takes as Progressed", () => {
     const slate = listed(live(one, "10:00"))
 
-    const [next, changes] = slate.take([snapshotOf(live(one, "9:00"))])
+    const [next, changes] = slate.take([listing("fbs", [live(one, "9:00")])])
 
     assert.deepStrictEqual(changes, [SlateChange.Progressed({ game: gameIn(next, one) })])
   })
@@ -443,10 +391,6 @@ function listed(...games: ReadonlyArray<GameSnapshot>) {
 
 function listing(league: LeagueId, games: ReadonlyArray<GameSnapshot>) {
   return Delivery.Listing({ league, games })
-}
-
-function snapshotOf(game: GameSnapshot) {
-  return Delivery.Snapshot({ snapshot: game })
 }
 
 /** A `Plays` delivery of game `id`'s whole list of plays, `plays`. */

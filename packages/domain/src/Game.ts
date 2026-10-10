@@ -120,14 +120,6 @@ export class GameSnapshot extends Schema.Class<GameSnapshot>("sportal/GameSnapsh
     return had.isAheadOf(this) && !this.isAheadOf(had) && !resumed
   }
 
-  /**
-   * Whether `had`, a snapshot of the same game, is live at this one's game time and this is not ahead of it: what a
-   * poll lagging the push between plays would be.
-   */
-  tiesLive(had: GameSnapshot): boolean {
-    return had.progress() === "live" && GameSnapshot.gameTime(this, had) === 0 && !this.isAheadOf(had)
-  }
-
   /** Both teams' points together. */
   private points(): number {
     return this.home.score + this.away.score
@@ -252,14 +244,6 @@ export class Game extends Schema.Class<Game>("sportal/Game")({
     if (Equal.equals(this.snapshot, snapshot) || snapshot.isBehind(this.snapshot)) return this
 
     return new Game({ ...this, snapshot })
-  }
-
-  /**
-   * This game with a listing's `snapshot` taken: as `snapshotTaken`, but a listing is a poll and the push wins a tie,
-   * so a live game keeps its snapshot over one at the same game time not ahead of it.
-   */
-  listed(snapshot: GameSnapshot): Game {
-    return snapshot.tiesLive(this.snapshot) ? this : this.snapshotTaken(snapshot)
   }
 
   /** This game with its whole list of plays replaced, in `Play.order`; this game itself when nothing changed. */

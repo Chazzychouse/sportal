@@ -57,8 +57,8 @@ describe("Director, the slate", () => {
       const second = snapshot({ id: two, status: "live", period: 3, clock: "1:00" })
       yield* listing([liveSnapshot({ id: one }), snapshot({ id: two, status: "live", period: 2 })])
 
-      yield* takenSnapshot(first)
-      const current = yield* takenSnapshot(second)
+      yield* listing([first, snapshot({ id: two, status: "live", period: 2 })])
+      const current = yield* listing([first, second])
 
       assert.deepStrictEqual(snapshotIn(current, one), first)
       assert.deepStrictEqual(snapshotIn(current, two), second)
@@ -88,7 +88,7 @@ describe("Director, the slate", () => {
       const feed = yield* ProviderFeed
       const next = liveSnapshot({ id: one, clock: "9:00" })
 
-      yield* feed.deliver([listingOf([liveSnapshot({ id: one })]), Delivery.Snapshot({ snapshot: next })])
+      yield* feed.deliver([listingOf([liveSnapshot({ id: one })]), listingOf([next])])
       const current = yield* latest
 
       assert.strictEqual(snapshotIn(current, one), next)
@@ -394,7 +394,7 @@ function listing(games: ReadonlyArray<GameSnapshot>) {
 }
 
 function takenSnapshot(game: GameSnapshot) {
-  return delivered(Delivery.Snapshot({ snapshot: game }))
+  return listing([game])
 }
 
 /** A live snapshot of game `id` at 8:00 in the first period whose progress raises a defect. */

@@ -87,7 +87,7 @@ describe("GET /api/live", () => {
       yield* firstSlateOnTestClock()
       const lines = yield* pastInitialMessages()
 
-      yield* delivered(Delivery.Snapshot({ snapshot: inPeriod(2) }))
+      yield* delivered(Delivery.Listing({ league: "fbs", games: [inPeriod(2)] }))
       yield* TestClock.adjust("250 millis")
       const line = yield* Queue.take(lines)
 
@@ -104,7 +104,7 @@ describe("GET /api/live", () => {
     Effect.gen(function* () {
       yield* firstSlateOnTestClock()
       const lines = yield* pastInitialMessages()
-      const pushes = [2, 3, 4].map((period) => Delivery.Snapshot({ snapshot: inPeriod(period) }))
+      const pushes = [2, 3, 4].map((period) => Delivery.Listing({ league: "fbs", games: [inPeriod(period)] }))
 
       yield* Effect.forEach(pushes, (push) => delivered(push))
       // The live stream reads each slate in turn; it reads the burst before the clock moves on.
@@ -146,7 +146,7 @@ describe("GET /api/live", () => {
     Effect.gen(function* () {
       yield* firstSlateOnTestClock()
       yield* pastInitialMessages()
-      yield* delivered(Delivery.Snapshot({ snapshot: inPeriod(2) }))
+      yield* delivered(Delivery.Listing({ league: "fbs", games: [inPeriod(2)] }))
       yield* TestClock.adjust("250 millis")
 
       const { lines } = yield* liveLines()
@@ -199,7 +199,7 @@ describe("GET /api/live", () => {
       yield* TestClock.adjust("20 seconds")
       yield* nextComment(lines)
 
-      yield* delivered(Delivery.Snapshot({ snapshot: inPeriod(2) }))
+      yield* delivered(Delivery.Listing({ league: "fbs", games: [inPeriod(2)] }))
       yield* TestClock.adjust("250 millis")
       const change = yield* Queue.take(lines).pipe(
         Effect.repeat({ until: (line) => line.includes("SlateChanged") })
@@ -215,7 +215,7 @@ describe("GET /api/live", () => {
       const lines = yield* pastInitialMessages()
 
       yield* TestClock.adjust("1250 millis")
-      yield* delivered(Delivery.Snapshot({ snapshot: inPeriod(2) }))
+      yield* delivered(Delivery.Listing({ league: "fbs", games: [inPeriod(2)] }))
       yield* TestClock.adjust("250 millis")
       const line = yield* Queue.take(lines)
 
@@ -236,7 +236,9 @@ describe("GET /api/live", () => {
         yield* TestClock.adjust("250 millis")
         const lines = yield* pastInitialMessages()
 
-        yield* delivered(Delivery.Snapshot({ snapshot: snapshot({ ...scheduled, status: "live" }) }))
+        yield* delivered(
+          Delivery.Listing({ league: "fbs", games: [snapshot({ ...scheduled, status: "live" })] })
+        )
         yield* TestClock.adjust("250 millis")
         const line = yield* Queue.take(lines)
 
@@ -274,7 +276,7 @@ describe("GET /api/live", () => {
 
       const message = yield* publishedAfter([
         Delivery.Listing({ league: "fbs", games: [first] }),
-        Delivery.Snapshot({ snapshot: next })
+        Delivery.Listing({ league: "fbs", games: [next] })
       ])
 
       assert.strictEqual(message.games[0]?.game.snapshot.period, 2)
@@ -323,23 +325,6 @@ describe("GET /api/live", () => {
       assert.deepStrictEqual(
         message.games.map(({ game }) => game.snapshot),
         [final]
-      )
-    }).pipe(Effect.scoped, Effect.provide(serverUnderTest()))
-  )
-
-  it.effect("should not publish an unlisted game's snapshot", () =>
-    Effect.gen(function* () {
-      const listed = snapshot({ id: GameId.make("1"), status: "live" })
-      const unlisted = snapshot({ id: GameId.make("9"), status: "live" })
-
-      const message = yield* publishedAfter([
-        Delivery.Listing({ league: "fbs", games: [listed] }),
-        Delivery.Snapshot({ snapshot: unlisted })
-      ])
-
-      assert.deepStrictEqual(
-        message.games.map(({ game }) => game.snapshot.id),
-        ["1"]
       )
     }).pipe(Effect.scoped, Effect.provide(serverUnderTest()))
   )

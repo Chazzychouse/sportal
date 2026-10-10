@@ -8,7 +8,7 @@ describe("ProviderFeed#deliver", () => {
     Effect.gen(function* () {
       const taken = yield* reading
       const feed = yield* ProviderFeed
-      const deliveries = [Delivery.Snapshot({ snapshot: liveSnapshot() })]
+      const deliveries = [Delivery.Listing({ league: "fbs", games: [liveSnapshot()] })]
 
       yield* feed.deliver(deliveries)
       const all = yield* Ref.get(taken)
@@ -23,7 +23,7 @@ describe("ProviderFeed#end", () => {
     Effect.gen(function* () {
       const provider = yield* Provider
       const feed = yield* ProviderFeed
-      const deliveries = [Delivery.Snapshot({ snapshot: liveSnapshot() })]
+      const deliveries = [Delivery.Listing({ league: "fbs", games: [liveSnapshot()] })]
       const all = yield* provider.deliveries.pipe(
         Stream.runCollect,
         Effect.forkScoped({ startImmediately: true })

@@ -756,24 +756,6 @@ describe("GameSnapshot#isBehind", () => {
   })
 })
 
-describe("GameSnapshot#tiesLive", () => {
-  it("should tie a live snapshot at the same game time", () => {
-    const had = liveSnapshot({ situation: situation({ yardLine: 45 }) })
-
-    const ties = liveSnapshot({ situation: situation({ yardLine: 60 }) }).tiesLive(had)
-
-    assert.isTrue(ties)
-  })
-
-  it("should not tie an upcoming snapshot", () => {
-    const had = snapshot()
-
-    const ties = snapshot({ broadcasts: [broadcast("ESPN")] }).tiesLive(had)
-
-    assert.isFalse(ties)
-  })
-})
-
 describe("Game#recent", () => {
   it("should keep only the last ten plays", () => {
     const plays = Array.from({ length: 12 }, (_, index) =>

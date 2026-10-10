@@ -16,9 +16,8 @@ export class Slate extends Data.Class<{
 
   /**
    * Takes one frame's deliveries, in order, and gives the next slate with what each delivery changed, in order. A listing
-   * replaces its league's games with the ones it names, each taken into the game the slate had (`Game#listed`) or new. A
-   * snapshot or plays of a listed game are taken into it (`Game#snapshotTaken`, `Game#playsTaken`); of a game no listing
-   * names, dropped. A take that changes nothing gives back this slate itself and no change, and a game it does not
+   * replaces its league's games with the ones it names, each taken into the game the slate had (`Game#snapshotTaken`) or
+   * new. Plays of a listed game are taken into it (`Game#playsTaken`); of a game no listing names, dropped. A take that changes nothing gives back this slate itself and no change, and a game it does not
    * change stays the same `Game`.
    */
   take(deliveries: ReadonlyArray<Delivery>): Taken {
@@ -34,7 +33,6 @@ export class Slate extends Data.Class<{
   private delivered(delivery: Delivery): Taken {
     return Delivery.$match(delivery, {
       Listing: ({ league, games }) => this.relisted(league, games),
-      Snapshot: ({ snapshot }) => this.changed(snapshot.id, (game) => game.snapshotTaken(snapshot)),
       Plays: ({ game, plays }) => this.changed(game, (had) => had.playsTaken(plays))
     })
   }
@@ -47,7 +45,7 @@ export class Slate extends Data.Class<{
     const had = this.games.filter((game) => game.snapshot.league === league)
     const taken = snapshots.map((snapshot) => {
       const before = had.find((each) => each.snapshot.id === snapshot.id)
-      return { before, game: before === undefined ? Game.of(snapshot) : before.listed(snapshot) }
+      return { before, game: before === undefined ? Game.of(snapshot) : before.snapshotTaken(snapshot) }
     })
     const listed = taken.map(({ game }) => game)
     if (listed.length === had.length && listed.every((game, index) => game === had[index])) return [this, []]
