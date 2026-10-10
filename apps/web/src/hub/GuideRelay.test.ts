@@ -1,5 +1,6 @@
 import { afterEach, assert, beforeEach, describe, it } from "@effect/vitest"
-import { Effect, Layer, Queue, Ref, Stream } from "effect"
+import type { ShellBridge } from "@sportal/api/ShellBridge"
+import { Effect, Layer, Queue, Stream } from "effect"
 import { Atom } from "effect/reactivity"
 import { vi } from "vitest"
 import { Shell } from "../shell/Shell.ts"
@@ -27,6 +28,29 @@ describe("GuideRelay.relay", () => {
       }).pipe(Effect.scoped, Effect.provide(registry))
 
       assert.deepStrictEqual(call, { _tag: "SendGuide", guide: "<guide/>" })
+    })
+  )
+
+  it.effect("should still send a guide after the send before it died", () =>
+    Effect.gen(function* () {
+      const sent = yield* Queue.unbounded<string>()
+      const registry = TestWeb.registryOf(
+        Layer.merge(
+          Shell.layerTest({ guideRead: Stream.make("<first/>", "<second/>"), record: () => Effect.void }),
+          HubClient.layerTest((guide) =>
+            guide === "<first/>"
+              ? Effect.die("The Hub's answer did not decode")
+              : Effect.asVoid(Queue.offer(sent, guide))
+          )
+        )
+      )
+
+      const second = yield* Effect.gen(function* () {
+        yield* Atom.mount(GuideRelay.relay)
+        return yield* Queue.take(sent)
+      }).pipe(Effect.scoped, Effect.provide(registry))
+
+      assert.strictEqual(second, "<second/>")
     })
   )
 
@@ -67,33 +91,42 @@ describe("GuideRelay.relay", () => {
 
   it.effect("should listen for guides before it first asks for one", () =>
     Effect.gen(function* () {
-      const listening = yield* Ref.make(false)
-      const asked = yield* Queue.unbounded<boolean>()
-      const shell = Shell.layerTest({
-        guideRead: Stream.unwrap(Effect.as(Ref.set(listening, true), Stream.never)),
-        record: (call) =>
-          call._tag === "ReadGuide"
-            ? Ref.get(listening).pipe(
-                Effect.flatMap((on) => Queue.offer(asked, on)),
-                Effect.asVoid
-              )
-            : Effect.void
-      })
+      const log = yield* Queue.unbounded<"Listen" | "ReadGuide">()
+      const bridge: ShellBridge = {
+        syncTiles: () => {},
+        setHidden: () => {},
+        setFullScreen: () => {},
+        onFullScreenChanged: () => () => {},
+        onHotkey: () => () => {},
+        onTilePressed: () => () => {},
+        openSignIn: () => {},
+        onGuideRead: () => {
+          Queue.offerUnsafe(log, "Listen")
+          return () => {}
+        },
+        readGuide: () => {
+          Queue.offerUnsafe(log, "ReadGuide")
+        }
+      }
       const registry = TestWeb.registryOf(
         Layer.merge(
-          shell,
+          Shell.layerBridge(bridge),
           HubClient.layerTest(() => Effect.void)
         )
       )
 
-      const listeningWhenAsked = yield* Effect.gen(function* () {
-        yield* Atom.mount(GuideRelay.relay)
+      const firstTwo = yield* Effect.gen(function* () {
+        yield* Atom.mount(LiveStream.live)
         const source = yield* TestWeb.opened
         source.onopen?.()
-        return yield* Queue.take(asked)
+        yield* TestWeb.until(LiveStream.live, (live) =>
+          LiveStream.Connection.$is("Connected")(live.connection)
+        )
+        yield* Atom.mount(GuideRelay.relay)
+        return yield* Queue.takeN(log, 2)
       }).pipe(Effect.scoped, Effect.provide(registry))
 
-      assert.isTrue(listeningWhenAsked)
+      assert.deepStrictEqual(firstTwo, ["Listen", "ReadGuide"])
     })
   )
 })

@@ -5,7 +5,7 @@ import { Shell } from "./Shell.ts"
 
 describe("Shell.layerBrowser hotkeys", () => {
   beforeEach(() => {
-    vi.stubGlobal("window", new PageWindow())
+    vi.stubGlobal("window", new EventTarget())
     vi.stubGlobal("HTMLElement", class {})
   })
   afterEach(() => {
@@ -65,37 +65,15 @@ describe("Shell.layerBrowser hotkeys", () => {
   )
 })
 
-/** The first hotkey the browser Shell gives, once its listener is on the page. */
+/** The first hotkey the browser Shell gives, listening from the moment it is forked. */
 const firstHotkey = Effect.gen(function* () {
   const shell = yield* Shell
-  const next = yield* shell.hotkeys.pipe(
+  return yield* shell.hotkeys.pipe(
     Stream.runHead,
     Effect.flatMap(Effect.fromOption),
     Effect.forkChild({ startImmediately: true })
   )
-
-  yield* listening()
-  return next
 }).pipe(Effect.provide(Shell.layerBrowser))
-
-/** Waits for a keydown listener on the page: the stream adds its listener in a fiber of its own. */
-function listening(): Effect.Effect<void> {
-  return Effect.suspend(() =>
-    window instanceof PageWindow && window.keydownListeners > 0
-      ? Effect.void
-      : Effect.yieldNow.pipe(Effect.flatMap(listening))
-  )
-}
-
-/** A window that counts the keydown listeners added to it. */
-class PageWindow extends EventTarget {
-  keydownListeners = 0
-
-  override addEventListener(...args: Parameters<EventTarget["addEventListener"]>) {
-    if (args[0] === "keydown") this.keydownListeners += 1
-    super.addEventListener(...args)
-  }
-}
 
 /** A cancelable keydown with these keys, as a browser dispatches it. */
 function keydown(keys: { code: string; shiftKey?: boolean; ctrlKey?: boolean; repeat?: boolean }) {

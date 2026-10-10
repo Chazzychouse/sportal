@@ -14,11 +14,13 @@ export const relay = runtime.atom((get) =>
     const hub = yield* HubClient
 
     // Listening first, then asking: the shell's first read waits for the web UI to ask.
+    // Each send in a fiber of its own, so a send that dies (already logged) ends only itself.
     yield* shell.guideRead.pipe(
       Stream.runForEach((guide) =>
-        hub
-          .sendGuide(guide)
-          .pipe(Effect.catch((failure) => Effect.logWarning("The Hub did not take a guide", failure)))
+        hub.sendGuide(guide).pipe(
+          Effect.catch((failure) => Effect.logWarning("The Hub did not take a guide", failure)),
+          Effect.forkScoped
+        )
       ),
       Effect.forkScoped({ startImmediately: true })
     )

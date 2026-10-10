@@ -61,7 +61,10 @@ export class Shell extends Context.Service<
     )
   }
 
-  // Lazy: the helpers it reads are defined below the class.
+  /**
+   * The browser's own Shell, for a page outside the desktop shell: hotkeys pressed on the page and the document's full
+   * screen, and no calls to a shell. Built lazily because the helpers it reads sit below the class.
+   */
   static readonly layerBrowser: Layer.Layer<Shell> = Layer.sync(Shell, () =>
     Shell.of({
       hotkeys: pageHotkeys,
@@ -122,33 +125,27 @@ export class Shell extends Context.Service<
 }
 
 /** Hotkeys pressed on the page. Keys typed into a text field are the field's, and a key already handled is ignored, except Ctrl+K. */
-const pageHotkeys: Stream.Stream<Hotkey> = Stream.callback<Hotkey>((queue) =>
-  Effect.acquireRelease(
-    Effect.sync(() => {
-      const pressed = (event: KeyboardEvent) => {
-        const hotkey = Hotkey.of(
-          {
-            code: event.code,
-            shift: event.shiftKey,
-            alt: event.altKey,
-            control: event.ctrlKey,
-            meta: event.metaKey
-          },
-          "page"
-        )
-        if (hotkey === undefined || event.repeat) return
-        if (!Hotkey.guards.CommandPalette(hotkey) && (isTyping(event.target) || event.defaultPrevented))
-          return
-        // In the listener itself: a default prevented after the event has been dispatched is too late.
-        event.preventDefault()
-        Queue.offerUnsafe(queue, hotkey)
-      }
-      window.addEventListener("keydown", pressed)
-      return pressed
-    }),
-    (pressed) => Effect.sync(() => window.removeEventListener("keydown", pressed))
-  )
-)
+const pageHotkeys: Stream.Stream<Hotkey> = listened<Hotkey>((listener) => {
+  const pressed = (event: KeyboardEvent) => {
+    const hotkey = Hotkey.of(
+      {
+        code: event.code,
+        shift: event.shiftKey,
+        alt: event.altKey,
+        control: event.ctrlKey,
+        meta: event.metaKey
+      },
+      "page"
+    )
+    if (hotkey === undefined || event.repeat) return
+    if (!Hotkey.guards.CommandPalette(hotkey) && (isTyping(event.target) || event.defaultPrevented)) return
+    // In the listener itself: a default prevented after the event has been dispatched is too late.
+    event.preventDefault()
+    listener(hotkey)
+  }
+  window.addEventListener("keydown", pressed)
+  return () => window.removeEventListener("keydown", pressed)
+})
 
 function isTyping(target: EventTarget | null) {
   return (
@@ -157,12 +154,19 @@ function isTyping(target: EventTarget | null) {
   )
 }
 
-/** An event as a stream: `listen` subscribes, and the function it returns unsubscribes. */
+/**
+ * An event as a stream: `listen` subscribes, and the function it returns unsubscribes. It subscribes in the fiber that
+ * runs the stream, as the stream starts, so nothing that fiber does next can miss an event.
+ */
 function listened<A>(listen: (listener: (value: A) => void) => () => void): Stream.Stream<A> {
-  return Stream.callback<A>((queue) =>
-    Effect.acquireRelease(
-      Effect.sync(() => listen((value) => Queue.offerUnsafe(queue, value))),
-      (stop) => Effect.sync(stop)
-    )
+  return Stream.unwrap(
+    Effect.gen(function* () {
+      const queue = yield* Queue.unbounded<A>()
+      yield* Effect.acquireRelease(
+        Effect.sync(() => listen((value) => Queue.offerUnsafe(queue, value))),
+        (stop) => Effect.sync(stop)
+      )
+      return Stream.fromQueue(queue)
+    })
   )
 }
