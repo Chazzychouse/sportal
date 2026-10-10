@@ -1,17 +1,39 @@
 // TypeScript 7 has no tsserver, so Zed's built-in vtsls and typescript-language-server cannot run here.
 // effect-tsgo (the "Effect Language Service (tsgo)" extension) runs @effect/tsgo: TypeScript 7 plus the
 // Effect diagnostics `pnpm check` reports.
+// Biome formats, as `pnpm check` does; without it Zed falls back to its bundled Prettier and its defaults.
 {
+  "auto_install_extensions": { "biome": true },
   "languages": {
     "TypeScript": {
-      "language_servers": ["effect-tsgo", "!vtsls"]
+      "language_servers": ["effect-tsgo", "biome", "!vtsls"],
+      "formatter": { "language_server": { "name": "biome" } },
+      "code_actions_on_format": { "source.organizeImports.biome": true }
     },
     "TSX": {
-      "language_servers": ["effect-tsgo", "!vtsls", "!typescript-language-server", "!typescript-ls", "..."]
-    }
+      "language_servers": [
+        "effect-tsgo",
+        "biome",
+        "!vtsls",
+        "!typescript-language-server",
+        "!typescript-ls",
+        "..."
+      ],
+      "formatter": { "language_server": { "name": "biome" } },
+      "code_actions_on_format": { "source.organizeImports.biome": true }
+    },
+    "JavaScript": {
+      "formatter": { "language_server": { "name": "biome" } },
+      "code_actions_on_format": { "source.organizeImports.biome": true }
+    },
+    "JSON": { "formatter": { "language_server": { "name": "biome" } } },
+    "JSONC": { "formatter": { "language_server": { "name": "biome" } } },
+    "CSS": { "formatter": { "language_server": { "name": "biome" } } }
   },
   "lsp": {
     // The same @effect/tsgo as package.json; bump them together.
-    "effect-tsgo": { "settings": { "package_version": "0.50.0" } }
+    "effect-tsgo": { "settings": { "package_version": "0.50.0" } },
+    // The Biome in node_modules, so Zed formats exactly as `pnpm check` does.
+    "biome": { "settings": { "require_config_file": true } }
   }
 }
