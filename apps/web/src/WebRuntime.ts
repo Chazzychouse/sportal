@@ -5,7 +5,10 @@ import { HubClient } from "./hub/HubClient.ts"
 import { Shell } from "./shell/Shell.ts"
 import * as WebTelemetry from "./WebTelemetry.ts"
 
-/** The one runtime the web UI's effects run in: the Hub client, the Shell and the telemetry. Tests swap `runtime.layer`. */
+/**
+ * The one runtime the web UI's effects run in: the Hub client, the Shell and the telemetry. Tests swap
+ * `runtime.layer`.
+ */
 export const runtime = Atom.runtime(
   Layer.mergeAll(HubClient.layer, Shell.layer, WebTelemetry.layer).pipe(Layer.provide(FetchHttpClient.layer))
 )

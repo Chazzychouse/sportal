@@ -1,4 +1,4 @@
-import { Effect, Layer, Option } from "effect"
+import { Cause, Duration, Effect, Layer, Option, Ref } from "effect"
 import {
   HttpClient,
   HttpClientRequest,
@@ -9,18 +9,29 @@ import {
 } from "effect/http"
 import { HubConfig } from "./HubConfig.ts"
 
+const relayTimeout = Duration.seconds(10)
+
 /**
  * Relays a Display's OTLP logs, posted to `/api/telemetry/logs`, to the collector the Hub reports to; with no
- * collector, takes them and drops them. A failed relay warns once.
+ * collector, takes them and drops them. A failed relay, or one slower than ten seconds, warns once, with its cause.
  */
 export const layer: Layer.Layer<never, never, HubConfig | HttpClient.HttpClient | HttpRouter.HttpRouter> =
   Layer.unwrap(
     Effect.gen(function* () {
       const { otlpUrl } = yield* HubConfig
       const client = yield* HttpClient.HttpClient
-      const warnOnce = yield* Effect.cached(
-        Effect.logWarning("The Hub cannot relay a Display's logs to the collector")
-      )
+      const warned = yield* Ref.make(false)
+      const warnOnce = (cause: Cause.Cause<unknown>) =>
+        Ref.getAndSet(warned, true).pipe(
+          Effect.flatMap((already) =>
+            already
+              ? Effect.void
+              : Effect.logWarning(
+                  "The Hub cannot relay a Display's logs to the collector",
+                  Cause.pretty(cause)
+                )
+          )
+        )
 
       const relay = (url: URL, request: HttpServerRequest.HttpServerRequest) =>
         request.arrayBuffer.pipe(
@@ -34,8 +45,11 @@ export const layer: Layer.Layer<never, never, HubConfig | HttpClient.HttpClient 
             )
           }),
           Effect.flatMap(HttpClientResponse.filterStatusOk),
+          Effect.timeout(relayTimeout),
           Effect.as(HttpServerResponse.empty({ status: 204 })),
-          Effect.catch(() => warnOnce.pipe(Effect.as(HttpServerResponse.empty({ status: 502 }))))
+          Effect.catchCause((cause) =>
+            warnOnce(cause).pipe(Effect.as(HttpServerResponse.empty({ status: 502 })))
+          )
         )
 
       return HttpRouter.add("POST", "/api/telemetry/logs", (request) =>
