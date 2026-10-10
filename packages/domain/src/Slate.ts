@@ -14,6 +14,12 @@ export class Slate extends Schema.Class<Slate>("sportal/Slate")({
 }) {
   static readonly empty: Slate = new Slate({ games: [] })
 
+  /**
+   * More new plays than this for one game in one take is a backfill (a game first seen, or the Hub just started), not
+   * plays just made.
+   */
+  static readonly backfill = 3
+
   /** Game `id`, when the slate lists it. */
   gameOf(id: GameId): Option.Option<Game> {
     return Arr.findFirst(this.games, (game) => game.snapshot.id === id)

@@ -3,7 +3,7 @@ import { Classification } from "./Classification.ts"
 import type { Game, GameId, Odds } from "./Game.ts"
 import { type BreakReason, Moment } from "./Moment.ts"
 import { type BigPlayKind, Play, type PlayId } from "./Play.ts"
-import { type Slate, SlateChange } from "./Slate.ts"
+import { Slate, SlateChange } from "./Slate.ts"
 
 /**
  * The fold that classifies the slate's games, one step per take and per expiry. It keeps per game what the slate
@@ -83,7 +83,7 @@ function followed(
 
 /** The newest big play among a take's new plays, lasting `bigPlayHold`; none for a backfill of many. */
 function latestBigPlay(plays: ReadonlyArray<Play>, now: DateTime.Utc): Followed["bigPlay"] {
-  if (plays.length > backfill) return undefined
+  if (plays.length > Slate.backfill) return undefined
   const until = DateTime.addDuration(now, Classifier.bigPlayHold)
   const found = plays
     .toReversed()
@@ -152,6 +152,3 @@ function earliest(times: ReadonlyArray<DateTime.Utc | undefined>): Option.Option
 
 /** How many of a game's latest plays with a win probability its swing is read from. */
 const swingPlays = 3
-
-/** More new plays than this in one take is a backfill (a game first seen), not a play just made. */
-const backfill = 3

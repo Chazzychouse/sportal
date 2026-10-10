@@ -1,8 +1,9 @@
 import { assert, describe, it } from "@effect/vitest"
 import { GameId, GameSnapshot } from "@sportal/domain/Game"
+import { PlayId } from "@sportal/domain/Play"
 import { Slate } from "@sportal/domain/Slate"
 import { completion, liveSnapshot, play, playsIn, snapshot, snapshotIn } from "@sportal/domain/TestGame"
-import { type Cause, DateTime, Effect, Layer, Option, Queue, Ref, Stream } from "effect"
+import { type Cause, DateTime, Effect, Layer, Logger, Option, Queue, Ref, Stream } from "effect"
 import { TestClock } from "effect/testing"
 import { Director } from "./Director.ts"
 import { Delivery, Provider } from "./provider/Provider.ts"
@@ -182,6 +183,39 @@ function fed<A, E, R>(test: (frames: TestHub.Frames) => Effect.Effect<A, E, R>) 
   })
 }
 
+describe("Director, play logs", () => {
+  it.effect("should log each play of a take that brings a few", () =>
+    Effect.gen(function* () {
+      const logs = yield* loggedBy((frames) =>
+        Effect.gen(function* () {
+          yield* listing(frames, [liveSnapshot({ id: one })])
+          yield* delivered(frames, Delivery.Plays({ game: one, plays: [play()] }))
+        })
+      )
+
+      assert.isTrue(logs.some((line) => line.includes("Q1 15:00 Rush for 1 yard")))
+    })
+  )
+
+  it.effect("should log one line for a game's plays caught up all at once", () =>
+    Effect.gen(function* () {
+      const plays = [1, 2, 3, 4].map((sequence) => play({ id: PlayId.make(String(sequence)), sequence }))
+
+      const logs = yield* loggedBy((frames) =>
+        Effect.gen(function* () {
+          yield* listing(frames, [liveSnapshot({ id: one })])
+          yield* delivered(frames, Delivery.Plays({ game: one, plays }))
+        })
+      )
+
+      assert.deepStrictEqual(
+        logs.filter((line) => line.includes("AWAY at HOME")),
+        ["Director: AWAY at HOME caught up on 4 plays"]
+      )
+    })
+  )
+})
+
 describe("Director#classifications", () => {
   it.effect("should classify each listed game once it is taken", () =>
     fed((frames) =>
@@ -210,6 +244,19 @@ describe("Director#classifications", () => {
       })
     )
   )
+})
+
+/** The messages the Director logs while `test` feeds it. */
+const loggedBy = Effect.fnUntraced(function* <A, E, R>(
+  test: (frames: TestHub.Frames) => Effect.Effect<A, E, R>
+) {
+  const logs: Array<string> = []
+  const collector = Logger.make(({ message }) => {
+    logs.push(Array.isArray(message) ? message.join(" ") : String(message))
+  })
+
+  yield* fed(test).pipe(Effect.provide(Logger.layer([collector])))
+  return logs
 })
 
 /** The Director's slate as it is now. */
