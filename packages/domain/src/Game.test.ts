@@ -131,6 +131,25 @@ describe("GameSnapshot#matchup", () => {
   })
 })
 
+describe("GameSnapshot#scoreline", () => {
+  it("should read the away side first, the abbreviations around the scores", () => {
+    const game = liveSnapshot({
+      away: { ...snapshot().away, score: 21 },
+      home: { ...snapshot().home, score: 14 }
+    })
+
+    const line = game.scoreline()
+
+    assert.strictEqual(line, "AWAY 21–14 HOME")
+  })
+
+  it("should show no score before kickoff", () => {
+    const line = snapshot().scoreline()
+
+    assert.strictEqual(line, "AWAY @ HOME")
+  })
+})
+
 describe("GameSnapshot.watchOrder", () => {
   it("should put live games first, then upcoming by kickoff, then finished", () => {
     const games = [

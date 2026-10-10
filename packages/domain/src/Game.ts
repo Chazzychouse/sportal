@@ -145,6 +145,12 @@ export class GameSnapshot extends Schema.Class<GameSnapshot>("sportal/GameSnapsh
     return `${this.away.team.abbreviation} at ${this.home.team.abbreviation}`
   }
 
+  /** The score as one line of text: "KC 21–14 BUF", or "KC @ BUF" before there is a score. */
+  scoreline(): string {
+    if (!this.scored()) return `${this.away.team.abbreviation} @ ${this.home.team.abbreviation}`
+    return `${this.away.team.abbreviation} ${this.away.score}–${this.home.score} ${this.home.team.abbreviation}`
+  }
+
   /** Seconds left in the period, from the clock ("2:10"). An unreadable clock reads as a full quarter. */
   secondsLeft(): number {
     const [minutes, seconds] = this.clock.split(":").map((part) => Number.parseInt(part, 10))

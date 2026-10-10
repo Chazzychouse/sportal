@@ -12,7 +12,6 @@ import {
   CommandShortcut
 } from "@/design/command"
 import { GameStatus } from "../game/GameStatus.tsx"
-import { scoreline } from "../game/Score.tsx"
 import { TeamLogo } from "../game/TeamLogo.tsx"
 import { LayoutGlyph, layoutLabel } from "../layout/LayoutGlyph.tsx"
 import * as DisplayScreen from "../screen/DisplayScreen.ts"
@@ -39,7 +38,7 @@ export function CommandPalette(props: {
     if (Tile.guards.Empty(tile)) return []
     const name = Option.match(props.slate.gameOf(tile.game), {
       onNone: () => `Tile ${slot + 1}`,
-      onSome: ({ snapshot }) => scoreline(snapshot)
+      onSome: ({ snapshot }) => snapshot.scoreline()
     })
     return [{ slot, name }]
   })
@@ -60,11 +59,11 @@ export function CommandPalette(props: {
           {snapshots.toSorted(GameSnapshot.watchOrder).map((game) => (
             <CommandItem
               key={game.id}
-              value={`watch ${scoreline(game)} ${game.away.team.name} ${game.home.team.name} ${game.networks()} ${game.id}`}
+              value={`watch ${game.scoreline()} ${game.away.team.name} ${game.home.team.name} ${game.networks()} ${game.id}`}
               onSelect={() => run({ _tag: "Assign", tile: props.selected, game: game.id })}
             >
               <TeamLogo team={game.away.team} size={16} />
-              <span className="font-mono">{scoreline(game)}</span>
+              <span className="font-mono">{game.scoreline()}</span>
               <TeamLogo team={game.home.team} size={16} />
               <GameStatus game={game} className="text-[11px]" />
               <CommandShortcut>{game.networks()}</CommandShortcut>
