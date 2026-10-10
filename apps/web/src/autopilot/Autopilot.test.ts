@@ -368,6 +368,21 @@ describe("Autopilot.step", () => {
     assert.deepStrictEqual(commands, [{ _tag: "Promote", tile: 1 }])
   })
 
+  it("should keep a red zone away when home enters a red zone too", () => {
+    const { pilot, screen } = awayOnOther()
+
+    const [, commands] = pilot.step(
+      screen,
+      classified([
+        [home, redZone],
+        [other, redZone]
+      ]),
+      at(31)
+    )
+
+    assert.deepStrictEqual(commands, [])
+  })
+
   it("should put every tile back where it was when it goes home after handing off to another away game", () => {
     const { pilot, screen } = awayOnOther(crunch)
     const [handedOff, toThird] = pilot.step(

@@ -211,12 +211,12 @@ function follow(
   const homeMoment = homeOnTile ? moment(home) : undefined
   const homeStopped = !homeOnTile || stopped(homeMoment)
   const homeAwayWorthy = !homeStopped && homeMoment !== undefined && awayWorthy(homeMoment)
-  // While home is away-worthy it is the target: another game is wanted only while its moment comes strictly first.
+  // While home is away-worthy it is the target: another game stays wanted until home's moment comes strictly first.
   const wanted = (game: GameId) => {
     const its = moment(game)
     if (its === undefined) return false
     if (homeStopped) return isLive(its)
-    return homeAwayWorthy ? interest(its) < interest(homeMoment) : awayWorthy(its)
+    return homeAwayWorthy ? interest(its) <= interest(homeMoment) : awayWorthy(its)
   }
   const target = homeAwayWorthy
     ? undefined
