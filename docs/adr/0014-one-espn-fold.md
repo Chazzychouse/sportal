@@ -1,7 +1,7 @@
 # 14. One ESPN fold; FastCast follows what it is told
 
 Date: 2026-10-09
-Status: Accepted. Refined by 0016 (FastCast follows game topics only).
+Status: Superseded by 0016.
 
 Amends ADR 0007 (the FastCast live feed).
 
