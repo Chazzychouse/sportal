@@ -73,11 +73,14 @@ export const display = Atom.family((id: DisplayId) =>
   ).pipe(Atom.keepAlive)
 )
 
-/** The reported prompt's game and `since`; it changes only when the Display shows another prompt. */
+/**
+ * The reported prompt's game and `since`; it changes only when the Display shows another prompt, and keeps its last
+ * value while the Display is not reporting, so a reconnection does not chime the same prompt again.
+ */
 export const promptKey = Atom.family((id: DisplayId) =>
   Atom.make((get): string | undefined => {
     const seen = get(followed(id))
-    if (!Followed.$is("Reported")(seen)) return undefined
+    if (!Followed.$is("Reported")(seen)) return Option.getOrUndefined(get.self<string | undefined>())
     return Option.match(seen.report.prompt, {
       onNone: () => undefined,
       onSome: ({ game, since }) => `${game} ${DateTime.formatIso(since)}`

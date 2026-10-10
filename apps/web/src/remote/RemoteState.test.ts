@@ -160,6 +160,29 @@ describe("RemoteState", () => {
       ])
     })
   )
+
+  it.effect("should keep the prompt key through a reconnection", () =>
+    Effect.gen(function* () {
+      const { registry } = yield* TestWeb.withShell()
+
+      const keys = yield* Effect.gen(function* () {
+        const keys = yield* collected(RemoteState.promptKey(desk), (each) => each)
+        const source = yield* TestWeb.openedAt("/api/displays/desk")
+
+        source.onmessage?.({ data: reported(reportOf(Option.some(promptOn("phi")))) })
+        source.onerror?.()
+        source.onmessage?.({ data: reported(reportOf(Option.some(promptOn("phi")))) })
+        source.onmessage?.({ data: reported(reportOf(Option.some(promptOn("chi")))) })
+        return yield* takeN(keys, 3)
+      }).pipe(Effect.scoped, Effect.provide(registry))
+
+      assert.deepStrictEqual(keys, [
+        undefined,
+        "phi 2026-10-10T20:00:00.000Z",
+        "chi 2026-10-10T20:00:00.000Z"
+      ])
+    })
+  )
 })
 
 const toggle = { _tag: "Pressed", hotkey: { _tag: "TogglePrompts" } } as const
