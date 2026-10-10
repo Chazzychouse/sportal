@@ -1,6 +1,6 @@
 import { createServer } from "node:http"
 import { NodeHttpServer, type NodeServices } from "@effect/platform-node"
-import { LiveMessage, LiveMessageJson, type SlateChanged } from "@sportal/api/LiveMessage"
+import { LiveMessage, type SlateChanged } from "@sportal/api/LiveMessage"
 import { SportalApi } from "@sportal/api/SportalApi"
 import {
   DateTime,
@@ -21,10 +21,9 @@ import {
   HttpRouter,
   type HttpServer,
   type HttpServerError,
-  HttpServerResponse,
   HttpStaticServer
 } from "effect/http"
-import { HttpApiBuilder } from "effect/http-api"
+import { HttpApiBuilder, HttpApiSchema } from "effect/http-api"
 import { Director } from "./Director.ts"
 import { HubConfig } from "./HubConfig.ts"
 import { Source } from "./source/Source.ts"
@@ -43,15 +42,14 @@ export const layer: Layer.Layer<
 > = Layer.unwrap(
   Effect.gen(function* () {
     const { webRoot } = yield* HubConfig
-    const events = yield* liveEvents
     const api = HttpApiBuilder.layer(SportalApi).pipe(
-      Layer.provide(Layer.mergeAll(guideHandlers, hostHandlers))
+      Layer.provide(Layer.mergeAll(guideHandlers, hostHandlers, liveHandlers))
     )
     const web = Option.match(webRoot, {
       onNone: () => Layer.empty,
       onSome: (root) => HttpStaticServer.layer({ root, spa: true })
     })
-    return HttpRouter.serve(Layer.mergeAll(api, liveRoute(events), web))
+    return HttpRouter.serve(Layer.mergeAll(api, web))
   })
 )
 
@@ -96,39 +94,38 @@ const hostHandlers = HttpApiBuilder.group(
   })
 )
 
-/**
- * GET /api/live — the slate, and each game's availability, then every change to either, as server-sent
- * events, with a comment every 20 seconds so proxies that close idle connections leave a quiet stream open. Every
- * connection reads the one `events` stream.
- */
-function liveRoute(events: Stream.Stream<string, Schema.SchemaError>) {
-  return HttpRouter.add(
-    "GET",
-    "/api/live",
-    Effect.sync(() => {
-      // `tick` emits once at the start; only the later ticks are wanted.
-      const keepAlive = Stream.tick("20 seconds").pipe(
-        Stream.drop(1),
-        Stream.map(() => ": keep-alive\n\n")
-      )
-      return HttpServerResponse.stream(Stream.merge(events, keepAlive).pipe(Stream.encodeText), {
-        contentType: "text/event-stream",
-        headers: { "cache-control": "no-cache" }
-      })
+const liveHandlers = HttpApiBuilder.group(
+  SportalApi,
+  "live",
+  Effect.fn(function* (handlers) {
+    const messages = yield* liveMessages
+    return handlers.handleAll({
+      // Every connection reads the one `messages` stream.
+      stream: () =>
+        Effect.sync(() => {
+          // `tick` emits once at the start; only the later ticks are wanted.
+          const keepAlive = Stream.tick("20 seconds").pipe(
+            Stream.drop(1),
+            Stream.map(() => ({ event: "keep-alive", data: "" }) as const)
+          )
+          const events = Stream.map(messages, (data) => ({ event: "message", data }) as const)
+          return HttpApiSchema.withHeaders({
+            body: Stream.merge(events, keepAlive),
+            headers: { "cache-control": "no-cache" } as const
+          })
+        })
     })
-  )
-}
+  })
+)
 
 /**
- * The live stream's events, built once for every connection: the slate, and each game's availability as of when
+ * The live stream's messages, built once for every connection: the slate, and each game's availability as of when
  * it is sent, first as it is, then once each burst of slate changes settles and every 30 seconds, so a guide read or
- * a guide going stale shows, unless what it sends is the same; each as an SSE `data:` line. A connection joining gets
- * the last one at once.
+ * a guide going stale shows, unless what it sends is the same. A connection joining gets the last one at once.
  */
-const liveEvents = Effect.gen(function* () {
+const liveMessages = Effect.gen(function* () {
   const director = yield* Director
   const source = yield* Source
-  const encode = Schema.encodeEffect(LiveMessageJson)
 
   return yield* Stream.zipLatest(settled(director.slate), Stream.tick("30 seconds")).pipe(
     Stream.mapEffect(([slate]) =>
@@ -143,7 +140,6 @@ const liveEvents = Effect.gen(function* () {
       })
     ),
     Stream.changesWith(samePublished),
-    Stream.mapEffect((message) => Effect.map(encode(message), (json) => `data: ${json}\n\n`)),
     Stream.share({ capacity: "unbounded", replay: 1 })
   )
 })

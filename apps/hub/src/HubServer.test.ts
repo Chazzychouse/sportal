@@ -77,6 +77,7 @@ describe("HubServer", () => {
 
             const message = messageOf(line)
             assert.strictEqual(response.headers["content-type"], "text/event-stream")
+            assert.strictEqual(response.headers["cache-control"], "no-cache")
             // Each event is one line, `data: <json>`, followed by a blank line.
             assert.isTrue(line.startsWith("data: "))
             assert.strictEqual(message._tag, "SlateChanged")
@@ -152,27 +153,29 @@ describe("HubServer", () => {
         })
       )
 
-      it.effect("should send a comment every 20 seconds, so a proxy does not close a quiet stream", () =>
-        served((frames) =>
-          Effect.gen(function* () {
-            yield* firstSlateOnTestClock(frames)
-            const lines = yield* pastInitialMessages()
+      it.effect(
+        "should send a keep-alive event every 20 seconds, so a proxy does not close a quiet stream",
+        () =>
+          served((frames) =>
+            Effect.gen(function* () {
+              yield* firstSlateOnTestClock(frames)
+              const lines = yield* pastInitialMessages()
 
-            yield* TestClock.adjust("20 seconds")
-            const comment = yield* nextComment(lines)
+              yield* TestClock.adjust("20 seconds")
+              const keepAlive = yield* nextKeepAlive(lines)
 
-            assert.strictEqual(comment, ": keep-alive")
-          })
-        )
+              assert.deepStrictEqual(keepAlive, ["event: keep-alive", "data: "])
+            })
+          )
       )
 
-      it.effect("should still send each change as data after a keep-alive comment", () =>
+      it.effect("should still send each change as data after a keep-alive event", () =>
         served((frames) =>
           Effect.gen(function* () {
             yield* firstSlateOnTestClock(frames)
             const lines = yield* pastInitialMessages()
             yield* TestClock.adjust("20 seconds")
-            yield* nextComment(lines)
+            yield* nextKeepAlive(lines)
 
             yield* TestHub.offered(frames, Delivery.Listing({ league: "fbs", games: [inPeriod(2)] }))
             yield* TestClock.adjust("250 millis")
@@ -532,15 +535,17 @@ function inPeriod(period: number) {
   })
 }
 
-/** The next line of `lines` that is data. */
+/** The next line of `lines` that carries a live message, past any keep-alive event. */
 function nextData(lines: Queue.Queue<string>) {
-  return Queue.take(lines).pipe(Effect.repeat({ until: (line) => line.startsWith("data: ") }))
+  return Queue.take(lines).pipe(Effect.repeat({ until: (line) => line.startsWith("data: {") }))
 }
 
-/** The next line of `lines` that is not data. */
-function nextComment(lines: Queue.Queue<string>) {
-  return Queue.take(lines).pipe(Effect.repeat({ until: (line) => !line.startsWith("data: ") }))
-}
+/** The next keep-alive event on `lines`: its event line and its data line. */
+const nextKeepAlive = Effect.fnUntraced(function* (lines: Queue.Queue<string>) {
+  const event = yield* Queue.take(lines).pipe(Effect.repeat({ until: (line) => line.startsWith("event: ") }))
+  const data = yield* Queue.take(lines)
+  return [event, data]
+})
 
 /**
  * A guide with the game's teams and network on ESPN, on at `now`; padding brings it to a real response's size.

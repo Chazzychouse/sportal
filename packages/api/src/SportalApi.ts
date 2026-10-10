@@ -1,6 +1,7 @@
 import { Schema } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "effect/http-api"
 import { GuideUnreadable } from "./GuideUnreadable.ts"
+import { LiveMessageJson } from "./LiveMessage.ts"
 
 export class SportalApi extends HttpApi.make("sportal")
   .add(
@@ -18,6 +19,24 @@ export class SportalApi extends HttpApi.make("sportal")
     HttpApiGroup.make("host").add(
       HttpApiEndpoint.get("health", "/health", {
         success: Schema.Struct({ version: Schema.String, startedAt: Schema.DateTimeUtcFromString })
+      })
+    )
+  )
+  .add(
+    // The slate, and each game's availability, then every change to either, as server-sent events. A `keep-alive`
+    // event with no data comes every 20 seconds, so proxies that close idle connections leave a quiet stream open;
+    // an EventSource's `onmessage` does not see it.
+    HttpApiGroup.make("live").add(
+      HttpApiEndpoint.get("stream", "/live", {
+        success: HttpApiSchema.WithHeaders(
+          HttpApiSchema.StreamSse({
+            events: Schema.Union([
+              Schema.Struct({ event: Schema.Literal("message"), data: LiveMessageJson }),
+              Schema.Struct({ event: Schema.Literal("keep-alive"), data: Schema.Literal("") })
+            ])
+          }),
+          { "cache-control": Schema.Literal("no-cache") }
+        )
       })
     )
   )
