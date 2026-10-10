@@ -87,7 +87,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "2 * (max(sportal_hub_up_ratio) or vector(0)) + (count(sportal_game_state_ratio{league=~\"$league\"}) > bool 0)",
+          "expr": "2 * (max(sportal_hub_up_ratio) or vector(0)) + ((count(sportal_game_state_ratio{league=~\"$league\"}) > bool 0) or vector(0))",
           "instant": true,
           "range": false
         }
