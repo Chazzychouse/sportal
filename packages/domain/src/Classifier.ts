@@ -7,9 +7,9 @@ import { Slate, SlateChange } from "./Slate.ts"
 
 /**
  * The fold that classifies the slate's games, one step per take and per expiry. It keeps per game what the slate
- * does not: the pregame line once the scoreboard drops it, a big play while it lasts, when it last got a play (its
- * stall clock, restarted whenever the game comes into play), and the moment shown and since when, which holds
- * `momentHold` before a lower one replaces it. Pure.
+ * does not: the pregame line once the scoreboard drops it, a big play while it lasts, when it last moved (its stall
+ * clock: a new play, or a change in its status, period, clock or score), and the moment shown and since when, which
+ * holds `momentHold` before a lower one replaces it. Pure.
  */
 export class Classifier extends Data.Class<{ readonly games: ReadonlyMap<GameId, Followed> }> {
   static readonly empty: Classifier = new Classifier({ games: new Map() })
@@ -20,7 +20,7 @@ export class Classifier extends Data.Class<{ readonly games: ReadonlyMap<GameId,
   /** How long a moment holds before a lower one may replace it. */
   static readonly momentHold = Duration.seconds(20)
 
-  /** How long a live game goes without a new play before it counts as stopped. */
+  /** How long a live game goes without moving before it counts as stopped. */
   static readonly stallAfter = Duration.seconds(90)
 
   /**
@@ -59,8 +59,8 @@ interface Followed {
   readonly bigPlay:
     | { readonly play: PlayId; readonly kind: BigPlayKind; readonly until: DateTime.Utc }
     | undefined
-  readonly lastPlayAt: DateTime.Utc
-  readonly inPlay: boolean
+  readonly movedAt: DateTime.Utc
+  readonly standing: string
   readonly classification: Classification
   readonly expiry: DateTime.Utc | undefined
 }
@@ -76,10 +76,9 @@ function followed(
   const lasting =
     had?.bigPlay !== undefined && DateTime.isLessThan(now, had.bigPlay.until) ? had.bigPlay : undefined
   const bigPlay = latestBigPlay(plays, now) ?? lasting
-  const inPlay = snapshot.inPlay()
-  const comingIntoPlay = inPlay && had?.inPlay === false
-  const lastPlayAt = plays.length > 0 || had === undefined || comingIntoPlay ? now : had.lastPlayAt
-  const stallAt = DateTime.addDuration(lastPlayAt, Classifier.stallAfter)
+  const standing = standingOf(snapshot)
+  const movedAt = plays.length > 0 || had === undefined || had.standing !== standing ? now : had.movedAt
+  const stallAt = DateTime.addDuration(movedAt, Classifier.stallAfter)
   const [moment, since, heldBack] = settled(had?.classification, momentOf(game, bigPlay, stallAt, now), now)
 
   const winProbabilities = game.plays
@@ -89,7 +88,16 @@ function followed(
   const held = heldBack ? DateTime.addDuration(since, Classifier.momentHold) : undefined
   const stalling = snapshot.progress() === "live" && DateTime.isLessThan(now, stallAt) ? stallAt : undefined
   const expiry = Option.getOrUndefined(earliest([bigPlay?.until, held, stalling]))
-  return { odds, bigPlay, lastPlayAt, inPlay, classification, expiry }
+  return { odds, bigPlay, movedAt, standing, classification, expiry }
+}
+
+/**
+ * What a game's scoreboard shows: its status, period, clock and score. A change means the game moved, though no play
+ * came, as when a polled scoreboard runs ahead of a quiet feed or a game comes into play.
+ */
+function standingOf(snapshot: GameSnapshot): string {
+  const { status, period, clock, home, away } = snapshot
+  return `${status} ${period} ${clock} ${home.score}-${away.score}`
 }
 
 /** The newest big play among a take's new plays, lasting `bigPlayHold`; none for a backfill of many. */

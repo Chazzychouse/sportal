@@ -204,6 +204,28 @@ describe("Classifier#step, moments", () => {
 })
 
 describe("Classifier#step, a stall", () => {
+  it("should not call a game stalled while its clock runs, though no play arrives", () => {
+    const [first] = Classifier.empty.step(slateOf(liveSnapshot({ id }), [play()]), [played(play())], at)
+    const [second] = first.step(slateOf(liveSnapshot({ id, clock: "9:20" }), [play()]), [], later(60))
+
+    const [, classified] = second.step(slateOf(liveSnapshot({ id, clock: "8:40" }), [play()]), [], later(140))
+
+    assert.strictEqual(classified.get(id)?.moment._tag, "Live")
+  })
+
+  it("should not call a game stalled when its score changes, though no play arrives", () => {
+    const [first] = Classifier.empty.step(slateOf(liveSnapshot({ id }), [play()]), [played(play())], at)
+    const [second] = first.step(slateOf(liveSnapshot({ id, ...sides(7, 0) }), [play()]), [], later(60))
+
+    const [, classified] = second.step(
+      slateOf(liveSnapshot({ id, ...sides(7, 0) }), [play()]),
+      [],
+      later(140)
+    )
+
+    assert.strictEqual(classified.get(id)?.moment._tag, "Live")
+  })
+
   it("should call a game a break when no play has arrived for ninety seconds", () => {
     const [first] = Classifier.empty.step(slateOf(liveSnapshot({ id }), [play()]), [played(play())], at)
 
