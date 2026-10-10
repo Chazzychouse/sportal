@@ -21,4 +21,4 @@ Two sources for one game are two answers, not a conflict the Hub settles. A comm
 its Screen in its browser until persistence is designed, so a Screen outlives the day: a game no longer on the slate keeps its tile until someone clears it. When automation
 comes, the Hub delivers a ranking of games by watchability, not screen commands, and each Display decides how its
 layout shows it. A stream budget shared across Displays will need the Hub's coordination; the Remote comes back with
-its own design.
+its own design. The autopilot (2026-10-10) reads the classifications on the slate as that ranking; there is no separate one yet.
