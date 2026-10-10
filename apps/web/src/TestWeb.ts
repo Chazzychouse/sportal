@@ -267,7 +267,7 @@ export const withShell = Effect.fn("TestWeb.withShell")(function* (
   events: Omit<Parameters<typeof Shell.layerTest>[0], "record"> = {},
   scheduleTask?: (f: () => void) => () => void
 ) {
-  const calls = yield* Queue.unbounded<ShellCall | HubCall>()
+  const calls = yield* Queue.unbounded<TestWebCall>()
   const layer = Layer.mergeAll(
     Shell.layerTest({ ...events, record: (call) => Effect.asVoid(Queue.offer(calls, call)) }),
     HubClient.layerTest({
@@ -279,12 +279,12 @@ export const withShell = Effect.fn("TestWeb.withShell")(function* (
   return { registry: registryOf(layer, scheduleTask), calls }
 })
 
-type HubCall =
+/** A call `withShell` records: one the Shell was asked to make, or one the Hub client was. */
+export type TestWebCall =
+  | Parameters<Parameters<typeof Shell.layerTest>[0]["record"]>[0]
   | { readonly _tag: "SendGuide"; readonly guide: string }
   | { readonly _tag: "Report"; readonly id: DisplayId; readonly report: Schema.Json }
   | { readonly _tag: "Send"; readonly id: DisplayId; readonly input: Schema.Json }
-
-type ShellCall = Parameters<Parameters<typeof Shell.layerTest>[0]["record"]>[0]
 
 /** Keeps `screen` in this browser, as the Display would have before a reload. */
 export const keep = Effect.fn("TestWeb.keep")(function* (screen: Screen) {

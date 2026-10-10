@@ -69,13 +69,19 @@ export const inputs = runtime.atom((get) =>
     yield* Stream.merge(keys, videos).pipe(
       Stream.runForEach((input) =>
         Effect.sync(() => {
-          if (DisplayInput.$is("Pressed")(input)) route(get, input.hotkey, input)
+          if (DisplayInput.$is("Pressed")(input)) get.set(pressed, input.hotkey)
           else get.set(display, input)
         })
       )
     )
   }).pipe(logDefect("The Display's inputs"))
 )
+
+/** A hotkey pressed anywhere, a Remote's included: routed as the shell's hotkeys are. */
+export const pressed: Atom.Writable<void, Hotkey> = Atom.writable(
+  () => undefined,
+  (ctx, hotkey: Hotkey) => route(ctx, hotkey)
+).pipe(Atom.keepAlive)
 
 /** Whether this Display can open the YouTube TV sign-in: only in the shell. */
 export const signIn: Atom.Atom<boolean> = runtime
@@ -98,13 +104,13 @@ export const openSignIn = runtime.fn((_: undefined) =>
 
 const kept = Atom.make(Display.initial).pipe(Atom.keepAlive)
 
-function route(get: Atom.FnContext, hotkey: Hotkey, pressed: DisplayInput) {
+function route(get: Atom.WriteContext<void>, hotkey: Hotkey) {
   Match.value(hotkey).pipe(
     Match.tag("FullScreen", () => get.set(toggleFullScreen, undefined)),
     Match.tag("ToggleAutopilot", () => get.set(AutopilotState.autopilot, AutopilotInput.Toggled())),
     Match.tag("TogglePrompts", () => get.set(PromptsState.prompts, PromptInput.Toggled())),
     Match.tag("AcceptPrompt", () => get.set(PromptsState.prompts, PromptInput.Accepted())),
     Match.tag("DismissPrompt", () => get.set(PromptsState.prompts, PromptInput.Dismissed())),
-    Match.orElse(() => get.set(display, pressed))
+    Match.orElse(() => get.set(display, DisplayInput.Pressed({ hotkey })))
   )
 }

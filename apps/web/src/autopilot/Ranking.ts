@@ -1,12 +1,13 @@
 import type { SlateChanged } from "@sportal/api/LiveMessage"
 import type { GameId } from "@sportal/domain/Game"
 import { Moment } from "@sportal/domain/Moment"
-import { Order } from "effect"
+import { Order, Schema } from "effect"
 
 const ranks = ["redZone", "crunchTime", "bigPlay", "live", "break", "notLive"] as const
 
 /** How worth showing a game is now: a red zone, crunch time, a big play, live play, a break, not live. */
-export type Rank = (typeof ranks)[number]
+export const Rank = Schema.Literals(ranks)
+export type Rank = typeof Rank.Type
 
 /** A moment's rank; a game with no classification counts as live. */
 export function rankOf(moment: Moment | undefined): Rank {

@@ -1,6 +1,6 @@
 import { assert, describe, it } from "@effect/vitest"
 import { GameId } from "@sportal/domain/Game"
-import { DateTime, Option } from "effect"
+import { DateTime, Option, Schema } from "effect"
 import { Prompt } from "./Prompt.ts"
 
 const phi = GameId.make("phi")
@@ -41,5 +41,19 @@ describe("Prompt", () => {
     const words = prompt.words(nameOf)
 
     assert.strictEqual(words, "PHI @ DAL — crunch time, into an empty tile")
+  })
+
+  it("should come back the same through its schema", () => {
+    const prompt = new Prompt({
+      game: phi,
+      rank: "redZone",
+      since,
+      target: 3,
+      replaces: Option.some({ game: chi, rank: "break" })
+    })
+
+    const back = Schema.decodeSync(Prompt)(Schema.encodeSync(Prompt)(prompt))
+
+    assert.deepStrictEqual(back, prompt)
   })
 })
