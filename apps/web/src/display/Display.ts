@@ -5,8 +5,9 @@ import { Layout } from "../layout/Layout.ts"
 import { type Screen, type ScreenCommand, Tile } from "../screen/Screen.ts"
 import { Place, StripCard } from "../slate/StripCard.ts"
 
-type Overlay = Data.TaggedEnum<{ None: object; Keys: object; Palette: object }>
-const Overlay = Data.taggedEnum<Overlay>()
+/** The one overlay a Display has open, or none. Above the class: `Display.initial` reads it when the class is defined. */
+export type Overlay = Data.TaggedEnum<{ None: object; Keys: object; Palette: object }>
+export const Overlay = Data.taggedEnum<Overlay>()
 
 /**
  * A Display's local state: what is selected, interacting, picked, and open. Never sent to the Hub. Each input
@@ -44,69 +45,67 @@ export class Display extends Data.Class<{
     return Tile.guards.StreamTile(tile) && tile.game === this.interacting ? this.interacting : undefined
   }
 
+  /** What an input does on this Screen, with the slate strip's `cards`. */
+  apply(input: DisplayInput, screen: Screen, cards: ReadonlyArray<StripCard>): DisplayStep {
+    return DisplayInput.$match(input, {
+      Pressed: ({ hotkey }) => this.press(hotkey, screen, cards),
+      Selected: ({ slot }) => this.select(slot, screen),
+      VideoPressed: ({ game }) => {
+        const slot = screen.slotOf(game)
+        return slot === undefined ? DisplayStep.of(this) : this.select(slot, screen)
+      },
+      Dropped: ({ card }) => this.drop(card, screen),
+      Commanded: ({ command }) => DisplayStep.of(this, [command]),
+      Opened: ({ overlay }) => DisplayStep.of(this.open(overlay)),
+      Closed: () => DisplayStep.of(this.close()),
+      SlateToggled: () => DisplayStep.of(this.toggleSlate())
+    })
+  }
+
   /** What a hotkey does. `FullScreen` does nothing here: it is the shell's or browser's, not the Display's. */
   press(hotkey: Hotkey, screen: Screen, cards: ReadonlyArray<StripCard>): DisplayStep {
-    const stay = (commands: ReadonlyArray<ScreenCommand>) => new DisplayStep({ display: this, commands })
     return Hotkey.match(hotkey, {
       SelectTile: ({ slot }) => this.select(slot, screen),
       ToggleSolo: () => {
-        if (Option.isSome(screen.solo)) return stay([{ _tag: "Unsolo" }])
+        if (Option.isSome(screen.solo)) return DisplayStep.of(this, [{ _tag: "Unsolo" }])
         const slot = this.selectedOn(screen)
-        return stay(Tile.guards.Empty(screen.onScreen()[slot]) ? [] : [{ _tag: "Solo", tile: slot }])
+        return DisplayStep.of(
+          this,
+          Tile.guards.Empty(screen.onScreen()[slot]) ? [] : [{ _tag: "Solo", tile: slot }]
+        )
       },
       Unsolo: () =>
         !Overlay.$is("None")(this.overlay)
-          ? new DisplayStep({ display: this.close(), commands: [] })
-          : stay(Option.isNone(screen.solo) ? [] : [{ _tag: "Unsolo" }]),
+          ? DisplayStep.of(this.close())
+          : DisplayStep.of(this, Option.isNone(screen.solo) ? [] : [{ _tag: "Unsolo" }]),
       Interact: () => {
         const tile = screen.onScreen()[this.selectedOn(screen)]
-        if (!Tile.guards.StreamTile(tile)) return stay([])
-        return new DisplayStep({
-          display: new Display({
-            ...this,
-            interacting: this.interactingOn(screen) === undefined ? tile.game : undefined
-          }),
-          commands: []
-        })
+        if (!Tile.guards.StreamTile(tile)) return DisplayStep.of(this)
+        const interacting = this.interactingOn(screen) === undefined ? tile.game : undefined
+        return DisplayStep.of(new Display({ ...this, interacting }))
       },
       StepPick: ({ step }) =>
-        new DisplayStep({
-          display: new Display({ ...this, pick: StripCard.nextPick(cards, this.pick, step) }),
-          commands: []
-        }),
+        DisplayStep.of(new Display({ ...this, pick: StripCard.nextPick(cards, this.pick, step) })),
       DropPick: () => {
         const card = cards.find((card) => card.id === this.pick)
-        return card === undefined ? stay([]) : this.drop(card, screen)
+        return card === undefined ? DisplayStep.of(this) : this.drop(card, screen)
       },
-      ToggleSlate: () => new DisplayStep({ display: this.toggleSlate(), commands: [] }),
-      ShowKeys: () =>
-        new DisplayStep({
-          display: Overlay.$is("Keys")(this.overlay) ? this.close() : this.open("Keys"),
-          commands: []
-        }),
+      ToggleSlate: () => DisplayStep.of(this.toggleSlate()),
+      ShowKeys: () => DisplayStep.of(Overlay.$is("Keys")(this.overlay) ? this.close() : this.open("Keys")),
       CommandPalette: () =>
-        new DisplayStep({
-          display: Overlay.$is("Palette")(this.overlay) ? this.close() : this.open("Palette"),
-          commands: []
-        }),
-      FocusAudio: ({ slot }) => stay([{ _tag: "FocusAudio", tile: slot }]),
-      Promote: ({ slot }) => stay([{ _tag: "Promote", tile: slot }]),
-      NextLayout: () => stay([{ _tag: "SetLayout", layout: Layout.next(screen.layout) }]),
-      FullScreen: () => stay([])
+        DisplayStep.of(Overlay.$is("Palette")(this.overlay) ? this.close() : this.open("Palette")),
+      FocusAudio: ({ slot }) => DisplayStep.of(this, [{ _tag: "FocusAudio", tile: slot }]),
+      Promote: ({ slot }) => DisplayStep.of(this, [{ _tag: "Promote", tile: slot }]),
+      NextLayout: () => DisplayStep.of(this, [{ _tag: "SetLayout", layout: Layout.next(screen.layout) }]),
+      FullScreen: () => DisplayStep.of(this)
     })
   }
 
   /** Selects a slot on screen, ending interacting when the slot changes. A slot past the last is ignored. */
   select(slot: number, screen: Screen): DisplayStep {
-    if (slot < 0 || slot >= screen.onScreen().length) return new DisplayStep({ display: this, commands: [] })
-    return new DisplayStep({
-      display: new Display({
-        ...this,
-        selected: slot,
-        interacting: slot === this.selectedOn(screen) ? this.interacting : undefined
-      }),
-      commands: []
-    })
+    if (slot < 0 || slot >= screen.onScreen().length) return DisplayStep.of(this)
+    const interacting = slot === this.selectedOn(screen) ? this.interacting : undefined
+    return DisplayStep.of(new Display({ ...this, selected: slot, interacting }))
   }
 
   /**
@@ -116,21 +115,14 @@ export class Display extends Data.Class<{
    */
   drop(card: StripCard, screen: Screen): DisplayStep {
     const slot = this.selectedOn(screen)
-    if (!card.pickable()) return new DisplayStep({ display: this, commands: [] })
+    if (!card.pickable()) return DisplayStep.of(this)
     const { place } = card
-    const { display, commands } = new Display({ ...this, pick: card.id }).select(
-      screen.nextEmptySlot(slot) ?? slot,
-      screen
-    )
-    return new DisplayStep({
-      display,
-      commands: [
-        Place.$is("Bench")(place)
-          ? { _tag: "Swap", a: place.tile, b: slot }
-          : { _tag: "Assign", tile: slot, game: card.id },
-        ...commands
-      ]
-    })
+    const picked = new Display({ ...this, pick: card.id })
+    const { display, commands } = picked.select(screen.nextEmptySlot(slot) ?? slot, screen)
+    const placed: ScreenCommand = Place.$is("Bench")(place)
+      ? { _tag: "Swap", a: place.tile, b: slot }
+      : { _tag: "Assign", tile: slot, game: card.id }
+    return DisplayStep.of(display, [placed, ...commands])
   }
 
   toggleSlate(): Display {
@@ -138,12 +130,12 @@ export class Display extends Data.Class<{
   }
 
   /** Whether this overlay is the one open. */
-  shows(overlay: Exclude<Overlay["_tag"], "None">): boolean {
+  shows(overlay: "Keys" | "Palette"): boolean {
     return Overlay.$is(overlay)(this.overlay)
   }
 
   /** Opens an overlay, closing any other: at most one is open. */
-  open(overlay: Exclude<Overlay["_tag"], "None">): Display {
+  open(overlay: "Keys" | "Palette"): Display {
     return new Display({ ...this, overlay: Overlay[overlay]() })
   }
 
@@ -156,4 +148,22 @@ export class Display extends Data.Class<{
 export class DisplayStep extends Data.Class<{
   readonly display: Display
   readonly commands: ReadonlyArray<ScreenCommand>
-}> {}
+}> {
+  /** `display`, sending `commands`: none unless given. */
+  static of(display: Display, commands: ReadonlyArray<ScreenCommand> = []): DisplayStep {
+    return new DisplayStep({ display, commands })
+  }
+}
+
+/** What a person did on a Display: a hotkey, a click, a drop, a command, or an overlay opened or closed. */
+export type DisplayInput = Data.TaggedEnum<{
+  Pressed: { readonly hotkey: Hotkey }
+  Selected: { readonly slot: number }
+  VideoPressed: { readonly game: GameId }
+  Dropped: { readonly card: StripCard }
+  Commanded: { readonly command: ScreenCommand }
+  Opened: { readonly overlay: "Keys" | "Palette" }
+  Closed: object
+  SlateToggled: object
+}>
+export const DisplayInput = Data.taggedEnum<DisplayInput>()

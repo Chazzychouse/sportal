@@ -4,7 +4,7 @@ import { Option } from "effect"
 import { Screen, type ScreenCommand } from "../screen/Screen.ts"
 import { StripCard } from "../slate/StripCard.ts"
 import * as TestWeb from "../TestWeb.ts"
-import { Display, DisplayStep } from "./Display.ts"
+import { Display, DisplayInput, DisplayStep } from "./Display.ts"
 
 describe("Display.initial", () => {
   it("should start on slot 0, with nothing interacting or picked, the slate open, and no overlay", () => {
@@ -489,8 +489,99 @@ describe("Display#open and Display#close", () => {
   })
 })
 
+describe("Display#apply", () => {
+  it("should press a hotkey as press does", () => {
+    const screen = TestWeb.withTiles(["live"])
+
+    const step = apply(Display.initial, DisplayInput.Pressed({ hotkey: { _tag: "ToggleSlate" } }), screen)
+
+    assert.deepStrictEqual(step, press(Display.initial, { _tag: "ToggleSlate" }, screen))
+  })
+
+  it("should select a slot as select does", () => {
+    const screen = TestWeb.withTiles(["live", "soon"])
+
+    const step = apply(Display.initial, DisplayInput.Selected({ slot: 1 }), screen)
+
+    assert.deepStrictEqual(step, Display.initial.select(1, screen))
+  })
+
+  it("should select the slot a pressed video's game is in", () => {
+    const screen = TestWeb.withTiles(["live", "soon"])
+
+    const { display, commands } = apply(
+      Display.initial,
+      DisplayInput.VideoPressed({ game: GameId.make("soon") }),
+      screen
+    )
+
+    assert.strictEqual(display.selected, 1)
+    assert.deepStrictEqual(commands, [])
+  })
+
+  it("should do nothing for a pressed video whose game is not on screen", () => {
+    const screen = TestWeb.withTiles(["live"])
+
+    const { display } = apply(
+      Display.initial,
+      DisplayInput.VideoPressed({ game: GameId.make("gone") }),
+      screen
+    )
+
+    assert.strictEqual(display, Display.initial)
+  })
+
+  it("should drop a card as drop does", () => {
+    const screen = TestWeb.withTiles(["soon"])
+    const free = cardOf(screen, 0)
+
+    const step = apply(Display.initial, DisplayInput.Dropped({ card: free }), screen)
+
+    assert.deepStrictEqual(step, Display.initial.drop(free, screen))
+  })
+
+  it("should send a command and change nothing", () => {
+    const command: ScreenCommand = { _tag: "SetLayout", layout: "Single" }
+
+    const { display, commands } = apply(
+      Display.initial,
+      DisplayInput.Commanded({ command }),
+      TestWeb.withTiles([])
+    )
+
+    assert.strictEqual(display, Display.initial)
+    assert.deepStrictEqual(commands, [command])
+  })
+
+  it("should open an overlay", () => {
+    const { display } = apply(
+      Display.initial,
+      DisplayInput.Opened({ overlay: "Keys" }),
+      TestWeb.withTiles([])
+    )
+
+    assert.isTrue(display.shows("Keys"))
+  })
+
+  it("should close the open overlay", () => {
+    const { display } = apply(Display.initial.open("Palette"), DisplayInput.Closed(), TestWeb.withTiles([]))
+
+    assert.strictEqual(display.overlay._tag, "None")
+  })
+
+  it("should toggle the slate", () => {
+    const { display } = apply(Display.initial, DisplayInput.SlateToggled(), TestWeb.withTiles([]))
+
+    assert.isFalse(display.slateOpen)
+  })
+})
+
 function press(display: Display, hotkey: Parameters<Display["press"]>[0], screen: Screen) {
   return display.press(hotkey, screen, StripCard.of(screen, TestWeb.slate))
+}
+
+function apply(display: Display, input: DisplayInput, screen: Screen) {
+  return display.apply(input, screen, StripCard.of(screen, TestWeb.slate))
 }
 
 /** The strip card at `index` on `screen`; a test that asks for one past the strip fails here. */

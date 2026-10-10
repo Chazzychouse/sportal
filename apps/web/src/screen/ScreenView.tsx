@@ -1,10 +1,11 @@
-import { useAtomSet } from "@effect/atom-react"
+import { useAtomSet, useAtomValue } from "@effect/atom-react"
 import type { ScreenTransition } from "@sportal/api/ShellBridge"
-import type { GameId } from "@sportal/domain/Game"
-import type { Slate } from "@sportal/domain/Slate"
 import { Option } from "effect"
-import { useEffect, useLayoutEffect, useRef, useState } from "react"
+import { useLayoutEffect, useRef, useState } from "react"
+import { DisplayInput } from "../display/Display.ts"
+import * as DisplayState from "../display/DisplayState.ts"
 import { useVideoAreas } from "../display/OverlayHost.tsx"
+import * as LiveStream from "../hub/LiveStream.ts"
 import * as DisplayScreen from "./DisplayScreen.ts"
 import { Dividers } from "./Dividers.tsx"
 import { type Screen, type Split, Tile } from "./Screen.ts"
@@ -16,22 +17,21 @@ import { placements, tileRects } from "./TileRects.ts"
  * The Screen: each on-screen tile positioned from the layout, with the shell's provider views laid over their
  * wells at the same pixels. When tiles move, the chrome and the video move together along one transition.
  */
-export function ScreenView(props: {
-  screen: Screen
-  slate: Slate
-  selected: number
-  interacting: GameId | undefined
-  onSelect: (tile: number) => void
-}) {
-  const dispatch = useAtomSet(DisplayScreen.screen)
+export function ScreenView() {
+  const screen = useAtomValue(DisplayScreen.screen)
+  const display = useAtomValue(DisplayState.display)
+  const input = useAtomSet(DisplayState.display)
+  const { slate } = useAtomValue(LiveStream.live)
+  const selected = display.selectedOn(screen)
+  const interacting = display.interactingOn(screen)
   const areaRef = useRef<HTMLDivElement | null>(null)
   const area = useArea(areaRef)
   // The split being dragged, shown in place of the Screen's until the drag is committed.
   const [dragged, setDragged] = useState<Split | undefined>(undefined)
 
-  const shown = dragged === undefined ? props.screen : props.screen.withSplit(dragged)
+  const shown = dragged === undefined ? screen : screen.withSplit(dragged)
   const rects = tileRects(shown, area)
-  const placed = placements(shown, rects, area, props.interacting)
+  const placed = placements(shown, rects, area, interacting)
   useVideoAreas(placed)
 
   // The shell hears only placements that changed, so a re-render never cuts a transition short. A change of
@@ -41,31 +41,19 @@ export function ScreenView(props: {
     if (area.width === 0) return
     const key = JSON.stringify(placed)
     if (key === synced.current.placements) return
-    const arrangement = arrangementOf(props.screen)
+    const arrangement = arrangementOf(screen)
     const moved =
       synced.current.arrangement !== "" && synced.current.arrangement !== arrangement && dragged === undefined
     synced.current = { placements: key, arrangement }
     window.sportalShell?.syncTiles(placed, moved ? screenTransition : undefined)
   })
 
-  // A click on a video reaches the shell, not this page: the shell reports which game's view it was.
-  useEffect(
-    () =>
-      window.sportalShell?.onTilePressed((game) => {
-        const slot = props.screen.slotOf(game)
-        if (slot !== undefined) props.onSelect(slot)
-      }),
-    [props.screen, props.onSelect]
-  )
-
   return (
     <main ref={areaRef} className="relative min-h-0 overflow-hidden bg-background">
       {shown.onScreen().map((tile, index) => {
         const rect = rects[index]
         if (rect === undefined) return null
-        const game = Tile.guards.Empty(tile)
-          ? undefined
-          : Option.getOrUndefined(props.slate.gameOf(tile.game))
+        const game = Tile.guards.Empty(tile) ? undefined : Option.getOrUndefined(slate.gameOf(tile.game))
         const hidden = rect.width === 0
 
         return (
@@ -73,7 +61,7 @@ export function ScreenView(props: {
             key={Tile.guards.Empty(tile) ? `slot-${index}` : tile.game}
             aria-hidden={hidden}
             className={`absolute flex flex-col overflow-hidden rounded-sm border ${
-              props.selected === index ? "border-foreground/60" : "border-border"
+              selected === index ? "border-foreground/60" : "border-border"
             } ${hidden ? "pointer-events-none opacity-0" : ""}`}
             style={{
               left: rect.x,
@@ -84,12 +72,11 @@ export function ScreenView(props: {
             }}
           >
             <TileChrome
-              screen={props.screen}
+              screen={screen}
               slot={index}
               tile={tile}
               game={game?.snapshot}
-              selected={props.selected === index}
-              onSelect={() => props.onSelect(index)}
+              selected={selected === index}
             />
             <div className="flex min-h-0 flex-1 items-center justify-center bg-well">
               <TileBody tile={tile} game={game} />
@@ -105,7 +92,7 @@ export function ScreenView(props: {
           onDrag={setDragged}
           onDrop={(split) => {
             setDragged(undefined)
-            dispatch({ _tag: "SetSplit", split })
+            input(DisplayInput.Commanded({ command: { _tag: "SetSplit", split } }))
           }}
         />
       )}

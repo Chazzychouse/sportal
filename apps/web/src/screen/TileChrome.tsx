@@ -4,9 +4,10 @@ import { ArrowUpLeft, Shrink, SquareDashed, Volume2, VolumeX, X } from "lucide-r
 import type { ReactNode } from "react"
 import { Button } from "@/design/button"
 import { cn } from "@/design/ClassName"
+import { DisplayInput } from "../display/Display.ts"
+import * as DisplayState from "../display/DisplayState.ts"
 import { GameStatus } from "../game/GameStatus.tsx"
 import { Score } from "../game/Score.tsx"
-import * as DisplayScreen from "./DisplayScreen.ts"
 import { type Screen, Tile } from "./Screen.ts"
 import { TileAction } from "./TileAction.ts"
 import { tileHeader } from "./TileRects.ts"
@@ -21,9 +22,8 @@ export function TileChrome(props: {
   tile: Tile
   game: GameSnapshot | undefined
   selected: boolean
-  onSelect: () => void
 }) {
-  const dispatch = useAtomSet(DisplayScreen.screen)
+  const input = useAtomSet(DisplayState.display)
   const { tile, slot } = props
   const onAir = !Tile.guards.Empty(tile) && props.screen.hears(tile.game)
 
@@ -37,7 +37,8 @@ export function TileChrome(props: {
       }}
       onDrop={(event) => {
         const from = Number(event.dataTransfer.getData(tileDrag))
-        if (Number.isInteger(from) && from !== slot) dispatch({ _tag: "Swap", a: from, b: slot })
+        if (Number.isInteger(from) && from !== slot)
+          input(DisplayInput.Commanded({ command: { _tag: "Swap", a: from, b: slot } }))
       }}
       style={{ height: tileHeader }}
       className={`flex shrink-0 items-center gap-2 border-b px-1.5 text-xs ${
@@ -46,7 +47,7 @@ export function TileChrome(props: {
     >
       <button
         type="button"
-        onClick={props.onSelect}
+        onClick={() => input(DisplayInput.Selected({ slot }))}
         aria-keyshortcuts={`Alt+${slot + 1}`}
         title={`Select tile ${slot + 1} · Alt ${slot + 1}`}
         className={`flex min-w-0 flex-1 items-center gap-2 text-left ${props.selected ? "" : "opacity-90"}`}
@@ -92,7 +93,7 @@ export function TileChrome(props: {
                 action.id === "hear" && onAir && "text-on-air",
                 action.id === "clear" && "hover:text-destructive"
               )}
-              onClick={() => dispatch(action.command)}
+              onClick={() => input(DisplayInput.Commanded({ command: action.command }))}
             >
               {iconOf(action, onAir)}
             </Button>
