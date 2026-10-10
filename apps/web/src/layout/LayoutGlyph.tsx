@@ -21,16 +21,3 @@ export function LayoutGlyph(props: { name: LayoutName }) {
     </svg>
   )
 }
-
-/** A layout's name as people read it. */
-export function layoutLabel(name: LayoutName): string {
-  return layoutLabels[name]
-}
-
-const layoutLabels: Record<LayoutName, string> = {
-  Single: "Single",
-  Pair: "Side by side",
-  Quad: "Quad",
-  MainThree: "Main + 3",
-  MainFive: "Main + 5"
-}

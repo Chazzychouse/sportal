@@ -13,7 +13,8 @@ import {
 } from "@/design/command"
 import { GameStatus } from "../game/GameStatus.tsx"
 import { TeamLogo } from "../game/TeamLogo.tsx"
-import { LayoutGlyph, layoutLabel } from "../layout/LayoutGlyph.tsx"
+import { Layout } from "../layout/Layout.ts"
+import { LayoutGlyph } from "../layout/LayoutGlyph.tsx"
 import * as DisplayScreen from "../screen/DisplayScreen.ts"
 import { LayoutName, type Screen, type ScreenCommand, Tile } from "../screen/Screen.ts"
 import { TileAction } from "../screen/TileAction.ts"
@@ -97,11 +98,11 @@ export function CommandPalette(props: {
           {LayoutName.literals.map((layout) => (
             <CommandItem
               key={layout}
-              value={`layout ${layoutLabel(layout)} ${layout}`}
+              value={`layout ${Layout.label(layout)} ${layout}`}
               onSelect={() => run({ _tag: "SetLayout", layout })}
             >
               <LayoutGlyph name={layout} />
-              {layoutLabel(layout)}
+              {Layout.label(layout)}
               {props.screen.layout === layout && <CommandShortcut>current</CommandShortcut>}
             </CommandItem>
           ))}

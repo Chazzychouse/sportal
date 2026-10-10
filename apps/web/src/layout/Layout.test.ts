@@ -144,6 +144,14 @@ describe("Layout.clamp", () => {
   })
 })
 
+describe("Layout.label", () => {
+  it("should name each layout as people read it", () => {
+    const labels = LayoutName.literals.map(Layout.label)
+
+    assert.deepStrictEqual(labels, ["Single", "Side by side", "Quad", "Main + 3", "Main + 5"])
+  })
+})
+
 /** Every layout at its default split and at each end of the bounds. */
 function layoutsAtSplits(): ReadonlyArray<Layout> {
   return LayoutName.literals.flatMap((name) =>
