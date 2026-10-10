@@ -31,7 +31,7 @@ crunch time.
 
 ### The prompt
 
-The prompt is the best qualifying candidate by rank, then score, then game id; or none. One prompt at a time: a better
+The prompt is the best qualifying candidate by rank, then score, then slate order; or none. One prompt at a time: a better
 candidate takes the toast over, and the one it replaced comes back when it is again the best and still qualifies.
 
 A prompt lasts as long as a step still gives it. When its game leaves the red zone or crunch time, gets a tile, loses
@@ -41,7 +41,7 @@ With prompts off, or the Screen soloed, there is no prompt.
 
 ### Accepting
 
-Accepting sends, as your commands through the Display, `Assign { tile: target, game }` then `Promote { tile: target }`:
+Accepting sends, as your commands, `Assign { tile: target, game }` then `Promote { tile: target }`:
 the game takes the target's slot, then swaps into the main tile with the sound. The main tile's game moves to the
 target's slot; the target's game, if any, leaves the Screen (it stays on the slate).
 
@@ -71,15 +71,23 @@ A `Schema.Class` (`sportal/prompts`):
   the live state.
 - `dismiss(prompt, classifications)`: records `prompt.game` with `prompt.since`, dropping each record whose game's
   `since` differs or that has no classification.
-- `Prompt.commands`: the `Assign` then `Promote` that accept it.
+### `apps/web/src/prompts/Prompt.ts`
 
-`Prompt`, beside it, a `Data.Class`: `game`, `rank` (`redZone` or `crunchTime`), `since`, `target` (the tile index),
-and `replaces: Option<{ game, rank }>` (none when the target is empty).
+`Prompt`, a `Data.Class`: `game`, `rank` (`redZone` or `crunchTime`), `since`, `target` (the tile index), and
+`replaces: Option<{ game, rank }>` (none when the target is empty). `commands()`: the `Assign` then `Promote` that
+accept it. `words(nameOf)`: `PHI @ DAL — red zone, replaces CHI @ GB (on a break)`, or `…, into an empty tile`.
 
 ### `Screen.tileFor`
 
 `tileFor` in `Screen.ts` becomes a static, `Screen.tileFor(game, availability)`, so a prompt and an assign agree on
 what streams.
+
+### `AutopilotState.yours`
+
+A writable atom taking a `ScreenCommand`: it sends the command to the Screen and, when the Screen applies it, to the
+autopilot as yours (`Commanded`). `DisplayState.display` sends its steps' commands through it, as it does today inline,
+and accepting a prompt sends its two commands through it; so both are yours to the autopilot without `PromptsState`
+importing `DisplayState` (which imports `PromptsState` for the hotkeys).
 
 ### `apps/web/src/prompts/PromptsState.ts`
 
@@ -87,19 +95,19 @@ As `AutopilotState`:
 
 - `PromptInput`, a `Data.TaggedEnum`: `Toggled`, `Accepted`, `Dismissed`.
 - `prompts`: an `Atom.kvs` (`sportal/prompts`, default `Prompts.initial`) behind a writable atom. `Toggled` toggles;
-  `Accepted` sends the current prompt's commands to `DisplayScreen.screen`; `Dismissed` dismisses it. Accepting or
+  `Accepted` sends the current prompt's commands through `AutopilotState.yours`; `Dismissed` dismisses it. Accepting or
   dismissing with no prompt does nothing.
-- `current`: a derived atom, `prompts.prompt(screen, live)`, recomputed on each change of the three.
+- `prompt`: a derived atom, `prompts.prompt(screen, live)`, recomputed on each change of the three.
 - `log`, mounted by the Display beside `pilot`: `Effect.logInfo("Prompt: …")` when a prompt is shown (with what it
   would replace), taken over, accepted, dismissed, or closed because it no longer holds, annotated with
   `prompt.game`, `prompt.rank` and `prompt.target`. Sent to `sportal-web` through the existing OTLP logger.
 
 ### The toast
 
-`apps/web/src/prompts/PromptToast.tsx`, mounted in `DisplayView`: one Sonner toast with a fixed id, updated in place
-while `current` holds a prompt and closed when it holds none. It reads `PHI @ DAL — red zone` (or `crunch time`) with
-its `MomentBadge`, then `replaces CHI @ GB (break)` or `into an empty tile`, and `Y watch · N skip`. A click on the
-toast accepts; its close button dismisses.
+`usePromptToast` in `apps/web/src/prompts/PromptToast.ts`, called by `DisplayView` as `useScreenRejectionToasts` is:
+one Sonner toast with a fixed id, updated in place while `prompt` holds a prompt and closed when it holds none. It reads `PHI @ DAL — red zone` (or `crunch time`), then
+`replaces CHI @ GB (on a break)` or `into an empty tile`, with two buttons: `Watch · Y` accepts, `Skip · N` dismisses.
+Never closed by a timer.
 
 ### The toggle
 
@@ -109,8 +117,9 @@ toast accepts; its close button dismisses.
 ### Hotkeys
 
 In `@sportal/api/Hotkey`: `TogglePrompts` on `P`, `AcceptPrompt` on `Y`, `DismissPrompt` on `N`, in a `Prompts`
-group of the keys. Pressed in a stream view too, like the others. The keys dialog, the command palette and the shell's
-key map follow, as for `ToggleAutopilot`.
+group of the keys. Pressed in a stream view too, like the others: the shell reads the same `Hotkey.of`. The keys dialog
+gains the `Prompts` group. `DisplayState.inputs` sends the three to `PromptsState.prompts`, as it sends
+`ToggleAutopilot` to the autopilot; `Display.press` does nothing with them.
 
 ## Docs
 
@@ -127,10 +136,11 @@ push** (a prompt delivered to a phone).
   weakest on-screen game; of two candidates the better rank, then score, wins; a dismissed game stays quiet for its
   `since` and prompts again for a new one; dismissing drops stale records; off prompts nothing; soloed prompts
   nothing; `commands` are `Assign` then `Promote` on the target.
-- `PromptsState.test.ts`: accepting sends both commands and leaves the game in the main tile with the sound;
-  accepting or dismissing with no prompt does nothing; a toggle is kept.
-- `AutopilotTimeline.test.ts`, one scenario: accepting a prompt holds the main tile through a higher-ranked game for
-  3 min, then the ranking decides.
+- `PromptsState.test.ts`: accepting leaves the game in the main tile with the sound; accepting with no prompt does
+  nothing; accepting makes the main tile yours to an autopilot that is on; dismissing closes the prompt; a toggle is
+  kept in this browser.
+- `DisplayState.test.ts`: the `TogglePrompts` hotkey turns prompts off.
+- `Display.test.ts`: the three prompt hotkeys change nothing in the Display.
 - `Hotkey.test.ts`: `P`, `Y`, `N`.
 
 Then, on a live game day: read the prompts in Grafana beside the autopilot's decisions.
