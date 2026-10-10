@@ -118,9 +118,12 @@ A reader opens a file to see the thing it is named for. Keep it that way.
 
 - Tests sit beside the file as `Name.test.ts`. Domain logic and provider decoding are written test-first.
   Provider tests run against recorded real payloads in the adapter's `fixtures/` folder.
-- A `Test*.ts` file is named for the concept it builds or fakes and sits beside its module.
+- Each app has one Test module: `apps/hub/src/TestHub.ts`, `apps/web/src/TestWeb.ts`,
+  `apps/desktop/src/main/TestDesktop.ts`. The domain's builders, used by every app, are `packages/domain/src/TestGame.ts`.
+  A test imports its app's module as a namespace (`import * as TestHub from "../TestHub.ts"`). A helper two test
+  files need goes there, never into one test file for the other to import.
 - A fake of one service is a `layerTest…` static on that service; it takes its data as arguments and imports no
-  fixture or `Test*.ts`. Everything else a test needs stays in `Test*.ts`.
+  fixture or `Test*.ts`. Everything else a test shares stays in its app's Test module.
 - One behaviour per test. Several cases are several tests; `it.each` only when the cases are one behaviour over
   different inputs.
 - `it("should …")`; the `describe` names the unit (`describe("GameSnapshot#progress")`).

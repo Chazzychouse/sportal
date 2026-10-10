@@ -273,7 +273,7 @@ The same standard applies within a file as across the tree: a file is not a junk
 | Rule | Tool |
 | --- | --- |
 | Import direction (section 4.1, rule 9); provider folders private to themselves | dependency-cruiser |
-| Production code cannot import a Hub `Test*.ts`; tests and other Hub `Test*.ts` harnesses can | dependency-cruiser |
+| Production code cannot import a `Test*.ts`; tests and other `Test*.ts` modules can | dependency-cruiser |
 | Banned file and folder names; no `index.ts` barrels | dependency-cruiser |
 | No unused files, exports, or dependencies | knip |
 | No `any`, no non-null assertions, no default exports | Biome |
