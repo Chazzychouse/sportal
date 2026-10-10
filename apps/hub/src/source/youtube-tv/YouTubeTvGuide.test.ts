@@ -1,10 +1,10 @@
 import { assert, describe, it } from "@effect/vitest"
 import { ChannelAvailability } from "@sportal/domain/Channel"
+import { Guide } from "@sportal/domain/Guide"
 import type { LeagueId } from "@sportal/domain/League"
 import { DateTime, Effect, Layer, Logger, Option } from "effect"
 import { TestClock } from "effect/testing"
 import * as TestHub from "../../TestHub.ts"
-import { Guide } from "../Guide.ts"
 import { Source } from "../Source.ts"
 import * as YouTubeTvGuide from "./YouTubeTvGuide.ts"
 

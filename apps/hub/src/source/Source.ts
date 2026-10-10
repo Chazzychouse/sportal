@@ -1,8 +1,8 @@
 import type { GuideUnreadable } from "@sportal/api/GuideUnreadable"
 import type { ChannelAvailability } from "@sportal/domain/Channel"
 import { type GameSnapshot, Network } from "@sportal/domain/Game"
+import { ChannelId, Guide } from "@sportal/domain/Guide"
 import { Context, DateTime, Duration, Effect, Layer, Option, Ref } from "effect"
-import { ChannelId, Guide } from "./Guide.ts"
 import * as YouTubeTvGuide from "./youtube-tv/YouTubeTvGuide.ts"
 
 /** A way to obtain video for a game. It says whether and where each game can be shown, as of a time. */
@@ -99,7 +99,6 @@ export class Source extends Context.Service<
   }
 }
 
-/** A guide answers for 45 minutes after its reading; the shell reads one every 5 minutes while it runs. */
 const staleAfter = Duration.minutes(45)
 
 function isFresh(guide: Guide, now: DateTime.Utc): boolean {

@@ -3,11 +3,6 @@ import { HttpClient } from "effect/http"
 import { Otlp } from "effect/observability"
 import { HubConfig } from "./HubConfig.ts"
 
-/**
- * The Hub's minimum log level and console format (Effect's console logger, or one JSON object per line), and,
- * when `SPORTAL_OTLP_URL` is set, its spans, logs, and metrics exported over OTLP under a `service.instance.id` of
- * its own.
- */
 export const layer: Layer.Layer<
   never,
   PlatformError.PlatformError,

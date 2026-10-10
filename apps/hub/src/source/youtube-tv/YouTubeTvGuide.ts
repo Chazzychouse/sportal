@@ -1,7 +1,7 @@
 import { GuideUnreadable } from "@sportal/api/GuideUnreadable"
 import type { SourceName } from "@sportal/domain/Channel"
+import { ChannelId, Guide } from "@sportal/domain/Guide"
 import { Array as Arr, DateTime, Effect, Option, Schema, SchemaGetter, SchemaTransformation } from "effect"
-import { ChannelId, Guide } from "../Guide.ts"
 import * as YouTubeTvPayload from "./YouTubeTvPayload.ts"
 
 /**

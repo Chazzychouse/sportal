@@ -20,7 +20,6 @@ import {
 import { HttpClient, HttpClientResponse } from "effect/http"
 import * as Socket from "effect/socket/Socket"
 import { TestClock } from "effect/testing"
-import { HubConfig } from "./HubConfig.ts"
 import * as Espn from "./provider/espn/Espn.ts"
 import * as EspnEvent from "./provider/espn/EspnEvent.ts"
 import { FastCast, Frame, Topic, type Wanted } from "./provider/espn/FastCast.ts"
@@ -30,7 +29,7 @@ import { Delivery, Provider } from "./provider/Provider.ts"
 import { Source } from "./source/Source.ts"
 
 /**
- * ESPN live with the default Hub config, answering each league's poll with its recorded scoreboard in `scoreboards`,
+ * ESPN live, answering each league's poll with its recorded scoreboard in `scoreboards`,
  * and with FastCast that opens no socket.
  */
 export function recordedEspn(scoreboards: { readonly [L in LeagueId]: string }): Layer.Layer<Provider> {
@@ -39,7 +38,7 @@ export function recordedEspn(scoreboards: { readonly [L in LeagueId]: string }):
     return Effect.succeed(HttpClientResponse.fromWeb(request, new Response(body)))
   })
   return Espn.layer.pipe(
-    Layer.provide([noSocket, HubConfig.layerTest({}).pipe(Layer.orDie)]),
+    Layer.provide(noSocket),
     Layer.provide(Layer.succeed(HttpClient.HttpClient, recorded))
   )
 }

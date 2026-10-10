@@ -23,7 +23,6 @@ const Hub = HubServer.layer.pipe(
 
 Layer.launch(Hub).pipe(
   NodeRuntime.runMain({
-    // The Hub runs until a signal stops it, so stopping is a clean exit.
     teardown: (exit, onExit) => (isStopping(exit) ? onExit(0) : Runtime.defaultTeardown(exit, onExit))
   })
 )

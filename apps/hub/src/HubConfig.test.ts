@@ -1,5 +1,4 @@
 import { assert, describe, it } from "@effect/vitest"
-import { LeagueId } from "@sportal/domain/League"
 import { Effect, Option } from "effect"
 import { HubConfig } from "./HubConfig.ts"
 
@@ -15,7 +14,6 @@ describe("HubConfig", () => {
       assert.strictEqual(config.logFormat, "pretty")
       assert.strictEqual(config.version, "dev")
       assert.isTrue(Option.isNone(config.otlpUrl))
-      assert.deepStrictEqual(config.leagues, LeagueId.literals)
     }).pipe(Effect.provide(HubConfig.layerTest({})))
   )
 
@@ -33,16 +31,7 @@ describe("HubConfig", () => {
         Option.map(config.otlpUrl, (url) => url.href),
         Option.some("http://localhost:4318/")
       )
-      assert.deepStrictEqual(config.leagues, ["fbs"])
     }).pipe(Effect.provide(HubConfig.layerTest(everySetting)))
-  )
-
-  it.effect("should read a list of leagues, ignoring the spaces around each", () =>
-    Effect.gen(function* () {
-      const config = yield* HubConfig
-
-      assert.deepStrictEqual(config.leagues, ["nfl", "fbs"])
-    }).pipe(Effect.provide(HubConfig.layerTest({ SPORTAL_LEAGUES: " nfl , fbs " })))
   )
 
   it.effect.each([
@@ -50,9 +39,7 @@ describe("HubConfig", () => {
     ["SPORTAL_LOG_LEVEL", "Loud"],
     ["SPORTAL_LOG_FORMAT", "xml"],
     ["SPORTAL_OTLP_URL", "not a url"],
-    ["SPORTAL_OTLP_URL", "localhost:4318"],
-    ["SPORTAL_LEAGUES", "mlb"],
-    ["SPORTAL_LEAGUES", " , "]
+    ["SPORTAL_OTLP_URL", "localhost:4318"]
   ] as const)("should refuse %s=%s, naming the setting", ([name, value]) =>
     Effect.gen(function* () {
       const config = Effect.service(HubConfig).pipe(Effect.provide(HubConfig.layerTest({ [name]: value })))
@@ -72,6 +59,5 @@ const everySetting = {
   SPORTAL_LOG_LEVEL: "Debug",
   SPORTAL_LOG_FORMAT: "json",
   SPORTAL_VERSION: "1.2.3",
-  SPORTAL_OTLP_URL: "http://localhost:4318",
-  SPORTAL_LEAGUES: "fbs"
+  SPORTAL_OTLP_URL: "http://localhost:4318"
 }

@@ -20,7 +20,6 @@ import {
 import { HttpClient, HttpClientError, HttpClientResponse } from "effect/http"
 import * as Socket from "effect/socket/Socket"
 import { TestClock } from "effect/testing"
-import { HubConfig } from "../../HubConfig.ts"
 import * as TestHub from "../../TestHub.ts"
 import { Delivery, Provider } from "../Provider.ts"
 import * as EspnProvider from "./EspnProvider.ts"
@@ -38,7 +37,7 @@ describe("EspnProvider", () => {
       Effect.gen(function* () {
         const said = yield* polledOnce(
           answering(() => Effect.succeed(new Response(fbsLive, { status: 503 }))),
-          { leagues: "fbs", frames: 1 }
+          { leagues: ["fbs"], frames: 1 }
         )
 
         assert.deepStrictEqual(said, [[]])
@@ -49,7 +48,7 @@ describe("EspnProvider", () => {
       Effect.gen(function* () {
         const said = yield* polledOnce(
           answering(() => Effect.succeed(new Response("not json"))),
-          { leagues: "fbs", frames: 1 }
+          { leagues: ["fbs"], frames: 1 }
         )
 
         assert.deepStrictEqual(said, [[]])
@@ -281,7 +280,7 @@ describe("EspnProvider", () => {
           mid: Option.none(),
           envelope: decodeEnvelope("{}")
         })
-        const espn = espnOver(recordedHttp(fbsLive), { leagues: "fbs", pushing: Stream.make(pushed) })
+        const espn = espnOver(recordedHttp(fbsLive), { leagues: ["fbs"], pushing: Stream.make(pushed) })
 
         const said = yield* Provider.use((provider) =>
           provider.deliveries.pipe(Stream.take(2), Stream.runCollect)
@@ -316,7 +315,7 @@ describe("EspnProvider", () => {
           yield* settled
           yield* TestClock.adjust("5 seconds")
           return yield* Fiber.join(taken)
-        }).pipe(Effect.provide(espnOver(slow, { leagues: "nfl", pushing })), Effect.scoped)
+        }).pipe(Effect.provide(espnOver(slow, { leagues: ["nfl"], pushing })), Effect.scoped)
 
         assert.deepStrictEqual(
           frames.map((deliveries) => deliveries.map(({ _tag }) => _tag)),
@@ -364,7 +363,7 @@ describe("EspnProvider", () => {
       Effect.gen(function* () {
         const unanswered = HttpClient.make(() => Effect.never)
 
-        const told = yield* toldOver(unanswered, "fbs", [])
+        const told = yield* toldOver(unanswered, ["fbs"], [])
 
         const [first] = told
         assert.deepStrictEqual(first === undefined ? [] : [...HashMap.entries(first)], [])
@@ -381,7 +380,7 @@ describe("EspnProvider", () => {
           Effect.succeed(HttpClientResponse.fromWeb(request, new Response(later)))
         )
 
-        const told = yield* toldOver(answering, "fbs", ["1 minute"])
+        const told = yield* toldOver(answering, ["fbs"], ["1 minute"])
 
         assert.isFalse(
           told.slice(0, -1).some((one) => HashMap.has(one, game)),
@@ -393,7 +392,7 @@ describe("EspnProvider", () => {
 
     it.effect("should want a listed game's topic while it is live", () =>
       Effect.gen(function* () {
-        const told = yield* toldOver(recordedNfl, "nfl", [])
+        const told = yield* toldOver(recordedNfl, ["nfl"], [])
 
         assert.isTrue(Option.exists(Arr.last(told), (one) => HashMap.has(one, neAtBuf)))
       })
@@ -403,7 +402,7 @@ describe("EspnProvider", () => {
       Effect.gen(function* () {
         yield* TestClock.setTime(DateTime.makeUnsafe("2026-10-04T19:35:00Z").epochMilliseconds)
 
-        const told = yield* toldOver(recordedNfl, "nfl", [])
+        const told = yield* toldOver(recordedNfl, ["nfl"], [])
 
         assert.isTrue(Option.exists(Arr.last(told), (one) => HashMap.has(one, gameTopic("401872974"))))
       })
@@ -413,7 +412,7 @@ describe("EspnProvider", () => {
       Effect.gen(function* () {
         yield* TestClock.setTime(DateTime.makeUnsafe("2026-10-04T19:34:59Z").epochMilliseconds)
 
-        const told = yield* toldOver(recordedNfl, "nfl", [])
+        const told = yield* toldOver(recordedNfl, ["nfl"], [])
 
         assert.isFalse(told.some((one) => HashMap.has(one, gameTopic("401872974"))))
       })
@@ -432,7 +431,7 @@ describe("EspnProvider", () => {
           )
         )
 
-        const told = yield* toldOver(client, "nfl", ["10 seconds"])
+        const told = yield* toldOver(client, ["nfl"], ["10 seconds"])
 
         assert.isTrue(
           told.some((one) => HashMap.has(one, topic)),
@@ -449,7 +448,7 @@ describe("EspnProvider", () => {
         const fbs = new Topic({ league: "fbs", game: nfl.game })
         const client = HttpClient.make((request) => Effect.succeed(answered(request, live)))
 
-        const told = yield* toldOver(client, "nfl,fbs", ["10 seconds"])
+        const told = yield* toldOver(client, ["nfl", "fbs"], ["10 seconds"])
 
         const last = Arr.last(told)
         assert.isTrue(Option.exists(last, (one) => HashMap.has(one, nfl)))
@@ -463,7 +462,7 @@ describe("EspnProvider", () => {
       Effect.gen(function* () {
         const pushing = Stream.fromEffect(Effect.sleep("1 second")).pipe(Stream.as(checkpointFrame(neAtBuf)))
 
-        const told = yield* toldOver(recordedNfl, "nfl", ["1 second"], pushing)
+        const told = yield* toldOver(recordedNfl, ["nfl"], ["1 second"], pushing)
 
         assert.deepStrictEqual(
           Option.flatMap(Arr.last(told), (one) => HashMap.get(one, neAtBuf)),
@@ -478,7 +477,7 @@ describe("EspnProvider", () => {
           Stream.flatMap(() => Stream.make(checkpointFrame(neAtBuf), unapplicablePatch(neAtBuf)))
         )
 
-        const told = yield* toldOver(recordedNfl, "nfl", ["1 second"], pushing)
+        const told = yield* toldOver(recordedNfl, ["nfl"], ["1 second"], pushing)
 
         assert.isTrue(
           told.slice(0, -1).some((one) => Option.contains(HashMap.get(one, neAtBuf), "Synced")),
@@ -498,7 +497,7 @@ describe("EspnProvider", () => {
         const pushing = Stream.fromEffect(Effect.sleep("1 second")).pipe(Stream.as(checkpointFrame(topic)))
         const client = HttpClient.make((request) => Effect.succeed(answered(request, live)))
 
-        const told = yield* toldOver(client, "nfl", ["1 second", "10 seconds"], pushing)
+        const told = yield* toldOver(client, ["nfl"], ["1 second", "10 seconds"], pushing)
 
         assert.deepStrictEqual(
           Option.flatMap(Arr.last(told), (one) => HashMap.get(one, topic)),
@@ -521,7 +520,7 @@ describe("EspnProvider", () => {
           )
         )
 
-        const told = yield* toldOver(client, "nfl", ["1 second", "10 seconds", "15 minutes"], pushing)
+        const told = yield* toldOver(client, ["nfl"], ["1 second", "10 seconds", "15 minutes"], pushing)
 
         assert.isTrue(
           told.some((one) => Option.contains(HashMap.get(one, topic), "Synced")),
@@ -625,15 +624,14 @@ function transportFailure(request: Parameters<typeof HttpClientResponse.fromWeb>
 function espnOver(
   client: HttpClient.HttpClient,
   options: {
-    readonly leagues?: string
+    readonly leagues?: ReadonlyArray<LeagueId>
     readonly pushing?: Stream.Stream<Frame>
     readonly wanting?: (wanted: Stream.Stream<Wanted>) => Stream.Stream<Frame>
   } = {}
 ) {
-  return EspnProvider.layer.pipe(
+  return EspnProvider.layer(options.leagues ?? LeagueId.literals).pipe(
     Layer.provide([
       FastCast.layerTest(options.wanting ?? (() => options.pushing ?? Stream.never)),
-      HubConfig.layerTest({ SPORTAL_LEAGUES: options.leagues ?? "nfl,fbs" }).pipe(Layer.orDie),
       Layer.succeed(HttpClient.HttpClient, client)
     ])
   )
@@ -644,7 +642,7 @@ function espnOver(
  */
 function polledOnce(
   client: HttpClient.HttpClient,
-  options: { readonly leagues?: string; readonly frames?: number } = {}
+  options: { readonly leagues?: ReadonlyArray<LeagueId>; readonly frames?: number } = {}
 ) {
   return Effect.gen(function* () {
     const provider = yield* Provider
@@ -710,7 +708,7 @@ function polledOver(
       yield* Effect.forEach(Arr.ensure(spans), (span) => Effect.andThen(TestClock.adjust(span), settled), {
         discard: true
       })
-    }).pipe(Effect.provide(espnOver(client, { leagues: leagues.join(","), pushing })), Effect.scoped)
+    }).pipe(Effect.provide(espnOver(client, { leagues, pushing })), Effect.scoped)
 
     const polled = yield* Ref.get(requests)
     const byLeague: Partial<Record<LeagueId, ReadonlyArray<number>>> = Object.fromEntries(
@@ -729,7 +727,7 @@ function polledOver(
  */
 function toldOver(
   client: HttpClient.HttpClient,
-  leagues: string,
+  leagues: ReadonlyArray<LeagueId>,
   spans: ReadonlyArray<Duration.Input>,
   pushing: Stream.Stream<Frame> = Stream.never
 ) {
@@ -782,10 +780,7 @@ function espnOverFastCast(server: ReturnType<typeof TestHub.fakeServer>) {
     Layer.succeed(HttpClient.HttpClient, http),
     Layer.succeed(Socket.WebSocketConstructor, () => server.socket)
   )
-  return EspnProvider.layer.pipe(
-    Layer.provide([FastCast.layer, HubConfig.layerTest({ SPORTAL_LEAGUES: "nfl" }).pipe(Layer.orDie)]),
-    Layer.provide(host)
-  )
+  return EspnProvider.layer(["nfl"]).pipe(Layer.provide(FastCast.layer), Layer.provide(host))
 }
 
 /**

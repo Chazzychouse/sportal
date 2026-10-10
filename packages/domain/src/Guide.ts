@@ -4,11 +4,9 @@ import type { LeagueId } from "@sportal/domain/League"
 import type { Team } from "@sportal/domain/Team"
 import { DateTime, Duration, Option, Schema } from "effect"
 
-/** A source's own id for one of its channels (YouTube TV's station id). */
 export const ChannelId = Schema.String.pipe(Schema.brand("ChannelId"))
 export type ChannelId = typeof ChannelId.Type
 
-/** One programme on a channel, with its begin and end. */
 export const Airing = Schema.Struct({
   channel: ChannelId,
   title: Schema.String,
@@ -17,10 +15,6 @@ export const Airing = Schema.Struct({
 })
 export type Airing = typeof Airing.Type
 
-/**
- * One reading of a source's guide: the channels this account gets, each with its live address while it is
- * on the air and, for a channel that is one network's stream, that network; and what each airs.
- */
 export class Guide extends Schema.Class<Guide>("sportal/Guide")({
   source: SourceName,
   readAt: Schema.DateTimeUtc,

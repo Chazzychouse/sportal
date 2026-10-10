@@ -5,22 +5,12 @@ import { Cause, Context, DateTime, Effect, Layer, Metric, Stream, SubscriptionRe
 import { Delivery, Provider } from "./provider/Provider.ts"
 import { loggedUnlessStopping } from "./Shutdown.ts"
 
-/**
- * The Hub's one holder of what is going on: the day's slate, taken from each frame its provider decodes as it
- * arrives.
- */
 export class Director extends Context.Service<
   Director,
   {
-    /** The slate as it is, then again each time a take changes it. */
     readonly slate: Stream.Stream<Slate>
   }
 >()("sportal/hub/Director") {
-  /**
-   * Takes what the provider decodes, from an empty slate, gauging each game a take changed by its progress, and
-   * logging each play it adds, as the take says. A take that raises a defect is logged, and the slate keeps what it
-   * had; if the provider's frames ever end other than by the Hub stopping, that is logged.
-   */
   static readonly layer: Layer.Layer<Director, never, Provider> = Layer.effect(
     Director,
     Effect.gen(function* () {
@@ -58,7 +48,6 @@ export class Director extends Context.Service<
   )
 }
 
-/** `slate` after each of a frame's deliveries in order, and what each changed, in order. */
 function taken(
   slate: Slate,
   deliveries: ReadonlyArray<Delivery>
@@ -75,7 +64,6 @@ function taken(
   )
 }
 
-/** A change the slate took, observed: a game's progress gauged (its series removed once delisted), or a play it added logged. */
 function observed(change: SlateChange) {
   return SlateChange.$match(change, {
     Progressed: ({ game }) => gaugeGame(game.snapshot, progressValues[game.snapshot.progress()]),
