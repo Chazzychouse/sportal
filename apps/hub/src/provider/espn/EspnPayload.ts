@@ -21,8 +21,7 @@ export const EspnSituation = Schema.Struct({
   distance: Schema.optional(Schema.Int),
   yardLine: Schema.optional(Schema.Int),
   homeTimeouts: Schema.optional(Schema.Int),
-  awayTimeouts: Schema.optional(Schema.Int),
-  lastPlay: Schema.optional(Schema.Struct({ text: Schema.optional(Schema.String) }))
+  awayTimeouts: Schema.optional(Schema.Int)
 })
 export type EspnSituation = typeof EspnSituation.Type
 

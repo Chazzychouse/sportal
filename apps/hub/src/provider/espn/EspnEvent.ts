@@ -133,8 +133,7 @@ function situation(league: LeagueId, raw: EspnSituation, homeTeamId: string): Si
     // the ball attacks. Without a team on the ball it cannot be oriented.
     ...(raw.yardLine === undefined || raw.possession === undefined
       ? {}
-      : { yardLine: raw.possession === homeTeamId ? 100 - raw.yardLine : raw.yardLine }),
-    lastPlay: raw.lastPlay?.text
+      : { yardLine: raw.possession === homeTeamId ? 100 - raw.yardLine : raw.yardLine })
   })
 }
 
