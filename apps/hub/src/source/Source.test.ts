@@ -2,7 +2,7 @@ import { assert, describe, it } from "@effect/vitest"
 import type { ChannelAvailability } from "@sportal/domain/Channel"
 import { type GameSnapshot, Network } from "@sportal/domain/Game"
 import { broadcast, snapshot, team } from "@sportal/domain/TestGame"
-import { DateTime, Effect, Fiber, Option, Ref, Stream } from "effect"
+import { DateTime, Effect } from "effect"
 import { TestClock } from "effect/testing"
 import { Source } from "./Source.ts"
 import * as TestYouTubeTv from "./youtube-tv/TestYouTubeTv.ts"
@@ -11,8 +11,7 @@ const now = Effect.gen(function* () {
   const source = yield* Source
   const now = yield* DateTime.now
 
-  const latest = yield* Stream.runHead(source.availability)
-  const availabilityOf = Option.getOrThrow(latest)
+  const availabilityOf = yield* source.availability
   return (game: GameSnapshot) => availabilityOf(game, now)
 })
 
@@ -42,30 +41,14 @@ describe("Source.layerYouTubeTv", () => {
     }).pipe(Effect.provide(youTubeTv))
   )
 
-  it.effect("should give its availability again after a guide is read", () =>
-    Effect.gen(function* () {
-      const signals = yield* laterAvailability.pipe(Stream.take(1), Stream.runCount, Effect.forkChild)
-      yield* Effect.yieldNow
-
-      yield* TestYouTubeTv.readRecordedGuide
-
-      const signalled = yield* Fiber.join(signals)
-      assert.strictEqual(signalled, 1)
-    }).pipe(Effect.provide(youTubeTv))
-  )
-
-  it.effect("should keep the guide it has, giving nothing again, when a later response cannot be read", () =>
+  it.effect("should keep the guide it has when a later response cannot be read", () =>
     Effect.gen(function* () {
       yield* TestYouTubeTv.readRecordedGuide
-      const changes = yield* counted(laterAvailability)
 
       yield* Source.use((source) => source.readGuide("{}")).pipe(Effect.flip)
-      yield* Effect.yieldNow
 
       const availabilityOf = yield* now
-      const signalled = yield* Ref.get(changes)
       assert.deepStrictEqual(availabilityOf(ohioStateAtIowa), [onNews3])
-      assert.strictEqual(signalled, 0)
     }).pipe(Effect.provide(youTubeTv))
   )
 
@@ -168,16 +151,6 @@ describe("Source.layerTwitch", () => {
       assert.deepStrictEqual(availabilityOf(thursdayNightStarted), [onPrimeVideo])
     }).pipe(Effect.provide(Source.layerTwitch))
   )
-
-  it.effect("should give its lineup once, never changing", () =>
-    Effect.gen(function* () {
-      const source = yield* Source
-
-      const given = yield* Stream.runCount(source.availability)
-
-      assert.strictEqual(given, 1)
-    }).pipe(Effect.provide(Source.layerTwitch))
-  )
 })
 
 describe("Source.layerAll", () => {
@@ -186,7 +159,6 @@ describe("Source.layerAll", () => {
     channel: { name: source, source, locator: { _tag: "WebView", url: `https://example.test/${source}` } }
   })
   const streamingOnly: ChannelAvailability = { _tag: "NotCarried", why: "StreamingOnly" }
-  const notInGuide: ChannelAvailability = { _tag: "NotCarried", why: "NotInGuide" }
 
   it.effect("should give every source's availability, in the order given", () =>
     Effect.gen(function* () {
@@ -198,21 +170,6 @@ describe("Source.layerAll", () => {
       const availabilityOf = yield* now.pipe(Effect.provide(all))
 
       assert.deepStrictEqual(availabilityOf(thursdayNight), [streamingOnly, carried("Twitch")])
-    })
-  )
-
-  it.effect("should give its availability again whenever any of its sources changes", () =>
-    Effect.gen(function* () {
-      const all = Source.layerAll([
-        Source.layerTest(() => notInGuide),
-        Source.layerTest(() => notInGuide, Stream.make(undefined))
-      ])
-
-      const given = yield* Source.use(({ availability }) => Stream.runCount(availability)).pipe(
-        Effect.provide(all)
-      )
-
-      assert.strictEqual(given, 2)
     })
   )
 
@@ -254,23 +211,5 @@ function primeVideoGame(kickoff: DateTime.Utc) {
     away: { team: team("NYJ", "nfl", { name: "New York Jets", shortName: "Jets" }), score: 0 },
     home: { team: team("DEN", "nfl", { name: "Denver Broncos", shortName: "Broncos" }), score: 0 },
     broadcasts: [broadcast("Prime Video", "streaming")]
-  })
-}
-
-/** Each availability the source gives after the one it gives now: a change. */
-const laterAvailability = Stream.unwrap(
-  Source.use(({ availability }) => Effect.succeed(Stream.drop(availability, 1)))
-)
-
-/** Counts what `stream` emits from now on, in the background. */
-function counted<R>(stream: Stream.Stream<unknown, never, R>) {
-  return Effect.gen(function* () {
-    const count = yield* Ref.make(0)
-    yield* stream.pipe(
-      Stream.runForEach(() => Ref.update(count, (n) => n + 1)),
-      Effect.forkChild
-    )
-    yield* Effect.yieldNow
-    return count
   })
 }

@@ -2,7 +2,7 @@ import { assert, describe, it } from "@effect/vitest"
 import { GameId, Network } from "@sportal/domain/Game"
 import { PlayId } from "@sportal/domain/Play"
 import { broadcast, play, snapshot, team } from "@sportal/domain/TestGame"
-import { DateTime, Effect, Queue, Ref, Stream } from "effect"
+import { DateTime, Effect, Queue } from "effect"
 import { HttpClient } from "effect/http"
 import { TestClock } from "effect/testing"
 import { Delivery } from "./provider/Provider.ts"
@@ -110,22 +110,22 @@ describe("HubServer", () => {
         }).pipe(Effect.scoped, Effect.provide(TestHubServer.serverUnderTest()))
       )
 
-      it.effect("should read the source's availability once, however many connections there are", () =>
+      it.effect("should not read the source's availability again for a connection that joins", () =>
         Effect.gen(function* () {
-          const reads = yield* Ref.make(0)
-          const counted = Source.layerTest(
-            () => ({ _tag: "NotCarried", why: "StreamingOnly" }),
-            Stream.never.pipe(Stream.onStart(Ref.update(reads, (count) => count + 1)))
-          )
+          let reads = 0
+          const counted = Source.layerTest(() => {
+            reads += 1
+            return { _tag: "NotCarried", why: "StreamingOnly" }
+          })
 
           yield* Effect.gen(function* () {
             yield* firstSlateOnTestClock()
             yield* TestHubServer.pastInitialMessages()
+            const readForOne = reads
+
             yield* TestHubServer.pastInitialMessages()
 
-            const read = yield* Ref.get(reads)
-
-            assert.strictEqual(read, 1)
+            assert.strictEqual(reads, readForOne)
           }).pipe(Effect.scoped, Effect.provide(TestHubServer.serverUnderTest(counted)))
         })
       )
@@ -185,22 +185,22 @@ describe("HubServer", () => {
         }).pipe(Effect.scoped, Effect.provide(TestHubServer.serverUnderTest()))
       )
 
-      it.effect("should send nothing when the source changes but no game's availability does", () =>
+      it.effect("should send nothing when the 30-second recheck finds no game's availability changed", () =>
         Effect.gen(function* () {
           yield* firstSlateOnTestClock()
           const lines = yield* TestHubServer.pastInitialMessages()
 
-          yield* TestClock.adjust("1250 millis")
+          yield* TestClock.adjust("30 seconds")
           yield* TestDirector.delivered(Delivery.Listing({ league: "fbs", games: [inPeriod(2)] }))
           yield* TestClock.adjust("250 millis")
-          const line = yield* Queue.take(lines)
+          const line = yield* nextData(lines)
 
           const message = TestHubServer.messageOf(line)
           assert.deepStrictEqual(
             message.slate.games.map((game) => game.snapshot.period),
             [2]
           )
-        }).pipe(Effect.scoped, Effect.provide(TestHubServer.serverUnderTest(changingEverySecond)))
+        }).pipe(Effect.scoped, Effect.provide(TestHubServer.serverUnderTest()))
       )
     })
 
@@ -357,20 +357,17 @@ describe("HubServer", () => {
           }).pipe(Effect.scoped, Effect.provide(TestHubServer.serverUnderTest(Source.layerTwitch)))
       )
 
-      it.live("should send the slate again when a guide read carries its game", () =>
+      it.effect("should send the slate again within 30 seconds when a guide read carries its game", () =>
         Effect.gen(function* () {
           const client = yield* TestHubServer.makeClient
-          yield* firstSlate()
+          yield* TestClock.setTime(DateTime.toEpochMillis(game.kickoff))
+          yield* firstSlateOnTestClock()
           const lines = yield* TestHubServer.pastInitialMessages()
           const now = yield* DateTime.now
 
           yield* client.guide.read({ payload: { guide: realSizedGuideAiring(now) } })
-          const line = yield* Queue.take(lines).pipe(
-            Effect.repeat({
-              until: (line) => line.includes("SlateChanged") && line.includes('"_tag":"Carried"')
-            }),
-            Effect.timeout("3 seconds")
-          )
+          yield* TestClock.adjust("30 seconds")
+          const line = yield* nextData(lines)
 
           const message = TestHubServer.messageOf(line)
           assert.deepStrictEqual(message.availability[game.id], [
@@ -414,16 +411,15 @@ function inPeriod(period: number) {
   })
 }
 
+/** The next line of `lines` that is data. */
+function nextData(lines: Queue.Queue<string>) {
+  return Queue.take(lines).pipe(Effect.repeat({ until: (line) => line.startsWith("data: ") }))
+}
+
 /** The next line of `lines` that is not data. */
 function nextComment(lines: Queue.Queue<string>) {
   return Queue.take(lines).pipe(Effect.repeat({ until: (line) => !line.startsWith("data: ") }))
 }
-
-/** A source that says it may have changed every second, though every game is always streaming only. */
-const changingEverySecond = Source.layerTest(
-  () => ({ _tag: "NotCarried", why: "StreamingOnly" }),
-  Stream.tick("1 second")
-)
 
 /**
  * A guide with the game's teams and network on ESPN, on at `now`; padding brings it to a real response's size.

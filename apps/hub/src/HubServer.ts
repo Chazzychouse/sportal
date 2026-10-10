@@ -126,21 +126,25 @@ function liveRoute(events: Stream.Stream<string, Schema.SchemaError>) {
 
 /**
  * The live stream's events, built once for every connection: the slate, and each game's availability as of when
- * it is sent, first as it is, then once each burst of changes to the slate or the availability settles, unless what
- * it sends is the same; each as an SSE `data:` line. A connection joining gets the last one at once.
+ * it is sent, first as it is, then once each burst of slate changes settles and every 30 seconds, so a guide read or
+ * a guide going stale shows, unless what it sends is the same; each as an SSE `data:` line. A connection joining gets
+ * the last one at once.
  */
 const liveEvents = Effect.gen(function* () {
   const director = yield* Director
   const source = yield* Source
   const encode = Schema.encodeEffect(LiveMessageJson)
 
-  return yield* settled(Stream.zipLatest(director.slate, source.availability)).pipe(
-    Stream.mapEffect(([slate, availabilityOf]) =>
-      Effect.map(DateTime.now, (now): SlateChanged => {
+  return yield* Stream.zipLatest(settled(director.slate), Stream.tick("30 seconds")).pipe(
+    Stream.mapEffect(([slate]) =>
+      Effect.gen(function* () {
+        const availabilityOf = yield* source.availability
+        const now = yield* DateTime.now
+
         const availability = Record.fromEntries(
           slate.games.map(({ snapshot }) => [snapshot.id, availabilityOf(snapshot, now)] as const)
         )
-        return { _tag: "SlateChanged", slate: slate.recent(), availability }
+        return { _tag: "SlateChanged", slate: slate.recent(), availability } satisfies SlateChanged
       })
     ),
     Stream.changesWith(samePublished),

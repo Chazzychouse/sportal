@@ -3,7 +3,7 @@ import { ChannelAvailability } from "@sportal/domain/Channel"
 import type { GameSnapshot } from "@sportal/domain/Game"
 import type { LeagueId } from "@sportal/domain/League"
 import { broadcast, snapshot, team } from "@sportal/domain/TestGame"
-import { DateTime, Effect, Layer, Logger, Option, Stream } from "effect"
+import { DateTime, Effect, Layer, Logger, Option } from "effect"
 import { TestClock } from "effect/testing"
 import * as TestEspn from "../../provider/espn/TestEspn.ts"
 import * as TestProvider from "../../provider/TestProvider.ts"
@@ -16,8 +16,7 @@ const now = Effect.gen(function* () {
   const source = yield* Source
   const now = yield* DateTime.now
 
-  const latest = yield* Stream.runHead(source.availability)
-  const availabilityOf = Option.getOrThrow(latest)
+  const availabilityOf = yield* source.availability
   return (game: GameSnapshot) => availabilityOf(game, now)
 })
 
