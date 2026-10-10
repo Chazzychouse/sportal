@@ -67,7 +67,7 @@ export class Director extends Context.Service<
           if (next === before) return
 
           yield* SubscriptionRef.set(slate, next)
-          yield* Effect.forEach(changes, observed, { discard: true })
+          yield* observed(changes)
           yield* classify(changes)
         },
         serial.withPermits(1),
@@ -115,12 +115,22 @@ export class Director extends Context.Service<
   )
 }
 
-function observed(change: SlateChange) {
-  return SlateChange.$match(change, {
-    Progressed: ({ game }) => gaugeGame(game.snapshot, progressValues[game.snapshot.progress()]),
-    Delisted: ({ game }) => forgotten(game.snapshot),
-    Played: ({ game, play }) => loggedPlay(game.snapshot, play)
-  })
+/**
+ * A take's changes gauged and logged: each play logged by itself, except a game's backfill (`Slate.backfill`), such as
+ * every game's plays so far when the Hub starts, which is one line.
+ */
+function observed(changes: ReadonlyArray<SlateChange>) {
+  const played = changes.filter(SlateChange.$is("Played"))
+  const backfilled = played.length > Slate.backfill
+  return Effect.forEach(
+    changes,
+    SlateChange.$match({
+      Progressed: ({ game }) => gaugeGame(game.snapshot, progressValues[game.snapshot.progress()]),
+      Delisted: ({ game }) => forgotten(game.snapshot),
+      Played: ({ game, play }) => (backfilled ? Effect.void : loggedPlay(game.snapshot, play))
+    }),
+    { discard: true }
+  ).pipe(Effect.andThen(backfilled ? loggedBackfill(played) : Effect.void))
 }
 
 const gaugeGame = Effect.fnUntraced(function* (snapshot: GameSnapshot, progress: number) {
@@ -172,6 +182,17 @@ function forgotten(snapshot: GameSnapshot) {
       .forEach(([key]) => {
         registry.delete(key)
       })
+  )
+}
+
+/** One line for a game's backfilled plays: a take's plays are all its one game's. */
+function loggedBackfill(played: ReadonlyArray<Extract<SlateChange, { readonly _tag: "Played" }>>) {
+  const first = played[0]
+  if (first === undefined) return Effect.void
+  const { snapshot } = first.game
+  const matchup = snapshot.matchup()
+  return Effect.logInfo(`Director: ${matchup} caught up on ${played.length} plays`).pipe(
+    Effect.annotateLogs({ game: snapshot.id, league: snapshot.league, matchup })
   )
 }
 
