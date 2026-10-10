@@ -16,7 +16,7 @@ import { TeamLogo } from "../game/TeamLogo.tsx"
 import { LayoutGlyph, layoutLabel } from "../layout/LayoutGlyph.tsx"
 import * as DisplayScreen from "../screen/DisplayScreen.ts"
 import { LayoutName, type Screen, type ScreenCommand, Tile } from "../screen/Screen.ts"
-import { keyText, tileActions } from "../screen/TileActions.tsx"
+import { TileAction } from "../screen/TileAction.ts"
 
 /** Every Screen command by name: watch a game, act on a tile, change layout, go full screen. */
 export function CommandPalette(props: {
@@ -74,7 +74,7 @@ export function CommandPalette(props: {
           <CommandGroup heading="Tiles">
             {occupied.flatMap(({ slot, name }) =>
               // The Display group below has the Unsolo.
-              tileActions(props.screen, slot, slot === props.selected)
+              TileAction.of(props.screen, slot, slot === props.selected)
                 .filter((action) => action.id !== "unsolo")
                 .map((action) => {
                   return (
@@ -84,7 +84,9 @@ export function CommandPalette(props: {
                       onSelect={() => run(action.command)}
                     >
                       {action.verb} {name}
-                      {action.key !== undefined && <CommandShortcut>{keyText(action.key)}</CommandShortcut>}
+                      {action.shortcut() !== undefined && (
+                        <CommandShortcut>{action.shortcut()}</CommandShortcut>
+                      )}
                     </CommandItem>
                   )
                 })

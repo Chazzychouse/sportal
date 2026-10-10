@@ -2,11 +2,11 @@ import { assert, describe, it } from "@effect/vitest"
 import type { GameId } from "@sportal/domain/Game"
 import * as TestWeb from "../TestWeb.ts"
 import { Screen } from "./Screen.ts"
-import { tileActions } from "./TileActions.tsx"
+import { TileAction } from "./TileAction.ts"
 
-describe("tileActions", () => {
+describe("TileAction.of", () => {
   it("should offer nothing for an empty tile", () => {
-    const actions = tileActions(Screen.initial, 0, true)
+    const actions = TileAction.of(Screen.initial, 0, true)
 
     assert.deepStrictEqual(actions, [])
   })
@@ -14,7 +14,7 @@ describe("tileActions", () => {
   it("should offer hear, solo, and clear for the main tile, with no promote", () => {
     const screen = TestWeb.fill([TestWeb.bama, TestWeb.irish])
 
-    const actions = tileActions(screen, 0, true)
+    const actions = TileAction.of(screen, 0, true)
 
     assert.deepStrictEqual(
       actions.map((action) => action.id),
@@ -25,7 +25,7 @@ describe("tileActions", () => {
   it("should offer promote for any other tile, sending it that tile", () => {
     const screen = TestWeb.fill([TestWeb.bama, TestWeb.irish])
 
-    const promote = tileActions(screen, 1, true).find((action) => action.id === "promote")
+    const promote = TileAction.of(screen, 1, true).find((action) => action.id === "promote")
 
     assert.deepStrictEqual(promote?.command, { _tag: "Promote", tile: 1 })
     assert.strictEqual(promote?.key, "Shift+2")
@@ -34,7 +34,7 @@ describe("tileActions", () => {
   it("should swap solo for unsolo on the soloed tile", () => {
     const screen = TestWeb.soloed([TestWeb.bama, TestWeb.irish], 1)
 
-    const actions = tileActions(screen, 1, true)
+    const actions = TileAction.of(screen, 1, true)
 
     assert.deepStrictEqual(
       actions.map((action) => action.id),
@@ -77,6 +77,32 @@ describe("tileActions", () => {
   })
 })
 
+describe("TileAction#shortcut", () => {
+  it("should read a shifted digit with the shift sign", () => {
+    const promote = actionOf(TestWeb.fill([TestWeb.bama, TestWeb.irish]), 1, true, "promote")
+
+    const shortcut = promote?.shortcut()
+
+    assert.strictEqual(shortcut, "⇧2")
+  })
+
+  it("should read Escape as Esc", () => {
+    const unsolo = actionOf(TestWeb.soloed([TestWeb.bama, TestWeb.irish], 1), 1, true, "unsolo")
+
+    const shortcut = unsolo?.shortcut()
+
+    assert.strictEqual(shortcut, "Esc")
+  })
+
+  it("should have none for an action with no key", () => {
+    const clear = actionOf(TestWeb.fill([TestWeb.bama]), 0, true, "clear")
+
+    const shortcut = clear?.shortcut()
+
+    assert.isUndefined(shortcut)
+  })
+})
+
 function actionOf(screen: Screen, slot: number, selected: boolean, id: string) {
-  return tileActions(screen, slot, selected).find((action) => action.id === id)
+  return TileAction.of(screen, slot, selected).find((action) => action.id === id)
 }

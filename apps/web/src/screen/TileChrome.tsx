@@ -1,12 +1,14 @@
 import { useAtomSet } from "@effect/atom-react"
 import type { GameSnapshot } from "@sportal/domain/Game"
+import { ArrowUpLeft, Shrink, SquareDashed, Volume2, VolumeX, X } from "lucide-react"
+import type { ReactNode } from "react"
 import { Button } from "@/design/button"
 import { cn } from "@/design/ClassName"
 import { GameStatus } from "../game/GameStatus.tsx"
 import { Score } from "../game/Score.tsx"
 import * as DisplayScreen from "./DisplayScreen.ts"
 import { type Screen, Tile } from "./Screen.ts"
-import { keyText, tileActions } from "./TileActions.tsx"
+import { TileAction } from "./TileAction.ts"
 import { tileHeader } from "./TileRects.ts"
 
 /**
@@ -75,27 +77,46 @@ export function TileChrome(props: {
         </span>
       </button>
       <span className="flex shrink-0 items-center">
-        {tileActions(props.screen, slot, props.selected).map((action) => (
-          <Button
-            key={action.id}
-            variant="ghost"
-            size="icon-xs"
-            aria-label={action.label}
-            aria-keyshortcuts={action.key}
-            title={action.key === undefined ? action.label : `${action.label} · ${keyText(action.key)}`}
-            className={cn(
-              "text-muted-foreground",
-              action.id === "hear" && onAir && "text-on-air",
-              action.id === "clear" && "hover:text-destructive"
-            )}
-            onClick={() => dispatch(action.command)}
-          >
-            {action.icon}
-          </Button>
-        ))}
+        {TileAction.of(props.screen, slot, props.selected).map((action) => {
+          const shortcut = action.shortcut()
+          return (
+            <Button
+              key={action.id}
+              variant="ghost"
+              size="icon-xs"
+              aria-label={action.label}
+              aria-keyshortcuts={action.key}
+              title={shortcut === undefined ? action.label : `${action.label} · ${shortcut}`}
+              className={cn(
+                "text-muted-foreground",
+                action.id === "hear" && onAir && "text-on-air",
+                action.id === "clear" && "hover:text-destructive"
+              )}
+              onClick={() => dispatch(action.command)}
+            >
+              {iconOf(action, onAir)}
+            </Button>
+          )
+        })}
       </span>
     </div>
   )
+}
+
+/** An action's icon; hear shows whether the tile's sound is on. */
+function iconOf(action: TileAction, hearing: boolean): ReactNode {
+  switch (action.id) {
+    case "hear":
+      return hearing ? <Volume2 /> : <VolumeX />
+    case "promote":
+      return <ArrowUpLeft />
+    case "solo":
+      return <SquareDashed />
+    case "unsolo":
+      return <Shrink />
+    case "clear":
+      return <X />
+  }
 }
 
 /** The drag data type of a tile or benched game being dragged: its index in the Screen's tiles. */
