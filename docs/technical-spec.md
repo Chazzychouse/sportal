@@ -186,7 +186,7 @@ sportal/
     │       ├── main.ts             Composition root: the Hub's layer pipe, run until a signal stops it; the only file that chooses providers and sources, ESPN's through `Espn`
     │       ├── HubConfig.ts        Every environment setting, in one place
     │       ├── Telemetry.ts        Log level and format; OTLP export when configured
-    │       ├── Director.ts         The one holder of the slate: takes each frame's deliveries as they arrive and publishes it beside each game's availability
+    │       ├── Director.ts         The one holder of the slate: takes each frame's deliveries as they arrive and offers the slate
     │       ├── HubStopping.ts      Whether a task that should run until the Hub stops ended because it is stopping, and the Error log unless it did
     │       ├── TestTelemetry.ts    Layers for tests
     │       ├── TestDirector.ts     The Director taking a fed provider, and what it takes of a test's frames
