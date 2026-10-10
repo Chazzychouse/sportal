@@ -8,9 +8,9 @@ import { TestClock } from "effect/testing"
 import * as TestEspn from "../../provider/espn/TestEspn.ts"
 import * as TestProvider from "../../provider/TestProvider.ts"
 import { Guide } from "../Guide.ts"
-import { GuideReader } from "../GuideReader.ts"
 import { Source } from "../Source.ts"
 import * as TestYouTubeTv from "./TestYouTubeTv.ts"
+import { YouTubeTv } from "./YouTubeTv.ts"
 import * as YouTubeTvGuide from "./YouTubeTvGuide.ts"
 
 const now = Effect.gen(function* () {
@@ -22,7 +22,7 @@ const now = Effect.gen(function* () {
   return (game: GameSnapshot) => availabilityOf(game, now)
 })
 
-const youTubeTv = Source.layerYouTubeTv.pipe(Layer.provideMerge(GuideReader.layerYouTubeTv))
+const youTubeTv = Source.layerYouTubeTv.pipe(Layer.provideMerge(YouTubeTv.layer))
 
 // News 3's live address, recorded from YouTube TV's live guide on 2026-10-03.
 const cbsLive = "https://tv.youtube.com/watch/y6zFA17zDsw?vp=0gEEEgIwAQ%3D%3D"

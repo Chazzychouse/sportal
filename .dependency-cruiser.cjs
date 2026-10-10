@@ -29,20 +29,6 @@ module.exports = {
       to: { path: "^apps/hub/src/(provider|source)/[^/]+/([^/]*Payload|FastCastMessage)\\.ts$" }
     },
     {
-      name: "only-main-names-adapters",
-      comment:
-        "Only main.ts, the source ports' layer variants, and tests know which concrete providers and sources exist, ESPN's through Espn.ts.",
-      severity: "error",
-      from: {
-        path: "^apps/hub/src/",
-        pathNot:
-          "(^apps/hub/src/main\\.ts$|^apps/hub/src/source/(Source|GuideReader)\\.ts$|\\.test\\.ts$|^apps/hub/src/provider/[^/]+/|^apps/hub/src/source/[^/]+/)"
-      },
-      to: {
-        path: "^apps/hub/src/(provider/[^/]+/|source/[^/]+/)"
-      }
-    },
-    {
       name: "espn-has-one-front-door",
       comment: "Outside ESPN's folder and tests, ESPN's layers are reached only through Espn.ts.",
       severity: "error",

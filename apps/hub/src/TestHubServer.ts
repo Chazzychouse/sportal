@@ -8,15 +8,15 @@ import { TestClock } from "effect/testing"
 import { HubConfig } from "./HubConfig.ts"
 import * as HubServer from "./HubServer.ts"
 import type { Delivery } from "./provider/Provider.ts"
-import { GuideReader } from "./source/GuideReader.ts"
 import { Source } from "./source/Source.ts"
+import { YouTubeTv } from "./source/youtube-tv/YouTubeTv.ts"
 import * as TestDirector from "./TestDirector.ts"
 
 /** A client of the Hub's API, pointed at the server under test. */
 export const makeClient = HttpApiClient.make(SportalApi)
 
 /** The Hub's routes served on an ephemeral port, with an HTTP client pointed at them; YouTube TV unless `source`. */
-export function serverUnderTest(source: Layer.Layer<Source, never, GuideReader> = Source.layerYouTubeTv) {
+export function serverUnderTest(source: Layer.Layer<Source, never, YouTubeTv> = Source.layerYouTubeTv) {
   return HubServer.layer.pipe(
     Layer.provideMerge(hubUnderTest(source)),
     Layer.provideMerge(NodeHttpServer.layerTest)
@@ -24,10 +24,10 @@ export function serverUnderTest(source: Layer.Layer<Source, never, GuideReader> 
 }
 
 /** Everything behind the API, over a provider the test feeds, against `source`. */
-function hubUnderTest(source: Layer.Layer<Source, never, GuideReader>) {
+function hubUnderTest(source: Layer.Layer<Source, never, YouTubeTv>) {
   return TestDirector.directorOver.pipe(
     Layer.provideMerge(source),
-    Layer.provideMerge(GuideReader.layerYouTubeTv),
+    Layer.provideMerge(YouTubeTv.layer),
     Layer.provideMerge(HubConfig.layerTest({ SPORTAL_VERSION: "1.2.3" }))
   )
 }

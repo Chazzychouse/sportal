@@ -4,9 +4,9 @@ import { type GameSnapshot, Network } from "@sportal/domain/Game"
 import { broadcast, snapshot, team } from "@sportal/domain/TestGame"
 import { DateTime, Effect, Layer, Option, Stream } from "effect"
 import { TestClock } from "effect/testing"
-import { GuideReader } from "./GuideReader.ts"
 import { Source } from "./Source.ts"
 import * as TestYouTubeTv from "./youtube-tv/TestYouTubeTv.ts"
+import { YouTubeTv } from "./youtube-tv/YouTubeTv.ts"
 
 const now = Effect.gen(function* () {
   const source = yield* Source
@@ -17,9 +17,9 @@ const now = Effect.gen(function* () {
   return (game: GameSnapshot) => availabilityOf(game, now)
 })
 
-const youTubeTv = Source.layerYouTubeTv.pipe(Layer.provideMerge(GuideReader.layerYouTubeTv))
+const youTubeTv = Source.layerYouTubeTv.pipe(Layer.provideMerge(YouTubeTv.layer))
 const youTubeTvAndTwitch = Source.layerAll([Source.layerYouTubeTv, Source.layerTwitch]).pipe(
-  Layer.provideMerge(GuideReader.layerYouTubeTv)
+  Layer.provideMerge(YouTubeTv.layer)
 )
 
 const espn = Network.make("ESPN")

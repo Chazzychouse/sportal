@@ -26,8 +26,8 @@ import {
 import { HttpApiBuilder } from "effect/http-api"
 import { Director } from "./Director.ts"
 import { HubConfig } from "./HubConfig.ts"
-import { GuideReader } from "./source/GuideReader.ts"
 import { Source } from "./source/Source.ts"
+import { YouTubeTv } from "./source/youtube-tv/YouTubeTv.ts"
 
 /**
  * The Hub's routes on the HTTP server in context: the API, the live stream, and the built web UI when there is one.
@@ -38,7 +38,7 @@ export const layer: Layer.Layer<
   | HubConfig
   | Director
   | Source
-  | GuideReader
+  | YouTubeTv
   | HttpServer.HttpServer
   | HttpPlatform.HttpPlatform
   | Etag.Generator
@@ -76,10 +76,10 @@ const guideHandlers = HttpApiBuilder.group(
   SportalApi,
   "guide",
   Effect.fn(function* (handlers) {
-    const reader = yield* GuideReader
+    const youTubeTv = yield* YouTubeTv
     return handlers.handleAll({
       read: ({ payload }) =>
-        reader
+        youTubeTv
           .readGuide(payload.guide)
           .pipe(
             Effect.tapError(() =>

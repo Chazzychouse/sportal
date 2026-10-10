@@ -2,8 +2,7 @@ import type { ChannelAvailability } from "@sportal/domain/Channel"
 import { type GameSnapshot, Network } from "@sportal/domain/Game"
 import { Context, DateTime, Effect, Layer, Option, Stream } from "effect"
 import { ChannelId, Guide } from "./Guide.ts"
-import { GuideReader } from "./GuideReader.ts"
-import * as YouTubeTvGuide from "./youtube-tv/YouTubeTvGuide.ts"
+import { YouTubeTv } from "./youtube-tv/YouTubeTv.ts"
 
 /** A way to obtain video for a game. It says whether and where each game can be shown, as of a time. */
 export class Source extends Context.Service<
@@ -18,16 +17,16 @@ export class Source extends Context.Service<
     >
   }
 >()("sportal/hub/source/Source") {
-  /** YouTube TV: from the latest guide its reader keeps while it is fresh; otherwise no guide. */
-  static readonly layerYouTubeTv: Layer.Layer<Source, never, GuideReader> = Layer.effect(
+  /** YouTube TV: from the latest guide it keeps while it is fresh; otherwise no guide. */
+  static readonly layerYouTubeTv: Layer.Layer<Source, never, YouTubeTv> = Layer.effect(
     Source,
     Effect.gen(function* () {
-      const reader = yield* GuideReader
+      const youTubeTv = yield* YouTubeTv
 
-      const availability = reader.guide.pipe(
+      const availability = youTubeTv.guide.pipe(
         Stream.map((latest) => (game: GameSnapshot, now: DateTime.Utc) => [
           Option.match(latest, {
-            onNone: (): ChannelAvailability => ({ _tag: "NoGuide", source: YouTubeTvGuide.source }),
+            onNone: (): ChannelAvailability => ({ _tag: "NoGuide", source: YouTubeTv.source }),
             onSome: (guide) => guide.availabilityOf(game, now)
           })
         ])

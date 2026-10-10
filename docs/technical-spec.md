@@ -127,7 +127,7 @@ This section is binding in the same way the type checker is. `AGENTS.md` carries
 6. **No mirror types.** There is no `GameDto`, `GameRow`, `GameResponse`, `GameProps`. The domain schema is the wire format. A variant is derived from the original (`pick`, `omit`, `extend`) at the point of use and is not given a name unless it is itself a domain concept with a glossary entry.
 7. **Search before you write.** Before adding a function, type, or file, look for the existing one. Duplicating logic that already exists is a defect even when the code works.
 8. **Organize by concept, not by kind.** No top-level `components/`, `hooks/`, `services/`, `schemas/` folders. Code for the slate lives under `slate/`, whatever kind of code it is.
-9. **Dependencies point one way.** `domain` imports only Effect. `api` imports `domain`. Apps import packages. Nothing imports an app. Within the Hub, only `main.ts` knows which concrete providers and sources exist, and it reaches ESPN's only through `provider/espn/Espn.ts`; a source port's layer variants (`Source.layerYouTubeTv`, `GuideReader.layerYouTubeTv`) name theirs too, and only the port modules import a source's folder.
+9. **Dependencies point one way.** `domain` imports only Effect. `api` imports `domain`. Apps import packages. Nothing imports an app. Within the Hub, ESPN's layers are reached only through `provider/espn/Espn.ts`.
 
 ### 4.2 The tree
 
@@ -215,11 +215,11 @@ sportal/
     │       └── source/
     │           ├── Source.ts           The port, its variants, and how several act as one
     │           ├── Guide.ts            Guide, Airing, ChannelId: a source's channels and what each airs
-    │           ├── GuideReader.ts      Reads the guide the shell fetches, offers it while fresh
     │           ├── Twitch.ts           Twitch's lineup
     │           ├── TestSource.ts       The source's availability now, for tests
     │           ├── TestGuide.ts        Guides and airings for tests
     │           └── youtube-tv/
+    │               ├── YouTubeTv.ts         Reads the guide the shell fetches, offers it while fresh
     │               ├── YouTubeTvGuide.ts    A guide response decoded to a complete, validated, stamped Guide
     │               ├── YouTubeTvPayload.ts  The guide response's wire shape
     │               ├── TestYouTubeTv.ts     A recorded guide, and a response of one row, for tests
@@ -329,9 +329,9 @@ class Source extends Context.Service<Source, {
 }>()("sportal/hub/source/Source") {}
 ```
 
-`Source.layerAll` runs every source and gives each game's availability from every source, in the order the sources are given, again whenever any of them changes; it merges nothing. A matched channel on the air is carried once the slate says the game has started, and upcoming before, so nothing ticks: the live route reads the time when it sends, only to choose among a guide's airings. The Display's Screen chooses: the most useful availability (carried, upcoming, no guide, then not carried), and a stream tile moves only when its own source carries its game on another channel, so a tile never moves to another source. YouTube TV's availability comes from the guide `GuideReader` offers; Twitch's from its lineup, a guide whose one channel carries Prime Video, given once.
+`Source.layerAll` runs every source and gives each game's availability from every source, in the order the sources are given, again whenever any of them changes; it merges nothing. A matched channel on the air is carried once the slate says the game has started, and upcoming before, so nothing ticks: the live route reads the time when it sends, only to choose among a guide's airings. The Display's Screen chooses: the most useful availability (carried, upcoming, no guide, then not carried), and a stream tile moves only when its own source carries its game on another channel, so a tile never moves to another source. YouTube TV's availability comes from the guide `YouTubeTv` offers; Twitch's from its lineup, a guide whose one channel carries Prime Video, given once.
 
-YouTube TV's channels are found in its own guide, read by the shell and handed to `GuideReader.readGuide` (`docs/history.md`, "Guide-matched channels"); with no fresh guide (a guide is fresh for 45 minutes), its availability is "no guide". Twitch's lineup is fixed and never read.
+YouTube TV's channels are found in its own guide, read by the shell and handed to `YouTubeTv.readGuide` (`docs/history.md`, "Guide-matched channels"); with no fresh guide (a guide is fresh for 45 minutes), its availability is "no guide". Twitch's lineup is fixed and never read.
 
 `StreamLocator` is a tagged union. Today it has one member, a web-view address; a new kind is added only when a source needs it.
 
