@@ -26,10 +26,12 @@ interface Live {
   readonly slate: Slate
   /** Each listed game's availability from every source, by its id. */
   readonly availability: SlateChanged["availability"]
+  /** Each listed game's classification, by its id. */
+  readonly classifications: SlateChanged["classifications"]
 }
 
 function initial(): Live {
-  return { connection: Connection.Connecting(), slate: Slate.empty, availability: {} }
+  return { connection: Connection.Connecting(), slate: Slate.empty, availability: {}, classifications: {} }
 }
 
 type SourceEvent = Data.TaggedEnum<{
@@ -76,7 +78,12 @@ function step(current: Live, event: SourceEvent): Effect.Effect<Live> {
 
 function received(live: Live, message: LiveMessage): Live {
   return LiveMessage.match(message, {
-    SlateChanged: ({ slate, availability }): Live => ({ ...live, slate, availability })
+    SlateChanged: ({ slate, availability, classifications }): Live => ({
+      ...live,
+      slate,
+      availability,
+      classifications
+    })
   })
 }
 
