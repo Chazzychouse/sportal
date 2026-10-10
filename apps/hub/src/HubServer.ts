@@ -13,6 +13,7 @@ import {
 } from "effect"
 import {
   type Etag,
+  type HttpClient,
   type HttpPlatform,
   HttpRouter,
   type HttpServer,
@@ -23,6 +24,7 @@ import { HttpApiBuilder, HttpApiSchema } from "effect/http-api"
 import { Broadcast } from "./Broadcast.ts"
 import { HubConfig } from "./HubConfig.ts"
 import { Source } from "./source/Source.ts"
+import * as TelemetryRelay from "./TelemetryRelay.ts"
 
 const guideHandlers = HttpApiBuilder.group(
   SportalApi,
@@ -94,12 +96,13 @@ export const layer: Layer.Layer<
   | HubConfig
   | Broadcast
   | Source
+  | HttpClient.HttpClient
   | HttpServer.HttpServer
   | HttpPlatform.HttpPlatform
   | Etag.Generator
   | FileSystem.FileSystem
   | Path.Path
-> = HttpRouter.serve(Layer.mergeAll(api, web))
+> = HttpRouter.serve(Layer.mergeAll(api, web, TelemetryRelay.layer))
 
 export const layerListen: Layer.Layer<
   HttpServer.HttpServer | HttpPlatform.HttpPlatform | Etag.Generator | NodeServices.NodeServices,

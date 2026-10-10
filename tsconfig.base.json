@@ -20,7 +20,7 @@
       {
         "name": "@effect/language-service",
         // AGENTS.md: "HTTP lives in `effect/http` and `effect/http-api`". The technical spec (2.2) adds Effect SQL for
-        // persistence and `effect/observability` for OTLP telemetry; FastCast is ESPN's WebSocket, read through
+        // persistence and `effect/observability` for OTLP telemetry (the web UI ships only its logs, through `OtlpLogger`); FastCast is ESPN's WebSocket, read through
         // `effect/socket`. The Hub's process test spawns the Hub through Effect's process wrapper, `effect/process`. A SQL
         // row is a `Model.Class` from `effect/schema/Model` (AGENTS.md, "SQL row").
         // The web UI holds what the live stream said in an atom from `effect/reactivity`, and keeps each Display's Screen
@@ -32,6 +32,8 @@
           "effect/sql",
           "effect/socket",
           "effect/observability/Otlp",
+          "effect/observability/OtlpLogger",
+          "effect/observability/OtlpSerialization",
           "effect/process",
           "effect/schema/Model",
           "effect/reactivity",
