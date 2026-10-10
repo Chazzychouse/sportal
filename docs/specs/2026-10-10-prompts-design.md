@@ -4,7 +4,7 @@
 detection](2026-10-10-break-detection-design.md), [Autopilot](2026-10-10-autopilot-design.md) and its
 [ranking](2026-10-10-autopilot-ranking-design.md)). The autopilot only steers the games already on a tile. A prompt
 brings in a game that is on no tile: when one enters a red zone or crunch time and is better than the weakest game on
-screen, a toast asks whether to watch it. Nothing changes unless you say yes.
+screen, the top bar asks whether to watch it. Nothing changes unless you say yes.
 
 Not in this spec: a phone push (a later delivery of the same prompt), bringing a game in without asking, prompting
 for a big play, and prompting for a game no source can stream.
@@ -32,10 +32,10 @@ crunch time.
 ### The prompt
 
 The prompt is the best qualifying candidate by rank, then score, then slate order; or none. One prompt at a time: a better
-candidate takes the toast over, and the one it replaced comes back when it is again the best and still qualifies.
+candidate takes the prompt over, and the one it replaced comes back when it is again the best and still qualifies.
 
 A prompt lasts as long as a step still gives it. When its game leaves the red zone or crunch time, gets a tile, loses
-its stream, or no longer outranks the target, the toast closes. No timer.
+its stream, or no longer outranks the target, the prompt goes. No timer.
 
 With prompts off, or the Screen soloed, there is no prompt.
 
@@ -102,12 +102,16 @@ As `AutopilotState`:
   would replace), taken over, accepted, dismissed, or closed because it no longer holds, annotated with
   `prompt.game`, `prompt.rank` and `prompt.target`. Sent to `sportal-web` through the existing OTLP logger.
 
-### The toast
+### The prompt in the top bar
 
-`usePromptToast` in `apps/web/src/prompts/PromptToast.ts`, called by `DisplayView` as `useScreenRejectionToasts` is:
-one Sonner toast with a fixed id, updated in place while `prompt` holds a prompt and closed when it holds none. It reads `PHI @ DAL — red zone` (or `crunch time`), then
-`replaces CHI @ GB (on a break)` or `into an empty tile`, with two buttons: `Watch · Y` accepts, `Skip · N` dismisses.
-Never closed by a timer.
+`PromptView` in `apps/web/src/prompts/PromptView.tsx`, in the `TopBar` after the prompts toggle, while `prompt` holds a
+prompt; nothing when it holds none. It reads the prompt's words, `PHI @ DAL — red zone, replaces CHI @ GB (on a
+break)` or `…, into an empty tile`, cut to the bar's width with the whole line as its tooltip, and has two buttons:
+`Watch · Y` accepts, `Skip · N` dismisses. No timer.
+
+Not a toast: a toast with two buttons is taller than the 44px bar, and what falls below it lies under the native video
+views, which draw above the page. In full screen there is no top bar, so no prompt is seen there; `Y` and `N` still
+answer it.
 
 ### The toggle
 
@@ -123,7 +127,7 @@ gains the `Prompts` group. `DisplayState.inputs` sends the three to `PromptsStat
 
 ## Docs
 
-CONTEXT.md, Automation: **Prompt** (a toast asking whether to bring a game on no tile into the main tile, when it is
+CONTEXT.md, Automation: **Prompt** (the top bar asking whether to bring a game on no tile into the main tile, when it is
 in a red zone or crunch time and outranks the weakest game on screen), **Prompts** (a Display's prompts: on or off,
 and the games you dismissed for their moment), **Target** (the slot a prompt's game would take). Planned: **Phone
 push** (a prompt delivered to a phone).

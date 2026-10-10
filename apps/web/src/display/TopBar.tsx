@@ -10,14 +10,15 @@ import { LayoutPicker } from "../layout/LayoutPicker.tsx"
 import * as PromptsState from "../prompts/PromptsState.ts"
 import { PromptInput } from "../prompts/PromptsState.ts"
 import { PromptsToggle } from "../prompts/PromptsToggle.tsx"
+import { PromptView } from "../prompts/PromptView.tsx"
 import * as DisplayScreen from "../screen/DisplayScreen.ts"
 import { BrandMark, ConnectionPill } from "./Brand.tsx"
 import { DisplayInput } from "./Display.ts"
 import * as DisplayState from "./DisplayState.ts"
 
 /**
- * The strip across the top of a Display: the slate, layout, solo, the autopilot, the prompts, full screen, and whether
- * the Hub is live.
+ * The strip across the top of a Display: the slate, layout, solo, the autopilot, the prompts and the prompt shown,
+ * full screen, and whether the Hub is live.
  */
 export function TopBar() {
   const display = useAtomValue(DisplayState.display)
@@ -89,6 +90,13 @@ export function TopBar() {
         prompt={prompt}
         slate={slate}
         onToggle={() => answer(PromptInput.Toggled())}
+      />
+
+      <PromptView
+        prompt={prompt}
+        slate={slate}
+        onAccept={() => answer(PromptInput.Accepted())}
+        onDismiss={() => answer(PromptInput.Dismissed())}
       />
 
       <div className="ml-auto flex items-center gap-3">
