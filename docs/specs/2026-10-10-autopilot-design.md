@@ -8,8 +8,8 @@ leaves home only for a moment that clearly beats it, and your input always wins.
 It runs in each Display, on the classifications that already ride the live stream beside the slate. Nothing changes
 in the Hub or the domain: the classifications are the ranking ADR 0015 anticipated.
 
-Not in this spec: pulling a game that is on no tile onto the Screen (that is the prompts' job, piece 4), changing the
-layout or soloing, returning ahead of a break's `expectedEnd`, BigPlay as a reason to move, coordination between
+Not in this spec: pulling a game that is on no tile onto the Screen (that is the prompts' job, piece 4), soloing (the layout came
+after, in [Autopilot layout](2026-10-10-autopilot-layout-design.md)), returning ahead of a break's `expectedEnd`, BigPlay as a reason to move, coordination between
 Displays, and the Remote.
 
 ## Behaviour
