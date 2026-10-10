@@ -6,6 +6,7 @@ import { DateTime, Duration, Match, Option } from "effect"
 import { Radar } from "lucide-react"
 import { useState } from "react"
 import { Button } from "@/design/button"
+import type { Screen } from "../screen/Screen.ts"
 import { type Autopilot, AutopilotStatus } from "./Autopilot.ts"
 
 /** The top bar's autopilot switch: on or off, with what it is doing as its tooltip. */
@@ -13,16 +14,17 @@ export function AutopilotToggle(props: {
   autopilot: Autopilot
   slate: Slate
   classifications: SlateChanged["classifications"]
+  screen: Screen
   onToggle: () => void
 }) {
-  const { autopilot, slate, classifications } = props
+  const { autopilot, slate, classifications, screen } = props
   const [now, setNow] = useState(DateTime.nowUnsafe)
   const nameOf = (game: GameId) =>
     Option.match(slate.gameOf(game), {
       onNone: () => "a game",
       onSome: ({ snapshot }) => `${snapshot.away.team.abbreviation} @ ${snapshot.home.team.abbreviation}`
     })
-  const doing = AutopilotStatus.$match(autopilot.status(now), {
+  const doing = AutopilotStatus.$match(autopilot.status(now, screen), {
     Off: () => "Autopilot off",
     Idle: () => "Autopilot on: following, nothing to chase",
     Away: ({ part, game }) =>
@@ -34,7 +36,8 @@ export function AutopilotToggle(props: {
         }
       )}`,
     Yours: ({ part, until }) =>
-      `Autopilot on: ${part === "main" ? "main tile" : "sound"} yours for ${countdown(DateTime.distance(now, until))}`
+      `Autopilot on: ${partName(part)} yours for ${countdown(DateTime.distance(now, until))}`,
+    Fitted: ({ slots }) => `Autopilot on: fitted to ${slots} ${slots === 1 ? "tile" : "tiles"}`
   })
 
   return (
@@ -54,6 +57,10 @@ export function AutopilotToggle(props: {
       <kbd className="ml-1 font-mono text-[10px] text-muted-foreground">A</kbd>
     </Button>
   )
+}
+
+function partName(part: "main" | "audio" | "layout"): string {
+  return part === "main" ? "main tile" : part === "audio" ? "sound" : "layout"
 }
 
 function whyAway(moment: Moment | undefined): Option.Option<string> {

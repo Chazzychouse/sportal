@@ -111,6 +111,33 @@ describe("AutopilotState", () => {
     })
   )
 
+  it.effect("should shrink the layout once a finished game's hold runs out, with no new slate", () =>
+    Effect.gen(function* () {
+      const start = DateTime.makeUnsafe("2026-10-10T20:00:00Z")
+      vi.useFakeTimers({ toFake: ["Date"] })
+      vi.setSystemTime(DateTime.toDate(start))
+      yield* TestClock.setTime(DateTime.toEpochMillis(start))
+      const clock = yield* Clock.Clock
+      const registry = TestWeb.registryOf(
+        Layer.mergeAll(
+          Shell.layerTest({ record: () => Effect.void }),
+          HubClient.layerTest(() => Effect.void),
+          Layer.succeed(Clock.Clock, clock)
+        )
+      )
+
+      const screen = yield* Effect.gen(function* () {
+        yield* arranged(slate(TestWeb.classified({ _tag: "Final" })))
+        yield* Atom.set(AutopilotState.autopilot, AutopilotInput.Toggled())
+        yield* Atom.mount(AutopilotState.pilot)
+        yield* passing(Duration.minutes(2))
+        return yield* TestWeb.until(DisplayScreen.screen, (screen) => screen.layout === "Single")
+      }).pipe(Effect.scoped, Effect.provide(registry))
+
+      assert.strictEqual(screen.layout, "Single")
+    })
+  )
+
   it.effect("should keep nothing in this browser for a tick that changes nothing", () =>
     Effect.gen(function* () {
       yield* arranged(slate())

@@ -6,6 +6,7 @@ import { DateTime, Duration, Option, Record } from "effect"
 import { createElement } from "react"
 import { renderToStaticMarkup } from "react-dom/server"
 import { vi } from "vitest"
+import { Screen } from "../screen/Screen.ts"
 import * as TestWeb from "../TestWeb.ts"
 import { Autopilot } from "./Autopilot.ts"
 import { AutopilotToggle } from "./AutopilotToggle.tsx"
@@ -20,9 +21,9 @@ const slate = new Slate({
   ]
 })
 
-function titleOf(autopilot: Autopilot, classifications = {}) {
+function titleOf(autopilot: Autopilot, classifications = {}, screen: Screen = Screen.initial) {
   const markup = renderToStaticMarkup(
-    createElement(AutopilotToggle, { autopilot, slate, classifications, onToggle: () => {} })
+    createElement(AutopilotToggle, { autopilot, slate, classifications, screen, onToggle: () => {} })
   )
   return /title="([^"]*)"/.exec(markup)?.[1]
 }
@@ -90,7 +91,11 @@ describe("AutopilotToggle", () => {
     const yours = new Autopilot({
       ...Autopilot.off,
       on: true,
-      suspended: { main: Option.some(DateTime.addDuration(now, Duration.seconds(161))), audio: Option.none() }
+      suspended: {
+        main: Option.some(DateTime.addDuration(now, Duration.seconds(161))),
+        audio: Option.none(),
+        layout: Option.none()
+      }
     })
 
     const title = titleOf(yours)
@@ -102,11 +107,43 @@ describe("AutopilotToggle", () => {
     const yours = new Autopilot({
       ...Autopilot.off,
       on: true,
-      suspended: { main: Option.none(), audio: Option.some(DateTime.addDuration(now, Duration.seconds(75))) }
+      suspended: {
+        main: Option.none(),
+        audio: Option.some(DateTime.addDuration(now, Duration.seconds(75))),
+        layout: Option.none()
+      }
     })
 
     const title = titleOf(yours)
 
     assert.strictEqual(title, "Autopilot on: sound yours for 1:15 · A")
+  })
+
+  it("should say for how long the layout is yours", () => {
+    const yours = new Autopilot({
+      ...Autopilot.off,
+      on: true,
+      suspended: {
+        main: Option.none(),
+        audio: Option.none(),
+        layout: Option.some(DateTime.addDuration(now, Duration.seconds(161)))
+      }
+    })
+
+    const title = titleOf(yours)
+
+    assert.strictEqual(title, "Autopilot on: layout yours for 2:41 · A")
+  })
+
+  it("should say how many tiles it fitted the layout to", () => {
+    const fitted = new Autopilot({
+      ...Autopilot.off,
+      on: true,
+      home: { main: Option.none(), audio: Option.none(), layout: Option.some("Quad") }
+    })
+
+    const title = titleOf(fitted, {}, new Screen({ ...Screen.initial, layout: "Pair" }))
+
+    assert.strictEqual(title, "Autopilot on: fitted to 2 tiles · A")
   })
 })

@@ -144,7 +144,9 @@ Provider and Source are the two words most likely to be swapped. Provider is alw
 | **Autopilot** | A Display's follower of the classifications: promotes the best moment into the main tile and moves the sound with it, then goes home. Off by default; your commands win. | director, auto-switcher |
 | **Home** | What you chose: the main tile's game and the game whose sound is on, taken after each command you send. | default, base |
 | **Away** | A game the autopilot moved the main tile or sound to, held at least 30 s unless it stops. | jump, cut |
-| **Suspension** | The 3 min a command you send keeps the autopilot off the main tile or the sound it touched. | pause, lock |
+| **Suspension** | The 3 min a command you send keeps the autopilot off the main tile, the sound or the layout it touched. | pause, lock |
+| **Ceiling** | The layout you chose, the autopilot's home layout: it fits the layout down from it as games end and back up to it as they start, never past. | max layout |
+| **Fit** | The autopilot's choice of layout and tile order: the smallest layout on the ceiling's ladder with a slot for the main tile and each other game in progress or just over. | auto-layout |
 
 ## Planned
 

@@ -71,6 +71,7 @@ export function TopBar() {
         autopilot={autopilot}
         slate={slate}
         classifications={classifications}
+        screen={screen}
         onToggle={() => steer(AutopilotInput.Toggled())}
       />
 
