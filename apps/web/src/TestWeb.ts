@@ -1,8 +1,10 @@
 import { LiveMessageJson } from "@sportal/api/LiveMessage"
 import type { ChannelAvailability } from "@sportal/domain/Channel"
+import { Classification } from "@sportal/domain/Classification"
 import { Game, GameId } from "@sportal/domain/Game"
+import type { Moment } from "@sportal/domain/Moment"
 import { Slate } from "@sportal/domain/Slate"
-import { snapshot } from "@sportal/domain/TestGame"
+import { snapshot, team } from "@sportal/domain/TestGame"
 import { DateTime, Effect, Layer, Queue, Record, Result, Schema, Stream } from "effect"
 import { Atom, AtomRegistry } from "effect/reactivity"
 import { HubClient } from "./hub/HubClient.ts"
@@ -85,6 +87,19 @@ export function soloed(games: ReadonlyArray<GameId | undefined>, tile: number) {
   return Result.getOrThrow(fill(games).apply({ _tag: "Solo", tile }, nowhere))
 }
 
+/** `moment` classified at 2026-10-10 20:00 UTC with `score`, all of it from closeness. */
+export function classified(moment: Moment, score = 50): Classification {
+  return new Classification({
+    moment,
+    score,
+    since: DateTime.makeUnsafe("2026-10-10T20:00:00Z"),
+    breakdown: { prior: 0, closeness: score, swing: 0, upset: 0, momentBonus: 0 }
+  })
+}
+
+/** The home team eight yards from scoring. */
+export const redZone: Moment = { _tag: "ScoringThreat", team: team("HOME").id, yardsToGo: 8 }
+
 /** The EventSource the live stream opened, once a read of the atom has started it. */
 export const opened: Effect.Effect<FakeEventSource, never, AtomRegistry.AtomRegistry> = Atom.get(
   LiveStream.live
@@ -117,15 +132,27 @@ export class FakeEventSource {
   }
 }
 
-/** A slate message's `data`, as the Hub sends it: the slate of `entries`' games, and each one's availability. */
+/**
+ * A slate message's `data`, as the Hub sends it: the slate of `entries`' games, each one's availability, and the
+ * classification of each that has one.
+ */
 export function slateMessage(
-  entries: ReadonlyArray<{ game: Game; availability: ReadonlyArray<ChannelAvailability> }>
+  entries: ReadonlyArray<{
+    game: Game
+    availability: ReadonlyArray<ChannelAvailability>
+    classification?: Classification
+  }>
 ) {
   const slate = new Slate({ games: entries.map(({ game }) => game) })
   const availability = Record.fromEntries(
     entries.map(({ game, availability }) => [game.snapshot.id, availability] as const)
   )
-  return encodeLiveMessage({ _tag: "SlateChanged", slate, availability, classifications: {} })
+  const classifications = Record.fromEntries(
+    entries.flatMap(({ game, classification }) =>
+      classification === undefined ? [] : [[game.snapshot.id, classification] as const]
+    )
+  )
+  return encodeLiveMessage({ _tag: "SlateChanged", slate, availability, classifications })
 }
 
 /** The first value of `atom` that `predicate` holds for. */

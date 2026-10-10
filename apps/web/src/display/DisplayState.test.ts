@@ -1,8 +1,10 @@
 import { afterEach, assert, beforeEach, describe, it } from "@effect/vitest"
 import { GameId } from "@sportal/domain/Game"
-import { Effect, Queue, Stream } from "effect"
+import { Effect, Option, Queue, Stream } from "effect"
 import { Atom } from "effect/reactivity"
 import { vi } from "vitest"
+import * as AutopilotState from "../autopilot/AutopilotState.ts"
+import { AutopilotInput } from "../autopilot/AutopilotState.ts"
 import * as DisplayScreen from "../screen/DisplayScreen.ts"
 import * as TestWeb from "../TestWeb.ts"
 import { DisplayInput } from "./Display.ts"
@@ -111,6 +113,57 @@ describe("DisplayState", () => {
       }).pipe(Effect.scoped, Effect.provide(registry))
 
       assert.strictEqual(display.selected, 1)
+    })
+  )
+
+  it.effect("should make the main tile yours when you promote a tile with the autopilot on", () =>
+    Effect.gen(function* () {
+      yield* TestWeb.keep(TestWeb.withTiles(["live", "soon"]))
+      const { registry } = yield* TestWeb.withShell()
+
+      const pilot = yield* Effect.gen(function* () {
+        yield* Atom.set(AutopilotState.autopilot, AutopilotInput.Toggled())
+        yield* Atom.set(
+          DisplayState.display,
+          DisplayInput.Commanded({ command: { _tag: "Promote", tile: 1 } })
+        )
+        return yield* Atom.get(AutopilotState.autopilot)
+      }).pipe(Effect.scoped, Effect.provide(registry))
+
+      assert.isTrue(Option.isSome(pilot.suspended.main))
+    })
+  )
+
+  it.effect("should leave the autopilot as it was when the Screen refuses your command", () =>
+    Effect.gen(function* () {
+      yield* TestWeb.keep(TestWeb.withTiles(["live", "soon"]))
+      const { registry } = yield* TestWeb.withShell()
+
+      const [before, after] = yield* Effect.gen(function* () {
+        yield* Atom.set(AutopilotState.autopilot, AutopilotInput.Toggled())
+        const before = yield* Atom.get(AutopilotState.autopilot)
+        yield* Atom.set(
+          DisplayState.display,
+          DisplayInput.Commanded({ command: { _tag: "Promote", tile: 2 } })
+        )
+        const after = yield* Atom.get(AutopilotState.autopilot)
+        return [before, after] as const
+      }).pipe(Effect.scoped, Effect.provide(registry))
+
+      assert.strictEqual(after, before)
+    })
+  )
+
+  it.effect("should turn the autopilot on for the ToggleAutopilot hotkey", () =>
+    Effect.gen(function* () {
+      const { registry } = yield* TestWeb.withShell({ hotkeys: Stream.make({ _tag: "ToggleAutopilot" }) })
+
+      const pilot = yield* Effect.gen(function* () {
+        yield* Atom.mount(DisplayState.inputs)
+        return yield* TestWeb.until(AutopilotState.autopilot, (pilot) => pilot.on)
+      }).pipe(Effect.scoped, Effect.provide(registry))
+
+      assert.isTrue(pilot.on)
     })
   )
 })

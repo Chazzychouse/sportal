@@ -271,7 +271,7 @@ describe("TileViews.hotkeys", () => {
       const { tiles } = yield* attached()
       yield* tiles.sync([placement])
 
-      const prevented = press("KeyA")
+      const prevented = press("KeyZ")
 
       expect(prevented).not.toHaveBeenCalled()
     }).pipe(Effect.scoped)
@@ -305,7 +305,7 @@ describe("TileViews.hotkeys", () => {
       yield* tiles.sync([placement])
       const hotkeys = yield* TestDesktop.collect(tiles.hotkeys, 1)
 
-      press("KeyA")
+      press("KeyZ")
       press("Digit2", "keyUp")
       press("Digit2")
       const forwarded = yield* Fiber.join(hotkeys)

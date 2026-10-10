@@ -1,6 +1,8 @@
 import { Hotkey } from "@sportal/api/Hotkey"
 import { Effect, Option, Stream } from "effect"
 import { AsyncResult, Atom } from "effect/reactivity"
+import * as AutopilotState from "../autopilot/AutopilotState.ts"
+import { AutopilotInput } from "../autopilot/AutopilotState.ts"
 import * as LiveStream from "../hub/LiveStream.ts"
 import * as DisplayScreen from "../screen/DisplayScreen.ts"
 import { Shell } from "../shell/Shell.ts"
@@ -10,7 +12,7 @@ import { Display, DisplayInput } from "./Display.ts"
 
 /**
  * This Display's local state. An input written to it is applied against the Screen and the slate strip: the next
- * Display is kept, and the step's screen commands go to the Screen.
+ * Display is kept, and the step's screen commands go to the Screen and, each one it applies, as yours to the autopilot.
  */
 export const display: Atom.Writable<Display, DisplayInput> = Atom.writable(
   (get) => get(kept),
@@ -18,7 +20,14 @@ export const display: Atom.Writable<Display, DisplayInput> = Atom.writable(
     const step = ctx.get(kept).apply(input, ctx.get(DisplayScreen.screen), ctx.get(cards))
     Atom.batch(() => {
       ctx.set(kept, step.display)
-      for (const command of step.commands) ctx.set(DisplayScreen.screen, command)
+      for (const command of step.commands) {
+        ctx.set(DisplayScreen.screen, command)
+        if (Option.isNone(ctx.get(DisplayScreen.rejected)))
+          ctx.set(
+            AutopilotState.autopilot,
+            AutopilotInput.Commanded({ command, screen: ctx.get(DisplayScreen.screen) })
+          )
+      }
     })
   }
 ).pipe(Atom.keepAlive)
@@ -54,7 +63,7 @@ export const toggleFullScreen = runtime.fn((_: undefined, get) =>
 
 /**
  * The hotkeys and video presses the Shell reports, as this Display's inputs; the `FullScreen` hotkey toggles full
- * screen. Mounted once, by the Display.
+ * screen and `ToggleAutopilot` the autopilot. Mounted once, by the Display.
  */
 export const inputs = runtime.atom((get) =>
   Effect.gen(function* () {
@@ -67,6 +76,8 @@ export const inputs = runtime.atom((get) =>
         Effect.sync(() => {
           if (DisplayInput.$is("Pressed")(input) && Hotkey.guards.FullScreen(input.hotkey))
             get.set(toggleFullScreen, undefined)
+          else if (DisplayInput.$is("Pressed")(input) && Hotkey.guards.ToggleAutopilot(input.hotkey))
+            get.set(AutopilotState.autopilot, AutopilotInput.Toggled())
           else get.set(display, input)
         })
       )

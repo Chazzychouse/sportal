@@ -13,6 +13,8 @@ export const Hotkey = Object.assign(
     Unsolo: {},
     FullScreen: {},
     NextLayout: {},
+    /** Turn this Display's autopilot on or off. */
+    ToggleAutopilot: {},
     ToggleSlate: {},
     CommandPalette: {},
     /** Move the slate's pick to the previous or next game that can be picked. */
@@ -43,6 +45,8 @@ export const Hotkey = Object.assign(
           return { _tag: "FullScreen" }
         case "KeyL":
           return { _tag: "NextLayout" }
+        case "KeyA":
+          return { _tag: "ToggleAutopilot" }
         case "KeyI":
           return { _tag: "Interact" }
         case "KeyS":
@@ -135,6 +139,13 @@ export const Hotkey = Object.assign(
         does: "Next layout",
         press: { code: "KeyL", from: "stream" },
         hotkey: { _tag: "NextLayout" }
+      },
+      {
+        group: "Screen",
+        keys: ["A"],
+        does: "Turn the autopilot on or off",
+        press: { code: "KeyA", from: "stream" },
+        hotkey: { _tag: "ToggleAutopilot" }
       },
       {
         group: "Screen",

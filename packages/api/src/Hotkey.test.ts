@@ -20,6 +20,7 @@ describe("Hotkey.of", () => {
     { code: "Escape", hotkey: { _tag: "Unsolo" } },
     { code: "F11", hotkey: { _tag: "FullScreen" } },
     { code: "KeyL", hotkey: { _tag: "NextLayout" } },
+    { code: "KeyA", hotkey: { _tag: "ToggleAutopilot" } },
     { code: "KeyI", hotkey: { _tag: "Interact" } },
     { code: "KeyI", from: "stream", hotkey: { _tag: "Interact" } },
     { code: "KeyS", hotkey: { _tag: "ToggleSlate" } },
@@ -79,7 +80,7 @@ describe("Hotkey.of", () => {
     assert.isUndefined(hotkey)
   })
 
-  it.each(["KeyA", "Digit0"])("should leave %s, a key Sportal does not bind, to the page", (code) => {
+  it.each(["KeyZ", "Digit0"])("should leave %s, a key Sportal does not bind, to the page", (code) => {
     const hotkey = key(code)
 
     assert.isUndefined(hotkey)
@@ -121,6 +122,7 @@ const wire: ReadonlyArray<unknown> = [
   { _tag: "Unsolo" },
   { _tag: "FullScreen" },
   { _tag: "NextLayout" },
+  { _tag: "ToggleAutopilot" },
   { _tag: "ToggleSlate" },
   { _tag: "CommandPalette" },
   { _tag: "StepPick", step: -1 },
