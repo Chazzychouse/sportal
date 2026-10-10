@@ -37,10 +37,10 @@ describe("EspnProvider", () => {
       Effect.gen(function* () {
         const said = yield* polledOnce(
           answering(() => Effect.succeed(new Response(fbsLive, { status: 503 }))),
-          { leagues: ["fbs"], frames: 1 }
+          { leagues: ["fbs"] }
         )
 
-        assert.deepStrictEqual(said, [[]])
+        assert.deepStrictEqual(said, [])
       })
     )
 
@@ -48,10 +48,10 @@ describe("EspnProvider", () => {
       Effect.gen(function* () {
         const said = yield* polledOnce(
           answering(() => Effect.succeed(new Response("not json"))),
-          { leagues: ["fbs"], frames: 1 }
+          { leagues: ["fbs"] }
         )
 
-        assert.deepStrictEqual(said, [[]])
+        assert.deepStrictEqual(said, [])
       })
     )
 
@@ -208,18 +208,11 @@ describe("EspnProvider", () => {
             : Effect.succeed(answered(request, fbsLive))
         )
 
-        const said = yield* polledOnce(nflDown, { frames: 2 })
+        const said = yield* polledOnce(nflDown)
 
         assert.deepStrictEqual(
-          said.flatMap((deliveries) =>
-            deliveries.filter(Delivery.$is("Listing")).map(({ league }) => league)
-          ),
+          said.map((one) => (Delivery.$is("Listing")(one) ? one.league : one._tag)),
           ["fbs"]
-        )
-        assert.deepStrictEqual(
-          said.filter((deliveries) => !deliveries.some(Delivery.$is("Listing"))),
-          [[]],
-          "the failed poll's frame says nothing"
         )
       })
     )
@@ -275,24 +268,14 @@ describe("EspnProvider", () => {
 
     it.effect("should deliver FastCast's frames beside its polls", () =>
       Effect.gen(function* () {
-        const pushed = Frame.Pushed({
-          topic: Option.some(new Topic({ league: "nfl", game: GameId.make("401872971") })),
-          mid: Option.none(),
-          envelope: decodeEnvelope("{}")
-        })
+        const pushed = checkpointFrame(new Topic({ league: "nfl", game: GameId.make("401872971") }))
         const espn = espnOver(recordedHttp(fbsLive), { leagues: ["fbs"], pushing: Stream.make(pushed) })
 
         const said = yield* Provider.use((provider) =>
           provider.deliveries.pipe(Stream.take(2), Stream.runCollect)
         ).pipe(Effect.provide(espn))
 
-        assert.deepStrictEqual(
-          said
-            .map((deliveries) => deliveries.map(({ _tag }) => _tag))
-            .toSorted((a, b) => a.length - b.length),
-          [[], ["Listing"]],
-          "the push, which says nothing, beside the poll's listing"
-        )
+        assert.deepStrictEqual(said.map(({ _tag }) => _tag).toSorted(), ["Listing", "Plays"])
       })
     )
 
@@ -301,15 +284,10 @@ describe("EspnProvider", () => {
         const slow = HttpClient.make((request) =>
           Effect.sleep("5 seconds").pipe(Effect.as(answered(request, nflPregame)))
         )
-        // A heartbeat: a push that says nothing, so its frame is an empty array of deliveries.
-        const heartbeat = Frame.Pushed({
-          topic: Option.none(),
-          mid: Option.none(),
-          envelope: decodeEnvelope(JSON.stringify({ op: "B" }))
-        })
-        const pushing = Stream.fromEffect(Effect.as(Effect.sleep("1 second"), heartbeat))
+        const checkpoint = checkpointFrame(new Topic({ league: "nfl", game: GameId.make("401872971") }))
+        const pushing = Stream.fromEffect(Effect.as(Effect.sleep("1 second"), checkpoint))
 
-        const frames = yield* Effect.gen(function* () {
+        const said = yield* Effect.gen(function* () {
           const provider = yield* Provider
           const taken = yield* provider.deliveries.pipe(Stream.take(2), Stream.runCollect, Effect.forkScoped)
           yield* settled
@@ -318,8 +296,8 @@ describe("EspnProvider", () => {
         }).pipe(Effect.provide(espnOver(slow, { leagues: ["nfl"], pushing })), Effect.scoped)
 
         assert.deepStrictEqual(
-          frames.map((deliveries) => deliveries.map(({ _tag }) => _tag)),
-          [[], ["Listing"]]
+          said.map(({ _tag }) => _tag),
+          ["Plays", "Listing"]
         )
       })
     )
@@ -338,21 +316,19 @@ describe("EspnProvider", () => {
 
         const said = yield* Effect.gen(function* () {
           const provider = yield* Provider
-          const frames = yield* Queue.unbounded<ReadonlyArray<Delivery>>()
+          const delivered = yield* Queue.unbounded<Delivery>()
           yield* provider.deliveries.pipe(
-            Stream.runForEach((deliveries) => Queue.offer(frames, deliveries)),
+            Stream.runForEach((one) => Queue.offer(delivered, one)),
             Effect.forkScoped({ startImmediately: true })
           )
           yield* settled
           yield* TestClock.adjust("10 seconds")
-          return yield* Queue.takeBetween(frames, 3, 3)
+          return yield* Queue.takeBetween(delivered, 3, 3)
         }).pipe(Effect.provide(espn), Effect.scoped)
 
         assert.deepStrictEqual(
-          said.map((deliveries) =>
-            deliveries.map((one) => (Delivery.$is("Listing")(one) ? `Listing ${one.league}` : one._tag))
-          ),
-          [["Listing nfl"], ["Plays"], ["Listing fbs"]]
+          said.map((one) => (Delivery.$is("Listing")(one) ? `Listing ${one.league}` : one._tag)),
+          ["Listing nfl", "Plays", "Listing fbs"]
         )
       })
     )
@@ -539,14 +515,14 @@ describe("EspnProvider", () => {
       () =>
         Effect.gen(function* () {
           const server = TestHub.fakeServer()
-          const delivered = TestHub.watched<ReadonlyArray<Delivery>>()
+          const delivered = TestHub.watched<Delivery>()
           const subscriptions = () =>
             server.sent.all().filter((sent) => sent.op === "S" && sent.tc === liveTc)
 
           const counted = yield* Effect.gen(function* () {
             const provider = yield* Provider
             yield* provider.deliveries.pipe(
-              Stream.runForEach((deliveries) => Effect.sync(() => delivered.add(deliveries))),
+              Stream.runForEach((one) => Effect.sync(() => delivered.add(one))),
               Effect.forkScoped({ startImmediately: true })
             )
             yield* server.sent.until(TestHub.subscribed(liveTc, 1))
@@ -637,24 +613,23 @@ function espnOver(
   )
 }
 
-/**
- * What the first `frames` frames (none, unless given) of ESPN's provider's first poll over `client` said.
- */
+/** What ESPN's provider's first polls over `client` said. */
 function polledOnce(
   client: HttpClient.HttpClient,
-  options: { readonly leagues?: ReadonlyArray<LeagueId>; readonly frames?: number } = {}
+  options: { readonly leagues?: ReadonlyArray<LeagueId> } = {}
 ) {
   return Effect.gen(function* () {
     const provider = yield* Provider
-    const said = yield* Queue.unbounded<ReadonlyArray<Delivery>>()
+    const said = yield* Queue.unbounded<Delivery>()
     yield* provider.deliveries.pipe(
       Stream.runForEach((one) => Queue.offer(said, one)),
       Effect.forkScoped({ startImmediately: true })
     )
 
     yield* TestClock.adjust(0)
+    yield* settled
 
-    return yield* Queue.takeBetween(said, options.frames ?? 0, options.frames ?? 0)
+    return yield* Queue.clear(said)
   }).pipe(Effect.provide(espnOver(client, options)), Effect.scoped)
 }
 
@@ -800,8 +775,7 @@ function checkpointAt(mid: number) {
 
 /** Whether at least `count` deliveries of plays have arrived. */
 function playsDelivered(count: number) {
-  return (all: ReadonlyArray<ReadonlyArray<Delivery>>) =>
-    all.flat().filter(Delivery.$is("Plays")).length >= count
+  return (all: ReadonlyArray<Delivery>) => all.filter(Delivery.$is("Plays")).length >= count
 }
 
 /** The recorded 18:00Z NFL scoreboard with `games`, by id, live as well. */

@@ -208,9 +208,7 @@ describe("EspnPlay.FootballPlay", () => {
         yield* TestClock.setTime(TestHub.duringNeAtBuf.epochMilliseconds)
         const day = yield* TestHub.recordedNeAtBuf
         const decoded = yield* TestHub.replayed(day)
-        const pushed = decoded
-          .flat()
-          .flatMap((delivery) => (Delivery.$is("Plays")(delivery) ? delivery.plays : []))
+        const pushed = decoded.flatMap((delivery) => (Delivery.$is("Plays")(delivery) ? delivery.plays : []))
         const entities = yield* Effect.forEach(Object.values(recorded), (one) => decodePlay(one))
 
         const all = [...pushed, ...entities]
@@ -299,10 +297,7 @@ describe("the recorded NE at BUF day", () => {
       Effect.gen(function* () {
         yield* TestClock.setTime(TestHub.duringNeAtBuf.epochMilliseconds)
         const decoded = yield* TestHub.neAtBufDecoded
-        const deliveries = decoded.flat()
-        const plays = deliveries.flatMap((delivery) =>
-          Delivery.$is("Plays")(delivery) ? delivery.plays : []
-        )
+        const plays = decoded.flatMap((delivery) => (Delivery.$is("Plays")(delivery) ? delivery.plays : []))
 
         const backs = yield* Effect.forEach(plays, (play) =>
           Schema.encodeEffect(playJson)(play).pipe(Effect.flatMap(Schema.decodeEffect(playJson)))

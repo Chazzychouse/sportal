@@ -38,7 +38,7 @@ export class GameTopics extends Data.Class<{
    * does not decode is skipped. Any other frame that does not decode says nothing, leaves the topics as they were, and
    * is logged.
    */
-  take(frame: Frame): Effect.Effect<readonly [GameTopics, ReadonlyArray<Delivery>]> {
+  take(frame: Frame): Effect.Effect<readonly [GameTopics, Option.Option<Delivery>]> {
     return taken(this, frame)
   }
 
@@ -97,18 +97,18 @@ const taken = Effect.fnUntraced(
 
     const next = new GameTopics({ ...topics, documents })
     return yield* Option.match(change, {
-      onNone: () => Effect.succeed([next, noDeliveries] as const),
+      onNone: () => Effect.succeed([next, Option.none<Delivery>()] as const),
       onSome: DocumentChange.$match({
         Game: ({ league, game, plays, touched }) =>
           Effect.map(playsAfter(next, game, league, plays, touched), (byId) => {
             const withPlays = new GameTopics({ ...next, plays: HashMap.set(next.plays, game, byId) })
             const list = [...HashMap.values(byId)].toSorted(Play.order)
-            return [withPlays, [Delivery.Plays({ game, plays: list })]] as const
+            return [withPlays, Option.some(Delivery.Plays({ game, plays: list }))] as const
           }),
         Reset: ({ topic, detail }) =>
           Effect.logWarning(`GameTopics: ${topic.tc()} lost its document (${detail})`).pipe(
             Effect.annotateLogs({ topic: topic.tc() }),
-            Effect.as([next, noDeliveries] as const)
+            Effect.as([next, Option.none<Delivery>()] as const)
           )
       })
     })
@@ -117,7 +117,7 @@ const taken = Effect.fnUntraced(
     Effect.catch(effect, (cause) =>
       Effect.logWarning("GameTopics: skipped a frame that does not decode", cause).pipe(
         Effect.annotateLogs(annotationsOf(frame)),
-        Effect.as([topics, noDeliveries] as const)
+        Effect.as([topics, Option.none<Delivery>()] as const)
       )
     )
 )
@@ -335,8 +335,6 @@ function movesOn<M extends { readonly op: string }>(
 ): message is Extract<M, { readonly op: "R" | "P" | "I" }> {
   return message.op === "R" || message.op === "P" || message.op === "I"
 }
-
-const noDeliveries: ReadonlyArray<Delivery> = []
 
 /**
  * Game `game`'s plays by id after a change: each touched entity decoded again, or dropped when it is gone or does

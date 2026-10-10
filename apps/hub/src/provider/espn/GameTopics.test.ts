@@ -413,8 +413,8 @@ describe("GameTopics#take", () => {
     )
   })
 
-  describe("one array of deliveries per frame", () => {
-    it.effect("should give a message that changes no document no deliveries", () =>
+  describe("what each frame said", () => {
+    it.effect("should say nothing for a message that changes no document", () =>
       Effect.gen(function* () {
         const [, second, ...rest] = yield* TestHub.framesReplayed([
           TestHub.neAtBufCheckpoint(),
@@ -422,22 +422,22 @@ describe("GameTopics#take", () => {
         ])
 
         assert.deepStrictEqual(rest, [])
-        assert.deepStrictEqual(second, [])
+        assert.deepStrictEqual(second, Option.none())
       })
     )
 
-    it.effect("should give a frame that resets its topic no deliveries", () =>
+    it.effect("should say nothing for a frame that resets its topic", () =>
       Effect.gen(function* () {
         const frames = [TestHub.neAtBufCheckpoint(), TestHub.undecodablePatch(819)]
 
         const all = yield* TestHub.framesReplayed(frames)
 
         assert.strictEqual(all.length, frames.length)
-        assert.deepStrictEqual(all.at(-1), [])
+        assert.deepStrictEqual(all.at(-1), Option.none())
       })
     )
 
-    it.effect("should give one array of deliveries per frame", () =>
+    it.effect("should say at most one thing per frame", () =>
       Effect.gen(function* () {
         const frames = TestHub.moveRecordingFrames()
 
@@ -477,7 +477,7 @@ describe("GameTopics#retained", () => {
 
       const kept = afterPush.retained(() => false)
 
-      assert.isTrue(said.some(Delivery.$is("Plays")))
+      assert.isTrue(Option.exists(said, Delivery.$is("Plays")))
       assert.isTrue(afterPush.isSynced(TestHub.topicNamed(TestHub.neAtBufPlays)))
       assert.isFalse(HashMap.has(kept.documents, TestHub.topicNamed(TestHub.neAtBufPlays)))
       assert.isFalse(HashMap.has(kept.plays, GameId.make("401872971")))
@@ -489,7 +489,7 @@ describe("GameTopics#retained", () => {
 function decoded(frames: ReadonlyArray<Frame>) {
   return TestHub.framesReplayed(frames).pipe(
     Effect.map((all) =>
-      all.flatMap((deliveries, index) => deliveries.map((delivery) => ({ frame: index + 1, delivery })))
+      all.flatMap((said, index) => Option.toArray(said).map((delivery) => ({ frame: index + 1, delivery })))
     )
   )
 }

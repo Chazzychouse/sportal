@@ -69,7 +69,7 @@ export const layer = (
           const polls = Stream.mergeAll(
             leagues.map((league) => pollsOf(league)),
             { concurrency: "unbounded" }
-          )
+          ).pipe(Stream.flattenIterable)
 
           // A frame is taken; a listing keeps only the topics wanted at the clock's now, and says nothing.
           const taken = Effect.fnUntraced(function* (
@@ -77,7 +77,8 @@ export const layer = (
             each: Result.Result<Frame, Listings>
           ) {
             const [next, said] = yield* Result.match(each, {
-              onSuccess: (frame) => Effect.map(topics.take(frame), ([after, one]) => [after, [one]] as const),
+              onSuccess: (frame) =>
+                Effect.map(topics.take(frame), ([after, one]) => [after, Option.toArray(one)] as const),
               onFailure: (latest) =>
                 Effect.map(DateTime.now, (now) => [topics.retainedFor(gamesOf(latest), now), []] as const)
             })

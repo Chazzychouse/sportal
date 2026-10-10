@@ -72,7 +72,7 @@ export const recordedNeAtBuf = Effect.gen(function* () {
 export const duringNeAtBuf = DateTime.makeUnsafe("2026-10-04T18:00:00Z")
 
 /**
- * What ESPN says each of `recorded` said, one array of deliveries a line: a poll is its league's `Listing` (nothing,
+ * What ESPN says each of `recorded` said, in order: a poll is its league's `Listing` (nothing,
  * when it does not decode), after which the game topics keep only those wanted at the clock's now; a frame is what
  * `GameTopics#take` gives. It approximates the provider's ordering (retention runs synchronously after each poll), for
  * the recorded-day tests; a test of `GameTopics` alone replays frames with `framesReplayed`.
@@ -82,7 +82,7 @@ export const replayed = Effect.fn("TestHub.replayed")(function* (recorded: Reado
     Stream.mapAccumEffect(
       () => ({ topics: GameTopics.empty, games: HashMap.empty<LeagueId, ReadonlyArray<GameSnapshot>>() }),
       (state, line) =>
-        Effect.map(replayedLine(state, line), ([next, deliveries]) => [next, [deliveries]] as const)
+        Effect.map(replayedLine(state, line), ([next, said]) => [next, Option.toArray(said)] as const)
     ),
     Stream.runCollect
   )
@@ -103,19 +103,20 @@ const replayedLine = Effect.fnUntraced(function* (
   line: Recorded
 ) {
   if (!("league" in line)) {
-    const [topics, deliveries] = yield* state.topics.take(line)
-    return [{ ...state, topics }, deliveries] as const
+    const [topics, said] = yield* state.topics.take(line)
+    return [{ ...state, topics }, said] as const
   }
 
   const listed = yield* Effect.option(EspnEvent.listingOf(line.league, line.body))
-  if (Option.isNone(listed)) return [state, noDeliveries] as const
+  if (Option.isNone(listed)) return [state, Option.none<Delivery>()] as const
   const games = HashMap.set(state.games, line.league, listed.value)
   const now = yield* DateTime.now
   const topics = state.topics.retainedFor([...HashMap.values(games)].flat(), now)
-  return [{ topics, games }, [Delivery.Listing({ league: line.league, games: listed.value })]] as const
+  return [
+    { topics, games },
+    Option.some(Delivery.Listing({ league: line.league, games: listed.value }))
+  ] as const
 })
-
-const noDeliveries: ReadonlyArray<Delivery> = []
 
 // Opening a socket throws, so FastCast never pushes.
 const noSocket = Layer.succeed(Socket.WebSocketConstructor, () => {
@@ -460,12 +461,12 @@ const decodeSent = Schema.decodeUnknownSync(Schema.fromJsonString(Sent))
 
 const decodeEnvelope = Schema.decodeUnknownOption(Schema.fromJsonString(FastCastMessage.Envelope))
 
-/** What GameTopics gives for each frame, one delivery array per frame. */
+/** What GameTopics gives for each frame, one per frame. */
 export const framesReplayed = Effect.fn("TestHub.framesReplayed")(function* (frames: ReadonlyArray<Frame>) {
   return yield* Stream.fromIterable(frames).pipe(
     Stream.mapAccumEffect(
       () => GameTopics.empty,
-      (topics, frame) => Effect.map(topics.take(frame), ([next, deliveries]) => [next, [deliveries]] as const)
+      (topics, frame) => Effect.map(topics.take(frame), ([next, said]) => [next, [said]] as const)
     ),
     Stream.runCollect
   )
@@ -487,7 +488,6 @@ export const topicsAfter = Effect.fn("TestHub.topicsAfter")(function* (frames: R
 export const listedBy = Effect.fn("TestHub.listedBy")(function* (league: LeagueId) {
   const provider = yield* Provider
   const listing = yield* provider.deliveries.pipe(
-    Stream.flatMap(Stream.fromIterable),
     Stream.filter(Delivery.$is("Listing")),
     Stream.filter((delivery) => delivery.league === league),
     Stream.runHead,

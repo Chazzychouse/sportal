@@ -201,8 +201,7 @@ describe("the recorded NE at BUF day", () => {
       Effect.gen(function* () {
         yield* TestClock.setTime(TestHub.duringNeAtBuf.epochMilliseconds)
         const decoded = yield* TestHub.neAtBufDecoded
-        const deliveries = decoded.flat()
-        const snapshots = deliveries.flatMap((delivery) =>
+        const snapshots = decoded.flatMap((delivery) =>
           Delivery.$is("Listing")(delivery) ? delivery.games : []
         )
 

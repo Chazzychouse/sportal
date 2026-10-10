@@ -18,10 +18,12 @@ export class Director extends Context.Service<
       const slate = yield* SubscriptionRef.make(Slate.empty)
 
       const take = Effect.fn("Director.take")(
-        function* (deliveries: ReadonlyArray<Delivery>) {
-          yield* Effect.annotateCurrentSpan({ "sportal.deliveries": deliveries.length })
+        function* (delivery: Delivery) {
           const before = yield* SubscriptionRef.get(slate)
-          const [next, changes] = taken(before, deliveries)
+          const [next, changes] = Delivery.$match(delivery, {
+            Listing: ({ league, games }) => before.relisted(league, games),
+            Plays: ({ game, plays }) => before.playsTaken(game, plays)
+          })
           if (next === before) return
 
           yield* SubscriptionRef.set(slate, next)
@@ -45,22 +47,6 @@ export class Director extends Context.Service<
 
       return Director.of({ slate: SubscriptionRef.changes(slate) })
     })
-  )
-}
-
-function taken(
-  slate: Slate,
-  deliveries: ReadonlyArray<Delivery>
-): readonly [Slate, ReadonlyArray<SlateChange>] {
-  return deliveries.reduce<readonly [Slate, ReadonlyArray<SlateChange>]>(
-    ([current, changes], delivery) => {
-      const [next, changed] = Delivery.$match(delivery, {
-        Listing: ({ league, games }) => current.relisted(league, games),
-        Plays: ({ game, plays }) => current.playsTaken(game, plays)
-      })
-      return [next, [...changes, ...changed]]
-    },
-    [slate, []]
   )
 }
 

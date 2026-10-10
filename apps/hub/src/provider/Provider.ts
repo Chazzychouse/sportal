@@ -11,18 +11,21 @@ export class Provider extends Context.Service<
   Provider,
   {
     /**
-     * What each frame it receives said, as its deliveries in the order the frame said them, one array per frame, in
-     * the order received, for as long as it runs. Never fails.
+     * What the frames it receives said, one delivery each, in the order received, for as long as it runs; a frame that
+     * says nothing delivers nothing. Never fails.
      */
-    readonly deliveries: Stream.Stream<ReadonlyArray<Delivery>>
+    readonly deliveries: Stream.Stream<Delivery>
   }
 >()("sportal/hub/provider/Provider") {
   /**
-   * A provider whose frames are what a test offers `frames`, taken one at a time: it takes the next only once its
-   * reader has taken the one before. They end when `frames` ends.
+   * A provider whose frames are what a test offers `frames`, each saying its deliveries, taken one at a time: it takes
+   * the next only once its reader has taken what the one before said. They end when `frames` ends.
    */
   static layerTest(frames: Queue.Dequeue<ReadonlyArray<Delivery>, Cause.Done>): Layer.Layer<Provider> {
-    return Layer.succeed(Provider, Provider.of({ deliveries: Stream.fromEffectRepeat(Queue.take(frames)) }))
+    return Layer.succeed(
+      Provider,
+      Provider.of({ deliveries: Stream.fromEffectRepeat(Queue.take(frames)).pipe(Stream.flattenIterable) })
+    )
   }
 }
 
