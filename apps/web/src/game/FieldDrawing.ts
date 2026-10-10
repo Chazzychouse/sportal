@@ -10,6 +10,7 @@ export type FieldDrawing = Data.TaggedEnum<{
   Settled: { readonly last: number }
   Animating: { readonly play: Play; readonly queued: ReadonlyArray<Play>; readonly last: number }
 }>
+// `Data.taggedEnum` returns a Proxy, so its members are picked into `FieldDrawing` rather than spread or assigned.
 const drawings = Data.taggedEnum<FieldDrawing>()
 export const FieldDrawing = {
   Settled: drawings.Settled,

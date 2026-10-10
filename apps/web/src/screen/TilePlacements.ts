@@ -1,9 +1,9 @@
 import { type ScreenTransition, type TileBounds, TilePlacement } from "@sportal/api/ShellBridge"
-import { Effect, Option, Scheduler, Schema, Stream } from "effect"
+import { Effect, Option, Schema, Stream } from "effect"
 import { Atom } from "effect/reactivity"
 import * as DisplayState from "../display/DisplayState.ts"
 import { Shell } from "../shell/Shell.ts"
-import { runtime } from "../WebRuntime.ts"
+import { beforePaint, logDefect, runtime } from "../WebRuntime.ts"
 import * as DisplayScreen from "./DisplayScreen.ts"
 import { type Screen, type Split, Tile } from "./Screen.ts"
 import * as TileRects from "./TileRects.ts"
@@ -65,11 +65,7 @@ export const sync = runtime.atom((get) =>
       ),
       Stream.runForEach(({ placements, transition }) => shell.syncTiles(placements, transition))
     )
-  }).pipe(
-    // The registry's scheduler is React's low-priority callback, which can run after paint; on microtasks the
-    // shell moves the videos before the browser paints the tiles that moved.
-    Effect.provideService(Scheduler.Scheduler, new Scheduler.MixedScheduler("sync"))
-  )
+  }).pipe(logDefect("The tile sync"), beforePaint)
 )
 
 /** What a sync reads: the placements, the Screen they arrange (without a dragged split), and whether one is dragged. */
@@ -79,6 +75,8 @@ const pending = Atom.make((get) => ({
   dragging: Option.isSome(get(dragged)),
   sized: get(area).width > 0
 }))
+
+const samePlacements = Schema.toEquivalence(Schema.Array(TilePlacement))
 
 /** Whether two Screens put tiles in the same places: the layout, its split, solo, and the game in each slot. */
 function sameArrangement(a: Screen, b: Screen): boolean {
@@ -99,5 +97,3 @@ function sameArrangement(a: Screen, b: Screen): boolean {
 function gamesIn(screen: Screen) {
   return screen.onScreen().map((tile) => (Tile.guards.Empty(tile) ? undefined : tile.game))
 }
-
-const samePlacements = Schema.toEquivalence(Schema.Array(TilePlacement))

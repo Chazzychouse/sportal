@@ -1,11 +1,11 @@
 import type { TileBounds } from "@sportal/api/ShellBridge"
 import type { GameId } from "@sportal/domain/Game"
-import { Effect, Scheduler, Stream } from "effect"
+import { Effect, Stream } from "effect"
 import { Atom } from "effect/reactivity"
 import * as TilePlacements from "../screen/TilePlacements.ts"
 import * as TileRects from "../screen/TileRects.ts"
 import { Shell } from "../shell/Shell.ts"
-import { runtime } from "../WebRuntime.ts"
+import { beforePaint, logDefect, runtime } from "../WebRuntime.ts"
 
 /** Each open overlay's rectangle in the window, by the overlay. */
 export const overlays: Atom.Writable<ReadonlyMap<string, TileBounds>> = Atom.make<
@@ -28,10 +28,7 @@ export const sync = runtime.atom((get) =>
       ),
       Stream.runForEach(shell.setHidden)
     )
-  }).pipe(
-    // As in the tile sync: on microtasks, not React's low-priority callback, so the shell hides before paint.
-    Effect.provideService(Scheduler.Scheduler, new Scheduler.MixedScheduler("sync"))
-  )
+  }).pipe(logDefect("The covering sync"), beforePaint)
 )
 
 const hidden = Atom.make((get) =>

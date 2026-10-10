@@ -5,7 +5,7 @@ import * as LiveStream from "../hub/LiveStream.ts"
 import * as DisplayScreen from "../screen/DisplayScreen.ts"
 import { Shell } from "../shell/Shell.ts"
 import { StripCard } from "../slate/StripCard.ts"
-import { runtime } from "../WebRuntime.ts"
+import { logDefect, runtime } from "../WebRuntime.ts"
 import { Display, DisplayInput } from "./Display.ts"
 
 /**
@@ -16,8 +16,10 @@ export const display: Atom.Writable<Display, DisplayInput> = Atom.writable(
   (get) => get(kept),
   (ctx, input: DisplayInput) => {
     const step = ctx.get(kept).apply(input, ctx.get(DisplayScreen.screen), ctx.get(cards))
-    ctx.set(kept, step.display)
-    for (const command of step.commands) ctx.set(DisplayScreen.screen, command)
+    Atom.batch(() => {
+      ctx.set(kept, step.display)
+      for (const command of step.commands) ctx.set(DisplayScreen.screen, command)
+    })
   }
 ).pipe(Atom.keepAlive)
 
@@ -68,7 +70,7 @@ export const inputs = runtime.atom((get) =>
         })
       )
     )
-  })
+  }).pipe(logDefect("The Display's inputs"))
 )
 
 /** Whether this Display can open the YouTube TV sign-in: only in the shell. */

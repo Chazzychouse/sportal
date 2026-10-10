@@ -1,6 +1,6 @@
 import { Effect, Stream } from "effect"
 import { Shell } from "../shell/Shell.ts"
-import { runtime } from "../WebRuntime.ts"
+import { logDefect, runtime } from "../WebRuntime.ts"
 import { HubClient } from "./HubClient.ts"
 import * as LiveStream from "./LiveStream.ts"
 
@@ -14,11 +14,12 @@ export const relay = runtime.atom((get) =>
     const hub = yield* HubClient
 
     // Listening first, then asking: the shell's first read waits for the web UI to ask.
-    // Each send in a fiber of its own, so a send that dies (already logged) ends only itself.
+    // Each send in a fiber of its own, so a send that dies ends only itself.
     yield* shell.guideRead.pipe(
       Stream.runForEach((guide) =>
         hub.sendGuide(guide).pipe(
           Effect.catch((failure) => Effect.logWarning("The Hub did not take a guide", failure)),
+          logDefect("The guide send"),
           Effect.forkScoped
         )
       ),
@@ -30,5 +31,5 @@ export const relay = runtime.atom((get) =>
       Stream.filter((connected) => connected),
       Stream.runForEach(() => shell.readGuide)
     )
-  })
+  }).pipe(logDefect("The guide relay"))
 )
