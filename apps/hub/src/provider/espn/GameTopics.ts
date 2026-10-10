@@ -4,9 +4,8 @@ import { Play } from "@sportal/domain/Play"
 import { Data, type DateTime, Effect, HashMap, HashSet, Option, Record, Schema } from "effect"
 import { Delivery } from "../Provider.ts"
 import * as EspnPlay from "./EspnPlay.ts"
-import { Frame } from "./FastCast.ts"
+import { Frame, Topic } from "./FastCast.ts"
 import { DocumentChange, FastCastDocuments } from "./FastCastDocuments.ts"
-import { Topic } from "./Topic.ts"
 
 /** Each followed FastCast game topic's document, and the plays decoded from it, every frame folded in once. */
 export class GameTopics extends Data.Class<{

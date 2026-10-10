@@ -12,9 +12,8 @@ import {
   Result,
   Schema
 } from "effect"
-import { Frame } from "./FastCast.ts"
+import { Frame, type Topic } from "./FastCast.ts"
 import * as FastCastMessage from "./FastCastMessage.ts"
-import type { Topic } from "./Topic.ts"
 
 /**
  * Each FastCast game topic's document, its plays by id at `gamePlays`: waiting for its checkpoint, or synced as of a

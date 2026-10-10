@@ -24,9 +24,8 @@ import { HubConfig } from "../../HubConfig.ts"
 import * as TestHub from "../../TestHub.ts"
 import { Delivery, Provider } from "../Provider.ts"
 import * as EspnProvider from "./EspnProvider.ts"
-import { FastCast, Frame, type Wanted } from "./FastCast.ts"
+import { FastCast, Frame, Topic, type Wanted } from "./FastCast.ts"
 import * as FastCastMessage from "./FastCastMessage.ts"
-import { Topic } from "./Topic.ts"
 
 // Real payloads recorded from ESPN. A payload that breaks decoding gets added here before the fix.
 const fbsLive = TestHub.recordedScoreboard("fbs-scoreboard-live")
