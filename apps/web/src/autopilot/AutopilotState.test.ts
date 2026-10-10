@@ -1,12 +1,15 @@
 import { afterEach, assert, beforeEach, describe, it } from "@effect/vitest"
 import { Game, GameId } from "@sportal/domain/Game"
 import { snapshot } from "@sportal/domain/TestGame"
-import { Effect } from "effect"
+import { Clock, DateTime, Duration, Effect, Layer } from "effect"
 import { Atom, AtomRegistry } from "effect/reactivity"
+import { TestClock } from "effect/testing"
 import { vi } from "vitest"
+import { HubClient } from "../hub/HubClient.ts"
 import * as LiveStream from "../hub/LiveStream.ts"
 import * as DisplayScreen from "../screen/DisplayScreen.ts"
 import type { Screen } from "../screen/Screen.ts"
+import { Shell } from "../shell/Shell.ts"
 import * as TestWeb from "../TestWeb.ts"
 import * as AutopilotState from "./AutopilotState.ts"
 import { AutopilotInput } from "./AutopilotState.ts"
@@ -48,6 +51,7 @@ describe("AutopilotState", () => {
   })
   afterEach(() => {
     vi.unstubAllGlobals()
+    vi.useRealTimers()
   })
 
   it.effect("should promote a red zone on another tile as soon as it is turned on", () =>
@@ -78,14 +82,65 @@ describe("AutopilotState", () => {
     })
   )
 
-  it.effect("should keep the autopilot in this browser", () =>
+  it.effect("should promote home again at the end of the dwell with no new slate", () =>
+    Effect.gen(function* () {
+      const start = DateTime.makeUnsafe("2026-10-10T20:00:00Z")
+      vi.useFakeTimers({ toFake: ["Date"] })
+      vi.setSystemTime(DateTime.toDate(start))
+      yield* TestClock.setTime(DateTime.toEpochMillis(start))
+      const clock = yield* Clock.Clock
+      const registry = TestWeb.registryOf(
+        Layer.mergeAll(
+          Shell.layerTest({ record: () => Effect.void }),
+          HubClient.layerTest(() => Effect.void),
+          Layer.succeed(Clock.Clock, clock)
+        )
+      )
+
+      const screen = yield* Effect.gen(function* () {
+        const source = yield* arranged(slate(TestWeb.classified(TestWeb.redZone)))
+        yield* Atom.set(AutopilotState.autopilot, AutopilotInput.Toggled())
+        yield* Atom.mount(AutopilotState.pilot)
+        yield* passing(Duration.seconds(10))
+        source.onmessage?.({ data: slate() })
+        yield* passing(Duration.seconds(20))
+        return yield* TestWeb.until(DisplayScreen.screen, (screen) => mainGame(screen) === home)
+      }).pipe(Effect.scoped, Effect.provide(registry))
+
+      assert.strictEqual(mainGame(screen), home)
+    })
+  )
+
+  it.effect("should keep nothing in this browser for a tick that changes nothing", () =>
     Effect.gen(function* () {
       yield* arranged(slate())
-      yield* Atom.set(AutopilotState.autopilot, AutopilotInput.Toggled())
+      yield* Atom.get(AutopilotState.autopilot)
+      const writes = vi.spyOn(localStorage, "setItem")
 
-      const kept = localStorage.getItem("sportal/autopilot")
+      yield* Atom.set(AutopilotState.autopilot, AutopilotInput.Ticked())
 
-      assert.include(kept ?? "", '"on":true')
+      assert.strictEqual(writes.mock.calls.length, 0)
     }).pipe(Effect.provide(AtomRegistry.layer))
   )
+
+  it.effect("should read the autopilot back on after a reload", () =>
+    Effect.gen(function* () {
+      yield* Effect.gen(function* () {
+        yield* arranged(slate())
+        yield* Atom.set(AutopilotState.autopilot, AutopilotInput.Toggled())
+      }).pipe(Effect.provide(AtomRegistry.layer))
+
+      const pilot = yield* Atom.get(AutopilotState.autopilot).pipe(Effect.provide(AtomRegistry.layer))
+
+      assert.isTrue(pilot.on)
+    })
+  )
 })
+
+/** `duration` passing on both the Effect clock and the browser's. */
+function passing(duration: Duration.Duration) {
+  return Effect.gen(function* () {
+    vi.setSystemTime(Date.now() + Duration.toMillis(duration))
+    yield* TestClock.adjust(duration)
+  })
+}

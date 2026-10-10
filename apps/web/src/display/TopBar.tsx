@@ -1,5 +1,5 @@
 import { useAtomSet, useAtomValue } from "@effect/atom-react"
-import { DateTime, Option } from "effect"
+import { Option } from "effect"
 import { Expand, Keyboard, List, LogIn, Minimize2, Shrink, SquareDashed } from "lucide-react"
 import { Button } from "@/design/button"
 import * as AutopilotState from "../autopilot/AutopilotState.ts"
@@ -71,7 +71,6 @@ export function TopBar() {
         autopilot={autopilot}
         slate={slate}
         classifications={classifications}
-        now={DateTime.nowUnsafe()}
         onToggle={() => steer(AutopilotInput.Toggled())}
       />
 

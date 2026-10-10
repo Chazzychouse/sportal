@@ -32,7 +32,7 @@ export const autopilot: Atom.Writable<Autopilot, AutopilotInput> = Atom.writable
     const moved = AutopilotInput.$is("Toggled")(input) ? current.toggle(screen) : current
     const [next, commands] = moved.step(screen, ctx.get(LiveStream.live).classifications, now)
     Atom.batch(() => {
-      ctx.set(kept, next)
+      if (next !== current) ctx.set(kept, next)
       for (const command of commands) ctx.set(DisplayScreen.screen, command)
     })
   }

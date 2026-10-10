@@ -1,7 +1,7 @@
 import type { SlateChanged } from "@sportal/api/LiveMessage"
 import { GameId } from "@sportal/domain/Game"
 import type { Moment } from "@sportal/domain/Moment"
-import { Array as Arr, Data, DateTime, Duration, Option, Order, Result, Schema } from "effect"
+import { Array as Arr, Data, DateTime, Duration, Equal, Option, Order, Result, Schema } from "effect"
 import { type Screen, type ScreenCommand, Tile } from "../screen/Screen.ts"
 
 /** The two things the autopilot steers: the main tile and the sound. */
@@ -94,6 +94,7 @@ export class Autopilot extends Schema.Class<Autopilot>("sportal/Autopilot")({
   /**
    * One step at `now` on `screen` with each game's classification: the next autopilot and the commands to send, in
    * order. The main tile is steered unless it is yours, else the sound unless it is yours. Off or soloed, nothing.
+   * When nothing changed, the autopilot is this one.
    */
   step(
     screen: Screen,
@@ -122,7 +123,8 @@ export class Autopilot extends Schema.Class<Autopilot>("sportal/Autopilot")({
         now
       )
       const commands = mainCommands(screen, this, move, Option.isSome(suspended.audio))
-      return [new Autopilot({ ...this, suspended, away: { main, audio: Option.none() } }), commands]
+      const next = new Autopilot({ ...this, suspended, away: { main, audio: Option.none() } })
+      return [unchangedOr(this, next), commands]
     }
 
     if (Option.isNone(suspended.audio)) {
@@ -141,10 +143,12 @@ export class Autopilot extends Schema.Class<Autopilot>("sportal/Autopilot")({
         Home: () => soundTo(screen, this.home.audio),
         Go: ({ game }) => soundTo(screen, Option.some(game))
       })
-      return [new Autopilot({ ...this, suspended, away: { main: Option.none(), audio } }), commands]
+      const next = new Autopilot({ ...this, suspended, away: { main: Option.none(), audio } })
+      return [unchangedOr(this, next), commands]
     }
 
-    return [new Autopilot({ ...this, suspended, away: { main: Option.none(), audio: Option.none() } }), []]
+    const next = new Autopilot({ ...this, suspended, away: { main: Option.none(), audio: Option.none() } })
+    return [unchangedOr(this, next), []]
   }
 
   /** When the next step may change something with no new slate: an away game's dwell ending, or a suspension. */
@@ -262,6 +266,11 @@ function mainCommands(
       return soundYours ? [...moved, ...soundTo(afterAll(screen, moved), home.audio)] : moved
     }
   })
+}
+
+/** `current` when `next` is equal to it, so an idle step changes nothing; else `next`. */
+function unchangedOr(current: Autopilot, next: Autopilot): Autopilot {
+  return Equal.equals(current, next) ? current : next
 }
 
 /** Most worth chasing first: a red zone, crunch time, a big play, plain live play. Anything else is not chased. */

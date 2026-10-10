@@ -1,10 +1,11 @@
-import { assert, describe, it } from "@effect/vitest"
+import { afterEach, assert, beforeEach, describe, it } from "@effect/vitest"
 import { Game, GameId } from "@sportal/domain/Game"
 import { Slate } from "@sportal/domain/Slate"
 import { liveSnapshot, team } from "@sportal/domain/TestGame"
 import { DateTime, Duration, Option, Record } from "effect"
 import { createElement } from "react"
 import { renderToStaticMarkup } from "react-dom/server"
+import { vi } from "vitest"
 import * as TestWeb from "../TestWeb.ts"
 import { Autopilot } from "./Autopilot.ts"
 import { AutopilotToggle } from "./AutopilotToggle.tsx"
@@ -21,7 +22,7 @@ const slate = new Slate({
 
 function titleOf(autopilot: Autopilot, classifications = {}) {
   const markup = renderToStaticMarkup(
-    createElement(AutopilotToggle, { autopilot, slate, classifications, now, onToggle: () => {} })
+    createElement(AutopilotToggle, { autopilot, slate, classifications, onToggle: () => {} })
   )
   return /title="([^"]*)"/.exec(markup)?.[1]
 }
@@ -34,11 +35,27 @@ function awayOn(game: GameId) {
   })
 }
 
+function soundAwayOn(game: GameId) {
+  return new Autopilot({
+    ...Autopilot.off,
+    on: true,
+    away: { main: Option.none(), audio: Option.some({ game, since: now }) }
+  })
+}
+
 function classify(classification: ReturnType<typeof TestWeb.classified>) {
   return Record.fromEntries([[dal, classification] as const])
 }
 
 describe("AutopilotToggle", () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] })
+    vi.setSystemTime(DateTime.toDate(now))
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
   it("should say it is off", () => {
     const title = titleOf(Autopilot.off)
 
@@ -49,6 +66,12 @@ describe("AutopilotToggle", () => {
     const title = titleOf(awayOn(dal), classify(TestWeb.classified(TestWeb.redZone)))
 
     assert.strictEqual(title, "Autopilot on: away on PHI @ DAL — red zone · A")
+  })
+
+  it("should say when only the sound is away", () => {
+    const title = titleOf(soundAwayOn(dal), classify(TestWeb.classified(TestWeb.redZone)))
+
+    assert.strictEqual(title, "Autopilot on: sound away on PHI @ DAL — red zone · A")
   })
 
   it("should say a live away game is chased because home is on a break", () => {

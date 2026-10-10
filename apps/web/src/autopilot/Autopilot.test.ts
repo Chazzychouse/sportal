@@ -81,6 +81,19 @@ describe("Autopilot.step", () => {
     assert.deepStrictEqual(commands, [])
   })
 
+  it("should give back the same autopilot when a step changes nothing", () => {
+    const [pilot] = on.step(
+      quad,
+      classified([
+        [home, live],
+        [other, live]
+      ]),
+      start
+    )
+
+    assert.strictEqual(pilot, on)
+  })
+
   it("should send nothing while the Screen is soloed", () => {
     const soloed = after(quad, [{ _tag: "Solo", tile: 1 }])
 
@@ -559,6 +572,14 @@ describe("Autopilot.manual", () => {
     assert.deepStrictEqual(pilot.suspended, { main: Option.some(at(180)), audio: Option.none() })
   })
 
+  it("should make only the sound yours when you focus the sound", () => {
+    const focused = after(quad, [{ _tag: "FocusAudio", tile: 1 }])
+
+    const pilot = on.manual({ _tag: "FocusAudio", tile: 1 }, focused, start)
+
+    assert.deepStrictEqual(pilot.suspended, { main: Option.none(), audio: Option.some(at(180)) })
+  })
+
   it("should make nothing yours when you swap two tiles other than tile 0", () => {
     const swapped = after(quad, [{ _tag: "Swap", a: 1, b: 2 }])
 
@@ -599,6 +620,16 @@ describe("Autopilot.nextDeadline", () => {
     const deadline = pilot.nextDeadline(at(1))
 
     assert.deepStrictEqual(deadline, Option.some(at(180)))
+  })
+
+  it("should give the earlier of an away game's dwell end and your suspension's end", () => {
+    const { pilot, screen } = awayOnOther()
+    const focused = after(screen, [{ _tag: "FocusAudio", tile: 2 }])
+    const yours = pilot.manual({ _tag: "FocusAudio", tile: 2 }, focused, start)
+
+    const deadline = yours.nextDeadline(at(1))
+
+    assert.deepStrictEqual(deadline, Option.some(at(30)))
   })
 
   it("should give no deadline while it has nothing away and nothing yours", () => {

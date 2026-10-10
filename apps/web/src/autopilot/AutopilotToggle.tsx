@@ -13,11 +13,10 @@ export function AutopilotToggle(props: {
   autopilot: Autopilot
   slate: Slate
   classifications: SlateChanged["classifications"]
-  now: DateTime.Utc
   onToggle: () => void
 }) {
   const { autopilot, slate, classifications } = props
-  const [now, setNow] = useState(props.now)
+  const [now, setNow] = useState(DateTime.nowUnsafe)
   const nameOf = (game: GameId) =>
     Option.match(slate.gameOf(game), {
       onNone: () => "a game",
@@ -26,11 +25,14 @@ export function AutopilotToggle(props: {
   const doing = AutopilotStatus.$match(autopilot.status(now), {
     Off: () => "Autopilot off",
     Idle: () => "Autopilot on: following, nothing to chase",
-    Away: ({ game }) =>
-      `Autopilot on: away on ${nameOf(game)}${Option.match(whyAway(classifications[game]?.moment), {
-        onNone: () => "",
-        onSome: (why) => ` — ${why}`
-      })}`,
+    Away: ({ part, game }) =>
+      `Autopilot on: ${part === "main" ? "" : "sound "}away on ${nameOf(game)}${Option.match(
+        whyAway(classifications[game]?.moment),
+        {
+          onNone: () => "",
+          onSome: (why) => ` — ${why}`
+        }
+      )}`,
     Yours: ({ part, until }) =>
       `Autopilot on: ${part === "main" ? "main tile" : "sound"} yours for ${countdown(DateTime.distance(now, until))}`
   })
@@ -43,6 +45,7 @@ export function AutopilotToggle(props: {
       aria-pressed={autopilot.on}
       title={`${doing} · A`}
       onPointerEnter={() => setNow(DateTime.nowUnsafe())}
+      onFocus={() => setNow(DateTime.nowUnsafe())}
       className={`label-caps text-xs ${autopilot.on ? "bg-accent" : ""}`}
       onClick={props.onToggle}
     >
