@@ -1,4 +1,6 @@
 import type { SlateChanged } from "@sportal/api/LiveMessage"
+import type { GameId } from "@sportal/domain/Game"
+import type { Slate } from "@sportal/domain/Slate"
 import { Data, DateTime, Effect, Option, Stream } from "effect"
 import { KeyValueStore } from "effect/persistence"
 import { Atom } from "effect/reactivity"
@@ -7,11 +9,12 @@ import * as DisplayScreen from "../screen/DisplayScreen.ts"
 import type { Screen, ScreenCommand } from "../screen/Screen.ts"
 import { logDefect, runtime } from "../WebRuntime.ts"
 import { Autopilot } from "./Autopilot.ts"
+import { type Decision, details, explain } from "./Decision.ts"
 
-/** What moves the autopilot: turned on or off, a command you sent and the Screen after it, or time passing. */
+/** What moves the autopilot: turned on or off, a command you sent, or time passing. */
 export type AutopilotInput = Data.TaggedEnum<{
   Toggled: object
-  Commanded: { readonly command: ScreenCommand; readonly screen: Screen }
+  Commanded: { readonly command: ScreenCommand }
   Ticked: object
 }>
 export const AutopilotInput = Data.taggedEnum<AutopilotInput>()
@@ -26,20 +29,33 @@ export const autopilot: Atom.Writable<Autopilot, AutopilotInput> = Atom.writable
     const now = DateTime.nowUnsafe()
     const current = ctx.get(kept)
     if (AutopilotInput.$is("Commanded")(input)) {
-      ctx.set(kept, current.manual(input.command, input.screen, now))
+      ctx.set(kept, current.manual(input.command, now))
       return
     }
     const screen = ctx.get(DisplayScreen.screen)
     const moved = AutopilotInput.$is("Toggled")(input) ? current.toggle(screen) : current
-    const [next, commands] = moved.step(screen, ctx.get(LiveStream.live).classifications, now)
+    const {
+      next,
+      commands,
+      decision: decided
+    } = moved.step(screen, ctx.get(LiveStream.live).classifications, now)
     Atom.batch(() => {
       if (next !== current) ctx.set(kept, next)
+      ctx.set(decision, Option.some(decided))
       for (const command of commands) ctx.set(DisplayScreen.screen, command)
     })
   }
 ).pipe(Atom.keepAlive)
 
-/** Steps the autopilot on each live update and at its next deadline. Mounted once, by the Display. */
+/** What the autopilot's last step decided, for its log; none before its first step. */
+const decision: Atom.Writable<Option.Option<Decision>> = Atom.make<Option.Option<Decision>>(
+  Option.none()
+).pipe(Atom.keepAlive)
+
+/**
+ * Steps the autopilot on each live update and at its next deadline, and logs each new decision in words. Mounted
+ * once, by the Display.
+ */
 export const pilot = runtime.atom((get) =>
   Effect.gen(function* () {
     const deadlines = Stream.zipLatestAll(
@@ -52,11 +68,31 @@ export const pilot = runtime.atom((get) =>
       )
     )
 
-    yield* Stream.merge(get.stream(LiveStream.live), deadlines).pipe(
+    const ticks = Stream.merge(get.stream(LiveStream.live), deadlines).pipe(
       Stream.runForEach(() => Effect.sync(() => get.set(autopilot, AutopilotInput.Ticked())))
     )
+    const log = get.stream(decision).pipe(
+      Stream.map(Option.toArray),
+      Stream.flattenIterable,
+      Stream.changesWith((a, b) => explain(a, String) === explain(b, String)),
+      Stream.runForEach((decided) =>
+        Effect.logInfo(`Autopilot: ${explain(decided, nameIn(get.once(LiveStream.live).slate))}`).pipe(
+          Effect.annotateLogs(details(decided))
+        )
+      )
+    )
+    yield* Effect.all([ticks, log], { concurrency: "unbounded", discard: true })
   }).pipe(logDefect("The autopilot"))
 )
+
+/** A game's matchup on `slate`, `PHI @ DAL`; its id when the slate does not have it. */
+export function nameIn(slate: Slate): (game: GameId) => string {
+  return (game) =>
+    Option.match(slate.gameOf(game), {
+      onNone: () => game,
+      onSome: ({ snapshot }) => `${snapshot.away.team.abbreviation} @ ${snapshot.home.team.abbreviation}`
+    })
+}
 
 /** Waits until `current`'s next deadline on `screen`; forever, when it has none. */
 function untilDeadline(

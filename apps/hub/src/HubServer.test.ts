@@ -3,7 +3,7 @@ import { assert, describe, it } from "@effect/vitest"
 import { type LiveMessage, LiveMessageJson } from "@sportal/api/LiveMessage"
 import { SportalApi } from "@sportal/api/SportalApi"
 import { Cause, DateTime, Effect, Exit, Layer, Queue, Schema, Stream } from "effect"
-import { HttpClient } from "effect/http"
+import { HttpClient, HttpClientRequest } from "effect/http"
 import { HttpApiClient } from "effect/http-api"
 import { TestClock } from "effect/testing"
 import { Broadcast } from "./Broadcast.ts"
@@ -38,6 +38,22 @@ describe("HubServer", () => {
           const error = yield* client.guide.read({ payload: { guide: "{}" } }).pipe(Effect.flip)
 
           assert.strictEqual(error._tag, "GuideUnreadable")
+        })
+      )
+    )
+
+    it.effect("should take a Display's logs and drop them without a collector", () =>
+      served(() =>
+        Effect.gen(function* () {
+          const http = yield* HttpClient.HttpClient
+
+          const response = yield* http.execute(
+            HttpClientRequest.post("/api/telemetry/logs").pipe(
+              HttpClientRequest.bodyText("{}", "application/json")
+            )
+          )
+
+          assert.strictEqual(response.status, 204)
         })
       )
     )

@@ -5,11 +5,13 @@ import { Game, GameId } from "@sportal/domain/Game"
 import type { Moment } from "@sportal/domain/Moment"
 import { Slate } from "@sportal/domain/Slate"
 import { snapshot, team } from "@sportal/domain/TestGame"
-import { DateTime, Effect, Layer, Queue, Record, Result, Schema, Stream } from "effect"
+import { DateTime, Duration, Effect, Layer, Option, Queue, Record, Result, Schema, Stream } from "effect"
 import { Atom, AtomRegistry } from "effect/reactivity"
+import type { Autopilot } from "./autopilot/Autopilot.ts"
+import type { Decision } from "./autopilot/Decision.ts"
 import { HubClient } from "./hub/HubClient.ts"
 import * as LiveStream from "./hub/LiveStream.ts"
-import { Screen } from "./screen/Screen.ts"
+import { type LayoutName, Screen, type ScreenCommand } from "./screen/Screen.ts"
 import { Shell } from "./shell/Shell.ts"
 import * as WebRuntime from "./WebRuntime.ts"
 
@@ -87,18 +89,88 @@ export function soloed(games: ReadonlyArray<GameId | undefined>, tile: number) {
   return Result.getOrThrow(fill(games).apply({ _tag: "Solo", tile }, nowhere))
 }
 
-/** `moment` classified at 2026-10-10 20:00 UTC with `score`, all of it from closeness. */
-export function classified(moment: Moment, score = 50): Classification {
+/** `moment` classified since `since` (2026-10-10 20:00 UTC unless given) with `score`, all of it from closeness. */
+export function classified(
+  moment: Moment,
+  score = 50,
+  since: DateTime.Utc = DateTime.makeUnsafe("2026-10-10T20:00:00Z")
+): Classification {
   return new Classification({
     moment,
     score,
-    since: DateTime.makeUnsafe("2026-10-10T20:00:00Z"),
+    since,
     breakdown: { prior: 0, closeness: score, swing: 0, upset: 0, momentBonus: 0 }
   })
 }
 
 /** The home team eight yards from scoring. */
 export const redZone: Moment = { _tag: "ScoringThreat", team: team("HOME").id, yardsToGo: 8 }
+
+/** A timeout, a break that expects to end a minute after 20:00 on 2026-10-10. */
+export const timeout: Moment = {
+  _tag: "Break",
+  reason: "timeout",
+  expectedEnd: DateTime.makeUnsafe("2026-10-10T20:01:00Z")
+}
+
+/** One moment of a scripted game day: seconds after 20:00 UTC, each game's classification then, and a command you send first. */
+export interface TimelineStep {
+  readonly at: number
+  readonly classifications: ReadonlyArray<readonly [GameId, Classification]>
+  readonly command?: ScreenCommand
+}
+
+/** What the Screen showed after a timeline step: the main tile's game, the game heard, the layout, and the decision. */
+export interface TimelineFrame {
+  readonly at: number
+  readonly main: GameId | undefined
+  readonly heard: GameId | undefined
+  readonly layout: LayoutName
+  readonly decision: Decision
+}
+
+/**
+ * Plays `steps` through `autopilot` from `screen` as a Display would: your command through the Screen and `manual`,
+ * then a step, its commands applied in order. Every game is on FOX.
+ */
+export function timeline(
+  screen: Screen,
+  autopilot: Autopilot,
+  steps: ReadonlyArray<TimelineStep>
+): ReadonlyArray<TimelineFrame> {
+  const start = DateTime.makeUnsafe("2026-10-10T20:00:00Z")
+  const applied = (on: Screen, commands: ReadonlyArray<ScreenCommand>) =>
+    commands.reduce((current, command) => Result.getOrThrow(current.apply(command, onFox)), on)
+  return steps.reduce(
+    (played, step) => {
+      const now = DateTime.addDuration(start, Duration.seconds(step.at))
+      const before =
+        step.command === undefined
+          ? played
+          : {
+              frames: played.frames,
+              screen: applied(played.screen, [step.command]),
+              autopilot: played.autopilot.manual(step.command, now)
+            }
+      const { next, commands, decision } = before.autopilot.step(
+        before.screen,
+        Record.fromEntries(step.classifications),
+        now
+      )
+      const shown = applied(before.screen, commands)
+      const main = shown.tiles[0]
+      const frame: TimelineFrame = {
+        at: step.at,
+        main: main === undefined || main._tag === "Empty" ? undefined : main.game,
+        heard: Option.getOrUndefined(shown.audioFocus),
+        layout: shown.layout,
+        decision
+      }
+      return { screen: shown, autopilot: next, frames: [...played.frames, frame] }
+    },
+    { screen, autopilot, frames: [] as ReadonlyArray<TimelineFrame> }
+  ).frames
+}
 
 /** The EventSource the live stream opened, once a read of the atom has started it. */
 export const opened: Effect.Effect<FakeEventSource, never, AtomRegistry.AtomRegistry> = Atom.get(

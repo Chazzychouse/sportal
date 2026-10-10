@@ -1,5 +1,7 @@
 # Autopilot
 
+Its chase (home, away, the main tile and the sound) is superseded by [Autopilot ranking](2026-10-10-autopilot-ranking-design.md).
+
 2026-10-10. The third piece of the automation (see the [Classification roadmap](2026-10-10-classification-design.md#roadmap)):
 a Display may follow the classifications. While it is on, the autopilot promotes the best moment into the main tile
 and moves the sound with it, then puts things back when the moment is over. What you choose is home; the autopilot

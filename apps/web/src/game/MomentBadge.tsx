@@ -34,8 +34,9 @@ function markOf(classification: Classification) {
     ScoringThreat: () => <Flag aria-label="Red zone" className="size-3 text-on-air" />,
     CrunchTime: () => <Timer aria-label="Crunch time" className="size-3 text-on-air" />,
     BigPlay: () => <Zap aria-label="Big play" className="size-3 text-on-air" />,
-    Break: ({ during }) => (
-      <span className="label-caps text-[9px] text-muted-foreground">
+    Break: ({ during, after }) => (
+      <span className="label-caps inline-flex items-center gap-0.5 text-[9px] text-muted-foreground">
+        {after === undefined ? null : <Zap aria-label="Big play" className="size-3 text-on-air" />}
         {during === undefined ? "BRK" : `BRK · ${during._tag === "ScoringThreat" ? "RZ" : "CT"}`}
       </span>
     ),

@@ -56,8 +56,13 @@ const cases = Schema.TaggedUnion({
   /** A big play, for a while after it. */
   BigPlay: { play: PlayId, kind: BigPlayKind },
   Live: {},
-  /** A live game stopped, when it is likely back, and what was at stake when it stopped. */
-  Break: { reason: reasons, expectedEnd: Schema.DateTimeUtcFromString, during: Schema.optional(Stakes) },
+  /** A live game stopped, when it is likely back, what was at stake when it stopped, and the big play just before. */
+  Break: {
+    reason: reasons,
+    expectedEnd: Schema.DateTimeUtcFromString,
+    during: Schema.optional(Stakes),
+    after: Schema.optional(Schema.Struct({ play: PlayId, kind: BigPlayKind }))
+  },
   Upcoming: {},
   Final: {}
 })
@@ -67,7 +72,10 @@ const cases = Schema.TaggedUnion({
  * hold, with what commentary and prompts need of it.
  */
 export const Moment = Object.assign(cases, {
-  /** Higher precedence first: a big play, a break, a scoring threat, crunch time, live play, then not live. */
+  /**
+   * Higher precedence first: a big play, a break, a scoring threat, crunch time, live play, then not live. It governs
+   * what holds in `settled`; `momentOf` itself lets a break win over a big play and carry it.
+   */
   precedence: Order.mapInput(Order.Number, (moment: typeof cases.Type) => rank[moment._tag])
 })
 export type Moment = typeof cases.Type

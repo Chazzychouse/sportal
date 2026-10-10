@@ -23,10 +23,7 @@ export const display: Atom.Writable<Display, DisplayInput> = Atom.writable(
       for (const command of step.commands) {
         ctx.set(DisplayScreen.screen, command)
         if (Option.isNone(ctx.get(DisplayScreen.rejected)))
-          ctx.set(
-            AutopilotState.autopilot,
-            AutopilotInput.Commanded({ command, screen: ctx.get(DisplayScreen.screen) })
-          )
+          ctx.set(AutopilotState.autopilot, AutopilotInput.Commanded({ command }))
       }
     })
   }

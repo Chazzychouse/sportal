@@ -134,18 +134,25 @@ Provider and Source are the two words most likely to be swapped. Provider is alw
 
 | Term | Meaning | Not |
 | --- | --- | --- |
-| **Moment** | What kind of thing is happening in a game now — a big play, a break, a scoring threat (red zone), crunch time, live play, upcoming, or final — one per game, the highest in precedence of those that hold, in that order; `Moment` in `packages/domain/src/Moment.ts`. | event, state |
+| **Moment** | What kind of thing is happening in a game now — a big play, a break, a scoring threat (red zone), crunch time, live play, upcoming, or final — one per game, a break winning over a big play (and carrying it) and otherwise the highest in precedence of those that hold; `Moment` in `packages/domain/src/Moment.ts`. | event, state |
 | **Break** | A live game stopped: halftime, a delay, the end of a period, the two-minute warning, a timeout, a review or an injury its latest play names, the gap from a score to the next kickoff, the kickoff after a score (the double dip), a possession change, or a stall; the `Break` moment, with its `BreakReason`, when it is likely back (`expectedEnd`, from the reason's typical length), and what was at stake when it stopped (`during`). Inferred from the data, never the video. | commercial, lull |
 | **Stall** | A live game in play that has not moved for 90 s, by when the Hub sees it: no new play, and the same status, period, clock and score; a break of last resort. | lull |
 | **Double dip** | The break after the kickoff that follows a score, the second of the two the score brings. | |
 | **Classification** | A game's moment, since when, and its score 0–100 with the points each part gave it; `Classification` in `packages/domain/src/Classification.ts`. | rating, watchability |
 | **Matchup prior** | What a game promises before it starts: the mean of how close its line is, how highly its teams are ranked, and how often they have won. It fades as the game is played. | |
 | **Classifier** | The pure fold that classifies the slate's games, stepped by the Director after each take and when a held moment runs out; it keeps each game's pregame line, its big play for a minute, when each game last moved (its stall clock), and its moment, which holds 20 s before a lower one replaces it. `Classifier` in `packages/domain/src/Classifier.ts`. | analyzer, scorer |
-| **Autopilot** | A Display's follower of the classifications: promotes the best moment into the main tile and moves the sound with it, fits the layout to the games worth showing (never past home's), then goes home. Off by default; your commands win. | director, auto-switcher |
-| **Home** | What you chose: the main tile's game, the game whose sound is on, and the layout (the ceiling), taken when the autopilot is turned on and after each command you send, the layout on each `SetLayout`. | default, base |
-| **Away** | A game the autopilot moved the main tile or sound to, held at least 30 s unless it stops. | jump, cut |
+| **Autopilot** | A Display's follower of the classifications: shows the best game by its rank in the main tile, the sound on it, and fits the layout under the ceiling. Off by default; your commands win. | director, auto-switcher |
+| **Rank** | How worth showing the autopilot finds a game, best first (`Rank` in `apps/web/src/autopilot/Ranking.ts`): a red zone, crunch time, a big play, live play, a break, not live; ties go to the higher score, then the lower tile. | priority, ranking |
+| **Ranked** | A game on a tile with its rank and score, as a step saw it. | |
+| **Decision** | What one step of the autopilot decided and why, for its log: off, frozen (the Screen soloed), or stepped, with the ranked games it saw and what it did with the layout, the main tile and the sound; `Decision` in `apps/web/src/autopilot/Decision.ts`. | verdict |
+| **LayoutDecision** | What a step did with the layout: fitted it from one to another, kept it, left it to you until a time, or had no ceiling to fit under. | |
+| **MainDecision** | What a step did with the main tile: promoted a game over the one there (it outranks it, or the one there stopped), or kept the one there, for a StayReason. | |
+| **StayReason** | Why the main tile kept its game: it is the best, nothing ranks higher, its dwell has time left, it is yours, or nothing is live. | |
+| **SoundDecision** | Where a step left the sound: on the main tile's game, or yours until a time. | |
+| **Step** | One step of the autopilot: the next autopilot, the commands to send in order, and its Decision; `Step` in `apps/web/src/autopilot/Autopilot.ts`. | tick |
+| **Dwell** | The 30 s the main tile's game holds the tile against a game in a higher rank, unless it stops. | hold |
 | **Suspension** | The 3 min a command you send keeps the autopilot off the main tile, the sound or the layout it touched. | pause, lock |
-| **Ceiling** | The layout you chose, the autopilot's home layout: it fits the layout down from it as games end and back up to it as they start, never past. | max layout |
+| **Ceiling** | The layout you chose (when you turn the autopilot on, and each one you set): the autopilot fits the layout down from it as games end and back up to it as they start, never past. | max layout |
 | **Fit** | The autopilot's choice of layout and tile order: the smallest layout on the ceiling's ladder with a slot for the main tile and each other game in progress or just over. | auto-layout |
 
 ## Planned
