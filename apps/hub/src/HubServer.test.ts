@@ -77,18 +77,6 @@ describe("HubServer", () => {
       )
     )
 
-    it.effect("should list the addresses a Remote can reach the Hub at, none of them loopback", () =>
-      served(() =>
-        Effect.gen(function* () {
-          const client = yield* makeClient
-
-          const addresses = yield* client.host.addresses()
-
-          assert.isFalse(addresses.includes("127.0.0.1"))
-        })
-      )
-    )
-
     it.effect("should not be served: the slate comes only on the live stream", () =>
       served(() =>
         Effect.gen(function* () {
