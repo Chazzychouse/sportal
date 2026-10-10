@@ -24,7 +24,7 @@ import {
 } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/http"
 import * as Socket from "effect/socket/Socket"
-import * as HubStopping from "../../HubStopping.ts"
+import { loggedUnlessStopping } from "../../Shutdown.ts"
 import * as FastCastMessage from "./FastCastMessage.ts"
 
 /**
@@ -330,7 +330,7 @@ const silence = "45 seconds"
 /** The end of the live feed, logged unless the Hub is stopping; nothing follows it, so `frames` never ends. */
 function stopped(cause: Cause.Cause<ProviderUnavailable>): Stream.Stream<never> {
   const logged = Effect.failCause(cause).pipe(
-    HubStopping.loggedUnlessStopping(
+    loggedUnlessStopping(
       "FastCast: the live feed stopped; only the poll reaches the slate until the Hub restarts",
       "the feed's stream ended"
     ),

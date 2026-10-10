@@ -100,10 +100,8 @@ const liveHandlers = HttpApiBuilder.group(
   Effect.fn(function* (handlers) {
     const messages = yield* liveMessages
     return handlers.handleAll({
-      // Every connection reads the one `messages` stream.
       stream: () =>
         Effect.sync(() => {
-          // `tick` emits once at the start; only the later ticks are wanted.
           const keepAlive = Stream.tick("20 seconds").pipe(
             Stream.drop(1),
             Stream.map(() => ({ event: "keep-alive", data: "" }) as const)
@@ -118,11 +116,6 @@ const liveHandlers = HttpApiBuilder.group(
   })
 )
 
-/**
- * The live stream's messages, built once for every connection: the slate, and each game's availability as of when
- * it is sent, first as it is, then once each burst of slate changes settles and every 30 seconds, so a guide read or
- * a guide going stale shows, unless what it sends is the same. A connection joining gets the last one at once.
- */
 const liveMessages = Effect.gen(function* () {
   const director = yield* Director
   const source = yield* Source

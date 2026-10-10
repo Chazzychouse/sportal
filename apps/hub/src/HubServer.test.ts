@@ -5,7 +5,7 @@ import { SportalApi } from "@sportal/api/SportalApi"
 import { GameId, Network } from "@sportal/domain/Game"
 import { PlayId } from "@sportal/domain/Play"
 import { broadcast, play, snapshot, team } from "@sportal/domain/TestGame"
-import { type Cause, DateTime, Effect, Layer, Queue, Schema, Stream } from "effect"
+import { Cause, DateTime, Effect, Exit, Layer, Queue, Schema, Stream } from "effect"
 import { HttpClient } from "effect/http"
 import { HttpApiClient } from "effect/http-api"
 import { TestClock } from "effect/testing"
@@ -13,6 +13,7 @@ import { Director } from "./Director.ts"
 import { HubConfig } from "./HubConfig.ts"
 import * as HubServer from "./HubServer.ts"
 import { Delivery, Provider } from "./provider/Provider.ts"
+import { isStopping } from "./Shutdown.ts"
 import { Source } from "./source/Source.ts"
 import * as TestHub from "./TestHub.ts"
 
@@ -443,10 +444,39 @@ describe("HubServer", () => {
   })
 })
 
-/**
- * Runs `test`, scoped, against the Hub's routes served on an ephemeral port, with an HTTP client pointed at them, over
- * a provider whose frames are what the test offers `frames`, against `source` (YouTube TV unless given).
- */
+describe("isStopping", () => {
+  it.each([
+    ["an interrupt", Exit.failCause(Cause.interrupt())],
+    ["a stream's end", Exit.failCause(Cause.fail(Cause.Done()))],
+    [
+      "an interrupt beside a stream's end",
+      Exit.failCause(Cause.combine(Cause.interrupt(), Cause.fail(Cause.Done())))
+    ]
+  ])("should read %s as stopping", (_name, exit) => {
+    const stopping = isStopping(exit)
+
+    assert.isTrue(stopping)
+  })
+
+  it.each([
+    ["a defect", Exit.failCause(Cause.combine(Cause.fail(Cause.Done()), Cause.die("boom")))],
+    ["a failure", Exit.failCause(Cause.combine(Cause.fail(Cause.Done()), Cause.fail("refused")))]
+  ])("should not read a stream's end beside %s as stopping", (_name, exit) => {
+    const stopping = isStopping(exit)
+
+    assert.isFalse(stopping)
+  })
+
+  it.each([
+    ["a success", Exit.void],
+    ["a defect alone", Exit.die("boom")]
+  ])("should not read %s as stopping", (_name, exit) => {
+    const stopping = isStopping(exit)
+
+    assert.isFalse(stopping)
+  })
+})
+
 function served<A, E, R>(
   test: (frames: TestHub.Frames) => Effect.Effect<A, E, R>,
   source: Layer.Layer<Source> = Source.layerYouTubeTv

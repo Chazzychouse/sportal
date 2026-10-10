@@ -5,7 +5,6 @@ import { LiveMessageJson } from "./LiveMessage.ts"
 
 export class SportalApi extends HttpApi.make("sportal")
   .add(
-    // A guide the shell read from the source's guide page, passed on unchanged; the Hub decodes it.
     HttpApiGroup.make("guide").add(
       HttpApiEndpoint.post("read", "/guide", {
         payload: Schema.Struct({ guide: Schema.String }),
@@ -15,7 +14,6 @@ export class SportalApi extends HttpApi.make("sportal")
     )
   )
   .add(
-    // Whether the Hub is up.
     HttpApiGroup.make("host").add(
       HttpApiEndpoint.get("health", "/health", {
         success: Schema.Struct({ version: Schema.String, startedAt: Schema.DateTimeUtcFromString })
@@ -23,9 +21,6 @@ export class SportalApi extends HttpApi.make("sportal")
     )
   )
   .add(
-    // The slate, and each game's availability, then every change to either, as server-sent events. A `keep-alive`
-    // event with no data comes every 20 seconds, so proxies that close idle connections leave a quiet stream open;
-    // an EventSource's `onmessage` does not see it.
     HttpApiGroup.make("live").add(
       HttpApiEndpoint.get("stream", "/live", {
         success: HttpApiSchema.WithHeaders(

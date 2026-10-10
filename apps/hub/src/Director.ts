@@ -2,8 +2,8 @@ import type { GameSnapshot, GameStatus, Progress } from "@sportal/domain/Game"
 import type { Play } from "@sportal/domain/Play"
 import { Slate, SlateChange } from "@sportal/domain/Slate"
 import { Cause, Context, DateTime, Effect, Layer, Metric, Stream, SubscriptionRef } from "effect"
-import * as HubStopping from "./HubStopping.ts"
 import { Delivery, Provider } from "./provider/Provider.ts"
+import { loggedUnlessStopping } from "./Shutdown.ts"
 
 /**
  * The Hub's one holder of what is going on: the day's slate, taken from each frame its provider decodes as it
@@ -45,7 +45,7 @@ export class Director extends Context.Service<
       yield* Effect.forkScoped(
         provider.deliveries.pipe(
           Stream.runForEach(take),
-          HubStopping.loggedUnlessStopping(
+          loggedUnlessStopping(
             "Director: the provider's frames stopped; the slate stays as it is until the Hub restarts",
             "the provider's frames ended"
           )

@@ -1,7 +1,8 @@
 import type { GameId, GameSnapshot } from "@sportal/domain/Game"
 import type { LeagueId } from "@sportal/domain/League"
 import type { Play } from "@sportal/domain/Play"
-import { type Cause, Context, Data, Layer, Queue, Stream } from "effect"
+import { type Cause, Context, Data, Effect, Exit, Layer, Queue, Stream } from "effect"
+import { isStopping } from "../Shutdown.ts"
 
 /**
  * A provider of game data. It runs itself: it decides when to poll, what to follow on its push, and when to reconnect,
