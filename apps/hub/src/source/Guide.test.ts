@@ -86,7 +86,7 @@ describe("Guide#availabilityOf", () => {
     })
   })
 
-  it("should be upcoming on a live channel while the game has not started, however soon its airing begins", () => {
+  it("should be upcoming on a live channel until its airing begins, however soon that is", () => {
     const arkansasAtTexasAM = snapshot({
       kickoff: DateTime.makeUnsafe("2026-10-03T20:45:00Z"),
       away: { team: team("ARK", "fbs", { name: "Arkansas Razorbacks", location: "Arkansas" }), score: 0 },
@@ -273,12 +273,12 @@ describe("Guide#availabilityOf", () => {
     assert.strictEqual(availability._tag, "Carried")
   })
 
-  it("should be upcoming on a live channel at its airing's begin while the game has not started", () => {
+  it("should be carried on a live channel at its airing's begin, before the game has started", () => {
     const scheduled = snapshot({ ...ohioStateAtIowa, status: "scheduled", kickoff: readAt })
 
     const availability = airingBeginning(readAt).availabilityOf(scheduled, readAt)
 
-    assert.strictEqual(availability._tag, "Upcoming")
+    assert.strictEqual(availability._tag, "Carried")
   })
 
   it("should not carry an unmatched kickoff exactly at the guide's reach", () => {
@@ -362,8 +362,8 @@ describe("Guide#availabilityOf on a channel that carries a network", () => {
     })
   })
 
-  it("should be upcoming on the network's channel at kickoff until the game has started, even past its kickoff", () => {
-    const now = DateTime.add(kickoff, { minutes: 5 })
+  it("should be upcoming on the network's channel until kickoff", () => {
+    const now = DateTime.subtract(kickoff, { minutes: 5 })
 
     const availability = lineup.availabilityOf(thursdayNight, now)
 
@@ -372,6 +372,14 @@ describe("Guide#availabilityOf on a channel that carries a network", () => {
       channel: Option.some("Prime Video"),
       begin: Option.some(kickoff)
     })
+  })
+
+  it("should be carried on the network's channel past kickoff, before the game has started", () => {
+    const now = DateTime.add(kickoff, { minutes: 5 })
+
+    const availability = lineup.availabilityOf(thursdayNight, now)
+
+    assert.strictEqual(availability._tag, "Carried")
   })
 
   it("should not carry a game that is over on the network's channel", () => {

@@ -39,8 +39,8 @@ export class Guide extends Schema.Class<Guide>("sportal/Guide")({
    * kickoff or is on now while the game is under way. Of several, the one on a channel named for one of the game's
    * networks wins, then the first in the guide. With no such airing, a channel that carries one of the game's networks
    * shows it as if it aired from kickoff, until the game is over. Either is carried once its channel is on the air and
-   * the game has started; until then it is upcoming. With neither, a kickoff past the reach of a
-   * guide that lists airings is upcoming, and any other game is not carried.
+   * either its airing has begun, so the pregame shows, or the game has started; until then it is upcoming. With
+   * neither, a kickoff past the reach of a guide that lists airings is upcoming, and any other game is not carried.
    */
   availabilityOf(game: GameSnapshot, now: DateTime.Utc): ChannelAvailability {
     const nearKickoff = {
@@ -54,13 +54,14 @@ export class Guide extends Schema.Class<Guide>("sportal/Guide")({
         matches.find((candidate) =>
           game.broadcasts.some(({ network }) => namesNetwork(this.channelOf(candidate).name, network))
         ) ?? first
-      return this.from(this.channelOf(airing), airing.begin, game)
+      return this.from(this.channelOf(airing), airing.begin, game, now)
     }
 
     const carrier = this.channels.find((channel) =>
       game.broadcasts.some(({ network }) => channel.network === network)
     )
-    if (carrier !== undefined && game.progress() !== "over") return this.from(carrier, game.kickoff, game)
+    if (carrier !== undefined && game.progress() !== "over")
+      return this.from(carrier, game.kickoff, game, now)
 
     const pastReach = DateTime.isGreaterThan(game.kickoff, DateTime.addDuration(this.readAt, Guide.reach))
     if (this.airings.length > 0 && pastReach)
@@ -70,13 +71,18 @@ export class Guide extends Schema.Class<Guide>("sportal/Guide")({
     return { _tag: "NotCarried", why: streamingOnly ? "StreamingOnly" : "NotInGuide" }
   }
 
-  /** Carried on `channel` once it is on the air and `game` has started; else upcoming from `begin`. */
+  /**
+   * Carried on `channel` once it is on the air and either `now` has reached `begin` or `game` has started; else
+   * upcoming from `begin`.
+   */
   private from(
     channel: { readonly name: string; readonly live?: StreamLocator | undefined },
     begin: DateTime.Utc,
-    game: GameSnapshot
+    game: GameSnapshot,
+    now: DateTime.Utc
   ): ChannelAvailability {
-    return channel.live !== undefined && game.progress() !== "upcoming"
+    const begun = DateTime.isGreaterThanOrEqualTo(now, begin) || game.progress() !== "upcoming"
+    return channel.live !== undefined && begun
       ? { _tag: "Carried", channel: { name: channel.name, source: this.source, locator: channel.live } }
       : { _tag: "Upcoming", channel: Option.some(channel.name), begin: Option.some(begin) }
   }
