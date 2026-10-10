@@ -87,39 +87,49 @@ describe("FootballPlay", () => {
   })
 })
 
-describe("Rush#offense", () => {
-  it("should be the play's team", () => {
+describe("FootballPlay.offense", () => {
+  it("should be the team a play that gains yards names", () => {
     const rush = new Rush({ ...gained, team: away, touchdown: false })
 
-    assert.strictEqual(rush.offense(), away)
+    assert.strictEqual(Play.offense(rush), away)
   })
 
   it("should fall back to the start spot's team", () => {
     const { team: _, ...unattributed } = gained
     const rush = new Rush({ ...unattributed, touchdown: false })
 
-    assert.strictEqual(rush.offense(), home)
+    assert.strictEqual(Play.offense(rush), home)
+  })
+
+  it("should be the start spot's team, not the caller, for a timeout", () => {
+    const timeout = new Timeout({ ...fields, team: away })
+
+    assert.strictEqual(Play.offense(timeout), home)
   })
 })
 
-describe("Sack#lostYards", () => {
-  it("should be true", () => {
+describe("FootballPlay.lostYards", () => {
+  it("should be true for a sack", () => {
     const sack = new Sack({ ...gained, yards: 0, fumbleLost: false })
 
-    assert.isTrue(sack.lostYards())
+    assert.isTrue(Play.lostYards(sack))
   })
-})
 
-describe("Rush#lostYards", () => {
   it("should be true below zero yards", () => {
     const rush = new Rush({ ...gained, yards: -2, touchdown: false })
 
-    assert.isTrue(rush.lostYards())
+    assert.isTrue(Play.lostYards(rush))
   })
 
   it("should be false at zero", () => {
     const rush = new Rush({ ...gained, yards: 0, touchdown: false })
 
-    assert.isFalse(rush.lostYards())
+    assert.isFalse(Play.lostYards(rush))
+  })
+
+  it("should be false for a play that gains no yards", () => {
+    const stoppage = new Stoppage({ ...fields, kind: "officialTimeout" })
+
+    assert.isFalse(Play.lostYards(stoppage))
   })
 })

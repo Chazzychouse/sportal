@@ -44,208 +44,78 @@ export class Rush extends Schema.TaggedClass<Rush>()("Rush", {
   ...common,
   ...gained,
   touchdown: Schema.Boolean
-}) {
-  /** The team with the ball at the snap. */
-  offense(): TeamId {
-    return offenseOf(this)
-  }
-
-  /** Whether the play went backwards. */
-  lostYards(): boolean {
-    return lostYardsOf(this)
-  }
-}
+}) {}
 
 /** A caught pass. */
 export class Completion extends Schema.TaggedClass<Completion>()("Completion", {
   ...common,
   ...gained,
   touchdown: Schema.Boolean
-}) {
-  /** The team with the ball at the snap. */
-  offense(): TeamId {
-    return offenseOf(this)
-  }
-
-  /** Whether the play went backwards. */
-  lostYards(): boolean {
-    return lostYardsOf(this)
-  }
-}
+}) {}
 
 /** A pass no one caught. */
 export class Incompletion extends Schema.TaggedClass<Incompletion>()("Incompletion", {
   ...common,
   ...gained
-}) {
-  /** The team with the ball at the snap. */
-  offense(): TeamId {
-    return offenseOf(this)
-  }
-
-  /** Whether the play went backwards. */
-  lostYards(): boolean {
-    return lostYardsOf(this)
-  }
-}
+}) {}
 
 /** A pass the defense caught, and how far it was run back. */
 export class Interception extends Schema.TaggedClass<Interception>()("Interception", {
   ...common,
   ...gained,
   return: Return
-}) {
-  /** The team with the ball at the snap. */
-  offense(): TeamId {
-    return offenseOf(this)
-  }
-
-  /** Whether the play went backwards. */
-  lostYards(): boolean {
-    return lostYardsOf(this)
-  }
-}
+}) {}
 
 /** The passer tackled behind the line, and whether the defense took the ball from a fumble. */
 export class Sack extends Schema.TaggedClass<Sack>()("Sack", {
   ...common,
   ...gained,
   fumbleLost: Schema.Boolean
-}) {
-  /** The team with the ball at the snap. */
-  offense(): TeamId {
-    return offenseOf(this)
-  }
-
-  /** Whether the play went backwards: always, for a sack. */
-  lostYards(): boolean {
-    return lostYardsOf(this)
-  }
-}
+}) {}
 
 /** A fumble, and who recovered it, when the feed says. */
 export class Fumble extends Schema.TaggedClass<Fumble>()("Fumble", {
   ...common,
   ...gained,
   recovery: Schema.Literals(["unknown", "own", "opponent", "touchdown"])
-}) {
-  /** The team with the ball at the snap. */
-  offense(): TeamId {
-    return offenseOf(this)
-  }
-
-  /** Whether the play went backwards. */
-  lostYards(): boolean {
-    return lostYardsOf(this)
-  }
-}
+}) {}
 
 /** A try for two points after a touchdown, passed or run. */
 export class TwoPointTry extends Schema.TaggedClass<TwoPointTry>()("TwoPointTry", {
   ...common,
   ...gained,
   by: Schema.Literals(["pass", "rush"])
-}) {
-  /** The team with the ball at the snap. */
-  offense(): TeamId {
-    return offenseOf(this)
-  }
-
-  /** Whether the play went backwards. */
-  lostYards(): boolean {
-    return lostYardsOf(this)
-  }
-}
+}) {}
 
 /** A kickoff, and whether it was returned for a touchdown. */
 export class Kickoff extends Schema.TaggedClass<Kickoff>()("Kickoff", {
   ...common,
   ...gained,
   returnTouchdown: Schema.Boolean
-}) {
-  /** The team with the ball at the snap. */
-  offense(): TeamId {
-    return offenseOf(this)
-  }
-
-  /** Whether the play went backwards. */
-  lostYards(): boolean {
-    return lostYardsOf(this)
-  }
-}
+}) {}
 
 /** A punt, and how far it was run back. */
-export class Punt extends Schema.TaggedClass<Punt>()("Punt", { ...common, ...gained, return: Return }) {
-  /** The team with the ball at the snap. */
-  offense(): TeamId {
-    return offenseOf(this)
-  }
-
-  /** Whether the play went backwards. */
-  lostYards(): boolean {
-    return lostYardsOf(this)
-  }
-}
+export class Punt extends Schema.TaggedClass<Punt>()("Punt", { ...common, ...gained, return: Return }) {}
 
 /** A field goal attempt, and how it ended. */
 export class FieldGoal extends Schema.TaggedClass<FieldGoal>()("FieldGoal", {
   ...common,
   ...gained,
   result: Schema.Literals(["good", "missed", "blocked"])
-}) {
-  /** The team with the ball at the snap. */
-  offense(): TeamId {
-    return offenseOf(this)
-  }
-
-  /** Whether the play went backwards. */
-  lostYards(): boolean {
-    return lostYardsOf(this)
-  }
-}
+}) {}
 
 /** A kick for the point after a touchdown, and whether it was good. */
 export class ExtraPoint extends Schema.TaggedClass<ExtraPoint>()("ExtraPoint", {
   ...common,
   ...gained,
   good: Schema.Boolean
-}) {
-  /** The team with the ball at the snap. */
-  offense(): TeamId {
-    return offenseOf(this)
-  }
-
-  /** Whether the play went backwards. */
-  lostYards(): boolean {
-    return lostYardsOf(this)
-  }
-}
+}) {}
 
 /** A safety. */
-export class Safety extends Schema.TaggedClass<Safety>()("Safety", { ...common, ...gained }) {
-  /** The team with the ball at the snap. */
-  offense(): TeamId {
-    return offenseOf(this)
-  }
-
-  /** Whether the play went backwards. */
-  lostYards(): boolean {
-    return lostYardsOf(this)
-  }
-}
+export class Safety extends Schema.TaggedClass<Safety>()("Safety", { ...common, ...gained }) {}
 
 /** A penalty enforced without a play. */
-export class Penalty extends Schema.TaggedClass<Penalty>()("Penalty", { ...common, ...gained }) {
-  /** The team with the ball at the snap. */
-  offense(): TeamId {
-    return offenseOf(this)
-  }
-
-  /** Whether the play went backwards. */
-  lostYards(): boolean {
-    return lostYardsOf(this)
-  }
-}
+export class Penalty extends Schema.TaggedClass<Penalty>()("Penalty", { ...common, ...gained }) {}
 
 /** A team's timeout: `team` is the team that called it, when something says. */
 export class Timeout extends Schema.TaggedClass<Timeout>()("Timeout", {
@@ -293,12 +163,14 @@ const cases = Schema.Union([
 
 /**
  * Every football play, as the game's play-by-play lists it: a tagged union of its cases, each keeping what the feed's
- * play type says, with `.match`, `.guards`, `.cases`, `order`, and `gainsYards`.
+ * play type says, with `.match`, `.guards`, `.cases`, `order`, `gainsYards`, `offense`, and `lostYards`.
  */
 export const FootballPlay = Object.assign(cases, {
   /** By `sequence`. */
   order: Order.mapInput(Order.Number, (play: typeof cases.Type) => play.sequence),
-  gainsYards
+  gainsYards,
+  offense,
+  lostYards
 })
 export type FootballPlay = typeof FootballPlay.Type
 
@@ -327,10 +199,12 @@ function gainsYards<P extends { readonly _tag: (typeof cases.Type)["_tag"] }>(
   return "yards" in cases.cases[play._tag].fields
 }
 
-function offenseOf(play: { readonly team?: TeamId | undefined; readonly start: typeof Spot.Type }): TeamId {
-  return play.team ?? play.start.team
+/** The team with the ball at the snap: the team a play that gains yards names, else its start spot's. */
+function offense(play: typeof cases.Type): TeamId {
+  return (gainsYards(play) ? play.team : undefined) ?? play.start.team
 }
 
-function lostYardsOf(play: { readonly _tag: string; readonly yards: number }): boolean {
-  return FootballPlay.guards.Sack(play) || play.yards < 0
+/** Whether `play` gains yards and went backwards: a sack always does. */
+function lostYards(play: typeof cases.Type): boolean {
+  return gainsYards(play) && (cases.guards.Sack(play) || play.yards < 0)
 }

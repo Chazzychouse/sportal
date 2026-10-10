@@ -47,8 +47,7 @@
           "situation": {
             "distance": 0,
             "homeTimeouts": 3,
-            "awayTimeouts": 1,
-            "lastPlay": "(07:28) No Huddle-Shotgun #2 M.Stokes pass complete deep left to #5 S.Burnside caught at CLT00, for 24 yards to the CLT00 TOUCHDOWN, clock 07:21, 1ST DOWN. The previous play is under automatic review - \"\""
+            "awayTimeouts": 1
           }
         },
         {
@@ -99,8 +98,7 @@
             "down": 1,
             "distance": 10,
             "homeTimeouts": 3,
-            "awayTimeouts": 3,
-            "lastPlay": "(15:00) #92 A.Burrell kickoff 65 yards to the ND 00, Touchback"
+            "awayTimeouts": 3
           }
         },
         {
@@ -148,8 +146,7 @@
             "down": 1,
             "distance": 10,
             "homeTimeouts": 3,
-            "awayTimeouts": 3,
-            "lastPlay": "(15:00) #90 L.Quinn kickoff 65 yards to the State00, Touchback"
+            "awayTimeouts": 3
           }
         },
         {
@@ -198,8 +195,7 @@
             "distance": 13,
             "yardLine": 13,
             "homeTimeouts": 3,
-            "awayTimeouts": 3,
-            "lastPlay": "(11:27) Shotgun #12 K.Jenkins pass incomplete short left to #9 W.Charles thrown to HOU00 broken up by #6 J.Allen PENALTY HOU Offside (#10 L.McCutchin) 5 yards from HOU18 to HOU13. NO PLAY"
+            "awayTimeouts": 3
           }
         },
         {
@@ -286,8 +282,7 @@
             "down": 1,
             "distance": 10,
             "homeTimeouts": 3,
-            "awayTimeouts": 3,
-            "lastPlay": "(15:00) #98 D.Efird kickoff 65 yards to the MTSU00 fair catch by #0 S.Fleming at MTSU00"
+            "awayTimeouts": 3
           }
         },
         {
@@ -332,8 +327,7 @@
           "situation": {
             "distance": 14,
             "homeTimeouts": 3,
-            "awayTimeouts": 3,
-            "lastPlay": "Timeout Iowa State, clock 12:38"
+            "awayTimeouts": 3
           }
         },
         {
@@ -381,8 +375,7 @@
             "distance": 3,
             "yardLine": 27,
             "homeTimeouts": 3,
-            "awayTimeouts": 3,
-            "lastPlay": "(12:56) No Huddle-Shotgun #8 D.Warren pass complete short right to #26 S.Irvin caught at WAKE31, for 8 yards to the WAKE27 (#23 V.Firenze; #5 D.Patterson)"
+            "awayTimeouts": 3
           }
         },
         {
@@ -430,8 +423,7 @@
             "distance": 10,
             "yardLine": 40,
             "homeTimeouts": 3,
-            "awayTimeouts": 3,
-            "lastPlay": "(13:19) No Huddle-Shotgun #13 M.Outten rush middle for 7 yards gain to the UConn40 (#13 J.Price; #4 B.Moore), 1ST DOWN"
+            "awayTimeouts": 3
           }
         },
         {
@@ -2503,8 +2495,7 @@
             "distance": 1,
             "yardLine": 58,
             "homeTimeouts": 3,
-            "awayTimeouts": 2,
-            "lastPlay": " J.Allen pass short left to D.Knox to BUF 42 for 8 yards (C.Elliss)."
+            "awayTimeouts": 2
           }
         },
         {
@@ -2550,8 +2541,7 @@
             "down": 1,
             "distance": 10,
             "homeTimeouts": 3,
-            "awayTimeouts": 2,
-            "lastPlay": "J.Sanders kicks 59 yards from NYJ 35 to CHI 6. Z.Thomas to CHI 29 for 23 yards (I.Davis)."
+            "awayTimeouts": 2
           }
         },
         {
@@ -2599,8 +2589,7 @@
             "distance": 10,
             "yardLine": 10,
             "homeTimeouts": 2,
-            "awayTimeouts": 3,
-            "lastPlay": " (Shotgun) T.Lawrence pass incomplete short middle to P.Washington (B.Carter)."
+            "awayTimeouts": 3
           }
         },
         {
@@ -2648,8 +2637,7 @@
             "distance": 8,
             "yardLine": 81,
             "homeTimeouts": 3,
-            "awayTimeouts": 3,
-            "lastPlay": " J.Brissett pass short right to T.McBride to ARZ 19 for 2 yards (G.Newsome)."
+            "awayTimeouts": 3
           }
         },
         {
@@ -2697,8 +2685,7 @@
             "distance": 10,
             "yardLine": 96,
             "homeTimeouts": 3,
-            "awayTimeouts": 3,
-            "lastPlay": "Official Timeout at 06:57."
+            "awayTimeouts": 3
           }
         },
         {
@@ -2743,8 +2730,7 @@
           "situation": {
             "distance": 0,
             "homeTimeouts": 3,
-            "awayTimeouts": 1,
-            "lastPlay": "Official Timeout at 05:13."
+            "awayTimeouts": 1
           }
         },
         {
@@ -2792,8 +2778,7 @@
             "distance": 10,
             "yardLine": 86,
             "homeTimeouts": 3,
-            "awayTimeouts": 2,
-            "lastPlay": "(Shotgun) L.Jackson pass short right to M.Andrews to BLT 14 for 6 yards (A.Hooker)."
+            "awayTimeouts": 2
           }
         },
         {
@@ -2841,8 +2826,7 @@
             "distance": 10,
             "yardLine": 83,
             "homeTimeouts": 3,
-            "awayTimeouts": 2,
-            "lastPlay": "Official Timeout at 08:13."
+            "awayTimeouts": 2
           }
         },
         {

@@ -1,9 +1,12 @@
 import { Schema } from "effect"
-import { StreamLocator } from "./Stream.ts"
 
 /** The sources Sportal can play video from, by the name people know them by. */
 export const SourceName = Schema.Literals(["YouTube TV", "Twitch"])
 export type SourceName = typeof SourceName.Type
+
+/** What a Display must load to play a stream: for now, always a web view's address. */
+export const StreamLocator = Schema.TaggedUnion({ WebView: { url: Schema.String } })
+export type StreamLocator = typeof StreamLocator.Type
 
 /** A channel as a source names it ("News 3", "ESPN2"), and the address that plays it live. */
 export const Channel = Schema.Struct({ name: Schema.String, source: SourceName, locator: StreamLocator })

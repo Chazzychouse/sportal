@@ -8,8 +8,7 @@ export class Situation extends Schema.Class<Situation>("sportal/Situation")({
   /** Yards to the goal the team with the ball attacks; absent when no team has the ball. */
   yardLine: Schema.optional(Schema.Int),
   homeTimeouts: Schema.Int,
-  awayTimeouts: Schema.Int,
-  lastPlay: Schema.optional(Schema.String)
+  awayTimeouts: Schema.Int
 }) {
   /** The ball is at the opponent's 20 or closer. */
   inRedZone(): boolean {
