@@ -33,7 +33,7 @@ describe("LiveStream.live", () => {
 
       source.onerror?.()
       source.onmessage?.({ data: slateMessage([{ game: someGame, availability: [] }]) })
-      const after = yield* until((state) => state.slate.length > 0)
+      const after = yield* until((state) => state.slate.games.length > 0)
 
       assert.strictEqual(after.connection._tag, "Connecting")
     }).pipe(Effect.provide(AtomRegistry.layer))
@@ -45,7 +45,7 @@ describe("LiveStream.live", () => {
       const listening = yield* Deferred.make<void>()
       const published = yield* Atom.toStream(LiveStream.live).pipe(
         Stream.tap(() => Deferred.succeed(listening, undefined)),
-        Stream.takeUntil((state) => state.slate.length > 0),
+        Stream.takeUntil((state) => state.slate.games.length > 0),
         Stream.runCollect,
         Effect.forkChild
       )
@@ -105,10 +105,10 @@ describe("LiveStream.live", () => {
       const source = yield* opened()
 
       source.onmessage?.({ data: slateMessage([{ game: someGame, availability: [] }]) })
-      const state = yield* until((current) => current.slate.length > 0)
+      const state = yield* until((current) => current.slate.games.length > 0)
 
       assert.deepStrictEqual(
-        state.slate.map(({ snapshot }) => snapshot.id),
+        state.slate.games.map(({ snapshot }) => snapshot.id),
         [GameId.make("401")]
       )
     }).pipe(Effect.provide(AtomRegistry.layer))
@@ -125,10 +125,10 @@ describe("LiveStream.live", () => {
         })
 
         source.onmessage?.({ data: slateMessage([{ game, availability: [] }]) })
-        const state = yield* until((current) => current.slate.length > 0)
+        const state = yield* until((current) => current.slate.games.length > 0)
 
-        assert.deepStrictEqual(state.slate[0]?.plays, game.plays)
-        assert.instanceOf(state.slate[0]?.plays[1], Completion)
+        assert.deepStrictEqual(state.slate.games[0]?.plays, game.plays)
+        assert.instanceOf(state.slate.games[0]?.plays[1], Completion)
       }).pipe(Effect.provide(AtomRegistry.layer))
   )
 
@@ -139,9 +139,9 @@ describe("LiveStream.live", () => {
       const availability: ReadonlyArray<ChannelAvailability> = [{ _tag: "NotCarried", why: "StreamingOnly" }]
 
       source.onmessage?.({ data: slateMessage([{ game, availability }]) })
-      const state = yield* until((current) => current.slate.length > 0)
+      const state = yield* until((current) => current.slate.games.length > 0)
 
-      assert.deepStrictEqual(state.availability.get(GameId.make("401")), availability)
+      assert.deepStrictEqual(state.availability[GameId.make("401")], availability)
     }).pipe(Effect.provide(AtomRegistry.layer))
   )
 
@@ -152,9 +152,9 @@ describe("LiveStream.live", () => {
       const before = yield* until((state) => state.connection._tag === "Connected")
 
       source.onmessage?.({ data: "{not json" })
-      source.onmessage?.({ data: JSON.stringify({ _tag: "SlateChanged", games: "nope" }) })
+      source.onmessage?.({ data: JSON.stringify({ _tag: "SlateChanged", slate: "nope", availability: {} }) })
       source.onmessage?.({ data: slateMessage([{ game: someGame, availability: [] }]) })
-      const after = yield* until((state) => state.slate.length > 0)
+      const after = yield* until((state) => state.slate.games.length > 0)
 
       assert.strictEqual(after.connection, before.connection)
     }).pipe(Effect.provide(AtomRegistry.layer))

@@ -24,7 +24,7 @@ describe("DisplayScreen.screen", () => {
     Effect.gen(function* () {
       const source = yield* opened()
       source.onmessage?.({ data: slateMessage([{ game, availability: [onEspn] }]) })
-      yield* untilLive((live) => live.slate.length > 0)
+      yield* untilLive((live) => live.slate.games.length > 0)
 
       yield* Atom.set(DisplayScreen.screen, { _tag: "Assign", tile: 0, game: id })
 
@@ -54,7 +54,7 @@ describe("DisplayScreen.screen", () => {
     Effect.gen(function* () {
       const source = yield* opened()
       source.onmessage?.({ data: slateMessage([{ game, availability: [] }]) })
-      yield* untilLive((live) => live.slate.length > 0)
+      yield* untilLive((live) => live.slate.games.length > 0)
       yield* Atom.set(DisplayScreen.screen, { _tag: "Assign", tile: 0, game: id })
 
       source.onmessage?.({ data: slateMessage([{ game, availability: [onEspn] }]) })

@@ -1,7 +1,8 @@
 import { LiveMessageJson } from "@sportal/api/LiveMessage"
 import type { ChannelAvailability } from "@sportal/domain/Channel"
 import type { Game } from "@sportal/domain/Game"
-import { Effect, Schema } from "effect"
+import { Slate } from "@sportal/domain/Slate"
+import { Effect, Record, Schema } from "effect"
 import { Atom, type AtomRegistry } from "effect/reactivity"
 import * as LiveStream from "./LiveStream.ts"
 
@@ -37,11 +38,15 @@ export class FakeEventSource {
   }
 }
 
-/** A slate message's `data`, as the Hub sends it. */
+/** A slate message's `data`, as the Hub sends it: the slate of `entries`' games, and each one's availability. */
 export function slateMessage(
-  games: ReadonlyArray<{ game: Game; availability: ReadonlyArray<ChannelAvailability> }>
+  entries: ReadonlyArray<{ game: Game; availability: ReadonlyArray<ChannelAvailability> }>
 ) {
-  return encodeLiveMessage({ _tag: "SlateChanged", games })
+  const slate = new Slate({ games: entries.map(({ game }) => game) })
+  const availability = Record.fromEntries(
+    entries.map(({ game, availability }) => [game.snapshot.id, availability] as const)
+  )
+  return encodeLiveMessage({ _tag: "SlateChanged", slate, availability })
 }
 
 const encodeLiveMessage = Schema.encodeSync(LiveMessageJson)

@@ -15,7 +15,7 @@ export const screen: Atom.Writable<Screen, ScreenCommand> = Atom.writable(
       LiveStream.live,
       ({ availability }) => {
         const current = get.once(kept)
-        const next = current.refresh((game) => Option.fromNullishOr(availability.get(game)))
+        const next = current.refresh((game) => Option.fromNullishOr(availability[game]))
         if (next !== current) get.set(kept, next)
       },
       { immediate: true }
@@ -24,7 +24,7 @@ export const screen: Atom.Writable<Screen, ScreenCommand> = Atom.writable(
   },
   (ctx, command: ScreenCommand) => {
     const { availability } = ctx.get(LiveStream.live)
-    const result = ctx.get(kept).apply(command, (game) => availability.get(game) ?? [])
+    const result = ctx.get(kept).apply(command, (game) => availability[game] ?? [])
     Result.match(result, {
       onSuccess: (next) => ctx.set(kept, next),
       onFailure: (rejection) => ctx.set(rejected, Option.some(rejection))

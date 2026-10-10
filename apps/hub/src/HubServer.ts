@@ -10,6 +10,7 @@ import {
   Option,
   type Path,
   type PlatformError,
+  Record,
   Schema,
   Sink,
   Stream
@@ -103,7 +104,7 @@ const hostHandlers = HttpApiBuilder.group(
 )
 
 /**
- * GET /api/live — the current slate, each game beside its availability, then every change to either, as server-sent
+ * GET /api/live — the slate, and each game's availability, then every change to either, as server-sent
  * events, with a comment every 20 seconds so proxies that close idle connections leave a quiet stream open. Every
  * connection reads the one `events` stream.
  */
@@ -126,7 +127,7 @@ function liveRoute(events: Stream.Stream<string, Schema.SchemaError>) {
 }
 
 /**
- * The live stream's events, built once for every connection: the slate, each game beside its availability as of when
+ * The live stream's events, built once for every connection: the slate, and each game's availability as of when
  * it is sent, first as it is, then once each burst of changes to the slate or the availability settles, unless what
  * it sends is the same; each as an SSE `data:` line. A connection joining gets the last one at once.
  */
@@ -138,11 +139,10 @@ const liveEvents = Effect.gen(function* () {
   return yield* settled(Stream.zipLatest(director.slate, source.availability)).pipe(
     Stream.mapEffect(([slate, availabilityOf]) =>
       Effect.map(DateTime.now, (now): SlateChanged => {
-        const games = slate.games.map((game) => ({
-          game: game.recent(),
-          availability: availabilityOf(game.snapshot, now)
-        }))
-        return { _tag: "SlateChanged", games }
+        const availability = Record.fromEntries(
+          slate.games.map(({ snapshot }) => [snapshot.id, availabilityOf(snapshot, now)] as const)
+        )
+        return { _tag: "SlateChanged", slate: slate.recent(), availability }
       })
     ),
     Stream.changesWith(samePublished),

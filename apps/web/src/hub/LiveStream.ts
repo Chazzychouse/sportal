@@ -1,6 +1,5 @@
-import { LiveMessage, LiveMessageJson } from "@sportal/api/LiveMessage"
-import type { ChannelAvailability } from "@sportal/domain/Channel"
-import type { Game, GameId } from "@sportal/domain/Game"
+import { LiveMessage, LiveMessageJson, type SlateChanged } from "@sportal/api/LiveMessage"
+import { Slate } from "@sportal/domain/Slate"
 import { Data, DateTime, Effect, Queue, Schema, Stream } from "effect"
 import { AsyncResult, Atom } from "effect/reactivity"
 
@@ -24,13 +23,13 @@ export const Connection = Data.taggedEnum<Connection>()
 
 interface Live {
   readonly connection: Connection
-  readonly slate: ReadonlyArray<Game>
-  /** Each game's availability from every source, by its id. */
-  readonly availability: ReadonlyMap<GameId, ReadonlyArray<ChannelAvailability>>
+  readonly slate: Slate
+  /** Each listed game's availability from every source, by its id. */
+  readonly availability: SlateChanged["availability"]
 }
 
 function initial(): Live {
-  return { connection: Connection.Connecting(), slate: [], availability: new Map() }
+  return { connection: Connection.Connecting(), slate: Slate.empty, availability: {} }
 }
 
 type SourceEvent = Data.TaggedEnum<{
@@ -77,11 +76,7 @@ function step(current: Live, event: SourceEvent): Effect.Effect<Live> {
 
 function received(live: Live, message: LiveMessage): Live {
   return LiveMessage.match(message, {
-    SlateChanged: ({ games }): Live => ({
-      ...live,
-      slate: games.map(({ game }) => game),
-      availability: new Map(games.map(({ game, availability }) => [game.snapshot.id, availability]))
-    })
+    SlateChanged: ({ slate, availability }): Live => ({ ...live, slate, availability })
   })
 }
 

@@ -68,7 +68,7 @@ describe("HubServer", () => {
           assert.isTrue(line.startsWith("data: "))
           assert.strictEqual(message._tag, "SlateChanged")
           assert.deepStrictEqual(
-            message.games.map(({ game }) => game.plays),
+            message.slate.games.map((game) => game.plays),
             [[]]
           )
         }).pipe(Effect.scoped, Effect.provide(TestHubServer.serverUnderTest()))
@@ -86,7 +86,7 @@ describe("HubServer", () => {
           const message = TestHubServer.messageOf(line)
           assert.isTrue(line.startsWith("data: "))
           assert.deepStrictEqual(
-            message.games.map(({ game }) => game.snapshot.period),
+            message.slate.games.map((game) => game.snapshot.period),
             [2]
           )
         }).pipe(Effect.scoped, Effect.provide(TestHubServer.serverUnderTest()))
@@ -104,7 +104,7 @@ describe("HubServer", () => {
 
           const message = TestHubServer.messageOf(line)
           assert.deepStrictEqual(
-            message.games.map(({ game }) => game.snapshot.period),
+            message.slate.games.map((game) => game.snapshot.period),
             [2]
           )
         }).pipe(Effect.scoped, Effect.provide(TestHubServer.serverUnderTest()))
@@ -178,7 +178,7 @@ describe("HubServer", () => {
 
           const message = TestHubServer.messageOf(line)
           assert.deepStrictEqual(
-            message.games.map(({ game }) => game.snapshot.period),
+            message.slate.games.map((game) => game.snapshot.period),
             [4]
           )
           assert.strictEqual(waiting, 0)
@@ -197,7 +197,7 @@ describe("HubServer", () => {
 
           const message = TestHubServer.messageOf(line)
           assert.deepStrictEqual(
-            message.games.map(({ game }) => game.snapshot.period),
+            message.slate.games.map((game) => game.snapshot.period),
             [2]
           )
         }).pipe(Effect.scoped, Effect.provide(TestHubServer.serverUnderTest(changingEverySecond)))
@@ -206,7 +206,7 @@ describe("HubServer", () => {
 
     describe("projection", () => {
       it.effect(
-        "should send each listed game as its snapshot and plays, beside its availability, and nothing else the slate remembers",
+        "should send the slate's games as their snapshots and plays, and each one's availability by its id, and nothing else the slate remembers",
         () =>
           Effect.gen(function* () {
             yield* firstSlateOnTestClock()
@@ -216,11 +216,12 @@ describe("HubServer", () => {
               Effect.repeat({ until: (line) => line.includes("SlateChanged") })
             )
 
-            const [entry] = JSON.parse(line.slice("data: ".length)).games
-            assert.strictEqual(entry.game.snapshot.id, game.id)
-            assert.deepStrictEqual(Object.keys(entry), ["game", "availability"])
-            assert.deepStrictEqual(Object.keys(entry.game), ["snapshot", "plays"])
-            assert.deepStrictEqual(entry.availability, [{ _tag: "NoGuide", source: "YouTube TV" }])
+            const message = JSON.parse(line.slice("data: ".length))
+            const [entry] = message.slate.games
+            assert.strictEqual(entry.snapshot.id, game.id)
+            assert.deepStrictEqual(Object.keys(message), ["_tag", "slate", "availability"])
+            assert.deepStrictEqual(Object.keys(entry), ["snapshot", "plays"])
+            assert.deepStrictEqual(message.availability[game.id], [{ _tag: "NoGuide", source: "YouTube TV" }])
             assert.notMatch(line, /"state"|"updatedAt"|"from"/)
           }).pipe(Effect.scoped, Effect.provide(TestHubServer.serverUnderTest()))
       )
@@ -238,7 +239,7 @@ describe("HubServer", () => {
           ])
 
           assert.deepStrictEqual(
-            message.games.map(({ game }) => game.snapshot.id),
+            message.slate.games.map((game) => game.snapshot.id),
             ["9", "3", "1", "2"]
           )
         }).pipe(Effect.scoped, Effect.provide(TestHubServer.serverUnderTest()))
@@ -254,7 +255,7 @@ describe("HubServer", () => {
             Delivery.Listing({ league: "fbs", games: [next] })
           ])
 
-          assert.strictEqual(message.games[0]?.game.snapshot.period, 2)
+          assert.strictEqual(message.slate.games[0]?.snapshot.period, 2)
         }).pipe(Effect.scoped, Effect.provide(TestHubServer.serverUnderTest()))
       )
 
@@ -268,7 +269,7 @@ describe("HubServer", () => {
             Delivery.Plays({ game: listed.id, plays: [recordedPlay] })
           ])
 
-          assert.deepStrictEqual(message.games[0]?.game.plays, [recordedPlay])
+          assert.deepStrictEqual(message.slate.games[0]?.plays, [recordedPlay])
         }).pipe(Effect.scoped, Effect.provide(TestHubServer.serverUnderTest()))
       )
 
@@ -285,7 +286,7 @@ describe("HubServer", () => {
           ])
 
           assert.deepStrictEqual(
-            message.games[0]?.game.plays.map(({ sequence }) => sequence),
+            message.slate.games[0]?.plays.map(({ sequence }) => sequence),
             [3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
           )
         }).pipe(Effect.scoped, Effect.provide(TestHubServer.serverUnderTest()))
@@ -300,13 +301,13 @@ describe("HubServer", () => {
           ])
 
           assert.deepStrictEqual(
-            message.games.map(({ game }) => game.snapshot),
+            message.slate.games.map((game) => game.snapshot),
             [final]
           )
         }).pipe(Effect.scoped, Effect.provide(TestHubServer.serverUnderTest()))
       )
 
-      it.effect("should publish every source's availability beside each game", () =>
+      it.effect("should publish every source's availability for each game, by its id", () =>
         Effect.gen(function* () {
           const listed = snapshot({ id: GameId.make("1"), status: "live" })
 
@@ -314,7 +315,7 @@ describe("HubServer", () => {
             Delivery.Listing({ league: "fbs", games: [listed] })
           ])
 
-          assert.deepStrictEqual(message.games[0]?.availability, [
+          assert.deepStrictEqual(message.availability[GameId.make("1")], [
             { _tag: "NotCarried", why: "StreamingOnly" },
             { _tag: "NoGuide", source: "Twitch" }
           ])
@@ -350,7 +351,7 @@ describe("HubServer", () => {
 
             const message = TestHubServer.messageOf(line)
             assert.deepStrictEqual(
-              message.games[0]?.availability.map(({ _tag }) => _tag),
+              message.availability[game.id]?.map(({ _tag }) => _tag),
               ["Carried"]
             )
           }).pipe(Effect.scoped, Effect.provide(TestHubServer.serverUnderTest(Source.layerTwitch)))
@@ -372,7 +373,7 @@ describe("HubServer", () => {
           )
 
           const message = TestHubServer.messageOf(line)
-          assert.deepStrictEqual(message.games[0]?.availability, [
+          assert.deepStrictEqual(message.availability[game.id], [
             {
               _tag: "Carried",
               channel: {
