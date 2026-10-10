@@ -1,6 +1,5 @@
 import { createServer } from "node:http"
 import { NodeHttpServer, type NodeServices } from "@effect/platform-node"
-import { LiveMessage, type SlateChanged } from "@sportal/api/LiveMessage"
 import { SportalApi } from "@sportal/api/SportalApi"
 import {
   DateTime,
@@ -10,9 +9,6 @@ import {
   Option,
   type Path,
   type PlatformError,
-  Record,
-  Schema,
-  Sink,
   Stream
 } from "effect"
 import {
@@ -24,45 +20,9 @@ import {
   HttpStaticServer
 } from "effect/http"
 import { HttpApiBuilder, HttpApiSchema } from "effect/http-api"
-import { Director } from "./Director.ts"
+import { Broadcast } from "./Broadcast.ts"
 import { HubConfig } from "./HubConfig.ts"
 import { Source } from "./source/Source.ts"
-
-export const layer: Layer.Layer<
-  never,
-  PlatformError.PlatformError,
-  | HubConfig
-  | Director
-  | Source
-  | HttpServer.HttpServer
-  | HttpPlatform.HttpPlatform
-  | Etag.Generator
-  | FileSystem.FileSystem
-  | Path.Path
-> = Layer.unwrap(
-  Effect.gen(function* () {
-    const { webRoot } = yield* HubConfig
-    const api = HttpApiBuilder.layer(SportalApi).pipe(
-      Layer.provide(Layer.mergeAll(guideHandlers, hostHandlers, liveHandlers))
-    )
-    const web = Option.match(webRoot, {
-      onNone: () => Layer.empty,
-      onSome: (root) => HttpStaticServer.layer({ root, spa: true })
-    })
-    return HttpRouter.serve(Layer.mergeAll(api, web))
-  })
-)
-
-export const layerListen: Layer.Layer<
-  HttpServer.HttpServer | HttpPlatform.HttpPlatform | Etag.Generator | NodeServices.NodeServices,
-  HttpServerError.ServeError,
-  HubConfig
-> = Layer.unwrap(
-  Effect.gen(function* () {
-    const { port, host } = yield* HubConfig
-    return NodeHttpServer.layer(createServer, { port, host, gracefulShutdownTimeout: "3 seconds" })
-  })
-)
 
 const guideHandlers = HttpApiBuilder.group(
   SportalApi,
@@ -98,7 +58,7 @@ const liveHandlers = HttpApiBuilder.group(
   SportalApi,
   "live",
   Effect.fn(function* (handlers) {
-    const messages = yield* liveMessages
+    const { messages } = yield* Broadcast
     return handlers.handleAll({
       stream: () =>
         Effect.sync(() => {
@@ -116,37 +76,38 @@ const liveHandlers = HttpApiBuilder.group(
   })
 )
 
-const liveMessages = Effect.gen(function* () {
-  const director = yield* Director
-  const source = yield* Source
+const api = HttpApiBuilder.layer(SportalApi).pipe(Layer.provide([guideHandlers, hostHandlers, liveHandlers]))
 
-  return yield* Stream.zipLatest(settled(director.slate), Stream.tick("30 seconds")).pipe(
-    Stream.mapEffect(([slate]) =>
-      Effect.gen(function* () {
-        const availabilityOf = yield* source.availability
-        const now = yield* DateTime.now
+const web = Layer.unwrap(
+  Effect.gen(function* () {
+    const { webRoot } = yield* HubConfig
+    return Option.match(webRoot, {
+      onNone: () => Layer.empty,
+      onSome: (root) => HttpStaticServer.layer({ root, spa: true })
+    })
+  })
+)
 
-        const availability = Record.fromEntries(
-          slate.games.map(({ snapshot }) => [snapshot.id, availabilityOf(snapshot, now)] as const)
-        )
-        return { _tag: "SlateChanged", slate: slate.recent(), availability } satisfies SlateChanged
-      })
-    ),
-    Stream.changesWith(samePublished),
-    Stream.share({ capacity: "unbounded", replay: 1 })
-  )
-})
+export const layer: Layer.Layer<
+  never,
+  PlatformError.PlatformError,
+  | HubConfig
+  | Broadcast
+  | Source
+  | HttpServer.HttpServer
+  | HttpPlatform.HttpPlatform
+  | Etag.Generator
+  | FileSystem.FileSystem
+  | Path.Path
+> = HttpRouter.serve(Layer.mergeAll(api, web))
 
-const samePublished = Schema.toEquivalence(LiveMessage.cases.SlateChanged)
-
-/**
- * The slate as it is, then each burst of changes once it settles 250 ms after the last, so changes arriving more often
- * than that, without a pause, send nothing until they pause.
- */
-function settled<A>(changes: Stream.Stream<A>): Stream.Stream<A> {
-  return Stream.unwrap(
-    Effect.map(Stream.peel(changes, Sink.head()), ([current, rest]) =>
-      Stream.concat(Stream.fromIterable(Option.toArray(current)), rest.pipe(Stream.debounce("250 millis")))
-    )
-  )
-}
+export const layerListen: Layer.Layer<
+  HttpServer.HttpServer | HttpPlatform.HttpPlatform | Etag.Generator | NodeServices.NodeServices,
+  HttpServerError.ServeError,
+  HubConfig
+> = Layer.unwrap(
+  Effect.gen(function* () {
+    const { port, host } = yield* HubConfig
+    return NodeHttpServer.layer(createServer, { port, host, gracefulShutdownTimeout: "3 seconds" })
+  })
+)

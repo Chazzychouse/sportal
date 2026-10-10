@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs"
 import { gunzipSync } from "node:zlib"
 import type { ChannelAvailability } from "@sportal/domain/Channel"
-import { GameId, type GameSnapshot } from "@sportal/domain/Game"
+import { GameId, type GameSnapshot, Network } from "@sportal/domain/Game"
 import { LeagueId } from "@sportal/domain/League"
 import { broadcast, snapshot, team } from "@sportal/domain/TestGame"
 import {
@@ -587,4 +587,24 @@ export const offered = Effect.fnUntraced(function* (frames: Frames, delivery: De
   yield* Queue.offer(frames, [delivery])
   yield* Queue.offer(frames, [])
   yield* Queue.offer(frames, [])
+})
+
+/** Alabama at Mississippi State, live and scoreless on ESPN. */
+export const alaAtMsst = snapshot({
+  id: GameId.make("401856707"),
+  status: "live",
+  home: { team: team("MSST"), score: 0 },
+  away: { team: team("ALA"), score: 0 },
+  broadcasts: [broadcast(Network.make("ESPN"))]
+})
+
+/** `alaAtMsst` in `period`. */
+export function alaAtMsstInPeriod(period: number) {
+  return snapshot({ ...alaAtMsst, period })
+}
+
+/** Delivers the fbs listing of `alaAtMsst`, so the Director has its first games, and moves on 250 ms for it to settle. */
+export const alaAtMsstListed = Effect.fnUntraced(function* (frames: Frames) {
+  yield* offered(frames, Delivery.Listing({ league: "fbs", games: [alaAtMsst] }))
+  yield* TestClock.adjust("250 millis")
 })
