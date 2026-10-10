@@ -2,12 +2,9 @@ import { useAtomSet } from "@effect/atom-react"
 import type { ScreenTransition } from "@sportal/api/ShellBridge"
 import type { GameId } from "@sportal/domain/Game"
 import type { Slate } from "@sportal/domain/Slate"
-import { Effect, Option } from "effect"
+import { Option } from "effect"
 import { useEffect, useLayoutEffect, useRef, useState } from "react"
 import { useVideoAreas } from "../display/OverlayHost.tsx"
-import { sendGuide } from "../hub/HubClient.ts"
-import { runtime } from "../hub/HubRuntime.ts"
-import * as LiveStream from "../hub/LiveStream.ts"
 import * as DisplayScreen from "./DisplayScreen.ts"
 import { Dividers } from "./Dividers.tsx"
 import { type Screen, type Split, Tile } from "./Screen.ts"
@@ -22,7 +19,6 @@ import { placements, tileRects } from "./TileRects.ts"
 export function ScreenView(props: {
   screen: Screen
   slate: Slate
-  connection: LiveStream.Connection
   selected: number
   interacting: GameId | undefined
   onSelect: (tile: number) => void
@@ -61,25 +57,6 @@ export function ScreenView(props: {
       }),
     [props.screen, props.onSelect]
   )
-
-  const connected = LiveStream.Connection.$is("Connected")(props.connection)
-  // Listening first, then asking: the shell's first read waits for the web UI to ask.
-  useEffect(
-    () =>
-      window.sportalShell?.onGuideRead((guide) => {
-        runtime.runFork(
-          sendGuide(guide).pipe(
-            Effect.catch((failure) => Effect.logWarning("The Hub did not take a guide", failure))
-          )
-        )
-      }),
-    []
-  )
-
-  useEffect(() => {
-    // Asked again whenever the Hub comes back, since a guide read while it was away was lost.
-    if (connected) window.sportalShell?.readGuide()
-  }, [connected])
 
   return (
     <main ref={areaRef} className="relative min-h-0 overflow-hidden bg-background">

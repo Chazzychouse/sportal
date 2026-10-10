@@ -1,7 +1,8 @@
-import { useAtomSet, useAtomValue } from "@effect/atom-react"
+import { useAtomMount, useAtomSet, useAtomValue } from "@effect/atom-react"
 import { Hotkey } from "@sportal/api/Hotkey"
 import { useState } from "react"
 import { Toaster } from "@/design/sonner"
+import * as GuideRelay from "../hub/GuideRelay.ts"
 import * as LiveStream from "../hub/LiveStream.ts"
 import * as DisplayScreen from "../screen/DisplayScreen.ts"
 import { useScreenRejectionToasts } from "../screen/Rejections.ts"
@@ -29,6 +30,7 @@ export function DisplayView() {
   const toggleSolo = display.press({ _tag: "ToggleSolo" }, screen, cards)
   const liveCount = live.slate.games.filter(({ snapshot }) => snapshot.progress() === "live").length
   useScreenRejectionToasts()
+  useAtomMount(GuideRelay.relay)
 
   useHotkeys((hotkey: Hotkey) =>
     Hotkey.guards.FullScreen(hotkey) ? fullScreen.toggle() : run(display.press(hotkey, screen, cards))
@@ -57,7 +59,6 @@ export function DisplayView() {
         <ScreenView
           screen={screen}
           slate={live.slate}
-          connection={live.connection}
           selected={selected}
           interacting={display.interactingOn(screen)}
           onSelect={(slot) => run(display.select(slot, screen))}

@@ -1,0 +1,168 @@
+import { Hotkey } from "@sportal/api/Hotkey"
+import type { ScreenTransition, ShellBridge, TilePlacement } from "@sportal/api/ShellBridge"
+import type { GameId } from "@sportal/domain/Game"
+import { Context, Effect, Layer, Option, Queue, Stream } from "effect"
+
+/**
+ * The web UI's edge to its window and to the desktop shell: hotkeys, full screen, presses on a video, and the guide
+ * the shell reads, and the calls that place videos and ask for a guide. The one reader of `window.sportalShell`.
+ */
+export class Shell extends Context.Service<
+  Shell,
+  {
+    /** Hotkeys pressed on the page (not repeats, not typed into a field, not already handled; Ctrl+K always) and in a focused stream view. */
+    readonly hotkeys: Stream.Stream<Hotkey>
+    /** Whether the window is full screen, each time it changes. */
+    readonly fullScreen: Stream.Stream<boolean>
+    /** The game whose video was clicked while it was not interactive. */
+    readonly tilePressed: Stream.Stream<GameId>
+    /** Each guide the shell reads from the source, unchanged. */
+    readonly guideRead: Stream.Stream<string>
+    readonly setFullScreen: (on: boolean) => Effect.Effect<void>
+    /** Replaces the provider views; with a transition they move along it, without one at once. */
+    readonly syncTiles: (
+      placements: ReadonlyArray<TilePlacement>,
+      transition: Option.Option<ScreenTransition>
+    ) => Effect.Effect<void>
+    /** Hides exactly these games' videos and shows the rest. */
+    readonly setHidden: (games: ReadonlyArray<GameId>) => Effect.Effect<void>
+    /** Asks the shell to read the guide now. */
+    readonly readGuide: Effect.Effect<void>
+    /** Opens the YouTube TV sign-in; none in a plain browser, which has no sign-in to open. */
+    readonly openSignIn: Option.Option<Effect.Effect<void>>
+  }
+>()("sportal/web/shell/Shell") {
+  /** The shell's bridge when the page runs in the shell, else the browser's own. */
+  static readonly layer: Layer.Layer<Shell> = Layer.unwrap(
+    Effect.sync(() => {
+      const bridge = window.sportalShell
+      return bridge === undefined ? Shell.layerBrowser : Shell.layerBridge(bridge)
+    })
+  )
+
+  static layerBridge(bridge: ShellBridge): Layer.Layer<Shell> {
+    return Layer.succeed(
+      Shell,
+      Shell.of({
+        hotkeys: Stream.merge(
+          pageHotkeys,
+          listened<Hotkey>((listener) => bridge.onHotkey(listener))
+        ),
+        fullScreen: listened((listener) => bridge.onFullScreenChanged(listener)),
+        tilePressed: listened((listener) => bridge.onTilePressed(listener)),
+        guideRead: listened((listener) => bridge.onGuideRead(listener)),
+        setFullScreen: (on) => Effect.sync(() => bridge.setFullScreen(on)),
+        syncTiles: (placements, transition) =>
+          Effect.sync(() => bridge.syncTiles(placements, Option.getOrUndefined(transition))),
+        setHidden: (games) => Effect.sync(() => bridge.setHidden(games)),
+        readGuide: Effect.sync(() => bridge.readGuide()),
+        openSignIn: Option.some(Effect.sync(() => bridge.openSignIn()))
+      })
+    )
+  }
+
+  // Lazy: the helpers it reads are defined below the class.
+  static readonly layerBrowser: Layer.Layer<Shell> = Layer.sync(Shell, () =>
+    Shell.of({
+      hotkeys: pageHotkeys,
+      fullScreen: listened((listener) => {
+        const changed = () => listener(document.fullscreenElement !== null)
+        document.addEventListener("fullscreenchange", changed)
+        return () => document.removeEventListener("fullscreenchange", changed)
+      }),
+      tilePressed: Stream.empty,
+      guideRead: Stream.empty,
+      // A browser refuses full screen outside a user gesture, or when the page may not have it.
+      setFullScreen: (on) =>
+        Effect.tryPromise(() =>
+          on ? document.documentElement.requestFullscreen() : document.exitFullscreen()
+        ).pipe(Effect.catch((error) => Effect.logWarning("The browser did not change full screen", error))),
+      syncTiles: () => Effect.void,
+      setHidden: () => Effect.void,
+      readGuide: Effect.void,
+      openSignIn: Option.none()
+    })
+  )
+
+  /** A Shell giving these events (none where not given), and running `record` for each call it is asked to make. */
+  static layerTest(options: {
+    readonly hotkeys?: Stream.Stream<Hotkey>
+    readonly fullScreen?: Stream.Stream<boolean>
+    readonly tilePressed?: Stream.Stream<GameId>
+    readonly guideRead?: Stream.Stream<string>
+    readonly record: (
+      call:
+        | { readonly _tag: "SetFullScreen"; readonly on: boolean }
+        | {
+            readonly _tag: "SyncTiles"
+            readonly placements: ReadonlyArray<TilePlacement>
+            readonly transition: Option.Option<ScreenTransition>
+          }
+        | { readonly _tag: "SetHidden"; readonly games: ReadonlyArray<GameId> }
+        | { readonly _tag: "ReadGuide" }
+        | { readonly _tag: "OpenSignIn" }
+    ) => Effect.Effect<void>
+  }): Layer.Layer<Shell> {
+    const { record } = options
+    return Layer.succeed(
+      Shell,
+      Shell.of({
+        hotkeys: options.hotkeys ?? Stream.empty,
+        fullScreen: options.fullScreen ?? Stream.empty,
+        tilePressed: options.tilePressed ?? Stream.empty,
+        guideRead: options.guideRead ?? Stream.empty,
+        setFullScreen: (on) => record({ _tag: "SetFullScreen", on }),
+        syncTiles: (placements, transition) => record({ _tag: "SyncTiles", placements, transition }),
+        setHidden: (games) => record({ _tag: "SetHidden", games }),
+        readGuide: record({ _tag: "ReadGuide" }),
+        openSignIn: Option.some(record({ _tag: "OpenSignIn" }))
+      })
+    )
+  }
+}
+
+/** Hotkeys pressed on the page. Keys typed into a text field are the field's, and a key already handled is ignored, except Ctrl+K. */
+const pageHotkeys: Stream.Stream<Hotkey> = Stream.callback<Hotkey>((queue) =>
+  Effect.acquireRelease(
+    Effect.sync(() => {
+      const pressed = (event: KeyboardEvent) => {
+        const hotkey = Hotkey.of(
+          {
+            code: event.code,
+            shift: event.shiftKey,
+            alt: event.altKey,
+            control: event.ctrlKey,
+            meta: event.metaKey
+          },
+          "page"
+        )
+        if (hotkey === undefined || event.repeat) return
+        if (!Hotkey.guards.CommandPalette(hotkey) && (isTyping(event.target) || event.defaultPrevented))
+          return
+        // In the listener itself: a default prevented after the event has been dispatched is too late.
+        event.preventDefault()
+        Queue.offerUnsafe(queue, hotkey)
+      }
+      window.addEventListener("keydown", pressed)
+      return pressed
+    }),
+    (pressed) => Effect.sync(() => window.removeEventListener("keydown", pressed))
+  )
+)
+
+function isTyping(target: EventTarget | null) {
+  return (
+    target instanceof HTMLElement &&
+    (target.isContentEditable || target.tagName === "INPUT" || target.tagName === "TEXTAREA")
+  )
+}
+
+/** An event as a stream: `listen` subscribes, and the function it returns unsubscribes. */
+function listened<A>(listen: (listener: (value: A) => void) => () => void): Stream.Stream<A> {
+  return Stream.callback<A>((queue) =>
+    Effect.acquireRelease(
+      Effect.sync(() => listen((value) => Queue.offerUnsafe(queue, value))),
+      (stop) => Effect.sync(stop)
+    )
+  )
+}

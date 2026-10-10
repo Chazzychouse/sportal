@@ -2,7 +2,7 @@ import { afterEach, assert, beforeEach, describe, it } from "@effect/vitest"
 import type { ChannelAvailability } from "@sportal/domain/Channel"
 import { Game, GameId } from "@sportal/domain/Game"
 import { snapshot } from "@sportal/domain/TestGame"
-import { Effect, Option, Schema, Stream } from "effect"
+import { Effect, Option } from "effect"
 import { Atom, AtomRegistry } from "effect/reactivity"
 import { vi } from "vitest"
 import * as LiveStream from "../hub/LiveStream.ts"
@@ -14,7 +14,7 @@ describe("DisplayScreen.screen", () => {
   beforeEach(() => {
     TestWeb.FakeEventSource.opened = []
     vi.stubGlobal("EventSource", TestWeb.FakeEventSource)
-    vi.stubGlobal("localStorage", new MemoryStorage())
+    vi.stubGlobal("localStorage", new TestWeb.MemoryStorage())
   })
   afterEach(() => {
     vi.unstubAllGlobals()
@@ -24,7 +24,7 @@ describe("DisplayScreen.screen", () => {
     Effect.gen(function* () {
       const source = yield* TestWeb.opened
       source.onmessage?.({ data: TestWeb.slateMessage([{ game, availability: [onEspn] }]) })
-      yield* untilLive((live) => live.slate.games.length > 0)
+      yield* TestWeb.until(LiveStream.live, (live) => live.slate.games.length > 0)
 
       yield* Atom.set(DisplayScreen.screen, { _tag: "Assign", tile: 0, game: id })
 
@@ -54,11 +54,14 @@ describe("DisplayScreen.screen", () => {
     Effect.gen(function* () {
       const source = yield* TestWeb.opened
       source.onmessage?.({ data: TestWeb.slateMessage([{ game, availability: [] }]) })
-      yield* untilLive((live) => live.slate.games.length > 0)
+      yield* TestWeb.until(LiveStream.live, (live) => live.slate.games.length > 0)
       yield* Atom.set(DisplayScreen.screen, { _tag: "Assign", tile: 0, game: id })
 
       source.onmessage?.({ data: TestWeb.slateMessage([{ game, availability: [onEspn] }]) })
-      const screen = yield* untilScreen((screen) => screen.tiles[0]?._tag === "StreamTile")
+      const screen = yield* TestWeb.until(
+        DisplayScreen.screen,
+        (screen) => screen.tiles[0]?._tag === "StreamTile"
+      )
 
       assert.deepStrictEqual(screen.tiles[0], { _tag: "StreamTile", game: id, channel: espn })
     }).pipe(Effect.provide(AtomRegistry.layer))
@@ -67,8 +70,7 @@ describe("DisplayScreen.screen", () => {
   it.effect("should start from the Screen this browser kept", () =>
     Effect.gen(function* () {
       const kept = new Screen({ ...Screen.initial, layout: "Pair" })
-      const encoded = yield* Schema.encodeEffect(Screen)(kept)
-      localStorage.setItem("sportal/screen", JSON.stringify(encoded))
+      yield* TestWeb.keep(kept)
       yield* TestWeb.opened
 
       const screen = yield* Atom.get(DisplayScreen.screen)
@@ -93,7 +95,7 @@ describe("DisplayScreen.screen", () => {
       yield* TestWeb.opened
 
       yield* Atom.set(DisplayScreen.screen, { _tag: "SetLayout", layout: "Single" })
-      yield* untilScreen((screen) => screen.layout === "Single")
+      yield* TestWeb.until(DisplayScreen.screen, (screen) => screen.layout === "Single")
 
       const kept = localStorage.getItem("sportal/screen") ?? ""
       assert.include(kept, '"layout":"Single"')
@@ -109,42 +111,3 @@ const espn = {
   locator: { _tag: "WebView" as const, url: "https://tv.youtube.com/watch/espn" }
 }
 const onEspn: ChannelAvailability = { _tag: "Carried", channel: espn }
-
-function untilLive(predicate: (live: Atom.Type<typeof LiveStream.live>) => boolean) {
-  return Atom.toStream(LiveStream.live).pipe(
-    Stream.filter(predicate),
-    Stream.runHead,
-    Effect.flatMap(Effect.fromOption)
-  )
-}
-
-function untilScreen(predicate: (screen: Screen) => boolean) {
-  return Atom.toStream(DisplayScreen.screen).pipe(
-    Stream.filter(predicate),
-    Stream.runHead,
-    Effect.flatMap(Effect.fromOption)
-  )
-}
-
-/** A `Storage` in memory, as a browser's `localStorage` is. */
-class MemoryStorage implements Storage {
-  private readonly items = new Map<string, string>()
-  get length() {
-    return this.items.size
-  }
-  clear() {
-    this.items.clear()
-  }
-  getItem(key: string) {
-    return this.items.get(key) ?? null
-  }
-  key(index: number) {
-    return [...this.items.keys()][index] ?? null
-  }
-  removeItem(key: string) {
-    this.items.delete(key)
-  }
-  setItem(key: string, value: string) {
-    this.items.set(key, value)
-  }
-}
