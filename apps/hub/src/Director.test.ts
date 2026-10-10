@@ -5,7 +5,7 @@ import { liveSnapshot, play, snapshot, team } from "@sportal/domain/TestGame"
 import { DateTime, Effect, Layer, Metric, Ref, Stream, type Tracer } from "effect"
 import { TestClock } from "effect/testing"
 import { Director } from "./Director.ts"
-import { duringNeAtBuf, recordedNeAtBuf, recordedPlays, replayed } from "./provider/espn/TestEspn.ts"
+import * as TestEspn from "./provider/espn/TestEspn.ts"
 import { Delivery } from "./provider/Provider.ts"
 import { ProviderFeed } from "./provider/ProviderFeed.ts"
 import { Slate } from "./Slate.ts"
@@ -213,9 +213,9 @@ describe("Director, a recorded game", () => {
     () => {
       const { logs, layer } = recordingLogs()
       return Effect.gen(function* () {
-        yield* TestClock.setTime(duringNeAtBuf.epochMilliseconds)
-        const day = yield* recordedNeAtBuf
-        const decoded = yield* replayed(day)
+        yield* TestClock.setTime(TestEspn.duringNeAtBuf.epochMilliseconds)
+        const day = yield* TestEspn.recordedNeAtBuf
+        const decoded = yield* TestEspn.replayed(day)
         const feed = yield* ProviderFeed
 
         yield* Effect.forEach(decoded, (deliveries) => feed.deliver(deliveries), { discard: true })
@@ -223,7 +223,7 @@ describe("Director, a recorded game", () => {
         const errors = logs.filter(({ level }) => level === "Error")
 
         assert.strictEqual(snapshotIn(current, neAtBuf)?.status, "final")
-        assert.strictEqual(playsIn(current, neAtBuf).length, recordedPlays)
+        assert.strictEqual(playsIn(current, neAtBuf).length, TestEspn.recordedPlays)
         assert.deepStrictEqual(errors, [])
       }).pipe(Effect.provide(TestDirector.directorOver.pipe(Layer.provideMerge(layer))))
     },

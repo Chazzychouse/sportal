@@ -6,7 +6,7 @@ import { Effect, Schema } from "effect"
 import { TestClock } from "effect/testing"
 import { Delivery } from "../Provider.ts"
 import * as EspnPlay from "./EspnPlay.ts"
-import { duringNeAtBuf, recordedNeAtBuf, replayed } from "./TestEspn.ts"
+import * as TestEspn from "./TestEspn.ts"
 
 // Play entities from the 2026-10-04 NFL recording, each as its game's `gp-` topic first added it, without its
 // participants; NE–BUF's first score, 401872971484, as the topic last had it, after its extra point.
@@ -228,9 +228,9 @@ describe("EspnPlay.FootballPlay", () => {
     "should read every play in the recorded fixtures without falling back to Other",
     () =>
       Effect.gen(function* () {
-        yield* TestClock.setTime(duringNeAtBuf.epochMilliseconds)
-        const day = yield* recordedNeAtBuf
-        const decoded = yield* replayed(day)
+        yield* TestClock.setTime(TestEspn.duringNeAtBuf.epochMilliseconds)
+        const day = yield* TestEspn.recordedNeAtBuf
+        const decoded = yield* TestEspn.replayed(day)
         const pushed = decoded
           .flat()
           .flatMap((delivery) => (Delivery.$is("Plays")(delivery) ? delivery.plays : []))

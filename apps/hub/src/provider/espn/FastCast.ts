@@ -21,7 +21,6 @@ import * as Socket from "effect/socket/Socket"
 import * as HubStopping from "../../HubStopping.ts"
 import * as FastCastMessage from "./FastCastMessage.ts"
 import { Frame } from "./Frame.ts"
-import { ProviderUnavailable } from "./ProviderUnavailable.ts"
 import { Topic } from "./Topic.ts"
 
 /**
@@ -43,34 +42,6 @@ export class FastCast extends Context.Service<
   }
 >()("sportal/hub/provider/espn/FastCast") {
   /**
-   * FastCast subscribing again to a topic whose checkpoint failed once `refollow` has passed, if it is still wanted
-   * and no later checkpoint of it has succeeded, and opening the socket again on `reconnect` after each failure,
-   * which it logs with its reason. Its `follow` never fails: where `reconnect` ends or a defect strikes, it logs that
-   * the live feed stopped and emits nothing more.
-   */
-  static readonly make = (retry: {
-    readonly refollow: Duration.Input
-    readonly reconnect: Schedule.Schedule<unknown, ProviderUnavailable>
-  }) =>
-    Effect.gen(function* () {
-      const context = yield* Effect.context<HttpClient.HttpClient | Socket.WebSocketConstructor>()
-      const follow = (wanted: Stream.Stream<Wanted>) =>
-        Stream.unwrap(connect(wanted, retry.refollow)).pipe(
-          Stream.concat(
-            Stream.fail(new ProviderUnavailable({ reason: "Closed", cause: "FastCast ended the stream" }))
-          ),
-          Stream.timeoutOrElse({ duration: silence, orElse: () => Stream.fail(silent()) }),
-          Stream.tapError((error) =>
-            Effect.logWarning(`FastCast: the live feed failed (${error.reason}); subscribing again`, error)
-          ),
-          Stream.retry(retry.reconnect),
-          Stream.catchCause(stopped),
-          Stream.provideContext(context)
-        )
-      return FastCast.of({ follow })
-    })
-
-  /**
    * FastCast subscribing again to a topic whose checkpoint failed after 30 s; it opens the socket again after about 1
    * second, then twice as long each time, jittered, up to a minute, without end. `Stream.retry` resets that backoff once
    * the socket delivers again.
@@ -78,12 +49,26 @@ export class FastCast extends Context.Service<
   static readonly layer: Layer.Layer<FastCast, never, HttpClient.HttpClient | Socket.WebSocketConstructor> =
     Layer.effect(
       FastCast,
-      FastCast.make({
-        refollow: "30 seconds",
-        reconnect: Schedule.min([
+      Effect.gen(function* () {
+        const context = yield* Effect.context<HttpClient.HttpClient | Socket.WebSocketConstructor>()
+        const reconnect = Schedule.min([
           Schedule.exponential("1 second").pipe(Schedule.jittered),
           Schedule.spaced("1 minute")
         ])
+        const follow = (wanted: Stream.Stream<Wanted>) =>
+          Stream.unwrap(connect(wanted, "30 seconds")).pipe(
+            Stream.concat(
+              Stream.fail(new ProviderUnavailable({ reason: "Closed", cause: "FastCast ended the stream" }))
+            ),
+            Stream.timeoutOrElse({ duration: silence, orElse: () => Stream.fail(silent()) }),
+            Stream.tapError((error) =>
+              Effect.logWarning(`FastCast: the live feed failed (${error.reason}); subscribing again`, error)
+            ),
+            Stream.retry(reconnect),
+            Stream.catchCause(stopped),
+            Stream.provideContext(context)
+          )
+        return FastCast.of({ follow })
       })
     )
 
@@ -95,6 +80,12 @@ export class FastCast extends Context.Service<
 
 /** The topics FastCast follows, each with whether its document is synced or waits for its checkpoint. */
 export type Wanted = HashMap.HashMap<Topic, "Synced" | "AwaitingCheckpoint">
+
+/** FastCast could not be followed: it refused, closed, or went silent. `FastCast` logs it and opens the socket again. */
+class ProviderUnavailable extends Schema.TaggedError<ProviderUnavailable>()("ProviderUnavailable", {
+  reason: Schema.Literals(["Refused", "Closed", "Silent"]),
+  cause: Schema.Defect()
+}) {}
 
 /** A topic's checkpoint was not read: it could not be loaded (unreachable, refused, timed out) or did not decode. */
 class CheckpointUnread extends Schema.TaggedError<CheckpointUnread>()("CheckpointUnread", {

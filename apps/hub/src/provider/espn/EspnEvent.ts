@@ -19,7 +19,7 @@ export const listingOf = Effect.fnUntraced(function* (league: LeagueId, body: st
  * One game as the site scoreboard spells it, read as a `league` `GameSnapshot`. An event without a home and an away
  * team does not decode.
  */
-function EspnEvent(league: LeagueId) {
+function espnEvent(league: LeagueId) {
   return SiteEvent.pipe(
     Schema.decodeTo(Schema.toType(GameSnapshot), {
       decode: SchemaGetter.transformEffect((event) => {
@@ -168,5 +168,5 @@ const decodeEvent: { readonly [L in LeagueId]: ReturnType<typeof decodeEventOf> 
 }
 
 function decodeEventOf(league: LeagueId) {
-  return Schema.decodeUnknownEffect(EspnEvent(league))
+  return Schema.decodeUnknownEffect(espnEvent(league))
 }

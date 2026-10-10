@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs"
 import { assert, describe, it } from "@effect/vitest"
 import { GameSnapshot } from "@sportal/domain/Game"
 import { Effect, Result, Schema } from "effect"
-import { listingOf } from "./EspnEvent.ts"
+import * as EspnEvent from "./EspnEvent.ts"
 
 describe("listingOf", () => {
   // Each recorded poll as it decoded when both feeds' events were read by one transform.
@@ -18,8 +18,8 @@ describe("listingOf", () => {
         )
       )(fixture("decoded-snapshots.json"))
 
-      const fbs = yield* listingOf("fbs", fixture("fbs-scoreboard-live.json"))
-      const nfl = yield* listingOf("nfl", scoreboardBody)
+      const fbs = yield* EspnEvent.listingOf("fbs", fixture("fbs-scoreboard-live.json"))
+      const nfl = yield* EspnEvent.listingOf("nfl", scoreboardBody)
 
       assert.deepStrictEqual(
         encoded([
@@ -33,7 +33,7 @@ describe("listingOf", () => {
 
   it.effect("should read a poll response as its league's listing", () =>
     Effect.gen(function* () {
-      const games = yield* listingOf("nfl", scoreboardBody)
+      const games = yield* EspnEvent.listingOf("nfl", scoreboardBody)
 
       assert.strictEqual(games.length, 16)
       assert.isTrue(games.every((game) => game.league === "nfl"))
@@ -47,7 +47,7 @@ describe("listingOf", () => {
       )(scoreboardBody)
       const withBroken = JSON.stringify({ events: [{ id: "broken" }, ...events] })
 
-      const games = yield* listingOf("nfl", withBroken)
+      const games = yield* EspnEvent.listingOf("nfl", withBroken)
 
       assert.strictEqual(games.length, events.length)
     })
@@ -58,7 +58,7 @@ describe("listingOf", () => {
     Effect.gen(function* () {
       const event = siteEvent()
 
-      const games = yield* listingOf("nfl", JSON.stringify({ events: [event] }))
+      const games = yield* EspnEvent.listingOf("nfl", JSON.stringify({ events: [event] }))
 
       assert.lengthOf(games, 1)
     })
@@ -73,7 +73,7 @@ describe("listingOf", () => {
         competitions: [{ ...competition, competitors: competition.competitors.filter(isHome) }]
       }
 
-      const games = yield* listingOf("nfl", JSON.stringify({ events: [homeOnly] }))
+      const games = yield* EspnEvent.listingOf("nfl", JSON.stringify({ events: [homeOnly] }))
 
       assert.lengthOf(games, 0)
     })
@@ -81,7 +81,7 @@ describe("listingOf", () => {
 
   it.effect("should fail a body that is not a scoreboard", () =>
     Effect.gen(function* () {
-      const listed = yield* Effect.result(listingOf("nfl", "not json"))
+      const listed = yield* Effect.result(EspnEvent.listingOf("nfl", "not json"))
 
       assert.isTrue(Result.isFailure(listed))
     })

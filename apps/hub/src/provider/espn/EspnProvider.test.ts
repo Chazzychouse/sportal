@@ -28,15 +28,15 @@ import * as EspnProvider from "./EspnProvider.ts"
 import { FastCast, type Wanted } from "./FastCast.ts"
 import * as FastCastMessage from "./FastCastMessage.ts"
 import { Frame } from "./Frame.ts"
-import { recordedScoreboard } from "./TestEspn.ts"
+import * as TestEspn from "./TestEspn.ts"
 import { fakeServer, subscribed, watched } from "./TestFastCast.ts"
 import { Topic } from "./Topic.ts"
 
 // Real payloads recorded from ESPN. A payload that breaks decoding gets added here before the fix.
-const fbsLive = recordedScoreboard("fbs-scoreboard-live")
-const fbsMidday = recordedScoreboard("fbs-scoreboard-2026-10-03T2024Z")
-const nflPregame = recordedScoreboard("nfl-scoreboard-pregame")
-const nflLive = recordedScoreboard("nfl-scoreboard-2026-10-04T1800Z")
+const fbsLive = TestEspn.recordedScoreboard("fbs-scoreboard-live")
+const fbsMidday = TestEspn.recordedScoreboard("fbs-scoreboard-2026-10-03T2024Z")
+const nflPregame = TestEspn.recordedScoreboard("nfl-scoreboard-pregame")
+const nflLive = TestEspn.recordedScoreboard("nfl-scoreboard-2026-10-04T1800Z")
 
 describe("EspnProvider", () => {
   it.effect("should decode a live FBS scoreboard into snapshots", () =>

@@ -5,7 +5,7 @@ import type { LeagueId } from "@sportal/domain/League"
 import { broadcast, snapshot, team } from "@sportal/domain/TestGame"
 import { DateTime, Effect, Layer, Option, Stream } from "effect"
 import { TestClock } from "effect/testing"
-import { recordedEspn, recordedScoreboard } from "../provider/espn/TestEspn.ts"
+import * as TestEspn from "../provider/espn/TestEspn.ts"
 import { listedBy } from "../provider/TestProvider.ts"
 import { GuideReader } from "./GuideReader.ts"
 import { Source } from "./Source.ts"
@@ -135,9 +135,9 @@ function tallied(league: LeagueId) {
 
 /** YouTube TV, and ESPN giving its 2026-10-03 recordings. */
 function matchingLayer() {
-  const espn = recordedEspn({
-    nfl: recordedScoreboard("nfl-scoreboard-pregame"),
-    fbs: recordedScoreboard("fbs-scoreboard-2026-10-03T2024Z")
+  const espn = TestEspn.recordedEspn({
+    nfl: TestEspn.recordedScoreboard("nfl-scoreboard-pregame"),
+    fbs: TestEspn.recordedScoreboard("fbs-scoreboard-2026-10-03T2024Z")
   })
   return Layer.mergeAll(youTubeTv, espn)
 }

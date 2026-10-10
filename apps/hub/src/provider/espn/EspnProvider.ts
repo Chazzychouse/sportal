@@ -4,7 +4,7 @@ import { DateTime, Duration, Effect, HashMap, Layer, Option, Result, Stream, Sub
 import { HttpClient } from "effect/http"
 import { HubConfig } from "../../HubConfig.ts"
 import { Delivery, Provider } from "../Provider.ts"
-import { listingOf } from "./EspnEvent.ts"
+import * as EspnEvent from "./EspnEvent.ts"
 import { FastCast, type Wanted } from "./FastCast.ts"
 import type { Frame } from "./Frame.ts"
 import { GameTopics } from "./GameTopics.ts"
@@ -32,7 +32,7 @@ export const layer: Layer.Layer<Provider, never, FastCast | HttpClient.HttpClien
       client.get(scoreboardUrl(league)).pipe(
         Effect.flatMap((response) => response.text),
         Effect.timeout("20 seconds"),
-        Effect.flatMap((body) => listingOf(league, body)),
+        Effect.flatMap((body) => EspnEvent.listingOf(league, body)),
         Effect.asSome,
         Effect.catch((error) =>
           Effect.logWarning(

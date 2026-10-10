@@ -4,9 +4,6 @@ import { Array as Arr, DateTime, Effect, Option, Schema, SchemaGetter, SchemaTra
 import { ChannelId, Guide } from "../Guide.ts"
 import * as YouTubeTvPayload from "./YouTubeTvPayload.ts"
 
-/** YouTube TV, as its guide names it. Its guide's responses are read here as the channels and airings they list. */
-export const source: SourceName = "YouTube TV"
-
 /**
  * A guide response as the complete guide it lists, stamped with the time it is read. A response that is not a guide,
  * or lists no channels, is unreadable; the reason is logged, never carried.
@@ -30,6 +27,9 @@ export const decode = Effect.fn("YouTubeTvGuide.decode")(function* (response: st
   )
   return guide
 })
+
+/** YouTube TV, as its guide names it. Its guide's responses are read here as the channels and airings they list. */
+export const source: SourceName = "YouTube TV"
 
 /**
  * A YouTube TV channel address, decoded to the address that plays the channel live. An address can

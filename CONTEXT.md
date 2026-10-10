@@ -44,7 +44,7 @@ Every exported type name must be a term here, except the wire schemas in `*Paylo
 | Term | Meaning | Not |
 | --- | --- | --- |
 | **Provider** | An adapter that supplies **game data** (ESPN, CollegeFootballData) and runs itself: it decides when to poll, what its push follows, and when to reconnect, and reads each frame it receives with its own decode; `deliveries` is what each frame said, one array per frame, in the order received. | source, feed |
-| **Provider unavailable** | FastCast could not be followed: it refused, closed, or went silent; `ProviderUnavailable` in code, in `espn/`. Logged with its reason, and the socket opens again on its backoff; the poll goes on. | provider error, live feed error |
+| **Provider unavailable** | FastCast could not be followed: it refused, closed, or went silent; `ProviderUnavailable` in code, in `apps/hub/src/provider/espn/FastCast.ts`. Logged with its reason, and the socket opens again on its backoff; the poll goes on. | provider error, live feed error |
 | **Live feed** | A provider's push: the connection carrying updates for live games between polls (ESPN FastCast). | socket, stream, webhook |
 | **FastCast** | ESPN's live feed, as the ESPN provider's push: one socket following the wanted topics the ESPN provider names, giving the socket as frames through `follow`, reconnecting itself; it never fails. | |
 | **Provider feed** | How a test drives a provider: each `deliver` is one frame saying the test's own deliveries, returning once the provider's reader has taken it, and `end` ends its frames; `Provider.layerTest`, with `ProviderFeed` (`provider/ProviderFeed.ts`). | snapshot feed |

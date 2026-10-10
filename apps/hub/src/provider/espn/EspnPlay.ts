@@ -1,7 +1,7 @@
 import type { LeagueId } from "@sportal/domain/League"
 import { Play, type PlayOutcome } from "@sportal/domain/Play"
 import { Effect, Predicate, Schema, SchemaGetter } from "effect"
-import { teamId } from "./EspnEvent.ts"
+import * as EspnEvent from "./EspnEvent.ts"
 import { PlayEntity, type PlayType } from "./EspnPayload.ts"
 
 /** ESPN's play entity, as a game package lists it under `entities.plays`, read as a `Play` of `league`. */
@@ -39,9 +39,9 @@ const read = Effect.fnUntraced(function* (
     ...(down === undefined || down < 1 ? {} : { down }),
     ...(down === undefined || down < 1 || distance === undefined ? {} : { distance }),
     ...(yardsToEndzone === undefined ? {} : { yardsToEndzone }),
-    ...(team === undefined ? {} : { team: teamId(league, team) })
+    ...(team === undefined ? {} : { team: EspnEvent.teamId(league, team) })
   })
-  const team = (id: string | undefined) => (id === undefined ? {} : { team: teamId(league, id) })
+  const team = (id: string | undefined) => (id === undefined ? {} : { team: EspnEvent.teamId(league, id) })
 
   const shared = {
     id: play.id,

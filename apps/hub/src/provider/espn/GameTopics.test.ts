@@ -9,7 +9,7 @@ import { Delivery } from "../Provider.ts"
 import * as FastCastMessage from "./FastCastMessage.ts"
 import { Frame } from "./Frame.ts"
 import { GameTopics } from "./GameTopics.ts"
-import { duringNeAtBuf, framesReplayed, recordedNeAtBuf, replayed, topicsAfter } from "./TestEspn.ts"
+import * as TestEspn from "./TestEspn.ts"
 import { Topic } from "./Topic.ts"
 
 const fixture = (name: string) => readFileSync(new URL(`./fixtures/${name}`, import.meta.url), "utf8")
@@ -42,7 +42,9 @@ const ariAtNygPlays = "gp-football-nfl-401872966"
 const neAtBufPlays = "gp-football-nfl-401872971"
 
 // NE at BUF's recorded day, replayed once, by the first test that reads it.
-const neAtBufDecoded = Effect.runSync(Effect.cached(Effect.flatMap(recordedNeAtBuf, replayed)))
+const neAtBufDecoded = Effect.runSync(
+  Effect.cached(Effect.flatMap(TestEspn.recordedNeAtBuf, TestEspn.replayed))
+)
 
 describe("GameTopics#take", () => {
   it.effect("should add the value read at a copy's source", () =>
@@ -123,7 +125,7 @@ describe("GameTopics#take", () => {
     Effect.gen(function* () {
       const { logs, layer } = recordingLogs()
 
-      yield* topicsAfter([neAtBufCheckpoint(), unapplicablePatch(819)]).pipe(Effect.provide(layer))
+      yield* TestEspn.topicsAfter([neAtBufCheckpoint(), unapplicablePatch(819)]).pipe(Effect.provide(layer))
 
       const lost = logs.filter(({ message }) => message.includes(`${neAtBufPlays} lost its document`))
       assert.lengthOf(lost, 1)
@@ -194,7 +196,7 @@ describe("GameTopics#take", () => {
     Effect.gen(function* () {
       const { logs, layer } = recordingLogs()
 
-      yield* framesReplayed([undecodablePatch(819), neAtBufCheckpoint()]).pipe(Effect.provide(layer))
+      yield* TestEspn.framesReplayed([undecodablePatch(819), neAtBufCheckpoint()]).pipe(Effect.provide(layer))
 
       assert.deepStrictEqual(
         logs.map(({ level, annotations }) => [level, annotations]),
@@ -416,7 +418,7 @@ describe("GameTopics#take", () => {
   describe("one array of deliveries per frame", () => {
     it.effect("should give a message that changes no document no deliveries", () =>
       Effect.gen(function* () {
-        const [, second, ...rest] = yield* framesReplayed([
+        const [, second, ...rest] = yield* TestEspn.framesReplayed([
           neAtBufCheckpoint(),
           message(neAtBufPlays, 819, [{ op: "replace", path: "/x", value: "1" }])
         ])
@@ -430,7 +432,7 @@ describe("GameTopics#take", () => {
       Effect.gen(function* () {
         const frames = [neAtBufCheckpoint(), undecodablePatch(819)]
 
-        const all = yield* framesReplayed(frames)
+        const all = yield* TestEspn.framesReplayed(frames)
 
         assert.strictEqual(all.length, frames.length)
         assert.deepStrictEqual(all.at(-1), [])
@@ -441,7 +443,7 @@ describe("GameTopics#take", () => {
       Effect.gen(function* () {
         const frames = moveRecordingFrames()
 
-        const all = yield* framesReplayed(frames)
+        const all = yield* TestEspn.framesReplayed(frames)
 
         assert.strictEqual(all.length, frames.length)
       })
@@ -455,7 +457,7 @@ describe("GameTopics#take", () => {
       "should decode every snapshot so it reads back from its JSON Equal to itself",
       () =>
         Effect.gen(function* () {
-          yield* TestClock.setTime(duringNeAtBuf.epochMilliseconds)
+          yield* TestClock.setTime(TestEspn.duringNeAtBuf.epochMilliseconds)
           const decoded = yield* neAtBufDecoded
           const deliveries = decoded.flat()
           const snapshots = deliveries.flatMap((delivery) =>
@@ -480,7 +482,7 @@ describe("GameTopics#take", () => {
       "should decode every play so it reads back from its JSON Equal to itself",
       () =>
         Effect.gen(function* () {
-          yield* TestClock.setTime(duringNeAtBuf.epochMilliseconds)
+          yield* TestClock.setTime(TestEspn.duringNeAtBuf.epochMilliseconds)
           const decoded = yield* neAtBufDecoded
           const deliveries = decoded.flat()
           const plays = deliveries.flatMap((delivery) =>
@@ -505,7 +507,7 @@ describe("GameTopics#take", () => {
 describe("GameTopics#retained", () => {
   it.effect("should drop the document and plays of a game no longer wanted", () =>
     Effect.gen(function* () {
-      const topics = yield* topicsAfter([neAtBufCheckpoint()])
+      const topics = yield* TestEspn.topicsAfter([neAtBufCheckpoint()])
 
       const kept = topics.retained((topic) => topic.tc() !== neAtBufPlays)
 
@@ -516,7 +518,7 @@ describe("GameTopics#retained", () => {
 
   it.effect("should keep the document of a topic still wanted", () =>
     Effect.gen(function* () {
-      const topics = yield* topicsAfter([neAtBufCheckpoint()])
+      const topics = yield* TestEspn.topicsAfter([neAtBufCheckpoint()])
 
       const kept = topics.retained((topic) => topic.tc() === neAtBufPlays)
 
@@ -540,7 +542,7 @@ describe("GameTopics#retained", () => {
 
 /** The deliveries `frames` decode to, each with the place, from 1, of the frame that said it. */
 function decoded(frames: ReadonlyArray<Frame>) {
-  return framesReplayed(frames).pipe(
+  return TestEspn.framesReplayed(frames).pipe(
     Effect.map((all) =>
       all.flatMap((deliveries, index) => deliveries.map((delivery) => ({ frame: index + 1, delivery })))
     )

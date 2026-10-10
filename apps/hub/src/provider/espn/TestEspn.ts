@@ -8,7 +8,7 @@ import * as Socket from "effect/socket/Socket"
 import { HubConfig } from "../../HubConfig.ts"
 import { Delivery, type Provider } from "../Provider.ts"
 import * as Espn from "./Espn.ts"
-import { listingOf } from "./EspnEvent.ts"
+import * as EspnEvent from "./EspnEvent.ts"
 import * as FastCastMessage from "./FastCastMessage.ts"
 import { Frame } from "./Frame.ts"
 import { GameTopics } from "./GameTopics.ts"
@@ -115,7 +115,7 @@ const replayedLine = Effect.fnUntraced(function* (
     return [{ ...state, topics }, deliveries] as const
   }
 
-  const listed = yield* Effect.option(listingOf(line.league, line.body))
+  const listed = yield* Effect.option(EspnEvent.listingOf(line.league, line.body))
   if (Option.isNone(listed)) return [state, noDeliveries] as const
   const games = HashMap.set(state.games, line.league, listed.value)
   const now = yield* DateTime.now

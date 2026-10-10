@@ -20,7 +20,7 @@ import { FastCast, type Wanted } from "./FastCast.ts"
 import * as FastCastMessage from "./FastCastMessage.ts"
 import { Frame } from "./Frame.ts"
 import type { GameTopics } from "./GameTopics.ts"
-import { topicsAfter } from "./TestEspn.ts"
+import * as TestEspn from "./TestEspn.ts"
 import { fakeServer, subscribed, watched } from "./TestFastCast.ts"
 import { Topic } from "./Topic.ts"
 
@@ -271,7 +271,7 @@ describe("FastCast", () => {
       yield* frames.until(wholeAt(7))
       yield* Effect.sync(() => server.send(undecodablePatchMessage(8)))
       const received = yield* frames.until(numbered(8))
-      const before = yield* topicsAfter(received.slice(0, -1))
+      const before = yield* TestEspn.topicsAfter(received.slice(0, -1))
       const bad = yield* Effect.fromOption(Arr.last(received))
 
       const [after] = yield* before.take(bad)
