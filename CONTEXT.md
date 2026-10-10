@@ -154,6 +154,9 @@ Provider and Source are the two words most likely to be swapped. Provider is alw
 | **Suspension** | The 3 min a command you send keeps the autopilot off the main tile, the sound or the layout it touched. | pause, lock |
 | **Ceiling** | The layout you chose (when you turn the autopilot on, and each one you set): the autopilot fits the layout down from it as games end and back up to it as they start, never past. | max layout |
 | **Fit** | The autopilot's choice of layout and tile order: the smallest layout on the ceiling's ladder with a slot for the main tile and each other game in progress or just over. | auto-layout |
+| **Prompt** | A toast asking whether to bring a game on no tile into the main tile: one a source can stream, in a red zone or crunch time, that has an empty slot to go to or outranks the weakest game on screen; the best such game, one at a time, for as long as it holds; `Prompt` in `apps/web/src/prompts/Prompt.ts`. Accepting assigns it to the target and promotes it, as your commands. | notification, alert, suggestion |
+| **Prompts** | A Display's prompts: on or off (`P`, on by default) and the games you dismissed, each quiet until a new moment; `Prompts` in `apps/web/src/prompts/Prompts.ts`. Apart from the autopilot. | prompter |
+| **Target** | The slot a prompt's game would take: the first empty slot on screen, else the weakest game's. | |
 
 ## Planned
 
@@ -173,6 +176,7 @@ Names the design uses that no code has yet. Move a row up, into its table, in th
 | **Tile delay** | Seconds that data is held back for a tile to match its video. | offset, latency |
 | **Scenario** | A game day a Hub plays offline in place of its providers and sources. Removed to be designed again ([ADR 0013](docs/adr/0013-scenarios-go.md)). | |
 | **Spoiler shield** | Hiding or delaying scores for chosen games. | |
+| **Phone push** | A prompt delivered to a phone. | notification |
 | **Follow** | Your declared interest in a team, conference, league, or game. | favourite, subscription |
 | **Persistence** | What the Hub keeps between runs: none for now, added back on top of the simplified model. | storage, database |
 | **Ticket** | A bet you have placed, tracked by the betting lens (later). | bet, wager |
