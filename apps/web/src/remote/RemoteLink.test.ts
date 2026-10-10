@@ -164,6 +164,17 @@ describe("RemoteLink", () => {
     })
   )
 
+  it.effect("should make a Display id outside a secure context, where crypto has no randomUUID", () =>
+    Effect.gen(function* () {
+      vi.stubGlobal("crypto", { getRandomValues: (bytes: Uint8Array) => bytes.fill(171) })
+      const { registry } = yield* TestWeb.withShell()
+
+      const id = yield* Atom.get(RemoteLink.displayId).pipe(Effect.scoped, Effect.provide(registry))
+
+      assert.strictEqual(id, "ab".repeat(16))
+    })
+  )
+
   it.effect("should keep the same Display id across reads", () =>
     Effect.gen(function* () {
       const { registry } = yield* TestWeb.withShell()

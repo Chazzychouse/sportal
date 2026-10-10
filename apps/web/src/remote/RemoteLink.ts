@@ -54,12 +54,17 @@ const report: Atom.Atom<RemoteReport> = Atom.make(
     })
 )
 
-/** This Display's id, made once and kept in this browser. */
+/** This Display's id, 16 random bytes as hex, made once and kept in this browser. */
 export const displayId: Atom.Writable<DisplayId> = Atom.kvs({
   runtime: Atom.runtime(KeyValueStore.layerStorage(() => localStorage)),
   key: "sportal/display-id",
   schema: DisplayId,
-  defaultValue: () => DisplayId.make(crypto.randomUUID())
+  defaultValue: () => {
+    // Not crypto.randomUUID: it exists only in a secure context, and a Display opened at a LAN address is not one.
+    const bytes = crypto.getRandomValues(new Uint8Array(16))
+    const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("")
+    return DisplayId.make(hex)
+  }
 }).pipe(Atom.keepAlive)
 
 /** Applies one input a Remote sent; one that does not decode is logged and dropped. */
