@@ -94,7 +94,7 @@ A client asks the Hub over the Hub socket: once (`list`), or live (`listLive`) f
 | **Schedule** | What the games API answers, the Hub's `Schedule` service: a day's games, one game, and a game's plays, each once or live. Today is live from the Director's slate; another day is the provider's listing, held in memory (a past day until the Hub restarts, a later one for 10 minutes). | calendar, games service |
 | **Listed game** | A game as a list or a tile shows it: its snapshot and its availability from every source, never its plays; `ListedGame`. | game summary |
 | **Game list** | A day and its games, filtered and in watch order, as a games query answers; `GameList`. | games response |
-| **Games query** | What a list of games asks for: a day, leagues, progress, and whether carried; `GamesQuery`, whose `answer` filters and orders. | filter |
+| **Games query** | What a list of games asks for: a day, a list of leagues, a list of progress, and whether only carried games; `GamesQuery`, whose `answer` filters and orders. | filter |
 | **Calendar date** | A day as `YYYY-MM-DD`, in the Hub's time zone; `CalendarDate` in code. | date |
 | **Game not found** | No day the Hub holds lists a game with that id; `GameNotFound`, the error of the `game`, `plays`, `gameLive` and `playsLive` RPCs. | |
 | **Schedule unavailable** | The provider could not be reached for a day, or a game's plays, the Hub does not hold; `ScheduleUnavailable`, the error of the games RPCs. | |

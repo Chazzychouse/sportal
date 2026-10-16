@@ -161,10 +161,7 @@ function PlayArrow(props: {
   onDrawn: () => void
 }) {
   const { game, play, onDrawn } = props
-  const spots = Option.all({
-    detail: Option.liftPredicate(play.detail, PlayDetail.guards.Football),
-    spots: FieldDrawing.spotsOf(game, play)
-  })
+  const spots = FieldDrawing.spotsOf(game, play)
   const missing = Option.isNone(spots)
   // A play dequeued with both spots always has them, but should one go missing no animation would end the play.
   useEffect(() => {
@@ -173,7 +170,7 @@ function PlayArrow(props: {
 
   return Option.match(spots, {
     onNone: () => null,
-    onSome: ({ detail, spots: { start, end } }) => {
+    onSome: ({ detail, start, end }) => {
       const scorer = play.scoring ? scorerOf(game, props.plays, play) : undefined
       const losing = detail.lostYards()
 

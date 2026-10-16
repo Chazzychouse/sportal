@@ -1,7 +1,7 @@
 import { ChannelAvailability } from "@sportal/domain/Channel"
 import { GameSnapshot, Progress } from "@sportal/domain/Game"
 import { LeagueId } from "@sportal/domain/League"
-import { Order, Schema, SchemaGetter } from "effect"
+import { Order, Schema } from "effect"
 import { ListedGame } from "./ListedGame.ts"
 
 /** A calendar day as `YYYY-MM-DD`. */
@@ -15,16 +15,16 @@ export const GameList = Schema.Struct({ date: CalendarDate, games: Schema.Array(
 export type GameList = typeof GameList.Type
 
 /**
- * What a list of games asks for, as its query string spells it: a day (today in the Hub's time zone without one),
- * leagues and progress as comma lists (all without them), and `carried=true` for only the games a source carries or
- * will carry. With `answer`, which filters and orders.
+ * What a list of games asks for: a day (today in the Hub's time zone without one), the leagues and the progress to keep
+ * (all without them), and `carried: true` for only the games a source carries or will carry. With `answer`, which
+ * filters and orders.
  */
 export const GamesQuery = Object.assign(
   Schema.Struct({
     date: Schema.optional(CalendarDate),
-    league: Schema.optional(commaList(LeagueId)),
-    progress: Schema.optional(commaList(Progress)),
-    carried: Schema.optional(Schema.Literal("true"))
+    league: Schema.optional(Schema.Array(LeagueId)),
+    progress: Schema.optional(Schema.Array(Progress)),
+    carried: Schema.optional(Schema.Boolean)
   }),
   { answer }
 )
@@ -40,19 +40,9 @@ function answer(
       ({ snapshot, availability }) =>
         (query.league === undefined || query.league.includes(snapshot.league)) &&
         (query.progress === undefined || query.progress.includes(snapshot.progress())) &&
-        (query.carried === undefined || availability.some(carriedOrUpcoming))
+        (query.carried !== true || availability.some(carriedOrUpcoming))
     )
     .toSorted(byWatchOrder)
-}
-
-/** A comma list in a query string, as `nfl,fbs`, read as the values of `item`. */
-function commaList<S extends Schema.Top & { readonly Encoded: string }>(item: S) {
-  return Schema.String.pipe(
-    Schema.decodeTo(Schema.Array(item), {
-      decode: SchemaGetter.transform((list: string) => list.split(",")),
-      encode: SchemaGetter.transform((items: ReadonlyArray<string>) => items.join(","))
-    })
-  )
 }
 
 function carriedOrUpcoming(availability: ChannelAvailability): boolean {

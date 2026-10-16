@@ -66,11 +66,15 @@ function step(drawing: FieldDrawing, event: FieldEvent): FieldDrawing {
   })
 }
 
-/** Where a football play started and ended on the field, when both are on it. */
+/** A football play's detail, with where the play started and ended on the field, when both are on it. */
 function spotsOf(game: GameSnapshot, play: Play) {
   return Option.liftPredicate(play.detail, PlayDetail.guards.Football).pipe(
     Option.flatMap((detail) =>
-      Option.all({ start: BallSpot.of(game, detail.start), end: BallSpot.of(game, detail.end) })
+      Option.all({
+        detail: Option.some(detail),
+        start: BallSpot.of(game, detail.start),
+        end: BallSpot.of(game, detail.end)
+      })
     )
   )
 }

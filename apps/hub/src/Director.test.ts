@@ -189,7 +189,7 @@ describe("Director, play logs", () => {
         })
       )
 
-      assert.isTrue(logs.some((line) => line.includes("Q1 15:00 Rush for 1 yard")))
+      assert.isTrue(logs.some((line) => line.includes("period 1 15:00 Rush for 1 yard")))
     })
   )
 

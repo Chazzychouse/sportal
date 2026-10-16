@@ -79,7 +79,7 @@ function loggedBackfill(played: ReadonlyArray<Extract<SlateChange, { readonly _t
 
 function loggedPlay(snapshot: GameSnapshot, play: Play) {
   const matchup = snapshot.matchup()
-  return Effect.logInfo(`Director: ${matchup} Q${play.period} ${play.clock} ${play.text}`).pipe(
+  return Effect.logInfo(`Director: ${matchup} period ${play.period} ${play.clock} ${play.text}`).pipe(
     Effect.annotateLogs({
       game: snapshot.id,
       league: snapshot.league,

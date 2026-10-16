@@ -1,6 +1,7 @@
 import { assert, describe, it } from "@effect/vitest"
 import { PlayId } from "@sportal/domain/Play"
 import { footballDetail, liveSnapshot, play, team } from "@sportal/domain/TestGame"
+import { Option } from "effect"
 import { FieldDrawing, FieldEvent } from "./FieldDrawing.ts"
 
 describe("FieldDrawing.initial", () => {
@@ -61,6 +62,25 @@ describe("FieldDrawing.step", () => {
     const next = FieldDrawing.step(drawing, FieldEvent.Drawn({ play: PlayId.make("9"), game }))
 
     assert.strictEqual(next, drawing)
+  })
+})
+
+describe("FieldDrawing.spotsOf", () => {
+  it("should give a football play's detail with its spots", () => {
+    const detail = footballDetail()
+
+    const spots = FieldDrawing.spotsOf(game, play({ detail }))
+
+    assert.strictEqual(Option.getOrUndefined(spots)?.detail, detail)
+  })
+
+  it("should give where a football play started and ended on the field", () => {
+    const spots = FieldDrawing.spotsOf(game, playAt(1))
+
+    assert.deepStrictEqual(
+      Option.map(spots, ({ start, end }) => [start.yards, end.yards]),
+      Option.some([25, 26])
+    )
   })
 })
 

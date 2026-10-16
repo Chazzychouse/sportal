@@ -1,10 +1,9 @@
 import { assert, describe, it } from "@effect/vitest"
 import type { ShellBridge } from "@sportal/api/ShellBridge"
-import { Effect, Layer, Option, Queue, Stream, SubscriptionRef } from "effect"
+import { Effect, Layer, Queue, Stream, SubscriptionRef } from "effect"
 import { Atom } from "effect/reactivity"
 import { Shell } from "../shell/Shell.ts"
 import * as TestWeb from "../TestWeb.ts"
-import * as Games from "./Games.ts"
 import * as GuideRelay from "./GuideRelay.ts"
 import { HubClient } from "./HubClient.ts"
 import { Connection } from "./HubSocket.ts"
@@ -12,7 +11,8 @@ import { Connection } from "./HubSocket.ts"
 describe("GuideRelay.relay", () => {
   it.effect("should send each guide the shell reads to the Hub", () =>
     Effect.gen(function* () {
-      const { registry, calls } = yield* TestWeb.withShell({ guideRead: Stream.make("<guide/>") })
+      const { registry, calls, hub } = yield* TestWeb.withShell({ guideRead: Stream.make("<guide/>") })
+      yield* SubscriptionRef.set(hub.connection, Connection.Connecting())
 
       const call = yield* Effect.gen(function* () {
         yield* Atom.mount(GuideRelay.relay)
@@ -73,8 +73,7 @@ describe("GuideRelay.relay", () => {
       const second = yield* Effect.gen(function* () {
         yield* Atom.mount(GuideRelay.relay)
         yield* Queue.take(calls)
-        yield* TestWeb.answer(hub, "games", hub.lists, TestWeb.todayList)
-        yield* TestWeb.until(Games.today, ({ value }) => Option.isSome(value))
+        yield* SubscriptionRef.set(hub.connection, Connection.Connected())
         yield* Queue.offer(guides, "<later/>")
         return yield* Queue.take(calls)
       }).pipe(Effect.scoped, Effect.provide(registry))
@@ -108,8 +107,6 @@ describe("GuideRelay.relay", () => {
       )
 
       const firstTwo = yield* Effect.gen(function* () {
-        yield* Atom.mount(Games.today)
-        yield* TestWeb.until(Games.today, (live) => Connection.$is("Connected")(live.connection))
         yield* Atom.mount(GuideRelay.relay)
         return yield* Queue.takeN(log, 2)
       }).pipe(Effect.scoped, Effect.provide(registry))

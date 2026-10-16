@@ -14,7 +14,7 @@ import * as TileRects from "./TileRects.ts"
 
 /**
  * A tile's header strip: its slot, its game and score, the on-air tally when its sound is on, and its controls.
- * It is a drop target for another tile or a benched game, which swaps in; and it can itself be dragged.
+ * It is a drop target for another tile, which swaps in; and it can itself be dragged.
  */
 export function TileChrome(props: {
   screen: Screen

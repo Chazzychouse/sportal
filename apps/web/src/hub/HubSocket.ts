@@ -1,5 +1,5 @@
 import { HubApi } from "@sportal/api/HubApi"
-import { Context, Data, DateTime, Effect, Layer, Option, Stream, SubscriptionRef } from "effect"
+import { Context, Data, DateTime, Effect, Layer, Option, Schedule, Stream, SubscriptionRef } from "effect"
 import { type Rpc, RpcClient, RpcClientError, type RpcGroup, RpcSerialization, RpcTest } from "effect/rpc"
 import { Socket } from "effect/socket"
 
@@ -17,8 +17,8 @@ export class HubSocket extends Context.Service<
     readonly connection: Stream.Stream<Connection>
     /**
      * The stream `query` asks the Hub for, while the socket is connected: ended when it is lost, and asked again each
-     * time it connects, so the Hub's first answer to each asking replaces what came before. A query the Hub refuses is
-     * logged, and asked again only when the socket next connects.
+     * time it connects, so the Hub's first answer to each asking replaces what came before. A query the Hub refuses,
+     * such as a game it has not listed yet, is logged and asked again every 10 seconds while it is read.
      */
     readonly live: <A, E>(query: (client: HubApiClient) => Stream.Stream<A, E>) => Stream.Stream<A>
   }
@@ -100,14 +100,22 @@ function over(
   }
 }
 
-/** One asking of a live query: it ends quietly when the socket is lost, which the connection shows, and logs a refusal. */
+/**
+ * A live query asked while the socket is up: it ends quietly when the socket is lost, which the connection shows, and
+ * a refusal is logged and asked again 10 seconds later.
+ */
 function asked<A, E>(answers: Stream.Stream<A, E>): Stream.Stream<A> {
   return answers.pipe(
     Stream.catchIf(
       (error) => error instanceof RpcClientError.RpcClientError,
-      () => Stream.empty,
-      (refused) => Stream.drain(Stream.fromEffect(Effect.logWarning("The Hub refused a live query", refused)))
-    )
+      () => Stream.empty
+    ),
+    Stream.tapError((refused) =>
+      Effect.logWarning("The Hub refused a live query; asking again in 10 s", refused)
+    ),
+    Stream.retry(Schedule.spaced("10 seconds")),
+    // A spaced schedule never ends, so the retry never gives up and fails.
+    Stream.orDie
   )
 }
 

@@ -171,8 +171,9 @@ describe("HubServer", () => {
 
   describe("game", () => {
     it.effect("should fail as not found for a game no day lists", () =>
-      served(() =>
+      served((frames) =>
         Effect.gen(function* () {
+          yield* TestHub.alaAtMsstListed(frames)
           const socket = yield* socketClient
 
           const error = yield* socket.game({ id: GameId.make("nope") }).pipe(Effect.flip)
@@ -207,107 +208,113 @@ describe("HubServer", () => {
   })
 
   describe("the live socket", () => {
-    it.effect("listLive should send the current answer first", () =>
-      served((frames) =>
-        Effect.gen(function* () {
-          yield* TestClock.setTime(TestHub.onAlaAtMsstDay)
-          yield* TestHub.alaAtMsstListed(frames)
-          const socket = yield* socketClient
+    describe("listLive", () => {
+      it.effect("should send the current answer first", () =>
+        served((frames) =>
+          Effect.gen(function* () {
+            yield* TestClock.setTime(TestHub.onAlaAtMsstDay)
+            yield* TestHub.alaAtMsstListed(frames)
+            const socket = yield* socketClient
 
-          const answers = yield* collected(socket.listLive({}))
-          const first = yield* Queue.take(answers)
+            const answers = yield* collected(socket.listLive({}))
+            const first = yield* Queue.take(answers)
 
-          assert.deepStrictEqual(
-            first.games.map(({ snapshot }) => snapshot.id),
-            [TestHub.alaAtMsst.id]
-          )
-        })
+            assert.deepStrictEqual(
+              first.games.map(({ snapshot }) => snapshot.id),
+              [TestHub.alaAtMsst.id]
+            )
+          })
+        )
       )
-    )
 
-    it.effect("listLive should send the answer again when a listing changes it", () =>
-      served((frames) =>
-        Effect.gen(function* () {
-          yield* TestClock.setTime(TestHub.onAlaAtMsstDay)
-          yield* TestHub.alaAtMsstListed(frames)
-          const socket = yield* socketClient
-          const answers = yield* collected(socket.listLive({}))
-          yield* Queue.take(answers)
+      it.effect("should send the answer again when a listing changes it", () =>
+        served((frames) =>
+          Effect.gen(function* () {
+            yield* TestClock.setTime(TestHub.onAlaAtMsstDay)
+            yield* TestHub.alaAtMsstListed(frames)
+            const socket = yield* socketClient
+            const answers = yield* collected(socket.listLive({}))
+            yield* Queue.take(answers)
 
-          yield* TestHub.offered(
-            frames,
-            Delivery.Listing({ league: "fbs", games: [TestHub.alaAtMsstInPeriod(2)] })
-          )
-          yield* TestClock.adjust("250 millis")
-          const next = yield* Queue.take(answers)
+            yield* TestHub.offered(
+              frames,
+              Delivery.Listing({ league: "fbs", games: [TestHub.alaAtMsstInPeriod(2)] })
+            )
+            yield* TestClock.adjust("250 millis")
+            const next = yield* Queue.take(answers)
 
-          assert.deepStrictEqual(
-            next.games.map(({ snapshot }) => snapshot.period),
-            [2]
-          )
-        })
+            assert.deepStrictEqual(
+              next.games.map(({ snapshot }) => snapshot.period),
+              [2]
+            )
+          })
+        )
       )
-    )
 
-    it.effect("listLive should give a query asked later the latest answer at once", () =>
-      served((frames) =>
-        Effect.gen(function* () {
-          yield* TestClock.setTime(TestHub.onAlaAtMsstDay)
-          yield* TestHub.alaAtMsstListed(frames)
-          const socket = yield* socketClient
-          const earlier = yield* collected(socket.listLive({}))
-          yield* Queue.take(earlier)
-          yield* TestHub.offered(
-            frames,
-            Delivery.Listing({ league: "fbs", games: [TestHub.alaAtMsstInPeriod(2)] })
-          )
-          yield* TestClock.adjust("250 millis")
-          yield* Queue.take(earlier)
+      it.effect("should give a query asked later the latest answer at once", () =>
+        served((frames) =>
+          Effect.gen(function* () {
+            yield* TestClock.setTime(TestHub.onAlaAtMsstDay)
+            yield* TestHub.alaAtMsstListed(frames)
+            const socket = yield* socketClient
+            const earlier = yield* collected(socket.listLive({}))
+            yield* Queue.take(earlier)
+            yield* TestHub.offered(
+              frames,
+              Delivery.Listing({ league: "fbs", games: [TestHub.alaAtMsstInPeriod(2)] })
+            )
+            yield* TestClock.adjust("250 millis")
+            yield* Queue.take(earlier)
 
-          const later = yield* collected(socket.listLive({}))
-          const first = yield* Queue.take(later)
+            const later = yield* collected(socket.listLive({}))
+            const first = yield* Queue.take(later)
 
-          assert.deepStrictEqual(
-            first.games.map(({ snapshot }) => snapshot.period),
-            [2]
-          )
-        })
+            assert.deepStrictEqual(
+              first.games.map(({ snapshot }) => snapshot.period),
+              [2]
+            )
+          })
+        )
       )
-    )
+    })
 
-    it.effect("gameLive should send the game with its availability first", () =>
-      served((frames) =>
-        Effect.gen(function* () {
-          yield* TestClock.setTime(TestHub.onAlaAtMsstDay)
-          yield* TestHub.alaAtMsstListed(frames)
-          const socket = yield* socketClient
+    describe("gameLive", () => {
+      it.effect("should send the game with its availability first", () =>
+        served((frames) =>
+          Effect.gen(function* () {
+            yield* TestClock.setTime(TestHub.onAlaAtMsstDay)
+            yield* TestHub.alaAtMsstListed(frames)
+            const socket = yield* socketClient
 
-          const answers = yield* collected(socket.gameLive({ id: TestHub.alaAtMsst.id }))
-          const first = yield* Queue.take(answers)
+            const answers = yield* collected(socket.gameLive({ id: TestHub.alaAtMsst.id }))
+            const first = yield* Queue.take(answers)
 
-          assert.strictEqual(first.snapshot.id, TestHub.alaAtMsst.id)
-          assert.deepStrictEqual(first.availability, [{ _tag: "NoGuide", source: "YouTube TV" }])
-        })
+            assert.strictEqual(first.snapshot.id, TestHub.alaAtMsst.id)
+            assert.deepStrictEqual(first.availability, [{ _tag: "NoGuide", source: "YouTube TV" }])
+          })
+        )
       )
-    )
+    })
 
-    it.effect("playsLive should start with a reset to the latest page", () =>
-      served((frames) =>
-        Effect.gen(function* () {
-          yield* TestHub.alaAtMsstListed(frames)
-          yield* TestHub.offered(
-            frames,
-            Delivery.Plays({ game: TestHub.alaAtMsst.id, plays: TestHub.playsUpTo(2) })
-          )
-          const socket = yield* socketClient
+    describe("playsLive", () => {
+      it.effect("should start with a reset to the latest page", () =>
+        served((frames) =>
+          Effect.gen(function* () {
+            yield* TestHub.alaAtMsstListed(frames)
+            yield* TestHub.offered(
+              frames,
+              Delivery.Plays({ game: TestHub.alaAtMsst.id, plays: TestHub.playsUpTo(2) })
+            )
+            const socket = yield* socketClient
 
-          const changes = yield* collected(socket.playsLive({ id: TestHub.alaAtMsst.id }))
-          const first = yield* Queue.take(changes)
+            const changes = yield* collected(socket.playsLive({ id: TestHub.alaAtMsst.id }))
+            const first = yield* Queue.take(changes)
 
-          assert.deepStrictEqual(first, { _tag: "Reset", plays: TestHub.playsUpTo(2).toReversed() })
-        })
+            assert.deepStrictEqual(first, { _tag: "Reset", plays: TestHub.playsUpTo(2).toReversed() })
+          })
+        )
       )
-    )
+    })
   })
 
   describe("HubServer.lanAddresses", () => {
@@ -362,88 +369,91 @@ describe("HubServer", () => {
     )
   })
 
-  describe("the displays routes", () => {
-    it.effect("inputs should tell a Display the Hub has registered it first", () =>
-      served(() =>
-        Effect.gen(function* () {
-          const socket = yield* socketClient
+  describe("the displays", () => {
+    describe("inputs", () => {
+      it.effect("should tell a Display the Hub has registered it first", () =>
+        served(() =>
+          Effect.gen(function* () {
+            const socket = yield* socketClient
 
-          const messages = yield* collected(socket.inputs({ display: desk }))
-          const first = yield* Queue.take(messages)
+            const messages = yield* collected(socket.inputs({ display: desk }))
+            const first = yield* Queue.take(messages)
 
-          assert.deepStrictEqual(first, { _tag: "Registered" })
-        })
+            assert.deepStrictEqual(first, { _tag: "Registered" })
+          })
+        )
       )
-    )
 
-    it.effect("inputs should send an input a Remote posts to the Display it names", () =>
-      served(() =>
-        Effect.gen(function* () {
-          const socket = yield* socketClient
-          const messages = yield* collected(socket.inputs({ display: desk }))
-          yield* Queue.take(messages)
+      it.effect("should send an input a Remote posts to the Display it names", () =>
+        served(() =>
+          Effect.gen(function* () {
+            const socket = yield* socketClient
+            const messages = yield* collected(socket.inputs({ display: desk }))
+            yield* Queue.take(messages)
 
-          yield* socket.send({ display: desk, input: { _tag: "Pressed" } })
-          const sent = yield* Queue.take(messages)
+            yield* socket.send({ display: desk, input: { _tag: "Pressed" } })
+            const sent = yield* Queue.take(messages)
 
-          assert.deepStrictEqual(sent, { _tag: "Sent", input: { _tag: "Pressed" } })
-        })
+            assert.deepStrictEqual(sent, { _tag: "Sent", input: { _tag: "Pressed" } })
+          })
+        )
       )
-    )
 
-    it.effect("inputs should forget a Display once its client stops reading them", () =>
-      served(() =>
-        Effect.gen(function* () {
-          const socket = yield* socketClient
-          const messages = yield* Queue.unbounded<DisplayMessage>()
-          const reading = yield* socket.inputs({ display: desk }).pipe(
-            Stream.runForEach((message) => Queue.offer(messages, message)),
-            Effect.forkScoped
-          )
-          yield* Queue.take(messages)
+      it.effect("should forget a Display once its client stops reading them", () =>
+        served(() =>
+          Effect.gen(function* () {
+            const socket = yield* socketClient
+            const messages = yield* Queue.unbounded<DisplayMessage>()
+            const reading = yield* socket.inputs({ display: desk }).pipe(
+              Stream.runForEach((message) => Queue.offer(messages, message)),
+              Effect.forkScoped
+            )
+            yield* Queue.take(messages)
 
-          yield* Fiber.interrupt(reading)
-          // The Hub ends the stream when the interrupt reaches it, a moment after the client's.
-          const error = yield* socket
-            .send({ display: desk, input: { _tag: "Pressed" } })
-            .pipe(Effect.flip, Effect.eventually)
+            yield* Fiber.interrupt(reading)
+            // The Hub ends the stream when the interrupt reaches it, a moment after the client's.
+            const error = yield* socket
+              .send({ display: desk, input: { _tag: "Pressed" } })
+              .pipe(Effect.flip, Effect.eventually)
 
-          assert.strictEqual(error._tag, "DisplayOffline")
-        })
+            assert.strictEqual(error._tag, "DisplayOffline")
+          })
+        )
       )
-    )
+    })
 
-    it.effect("send should refuse with DisplayOffline an input for a Display that is not connected", () =>
-      served(() =>
-        Effect.gen(function* () {
-          const socket = yield* socketClient
+    describe("send", () => {
+      it.effect("should refuse with DisplayOffline an input for a Display that is not connected", () =>
+        served(() =>
+          Effect.gen(function* () {
+            const socket = yield* socketClient
 
-          const error = yield* socket.send({ display: desk, input: { _tag: "Pressed" } }).pipe(Effect.flip)
+            const error = yield* socket.send({ display: desk, input: { _tag: "Pressed" } }).pipe(Effect.flip)
 
-          assert.strictEqual(error._tag, "DisplayOffline")
-        })
+            assert.strictEqual(error._tag, "DisplayOffline")
+          })
+        )
       )
-    )
+    })
 
-    it.effect("follow should send a Display's report to a Remote following it", () =>
-      served(() =>
-        Effect.gen(function* () {
-          const socket = yield* socketClient
-          const inputs = yield* collected(socket.inputs({ display: desk }))
-          yield* Queue.take(inputs)
-          yield* socket.report({ display: desk, report: { screen: 1 } })
+    describe("follow", () => {
+      it.effect("should send a Display's report to a Remote following it", () =>
+        served(() =>
+          Effect.gen(function* () {
+            const socket = yield* socketClient
+            const inputs = yield* collected(socket.inputs({ display: desk }))
+            yield* Queue.take(inputs)
+            yield* socket.report({ display: desk, report: { screen: 1 } })
 
-          const follows = yield* collected(socket.follow({ display: desk }))
-          const message = yield* Queue.take(follows)
+            const follows = yield* collected(socket.follow({ display: desk }))
+            const message = yield* Queue.take(follows)
 
-          assert.deepStrictEqual(message, { _tag: "Reported", report: { screen: 1 } })
-        })
+            assert.deepStrictEqual(message, { _tag: "Reported", report: { screen: 1 } })
+          })
+        )
       )
-    )
 
-    it.effect(
-      "follow should tell a Remote following a Display that is not connected that it is offline",
-      () =>
+      it.effect("should tell a Remote following a Display that is not connected that it is offline", () =>
         served(() =>
           Effect.gen(function* () {
             const socket = yield* socketClient
@@ -454,7 +464,8 @@ describe("HubServer", () => {
             assert.deepStrictEqual(message, { _tag: "Offline" })
           })
         )
-    )
+      )
+    })
   })
 })
 

@@ -2,9 +2,19 @@ import { assert, describe, it } from "@effect/vitest"
 import type { ChannelAvailability } from "@sportal/domain/Channel"
 import { GameId } from "@sportal/domain/Game"
 import * as TestGame from "@sportal/domain/TestGame"
-import { DateTime } from "effect"
+import { DateTime, Schema } from "effect"
 import { GamesQuery } from "./GamesQuery.ts"
 import type { ListedGame } from "./ListedGame.ts"
+
+describe("GamesQuery", () => {
+  it("should send leagues and progress as JSON lists and carried as a boolean", () => {
+    const query: GamesQuery = { league: ["nfl", "fbs"], progress: ["live"], carried: true }
+
+    const wire = Schema.encodeSync(GamesQuery)(query)
+
+    assert.deepStrictEqual(wire, { league: ["nfl", "fbs"], progress: ["live"], carried: true })
+  })
+})
 
 describe("GamesQuery.answer", () => {
   it("should keep only the leagues asked for", () => {
@@ -26,7 +36,7 @@ describe("GamesQuery.answer", () => {
   it("should keep only games a source carries or will carry when asked", () => {
     const games = [listed("1", {}, [carried]), listed("2", {}, [{ _tag: "NotCarried", why: "NotInGuide" }])]
 
-    const answer = GamesQuery.answer({ carried: "true" }, games)
+    const answer = GamesQuery.answer({ carried: true }, games)
 
     assert.deepStrictEqual(ids(answer), ["1"])
   })

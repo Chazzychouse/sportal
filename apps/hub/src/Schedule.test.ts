@@ -3,7 +3,7 @@ import { CalendarDate } from "@sportal/api/GamesQuery"
 import type { ChannelAvailability } from "@sportal/domain/Channel"
 import { GameId } from "@sportal/domain/Game"
 import { play, snapshot } from "@sportal/domain/TestGame"
-import { DateTime, Effect, Queue, type Stream } from "effect"
+import { DateTime, Effect, Fiber, Queue, type Stream } from "effect"
 import { TestClock } from "effect/testing"
 import { Delivery } from "./provider/Provider.ts"
 import { Schedule } from "./Schedule.ts"
@@ -211,7 +211,9 @@ describe("Schedule#listLive", () => {
         )
 
         yield* Effect.forEach(pushes, (push) => TestHub.offered(frames, push))
-        // The answer reads each slate in turn; it reads the burst before the clock moves on.
+        // The answer reads each slate in turn, a yield for each stage before its debounce; it reads the burst before
+        // the clock moves on.
+        yield* Effect.yieldNow
         yield* Effect.yieldNow
         yield* TestClock.adjust("250 millis")
         const answer = yield* Queue.take(answers)
@@ -246,6 +248,23 @@ describe("Schedule#listLive", () => {
           answer.games.map(({ snapshot }) => snapshot.period),
           [2]
         )
+      })
+    )
+  )
+
+  it.effect("should move today on at midnight in the Hub's time zone, with the new day's games", () =>
+    TestHub.scheduled({}, (frames) =>
+      Effect.gen(function* () {
+        yield* TestClock.setTime(beforeMidnight)
+        yield* TestHub.offered(frames, Delivery.Listing({ league: "fbs", games: [tonightsFinal] }))
+        const schedule = yield* Schedule
+        const live = yield* schedule.listLive({})
+        const answers = yield* pastFirst(live)
+
+        yield* TestClock.adjust("2 minutes")
+        const answer = yield* Queue.take(answers)
+
+        assert.deepStrictEqual(answer, { date: CalendarDate.make("2026-10-04"), games: [] })
       })
     )
   )
@@ -296,14 +315,47 @@ describe("Schedule#game", () => {
   )
 
   it.effect("should answer a game of a day it already listed", () =>
-    TestHub.scheduled({ listing: () => Effect.succeed([tomorrows]) }, () =>
+    TestHub.scheduled({ listing: () => Effect.succeed([tomorrows]) }, (frames) =>
       Effect.gen(function* () {
+        yield* TestHub.alaAtMsstListed(frames)
         const schedule = yield* Schedule
         yield* schedule.list({ date: tomorrow })
 
         const game = yield* schedule.game(tomorrows.id)
 
         assert.strictEqual(game.snapshot.id, tomorrows.id)
+      })
+    )
+  )
+
+  it.effect("should answer a game asked for before the first listing once the listing comes", () =>
+    TestHub.scheduled({}, (frames) =>
+      Effect.gen(function* () {
+        const schedule = yield* Schedule
+        const asking = yield* Effect.forkScoped(schedule.game(TestHub.alaAtMsst.id), {
+          startImmediately: true
+        })
+
+        yield* TestHub.alaAtMsstListed(frames)
+        const game = yield* Fiber.join(asking)
+
+        assert.strictEqual(game.snapshot.id, TestHub.alaAtMsst.id)
+      })
+    )
+  )
+
+  it.effect("should fail as not found when no listing comes within 20 seconds of the Hub starting", () =>
+    TestHub.scheduled({}, () =>
+      Effect.gen(function* () {
+        const schedule = yield* Schedule
+        const asking = yield* Effect.forkScoped(schedule.game(TestHub.alaAtMsst.id), {
+          startImmediately: true
+        })
+
+        yield* TestClock.adjust("20 seconds")
+        const error = yield* Fiber.join(asking).pipe(Effect.flip)
+
+        assert.strictEqual(error._tag, "GameNotFound")
       })
     )
   )
@@ -347,8 +399,9 @@ describe("Schedule#plays", () => {
   it.effect("should fetch an off-slate game's plays from the provider", () =>
     TestHub.scheduled(
       { listing: () => Effect.succeed([tomorrows]), plays: () => Effect.succeed(TestHub.playsUpTo(2)) },
-      () =>
+      (frames) =>
         Effect.gen(function* () {
+          yield* TestHub.alaAtMsstListed(frames)
           const schedule = yield* Schedule
           yield* schedule.list({ date: tomorrow })
 
@@ -424,6 +477,16 @@ const yesterdaysFinal = snapshot({
   id: GameId.make("2"),
   status: "final",
   startsAt: DateTime.makeUnsafe("2026-10-02T23:30:00Z")
+})
+
+/** A minute before midnight US Eastern, at the end of `TestHub.onAlaAtMsstDay`. */
+const beforeMidnight = DateTime.toEpochMillis(DateTime.makeUnsafe("2026-10-04T03:59:00Z"))
+
+/** A game that started this evening, US Eastern, and is over. */
+const tonightsFinal = snapshot({
+  id: GameId.make("4"),
+  status: "final",
+  startsAt: DateTime.makeUnsafe("2026-10-03T23:30:00Z")
 })
 
 /** A game tomorrow, US Eastern, off today's slate. */

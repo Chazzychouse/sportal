@@ -107,10 +107,13 @@ The Hub's API, `HubApi`, answered by the Hub's `Schedule` and `Displays`:
 
 - A listed game is its snapshot and its availability from every source; a list never carries plays, and is in watch
   order: live, then upcoming by start, then over. `date` defaults to today in the Hub's time zone (`SPORTAL_TIME_ZONE`);
-  `league` and `progress` are comma lists; `carried=true` keeps the games a source carries or will carry.
-- Today is live from the Director's slate. Another day is the provider's listing for it, fetched on demand and held in
-  memory: a past day until the Hub restarts, a later one for 10 minutes. A game off today's slate is found in a held
-  day, and its plays are fetched from the provider.
+  `league` and `progress` are lists of values, all without them; `carried: true` keeps the games a source carries or
+  will carry.
+- Today is live from the Director's slate, and a list asked with no `date` moves on to the next day at midnight in the
+  Hub's time zone. Another day is the provider's listing for it, fetched on demand and held in memory: a past day until
+  the Hub restarts, a later one for 10 minutes. A game off today's slate is found in a held day, and its plays are
+  fetched from the provider. A game asked for before the Director has its first games waits for them, up to 20 seconds
+  after the Hub starts, before it is `GameNotFound`; the web UI asks a refused live query again every 10 seconds.
 - Each live query is a stream of its own for its one asking, derived from the Director's slate and the sources'
   availability, rechecked every 30 seconds: the list filters, orders, drops a repeat, and sends a change once 250 ms
   have passed without a further one; the game drops a repeat; the plays stream sends `Game#playsChange` of each version

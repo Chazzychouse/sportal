@@ -1,7 +1,10 @@
 import { afterEach, assert, beforeEach, describe, it } from "@effect/vitest"
-import { Effect, Queue, Stream } from "effect"
+import { GameId } from "@sportal/domain/Game"
+import { snapshot } from "@sportal/domain/TestGame"
+import { Effect, Queue, Stream, SubscriptionRef } from "effect"
 import { TestClock } from "effect/testing"
 import { vi } from "vitest"
+import * as TestWeb from "../TestWeb.ts"
 import { type Connection, HubSocket } from "./HubSocket.ts"
 
 describe("HubSocket", () => {
@@ -127,6 +130,38 @@ describe("HubSocket", () => {
     })
   )
 })
+
+describe("HubSocket#live", () => {
+  it.effect("should ask a refused query again 10 seconds later, and send what the Hub answers then", () =>
+    Effect.gen(function* () {
+      const hub = yield* TestWeb.liveHub()
+      yield* SubscriptionRef.set(hub.refusals, 1)
+
+      const answer = yield* Effect.gen(function* () {
+        const socket = yield* HubSocket
+        const answers = yield* Queue.unbounded<GameId>()
+        const live = socket.live((client) => client.gameLive({ id: game.id }))
+        yield* live.pipe(
+          Stream.runForEach(({ snapshot }) => Queue.offer(answers, snapshot.id)),
+          Effect.forkScoped
+        )
+        yield* SubscriptionRef.changes(hub.refusals).pipe(
+          Stream.filter((left) => left === 0),
+          Stream.runHead
+        )
+
+        yield* TestClock.adjust("10 seconds")
+        yield* TestWeb.answer(hub, `game ${game.id}`, hub.games, { snapshot: game, availability: [] })
+        return yield* Queue.take(answers)
+      }).pipe(Effect.scoped, Effect.provide(hub.layer))
+
+      assert.strictEqual(answer, game.id)
+    })
+  )
+})
+
+/** A game the Hub refuses before it answers it. */
+const game = snapshot({ id: GameId.make("401") })
 
 /** Each connection the socket publishes, by its tag, in a queue, while the test's scope lives. */
 const connections = Effect.gen(function* () {

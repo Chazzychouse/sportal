@@ -1,4 +1,5 @@
 import { useAtomSet, useAtomValue } from "@effect/atom-react"
+import type { GameId } from "@sportal/domain/Game"
 import { Option } from "effect"
 import {
   CommandDialog,
@@ -32,6 +33,11 @@ export function CommandPalette(props: { open: boolean; onOpenChange: (open: bool
     input(DisplayInput.Commanded({ command }))
     props.onOpenChange(false)
   }
+  // As the Remote chooses: a game already on screen stays where it is.
+  const choose = (game: GameId) => {
+    input(DisplayInput.Chosen({ game }))
+    props.onOpenChange(false)
+  }
   const snapshots = Option.match(value, { onNone: () => [], onSome: ({ games }) => games }).map(
     ({ snapshot }) => snapshot
   )
@@ -58,7 +64,7 @@ export function CommandPalette(props: { open: boolean; onOpenChange: (open: bool
             <CommandItem
               key={game.id}
               value={`watch ${game.scoreline()} ${game.away.team.name} ${game.home.team.name} ${game.networks()} ${game.id}`}
-              onSelect={() => run({ _tag: "Assign", tile: selected, game: game.id })}
+              onSelect={() => choose(game.id)}
             >
               <TeamLogo team={game.away.team} size={16} />
               <span className="font-mono">{game.scoreline()}</span>
