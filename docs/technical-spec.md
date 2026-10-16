@@ -99,6 +99,9 @@ The Hub's API, `HubApi`, answered by the Hub's `Schedule` and `Displays`:
 | `list` | a games query (`date`, `league`, `progress`, `carried`) | `{ date, games: ListedGame[] }`; `ScheduleUnavailable` |
 | `game` | `{ id }` | `ListedGame`; `GameNotFound` or `ScheduleUnavailable` |
 | `plays` | `{ id, before?, limit? }` | `{ plays, more }`, newest first; `before` is a `sequence`, `limit` (1–200) defaults to 50 |
+| `stats` | `{ id }` | the game's `GameStats`; `GameNotFound` or `StatsUnavailable` |
+| `statsLive` | `{ id }` | stream: the game's stats, then again each time a refresh changes them |
+| `highlights` | `{ league, date }` | the highlights of that day's final games in that league; `StatsUnavailable` |
 | `readGuide` | `{ guide }` | nothing; `GuideUnreadable` when the source cannot read it |
 | `health` | – | `{ version, startedAt }` |
 | `addresses` | – | the LAN addresses a Remote's join code can point at |
@@ -120,12 +123,20 @@ The Hub's API, `HubApi`, answered by the Hub's `Schedule` and `Displays`:
   of the game against the one before. The client pings the socket every 5 seconds and reopens
   a lost one after half a second, then half as long again each time, up to 5 seconds; each query is asked again when
   it reconnects.
+- Stats come from the Hub's `Stats` service (`apps/hub/src/Stats.ts`) over the provider's game summary (`EspnSummary`).
+  An upcoming game's are empty with no fetch. A final game's are fetched once and kept, except that one with no
+  highlights yet is fetched again at most every 10 minutes. A live game's are fetched when asked, and again every
+  `HubConfig.statsRefresh` (`SPORTAL_STATS_REFRESH`, 30 s, at least 10 s) while any `statsLive` asking follows it: one
+  fetch however many follow, none when none do. `highlights` fetches any uncached final game's summary of the day,
+  four at a time. `StatsUnavailable` when the provider cannot give them.
 - `GameNotFound` for an id no held day lists; `ScheduleUnavailable` when the provider cannot be reached for
   a day, or a game's plays, the Hub does not hold.
 - In the web UI, `Games` (`apps/web/src/hub/Games.ts`) holds an atom per query the views make, all
   over the one `HubSocket`: today's list, kept open,
-  which the Screen, the top bar, the palette and the Remote read; and each tile's game and, for a field, its plays,
-  each asked only while a tile reads it.
+  which the Screen, the ribbon, the full guide, the palette and the Remote read; and each tile's game and, for a field, its plays,
+  each asked only while a tile reads it. `Stats` (`apps/web/src/hub/Stats.ts`) does the same for a game's stats, kept
+  open while a page or a stats tile reads them, and for a league's highlights: today's asked again every 5 minutes while
+  shown (a failed ask is tried again), a past day asked once.
 
 The Hub's API for Displays and their Remotes:
 
@@ -213,6 +224,8 @@ sportal/
 │   │       ├── League.ts       League (its id, sport and name), LeagueId, Sport
 │   │       ├── Team.ts         Team, its colors, Ranking
 │   │       ├── Game.ts         Game (a snapshot and its plays), GameId, GameStatus, GameSnapshot, Progress, PlaysPage, PlaysChange, Network, Broadcast
+│   │       ├── GameStats.ts    GameStats (periods, team stats, leaders, win chance, scoring plays), TeamStat, Leader, WinChance
+│   │       ├── Highlight.ts    Highlight, HighlightId: a provider's video clip of a game
 │   │       ├── Slate.ts        Slate (the listed games, from listings and play lists), SlateChange
 │   │       ├── Situation.ts    Situation, a union by sport (FootballSituation, BaseballSituation), and BallSpot
 │   │       ├── Play.ts         Play, as the game's play-by-play lists it; PlayDetail, a union by sport; FootballKind
@@ -233,6 +246,7 @@ sportal/
 │           ├── DisplayOffline.ts   The error for an input or report to a Display that is not connected
 │           ├── RemoteMessage.ts    What the Hub pushes to a Remote: its Display's latest report, or Offline
 │           ├── ShellBridge.ts      What the desktop shell exposes to the web UI; TilePlacement, TileBounds
+│           ├── StatsUnavailable.ts The error for stats or highlights the provider could not give
 │           ├── TileKey.ts          What a tile shows, as the one string the Screen, the shell and a Remote name it by
 │           ├── ShellChannel.ts     The IPC channel names, apart so the sandboxed preload bundles only them
 │           └── Hotkey.ts           The keys Sportal acts on, with their help text
@@ -246,6 +260,7 @@ sportal/
     │       ├── Director.ts         The one holder of the slate: takes each delivery as it arrives and offers the slate
     │       ├── Shutdown.ts         Whether a task that should run until the Hub stops ended because it is stopping, and the Error log unless it did
     │       ├── TestHub.ts          The Hub's one Test module: recorded payloads, fake ESPN and FastCast hosts, frame builders, and harnesses over the Director and the Schedule
+    │       ├── Stats.ts            A game's stats and a day's highlights: fetched once, or live, kept per game
     │       ├── Schedule.ts         Answers the games API: a day's games, one game, a game's plays, each once or live
     │       ├── HubServer.ts        Serves the API, its live queries, and the web UI's files
     │       ├── provider/
@@ -257,6 +272,8 @@ sportal/
     │       │       ├── EspnLeague.ts       The leagues ESPN serves, as a table: each one's URLs and FastCast topic prefix
 │       │       ├── EspnPayload.ts      ESPN's JSON as ESPN spells it: events, scoreboard, plays
     │       │       ├── EspnEvent.ts        The site scoreboard's event as a GameSnapshot
+    │       │       ├── EspnSummary.ts      ESPN's game summary as GameStats and Highlights
+    │       │       ├── EspnSummaryPayload.ts  The summary's wire shape
     │       │       ├── EspnPlay.ts         ESPN's plays and their type ids, as Play
     │       │       ├── FastCast.ts         ESPN's push, a service: follows the topics it is told to, and gives the socket as frames (`Frame`, each as received, before ESPN's decode reads it; `Topic`, read once from its `tc`)
     │       │       ├── FastCastMessage.ts  FastCast's wire shapes: the outer envelope, framing, and the patch message
@@ -272,11 +289,15 @@ sportal/
     │   └── src/
     │       ├── main.tsx
     │       ├── WebRuntime.ts       The web UI's one runtime
-    │       ├── theme.css           Desk and couch density themes
+    │       ├── theme.css           Desk and couch density themes, and the Glass and Team tokens
+    │       ├── ui/                 Theme (the Glass and Team looks), Shelf (a row of cards)
+    │       ├── guide/              The ribbon, the full guide and its rail, the guide's shelves and items
+    │       ├── custom/             Custom streams (YouTube videos and playlists): parse, save, the form, the card
+    │       ├── stats/              A game's stats as a page and as a tile, fitted to the tile; a highlight card
     │       ├── design/             Vendored shadcn primitives, under the CLI's own file names
-    │       ├── display/            This device's Display: state and rules, hotkeys, full screen, overlays, top bar, command palette
+    │       ├── display/            This device's Display: state and rules, hotkeys, full screen, overlays, the toasts, the game page, command palette
     │       ├── shell/              Shell: the edge to the window and the shell bridge
-    │       ├── hub/                HubClient (the requests and writes), HubSocket (the one socket, its client and its connection), LiveStream (a live query folded into an atom), Games (one atom per live query)
+    │       ├── hub/                HubClient (the requests and writes), Stats (a game's stats and a league's highlights as atoms), HubSocket (the one socket, its client and its connection), LiveStream (a live query folded into an atom), Games (one atom per live query)
     │       ├── screen/             The Screen (state, commands, source choice), this Display's copy of it, tiles, dividers, tile actions, rejections
     │       ├── layout/             Layout (the geometry: slots, dividers, next, clamp), its picker and glyphs
     │       ├── game/               A game's status, score, and logo, as lists and tiles show them; the field, which draws a game's plays
@@ -404,6 +425,30 @@ YouTube TV's channels are found in its own guide, read by the shell and handed t
 - Full screen is the Display's window, local to it, and is not Screen state.
 
 Each Display owns its Screen (`DisplayScreen.ts`, an atom kept in localStorage). A screen command written to it is applied against the availability today's list last brought, and a refused one is published on its `rejected` atom. Each answer today's live list brings refreshes its tiles with `screen.refresh`. The Hub holds no Screen.
+
+### 5.3.1 Display
+
+The Display (`apps/web/src/display/Display.ts`) is one pure fold from what a person did (`DisplayInput`) to its next
+state and the screen commands to send: no top bar, nothing beside the Screen but the guide.
+
+- The **ribbon** (`guide/Ribbon.tsx`) docks under the Screen: the entries as tabs and one row of the entry's live then
+  upcoming games (under Custom, the saved streams), and opens into the full guide. The **full guide** (`guide/FullGuide.tsx`) covers the Screen with a rail of entries (All live,
+  each league with a game today, Custom) and shelves of games (`guide/GuideShelves.ts`, built from today's list). The
+  guide's state is the fold's `Overlay.Guide` (level `Ribbon` or `Full`, the entry, the focus); the last entry opened is
+  kept and falls back to All live when it is no longer listed. A game page (`GamePage`) and the YouTube form
+  (`CustomForm`) are overlays that `close()` returns to where they were opened from.
+- The shell is told whether the guide is open with `setGuideOpen` on the bridge (`packages/api/src/ShellBridge.ts`):
+  while it is open a provider view's arrows, Enter, brackets and I are hotkeys the player never sees, and while it is
+  closed the player keeps them.
+- Themes (`ui/Theme.ts`, tokens in `theme.css`): Glass, the default, and Team, painted in the teams' colors
+  (`game/TeamColors.ts`); kept in this browser and set on the document as `data-theme`.
+- Tiles beyond a game's stream: a **custom tile** (a YouTube video or playlist, `custom/CustomStream.ts`, saved in this
+  browser by `custom/CustomStreams.ts`), a **stats tile** (`stats/GameStats.tsx`, as many sections as fit, by
+  `stats/StatsFit.ts`) and a **clip tile** (a highlight in a page `<video>`). Each is named by a `TileKey`
+  (`packages/api/src/TileKey.ts`), the one string the Screen, the shell and a Remote use for it. A clip tile is not
+  restored when a Display reloads (`Screen#withoutClips`).
+- Toasts draw under provider views, so each visible toast registers its element with Covering, which hides the strip of
+  video under it; the connection-lost toast keeps its strip hidden until the Hub is back.
 
 ### 5.4 Director
 

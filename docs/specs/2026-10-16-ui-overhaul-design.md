@@ -270,6 +270,25 @@ The Ctrl+K palette, `Screen` commands, layouts, solo, audio focus, the Remote, a
   the guide closed; a YouTube video and a playlist play in the shell and in a browser; a stats page and a stats tile for
   a live game update; a highlight plays with audio focus; Ctrl+K still works; the Remote still moves a custom tile.
 
+## Amendments while planning and building
+
+1. Custom stream ids are derived from the target (`video.<id>`, `list.<id>`, `list.<id>.<videoId>`), not random.
+2. Guide entries are "All live", the leagues with games today (the Hub follows only some), then "Custom"; `GuideShelves` carries `entries`, and a last entry no longer listed falls back to "All live".
+3. With no top bar, a toast draws under provider views, and each visible toast registers with Covering so the strip of video under it hides; the connection toast keeps it hidden until the Hub is back.
+4. `teamColor(team)` takes no surface; `teamEdge` and `teamHalf` draw edges and halves.
+5. One placing rule: `Screen`'s private `placed` serves `Assign`, `AssignCustom`, `AssignStats` and `AssignClip`, and `Display#place` serves `ChosenClip`.
+6. `Display#close()` returns `CustomForm` and `GamePage` to their `back`; both are excluded from `Opened` like `Guide`; the palette opens a game page with `DisplayInput.GamePageOpened`.
+7. `Tile.game`, `Tile.locator` and `Tile.key` cover `StatsTile` and `ClipTile`.
+8. `Info` is mapped in phase 3 and does nothing until phase 6 wires it to `GamePage`.
+9. Stats for unfollowed leagues are not reachable on a running Hub (no games listed); the decode and fixtures still cover NFL, FBS, MLB and NBA.
+
+Found while building:
+
+- A final game's stats with no highlights yet are refetched at most every 10 minutes; `SPORTAL_STATS_REFRESH` has a 10-second floor (section 5).
+- Today's highlights are asked again every 5 minutes while shown, and a failed ask is retried; past days are asked once.
+- A clip tile is not restored when a Display reloads (`Screen#withoutClips`).
+- Visible toasts register with Covering and hide the strip of video under them.
+
 ## Done
 
 Every phase merged on `ui-overhaul` with `pnpm check` green, the branch's final review findings fixed, and the eye-check
