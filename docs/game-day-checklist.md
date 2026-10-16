@@ -60,5 +60,7 @@ Setup: Hub serving the built web UI, desktop shell running, signed in to YouTube
 | 51 | Removed with telemetry ([ADR 0019](adr/0019-telemetry-goes.md)) | – |
 | 52 | Removed with telemetry ([ADR 0019](adr/0019-telemetry-goes.md)) | – |
 | 53 | Reconnect FastCast (cut the network briefly) with several games live | Their checkpoints load together: "Checkpoint duration" shows them overlapping, and plays resume for every game within one checkpoint's time |
+| 54 | Install a release build on Windows (VMP-signed) and on Linux (the `.deb`), sign in to YouTube TV, and play a game in a tile | The video plays in each; on Windows a build without the VMP signature is refused by the player, a signed one is not |
+| 55 | With the installed app running, scan Join Remote's code from a phone on the home network | The Remote page loads from the embedded Hub (Windows asks once to let Sportal through its firewall) |
 
 Record the date, the build, and any row that failed.

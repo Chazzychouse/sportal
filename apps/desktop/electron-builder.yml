@@ -1,0 +1,36 @@
+# The installable app: the shell, with the Hub's bundle and the web UI's build beside it as resources.
+# Build those first (`pnpm package` at the repository root does all of it).
+appId: io.github.chazzychouse.sportal
+productName: Sportal
+directories:
+  output: release
+# Everything the shell runs is bundled into out/ by electron-vite; it needs no node_modules.
+files:
+  - out/**
+  - package.json
+extraResources:
+  - from: ../hub/dist
+    to: hub
+  - from: ../web/dist
+    to: web
+# The castlabs Widevine build, as installed for this OS. electron-builder cannot download it by version.
+electronDist: node_modules/electron/dist
+electronVersion: 44.1.0
+npmRebuild: false
+# Windows needs a VMP signature for Widevine, made after Authenticode signing; Linux has no VMP.
+afterSign: ./VmpSign.mjs
+linux:
+  target: [AppImage, deb]
+  category: AudioVideo
+  maintainer: Chazzychouse
+win:
+  target: nsis
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+artifactName: ${productName}-${version}-${os}-${arch}.${ext}
+publish:
+  provider: github
+  owner: Chazzychouse
+  repo: sportal
+  releaseType: draft

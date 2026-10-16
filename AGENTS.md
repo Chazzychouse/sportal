@@ -155,8 +155,10 @@ A reader opens a file to see the thing it is named for. Keep it that way.
   `sudo ufw allow from 192.168.0.0/24 to any port 4400:4401 proto tcp`.
 - `pnpm --filter @sportal/desktop dev` — run only the desktop shell against the web dev server
   (`SPORTAL_HUB_URL` overrides the address).
-- To run without the dev server: `pnpm --filter @sportal/web build`, start the Hub with
-  `SPORTAL_WEB_ROOT=$PWD/apps/web/dist`, then `pnpm --filter @sportal/desktop start` (or `start:x11`).
+- `pnpm start` — build the web UI and the Hub's bundle, then run the desktop shell with its embedded Hub, as the
+  installed app runs (`SPORTAL_HUB_URL` points it at a running Hub instead, and it starts none).
+- `pnpm package` — the same builds, then the installer for this OS in `apps/desktop/release/` (`electron-builder.yml`).
+  Releases are built by CI from a `v*` tag: `docs/release.md`.
 
 ## Limits that are deliberate
 

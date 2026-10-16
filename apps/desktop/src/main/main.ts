@@ -3,6 +3,7 @@ import { ShellChannel } from "@sportal/api/ShellChannel"
 import { GameId } from "@sportal/domain/Game"
 import { Cause, Effect, FiberSet, Layer, Option, Queue, Schedule, Schema, Stream } from "effect"
 import { app, components, type IpcMainEvent, ipcMain } from "electron"
+import * as EmbeddedHub from "./EmbeddedHub.ts"
 import { GuideReader } from "./GuideReader.ts"
 import { hostOf, load } from "./Navigation.ts"
 import { ProviderSession } from "./ProviderSession.ts"
@@ -21,7 +22,7 @@ const Shell = Layer.unwrap(
     })
 
     return Layer.effectDiscard(serveHub).pipe(
-      Layer.provide([TileViews.layer, GuideReader.layer]),
+      Layer.provide([TileViews.layer, GuideReader.layer, EmbeddedHub.layer]),
       Layer.provideMerge(ProviderSession.layer),
       Layer.provideMerge(ShellWindow.layer),
       Layer.provideMerge(ShellConfig.layer)
@@ -164,10 +165,13 @@ function allWindowsClosed() {
 
 // Launched last, once everything above is defined. Electron owns the process, so the shell is not
 // run with NodeRuntime.runMain: it runs until its last window closes, releases what it holds, and
-// then asks Electron to quit.
-Layer.launch(Shell).pipe(
-  Effect.raceFirst(allWindowsClosed()),
-  Effect.tapCause((cause) => Effect.logError("Sportal: the shell stopped", cause)),
-  Effect.ensuring(Effect.sync(() => app.quit())),
-  Effect.runFork
-)
+// then asks Electron to quit. One shell runs at a time, since each would start a Hub on the same port: a second
+// launch brings the first one's window forward and quits.
+if (app.requestSingleInstanceLock())
+  Layer.launch(Shell).pipe(
+    Effect.raceFirst(allWindowsClosed()),
+    Effect.tapCause((cause) => Effect.logError("Sportal: the shell stopped", cause)),
+    Effect.ensuring(Effect.sync(() => app.quit())),
+    Effect.runFork
+  )
+else app.quit()

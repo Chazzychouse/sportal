@@ -99,7 +99,8 @@ Provider and Source are the two words most likely to be swapped. Provider is alw
 | **Remote link** | A Display's side of its Remotes (`apps/web/src/remote/RemoteLink.ts`): its input stream at the Hub, its reports, and the inputs it applies. | |
 | **Followed** | The Display as a Remote sees it through the Hub: connecting (not heard from yet), offline, or as it last reported; `Followed` in `apps/web/src/remote/RemoteState.ts`. A report that does not decode reads as offline. | status |
 | **Overlay** | The one dialog a Display has open — the key help, the command palette, or Join Remote — or none; `Overlay` beside `Display` in `apps/web/src/display/Display.ts`. Local to the Display. | modal, popup |
-| **Shell config** | Every setting the desktop shell reads from its environment: the Hub's address; `ShellConfig` in code. | settings, env |
+| **Shell config** | Every setting the desktop shell reads from its environment: the Hub's address, and, when none is given, the embedded Hub it starts; `ShellConfig` in code. | settings, env |
+| **Embedded Hub** | The Hub the desktop app ships with, bundled into one script beside the web UI's build, which the shell runs as a utility process for as long as it runs, unless `SPORTAL_HUB_URL` names a Hub already running; `EmbeddedHub` in `apps/desktop/src/main/EmbeddedHub.ts`. Its output goes to `hub.log` in the app's log folder. | bundled Hub, local server |
 | **Shell window** | The shell's one window, showing the Hub's web UI, confined to the Hub's origin; `ShellWindow` in code. | main window, BrowserWindow |
 | **Shell bridge** | The small interface the desktop shell exposes to the web UI; its IPC channel names are `ShellChannel`. | IPC, native API |
 | **Full screen** | A Display's window filling its monitor with only the Screen: the window's state, not the Screen's, and local to the Display. | solo |

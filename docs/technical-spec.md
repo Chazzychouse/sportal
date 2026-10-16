@@ -47,7 +47,7 @@ Versions were checked against the registry on 2026-10-03. Effect is at 4.0, whic
 | Lint and format | Biome | One fast tool |
 | Structure enforcement | dependency-cruiser (import boundaries), knip (unused files, exports, dependencies) | The layout rules in section 4 are checked by machine, not by memory |
 | Hooks | Lefthook: format and lint on commit; typecheck, test, structure checks on push | |
-| Hub packaging (not built) | A container image built from `apps/hub` | The cloud move is "run the image with different environment" |
+| Packaging | The Hub bundled by Vite into one script (`apps/hub/dist/hub.mjs`); electron-builder ships it and the web UI's build inside the desktop app, which runs it as a utility process: an AppImage and a `.deb` for Linux, an NSIS installer for Windows ([ADR 0020](./adr/0020-one-installable-app.md)) | One thing to install. A container image of the same bundle stays possible for a cloud Hub |
 
 **Decided: no CI host yet.** The repository is local; the Lefthook hooks are the gate. CI is added when the repository gets a remote.
 
@@ -84,7 +84,7 @@ flowchart LR
 
 - **Hub** — takes what its providers' frames say, as they arrive, into the Director's slate (the listed games, each with its latest snapshot and plays), and classifies each game (its moment and score). Its live stream sends the slate, each game beside its classification and its availability from every source. Serves the web UI's static files, the HTTP API, and one live stream per client.
 - **Web UI** — one codebase for desk and couch. It renders Hub state, and its Display owns its Screen: it applies screen commands and chooses between sources.
-- **Desktop shell** — loads the web UI from the Hub, registers as a Display, and mirrors that Display's stream tiles into native provider web views. It is told the Hub's address by configuration (`SPORTAL_HUB_URL`, read once into `ShellConfig`) and never starts a Hub.
+- **Desktop shell** — starts the Hub it ships with (the embedded Hub), loads the web UI from it, registers as a Display, and mirrors that Display's stream tiles into native provider web views. Given a Hub's address by configuration (`SPORTAL_HUB_URL`, read once into `ShellConfig`), it starts none and loads that one instead, as `pnpm dev` does.
 
 The Hub's routes for Displays and their Remotes:
 
@@ -241,7 +241,8 @@ sportal/
         └── src/
             ├── main/
             │   ├── main.ts             App lifecycle: the shell's layers, and the window's IPC
-            │   ├── ShellConfig.ts      Every setting the shell reads from its environment: the Hub's address
+            │   ├── ShellConfig.ts      Every setting the shell reads from its environment: the Hub's address, or the embedded Hub
+            │   ├── EmbeddedHub.ts      Runs the bundled Hub as a utility process while the shell runs
             │   ├── ShellWindow.ts      The shell's one window, confined to the Hub's origin
             │   ├── TileViews.ts        Creates, positions, tunes, and mutes provider views
             │   ├── Transition.ts       The arithmetic of a Screen transition
@@ -320,7 +321,7 @@ class Director extends Context.Service<Director, {
 - A take that raises a defect is an Error log; what it had not yet set is unchanged and takes the next frame. If the provider's frames end other than by the Hub stopping, that is an Error log and the slate stays as it is.
 - The Hub server's live route builds `SlateChanged`: the slate with each game carrying only its last ten plays (`Slate#recent`), `classifications` by game id (the live route zips the slate with the Director's classifications), and each listed game's availability from every source, by its id. The Slate and the Director know nothing of sources or the API: the live route joins the Director's slate with the source's availability, reads the sources' availability again every 30 seconds, drops a message that is the same as the last, and sends a slate change once 250 ms have passed without a further one (a trailing settling, not a maximum latency: continuous updates keep deferring it).
 - `main.ts` provides it over ESPN as the provider and YouTube TV and Twitch as the sources.
-- The Hub's whole shutdown bound is about 4 s: the HTTP server's 3 s for connected Displays, then telemetry's 1 s to export what it holds.
+- The Hub's whole shutdown bound is about 4 s: the HTTP server's 3 s for connected Displays. The desktop app waits up to 5 s for its embedded Hub to exit.
 
 **Source** — video out:
 
@@ -388,7 +389,7 @@ Expected failures are typed errors in the Effect error channel, each handled whe
 | Client loses the Hub | UI shows disconnected and reconnects; provider views keep playing |
 | Live feed refused, closed, silent, or out of step | Logged as a Warning with its reason; resubscribed from a checkpoint with backoff from 1 s to 1 min; the poll carries on, so games go on updating at the poll's pace |
 | Applying a delivery dies | Error log; the slate keeps what it had and takes the next frame |
-| Telemetry collector unreachable | One warning naming its URL; the exporters drop what they cannot send and the Hub carries on, and still stops within its shutdown bound |
+| The embedded Hub stops on its own (its port taken, a crash) | A dialog names the exit code and `hub.log`, and the app quits. A second launch of the app does not start a second Hub: it brings the first window forward |
 
 
 ## 6. Domain language

@@ -34,7 +34,7 @@
   },
   "overrides": [
     {
-      "includes": ["**/*.config.ts", "**/.dependency-cruiser.cjs"],
+      "includes": ["**/*.config.ts", "**/.dependency-cruiser.cjs", "apps/desktop/VmpSign.mjs"],
       "linter": {
         "rules": {
           "style": {

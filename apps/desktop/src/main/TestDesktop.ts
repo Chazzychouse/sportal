@@ -1,4 +1,4 @@
-import { Effect, Layer, Logger, Stream } from "effect"
+import { Effect, Layer, Logger, Option, Stream } from "effect"
 import type { BrowserWindow } from "electron"
 import { vi } from "vitest"
 import { ShellConfig } from "./ShellConfig.ts"
@@ -13,7 +13,10 @@ export function shellOf(window: BrowserWindow, logs: Array<string> = []) {
     logs.push(String(Array.isArray(message) ? message[0] : message))
   })
   return Layer.mergeAll(
-    Layer.succeed(ShellConfig, ShellConfig.of({ hubUrl: "http://127.0.0.1:4401" })),
+    Layer.succeed(
+      ShellConfig,
+      ShellConfig.of({ hubUrl: "http://127.0.0.1:4401", embeddedHub: Option.none() })
+    ),
     Layer.succeed(ShellWindow, window),
     Logger.layer([capture])
   )

@@ -6,7 +6,7 @@
       "project": ["src/**/*.ts!", "!src/**/Test*.ts!"]
     },
     "apps/hub": {
-      "entry": ["src/main.ts!"],
+      "entry": ["src/main.ts!", "vite.config.ts"],
       "project": ["src/**/*.ts!", "!src/**/Test*.ts!"]
     },
     "apps/web": {
@@ -18,7 +18,8 @@
         "src/main/main.ts!",
         "src/preload/ShellBridge.ts!",
         "electron.vite.config.ts",
-        "WaitForElectron.ts"
+        "WaitForElectron.ts",
+        "VmpSign.mjs"
       ],
       "project": ["src/**/*.ts!", "!src/**/Test*.ts!"],
       "ignoreBinaries": ["electron", "electron-vite"]

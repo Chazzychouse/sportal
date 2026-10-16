@@ -1,5 +1,9 @@
 {
   "name": "@sportal/desktop",
+  "productName": "Sportal",
+  "version": "0.1.0",
+  "description": "Track live football and watch several games at once",
+  "author": "Chazzychouse",
   "private": true,
   "type": "module",
   "main": "out/main/main.js",
@@ -8,15 +12,15 @@
     "dev": "SPORTAL_HUB_URL=${SPORTAL_HUB_URL:-http://127.0.0.1:4401} node --import ./WaitForElectron.ts node_modules/electron-vite/bin/electron-vite.js dev --watch -- $SPORTAL_ELECTRON_FLAGS",
     "build": "electron-vite build",
     "start": "electron-vite build && electron . $SPORTAL_ELECTRON_FLAGS",
-    "start:x11": "SPORTAL_ELECTRON_FLAGS=--ozone-platform=x11 pnpm start"
-  },
-  "dependencies": {
-    "@sportal/api": "workspace:*",
-    "@sportal/domain": "workspace:*",
-    "effect": "4.0.0"
+    "start:x11": "SPORTAL_ELECTRON_FLAGS=--ozone-platform=x11 pnpm start",
+    "package": "electron-vite build && electron-builder --publish never"
   },
   "devDependencies": {
+    "@sportal/api": "workspace:*",
+    "@sportal/domain": "workspace:*",
+    "effect": "4.0.0",
     "electron": "github:castlabs/electron-releases#v44.1.0+wvcus",
+    "electron-builder": "^26.15.3",
     "electron-vite": "^5.0.0",
     "vite": "^8.3.2"
   }

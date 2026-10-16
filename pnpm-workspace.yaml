@@ -5,6 +5,8 @@ allowBuilds:
   electron: true
   esbuild: true
   lefthook: true
+  # electron-builder's Squirrel.Windows installer; Sportal builds NSIS, so its script never needs to run.
+  electron-winstaller: false
 # Scripts use `VAR=x cmd` and `${VAR:-default}`, which cmd and PowerShell cannot run.
 shellEmulator: true
 # dependency-cruiser parses through the TypeScript JS API, which TS 7.0 does not ship. Drop this once it

@@ -1,6 +1,6 @@
 import { join } from "node:path"
 import { Context, Effect, FiberSet, Layer } from "effect"
-import { BrowserWindow } from "electron"
+import { app, BrowserWindow } from "electron"
 import { confine } from "./Navigation.ts"
 import { sandboxed } from "./Sandbox.ts"
 import { ShellConfig } from "./ShellConfig.ts"
@@ -41,6 +41,17 @@ export class ShellWindow extends Context.Service<ShellWindow, BrowserWindow>()(
         (url) => URL.canParse(url) && new URL(url).origin === hubOrigin,
         (message) => log(Effect.logWarning(`Sportal: ${message}`)),
         { subframes: true }
+      )
+
+      // A second launch of the shell quits at once (main.ts); this window comes forward instead.
+      const cameForward = () => {
+        if (window.isDestroyed()) return
+        if (window.isMinimized()) window.restore()
+        window.focus()
+      }
+      yield* Effect.acquireRelease(
+        Effect.sync(() => app.on("second-instance", cameForward)),
+        () => Effect.sync(() => app.removeListener("second-instance", cameForward))
       )
 
       return ShellWindow.of(window)
