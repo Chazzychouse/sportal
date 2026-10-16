@@ -1,8 +1,9 @@
 import { afterEach, assert, beforeEach, describe, it } from "@effect/vitest"
-import { Effect, Queue, Schema } from "effect"
+import { Effect, Queue, Schema, SubscriptionRef } from "effect"
 import { Atom } from "effect/reactivity"
 import { vi } from "vitest"
 import * as DisplayState from "../display/DisplayState.ts"
+import { Connection } from "../hub/HubSocket.ts"
 import * as DisplayScreen from "../screen/DisplayScreen.ts"
 import * as TestWeb from "../TestWeb.ts"
 import * as RemoteLink from "./RemoteLink.ts"
@@ -10,23 +11,19 @@ import { RemoteReport } from "./RemoteReport.ts"
 
 describe("RemoteLink", () => {
   beforeEach(() => {
-    TestWeb.FakeEventSource.opened = []
-    vi.stubGlobal("EventSource", TestWeb.FakeEventSource)
     vi.stubGlobal("localStorage", new TestWeb.MemoryStorage())
   })
   afterEach(() => {
     vi.unstubAllGlobals()
   })
 
-  it.effect("should report once its input stream opens", () =>
+  it.effect("should report once the Hub has registered it", () =>
     Effect.gen(function* () {
       const { registry, calls } = yield* TestWeb.withShell()
 
       const call = yield* Effect.gen(function* () {
         yield* Atom.mount(RemoteLink.link)
-        const source = yield* inputStream
 
-        source.onopen?.()
         return yield* nextReport(calls)
       }).pipe(Effect.scoped, Effect.provide(registry))
 
@@ -34,14 +31,14 @@ describe("RemoteLink", () => {
     })
   )
 
-  it.effect("should not report before its input stream opens", () =>
+  it.effect("should not report before the socket connects", () =>
     Effect.gen(function* () {
-      const { registry, calls } = yield* TestWeb.withShell()
+      const { registry, calls, hub } = yield* TestWeb.withShell()
+      yield* SubscriptionRef.set(hub.connection, Connection.Connecting())
 
       const size = yield* Effect.gen(function* () {
         yield* Atom.mount(RemoteLink.link)
-        yield* inputStream
-        yield* Effect.yieldNow
+        yield* TestWeb.afterTasks
         return yield* Queue.size(calls)
       }).pipe(Effect.scoped, Effect.provide(registry))
 
@@ -55,8 +52,6 @@ describe("RemoteLink", () => {
 
       const call = yield* Effect.gen(function* () {
         yield* Atom.mount(RemoteLink.link)
-        const source = yield* inputStream
-        source.onopen?.()
         yield* nextReport(calls)
 
         yield* Atom.set(DisplayScreen.screen, { _tag: "SetLayout", layout: "Single" })
@@ -67,18 +62,18 @@ describe("RemoteLink", () => {
     })
   )
 
-  it.effect("should report again after its input stream reopens", () =>
+  it.effect("should report again once the Hub registers it after the socket was lost", () =>
     Effect.gen(function* () {
-      const { registry, calls } = yield* TestWeb.withShell()
+      const { registry, calls, hub } = yield* TestWeb.withShell()
 
       const call = yield* Effect.gen(function* () {
         yield* Atom.mount(RemoteLink.link)
-        const source = yield* inputStream
-        source.onopen?.()
+        const query = yield* inputsQuery
         yield* nextReport(calls)
+        yield* SubscriptionRef.set(hub.connection, TestWeb.lost)
+        yield* TestWeb.dropped(hub, query)
 
-        source.onerror?.()
-        source.onopen?.()
+        yield* SubscriptionRef.set(hub.connection, Connection.Connected())
         return yield* nextReport(calls)
       }).pipe(Effect.scoped, Effect.provide(registry))
 
@@ -86,20 +81,19 @@ describe("RemoteLink", () => {
     })
   )
 
-  it.effect("should not report while its input stream is closed", () =>
+  it.effect("should not report while the socket is lost", () =>
     Effect.gen(function* () {
-      const { registry, calls } = yield* TestWeb.withShell()
+      const { registry, calls, hub } = yield* TestWeb.withShell()
 
       const size = yield* Effect.gen(function* () {
         yield* Atom.mount(RemoteLink.link)
-        const source = yield* inputStream
-        source.onopen?.()
+        const query = yield* inputsQuery
         yield* nextReport(calls)
-        source.onerror?.()
-        yield* Effect.yieldNow
+        yield* SubscriptionRef.set(hub.connection, TestWeb.lost)
+        yield* TestWeb.dropped(hub, query)
 
         yield* Atom.set(DisplayScreen.screen, { _tag: "SetLayout", layout: "Single" })
-        yield* Effect.yieldNow
+        yield* TestWeb.afterTasks
         return yield* Queue.size(calls)
       }).pipe(Effect.scoped, Effect.provide(registry))
 
@@ -110,14 +104,15 @@ describe("RemoteLink", () => {
   it.effect("should apply a Commanded input to the Screen", () =>
     Effect.gen(function* () {
       yield* TestWeb.keep(TestWeb.withTiles(["live", "soon"]))
-      const { registry } = yield* TestWeb.withShell()
+      const { registry, hub } = yield* TestWeb.withShell()
 
       const screen = yield* Effect.gen(function* () {
         yield* Atom.mount(RemoteLink.link)
-        const source = yield* inputStream
+        const query = yield* inputsQuery
 
-        source.onmessage?.({
-          data: JSON.stringify({ _tag: "Commanded", command: { _tag: "SetLayout", layout: "Single" } })
+        yield* TestWeb.answer(hub, query, hub.inputs, {
+          _tag: "Commanded",
+          command: { _tag: "SetLayout", layout: "Single" }
         })
         return yield* TestWeb.until(DisplayScreen.screen, (screen) => screen.layout === "Single")
       }).pipe(Effect.scoped, Effect.provide(registry))
@@ -128,13 +123,13 @@ describe("RemoteLink", () => {
 
   it.effect("should route a Pressed input as a hotkey", () =>
     Effect.gen(function* () {
-      const { registry } = yield* TestWeb.withShell()
+      const { registry, hub } = yield* TestWeb.withShell()
 
       const display = yield* Effect.gen(function* () {
         yield* Atom.mount(RemoteLink.link)
-        const source = yield* inputStream
+        const query = yield* inputsQuery
 
-        source.onmessage?.({ data: JSON.stringify({ _tag: "Pressed", hotkey: { _tag: "ShowKeys" } }) })
+        yield* TestWeb.answer(hub, query, hub.inputs, { _tag: "Pressed", hotkey: { _tag: "ShowKeys" } })
         return yield* TestWeb.until(DisplayState.display, (display) => display.shows("Keys"))
       }).pipe(Effect.scoped, Effect.provide(registry))
 
@@ -144,17 +139,17 @@ describe("RemoteLink", () => {
 
   it.effect("should drop an input that does not decode and apply the next one", () =>
     Effect.gen(function* () {
-      const { registry } = yield* TestWeb.withShell()
+      const { registry, hub } = yield* TestWeb.withShell()
 
       const [before, after, display] = yield* Effect.gen(function* () {
         yield* Atom.mount(RemoteLink.link)
         const before = yield* Atom.get(DisplayScreen.screen)
-        const source = yield* inputStream
+        const query = yield* inputsQuery
 
-        source.onmessage?.({ data: JSON.stringify({ _tag: "Shouted" }) })
+        yield* TestWeb.answer(hub, query, hub.inputs, { _tag: "Shouted" })
         yield* Effect.yieldNow
         const after = yield* Atom.get(DisplayScreen.screen)
-        source.onmessage?.({ data: JSON.stringify({ _tag: "Pressed", hotkey: { _tag: "ShowKeys" } }) })
+        yield* TestWeb.answer(hub, query, hub.inputs, { _tag: "Pressed", hotkey: { _tag: "ShowKeys" } })
         const display = yield* TestWeb.until(DisplayState.display, (display) => display.shows("Keys"))
         return [before, after, display] as const
       }).pipe(Effect.scoped, Effect.provide(registry))
@@ -191,11 +186,8 @@ describe("RemoteLink", () => {
   )
 })
 
-/** The input stream the link opened, at this Display's id. */
-const inputStream = Effect.gen(function* () {
-  const id = yield* Atom.get(RemoteLink.displayId)
-  return yield* TestWeb.openedAt(`/api/displays/${id}/inputs`)
-})
+/** The name of this Display's input query on the fake Hub. */
+const inputsQuery = Effect.map(Atom.get(RemoteLink.displayId), (id) => `inputs ${id}`)
 
 /** The next report the link sent the Hub. */
 const nextReport = Effect.fnUntraced(function* (calls: Queue.Queue<TestWeb.TestWebCall>) {

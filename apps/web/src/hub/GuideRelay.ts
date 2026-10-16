@@ -3,10 +3,10 @@ import { Shell } from "../shell/Shell.ts"
 import { logDefect, runtime } from "../WebRuntime.ts"
 import * as Games from "./Games.ts"
 import { HubClient } from "./HubClient.ts"
-import * as LiveStream from "./LiveStream.ts"
+import { Connection } from "./HubSocket.ts"
 
 /**
- * Passes each guide the shell reads to the Hub, and asks the shell to read again each time today's live list connects,
+ * Passes each guide the shell reads to the Hub, and asks the shell to read again each time the Hub socket connects,
  * since a guide read while the Hub was away was lost. Mounted once, by the Display.
  */
 export const relay = runtime.atom((get) =>
@@ -27,7 +27,7 @@ export const relay = runtime.atom((get) =>
       Effect.forkScoped({ startImmediately: true })
     )
     yield* get.stream(Games.today).pipe(
-      Stream.map(({ connection }) => LiveStream.Connection.$is("Connected")(connection)),
+      Stream.map(({ connection }) => Connection.$is("Connected")(connection)),
       Stream.changes,
       Stream.filter((connected) => connected),
       Stream.runForEach(() => shell.readGuide)

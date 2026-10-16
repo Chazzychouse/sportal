@@ -1,147 +1,91 @@
-import { afterEach, assert, beforeEach, describe, it } from "@effect/vitest"
-import { Deferred, Effect, Fiber, Schema, Stream } from "effect"
-import { Atom, AtomRegistry } from "effect/reactivity"
-import { vi } from "vitest"
+import { assert, describe, it } from "@effect/vitest"
+import { Effect, SubscriptionRef } from "effect"
+import { Atom } from "effect/reactivity"
 import * as TestWeb from "../TestWeb.ts"
+import { Connection } from "./HubSocket.ts"
 import * as LiveStream from "./LiveStream.ts"
 
 describe("LiveStream.of", () => {
-  beforeEach(() => {
-    TestWeb.FakeEventSource.opened = []
-    vi.stubGlobal("EventSource", TestWeb.FakeEventSource)
-  })
-  afterEach(() => {
-    vi.unstubAllGlobals()
-  })
-
-  it.effect("should be connecting before the stream first opens", () =>
+  it.effect("should be connecting before the socket first connects", () =>
     Effect.gen(function* () {
-      yield* TestWeb.openedBy(counted)
-      const state = yield* Atom.get(counted)
+      const { registry, hub } = yield* TestWeb.withShell()
+      yield* SubscriptionRef.set(hub.connection, Connection.Connecting())
+
+      const state = yield* Atom.get(counted).pipe(Effect.scoped, Effect.provide(registry))
 
       assert.strictEqual(state.connection._tag, "Connecting")
-    }).pipe(Effect.provide(AtomRegistry.layer))
+    })
   )
 
-  it.effect("should stay connecting after an error before the stream first opens", () =>
+  it.effect("should be lost when the socket is lost", () =>
     Effect.gen(function* () {
-      const source = yield* TestWeb.openedBy(counted)
+      const { registry, hub } = yield* TestWeb.withShell()
 
-      source.onerror?.()
-      source.onmessage?.({ data: countMessage(1) })
-      const after = yield* TestWeb.until(counted, (state) => state.value > 0)
+      const state = yield* Effect.gen(function* () {
+        yield* Atom.mount(counted)
 
-      assert.strictEqual(after.connection._tag, "Connecting")
-    }).pipe(Effect.provide(AtomRegistry.layer))
+        yield* SubscriptionRef.set(hub.connection, TestWeb.lost)
+        return yield* TestWeb.until(counted, ({ connection }) => connection._tag === "Lost")
+      }).pipe(Effect.scoped, Effect.provide(registry))
+
+      assert.strictEqual(state.connection, TestWeb.lost)
+    })
   )
 
-  it.effect("should publish nothing for an error while connecting or already lost", () =>
+  it.effect("should fold each element into its value", () =>
     Effect.gen(function* () {
-      const source = yield* TestWeb.openedBy(counted)
-      const listening = yield* Deferred.make<void>()
-      const published = yield* Atom.toStream(counted).pipe(
-        Stream.tap(() => Deferred.succeed(listening, undefined)),
-        Stream.takeUntil((state) => state.value > 0),
-        Stream.runCollect,
-        Effect.forkChild
+      const { registry, hub } = yield* TestWeb.withShell()
+
+      const state = yield* Effect.gen(function* () {
+        yield* Atom.mount(counted)
+
+        yield* TestWeb.answer(hub, "games", hub.lists, TestWeb.todayList)
+        yield* TestWeb.answer(hub, "games", hub.lists, TestWeb.todayList)
+        return yield* TestWeb.until(counted, ({ value }) => value === 8)
+      }).pipe(Effect.scoped, Effect.provide(registry))
+
+      assert.strictEqual(state.value, 8)
+    })
+  )
+
+  it.effect("should ask its query again when the socket connects again", () =>
+    Effect.gen(function* () {
+      const { registry, hub } = yield* TestWeb.withShell()
+
+      const state = yield* Effect.gen(function* () {
+        yield* Atom.mount(counted)
+        yield* TestWeb.answer(hub, "games", hub.lists, TestWeb.todayList)
+        yield* TestWeb.until(counted, ({ value }) => value === 4)
+        yield* SubscriptionRef.set(hub.connection, TestWeb.lost)
+        yield* TestWeb.dropped(hub, "games")
+
+        yield* SubscriptionRef.set(hub.connection, Connection.Connected())
+        yield* TestWeb.answer(hub, "games", hub.lists, TestWeb.todayList)
+        return yield* TestWeb.until(counted, ({ value }) => value === 8)
+      }).pipe(Effect.scoped, Effect.provide(registry))
+
+      assert.strictEqual(state.connection._tag, "Connected")
+    })
+  )
+
+  it.effect("should end its query on the Hub when the registry goes", () =>
+    Effect.gen(function* () {
+      const { registry, hub } = yield* TestWeb.withShell()
+      yield* Effect.andThen(Atom.get(counted), TestWeb.asked(hub, "games")).pipe(
+        Effect.scoped,
+        Effect.provide(registry)
       )
-      yield* Deferred.await(listening)
 
-      source.onerror?.()
-      source.onopen?.()
-      source.onerror?.()
-      source.onerror?.()
-      source.onmessage?.({ data: countMessage(1) })
-      const states = yield* Fiber.join(published)
+      const open = yield* TestWeb.dropped(hub, "games")
 
-      const connections = Array.from(states, (state) => state.connection._tag)
-      assert.deepStrictEqual(connections, ["Connecting", "Connected", "Lost", "Lost"])
-    }).pipe(Effect.provide(AtomRegistry.layer))
-  )
-
-  it.effect("should be connected once open", () =>
-    Effect.gen(function* () {
-      const source = yield* TestWeb.openedBy(counted)
-
-      source.onopen?.()
-
-      yield* TestWeb.until(counted, (state) => state.connection._tag === "Connected")
-    }).pipe(Effect.provide(AtomRegistry.layer))
-  )
-
-  it.effect("should be lost after an error once open", () =>
-    Effect.gen(function* () {
-      const source = yield* TestWeb.openedBy(counted)
-      source.onopen?.()
-      yield* TestWeb.until(counted, (state) => state.connection._tag === "Connected")
-
-      source.onerror?.()
-
-      yield* TestWeb.until(counted, (state) => state.connection._tag === "Lost")
-    }).pipe(Effect.provide(AtomRegistry.layer))
-  )
-
-  it.effect("should be connected again when it reopens after it was lost", () =>
-    Effect.gen(function* () {
-      const source = yield* TestWeb.openedBy(counted)
-      source.onopen?.()
-      yield* TestWeb.until(counted, (state) => state.connection._tag === "Connected")
-      source.onerror?.()
-      yield* TestWeb.until(counted, (state) => state.connection._tag === "Lost")
-
-      source.onerror?.()
-      source.onopen?.()
-
-      yield* TestWeb.until(counted, (state) => state.connection._tag === "Connected")
-    }).pipe(Effect.provide(AtomRegistry.layer))
-  )
-
-  it.effect("should fold each message into its value", () =>
-    Effect.gen(function* () {
-      const source = yield* TestWeb.openedBy(counted)
-
-      source.onmessage?.({ data: countMessage(2) })
-      source.onmessage?.({ data: countMessage(3) })
-      const state = yield* TestWeb.until(counted, (current) => current.value === 5)
-
-      assert.strictEqual(state.value, 5)
-    }).pipe(Effect.provide(AtomRegistry.layer))
-  )
-
-  it.effect("should skip a malformed message and keep reading", () =>
-    Effect.gen(function* () {
-      const source = yield* TestWeb.openedBy(counted)
-      source.onopen?.()
-      const before = yield* TestWeb.until(counted, (state) => state.connection._tag === "Connected")
-
-      source.onmessage?.({ data: "{not json" })
-      source.onmessage?.({ data: JSON.stringify({ count: "nope" }) })
-      source.onmessage?.({ data: countMessage(1) })
-      const after = yield* TestWeb.until(counted, (state) => state.value > 0)
-
-      assert.strictEqual(after.connection, before.connection)
-      assert.strictEqual(after.value, 1)
-    }).pipe(Effect.provide(AtomRegistry.layer))
-  )
-
-  it.effect("should open its url and close it when the registry goes", () =>
-    Effect.gen(function* () {
-      const source = yield* Effect.scoped(Effect.provide(TestWeb.openedBy(counted), AtomRegistry.layer))
-
-      assert.strictEqual(source.url, "/api/counts/live")
-      assert.isTrue(source.closed)
+      assert.notInclude(open, "games")
     })
   )
 })
 
-/** A message of the test stream: a count to add. */
-const Count = Schema.fromJsonString(Schema.Struct({ count: Schema.Finite }))
-
-/** A live stream of counts, summed from zero; kept alive so a test's reads all see one EventSource. */
-const counted = LiveStream.of("/api/counts/live", Count, 0, (sum, { count }) => sum + count).pipe(
-  Atom.keepAlive
-)
-
-function countMessage(count: number) {
-  return Schema.encodeSync(Count)({ count })
-}
+/** Today's games, counted across every answer; kept alive so a test's reads all see one query. */
+const counted = LiveStream.of(
+  (client) => client.listLive({}),
+  0,
+  (count, { games }) => count + games.length
+).pipe(Atom.keepAlive)

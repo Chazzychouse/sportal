@@ -1,13 +1,12 @@
-import { GameId, PlaysChange, PlaysPage } from "@sportal/domain/Game"
+import { GameId, PlaysPage } from "@sportal/domain/Game"
 import { Schema } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "effect/http-api"
 import { DisplayId } from "./DisplayId.ts"
 import { DisplayOffline } from "./DisplayOffline.ts"
 import { GameNotFound } from "./GameNotFound.ts"
-import { GameList, GameListJson, GamesQuery } from "./GamesQuery.ts"
+import { GameList, GamesQuery } from "./GamesQuery.ts"
 import { GuideUnreadable } from "./GuideUnreadable.ts"
-import { ListedGame, ListedGameJson } from "./ListedGame.ts"
-import { RemoteMessageJson } from "./RemoteMessage.ts"
+import { ListedGame } from "./ListedGame.ts"
 import { ScheduleUnavailable } from "./ScheduleUnavailable.ts"
 
 export class SportalApi extends HttpApi.make("sportal")
@@ -39,23 +38,9 @@ export class SportalApi extends HttpApi.make("sportal")
         })
       )
       .add(
-        HttpApiEndpoint.get("listLive", "/games/live", {
-          query: GamesQuery.fields,
-          success: sse(GameListJson),
-          error: ScheduleUnavailable
-        })
-      )
-      .add(
         HttpApiEndpoint.get("game", "/games/:id", {
           params: { id: GameId },
           success: ListedGame,
-          error: [GameNotFound, ScheduleUnavailable]
-        })
-      )
-      .add(
-        HttpApiEndpoint.get("gameLive", "/games/:id/live", {
-          params: { id: GameId },
-          success: sse(ListedGameJson),
           error: [GameNotFound, ScheduleUnavailable]
         })
       )
@@ -72,34 +57,15 @@ export class SportalApi extends HttpApi.make("sportal")
           error: [GameNotFound, ScheduleUnavailable]
         })
       )
-      .add(
-        HttpApiEndpoint.get("playsLive", "/games/:id/plays/live", {
-          params: { id: GameId },
-          success: sse(Schema.fromJsonString(PlaysChange)),
-          error: [GameNotFound, ScheduleUnavailable]
-        })
-      )
   )
   .add(
     HttpApiGroup.make("displays")
-      .add(
-        HttpApiEndpoint.get("inputs", "/displays/:id/inputs", {
-          params: { id: DisplayId },
-          success: sse(Schema.fromJsonString(Schema.Json))
-        })
-      )
       .add(
         HttpApiEndpoint.put("report", "/displays/:id", {
           params: { id: DisplayId },
           payload: Schema.Json,
           success: HttpApiSchema.NoContent,
           error: DisplayOffline
-        })
-      )
-      .add(
-        HttpApiEndpoint.get("follow", "/displays/:id", {
-          params: { id: DisplayId },
-          success: sse(RemoteMessageJson)
         })
       )
       .add(
@@ -112,16 +78,3 @@ export class SportalApi extends HttpApi.make("sportal")
       )
   )
   .prefix("/api") {}
-
-/** A server-sent event stream whose `message` events carry `data`, with keep-alive events between them. */
-function sse<A>(data: Schema.Codec<A, string>) {
-  return HttpApiSchema.WithHeaders(
-    HttpApiSchema.StreamSse({
-      events: Schema.Union([
-        Schema.Struct({ event: Schema.Literal("message"), data }),
-        Schema.Struct({ event: Schema.Literal("keep-alive"), data: Schema.Literal("") })
-      ])
-    }),
-    { "cache-control": Schema.Literal("no-cache") }
-  )
-}

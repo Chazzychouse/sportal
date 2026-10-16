@@ -1,55 +1,43 @@
-import { Data, DateTime, Effect, Schema, Stream } from "effect"
+import { Effect, Stream } from "effect"
 import { AsyncResult, Atom } from "effect/reactivity"
-import * as ServerEvents from "./ServerEvents.ts"
-import { ServerEvent } from "./ServerEvents.ts"
+import { runtime } from "../WebRuntime.ts"
+import { Connection, type HubApiClient, HubSocket } from "./HubSocket.ts"
 
 /**
- * The live stream at `url`, its messages folded by `fold` from `initial`, and whether it is up. The EventSource opens
- * when the atom is first read and closes when nothing reads it; it reconnects after an error, and the Hub sends the
- * current answer on every connection. A message that does not decode is logged and skipped.
+ * The live query `query` asks over the Hub socket, its elements folded by `fold` from `initial`, and the socket's
+ * connection. It is asked when the atom is first read, ended on the Hub when nothing reads it, and asked again each
+ * time the socket connects; the Hub's first answer to each asking is its current one.
  */
-export function of<M, S>(
-  url: string,
-  message: Schema.Codec<M, string>,
+export function of<A, E, S>(
+  query: (client: HubApiClient) => Stream.Stream<A, E>,
   initial: S,
-  fold: (state: S, message: M) => S
+  fold: (state: S, element: A) => S
 ): Atom.Atom<Live<S>> {
-  const decode = Schema.decodeUnknownEffect(message)
   const start: Live<S> = { connection: Connection.Connecting(), value: initial }
-  const step = (current: Live<S>, event: ServerEvent): Effect.Effect<Live<S>> =>
-    ServerEvent.$match(event, {
-      Opened: () => Effect.succeed({ ...current, connection: Connection.Connected() }),
-      // Only a stream that was up is lost; one that never connected is still connecting, and one already lost
-      // keeps the instant it was lost.
-      Errored: () =>
-        Connection.$is("Connected")(current.connection)
-          ? Effect.map(DateTime.now, (since) => ({ ...current, connection: Connection.Lost({ since }) }))
-          : Effect.succeed(current),
-      Received: ({ data }) =>
-        decode(data).pipe(
-          Effect.map((each) => ({ ...current, value: fold(current.value, each) })),
-          Effect.catchTag("SchemaError", (error) =>
-            Effect.logWarning(`Skipped a message on ${url} that did not decode`, error).pipe(
-              Effect.as(current)
-            )
-          )
-        )
-    })
-  return Atom.make(ServerEvents.from(url).pipe(Stream.scanEffect(() => start, step))).pipe(
-    Atom.map(AsyncResult.getOrElse(() => start))
-  )
+  const live = Effect.gen(function* () {
+    const socket = yield* HubSocket
+    // Stream.scan sends its initial state only with the first element, and the connection must show before it.
+    const folded = Stream.mapAccum(
+      socket.live(query),
+      () => initial,
+      (state, element) => {
+        const next = fold(state, element)
+        return [next, [next]]
+      }
+    )
+    const values = Stream.concat(Stream.succeed(initial), folded)
+
+    return Stream.zipLatestWith(
+      socket.connection,
+      values,
+      (connection, value): Live<S> => ({ connection, value })
+    )
+  })
+  return runtime.atom(Stream.unwrap(live)).pipe(Atom.map(AsyncResult.getOrElse(() => start)))
 }
 
-/** A live stream's folded messages, and whether it is up. */
+/** A live query's folded elements, and whether the Hub socket is up. */
 export interface Live<S> {
   readonly connection: Connection
   readonly value: S
 }
-
-/** Whether this client's live stream is up: not connected yet, connected, or lost at an instant and retrying. */
-export type Connection = Data.TaggedEnum<{
-  Connecting: object
-  Connected: object
-  Lost: { readonly since: DateTime.Utc }
-}>
-export const Connection = Data.taggedEnum<Connection>()

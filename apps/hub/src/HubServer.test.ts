@@ -1,14 +1,16 @@
-import { NodeHttpServer } from "@effect/platform-node"
+import { NodeHttpServer, NodeSocket } from "@effect/platform-node"
 import { assert, describe, it } from "@effect/vitest"
 import { DisplayId } from "@sportal/api/DisplayId"
-import { type GameList, GameListJson } from "@sportal/api/GamesQuery"
-import { type RemoteMessage, RemoteMessageJson } from "@sportal/api/RemoteMessage"
+import type { DisplayMessage } from "@sportal/api/DisplayMessage"
+import { GameList } from "@sportal/api/GamesQuery"
+import { HubApi } from "@sportal/api/HubApi"
 import { SportalApi } from "@sportal/api/SportalApi"
-import { GameId, PlaysChange } from "@sportal/domain/Game"
+import { GameId } from "@sportal/domain/Game"
 import { snapshot } from "@sportal/domain/TestGame"
-import { Cause, DateTime, Effect, Exit, Layer, Queue, Schema, Stream } from "effect"
-import { HttpClient } from "effect/http"
+import { Cause, DateTime, Effect, Exit, Fiber, Layer, Queue, Schema, Stream } from "effect"
+import { HttpClient, HttpServer } from "effect/http"
 import { HttpApiClient } from "effect/http-api"
+import { RpcClient, RpcSerialization } from "effect/rpc"
 import { TestClock } from "effect/testing"
 import { afterEach, vi } from "vitest"
 import { Director } from "./Director.ts"
@@ -74,7 +76,7 @@ describe("HubServer", () => {
 
           const response = yield* http.get("/api/games")
           const body = yield* response.text
-          const answer = yield* Schema.decodeEffect(GameListJson)(body)
+          const answer = yield* decodeGameList(body)
 
           assert.include(response.headers["content-type"], "application/json")
           assert.strictEqual(answer.date, "2026-10-03")
@@ -97,7 +99,7 @@ describe("HubServer", () => {
 
           const response = yield* http.get("/api/games?league=mlb,nfl")
           const body = yield* response.text
-          const answer = yield* Schema.decodeEffect(GameListJson)(body)
+          const answer = yield* decodeGameList(body)
 
           assert.deepStrictEqual(
             answer.games.map(({ snapshot }) => snapshot.id),
@@ -131,186 +133,57 @@ describe("HubServer", () => {
         })
       )
     )
-  })
-
-  describe("GET /api/games/live", () => {
-    it.effect("should send the current answer first, as a server-sent event", () =>
-      served((frames) =>
-        Effect.gen(function* () {
-          yield* TestClock.setTime(TestHub.onAlaAtMsstDay)
-          yield* TestHub.alaAtMsstListed(frames)
-
-          const { response, lines } = yield* sseLines("/api/games/live")
-          const line = yield* Queue.take(lines)
-
-          assert.strictEqual(response.headers["content-type"], "text/event-stream")
-          assert.strictEqual(response.headers["cache-control"], "no-cache")
-          // Each event is one line, `data: <json>`, followed by a blank line.
-          assert.isTrue(line.startsWith("data: "))
-          assert.deepStrictEqual(
-            gameListOf(line).games.map(({ snapshot }) => snapshot.id),
-            [TestHub.alaAtMsst.id]
-          )
-        })
-      )
-    )
-
-    it.effect("should send the answer again when a listing changes it", () =>
-      served((frames) =>
-        Effect.gen(function* () {
-          yield* TestClock.setTime(TestHub.onAlaAtMsstDay)
-          yield* TestHub.alaAtMsstListed(frames)
-          const { lines } = yield* sseLines("/api/games/live")
-          yield* Queue.take(lines)
-
-          yield* TestHub.offered(
-            frames,
-            Delivery.Listing({ league: "fbs", games: [TestHub.alaAtMsstInPeriod(2)] })
-          )
-          yield* TestClock.adjust("250 millis")
-          const line = yield* nextData(lines)
-
-          assert.deepStrictEqual(
-            gameListOf(line).games.map(({ snapshot }) => snapshot.period),
-            [2]
-          )
-        })
-      )
-    )
-
-    it.effect("should give a connection that joins later the latest answer at once", () =>
-      served((frames) =>
-        Effect.gen(function* () {
-          yield* TestClock.setTime(TestHub.onAlaAtMsstDay)
-          yield* TestHub.alaAtMsstListed(frames)
-          yield* pastInitialMessages()
-          yield* TestHub.offered(
-            frames,
-            Delivery.Listing({ league: "fbs", games: [TestHub.alaAtMsstInPeriod(2)] })
-          )
-          yield* TestClock.adjust("250 millis")
-
-          const { lines } = yield* sseLines("/api/games/live")
-          const line = yield* Queue.take(lines)
-
-          assert.deepStrictEqual(
-            gameListOf(line).games.map(({ snapshot }) => snapshot.period),
-            [2]
-          )
-        })
-      )
-    )
-
-    it.effect(
-      "should send a keep-alive event every 20 seconds, so a proxy does not close a quiet stream",
-      () =>
-        served((frames) =>
-          Effect.gen(function* () {
-            yield* TestClock.setTime(TestHub.onAlaAtMsstDay)
-            yield* TestHub.alaAtMsstListed(frames)
-            const lines = yield* pastInitialMessages()
-
-            yield* TestClock.adjust("20 seconds")
-            const keepAlive = yield* nextKeepAlive(lines)
-
-            assert.deepStrictEqual(keepAlive, ["event: keep-alive", "data: "])
-          })
-        )
-    )
-
-    it.effect("should still send each change as data after a keep-alive event", () =>
-      served((frames) =>
-        Effect.gen(function* () {
-          yield* TestClock.setTime(TestHub.onAlaAtMsstDay)
-          yield* TestHub.alaAtMsstListed(frames)
-          const lines = yield* pastInitialMessages()
-          yield* TestClock.adjust("20 seconds")
-          yield* nextKeepAlive(lines)
-
-          yield* TestHub.offered(
-            frames,
-            Delivery.Listing({ league: "fbs", games: [TestHub.alaAtMsstInPeriod(2)] })
-          )
-          yield* TestClock.adjust("250 millis")
-          const change = yield* nextData(lines)
-
-          assert.deepStrictEqual(
-            gameListOf(change).games.map(({ snapshot }) => snapshot.period),
-            [2]
-          )
-        })
-      )
-    )
 
     it.effect("should send each game as its snapshot and its availability, and nothing else", () =>
       served((frames) =>
         Effect.gen(function* () {
+          const http = yield* HttpClient.HttpClient
           yield* TestClock.setTime(TestHub.onAlaAtMsstDay)
           yield* TestHub.alaAtMsstListed(frames)
 
-          const { lines } = yield* sseLines("/api/games/live")
-          const line = yield* nextData(lines)
+          const response = yield* http.get("/api/games")
+          const body = yield* response.text
 
-          const message = JSON.parse(line.slice("data: ".length))
-          const [entry] = message.games
+          const answer = JSON.parse(body)
+          const [entry] = answer.games
           assert.strictEqual(entry.snapshot.id, TestHub.alaAtMsst.id)
-          assert.deepStrictEqual(Object.keys(message), ["date", "games"])
+          assert.deepStrictEqual(Object.keys(answer), ["date", "games"])
           assert.deepStrictEqual(Object.keys(entry), ["snapshot", "availability"])
           assert.deepStrictEqual(entry.availability, [{ _tag: "NoGuide", source: "YouTube TV" }])
-          assert.notMatch(line, /"state"|"updatedAt"|"from"|"plays"/)
+          assert.notMatch(body, /"state"|"updatedAt"|"from"|"plays"/)
         })
       )
     )
 
-    it.effect(
-      "should send the answer again at the next 30-second recheck when a guide read carries its game",
-      () =>
-        served((frames) =>
-          Effect.gen(function* () {
-            const client = yield* makeClient
-            yield* TestClock.setTime(DateTime.toEpochMillis(TestHub.alaAtMsst.startsAt))
-            yield* TestHub.alaAtMsstListed(frames)
-            const lines = yield* pastInitialMessages()
-            const now = yield* DateTime.now
-
-            yield* client.guide.read({ payload: { guide: realSizedGuideAiring(now) } })
-            yield* TestClock.adjust("30 seconds")
-            yield* TestClock.adjust("250 millis")
-            const line = yield* nextData(lines)
-
-            assert.deepStrictEqual(
-              gameListOf(line).games.map(({ availability }) => availability),
-              [
-                [
-                  {
-                    _tag: "Carried",
-                    channel: {
-                      name: "ESPN",
-                      source: "YouTube TV",
-                      locator: {
-                        _tag: "WebView",
-                        url: "https://tv.youtube.com/watch/PFuNFGzJDE4?vp=0gEEEgIwAQ%3D%3D"
-                      }
-                    }
-                  }
-                ]
-              ]
-            )
-          })
-        )
-    )
-
-    it.effect("should not route to the game endpoint", () =>
+    it.effect("should carry a game once a guide read airs it", () =>
       served((frames) =>
         Effect.gen(function* () {
-          yield* TestClock.setTime(TestHub.onAlaAtMsstDay)
+          const client = yield* makeClient
+          yield* TestClock.setTime(DateTime.toEpochMillis(TestHub.alaAtMsst.startsAt))
           yield* TestHub.alaAtMsstListed(frames)
+          const now = yield* DateTime.now
+          yield* client.guide.read({ payload: { guide: realSizedGuideAiring(now) } })
 
-          const { response, lines } = yield* sseLines("/api/games/live")
-          const line = yield* Queue.take(lines)
+          const answer = yield* client.games.list({ query: {} })
 
-          assert.strictEqual(response.status, 200)
-          assert.strictEqual(gameListOf(line).date, "2026-10-03")
+          assert.deepStrictEqual(
+            answer.games.map(({ availability }) => availability),
+            [
+              [
+                {
+                  _tag: "Carried",
+                  channel: {
+                    name: "ESPN",
+                    source: "YouTube TV",
+                    locator: {
+                      _tag: "WebView",
+                      url: "https://tv.youtube.com/watch/PFuNFGzJDE4?vp=0gEEEgIwAQ%3D%3D"
+                    }
+                  }
+                }
+              ]
+            ]
+          )
         })
       )
     )
@@ -356,8 +229,92 @@ describe("HubServer", () => {
     )
   })
 
-  describe("GET /api/games/:id/plays/live", () => {
-    it.effect("should start with a reset to the latest page", () =>
+  describe("the live socket", () => {
+    it.effect("listLive should send the current answer first", () =>
+      served((frames) =>
+        Effect.gen(function* () {
+          yield* TestClock.setTime(TestHub.onAlaAtMsstDay)
+          yield* TestHub.alaAtMsstListed(frames)
+          const socket = yield* socketClient
+
+          const answers = yield* collected(socket.listLive({}))
+          const first = yield* Queue.take(answers)
+
+          assert.deepStrictEqual(
+            first.games.map(({ snapshot }) => snapshot.id),
+            [TestHub.alaAtMsst.id]
+          )
+        })
+      )
+    )
+
+    it.effect("listLive should send the answer again when a listing changes it", () =>
+      served((frames) =>
+        Effect.gen(function* () {
+          yield* TestClock.setTime(TestHub.onAlaAtMsstDay)
+          yield* TestHub.alaAtMsstListed(frames)
+          const socket = yield* socketClient
+          const answers = yield* collected(socket.listLive({}))
+          yield* Queue.take(answers)
+
+          yield* TestHub.offered(
+            frames,
+            Delivery.Listing({ league: "fbs", games: [TestHub.alaAtMsstInPeriod(2)] })
+          )
+          yield* TestClock.adjust("250 millis")
+          const next = yield* Queue.take(answers)
+
+          assert.deepStrictEqual(
+            next.games.map(({ snapshot }) => snapshot.period),
+            [2]
+          )
+        })
+      )
+    )
+
+    it.effect("listLive should give a query asked later the latest answer at once", () =>
+      served((frames) =>
+        Effect.gen(function* () {
+          yield* TestClock.setTime(TestHub.onAlaAtMsstDay)
+          yield* TestHub.alaAtMsstListed(frames)
+          const socket = yield* socketClient
+          const earlier = yield* collected(socket.listLive({}))
+          yield* Queue.take(earlier)
+          yield* TestHub.offered(
+            frames,
+            Delivery.Listing({ league: "fbs", games: [TestHub.alaAtMsstInPeriod(2)] })
+          )
+          yield* TestClock.adjust("250 millis")
+          yield* Queue.take(earlier)
+
+          const later = yield* collected(socket.listLive({}))
+          const first = yield* Queue.take(later)
+
+          assert.deepStrictEqual(
+            first.games.map(({ snapshot }) => snapshot.period),
+            [2]
+          )
+        })
+      )
+    )
+
+    it.effect("gameLive should send the game with its availability first", () =>
+      served((frames) =>
+        Effect.gen(function* () {
+          yield* TestClock.setTime(TestHub.onAlaAtMsstDay)
+          yield* TestHub.alaAtMsstListed(frames)
+          const socket = yield* socketClient
+
+          const answers = yield* collected(socket.gameLive({ id: TestHub.alaAtMsst.id }))
+          const first = yield* Queue.take(answers)
+
+          assert.strictEqual(first.snapshot.id, TestHub.alaAtMsst.id)
+          assert.deepStrictEqual(first.availability, [{ _tag: "NoGuide", source: "YouTube TV" }])
+        })
+      )
+    )
+
+    it.effect("playsLive should start with a reset to the latest page", () =>
       served((frames) =>
         Effect.gen(function* () {
           yield* TestHub.alaAtMsstListed(frames)
@@ -365,14 +322,12 @@ describe("HubServer", () => {
             frames,
             Delivery.Plays({ game: TestHub.alaAtMsst.id, plays: TestHub.playsUpTo(2) })
           )
+          const socket = yield* socketClient
 
-          const { lines } = yield* sseLines(`/api/games/${TestHub.alaAtMsst.id}/plays/live`)
-          const line = yield* nextData(lines)
+          const changes = yield* collected(socket.playsLive({ id: TestHub.alaAtMsst.id }))
+          const first = yield* Queue.take(changes)
 
-          assert.deepStrictEqual(playsChangeOf(line), {
-            _tag: "Reset",
-            plays: TestHub.playsUpTo(2).toReversed()
-          })
+          assert.deepStrictEqual(first, { _tag: "Reset", plays: TestHub.playsUpTo(2).toReversed() })
         })
       )
     )
@@ -431,16 +386,54 @@ describe("HubServer", () => {
   })
 
   describe("the displays routes", () => {
-    it.effect("should stream an input a Remote posts to the Display it names", () =>
+    it.effect("inputs should tell a Display the Hub has registered it first", () =>
+      served(() =>
+        Effect.gen(function* () {
+          const socket = yield* socketClient
+
+          const messages = yield* collected(socket.inputs({ display: desk }))
+          const first = yield* Queue.take(messages)
+
+          assert.deepStrictEqual(first, { _tag: "Registered" })
+        })
+      )
+    )
+
+    it.effect("inputs should send an input a Remote posts to the Display it names", () =>
       served(() =>
         Effect.gen(function* () {
           const client = yield* makeClient
-          const { lines } = yield* sseLines("/api/displays/desk/inputs")
+          const socket = yield* socketClient
+          const messages = yield* collected(socket.inputs({ display: desk }))
+          yield* Queue.take(messages)
 
           yield* client.displays.send({ params: { id: desk }, payload: { _tag: "Pressed" } })
-          const line = yield* nextData(lines)
+          const sent = yield* Queue.take(messages)
 
-          assert.deepStrictEqual(JSON.parse(line.slice("data: ".length)), { _tag: "Pressed" })
+          assert.deepStrictEqual(sent, { _tag: "Sent", input: { _tag: "Pressed" } })
+        })
+      )
+    )
+
+    it.effect("inputs should forget a Display once its client stops reading them", () =>
+      served(() =>
+        Effect.gen(function* () {
+          const client = yield* makeClient
+          const socket = yield* socketClient
+          const messages = yield* Queue.unbounded<DisplayMessage>()
+          const reading = yield* socket.inputs({ display: desk }).pipe(
+            Stream.runForEach((message) => Queue.offer(messages, message)),
+            Effect.forkScoped
+          )
+          yield* Queue.take(messages)
+
+          yield* Fiber.interrupt(reading)
+          // The Hub ends the stream when the interrupt reaches it, a moment after the client's.
+          const error = yield* client.displays
+            .send({ params: { id: desk }, payload: { _tag: "Pressed" } })
+            .pipe(Effect.flip, Effect.eventually)
+
+          assert.strictEqual(error._tag, "DisplayOffline")
         })
       )
     )
@@ -459,36 +452,36 @@ describe("HubServer", () => {
       )
     )
 
-    it.effect("should stream a Display's report to a Remote following it", () =>
+    it.effect("follow should send a Display's report to a Remote following it", () =>
       served(() =>
         Effect.gen(function* () {
           const client = yield* makeClient
-          yield* sseLines("/api/displays/desk/inputs")
+          const socket = yield* socketClient
+          const inputs = yield* collected(socket.inputs({ display: desk }))
+          yield* Queue.take(inputs)
           yield* client.displays.report({ params: { id: desk }, payload: { screen: 1 } })
 
-          const { lines } = yield* sseLines("/api/displays/desk")
-          const line = yield* nextData(lines)
+          const follows = yield* collected(socket.follow({ display: desk }))
+          const message = yield* Queue.take(follows)
 
-          assert.deepStrictEqual(remoteMessageOf(line), {
-            _tag: "Reported",
-            report: { screen: 1 }
-          })
+          assert.deepStrictEqual(message, { _tag: "Reported", report: { screen: 1 } })
         })
       )
     )
 
-    it.effect("should tell a Remote following a Display that is not connected that it is offline", () =>
-      served(() =>
-        Effect.gen(function* () {
-          const { lines } = yield* sseLines("/api/displays/desk")
+    it.effect(
+      "follow should tell a Remote following a Display that is not connected that it is offline",
+      () =>
+        served(() =>
+          Effect.gen(function* () {
+            const socket = yield* socketClient
 
-          const line = yield* nextData(lines)
+            const follows = yield* collected(socket.follow({ display: desk }))
+            const message = yield* Queue.take(follows)
 
-          assert.deepStrictEqual(remoteMessageOf(line), {
-            _tag: "Offline"
+            assert.deepStrictEqual(message, { _tag: "Offline" })
           })
-        })
-      )
+        )
     )
   })
 })
@@ -551,57 +544,31 @@ function serverUnderTest(frames: TestHub.Frames) {
 /** A client of the Hub's API, pointed at the server under test. */
 const makeClient = HttpApiClient.make(SportalApi)
 
-/** Opens the server-sent event stream at `path`: its response, and a queue of its lines that are not blank, as they arrive. */
-const sseLines = Effect.fn("HubServer.test.sseLines")(function* (path: string) {
-  const http = yield* HttpClient.HttpClient
-  const lines = yield* Queue.unbounded<string>()
+/**
+ * A client of the Hub's live queries over a WebSocket to the server under test. A test builds it after it sets the
+ * clock: the client pings every 5 s of the test's time, and a jump with no pong would drop its socket.
+ */
+const socketClient = Effect.gen(function* () {
+  const { address } = yield* HttpServer.HttpServer
+  if (!("port" in address)) return yield* Effect.die("The server under test listens on a Unix socket")
+  const url = `ws://127.0.0.1:${address.port}/api/socket`
+  const protocol = RpcClient.layerProtocolSocket().pipe(
+    Layer.provide([NodeSocket.layerWebSocket(url), RpcSerialization.layerJson])
+  )
+  const context = yield* Layer.build(protocol)
 
-  const response = yield* http.get(path)
-  yield* response.stream.pipe(
-    Stream.decodeText,
-    Stream.splitLines,
-    Stream.filter((line) => line !== ""),
-    Stream.runForEach((line) => Queue.offer(lines, line)),
+  return yield* RpcClient.make(HubApi).pipe(Effect.provideContext(context))
+})
+
+/** Each element of `stream`, in a queue as it arrives, while the test's scope lives. */
+const collected = Effect.fnUntraced(function* <A, E>(stream: Stream.Stream<A, E>) {
+  const queue = yield* Queue.unbounded<A>()
+
+  yield* stream.pipe(
+    Stream.runForEach((each) => Queue.offer(queue, each)),
     Effect.forkScoped
   )
-
-  return { response, lines }
-})
-
-/** Opens today's live list and takes its first message, the current answer: the lines after it. */
-const pastInitialMessages = Effect.fn("HubServer.test.pastInitialMessages")(function* () {
-  const { lines } = yield* sseLines("/api/games/live")
-
-  yield* Queue.take(lines)
-
-  return lines
-})
-
-/** The game list a `data: <json>` line carries. */
-function gameListOf(line: string): GameList {
-  return Schema.decodeSync(GameListJson)(line.slice("data: ".length))
-}
-
-/** The plays change a `data: <json>` line carries. */
-function playsChangeOf(line: string): PlaysChange {
-  return Schema.decodeSync(Schema.fromJsonString(PlaysChange))(line.slice("data: ".length))
-}
-
-/** The Remote message a `data: <json>` line carries. */
-function remoteMessageOf(line: string): RemoteMessage {
-  return Schema.decodeSync(RemoteMessageJson)(line.slice("data: ".length))
-}
-
-/** The next line of `lines` that carries a message, past any keep-alive event. */
-function nextData(lines: Queue.Queue<string>) {
-  return Queue.take(lines).pipe(Effect.repeat({ until: (line) => line.startsWith("data: {") }))
-}
-
-/** The next keep-alive event on `lines`: its event line and its data line. */
-const nextKeepAlive = Effect.fnUntraced(function* (lines: Queue.Queue<string>) {
-  const event = yield* Queue.take(lines).pipe(Effect.repeat({ until: (line) => line.startsWith("event: ") }))
-  const data = yield* Queue.take(lines)
-  return [event, data]
+  return queue
 })
 
 /**
@@ -653,3 +620,5 @@ function v4(address: string, internal = false) {
 function v6(address: string, internal = false) {
   return { address, family: "IPv6", internal }
 }
+
+const decodeGameList = Schema.decodeEffect(Schema.fromJsonString(GameList))

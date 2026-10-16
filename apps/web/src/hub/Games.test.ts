@@ -1,85 +1,113 @@
-import { afterEach, assert, beforeEach, describe, it } from "@effect/vitest"
-import { GameId, PlaysChange } from "@sportal/domain/Game"
+import { assert, describe, it } from "@effect/vitest"
+import { GameId, type PlaysChange } from "@sportal/domain/Game"
 import { PlayId } from "@sportal/domain/Play"
 import { play } from "@sportal/domain/TestGame"
-import { Effect, Schema } from "effect"
-import { Atom, AtomRegistry } from "effect/reactivity"
-import { vi } from "vitest"
+import { Effect } from "effect"
+import { Atom } from "effect/reactivity"
 import * as TestWeb from "../TestWeb.ts"
 import * as Games from "./Games.ts"
 
 describe("Games.plays", () => {
-  beforeEach(() => {
-    TestWeb.FakeEventSource.opened = []
-    vi.stubGlobal("EventSource", TestWeb.FakeEventSource)
-  })
-  afterEach(() => {
-    vi.unstubAllGlobals()
-  })
-
   it.effect("should start from a reset's plays", () =>
     Effect.gen(function* () {
-      yield* Atom.mount(Games.plays(id))
-      const source = yield* TestWeb.openedAt(`/api/games/${id}/plays/live`)
+      const { registry, hub } = yield* TestWeb.withShell()
 
-      source.onmessage?.({ data: changeMessage({ _tag: "Reset", plays: playsOf([2, 1]) }) })
-      const { value } = yield* TestWeb.until(Games.plays(id), ({ value }) => value.length > 0)
+      const { value } = yield* Effect.gen(function* () {
+        yield* Atom.mount(Games.plays(id))
+
+        yield* TestWeb.answer(
+          hub,
+          `plays ${id}`,
+          hub.plays,
+          changed({ _tag: "Reset", plays: playsOf([2, 1]) })
+        )
+        return yield* TestWeb.until(Games.plays(id), ({ value }) => value.length > 0)
+      }).pipe(Effect.scoped, Effect.provide(registry))
 
       assert.deepStrictEqual(
         value.map(({ sequence }) => sequence),
         [2, 1]
       )
-    }).pipe(Effect.scoped, Effect.provide(AtomRegistry.layer))
+    })
   )
 
   it.effect("should put appended plays before the ones it had", () =>
     Effect.gen(function* () {
-      yield* Atom.mount(Games.plays(id))
-      const source = yield* TestWeb.openedAt(`/api/games/${id}/plays/live`)
-      source.onmessage?.({ data: changeMessage({ _tag: "Reset", plays: playsOf([1]) }) })
+      const { registry, hub } = yield* TestWeb.withShell()
 
-      source.onmessage?.({ data: changeMessage({ _tag: "Appended", plays: playsOf([3, 2]) }) })
-      const { value } = yield* TestWeb.until(Games.plays(id), ({ value }) => value.length === 3)
+      const { value } = yield* Effect.gen(function* () {
+        yield* Atom.mount(Games.plays(id))
+        yield* TestWeb.answer(hub, `plays ${id}`, hub.plays, changed({ _tag: "Reset", plays: playsOf([1]) }))
+
+        yield* TestWeb.answer(
+          hub,
+          `plays ${id}`,
+          hub.plays,
+          changed({ _tag: "Appended", plays: playsOf([3, 2]) })
+        )
+        return yield* TestWeb.until(Games.plays(id), ({ value }) => value.length === 3)
+      }).pipe(Effect.scoped, Effect.provide(registry))
 
       assert.deepStrictEqual(
         value.map(({ sequence }) => sequence),
         [3, 2, 1]
       )
-    }).pipe(Effect.scoped, Effect.provide(AtomRegistry.layer))
+    })
   )
 
   it.effect("should replace its plays on a reset", () =>
     Effect.gen(function* () {
-      yield* Atom.mount(Games.plays(id))
-      const source = yield* TestWeb.openedAt(`/api/games/${id}/plays/live`)
-      source.onmessage?.({ data: changeMessage({ _tag: "Reset", plays: playsOf([1]) }) })
+      const { registry, hub } = yield* TestWeb.withShell()
 
-      source.onmessage?.({ data: changeMessage({ _tag: "Reset", plays: playsOf([5, 4]) }) })
-      const { value } = yield* TestWeb.until(Games.plays(id), ({ value }) => value[0]?.sequence === 5)
+      const { value } = yield* Effect.gen(function* () {
+        yield* Atom.mount(Games.plays(id))
+        yield* TestWeb.answer(hub, `plays ${id}`, hub.plays, changed({ _tag: "Reset", plays: playsOf([1]) }))
+
+        yield* TestWeb.answer(
+          hub,
+          `plays ${id}`,
+          hub.plays,
+          changed({ _tag: "Reset", plays: playsOf([5, 4]) })
+        )
+        return yield* TestWeb.until(Games.plays(id), ({ value }) => value[0]?.sequence === 5)
+      }).pipe(Effect.scoped, Effect.provide(registry))
 
       assert.deepStrictEqual(
         value.map(({ sequence }) => sequence),
         [5, 4]
       )
-    }).pipe(Effect.scoped, Effect.provide(AtomRegistry.layer))
+    })
+  )
+
+  it.effect("should end its query on the Hub once nothing reads it", () =>
+    Effect.gen(function* () {
+      const { registry, hub } = yield* TestWeb.withShell()
+
+      const open = yield* Effect.gen(function* () {
+        yield* Effect.scoped(Effect.andThen(Atom.mount(Games.plays(id)), TestWeb.asked(hub, `plays ${id}`)))
+
+        yield* TestWeb.afterTasks
+        return yield* TestWeb.dropped(hub, `plays ${id}`)
+      }).pipe(Effect.provide(registry))
+
+      assert.notInclude(open, `plays ${id}`)
+    })
   )
 })
 
 describe("Games.game", () => {
-  beforeEach(() => {
-    TestWeb.FakeEventSource.opened = []
-    vi.stubGlobal("EventSource", TestWeb.FakeEventSource)
-  })
-  afterEach(() => {
-    vi.unstubAllGlobals()
-  })
-
-  it.effect("should open the game's live stream", () =>
+  it.effect("should ask the Hub for that game", () =>
     Effect.gen(function* () {
-      const source = yield* TestWeb.openedBy(Games.game(id))
+      const { registry, hub } = yield* TestWeb.withShell()
 
-      assert.strictEqual(source.url, "/api/games/401/live")
-    }).pipe(Effect.scoped, Effect.provide(AtomRegistry.layer))
+      const open = yield* Effect.gen(function* () {
+        yield* Atom.mount(Games.game(id))
+
+        return yield* TestWeb.asked(hub, "game 401")
+      }).pipe(Effect.scoped, Effect.provide(registry))
+
+      assert.include(open, "game 401")
+    })
   )
 })
 
@@ -90,7 +118,7 @@ function playsOf(sequences: ReadonlyArray<number>) {
   return sequences.map((sequence) => play({ id: PlayId.make(`p${sequence}`), sequence }))
 }
 
-/** A plays change's `data`, as the Hub sends it. */
-function changeMessage(change: PlaysChange) {
-  return Schema.encodeSync(Schema.fromJsonString(PlaysChange))(change)
+/** `change` to game `id`'s plays, as the fake Hub publishes it. */
+function changed(change: PlaysChange) {
+  return { game: id, change }
 }

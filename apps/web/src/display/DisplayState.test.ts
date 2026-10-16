@@ -10,8 +10,6 @@ import * as DisplayState from "./DisplayState.ts"
 
 describe("DisplayState", () => {
   beforeEach(() => {
-    TestWeb.FakeEventSource.opened = []
-    vi.stubGlobal("EventSource", TestWeb.FakeEventSource)
     vi.stubGlobal("localStorage", new TestWeb.MemoryStorage())
   })
   afterEach(() => {

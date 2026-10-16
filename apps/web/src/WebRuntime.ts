@@ -2,13 +2,14 @@ import { Effect, Layer, Scheduler } from "effect"
 import { FetchHttpClient } from "effect/http"
 import { Atom } from "effect/reactivity"
 import { HubClient } from "./hub/HubClient.ts"
+import { HubSocket } from "./hub/HubSocket.ts"
 import { Shell } from "./shell/Shell.ts"
 
 /**
- * The one runtime the web UI's effects run in: the Hub client and the Shell. Tests swap `runtime.layer`.
+ * The one runtime the web UI's effects run in: the Hub client, the Hub socket and the Shell. Tests swap `runtime.layer`.
  */
 export const runtime = Atom.runtime(
-  Layer.mergeAll(HubClient.layer, Shell.layer).pipe(Layer.provide(FetchHttpClient.layer))
+  Layer.mergeAll(HubClient.layer, HubSocket.layer, Shell.layer).pipe(Layer.provide(FetchHttpClient.layer))
 )
 
 /** Runs a mounted atom's effect before the browser paints what changed. */

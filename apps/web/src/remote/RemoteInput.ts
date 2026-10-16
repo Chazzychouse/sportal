@@ -11,6 +11,3 @@ export const RemoteInput = Schema.TaggedUnion({
   Pressed: { hotkey: Hotkey }
 })
 export type RemoteInput = typeof RemoteInput.Type
-
-/** A Remote input as the Hub relays it: a JSON string. */
-export const RemoteInputJson = Schema.fromJsonString(RemoteInput)

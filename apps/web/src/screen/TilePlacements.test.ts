@@ -9,8 +9,6 @@ import * as TilePlacements from "./TilePlacements.ts"
 
 describe("TilePlacements.sync", () => {
   beforeEach(() => {
-    TestWeb.FakeEventSource.opened = []
-    vi.stubGlobal("EventSource", TestWeb.FakeEventSource)
     vi.stubGlobal("localStorage", new TestWeb.MemoryStorage())
   })
   afterEach(() => {

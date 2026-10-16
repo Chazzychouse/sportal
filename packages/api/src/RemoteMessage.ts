@@ -9,6 +9,3 @@ export const RemoteMessage = Schema.TaggedUnion({
   Offline: {}
 })
 export type RemoteMessage = typeof RemoteMessage.Type
-
-/** A Remote message as one line of JSON, as the Remote stream sends it. */
-export const RemoteMessageJson = Schema.fromJsonString(RemoteMessage)

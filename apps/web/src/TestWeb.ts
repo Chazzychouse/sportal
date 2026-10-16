@@ -1,12 +1,16 @@
 import type { DisplayId } from "@sportal/api/DisplayId"
-import { CalendarDate, type GameList, GameListJson } from "@sportal/api/GamesQuery"
+import type { DisplayMessage } from "@sportal/api/DisplayMessage"
+import { CalendarDate, type GameList } from "@sportal/api/GamesQuery"
+import { HubApi } from "@sportal/api/HubApi"
+import type { ListedGame } from "@sportal/api/ListedGame"
+import type { RemoteMessage } from "@sportal/api/RemoteMessage"
 import type { ChannelAvailability } from "@sportal/domain/Channel"
-import { GameId } from "@sportal/domain/Game"
+import { GameId, type PlaysChange } from "@sportal/domain/Game"
 import { snapshot } from "@sportal/domain/TestGame"
-import { DateTime, Effect, Layer, Queue, Result, Schema, Stream } from "effect"
+import { DateTime, Effect, Layer, PubSub, Queue, Result, Schema, Stream, SubscriptionRef } from "effect"
 import { Atom, AtomRegistry } from "effect/reactivity"
-import * as Games from "./hub/Games.ts"
 import { HubClient } from "./hub/HubClient.ts"
+import { Connection, HubSocket } from "./hub/HubSocket.ts"
 import { Screen } from "./screen/Screen.ts"
 import { Shell } from "./shell/Shell.ts"
 import * as WebRuntime from "./WebRuntime.ts"
@@ -88,68 +92,102 @@ export function soloed(games: ReadonlyArray<GameId | undefined>, tile: number) {
   return Result.getOrThrow(fill(games).apply({ _tag: "Solo", tile }, nowhere))
 }
 
-/** The EventSource today's list opened, once a read of its atom has started it. */
-export const opened: Effect.Effect<FakeEventSource, never, AtomRegistry.AtomRegistry> = Atom.get(
-  Games.today
-).pipe(Effect.andThen(() => openedAt("/api/games/live")))
-
-/** The EventSource last opened, once a read of `atom` has started one. */
-export function openedBy<A>(
-  atom: Atom.Atom<A>
-): Effect.Effect<FakeEventSource, never, AtomRegistry.AtomRegistry> {
-  return Atom.get(atom).pipe(Effect.andThen(() => lastOpened(() => true)))
-}
-
-/** The EventSource last opened at `url`, once something has opened one. */
-export function openedAt(url: string): Effect.Effect<FakeEventSource> {
-  return lastOpened((source) => source.url === url)
-}
-
-/** The EventSource opened at `source`'s url after it, once one has been. */
-export function reopened(source: FakeEventSource): Effect.Effect<FakeEventSource> {
-  return lastOpened(
-    (each) =>
-      each.url === source.url && FakeEventSource.opened.indexOf(each) > FakeEventSource.opened.indexOf(source)
-  )
-}
-
-function lastOpened(predicate: (source: FakeEventSource) => boolean): Effect.Effect<FakeEventSource> {
-  return Effect.suspend(() => {
-    const last = FakeEventSource.opened.findLast(predicate)
-    return last === undefined
-      ? Effect.yieldNow.pipe(Effect.flatMap(() => lastOpened(predicate)))
-      : Effect.succeed(last)
-  })
-}
-
 /**
- * An EventSource a test drives by hand: it records each one opened, and the test calls its handlers. A test sets
- * `readyState` to `CLOSED` before `onerror` to fail it as the browser does, for good.
+ * A Hub over an in-memory socket, for a test to drive: its connection (connected), and a PubSub per kind of live query;
+ * each publish goes to every query of its kind open then (a game's and its plays' by the game's id). `open` names the
+ * queries open now, as "games", "game 401", "plays 401", "inputs desk" and "follow desk": a test waits for one with
+ * `asked` before it answers it, and for its end with `dropped`. An `inputs` query sends `Registered` first.
  */
-export class FakeEventSource {
-  static readonly CLOSED = 2
-  static opened: Array<FakeEventSource> = []
-  onopen: (() => void) | null = null
-  onerror: (() => void) | null = null
-  onmessage: ((event: { data: unknown }) => void) | null = null
-  readyState = 0
-  closed = false
+export const liveHub = Effect.fn("TestWeb.liveHub")(function* () {
+  const connection = yield* SubscriptionRef.make<Connection>(Connection.Connected())
+  const open = yield* SubscriptionRef.make<ReadonlyArray<string>>([])
+  const lists = yield* PubSub.unbounded<GameList>()
+  const games = yield* PubSub.unbounded<ListedGame>()
+  const plays = yield* PubSub.unbounded<{ readonly game: GameId; readonly change: PlaysChange }>()
+  const inputs = yield* PubSub.unbounded<Schema.Json>()
+  const follows = yield* PubSub.unbounded<RemoteMessage>()
 
-  readonly url: string
+  const handlers = HubApi.toLayer({
+    listLive: () => served(open, "games", lists),
+    gameLive: ({ id }) =>
+      served(open, `game ${id}`, games).pipe(Stream.filter(({ snapshot }) => snapshot.id === id)),
+    playsLive: ({ id }) =>
+      served(open, `plays ${id}`, plays).pipe(
+        Stream.filter(({ game }) => game === id),
+        Stream.map(({ change }) => change)
+      ),
+    inputs: ({ display }) =>
+      Stream.concat(
+        Stream.succeed<DisplayMessage>({ _tag: "Registered" }),
+        Stream.map(
+          served(open, `inputs ${display}`, inputs),
+          (input): DisplayMessage => ({ _tag: "Sent", input })
+        )
+      ),
+    follow: ({ display }) => served(open, `follow ${display}`, follows)
+  })
+  const layer = HubSocket.layerTest(connection, handlers)
+  return { layer, connection, open, lists, games, plays, inputs, follows }
+})
 
-  constructor(url: string) {
-    this.url = url
-    FakeEventSource.opened.push(this)
-  }
-
-  close() {
-    this.closed = true
-  }
+/** The queries `hub` has open, once it has `name` open. */
+export function asked(
+  hub: { readonly open: SubscriptionRef.SubscriptionRef<ReadonlyArray<string>> },
+  name: string
+) {
+  return openWhen(hub, (names) => names.includes(name))
 }
 
-/** A game list's `data`, as the Hub sends it on a live list. */
-export function gameListMessage(list: GameList) {
-  return encodeGameList(list)
+/** The queries `hub` has open, once nothing reads its query `name` any more. */
+export function dropped(
+  hub: { readonly open: SubscriptionRef.SubscriptionRef<ReadonlyArray<string>> },
+  name: string
+) {
+  return openWhen(hub, (names) => !names.includes(name))
+}
+
+/** Publishes `value` on `answers` once `hub` has the query `name` open, so that query gets it. */
+export const answer = Effect.fnUntraced(function* <A>(
+  hub: { readonly open: SubscriptionRef.SubscriptionRef<ReadonlyArray<string>> },
+  name: string,
+  answers: PubSub.PubSub<A>,
+  value: A
+) {
+  yield* asked(hub, name)
+  yield* PubSub.publish(answers, value)
+})
+
+/** A socket lost at the epoch. */
+export const lost: Connection = Connection.Lost({ since: DateTime.makeUnsafe(0) })
+
+/** Waits past the registry's next scheduled tasks, where it removes an atom nothing holds. */
+export const afterTasks = Effect.promise(() => new Promise((resolve) => setTimeout(resolve, 10)))
+
+/** `answers` to one query named `name`: open from its subscription until its client stops reading it. */
+function served<A>(
+  open: SubscriptionRef.SubscriptionRef<ReadonlyArray<string>>,
+  name: string,
+  answers: PubSub.PubSub<A>
+): Stream.Stream<A> {
+  const subscribed = Effect.gen(function* () {
+    const subscription = yield* PubSub.subscribe(answers)
+    yield* SubscriptionRef.update(open, (names) => [...names, name])
+
+    return Stream.fromSubscription(subscription)
+  })
+  const ended = SubscriptionRef.update(open, (names) => names.filter((each) => each !== name))
+  return Stream.unwrap(subscribed).pipe(Stream.ensuring(ended))
+}
+
+function openWhen(
+  hub: { readonly open: SubscriptionRef.SubscriptionRef<ReadonlyArray<string>> },
+  holds: (names: ReadonlyArray<string>) => boolean
+) {
+  return SubscriptionRef.changes(hub.open).pipe(
+    Stream.filter(holds),
+    Stream.runHead,
+    Effect.flatMap(Effect.fromOption)
+  )
 }
 
 /** The first value of `atom` that `predicate` holds for. */
@@ -162,7 +200,7 @@ export function until<A>(atom: Atom.Atom<A>, predicate: (value: A) => boolean) {
  * React's scheduler.
  */
 export function registryOf(
-  layer: Layer.Layer<Shell | HubClient>,
+  layer: Layer.Layer<Shell | HubClient | HubSocket>,
   scheduleTask?: (f: () => void) => () => void
 ) {
   return AtomRegistry.layerOptions({ initialValues: [[WebRuntime.runtime.layer, layer]], scheduleTask })
@@ -170,22 +208,24 @@ export function registryOf(
 
 /**
  * A registry whose web runtime has a Shell giving `events` and a Hub client taking every guide, and each call the
- * Shell and the Hub client are asked to make, in order.
+ * Shell and the Hub client are asked to make, in order, and the fake Hub its live queries ask (`liveHub`).
  */
 export const withShell = Effect.fn("TestWeb.withShell")(function* (
   events: Omit<Parameters<typeof Shell.layerTest>[0], "record"> = {},
   scheduleTask?: (f: () => void) => () => void
 ) {
   const calls = yield* Queue.unbounded<TestWebCall>()
+  const hub = yield* liveHub()
   const layer = Layer.mergeAll(
     Shell.layerTest({ ...events, record: (call) => Effect.asVoid(Queue.offer(calls, call)) }),
     HubClient.layerTest({
       sendGuide: (guide) => Effect.asVoid(Queue.offer(calls, { _tag: "SendGuide", guide })),
       report: (id, report) => Effect.asVoid(Queue.offer(calls, { _tag: "Report", id, report })),
       send: (id, input) => Effect.asVoid(Queue.offer(calls, { _tag: "Send", id, input }))
-    })
+    }),
+    hub.layer
   )
-  return { registry: registryOf(layer, scheduleTask), calls }
+  return { registry: registryOf(layer, scheduleTask), calls, hub }
 })
 
 /** A call `withShell` records: one the Shell was asked to make, or one the Hub client was. */
@@ -223,5 +263,3 @@ export class MemoryStorage implements Storage {
     this.items.set(key, value)
   }
 }
-
-const encodeGameList = Schema.encodeSync(GameListJson)

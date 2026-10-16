@@ -1,11 +1,10 @@
 import type { DisplayId } from "@sportal/api/DisplayId"
-import { RemoteMessage, RemoteMessageJson } from "@sportal/api/RemoteMessage"
+import { RemoteMessage } from "@sportal/api/RemoteMessage"
 import { Data, Effect, Schema, Stream } from "effect"
 import { AsyncResult, Atom } from "effect/reactivity"
 import { Display, type DisplayInput } from "../display/Display.ts"
 import { HubClient } from "../hub/HubClient.ts"
-import * as ServerEvents from "../hub/ServerEvents.ts"
-import { ServerEvent } from "../hub/ServerEvents.ts"
+import { Connection, HubSocket } from "../hub/HubSocket.ts"
 import { runtime } from "../WebRuntime.ts"
 import { RemoteInput } from "./RemoteInput.ts"
 import { RemoteReport } from "./RemoteReport.ts"
@@ -18,13 +17,27 @@ export type Followed = Data.TaggedEnum<{
 }>
 export const Followed = Data.taggedEnum<Followed>()
 
-/** The Display `id`, followed through the Hub; it reconnects after an error and starts again from `Connecting`. */
-export const followed = Atom.family((id: DisplayId) =>
-  Atom.make(ServerEvents.from(`/api/displays/${id}`).pipe(Stream.scanEffect(connecting, step))).pipe(
-    Atom.map(AsyncResult.getOrElse(connecting)),
-    Atom.keepAlive
+/**
+ * The Display `id`, followed through the Hub: connecting until the Hub first answers, and again while the socket is
+ * lost; it follows again when the socket connects.
+ */
+export const followed = Atom.family((id: DisplayId) => {
+  const seen = Stream.unwrap(
+    Effect.gen(function* () {
+      const socket = yield* HubSocket
+      const messages = socket
+        .live((client) => client.follow({ display: id }))
+        .pipe(Stream.mapEffect(followedOf))
+      const lost = socket.connection.pipe(
+        Stream.filter((connection) => !Connection.$is("Connected")(connection)),
+        Stream.map(connecting)
+      )
+
+      return Stream.merge(lost, messages)
+    })
   )
-)
+  return runtime.atom(seen).pipe(Atom.map(AsyncResult.getOrElse(connecting)), Atom.keepAlive)
+})
 
 /** Sends one input to the Display `id`; a Display that is offline counts on `offline`. */
 export const send = Atom.family((id: DisplayId) =>
@@ -74,20 +87,13 @@ function connecting(): Followed {
 
 const kept = Atom.family((_: DisplayId) => Atom.make(Display.initial).pipe(Atom.keepAlive))
 
-/** What `current` becomes on `event`. */
-function step(current: Followed, event: ServerEvent): Effect.Effect<Followed> {
-  return ServerEvent.$match(event, {
-    Opened: () => Effect.succeed(current),
-    Errored: () => Effect.succeed(Followed.Connecting()),
-    Received: ({ data }) =>
-      decodeMessage(data).pipe(
-        Effect.flatMap((message) =>
-          RemoteMessage.match(message, {
-            Offline: () => Effect.succeed<Followed>(Followed.Offline()),
-            Reported: ({ report }) =>
-              Effect.map(decodeReport(report), (decoded): Followed => Followed.Reported({ report: decoded }))
-          })
-        ),
+/** What `message` says of the Display; a report that does not decode reads as offline. */
+function followedOf(message: RemoteMessage): Effect.Effect<Followed> {
+  return RemoteMessage.match(message, {
+    Offline: () => Effect.succeed<Followed>(Followed.Offline()),
+    Reported: ({ report }) =>
+      decodeReport(report).pipe(
+        Effect.map((decoded): Followed => Followed.Reported({ report: decoded })),
         Effect.catchTag("SchemaError", (error) =>
           Effect.logWarning("A report from the Display did not decode", error).pipe(
             Effect.as(Followed.Offline())
@@ -98,7 +104,5 @@ function step(current: Followed, event: ServerEvent): Effect.Effect<Followed> {
 }
 
 const encodeInput = Schema.encodeEffect(RemoteInput)
-
-const decodeMessage = Schema.decodeUnknownEffect(RemoteMessageJson)
 
 const decodeReport = Schema.decodeUnknownEffect(RemoteReport)

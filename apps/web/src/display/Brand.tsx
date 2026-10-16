@@ -1,4 +1,4 @@
-import * as LiveStream from "../hub/LiveStream.ts"
+import { Connection } from "../hub/HubSocket.ts"
 
 /** The Sportal name with its on-air dot. */
 export function BrandMark() {
@@ -10,13 +10,13 @@ export function BrandMark() {
   )
 }
 
-/** Whether the Hub's live stream is up: "Hub live", "Connecting" before it first is, "Reconnecting" once lost. */
-export function ConnectionPill(props: { connection: LiveStream.Connection }) {
-  const live = LiveStream.Connection.$is("Connected")(props.connection)
+/** Whether the Hub socket is up: "Hub live", "Connecting" before it first is, "Reconnecting" once lost. */
+export function ConnectionPill(props: { connection: Connection }) {
+  const live = Connection.$is("Connected")(props.connection)
   return (
     <span className={`label-caps flex items-center gap-1.5 text-[11px] ${live ? "text-live" : "text-warn"}`}>
       <span className={`size-1.5 rounded-full ${live ? "bg-live" : "animate-pulse bg-warn"}`} />
-      {LiveStream.Connection.$match(props.connection, {
+      {Connection.$match(props.connection, {
         Connecting: () => "Connecting",
         Connected: () => "Hub live",
         Lost: () => "Reconnecting"

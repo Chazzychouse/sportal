@@ -8,9 +8,7 @@ export function KeysDialog(props: { open: boolean; onOpenChange: (open: boolean)
       <DialogContent className="top-20 translate-y-0 gap-3 border-border bg-popover sm:max-w-md">
         <div>
           <DialogTitle className="label-caps text-xs">Keys</DialogTitle>
-          <DialogDescription className="text-xs">
-            They work while a video has focus too, except Enter.
-          </DialogDescription>
+          <DialogDescription className="text-xs">They work while a video has focus too.</DialogDescription>
         </div>
         {(["Tiles", "Screen"] as const).map((group) => (
           <section key={group}>

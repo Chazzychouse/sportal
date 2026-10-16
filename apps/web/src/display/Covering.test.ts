@@ -8,8 +8,6 @@ import * as Covering from "./Covering.ts"
 
 describe("Covering.sync", () => {
   beforeEach(() => {
-    TestWeb.FakeEventSource.opened = []
-    vi.stubGlobal("EventSource", TestWeb.FakeEventSource)
     vi.stubGlobal("localStorage", new TestWeb.MemoryStorage())
   })
   afterEach(() => {

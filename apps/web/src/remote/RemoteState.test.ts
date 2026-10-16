@@ -1,9 +1,9 @@
 import { afterEach, assert, beforeEach, describe, it } from "@effect/vitest"
 import { DisplayId } from "@sportal/api/DisplayId"
 import { DisplayOffline } from "@sportal/api/DisplayOffline"
-import { RemoteMessageJson } from "@sportal/api/RemoteMessage"
+import type { RemoteMessage } from "@sportal/api/RemoteMessage"
 import { GameId } from "@sportal/domain/Game"
-import { Deferred, Effect, Layer, Queue, Schema, Stream } from "effect"
+import { Deferred, Effect, Layer, PubSub, Queue, Schema, Stream, SubscriptionRef } from "effect"
 import { Atom } from "effect/reactivity"
 import { vi } from "vitest"
 import { DisplayInput } from "../display/Display.ts"
@@ -17,8 +17,6 @@ const desk = DisplayId.make("desk")
 
 describe("RemoteState", () => {
   beforeEach(() => {
-    TestWeb.FakeEventSource.opened = []
-    vi.stubGlobal("EventSource", TestWeb.FakeEventSource)
     vi.stubGlobal("localStorage", new TestWeb.MemoryStorage())
   })
   afterEach(() => {
@@ -27,15 +25,14 @@ describe("RemoteState", () => {
 
   it.effect("should follow the Display from reported to offline and back", () =>
     Effect.gen(function* () {
-      const { registry } = yield* TestWeb.withShell()
+      const { registry, hub } = yield* TestWeb.withShell()
 
       const seen = yield* Effect.gen(function* () {
         const tags = yield* collected(RemoteState.followed(desk), (each) => each._tag)
-        const source = yield* TestWeb.openedAt("/api/displays/desk")
 
-        source.onmessage?.({ data: reported(reportOf()) })
-        source.onmessage?.({ data: offline })
-        source.onmessage?.({ data: reported(reportOf()) })
+        yield* TestWeb.answer(hub, "follow desk", hub.follows, reported(reportOf()))
+        yield* PubSub.publish(hub.follows, { _tag: "Offline" })
+        yield* PubSub.publish(hub.follows, reported(reportOf()))
         return yield* takeN(tags, 4)
       }).pipe(Effect.scoped, Effect.provide(registry))
 
@@ -45,13 +42,15 @@ describe("RemoteState", () => {
 
   it.effect("should read a report that does not decode as offline", () =>
     Effect.gen(function* () {
-      const { registry } = yield* TestWeb.withShell()
+      const { registry, hub } = yield* TestWeb.withShell()
 
       const followed = yield* Effect.gen(function* () {
         yield* Atom.get(RemoteState.followed(desk))
-        const source = yield* TestWeb.openedAt("/api/displays/desk")
 
-        source.onmessage?.({ data: JSON.stringify({ _tag: "Reported", report: { screen: "nonsense" } }) })
+        yield* TestWeb.answer(hub, "follow desk", hub.follows, {
+          _tag: "Reported",
+          report: { screen: "nonsense" }
+        })
         return yield* TestWeb.until(RemoteState.followed(desk), (each) => each._tag === "Offline")
       }).pipe(Effect.scoped, Effect.provide(registry))
 
@@ -59,14 +58,30 @@ describe("RemoteState", () => {
     })
   )
 
+  it.effect("should be connecting again while the socket is lost", () =>
+    Effect.gen(function* () {
+      const { registry, hub } = yield* TestWeb.withShell()
+
+      const followed = yield* Effect.gen(function* () {
+        yield* Atom.mount(RemoteState.followed(desk))
+        yield* TestWeb.answer(hub, "follow desk", hub.follows, reported(reportOf()))
+        yield* TestWeb.until(RemoteState.followed(desk), (each) => each._tag === "Reported")
+
+        yield* SubscriptionRef.set(hub.connection, TestWeb.lost)
+        return yield* TestWeb.until(RemoteState.followed(desk), (each) => each._tag === "Connecting")
+      }).pipe(Effect.scoped, Effect.provide(registry))
+
+      assert.strictEqual(followed._tag, "Connecting")
+    })
+  )
+
   it.effect("should send a tapped game to the selected tile as Commanded Assign", () =>
     Effect.gen(function* () {
-      const { registry, calls } = yield* TestWeb.withShell()
+      const { registry, calls, hub } = yield* TestWeb.withShell()
 
       const sent = yield* Effect.gen(function* () {
         yield* Atom.get(RemoteState.followed(desk))
-        const source = yield* TestWeb.openedAt("/api/displays/desk")
-        source.onmessage?.({ data: reported(reportOf()) })
+        yield* TestWeb.answer(hub, "follow desk", hub.follows, reported(reportOf()))
         yield* TestWeb.until(RemoteState.followed(desk), (each) => each._tag === "Reported")
 
         yield* Atom.set(RemoteState.display(desk), DisplayInput.Chosen({ game: GameId.make("live") }))
@@ -82,7 +97,7 @@ describe("RemoteState", () => {
 
   it.effect("should count an input the Hub refuses as the Display offline", () =>
     Effect.gen(function* () {
-      const registry = registryWith({ send: () => Effect.fail(new DisplayOffline()) })
+      const registry = yield* registryWith({ send: () => Effect.fail(new DisplayOffline()) })
 
       const count = yield* Effect.gen(function* () {
         yield* Atom.set(RemoteState.send(desk), toggle)
@@ -98,11 +113,11 @@ describe("RemoteState", () => {
     Effect.gen(function* () {
       const gate = yield* Deferred.make<void>()
       const done = yield* Queue.unbounded<Schema.Json>()
-      const registry = registryWith({ send: (_, input) => heldUntil(gate, done, input) })
+      const registry = yield* registryWith({ send: (_, input) => heldUntil(gate, done, input) })
 
       const finished = yield* Effect.gen(function* () {
         yield* Atom.set(RemoteState.send(desk), toggle)
-        yield* afterTasks
+        yield* TestWeb.afterTasks
 
         yield* Deferred.succeed(gate, undefined)
         return yield* Queue.take(done)
@@ -116,13 +131,13 @@ describe("RemoteState", () => {
     Effect.gen(function* () {
       const gate = yield* Deferred.make<void>()
       const done = yield* Queue.unbounded<Schema.Json>()
-      const registry = registryWith({ send: (_, input) => heldUntil(gate, done, input) })
+      const registry = yield* registryWith({ send: (_, input) => heldUntil(gate, done, input) })
 
       const finished = yield* Effect.gen(function* () {
         yield* Atom.mount(RemoteState.send(desk))
         yield* Atom.set(RemoteState.send(desk), toggle)
         yield* Atom.set(RemoteState.send(desk), toggle)
-        yield* afterTasks
+        yield* TestWeb.afterTasks
 
         yield* Deferred.succeed(gate, undefined)
         return yield* takeN(done, 2)
@@ -136,33 +151,27 @@ describe("RemoteState", () => {
 const toggle = { _tag: "Pressed", hotkey: { _tag: "NextLayout" } } as const
 
 /** A registry whose Hub client is `fakes`. */
-function registryWith(fakes: Parameters<typeof HubClient.layerTest>[0]) {
+const registryWith = Effect.fnUntraced(function* (fakes: Parameters<typeof HubClient.layerTest>[0]) {
+  const hub = yield* TestWeb.liveHub()
+
   return TestWeb.registryOf(
-    Layer.merge(Shell.layerTest({ record: () => Effect.void }), HubClient.layerTest(fakes))
+    Layer.mergeAll(Shell.layerTest({ record: () => Effect.void }), HubClient.layerTest(fakes), hub.layer)
   )
-}
+})
 
 /** A send held until `gate` opens, then recorded in `done`. */
 function heldUntil(gate: Deferred.Deferred<void>, done: Queue.Queue<Schema.Json>, input: Schema.Json) {
   return Deferred.await(gate).pipe(Effect.andThen(Queue.offer(done, input)), Effect.asVoid)
 }
 
-/** Waits past the registry's next scheduled tasks, where it removes an atom nothing holds. */
-const afterTasks = Effect.promise(() => new Promise((resolve) => setTimeout(resolve, 10)))
-
 function reportOf() {
   return new RemoteReport({ screen: TestWeb.withTiles([]) })
 }
 
-const encodeMessage = Schema.encodeSync(RemoteMessageJson)
-
-/** A Reported message's data, as the Hub sends it. */
-function reported(report: RemoteReport) {
-  return encodeMessage({ _tag: "Reported", report: Schema.encodeSync(RemoteReport)(report) })
+/** A Reported message, as the Hub sends it. */
+function reported(report: RemoteReport): RemoteMessage {
+  return { _tag: "Reported", report: Schema.encodeSync(RemoteReport)(report) }
 }
-
-/** An Offline message's data. */
-const offline = encodeMessage({ _tag: "Offline" })
 
 /** Each value of `atom`, mapped by `f`, in a queue, collected while the scope lives. */
 const collected = Effect.fnUntraced(function* <A, B>(atom: Atom.Atom<A>, f: (value: A) => B) {

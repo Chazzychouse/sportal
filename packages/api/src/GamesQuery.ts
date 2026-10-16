@@ -14,8 +14,6 @@ export type CalendarDate = typeof CalendarDate.Type
 export const GameList = Schema.Struct({ date: CalendarDate, games: Schema.Array(ListedGame) })
 export type GameList = typeof GameList.Type
 
-export const GameListJson = Schema.fromJsonString(GameList)
-
 /**
  * What a list of games asks for, as its query string spells it: a day (today in the Hub's time zone without one),
  * leagues and progress as comma lists (all without them), and `carried=true` for only the games a source carries or

@@ -84,7 +84,7 @@ flowchart LR
   yttv --> views
 ```
 
-- **Hub** — takes what its providers' frames say, as they arrive, into the Director's slate (the listed games, each with its latest snapshot and plays). Its Schedule answers the games API from it: a day's games, one game, a game's plays, each once or live. Serves the web UI's static files and the HTTP API, with one stream per live query.
+- **Hub** — takes what its providers' frames say, as they arrive, into the Director's slate (the listed games, each with its latest snapshot and plays). Its Schedule answers the games API from it: a day's games, one game, a game's plays, each once or live. Serves the web UI's static files, the HTTP API, and the live queries: stream RPCs over one WebSocket per page, at `/api/socket` on the same port.
 - **Web UI** — one codebase for desk and couch. It renders Hub state, and its Display owns its Screen: it applies screen commands and chooses between sources.
 - **Desktop shell** — starts the Hub it ships with (the embedded Hub), loads the web UI from it, registers as a Display, and mirrors that Display's stream tiles into native provider web views. Given a Hub's address by configuration (`SPORTAL_HUB_URL`, read once into `ShellConfig`), it starts none and loads that one instead, as `pnpm dev` does.
 
@@ -93,11 +93,19 @@ The games API, answered by the Hub's `Schedule` (`apps/hub/src/Schedule.ts`):
 | Endpoint | Answer |
 |---|---|
 | `GET /api/games?date&league&progress&carried` | `{ date, games: ListedGame[] }` |
-| `GET /api/games/live?…` | The same answer, then the whole answer again each time it changes, debounced |
 | `GET /api/games/:id` | `ListedGame` |
-| `GET /api/games/:id/live` | The same, then again each time that game or its availability changes |
 | `GET /api/games/:id/plays?before&limit` | `{ plays, more }`, newest first; `before` is a `sequence`, `limit` defaults to 50 |
-| `GET /api/games/:id/plays/live` | The latest page, then `Appended { plays }` or `Reset { plays }` (the latest page) |
+
+The live queries (`HubApi`, stream RPCs over one WebSocket per page at `/api/socket`; a page with any number of
+tiles holds one socket, under Chromium's six HTTP/1.1 connections per host):
+
+| RPC | Payload | Sends |
+|---|---|---|
+| `listLive` | a games query | the answer, then the whole answer again each time it changes, debounced |
+| `gameLive` | `{ id }` | the listed game, then again each time it or its availability changes |
+| `playsLive` | `{ id }` | the latest page as a `Reset`, then `Appended { plays }` or `Reset { plays }` |
+| `inputs` | `{ display }` | `Registered`, then each Remote input as `Sent { input }`; registers the Display while it runs |
+| `follow` | `{ display }` | the Display's latest report, or that it is offline, then each change |
 
 - A listed game is its snapshot and its availability from every source; a list never carries plays, and is in watch
   order: live, then upcoming by start, then over. `date` defaults to today in the Hub's time zone (`SPORTAL_TIME_ZONE`);
@@ -105,22 +113,24 @@ The games API, answered by the Hub's `Schedule` (`apps/hub/src/Schedule.ts`):
 - Today is live from the Director's slate. Another day is the provider's listing for it, fetched on demand and held in
   memory: a past day until the Hub restarts, a later one for 10 minutes. A game off today's slate is found in a held
   day, and its plays are fetched from the provider.
-- Each `/live` twin is a stream of its own for its one connection, derived from the Director's slate and the sources'
+- Each live query is a stream of its own for its one asking, derived from the Director's slate and the sources'
   availability, rechecked every 30 seconds: the list filters, orders, drops a repeat, and sends a change once 250 ms
   have passed without a further one; the game drops a repeat; the plays stream sends `Game#playsChange` of each version
-  of the game against the one before. Every stream sends a keep-alive event every 20 seconds.
+  of the game against the one before. The client pings the socket every 5 seconds and reopens
+  a lost one after half a second, then half as long again each time, up to 5 seconds; each query is asked again when
+  it reconnects.
 - `GameNotFound` (404) for an id no held day lists; `ScheduleUnavailable` (503) when the provider cannot be reached for
   a day, or a game's plays, the Hub does not hold.
-- In the web UI, `Games` (`apps/web/src/hub/Games.ts`) holds an atom per query the views make: today's list, kept open,
+- In the web UI, `Games` (`apps/web/src/hub/Games.ts`) holds an atom per query the views make, all
+  over the one `HubSocket`: today's list, kept open,
   which the Screen, the top bar, the palette and the Remote read; and each tile's game and, for a field, its plays,
-  each open only while a tile reads it.
+  each asked only while a tile reads it.
 
 The Hub's routes for Displays and their Remotes:
 
-- `GET /api/displays/:id/inputs` — a Display's input stream (server-sent events); its connection registers the Display under its id.
 - `PUT /api/displays/:id` — the Display's report, which the Hub keeps and passes on unread; 404 when the Display is not connected.
-- `GET /api/displays/:id` — a Remote follows the Display: its latest report, or that it is offline (server-sent events).
 - `POST /api/displays/:id/inputs` — a Remote's input, relayed to the Display; 404 when it is not connected.
+- The `inputs` and `follow` live queries — a Display's input stream, which registers the Display under its id while it runs, and a Remote's follow of the Display.
 - `GET /api/host/addresses` — the LAN addresses a Remote's join code can point at.
 
 ### 3.1 Why each Display owns its Screen
@@ -262,7 +272,7 @@ sportal/
     │       ├── design/             Vendored shadcn primitives, under the CLI's own file names
     │       ├── display/            This device's Display: state and rules, hotkeys, full screen, overlays, top bar, command palette
     │       ├── shell/              Shell: the edge to the window and the shell bridge
-    │       ├── hub/                HubClient (typed client from SportalApi), LiveStream (a live stream folded into an atom), Games (one atom per live query)
+    │       ├── hub/                HubClient (typed client from SportalApi), HubSocket (the one socket and its connection), LiveStream (a live query folded into an atom), Games (one atom per live query)
     │       ├── screen/             The Screen (state, commands, source choice), this Display's copy of it, tiles, dividers, tile actions, rejections
     │       ├── layout/             Layout (the geometry: slots, dividers, next, clamp), its picker and glyphs
     │       ├── game/               A game's status, score, and logo, as lists and tiles show them; the field, which draws a game's plays

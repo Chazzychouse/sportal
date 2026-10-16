@@ -8,5 +8,3 @@ export const ListedGame = Schema.Struct({
   availability: Schema.Array(ChannelAvailability)
 })
 export type ListedGame = typeof ListedGame.Type
-
-export const ListedGameJson = Schema.fromJsonString(ListedGame)

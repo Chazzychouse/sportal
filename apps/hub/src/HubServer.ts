@@ -1,6 +1,8 @@
 import { createServer } from "node:http"
 import { networkInterfaces } from "node:os"
 import { NodeHttpServer, type NodeServices } from "@effect/platform-node"
+import type { DisplayMessage } from "@sportal/api/DisplayMessage"
+import { HubApi } from "@sportal/api/HubApi"
 import { SportalApi } from "@sportal/api/SportalApi"
 import {
   DateTime,
@@ -10,6 +12,7 @@ import {
   Option,
   type Path,
   type PlatformError,
+  type Schema,
   Stream
 } from "effect"
 import {
@@ -21,7 +24,8 @@ import {
   type HttpServerError,
   HttpStaticServer
 } from "effect/http"
-import { HttpApiBuilder, HttpApiSchema } from "effect/http-api"
+import { HttpApiBuilder } from "effect/http-api"
+import { RpcSerialization, RpcServer } from "effect/rpc"
 import { Displays } from "./Displays.ts"
 import { HubConfig } from "./HubConfig.ts"
 import { Schedule } from "./Schedule.ts"
@@ -65,11 +69,8 @@ const gamesHandlers = HttpApiBuilder.group(
     const schedule = yield* Schedule
     return handlers.handleAll({
       list: ({ query }) => schedule.list(query),
-      listLive: ({ query }) => Effect.map(schedule.listLive(query), (answers) => sse(answers)),
       game: ({ params }) => schedule.game(params.id),
-      gameLive: ({ params }) => Effect.map(schedule.gameLive(params.id), (answers) => sse(answers)),
-      plays: ({ params, query }) => schedule.plays(params.id, query),
-      playsLive: ({ params }) => Effect.map(schedule.playsLive(params.id), (changes) => sse(changes))
+      plays: ({ params, query }) => schedule.plays(params.id, query)
     })
   })
 )
@@ -80,10 +81,7 @@ const displaysHandlers = HttpApiBuilder.group(
   Effect.fn(function* (handlers) {
     const displays = yield* Displays
     return handlers.handleAll({
-      inputs: ({ params }) =>
-        Effect.map(displays.connect(params.id), (inputs) => sse(inputs, { openNow: true })),
       report: ({ params, payload }) => displays.report(params.id, payload),
-      follow: ({ params }) => Effect.sync(() => sse(displays.follow(params.id))),
       send: ({ params, payload }) => displays.send(params.id, payload)
     })
   })
@@ -91,6 +89,25 @@ const displaysHandlers = HttpApiBuilder.group(
 
 const api = HttpApiBuilder.layer(SportalApi).pipe(
   Layer.provide([guideHandlers, hostHandlers, gamesHandlers, displaysHandlers])
+)
+
+const liveHandlers = HubApi.toLayer(
+  Effect.gen(function* () {
+    const schedule = yield* Schedule
+    const displays = yield* Displays
+    return HubApi.of({
+      listLive: (query) => Stream.unwrap(schedule.listLive(query)),
+      gameLive: ({ id }) => Stream.unwrap(schedule.gameLive(id)),
+      playsLive: ({ id }) => Stream.unwrap(schedule.playsLive(id)),
+      inputs: ({ display }) => Stream.unwrap(Effect.map(displays.connect(display), registered)),
+      follow: ({ display }) => displays.follow(display)
+    })
+  })
+)
+
+/** The live queries, on the same server and port as the API: one WebSocket per page carries every one it asks. */
+const live = RpcServer.layerHttp({ group: HubApi, path: "/api/socket", protocol: "websocket" }).pipe(
+  Layer.provide([liveHandlers, RpcSerialization.layerJson])
 )
 
 const web = Layer.unwrap(
@@ -116,7 +133,7 @@ export const layer: Layer.Layer<
   | Etag.Generator
   | FileSystem.FileSystem
   | Path.Path
-> = HttpRouter.serve(Layer.mergeAll(api, web))
+> = HttpRouter.serve(Layer.mergeAll(api, live, web))
 
 export const layerListen: Layer.Layer<
   HttpServer.HttpServer | HttpPlatform.HttpPlatform | Etag.Generator | NodeServices.NodeServices,
@@ -157,19 +174,8 @@ function rank(address: string) {
   return /^172\.(1[6-9]|2\d|3[01])\./.test(address) ? 2 : 3
 }
 
-/**
- * `data` as server-sent `message` events, with a keep-alive event every 20 seconds so a proxy, or the server
- * itself, notices a stream whose client is gone. The response only starts with its first event, so a stream
- * that may have no data for a while sends a keep-alive at once (`openNow`), and its client sees it open.
- */
-function sse<A>(data: Stream.Stream<A>, { openNow = false }: { openNow?: boolean } = {}) {
-  const keepAlive = Stream.tick("20 seconds").pipe(
-    Stream.drop(openNow ? 0 : 1),
-    Stream.map(() => ({ event: "keep-alive", data: "" }) as const)
-  )
-  const events = Stream.map(data, (each) => ({ event: "message", data: each }) as const)
-  return HttpApiSchema.withHeaders({
-    body: Stream.merge(events, keepAlive),
-    headers: { "cache-control": "no-cache" } as const
-  })
+/** A Display's inputs as its input stream sends them: that the Hub has registered it, then each input. */
+function registered(inputs: Stream.Stream<Schema.Json>): Stream.Stream<DisplayMessage> {
+  const sent = Stream.map(inputs, (input): DisplayMessage => ({ _tag: "Sent", input }))
+  return Stream.concat(Stream.succeed<DisplayMessage>({ _tag: "Registered" }), sent)
 }

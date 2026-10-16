@@ -65,7 +65,7 @@ export function TileChrome(props: {
         <span className="flex min-w-0 items-center gap-1.5 truncate font-mono">
           {props.game === undefined ? (
             <span className="font-sans text-muted-foreground">
-              {Tile.guards.Empty(tile) ? "Empty — pick a game" : "Loading…"}
+              {Tile.guards.Empty(tile) ? "Empty — Ctrl K to choose a game" : "Loading…"}
             </span>
           ) : (
             <>

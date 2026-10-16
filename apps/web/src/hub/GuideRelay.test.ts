@@ -1,24 +1,15 @@
-import { afterEach, assert, beforeEach, describe, it } from "@effect/vitest"
+import { assert, describe, it } from "@effect/vitest"
 import type { ShellBridge } from "@sportal/api/ShellBridge"
-import { Effect, Layer, Option, Queue, Stream } from "effect"
+import { Effect, Layer, Option, Queue, Stream, SubscriptionRef } from "effect"
 import { Atom } from "effect/reactivity"
-import { vi } from "vitest"
 import { Shell } from "../shell/Shell.ts"
 import * as TestWeb from "../TestWeb.ts"
 import * as Games from "./Games.ts"
 import * as GuideRelay from "./GuideRelay.ts"
 import { HubClient } from "./HubClient.ts"
-import * as LiveStream from "./LiveStream.ts"
+import { Connection } from "./HubSocket.ts"
 
 describe("GuideRelay.relay", () => {
-  beforeEach(() => {
-    TestWeb.FakeEventSource.opened = []
-    vi.stubGlobal("EventSource", TestWeb.FakeEventSource)
-  })
-  afterEach(() => {
-    vi.unstubAllGlobals()
-  })
-
   it.effect("should send each guide the shell reads to the Hub", () =>
     Effect.gen(function* () {
       const { registry, calls } = yield* TestWeb.withShell({ guideRead: Stream.make("<guide/>") })
@@ -35,15 +26,17 @@ describe("GuideRelay.relay", () => {
   it.effect("should still send a guide after the send before it died", () =>
     Effect.gen(function* () {
       const sent = yield* Queue.unbounded<string>()
+      const hub = yield* TestWeb.liveHub()
       const registry = TestWeb.registryOf(
-        Layer.merge(
+        Layer.mergeAll(
           Shell.layerTest({ guideRead: Stream.make("<first/>", "<second/>"), record: () => Effect.void }),
           HubClient.layerTest({
             sendGuide: (guide) =>
               guide === "<first/>"
                 ? Effect.die("The Hub's answer did not decode")
                 : Effect.asVoid(Queue.offer(sent, guide))
-          })
+          }),
+          hub.layer
         )
       )
 
@@ -56,14 +49,15 @@ describe("GuideRelay.relay", () => {
     })
   )
 
-  it.effect("should ask the shell to read the guide when the live stream connects", () =>
+  it.effect("should ask the shell to read the guide when the socket connects", () =>
     Effect.gen(function* () {
-      const { registry, calls } = yield* TestWeb.withShell()
+      const { registry, calls, hub } = yield* TestWeb.withShell()
+      yield* SubscriptionRef.set(hub.connection, Connection.Connecting())
 
       const call = yield* Effect.gen(function* () {
         yield* Atom.mount(GuideRelay.relay)
-        const source = yield* TestWeb.opened
-        source.onopen?.()
+
+        yield* SubscriptionRef.set(hub.connection, Connection.Connected())
         return yield* Queue.take(calls)
       }).pipe(Effect.scoped, Effect.provide(registry))
 
@@ -71,17 +65,15 @@ describe("GuideRelay.relay", () => {
     })
   )
 
-  it.effect("should not ask again for a message while the live stream stays connected", () =>
+  it.effect("should not ask again for a message while the socket stays connected", () =>
     Effect.gen(function* () {
       const guides = yield* Queue.unbounded<string>()
-      const { registry, calls } = yield* TestWeb.withShell({ guideRead: Stream.fromQueue(guides) })
+      const { registry, calls, hub } = yield* TestWeb.withShell({ guideRead: Stream.fromQueue(guides) })
 
       const second = yield* Effect.gen(function* () {
         yield* Atom.mount(GuideRelay.relay)
-        const source = yield* TestWeb.opened
-        source.onopen?.()
         yield* Queue.take(calls)
-        source.onmessage?.({ data: TestWeb.gameListMessage(TestWeb.todayList) })
+        yield* TestWeb.answer(hub, "games", hub.lists, TestWeb.todayList)
         yield* TestWeb.until(Games.today, ({ value }) => Option.isSome(value))
         yield* Queue.offer(guides, "<later/>")
         return yield* Queue.take(calls)
@@ -110,13 +102,14 @@ describe("GuideRelay.relay", () => {
           Queue.offerUnsafe(log, "ReadGuide")
         }
       }
-      const registry = TestWeb.registryOf(Layer.merge(Shell.layerBridge(bridge), HubClient.layerTest()))
+      const hub = yield* TestWeb.liveHub()
+      const registry = TestWeb.registryOf(
+        Layer.mergeAll(Shell.layerBridge(bridge), HubClient.layerTest(), hub.layer)
+      )
 
       const firstTwo = yield* Effect.gen(function* () {
         yield* Atom.mount(Games.today)
-        const source = yield* TestWeb.opened
-        source.onopen?.()
-        yield* TestWeb.until(Games.today, (live) => LiveStream.Connection.$is("Connected")(live.connection))
+        yield* TestWeb.until(Games.today, (live) => Connection.$is("Connected")(live.connection))
         yield* Atom.mount(GuideRelay.relay)
         return yield* Queue.takeN(log, 2)
       }).pipe(Effect.scoped, Effect.provide(registry))

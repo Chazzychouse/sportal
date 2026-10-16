@@ -1,43 +1,49 @@
 import { DisplayId } from "@sportal/api/DisplayId"
+import { DisplayMessage } from "@sportal/api/DisplayMessage"
 import { Effect, Schema, Stream, SubscriptionRef } from "effect"
 import { KeyValueStore } from "effect/persistence"
 import { Atom } from "effect/reactivity"
 import * as DisplayState from "../display/DisplayState.ts"
 import { HubClient } from "../hub/HubClient.ts"
-import * as ServerEvents from "../hub/ServerEvents.ts"
-import { ServerEvent } from "../hub/ServerEvents.ts"
+import { Connection, HubSocket } from "../hub/HubSocket.ts"
 import * as DisplayScreen from "../screen/DisplayScreen.ts"
 import { logDefect, runtime } from "../WebRuntime.ts"
-import { RemoteInput, RemoteInputJson } from "./RemoteInput.ts"
+import { RemoteInput } from "./RemoteInput.ts"
 import { RemoteReport } from "./RemoteReport.ts"
 
 /**
- * This Display's link to its Remotes: while its input stream at the Hub is open it reports, then reports each change,
- * and it applies each input a Remote sends, a screen command to the Screen and a hotkey as if pressed here. Mounted once,
- * by the Display.
+ * This Display's link to its Remotes: once the Hub has registered its input stream it reports, then reports each
+ * change, until the socket is lost; and it applies each input a Remote sends, a screen command to the Screen and a
+ * hotkey as if pressed here. Mounted once, by the Display.
  */
 export const link = runtime.atom((get) =>
   Effect.gen(function* () {
     const hub = yield* HubClient
+    const socket = yield* HubSocket
     const id = get(displayId)
-    const open = yield* SubscriptionRef.make(false)
+    const registered = yield* SubscriptionRef.make(false)
 
-    const inputs = ServerEvents.from(`/api/displays/${id}/inputs`).pipe(
-      Stream.runForEach((event) =>
-        ServerEvent.$match(event, {
-          Opened: () => SubscriptionRef.set(open, true),
-          Errored: () => SubscriptionRef.set(open, false),
-          Received: ({ data }) => applied(get, data)
-        })
+    const inputs = socket
+      .live((client) => client.inputs({ display: id }))
+      .pipe(
+        Stream.runForEach((message) =>
+          DisplayMessage.match(message, {
+            Registered: () => SubscriptionRef.set(registered, true),
+            Sent: ({ input }) => applied(get, input)
+          })
+        )
       )
+    const lost = socket.connection.pipe(
+      Stream.filter((connection) => !Connection.$is("Connected")(connection)),
+      Stream.runForEach(() => SubscriptionRef.set(registered, false))
     )
-    const reports = SubscriptionRef.changes(open).pipe(
-      Stream.switchMap((isOpen) =>
-        isOpen ? get.stream(report).pipe(Stream.changesWith(sameReport)) : Stream.empty
+    const reports = SubscriptionRef.changes(registered).pipe(
+      Stream.switchMap((isRegistered) =>
+        isRegistered ? get.stream(report).pipe(Stream.changesWith(sameReport)) : Stream.empty
       ),
       Stream.runForEach((each) => reported(hub, id, each))
     )
-    yield* Effect.all([inputs, reports], { concurrency: "unbounded", discard: true })
+    yield* Effect.all([inputs, lost, reports], { concurrency: "unbounded", discard: true })
   }).pipe(logDefect("The Remote link"))
 )
 
@@ -82,7 +88,7 @@ function reported(hub: HubClient["Service"], id: DisplayId, each: RemoteReport) 
   return encodeReport(each).pipe(
     Effect.flatMap((json) => hub.report(id, json)),
     Effect.catchTags({
-      DisplayOffline: () => Effect.logWarning("The Hub has not seen this Display's input stream"),
+      DisplayOffline: () => Effect.logWarning("The Hub has not registered this Display"),
       HttpClientError: (error) => Effect.logWarning("Could not report to the Hub", error)
     })
   )
@@ -90,6 +96,6 @@ function reported(hub: HubClient["Service"], id: DisplayId, each: RemoteReport) 
 
 const sameReport = Schema.toEquivalence(RemoteReport)
 
-const decodeInput = Schema.decodeUnknownEffect(RemoteInputJson)
+const decodeInput = Schema.decodeUnknownEffect(RemoteInput)
 
 const encodeReport = Schema.encodeEffect(RemoteReport)
