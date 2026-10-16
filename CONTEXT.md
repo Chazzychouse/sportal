@@ -136,6 +136,7 @@ A client asks the Hub over the Hub socket: once (`list`), or live (`listLive`) f
 | **Layout** | A named arrangement of tile slots whose dividers can be moved. The geometry is the web's: `Layout` in `apps/web/src/layout/Layout.ts` gives the slots, dividers, next layout, and clamped split. | grid, template |
 | **Split** | Where a layout's dividers sit, as fractions of the Screen area; `Split` in `Screen.ts`, which keeps it within `Screen.splitBounds`. | ratio, sizes |
 | **Tile** | One slot's content: a **stream tile**, a **data tile**, or empty. | pane, cell, window |
+| **Tile key** | What a tile shows, as one string: a game's stream or data tile is the game's id. Audio focus, solo, the interacting tile, tile placements and the shell's provider views name a tile by it, so what a tile shows keeps them when it moves; `TileKey` in `packages/api/src/TileKey.ts`, and `Tile.key` gives a tile's. | tile id, slot id |
 | **Main tile** | The largest slot of a layout. | hero, primary |
 | **Bench** | The tiles a layout has no slot for, kept in order and not played. | queue, reserve |
 | **Solo** | One on-screen game filling the whole Screen. | fullscreen, maximize |

@@ -78,22 +78,22 @@ const pending = Atom.make((get) => ({
 
 const samePlacements = Schema.toEquivalence(Schema.Array(TilePlacement))
 
-/** Whether two Screens put tiles in the same places: the layout, its split, solo, and the game in each slot. */
+/** Whether two Screens put tiles in the same places: the layout, its split, solo, and the tile key in each slot. */
 function sameArrangement(a: Screen, b: Screen): boolean {
   const split = a.splits[a.layout]
   const other = b.splits[b.layout]
-  const games = gamesIn(a)
-  const others = gamesIn(b)
+  const keys = keysIn(a)
+  const others = keysIn(b)
   return (
     a.layout === b.layout &&
     split.x === other.x &&
     split.y === other.y &&
     Option.getOrUndefined(a.solo) === Option.getOrUndefined(b.solo) &&
-    games.length === others.length &&
-    games.every((game, slot) => game === others[slot])
+    keys.length === others.length &&
+    keys.every((key, slot) => key === others[slot])
   )
 }
 
-function gamesIn(screen: Screen) {
-  return screen.onScreen().map((tile) => (Tile.guards.Empty(tile) ? undefined : tile.game))
+function keysIn(screen: Screen) {
+  return screen.onScreen().map((tile) => Tile.key(tile))
 }

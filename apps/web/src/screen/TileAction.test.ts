@@ -1,4 +1,5 @@
 import { assert, describe, it } from "@effect/vitest"
+import { TileKey } from "@sportal/api/TileKey"
 import type { GameId } from "@sportal/domain/Game"
 import * as TestWeb from "../TestWeb.ts"
 import { Screen } from "./Screen.ts"
@@ -69,7 +70,7 @@ describe("TileAction.of", () => {
 
   it("should word hear by whether the tile's sound is already on", () => {
     const screen = TestWeb.fill([TestWeb.bama, TestWeb.irish])
-    const wording = (game: GameId) => (screen.hears(game) ? "Sound on" : "Hear this game")
+    const wording = (game: GameId) => (screen.hears(TileKey.game(game)) ? "Sound on" : "Hear this game")
 
     const labels = [actionOf(screen, 0, true, "hear")?.label, actionOf(screen, 1, true, "hear")?.label]
 

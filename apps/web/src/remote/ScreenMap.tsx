@@ -51,8 +51,8 @@ export function ScreenMap(props: {
           .map((slot, index) => {
             const at = tiles[index]
             const game = gameIn(index)
-            const onAir = at !== undefined && !Tile.guards.Empty(at) && props.screen.hears(at.game)
-            const soloed = at !== undefined && !Tile.guards.Empty(at) && props.screen.soloes(at.game)
+            const onAir = at !== undefined && !Tile.guards.Empty(at) && props.screen.hears(Tile.key(at))
+            const soloed = at !== undefined && !Tile.guards.Empty(at) && props.screen.soloes(Tile.key(at))
 
             return (
               <button

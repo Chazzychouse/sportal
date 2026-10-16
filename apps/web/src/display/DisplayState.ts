@@ -52,8 +52,8 @@ export const inputs = runtime.atom((get) =>
   Effect.gen(function* () {
     const shell = yield* Shell
     const keys = Stream.runForEach(shell.hotkeys, (hotkey) => Effect.sync(() => get.set(pressed, hotkey)))
-    const videos = Stream.runForEach(shell.tilePressed, (game) =>
-      Effect.sync(() => get.set(display, DisplayInput.VideoPressed({ game })))
+    const videos = Stream.runForEach(shell.tilePressed, (key) =>
+      Effect.sync(() => get.set(display, DisplayInput.VideoPressed({ key })))
     )
 
     yield* Effect.all([keys, videos], { concurrency: "unbounded", discard: true })

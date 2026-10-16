@@ -1,4 +1,5 @@
 import { afterEach, assert, beforeEach, describe, it } from "@effect/vitest"
+import { TileKey } from "@sportal/api/TileKey"
 import { GameId } from "@sportal/domain/Game"
 import { Effect, Queue, Stream } from "effect"
 import { Atom } from "effect/reactivity"
@@ -101,7 +102,9 @@ describe("DisplayState", () => {
   it.effect("should select the slot of a video the shell says was pressed", () =>
     Effect.gen(function* () {
       yield* TestWeb.keep(TestWeb.withTiles(["live", "soon"]))
-      const { registry } = yield* TestWeb.withShell({ tilePressed: Stream.make(GameId.make("soon")) })
+      const { registry } = yield* TestWeb.withShell({
+        tilePressed: Stream.make(TileKey.game(GameId.make("soon")))
+      })
 
       const display = yield* Effect.gen(function* () {
         yield* Atom.mount(DisplayState.inputs)

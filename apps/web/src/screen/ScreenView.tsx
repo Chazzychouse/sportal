@@ -33,7 +33,7 @@ export function ScreenView() {
 
         return (
           <section
-            key={Tile.guards.Empty(tile) ? `slot-${index}` : tile.game}
+            key={Tile.key(tile) ?? `slot-${index}`}
             aria-hidden={hidden}
             className={`absolute flex flex-col overflow-hidden rounded-sm border ${
               selected === index ? "border-foreground/60" : "border-border"

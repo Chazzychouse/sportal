@@ -233,6 +233,7 @@ sportal/
 │           ├── DisplayOffline.ts   The error for an input or report to a Display that is not connected
 │           ├── RemoteMessage.ts    What the Hub pushes to a Remote: its Display's latest report, or Offline
 │           ├── ShellBridge.ts      What the desktop shell exposes to the web UI; TilePlacement, TileBounds
+│           ├── TileKey.ts          What a tile shows, as the one string the Screen, the shell and a Remote name it by
 │           ├── ShellChannel.ts     The IPC channel names, apart so the sandboxed preload bundles only them
 │           └── Hotkey.ts           The keys Sportal acts on, with their help text
 │

@@ -22,7 +22,7 @@ export class TileAction extends Data.Class<{
     const tile = screen.onScreen()[slot]
     if (tile === undefined || Tile.guards.Empty(tile)) return []
 
-    const hearLabel = screen.hears(tile.game) ? "Sound on" : "Hear this game"
+    const hearLabel = screen.hears(Tile.key(tile)) ? "Sound on" : "Hear this game"
     const hear = new TileAction({
       id: "hear",
       verb: "Hear",
@@ -37,7 +37,7 @@ export class TileAction extends Data.Class<{
       command: { _tag: "Promote", tile: slot },
       key: `Shift+${slot + 1}`
     })
-    const solo = screen.soloes(tile.game)
+    const solo = screen.soloes(Tile.key(tile))
       ? new TileAction({
           id: "unsolo",
           verb: "Unsolo",

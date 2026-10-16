@@ -1,5 +1,5 @@
 import type { TileBounds } from "@sportal/api/ShellBridge"
-import type { GameId } from "@sportal/domain/Game"
+import type { TileKey } from "@sportal/api/TileKey"
 import { Effect, Stream } from "effect"
 import { Atom } from "effect/reactivity"
 import * as TilePlacements from "../screen/TilePlacements.ts"
@@ -23,8 +23,8 @@ export const sync = runtime.atom((get) =>
 
     yield* get.stream(hidden).pipe(
       Stream.mapAccum(
-        (): ReadonlyArray<GameId> => [],
-        (last, next) => (sameGames(last, next) ? [last, []] : [next, [next]])
+        (): ReadonlyArray<TileKey> => [],
+        (last, next) => (sameKeys(last, next) ? [last, []] : [next, [next]])
       ),
       Stream.runForEach(shell.setHidden)
     )
@@ -32,9 +32,9 @@ export const sync = runtime.atom((get) =>
 )
 
 const hidden = Atom.make((get) =>
-  TileRects.coveredGames([...get(overlays).values()], get(TilePlacements.placements))
+  TileRects.coveredTiles([...get(overlays).values()], get(TilePlacements.placements))
 )
 
-function sameGames(a: ReadonlyArray<GameId>, b: ReadonlyArray<GameId>): boolean {
-  return a.length === b.length && a.every((game, index) => game === b[index])
+function sameKeys(a: ReadonlyArray<TileKey>, b: ReadonlyArray<TileKey>): boolean {
+  return a.length === b.length && a.every((key, index) => key === b[index])
 }

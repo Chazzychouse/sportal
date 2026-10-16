@@ -1,4 +1,5 @@
 import { Hotkey } from "@sportal/api/Hotkey"
+import { TileKey } from "@sportal/api/TileKey"
 import type { GameId } from "@sportal/domain/Game"
 import { Data, Option } from "effect"
 import { Layout } from "../layout/Layout.ts"
@@ -16,7 +17,7 @@ export class Display extends Data.Class<{
   /** The slot as last chosen; read it through `selectedOn`. */
   readonly selected: number
   /** Read it through `interactingOn`. */
-  readonly interacting: GameId | undefined
+  readonly interacting: TileKey | undefined
   readonly overlay: Overlay
 }> {
   /** Slot 0, nothing interacting, and no overlay. */
@@ -28,12 +29,12 @@ export class Display extends Data.Class<{
   }
 
   /**
-   * The interacting game, while the selected slot still holds its stream; otherwise none. It returns when its game is
-   * back in the selected slot.
+   * The interacting tile's key, while the selected slot still holds its stream; otherwise none. It returns when that
+   * tile is back in the selected slot.
    */
-  interactingOn(screen: Screen): GameId | undefined {
+  interactingOn(screen: Screen): TileKey | undefined {
     const tile = screen.onScreen()[this.selectedOn(screen)]
-    return Tile.guards.StreamTile(tile) && tile.game === this.interacting ? this.interacting : undefined
+    return Tile.guards.StreamTile(tile) && Tile.key(tile) === this.interacting ? this.interacting : undefined
   }
 
   /** What an input does on this Screen. */
@@ -41,8 +42,8 @@ export class Display extends Data.Class<{
     return DisplayInput.$match(input, {
       Pressed: ({ hotkey }) => this.press(hotkey, screen),
       Selected: ({ slot }) => this.select(slot, screen),
-      VideoPressed: ({ game }) => {
-        const slot = screen.slotOf(game)
+      VideoPressed: ({ key }) => {
+        const slot = screen.slotOf(key)
         return slot === undefined ? DisplayStep.of(this) : this.select(slot, screen)
       },
       Chosen: ({ game }) => this.choose(game, screen),
@@ -73,7 +74,7 @@ export class Display extends Data.Class<{
       Interact: () => {
         const tile = screen.onScreen()[this.selectedOn(screen)]
         if (!Tile.guards.StreamTile(tile)) return DisplayStep.of(this)
-        const interacting = this.interactingOn(screen) === undefined ? tile.game : undefined
+        const interacting = this.interactingOn(screen) === undefined ? Tile.key(tile) : undefined
         return DisplayStep.of(new Display({ ...this, interacting }))
       },
       ShowKeys: () => DisplayStep.of(Overlay.$is("Keys")(this.overlay) ? this.close() : this.open("Keys")),
@@ -99,9 +100,10 @@ export class Display extends Data.Class<{
    * left.
    */
   choose(game: GameId, screen: Screen): DisplayStep {
-    if (screen.slotOf(game) !== undefined) return DisplayStep.of(this)
+    const key = TileKey.game(game)
+    if (screen.slotOf(key) !== undefined) return DisplayStep.of(this)
     const slot = this.selectedOn(screen)
-    const bench = screen.benched().find((each) => each.game === game)
+    const bench = screen.benched().find((each) => each.key === key)
     const { display, commands } = this.select(screen.nextEmptySlot(slot) ?? slot, screen)
     const placed: ScreenCommand =
       bench === undefined ? { _tag: "Assign", tile: slot, game } : { _tag: "Swap", a: bench.tile, b: slot }
@@ -141,7 +143,7 @@ export class DisplayStep extends Data.Class<{
 export type DisplayInput = Data.TaggedEnum<{
   Pressed: { readonly hotkey: Hotkey }
   Selected: { readonly slot: number }
-  VideoPressed: { readonly game: GameId }
+  VideoPressed: { readonly key: TileKey }
   Chosen: { readonly game: GameId }
   Commanded: { readonly command: ScreenCommand }
   Opened: { readonly overlay: OpenOverlay }

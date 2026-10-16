@@ -1,4 +1,5 @@
 import { describe, expect, it } from "@effect/vitest"
+import { TileKey } from "@sportal/api/TileKey"
 import { GameId } from "@sportal/domain/Game"
 import { Context, Effect, Exit, Fiber, Layer, Scope } from "effect"
 import { TestClock } from "effect/testing"
@@ -134,7 +135,7 @@ describe("TileViews.sync", () => {
     Effect.gen(function* () {
       const scope = yield* Scope.make()
       const { window, tiles } = yield* attached().pipe(Scope.provide(scope))
-      yield* tiles.sync([placement, { ...placement, game: two }])
+      yield* tiles.sync([placement, { ...placement, key: two }])
 
       yield* Scope.close(scope, Exit.void)
 
@@ -398,7 +399,7 @@ describe("TileViews mouse filter", () => {
 
       mouse(0, "mouseDown", "left")
       yield* tiles.sync([placement])
-      yield* tiles.sync([{ ...placement, game: two }])
+      yield* tiles.sync([{ ...placement, key: two }])
       mouse(0, "mouseDown", "left")
       mouse(1, "mouseDown", "left")
       const reported = yield* Fiber.join(presses)
@@ -408,10 +409,10 @@ describe("TileViews mouse filter", () => {
   )
 })
 
-const one = GameId.make("one")
-const two = GameId.make("two")
+const one = TileKey.game(GameId.make("one"))
+const two = TileKey.game(GameId.make("two"))
 const placement = {
-  game: one,
+  key: one,
   url: "https://tv.youtube.com/watch/one",
   bounds: { x: 10, y: 20, width: 640, height: 360 },
   muted: true,
@@ -435,7 +436,7 @@ function attached() {
 
 /** The second game's placement, on its own address, where `placement` is. */
 function secondGame() {
-  return { ...placement, game: two, url: "https://tv.youtube.com/watch/two" }
+  return { ...placement, key: two, url: "https://tv.youtube.com/watch/two" }
 }
 
 /** The second game's placement at `target`: a view a transition brings in. */

@@ -25,7 +25,7 @@ export function TileChrome(props: {
 }) {
   const input = useAtomSet(DisplayState.display)
   const { tile, slot } = props
-  const onAir = !Tile.guards.Empty(tile) && props.screen.hears(tile.game)
+  const onAir = !Tile.guards.Empty(tile) && props.screen.hears(Tile.key(tile))
 
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: dragging is a shortcut; every swap is also in the command palette.

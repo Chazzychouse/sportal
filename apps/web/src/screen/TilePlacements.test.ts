@@ -1,4 +1,5 @@
 import { afterEach, assert, beforeEach, describe, it } from "@effect/vitest"
+import { TileKey } from "@sportal/api/TileKey"
 import { Effect, Option, Queue } from "effect"
 import { Atom } from "effect/reactivity"
 import { vi } from "vitest"
@@ -27,8 +28,8 @@ describe("TilePlacements.sync", () => {
       }).pipe(Effect.scoped, Effect.provide(registry))
 
       assert.strictEqual(call._tag, "SyncTiles")
-      assert.deepStrictEqual(call._tag === "SyncTiles" && call.placements.map(({ game }) => game), [
-        TestWeb.bama
+      assert.deepStrictEqual(call._tag === "SyncTiles" && call.placements.map(({ key }) => key), [
+        TileKey.game(TestWeb.bama)
       ])
     })
   )

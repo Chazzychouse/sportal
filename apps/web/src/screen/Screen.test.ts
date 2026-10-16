@@ -1,4 +1,5 @@
 import { assert, describe, it } from "@effect/vitest"
+import { TileKey } from "@sportal/api/TileKey"
 import type { ChannelAvailability } from "@sportal/domain/Channel"
 import { GameId } from "@sportal/domain/Game"
 import { DateTime, Option, Result, Schema } from "effect"
@@ -86,7 +87,7 @@ describe("Screen#apply", () => {
   it("should give audio to the first game on screen when no game has it", () => {
     const screen = TestWeb.assign(Screen.initial, 2, TestWeb.bama, TestWeb.onFox)
 
-    assert.deepStrictEqual(screen.audioFocus, Option.some(TestWeb.bama))
+    assert.deepStrictEqual(screen.audioFocus, Option.some(TileKey.game(TestWeb.bama)))
   })
 
   it("should move audio focus to a tile's game", () => {
@@ -94,7 +95,7 @@ describe("Screen#apply", () => {
 
     const focused = run(two, { _tag: "FocusAudio", tile: 1 })
 
-    assert.deepStrictEqual(focused.audioFocus, Option.some(TestWeb.irish))
+    assert.deepStrictEqual(focused.audioFocus, Option.some(TileKey.game(TestWeb.irish)))
   })
 
   it("should keep audio focus where it is when another game is assigned", () => {
@@ -102,7 +103,7 @@ describe("Screen#apply", () => {
 
     const assigned = TestWeb.assign(focused, 2, usc, TestWeb.onFox)
 
-    assert.deepStrictEqual(assigned.audioFocus, Option.some(TestWeb.irish))
+    assert.deepStrictEqual(assigned.audioFocus, Option.some(TileKey.game(TestWeb.irish)))
   })
 
   it("should move audio to the main tile's game when the focused game is cleared", () => {
@@ -110,7 +111,7 @@ describe("Screen#apply", () => {
 
     const cleared = run(focused, { _tag: "Clear", tile: 1 })
 
-    assert.deepStrictEqual(cleared.audioFocus, Option.some(TestWeb.bama))
+    assert.deepStrictEqual(cleared.audioFocus, Option.some(TileKey.game(TestWeb.bama)))
   })
 
   it("should reject audio for an empty tile", () => {
@@ -282,7 +283,7 @@ describe("Screen#refresh", () => {
 
     const refreshed = focused.refresh(some(TestWeb.onFox))
 
-    assert.deepStrictEqual(refreshed.audioFocus, Option.some(TestWeb.irish))
+    assert.deepStrictEqual(refreshed.audioFocus, Option.some(TileKey.game(TestWeb.irish)))
   })
 
   it("should re-resolve benched tiles too", () => {
@@ -453,7 +454,7 @@ describe("Screen layouts and the bench", () => {
 
     const single = run(focused, { _tag: "SetLayout", layout: "Single" })
 
-    assert.deepStrictEqual(single.audioFocus, Option.some(TestWeb.bama))
+    assert.deepStrictEqual(single.audioFocus, Option.some(TileKey.game(TestWeb.bama)))
   })
 
   it("should keep a game in one tile across screen and bench", () => {
@@ -548,27 +549,51 @@ describe("Screen#hears and Screen#soloes", () => {
   })
 
   it("should hear the on-air game", () => {
-    assert.isTrue(screen.hears(TestWeb.irish))
+    assert.isTrue(screen.hears(TileKey.game(TestWeb.irish)))
   })
 
   it("should not hear the soloed game when another is on air", () => {
-    assert.isFalse(screen.hears(TestWeb.bama))
+    assert.isFalse(screen.hears(TileKey.game(TestWeb.bama)))
   })
 
   it("should solo the soloed game", () => {
-    assert.isTrue(screen.soloes(TestWeb.bama))
+    assert.isTrue(screen.soloes(TileKey.game(TestWeb.bama)))
   })
 
   it("should not solo the game on air", () => {
-    assert.isFalse(screen.soloes(TestWeb.irish))
+    assert.isFalse(screen.soloes(TileKey.game(TestWeb.irish)))
   })
 
   it("should not hear a game in no tile", () => {
-    assert.isFalse(screen.hears(usc))
+    assert.isFalse(screen.hears(TileKey.game(usc)))
   })
 
   it("should not solo a game in no tile", () => {
-    assert.isFalse(screen.soloes(usc))
+    assert.isFalse(screen.soloes(TileKey.game(usc)))
+  })
+})
+
+describe("Tile.key", () => {
+  it("should key a stream tile by its game", () => {
+    const tile: Tile = { _tag: "StreamTile", game: TestWeb.bama, channel: TestWeb.foxChannel }
+
+    const key = Tile.key(tile)
+
+    assert.strictEqual(key, TileKey.game(TestWeb.bama))
+  })
+
+  it("should key a data tile by its game", () => {
+    const tile: Tile = { _tag: "DataTile", game: TestWeb.bama, why: { _tag: "NoStream" } }
+
+    const key = Tile.key(tile)
+
+    assert.strictEqual(key, TileKey.game(TestWeb.bama))
+  })
+
+  it("should give an empty tile no key", () => {
+    const key = Tile.key({ _tag: "Empty" })
+
+    assert.isUndefined(key)
   })
 })
 
@@ -601,8 +626,8 @@ describe("Screen#benched", () => {
     })
 
     assert.deepStrictEqual(pair.benched(), [
-      { tile: 2, game: usc },
-      { tile: 3, game: ohio }
+      { tile: 2, key: TileKey.game(usc) },
+      { tile: 3, key: TileKey.game(ohio) }
     ])
   })
 
@@ -613,8 +638,8 @@ describe("Screen#benched", () => {
     })
 
     assert.deepStrictEqual(single.benched(), [
-      { tile: 1, game: TestWeb.irish },
-      { tile: 3, game: ohio }
+      { tile: 1, key: TileKey.game(TestWeb.irish) },
+      { tile: 3, key: TileKey.game(ohio) }
     ])
   })
 })
@@ -673,7 +698,7 @@ describe("Screen swap and promote", () => {
   it("should keep audio with its game through a swap", () => {
     const swapped = run(TestWeb.fill([TestWeb.bama, TestWeb.irish]), { _tag: "Swap", a: 0, b: 1 })
 
-    assert.deepStrictEqual(swapped.audioFocus, Option.some(TestWeb.bama))
+    assert.deepStrictEqual(swapped.audioFocus, Option.some(TileKey.game(TestWeb.bama)))
   })
 
   it("should promote a tile into the main tile and give it audio", () => {
@@ -682,7 +707,7 @@ describe("Screen swap and promote", () => {
     const promoted = run(screen, { _tag: "Promote", tile: 3 })
 
     assert.deepStrictEqual(promoted.tiles.map(gameOf), [TestWeb.irish, undefined, undefined, TestWeb.bama])
-    assert.deepStrictEqual(promoted.audioFocus, Option.some(TestWeb.irish))
+    assert.deepStrictEqual(promoted.audioFocus, Option.some(TileKey.game(TestWeb.irish)))
   })
 
   it("should promote a benched game", () => {
@@ -704,8 +729,8 @@ describe("Screen solo", () => {
   it("should solo a tile's game and give it audio", () => {
     const solo = run(TestWeb.fill([TestWeb.bama, TestWeb.irish]), { _tag: "Solo", tile: 1 })
 
-    assert.deepStrictEqual(solo.solo, Option.some(TestWeb.irish))
-    assert.deepStrictEqual(solo.audioFocus, Option.some(TestWeb.irish))
+    assert.deepStrictEqual(solo.solo, Option.some(TileKey.game(TestWeb.irish)))
+    assert.deepStrictEqual(solo.audioFocus, Option.some(TileKey.game(TestWeb.irish)))
   })
 
   it("should follow its game through a swap", () => {
@@ -713,7 +738,7 @@ describe("Screen solo", () => {
 
     const swapped = run(solo, { _tag: "Swap", a: 0, b: 1 })
 
-    assert.deepStrictEqual(swapped.solo, Option.some(TestWeb.irish))
+    assert.deepStrictEqual(swapped.solo, Option.some(TileKey.game(TestWeb.irish)))
   })
 
   it("should end when the game is cleared", () => {

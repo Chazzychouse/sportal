@@ -4,7 +4,7 @@ import { contextBridge, type IpcRendererEvent, ipcRenderer } from "electron"
 
 const bridge: ShellBridge = {
   syncTiles: (placements, transition) => ipcRenderer.send(ShellChannel.syncTiles, placements, transition),
-  setHidden: (games) => ipcRenderer.send(ShellChannel.setHidden, games),
+  setHidden: (keys) => ipcRenderer.send(ShellChannel.setHidden, keys),
   setFullScreen: (on) => ipcRenderer.send(ShellChannel.setFullScreen, on),
   onFullScreenChanged: subscribe(ShellChannel.fullScreenChanged),
   onHotkey: subscribe(ShellChannel.hotkey),

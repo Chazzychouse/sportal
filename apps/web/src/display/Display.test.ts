@@ -1,4 +1,5 @@
 import { assert, describe, it } from "@effect/vitest"
+import { TileKey } from "@sportal/api/TileKey"
 import { GameId } from "@sportal/domain/Game"
 import { Option } from "effect"
 import { Screen, type ScreenCommand } from "../screen/Screen.ts"
@@ -225,7 +226,7 @@ describe("Display#press", () => {
   it("should unsolo with ToggleSolo while soloed", () => {
     const screen = TestWeb.withTiles(["live", "soon"])
     const selected = Display.initial.select(1, screen).display
-    const soloed = new Screen({ ...screen, solo: Option.some(GameId.make("soon")) })
+    const soloed = new Screen({ ...screen, solo: Option.some(TileKey.game(GameId.make("soon"))) })
 
     const { commands } = selected.press({ _tag: "ToggleSolo" }, soloed)
 
@@ -243,7 +244,10 @@ describe("Display#press", () => {
   })
 
   it("should unsolo with ToggleSolo on an Empty tile while soloed", () => {
-    const soloed = new Screen({ ...TestWeb.withTiles(["live"]), solo: Option.some(GameId.make("live")) })
+    const soloed = new Screen({
+      ...TestWeb.withTiles(["live"]),
+      solo: Option.some(TileKey.game(GameId.make("live")))
+    })
     const selected = Display.initial.select(1, soloed).display
 
     const { commands } = selected.press({ _tag: "ToggleSolo" }, soloed)
@@ -262,7 +266,10 @@ describe("Display#press", () => {
   })
 
   it("should close the key help with Esc and send no Unsolo, even while soloed", () => {
-    const soloed = new Screen({ ...TestWeb.withTiles(["live"]), solo: Option.some(GameId.make("live")) })
+    const soloed = new Screen({
+      ...TestWeb.withTiles(["live"]),
+      solo: Option.some(TileKey.game(GameId.make("live")))
+    })
     const keys = Display.initial.open("Keys")
 
     const { display, commands } = keys.press({ _tag: "Unsolo" }, soloed)
@@ -284,7 +291,10 @@ describe("Display#press", () => {
   )
 
   it("should unsolo with Esc and no overlay while soloed", () => {
-    const soloed = new Screen({ ...TestWeb.withTiles(["live"]), solo: Option.some(GameId.make("live")) })
+    const soloed = new Screen({
+      ...TestWeb.withTiles(["live"]),
+      solo: Option.some(TileKey.game(GameId.make("live")))
+    })
 
     const { display, commands } = Display.initial.press({ _tag: "Unsolo" }, soloed)
 
@@ -447,7 +457,7 @@ describe("Display#apply", () => {
     const screen = TestWeb.withTiles(["live", "soon"])
 
     const { display, commands } = Display.initial.apply(
-      DisplayInput.VideoPressed({ game: GameId.make("soon") }),
+      DisplayInput.VideoPressed({ key: TileKey.game(GameId.make("soon")) }),
       screen
     )
 
@@ -459,7 +469,7 @@ describe("Display#apply", () => {
     const screen = TestWeb.withTiles(["live"])
 
     const { display } = Display.initial.apply(
-      DisplayInput.VideoPressed({ game: GameId.make("gone") }),
+      DisplayInput.VideoPressed({ key: TileKey.game(GameId.make("gone")) }),
       screen
     )
 

@@ -1,6 +1,6 @@
 import { Hotkey } from "@sportal/api/Hotkey"
 import type { ScreenTransition, ShellBridge, TilePlacement } from "@sportal/api/ShellBridge"
-import type { GameId } from "@sportal/domain/Game"
+import type { TileKey } from "@sportal/api/TileKey"
 import { Context, Effect, Layer, Option, Queue, Stream } from "effect"
 
 /**
@@ -14,8 +14,8 @@ export class Shell extends Context.Service<
     readonly hotkeys: Stream.Stream<Hotkey>
     /** Whether the window is full screen, each time it changes. */
     readonly fullScreen: Stream.Stream<boolean>
-    /** The game whose video was clicked while it was not interactive. */
-    readonly tilePressed: Stream.Stream<GameId>
+    /** The key of the tile whose video was clicked while it was not interactive. */
+    readonly tilePressed: Stream.Stream<TileKey>
     /** Each guide the shell reads from the source, unchanged. */
     readonly guideRead: Stream.Stream<string>
     readonly setFullScreen: (on: boolean) => Effect.Effect<void>
@@ -24,8 +24,8 @@ export class Shell extends Context.Service<
       placements: ReadonlyArray<TilePlacement>,
       transition: Option.Option<ScreenTransition>
     ) => Effect.Effect<void>
-    /** Hides exactly these games' videos and shows the rest. */
-    readonly setHidden: (games: ReadonlyArray<GameId>) => Effect.Effect<void>
+    /** Hides exactly these tiles' videos and shows the rest. */
+    readonly setHidden: (keys: ReadonlyArray<TileKey>) => Effect.Effect<void>
     /** Asks the shell to read the guide now. */
     readonly readGuide: Effect.Effect<void>
     /** Opens the YouTube TV sign-in; none in a plain browser, which has no sign-in to open. */
@@ -54,7 +54,7 @@ export class Shell extends Context.Service<
         setFullScreen: (on) => Effect.sync(() => bridge.setFullScreen(on)),
         syncTiles: (placements, transition) =>
           Effect.sync(() => bridge.syncTiles(placements, Option.getOrUndefined(transition))),
-        setHidden: (games) => Effect.sync(() => bridge.setHidden(games)),
+        setHidden: (keys) => Effect.sync(() => bridge.setHidden(keys)),
         readGuide: Effect.sync(() => bridge.readGuide()),
         openSignIn: Option.some(Effect.sync(() => bridge.openSignIn()))
       })
@@ -91,7 +91,7 @@ export class Shell extends Context.Service<
   static layerTest(options: {
     readonly hotkeys?: Stream.Stream<Hotkey>
     readonly fullScreen?: Stream.Stream<boolean>
-    readonly tilePressed?: Stream.Stream<GameId>
+    readonly tilePressed?: Stream.Stream<TileKey>
     readonly guideRead?: Stream.Stream<string>
     readonly record: (
       call:
@@ -101,7 +101,7 @@ export class Shell extends Context.Service<
             readonly placements: ReadonlyArray<TilePlacement>
             readonly transition: Option.Option<ScreenTransition>
           }
-        | { readonly _tag: "SetHidden"; readonly games: ReadonlyArray<GameId> }
+        | { readonly _tag: "SetHidden"; readonly keys: ReadonlyArray<TileKey> }
         | { readonly _tag: "ReadGuide" }
         | { readonly _tag: "OpenSignIn" }
     ) => Effect.Effect<void>
@@ -116,7 +116,7 @@ export class Shell extends Context.Service<
         guideRead: options.guideRead ?? Stream.empty,
         setFullScreen: (on) => record({ _tag: "SetFullScreen", on }),
         syncTiles: (placements, transition) => record({ _tag: "SyncTiles", placements, transition }),
-        setHidden: (games) => record({ _tag: "SetHidden", games }),
+        setHidden: (keys) => record({ _tag: "SetHidden", keys }),
         readGuide: record({ _tag: "ReadGuide" }),
         openSignIn: Option.some(record({ _tag: "OpenSignIn" }))
       })
