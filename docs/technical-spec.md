@@ -64,7 +64,7 @@ flowchart LR
     prov[Providers]
     director[Director: the slate of games, in memory]
     schedule[Schedule: games by day, game, and plays]
-    api[HTTP API + live queries]
+    api[HubApi over one WebSocket: requests and live queries]
   end
 
   subgraph display[Display — desktop shell]
@@ -210,21 +210,28 @@ sportal/
 ├── packages/
 │   ├── domain/                 Pure. Imports only Effect. No I/O.
 │   │   └── src/
-│   │       ├── League.ts       LeagueId
+│   │       ├── League.ts       League (its id, sport and name), LeagueId, Sport
 │   │       ├── Team.ts         Team, its colors, Ranking
-│   │       ├── Game.ts         Game (a snapshot and its plays), GameId, GameStatus, GameSnapshot, BallSpot, Network, Broadcast
+│   │       ├── Game.ts         Game (a snapshot and its plays), GameId, GameStatus, GameSnapshot, Progress, PlaysPage, PlaysChange, Network, Broadcast
 │   │       ├── Slate.ts        Slate (the listed games, from listings and play lists), SlateChange
-│   │       ├── Situation.ts    Possession, down, distance, field position, red zone
-│   │       ├── Play.ts         A single play, as the game's play-by-play lists it; PlayKind
+│   │       ├── Situation.ts    Situation, a union by sport (FootballSituation, BaseballSituation), and BallSpot
+│   │       ├── Play.ts         Play, as the game's play-by-play lists it; PlayDetail, a union by sport; FootballKind
 │   │       ├── Channel.ts      SourceName, StreamLocator, Channel, ChannelAvailability
+│   │       ├── Guide.ts        Guide, Airing, ChannelId: a source's channels and what each airs
 │   │       └── TestGame.ts     Game snapshots and plays for tests
 │   │
 │   └── api/                    The contracts between processes.
 │       └── src/
 │           ├── HubApi.ts           RPC group: the Hub's whole API, built from domain schemas
 │           ├── GuideUnreadable.ts  The error for a guide response the source could not read
+│           ├── GameNotFound.ts     The error for a game no day the Hub holds lists
+│           ├── ScheduleUnavailable.ts  The error for a day or plays the provider could not give
 │           ├── GamesQuery.ts       What a list of games asks for, and the answer: CalendarDate, GameList
 │           ├── ListedGame.ts       A game as a list or a tile shows it: its snapshot and availability
+│           ├── DisplayId.ts        A Display's own id, which a Remote names it by
+│           ├── DisplayMessage.ts   What the Hub pushes to a Display: Registered, then each Remote input as Sent
+│           ├── DisplayOffline.ts   The error for an input or report to a Display that is not connected
+│           ├── RemoteMessage.ts    What the Hub pushes to a Remote: its Display's latest report, or Offline
 │           ├── ShellBridge.ts      What the desktop shell exposes to the web UI; TilePlacement, TileBounds
 │           ├── ShellChannel.ts     The IPC channel names, apart so the sandboxed preload bundles only them
 │           └── Hotkey.ts           The keys Sportal acts on, with their help text
@@ -236,8 +243,8 @@ sportal/
     │       ├── HubConfig.ts        Every environment setting, in one place
     │       ├── Logging.ts          Log level and format
     │       ├── Director.ts         The one holder of the slate: takes each delivery as it arrives and offers the slate
-    │       ├── HubStopping.ts      Whether a task that should run until the Hub stops ended because it is stopping, and the Error log unless it did
-    │       ├── TestDirector.ts     The Director taking a fed provider, and what it takes of a test's frames
+    │       ├── Shutdown.ts         Whether a task that should run until the Hub stops ended because it is stopping, and the Error log unless it did
+    │       ├── TestHub.ts          The Hub's one Test module: recorded payloads, fake ESPN and FastCast hosts, frame builders, and harnesses over the Director and the Schedule
     │       ├── Schedule.ts         Answers the games API: a day's games, one game, a game's plays, each once or live
     │       ├── HubServer.ts        Serves the API, its live queries, and the web UI's files
     │       ├── provider/
@@ -246,22 +253,16 @@ sportal/
     │       │       ├── Espn.ts             ESPN's one front door: the live provider (`layer`), polling and pushing through FastCast
     │       │       ├── EspnProvider.ts     Implements the port: polls each league on its own, folds FastCast's frames into GameTopics, tells FastCast what to follow
     │       │       ├── GameTopics.ts       The fold of FastCast's frames: each game topic's document, rebuilt from checkpoints and patches, and its decoded plays
-    │       │       ├── EspnPayload.ts      ESPN's JSON as ESPN spells it: events, scoreboard, plays
+    │       │       ├── EspnLeague.ts       The leagues ESPN serves, as a table: each one's URLs and FastCast topic prefix
+│       │       ├── EspnPayload.ts      ESPN's JSON as ESPN spells it: events, scoreboard, plays
     │       │       ├── EspnEvent.ts        The site scoreboard's event as a GameSnapshot
     │       │       ├── EspnPlay.ts         ESPN's plays and their type ids, as Play
     │       │       ├── FastCast.ts         ESPN's push, a service: follows the topics it is told to, and gives the socket as frames (`Frame`, each as received, before ESPN's decode reads it; `Topic`, read once from its `tc`)
     │       │       ├── FastCastMessage.ts  FastCast's wire shapes: the outer envelope, framing, and the patch message
-    │       │       ├── TestEspn.ts         Recorded payloads, NE at BUF's day replayed and cached (`recordedNeAtBuf`, `neAtBufDecoded`), and ESPN answering from recorded scoreboards (`recordedEspn`)
-    │       │       ├── TestFastCast.ts     A fake FastCast socket host, builders of frames, checkpoints and messages, and the real FastCast run over the fake host (`nflFrames`, `framesOver`, `closedSockets`)
-    │       │       ├── TestGameTopics.ts   A test's frames replayed through the game topics, and the topics they leave
     │       │       └── fixtures/           Recorded real payloads, NE at BUF's frames among them
     │       └── source/
-    │           ├── Source.ts           The port, its variants, and how several act as one
-    │           ├── Guide.ts            Guide, Airing, ChannelId: a source's channels and what each airs
-    │           ├── Twitch.ts           Twitch's lineup
-    │           ├── TestSource.ts       The source's availability now, for tests
+    │           ├── Source.ts           The port and its variants (YouTube TV's guide, read while fresh; Twitch's lineup), and how several act as one
     │           └── youtube-tv/
-    │               ├── YouTubeTv.ts         Reads the guide the shell fetches, offers it while fresh
     │               ├── YouTubeTvGuide.ts    A guide response decoded to a complete, validated, stamped Guide
     │               ├── YouTubeTvPayload.ts  The guide response's wire shape
     │               └── fixtures/            Recorded real payloads

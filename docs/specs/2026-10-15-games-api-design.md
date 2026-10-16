@@ -210,7 +210,8 @@ what the view held.
 
 **Deleted.** Every `/api` HTTP route, with the SSE keep-alives and the server's `sse` helper; `SportalApi`; the web's
 `ServerEvents.ts` and its `ServerEvent`; the JSON-string codecs that only SSE read (`GameListJson`, `ListedGameJson`,
-`RemoteMessageJson`, `RemoteInputJson`). Curl checks become a small Node script over the socket.
+`RemoteMessageJson`, `RemoteInputJson`). Curl checks become a small Node script over the socket: `apps/hub/src/probe.ts`,
+run by `pnpm --filter @sportal/hub probe`.
 
 **Phases.** Two commits. First the socket and the live streams, which fixes the connection limit. Then the requests,
 which deletes the HTTP API.

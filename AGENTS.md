@@ -94,7 +94,7 @@ A reader opens a file to see the thing it is named for. Keep it that way.
 | Effectful operation | `const f = Effect.fn("Module.f")(…)`, or `Effect.fnUntraced` on a hot path; a service member is `Effect.fn("Service.member")`. Never a `function` that only returns `Effect.gen`, never a hand-added `Effect.withSpan` |
 | Pure helper | A hoisted `function`, below its first user |
 | Wire value | `export const X = Schema.…`, then `export type X = typeof X.Type` |
-| Wire union | `Schema.TaggedUnion({…})` with its type; `X.match`, `X.guards`. Cases with behaviour: one `Schema.TaggedClass` each, then `Schema.Union` (`FootballPlay`) |
+| Wire union | `Schema.TaggedUnion({…})` with its type; `X.match`, `X.guards`. Cases with behaviour: one `Schema.TaggedClass` each, then `Schema.Union` (`PlayDetail`) |
 | Wire-union value | A literal, `{ _tag: "NotCarried", why: "NotInGuide" }`, typed by where it goes (annotate a bare `const`); `X.cases.Y.make` only when the case has checks or defaults |
 | In-memory value | `Data.Class` |
 | In-memory state | `type X = Data.TaggedEnum<…>` with `const X = Data.taggedEnum<X>()`; `X.$match`, `X.$is`. Never `_tag ===`, never `Match.valueTags` |
@@ -148,6 +148,9 @@ A reader opens a file to see the thing it is named for. Keep it that way.
   now it keeps nothing between runs: a restarted Hub starts from an empty slate and the next poll fills it.
 - Hub settings: every one is a field of `apps/hub/src/HubConfig.ts`, with its variable and default. A bad value stops
   the Hub at startup. Its `health` RPC answers while it is up.
+- `pnpm --filter @sportal/hub probe` — ask a Hub running on this machine, over its socket, for its health and its first
+  answer to today's games, and print both. It dials `ws://127.0.0.1:<port>/api/socket`, the port as the Hub reads it
+  (`SPORTAL_PORT`, 4400 without it), so `SPORTAL_PORT=4475 pnpm --filter @sportal/hub probe` checks a Hub on 4475.
 - Scripts run through pnpm's own shell (`shellEmulator`), so `VAR=x cmd` in a `package.json` script works on every OS.
   Keep scripts to what that shell understands: no bash-only syntax.
 - `pnpm --filter @sportal/web dev` — run only the web UI on port 4401, also on the home network, proxying the Hub's

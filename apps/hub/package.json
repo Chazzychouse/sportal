@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "node --watch src/main.ts",
     "start": "node src/main.ts",
+    "probe": "node src/probe.ts",
     "build": "vite build"
   },
   "dependencies": {

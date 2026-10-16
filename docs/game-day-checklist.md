@@ -7,7 +7,7 @@ Setup: Hub serving the built web UI, desktop shell running, signed in to YouTube
 
 | # | Do | Expect |
 | --- | --- | --- |
-| 1 | Open the shell | Slate lists today's NFL and FBS games, live first; header reads `live` |
+| 1 | Open the shell, then the command palette (`Ctrl`+`K`) | The palette's Watch group lists today's NFL and FBS games, live first; the top bar counts the games live and its pill reads `Hub live` |
 | 2 | Watch a live game's row for a minute | Score and clock update without a reload |
 | 3 | Start the Hub, open the shell and watch its terminal | Once the Hub page shows, a game live on a TV network in your guide plays when clicked (as row 4); no `GuideReader:` warning in the shell, no `could not be read` warning in the Hub log |
 | 4 | Click a live game on a TV network in your YouTube TV guide | It plays within a few seconds, straight into the tile |
@@ -15,12 +15,12 @@ Setup: Hub serving the built web UI, desktop shell running, signed in to YouTube
 | 6 | Click another game on the same network | It plays at once |
 | 7 | Fill all four tiles with games on TV networks in your guide | Tiles up to the stream limit play; note what the provider does past it |
 | 8 | Press `audio` on each tile in turn | Exactly one tile is audible each time |
-| 9 | Pick a game that is already on the Stage | It moves to the selected tile; it is never shown twice |
+| 9 | From the palette, then from the Remote, pick a game already in a tile | It stays in its tile; it is never shown twice |
 | 10 | Click an ESPN+ game | "Streaming only: not on YouTube TV" and no video; the next ESPN+ game is a data tile at once |
 | 11 | Press `clear` on a playing tile | Video and sound stop for that tile only |
 | 12 | Resize and maximize the window | Every video stays inside its tile; score strips stay visible |
-| 13 | Open the web UI in a normal browser on the same machine | Same slate and Stage; a stream tile shows an "Open in YouTube TV" link instead of video; while the shell has read a guide in the last 45 minutes, tiles there are guide-matched as in the shell; with no guide read (or the last one stale), a game's tile says "Waiting for the YouTube TV guide"; a change there changes the shell |
-| 14 | Stop the Hub, wait, start it | Header shows `reconnecting…` then `live`; video keeps playing while the Hub is down; when the Hub returns the Stage is empty again, because the Stage is not saved yet |
+| 13 | Open the web UI in a normal browser on the same machine and fill a tile from its palette | Its palette lists the same games as the shell's; a stream tile shows an "Open in YouTube TV" link instead of video; while the shell has read a guide in the last 45 minutes, tiles there are guide-matched as in the shell; with no guide read (or the last one stale), a game's tile says "Waiting for the YouTube TV guide"; its Screen is its own (row 49) |
+| 14 | Stop the Hub, wait, start it | The top bar's pill shows `Reconnecting` then `Hub live`; video keeps playing while the Hub is down, and the Screen stays as it was |
 | 15 | After the Hub restart, click a game on a network | It plays once the shell's next guide read lands (the guide is kept in memory only); until then its tile says "Waiting for the YouTube TV guide" |
 | 16 | Quit and reopen the shell | Still signed in to the provider |
 | 17 | Once, after a channel's programme changes, click a game on that network | It plays the channel live, showing the new programme (first passed 2026-10-03). If it plays the old programme or fails, record it |
@@ -33,12 +33,12 @@ Setup: Hub serving the built web UI, desktop shell running, signed in to YouTube
 | 24 | During a game that runs past its listed time (overtime, a long review), wait through the guide reads after its airing ends | The tile keeps playing; it never turns into a data tile while the game is on |
 | 25 | In YouTube TV, set the live guide's sort to Custom, then wait 5 minutes for a read | The Hub logs fewer channels; games on hidden channels are "Not in your YouTube TV guide". Set the sort back to Default |
 | 26 | Fill four tiles with live streams, then promote tile 4 (`Shift`+`4`) | Tile 4's video slides into the main tile while it plays and takes the sound; neither player reloads or goes black |
-| 27 | Press `L` through every layout and back to Quad | Tiles move with their video; shrinking benches games (listed under the slate) and growing restores each to its place |
+| 27 | Press `L` through every layout and back to Quad | Tiles move with their video; shrinking benches the games past the layout's tiles (off screen, and on the Remote's map) and growing restores each to its place |
 | 28 | Click into a playing stream, then press `2`, `F`, `Esc` | Sound moves to tile 2; the selected tile solos and unsolos; YouTube TV does not seek |
 | 29 | Drag a divider across a playing video | The video tracks the divider live; on release the split holds and survives a reload |
-| 30 | Press `F11`, then solo a tile | Top bar and slate hide; the soloed game fills the screen; `Esc` and `F11` undo each in turn |
+| 30 | Press `F11`, then solo a tile | The top bar hides; the soloed game fills the screen; `Esc` and `F11` undo each in turn |
 | 31 | Open the command palette (`Ctrl`+`K`) | Only the videos under the palette blank, with sound still on; they return when it closes |
-| 32 | Drag a benched game onto a tile's header | The two swap; the benched game's player starts, the other's closes |
+| 32 | Drag one playing tile's header onto another's | The two swap; each video moves with its game |
 | 33 | Fill four tiles from live games, move audio focus (`1`–`4`), then show a game with a drive under way as a data tile | Sound moves with focus. The data tile's field draws each play as it arrives: the ball moves and the play's arrow draws on |
 | 34 | With two games playing, rest and move the pointer over each video | No YouTube TV title or controls appear on either |
 | 35 | Click a video that is not the selected tile | That tile becomes selected; playback does not pause or change |
@@ -49,9 +49,9 @@ Setup: Hub serving the built web UI, desktop shell running, signed in to YouTube
 | 40 | Select tile 4 in Quad, press `L` until Single, or choose Single in the top bar's layout picker | The one tile is selected, and a drop goes into it |
 | 41 | Solo a tile, press `?`, then `Esc` | The key help closes and the tile stays soloed |
 | 42 | During a live NFL game, read the Hub's log (its console, or `hub.log` in the installed app's log folder) | `FastCast: connected` appears once, with no reconnect after it; no FastCast Warning names a refused or empty subscription |
-| 43 | During a live game, note one game's score and its recent plays on the strip, stop the Hub, start it, and look again | The slate is empty until the first poll, then shows the game at its current score; its recent plays come back once FastCast follows its topic again |
-| 44 | During a live NFL game, watch its card's recent plays on the strip | Each new play appears within a minute of the snap, one per play |
-| 45 | Once, on a live college Saturday | Confirm the college `gp-` topic, `gp-football-college-football-<id>`, is the one ESPN serves: a college game shows `Plays` deliveries and its plays arrive on the strip, and the Hub's log shows no refused or empty subscription. Confirmed 2026-10-09 on FSU @ LOU: `gp-football-college-football-<id>` subscribes and checkpoints with its plays |
+| 43 | During a live game, put it on a data tile, note its score and the plays on its field, stop the Hub, start it, and look again | The palette is empty until the first poll; the tile shows the game at its current score within 20 seconds of the Hub starting (it never stays on "Loading…"), and its field's plays come back once FastCast follows its topic again |
+| 44 | During a live NFL game, put it on a data tile and watch its field | Each new play draws on the field within a minute of the snap, one per play |
+| 45 | Once, on a live college Saturday | Confirm the college `gp-` topic, `gp-football-college-football-<id>`, is the one ESPN serves: a college game shows `Plays` deliveries and its plays draw on its data tile's field, and the Hub's log shows no refused or empty subscription. Confirmed 2026-10-09 on FSU @ LOU: `gp-football-college-football-<id>` subscribes and checkpoints with its plays |
 | 46 | Once, while a game is live, make a FastCast topic lose its document (cut the network briefly) | A `GameTopics: <topic> lost its document (…)` Warning is logged, then `FastCast: following <topic> again from its checkpoint` (Info). The socket re-sends `S` for that topic and a fresh `H` (checkpoint) arrives, and the game's plays carry on (a checkpoint that fails to load or decode is followed again every 30 s, five tries in all, then left to polling). Unverified live: if no `H` comes back, record it |
 | 47 | With a game live, put it on a data tile (a game with no stream) | The tile draws the field with the ball at the game's spot; each new play animates on it, the field dims when the ball is out of play, and a busy stretch of plays does not stall it |
 | 48 | Fill tiles, change the layout, reload the web UI (`Ctrl`+`R` in the shell) | The Screen comes back as it was: the same layout, tiles and audio focus |
