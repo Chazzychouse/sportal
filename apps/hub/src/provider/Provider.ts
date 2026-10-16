@@ -1,5 +1,6 @@
 import type { CalendarDate } from "@sportal/api/GamesQuery"
 import type { GameId, GameSnapshot } from "@sportal/domain/Game"
+import type { GameStats } from "@sportal/domain/GameStats"
 import type { LeagueId } from "@sportal/domain/League"
 import type { Play } from "@sportal/domain/Play"
 import { type Cause, Context, Data, Effect, Layer, Queue, Schema, Stream } from "effect"
@@ -23,16 +24,18 @@ export class Provider extends Context.Service<
       league: LeagueId,
       game: GameId
     ) => Effect.Effect<ReadonlyArray<Play>, ProviderUnavailable>
+    /** Game `game` of `league`'s stats, read from its summary. */
+    readonly stats: (league: LeagueId, game: GameId) => Effect.Effect<GameStats, ProviderUnavailable>
   }
 >()("sportal/hub/provider/Provider") {
   /**
    * A provider whose frames are what a test offers `frames`, each saying its deliveries, taken one at a time: it takes
    * the next only once its reader has taken what the one before said. They end when `frames` ends. `answers` gives its
-   * listings and plays; each not given fails as unavailable.
+   * listings, plays and stats; each not given fails as unavailable.
    */
   static layerTest(
     frames: Queue.Dequeue<ReadonlyArray<Delivery>, Cause.Done>,
-    answers: Partial<Pick<Provider["Service"], "listing" | "plays">> = {}
+    answers: Partial<Pick<Provider["Service"], "listing" | "plays" | "stats">> = {}
   ): Layer.Layer<Provider> {
     return Layer.succeed(
       Provider,
@@ -42,6 +45,8 @@ export class Provider extends Context.Service<
           Effect.fail(new ProviderUnavailable({ reason: "Unanswered", cause: "No listing in this test" })),
         plays: () =>
           Effect.fail(new ProviderUnavailable({ reason: "Unanswered", cause: "No plays in this test" })),
+        stats: () =>
+          Effect.fail(new ProviderUnavailable({ reason: "Unanswered", cause: "No stats in this test" })),
         ...answers
       })
     )

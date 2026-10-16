@@ -1,15 +1,19 @@
 import { GameId, PlaysChange, PlaysPage } from "@sportal/domain/Game"
+import { GameStats } from "@sportal/domain/GameStats"
+import { Highlight } from "@sportal/domain/Highlight"
+import { LeagueId } from "@sportal/domain/League"
 import { Schema } from "effect"
 import { Rpc, RpcGroup } from "effect/rpc"
 import { DisplayId } from "./DisplayId.ts"
 import { DisplayMessage } from "./DisplayMessage.ts"
 import { DisplayOffline } from "./DisplayOffline.ts"
 import { GameNotFound } from "./GameNotFound.ts"
-import { GameList, GamesQuery } from "./GamesQuery.ts"
+import { CalendarDate, GameList, GamesQuery } from "./GamesQuery.ts"
 import { GuideUnreadable } from "./GuideUnreadable.ts"
 import { ListedGame } from "./ListedGame.ts"
 import { RemoteMessage } from "./RemoteMessage.ts"
 import { ScheduleUnavailable } from "./ScheduleUnavailable.ts"
+import { StatsUnavailable } from "./StatsUnavailable.ts"
 
 /**
  * The Hub's whole API, over its one WebSocket per page at `/api/socket`, declared once: the Hub serves it and the web
@@ -30,6 +34,12 @@ export class HubApi extends RpcGroup.make(
     error: Schema.Union([GameNotFound, ScheduleUnavailable]),
     stream: true
   }),
+  Rpc.make("statsLive", {
+    payload: { id: GameId },
+    success: GameStats,
+    error: Schema.Union([GameNotFound, StatsUnavailable]),
+    stream: true
+  }),
   Rpc.make("inputs", { payload: { display: DisplayId }, success: DisplayMessage, stream: true }),
   Rpc.make("follow", { payload: { display: DisplayId }, success: RemoteMessage, stream: true }),
   Rpc.make("list", { payload: GamesQuery, success: GameList, error: ScheduleUnavailable }),
@@ -48,6 +58,16 @@ export class HubApi extends RpcGroup.make(
     },
     success: PlaysPage,
     error: Schema.Union([GameNotFound, ScheduleUnavailable])
+  }),
+  Rpc.make("stats", {
+    payload: { id: GameId },
+    success: GameStats,
+    error: Schema.Union([GameNotFound, StatsUnavailable])
+  }),
+  Rpc.make("highlights", {
+    payload: { league: LeagueId, date: CalendarDate },
+    success: Schema.Array(Highlight),
+    error: StatsUnavailable
   }),
   Rpc.make("readGuide", { payload: { guide: Schema.String }, error: GuideUnreadable }),
   Rpc.make("health", {

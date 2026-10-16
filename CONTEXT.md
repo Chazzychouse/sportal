@@ -31,6 +31,11 @@ Every exported type name must be a term here, except the wire schemas in `*Paylo
 | **Progress** | Where a game is in its day: `upcoming`, `live`, or `over`. A delay before the start is upcoming and a delay during the game is live. | phase, state |
 | **Plays page** | A page of a game's plays, newest first, and whether earlier ones remain; `PlaysPage` in `packages/domain/src/Game.ts`, given by `Game#playsPage`. | |
 | **Plays change** | What changed in a game's plays: plays added after the last it had (`Appended`) or a reset to its latest page (`Reset`) when one was revised or removed; `PlaysChange` in `packages/domain/src/Game.ts`, given by `Game#playsChange`. Each list is newest first. | |
+| **Game stats** | A game's stats in any sport: points per period (`linescore`), team stats in the provider's order and words, each side's leaders, the home side's win probability by play when the provider has it, the scoring plays' ids in order, and its highlights; `GameStats` in `packages/domain/src/GameStats.ts`, empty before the start (`GameStats.empty`). | box score, summary |
+| **Team stat** | One stat of both sides, as the provider labels and shows it ("3rd down efficiency", "7-17"); `TeamStat` beside `GameStats`. A stat both of whose values are plain numbers gets a two-sided bar (`GameStats.homeShare`). | |
+| **Leader** | A side's best athlete in one category, with their line as the provider shows it; `Leader` beside `GameStats`. | top performer |
+| **Win chance** | The home side's chance of winning after one play, 0 to 1; `WinChance` beside `GameStats`. | win probability point |
+| **Highlight** | A provider's video clip of a game: headline, length in seconds, its mp4 (HD when there is one), its thumbnail; `Highlight` and `HighlightId` in `packages/domain/src/Highlight.ts`. | clip, video, replay |
 | **Ahead** | One snapshot of a game past another: later in game time, or at the same game time with more points, or as many points split differently (`isAheadOf`). Ahead of a game's end (`isAheadOfOver`) is later on the clock whatever either's status, or at the same clock with more points. | newer |
 | **Delivery** | `Delivery` in `apps/hub/src/provider/Provider.ts`, beside the port that gives it: what a frame said: a league's listing, or one game's whole list of plays. | input, update |
 | **Test game** | A game snapshot built for a test, with defaults for everything the test does not care about. | fixture, mock |
@@ -52,7 +57,7 @@ Every exported type name must be a term here, except the wire schemas in `*Paylo
 
 | Term | Meaning | Not |
 | --- | --- | --- |
-| **Provider** | An adapter that supplies **game data** (ESPN, CollegeFootballData) and runs itself: it decides when to poll, what its push follows, and when to reconnect, and reads each frame it receives with its own decode; `deliveries` is what each frame said, one array per frame, in the order received. It also answers on request: `listing` a day's games in every league it serves, and `plays` a game's plays so far. | source, feed |
+| **Provider** | An adapter that supplies **game data** (ESPN, CollegeFootballData) and runs itself: it decides when to poll, what its push follows, and when to reconnect, and reads each frame it receives with its own decode; `deliveries` is what each frame said, one array per frame, in the order received. It also answers on request: `listing` a day's games in every league it serves, and `plays` a game's plays so far and `stats` its game stats. | source, feed |
 | **Provider unavailable** | The provider could not be followed or asked: FastCast refused, closed, or went silent, or a request for a listing or plays went unanswered; `ProviderUnavailable` in code, in `apps/hub/src/provider/Provider.ts`. FastCast's is logged with its reason, and the socket opens again on its backoff; the poll goes on. | provider error, live feed error |
 | **Live feed** | A provider's push: the connection carrying updates for live games between polls (ESPN FastCast). | socket, stream, webhook |
 | **FastCast** | ESPN's live feed, as the ESPN provider's push: one socket following the wanted topics the ESPN provider names, giving the socket as frames through `follow`, reconnecting itself; it never fails. | |
@@ -88,7 +93,7 @@ A client asks the Hub over the Hub socket: once (`list`), or live (`listLive`) f
 | Term | Meaning | Not |
 | --- | --- | --- |
 | **Hub** | The server process that owns all shared state. | backend, server |
-| **Hub API** | The Hub's whole API, declared once as `HubApi` (`packages/api`): RPCs over one WebSocket per page, at `/api/socket`. The Hub serves it and every client derives its typed client from it. Its live queries (a games query, one game, a game's plays, a Display's inputs, a Remote's follow) are streams that send their current answer, then each change, while their client reads them; every other read and write is a request. | REST layer, SSE |
+| **Hub API** | The Hub's whole API, declared once as `HubApi` (`packages/api`): RPCs over one WebSocket per page, at `/api/socket`. The Hub serves it and every client derives its typed client from it. Its live queries (a games query, one game, a game's plays, a game's stats, a Display's inputs, a Remote's follow) are streams that send their current answer, then each change, while their client reads them; every other read and write is a request. | REST layer, SSE |
 | **Hub config** | Every setting a Hub reads from its environment, decoded once at startup; `HubConfig` in code. | settings, env |
 | **Hub mode** | What a Hub plays: the live day from its providers and sources. | profile |
 | **Schedule** | What the games API answers, the Hub's `Schedule` service: a day's games, one game, and a game's plays, each once or live. Today is live from the Director's slate; another day is the provider's listing, held in memory (a past day until the Hub restarts, a later one for 10 minutes). | calendar, games service |
@@ -98,6 +103,8 @@ A client asks the Hub over the Hub socket: once (`list`), or live (`listLive`) f
 | **Calendar date** | A day as `YYYY-MM-DD`, in the Hub's time zone; `CalendarDate` in code. | date |
 | **Game not found** | No day the Hub holds lists a game with that id; `GameNotFound`, the error of the `game`, `plays`, `gameLive` and `playsLive` RPCs. | |
 | **Schedule unavailable** | The provider could not be reached for a day, or a game's plays, the Hub does not hold; `ScheduleUnavailable`, the error of the games RPCs. | |
+| **Stats** | The Hub's `Stats` service (`apps/hub/src/Stats.ts`): a game's stats, once or live, and a day's highlights in a league. An upcoming game's are empty with no fetch; an over game's are fetched once per Hub run; a live game's are fetched when asked, and every `HubConfig.statsRefresh` (`SPORTAL_STATS_REFRESH`, 30 s) while a live answer follows them, one fetch however many follow. | stats cache |
+| **Stats unavailable** | The provider could not give a game's stats; `StatsUnavailable`, the error of the `stats`, `statsLive` and `highlights` RPCs. | |
 | **Remote message** | One update the Hub pushes to a Remote about its Display: its latest report (`Reported`, passed on unread) or `Offline`; `RemoteMessage`. | event |
 | **Display message** | One update the Hub pushes to a Display on its input stream: that the Hub has registered it (`Registered`, first), then each input a Remote sent (`Sent`, passed on unread); `DisplayMessage`. | event |
 | **Live stream** | A live query as a client reads it: answers, then changes, over the Hub socket. In the web UI, `LiveStream.of` folds one's elements into an atom of `Live`, the value so far and the socket's connection; `Games` holds one per query the views make. | event stream |

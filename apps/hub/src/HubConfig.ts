@@ -1,4 +1,4 @@
-import { Config, ConfigProvider, Context, Layer, type LogLevel, type Option } from "effect"
+import { Config, ConfigProvider, Context, Duration, Layer, type LogLevel, type Option } from "effect"
 
 export class HubConfig extends Context.Service<
   HubConfig,
@@ -11,6 +11,8 @@ export class HubConfig extends Context.Service<
     readonly version: string
     /** The zone whose calendar says what day it is: ESPN's scoreboard days are US Eastern. */
     readonly timeZone: string
+    /** How often a live game's stats are fetched again while a live answer follows them. */
+    readonly statsRefresh: Duration.Duration
   }
 >()("sportal/hub/HubConfig") {
   static readonly layer: Layer.Layer<HubConfig, Config.ConfigError> = Layer.effect(
@@ -22,7 +24,8 @@ export class HubConfig extends Context.Service<
       logLevel: Config.LogLevel("SPORTAL_LOG_LEVEL").pipe(Config.withDefault("Info")),
       logFormat: Config.Literals(["pretty", "json"], "SPORTAL_LOG_FORMAT").pipe(Config.withDefault("pretty")),
       version: Config.String("SPORTAL_VERSION").pipe(Config.withDefault("dev")),
-      timeZone: Config.String("SPORTAL_TIME_ZONE").pipe(Config.withDefault("America/New_York"))
+      timeZone: Config.String("SPORTAL_TIME_ZONE").pipe(Config.withDefault("America/New_York")),
+      statsRefresh: Config.Duration("SPORTAL_STATS_REFRESH").pipe(Config.withDefault(Duration.seconds(30)))
     })
   )
 

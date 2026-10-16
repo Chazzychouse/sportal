@@ -30,6 +30,7 @@ import * as FastCastMessage from "./provider/espn/FastCastMessage.ts"
 import { GameTopics } from "./provider/espn/GameTopics.ts"
 import { Delivery, Provider } from "./provider/Provider.ts"
 import { Schedule } from "./Schedule.ts"
+import { Stats } from "./Stats.ts"
 import { Source } from "./source/Source.ts"
 
 /**
@@ -625,10 +626,10 @@ export const onAlaAtMsstDay = DateTime.toEpochMillis(DateTime.makeUnsafe("2026-1
 
 /**
  * Runs `test` against the Schedule as the Hub composes it, on the test clock at `onAlaAtMsstDay`: over a Director fed
- * the frames the test offers, a provider whose listings and plays are `answers`, and `source`.
+ * the frames the test offers, a provider whose listings, plays and stats are `answers`, and `source`.
  */
 export function scheduled<A, E, R>(
-  answers: Partial<Pick<Provider["Service"], "listing" | "plays">>,
+  answers: Partial<Pick<Provider["Service"], "listing" | "plays" | "stats">>,
   test: (frames: Frames) => Effect.Effect<A, E, R>,
   source: Layer.Layer<Source> = Source.layerYouTubeTv
 ) {
@@ -643,6 +644,30 @@ export function scheduled<A, E, R>(
     yield* TestClock.setTime(onAlaAtMsstDay)
 
     return yield* test(frames).pipe(Effect.scoped, Effect.provide(schedule))
+  })
+}
+
+/**
+ * Runs `test` against the Stats as the Hub composes them, on the test clock at `onAlaAtMsstDay`: over the Schedule
+ * and a Director fed the frames the test offers, a provider whose listings, plays and stats are `answers`, and
+ * YouTube TV with no guide read.
+ */
+export function withStats<A, E, R>(
+  answers: Partial<Pick<Provider["Service"], "listing" | "plays" | "stats">>,
+  test: (frames: Frames) => Effect.Effect<A, E, R>
+) {
+  return Effect.gen(function* () {
+    const frames = yield* Queue.bounded<ReadonlyArray<Delivery>, Cause.Done>(1)
+    const stats = Stats.layer.pipe(
+      Layer.provideMerge(Schedule.layer),
+      Layer.provide(Director.layer),
+      Layer.provide(Provider.layerTest(frames, answers)),
+      Layer.provide(Source.layerYouTubeTv),
+      Layer.provide(HubConfig.layerTest({}))
+    )
+    yield* TestClock.setTime(onAlaAtMsstDay)
+
+    return yield* test(frames).pipe(Effect.scoped, Effect.provide(stats))
   })
 }
 

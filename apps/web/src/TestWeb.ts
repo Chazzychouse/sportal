@@ -7,6 +7,7 @@ import type { ListedGame } from "@sportal/api/ListedGame"
 import type { RemoteMessage } from "@sportal/api/RemoteMessage"
 import type { ChannelAvailability } from "@sportal/domain/Channel"
 import { GameId, type PlaysChange } from "@sportal/domain/Game"
+import type { GameStats } from "@sportal/domain/GameStats"
 import { snapshot } from "@sportal/domain/TestGame"
 import { DateTime, Effect, Layer, PubSub, Queue, Result, Schema, Stream, SubscriptionRef } from "effect"
 import { Atom, AtomRegistry } from "effect/reactivity"
@@ -116,8 +117,8 @@ export function soloed(games: ReadonlyArray<GameId | undefined>, tile: number) {
 
 /**
  * A Hub over an in-memory socket, for a test to drive: its connection (connected), and a PubSub per kind of live query;
- * each publish goes to every query of its kind open then (a game's and its plays' by the game's id). `open` names the
- * queries open now, as "games", "game 401", "plays 401", "inputs desk" and "follow desk": a test waits for one with
+ * each publish goes to every query of its kind open then (a game's, its plays' and its stats' by the game's id). `open` names
+ * the queries open now, as "games", "game 401", "plays 401", "stats 401", "inputs desk" and "follow desk": a test waits for one with
  * `asked` before it answers it, and for its end with `dropped`. An `inputs` query sends `Registered` first. While
  * `refusals` is above 0, a game's query is refused as not found, and counts it down. Each write the socket carries
  * goes to `requests`, as a `TestWebCall`.
@@ -128,6 +129,7 @@ export const liveHub = Effect.fn("TestWeb.liveHub")(function* () {
   const lists = yield* PubSub.unbounded<GameList>()
   const games = yield* PubSub.unbounded<ListedGame>()
   const plays = yield* PubSub.unbounded<{ readonly game: GameId; readonly change: PlaysChange }>()
+  const stats = yield* PubSub.unbounded<GameStats>()
   const inputs = yield* PubSub.unbounded<Schema.Json>()
   const follows = yield* PubSub.unbounded<RemoteMessage>()
   const requests = yield* Queue.unbounded<TestWebCall>()
@@ -149,6 +151,7 @@ export const liveHub = Effect.fn("TestWeb.liveHub")(function* () {
         Stream.filter(({ game }) => game === id),
         Stream.map(({ change }) => change)
       ),
+    statsLive: ({ id }) => served(open, `stats ${id}`, stats).pipe(Stream.filter(({ game }) => game === id)),
     inputs: ({ display }) =>
       Stream.concat(
         Stream.succeed<DisplayMessage>({ _tag: "Registered" }),
@@ -161,6 +164,8 @@ export const liveHub = Effect.fn("TestWeb.liveHub")(function* () {
     list: () => Effect.die("TestWeb.liveHub does not answer list"),
     game: () => Effect.die("TestWeb.liveHub does not answer game"),
     plays: () => Effect.die("TestWeb.liveHub does not answer plays"),
+    stats: () => Effect.die("TestWeb.liveHub does not answer stats"),
+    highlights: () => Effect.die("TestWeb.liveHub does not answer highlights"),
     readGuide: ({ guide }) => Queue.offer(requests, { _tag: "SendGuide", guide }).pipe(Effect.asVoid),
     health: () => Effect.succeed({ version: "test", startedAt: DateTime.makeUnsafe(0) }),
     addresses: () => Effect.succeed([]),
@@ -170,7 +175,7 @@ export const liveHub = Effect.fn("TestWeb.liveHub")(function* () {
       Queue.offer(requests, { _tag: "Send", id: display, input }).pipe(Effect.asVoid)
   })
   const layer = HubSocket.layerTest(connection, handlers)
-  return { layer, connection, open, lists, games, plays, inputs, follows, requests, refusals }
+  return { layer, connection, open, lists, games, plays, stats, inputs, follows, requests, refusals }
 })
 
 /** The queries `hub` has open, once it has `name` open. */

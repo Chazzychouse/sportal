@@ -5,6 +5,8 @@ import type { DisplayMessage } from "@sportal/api/DisplayMessage"
 import { CalendarDate, GameList } from "@sportal/api/GamesQuery"
 import { HubApi } from "@sportal/api/HubApi"
 import { GameId } from "@sportal/domain/Game"
+import { GameStats } from "@sportal/domain/GameStats"
+import { PlayId } from "@sportal/domain/Play"
 import { snapshot } from "@sportal/domain/TestGame"
 import { Cause, DateTime, Effect, Exit, Fiber, Layer, Queue, Schema, Stream } from "effect"
 import { HttpServer } from "effect/http"
@@ -18,6 +20,7 @@ import * as HubServer from "./HubServer.ts"
 import { Delivery, Provider } from "./provider/Provider.ts"
 import { Schedule } from "./Schedule.ts"
 import { isStopping } from "./Shutdown.ts"
+import { Stats } from "./Stats.ts"
 import { Source } from "./source/Source.ts"
 import * as TestHub from "./TestHub.ts"
 
@@ -202,6 +205,39 @@ describe("HubServer", () => {
             [2, 1]
           )
           assert.isFalse(page.more)
+        })
+      )
+    )
+  })
+
+  describe("stats", () => {
+    it.effect("should answer a live game's stats", () =>
+      served(
+        (frames) =>
+          Effect.gen(function* () {
+            const socket = yield* socketClient
+            yield* TestHub.alaAtMsstListed(frames)
+
+            const stats = yield* socket.stats({ id: TestHub.alaAtMsst.id })
+
+            assert.deepStrictEqual(stats.scoringPlays, [PlayId.make("p1")])
+          }),
+        {
+          stats: (_, game) =>
+            Effect.succeed(new GameStats({ ...GameStats.empty(game), scoringPlays: [PlayId.make("p1")] }))
+        }
+      )
+    )
+
+    it.effect("should fail as not found for a game no day lists", () =>
+      served((frames) =>
+        Effect.gen(function* () {
+          yield* TestHub.alaAtMsstListed(frames)
+          const socket = yield* socketClient
+
+          const error = yield* socket.stats({ id: GameId.make("nope") }).pipe(Effect.flip)
+
+          assert.strictEqual(error._tag, "GameNotFound")
         })
       )
     )
@@ -502,18 +538,25 @@ describe("isStopping", () => {
   })
 })
 
-function served<A, E, R>(test: (frames: TestHub.Frames) => Effect.Effect<A, E, R>) {
+function served<A, E, R>(
+  test: (frames: TestHub.Frames) => Effect.Effect<A, E, R>,
+  answers: Partial<Pick<Provider["Service"], "listing" | "plays" | "stats">> = {}
+) {
   return Effect.gen(function* () {
     const frames = yield* Queue.bounded<ReadonlyArray<Delivery>, Cause.Done>(1)
 
-    return yield* test(frames).pipe(Effect.scoped, Effect.provide(serverUnderTest(frames)))
+    return yield* test(frames).pipe(Effect.scoped, Effect.provide(serverUnderTest(frames, answers)))
   })
 }
 
-function serverUnderTest(frames: TestHub.Frames) {
-  const hub = Schedule.layer.pipe(
+function serverUnderTest(
+  frames: TestHub.Frames,
+  answers: Partial<Pick<Provider["Service"], "listing" | "plays" | "stats">>
+) {
+  const hub = Stats.layer.pipe(
+    Layer.provideMerge(Schedule.layer),
     Layer.provide(Director.layer),
-    Layer.provide(Provider.layerTest(frames)),
+    Layer.provide(Provider.layerTest(frames, answers)),
     Layer.provideMerge(Source.layerYouTubeTv),
     Layer.provideMerge(HubConfig.layerTest({ SPORTAL_VERSION: "1.2.3" }))
   )

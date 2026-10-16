@@ -1,5 +1,5 @@
 import { assert, describe, it } from "@effect/vitest"
-import { Effect, Option } from "effect"
+import { Duration, Effect, Option } from "effect"
 import { HubConfig } from "./HubConfig.ts"
 
 describe("HubConfig", () => {
@@ -13,6 +13,7 @@ describe("HubConfig", () => {
       assert.strictEqual(config.logLevel, "Info")
       assert.strictEqual(config.logFormat, "pretty")
       assert.strictEqual(config.version, "dev")
+      assert.deepStrictEqual(config.statsRefresh, Duration.seconds(30))
     }).pipe(Effect.provide(HubConfig.layerTest({})))
   )
 
@@ -35,13 +36,15 @@ describe("HubConfig", () => {
       assert.strictEqual(config.logFormat, "json")
       assert.strictEqual(config.version, "1.2.3")
       assert.strictEqual(config.timeZone, "Europe/London")
+      assert.deepStrictEqual(config.statsRefresh, Duration.seconds(45))
     }).pipe(Effect.provide(HubConfig.layerTest(everySetting)))
   )
 
   it.effect.each([
     ["SPORTAL_PORT", "eighty"],
     ["SPORTAL_LOG_LEVEL", "Loud"],
-    ["SPORTAL_LOG_FORMAT", "xml"]
+    ["SPORTAL_LOG_FORMAT", "xml"],
+    ["SPORTAL_STATS_REFRESH", "soon"]
   ] as const)("should refuse %s=%s, naming the setting", ([name, value]) =>
     Effect.gen(function* () {
       const config = Effect.service(HubConfig).pipe(Effect.provide(HubConfig.layerTest({ [name]: value })))
@@ -61,5 +64,6 @@ const everySetting = {
   SPORTAL_LOG_LEVEL: "Debug",
   SPORTAL_LOG_FORMAT: "json",
   SPORTAL_VERSION: "1.2.3",
-  SPORTAL_TIME_ZONE: "Europe/London"
+  SPORTAL_TIME_ZONE: "Europe/London",
+  SPORTAL_STATS_REFRESH: "45 seconds"
 }

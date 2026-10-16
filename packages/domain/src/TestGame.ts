@@ -1,5 +1,6 @@
 import { DateTime } from "effect"
 import { type Broadcast, GameId, GameSnapshot, Network, type Odds } from "./Game.ts"
+import { Highlight, HighlightId } from "./Highlight.ts"
 import type { LeagueId } from "./League.ts"
 import { FootballDetail, Play, PlayId } from "./Play.ts"
 import { BaseballSituation, FootballSituation } from "./Situation.ts"
@@ -134,4 +135,16 @@ export function sides(home: number, away: number, rankings: { home?: number; awa
       ...(rankings.away === undefined ? {} : { ranking: rankings.away })
     }
   }
+}
+
+/** A highlight for a test: a 30-second clip of game "1" unless the overrides say otherwise. */
+export function highlight(overrides: Partial<Highlight> = {}): Highlight {
+  return new Highlight({
+    id: HighlightId.make("h1"),
+    game: GameId.make("1"),
+    headline: "A touchdown",
+    duration: 30,
+    video: "https://video.test/h1.mp4",
+    ...overrides
+  })
 }
