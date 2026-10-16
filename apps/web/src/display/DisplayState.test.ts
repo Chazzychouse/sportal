@@ -4,6 +4,8 @@ import { GameId } from "@sportal/domain/Game"
 import { Effect, Equal, Option, Queue, Stream } from "effect"
 import { Atom } from "effect/reactivity"
 import { vi } from "vitest"
+import * as CustomStreams from "../custom/CustomStreams.ts"
+import { CustomStreamsChange } from "../custom/CustomStreams.ts"
 import * as DisplayScreen from "../screen/DisplayScreen.ts"
 import * as TestWeb from "../TestWeb.ts"
 import { DisplayInput } from "./Display.ts"
@@ -129,6 +131,43 @@ describe("DisplayState", () => {
       }).pipe(Effect.scoped, Effect.provide(registry))
 
       assert.strictEqual(display.selected, 1)
+    })
+  )
+
+  it.effect("should clear a removed custom stream's tile and drop it from the list", () =>
+    Effect.gen(function* () {
+      const { registry } = yield* TestWeb.withShell()
+
+      const [screen, streams] = yield* Effect.gen(function* () {
+        yield* Atom.set(DisplayState.editCustom, CustomStreamsChange.Added({ stream: TestWeb.video }))
+        yield* Atom.set(DisplayState.display, DisplayInput.ChosenCustom({ stream: TestWeb.video }))
+        yield* TestWeb.until(DisplayScreen.screen, (each) => each.customTiles(TestWeb.video.id).length === 1)
+        yield* Atom.set(DisplayState.editCustom, CustomStreamsChange.Removed({ id: TestWeb.video.id }))
+        const screen = yield* TestWeb.until(
+          DisplayScreen.screen,
+          (each) => each.customTiles(TestWeb.video.id).length === 0
+        )
+        const streams = yield* Atom.get(CustomStreams.customStreams)
+        return [screen, streams] as const
+      }).pipe(Effect.scoped, Effect.provide(registry))
+
+      assert.strictEqual(screen.tiles[0]?._tag, "Empty")
+      assert.deepStrictEqual(streams, [])
+    })
+  )
+
+  it.effect("should remove the custom stream whose guide card has the focus on Remove", () =>
+    Effect.gen(function* () {
+      const { registry } = yield* TestWeb.withShell()
+
+      const streams = yield* Effect.gen(function* () {
+        yield* Atom.set(DisplayState.editCustom, CustomStreamsChange.Added({ stream: TestWeb.video }))
+        yield* Atom.set(DisplayState.display, DisplayInput.GuideOpened({ entry: "Custom" }))
+        yield* Atom.set(DisplayState.pressed, { _tag: "Remove" })
+        return yield* Atom.get(CustomStreams.customStreams)
+      }).pipe(Effect.scoped, Effect.provide(registry))
+
+      assert.deepStrictEqual(streams, [])
     })
   )
 })

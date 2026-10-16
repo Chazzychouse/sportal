@@ -1,9 +1,13 @@
 import { TileKey } from "@sportal/api/TileKey"
-import { Channel, ChannelAvailability, SourceName } from "@sportal/domain/Channel"
+import { Channel, ChannelAvailability, SourceName, StreamLocator } from "@sportal/domain/Channel"
 import { GameId } from "@sportal/domain/Game"
 import { Array as Arr, Option, Record as Rec, Result, Schema } from "effect"
+import { CustomStreamId } from "../custom/CustomStream.ts"
 
-/** One slot's content: a game's stream, its data, or nothing. With `key`, what the tile shows as a `TileKey`. */
+/**
+ * One slot's content: a game's stream, its data, a saved custom stream, or nothing. With `key`, what the tile shows as
+ * a `TileKey`; `game`, the game it shows; and `locator`, what the shell loads for it.
+ */
 export const Tile = Object.assign(
   Schema.TaggedUnion({
     Empty: {},
@@ -21,9 +25,11 @@ export const Tile = Object.assign(
           begin: Schema.OptionFromOptionalKey(Schema.DateTimeUtcFromString)
         }
       })
-    }
+    },
+    /** A saved YouTube video or playlist: its stream, its name, and what the shell loads, so a placement needs no lookup. */
+    CustomTile: { stream: CustomStreamId, name: Schema.String, locator: StreamLocator }
   }),
-  { key }
+  { key, game, locator }
 )
 export type Tile = typeof Tile.Type
 
@@ -136,6 +142,15 @@ export class Screen extends Schema.Class<Screen>("sportal/Screen")({
     )
   }
 
+  /** Every tile showing the custom stream `stream`, on screen or benched, with its index in `tiles`. */
+  customTiles(
+    stream: CustomStreamId
+  ): ReadonlyArray<{ index: number; tile: typeof Tile.cases.CustomTile.Type }> {
+    return this.tiles.flatMap((tile, index) =>
+      Tile.guards.CustomTile(tile) && tile.stream === stream ? [{ index, tile }] : []
+    )
+  }
+
   /**
    * Applies a command. `availabilityOf` gives a game's availability from every source: a game is assigned as the
    * most useful of them says, a carried game as a stream tile and any other as a data tile.
@@ -157,14 +172,13 @@ export class Screen extends Schema.Class<Screen>("sportal/Screen")({
           ? reject("no-such-tile")
           : Result.succeed({ ...this, tiles: swapped(this.tiles, a, b) }),
       Assign: ({ tile, game }) =>
-        tileAt(this, tile, () => {
-          const assigned = Screen.tileFor(game, availabilityOf(game))
-          // A game appears in at most one tile, on screen or benched: assigning it elsewhere moves it.
-          const tiles = this.tiles.map((existing, index) =>
-            index === tile ? assigned : holds(existing, TileKey.game(game)) ? empty : existing
-          )
-          return Result.succeed({ ...this, tiles })
-        }),
+        tileAt(this, tile, () =>
+          Result.succeed(placed(this, tile, Screen.tileFor(game, availabilityOf(game))))
+        ),
+      AssignCustom: ({ tile, stream, name, locator }) =>
+        tileAt(this, tile, () =>
+          Result.succeed(placed(this, tile, { _tag: "CustomTile", stream, name, locator }))
+        ),
       Clear: ({ tile }) =>
         tileAt(this, tile, () => {
           const tiles = this.tiles.map((existing, index) => (index === tile ? empty : existing))
@@ -194,7 +208,8 @@ export class Screen extends Schema.Class<Screen>("sportal/Screen")({
   }
 
   /**
-   * Re-resolves every occupied tile, on screen and benched, after what a source knows has changed. A game
+   * Re-resolves every tile with a game, on screen and benched, after what a source knows has changed. A custom tile has
+   * no game, and stays as it is. A game
    * `availabilityOf` knows nothing about keeps its tile as it was: the change did not concern it.
    *
    * A stream tile is replaced only when its own source carries its game on another channel. Any other availability
@@ -203,17 +218,17 @@ export class Screen extends Schema.Class<Screen>("sportal/Screen")({
    * Screen.
    */
   refresh(availabilityOf: (game: GameId) => Option.Option<ReadonlyArray<ChannelAvailability>>): Screen {
-    const tiles = this.tiles.map((tile) =>
-      Tile.guards.Empty(tile)
-        ? tile
-        : Option.match(availabilityOf(tile.game), {
-            onNone: () => tile,
-            onSome: (availability) =>
-              Tile.guards.StreamTile(tile)
-                ? movedWithinSource(tile, availability)
-                : Screen.tileFor(tile.game, availability)
-          })
-    )
+    const tiles = this.tiles.map((tile) => {
+      const game = Tile.game(tile)
+      if (game === undefined) return tile
+      return Option.match(availabilityOf(game), {
+        onNone: () => tile,
+        onSome: (availability) =>
+          Tile.guards.StreamTile(tile)
+            ? movedWithinSource(tile, availability)
+            : Screen.tileFor(game, availability)
+      })
+    })
 
     return Arr.makeEquivalence(tileEquivalence)(tiles, this.tiles) ? this : settle({ ...this, tiles })
   }
@@ -221,6 +236,8 @@ export class Screen extends Schema.Class<Screen>("sportal/Screen")({
 
 export const ScreenCommand = Schema.TaggedUnion({
   Assign: { tile: Schema.Int, game: GameId },
+  /** Puts a saved custom stream in a tile; one already on another tile moves. */
+  AssignCustom: { tile: Schema.Int, stream: CustomStreamId, name: Schema.String, locator: StreamLocator },
   Clear: { tile: Schema.Int },
   FocusAudio: { tile: Schema.Int },
   Swap: { a: Schema.Int, b: Schema.Int },
@@ -236,7 +253,7 @@ export class ScreenRejection extends Schema.TaggedError<ScreenRejection>()("Scre
   reason: Schema.Literals(["no-such-tile", "empty-tile", "offscreen-tile", "split-out-of-range"])
 }) {}
 
-/** A tile that holds a game. */
+/** A tile that holds something. */
 type Occupied = Exclude<Tile, { readonly _tag: "Empty" }>
 
 /** A Screen's fields before `settle` makes them a Screen that keeps its invariants. */
@@ -248,11 +265,39 @@ interface Unsettled {
   readonly solo: Option.Option<TileKey>
 }
 
-/** What `tile` shows, as a key: its game's id for a stream or data tile; none for an empty tile. */
+/**
+ * What `tile` shows, as a key: its game's id for a stream or data tile, its stream's for a custom tile; none for an
+ * empty tile.
+ */
 function key(tile: Occupied): TileKey
 function key(tile: Tile): TileKey | undefined
 function key(tile: Tile): TileKey | undefined {
-  return Tile.guards.Empty(tile) ? undefined : TileKey.game(tile.game)
+  return Tile.match(tile, {
+    Empty: () => undefined,
+    StreamTile: ({ game }) => TileKey.game(game),
+    DataTile: ({ game }) => TileKey.game(game),
+    CustomTile: ({ stream }) => TileKey.custom(stream)
+  })
+}
+
+/** The game a tile shows: a stream or data tile's. An empty or custom tile shows none. */
+function game(tile: Tile): GameId | undefined {
+  return Tile.match(tile, {
+    Empty: () => undefined,
+    StreamTile: ({ game }) => game,
+    DataTile: ({ game }) => game,
+    CustomTile: () => undefined
+  })
+}
+
+/** What the shell loads for a tile: a stream tile's channel's address, a custom tile's own; none without a video. */
+function locator(tile: Tile): StreamLocator | undefined {
+  return Tile.match(tile, {
+    Empty: () => undefined,
+    StreamTile: ({ channel }) => channel.locator,
+    DataTile: () => undefined,
+    CustomTile: ({ locator }) => locator
+  })
 }
 
 /** Runs `f` on the tile at `index`, or rejects a tile that does not exist. */
@@ -262,6 +307,18 @@ function tileAt(
   f: (tile: Tile) => Result.Result<Unsettled, ScreenRejection>
 ): Result.Result<Unsettled, ScreenRejection> {
   return Option.match(Arr.get(screen.tiles, index), { onNone: () => reject("no-such-tile"), onSome: f })
+}
+
+/**
+ * This Screen's fields with `assigned` in tile `index`. What a tile shows appears in at most one tile, on screen or
+ * benched: assigning it to another tile moves it.
+ */
+function placed(screen: Screen, index: number, assigned: Tile): Unsettled {
+  const key = Tile.key(assigned)
+  const tiles = screen.tiles.map((existing, at) =>
+    at === index ? assigned : key !== undefined && holds(existing, key) ? empty : existing
+  )
+  return { ...screen, tiles }
 }
 
 /** Runs `f` on the occupied on-screen tile at `index`, or says why there is none. */

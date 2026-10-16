@@ -1,6 +1,6 @@
 import { type ScreenTransition, type TileBounds, TilePlacement } from "@sportal/api/ShellBridge"
 import { Effect, Option, Schema, Stream } from "effect"
-import { Atom } from "effect/reactivity"
+import { AsyncResult, Atom } from "effect/reactivity"
 import * as DisplayState from "../display/DisplayState.ts"
 import { Shell } from "../shell/Shell.ts"
 import { beforePaint, logDefect, runtime } from "../WebRuntime.ts"
@@ -32,12 +32,25 @@ export const rects: Atom.Atom<ReadonlyArray<TileBounds>> = Atom.make((get) =>
   TileRects.tileRects(get(shown), get(area))
 )
 
-/** What the shell must show for each stream tile with a size, as shown. */
+/** What the shell must show for each tile with a video and a size, as shown. */
 export const placements: Atom.Atom<ReadonlyArray<TilePlacement>> = Atom.make((get) => {
   const screen = get(DisplayScreen.screen)
   const interacting = get(DisplayState.display).interactingOn(screen)
   return TileRects.placements(get(shown), get(rects), get(area), interacting)
 })
+
+/**
+ * Whether the shell's provider views play the tiles' videos. Until the Shell answers, it says they do, so the page never
+ * starts a player of its own under a provider view.
+ */
+export const providerViews: Atom.Atom<boolean> = runtime
+  .atom(
+    Effect.gen(function* () {
+      const shell = yield* Shell
+      return shell.providerViews
+    })
+  )
+  .pipe(Atom.map(AsyncResult.getOrElse(() => true)))
 
 /** How tiles move when the Screen's arrangement changes; the shell moves the video along the same curve. */
 export const screenTransition: ScreenTransition = { durationMs: 280, easing: [0.2, 0, 0, 1] }

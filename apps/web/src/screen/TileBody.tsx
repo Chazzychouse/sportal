@@ -1,17 +1,20 @@
 import { useAtomValue } from "@effect/atom-react"
 import type { GameSnapshot } from "@sportal/domain/Game"
-import { Option } from "effect"
+import { Option, Result } from "effect"
 import { useMemo } from "react"
+import { CustomStream } from "../custom/CustomStream.ts"
 import { Field } from "../game/Field.tsx"
 import { GameStatus, localTime } from "../game/GameStatus.tsx"
 import { Score } from "../game/Score.tsx"
 import * as Games from "../hub/Games.ts"
 import { Tile } from "./Screen.ts"
+import * as TilePlacements from "./TilePlacements.ts"
 
 /**
  * What a tile's well shows from the web UI. In the shell a provider view covers a stream tile's
  * well; in a plain browser this is what is seen, with a link to watch. A data tile of a live game (halftime and a
- * delay during it included) shows the field in place of why it has no stream; the field dims itself out of play.
+ * delay during it included) shows the field in place of why it has no stream; the field dims itself out of play. A
+ * custom tile, in a plain browser, plays YouTube's embedded player.
  */
 export function TileBody(props: { tile: Tile; snapshot: GameSnapshot | undefined }) {
   const { tile, snapshot } = props
@@ -38,8 +41,34 @@ export function TileBody(props: { tile: Tile; snapshot: GameSnapshot | undefined
       >
         Open in {channel.source}
       </a>
-    )
+    ),
+    CustomTile: (custom) => <CustomPlayer tile={custom} />
   })
+}
+
+/**
+ * A custom tile's well. In the shell its provider view plays the watch page over it, so it only names the stream; in a
+ * plain browser it is YouTube's embedded player.
+ */
+function CustomPlayer(props: { tile: typeof Tile.cases.CustomTile.Type }) {
+  const providerViews = useAtomValue(TilePlacements.providerViews)
+  const { stream, name, locator } = props.tile
+  // The tile keeps the watch page the shell loads; the embedded player's address is read back from it.
+  const embed = Result.match(CustomStream.parse(locator.url, name), {
+    onSuccess: (custom) => custom.embedUrl(),
+    onFailure: () => undefined
+  })
+  if (providerViews || embed === undefined) return <p className="text-muted-foreground text-sm">{name}</p>
+  return (
+    <iframe
+      key={stream}
+      title={name}
+      src={embed}
+      className="h-full w-full border-0"
+      allow="autoplay; encrypted-media; picture-in-picture"
+      allowFullScreen
+    />
+  )
 }
 
 /** A live game's field, its plays read from the game's own live stream. */

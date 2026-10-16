@@ -89,7 +89,7 @@ function connecting(): Followed {
 
 const kept = Atom.family((_: DisplayId) => Atom.make(Display.initial).pipe(Atom.keepAlive))
 
-const noGuide = GuideShelves.guideShelves([])
+const noGuide = GuideShelves.guideShelves([], [])
 
 /** What `message` says of the Display; a report that does not decode reads as offline. */
 function followedOf(message: RemoteMessage): Effect.Effect<Followed> {

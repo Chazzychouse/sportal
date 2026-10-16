@@ -120,6 +120,18 @@ describe("Hotkey.of in the guide", () => {
     }
   )
 
+  it.each(["Delete", "Backspace"])("should read %s as Remove while the guide is open", (code) => {
+    const hotkey = key(code, { guideOpen: true })
+
+    assert.deepStrictEqual(hotkey, { _tag: "Remove" })
+  })
+
+  it.each(["Delete", "Backspace"])("should leave %s to the page while the guide is closed", (code) => {
+    const hotkey = key(code)
+
+    assert.isUndefined(hotkey)
+  })
+
   it("should read I as interacting while the guide is closed", () => {
     const hotkey = key("KeyI")
 
@@ -166,7 +178,8 @@ const wire: ReadonlyArray<unknown> = [
   { _tag: "Confirm" },
   { _tag: "NextEntry" },
   { _tag: "PreviousEntry" },
-  { _tag: "Info" }
+  { _tag: "Info" },
+  { _tag: "Remove" }
 ]
 
 describe("Hotkey wire", () => {

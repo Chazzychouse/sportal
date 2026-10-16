@@ -2,7 +2,8 @@ import { assert, describe, it } from "@effect/vitest"
 import type { Hotkey } from "@sportal/api/Hotkey"
 import { TileKey } from "@sportal/api/TileKey"
 import { GameId } from "@sportal/domain/Game"
-import { Option } from "effect"
+import { Option, Result } from "effect"
+import { CustomStreamsChange } from "../custom/CustomStreams.ts"
 import { GuideItem } from "../guide/GuideItem.ts"
 import type { GuideShelves } from "../guide/GuideShelves.ts"
 import { Screen, type ScreenCommand } from "../screen/Screen.ts"
@@ -841,6 +842,203 @@ describe("Display#apply in the guide", () => {
     assert.deepStrictEqual(commands, [{ _tag: "Assign", tile: 0, game: GameId.make("nyj") }])
   })
 })
+
+describe("Display#chooseCustom", () => {
+  it("should assign a custom stream to the selected slot and select the next empty one", () => {
+    const screen = TestWeb.fill([TestWeb.bama])
+    const display = Display.initial.select(1, screen).display
+
+    const { display: next, commands } = display.chooseCustom(TestWeb.video, screen)
+
+    assert.deepStrictEqual(commands, [
+      {
+        _tag: "AssignCustom",
+        tile: 1,
+        stream: TestWeb.video.id,
+        name: "Highlights",
+        locator: TestWeb.video.locator()
+      }
+    ])
+    assert.strictEqual(next.selected, 2)
+  })
+
+  it("should leave a custom stream on screen where it is", () => {
+    const screen = TestWeb.assignCustom(Screen.initial, 2, TestWeb.video)
+
+    const { commands } = Display.initial.chooseCustom(TestWeb.video, screen)
+
+    assert.deepStrictEqual(commands, [])
+  })
+
+  it("should swap a benched custom stream into the selected slot", () => {
+    const quad = TestWeb.assignCustom(Screen.initial, 3, TestWeb.video)
+    const pair = Result.getOrThrow(quad.apply({ _tag: "SetLayout", layout: "Pair" }, TestWeb.nowhere))
+
+    const { commands } = Display.initial.chooseCustom(TestWeb.video, pair)
+
+    assert.deepStrictEqual(commands[0], { _tag: "Swap", a: 3, b: 0 })
+  })
+
+  it("should close the guide once a custom stream is chosen", () => {
+    const display = new Display({ ...Display.initial, overlay: customGuide })
+
+    const { display: next } = display.chooseCustom(TestWeb.video, Screen.initial)
+
+    assert.strictEqual(next.overlay._tag, "None")
+  })
+})
+
+describe("Display#customEdited", () => {
+  it("should clear every tile showing a removed stream", () => {
+    const screen = TestWeb.assignCustom(TestWeb.fill([TestWeb.bama]), 1, TestWeb.video)
+
+    const { commands } = Display.initial.customEdited(
+      CustomStreamsChange.Removed({ id: TestWeb.video.id }),
+      screen
+    )
+
+    assert.deepStrictEqual(commands, [{ _tag: "Clear", tile: 1 }])
+  })
+
+  it("should give every tile showing a renamed stream its new name", () => {
+    const screen = TestWeb.assignCustom(Screen.initial, 1, TestWeb.video)
+
+    const { commands } = Display.initial.customEdited(
+      CustomStreamsChange.Renamed({ id: TestWeb.video.id, name: "Recap" }),
+      screen
+    )
+
+    assert.deepStrictEqual(commands, [
+      {
+        _tag: "AssignCustom",
+        tile: 1,
+        stream: TestWeb.video.id,
+        name: "Recap",
+        locator: TestWeb.video.locator()
+      }
+    ])
+  })
+
+  it("should send nothing for a stream added to the list", () => {
+    const { commands } = Display.initial.customEdited(
+      CustomStreamsChange.Added({ stream: TestWeb.video }),
+      Screen.initial
+    )
+
+    assert.deepStrictEqual(commands, [])
+  })
+})
+
+describe("Display custom tiles", () => {
+  it("should interact with a custom tile's player", () => {
+    const screen = TestWeb.assignCustom(Screen.initial, 0, TestWeb.video)
+
+    const { display } = Display.initial.press({ _tag: "Interact" }, screen, none)
+
+    assert.strictEqual(display.interactingOn(screen), TileKey.custom(TestWeb.video.id))
+  })
+
+  it("should do nothing in the fold on Remove: the saved list is DisplayState's", () => {
+    const display = new Display({ ...Display.initial, overlay: customGuide })
+
+    const step = display.press({ _tag: "Remove" }, Screen.initial, none)
+
+    assert.strictEqual(step.display, display)
+    assert.deepStrictEqual(step.commands, [])
+  })
+})
+
+describe("Display#focusedItem", () => {
+  it("should be the card the guide's focus is on", () => {
+    const display = new Display({ ...Display.initial, overlay: customGuide })
+
+    const item = display.focusedItem(customShelves)
+
+    assert.deepStrictEqual(item, GuideItem.Custom({ stream: TestWeb.video }))
+  })
+
+  it("should be none while the focus is on the rail", () => {
+    const overlay = Overlay.Guide({
+      level: "Full",
+      entry: "Custom",
+      focus: { rail: true, shelf: 0, item: 0 }
+    })
+    const display = new Display({ ...Display.initial, overlay })
+
+    const item = display.focusedItem(customShelves)
+
+    assert.isUndefined(item)
+  })
+})
+
+describe("Display guide Custom entry", () => {
+  it("should assign a custom stream on Confirm on its card, and close the guide", () => {
+    const display = new Display({ ...Display.initial, overlay: customGuide })
+
+    const step = display.apply(
+      DisplayInput.Pressed({ hotkey: { _tag: "Confirm" } }),
+      Screen.initial,
+      customShelves
+    )
+
+    assert.strictEqual(step.commands[0]?._tag, "AssignCustom")
+    assert.strictEqual(step.display.overlay._tag, "None")
+  })
+
+  it("should open the YouTube form on Confirm on the add card", () => {
+    const overlay = Overlay.Guide({
+      level: "Full",
+      entry: "Custom",
+      focus: { rail: false, shelf: 0, item: 1 }
+    })
+    const display = new Display({ ...Display.initial, overlay })
+
+    const step = display.apply(
+      DisplayInput.Pressed({ hotkey: { _tag: "Confirm" } }),
+      Screen.initial,
+      customShelves
+    )
+
+    assert.strictEqual(step.display.overlay._tag, "CustomForm")
+  })
+})
+
+describe("Display YouTube form", () => {
+  it("should go back to the guide, at its focus, when the form closes", () => {
+    const opened = new Display({ ...Display.initial, overlay: customGuide }).openCustomForm(undefined)
+
+    const closed = opened.close()
+
+    assert.deepStrictEqual(closed.overlay, customGuide)
+  })
+
+  it("should close to nothing when it was opened from outside the guide", () => {
+    const opened = new Display({ ...Display.initial, overlay: Overlay.Palette() }).openCustomForm(undefined)
+
+    const closed = opened.close()
+
+    assert.strictEqual(closed.overlay._tag, "None")
+  })
+
+  it("should hold the stream it renames", () => {
+    const opened = Display.initial.openCustomForm(TestWeb.video)
+
+    assert.isTrue(Overlay.$is("CustomForm")(opened.overlay) && opened.overlay.editing === TestWeb.video)
+  })
+})
+
+/** The full guide on Custom, focused on its first card. */
+const customGuide = Overlay.Guide({
+  level: "Full",
+  entry: "Custom",
+  focus: { rail: false, shelf: 0, item: 0 }
+})
+
+/** One saved stream, then the add card, under every entry. */
+const customShelves: GuideShelves = {
+  entries: ["AllLive", "Custom"],
+  shelves: () => [[GuideItem.Custom({ stream: TestWeb.video }), GuideItem.AddCustom()]]
+}
 
 const live = GameId.make("live")
 

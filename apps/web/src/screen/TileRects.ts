@@ -33,8 +33,8 @@ export function tileRects(
 }
 
 /**
- * What the shell must show for each stream tile with a size: its view, by the tile's key, in window pixels.
- * `origin` is where the Screen area sits in the window. Only `interacting`'s stream gets the mouse.
+ * What the shell must show for each tile with a video and a size: its view, by the tile's key, in window pixels.
+ * `origin` is where the Screen area sits in the window. Only `interacting`'s view gets the mouse.
  */
 export function placements(
   screen: Screen,
@@ -44,13 +44,10 @@ export function placements(
 ): Array<TilePlacement> {
   return screen.onScreen().flatMap((tile, index) => {
     const rect = rects[index]
-    if (rect === undefined || rect.width === 0 || !Tile.guards.StreamTile(tile)) return []
     const key = Tile.key(tile)
-    const view = {
-      url: tile.channel.locator.url,
-      muted: !screen.hears(key),
-      interactive: key === interacting
-    }
+    const locator = Tile.locator(tile)
+    if (rect === undefined || rect.width === 0 || key === undefined || locator === undefined) return []
+    const view = { url: locator.url, muted: !screen.hears(key), interactive: key === interacting }
     const video = videoBounds(rect)
     return [{ key, ...view, bounds: { ...video, x: video.x + origin.x, y: video.y + origin.y } }]
   })

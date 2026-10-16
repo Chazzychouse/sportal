@@ -35,6 +35,11 @@ export class Shell extends Context.Service<
     readonly readGuide: Effect.Effect<void>
     /** Opens the YouTube TV sign-in; none in a plain browser, which has no sign-in to open. */
     readonly openSignIn: Option.Option<Effect.Effect<void>>
+    /**
+     * Whether provider views lay the streams over the page: in the desktop shell. A plain browser has none, so the page
+     * plays what it can itself.
+     */
+    readonly providerViews: boolean
   }
 >()("sportal/web/shell/Shell") {
   /** The shell's bridge when the page runs in the shell, else the browser's own. */
@@ -66,7 +71,8 @@ export class Shell extends Context.Service<
           setGuideOpen: (on) =>
             Ref.set(guideOpen, on).pipe(Effect.andThen(Effect.sync(() => bridge.setGuideOpen(on)))),
           readGuide: Effect.sync(() => bridge.readGuide()),
-          openSignIn: Option.some(Effect.sync(() => bridge.openSignIn()))
+          openSignIn: Option.some(Effect.sync(() => bridge.openSignIn())),
+          providerViews: true
         })
       })
     )
@@ -99,12 +105,16 @@ export class Shell extends Context.Service<
         setHidden: () => Effect.void,
         setGuideOpen: (on) => Ref.set(guideOpen, on),
         readGuide: Effect.void,
-        openSignIn: Option.none()
+        openSignIn: Option.none(),
+        providerViews: false
       })
     })
   )
 
-  /** A Shell giving these events (none where not given), and running `record` for each call it is asked to make. */
+  /**
+   * A Shell giving these events (none where not given), and running `record` for each call it is asked to make. It has
+   * provider views, as the desktop shell does.
+   */
   static layerTest(options: {
     readonly hotkeys?: Stream.Stream<Hotkey>
     readonly fullScreen?: Stream.Stream<boolean>
@@ -137,7 +147,8 @@ export class Shell extends Context.Service<
         setHidden: (keys) => record({ _tag: "SetHidden", keys }),
         setGuideOpen: (on) => record({ _tag: "SetGuideOpen", on }),
         readGuide: record({ _tag: "ReadGuide" }),
-        openSignIn: Option.some(record({ _tag: "OpenSignIn" }))
+        openSignIn: Option.some(record({ _tag: "OpenSignIn" })),
+        providerViews: true
       })
     )
   }

@@ -20,3 +20,11 @@ describe("TileKey.game", () => {
     assert.strictEqual(key, "401856707")
   })
 })
+
+describe("TileKey.custom", () => {
+  it("should key a custom stream's tile by its id, prefixed custom:", () => {
+    const key = TileKey.custom("video.dQw4w9WgXcQ")
+
+    assert.strictEqual(key, "custom:video.dQw4w9WgXcQ")
+  })
+})

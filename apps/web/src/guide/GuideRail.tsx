@@ -4,6 +4,7 @@ import type { ReactNode } from "react"
 import { Button } from "@/design/button"
 import { cn } from "@/design/ClassName"
 import { ToggleGroup, ToggleGroupItem } from "@/design/toggle-group"
+import * as CustomStreams from "../custom/CustomStreams.ts"
 import { BrandMark, ConnectionPill } from "../display/Brand.tsx"
 import { Display, DisplayInput, type GuideEntry } from "../display/Display.ts"
 import * as DisplayState from "../display/DisplayState.ts"
@@ -19,12 +20,13 @@ interface GuideRailProps {
 
 /**
  * The full guide's left rail: Sportal's mark; the guide's entries, the one shown lit, All live with its count of live
- * games; and at its foot the Display's controls: theme, layout, YouTube TV, Remote, keys, full screen, and the Hub.
+ * games and Custom with its count of saved streams; and at its foot the Display's controls: theme, layout, YouTube TV, Remote, keys, full screen, and the Hub.
  */
 export function GuideRail({ entry, focused }: GuideRailProps) {
   const input = useAtomSet(DisplayState.display)
   const shelves = useAtomValue(DisplayState.shelves)
   const live = shelves.shelves("AllLive", "Ribbon")[0]?.length ?? 0
+  const saved = useAtomValue(CustomStreams.customStreams).length
 
   return (
     <nav aria-label="Guide entries" className="flex min-h-0 flex-col gap-1 border-r bg-guide-rail px-3 py-4">
@@ -50,6 +52,11 @@ export function GuideRail({ entry, focused }: GuideRailProps) {
             <span className="flex items-center gap-1 font-mono text-live text-xs" title="Games live now">
               <span className="size-1.5 rounded-full bg-live" />
               {live}
+            </span>
+          )}
+          {each === "Custom" && saved > 0 && (
+            <span className="font-mono text-xs" title="Saved YouTube streams">
+              {saved}
             </span>
           )}
         </button>

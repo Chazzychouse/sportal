@@ -13,7 +13,7 @@ import { TileAction } from "./TileAction.ts"
 import * as TileRects from "./TileRects.ts"
 
 /**
- * A tile's header strip: its slot, its game and score, the on-air tally when its sound is on, and its controls.
+ * A tile's header strip: its slot, its game and score (a custom tile's name), the on-air tally when its sound is on, and its controls.
  * It is a drop target for another tile, which swaps in; and it can itself be dragged.
  */
 export function TileChrome(props: {
@@ -63,7 +63,9 @@ export function TileChrome(props: {
           <span className="label-caps rounded-[2px] bg-on-air px-1 text-[10px] text-background">On air</span>
         )}
         <span className="flex min-w-0 items-center gap-1.5 truncate font-mono">
-          {props.game === undefined ? (
+          {Tile.guards.CustomTile(tile) ? (
+            <span className="truncate font-sans">{tile.name}</span>
+          ) : props.game === undefined ? (
             <span className="font-sans text-muted-foreground">
               {Tile.guards.Empty(tile) ? "Empty — G to choose a game" : "Loading…"}
             </span>

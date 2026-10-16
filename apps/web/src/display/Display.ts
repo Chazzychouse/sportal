@@ -3,12 +3,17 @@ import { TileKey } from "@sportal/api/TileKey"
 import type { GameId } from "@sportal/domain/Game"
 import { League, type LeagueId } from "@sportal/domain/League"
 import { Data, Equal, Option } from "effect"
+import type { CustomStream } from "../custom/CustomStream.ts"
+import { CustomStreamsChange } from "../custom/CustomStreams.ts"
 import { GuideItem } from "../guide/GuideItem.ts"
 import type { GuideShelves } from "../guide/GuideShelves.ts"
 import { Layout } from "../layout/Layout.ts"
 import { type Screen, type ScreenCommand, Tile } from "../screen/Screen.ts"
 
-/** The one overlay a Display has open, or none. Above the class: `Display.initial` reads it when the class is defined. */
+/**
+ * The one overlay a Display has open, or none. `CustomForm` is the YouTube form: renaming `editing`, or adding a stream
+ * without one; closing it goes `back`. Above the class: `Display.initial` reads it when the class is defined.
+ */
 export type Overlay = Data.TaggedEnum<{
   None: object
   Keys: object
@@ -16,6 +21,7 @@ export type Overlay = Data.TaggedEnum<{
   JoinRemote: object
   /** The guide, at its level, on its entry, with its focus. */
   Guide: { readonly level: GuideLevel; readonly entry: GuideEntry; readonly focus: GuideFocus }
+  CustomForm: { readonly editing: CustomStream | undefined; readonly back: Overlay }
 }>
 export const Overlay = Data.taggedEnum<Overlay>()
 
@@ -52,12 +58,23 @@ export class Display extends Data.Class<{
   }
 
   /**
-   * The interacting tile's key, while the selected slot still holds its stream; otherwise none. It returns when that
-   * tile is back in the selected slot.
+   * The interacting tile, while the selected slot still holds it; otherwise none. It returns when its tile is back in
+   * the selected slot.
    */
   interactingOn(screen: Screen): TileKey | undefined {
     const tile = screen.onScreen()[this.selectedOn(screen)]
-    return Tile.guards.StreamTile(tile) && Tile.key(tile) === this.interacting ? this.interacting : undefined
+    return tile !== undefined && Tile.locator(tile) !== undefined && Tile.key(tile) === this.interacting
+      ? this.interacting
+      : undefined
+  }
+
+  /** The guide card the focus is on: none while the guide is closed, or while the focus is on the rail. */
+  focusedItem(shelves: GuideShelves): GuideItem | undefined {
+    if (!Overlay.$is("Guide")(this.overlay)) return undefined
+    const { entry, level } = this.overlay
+    const shown = shelves.shelves(entry, level)
+    const focus = clamped(this.overlay.focus, shown)
+    return focus.rail ? undefined : shown[focus.shelf]?.[focus.item]
   }
 
   /** The entry the guide opens on with these shelves: the one last shown while the guide lists it, else All live. */
@@ -75,6 +92,9 @@ export class Display extends Data.Class<{
         return slot === undefined ? DisplayStep.of(this) : this.select(slot, screen)
       },
       Chosen: ({ game }) => this.choose(game, screen),
+      ChosenCustom: ({ stream }) => this.chooseCustom(stream, screen),
+      CustomEdited: ({ change }) => this.customEdited(change, screen),
+      CustomFormOpened: ({ editing }) => DisplayStep.of(this.openCustomForm(editing)),
       Commanded: ({ command }) => DisplayStep.of(this, [command]),
       Opened: ({ overlay }) => DisplayStep.of(this.open(overlay)),
       Closed: () => DisplayStep.of(this.close()),
@@ -86,6 +106,7 @@ export class Display extends Data.Class<{
 
   /**
    * What a hotkey does. `FullScreen` does nothing here: it is the shell's or browser's. `Info` waits for the game page.
+   * `Remove` does nothing here either: it edits the saved custom streams, which `DisplayState` holds.
    */
   press(hotkey: Hotkey, screen: Screen, shelves: GuideShelves): DisplayStep {
     return Hotkey.match(hotkey, {
@@ -101,8 +122,9 @@ export class Display extends Data.Class<{
       Unsolo: () => this.escape(screen, shelves),
       Interact: () => {
         const tile = screen.onScreen()[this.selectedOn(screen)]
-        if (!Tile.guards.StreamTile(tile)) return DisplayStep.of(this)
-        const interacting = this.interactingOn(screen) === undefined ? Tile.key(tile) : undefined
+        const key = tile === undefined || Tile.locator(tile) === undefined ? undefined : Tile.key(tile)
+        if (key === undefined) return DisplayStep.of(this)
+        const interacting = this.interactingOn(screen) === undefined ? key : undefined
         return DisplayStep.of(new Display({ ...this, interacting }))
       },
       ShowKeys: () => DisplayStep.of(Overlay.$is("Keys")(this.overlay) ? this.close() : this.open("Keys")),
@@ -112,6 +134,7 @@ export class Display extends Data.Class<{
       Promote: ({ slot }) => DisplayStep.of(this, [{ _tag: "Promote", tile: slot }]),
       NextLayout: () => DisplayStep.of(this, [{ _tag: "SetLayout", layout: Layout.next(screen.layout) }]),
       FullScreen: () => DisplayStep.of(this),
+      Remove: () => DisplayStep.of(this),
       Guide: () => DisplayStep.of(this.guideUp(shelves)),
       Move: ({ direction }) => DisplayStep.of(this.move(direction, shelves)),
       Confirm: () => this.confirm(undefined, screen, shelves),
@@ -128,20 +151,72 @@ export class Display extends Data.Class<{
     return DisplayStep.of(new Display({ ...this, selected: slot, interacting }))
   }
 
-  /**
-   * Puts game `game` in the selected slot: a benched game is swapped in, a free one assigned, and one on screen left
-   * where it is. Then selects the next empty slot, so the next choice fills it, or keeps the selection when none is
-   * left.
-   */
+  /** Puts game `game` in the selected slot, as `place` puts anything. */
   choose(game: GameId, screen: Screen): DisplayStep {
-    const key = TileKey.game(game)
+    return this.place(TileKey.game(game), (tile) => ({ _tag: "Assign", tile, game }), screen)
+  }
+
+  /** Puts a saved custom stream in the selected slot, as `place` puts anything, and closes what is open. */
+  chooseCustom(stream: CustomStream, screen: Screen): DisplayStep {
+    const { display, commands } = this.place(
+      TileKey.custom(stream.id),
+      (tile) => ({
+        _tag: "AssignCustom",
+        tile,
+        stream: stream.id,
+        name: stream.name,
+        locator: stream.locator()
+      }),
+      screen
+    )
+    return DisplayStep.of(new Display({ ...display, overlay: Overlay.None() }), commands)
+  }
+
+  /**
+   * Puts what `key` names in the selected slot: benched, it is swapped in; on no tile, `assign` puts it there; on
+   * screen, it stays where it is. Then selects the next empty slot, so the next choice fills it, or keeps the selection
+   * when none is left.
+   */
+  place(key: TileKey, assign: (tile: number) => ScreenCommand, screen: Screen): DisplayStep {
     if (screen.slotOf(key) !== undefined) return DisplayStep.of(this)
     const slot = this.selectedOn(screen)
     const bench = screen.benched().find((each) => each.key === key)
     const { display, commands } = this.select(screen.nextEmptySlot(slot) ?? slot, screen)
     const placed: ScreenCommand =
-      bench === undefined ? { _tag: "Assign", tile: slot, game } : { _tag: "Swap", a: bench.tile, b: slot }
+      bench === undefined ? assign(slot) : { _tag: "Swap", a: bench.tile, b: slot }
     return DisplayStep.of(display, [placed, ...commands])
+  }
+
+  /**
+   * What a change to the saved custom streams does on this Screen: a removed stream's tiles are cleared, a renamed one's
+   * take its new name, and an added one changes nothing.
+   */
+  customEdited(change: CustomStreamsChange, screen: Screen): DisplayStep {
+    const commands = CustomStreamsChange.$match(change, {
+      Added: (): ReadonlyArray<ScreenCommand> => [],
+      Renamed: ({ id, name }) =>
+        screen.customTiles(id).map(
+          ({ index, tile }): ScreenCommand => ({
+            _tag: "AssignCustom",
+            tile: index,
+            stream: id,
+            name,
+            locator: tile.locator
+          })
+        ),
+      Removed: ({ id }) =>
+        screen.customTiles(id).map(({ index }): ScreenCommand => ({ _tag: "Clear", tile: index }))
+    })
+    return DisplayStep.of(this, commands)
+  }
+
+  /**
+   * Opens the YouTube form: to rename `editing`, or, without it, to add a stream. Closing it goes back to the guide it
+   * was opened from, at the same focus, or to nothing.
+   */
+  openCustomForm(editing: CustomStream | undefined): Display {
+    const back = Overlay.$is("Guide")(this.overlay) ? this.overlay : Overlay.None()
+    return new Display({ ...this, overlay: Overlay.CustomForm({ editing, back }) })
   }
 
   /** Whether this overlay is the one open. */
@@ -154,8 +229,10 @@ export class Display extends Data.Class<{
     return new Display({ ...this, overlay: Overlay[overlay]() })
   }
 
+  /** Closes what is open: the YouTube form goes back to where it was opened from, anything else to nothing. */
   close(): Display {
-    return new Display({ ...this, overlay: Overlay.None() })
+    const overlay = Overlay.$is("CustomForm")(this.overlay) ? this.overlay.back : Overlay.None()
+    return new Display({ ...this, overlay })
   }
 
   /**
@@ -233,7 +310,8 @@ export class Display extends Data.Class<{
 
   /**
    * Enter, or a click on the item at `at`: on the rail it leaves the rail; on a game it watches the game as `choose`
-   * does and closes the guide. With the guide closed, or nothing there, nothing.
+   * does and closes the guide; on a custom stream it watches it as `chooseCustom` does; on the add card it opens the
+   * YouTube form. With the guide closed, or nothing there, nothing.
    */
   private confirm(at: GuideFocus | undefined, screen: Screen, shelves: GuideShelves): DisplayStep {
     const overlay = this.overlay
@@ -244,7 +322,11 @@ export class Display extends Data.Class<{
       return DisplayStep.of(this.guide(overlay.level, overlay.entry, { ...focus, rail: false }, shelves))
     const item = shown[focus.shelf]?.[focus.item]
     if (item === undefined) return DisplayStep.of(this)
-    return GuideItem.$match(item, { Game: ({ game }) => this.close().choose(game, screen) })
+    return GuideItem.$match(item, {
+      Game: ({ game }) => this.close().choose(game, screen),
+      Custom: ({ stream }) => this.chooseCustom(stream, screen),
+      AddCustom: () => DisplayStep.of(this.openCustomForm(undefined))
+    })
   }
 
   /**
@@ -267,8 +349,11 @@ export class Display extends Data.Class<{
   }
 }
 
-/** An overlay that opens with no more to say: any but `None` and the guide, which opens at a level on an entry. */
-type OpenOverlay = Exclude<Overlay["_tag"], "None" | "Guide">
+/**
+ * An overlay that opens with no more to say: any but `None`, the guide, which opens at a level on an entry, and the
+ * YouTube form, which `CustomFormOpened` opens.
+ */
+type OpenOverlay = Exclude<Overlay["_tag"], "None" | "Guide" | "CustomForm">
 
 /** Which level of the guide is open: the ribbon docked under the Screen, or the full guide over the whole Display. */
 export type GuideLevel = "Ribbon" | "Full"
@@ -298,14 +383,17 @@ export class DisplayStep extends Data.Class<{
 }
 
 /**
- * What a person did on a Display: a hotkey, a click, a game chosen, a command, an overlay opened or closed, or the
- * guide clicked.
+ * What a person did on a Display: a hotkey, a click, a game or a custom stream chosen for the selected tile, a change to
+ * the saved custom streams, the YouTube form opened, a command, an overlay opened or closed, or the guide clicked.
  */
 export type DisplayInput = Data.TaggedEnum<{
   Pressed: { readonly hotkey: Hotkey }
   Selected: { readonly slot: number }
   VideoPressed: { readonly key: TileKey }
   Chosen: { readonly game: GameId }
+  ChosenCustom: { readonly stream: CustomStream }
+  CustomEdited: { readonly change: CustomStreamsChange }
+  CustomFormOpened: { readonly editing: CustomStream | undefined }
   Commanded: { readonly command: ScreenCommand }
   Opened: { readonly overlay: OpenOverlay }
   Closed: object

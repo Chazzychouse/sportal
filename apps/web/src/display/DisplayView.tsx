@@ -1,5 +1,6 @@
 import { useAtomMount, useAtomSet, useAtomValue } from "@effect/atom-react"
 import { Toaster } from "@/design/sonner"
+import { CustomStreamForm } from "../custom/CustomStreamForm.tsx"
 import { FullGuide } from "../guide/FullGuide.tsx"
 import { Ribbon } from "../guide/Ribbon.tsx"
 import * as GuideRelay from "../hub/GuideRelay.ts"
@@ -18,8 +19,8 @@ import { KeysDialog } from "./KeysDialog.tsx"
 
 /**
  * A Display: one column of the Screen and, while the guide's ribbon is open, the ribbon docked under it (the Screen
- * shrinks above it, and every video moves with it). The full guide, the key help, Join Remote and the palette open over
- * it, one at a time. Toasts sit at the bottom center, above the ribbon while it is open.
+ * shrinks above it, and every video moves with it). The full guide, the key help, Join Remote, the palette and the
+ * YouTube form open over it, one at a time. Toasts sit at the bottom center, above the ribbon while it is open.
  */
 export function DisplayView() {
   const display = useAtomValue(DisplayState.display)
@@ -52,6 +53,13 @@ export function DisplayView() {
       <KeysDialog open={display.shows("Keys")} onOpenChange={closeOverlay} />
       {display.shows("JoinRemote") && <JoinRemote open onOpenChange={closeOverlay} />}
       <CommandPalette open={display.shows("Palette")} onOpenChange={closeOverlay} />
+      {Overlay.$is("CustomForm")(display.overlay) && (
+        <CustomStreamForm
+          key={display.overlay.editing?.id ?? "add"}
+          editing={display.overlay.editing}
+          onOpenChange={closeOverlay}
+        />
+      )}
       <Toaster
         position="bottom-center"
         offset={toastOffset}

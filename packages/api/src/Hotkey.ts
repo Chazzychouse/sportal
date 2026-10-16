@@ -26,12 +26,14 @@ export const Hotkey = Object.assign(
     /** The guide's previous entry. */
     PreviousEntry: {},
     /** Open the focused game's page. */
-    Info: {}
+    Info: {},
+    /** Remove the focused custom stream from the saved list. */
+    Remove: {}
   }),
   {
     /**
      * What a key press means, read by its physical `code`; none for a key the page should have. While the guide is
-     * open, the arrows, Enter, the brackets and I are the guide's.
+     * open, the arrows, Enter, the brackets, I, Delete and Backspace are the guide's.
      */
     of(key: {
       code: string
@@ -183,13 +185,20 @@ export const Hotkey = Object.assign(
         does: "The focused game's page",
         press: { code: "KeyI", guideOpen: true },
         hotkey: { _tag: "Info" }
+      },
+      {
+        group: "Guide",
+        keys: ["Delete"],
+        does: "Remove the focused YouTube stream",
+        press: { code: "Delete", guideOpen: true },
+        hotkey: { _tag: "Remove" }
       }
     ] as const
   }
 )
 export type Hotkey = typeof Hotkey.Type
 
-/** A key that is the guide's while it is open: the arrows, Enter, the brackets, and I. */
+/** A key that is the guide's while it is open: the arrows, Enter, the brackets, I, Delete and Backspace. */
 function guideKey(code: string): Hotkey | undefined {
   switch (code) {
     case "ArrowUp":
@@ -208,6 +217,9 @@ function guideKey(code: string): Hotkey | undefined {
       return { _tag: "PreviousEntry" }
     case "KeyI":
       return { _tag: "Info" }
+    case "Delete":
+    case "Backspace":
+      return { _tag: "Remove" }
     default:
       return undefined
   }

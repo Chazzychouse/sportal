@@ -1,6 +1,9 @@
 import type { Hotkey } from "@sportal/api/Hotkey"
 import { Effect, Match, Option, Stream } from "effect"
 import { AsyncResult, Atom } from "effect/reactivity"
+import * as CustomStreams from "../custom/CustomStreams.ts"
+import { CustomStreamsChange } from "../custom/CustomStreams.ts"
+import { GuideItem } from "../guide/GuideItem.ts"
 import * as GuideShelves from "../guide/GuideShelves.ts"
 import * as Games from "../hub/Games.ts"
 import * as DisplayScreen from "../screen/DisplayScreen.ts"
@@ -24,12 +27,12 @@ export const display: Atom.Writable<Display, DisplayInput> = Atom.writable(
 ).pipe(Atom.keepAlive)
 
 /**
- * The guide's entries and shelves over today's games: only All live, with nothing on it, before the first answer.
- * What the fold and the guide read.
+ * The guide's entries and shelves over today's games and the saved custom streams: only All live, with nothing on it,
+ * and Custom before the first answer. What the fold and the guide read.
  */
 export const shelves: Atom.Atom<GuideShelves.GuideShelves> = Atom.make((get) => {
   const games = Option.match(get(Games.today).value, { onNone: () => [], onSome: ({ games }) => games })
-  return GuideShelves.guideShelves(games)
+  return GuideShelves.guideShelves(games, get(CustomStreams.customStreams))
 })
 
 /** Whether this Display's window is full screen: in the shell the window, in a browser the page. */
@@ -71,10 +74,26 @@ export const inputs = runtime.atom((get) =>
   }).pipe(logDefect("The Display's inputs"))
 )
 
-/** A hotkey pressed anywhere, a Remote's included: routed as the shell's hotkeys are. */
+/**
+ * A hotkey pressed anywhere, a Remote's included: routed as the shell's hotkeys are. `Remove` removes the focused
+ * custom stream, through `editCustom`.
+ */
 export const pressed: Atom.Writable<void, Hotkey> = Atom.writable(
   () => undefined,
   (ctx, hotkey: Hotkey) => route(ctx, hotkey)
+).pipe(Atom.keepAlive)
+
+/**
+ * Edits the custom streams saved in this browser, and follows the change on the Screen: a removed stream's tiles are
+ * cleared, and a renamed one's take its new name.
+ */
+export const editCustom: Atom.Writable<void, CustomStreamsChange> = Atom.writable(
+  () => undefined,
+  (ctx, change: CustomStreamsChange) =>
+    Atom.batch(() => {
+      ctx.set(CustomStreams.customStreams, change)
+      ctx.set(display, DisplayInput.CustomEdited({ change }))
+    })
 ).pipe(Atom.keepAlive)
 
 /** Whether this Display can open the YouTube TV sign-in: only in the shell. */
@@ -115,6 +134,14 @@ const guideOpen = Atom.make((get) => get(display).shows("Guide"))
 function route(ctx: Atom.WriteContext<void>, hotkey: Hotkey) {
   Match.value(hotkey).pipe(
     Match.tag("FullScreen", () => ctx.set(toggleFullScreen, undefined)),
+    Match.tag("Remove", () => removeFocused(ctx)),
     Match.orElse(() => ctx.set(display, DisplayInput.Pressed({ hotkey })))
   )
+}
+
+/** Removes the custom stream whose guide card has the focus; no other card is removed. */
+function removeFocused(ctx: Atom.WriteContext<void>) {
+  const focused = ctx.get(display).focusedItem(ctx.get(shelves))
+  if (focused !== undefined && GuideItem.$is("Custom")(focused))
+    ctx.set(editCustom, CustomStreamsChange.Removed({ id: focused.stream.id }))
 }

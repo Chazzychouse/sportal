@@ -1,4 +1,6 @@
 import { useAtomSet, useAtomValue } from "@effect/atom-react"
+import { AddCustomCard, CustomCard } from "../custom/CustomCard.tsx"
+import { CustomStreamsChange } from "../custom/CustomStreams.ts"
 import { Display, DisplayInput, type GuideEntry, type GuideFocus } from "../display/Display.ts"
 import * as DisplayState from "../display/DisplayState.ts"
 import { useOverlayRef } from "../display/OverlayRef.ts"
@@ -16,17 +18,19 @@ interface FullGuideProps {
 
 /**
  * The guide's second level, over the whole Display: the rail at the left, and the entry's shelves at the right (live
- * now, later today, final for a league; live now for All live). It covers every video, which hides under it, and fades
+ * now, later today, final for a league; live now for All live; YouTube for Custom, the saved streams and the card that
+ * adds one). It covers every video, which hides under it, and fades
  * in.
  */
 export function FullGuide({ entry, focus }: FullGuideProps) {
   const ref = useOverlayRef()
   const input = useAtomSet(DisplayState.display)
+  const edit = useAtomSet(DisplayState.editCustom)
   const display = useAtomValue(DisplayState.display)
   const screen = useAtomValue(DisplayScreen.screen)
   const shelves = useAtomValue(DisplayState.shelves).shelves(entry, "Full")
   const games = useAtomValue(Games.byId)
-  const titles = entry === "AllLive" ? ["Live now"] : shelfTitles
+  const titles = entry === "AllLive" ? ["Live now"] : entry === "Custom" ? ["YouTube"] : shelfTitles
   const empty = shelves.every((shelf) => shelf.length === 0)
 
   return (
@@ -58,21 +62,31 @@ export function FullGuide({ entry, focus }: FullGuideProps) {
                 live={index === 0}
                 focus={!focus.rail && focus.shelf === index ? focus.item : undefined}
               >
-                {shelf.map((item, at) =>
-                  GuideItem.$match(item, {
+                {shelf.map((item, at) => {
+                  const focused = !focus.rail && focus.shelf === index && focus.item === at
+                  const choose = () => input(DisplayInput.GuideItemChosen({ shelf: index, item: at }))
+                  return GuideItem.$match(item, {
                     Game: ({ game }) => {
                       const listed = games.get(game)
                       return listed === undefined ? null : (
-                        <GameCard
-                          key={game}
-                          game={listed.snapshot}
-                          focused={!focus.rail && focus.shelf === index && focus.item === at}
-                          onChoose={() => input(DisplayInput.GuideItemChosen({ shelf: index, item: at }))}
-                        />
+                        <GameCard key={game} game={listed.snapshot} focused={focused} onChoose={choose} />
                       )
-                    }
+                    },
+                    Custom: ({ stream }) => (
+                      <CustomCard
+                        key={stream.id}
+                        stream={stream}
+                        focused={focused}
+                        compact={false}
+                        onChoose={choose}
+                        onRemove={() => edit(CustomStreamsChange.Removed({ id: stream.id }))}
+                      />
+                    ),
+                    AddCustom: () => (
+                      <AddCustomCard key="add" focused={focused} compact={false} onChoose={choose} />
+                    )
                   })
-                )}
+                })}
               </Shelf>
             )
           )

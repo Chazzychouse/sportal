@@ -146,6 +146,17 @@ describe("TileViews.sync", () => {
       }
     })
   )
+
+  it.effect("should load a custom tile's YouTube watch page in a view of its own", () =>
+    Effect.gen(function* () {
+      const { tiles } = yield* attached()
+
+      yield* tiles.sync([placement, custom])
+
+      expect(created).toHaveLength(2)
+      expect(created[1]?.webContents.loadURL).toHaveBeenCalledWith(custom.url)
+    }).pipe(Effect.scoped)
+  )
 })
 
 describe("TileViews transitions", () => {
@@ -467,6 +478,12 @@ const placement = {
   bounds: { x: 10, y: 20, width: 640, height: 360 },
   muted: true,
   interactive: false
+}
+/** A custom tile's placement: a YouTube video's watch page, beside `placement`. */
+const custom = {
+  ...placement,
+  key: TileKey.custom("video.dQw4w9WgXcQ"),
+  url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
 }
 const transition = { durationMs: 160, easing: [0, 0, 1, 1] as const }
 const target = { x: 110, y: 20, width: 640, height: 360 }

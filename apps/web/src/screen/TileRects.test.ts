@@ -36,6 +36,15 @@ describe("tileRects", () => {
 })
 
 describe("placements", () => {
+  it("should place a custom tile's view at its watch page, keyed by its stream", () => {
+    const screen = TestWeb.assignCustom(TestWeb.fill([TestWeb.bama]), 1, TestWeb.video)
+
+    const [, custom] = placed(screen)
+
+    assert.strictEqual(custom?.key, TileKey.custom(TestWeb.video.id))
+    assert.strictEqual(custom?.url, "https://www.youtube.com/watch?v=dQw4w9WgXcQ")
+  })
+
   it("should place a stream tile's video below its header, offset by the Screen area's position", () => {
     const screen = TestWeb.fill([TestWeb.bama, TestWeb.irish])
 

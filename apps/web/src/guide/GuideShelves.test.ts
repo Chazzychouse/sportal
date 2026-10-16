@@ -4,44 +4,45 @@ import { GameId, type GameStatus } from "@sportal/domain/Game"
 import type { LeagueId } from "@sportal/domain/League"
 import { snapshot } from "@sportal/domain/TestGame"
 import { DateTime } from "effect"
+import * as TestWeb from "../TestWeb.ts"
 import { GuideItem } from "./GuideItem.ts"
 import * as GuideShelves from "./GuideShelves.ts"
 
 describe("GuideShelves.guideShelves", () => {
-  it("should list All live, then each league with games today in league order, and no league without", () => {
+  it("should list All live, then each league with games today in league order, no league without, then Custom", () => {
     const fbsFirst = [listed("osu", "fbs", "live"), listed("kc", "nfl", "final")]
 
-    const shelves = GuideShelves.guideShelves(fbsFirst)
+    const shelves = GuideShelves.guideShelves(fbsFirst, [])
 
-    assert.deepStrictEqual(shelves.entries, ["AllLive", "nfl", "fbs"])
+    assert.deepStrictEqual(shelves.entries, ["AllLive", "nfl", "fbs", "Custom"])
   })
 
-  it("should list only All live before there are games", () => {
-    const shelves = GuideShelves.guideShelves([])
+  it("should list only All live and Custom before there are games", () => {
+    const shelves = GuideShelves.guideShelves([], [])
 
-    assert.deepStrictEqual(shelves.entries, ["AllLive"])
+    assert.deepStrictEqual(shelves.entries, ["AllLive", "Custom"])
   })
 
   it("should shelve every league's live games for All live in the ribbon, and nothing else", () => {
-    const shelves = GuideShelves.guideShelves(today)
+    const shelves = GuideShelves.guideShelves(today, [])
 
     assert.deepStrictEqual(shelves.shelves("AllLive", "Ribbon"), [[item("kc"), item("osu")]])
   })
 
   it("should shelve All live the same in the full guide", () => {
-    const shelves = GuideShelves.guideShelves(today)
+    const shelves = GuideShelves.guideShelves(today, [])
 
     assert.deepStrictEqual(shelves.shelves("AllLive", "Full"), [[item("kc"), item("osu")]])
   })
 
   it("should give a league's live then upcoming games in the ribbon, without its final ones", () => {
-    const shelves = GuideShelves.guideShelves(today)
+    const shelves = GuideShelves.guideShelves(today, [])
 
     assert.deepStrictEqual(shelves.shelves("nfl", "Ribbon"), [[item("kc"), item("gb"), item("sf")]])
   })
 
   it("should shelve a league's games as live now, later today and final in the full guide", () => {
-    const shelves = GuideShelves.guideShelves(today)
+    const shelves = GuideShelves.guideShelves(today, [])
 
     assert.deepStrictEqual(shelves.shelves("nfl", "Full"), [
       [item("kc")],
@@ -51,7 +52,7 @@ describe("GuideShelves.guideShelves", () => {
   })
 
   it("should order upcoming games by their start", () => {
-    const shelves = GuideShelves.guideShelves(today)
+    const shelves = GuideShelves.guideShelves(today, [])
 
     const [, later] = shelves.shelves("nfl", "Full")
 
@@ -59,16 +60,42 @@ describe("GuideShelves.guideShelves", () => {
   })
 
   it("should give a league with no games today empty shelves at either level", () => {
-    const shelves = GuideShelves.guideShelves(today)
+    const shelves = GuideShelves.guideShelves(today, [])
 
     assert.deepStrictEqual(shelves.shelves("nba", "Ribbon"), [[]])
     assert.deepStrictEqual(shelves.shelves("nba", "Full"), [[], [], []])
   })
+})
 
-  it("should give Custom one empty shelf for now", () => {
-    const shelves = GuideShelves.guideShelves(today)
+describe("GuideShelves.guideShelves Custom", () => {
+  it("should list the saved streams in order, then the add card", () => {
+    const shelves = GuideShelves.guideShelves([], [TestWeb.video, TestWeb.playlist])
 
-    assert.deepStrictEqual(shelves.shelves("Custom", "Full"), [[]])
+    const custom = shelves.shelves("Custom", "Full")
+
+    assert.deepStrictEqual(custom, [
+      [
+        GuideItem.Custom({ stream: TestWeb.video }),
+        GuideItem.Custom({ stream: TestWeb.playlist }),
+        GuideItem.AddCustom()
+      ]
+    ])
+  })
+
+  it("should list only the add card while no stream is saved", () => {
+    const shelves = GuideShelves.guideShelves([], [])
+
+    const custom = shelves.shelves("Custom", "Ribbon")
+
+    assert.deepStrictEqual(custom, [[GuideItem.AddCustom()]])
+  })
+
+  it("should keep the saved streams out of every league's shelves", () => {
+    const shelves = GuideShelves.guideShelves(today, [TestWeb.video])
+
+    const nfl = shelves.shelves("nfl", "Full")
+
+    assert.isFalse(nfl.flat().some(GuideItem.$is("Custom")))
   })
 })
 

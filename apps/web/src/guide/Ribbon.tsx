@@ -2,6 +2,8 @@ import { useAtomSet, useAtomValue } from "@effect/atom-react"
 import { ChevronUp } from "lucide-react"
 import { Button } from "@/design/button"
 import { cn } from "@/design/ClassName"
+import { AddCustomCard, CustomCard } from "../custom/CustomCard.tsx"
+import { CustomStreamsChange } from "../custom/CustomStreams.ts"
 import { Display, DisplayInput, type GuideEntry, type GuideFocus } from "../display/Display.ts"
 import * as DisplayState from "../display/DisplayState.ts"
 import { GameChip } from "../game/GameChip.tsx"
@@ -17,10 +19,11 @@ interface RibbonProps {
 
 /**
  * The guide's first level, docked under the Screen: the entries as tabs, which tile a pick goes to, and one row of the
- * entry's live then upcoming games. It slides up as it opens.
+ * entry's live then upcoming games (under Custom, the saved streams and the card that adds one). It slides up as it opens.
  */
 export function Ribbon({ entry, focus }: RibbonProps) {
   const input = useAtomSet(DisplayState.display)
+  const edit = useAtomSet(DisplayState.editCustom)
   const display = useAtomValue(DisplayState.display)
   const screen = useAtomValue(DisplayScreen.screen)
   const shelves = useAtomValue(DisplayState.shelves)
@@ -69,21 +72,29 @@ export function Ribbon({ entry, focus }: RibbonProps) {
         </p>
       ) : (
         <Shelf focus={focus.item}>
-          {row.map((item, index) =>
-            GuideItem.$match(item, {
+          {row.map((item, index) => {
+            const focused = focus.item === index
+            const choose = () => input(DisplayInput.GuideItemChosen({ shelf: 0, item: index }))
+            return GuideItem.$match(item, {
               Game: ({ game }) => {
                 const listed = games.get(game)
                 return listed === undefined ? null : (
-                  <GameChip
-                    key={game}
-                    game={listed.snapshot}
-                    focused={focus.item === index}
-                    onChoose={() => input(DisplayInput.GuideItemChosen({ shelf: 0, item: index }))}
-                  />
+                  <GameChip key={game} game={listed.snapshot} focused={focused} onChoose={choose} />
                 )
-              }
+              },
+              Custom: ({ stream }) => (
+                <CustomCard
+                  key={stream.id}
+                  stream={stream}
+                  focused={focused}
+                  compact={true}
+                  onChoose={choose}
+                  onRemove={() => edit(CustomStreamsChange.Removed({ id: stream.id }))}
+                />
+              ),
+              AddCustom: () => <AddCustomCard key="add" focused={focused} compact={true} onChoose={choose} />
             })
-          )}
+          })}
         </Shelf>
       )}
     </section>
