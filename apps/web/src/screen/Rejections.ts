@@ -15,5 +15,6 @@ const rejectionText: Record<ScreenRejection["reason"], string> = {
   "no-such-tile": "There is no tile there.",
   "empty-tile": "That tile is empty.",
   "offscreen-tile": "That game is on the bench. Swap it in first.",
-  "split-out-of-range": "Every tile needs some room."
+  "split-out-of-range": "Every tile needs some room.",
+  "silent-tile": "A stats tile has no sound."
 }

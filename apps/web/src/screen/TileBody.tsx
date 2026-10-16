@@ -7,6 +7,7 @@ import { Field } from "../game/Field.tsx"
 import { GameStatus, localTime } from "../game/GameStatus.tsx"
 import { Score } from "../game/Score.tsx"
 import * as Games from "../hub/Games.ts"
+import { GameStatsView } from "../stats/GameStats.tsx"
 import { Tile } from "./Screen.ts"
 import * as TilePlacements from "./TilePlacements.ts"
 
@@ -14,7 +15,8 @@ import * as TilePlacements from "./TilePlacements.ts"
  * What a tile's well shows from the web UI. In the shell a provider view covers a stream tile's
  * well; in a plain browser this is what is seen, with a link to watch. A data tile of a live game (halftime and a
  * delay during it included) shows the field in place of why it has no stream; the field dims itself out of play. A
- * custom tile, in a plain browser, plays YouTube's embedded player.
+ * custom tile, in a plain browser, plays YouTube's embedded player. A stats tile fills its well with as many of its
+ * game's stats as fit.
  */
 export function TileBody(props: { tile: Tile; snapshot: GameSnapshot | undefined }) {
   const { tile, snapshot } = props
@@ -42,7 +44,8 @@ export function TileBody(props: { tile: Tile; snapshot: GameSnapshot | undefined
         Open in {channel.source}
       </a>
     ),
-    CustomTile: (custom) => <CustomPlayer tile={custom} />
+    CustomTile: (custom) => <CustomPlayer tile={custom} />,
+    StatsTile: ({ game }) => <GameStatsView game={game} fit="tile" />
   })
 }
 

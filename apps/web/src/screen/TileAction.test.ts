@@ -1,6 +1,7 @@
 import { assert, describe, it } from "@effect/vitest"
 import { TileKey } from "@sportal/api/TileKey"
 import type { GameId } from "@sportal/domain/Game"
+import { Result } from "effect"
 import * as TestWeb from "../TestWeb.ts"
 import { Screen } from "./Screen.ts"
 import { TileAction } from "./TileAction.ts"
@@ -75,6 +76,19 @@ describe("TileAction.of", () => {
     const labels = [actionOf(screen, 0, true, "hear")?.label, actionOf(screen, 1, true, "hear")?.label]
 
     assert.deepStrictEqual(labels, [wording(TestWeb.bama), wording(TestWeb.irish)])
+  })
+
+  it("should offer no hear for a stats tile", () => {
+    const screen = Result.getOrThrow(
+      TestWeb.fill([TestWeb.bama]).apply({ _tag: "AssignStats", tile: 1, game: TestWeb.bama }, TestWeb.onFox)
+    )
+
+    const actions = TileAction.of(screen, 1, true)
+
+    assert.deepStrictEqual(
+      actions.map((action) => action.id),
+      ["promote", "solo", "clear"]
+    )
   })
 })
 

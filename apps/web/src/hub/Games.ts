@@ -2,8 +2,10 @@ import type { GameList } from "@sportal/api/GamesQuery"
 import type { ListedGame } from "@sportal/api/ListedGame"
 import { type GameId, PlaysChange } from "@sportal/domain/Game"
 import type { Play } from "@sportal/domain/Play"
-import { Option } from "effect"
+import { Effect, Option } from "effect"
 import { Atom } from "effect/reactivity"
+import { runtime } from "../WebRuntime.ts"
+import { HubClient } from "./HubClient.ts"
 import * as LiveStream from "./LiveStream.ts"
 
 /**
@@ -49,6 +51,16 @@ export const plays = Atom.family((id: GameId) =>
         Reset: ({ plays }) => plays,
         Appended: ({ plays }) => [...plays, ...had]
       })
+  )
+)
+
+/** Every play of game `id`, newest first, asked once while read: for a list that needs plays older than the live page. */
+export const everyPlay = Atom.family((id: GameId) =>
+  runtime.atom(
+    Effect.gen(function* () {
+      const hub = yield* HubClient
+      return yield* hub.plays(id)
+    })
   )
 )
 

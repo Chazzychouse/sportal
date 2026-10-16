@@ -3,6 +3,7 @@ import { Situation } from "@sportal/domain/Situation"
 import { cn } from "@/design/ClassName"
 import { useTheme } from "../ui/Theme.ts"
 import { GameStatus } from "./GameStatus.tsx"
+import { standing, trails } from "./Score.tsx"
 import { teamEdge, teamHalf } from "./TeamColors.ts"
 import { TeamLogo } from "./TeamLogo.tsx"
 
@@ -96,18 +97,6 @@ function TeamCard({ game }: { game: GameSnapshot }) {
       </div>
     </div>
   )
-}
-
-/** Whether `side` trails once there is a score. */
-function trails(game: GameSnapshot, side: "home" | "away"): boolean {
-  return game.scored() && game[side].score < game[side === "home" ? "away" : "home"].score
-}
-
-/** A side's ranking ("#5") when it has one, else its record ("8-2"), else nothing. */
-function standing(game: GameSnapshot, side: "home" | "away"): string {
-  const { ranking, record } = game[side]
-  if (ranking !== undefined) return `#${ranking}`
-  return record === undefined ? "" : `${record.wins}-${record.losses}`
 }
 
 /** The card's footer after the status: the situation's short line while live, then the networks. */

@@ -3,11 +3,11 @@ import { Schema } from "effect"
 
 /**
  * What a tile shows, as one string the Screen, the shell and a Remote all name it by: a game's stream or data tile is
- * the game's id itself; a custom tile is `custom:` and its stream's id. Audio focus, solo, the interacting tile and
- * each provider view follow a tile's key, so what a tile shows keeps them when it moves. With `game` and `custom`,
- * which build those keys.
+ * the game's id itself; a custom tile is `custom:` and its stream's id; a stats tile is `stats:` and its game's id.
+ * Audio focus, solo, the interacting tile and each provider view follow a tile's key, so what a tile shows keeps them
+ * when it moves. With `game`, `custom` and `stats`, which build those keys.
  */
-export const TileKey = Object.assign(Schema.String.pipe(Schema.brand("TileKey")), { game, custom })
+export const TileKey = Object.assign(Schema.String.pipe(Schema.brand("TileKey")), { game, custom, stats })
 export type TileKey = typeof TileKey.Type
 
 /** A game's tile: the game's id. */
@@ -18,4 +18,9 @@ function game(id: GameId): TileKey {
 /** A custom stream's tile: `custom:` and the stream's id. It takes the id as a string: the id's brand is the web's. */
 function custom(id: string): TileKey {
   return TileKey.make(`custom:${id}`)
+}
+
+/** The key of game `game`'s stats tile. */
+function stats(game: GameId): TileKey {
+  return TileKey.make(`stats:${game}`)
 }

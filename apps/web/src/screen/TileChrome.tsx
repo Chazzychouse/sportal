@@ -1,6 +1,6 @@
 import { useAtomSet } from "@effect/atom-react"
 import type { GameSnapshot } from "@sportal/domain/Game"
-import { ArrowUpLeft, Shrink, SquareDashed, Volume2, VolumeX, X } from "lucide-react"
+import { ArrowUpLeft, ChartNoAxesColumn, Shrink, SquareDashed, Volume2, VolumeX, X } from "lucide-react"
 import type { ReactNode } from "react"
 import { Button } from "@/design/button"
 import { cn } from "@/design/ClassName"
@@ -13,8 +13,9 @@ import { TileAction } from "./TileAction.ts"
 import * as TileRects from "./TileRects.ts"
 
 /**
- * A tile's header strip: its slot, its game and score (a custom tile's name), the on-air tally when its sound is on, and its controls.
- * It is a drop target for another tile, which swaps in; and it can itself be dragged.
+ * A tile's header strip: its slot, its game and score (a custom tile's name; a stats tile's game, tagged "Stats"), the
+ * on-air tally when its sound is on, and its controls, with Stats beside on a game's stream or data tile. It is a drop
+ * target for another tile, which swaps in; and it can itself be dragged.
  */
 export function TileChrome(props: {
   screen: Screen
@@ -62,6 +63,9 @@ export function TileChrome(props: {
         {onAir && (
           <span className="label-caps rounded-[2px] bg-on-air px-1 text-[10px] text-background">On air</span>
         )}
+        {Tile.guards.StatsTile(tile) && (
+          <span className="label-caps text-[10px] text-muted-foreground">Stats</span>
+        )}
         <span className="flex min-w-0 items-center gap-1.5 truncate font-mono">
           {Tile.guards.CustomTile(tile) ? (
             <span className="truncate font-sans">{tile.name}</span>
@@ -80,6 +84,18 @@ export function TileChrome(props: {
         </span>
       </button>
       <span className="flex shrink-0 items-center">
+        {(Tile.guards.StreamTile(tile) || Tile.guards.DataTile(tile)) && (
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            aria-label="Stats beside"
+            title="Stats beside"
+            className="text-muted-foreground"
+            onClick={() => input(DisplayInput.StatsBeside({ game: tile.game }))}
+          >
+            <ChartNoAxesColumn />
+          </Button>
+        )}
         {TileAction.of(props.screen, slot, props.selected).map((action) => {
           const shortcut = action.shortcut()
           return (

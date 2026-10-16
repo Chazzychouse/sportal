@@ -8,11 +8,12 @@ import { CustomStreamsChange } from "../custom/CustomStreams.ts"
 import { GuideItem } from "../guide/GuideItem.ts"
 import type { GuideShelves } from "../guide/GuideShelves.ts"
 import { Layout } from "../layout/Layout.ts"
-import { type Screen, type ScreenCommand, Tile } from "../screen/Screen.ts"
+import { Screen, type ScreenCommand, Tile } from "../screen/Screen.ts"
 
 /**
  * The one overlay a Display has open, or none. `CustomForm` is the YouTube form: renaming `editing`, or adding a stream
- * without one; closing it goes `back`. Above the class: `Display.initial` reads it when the class is defined.
+ * without one; closing it goes `back`, as closing `GamePage` does. Above the class: `Display.initial` reads it when the
+ * class is defined.
  */
 export type Overlay = Data.TaggedEnum<{
   None: object
@@ -22,6 +23,8 @@ export type Overlay = Data.TaggedEnum<{
   /** The guide, at its level, on its entry, with its focus. */
   Guide: { readonly level: GuideLevel; readonly entry: GuideEntry; readonly focus: GuideFocus }
   CustomForm: { readonly editing: CustomStream | undefined; readonly back: Overlay }
+  /** One game's stats page, and the overlay Escape goes back to: the guide where it was, or none. */
+  GamePage: { readonly game: GameId; readonly back: Overlay }
 }>
 export const Overlay = Data.taggedEnum<Overlay>()
 
@@ -92,6 +95,8 @@ export class Display extends Data.Class<{
         return slot === undefined ? DisplayStep.of(this) : this.select(slot, screen)
       },
       Chosen: ({ game }) => this.choose(game, screen),
+      StatsBeside: ({ game }) => this.statsBeside(game, screen),
+      GamePageOpened: ({ game }) => DisplayStep.of(this.openGamePage(game)),
       ChosenCustom: ({ stream }) => this.chooseCustom(stream, screen),
       CustomEdited: ({ change }) => this.customEdited(change, screen),
       CustomFormOpened: ({ editing }) => DisplayStep.of(this.openCustomForm(editing)),
@@ -105,8 +110,8 @@ export class Display extends Data.Class<{
   }
 
   /**
-   * What a hotkey does. `FullScreen` does nothing here: it is the shell's or browser's. `Info` waits for the game page.
-   * `Remove` does nothing here either: it edits the saved custom streams, which `DisplayState` holds.
+   * What a hotkey does. `FullScreen` does nothing here: it is the shell's or browser's. `Remove` does nothing here
+   * either: it edits the saved custom streams, which `DisplayState` holds.
    */
   press(hotkey: Hotkey, screen: Screen, shelves: GuideShelves): DisplayStep {
     return Hotkey.match(hotkey, {
@@ -140,7 +145,7 @@ export class Display extends Data.Class<{
       Confirm: () => this.confirm(undefined, screen, shelves),
       NextEntry: () => DisplayStep.of(this.nextEntry(1, shelves)),
       PreviousEntry: () => DisplayStep.of(this.nextEntry(-1, shelves)),
-      Info: () => DisplayStep.of(this)
+      Info: () => DisplayStep.of(this.info(shelves))
     })
   }
 
@@ -154,6 +159,23 @@ export class Display extends Data.Class<{
   /** Puts game `game` in the selected slot, as `place` puts anything. */
   choose(game: GameId, screen: Screen): DisplayStep {
     return this.place(TileKey.game(game), (tile) => ({ _tag: "Assign", tile, game }), screen)
+  }
+
+  /**
+   * Puts game `game`'s stats beside it: in the next empty slot after its stream (or after the selected slot when it
+   * is not on screen), else the slot after it; a one-slot layout becomes a Pair first. Stats already on screen stay.
+   */
+  statsBeside(game: GameId, screen: Screen): DisplayStep {
+    if (screen.slotOf(TileKey.stats(game)) !== undefined) return DisplayStep.of(this)
+    if (Screen.slotCount(screen.layout) === 1) {
+      return DisplayStep.of(this, [
+        { _tag: "SetLayout", layout: "Pair" },
+        { _tag: "AssignStats", tile: 1, game }
+      ])
+    }
+    const from = screen.slotOf(TileKey.game(game)) ?? this.selectedOn(screen)
+    const slot = screen.nextEmptySlot(from) ?? (from + 1) % screen.onScreen().length
+    return DisplayStep.of(this, [{ _tag: "AssignStats", tile: slot, game }])
   }
 
   /** Puts a saved custom stream in the selected slot, as `place` puts anything, and closes what is open. */
@@ -219,6 +241,12 @@ export class Display extends Data.Class<{
     return new Display({ ...this, overlay: Overlay.CustomForm({ editing, back }) })
   }
 
+  /** Opens game `game`'s page; closing it goes back to the guide it was opened from, at the same focus, or to nothing. */
+  openGamePage(game: GameId): Display {
+    const back = Overlay.$is("Guide")(this.overlay) ? this.overlay : Overlay.None()
+    return new Display({ ...this, overlay: Overlay.GamePage({ game, back }) })
+  }
+
   /** Whether this overlay is the one open. */
   shows(overlay: Exclude<Overlay["_tag"], "None">): boolean {
     return Overlay.$is(overlay)(this.overlay)
@@ -229,9 +257,15 @@ export class Display extends Data.Class<{
     return new Display({ ...this, overlay: Overlay[overlay]() })
   }
 
-  /** Closes what is open: the YouTube form goes back to where it was opened from, anything else to nothing. */
+  /**
+   * Closes what is open: the YouTube form and a game page go back to where they were opened from, anything else to
+   * nothing.
+   */
   close(): Display {
-    const overlay = Overlay.$is("CustomForm")(this.overlay) ? this.overlay.back : Overlay.None()
+    const overlay =
+      Overlay.$is("CustomForm")(this.overlay) || Overlay.$is("GamePage")(this.overlay)
+        ? this.overlay.back
+        : Overlay.None()
     return new Display({ ...this, overlay })
   }
 
@@ -245,13 +279,22 @@ export class Display extends Data.Class<{
     return this.guide("Ribbon", this.entryOn(shelves), start, shelves)
   }
 
-  /** Esc: the full guide goes back to the ribbon; the ribbon or any other overlay closes; with none open, it unsolos. */
+  /**
+   * Esc: the full guide goes back to the ribbon; the ribbon or any other overlay closes (a game page back to where it
+   * opened); with none open, it unsolos.
+   */
   private escape(screen: Screen, shelves: GuideShelves): DisplayStep {
     const overlay = this.overlay
     if (Overlay.$is("Guide")(overlay) && overlay.level === "Full")
       return DisplayStep.of(this.relevel(overlay, "Ribbon", shelves))
     if (!Overlay.$is("None")(overlay)) return DisplayStep.of(this.close())
     return DisplayStep.of(this, Option.isNone(screen.solo) ? [] : [{ _tag: "Unsolo" }])
+  }
+
+  /** `I`: on a game card in the open guide, that game's page; anywhere else, nothing. */
+  private info(shelves: GuideShelves): Display {
+    const item = this.focusedItem(shelves)
+    return item !== undefined && GuideItem.$is("Game")(item) ? this.openGamePage(item.game) : this
   }
 
   /**
@@ -350,10 +393,10 @@ export class Display extends Data.Class<{
 }
 
 /**
- * An overlay that opens with no more to say: any but `None`, the guide, which opens at a level on an entry, and the
- * YouTube form, which `CustomFormOpened` opens.
+ * An overlay that opens with no more to say: any but `None`, the guide, which opens at a level on an entry, the
+ * YouTube form, which `CustomFormOpened` opens, and a game page, which `GamePageOpened` opens.
  */
-type OpenOverlay = Exclude<Overlay["_tag"], "None" | "Guide" | "CustomForm">
+type OpenOverlay = Exclude<Overlay["_tag"], "None" | "Guide" | "CustomForm" | "GamePage">
 
 /** Which level of the guide is open: the ribbon docked under the Screen, or the full guide over the whole Display. */
 export type GuideLevel = "Ribbon" | "Full"
@@ -383,14 +426,17 @@ export class DisplayStep extends Data.Class<{
 }
 
 /**
- * What a person did on a Display: a hotkey, a click, a game or a custom stream chosen for the selected tile, a change to
- * the saved custom streams, the YouTube form opened, a command, an overlay opened or closed, or the guide clicked.
+ * What a person did on a Display: a hotkey, a click, a game or a custom stream chosen for the selected tile, a game's
+ * stats put beside it, a change to the saved custom streams, the YouTube form or a game page opened, a command, an
+ * overlay opened or closed, or the guide clicked.
  */
 export type DisplayInput = Data.TaggedEnum<{
   Pressed: { readonly hotkey: Hotkey }
   Selected: { readonly slot: number }
   VideoPressed: { readonly key: TileKey }
   Chosen: { readonly game: GameId }
+  StatsBeside: { readonly game: GameId }
+  GamePageOpened: { readonly game: GameId }
   ChosenCustom: { readonly stream: CustomStream }
   CustomEdited: { readonly change: CustomStreamsChange }
   CustomFormOpened: { readonly editing: CustomStream | undefined }

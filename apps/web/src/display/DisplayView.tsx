@@ -15,12 +15,13 @@ import { useConnectionToast } from "./ConnectionToast.ts"
 import * as Covering from "./Covering.ts"
 import { DisplayInput, Overlay } from "./Display.ts"
 import * as DisplayState from "./DisplayState.ts"
+import { GamePage } from "./GamePage.tsx"
 import { KeysDialog } from "./KeysDialog.tsx"
 
 /**
  * A Display: one column of the Screen and, while the guide's ribbon is open, the ribbon docked under it (the Screen
- * shrinks above it, and every video moves with it). The full guide, the key help, Join Remote, the palette and the
- * YouTube form open over it, one at a time. Toasts sit at the bottom center, above the ribbon while it is open.
+ * shrinks above it, and every video moves with it). The full guide, a game's page, the key help, Join Remote, the
+ * palette and the YouTube form open over it, one at a time. Toasts sit at the bottom center, above the ribbon while it is open.
  */
 export function DisplayView() {
   const display = useAtomValue(DisplayState.display)
@@ -50,6 +51,7 @@ export function DisplayView() {
         {ribbon !== undefined && <Ribbon entry={ribbon.entry} focus={ribbon.focus} />}
       </div>
       {guide?.level === "Full" && <FullGuide entry={guide.entry} focus={guide.focus} />}
+      {Overlay.$is("GamePage")(display.overlay) && <GamePage game={display.overlay.game} />}
       <KeysDialog open={display.shows("Keys")} onOpenChange={closeOverlay} />
       {display.shows("JoinRemote") && <JoinRemote open onOpenChange={closeOverlay} />}
       <CommandPalette open={display.shows("Palette")} onOpenChange={closeOverlay} />

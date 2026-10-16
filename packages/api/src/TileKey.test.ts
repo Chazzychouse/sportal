@@ -28,3 +28,11 @@ describe("TileKey.custom", () => {
     assert.strictEqual(key, "custom:video.dQw4w9WgXcQ")
   })
 })
+
+describe("TileKey.stats", () => {
+  it("should key a game's stats tile by the game's id, prefixed stats:", () => {
+    const key = TileKey.stats(GameId.make("401856707"))
+
+    assert.strictEqual(key, "stats:401856707")
+  })
+})

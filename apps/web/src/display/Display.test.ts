@@ -1027,6 +1027,116 @@ describe("Display YouTube form", () => {
   })
 })
 
+describe("Display#apply StatsBeside", () => {
+  it("should put a game's stats in the next empty slot after its stream", () => {
+    const screen = TestWeb.fill([TestWeb.bama])
+
+    const step = Display.initial.apply(DisplayInput.StatsBeside({ game: TestWeb.bama }), screen, none)
+
+    assert.deepStrictEqual(step.commands, [{ _tag: "AssignStats", tile: 1, game: TestWeb.bama }])
+  })
+
+  it("should put a game's stats in the slot after its stream when no slot is empty", () => {
+    const screen = TestWeb.fill([TestWeb.irish, TestWeb.bama, usc, ohio])
+
+    const step = Display.initial.apply(DisplayInput.StatsBeside({ game: TestWeb.bama }), screen, none)
+
+    assert.deepStrictEqual(step.commands, [{ _tag: "AssignStats", tile: 2, game: TestWeb.bama }])
+  })
+
+  it("should leave a game's stats where they are when already on screen", () => {
+    const screen = Result.getOrThrow(
+      TestWeb.fill([TestWeb.bama]).apply({ _tag: "AssignStats", tile: 3, game: TestWeb.bama }, TestWeb.onFox)
+    )
+
+    const step = Display.initial.apply(DisplayInput.StatsBeside({ game: TestWeb.bama }), screen, none)
+
+    assert.deepStrictEqual(step.commands, [])
+  })
+
+  it("should move to Pair to put a game's stats beside it in a one-slot layout", () => {
+    const screen = Result.getOrThrow(
+      TestWeb.fill([TestWeb.bama]).apply({ _tag: "SetLayout", layout: "Single" }, TestWeb.onFox)
+    )
+
+    const step = Display.initial.apply(DisplayInput.StatsBeside({ game: TestWeb.bama }), screen, none)
+
+    assert.deepStrictEqual(step.commands, [
+      { _tag: "SetLayout", layout: "Pair" },
+      { _tag: "AssignStats", tile: 1, game: TestWeb.bama }
+    ])
+  })
+})
+
+describe("Display GamePage", () => {
+  it("should open a game card's page with Info in the full guide", () => {
+    const display = new Display({ ...Display.initial, overlay: fullGuide })
+
+    const step = display.apply(DisplayInput.Pressed({ hotkey: { _tag: "Info" } }), Screen.initial, bamaShelf)
+
+    assert.deepStrictEqual(step.display.overlay, Overlay.GamePage({ game: TestWeb.bama, back: fullGuide }))
+  })
+
+  it("should return to the guide at its focus with Escape from a game page", () => {
+    const display = new Display({
+      ...Display.initial,
+      overlay: Overlay.GamePage({ game: TestWeb.bama, back: fullGuide })
+    })
+
+    const step = display.apply(
+      DisplayInput.Pressed({ hotkey: { _tag: "Unsolo" } }),
+      Screen.initial,
+      bamaShelf
+    )
+
+    assert.deepStrictEqual(step.display.overlay, fullGuide)
+  })
+
+  it("should return to the guide when a game page is closed", () => {
+    const display = new Display({
+      ...Display.initial,
+      overlay: Overlay.GamePage({ game: TestWeb.bama, back: fullGuide })
+    })
+
+    const step = display.apply(DisplayInput.Closed(), Screen.initial, bamaShelf)
+
+    assert.deepStrictEqual(step.display.overlay, fullGuide)
+  })
+
+  it("should open a game page from the palette with nothing to return to", () => {
+    const display = new Display({ ...Display.initial, overlay: Overlay.Palette() })
+
+    const step = display.apply(DisplayInput.GamePageOpened({ game: TestWeb.bama }), Screen.initial, none)
+
+    assert.deepStrictEqual(
+      step.display.overlay,
+      Overlay.GamePage({ game: TestWeb.bama, back: Overlay.None() })
+    )
+  })
+
+  it("should send nothing to the Screen when a game page opens", () => {
+    const step = Display.initial.apply(
+      DisplayInput.GamePageOpened({ game: TestWeb.bama }),
+      Screen.initial,
+      none
+    )
+
+    assert.deepStrictEqual(step.commands, [])
+  })
+})
+
+const usc = GameId.make("401856800")
+const ohio = GameId.make("401858473")
+
+/** Every entry's one shelf holds Alabama's game. */
+const bamaShelf: GuideShelves = {
+  entries: ["AllLive", "fbs"],
+  shelves: () => [[GuideItem.Game({ game: TestWeb.bama })]]
+}
+
+/** The full guide on FBS, focused on its first card. */
+const fullGuide = Overlay.Guide({ level: "Full", entry: "fbs", focus: { rail: false, shelf: 0, item: 0 } })
+
 /** The full guide on Custom, focused on its first card. */
 const customGuide = Overlay.Guide({
   level: "Full",

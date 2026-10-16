@@ -17,7 +17,7 @@ export function teamHalf(team: Team, side: "home" | "away"): string {
  * (relative luminance under 0.03), its alternate color when that one is not, else its own color lightened. A neutral
  * graphite for a team with no color.
  */
-function teamColor(team: Team): string {
+export function teamColor(team: Team): string {
   const color = rgbOf(team.color)
   if (color === undefined) return graphite
   if (luminance(color) >= darkest) return css(color)

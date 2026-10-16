@@ -25,8 +25,8 @@ import { DisplayInput } from "./Display.ts"
 import * as DisplayState from "./DisplayState.ts"
 
 /**
- * Every Screen command by name: watch a game or a saved YouTube stream, add one, act on a tile, change layout, go full
- * screen.
+ * Every Screen command by name: watch a game or a saved YouTube stream, add one, open a game's stats page or put its
+ * stats in a tile, act on a tile, change layout, go full screen.
  */
 export function CommandPalette(props: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const input = useAtomSet(DisplayState.display)
@@ -53,9 +53,14 @@ export function CommandPalette(props: { open: boolean; onOpenChange: (open: bool
   const occupied = screen.onScreen().flatMap((tile, slot) => {
     if (Tile.guards.Empty(tile)) return []
     const game = Tile.game(tile)
+    const scoreline = snapshots.find((each) => each.id === game)?.scoreline()
     const name = Tile.guards.CustomTile(tile)
       ? tile.name
-      : (snapshots.find((each) => each.id === game)?.scoreline() ?? `Tile ${slot + 1}`)
+      : scoreline === undefined
+        ? `Tile ${slot + 1}`
+        : Tile.guards.StatsTile(tile)
+          ? `Stats ${scoreline}`
+          : scoreline
     return [{ slot, name }]
   })
 
@@ -83,6 +88,26 @@ export function CommandPalette(props: { open: boolean; onOpenChange: (open: bool
               <TeamLogo team={game.home.team} size={16} />
               <GameStatus game={game} className="text-[11px]" />
               <CommandShortcut>{game.networks()}</CommandShortcut>
+            </CommandItem>
+          ))}
+        </CommandGroup>
+        <CommandGroup heading="Stats">
+          {snapshots.map((game) => (
+            <CommandItem
+              key={`page-${game.id}`}
+              value={`stats page ${game.scoreline()} ${game.away.team.name} ${game.home.team.name} ${game.id}`}
+              onSelect={() => input(DisplayInput.GamePageOpened({ game: game.id }))}
+            >
+              Stats: {game.scoreline()}
+            </CommandItem>
+          ))}
+          {snapshots.map((game) => (
+            <CommandItem
+              key={`tile-${game.id}`}
+              value={`stats tile ${game.scoreline()} ${game.away.team.name} ${game.home.team.name} ${game.id}`}
+              onSelect={() => run({ _tag: "AssignStats", tile: selected, game: game.id })}
+            >
+              Stats for {game.scoreline()} in tile {selected + 1}
             </CommandItem>
           ))}
         </CommandGroup>

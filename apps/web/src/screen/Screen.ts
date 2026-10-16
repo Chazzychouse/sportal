@@ -5,8 +5,8 @@ import { Array as Arr, Option, Record as Rec, Result, Schema } from "effect"
 import { CustomStreamId } from "../custom/CustomStream.ts"
 
 /**
- * One slot's content: a game's stream, its data, a saved custom stream, or nothing. With `key`, what the tile shows as
- * a `TileKey`; `game`, the game it shows; and `locator`, what the shell loads for it.
+ * One slot's content: a game's stream, its data, its stats, a saved custom stream, or nothing. With `key`, what the
+ * tile shows as a `TileKey`; `game`, the game it shows; and `locator`, what the shell loads for it.
  */
 export const Tile = Object.assign(
   Schema.TaggedUnion({
@@ -27,7 +27,9 @@ export const Tile = Object.assign(
       })
     },
     /** A saved YouTube video or playlist: its stream, its name, and what the shell loads, so a placement needs no lookup. */
-    CustomTile: { stream: CustomStreamId, name: Schema.String, locator: StreamLocator }
+    CustomTile: { stream: CustomStreamId, name: Schema.String, locator: StreamLocator },
+    /** A game's stats, beside or instead of its stream: no provider view and no sound. */
+    StatsTile: { game: GameId }
   }),
   { key, game, locator }
 )
@@ -175,6 +177,8 @@ export class Screen extends Schema.Class<Screen>("sportal/Screen")({
         tileAt(this, tile, () =>
           Result.succeed(placed(this, tile, Screen.tileFor(game, availabilityOf(game))))
         ),
+      AssignStats: ({ tile, game }) =>
+        tileAt(this, tile, () => Result.succeed(placed(this, tile, { _tag: "StatsTile", game }))),
       AssignCustom: ({ tile, stream, name, locator }) =>
         tileAt(this, tile, () =>
           Result.succeed(placed(this, tile, { _tag: "CustomTile", stream, name, locator }))
@@ -190,27 +194,30 @@ export class Screen extends Schema.Class<Screen>("sportal/Screen")({
             Result.succeed({
               ...this,
               tiles: swapped(this.tiles, 0, tile),
-              audioFocus: Option.some(Tile.key(held))
+              audioFocus: audible(held) ? Option.some(Tile.key(held)) : this.audioFocus
             })
           )
         ),
       FocusAudio: ({ tile }) =>
         onScreenAt(this, tile, (held) =>
-          Result.succeed({ ...this, audioFocus: Option.some(Tile.key(held)) })
+          audible(held)
+            ? Result.succeed({ ...this, audioFocus: Option.some(Tile.key(held)) })
+            : reject("silent-tile")
         ),
       Solo: ({ tile }) =>
         onScreenAt(this, tile, (held) => {
           const key = Tile.key(held)
-          return Result.succeed({ ...this, audioFocus: Option.some(key), solo: Option.some(key) })
+          const audioFocus = audible(held) ? Option.some(key) : this.audioFocus
+          return Result.succeed({ ...this, audioFocus, solo: Option.some(key) })
         })
     })
     return Result.map(next, settle)
   }
 
   /**
-   * Re-resolves every tile with a game, on screen and benched, after what a source knows has changed. A custom tile has
-   * no game, and stays as it is. A game
-   * `availabilityOf` knows nothing about keeps its tile as it was: the change did not concern it.
+   * Re-resolves every tile with a game's stream or data, on screen and benched, after what a source knows has changed.
+   * A custom tile has no game and a stats tile no stream, so both stay as they are. A game `availabilityOf` knows
+   * nothing about keeps its tile as it was: the change did not concern it.
    *
    * A stream tile is replaced only when its own source carries its game on another channel. Any other availability
    * (another source carrying it, a game running past its listing, no guide, a failed or stale read) never stops
@@ -220,7 +227,7 @@ export class Screen extends Schema.Class<Screen>("sportal/Screen")({
   refresh(availabilityOf: (game: GameId) => Option.Option<ReadonlyArray<ChannelAvailability>>): Screen {
     const tiles = this.tiles.map((tile) => {
       const game = Tile.game(tile)
-      if (game === undefined) return tile
+      if (game === undefined || Tile.guards.StatsTile(tile)) return tile
       return Option.match(availabilityOf(game), {
         onNone: () => tile,
         onSome: (availability) =>
@@ -236,6 +243,8 @@ export class Screen extends Schema.Class<Screen>("sportal/Screen")({
 
 export const ScreenCommand = Schema.TaggedUnion({
   Assign: { tile: Schema.Int, game: GameId },
+  /** Puts a game's stats in a tile; stats already on another tile move. */
+  AssignStats: { tile: Schema.Int, game: GameId },
   /** Puts a saved custom stream in a tile; one already on another tile moves. */
   AssignCustom: { tile: Schema.Int, stream: CustomStreamId, name: Schema.String, locator: StreamLocator },
   Clear: { tile: Schema.Int },
@@ -250,7 +259,13 @@ export const ScreenCommand = Schema.TaggedUnion({
 export type ScreenCommand = typeof ScreenCommand.Type
 
 export class ScreenRejection extends Schema.TaggedError<ScreenRejection>()("ScreenRejection", {
-  reason: Schema.Literals(["no-such-tile", "empty-tile", "offscreen-tile", "split-out-of-range"])
+  reason: Schema.Literals([
+    "no-such-tile",
+    "empty-tile",
+    "offscreen-tile",
+    "split-out-of-range",
+    "silent-tile"
+  ])
 }) {}
 
 /** A tile that holds something. */
@@ -266,8 +281,8 @@ interface Unsettled {
 }
 
 /**
- * What `tile` shows, as a key: its game's id for a stream or data tile, its stream's for a custom tile; none for an
- * empty tile.
+ * What `tile` shows, as a key: its game's id for a stream or data tile, its stream's for a custom tile, its game's
+ * stats for a stats tile; none for an empty tile.
  */
 function key(tile: Occupied): TileKey
 function key(tile: Tile): TileKey | undefined
@@ -276,17 +291,19 @@ function key(tile: Tile): TileKey | undefined {
     Empty: () => undefined,
     StreamTile: ({ game }) => TileKey.game(game),
     DataTile: ({ game }) => TileKey.game(game),
-    CustomTile: ({ stream }) => TileKey.custom(stream)
+    CustomTile: ({ stream }) => TileKey.custom(stream),
+    StatsTile: ({ game }) => TileKey.stats(game)
   })
 }
 
-/** The game a tile shows: a stream or data tile's. An empty or custom tile shows none. */
+/** The game a tile shows: a stream, data or stats tile's. An empty or custom tile shows none. */
 function game(tile: Tile): GameId | undefined {
   return Tile.match(tile, {
     Empty: () => undefined,
     StreamTile: ({ game }) => game,
     DataTile: ({ game }) => game,
-    CustomTile: () => undefined
+    CustomTile: () => undefined,
+    StatsTile: ({ game }) => game
   })
 }
 
@@ -296,7 +313,8 @@ function locator(tile: Tile): StreamLocator | undefined {
     Empty: () => undefined,
     StreamTile: ({ channel }) => channel.locator,
     DataTile: () => undefined,
-    CustomTile: ({ locator }) => locator
+    CustomTile: ({ locator }) => locator,
+    StatsTile: () => undefined
   })
 }
 
@@ -343,6 +361,11 @@ function holds(tile: Tile, key: TileKey): boolean {
   return Tile.key(tile) === key
 }
 
+/** Whether a tile has sound to focus: a stats tile has none. */
+function audible(tile: Occupied): boolean {
+  return !Tile.guards.StatsTile(tile)
+}
+
 /** The availability that says most of several: ties go to the first, and none at all is no stream. */
 function mostUseful(availability: ReadonlyArray<ChannelAvailability>): ChannelAvailability {
   return Arr.reduce<ChannelAvailability, ChannelAvailability>(
@@ -367,7 +390,8 @@ function usefulness(availability: ChannelAvailability): number {
 
 /**
  * Builds a Screen that keeps the invariants: the layout's slots exist, the bench ends in a game, audio is on
- * an on-screen game (the focused one while it is on screen, else the first), and solo is on an on-screen game.
+ * an on-screen tile with sound (the focused one while it is on screen, else the first), and solo is on an on-screen
+ * tile.
  */
 function settle(fields: Unsettled): Screen {
   const slots = Screen.slotCount(fields.layout)
@@ -381,11 +405,15 @@ function settle(fields: Unsettled): Screen {
   const tiles = Arr.makeBy(Math.max(slots, kept), (index) => fields.tiles[index] ?? empty)
   const onScreen = tiles.slice(0, slots).flatMap((tile) => (Tile.guards.Empty(tile) ? [] : [Tile.key(tile)]))
   const isOnScreen = (key: TileKey) => onScreen.includes(key)
+  const audibleKeys = tiles
+    .slice(0, slots)
+    .flatMap((tile) => (Tile.guards.Empty(tile) || !audible(tile) ? [] : [Tile.key(tile)]))
+  const isAudible = (key: TileKey) => audibleKeys.includes(key)
   return new Screen({
     tiles,
     layout: fields.layout,
     splits: fields.splits,
-    audioFocus: Option.orElse(Option.filter(fields.audioFocus, isOnScreen), () => Arr.head(onScreen)),
+    audioFocus: Option.orElse(Option.filter(fields.audioFocus, isAudible), () => Arr.head(audibleKeys)),
     solo: Option.filter(fields.solo, isOnScreen)
   })
 }
