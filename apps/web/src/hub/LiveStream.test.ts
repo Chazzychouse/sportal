@@ -1,8 +1,8 @@
 import { afterEach, assert, beforeEach, describe, it } from "@effect/vitest"
 import type { ChannelAvailability } from "@sportal/domain/Channel"
 import { Game, GameId } from "@sportal/domain/Game"
-import { Completion, PlayId } from "@sportal/domain/Play"
-import { play, snapshot, team } from "@sportal/domain/TestGame"
+import { FootballDetail, PlayId } from "@sportal/domain/Play"
+import { footballDetail, play, snapshot, team } from "@sportal/domain/TestGame"
 import { Deferred, Effect, Fiber, Stream } from "effect"
 import { Atom, AtomRegistry } from "effect/reactivity"
 import { vi } from "vitest"
@@ -115,7 +115,7 @@ describe("LiveStream.live", () => {
   )
 
   it.effect(
-    "should keep the plays each game of a slate message carries, each read back from its JSON as its case",
+    "should keep the plays each game of a slate message carries, each read back from its JSON with its detail",
     () =>
       Effect.gen(function* () {
         const source = yield* TestWeb.opened
@@ -128,7 +128,7 @@ describe("LiveStream.live", () => {
         const state = yield* TestWeb.until(LiveStream.live, (current) => current.slate.games.length > 0)
 
         assert.deepStrictEqual(state.slate.games[0]?.plays, game.plays)
-        assert.instanceOf(state.slate.games[0]?.plays[1], Completion)
+        assert.instanceOf(state.slate.games[0]?.plays[1]?.detail, FootballDetail)
       }).pipe(Effect.provide(AtomRegistry.layer))
   )
 
@@ -172,23 +172,22 @@ describe("LiveStream.live", () => {
 
 const someGame = new Game({ snapshot: snapshot({ id: GameId.make("401") }), plays: [] })
 
-/** A one-yard touchdown pass for the home side: a Completion, so a decode has its case to keep. */
+/** A one-yard touchdown pass for the home side: a football detail, so a decode has its class to keep. */
 function touchdown() {
   const home = team("HOME").id
   const away = team("AWAY").id
-  return new Completion({
+  return play({
     id: PlayId.make("2"),
     sequence: 2,
-    period: 1,
     clock: "14:30",
     text: "Pass complete for 1 yard",
+    type: { id: "67", text: "Passing Touchdown" },
     scoring: true,
     homeScore: 7,
-    awayScore: 0,
-    start: { down: 1, distance: 10, yardsToEndzone: 1, team: home },
-    end: { team: away },
-    team: home,
-    yards: 1,
-    touchdown: true
+    detail: footballDetail({
+      kind: "pass",
+      start: { down: 1, distance: 10, yardsToEndzone: 1, team: home },
+      end: { team: away }
+    })
   })
 }

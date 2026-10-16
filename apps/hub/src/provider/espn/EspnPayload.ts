@@ -6,10 +6,12 @@ export const Scoreboard = Schema.Struct({ events: Schema.Array(Schema.Unknown) }
 /** The game's status as the site scoreboard spells it. */
 export const EspnStatus = Schema.Struct({
   period: Schema.Int,
-  displayClock: Schema.String,
+  /** Seconds left in the period, as ESPN counts them. */
+  clock: Schema.Finite,
   type: Schema.Struct({
     name: Schema.String,
-    state: Schema.Literals(["pre", "in", "post"])
+    state: Schema.Literals(["pre", "in", "post"]),
+    shortDetail: Schema.String
   })
 })
 export type EspnStatus = typeof EspnStatus.Type
@@ -85,8 +87,7 @@ const TeamRef = Schema.Struct({ $key: Schema.String }).pipe(
 )
 
 /** A play's type: ESPN's id for it, and its text. */
-export const PlayType = Schema.Struct({ id: Schema.String, text: Schema.String })
-export type PlayType = typeof PlayType.Type
+const PlayType = Schema.Struct({ id: Schema.String, text: Schema.String })
 
 const Spot = Schema.Struct({
   team: Schema.optional(TeamRef),

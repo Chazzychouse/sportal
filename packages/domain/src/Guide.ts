@@ -30,24 +30,24 @@ export class Guide extends Schema.Class<Guide>("sportal/Guide")({
 }) {
   /**
    * How far past its reading a guide's airings are complete. The first page of YouTube TV's guide reached 3h46m past
-   * the half hour before the read (spike, 2026-10-03); a later kickoff may not be listed yet.
+   * the half hour before the read (spike, 2026-10-03); a later start may not be listed yet.
    */
   static readonly reach = Duration.hours(3)
 
   /**
    * Where this source shows a game at `now`, from the airing that names both its teams, has not ended, and begins near
-   * kickoff or is on now while the game is under way. Of several, the one on a channel named for one of the game's
+   * its start or is on now while the game is under way. Of several, the one on a channel named for one of the game's
    * networks wins, then the first in the guide. With no such airing, a channel that carries one of the game's networks
-   * shows it as if it aired from kickoff, until the game is over. Either is carried once its channel is on the air and
+   * shows it as if it aired from its start, until the game is over. Either is carried once its channel is on the air and
    * either its airing has begun, so the pregame shows, or the game has started; until then it is upcoming. With
-   * neither, a kickoff past the reach of a guide that lists airings is upcoming, and any other game is not carried.
+   * neither, a start past the reach of a guide that lists airings is upcoming, and any other game is not carried.
    */
   availabilityOf(game: GameSnapshot, now: DateTime.Utc): ChannelAvailability {
-    const nearKickoff = {
-      minimum: DateTime.subtractDuration(game.kickoff, kickoffTolerance),
-      maximum: DateTime.addDuration(game.kickoff, kickoffTolerance)
+    const nearStart = {
+      minimum: DateTime.subtractDuration(game.startsAt, startTolerance),
+      maximum: DateTime.addDuration(game.startsAt, startTolerance)
     }
-    const matches = this.airings.filter((airing) => this.airs(airing, game, now, nearKickoff))
+    const matches = this.airings.filter((airing) => this.airs(airing, game, now, nearStart))
     const [first] = matches
     if (first !== undefined) {
       const airing =
@@ -61,9 +61,9 @@ export class Guide extends Schema.Class<Guide>("sportal/Guide")({
       game.broadcasts.some(({ network }) => channel.network === network)
     )
     if (carrier !== undefined && game.progress() !== "over")
-      return this.from(carrier, game.kickoff, game, now)
+      return this.from(carrier, game.startsAt, game, now)
 
-    const pastReach = DateTime.isGreaterThan(game.kickoff, DateTime.addDuration(this.readAt, Guide.reach))
+    const pastReach = DateTime.isGreaterThan(game.startsAt, DateTime.addDuration(this.readAt, Guide.reach))
     if (this.airings.length > 0 && pastReach)
       return { _tag: "Upcoming", channel: Option.none(), begin: Option.none() }
     const streamingOnly =
@@ -91,12 +91,12 @@ export class Guide extends Schema.Class<Guide>("sportal/Guide")({
     airing: Airing,
     game: GameSnapshot,
     now: DateTime.Utc,
-    nearKickoff: { readonly minimum: DateTime.Utc; readonly maximum: DateTime.Utc }
+    nearStart: { readonly minimum: DateTime.Utc; readonly maximum: DateTime.Utc }
   ): boolean {
     const onNow =
       game.progress() === "live" && DateTime.between(now, { minimum: airing.begin, maximum: airing.end })
     return (
-      (DateTime.between(airing.begin, nearKickoff) || onNow) &&
+      (DateTime.between(airing.begin, nearStart) || onNow) &&
       DateTime.isGreaterThan(airing.end, now) &&
       namesTeam(airing.title, game.home.team, game.league) &&
       namesTeam(airing.title, game.away.team, game.league)
@@ -108,8 +108,8 @@ export class Guide extends Schema.Class<Guide>("sportal/Guide")({
   }
 }
 
-/** How far an airing may begin from kickoff and still be the game: listings round, and kickoffs slip. */
-const kickoffTolerance = Duration.minutes(45)
+/** How far an airing may begin from a game's start and still be the game: listings round, and starts slip. */
+const startTolerance = Duration.minutes(45)
 
 /** Whether a channel's name carries a network's as whole words: "ABC 13" for ABC. */
 function namesNetwork(channel: string, network: Network): boolean {

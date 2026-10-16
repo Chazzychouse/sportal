@@ -5,7 +5,7 @@ import * as TestWeb from "../TestWeb.ts"
 import { StripCard } from "./StripCard.ts"
 
 describe("StripCard.of", () => {
-  it("should order the slate live, upcoming by kickoff, then over", () => {
+  it("should order the slate live, upcoming by start, then over", () => {
     const cards = StripCard.of(Screen.initial, TestWeb.slate)
 
     assert.deepStrictEqual(ids(cards), ["live", "soon", "later", "done"])

@@ -1,5 +1,6 @@
 import type { GameSnapshot } from "@sportal/domain/Game"
-import { Play, type PlayId } from "@sportal/domain/Play"
+import { Play, PlayDetail, type PlayId } from "@sportal/domain/Play"
+import { BallSpot } from "@sportal/domain/Situation"
 import { Data, Option } from "effect"
 
 /**
@@ -65,9 +66,13 @@ function step(drawing: FieldDrawing, event: FieldEvent): FieldDrawing {
   })
 }
 
-/** Where a play started and ended on the field, when both are on it. */
+/** Where a football play started and ended on the field, when both are on it. */
 function spotsOf(game: GameSnapshot, play: Play) {
-  return Option.all({ start: game.spotOf(play.start), end: game.spotOf(play.end) })
+  return Option.liftPredicate(play.detail, PlayDetail.guards.Football).pipe(
+    Option.flatMap((detail) =>
+      Option.all({ start: BallSpot.of(game, detail.start), end: BallSpot.of(game, detail.end) })
+    )
+  )
 }
 
 function newestOf(plays: ReadonlyArray<Play>): number {

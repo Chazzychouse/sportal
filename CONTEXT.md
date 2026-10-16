@@ -7,37 +7,46 @@ Every exported type name must be a term here, except the wire schemas in `*Paylo
 
 | Term | Meaning | Not |
 | --- | --- | --- |
-| **League** | An organized competition (NFL, FBS). | association, division |
+| **League** | An organized competition (NFL, FBS, MLB, NBA), and the sport it plays; `League` in code, `League.of`. | association, division |
+| **Sport** | What a league plays: `football`, `baseball`, or `basketball`. It says which situation and play detail its games carry. | |
 | **Team** | A league member. | club, competitor, franchise |
 | **Ranking** | A team's position in a poll (college). | seed |
 | **Team record** | A team's wins and losses this season, as the scoreboard gives them, ties left out: `TeamRecord`, `record` on a snapshot's side. | standing |
-| **Odds** | A game's pregame betting line: the favored side, the spread in points, and the total expected; `Odds` on `GameSnapshot`. ESPN sends it only before kickoff. | line, betting |
+| **Odds** | A game's pregame betting line: the favored side, the spread in points, and the total expected; `Odds` on `GameSnapshot`. ESPN sends it only before the start. | line, betting |
 | **Team colors** | The two colors a team plays in: `color` and `alternateColor` on `Team`, six hex digits without `#`, as ESPN sends them. The Hub reads them from the scoreboard; a team ESPN sends none for has neither. | |
 | **Game** | One scheduled contest between two teams. As the slate holds it, `Game` (`packages/domain/src/Game.ts`): its latest snapshot and its plays, in sequence order. | event, match, competition, fixture |
 | **Slate** | The domain `Slate` (`packages/domain/src/Slate.ts`): an ordered list of games: each league's last listing, leagues in `LeagueId` order, each game with its latest snapshot and its plays. `relisted` takes a league's listing and `playsTaken` a game's whole list of plays; the Director takes each frame's deliveries onto them in arrival order. A snapshot behind its game (earlier in game time, or at the same game time with fewer points) is ignored, except that an over game takes one ahead of its end (overtime after a spurious final, a postponed game resuming); plays of a game no listing names are dropped. Pure; each operation returns the next slate and its slate changes, or this one and none when nothing changed. | schedule, scoreboard, live games |
 | **Director** | The Hub's `Director` service (`apps/hub/src/Director.ts`), the one holder of what is going on. From an empty slate it takes each frame's deliveries from its provider as they arrive, logs a take that raised a defect, and logs each play a take adds. It offers the slate as it is, then again each time a take changes it; it knows nothing of sources. For now nothing is kept between runs: a restarted Hub starts empty and the next poll fills it. | board, switcher, producer, autopilot, tracker, stage manager |
 | **Slate changed** | The live message that carries the slate, each game with its recent plays (`Slate#recent`), and each listed game's availability from every source by its id, settled 250 ms after a change; `SlateChanged` in code, built by the Hub server's live route, not by the Slate; the live stream joins the Director's slate with the source's availability, and sends the current one, then one for each burst of slate changes once it settles and one when the 30-second availability recheck finds a change. | slate payload, snapshot, published |
 | **Slate change** | One thing a slate operation changed: a game's snapshot (`Progressed`, including a game newly listed), a game no listing names any more (`Delisted`), or a play a game did not have (`Played`); `SlateChange` in `packages/domain/src/Slate.ts`, given by `Slate#relisted` and `Slate#playsTaken` beside the next slate. The Director logs the plays among them. | diff, delta, event |
-| **Kickoff** | A game's scheduled start instant. | start time, date |
+| **Start** | A game's scheduled start instant; `startsAt` on a snapshot. | kickoff, start time, date |
 
 ### Game state
 
 | Term | Meaning | Not |
 | --- | --- | --- |
-| **GameStatus** | `scheduled`, `live`, `halftime`, `delayed`, `final`, `postponed`, `canceled`. | state, phase |
+| **GameStatus** | `scheduled`, `live`, `break` (any stop between periods, halftime included), `delayed`, `final`, `postponed`, `canceled`. | state, phase |
 | **GameSnapshot** | The complete normalized state of a game at an instant. | update, payload |
-| **Game time** | How far a game has got: before kickoff, in play, or over; then the period; then the clock running down; then, at the same clock, halftime after play (any other statuses at the same clock tie). Orders two snapshots of one game. | timestamp, version |
-| **Progress** | Where a game is in its day: `upcoming`, `live`, or `over`. A delay before kickoff is upcoming and a delay during the game is live. | phase, state |
+| **Status text** | The provider's short status of a game ("Top 7th", "7:21 - 2nd"), shown as it is; `statusText`. | |
+| **Game time** | How far a game has got: before the start, in play, or over; then the period; then the clock running down; then the situation's own order (baseball: the bottom half after the top, then outs); then, at the same clock, a break after play (any other statuses at the same clock tie). Orders two snapshots of one game. | timestamp, version |
+| **Progress** | Where a game is in its day: `upcoming`, `live`, or `over`. A delay before the start is upcoming and a delay during the game is live. | phase, state |
+| **Plays page** | A page of a game's plays, newest first, and whether earlier ones remain; `PlaysPage` in `packages/domain/src/Game.ts`, given by `Game#playsPage`. | |
+| **Plays change** | What changed in a game's plays: plays added after the last it had (`Appended`) or a reset to its latest page (`Reset`) when one was revised or removed; `PlaysChange` in `packages/domain/src/Game.ts`, given by `Game#playsChange`. Each list is newest first. | |
 | **Ahead** | One snapshot of a game past another: later in game time, or at the same game time with more points, or as many points split differently (`isAheadOf`). Ahead of a game's end (`isAheadOfOver`) is later on the clock whatever either's status, or at the same clock with more points. | newer |
 | **Delivery** | `Delivery` in `apps/hub/src/provider/Provider.ts`, beside the port that gives it: what a frame said: a league's listing, or one game's whole list of plays. | input, update |
 | **Test game** | A game snapshot built for a test, with defaults for everything the test does not care about. | fixture, mock |
-| **Situation** | Live football state: possession, down, distance, field position, red zone (the 20 and in), timeouts. | context |
+| **Situation** | A live game's state, by sport: `FootballSituation` (possession, down, distance, field position, red zone, timeouts) or `BaseballSituation` (half inning, outs, count, runners). | context |
+| **Football situation** | Live football state: possession, down, distance, field position, red zone (the 20 and in), timeouts. | |
+| **Baseball situation** | Live baseball state: the half inning, outs, balls and strikes, and the runners on base. | |
 | **Ball spot** | Where a spot is on the field: yards from the home goal line (0–100) and the way its team is going, from a team and its yards to the goal it attacks. | |
-| **Period** | A quarter or an overtime. | quarter (in code) |
-| **Play** | The plays of every sport, as a game's play-by-play lists them; football's only, for now, so `Play` is `FootballPlay`. | |
-| **Football play** | A single snap, kick, try, penalty, timeout, stoppage, or the end of a period, as the play-by-play lists it: its clock, text, score after, start and end, and the case its feed's play type says, with what that type says of it; `FootballPlay` in code. The cases: `Rush` and `Completion` (a touchdown or not), `Incompletion`, `Interception` (returned, for a touchdown, or not), `Sack` (the defense recovering a fumble or not), `Fumble` (recovered by its own side, the other, for a touchdown, or not said), `TwoPointTry` (passed or run), `Kickoff` (returned for a touchdown or not), `Punt` (returned, for a touchdown, or not), `FieldGoal` (good, missed, or blocked), `ExtraPoint` (good or not), `Safety`, and `Penalty`, each with the team with the ball and the yards gained; `Timeout`, with the team that called it when the feed marks one; `Stoppage` (an official timeout, the two-minute warning, the coin toss); `PeriodEnd` (of a period, the half, regulation, or the game); and `Other`, a play type no case knows, kept as the feed spells it. | play kind, play type |
-| **Play outcome** | A football play's case and what its feed's play type says of it: its `_tag` and outcome fields, without what every play carries or what it gained, as `{ _tag: "Punt", return: "none" }`; `PlayOutcome` in code. | play type, play kind |
-| **Game id** / **Team id** / **League id** | A provider's own id for a game or a team, and a league's (`nfl` or `fbs`); `GameId`, `TeamId`, `LeagueId` in code. | |
+| **Period** | A quarter, an overtime, or an inning. | quarter (in code) |
+| **Play** | One play in any sport, as a game's play-by-play lists it: its sequence, period, clock, text, the feed's type, scoring, the score after it, its team, and its sport's detail (`Play#offense` is the team with the ball). | |
+| **Play detail** | What a play adds for its sport: `FootballDetail` (its kind, yards, and spots), `BaseballDetail` (outs and count), `BasketballDetail` (nothing yet). | |
+| **Football kind** | How a football play moved the ball, as the field draws it: run, pass, incomplete, sack, kick, penalty, or other; `FootballKind` in code. | play type, outcome |
+| **Football detail** | A football play's football kind, the yards it gained, and where it started and ended; `FootballDetail` in code. | football play |
+| **Baseball detail** | A baseball play's outs and count after it; `BaseballDetail` in code. | |
+| **Basketball detail** | A basketball play's detail: none yet; `BasketballDetail` in code. | |
+| **Game id** / **Team id** / **League id** | A provider's own id for a game or a team, and a league's (`nfl`, `fbs`, `mlb` or `nba`); `GameId`, `TeamId`, `LeagueId` in code. | |
 | **Recent plays** | A game's last ten plays, in sequence order: what each game on `SlateChanged` carries (`Game#recent`, over the slate `Slate#recent`). | |
 | **Play id** | The feed's own id for one play; `PlayId` in code. Not ordered: plays are ordered by their sequence. | |
 
@@ -51,7 +60,8 @@ Every exported type name must be a term here, except the wire schemas in `*Paylo
 | **FastCast** | ESPN's live feed, as the ESPN provider's push: one socket following the wanted topics the ESPN provider names, giving the socket as frames through `follow`, reconnecting itself; it never fails. | |
 | **Provider feed** | How a test drives a provider: `TestHub.offered` offers one frame saying the test's own delivery, returning once the provider's reader has taken it, and ending the queue ends its frames; `Provider.layerTest`, with `TestHub.Frames`. | snapshot feed |
 | **Game topics** | Each followed FastCast game topic's document and the plays decoded from it, each frame folded in once; `GameTopics` in `apps/hub/src/provider/espn/GameTopics.ts`. A topic's document is rebuilt from its checkpoint and the patches after it: waiting for its checkpoint, or synced as of a message; a missed message, a patch that will not apply, or one that does not decode sends it back to waiting. Its `take` gives each frame's `Plays`; its `retainedFor` keeps only the topics still wanted. | decoder state, cache, ESPN state, topic documents, document change |
-| **Wanted topics** | What the live feed is told to follow: the topic of each listed game live or within 30 minutes of kickoff, each with whether its document is synced or waits for its checkpoint; `Wanted` in code, beside `FastCast`, which the ESPN provider gives from each league's last good listing and the game topics, with `Topic.wantedAt` naming the topics. FastCast subscribes to each newly wanted topic and each whose document goes from synced back to waiting; a topic no longer wanted is not subscribed to again. | subscriptions, follows |
+| **Wanted topics** | What the live feed is told to follow: the topic of each listed game live or within 30 minutes of its start, each with whether its document is synced or waits for its checkpoint; `Wanted` in code, beside `FastCast`, which the ESPN provider gives from each league's last good listing and the game topics, with `Topic.wantedAt` naming the topics. FastCast subscribes to each newly wanted topic and each whose document goes from synced back to waiting; a topic no longer wanted is not subscribed to again. | subscriptions, follows |
+| **ESPN league** | A league ESPN serves the Hub: its scoreboard and summary path and its FastCast topic prefix; `EspnLeague` in code, `EspnLeague.followed`. | |
 | **ESPN event** | The site scoreboard's event, read as a GameSnapshot (`EspnEvent` in code); a poll's events, read together, are its league's listing (`listingOf`, beside it). | payload, DTO |
 | **Topic** | A live feed topic: one game's package, which carries its plays; `Topic` in code, beside `FastCast`, read from FastCast's `tc` once where it arrives (`Topic.fromTc`), and named for it by `tc()`. | subscription, owner, channel |
 | **Checkpoint unread** | A live feed topic's checkpoint could not be loaded or did not decode; logged, and FastCast subscribes to the topic again after 30 s while it is still wanted, unless a later checkpoint of the topic, in the socket's order, succeeds first; `CheckpointUnread` in code. | checkpoint error |

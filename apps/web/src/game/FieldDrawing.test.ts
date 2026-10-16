@@ -1,6 +1,6 @@
 import { assert, describe, it } from "@effect/vitest"
 import { PlayId } from "@sportal/domain/Play"
-import { liveSnapshot, play, team } from "@sportal/domain/TestGame"
+import { footballDetail, liveSnapshot, play, team } from "@sportal/domain/TestGame"
 import { FieldDrawing, FieldEvent } from "./FieldDrawing.ts"
 
 describe("FieldDrawing.initial", () => {
@@ -30,7 +30,11 @@ describe("FieldDrawing.step", () => {
   })
 
   it("should skip a play with no spot on the field", () => {
-    const offField = play({ id: PlayId.make("2"), sequence: 2, end: { team: team("HOME").id } })
+    const offField = play({
+      id: PlayId.make("2"),
+      sequence: 2,
+      detail: footballDetail({ end: { team: team("HOME").id } })
+    })
 
     const next = FieldDrawing.step(FieldDrawing.Settled({ last: 1 }), arrived([offField, playAt(3)]))
 

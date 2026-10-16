@@ -32,7 +32,10 @@ import { Source } from "./source/Source.ts"
  * ESPN live, answering each league's poll with its recorded scoreboard in `scoreboards`,
  * and with FastCast that opens no socket.
  */
-export function recordedEspn(scoreboards: { readonly [L in LeagueId]: string }): Layer.Layer<Provider> {
+export function recordedEspn(scoreboards: {
+  readonly nfl: string
+  readonly fbs: string
+}): Layer.Layer<Provider> {
   const recorded = HttpClient.make((request) => {
     const body = request.url.includes("/nfl/") ? scoreboards.nfl : scoreboards.fbs
     return Effect.succeed(HttpClientResponse.fromWeb(request, new Response(body)))
@@ -563,7 +566,7 @@ const cbsLive = "https://tv.youtube.com/watch/y6zFA17zDsw?vp=0gEEEgIwAQ%3D%3D"
 /** Ohio State at Iowa, live on CBS, which the recorded guide has on News 3. */
 export const ohioStateAtIowa = snapshot({
   status: "live",
-  kickoff: DateTime.makeUnsafe("2026-10-03T19:30:00Z"),
+  startsAt: DateTime.makeUnsafe("2026-10-03T19:30:00Z"),
   away: { team: team("OSU", "fbs", { name: "Ohio State Buckeyes", location: "Ohio State" }), score: 0 },
   home: { team: team("IOWA", "fbs", { name: "Iowa Hawkeyes", location: "Iowa" }), score: 0 },
   broadcasts: [broadcast("CBS")]

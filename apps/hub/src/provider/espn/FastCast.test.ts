@@ -1,6 +1,7 @@
 import { assert, describe, it } from "@effect/vitest"
 import { GameId } from "@sportal/domain/Game"
-import { Deferred, Effect, Layer, Option } from "effect"
+import { liveSnapshot } from "@sportal/domain/TestGame"
+import { Deferred, Effect, HashSet, Layer, Option } from "effect"
 import { TestClock } from "effect/testing"
 import * as TestHub from "../../TestHub.ts"
 import { Frame, Topic } from "./FastCast.ts"
@@ -907,5 +908,15 @@ describe("Topic.fromTc", () => {
     const topic = Topic.fromTc(tc)
 
     assert.isTrue(Option.isNone(topic))
+  })
+})
+
+describe("Topic.wantedAt", () => {
+  it("should not want a live game of a league ESPN does not follow", () => {
+    const game = liveSnapshot({ league: "mlb" })
+
+    const wanted = Topic.wantedAt([game], game.startsAt)
+
+    assert.strictEqual(HashSet.size(wanted), 0)
   })
 })

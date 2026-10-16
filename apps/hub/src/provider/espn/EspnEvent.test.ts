@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs"
 import { assert, describe, it } from "@effect/vitest"
 import { GameId, GameSnapshot, Network } from "@sportal/domain/Game"
+import { type FootballSituation, Situation } from "@sportal/domain/Situation"
 import { Effect, Equal, Result, Schema } from "effect"
 import { TestClock } from "effect/testing"
 import * as TestHub from "../../TestHub.ts"
@@ -110,6 +111,27 @@ describe("EspnEvent.listingOf", () => {
     })
   )
 
+  it.effect("should read the end of a period as a break", () =>
+    Effect.gen(function* () {
+      const event = siteEvent()
+      const endOfFirst = {
+        ...event,
+        status: {
+          period: 1,
+          clock: 0,
+          type: { name: "STATUS_END_PERIOD", state: "in", shortDetail: "End of 1st" }
+        }
+      }
+
+      const games = yield* EspnEvent.listingOf("nfl", JSON.stringify({ events: [endOfFirst] }))
+
+      assert.deepStrictEqual(
+        games.map(({ status }) => status),
+        ["break"]
+      )
+    })
+  )
+
   it.effect("should decode a live FBS scoreboard into snapshots", () =>
     Effect.gen(function* () {
       const slate = yield* EspnEvent.listingOf("fbs", TestHub.recordedScoreboard("fbs-scoreboard-live"))
@@ -174,7 +196,7 @@ describe("EspnEvent.listingOf", () => {
       const game = slate.find((g) => g.id === "401862787")
       // ESPN sends rank 99 for an unranked team and down -1 between plays.
       assert.strictEqual(game?.home.ranking, undefined)
-      assert.strictEqual(game?.situation?.down, undefined)
+      assert.strictEqual(footballOf(game)?.down, undefined)
     })
   )
 
@@ -197,7 +219,7 @@ describe("EspnEvent.listingOf", () => {
           TestHub.recordedScoreboard("fbs-scoreboard-2026-10-03T2024Z")
         )
 
-        const yardLine = (id: string) => slate.find((g) => g.id === id)?.situation?.yardLine
+        const yardLine = (id: string) => footballOf(slate.find((g) => g.id === id))?.yardLine
         // Away ball, "4th & 1 at NCSU 11": Louisville is 11 yards from the goal.
         assert.strictEqual(yardLine("401858248"), 11)
         // Home ball, "1st & 10 at MIZ 10": Missouri is at its own 10, 90 yards from the goal.
@@ -288,4 +310,10 @@ function withoutColors(body: string) {
   return JSON.stringify(JSON.parse(body), (key, value) =>
     key === "color" || key === "alternateColor" ? undefined : value
   )
+}
+
+/** `game`'s situation, when it is football's. */
+function footballOf(game: GameSnapshot | undefined): FootballSituation | undefined {
+  const situation = game?.situation
+  return situation !== undefined && Situation.guards.Football(situation) ? situation : undefined
 }

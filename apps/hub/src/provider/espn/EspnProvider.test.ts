@@ -22,6 +22,7 @@ import * as Socket from "effect/socket/Socket"
 import { TestClock } from "effect/testing"
 import * as TestHub from "../../TestHub.ts"
 import { Delivery, Provider } from "../Provider.ts"
+import { EspnLeague } from "./EspnLeague.ts"
 import * as EspnProvider from "./EspnProvider.ts"
 import { FastCast, Frame, Topic, type Wanted } from "./FastCast.ts"
 import * as FastCastMessage from "./FastCastMessage.ts"
@@ -75,9 +76,9 @@ describe("EspnProvider", () => {
       })
     )
 
-    it.effect("should poll every minute within 30 minutes of a kickoff", () =>
+    it.effect("should poll every minute within 30 minutes of a start", () =>
       Effect.gen(function* () {
-        const soon = scoreboardOf([{ state: "pre", period: 0, kickoff: "2026-10-03T12:20Z" }])
+        const soon = scoreboardOf([{ state: "pre", period: 0, startsAt: "2026-10-03T12:20Z" }])
 
         const polled = yield* polledOver("1 minute", { fbs: soon })
 
@@ -85,10 +86,10 @@ describe("EspnProvider", () => {
       })
     )
 
-    it.effect("should poll every minute when a game delayed before kickoff is within 30 minutes", () =>
+    it.effect("should poll every minute when a game delayed before its start is within 30 minutes", () =>
       Effect.gen(function* () {
         const delayed = scoreboardOf([
-          { state: "pre", name: "STATUS_DELAYED", period: 0, kickoff: "2026-10-03T12:20Z" }
+          { state: "pre", name: "STATUS_DELAYED", period: 0, startsAt: "2026-10-03T12:20Z" }
         ])
 
         const polled = yield* polledOver("1 minute", { fbs: delayed })
@@ -99,7 +100,7 @@ describe("EspnProvider", () => {
 
     it.effect("should poll every 15 minutes otherwise", () =>
       Effect.gen(function* () {
-        const later = scoreboardOf([{ state: "pre", period: 0, kickoff: "2026-10-03T13:00Z" }])
+        const later = scoreboardOf([{ state: "pre", period: 0, startsAt: "2026-10-03T13:00Z" }])
 
         const polled = yield* polledOver("15 minutes", { fbs: later })
 
@@ -108,11 +109,11 @@ describe("EspnProvider", () => {
     )
 
     it.effect(
-      "should poll every 15 minutes when a game delayed before kickoff is more than 30 minutes away",
+      "should poll every 15 minutes when a game delayed before its start is more than 30 minutes away",
       () =>
         Effect.gen(function* () {
           const delayed = scoreboardOf([
-            { state: "pre", name: "STATUS_DELAYED", period: 0, kickoff: "2026-10-03T13:00Z" }
+            { state: "pre", name: "STATUS_DELAYED", period: 0, startsAt: "2026-10-03T13:00Z" }
           ])
 
           const polled = yield* polledOver("15 minutes", { fbs: delayed })
@@ -154,7 +155,7 @@ describe("EspnProvider", () => {
       () =>
         Effect.gen(function* () {
           const live = scoreboardOf([{ state: "in", period: 2 }])
-          const later = scoreboardOf([{ state: "pre", period: 0, kickoff: "2026-10-03T20:00Z" }])
+          const later = scoreboardOf([{ state: "pre", period: 0, startsAt: "2026-10-03T20:00Z" }])
 
           const polled = yield* polledOver(["10 seconds", "15 minutes"], { nfl: live, fbs: later })
 
@@ -346,10 +347,10 @@ describe("EspnProvider", () => {
       })
     )
 
-    it.effect("should want a game's topic once its kickoff is 30 minutes away, with no frame", () =>
+    it.effect("should want a game's topic once its start is 30 minutes away, with no frame", () =>
       Effect.gen(function* () {
         yield* TestClock.setTime(DateTime.makeUnsafe("2026-10-03T12:00:00Z").epochMilliseconds)
-        const later = scoreboardOf([{ state: "pre", period: 0, kickoff: "2026-10-03T12:31Z" }])
+        const later = scoreboardOf([{ state: "pre", period: 0, startsAt: "2026-10-03T12:31Z" }])
         const [event] = decodeEventIds(later).events
         const game = new Topic({ league: "fbs", game: event.id })
         const answering = HttpClient.make((request) =>
@@ -374,7 +375,7 @@ describe("EspnProvider", () => {
       })
     )
 
-    it.effect("should want a listed game's topic from 30 minutes before its kickoff", () =>
+    it.effect("should want a listed game's topic from 30 minutes before its start", () =>
       Effect.gen(function* () {
         yield* TestClock.setTime(DateTime.makeUnsafe("2026-10-04T19:35:00Z").epochMilliseconds)
 
@@ -384,7 +385,7 @@ describe("EspnProvider", () => {
       })
     )
 
-    it.effect("should not want a listed game's topic a second before 30 minutes before its kickoff", () =>
+    it.effect("should not want a listed game's topic a second before 30 minutes before its start", () =>
       Effect.gen(function* () {
         yield* TestClock.setTime(DateTime.makeUnsafe("2026-10-04T19:34:59Z").epochMilliseconds)
 
@@ -605,7 +606,7 @@ function espnOver(
     readonly wanting?: (wanted: Stream.Stream<Wanted>) => Stream.Stream<Frame>
   } = {}
 ) {
-  return EspnProvider.layer(options.leagues ?? LeagueId.literals).pipe(
+  return EspnProvider.layer(followed(options.leagues ?? LeagueId.literals)).pipe(
     Layer.provide([
       FastCast.layerTest(options.wanting ?? (() => options.pushing ?? Stream.never)),
       Layer.succeed(HttpClient.HttpClient, client)
@@ -755,7 +756,7 @@ function espnOverFastCast(server: ReturnType<typeof TestHub.fakeServer>) {
     Layer.succeed(HttpClient.HttpClient, http),
     Layer.succeed(Socket.WebSocketConstructor, () => server.socket)
   )
-  return EspnProvider.layer(["nfl"]).pipe(Layer.provide(FastCast.layer), Layer.provide(host))
+  return EspnProvider.layer(followed(["nfl"])).pipe(Layer.provide(FastCast.layer), Layer.provide(host))
 }
 
 /**
@@ -834,23 +835,23 @@ function checkpointFrame(topic: Topic): Frame {
 }
 
 /**
- * An ESPN scoreboard of one game per entry, each the pregame scoreboard's second event kicking off at `kickoff` (the
- * recorded kickoff, unless given), in ESPN's status `state`, named `name` (the recorded name, unless given), in `period`.
+ * An ESPN scoreboard of one game per entry, each the pregame scoreboard's second event starting at `startsAt` (the
+ * recorded start, unless given), in ESPN's status `state`, named `name` (the recorded name, unless given), in `period`.
  */
 function scoreboardOf(
   games: ReadonlyArray<{
     readonly state: "pre" | "in" | "post"
     readonly name?: string
     readonly period: number
-    readonly kickoff?: string
+    readonly startsAt?: string
   }>
 ) {
   const scoreboard = JSON.parse(nflPregame)
   const template = scoreboard.events[1]
-  const events = games.map(({ state, name, period, kickoff }, index) => ({
+  const events = games.map(({ state, name, period, startsAt }, index) => ({
     ...template,
     id: `${template.id}${index}`,
-    date: kickoff ?? template.date,
+    date: startsAt ?? template.date,
     status: {
       ...template.status,
       period,
@@ -858,4 +859,9 @@ function scoreboardOf(
     }
   }))
   return JSON.stringify({ ...scoreboard, events })
+}
+
+/** The followed ESPN leagues among `leagues`. */
+function followed(leagues: ReadonlyArray<LeagueId>): ReadonlyArray<EspnLeague> {
+  return EspnLeague.followed.filter(({ league }) => leagues.includes(league))
 }

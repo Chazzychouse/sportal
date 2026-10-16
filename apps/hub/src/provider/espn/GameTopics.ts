@@ -13,9 +13,11 @@ import {
   Option,
   Record,
   Result,
-  Schema
+  Schema,
+  SchemaIssue
 } from "effect"
 import { Delivery } from "../Provider.ts"
+import { EspnLeague } from "./EspnLeague.ts"
 import * as EspnPlay from "./EspnPlay.ts"
 import { Frame, Topic } from "./FastCast.ts"
 import * as FastCastMessage from "./FastCastMessage.ts"
@@ -359,7 +361,7 @@ const playsAfter = Effect.fnUntraced(function* (
       Option.match(Record.get(entities, id), {
         onNone: () => Effect.succeed(HashMap.remove(byId, id)),
         onSome: (entity) =>
-          Effect.map(Effect.option(decodePlay[league](entity)), (play) =>
+          Effect.map(Effect.option(playOf(league, entity)), (play) =>
             Option.match(play, {
               onNone: () => HashMap.remove(byId, id),
               onSome: (decoded) => HashMap.set(byId, id, decoded)
@@ -367,6 +369,17 @@ const playsAfter = Effect.fnUntraced(function* (
           )
       })
   )
+})
+
+/** Entity `entity` read as a play of `league`; it fails when ESPN does not serve `league` to the Hub. */
+const playOf = Effect.fnUntraced(function* (league: LeagueId, entity: Schema.Json) {
+  const decode = decodePlay.get(league)
+  if (decode === undefined) {
+    return yield* Effect.fail(
+      new SchemaIssue.InvalidValue({ message: "ESPN does not serve this league to the Hub" }, league)
+    )
+  }
+  return yield* decode(entity)
 })
 
 /** What a log of `frame` is annotated with: its kind, and its topic's name. */
@@ -387,11 +400,10 @@ const decodeKnownOp = Schema.decodeUnknownOption(
 )
 
 // Each league's play entity decode, built once.
-const decodePlay: { readonly [L in LeagueId]: ReturnType<typeof decodePlayOf> } = {
-  nfl: decodePlayOf("nfl"),
-  fbs: decodePlayOf("fbs")
-}
+const decodePlay: ReadonlyMap<LeagueId, ReturnType<typeof decodePlayOf>> = new Map(
+  EspnLeague.followed.map(({ league }) => [league, decodePlayOf(league)])
+)
 
 function decodePlayOf(league: LeagueId) {
-  return Schema.decodeUnknownEffect(EspnPlay.FootballPlay(league))
+  return Schema.decodeUnknownEffect(EspnPlay.play(league))
 }

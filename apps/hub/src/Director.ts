@@ -84,7 +84,7 @@ function loggedPlay(snapshot: GameSnapshot, play: Play) {
       game: snapshot.id,
       league: snapshot.league,
       matchup,
-      play: play._tag,
+      play: play.type.text,
       scoring: play.scoring
     })
   )

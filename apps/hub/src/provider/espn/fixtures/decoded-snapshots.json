@@ -8,10 +8,11 @@
         {
           "id": "401862787",
           "league": "fbs",
-          "kickoff": "2026-10-03T15:00:00.000Z",
+          "startsAt": "2026-10-03T15:00:00.000Z",
           "status": "live",
           "period": 2,
-          "clock": "7:21",
+          "clock": 441,
+          "statusText": "7:21 - 2nd",
           "home": {
             "team": {
               "id": "fbs:2429",
@@ -53,6 +54,7 @@
             }
           ],
           "situation": {
+            "_tag": "Football",
             "distance": 0,
             "homeTimeouts": 3,
             "awayTimeouts": 1
@@ -61,10 +63,11 @@
         {
           "id": "401858250",
           "league": "fbs",
-          "kickoff": "2026-10-03T16:00:00.000Z",
+          "startsAt": "2026-10-03T16:00:00.000Z",
           "status": "live",
           "period": 1,
-          "clock": "15:00",
+          "clock": 900,
+          "statusText": "15:00 - 1st",
           "home": {
             "team": {
               "id": "fbs:153",
@@ -111,6 +114,7 @@
             }
           ],
           "situation": {
+            "_tag": "Football",
             "down": 1,
             "distance": 10,
             "homeTimeouts": 3,
@@ -120,10 +124,11 @@
         {
           "id": "401856707",
           "league": "fbs",
-          "kickoff": "2026-10-03T16:00:00.000Z",
+          "startsAt": "2026-10-03T16:00:00.000Z",
           "status": "live",
           "period": 1,
-          "clock": "14:55",
+          "clock": 895,
+          "statusText": "14:55 - 1st",
           "home": {
             "team": {
               "id": "fbs:344",
@@ -167,6 +172,7 @@
             }
           ],
           "situation": {
+            "_tag": "Football",
             "down": 1,
             "distance": 10,
             "homeTimeouts": 3,
@@ -176,10 +182,11 @@
         {
           "id": "401856819",
           "league": "fbs",
-          "kickoff": "2026-10-03T16:00:00.000Z",
+          "startsAt": "2026-10-03T16:00:00.000Z",
           "status": "live",
           "period": 1,
-          "clock": "11:23",
+          "clock": 683,
+          "statusText": "11:23 - 1st",
           "home": {
             "team": {
               "id": "fbs:248",
@@ -222,6 +229,7 @@
             }
           ],
           "situation": {
+            "_tag": "Football",
             "possession": "fbs:2116",
             "down": 3,
             "distance": 13,
@@ -233,10 +241,11 @@
         {
           "id": "401858246",
           "league": "fbs",
-          "kickoff": "2026-10-03T16:00:00.000Z",
+          "startsAt": "2026-10-03T16:00:00.000Z",
           "status": "scheduled",
           "period": 0,
-          "clock": "0:00",
+          "clock": 0,
+          "statusText": "10/3 - 12:00 PM EDT",
           "home": {
             "team": {
               "id": "fbs:2567",
@@ -287,10 +296,11 @@
         {
           "id": "401856807",
           "league": "fbs",
-          "kickoff": "2026-10-03T16:00:00.000Z",
+          "startsAt": "2026-10-03T16:00:00.000Z",
           "status": "live",
           "period": 1,
-          "clock": "15:00",
+          "clock": 900,
+          "statusText": "15:00 - 1st",
           "home": {
             "team": {
               "id": "fbs:2305",
@@ -332,6 +342,7 @@
             }
           ],
           "situation": {
+            "_tag": "Football",
             "down": 1,
             "distance": 10,
             "homeTimeouts": 3,
@@ -341,10 +352,11 @@
         {
           "id": "401856822",
           "league": "fbs",
-          "kickoff": "2026-10-03T16:00:00.000Z",
+          "startsAt": "2026-10-03T16:00:00.000Z",
           "status": "live",
           "period": 1,
-          "clock": "12:38",
+          "clock": 758,
+          "statusText": "12:38 - 1st",
           "home": {
             "team": {
               "id": "fbs:66",
@@ -386,6 +398,7 @@
             }
           ],
           "situation": {
+            "_tag": "Football",
             "distance": 14,
             "homeTimeouts": 3,
             "awayTimeouts": 3
@@ -394,10 +407,11 @@
         {
           "id": "401858251",
           "league": "fbs",
-          "kickoff": "2026-10-03T16:00:00.000Z",
+          "startsAt": "2026-10-03T16:00:00.000Z",
           "status": "live",
           "period": 1,
-          "clock": "12:09",
+          "clock": 729,
+          "statusText": "12:09 - 1st",
           "home": {
             "team": {
               "id": "fbs:154",
@@ -439,6 +453,7 @@
             }
           ],
           "situation": {
+            "_tag": "Football",
             "possession": "fbs:24",
             "down": 4,
             "distance": 3,
@@ -450,10 +465,11 @@
         {
           "id": "401858252",
           "league": "fbs",
-          "kickoff": "2026-10-03T16:00:00.000Z",
+          "startsAt": "2026-10-03T16:00:00.000Z",
           "status": "live",
           "period": 1,
-          "clock": "13:10",
+          "clock": 790,
+          "statusText": "13:10 - 1st",
           "home": {
             "team": {
               "id": "fbs:41",
@@ -495,6 +511,7 @@
             }
           ],
           "situation": {
+            "_tag": "Football",
             "possession": "fbs:183",
             "down": 1,
             "distance": 10,
@@ -506,10 +523,11 @@
         {
           "id": "401858474",
           "league": "fbs",
-          "kickoff": "2026-10-03T16:00:00.000Z",
+          "startsAt": "2026-10-03T16:00:00.000Z",
           "status": "scheduled",
           "period": 0,
-          "clock": "0:00",
+          "clock": 0,
+          "statusText": "10/3 - 12:00 PM EDT",
           "home": {
             "team": {
               "id": "fbs:135",
@@ -559,10 +577,11 @@
         {
           "id": "401862791",
           "league": "fbs",
-          "kickoff": "2026-10-03T16:00:00.000Z",
+          "startsAt": "2026-10-03T16:00:00.000Z",
           "status": "scheduled",
           "period": 0,
-          "clock": "0:00",
+          "clock": 0,
+          "statusText": "10/3 - 12:00 PM EDT",
           "home": {
             "team": {
               "id": "fbs:2005",
@@ -612,10 +631,11 @@
         {
           "id": "401858479",
           "league": "fbs",
-          "kickoff": "2026-10-03T16:30:00.000Z",
+          "startsAt": "2026-10-03T16:30:00.000Z",
           "status": "scheduled",
           "period": 0,
-          "clock": "0:00",
+          "clock": 0,
+          "statusText": "10/3 - 12:30 PM EDT",
           "home": {
             "team": {
               "id": "fbs:275",
@@ -665,10 +685,11 @@
         {
           "id": "401856705",
           "league": "fbs",
-          "kickoff": "2026-10-03T16:45:00.000Z",
+          "startsAt": "2026-10-03T16:45:00.000Z",
           "status": "scheduled",
           "period": 0,
-          "clock": "0:00",
+          "clock": 0,
+          "statusText": "10/3 - 12:45 PM EDT",
           "home": {
             "team": {
               "id": "fbs:61",
@@ -719,10 +740,11 @@
         {
           "id": "401866432",
           "league": "fbs",
-          "kickoff": "2026-10-03T17:00:00.000Z",
+          "startsAt": "2026-10-03T17:00:00.000Z",
           "status": "scheduled",
           "period": 0,
-          "clock": "0:00",
+          "clock": 0,
+          "statusText": "10/3 - 1:00 PM EDT",
           "home": {
             "team": {
               "id": "fbs:2084",
@@ -772,10 +794,11 @@
         {
           "id": "401866431",
           "league": "fbs",
-          "kickoff": "2026-10-03T18:00:00.000Z",
+          "startsAt": "2026-10-03T18:00:00.000Z",
           "status": "scheduled",
           "period": 0,
-          "clock": "0:00",
+          "clock": 0,
+          "statusText": "10/3 - 2:00 PM EDT",
           "home": {
             "team": {
               "id": "fbs:2050",
@@ -825,10 +848,11 @@
         {
           "id": "401858473",
           "league": "fbs",
-          "kickoff": "2026-10-03T19:30:00.000Z",
+          "startsAt": "2026-10-03T19:30:00.000Z",
           "status": "scheduled",
           "period": 0,
-          "clock": "0:00",
+          "clock": 0,
+          "statusText": "10/3 - 3:30 PM EDT",
           "home": {
             "team": {
               "id": "fbs:2294",
@@ -880,10 +904,11 @@
         {
           "id": "401856708",
           "league": "fbs",
-          "kickoff": "2026-10-03T19:30:00.000Z",
+          "startsAt": "2026-10-03T19:30:00.000Z",
           "status": "scheduled",
           "period": 0,
-          "clock": "0:00",
+          "clock": 0,
+          "statusText": "10/3 - 3:30 PM EDT",
           "home": {
             "team": {
               "id": "fbs:142",
@@ -935,10 +960,11 @@
         {
           "id": "401856710",
           "league": "fbs",
-          "kickoff": "2026-10-03T19:30:00.000Z",
+          "startsAt": "2026-10-03T19:30:00.000Z",
           "status": "scheduled",
           "period": 0,
-          "clock": "0:00",
+          "clock": 0,
+          "statusText": "10/3 - 3:30 PM EDT",
           "home": {
             "team": {
               "id": "fbs:2633",
@@ -989,10 +1015,11 @@
         {
           "id": "401858247",
           "league": "fbs",
-          "kickoff": "2026-10-03T19:30:00.000Z",
+          "startsAt": "2026-10-03T19:30:00.000Z",
           "status": "scheduled",
           "period": 0,
-          "clock": "0:00",
+          "clock": 0,
+          "statusText": "10/3 - 3:30 PM EDT",
           "home": {
             "team": {
               "id": "fbs:2439",
@@ -1042,10 +1069,11 @@
         {
           "id": "401858248",
           "league": "fbs",
-          "kickoff": "2026-10-03T19:30:00.000Z",
+          "startsAt": "2026-10-03T19:30:00.000Z",
           "status": "scheduled",
           "period": 0,
-          "clock": "0:00",
+          "clock": 0,
+          "statusText": "10/3 - 3:30 PM EDT",
           "home": {
             "team": {
               "id": "fbs:152",
@@ -1095,10 +1123,11 @@
         {
           "id": "401858253",
           "league": "fbs",
-          "kickoff": "2026-10-03T19:30:00.000Z",
+          "startsAt": "2026-10-03T19:30:00.000Z",
           "status": "scheduled",
           "period": 0,
-          "clock": "0:00",
+          "clock": 0,
+          "statusText": "10/3 - 3:30 PM EDT",
           "home": {
             "team": {
               "id": "fbs:52",
@@ -1148,10 +1177,11 @@
         {
           "id": "401862793",
           "league": "fbs",
-          "kickoff": "2026-10-03T19:30:00.000Z",
+          "startsAt": "2026-10-03T19:30:00.000Z",
           "status": "scheduled",
           "period": 0,
-          "clock": "0:00",
+          "clock": 0,
+          "statusText": "10/3 - 3:30 PM EDT",
           "home": {
             "team": {
               "id": "fbs:5",
@@ -1201,10 +1231,11 @@
         {
           "id": "401864515",
           "league": "fbs",
-          "kickoff": "2026-10-03T19:30:00.000Z",
+          "startsAt": "2026-10-03T19:30:00.000Z",
           "status": "scheduled",
           "period": 0,
-          "clock": "0:00",
+          "clock": 0,
+          "statusText": "10/3 - 3:30 PM EDT",
           "home": {
             "team": {
               "id": "fbs:2449",
@@ -1254,10 +1285,11 @@
         {
           "id": "401866430",
           "league": "fbs",
-          "kickoff": "2026-10-03T19:30:00.000Z",
+          "startsAt": "2026-10-03T19:30:00.000Z",
           "status": "scheduled",
           "period": 0,
-          "clock": "0:00",
+          "clock": 0,
+          "statusText": "10/3 - 3:30 PM EDT",
           "home": {
             "team": {
               "id": "fbs:2117",
@@ -1307,10 +1339,11 @@
         {
           "id": "401866433",
           "league": "fbs",
-          "kickoff": "2026-10-03T19:30:00.000Z",
+          "startsAt": "2026-10-03T19:30:00.000Z",
           "status": "scheduled",
           "period": 0,
-          "clock": "0:00",
+          "clock": 0,
+          "statusText": "10/3 - 3:30 PM EDT",
           "home": {
             "team": {
               "id": "fbs:113",
@@ -1360,10 +1393,11 @@
         {
           "id": "401866434",
           "league": "fbs",
-          "kickoff": "2026-10-03T19:30:00.000Z",
+          "startsAt": "2026-10-03T19:30:00.000Z",
           "status": "scheduled",
           "period": 0,
-          "clock": "0:00",
+          "clock": 0,
+          "statusText": "10/3 - 3:30 PM EDT",
           "home": {
             "team": {
               "id": "fbs:2309",
@@ -1413,10 +1447,11 @@
         {
           "id": "401866477",
           "league": "fbs",
-          "kickoff": "2026-10-03T19:30:00.000Z",
+          "startsAt": "2026-10-03T19:30:00.000Z",
           "status": "scheduled",
           "period": 0,
-          "clock": "0:00",
+          "clock": 0,
+          "statusText": "10/3 - 3:30 PM EDT",
           "home": {
             "team": {
               "id": "fbs:193",
@@ -1466,10 +1501,11 @@
         {
           "id": "401869956",
           "league": "fbs",
-          "kickoff": "2026-10-03T19:30:00.000Z",
+          "startsAt": "2026-10-03T19:30:00.000Z",
           "status": "scheduled",
           "period": 0,
-          "clock": "0:00",
+          "clock": 0,
+          "statusText": "10/3 - 3:30 PM EDT",
           "home": {
             "team": {
               "id": "fbs:2247",
@@ -1519,10 +1555,11 @@
         {
           "id": "401869962",
           "league": "fbs",
-          "kickoff": "2026-10-03T19:45:00.000Z",
+          "startsAt": "2026-10-03T19:45:00.000Z",
           "status": "scheduled",
           "period": 0,
-          "clock": "0:00",
+          "clock": 0,
+          "statusText": "10/3 - 3:45 PM EDT",
           "home": {
             "team": {
               "id": "fbs:256",
@@ -1572,10 +1609,11 @@
         {
           "id": "401858475",
           "league": "fbs",
-          "kickoff": "2026-10-03T20:00:00.000Z",
+          "startsAt": "2026-10-03T20:00:00.000Z",
           "status": "scheduled",
           "period": 0,
-          "clock": "0:00",
+          "clock": 0,
+          "statusText": "10/3 - 4:00 PM EDT",
           "home": {
             "team": {
               "id": "fbs:158",
@@ -1625,10 +1663,11 @@
         {
           "id": "401864514",
           "league": "fbs",
-          "kickoff": "2026-10-03T20:00:00.000Z",
+          "startsAt": "2026-10-03T20:00:00.000Z",
           "status": "scheduled",
           "period": 0,
-          "clock": "0:00",
+          "clock": 0,
+          "statusText": "10/3 - 4:00 PM EDT",
           "home": {
             "team": {
               "id": "fbs:167",
@@ -1678,10 +1717,11 @@
         {
           "id": "401856709",
           "league": "fbs",
-          "kickoff": "2026-10-03T20:15:00.000Z",
+          "startsAt": "2026-10-03T20:15:00.000Z",
           "status": "scheduled",
           "period": 0,
-          "clock": "0:00",
+          "clock": 0,
+          "statusText": "10/3 - 4:15 PM EDT",
           "home": {
             "team": {
               "id": "fbs:2579",
@@ -1732,10 +1772,11 @@
         {
           "id": "401858472",
           "league": "fbs",
-          "kickoff": "2026-10-03T20:15:00.000Z",
+          "startsAt": "2026-10-03T20:15:00.000Z",
           "status": "scheduled",
           "period": 0,
-          "clock": "0:00",
+          "clock": 0,
+          "statusText": "10/3 - 4:15 PM EDT",
           "home": {
             "team": {
               "id": "fbs:356",
@@ -1785,10 +1826,11 @@
         {
           "id": "401860899",
           "league": "fbs",
-          "kickoff": "2026-10-03T22:00:00.000Z",
+          "startsAt": "2026-10-03T22:00:00.000Z",
           "status": "scheduled",
           "period": 0,
-          "clock": "0:00",
+          "clock": 0,
+          "statusText": "10/3 - 6:00 PM EDT",
           "home": {
             "team": {
               "id": "fbs:36",
@@ -1838,10 +1880,11 @@
         {
           "id": "401862790",
           "league": "fbs",
-          "kickoff": "2026-10-03T22:00:00.000Z",
+          "startsAt": "2026-10-03T22:00:00.000Z",
           "status": "scheduled",
           "period": 0,
-          "clock": "0:00",
+          "clock": 0,
+          "statusText": "10/3 - 6:00 PM EDT",
           "home": {
             "team": {
               "id": "fbs:2226",
@@ -1891,10 +1934,11 @@
         {
           "id": "401856818",
           "league": "fbs",
-          "kickoff": "2026-10-03T23:00:00.000Z",
+          "startsAt": "2026-10-03T23:00:00.000Z",
           "status": "scheduled",
           "period": 0,
-          "clock": "0:00",
+          "clock": 0,
+          "statusText": "10/3 - 7:00 PM EDT",
           "home": {
             "team": {
               "id": "fbs:2628",
@@ -1949,10 +1993,11 @@
         {
           "id": "401856711",
           "league": "fbs",
-          "kickoff": "2026-10-03T23:00:00.000Z",
+          "startsAt": "2026-10-03T23:00:00.000Z",
           "status": "scheduled",
           "period": 0,
-          "clock": "0:00",
+          "clock": 0,
+          "statusText": "10/3 - 7:00 PM EDT",
           "home": {
             "team": {
               "id": "fbs:245",
@@ -2002,10 +2047,11 @@
         {
           "id": "401862788",
           "league": "fbs",
-          "kickoff": "2026-10-03T23:00:00.000Z",
+          "startsAt": "2026-10-03T23:00:00.000Z",
           "status": "scheduled",
           "period": 0,
-          "clock": "0:00",
+          "clock": 0,
+          "statusText": "10/3 - 7:00 PM EDT",
           "home": {
             "team": {
               "id": "fbs:242",
@@ -2055,10 +2101,11 @@
         {
           "id": "401869942",
           "league": "fbs",
-          "kickoff": "2026-10-03T23:00:00.000Z",
+          "startsAt": "2026-10-03T23:00:00.000Z",
           "status": "scheduled",
           "period": 0,
-          "clock": "0:00",
+          "clock": 0,
+          "statusText": "10/3 - 7:00 PM EDT",
           "home": {
             "team": {
               "id": "fbs:324",
@@ -2108,10 +2155,11 @@
         {
           "id": "401871089",
           "league": "fbs",
-          "kickoff": "2026-10-03T23:00:00.000Z",
+          "startsAt": "2026-10-03T23:00:00.000Z",
           "status": "scheduled",
           "period": 0,
-          "clock": "0:00",
+          "clock": 0,
+          "statusText": "10/3 - 7:00 PM EDT",
           "home": {
             "team": {
               "id": "fbs:6",
@@ -2161,10 +2209,11 @@
         {
           "id": "401858249",
           "league": "fbs",
-          "kickoff": "2026-10-03T23:30:00.000Z",
+          "startsAt": "2026-10-03T23:30:00.000Z",
           "status": "scheduled",
           "period": 0,
-          "clock": "0:00",
+          "clock": 0,
+          "statusText": "10/3 - 7:30 PM EDT",
           "home": {
             "team": {
               "id": "fbs:228",
@@ -2215,10 +2264,11 @@
         {
           "id": "401856821",
           "league": "fbs",
-          "kickoff": "2026-10-03T23:30:00.000Z",
+          "startsAt": "2026-10-03T23:30:00.000Z",
           "status": "scheduled",
           "period": 0,
-          "clock": "0:00",
+          "clock": 0,
+          "statusText": "10/3 - 7:30 PM EDT",
           "home": {
             "team": {
               "id": "fbs:38",
@@ -2269,10 +2319,11 @@
         {
           "id": "401858478",
           "league": "fbs",
-          "kickoff": "2026-10-03T23:30:00.000Z",
+          "startsAt": "2026-10-03T23:30:00.000Z",
           "status": "scheduled",
           "period": 0,
-          "clock": "0:00",
+          "clock": 0,
+          "statusText": "10/3 - 7:30 PM EDT",
           "home": {
             "team": {
               "id": "fbs:30",
@@ -2323,10 +2374,11 @@
         {
           "id": "401860898",
           "league": "fbs",
-          "kickoff": "2026-10-03T23:30:00.000Z",
+          "startsAt": "2026-10-03T23:30:00.000Z",
           "status": "scheduled",
           "period": 0,
-          "clock": "0:00",
+          "clock": 0,
+          "statusText": "10/3 - 7:30 PM EDT",
           "home": {
             "team": {
               "id": "fbs:68",
@@ -2377,10 +2429,11 @@
         {
           "id": "401862792",
           "league": "fbs",
-          "kickoff": "2026-10-03T23:30:00.000Z",
+          "startsAt": "2026-10-03T23:30:00.000Z",
           "status": "scheduled",
           "period": 0,
-          "clock": "0:00",
+          "clock": 0,
+          "statusText": "10/3 - 7:30 PM EDT",
           "home": {
             "team": {
               "id": "fbs:58",
@@ -2430,10 +2483,11 @@
         {
           "id": "401869842",
           "league": "fbs",
-          "kickoff": "2026-10-03T23:30:00.000Z",
+          "startsAt": "2026-10-03T23:30:00.000Z",
           "status": "scheduled",
           "period": 0,
-          "clock": "0:00",
+          "clock": 0,
+          "statusText": "10/3 - 7:30 PM EDT",
           "home": {
             "team": {
               "id": "fbs:2348",
@@ -2483,10 +2537,11 @@
         {
           "id": "401856706",
           "league": "fbs",
-          "kickoff": "2026-10-03T23:45:00.000Z",
+          "startsAt": "2026-10-03T23:45:00.000Z",
           "status": "scheduled",
           "period": 0,
-          "clock": "0:00",
+          "clock": 0,
+          "statusText": "10/3 - 7:45 PM EDT",
           "home": {
             "team": {
               "id": "fbs:99",
@@ -2536,10 +2591,11 @@
         {
           "id": "401858477",
           "league": "fbs",
-          "kickoff": "2026-10-04T00:00:00.000Z",
+          "startsAt": "2026-10-04T00:00:00.000Z",
           "status": "scheduled",
           "period": 0,
-          "clock": "0:00",
+          "clock": 0,
+          "statusText": "10/3 - 8:00 PM EDT",
           "home": {
             "team": {
               "id": "fbs:164",
@@ -2590,10 +2646,11 @@
         {
           "id": "401869932",
           "league": "fbs",
-          "kickoff": "2026-10-04T00:00:00.000Z",
+          "startsAt": "2026-10-04T00:00:00.000Z",
           "status": "scheduled",
           "period": 0,
-          "clock": "0:00",
+          "clock": 0,
+          "statusText": "10/3 - 8:00 PM EDT",
           "home": {
             "team": {
               "id": "fbs:309",
@@ -2643,10 +2700,11 @@
         {
           "id": "401860921",
           "league": "fbs",
-          "kickoff": "2026-10-04T01:30:00.000Z",
+          "startsAt": "2026-10-04T01:30:00.000Z",
           "status": "scheduled",
           "period": 0,
-          "clock": "0:00",
+          "clock": 0,
+          "statusText": "10/3 - 9:30 PM EDT",
           "home": {
             "team": {
               "id": "fbs:265",
@@ -2696,10 +2754,11 @@
         {
           "id": "401856817",
           "league": "fbs",
-          "kickoff": "2026-10-04T02:30:00.000Z",
+          "startsAt": "2026-10-04T02:30:00.000Z",
           "status": "scheduled",
           "period": 0,
-          "clock": "0:00",
+          "clock": 0,
+          "statusText": "10/3 - 10:30 PM EDT",
           "home": {
             "team": {
               "id": "fbs:9",
@@ -2749,10 +2808,11 @@
         {
           "id": "401860900",
           "league": "fbs",
-          "kickoff": "2026-10-04T02:30:00.000Z",
+          "startsAt": "2026-10-04T02:30:00.000Z",
           "status": "scheduled",
           "period": 0,
-          "clock": "0:00",
+          "clock": 0,
+          "statusText": "10/3 - 10:30 PM EDT",
           "home": {
             "team": {
               "id": "fbs:21",
@@ -2802,10 +2862,11 @@
         {
           "id": "401856820",
           "league": "fbs",
-          "kickoff": "2026-10-04T03:00:00.000Z",
+          "startsAt": "2026-10-04T03:00:00.000Z",
           "status": "scheduled",
           "period": 0,
-          "clock": "0:00",
+          "clock": 0,
+          "statusText": "10/3 - 11:00 PM EDT",
           "home": {
             "team": {
               "id": "fbs:12",
@@ -2855,10 +2916,11 @@
         {
           "id": "401864513",
           "league": "fbs",
-          "kickoff": "2026-10-04T03:59:00.000Z",
+          "startsAt": "2026-10-04T03:59:00.000Z",
           "status": "scheduled",
           "period": 0,
-          "clock": "0:00",
+          "clock": 0,
+          "statusText": "10/3 - 11:59 PM EDT",
           "home": {
             "team": {
               "id": "fbs:62",
@@ -2908,10 +2970,11 @@
         {
           "id": "401871049",
           "league": "fbs",
-          "kickoff": "2026-10-02T00:00:00.000Z",
+          "startsAt": "2026-10-02T00:00:00.000Z",
           "status": "final",
           "period": 4,
-          "clock": "0:00",
+          "clock": 0,
+          "statusText": "Final",
           "home": {
             "team": {
               "id": "fbs:166",
@@ -2956,10 +3019,10 @@
         {
           "id": "401862786",
           "league": "fbs",
-          "kickoff": "2026-10-02T01:00:00.000Z",
+          "startsAt": "2026-10-02T01:00:00.000Z",
           "status": "final",
           "period": 5,
-          "clock": "0:00",
+          "statusText": "Final/OT",
           "home": {
             "team": {
               "id": "fbs:202",
@@ -3004,10 +3067,11 @@
         {
           "id": "401858245",
           "league": "fbs",
-          "kickoff": "2026-10-02T23:00:00.000Z",
+          "startsAt": "2026-10-02T23:00:00.000Z",
           "status": "final",
           "period": 4,
-          "clock": "0:00",
+          "clock": 0,
+          "statusText": "Final",
           "home": {
             "team": {
               "id": "fbs:259",
@@ -3052,10 +3116,11 @@
         {
           "id": "401871050",
           "league": "fbs",
-          "kickoff": "2026-10-02T23:00:00.000Z",
+          "startsAt": "2026-10-02T23:00:00.000Z",
           "status": "final",
           "period": 4,
-          "clock": "0:00",
+          "clock": 0,
+          "statusText": "Final",
           "home": {
             "team": {
               "id": "fbs:48",
@@ -3100,10 +3165,11 @@
         {
           "id": "401858476",
           "league": "fbs",
-          "kickoff": "2026-10-03T00:00:00.000Z",
+          "startsAt": "2026-10-03T00:00:00.000Z",
           "status": "final",
           "period": 4,
-          "clock": "0:00",
+          "clock": 0,
+          "statusText": "Final",
           "home": {
             "team": {
               "id": "fbs:77",
@@ -3155,10 +3221,11 @@
         {
           "id": "401872971",
           "league": "nfl",
-          "kickoff": "2026-10-04T17:00:00.000Z",
+          "startsAt": "2026-10-04T17:00:00.000Z",
           "status": "live",
           "period": 2,
-          "clock": "4:51",
+          "clock": 291,
+          "statusText": "4:51 - 2nd",
           "home": {
             "team": {
               "id": "nfl:2",
@@ -3200,6 +3267,7 @@
             }
           ],
           "situation": {
+            "_tag": "Football",
             "possession": "nfl:2",
             "down": 3,
             "distance": 1,
@@ -3211,10 +3279,11 @@
         {
           "id": "401872972",
           "league": "nfl",
-          "kickoff": "2026-10-04T17:00:00.000Z",
+          "startsAt": "2026-10-04T17:00:00.000Z",
           "status": "live",
           "period": 2,
-          "clock": "8:15",
+          "clock": 495,
+          "statusText": "8:15 - 2nd",
           "home": {
             "team": {
               "id": "nfl:3",
@@ -3256,6 +3325,7 @@
             }
           ],
           "situation": {
+            "_tag": "Football",
             "down": 1,
             "distance": 10,
             "homeTimeouts": 3,
@@ -3265,10 +3335,11 @@
         {
           "id": "401872969",
           "league": "nfl",
-          "kickoff": "2026-10-04T17:00:00.000Z",
+          "startsAt": "2026-10-04T17:00:00.000Z",
           "status": "live",
           "period": 2,
-          "clock": "4:28",
+          "clock": 268,
+          "statusText": "4:28 - 2nd",
           "home": {
             "team": {
               "id": "nfl:4",
@@ -3310,6 +3381,7 @@
             }
           ],
           "situation": {
+            "_tag": "Football",
             "possession": "nfl:30",
             "down": 3,
             "distance": 10,
@@ -3321,10 +3393,11 @@
         {
           "id": "401872966",
           "league": "nfl",
-          "kickoff": "2026-10-04T17:00:00.000Z",
+          "startsAt": "2026-10-04T17:00:00.000Z",
           "status": "live",
           "period": 2,
-          "clock": "9:12",
+          "clock": 552,
+          "statusText": "9:12 - 2nd",
           "home": {
             "team": {
               "id": "nfl:19",
@@ -3366,6 +3439,7 @@
             }
           ],
           "situation": {
+            "_tag": "Football",
             "possession": "nfl:22",
             "down": 4,
             "distance": 8,
@@ -3377,10 +3451,11 @@
         {
           "id": "401872970",
           "league": "nfl",
-          "kickoff": "2026-10-04T17:00:00.000Z",
+          "startsAt": "2026-10-04T17:00:00.000Z",
           "status": "live",
           "period": 2,
-          "clock": "6:57",
+          "clock": 417,
+          "statusText": "6:57 - 2nd",
           "home": {
             "team": {
               "id": "nfl:21",
@@ -3422,6 +3497,7 @@
             }
           ],
           "situation": {
+            "_tag": "Football",
             "possession": "nfl:14",
             "down": 1,
             "distance": 10,
@@ -3433,10 +3509,11 @@
         {
           "id": "401872968",
           "league": "nfl",
-          "kickoff": "2026-10-04T17:00:00.000Z",
+          "startsAt": "2026-10-04T17:00:00.000Z",
           "status": "live",
           "period": 2,
-          "clock": "5:13",
+          "clock": 313,
+          "statusText": "5:13 - 2nd",
           "home": {
             "team": {
               "id": "nfl:27",
@@ -3478,6 +3555,7 @@
             }
           ],
           "situation": {
+            "_tag": "Football",
             "distance": 0,
             "homeTimeouts": 3,
             "awayTimeouts": 1
@@ -3486,10 +3564,11 @@
         {
           "id": "401872973",
           "league": "nfl",
-          "kickoff": "2026-10-04T17:00:00.000Z",
+          "startsAt": "2026-10-04T17:00:00.000Z",
           "status": "live",
           "period": 2,
-          "clock": "6:56",
+          "clock": 416,
+          "statusText": "6:56 - 2nd",
           "home": {
             "team": {
               "id": "nfl:33",
@@ -3531,6 +3610,7 @@
             }
           ],
           "situation": {
+            "_tag": "Football",
             "possession": "nfl:33",
             "down": 1,
             "distance": 10,
@@ -3542,10 +3622,11 @@
         {
           "id": "401872967",
           "league": "nfl",
-          "kickoff": "2026-10-04T17:00:00.000Z",
+          "startsAt": "2026-10-04T17:00:00.000Z",
           "status": "live",
           "period": 2,
-          "clock": "8:13",
+          "clock": 493,
+          "statusText": "8:13 - 2nd",
           "home": {
             "team": {
               "id": "nfl:34",
@@ -3587,6 +3668,7 @@
             }
           ],
           "situation": {
+            "_tag": "Football",
             "possession": "nfl:34",
             "down": 1,
             "distance": 10,
@@ -3598,10 +3680,11 @@
         {
           "id": "401872965",
           "league": "nfl",
-          "kickoff": "2026-10-04T13:30:00.000Z",
+          "startsAt": "2026-10-04T13:30:00.000Z",
           "status": "final",
           "period": 4,
-          "clock": "0:00",
+          "clock": 0,
+          "statusText": "Final",
           "home": {
             "team": {
               "id": "nfl:28",
@@ -3646,10 +3729,11 @@
         {
           "id": "401872974",
           "league": "nfl",
-          "kickoff": "2026-10-04T20:05:00.000Z",
+          "startsAt": "2026-10-04T20:05:00.000Z",
           "status": "scheduled",
           "period": 0,
-          "clock": "0:00",
+          "clock": 0,
+          "statusText": "10/4 - 4:05 PM EDT",
           "home": {
             "team": {
               "id": "nfl:16",
@@ -3699,10 +3783,11 @@
         {
           "id": "401872976",
           "league": "nfl",
-          "kickoff": "2026-10-04T20:25:00.000Z",
+          "startsAt": "2026-10-04T20:25:00.000Z",
           "status": "scheduled",
           "period": 0,
-          "clock": "0:00",
+          "clock": 0,
+          "statusText": "10/4 - 4:25 PM EDT",
           "home": {
             "team": {
               "id": "nfl:13",
@@ -3752,10 +3837,11 @@
         {
           "id": "401872975",
           "league": "nfl",
-          "kickoff": "2026-10-04T20:25:00.000Z",
+          "startsAt": "2026-10-04T20:25:00.000Z",
           "status": "scheduled",
           "period": 0,
-          "clock": "0:00",
+          "clock": 0,
+          "statusText": "10/4 - 4:25 PM EDT",
           "home": {
             "team": {
               "id": "nfl:25",
@@ -3805,10 +3891,11 @@
         {
           "id": "401872977",
           "league": "nfl",
-          "kickoff": "2026-10-04T20:25:00.000Z",
+          "startsAt": "2026-10-04T20:25:00.000Z",
           "status": "scheduled",
           "period": 0,
-          "clock": "0:00",
+          "clock": 0,
+          "statusText": "10/4 - 4:25 PM EDT",
           "home": {
             "team": {
               "id": "nfl:26",
@@ -3858,10 +3945,11 @@
         {
           "id": "401872978",
           "league": "nfl",
-          "kickoff": "2026-10-05T00:20:00.000Z",
+          "startsAt": "2026-10-05T00:20:00.000Z",
           "status": "scheduled",
           "period": 0,
-          "clock": "0:00",
+          "clock": 0,
+          "statusText": "10/4 - 8:20 PM EDT",
           "home": {
             "team": {
               "id": "nfl:29",
@@ -3911,10 +3999,11 @@
         {
           "id": "401872964",
           "league": "nfl",
-          "kickoff": "2026-10-02T00:15:00.000Z",
+          "startsAt": "2026-10-02T00:15:00.000Z",
           "status": "final",
           "period": 4,
-          "clock": "0:00",
+          "clock": 0,
+          "statusText": "Final",
           "home": {
             "team": {
               "id": "nfl:5",
@@ -3959,10 +4048,11 @@
         {
           "id": "401872979",
           "league": "nfl",
-          "kickoff": "2026-10-06T00:15:00.000Z",
+          "startsAt": "2026-10-06T00:15:00.000Z",
           "status": "scheduled",
           "period": 0,
-          "clock": "0:00",
+          "clock": 0,
+          "statusText": "10/5 - 8:15 PM EDT",
           "home": {
             "team": {
               "id": "nfl:18",

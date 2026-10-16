@@ -6,31 +6,20 @@ import { renderToStaticMarkup } from "react-dom/server"
 import { GameStatus, localTime } from "./GameStatus.tsx"
 
 describe("GameStatus", () => {
-  it.each([
-    [{ status: "live", period: 2, clock: "7:31" }, "Q2 7:31"],
-    [{ status: "live", period: 5, clock: "10:00" }, "OT 10:00"],
-    [{ status: "live", period: 6, clock: "10:00" }, "2OT 10:00"],
-    [{ status: "live", period: 7, clock: "10:00" }, "3OT 10:00"],
-    [{ status: "halftime", period: 2, clock: "0:00" }, "Half"],
-    [{ status: "delayed", period: 2, clock: "5:00" }, "Delayed"],
-    [{ status: "final", period: 4, clock: "0:00" }, "Final"],
-    [{ status: "final", period: 5, clock: "0:00" }, "Final/OT"],
-    [{ status: "postponed" }, "Postponed"],
-    [{ status: "canceled" }, "Canceled"]
-  ] as const)("should read %j as %s", (overrides, text) => {
-    const game = snapshot(overrides)
+  it("should show a live game's status text as the provider gives it", () => {
+    const game = snapshot({ status: "live", period: 2, clock: 451, statusText: "7:31 - 2nd" })
 
     const status = shownStatus(game)
 
-    assert.strictEqual(status, text)
+    assert.strictEqual(status, "7:31 - 2nd")
   })
 
-  it("should read a scheduled game as its local kickoff time", () => {
+  it("should read a scheduled game as its local start time", () => {
     const game = snapshot({ status: "scheduled" })
 
     const status = shownStatus(game)
 
-    assert.strictEqual(status, localTime(game.kickoff))
+    assert.strictEqual(status, localTime(game.startsAt))
   })
 })
 

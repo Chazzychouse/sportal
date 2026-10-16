@@ -1,8 +1,8 @@
 import { DateTime } from "effect"
 import { type Broadcast, GameId, GameSnapshot, Network, type Odds } from "./Game.ts"
 import type { LeagueId } from "./League.ts"
-import { Completion, type Play, PlayId, Rush, Timeout } from "./Play.ts"
-import { Situation } from "./Situation.ts"
+import { FootballDetail, Play, PlayId } from "./Play.ts"
+import { BaseballSituation, FootballSituation } from "./Situation.ts"
 import type { Slate } from "./Slate.ts"
 import { Team, TeamId } from "./Team.ts"
 
@@ -11,10 +11,10 @@ export function snapshot(overrides: Partial<GameSnapshot> = {}): GameSnapshot {
   return new GameSnapshot({
     id: GameId.make("1"),
     league: "fbs",
-    kickoff: DateTime.makeUnsafe("2026-10-03T16:00:00Z"),
+    startsAt: DateTime.makeUnsafe("2026-10-03T16:00:00Z"),
     status: "scheduled",
     period: 0,
-    clock: "0:00",
+    statusText: "Sat 12:00 PM",
     home: { team: team("HOME"), score: 0 },
     away: { team: team("AWAY"), score: 0 },
     broadcasts: [],
@@ -24,18 +24,32 @@ export function snapshot(overrides: Partial<GameSnapshot> = {}): GameSnapshot {
 
 /** A live game snapshot for a test: in the first period with 10:00 on the clock unless the overrides say otherwise. */
 export function liveSnapshot(overrides: Partial<GameSnapshot> = {}): GameSnapshot {
-  return snapshot({ status: "live", period: 1, clock: "10:00", ...overrides })
+  return snapshot({ status: "live", period: 1, clock: 600, statusText: "10:00 - 1st", ...overrides })
 }
 
-/** A situation for a test: the home team's first and ten at midfield, three timeouts each, unless the overrides say otherwise. */
-export function situation(overrides: Partial<Situation> = {}): Situation {
-  return new Situation({
+/** A football situation for a test: the home team's first and ten at midfield, three timeouts each, unless the overrides say otherwise. */
+export function situation(overrides: Partial<FootballSituation> = {}): FootballSituation {
+  return new FootballSituation({
     possession: team("HOME").id,
     down: 1,
     distance: 10,
     yardLine: 50,
     homeTimeouts: 3,
     awayTimeouts: 3,
+    ...overrides
+  })
+}
+
+/** A baseball situation for a test: the top of an inning with nobody on and no count, unless the overrides say otherwise. */
+export function baseballSituation(overrides: Partial<BaseballSituation> = {}): BaseballSituation {
+  return new BaseballSituation({
+    half: "top",
+    outs: 0,
+    balls: 0,
+    strikes: 0,
+    onFirst: false,
+    onSecond: false,
+    onThird: false,
     ...overrides
   })
 }
@@ -62,41 +76,33 @@ export function broadcast(network: string, medium: Broadcast["medium"] = "tv"): 
 
 const home = team("HOME").id
 
-/** What every play in a test carries: the home team's first snap, at 15:00 of the first quarter. */
-export const playFields = {
-  id: PlayId.make("1"),
-  sequence: 1,
-  period: 1,
-  clock: "15:00",
-  text: "Play",
-  scoring: false,
-  homeScore: 0,
-  awayScore: 0,
-  start: { down: 1, distance: 10, yardsToEndzone: 75, team: home },
-  end: { down: 2, distance: 9, yardsToEndzone: 74, team: home }
+/** A football play's detail for a test: a one-yard run by the home team from its 25 unless the overrides say otherwise. */
+export function footballDetail(overrides: Partial<FootballDetail> = {}): FootballDetail {
+  return new FootballDetail({
+    kind: "run",
+    yards: 1,
+    start: { down: 1, distance: 10, yardsToEndzone: 75, team: home },
+    end: { down: 2, distance: 9, yardsToEndzone: 74, team: home },
+    ...overrides
+  })
 }
 
-/** The fields a one-yard first-quarter play by the home team shares, whichever way it was made. */
-const oneYardPlay = { ...playFields, team: home, yards: 1, touchdown: false }
-
-/**
- * A play for a test: a one-yard rush by the home team in the first quarter unless the overrides say otherwise. A test
- * that needs another case constructs it.
- */
-export function play(overrides: Partial<Rush> = {}): Rush {
-  return new Rush({ ...oneYardPlay, text: "Rush for 1 yard", ...overrides })
-}
-
-/**
- * A pass for a test: a one-yard completion by the home team in the first quarter unless the overrides say otherwise.
- */
-export function completion(overrides: Partial<Completion> = {}): Completion {
-  return new Completion({ ...oneYardPlay, text: "Pass complete for 1 yard", ...overrides })
-}
-
-/** A timeout for a test: the home team's, at 15:00 of the first quarter, unless the overrides say otherwise. */
-export function timeout(overrides: Partial<Timeout> = {}): Timeout {
-  return new Timeout({ ...playFields, text: "Timeout", team: home, ...overrides })
+/** A play for a test: a one-yard run by the home team at 15:00 of the first quarter unless the overrides say otherwise. */
+export function play(overrides: Partial<Play> = {}): Play {
+  return new Play({
+    id: PlayId.make("1"),
+    sequence: 1,
+    period: 1,
+    clock: "15:00",
+    text: "Rush for 1 yard",
+    type: { id: "5", text: "Rush" },
+    scoring: false,
+    homeScore: 0,
+    awayScore: 0,
+    team: home,
+    detail: footballDetail(),
+    ...overrides
+  })
 }
 
 /** Game `id`'s snapshot, as `slate` has it. */

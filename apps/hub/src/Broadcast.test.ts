@@ -92,7 +92,7 @@ describe("Broadcast", () => {
       broadcasting((frames) =>
         Effect.gen(function* () {
           const fbs = ["3", "1", "2"].map((id) =>
-            snapshot({ id: GameId.make(id), league: "fbs", status: "live", period: 1, clock: "10:00" })
+            snapshot({ id: GameId.make(id), league: "fbs", status: "live", period: 1, clock: 600 })
           )
           const nfl = snapshot({ id: GameId.make("9"), league: "nfl", status: "live" })
 
@@ -112,7 +112,7 @@ describe("Broadcast", () => {
     it.effect("should publish the accepted snapshot rather than the original listing", () =>
       broadcasting((frames) =>
         Effect.gen(function* () {
-          const first = snapshot({ id: GameId.make("1"), status: "live", period: 1, clock: "10:00" })
+          const first = snapshot({ id: GameId.make("1"), status: "live", period: 1, clock: 600 })
           const next = snapshot({ ...first, period: 2 })
 
           const message = yield* publishedAfter(frames, [

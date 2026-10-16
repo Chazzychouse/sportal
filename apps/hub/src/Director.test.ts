@@ -28,8 +28,8 @@ describe("Director, the slate", () => {
       Effect.gen(function* () {
         const now = yield* DateTime.now
         const live = liveSnapshot({ id: one })
-        const soon = snapshot({ id: two, kickoff: DateTime.add(now, { minutes: 20 }) })
-        const later = snapshot({ id: three, kickoff: DateTime.add(now, { hours: 3 }) })
+        const soon = snapshot({ id: two, startsAt: DateTime.add(now, { minutes: 20 }) })
+        const later = snapshot({ id: three, startsAt: DateTime.add(now, { hours: 3 }) })
 
         const current = yield* listing(frames, [live, soon, later])
 
@@ -44,12 +44,9 @@ describe("Director, the slate", () => {
   it.effect("should ignore a snapshot behind its game's", () =>
     fed((frames) =>
       Effect.gen(function* () {
-        yield* listing(frames, [snapshot({ id: one, status: "live", period: 2, clock: "5:00" })])
+        yield* listing(frames, [snapshot({ id: one, status: "live", period: 2, clock: 300 })])
 
-        const current = yield* relisted(
-          frames,
-          snapshot({ id: one, status: "live", period: 1, clock: "5:00" })
-        )
+        const current = yield* relisted(frames, snapshot({ id: one, status: "live", period: 1, clock: 300 }))
 
         assert.strictEqual(snapshotIn(current, one)?.period, 2)
       })
@@ -59,8 +56,8 @@ describe("Director, the slate", () => {
   it.effect("should keep a snapshot of its own for each game", () =>
     fed((frames) =>
       Effect.gen(function* () {
-        const first = liveSnapshot({ id: one, clock: "9:00" })
-        const second = snapshot({ id: two, status: "live", period: 3, clock: "1:00" })
+        const first = liveSnapshot({ id: one, clock: 540 })
+        const second = snapshot({ id: two, status: "live", period: 3, clock: 60 })
         yield* listing(frames, [liveSnapshot({ id: one }), snapshot({ id: two, status: "live", period: 2 })])
 
         yield* listing(frames, [first, snapshot({ id: two, status: "live", period: 2 })])
@@ -106,7 +103,7 @@ describe("Director#slate", () => {
           Effect.forkScoped({ startImmediately: true })
         )
         const first = liveSnapshot({ id: one })
-        const second = liveSnapshot({ id: one, clock: "9:00" })
+        const second = liveSnapshot({ id: one, clock: 540 })
 
         yield* listing(frames, [first])
         yield* Effect.yieldNow
@@ -130,7 +127,7 @@ describe("Director#slate", () => {
         )
         yield* listing(frames, [liveSnapshot({ id: one })])
 
-        yield* relisted(frames, liveSnapshot({ id: one, clock: "11:00" }))
+        yield* relisted(frames, liveSnapshot({ id: one, clock: 660 }))
         yield* Effect.yieldNow
         const count = yield* Ref.get(given)
 
@@ -144,7 +141,7 @@ describe("Director, a take that raises a defect", () => {
   it.effect("should keep the slate as it was", () =>
     fed((frames) =>
       Effect.gen(function* () {
-        const before = yield* listing(frames, [liveSnapshot({ id: one, clock: "9:00" })])
+        const before = yield* listing(frames, [liveSnapshot({ id: one, clock: 540 })])
 
         const current = yield* relisted(frames, broken(one))
 
@@ -156,9 +153,9 @@ describe("Director, a take that raises a defect", () => {
   it.effect("should take the game's next snapshot", () =>
     fed((frames) =>
       Effect.gen(function* () {
-        yield* listing(frames, [liveSnapshot({ id: one, clock: "9:00" })])
+        yield* listing(frames, [liveSnapshot({ id: one, clock: 540 })])
         yield* relisted(frames, broken(one))
-        const next = liveSnapshot({ id: one, clock: "7:00" })
+        const next = liveSnapshot({ id: one, clock: 420 })
 
         const current = yield* relisted(frames, next)
 
@@ -257,5 +254,5 @@ function broken(id: GameId): GameSnapshot {
       throw new Error("a broken snapshot")
     }
   }
-  return new Broken({ ...liveSnapshot({ id, clock: "8:00" }) })
+  return new Broken({ ...liveSnapshot({ id, clock: 480 }) })
 }

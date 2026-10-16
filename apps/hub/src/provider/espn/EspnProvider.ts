@@ -4,21 +4,22 @@ import { DateTime, Duration, Effect, HashMap, Layer, Option, Result, Stream, Sub
 import { HttpClient } from "effect/http"
 import { Delivery, Provider } from "../Provider.ts"
 import * as EspnEvent from "./EspnEvent.ts"
+import type { EspnLeague } from "./EspnLeague.ts"
 import { FastCast, type Frame, Topic, type Wanted } from "./FastCast.ts"
 import { GameTopics } from "./GameTopics.ts"
 
 /**
  * ESPN as the provider: the site scoreboard of each of `leagues`, polled, beside FastCast's game topics,
  * with no order between the two. Each league polls on its own, each poll its league's `Listing`, and waits after it by
- * its own last good listing: 10 seconds while a game is live, a minute while one kicks off within 30 minutes, and 15
+ * its own last good listing: 10 seconds while a game is live, a minute while one starts within 30 minutes, and 15
  * minutes otherwise; at most 30 seconds after a poll that failed or did not decode. A poll's request and body read are
  * bounded to 20 seconds; a poll that fails, times out, or does not decode is logged, says nothing, and keeps the last
- * good listing. It tells FastCast to follow each listed game live or within 30 minutes of kickoff, folds FastCast's
+ * good listing. It tells FastCast to follow each listed game live or within 30 minutes of its start, folds FastCast's
  * frames into one `GameTopics`, and after each listing keeps no document of a topic it no longer follows. Each run of
  * `deliveries` polls and follows on its own.
  */
 export const layer = (
-  leagues: ReadonlyArray<LeagueId>
+  leagues: ReadonlyArray<EspnLeague>
 ): Layer.Layer<Provider, never, FastCast | HttpClient.HttpClient> =>
   Layer.effect(
     Provider,
@@ -27,17 +28,17 @@ export const layer = (
       const fastCast = yield* FastCast
       const client = http.pipe(HttpClient.filterStatusOk)
 
-      const polled = (league: LeagueId) =>
-        client.get(scoreboardUrl(league)).pipe(
+      const polled = (league: EspnLeague) =>
+        client.get(league.scoreboardUrl(Option.none())).pipe(
           Effect.flatMap((response) => response.text),
           Effect.timeout("20 seconds"),
-          Effect.flatMap((body) => EspnEvent.listingOf(league, body)),
+          Effect.flatMap((body) => EspnEvent.listingOf(league.league, body)),
           Effect.asSome,
           Effect.catch((error) =>
             Effect.logWarning(
               "EspnProvider: a poll failed; keeping the last good listing for this league, if any",
               error
-            ).pipe(Effect.annotateLogs({ league }), Effect.as(Option.none()))
+            ).pipe(Effect.annotateLogs({ league: league.league }), Effect.as(Option.none()))
           )
         )
 
@@ -48,20 +49,22 @@ export const layer = (
           // What the game topics' fold last took, for `wanted` to read; only the fold sets it.
           const view = yield* SubscriptionRef.make(GameTopics.empty)
 
-          const pollsOf = (league: LeagueId) =>
+          const pollsOf = (league: EspnLeague) =>
             Stream.unfold(
               { games: noGames, wait: Duration.zero },
               Effect.fnUntraced(function* ({ games, wait }) {
                 yield* Effect.sleep(wait)
                 const listed = yield* polled(league)
                 if (Option.isSome(listed)) {
-                  yield* SubscriptionRef.update(listings, (all) => HashMap.set(all, league, listed.value))
+                  yield* SubscriptionRef.update(listings, (all) =>
+                    HashMap.set(all, league.league, listed.value)
+                  )
                 }
                 const now = yield* DateTime.now
 
                 const last = Option.getOrElse(listed, () => games)
                 const said = Option.toArray(
-                  Option.map(listed, (listing) => Delivery.Listing({ league, games: listing }))
+                  Option.map(listed, (listing) => Delivery.Listing({ league: league.league, games: listing }))
                 )
                 return [said, { games: last, wait: waitAfter(last, Option.isNone(listed), now) }] as const
               })
@@ -102,19 +105,11 @@ export const layer = (
 /** Each league's last good listing. */
 type Listings = HashMap.HashMap<LeagueId, ReadonlyArray<GameSnapshot>>
 
-/** The site scoreboard of `league` the Hub polls: today's games, every FBS game for college. */
-function scoreboardUrl(league: LeagueId): string {
-  const base = "https://site.api.espn.com/apis/site/v2/sports/football"
-  return league === "nfl"
-    ? `${base}/nfl/scoreboard`
-    : `${base}/college-football/scoreboard?groups=80&limit=300`
-}
-
 const noGames: ReadonlyArray<GameSnapshot> = []
 
 /**
  * How long a league waits after a poll, by its last good listing `games`: 10 seconds while one is live, a minute while
- * one kicks off within `GameSnapshot.kickoffWindow`, and 15 minutes otherwise; at most 30 seconds when this poll
+ * one starts within `GameSnapshot.startWindow`, and 15 minutes otherwise; at most 30 seconds when this poll
  * `failed` or did not decode, so its scoreboard is read again soon.
  */
 function waitAfter(
@@ -124,7 +119,7 @@ function waitAfter(
 ): Duration.Duration {
   const normal = games.some((game) => game.progress() === "live")
     ? Duration.seconds(10)
-    : games.some((game) => game.isLiveOrKicksOffWithin(GameSnapshot.kickoffWindow, now))
+    : games.some((game) => game.isLiveOrStartsWithin(GameSnapshot.startWindow, now))
       ? Duration.minutes(1)
       : Duration.minutes(15)
   return failed ? Duration.min(normal, Duration.seconds(30)) : normal
@@ -136,7 +131,7 @@ function gamesOf(listings: Listings): ReadonlyArray<GameSnapshot> {
 }
 
 /**
- * What FastCast follows, read from `listings` and `view` on each change of either and once a minute, so a kickoff
+ * What FastCast follows, read from `listings` and `view` on each change of either and once a minute, so a start
  * coming into its window is followed with no frame to say so.
  */
 function wantedOf(

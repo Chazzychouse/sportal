@@ -2,7 +2,7 @@ import { DateTime, Duration, Equal, Option, Order, Schema } from "effect"
 import { LeagueId } from "./League.ts"
 import { Play } from "./Play.ts"
 import { Situation } from "./Situation.ts"
-import { Team, type TeamId } from "./Team.ts"
+import { Team } from "./Team.ts"
 
 export const GameId = Schema.String.pipe(Schema.brand("GameId"))
 export type GameId = typeof GameId.Type
@@ -10,7 +10,7 @@ export type GameId = typeof GameId.Type
 export const GameStatus = Schema.Literals([
   "scheduled",
   "live",
-  "halftime",
+  "break",
   "delayed",
   "final",
   "postponed",
@@ -32,7 +32,7 @@ export type TeamRecord = typeof TeamRecord.Type
 
 /**
  * The pregame betting line: the side favored, if either, by how many points (`spread`, never negative), and the
- * total points expected. The scoreboard sends it only before kickoff.
+ * total points expected. The scoreboard sends it only before the start.
  */
 export const Odds = Schema.Struct({
   favorite: Schema.optional(Schema.Literals(["home", "away"])),
@@ -51,10 +51,13 @@ const Side = Schema.Struct({
 export class GameSnapshot extends Schema.Class<GameSnapshot>("sportal/GameSnapshot")({
   id: GameId,
   league: LeagueId,
-  kickoff: Schema.DateTimeUtcFromString,
+  startsAt: Schema.DateTimeUtcFromString,
   status: GameStatus,
   period: Schema.Int,
-  clock: Schema.String,
+  /** Seconds left in the period, when the period runs on a clock: absent in baseball, and in a college overtime, which has none. */
+  clock: Schema.optional(Schema.Int),
+  /** The provider's short status, shown as it is ("Top 7th", "7:21 - 2nd", "Halftime"). */
+  statusText: Schema.String,
   home: Side,
   away: Side,
   broadcasts: Schema.Array(Broadcast),
@@ -62,50 +65,53 @@ export class GameSnapshot extends Schema.Class<GameSnapshot>("sportal/GameSnapsh
   odds: Schema.optional(Odds)
 }) {
   /**
-   * How long before its kickoff an upcoming game counts with the live ones: the slate holds it as current, FastCast
+   * How long before its start an upcoming game counts with the live ones: the slate holds it as current, FastCast
    * follows its topic, and ESPN's scoreboard is polled every minute.
    */
-  static readonly kickoffWindow = Duration.minutes(30)
+  static readonly startWindow = Duration.minutes(30)
 
-  /** Live games first, then upcoming by kickoff, then everything that is over. */
+  /** Live games first, then upcoming by start, then everything that is over. */
   static readonly watchOrder: Order.Order<GameSnapshot> = Order.combine(
     Order.mapInput(Order.Number, (game: GameSnapshot) => watchRank[game.progress()]),
-    Order.mapInput(DateTime.Order, (game: GameSnapshot) => game.kickoff)
+    Order.mapInput(DateTime.Order, (game: GameSnapshot) => game.startsAt)
   )
 
-  /** The period, then less time left on the clock, whatever the status. */
+  /** The period, then less time left on the clock, then the situation's own order, whatever the status. */
   private static readonly clockTime: Order.Order<GameSnapshot> = Order.combine(
-    Order.mapInput(Order.Number, (game: GameSnapshot) => game.period),
-    Order.mapInput(Order.flip(Order.Number), (game: GameSnapshot) => game.secondsLeft())
+    Order.combine(
+      Order.mapInput(Order.Number, (game: GameSnapshot) => game.period),
+      Order.mapInput(Order.flip(Order.Number), (game: GameSnapshot) => game.clock ?? 0)
+    ),
+    Order.mapInput(Situation.order, (game: GameSnapshot) => game.situation)
   )
 
   /**
-   * How far a game has got: before kickoff, in play, or over; then the period; then less time left on the clock; then,
-   * at the same clock, halftime after play. Any other statuses at the same clock tie. Orders two snapshots of one game.
+   * How far a game has got: before the start, in play, or over; then the period; then less time left on the clock; then,
+   * at the same clock, a break after play. Any other statuses at the same clock tie. Orders two snapshots of one game.
    */
   private static readonly gameTime: Order.Order<GameSnapshot> = Order.combine(
     Order.mapInput(Order.Number, (game: GameSnapshot) => gameTimeRank[game.progress()]),
     Order.combine(
       GameSnapshot.clockTime,
-      Order.mapInput(Order.Number, (game: GameSnapshot) => (game.status === "halftime" ? 1 : 0))
+      Order.mapInput(Order.Number, (game: GameSnapshot) => (game.status === "break" ? 1 : 0))
     )
   )
 
   /**
    * Where the game is in its day: not started, being played, or done with (final, postponed, canceled). A delay
-   * before kickoff is upcoming and a delay during the game is live.
+   * before the start is upcoming and a delay during the game is live.
    */
   progress(): Progress {
     return progressOf[this.status](this.period)
   }
 
-  /** Whether the game is live at `now`, or upcoming with its kickoff no later than `window` after `now`. */
-  isLiveOrKicksOffWithin(window: Duration.Duration, now: DateTime.Utc): boolean {
+  /** Whether the game is live at `now`, or upcoming with its start no later than `window` after `now`. */
+  isLiveOrStartsWithin(window: Duration.Duration, now: DateTime.Utc): boolean {
     const progress = this.progress()
     return (
       progress === "live" ||
       (progress === "upcoming" &&
-        DateTime.isLessThanOrEqualTo(this.kickoff, DateTime.addDuration(now, window)))
+        DateTime.isLessThanOrEqualTo(this.startsAt, DateTime.addDuration(now, window)))
     )
   }
 
@@ -146,11 +152,6 @@ export class GameSnapshot extends Schema.Class<GameSnapshot>("sportal/GameSnapsh
     return this.home.score + this.away.score
   }
 
-  /** Whether the game is in overtime, the fifth period or later. */
-  inOvertime(): boolean {
-    return this.period >= 5
-  }
-
   /** Whether the game has a score worth showing: it is being played or is final. */
   scored(): boolean {
     return this.progress() === "live" || this.status === "final"
@@ -172,50 +173,28 @@ export class GameSnapshot extends Schema.Class<GameSnapshot>("sportal/GameSnapsh
     return `${this.away.team.abbreviation} ${this.away.score}–${this.home.score} ${this.home.team.abbreviation}`
   }
 
-  /** Seconds left in the period, from the clock ("2:10"). An unreadable clock reads as a full quarter. */
-  secondsLeft(): number {
-    const [minutes, seconds] = this.clock.split(":").map((part) => Number.parseInt(part, 10))
-    const total = (minutes ?? Number.NaN) * 60 + (seconds ?? 0)
-    return Number.isFinite(total) ? total : quarterSeconds
-  }
-
   /**
-   * Whether the period runs on a game clock, so 0:00 means it is over. A college overtime has no clock: ESPN shows
-   * it as 0:00 throughout. An NFL overtime has one.
-   */
-  private timed(): boolean {
-    return !(this.league === "fbs" && this.inOvertime())
-  }
-
-  /**
-   * Where a spot is on the field, from the team with the ball and the yards it has to the goal it attacks. None
-   * when either is missing, the team plays in neither side, or the yards are off the field.
-   */
-  spotOf(spot: {
-    readonly team?: TeamId | undefined
-    readonly yardsToEndzone?: number | undefined
-  }): Option.Option<BallSpot> {
-    const { team, yardsToEndzone } = spot
-    if (team === undefined || yardsToEndzone === undefined) return Option.none()
-    if (team === this.home.team.id)
-      return BallSpot.makeOption({ yards: 100 - yardsToEndzone, toward: "away" })
-    if (team === this.away.team.id) return BallSpot.makeOption({ yards: yardsToEndzone, toward: "home" })
-    return Option.none()
-  }
-
-  /**
-   * Whether the game is being played right now: live, with time left on a timed period's clock. Halftime, the break
-   * between periods, and everything before kickoff or after the final are not.
+   * Whether the game is being played right now: live, with time left on the clock when it has one. A break, and
+   * everything before the start or after the final, are not.
    */
   inPlay(): boolean {
-    return this.status === "live" && !(this.timed() && this.secondsLeft() === 0)
-  }
-
-  /** Where the ball is: the spot of the situation's team with the ball, at its yard line. */
-  ball(): Option.Option<BallSpot> {
-    return this.spotOf({ team: this.situation?.possession, yardsToEndzone: this.situation?.yardLine })
+    return this.status === "live" && (this.clock === undefined || this.clock > 0)
   }
 }
+
+/** A page of a game's plays, newest first, and whether earlier ones remain. */
+export const PlaysPage = Schema.Struct({ plays: Schema.Array(Play), more: Schema.Boolean })
+export type PlaysPage = typeof PlaysPage.Type
+
+/**
+ * What changed in a game's plays: plays added after the last it had, or anything else (a play revised or removed),
+ * which replaces the list with its latest page. Each list is newest first.
+ */
+export const PlaysChange = Schema.TaggedUnion({
+  Appended: { plays: Schema.Array(Play) },
+  Reset: { plays: Schema.Array(Play) }
+})
+export type PlaysChange = typeof PlaysChange.Type
 
 /** A game as the slate has it: its latest snapshot, and its plays in `Play.order`. */
 export class Game extends Schema.Class<Game>("sportal/Game")({
@@ -224,6 +203,9 @@ export class Game extends Schema.Class<Game>("sportal/Game")({
 }) {
   /** How many of its plays `recent` keeps. */
   private static readonly recentCount = 10
+
+  /** How many plays a page holds unless asked for fewer. */
+  static readonly pageSize = 50
 
   /** A game first seen as `snapshot`, with no plays yet. */
   static of(snapshot: GameSnapshot): Game {
@@ -251,6 +233,26 @@ export class Game extends Schema.Class<Game>("sportal/Game")({
     return this.plays.filter(({ id }) => !had.has(id))
   }
 
+  /** Its plays before sequence `before` (all of them without it), newest first, at most `limit`, and whether more remain. */
+  playsPage(before: number | undefined, limit: number): PlaysPage {
+    const earlier = before === undefined ? this.plays : this.plays.filter((play) => play.sequence < before)
+    return { plays: earlier.slice(-limit).toReversed(), more: earlier.length > limit }
+  }
+
+  /**
+   * What changed in its plays since `earlier`, the same game before: none when they are the same; the plays added
+   * when `earlier`'s are all still first and unchanged; otherwise a reset to its latest page.
+   */
+  playsChange(earlier: Game): Option.Option<PlaysChange> {
+    if (Equal.equals(earlier.plays, this.plays)) return Option.none()
+
+    const kept = this.plays.slice(0, earlier.plays.length)
+    if (this.plays.length > earlier.plays.length && Equal.equals(kept, earlier.plays)) {
+      return Option.some({ _tag: "Appended", plays: this.plays.slice(earlier.plays.length).toReversed() })
+    }
+    return Option.some({ _tag: "Reset", plays: this.playsPage(undefined, Game.pageSize).plays })
+  }
+
   /** This game with only its last ten plays: what the live stream sends. */
   recent(): Game {
     if (this.plays.length <= Game.recentCount) return this
@@ -259,21 +261,16 @@ export class Game extends Schema.Class<Game>("sportal/Game")({
   }
 }
 
-/** Where a spot is on the field: yards from the home goal line (0–100), and the way its team is going. */
-export class BallSpot extends Schema.Class<BallSpot>("sportal/BallSpot")({
-  yards: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 100 })),
-  toward: Schema.Literals(["home", "away"])
-}) {}
-
 /** Where a game is in its day. */
-export type Progress = "upcoming" | "live" | "over"
+export const Progress = Schema.Literals(["upcoming", "live", "over"])
+export type Progress = typeof Progress.Type
 
 /** Each status's progress, given the period it is in. */
 const progressOf: Record<GameStatus, (period: number) => Progress> = {
   scheduled: () => "upcoming",
   delayed: (period) => (period >= 1 ? "live" : "upcoming"),
   live: () => "live",
-  halftime: () => "live",
+  break: () => "live",
   final: () => "over",
   postponed: () => "over",
   canceled: () => "over"
@@ -282,6 +279,3 @@ const progressOf: Record<GameStatus, (period: number) => Progress> = {
 const watchRank = { live: 0, upcoming: 1, over: 2 } as const
 
 const gameTimeRank = { upcoming: 0, live: 1, over: 2 } as const
-
-/** Seconds in a quarter, college and NFL alike. */
-const quarterSeconds = 15 * 60

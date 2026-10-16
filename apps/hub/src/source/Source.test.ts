@@ -101,10 +101,10 @@ describe("Source.layerYouTubeTv", () => {
   )
 })
 
-const thursdayKickoff = DateTime.makeUnsafe("2026-10-09T00:15:00Z")
-const thursdayNight = primeVideoGame(thursdayKickoff)
+const thursdayStart = DateTime.makeUnsafe("2026-10-09T00:15:00Z")
+const thursdayNight = primeVideoGame(thursdayStart)
 const thursdayNightStarted = snapshot({ ...thursdayNight, status: "live" })
-// A Prime Video game whose teams the recorded guide does not list, kicking off 20 minutes after it was read.
+// A Prime Video game whose teams the recorded guide does not list, starting 20 minutes after it was read.
 const primeVideoSoonAfterRecording = primeVideoGame(
   DateTime.add(DateTime.makeUnsafe(TestHub.recordedAt), { minutes: 20 })
 )
@@ -123,7 +123,7 @@ const onPrimeVideo: ChannelAvailability = {
 describe("Source.layerTwitch", () => {
   it.effect("should carry a Prime Video game on primevideo once it has started", () =>
     Effect.gen(function* () {
-      yield* TestClock.setTime(DateTime.toEpochMillis(thursdayKickoff))
+      yield* TestClock.setTime(DateTime.toEpochMillis(thursdayStart))
 
       const availabilityOf = yield* TestHub.availabilityNow
 
@@ -156,7 +156,7 @@ describe("Source.layerAll", () => {
     "should give no guide from YouTube TV and carried from Twitch for Thursday's Prime Video game once it has started",
     () =>
       Effect.gen(function* () {
-        yield* TestClock.setTime(DateTime.toEpochMillis(DateTime.add(thursdayKickoff, { minutes: 10 })))
+        yield* TestClock.setTime(DateTime.toEpochMillis(DateTime.add(thursdayStart, { minutes: 10 })))
 
         const availabilityOf = yield* TestHub.availabilityNow
 
@@ -182,11 +182,11 @@ describe("Source.layerAll", () => {
   )
 })
 
-/** An NFL game, Jets at Broncos, streaming only on Prime Video, kicking off at `kickoff`. */
-function primeVideoGame(kickoff: DateTime.Utc) {
+/** An NFL game, Jets at Broncos, streaming only on Prime Video, starting at `startsAt`. */
+function primeVideoGame(startsAt: DateTime.Utc) {
   return snapshot({
     league: "nfl",
-    kickoff,
+    startsAt,
     away: { team: team("NYJ", "nfl", { name: "New York Jets", shortName: "Jets" }), score: 0 },
     home: { team: team("DEN", "nfl", { name: "Denver Broncos", shortName: "Broncos" }), score: 0 },
     broadcasts: [broadcast("Prime Video", "streaming")]

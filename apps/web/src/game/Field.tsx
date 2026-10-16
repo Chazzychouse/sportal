@@ -1,9 +1,9 @@
-import type { BallSpot, GameSnapshot } from "@sportal/domain/Game"
-import { Play } from "@sportal/domain/Play"
-import type { Situation } from "@sportal/domain/Situation"
+import type { GameSnapshot } from "@sportal/domain/Game"
+import { type FootballDetail, type Play, PlayDetail } from "@sportal/domain/Play"
+import { type BallSpot, type FootballSituation, Situation } from "@sportal/domain/Situation"
 import type { Team, TeamId } from "@sportal/domain/Team"
 import { Option } from "effect"
-import { type CSSProperties, useEffect, useReducer } from "react"
+import { type CSSProperties, useEffect, useMemo, useReducer } from "react"
 import { cn } from "@/design/ClassName"
 import { FieldDrawing, FieldEvent } from "./FieldDrawing.ts"
 
@@ -15,11 +15,12 @@ import { FieldDrawing, FieldEvent } from "./FieldDrawing.ts"
  */
 export function Field(props: { game: GameSnapshot; plays: ReadonlyArray<Play>; className?: string }) {
   const { game, plays } = props
-  const [drawing, dispatch] = useReducer(FieldDrawing.step, plays, FieldDrawing.initial)
-  useEffect(() => dispatch(FieldEvent.Arrived({ plays, game })), [plays, game])
-
-  const ball = game.inPlay() ? game.ball() : Option.none()
-  const situation = game.situation
+  const situation =
+    game.situation !== undefined && Situation.guards.Football(game.situation) ? game.situation : undefined
+  const ball = game.inPlay() && situation !== undefined ? situation.ball(game) : Option.none()
+  const drawn = useMemo(() => plays.filter((play) => PlayDetail.guards.Football(play.detail)), [plays])
+  const [drawing, dispatch] = useReducer(FieldDrawing.step, drawn, FieldDrawing.initial)
+  useEffect(() => dispatch(FieldEvent.Arrived({ plays: drawn, game })), [drawn, game])
 
   return (
     <svg
@@ -77,7 +78,7 @@ export function Field(props: { game: GameSnapshot; plays: ReadonlyArray<Play>; c
           <PlayArrow
             key={play.id}
             game={game}
-            plays={plays}
+            plays={drawn}
             play={play}
             onDrawn={() => dispatch(FieldEvent.Drawn({ play: play.id, game }))}
           />
@@ -120,7 +121,7 @@ function ballColorOf(game: GameSnapshot, team: TeamId | undefined): string {
 }
 
 /** The situation at rest: the red zone when the ball is in it, the line of scrimmage, the line to gain, and the ball. */
-function Scrimmage(props: { game: GameSnapshot; situation: Situation; spot: BallSpot }) {
+function Scrimmage(props: { game: GameSnapshot; situation: FootballSituation; spot: BallSpot }) {
   const { situation, spot } = props
   const x = xOf(spot)
   const direction = directionOf(spot)
@@ -149,7 +150,7 @@ function Scrimmage(props: { game: GameSnapshot; situation: Situation; spot: Ball
 }
 
 /**
- * One play, drawn once over `drawSeconds`: its arrow by case, the ball leaving its start and arriving at its end in
+ * One football play, drawn once over `drawSeconds`: its arrow by kind, the ball leaving its start and arriving at its end in
  * the color of the team that has it there, and on a score the end zone the scorer attacks flashing in its color.
  * `onDrawn` runs when the arrow is finished.
  */
@@ -160,7 +161,10 @@ function PlayArrow(props: {
   onDrawn: () => void
 }) {
   const { game, play, onDrawn } = props
-  const spots = FieldDrawing.spotsOf(game, play)
+  const spots = Option.all({
+    detail: Option.liftPredicate(play.detail, PlayDetail.guards.Football),
+    spots: FieldDrawing.spotsOf(game, play)
+  })
   const missing = Option.isNone(spots)
   // A play dequeued with both spots always has them, but should one go missing no animation would end the play.
   useEffect(() => {
@@ -169,9 +173,9 @@ function PlayArrow(props: {
 
   return Option.match(spots, {
     onNone: () => null,
-    onSome: ({ start, end }) => {
+    onSome: ({ detail, spots: { start, end } }) => {
       const scorer = play.scoring ? scorerOf(game, props.plays, play) : undefined
-      const losing = Play.lostYards(play)
+      const losing = detail.lostYards()
 
       return (
         <g>
@@ -187,20 +191,20 @@ function PlayArrow(props: {
             />
           )}
           <path
-            d={pathOf(play, start, end)}
+            d={pathOf(detail, start, end)}
             pathLength={1}
             fill="none"
             stroke={losing ? "var(--destructive)" : "var(--foreground)"}
             strokeWidth={0.6}
             strokeLinecap="round"
-            strokeDasharray={dashesOf(play)}
+            strokeDasharray={dashesOf(detail)}
             style={{ animation: `field-draw ${drawSeconds}s ease-out both` }}
             onAnimationEnd={onDrawn}
           />
-          <Ball x={xOf(start)} color={ballColorOf(game, play.start.team)} opacity={0.5} />
+          <Ball x={xOf(start)} color={ballColorOf(game, detail.start.team)} opacity={0.5} />
           <Ball
             x={xOf(end)}
-            color={ballColorOf(game, play.end.team)}
+            color={ballColorOf(game, detail.end.team)}
             style={{ animation: `field-arrive ${drawSeconds}s ease-out both` }}
           />
         </g>
@@ -210,72 +214,46 @@ function PlayArrow(props: {
 }
 
 /**
- * The arrow's course by case: a high arc for a kick, an arc for a completion, a loop downfield and back for an
- * incompletion, and straight along the field for anything else.
+ * The arrow's course by kind: a high arc for a kick, an arc for a caught pass, a loop downfield and back for an
+ * incomplete pass, and straight along the field for anything else.
  */
-function pathOf(play: Play, start: BallSpot, end: BallSpot): string {
+function pathOf(detail: FootballDetail, start: BallSpot, end: BallSpot): string {
   const from = xOf(start)
   const to = xOf(end)
   const span = Math.abs(to - from)
   const arc = (height: number) =>
     `M ${from} ${middle} Q ${(from + to) / 2} ${middle - height} ${to} ${middle}`
-  const kick = () => arc(Math.min(24, Math.max(10, span * 0.6)))
-  const straight = () => `M ${from} ${middle} L ${to} ${middle}`
-  return Play.match(play, {
-    Kickoff: kick,
-    Punt: kick,
-    FieldGoal: kick,
-    ExtraPoint: kick,
-    Completion: () => arc(Math.min(18, Math.max(4, span * 0.4))),
-    Incompletion: () => {
+  const straight = `M ${from} ${middle} L ${to} ${middle}`
+  switch (detail.kind) {
+    case "kick":
+      return arc(Math.min(24, Math.max(10, span * 0.6)))
+    case "pass":
+      return arc(Math.min(18, Math.max(4, span * 0.4)))
+    case "incomplete": {
       const out = from + directionOf(start) * 16
       return `M ${from} ${middle} C ${out} ${middle - 16} ${out} ${middle - 2} ${from} ${middle}`
-    },
-    Rush: straight,
-    Interception: straight,
-    Sack: straight,
-    Fumble: straight,
-    TwoPointTry: straight,
-    Safety: straight,
-    Penalty: straight,
-    Timeout: straight,
-    Stoppage: straight,
-    PeriodEnd: straight,
-    Other: straight
-  })
+    }
+    default:
+      return straight
+  }
 }
 
 /**
  * The arrow's dashes on a path of length 1, then a gap of 1, so `field-draw` (the offset from 1 to 0) reveals them
- * from the start: dashed for a penalty, dotted for an incompletion, solid otherwise. The list has an even length,
+ * from the start: dashed for a penalty, dotted for an incomplete pass, solid otherwise. The list has an even length,
  * since SVG repeats an odd one twice and that would show the dashes before they are drawn.
  */
-function dashesOf(play: Play): string {
+function dashesOf(detail: FootballDetail): string {
   const pattern = (count: number, dash: number) =>
     Array.from(
       { length: count },
       (_, index) => `${dash} ${1 / count - dash + (index === count - 1 ? 1 : 0)}`
     ).join(" ")
-  const solid = () => "1 1"
-  return Play.match(play, {
-    Penalty: () => pattern(12, 0.05),
-    Incompletion: () => pattern(24, 0.001),
-    Rush: solid,
-    Completion: solid,
-    Interception: solid,
-    Sack: solid,
-    Fumble: solid,
-    TwoPointTry: solid,
-    Kickoff: solid,
-    Punt: solid,
-    FieldGoal: solid,
-    ExtraPoint: solid,
-    Safety: solid,
-    Timeout: solid,
-    Stoppage: solid,
-    PeriodEnd: solid,
-    Other: solid
-  })
+  return detail.kind === "penalty"
+    ? pattern(12, 0.05)
+    : detail.kind === "incomplete"
+      ? pattern(24, 0.001)
+      : "1 1"
 }
 
 /**
@@ -286,7 +264,7 @@ function scorerOf(game: GameSnapshot, plays: ReadonlyArray<Play>, play: Play): T
   const previous = plays.findLast((candidate) => candidate.sequence < play.sequence)
   if (previous !== undefined && play.homeScore > previous.homeScore) return game.home.team
   if (previous !== undefined && play.awayScore > previous.awayScore) return game.away.team
-  const team = Play.offense(play)
+  const team = Option.getOrUndefined(play.offense())
   return [game.home.team, game.away.team].find((candidate) => candidate.id === team)
 }
 

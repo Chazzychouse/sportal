@@ -1,7 +1,6 @@
-import { GameId, GameSnapshot } from "@sportal/domain/Game"
-import { LeagueId } from "@sportal/domain/League"
+import { type GameId, GameSnapshot } from "@sportal/domain/Game"
+import type { LeagueId } from "@sportal/domain/League"
 import {
-  Array as Arr,
   type Cause,
   Channel,
   Context,
@@ -25,6 +24,7 @@ import {
 import { HttpClient, HttpClientResponse } from "effect/http"
 import * as Socket from "effect/socket/Socket"
 import { loggedUnlessStopping } from "../../Shutdown.ts"
+import { EspnLeague } from "./EspnLeague.ts"
 import * as FastCastMessage from "./FastCastMessage.ts"
 
 /**
@@ -103,30 +103,34 @@ export type Frame = Data.TaggedEnum<{
 }>
 export const Frame = Data.taggedEnum<Frame>()
 
-/** A FastCast game topic: one game's package, which carries its plays. */
+/** A FastCast game topic: one game's package, which carries its plays. Only a league ESPN follows has one. */
 export class Topic extends Data.Class<{ readonly league: LeagueId; readonly game: GameId }> {
-  /** The topic FastCast's `tc` names, when it is a game's. */
+  /** The topic FastCast's `tc` names, when it is a followed league's game's. */
   static fromTc(tc: string): Option.Option<Topic> {
-    return Arr.findFirst(LeagueId.literals, (league) => {
-      const prefix = prefixOf(league)
-      return tc.startsWith(prefix) && tc.length > prefix.length
-        ? Option.some(new Topic({ league, game: GameId.make(tc.slice(prefix.length)) }))
-        : Option.none()
-    })
+    return Option.map(
+      EspnLeague.ofTopic(tc),
+      ({ league, game }) => new Topic({ league: league.league, game })
+    )
   }
 
   /**
-   * The topic of each of `games` live or kicking off within `GameSnapshot.kickoffWindow` at `now`: those FastCast
-   * follows.
+   * The topic of each of `games` of a followed league live or starting within `GameSnapshot.startWindow` at `now`:
+   * those FastCast follows.
    */
   static wantedAt(games: Iterable<GameSnapshot>, now: DateTime.Utc): HashSet.HashSet<Topic> {
-    const wanted = [...games].filter((game) => game.isLiveOrKicksOffWithin(GameSnapshot.kickoffWindow, now))
+    const wanted = [...games].filter(
+      (game) =>
+        Option.isSome(EspnLeague.of(game.league)) && game.isLiveOrStartsWithin(GameSnapshot.startWindow, now)
+    )
     return HashSet.fromIterable(wanted.map((game) => new Topic({ league: game.league, game: game.id })))
   }
 
   /** This topic as FastCast's `tc` names it. */
   tc(): string {
-    return `${prefixOf(this.league)}${this.game}`
+    return Option.match(EspnLeague.of(this.league), {
+      onNone: () => this.game,
+      onSome: (league) => league.topicOf(this.game)
+    })
   }
 }
 
@@ -142,10 +146,6 @@ class CheckpointUnread extends Schema.TaggedError<CheckpointUnread>()("Checkpoin
   reason: Schema.Literals(["Unloaded", "Undecodable"]),
   cause: Schema.Defect()
 }) {}
-
-function prefixOf(league: LeagueId): string {
-  return league === "nfl" ? "gp-football-nfl-" : "gp-football-college-football-"
-}
 
 /**
  * Opens the socket, then subscribes as `wanted` says, returning the frames that follow, the handshake's first. A topic

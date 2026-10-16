@@ -15,7 +15,7 @@ import * as WebRuntime from "./WebRuntime.ts"
 const live = snapshot({ id: GameId.make("live"), status: "live" })
 const later = snapshot({
   id: GameId.make("later"),
-  kickoff: DateTime.makeUnsafe("2026-10-03T20:00:00Z")
+  startsAt: DateTime.makeUnsafe("2026-10-03T20:00:00Z")
 })
 const soon = snapshot({ id: GameId.make("soon") })
 const done = snapshot({ id: GameId.make("done"), status: "final" })

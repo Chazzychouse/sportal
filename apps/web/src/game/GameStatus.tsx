@@ -17,27 +17,12 @@ export function GameStatus(props: { game: GameSnapshot; className?: string }) {
   )
 }
 
-/** A game's status as a slate row or a tile shows it: the period and clock, the kickoff, or the status in a word. */
+/** A game's status as a list row or a tile shows it: the start time in this browser's zone, else the provider's. */
 function statusText(game: GameSnapshot): string {
-  return statusTexts[game.status](game)
-}
-
-const statusTexts: Record<GameSnapshot["status"], (game: GameSnapshot) => string> = {
-  live: (game) => `${periodName(game.period)} ${game.clock}`,
-  scheduled: (game) => localTime(game.kickoff),
-  halftime: () => "Half",
-  delayed: () => "Delayed",
-  final: (game) => (game.inOvertime() ? "Final/OT" : "Final"),
-  postponed: () => "Postponed",
-  canceled: () => "Canceled"
+  return game.status === "scheduled" ? localTime(game.startsAt) : game.statusText
 }
 
 /** A time of day as this browser shows it ("1:00 PM"). */
 export function localTime(at: DateTime.Utc): string {
   return DateTime.toDateUtc(at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
-}
-
-function periodName(period: number): string {
-  if (period < 5) return `Q${period}`
-  return period === 5 ? "OT" : `${period - 4}OT`
 }

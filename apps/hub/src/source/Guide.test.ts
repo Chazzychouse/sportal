@@ -45,7 +45,7 @@ describe("Guide#availabilityOf", () => {
   })
   const ohioStateAtIowa = snapshot({
     status: "live",
-    kickoff: DateTime.makeUnsafe("2026-10-03T19:30:00Z"),
+    startsAt: DateTime.makeUnsafe("2026-10-03T19:30:00Z"),
     away: {
       team: team("OSU", "fbs", {
         name: "Ohio State Buckeyes",
@@ -65,14 +65,14 @@ describe("Guide#availabilityOf", () => {
     snapshot({
       league: "nfl",
       status: "live",
-      kickoff: readAt,
+      startsAt: readAt,
       away: { team: away, score: 0 },
       home: { team: home, score: 0 },
       broadcasts: [broadcast("FOX")]
     })
   const miamiAtClemson = (broadcasts: Array<Broadcast>) =>
     snapshot({
-      kickoff: DateTime.makeUnsafe("2026-10-03T23:30:00Z"),
+      startsAt: DateTime.makeUnsafe("2026-10-03T23:30:00Z"),
       away: { team: team("MIA", "fbs", { name: "Miami Hurricanes", location: "Miami" }), score: 0 },
       home: { team: team("CLEM", "fbs", { name: "Clemson Tigers", location: "Clemson" }), score: 0 },
       broadcasts
@@ -88,7 +88,7 @@ describe("Guide#availabilityOf", () => {
 
   it("should be upcoming on a live channel until its airing begins, however soon that is", () => {
     const arkansasAtTexasAM = snapshot({
-      kickoff: DateTime.makeUnsafe("2026-10-03T20:45:00Z"),
+      startsAt: DateTime.makeUnsafe("2026-10-03T20:45:00Z"),
       away: { team: team("ARK", "fbs", { name: "Arkansas Razorbacks", location: "Arkansas" }), score: 0 },
       home: { team: team("TA&M", "fbs", { name: "Texas A&M Aggies", location: "Texas A&M" }), score: 0 },
       broadcasts: [broadcast("ESPN2")]
@@ -102,7 +102,7 @@ describe("Guide#availabilityOf", () => {
   it("should be upcoming, naming the channel, when the channel is off the air", () => {
     const patriotsAtBills = snapshot({
       league: "nfl",
-      kickoff: DateTime.makeUnsafe("2026-10-04T17:00:00Z"),
+      startsAt: DateTime.makeUnsafe("2026-10-04T17:00:00Z"),
       away: {
         team: team("NE", "nfl", {
           name: "New England Patriots",
@@ -147,7 +147,7 @@ describe("Guide#availabilityOf", () => {
   })
 
   it("should match an airing on now for a game under way, however late it began", () => {
-    const delayed = snapshot({ ...ohioStateAtIowa, kickoff: DateTime.makeUnsafe("2026-10-03T17:00:00Z") })
+    const delayed = snapshot({ ...ohioStateAtIowa, startsAt: DateTime.makeUnsafe("2026-10-03T17:00:00Z") })
 
     const availability = guide.availabilityOf(delayed, readAt)
 
@@ -159,7 +159,7 @@ describe("Guide#availabilityOf", () => {
       ...ohioStateAtIowa,
       status: "delayed",
       period: 3,
-      kickoff: DateTime.makeUnsafe("2026-10-03T17:00:00Z")
+      startsAt: DateTime.makeUnsafe("2026-10-03T17:00:00Z")
     })
 
     const availability = guide.availabilityOf(delayed, readAt)
@@ -167,11 +167,11 @@ describe("Guide#availabilityOf", () => {
     assert.strictEqual(availability._tag, "Carried")
   })
 
-  it("should not match a replay hours from kickoff", () => {
+  it("should not match a replay hours from the start", () => {
     const scheduled = snapshot({
       ...ohioStateAtIowa,
       status: "scheduled",
-      kickoff: DateTime.makeUnsafe("2026-10-04T14:00:00Z")
+      startsAt: DateTime.makeUnsafe("2026-10-04T14:00:00Z")
     })
 
     const availability = guide.availabilityOf(scheduled, readAt)
@@ -181,7 +181,7 @@ describe("Guide#availabilityOf", () => {
 
   it("should not match a title naming only one of the teams", () => {
     const iowaAtKansas = snapshot({
-      kickoff: DateTime.makeUnsafe("2026-10-03T19:30:00Z"),
+      startsAt: DateTime.makeUnsafe("2026-10-03T19:30:00Z"),
       away: ohioStateAtIowa.home,
       home: { team: team("KU", "fbs", { name: "Kansas Jayhawks", location: "Kansas" }), score: 0 },
       broadcasts: [broadcast("CBS")]
@@ -193,7 +193,7 @@ describe("Guide#availabilityOf", () => {
   })
 
   it("should not carry a game, streaming only, when every broadcast streams and no airing matches", () => {
-    const onEspnPlus = snapshot({ kickoff: readAt, broadcasts: [broadcast("ESPN+", "streaming")] })
+    const onEspnPlus = snapshot({ startsAt: readAt, broadcasts: [broadcast("ESPN+", "streaming")] })
 
     const availability = guide.availabilityOf(onEspnPlus, readAt)
 
@@ -201,7 +201,7 @@ describe("Guide#availabilityOf", () => {
   })
 
   it("should not carry a television game within reach that no airing matches, as not in the guide", () => {
-    const onCw = snapshot({ kickoff: readAt, broadcasts: [broadcast("CW")] })
+    const onCw = snapshot({ startsAt: readAt, broadcasts: [broadcast("CW")] })
 
     const availability = guide.availabilityOf(onCw, readAt)
 
@@ -234,17 +234,17 @@ describe("Guide#availabilityOf", () => {
     const ended = onLiveChannel(readAt, [
       airing(live, "Ohio State at Iowa", "2026-10-03T17:00:00Z", "2026-10-03T20:25:00Z")
     ])
-    const earlier = snapshot({ ...ohioStateAtIowa, kickoff: DateTime.makeUnsafe("2026-10-03T17:00:00Z") })
+    const earlier = snapshot({ ...ohioStateAtIowa, startsAt: DateTime.makeUnsafe("2026-10-03T17:00:00Z") })
 
     const availability = ended.availabilityOf(earlier, readAt)
 
     assert.deepStrictEqual(availability, { _tag: "NotCarried", why: "NotInGuide" })
   })
 
-  it("should match an airing beginning exactly 45 minutes from kickoff", () => {
-    const kickoff = DateTime.add(readAt, { hours: 1 })
-    const scheduled = snapshot({ ...ohioStateAtIowa, status: "scheduled", kickoff })
-    const atTolerance = DateTime.add(kickoff, { minutes: 45 })
+  it("should match an airing beginning exactly 45 minutes from the start", () => {
+    const startsAt = DateTime.add(readAt, { hours: 1 })
+    const scheduled = snapshot({ ...ohioStateAtIowa, status: "scheduled", startsAt })
+    const atTolerance = DateTime.add(startsAt, { minutes: 45 })
 
     const availability = airingBeginning(atTolerance).availabilityOf(scheduled, readAt)
 
@@ -255,10 +255,10 @@ describe("Guide#availabilityOf", () => {
     })
   })
 
-  it("should not match an airing beginning just over 45 minutes from kickoff", () => {
-    const kickoff = DateTime.add(readAt, { hours: 1 })
-    const scheduled = snapshot({ ...ohioStateAtIowa, status: "scheduled", kickoff })
-    const justOver = DateTime.add(kickoff, { minutes: 45, seconds: 1 })
+  it("should not match an airing beginning just over 45 minutes from the start", () => {
+    const startsAt = DateTime.add(readAt, { hours: 1 })
+    const scheduled = snapshot({ ...ohioStateAtIowa, status: "scheduled", startsAt })
+    const justOver = DateTime.add(startsAt, { minutes: 45, seconds: 1 })
 
     const availability = airingBeginning(justOver).availabilityOf(scheduled, readAt)
 
@@ -266,7 +266,7 @@ describe("Guide#availabilityOf", () => {
   })
 
   it("should be carried on a live channel once the game has started", () => {
-    const started = snapshot({ ...ohioStateAtIowa, status: "live", kickoff: readAt })
+    const started = snapshot({ ...ohioStateAtIowa, status: "live", startsAt: readAt })
 
     const availability = airingBeginning(readAt).availabilityOf(started, readAt)
 
@@ -274,24 +274,24 @@ describe("Guide#availabilityOf", () => {
   })
 
   it("should be carried on a live channel at its airing's begin, before the game has started", () => {
-    const scheduled = snapshot({ ...ohioStateAtIowa, status: "scheduled", kickoff: readAt })
+    const scheduled = snapshot({ ...ohioStateAtIowa, status: "scheduled", startsAt: readAt })
 
     const availability = airingBeginning(readAt).availabilityOf(scheduled, readAt)
 
     assert.strictEqual(availability._tag, "Carried")
   })
 
-  it("should not carry an unmatched kickoff exactly at the guide's reach", () => {
-    const atReach = snapshot({ kickoff: DateTime.add(readAt, { hours: 3 }), broadcasts: [broadcast("BTN")] })
+  it("should not carry an unmatched start exactly at the guide's reach", () => {
+    const atReach = snapshot({ startsAt: DateTime.add(readAt, { hours: 3 }), broadcasts: [broadcast("BTN")] })
 
     const availability = guide.availabilityOf(atReach, readAt)
 
     assert.deepStrictEqual(availability, { _tag: "NotCarried", why: "NotInGuide" })
   })
 
-  it("should be upcoming for an unmatched kickoff just past the guide's reach", () => {
+  it("should be upcoming for an unmatched start just past the guide's reach", () => {
     const pastReach = snapshot({
-      kickoff: DateTime.add(readAt, { hours: 3, seconds: 1 }),
+      startsAt: DateTime.add(readAt, { hours: 3, seconds: 1 }),
       broadcasts: [broadcast("BTN")]
     })
 
@@ -301,16 +301,16 @@ describe("Guide#availabilityOf", () => {
   })
 
   it("should not carry a game with no broadcasts that no airing matches, as not in the guide", () => {
-    const unlisted = snapshot({ kickoff: readAt, broadcasts: [] })
+    const unlisted = snapshot({ startsAt: readAt, broadcasts: [] })
 
     const availability = guide.availabilityOf(unlisted, readAt)
 
     assert.deepStrictEqual(availability, { _tag: "NotCarried", why: "NotInGuide" })
   })
 
-  it("should be upcoming with nothing known for a kickoff past the guide's reach", () => {
+  it("should be upcoming with nothing known for a start past the guide's reach", () => {
     const tonight = snapshot({
-      kickoff: DateTime.makeUnsafe("2026-10-04T00:00:00Z"),
+      startsAt: DateTime.makeUnsafe("2026-10-04T00:00:00Z"),
       broadcasts: [broadcast("BTN")]
     })
 
@@ -334,7 +334,7 @@ describe("Guide#availabilityOf", () => {
 })
 
 describe("Guide#availabilityOf on a channel that carries a network", () => {
-  const kickoff = DateTime.makeUnsafe("2026-10-09T00:15:00Z")
+  const startsAt = DateTime.makeUnsafe("2026-10-09T00:15:00Z")
   const primeVideo = ChannelId.make("primevideo")
   const primeVideoLive = { _tag: "WebView" as const, url: "https://player.twitch.tv/?channel=primevideo" }
   const lineup = new Guide({
@@ -347,14 +347,14 @@ describe("Guide#availabilityOf on a channel that carries a network", () => {
   })
   const thursdayNight = snapshot({
     league: "nfl",
-    kickoff,
+    startsAt,
     broadcasts: [broadcast("Prime Video", "streaming")]
   })
 
   it("should be carried on the network's channel once the game has started", () => {
     const started = snapshot({ ...thursdayNight, status: "live" })
 
-    const availability = lineup.availabilityOf(started, kickoff)
+    const availability = lineup.availabilityOf(started, startsAt)
 
     assert.deepStrictEqual(availability, {
       _tag: "Carried",
@@ -362,20 +362,20 @@ describe("Guide#availabilityOf on a channel that carries a network", () => {
     })
   })
 
-  it("should be upcoming on the network's channel until kickoff", () => {
-    const now = DateTime.subtract(kickoff, { minutes: 5 })
+  it("should be upcoming on the network's channel until the start", () => {
+    const now = DateTime.subtract(startsAt, { minutes: 5 })
 
     const availability = lineup.availabilityOf(thursdayNight, now)
 
     assert.deepStrictEqual(availability, {
       _tag: "Upcoming",
       channel: Option.some("Prime Video"),
-      begin: Option.some(kickoff)
+      begin: Option.some(startsAt)
     })
   })
 
-  it("should be carried on the network's channel past kickoff, before the game has started", () => {
-    const now = DateTime.add(kickoff, { minutes: 5 })
+  it("should be carried on the network's channel past the start, before the game has started", () => {
+    const now = DateTime.add(startsAt, { minutes: 5 })
 
     const availability = lineup.availabilityOf(thursdayNight, now)
 
@@ -385,23 +385,26 @@ describe("Guide#availabilityOf on a channel that carries a network", () => {
   it("should not carry a game that is over on the network's channel", () => {
     const over = snapshot({ ...thursdayNight, status: "final" })
 
-    const availability = lineup.availabilityOf(over, DateTime.add(kickoff, { hours: 4 }))
+    const availability = lineup.availabilityOf(over, DateTime.add(startsAt, { hours: 4 }))
 
     assert.deepStrictEqual(availability, { _tag: "NotCarried", why: "StreamingOnly" })
   })
 
   it("should not carry a game of a network no channel carries", () => {
-    const onPeacock = snapshot({ league: "nfl", kickoff, broadcasts: [broadcast("Peacock", "streaming")] })
+    const onPeacock = snapshot({ league: "nfl", startsAt, broadcasts: [broadcast("Peacock", "streaming")] })
 
-    const availability = lineup.availabilityOf(onPeacock, kickoff)
+    const availability = lineup.availabilityOf(onPeacock, startsAt)
 
     assert.deepStrictEqual(availability, { _tag: "NotCarried", why: "StreamingOnly" })
   })
 
   it("should not be upcoming past its reach when the guide lists no airings", () => {
-    const tomorrow = snapshot({ kickoff: DateTime.add(kickoff, { days: 1 }), broadcasts: [broadcast("CBS")] })
+    const tomorrow = snapshot({
+      startsAt: DateTime.add(startsAt, { days: 1 }),
+      broadcasts: [broadcast("CBS")]
+    })
 
-    const availability = lineup.availabilityOf(tomorrow, kickoff)
+    const availability = lineup.availabilityOf(tomorrow, startsAt)
 
     assert.deepStrictEqual(availability, { _tag: "NotCarried", why: "NotInGuide" })
   })
@@ -411,7 +414,7 @@ describe("Guide#availabilityOf on a channel that carries a network", () => {
     const liveAddress = { _tag: "WebView" as const, url: "https://tv.youtube.com/watch/live1" }
     const both = new Guide({
       source: "YouTube TV",
-      readAt: kickoff,
+      readAt: startsAt,
       channels: [
         { id: primeVideo, name: "Prime Video", live: primeVideoLive, network: Network.make("Prime Video") },
         { id: live, name: "Live 1", live: liveAddress }
@@ -419,7 +422,7 @@ describe("Guide#availabilityOf on a channel that carries a network", () => {
       airings: [airing(live, "AWAY at HOME", "2026-10-09T00:15:00Z", "2026-10-09T03:30:00Z")]
     })
 
-    const availability = both.availabilityOf(snapshot({ ...thursdayNight, status: "live" }), kickoff)
+    const availability = both.availabilityOf(snapshot({ ...thursdayNight, status: "live" }), startsAt)
 
     assert.deepStrictEqual(availability, {
       _tag: "Carried",
@@ -435,7 +438,7 @@ describe("Guide#availabilityOf at a time after its reading", () => {
     const guide = onLiveChannel(readAt, [
       airing(live, "AWAY at HOME", "2026-10-03T17:00:00Z", "2026-10-03T20:35:00Z")
     ])
-    const game = snapshot({ status: "live", kickoff: DateTime.makeUnsafe("2026-10-03T17:00:00Z") })
+    const game = snapshot({ status: "live", startsAt: DateTime.makeUnsafe("2026-10-03T17:00:00Z") })
 
     const availability = guide.availabilityOf(game, DateTime.add(readAt, { minutes: 20 }))
 

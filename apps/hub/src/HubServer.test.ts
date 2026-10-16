@@ -215,7 +215,7 @@ describe("HubServer", () => {
         served((frames) =>
           Effect.gen(function* () {
             const client = yield* makeClient
-            yield* TestClock.setTime(DateTime.toEpochMillis(TestHub.alaAtMsst.kickoff))
+            yield* TestClock.setTime(DateTime.toEpochMillis(TestHub.alaAtMsst.startsAt))
             yield* TestHub.alaAtMsstListed(frames)
             const lines = yield* pastInitialMessages()
             const now = yield* DateTime.now

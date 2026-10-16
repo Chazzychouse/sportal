@@ -1,7 +1,7 @@
-import { Order, Schema } from "effect"
+import { Option, Order, Schema } from "effect"
 import { TeamId } from "./Team.ts"
 
-/** The feed's own id. Not ordered: order plays by `Play.sequence`. */
+/** The feed's own id. Not ordered: order plays by `Play.order`. */
 export const PlayId = Schema.String.pipe(Schema.brand("PlayId"))
 export type PlayId = typeof PlayId.Type
 
@@ -16,194 +16,68 @@ const Spot = Schema.Struct({
 // official timeout's end without one.
 const EndSpot = Schema.Struct({ ...Spot.fields, team: Schema.optional(TeamId) })
 
-// What every play carries.
-const common = {
+/**
+ * How a football play moved the ball, as the field draws it: a run, a caught pass, an incomplete pass, a sack, a
+ * kick, a penalty, or anything else (a turnover, a safety, a timeout, a stoppage, the end of a period).
+ */
+export const FootballKind = Schema.Literals(["run", "pass", "incomplete", "sack", "kick", "penalty", "other"])
+export type FootballKind = typeof FootballKind.Type
+
+/** What a football play adds: how it moved the ball, the yards it gained, and where it started and ended. */
+export class FootballDetail extends Schema.TaggedClass<FootballDetail>()("Football", {
+  kind: FootballKind,
+  yards: Schema.Int,
+  start: Spot,
+  end: EndSpot
+}) {
+  /** Whether the play went backwards: a sack always does. */
+  lostYards(): boolean {
+    return this.kind === "sack" || this.yards < 0
+  }
+}
+
+/** What a baseball play adds: the outs and the count after it. */
+export class BaseballDetail extends Schema.TaggedClass<BaseballDetail>()("Baseball", {
+  outs: Schema.Int,
+  balls: Schema.Int,
+  strikes: Schema.Int
+}) {}
+
+/** What a basketball play adds: nothing yet. */
+export class BasketballDetail extends Schema.TaggedClass<BasketballDetail>()("Basketball", {}) {}
+
+/**
+ * A play's sport-specific part, by sport. A sport's case can later become a union of play cases read from the feed's
+ * type, without changing `Play` or any other sport.
+ */
+export const PlayDetail = Schema.Union([FootballDetail, BaseballDetail, BasketballDetail]).pipe(
+  Schema.toTaggedUnion("_tag")
+)
+export type PlayDetail = typeof PlayDetail.Type
+
+/** One play as a game's play-by-play lists it, in any sport: what every sport's plays carry, and its sport's detail. */
+export class Play extends Schema.Class<Play>("sportal/Play")({
   id: PlayId,
   sequence: Schema.Int,
   period: Schema.Int,
+  /** The game clock as the feed shows it ("4:12"); empty in a sport without one. */
   clock: Schema.String,
   text: Schema.String,
+  /** The feed's own type for the play, kept so a sport's detail can later grow into cases read from it. */
+  type: Schema.Struct({ id: Schema.String, text: Schema.String }),
   scoring: Schema.Boolean,
   homeScore: Schema.Int,
   awayScore: Schema.Int,
-  start: Spot,
-  end: EndSpot
-}
-
-// What a snap, a kick, a safety, or a penalty gains: `team` is the team with the ball, when the feed says.
-const gained = {
+  /** The team the play is credited to, when the feed says: the team with the ball, or a timeout's caller. */
   team: Schema.optional(TeamId),
-  yards: Schema.Int
-}
-
-const Return = Schema.Literals(["none", "returned", "touchdown"])
-
-/** A run. */
-export class Rush extends Schema.TaggedClass<Rush>()("Rush", {
-  ...common,
-  ...gained,
-  touchdown: Schema.Boolean
-}) {}
-
-/** A caught pass. */
-export class Completion extends Schema.TaggedClass<Completion>()("Completion", {
-  ...common,
-  ...gained,
-  touchdown: Schema.Boolean
-}) {}
-
-/** A pass no one caught. */
-export class Incompletion extends Schema.TaggedClass<Incompletion>()("Incompletion", {
-  ...common,
-  ...gained
-}) {}
-
-/** A pass the defense caught, and how far it was run back. */
-export class Interception extends Schema.TaggedClass<Interception>()("Interception", {
-  ...common,
-  ...gained,
-  return: Return
-}) {}
-
-/** The passer tackled behind the line, and whether the defense took the ball from a fumble. */
-export class Sack extends Schema.TaggedClass<Sack>()("Sack", {
-  ...common,
-  ...gained,
-  fumbleLost: Schema.Boolean
-}) {}
-
-/** A fumble, and who recovered it, when the feed says. */
-export class Fumble extends Schema.TaggedClass<Fumble>()("Fumble", {
-  ...common,
-  ...gained,
-  recovery: Schema.Literals(["unknown", "own", "opponent", "touchdown"])
-}) {}
-
-/** A try for two points after a touchdown, passed or run. */
-export class TwoPointTry extends Schema.TaggedClass<TwoPointTry>()("TwoPointTry", {
-  ...common,
-  ...gained,
-  by: Schema.Literals(["pass", "rush"])
-}) {}
-
-/** A kickoff, and whether it was returned for a touchdown. */
-export class Kickoff extends Schema.TaggedClass<Kickoff>()("Kickoff", {
-  ...common,
-  ...gained,
-  returnTouchdown: Schema.Boolean
-}) {}
-
-/** A punt, and how far it was run back. */
-export class Punt extends Schema.TaggedClass<Punt>()("Punt", { ...common, ...gained, return: Return }) {}
-
-/** A field goal attempt, and how it ended. */
-export class FieldGoal extends Schema.TaggedClass<FieldGoal>()("FieldGoal", {
-  ...common,
-  ...gained,
-  result: Schema.Literals(["good", "missed", "blocked"])
-}) {}
-
-/** A kick for the point after a touchdown, and whether it was good. */
-export class ExtraPoint extends Schema.TaggedClass<ExtraPoint>()("ExtraPoint", {
-  ...common,
-  ...gained,
-  good: Schema.Boolean
-}) {}
-
-/** A safety. */
-export class Safety extends Schema.TaggedClass<Safety>()("Safety", { ...common, ...gained }) {}
-
-/** A penalty enforced without a play. */
-export class Penalty extends Schema.TaggedClass<Penalty>()("Penalty", { ...common, ...gained }) {}
-
-/** A team's timeout: `team` is the team that called it, when something says. */
-export class Timeout extends Schema.TaggedClass<Timeout>()("Timeout", {
-  ...common,
-  team: Schema.optional(TeamId)
-}) {}
-
-/** A stop no team called. */
-export class Stoppage extends Schema.TaggedClass<Stoppage>()("Stoppage", {
-  ...common,
-  kind: Schema.Literals(["officialTimeout", "twoMinuteWarning", "coinToss"])
-}) {}
-
-/** The end of a period, and what else ended with it. */
-export class PeriodEnd extends Schema.TaggedClass<PeriodEnd>()("PeriodEnd", {
-  ...common,
-  ends: Schema.Literals(["period", "half", "regulation", "game"])
-}) {}
-
-/** A play of a type no case knows, with the feed's own type. */
-export class Other extends Schema.TaggedClass<Other>()("Other", {
-  ...common,
-  type: Schema.Struct({ id: Schema.String, text: Schema.String })
-}) {}
-
-const cases = Schema.Union([
-  Rush,
-  Completion,
-  Incompletion,
-  Interception,
-  Sack,
-  Fumble,
-  TwoPointTry,
-  Kickoff,
-  Punt,
-  FieldGoal,
-  ExtraPoint,
-  Safety,
-  Penalty,
-  Timeout,
-  Stoppage,
-  PeriodEnd,
-  Other
-]).pipe(Schema.toTaggedUnion("_tag"))
-
-/**
- * Every football play, as the game's play-by-play lists it: a tagged union of its cases, each keeping what the feed's
- * play type says, with `.match`, `.guards`, `.cases`, `order`, `gainsYards`, `offense`, and `lostYards`.
- */
-export const FootballPlay = Object.assign(cases, {
+  detail: PlayDetail
+}) {
   /** By `sequence`. */
-  order: Order.mapInput(Order.Number, (play: typeof cases.Type) => play.sequence),
-  gainsYards,
-  offense,
-  lostYards
-})
-export type FootballPlay = typeof FootballPlay.Type
+  static readonly order: Order.Order<Play> = Order.mapInput(Order.Number, (play: Play) => play.sequence)
 
-/**
- * A football play's case and what its feed's play type says of it: its `_tag` and its outcome fields, without what
- * every play carries or what it gained, as `{ _tag: "Punt", return: "none" }`.
- */
-export type PlayOutcome = typeof cases.Encoded extends infer Case
-  ? Case extends unknown
-    ? Omit<Case, keyof typeof common | keyof typeof gained>
-    : never
-  : never
-
-/**
- * The plays of every sport; football's only, for now.
- *
- * @alias
- */
-export const Play = FootballPlay
-export type Play = FootballPlay
-
-/** Whether `play`'s case gains yards for a team: a snap, a kick, a safety, or a penalty. */
-function gainsYards<P extends { readonly _tag: (typeof cases.Type)["_tag"] }>(
-  play: P
-): play is Extract<P, { readonly _tag: Extract<typeof cases.Type, { readonly yards: number }>["_tag"] }> {
-  return "yards" in cases.cases[play._tag].fields
-}
-
-/** The team with the ball at the snap: the team a play that gains yards names, else its start spot's. */
-function offense(play: typeof cases.Type): TeamId {
-  return (gainsYards(play) ? play.team : undefined) ?? play.start.team
-}
-
-/** Whether `play` gains yards and went backwards: a sack always does. */
-function lostYards(play: typeof cases.Type): boolean {
-  return gainsYards(play) && (cases.guards.Sack(play) || play.yards < 0)
+  /** The team with the ball at the snap: the play's own team, else a football play's start spot team. */
+  offense(): Option.Option<TeamId> {
+    if (this.team !== undefined) return Option.some(this.team)
+    return PlayDetail.guards.Football(this.detail) ? Option.some(this.detail.start.team) : Option.none()
+  }
 }
