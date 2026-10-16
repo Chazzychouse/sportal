@@ -82,6 +82,8 @@ export function Ribbon({ entry, focus }: RibbonProps) {
                   <GameChip key={game} game={listed.snapshot} focused={focused} onChoose={choose} />
                 )
               },
+              // Highlights are only ever on the full guide's shelves.
+              Clip: () => null,
               Custom: ({ stream }) => (
                 <CustomCard
                   key={stream.id}

@@ -1,11 +1,13 @@
+import { CalendarDate } from "@sportal/api/GamesQuery"
 import type { Hotkey } from "@sportal/api/Hotkey"
-import { Effect, Match, Option, Stream } from "effect"
+import { DateTime, Effect, Match, Option, Stream } from "effect"
 import { AsyncResult, Atom } from "effect/reactivity"
 import * as CustomStreams from "../custom/CustomStreams.ts"
 import { CustomStreamsChange } from "../custom/CustomStreams.ts"
 import { GuideItem } from "../guide/GuideItem.ts"
 import * as GuideShelves from "../guide/GuideShelves.ts"
 import * as Games from "../hub/Games.ts"
+import * as Stats from "../hub/Stats.ts"
 import * as DisplayScreen from "../screen/DisplayScreen.ts"
 import { Shell } from "../shell/Shell.ts"
 import { logDefect, runtime } from "../WebRuntime.ts"
@@ -27,12 +29,25 @@ export const display: Atom.Writable<Display, DisplayInput> = Atom.writable(
 ).pipe(Atom.keepAlive)
 
 /**
- * The guide's entries and shelves over today's games and the saved custom streams: only All live, with nothing on it,
- * and Custom before the first answer. What the fold and the guide read.
+ * The guide's entries and shelves over today's games, the saved custom streams, and the highlights of each league
+ * whose Highlights shelf has shown: only All live, with nothing on it, and Custom before the first answer. What the
+ * fold and the guide read.
  */
 export const shelves: Atom.Atom<GuideShelves.GuideShelves> = Atom.make((get) => {
   const games = Option.match(get(Games.today).value, { onNone: () => [], onSome: ({ games }) => games })
-  return GuideShelves.guideShelves(games, get(CustomStreams.customStreams))
+  const today = Option.map(get(Games.today).value, ({ date }) => date)
+  const highlights = new Map(
+    Option.match(today, {
+      onNone: () => [],
+      onSome: (date) =>
+        [...get(GuideShelves.highlightsShown)].map((league) => {
+          const clipsOf = (day: CalendarDate) =>
+            AsyncResult.getOrElse(get(Stats.highlights({ league, date: day })), () => [])
+          return [league, GuideShelves.highlightShelf(clipsOf(date), clipsOf(dayBefore(date)))] as const
+        })
+    })
+  )
+  return GuideShelves.guideShelves(games, get(CustomStreams.customStreams), highlights)
 })
 
 /** Whether this Display's window is full screen: in the shell the window, in a browser the page. */
@@ -144,4 +159,10 @@ function removeFocused(ctx: Atom.WriteContext<void>) {
   const focused = ctx.get(display).focusedItem(ctx.get(shelves))
   if (focused !== undefined && GuideItem.$is("Custom")(focused))
     ctx.set(editCustom, CustomStreamsChange.Removed({ id: focused.stream.id }))
+}
+
+/** The calendar day before `date`. */
+function dayBefore(date: CalendarDate): CalendarDate {
+  const noon = DateTime.makeUnsafe(`${date}T12:00:00Z`)
+  return CalendarDate.make(DateTime.formatIsoDate(DateTime.subtract(noon, { days: 1 })))
 }

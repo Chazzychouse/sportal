@@ -1,6 +1,7 @@
 import { Hotkey } from "@sportal/api/Hotkey"
 import { TileKey } from "@sportal/api/TileKey"
 import type { GameId } from "@sportal/domain/Game"
+import type { Highlight } from "@sportal/domain/Highlight"
 import { League, type LeagueId } from "@sportal/domain/League"
 import { Data, Equal, Option } from "effect"
 import type { CustomStream } from "../custom/CustomStream.ts"
@@ -98,6 +99,7 @@ export class Display extends Data.Class<{
       StatsBeside: ({ game }) => this.statsBeside(game, screen),
       GamePageOpened: ({ game }) => DisplayStep.of(this.openGamePage(game)),
       ChosenCustom: ({ stream }) => this.chooseCustom(stream, screen),
+      ChosenClip: ({ highlight }) => this.chooseClip(highlight, screen),
       CustomEdited: ({ change }) => this.customEdited(change, screen),
       CustomFormOpened: ({ editing }) => DisplayStep.of(this.openCustomForm(editing)),
       Commanded: ({ command }) => DisplayStep.of(this, [command]),
@@ -192,6 +194,19 @@ export class Display extends Data.Class<{
       screen
     )
     return DisplayStep.of(new Display({ ...display, overlay: Overlay.None() }), commands)
+  }
+
+  /**
+   * Puts highlight `highlight` in the selected slot, as `place` puts anything, and closes what is open: a game page
+   * opened from the guide, then that guide.
+   */
+  chooseClip(highlight: Highlight, screen: Screen): DisplayStep {
+    const { display, commands } = this.place(
+      TileKey.clip(highlight.id),
+      (tile) => ({ _tag: "AssignClip", tile, highlight }),
+      screen
+    )
+    return DisplayStep.of(display.close().close(), commands)
   }
 
   /**
@@ -353,8 +368,8 @@ export class Display extends Data.Class<{
 
   /**
    * Enter, or a click on the item at `at`: on the rail it leaves the rail; on a game it watches the game as `choose`
-   * does and closes the guide; on a custom stream it watches it as `chooseCustom` does; on the add card it opens the
-   * YouTube form. With the guide closed, or nothing there, nothing.
+   * does and closes the guide; on a highlight it plays it as `chooseClip` does; on a custom stream it watches it as
+   * `chooseCustom` does; on the add card it opens the YouTube form. With the guide closed, or nothing there, nothing.
    */
   private confirm(at: GuideFocus | undefined, screen: Screen, shelves: GuideShelves): DisplayStep {
     const overlay = this.overlay
@@ -367,6 +382,7 @@ export class Display extends Data.Class<{
     if (item === undefined) return DisplayStep.of(this)
     return GuideItem.$match(item, {
       Game: ({ game }) => this.close().choose(game, screen),
+      Clip: ({ highlight }) => this.chooseClip(highlight, screen),
       Custom: ({ stream }) => this.chooseCustom(stream, screen),
       AddCustom: () => DisplayStep.of(this.openCustomForm(undefined))
     })
@@ -426,9 +442,9 @@ export class DisplayStep extends Data.Class<{
 }
 
 /**
- * What a person did on a Display: a hotkey, a click, a game or a custom stream chosen for the selected tile, a game's
- * stats put beside it, a change to the saved custom streams, the YouTube form or a game page opened, a command, an
- * overlay opened or closed, or the guide clicked.
+ * What a person did on a Display: a hotkey, a click, a game, a custom stream or a highlight chosen for the selected
+ * tile, a game's stats put beside it, a change to the saved custom streams, the YouTube form or a game page opened, a
+ * command, an overlay opened or closed, or the guide clicked.
  */
 export type DisplayInput = Data.TaggedEnum<{
   Pressed: { readonly hotkey: Hotkey }
@@ -438,6 +454,7 @@ export type DisplayInput = Data.TaggedEnum<{
   StatsBeside: { readonly game: GameId }
   GamePageOpened: { readonly game: GameId }
   ChosenCustom: { readonly stream: CustomStream }
+  ChosenClip: { readonly highlight: Highlight }
   CustomEdited: { readonly change: CustomStreamsChange }
   CustomFormOpened: { readonly editing: CustomStream | undefined }
   Commanded: { readonly command: ScreenCommand }

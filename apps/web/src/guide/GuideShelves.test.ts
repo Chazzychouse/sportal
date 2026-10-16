@@ -1,8 +1,9 @@
 import { assert, describe, it } from "@effect/vitest"
 import type { ListedGame } from "@sportal/api/ListedGame"
 import { GameId, type GameStatus } from "@sportal/domain/Game"
+import { HighlightId } from "@sportal/domain/Highlight"
 import type { LeagueId } from "@sportal/domain/League"
-import { snapshot } from "@sportal/domain/TestGame"
+import { highlight, snapshot } from "@sportal/domain/TestGame"
 import { DateTime } from "effect"
 import * as TestWeb from "../TestWeb.ts"
 import { GuideItem } from "./GuideItem.ts"
@@ -64,6 +65,46 @@ describe("GuideShelves.guideShelves", () => {
 
     assert.deepStrictEqual(shelves.shelves("nba", "Ribbon"), [[]])
     assert.deepStrictEqual(shelves.shelves("nba", "Full"), [[], [], []])
+  })
+})
+
+describe("GuideShelves.highlightShelf", () => {
+  it("should list today's highlights before yesterday's", () => {
+    const today = highlight({ id: HighlightId.make("today") })
+    const yesterday = highlight({ id: HighlightId.make("yesterday") })
+
+    const shelf = GuideShelves.highlightShelf([today], [yesterday])
+
+    assert.deepStrictEqual(shelf, [
+      GuideItem.Clip({ highlight: today }),
+      GuideItem.Clip({ highlight: yesterday })
+    ])
+  })
+
+  it("should list a highlight both days have once, as today's", () => {
+    const both = highlight({ id: HighlightId.make("both") })
+
+    const shelf = GuideShelves.highlightShelf([both], [both])
+
+    assert.deepStrictEqual(shelf, [GuideItem.Clip({ highlight: both })])
+  })
+})
+
+describe("GuideShelves.guideShelves highlights", () => {
+  it("should put a league's highlights last in its full guide", () => {
+    const clips = [GuideItem.Clip({ highlight: highlight() })]
+
+    const shelves = GuideShelves.guideShelves(TestWeb.todayList.games, [], new Map([["fbs", clips]]))
+
+    assert.deepStrictEqual(shelves.shelves("fbs", "Full").at(-1), clips)
+  })
+
+  it("should leave highlights out of the ribbon", () => {
+    const clips = [GuideItem.Clip({ highlight: highlight() })]
+
+    const shelves = GuideShelves.guideShelves(TestWeb.todayList.games, [], new Map([["fbs", clips]]))
+
+    assert.notDeepInclude(shelves.shelves("fbs", "Ribbon"), clips)
   })
 })
 

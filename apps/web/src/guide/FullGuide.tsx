@@ -1,4 +1,5 @@
 import { useAtomSet, useAtomValue } from "@effect/atom-react"
+import { useEffect } from "react"
 import { AddCustomCard, CustomCard } from "../custom/CustomCard.tsx"
 import { CustomStreamsChange } from "../custom/CustomStreams.ts"
 import { Display, DisplayInput, type GuideEntry, type GuideFocus } from "../display/Display.ts"
@@ -7,9 +8,11 @@ import { useOverlayRef } from "../display/OverlayRef.ts"
 import { GameCard } from "../game/GameCard.tsx"
 import * as Games from "../hub/Games.ts"
 import * as DisplayScreen from "../screen/DisplayScreen.ts"
+import { HighlightCard } from "../stats/HighlightCard.tsx"
 import { Shelf } from "../ui/Shelf.tsx"
 import { GuideItem } from "./GuideItem.ts"
 import { GuideRail } from "./GuideRail.tsx"
+import * as GuideShelves from "./GuideShelves.ts"
 
 interface FullGuideProps {
   entry: GuideEntry
@@ -18,9 +21,9 @@ interface FullGuideProps {
 
 /**
  * The guide's second level, over the whole Display: the rail at the left, and the entry's shelves at the right (live
- * now, later today, final for a league; live now for All live; YouTube for Custom, the saved streams and the card that
- * adds one). It covers every video, which hides under it, and fades
- * in.
+ * now, later today, final, then highlights for a league; live now for All live; YouTube for Custom, the saved streams
+ * and the card that adds one). A league's highlights are asked for once its guide shows. It covers every video, which
+ * hides under it, and fades in.
  */
 export function FullGuide({ entry, focus }: FullGuideProps) {
   const ref = useOverlayRef()
@@ -32,6 +35,11 @@ export function FullGuide({ entry, focus }: FullGuideProps) {
   const games = useAtomValue(Games.byId)
   const titles = entry === "AllLive" ? ["Live now"] : entry === "Custom" ? ["YouTube"] : shelfTitles
   const empty = shelves.every((shelf) => shelf.length === 0)
+  const showHighlights = useAtomSet(GuideShelves.highlightsShown)
+  useEffect(() => {
+    if (entry === "AllLive" || entry === "Custom") return
+    showHighlights((shown) => (shown.has(entry) ? shown : new Set([...shown, entry])))
+  }, [entry, showHighlights])
 
   return (
     <div
@@ -72,6 +80,14 @@ export function FullGuide({ entry, focus }: FullGuideProps) {
                         <GameCard key={game} game={listed.snapshot} focused={focused} onChoose={choose} />
                       )
                     },
+                    Clip: ({ highlight }) => (
+                      <HighlightCard
+                        key={highlight.id}
+                        highlight={highlight}
+                        focused={focused}
+                        onChoose={choose}
+                      />
+                    ),
                     Custom: ({ stream }) => (
                       <CustomCard
                         key={stream.id}
@@ -96,5 +112,5 @@ export function FullGuide({ entry, focus }: FullGuideProps) {
   )
 }
 
-/** A league's shelves' titles, in `guideShelves`' order. Phase 7 appends "Highlights". */
-const shelfTitles = ["Live now", "Later today", "Final"]
+/** A league's shelves' titles, in `guideShelves`' order. */
+const shelfTitles = ["Live now", "Later today", "Final", "Highlights"]

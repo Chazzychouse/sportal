@@ -13,7 +13,7 @@ export class Highlight extends Schema.Class<Highlight>("sportal/Highlight")({
   duration: Schema.Int,
   /** The clip's mp4: the HD one when the provider has it. */
   video: Schema.String,
-  thumbnail: Schema.optional(Schema.String)
+  thumbnail: Schema.optionalKey(Schema.String)
 }) {
   /** Its length as a person reads it: "1:09". */
   durationText(): string {

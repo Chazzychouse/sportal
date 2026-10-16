@@ -1,6 +1,7 @@
 import { assert, describe, it } from "@effect/vitest"
 import { TileKey } from "@sportal/api/TileKey"
 import type { GameId } from "@sportal/domain/Game"
+import { highlight } from "@sportal/domain/TestGame"
 import { Result } from "effect"
 import * as TestWeb from "../TestWeb.ts"
 import { Screen } from "./Screen.ts"
@@ -61,6 +62,22 @@ describe("placements", () => {
     const muted = placed(screen).map((placement) => placement.muted)
 
     assert.deepStrictEqual(muted, [false, true])
+  })
+
+  it("should mute every stream while a clip tile has audio focus", () => {
+    const screen = Result.getOrThrow(
+      Result.flatMap(
+        TestWeb.fill([TestWeb.bama]).apply(
+          { _tag: "AssignClip", tile: 1, highlight: highlight() },
+          TestWeb.onFox
+        ),
+        (withClip) => withClip.apply({ _tag: "FocusAudio", tile: 1 }, TestWeb.onFox)
+      )
+    )
+
+    const muted = placed(screen).map((placement) => placement.muted)
+
+    assert.deepStrictEqual(muted, [true])
   })
 
   it("should give the mouse only to the interacting game's stream", () => {

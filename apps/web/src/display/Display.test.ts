@@ -2,6 +2,7 @@ import { assert, describe, it } from "@effect/vitest"
 import type { Hotkey } from "@sportal/api/Hotkey"
 import { TileKey } from "@sportal/api/TileKey"
 import { GameId } from "@sportal/domain/Game"
+import { highlight } from "@sportal/domain/TestGame"
 import { Option, Result } from "effect"
 import { CustomStreamsChange } from "../custom/CustomStreams.ts"
 import { GuideItem } from "../guide/GuideItem.ts"
@@ -1122,6 +1123,56 @@ describe("Display GamePage", () => {
     )
 
     assert.deepStrictEqual(step.commands, [])
+  })
+})
+
+describe("Display#apply ChosenClip", () => {
+  it("should put a chosen clip in the selected slot and select the next empty slot", () => {
+    const clip = highlight()
+
+    const step = Display.initial.apply(DisplayInput.ChosenClip({ highlight: clip }), Screen.initial, none)
+
+    assert.deepStrictEqual(step.commands, [{ _tag: "AssignClip", tile: 0, highlight: clip }])
+    assert.strictEqual(step.display.selected, 1)
+  })
+
+  it("should leave a chosen clip already on screen where it is", () => {
+    const clip = highlight()
+    const screen = Result.getOrThrow(
+      Screen.initial.apply({ _tag: "AssignClip", tile: 2, highlight: clip }, TestWeb.onFox)
+    )
+
+    const step = Display.initial.apply(DisplayInput.ChosenClip({ highlight: clip }), screen, none)
+
+    assert.deepStrictEqual(step.commands, [])
+  })
+
+  it("should close the open overlay once a clip is chosen", () => {
+    const display = new Display({
+      ...Display.initial,
+      overlay: Overlay.GamePage({ game: TestWeb.bama, back: fullGuide })
+    })
+
+    const step = display.apply(DisplayInput.ChosenClip({ highlight: highlight() }), Screen.initial, none)
+
+    assert.deepStrictEqual(step.display.overlay, Overlay.None())
+  })
+
+  it("should choose the focused clip with Confirm in the full guide", () => {
+    const clip = highlight()
+    const display = new Display({ ...Display.initial, overlay: fullGuide })
+    const clipShelf: GuideShelves = {
+      entries: ["AllLive", "fbs"],
+      shelves: () => [[GuideItem.Clip({ highlight: clip })]]
+    }
+
+    const step = display.apply(
+      DisplayInput.Pressed({ hotkey: { _tag: "Confirm" } }),
+      Screen.initial,
+      clipShelf
+    )
+
+    assert.deepStrictEqual(step.commands, [{ _tag: "AssignClip", tile: 0, highlight: clip }])
   })
 })
 

@@ -124,7 +124,7 @@ function highlightOf(game: GameId, video: SummaryVideo): ReadonlyArray<Highlight
       headline: video.headline,
       duration: video.duration,
       video: source.HD?.href ?? source.href,
-      thumbnail: video.thumbnail
+      ...(video.thumbnail === undefined ? {} : { thumbnail: video.thumbnail })
     })
   ]
 }

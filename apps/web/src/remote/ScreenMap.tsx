@@ -28,9 +28,16 @@ export function ScreenMap(props: {
     const game = at === undefined ? undefined : Tile.game(at)
     return game === undefined ? undefined : props.games.find(({ snapshot }) => snapshot.id === game)?.snapshot
   }
-  const nameIn = (slot: number) => {
+  const titleIn = (slot: number) => {
     const at = tiles[slot]
     if (at !== undefined && Tile.guards.CustomTile(at)) return at.name
+    if (at !== undefined && Tile.guards.ClipTile(at)) return at.highlight.headline
+    return undefined
+  }
+  const nameIn = (slot: number) => {
+    const at = tiles[slot]
+    const title = titleIn(slot)
+    if (title !== undefined) return title
     const scoreline = gameIn(slot)?.scoreline()
     return at !== undefined && Tile.guards.StatsTile(at) && scoreline !== undefined
       ? `Stats ${scoreline}`
@@ -58,6 +65,7 @@ export function ScreenMap(props: {
           .map((slot, index) => {
             const at = tiles[index]
             const game = gameIn(index)
+            const title = titleIn(index)
             const onAir = at !== undefined && !Tile.guards.Empty(at) && props.screen.hears(Tile.key(at))
             const soloed = at !== undefined && !Tile.guards.Empty(at) && props.screen.soloes(Tile.key(at))
 
@@ -101,9 +109,12 @@ export function ScreenMap(props: {
                     {at !== undefined && Tile.guards.StatsTile(at) && (
                       <span className="label-caps text-[9px] text-muted-foreground">Stats</span>
                     )}
+                    {at !== undefined && Tile.guards.ClipTile(at) && (
+                      <span className="label-caps text-[9px] text-muted-foreground">Replay</span>
+                    )}
                   </span>
-                  {at !== undefined && Tile.guards.CustomTile(at) ? (
-                    <span className="m-auto line-clamp-3 px-0.5 text-center text-[11px]">{at.name}</span>
+                  {title !== undefined ? (
+                    <span className="m-auto line-clamp-3 px-0.5 text-center text-[11px]">{title}</span>
                   ) : game === undefined ? (
                     <span className="m-auto text-[10px] text-muted-foreground">
                       {Tile.guards.Empty(at) ? "Empty" : "Loading…"}

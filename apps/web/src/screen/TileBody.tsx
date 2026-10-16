@@ -1,7 +1,8 @@
 import { useAtomValue } from "@effect/atom-react"
 import type { GameSnapshot } from "@sportal/domain/Game"
+import type { Highlight } from "@sportal/domain/Highlight"
 import { Option, Result } from "effect"
-import { useMemo } from "react"
+import { useEffect, useMemo, useRef } from "react"
 import { CustomStream } from "../custom/CustomStream.ts"
 import { Field } from "../game/Field.tsx"
 import { GameStatus, localTime } from "../game/GameStatus.tsx"
@@ -16,9 +17,9 @@ import * as TilePlacements from "./TilePlacements.ts"
  * well; in a plain browser this is what is seen, with a link to watch. A data tile of a live game (halftime and a
  * delay during it included) shows the field in place of why it has no stream; the field dims itself out of play. A
  * custom tile, in a plain browser, plays YouTube's embedded player. A stats tile fills its well with as many of its
- * game's stats as fit.
+ * game's stats as fit. A clip tile plays its highlight in a page video, with sound only while `heard`.
  */
-export function TileBody(props: { tile: Tile; snapshot: GameSnapshot | undefined }) {
+export function TileBody(props: { tile: Tile; snapshot: GameSnapshot | undefined; heard: boolean }) {
   const { tile, snapshot } = props
   return Tile.match(tile, {
     Empty: () => <p className="label-caps text-muted-foreground/60 text-sm tracking-[0.2em]">No signal</p>,
@@ -45,8 +46,35 @@ export function TileBody(props: { tile: Tile; snapshot: GameSnapshot | undefined
       </a>
     ),
     CustomTile: (custom) => <CustomPlayer tile={custom} />,
-    StatsTile: ({ game }) => <GameStatsView game={game} fit="tile" />
+    StatsTile: ({ game }) => <GameStatsView game={game} fit="tile" />,
+    ClipTile: ({ highlight }) => <ClipVideo highlight={highlight} heard={props.heard} />
   })
+}
+
+/** A highlight in a page video: it plays at once, muted unless its tile has audio focus, and rests on its last frame. */
+function ClipVideo(props: { highlight: Highlight; heard: boolean }) {
+  const ref = useRef<HTMLVideoElement>(null)
+  // React sets `muted` only when the element is made; audio focus moving later sets it here.
+  useEffect(() => {
+    if (ref.current !== null) ref.current.muted = !props.heard
+  }, [props.heard])
+  return (
+    <div className="relative flex size-full items-center justify-center">
+      <video
+        ref={ref}
+        src={props.highlight.video}
+        poster={props.highlight.thumbnail}
+        autoPlay
+        controls
+        playsInline
+        muted={!props.heard}
+        className="max-h-full max-w-full"
+      />
+      <span className="label-caps absolute top-2 left-2 rounded-sm bg-black/70 px-1.5 py-0.5 text-[10px] text-white">
+        Replay
+      </span>
+    </div>
+  )
 }
 
 /**

@@ -1,13 +1,20 @@
 import type { GameId } from "@sportal/domain/Game"
+import type { HighlightId } from "@sportal/domain/Highlight"
 import { Schema } from "effect"
 
 /**
  * What a tile shows, as one string the Screen, the shell and a Remote all name it by: a game's stream or data tile is
- * the game's id itself; a custom tile is `custom:` and its stream's id; a stats tile is `stats:` and its game's id.
+ * the game's id itself; a custom tile is `custom:` and its stream's id; a stats tile is `stats:` and its game's id; a
+ * clip tile is `clip:` and its highlight's id.
  * Audio focus, solo, the interacting tile and each provider view follow a tile's key, so what a tile shows keeps them
- * when it moves. With `game`, `custom` and `stats`, which build those keys.
+ * when it moves. With `game`, `custom`, `stats` and `clip`, which build those keys.
  */
-export const TileKey = Object.assign(Schema.String.pipe(Schema.brand("TileKey")), { game, custom, stats })
+export const TileKey = Object.assign(Schema.String.pipe(Schema.brand("TileKey")), {
+  game,
+  custom,
+  stats,
+  clip
+})
 export type TileKey = typeof TileKey.Type
 
 /** A game's tile: the game's id. */
@@ -23,4 +30,9 @@ function custom(id: string): TileKey {
 /** The key of game `game`'s stats tile. */
 function stats(game: GameId): TileKey {
   return TileKey.make(`stats:${game}`)
+}
+
+/** The key of highlight `id`'s clip tile. */
+function clip(id: HighlightId): TileKey {
+  return TileKey.make(`clip:${id}`)
 }

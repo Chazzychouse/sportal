@@ -47,7 +47,7 @@ export function ScreenView() {
               transition: dragging ? undefined : cssTransition
             }}
           >
-            {game === undefined ? (
+            {game === undefined || Tile.guards.ClipTile(tile) ? (
               <TileFace
                 screen={screen}
                 slot={index}
@@ -73,7 +73,7 @@ function TileGame(props: { screen: Screen; slot: number; tile: Tile; game: GameI
   return <TileFace {...props} snapshot={snapshot} />
 }
 
-/** A tile's chrome over its well. */
+/** A tile's chrome over its well; the well's clip video has sound while the tile has audio focus. */
 function TileFace(props: {
   screen: Screen
   slot: number
@@ -81,6 +81,7 @@ function TileFace(props: {
   snapshot: GameSnapshot | undefined
   selected: boolean
 }) {
+  const key = Tile.key(props.tile)
   return (
     <>
       <TileChrome
@@ -91,7 +92,11 @@ function TileFace(props: {
         selected={props.selected}
       />
       <div className="flex min-h-0 flex-1 items-center justify-center bg-well">
-        <TileBody tile={props.tile} snapshot={props.snapshot} />
+        <TileBody
+          tile={props.tile}
+          snapshot={props.snapshot}
+          heard={key !== undefined && props.screen.hears(key)}
+        />
       </div>
     </>
   )

@@ -1,12 +1,15 @@
-import { useAtomValue } from "@effect/atom-react"
+import { useAtomSet, useAtomValue } from "@effect/atom-react"
 import type { GameId, GameSnapshot } from "@sportal/domain/Game"
 import { GameStats, type Leader, type TeamStat, type WinChance } from "@sportal/domain/GameStats"
+import type { Highlight } from "@sportal/domain/Highlight"
 import { League } from "@sportal/domain/League"
 import type { PlayId } from "@sportal/domain/Play"
 import { Option } from "effect"
 import { AsyncResult } from "effect/reactivity"
 import { type ReactNode, useLayoutEffect, useRef, useState } from "react"
 import { cn } from "@/design/ClassName"
+import { DisplayInput } from "../display/Display.ts"
+import * as DisplayState from "../display/DisplayState.ts"
 import { GameStatus } from "../game/GameStatus.tsx"
 import { standing, trails } from "../game/Score.tsx"
 import { teamColor, teamEdge, teamHalf } from "../game/TeamColors.ts"
@@ -14,13 +17,14 @@ import { TeamLogo } from "../game/TeamLogo.tsx"
 import * as Games from "../hub/Games.ts"
 import * as Stats from "../hub/Stats.ts"
 import { type ThemeName, useTheme } from "../ui/Theme.ts"
+import { HighlightCard } from "./HighlightCard.tsx"
 import * as StatsFit from "./StatsFit.ts"
 
 /**
  * A game's stats, as a broadcast stat page: its header from the snapshot, then linescore, team stats, leaders, win
- * probability and scoring summary, each when the stats have it. On a page every section shows and the page scrolls;
- * in a tile, as many as fit, in that order, and never a scrollbar. A live game's stats follow the Hub; any other
- * game's are asked once.
+ * probability, scoring summary and highlights, each when the stats have it. On a page every section shows and the
+ * page scrolls; in a tile, as many as fit, in that order, and never a scrollbar. A live game's stats follow the Hub;
+ * any other game's are asked once.
  */
 export function GameStatsView(props: { game: GameId; fit: Fit }) {
   const { value } = useAtomValue(Games.game(props.game))
@@ -92,7 +96,7 @@ function sectionsOf(
     const text = unavailable ? "Stats unavailable" : "Loading stats…"
     return [header, { section: "status", node: <p className="text-muted-foreground text-sm">{text}</p> }]
   }
-  const { linescore, teamStats, leaders, winProbability, scoringPlays } = stats
+  const { linescore, teamStats, leaders, winProbability, scoringPlays, highlights } = stats
   return [
     header,
     ...(linescore.home.length + linescore.away.length > 0
@@ -150,6 +154,18 @@ function sectionsOf(
             node: (
               <Panel title="Scoring">
                 <Scoring game={game} ids={scoringPlays} />
+              </Panel>
+            )
+          }
+        ]
+      : []),
+    ...(highlights.length > 0
+      ? [
+          {
+            section: "highlights",
+            node: (
+              <Panel title="Highlights">
+                <Highlights highlights={highlights} />
               </Panel>
             )
           }
@@ -518,5 +534,22 @@ function Scoring(props: { game: GameSnapshot; ids: ReadonlyArray<PlayId> }) {
         </li>
       ))}
     </ol>
+  )
+}
+
+/** The game's highlights in a row; choosing one plays it in a clip tile. */
+function Highlights(props: { highlights: ReadonlyArray<Highlight> }) {
+  const input = useAtomSet(DisplayState.display)
+  return (
+    <div className="flex gap-3 overflow-x-auto pb-1">
+      {props.highlights.map((highlight) => (
+        <HighlightCard
+          key={highlight.id}
+          highlight={highlight}
+          focused={false}
+          onChoose={() => input(DisplayInput.ChosenClip({ highlight }))}
+        />
+      ))}
+    </div>
   )
 }

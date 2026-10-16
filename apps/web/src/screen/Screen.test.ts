@@ -2,6 +2,7 @@ import { assert, describe, it } from "@effect/vitest"
 import { TileKey } from "@sportal/api/TileKey"
 import type { ChannelAvailability } from "@sportal/domain/Channel"
 import { GameId } from "@sportal/domain/Game"
+import { highlight } from "@sportal/domain/TestGame"
 import { DateTime, Option, Result, Schema } from "effect"
 import * as TestWeb from "../TestWeb.ts"
 import { type LayoutName, Screen, ScreenCommand, Tile } from "./Screen.ts"
@@ -296,6 +297,22 @@ describe("Screen#apply", () => {
     const soloed = run(screen, { _tag: "Solo", tile: 1 })
 
     assert.deepStrictEqual(soloed.audioFocus, Option.some(TileKey.game(TestWeb.bama)))
+  })
+
+  it("should put a highlight in a clip tile", () => {
+    const clip = highlight()
+
+    const screen = run(Screen.initial, { _tag: "AssignClip", tile: 2, highlight: clip })
+
+    assert.deepStrictEqual(screen.tiles[2], { _tag: "ClipTile", highlight: clip })
+  })
+
+  it("should give audio focus to a clip tile", () => {
+    const screen = run(TestWeb.fill([TestWeb.bama]), { _tag: "AssignClip", tile: 1, highlight: highlight() })
+
+    const focused = run(screen, { _tag: "FocusAudio", tile: 1 })
+
+    assert.deepStrictEqual(focused.audioFocus, Option.some(TileKey.clip(highlight().id)))
   })
 })
 

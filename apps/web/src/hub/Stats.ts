@@ -1,5 +1,7 @@
+import type { CalendarDate } from "@sportal/api/GamesQuery"
 import type { GameId } from "@sportal/domain/Game"
 import type { GameStats } from "@sportal/domain/GameStats"
+import type { LeagueId } from "@sportal/domain/League"
 import { Effect, Option } from "effect"
 import { Atom } from "effect/reactivity"
 import { runtime } from "../WebRuntime.ts"
@@ -23,4 +25,16 @@ export const statsLive = Atom.family((id: GameId) =>
     Option.none<GameStats>(),
     (_, answer) => Option.some(answer)
   )
+)
+
+/** The highlights of `date`'s final games of `league`, asked once per page. */
+export const highlights = Atom.family((day: { readonly league: LeagueId; readonly date: CalendarDate }) =>
+  runtime
+    .atom(
+      Effect.gen(function* () {
+        const hub = yield* HubClient
+        return yield* hub.highlights(day.league, day.date)
+      })
+    )
+    .pipe(Atom.keepAlive)
 )

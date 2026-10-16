@@ -1,12 +1,13 @@
 import { TileKey } from "@sportal/api/TileKey"
 import { Channel, ChannelAvailability, SourceName, StreamLocator } from "@sportal/domain/Channel"
 import { GameId } from "@sportal/domain/Game"
+import { Highlight } from "@sportal/domain/Highlight"
 import { Array as Arr, Option, Record as Rec, Result, Schema } from "effect"
 import { CustomStreamId } from "../custom/CustomStream.ts"
 
 /**
- * One slot's content: a game's stream, its data, its stats, a saved custom stream, or nothing. With `key`, what the
- * tile shows as a `TileKey`; `game`, the game it shows; and `locator`, what the shell loads for it.
+ * One slot's content: a game's stream, its data, its stats, a saved custom stream, a highlight, or nothing. With `key`,
+ * what the tile shows as a `TileKey`; `game`, the game it shows; and `locator`, what the shell loads for it.
  */
 export const Tile = Object.assign(
   Schema.TaggedUnion({
@@ -29,7 +30,9 @@ export const Tile = Object.assign(
     /** A saved YouTube video or playlist: its stream, its name, and what the shell loads, so a placement needs no lookup. */
     CustomTile: { stream: CustomStreamId, name: Schema.String, locator: StreamLocator },
     /** A game's stats, beside or instead of its stream: no provider view and no sound. */
-    StatsTile: { game: GameId }
+    StatsTile: { game: GameId },
+    /** A highlight playing in a page video, with sound when it has audio focus. */
+    ClipTile: { highlight: Highlight }
   }),
   { key, game, locator }
 )
@@ -179,6 +182,8 @@ export class Screen extends Schema.Class<Screen>("sportal/Screen")({
         ),
       AssignStats: ({ tile, game }) =>
         tileAt(this, tile, () => Result.succeed(placed(this, tile, { _tag: "StatsTile", game }))),
+      AssignClip: ({ tile, highlight }) =>
+        tileAt(this, tile, () => Result.succeed(placed(this, tile, { _tag: "ClipTile", highlight }))),
       AssignCustom: ({ tile, stream, name, locator }) =>
         tileAt(this, tile, () =>
           Result.succeed(placed(this, tile, { _tag: "CustomTile", stream, name, locator }))
@@ -216,8 +221,8 @@ export class Screen extends Schema.Class<Screen>("sportal/Screen")({
 
   /**
    * Re-resolves every tile with a game's stream or data, on screen and benched, after what a source knows has changed.
-   * A custom tile has no game and a stats tile no stream, so both stay as they are. A game `availabilityOf` knows
-   * nothing about keeps its tile as it was: the change did not concern it.
+   * A custom tile has no game, and a stats or clip tile no stream, so each stays as it is. A game `availabilityOf`
+   * knows nothing about keeps its tile as it was: the change did not concern it.
    *
    * A stream tile is replaced only when its own source carries its game on another channel. Any other availability
    * (another source carrying it, a game running past its listing, no guide, a failed or stale read) never stops
@@ -227,7 +232,7 @@ export class Screen extends Schema.Class<Screen>("sportal/Screen")({
   refresh(availabilityOf: (game: GameId) => Option.Option<ReadonlyArray<ChannelAvailability>>): Screen {
     const tiles = this.tiles.map((tile) => {
       const game = Tile.game(tile)
-      if (game === undefined || Tile.guards.StatsTile(tile)) return tile
+      if (game === undefined || Tile.guards.StatsTile(tile) || Tile.guards.ClipTile(tile)) return tile
       return Option.match(availabilityOf(game), {
         onNone: () => tile,
         onSome: (availability) =>
@@ -247,6 +252,8 @@ export const ScreenCommand = Schema.TaggedUnion({
   AssignStats: { tile: Schema.Int, game: GameId },
   /** Puts a saved custom stream in a tile; one already on another tile moves. */
   AssignCustom: { tile: Schema.Int, stream: CustomStreamId, name: Schema.String, locator: StreamLocator },
+  /** Puts a highlight in a clip tile; one already on another tile moves. */
+  AssignClip: { tile: Schema.Int, highlight: Highlight },
   Clear: { tile: Schema.Int },
   FocusAudio: { tile: Schema.Int },
   Swap: { a: Schema.Int, b: Schema.Int },
@@ -282,7 +289,7 @@ interface Unsettled {
 
 /**
  * What `tile` shows, as a key: its game's id for a stream or data tile, its stream's for a custom tile, its game's
- * stats for a stats tile; none for an empty tile.
+ * stats for a stats tile, its highlight's clip for a clip tile; none for an empty tile.
  */
 function key(tile: Occupied): TileKey
 function key(tile: Tile): TileKey | undefined
@@ -292,18 +299,23 @@ function key(tile: Tile): TileKey | undefined {
     StreamTile: ({ game }) => TileKey.game(game),
     DataTile: ({ game }) => TileKey.game(game),
     CustomTile: ({ stream }) => TileKey.custom(stream),
-    StatsTile: ({ game }) => TileKey.stats(game)
+    StatsTile: ({ game }) => TileKey.stats(game),
+    ClipTile: ({ highlight }) => TileKey.clip(highlight.id)
   })
 }
 
-/** The game a tile shows: a stream, data or stats tile's. An empty or custom tile shows none. */
+/**
+ * The game a tile shows: a stream, data or stats tile's, or a clip tile's highlight's. An empty or custom tile shows
+ * none.
+ */
 function game(tile: Tile): GameId | undefined {
   return Tile.match(tile, {
     Empty: () => undefined,
     StreamTile: ({ game }) => game,
     DataTile: ({ game }) => game,
     CustomTile: () => undefined,
-    StatsTile: ({ game }) => game
+    StatsTile: ({ game }) => game,
+    ClipTile: ({ highlight }) => highlight.game
   })
 }
 
@@ -314,7 +326,8 @@ function locator(tile: Tile): StreamLocator | undefined {
     StreamTile: ({ channel }) => channel.locator,
     DataTile: () => undefined,
     CustomTile: ({ locator }) => locator,
-    StatsTile: () => undefined
+    StatsTile: () => undefined,
+    ClipTile: () => undefined
   })
 }
 
