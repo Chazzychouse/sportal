@@ -158,3 +158,45 @@ Each passes `pnpm check` and is committed on its own.
 
 - MLB, then NBA: league-table row, situation and detail decode, recorded payloads, FastCast topics checked live.
 - Automation rebuilt on the new model.
+
+## Live queries over one socket
+
+**Why.** Each live query is its own server-sent event stream, so each is its own HTTP/1.1 connection, and Chromium
+allows six per host. The Display holds today's list, each occupied tile's game, each live data tile's plays and its
+input stream: a full Quad uses all six and MainFive needs more. Past the limit the report `PUT`s, the guide `POST`s
+and some tiles wait for a connection that never frees.
+
+**Decision.** The live queries become stream RPCs (`effect/rpc`) over one WebSocket per page, at `/api/socket` on the
+Hub's port, beside the HTTP API. Any number of tiles share it. The plain `GET`s, `PUT`s and `POST`s stay as they are,
+and stay curl-able.
+
+**The group**, `LiveQueries` in `packages/api`. Each RPC sends its current answer first, then each change, for as long
+as the client reads it; JSON over the socket (`RpcSerialization.layerJson`).
+
+| RPC | Payload | Stream element | Error |
+|---|---|---|---|
+| `games` | `GamesQuery` | `GameList` | `ScheduleUnavailable` |
+| `game` | `{ id: GameId }` | `ListedGame` | `GameNotFound \| ScheduleUnavailable` |
+| `plays` | `{ id: GameId }` | `PlaysChange` | `GameNotFound \| ScheduleUnavailable` |
+| `inputs` | `{ display: DisplayId }` | `DisplayMessage`: `Registered`, then `Sent { input }` per Remote input | – |
+| `follow` | `{ display: DisplayId }` | `RemoteMessage` | – |
+
+`inputs` registers the Display while it runs, as its SSE stream did; its first element tells the Display the Hub has
+registered it, which the SSE stream's opening used to. The Display's report (`PUT /api/displays/:id`) and a Remote's
+input (`POST /api/displays/:id/inputs`) stay HTTP.
+
+**The web.** `HubSocket` (`apps/web/src/hub/HubSocket.ts`) is the one socket, in the web runtime beside `HubClient`.
+It gives the socket's `Connection` (connecting, connected, lost since an instant), from the RPC client's connection
+hooks, and `live(query)`: the query's stream, asked again each time the socket connects. `LiveStream.of` takes a
+query instead of a URL; `Games.today` stays kept alive, and `Games.game(id)` and `Games.plays(id)` ask the Hub only
+while read, ending their RPC on the Hub when nothing reads them. The top bar's pill shows the socket's connection.
+The Remote page's two streams (today's list and its follow) share its own one socket the same way.
+
+**Reconnecting.** The RPC client's socket protocol reopens a lost socket after 500 ms, then 1.5 times as long each
+time, up to 5 s, and pings every 5 s, failing the socket on a missed pong. A lost socket fails every query on it;
+each asks again when the socket connects, and the Hub's first answer replaces what the view held.
+
+**Deleted.** `GET /api/games/live`, `/api/games/:id/live`, `/api/games/:id/plays/live`, `GET /api/displays/:id/inputs`
+and `GET /api/displays/:id` (the follow), with their keep-alive events and the server's `sse` helper; the web's
+`ServerEvents.ts` and its `ServerEvent`; the JSON-string codecs only SSE read (`GameListJson`, `ListedGameJson`,
+`RemoteMessageJson`, `RemoteInputJson`). A live query is not curl-able any more; its plain `GET` is.
