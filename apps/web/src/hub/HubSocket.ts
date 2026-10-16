@@ -4,13 +4,15 @@ import { type Rpc, RpcClient, RpcClientError, type RpcGroup, RpcSerialization, R
 import { Socket } from "effect/socket"
 
 /**
- * The web UI's one WebSocket to the Hub, at `/api/socket` on the page's host: every live query (`HubApi`) goes over
- * it as a stream RPC, however many views ask. It opens with the web runtime, and the RPC client opens it again once
+ * The web UI's one WebSocket to the Hub, at `/api/socket` on the page's host: the whole `HubApi` goes over it, every
+ * request and every live query, however many views ask. It opens with the web runtime, and the RPC client opens it again once
  * lost: after half a second, then half as long again each time, up to 5 seconds.
  */
 export class HubSocket extends Context.Service<
   HubSocket,
   {
+    /** The typed client of `HubApi`, for a request; one sent while the socket is down fails with `RpcClientError`. */
+    readonly client: HubApiClient
     /** Whether the socket is up: now, then each change. */
     readonly connection: Stream.Stream<Connection>
     /**
@@ -57,7 +59,7 @@ export class HubSocket extends Context.Service<
   }
 }
 
-/** The typed client of the Hub's live queries, which a live query is asked through. */
+/** The typed client of the Hub's API, which each request and live query is asked through. */
 export type HubApiClient = RpcClient.FromGroup<typeof HubApi, RpcClientError.RpcClientError>
 
 /** Whether the Hub socket is up: not connected yet, connected, or lost at an instant and reconnecting. */
@@ -87,6 +89,7 @@ function over(
 ): HubSocket["Service"] {
   const changes = SubscriptionRef.changes(connection)
   return {
+    client,
     connection: changes,
     live: (query) =>
       changes.pipe(

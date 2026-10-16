@@ -3,13 +3,13 @@ import type { GameList } from "@sportal/api/GamesQuery"
 import type { ChannelAvailability } from "@sportal/domain/Channel"
 import { GameId } from "@sportal/domain/Game"
 import { snapshot } from "@sportal/domain/TestGame"
-import { Effect, Option } from "effect"
+import { Array as Arr, Effect, Option } from "effect"
 import { Atom } from "effect/reactivity"
 import { vi } from "vitest"
 import * as Games from "../hub/Games.ts"
 import * as TestWeb from "../TestWeb.ts"
 import * as DisplayScreen from "./DisplayScreen.ts"
-import { Screen } from "./Screen.ts"
+import { Screen, Tile } from "./Screen.ts"
 
 describe("DisplayScreen.screen", () => {
   beforeEach(() => {
@@ -68,7 +68,9 @@ describe("DisplayScreen.screen", () => {
         yield* Atom.set(DisplayScreen.screen, { _tag: "Assign", tile: 0, game: id })
 
         yield* TestWeb.answer(hub, "games", hub.lists, listOf([onEspn]))
-        return yield* TestWeb.until(DisplayScreen.screen, (screen) => screen.tiles[0]?._tag === "StreamTile")
+        return yield* TestWeb.until(DisplayScreen.screen, (screen) =>
+          Option.exists(Arr.get(screen.tiles, 0), Tile.guards.StreamTile)
+        )
       }).pipe(Effect.scoped, Effect.provide(registry))
 
       assert.deepStrictEqual(screen.tiles[0], { _tag: "StreamTile", game: id, channel: espn })

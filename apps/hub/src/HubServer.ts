@@ -3,7 +3,6 @@ import { networkInterfaces } from "node:os"
 import { NodeHttpServer, type NodeServices } from "@effect/platform-node"
 import type { DisplayMessage } from "@sportal/api/DisplayMessage"
 import { HubApi } from "@sportal/api/HubApi"
-import { SportalApi } from "@sportal/api/SportalApi"
 import {
   DateTime,
   Effect,
@@ -17,97 +16,53 @@ import {
 } from "effect"
 import {
   type Etag,
-  type HttpClient,
   type HttpPlatform,
   HttpRouter,
   type HttpServer,
   type HttpServerError,
   HttpStaticServer
 } from "effect/http"
-import { HttpApiBuilder } from "effect/http-api"
 import { RpcSerialization, RpcServer } from "effect/rpc"
 import { Displays } from "./Displays.ts"
 import { HubConfig } from "./HubConfig.ts"
 import { Schedule } from "./Schedule.ts"
 import { Source } from "./source/Source.ts"
 
-const guideHandlers = HttpApiBuilder.group(
-  SportalApi,
-  "guide",
-  Effect.fn(function* (handlers) {
-    const source = yield* Source
-    return handlers.handleAll({
-      read: ({ payload }) =>
-        source
-          .readGuide(payload.guide)
-          .pipe(
-            Effect.tapError(() =>
-              Effect.logWarning(`HubServer: a guide of ${payload.guide.length} characters could not be read`)
-            )
-          )
-    })
-  })
-)
-
-const hostHandlers = HttpApiBuilder.group(
-  SportalApi,
-  "host",
-  Effect.fn(function* (handlers) {
-    const config = yield* HubConfig
-    const startedAt = yield* DateTime.now
-    return handlers.handleAll({
-      health: () => Effect.succeed({ version: config.version, startedAt }),
-      addresses: () => Effect.sync(() => lanAddresses(networkInterfaces()))
-    })
-  })
-)
-
-const gamesHandlers = HttpApiBuilder.group(
-  SportalApi,
-  "games",
-  Effect.fn(function* (handlers) {
-    const schedule = yield* Schedule
-    return handlers.handleAll({
-      list: ({ query }) => schedule.list(query),
-      game: ({ params }) => schedule.game(params.id),
-      plays: ({ params, query }) => schedule.plays(params.id, query)
-    })
-  })
-)
-
-const displaysHandlers = HttpApiBuilder.group(
-  SportalApi,
-  "displays",
-  Effect.fn(function* (handlers) {
-    const displays = yield* Displays
-    return handlers.handleAll({
-      report: ({ params, payload }) => displays.report(params.id, payload),
-      send: ({ params, payload }) => displays.send(params.id, payload)
-    })
-  })
-)
-
-const api = HttpApiBuilder.layer(SportalApi).pipe(
-  Layer.provide([guideHandlers, hostHandlers, gamesHandlers, displaysHandlers])
-)
-
-const liveHandlers = HubApi.toLayer(
+const handlers = HubApi.toLayer(
   Effect.gen(function* () {
     const schedule = yield* Schedule
     const displays = yield* Displays
+    const source = yield* Source
+    const config = yield* HubConfig
+    const startedAt = yield* DateTime.now
     return HubApi.of({
       listLive: (query) => Stream.unwrap(schedule.listLive(query)),
       gameLive: ({ id }) => Stream.unwrap(schedule.gameLive(id)),
       playsLive: ({ id }) => Stream.unwrap(schedule.playsLive(id)),
       inputs: ({ display }) => Stream.unwrap(Effect.map(displays.connect(display), registered)),
-      follow: ({ display }) => displays.follow(display)
+      follow: ({ display }) => displays.follow(display),
+      list: (query) => schedule.list(query),
+      game: ({ id }) => schedule.game(id),
+      plays: ({ id, before, limit }) => schedule.plays(id, { before, limit }),
+      readGuide: ({ guide }) =>
+        source
+          .readGuide(guide)
+          .pipe(
+            Effect.tapError(() =>
+              Effect.logWarning(`HubServer: a guide of ${guide.length} characters could not be read`)
+            )
+          ),
+      health: () => Effect.succeed({ version: config.version, startedAt }),
+      addresses: () => Effect.sync(() => lanAddresses(networkInterfaces())),
+      report: ({ display, report }) => displays.report(display, report),
+      send: ({ display, input }) => displays.send(display, input)
     })
   })
 )
 
-/** The live queries, on the same server and port as the API: one WebSocket per page carries every one it asks. */
-const live = RpcServer.layerHttp({ group: HubApi, path: "/api/socket", protocol: "websocket" }).pipe(
-  Layer.provide([liveHandlers, RpcSerialization.layerJson])
+/** The Hub's API, on the same server and port as the web UI's files: one WebSocket per page carries all of it. */
+const socket = RpcServer.layerHttp({ group: HubApi, path: "/api/socket", protocol: "websocket" }).pipe(
+  Layer.provide([handlers, RpcSerialization.layerJson])
 )
 
 const web = Layer.unwrap(
@@ -127,13 +82,12 @@ export const layer: Layer.Layer<
   | Schedule
   | Displays
   | Source
-  | HttpClient.HttpClient
   | HttpServer.HttpServer
   | HttpPlatform.HttpPlatform
   | Etag.Generator
   | FileSystem.FileSystem
   | Path.Path
-> = HttpRouter.serve(Layer.mergeAll(api, live, web))
+> = HttpRouter.serve(Layer.mergeAll(socket, web))
 
 export const layerListen: Layer.Layer<
   HttpServer.HttpServer | HttpPlatform.HttpPlatform | Etag.Generator | NodeServices.NodeServices,

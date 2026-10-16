@@ -25,7 +25,7 @@ describe("LiveStream.of", () => {
         yield* Atom.mount(counted)
 
         yield* SubscriptionRef.set(hub.connection, TestWeb.lost)
-        return yield* TestWeb.until(counted, ({ connection }) => connection._tag === "Lost")
+        return yield* TestWeb.until(counted, ({ connection }) => Connection.$is("Lost")(connection))
       }).pipe(Effect.scoped, Effect.provide(registry))
 
       assert.strictEqual(state.connection, TestWeb.lost)

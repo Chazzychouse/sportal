@@ -83,12 +83,12 @@ Provider and Source are the two words most likely to be swapped. Provider is alw
 
 ### Devices
 
-A client asks the Hub by query: `GET /api/games…` once, or the same query live over the Hub socket for the answer and each change.
+A client asks the Hub over the Hub socket: once (`list`), or live (`listLive`) for the answer and each change.
 
 | Term | Meaning | Not |
 | --- | --- | --- |
 | **Hub** | The server process that owns all shared state. | backend, server |
-| **Hub API** | The Hub's API, declared once in `packages/api`; the Hub serves it and every client derives its typed client from it. `HubApi` is RPCs over one WebSocket per page, at `/api/socket`: the live queries (a games query, one game, a game's plays, a Display's inputs, a Remote's follow), each a stream sending its current answer, then each change, while its client reads it. The plain reads and writes are still HTTP, `SportalApi`. | REST layer, SSE |
+| **Hub API** | The Hub's whole API, declared once as `HubApi` (`packages/api`): RPCs over one WebSocket per page, at `/api/socket`. The Hub serves it and every client derives its typed client from it. Its live queries (a games query, one game, a game's plays, a Display's inputs, a Remote's follow) are streams that send their current answer, then each change, while their client reads them; every other read and write is a request. | REST layer, SSE |
 | **Hub config** | Every setting a Hub reads from its environment, decoded once at startup; `HubConfig` in code. | settings, env |
 | **Hub mode** | What a Hub plays: the live day from its providers and sources. | profile |
 | **Schedule** | What the games API answers, the Hub's `Schedule` service: a day's games, one game, and a game's plays, each once or live. Today is live from the Director's slate; another day is the provider's listing, held in memory (a past day until the Hub restarts, a later one for 10 minutes). | calendar, games service |
@@ -96,19 +96,19 @@ A client asks the Hub by query: `GET /api/games…` once, or the same query live
 | **Game list** | A day and its games, filtered and in watch order, as a games query answers; `GameList`. | games response |
 | **Games query** | What a list of games asks for: a day, leagues, progress, and whether carried; `GamesQuery`, whose `answer` filters and orders. | filter |
 | **Calendar date** | A day as `YYYY-MM-DD`, in the Hub's time zone; `CalendarDate` in code. | date |
-| **Game not found** | No day the Hub holds lists a game with that id; `GameNotFound`, answered as 404. | |
-| **Schedule unavailable** | The provider could not be reached for a day, or a game's plays, the Hub does not hold; `ScheduleUnavailable`, answered as 503. | |
+| **Game not found** | No day the Hub holds lists a game with that id; `GameNotFound`, the error of the `game`, `plays`, `gameLive` and `playsLive` RPCs. | |
+| **Schedule unavailable** | The provider could not be reached for a day, or a game's plays, the Hub does not hold; `ScheduleUnavailable`, the error of the games RPCs. | |
 | **Remote message** | One update the Hub pushes to a Remote about its Display: its latest report (`Reported`, passed on unread) or `Offline`; `RemoteMessage`. | event |
 | **Display message** | One update the Hub pushes to a Display on its input stream: that the Hub has registered it (`Registered`, first), then each input a Remote sent (`Sent`, passed on unread); `DisplayMessage`. | event |
 | **Live stream** | A live query as a client reads it: answers, then changes, over the Hub socket. In the web UI, `LiveStream.of` folds one's elements into an atom of `Live`, the value so far and the socket's connection; `Games` holds one per query the views make. | event stream |
 | **Connection** | Whether the Hub socket is up: connecting (never yet connected), connected, or lost (since an instant, reconnecting); `Connection` beside `HubSocket`. | online, status |
-| **Hub client** | The web UI's way to the Hub's API, `HubClient` in code. It runs in the web UI's one runtime (`WebRuntime.ts`), beside the Shell. | API client, fetcher |
-| **Hub socket** | The web UI's one WebSocket to the Hub, `HubSocket` in `apps/web/src/hub/HubSocket.ts`: it carries every live query a page asks, asks each again when it reconnects, and gives its connection. It runs in the web runtime beside the Hub client; `HubApiClient`, beside it, is the typed client of `HubApi`. | event source, stream |
+| **Hub client** | The web UI's requests and writes to the Hub, `HubClient` in code, over the Hub socket. It runs in the web UI's one runtime (`WebRuntime.ts`), beside the Shell. | API client, fetcher |
+| **Hub socket** | The web UI's one WebSocket to the Hub, `HubSocket` in `apps/web/src/hub/HubSocket.ts`: it carries every request and live query a page makes, asks each live query again when it reconnects, and gives its connection. It runs in the web runtime beside the Hub client; `HubApiClient`, beside it, is the typed client of `HubApi`. | event source, stream |
 | **Display** | A device running the shell and presenting a Screen. It owns its Screen (`apps/web/src/screen/DisplayScreen.ts`), kept in its browser. Its local state (selected tile, interacting tile, and the one open overlay) is the web UI's `Display`, held in the `DisplayState.display` atom. | screen, client, player |
 | **Remote** | A phone's view and control of one Display, at /remote/<display id>: its layout and tiles, and today's games. It sends Remote inputs and follows the Display's Remote report through the Hub; it works only while the page is open. | controller |
 | **Display id** | A Display's own id, made once and kept in its browser (`sportal/display-id`); a Remote names its Display by it. `DisplayId` in `packages/api`. | display name |
 | **Displays** | The Hub's in-memory relay between each connected Display and its Remotes (`apps/hub/src/Displays.ts`): the Display's latest report and the inputs waiting for it, neither of which the Hub reads. A Display is connected while its input stream is open; when it closes, the Display and its report are forgotten. | registry, sessions |
-| **Display offline** | The Hub's answer to a report or input for a Display that is not connected: `DisplayOffline`, a 404. | |
+| **Display offline** | The Hub's answer to a report or input for a Display that is not connected: `DisplayOffline`, the error of the `report` and `send` RPCs. | |
 | **Remote report** | What a Display tells its Remotes through the Hub: its Screen; `RemoteReport` in `apps/web/src/remote/RemoteReport.ts`. Sent once the Hub has registered its input stream, and again on each change. | state, snapshot |
 | **Remote input** | What a Remote sends a Display: a screen command, applied to its Screen, or a hotkey, routed as if pressed on the Display; `RemoteInput` in `apps/web/src/remote/RemoteInput.ts`. | command, event |
 | **Remote link** | A Display's side of its Remotes (`apps/web/src/remote/RemoteLink.ts`): its input stream at the Hub, its reports, and the inputs it applies. | |

@@ -19,14 +19,13 @@
     "plugins": [
       {
         "name": "@effect/language-service",
-        // AGENTS.md: "HTTP lives in `effect/http` and `effect/http-api`". FastCast is ESPN's WebSocket, read through
+        // AGENTS.md: "HTTP lives in `effect/http`, the Hub's API in `effect/rpc`". FastCast is ESPN's WebSocket, read through
         // `effect/socket`. The web UI holds what the live stream said in an atom from `effect/reactivity`, and keeps each
         // Display's Screen in the browser through `effect/persistence/KeyValueStore`.
         // The Hub's live queries are stream RPCs from `effect/rpc`, over one WebSocket per page.
         // Effect marks all of these unstable; they are the house choices, not accidents.
         "allowedUnstableApis": [
           "effect/http",
-          "effect/http-api",
           "effect/socket",
           "effect/rpc",
           "effect/reactivity",

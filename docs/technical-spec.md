@@ -26,15 +26,14 @@ You like Effect, Rust, and gpui. Only one of them fits this product cleanly, and
 
 ### 2.2 Choices
 
-Versions were checked against the registry on 2026-10-03. Effect is at 4.0, which merged the former platform packages into `effect` itself (`effect/http`, `effect/http-api`, `effect/sql`).
+Versions were checked against the registry on 2026-10-03. Effect is at 4.0, which merged the former platform packages into `effect` itself (`effect/http`, `effect/rpc`, `effect/sql`).
 
 | Concern | Choice | Why |
 | --- | --- | --- |
 | Language | TypeScript 7 with the Effect language service (`@effect/tsgo`), `strict`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`, `erasableSyntaxOnly` | Shared model across every process. The language service's Effect diagnostics run in `tsc` and the editor. dependency-cruiser runs on a private TypeScript 6 until it supports 7.1. Erasable-only syntax lets Node run the Hub's source directly, with no build step |
 | Core library | Effect 4 | Typed errors, dependency injection by Layer, schedules for polling, streams for live data, a test clock for replaying games |
 | Schemas | Effect Schema | The single definition of each domain concept: type, decoder, encoder |
-| HTTP API | Effect `HttpApi` (`effect/http-api`) | The API is declared once from domain schemas; the Hub implements it and clients derive a fully typed client from the same declaration — no hand-written request or response types anywhere |
-| Live transport | Server-Sent Events carrying schema-encoded messages | One-way, auto-reconnecting, proxies and cloud hosts handle it without special setup |
+| Hub API | Effect RPC (`effect/rpc`) over one WebSocket | Declared once from domain schemas; the Hub implements it and clients derive a fully typed client. One socket per page, whatever it shows, under Chromium's six connections per host |
 | Persistence | None, for now | The Hub keeps nothing between runs: a restarted Hub starts from an empty slate and its next poll fills it. Persistence is added back on top of the simplified model (ADR 0012) |
 | Runtime | Node 24 (LTS), pinned in `mise.toml` | Electron's main process is Node; one runtime everywhere |
 | Package manager | pnpm workspaces | Strict dependency isolation; already installed |
@@ -84,28 +83,27 @@ flowchart LR
   yttv --> views
 ```
 
-- **Hub** — takes what its providers' frames say, as they arrive, into the Director's slate (the listed games, each with its latest snapshot and plays). Its Schedule answers the games API from it: a day's games, one game, a game's plays, each once or live. Serves the web UI's static files, the HTTP API, and the live queries: stream RPCs over one WebSocket per page, at `/api/socket` on the same port.
+- **Hub** — takes what its providers' frames say, as they arrive, into the Director's slate (the listed games, each with its latest snapshot and plays). Its Schedule answers the games API from it: a day's games, one game, a game's plays, each once or live. Serves the web UI's static files over HTTP, and its whole API as RPCs over one WebSocket per page, at `/api/socket` on the same port.
 - **Web UI** — one codebase for desk and couch. It renders Hub state, and its Display owns its Screen: it applies screen commands and chooses between sources.
 - **Desktop shell** — starts the Hub it ships with (the embedded Hub), loads the web UI from it, registers as a Display, and mirrors that Display's stream tiles into native provider web views. Given a Hub's address by configuration (`SPORTAL_HUB_URL`, read once into `ShellConfig`), it starts none and loads that one instead, as `pnpm dev` does.
 
-The games API, answered by the Hub's `Schedule` (`apps/hub/src/Schedule.ts`):
+The Hub's API, `HubApi`, answered by the Hub's `Schedule` and `Displays`:
 
-| Endpoint | Answer |
-|---|---|
-| `GET /api/games?date&league&progress&carried` | `{ date, games: ListedGame[] }` |
-| `GET /api/games/:id` | `ListedGame` |
-| `GET /api/games/:id/plays?before&limit` | `{ plays, more }`, newest first; `before` is a `sequence`, `limit` defaults to 50 |
-
-The live queries (`HubApi`, stream RPCs over one WebSocket per page at `/api/socket`; a page with any number of
-tiles holds one socket, under Chromium's six HTTP/1.1 connections per host):
-
-| RPC | Payload | Sends |
+| RPC | Payload | Answer |
 |---|---|---|
-| `listLive` | a games query | the answer, then the whole answer again each time it changes, debounced |
-| `gameLive` | `{ id }` | the listed game, then again each time it or its availability changes |
-| `playsLive` | `{ id }` | the latest page as a `Reset`, then `Appended { plays }` or `Reset { plays }` |
-| `inputs` | `{ display }` | `Registered`, then each Remote input as `Sent { input }`; registers the Display while it runs |
-| `follow` | `{ display }` | the Display's latest report, or that it is offline, then each change |
+| `listLive` | a games query | stream: the answer, then the whole answer again each time it changes, debounced |
+| `gameLive` | `{ id }` | stream: the listed game, then again each time it or its availability changes |
+| `playsLive` | `{ id }` | stream: the latest page as a `Reset`, then `Appended { plays }` or `Reset { plays }` |
+| `inputs` | `{ display }` | stream: `Registered`, then each Remote input as `Sent { input }`; registers the Display while it runs |
+| `follow` | `{ display }` | stream: the Display's latest report, or that it is offline, then each change |
+| `list` | a games query (`date`, `league`, `progress`, `carried`) | `{ date, games: ListedGame[] }`; `ScheduleUnavailable` |
+| `game` | `{ id }` | `ListedGame`; `GameNotFound` or `ScheduleUnavailable` |
+| `plays` | `{ id, before?, limit? }` | `{ plays, more }`, newest first; `before` is a `sequence`, `limit` (1–200) defaults to 50 |
+| `readGuide` | `{ guide }` | nothing; `GuideUnreadable` when the source cannot read it |
+| `health` | – | `{ version, startedAt }` |
+| `addresses` | – | the LAN addresses a Remote's join code can point at |
+| `report` | `{ display, report }` | nothing; `DisplayOffline` when the Display is not connected |
+| `send` | `{ display, input }` | nothing; `DisplayOffline` when the Display is not connected |
 
 - A listed game is its snapshot and its availability from every source; a list never carries plays, and is in watch
   order: live, then upcoming by start, then over. `date` defaults to today in the Hub's time zone (`SPORTAL_TIME_ZONE`);
@@ -119,19 +117,20 @@ tiles holds one socket, under Chromium's six HTTP/1.1 connections per host):
   of the game against the one before. The client pings the socket every 5 seconds and reopens
   a lost one after half a second, then half as long again each time, up to 5 seconds; each query is asked again when
   it reconnects.
-- `GameNotFound` (404) for an id no held day lists; `ScheduleUnavailable` (503) when the provider cannot be reached for
+- `GameNotFound` for an id no held day lists; `ScheduleUnavailable` when the provider cannot be reached for
   a day, or a game's plays, the Hub does not hold.
 - In the web UI, `Games` (`apps/web/src/hub/Games.ts`) holds an atom per query the views make, all
   over the one `HubSocket`: today's list, kept open,
   which the Screen, the top bar, the palette and the Remote read; and each tile's game and, for a field, its plays,
   each asked only while a tile reads it.
 
-The Hub's routes for Displays and their Remotes:
+The Hub's API for Displays and their Remotes:
 
-- `PUT /api/displays/:id` — the Display's report, which the Hub keeps and passes on unread; 404 when the Display is not connected.
-- `POST /api/displays/:id/inputs` — a Remote's input, relayed to the Display; 404 when it is not connected.
-- The `inputs` and `follow` live queries — a Display's input stream, which registers the Display under its id while it runs, and a Remote's follow of the Display.
-- `GET /api/host/addresses` — the LAN addresses a Remote's join code can point at.
+- `inputs` — a Display's input stream, which registers the Display under its id while it runs.
+- `report` — the Display's report, which the Hub keeps and passes on unread; `DisplayOffline` when the Display is not connected.
+- `follow` — a Remote's follow of the Display: its latest report, or that it is offline, then each change.
+- `send` — a Remote's input, relayed to the Display; `DisplayOffline` when it is not connected.
+- `addresses` — the LAN addresses a Remote's join code can point at.
 
 ### 3.1 Why each Display owns its Screen
 
@@ -219,7 +218,7 @@ sportal/
 │   │
 │   └── api/                    The contracts between processes.
 │       └── src/
-│           ├── SportalApi.ts       HttpApi declaration: endpoint groups built from domain schemas
+│           ├── HubApi.ts           RPC group: the Hub's whole API, built from domain schemas
 │           ├── GuideUnreadable.ts  The error for a guide response the source could not read
 │           ├── GamesQuery.ts       What a list of games asks for, and the answer: CalendarDate, GameList
 │           ├── ListedGame.ts       A game as a list or a tile shows it: its snapshot and availability
@@ -272,7 +271,7 @@ sportal/
     │       ├── design/             Vendored shadcn primitives, under the CLI's own file names
     │       ├── display/            This device's Display: state and rules, hotkeys, full screen, overlays, top bar, command palette
     │       ├── shell/              Shell: the edge to the window and the shell bridge
-    │       ├── hub/                HubClient (typed client from SportalApi), HubSocket (the one socket and its connection), LiveStream (a live query folded into an atom), Games (one atom per live query)
+    │       ├── hub/                HubClient (the requests and writes), HubSocket (the one socket, its client and its connection), LiveStream (a live query folded into an atom), Games (one atom per live query)
     │       ├── screen/             The Screen (state, commands, source choice), this Display's copy of it, tiles, dividers, tile actions, rejections
     │       ├── layout/             Layout (the geometry: slots, dividers, next, clamp), its picker and glyphs
     │       ├── game/               A game's status, score, and logo, as lists and tiles show them; the field, which draws a game's plays

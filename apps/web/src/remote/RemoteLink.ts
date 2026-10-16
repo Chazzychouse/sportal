@@ -89,7 +89,7 @@ function reported(hub: HubClient["Service"], id: DisplayId, each: RemoteReport) 
     Effect.flatMap((json) => hub.report(id, json)),
     Effect.catchTags({
       DisplayOffline: () => Effect.logWarning("The Hub has not registered this Display"),
-      HttpClientError: (error) => Effect.logWarning("Could not report to the Hub", error)
+      RpcClientError: (error) => Effect.logWarning("Could not report to the Hub", error)
     })
   )
 }

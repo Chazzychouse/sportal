@@ -96,7 +96,8 @@ export function soloed(games: ReadonlyArray<GameId | undefined>, tile: number) {
  * A Hub over an in-memory socket, for a test to drive: its connection (connected), and a PubSub per kind of live query;
  * each publish goes to every query of its kind open then (a game's and its plays' by the game's id). `open` names the
  * queries open now, as "games", "game 401", "plays 401", "inputs desk" and "follow desk": a test waits for one with
- * `asked` before it answers it, and for its end with `dropped`. An `inputs` query sends `Registered` first.
+ * `asked` before it answers it, and for its end with `dropped`. An `inputs` query sends `Registered` first. Each write
+ * the socket carries goes to `requests`, as a `TestWebCall`.
  */
 export const liveHub = Effect.fn("TestWeb.liveHub")(function* () {
   const connection = yield* SubscriptionRef.make<Connection>(Connection.Connected())
@@ -106,6 +107,7 @@ export const liveHub = Effect.fn("TestWeb.liveHub")(function* () {
   const plays = yield* PubSub.unbounded<{ readonly game: GameId; readonly change: PlaysChange }>()
   const inputs = yield* PubSub.unbounded<Schema.Json>()
   const follows = yield* PubSub.unbounded<RemoteMessage>()
+  const requests = yield* Queue.unbounded<TestWebCall>()
 
   const handlers = HubApi.toLayer({
     listLive: () => served(open, "games", lists),
@@ -124,10 +126,20 @@ export const liveHub = Effect.fn("TestWeb.liveHub")(function* () {
           (input): DisplayMessage => ({ _tag: "Sent", input })
         )
       ),
-    follow: ({ display }) => served(open, `follow ${display}`, follows)
+    follow: ({ display }) => served(open, `follow ${display}`, follows),
+    list: () => Effect.die("TestWeb.liveHub does not answer list"),
+    game: () => Effect.die("TestWeb.liveHub does not answer game"),
+    plays: () => Effect.die("TestWeb.liveHub does not answer plays"),
+    readGuide: ({ guide }) => Queue.offer(requests, { _tag: "SendGuide", guide }).pipe(Effect.asVoid),
+    health: () => Effect.succeed({ version: "test", startedAt: DateTime.makeUnsafe(0) }),
+    addresses: () => Effect.succeed([]),
+    report: ({ display, report }) =>
+      Queue.offer(requests, { _tag: "Report", id: display, report }).pipe(Effect.asVoid),
+    send: ({ display, input }) =>
+      Queue.offer(requests, { _tag: "Send", id: display, input }).pipe(Effect.asVoid)
   })
   const layer = HubSocket.layerTest(connection, handlers)
-  return { layer, connection, open, lists, games, plays, inputs, follows }
+  return { layer, connection, open, lists, games, plays, inputs, follows, requests }
 })
 
 /** The queries `hub` has open, once it has `name` open. */

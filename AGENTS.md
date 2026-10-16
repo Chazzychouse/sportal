@@ -10,8 +10,8 @@ easiest to break.
   Duplicated logic is a defect even when it works.
 - **Effect 4 is newer than most training data.** Do not write Effect code from memory. The package ships
   its own current examples: read `node_modules/effect/ai-docs/src/` (start with `index.md`) and
-  `node_modules/effect/AGENTS.md`. Services are `Context.Service`, HTTP lives in `effect/http` and
-  `effect/http-api`, the test clock in `effect/testing`.
+  `node_modules/effect/AGENTS.md`. Services are `Context.Service`, HTTP lives in `effect/http`, the
+  Hub's API in `effect/rpc`, the test clock in `effect/testing`.
 - **Use the words in `CONTEXT.md`.** Every exported type name must be a term there; a new concept adds
   its glossary row in the same commit. The wire schemas in `*Payload.ts` and `FastCastMessage.ts` are exempt: they
   spell a provider's own words. So are React components: they are named for what they show. Terms the code does not have yet sit under Planned.
@@ -144,14 +144,14 @@ A reader opens a file to see the thing it is named for. Keep it that way.
 - `pnpm format` — apply formatting and safe lint fixes.
 - `pnpm dev` — run the Hub, the web dev server, and the desktop shell together, each reloading on change. The shell
   waits for the UI to come up. Use `pnpm dev:x11` to run the shell through XWayland.
-- `pnpm --filter @sportal/hub dev` — run only the Hub on port 4400 (API and live queries), on every interface (`SPORTAL_HOST` narrows it). For
+- `pnpm --filter @sportal/hub dev` — run only the Hub on port 4400 (its API, on one WebSocket at `/api/socket`, and the web UI's files when built), on every interface (`SPORTAL_HOST` narrows it). For
   now it keeps nothing between runs: a restarted Hub starts from an empty slate and the next poll fills it.
 - Hub settings: every one is a field of `apps/hub/src/HubConfig.ts`, with its variable and default. A bad value stops
-  the Hub at startup. `GET /api/health` answers while it is up.
+  the Hub at startup. Its `health` RPC answers while it is up.
 - Scripts run through pnpm's own shell (`shellEmulator`), so `VAR=x cmd` in a `package.json` script works on every OS.
   Keep scripts to what that shell understands: no bash-only syntax.
-- `pnpm --filter @sportal/web dev` — run only the web UI on port 4401, also on the home network, proxying `/api` to the
-  Hub. A firewall must let the home network reach both ports, for another device to load the UI: on Omarchy,
+- `pnpm --filter @sportal/web dev` — run only the web UI on port 4401, also on the home network, proxying the Hub's
+  socket to it. A firewall must let the home network reach both ports, for another device to load the UI: on Omarchy,
   `sudo ufw allow from 192.168.0.0/24 to any port 4400:4401 proto tcp`.
 - `pnpm --filter @sportal/desktop dev` — run only the desktop shell against the web dev server
   (`SPORTAL_HUB_URL` overrides the address).

@@ -2,14 +2,12 @@ import { NodeHttpServer, NodeSocket } from "@effect/platform-node"
 import { assert, describe, it } from "@effect/vitest"
 import { DisplayId } from "@sportal/api/DisplayId"
 import type { DisplayMessage } from "@sportal/api/DisplayMessage"
-import { GameList } from "@sportal/api/GamesQuery"
+import { CalendarDate, GameList } from "@sportal/api/GamesQuery"
 import { HubApi } from "@sportal/api/HubApi"
-import { SportalApi } from "@sportal/api/SportalApi"
 import { GameId } from "@sportal/domain/Game"
 import { snapshot } from "@sportal/domain/TestGame"
 import { Cause, DateTime, Effect, Exit, Fiber, Layer, Queue, Schema, Stream } from "effect"
-import { HttpClient, HttpServer } from "effect/http"
-import { HttpApiClient } from "effect/http-api"
+import { HttpServer } from "effect/http"
 import { RpcClient, RpcSerialization } from "effect/rpc"
 import { TestClock } from "effect/testing"
 import { afterEach, vi } from "vitest"
@@ -39,13 +37,13 @@ afterEach(() => {
 })
 
 describe("HubServer", () => {
-  describe("HTTP endpoints", () => {
+  describe("health and the guide", () => {
     it.effect("should say it is up, with its version and when it started", () =>
       served(() =>
         Effect.gen(function* () {
-          const client = yield* makeClient
+          const socket = yield* socketClient
 
-          const health = yield* client.host.health()
+          const health = yield* socket.health()
 
           assert.strictEqual(health.version, "1.2.3")
           assert.strictEqual(DateTime.toEpochMillis(health.startedAt), 0)
@@ -56,9 +54,9 @@ describe("HubServer", () => {
     it.effect("should refuse a guide it cannot read", () =>
       served(() =>
         Effect.gen(function* () {
-          const client = yield* makeClient
+          const socket = yield* socketClient
 
-          const error = yield* client.guide.read({ payload: { guide: "{}" } }).pipe(Effect.flip)
+          const error = yield* socket.readGuide({ guide: "{}" }).pipe(Effect.flip)
 
           assert.strictEqual(error._tag, "GuideUnreadable")
         })
@@ -66,19 +64,16 @@ describe("HubServer", () => {
     )
   })
 
-  describe("GET /api/games", () => {
-    it.effect("should answer today's games as JSON", () =>
+  describe("list", () => {
+    it.effect("should answer today's games", () =>
       served((frames) =>
         Effect.gen(function* () {
-          const http = yield* HttpClient.HttpClient
           yield* TestClock.setTime(TestHub.onAlaAtMsstDay)
           yield* TestHub.alaAtMsstListed(frames)
+          const socket = yield* socketClient
 
-          const response = yield* http.get("/api/games")
-          const body = yield* response.text
-          const answer = yield* decodeGameList(body)
+          const answer = yield* socket.list({})
 
-          assert.include(response.headers["content-type"], "application/json")
           assert.strictEqual(answer.date, "2026-10-03")
           assert.deepStrictEqual(
             answer.games.map(({ snapshot }) => snapshot.id),
@@ -88,18 +83,16 @@ describe("HubServer", () => {
       )
     )
 
-    it.effect("should read leagues from a comma list", () =>
+    it.effect("should keep only the leagues asked for", () =>
       served((frames) =>
         Effect.gen(function* () {
-          const http = yield* HttpClient.HttpClient
           const nfl = snapshot({ id: GameId.make("9"), league: "nfl", status: "live" })
           yield* TestClock.setTime(TestHub.onAlaAtMsstDay)
           yield* TestHub.offered(frames, Delivery.Listing({ league: "fbs", games: [TestHub.alaAtMsst] }))
           yield* TestHub.offered(frames, Delivery.Listing({ league: "nfl", games: [nfl] }))
+          const socket = yield* socketClient
 
-          const response = yield* http.get("/api/games?league=mlb,nfl")
-          const body = yield* response.text
-          const answer = yield* decodeGameList(body)
+          const answer = yield* socket.list({ league: ["mlb", "nfl"] })
 
           assert.deepStrictEqual(
             answer.games.map(({ snapshot }) => snapshot.id),
@@ -109,27 +102,15 @@ describe("HubServer", () => {
       )
     )
 
-    it.effect("should refuse a malformed date with 400", () =>
+    it.effect("should fail as unavailable when the provider cannot list the day", () =>
       served(() =>
         Effect.gen(function* () {
-          const http = yield* HttpClient.HttpClient
-
-          const response = yield* http.get("/api/games?date=tomorrow")
-
-          assert.strictEqual(response.status, 400)
-        })
-      )
-    )
-
-    it.effect("should answer 503 when the provider cannot list the day", () =>
-      served(() =>
-        Effect.gen(function* () {
-          const http = yield* HttpClient.HttpClient
           yield* TestClock.setTime(TestHub.onAlaAtMsstDay)
+          const socket = yield* socketClient
 
-          const response = yield* http.get("/api/games?date=2026-10-04")
+          const error = yield* socket.list({ date: CalendarDate.make("2026-10-04") }).pipe(Effect.flip)
 
-          assert.strictEqual(response.status, 503)
+          assert.strictEqual(error._tag, "ScheduleUnavailable")
         })
       )
     )
@@ -137,20 +118,19 @@ describe("HubServer", () => {
     it.effect("should send each game as its snapshot and its availability, and nothing else", () =>
       served((frames) =>
         Effect.gen(function* () {
-          const http = yield* HttpClient.HttpClient
           yield* TestClock.setTime(TestHub.onAlaAtMsstDay)
           yield* TestHub.alaAtMsstListed(frames)
+          const socket = yield* socketClient
 
-          const response = yield* http.get("/api/games")
-          const body = yield* response.text
+          const answer = yield* socket.list({})
 
-          const answer = JSON.parse(body)
-          const [entry] = answer.games
-          assert.strictEqual(entry.snapshot.id, TestHub.alaAtMsst.id)
-          assert.deepStrictEqual(Object.keys(answer), ["date", "games"])
-          assert.deepStrictEqual(Object.keys(entry), ["snapshot", "availability"])
-          assert.deepStrictEqual(entry.availability, [{ _tag: "NoGuide", source: "YouTube TV" }])
-          assert.notMatch(body, /"state"|"updatedAt"|"from"|"plays"/)
+          const wire = encodeGameList(answer)
+          const [entry] = wire.games
+          assert.strictEqual(entry?.snapshot.id, TestHub.alaAtMsst.id)
+          assert.deepStrictEqual(Object.keys(wire), ["date", "games"])
+          assert.deepStrictEqual(Object.keys(entry ?? {}), ["snapshot", "availability"])
+          assert.deepStrictEqual(entry?.availability, [{ _tag: "NoGuide", source: "YouTube TV" }])
+          assert.notMatch(JSON.stringify(wire), /"state"|"updatedAt"|"from"|"plays"/)
         })
       )
     )
@@ -158,13 +138,13 @@ describe("HubServer", () => {
     it.effect("should carry a game once a guide read airs it", () =>
       served((frames) =>
         Effect.gen(function* () {
-          const client = yield* makeClient
           yield* TestClock.setTime(DateTime.toEpochMillis(TestHub.alaAtMsst.startsAt))
           yield* TestHub.alaAtMsstListed(frames)
+          const socket = yield* socketClient
           const now = yield* DateTime.now
-          yield* client.guide.read({ payload: { guide: realSizedGuideAiring(now) } })
+          yield* socket.readGuide({ guide: realSizedGuideAiring(now) })
 
-          const answer = yield* client.games.list({ query: {} })
+          const answer = yield* socket.list({})
 
           assert.deepStrictEqual(
             answer.games.map(({ availability }) => availability),
@@ -189,13 +169,13 @@ describe("HubServer", () => {
     )
   })
 
-  describe("GET /api/games/:id", () => {
-    it.effect("should answer 404 for a game no day lists", () =>
+  describe("game", () => {
+    it.effect("should fail as not found for a game no day lists", () =>
       served(() =>
         Effect.gen(function* () {
-          const client = yield* makeClient
+          const socket = yield* socketClient
 
-          const error = yield* client.games.game({ params: { id: GameId.make("nope") } }).pipe(Effect.flip)
+          const error = yield* socket.game({ id: GameId.make("nope") }).pipe(Effect.flip)
 
           assert.strictEqual(error._tag, "GameNotFound")
         })
@@ -203,21 +183,18 @@ describe("HubServer", () => {
     )
   })
 
-  describe("GET /api/games/:id/plays", () => {
+  describe("plays", () => {
     it.effect("should page plays before a sequence", () =>
       served((frames) =>
         Effect.gen(function* () {
-          const client = yield* makeClient
+          const socket = yield* socketClient
           yield* TestHub.alaAtMsstListed(frames)
           yield* TestHub.offered(
             frames,
             Delivery.Plays({ game: TestHub.alaAtMsst.id, plays: TestHub.playsUpTo(3) })
           )
 
-          const page = yield* client.games.plays({
-            params: { id: TestHub.alaAtMsst.id },
-            query: { before: 3 }
-          })
+          const page = yield* socket.plays({ id: TestHub.alaAtMsst.id, before: 3 })
 
           assert.deepStrictEqual(
             page.plays.map(({ sequence }) => sequence),
@@ -343,9 +320,9 @@ describe("HubServer", () => {
             eth0: [v4("10.0.0.7")],
             wlo1: [v4("192.168.0.54"), v6("fe80::1")]
           }
-          const client = yield* makeClient
+          const socket = yield* socketClient
 
-          const addresses = yield* client.host.addresses()
+          const addresses = yield* socket.addresses()
 
           assert.deepStrictEqual(addresses, ["192.168.0.54", "10.0.0.7", "100.64.0.9"])
         })
@@ -362,9 +339,9 @@ describe("HubServer", () => {
             veth12: [v4("169.254.1.1")],
             enp3s0: [v4("172.20.1.5")]
           }
-          const client = yield* makeClient
+          const socket = yield* socketClient
 
-          const addresses = yield* client.host.addresses()
+          const addresses = yield* socket.addresses()
 
           assert.deepStrictEqual(addresses, ["172.20.1.5"])
         })
@@ -375,9 +352,9 @@ describe("HubServer", () => {
       served(() =>
         Effect.gen(function* () {
           network.interfaces = { lo: [v4("127.0.0.1", true)], down: undefined }
-          const client = yield* makeClient
+          const socket = yield* socketClient
 
-          const addresses = yield* client.host.addresses()
+          const addresses = yield* socket.addresses()
 
           assert.deepStrictEqual(addresses, [])
         })
@@ -402,12 +379,11 @@ describe("HubServer", () => {
     it.effect("inputs should send an input a Remote posts to the Display it names", () =>
       served(() =>
         Effect.gen(function* () {
-          const client = yield* makeClient
           const socket = yield* socketClient
           const messages = yield* collected(socket.inputs({ display: desk }))
           yield* Queue.take(messages)
 
-          yield* client.displays.send({ params: { id: desk }, payload: { _tag: "Pressed" } })
+          yield* socket.send({ display: desk, input: { _tag: "Pressed" } })
           const sent = yield* Queue.take(messages)
 
           assert.deepStrictEqual(sent, { _tag: "Sent", input: { _tag: "Pressed" } })
@@ -418,7 +394,6 @@ describe("HubServer", () => {
     it.effect("inputs should forget a Display once its client stops reading them", () =>
       served(() =>
         Effect.gen(function* () {
-          const client = yield* makeClient
           const socket = yield* socketClient
           const messages = yield* Queue.unbounded<DisplayMessage>()
           const reading = yield* socket.inputs({ display: desk }).pipe(
@@ -429,8 +404,8 @@ describe("HubServer", () => {
 
           yield* Fiber.interrupt(reading)
           // The Hub ends the stream when the interrupt reaches it, a moment after the client's.
-          const error = yield* client.displays
-            .send({ params: { id: desk }, payload: { _tag: "Pressed" } })
+          const error = yield* socket
+            .send({ display: desk, input: { _tag: "Pressed" } })
             .pipe(Effect.flip, Effect.eventually)
 
           assert.strictEqual(error._tag, "DisplayOffline")
@@ -438,14 +413,12 @@ describe("HubServer", () => {
       )
     )
 
-    it.effect("should answer 404 DisplayOffline to an input for a Display that is not connected", () =>
+    it.effect("send should refuse with DisplayOffline an input for a Display that is not connected", () =>
       served(() =>
         Effect.gen(function* () {
-          const client = yield* makeClient
+          const socket = yield* socketClient
 
-          const error = yield* client.displays
-            .send({ params: { id: desk }, payload: { _tag: "Pressed" } })
-            .pipe(Effect.flip)
+          const error = yield* socket.send({ display: desk, input: { _tag: "Pressed" } }).pipe(Effect.flip)
 
           assert.strictEqual(error._tag, "DisplayOffline")
         })
@@ -455,11 +428,10 @@ describe("HubServer", () => {
     it.effect("follow should send a Display's report to a Remote following it", () =>
       served(() =>
         Effect.gen(function* () {
-          const client = yield* makeClient
           const socket = yield* socketClient
           const inputs = yield* collected(socket.inputs({ display: desk }))
           yield* Queue.take(inputs)
-          yield* client.displays.report({ params: { id: desk }, payload: { screen: 1 } })
+          yield* socket.report({ display: desk, report: { screen: 1 } })
 
           const follows = yield* collected(socket.follow({ display: desk }))
           const message = yield* Queue.take(follows)
@@ -541,11 +513,8 @@ function serverUnderTest(frames: TestHub.Frames) {
   )
 }
 
-/** A client of the Hub's API, pointed at the server under test. */
-const makeClient = HttpApiClient.make(SportalApi)
-
 /**
- * A client of the Hub's live queries over a WebSocket to the server under test. A test builds it after it sets the
+ * A client of the Hub's API over a WebSocket to the server under test. A test builds it after it sets the
  * clock: the client pings every 5 s of the test's time, and a jump with no pong would drop its socket.
  */
 const socketClient = Effect.gen(function* () {
@@ -621,4 +590,4 @@ function v6(address: string, internal = false) {
   return { address, family: "IPv6", internal }
 }
 
-const decodeGameList = Schema.decodeEffect(Schema.fromJsonString(GameList))
+const encodeGameList = Schema.encodeSync(GameList)

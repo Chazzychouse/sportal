@@ -1,47 +1,46 @@
 import type { DisplayId } from "@sportal/api/DisplayId"
 import type { DisplayOffline } from "@sportal/api/DisplayOffline"
 import type { GuideUnreadable } from "@sportal/api/GuideUnreadable"
-import { SportalApi } from "@sportal/api/SportalApi"
 import { Context, Effect, Layer, type Schema } from "effect"
-import type { HttpClient, HttpClientError } from "effect/http"
-import { HttpApiClient } from "effect/http-api"
+import type { RpcClientError } from "effect/rpc"
+import { HubSocket } from "./HubSocket.ts"
 
-/** This client's way to the Hub's HTTP API. */
+/** This client's requests and writes to the Hub, over the Hub socket. */
 export class HubClient extends Context.Service<
   HubClient,
   {
-    /** Passes a guide the shell read to the Hub. What it changes arrives on the live stream. */
+    /** Passes a guide the shell read to the Hub. What it changes arrives on the live queries. */
     readonly sendGuide: (
       guide: string
-    ) => Effect.Effect<void, GuideUnreadable | HttpClientError.HttpClientError>
+    ) => Effect.Effect<void, GuideUnreadable | RpcClientError.RpcClientError>
     /** The addresses a Remote on the home network can reach the Hub's machine at. */
-    readonly addresses: Effect.Effect<ReadonlyArray<string>, HttpClientError.HttpClientError>
+    readonly addresses: Effect.Effect<ReadonlyArray<string>, RpcClientError.RpcClientError>
     /** Tells the Hub this Display's report, for its Remotes. */
     readonly report: (
       id: DisplayId,
       report: Schema.Json
-    ) => Effect.Effect<void, DisplayOffline | HttpClientError.HttpClientError>
+    ) => Effect.Effect<void, DisplayOffline | RpcClientError.RpcClientError>
     /** Sends one input to the Display `id`, from a Remote. */
     readonly send: (
       id: DisplayId,
       input: Schema.Json
-    ) => Effect.Effect<void, DisplayOffline | HttpClientError.HttpClientError>
+    ) => Effect.Effect<void, DisplayOffline | RpcClientError.RpcClientError>
   }
 >()("sportal/web/hub/HubClient") {
-  static readonly layer: Layer.Layer<HubClient, never, HttpClient.HttpClient> = Layer.effect(
+  static readonly layer: Layer.Layer<HubClient, never, HubSocket> = Layer.effect(
     HubClient,
     Effect.gen(function* () {
-      const api = yield* HttpApiClient.make(SportalApi)
+      const { client } = yield* HubSocket
 
       const sendGuide = Effect.fn("HubClient.sendGuide")(function* (guide: string) {
-        yield* answerRead(api.guide.read({ payload: { guide } }))
+        yield* client.readGuide({ guide })
       })
-      const addresses = answerRead(api.host.addresses())
+      const addresses = client.addresses()
       const report = Effect.fn("HubClient.report")(function* (id: DisplayId, json: Schema.Json) {
-        yield* answerRead(api.displays.report({ params: { id }, payload: json }))
+        yield* client.report({ display: id, report: json })
       })
       const send = Effect.fn("HubClient.send")(function* (id: DisplayId, input: Schema.Json) {
-        yield* answerRead(api.displays.send({ params: { id }, payload: input }))
+        yield* client.send({ display: id, input })
       })
       return HubClient.of({ sendGuide, addresses, report, send })
     })
@@ -60,13 +59,4 @@ export class HubClient extends Context.Service<
       })
     )
   }
-}
-
-/** An answer this UI cannot read means it and the Hub disagree on the API: a defect, logged where it happens. */
-function answerRead<A, E, R>(request: Effect.Effect<A, E | Schema.SchemaError, R>) {
-  return request.pipe(
-    Effect.catchTag("SchemaError", (error) =>
-      Effect.logError("The Hub's answer did not decode", error).pipe(Effect.andThen(Effect.die(error)))
-    )
-  )
 }

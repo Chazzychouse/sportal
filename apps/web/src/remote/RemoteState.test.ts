@@ -3,7 +3,7 @@ import { DisplayId } from "@sportal/api/DisplayId"
 import { DisplayOffline } from "@sportal/api/DisplayOffline"
 import type { RemoteMessage } from "@sportal/api/RemoteMessage"
 import { GameId } from "@sportal/domain/Game"
-import { Deferred, Effect, Layer, PubSub, Queue, Schema, Stream, SubscriptionRef } from "effect"
+import { Deferred, Effect, Layer, Predicate, PubSub, Queue, Schema, Stream, SubscriptionRef } from "effect"
 import { Atom } from "effect/reactivity"
 import { vi } from "vitest"
 import { DisplayInput } from "../display/Display.ts"
@@ -51,7 +51,7 @@ describe("RemoteState", () => {
           _tag: "Reported",
           report: { screen: "nonsense" }
         })
-        return yield* TestWeb.until(RemoteState.followed(desk), (each) => each._tag === "Offline")
+        return yield* TestWeb.until(RemoteState.followed(desk), RemoteState.Followed.$is("Offline"))
       }).pipe(Effect.scoped, Effect.provide(registry))
 
       assert.strictEqual(followed._tag, "Offline")
@@ -65,10 +65,10 @@ describe("RemoteState", () => {
       const followed = yield* Effect.gen(function* () {
         yield* Atom.mount(RemoteState.followed(desk))
         yield* TestWeb.answer(hub, "follow desk", hub.follows, reported(reportOf()))
-        yield* TestWeb.until(RemoteState.followed(desk), (each) => each._tag === "Reported")
+        yield* TestWeb.until(RemoteState.followed(desk), RemoteState.Followed.$is("Reported"))
 
         yield* SubscriptionRef.set(hub.connection, TestWeb.lost)
-        return yield* TestWeb.until(RemoteState.followed(desk), (each) => each._tag === "Connecting")
+        return yield* TestWeb.until(RemoteState.followed(desk), RemoteState.Followed.$is("Connecting"))
       }).pipe(Effect.scoped, Effect.provide(registry))
 
       assert.strictEqual(followed._tag, "Connecting")
@@ -82,15 +82,16 @@ describe("RemoteState", () => {
       const sent = yield* Effect.gen(function* () {
         yield* Atom.get(RemoteState.followed(desk))
         yield* TestWeb.answer(hub, "follow desk", hub.follows, reported(reportOf()))
-        yield* TestWeb.until(RemoteState.followed(desk), (each) => each._tag === "Reported")
+        yield* TestWeb.until(RemoteState.followed(desk), RemoteState.Followed.$is("Reported"))
 
         yield* Atom.set(RemoteState.display(desk), DisplayInput.Chosen({ game: GameId.make("live") }))
-        return yield* Queue.take(calls).pipe(Effect.repeat({ until: (call) => call._tag === "Send" }))
+        return yield* Queue.take(calls).pipe(Effect.repeat({ until: Predicate.isTagged("Send") }))
       }).pipe(Effect.scoped, Effect.provide(registry))
 
-      assert.deepStrictEqual(sent._tag === "Send" ? sent.input : undefined, {
-        _tag: "Commanded",
-        command: { _tag: "Assign", tile: 0, game: "live" }
+      assert.deepStrictEqual(sent, {
+        _tag: "Send",
+        id: desk,
+        input: { _tag: "Commanded", command: { _tag: "Assign", tile: 0, game: "live" } }
       })
     })
   )

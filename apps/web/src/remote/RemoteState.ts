@@ -52,7 +52,7 @@ export const send = Atom.family((id: DisplayId) =>
         }).pipe(
           Effect.catchTags({
             DisplayOffline: () => Effect.sync(() => get.registry.update(offline, (count) => count + 1)),
-            HttpClientError: (error) => Effect.logWarning("Could not reach the Hub", error)
+            RpcClientError: (error) => Effect.logWarning("Could not reach the Hub", error)
           })
         ),
       // Each input stands alone: a second tap must not cancel the first one's request.

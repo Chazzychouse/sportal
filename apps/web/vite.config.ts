@@ -12,6 +12,6 @@ export default defineConfig({
     // On the home network too, so other devices can open the UI.
     host: true,
     // In development the Hub runs separately; in production it serves this app itself.
-    proxy: { "/api": { target: "http://127.0.0.1:4400", ws: true } }
+    proxy: { "/api/socket": { target: "http://127.0.0.1:4400", ws: true } }
   }
 })
