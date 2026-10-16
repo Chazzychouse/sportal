@@ -1,9 +1,0 @@
-apiVersion: 1
-
-providers:
-  - name: sportal
-    folder: Sportal
-    type: file
-    allowUiUpdates: false
-    options:
-      path: /var/lib/sportal-dashboards

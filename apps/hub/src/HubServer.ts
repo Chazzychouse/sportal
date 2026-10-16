@@ -26,7 +26,6 @@ import { Broadcast } from "./Broadcast.ts"
 import { Displays } from "./Displays.ts"
 import { HubConfig } from "./HubConfig.ts"
 import { Source } from "./source/Source.ts"
-import * as TelemetryRelay from "./TelemetryRelay.ts"
 
 const guideHandlers = HttpApiBuilder.group(
   SportalApi,
@@ -112,7 +111,7 @@ export const layer: Layer.Layer<
   | Etag.Generator
   | FileSystem.FileSystem
   | Path.Path
-> = HttpRouter.serve(Layer.mergeAll(api, web, TelemetryRelay.layer))
+> = HttpRouter.serve(Layer.mergeAll(api, web))
 
 export const layerListen: Layer.Layer<
   HttpServer.HttpServer | HttpPlatform.HttpPlatform | Etag.Generator | NodeServices.NodeServices,

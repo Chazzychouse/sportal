@@ -42,7 +42,7 @@ Versions were checked against the registry on 2026-10-03. Effect is at 4.0, whic
 | UI state | Server state mirrored from the Hub's live stream into one store; local-only state in component state | The Hub owns shared state, so the client has little of its own |
 | Styling | Tailwind CSS with two density themes (desk, couch) | Same components, two presentation modes |
 | Desktop shell | Electron (castlabs Widevine build), one `WebContentsView` per stream tile, electron-vite | The only dependable way to play Widevine content in several independent views |
-| Telemetry | Effect's own OTLP exporters (`effect/observability`), over OTLP/HTTP to a collector named by `SPORTAL_OTLP_URL`; without it the Hub only logs to the console | Spans, logs, and metrics with no OpenTelemetry SDK and no new dependency; the provisioned Sportal folder contains Game Day, Game Detail, and Hub |
+| Logging | Effect's console logger, at `SPORTAL_LOG_LEVEL`, pretty or JSON lines (`SPORTAL_LOG_FORMAT`); the installed app writes the Hub's to `hub.log` | Telemetry export and the local Grafana were cut for the first installable build ([ADR 0019](./adr/0019-telemetry-goes.md)) |
 | Tests | Vitest with `@effect/vitest` | Effect-aware tests with a controllable clock |
 | Lint and format | Biome | One fast tool |
 | Structure enforcement | dependency-cruiser (import boundaries), knip (unused files, exports, dependencies) | The layout rules in section 4 are checked by machine, not by memory |
@@ -192,10 +192,9 @@ sportal/
     │   └── src/
     │       ├── main.ts             Composition root: the Hub's layer pipe, run until a signal stops it; the only file that chooses providers and sources, ESPN's through `Espn`
     │       ├── HubConfig.ts        Every environment setting, in one place
-    │       ├── Telemetry.ts        Log level and format; OTLP export when configured
+    │       ├── Logging.ts          Log level and format
     │       ├── Director.ts         The one holder of the slate: takes each delivery as it arrives and offers the slate
     │       ├── HubStopping.ts      Whether a task that should run until the Hub stops ended because it is stopping, and the Error log unless it did
-    │       ├── TestTelemetry.ts    Layers for tests
     │       ├── TestDirector.ts     The Director taking a fed provider, and what it takes of a test's frames
     │       ├── HubServer.ts        Serves the API, the live stream, and the web UI's files
     │       ├── provider/
@@ -316,7 +315,7 @@ class Director extends Context.Service<Director, {
 ```
 
 - The `Slate` (`packages/domain/src/Slate.ts`) is the fold: an ordered list of `Game`s, leagues in `LeagueId` order and each league's in its listing's order, each with its latest `GameSnapshot` and its plays. `relisted(league, snapshots)` and `playsTaken(game, plays)` on it are pure and return the next slate and its slate changes; one that changes nothing gives back the same slate. The Director takes each delivery onto them in order.
-- The Director starts from an empty slate and takes each delivery as it arrives, in one `Director.take` span. From the slate changes each take gives, it gauges each listed game's progress (`sportal_game_state`: 1 upcoming, 2 live, 3 over), status (`sportal_game_status`: 1 scheduled, 2 live, 3 halftime, 4 delayed, 5 final, 6 postponed, 7 canceled), away and home scores (`sportal_game_score`), period (`sportal_game_period`), clock (`sportal_game_clock`), kickoff as Unix seconds (`sportal_game_kickoff`), and accepted-at time as Unix seconds (`sportal_game_updated_at`). Every series carries stable `game`, `league`, and `matchup` attributes; score series also carry `side` and `team`. A changing value updates its series, and a game no listing names has every current-game series removed. The Director logs each play a take adds at Info, annotated with `game`, `league`, `matchup`, `play`, and `scoring`; these logs, rather than a play counter, supply the latest-five, scoring-only, and complete-in-range play panels. For now nothing is kept between runs: a restarted Hub serves an empty slate until its provider's next poll lists the day's games.
+- The Director starts from an empty slate and takes each delivery as it arrives, in one `Director.take` span. The Director logs each play a take adds at Info, annotated with `game`, `league`, `matchup`, `play`, and `scoring`, and a game's backfill as one line. For now nothing is kept between runs: a restarted Hub serves an empty slate until its provider's next poll lists the day's games.
 - The Director runs the Classifier (`packages/domain/src/Classifier.ts`) after a take that changes the slate and when its `nextExpiry` comes, and logs each game's new moment (a game's first classification is not logged).
 - A take that raises a defect is an Error log; what it had not yet set is unchanged and takes the next frame. If the provider's frames end other than by the Hub stopping, that is an Error log and the slate stays as it is.
 - The Hub server's live route builds `SlateChanged`: the slate with each game carrying only its last ten plays (`Slate#recent`), `classifications` by game id (the live route zips the slate with the Director's classifications), and each listed game's availability from every source, by its id. The Slate and the Director know nothing of sources or the API: the live route joins the Director's slate with the source's availability, reads the sources' availability again every 30 seconds, drops a message that is the same as the last, and sends a slate change once 250 ms have passed without a further one (a trailing settling, not a maximum latency: continuous updates keep deferring it).
@@ -391,7 +390,6 @@ Expected failures are typed errors in the Effect error channel, each handled whe
 | Applying a delivery dies | Error log; the slate keeps what it had and takes the next frame |
 | Telemetry collector unreachable | One warning naming its URL; the exporters drop what they cannot send and the Hub carries on, and still stops within its shutdown bound |
 
-The `sportal_hub_up` gauge is 1 while the Hub telemetry registry is active, so the dashboards distinguish a healthy Hub with an empty slate from an unavailable Hub whose series is absent after Prometheus staleness.
 
 ## 6. Domain language
 

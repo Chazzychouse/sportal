@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "SPORTAL_OTLP_URL=${SPORTAL_OTLP_URL:-http://localhost:4318} node --watch src/main.ts",
+    "dev": "node --watch src/main.ts",
     "start": "node src/main.ts"
   },
   "dependencies": {

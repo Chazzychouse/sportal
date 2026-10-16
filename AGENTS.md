@@ -43,7 +43,7 @@ easiest to break.
 | Shape | Exports | Imported |
 |---|---|---|
 | Class module | One class named for the file (service, `Schema.Class`, `Data.Class`), and beside it only that concept's member types, errors and the schemas its fields read | By name |
-| Namespace module | No class of its own: an adapter of a port defined elsewhere (`EspnProvider`), a layer that provides no service (`Telemetry`), or a set of functions (`HubStopping`). An adapter or layer-only module exports `layer` | `import * as X` |
+| Namespace module | No class of its own: an adapter of a port defined elsewhere (`EspnProvider`), a layer that provides no service (`Logging`), or a set of functions (`HubStopping`). An adapter or layer-only module exports `layer` | `import * as X` |
 | Payload module (`*Payload.ts`) | A provider's wire spelling, with no transform into domain types | By name |
 | Entry point (lowercase) | Nothing; it runs a process (`main.ts`) | – |
 | Test module (`Test*.ts`) | Fixtures, recorded payloads, builders of domain values, harnesses composing several layers, test-only adapters of a port | As its shape says |
@@ -142,16 +142,12 @@ A reader opens a file to see the thing it is named for. Keep it that way.
   "Effect Language Service (tsgo)" extension; `.zed/settings.json` turns vtsls off and pins its `@effect/tsgo` to
   the same version.
 - `pnpm format` — apply formatting and safe lint fixes.
-- `pnpm dev` — start the local Grafana (`pnpm telemetry`), then run the Hub, the web dev server, and the desktop shell
-  together, each reloading on change. Without Docker it says telemetry is off and runs the rest. The shell
+- `pnpm dev` — run the Hub, the web dev server, and the desktop shell together, each reloading on change. The shell
   waits for the UI to come up. Use `pnpm dev:x11` to run the shell through XWayland.
 - `pnpm --filter @sportal/hub dev` — run only the Hub on port 4400 (API and live stream), on every interface (`SPORTAL_HOST` narrows it). For
   now it keeps nothing between runs: a restarted Hub starts from an empty slate and the next poll fills it.
 - Hub settings: every one is a field of `apps/hub/src/HubConfig.ts`, with its variable and default. A bad value stops
   the Hub at startup. `GET /api/health` answers while it is up.
-- `pnpm telemetry` / `pnpm telemetry:down` — start or stop a local Grafana (`localhost:3000`) with OTLP on `localhost:4318`
-  and the Hub dashboard; needs Docker. `pnpm dev` starts it but never stops it. The Hub's `dev` script sends to it unless
-  `SPORTAL_OTLP_URL` says otherwise; started any other way, the Hub exports nothing until that is set.
 - Scripts run through pnpm's own shell (`shellEmulator`), so `VAR=x cmd` in a `package.json` script works on every OS.
   Keep scripts to what that shell understands: no bash-only syntax.
 - `pnpm --filter @sportal/web dev` — run only the web UI on port 4401, also on the home network, proxying `/api` to the
