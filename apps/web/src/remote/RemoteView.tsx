@@ -1,6 +1,7 @@
 import { useAtomSet, useAtomSubscribe, useAtomValue } from "@effect/atom-react"
 import type { DisplayId } from "@sportal/api/DisplayId"
 import type { ListedGame } from "@sportal/api/ListedGame"
+import { TileKey } from "@sportal/api/TileKey"
 import type { GameId, Progress } from "@sportal/domain/Game"
 import { Array as Arr, Option } from "effect"
 import { Shrink } from "lucide-react"
@@ -131,7 +132,7 @@ function GameTabs(props: {
         {games
           .filter(({ snapshot }) => sections[snapshot.progress()] === open)
           .map(({ snapshot }) => {
-            const slot = screen.slotOf(snapshot.id)
+            const slot = screen.slotOf(TileKey.game(snapshot.id))
             return (
               <li key={snapshot.id}>
                 <button

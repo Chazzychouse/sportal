@@ -1,6 +1,13 @@
+import { CalendarDate } from "@sportal/api/GamesQuery"
 import type { Hotkey } from "@sportal/api/Hotkey"
-import { Effect, Match, Option, Stream } from "effect"
+import { DateTime, Effect, Match, Option, Stream } from "effect"
 import { AsyncResult, Atom } from "effect/reactivity"
+import * as CustomStreams from "../custom/CustomStreams.ts"
+import { CustomStreamsChange } from "../custom/CustomStreams.ts"
+import { GuideItem } from "../guide/GuideItem.ts"
+import * as GuideShelves from "../guide/GuideShelves.ts"
+import * as Games from "../hub/Games.ts"
+import * as Stats from "../hub/Stats.ts"
 import * as DisplayScreen from "../screen/DisplayScreen.ts"
 import { Shell } from "../shell/Shell.ts"
 import { logDefect, runtime } from "../WebRuntime.ts"
@@ -13,13 +20,38 @@ import { Display, DisplayInput } from "./Display.ts"
 export const display: Atom.Writable<Display, DisplayInput> = Atom.writable(
   (get) => get(kept),
   (ctx, input: DisplayInput) => {
-    const step = ctx.get(kept).apply(input, ctx.get(DisplayScreen.screen))
+    const step = ctx.get(kept).apply(input, ctx.get(DisplayScreen.screen), ctx.get(shelves))
     Atom.batch(() => {
       ctx.set(kept, step.display)
       for (const command of step.commands) ctx.set(DisplayScreen.screen, command)
     })
   }
 ).pipe(Atom.keepAlive)
+
+/**
+ * The guide's entries and shelves over today's games, the saved custom streams, and the highlights of each league
+ * whose Highlights shelf has shown: only All live, with nothing on it, and Custom before the first answer. What the
+ * fold and the guide read.
+ */
+export const shelves: Atom.Atom<GuideShelves.GuideShelves> = Atom.make((get) => {
+  const games = Option.match(get(Games.today).value, { onNone: () => [], onSome: ({ games }) => games })
+  const today = Option.map(get(Games.today).value, ({ date }) => date)
+  const highlights = new Map(
+    Option.match(today, {
+      onNone: () => [],
+      onSome: (date) =>
+        [...get(GuideShelves.highlightsShown)].map((league) => {
+          const clipsToday = AsyncResult.getOrElse(get(Stats.highlightsToday({ league, date })), () => [])
+          const clipsBefore = AsyncResult.getOrElse(
+            get(Stats.highlights({ league, date: dayBefore(date) })),
+            () => []
+          )
+          return [league, GuideShelves.highlightShelf(clipsToday, clipsBefore)] as const
+        })
+    })
+  )
+  return GuideShelves.guideShelves(games, get(CustomStreams.customStreams), highlights)
+})
 
 /** Whether this Display's window is full screen: in the shell the window, in a browser the page. */
 export const fullScreen: Atom.Atom<boolean> = runtime
@@ -52,18 +84,34 @@ export const inputs = runtime.atom((get) =>
   Effect.gen(function* () {
     const shell = yield* Shell
     const keys = Stream.runForEach(shell.hotkeys, (hotkey) => Effect.sync(() => get.set(pressed, hotkey)))
-    const videos = Stream.runForEach(shell.tilePressed, (game) =>
-      Effect.sync(() => get.set(display, DisplayInput.VideoPressed({ game })))
+    const videos = Stream.runForEach(shell.tilePressed, (key) =>
+      Effect.sync(() => get.set(display, DisplayInput.VideoPressed({ key })))
     )
 
     yield* Effect.all([keys, videos], { concurrency: "unbounded", discard: true })
   }).pipe(logDefect("The Display's inputs"))
 )
 
-/** A hotkey pressed anywhere, a Remote's included: routed as the shell's hotkeys are. */
+/**
+ * A hotkey pressed anywhere, a Remote's included: routed as the shell's hotkeys are. `Remove` removes the focused
+ * custom stream, through `editCustom`.
+ */
 export const pressed: Atom.Writable<void, Hotkey> = Atom.writable(
   () => undefined,
   (ctx, hotkey: Hotkey) => route(ctx, hotkey)
+).pipe(Atom.keepAlive)
+
+/**
+ * Edits the custom streams saved in this browser, and follows the change on the Screen: a removed stream's tiles are
+ * cleared, and a renamed one's take its new name.
+ */
+export const editCustom: Atom.Writable<void, CustomStreamsChange> = Atom.writable(
+  () => undefined,
+  (ctx, change: CustomStreamsChange) =>
+    Atom.batch(() => {
+      ctx.set(CustomStreams.customStreams, change)
+      ctx.set(display, DisplayInput.CustomEdited({ change }))
+    })
 ).pipe(Atom.keepAlive)
 
 /** Whether this Display can open the YouTube TV sign-in: only in the shell. */
@@ -85,11 +133,39 @@ export const openSignIn = runtime.fn((_: undefined) =>
   })
 )
 
+/**
+ * Tells the shell whether the guide is open, each time that changes: while it is, the arrows and Enter are the guide's,
+ * and while it is closed a player keeps them. Mounted once, by the Display.
+ */
+export const guideOpenSync = runtime.atom((get) =>
+  Effect.gen(function* () {
+    const shell = yield* Shell
+
+    yield* get.stream(guideOpen).pipe(Stream.changes, Stream.runForEach(shell.setGuideOpen))
+  }).pipe(logDefect("The guide-open sync"))
+)
+
 const kept = Atom.make(Display.initial).pipe(Atom.keepAlive)
+
+const guideOpen = Atom.make((get) => get(display).shows("Guide"))
 
 function route(ctx: Atom.WriteContext<void>, hotkey: Hotkey) {
   Match.value(hotkey).pipe(
     Match.tag("FullScreen", () => ctx.set(toggleFullScreen, undefined)),
+    Match.tag("Remove", () => removeFocused(ctx)),
     Match.orElse(() => ctx.set(display, DisplayInput.Pressed({ hotkey })))
   )
+}
+
+/** Removes the custom stream whose guide card has the focus; no other card is removed. */
+function removeFocused(ctx: Atom.WriteContext<void>) {
+  const focused = ctx.get(display).focusedItem(ctx.get(shelves))
+  if (focused !== undefined && GuideItem.$is("Custom")(focused))
+    ctx.set(editCustom, CustomStreamsChange.Removed({ id: focused.stream.id }))
+}
+
+/** The calendar day before `date`. */
+function dayBefore(date: CalendarDate): CalendarDate {
+  const noon = DateTime.makeUnsafe(`${date}T12:00:00Z`)
+  return CalendarDate.make(DateTime.formatIsoDate(DateTime.subtract(noon, { days: 1 })))
 }

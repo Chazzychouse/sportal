@@ -3,6 +3,7 @@ import { RemoteMessage } from "@sportal/api/RemoteMessage"
 import { Data, Effect, Schema, Stream } from "effect"
 import { AsyncResult, Atom } from "effect/reactivity"
 import { Display, type DisplayInput } from "../display/Display.ts"
+import * as GuideShelves from "../guide/GuideShelves.ts"
 import { HubClient } from "../hub/HubClient.ts"
 import { Connection, HubSocket } from "../hub/HubSocket.ts"
 import { runtime } from "../WebRuntime.ts"
@@ -74,7 +75,8 @@ export const display = Atom.family((id: DisplayId) =>
     (ctx, input: DisplayInput) => {
       const seen = ctx.get(followed(id))
       if (!Followed.$is("Reported")(seen)) return
-      const step = ctx.get(kept(id)).apply(input, seen.report.screen)
+      // A Remote shows no guide: its Display state only selects tiles.
+      const step = ctx.get(kept(id)).apply(input, seen.report.screen, noGuide)
       ctx.set(kept(id), step.display)
       for (const command of step.commands) ctx.set(send(id), { _tag: "Commanded", command })
     }
@@ -86,6 +88,8 @@ function connecting(): Followed {
 }
 
 const kept = Atom.family((_: DisplayId) => Atom.make(Display.initial).pipe(Atom.keepAlive))
+
+const noGuide = GuideShelves.guideShelves([], [])
 
 /** What `message` says of the Display; a report that does not decode reads as offline. */
 function followedOf(message: RemoteMessage): Effect.Effect<Followed> {

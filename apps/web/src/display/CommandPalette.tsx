@@ -1,6 +1,7 @@
 import { useAtomSet, useAtomValue } from "@effect/atom-react"
 import type { GameId } from "@sportal/domain/Game"
 import { Option } from "effect"
+import { Fragment } from "react"
 import {
   CommandDialog,
   CommandEmpty,
@@ -10,6 +11,8 @@ import {
   CommandList,
   CommandShortcut
 } from "@/design/command"
+import * as CustomStreams from "../custom/CustomStreams.ts"
+import { CustomStreamsChange } from "../custom/CustomStreams.ts"
 import { GameStatus } from "../game/GameStatus.tsx"
 import { TeamLogo } from "../game/TeamLogo.tsx"
 import * as Games from "../hub/Games.ts"
@@ -21,13 +24,19 @@ import { TileAction } from "../screen/TileAction.ts"
 import { DisplayInput } from "./Display.ts"
 import * as DisplayState from "./DisplayState.ts"
 
-/** Every Screen command by name: watch a game, act on a tile, change layout, go full screen. */
+/**
+ * Every Screen command by name: watch a game or a saved YouTube stream, add one, open a game's stats page or put its
+ * stats in a tile, act on a tile, change layout, go full screen.
+ */
 export function CommandPalette(props: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const input = useAtomSet(DisplayState.display)
   const toggleFullScreen = useAtomSet(DisplayState.toggleFullScreen)
   const display = useAtomValue(DisplayState.display)
   const screen = useAtomValue(DisplayScreen.screen)
+  const shelves = useAtomValue(DisplayState.shelves)
   const { value } = useAtomValue(Games.today)
+  const streams = useAtomValue(CustomStreams.customStreams)
+  const edit = useAtomSet(DisplayState.editCustom)
   const selected = display.selectedOn(screen)
   const run = (command: ScreenCommand) => {
     input(DisplayInput.Commanded({ command }))
@@ -43,8 +52,9 @@ export function CommandPalette(props: { open: boolean; onOpenChange: (open: bool
   )
   const occupied = screen.onScreen().flatMap((tile, slot) => {
     if (Tile.guards.Empty(tile)) return []
-    const name = snapshots.find((each) => each.id === tile.game)?.scoreline() ?? `Tile ${slot + 1}`
-    return [{ slot, name }]
+    const game = Tile.game(tile)
+    const snapshot = snapshots.find((each) => each.id === game)
+    return [{ slot, name: Tile.label(tile, snapshot) ?? `Tile ${slot + 1}` }]
   })
 
   return (
@@ -73,6 +83,56 @@ export function CommandPalette(props: { open: boolean; onOpenChange: (open: bool
               <CommandShortcut>{game.networks()}</CommandShortcut>
             </CommandItem>
           ))}
+        </CommandGroup>
+        <CommandGroup heading="Stats">
+          {snapshots.map((game) => (
+            <CommandItem
+              key={`page-${game.id}`}
+              value={`stats page ${game.scoreline()} ${game.away.team.name} ${game.home.team.name} ${game.id}`}
+              onSelect={() => input(DisplayInput.GamePageOpened({ game: game.id }))}
+            >
+              Stats: {game.scoreline()}
+            </CommandItem>
+          ))}
+          {snapshots.map((game) => (
+            <CommandItem
+              key={`tile-${game.id}`}
+              value={`stats tile ${game.scoreline()} ${game.away.team.name} ${game.home.team.name} ${game.id}`}
+              onSelect={() => run({ _tag: "AssignStats", tile: selected, game: game.id })}
+            >
+              Stats for {game.scoreline()} in tile {selected + 1}
+            </CommandItem>
+          ))}
+        </CommandGroup>
+        <CommandGroup heading="YouTube">
+          {streams.map((stream) => (
+            <Fragment key={stream.id}>
+              <CommandItem
+                value={`watch youtube ${stream.name} ${stream.id}`}
+                onSelect={() => input(DisplayInput.ChosenCustom({ stream }))}
+              >
+                Watch {stream.name} in tile {selected + 1}
+              </CommandItem>
+              <CommandItem
+                value={`rename youtube ${stream.name} ${stream.id}`}
+                onSelect={() => input(DisplayInput.CustomFormOpened({ editing: stream }))}
+              >
+                Rename {stream.name}…
+              </CommandItem>
+              <CommandItem
+                value={`remove delete youtube ${stream.name} ${stream.id}`}
+                onSelect={() => edit(CustomStreamsChange.Removed({ id: stream.id }))}
+              >
+                Remove {stream.name}
+              </CommandItem>
+            </Fragment>
+          ))}
+          <CommandItem
+            value="add youtube video playlist address url"
+            onSelect={() => input(DisplayInput.CustomFormOpened({ editing: undefined }))}
+          >
+            Add YouTube…
+          </CommandItem>
         </CommandGroup>
         {occupied.length > 0 && (
           <CommandGroup heading="Tiles">
@@ -110,6 +170,13 @@ export function CommandPalette(props: { open: boolean; onOpenChange: (open: bool
           ))}
         </CommandGroup>
         <CommandGroup heading="Display">
+          <CommandItem
+            value="guide games league tv"
+            onSelect={() => input(DisplayInput.GuideOpened({ entry: display.entryOn(shelves) }))}
+          >
+            Guide
+            <CommandShortcut>G</CommandShortcut>
+          </CommandItem>
           {Option.isSome(screen.solo) && (
             <CommandItem value="unsolo" onSelect={() => run({ _tag: "Unsolo" })}>
               Unsolo

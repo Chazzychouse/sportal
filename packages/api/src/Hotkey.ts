@@ -14,21 +14,41 @@ export const Hotkey = Object.assign(
     FullScreen: {},
     NextLayout: {},
     CommandPalette: {},
-    ShowKeys: {}
+    ShowKeys: {},
+    /** Open the guide's ribbon, or from the ribbon the full guide. */
+    Guide: {},
+    /** An arrow, while the guide is open. */
+    Move: { direction: Schema.Literals(["up", "down", "left", "right"]) },
+    /** Watch what the guide has focused. */
+    Confirm: {},
+    /** The guide's next entry. */
+    NextEntry: {},
+    /** The guide's previous entry. */
+    PreviousEntry: {},
+    /** Open the focused game's page. */
+    Info: {},
+    /** Remove the focused custom stream from the saved list. */
+    Remove: {}
   }),
   {
-    /** What a key press means, read by its physical `code`; none for a key the page should have. */
+    /**
+     * What a key press means, read by its physical `code`; none for a key the page should have. While the guide is
+     * open, the arrows, Enter, the brackets, I, Delete and Backspace are the guide's.
+     */
     of(key: {
       code: string
       shift: boolean
       alt: boolean
       control: boolean
       meta: boolean
+      guideOpen: boolean
     }): Hotkey | undefined {
       if (key.control || key.meta) return key.code === "KeyK" ? { _tag: "CommandPalette" } : undefined
       const digit = /^Digit([1-9])$/.exec(key.code)?.[1]
       if (key.alt) return digit === undefined ? undefined : { _tag: "SelectTile", slot: Number(digit) - 1 }
       if (digit !== undefined) return { _tag: key.shift ? "Promote" : "FocusAudio", slot: Number(digit) - 1 }
+      const guide = key.guideOpen ? guideKey(key.code) : undefined
+      if (guide !== undefined) return guide
       switch (key.code) {
         case "KeyF":
           return { _tag: "ToggleSolo" }
@@ -40,6 +60,8 @@ export const Hotkey = Object.assign(
           return { _tag: "NextLayout" }
         case "KeyI":
           return { _tag: "Interact" }
+        case "KeyG":
+          return { _tag: "Guide" }
         case "Slash":
           return key.shift ? { _tag: "ShowKeys" } : undefined
         default:
@@ -90,7 +112,7 @@ export const Hotkey = Object.assign(
       {
         group: "Tiles",
         keys: ["Esc"],
-        does: "Close what is open, or unsolo",
+        does: "Close what is open (the full guide goes back to the ribbon), or unsolo",
         press: { code: "Escape" },
         hotkey: { _tag: "Unsolo" }
       },
@@ -121,8 +143,84 @@ export const Hotkey = Object.assign(
         does: "These keys",
         press: { code: "Slash", shift: true },
         hotkey: { _tag: "ShowKeys" }
+      },
+      {
+        group: "Guide",
+        keys: ["G"],
+        does: "Open the guide, then the full guide",
+        press: { code: "KeyG" },
+        hotkey: { _tag: "Guide" }
+      },
+      {
+        group: "Guide",
+        keys: ["←", "↑", "→", "↓"],
+        does: "Move in the guide (up from the ribbon opens the full guide)",
+        press: { code: "ArrowLeft", guideOpen: true },
+        hotkey: { _tag: "Move", direction: "left" }
+      },
+      {
+        group: "Guide",
+        keys: ["Enter"],
+        does: "Watch the focused game in the selected tile",
+        press: { code: "Enter", guideOpen: true },
+        hotkey: { _tag: "Confirm" }
+      },
+      {
+        group: "Guide",
+        keys: ["]"],
+        does: "Next league",
+        press: { code: "BracketRight", guideOpen: true },
+        hotkey: { _tag: "NextEntry" }
+      },
+      {
+        group: "Guide",
+        keys: ["["],
+        does: "Previous league",
+        press: { code: "BracketLeft", guideOpen: true },
+        hotkey: { _tag: "PreviousEntry" }
+      },
+      {
+        group: "Guide",
+        keys: ["I"],
+        does: "The focused game's page",
+        press: { code: "KeyI", guideOpen: true },
+        hotkey: { _tag: "Info" }
+      },
+      {
+        group: "Guide",
+        keys: ["Delete", "Backspace"],
+        does: "Remove the focused YouTube stream",
+        press: { code: "Delete", guideOpen: true },
+        hotkey: { _tag: "Remove" }
       }
     ] as const
   }
 )
 export type Hotkey = typeof Hotkey.Type
+
+/** A key that is the guide's while it is open: the arrows, Enter, the brackets, I, Delete and Backspace. */
+function guideKey(code: string): Hotkey | undefined {
+  switch (code) {
+    case "ArrowUp":
+      return { _tag: "Move", direction: "up" }
+    case "ArrowDown":
+      return { _tag: "Move", direction: "down" }
+    case "ArrowLeft":
+      return { _tag: "Move", direction: "left" }
+    case "ArrowRight":
+      return { _tag: "Move", direction: "right" }
+    case "Enter":
+      return { _tag: "Confirm" }
+    case "BracketRight":
+      return { _tag: "NextEntry" }
+    case "BracketLeft":
+      return { _tag: "PreviousEntry" }
+    case "KeyI":
+      return { _tag: "Info" }
+    case "Delete":
+    case "Backspace":
+      return { _tag: "Remove" }
+    default:
+      return undefined
+  }
+}

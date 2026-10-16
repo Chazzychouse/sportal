@@ -1,6 +1,6 @@
 import { ScreenTransition, TilePlacement } from "@sportal/api/ShellBridge"
 import { ShellChannel } from "@sportal/api/ShellChannel"
-import { GameId } from "@sportal/domain/Game"
+import { TileKey } from "@sportal/api/TileKey"
 import { Cause, Effect, FiberSet, Layer, Option, Queue, Schedule, Schema, Stream } from "effect"
 import { app, components, type IpcMainEvent, ipcMain } from "electron"
 import * as EmbeddedHub from "./EmbeddedHub.ts"
@@ -69,12 +69,15 @@ const serveHub = Effect.gen(function* () {
     if (Option.isSome(decoded) && Option.isSome(along))
       Queue.offerUnsafe(pending, { placements: decoded.value, transition: along.value })
   })
-  yield* listen(ShellChannel.setHidden, (games) => {
-    const decoded = decodeGames(games)
+  yield* listen(ShellChannel.setHidden, (keys) => {
+    const decoded = decodeKeys(keys)
     if (Option.isSome(decoded)) run(tiles.hide(decoded.value))
   })
   yield* listen(ShellChannel.setFullScreen, (on) => {
     if (typeof on === "boolean") window.setFullScreen(on)
+  })
+  yield* listen(ShellChannel.setGuideOpen, (on) => {
+    if (typeof on === "boolean") run(tiles.setGuideOpen(on))
   })
 
   // The window manager or the OS may change full screen too; the web UI hears every change from here.
@@ -153,7 +156,7 @@ const listen = Effect.fn("main.listen")(function* (
 
 const decodePlacements = Schema.decodeUnknownOption(Schema.Array(TilePlacement))
 const decodeTransition = Schema.decodeUnknownOption(Schema.UndefinedOr(ScreenTransition))
-const decodeGames = Schema.decodeUnknownOption(Schema.Array(GameId))
+const decodeKeys = Schema.decodeUnknownOption(Schema.Array(TileKey))
 
 function allWindowsClosed() {
   return Effect.callback<void>((resume) => {

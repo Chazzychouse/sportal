@@ -26,11 +26,13 @@ import { RpcSerialization, RpcServer } from "effect/rpc"
 import { Displays } from "./Displays.ts"
 import { HubConfig } from "./HubConfig.ts"
 import { Schedule } from "./Schedule.ts"
+import { Stats } from "./Stats.ts"
 import { Source } from "./source/Source.ts"
 
 const handlers = HubApi.toLayer(
   Effect.gen(function* () {
     const schedule = yield* Schedule
+    const stats = yield* Stats
     const displays = yield* Displays
     const source = yield* Source
     const config = yield* HubConfig
@@ -39,11 +41,14 @@ const handlers = HubApi.toLayer(
       listLive: (query) => Stream.unwrap(schedule.listLive(query)),
       gameLive: ({ id }) => Stream.unwrap(schedule.gameLive(id)),
       playsLive: ({ id }) => Stream.unwrap(schedule.playsLive(id)),
+      statsLive: ({ id }) => Stream.unwrap(stats.statsLive(id)),
       inputs: ({ display }) => Stream.unwrap(Effect.map(displays.connect(display), registered)),
       follow: ({ display }) => displays.follow(display),
       list: (query) => schedule.list(query),
       game: ({ id }) => schedule.game(id),
       plays: ({ id, before, limit }) => schedule.plays(id, { before, limit }),
+      stats: ({ id }) => stats.stats(id),
+      highlights: ({ league, date }) => stats.highlights(league, date),
       readGuide: ({ guide }) =>
         source
           .readGuide(guide)
@@ -80,6 +85,7 @@ export const layer: Layer.Layer<
   PlatformError.PlatformError,
   | HubConfig
   | Schedule
+  | Stats
   | Displays
   | Source
   | HttpServer.HttpServer

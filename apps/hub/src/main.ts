@@ -9,11 +9,13 @@ import * as Logging from "./Logging.ts"
 import * as Espn from "./provider/espn/Espn.ts"
 import { Schedule } from "./Schedule.ts"
 import { isStopping } from "./Shutdown.ts"
+import { Stats } from "./Stats.ts"
 import { Source } from "./source/Source.ts"
 
 const Hub = HubServer.layer.pipe(
   Layer.provide(HubServer.layerListen),
   Layer.provide(Displays.layer),
+  Layer.provide(Stats.layer),
   Layer.provide(Schedule.layer),
   Layer.provide(Director.layer),
   Layer.provide(Espn.layer),

@@ -11,5 +11,6 @@ export const ShellChannel = {
   tilePressed: "sportal:tile-pressed",
   openSignIn: "sportal:open-sign-in",
   guideRead: "sportal:guide-read",
-  readGuide: "sportal:read-guide"
+  readGuide: "sportal:read-guide",
+  setGuideOpen: "sportal:set-guide-open"
 } as const

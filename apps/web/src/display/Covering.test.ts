@@ -1,4 +1,5 @@
 import { afterEach, assert, beforeEach, describe, it } from "@effect/vitest"
+import { TileKey } from "@sportal/api/TileKey"
 import { Effect, Option, Queue } from "effect"
 import { Atom } from "effect/reactivity"
 import { vi } from "vitest"
@@ -26,7 +27,7 @@ describe("Covering.sync", () => {
         return yield* Queue.take(calls)
       }).pipe(Effect.scoped, Effect.provide(registry))
 
-      assert.deepStrictEqual(call, { _tag: "SetHidden", games: [TestWeb.bama] })
+      assert.deepStrictEqual(call, { _tag: "SetHidden", keys: [TileKey.game(TestWeb.bama)] })
     })
   )
 
@@ -43,7 +44,7 @@ describe("Covering.sync", () => {
         return yield* Queue.poll(calls)
       }).pipe(Effect.scoped, Effect.provide(registry))
 
-      assert.deepStrictEqual(call, Option.some({ _tag: "SetHidden", games: [TestWeb.bama] }))
+      assert.deepStrictEqual(call, Option.some({ _tag: "SetHidden", keys: [TileKey.game(TestWeb.bama)] }))
     })
   )
 
@@ -61,7 +62,7 @@ describe("Covering.sync", () => {
         return yield* Queue.take(calls)
       }).pipe(Effect.scoped, Effect.provide(registry))
 
-      assert.deepStrictEqual(call, { _tag: "SetHidden", games: [] })
+      assert.deepStrictEqual(call, { _tag: "SetHidden", keys: [] })
     })
   )
 
@@ -80,7 +81,7 @@ describe("Covering.sync", () => {
         return yield* Queue.take(calls)
       }).pipe(Effect.scoped, Effect.provide(registry))
 
-      assert.deepStrictEqual(call, { _tag: "SetHidden", games: [] })
+      assert.deepStrictEqual(call, { _tag: "SetHidden", keys: [] })
     })
   )
 })

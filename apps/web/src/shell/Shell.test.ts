@@ -63,17 +63,49 @@ describe("Shell.layerBrowser hotkeys", () => {
       assert.deepStrictEqual(hotkey, { _tag: "CommandPalette" })
     })
   )
+
+  it.effect("should give an arrow as a move once the guide is open", () =>
+    Effect.gen(function* () {
+      const shell = yield* Shell
+      yield* shell.setGuideOpen(true)
+      const next = yield* firstOf(shell)
+
+      window.dispatchEvent(keydown({ code: "ArrowDown" }))
+      const hotkey = yield* Fiber.join(next)
+
+      assert.deepStrictEqual(hotkey, { _tag: "Move", direction: "down" })
+    }).pipe(Effect.provide(Shell.layerBrowser))
+  )
+
+  it.effect("should leave an arrow to the page while the guide is closed", () =>
+    Effect.gen(function* () {
+      const next = yield* firstHotkey
+      const arrow = keydown({ code: "ArrowDown" })
+
+      window.dispatchEvent(arrow)
+      window.dispatchEvent(keydown({ code: "Slash", shiftKey: true }))
+      const hotkey = yield* Fiber.join(next)
+
+      assert.deepStrictEqual(hotkey, { _tag: "ShowKeys" })
+      assert.isFalse(arrow.defaultPrevented)
+    })
+  )
 })
 
 /** The first hotkey the browser Shell gives, listening from the moment it is forked. */
 const firstHotkey = Effect.gen(function* () {
   const shell = yield* Shell
-  return yield* shell.hotkeys.pipe(
+  return yield* firstOf(shell)
+}).pipe(Effect.provide(Shell.layerBrowser))
+
+/** The first hotkey `shell` gives, listening from the moment it is forked. */
+function firstOf(shell: Shell["Service"]) {
+  return shell.hotkeys.pipe(
     Stream.runHead,
     Effect.flatMap(Effect.fromOption),
     Effect.forkChild({ startImmediately: true })
   )
-}).pipe(Effect.provide(Shell.layerBrowser))
+}
 
 /** A cancelable keydown with these keys, as a browser dispatches it. */
 function keydown(keys: { code: string; shiftKey?: boolean; ctrlKey?: boolean; repeat?: boolean }) {

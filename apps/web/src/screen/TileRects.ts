@@ -1,12 +1,12 @@
 import type { TileBounds, TilePlacement } from "@sportal/api/ShellBridge"
-import type { GameId } from "@sportal/domain/Game"
+import type { TileKey } from "@sportal/api/TileKey"
 import { Option } from "effect"
 import { Layout } from "../layout/Layout.ts"
 import { type Screen, Tile } from "./Screen.ts"
 
 /**
  * Each on-screen tile's rectangle in the Screen area, in whole pixels, main tile first. Slot edges are rounded
- * once, so neighbours share an edge and every gap is the same width. A soloed game gets the whole area; the
+ * once, so neighbours share an edge and every gap is the same width. A soloed tile gets the whole area; the
  * other tiles keep their place with no size, so they can grow back from it.
  */
 export function tileRects(
@@ -14,7 +14,7 @@ export function tileRects(
   area: { width: number; height: number }
 ): ReadonlyArray<TileBounds> {
   const whole = inset({ x: 0, y: 0, width: area.width, height: area.height })
-  const solo = Option.getOrUndefined(Option.map(screen.solo, (game) => screen.slotOf(game)))
+  const solo = Option.getOrUndefined(Option.map(screen.solo, (key) => screen.slotOf(key)))
 
   return Layout.of(screen)
     .slots()
@@ -33,39 +33,37 @@ export function tileRects(
 }
 
 /**
- * What the shell must show for each stream tile with a size: its game's view, in window pixels.
- * `origin` is where the Screen area sits in the window. Only `interacting`'s stream gets the mouse.
+ * What the shell must show for each tile with a video and a size: its view, by the tile's key, in window pixels.
+ * `origin` is where the Screen area sits in the window. Only `interacting`'s view gets the mouse.
  */
 export function placements(
   screen: Screen,
   rects: ReadonlyArray<TileBounds>,
   origin: { x: number; y: number },
-  interacting: GameId | undefined
+  interacting: TileKey | undefined
 ): Array<TilePlacement> {
   return screen.onScreen().flatMap((tile, index) => {
     const rect = rects[index]
-    if (rect === undefined || rect.width === 0 || !Tile.guards.StreamTile(tile)) return []
-    const view = {
-      url: tile.channel.locator.url,
-      muted: !screen.hears(tile.game),
-      interactive: tile.game === interacting
-    }
+    const key = Tile.key(tile)
+    const locator = Tile.locator(tile)
+    if (rect === undefined || rect.width === 0 || key === undefined || locator === undefined) return []
+    const view = { url: locator.url, muted: !screen.hears(key), interactive: key === interacting }
     const video = videoBounds(rect)
-    return [{ game: tile.game, ...view, bounds: { ...video, x: video.x + origin.x, y: video.y + origin.y } }]
+    return [{ key, ...view, bounds: { ...video, x: video.x + origin.x, y: video.y + origin.y } }]
   })
 }
 
 /**
- * The games whose video an open overlay covers, in the order of `videos`: those sharing any area with an
+ * The keys of the tiles whose video an open overlay covers, in the order of `videos`: those sharing any area with an
  * overlay. An overlay flush against a video, touching only its edge, leaves it shown.
  */
-export function coveredGames(
+export function coveredTiles(
   overlays: ReadonlyArray<TileBounds>,
-  videos: ReadonlyArray<{ game: GameId; bounds: TileBounds }>
-): ReadonlyArray<GameId> {
+  videos: ReadonlyArray<{ key: TileKey; bounds: TileBounds }>
+): ReadonlyArray<TileKey> {
   return videos
     .filter((video) => overlays.some((overlay) => overlaps(overlay, video.bounds)))
-    .map((video) => video.game)
+    .map((video) => video.key)
 }
 
 /** The part of a tile below its tileHeader, where its video goes. */

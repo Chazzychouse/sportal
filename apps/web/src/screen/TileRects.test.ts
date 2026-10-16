@@ -1,5 +1,7 @@
 import { assert, describe, it } from "@effect/vitest"
+import { TileKey } from "@sportal/api/TileKey"
 import type { GameId } from "@sportal/domain/Game"
+import { highlight } from "@sportal/domain/TestGame"
 import { Result } from "effect"
 import * as TestWeb from "../TestWeb.ts"
 import { Screen } from "./Screen.ts"
@@ -35,13 +37,22 @@ describe("tileRects", () => {
 })
 
 describe("placements", () => {
+  it("should place a custom tile's view at its watch page, keyed by its stream", () => {
+    const screen = TestWeb.assignCustom(TestWeb.fill([TestWeb.bama]), 1, TestWeb.video)
+
+    const [, custom] = placed(screen)
+
+    assert.strictEqual(custom?.key, TileKey.custom(TestWeb.video.id))
+    assert.strictEqual(custom?.url, "https://www.youtube.com/watch?v=dQw4w9WgXcQ")
+  })
+
   it("should place a stream tile's video below its header, offset by the Screen area's position", () => {
     const screen = TestWeb.fill([TestWeb.bama, TestWeb.irish])
 
     const [placement] = placed(screen, undefined, { x: 352, y: 48 })
 
     assert.deepStrictEqual(placement?.bounds, { x: 355, y: 79, width: 794, height: 416 })
-    assert.strictEqual(placement?.game, TestWeb.bama)
+    assert.strictEqual(placement?.key, TileKey.game(TestWeb.bama))
     assert.isFalse(placement?.muted)
   })
 
@@ -53,10 +64,26 @@ describe("placements", () => {
     assert.deepStrictEqual(muted, [false, true])
   })
 
+  it("should mute every stream while a clip tile has audio focus", () => {
+    const screen = Result.getOrThrow(
+      Result.flatMap(
+        TestWeb.fill([TestWeb.bama]).apply(
+          { _tag: "AssignClip", tile: 1, highlight: highlight() },
+          TestWeb.onFox
+        ),
+        (withClip) => withClip.apply({ _tag: "FocusAudio", tile: 1 }, TestWeb.onFox)
+      )
+    )
+
+    const muted = placed(screen).map((placement) => placement.muted)
+
+    assert.deepStrictEqual(muted, [true])
+  })
+
   it("should give the mouse only to the interacting game's stream", () => {
     const screen = TestWeb.fill([TestWeb.bama, TestWeb.irish])
 
-    const interactive = placed(screen, TestWeb.irish).map((placement) => placement.interactive)
+    const interactive = placed(screen, TileKey.game(TestWeb.irish)).map((placement) => placement.interactive)
 
     assert.deepStrictEqual(interactive, [false, true])
   })
@@ -72,22 +99,22 @@ describe("placements", () => {
   it("should place nothing for a tile with no size", () => {
     const screen = TestWeb.soloed([TestWeb.bama, TestWeb.irish], 1)
 
-    const games = placed(screen).map((placement) => placement.game)
+    const keys = placed(screen).map((placement) => placement.key)
 
-    assert.deepStrictEqual(games, [TestWeb.irish])
+    assert.deepStrictEqual(keys, [TileKey.game(TestWeb.irish)])
   })
 })
 
-describe("coveredGames", () => {
+describe("coveredTiles", () => {
   it.each([
     { overlay: { x: 250, y: 150, width: 200, height: 200 }, shares: "a corner" },
     { overlay: { x: 0, y: 0, width: 1000, height: 1000 }, shares: "all" }
   ])("should cover a video an overlay shares area with: $shares", ({ overlay }) => {
     const video = videoOf(TestWeb.bama)
 
-    const covered = TileRects.coveredGames([overlay], [video])
+    const covered = TileRects.coveredTiles([overlay], [video])
 
-    assert.deepStrictEqual(covered, [TestWeb.bama])
+    assert.deepStrictEqual(covered, [TileKey.game(TestWeb.bama)])
   })
 
   it.each([
@@ -96,7 +123,7 @@ describe("coveredGames", () => {
   ])("should leave a video an overlay shares no area with: $is", ({ overlay }) => {
     const video = videoOf(TestWeb.bama)
 
-    const covered = TileRects.coveredGames([overlay], [video])
+    const covered = TileRects.coveredTiles([overlay], [video])
 
     assert.deepStrictEqual(covered, [])
   })
@@ -104,7 +131,7 @@ describe("coveredGames", () => {
   it("should leave a video shown under an overlay flush against its top edge", () => {
     const videos = [videoOf(TestWeb.bama), belowOf(TestWeb.irish)]
 
-    const covered = TileRects.coveredGames([sheet()], videos)
+    const covered = TileRects.coveredTiles([sheet()], videos)
 
     assert.deepStrictEqual(covered, [])
   })
@@ -112,27 +139,27 @@ describe("coveredGames", () => {
   it("should cover every video an overlay reaches", () => {
     const videos = [videoOf(TestWeb.bama), belowOf(TestWeb.irish)]
 
-    const covered = TileRects.coveredGames([{ ...sheet(), height: 301 }], videos)
+    const covered = TileRects.coveredTiles([{ ...sheet(), height: 301 }], videos)
 
-    assert.deepStrictEqual(covered, [TestWeb.bama, TestWeb.irish])
+    assert.deepStrictEqual(covered, [TileKey.game(TestWeb.bama), TileKey.game(TestWeb.irish)])
   })
 })
 
 const area = { width: 1600, height: 900 }
 
 /** The placements of `screen`'s streams in the Screen area, on the dev server's origin. */
-function placed(screen: Screen, interacting?: GameId, offset = { x: 0, y: 0 }) {
+function placed(screen: Screen, interacting?: TileKey, offset = { x: 0, y: 0 }) {
   return TileRects.placements(screen, TileRects.tileRects(screen, area), offset, interacting)
 }
 
 /** `game`'s video, 200 by 100 at 100,100. */
 function videoOf(game: GameId) {
-  return { game, bounds: { x: 100, y: 100, width: 200, height: 100 } }
+  return { key: TileKey.game(game), bounds: { x: 100, y: 100, width: 200, height: 100 } }
 }
 
 /** `game`'s video, 200 by 100 at 100,300: below the one `videoOf` places. */
 function belowOf(game: GameId) {
-  return { game, bounds: { x: 100, y: 300, width: 200, height: 100 } }
+  return { key: TileKey.game(game), bounds: { x: 100, y: 300, width: 200, height: 100 } }
 }
 
 /** A sheet across the top, 100 tall: it ends at `videoOf`'s top edge. */

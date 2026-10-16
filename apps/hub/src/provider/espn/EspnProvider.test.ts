@@ -501,6 +501,39 @@ describe("EspnProvider", () => {
     )
   })
 
+  describe("stats", () => {
+    it.effect("should read a game's stats from its summary", () =>
+      Effect.gen(function* () {
+        const summary = TestHub.recordedSummary("nfl-summary-401872971")
+        const client = HttpClient.make((request) =>
+          Effect.succeed(answered(request, request.url.includes("/summary?event=401872971") ? summary : "{}"))
+        )
+
+        const stats = yield* statsOver(client, "nfl", GameId.make("401872971"))
+
+        assert.deepStrictEqual(stats.linescore, { home: [0, 17, 0, 9], away: [7, 7, 7, 8] })
+      })
+    )
+
+    it.effect("should fail as unavailable for a summary that does not decode", () =>
+      Effect.gen(function* () {
+        const client = HttpClient.make((request) => Effect.succeed(answered(request, "{}")))
+
+        const failed = yield* statsOver(client, "nfl", GameId.make("401872971")).pipe(Effect.flip)
+
+        assert.instanceOf(failed, ProviderUnavailable)
+      })
+    )
+
+    it.effect("should fail as unavailable for a league ESPN does not serve", () =>
+      Effect.gen(function* () {
+        const failed = yield* statsOver(recordedHttp(fbsLive), "mlb", GameId.make("1")).pipe(Effect.flip)
+
+        assert.instanceOf(failed, ProviderUnavailable)
+      })
+    )
+  })
+
   describe("retention/integration", () => {
     it.effect("should show a synced topic as Synced", () =>
       Effect.gen(function* () {
@@ -698,6 +731,14 @@ function playsOver(client: HttpClient.HttpClient, league: LeagueId, game: GameId
   return Effect.gen(function* () {
     const provider = yield* Provider
     return yield* provider.plays(league, game)
+  }).pipe(Effect.provide(espnOver(client)))
+}
+
+/** The stats of game `game` of `league` that ESPN's provider over `client` reads. */
+function statsOver(client: HttpClient.HttpClient, league: LeagueId, game: GameId) {
+  return Effect.gen(function* () {
+    const provider = yield* Provider
+    return yield* provider.stats(league, game)
   }).pipe(Effect.provide(espnOver(client)))
 }
 

@@ -1,6 +1,8 @@
 import { assert, describe, it } from "@effect/vitest"
+import { TileKey } from "@sportal/api/TileKey"
 import type { ChannelAvailability } from "@sportal/domain/Channel"
 import { GameId } from "@sportal/domain/Game"
+import { highlight, snapshot } from "@sportal/domain/TestGame"
 import { DateTime, Option, Result, Schema } from "effect"
 import * as TestWeb from "../TestWeb.ts"
 import { type LayoutName, Screen, ScreenCommand, Tile } from "./Screen.ts"
@@ -86,7 +88,7 @@ describe("Screen#apply", () => {
   it("should give audio to the first game on screen when no game has it", () => {
     const screen = TestWeb.assign(Screen.initial, 2, TestWeb.bama, TestWeb.onFox)
 
-    assert.deepStrictEqual(screen.audioFocus, Option.some(TestWeb.bama))
+    assert.deepStrictEqual(screen.audioFocus, Option.some(TileKey.game(TestWeb.bama)))
   })
 
   it("should move audio focus to a tile's game", () => {
@@ -94,7 +96,7 @@ describe("Screen#apply", () => {
 
     const focused = run(two, { _tag: "FocusAudio", tile: 1 })
 
-    assert.deepStrictEqual(focused.audioFocus, Option.some(TestWeb.irish))
+    assert.deepStrictEqual(focused.audioFocus, Option.some(TileKey.game(TestWeb.irish)))
   })
 
   it("should keep audio focus where it is when another game is assigned", () => {
@@ -102,7 +104,7 @@ describe("Screen#apply", () => {
 
     const assigned = TestWeb.assign(focused, 2, usc, TestWeb.onFox)
 
-    assert.deepStrictEqual(assigned.audioFocus, Option.some(TestWeb.irish))
+    assert.deepStrictEqual(assigned.audioFocus, Option.some(TileKey.game(TestWeb.irish)))
   })
 
   it("should move audio to the main tile's game when the focused game is cleared", () => {
@@ -110,7 +112,7 @@ describe("Screen#apply", () => {
 
     const cleared = run(focused, { _tag: "Clear", tile: 1 })
 
-    assert.deepStrictEqual(cleared.audioFocus, Option.some(TestWeb.bama))
+    assert.deepStrictEqual(cleared.audioFocus, Option.some(TileKey.game(TestWeb.bama)))
   })
 
   it("should reject audio for an empty tile", () => {
@@ -237,9 +239,92 @@ describe("Screen#apply", () => {
       why: { _tag: "NoStream" }
     })
   })
+
+  it("should put a game's stats in a stats tile", () => {
+    const screen = run(Screen.initial, { _tag: "AssignStats", tile: 1, game: TestWeb.bama })
+
+    assert.deepStrictEqual(screen.tiles[1], { _tag: "StatsTile", game: TestWeb.bama })
+  })
+
+  it("should keep a game's stream where it is when its stats go beside it", () => {
+    const screen = TestWeb.fill([TestWeb.bama])
+
+    const beside = run(screen, { _tag: "AssignStats", tile: 1, game: TestWeb.bama })
+
+    assert.strictEqual(beside.tiles[0]?._tag, "StreamTile")
+    assert.strictEqual(beside.tiles[1]?._tag, "StatsTile")
+  })
+
+  it("should move a game's stats rather than show them twice", () => {
+    const first = run(Screen.initial, { _tag: "AssignStats", tile: 0, game: TestWeb.bama })
+
+    const second = run(first, { _tag: "AssignStats", tile: 2, game: TestWeb.bama })
+
+    assert.deepStrictEqual(
+      second.tiles.map(({ _tag }) => _tag),
+      ["Empty", "Empty", "StatsTile", "Empty"]
+    )
+  })
+
+  it("should refuse to focus audio on a stats tile", () => {
+    const screen = run(TestWeb.fill([TestWeb.bama]), { _tag: "AssignStats", tile: 1, game: TestWeb.bama })
+
+    const result = screen.apply({ _tag: "FocusAudio", tile: 1 }, TestWeb.onFox)
+
+    assert.deepStrictEqual(
+      Result.getFailure(result).pipe(Option.map(({ reason }) => reason)),
+      Option.some("silent-tile")
+    )
+  })
+
+  it("should give audio focus to no stats tile", () => {
+    const screen = run(Screen.initial, { _tag: "AssignStats", tile: 0, game: TestWeb.bama })
+
+    assert.isTrue(Option.isNone(screen.audioFocus))
+  })
+
+  it("should keep the audio focus where it is when a stats tile is promoted", () => {
+    const screen = run(TestWeb.fill([TestWeb.bama]), { _tag: "AssignStats", tile: 1, game: TestWeb.bama })
+
+    const promoted = run(screen, { _tag: "Promote", tile: 1 })
+
+    assert.deepStrictEqual(promoted.audioFocus, Option.some(TileKey.game(TestWeb.bama)))
+  })
+
+  it("should keep the audio focus where it is when a stats tile is soloed", () => {
+    const screen = run(TestWeb.fill([TestWeb.bama]), { _tag: "AssignStats", tile: 1, game: TestWeb.bama })
+
+    const soloed = run(screen, { _tag: "Solo", tile: 1 })
+
+    assert.deepStrictEqual(soloed.audioFocus, Option.some(TileKey.game(TestWeb.bama)))
+  })
+
+  it("should put a highlight in a clip tile", () => {
+    const clip = highlight()
+
+    const screen = run(Screen.initial, { _tag: "AssignClip", tile: 2, highlight: clip })
+
+    assert.deepStrictEqual(screen.tiles[2], { _tag: "ClipTile", highlight: clip })
+  })
+
+  it("should give audio focus to a clip tile", () => {
+    const screen = run(TestWeb.fill([TestWeb.bama]), { _tag: "AssignClip", tile: 1, highlight: highlight() })
+
+    const focused = run(screen, { _tag: "FocusAudio", tile: 1 })
+
+    assert.deepStrictEqual(focused.audioFocus, Option.some(TileKey.clip(highlight().id)))
+  })
 })
 
 describe("Screen#refresh", () => {
+  it("should keep a stats tile as it is", () => {
+    const screen = run(Screen.initial, { _tag: "AssignStats", tile: 0, game: TestWeb.bama })
+
+    const refreshed = screen.refresh(() => Option.some(TestWeb.onFox()))
+
+    assert.strictEqual(refreshed, screen)
+  })
+
   it("should return the same Screen when no tile changes", () => {
     const screen = TestWeb.assign(Screen.initial, 0, TestWeb.bama, noGuide)
 
@@ -282,7 +367,7 @@ describe("Screen#refresh", () => {
 
     const refreshed = focused.refresh(some(TestWeb.onFox))
 
-    assert.deepStrictEqual(refreshed.audioFocus, Option.some(TestWeb.irish))
+    assert.deepStrictEqual(refreshed.audioFocus, Option.some(TileKey.game(TestWeb.irish)))
   })
 
   it("should re-resolve benched tiles too", () => {
@@ -411,8 +496,8 @@ describe("Screen layouts and the bench", () => {
 
     const pair = run(full, { _tag: "SetLayout", layout: "Pair" })
 
-    assert.deepStrictEqual(pair.onScreen().map(gameOf), [TestWeb.bama, TestWeb.irish])
-    assert.deepStrictEqual(pair.tiles.map(gameOf), [TestWeb.bama, TestWeb.irish, usc, ohio])
+    assert.deepStrictEqual(pair.onScreen().map(Tile.game), [TestWeb.bama, TestWeb.irish])
+    assert.deepStrictEqual(pair.tiles.map(Tile.game), [TestWeb.bama, TestWeb.irish, usc, ohio])
   })
 
   it("should bring the benched tiles back in order", () => {
@@ -445,7 +530,7 @@ describe("Screen layouts and the bench", () => {
 
     const single = run(holed, { _tag: "SetLayout", layout: "Single" })
 
-    assert.deepStrictEqual(single.tiles.map(gameOf), [TestWeb.bama, TestWeb.irish, undefined, ohio])
+    assert.deepStrictEqual(single.tiles.map(Tile.game), [TestWeb.bama, TestWeb.irish, undefined, ohio])
   })
 
   it("should move audio off a benched game to the main tile's game", () => {
@@ -453,7 +538,7 @@ describe("Screen layouts and the bench", () => {
 
     const single = run(focused, { _tag: "SetLayout", layout: "Single" })
 
-    assert.deepStrictEqual(single.audioFocus, Option.some(TestWeb.bama))
+    assert.deepStrictEqual(single.audioFocus, Option.some(TileKey.game(TestWeb.bama)))
   })
 
   it("should keep a game in one tile across screen and bench", () => {
@@ -461,7 +546,21 @@ describe("Screen layouts and the bench", () => {
 
     const assigned = TestWeb.assign(benched, 0, TestWeb.irish, TestWeb.onFox)
 
-    assert.deepStrictEqual(assigned.tiles.map(gameOf), [TestWeb.irish])
+    assert.deepStrictEqual(assigned.tiles.map(Tile.game), [TestWeb.irish])
+  })
+
+  it("should move a benched tile to the end of the bench when another is assigned there", () => {
+    const benched = run(TestWeb.fill([TestWeb.bama, TestWeb.irish, usc]), {
+      _tag: "SetLayout",
+      layout: "Single"
+    })
+
+    const assigned = run(benched, { _tag: "AssignStats", tile: 1, game: TestWeb.bama })
+
+    assert.deepStrictEqual(
+      assigned.benched().map(({ key }) => key),
+      [TileKey.stats(TestWeb.bama), TileKey.game(usc), TileKey.game(TestWeb.irish)]
+    )
   })
 
   it("should reject audio for a benched tile", () => {
@@ -548,27 +647,99 @@ describe("Screen#hears and Screen#soloes", () => {
   })
 
   it("should hear the on-air game", () => {
-    assert.isTrue(screen.hears(TestWeb.irish))
+    assert.isTrue(screen.hears(TileKey.game(TestWeb.irish)))
   })
 
   it("should not hear the soloed game when another is on air", () => {
-    assert.isFalse(screen.hears(TestWeb.bama))
+    assert.isFalse(screen.hears(TileKey.game(TestWeb.bama)))
   })
 
   it("should solo the soloed game", () => {
-    assert.isTrue(screen.soloes(TestWeb.bama))
+    assert.isTrue(screen.soloes(TileKey.game(TestWeb.bama)))
   })
 
   it("should not solo the game on air", () => {
-    assert.isFalse(screen.soloes(TestWeb.irish))
+    assert.isFalse(screen.soloes(TileKey.game(TestWeb.irish)))
   })
 
   it("should not hear a game in no tile", () => {
-    assert.isFalse(screen.hears(usc))
+    assert.isFalse(screen.hears(TileKey.game(usc)))
   })
 
   it("should not solo a game in no tile", () => {
-    assert.isFalse(screen.soloes(usc))
+    assert.isFalse(screen.soloes(TileKey.game(usc)))
+  })
+})
+
+describe("Tile.key", () => {
+  it("should key a stream tile by its game", () => {
+    const tile: Tile = { _tag: "StreamTile", game: TestWeb.bama, channel: TestWeb.foxChannel }
+
+    const key = Tile.key(tile)
+
+    assert.strictEqual(key, TileKey.game(TestWeb.bama))
+  })
+
+  it("should key a data tile by its game", () => {
+    const tile: Tile = { _tag: "DataTile", game: TestWeb.bama, why: { _tag: "NoStream" } }
+
+    const key = Tile.key(tile)
+
+    assert.strictEqual(key, TileKey.game(TestWeb.bama))
+  })
+
+  it("should key a stats tile by its game's stats", () => {
+    const tile: Tile = { _tag: "StatsTile", game: TestWeb.bama }
+
+    const key = Tile.key(tile)
+
+    assert.strictEqual(key, TileKey.stats(TestWeb.bama))
+  })
+
+  it("should give an empty tile no key", () => {
+    const key = Tile.key({ _tag: "Empty" })
+
+    assert.isUndefined(key)
+  })
+})
+
+describe("Tile.label", () => {
+  it("should name a game's stream tile by its scoreline", () => {
+    const game = snapshot({ id: TestWeb.bama })
+
+    const name = Tile.label({ _tag: "StreamTile", game: TestWeb.bama, channel: TestWeb.foxChannel }, game)
+
+    assert.strictEqual(name, game.scoreline())
+  })
+
+  it("should name a stats tile by its game's scoreline after Stats", () => {
+    const game = snapshot({ id: TestWeb.bama })
+
+    const name = Tile.label({ _tag: "StatsTile", game: TestWeb.bama }, game)
+
+    assert.strictEqual(name, `Stats · ${game.scoreline()}`)
+  })
+
+  it("should name a custom tile by its stream's name", () => {
+    const screen = TestWeb.assignCustom(Screen.initial, 0, TestWeb.video)
+
+    const name = Tile.label(screen.tiles[0] ?? { _tag: "Empty" }, undefined)
+
+    assert.strictEqual(name, "Highlights")
+  })
+
+  it("should name a clip tile by its headline after Replay", () => {
+    const clip = highlight({ headline: "A long touchdown" })
+
+    const name = Tile.label({ _tag: "ClipTile", highlight: clip }, undefined)
+
+    assert.strictEqual(name, "Replay · A long touchdown")
+  })
+
+  it("should give a game tile no name before its game is known", () => {
+    const name = Tile.label({ _tag: "StatsTile", game: TestWeb.bama }, undefined)
+
+    assert.isUndefined(name)
   })
 })
 
@@ -601,8 +772,8 @@ describe("Screen#benched", () => {
     })
 
     assert.deepStrictEqual(pair.benched(), [
-      { tile: 2, game: usc },
-      { tile: 3, game: ohio }
+      { tile: 2, key: TileKey.game(usc) },
+      { tile: 3, key: TileKey.game(ohio) }
     ])
   })
 
@@ -613,8 +784,8 @@ describe("Screen#benched", () => {
     })
 
     assert.deepStrictEqual(single.benched(), [
-      { tile: 1, game: TestWeb.irish },
-      { tile: 3, game: ohio }
+      { tile: 1, key: TileKey.game(TestWeb.irish) },
+      { tile: 3, key: TileKey.game(ohio) }
     ])
   })
 })
@@ -656,7 +827,7 @@ describe("Screen swap and promote", () => {
 
     const swapped = run(three, { _tag: "Swap", a: 0, b: 2 })
 
-    assert.deepStrictEqual(swapped.tiles.map(gameOf), [usc, TestWeb.irish, TestWeb.bama, undefined])
+    assert.deepStrictEqual(swapped.tiles.map(Tile.game), [usc, TestWeb.irish, TestWeb.bama, undefined])
   })
 
   it("should swap a benched tile onto the screen", () => {
@@ -667,13 +838,13 @@ describe("Screen swap and promote", () => {
 
     const swapped = run(benched, { _tag: "Swap", a: 1, b: 2 })
 
-    assert.deepStrictEqual(swapped.onScreen().map(gameOf), [TestWeb.bama, usc])
+    assert.deepStrictEqual(swapped.onScreen().map(Tile.game), [TestWeb.bama, usc])
   })
 
   it("should keep audio with its game through a swap", () => {
     const swapped = run(TestWeb.fill([TestWeb.bama, TestWeb.irish]), { _tag: "Swap", a: 0, b: 1 })
 
-    assert.deepStrictEqual(swapped.audioFocus, Option.some(TestWeb.bama))
+    assert.deepStrictEqual(swapped.audioFocus, Option.some(TileKey.game(TestWeb.bama)))
   })
 
   it("should promote a tile into the main tile and give it audio", () => {
@@ -681,8 +852,8 @@ describe("Screen swap and promote", () => {
 
     const promoted = run(screen, { _tag: "Promote", tile: 3 })
 
-    assert.deepStrictEqual(promoted.tiles.map(gameOf), [TestWeb.irish, undefined, undefined, TestWeb.bama])
-    assert.deepStrictEqual(promoted.audioFocus, Option.some(TestWeb.irish))
+    assert.deepStrictEqual(promoted.tiles.map(Tile.game), [TestWeb.irish, undefined, undefined, TestWeb.bama])
+    assert.deepStrictEqual(promoted.audioFocus, Option.some(TileKey.game(TestWeb.irish)))
   })
 
   it("should promote a benched game", () => {
@@ -690,7 +861,7 @@ describe("Screen swap and promote", () => {
 
     const promoted = run(benched, { _tag: "Promote", tile: 1 })
 
-    assert.deepStrictEqual(promoted.onScreen().map(gameOf), [TestWeb.irish])
+    assert.deepStrictEqual(promoted.onScreen().map(Tile.game), [TestWeb.irish])
   })
 
   it("should reject promoting an empty tile", () => {
@@ -704,8 +875,8 @@ describe("Screen solo", () => {
   it("should solo a tile's game and give it audio", () => {
     const solo = run(TestWeb.fill([TestWeb.bama, TestWeb.irish]), { _tag: "Solo", tile: 1 })
 
-    assert.deepStrictEqual(solo.solo, Option.some(TestWeb.irish))
-    assert.deepStrictEqual(solo.audioFocus, Option.some(TestWeb.irish))
+    assert.deepStrictEqual(solo.solo, Option.some(TileKey.game(TestWeb.irish)))
+    assert.deepStrictEqual(solo.audioFocus, Option.some(TileKey.game(TestWeb.irish)))
   })
 
   it("should follow its game through a swap", () => {
@@ -713,7 +884,7 @@ describe("Screen solo", () => {
 
     const swapped = run(solo, { _tag: "Swap", a: 0, b: 1 })
 
-    assert.deepStrictEqual(swapped.solo, Option.some(TestWeb.irish))
+    assert.deepStrictEqual(swapped.solo, Option.some(TileKey.game(TestWeb.irish)))
   })
 
   it("should end when the game is cleared", () => {
@@ -747,9 +918,136 @@ describe("Screen solo", () => {
   })
 })
 
+describe("Screen custom tiles", () => {
+  it("should assign a custom stream as a custom tile carrying its watch page", () => {
+    const screen = TestWeb.assignCustom(Screen.initial, 1, TestWeb.video)
+
+    assert.deepStrictEqual(screen.tiles[1], {
+      _tag: "CustomTile",
+      stream: TestWeb.video.id,
+      name: "Highlights",
+      locator: { _tag: "WebView", url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ" }
+    })
+  })
+
+  it("should move a custom stream rather than show it twice", () => {
+    const first = TestWeb.assignCustom(Screen.initial, 0, TestWeb.video)
+
+    const second = TestWeb.assignCustom(first, 2, TestWeb.video)
+
+    assert.strictEqual(second.tiles[0]?._tag, "Empty")
+    assert.strictEqual(second.tiles[2]?._tag, "CustomTile")
+  })
+
+  it("should keep a game where it is when a custom stream is assigned beside it", () => {
+    const screen = TestWeb.assignCustom(TestWeb.fill([TestWeb.bama]), 1, TestWeb.video)
+
+    assert.strictEqual(screen.tiles[0]?._tag, "StreamTile")
+    assert.strictEqual(screen.tiles[1]?._tag, "CustomTile")
+  })
+
+  it("should give audio focus to a custom tile", () => {
+    const screen = TestWeb.assignCustom(TestWeb.fill([TestWeb.bama]), 1, TestWeb.video)
+
+    const focused = run(screen, { _tag: "FocusAudio", tile: 1 })
+
+    assert.deepStrictEqual(focused.audioFocus, Option.some(TileKey.custom(TestWeb.video.id)))
+  })
+
+  it("should solo a custom tile", () => {
+    const screen = TestWeb.assignCustom(TestWeb.fill([TestWeb.bama]), 1, TestWeb.video)
+
+    const soloed = run(screen, { _tag: "Solo", tile: 1 })
+
+    assert.deepStrictEqual(soloed.solo, Option.some(TileKey.custom(TestWeb.video.id)))
+  })
+
+  it("should promote a custom tile into the main tile", () => {
+    const screen = TestWeb.assignCustom(TestWeb.fill([TestWeb.bama]), 1, TestWeb.video)
+
+    const promoted = run(screen, { _tag: "Promote", tile: 1 })
+
+    assert.strictEqual(promoted.tiles[0]?._tag, "CustomTile")
+  })
+
+  it("should clear a custom tile", () => {
+    const screen = TestWeb.assignCustom(Screen.initial, 1, TestWeb.video)
+
+    const cleared = run(screen, { _tag: "Clear", tile: 1 })
+
+    assert.strictEqual(cleared.tiles[1]?._tag, "Empty")
+  })
+
+  it("should leave a custom tile as it was when what a source knows changes", () => {
+    const screen = TestWeb.assignCustom(TestWeb.fill([TestWeb.bama]), 1, TestWeb.video)
+
+    const refreshed = screen.refresh(some(TestWeb.nowhere))
+
+    assert.deepStrictEqual(refreshed.tiles[1], screen.tiles[1])
+  })
+})
+
+describe("Screen#customTiles", () => {
+  it("should list the tile showing a stream, benched as well as on screen", () => {
+    const quad = TestWeb.assignCustom(Screen.initial, 3, TestWeb.video)
+    const single = run(quad, { _tag: "SetLayout", layout: "Single" })
+
+    const shown = single.customTiles(TestWeb.video.id)
+
+    assert.deepStrictEqual(
+      shown.map(({ index }) => index),
+      [3]
+    )
+  })
+
+  it("should be empty for a stream on no tile", () => {
+    const screen = TestWeb.assignCustom(Screen.initial, 0, TestWeb.video)
+
+    const shown = screen.customTiles(TestWeb.playlist.id)
+
+    assert.deepStrictEqual(shown, [])
+  })
+})
+
 function some(availability: () => ReadonlyArray<ChannelAvailability>) {
   return () => Option.some(availability())
 }
+
+describe("Screen#withoutClips", () => {
+  it("should empty every clip tile", () => {
+    const screen = run(TestWeb.fill([TestWeb.bama]), { _tag: "AssignClip", tile: 1, highlight: highlight() })
+
+    const restored = screen.withoutClips()
+
+    assert.deepStrictEqual(restored.tiles[1], { _tag: "Empty" })
+  })
+
+  it("should give audio focus on a clip tile to the first on-screen tile with sound", () => {
+    const clipped = run(TestWeb.fill([TestWeb.bama]), { _tag: "AssignClip", tile: 1, highlight: highlight() })
+    const screen = run(clipped, { _tag: "FocusAudio", tile: 1 })
+
+    const restored = screen.withoutClips()
+
+    assert.deepStrictEqual(restored.audioFocus, Option.some(TileKey.game(TestWeb.bama)))
+  })
+
+  it("should end solo on a clip tile", () => {
+    const clipped = run(TestWeb.fill([TestWeb.bama]), { _tag: "AssignClip", tile: 1, highlight: highlight() })
+    const screen = run(clipped, { _tag: "Solo", tile: 1 })
+
+    const restored = screen.withoutClips()
+
+    assert.deepStrictEqual(restored.solo, Option.none())
+  })
+
+  it("should be the same Screen when it has no clip tile", () => {
+    const screen = TestWeb.fill([TestWeb.bama])
+
+    const restored = screen.withoutClips()
+
+    assert.strictEqual(restored, screen)
+  })
+})
 
 function run(screen: Screen, command: ScreenCommand) {
   return Result.getOrThrow(screen.apply(command, TestWeb.nowhere))
@@ -758,10 +1056,6 @@ function run(screen: Screen, command: ScreenCommand) {
 function rejection(screen: Screen, command: ScreenCommand) {
   const result = screen.apply(command, TestWeb.nowhere)
   return Result.isFailure(result) ? result.failure.reason : undefined
-}
-
-function gameOf(tile: Tile) {
-  return tile._tag === "Empty" ? undefined : tile.game
 }
 
 function unknownUpcoming(): ReadonlyArray<ChannelAvailability> {
@@ -814,7 +1108,17 @@ const tiles: ReadonlyArray<readonly [string, unknown]> = [
       game: "401856800",
       why: { _tag: "NotYet", channel: "ESPN", begin: "2026-10-04T17:00:00.000Z" }
     }
-  ]
+  ],
+  [
+    "CustomTile",
+    {
+      _tag: "CustomTile",
+      stream: "video.dQw4w9WgXcQ",
+      name: "Highlights",
+      locator: { _tag: "WebView", url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ" }
+    }
+  ],
+  ["StatsTile", { _tag: "StatsTile", game: "401856800" }]
 ]
 
 describe("Tile", () => {
@@ -837,6 +1141,14 @@ describe("Tile", () => {
 
 const commands: ReadonlyArray<unknown> = [
   { _tag: "Assign", tile: 1, game: "401856800" },
+  { _tag: "AssignStats", tile: 1, game: "401856800" },
+  {
+    _tag: "AssignCustom",
+    tile: 1,
+    stream: "video.dQw4w9WgXcQ",
+    name: "Highlights",
+    locator: { _tag: "WebView", url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ" }
+  },
   { _tag: "Clear", tile: 2 },
   { _tag: "FocusAudio", tile: 0 },
   { _tag: "Swap", a: 0, b: 3 },

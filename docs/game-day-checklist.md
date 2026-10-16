@@ -64,3 +64,26 @@ Setup: Hub serving the built web UI, desktop shell running, signed in to YouTube
 | 55 | With the installed app running, scan Join Remote's code from a phone on the home network | The Remote page loads from the embedded Hub (Windows asks once to let Sportal through its firewall) |
 
 Record the date, the build, and any row that failed.
+
+## Eye-check: UI overhaul
+
+| # | Do | Expect |
+| --- | --- | --- |
+| 56 | Switch between Glass and Team in the ribbon, the full guide, a stats page and a stats tile | Each reads clearly in both themes; Team paints in the teams' colors |
+| 57 | In the desktop shell, open the ribbon and the full guide while videos play | The ribbon docks under the Screen and every video keeps playing, resized |
+| 58 | Focus a player (a YouTube custom tile), then press the arrow keys with the guide closed and with it open | Closed: the player gets them (seek). Open: they move the guide |
+| 59 | Add a YouTube video and a YouTube playlist; play each in the shell and in a browser | Both play in the shell (watch page) and in the browser (embed; no autoplay expected) |
+| 60 | Put a live game's stats on a page and on a tile | Both update about every 30 s |
+| 61 | Choose a highlight into a tile | It plays, muted until it has audio focus |
+| 62 | Show a toast over a playing video, then cut the Hub | A toast hides only the strip of video it covers; the connection-lost toast clears when the Hub is back |
+| 63 | Press `Ctrl`+`K`, run Add YouTube… and a Stats entry | Both work |
+| 64 | From the Remote, move, solo and clear a custom tile | Each does what it says on the Display |
+| 65 | Look at a ribbon chip inside its shelf row | The chip's height fits the row, with no clipping or gap |
+| 66 | Open a game page and press the arrow keys and `PageDown` | The page scrolls |
+| 67 | Open a stats tile with highlights and click a highlight card in it | The clip opens as it does from the guide |
+| 68 | Open the full guide with Glass and watch the GPU (or the frame rate) | Glass's stacked blur costs no visible stutter; record the GPU cost if it does |
+| 69 | Put a clip in a tile and reload the Display | The reloaded Display has no clip tiles |
+| 70 | In the shell, select a playing tile and press `I`, then press `Ctrl`+`K` and type; close it, open the guide and choose Add YouTube by keyboard, and type a link | Typing reaches the palette's search and the YouTube form's fields, not the player |
+| 71 | In the shell with videos playing, press `G` to open the full guide and `Esc` to close it, several times | Each time, the provider views resize behind the full guide without flicker, and are back in their tiles after `Esc`; record any view left out of place |
+
+Record the date, the build, and any row that failed.

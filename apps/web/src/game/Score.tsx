@@ -11,8 +11,7 @@ export function Score(props: { game: GameSnapshot; side: "home" | "away"; size?:
   const { game } = props
   const team = game[props.side]
   const scored = game.scored()
-  const muted = scored && team.score < game[props.side === "home" ? "away" : "home"].score
-  const mute = muted ? "text-muted-foreground" : ""
+  const mute = trails(game, props.side) ? "text-muted-foreground" : ""
   const score = scored ? team.score : null
 
   if (props.size === "board")
@@ -38,4 +37,16 @@ export function Score(props: { game: GameSnapshot; side: "home" | "away"; size?:
       <span className={cn("ml-auto text-right", mute)}>{score}</span>
     </>
   )
+}
+
+/** Whether `side` trails once there is a score. */
+export function trails(game: GameSnapshot, side: "home" | "away"): boolean {
+  return game.scored() && game[side].score < game[side === "home" ? "away" : "home"].score
+}
+
+/** A side's ranking ("#5") when it has one, else its record ("8-2"), else nothing. */
+export function standing(game: GameSnapshot, side: "home" | "away"): string {
+  const { ranking, record } = game[side]
+  if (ranking !== undefined) return `#${ranking}`
+  return record === undefined ? "" : `${record.wins}-${record.losses}`
 }

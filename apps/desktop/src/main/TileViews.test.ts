@@ -1,4 +1,5 @@
 import { describe, expect, it } from "@effect/vitest"
+import { TileKey } from "@sportal/api/TileKey"
 import { GameId } from "@sportal/domain/Game"
 import { Context, Effect, Exit, Fiber, Layer, Scope } from "effect"
 import { TestClock } from "effect/testing"
@@ -134,7 +135,7 @@ describe("TileViews.sync", () => {
     Effect.gen(function* () {
       const scope = yield* Scope.make()
       const { window, tiles } = yield* attached().pipe(Scope.provide(scope))
-      yield* tiles.sync([placement, { ...placement, game: two }])
+      yield* tiles.sync([placement, { ...placement, key: two }])
 
       yield* Scope.close(scope, Exit.void)
 
@@ -144,6 +145,17 @@ describe("TileViews.sync", () => {
         expect(view.webContents.close).toHaveBeenCalled()
       }
     })
+  )
+
+  it.effect("should load a custom tile's YouTube watch page in a view of its own", () =>
+    Effect.gen(function* () {
+      const { tiles } = yield* attached()
+
+      yield* tiles.sync([placement, custom])
+
+      expect(created).toHaveLength(2)
+      expect(created[1]?.webContents.loadURL).toHaveBeenCalledWith(custom.url)
+    }).pipe(Effect.scoped)
   )
 })
 
@@ -313,6 +325,56 @@ describe("TileViews.hotkeys", () => {
       expect(forwarded).toEqual([{ _tag: "FocusAudio", slot: 1 }])
     }).pipe(Effect.scoped)
   )
+
+  it.effect("should leave an arrow to the stream view's page while the guide is closed", () =>
+    Effect.gen(function* () {
+      const { tiles } = yield* attached()
+      yield* tiles.sync([placement])
+
+      const prevented = press("ArrowDown")
+
+      expect(prevented).not.toHaveBeenCalled()
+    }).pipe(Effect.scoped)
+  )
+
+  it.effect("should keep an arrow from the stream view's page while the guide is open", () =>
+    Effect.gen(function* () {
+      const { tiles } = yield* attached()
+      yield* tiles.sync([placement])
+      yield* tiles.setGuideOpen(true)
+
+      const prevented = press("ArrowDown")
+
+      expect(prevented).toHaveBeenCalled()
+    }).pipe(Effect.scoped)
+  )
+
+  it.effect("should forward an arrow as a move while the guide is open", () =>
+    Effect.gen(function* () {
+      const { tiles } = yield* attached()
+      yield* tiles.sync([placement])
+      yield* tiles.setGuideOpen(true)
+      const hotkeys = yield* TestDesktop.collect(tiles.hotkeys, 1)
+
+      press("ArrowDown")
+      const forwarded = yield* Fiber.join(hotkeys)
+
+      expect(forwarded).toEqual([{ _tag: "Move", direction: "down" }])
+    }).pipe(Effect.scoped)
+  )
+
+  it.effect("should leave arrows to the stream view's page again once the guide closes", () =>
+    Effect.gen(function* () {
+      const { tiles } = yield* attached()
+      yield* tiles.sync([placement])
+      yield* tiles.setGuideOpen(true)
+      yield* tiles.setGuideOpen(false)
+
+      const prevented = press("ArrowDown")
+
+      expect(prevented).not.toHaveBeenCalled()
+    }).pipe(Effect.scoped)
+  )
 })
 
 describe("TileViews mouse filter", () => {
@@ -398,7 +460,7 @@ describe("TileViews mouse filter", () => {
 
       mouse(0, "mouseDown", "left")
       yield* tiles.sync([placement])
-      yield* tiles.sync([{ ...placement, game: two }])
+      yield* tiles.sync([{ ...placement, key: two }])
       mouse(0, "mouseDown", "left")
       mouse(1, "mouseDown", "left")
       const reported = yield* Fiber.join(presses)
@@ -408,14 +470,20 @@ describe("TileViews mouse filter", () => {
   )
 })
 
-const one = GameId.make("one")
-const two = GameId.make("two")
+const one = TileKey.game(GameId.make("one"))
+const two = TileKey.game(GameId.make("two"))
 const placement = {
-  game: one,
+  key: one,
   url: "https://tv.youtube.com/watch/one",
   bounds: { x: 10, y: 20, width: 640, height: 360 },
   muted: true,
   interactive: false
+}
+/** A custom tile's placement: a YouTube video's watch page, beside `placement`. */
+const custom = {
+  ...placement,
+  key: TileKey.custom("video.dQw4w9WgXcQ"),
+  url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
 }
 const transition = { durationMs: 160, easing: [0, 0, 1, 1] as const }
 const target = { x: 110, y: 20, width: 640, height: 360 }
@@ -435,7 +503,7 @@ function attached() {
 
 /** The second game's placement, on its own address, where `placement` is. */
 function secondGame() {
-  return { ...placement, game: two, url: "https://tv.youtube.com/watch/two" }
+  return { ...placement, key: two, url: "https://tv.youtube.com/watch/two" }
 }
 
 /** The second game's placement at `target`: a view a transition brings in. */
@@ -450,6 +518,7 @@ function press(code: string, type = "keyDown") {
     type,
     code,
     shift: false,
+    alt: false,
     control: false,
     meta: false
   })

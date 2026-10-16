@@ -16,3 +16,5 @@ fixtures/**
 
 # Coverage reports (pnpm coverage)
 coverage/
+
+.superpowers/

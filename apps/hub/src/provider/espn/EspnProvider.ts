@@ -7,6 +7,7 @@ import { Delivery, Provider, ProviderUnavailable } from "../Provider.ts"
 import * as EspnEvent from "./EspnEvent.ts"
 import { EspnLeague } from "./EspnLeague.ts"
 import * as EspnPlay from "./EspnPlay.ts"
+import * as EspnSummary from "./EspnSummary.ts"
 import { FastCast, type Frame, Topic, type Wanted } from "./FastCast.ts"
 import { GameTopics } from "./GameTopics.ts"
 
@@ -18,8 +19,8 @@ import { GameTopics } from "./GameTopics.ts"
  * bounded to 20 seconds; a poll that fails, times out, or does not decode is logged, says nothing, and keeps the last
  * good listing. It tells FastCast to follow each listed game live or within 30 minutes of its start, folds FastCast's
  * frames into one `GameTopics`, and after each listing keeps no document of a topic it no longer follows. Each run of
- * `deliveries` polls and follows on its own. It also answers, on request, a day's listing in every league and a game's
- * plays from its summary. One league failing fails the whole day's listing.
+ * `deliveries` polls and follows on its own. It also answers, on request, a day's listing in every league, and a game's
+ * plays and its stats from its summary. One league failing fails the whole day's listing.
  */
 export const layer = (
   leagues: ReadonlyArray<EspnLeague>
@@ -68,7 +69,7 @@ export const layer = (
         return days.flat()
       })
 
-      const plays = Effect.fn("EspnProvider.plays")(function* (league: LeagueId, game: GameId) {
+      const summaryOf = Effect.fnUntraced(function* (league: LeagueId, game: GameId) {
         const espn = yield* Effect.fromOption(
           EspnLeague.of(league),
           () =>
@@ -77,9 +78,21 @@ export const layer = (
               cause: `ESPN does not serve ${league} to the Hub`
             })
         )
-        const body = yield* fetched(espn.summaryUrl(game))
+        return yield* fetched(espn.summaryUrl(game))
+      })
+
+      const plays = Effect.fn("EspnProvider.plays")(function* (league: LeagueId, game: GameId) {
+        const body = yield* summaryOf(league, game)
 
         return yield* EspnPlay.summaryPlays(league, body).pipe(
+          Effect.mapError((cause) => new ProviderUnavailable({ reason: "Unanswered", cause }))
+        )
+      })
+
+      const stats = Effect.fn("EspnProvider.stats")(function* (league: LeagueId, game: GameId) {
+        const body = yield* summaryOf(league, game)
+
+        return yield* EspnSummary.decode(league, game, body).pipe(
           Effect.mapError((cause) => new ProviderUnavailable({ reason: "Unanswered", cause }))
         )
       })
@@ -140,7 +153,7 @@ export const layer = (
         })
       )
 
-      return Provider.of({ deliveries, listing, plays })
+      return Provider.of({ deliveries, listing, plays, stats })
     })
   )
 

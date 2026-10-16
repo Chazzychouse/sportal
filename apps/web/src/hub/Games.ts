@@ -2,8 +2,10 @@ import type { GameList } from "@sportal/api/GamesQuery"
 import type { ListedGame } from "@sportal/api/ListedGame"
 import { type GameId, PlaysChange } from "@sportal/domain/Game"
 import type { Play } from "@sportal/domain/Play"
-import { Option } from "effect"
+import { Effect, Option } from "effect"
 import { Atom } from "effect/reactivity"
+import { runtime } from "../WebRuntime.ts"
+import { HubClient } from "./HubClient.ts"
 import * as LiveStream from "./LiveStream.ts"
 
 /**
@@ -15,6 +17,17 @@ export const today = LiveStream.of(
   Option.none<GameList>(),
   (_, answer) => Option.some(answer)
 ).pipe(Atom.keepAlive)
+
+/** Today's games by id, from `today`: none before the first answer. What the guide's cards read. */
+export const byId: Atom.Atom<ReadonlyMap<GameId, ListedGame>> = Atom.make(
+  (get) =>
+    new Map(
+      Option.match(get(today).value, {
+        onNone: () => [],
+        onSome: ({ games }) => games.map((listed) => [listed.snapshot.id, listed] as const)
+      })
+    )
+)
 
 /** Game `id` with its availability, live: none before the first answer. Asked of the Hub only while read. */
 export const game = Atom.family((id: GameId) =>
@@ -38,6 +51,16 @@ export const plays = Atom.family((id: GameId) =>
         Reset: ({ plays }) => plays,
         Appended: ({ plays }) => [...plays, ...had]
       })
+  )
+)
+
+/** Every play of game `id`, newest first, asked once while read: for a list that needs plays older than the live page. */
+export const everyPlay = Atom.family((id: GameId) =>
+  runtime.atom(
+    Effect.gen(function* () {
+      const hub = yield* HubClient
+      return yield* hub.plays(id)
+    })
   )
 )
 

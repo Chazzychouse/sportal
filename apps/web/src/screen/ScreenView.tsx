@@ -1,5 +1,5 @@
 import { useAtomSet, useAtomValue } from "@effect/atom-react"
-import type { GameSnapshot } from "@sportal/domain/Game"
+import type { GameId, GameSnapshot } from "@sportal/domain/Game"
 import { Option } from "effect"
 import { useCallback } from "react"
 import * as DisplayState from "../display/DisplayState.ts"
@@ -30,10 +30,11 @@ export function ScreenView() {
         const rect = rects[index]
         if (rect === undefined) return null
         const hidden = rect.width === 0
+        const game = Tile.game(tile)
 
         return (
           <section
-            key={Tile.guards.Empty(tile) ? `slot-${index}` : tile.game}
+            key={Tile.key(tile) ?? `slot-${index}`}
             aria-hidden={hidden}
             className={`absolute flex flex-col overflow-hidden rounded-sm border ${
               selected === index ? "border-foreground/60" : "border-border"
@@ -46,7 +47,7 @@ export function ScreenView() {
               transition: dragging ? undefined : cssTransition
             }}
           >
-            {Tile.guards.Empty(tile) ? (
+            {game === undefined || Tile.guards.ClipTile(tile) ? (
               <TileFace
                 screen={screen}
                 slot={index}
@@ -55,7 +56,7 @@ export function ScreenView() {
                 selected={selected === index}
               />
             ) : (
-              <TileGame screen={screen} slot={index} tile={tile} selected={selected === index} />
+              <TileGame screen={screen} slot={index} tile={tile} game={game} selected={selected === index} />
             )}
           </section>
         )
@@ -66,18 +67,13 @@ export function ScreenView() {
 }
 
 /** A tile's game, read from its own live stream: the header always, the field only for a data tile of a live game. */
-function TileGame(props: {
-  screen: Screen
-  slot: number
-  tile: Exclude<Tile, { readonly _tag: "Empty" }>
-  selected: boolean
-}) {
-  const { value } = useAtomValue(Games.game(props.tile.game))
+function TileGame(props: { screen: Screen; slot: number; tile: Tile; game: GameId; selected: boolean }) {
+  const { value } = useAtomValue(Games.game(props.game))
   const snapshot = Option.getOrUndefined(Option.map(value, ({ snapshot }) => snapshot))
   return <TileFace {...props} snapshot={snapshot} />
 }
 
-/** A tile's chrome over its well. */
+/** A tile's chrome over its well; the well's clip video has sound while the tile has audio focus. */
 function TileFace(props: {
   screen: Screen
   slot: number
@@ -85,6 +81,7 @@ function TileFace(props: {
   snapshot: GameSnapshot | undefined
   selected: boolean
 }) {
+  const key = Tile.key(props.tile)
   return (
     <>
       <TileChrome
@@ -95,7 +92,11 @@ function TileFace(props: {
         selected={props.selected}
       />
       <div className="flex min-h-0 flex-1 items-center justify-center bg-well">
-        <TileBody tile={props.tile} snapshot={props.snapshot} />
+        <TileBody
+          tile={props.tile}
+          snapshot={props.snapshot}
+          heard={key !== undefined && props.screen.hears(key)}
+        />
       </div>
     </>
   )

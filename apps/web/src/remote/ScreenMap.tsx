@@ -10,8 +10,9 @@ import { type Screen, type ScreenCommand, Tile } from "../screen/Screen.ts"
 import { TileAction } from "../screen/TileAction.ts"
 
 /**
- * The Screen's layout in miniature, every tile shown even while one is soloed. Tapping a tile selects it; tapping
- * the selected one opens its actions. "Swap with…" waits for the next tile tapped.
+ * The Screen's layout in miniature, every tile shown even while one is soloed; a custom or clip tile by its name, a
+ * stats tile as "Stats" and its game. Tapping a tile selects it; tapping the selected one opens its actions. "Swap
+ * with…" waits for the next tile tapped.
  */
 export function ScreenMap(props: {
   screen: Screen
@@ -24,11 +25,19 @@ export function ScreenMap(props: {
   const tiles = props.screen.onScreen()
   const gameIn = (slot: number) => {
     const at = tiles[slot]
-    return at === undefined || Tile.guards.Empty(at)
-      ? undefined
-      : props.games.find(({ snapshot }) => snapshot.id === at.game)?.snapshot
+    const game = at === undefined ? undefined : Tile.game(at)
+    return game === undefined ? undefined : props.games.find(({ snapshot }) => snapshot.id === game)?.snapshot
   }
-  const selectedGame = gameIn(props.selected)
+  const nameIn = (slot: number) => {
+    const at = tiles[slot]
+    return at === undefined ? undefined : Tile.label(at, gameIn(slot))
+  }
+  const titleIn = (slot: number) => {
+    const at = tiles[slot]
+    return at !== undefined && (Tile.guards.CustomTile(at) || Tile.guards.ClipTile(at))
+      ? nameIn(slot)
+      : undefined
+  }
   const run = (command: ScreenCommand) => {
     props.onCommand(command)
     setMode(Mode.Idle())
@@ -51,8 +60,9 @@ export function ScreenMap(props: {
           .map((slot, index) => {
             const at = tiles[index]
             const game = gameIn(index)
-            const onAir = at !== undefined && !Tile.guards.Empty(at) && props.screen.hears(at.game)
-            const soloed = at !== undefined && !Tile.guards.Empty(at) && props.screen.soloes(at.game)
+            const title = titleIn(index)
+            const onAir = at !== undefined && !Tile.guards.Empty(at) && props.screen.hears(Tile.key(at))
+            const soloed = at !== undefined && !Tile.guards.Empty(at) && props.screen.soloes(Tile.key(at))
 
             return (
               <button
@@ -61,7 +71,7 @@ export function ScreenMap(props: {
                 type="button"
                 onClick={() => tap(index)}
                 aria-pressed={props.selected === index}
-                aria-label={`Tile ${index + 1}${game === undefined ? ", empty" : `, ${game.away.team.name} at ${game.home.team.name}`}`}
+                aria-label={`Tile ${index + 1}${Tile.guards.Empty(at) ? ", empty" : `, ${nameIn(index) ?? "loading"}`}`}
                 style={{
                   left: `${slot.x * 100}%`,
                   top: `${slot.y * 100}%`,
@@ -91,8 +101,13 @@ export function ScreenMap(props: {
                     </span>
                     {onAir && <Volume2 className="size-3 text-on-air" />}
                     {soloed && <span className="label-caps text-[9px] text-on-air">Solo</span>}
+                    {at !== undefined && Tile.guards.StatsTile(at) && (
+                      <span className="label-caps text-[9px] text-muted-foreground">Stats</span>
+                    )}
                   </span>
-                  {game === undefined ? (
+                  {title !== undefined ? (
+                    <span className="m-auto line-clamp-3 px-0.5 text-center text-[11px]">{title}</span>
+                  ) : game === undefined ? (
                     <span className="m-auto text-[10px] text-muted-foreground">
                       {Tile.guards.Empty(at) ? "Empty" : "Loading…"}
                     </span>
@@ -130,9 +145,7 @@ export function ScreenMap(props: {
         >
           <div className="px-4 pt-4 pb-2">
             <SheetTitle className="label-caps text-xs">Tile {props.selected + 1}</SheetTitle>
-            <SheetDescription className="font-mono text-sm">
-              {selectedGame === undefined ? "" : selectedGame.scoreline()}
-            </SheetDescription>
+            <SheetDescription className="font-mono text-sm">{nameIn(props.selected) ?? ""}</SheetDescription>
           </div>
           <div className="flex flex-col pb-2">
             {TileAction.of(props.screen, props.selected, true).map((action) => (

@@ -4,14 +4,15 @@ import { contextBridge, type IpcRendererEvent, ipcRenderer } from "electron"
 
 const bridge: ShellBridge = {
   syncTiles: (placements, transition) => ipcRenderer.send(ShellChannel.syncTiles, placements, transition),
-  setHidden: (games) => ipcRenderer.send(ShellChannel.setHidden, games),
+  setHidden: (keys) => ipcRenderer.send(ShellChannel.setHidden, keys),
   setFullScreen: (on) => ipcRenderer.send(ShellChannel.setFullScreen, on),
   onFullScreenChanged: subscribe(ShellChannel.fullScreenChanged),
   onHotkey: subscribe(ShellChannel.hotkey),
   onTilePressed: subscribe(ShellChannel.tilePressed),
   openSignIn: () => ipcRenderer.send(ShellChannel.openSignIn),
   onGuideRead: subscribe(ShellChannel.guideRead),
-  readGuide: () => ipcRenderer.send(ShellChannel.readGuide)
+  readGuide: () => ipcRenderer.send(ShellChannel.readGuide),
+  setGuideOpen: (on) => ipcRenderer.send(ShellChannel.setGuideOpen, on)
 }
 
 contextBridge.exposeInMainWorld("sportalShell", bridge)

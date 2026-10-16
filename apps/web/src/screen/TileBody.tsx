@@ -1,19 +1,25 @@
 import { useAtomValue } from "@effect/atom-react"
 import type { GameSnapshot } from "@sportal/domain/Game"
-import { Option } from "effect"
-import { useMemo } from "react"
+import type { Highlight } from "@sportal/domain/Highlight"
+import { Option, Result } from "effect"
+import { useEffect, useMemo, useRef } from "react"
+import { CustomStream } from "../custom/CustomStream.ts"
 import { Field } from "../game/Field.tsx"
 import { GameStatus, localTime } from "../game/GameStatus.tsx"
 import { Score } from "../game/Score.tsx"
 import * as Games from "../hub/Games.ts"
+import { GameStatsView } from "../stats/GameStats.tsx"
 import { Tile } from "./Screen.ts"
+import * as TilePlacements from "./TilePlacements.ts"
 
 /**
  * What a tile's well shows from the web UI. In the shell a provider view covers a stream tile's
  * well; in a plain browser this is what is seen, with a link to watch. A data tile of a live game (halftime and a
- * delay during it included) shows the field in place of why it has no stream; the field dims itself out of play.
+ * delay during it included) shows the field in place of why it has no stream; the field dims itself out of play. A
+ * custom tile, in a plain browser, plays YouTube's embedded player. A stats tile fills its well with as many of its
+ * game's stats as fit. A clip tile plays its highlight in a page video, with sound only while `heard`.
  */
-export function TileBody(props: { tile: Tile; snapshot: GameSnapshot | undefined }) {
+export function TileBody(props: { tile: Tile; snapshot: GameSnapshot | undefined; heard: boolean }) {
   const { tile, snapshot } = props
   return Tile.match(tile, {
     Empty: () => <p className="label-caps text-muted-foreground/60 text-sm tracking-[0.2em]">No signal</p>,
@@ -38,8 +44,62 @@ export function TileBody(props: { tile: Tile; snapshot: GameSnapshot | undefined
       >
         Open in {channel.source}
       </a>
-    )
+    ),
+    CustomTile: (custom) => <CustomPlayer tile={custom} />,
+    StatsTile: ({ game }) => <GameStatsView game={game} fit="tile" />,
+    ClipTile: ({ highlight }) => <ClipVideo highlight={highlight} heard={props.heard} />
   })
+}
+
+/** A highlight in a page video: it plays at once, muted unless its tile has audio focus, and rests on its last frame. */
+function ClipVideo(props: { highlight: Highlight; heard: boolean }) {
+  const ref = useRef<HTMLVideoElement>(null)
+  // React sets `muted` only when the element is made; audio focus moving later sets it here.
+  useEffect(() => {
+    if (ref.current !== null) ref.current.muted = !props.heard
+  }, [props.heard])
+  return (
+    <div className="relative flex size-full items-center justify-center">
+      <video
+        ref={ref}
+        src={props.highlight.video}
+        poster={props.highlight.thumbnail}
+        autoPlay
+        controls
+        playsInline
+        muted={!props.heard}
+        className="max-h-full max-w-full"
+      />
+      <span className="label-caps absolute top-2 left-2 rounded-sm bg-black/70 px-1.5 py-0.5 text-[10px] text-white">
+        Replay
+      </span>
+    </div>
+  )
+}
+
+/**
+ * A custom tile's well. In the shell its provider view plays the watch page over it, so it only names the stream; in a
+ * plain browser it is YouTube's embedded player.
+ */
+function CustomPlayer(props: { tile: typeof Tile.cases.CustomTile.Type }) {
+  const providerViews = useAtomValue(TilePlacements.providerViews)
+  const { stream, name, locator } = props.tile
+  // The tile keeps the watch page the shell loads; the embedded player's address is read back from it.
+  const embed = Result.match(CustomStream.parse(locator.url, name), {
+    onSuccess: (custom) => custom.embedUrl(),
+    onFailure: () => undefined
+  })
+  if (providerViews || embed === undefined) return <p className="text-muted-foreground text-sm">{name}</p>
+  return (
+    <iframe
+      key={stream}
+      title={name}
+      src={embed}
+      className="h-full w-full border-0"
+      allow="autoplay; encrypted-media; picture-in-picture"
+      allowFullScreen
+    />
+  )
 }
 
 /** A live game's field, its plays read from the game's own live stream. */

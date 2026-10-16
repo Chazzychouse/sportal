@@ -2,8 +2,8 @@ import { afterEach, assert, beforeEach, describe, it } from "@effect/vitest"
 import type { GameList } from "@sportal/api/GamesQuery"
 import type { ChannelAvailability } from "@sportal/domain/Channel"
 import { GameId } from "@sportal/domain/Game"
-import { snapshot } from "@sportal/domain/TestGame"
-import { Array as Arr, Effect, Option } from "effect"
+import { highlight, snapshot } from "@sportal/domain/TestGame"
+import { Array as Arr, Effect, Option, Result } from "effect"
 import { Atom } from "effect/reactivity"
 import { vi } from "vitest"
 import * as Games from "../hub/Games.ts"
@@ -86,6 +86,20 @@ describe("DisplayScreen.screen", () => {
       const screen = yield* Atom.get(DisplayScreen.screen).pipe(Effect.scoped, Effect.provide(registry))
 
       assert.strictEqual(screen.layout, "Pair")
+    })
+  )
+
+  it.effect("should start with an empty tile where the kept Screen had a clip", () =>
+    Effect.gen(function* () {
+      const kept = Result.getOrThrow(
+        Screen.initial.apply({ _tag: "AssignClip", tile: 0, highlight: highlight() }, TestWeb.nowhere)
+      )
+      yield* TestWeb.keep(kept)
+      const { registry } = yield* TestWeb.withShell()
+
+      const screen = yield* Atom.get(DisplayScreen.screen).pipe(Effect.scoped, Effect.provide(registry))
+
+      assert.deepStrictEqual(screen.tiles[0], { _tag: "Empty" })
     })
   )
 
