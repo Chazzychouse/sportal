@@ -49,7 +49,7 @@ Versions were checked against the registry on 2026-10-03. Effect is at 4.0, whic
 | Hooks | Lefthook: format and lint on commit; typecheck, test, structure checks on push | |
 | Packaging | The Hub bundled by Vite into one script (`apps/hub/dist/hub.mjs`); electron-builder ships it and the web UI's build inside the desktop app, which runs it as a utility process: an AppImage and a `.deb` for Linux, an NSIS installer for Windows ([ADR 0020](./adr/0020-one-installable-app.md)) | One thing to install. A container image of the same bundle stays possible for a cloud Hub |
 
-**Decided: no CI host yet.** The repository is local; the Lefthook hooks are the gate. CI is added when the repository gets a remote.
+**CI: GitHub Actions.** `ci.yml` runs `pnpm check` and a Linux package on every push and pull request; `release.yml` builds and attaches the installers to a draft release for each `v*` tag ([release.md](./release.md)). The Lefthook hooks stay the local gate.
 
 ## 3. System shape
 
@@ -155,7 +155,7 @@ sportal/
 ├── vitest.config.ts            Vitest projects and coverage; each workspace has its own vitest.config.ts
 ├── .dependency-cruiser.cjs     Import-direction and banned-name rules
 ├── lefthook.yml
-├── telemetry/                  Local Grafana: compose file, Game Day, Game Detail, and Hub dashboards
+├── .github/workflows/          CI (check, Linux package) and releases (installers per tag)
 │
 ├── docs/
 │   ├── product-plan.md

@@ -1,0 +1,80 @@
+# A tag v<version> builds the installers on each OS and attaches them to a draft GitHub release of that tag.
+# Publish the draft by hand once both jobs are green. See docs/release.md.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+env:
+  LEFTHOOK: "0"
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check
+
+  installers:
+    needs: check
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      # Windows only: castlabs' VMP signature, without which Widevine services refuse playback.
+      - if: runner.os == 'Windows'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - if: runner.os == 'Windows'
+        shell: bash
+        env:
+          EVS_ACCOUNT_NAME: ${{ secrets.EVS_ACCOUNT_NAME }}
+          EVS_PASSWD: ${{ secrets.EVS_PASSWD }}
+        run: |
+          python -m pip install --upgrade castlabs-evs
+          python -m castlabs_evs.account --no-ask reauth
+          echo "SPORTAL_VMP_SIGN=1" >> "$GITHUB_ENV"
+      # Windows only, optional: Authenticode signing, when a certificate is configured. It runs before the VMP
+      # signature, as castlabs requires.
+      - if: runner.os == 'Windows'
+        shell: bash
+        env:
+          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+        run: |
+          if [ -n "$WIN_CSC_LINK" ]; then
+            echo "CSC_LINK=$WIN_CSC_LINK" >> "$GITHUB_ENV"
+            echo "CSC_KEY_PASSWORD=$WIN_CSC_KEY_PASSWORD" >> "$GITHUB_ENV"
+          else
+            echo "No Authenticode certificate: the installer is unsigned and SmartScreen will warn."
+          fi
+
+      - run: pnpm build
+      - working-directory: apps/desktop
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          pnpm exec electron-vite build
+          pnpm exec electron-builder --publish always -c.extraMetadata.version="${GITHUB_REF_NAME#v}"

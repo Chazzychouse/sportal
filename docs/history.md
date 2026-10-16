@@ -62,7 +62,7 @@ The thin vertical slice came first: a minimal NFL and FBS slate with live scores
 | Question | Decision |
 | --- | --- |
 | Language shape | Effect TypeScript end to end (ADR 0001) |
-| CI | Local only for now; the Lefthook hooks are the gate |
+| CI | Local only at first; GitHub Actions from 2026-10-15 (`docs/release.md`) |
 | First slice | Thin vertical |
 | Record the FBS feed of 2026-10-03 before approval | Yes |
 | Layout standard | Accepted, with files as no junk drawer: main behaviour first, no scattered incidental interfaces, no helper pile at the top |
