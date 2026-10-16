@@ -117,9 +117,10 @@ export function soloed(games: ReadonlyArray<GameId | undefined>, tile: number) {
 
 /**
  * A Hub over an in-memory socket, for a test to drive: its connection (connected), and a PubSub per kind of live query;
- * each publish goes to every query of its kind open then (a game's, its plays' and its stats' by the game's id). `open` names
- * the queries open now, as "games", "game 401", "plays 401", "stats 401", "inputs desk" and "follow desk": a test waits for one with
- * `asked` before it answers it, and for its end with `dropped`. An `inputs` query sends `Registered` first. While
+ * each publish goes to every query of its kind open then (a game's, its plays' and its stats' by the game's id).
+ * `open` names the queries open now, as "games", "game 401", "plays 401", "stats 401", "inputs desk" and
+ * "follow desk": a test waits for one with `asked` before it answers it, and for its end with `dropped`. An `inputs`
+ * query sends `Registered` first. While
  * `refusals` is above 0, a game's query is refused as not found, and counts it down. Each write the socket carries
  * goes to `requests`, as a `TestWebCall`.
  */

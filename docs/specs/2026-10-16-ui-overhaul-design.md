@@ -212,8 +212,9 @@ The Ctrl+K palette, `Screen` commands, layouts, solo, audio focus, the Remote, a
   - The port gains `stats(game): Effect<GameStats, StatsUnavailable>`. `StatsUnavailable` is a `Schema.TaggedError`
     in `packages/api`.
   - A cache per game in the Hub, beside where the port is used (follow how the existing play pages are served). A
-    final game's stats are fetched once and kept. A live game's are refetched every `HubConfig.statsRefresh`
-    (`SPORTAL_STATS_REFRESH`, default 30 s) while any `statsLive` subscriber follows it, and not at all otherwise.
+    final game's stats are fetched once and kept, except that a final game with no highlights yet is refetched at most
+    every 10 minutes (ESPN posts its videos after the whistle). A live game's are refetched every `HubConfig.statsRefresh`
+    (`SPORTAL_STATS_REFRESH`, default 30 s, at least 10 s: a lower value stops the Hub at startup) while any `statsLive` subscriber follows it, and not at all otherwise.
     Upcoming games answer with empty stats and no fetch.
 - `HubApi` gains `stats({ id })` (one-shot), `statsLive({ id })` (stream), and `highlights({ league, date })`: the
   highlights of that day's final games of that league, fetching any uncached final game's summary with concurrency 4,

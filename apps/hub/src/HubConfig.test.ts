@@ -44,7 +44,8 @@ describe("HubConfig", () => {
     ["SPORTAL_PORT", "eighty"],
     ["SPORTAL_LOG_LEVEL", "Loud"],
     ["SPORTAL_LOG_FORMAT", "xml"],
-    ["SPORTAL_STATS_REFRESH", "soon"]
+    ["SPORTAL_STATS_REFRESH", "soon"],
+    ["SPORTAL_STATS_REFRESH", "5 seconds"]
   ] as const)("should refuse %s=%s, naming the setting", ([name, value]) =>
     Effect.gen(function* () {
       const config = Effect.service(HubConfig).pipe(Effect.provide(HubConfig.layerTest({ [name]: value })))

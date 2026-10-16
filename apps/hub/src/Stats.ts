@@ -25,7 +25,8 @@ import { Schedule } from "./Schedule.ts"
 
 /**
  * A game's stats, from its provider's summary. An upcoming game's are empty, and nothing is fetched. An over game's
- * are fetched once and kept for the Hub's run. A live game's are fetched when asked once, and while any live answer
+ * are fetched once and kept for the Hub's run, unless it has no highlights yet, then fetched again at most every
+ * 10 minutes. A live game's are fetched when asked once, and while any live answer
  * follows them, again every `HubConfig.statsRefresh`, one fetch however many follow; a refresh that fails is logged and
  * the last stats stand. A day's highlights in a league are its final games', each final game's stats fetched once,
  * four at a time; a game whose stats are unavailable is logged and left out.
@@ -55,7 +56,10 @@ export class Stats extends Context.Service<
 
       const finals = yield* Cache.makeWith(fetched, {
         capacity: 1024,
-        timeToLive: (exit) => (Exit.isSuccess(exit) ? Duration.infinity : Duration.zero)
+        timeToLive: (exit) => {
+          if (Exit.isFailure(exit)) return Duration.zero
+          return exit.value.highlights.length === 0 ? highlightsWait : Duration.infinity
+        }
       })
 
       // Each followed live game's latest stats, refreshed while anything holds it.
@@ -151,6 +155,9 @@ export class Stats extends Context.Service<
     })
   )
 }
+
+/** How long a final game's stats without highlights stand: ESPN posts a game's videos after it goes final. */
+const highlightsWait = Duration.minutes(10)
 
 /** A game whose summary is asked for: its league, which says where, and its id. */
 interface Summarized {

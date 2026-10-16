@@ -1,4 +1,13 @@
-import { Config, ConfigProvider, Context, Duration, Layer, type LogLevel, type Option } from "effect"
+import { Config, ConfigProvider, Context, Duration, Layer, type LogLevel, type Option, Schema } from "effect"
+
+/** A duration of at least 10 seconds. */
+const RefreshInterval = Schema.DurationFromString.pipe(
+  Schema.check(
+    Schema.makeFilter(
+      (interval) => Duration.isGreaterThanOrEqualTo(interval, Duration.seconds(10)) || "at least 10 seconds"
+    )
+  )
+)
 
 export class HubConfig extends Context.Service<
   HubConfig,
@@ -11,7 +20,7 @@ export class HubConfig extends Context.Service<
     readonly version: string
     /** The zone whose calendar says what day it is: ESPN's scoreboard days are US Eastern. */
     readonly timeZone: string
-    /** How often a live game's stats are fetched again while a live answer follows them. */
+    /** How often a live game's stats are fetched again while a live answer follows them; at least 10 seconds. */
     readonly statsRefresh: Duration.Duration
   }
 >()("sportal/hub/HubConfig") {
@@ -25,7 +34,9 @@ export class HubConfig extends Context.Service<
       logFormat: Config.Literals(["pretty", "json"], "SPORTAL_LOG_FORMAT").pipe(Config.withDefault("pretty")),
       version: Config.String("SPORTAL_VERSION").pipe(Config.withDefault("dev")),
       timeZone: Config.String("SPORTAL_TIME_ZONE").pipe(Config.withDefault("America/New_York")),
-      statsRefresh: Config.Duration("SPORTAL_STATS_REFRESH").pipe(Config.withDefault(Duration.seconds(30)))
+      statsRefresh: Config.schema(RefreshInterval, "SPORTAL_STATS_REFRESH").pipe(
+        Config.withDefault(Duration.seconds(30))
+      )
     })
   )
 

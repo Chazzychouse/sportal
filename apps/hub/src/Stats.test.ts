@@ -41,7 +41,7 @@ describe("Stats#stats", () => {
   })
 
   it.effect("should ask the provider for a final game's stats only once", () => {
-    const asked = counted()
+    const asked = counted((game) => Effect.succeed(withHighlight(game)))
     return TestHub.withStats({ stats: asked.stats }, (frames) =>
       Effect.gen(function* () {
         yield* listed(frames, [finalA])
@@ -49,6 +49,40 @@ describe("Stats#stats", () => {
         yield* stats.stats(finalA.id)
 
         yield* TestClock.adjust("1 hour")
+        yield* stats.stats(finalA.id)
+
+        assert.strictEqual(asked.times(), 1)
+      })
+    )
+  })
+
+  it.effect("should ask again after 10 minutes for a final game with no highlights yet", () => {
+    const asked = counted((game, times) =>
+      Effect.succeed(times === 1 ? GameStats.empty(game) : withHighlight(game))
+    )
+    return TestHub.withStats({ stats: asked.stats }, (frames) =>
+      Effect.gen(function* () {
+        yield* listed(frames, [finalA])
+        const stats = yield* Stats
+        yield* stats.stats(finalA.id)
+
+        yield* TestClock.adjust("10 minutes")
+        const later = yield* stats.stats(finalA.id)
+
+        assert.deepStrictEqual(later.highlights.length, 1)
+      })
+    )
+  })
+
+  it.effect("should not ask again after 10 minutes for a final game with highlights", () => {
+    const asked = counted((game) => Effect.succeed(withHighlight(game)))
+    return TestHub.withStats({ stats: asked.stats }, (frames) =>
+      Effect.gen(function* () {
+        yield* listed(frames, [finalA])
+        const stats = yield* Stats
+        yield* stats.stats(finalA.id)
+
+        yield* TestClock.adjust("10 minutes")
         yield* stats.stats(finalA.id)
 
         assert.strictEqual(asked.times(), 1)
