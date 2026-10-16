@@ -3,7 +3,6 @@ import { Fragment, useEffect, useRef } from "react"
 import { DisplayInput } from "../display/Display.ts"
 import * as DisplayState from "../display/DisplayState.ts"
 import { GameStatus } from "../game/GameStatus.tsx"
-import { MomentBadge } from "../game/MomentBadge.tsx"
 import { Score } from "../game/Score.tsx"
 import * as DisplayScreen from "../screen/DisplayScreen.ts"
 import { tileDrag } from "../screen/TileChrome.tsx"
@@ -84,7 +83,7 @@ export function SlateView() {
  * and clocks change length. A game on screen shows its tile and cannot be picked.
  */
 function Card(props: { card: StripCard; picked: boolean; onDrop: () => void }) {
-  const { game, place, classification } = props.card
+  const { game, place } = props.card
   const bench = Place.$is("Bench")(place) ? place.tile : undefined
   const networks = game?.networks()
 
@@ -112,7 +111,6 @@ function Card(props: { card: StripCard; picked: boolean; onDrop: () => void }) {
           <GameStatus game={game} className="truncate text-right text-[10px]" />
           <Score game={game} side="home" />
           <span className="flex min-w-0 items-center justify-end gap-1">
-            <MomentBadge classification={classification} />
             <span className="truncate font-sans text-[10px] text-muted-foreground" title={networks}>
               {networks}
             </span>

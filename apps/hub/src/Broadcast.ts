@@ -15,9 +15,8 @@ export class Broadcast extends Context.Service<
       const director = yield* Director
       const source = yield* Source
 
-      const classified = Stream.zipLatest(director.slate, director.classifications)
-      const messages = yield* Stream.zipLatest(settled(classified), Stream.tick("30 seconds")).pipe(
-        Stream.mapEffect(([[slate, classifiedNow]]) =>
+      const messages = yield* Stream.zipLatest(settled(director.slate), Stream.tick("30 seconds")).pipe(
+        Stream.mapEffect(([slate]) =>
           Effect.gen(function* () {
             const availabilityOf = yield* source.availability
             const now = yield* DateTime.now
@@ -25,17 +24,10 @@ export class Broadcast extends Context.Service<
             const availability = Record.fromEntries(
               slate.games.map(({ snapshot }) => [snapshot.id, availabilityOf(snapshot, now)] as const)
             )
-            const classifications = Record.fromEntries(
-              slate.games.flatMap(({ snapshot }) => {
-                const classification = classifiedNow.get(snapshot.id)
-                return classification === undefined ? [] : [[snapshot.id, classification] as const]
-              })
-            )
             return {
               _tag: "SlateChanged",
               slate: slate.recent(),
-              availability,
-              classifications
+              availability
             } satisfies SlateChanged
           })
         ),

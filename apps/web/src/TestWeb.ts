@@ -1,7 +1,6 @@
 import type { DisplayId } from "@sportal/api/DisplayId"
 import { LiveMessageJson } from "@sportal/api/LiveMessage"
 import type { ChannelAvailability } from "@sportal/domain/Channel"
-import type { Classification } from "@sportal/domain/Classification"
 import { Game, GameId } from "@sportal/domain/Game"
 import { Slate } from "@sportal/domain/Slate"
 import { snapshot } from "@sportal/domain/TestGame"
@@ -140,26 +139,19 @@ export class FakeEventSource {
 }
 
 /**
- * A slate message's `data`, as the Hub sends it: the slate of `entries`' games, each one's availability, and the
- * classification of each that has one.
+ * A slate message's `data`, as the Hub sends it: the slate of `entries`' games and each one's availability.
  */
 export function slateMessage(
   entries: ReadonlyArray<{
     game: Game
     availability: ReadonlyArray<ChannelAvailability>
-    classification?: Classification
   }>
 ) {
   const slate = new Slate({ games: entries.map(({ game }) => game) })
   const availability = Record.fromEntries(
     entries.map(({ game, availability }) => [game.snapshot.id, availability] as const)
   )
-  const classifications = Record.fromEntries(
-    entries.flatMap(({ game, classification }) =>
-      classification === undefined ? [] : [[game.snapshot.id, classification] as const]
-    )
-  )
-  return encodeLiveMessage({ _tag: "SlateChanged", slate, availability, classifications })
+  return encodeLiveMessage({ _tag: "SlateChanged", slate, availability })
 }
 
 /** The first value of `atom` that `predicate` holds for. */

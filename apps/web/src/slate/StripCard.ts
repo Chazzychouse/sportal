@@ -1,8 +1,6 @@
-import type { SlateChanged } from "@sportal/api/LiveMessage"
-import type { Classification } from "@sportal/domain/Classification"
 import { type GameId, GameSnapshot } from "@sportal/domain/Game"
 import type { Slate } from "@sportal/domain/Slate"
-import { Array as Arr, Data, Option, Order } from "effect"
+import { Array as Arr, Data, Option } from "effect"
 import type { Screen } from "../screen/Screen.ts"
 
 /** Where a strip card's game is: in a slot on screen, or on the bench at a tile. */
@@ -18,18 +16,13 @@ export class StripCard extends Data.Class<{
   readonly game: GameSnapshot | undefined
   readonly place: Place | undefined
   readonly section: "Bench" | "Live" | "Next" | "Final"
-  readonly classification: Classification | undefined
 }> {
   /**
-   * The strip's cards, in order: the bench, then the slate live by score (highest first), upcoming, and over. A
+   * The strip's cards, in order: the bench, then the slate live, upcoming, and over, in watch order. A
    * benched game shows once, on the bench, even when it has left the slate. A game on screen keeps its place in the
    * slate, marked with its slot.
    */
-  static of(
-    screen: Screen,
-    slate: Slate,
-    classifications: SlateChanged["classifications"]
-  ): ReadonlyArray<StripCard> {
+  static of(screen: Screen, slate: Slate): ReadonlyArray<StripCard> {
     const benched = screen.benched()
     const bench = benched.map(({ tile, game }) => {
       const snapshot = Option.getOrUndefined(Option.map(slate.gameOf(game), (found) => found.snapshot))
@@ -37,8 +30,7 @@ export class StripCard extends Data.Class<{
         id: game,
         game: snapshot,
         place: Place.Bench({ tile }),
-        section: "Bench",
-        classification: classifications[game]
+        section: "Bench"
       })
     })
     const rest = slate.games
@@ -48,10 +40,8 @@ export class StripCard extends Data.Class<{
       .map((game) => {
         const slot = screen.slotOf(game.id)
         const place = slot === undefined ? undefined : Place.Slot({ slot })
-        const classification = classifications[game.id]
-        return new StripCard({ id: game.id, game, place, section: sections[game.progress()], classification })
+        return new StripCard({ id: game.id, game, place, section: sections[game.progress()] })
       })
-      .toSorted(liveByScore)
     return [...bench, ...rest]
   }
 
@@ -83,8 +73,3 @@ export class StripCard extends Data.Class<{
 }
 
 const sections = { live: "Live", upcoming: "Next", over: "Final" } as const
-
-// Live cards by score, highest first; the sort is stable, so every other card keeps the watch order.
-const liveByScore = Order.mapInput(Order.flip(Order.Number), (card: StripCard) =>
-  card.section === "Live" ? (card.classification?.score ?? 0) : 0
-)

@@ -151,24 +151,6 @@ export class GameSnapshot extends Schema.Class<GameSnapshot>("sportal/GameSnapsh
     return this.period >= 5
   }
 
-  /** The points between the two teams, whoever leads. */
-  margin(): number {
-    return Math.abs(this.home.score - this.away.score)
-  }
-
-  /** How much of regulation has been played, from 0 before the first snap to 1 at its end; overtime is 1. */
-  timePlayed(): number {
-    if (this.inOvertime()) return 1
-    const played = (Math.max(1, this.period) - 1) * quarterSeconds + (quarterSeconds - this.secondsLeft())
-    return Math.min(1, Math.max(0, played / (4 * quarterSeconds)))
-  }
-
-  /** The fourth quarter with five minutes or less left, or any overtime, with the game within one score. */
-  inCrunchTime(): boolean {
-    const late = this.inOvertime() || (this.period === 4 && this.secondsLeft() <= crunchSeconds)
-    return late && this.margin() <= oneScore
-  }
-
   /** Whether the game has a score worth showing: it is being played or is final. */
   scored(): boolean {
     return this.progress() === "live" || this.status === "final"
@@ -303,9 +285,3 @@ const gameTimeRank = { upcoming: 0, live: 1, over: 2 } as const
 
 /** Seconds in a quarter, college and NFL alike. */
 const quarterSeconds = 15 * 60
-
-/** Seconds left in the fourth quarter at which a close game is in crunch time. */
-const crunchSeconds = 5 * 60
-
-/** The most points one possession can score: a touchdown and a two-point try. */
-const oneScore = 8

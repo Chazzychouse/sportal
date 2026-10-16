@@ -65,7 +65,7 @@ export const display = Atom.family((id: DisplayId) =>
       if (!Followed.$is("Reported")(seen)) return
       const { screen } = seen.report
       const live = ctx.get(LiveStream.live)
-      const cards = StripCard.of(screen, live.slate, live.classifications)
+      const cards = StripCard.of(screen, live.slate)
       const step = ctx.get(kept(id)).apply(input, screen, cards)
       ctx.set(kept(id), step.display)
       for (const command of step.commands) ctx.set(send(id), { _tag: "Commanded", command })

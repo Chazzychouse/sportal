@@ -358,7 +358,7 @@ describe("Display#press", () => {
 
   it("should move the pick forward with StepPick as StripCard.nextPick does", () => {
     const screen = TestWeb.withTiles(["soon", undefined, undefined, undefined, "done"])
-    const cards = StripCard.of(screen, TestWeb.slate, {})
+    const cards = StripCard.of(screen, TestWeb.slate)
 
     const { display, commands } = press(Display.initial, { _tag: "StepPick", step: 1 }, screen)
 
@@ -368,7 +368,7 @@ describe("Display#press", () => {
 
   it("should move the pick back with StepPick as StripCard.nextPick does", () => {
     const screen = TestWeb.withTiles(["soon", undefined, undefined, undefined, "done"])
-    const cards = StripCard.of(screen, TestWeb.slate, {})
+    const cards = StripCard.of(screen, TestWeb.slate)
     const first = press(Display.initial, { _tag: "StepPick", step: 1 }, screen).display
 
     const { display } = press(first, { _tag: "StepPick", step: -1 }, screen)
@@ -580,16 +580,16 @@ describe("Display#apply", () => {
 })
 
 function press(display: Display, hotkey: Parameters<Display["press"]>[0], screen: Screen) {
-  return display.press(hotkey, screen, StripCard.of(screen, TestWeb.slate, {}))
+  return display.press(hotkey, screen, StripCard.of(screen, TestWeb.slate))
 }
 
 function apply(display: Display, input: DisplayInput, screen: Screen) {
-  return display.apply(input, screen, StripCard.of(screen, TestWeb.slate, {}))
+  return display.apply(input, screen, StripCard.of(screen, TestWeb.slate))
 }
 
 /** The strip card at `index` on `screen`; a test that asks for one past the strip fails here. */
 function cardOf(screen: Screen, index: number) {
-  const card = StripCard.of(screen, TestWeb.slate, {})[index]
+  const card = StripCard.of(screen, TestWeb.slate)[index]
   if (card === undefined) throw new Error(`no strip card at ${index}`)
   return card
 }

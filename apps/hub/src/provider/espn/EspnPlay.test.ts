@@ -9,7 +9,7 @@ import { Delivery } from "../Provider.ts"
 import * as EspnPlay from "./EspnPlay.ts"
 
 describe("EspnPlay.FootballPlay", () => {
-  it.effect("should read a rush, with its text and win probability", () =>
+  it.effect("should read a rush, with its text", () =>
     Effect.gen(function* () {
       const play = yield* decodePlay(entity("40187297063"))
 
@@ -26,7 +26,6 @@ describe("EspnPlay.FootballPlay", () => {
           awayScore: 0,
           start: { down: 1, distance: 10, yardsToEndzone: 75, team: nfl("21") },
           end: { down: 2, distance: 8, yardsToEndzone: 73, team: nfl("21") },
-          homeWinProbability: 0.3675,
           team: nfl("21"),
           yards: 2,
           touchdown: false
@@ -76,7 +75,7 @@ describe("EspnPlay.FootballPlay", () => {
     Effect.gen(function* () {
       const play = yield* decodePlay(entity("401872966237"))
 
-      const { text: _text, homeWinProbability: _probability, ...rest } = play
+      const { text: _text, ...rest } = play
       assert.deepStrictEqual(
         { ...rest },
         {

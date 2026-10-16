@@ -23,10 +23,10 @@ export const display: Atom.Writable<Display, DisplayInput> = Atom.writable(
   }
 ).pipe(Atom.keepAlive)
 
-/** The slate strip's cards: this Screen's bench, then the live slate, its Live games by score. */
+/** The slate strip's cards: this Screen's bench, then the live slate, in watch order. */
 export const cards: Atom.Atom<ReadonlyArray<StripCard>> = Atom.make((get) => {
   const live = get(LiveStream.live)
-  return StripCard.of(get(DisplayScreen.screen), live.slate, live.classifications)
+  return StripCard.of(get(DisplayScreen.screen), live.slate)
 })
 
 /** Whether this Display's window is full screen: in the shell the window, in a browser the page. */

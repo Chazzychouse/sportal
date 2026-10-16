@@ -177,20 +177,6 @@ describe("Broadcast", () => {
       )
     )
 
-    it.effect("should publish each listed game's classification, by its id", () =>
-      broadcasting((frames) =>
-        Effect.gen(function* () {
-          const listed = snapshot({ id: GameId.make("1"), status: "live", period: 1, clock: "10:00" })
-
-          const message = yield* publishedAfter(frames, [
-            Delivery.Listing({ league: "fbs", games: [listed] })
-          ])
-
-          assert.strictEqual(message.classifications[GameId.make("1")]?.moment._tag, "Live")
-        })
-      )
-    )
-
     it.effect("should publish every source's availability for each game, by its id", () =>
       broadcasting(
         (frames) =>

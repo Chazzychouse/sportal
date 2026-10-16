@@ -1,5 +1,5 @@
 import { assert, describe, it } from "@effect/vitest"
-import { Option, Order, Schema } from "effect"
+import { Order, Schema } from "effect"
 import {
   Completion,
   ExtraPoint,
@@ -21,7 +21,7 @@ import {
   Timeout,
   TwoPointTry
 } from "./Play.ts"
-import { completion, play, playFields, team } from "./TestGame.ts"
+import { team } from "./TestGame.ts"
 
 const home = team("HOME").id
 const away = team("AWAY").id
@@ -37,8 +37,7 @@ const fields = {
   homeScore: 0,
   awayScore: 0,
   start: { down: 1, distance: 10, yardsToEndzone: 75, team: home },
-  end: { down: 2, distance: 6, yardsToEndzone: 71, team: home },
-  homeWinProbability: 0.52
+  end: { down: 2, distance: 6, yardsToEndzone: 71, team: home }
 }
 const gained = { ...fields, team: home, yards: 4 }
 
@@ -131,185 +130,5 @@ describe("FootballPlay.lostYards", () => {
     const stoppage = new Stoppage({ ...fields, kind: "officialTimeout" })
 
     assert.isFalse(Play.lostYards(stoppage))
-  })
-})
-
-describe("FootballPlay.bigPlay", () => {
-  it("should call a touchdown run a touchdown", () => {
-    const run = play({ yards: 3, touchdown: true, scoring: true })
-
-    assert.deepStrictEqual(Play.bigPlay(run), Option.some("touchdown"))
-  })
-
-  it("should call a 25-yard catch a long gain", () => {
-    const catch25 = completion({ yards: 25 })
-
-    assert.deepStrictEqual(Play.bigPlay(catch25), Option.some("longGain"))
-  })
-
-  it("should not call a 24-yard catch a big play", () => {
-    const catch24 = completion({ yards: 24 })
-
-    assert.deepStrictEqual(Play.bigPlay(catch24), Option.none())
-  })
-
-  it("should call any sack a sack", () => {
-    const sack = new Sack({ ...playFields, team: playFields.start.team, yards: -2, fumbleLost: false })
-
-    assert.deepStrictEqual(Play.bigPlay(sack), Option.some("sack"))
-  })
-
-  it("should call a strip sack a turnover", () => {
-    const sack = new Sack({ ...playFields, team: playFields.start.team, yards: -8, fumbleLost: true })
-
-    assert.deepStrictEqual(Play.bigPlay(sack), Option.some("turnover"))
-  })
-
-  it("should call an interception a turnover", () => {
-    const pick = new Interception({
-      ...playFields,
-      team: playFields.start.team,
-      yards: 0,
-      return: "returned"
-    })
-
-    assert.deepStrictEqual(Play.bigPlay(pick), Option.some("turnover"))
-  })
-
-  it("should call a pick-six a touchdown", () => {
-    const pick = new Interception({
-      ...playFields,
-      team: playFields.start.team,
-      yards: 0,
-      return: "touchdown"
-    })
-
-    assert.deepStrictEqual(Play.bigPlay(pick), Option.some("touchdown"))
-  })
-
-  it("should call a fumble the defense recovers a turnover", () => {
-    const fumble = new Fumble({ ...playFields, team: playFields.start.team, yards: 2, recovery: "opponent" })
-
-    assert.deepStrictEqual(Play.bigPlay(fumble), Option.some("turnover"))
-  })
-
-  it("should not call a fumble the offense recovers a big play", () => {
-    const fumble = new Fumble({ ...playFields, team: playFields.start.team, yards: 2, recovery: "own" })
-
-    assert.deepStrictEqual(Play.bigPlay(fumble), Option.none())
-  })
-
-  it("should call a kickoff returned past the receiving team's 45 a return", () => {
-    const kick = new Kickoff({
-      ...playFields,
-      yards: 60,
-      returnTouchdown: false,
-      end: { yardsToEndzone: 52, team: playFields.start.team }
-    })
-
-    assert.deepStrictEqual(Play.bigPlay(kick), Option.some("return"))
-  })
-
-  it("should not call a touchback a big play", () => {
-    const kick = new Kickoff({
-      ...playFields,
-      yards: 65,
-      returnTouchdown: false,
-      end: { yardsToEndzone: 75, team: playFields.start.team }
-    })
-
-    assert.deepStrictEqual(Play.bigPlay(kick), Option.none())
-  })
-
-  it("should call a punt returned for a touchdown a touchdown", () => {
-    const punt = new Punt({ ...playFields, yards: 45, return: "touchdown" })
-
-    assert.deepStrictEqual(Play.bigPlay(punt), Option.some("touchdown"))
-  })
-
-  it("should not call a punt nobody returned a big play, wherever it ended", () => {
-    const punt = new Punt({
-      ...playFields,
-      yards: 30,
-      return: "none",
-      end: { yardsToEndzone: 50, team: playFields.start.team }
-    })
-
-    assert.deepStrictEqual(Play.bigPlay(punt), Option.none())
-  })
-})
-
-describe("FootballPlay.changesPossession", () => {
-  it.each([
-    ["a punt", new Punt({ ...fields, team: home, yards: 40, return: "none" })],
-    ["an interception", new Interception({ ...fields, team: home, yards: 0, return: "none" })],
-    [
-      "a sack the defense recovers a fumble from",
-      new Sack({ ...fields, team: home, yards: -7, fumbleLost: true })
-    ],
-    [
-      "a fumble the other side recovers",
-      new Fumble({ ...fields, team: home, yards: 3, recovery: "opponent" })
-    ],
-    ["a missed field goal", new FieldGoal({ ...fields, team: home, yards: 0, result: "missed" })],
-    ["a blocked field goal", new FieldGoal({ ...fields, team: home, yards: 0, result: "blocked" })],
-    [
-      "a fourth-down run short of the line to gain",
-      new Rush({
-        ...fields,
-        start: { ...fields.start, down: 4, distance: 2 },
-        team: home,
-        yards: 1,
-        touchdown: false
-      })
-    ],
-    [
-      "a fourth-down incompletion",
-      new Incompletion({ ...fields, start: { ...fields.start, down: 4, distance: 5 }, team: home, yards: 0 })
-    ]
-  ])("should say %s changes possession", (_, given) => {
-    const changes = Play.changesPossession(given)
-
-    assert.isTrue(changes)
-  })
-
-  it.each([
-    ["a first-down run", play()],
-    ["a good field goal", new FieldGoal({ ...fields, team: home, yards: 0, result: "good" })],
-    ["a fumble its own side recovers", new Fumble({ ...fields, team: home, yards: 3, recovery: "own" })],
-    [
-      "a fourth-down run that gains the line to gain",
-      new Rush({
-        ...fields,
-        start: { ...fields.start, down: 4, distance: 2 },
-        team: home,
-        yards: 3,
-        touchdown: false
-      })
-    ]
-  ])("should say %s keeps possession", (_, given) => {
-    const changes = Play.changesPossession(given)
-
-    assert.isFalse(changes)
-  })
-})
-
-describe("FootballPlay.stopInText", () => {
-  it.each([
-    ["Smith rush for 3 yards. Jones was injured during the play.", "injury"],
-    ["Pass complete for 8 yards. Brown was shaken up on the play.", "injury"],
-    ["The ruling on the field was challenged by DAL.", "review"],
-    ["The play is under review.", "review"],
-    ["After further REPLAY, the ruling stands.", "review"]
-  ] as const)("should find %j a stop for %s", (text, stop) => {
-    const found = Play.stopInText(play({ text }))
-
-    assert.deepStrictEqual(found, Option.some(stop))
-  })
-
-  it("should find no stop in a play that names none", () => {
-    const found = Play.stopInText(play({ text: "Smith rush for 3 yards" }))
-
-    assert.isTrue(Option.isNone(found))
   })
 })

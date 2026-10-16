@@ -27,12 +27,10 @@ interface Live {
   readonly slate: Slate
   /** Each listed game's availability from every source, by its id. */
   readonly availability: SlateChanged["availability"]
-  /** Each listed game's classification, by its id. */
-  readonly classifications: SlateChanged["classifications"]
 }
 
 function initial(): Live {
-  return { connection: Connection.Connecting(), slate: Slate.empty, availability: {}, classifications: {} }
+  return { connection: Connection.Connecting(), slate: Slate.empty, availability: {} }
 }
 
 /** What `current` becomes on `event`; `current` itself when nothing changed, so nothing is published. */
@@ -57,12 +55,7 @@ function step(current: Live, event: ServerEvent): Effect.Effect<Live> {
 
 function received(live: Live, message: LiveMessage): Live {
   return LiveMessage.match(message, {
-    SlateChanged: ({ slate, availability, classifications }): Live => ({
-      ...live,
-      slate,
-      availability,
-      classifications
-    })
+    SlateChanged: ({ slate, availability }): Live => ({ ...live, slate, availability })
   })
 }
 

@@ -1,5 +1,4 @@
 import { useAtomSet } from "@effect/atom-react"
-import type { Classification } from "@sportal/domain/Classification"
 import type { GameSnapshot } from "@sportal/domain/Game"
 import { ArrowUpLeft, Shrink, SquareDashed, Volume2, VolumeX, X } from "lucide-react"
 import type { ReactNode } from "react"
@@ -8,7 +7,6 @@ import { cn } from "@/design/ClassName"
 import { DisplayInput } from "../display/Display.ts"
 import * as DisplayState from "../display/DisplayState.ts"
 import { GameStatus } from "../game/GameStatus.tsx"
-import { MomentBadge } from "../game/MomentBadge.tsx"
 import { Score } from "../game/Score.tsx"
 import { type Screen, Tile } from "./Screen.ts"
 import { TileAction } from "./TileAction.ts"
@@ -24,7 +22,6 @@ export function TileChrome(props: {
   tile: Tile
   game: GameSnapshot | undefined
   selected: boolean
-  classification: Classification | undefined
 }) {
   const input = useAtomSet(DisplayState.display)
   const { tile, slot } = props
@@ -76,7 +73,6 @@ export function TileChrome(props: {
               {props.game.scored() && <span className="text-muted-foreground">–</span>}
               <Score game={props.game} side="home" />
               <GameStatus game={props.game} className="ml-1.5 truncate text-[11px]" />
-              <MomentBadge classification={props.classification} className="ml-1" />
             </>
           )}
         </span>

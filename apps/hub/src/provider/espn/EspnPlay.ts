@@ -11,8 +11,7 @@ export function FootballPlay(league: LeagueId) {
       decode: SchemaGetter.transformEffect((entity) =>
         read(league, {
           ...entity,
-          caller: entity.participants?.find(({ type }) => type === "timeout_taker")?.team,
-          homeWinProbability: entity.probabilities?.winProbability?.homeWinPercentage
+          caller: entity.participants?.find(({ type }) => type === "timeout_taker")?.team
         })
       ),
       encode: SchemaGetter.forbidden(() => "A Play cannot be encoded back to an ESPN play entity")
@@ -23,15 +22,12 @@ export function FootballPlay(league: LeagueId) {
 /**
  * The `Play` of `league` that an ESPN play says, as either of ESPN's feeds spells it: the case and outcome its type
  * reads as (`Other` for a type the table does not know), the fields both feeds spell alike, its teams by ESPN's own
- * ids, and its win probability. A timeout's team is its `caller`: ESPN's own `team` on one is the team with the ball.
+ * ids. A timeout's team is its `caller`: ESPN's own `team` on one is the team with the ball.
  * It fails when its start spot has no team.
  */
 const read = Effect.fnUntraced(function* (
   league: LeagueId,
-  play: typeof PlayEntity.Type & {
-    readonly caller?: string | undefined
-    readonly homeWinProbability?: number | undefined
-  }
+  play: typeof PlayEntity.Type & { readonly caller?: string | undefined }
 ) {
   const outcome = outcomeOf(play.type)
   // ESPN reports down -1, with a meaningless distance, when no down is being played (after a score, at a stoppage).
@@ -53,8 +49,7 @@ const read = Effect.fnUntraced(function* (
     homeScore: play.homeScore,
     awayScore: play.awayScore,
     start: spot(play.start),
-    end: spot(play.end),
-    ...(play.homeWinProbability === undefined ? {} : { homeWinProbability: play.homeWinProbability })
+    end: spot(play.end)
   }
 
   const wire = Play.gainsYards(outcome)

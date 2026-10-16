@@ -187,7 +187,6 @@ function touchdown() {
     awayScore: 0,
     start: { down: 1, distance: 10, yardsToEndzone: 1, team: home },
     end: { team: away },
-    homeWinProbability: 0.62,
     team: home,
     yards: 1,
     touchdown: true

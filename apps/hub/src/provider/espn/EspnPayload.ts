@@ -112,10 +112,5 @@ export const PlayEntity = Schema.Struct({
   team: Schema.optional(TeamRef),
   participants: Schema.optional(
     Schema.Array(Schema.Struct({ type: Schema.optional(Schema.String), team: Schema.optional(TeamRef) }))
-  ),
-  probabilities: Schema.optional(
-    Schema.Struct({
-      winProbability: Schema.optional(Schema.Struct({ homeWinPercentage: Schema.Finite }))
-    })
   )
 })

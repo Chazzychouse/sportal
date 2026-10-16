@@ -185,7 +185,7 @@ function takeN<A>(queue: Queue.Queue<A>, n: number) {
 
 /** The strip card of the test slate's game `id`, on a Quad with every tile empty. */
 function cardFor(id: GameId) {
-  const card = StripCard.of(TestWeb.withTiles([]), TestWeb.slate, {}).find((each) => each.id === id)
+  const card = StripCard.of(TestWeb.withTiles([]), TestWeb.slate).find((each) => each.id === id)
   if (card === undefined) throw new Error(`No card for ${id}`)
   return card
 }

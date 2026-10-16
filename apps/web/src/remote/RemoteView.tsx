@@ -34,10 +34,10 @@ export function RemoteView(props: { id: DisplayId }) {
   return (
     <div className="min-h-dvh bg-background pb-[env(safe-area-inset-bottom)]">
       {Followed.$match(followed, {
-        Connecting: () => <Waiting cards={StripCard.of(Screen.initial, live.slate, live.classifications)} />,
-        Offline: () => <Waiting cards={StripCard.of(Screen.initial, live.slate, live.classifications)} />,
+        Connecting: () => <Waiting cards={StripCard.of(Screen.initial, live.slate)} />,
+        Offline: () => <Waiting cards={StripCard.of(Screen.initial, live.slate)} />,
         Reported: ({ report }) => {
-          const cards = StripCard.of(report.screen, live.slate, live.classifications)
+          const cards = StripCard.of(report.screen, live.slate)
           return (
             <>
               <div className="sticky top-0 z-10 flex flex-col gap-2 border-b bg-background/95 px-3 pt-[max(0.75rem,env(safe-area-inset-top))] pb-3 backdrop-blur">
