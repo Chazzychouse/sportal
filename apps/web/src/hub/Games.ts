@@ -16,6 +16,17 @@ export const today = LiveStream.of(
   (_, answer) => Option.some(answer)
 ).pipe(Atom.keepAlive)
 
+/** Today's games by id, from `today`: none before the first answer. What the guide's cards read. */
+export const byId: Atom.Atom<ReadonlyMap<GameId, ListedGame>> = Atom.make(
+  (get) =>
+    new Map(
+      Option.match(get(today).value, {
+        onNone: () => [],
+        onSome: ({ games }) => games.map((listed) => [listed.snapshot.id, listed] as const)
+      })
+    )
+)
+
 /** Game `id` with its availability, live: none before the first answer. Asked of the Hub only while read. */
 export const game = Atom.family((id: GameId) =>
   LiveStream.of(

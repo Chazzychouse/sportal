@@ -1,7 +1,7 @@
 import { Hotkey } from "@sportal/api/Hotkey"
 import { TileKey } from "@sportal/api/TileKey"
 import type { GameId } from "@sportal/domain/Game"
-import type { LeagueId } from "@sportal/domain/League"
+import { League, type LeagueId } from "@sportal/domain/League"
 import { Data, Equal, Option } from "effect"
 import { GuideItem } from "../guide/GuideItem.ts"
 import type { GuideShelves } from "../guide/GuideShelves.ts"
@@ -40,6 +40,12 @@ export class Display extends Data.Class<{
     lastEntry: "AllLive"
   })
 
+  /** How the guide names an entry: "All live", the league's name, or "Custom". */
+  static entryName(entry: GuideEntry): string {
+    if (entry === "AllLive") return "All live"
+    return entry === "Custom" ? "Custom" : League.of(entry).name
+  }
+
   /** The selected slot on this Screen: the last slot when the layout now has fewer. */
   selectedOn(screen: Screen): number {
     return Math.min(this.selected, screen.onScreen().length - 1)
@@ -52,6 +58,11 @@ export class Display extends Data.Class<{
   interactingOn(screen: Screen): TileKey | undefined {
     const tile = screen.onScreen()[this.selectedOn(screen)]
     return Tile.guards.StreamTile(tile) && Tile.key(tile) === this.interacting ? this.interacting : undefined
+  }
+
+  /** The entry the guide opens on with these shelves: the one last shown while the guide lists it, else All live. */
+  entryOn(shelves: GuideShelves): GuideEntry {
+    return shelves.entries.includes(this.lastEntry) ? this.lastEntry : "AllLive"
   }
 
   /** What an input does on this Screen, with the guide's shelves as they are now. */
@@ -154,8 +165,7 @@ export class Display extends Data.Class<{
   private guideUp(shelves: GuideShelves): Display {
     const overlay = this.overlay
     if (Overlay.$is("Guide")(overlay)) return this.relevel(overlay, "Full", shelves)
-    const entry = shelves.entries.includes(this.lastEntry) ? this.lastEntry : "AllLive"
-    return this.guide("Ribbon", entry, start, shelves)
+    return this.guide("Ribbon", this.entryOn(shelves), start, shelves)
   }
 
   /** Esc: the full guide goes back to the ribbon; the ribbon or any other overlay closes; with none open, it unsolos. */

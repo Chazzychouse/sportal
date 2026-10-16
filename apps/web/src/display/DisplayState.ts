@@ -23,6 +23,15 @@ export const display: Atom.Writable<Display, DisplayInput> = Atom.writable(
   }
 ).pipe(Atom.keepAlive)
 
+/**
+ * The guide's entries and shelves over today's games: only All live, with nothing on it, before the first answer.
+ * What the fold and the guide read.
+ */
+export const shelves: Atom.Atom<GuideShelves.GuideShelves> = Atom.make((get) => {
+  const games = Option.match(get(Games.today).value, { onNone: () => [], onSome: ({ games }) => games })
+  return GuideShelves.guideShelves(games)
+})
+
 /** Whether this Display's window is full screen: in the shell the window, in a browser the page. */
 export const fullScreen: Atom.Atom<boolean> = runtime
   .atom(
@@ -100,12 +109,6 @@ export const guideOpenSync = runtime.atom((get) =>
 )
 
 const kept = Atom.make(Display.initial).pipe(Atom.keepAlive)
-
-/** The guide's shelves over today's games: only All live, with nothing on it, before the first answer. */
-const shelves: Atom.Atom<GuideShelves.GuideShelves> = Atom.make((get) => {
-  const games = Option.match(get(Games.today).value, { onNone: () => [], onSome: ({ games }) => games })
-  return GuideShelves.guideShelves(games)
-})
 
 const guideOpen = Atom.make((get) => get(display).shows("Guide"))
 

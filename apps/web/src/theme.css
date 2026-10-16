@@ -43,6 +43,51 @@
   --well: oklch(0.08 0.003 260);
 }
 
+/*
+ * Glass, the default: translucent blurred surfaces, soft rounded cards with full team names and a thin edge in the two
+ * teams' colors; the focused card lifts and grows.
+ */
+:root[data-theme="glass"] {
+  --background: oklch(0.135 0.008 262);
+  --card: oklch(0.2 0.008 262 / 0.82);
+  --popover: oklch(0.2 0.008 262 / 0.94);
+  --border: oklch(1 0 0 / 0.09);
+
+  --guide: oklch(0.15 0.008 262 / 0.8);
+  --guide-rail: oklch(0.12 0.008 262 / 0.55);
+  --guide-blur: 18px;
+  --card-surface: linear-gradient(180deg, oklch(1 0 0 / 0.07), oklch(1 0 0 / 0.025));
+  --card-edge: oklch(1 0 0 / 0.08);
+  --card-footer: transparent;
+  --card-radius: 14px;
+  --focus-outline: oklch(1 0 0 / 0.35);
+  --focus-outline-width: 1px;
+  --focus-offset: 0px;
+  --focus-scale: 1.04;
+  --focus-shadow: 0 10px 30px oklch(0 0 0 / 0.5);
+}
+
+/*
+ * Team: opaque graphite; a card is split into two halves painted in each team's color, with big logos and scores over a
+ * dark footer; focus is a white outline.
+ */
+:root[data-theme="team"] {
+  --card: oklch(0.18 0.004 260);
+
+  --guide: oklch(0.13 0.004 260 / 0.97);
+  --guide-rail: oklch(0.11 0.004 260);
+  --guide-blur: 0px;
+  --card-surface: oklch(0.19 0.005 260);
+  --card-edge: transparent;
+  --card-footer: oklch(0.14 0.004 260);
+  --card-radius: 10px;
+  --focus-outline: oklch(1 0 0);
+  --focus-outline-width: 3px;
+  --focus-offset: 2px;
+  --focus-scale: 1;
+  --focus-shadow: none;
+}
+
 @theme inline {
   --font-sans: "Barlow", ui-sans-serif, sans-serif;
   --font-display: "Barlow Condensed", "Barlow", ui-sans-serif, sans-serif;
@@ -75,6 +120,11 @@
   --color-live: var(--live);
   --color-warn: var(--warn);
   --color-well: var(--well);
+  --color-guide: var(--guide);
+  --color-guide-rail: var(--guide-rail);
+  --color-card-edge: var(--card-edge);
+  --color-card-footer: var(--card-footer);
+  --radius-card: var(--card-radius);
 }
 
 @layer base {
@@ -96,6 +146,24 @@
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+}
+
+/* A guide card, chip or rail entry: the theme says how the one with focus shows. Focus moves animate, unless reduced. */
+@utility guide-focus {
+  outline: var(--focus-outline-width, 2px) solid transparent;
+  outline-offset: var(--focus-offset, 2px);
+  transition:
+    transform 100ms ease-out,
+    box-shadow 100ms ease-out,
+    outline-color 100ms ease-out;
+  &[data-focused="true"] {
+    outline-color: var(--focus-outline, var(--ring));
+    transform: scale(var(--focus-scale, 1));
+    box-shadow: var(--focus-shadow, none);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    transition: none;
+  }
 }
 
 /* A play's arrow on the field, drawn from its start: the offset runs over a path of length 1 (see `Field`). */

@@ -27,6 +27,7 @@ export function CommandPalette(props: { open: boolean; onOpenChange: (open: bool
   const toggleFullScreen = useAtomSet(DisplayState.toggleFullScreen)
   const display = useAtomValue(DisplayState.display)
   const screen = useAtomValue(DisplayScreen.screen)
+  const shelves = useAtomValue(DisplayState.shelves)
   const { value } = useAtomValue(Games.today)
   const selected = display.selectedOn(screen)
   const run = (command: ScreenCommand) => {
@@ -110,6 +111,13 @@ export function CommandPalette(props: { open: boolean; onOpenChange: (open: bool
           ))}
         </CommandGroup>
         <CommandGroup heading="Display">
+          <CommandItem
+            value="guide games league tv"
+            onSelect={() => input(DisplayInput.GuideOpened({ entry: display.entryOn(shelves) }))}
+          >
+            Guide
+            <CommandShortcut>G</CommandShortcut>
+          </CommandItem>
           {Option.isSome(screen.solo) && (
             <CommandItem value="unsolo" onSelect={() => run({ _tag: "Unsolo" })}>
               Unsolo
