@@ -4,13 +4,17 @@ import type { TileKey } from "@sportal/api/TileKey"
 import { Context, Effect, Layer, Option, Queue, Ref, Stream } from "effect"
 
 /**
- * The web UI's edge to its window and to the desktop shell: hotkeys (the guide's while it is open), full screen, presses
- * on a video, and the guide the shell reads, and the calls that place videos and ask for a guide. The one reader of `window.sportalShell`.
+ * The web UI's edge to its window and to the desktop shell: hotkeys (the guide's while it is open), full screen,
+ * presses on a video, and the guide the shell reads, and the calls that place videos and ask for a guide. The one
+ * reader of `window.sportalShell`.
  */
 export class Shell extends Context.Service<
   Shell,
   {
-    /** Hotkeys pressed on the page (not repeats, not typed into a field, not already handled; Ctrl+K always) and in a focused stream view. */
+    /**
+     * Hotkeys pressed on the page (not repeats, not typed into a field, not already handled; Ctrl+K always) and in a
+     * focused stream view.
+     */
     readonly hotkeys: Stream.Stream<Hotkey>
     /** Whether the window is full screen, each time it changes. */
     readonly fullScreen: Stream.Stream<boolean>
@@ -27,8 +31,8 @@ export class Shell extends Context.Service<
     /** Hides exactly these tiles' videos and shows the rest. */
     readonly setHidden: (keys: ReadonlyArray<TileKey>) => Effect.Effect<void>
     /**
-     * Whether the guide is open. While it is, the arrows, Enter, the brackets and I are the guide's hotkeys, on the
-     * page and in a focused stream view; while it is closed, the page and the players keep them.
+     * Whether the guide is open. While it is, the arrows, Enter, the brackets, I, Delete and Backspace are the guide's
+     * hotkeys, on the page and in a focused stream view; while it is closed, the page and the players keep them.
      */
     readonly setGuideOpen: (on: boolean) => Effect.Effect<void>
     /** Asks the shell to read the guide now. */

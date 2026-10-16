@@ -8,6 +8,7 @@ import type { RemoteMessage } from "@sportal/api/RemoteMessage"
 import type { ChannelAvailability } from "@sportal/domain/Channel"
 import { GameId, type PlaysChange } from "@sportal/domain/Game"
 import type { GameStats } from "@sportal/domain/GameStats"
+import type { LeagueId } from "@sportal/domain/League"
 import { snapshot } from "@sportal/domain/TestGame"
 import { DateTime, Effect, Layer, PubSub, Queue, Result, Schema, Stream, SubscriptionRef } from "effect"
 import { Atom, AtomRegistry } from "effect/reactivity"
@@ -270,7 +271,8 @@ export const withShell = Effect.fn("TestWeb.withShell")(function* (
     HubClient.layerTest({
       sendGuide: (guide) => Effect.asVoid(Queue.offer(calls, { _tag: "SendGuide", guide })),
       report: (id, report) => Effect.asVoid(Queue.offer(calls, { _tag: "Report", id, report })),
-      send: (id, input) => Effect.asVoid(Queue.offer(calls, { _tag: "Send", id, input }))
+      send: (id, input) => Effect.asVoid(Queue.offer(calls, { _tag: "Send", id, input })),
+      highlights: (league, date) => Effect.as(Queue.offer(calls, { _tag: "Highlights", league, date }), [])
     }),
     hub.layer
   )
@@ -283,6 +285,7 @@ export type TestWebCall =
   | { readonly _tag: "SendGuide"; readonly guide: string }
   | { readonly _tag: "Report"; readonly id: DisplayId; readonly report: Schema.Json }
   | { readonly _tag: "Send"; readonly id: DisplayId; readonly input: Schema.Json }
+  | { readonly _tag: "Highlights"; readonly league: LeagueId; readonly date: CalendarDate }
 
 /** Keeps `screen` in this browser, as the Display would have before a reload. */
 export const keep = Effect.fn("TestWeb.keep")(function* (screen: Screen) {

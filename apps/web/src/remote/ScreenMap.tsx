@@ -10,9 +10,9 @@ import { type Screen, type ScreenCommand, Tile } from "../screen/Screen.ts"
 import { TileAction } from "../screen/TileAction.ts"
 
 /**
- * The Screen's layout in miniature, every tile shown even while one is soloed; a custom tile by its name, a stats tile
- * as "Stats" and its game. Tapping a tile selects it; tapping the selected one opens its actions. "Swap with…" waits
- * for the next tile tapped.
+ * The Screen's layout in miniature, every tile shown even while one is soloed; a custom or clip tile by its name, a
+ * stats tile as "Stats" and its game. Tapping a tile selects it; tapping the selected one opens its actions. "Swap
+ * with…" waits for the next tile tapped.
  */
 export function ScreenMap(props: {
   screen: Screen
@@ -28,20 +28,15 @@ export function ScreenMap(props: {
     const game = at === undefined ? undefined : Tile.game(at)
     return game === undefined ? undefined : props.games.find(({ snapshot }) => snapshot.id === game)?.snapshot
   }
-  const titleIn = (slot: number) => {
-    const at = tiles[slot]
-    if (at !== undefined && Tile.guards.CustomTile(at)) return at.name
-    if (at !== undefined && Tile.guards.ClipTile(at)) return at.highlight.headline
-    return undefined
-  }
   const nameIn = (slot: number) => {
     const at = tiles[slot]
-    const title = titleIn(slot)
-    if (title !== undefined) return title
-    const scoreline = gameIn(slot)?.scoreline()
-    return at !== undefined && Tile.guards.StatsTile(at) && scoreline !== undefined
-      ? `Stats ${scoreline}`
-      : scoreline
+    return at === undefined ? undefined : Tile.label(at, gameIn(slot))
+  }
+  const titleIn = (slot: number) => {
+    const at = tiles[slot]
+    return at !== undefined && (Tile.guards.CustomTile(at) || Tile.guards.ClipTile(at))
+      ? nameIn(slot)
+      : undefined
   }
   const run = (command: ScreenCommand) => {
     props.onCommand(command)
@@ -108,9 +103,6 @@ export function ScreenMap(props: {
                     {soloed && <span className="label-caps text-[9px] text-on-air">Solo</span>}
                     {at !== undefined && Tile.guards.StatsTile(at) && (
                       <span className="label-caps text-[9px] text-muted-foreground">Stats</span>
-                    )}
-                    {at !== undefined && Tile.guards.ClipTile(at) && (
-                      <span className="label-caps text-[9px] text-muted-foreground">Replay</span>
                     )}
                   </span>
                   {title !== undefined ? (

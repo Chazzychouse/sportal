@@ -78,6 +78,18 @@ describe("EspnSummary.decode", () => {
         assert.isUndefined(stats.winProbability)
       })
     )
+
+    it.effect("should leave out a win probability point outside 0 to 1", () =>
+      Effect.gen(function* () {
+        const body = withFirstOf(TestHub.recordedSummary("nfl-summary-401872971"), "winprobability", {
+          homeWinPercentage: 1.5
+        })
+
+        const stats = yield* EspnSummary.decode("nfl", GameId.make("401872971"), body)
+
+        assert.strictEqual(stats.winProbability?.length, 182)
+      })
+    )
   })
 
   describe("an FBS summary", () => {
@@ -107,6 +119,30 @@ describe("EspnSummary.decode", () => {
               "https://espnmedia-cdn.akamaized.net/espn/media/common/wsc/2026/1011/ebdf8121-464c-46cf-a01a-963fbe7523ba/ebdf8121-464c-46cf-a01a-963fbe7523ba.jpg"
           })
         )
+      })
+    )
+
+    it.effect("should leave out a video whose duration is not whole seconds", () =>
+      Effect.gen(function* () {
+        const body = withFirstOf(TestHub.recordedSummary("fbs-summary-401856712"), "videos", {
+          duration: 33.5
+        })
+
+        const stats = yield* EspnSummary.decode("fbs", GameId.make("401856712"), body)
+
+        assert.strictEqual(stats.highlights.length, 12)
+      })
+    )
+
+    it.effect("should leave out a video with no duration", () =>
+      Effect.gen(function* () {
+        const body = withFirstOf(TestHub.recordedSummary("fbs-summary-401856712"), "videos", {
+          duration: undefined
+        })
+
+        const stats = yield* EspnSummary.decode("fbs", GameId.make("401856712"), body)
+
+        assert.strictEqual(stats.highlights.length, 12)
       })
     )
   })
@@ -217,4 +253,19 @@ const nba = EspnSummary.decode(
 function withoutKey(body: string, key: string): string {
   const summary = Schema.decodeSync(Schema.fromJsonString(Schema.Record(Schema.String, Schema.Json)))(body)
   return JSON.stringify(Object.fromEntries(Object.entries(summary).filter(([each]) => each !== key)))
+}
+
+/**
+ * `body`, a JSON object, with `fields` over the first entry of its array `key`; a field given as undefined is dropped.
+ */
+function withFirstOf(
+  body: string,
+  key: string,
+  fields: Readonly<Record<string, Schema.Json | undefined>>
+): string {
+  const summary = Schema.decodeSync(Schema.fromJsonString(Schema.Record(Schema.String, Schema.Json)))(body)
+  const [first, ...rest] = Schema.decodeUnknownSync(Schema.Array(Schema.Record(Schema.String, Schema.Json)))(
+    summary[key]
+  )
+  return JSON.stringify({ ...summary, [key]: [{ ...first, ...fields }, ...rest] })
 }

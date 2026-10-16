@@ -1,13 +1,14 @@
 import { TileKey } from "@sportal/api/TileKey"
 import { Channel, ChannelAvailability, SourceName, StreamLocator } from "@sportal/domain/Channel"
-import { GameId } from "@sportal/domain/Game"
+import { GameId, type GameSnapshot } from "@sportal/domain/Game"
 import { Highlight } from "@sportal/domain/Highlight"
 import { Array as Arr, Option, Record as Rec, Result, Schema } from "effect"
 import { CustomStreamId } from "../custom/CustomStream.ts"
 
 /**
  * One slot's content: a game's stream, its data, its stats, a saved custom stream, a highlight, or nothing. With `key`,
- * what the tile shows as a `TileKey`; `game`, the game it shows; and `locator`, what the shell loads for it.
+ * what the tile shows as a `TileKey`; `game`, the game it shows; `locator`, what the shell loads for it; and `label`,
+ * what a Display calls it.
  */
 export const Tile = Object.assign(
   Schema.TaggedUnion({
@@ -34,7 +35,7 @@ export const Tile = Object.assign(
     /** A highlight playing in a page video, with sound when it has audio focus. */
     ClipTile: { highlight: Highlight }
   }),
-  { key, game, locator }
+  { key, game, locator, label }
 )
 export type Tile = typeof Tile.Type
 
@@ -341,6 +342,22 @@ function locator(tile: Tile): StreamLocator | undefined {
   })
 }
 
+/**
+ * What a Display calls a tile, given its game's snapshot: the game's scoreline, "Stats · " and it for a stats tile, a
+ * custom tile's name, "Replay · " and a clip tile's headline; none for an empty tile, or a game not known yet.
+ */
+function label(tile: Tile, snapshot: GameSnapshot | undefined): string | undefined {
+  const scoreline = snapshot?.scoreline()
+  return Tile.match(tile, {
+    Empty: () => undefined,
+    StreamTile: () => scoreline,
+    DataTile: () => scoreline,
+    CustomTile: ({ name }) => name,
+    StatsTile: () => (scoreline === undefined ? undefined : `Stats · ${scoreline}`),
+    ClipTile: ({ highlight }) => `Replay · ${highlight.headline}`
+  })
+}
+
 /** Runs `f` on the tile at `index`, or rejects a tile that does not exist. */
 function tileAt(
   screen: Screen,
@@ -352,14 +369,19 @@ function tileAt(
 
 /**
  * This Screen's fields with `assigned` in tile `index`. What a tile shows appears in at most one tile, on screen or
- * benched: assigning it to another tile moves it.
+ * benched: assigning it to another tile moves it. A benched tile it lands on moves to the end of the bench; an
+ * on-screen one is replaced.
  */
 function placed(screen: Screen, index: number, assigned: Tile): Unsettled {
   const key = Tile.key(assigned)
   const tiles = screen.tiles.map((existing, at) =>
     at === index ? assigned : key !== undefined && holds(existing, key) ? empty : existing
   )
-  return { ...screen, tiles }
+  const displaced = screen.tiles[index]
+  const benched = index >= Screen.slotCount(screen.layout)
+  const kept =
+    benched && displaced !== undefined && !Tile.guards.Empty(displaced) && Tile.key(displaced) !== key
+  return { ...screen, tiles: kept ? [...tiles, displaced] : tiles }
 }
 
 /** Runs `f` on the occupied on-screen tile at `index`, or says why there is none. */

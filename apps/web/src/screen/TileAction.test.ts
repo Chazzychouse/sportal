@@ -1,6 +1,7 @@
 import { assert, describe, it } from "@effect/vitest"
 import { TileKey } from "@sportal/api/TileKey"
 import type { GameId } from "@sportal/domain/Game"
+import { highlight } from "@sportal/domain/TestGame"
 import { Result } from "effect"
 import * as TestWeb from "../TestWeb.ts"
 import { Screen } from "./Screen.ts"
@@ -76,6 +77,23 @@ describe("TileAction.of", () => {
     const labels = [actionOf(screen, 0, true, "hear")?.label, actionOf(screen, 1, true, "hear")?.label]
 
     assert.deepStrictEqual(labels, [wording(TestWeb.bama), wording(TestWeb.irish)])
+  })
+
+  it.each([
+    { tile: "a custom tile", screen: TestWeb.assignCustom(TestWeb.fill([TestWeb.bama]), 1, TestWeb.video) },
+    {
+      tile: "a clip tile",
+      screen: Result.getOrThrow(
+        TestWeb.fill([TestWeb.bama]).apply(
+          { _tag: "AssignClip", tile: 1, highlight: highlight() },
+          TestWeb.onFox
+        )
+      )
+    }
+  ])("should word hear as this tile's for $tile", ({ screen }) => {
+    const label = actionOf(screen, 1, true, "hear")?.label
+
+    assert.strictEqual(label, "Hear this tile")
   })
 
   it("should offer no hear for a stats tile", () => {

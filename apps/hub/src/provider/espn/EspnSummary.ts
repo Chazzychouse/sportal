@@ -15,8 +15,8 @@ import {
  * Game `game` of `league`'s summary `body` read as its stats. Points per period come from the header; team stats pair
  * the two sides' box score rows by name, in ESPN's order and words (baseball keeps a few of each group); leaders are
  * each category's first athlete, on the side of their team; scoring plays are ESPN's own list, or for baseball, which
- * has none, the plays marked scoring. Basketball has no scoring plays: every basket scores. A video with no mp4 is
- * left out of the highlights.
+ * has none, the plays marked scoring. Basketball has no scoring plays: every basket scores. A win probability point
+ * outside 0 to 1 is left out, as is a video with no mp4 or no duration in whole seconds.
  */
 export const decode = Effect.fnUntraced(function* (league: LeagueId, game: GameId, body: string) {
   const summary = yield* decodeSummary(body)
@@ -33,10 +33,11 @@ export const decode = Effect.fnUntraced(function* (league: LeagueId, game: GameI
   const linescore = { home: linescoreOf("home"), away: linescoreOf("away") }
   const teamStats = paired(rowsOf("home"), rowsOf("away"))
   const leaders = leadersOf(summary.leaders ?? [], sideOf)
-  const winProbability = summary.winprobability?.map(({ playId, homeWinPercentage }) => ({
-    play: PlayId.make(playId),
-    home: homeWinPercentage
-  }))
+  const winProbability = summary.winprobability?.flatMap(({ playId, homeWinPercentage }) =>
+    homeWinPercentage < 0 || homeWinPercentage > 1
+      ? []
+      : [{ play: PlayId.make(playId), home: homeWinPercentage }]
+  )
   const scoringPlays = scoringOf(league, summary)
   const highlights = (summary.videos ?? []).flatMap((video) => highlightOf(game, video))
   return new GameStats({ game, linescore, teamStats, leaders, winProbability, scoringPlays, highlights })
@@ -116,13 +117,14 @@ function scoringOf(league: LeagueId, summary: EspnSummaryPayload): ReadonlyArray
 
 function highlightOf(game: GameId, video: SummaryVideo): ReadonlyArray<Highlight> {
   const source = video.links?.source
-  if (source === undefined) return []
+  const duration = video.duration
+  if (source === undefined || duration === undefined || !Number.isInteger(duration)) return []
   return [
     new Highlight({
       id: HighlightId.make(String(video.id)),
       game,
       headline: video.headline,
-      duration: video.duration,
+      duration,
       video: source.HD?.href ?? source.href,
       ...(video.thumbnail === undefined ? {} : { thumbnail: video.thumbnail })
     })

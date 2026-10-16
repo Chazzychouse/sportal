@@ -373,6 +373,18 @@ describe("Display#press", () => {
     assert.strictEqual(display, Display.initial)
   })
 
+  it("should not interact while a game page is open", () => {
+    const screen = TestWeb.withTiles(["live"])
+    const display = new Display({
+      ...Display.initial,
+      overlay: Overlay.GamePage({ game: TestWeb.bama, back: Overlay.None() })
+    })
+
+    const step = display.press({ _tag: "Interact" }, screen, none)
+
+    assert.isUndefined(step.display.interacting)
+  })
+
   it("should open the key help with ShowKeys", () => {
     const { display, commands } = Display.initial.press({ _tag: "ShowKeys" }, TestWeb.withTiles([]), none)
 
@@ -1024,7 +1036,11 @@ describe("Display YouTube form", () => {
   it("should hold the stream it renames", () => {
     const opened = Display.initial.openCustomForm(TestWeb.video)
 
-    assert.isTrue(Overlay.$is("CustomForm")(opened.overlay) && opened.overlay.editing === TestWeb.video)
+    assert.isTrue(Overlay.$is("CustomForm")(opened.overlay))
+    assert.strictEqual(
+      Overlay.$is("CustomForm")(opened.overlay) ? opened.overlay.editing : undefined,
+      TestWeb.video
+    )
   })
 })
 
@@ -1066,6 +1082,26 @@ describe("Display#apply StatsBeside", () => {
       { _tag: "SetLayout", layout: "Pair" },
       { _tag: "AssignStats", tile: 1, game: TestWeb.bama }
     ])
+  })
+
+  it("should keep a benched game on the bench when a one-slot layout's stats go beside it", () => {
+    const screen = Result.getOrThrow(
+      TestWeb.fill([TestWeb.bama, TestWeb.irish]).apply(
+        { _tag: "SetLayout", layout: "Single" },
+        TestWeb.onFox
+      )
+    )
+
+    const { commands } = Display.initial.apply(DisplayInput.StatsBeside({ game: TestWeb.bama }), screen, none)
+    const after = commands.reduce(
+      (each, command) => Result.getOrThrow(each.apply(command, TestWeb.onFox)),
+      screen
+    )
+
+    assert.deepStrictEqual(
+      after.benched().map(({ key }) => key),
+      [TileKey.game(TestWeb.irish)]
+    )
   })
 })
 

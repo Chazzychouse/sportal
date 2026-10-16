@@ -128,6 +128,7 @@ export class Display extends Data.Class<{
       },
       Unsolo: () => this.escape(screen, shelves),
       Interact: () => {
+        if (!Overlay.$is("None")(this.overlay)) return DisplayStep.of(this)
         const tile = screen.onScreen()[this.selectedOn(screen)]
         const key = tile === undefined || Tile.locator(tile) === undefined ? undefined : Tile.key(tile)
         if (key === undefined) return DisplayStep.of(this)
@@ -165,15 +166,15 @@ export class Display extends Data.Class<{
 
   /**
    * Puts game `game`'s stats beside it: in the next empty slot after its stream (or after the selected slot when it
-   * is not on screen), else the slot after it; a one-slot layout becomes a Pair first. Stats already on screen stay.
+   * is not on screen), else the slot after it; a one-slot layout becomes a Pair. Stats already on screen stay.
    */
   statsBeside(game: GameId, screen: Screen): DisplayStep {
     if (screen.slotOf(TileKey.stats(game)) !== undefined) return DisplayStep.of(this)
     if (Screen.slotCount(screen.layout) === 1) {
-      return DisplayStep.of(this, [
-        { _tag: "SetLayout", layout: "Pair" },
-        { _tag: "AssignStats", tile: 1, game }
-      ])
+      const pair: ScreenCommand = { _tag: "SetLayout", layout: "Pair" }
+      const stats: ScreenCommand = { _tag: "AssignStats", tile: 1, game }
+      // Placed while tile 1 is still benched, the stats move what it holds to the end of the bench.
+      return DisplayStep.of(this, screen.tiles.length > 1 ? [stats, pair] : [pair, stats])
     }
     const from = screen.slotOf(TileKey.game(game)) ?? this.selectedOn(screen)
     const slot = screen.nextEmptySlot(from) ?? (from + 1) % screen.onScreen().length

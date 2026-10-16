@@ -2,7 +2,7 @@ import { assert, describe, it } from "@effect/vitest"
 import { TileKey } from "@sportal/api/TileKey"
 import type { ChannelAvailability } from "@sportal/domain/Channel"
 import { GameId } from "@sportal/domain/Game"
-import { highlight } from "@sportal/domain/TestGame"
+import { highlight, snapshot } from "@sportal/domain/TestGame"
 import { DateTime, Option, Result, Schema } from "effect"
 import * as TestWeb from "../TestWeb.ts"
 import { type LayoutName, Screen, ScreenCommand, Tile } from "./Screen.ts"
@@ -549,6 +549,20 @@ describe("Screen layouts and the bench", () => {
     assert.deepStrictEqual(assigned.tiles.map(Tile.game), [TestWeb.irish])
   })
 
+  it("should move a benched tile to the end of the bench when another is assigned there", () => {
+    const benched = run(TestWeb.fill([TestWeb.bama, TestWeb.irish, usc]), {
+      _tag: "SetLayout",
+      layout: "Single"
+    })
+
+    const assigned = run(benched, { _tag: "AssignStats", tile: 1, game: TestWeb.bama })
+
+    assert.deepStrictEqual(
+      assigned.benched().map(({ key }) => key),
+      [TileKey.stats(TestWeb.bama), TileKey.game(usc), TileKey.game(TestWeb.irish)]
+    )
+  })
+
   it("should reject audio for a benched tile", () => {
     const benched = run(TestWeb.fill([TestWeb.bama, TestWeb.irish]), { _tag: "SetLayout", layout: "Single" })
 
@@ -686,6 +700,46 @@ describe("Tile.key", () => {
     const key = Tile.key({ _tag: "Empty" })
 
     assert.isUndefined(key)
+  })
+})
+
+describe("Tile.label", () => {
+  it("should name a game's stream tile by its scoreline", () => {
+    const game = snapshot({ id: TestWeb.bama })
+
+    const name = Tile.label({ _tag: "StreamTile", game: TestWeb.bama, channel: TestWeb.foxChannel }, game)
+
+    assert.strictEqual(name, game.scoreline())
+  })
+
+  it("should name a stats tile by its game's scoreline after Stats", () => {
+    const game = snapshot({ id: TestWeb.bama })
+
+    const name = Tile.label({ _tag: "StatsTile", game: TestWeb.bama }, game)
+
+    assert.strictEqual(name, `Stats · ${game.scoreline()}`)
+  })
+
+  it("should name a custom tile by its stream's name", () => {
+    const screen = TestWeb.assignCustom(Screen.initial, 0, TestWeb.video)
+
+    const name = Tile.label(screen.tiles[0] ?? { _tag: "Empty" }, undefined)
+
+    assert.strictEqual(name, "Highlights")
+  })
+
+  it("should name a clip tile by its headline after Replay", () => {
+    const clip = highlight({ headline: "A long touchdown" })
+
+    const name = Tile.label({ _tag: "ClipTile", highlight: clip }, undefined)
+
+    assert.strictEqual(name, "Replay · A long touchdown")
+  })
+
+  it("should give a game tile no name before its game is known", () => {
+    const name = Tile.label({ _tag: "StatsTile", game: TestWeb.bama }, undefined)
+
+    assert.isUndefined(name)
   })
 })
 

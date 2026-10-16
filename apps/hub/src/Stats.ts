@@ -26,10 +26,11 @@ import { Schedule } from "./Schedule.ts"
 /**
  * A game's stats, from its provider's summary. An upcoming game's are empty, and nothing is fetched. An over game's
  * are fetched once and kept for the Hub's run, unless it has no highlights yet, then fetched again at most every
- * 10 minutes. A live game's are fetched when asked once, and while any live answer
- * follows them, again every `HubConfig.statsRefresh`, one fetch however many follow; a refresh that fails is logged and
- * the last stats stand. A day's highlights in a league are its final games', each final game's stats fetched once,
- * four at a time; a game whose stats are unavailable is logged and left out.
+ * 10 minutes. A live game's are fetched when asked once, and while any live answer follows them, again every
+ * `HubConfig.statsRefresh`, one fetch however many follow; they are kept one refresh after the last stops following,
+ * so following again soon fetches nothing at once. A refresh that fails or dies is logged and the last stats stand.
+ * A day's highlights in a league are its final games', each final game's stats fetched once, four at a time; a game
+ * whose stats are unavailable is logged and left out.
  */
 export class Stats extends Context.Service<
   Stats,
@@ -62,16 +63,17 @@ export class Stats extends Context.Service<
         }
       })
 
-      // Each followed live game's latest stats, refreshed while anything holds it.
+      // Each followed live game's latest stats, refreshed while anything holds it and for one refresh after.
       const following = yield* RcMap.make({
+        idleTimeToLive: config.statsRefresh,
         lookup: Effect.fnUntraced(function* (game: Summarized) {
           const latest = yield* SubscriptionRef.make(Option.none<GameStats>())
           const refresh = fetched(game).pipe(
             Effect.flatMap((stats) => SubscriptionRef.set(latest, Option.some(stats))),
-            Effect.catch((error) =>
+            Effect.catchCause((cause) =>
               Effect.logWarning(
                 "Stats: a live game's stats could not be fetched; its last stats stand",
-                error
+                cause
               ).pipe(Effect.annotateLogs({ game: game.game }))
             )
           )

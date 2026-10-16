@@ -83,5 +83,7 @@ Record the date, the build, and any row that failed.
 | 67 | Open a stats tile with highlights and click a highlight card in it | The clip opens as it does from the guide |
 | 68 | Open the full guide with Glass and watch the GPU (or the frame rate) | Glass's stacked blur costs no visible stutter; record the GPU cost if it does |
 | 69 | Put a clip in a tile and reload the Display | The reloaded Display has no clip tiles |
+| 70 | In the shell, select a playing tile and press `I`, then press `Ctrl`+`K` and type; close it, open the guide and choose Add YouTube by keyboard, and type a link | Typing reaches the palette's search and the YouTube form's fields, not the player |
+| 71 | In the shell with videos playing, press `G` to open the full guide and `Esc` to close it, several times | Each time, the provider views resize behind the full guide without flicker, and are back in their tiles after `Esc`; record any view left out of place |
 
 Record the date, the build, and any row that failed.

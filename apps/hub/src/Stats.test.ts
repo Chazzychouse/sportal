@@ -164,16 +164,18 @@ describe("Stats#statsLive", () => {
     )
   })
 
-  it.effect("should stop refreshing a live game once nothing follows it", () => {
+  it.effect("should stop refreshing a live game a refresh after nothing follows it", () => {
     const asked = counted()
     return TestHub.withStats({ stats: asked.stats }, (frames) =>
       Effect.gen(function* () {
         yield* TestHub.alaAtMsstListed(frames)
         yield* Effect.scoped(Effect.flatMap(followed(TestHub.alaAtMsst.id), Queue.take))
+        yield* TestClock.adjust("2 minutes")
+        const stopped = asked.times()
 
         yield* TestClock.adjust("2 minutes")
 
-        assert.strictEqual(asked.times(), 1)
+        assert.strictEqual(asked.times(), stopped)
       })
     )
   })
@@ -193,6 +195,43 @@ describe("Stats#statsLive", () => {
         yield* Queue.take(other)
 
         assert.strictEqual(asked.times(), 2)
+      })
+    )
+  })
+
+  it.effect("should not fetch a live game again at once when it is followed again within a refresh", () => {
+    const asked = counted()
+    return TestHub.withStats({ stats: asked.stats }, (frames) =>
+      Effect.gen(function* () {
+        yield* TestHub.alaAtMsstListed(frames)
+        yield* Effect.scoped(Effect.flatMap(followed(TestHub.alaAtMsst.id), Queue.take))
+        yield* TestClock.adjust("10 seconds")
+
+        yield* Effect.scoped(Effect.flatMap(followed(TestHub.alaAtMsst.id), Queue.take))
+
+        assert.strictEqual(asked.times(), 1)
+      })
+    )
+  })
+
+  it.effect("should keep refreshing a live game after a refresh dies", () => {
+    const asked = counted((game, times) =>
+      times === 2
+        ? Effect.die("refresh died")
+        : Effect.succeed(
+            new GameStats({ ...GameStats.empty(game), scoringPlays: [PlayId.make(`p${times}`)] })
+          )
+    )
+    return TestHub.withStats({ stats: asked.stats }, (frames) =>
+      Effect.gen(function* () {
+        yield* TestHub.alaAtMsstListed(frames)
+        const values = yield* followed(TestHub.alaAtMsst.id)
+        yield* Queue.take(values)
+
+        yield* TestClock.adjust("60 seconds")
+        const next = yield* Queue.take(values)
+
+        assert.deepStrictEqual(next.scoringPlays, [PlayId.make("p3")])
       })
     )
   })

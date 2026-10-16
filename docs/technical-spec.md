@@ -438,8 +438,8 @@ state and the screen commands to send: no top bar, nothing beside the Screen but
   kept and falls back to All live when it is no longer listed. A game page (`GamePage`) and the YouTube form
   (`CustomForm`) are overlays that `close()` returns to where they were opened from.
 - The shell is told whether the guide is open with `setGuideOpen` on the bridge (`packages/api/src/ShellBridge.ts`):
-  while it is open a provider view's arrows, Enter, brackets and I are hotkeys the player never sees, and while it is
-  closed the player keeps them.
+  while it is open a provider view's arrows, Enter, brackets, I, Delete and Backspace are hotkeys the player never sees,
+  and while it is closed the player keeps them.
 - Themes (`ui/Theme.ts`, tokens in `theme.css`): Glass, the default, and Team, painted in the teams' colors
   (`game/TeamColors.ts`); kept in this browser and set on the document as `data-theme`.
 - Tiles beyond a game's stream: a **custom tile** (a YouTube video or playlist, `custom/CustomStream.ts`, saved in this

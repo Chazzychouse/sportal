@@ -22,7 +22,12 @@ export class TileAction extends Data.Class<{
     const tile = screen.onScreen()[slot]
     if (tile === undefined || Tile.guards.Empty(tile)) return []
 
-    const hearLabel = screen.hears(Tile.key(tile)) ? "Sound on" : "Hear this game"
+    const showsGame = Tile.guards.StreamTile(tile) || Tile.guards.DataTile(tile)
+    const hearLabel = screen.hears(Tile.key(tile))
+      ? "Sound on"
+      : showsGame
+        ? "Hear this game"
+        : "Hear this tile"
     const hear = new TileAction({
       id: "hear",
       verb: "Hear",

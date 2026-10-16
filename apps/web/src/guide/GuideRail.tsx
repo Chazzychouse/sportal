@@ -20,7 +20,8 @@ interface GuideRailProps {
 
 /**
  * The full guide's left rail: Sportal's mark; the guide's entries, the one shown lit, All live with its count of live
- * games and Custom with its count of saved streams; and at its foot the Display's controls: theme, layout, YouTube TV, Remote, keys, full screen, and the Hub.
+ * games and Custom with its count of saved streams; and at its foot the Display's controls: theme, layout, YouTube TV,
+ * Remote, keys, full screen, and the Hub.
  */
 export function GuideRail({ entry, focused }: GuideRailProps) {
   const input = useAtomSet(DisplayState.display)

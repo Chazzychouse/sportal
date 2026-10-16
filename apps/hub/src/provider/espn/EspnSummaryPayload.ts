@@ -19,11 +19,11 @@ export const SummaryStat = Schema.Struct({
 })
 export type SummaryStat = typeof SummaryStat.Type
 
-/** One of the summary's videos: its id, headline, seconds, thumbnail, and its mp4s. */
+/** One of the summary's videos: its id, headline, seconds (when ESPN sends them), thumbnail, and its mp4s. */
 export const SummaryVideo = Schema.Struct({
   id: Schema.Union([Schema.String, Schema.Finite]),
   headline: Schema.String,
-  duration: Schema.Int,
+  duration: Schema.optional(Schema.Finite),
   thumbnail: Schema.optional(Schema.String),
   links: Schema.optional(
     Schema.Struct({

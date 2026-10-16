@@ -188,7 +188,7 @@ export const Hotkey = Object.assign(
       },
       {
         group: "Guide",
-        keys: ["Delete"],
+        keys: ["Delete", "Backspace"],
         does: "Remove the focused YouTube stream",
         press: { code: "Delete", guideOpen: true },
         hotkey: { _tag: "Remove" }

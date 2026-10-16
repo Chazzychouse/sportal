@@ -53,17 +53,8 @@ export function CommandPalette(props: { open: boolean; onOpenChange: (open: bool
   const occupied = screen.onScreen().flatMap((tile, slot) => {
     if (Tile.guards.Empty(tile)) return []
     const game = Tile.game(tile)
-    const scoreline = snapshots.find((each) => each.id === game)?.scoreline()
-    const name = Tile.guards.CustomTile(tile)
-      ? tile.name
-      : Tile.guards.ClipTile(tile)
-        ? `Replay · ${tile.highlight.headline}`
-        : scoreline === undefined
-          ? `Tile ${slot + 1}`
-          : Tile.guards.StatsTile(tile)
-            ? `Stats ${scoreline}`
-            : scoreline
-    return [{ slot, name }]
+    const snapshot = snapshots.find((each) => each.id === game)
+    return [{ slot, name: Tile.label(tile, snapshot) ?? `Tile ${slot + 1}` }]
   })
 
   return (

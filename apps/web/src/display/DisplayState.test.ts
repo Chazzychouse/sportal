@@ -1,11 +1,14 @@
 import { afterEach, assert, beforeEach, describe, it } from "@effect/vitest"
+import { CalendarDate } from "@sportal/api/GamesQuery"
 import { TileKey } from "@sportal/api/TileKey"
 import { GameId } from "@sportal/domain/Game"
+import type { LeagueId } from "@sportal/domain/League"
 import { Effect, Equal, Option, Queue, Stream } from "effect"
 import { Atom } from "effect/reactivity"
 import { vi } from "vitest"
 import * as CustomStreams from "../custom/CustomStreams.ts"
 import { CustomStreamsChange } from "../custom/CustomStreams.ts"
+import * as GuideShelves from "../guide/GuideShelves.ts"
 import * as DisplayScreen from "../screen/DisplayScreen.ts"
 import * as TestWeb from "../TestWeb.ts"
 import { DisplayInput } from "./Display.ts"
@@ -153,6 +156,32 @@ describe("DisplayState", () => {
 
       assert.strictEqual(screen.tiles[0]?._tag, "Empty")
       assert.deepStrictEqual(streams, [])
+    })
+  )
+
+  it.effect("should ask for the highlights of the day before today across a year's end", () =>
+    Effect.gen(function* () {
+      const { registry, calls, hub } = yield* TestWeb.withShell()
+      const yesterday: TestWeb.TestWebCall = {
+        _tag: "Highlights",
+        league: "fbs",
+        date: CalendarDate.make("2026-12-31")
+      }
+
+      const call = yield* Effect.gen(function* () {
+        yield* Atom.mount(DisplayState.shelves)
+        yield* Atom.set(GuideShelves.highlightsShown, new Set<LeagueId>(["fbs"]))
+        yield* TestWeb.answer(hub, "games", hub.lists, {
+          ...TestWeb.todayList,
+          date: CalendarDate.make("2027-01-01")
+        })
+        return yield* Stream.fromQueue(calls).pipe(
+          Stream.filter((each) => Equal.equals(each, yesterday)),
+          Stream.runHead
+        )
+      }).pipe(Effect.scoped, Effect.provide(registry))
+
+      assert.deepStrictEqual(call, Option.some(yesterday))
     })
   )
 

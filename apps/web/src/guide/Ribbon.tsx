@@ -19,7 +19,8 @@ interface RibbonProps {
 
 /**
  * The guide's first level, docked under the Screen: the entries as tabs, which tile a pick goes to, and one row of the
- * entry's live then upcoming games (under Custom, the saved streams and the card that adds one). It slides up as it opens.
+ * entry's live then upcoming games (under Custom, the saved streams and the card that adds one). It slides up as it
+ * opens.
  */
 export function Ribbon({ entry, focus }: RibbonProps) {
   const input = useAtomSet(DisplayState.display)
