@@ -32,6 +32,9 @@ pnpm workspaces.
 - Do not merge to `main`. Do not push.
 - Provider web players load unmodified: no script injection, no request rewriting.
 
+- Tasks are numbered 1–43 across the plan. Each heading also shows its phase and the number it had inside that phase; a
+  "Task N" inside a phase's text means that phase's own numbering.
+
 ## Amendments (these override the phase parts below where they disagree)
 
 The phases were drafted in parallel; these reconcile them.
@@ -70,7 +73,7 @@ The phases were drafted in parallel; these reconcile them.
 
 ## Phase 1 — Web rules
 
-### Task 1: The "In the web app" section in `AGENTS.md` — then commit
+### Task 1 (phase 1, was task 1): The "In the web app" section in `AGENTS.md` — then commit
 
 **Files:**
 - Modify: `AGENTS.md` (insert one section between "How code is written" and "Tests")
@@ -198,7 +201,7 @@ key is derived inside), `ScreenCommand.Assign({ tile, game })` (it names a game 
 lookup. No other `ScreenCommand` field names an on-screen thing (they are all slot indices), so `ScreenCommand` does not
 change.
 
-### Task 2: `TileKey` in `packages/api`
+### Task 2 (phase 2, was task 2): `TileKey` in `packages/api`
 
 **Files:**
 - Create: `packages/api/src/TileKey.ts`
@@ -281,7 +284,7 @@ pnpm vitest run packages/api/src/TileKey.test.ts
 
 Expected: PASS, 2 tests.
 
-### Task 3: `Tile.key`, and the Screen keyed by `TileKey`
+### Task 3 (phase 2, was task 3): `Tile.key`, and the Screen keyed by `TileKey`
 
 **Files:**
 - Modify: `apps/web/src/screen/Screen.ts`
@@ -687,7 +690,7 @@ pnpm vitest run apps/web/src/screen/Screen.test.ts
 
 Expected: PASS (every existing test plus the 3 `Tile.key` tests).
 
-### Task 4: The Display fold and the views that read the Screen
+### Task 4 (phase 2, was task 4): The Display fold and the views that read the Screen
 
 **Files:**
 - Modify: `apps/web/src/display/Display.ts`, `apps/web/src/display/Display.test.ts`
@@ -973,7 +976,7 @@ pnpm vitest run apps/web/src/display/Display.test.ts apps/web/src/display/Displa
 Expected: PASS. (Typecheck is green only once Task 6 is done: `Shell.tilePressed` is still a `GameId` stream until
 Task 5. Vitest does not typecheck, and a game's key is its id, so the run passes now.)
 
-### Task 5: The shell bridge, the Shell, placements and covering
+### Task 5 (phase 2, was task 5): The shell bridge, the Shell, placements and covering
 
 **Files:**
 - Modify: `packages/api/src/ShellBridge.ts`
@@ -1398,7 +1401,7 @@ pnpm vitest run apps/web/src/screen/TileRects.test.ts apps/web/src/screen/TilePl
 
 Expected: PASS.
 
-### Task 6: The desktop shell keyed by `TileKey`
+### Task 6 (phase 2, was task 6): The desktop shell keyed by `TileKey`
 
 **Files:**
 - Modify: `apps/desktop/src/main/TileViews.ts`, `apps/desktop/src/main/TileViews.test.ts`
@@ -1678,7 +1681,7 @@ grep -rn "coveredGames\|placement\.game\|\.benched().*\.game\|VideoPressed({ gam
 
 Expected: no matches.
 
-### Task 7: The glossary row, the tree line, and the check — then commit
+### Task 7 (phase 2, was task 7): The glossary row, the tree line, and the check — then commit
 
 **Files:**
 - Modify: `CONTEXT.md`
@@ -1864,7 +1867,7 @@ Run a single test file with `pnpm vitest run <path>`. The root `vitest.config.ts
 
 ---
 
-### Task 1: The guide's hotkeys
+### Task 8 (phase 3, was task 1): The guide's hotkeys
 
 **Files:**
 - Modify: `packages/api/src/Hotkey.ts`
@@ -2114,7 +2117,7 @@ Expected: PASS. "should list the hotkey %s" now also covers the six new tags.
 
 ---
 
-### Task 2: `setGuideOpen` through the bridge to the desktop's tile views
+### Task 9 (phase 3, was task 2): `setGuideOpen` through the bridge to the desktop's tile views
 
 **Files:**
 - Modify: `packages/api/src/ShellBridge.ts`, `packages/api/src/ShellChannel.ts`
@@ -2271,7 +2274,7 @@ Expected: PASS.
 
 ---
 
-### Task 3: The web `Shell` tells the shell, and reads the flag for page keys
+### Task 10 (phase 3, was task 3): The web `Shell` tells the shell, and reads the flag for page keys
 
 **Files:**
 - Modify: `apps/web/src/shell/Shell.ts`, `apps/web/src/shell/Shell.test.ts`
@@ -2466,7 +2469,7 @@ Expected: PASS.
 
 ---
 
-### Task 4: Guide items and the pure shelves
+### Task 11 (phase 3, was task 4): Guide items and the pure shelves
 
 **Files:**
 - Create: `apps/web/src/guide/GuideItem.ts`
@@ -2639,7 +2642,7 @@ Expected: PASS.
 
 ---
 
-### Task 5: The guide in the Display fold, its state atoms, and commit 3a
+### Task 12 (phase 3, was task 5): The guide in the Display fold, its state atoms, and commit 3a
 
 **Files:**
 - Modify: `apps/web/src/display/Display.ts`, `apps/web/src/display/Display.test.ts`
@@ -3517,7 +3520,7 @@ EOF
 
 ---
 
-### Task 6: Themes in `theme.css`, and the theme atom
+### Task 13 (phase 3, was task 6): Themes in `theme.css`, and the theme atom
 
 **Files:**
 - Modify: `apps/web/src/theme.css`
@@ -3729,7 +3732,7 @@ the theme blocks restyle them with no change to their structure.
 
 ---
 
-### Task 7: Team colors
+### Task 14 (phase 3, was task 7): Team colors
 
 **Files:**
 - Create: `apps/web/src/game/TeamColors.ts`, `apps/web/src/game/TeamColors.test.ts`
@@ -3907,7 +3910,7 @@ Expected: PASS.
 
 ---
 
-### Task 8: Cards, chips and the shelf
+### Task 15 (phase 3, was task 8): Cards, chips and the shelf
 
 **Files:**
 - Create: `apps/web/src/ui/Shelf.tsx`
@@ -4157,7 +4160,7 @@ const ordinals = ["1st", "2nd", "3rd", "4th"]
 
 ---
 
-### Task 9: Ribbon, rail and full guide
+### Task 16 (phase 3, was task 9): Ribbon, rail and full guide
 
 **Files:**
 - Create: `apps/web/src/guide/Ribbon.tsx`, `apps/web/src/guide/GuideRail.tsx`, `apps/web/src/guide/FullGuide.tsx`
@@ -4549,7 +4552,7 @@ const shelfTitles = ["Live now", "Later today", "Final"]
 
 ---
 
-### Task 10: The connection toast
+### Task 17 (phase 3, was task 10): The connection toast
 
 **Files:**
 - Create: `apps/web/src/display/ConnectionToast.ts`
@@ -4589,7 +4592,7 @@ const lostToast = "sportal-hub-lost"
 
 ---
 
-### Task 11: The new `DisplayView`, without the top bar
+### Task 18 (phase 3, was task 11): The new `DisplayView`, without the top bar
 
 **Files:**
 - Modify: `apps/web/src/display/DisplayView.tsx` (rewrite)
@@ -4697,7 +4700,7 @@ In `apps/web/src/screen/TileChrome.tsx`, change `"Empty — Ctrl K to choose a g
 
 ---
 
-### Task 12: Docs rows, check, and commit 3b
+### Task 19 (phase 3, was task 12): Docs rows, check, and commit 3b
 
 **Files:**
 - Modify: `CONTEXT.md`
@@ -4841,7 +4844,7 @@ every workspace as a project, so a path from the root runs in its own project).
 
 ---
 
-### Task 1: `CustomStream`: a YouTube address, read (test-first)
+### Task 20 (phase 4, was task 1): `CustomStream`: a YouTube address, read (test-first)
 
 **Files:**
 - Create: `apps/web/src/custom/CustomStream.ts`
@@ -5211,7 +5214,7 @@ was written, and are `biome check` clean as given.)
 
 ---
 
-### Task 2: `CustomStreams`: the saved list, kept in this browser
+### Task 21 (phase 4, was task 2): `CustomStreams`: the saved list, kept in this browser
 
 **Files:**
 - Create: `apps/web/src/custom/CustomStreams.ts`
@@ -5426,7 +5429,7 @@ Expected: PASS, 7 tests. (Run against `effect@4.0.0` while this plan was written
 
 ---
 
-### Task 3: `CustomTile` on the Screen
+### Task 22 (phase 4, was task 3): `CustomTile` on the Screen
 
 **Files:**
 - Modify: `packages/api/src/TileKey.ts`, and its test file beside it (phase 2's `TileKey.test.ts`)
@@ -5735,7 +5738,7 @@ Expected: PASS.
 
 ---
 
-### Task 4: Custom tiles in the shell: placements, and whether the page plays
+### Task 23 (phase 4, was task 4): Custom tiles in the shell: placements, and whether the page plays
 
 **Files:**
 - Modify: `apps/web/src/screen/TileRects.ts`, `apps/web/src/screen/TileRects.test.ts`
@@ -5830,7 +5833,7 @@ export const providerViews: Atom.Atom<boolean> = runtime
 
 ---
 
-### Task 5: The Display fold: choosing, editing, the YouTube form, Remove
+### Task 24 (phase 4, was task 5): The Display fold: choosing, editing, the YouTube form, Remove
 
 **Files:**
 - Modify: `packages/api/src/Hotkey.ts`, `packages/api/src/Hotkey.test.ts`
@@ -6387,7 +6390,7 @@ Run the test file again — Expected: PASS.
 
 ---
 
-### Task 6: The guide's Custom entry
+### Task 25 (phase 4, was task 6): The guide's Custom entry
 
 **Files:**
 - Modify: `apps/web/src/guide/GuideShelves.ts`, `apps/web/src/guide/GuideShelves.test.ts`
@@ -6578,7 +6581,7 @@ today and Final.
 
 ---
 
-### Task 7: The YouTube form, the palette, and the tile
+### Task 26 (phase 4, was task 7): The YouTube form, the palette, and the tile
 
 **Files:**
 - Create: `apps/web/src/custom/CustomStreamForm.tsx`
@@ -6868,7 +6871,7 @@ The section's `key` (phase 2's `Tile.key(tile)`) already keeps a custom tile's e
 
 ---
 
-### Task 8: The Remote shows custom tiles by name
+### Task 27 (phase 4, was task 8): The Remote shows custom tiles by name
 
 **Files:**
 - Modify: `apps/web/src/remote/ScreenMap.tsx`
@@ -6910,7 +6913,7 @@ shows a custom tile's name before the game branch:
 
 ---
 
-### Task 9: The shell loads a custom tile's watch page
+### Task 28 (phase 4, was task 9): The shell loads a custom tile's watch page
 
 **Files:**
 - Modify: `apps/desktop/src/main/TileViews.test.ts`
@@ -6954,7 +6957,7 @@ that the shell needs no change for custom tiles).
 
 ---
 
-### Task 10: Glossary, check, commit
+### Task 29 (phase 4, was task 10): Glossary, check, commit
 
 **Files:**
 - Modify: `CONTEXT.md`
@@ -7081,7 +7084,7 @@ Run one test file with `pnpm --filter <package> exec vitest run <path from the p
 
 ## Phase 5 — Hub summary
 
-### Task 5.1: `Highlight` and `GameStats` in the domain
+### Task 30 (phase 5, was task 5.1): `Highlight` and `GameStats` in the domain
 
 **Files:**
 - Create: `packages/domain/src/Highlight.ts`, `packages/domain/src/Highlight.test.ts`
@@ -7305,7 +7308,7 @@ export function highlight(overrides: Partial<Highlight> = {}): Highlight {
 
 - [ ] **Step 4: Run the tests to see them pass.** Same command. Expected: PASS.
 
-### Task 5.2: `StatsUnavailable`, the summary payload, and its decode
+### Task 31 (phase 5, was task 5.2): `StatsUnavailable`, the summary payload, and its decode
 
 **Files:**
 - Create: `packages/api/src/StatsUnavailable.ts`
@@ -7869,7 +7872,7 @@ const decodeSummary = Schema.decodeUnknownEffect(Schema.fromJsonString(EspnSumma
   `pnpm --filter @sportal/hub exec vitest run src/provider/espn/EspnSummary.test.ts src/provider/espn/EspnPlay.test.ts src/provider/espn/EspnProvider.test.ts`
   Expected: PASS (EspnPlay's 182-play, kickoff-first and team-`2` assertions hold on the full file).
 
-### Task 5.3: The port's `stats`, ESPN's answer, and `HubConfig.statsRefresh`
+### Task 32 (phase 5, was task 5.3): The port's `stats`, ESPN's answer, and `HubConfig.statsRefresh`
 
 **Files:**
 - Modify: `apps/hub/src/provider/Provider.ts`, `apps/hub/src/provider/espn/EspnProvider.ts`,
@@ -8008,7 +8011,7 @@ function statsOver(client: HttpClient.HttpClient, league: LeagueId, game: GameId
 
 - [ ] **Step 4: Run to see them pass.** Same command. Expected: PASS.
 
-### Task 5.4: The Hub's `Stats` service
+### Task 33 (phase 5, was task 5.4): The Hub's `Stats` service
 
 **Files:**
 - Create: `apps/hub/src/Stats.ts`, `apps/hub/src/Stats.test.ts`
@@ -8525,7 +8528,7 @@ const sameStats = Schema.toEquivalence(GameStats)
 - [ ] **Step 5: Run the tests to see them pass.** Same command. Expected: PASS. If `Effect.catchTag`'s handler type
   rejects `unavailable` (no argument), write it `() => unavailable()`.
 
-### Task 5.5: The RPCs, the server, and `main.ts` — then commit phase 5
+### Task 34 (phase 5, was task 5.5): The RPCs, the server, and `main.ts` — then commit phase 5
 
 **Files:**
 - Modify: `packages/api/src/HubApi.ts`, `apps/hub/src/HubServer.ts`, `apps/hub/src/HubServer.test.ts`,
@@ -8707,7 +8710,7 @@ EOF
 
 ## Phase 6 — Stats view
 
-### Task 6.1: Web atoms for stats, and every play of a game
+### Task 35 (phase 6, was task 6.1): Web atoms for stats, and every play of a game
 
 **Files:**
 - Create: `apps/web/src/hub/Stats.ts`, `apps/web/src/hub/Stats.test.ts`
@@ -8887,7 +8890,7 @@ export const everyPlay = Atom.family((id: GameId) =>
 
 - [ ] **Step 4: Run to see it pass.** Same command. PASS.
 
-### Task 6.2: `StatsFit`
+### Task 36 (phase 6, was task 6.2): `StatsFit`
 
 **Files:** Create `apps/web/src/stats/StatsFit.ts`, `apps/web/src/stats/StatsFit.test.ts`
 
@@ -8967,7 +8970,7 @@ export function sectionsThatFit<S>(
 
 - [ ] **Step 4: Run** — PASS.
 
-### Task 6.3: Stats tiles on the Screen
+### Task 37 (phase 6, was task 6.3): Stats tiles on the Screen
 
 **Files:**
 - Modify: `packages/api/src/TileKey.ts` (phase 2), `apps/web/src/screen/Screen.ts`, `apps/web/src/screen/Screen.test.ts`,
@@ -9132,7 +9135,7 @@ function audible(tile: Occupied): boolean {
 
 - [ ] **Step 4: Run** — PASS.
 
-### Task 6.4: `StatsBeside`, the game page in the fold
+### Task 38 (phase 6, was task 6.4): `StatsBeside`, the game page in the fold
 
 **Files:** Modify `apps/web/src/display/Display.ts`, `apps/web/src/display/Display.test.ts`
 
@@ -9335,7 +9338,7 @@ const fullGuide = Overlay.Guide({ level: "Full", entry: "fbs", focus: { rail: fa
 
 - [ ] **Step 4: Run** — PASS.
 
-### Task 6.5: `GameStatsView`, `GamePage`, the stats tile body, the palette, and Stats beside — then commit phase 6
+### Task 39 (phase 6, was task 6.5): `GameStatsView`, `GamePage`, the stats tile body, the palette, and Stats beside — then commit phase 6
 
 **Files:**
 - Create: `apps/web/src/stats/GameStats.tsx`, `apps/web/src/display/GamePage.tsx`
@@ -9820,7 +9823,7 @@ EOF
 
 ## Phase 7 — Highlights
 
-### Task 7.1: Clip tiles on the Screen and `ChosenClip`
+### Task 40 (phase 7, was task 7.1): Clip tiles on the Screen and `ChosenClip`
 
 **Files:** Modify `packages/api/src/TileKey.ts`, `apps/web/src/screen/Screen.ts`, `Screen.test.ts`,
 `apps/web/src/screen/TileRects.test.ts`, `apps/web/src/display/Display.ts`, `Display.test.ts`,
@@ -9982,7 +9985,7 @@ function clip(id: HighlightId): TileKey {
 
 - [ ] **Step 4: Run** — PASS.
 
-### Task 7.2: The Highlights shelf
+### Task 41 (phase 7, was task 7.2): The Highlights shelf
 
 **Files:** Modify `apps/web/src/guide/GuideShelves.ts`, `apps/web/src/guide/GuideShelves.test.ts`,
 `apps/web/src/guide/FullGuide.tsx`
@@ -10111,7 +10114,7 @@ function dayBefore(date: CalendarDate): CalendarDate {
 
 - [ ] **Step 4: Run** — PASS.
 
-### Task 7.3: `HighlightCard`, the clip tile's video, the page's highlights — then commit phase 7
+### Task 42 (phase 7, was task 7.3): `HighlightCard`, the clip tile's video, the page's highlights — then commit phase 7
 
 **Files:**
 - Create: `apps/web/src/stats/HighlightCard.tsx`
@@ -10303,7 +10306,7 @@ EOF
 
 ## Phase 8 — Docs and eye-check
 
-### Task 8.1: Glossary, technical spec, eye-check list — then commit
+### Task 43 (phase 8, was task 8.1): Glossary, technical spec, eye-check list — then commit
 
 **Files:**
 - Modify: `CONTEXT.md`, `docs/technical-spec.md`, `docs/game-day-checklist.md`, `docs/specs/2026-10-16-ui-overhaul-design.md`
