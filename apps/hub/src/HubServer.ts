@@ -22,9 +22,9 @@ import {
   HttpStaticServer
 } from "effect/http"
 import { HttpApiBuilder, HttpApiSchema } from "effect/http-api"
-import { Broadcast } from "./Broadcast.ts"
 import { Displays } from "./Displays.ts"
 import { HubConfig } from "./HubConfig.ts"
+import { Schedule } from "./Schedule.ts"
 import { Source } from "./source/Source.ts"
 
 const guideHandlers = HttpApiBuilder.group(
@@ -58,13 +58,18 @@ const hostHandlers = HttpApiBuilder.group(
   })
 )
 
-const liveHandlers = HttpApiBuilder.group(
+const gamesHandlers = HttpApiBuilder.group(
   SportalApi,
-  "live",
+  "games",
   Effect.fn(function* (handlers) {
-    const { messages } = yield* Broadcast
+    const schedule = yield* Schedule
     return handlers.handleAll({
-      stream: () => Effect.sync(() => sse(messages))
+      list: ({ query }) => schedule.list(query),
+      listLive: ({ query }) => Effect.map(schedule.listLive(query), (answers) => sse(answers)),
+      game: ({ params }) => schedule.game(params.id),
+      gameLive: ({ params }) => Effect.map(schedule.gameLive(params.id), (answers) => sse(answers)),
+      plays: ({ params, query }) => schedule.plays(params.id, query),
+      playsLive: ({ params }) => Effect.map(schedule.playsLive(params.id), (changes) => sse(changes))
     })
   })
 )
@@ -85,7 +90,7 @@ const displaysHandlers = HttpApiBuilder.group(
 )
 
 const api = HttpApiBuilder.layer(SportalApi).pipe(
-  Layer.provide([guideHandlers, hostHandlers, liveHandlers, displaysHandlers])
+  Layer.provide([guideHandlers, hostHandlers, gamesHandlers, displaysHandlers])
 )
 
 const web = Layer.unwrap(
@@ -102,7 +107,7 @@ export const layer: Layer.Layer<
   never,
   PlatformError.PlatformError,
   | HubConfig
-  | Broadcast
+  | Schedule
   | Displays
   | Source
   | HttpClient.HttpClient

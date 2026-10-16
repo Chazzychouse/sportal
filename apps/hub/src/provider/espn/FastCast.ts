@@ -24,6 +24,7 @@ import {
 import { HttpClient, HttpClientResponse } from "effect/http"
 import * as Socket from "effect/socket/Socket"
 import { loggedUnlessStopping } from "../../Shutdown.ts"
+import { ProviderUnavailable } from "../Provider.ts"
 import { EspnLeague } from "./EspnLeague.ts"
 import * as FastCastMessage from "./FastCastMessage.ts"
 
@@ -133,12 +134,6 @@ export class Topic extends Data.Class<{ readonly league: LeagueId; readonly game
     })
   }
 }
-
-/** FastCast could not be followed: it refused, closed, or went silent. `FastCast` logs it and opens the socket again. */
-class ProviderUnavailable extends Schema.TaggedError<ProviderUnavailable>()("ProviderUnavailable", {
-  reason: Schema.Literals(["Refused", "Closed", "Silent"]),
-  cause: Schema.Defect()
-}) {}
 
 /** A topic's checkpoint was not read: it could not be loaded (unreachable, refused, timed out) or did not decode. */
 class CheckpointUnread extends Schema.TaggedError<CheckpointUnread>()("CheckpointUnread", {

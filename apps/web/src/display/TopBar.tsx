@@ -1,8 +1,8 @@
 import { useAtomSet, useAtomValue } from "@effect/atom-react"
 import { Option } from "effect"
-import { Expand, Keyboard, List, LogIn, Minimize2, Shrink, Smartphone, SquareDashed } from "lucide-react"
+import { Expand, Keyboard, LogIn, Minimize2, Shrink, Smartphone, SquareDashed } from "lucide-react"
 import { Button } from "@/design/button"
-import * as LiveStream from "../hub/LiveStream.ts"
+import * as Games from "../hub/Games.ts"
 import { LayoutPicker } from "../layout/LayoutPicker.tsx"
 import * as DisplayScreen from "../screen/DisplayScreen.ts"
 import { BrandMark, ConnectionPill } from "./Brand.tsx"
@@ -10,43 +10,27 @@ import { DisplayInput } from "./Display.ts"
 import * as DisplayState from "./DisplayState.ts"
 
 /**
- * The strip across the top of a Display: the slate, layout, solo, full screen, and whether the Hub is live.
+ * The strip across the top of a Display: how many games are live, layout, solo, full screen, and whether the Hub is
+ * live.
  */
 export function TopBar() {
   const display = useAtomValue(DisplayState.display)
   const input = useAtomSet(DisplayState.display)
   const screen = useAtomValue(DisplayScreen.screen)
-  const cards = useAtomValue(DisplayState.cards)
-  const { connection, slate } = useAtomValue(LiveStream.live)
+  const { connection, value } = useAtomValue(Games.today)
   const fullScreen = useAtomValue(DisplayState.fullScreen)
   const toggleFullScreen = useAtomSet(DisplayState.toggleFullScreen)
   const signIn = useAtomValue(DisplayState.signIn)
   const openSignIn = useAtomSet(DisplayState.openSignIn)
-  const soloToggles = display.press({ _tag: "ToggleSolo" }, screen, cards).commands.length > 0
-  const live = slate.games.filter(({ snapshot }) => snapshot.progress() === "live").length
+  const soloToggles = display.press({ _tag: "ToggleSolo" }, screen).commands.length > 0
+  const live = Option.match(value, {
+    onNone: () => 0,
+    onSome: ({ games }) => games.filter(({ snapshot }) => snapshot.progress() === "live").length
+  })
 
   return (
     <header className="flex h-11 items-center gap-4 border-b bg-card/60 px-3">
       <BrandMark />
-      <span className="h-5 w-px bg-border" />
-      <Button
-        variant="ghost"
-        size="sm"
-        aria-keyshortcuts="S"
-        aria-pressed={display.slateOpen}
-        className={`label-caps text-xs ${display.slateOpen ? "bg-accent" : ""}`}
-        onClick={() => input(DisplayInput.SlateToggled())}
-      >
-        <List />
-        Slate
-        {live > 0 && (
-          <span className="flex items-center gap-1 font-mono text-live">
-            <span className="size-1.5 rounded-full bg-live" />
-            {live}
-          </span>
-        )}
-        <kbd className="ml-1 font-mono text-[10px] text-muted-foreground">S</kbd>
-      </Button>
       <span className="h-5 w-px bg-border" />
 
       <LayoutPicker
@@ -78,6 +62,15 @@ export function TopBar() {
             <LogIn />
             YouTube TV
           </Button>
+        )}
+        {live > 0 && (
+          <span
+            className="label-caps flex items-center gap-1 font-mono text-live text-xs"
+            title="Games live now"
+          >
+            <span className="size-1.5 rounded-full bg-live" />
+            {live} live
+          </span>
         )}
         <ConnectionPill connection={connection} />
         <Button

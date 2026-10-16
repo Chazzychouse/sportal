@@ -59,14 +59,6 @@ export class Slate extends Schema.Class<Slate>("sportal/Slate")({
 
     return [new Slate({ games: this.games.with(index, next) }), changesOf(had, next)]
   }
-
-  /** This slate with each game's recent plays only (`Game#recent`): what the live stream sends. */
-  recent(): Slate {
-    const games = this.games.map((game) => game.recent())
-    if (games.every((game, index) => game === this.games[index])) return this
-
-    return new Slate({ games })
-  }
 }
 
 /** One thing an operation changed: a game's snapshot, a game no listing names any more, or a play a game did not have. */

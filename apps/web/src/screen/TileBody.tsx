@@ -1,8 +1,11 @@
-import type { Game, GameSnapshot } from "@sportal/domain/Game"
+import { useAtomValue } from "@effect/atom-react"
+import type { GameSnapshot } from "@sportal/domain/Game"
 import { Option } from "effect"
+import { useMemo } from "react"
 import { Field } from "../game/Field.tsx"
 import { GameStatus, localTime } from "../game/GameStatus.tsx"
 import { Score } from "../game/Score.tsx"
+import * as Games from "../hub/Games.ts"
 import { Tile } from "./Screen.ts"
 
 /**
@@ -10,24 +13,19 @@ import { Tile } from "./Screen.ts"
  * well; in a plain browser this is what is seen, with a link to watch. A data tile of a live game (halftime and a
  * delay during it included) shows the field in place of why it has no stream; the field dims itself out of play.
  */
-export function TileBody(props: { tile: Tile; game: Game | undefined }) {
-  const { tile, game } = props
+export function TileBody(props: { tile: Tile; snapshot: GameSnapshot | undefined }) {
+  const { tile, snapshot } = props
   return Tile.match(tile, {
     Empty: () => <p className="label-caps text-muted-foreground/60 text-sm tracking-[0.2em]">No signal</p>,
     DataTile: ({ why }) =>
-      game?.snapshot.progress() === "live" ? (
+      snapshot?.progress() === "live" ? (
         <div className="flex max-h-full min-h-0 w-full flex-col items-center gap-3 p-3">
-          <Scoreboard game={game.snapshot} />
-          <Field
-            key={game.snapshot.id}
-            game={game.snapshot}
-            plays={game.plays}
-            className="min-h-0 w-full max-w-xl"
-          />
+          <Scoreboard game={snapshot} />
+          <LiveField key={snapshot.id} game={snapshot} />
         </div>
       ) : (
         <div className="flex flex-col items-center gap-3">
-          {game !== undefined && <Scoreboard game={game.snapshot} />}
+          {snapshot !== undefined && <Scoreboard game={snapshot} />}
           <p className="text-muted-foreground text-sm">{noStream(why)}</p>
         </div>
       ),
@@ -42,6 +40,14 @@ export function TileBody(props: { tile: Tile; game: Game | undefined }) {
       </a>
     )
   })
+}
+
+/** A live game's field, its plays read from the game's own live stream. */
+function LiveField(props: { game: GameSnapshot }) {
+  const { value } = useAtomValue(Games.plays(props.game.id))
+  // The stream sends plays newest first; the field draws them in play order.
+  const plays = useMemo(() => value.toReversed(), [value])
+  return <Field game={props.game} plays={plays} className="min-h-0 w-full max-w-xl" />
 }
 
 /** A game's score, large, for a tile with no video. */

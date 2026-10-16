@@ -1,11 +1,12 @@
 import { useAtomSet, useAtomValue } from "@effect/atom-react"
+import type { GameSnapshot } from "@sportal/domain/Game"
 import { Option } from "effect"
 import { useCallback } from "react"
 import * as DisplayState from "../display/DisplayState.ts"
-import * as LiveStream from "../hub/LiveStream.ts"
+import * as Games from "../hub/Games.ts"
 import * as DisplayScreen from "./DisplayScreen.ts"
 import { Dividers } from "./Dividers.tsx"
-import { Tile } from "./Screen.ts"
+import { type Screen, Tile } from "./Screen.ts"
 import { TileBody } from "./TileBody.tsx"
 import { TileChrome } from "./TileChrome.tsx"
 import * as TilePlacements from "./TilePlacements.ts"
@@ -20,7 +21,6 @@ export function ScreenView() {
   const rects = useAtomValue(TilePlacements.rects)
   const dragging = Option.isSome(useAtomValue(TilePlacements.dragged))
   const display = useAtomValue(DisplayState.display)
-  const { slate } = useAtomValue(LiveStream.live)
   const selected = display.selectedOn(screen)
   const areaRef = useArea()
 
@@ -29,7 +29,6 @@ export function ScreenView() {
       {shown.onScreen().map((tile, index) => {
         const rect = rects[index]
         if (rect === undefined) return null
-        const game = Tile.guards.Empty(tile) ? undefined : Option.getOrUndefined(slate.gameOf(tile.game))
         const hidden = rect.width === 0
 
         return (
@@ -47,21 +46,58 @@ export function ScreenView() {
               transition: dragging ? undefined : cssTransition
             }}
           >
-            <TileChrome
-              screen={screen}
-              slot={index}
-              tile={tile}
-              game={game?.snapshot}
-              selected={selected === index}
-            />
-            <div className="flex min-h-0 flex-1 items-center justify-center bg-well">
-              <TileBody tile={tile} game={game} />
-            </div>
+            {Tile.guards.Empty(tile) ? (
+              <TileFace
+                screen={screen}
+                slot={index}
+                tile={tile}
+                snapshot={undefined}
+                selected={selected === index}
+              />
+            ) : (
+              <TileGame screen={screen} slot={index} tile={tile} selected={selected === index} />
+            )}
           </section>
         )
       })}
       {Option.isNone(shown.solo) && <Dividers layout={shown.layout} split={shown.splits[shown.layout]} />}
     </main>
+  )
+}
+
+/** A tile's game, read from its own live stream: the header always, the field only for a data tile of a live game. */
+function TileGame(props: {
+  screen: Screen
+  slot: number
+  tile: Exclude<Tile, { readonly _tag: "Empty" }>
+  selected: boolean
+}) {
+  const { value } = useAtomValue(Games.game(props.tile.game))
+  const snapshot = Option.getOrUndefined(Option.map(value, ({ snapshot }) => snapshot))
+  return <TileFace {...props} snapshot={snapshot} />
+}
+
+/** A tile's chrome over its well. */
+function TileFace(props: {
+  screen: Screen
+  slot: number
+  tile: Tile
+  snapshot: GameSnapshot | undefined
+  selected: boolean
+}) {
+  return (
+    <>
+      <TileChrome
+        screen={props.screen}
+        slot={props.slot}
+        tile={props.tile}
+        game={props.snapshot}
+        selected={props.selected}
+      />
+      <div className="flex min-h-0 flex-1 items-center justify-center bg-well">
+        <TileBody tile={props.tile} snapshot={props.snapshot} />
+      </div>
+    </>
   )
 }
 

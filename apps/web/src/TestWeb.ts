@@ -1,13 +1,12 @@
 import type { DisplayId } from "@sportal/api/DisplayId"
-import { LiveMessageJson } from "@sportal/api/LiveMessage"
+import { CalendarDate, type GameList, GameListJson } from "@sportal/api/GamesQuery"
 import type { ChannelAvailability } from "@sportal/domain/Channel"
-import { Game, GameId } from "@sportal/domain/Game"
-import { Slate } from "@sportal/domain/Slate"
+import { GameId } from "@sportal/domain/Game"
 import { snapshot } from "@sportal/domain/TestGame"
-import { DateTime, Effect, Layer, Queue, Record, Result, Schema, Stream } from "effect"
+import { DateTime, Effect, Layer, Queue, Result, Schema, Stream } from "effect"
 import { Atom, AtomRegistry } from "effect/reactivity"
+import * as Games from "./hub/Games.ts"
 import { HubClient } from "./hub/HubClient.ts"
-import * as LiveStream from "./hub/LiveStream.ts"
 import { Screen } from "./screen/Screen.ts"
 import { Shell } from "./shell/Shell.ts"
 import * as WebRuntime from "./WebRuntime.ts"
@@ -20,8 +19,11 @@ const later = snapshot({
 const soon = snapshot({ id: GameId.make("soon") })
 const done = snapshot({ id: GameId.make("done"), status: "final" })
 
-/** Four games in no order: live, soon, later, done are the ids; the strip puts them live, soon, later, done. */
-export const slate = new Slate({ games: [done, later, live, soon].map(Game.of) })
+/** Today's four games, as the Hub lists them in watch order: live, soon, later, done, none carried. */
+export const todayList: GameList = {
+  date: CalendarDate.make("2026-10-03"),
+  games: [live, soon, later, done].map((each) => ({ snapshot: each, availability: [] }))
+}
 
 /** A Quad with these games streaming in its tiles, in order; past the fourth they are benched. */
 export function withTiles(games: ReadonlyArray<string | undefined>) {
@@ -86,10 +88,17 @@ export function soloed(games: ReadonlyArray<GameId | undefined>, tile: number) {
   return Result.getOrThrow(fill(games).apply({ _tag: "Solo", tile }, nowhere))
 }
 
-/** The EventSource the live stream opened, once a read of the atom has started it. */
+/** The EventSource today's list opened, once a read of its atom has started it. */
 export const opened: Effect.Effect<FakeEventSource, never, AtomRegistry.AtomRegistry> = Atom.get(
-  LiveStream.live
-).pipe(Effect.andThen(() => lastOpened(() => true)))
+  Games.today
+).pipe(Effect.andThen(() => openedAt("/api/games/live")))
+
+/** The EventSource last opened, once a read of `atom` has started one. */
+export function openedBy<A>(
+  atom: Atom.Atom<A>
+): Effect.Effect<FakeEventSource, never, AtomRegistry.AtomRegistry> {
+  return Atom.get(atom).pipe(Effect.andThen(() => lastOpened(() => true)))
+}
 
 /** The EventSource last opened at `url`, once something has opened one. */
 export function openedAt(url: string): Effect.Effect<FakeEventSource> {
@@ -138,20 +147,9 @@ export class FakeEventSource {
   }
 }
 
-/**
- * A slate message's `data`, as the Hub sends it: the slate of `entries`' games and each one's availability.
- */
-export function slateMessage(
-  entries: ReadonlyArray<{
-    game: Game
-    availability: ReadonlyArray<ChannelAvailability>
-  }>
-) {
-  const slate = new Slate({ games: entries.map(({ game }) => game) })
-  const availability = Record.fromEntries(
-    entries.map(({ game, availability }) => [game.snapshot.id, availability] as const)
-  )
-  return encodeLiveMessage({ _tag: "SlateChanged", slate, availability })
+/** A game list's `data`, as the Hub sends it on a live list. */
+export function gameListMessage(list: GameList) {
+  return encodeGameList(list)
 }
 
 /** The first value of `atom` that `predicate` holds for. */
@@ -226,4 +224,4 @@ export class MemoryStorage implements Storage {
   }
 }
 
-const encodeLiveMessage = Schema.encodeSync(LiveMessageJson)
+const encodeGameList = Schema.encodeSync(GameListJson)

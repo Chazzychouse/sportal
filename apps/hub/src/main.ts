@@ -1,20 +1,20 @@
 import { NodeRuntime, NodeServices, NodeSocket } from "@effect/platform-node"
 import { Layer, Runtime } from "effect"
 import { FetchHttpClient } from "effect/http"
-import { Broadcast } from "./Broadcast.ts"
 import { Director } from "./Director.ts"
 import { Displays } from "./Displays.ts"
 import { HubConfig } from "./HubConfig.ts"
 import * as HubServer from "./HubServer.ts"
 import * as Logging from "./Logging.ts"
 import * as Espn from "./provider/espn/Espn.ts"
+import { Schedule } from "./Schedule.ts"
 import { isStopping } from "./Shutdown.ts"
 import { Source } from "./source/Source.ts"
 
 const Hub = HubServer.layer.pipe(
   Layer.provide(HubServer.layerListen),
   Layer.provide(Displays.layer),
-  Layer.provide(Broadcast.layer),
+  Layer.provide(Schedule.layer),
   Layer.provide(Director.layer),
   Layer.provide(Espn.layer),
   Layer.provide(Source.layerAll([Source.layerYouTubeTv, Source.layerTwitch])),

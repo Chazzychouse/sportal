@@ -15,12 +15,12 @@ describe("Shell.layerBrowser hotkeys", () => {
   it.effect("should give a hotkey pressed on the page and prevent its default", () =>
     Effect.gen(function* () {
       const next = yield* firstHotkey
-      const event = keydown({ code: "KeyS" })
+      const event = keydown({ code: "KeyL" })
 
       window.dispatchEvent(event)
       const hotkey = yield* Fiber.join(next)
 
-      assert.deepStrictEqual(hotkey, { _tag: "ToggleSlate" })
+      assert.deepStrictEqual(hotkey, { _tag: "NextLayout" })
       assert.isTrue(event.defaultPrevented)
     })
   )
@@ -29,7 +29,7 @@ describe("Shell.layerBrowser hotkeys", () => {
     Effect.gen(function* () {
       const next = yield* firstHotkey
 
-      window.dispatchEvent(keydown({ code: "KeyS", repeat: true }))
+      window.dispatchEvent(keydown({ code: "KeyL", repeat: true }))
       window.dispatchEvent(keydown({ code: "Slash", shiftKey: true }))
       const hotkey = yield* Fiber.join(next)
 
@@ -40,7 +40,7 @@ describe("Shell.layerBrowser hotkeys", () => {
   it.effect("should skip a key something already handled", () =>
     Effect.gen(function* () {
       const next = yield* firstHotkey
-      const handled = keydown({ code: "KeyS" })
+      const handled = keydown({ code: "KeyL" })
       handled.preventDefault()
 
       window.dispatchEvent(handled)

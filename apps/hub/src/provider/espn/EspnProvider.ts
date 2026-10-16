@@ -1,10 +1,12 @@
-import { GameSnapshot } from "@sportal/domain/Game"
+import type { CalendarDate } from "@sportal/api/GamesQuery"
+import { type GameId, GameSnapshot } from "@sportal/domain/Game"
 import type { LeagueId } from "@sportal/domain/League"
 import { DateTime, Duration, Effect, HashMap, Layer, Option, Result, Stream, SubscriptionRef } from "effect"
 import { HttpClient } from "effect/http"
-import { Delivery, Provider } from "../Provider.ts"
+import { Delivery, Provider, ProviderUnavailable } from "../Provider.ts"
 import * as EspnEvent from "./EspnEvent.ts"
-import type { EspnLeague } from "./EspnLeague.ts"
+import { EspnLeague } from "./EspnLeague.ts"
+import * as EspnPlay from "./EspnPlay.ts"
 import { FastCast, type Frame, Topic, type Wanted } from "./FastCast.ts"
 import { GameTopics } from "./GameTopics.ts"
 
@@ -16,7 +18,8 @@ import { GameTopics } from "./GameTopics.ts"
  * bounded to 20 seconds; a poll that fails, times out, or does not decode is logged, says nothing, and keeps the last
  * good listing. It tells FastCast to follow each listed game live or within 30 minutes of its start, folds FastCast's
  * frames into one `GameTopics`, and after each listing keeps no document of a topic it no longer follows. Each run of
- * `deliveries` polls and follows on its own.
+ * `deliveries` polls and follows on its own. It also answers, on request, a day's listing in every league and a game's
+ * plays from its summary. One league failing fails the whole day's listing.
  */
 export const layer = (
   leagues: ReadonlyArray<EspnLeague>
@@ -41,6 +44,45 @@ export const layer = (
             ).pipe(Effect.annotateLogs({ league: league.league }), Effect.as(Option.none()))
           )
         )
+
+      const fetched = (url: string) =>
+        client.get(url).pipe(
+          Effect.flatMap((response) => response.text),
+          Effect.timeout("20 seconds"),
+          Effect.mapError((cause) => new ProviderUnavailable({ reason: "Unanswered", cause }))
+        )
+
+      const listing = Effect.fn("EspnProvider.listing")(function* (date: CalendarDate) {
+        const days = yield* Effect.forEach(
+          leagues,
+          (league) =>
+            fetched(league.scoreboardUrl(Option.some(date))).pipe(
+              Effect.flatMap((body) =>
+                EspnEvent.listingOf(league.league, body).pipe(
+                  Effect.mapError((cause) => new ProviderUnavailable({ reason: "Unanswered", cause }))
+                )
+              )
+            ),
+          { concurrency: "unbounded" }
+        )
+        return days.flat()
+      })
+
+      const plays = Effect.fn("EspnProvider.plays")(function* (league: LeagueId, game: GameId) {
+        const espn = yield* Effect.fromOption(
+          EspnLeague.of(league),
+          () =>
+            new ProviderUnavailable({
+              reason: "Unanswered",
+              cause: `ESPN does not serve ${league} to the Hub`
+            })
+        )
+        const body = yield* fetched(espn.summaryUrl(game))
+
+        return yield* EspnPlay.summaryPlays(league, body).pipe(
+          Effect.mapError((cause) => new ProviderUnavailable({ reason: "Unanswered", cause }))
+        )
+      })
 
       const deliveries = Stream.unwrap(
         Effect.gen(function* () {
@@ -98,7 +140,7 @@ export const layer = (
         })
       )
 
-      return Provider.of({ deliveries })
+      return Provider.of({ deliveries, listing, plays })
     })
   )
 

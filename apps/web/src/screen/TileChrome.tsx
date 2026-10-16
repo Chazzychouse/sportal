@@ -120,5 +120,5 @@ function iconOf(action: TileAction, hearing: boolean): ReactNode {
   }
 }
 
-/** The drag data type of a tile or benched game being dragged: its index in the Screen's tiles. */
-export const tileDrag = "application/x-sportal-tile"
+/** The drag data type of a tile being dragged: its index in the Screen's tiles. */
+const tileDrag = "application/x-sportal-tile"

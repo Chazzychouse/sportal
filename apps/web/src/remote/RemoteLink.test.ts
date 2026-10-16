@@ -134,11 +134,11 @@ describe("RemoteLink", () => {
         yield* Atom.mount(RemoteLink.link)
         const source = yield* inputStream
 
-        source.onmessage?.({ data: JSON.stringify({ _tag: "Pressed", hotkey: { _tag: "ToggleSlate" } }) })
-        return yield* TestWeb.until(DisplayState.display, (display) => !display.slateOpen)
+        source.onmessage?.({ data: JSON.stringify({ _tag: "Pressed", hotkey: { _tag: "ShowKeys" } }) })
+        return yield* TestWeb.until(DisplayState.display, (display) => display.shows("Keys"))
       }).pipe(Effect.scoped, Effect.provide(registry))
 
-      assert.isFalse(display.slateOpen)
+      assert.isTrue(display.shows("Keys"))
     })
   )
 
@@ -154,13 +154,13 @@ describe("RemoteLink", () => {
         source.onmessage?.({ data: JSON.stringify({ _tag: "Shouted" }) })
         yield* Effect.yieldNow
         const after = yield* Atom.get(DisplayScreen.screen)
-        source.onmessage?.({ data: JSON.stringify({ _tag: "Pressed", hotkey: { _tag: "ToggleSlate" } }) })
-        const display = yield* TestWeb.until(DisplayState.display, (display) => !display.slateOpen)
+        source.onmessage?.({ data: JSON.stringify({ _tag: "Pressed", hotkey: { _tag: "ShowKeys" } }) })
+        const display = yield* TestWeb.until(DisplayState.display, (display) => display.shows("Keys"))
         return [before, after, display] as const
       }).pipe(Effect.scoped, Effect.provide(registry))
 
       assert.strictEqual(after, before)
-      assert.isFalse(display.slateOpen)
+      assert.isTrue(display.shows("Keys"))
     })
   )
 

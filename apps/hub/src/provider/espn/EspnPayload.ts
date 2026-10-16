@@ -115,3 +115,34 @@ export const PlayEntity = Schema.Struct({
     Schema.Array(Schema.Struct({ type: Schema.optional(Schema.String), team: Schema.optional(TeamRef) }))
   )
 })
+
+/** A summary play's reference to a team, `{ id }`, read as ESPN's id for it. */
+const SummaryTeamRef = Schema.Struct({ id: Schema.String }).pipe(
+  Schema.decodeTo(Schema.String, {
+    decode: SchemaGetter.transform(({ id }) => id),
+    encode: SchemaGetter.transform((id) => ({ id }))
+  })
+)
+
+const SummarySpot = Schema.Struct({
+  ...Spot.fields,
+  team: Schema.optional(SummaryTeamRef)
+})
+
+/** A play as the game summary lists it under `drives`: a play entity spelled with `{ id }` teams, sometimes null. */
+export const SummaryPlay = Schema.Struct({
+  ...PlayEntity.fields,
+  start: SummarySpot,
+  end: SummarySpot,
+  team: Schema.optional(Schema.NullOr(SummaryTeamRef)),
+  participants: Schema.optional(Schema.Null)
+})
+
+/** The game summary: what the decoder reads of it, each drive's plays for `EspnPlay` to read one by one. */
+export const Summary = Schema.Struct({
+  drives: Schema.optional(
+    Schema.Struct({
+      previous: Schema.Array(Schema.Struct({ plays: Schema.Array(Schema.Unknown) }))
+    })
+  )
+})

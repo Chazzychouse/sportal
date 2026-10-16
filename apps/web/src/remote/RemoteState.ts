@@ -4,10 +4,8 @@ import { Data, Effect, Schema, Stream } from "effect"
 import { AsyncResult, Atom } from "effect/reactivity"
 import { Display, type DisplayInput } from "../display/Display.ts"
 import { HubClient } from "../hub/HubClient.ts"
-import * as LiveStream from "../hub/LiveStream.ts"
 import * as ServerEvents from "../hub/ServerEvents.ts"
 import { ServerEvent } from "../hub/ServerEvents.ts"
-import { StripCard } from "../slate/StripCard.ts"
 import { runtime } from "../WebRuntime.ts"
 import { RemoteInput } from "./RemoteInput.ts"
 import { RemoteReport } from "./RemoteReport.ts"
@@ -54,8 +52,8 @@ export const send = Atom.family((id: DisplayId) =>
 export const offline = Atom.make(0).pipe(Atom.keepAlive)
 
 /**
- * This phone's own Display state for the Display `id` (the selected tile), applied against the reported Screen and
- * the live slate; its screen commands go to the Display as `Commanded`. Before a report, inputs do nothing.
+ * This phone's own Display state for the Display `id` (the selected tile), applied against the reported Screen; its
+ * screen commands go to the Display as `Commanded`. Before a report, inputs do nothing.
  */
 export const display = Atom.family((id: DisplayId) =>
   Atom.writable(
@@ -63,10 +61,7 @@ export const display = Atom.family((id: DisplayId) =>
     (ctx, input: DisplayInput) => {
       const seen = ctx.get(followed(id))
       if (!Followed.$is("Reported")(seen)) return
-      const { screen } = seen.report
-      const live = ctx.get(LiveStream.live)
-      const cards = StripCard.of(screen, live.slate)
-      const step = ctx.get(kept(id)).apply(input, screen, cards)
+      const step = ctx.get(kept(id)).apply(input, seen.report.screen)
       ctx.set(kept(id), step.display)
       for (const command of step.commands) ctx.set(send(id), { _tag: "Commanded", command })
     }

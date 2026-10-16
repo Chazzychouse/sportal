@@ -1,4 +1,4 @@
-import type { Slate } from "@sportal/domain/Slate"
+import type { ListedGame } from "@sportal/api/ListedGame"
 import { Data } from "effect"
 import { ArrowLeftRight, ArrowUpToLine, Shrink, SquareDashed, Volume2, X } from "lucide-react"
 import { Fragment, type ReactNode, useState } from "react"
@@ -15,7 +15,7 @@ import { TileAction } from "../screen/TileAction.ts"
  */
 export function ScreenMap(props: {
   screen: Screen
-  slate: Slate
+  games: ReadonlyArray<ListedGame>
   selected: number
   onSelect: (slot: number) => void
   onCommand: (command: ScreenCommand) => void
@@ -26,7 +26,7 @@ export function ScreenMap(props: {
     const at = tiles[slot]
     return at === undefined || Tile.guards.Empty(at)
       ? undefined
-      : props.slate.games.find(({ snapshot }) => snapshot.id === at.game)?.snapshot
+      : props.games.find(({ snapshot }) => snapshot.id === at.game)?.snapshot
   }
   const selectedGame = gameIn(props.selected)
   const run = (command: ScreenCommand) => {

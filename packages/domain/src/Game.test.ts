@@ -609,30 +609,6 @@ describe("Game#playsChange", () => {
   })
 })
 
-describe("Game#recent", () => {
-  it("should keep only the last ten plays", () => {
-    const plays = Array.from({ length: 12 }, (_, index) =>
-      play({ id: PlayId.make(`p${index + 1}`), sequence: index + 1 })
-    )
-    const game = new Game({ snapshot: liveSnapshot(), plays })
-
-    const recent = game.recent()
-
-    assert.deepStrictEqual(
-      recent.plays.map(({ sequence }) => sequence),
-      [3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
-    )
-  })
-
-  it("should give back the game itself with ten plays or fewer", () => {
-    const game = new Game({ snapshot: liveSnapshot(), plays: [play()] })
-
-    const recent = game.recent()
-
-    assert.strictEqual(recent, game)
-  })
-})
-
 describe("Game#playsAfter", () => {
   it("should give the plays the earlier game lacks, in order", () => {
     const first = play({ id: PlayId.make("1"), sequence: 1 })

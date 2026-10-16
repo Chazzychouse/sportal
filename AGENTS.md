@@ -144,7 +144,7 @@ A reader opens a file to see the thing it is named for. Keep it that way.
 - `pnpm format` — apply formatting and safe lint fixes.
 - `pnpm dev` — run the Hub, the web dev server, and the desktop shell together, each reloading on change. The shell
   waits for the UI to come up. Use `pnpm dev:x11` to run the shell through XWayland.
-- `pnpm --filter @sportal/hub dev` — run only the Hub on port 4400 (API and live stream), on every interface (`SPORTAL_HOST` narrows it). For
+- `pnpm --filter @sportal/hub dev` — run only the Hub on port 4400 (API and live queries), on every interface (`SPORTAL_HOST` narrows it). For
   now it keeps nothing between runs: a restarted Hub starts from an empty slate and the next poll fills it.
 - Hub settings: every one is a field of `apps/hub/src/HubConfig.ts`, with its variable and default. A bad value stops
   the Hub at startup. `GET /api/health` answers while it is up.

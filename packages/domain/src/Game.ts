@@ -201,9 +201,6 @@ export class Game extends Schema.Class<Game>("sportal/Game")({
   snapshot: GameSnapshot,
   plays: Schema.Array(Play)
 }) {
-  /** How many of its plays `recent` keeps. */
-  private static readonly recentCount = 10
-
   /** How many plays a page holds unless asked for fewer. */
   static readonly pageSize = 50
 
@@ -251,13 +248,6 @@ export class Game extends Schema.Class<Game>("sportal/Game")({
       return Option.some({ _tag: "Appended", plays: this.plays.slice(earlier.plays.length).toReversed() })
     }
     return Option.some({ _tag: "Reset", plays: this.playsPage(undefined, Game.pageSize).plays })
-  }
-
-  /** This game with only its last ten plays: what the live stream sends. */
-  recent(): Game {
-    if (this.plays.length <= Game.recentCount) return this
-
-    return new Game({ ...this, plays: this.plays.slice(-Game.recentCount) })
   }
 }
 

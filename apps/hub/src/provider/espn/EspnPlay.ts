@@ -1,8 +1,8 @@
 import type { LeagueId } from "@sportal/domain/League"
 import { type FootballKind, Play } from "@sportal/domain/Play"
-import { Effect, Schema, SchemaGetter } from "effect"
+import { Array as Arr, Effect, Schema, SchemaGetter } from "effect"
 import * as EspnEvent from "./EspnEvent.ts"
-import { PlayEntity } from "./EspnPayload.ts"
+import { PlayEntity, Summary, SummaryPlay } from "./EspnPayload.ts"
 
 /** ESPN's play entity, as a game package lists it under `entities.plays`, read as a football `Play` of `league`. */
 export function play(league: LeagueId) {
@@ -20,6 +20,30 @@ export function play(league: LeagueId) {
 }
 
 /**
+ * Game `league`'s summary `body` read as its plays, in `Play.order`; a play that does not decode is skipped. A summary
+ * play carries no team (ESPN sends `team: null`), so `Play.team` stays unset and `offense()` reads the start spot.
+ */
+export const summaryPlays = Effect.fnUntraced(function* (league: LeagueId, body: string) {
+  const summary = yield* decodeSummary(body)
+  const entities = (summary.drives?.previous ?? []).flatMap(({ plays }) => plays)
+  const plays = yield* Effect.forEach(entities, (entity) => Effect.option(decodeSummaryPlay(league)(entity)))
+  return Arr.getSomes(plays).toSorted(Play.order)
+})
+
+const decodeSummary = Schema.decodeUnknownEffect(Schema.fromJsonString(Summary))
+
+function decodeSummaryPlay(league: LeagueId) {
+  return Schema.decodeUnknownEffect(
+    SummaryPlay.pipe(
+      Schema.decodeTo(Schema.toType(Play), {
+        decode: SchemaGetter.transformEffect((entity) => read(league, entity)),
+        encode: SchemaGetter.forbidden(() => "A Play cannot be encoded back to an ESPN summary play")
+      })
+    )
+  )
+}
+
+/**
  * The football `Play` of `league` that an ESPN play says: the fields every sport's play carries, its team (a
  * timeout's `caller`, since ESPN's own `team` on one is the team with the ball), and its detail: the kind its type
  * reads as (`other` for a type the table does not know), its yards, and its spots. It fails when its start spot has
@@ -27,7 +51,10 @@ export function play(league: LeagueId) {
  */
 const read = Effect.fnUntraced(function* (
   league: LeagueId,
-  play: typeof PlayEntity.Type & { readonly caller?: string | undefined }
+  play: Omit<typeof PlayEntity.Type, "team" | "participants"> & {
+    readonly team?: string | null | undefined
+    readonly caller?: string | undefined
+  }
 ) {
   // ESPN reports down -1, with a meaningless distance, when no down is being played (after a score, at a stoppage).
   const spot = ({ down, distance, yardsToEndzone, team }: typeof play.start) => ({
@@ -36,7 +63,7 @@ const read = Effect.fnUntraced(function* (
     ...(yardsToEndzone === undefined ? {} : { yardsToEndzone }),
     ...(team === undefined ? {} : { team: EspnEvent.teamId(league, team) })
   })
-  const credited = play.type.id === timeoutType ? play.caller : play.team
+  const credited = play.type.id === timeoutType ? play.caller : (play.team ?? undefined)
 
   const wire = {
     id: play.id,

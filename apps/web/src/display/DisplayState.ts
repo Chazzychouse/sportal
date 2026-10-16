@@ -1,33 +1,25 @@
 import type { Hotkey } from "@sportal/api/Hotkey"
 import { Effect, Match, Option, Stream } from "effect"
 import { AsyncResult, Atom } from "effect/reactivity"
-import * as LiveStream from "../hub/LiveStream.ts"
 import * as DisplayScreen from "../screen/DisplayScreen.ts"
 import { Shell } from "../shell/Shell.ts"
-import { StripCard } from "../slate/StripCard.ts"
 import { logDefect, runtime } from "../WebRuntime.ts"
 import { Display, DisplayInput } from "./Display.ts"
 
 /**
- * This Display's local state. An input written to it is applied against the Screen and the slate strip: the next
- * Display is kept, and the step's screen commands go to the Screen.
+ * This Display's local state. An input written to it is applied against the Screen: the next Display is kept, and the
+ * step's screen commands go to the Screen.
  */
 export const display: Atom.Writable<Display, DisplayInput> = Atom.writable(
   (get) => get(kept),
   (ctx, input: DisplayInput) => {
-    const step = ctx.get(kept).apply(input, ctx.get(DisplayScreen.screen), ctx.get(cards))
+    const step = ctx.get(kept).apply(input, ctx.get(DisplayScreen.screen))
     Atom.batch(() => {
       ctx.set(kept, step.display)
       for (const command of step.commands) ctx.set(DisplayScreen.screen, command)
     })
   }
 ).pipe(Atom.keepAlive)
-
-/** The slate strip's cards: this Screen's bench, then the live slate, in watch order. */
-export const cards: Atom.Atom<ReadonlyArray<StripCard>> = Atom.make((get) => {
-  const live = get(LiveStream.live)
-  return StripCard.of(get(DisplayScreen.screen), live.slate)
-})
 
 /** Whether this Display's window is full screen: in the shell the window, in a browser the page. */
 export const fullScreen: Atom.Atom<boolean> = runtime

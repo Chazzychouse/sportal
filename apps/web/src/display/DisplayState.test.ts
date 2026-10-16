@@ -23,11 +23,11 @@ describe("DisplayState", () => {
       const { registry } = yield* TestWeb.withShell()
 
       const display = yield* Effect.gen(function* () {
-        yield* Atom.set(DisplayState.display, DisplayInput.SlateToggled())
+        yield* Atom.set(DisplayState.display, DisplayInput.Opened({ overlay: "Keys" }))
         return yield* Atom.get(DisplayState.display)
       }).pipe(Effect.scoped, Effect.provide(registry))
 
-      assert.isFalse(display.slateOpen)
+      assert.isTrue(display.shows("Keys"))
     })
   )
 
@@ -89,14 +89,14 @@ describe("DisplayState", () => {
 
   it.effect("should press every other hotkey on the Display", () =>
     Effect.gen(function* () {
-      const { registry } = yield* TestWeb.withShell({ hotkeys: Stream.make({ _tag: "ToggleSlate" }) })
+      const { registry } = yield* TestWeb.withShell({ hotkeys: Stream.make({ _tag: "ShowKeys" }) })
 
       const display = yield* Effect.gen(function* () {
         yield* Atom.mount(DisplayState.inputs)
-        return yield* TestWeb.until(DisplayState.display, (display) => !display.slateOpen)
+        return yield* TestWeb.until(DisplayState.display, (display) => display.shows("Keys"))
       }).pipe(Effect.scoped, Effect.provide(registry))
 
-      assert.isFalse(display.slateOpen)
+      assert.isTrue(display.shows("Keys"))
     })
   )
 

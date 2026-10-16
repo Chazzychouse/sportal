@@ -2,18 +2,15 @@ import { assert, describe, it } from "@effect/vitest"
 import { GameId } from "@sportal/domain/Game"
 import { Option } from "effect"
 import { Screen, type ScreenCommand } from "../screen/Screen.ts"
-import { StripCard } from "../slate/StripCard.ts"
 import * as TestWeb from "../TestWeb.ts"
 import { Display, DisplayInput, DisplayStep } from "./Display.ts"
 
 describe("Display.initial", () => {
-  it("should start on slot 0, with nothing interacting or picked, the slate open, and no overlay", () => {
+  it("should start on slot 0, with nothing interacting and no overlay", () => {
     const display = Display.initial
 
     assert.strictEqual(display.selected, 0)
     assert.isUndefined(display.interacting)
-    assert.isUndefined(display.pick)
-    assert.isTrue(display.slateOpen)
     assert.strictEqual(display.overlay._tag, "None")
   })
 })
@@ -34,7 +31,7 @@ describe("Display#select", () => {
 
   it("should keep interacting when the same slot is selected", () => {
     const screen = TestWeb.withTiles(["live", "soon"])
-    const interacting = press(Display.initial, { _tag: "Interact" }, screen).display
+    const interacting = Display.initial.press({ _tag: "Interact" }, screen).display
 
     const reselected = interacting.select(0, screen).display
 
@@ -43,7 +40,7 @@ describe("Display#select", () => {
 
   it("should end interacting when another slot is selected", () => {
     const screen = TestWeb.withTiles(["live", "soon"])
-    const interacting = press(Display.initial, { _tag: "Interact" }, screen).display
+    const interacting = Display.initial.press({ _tag: "Interact" }, screen).display
 
     const moved = interacting.select(1, screen).display
 
@@ -52,7 +49,7 @@ describe("Display#select", () => {
 
   it("should not interact again when the slot it ended on is selected back", () => {
     const screen = TestWeb.withTiles(["live", "soon"])
-    const interacting = press(Display.initial, { _tag: "Interact" }, screen).display
+    const interacting = Display.initial.press({ _tag: "Interact" }, screen).display
     const moved = interacting.select(1, screen).display
 
     const back = moved.select(0, screen).display
@@ -81,13 +78,12 @@ describe("Display#selectedOn and Display#interactingOn", () => {
     assert.strictEqual(slot, 0)
   })
 
-  it("should drop into the last slot once the layout has fewer", () => {
+  it("should choose into the last slot once the layout has fewer", () => {
     const quad = TestWeb.withTiles([])
     const selected = Display.initial.select(3, quad).display
     const single = new Screen({ ...quad, layout: "Single" })
-    const free = cardOf(single, 0)
 
-    const { commands } = selected.drop(free, single)
+    const { commands } = selected.choose(live, single)
 
     assert.deepStrictEqual(commands, [{ _tag: "Assign", tile: 0, game: GameId.make("live") }])
   })
@@ -96,7 +92,7 @@ describe("Display#selectedOn and Display#interactingOn", () => {
     const quad = TestWeb.withTiles(["live"])
     const selected = Display.initial.select(3, quad).display
     const single = new Screen({ ...quad, layout: "Single" })
-    const interacting = press(selected, { _tag: "Interact" }, single).display
+    const interacting = selected.press({ _tag: "Interact" }, single).display
 
     const reselected = interacting.select(0, single).display
 
@@ -105,7 +101,7 @@ describe("Display#selectedOn and Display#interactingOn", () => {
 
   it("should read the game interacting on the screen it began on", () => {
     const before = TestWeb.withTiles(["live", "soon"])
-    const display = press(Display.initial, { _tag: "Interact" }, before).display
+    const display = Display.initial.press({ _tag: "Interact" }, before).display
 
     const interacting = display.interactingOn(before)
 
@@ -114,7 +110,7 @@ describe("Display#selectedOn and Display#interactingOn", () => {
 
   it("should read interacting as none once a swap moves another game into the selected slot", () => {
     const before = TestWeb.withTiles(["live", "soon"])
-    const display = press(Display.initial, { _tag: "Interact" }, before).display
+    const display = Display.initial.press({ _tag: "Interact" }, before).display
 
     const interacting = display.interactingOn(TestWeb.withTiles(["soon", "live"]))
 
@@ -123,7 +119,7 @@ describe("Display#selectedOn and Display#interactingOn", () => {
 
   it("should read interacting again once its game is swapped back into the selected slot", () => {
     const before = TestWeb.withTiles(["live", "soon"])
-    const display = press(Display.initial, { _tag: "Interact" }, before).display
+    const display = Display.initial.press({ _tag: "Interact" }, before).display
     display.interactingOn(TestWeb.withTiles(["soon", "live"]))
 
     const swappedBack = display.interactingOn(TestWeb.withTiles(["live", "soon"]))
@@ -132,83 +128,75 @@ describe("Display#selectedOn and Display#interactingOn", () => {
   })
 })
 
-describe("Display#drop", () => {
-  it("should assign a free game into the selected slot, pick it, and select the next empty slot", () => {
+describe("Display#choose", () => {
+  it("should assign a free game into the selected slot and select the next empty slot", () => {
     const screen = TestWeb.withTiles(["soon"])
-    const free = cardOf(screen, 0)
 
-    const dropped = Display.initial.drop(free, screen)
+    const chosen = Display.initial.choose(live, screen)
 
-    assert.deepStrictEqual(dropped.commands, [{ _tag: "Assign", tile: 0, game: GameId.make("live") }])
-    assert.strictEqual(dropped.display.pick, "live")
-    assert.strictEqual(dropped.display.selected, 1)
+    assert.deepStrictEqual(chosen.commands, [{ _tag: "Assign", tile: 0, game: GameId.make("live") }])
+    assert.strictEqual(chosen.display.selected, 1)
   })
 
   it("should swap a benched game into the selected slot and select the next empty slot", () => {
     const screen = TestWeb.withTiles(["soon", undefined, undefined, undefined, "done"])
-    const bench = cardOf(screen, 0)
     const selected = Display.initial.select(2, screen).display
 
-    const dropped = selected.drop(bench, screen)
+    const chosen = selected.choose(GameId.make("done"), screen)
 
-    assert.deepStrictEqual(dropped.commands, [{ _tag: "Swap", a: 4, b: 2 }])
-    assert.strictEqual(dropped.display.pick, "done")
-    assert.strictEqual(dropped.display.selected, 3)
+    assert.deepStrictEqual(chosen.commands, [{ _tag: "Swap", a: 4, b: 2 }])
+    assert.strictEqual(chosen.display.selected, 3)
   })
 
   it("should do nothing with a game already on screen", () => {
     const screen = TestWeb.withTiles(["soon", undefined, undefined, undefined, "done"])
-    const onScreen = cardOf(screen, 2)
 
-    const dropped = Display.initial.drop(onScreen, screen)
+    const chosen = Display.initial.choose(GameId.make("soon"), screen)
 
-    assert.strictEqual(dropped.display, Display.initial)
-    assert.deepStrictEqual(dropped.commands, [])
+    assert.strictEqual(chosen.display, Display.initial)
+    assert.deepStrictEqual(chosen.commands, [])
   })
 
-  it("should select the next empty slot after the drop", () => {
+  it("should select the next empty slot after the choice", () => {
     const screen = TestWeb.withTiles(["soon", undefined, undefined, undefined])
-    const free = cardOf(screen, 0)
     const selected = Display.initial.select(1, screen).display
 
-    const dropped = selected.drop(free, screen)
+    const chosen = selected.choose(live, screen)
 
-    assert.strictEqual(dropped.display.selected, 2)
+    assert.strictEqual(chosen.display.selected, 2)
   })
 
   it("should keep the selection when no empty slot is left", () => {
     const full = TestWeb.withTiles(["soon", "later", undefined, "done"])
-    const left = cardOf(full, 0)
     const selected = Display.initial.select(2, full).display
 
-    const dropped = selected.drop(left, full)
+    const chosen = selected.choose(live, full)
 
-    assert.strictEqual(dropped.display.selected, 2)
+    assert.strictEqual(chosen.display.selected, 2)
   })
 
-  it("should end interacting when the drop moves the selection", () => {
+  it("should end interacting when the choice moves the selection", () => {
     const screen = TestWeb.withTiles(["soon"])
-    const interacting = press(Display.initial, { _tag: "Interact" }, screen).display
-    const free = cardOf(screen, 0)
+    const interacting = Display.initial.press({ _tag: "Interact" }, screen).display
 
-    const dropped = interacting.drop(free, screen)
+    const chosen = interacting.choose(live, screen)
 
-    assert.isUndefined(dropped.display.interacting)
+    assert.isUndefined(chosen.display.interacting)
   })
 })
 
 describe("Display#press", () => {
   it("should answer with a DisplayStep", () => {
-    const step = press(Display.initial, { _tag: "ToggleSlate" }, TestWeb.withTiles([]))
+    const step = Display.initial.press({ _tag: "ShowKeys" }, TestWeb.withTiles([]))
 
     assert.instanceOf(step, DisplayStep)
   })
 
   it("should select with SelectTile as select does", () => {
     const screen = TestWeb.withTiles(["live", "soon"])
-    const interacting = press(Display.initial, { _tag: "Interact" }, screen).display
+    const interacting = Display.initial.press({ _tag: "Interact" }, screen).display
 
-    const { display, commands } = press(interacting, { _tag: "SelectTile", slot: 1 }, screen)
+    const { display, commands } = interacting.press({ _tag: "SelectTile", slot: 1 }, screen)
 
     assert.strictEqual(display.selected, 1)
     assert.isUndefined(display.interacting)
@@ -217,9 +205,9 @@ describe("Display#press", () => {
 
   it("should ignore SelectTile past the last slot, as select does", () => {
     const screen = TestWeb.withTiles(["live", "soon"])
-    const interacting = press(Display.initial, { _tag: "Interact" }, screen).display
+    const interacting = Display.initial.press({ _tag: "Interact" }, screen).display
 
-    const { display } = press(interacting, { _tag: "SelectTile", slot: 8 }, screen)
+    const { display } = interacting.press({ _tag: "SelectTile", slot: 8 }, screen)
 
     assert.strictEqual(display, interacting)
   })
@@ -228,7 +216,7 @@ describe("Display#press", () => {
     const screen = TestWeb.withTiles(["live", "soon"])
     const selected = Display.initial.select(1, screen).display
 
-    const solo = press(selected, { _tag: "ToggleSolo" }, screen)
+    const solo = selected.press({ _tag: "ToggleSolo" }, screen)
 
     assert.strictEqual(solo.display, selected)
     assert.deepStrictEqual(solo.commands, [{ _tag: "Solo", tile: 1 }])
@@ -239,7 +227,7 @@ describe("Display#press", () => {
     const selected = Display.initial.select(1, screen).display
     const soloed = new Screen({ ...screen, solo: Option.some(GameId.make("soon")) })
 
-    const { commands } = press(selected, { _tag: "ToggleSolo" }, soloed)
+    const { commands } = selected.press({ _tag: "ToggleSolo" }, soloed)
 
     assert.deepStrictEqual(commands, [{ _tag: "Unsolo" }])
   })
@@ -248,7 +236,7 @@ describe("Display#press", () => {
     const screen = TestWeb.withTiles(["live"])
     const selected = Display.initial.select(1, screen).display
 
-    const { display, commands } = press(selected, { _tag: "ToggleSolo" }, screen)
+    const { display, commands } = selected.press({ _tag: "ToggleSolo" }, screen)
 
     assert.strictEqual(display, selected)
     assert.deepStrictEqual(commands, [])
@@ -258,7 +246,7 @@ describe("Display#press", () => {
     const soloed = new Screen({ ...TestWeb.withTiles(["live"]), solo: Option.some(GameId.make("live")) })
     const selected = Display.initial.select(1, soloed).display
 
-    const { commands } = press(selected, { _tag: "ToggleSolo" }, soloed)
+    const { commands } = selected.press({ _tag: "ToggleSolo" }, soloed)
 
     assert.deepStrictEqual(commands, [{ _tag: "Unsolo" }])
   })
@@ -268,7 +256,7 @@ describe("Display#press", () => {
     const selected = Display.initial.select(3, quad).display
     const single = new Screen({ ...quad, layout: "Single" })
 
-    const { commands } = press(selected, { _tag: "ToggleSolo" }, single)
+    const { commands } = selected.press({ _tag: "ToggleSolo" }, single)
 
     assert.deepStrictEqual(commands, [{ _tag: "Solo", tile: 0 }])
   })
@@ -277,7 +265,7 @@ describe("Display#press", () => {
     const soloed = new Screen({ ...TestWeb.withTiles(["live"]), solo: Option.some(GameId.make("live")) })
     const keys = Display.initial.open("Keys")
 
-    const { display, commands } = press(keys, { _tag: "Unsolo" }, soloed)
+    const { display, commands } = keys.press({ _tag: "Unsolo" }, soloed)
 
     assert.strictEqual(display.overlay._tag, "None")
     assert.deepStrictEqual(commands, [])
@@ -288,7 +276,7 @@ describe("Display#press", () => {
     (overlay) => {
       const open = Display.initial.open(overlay)
 
-      const { display, commands } = press(open, { _tag: "Unsolo" }, TestWeb.withTiles([]))
+      const { display, commands } = open.press({ _tag: "Unsolo" }, TestWeb.withTiles([]))
 
       assert.strictEqual(display.overlay._tag, "None")
       assert.deepStrictEqual(commands, [])
@@ -298,7 +286,7 @@ describe("Display#press", () => {
   it("should unsolo with Esc and no overlay while soloed", () => {
     const soloed = new Screen({ ...TestWeb.withTiles(["live"]), solo: Option.some(GameId.make("live")) })
 
-    const { display, commands } = press(Display.initial, { _tag: "Unsolo" }, soloed)
+    const { display, commands } = Display.initial.press({ _tag: "Unsolo" }, soloed)
 
     assert.strictEqual(display, Display.initial)
     assert.deepStrictEqual(commands, [{ _tag: "Unsolo" }])
@@ -307,7 +295,7 @@ describe("Display#press", () => {
   it("should do nothing with Esc and no overlay while not soloed", () => {
     const screen = TestWeb.withTiles(["live"])
 
-    const { display, commands } = press(Display.initial, { _tag: "Unsolo" }, screen)
+    const { display, commands } = Display.initial.press({ _tag: "Unsolo" }, screen)
 
     assert.strictEqual(display, Display.initial)
     assert.deepStrictEqual(commands, [])
@@ -316,7 +304,7 @@ describe("Display#press", () => {
   it("should interact with the selected slot's stream with Interact", () => {
     const screen = TestWeb.withTiles(["live"])
 
-    const { display, commands } = press(Display.initial, { _tag: "Interact" }, screen)
+    const { display, commands } = Display.initial.press({ _tag: "Interact" }, screen)
 
     assert.strictEqual(display.interactingOn(screen), "live")
     assert.deepStrictEqual(commands, [])
@@ -324,19 +312,19 @@ describe("Display#press", () => {
 
   it("should end interacting with Interact when it was on", () => {
     const screen = TestWeb.withTiles(["live"])
-    const on = press(Display.initial, { _tag: "Interact" }, screen).display
+    const on = Display.initial.press({ _tag: "Interact" }, screen).display
 
-    const { display } = press(on, { _tag: "Interact" }, screen)
+    const { display } = on.press({ _tag: "Interact" }, screen)
 
     assert.isUndefined(display.interactingOn(screen))
   })
 
   it("should interact with the game now there with Interact on a slot a swap has refilled", () => {
     const before = TestWeb.withTiles(["live", "soon"])
-    const stale = press(Display.initial, { _tag: "Interact" }, before).display
+    const stale = Display.initial.press({ _tag: "Interact" }, before).display
     const swapped = TestWeb.withTiles(["soon", "live"])
 
-    const { display } = press(stale, { _tag: "Interact" }, swapped)
+    const { display } = stale.press({ _tag: "Interact" }, swapped)
 
     assert.strictEqual(display.interactingOn(swapped), "soon")
   })
@@ -351,67 +339,13 @@ describe("Display#press", () => {
       })
     }
   ])("should do nothing with Interact on a tile with no stream: $tile", ({ screen }) => {
-    const { display } = press(Display.initial, { _tag: "Interact" }, screen)
+    const { display } = Display.initial.press({ _tag: "Interact" }, screen)
 
     assert.strictEqual(display, Display.initial)
-  })
-
-  it("should move the pick forward with StepPick as StripCard.nextPick does", () => {
-    const screen = TestWeb.withTiles(["soon", undefined, undefined, undefined, "done"])
-    const cards = StripCard.of(screen, TestWeb.slate)
-
-    const { display, commands } = press(Display.initial, { _tag: "StepPick", step: 1 }, screen)
-
-    assert.strictEqual(display.pick, StripCard.nextPick(cards, undefined, 1))
-    assert.deepStrictEqual(commands, [])
-  })
-
-  it("should move the pick back with StepPick as StripCard.nextPick does", () => {
-    const screen = TestWeb.withTiles(["soon", undefined, undefined, undefined, "done"])
-    const cards = StripCard.of(screen, TestWeb.slate)
-    const first = press(Display.initial, { _tag: "StepPick", step: 1 }, screen).display
-
-    const { display } = press(first, { _tag: "StepPick", step: -1 }, screen)
-
-    assert.strictEqual(display.pick, StripCard.nextPick(cards, first.pick, -1))
-  })
-
-  it("should drop the picked card with DropPick as drop does", () => {
-    const screen = TestWeb.withTiles(["soon"])
-    const picked = press(Display.initial, { _tag: "StepPick", step: 1 }, screen).display
-    const free = cardOf(screen, 0)
-
-    const step = press(picked, { _tag: "DropPick" }, screen)
-
-    assert.deepStrictEqual(step, picked.drop(free, screen))
-  })
-
-  it("should do nothing with DropPick and no pick", () => {
-    const { display, commands } = press(Display.initial, { _tag: "DropPick" }, TestWeb.withTiles([]))
-
-    assert.strictEqual(display, Display.initial)
-    assert.deepStrictEqual(commands, [])
-  })
-
-  it("should toggle the slate with ToggleSlate as toggleSlate does", () => {
-    const { display, commands } = press(Display.initial, { _tag: "ToggleSlate" }, TestWeb.withTiles([]))
-
-    assert.isFalse(display.slateOpen)
-    assert.deepStrictEqual(display, Display.initial.toggleSlate())
-    assert.deepStrictEqual(commands, [])
-  })
-
-  it("should open a closed slate with ToggleSlate", () => {
-    const closed = Display.initial.toggleSlate()
-
-    const { display, commands } = press(closed, { _tag: "ToggleSlate" }, TestWeb.withTiles([]))
-
-    assert.isTrue(display.slateOpen)
-    assert.deepStrictEqual(commands, [])
   })
 
   it("should open the key help with ShowKeys", () => {
-    const { display, commands } = press(Display.initial, { _tag: "ShowKeys" }, TestWeb.withTiles([]))
+    const { display, commands } = Display.initial.press({ _tag: "ShowKeys" }, TestWeb.withTiles([]))
 
     assert.strictEqual(display.overlay._tag, "Keys")
     assert.deepStrictEqual(commands, [])
@@ -419,9 +353,9 @@ describe("Display#press", () => {
 
   it("should close the key help with ShowKeys when it was open", () => {
     const screen = TestWeb.withTiles([])
-    const open = press(Display.initial, { _tag: "ShowKeys" }, screen).display
+    const open = Display.initial.press({ _tag: "ShowKeys" }, screen).display
 
-    const { display } = press(open, { _tag: "ShowKeys" }, screen)
+    const { display } = open.press({ _tag: "ShowKeys" }, screen)
 
     assert.strictEqual(display.overlay._tag, "None")
   })
@@ -429,7 +363,7 @@ describe("Display#press", () => {
   it("should replace the palette with the key help with ShowKeys", () => {
     const palette = Display.initial.open("Palette")
 
-    const { display, commands } = press(palette, { _tag: "ShowKeys" }, TestWeb.withTiles([]))
+    const { display, commands } = palette.press({ _tag: "ShowKeys" }, TestWeb.withTiles([]))
 
     assert.strictEqual(display.overlay._tag, "Keys")
     assert.deepStrictEqual(commands, [])
@@ -438,7 +372,7 @@ describe("Display#press", () => {
   it("should open the palette with CommandPalette, replacing the key help", () => {
     const keys = Display.initial.open("Keys")
 
-    const { display, commands } = press(keys, { _tag: "CommandPalette" }, TestWeb.withTiles([]))
+    const { display, commands } = keys.press({ _tag: "CommandPalette" }, TestWeb.withTiles([]))
 
     assert.strictEqual(display.overlay._tag, "Palette")
     assert.deepStrictEqual(commands, [])
@@ -446,9 +380,9 @@ describe("Display#press", () => {
 
   it("should close the palette with CommandPalette when it was open", () => {
     const screen = TestWeb.withTiles([])
-    const open = press(Display.initial.open("Keys"), { _tag: "CommandPalette" }, screen).display
+    const open = Display.initial.open("Keys").press({ _tag: "CommandPalette" }, screen).display
 
-    const { display } = press(open, { _tag: "CommandPalette" }, screen)
+    const { display } = open.press({ _tag: "CommandPalette" }, screen)
 
     assert.strictEqual(display.overlay._tag, "None")
   })
@@ -460,14 +394,14 @@ describe("Display#press", () => {
   ])("should send $hotkey._tag's command and change nothing", ({ hotkey, command }) => {
     const screen = TestWeb.withTiles(["live", "soon"])
 
-    const { display, commands } = press(Display.initial, hotkey, screen)
+    const { display, commands } = Display.initial.press(hotkey, screen)
 
     assert.strictEqual(display, Display.initial)
     assert.deepStrictEqual(commands, [command])
   })
 
   it("should return the same display with FullScreen and send nothing", () => {
-    const { display, commands } = press(Display.initial, { _tag: "FullScreen" }, TestWeb.withTiles([]))
+    const { display, commands } = Display.initial.press({ _tag: "FullScreen" }, TestWeb.withTiles([]))
 
     assert.strictEqual(display, Display.initial)
     assert.deepStrictEqual(commands, [])
@@ -496,15 +430,15 @@ describe("Display#apply", () => {
   it("should press a hotkey as press does", () => {
     const screen = TestWeb.withTiles(["live"])
 
-    const step = apply(Display.initial, DisplayInput.Pressed({ hotkey: { _tag: "ToggleSlate" } }), screen)
+    const step = Display.initial.apply(DisplayInput.Pressed({ hotkey: { _tag: "ShowKeys" } }), screen)
 
-    assert.deepStrictEqual(step, press(Display.initial, { _tag: "ToggleSlate" }, screen))
+    assert.deepStrictEqual(step, Display.initial.press({ _tag: "ShowKeys" }, screen))
   })
 
   it("should select a slot as select does", () => {
     const screen = TestWeb.withTiles(["live", "soon"])
 
-    const step = apply(Display.initial, DisplayInput.Selected({ slot: 1 }), screen)
+    const step = Display.initial.apply(DisplayInput.Selected({ slot: 1 }), screen)
 
     assert.deepStrictEqual(step, Display.initial.select(1, screen))
   })
@@ -512,8 +446,7 @@ describe("Display#apply", () => {
   it("should select the slot a pressed video's game is in", () => {
     const screen = TestWeb.withTiles(["live", "soon"])
 
-    const { display, commands } = apply(
-      Display.initial,
+    const { display, commands } = Display.initial.apply(
       DisplayInput.VideoPressed({ game: GameId.make("soon") }),
       screen
     )
@@ -525,8 +458,7 @@ describe("Display#apply", () => {
   it("should do nothing for a pressed video whose game is not on screen", () => {
     const screen = TestWeb.withTiles(["live"])
 
-    const { display } = apply(
-      Display.initial,
+    const { display } = Display.initial.apply(
       DisplayInput.VideoPressed({ game: GameId.make("gone") }),
       screen
     )
@@ -534,20 +466,18 @@ describe("Display#apply", () => {
     assert.strictEqual(display, Display.initial)
   })
 
-  it("should drop a card as drop does", () => {
+  it("should choose a game as choose does", () => {
     const screen = TestWeb.withTiles(["soon"])
-    const free = cardOf(screen, 0)
 
-    const step = apply(Display.initial, DisplayInput.Dropped({ card: free }), screen)
+    const step = Display.initial.apply(DisplayInput.Chosen({ game: live }), screen)
 
-    assert.deepStrictEqual(step, Display.initial.drop(free, screen))
+    assert.deepStrictEqual(step, Display.initial.choose(live, screen))
   })
 
   it("should send a command and change nothing", () => {
     const command: ScreenCommand = { _tag: "SetLayout", layout: "Single" }
 
-    const { display, commands } = apply(
-      Display.initial,
+    const { display, commands } = Display.initial.apply(
       DisplayInput.Commanded({ command }),
       TestWeb.withTiles([])
     )
@@ -557,39 +487,16 @@ describe("Display#apply", () => {
   })
 
   it("should open an overlay", () => {
-    const { display } = apply(
-      Display.initial,
-      DisplayInput.Opened({ overlay: "Keys" }),
-      TestWeb.withTiles([])
-    )
+    const { display } = Display.initial.apply(DisplayInput.Opened({ overlay: "Keys" }), TestWeb.withTiles([]))
 
     assert.isTrue(display.shows("Keys"))
   })
 
   it("should close the open overlay", () => {
-    const { display } = apply(Display.initial.open("Palette"), DisplayInput.Closed(), TestWeb.withTiles([]))
+    const { display } = Display.initial.open("Palette").apply(DisplayInput.Closed(), TestWeb.withTiles([]))
 
     assert.strictEqual(display.overlay._tag, "None")
   })
-
-  it("should toggle the slate", () => {
-    const { display } = apply(Display.initial, DisplayInput.SlateToggled(), TestWeb.withTiles([]))
-
-    assert.isFalse(display.slateOpen)
-  })
 })
 
-function press(display: Display, hotkey: Parameters<Display["press"]>[0], screen: Screen) {
-  return display.press(hotkey, screen, StripCard.of(screen, TestWeb.slate))
-}
-
-function apply(display: Display, input: DisplayInput, screen: Screen) {
-  return display.apply(input, screen, StripCard.of(screen, TestWeb.slate))
-}
-
-/** The strip card at `index` on `screen`; a test that asks for one past the strip fails here. */
-function cardOf(screen: Screen, index: number) {
-  const card = StripCard.of(screen, TestWeb.slate)[index]
-  if (card === undefined) throw new Error(`no strip card at ${index}`)
-  return card
-}
+const live = GameId.make("live")

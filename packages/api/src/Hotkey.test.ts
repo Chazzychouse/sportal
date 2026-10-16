@@ -15,20 +15,18 @@ describe("Hotkey.of", () => {
     assert.deepStrictEqual(hotkey, { _tag: "Promote", slot: 8 })
   })
 
-  it.each<{ code: string; modifiers?: Modifiers; from?: "page" | "stream"; hotkey: Hotkey }>([
+  it.each<{ code: string; modifiers?: Modifiers; hotkey: Hotkey }>([
     { code: "KeyF", hotkey: { _tag: "ToggleSolo" } },
     { code: "Escape", hotkey: { _tag: "Unsolo" } },
     { code: "F11", hotkey: { _tag: "FullScreen" } },
     { code: "KeyL", hotkey: { _tag: "NextLayout" } },
     { code: "KeyI", hotkey: { _tag: "Interact" } },
-    { code: "KeyI", from: "stream", hotkey: { _tag: "Interact" } },
-    { code: "KeyS", hotkey: { _tag: "ToggleSlate" } },
     { code: "KeyK", modifiers: { control: true }, hotkey: { _tag: "CommandPalette" } },
     { code: "KeyK", modifiers: { meta: true }, hotkey: { _tag: "CommandPalette" } }
   ])(
     "should read a letter or function key: $code $modifiers as $hotkey._tag",
-    ({ code, modifiers, from, hotkey }) => {
-      const read = key(code, modifiers, from)
+    ({ code, modifiers, hotkey }) => {
+      const read = key(code, modifiers)
 
       assert.deepStrictEqual(read, hotkey)
     }
@@ -46,15 +44,6 @@ describe("Hotkey.of", () => {
     assert.isUndefined(hotkey)
   })
 
-  it.each<{ code: string; step: -1 | 1 }>([
-    { code: "BracketLeft", step: -1 },
-    { code: "BracketRight", step: 1 }
-  ])("should read $code as stepping the pick by $step", ({ code, step }) => {
-    const hotkey = key(code)
-
-    assert.deepStrictEqual(hotkey, { _tag: "StepPick", step })
-  })
-
   it("should read Shift+Slash as the key help", () => {
     const hotkey = key("Slash", { shift: true })
 
@@ -63,18 +52,6 @@ describe("Hotkey.of", () => {
 
   it("should leave Slash without Shift to the page", () => {
     const hotkey = key("Slash")
-
-    assert.isUndefined(hotkey)
-  })
-
-  it.each(["Enter", "NumpadEnter"])("should read %s in the page as dropping the pick", (code) => {
-    const hotkey = key(code, {}, "page")
-
-    assert.deepStrictEqual(hotkey, { _tag: "DropPick" })
-  })
-
-  it("should leave Enter in a stream view to the stream", () => {
-    const hotkey = key("Enter", {}, "stream")
 
     assert.isUndefined(hotkey)
   })
@@ -100,7 +77,7 @@ describe("Hotkey.keys", () => {
   it.each(Hotkey.keys)("should list a binding that reads back to its hotkey: $does", (binding) => {
     const press = { shift: false, alt: false, control: false, meta: false, ...binding.press }
 
-    const hotkey = Hotkey.of(press, binding.press.from)
+    const hotkey = Hotkey.of(press)
 
     assert.deepStrictEqual(hotkey, binding.hotkey, binding.does)
   })
@@ -121,11 +98,7 @@ const wire: ReadonlyArray<unknown> = [
   { _tag: "Unsolo" },
   { _tag: "FullScreen" },
   { _tag: "NextLayout" },
-  { _tag: "ToggleSlate" },
   { _tag: "CommandPalette" },
-  { _tag: "StepPick", step: -1 },
-  { _tag: "StepPick", step: 1 },
-  { _tag: "DropPick" },
   { _tag: "ShowKeys" }
 ]
 
@@ -149,6 +122,6 @@ describe("Hotkey wire", () => {
 
 type Modifiers = Partial<{ shift: boolean; alt: boolean; control: boolean; meta: boolean }>
 
-function key(code: string, modifiers: Modifiers = {}, from: "page" | "stream" = "stream") {
-  return Hotkey.of({ code, shift: false, alt: false, control: false, meta: false, ...modifiers }, from)
+function key(code: string, modifiers: Modifiers = {}) {
+  return Hotkey.of({ code, shift: false, alt: false, control: false, meta: false, ...modifiers })
 }

@@ -1,11 +1,11 @@
 import { afterEach, assert, beforeEach, describe, it } from "@effect/vitest"
 import type { ChannelAvailability } from "@sportal/domain/Channel"
-import { Game, GameId } from "@sportal/domain/Game"
+import { GameId } from "@sportal/domain/Game"
 import { snapshot } from "@sportal/domain/TestGame"
 import { Effect, Option } from "effect"
 import { Atom, AtomRegistry } from "effect/reactivity"
 import { vi } from "vitest"
-import * as LiveStream from "../hub/LiveStream.ts"
+import * as Games from "../hub/Games.ts"
 import * as TestWeb from "../TestWeb.ts"
 import * as DisplayScreen from "./DisplayScreen.ts"
 import { Screen } from "./Screen.ts"
@@ -20,11 +20,11 @@ describe("DisplayScreen.screen", () => {
     vi.unstubAllGlobals()
   })
 
-  it.effect("should assign a game as the slate's availability says", () =>
+  it.effect("should assign a game as today's list says it is available", () =>
     Effect.gen(function* () {
       const source = yield* TestWeb.opened
-      source.onmessage?.({ data: TestWeb.slateMessage([{ game, availability: [onEspn] }]) })
-      yield* TestWeb.until(LiveStream.live, (live) => live.slate.games.length > 0)
+      source.onmessage?.({ data: listMessage([onEspn]) })
+      yield* TestWeb.until(Games.today, ({ value }) => Option.isSome(value))
 
       yield* Atom.set(DisplayScreen.screen, { _tag: "Assign", tile: 0, game: id })
 
@@ -50,14 +50,14 @@ describe("DisplayScreen.screen", () => {
     }).pipe(Effect.provide(AtomRegistry.layer))
   )
 
-  it.effect("should refresh a tile when a slate brings its game a stream", () =>
+  it.effect("should refresh a tile when today's list brings its game a stream", () =>
     Effect.gen(function* () {
       const source = yield* TestWeb.opened
-      source.onmessage?.({ data: TestWeb.slateMessage([{ game, availability: [] }]) })
-      yield* TestWeb.until(LiveStream.live, (live) => live.slate.games.length > 0)
+      source.onmessage?.({ data: listMessage([]) })
+      yield* TestWeb.until(Games.today, ({ value }) => Option.isSome(value))
       yield* Atom.set(DisplayScreen.screen, { _tag: "Assign", tile: 0, game: id })
 
-      source.onmessage?.({ data: TestWeb.slateMessage([{ game, availability: [onEspn] }]) })
+      source.onmessage?.({ data: listMessage([onEspn]) })
       const screen = yield* TestWeb.until(
         DisplayScreen.screen,
         (screen) => screen.tiles[0]?._tag === "StreamTile"
@@ -104,10 +104,15 @@ describe("DisplayScreen.screen", () => {
 })
 
 const id = GameId.make("401")
-const game = new Game({ snapshot: snapshot({ id }), plays: [] })
+const game = snapshot({ id })
 const espn = {
   name: "ESPN",
   source: "YouTube TV" as const,
   locator: { _tag: "WebView" as const, url: "https://tv.youtube.com/watch/espn" }
 }
 const onEspn: ChannelAvailability = { _tag: "Carried", channel: espn }
+
+/** Today's list of the one game, with `availability`, as the Hub sends it. */
+function listMessage(availability: ReadonlyArray<ChannelAvailability>) {
+  return TestWeb.gameListMessage({ date: TestWeb.todayList.date, games: [{ snapshot: game, availability }] })
+}

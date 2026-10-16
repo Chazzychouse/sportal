@@ -1,10 +1,11 @@
 import { afterEach, assert, beforeEach, describe, it } from "@effect/vitest"
 import type { ShellBridge } from "@sportal/api/ShellBridge"
-import { Effect, Layer, Queue, Stream } from "effect"
+import { Effect, Layer, Option, Queue, Stream } from "effect"
 import { Atom } from "effect/reactivity"
 import { vi } from "vitest"
 import { Shell } from "../shell/Shell.ts"
 import * as TestWeb from "../TestWeb.ts"
+import * as Games from "./Games.ts"
 import * as GuideRelay from "./GuideRelay.ts"
 import { HubClient } from "./HubClient.ts"
 import * as LiveStream from "./LiveStream.ts"
@@ -80,8 +81,8 @@ describe("GuideRelay.relay", () => {
         const source = yield* TestWeb.opened
         source.onopen?.()
         yield* Queue.take(calls)
-        source.onmessage?.({ data: TestWeb.slateMessage([]) })
-        yield* TestWeb.until(LiveStream.live, (live) => live.slate.games.length === 0)
+        source.onmessage?.({ data: TestWeb.gameListMessage(TestWeb.todayList) })
+        yield* TestWeb.until(Games.today, ({ value }) => Option.isSome(value))
         yield* Queue.offer(guides, "<later/>")
         return yield* Queue.take(calls)
       }).pipe(Effect.scoped, Effect.provide(registry))
@@ -112,12 +113,10 @@ describe("GuideRelay.relay", () => {
       const registry = TestWeb.registryOf(Layer.merge(Shell.layerBridge(bridge), HubClient.layerTest()))
 
       const firstTwo = yield* Effect.gen(function* () {
-        yield* Atom.mount(LiveStream.live)
+        yield* Atom.mount(Games.today)
         const source = yield* TestWeb.opened
         source.onopen?.()
-        yield* TestWeb.until(LiveStream.live, (live) =>
-          LiveStream.Connection.$is("Connected")(live.connection)
-        )
+        yield* TestWeb.until(Games.today, (live) => LiveStream.Connection.$is("Connected")(live.connection))
         yield* Atom.mount(GuideRelay.relay)
         return yield* Queue.takeN(log, 2)
       }).pipe(Effect.scoped, Effect.provide(registry))

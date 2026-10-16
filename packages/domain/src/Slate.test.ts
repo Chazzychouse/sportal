@@ -361,27 +361,6 @@ describe("Slate#playsTaken, its changes", () => {
   })
 })
 
-describe("Slate#recent", () => {
-  it("should keep each game's last ten plays", () => {
-    const slate = listed(live(one, 600)).playsTaken(one, playsOf(12))[0]
-
-    const next = slate.recent()
-
-    assert.deepStrictEqual(
-      playsIn(next, one).map(({ sequence }) => sequence),
-      [3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
-    )
-  })
-
-  it("should give back the slate itself when no game has more than ten plays", () => {
-    const slate = listed(live(one, 600)).playsTaken(one, playsOf(10))[0]
-
-    const next = slate.recent()
-
-    assert.strictEqual(next, slate)
-  })
-})
-
 /** Game `id`, as `slate` has it; the test fails when the slate lacks it. */
 function gameIn(slate: Slate, id: GameId): Game {
   return Option.getOrThrow(Arr.findFirst(slate.games, ({ snapshot }) => snapshot.id === id))

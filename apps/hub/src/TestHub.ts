@@ -3,7 +3,8 @@ import { gunzipSync } from "node:zlib"
 import type { ChannelAvailability } from "@sportal/domain/Channel"
 import { GameId, type GameSnapshot, Network } from "@sportal/domain/Game"
 import { LeagueId } from "@sportal/domain/League"
-import { broadcast, snapshot, team } from "@sportal/domain/TestGame"
+import { PlayId } from "@sportal/domain/Play"
+import { broadcast, play, snapshot, team } from "@sportal/domain/TestGame"
 import {
   type Cause,
   DateTime,
@@ -20,12 +21,15 @@ import {
 import { HttpClient, HttpClientResponse } from "effect/http"
 import * as Socket from "effect/socket/Socket"
 import { TestClock } from "effect/testing"
+import { Director } from "./Director.ts"
+import { HubConfig } from "./HubConfig.ts"
 import * as Espn from "./provider/espn/Espn.ts"
 import * as EspnEvent from "./provider/espn/EspnEvent.ts"
 import { FastCast, Frame, Topic, type Wanted } from "./provider/espn/FastCast.ts"
 import * as FastCastMessage from "./provider/espn/FastCastMessage.ts"
 import { GameTopics } from "./provider/espn/GameTopics.ts"
 import { Delivery, Provider } from "./provider/Provider.ts"
+import { Schedule } from "./Schedule.ts"
 import { Source } from "./source/Source.ts"
 
 /**
@@ -48,6 +52,11 @@ export function recordedEspn(scoreboards: {
 
 /** A recorded ESPN site scoreboard among the ESPN adapter's fixtures. */
 export function recordedScoreboard(name: string): string {
+  return readFileSync(new URL(`./provider/espn/fixtures/${name}.json`, import.meta.url), "utf8")
+}
+
+/** A recorded ESPN game summary among the ESPN adapter's fixtures. */
+export function recordedSummary(name: string): string {
   return readFileSync(new URL(`./provider/espn/fixtures/${name}.json`, import.meta.url), "utf8")
 }
 
@@ -610,3 +619,48 @@ export const alaAtMsstListed = Effect.fnUntraced(function* (frames: Frames) {
   yield* offered(frames, Delivery.Listing({ league: "fbs", games: [alaAtMsst] }))
   yield* TestClock.adjust("250 millis")
 })
+
+/** A time on `alaAtMsst`'s day, Saturday 2026-10-03, in the afternoon US Eastern: today, for a test of the Schedule. */
+export const onAlaAtMsstDay = DateTime.toEpochMillis(DateTime.makeUnsafe("2026-10-03T18:00:00Z"))
+
+/**
+ * Runs `test` against the Schedule as the Hub composes it, on the test clock at `onAlaAtMsstDay`: over a Director fed
+ * the frames the test offers, a provider whose listings and plays are `answers`, and `source`.
+ */
+export function scheduled<A, E, R>(
+  answers: Partial<Pick<Provider["Service"], "listing" | "plays">>,
+  test: (frames: Frames) => Effect.Effect<A, E, R>,
+  source: Layer.Layer<Source> = Source.layerYouTubeTv
+) {
+  return Effect.gen(function* () {
+    const frames = yield* Queue.bounded<ReadonlyArray<Delivery>, Cause.Done>(1)
+    const schedule = Schedule.layer.pipe(
+      Layer.provide(Director.layer),
+      Layer.provide(Provider.layerTest(frames, answers)),
+      Layer.provide(source),
+      Layer.provide(HubConfig.layerTest({}))
+    )
+    yield* TestClock.setTime(onAlaAtMsstDay)
+
+    return yield* test(frames).pipe(Effect.scoped, Effect.provide(schedule))
+  })
+}
+
+/** A queue of what `stream` sends, as it arrives, run for the rest of the test's scope. */
+export const received = Effect.fnUntraced(function* <A>(stream: Stream.Stream<A>) {
+  const values = yield* Queue.unbounded<A>()
+
+  yield* stream.pipe(
+    Stream.runForEach((value) => Queue.offer(values, value)),
+    Effect.forkScoped
+  )
+
+  return values
+})
+
+/** Plays with sequences 1 to `last`. */
+export function playsUpTo(last: number) {
+  return Array.from({ length: last }, (_, index) =>
+    play({ id: PlayId.make(`p${index + 1}`), sequence: index + 1 })
+  )
+}

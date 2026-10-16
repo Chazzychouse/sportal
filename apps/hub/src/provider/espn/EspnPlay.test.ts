@@ -2,11 +2,34 @@ import { readFileSync } from "node:fs"
 import { assert, describe, it } from "@effect/vitest"
 import { FootballDetail, Play, PlayDetail, PlayId } from "@sportal/domain/Play"
 import { TeamId } from "@sportal/domain/Team"
-import { Effect, Equal, Schema } from "effect"
+import { Effect, Equal, Option, Schema } from "effect"
 import { TestClock } from "effect/testing"
 import * as TestHub from "../../TestHub.ts"
 import { Delivery } from "../Provider.ts"
 import * as EspnPlay from "./EspnPlay.ts"
+
+describe("EspnPlay.summaryPlays", () => {
+  it.effect("should read every play of a recorded game summary", () =>
+    Effect.gen(function* () {
+      const body = TestHub.recordedSummary("nfl-summary-401872971")
+
+      const plays = yield* EspnPlay.summaryPlays("nfl", body)
+
+      assert.strictEqual(plays.length, 182)
+      assert.strictEqual(plays[0]?.type.text, "Kickoff")
+    })
+  )
+
+  it.effect("should read a summary play's team from its id", () =>
+    Effect.gen(function* () {
+      const body = TestHub.recordedSummary("nfl-summary-401872971")
+
+      const plays = yield* EspnPlay.summaryPlays("nfl", body)
+
+      assert.deepStrictEqual(plays[1]?.offense().pipe(Option.getOrUndefined), nfl("2"))
+    })
+  )
+})
 
 describe("EspnPlay.play", () => {
   it.effect("should read a rush, with its text", () =>

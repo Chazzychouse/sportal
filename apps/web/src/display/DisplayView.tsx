@@ -6,7 +6,6 @@ import * as RemoteLink from "../remote/RemoteLink.ts"
 import { useScreenRejectionToasts } from "../screen/Rejections.ts"
 import { ScreenView } from "../screen/ScreenView.tsx"
 import * as TilePlacements from "../screen/TilePlacements.ts"
-import { SlateView } from "../slate/SlateView.tsx"
 import { CommandPalette } from "./CommandPalette.tsx"
 import * as Covering from "./Covering.ts"
 import { DisplayInput } from "./Display.ts"
@@ -30,10 +29,9 @@ export function DisplayView() {
 
   return (
     <>
-      <div className={`grid h-screen ${fullScreen ? "grid-rows-[1fr]" : "grid-rows-[auto_1fr_auto]"}`}>
+      <div className={`grid h-screen ${fullScreen ? "grid-rows-[1fr]" : "grid-rows-[auto_1fr]"}`}>
         {fullScreen ? null : <TopBar />}
         <ScreenView />
-        {fullScreen || !display.slateOpen ? null : <SlateView />}
       </div>
       <KeysDialog open={display.shows("Keys")} onOpenChange={closeOverlay} />
       {display.shows("JoinRemote") && <JoinRemote open onOpenChange={closeOverlay} />}

@@ -9,7 +9,6 @@ import { vi } from "vitest"
 import { DisplayInput } from "../display/Display.ts"
 import { HubClient } from "../hub/HubClient.ts"
 import { Shell } from "../shell/Shell.ts"
-import { StripCard } from "../slate/StripCard.ts"
 import * as TestWeb from "../TestWeb.ts"
 import { RemoteReport } from "./RemoteReport.ts"
 import * as RemoteState from "./RemoteState.ts"
@@ -60,7 +59,7 @@ describe("RemoteState", () => {
     })
   )
 
-  it.effect("should send a tapped slate game to the selected tile as Commanded Assign", () =>
+  it.effect("should send a tapped game to the selected tile as Commanded Assign", () =>
     Effect.gen(function* () {
       const { registry, calls } = yield* TestWeb.withShell()
 
@@ -70,10 +69,7 @@ describe("RemoteState", () => {
         source.onmessage?.({ data: reported(reportOf()) })
         yield* TestWeb.until(RemoteState.followed(desk), (each) => each._tag === "Reported")
 
-        yield* Atom.set(
-          RemoteState.display(desk),
-          DisplayInput.Dropped({ card: cardFor(GameId.make("live")) })
-        )
+        yield* Atom.set(RemoteState.display(desk), DisplayInput.Chosen({ game: GameId.make("live") }))
         return yield* Queue.take(calls).pipe(Effect.repeat({ until: (call) => call._tag === "Send" }))
       }).pipe(Effect.scoped, Effect.provide(registry))
 
@@ -137,7 +133,7 @@ describe("RemoteState", () => {
   )
 })
 
-const toggle = { _tag: "Pressed", hotkey: { _tag: "ToggleSlate" } } as const
+const toggle = { _tag: "Pressed", hotkey: { _tag: "NextLayout" } } as const
 
 /** A registry whose Hub client is `fakes`. */
 function registryWith(fakes: Parameters<typeof HubClient.layerTest>[0]) {
@@ -181,11 +177,4 @@ const collected = Effect.fnUntraced(function* <A, B>(atom: Atom.Atom<A>, f: (val
 
 function takeN<A>(queue: Queue.Queue<A>, n: number) {
   return Effect.replicateEffect(Queue.take(queue), n)
-}
-
-/** The strip card of the test slate's game `id`, on a Quad with every tile empty. */
-function cardFor(id: GameId) {
-  const card = StripCard.of(TestWeb.withTiles([]), TestWeb.slate).find((each) => each.id === id)
-  if (card === undefined) throw new Error(`No card for ${id}`)
-  return card
 }

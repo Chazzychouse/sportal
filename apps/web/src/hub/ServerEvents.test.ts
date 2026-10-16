@@ -16,13 +16,13 @@ describe("ServerEvents.from", () => {
 
   it.effect("should open a new EventSource after the browser closes one", () =>
     Effect.gen(function* () {
-      yield* ServerEvents.from("/api/live").pipe(Stream.runDrain, Effect.forkChild)
-      const first = yield* TestWeb.openedAt("/api/live")
+      yield* ServerEvents.from("/api/games/live").pipe(Stream.runDrain, Effect.forkChild)
+      const first = yield* TestWeb.openedAt("/api/games/live")
       first.onopen?.()
 
       closedByBrowser(first)
       yield* TestClock.adjust("5 seconds")
-      const second = yield* TestWeb.openedAt("/api/live")
+      const second = yield* TestWeb.openedAt("/api/games/live")
 
       assert.notStrictEqual(second, first)
     })
@@ -30,13 +30,13 @@ describe("ServerEvents.from", () => {
 
   it.effect("should close the EventSource the browser closed", () =>
     Effect.gen(function* () {
-      yield* ServerEvents.from("/api/live").pipe(Stream.runDrain, Effect.forkChild)
-      const first = yield* TestWeb.openedAt("/api/live")
+      yield* ServerEvents.from("/api/games/live").pipe(Stream.runDrain, Effect.forkChild)
+      const first = yield* TestWeb.openedAt("/api/games/live")
       first.onopen?.()
 
       closedByBrowser(first)
       yield* TestClock.adjust("5 seconds")
-      yield* TestWeb.openedAt("/api/live")
+      yield* TestWeb.openedAt("/api/games/live")
 
       assert.isTrue(first.closed)
     })
@@ -44,12 +44,12 @@ describe("ServerEvents.from", () => {
 
   it.effect("should report Errored then Opened across a reopening", () =>
     Effect.gen(function* () {
-      const events = yield* ServerEvents.from("/api/live").pipe(
+      const events = yield* ServerEvents.from("/api/games/live").pipe(
         Stream.take(3),
         Stream.runCollect,
         Effect.forkChild
       )
-      const first = yield* TestWeb.openedAt("/api/live")
+      const first = yield* TestWeb.openedAt("/api/games/live")
       first.onopen?.()
 
       closedByBrowser(first)
@@ -64,11 +64,11 @@ describe("ServerEvents.from", () => {
 
   it.effect("should wait longer before each reopening while the Hub stays away", () =>
     Effect.gen(function* () {
-      yield* ServerEvents.from("/api/live").pipe(Stream.runDrain, Effect.forkChild)
-      const first = yield* TestWeb.openedAt("/api/live")
+      yield* ServerEvents.from("/api/games/live").pipe(Stream.runDrain, Effect.forkChild)
+      const first = yield* TestWeb.openedAt("/api/games/live")
       closedByBrowser(first)
       yield* TestClock.adjust("5 seconds")
-      const second = yield* TestWeb.openedAt("/api/live")
+      const second = yield* TestWeb.openedAt("/api/games/live")
 
       closedByBrowser(second)
       yield* TestClock.adjust("500 millis")

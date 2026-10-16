@@ -1,21 +1,25 @@
+import type { GameList } from "@sportal/api/GamesQuery"
+import type { ChannelAvailability } from "@sportal/domain/Channel"
+import type { GameId } from "@sportal/domain/Game"
 import { Option, Result } from "effect"
 import { KeyValueStore } from "effect/persistence"
 import { Atom } from "effect/reactivity"
-import * as LiveStream from "../hub/LiveStream.ts"
+import * as Games from "../hub/Games.ts"
 import { Screen, type ScreenCommand, type ScreenRejection } from "./Screen.ts"
 
 /**
- * This Display's Screen. A screen command written to it is applied against where each game on the live slate can be
- * streamed; each command's outcome is published on `rejected`. Each slate the live stream brings refreshes it, and it is
+ * This Display's Screen. A screen command written to it is applied against where each of today's games can be
+ * streamed; each command's outcome is published on `rejected`. Each answer today's list brings refreshes it, and it is
  * kept in this browser, so a reload shows it as it was.
  */
 export const screen: Atom.Writable<Screen, ScreenCommand> = Atom.writable(
   (get) => {
     get.subscribe(
-      LiveStream.live,
-      ({ availability }) => {
+      Games.today,
+      ({ value }) => {
+        const availability = availabilityOf(value)
         const current = get.once(kept)
-        const next = current.refresh((game) => Option.fromNullishOr(availability[game]))
+        const next = current.refresh((game) => Option.fromNullishOr(availability.get(game)))
         if (next !== current) get.set(kept, next)
       },
       { immediate: true }
@@ -23,8 +27,8 @@ export const screen: Atom.Writable<Screen, ScreenCommand> = Atom.writable(
     return get(kept)
   },
   (ctx, command: ScreenCommand) => {
-    const { availability } = ctx.get(LiveStream.live)
-    const result = ctx.get(kept).apply(command, (game) => availability[game] ?? [])
+    const availability = availabilityOf(ctx.get(Games.today).value)
+    const result = ctx.get(kept).apply(command, (game) => availability.get(game) ?? [])
     Result.match(result, {
       onSuccess: (next) => {
         ctx.set(kept, next)
@@ -37,6 +41,18 @@ export const screen: Atom.Writable<Screen, ScreenCommand> = Atom.writable(
 
 /** Why the last screen command this Display was sent was refused; none when it was applied, or before any. */
 export const rejected = Atom.make<Option.Option<ScreenRejection>>(Option.none()).pipe(Atom.keepAlive)
+
+/** Each of today's games' availability, by its id; none before the first answer. */
+function availabilityOf(
+  list: Option.Option<GameList>
+): ReadonlyMap<GameId, ReadonlyArray<ChannelAvailability>> {
+  return new Map(
+    Option.match(list, {
+      onNone: () => [],
+      onSome: ({ games }) => games.map(({ snapshot, availability }) => [snapshot.id, availability] as const)
+    })
+  )
+}
 
 // TODO(Chase): fix this once persistence layers are added
 const kept = Atom.kvs({

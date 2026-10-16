@@ -1,4 +1,5 @@
 import { assert, describe, it } from "@effect/vitest"
+import { CalendarDate } from "@sportal/api/GamesQuery"
 import { GameId } from "@sportal/domain/Game"
 import { LeagueId } from "@sportal/domain/League"
 import {
@@ -21,7 +22,7 @@ import { HttpClient, HttpClientError, HttpClientResponse } from "effect/http"
 import * as Socket from "effect/socket/Socket"
 import { TestClock } from "effect/testing"
 import * as TestHub from "../../TestHub.ts"
-import { Delivery, Provider } from "../Provider.ts"
+import { Delivery, Provider, ProviderUnavailable } from "../Provider.ts"
 import { EspnLeague } from "./EspnLeague.ts"
 import * as EspnProvider from "./EspnProvider.ts"
 import { FastCast, Frame, Topic, type Wanted } from "./FastCast.ts"
@@ -434,6 +435,72 @@ describe("EspnProvider", () => {
     )
   })
 
+  describe("listing", () => {
+    it.effect("should ask each league's scoreboard for the day", () =>
+      Effect.gen(function* () {
+        const urls = yield* Ref.make<ReadonlyArray<string>>([])
+        const client = HttpClient.make((request) =>
+          Ref.update(urls, (all) => [...all, request.url]).pipe(
+            Effect.as(answered(request, request.url.includes("/nfl/") ? nflLive : fbsLive))
+          )
+        )
+
+        yield* listedOver(client, "2026-10-04")
+
+        const asked = yield* Ref.get(urls)
+        assert.deepStrictEqual(
+          asked.map((url) => url.replace(/^https?:\/\/[^/]+\/apis\/site\/v2\/sports/, "")),
+          [
+            "/football/nfl/scoreboard?dates=20261004",
+            "/football/college-football/scoreboard?groups=80&limit=300&dates=20261004"
+          ]
+        )
+      })
+    )
+
+    it.effect("should list the games of the recorded NFL scoreboard", () =>
+      Effect.gen(function* () {
+        const games = yield* listedOver(recordedHttp(fbsLive), "2026-10-04", ["nfl"])
+
+        assert.strictEqual(games.length, 16)
+      })
+    )
+
+    it.effect("should fail as unavailable when a scoreboard is not answered with a 2xx", () =>
+      Effect.gen(function* () {
+        const failed = yield* listedOver(
+          answering(() => Effect.succeed(new Response(nflLive, { status: 503 }))),
+          "2026-10-04"
+        ).pipe(Effect.flip)
+
+        assert.instanceOf(failed, ProviderUnavailable)
+      })
+    )
+  })
+
+  describe("plays", () => {
+    it.effect("should read a game's plays from its summary", () =>
+      Effect.gen(function* () {
+        const summary = TestHub.recordedSummary("nfl-summary-401872971")
+        const client = HttpClient.make((request) =>
+          Effect.succeed(answered(request, request.url.includes("/summary?event=401872971") ? summary : "{}"))
+        )
+
+        const plays = yield* playsOver(client, "nfl", GameId.make("401872971"))
+
+        assert.strictEqual(plays[0]?.type.text, "Kickoff")
+      })
+    )
+
+    it.effect("should fail as unavailable for a league ESPN does not serve", () =>
+      Effect.gen(function* () {
+        const failed = yield* playsOver(recordedHttp(fbsLive), "mlb", GameId.make("1")).pipe(Effect.flip)
+
+        assert.instanceOf(failed, ProviderUnavailable)
+      })
+    )
+  })
+
   describe("retention/integration", () => {
     it.effect("should show a synced topic as Synced", () =>
       Effect.gen(function* () {
@@ -612,6 +679,26 @@ function espnOver(
       Layer.succeed(HttpClient.HttpClient, client)
     ])
   )
+}
+
+/** The games ESPN's provider over `client` lists for `date` in `leagues` (every league, unless given). */
+function listedOver(
+  client: HttpClient.HttpClient,
+  date: string,
+  leagues: ReadonlyArray<LeagueId> = LeagueId.literals
+) {
+  return Effect.gen(function* () {
+    const provider = yield* Provider
+    return yield* provider.listing(CalendarDate.make(date))
+  }).pipe(Effect.provide(espnOver(client, { leagues })))
+}
+
+/** The plays of game `game` of `league` that ESPN's provider over `client` reads. */
+function playsOver(client: HttpClient.HttpClient, league: LeagueId, game: GameId) {
+  return Effect.gen(function* () {
+    const provider = yield* Provider
+    return yield* provider.plays(league, game)
+  }).pipe(Effect.provide(espnOver(client)))
 }
 
 /** What ESPN's provider's first polls over `client` said. */

@@ -39,7 +39,7 @@ Versions were checked against the registry on 2026-10-03. Effect is at 4.0, whic
 | Runtime | Node 24 (LTS), pinned in `mise.toml` | Electron's main process is Node; one runtime everywhere |
 | Package manager | pnpm workspaces | Strict dependency isolation; already installed |
 | Web UI | React + Vite; TanStack Router once there is more than one screen | Components stay plain React; typed routes when routing exists |
-| UI state | Server state mirrored from the Hub's live stream into one store; local-only state in component state | The Hub owns shared state, so the client has little of its own |
+| UI state | Server state read per view, one atom per live query to the Hub; local-only state in component state | The Hub owns shared state, so the client has little of its own |
 | Styling | Tailwind CSS with two density themes (desk, couch) | Same components, two presentation modes |
 | Desktop shell | Electron (castlabs Widevine build), one `WebContentsView` per stream tile, electron-vite | The only dependable way to play Widevine content in several independent views |
 | Logging | Effect's console logger, at `SPORTAL_LOG_LEVEL`, pretty or JSON lines (`SPORTAL_LOG_FORMAT`); the installed app writes the Hub's to `hub.log` | Telemetry export and the local Grafana were cut for the first installable build ([ADR 0019](./adr/0019-telemetry-goes.md)) |
@@ -64,7 +64,8 @@ flowchart LR
   subgraph hub[Hub — one server process]
     prov[Providers]
     director[Director: the slate of games, in memory]
-    api[HTTP API + live stream]
+    schedule[Schedule: games by day, game, and plays]
+    api[HTTP API + live queries]
   end
 
   subgraph display[Display — desktop shell]
@@ -76,15 +77,43 @@ flowchart LR
   espn --> prov
   cfbd --> prov
   prov -- decoded frames --> director
-  director -- listed games with recent plays, each beside every source's availability --> api
+  director -- the slate --> schedule
+  schedule -- listed games, each beside every source's availability; plays by page --> api
   api <--> ui1
   ui1 -- tile rectangles --> main --> views
   yttv --> views
 ```
 
-- **Hub** — takes what its providers' frames say, as they arrive, into the Director's slate (the listed games, each with its latest snapshot and plays). Its live stream sends the slate, each game beside its availability from every source. Serves the web UI's static files, the HTTP API, and one live stream per client.
+- **Hub** — takes what its providers' frames say, as they arrive, into the Director's slate (the listed games, each with its latest snapshot and plays). Its Schedule answers the games API from it: a day's games, one game, a game's plays, each once or live. Serves the web UI's static files and the HTTP API, with one stream per live query.
 - **Web UI** — one codebase for desk and couch. It renders Hub state, and its Display owns its Screen: it applies screen commands and chooses between sources.
 - **Desktop shell** — starts the Hub it ships with (the embedded Hub), loads the web UI from it, registers as a Display, and mirrors that Display's stream tiles into native provider web views. Given a Hub's address by configuration (`SPORTAL_HUB_URL`, read once into `ShellConfig`), it starts none and loads that one instead, as `pnpm dev` does.
+
+The games API, answered by the Hub's `Schedule` (`apps/hub/src/Schedule.ts`):
+
+| Endpoint | Answer |
+|---|---|
+| `GET /api/games?date&league&progress&carried` | `{ date, games: ListedGame[] }` |
+| `GET /api/games/live?…` | The same answer, then the whole answer again each time it changes, debounced |
+| `GET /api/games/:id` | `ListedGame` |
+| `GET /api/games/:id/live` | The same, then again each time that game or its availability changes |
+| `GET /api/games/:id/plays?before&limit` | `{ plays, more }`, newest first; `before` is a `sequence`, `limit` defaults to 50 |
+| `GET /api/games/:id/plays/live` | The latest page, then `Appended { plays }` or `Reset { plays }` (the latest page) |
+
+- A listed game is its snapshot and its availability from every source; a list never carries plays, and is in watch
+  order: live, then upcoming by start, then over. `date` defaults to today in the Hub's time zone (`SPORTAL_TIME_ZONE`);
+  `league` and `progress` are comma lists; `carried=true` keeps the games a source carries or will carry.
+- Today is live from the Director's slate. Another day is the provider's listing for it, fetched on demand and held in
+  memory: a past day until the Hub restarts, a later one for 10 minutes. A game off today's slate is found in a held
+  day, and its plays are fetched from the provider.
+- Each `/live` twin is a stream of its own for its one connection, derived from the Director's slate and the sources'
+  availability, rechecked every 30 seconds: the list filters, orders, drops a repeat, and sends a change once 250 ms
+  have passed without a further one; the game drops a repeat; the plays stream sends `Game#playsChange` of each version
+  of the game against the one before. Every stream sends a keep-alive event every 20 seconds.
+- `GameNotFound` (404) for an id no held day lists; `ScheduleUnavailable` (503) when the provider cannot be reached for
+  a day, or a game's plays, the Hub does not hold.
+- In the web UI, `Games` (`apps/web/src/hub/Games.ts`) holds an atom per query the views make: today's list, kept open,
+  which the Screen, the top bar, the palette and the Remote read; and each tile's game and, for a field, its plays,
+  each open only while a tile reads it.
 
 The Hub's routes for Displays and their Remotes:
 
@@ -100,7 +129,7 @@ Each Display runs its own Screen, so a command costs no round trip and a second 
 
 ```
 command (from UI, hotkey, or palette)
-  -> the Display's Screen applies it, against the availability each slate brought
+  -> the Display's Screen applies it, against the availability today's list brought
   -> the new Screen is kept in the browser
   -> the Display's UI re-renders; the shell re-syncs its views
 ```
@@ -134,7 +163,7 @@ This section is binding in the same way the type checker is. `AGENTS.md` carries
 5. **No barrels.** No `index.ts` re-export files. Packages expose modules through `package.json` `exports`; inside an app, import the module file directly.
 6. **No mirror types.** There is no `GameDto`, `GameRow`, `GameResponse`, `GameProps`. The domain schema is the wire format. A variant is derived from the original (`pick`, `omit`, `extend`) at the point of use and is not given a name unless it is itself a domain concept with a glossary entry.
 7. **Search before you write.** Before adding a function, type, or file, look for the existing one. Duplicating logic that already exists is a defect even when the code works.
-8. **Organize by concept, not by kind.** No top-level `components/`, `hooks/`, `services/`, `schemas/` folders. Code for the slate lives under `slate/`, whatever kind of code it is.
+8. **Organize by concept, not by kind.** No top-level `components/`, `hooks/`, `services/`, `schemas/` folders. Code for the Screen lives under `screen/`, whatever kind of code it is.
 9. **Dependencies point one way.** `domain` imports only Effect. `api` imports `domain`. Apps import packages. Nothing imports an app. Within the Hub, ESPN's layers are reached only through `provider/espn/Espn.ts`.
 
 ### 4.2 The tree
@@ -182,7 +211,8 @@ sportal/
 │       └── src/
 │           ├── SportalApi.ts       HttpApi declaration: endpoint groups built from domain schemas
 │           ├── GuideUnreadable.ts  The error for a guide response the source could not read
-│           ├── LiveMessage.ts      The union of messages on the live stream
+│           ├── GamesQuery.ts       What a list of games asks for, and the answer: CalendarDate, GameList
+│           ├── ListedGame.ts       A game as a list or a tile shows it: its snapshot and availability
 │           ├── ShellBridge.ts      What the desktop shell exposes to the web UI; TilePlacement, TileBounds
 │           ├── ShellChannel.ts     The IPC channel names, apart so the sandboxed preload bundles only them
 │           └── Hotkey.ts           The keys Sportal acts on, with their help text
@@ -196,7 +226,8 @@ sportal/
     │       ├── Director.ts         The one holder of the slate: takes each delivery as it arrives and offers the slate
     │       ├── HubStopping.ts      Whether a task that should run until the Hub stops ended because it is stopping, and the Error log unless it did
     │       ├── TestDirector.ts     The Director taking a fed provider, and what it takes of a test's frames
-    │       ├── HubServer.ts        Serves the API, the live stream, and the web UI's files
+    │       ├── Schedule.ts         Answers the games API: a day's games, one game, a game's plays, each once or live
+    │       ├── HubServer.ts        Serves the API, its live queries, and the web UI's files
     │       ├── provider/
     │       │   ├── Provider.ts     The port: `deliveries`, in order, and `Delivery`, what a frame said; `layerTest`, the provider tests feed
     │       │   └── espn/
@@ -231,11 +262,10 @@ sportal/
     │       ├── design/             Vendored shadcn primitives, under the CLI's own file names
     │       ├── display/            This device's Display: state and rules, hotkeys, full screen, overlays, top bar, command palette
     │       ├── shell/              Shell: the edge to the window and the shell bridge
-    │       ├── hub/                HubClient (typed client from SportalApi), LiveStream (the live stream, as an atom)
-    │       ├── slate/              The slate strip and its cards
+    │       ├── hub/                HubClient (typed client from SportalApi), LiveStream (a live stream folded into an atom), Games (one atom per live query)
     │       ├── screen/             The Screen (state, commands, source choice), this Display's copy of it, tiles, dividers, tile actions, rejections
     │       ├── layout/             Layout (the geometry: slots, dividers, next, clamp), its picker and glyphs
-    │       ├── game/               A game's status, score, and logo, as slate and tiles show them; the field, which draws a game's plays
+    │       ├── game/               A game's status, score, and logo, as lists and tiles show them; the field, which draws a game's plays
     │
     └── desktop/
         └── src/
@@ -317,7 +347,7 @@ class Director extends Context.Service<Director, {
 - The `Slate` (`packages/domain/src/Slate.ts`) is the fold: an ordered list of `Game`s, leagues in `LeagueId` order and each league's in its listing's order, each with its latest `GameSnapshot` and its plays. `relisted(league, snapshots)` and `playsTaken(game, plays)` on it are pure and return the next slate and its slate changes; one that changes nothing gives back the same slate. The Director takes each delivery onto them in order.
 - The Director starts from an empty slate and takes each delivery as it arrives, in one `Director.take` span. The Director logs each play a take adds at Info, annotated with `game`, `league`, `matchup`, `play`, and `scoring`, and a game's backfill as one line. For now nothing is kept between runs: a restarted Hub serves an empty slate until its provider's next poll lists the day's games.
 - A take that raises a defect is an Error log; what it had not yet set is unchanged and takes the next frame. If the provider's frames end other than by the Hub stopping, that is an Error log and the slate stays as it is.
-- The Hub server's live route builds `SlateChanged`: the slate with each game carrying only its last ten plays (`Slate#recent`), and each listed game's availability from every source, by its id. The Slate and the Director know nothing of sources or the API: the live route joins the Director's slate with the source's availability, reads the sources' availability again every 30 seconds, drops a message that is the same as the last, and sends a slate change once 250 ms have passed without a further one (a trailing settling, not a maximum latency: continuous updates keep deferring it).
+- The Director offers the slate to the Schedule, which answers the games API (section 3). The Slate and the Director know nothing of sources or the API: the Schedule joins the slate with the sources' availability for each live query, reads the availability again every 30 seconds, drops an answer that is the same as the last, and sends a list's change once 250 ms have passed without a further one (a trailing settling, not a maximum latency: continuous updates keep deferring it).
 - `main.ts` provides it over ESPN as the provider and YouTube TV and Twitch as the sources.
 - The Hub's whole shutdown bound is about 4 s: the HTTP server's 3 s for connected Displays. The desktop app waits up to 5 s for its embedded Hub to exit.
 
@@ -331,7 +361,7 @@ class Source extends Context.Service<Source, {
 }>()("sportal/hub/source/Source") {}
 ```
 
-`Source.layerAll` runs every source and gives each game's availability from every source, in the order the sources are given; it merges nothing. A source says nothing when what it knows changes: the live route reads its availability again each time the slate settles and every 30 seconds, so a guide read or a guide gone stale shows within 30 seconds, and reads the time when it sends, to choose among a guide's airings and to judge a guide's freshness. A matched channel on the air is carried once the slate says the game has started, and upcoming before. The Display's Screen chooses: the most useful availability (carried, upcoming, no guide, then not carried), and a stream tile moves only when its own source carries its game on another channel, so a tile never moves to another source. YouTube TV's availability comes from the latest guide it read; Twitch's from its lineup, a guide whose one channel carries Prime Video.
+`Source.layerAll` runs every source and gives each game's availability from every source, in the order the sources are given; it merges nothing. A source says nothing when what it knows changes: each live query reads its availability again each time the slate changes and every 30 seconds, so a guide read or a guide gone stale shows within 30 seconds, and reads the time when it sends, to choose among a guide's airings and to judge a guide's freshness. A matched channel on the air is carried once the slate says the game has started, and upcoming before. The Display's Screen chooses: the most useful availability (carried, upcoming, no guide, then not carried), and a stream tile moves only when its own source carries its game on another channel, so a tile never moves to another source. YouTube TV's availability comes from the latest guide it read; Twitch's from its lineup, a guide whose one channel carries Prime Video.
 
 YouTube TV's channels are found in its own guide, read by the shell and handed to `Source.readGuide`, which every source receives and only YouTube TV keeps (`docs/history.md`, "Guide-matched channels"); with no fresh guide (a guide is fresh for 45 minutes), its availability is "no guide". Twitch's lineup is fixed and never read.
 
@@ -359,7 +389,7 @@ YouTube TV's channels are found in its own guide, read by the shell and handed t
 - Geometry: the web's `Layout#slots` gives each slot as fractions of the Screen area. The web UI turns them into pixels once and uses the same numbers for its tile chrome and the shell's tile placements, so the two move together along one **Screen transition** (280 ms, `cubic-bezier(0.2, 0, 0, 1)`), which the shell follows by moving each view's bounds.
 - Full screen is the Display's window, local to it, and is not Screen state.
 
-Each Display owns its Screen (`DisplayScreen.ts`, an atom kept in localStorage). A screen command written to it is applied against the availability the latest slate brought, and a refused one is published on its `rejected` atom. Each slate from the live stream refreshes its tiles with `screen.refresh`. The Hub holds no Screen.
+Each Display owns its Screen (`DisplayScreen.ts`, an atom kept in localStorage). A screen command written to it is applied against the availability today's list last brought, and a refused one is published on its `rejected` atom. Each answer today's live list brings refreshes its tiles with `screen.refresh`. The Hub holds no Screen.
 
 ### 5.4 Director
 
@@ -370,7 +400,7 @@ Designed in full in `docs/specs/2026-10-03-director-design.md`.
 ### 5.5 Time and the spoiler shield
 
 - Time comes only from Effect's `Clock`. Tests use the test clock to replay a recorded game at any speed.
-- Each stream tile has a tile delay. The Hub's live stream is immediate; the *client* holds back score data for that game by the delay, so different Displays can have different delays for the same game.
+- Each stream tile has a tile delay. The Hub's live queries are immediate; the *client* holds back score data for that game by the delay, so different Displays can have different delays for the same game.
 
 ### 5.6 Failure behaviour
 

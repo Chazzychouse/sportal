@@ -77,7 +77,7 @@ export class TileViews extends Context.Service<
         }
         entry.view.webContents.on("before-input-event", (event, input) => {
           if (views.get(game) !== entry || input.type !== "keyDown") return
-          const hotkey = Hotkey.of(input, "stream")
+          const hotkey = Hotkey.of(input)
           if (hotkey === undefined) return
           event.preventDefault()
           PubSub.publishUnsafe(hotkeys, hotkey)

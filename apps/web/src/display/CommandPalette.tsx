@@ -1,5 +1,4 @@
 import { useAtomSet, useAtomValue } from "@effect/atom-react"
-import { GameSnapshot } from "@sportal/domain/Game"
 import { Option } from "effect"
 import {
   CommandDialog,
@@ -12,7 +11,7 @@ import {
 } from "@/design/command"
 import { GameStatus } from "../game/GameStatus.tsx"
 import { TeamLogo } from "../game/TeamLogo.tsx"
-import * as LiveStream from "../hub/LiveStream.ts"
+import * as Games from "../hub/Games.ts"
 import { Layout } from "../layout/Layout.ts"
 import { LayoutGlyph } from "../layout/LayoutGlyph.tsx"
 import * as DisplayScreen from "../screen/DisplayScreen.ts"
@@ -27,19 +26,18 @@ export function CommandPalette(props: { open: boolean; onOpenChange: (open: bool
   const toggleFullScreen = useAtomSet(DisplayState.toggleFullScreen)
   const display = useAtomValue(DisplayState.display)
   const screen = useAtomValue(DisplayScreen.screen)
-  const { slate } = useAtomValue(LiveStream.live)
+  const { value } = useAtomValue(Games.today)
   const selected = display.selectedOn(screen)
   const run = (command: ScreenCommand) => {
     input(DisplayInput.Commanded({ command }))
     props.onOpenChange(false)
   }
-  const snapshots = slate.games.map(({ snapshot }) => snapshot)
+  const snapshots = Option.match(value, { onNone: () => [], onSome: ({ games }) => games }).map(
+    ({ snapshot }) => snapshot
+  )
   const occupied = screen.onScreen().flatMap((tile, slot) => {
     if (Tile.guards.Empty(tile)) return []
-    const name = Option.match(slate.gameOf(tile.game), {
-      onNone: () => `Tile ${slot + 1}`,
-      onSome: ({ snapshot }) => snapshot.scoreline()
-    })
+    const name = snapshots.find((each) => each.id === tile.game)?.scoreline() ?? `Tile ${slot + 1}`
     return [{ slot, name }]
   })
 
@@ -56,7 +54,7 @@ export function CommandPalette(props: { open: boolean; onOpenChange: (open: bool
       <CommandList className="max-h-[min(60vh,28rem)]">
         <CommandEmpty>Nothing matches.</CommandEmpty>
         <CommandGroup heading={`Watch in tile ${selected + 1}`}>
-          {snapshots.toSorted(GameSnapshot.watchOrder).map((game) => (
+          {snapshots.map((game) => (
             <CommandItem
               key={game.id}
               value={`watch ${game.scoreline()} ${game.away.team.name} ${game.home.team.name} ${game.networks()} ${game.id}`}

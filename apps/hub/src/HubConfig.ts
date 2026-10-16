@@ -9,6 +9,8 @@ export class HubConfig extends Context.Service<
     readonly logLevel: LogLevel.LogLevel
     readonly logFormat: "pretty" | "json"
     readonly version: string
+    /** The zone whose calendar says what day it is: ESPN's scoreboard days are US Eastern. */
+    readonly timeZone: string
   }
 >()("sportal/hub/HubConfig") {
   static readonly layer: Layer.Layer<HubConfig, Config.ConfigError> = Layer.effect(
@@ -19,7 +21,8 @@ export class HubConfig extends Context.Service<
       webRoot: Config.option(Config.String("SPORTAL_WEB_ROOT")),
       logLevel: Config.LogLevel("SPORTAL_LOG_LEVEL").pipe(Config.withDefault("Info")),
       logFormat: Config.Literals(["pretty", "json"], "SPORTAL_LOG_FORMAT").pipe(Config.withDefault("pretty")),
-      version: Config.String("SPORTAL_VERSION").pipe(Config.withDefault("dev"))
+      version: Config.String("SPORTAL_VERSION").pipe(Config.withDefault("dev")),
+      timeZone: Config.String("SPORTAL_TIME_ZONE").pipe(Config.withDefault("America/New_York"))
     })
   )
 

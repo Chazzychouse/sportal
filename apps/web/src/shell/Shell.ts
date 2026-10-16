@@ -127,16 +127,13 @@ export class Shell extends Context.Service<
 /** Hotkeys pressed on the page. Keys typed into a text field are the field's, and a key already handled is ignored, except Ctrl+K. */
 const pageHotkeys: Stream.Stream<Hotkey> = listened<Hotkey>((listener) => {
   const pressed = (event: KeyboardEvent) => {
-    const hotkey = Hotkey.of(
-      {
-        code: event.code,
-        shift: event.shiftKey,
-        alt: event.altKey,
-        control: event.ctrlKey,
-        meta: event.metaKey
-      },
-      "page"
-    )
+    const hotkey = Hotkey.of({
+      code: event.code,
+      shift: event.shiftKey,
+      alt: event.altKey,
+      control: event.ctrlKey,
+      meta: event.metaKey
+    })
     if (hotkey === undefined || event.repeat) return
     if (!Hotkey.guards.CommandPalette(hotkey) && (isTyping(event.target) || event.defaultPrevented)) return
     // In the listener itself: a default prevented after the event has been dispatched is too late.

@@ -16,6 +16,14 @@ describe("HubConfig", () => {
     }).pipe(Effect.provide(HubConfig.layerTest({})))
   )
 
+  it.effect("should default the time zone to US Eastern", () =>
+    Effect.gen(function* () {
+      const config = yield* HubConfig
+
+      assert.strictEqual(config.timeZone, "America/New_York")
+    }).pipe(Effect.provide(HubConfig.layerTest({})))
+  )
+
   it.effect("should read each setting", () =>
     Effect.gen(function* () {
       const config = yield* HubConfig
@@ -26,6 +34,7 @@ describe("HubConfig", () => {
       assert.strictEqual(config.logLevel, "Debug")
       assert.strictEqual(config.logFormat, "json")
       assert.strictEqual(config.version, "1.2.3")
+      assert.strictEqual(config.timeZone, "Europe/London")
     }).pipe(Effect.provide(HubConfig.layerTest(everySetting)))
   )
 
@@ -51,5 +60,6 @@ const everySetting = {
   SPORTAL_WEB_ROOT: "/srv/web",
   SPORTAL_LOG_LEVEL: "Debug",
   SPORTAL_LOG_FORMAT: "json",
-  SPORTAL_VERSION: "1.2.3"
+  SPORTAL_VERSION: "1.2.3",
+  SPORTAL_TIME_ZONE: "Europe/London"
 }

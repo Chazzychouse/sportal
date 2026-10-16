@@ -1,20 +1,22 @@
 import { NodeHttpServer } from "@effect/platform-node"
 import { assert, describe, it } from "@effect/vitest"
 import { DisplayId } from "@sportal/api/DisplayId"
-import { type LiveMessage, LiveMessageJson } from "@sportal/api/LiveMessage"
+import { type GameList, GameListJson } from "@sportal/api/GamesQuery"
 import { type RemoteMessage, RemoteMessageJson } from "@sportal/api/RemoteMessage"
 import { SportalApi } from "@sportal/api/SportalApi"
+import { GameId, PlaysChange } from "@sportal/domain/Game"
+import { snapshot } from "@sportal/domain/TestGame"
 import { Cause, DateTime, Effect, Exit, Layer, Queue, Schema, Stream } from "effect"
 import { HttpClient } from "effect/http"
 import { HttpApiClient } from "effect/http-api"
 import { TestClock } from "effect/testing"
 import { afterEach, vi } from "vitest"
-import { Broadcast } from "./Broadcast.ts"
 import { Director } from "./Director.ts"
 import { Displays } from "./Displays.ts"
 import { HubConfig } from "./HubConfig.ts"
 import * as HubServer from "./HubServer.ts"
 import { Delivery, Provider } from "./provider/Provider.ts"
+import { Schedule } from "./Schedule.ts"
 import { isStopping } from "./Shutdown.ts"
 import { Source } from "./source/Source.ts"
 import * as TestHub from "./TestHub.ts"
@@ -60,158 +62,209 @@ describe("HubServer", () => {
         })
       )
     )
+  })
 
-    it.effect("should not be served: the slate comes only on the live stream", () =>
+  describe("GET /api/games", () => {
+    it.effect("should answer today's games as JSON", () =>
+      served((frames) =>
+        Effect.gen(function* () {
+          const http = yield* HttpClient.HttpClient
+          yield* TestClock.setTime(TestHub.onAlaAtMsstDay)
+          yield* TestHub.alaAtMsstListed(frames)
+
+          const response = yield* http.get("/api/games")
+          const body = yield* response.text
+          const answer = yield* Schema.decodeEffect(GameListJson)(body)
+
+          assert.include(response.headers["content-type"], "application/json")
+          assert.strictEqual(answer.date, "2026-10-03")
+          assert.deepStrictEqual(
+            answer.games.map(({ snapshot }) => snapshot.id),
+            [TestHub.alaAtMsst.id]
+          )
+        })
+      )
+    )
+
+    it.effect("should read leagues from a comma list", () =>
+      served((frames) =>
+        Effect.gen(function* () {
+          const http = yield* HttpClient.HttpClient
+          const nfl = snapshot({ id: GameId.make("9"), league: "nfl", status: "live" })
+          yield* TestClock.setTime(TestHub.onAlaAtMsstDay)
+          yield* TestHub.offered(frames, Delivery.Listing({ league: "fbs", games: [TestHub.alaAtMsst] }))
+          yield* TestHub.offered(frames, Delivery.Listing({ league: "nfl", games: [nfl] }))
+
+          const response = yield* http.get("/api/games?league=mlb,nfl")
+          const body = yield* response.text
+          const answer = yield* Schema.decodeEffect(GameListJson)(body)
+
+          assert.deepStrictEqual(
+            answer.games.map(({ snapshot }) => snapshot.id),
+            [nfl.id]
+          )
+        })
+      )
+    )
+
+    it.effect("should refuse a malformed date with 400", () =>
       served(() =>
         Effect.gen(function* () {
           const http = yield* HttpClient.HttpClient
 
-          const response = yield* http.get("/api/slate")
+          const response = yield* http.get("/api/games?date=tomorrow")
 
-          assert.strictEqual(response.status, 404)
+          assert.strictEqual(response.status, 400)
+        })
+      )
+    )
+
+    it.effect("should answer 503 when the provider cannot list the day", () =>
+      served(() =>
+        Effect.gen(function* () {
+          const http = yield* HttpClient.HttpClient
+          yield* TestClock.setTime(TestHub.onAlaAtMsstDay)
+
+          const response = yield* http.get("/api/games?date=2026-10-04")
+
+          assert.strictEqual(response.status, 503)
         })
       )
     )
   })
 
-  describe("GET /api/live", () => {
-    describe("SSE transport", () => {
-      it.effect("should stream the current slate first, as a server-sent event", () =>
-        served((frames) =>
-          Effect.gen(function* () {
-            yield* TestHub.alaAtMsstListed(frames)
+  describe("GET /api/games/live", () => {
+    it.effect("should send the current answer first, as a server-sent event", () =>
+      served((frames) =>
+        Effect.gen(function* () {
+          yield* TestClock.setTime(TestHub.onAlaAtMsstDay)
+          yield* TestHub.alaAtMsstListed(frames)
 
-            const { response, lines } = yield* sseLines("/api/live")
-            const line = yield* Queue.take(lines)
+          const { response, lines } = yield* sseLines("/api/games/live")
+          const line = yield* Queue.take(lines)
 
-            const message = messageOf(line)
-            assert.strictEqual(response.headers["content-type"], "text/event-stream")
-            assert.strictEqual(response.headers["cache-control"], "no-cache")
-            // Each event is one line, `data: <json>`, followed by a blank line.
-            assert.isTrue(line.startsWith("data: "))
-            assert.strictEqual(message._tag, "SlateChanged")
-            assert.deepStrictEqual(
-              message.slate.games.map((game) => game.plays),
-              [[]]
-            )
-          })
-        )
-      )
-
-      it.effect("should stream each change after the current slate", () =>
-        served((frames) =>
-          Effect.gen(function* () {
-            yield* TestHub.alaAtMsstListed(frames)
-            const lines = yield* pastInitialMessages()
-
-            yield* TestHub.offered(
-              frames,
-              Delivery.Listing({ league: "fbs", games: [TestHub.alaAtMsstInPeriod(2)] })
-            )
-            yield* TestClock.adjust("250 millis")
-            const line = yield* Queue.take(lines)
-
-            const message = messageOf(line)
-            assert.isTrue(line.startsWith("data: "))
-            assert.deepStrictEqual(
-              message.slate.games.map((game) => game.snapshot.period),
-              [2]
-            )
-          })
-        )
-      )
-
-      it.effect("should give a connection that joins later the latest slate at once", () =>
-        served((frames) =>
-          Effect.gen(function* () {
-            yield* TestHub.alaAtMsstListed(frames)
-            yield* pastInitialMessages()
-            yield* TestHub.offered(
-              frames,
-              Delivery.Listing({ league: "fbs", games: [TestHub.alaAtMsstInPeriod(2)] })
-            )
-            yield* TestClock.adjust("250 millis")
-
-            const { lines } = yield* sseLines("/api/live")
-            const line = yield* Queue.take(lines)
-
-            const message = messageOf(line)
-            assert.deepStrictEqual(
-              message.slate.games.map((game) => game.snapshot.period),
-              [2]
-            )
-          })
-        )
-      )
-
-      it.effect(
-        "should send a keep-alive event every 20 seconds, so a proxy does not close a quiet stream",
-        () =>
-          served((frames) =>
-            Effect.gen(function* () {
-              yield* TestHub.alaAtMsstListed(frames)
-              const lines = yield* pastInitialMessages()
-
-              yield* TestClock.adjust("20 seconds")
-              const keepAlive = yield* nextKeepAlive(lines)
-
-              assert.deepStrictEqual(keepAlive, ["event: keep-alive", "data: "])
-            })
+          assert.strictEqual(response.headers["content-type"], "text/event-stream")
+          assert.strictEqual(response.headers["cache-control"], "no-cache")
+          // Each event is one line, `data: <json>`, followed by a blank line.
+          assert.isTrue(line.startsWith("data: "))
+          assert.deepStrictEqual(
+            gameListOf(line).games.map(({ snapshot }) => snapshot.id),
+            [TestHub.alaAtMsst.id]
           )
+        })
       )
+    )
 
-      it.effect("should still send each change as data after a keep-alive event", () =>
+    it.effect("should send the answer again when a listing changes it", () =>
+      served((frames) =>
+        Effect.gen(function* () {
+          yield* TestClock.setTime(TestHub.onAlaAtMsstDay)
+          yield* TestHub.alaAtMsstListed(frames)
+          const { lines } = yield* sseLines("/api/games/live")
+          yield* Queue.take(lines)
+
+          yield* TestHub.offered(
+            frames,
+            Delivery.Listing({ league: "fbs", games: [TestHub.alaAtMsstInPeriod(2)] })
+          )
+          yield* TestClock.adjust("250 millis")
+          const line = yield* nextData(lines)
+
+          assert.deepStrictEqual(
+            gameListOf(line).games.map(({ snapshot }) => snapshot.period),
+            [2]
+          )
+        })
+      )
+    )
+
+    it.effect("should give a connection that joins later the latest answer at once", () =>
+      served((frames) =>
+        Effect.gen(function* () {
+          yield* TestClock.setTime(TestHub.onAlaAtMsstDay)
+          yield* TestHub.alaAtMsstListed(frames)
+          yield* pastInitialMessages()
+          yield* TestHub.offered(
+            frames,
+            Delivery.Listing({ league: "fbs", games: [TestHub.alaAtMsstInPeriod(2)] })
+          )
+          yield* TestClock.adjust("250 millis")
+
+          const { lines } = yield* sseLines("/api/games/live")
+          const line = yield* Queue.take(lines)
+
+          assert.deepStrictEqual(
+            gameListOf(line).games.map(({ snapshot }) => snapshot.period),
+            [2]
+          )
+        })
+      )
+    )
+
+    it.effect(
+      "should send a keep-alive event every 20 seconds, so a proxy does not close a quiet stream",
+      () =>
         served((frames) =>
           Effect.gen(function* () {
+            yield* TestClock.setTime(TestHub.onAlaAtMsstDay)
             yield* TestHub.alaAtMsstListed(frames)
             const lines = yield* pastInitialMessages()
+
             yield* TestClock.adjust("20 seconds")
-            yield* nextKeepAlive(lines)
+            const keepAlive = yield* nextKeepAlive(lines)
 
-            yield* TestHub.offered(
-              frames,
-              Delivery.Listing({ league: "fbs", games: [TestHub.alaAtMsstInPeriod(2)] })
-            )
-            yield* TestClock.adjust("250 millis")
-            const change = yield* Queue.take(lines).pipe(
-              Effect.repeat({ until: (line) => line.includes("SlateChanged") })
-            )
-
-            assert.isTrue(change.startsWith("data: "))
+            assert.deepStrictEqual(keepAlive, ["event: keep-alive", "data: "])
           })
         )
-      )
-    })
+    )
 
-    describe("encoding", () => {
-      it.effect(
-        "should send the slate's games as their snapshots and plays, and each one's availability by its id, and nothing else the slate remembers",
-        () =>
-          served((frames) =>
-            Effect.gen(function* () {
-              yield* TestHub.alaAtMsstListed(frames)
+    it.effect("should still send each change as data after a keep-alive event", () =>
+      served((frames) =>
+        Effect.gen(function* () {
+          yield* TestClock.setTime(TestHub.onAlaAtMsstDay)
+          yield* TestHub.alaAtMsstListed(frames)
+          const lines = yield* pastInitialMessages()
+          yield* TestClock.adjust("20 seconds")
+          yield* nextKeepAlive(lines)
 
-              const { lines } = yield* sseLines("/api/live")
-              const line = yield* Queue.take(lines).pipe(
-                Effect.repeat({ until: (line) => line.includes("SlateChanged") })
-              )
-
-              const message = JSON.parse(line.slice("data: ".length))
-              const [entry] = message.slate.games
-              assert.strictEqual(entry.snapshot.id, TestHub.alaAtMsst.id)
-              assert.deepStrictEqual(Object.keys(message), ["_tag", "slate", "availability"])
-              assert.deepStrictEqual(Object.keys(entry), ["snapshot", "plays"])
-              assert.deepStrictEqual(message.availability[TestHub.alaAtMsst.id], [
-                { _tag: "NoGuide", source: "YouTube TV" }
-              ])
-              assert.notMatch(line, /"state"|"updatedAt"|"from"/)
-            })
+          yield* TestHub.offered(
+            frames,
+            Delivery.Listing({ league: "fbs", games: [TestHub.alaAtMsstInPeriod(2)] })
           )
-      )
-    })
+          yield* TestClock.adjust("250 millis")
+          const change = yield* nextData(lines)
 
-    describe("guide integration", () => {
-      it.effect("should send the slate again within 30 seconds when a guide read carries its game", () =>
+          assert.deepStrictEqual(
+            gameListOf(change).games.map(({ snapshot }) => snapshot.period),
+            [2]
+          )
+        })
+      )
+    )
+
+    it.effect("should send each game as its snapshot and its availability, and nothing else", () =>
+      served((frames) =>
+        Effect.gen(function* () {
+          yield* TestClock.setTime(TestHub.onAlaAtMsstDay)
+          yield* TestHub.alaAtMsstListed(frames)
+
+          const { lines } = yield* sseLines("/api/games/live")
+          const line = yield* nextData(lines)
+
+          const message = JSON.parse(line.slice("data: ".length))
+          const [entry] = message.games
+          assert.strictEqual(entry.snapshot.id, TestHub.alaAtMsst.id)
+          assert.deepStrictEqual(Object.keys(message), ["date", "games"])
+          assert.deepStrictEqual(Object.keys(entry), ["snapshot", "availability"])
+          assert.deepStrictEqual(entry.availability, [{ _tag: "NoGuide", source: "YouTube TV" }])
+          assert.notMatch(line, /"state"|"updatedAt"|"from"|"plays"/)
+        })
+      )
+    )
+
+    it.effect(
+      "should send the answer again at the next 30-second recheck when a guide read carries its game",
+      () =>
         served((frames) =>
           Effect.gen(function* () {
             const client = yield* makeClient
@@ -222,27 +275,109 @@ describe("HubServer", () => {
 
             yield* client.guide.read({ payload: { guide: realSizedGuideAiring(now) } })
             yield* TestClock.adjust("30 seconds")
+            yield* TestClock.adjust("250 millis")
             const line = yield* nextData(lines)
 
-            const message = messageOf(line)
-            assert.deepStrictEqual(message.availability[TestHub.alaAtMsst.id], [
-              {
-                _tag: "Carried",
-                channel: {
-                  name: "ESPN",
-                  source: "YouTube TV",
-                  locator: {
-                    _tag: "WebView",
-                    url: "https://tv.youtube.com/watch/PFuNFGzJDE4?vp=0gEEEgIwAQ%3D%3D"
+            assert.deepStrictEqual(
+              gameListOf(line).games.map(({ availability }) => availability),
+              [
+                [
+                  {
+                    _tag: "Carried",
+                    channel: {
+                      name: "ESPN",
+                      source: "YouTube TV",
+                      locator: {
+                        _tag: "WebView",
+                        url: "https://tv.youtube.com/watch/PFuNFGzJDE4?vp=0gEEEgIwAQ%3D%3D"
+                      }
+                    }
                   }
-                }
-              }
-            ])
+                ]
+              ]
+            )
           })
         )
+    )
+
+    it.effect("should not route to the game endpoint", () =>
+      served((frames) =>
+        Effect.gen(function* () {
+          yield* TestClock.setTime(TestHub.onAlaAtMsstDay)
+          yield* TestHub.alaAtMsstListed(frames)
+
+          const { response, lines } = yield* sseLines("/api/games/live")
+          const line = yield* Queue.take(lines)
+
+          assert.strictEqual(response.status, 200)
+          assert.strictEqual(gameListOf(line).date, "2026-10-03")
+        })
       )
-    })
+    )
   })
+
+  describe("GET /api/games/:id", () => {
+    it.effect("should answer 404 for a game no day lists", () =>
+      served(() =>
+        Effect.gen(function* () {
+          const client = yield* makeClient
+
+          const error = yield* client.games.game({ params: { id: GameId.make("nope") } }).pipe(Effect.flip)
+
+          assert.strictEqual(error._tag, "GameNotFound")
+        })
+      )
+    )
+  })
+
+  describe("GET /api/games/:id/plays", () => {
+    it.effect("should page plays before a sequence", () =>
+      served((frames) =>
+        Effect.gen(function* () {
+          const client = yield* makeClient
+          yield* TestHub.alaAtMsstListed(frames)
+          yield* TestHub.offered(
+            frames,
+            Delivery.Plays({ game: TestHub.alaAtMsst.id, plays: TestHub.playsUpTo(3) })
+          )
+
+          const page = yield* client.games.plays({
+            params: { id: TestHub.alaAtMsst.id },
+            query: { before: 3 }
+          })
+
+          assert.deepStrictEqual(
+            page.plays.map(({ sequence }) => sequence),
+            [2, 1]
+          )
+          assert.isFalse(page.more)
+        })
+      )
+    )
+  })
+
+  describe("GET /api/games/:id/plays/live", () => {
+    it.effect("should start with a reset to the latest page", () =>
+      served((frames) =>
+        Effect.gen(function* () {
+          yield* TestHub.alaAtMsstListed(frames)
+          yield* TestHub.offered(
+            frames,
+            Delivery.Plays({ game: TestHub.alaAtMsst.id, plays: TestHub.playsUpTo(2) })
+          )
+
+          const { lines } = yield* sseLines(`/api/games/${TestHub.alaAtMsst.id}/plays/live`)
+          const line = yield* nextData(lines)
+
+          assert.deepStrictEqual(playsChangeOf(line), {
+            _tag: "Reset",
+            plays: TestHub.playsUpTo(2).toReversed()
+          })
+        })
+      )
+    )
+  })
+
   describe("HubServer.lanAddresses", () => {
     it.effect("should list external IPv4 addresses, home ranges first, then any other such as a VPN", () =>
       served(() =>
@@ -391,22 +526,19 @@ describe("isStopping", () => {
   })
 })
 
-function served<A, E, R>(
-  test: (frames: TestHub.Frames) => Effect.Effect<A, E, R>,
-  source: Layer.Layer<Source> = Source.layerYouTubeTv
-) {
+function served<A, E, R>(test: (frames: TestHub.Frames) => Effect.Effect<A, E, R>) {
   return Effect.gen(function* () {
     const frames = yield* Queue.bounded<ReadonlyArray<Delivery>, Cause.Done>(1)
 
-    return yield* test(frames).pipe(Effect.scoped, Effect.provide(serverUnderTest(frames, source)))
+    return yield* test(frames).pipe(Effect.scoped, Effect.provide(serverUnderTest(frames)))
   })
 }
 
-function serverUnderTest(frames: TestHub.Frames, source: Layer.Layer<Source>) {
-  const hub = Broadcast.layer.pipe(
+function serverUnderTest(frames: TestHub.Frames) {
+  const hub = Schedule.layer.pipe(
     Layer.provide(Director.layer),
     Layer.provide(Provider.layerTest(frames)),
-    Layer.provideMerge(source),
+    Layer.provideMerge(Source.layerYouTubeTv),
     Layer.provideMerge(HubConfig.layerTest({ SPORTAL_VERSION: "1.2.3" }))
   )
   return HubServer.layer.pipe(
@@ -436,18 +568,23 @@ const sseLines = Effect.fn("HubServer.test.sseLines")(function* (path: string) {
   return { response, lines }
 })
 
-/** Opens the live stream and takes its first message, the current slate: the lines after it. */
+/** Opens today's live list and takes its first message, the current answer: the lines after it. */
 const pastInitialMessages = Effect.fn("HubServer.test.pastInitialMessages")(function* () {
-  const { lines } = yield* sseLines("/api/live")
+  const { lines } = yield* sseLines("/api/games/live")
 
   yield* Queue.take(lines)
 
   return lines
 })
 
-/** The live message a `data: <json>` line carries. */
-function messageOf(line: string): LiveMessage {
-  return Schema.decodeSync(LiveMessageJson)(line.slice("data: ".length))
+/** The game list a `data: <json>` line carries. */
+function gameListOf(line: string): GameList {
+  return Schema.decodeSync(GameListJson)(line.slice("data: ".length))
+}
+
+/** The plays change a `data: <json>` line carries. */
+function playsChangeOf(line: string): PlaysChange {
+  return Schema.decodeSync(Schema.fromJsonString(PlaysChange))(line.slice("data: ".length))
 }
 
 /** The Remote message a `data: <json>` line carries. */
@@ -455,7 +592,7 @@ function remoteMessageOf(line: string): RemoteMessage {
   return Schema.decodeSync(RemoteMessageJson)(line.slice("data: ".length))
 }
 
-/** The next line of `lines` that carries a live message, past any keep-alive event. */
+/** The next line of `lines` that carries a message, past any keep-alive event. */
 function nextData(lines: Queue.Queue<string>) {
   return Queue.take(lines).pipe(Effect.repeat({ until: (line) => line.startsWith("data: {") }))
 }
