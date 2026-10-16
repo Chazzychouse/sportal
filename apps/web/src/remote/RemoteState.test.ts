@@ -3,14 +3,11 @@ import { DisplayId } from "@sportal/api/DisplayId"
 import { DisplayOffline } from "@sportal/api/DisplayOffline"
 import { RemoteMessageJson } from "@sportal/api/RemoteMessage"
 import { GameId } from "@sportal/domain/Game"
-import { DateTime, Deferred, Effect, Layer, Option, Queue, Result, Schema, Stream } from "effect"
+import { Deferred, Effect, Layer, Queue, Schema, Stream } from "effect"
 import { Atom } from "effect/reactivity"
 import { vi } from "vitest"
-import { Autopilot } from "../autopilot/Autopilot.ts"
 import { DisplayInput } from "../display/Display.ts"
 import { HubClient } from "../hub/HubClient.ts"
-import { Prompt } from "../prompts/Prompt.ts"
-import { Prompts } from "../prompts/Prompts.ts"
 import { Shell } from "../shell/Shell.ts"
 import { StripCard } from "../slate/StripCard.ts"
 import * as TestWeb from "../TestWeb.ts"
@@ -37,9 +34,9 @@ describe("RemoteState", () => {
         const tags = yield* collected(RemoteState.followed(desk), (each) => each._tag)
         const source = yield* TestWeb.openedAt("/api/displays/desk")
 
-        source.onmessage?.({ data: reported(reportOf(Option.none())) })
+        source.onmessage?.({ data: reported(reportOf()) })
         source.onmessage?.({ data: offline })
-        source.onmessage?.({ data: reported(reportOf(Option.none())) })
+        source.onmessage?.({ data: reported(reportOf()) })
         return yield* takeN(tags, 4)
       }).pipe(Effect.scoped, Effect.provide(registry))
 
@@ -70,7 +67,7 @@ describe("RemoteState", () => {
       const sent = yield* Effect.gen(function* () {
         yield* Atom.get(RemoteState.followed(desk))
         const source = yield* TestWeb.openedAt("/api/displays/desk")
-        source.onmessage?.({ data: reported(reportOf(Option.none())) })
+        source.onmessage?.({ data: reported(reportOf()) })
         yield* TestWeb.until(RemoteState.followed(desk), (each) => each._tag === "Reported")
 
         yield* Atom.set(
@@ -138,54 +135,9 @@ describe("RemoteState", () => {
       assert.strictEqual(finished.length, 2)
     })
   )
-
-  it.effect("should change the prompt key for a new prompt and not for the same prompt again", () =>
-    Effect.gen(function* () {
-      const { registry } = yield* TestWeb.withShell()
-
-      const keys = yield* Effect.gen(function* () {
-        const keys = yield* collected(RemoteState.promptKey(desk), (each) => each)
-        const source = yield* TestWeb.openedAt("/api/displays/desk")
-
-        source.onmessage?.({ data: reported(reportOf(Option.some(promptOn("phi")))) })
-        source.onmessage?.({ data: reported(reportOf(Option.some(promptOn("phi")), "Single")) })
-        source.onmessage?.({ data: reported(reportOf(Option.some(promptOn("chi")))) })
-        return yield* takeN(keys, 3)
-      }).pipe(Effect.scoped, Effect.provide(registry))
-
-      assert.deepStrictEqual(keys, [
-        undefined,
-        "phi 2026-10-10T20:00:00.000Z",
-        "chi 2026-10-10T20:00:00.000Z"
-      ])
-    })
-  )
-
-  it.effect("should keep the prompt key through a reconnection", () =>
-    Effect.gen(function* () {
-      const { registry } = yield* TestWeb.withShell()
-
-      const keys = yield* Effect.gen(function* () {
-        const keys = yield* collected(RemoteState.promptKey(desk), (each) => each)
-        const source = yield* TestWeb.openedAt("/api/displays/desk")
-
-        source.onmessage?.({ data: reported(reportOf(Option.some(promptOn("phi")))) })
-        source.onerror?.()
-        source.onmessage?.({ data: reported(reportOf(Option.some(promptOn("phi")))) })
-        source.onmessage?.({ data: reported(reportOf(Option.some(promptOn("chi")))) })
-        return yield* takeN(keys, 3)
-      }).pipe(Effect.scoped, Effect.provide(registry))
-
-      assert.deepStrictEqual(keys, [
-        undefined,
-        "phi 2026-10-10T20:00:00.000Z",
-        "chi 2026-10-10T20:00:00.000Z"
-      ])
-    })
-  )
 })
 
-const toggle = { _tag: "Pressed", hotkey: { _tag: "TogglePrompts" } } as const
+const toggle = { _tag: "Pressed", hotkey: { _tag: "ToggleSlate" } } as const
 
 /** A registry whose Hub client is `fakes`. */
 function registryWith(fakes: Parameters<typeof HubClient.layerTest>[0]) {
@@ -202,17 +154,8 @@ function heldUntil(gate: Deferred.Deferred<void>, done: Queue.Queue<Schema.Json>
 /** Waits past the registry's next scheduled tasks, where it removes an atom nothing holds. */
 const afterTasks = Effect.promise(() => new Promise((resolve) => setTimeout(resolve, 10)))
 
-const since = DateTime.makeUnsafe("2026-10-10T20:00:00Z")
-
-function promptOn(game: string) {
-  return new Prompt({ game: GameId.make(game), rank: "redZone", since, target: 1, replaces: Option.none() })
-}
-
-function reportOf(prompt: Option.Option<Prompt>, layout: "Quad" | "Single" = "Quad") {
-  const quad = TestWeb.withTiles([])
-  const screen =
-    layout === "Quad" ? quad : Result.getOrThrow(quad.apply({ _tag: "SetLayout", layout }, TestWeb.nowhere))
-  return new RemoteReport({ screen, autopilot: Autopilot.off, prompts: Prompts.initial, prompt })
+function reportOf() {
+  return new RemoteReport({ screen: TestWeb.withTiles([]) })
 }
 
 const encodeMessage = Schema.encodeSync(RemoteMessageJson)

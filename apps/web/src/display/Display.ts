@@ -63,8 +63,7 @@ export class Display extends Data.Class<{
   }
 
   /**
-   * What a hotkey does. `FullScreen`, `ToggleAutopilot` and the prompt keys do nothing here: the first is the
-   * shell's or browser's, the second the autopilot's, the rest the prompts'.
+   * What a hotkey does. `FullScreen` does nothing here: it is the shell's or browser's.
    */
   press(hotkey: Hotkey, screen: Screen, cards: ReadonlyArray<StripCard>): DisplayStep {
     return Hotkey.match(hotkey, {
@@ -100,11 +99,7 @@ export class Display extends Data.Class<{
       FocusAudio: ({ slot }) => DisplayStep.of(this, [{ _tag: "FocusAudio", tile: slot }]),
       Promote: ({ slot }) => DisplayStep.of(this, [{ _tag: "Promote", tile: slot }]),
       NextLayout: () => DisplayStep.of(this, [{ _tag: "SetLayout", layout: Layout.next(screen.layout) }]),
-      FullScreen: () => DisplayStep.of(this),
-      ToggleAutopilot: () => DisplayStep.of(this),
-      TogglePrompts: () => DisplayStep.of(this),
-      AcceptPrompt: () => DisplayStep.of(this),
-      DismissPrompt: () => DisplayStep.of(this)
+      FullScreen: () => DisplayStep.of(this)
     })
   }
 

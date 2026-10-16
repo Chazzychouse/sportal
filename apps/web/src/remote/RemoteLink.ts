@@ -2,12 +2,10 @@ import { DisplayId } from "@sportal/api/DisplayId"
 import { Effect, Schema, Stream, SubscriptionRef } from "effect"
 import { KeyValueStore } from "effect/persistence"
 import { Atom } from "effect/reactivity"
-import * as AutopilotState from "../autopilot/AutopilotState.ts"
 import * as DisplayState from "../display/DisplayState.ts"
 import { HubClient } from "../hub/HubClient.ts"
 import * as ServerEvents from "../hub/ServerEvents.ts"
 import { ServerEvent } from "../hub/ServerEvents.ts"
-import * as PromptsState from "../prompts/PromptsState.ts"
 import * as DisplayScreen from "../screen/DisplayScreen.ts"
 import { logDefect, runtime } from "../WebRuntime.ts"
 import { RemoteInput, RemoteInputJson } from "./RemoteInput.ts"
@@ -15,7 +13,7 @@ import { RemoteReport } from "./RemoteReport.ts"
 
 /**
  * This Display's link to its Remotes: while its input stream at the Hub is open it reports, then reports each change,
- * and it applies each input a Remote sends, a screen command as yours and a hotkey as if pressed here. Mounted once,
+ * and it applies each input a Remote sends, a screen command to the Screen and a hotkey as if pressed here. Mounted once,
  * by the Display.
  */
 export const link = runtime.atom((get) =>
@@ -47,10 +45,7 @@ export const link = runtime.atom((get) =>
 const report: Atom.Atom<RemoteReport> = Atom.make(
   (get) =>
     new RemoteReport({
-      screen: get(DisplayScreen.screen),
-      autopilot: get(AutopilotState.autopilot),
-      prompts: get(PromptsState.prompts),
-      prompt: get(PromptsState.prompt)
+      screen: get(DisplayScreen.screen)
     })
 )
 
@@ -72,7 +67,7 @@ function applied(get: Atom.FnContext, data: unknown) {
   return decodeInput(data).pipe(
     Effect.map((input) =>
       RemoteInput.match(input, {
-        Commanded: ({ command }) => get.set(AutopilotState.yours, command),
+        Commanded: ({ command }) => get.set(DisplayScreen.screen, command),
         Pressed: ({ hotkey }) => get.set(DisplayState.pressed, hotkey)
       })
     ),

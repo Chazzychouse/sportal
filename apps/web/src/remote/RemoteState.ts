@@ -1,6 +1,6 @@
 import type { DisplayId } from "@sportal/api/DisplayId"
 import { RemoteMessage, RemoteMessageJson } from "@sportal/api/RemoteMessage"
-import { Data, DateTime, Effect, Option, Schema, Stream } from "effect"
+import { Data, Effect, Schema, Stream } from "effect"
 import { AsyncResult, Atom } from "effect/reactivity"
 import { Display, type DisplayInput } from "../display/Display.ts"
 import { HubClient } from "../hub/HubClient.ts"
@@ -71,21 +71,6 @@ export const display = Atom.family((id: DisplayId) =>
       for (const command of step.commands) ctx.set(send(id), { _tag: "Commanded", command })
     }
   ).pipe(Atom.keepAlive)
-)
-
-/**
- * The reported prompt's game and `since`; it changes only when the Display shows another prompt, and keeps its last
- * value while the Display is not reporting, so a reconnection does not chime the same prompt again.
- */
-export const promptKey = Atom.family((id: DisplayId) =>
-  Atom.make((get): string | undefined => {
-    const seen = get(followed(id))
-    if (!Followed.$is("Reported")(seen)) return Option.getOrUndefined(get.self<string | undefined>())
-    return Option.match(seen.report.prompt, {
-      onNone: () => undefined,
-      onSome: ({ game, since }) => `${game} ${DateTime.formatIso(since)}`
-    })
-  })
 )
 
 function connecting(): Followed {

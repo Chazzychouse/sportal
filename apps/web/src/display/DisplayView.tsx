@@ -1,8 +1,6 @@
 import { useAtomMount, useAtomSet, useAtomValue } from "@effect/atom-react"
 import { Toaster } from "@/design/sonner"
-import * as AutopilotState from "../autopilot/AutopilotState.ts"
 import * as GuideRelay from "../hub/GuideRelay.ts"
-import * as PromptsState from "../prompts/PromptsState.ts"
 import { JoinRemote } from "../remote/JoinRemote.tsx"
 import * as RemoteLink from "../remote/RemoteLink.ts"
 import { useScreenRejectionToasts } from "../screen/Rejections.ts"
@@ -27,8 +25,6 @@ export function DisplayView() {
   useAtomMount(GuideRelay.relay)
   useAtomMount(TilePlacements.sync)
   useAtomMount(Covering.sync)
-  useAtomMount(AutopilotState.pilot)
-  useAtomMount(PromptsState.log)
   useAtomMount(RemoteLink.link)
   useScreenRejectionToasts()
 

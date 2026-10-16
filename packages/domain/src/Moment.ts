@@ -69,7 +69,7 @@ const cases = Schema.TaggedUnion({
 
 /**
  * What kind of thing is happening in a game now: one case per game, the one highest in `precedence` of those that
- * hold, with what commentary and prompts need of it.
+ * hold, with what commentary needs of it.
  */
 export const Moment = Object.assign(cases, {
   /**

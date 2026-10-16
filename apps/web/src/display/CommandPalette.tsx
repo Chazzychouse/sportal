@@ -10,8 +10,6 @@ import {
   CommandList,
   CommandShortcut
 } from "@/design/command"
-import * as AutopilotState from "../autopilot/AutopilotState.ts"
-import { AutopilotInput } from "../autopilot/AutopilotState.ts"
 import { GameStatus } from "../game/GameStatus.tsx"
 import { TeamLogo } from "../game/TeamLogo.tsx"
 import * as LiveStream from "../hub/LiveStream.ts"
@@ -27,8 +25,6 @@ import * as DisplayState from "./DisplayState.ts"
 export function CommandPalette(props: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const input = useAtomSet(DisplayState.display)
   const toggleFullScreen = useAtomSet(DisplayState.toggleFullScreen)
-  const autopilot = useAtomValue(AutopilotState.autopilot)
-  const steer = useAtomSet(AutopilotState.autopilot)
   const display = useAtomValue(DisplayState.display)
   const screen = useAtomValue(DisplayScreen.screen)
   const { slate } = useAtomValue(LiveStream.live)
@@ -125,16 +121,6 @@ export function CommandPalette(props: { open: boolean; onOpenChange: (open: bool
           >
             Full screen
             <CommandShortcut>F11</CommandShortcut>
-          </CommandItem>
-          <CommandItem
-            value="autopilot auto follow"
-            onSelect={() => {
-              steer(AutopilotInput.Toggled())
-              props.onOpenChange(false)
-            }}
-          >
-            {autopilot.on ? "Turn the autopilot off" : "Turn the autopilot on"}
-            <CommandShortcut>A</CommandShortcut>
           </CommandItem>
           <CommandItem
             value="remote phone join qr"

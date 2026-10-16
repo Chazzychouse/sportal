@@ -1,10 +1,8 @@
 import { afterEach, assert, beforeEach, describe, it } from "@effect/vitest"
-import { Effect, Option, Queue, Schema } from "effect"
+import { Effect, Queue, Schema } from "effect"
 import { Atom } from "effect/reactivity"
 import { vi } from "vitest"
-import * as AutopilotState from "../autopilot/AutopilotState.ts"
-import { AutopilotInput } from "../autopilot/AutopilotState.ts"
-import * as PromptsState from "../prompts/PromptsState.ts"
+import * as DisplayState from "../display/DisplayState.ts"
 import * as DisplayScreen from "../screen/DisplayScreen.ts"
 import * as TestWeb from "../TestWeb.ts"
 import * as RemoteLink from "./RemoteLink.ts"
@@ -109,23 +107,22 @@ describe("RemoteLink", () => {
     })
   )
 
-  it.effect("should apply a Commanded input to the Screen as yours", () =>
+  it.effect("should apply a Commanded input to the Screen", () =>
     Effect.gen(function* () {
       yield* TestWeb.keep(TestWeb.withTiles(["live", "soon"]))
       const { registry } = yield* TestWeb.withShell()
 
-      const pilot = yield* Effect.gen(function* () {
+      const screen = yield* Effect.gen(function* () {
         yield* Atom.mount(RemoteLink.link)
-        yield* Atom.set(AutopilotState.autopilot, AutopilotInput.Toggled())
         const source = yield* inputStream
 
         source.onmessage?.({
-          data: JSON.stringify({ _tag: "Commanded", command: { _tag: "Promote", tile: 1 } })
+          data: JSON.stringify({ _tag: "Commanded", command: { _tag: "SetLayout", layout: "Single" } })
         })
-        return yield* TestWeb.until(AutopilotState.autopilot, (pilot) => Option.isSome(pilot.suspended.main))
+        return yield* TestWeb.until(DisplayScreen.screen, (screen) => screen.layout === "Single")
       }).pipe(Effect.scoped, Effect.provide(registry))
 
-      assert.isTrue(Option.isSome(pilot.suspended.main))
+      assert.strictEqual(screen.layout, "Single")
     })
   )
 
@@ -133,15 +130,15 @@ describe("RemoteLink", () => {
     Effect.gen(function* () {
       const { registry } = yield* TestWeb.withShell()
 
-      const prompts = yield* Effect.gen(function* () {
+      const display = yield* Effect.gen(function* () {
         yield* Atom.mount(RemoteLink.link)
         const source = yield* inputStream
 
-        source.onmessage?.({ data: JSON.stringify({ _tag: "Pressed", hotkey: { _tag: "TogglePrompts" } }) })
-        return yield* TestWeb.until(PromptsState.prompts, (prompts) => !prompts.on)
+        source.onmessage?.({ data: JSON.stringify({ _tag: "Pressed", hotkey: { _tag: "ToggleSlate" } }) })
+        return yield* TestWeb.until(DisplayState.display, (display) => !display.slateOpen)
       }).pipe(Effect.scoped, Effect.provide(registry))
 
-      assert.isFalse(prompts.on)
+      assert.isFalse(display.slateOpen)
     })
   )
 
@@ -149,7 +146,7 @@ describe("RemoteLink", () => {
     Effect.gen(function* () {
       const { registry } = yield* TestWeb.withShell()
 
-      const [before, after, prompts] = yield* Effect.gen(function* () {
+      const [before, after, display] = yield* Effect.gen(function* () {
         yield* Atom.mount(RemoteLink.link)
         const before = yield* Atom.get(DisplayScreen.screen)
         const source = yield* inputStream
@@ -157,13 +154,13 @@ describe("RemoteLink", () => {
         source.onmessage?.({ data: JSON.stringify({ _tag: "Shouted" }) })
         yield* Effect.yieldNow
         const after = yield* Atom.get(DisplayScreen.screen)
-        source.onmessage?.({ data: JSON.stringify({ _tag: "Pressed", hotkey: { _tag: "TogglePrompts" } }) })
-        const prompts = yield* TestWeb.until(PromptsState.prompts, (prompts) => !prompts.on)
-        return [before, after, prompts] as const
+        source.onmessage?.({ data: JSON.stringify({ _tag: "Pressed", hotkey: { _tag: "ToggleSlate" } }) })
+        const display = yield* TestWeb.until(DisplayState.display, (display) => !display.slateOpen)
+        return [before, after, display] as const
       }).pipe(Effect.scoped, Effect.provide(registry))
 
       assert.strictEqual(after, before)
-      assert.isFalse(prompts.on)
+      assert.isFalse(display.slateOpen)
     })
   )
 

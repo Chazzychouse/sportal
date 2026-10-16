@@ -1,11 +1,7 @@
 import type { Hotkey } from "@sportal/api/Hotkey"
 import { Effect, Match, Option, Stream } from "effect"
 import { AsyncResult, Atom } from "effect/reactivity"
-import * as AutopilotState from "../autopilot/AutopilotState.ts"
-import { AutopilotInput } from "../autopilot/AutopilotState.ts"
 import * as LiveStream from "../hub/LiveStream.ts"
-import * as PromptsState from "../prompts/PromptsState.ts"
-import { PromptInput } from "../prompts/PromptsState.ts"
 import * as DisplayScreen from "../screen/DisplayScreen.ts"
 import { Shell } from "../shell/Shell.ts"
 import { StripCard } from "../slate/StripCard.ts"
@@ -14,7 +10,7 @@ import { Display, DisplayInput } from "./Display.ts"
 
 /**
  * This Display's local state. An input written to it is applied against the Screen and the slate strip: the next
- * Display is kept, and the step's screen commands go to the Screen and, each one it applies, as yours to the autopilot.
+ * Display is kept, and the step's screen commands go to the Screen.
  */
 export const display: Atom.Writable<Display, DisplayInput> = Atom.writable(
   (get) => get(kept),
@@ -22,7 +18,7 @@ export const display: Atom.Writable<Display, DisplayInput> = Atom.writable(
     const step = ctx.get(kept).apply(input, ctx.get(DisplayScreen.screen), ctx.get(cards))
     Atom.batch(() => {
       ctx.set(kept, step.display)
-      for (const command of step.commands) ctx.set(AutopilotState.yours, command)
+      for (const command of step.commands) ctx.set(DisplayScreen.screen, command)
     })
   }
 ).pipe(Atom.keepAlive)
@@ -58,7 +54,7 @@ export const toggleFullScreen = runtime.fn((_: undefined, get) =>
 
 /**
  * The hotkeys and video presses the Shell reports, as this Display's inputs; the `FullScreen` hotkey toggles full
- * screen and `ToggleAutopilot` the autopilot, and the prompt keys the prompts. Mounted once, by the Display.
+ * screen. Mounted once, by the Display.
  */
 export const inputs = runtime.atom((get) =>
   Effect.gen(function* () {
@@ -102,10 +98,6 @@ const kept = Atom.make(Display.initial).pipe(Atom.keepAlive)
 function route(ctx: Atom.WriteContext<void>, hotkey: Hotkey) {
   Match.value(hotkey).pipe(
     Match.tag("FullScreen", () => ctx.set(toggleFullScreen, undefined)),
-    Match.tag("ToggleAutopilot", () => ctx.set(AutopilotState.autopilot, AutopilotInput.Toggled())),
-    Match.tag("TogglePrompts", () => ctx.set(PromptsState.prompts, PromptInput.Toggled())),
-    Match.tag("AcceptPrompt", () => ctx.set(PromptsState.prompts, PromptInput.Accepted())),
-    Match.tag("DismissPrompt", () => ctx.set(PromptsState.prompts, PromptInput.Dismissed())),
     Match.orElse(() => ctx.set(display, DisplayInput.Pressed({ hotkey })))
   )
 }

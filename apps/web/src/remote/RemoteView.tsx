@@ -1,31 +1,25 @@
 import { useAtomSet, useAtomSubscribe, useAtomValue } from "@effect/atom-react"
 import type { DisplayId } from "@sportal/api/DisplayId"
-import type { Hotkey } from "@sportal/api/Hotkey"
 import { Array as Arr, Option } from "effect"
 import { Shrink } from "lucide-react"
 import { useState } from "react"
 import { toast } from "sonner"
 import { Toaster } from "@/design/sonner"
-import { AutopilotToggle } from "../autopilot/AutopilotToggle.tsx"
 import { BrandMark, ConnectionPill } from "../display/Brand.tsx"
 import { DisplayInput } from "../display/Display.ts"
 import { GameStatus } from "../game/GameStatus.tsx"
 import { Score } from "../game/Score.tsx"
 import * as LiveStream from "../hub/LiveStream.ts"
 import { LayoutPicker } from "../layout/LayoutPicker.tsx"
-import { PromptsToggle } from "../prompts/PromptsToggle.tsx"
 import { Screen } from "../screen/Screen.ts"
 import { PlaceBadge } from "../slate/PlaceBadge.tsx"
 import { StripCard } from "../slate/StripCard.ts"
-import * as Chime from "./Chime.ts"
-import { RemotePrompt } from "./RemotePrompt.tsx"
 import * as RemoteState from "./RemoteState.ts"
 import { Followed } from "./RemoteState.ts"
 import { ScreenMap } from "./ScreenMap.tsx"
 
 /**
- * The Remote: a phone's view of one Display. Its prompt on top, then its toggles, its layout and tiles in miniature,
- * and the slate in tabs; tapping a game puts it in the selected tile and selects the next empty one.
+ * The Remote: a phone's view of one Display. Its layout and tiles in miniature on top, then the slate in tabs; tapping a game puts it in the selected tile and selects the next empty one.
  */
 export function RemoteView(props: { id: DisplayId }) {
   const live = useAtomValue(LiveStream.live)
@@ -33,24 +27,12 @@ export function RemoteView(props: { id: DisplayId }) {
   const display = useAtomValue(RemoteState.display(props.id))
   const input = useAtomSet(RemoteState.display(props.id))
   const send = useAtomSet(RemoteState.send(props.id))
-  const [soundReady, setSoundReady] = useState(Chime.unlocked)
-  useAtomSubscribe(RemoteState.promptKey(props.id), (key) => {
-    if (key !== undefined) Chime.play()
-  })
   useAtomSubscribe(RemoteState.offline, (count) => {
     if (count > 0) toast.warning("The Display is offline")
   })
-  const press = (hotkey: Hotkey) => send({ _tag: "Pressed", hotkey })
 
   return (
-    <div
-      className="min-h-dvh bg-background pb-[env(safe-area-inset-bottom)]"
-      // A tap's pointerup is what iOS counts as a gesture that may start audio; a touch's pointerdown is not.
-      onPointerUp={() => {
-        Chime.unlock()
-        setSoundReady(true)
-      }}
-    >
+    <div className="min-h-dvh bg-background pb-[env(safe-area-inset-bottom)]">
       {Followed.$match(followed, {
         Connecting: () => <Waiting cards={StripCard.of(Screen.initial, live.slate, live.classifications)} />,
         Offline: () => <Waiting cards={StripCard.of(Screen.initial, live.slate, live.classifications)} />,
@@ -59,29 +41,9 @@ export function RemoteView(props: { id: DisplayId }) {
           return (
             <>
               <div className="sticky top-0 z-10 flex flex-col gap-2 border-b bg-background/95 px-3 pt-[max(0.75rem,env(safe-area-inset-top))] pb-3 backdrop-blur">
-                <RemotePrompt
-                  prompt={report.prompt}
-                  slate={live.slate}
-                  soundReady={soundReady}
-                  onAccept={() => press({ _tag: "AcceptPrompt" })}
-                  onDismiss={() => press({ _tag: "DismissPrompt" })}
-                />
                 <header className="flex flex-wrap items-center gap-2">
                   <BrandMark />
                   <ConnectionPill connection={live.connection} />
-                  <AutopilotToggle
-                    autopilot={report.autopilot}
-                    slate={live.slate}
-                    classifications={live.classifications}
-                    screen={report.screen}
-                    onToggle={() => press({ _tag: "ToggleAutopilot" })}
-                  />
-                  <PromptsToggle
-                    prompts={report.prompts}
-                    prompt={report.prompt}
-                    slate={live.slate}
-                    onToggle={() => press({ _tag: "TogglePrompts" })}
-                  />
                   {Option.isSome(report.screen.solo) && (
                     <button
                       type="button"

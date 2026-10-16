@@ -91,13 +91,12 @@ Provider and Source are the two words most likely to be swapped. Provider is alw
 | **Hub client** | The web UI's way to the Hub's API, `HubClient` in code. It runs in the web UI's one runtime (`WebRuntime.ts`), beside the Shell. | API client, fetcher |
 | **Telemetry** | The traces, logs, and metrics the Hub exports for people to read in Grafana. | monitoring, observability stack |
 | **Display** | A device running the shell and presenting a Screen. It owns its Screen (`apps/web/src/screen/DisplayScreen.ts`), kept in its browser. Its local state (selected tile, interacting tile, pick, slate drawer, and the one open overlay) is the web UI's `Display`, held in the `DisplayState.display` atom. | screen, client, player |
-| **Remote** | A phone's view and control of one Display, at /remote/<display id>: its prompt (Watch, Skip, with a chime), its autopilot and prompts toggles, its layout and tiles, and the slate. It sends Remote inputs and follows the Display's Remote report through the Hub; it works only while the page is open. | controller |
-| **Chime** | The Remote's short tone for a new prompt, playable only after a first tap on the page. | notification, alert |
+| **Remote** | A phone's view and control of one Display, at /remote/<display id>: its layout and tiles, and the slate. It sends Remote inputs and follows the Display's Remote report through the Hub; it works only while the page is open. | controller |
 | **Display id** | A Display's own id, made once and kept in its browser (`sportal/display-id`); a Remote names its Display by it. `DisplayId` in `packages/api`. | display name |
 | **Displays** | The Hub's in-memory relay between each connected Display and its Remotes (`apps/hub/src/Displays.ts`): the Display's latest report and the inputs waiting for it, neither of which the Hub reads. A Display is connected while its input stream is open; when it closes, the Display and its report are forgotten. | registry, sessions |
 | **Display offline** | The Hub's answer to a report or input for a Display that is not connected: `DisplayOffline`, a 404. | |
-| **Remote report** | What a Display tells its Remotes through the Hub: its Screen, its autopilot, its prompts, and the prompt it shows; `RemoteReport` in `apps/web/src/remote/RemoteReport.ts`. Sent once its input stream opens and again on each change. | state, snapshot |
-| **Remote input** | What a Remote sends a Display: a screen command, applied as yours, or a hotkey, routed as if pressed on the Display; `RemoteInput` in `apps/web/src/remote/RemoteInput.ts`, and `RemoteInputJson` its JSON form. | command, event |
+| **Remote report** | What a Display tells its Remotes through the Hub: its Screen; `RemoteReport` in `apps/web/src/remote/RemoteReport.ts`. Sent once its input stream opens and again on each change. | state, snapshot |
+| **Remote input** | What a Remote sends a Display: a screen command, applied to its Screen, or a hotkey, routed as if pressed on the Display; `RemoteInput` in `apps/web/src/remote/RemoteInput.ts`, and `RemoteInputJson` its JSON form. | command, event |
 | **Remote link** | A Display's side of its Remotes (`apps/web/src/remote/RemoteLink.ts`): its input stream at the Hub, its reports, and the inputs it applies. | |
 | **Followed** | The Display as a Remote sees it through the Hub: connecting (not heard from yet), offline, or as it last reported; `Followed` in `apps/web/src/remote/RemoteState.ts`. A report that does not decode reads as offline. | status |
 | **Overlay** | The one dialog a Display has open — the key help, the command palette, or Join Remote — or none; `Overlay` beside `Display` in `apps/web/src/display/Display.ts`. Local to the Display. | modal, popup |
@@ -152,22 +151,6 @@ Provider and Source are the two words most likely to be swapped. Provider is alw
 | **Classification** | A game's moment, since when, and its score 0–100 with the points each part gave it; `Classification` in `packages/domain/src/Classification.ts`. | rating, watchability |
 | **Matchup prior** | What a game promises before it starts: the mean of how close its line is, how highly its teams are ranked, and how often they have won. It fades as the game is played. | |
 | **Classifier** | The pure fold that classifies the slate's games, stepped by the Director after each take and when a held moment runs out; it keeps each game's pregame line, its big play for a minute, when each game last moved (its stall clock), and its moment, which holds 20 s before a lower one replaces it. `Classifier` in `packages/domain/src/Classifier.ts`. | analyzer, scorer |
-| **Autopilot** | A Display's follower of the classifications: shows the best game by its rank in the main tile, the sound on it, and fits the layout under the ceiling. Off by default; your commands win. | director, auto-switcher |
-| **Rank** | How worth showing the autopilot finds a game, best first (`Rank` in `apps/web/src/autopilot/Ranking.ts`): a red zone, crunch time, a big play, live play, a break, not live; ties go to the higher score, then the lower tile. | priority, ranking |
-| **Ranked** | A game on a tile with its rank and score, as a step saw it. | |
-| **Decision** | What one step of the autopilot decided and why, for its log: off, frozen (the Screen soloed), or stepped, with the ranked games it saw and what it did with the layout, the main tile and the sound; `Decision` in `apps/web/src/autopilot/Decision.ts`. | verdict |
-| **LayoutDecision** | What a step did with the layout: fitted it from one to another, kept it, left it to you until a time, or had no ceiling to fit under. | |
-| **MainDecision** | What a step did with the main tile: promoted a game over the one there (it outranks it, or the one there stopped), or kept the one there, for a StayReason. | |
-| **StayReason** | Why the main tile kept its game: it is the best, nothing ranks higher, its dwell has time left, it is yours, or nothing is live. | |
-| **SoundDecision** | Where a step left the sound: on the main tile's game, or yours until a time. | |
-| **Step** | One step of the autopilot: the next autopilot, the commands to send in order, and its Decision; `Step` in `apps/web/src/autopilot/Autopilot.ts`. | tick |
-| **Dwell** | The 30 s the main tile's game holds the tile against a game in a higher rank, unless it stops. | hold |
-| **Suspension** | The 3 min a command you send keeps the autopilot off the main tile, the sound or the layout it touched. | pause, lock |
-| **Ceiling** | The layout you chose (when you turn the autopilot on, and each one you set): the autopilot fits the layout down from it as games end and back up to it as they start, never past. | max layout |
-| **Fit** | The autopilot's choice of layout and tile order: the smallest layout on the ceiling's ladder with a slot for the main tile and each other game in progress or just over. | auto-layout |
-| **Prompt** | The top bar asking whether to bring a game on no tile into the main tile: one a source can stream, in a red zone or crunch time, that has an empty slot to go to or outranks the weakest game on screen; the best such game, one at a time, for as long as it holds; `Prompt` in `apps/web/src/prompts/Prompt.ts`. Accepting assigns it to the target and promotes it, as your commands. | notification, alert, suggestion, toast |
-| **Prompts** | A Display's prompts: on or off (`P`, on by default) and the games you dismissed, each quiet until a new moment; `Prompts` in `apps/web/src/prompts/Prompts.ts`. Apart from the autopilot. | prompter |
-| **Target** | The slot a prompt's game would take: the first empty slot on screen, else the weakest game's. | |
 
 ## Planned
 
@@ -186,6 +169,8 @@ Names the design uses that no code has yet. Move a row up, into its table, in th
 | **Tile delay** | Seconds that data is held back for a tile to match its video. | offset, latency |
 | **Scenario** | A game day a Hub plays offline in place of its providers and sources. Removed to be designed again ([ADR 0013](docs/adr/0013-scenarios-go.md)). | |
 | **Spoiler shield** | Hiding or delaying scores for chosen games. | |
+| **Autopilot** | A Display's follower of the classifications: puts the best game in the main tile and the sound on it, and fits the layout. Built once and removed for the first installable build, to be designed again ([ADR 0018](docs/adr/0018-autopilot-and-prompts-go.md)). | director, auto-switcher |
+| **Prompt** | Asking whether to bring a game on no tile into the main tile when it reaches a red zone or crunch time. Removed with the autopilot ([ADR 0018](docs/adr/0018-autopilot-and-prompts-go.md)). | notification, alert, suggestion, toast |
 | **Phone push** | A prompt delivered to a phone's lock screen; needs HTTPS (Tailscale or the home box), so the Remote cannot do it over the home network's plain HTTP. | notification |
 | **Follow** | Your declared interest in a team, conference, league, or game. | favourite, subscription |
 | **Persistence** | What the Hub keeps between runs: none for now, added back on top of the simplified model. | storage, database |
