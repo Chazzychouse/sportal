@@ -12,7 +12,8 @@ import { Transition } from "./Transition.ts"
  * Keeps one provider web view per stream tile, by the tile's key, laid over the web UI at the rectangle the UI
  * reports. A view belongs to its tile's key, so a game that changes tiles keeps its player.
  * The shell only ever sets a view's address, bounds, visibility, mute flag, and focus, reads the keys pressed in
- * a view, and keeps the mouse from a view's player unless it is interactive; the provider's page is never modified.
+ * a view — the guide's keys only while the web UI says the guide is open — and keeps the mouse from a view's player
+ * unless it is interactive; the provider's page is never modified.
  */
 export class TileViews extends Context.Service<
   TileViews,
@@ -24,6 +25,8 @@ export class TileViews extends Context.Service<
     sync(placements: ReadonlyArray<TilePlacement>, transition?: ScreenTransition): Effect.Effect<void>
     /** Hides exactly these tiles' views, now and through later syncs, until a later call no longer names them. */
     hide(keys: ReadonlyArray<TileKey>): Effect.Effect<void>
+    /** Whether the guide is open: while it is, the guide's keys pressed in a stream view are hotkeys, not the player's. */
+    setGuideOpen(on: boolean): Effect.Effect<void>
     /** Each hotkey pressed while a stream view had keyboard focus. The page never receives it. */
     readonly hotkeys: Stream.Stream<Hotkey>
     /**
@@ -45,6 +48,7 @@ export class TileViews extends Context.Service<
 
       const views = new Map<TileKey, Entry>()
       let hidden: ReadonlySet<TileKey> = new Set()
+      let guideOpen = false
       // Views created during a transition, kept out of sight until it ends.
       const arriving = new Set<TileKey>()
 
@@ -77,7 +81,14 @@ export class TileViews extends Context.Service<
         }
         entry.view.webContents.on("before-input-event", (event, input) => {
           if (views.get(key) !== entry || input.type !== "keyDown") return
-          const hotkey = Hotkey.of(input)
+          const hotkey = Hotkey.of({
+            code: input.code,
+            shift: input.shift,
+            alt: input.alt,
+            control: input.control,
+            meta: input.meta,
+            guideOpen
+          })
           if (hotkey === undefined) return
           event.preventDefault()
           PubSub.publishUnsafe(hotkeys, hotkey)
@@ -176,6 +187,10 @@ export class TileViews extends Context.Service<
       return TileViews.of({
         sync,
         hide,
+        setGuideOpen: (on) =>
+          Effect.sync(() => {
+            guideOpen = on
+          }),
         hotkeys: Stream.fromPubSub(hotkeys),
         tilePresses: Stream.fromPubSub(presses)
       })

@@ -1,10 +1,21 @@
 import { assert, describe, it } from "@effect/vitest"
+import type { Hotkey } from "@sportal/api/Hotkey"
 import { TileKey } from "@sportal/api/TileKey"
 import { GameId } from "@sportal/domain/Game"
 import { Option } from "effect"
+import { GuideItem } from "../guide/GuideItem.ts"
+import type { GuideShelves } from "../guide/GuideShelves.ts"
 import { Screen, type ScreenCommand } from "../screen/Screen.ts"
 import * as TestWeb from "../TestWeb.ts"
-import { Display, DisplayInput, DisplayStep } from "./Display.ts"
+import {
+  Display,
+  DisplayInput,
+  DisplayStep,
+  type GuideEntry,
+  type GuideFocus,
+  type GuideLevel,
+  Overlay
+} from "./Display.ts"
 
 describe("Display.initial", () => {
   it("should start on slot 0, with nothing interacting and no overlay", () => {
@@ -13,6 +24,12 @@ describe("Display.initial", () => {
     assert.strictEqual(display.selected, 0)
     assert.isUndefined(display.interacting)
     assert.strictEqual(display.overlay._tag, "None")
+  })
+
+  it("should open the guide on All live first", () => {
+    const display = Display.initial
+
+    assert.strictEqual(display.lastEntry, "AllLive")
   })
 })
 
@@ -32,7 +49,7 @@ describe("Display#select", () => {
 
   it("should keep interacting when the same slot is selected", () => {
     const screen = TestWeb.withTiles(["live", "soon"])
-    const interacting = Display.initial.press({ _tag: "Interact" }, screen).display
+    const interacting = Display.initial.press({ _tag: "Interact" }, screen, none).display
 
     const reselected = interacting.select(0, screen).display
 
@@ -41,7 +58,7 @@ describe("Display#select", () => {
 
   it("should end interacting when another slot is selected", () => {
     const screen = TestWeb.withTiles(["live", "soon"])
-    const interacting = Display.initial.press({ _tag: "Interact" }, screen).display
+    const interacting = Display.initial.press({ _tag: "Interact" }, screen, none).display
 
     const moved = interacting.select(1, screen).display
 
@@ -50,7 +67,7 @@ describe("Display#select", () => {
 
   it("should not interact again when the slot it ended on is selected back", () => {
     const screen = TestWeb.withTiles(["live", "soon"])
-    const interacting = Display.initial.press({ _tag: "Interact" }, screen).display
+    const interacting = Display.initial.press({ _tag: "Interact" }, screen, none).display
     const moved = interacting.select(1, screen).display
 
     const back = moved.select(0, screen).display
@@ -93,7 +110,7 @@ describe("Display#selectedOn and Display#interactingOn", () => {
     const quad = TestWeb.withTiles(["live"])
     const selected = Display.initial.select(3, quad).display
     const single = new Screen({ ...quad, layout: "Single" })
-    const interacting = selected.press({ _tag: "Interact" }, single).display
+    const interacting = selected.press({ _tag: "Interact" }, single, none).display
 
     const reselected = interacting.select(0, single).display
 
@@ -102,7 +119,7 @@ describe("Display#selectedOn and Display#interactingOn", () => {
 
   it("should read the game interacting on the screen it began on", () => {
     const before = TestWeb.withTiles(["live", "soon"])
-    const display = Display.initial.press({ _tag: "Interact" }, before).display
+    const display = Display.initial.press({ _tag: "Interact" }, before, none).display
 
     const interacting = display.interactingOn(before)
 
@@ -111,7 +128,7 @@ describe("Display#selectedOn and Display#interactingOn", () => {
 
   it("should read interacting as none once a swap moves another game into the selected slot", () => {
     const before = TestWeb.withTiles(["live", "soon"])
-    const display = Display.initial.press({ _tag: "Interact" }, before).display
+    const display = Display.initial.press({ _tag: "Interact" }, before, none).display
 
     const interacting = display.interactingOn(TestWeb.withTiles(["soon", "live"]))
 
@@ -120,7 +137,7 @@ describe("Display#selectedOn and Display#interactingOn", () => {
 
   it("should read interacting again once its game is swapped back into the selected slot", () => {
     const before = TestWeb.withTiles(["live", "soon"])
-    const display = Display.initial.press({ _tag: "Interact" }, before).display
+    const display = Display.initial.press({ _tag: "Interact" }, before, none).display
     display.interactingOn(TestWeb.withTiles(["soon", "live"]))
 
     const swappedBack = display.interactingOn(TestWeb.withTiles(["live", "soon"]))
@@ -178,7 +195,7 @@ describe("Display#choose", () => {
 
   it("should end interacting when the choice moves the selection", () => {
     const screen = TestWeb.withTiles(["soon"])
-    const interacting = Display.initial.press({ _tag: "Interact" }, screen).display
+    const interacting = Display.initial.press({ _tag: "Interact" }, screen, none).display
 
     const chosen = interacting.choose(live, screen)
 
@@ -188,16 +205,16 @@ describe("Display#choose", () => {
 
 describe("Display#press", () => {
   it("should answer with a DisplayStep", () => {
-    const step = Display.initial.press({ _tag: "ShowKeys" }, TestWeb.withTiles([]))
+    const step = Display.initial.press({ _tag: "ShowKeys" }, TestWeb.withTiles([]), none)
 
     assert.instanceOf(step, DisplayStep)
   })
 
   it("should select with SelectTile as select does", () => {
     const screen = TestWeb.withTiles(["live", "soon"])
-    const interacting = Display.initial.press({ _tag: "Interact" }, screen).display
+    const interacting = Display.initial.press({ _tag: "Interact" }, screen, none).display
 
-    const { display, commands } = interacting.press({ _tag: "SelectTile", slot: 1 }, screen)
+    const { display, commands } = interacting.press({ _tag: "SelectTile", slot: 1 }, screen, none)
 
     assert.strictEqual(display.selected, 1)
     assert.isUndefined(display.interacting)
@@ -206,9 +223,9 @@ describe("Display#press", () => {
 
   it("should ignore SelectTile past the last slot, as select does", () => {
     const screen = TestWeb.withTiles(["live", "soon"])
-    const interacting = Display.initial.press({ _tag: "Interact" }, screen).display
+    const interacting = Display.initial.press({ _tag: "Interact" }, screen, none).display
 
-    const { display } = interacting.press({ _tag: "SelectTile", slot: 8 }, screen)
+    const { display } = interacting.press({ _tag: "SelectTile", slot: 8 }, screen, none)
 
     assert.strictEqual(display, interacting)
   })
@@ -217,7 +234,7 @@ describe("Display#press", () => {
     const screen = TestWeb.withTiles(["live", "soon"])
     const selected = Display.initial.select(1, screen).display
 
-    const solo = selected.press({ _tag: "ToggleSolo" }, screen)
+    const solo = selected.press({ _tag: "ToggleSolo" }, screen, none)
 
     assert.strictEqual(solo.display, selected)
     assert.deepStrictEqual(solo.commands, [{ _tag: "Solo", tile: 1 }])
@@ -228,7 +245,7 @@ describe("Display#press", () => {
     const selected = Display.initial.select(1, screen).display
     const soloed = new Screen({ ...screen, solo: Option.some(TileKey.game(GameId.make("soon"))) })
 
-    const { commands } = selected.press({ _tag: "ToggleSolo" }, soloed)
+    const { commands } = selected.press({ _tag: "ToggleSolo" }, soloed, none)
 
     assert.deepStrictEqual(commands, [{ _tag: "Unsolo" }])
   })
@@ -237,7 +254,7 @@ describe("Display#press", () => {
     const screen = TestWeb.withTiles(["live"])
     const selected = Display.initial.select(1, screen).display
 
-    const { display, commands } = selected.press({ _tag: "ToggleSolo" }, screen)
+    const { display, commands } = selected.press({ _tag: "ToggleSolo" }, screen, none)
 
     assert.strictEqual(display, selected)
     assert.deepStrictEqual(commands, [])
@@ -250,7 +267,7 @@ describe("Display#press", () => {
     })
     const selected = Display.initial.select(1, soloed).display
 
-    const { commands } = selected.press({ _tag: "ToggleSolo" }, soloed)
+    const { commands } = selected.press({ _tag: "ToggleSolo" }, soloed, none)
 
     assert.deepStrictEqual(commands, [{ _tag: "Unsolo" }])
   })
@@ -260,7 +277,7 @@ describe("Display#press", () => {
     const selected = Display.initial.select(3, quad).display
     const single = new Screen({ ...quad, layout: "Single" })
 
-    const { commands } = selected.press({ _tag: "ToggleSolo" }, single)
+    const { commands } = selected.press({ _tag: "ToggleSolo" }, single, none)
 
     assert.deepStrictEqual(commands, [{ _tag: "Solo", tile: 0 }])
   })
@@ -272,7 +289,7 @@ describe("Display#press", () => {
     })
     const keys = Display.initial.open("Keys")
 
-    const { display, commands } = keys.press({ _tag: "Unsolo" }, soloed)
+    const { display, commands } = keys.press({ _tag: "Unsolo" }, soloed, none)
 
     assert.strictEqual(display.overlay._tag, "None")
     assert.deepStrictEqual(commands, [])
@@ -283,7 +300,7 @@ describe("Display#press", () => {
     (overlay) => {
       const open = Display.initial.open(overlay)
 
-      const { display, commands } = open.press({ _tag: "Unsolo" }, TestWeb.withTiles([]))
+      const { display, commands } = open.press({ _tag: "Unsolo" }, TestWeb.withTiles([]), none)
 
       assert.strictEqual(display.overlay._tag, "None")
       assert.deepStrictEqual(commands, [])
@@ -296,7 +313,7 @@ describe("Display#press", () => {
       solo: Option.some(TileKey.game(GameId.make("live")))
     })
 
-    const { display, commands } = Display.initial.press({ _tag: "Unsolo" }, soloed)
+    const { display, commands } = Display.initial.press({ _tag: "Unsolo" }, soloed, none)
 
     assert.strictEqual(display, Display.initial)
     assert.deepStrictEqual(commands, [{ _tag: "Unsolo" }])
@@ -305,7 +322,7 @@ describe("Display#press", () => {
   it("should do nothing with Esc and no overlay while not soloed", () => {
     const screen = TestWeb.withTiles(["live"])
 
-    const { display, commands } = Display.initial.press({ _tag: "Unsolo" }, screen)
+    const { display, commands } = Display.initial.press({ _tag: "Unsolo" }, screen, none)
 
     assert.strictEqual(display, Display.initial)
     assert.deepStrictEqual(commands, [])
@@ -314,7 +331,7 @@ describe("Display#press", () => {
   it("should interact with the selected slot's stream with Interact", () => {
     const screen = TestWeb.withTiles(["live"])
 
-    const { display, commands } = Display.initial.press({ _tag: "Interact" }, screen)
+    const { display, commands } = Display.initial.press({ _tag: "Interact" }, screen, none)
 
     assert.strictEqual(display.interactingOn(screen), "live")
     assert.deepStrictEqual(commands, [])
@@ -322,19 +339,19 @@ describe("Display#press", () => {
 
   it("should end interacting with Interact when it was on", () => {
     const screen = TestWeb.withTiles(["live"])
-    const on = Display.initial.press({ _tag: "Interact" }, screen).display
+    const on = Display.initial.press({ _tag: "Interact" }, screen, none).display
 
-    const { display } = on.press({ _tag: "Interact" }, screen)
+    const { display } = on.press({ _tag: "Interact" }, screen, none)
 
     assert.isUndefined(display.interactingOn(screen))
   })
 
   it("should interact with the game now there with Interact on a slot a swap has refilled", () => {
     const before = TestWeb.withTiles(["live", "soon"])
-    const stale = Display.initial.press({ _tag: "Interact" }, before).display
+    const stale = Display.initial.press({ _tag: "Interact" }, before, none).display
     const swapped = TestWeb.withTiles(["soon", "live"])
 
-    const { display } = stale.press({ _tag: "Interact" }, swapped)
+    const { display } = stale.press({ _tag: "Interact" }, swapped, none)
 
     assert.strictEqual(display.interactingOn(swapped), "soon")
   })
@@ -349,13 +366,13 @@ describe("Display#press", () => {
       })
     }
   ])("should do nothing with Interact on a tile with no stream: $tile", ({ screen }) => {
-    const { display } = Display.initial.press({ _tag: "Interact" }, screen)
+    const { display } = Display.initial.press({ _tag: "Interact" }, screen, none)
 
     assert.strictEqual(display, Display.initial)
   })
 
   it("should open the key help with ShowKeys", () => {
-    const { display, commands } = Display.initial.press({ _tag: "ShowKeys" }, TestWeb.withTiles([]))
+    const { display, commands } = Display.initial.press({ _tag: "ShowKeys" }, TestWeb.withTiles([]), none)
 
     assert.strictEqual(display.overlay._tag, "Keys")
     assert.deepStrictEqual(commands, [])
@@ -363,9 +380,9 @@ describe("Display#press", () => {
 
   it("should close the key help with ShowKeys when it was open", () => {
     const screen = TestWeb.withTiles([])
-    const open = Display.initial.press({ _tag: "ShowKeys" }, screen).display
+    const open = Display.initial.press({ _tag: "ShowKeys" }, screen, none).display
 
-    const { display } = open.press({ _tag: "ShowKeys" }, screen)
+    const { display } = open.press({ _tag: "ShowKeys" }, screen, none)
 
     assert.strictEqual(display.overlay._tag, "None")
   })
@@ -373,7 +390,7 @@ describe("Display#press", () => {
   it("should replace the palette with the key help with ShowKeys", () => {
     const palette = Display.initial.open("Palette")
 
-    const { display, commands } = palette.press({ _tag: "ShowKeys" }, TestWeb.withTiles([]))
+    const { display, commands } = palette.press({ _tag: "ShowKeys" }, TestWeb.withTiles([]), none)
 
     assert.strictEqual(display.overlay._tag, "Keys")
     assert.deepStrictEqual(commands, [])
@@ -382,7 +399,7 @@ describe("Display#press", () => {
   it("should open the palette with CommandPalette, replacing the key help", () => {
     const keys = Display.initial.open("Keys")
 
-    const { display, commands } = keys.press({ _tag: "CommandPalette" }, TestWeb.withTiles([]))
+    const { display, commands } = keys.press({ _tag: "CommandPalette" }, TestWeb.withTiles([]), none)
 
     assert.strictEqual(display.overlay._tag, "Palette")
     assert.deepStrictEqual(commands, [])
@@ -390,9 +407,9 @@ describe("Display#press", () => {
 
   it("should close the palette with CommandPalette when it was open", () => {
     const screen = TestWeb.withTiles([])
-    const open = Display.initial.open("Keys").press({ _tag: "CommandPalette" }, screen).display
+    const open = Display.initial.open("Keys").press({ _tag: "CommandPalette" }, screen, none).display
 
-    const { display } = open.press({ _tag: "CommandPalette" }, screen)
+    const { display } = open.press({ _tag: "CommandPalette" }, screen, none)
 
     assert.strictEqual(display.overlay._tag, "None")
   })
@@ -404,14 +421,14 @@ describe("Display#press", () => {
   ])("should send $hotkey._tag's command and change nothing", ({ hotkey, command }) => {
     const screen = TestWeb.withTiles(["live", "soon"])
 
-    const { display, commands } = Display.initial.press(hotkey, screen)
+    const { display, commands } = Display.initial.press(hotkey, screen, none)
 
     assert.strictEqual(display, Display.initial)
     assert.deepStrictEqual(commands, [command])
   })
 
   it("should return the same display with FullScreen and send nothing", () => {
-    const { display, commands } = Display.initial.press({ _tag: "FullScreen" }, TestWeb.withTiles([]))
+    const { display, commands } = Display.initial.press({ _tag: "FullScreen" }, TestWeb.withTiles([]), none)
 
     assert.strictEqual(display, Display.initial)
     assert.deepStrictEqual(commands, [])
@@ -440,15 +457,15 @@ describe("Display#apply", () => {
   it("should press a hotkey as press does", () => {
     const screen = TestWeb.withTiles(["live"])
 
-    const step = Display.initial.apply(DisplayInput.Pressed({ hotkey: { _tag: "ShowKeys" } }), screen)
+    const step = Display.initial.apply(DisplayInput.Pressed({ hotkey: { _tag: "ShowKeys" } }), screen, none)
 
-    assert.deepStrictEqual(step, Display.initial.press({ _tag: "ShowKeys" }, screen))
+    assert.deepStrictEqual(step, Display.initial.press({ _tag: "ShowKeys" }, screen, none))
   })
 
   it("should select a slot as select does", () => {
     const screen = TestWeb.withTiles(["live", "soon"])
 
-    const step = Display.initial.apply(DisplayInput.Selected({ slot: 1 }), screen)
+    const step = Display.initial.apply(DisplayInput.Selected({ slot: 1 }), screen, none)
 
     assert.deepStrictEqual(step, Display.initial.select(1, screen))
   })
@@ -458,7 +475,8 @@ describe("Display#apply", () => {
 
     const { display, commands } = Display.initial.apply(
       DisplayInput.VideoPressed({ key: TileKey.game(GameId.make("soon")) }),
-      screen
+      screen,
+      none
     )
 
     assert.strictEqual(display.selected, 1)
@@ -470,7 +488,8 @@ describe("Display#apply", () => {
 
     const { display } = Display.initial.apply(
       DisplayInput.VideoPressed({ key: TileKey.game(GameId.make("gone")) }),
-      screen
+      screen,
+      none
     )
 
     assert.strictEqual(display, Display.initial)
@@ -479,7 +498,7 @@ describe("Display#apply", () => {
   it("should choose a game as choose does", () => {
     const screen = TestWeb.withTiles(["soon"])
 
-    const step = Display.initial.apply(DisplayInput.Chosen({ game: live }), screen)
+    const step = Display.initial.apply(DisplayInput.Chosen({ game: live }), screen, none)
 
     assert.deepStrictEqual(step, Display.initial.choose(live, screen))
   })
@@ -489,7 +508,8 @@ describe("Display#apply", () => {
 
     const { display, commands } = Display.initial.apply(
       DisplayInput.Commanded({ command }),
-      TestWeb.withTiles([])
+      TestWeb.withTiles([]),
+      none
     )
 
     assert.strictEqual(display, Display.initial)
@@ -497,16 +517,377 @@ describe("Display#apply", () => {
   })
 
   it("should open an overlay", () => {
-    const { display } = Display.initial.apply(DisplayInput.Opened({ overlay: "Keys" }), TestWeb.withTiles([]))
+    const { display } = Display.initial.apply(
+      DisplayInput.Opened({ overlay: "Keys" }),
+      TestWeb.withTiles([]),
+      none
+    )
 
     assert.isTrue(display.shows("Keys"))
   })
 
   it("should close the open overlay", () => {
-    const { display } = Display.initial.open("Palette").apply(DisplayInput.Closed(), TestWeb.withTiles([]))
+    const { display } = Display.initial
+      .open("Palette")
+      .apply(DisplayInput.Closed(), TestWeb.withTiles([]), none)
 
     assert.strictEqual(display.overlay._tag, "None")
   })
 })
 
+describe("Display#press in the guide", () => {
+  it("should open the ribbon on All live with Guide when nothing is open", () => {
+    const { display, commands } = Display.initial.press({ _tag: "Guide" }, emptyQuad, shelves)
+
+    assert.deepStrictEqual(display.overlay, guide("Ribbon", "AllLive"))
+    assert.deepStrictEqual(commands, [])
+  })
+
+  it("should open the ribbon on the entry last shown", () => {
+    const closed = after(Display.initial, [{ _tag: "Guide" }, { _tag: "NextEntry" }, { _tag: "Unsolo" }])
+
+    const { display } = closed.press({ _tag: "Guide" }, emptyQuad, shelves)
+
+    assert.deepStrictEqual(display.overlay, guide("Ribbon", "nfl"))
+  })
+
+  it("should open the ribbon on All live when the entry last shown has no games now", () => {
+    const closed = after(Display.initial, [{ _tag: "Guide" }, { _tag: "NextEntry" }, { _tag: "Unsolo" }])
+    const withoutNfl: GuideShelves = { ...shelves, entries: ["AllLive", "fbs", "mlb", "nba"] }
+
+    const { display } = closed.press({ _tag: "Guide" }, emptyQuad, withoutNfl)
+
+    assert.deepStrictEqual(display.overlay, guide("Ribbon", "AllLive"))
+  })
+
+  it("should open the full guide with Guide from the ribbon", () => {
+    const ribbon = after(Display.initial, [{ _tag: "Guide" }])
+
+    const { display } = ribbon.press({ _tag: "Guide" }, emptyQuad, shelves)
+
+    assert.deepStrictEqual(display.overlay, guide("Full", "AllLive"))
+  })
+
+  it("should keep the full guide open with Guide", () => {
+    const full = after(Display.initial, [{ _tag: "Guide" }, { _tag: "Guide" }])
+
+    const { display } = full.press({ _tag: "Guide" }, emptyQuad, shelves)
+
+    assert.deepStrictEqual(display.overlay, guide("Full", "AllLive"))
+  })
+
+  it("should open the full guide with up from the ribbon", () => {
+    const ribbon = after(Display.initial, [{ _tag: "Guide" }])
+
+    const { display } = ribbon.press(move("up"), emptyQuad, shelves)
+
+    assert.deepStrictEqual(display.overlay, guide("Full", "AllLive"))
+  })
+
+  it("should keep the focused game when the ribbon opens the full guide, on its own shelf", () => {
+    const ribbon = after(Display.initial, [
+      { _tag: "Guide" },
+      { _tag: "NextEntry" },
+      move("right"),
+      move("right")
+    ])
+
+    const { display } = ribbon.press({ _tag: "Guide" }, emptyQuad, shelves)
+
+    assert.deepStrictEqual(display.overlay, guide("Full", "nfl", { shelf: 1, item: 0 }))
+  })
+
+  it("should go back to the ribbon with Esc from the full guide, on the game it had focused", () => {
+    const full = after(Display.initial, [{ _tag: "Guide" }, { _tag: "NextEntry" }, move("up"), move("down")])
+
+    const { display, commands } = full.press({ _tag: "Unsolo" }, emptyQuad, shelves)
+
+    assert.deepStrictEqual(display.overlay, guide("Ribbon", "nfl", { item: 2 }))
+    assert.deepStrictEqual(commands, [])
+  })
+
+  it("should close the ribbon with Esc and send no Unsolo, even while soloed", () => {
+    const soloed = new Screen({ ...TestWeb.withTiles(["live"]), solo: Option.some(TileKey.game(live)) })
+    const ribbon = after(Display.initial, [{ _tag: "Guide" }])
+
+    const { display, commands } = ribbon.press({ _tag: "Unsolo" }, soloed, shelves)
+
+    assert.strictEqual(display.overlay._tag, "None")
+    assert.deepStrictEqual(commands, [])
+  })
+
+  it("should move along the ribbon with right", () => {
+    const ribbon = after(Display.initial, [{ _tag: "Guide" }])
+
+    const { display } = ribbon.press(move("right"), emptyQuad, shelves)
+
+    assert.deepStrictEqual(display.overlay, guide("Ribbon", "AllLive", { item: 1 }))
+  })
+
+  it("should stay on the ribbon's first chip with left", () => {
+    const ribbon = after(Display.initial, [{ _tag: "Guide" }])
+
+    const { display } = ribbon.press(move("left"), emptyQuad, shelves)
+
+    assert.deepStrictEqual(display.overlay, guide("Ribbon", "AllLive"))
+  })
+
+  it("should stay on the ribbon's last chip with right", () => {
+    const last = after(Display.initial, [{ _tag: "Guide" }, move("right"), move("right")])
+
+    const { display } = last.press(move("right"), emptyQuad, shelves)
+
+    assert.deepStrictEqual(display.overlay, guide("Ribbon", "AllLive", { item: 2 }))
+  })
+
+  it("should do nothing with down in the ribbon", () => {
+    const ribbon = after(Display.initial, [{ _tag: "Guide" }])
+
+    const { display } = ribbon.press(move("down"), emptyQuad, shelves)
+
+    assert.strictEqual(display, ribbon)
+  })
+
+  it("should move along a shelf with right in the full guide", () => {
+    const full = after(Display.initial, [{ _tag: "Guide" }, { _tag: "NextEntry" }, move("up")])
+
+    const { display } = full.press(move("right"), emptyQuad, shelves)
+
+    assert.deepStrictEqual(display.overlay, guide("Full", "nfl", { item: 1 }))
+  })
+
+  it("should move with down to the next shelf with items, past an empty one", () => {
+    const fbs = Display.initial.apply(DisplayInput.GuideOpened({ entry: "fbs" }), emptyQuad, shelves).display
+
+    const { display } = fbs.press(move("down"), emptyQuad, shelves)
+
+    assert.deepStrictEqual(display.overlay, guide("Full", "fbs", { shelf: 2 }))
+  })
+
+  it("should keep the item's place, clamped, moving to a shorter shelf", () => {
+    const second = after(Display.initial, [
+      { _tag: "Guide" },
+      { _tag: "NextEntry" },
+      move("up"),
+      move("right")
+    ])
+
+    const { display } = second.press(move("down"), emptyQuad, shelves)
+
+    assert.deepStrictEqual(display.overlay, guide("Full", "nfl", { shelf: 1, item: 0 }))
+  })
+
+  it("should stay on the last shelf with items with down", () => {
+    const fbs = Display.initial.apply(DisplayInput.GuideOpened({ entry: "fbs" }), emptyQuad, shelves).display
+    const last = after(fbs, [move("down")])
+
+    const { display } = last.press(move("down"), emptyQuad, shelves)
+
+    assert.deepStrictEqual(display.overlay, guide("Full", "fbs", { shelf: 2 }))
+  })
+
+  it("should move to the rail with left on a shelf's first item", () => {
+    const full = after(Display.initial, [{ _tag: "Guide" }, { _tag: "Guide" }])
+
+    const { display } = full.press(move("left"), emptyQuad, shelves)
+
+    assert.deepStrictEqual(display.overlay, guide("Full", "AllLive", { rail: true }))
+  })
+
+  it("should change the entry with down on the rail, focused on its first item", () => {
+    const rail = after(Display.initial, [
+      { _tag: "Guide" },
+      { _tag: "Guide" },
+      move("right"),
+      move("left"),
+      move("left")
+    ])
+
+    const { display } = rail.press(move("down"), emptyQuad, shelves)
+
+    assert.deepStrictEqual(display.overlay, guide("Full", "nfl", { rail: true }))
+  })
+
+  it("should come back from the rail with right", () => {
+    const rail = after(Display.initial, [{ _tag: "Guide" }, { _tag: "Guide" }, move("left")])
+
+    const { display } = rail.press(move("right"), emptyQuad, shelves)
+
+    assert.deepStrictEqual(display.overlay, guide("Full", "AllLive"))
+  })
+
+  it("should change the entry with NextEntry, focused on its first item", () => {
+    const ribbon = after(Display.initial, [{ _tag: "Guide" }, move("right")])
+
+    const { display } = ribbon.press({ _tag: "NextEntry" }, emptyQuad, shelves)
+
+    assert.deepStrictEqual(display.overlay, guide("Ribbon", "nfl"))
+  })
+
+  it("should change the entry with PreviousEntry in the full guide", () => {
+    const nfl = Display.initial.apply(DisplayInput.GuideOpened({ entry: "nfl" }), emptyQuad, shelves).display
+
+    const { display } = nfl.press({ _tag: "PreviousEntry" }, emptyQuad, shelves)
+
+    assert.deepStrictEqual(display.overlay, guide("Full", "AllLive"))
+  })
+
+  it("should stay on the last entry with NextEntry", () => {
+    const nba = Display.initial.apply(DisplayInput.GuideOpened({ entry: "nba" }), emptyQuad, shelves).display
+
+    const { display } = nba.press({ _tag: "NextEntry" }, emptyQuad, shelves)
+
+    assert.strictEqual(display, nba)
+  })
+
+  it("should focus a new entry's first shelf with items", () => {
+    const fbs = Display.initial.apply(DisplayInput.GuideOpened({ entry: "fbs" }), emptyQuad, shelves).display
+
+    const { display } = fbs.press({ _tag: "NextEntry" }, emptyQuad, shelves)
+
+    assert.deepStrictEqual(display.overlay, guide("Full", "mlb", { shelf: 1 }))
+  })
+
+  it("should watch the focused game with Confirm and close the guide", () => {
+    const ribbon = after(Display.initial, [{ _tag: "Guide" }, move("right")])
+
+    const { display, commands } = ribbon.press({ _tag: "Confirm" }, emptyQuad, shelves)
+
+    assert.strictEqual(display.overlay._tag, "None")
+    assert.deepStrictEqual(commands, [{ _tag: "Assign", tile: 0, game: GameId.make("dal") }])
+  })
+
+  it("should watch the last game with Confirm once the focus is past what its shelf now holds", () => {
+    const third = after(Display.initial, [
+      { _tag: "Guide" },
+      { _tag: "NextEntry" },
+      move("right"),
+      move("right")
+    ])
+    const fewer: GuideShelves = { entries: shelves.entries, shelves: () => [[item("kc")]] }
+
+    const { commands } = third.press({ _tag: "Confirm" }, emptyQuad, fewer)
+
+    assert.deepStrictEqual(commands, [{ _tag: "Assign", tile: 0, game: GameId.make("kc") }])
+  })
+
+  it("should leave the rail with Confirm on it", () => {
+    const rail = after(Display.initial, [{ _tag: "Guide" }, { _tag: "Guide" }, move("left")])
+
+    const { display, commands } = rail.press({ _tag: "Confirm" }, emptyQuad, shelves)
+
+    assert.deepStrictEqual(display.overlay, guide("Full", "AllLive"))
+    assert.deepStrictEqual(commands, [])
+  })
+
+  it("should do nothing with Confirm on an entry with no games", () => {
+    const nba = Display.initial.apply(DisplayInput.GuideOpened({ entry: "nba" }), emptyQuad, shelves).display
+
+    const { display, commands } = nba.press({ _tag: "Confirm" }, emptyQuad, shelves)
+
+    assert.strictEqual(display, nba)
+    assert.deepStrictEqual(commands, [])
+  })
+
+  it.each<Hotkey>([
+    move("down"),
+    { _tag: "Confirm" },
+    { _tag: "NextEntry" },
+    { _tag: "PreviousEntry" },
+    { _tag: "Info" }
+  ])("should do nothing with $_tag while the guide is closed", (hotkey) => {
+    const { display, commands } = Display.initial.press(hotkey, emptyQuad, shelves)
+
+    assert.strictEqual(display, Display.initial)
+    assert.deepStrictEqual(commands, [])
+  })
+})
+
+describe("Display#apply in the guide", () => {
+  it("should open the full guide on an entry", () => {
+    const { display } = Display.initial.apply(DisplayInput.GuideOpened({ entry: "mlb" }), emptyQuad, shelves)
+
+    assert.deepStrictEqual(display.overlay, guide("Full", "mlb", { shelf: 1 }))
+  })
+
+  it("should change the entry at the ribbon's own level when one is clicked", () => {
+    const ribbon = after(Display.initial, [{ _tag: "Guide" }])
+
+    const { display } = ribbon.apply(DisplayInput.GuideEntryChosen({ entry: "fbs" }), emptyQuad, shelves)
+
+    assert.deepStrictEqual(display.overlay, guide("Ribbon", "fbs"))
+  })
+
+  it("should open the full guide on an entry clicked while the guide is closed", () => {
+    const { display } = Display.initial.apply(
+      DisplayInput.GuideEntryChosen({ entry: "fbs" }),
+      emptyQuad,
+      shelves
+    )
+
+    assert.deepStrictEqual(display.overlay, guide("Full", "fbs"))
+  })
+
+  it("should watch a clicked game and close the guide", () => {
+    const nfl = Display.initial.apply(DisplayInput.GuideOpened({ entry: "nfl" }), emptyQuad, shelves).display
+
+    const { display, commands } = nfl.apply(
+      DisplayInput.GuideItemChosen({ shelf: 2, item: 0 }),
+      emptyQuad,
+      shelves
+    )
+
+    assert.strictEqual(display.overlay._tag, "None")
+    assert.deepStrictEqual(commands, [{ _tag: "Assign", tile: 0, game: GameId.make("nyj") }])
+  })
+})
+
 const live = GameId.make("live")
+
+/** No guide: only All live, and every entry has no shelves. */
+const none: GuideShelves = { entries: ["AllLive"], shelves: () => [] }
+
+/** An empty Quad, for the guide's tests. */
+const emptyQuad = TestWeb.withTiles([])
+
+/**
+ * Today's guide for the guide's tests: NFL with all three shelves, FBS with an empty middle one, MLB with only later,
+ * and NBA listed last with no games.
+ */
+const shelves: GuideShelves = {
+  entries: ["AllLive", "nfl", "fbs", "mlb", "nba"],
+  shelves: (entry, level) => {
+    switch (entry) {
+      case "AllLive":
+        return [[item("kc"), item("dal"), item("osu")]]
+      case "nfl":
+        return level === "Ribbon"
+          ? [[item("kc"), item("dal"), item("sf")]]
+          : [[item("kc"), item("dal")], [item("sf")], [item("nyj")]]
+      case "fbs":
+        return level === "Ribbon" ? [[item("osu")]] : [[item("osu")], [], [item("mich")]]
+      case "mlb":
+        return level === "Ribbon" ? [[item("nyy")]] : [[], [item("nyy")], []]
+      default:
+        return level === "Ribbon" ? [[]] : [[], [], []]
+    }
+  }
+}
+
+function item(id: string): GuideItem {
+  return GuideItem.Game({ game: GameId.make(id) })
+}
+
+/** The guide overlay at `level` on `entry`, focused at `focus` (the first item of the first shelf unless said). */
+function guide(level: GuideLevel, entry: GuideEntry, focus: Partial<GuideFocus> = {}): Overlay {
+  return Overlay.Guide({ level, entry, focus: { rail: false, shelf: 0, item: 0, ...focus } })
+}
+
+/** `display` after pressing `hotkeys` in order on an empty Quad, over `on`. */
+function after(display: Display, hotkeys: ReadonlyArray<Hotkey>, on: GuideShelves = shelves): Display {
+  return hotkeys.reduce((each, hotkey) => each.press(hotkey, emptyQuad, on).display, display)
+}
+
+function move(direction: "up" | "down" | "left" | "right"): Hotkey {
+  return { _tag: "Move", direction }
+}

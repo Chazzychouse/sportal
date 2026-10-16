@@ -1,6 +1,8 @@
 import type { Hotkey } from "@sportal/api/Hotkey"
 import { Effect, Match, Option, Stream } from "effect"
 import { AsyncResult, Atom } from "effect/reactivity"
+import * as GuideShelves from "../guide/GuideShelves.ts"
+import * as Games from "../hub/Games.ts"
 import * as DisplayScreen from "../screen/DisplayScreen.ts"
 import { Shell } from "../shell/Shell.ts"
 import { logDefect, runtime } from "../WebRuntime.ts"
@@ -13,7 +15,7 @@ import { Display, DisplayInput } from "./Display.ts"
 export const display: Atom.Writable<Display, DisplayInput> = Atom.writable(
   (get) => get(kept),
   (ctx, input: DisplayInput) => {
-    const step = ctx.get(kept).apply(input, ctx.get(DisplayScreen.screen))
+    const step = ctx.get(kept).apply(input, ctx.get(DisplayScreen.screen), ctx.get(shelves))
     Atom.batch(() => {
       ctx.set(kept, step.display)
       for (const command of step.commands) ctx.set(DisplayScreen.screen, command)
@@ -85,7 +87,27 @@ export const openSignIn = runtime.fn((_: undefined) =>
   })
 )
 
+/**
+ * Tells the shell whether the guide is open, each time that changes: while it is, the arrows and Enter are the guide's,
+ * and while it is closed a player keeps them. Mounted once, by the Display.
+ */
+export const guideOpenSync = runtime.atom((get) =>
+  Effect.gen(function* () {
+    const shell = yield* Shell
+
+    yield* get.stream(guideOpen).pipe(Stream.changes, Stream.runForEach(shell.setGuideOpen))
+  }).pipe(logDefect("The guide-open sync"))
+)
+
 const kept = Atom.make(Display.initial).pipe(Atom.keepAlive)
+
+/** The guide's shelves over today's games: only All live, with nothing on it, before the first answer. */
+const shelves: Atom.Atom<GuideShelves.GuideShelves> = Atom.make((get) => {
+  const games = Option.match(get(Games.today).value, { onNone: () => [], onSome: ({ games }) => games })
+  return GuideShelves.guideShelves(games)
+})
+
+const guideOpen = Atom.make((get) => get(display).shows("Guide"))
 
 function route(ctx: Atom.WriteContext<void>, hotkey: Hotkey) {
   Match.value(hotkey).pipe(

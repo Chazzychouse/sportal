@@ -76,6 +76,9 @@ const serveHub = Effect.gen(function* () {
   yield* listen(ShellChannel.setFullScreen, (on) => {
     if (typeof on === "boolean") window.setFullScreen(on)
   })
+  yield* listen(ShellChannel.setGuideOpen, (on) => {
+    if (typeof on === "boolean") run(tiles.setGuideOpen(on))
+  })
 
   // The window manager or the OS may change full screen too; the web UI hears every change from here.
   const enteredFullScreen = () => window.webContents.send(ShellChannel.fullScreenChanged, true)

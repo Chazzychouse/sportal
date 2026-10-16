@@ -99,7 +99,8 @@ describe("GuideRelay.relay", () => {
         },
         readGuide: () => {
           Queue.offerUnsafe(log, "ReadGuide")
-        }
+        },
+        setGuideOpen: () => {}
       }
       const hub = yield* TestWeb.liveHub()
       const registry = TestWeb.registryOf(

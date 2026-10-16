@@ -11,7 +11,8 @@ const bridge: ShellBridge = {
   onTilePressed: subscribe(ShellChannel.tilePressed),
   openSignIn: () => ipcRenderer.send(ShellChannel.openSignIn),
   onGuideRead: subscribe(ShellChannel.guideRead),
-  readGuide: () => ipcRenderer.send(ShellChannel.readGuide)
+  readGuide: () => ipcRenderer.send(ShellChannel.readGuide),
+  setGuideOpen: (on) => ipcRenderer.send(ShellChannel.setGuideOpen, on)
 }
 
 contextBridge.exposeInMainWorld("sportalShell", bridge)

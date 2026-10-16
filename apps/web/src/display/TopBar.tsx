@@ -5,6 +5,7 @@ import { Button } from "@/design/button"
 import * as Games from "../hub/Games.ts"
 import { LayoutPicker } from "../layout/LayoutPicker.tsx"
 import * as DisplayScreen from "../screen/DisplayScreen.ts"
+import { Tile } from "../screen/Screen.ts"
 import { BrandMark, ConnectionPill } from "./Brand.tsx"
 import { DisplayInput } from "./Display.ts"
 import * as DisplayState from "./DisplayState.ts"
@@ -22,7 +23,8 @@ export function TopBar() {
   const toggleFullScreen = useAtomSet(DisplayState.toggleFullScreen)
   const signIn = useAtomValue(DisplayState.signIn)
   const openSignIn = useAtomSet(DisplayState.openSignIn)
-  const soloToggles = display.press({ _tag: "ToggleSolo" }, screen).commands.length > 0
+  const soloToggles =
+    Option.isSome(screen.solo) || !Tile.guards.Empty(screen.onScreen()[display.selectedOn(screen)])
   const live = Option.match(value, {
     onNone: () => 0,
     onSome: ({ games }) => games.filter(({ snapshot }) => snapshot.progress() === "live").length

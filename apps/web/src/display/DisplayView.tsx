@@ -21,6 +21,7 @@ export function DisplayView() {
     if (!open) input(DisplayInput.Closed())
   }
   useAtomMount(DisplayState.inputs)
+  useAtomMount(DisplayState.guideOpenSync)
   useAtomMount(GuideRelay.relay)
   useAtomMount(TilePlacements.sync)
   useAtomMount(Covering.sync)

@@ -55,6 +55,11 @@ export interface ShellBridge {
   onGuideRead(listener: (guide: string) => void): () => void
   /** Asks the shell to read the guide now: at start, and when the Hub comes back. The shell also reads every 5 minutes. */
   readGuide(): void
+  /**
+   * Tells the shell whether the guide is open. While it is, a stream view's arrows, Enter, brackets and I are hotkeys
+   * and the player never sees them; while it is closed, the player keeps them.
+   */
+  setGuideOpen(on: boolean): void
 }
 
 declare global {

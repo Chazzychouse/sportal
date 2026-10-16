@@ -1,7 +1,7 @@
 import { afterEach, assert, beforeEach, describe, it } from "@effect/vitest"
 import { TileKey } from "@sportal/api/TileKey"
 import { GameId } from "@sportal/domain/Game"
-import { Effect, Queue, Stream } from "effect"
+import { Effect, Equal, Option, Queue, Stream } from "effect"
 import { Atom } from "effect/reactivity"
 import { vi } from "vitest"
 import * as DisplayScreen from "../screen/DisplayScreen.ts"
@@ -43,6 +43,23 @@ describe("DisplayState", () => {
       }).pipe(Effect.scoped, Effect.provide(registry))
 
       assert.strictEqual(screen.layout, "Single")
+    })
+  )
+
+  it.effect("should tell the shell once the guide is open", () =>
+    Effect.gen(function* () {
+      const { registry, calls } = yield* TestWeb.withShell()
+
+      const call = yield* Effect.gen(function* () {
+        yield* Atom.mount(DisplayState.guideOpenSync)
+        yield* Atom.set(DisplayState.display, DisplayInput.Pressed({ hotkey: { _tag: "Guide" } }))
+        return yield* Stream.fromQueue(calls).pipe(
+          Stream.filter((each) => Equal.equals(each, { _tag: "SetGuideOpen", on: true })),
+          Stream.runHead
+        )
+      }).pipe(Effect.scoped, Effect.provide(registry))
+
+      assert.deepStrictEqual(call, Option.some({ _tag: "SetGuideOpen", on: true }))
     })
   )
 

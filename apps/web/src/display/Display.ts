@@ -1,12 +1,22 @@
 import { Hotkey } from "@sportal/api/Hotkey"
 import { TileKey } from "@sportal/api/TileKey"
 import type { GameId } from "@sportal/domain/Game"
-import { Data, Option } from "effect"
+import type { LeagueId } from "@sportal/domain/League"
+import { Data, Equal, Option } from "effect"
+import { GuideItem } from "../guide/GuideItem.ts"
+import type { GuideShelves } from "../guide/GuideShelves.ts"
 import { Layout } from "../layout/Layout.ts"
 import { type Screen, type ScreenCommand, Tile } from "../screen/Screen.ts"
 
 /** The one overlay a Display has open, or none. Above the class: `Display.initial` reads it when the class is defined. */
-export type Overlay = Data.TaggedEnum<{ None: object; Keys: object; Palette: object; JoinRemote: object }>
+export type Overlay = Data.TaggedEnum<{
+  None: object
+  Keys: object
+  Palette: object
+  JoinRemote: object
+  /** The guide, at its level, on its entry, with its focus. */
+  Guide: { readonly level: GuideLevel; readonly entry: GuideEntry; readonly focus: GuideFocus }
+}>
 export const Overlay = Data.taggedEnum<Overlay>()
 
 /**
@@ -19,9 +29,16 @@ export class Display extends Data.Class<{
   /** Read it through `interactingOn`. */
   readonly interacting: TileKey | undefined
   readonly overlay: Overlay
+  /** The guide entry last shown; the guide opens on it while the guide still lists it. */
+  readonly lastEntry: GuideEntry
 }> {
-  /** Slot 0, nothing interacting, and no overlay. */
-  static readonly initial = new Display({ selected: 0, interacting: undefined, overlay: Overlay.None() })
+  /** Slot 0, nothing interacting, no overlay, and the guide to open on All live. */
+  static readonly initial = new Display({
+    selected: 0,
+    interacting: undefined,
+    overlay: Overlay.None(),
+    lastEntry: "AllLive"
+  })
 
   /** The selected slot on this Screen: the last slot when the layout now has fewer. */
   selectedOn(screen: Screen): number {
@@ -37,10 +54,10 @@ export class Display extends Data.Class<{
     return Tile.guards.StreamTile(tile) && Tile.key(tile) === this.interacting ? this.interacting : undefined
   }
 
-  /** What an input does on this Screen. */
-  apply(input: DisplayInput, screen: Screen): DisplayStep {
+  /** What an input does on this Screen, with the guide's shelves as they are now. */
+  apply(input: DisplayInput, screen: Screen, shelves: GuideShelves): DisplayStep {
     return DisplayInput.$match(input, {
-      Pressed: ({ hotkey }) => this.press(hotkey, screen),
+      Pressed: ({ hotkey }) => this.press(hotkey, screen, shelves),
       Selected: ({ slot }) => this.select(slot, screen),
       VideoPressed: ({ key }) => {
         const slot = screen.slotOf(key)
@@ -49,14 +66,17 @@ export class Display extends Data.Class<{
       Chosen: ({ game }) => this.choose(game, screen),
       Commanded: ({ command }) => DisplayStep.of(this, [command]),
       Opened: ({ overlay }) => DisplayStep.of(this.open(overlay)),
-      Closed: () => DisplayStep.of(this.close())
+      Closed: () => DisplayStep.of(this.close()),
+      GuideOpened: ({ entry }) => DisplayStep.of(this.guide("Full", entry, start, shelves)),
+      GuideEntryChosen: ({ entry }) => DisplayStep.of(this.chooseEntry(entry, shelves)),
+      GuideItemChosen: ({ shelf, item }) => this.confirm({ rail: false, shelf, item }, screen, shelves)
     })
   }
 
   /**
-   * What a hotkey does. `FullScreen` does nothing here: it is the shell's or browser's.
+   * What a hotkey does. `FullScreen` does nothing here: it is the shell's or browser's. `Info` waits for the game page.
    */
-  press(hotkey: Hotkey, screen: Screen): DisplayStep {
+  press(hotkey: Hotkey, screen: Screen, shelves: GuideShelves): DisplayStep {
     return Hotkey.match(hotkey, {
       SelectTile: ({ slot }) => this.select(slot, screen),
       ToggleSolo: () => {
@@ -67,10 +87,7 @@ export class Display extends Data.Class<{
           Tile.guards.Empty(screen.onScreen()[slot]) ? [] : [{ _tag: "Solo", tile: slot }]
         )
       },
-      Unsolo: () =>
-        !Overlay.$is("None")(this.overlay)
-          ? DisplayStep.of(this.close())
-          : DisplayStep.of(this, Option.isNone(screen.solo) ? [] : [{ _tag: "Unsolo" }]),
+      Unsolo: () => this.escape(screen, shelves),
       Interact: () => {
         const tile = screen.onScreen()[this.selectedOn(screen)]
         if (!Tile.guards.StreamTile(tile)) return DisplayStep.of(this)
@@ -83,7 +100,13 @@ export class Display extends Data.Class<{
       FocusAudio: ({ slot }) => DisplayStep.of(this, [{ _tag: "FocusAudio", tile: slot }]),
       Promote: ({ slot }) => DisplayStep.of(this, [{ _tag: "Promote", tile: slot }]),
       NextLayout: () => DisplayStep.of(this, [{ _tag: "SetLayout", layout: Layout.next(screen.layout) }]),
-      FullScreen: () => DisplayStep.of(this)
+      FullScreen: () => DisplayStep.of(this),
+      Guide: () => DisplayStep.of(this.guideUp(shelves)),
+      Move: ({ direction }) => DisplayStep.of(this.move(direction, shelves)),
+      Confirm: () => this.confirm(undefined, screen, shelves),
+      NextEntry: () => DisplayStep.of(this.nextEntry(1, shelves)),
+      PreviousEntry: () => DisplayStep.of(this.nextEntry(-1, shelves)),
+      Info: () => DisplayStep.of(this)
     })
   }
 
@@ -111,7 +134,7 @@ export class Display extends Data.Class<{
   }
 
   /** Whether this overlay is the one open. */
-  shows(overlay: OpenOverlay): boolean {
+  shows(overlay: Exclude<Overlay["_tag"], "None">): boolean {
     return Overlay.$is(overlay)(this.overlay)
   }
 
@@ -123,10 +146,135 @@ export class Display extends Data.Class<{
   close(): Display {
     return new Display({ ...this, overlay: Overlay.None() })
   }
+
+  /**
+   * `G`: closed, the ribbon opens on the entry last shown (All live once the guide no longer lists it); the ribbon
+   * opens the full guide, which stays open.
+   */
+  private guideUp(shelves: GuideShelves): Display {
+    const overlay = this.overlay
+    if (Overlay.$is("Guide")(overlay)) return this.relevel(overlay, "Full", shelves)
+    const entry = shelves.entries.includes(this.lastEntry) ? this.lastEntry : "AllLive"
+    return this.guide("Ribbon", entry, start, shelves)
+  }
+
+  /** Esc: the full guide goes back to the ribbon; the ribbon or any other overlay closes; with none open, it unsolos. */
+  private escape(screen: Screen, shelves: GuideShelves): DisplayStep {
+    const overlay = this.overlay
+    if (Overlay.$is("Guide")(overlay) && overlay.level === "Full")
+      return DisplayStep.of(this.relevel(overlay, "Ribbon", shelves))
+    if (!Overlay.$is("None")(overlay)) return DisplayStep.of(this.close())
+    return DisplayStep.of(this, Option.isNone(screen.solo) ? [] : [{ _tag: "Unsolo" }])
+  }
+
+  /**
+   * An arrow in the open guide. In the ribbon, left and right move along its row and up opens the full guide. In the
+   * full guide, up and down move to the next shelf with items and left and right along a shelf; left from a shelf's
+   * first item goes to the rail, where up and down change the entry and right comes back. With the guide closed,
+   * nothing.
+   */
+  private move(direction: "up" | "down" | "left" | "right", shelves: GuideShelves): Display {
+    const overlay = this.overlay
+    if (!Overlay.$is("Guide")(overlay)) return this
+    const { level, entry } = overlay
+    const shown = shelves.shelves(entry, level)
+    const focus = clamped(overlay.focus, shown)
+    const along = direction === "left" ? -1 : 1
+
+    if (level === "Ribbon") {
+      if (direction === "up") return this.relevel(overlay, "Full", shelves)
+      return direction === "down"
+        ? this
+        : this.guide(level, entry, { ...focus, item: focus.item + along }, shelves)
+    }
+    if (focus.rail) {
+      if (direction === "right") return this.guide(level, entry, { ...focus, rail: false }, shelves)
+      return direction === "left" ? this : this.nextEntry(direction === "up" ? -1 : 1, shelves)
+    }
+    if (direction === "left" && focus.item === 0)
+      return this.guide(level, entry, { ...focus, rail: true }, shelves)
+    if (direction === "left" || direction === "right")
+      return this.guide(level, entry, { ...focus, item: focus.item + along }, shelves)
+    const shelf = nextFilled(shown, focus.shelf, direction === "up" ? -1 : 1)
+    return shelf === undefined ? this : this.guide(level, entry, { ...focus, shelf }, shelves)
+  }
+
+  /**
+   * `]` or `[` (`step` 1 or -1), or up and down on the rail: the open guide on the entry `step` from its own in the
+   * guide's entries, at the same level and on or off the rail as it was, focused on the entry's first item. Past
+   * either end it stays; with the guide closed, nothing.
+   */
+  private nextEntry(step: 1 | -1, shelves: GuideShelves): Display {
+    const overlay = this.overlay
+    if (!Overlay.$is("Guide")(overlay)) return this
+    const entries = shelves.entries
+    const index = Math.min(Math.max(entries.indexOf(overlay.entry) + step, 0), entries.length - 1)
+    const entry = entries[index] ?? overlay.entry
+    if (entry === overlay.entry) return this
+    return this.guide(overlay.level, entry, { ...start, rail: overlay.focus.rail }, shelves)
+  }
+
+  /** A click on an entry: the guide on it at the level open, or the full guide when none is, on its first item. */
+  private chooseEntry(entry: GuideEntry, shelves: GuideShelves): Display {
+    const overlay = this.overlay
+    const level = Overlay.$is("Guide")(overlay) ? overlay.level : "Full"
+    return this.guide(level, entry, start, shelves)
+  }
+
+  /**
+   * Enter, or a click on the item at `at`: on the rail it leaves the rail; on a game it watches the game as `choose`
+   * does and closes the guide. With the guide closed, or nothing there, nothing.
+   */
+  private confirm(at: GuideFocus | undefined, screen: Screen, shelves: GuideShelves): DisplayStep {
+    const overlay = this.overlay
+    if (!Overlay.$is("Guide")(overlay)) return DisplayStep.of(this)
+    const shown = shelves.shelves(overlay.entry, overlay.level)
+    const focus = clamped(at ?? overlay.focus, shown)
+    if (focus.rail)
+      return DisplayStep.of(this.guide(overlay.level, overlay.entry, { ...focus, rail: false }, shelves))
+    const item = shown[focus.shelf]?.[focus.item]
+    if (item === undefined) return DisplayStep.of(this)
+    return GuideItem.$match(item, { Game: ({ game }) => this.close().choose(game, screen) })
+  }
+
+  /**
+   * The guide at `level` on `entry`, focused on `focus` as far as the entry's shelves allow (never the rail in the
+   * ribbon); `entry` is the one the guide opens on next.
+   */
+  private guide(level: GuideLevel, entry: GuideEntry, focus: GuideFocus, shelves: GuideShelves): Display {
+    const asked = level === "Ribbon" ? { ...focus, rail: false } : focus
+    const at = clamped(asked, shelves.shelves(entry, level))
+    return new Display({ ...this, lastEntry: entry, overlay: Overlay.Guide({ level, entry, focus: at }) })
+  }
+
+  /** The open guide at `level` instead, on the item it had focused when that level shows it, else on its first. */
+  private relevel(open: GuideOpen, level: GuideLevel, shelves: GuideShelves): Display {
+    const shown = shelves.shelves(open.entry, open.level)
+    const focus = clamped(open.focus, shown)
+    const item = focus.rail ? undefined : shown[focus.shelf]?.[focus.item]
+    const found = item === undefined ? undefined : focusOf(item, shelves.shelves(open.entry, level))
+    return this.guide(level, open.entry, found ?? start, shelves)
+  }
 }
 
-/** An overlay that can be open: any but `None`. */
-type OpenOverlay = Exclude<Overlay["_tag"], "None">
+/** An overlay that opens with no more to say: any but `None` and the guide, which opens at a level on an entry. */
+type OpenOverlay = Exclude<Overlay["_tag"], "None" | "Guide">
+
+/** Which level of the guide is open: the ribbon docked under the Screen, or the full guide over the whole Display. */
+export type GuideLevel = "Ribbon" | "Full"
+
+/** An entry of the guide's rail: every league's live games, one league, or the custom streams. */
+export type GuideEntry = "AllLive" | LeagueId | "Custom"
+
+/** Where the open guide's focus is: on the rail, or on item `item` of shelf `shelf` (the ribbon's row is shelf 0). */
+export interface GuideFocus {
+  readonly rail: boolean
+  readonly shelf: number
+  readonly item: number
+}
+
+/** The guide as the open overlay. */
+type GuideOpen = Data.TaggedEnum.Value<Overlay, "Guide">
 
 /** A Display after an input, and the Screen commands the input sends. */
 export class DisplayStep extends Data.Class<{
@@ -139,7 +287,10 @@ export class DisplayStep extends Data.Class<{
   }
 }
 
-/** What a person did on a Display: a hotkey, a click, a game chosen, a command, or an overlay opened or closed. */
+/**
+ * What a person did on a Display: a hotkey, a click, a game chosen, a command, an overlay opened or closed, or the
+ * guide clicked.
+ */
 export type DisplayInput = Data.TaggedEnum<{
   Pressed: { readonly hotkey: Hotkey }
   Selected: { readonly slot: number }
@@ -148,5 +299,53 @@ export type DisplayInput = Data.TaggedEnum<{
   Commanded: { readonly command: ScreenCommand }
   Opened: { readonly overlay: OpenOverlay }
   Closed: object
+  /** The full guide opened on `entry`, by a click. */
+  GuideOpened: { readonly entry: GuideEntry }
+  /** An entry clicked in the guide's rail or the ribbon's tabs. */
+  GuideEntryChosen: { readonly entry: GuideEntry }
+  /** An item clicked on a shelf of the open guide. */
+  GuideItemChosen: { readonly shelf: number; readonly item: number }
 }>
 export const DisplayInput = Data.taggedEnum<DisplayInput>()
+
+/** Off the rail, on the first item of the first shelf. */
+const start: GuideFocus = { rail: false, shelf: 0, item: 0 }
+
+/**
+ * `focus` on what `shelves` hold: a shelf past the last is the last, an empty shelf gives way to the nearest one with
+ * items (the later one on a tie), and the item stays within its shelf.
+ */
+function clamped(focus: GuideFocus, shelves: ReadonlyArray<ReadonlyArray<GuideItem>>): GuideFocus {
+  const asked = Math.max(0, Math.min(focus.shelf, shelves.length - 1))
+  const shelf = nearestFilled(shelves, asked) ?? asked
+  const length = shelves[shelf]?.length ?? 0
+  return { rail: focus.rail, shelf, item: Math.max(0, Math.min(focus.item, length - 1)) }
+}
+
+/** The shelf with items nearest `from`: `from` itself first, then outward, the later one on a tie. */
+function nearestFilled(shelves: ReadonlyArray<ReadonlyArray<GuideItem>>, from: number): number | undefined {
+  for (let distance = 0; distance < shelves.length; distance++)
+    for (const shelf of [from + distance, from - distance])
+      if ((shelves[shelf]?.length ?? 0) > 0) return shelf
+  return undefined
+}
+
+/** Where `item` is on `shelves`, if it is there. */
+function focusOf(item: GuideItem, shelves: ReadonlyArray<ReadonlyArray<GuideItem>>): GuideFocus | undefined {
+  for (const [shelf, items] of shelves.entries()) {
+    const at = items.findIndex((each) => Equal.equals(each, item))
+    if (at >= 0) return { rail: false, shelf, item: at }
+  }
+  return undefined
+}
+
+/** The next shelf with items after `from`, going `step` (1 down, -1 up); none past either end. */
+function nextFilled(
+  shelves: ReadonlyArray<ReadonlyArray<GuideItem>>,
+  from: number,
+  step: 1 | -1
+): number | undefined {
+  for (let shelf = from + step; shelf >= 0 && shelf < shelves.length; shelf += step)
+    if ((shelves[shelf]?.length ?? 0) > 0) return shelf
+  return undefined
+}

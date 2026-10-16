@@ -73,9 +73,70 @@ describe("Hotkey.of", () => {
   })
 })
 
+describe("Hotkey.of in the guide", () => {
+  it.each<{ code: string; direction: "up" | "down" | "left" | "right" }>([
+    { code: "ArrowUp", direction: "up" },
+    { code: "ArrowDown", direction: "down" },
+    { code: "ArrowLeft", direction: "left" },
+    { code: "ArrowRight", direction: "right" }
+  ])("should read $code as a move $direction while the guide is open", ({ code, direction }) => {
+    const hotkey = key(code, { guideOpen: true })
+
+    assert.deepStrictEqual(hotkey, { _tag: "Move", direction })
+  })
+
+  it.each(["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"])(
+    "should leave %s to the page while the guide is closed",
+    (code) => {
+      const hotkey = key(code)
+
+      assert.isUndefined(hotkey)
+    }
+  )
+
+  it.each([false, true])("should read G as the guide, whether it is open or not: open %s", (guideOpen) => {
+    const hotkey = key("KeyG", { guideOpen })
+
+    assert.deepStrictEqual(hotkey, { _tag: "Guide" })
+  })
+
+  it.each<{ code: string; hotkey: Hotkey }>([
+    { code: "Enter", hotkey: { _tag: "Confirm" } },
+    { code: "BracketRight", hotkey: { _tag: "NextEntry" } },
+    { code: "BracketLeft", hotkey: { _tag: "PreviousEntry" } },
+    { code: "KeyI", hotkey: { _tag: "Info" } }
+  ])("should read $code as $hotkey._tag while the guide is open", ({ code, hotkey }) => {
+    const read = key(code, { guideOpen: true })
+
+    assert.deepStrictEqual(read, hotkey)
+  })
+
+  it.each(["Enter", "BracketRight", "BracketLeft"])(
+    "should leave %s to the page while the guide is closed",
+    (code) => {
+      const hotkey = key(code)
+
+      assert.isUndefined(hotkey)
+    }
+  )
+
+  it("should read I as interacting while the guide is closed", () => {
+    const hotkey = key("KeyI")
+
+    assert.deepStrictEqual(hotkey, { _tag: "Interact" })
+  })
+})
+
 describe("Hotkey.keys", () => {
   it.each(Hotkey.keys)("should list a binding that reads back to its hotkey: $does", (binding) => {
-    const press = { shift: false, alt: false, control: false, meta: false, ...binding.press }
+    const press = {
+      shift: false,
+      alt: false,
+      control: false,
+      meta: false,
+      guideOpen: false,
+      ...binding.press
+    }
 
     const hotkey = Hotkey.of(press)
 
@@ -99,7 +160,13 @@ const wire: ReadonlyArray<unknown> = [
   { _tag: "FullScreen" },
   { _tag: "NextLayout" },
   { _tag: "CommandPalette" },
-  { _tag: "ShowKeys" }
+  { _tag: "ShowKeys" },
+  { _tag: "Guide" },
+  { _tag: "Move", direction: "up" },
+  { _tag: "Confirm" },
+  { _tag: "NextEntry" },
+  { _tag: "PreviousEntry" },
+  { _tag: "Info" }
 ]
 
 describe("Hotkey wire", () => {
@@ -120,8 +187,22 @@ describe("Hotkey wire", () => {
   })
 })
 
-type Modifiers = Partial<{ shift: boolean; alt: boolean; control: boolean; meta: boolean }>
+type Modifiers = Partial<{
+  shift: boolean
+  alt: boolean
+  control: boolean
+  meta: boolean
+  guideOpen: boolean
+}>
 
 function key(code: string, modifiers: Modifiers = {}) {
-  return Hotkey.of({ code, shift: false, alt: false, control: false, meta: false, ...modifiers })
+  return Hotkey.of({
+    code,
+    shift: false,
+    alt: false,
+    control: false,
+    meta: false,
+    guideOpen: false,
+    ...modifiers
+  })
 }

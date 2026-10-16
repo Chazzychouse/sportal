@@ -314,6 +314,56 @@ describe("TileViews.hotkeys", () => {
       expect(forwarded).toEqual([{ _tag: "FocusAudio", slot: 1 }])
     }).pipe(Effect.scoped)
   )
+
+  it.effect("should leave an arrow to the stream view's page while the guide is closed", () =>
+    Effect.gen(function* () {
+      const { tiles } = yield* attached()
+      yield* tiles.sync([placement])
+
+      const prevented = press("ArrowDown")
+
+      expect(prevented).not.toHaveBeenCalled()
+    }).pipe(Effect.scoped)
+  )
+
+  it.effect("should keep an arrow from the stream view's page while the guide is open", () =>
+    Effect.gen(function* () {
+      const { tiles } = yield* attached()
+      yield* tiles.sync([placement])
+      yield* tiles.setGuideOpen(true)
+
+      const prevented = press("ArrowDown")
+
+      expect(prevented).toHaveBeenCalled()
+    }).pipe(Effect.scoped)
+  )
+
+  it.effect("should forward an arrow as a move while the guide is open", () =>
+    Effect.gen(function* () {
+      const { tiles } = yield* attached()
+      yield* tiles.sync([placement])
+      yield* tiles.setGuideOpen(true)
+      const hotkeys = yield* TestDesktop.collect(tiles.hotkeys, 1)
+
+      press("ArrowDown")
+      const forwarded = yield* Fiber.join(hotkeys)
+
+      expect(forwarded).toEqual([{ _tag: "Move", direction: "down" }])
+    }).pipe(Effect.scoped)
+  )
+
+  it.effect("should leave arrows to the stream view's page again once the guide closes", () =>
+    Effect.gen(function* () {
+      const { tiles } = yield* attached()
+      yield* tiles.sync([placement])
+      yield* tiles.setGuideOpen(true)
+      yield* tiles.setGuideOpen(false)
+
+      const prevented = press("ArrowDown")
+
+      expect(prevented).not.toHaveBeenCalled()
+    }).pipe(Effect.scoped)
+  )
 })
 
 describe("TileViews mouse filter", () => {
@@ -451,6 +501,7 @@ function press(code: string, type = "keyDown") {
     type,
     code,
     shift: false,
+    alt: false,
     control: false,
     meta: false
   })
