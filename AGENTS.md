@@ -114,6 +114,31 @@ A reader opens a file to see the thing it is named for. Keep it that way.
 - No `any`, no non-null assertions, no enums, no default exports, no casts outside decoding.
 - No export lives only for its tests: `knip --production` fails on one.
 
+## In the web app
+
+These override the rules above for `apps/web` only. Everything else in this file still holds there.
+
+- **State.**
+  - Atoms or Effects hold Hub data, the `Screen`, and any state an outside input writes or another view reads: Shell
+    hotkeys, the Remote, the shell's provider views. The guide's level, league and focus are such state.
+  - Plain React state (`useState`, `useReducer`, refs) holds what only a component's own DOM events touch: hover, a
+    collapsed section, a text field's draft, scroll, animation.
+  - A pure class with a fold (`Display.apply`) only when the logic has rules worth testing apart. Opening and closing
+    something is not such logic.
+  - Effect discipline (no bare promises, tagged errors, `Effect.fn`) is for code that does IO, not for UI-only code.
+- **Props.** A component may declare its props as a non-exported `interface` directly above it, or inline them; rule 4
+  of "Inside a file" does not apply to props. Props take domain values (`game: GameSnapshot`); they never copy a domain
+  type's fields.
+- **Order.** A `.tsx` file may hold several components, in the order that reads best. A component two files use moves
+  to its own file.
+- **Placement.** `apps/web/src/ui/` holds reusable, sport-agnostic presentational components: rails, shelves, cards'
+  frames, stat blocks, the page frame. It is the one folder named for a kind rather than a concept. `design/` stays
+  shadcn only. Everything else is by concept, as elsewhere.
+- **Expressions.** Rules 9–11 of "Inside a file" and the "One spelling per kind" table apply to Effect code. JSX,
+  handlers and render logic are exempt: inline ternaries, maps and handlers are fine.
+- **Tests.** Pure logic with rules keeps its tests beside it. Components and UI-only state need none. `TestWeb.ts` stays
+  the one shared test module.
+
 ## Tests
 
 - Tests sit beside the file as `Name.test.ts`. Domain logic and provider decoding are written test-first.
