@@ -1,7 +1,7 @@
 import type { GameList } from "@sportal/api/GamesQuery"
 import type { ChannelAvailability } from "@sportal/domain/Channel"
 import type { GameId } from "@sportal/domain/Game"
-import { Option, Result } from "effect"
+import { Option, Result, Schema, SchemaGetter } from "effect"
 import { KeyValueStore } from "effect/persistence"
 import { Atom } from "effect/reactivity"
 import * as Games from "../hub/Games.ts"
@@ -10,7 +10,7 @@ import { Screen, type ScreenCommand, type ScreenRejection } from "./Screen.ts"
 /**
  * This Display's Screen. A screen command written to it is applied against where each of today's games can be
  * streamed; each command's outcome is published on `rejected`. Each answer today's list brings refreshes it, and it is
- * kept in this browser, so a reload shows it as it was.
+ * kept in this browser, so a reload shows it as it was, but for its clips.
  */
 export const screen: Atom.Writable<Screen, ScreenCommand> = Atom.writable(
   (get) => {
@@ -58,6 +58,11 @@ function availabilityOf(
 const kept = Atom.kvs({
   runtime: Atom.runtime(KeyValueStore.layerStorage(() => localStorage)),
   key: "sportal/screen",
-  schema: Screen,
+  schema: Screen.pipe(
+    Schema.decodeTo(Schema.toType(Screen), {
+      decode: SchemaGetter.transform((restored) => restored.withoutClips()),
+      encode: SchemaGetter.passthrough()
+    })
+  ),
   defaultValue: () => Screen.initial
 }).pipe(Atom.keepAlive)

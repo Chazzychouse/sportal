@@ -56,11 +56,13 @@ export function CommandPalette(props: { open: boolean; onOpenChange: (open: bool
     const scoreline = snapshots.find((each) => each.id === game)?.scoreline()
     const name = Tile.guards.CustomTile(tile)
       ? tile.name
-      : scoreline === undefined
-        ? `Tile ${slot + 1}`
-        : Tile.guards.StatsTile(tile)
-          ? `Stats ${scoreline}`
-          : scoreline
+      : Tile.guards.ClipTile(tile)
+        ? `Replay · ${tile.highlight.headline}`
+        : scoreline === undefined
+          ? `Tile ${slot + 1}`
+          : Tile.guards.StatsTile(tile)
+            ? `Stats ${scoreline}`
+            : scoreline
     return [{ slot, name }]
   })
 

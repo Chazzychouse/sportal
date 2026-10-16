@@ -244,6 +244,16 @@ export class Screen extends Schema.Class<Screen>("sportal/Screen")({
 
     return Arr.makeEquivalence(tileEquivalence)(tiles, this.tiles) ? this : settle({ ...this, tiles })
   }
+
+  /**
+   * This Screen as a reload restores it: clips are kept nowhere, so each clip tile is empty, and audio focus and solo
+   * that were on one move as for any emptied tile. Without a clip tile, it is this Screen.
+   */
+  withoutClips(): Screen {
+    if (!this.tiles.some(Tile.guards.ClipTile)) return this
+    const tiles = this.tiles.map((tile) => (Tile.guards.ClipTile(tile) ? empty : tile))
+    return settle({ ...this, tiles })
+  }
 }
 
 export const ScreenCommand = Schema.TaggedUnion({

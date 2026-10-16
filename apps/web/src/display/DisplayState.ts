@@ -41,9 +41,12 @@ export const shelves: Atom.Atom<GuideShelves.GuideShelves> = Atom.make((get) => 
       onNone: () => [],
       onSome: (date) =>
         [...get(GuideShelves.highlightsShown)].map((league) => {
-          const clipsOf = (day: CalendarDate) =>
-            AsyncResult.getOrElse(get(Stats.highlights({ league, date: day })), () => [])
-          return [league, GuideShelves.highlightShelf(clipsOf(date), clipsOf(dayBefore(date)))] as const
+          const clipsToday = AsyncResult.getOrElse(get(Stats.highlightsToday({ league, date })), () => [])
+          const clipsBefore = AsyncResult.getOrElse(
+            get(Stats.highlights({ league, date: dayBefore(date) })),
+            () => []
+          )
+          return [league, GuideShelves.highlightShelf(clipsToday, clipsBefore)] as const
         })
     })
   )

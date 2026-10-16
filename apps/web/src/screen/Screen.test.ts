@@ -959,6 +959,42 @@ function some(availability: () => ReadonlyArray<ChannelAvailability>) {
   return () => Option.some(availability())
 }
 
+describe("Screen#withoutClips", () => {
+  it("should empty every clip tile", () => {
+    const screen = run(TestWeb.fill([TestWeb.bama]), { _tag: "AssignClip", tile: 1, highlight: highlight() })
+
+    const restored = screen.withoutClips()
+
+    assert.deepStrictEqual(restored.tiles[1], { _tag: "Empty" })
+  })
+
+  it("should give audio focus on a clip tile to the first on-screen tile with sound", () => {
+    const clipped = run(TestWeb.fill([TestWeb.bama]), { _tag: "AssignClip", tile: 1, highlight: highlight() })
+    const screen = run(clipped, { _tag: "FocusAudio", tile: 1 })
+
+    const restored = screen.withoutClips()
+
+    assert.deepStrictEqual(restored.audioFocus, Option.some(TileKey.game(TestWeb.bama)))
+  })
+
+  it("should end solo on a clip tile", () => {
+    const clipped = run(TestWeb.fill([TestWeb.bama]), { _tag: "AssignClip", tile: 1, highlight: highlight() })
+    const screen = run(clipped, { _tag: "Solo", tile: 1 })
+
+    const restored = screen.withoutClips()
+
+    assert.deepStrictEqual(restored.solo, Option.none())
+  })
+
+  it("should be the same Screen when it has no clip tile", () => {
+    const screen = TestWeb.fill([TestWeb.bama])
+
+    const restored = screen.withoutClips()
+
+    assert.strictEqual(restored, screen)
+  })
+})
+
 function run(screen: Screen, command: ScreenCommand) {
   return Result.getOrThrow(screen.apply(command, TestWeb.nowhere))
 }
