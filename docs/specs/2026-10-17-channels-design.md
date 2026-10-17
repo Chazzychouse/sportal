@@ -48,6 +48,10 @@ user that needs its type derives it from `Lineup`.
   Channel, ABC, CBS, NBC, FOX. The list is a private constant beside its one user.
 - `now` is the channel's airing with `begin <= now < end`; `next` is its airing with the earliest `begin > now`.
 - `channel` is `{ name, source: this.source, locator: live }`.
+- **Amended 2026-10-17:** some locals are named for their call sign ("News 3" is CBS, "WAVY 10" is NBC), so
+  `lineup(now, alsoNamed)` also keeps a channel whose name, read without case or punctuation, is one of `alsoNamed`:
+  `HubConfig.lineupChannels`, from `SPORTAL_LINEUP_CHANNELS` (comma-separated, default none). The sports networks also
+  include BTN, NBCSN, TBS, TNT, truTV and USA, as the recorded guide names them.
 
 Tests in `Guide.test.ts`, test-first, one behaviour each:
 
