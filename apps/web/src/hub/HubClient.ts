@@ -7,6 +7,7 @@ import type { ScheduleUnavailable } from "@sportal/api/ScheduleUnavailable"
 import type { StatsUnavailable } from "@sportal/api/StatsUnavailable"
 import type { GameId } from "@sportal/domain/Game"
 import { GameStats } from "@sportal/domain/GameStats"
+import type { Lineup } from "@sportal/domain/Guide"
 import type { Highlight } from "@sportal/domain/Highlight"
 import type { LeagueId } from "@sportal/domain/League"
 import type { Play } from "@sportal/domain/Play"
@@ -43,6 +44,8 @@ export class HubClient extends Context.Service<
       league: LeagueId,
       date: CalendarDate
     ) => Effect.Effect<ReadonlyArray<Highlight>, StatsUnavailable | RpcClientError.RpcClientError>
+    /** Every source's sports channels that play live now, with what airs on each now and next. */
+    readonly lineup: Effect.Effect<Lineup, RpcClientError.RpcClientError>
     /** Every play of game `id`, newest first, asked a page at a time. */
     readonly plays: (
       id: GameId
@@ -73,6 +76,7 @@ export class HubClient extends Context.Service<
       const highlights = Effect.fn("HubClient.highlights")(function* (league: LeagueId, date: CalendarDate) {
         return yield* client.highlights({ league, date })
       })
+      const lineup = client.lineup()
       const plays = Effect.fn("HubClient.plays")(function* (id: GameId) {
         const all: Array<Play> = []
         let before: number | undefined
@@ -84,13 +88,13 @@ export class HubClient extends Context.Service<
           before = last.sequence
         }
       })
-      return HubClient.of({ sendGuide, addresses, report, send, stats, highlights, plays })
+      return HubClient.of({ sendGuide, addresses, report, send, stats, highlights, lineup, plays })
     })
   )
 
   /**
    * A Hub client whose calls are `fakes`; each one not given does nothing, `addresses` lists none, `stats` are empty,
-   * and `highlights` and `plays` none.
+   * and `highlights`, `lineup` and `plays` none.
    */
   static layerTest(fakes: Partial<HubClient["Service"]> = {}): Layer.Layer<HubClient> {
     return Layer.succeed(
@@ -102,6 +106,7 @@ export class HubClient extends Context.Service<
         send: () => Effect.void,
         stats: (id) => Effect.succeed(GameStats.empty(id)),
         highlights: () => Effect.succeed([]),
+        lineup: Effect.succeed([]),
         plays: () => Effect.succeed([]),
         ...fakes
       })

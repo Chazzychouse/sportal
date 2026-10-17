@@ -1,24 +1,49 @@
 import type { GuideUnreadable } from "@sportal/api/GuideUnreadable"
 import type { ChannelAvailability } from "@sportal/domain/Channel"
 import { type GameSnapshot, Network } from "@sportal/domain/Game"
-import { ChannelId, Guide } from "@sportal/domain/Guide"
+import { ChannelId, Guide, type Lineup } from "@sportal/domain/Guide"
 import { Context, DateTime, Duration, Effect, Layer, Option, Ref } from "effect"
+import { HubConfig } from "../HubConfig.ts"
 import * as YouTubeTvGuide from "./youtube-tv/YouTubeTvGuide.ts"
 
-/** A way to obtain video for a game. It says whether and where each game can be shown, as of a time. */
+/** Twitch's fixed guide: Prime Video's channel, which carries every Prime Video broadcast; it airs nothing listed. */
+const twitchGuide = new Guide({
+  source: "Twitch",
+  readAt: DateTime.makeUnsafe(0),
+  channels: [
+    {
+      id: ChannelId.make("primevideo"),
+      name: "Prime Video",
+      live: {
+        _tag: "WebView",
+        url: "https://player.twitch.tv/?channel=primevideo&parent=twitch.tv&player=popout"
+      },
+      network: Network.make("Prime Video")
+    }
+  ],
+  airings: []
+})
+
+/**
+ * A way to obtain video: for a game, whether and where it can be shown; and its lineup of sports channels; each as of
+ * a time.
+ */
 export class Source extends Context.Service<
   Source,
   {
     readonly availability: Effect.Effect<
       (game: GameSnapshot, now: DateTime.Utc) => ReadonlyArray<ChannelAvailability>
     >
+    /** This source's sports channels that play live at a time, each with what airs on it now and next. */
+    readonly lineup: Effect.Effect<(now: DateTime.Utc) => Lineup>
     readGuide(response: string): Effect.Effect<void, GuideUnreadable>
   }
 >()("sportal/hub/source/Source") {
-  static readonly layerYouTubeTv: Layer.Layer<Source> = Layer.effect(
+  static readonly layerYouTubeTv: Layer.Layer<Source, never, HubConfig> = Layer.effect(
     Source,
     Effect.gen(function* () {
       const latest = yield* Ref.make(Option.none<Guide>())
+      const { lineupChannels } = yield* HubConfig
 
       const readGuide = Effect.fn("Source.readGuide")(function* (response: string) {
         const read = yield* YouTubeTvGuide.decode(response)
@@ -37,7 +62,20 @@ export class Source extends Context.Service<
         })
       )
 
-      return Source.of({ availability, readGuide })
+      const lineup = Ref.get(latest).pipe(
+        Effect.map(
+          (latest) => (now: DateTime.Utc) =>
+            Option.match(
+              Option.filter(latest, (guide) => isFresh(guide, now)),
+              {
+                onNone: (): Lineup => [],
+                onSome: (guide) => guide.lineup(now, lineupChannels)
+              }
+            )
+        )
+      )
+
+      return Source.of({ availability, lineup, readGuide })
     })
   )
 
@@ -45,23 +83,9 @@ export class Source extends Context.Service<
     Source,
     Source.of({
       availability: Effect.succeed((game: GameSnapshot, now: DateTime.Utc) => [
-        new Guide({
-          source: "Twitch",
-          readAt: DateTime.makeUnsafe(0),
-          channels: [
-            {
-              id: ChannelId.make("primevideo"),
-              name: "Prime Video",
-              live: {
-                _tag: "WebView",
-                url: "https://player.twitch.tv/?channel=primevideo&parent=twitch.tv&player=popout"
-              },
-              network: Network.make("Prime Video")
-            }
-          ],
-          airings: []
-        }).availabilityOf(game, now)
+        twitchGuide.availabilityOf(game, now)
       ]),
+      lineup: Effect.succeed((now: DateTime.Utc) => twitchGuide.lineup(now, [])),
       readGuide: () => Effect.void
     })
   )
@@ -80,19 +104,26 @@ export class Source extends Context.Service<
               availabilities.flatMap((availabilityOf) => availabilityOf(game, now))
           )
         )
+        const lineup = Effect.forEach(each, (source) => source.lineup).pipe(
+          Effect.map((lineups) => (now: DateTime.Utc) => lineups.flatMap((lineupAt) => lineupAt(now)))
+        )
         const readGuide = (response: string) =>
           Effect.forEach(each, (source) => source.readGuide(response), { discard: true })
 
-        return Source.of({ availability, readGuide })
+        return Source.of({ availability, lineup, readGuide })
       })
     )
   }
 
-  static layerTest(availabilityOf: (game: GameSnapshot) => ChannelAvailability): Layer.Layer<Source> {
+  static layerTest(
+    availabilityOf: (game: GameSnapshot) => ChannelAvailability,
+    lineup: Lineup = []
+  ): Layer.Layer<Source> {
     return Layer.succeed(
       Source,
       Source.of({
         availability: Effect.succeed((game: GameSnapshot) => [availabilityOf(game)]),
+        lineup: Effect.succeed(() => lineup),
         readGuide: () => Effect.void
       })
     )

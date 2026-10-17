@@ -168,6 +168,7 @@ export const liveHub = Effect.fn("TestWeb.liveHub")(function* () {
     plays: () => Effect.die("TestWeb.liveHub does not answer plays"),
     stats: () => Effect.die("TestWeb.liveHub does not answer stats"),
     highlights: () => Effect.die("TestWeb.liveHub does not answer highlights"),
+    lineup: () => Effect.die("TestWeb.liveHub does not answer lineup"),
     readGuide: ({ guide }) => Queue.offer(requests, { _tag: "SendGuide", guide }).pipe(Effect.asVoid),
     health: () => Effect.succeed({ version: "test", startedAt: DateTime.makeUnsafe(0) }),
     addresses: () => Effect.succeed([]),

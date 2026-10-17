@@ -25,6 +25,22 @@ describe("HubConfig", () => {
     }).pipe(Effect.provide(HubConfig.layerTest({})))
   )
 
+  it.effect("should read the lineup's channels, comma-separated, without blanks", () =>
+    Effect.gen(function* () {
+      const config = yield* HubConfig
+
+      assert.deepStrictEqual(config.lineupChannels, ["News 3", "WAVY 10"])
+    }).pipe(Effect.provide(HubConfig.layerTest({ SPORTAL_LINEUP_CHANNELS: " News 3, WAVY 10 ,," })))
+  )
+
+  it.effect("should name no lineup channels by default", () =>
+    Effect.gen(function* () {
+      const config = yield* HubConfig
+
+      assert.deepStrictEqual(config.lineupChannels, [])
+    }).pipe(Effect.provide(HubConfig.layerTest({})))
+  )
+
   it.effect("should read each setting", () =>
     Effect.gen(function* () {
       const config = yield* HubConfig

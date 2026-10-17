@@ -2,13 +2,17 @@ import { assert, describe, it } from "@effect/vitest"
 import type { ChannelAvailability } from "@sportal/domain/Channel"
 import { Network } from "@sportal/domain/Game"
 import { broadcast, snapshot, team } from "@sportal/domain/TestGame"
-import { DateTime, Effect } from "effect"
+import { DateTime, Effect, Layer, Option } from "effect"
 import { TestClock } from "effect/testing"
+import { HubConfig } from "../HubConfig.ts"
 import * as TestHub from "../TestHub.ts"
 import { Source } from "./Source.ts"
 
-const youTubeTv = Source.layerYouTubeTv
-const youTubeTvAndTwitch = Source.layerAll([Source.layerYouTubeTv, Source.layerTwitch])
+const config = HubConfig.layerTest({ SPORTAL_LINEUP_CHANNELS: "News 3" })
+const youTubeTv = Source.layerYouTubeTv.pipe(Layer.provide(config))
+const youTubeTvAndTwitch = Source.layerAll([Source.layerYouTubeTv, Source.layerTwitch]).pipe(
+  Layer.provide(config)
+)
 
 const espn = Network.make("ESPN")
 const onEspn = snapshot({ broadcasts: [broadcast(espn)] })
@@ -99,6 +103,41 @@ describe("Source.layerYouTubeTv", () => {
       assert.deepStrictEqual(availabilityOf(TestHub.ohioStateAtIowa), [TestHub.onNews3])
     }).pipe(Effect.provide(youTubeTv))
   )
+
+  it.effect("should give an empty lineup before any guide is read", () =>
+    Effect.gen(function* () {
+      const now = yield* DateTime.now
+      const lineupAt = yield* Source.use((source) => source.lineup)
+
+      assert.deepStrictEqual(lineupAt(now), [])
+    }).pipe(Effect.provide(youTubeTv))
+  )
+
+  it.effect("should give the recorded guide's sports channels, and the channel the setting names", () =>
+    Effect.gen(function* () {
+      yield* TestHub.readRecordedGuide
+      const now = yield* DateTime.now
+      const lineupAt = yield* Source.use((source) => source.lineup)
+
+      const names = lineupAt(now).map(({ channel }) => channel.name)
+
+      assert.include(names, "ESPN")
+      assert.include(names, "News 3")
+      assert.notInclude(names, "HGTV")
+      assert.notInclude(names, "Dabl")
+    }).pipe(Effect.provide(youTubeTv))
+  )
+
+  it.effect("should give an empty lineup once its guide is 45 minutes old", () =>
+    Effect.gen(function* () {
+      yield* TestHub.readRecordedGuide
+      yield* TestClock.adjust("45 minutes")
+      const now = yield* DateTime.now
+      const lineupAt = yield* Source.use((source) => source.lineup)
+
+      assert.deepStrictEqual(lineupAt(now), [])
+    }).pipe(Effect.provide(youTubeTv))
+  )
 })
 
 const thursdayStart = DateTime.makeUnsafe("2026-10-09T00:15:00Z")
@@ -128,6 +167,18 @@ describe("Source.layerTwitch", () => {
       const availabilityOf = yield* TestHub.availabilityNow
 
       assert.deepStrictEqual(availabilityOf(thursdayNightStarted), [onPrimeVideo])
+    }).pipe(Effect.provide(Source.layerTwitch))
+  )
+
+  it.effect("should give Prime Video in its lineup", () =>
+    Effect.gen(function* () {
+      const now = yield* DateTime.now
+      const lineupAt = yield* Source.use((source) => source.lineup)
+
+      assert.deepStrictEqual(
+        lineupAt(now).map(({ channel }) => channel.name),
+        ["Prime Video"]
+      )
     }).pipe(Effect.provide(Source.layerTwitch))
   )
 })
@@ -179,6 +230,27 @@ describe("Source.layerAll", () => {
           [{ _tag: "NotCarried", why: "StreamingOnly" }, onPrimeVideo]
         )
       }).pipe(Effect.provide(youTubeTvAndTwitch))
+  )
+
+  it.effect("should give every source's lineup, in the order given", () =>
+    Effect.gen(function* () {
+      const member = (name: string, source: "YouTube TV" | "Twitch") => ({
+        channel: { name, source, locator: { _tag: "WebView" as const, url: `https://example.test/${name}` } },
+        now: Option.none(),
+        next: Option.none()
+      })
+      const all = Source.layerAll([
+        Source.layerTest(() => streamingOnly, [member("ESPN", "YouTube TV")]),
+        Source.layerTest(() => streamingOnly, [member("Prime Video", "Twitch")])
+      ])
+
+      const lineupAt = yield* Source.use((source) => source.lineup).pipe(Effect.provide(all))
+
+      assert.deepStrictEqual(
+        lineupAt(DateTime.makeUnsafe(0)).map(({ channel }) => channel.name),
+        ["ESPN", "Prime Video"]
+      )
+    })
   )
 })
 

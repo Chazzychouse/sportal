@@ -1,5 +1,6 @@
 import { GameId, PlaysChange, PlaysPage } from "@sportal/domain/Game"
 import { GameStats } from "@sportal/domain/GameStats"
+import { Lineup } from "@sportal/domain/Guide"
 import { Highlight } from "@sportal/domain/Highlight"
 import { LeagueId } from "@sportal/domain/League"
 import { Schema } from "effect"
@@ -70,6 +71,7 @@ export class HubApi extends RpcGroup.make(
     error: StatsUnavailable
   }),
   Rpc.make("readGuide", { payload: { guide: Schema.String }, error: GuideUnreadable }),
+  Rpc.make("lineup", { success: Lineup }),
   Rpc.make("health", {
     success: Schema.Struct({ version: Schema.String, startedAt: Schema.DateTimeUtcFromString })
   }),
