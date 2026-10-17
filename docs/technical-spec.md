@@ -102,6 +102,7 @@ The Hub's API, `HubApi`, answered by the Hub's `Schedule` and `Displays`:
 | `stats` | `{ id }` | the game's `GameStats`; `GameNotFound` or `StatsUnavailable` |
 | `statsLive` | `{ id }` | stream: the game's stats, then again each time a refresh changes them |
 | `highlights` | `{ league, date }` | the highlights of that day's final games in that league; `StatsUnavailable` |
+| `lineup` | – | every source's lineup at the Hub clock's now: its sports channels, each with the airing now and the next |
 | `readGuide` | `{ guide }` | nothing; `GuideUnreadable` when the source cannot read it |
 | `health` | – | `{ version, startedAt }` |
 | `addresses` | – | the LAN addresses a Remote's join code can point at |
@@ -168,7 +169,7 @@ A stream budget shared across Displays will need the Hub's coordination.
 
 ### 3.3 Portability and network exposure
 
-- All Hub configuration comes from the environment through Effect `Config`: bind address, provider keys, access token.
+- All Hub configuration comes from the environment through Effect `Config`: bind address, provider keys, access token, and `SPORTAL_LINEUP_CHANNELS`, the comma-separated channel names the lineup lists beside the sports networks (default none).
 - For now the Hub keeps no state between runs, so it can be stopped, moved, and restarted freely: its next poll fills the slate again.
 - Planned: on the home network the Hub requires a single shared access token, entered once per device. It is not built for the public internet: a cloud deployment additionally requires real authentication, which is deliberately left as a future decision record rather than half-built now.
 - The Electron shell never moves to the cloud; Displays always run at home and point at wherever the Hub is.
@@ -279,7 +280,7 @@ sportal/
     │       │       ├── FastCastMessage.ts  FastCast's wire shapes: the outer envelope, framing, and the patch message
     │       │       └── fixtures/           Recorded real payloads, NE at BUF's frames among them
     │       └── source/
-    │           ├── Source.ts           The port and its variants (YouTube TV's guide, read while fresh; Twitch's lineup), and how several act as one
+    │           ├── Source.ts           The port and its variants (YouTube TV's guide, read while fresh; Twitch's fixed channels), and how several act as one
     │           └── youtube-tv/
     │               ├── YouTubeTvGuide.ts    A guide response decoded to a complete, validated, stamped Guide
     │               ├── YouTubeTvPayload.ts  The guide response's wire shape
@@ -396,9 +397,9 @@ class Source extends Context.Service<Source, {
 }>()("sportal/hub/source/Source") {}
 ```
 
-`Source.layerAll` runs every source and gives each game's availability from every source, in the order the sources are given; it merges nothing. A source says nothing when what it knows changes: each live query reads its availability again each time the slate changes and every 30 seconds, so a guide read or a guide gone stale shows within 30 seconds, and reads the time when it sends, to choose among a guide's airings and to judge a guide's freshness. A matched channel on the air is carried once the slate says the game has started, and upcoming before. The Display's Screen chooses: the most useful availability (carried, upcoming, no guide, then not carried), and a stream tile moves only when its own source carries its game on another channel, so a tile never moves to another source. YouTube TV's availability comes from the latest guide it read; Twitch's from its lineup, a guide whose one channel carries Prime Video.
+`Source.layerAll` runs every source and gives each game's availability from every source, in the order the sources are given; it merges nothing. A source says nothing when what it knows changes: each live query reads its availability again each time the slate changes and every 30 seconds, so a guide read or a guide gone stale shows within 30 seconds, and reads the time when it sends, to choose among a guide's airings and to judge a guide's freshness. A matched channel on the air is carried once the slate says the game has started, and upcoming before. The Display's Screen chooses: the most useful availability (carried, upcoming, no guide, then not carried), and a stream tile moves only when its own source carries its game on another channel, so a tile never moves to another source. YouTube TV's availability comes from the latest guide it read; Twitch's from its fixed channels, a guide whose one channel carries Prime Video.
 
-YouTube TV's channels are found in its own guide, read by the shell and handed to `Source.readGuide`, which every source receives and only YouTube TV keeps (`docs/history.md`, "Guide-matched channels"); with no fresh guide (a guide is fresh for 45 minutes), its availability is "no guide". Twitch's lineup is fixed and never read.
+YouTube TV's channels are found in its own guide, read by the shell and handed to `Source.readGuide`, which every source receives and only YouTube TV keeps (`docs/history.md`, "Guide-matched channels"); with no fresh guide (a guide is fresh for 45 minutes), its availability is "no guide". Twitch's channels are fixed and never read.
 
 `StreamLocator` is a tagged union. Today it has one member, a web-view address; a new kind is added only when a source needs it.
 
@@ -444,7 +445,7 @@ state and the screen commands to send: no top bar, nothing beside the Screen but
   (`game/TeamColors.ts`); kept in this browser and set on the document as `data-theme`.
 - Tiles beyond a game's stream: a **custom tile** (a YouTube video or playlist, `custom/CustomStream.ts`, saved in this
   browser by `custom/CustomStreams.ts`), a **stats tile** (`stats/GameStats.tsx`, as many sections as fit, by
-  `stats/StatsFit.ts`) and a **clip tile** (a highlight in a page `<video>`). Each is named by a `TileKey`
+  `stats/StatsFit.ts`) and a **clip tile** (a highlight in a page `<video>`) and a **channel tile** (a source's channel itself, from the guide's Channels entry, `AssignChannel`; its chrome reads the lineup, asked once the entry has shown and then every minute, for what is on now). Each is named by a `TileKey`
   (`packages/api/src/TileKey.ts`), the one string the Screen, the shell and a Remote use for it. A clip tile is not
   restored when a Display reloads (`Screen#withoutClips`).
 - Toasts draw under provider views, so each visible toast registers its element with Covering, which hides the strip of
