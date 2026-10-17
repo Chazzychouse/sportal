@@ -85,5 +85,12 @@ Record the date, the build, and any row that failed.
 | 69 | Put a clip in a tile and reload the Display | The reloaded Display has no clip tiles |
 | 70 | In the shell, select a playing tile and press `I`, then press `Ctrl`+`K` and type; close it, open the guide and choose Add YouTube by keyboard, and type a link | Typing reaches the palette's search and the YouTube form's fields, not the player |
 | 71 | In the shell with videos playing, press `G` to open the full guide and `Esc` to close it, several times | Each time, the provider views resize behind the full guide without flicker, and are back in their tiles after `Esc`; record any view left out of place |
+| 72 | On a Saturday morning with `SPORTAL_LINEUP_CHANNELS="News 3,WAVY 10"`, open the guide | The rail lists Channels after the leagues |
+| 73 | Open Channels and look at ESPN's card | It shows College GameDay, its minutes left, and what is next |
+| 74 | Look through the Channels shelf | News 3 and WAVY 10 are listed; HGTV is not |
+| 75 | Select a tile, focus ESPN in Channels and press Enter | ESPN is on the selected tile and plays |
+| 76 | Look at that tile's header | It reads "ESPN · College GameDay" |
+| 77 | Reload the Display | The channel tile is kept |
+| 78 | With no fresh guide (a fresh Hub with the shell not signed in, a guide older than 45 minutes, or a Hub that cannot be reached), open Channels | It shows "No sports channels: no fresh guide" |
 
 Record the date, the build, and any row that failed.

@@ -1,5 +1,7 @@
 import { useAtomSet, useAtomValue } from "@effect/atom-react"
+import { TileKey } from "@sportal/api/TileKey"
 import { ChevronUp } from "lucide-react"
+import { useEffect } from "react"
 import { Button } from "@/design/button"
 import { cn } from "@/design/ClassName"
 import { AddCustomCard, CustomCard } from "../custom/CustomCard.tsx"
@@ -10,7 +12,9 @@ import { GameChip } from "../game/GameChip.tsx"
 import * as Games from "../hub/Games.ts"
 import * as DisplayScreen from "../screen/DisplayScreen.ts"
 import { Shelf } from "../ui/Shelf.tsx"
+import { ChannelCard } from "./ChannelCard.tsx"
 import { GuideItem } from "./GuideItem.ts"
+import * as GuideShelves from "./GuideShelves.ts"
 
 interface RibbonProps {
   entry: GuideEntry
@@ -30,6 +34,10 @@ export function Ribbon({ entry, focus }: RibbonProps) {
   const shelves = useAtomValue(DisplayState.shelves)
   const games = useAtomValue(Games.byId)
   const [row = []] = shelves.shelves(entry, "Ribbon")
+  const showChannels = useAtomSet(GuideShelves.channelsShown)
+  useEffect(() => {
+    if (entry === "Channels") showChannels(true)
+  }, [entry, showChannels])
 
   return (
     <section
@@ -69,7 +77,9 @@ export function Ribbon({ entry, focus }: RibbonProps) {
         <p className="m-auto text-muted-foreground text-sm">
           {entry === "AllLive"
             ? "Nothing live right now"
-            : `Nothing live or later in ${Display.entryName(entry)} today`}
+            : entry === "Channels"
+              ? "No sports channels: no fresh guide"
+              : `Nothing live or later in ${Display.entryName(entry)} today`}
         </p>
       ) : (
         <Shelf focus={focus.item}>
@@ -93,6 +103,15 @@ export function Ribbon({ entry, focus }: RibbonProps) {
                   compact={true}
                   onChoose={choose}
                   onRemove={() => edit(CustomStreamsChange.Removed({ id: stream.id }))}
+                />
+              ),
+              Channel: ({ member }) => (
+                <ChannelCard
+                  key={TileKey.channel(member.channel)}
+                  member={member}
+                  focused={focused}
+                  compact={true}
+                  onChoose={choose}
                 />
               ),
               AddCustom: () => <AddCustomCard key="add" focused={focused} compact={true} onChoose={choose} />

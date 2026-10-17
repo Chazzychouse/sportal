@@ -54,6 +54,23 @@ describe("HubServer", () => {
       )
     )
 
+    it.effect("should answer the lineup of a guide read", () =>
+      served(() =>
+        Effect.gen(function* () {
+          yield* TestClock.setTime(TestHub.recordedAt)
+          const socket = yield* socketClient
+          yield* socket.readGuide({ guide: TestHub.recordedGuide })
+
+          const lineup = yield* socket.lineup()
+
+          assert.include(
+            lineup.map(({ channel }) => channel.name),
+            "ESPN"
+          )
+        })
+      )
+    )
+
     it.effect("should refuse a guide it cannot read", () =>
       served(() =>
         Effect.gen(function* () {

@@ -22,6 +22,11 @@ export class HubConfig extends Context.Service<
     readonly timeZone: string
     /** How often a live game's stats are fetched again while a live answer follows them; at least 10 seconds. */
     readonly statsRefresh: Duration.Duration
+    /**
+     * Channels the lineup lists beside the sports networks, by name: local stations named for their call sign ("News
+     * 3"), not their network.
+     */
+    readonly lineupChannels: ReadonlyArray<string>
   }
 >()("sportal/hub/HubConfig") {
   static readonly layer: Layer.Layer<HubConfig, Config.ConfigError> = Layer.effect(
@@ -36,6 +41,15 @@ export class HubConfig extends Context.Service<
       timeZone: Config.String("SPORTAL_TIME_ZONE").pipe(Config.withDefault("America/New_York")),
       statsRefresh: Config.schema(RefreshInterval, "SPORTAL_STATS_REFRESH").pipe(
         Config.withDefault(Duration.seconds(30))
+      ),
+      lineupChannels: Config.String("SPORTAL_LINEUP_CHANNELS").pipe(
+        Config.withDefault(""),
+        Config.map((names) =>
+          names
+            .split(",")
+            .map((name) => name.trim())
+            .filter((name) => name !== "")
+        )
       )
     })
   )

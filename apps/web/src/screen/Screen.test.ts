@@ -918,6 +918,43 @@ describe("Screen solo", () => {
   })
 })
 
+describe("Screen#apply AssignChannel", () => {
+  it("should place a channel tile", () => {
+    const screen = run(Screen.initial, { _tag: "AssignChannel", tile: 0, channel: TestWeb.espn })
+
+    assert.deepStrictEqual(screen.tiles[0], { _tag: "ChannelTile", channel: TestWeb.espn })
+  })
+
+  it("should give the channel's key to a channel tile", () => {
+    const screen = run(Screen.initial, { _tag: "AssignChannel", tile: 0, channel: TestWeb.espn })
+
+    assert.strictEqual(screen.slotOf(TileKey.channel(TestWeb.espn)), 0)
+  })
+
+  it("should hold two same-named channels at different addresses in two tiles", () => {
+    const screen = run(run(Screen.initial, { _tag: "AssignChannel", tile: 0, channel: TestWeb.espn }), {
+      _tag: "AssignChannel",
+      tile: 1,
+      channel: TestWeb.espnAlternate
+    })
+
+    assert.deepStrictEqual(screen.tiles.slice(0, 2), [
+      { _tag: "ChannelTile", channel: TestWeb.espn },
+      { _tag: "ChannelTile", channel: TestWeb.espnAlternate }
+    ])
+  })
+})
+
+describe("Screen#refresh channel tile", () => {
+  it("should keep a channel tile whatever any game's availability", () => {
+    const screen = run(Screen.initial, { _tag: "AssignChannel", tile: 0, channel: TestWeb.espn })
+
+    const refreshed = screen.refresh(() => Option.some([{ _tag: "NotCarried", why: "NoStream" }]))
+
+    assert.strictEqual(refreshed, screen)
+  })
+})
+
 describe("Screen custom tiles", () => {
   it("should assign a custom stream as a custom tile carrying its watch page", () => {
     const screen = TestWeb.assignCustom(Screen.initial, 1, TestWeb.video)
@@ -1118,7 +1155,8 @@ const tiles: ReadonlyArray<readonly [string, unknown]> = [
       locator: { _tag: "WebView", url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ" }
     }
   ],
-  ["StatsTile", { _tag: "StatsTile", game: "401856800" }]
+  ["StatsTile", { _tag: "StatsTile", game: "401856800" }],
+  ["ChannelTile", { _tag: "ChannelTile", channel }]
 ]
 
 describe("Tile", () => {
@@ -1149,6 +1187,7 @@ const commands: ReadonlyArray<unknown> = [
     name: "Highlights",
     locator: { _tag: "WebView", url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ" }
   },
+  { _tag: "AssignChannel", tile: 1, channel },
   { _tag: "Clear", tile: 2 },
   { _tag: "FocusAudio", tile: 0 },
   { _tag: "Swap", a: 0, b: 3 },

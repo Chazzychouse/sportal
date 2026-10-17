@@ -1,8 +1,8 @@
-import { type ChannelAvailability, SourceName, StreamLocator } from "@sportal/domain/Channel"
+import { Channel, type ChannelAvailability, SourceName, StreamLocator } from "@sportal/domain/Channel"
 import { type GameSnapshot, Network } from "@sportal/domain/Game"
 import type { LeagueId } from "@sportal/domain/League"
 import type { Team } from "@sportal/domain/Team"
-import { DateTime, Duration, Option, Schema } from "effect"
+import { Array as Arr, DateTime, Duration, Option, Schema } from "effect"
 
 export const ChannelId = Schema.String.pipe(Schema.brand("ChannelId"))
 export type ChannelId = typeof ChannelId.Type
@@ -14,6 +14,26 @@ export const Airing = Schema.Struct({
   end: Schema.DateTimeUtc
 })
 export type Airing = typeof Airing.Type
+
+/** An airing as a client sees it: its title, begin and end, without its channel's id. */
+const OnAir = Schema.Struct({
+  title: Schema.String,
+  begin: Schema.DateTimeUtcFromString,
+  end: Schema.DateTimeUtcFromString
+})
+
+/**
+ * A source's sports channels that play live, in its guide's order, each with the airing on it now and the next to
+ * begin; given by `Guide#lineup`.
+ */
+export const Lineup = Schema.Array(
+  Schema.Struct({
+    channel: Channel,
+    now: Schema.OptionFromOptionalKey(OnAir),
+    next: Schema.OptionFromOptionalKey(OnAir)
+  })
+)
+export type Lineup = typeof Lineup.Type
 
 export class Guide extends Schema.Class<Guide>("sportal/Guide")({
   source: SourceName,
@@ -72,6 +92,33 @@ export class Guide extends Schema.Class<Guide>("sportal/Guide")({
   }
 
   /**
+   * This guide's sports channels that play live, in its order, each with the airing on at `now` and the earliest to
+   * begin after it. A sports channel is one network's stream, one whose name names a sports network ("ABC 13" for
+   * ABC), or one `alsoNamed` names (a local station named for its call sign, as "News 3"), read without case or
+   * punctuation.
+   */
+  lineup(now: DateTime.Utc, alsoNamed: ReadonlyArray<string>): Lineup {
+    const named = new Set(alsoNamed.map(normalized))
+    return this.channels.flatMap(({ id, name, live, network }) => {
+      const sports =
+        network !== undefined ||
+        named.has(normalized(name)) ||
+        sportsNetworks.some((sportsNetwork) => namesNetwork(name, sportsNetwork))
+      if (live === undefined || !sports) return []
+
+      const airings = this.airings.filter(({ channel }) => channel === id)
+      const onNow = Arr.findFirst(
+        airings,
+        ({ begin, end }) => DateTime.isLessThanOrEqualTo(begin, now) && DateTime.isLessThan(now, end)
+      )
+      const later = airings.filter(({ begin }) => DateTime.isGreaterThan(begin, now))
+      const next = Arr.head(Arr.sortWith(later, ({ begin }) => begin, DateTime.Order))
+      const channel = { name, source: this.source, locator: live }
+      return [{ channel, now: Option.map(onNow, onAir), next: Option.map(next, onAir) }]
+    })
+  }
+
+  /**
    * Carried on `channel` once it is on the air and either `now` has reached `begin` or `game` has started; else
    * upcoming from `begin`.
    */
@@ -111,6 +158,37 @@ export class Guide extends Schema.Class<Guide>("sportal/Guide")({
 /** How far an airing may begin from a game's start and still be the game: listings round, and starts slip. */
 const startTolerance = Duration.minutes(45)
 
+/** The networks whose channels are sports channels, as channel names spell them; locals by their network's name. */
+const sportsNetworks = [
+  "ESPN",
+  "ESPN2",
+  "ESPNU",
+  "ESPNews",
+  "SEC Network",
+  "ACC Network",
+  "Big Ten Network",
+  "BTN",
+  "FS1",
+  "FS2",
+  "NFL Network",
+  "NFL RedZone",
+  "CBS Sports Network",
+  "NBCSN",
+  "Golf Channel",
+  "NBA TV",
+  "MLB Network",
+  "NHL Network",
+  "Tennis Channel",
+  "TBS",
+  "TNT",
+  "truTV",
+  "USA",
+  "ABC",
+  "CBS",
+  "NBC",
+  "FOX"
+].map((name) => Network.make(name))
+
 /** Whether a channel's name carries a network's as whole words: "ABC 13" for ABC. */
 function namesNetwork(channel: string, network: Network): boolean {
   return ` ${normalized(channel)} `.includes(` ${normalized(network)} `)
@@ -124,6 +202,11 @@ function namesTeam(title: string, team: Team, league: LeagueId): boolean {
   const words = ` ${normalized(title)} `
   const names = league === "nfl" ? [team.shortName, team.name] : [team.location, team.shortName, team.name]
   return names.some((name) => words.includes(` ${normalized(name)} `))
+}
+
+/** An airing without its channel, as the lineup sends it. */
+function onAir({ title, begin, end }: Airing): { title: string; begin: DateTime.Utc; end: DateTime.Utc } {
+  return { title, begin, end }
 }
 
 /** Lower case, "&" read as "and", every run of punctuation and space a single space. */

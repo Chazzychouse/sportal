@@ -104,7 +104,7 @@ member, in order.
 
 - `Screen.ts`: `Tile` gains `ChannelTile: { channel: Channel }`; `ScreenCommand` gains `AssignChannel: { tile:
   Schema.Int, channel: Channel }`, which places it as `AssignCustom` places a custom tile.
-- `packages/api/src/TileKey.ts` gains `channel(source: string, name: string)`: `channel:<source>:<name>`.
+- `packages/api/src/TileKey.ts` gains `channel(channel)`: `channel:<source>:<live address>`. Amended 2026-10-17: keyed by live address; a source may list several channels with one name (four ESPN feeds).
   `Tile.key` gives it for a channel tile.
 - A channel tile follows no game: whatever re-points stream tiles by availability, and the autopilot, leave it as they
   leave a custom tile. It is audible and can take audio focus and solo, as a stream tile can.

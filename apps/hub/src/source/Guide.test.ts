@@ -446,6 +446,145 @@ describe("Guide#availabilityOf at a time after its reading", () => {
   })
 })
 
+describe("Guide#lineup", () => {
+  const now = DateTime.makeUnsafe("2026-10-03T14:00:00Z")
+  const espn = ChannelId.make("espn")
+  const espnLive = { _tag: "WebView" as const, url: "https://tv.youtube.com/watch/espn" }
+
+  it("should keep a channel that names a sports network", () => {
+    const guide = guideOf([{ id: espn, name: "ESPN", live: espnLive }], [])
+
+    const lineup = guide.lineup(now, [])
+
+    assert.deepStrictEqual(
+      lineup.map(({ channel }) => channel),
+      [{ name: "ESPN", source: "YouTube TV", locator: espnLive }]
+    )
+  })
+
+  it("should drop a channel that names no sports network", () => {
+    const guide = guideOf([{ id: ChannelId.make("hgtv"), name: "HGTV", live: espnLive }], [])
+
+    const lineup = guide.lineup(now, [])
+
+    assert.deepStrictEqual(lineup, [])
+  })
+
+  it("should keep a local channel by its network's name", () => {
+    const guide = guideOf([{ id: ChannelId.make("abc13"), name: "ABC 13", live: espnLive }], [])
+
+    const lineup = guide.lineup(now, [])
+
+    assert.deepStrictEqual(
+      lineup.map(({ channel }) => channel.name),
+      ["ABC 13"]
+    )
+  })
+
+  it("should keep a channel named in the setting, whatever its case and punctuation", () => {
+    const guide = guideOf([{ id: ChannelId.make("news3"), name: "News 3", live: espnLive }], [])
+
+    const lineup = guide.lineup(now, ["news-3"])
+
+    assert.deepStrictEqual(
+      lineup.map(({ channel }) => channel.name),
+      ["News 3"]
+    )
+  })
+
+  it("should keep a channel that is one network's stream", () => {
+    const guide = guideOf(
+      [
+        {
+          id: ChannelId.make("primevideo"),
+          name: "Prime Video",
+          live: espnLive,
+          network: Network.make("Prime Video")
+        }
+      ],
+      []
+    )
+
+    const lineup = guide.lineup(now, [])
+
+    assert.deepStrictEqual(
+      lineup.map(({ channel }) => channel.name),
+      ["Prime Video"]
+    )
+  })
+
+  it("should drop a channel with no live address", () => {
+    const guide = guideOf([{ id: espn, name: "ESPN" }], [])
+
+    const lineup = guide.lineup(now, [])
+
+    assert.deepStrictEqual(lineup, [])
+  })
+
+  it("should give the airing on now", () => {
+    const guide = guideOf(
+      [{ id: espn, name: "ESPN", live: espnLive }],
+      [airing(espn, "College GameDay", "2026-10-03T13:00:00Z", "2026-10-03T16:00:00Z")]
+    )
+
+    const [espnNow] = guide.lineup(now, [])
+
+    assert.deepStrictEqual(
+      espnNow?.now,
+      Option.some({
+        title: "College GameDay",
+        begin: DateTime.makeUnsafe("2026-10-03T13:00:00Z"),
+        end: DateTime.makeUnsafe("2026-10-03T16:00:00Z")
+      })
+    )
+  })
+
+  it("should give no airing on now once it has ended", () => {
+    const guide = guideOf(
+      [{ id: espn, name: "ESPN", live: espnLive }],
+      [airing(espn, "SportsCenter", "2026-10-03T13:00:00Z", "2026-10-03T14:00:00Z")]
+    )
+
+    const [espnNow] = guide.lineup(now, [])
+
+    assert.deepStrictEqual(espnNow?.now, Option.none())
+  })
+
+  it("should give the earliest airing after now as next", () => {
+    const guide = guideOf(
+      [{ id: espn, name: "ESPN", live: espnLive }],
+      [
+        airing(espn, "Miami at Clemson", "2026-10-03T23:30:00Z", "2026-10-04T03:00:00Z"),
+        airing(espn, "Alabama at Mississippi State", "2026-10-03T16:00:00Z", "2026-10-03T19:30:00Z")
+      ]
+    )
+
+    const [espnNow] = guide.lineup(now, [])
+
+    assert.deepStrictEqual(
+      Option.map(espnNow?.next ?? Option.none(), ({ title }) => title),
+      Option.some("Alabama at Mississippi State")
+    )
+  })
+
+  it("should keep the guide's channel order", () => {
+    const guide = guideOf(
+      [
+        { id: ChannelId.make("fs1"), name: "FS1", live: espnLive },
+        { id: espn, name: "ESPN", live: espnLive }
+      ],
+      []
+    )
+
+    const lineup = guide.lineup(now, [])
+
+    assert.deepStrictEqual(
+      lineup.map(({ channel }) => channel.name),
+      ["FS1", "ESPN"]
+    )
+  })
+})
+
 function onLiveChannel(readAt: DateTime.Utc, airings: ReadonlyArray<Airing>): Guide {
   return new Guide({
     source: "YouTube TV",
@@ -457,6 +596,15 @@ function onLiveChannel(readAt: DateTime.Utc, airings: ReadonlyArray<Airing>): Gu
         live: { _tag: "WebView", url: "https://tv.youtube.com/watch/live1" }
       }
     ],
+    airings
+  })
+}
+
+function guideOf(channels: Guide["channels"], airings: ReadonlyArray<Airing>): Guide {
+  return new Guide({
+    source: "YouTube TV",
+    readAt: DateTime.makeUnsafe("2026-10-03T13:55:00Z"),
+    channels,
     airings
   })
 }

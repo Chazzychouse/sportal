@@ -901,6 +901,35 @@ describe("Display#chooseCustom", () => {
   })
 })
 
+describe("Display#chooseChannel", () => {
+  it("should assign a channel to the selected slot", () => {
+    const screen = TestWeb.fill([TestWeb.bama])
+    const display = Display.initial.select(1, screen).display
+
+    const { commands } = display.chooseChannel(TestWeb.espn, screen)
+
+    assert.deepStrictEqual(commands[0], { _tag: "AssignChannel", tile: 1, channel: TestWeb.espn })
+  })
+
+  it("should assign a second channel with the same name at a different address", () => {
+    const screen = TestWeb.fill([TestWeb.bama])
+    const display = Display.initial.select(1, screen).display
+    const onScreen = TestWeb.assignChannel(screen, 0, TestWeb.espn)
+
+    const { commands } = display.chooseChannel(TestWeb.espnAlternate, onScreen)
+
+    assert.deepStrictEqual(commands[0], { _tag: "AssignChannel", tile: 1, channel: TestWeb.espnAlternate })
+  })
+
+  it("should close the guide once a channel is chosen", () => {
+    const display = new Display({ ...Display.initial, overlay: customGuide })
+
+    const { display: next } = display.chooseChannel(TestWeb.espn, Screen.initial)
+
+    assert.strictEqual(next.overlay._tag, "None")
+  })
+})
+
 describe("Display#customEdited", () => {
   it("should clear every tile showing a removed stream", () => {
     const screen = TestWeb.assignCustom(TestWeb.fill([TestWeb.bama]), 1, TestWeb.video)
@@ -981,6 +1010,37 @@ describe("Display#focusedItem", () => {
     const item = display.focusedItem(customShelves)
 
     assert.isUndefined(item)
+  })
+})
+
+describe("Display guide Channels entry", () => {
+  it("should put a chosen channel card's channel in the selected slot", () => {
+    const shelves: GuideShelves = {
+      entries: ["AllLive", "Channels", "Custom"],
+      shelves: (entry) =>
+        entry === "Channels"
+          ? [
+              [
+                GuideItem.Channel({
+                  member: { channel: TestWeb.espn, now: Option.none(), next: Option.none() }
+                })
+              ]
+            ]
+          : [[]]
+    }
+    const opened = Display.initial.apply(
+      DisplayInput.GuideOpened({ entry: "Channels" }),
+      Screen.initial,
+      shelves
+    )
+
+    const { commands } = opened.display.apply(
+      DisplayInput.GuideItemChosen({ shelf: 0, item: 0 }),
+      Screen.initial,
+      shelves
+    )
+
+    assert.deepStrictEqual(commands[0], { _tag: "AssignChannel", tile: 0, channel: TestWeb.espn })
   })
 })
 

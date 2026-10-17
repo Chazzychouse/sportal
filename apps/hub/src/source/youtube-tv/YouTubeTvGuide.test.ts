@@ -4,11 +4,12 @@ import { Guide } from "@sportal/domain/Guide"
 import type { LeagueId } from "@sportal/domain/League"
 import { DateTime, Effect, Layer, Logger, Option } from "effect"
 import { TestClock } from "effect/testing"
+import { HubConfig } from "../../HubConfig.ts"
 import * as TestHub from "../../TestHub.ts"
 import { Source } from "../Source.ts"
 import * as YouTubeTvGuide from "./YouTubeTvGuide.ts"
 
-const youTubeTv = Source.layerYouTubeTv
+const youTubeTv = Source.layerYouTubeTv.pipe(Layer.provide(HubConfig.layerTest({})))
 
 describe("YouTubeTvGuide.decode", () => {
   it.effect("should return a complete guide stamped by the Effect clock", () =>

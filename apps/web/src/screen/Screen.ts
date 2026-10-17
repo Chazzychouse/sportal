@@ -6,9 +6,9 @@ import { Array as Arr, Option, Record as Rec, Result, Schema } from "effect"
 import { CustomStreamId } from "../custom/CustomStream.ts"
 
 /**
- * One slot's content: a game's stream, its data, its stats, a saved custom stream, a highlight, or nothing. With `key`,
- * what the tile shows as a `TileKey`; `game`, the game it shows; `locator`, what the shell loads for it; and `label`,
- * what a Display calls it.
+ * One slot's content: a game's stream, its data, its stats, a saved custom stream, a source's channel, a highlight, or
+ * nothing. With `key`, what the tile shows as a `TileKey`; `game`, the game it shows; `locator`, what the shell loads
+ * for it; and `label`, what a Display calls it.
  */
 export const Tile = Object.assign(
   Schema.TaggedUnion({
@@ -30,6 +30,8 @@ export const Tile = Object.assign(
     },
     /** A saved YouTube video or playlist: its stream, its name, and what the shell loads, so a placement needs no lookup. */
     CustomTile: { stream: CustomStreamId, name: Schema.String, locator: StreamLocator },
+    /** A source's channel itself, playing whatever airs on it: no game, and what the shell loads. */
+    ChannelTile: { channel: Channel },
     /** A game's stats, beside or instead of its stream: no provider view and no sound. */
     StatsTile: { game: GameId },
     /** A highlight playing in a page video, with sound when it has audio focus. */
@@ -189,6 +191,8 @@ export class Screen extends Schema.Class<Screen>("sportal/Screen")({
         tileAt(this, tile, () =>
           Result.succeed(placed(this, tile, { _tag: "CustomTile", stream, name, locator }))
         ),
+      AssignChannel: ({ tile, channel }) =>
+        tileAt(this, tile, () => Result.succeed(placed(this, tile, { _tag: "ChannelTile", channel }))),
       Clear: ({ tile }) =>
         tileAt(this, tile, () => {
           const tiles = this.tiles.map((existing, index) => (index === tile ? empty : existing))
@@ -222,8 +226,8 @@ export class Screen extends Schema.Class<Screen>("sportal/Screen")({
 
   /**
    * Re-resolves every tile with a game's stream or data, on screen and benched, after what a source knows has changed.
-   * A custom tile has no game, and a stats or clip tile no stream, so each stays as it is. A game `availabilityOf`
-   * knows nothing about keeps its tile as it was: the change did not concern it.
+   * A custom or channel tile has no game, and a stats or clip tile no stream, so each stays as it is. A game
+   * `availabilityOf` knows nothing about keeps its tile as it was: the change did not concern it.
    *
    * A stream tile is replaced only when its own source carries its game on another channel. Any other availability
    * (another source carrying it, a game running past its listing, no guide, a failed or stale read) never stops
@@ -263,6 +267,8 @@ export const ScreenCommand = Schema.TaggedUnion({
   AssignStats: { tile: Schema.Int, game: GameId },
   /** Puts a saved custom stream in a tile; one already on another tile moves. */
   AssignCustom: { tile: Schema.Int, stream: CustomStreamId, name: Schema.String, locator: StreamLocator },
+  /** Puts a channel in a tile; one already on another tile moves. */
+  AssignChannel: { tile: Schema.Int, channel: Channel },
   /** Puts a highlight in a clip tile; one already on another tile moves. */
   AssignClip: { tile: Schema.Int, highlight: Highlight },
   Clear: { tile: Schema.Int },
@@ -299,8 +305,8 @@ interface Unsettled {
 }
 
 /**
- * What `tile` shows, as a key: its game's id for a stream or data tile, its stream's for a custom tile, its game's
- * stats for a stats tile, its highlight's clip for a clip tile; none for an empty tile.
+ * What `tile` shows, as a key: its game's id for a stream or data tile, its stream's for a custom tile, its channel's
+ * for a channel tile, its game's stats for a stats tile, its highlight's clip for a clip tile; none for an empty tile.
  */
 function key(tile: Occupied): TileKey
 function key(tile: Tile): TileKey | undefined
@@ -310,14 +316,15 @@ function key(tile: Tile): TileKey | undefined {
     StreamTile: ({ game }) => TileKey.game(game),
     DataTile: ({ game }) => TileKey.game(game),
     CustomTile: ({ stream }) => TileKey.custom(stream),
+    ChannelTile: ({ channel }) => TileKey.channel(channel),
     StatsTile: ({ game }) => TileKey.stats(game),
     ClipTile: ({ highlight }) => TileKey.clip(highlight.id)
   })
 }
 
 /**
- * The game a tile shows: a stream, data or stats tile's, or a clip tile's highlight's. An empty or custom tile shows
- * none.
+ * The game a tile shows: a stream, data or stats tile's, or a clip tile's highlight's. An empty, custom or channel tile
+ * shows none.
  */
 function game(tile: Tile): GameId | undefined {
   return Tile.match(tile, {
@@ -325,18 +332,23 @@ function game(tile: Tile): GameId | undefined {
     StreamTile: ({ game }) => game,
     DataTile: ({ game }) => game,
     CustomTile: () => undefined,
+    ChannelTile: () => undefined,
     StatsTile: ({ game }) => game,
     ClipTile: ({ highlight }) => highlight.game
   })
 }
 
-/** What the shell loads for a tile: a stream tile's channel's address, a custom tile's own; none without a video. */
+/**
+ * What the shell loads for a tile: a stream tile's channel's address, a custom or channel tile's own; none without a
+ * video.
+ */
 function locator(tile: Tile): StreamLocator | undefined {
   return Tile.match(tile, {
     Empty: () => undefined,
     StreamTile: ({ channel }) => channel.locator,
     DataTile: () => undefined,
     CustomTile: ({ locator }) => locator,
+    ChannelTile: ({ channel }) => channel.locator,
     StatsTile: () => undefined,
     ClipTile: () => undefined
   })
@@ -344,7 +356,8 @@ function locator(tile: Tile): StreamLocator | undefined {
 
 /**
  * What a Display calls a tile, given its game's snapshot: the game's scoreline, "Stats · " and it for a stats tile, a
- * custom tile's name, "Replay · " and a clip tile's headline; none for an empty tile, or a game not known yet.
+ * custom tile's or a channel tile's name, "Replay · " and a clip tile's headline; none for an empty tile, or a game not
+ * known yet.
  */
 function label(tile: Tile, snapshot: GameSnapshot | undefined): string | undefined {
   const scoreline = snapshot?.scoreline()
@@ -353,6 +366,7 @@ function label(tile: Tile, snapshot: GameSnapshot | undefined): string | undefin
     StreamTile: () => scoreline,
     DataTile: () => scoreline,
     CustomTile: ({ name }) => name,
+    ChannelTile: ({ channel }) => channel.name,
     StatsTile: () => (scoreline === undefined ? undefined : `Stats · ${scoreline}`),
     ClipTile: ({ highlight }) => `Replay · ${highlight.headline}`
   })

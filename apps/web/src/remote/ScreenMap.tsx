@@ -34,7 +34,8 @@ export function ScreenMap(props: {
   }
   const titleIn = (slot: number) => {
     const at = tiles[slot]
-    return at !== undefined && (Tile.guards.CustomTile(at) || Tile.guards.ClipTile(at))
+    return at !== undefined &&
+      (Tile.guards.CustomTile(at) || Tile.guards.ChannelTile(at) || Tile.guards.ClipTile(at))
       ? nameIn(slot)
       : undefined
   }

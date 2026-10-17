@@ -631,7 +631,7 @@ export const onAlaAtMsstDay = DateTime.toEpochMillis(DateTime.makeUnsafe("2026-1
 export function scheduled<A, E, R>(
   answers: Partial<Pick<Provider["Service"], "listing" | "plays" | "stats">>,
   test: (frames: Frames) => Effect.Effect<A, E, R>,
-  source: Layer.Layer<Source> = Source.layerYouTubeTv
+  source: Layer.Layer<Source, never, HubConfig> = Source.layerYouTubeTv
 ) {
   return Effect.gen(function* () {
     const frames = yield* Queue.bounded<ReadonlyArray<Delivery>, Cause.Done>(1)

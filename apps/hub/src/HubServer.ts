@@ -57,6 +57,12 @@ const handlers = HubApi.toLayer(
               Effect.logWarning(`HubServer: a guide of ${guide.length} characters could not be read`)
             )
           ),
+      lineup: () =>
+        Effect.gen(function* () {
+          const now = yield* DateTime.now
+          const lineupAt = yield* source.lineup
+          return lineupAt(now)
+        }),
       health: () => Effect.succeed({ version: config.version, startedAt }),
       addresses: () => Effect.sync(() => lanAddresses(networkInterfaces())),
       report: ({ display, report }) => displays.report(display, report),
