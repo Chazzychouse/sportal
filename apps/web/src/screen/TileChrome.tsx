@@ -1,5 +1,7 @@
-import { useAtomSet } from "@effect/atom-react"
+import { useAtomSet, useAtomValue } from "@effect/atom-react"
 import type { GameSnapshot } from "@sportal/domain/Game"
+import { Option } from "effect"
+import { AsyncResult } from "effect/reactivity"
 import { ArrowUpLeft, ChartNoAxesColumn, Shrink, SquareDashed, Volume2, VolumeX, X } from "lucide-react"
 import type { ReactNode } from "react"
 import { Button } from "@/design/button"
@@ -8,12 +10,13 @@ import { DisplayInput } from "../display/Display.ts"
 import * as DisplayState from "../display/DisplayState.ts"
 import { GameStatus } from "../game/GameStatus.tsx"
 import { Score } from "../game/Score.tsx"
+import * as Lineup from "../hub/Lineup.ts"
 import { type Screen, Tile } from "./Screen.ts"
 import { TileAction } from "./TileAction.ts"
 import * as TileRects from "./TileRects.ts"
 
 /**
- * A tile's header strip: its slot, its game and score (a custom tile's name; a stats tile's game, tagged "Stats"; a
+ * A tile's header strip: its slot, its game and score (a custom tile's name; a channel tile's name and what airs on it now; a stats tile's game, tagged "Stats"; a
  * clip tile's headline, after "Replay"), the on-air tally when its sound is on, and its controls, with Stats beside on
  * a game's stream or data tile. It is a drop target for another tile, which swaps in; and it can itself be dragged.
  */
@@ -67,7 +70,9 @@ export function TileChrome(props: {
           <span className="label-caps text-[10px] text-muted-foreground">Stats</span>
         )}
         <span className="flex min-w-0 items-center gap-1.5 truncate font-mono">
-          {Tile.guards.CustomTile(tile) || Tile.guards.ChannelTile(tile) || Tile.guards.ClipTile(tile) ? (
+          {Tile.guards.ChannelTile(tile) ? (
+            <ChannelLabel tile={tile} />
+          ) : Tile.guards.CustomTile(tile) || Tile.guards.ClipTile(tile) ? (
             <span className="truncate font-sans">{Tile.label(tile, props.game)}</span>
           ) : props.game === undefined ? (
             <span className="font-sans text-muted-foreground">
@@ -140,3 +145,19 @@ function iconOf(action: TileAction, hearing: boolean): ReactNode {
 
 /** The drag data type of a tile being dragged: its index in the Screen's tiles. */
 const tileDrag = "application/x-sportal-tile"
+
+/** A channel tile's name, and what airs on it now when the lineup has it. */
+function ChannelLabel(props: { tile: typeof Tile.cases.ChannelTile.Type }) {
+  const lineup = AsyncResult.getOrElse(useAtomValue(Lineup.lineup), () => [])
+  const onNow = lineup.find(
+    ({ channel }) => channel.name === props.tile.channel.name && channel.source === props.tile.channel.source
+  )
+  const title =
+    onNow === undefined ? undefined : Option.getOrUndefined(Option.map(onNow.now, ({ title }) => title))
+  return (
+    <span className="truncate font-sans">
+      {props.tile.channel.name}
+      {title !== undefined && <span className="text-muted-foreground"> · {title}</span>}
+    </span>
+  )
+}

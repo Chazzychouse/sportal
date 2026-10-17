@@ -10,6 +10,7 @@ import * as Games from "../hub/Games.ts"
 import * as DisplayScreen from "../screen/DisplayScreen.ts"
 import { HighlightCard } from "../stats/HighlightCard.tsx"
 import { Shelf } from "../ui/Shelf.tsx"
+import { ChannelCard } from "./ChannelCard.tsx"
 import { GuideItem } from "./GuideItem.ts"
 import { GuideRail } from "./GuideRail.tsx"
 import * as GuideShelves from "./GuideShelves.ts"
@@ -21,7 +22,7 @@ interface FullGuideProps {
 
 /**
  * The guide's second level, over the whole Display: the rail at the left, and the entry's shelves at the right (live
- * now, later today, final, then highlights for a league; live now for All live; YouTube for Custom, the saved streams
+ * now, later today, final, then highlights for a league; live now for All live; On now for Channels; YouTube for Custom, the saved streams
  * and the card that adds one). A league's highlights are asked for once its guide shows. It covers every video, which
  * hides under it, and fades in.
  */
@@ -33,13 +34,24 @@ export function FullGuide({ entry, focus }: FullGuideProps) {
   const screen = useAtomValue(DisplayScreen.screen)
   const shelves = useAtomValue(DisplayState.shelves).shelves(entry, "Full")
   const games = useAtomValue(Games.byId)
-  const titles = entry === "AllLive" ? ["Live now"] : entry === "Custom" ? ["YouTube"] : shelfTitles
+  const titles =
+    entry === "AllLive"
+      ? ["Live now"]
+      : entry === "Channels"
+        ? ["On now"]
+        : entry === "Custom"
+          ? ["YouTube"]
+          : shelfTitles
   const empty = shelves.every((shelf) => shelf.length === 0)
   const showHighlights = useAtomSet(GuideShelves.highlightsShown)
   useEffect(() => {
-    if (entry === "AllLive" || entry === "Custom") return
+    if (entry === "AllLive" || entry === "Channels" || entry === "Custom") return
     showHighlights((shown) => (shown.has(entry) ? shown : new Set([...shown, entry])))
   }, [entry, showHighlights])
+  const showChannels = useAtomSet(GuideShelves.channelsShown)
+  useEffect(() => {
+    if (entry === "Channels") showChannels(true)
+  }, [entry, showChannels])
 
   return (
     <div
@@ -59,7 +71,11 @@ export function FullGuide({ entry, focus }: FullGuideProps) {
         </header>
         {empty ? (
           <p className="m-auto text-lg text-muted-foreground">
-            {entry === "AllLive" ? "Nothing live right now" : `No ${Display.entryName(entry)} games today`}
+            {entry === "AllLive"
+              ? "Nothing live right now"
+              : entry === "Channels"
+                ? "No sports channels: the guide has not been read yet"
+                : `No ${Display.entryName(entry)} games today`}
           </p>
         ) : (
           shelves.map((shelf, index) =>
@@ -96,6 +112,15 @@ export function FullGuide({ entry, focus }: FullGuideProps) {
                         compact={false}
                         onChoose={choose}
                         onRemove={() => edit(CustomStreamsChange.Removed({ id: stream.id }))}
+                      />
+                    ),
+                    Channel: ({ member }) => (
+                      <ChannelCard
+                        key={member.channel.name}
+                        member={member}
+                        focused={focused}
+                        compact={false}
+                        onChoose={choose}
                       />
                     ),
                     AddCustom: () => (

@@ -51,10 +51,11 @@ export class Display extends Data.Class<{
     lastEntry: "AllLive"
   })
 
-  /** How the guide names an entry: "All live", the league's name, or "Custom". */
+  /** How the guide names an entry: "All live", the league's name, "Channels", or "Custom". */
   static entryName(entry: GuideEntry): string {
     if (entry === "AllLive") return "All live"
-    return entry === "Custom" ? "Custom" : League.of(entry).name
+    if (entry === "Channels" || entry === "Custom") return entry
+    return League.of(entry).name
   }
 
   /** The selected slot on this Screen: the last slot when the layout now has fewer. */
@@ -381,7 +382,7 @@ export class Display extends Data.Class<{
   /**
    * Enter, or a click on the item at `at`: on the rail it leaves the rail; on a game it watches the game as `choose`
    * does and closes the guide; on a highlight it plays it as `chooseClip` does; on a custom stream it watches it as
-   * `chooseCustom` does; on the add card it opens the YouTube form. With the guide closed, or nothing there, nothing.
+   * `chooseCustom` does; on a channel it watches it as `chooseChannel` does; on the add card it opens the YouTube form. With the guide closed, or nothing there, nothing.
    */
   private confirm(at: GuideFocus | undefined, screen: Screen, shelves: GuideShelves): DisplayStep {
     const overlay = this.overlay
@@ -396,6 +397,7 @@ export class Display extends Data.Class<{
       Game: ({ game }) => this.close().choose(game, screen),
       Clip: ({ highlight }) => this.chooseClip(highlight, screen),
       Custom: ({ stream }) => this.chooseCustom(stream, screen),
+      Channel: ({ member }) => this.chooseChannel(member.channel, screen),
       AddCustom: () => DisplayStep.of(this.openCustomForm(undefined))
     })
   }
@@ -429,8 +431,8 @@ type OpenOverlay = Exclude<Overlay["_tag"], "None" | "Guide" | "CustomForm" | "G
 /** Which level of the guide is open: the ribbon docked under the Screen, or the full guide over the whole Display. */
 export type GuideLevel = "Ribbon" | "Full"
 
-/** An entry of the guide's rail: every league's live games, one league, or the custom streams. */
-export type GuideEntry = "AllLive" | LeagueId | "Custom"
+/** An entry of the guide's rail: every league's live games, one league, the sports channels, or the custom streams. */
+export type GuideEntry = "AllLive" | LeagueId | "Channels" | "Custom"
 
 /** Where the open guide's focus is: on the rail, or on item `item` of shelf `shelf` (the ribbon's row is shelf 0). */
 export interface GuideFocus {

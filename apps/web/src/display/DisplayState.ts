@@ -7,6 +7,7 @@ import { CustomStreamsChange } from "../custom/CustomStreams.ts"
 import { GuideItem } from "../guide/GuideItem.ts"
 import * as GuideShelves from "../guide/GuideShelves.ts"
 import * as Games from "../hub/Games.ts"
+import * as Lineup from "../hub/Lineup.ts"
 import * as Stats from "../hub/Stats.ts"
 import * as DisplayScreen from "../screen/DisplayScreen.ts"
 import { Shell } from "../shell/Shell.ts"
@@ -29,8 +30,9 @@ export const display: Atom.Writable<Display, DisplayInput> = Atom.writable(
 ).pipe(Atom.keepAlive)
 
 /**
- * The guide's entries and shelves over today's games, the saved custom streams, and the highlights of each league
- * whose Highlights shelf has shown: only All live, with nothing on it, and Custom before the first answer. What the
+ * The guide's entries and shelves over today's games, the saved custom streams, the highlights of each league
+ * whose Highlights shelf has shown, and the lineup once Channels has shown: only All live, with nothing on it,
+ * Channels, and Custom before the first answer. What the
  * fold and the guide read.
  */
 export const shelves: Atom.Atom<GuideShelves.GuideShelves> = Atom.make((get) => {
@@ -50,7 +52,8 @@ export const shelves: Atom.Atom<GuideShelves.GuideShelves> = Atom.make((get) => 
         })
     })
   )
-  return GuideShelves.guideShelves(games, get(CustomStreams.customStreams), highlights)
+  const lineup = get(GuideShelves.channelsShown) ? AsyncResult.getOrElse(get(Lineup.lineup), () => []) : []
+  return GuideShelves.guideShelves(games, get(CustomStreams.customStreams), highlights, lineup)
 })
 
 /** Whether this Display's window is full screen: in the shell the window, in a browser the page. */

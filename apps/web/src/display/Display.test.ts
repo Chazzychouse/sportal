@@ -1010,6 +1010,36 @@ describe("Display#focusedItem", () => {
   })
 })
 
+describe("Display guide Channels entry", () => {
+  it("should put a chosen channel card's channel in the selected slot", () => {
+    const espn: Channel = {
+      name: "ESPN",
+      source: "YouTube TV",
+      locator: { _tag: "WebView", url: "https://tv.youtube.com/watch/espn" }
+    }
+    const shelves: GuideShelves = {
+      entries: ["AllLive", "Channels", "Custom"],
+      shelves: (entry) =>
+        entry === "Channels"
+          ? [[GuideItem.Channel({ member: { channel: espn, now: Option.none(), next: Option.none() } })]]
+          : [[]]
+    }
+    const opened = Display.initial.apply(
+      DisplayInput.GuideOpened({ entry: "Channels" }),
+      Screen.initial,
+      shelves
+    )
+
+    const { commands } = opened.display.apply(
+      DisplayInput.GuideItemChosen({ shelf: 0, item: 0 }),
+      Screen.initial,
+      shelves
+    )
+
+    assert.deepStrictEqual(commands[0], { _tag: "AssignChannel", tile: 0, channel: espn })
+  })
+})
+
 describe("Display guide Custom entry", () => {
   it("should assign a custom stream on Confirm on its card, and close the guide", () => {
     const display = new Display({ ...Display.initial, overlay: customGuide })

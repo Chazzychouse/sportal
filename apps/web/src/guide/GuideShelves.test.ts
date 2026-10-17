@@ -4,24 +4,56 @@ import { GameId, type GameStatus } from "@sportal/domain/Game"
 import { HighlightId } from "@sportal/domain/Highlight"
 import type { LeagueId } from "@sportal/domain/League"
 import { highlight, snapshot } from "@sportal/domain/TestGame"
-import { DateTime } from "effect"
+import { DateTime, Option } from "effect"
 import * as TestWeb from "../TestWeb.ts"
 import { GuideItem } from "./GuideItem.ts"
 import * as GuideShelves from "./GuideShelves.ts"
 
+describe("GuideShelves.guideShelves Channels", () => {
+  const member = (name: string) => ({
+    channel: {
+      name,
+      source: "YouTube TV" as const,
+      locator: { _tag: "WebView" as const, url: `https://example.test/${name}` }
+    },
+    now: Option.none(),
+    next: Option.none()
+  })
+
+  it("should give one channel item per lineup member, in order, in the full guide", () => {
+    const lineup = [member("ESPN"), member("FS1")]
+
+    const shelves = GuideShelves.guideShelves([], [], new Map(), lineup)
+
+    assert.deepStrictEqual(shelves.shelves("Channels", "Full"), [
+      lineup.map((each) => GuideItem.Channel({ member: each }))
+    ])
+  })
+
+  it("should give the same channel items in the ribbon", () => {
+    const lineup = [member("ESPN")]
+
+    const shelves = GuideShelves.guideShelves([], [], new Map(), lineup)
+
+    assert.deepStrictEqual(shelves.shelves("Channels", "Ribbon"), [
+      lineup.map((each) => GuideItem.Channel({ member: each }))
+    ])
+  })
+})
+
 describe("GuideShelves.guideShelves", () => {
-  it("should list All live, then each league with games today in league order, no league without, then Custom", () => {
+  it("should list All live, then each league with games today in league order, no league without, then Channels, then Custom", () => {
     const fbsFirst = [listed("osu", "fbs", "live"), listed("kc", "nfl", "final")]
 
     const shelves = GuideShelves.guideShelves(fbsFirst, [])
 
-    assert.deepStrictEqual(shelves.entries, ["AllLive", "nfl", "fbs", "Custom"])
+    assert.deepStrictEqual(shelves.entries, ["AllLive", "nfl", "fbs", "Channels", "Custom"])
   })
 
-  it("should list only All live and Custom before there are games", () => {
+  it("should list only All live, Channels and Custom before there are games", () => {
     const shelves = GuideShelves.guideShelves([], [])
 
-    assert.deepStrictEqual(shelves.entries, ["AllLive", "Custom"])
+    assert.deepStrictEqual(shelves.entries, ["AllLive", "Channels", "Custom"])
   })
 
   it("should shelve every league's live games for All live in the ribbon, and nothing else", () => {
