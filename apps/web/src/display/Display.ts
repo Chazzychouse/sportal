@@ -1,5 +1,6 @@
 import { Hotkey } from "@sportal/api/Hotkey"
 import { TileKey } from "@sportal/api/TileKey"
+import type { Channel } from "@sportal/domain/Channel"
 import type { GameId } from "@sportal/domain/Game"
 import type { Highlight } from "@sportal/domain/Highlight"
 import { League, type LeagueId } from "@sportal/domain/League"
@@ -179,6 +180,16 @@ export class Display extends Data.Class<{
     const from = screen.slotOf(TileKey.game(game)) ?? this.selectedOn(screen)
     const slot = screen.nextEmptySlot(from) ?? (from + 1) % screen.onScreen().length
     return DisplayStep.of(this, [{ _tag: "AssignStats", tile: slot, game }])
+  }
+
+  /** Puts `channel` in the selected slot, as `place` puts anything, and closes what is open. */
+  chooseChannel(channel: Channel, screen: Screen): DisplayStep {
+    const { display, commands } = this.place(
+      TileKey.channel(channel),
+      (tile) => ({ _tag: "AssignChannel", tile, channel }),
+      screen
+    )
+    return DisplayStep.of(new Display({ ...display, overlay: Overlay.None() }), commands)
   }
 
   /** Puts a saved custom stream in the selected slot, as `place` puts anything, and closes what is open. */

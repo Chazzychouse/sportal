@@ -67,7 +67,7 @@ export function TileChrome(props: {
           <span className="label-caps text-[10px] text-muted-foreground">Stats</span>
         )}
         <span className="flex min-w-0 items-center gap-1.5 truncate font-mono">
-          {Tile.guards.CustomTile(tile) || Tile.guards.ClipTile(tile) ? (
+          {Tile.guards.CustomTile(tile) || Tile.guards.ChannelTile(tile) || Tile.guards.ClipTile(tile) ? (
             <span className="truncate font-sans">{Tile.label(tile, props.game)}</span>
           ) : props.game === undefined ? (
             <span className="font-sans text-muted-foreground">

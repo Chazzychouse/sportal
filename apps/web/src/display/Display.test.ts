@@ -1,6 +1,7 @@
 import { assert, describe, it } from "@effect/vitest"
 import type { Hotkey } from "@sportal/api/Hotkey"
 import { TileKey } from "@sportal/api/TileKey"
+import type { Channel } from "@sportal/domain/Channel"
 import { GameId } from "@sportal/domain/Game"
 import { highlight } from "@sportal/domain/TestGame"
 import { Option, Result } from "effect"
@@ -896,6 +897,31 @@ describe("Display#chooseCustom", () => {
     const display = new Display({ ...Display.initial, overlay: customGuide })
 
     const { display: next } = display.chooseCustom(TestWeb.video, Screen.initial)
+
+    assert.strictEqual(next.overlay._tag, "None")
+  })
+})
+
+describe("Display#chooseChannel", () => {
+  const espn: Channel = {
+    name: "ESPN",
+    source: "YouTube TV",
+    locator: { _tag: "WebView", url: "https://tv.youtube.com/watch/espn" }
+  }
+
+  it("should assign a channel to the selected slot", () => {
+    const screen = TestWeb.fill([TestWeb.bama])
+    const display = Display.initial.select(1, screen).display
+
+    const { commands } = display.chooseChannel(espn, screen)
+
+    assert.deepStrictEqual(commands[0], { _tag: "AssignChannel", tile: 1, channel: espn })
+  })
+
+  it("should close the guide once a channel is chosen", () => {
+    const display = new Display({ ...Display.initial, overlay: customGuide })
+
+    const { display: next } = display.chooseChannel(espn, Screen.initial)
 
     assert.strictEqual(next.overlay._tag, "None")
   })

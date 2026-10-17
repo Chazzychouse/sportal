@@ -36,3 +36,11 @@ describe("TileKey.stats", () => {
     assert.strictEqual(key, "stats:401856707")
   })
 })
+
+describe("TileKey.channel", () => {
+  it("should key a channel by its source and name, prefixed channel:", () => {
+    const key = TileKey.channel({ source: "YouTube TV", name: "ESPN" })
+
+    assert.strictEqual(key, "channel:YouTube TV:ESPN")
+  })
+})

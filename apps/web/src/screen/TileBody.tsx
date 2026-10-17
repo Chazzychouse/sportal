@@ -16,7 +16,7 @@ import * as TilePlacements from "./TilePlacements.ts"
  * What a tile's well shows from the web UI. In the shell a provider view covers a stream tile's
  * well; in a plain browser this is what is seen, with a link to watch. A data tile of a live game (halftime and a
  * delay during it included) shows the field in place of why it has no stream; the field dims itself out of play. A
- * custom tile, in a plain browser, plays YouTube's embedded player. A stats tile fills its well with as many of its
+ * channel tile links to its channel. A custom tile, in a plain browser, plays YouTube's embedded player. A stats tile fills its well with as many of its
  * game's stats as fit. A clip tile plays its highlight in a page video, with sound only while `heard`.
  */
 export function TileBody(props: { tile: Tile; snapshot: GameSnapshot | undefined; heard: boolean }) {
@@ -43,6 +43,16 @@ export function TileBody(props: { tile: Tile; snapshot: GameSnapshot | undefined
         rel="noreferrer"
       >
         Open in {channel.source}
+      </a>
+    ),
+    ChannelTile: ({ channel }) => (
+      <a
+        className="text-muted-foreground text-sm underline underline-offset-4"
+        href={channel.locator.url}
+        target="_blank"
+        rel="noreferrer"
+      >
+        Open {channel.name} in {channel.source}
       </a>
     ),
     CustomTile: (custom) => <CustomPlayer tile={custom} />,

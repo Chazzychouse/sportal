@@ -1,6 +1,6 @@
 import { assert, describe, it } from "@effect/vitest"
 import { TileKey } from "@sportal/api/TileKey"
-import type { ChannelAvailability } from "@sportal/domain/Channel"
+import type { Channel, ChannelAvailability } from "@sportal/domain/Channel"
 import { GameId } from "@sportal/domain/Game"
 import { highlight, snapshot } from "@sportal/domain/TestGame"
 import { DateTime, Option, Result, Schema } from "effect"
@@ -9,6 +9,11 @@ import { type LayoutName, Screen, ScreenCommand, Tile } from "./Screen.ts"
 
 const usc = GameId.make("401856800")
 const ohio = GameId.make("401858473")
+const espn: Channel = {
+  name: "ESPN",
+  source: "YouTube TV",
+  locator: { _tag: "WebView", url: "https://tv.youtube.com/watch/espn" }
+}
 const noGuide = (): ReadonlyArray<ChannelAvailability> => [{ _tag: "NoGuide", source: "YouTube TV" }]
 
 describe("Screen#apply", () => {
@@ -918,6 +923,30 @@ describe("Screen solo", () => {
   })
 })
 
+describe("Screen#apply AssignChannel", () => {
+  it("should place a channel tile", () => {
+    const screen = run(Screen.initial, { _tag: "AssignChannel", tile: 0, channel: espn })
+
+    assert.deepStrictEqual(screen.tiles[0], { _tag: "ChannelTile", channel: espn })
+  })
+
+  it("should give the channel's key to a channel tile", () => {
+    const screen = run(Screen.initial, { _tag: "AssignChannel", tile: 0, channel: espn })
+
+    assert.strictEqual(screen.slotOf(TileKey.channel(espn)), 0)
+  })
+})
+
+describe("Screen#refresh channel tile", () => {
+  it("should keep a channel tile whatever any game's availability", () => {
+    const screen = run(Screen.initial, { _tag: "AssignChannel", tile: 0, channel: espn })
+
+    const refreshed = screen.refresh(() => Option.some([{ _tag: "NotCarried", why: "NoStream" }]))
+
+    assert.strictEqual(refreshed, screen)
+  })
+})
+
 describe("Screen custom tiles", () => {
   it("should assign a custom stream as a custom tile carrying its watch page", () => {
     const screen = TestWeb.assignCustom(Screen.initial, 1, TestWeb.video)
@@ -1118,7 +1147,8 @@ const tiles: ReadonlyArray<readonly [string, unknown]> = [
       locator: { _tag: "WebView", url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ" }
     }
   ],
-  ["StatsTile", { _tag: "StatsTile", game: "401856800" }]
+  ["StatsTile", { _tag: "StatsTile", game: "401856800" }],
+  ["ChannelTile", { _tag: "ChannelTile", channel }]
 ]
 
 describe("Tile", () => {
@@ -1149,6 +1179,7 @@ const commands: ReadonlyArray<unknown> = [
     name: "Highlights",
     locator: { _tag: "WebView", url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ" }
   },
+  { _tag: "AssignChannel", tile: 1, channel },
   { _tag: "Clear", tile: 2 },
   { _tag: "FocusAudio", tile: 0 },
   { _tag: "Swap", a: 0, b: 3 },
