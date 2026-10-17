@@ -1,7 +1,6 @@
 import { assert, describe, it } from "@effect/vitest"
 import type { Hotkey } from "@sportal/api/Hotkey"
 import { TileKey } from "@sportal/api/TileKey"
-import type { Channel } from "@sportal/domain/Channel"
 import { GameId } from "@sportal/domain/Game"
 import { highlight } from "@sportal/domain/TestGame"
 import { Option, Result } from "effect"
@@ -903,25 +902,29 @@ describe("Display#chooseCustom", () => {
 })
 
 describe("Display#chooseChannel", () => {
-  const espn: Channel = {
-    name: "ESPN",
-    source: "YouTube TV",
-    locator: { _tag: "WebView", url: "https://tv.youtube.com/watch/espn" }
-  }
-
   it("should assign a channel to the selected slot", () => {
     const screen = TestWeb.fill([TestWeb.bama])
     const display = Display.initial.select(1, screen).display
 
-    const { commands } = display.chooseChannel(espn, screen)
+    const { commands } = display.chooseChannel(TestWeb.espn, screen)
 
-    assert.deepStrictEqual(commands[0], { _tag: "AssignChannel", tile: 1, channel: espn })
+    assert.deepStrictEqual(commands[0], { _tag: "AssignChannel", tile: 1, channel: TestWeb.espn })
+  })
+
+  it("should assign a second channel with the same name at a different address", () => {
+    const screen = TestWeb.fill([TestWeb.bama])
+    const display = Display.initial.select(1, screen).display
+    const onScreen = TestWeb.assignChannel(screen, 0, TestWeb.espn)
+
+    const { commands } = display.chooseChannel(TestWeb.espnAlternate, onScreen)
+
+    assert.deepStrictEqual(commands[0], { _tag: "AssignChannel", tile: 1, channel: TestWeb.espnAlternate })
   })
 
   it("should close the guide once a channel is chosen", () => {
     const display = new Display({ ...Display.initial, overlay: customGuide })
 
-    const { display: next } = display.chooseChannel(espn, Screen.initial)
+    const { display: next } = display.chooseChannel(TestWeb.espn, Screen.initial)
 
     assert.strictEqual(next.overlay._tag, "None")
   })
@@ -1012,16 +1015,17 @@ describe("Display#focusedItem", () => {
 
 describe("Display guide Channels entry", () => {
   it("should put a chosen channel card's channel in the selected slot", () => {
-    const espn: Channel = {
-      name: "ESPN",
-      source: "YouTube TV",
-      locator: { _tag: "WebView", url: "https://tv.youtube.com/watch/espn" }
-    }
     const shelves: GuideShelves = {
       entries: ["AllLive", "Channels", "Custom"],
       shelves: (entry) =>
         entry === "Channels"
-          ? [[GuideItem.Channel({ member: { channel: espn, now: Option.none(), next: Option.none() } })]]
+          ? [
+              [
+                GuideItem.Channel({
+                  member: { channel: TestWeb.espn, now: Option.none(), next: Option.none() }
+                })
+              ]
+            ]
           : [[]]
     }
     const opened = Display.initial.apply(
@@ -1036,7 +1040,7 @@ describe("Display guide Channels entry", () => {
       shelves
     )
 
-    assert.deepStrictEqual(commands[0], { _tag: "AssignChannel", tile: 0, channel: espn })
+    assert.deepStrictEqual(commands[0], { _tag: "AssignChannel", tile: 0, channel: TestWeb.espn })
   })
 })
 

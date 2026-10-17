@@ -1,4 +1,5 @@
 import { useAtomSet, useAtomValue } from "@effect/atom-react"
+import { TileKey } from "@sportal/api/TileKey"
 import { useEffect } from "react"
 import { AddCustomCard, CustomCard } from "../custom/CustomCard.tsx"
 import { CustomStreamsChange } from "../custom/CustomStreams.ts"
@@ -22,9 +23,9 @@ interface FullGuideProps {
 
 /**
  * The guide's second level, over the whole Display: the rail at the left, and the entry's shelves at the right (live
- * now, later today, final, then highlights for a league; live now for All live; On now for Channels; YouTube for Custom, the saved streams
- * and the card that adds one). A league's highlights are asked for once its guide shows. It covers every video, which
- * hides under it, and fades in.
+ * now, later today, final, then highlights for a league; live now for All live; On now for Channels; YouTube for
+ * Custom, the saved streams and the card that adds one). A league's highlights are asked for once its guide shows. It
+ * covers every video, which hides under it, and fades in.
  */
 export function FullGuide({ entry, focus }: FullGuideProps) {
   const ref = useOverlayRef()
@@ -74,7 +75,7 @@ export function FullGuide({ entry, focus }: FullGuideProps) {
             {entry === "AllLive"
               ? "Nothing live right now"
               : entry === "Channels"
-                ? "No sports channels: the guide has not been read yet"
+                ? "No sports channels: no fresh guide"
                 : `No ${Display.entryName(entry)} games today`}
           </p>
         ) : (
@@ -116,7 +117,7 @@ export function FullGuide({ entry, focus }: FullGuideProps) {
                     ),
                     Channel: ({ member }) => (
                       <ChannelCard
-                        key={member.channel.name}
+                        key={TileKey.channel(member.channel)}
                         member={member}
                         focused={focused}
                         compact={false}

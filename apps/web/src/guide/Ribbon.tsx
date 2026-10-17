@@ -1,4 +1,5 @@
 import { useAtomSet, useAtomValue } from "@effect/atom-react"
+import { TileKey } from "@sportal/api/TileKey"
 import { ChevronUp } from "lucide-react"
 import { useEffect } from "react"
 import { Button } from "@/design/button"
@@ -77,7 +78,7 @@ export function Ribbon({ entry, focus }: RibbonProps) {
           {entry === "AllLive"
             ? "Nothing live right now"
             : entry === "Channels"
-              ? "No sports channels: the guide has not been read yet"
+              ? "No sports channels: no fresh guide"
               : `Nothing live or later in ${Display.entryName(entry)} today`}
         </p>
       ) : (
@@ -106,7 +107,7 @@ export function Ribbon({ entry, focus }: RibbonProps) {
               ),
               Channel: ({ member }) => (
                 <ChannelCard
-                  key={member.channel.name}
+                  key={TileKey.channel(member.channel)}
                   member={member}
                   focused={focused}
                   compact={true}

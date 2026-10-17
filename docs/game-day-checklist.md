@@ -91,6 +91,6 @@ Record the date, the build, and any row that failed.
 | 75 | Select a tile, focus ESPN in Channels and press Enter | ESPN is on the selected tile and plays |
 | 76 | Look at that tile's header | It reads "ESPN · College GameDay" |
 | 77 | Reload the Display | The channel tile is kept |
-| 78 | With no guide read (a fresh Hub, shell not signed in), open Channels | It shows "No sports channels: the guide has not been read yet" |
+| 78 | With no fresh guide (a fresh Hub with the shell not signed in, a guide older than 45 minutes, or a Hub that cannot be reached), open Channels | It shows "No sports channels: no fresh guide" |
 
 Record the date, the build, and any row that failed.

@@ -382,7 +382,8 @@ export class Display extends Data.Class<{
   /**
    * Enter, or a click on the item at `at`: on the rail it leaves the rail; on a game it watches the game as `choose`
    * does and closes the guide; on a highlight it plays it as `chooseClip` does; on a custom stream it watches it as
-   * `chooseCustom` does; on a channel it watches it as `chooseChannel` does; on the add card it opens the YouTube form. With the guide closed, or nothing there, nothing.
+   * `chooseCustom` does; on a channel it watches it as `chooseChannel` does; on the add card it opens the YouTube form.
+   * With the guide closed, or nothing there, nothing.
    */
   private confirm(at: GuideFocus | undefined, screen: Screen, shelves: GuideShelves): DisplayStep {
     const overlay = this.overlay

@@ -32,8 +32,7 @@ export const display: Atom.Writable<Display, DisplayInput> = Atom.writable(
 /**
  * The guide's entries and shelves over today's games, the saved custom streams, the highlights of each league
  * whose Highlights shelf has shown, and the lineup once Channels has shown: only All live, with nothing on it,
- * Channels, and Custom before the first answer. What the
- * fold and the guide read.
+ * Channels, and Custom before the first answer. What the fold and the guide read.
  */
 export const shelves: Atom.Atom<GuideShelves.GuideShelves> = Atom.make((get) => {
   const games = Option.match(get(Games.today).value, { onNone: () => [], onSome: ({ games }) => games })

@@ -5,7 +5,7 @@ import { CalendarDate, type GameList } from "@sportal/api/GamesQuery"
 import { HubApi } from "@sportal/api/HubApi"
 import type { ListedGame } from "@sportal/api/ListedGame"
 import type { RemoteMessage } from "@sportal/api/RemoteMessage"
-import type { ChannelAvailability } from "@sportal/domain/Channel"
+import type { Channel, ChannelAvailability } from "@sportal/domain/Channel"
 import { GameId, type PlaysChange } from "@sportal/domain/Game"
 import type { GameStats } from "@sportal/domain/GameStats"
 import type { LeagueId } from "@sportal/domain/League"
@@ -71,6 +71,20 @@ export const foxChannel = {
   locator: { _tag: "WebView" as const, url: "https://tv.youtube.com/watch/fox" }
 }
 
+/** ESPN on YouTube TV, a channel chosen from the guide's lineup. */
+export const espn: Channel = {
+  name: "ESPN",
+  source: "YouTube TV",
+  locator: { _tag: "WebView", url: "https://tv.youtube.com/watch/espn" }
+}
+
+/** A second feed also named ESPN on YouTube TV, at another live address. */
+export const espnAlternate: Channel = {
+  name: "ESPN",
+  source: "YouTube TV",
+  locator: { _tag: "WebView", url: "https://tv.youtube.com/watch/espn-alternate" }
+}
+
 /** Every game is carried on FOX. */
 export function onFox(): ReadonlyArray<ChannelAvailability> {
   return [{ _tag: "Carried", channel: foxChannel }]
@@ -100,6 +114,12 @@ export function assignCustom(screen: Screen, tile: number, stream: CustomStream)
     name: stream.name,
     locator: stream.locator()
   }
+  return Result.getOrThrow(screen.apply(command, nowhere))
+}
+
+/** `screen` with `channel` in `tile` as a channel tile, as choosing it from the guide would put it there. */
+export function assignChannel(screen: Screen, tile: number, channel: Channel) {
+  const command: ScreenCommand = { _tag: "AssignChannel", tile, channel }
   return Result.getOrThrow(screen.apply(command, nowhere))
 }
 

@@ -16,9 +16,10 @@ import { TileAction } from "./TileAction.ts"
 import * as TileRects from "./TileRects.ts"
 
 /**
- * A tile's header strip: its slot, its game and score (a custom tile's name; a channel tile's name and what airs on it now; a stats tile's game, tagged "Stats"; a
- * clip tile's headline, after "Replay"), the on-air tally when its sound is on, and its controls, with Stats beside on
- * a game's stream or data tile. It is a drop target for another tile, which swaps in; and it can itself be dragged.
+ * A tile's header strip: its slot, its game and score (a custom tile's name; a channel tile's name and what airs on it
+ * now; a stats tile's game, tagged "Stats"; a clip tile's headline, after "Replay"), the on-air tally when its sound
+ * is on, and its controls, with Stats beside on a game's stream or data tile. It is a drop target for another tile,
+ * which swaps in; and it can itself be dragged.
  */
 export function TileChrome(props: {
   screen: Screen
@@ -150,7 +151,8 @@ const tileDrag = "application/x-sportal-tile"
 function ChannelLabel(props: { tile: typeof Tile.cases.ChannelTile.Type }) {
   const lineup = AsyncResult.getOrElse(useAtomValue(Lineup.lineup), () => [])
   const onNow = lineup.find(
-    ({ channel }) => channel.name === props.tile.channel.name && channel.source === props.tile.channel.source
+    ({ channel }) =>
+      channel.source === props.tile.channel.source && channel.locator.url === props.tile.channel.locator.url
   )
   const title =
     onNow === undefined ? undefined : Option.getOrUndefined(Option.map(onNow.now, ({ title }) => title))

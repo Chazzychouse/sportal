@@ -38,9 +38,27 @@ describe("TileKey.stats", () => {
 })
 
 describe("TileKey.channel", () => {
-  it("should key a channel by its source and name, prefixed channel:", () => {
-    const key = TileKey.channel({ source: "YouTube TV", name: "ESPN" })
+  const youTubeTv = "YouTube TV" as const
 
-    assert.strictEqual(key, "channel:YouTube TV:ESPN")
+  it("should key a channel by its source and live address, prefixed channel:", () => {
+    const key = TileKey.channel({
+      source: youTubeTv,
+      locator: { _tag: "WebView", url: "https://tv.youtube.com/watch/espn" }
+    })
+
+    assert.strictEqual(key, "channel:YouTube TV:https://tv.youtube.com/watch/espn")
+  })
+
+  it("should key two same-named channels at different addresses apart", () => {
+    const one = TileKey.channel({
+      source: youTubeTv,
+      locator: { _tag: "WebView", url: "https://tv.youtube.com/a" }
+    })
+    const other = TileKey.channel({
+      source: youTubeTv,
+      locator: { _tag: "WebView", url: "https://tv.youtube.com/b" }
+    })
+
+    assert.notStrictEqual(one, other)
   })
 })

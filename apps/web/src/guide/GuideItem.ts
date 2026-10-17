@@ -5,7 +5,8 @@ import { Data } from "effect"
 import type { CustomStream } from "../custom/CustomStream.ts"
 
 /**
- * One thing on a shelf of the Display's guide: a game, a highlight, a saved custom stream, a sports channel, or the card that adds a custom stream.
+ * One thing on a shelf of the Display's guide: a game, a highlight, a saved custom stream, a sports channel, or the
+ * card that adds a custom stream.
  */
 export type GuideItem = Data.TaggedEnum<{
   Game: { readonly game: GameId }

@@ -20,11 +20,10 @@ export interface GuideShelves {
 /**
  * The guide over today's `games`, the saved `custom` streams, each league's Highlights shelf in `highlights`, and the
  * lineup's sports channels. Its entries: All live, then each league with a game today, in league order, then Channels,
- * then Custom. Its shelves, each in watch
- * order. All live: every league's live games, on one shelf at either level. A league: in the ribbon its live then
- * upcoming games; in the full guide three shelves, always, live now, later today, and final, then its Highlights shelf
- * when it has one. Under Custom, at either level, one shelf: the saved streams, then the card that adds one. Under Channels, at either level, one shelf: the
- * lineup's channels, in order.
+ * then Custom. Its shelves, each in watch order. All live: every league's live games, on one shelf at either level. A
+ * league: in the ribbon its live then upcoming games; in the full guide three shelves, always, live now, later today,
+ * and final, then its Highlights shelf when it has one. Under Custom, at either level, one shelf: the saved streams,
+ * then the card that adds one. Under Channels, at either level, one shelf: the lineup's channels, in order.
  */
 export function guideShelves(
   games: ReadonlyArray<ListedGame>,

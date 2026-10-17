@@ -6,24 +6,6 @@ import { Context, DateTime, Duration, Effect, Layer, Option, Ref } from "effect"
 import { HubConfig } from "../HubConfig.ts"
 import * as YouTubeTvGuide from "./youtube-tv/YouTubeTvGuide.ts"
 
-/** Twitch's fixed guide: Prime Video's channel, which carries every Prime Video broadcast; it airs nothing listed. */
-const twitchGuide = new Guide({
-  source: "Twitch",
-  readAt: DateTime.makeUnsafe(0),
-  channels: [
-    {
-      id: ChannelId.make("primevideo"),
-      name: "Prime Video",
-      live: {
-        _tag: "WebView",
-        url: "https://player.twitch.tv/?channel=primevideo&parent=twitch.tv&player=popout"
-      },
-      network: Network.make("Prime Video")
-    }
-  ],
-  airings: []
-})
-
 /**
  * A way to obtain video: for a game, whether and where it can be shown; and its lineup of sports channels; each as of
  * a time.
@@ -135,3 +117,21 @@ const staleAfter = Duration.minutes(45)
 function isFresh(guide: Guide, now: DateTime.Utc): boolean {
   return DateTime.isLessThan(now, DateTime.addDuration(guide.readAt, staleAfter))
 }
+
+/** Twitch's fixed guide: Prime Video's channel, which carries every Prime Video broadcast; it airs nothing listed. */
+const twitchGuide = new Guide({
+  source: "Twitch",
+  readAt: DateTime.makeUnsafe(0),
+  channels: [
+    {
+      id: ChannelId.make("primevideo"),
+      name: "Prime Video",
+      live: {
+        _tag: "WebView",
+        url: "https://player.twitch.tv/?channel=primevideo&parent=twitch.tv&player=popout"
+      },
+      network: Network.make("Prime Video")
+    }
+  ],
+  airings: []
+})

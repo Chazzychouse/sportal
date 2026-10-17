@@ -1,6 +1,6 @@
 import { assert, describe, it } from "@effect/vitest"
 import { TileKey } from "@sportal/api/TileKey"
-import type { Channel, ChannelAvailability } from "@sportal/domain/Channel"
+import type { ChannelAvailability } from "@sportal/domain/Channel"
 import { GameId } from "@sportal/domain/Game"
 import { highlight, snapshot } from "@sportal/domain/TestGame"
 import { DateTime, Option, Result, Schema } from "effect"
@@ -9,11 +9,6 @@ import { type LayoutName, Screen, ScreenCommand, Tile } from "./Screen.ts"
 
 const usc = GameId.make("401856800")
 const ohio = GameId.make("401858473")
-const espn: Channel = {
-  name: "ESPN",
-  source: "YouTube TV",
-  locator: { _tag: "WebView", url: "https://tv.youtube.com/watch/espn" }
-}
 const noGuide = (): ReadonlyArray<ChannelAvailability> => [{ _tag: "NoGuide", source: "YouTube TV" }]
 
 describe("Screen#apply", () => {
@@ -925,21 +920,31 @@ describe("Screen solo", () => {
 
 describe("Screen#apply AssignChannel", () => {
   it("should place a channel tile", () => {
-    const screen = run(Screen.initial, { _tag: "AssignChannel", tile: 0, channel: espn })
+    const screen = run(Screen.initial, { _tag: "AssignChannel", tile: 0, channel: TestWeb.espn })
 
-    assert.deepStrictEqual(screen.tiles[0], { _tag: "ChannelTile", channel: espn })
+    assert.deepStrictEqual(screen.tiles[0], { _tag: "ChannelTile", channel: TestWeb.espn })
   })
 
   it("should give the channel's key to a channel tile", () => {
-    const screen = run(Screen.initial, { _tag: "AssignChannel", tile: 0, channel: espn })
+    const screen = run(Screen.initial, { _tag: "AssignChannel", tile: 0, channel: TestWeb.espn })
 
-    assert.strictEqual(screen.slotOf(TileKey.channel(espn)), 0)
+    assert.strictEqual(screen.slotOf(TileKey.channel(TestWeb.espn)), 0)
+  })
+
+  it("should hold two same-named channels at different addresses in two tiles", () => {
+    const screen = run(run(Screen.initial, { _tag: "AssignChannel", tile: 0, channel: TestWeb.espn }), {
+      _tag: "AssignChannel",
+      tile: 1,
+      channel: TestWeb.espnAlternate
+    })
+
+    assert.deepStrictEqual(screen.tiles[0], { _tag: "ChannelTile", channel: TestWeb.espn })
   })
 })
 
 describe("Screen#refresh channel tile", () => {
   it("should keep a channel tile whatever any game's availability", () => {
-    const screen = run(Screen.initial, { _tag: "AssignChannel", tile: 0, channel: espn })
+    const screen = run(Screen.initial, { _tag: "AssignChannel", tile: 0, channel: TestWeb.espn })
 
     const refreshed = screen.refresh(() => Option.some([{ _tag: "NotCarried", why: "NoStream" }]))
 
