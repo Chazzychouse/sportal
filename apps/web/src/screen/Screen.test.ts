@@ -938,7 +938,10 @@ describe("Screen#apply AssignChannel", () => {
       channel: TestWeb.espnAlternate
     })
 
-    assert.deepStrictEqual(screen.tiles[0], { _tag: "ChannelTile", channel: TestWeb.espn })
+    assert.deepStrictEqual(screen.tiles.slice(0, 2), [
+      { _tag: "ChannelTile", channel: TestWeb.espn },
+      { _tag: "ChannelTile", channel: TestWeb.espnAlternate }
+    ])
   })
 })
 

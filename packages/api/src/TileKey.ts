@@ -6,8 +6,7 @@ import { Schema } from "effect"
 /**
  * What a tile shows, as one string the Screen, the shell and a Remote all name it by: a game's stream or data tile is
  * the game's id itself; a custom tile is `custom:` and its stream's id; a stats tile is `stats:` and its game's id; a
- * clip tile is `clip:` and its highlight's id; a channel tile is `channel:`, its
- * source and its live address.
+ * clip tile is `clip:` and its highlight's id; a channel tile is `channel:`, its source and its live address.
  * Audio focus, solo, the interacting tile and each provider view follow a tile's key, so what a tile shows keeps them
  * when it moves. With `game`, `custom`, `stats`, `clip` and `channel`, which build those keys.
  */
