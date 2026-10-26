@@ -14,9 +14,10 @@ ESPN feeds ──► Hub ──── one WebSocket ────► web UI (any 
                 └─ one in-memory slate of games
 ```
 
-- **Hub** (`apps/hub`): one server process. It polls the score feeds, decodes everything on the way
-  in, folds each delivery into one slate of games, and answers requests and live queries over a
-  single WebSocket.
+- **Hub** (`apps/hub`): one server process. It polls ESPN's scoreboard for the day's games and
+  takes live updates from ESPN's FastCast push feed (the fastest, measured: `docs/adr/0007`). It
+  decodes everything on the way in, folds each delivery into one slate of games, and answers
+  requests and live queries over a single WebSocket.
 - **Web UI** (`apps/web`): the tracker, in React. It shows scores, game situations, play-by-play,
   team stats, win probability and highlights, and runs in any browser.
 - **Desktop shell** (`apps/desktop`): an Electron app whose tiles are the streaming providers' own
