@@ -563,6 +563,33 @@ describe("Display#press with tile keys", () => {
   })
 })
 
+describe("Display#press behind an overlay", () => {
+  it("should send nothing on ClearTile with the keys open", () => {
+    const screen = TestWeb.withTiles(["live", "soon"])
+
+    const { commands } = Display.initial.open("Keys").press({ _tag: "ClearTile" }, screen, none)
+
+    assert.deepStrictEqual(commands, [])
+  })
+
+  it("should send nothing on Carry with the keys open", () => {
+    const screen = TestWeb.withTiles(["live", "soon"])
+
+    const { commands } = Display.initial.open("Keys").press({ _tag: "Carry", slot: 1 }, screen, none)
+
+    assert.deepStrictEqual(commands, [])
+  })
+
+  it("should still clear the selected tile on ClearTile with the guide open", () => {
+    const screen = TestWeb.withTiles(["live", "soon"])
+    const open = Display.initial.press({ _tag: "Guide" }, screen, none).display
+
+    const { commands } = open.press({ _tag: "ClearTile" }, screen, none)
+
+    assert.deepStrictEqual(commands, [{ _tag: "Clear", tile: 0 }])
+  })
+})
+
 describe("Display#open and Display#close", () => {
   it("should replace any open overlay: Palette over Keys", () => {
     const open = Display.initial.open("Keys")

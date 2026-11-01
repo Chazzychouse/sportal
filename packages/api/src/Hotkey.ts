@@ -44,7 +44,8 @@ export const Hotkey = Object.assign(
     /**
      * What a key press means, read by its physical `code`; none for a key the page should have. The arrows select,
      * or with Shift carry, the selected tile; while the guide is open, plain arrows move in it instead, and Enter,
-     * the brackets, I, Delete and Backspace are the guide's.
+     * the brackets, I, Delete and Backspace are the guide's. X, Delete and Backspace clear the selected tile (Delete and
+     * Backspace are the guide's while it is open).
      */
     of(key: {
       code: string
@@ -131,7 +132,7 @@ export const Hotkey = Object.assign(
       },
       {
         group: "Tiles",
-        keys: ["X", "Delete"],
+        keys: ["X", "Delete", "Backspace"],
         does: "Clear the selected tile",
         press: { code: "KeyX" },
         hotkey: { _tag: "ClearTile" }

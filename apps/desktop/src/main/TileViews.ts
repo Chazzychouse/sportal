@@ -84,7 +84,7 @@ export class TileViews extends Context.Service<
           bounds: { x: 0, y: 0, width: 0, height: 0 }
         }
         entry.view.webContents.on("before-input-event", (event, input) => {
-          if (views.get(key) !== entry || input.type !== "keyDown") return
+          if (views.get(key) !== entry || input.type !== "keyDown" || input.isAutoRepeat) return
           const hotkey = Hotkey.of({
             code: input.code,
             shift: input.shift,

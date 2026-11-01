@@ -141,16 +141,19 @@ export class Display extends Data.Class<{
       CommandPalette: () =>
         DisplayStep.of(Overlay.$is("Palette")(this.overlay) ? this.close() : this.open("Palette")),
       FocusAudio: ({ slot }) => DisplayStep.of(this, [{ _tag: "FocusAudio", tile: slot }]),
-      Carry: ({ slot }) => this.carry(slot, screen),
+      Carry: ({ slot }) => (this.behindOverlay() ? DisplayStep.of(this) : this.carry(slot, screen)),
       CarryToward: ({ direction }) => {
+        if (this.behindOverlay()) return DisplayStep.of(this)
         const slot = Layout.of(screen).neighbour(this.selectedOn(screen), direction)
         return slot === undefined ? DisplayStep.of(this) : this.carry(slot, screen)
       },
       SelectToward: ({ direction }) => {
+        if (this.behindOverlay()) return DisplayStep.of(this)
         const slot = Layout.of(screen).neighbour(this.selectedOn(screen), direction)
         return slot === undefined ? DisplayStep.of(this) : this.select(slot, screen)
       },
       ClearTile: () => {
+        if (this.behindOverlay()) return DisplayStep.of(this)
         const slot = this.selectedOn(screen)
         return Tile.guards.Empty(screen.onScreen()[slot])
           ? DisplayStep.of(this)
@@ -330,7 +333,7 @@ export class Display extends Data.Class<{
 
   /**
    * Esc: the full guide goes back to the ribbon; the ribbon or any other overlay closes (a game page back to where it
-   * opened); with none open, it unsolos.
+   * opened); with none open, it first stops interacting with a player, then unsolos.
    */
   private escape(screen: Screen, shelves: GuideShelves): DisplayStep {
     const overlay = this.overlay
@@ -340,6 +343,11 @@ export class Display extends Data.Class<{
     if (this.interactingOn(screen) !== undefined)
       return DisplayStep.of(new Display({ ...this, interacting: undefined }))
     return DisplayStep.of(this, Option.isNone(screen.solo) ? [] : [{ _tag: "Unsolo" }])
+  }
+
+  /** Whether an overlay other than the guide is open: the tile keys leave the tiles alone then. */
+  private behindOverlay(): boolean {
+    return !Overlay.$is("None")(this.overlay) && !Overlay.$is("Guide")(this.overlay)
   }
 
   /** `I`: on a game card in the open guide, that game's page; anywhere else, nothing. */

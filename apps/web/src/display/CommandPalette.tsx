@@ -56,12 +56,13 @@ export function CommandPalette(props: { open: boolean; onOpenChange: (open: bool
     const snapshot = snapshots.find((each) => each.id === game)
     return [{ slot, name: Tile.label(tile, snapshot) ?? `Tile ${slot + 1}` }]
   })
-  // As Shift with a digit does: the selection goes with the tile.
+  // As Shift with a digit does: the selection goes with the tile. The palette closes first: tile keys wait behind it.
   const carry = (slot: number) => {
+    input(DisplayInput.Closed())
     input(DisplayInput.Pressed({ hotkey: { _tag: "Carry", slot } }))
     props.onOpenChange(false)
   }
-  const selectedName = occupied.find((each) => each.slot === selected)?.name
+  const selectedName = occupied.find((each) => each.slot === selected)?.name ?? `tile ${selected + 1}`
 
   return (
     <CommandDialog
@@ -160,22 +161,21 @@ export function CommandPalette(props: { open: boolean; onOpenChange: (open: bool
                   )
                 })
             )}
-            {selectedName !== undefined &&
-              screen.onScreen().flatMap((_, slot) => {
-                if (slot === selected) return []
-                const name = occupied.find((each) => each.slot === slot)?.name ?? `tile ${slot + 1}`
-                return [
-                  <CommandItem
-                    // biome-ignore lint/suspicious/noArrayIndexKey: a slot is identified by its place on the screen.
-                    key={`swap-${slot}`}
-                    value={`swap move carry ${selectedName} with ${name} tile ${slot + 1}`}
-                    onSelect={() => carry(slot)}
-                  >
-                    Swap {selectedName} with {name}
-                    <CommandShortcut>⇧{slot + 1}</CommandShortcut>
-                  </CommandItem>
-                ]
-              })}
+            {screen.onScreen().flatMap((_, slot) => {
+              if (slot === selected) return []
+              const name = occupied.find((each) => each.slot === slot)?.name ?? `tile ${slot + 1}`
+              return [
+                <CommandItem
+                  // biome-ignore lint/suspicious/noArrayIndexKey: a slot is identified by its place on the screen.
+                  key={`swap-${slot}`}
+                  value={`swap move carry ${selectedName} with ${name} tile ${slot + 1}`}
+                  onSelect={() => carry(slot)}
+                >
+                  Swap {selectedName} with {name}
+                  <CommandShortcut>⇧{slot + 1}</CommandShortcut>
+                </CommandItem>
+              ]
+            })}
           </CommandGroup>
         )}
         <CommandGroup heading="Layout">
