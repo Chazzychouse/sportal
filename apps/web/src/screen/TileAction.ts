@@ -16,7 +16,7 @@ export class TileAction extends Data.Class<{
   /**
    * What can be done to the tile in `slot`, in the order every host lists it: hear it (not a stats tile, which has no
    * sound), promote it unless it is the main tile, solo or unsolo it, clear it. An empty tile has none. Solo acts on
-   * the selected tile, so only `selected` gives it a key; Escape unsolos from anywhere.
+   * the selected tile, so only `selected` gives it a key; Escape unsolos from anywhere. Clear takes X on the selected tile.
    */
   static of(screen: Screen, slot: number, selected: boolean): ReadonlyArray<TileAction> {
     const tile = screen.onScreen()[slot]
@@ -40,7 +40,7 @@ export class TileAction extends Data.Class<{
       verb: "Promote",
       label: "Promote to the main tile",
       command: { _tag: "Promote", tile: slot },
-      key: `Shift+${slot + 1}`
+      key: undefined
     })
     const solo = screen.soloes(Tile.key(tile))
       ? new TileAction({
@@ -62,14 +62,14 @@ export class TileAction extends Data.Class<{
       verb: "Clear",
       label: "Clear",
       command: { _tag: "Clear", tile: slot },
-      key: undefined
+      key: selected ? "X" : undefined
     })
     const heard = Tile.guards.StatsTile(tile) ? [] : [hear]
     return slot === 0 ? [...heard, solo, clear] : [...heard, promote, solo, clear]
   }
 
-  /** The hotkey as a person reads it, in tooltips and the palette: `Shift+2` is "⇧2", `Escape` is "Esc". */
+  /** The hotkey as a person reads it, in tooltips and the palette: `Escape` is "Esc". */
   shortcut(): string | undefined {
-    return this.key?.replace("Shift+", "⇧").replace("Escape", "Esc")
+    return this.key?.replace("Escape", "Esc")
   }
 }

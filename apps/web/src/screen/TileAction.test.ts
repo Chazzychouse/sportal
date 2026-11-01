@@ -31,7 +31,30 @@ describe("TileAction.of", () => {
     const promote = TileAction.of(screen, 1, true).find((action) => action.id === "promote")
 
     assert.deepStrictEqual(promote?.command, { _tag: "Promote", tile: 1 })
-    assert.strictEqual(promote?.key, "Shift+2")
+  })
+
+  it("should give promote no key", () => {
+    const screen = TestWeb.fill([TestWeb.bama, TestWeb.irish])
+
+    const key = actionOf(screen, 1, true, "promote")?.key
+
+    assert.strictEqual(key, undefined)
+  })
+
+  it("should give clear X on the selected tile", () => {
+    const screen = TestWeb.fill([TestWeb.bama, TestWeb.irish])
+
+    const key = actionOf(screen, 1, true, "clear")?.key
+
+    assert.strictEqual(key, "X")
+  })
+
+  it("should give clear no key on a tile that is not selected", () => {
+    const screen = TestWeb.fill([TestWeb.bama, TestWeb.irish])
+
+    const key = actionOf(screen, 1, false, "clear")?.key
+
+    assert.strictEqual(key, undefined)
   })
 
   it("should swap solo for unsolo on the soloed tile", () => {
@@ -111,14 +134,6 @@ describe("TileAction.of", () => {
 })
 
 describe("TileAction#shortcut", () => {
-  it("should read a shifted digit with the shift sign", () => {
-    const promote = actionOf(TestWeb.fill([TestWeb.bama, TestWeb.irish]), 1, true, "promote")
-
-    const shortcut = promote?.shortcut()
-
-    assert.strictEqual(shortcut, "⇧2")
-  })
-
   it("should read Escape as Esc", () => {
     const unsolo = actionOf(TestWeb.soloed([TestWeb.bama, TestWeb.irish], 1), 1, true, "unsolo")
 
@@ -128,7 +143,7 @@ describe("TileAction#shortcut", () => {
   })
 
   it("should have none for an action with no key", () => {
-    const clear = actionOf(TestWeb.fill([TestWeb.bama]), 0, true, "clear")
+    const clear = actionOf(TestWeb.fill([TestWeb.bama, TestWeb.irish]), 1, false, "clear")
 
     const shortcut = clear?.shortcut()
 
