@@ -12,8 +12,9 @@ import { Transition } from "./Transition.ts"
  * Keeps one provider web view per stream tile, by the tile's key, laid over the web UI at the rectangle the UI
  * reports. A view belongs to its tile's key, so a game that changes tiles keeps its player.
  * The shell only ever sets a view's address, bounds, visibility, mute flag, and focus, reads the keys pressed in
- * a view — the guide's keys only while the web UI says the guide is open — and keeps the mouse from a view's player
- * unless it is interactive; the provider's page is never modified.
+ * a view — the guide's keys only while the web UI says the guide is open, and only Esc and Ctrl+K while the view is
+ * interactive — and keeps the mouse from a view's player unless it is interactive; the provider's page is never
+ * modified.
  */
 export class TileViews extends Context.Service<
   TileViews,
@@ -27,7 +28,10 @@ export class TileViews extends Context.Service<
     hide(keys: ReadonlyArray<TileKey>): Effect.Effect<void>
     /** Whether the guide is open: while it is, the guide's keys pressed in a stream view are hotkeys, not the player's. */
     setGuideOpen(on: boolean): Effect.Effect<void>
-    /** Each hotkey pressed while a stream view had keyboard focus. The page never receives it. */
+    /**
+     * Each hotkey pressed while a stream view had keyboard focus; from an interactive view, only Esc and Ctrl+K. The
+     * page never receives it.
+     */
     readonly hotkeys: Stream.Stream<Hotkey>
     /**
      * The key of each tile whose stream view was pressed with the left button while it was not interactive. The page
@@ -89,7 +93,12 @@ export class TileViews extends Context.Service<
             meta: input.meta,
             guideOpen
           })
-          if (hotkey === undefined) return
+          // A player in use gets every key but the two that hand control back, so a form on its page can be typed in.
+          if (
+            hotkey === undefined ||
+            (entry.interactive && !Hotkey.guards.CommandPalette(hotkey) && input.code !== "Escape")
+          )
+            return
           event.preventDefault()
           PubSub.publishUnsafe(hotkeys, hotkey)
         })

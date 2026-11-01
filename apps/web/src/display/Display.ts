@@ -316,6 +316,8 @@ export class Display extends Data.Class<{
     if (Overlay.$is("Guide")(overlay) && overlay.level === "Full")
       return DisplayStep.of(this.relevel(overlay, "Ribbon", shelves))
     if (!Overlay.$is("None")(overlay)) return DisplayStep.of(this.close())
+    if (this.interactingOn(screen) !== undefined)
+      return DisplayStep.of(new Display({ ...this, interacting: undefined }))
     return DisplayStep.of(this, Option.isNone(screen.solo) ? [] : [{ _tag: "Unsolo" }])
   }
 

@@ -377,6 +377,45 @@ describe("TileViews.hotkeys", () => {
   )
 })
 
+describe("TileViews hotkeys while interactive", () => {
+  it.effect("should leave a hotkey to an interactive stream view's page", () =>
+    Effect.gen(function* () {
+      const { tiles } = yield* attached()
+      yield* tiles.sync([{ ...placement, interactive: true }])
+
+      const prevented = press("KeyF")
+
+      expect(prevented).not.toHaveBeenCalled()
+    }).pipe(Effect.scoped)
+  )
+
+  it.effect("should forward Esc from an interactive stream view", () =>
+    Effect.gen(function* () {
+      const { tiles } = yield* attached()
+      yield* tiles.sync([{ ...placement, interactive: true }])
+      const hotkeys = yield* TestDesktop.collect(tiles.hotkeys, 1)
+
+      press("KeyF")
+      press("Escape")
+      const forwarded = yield* Fiber.join(hotkeys)
+
+      expect(forwarded).toEqual([{ _tag: "Unsolo" }])
+    }).pipe(Effect.scoped)
+  )
+
+  it.effect("should keep hotkeys from a stream view's page once it stops being interactive", () =>
+    Effect.gen(function* () {
+      const { tiles } = yield* attached()
+      yield* tiles.sync([{ ...placement, interactive: true }])
+      yield* tiles.sync([placement])
+
+      const prevented = press("KeyF")
+
+      expect(prevented).toHaveBeenCalled()
+    }).pipe(Effect.scoped)
+  )
+})
+
 describe("TileViews mouse filter", () => {
   it.effect.each(["mouseMove", "mouseEnter", "mouseDown", "mouseUp", "mouseWheel", "contextMenu"])(
     "should keep a %s from a stream view's page",

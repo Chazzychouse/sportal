@@ -321,6 +321,19 @@ describe("Display#press", () => {
     assert.deepStrictEqual(commands, [{ _tag: "Unsolo" }])
   })
 
+  it("should stop interacting with Esc and send no Unsolo, even while soloed", () => {
+    const soloed = new Screen({
+      ...TestWeb.withTiles(["live"]),
+      solo: Option.some(TileKey.game(GameId.make("live")))
+    })
+    const interacting = Display.initial.press({ _tag: "Interact" }, soloed, none).display
+
+    const { display, commands } = interacting.press({ _tag: "Unsolo" }, soloed, none)
+
+    assert.isUndefined(display.interactingOn(soloed))
+    assert.deepStrictEqual(commands, [])
+  })
+
   it("should do nothing with Esc and no overlay while not soloed", () => {
     const screen = TestWeb.withTiles(["live"])
 

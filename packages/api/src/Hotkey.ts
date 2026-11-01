@@ -105,14 +105,14 @@ export const Hotkey = Object.assign(
       {
         group: "Tiles",
         keys: ["I"],
-        does: "Use the selected tile's player with the mouse, or stop",
+        does: "Use the selected tile's player with the mouse and keys, or stop (Esc stops too)",
         press: { code: "KeyI" },
         hotkey: { _tag: "Interact" }
       },
       {
         group: "Tiles",
         keys: ["Esc"],
-        does: "Close what is open (the full guide goes back to the ribbon), or unsolo",
+        does: "Close what is open (the full guide goes back to the ribbon), stop using a player, or unsolo",
         press: { code: "Escape" },
         hotkey: { _tag: "Unsolo" }
       },
