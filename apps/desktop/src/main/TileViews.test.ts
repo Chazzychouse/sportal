@@ -311,6 +311,17 @@ describe("TileViews.hotkeys", () => {
     }).pipe(Effect.scoped)
   )
 
+  it.effect("should leave a held key's repeats to the stream view's page", () =>
+    Effect.gen(function* () {
+      const { tiles } = yield* attached()
+      yield* tiles.sync([placement])
+
+      const prevented = press("Digit2", "keyDown", true)
+
+      expect(prevented).not.toHaveBeenCalled()
+    }).pipe(Effect.scoped)
+  )
+
   it.effect("should forward only the hotkey pressed in a stream view", () =>
     Effect.gen(function* () {
       const { tiles } = yield* attached()
@@ -326,14 +337,16 @@ describe("TileViews.hotkeys", () => {
     }).pipe(Effect.scoped)
   )
 
-  it.effect("should leave an arrow to the stream view's page while the guide is closed", () =>
+  it.effect("should forward an arrow as selecting toward while the guide is closed", () =>
     Effect.gen(function* () {
       const { tiles } = yield* attached()
       yield* tiles.sync([placement])
+      const hotkeys = yield* TestDesktop.collect(tiles.hotkeys, 1)
 
-      const prevented = press("ArrowDown")
+      press("ArrowDown")
+      const forwarded = yield* Fiber.join(hotkeys)
 
-      expect(prevented).not.toHaveBeenCalled()
+      expect(forwarded).toEqual([{ _tag: "SelectToward", direction: "down" }])
     }).pipe(Effect.scoped)
   )
 
@@ -363,14 +376,14 @@ describe("TileViews.hotkeys", () => {
     }).pipe(Effect.scoped)
   )
 
-  it.effect("should leave arrows to the stream view's page again once the guide closes", () =>
+  it.effect("should leave Enter to the stream view's page again once the guide closes", () =>
     Effect.gen(function* () {
       const { tiles } = yield* attached()
       yield* tiles.sync([placement])
       yield* tiles.setGuideOpen(true)
       yield* tiles.setGuideOpen(false)
 
-      const prevented = press("ArrowDown")
+      const prevented = press("Enter")
 
       expect(prevented).not.toHaveBeenCalled()
     }).pipe(Effect.scoped)
@@ -551,7 +564,7 @@ function arriving() {
 }
 
 /** Presses `code` in the first view, as Electron reports it; answers the spy for keeping it from the page. */
-function press(code: string, type = "keyDown") {
+function press(code: string, type = "keyDown", isAutoRepeat = false) {
   const event = { preventDefault: vi.fn() }
   viewAt(0).webContents.emit("before-input-event", event, {
     type,
@@ -559,7 +572,8 @@ function press(code: string, type = "keyDown") {
     shift: false,
     alt: false,
     control: false,
-    meta: false
+    meta: false,
+    isAutoRepeat
   })
   return event.preventDefault
 }

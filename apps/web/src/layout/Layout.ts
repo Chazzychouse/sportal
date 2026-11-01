@@ -36,6 +36,32 @@ export class Layout extends Schema.Class<Layout>("sportal/web/Layout")({ name: L
   slots(): ReadonlyArray<Slot> {
     return slotsOf[this.name](this.split)
   }
+
+  /**
+   * The slot that way from slot `from`: of the slots whose centre lies that way, those overlapping it across the axis
+   * first, then the nearest along it, then the nearest across it. None at an edge.
+   */
+  neighbour(from: number, direction: "up" | "down" | "left" | "right"): number | undefined {
+    const slots = this.slots()
+    const origin = slots[from]
+    if (origin === undefined) return undefined
+
+    const [along, across] =
+      direction === "left" || direction === "right" ? (["x", "y"] as const) : (["y", "x"] as const)
+    const sign = direction === "right" || direction === "down" ? 1 : -1
+    const ahead = slots
+      .map((slot, index) => ({
+        index,
+        distance: (middle(slot, along) - middle(origin, along)) * sign,
+        offset: Math.abs(middle(slot, across) - middle(origin, across)),
+        overlaps: overlap(slot, origin, across) > 0
+      }))
+      .filter((candidate) => candidate.distance > 0)
+      .toSorted(
+        (a, b) => Number(b.overlaps) - Number(a.overlaps) || a.distance - b.distance || a.offset - b.offset
+      )
+    return ahead[0]?.index
+  }
 }
 
 /** A place in a layout: a rectangle as fractions of the Screen area. */
@@ -92,4 +118,15 @@ function within(at: number): number {
 /** The rectangle between two corners. */
 function rect(left: number, top: number, right: number, bottom: number): Slot {
   return { x: left, y: top, width: right - left, height: bottom - top }
+}
+
+/** The middle of a slot on one axis. */
+function middle(slot: Slot, axis: "x" | "y"): number {
+  return axis === "x" ? slot.x + slot.width / 2 : slot.y + slot.height / 2
+}
+
+/** How far two slots overlap on one axis: zero or less when they only touch or are apart. */
+function overlap(a: Slot, b: Slot, axis: "x" | "y"): number {
+  const [start, size] = axis === "x" ? (["x", "width"] as const) : (["y", "height"] as const)
+  return Math.min(a[start] + a[size], b[start] + b[size]) - Math.max(a[start], b[start])
 }

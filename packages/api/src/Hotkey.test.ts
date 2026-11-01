@@ -9,10 +9,10 @@ describe("Hotkey.of", () => {
     assert.deepStrictEqual(hotkey, { _tag: "FocusAudio", slot: 0 })
   })
 
-  it("should read a shifted digit as promote, 0-based", () => {
+  it("should read a shifted digit as carrying to that slot, 0-based", () => {
     const hotkey = key("Digit9", { shift: true })
 
-    assert.deepStrictEqual(hotkey, { _tag: "Promote", slot: 8 })
+    assert.deepStrictEqual(hotkey, { _tag: "Carry", slot: 8 })
   })
 
   it.each<{ code: string; modifiers?: Modifiers; hotkey: Hotkey }>([
@@ -20,6 +20,7 @@ describe("Hotkey.of", () => {
     { code: "Escape", hotkey: { _tag: "Unsolo" } },
     { code: "F11", hotkey: { _tag: "FullScreen" } },
     { code: "KeyL", hotkey: { _tag: "NextLayout" } },
+    { code: "KeyX", hotkey: { _tag: "ClearTile" } },
     { code: "KeyI", hotkey: { _tag: "Interact" } },
     { code: "KeyK", modifiers: { control: true }, hotkey: { _tag: "CommandPalette" } },
     { code: "KeyK", modifiers: { meta: true }, hotkey: { _tag: "CommandPalette" } }
@@ -85,15 +86,6 @@ describe("Hotkey.of in the guide", () => {
     assert.deepStrictEqual(hotkey, { _tag: "Move", direction })
   })
 
-  it.each(["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"])(
-    "should leave %s to the page while the guide is closed",
-    (code) => {
-      const hotkey = key(code)
-
-      assert.isUndefined(hotkey)
-    }
-  )
-
   it.each([false, true])("should read G as the guide, whether it is open or not: open %s", (guideOpen) => {
     const hotkey = key("KeyG", { guideOpen })
 
@@ -126,16 +118,47 @@ describe("Hotkey.of in the guide", () => {
     assert.deepStrictEqual(hotkey, { _tag: "Remove" })
   })
 
-  it.each(["Delete", "Backspace"])("should leave %s to the page while the guide is closed", (code) => {
-    const hotkey = key(code)
-
-    assert.isUndefined(hotkey)
-  })
-
   it("should read I as interacting while the guide is closed", () => {
     const hotkey = key("KeyI")
 
     assert.deepStrictEqual(hotkey, { _tag: "Interact" })
+  })
+})
+
+describe("Hotkey.of for tiles", () => {
+  it.each<{ code: string; direction: "up" | "down" | "left" | "right" }>([
+    { code: "ArrowUp", direction: "up" },
+    { code: "ArrowDown", direction: "down" },
+    { code: "ArrowLeft", direction: "left" },
+    { code: "ArrowRight", direction: "right" }
+  ])("should read $code as selecting toward $direction while the guide is closed", ({ code, direction }) => {
+    const hotkey = key(code)
+
+    assert.deepStrictEqual(hotkey, { _tag: "SelectToward", direction })
+  })
+
+  it.each([false, true])(
+    "should read Shift with an arrow as carrying that way: guide open %s",
+    (guideOpen) => {
+      const hotkey = key("ArrowLeft", { shift: true, guideOpen })
+
+      assert.deepStrictEqual(hotkey, { _tag: "CarryToward", direction: "left" })
+    }
+  )
+
+  it.each(["Delete", "Backspace"])(
+    "should read %s as clearing the tile while the guide is closed",
+    (code) => {
+      const hotkey = key(code)
+
+      assert.deepStrictEqual(hotkey, { _tag: "ClearTile" })
+    }
+  )
+
+  it("should read X as clearing the tile while the guide is open", () => {
+    const hotkey = key("KeyX", { guideOpen: true })
+
+    assert.deepStrictEqual(hotkey, { _tag: "ClearTile" })
   })
 })
 
@@ -164,7 +187,10 @@ describe("Hotkey.keys", () => {
 
 const wire: ReadonlyArray<unknown> = [
   { _tag: "FocusAudio", slot: 0 },
-  { _tag: "Promote", slot: 1 },
+  { _tag: "Carry", slot: 1 },
+  { _tag: "CarryToward", direction: "right" },
+  { _tag: "SelectToward", direction: "down" },
+  { _tag: "ClearTile" },
   { _tag: "SelectTile", slot: 2 },
   { _tag: "Interact" },
   { _tag: "ToggleSolo" },

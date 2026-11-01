@@ -443,7 +443,6 @@ describe("Display#press", () => {
 
   it.each<{ hotkey: Parameters<Display["press"]>[0]; command: ScreenCommand }>([
     { hotkey: { _tag: "FocusAudio", slot: 1 }, command: { _tag: "FocusAudio", tile: 1 } },
-    { hotkey: { _tag: "Promote", slot: 1 }, command: { _tag: "Promote", tile: 1 } },
     { hotkey: { _tag: "NextLayout" }, command: { _tag: "SetLayout", layout: "MainThree" } }
   ])("should send $hotkey._tag's command and change nothing", ({ hotkey, command }) => {
     const screen = TestWeb.withTiles(["live", "soon"])
@@ -459,6 +458,135 @@ describe("Display#press", () => {
 
     assert.strictEqual(display, Display.initial)
     assert.deepStrictEqual(commands, [])
+  })
+})
+
+describe("Display#press with tile keys", () => {
+  it("should swap the selected tile with slot N on Carry", () => {
+    const screen = TestWeb.withTiles(["live", "soon"])
+
+    const { commands } = Display.initial.press({ _tag: "Carry", slot: 1 }, screen, none)
+
+    assert.deepStrictEqual(commands, [{ _tag: "Swap", a: 0, b: 1 }])
+  })
+
+  it("should move the selection with the tile on Carry", () => {
+    const screen = TestWeb.withTiles(["live", "soon"])
+
+    const { display } = Display.initial.press({ _tag: "Carry", slot: 1 }, screen, none)
+
+    assert.strictEqual(display.selected, 1)
+  })
+
+  it.each([0, 8])(
+    "should do nothing on Carry to slot %i, the selected slot or one past the screen",
+    (slot) => {
+      const screen = TestWeb.withTiles(["live", "soon"])
+
+      const { display, commands } = Display.initial.press({ _tag: "Carry", slot }, screen, none)
+
+      assert.strictEqual(display, Display.initial)
+      assert.deepStrictEqual(commands, [])
+    }
+  )
+
+  it("should keep interacting with the tile it carries", () => {
+    const screen = TestWeb.withTiles(["live", "soon"])
+    const interacting = Display.initial.press({ _tag: "Interact" }, screen, none).display
+
+    const { display } = interacting.press({ _tag: "Carry", slot: 1 }, screen, none)
+
+    assert.strictEqual(display.interactingOn(TestWeb.withTiles(["soon", "live"])), "live")
+  })
+
+  it("should swap with the neighbour and select it on CarryToward", () => {
+    const screen = TestWeb.withTiles(["live", "soon"])
+
+    const { display, commands } = Display.initial.press(
+      { _tag: "CarryToward", direction: "down" },
+      screen,
+      none
+    )
+
+    assert.deepStrictEqual(commands, [{ _tag: "Swap", a: 0, b: 2 }])
+    assert.strictEqual(display.selected, 2)
+  })
+
+  it("should do nothing on CarryToward at an edge", () => {
+    const screen = TestWeb.withTiles(["live", "soon"])
+
+    const { display, commands } = Display.initial.press(
+      { _tag: "CarryToward", direction: "left" },
+      screen,
+      none
+    )
+
+    assert.strictEqual(display, Display.initial)
+    assert.deepStrictEqual(commands, [])
+  })
+
+  it("should select the neighbour and send nothing on SelectToward", () => {
+    const screen = TestWeb.withTiles(["live", "soon"])
+
+    const { display, commands } = Display.initial.press(
+      { _tag: "SelectToward", direction: "right" },
+      screen,
+      none
+    )
+
+    assert.strictEqual(display.selected, 1)
+    assert.deepStrictEqual(commands, [])
+  })
+
+  it("should do nothing on SelectToward at an edge", () => {
+    const screen = TestWeb.withTiles(["live", "soon"])
+
+    const { display } = Display.initial.press({ _tag: "SelectToward", direction: "up" }, screen, none)
+
+    assert.strictEqual(display, Display.initial)
+  })
+
+  it("should clear the selected tile on ClearTile", () => {
+    const screen = TestWeb.withTiles(["live", "soon"])
+
+    const { commands } = Display.initial.press({ _tag: "ClearTile" }, screen, none)
+
+    assert.deepStrictEqual(commands, [{ _tag: "Clear", tile: 0 }])
+  })
+
+  it("should do nothing on ClearTile with an empty tile selected", () => {
+    const screen = TestWeb.withTiles([])
+
+    const { commands } = Display.initial.press({ _tag: "ClearTile" }, screen, none)
+
+    assert.deepStrictEqual(commands, [])
+  })
+})
+
+describe("Display#press behind an overlay", () => {
+  it("should send nothing on ClearTile with the keys open", () => {
+    const screen = TestWeb.withTiles(["live", "soon"])
+
+    const { commands } = Display.initial.open("Keys").press({ _tag: "ClearTile" }, screen, none)
+
+    assert.deepStrictEqual(commands, [])
+  })
+
+  it("should send nothing on Carry with the keys open", () => {
+    const screen = TestWeb.withTiles(["live", "soon"])
+
+    const { commands } = Display.initial.open("Keys").press({ _tag: "Carry", slot: 1 }, screen, none)
+
+    assert.deepStrictEqual(commands, [])
+  })
+
+  it("should still clear the selected tile on ClearTile with the guide open", () => {
+    const screen = TestWeb.withTiles(["live", "soon"])
+    const open = Display.initial.press({ _tag: "Guide" }, screen, none).display
+
+    const { commands } = open.press({ _tag: "ClearTile" }, screen, none)
+
+    assert.deepStrictEqual(commands, [{ _tag: "Clear", tile: 0 }])
   })
 })
 
