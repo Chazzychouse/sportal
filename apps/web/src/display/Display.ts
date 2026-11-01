@@ -321,10 +321,6 @@ export class Display extends Data.Class<{
     return this.guide("Ribbon", this.entryOn(shelves), start, shelves)
   }
 
-  /**
-   * Esc: the full guide goes back to the ribbon; the ribbon or any other overlay closes (a game page back to where it
-   * opened); with none open, it unsolos.
-   */
   /** Swaps the selected tile with slot `slot`'s and selects `slot`, so the selection goes with the tile. */
   private carry(slot: number, screen: Screen): DisplayStep {
     const from = this.selectedOn(screen)
@@ -332,6 +328,10 @@ export class Display extends Data.Class<{
     return DisplayStep.of(new Display({ ...this, selected: slot }), [{ _tag: "Swap", a: from, b: slot }])
   }
 
+  /**
+   * Esc: the full guide goes back to the ribbon; the ribbon or any other overlay closes (a game page back to where it
+   * opened); with none open, it unsolos.
+   */
   private escape(screen: Screen, shelves: GuideShelves): DisplayStep {
     const overlay = this.overlay
     if (Overlay.$is("Guide")(overlay) && overlay.level === "Full")
