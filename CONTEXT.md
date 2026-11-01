@@ -173,6 +173,7 @@ A client asks the Hub over the Hub socket: once (`list`), or live (`listLive`) f
 | **Display step** | A Display after an input, and the screen commands that input sends; `DisplayStep` in code. | result, update |
 | **Interacting tile** | The one stream or custom tile whose player gets the mouse, after `I`; every other tile's player never sees the pointer. Local to the Display, like the selected tile. | active, unlocked |
 | **Promote** | Move a game into the main tile. | feature |
+| **Carry** | Move the selected tile to another slot, swapping it with what is there; the selection goes with it. Shift with a digit or an arrow. | move, drag |
 | **Tile placement** | Where a tile's video (a stream tile's or a custom tile's) sits in a Display's window, what it loads, and whether it is muted or interactive, as told to the shell. | bounds, rect |
 | **Screen transition** | How tiles move to new places: one duration and easing, shared by the web UI and the shell. | animation |
 

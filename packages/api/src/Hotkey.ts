@@ -1,10 +1,20 @@
 import { Schema } from "effect"
 
+/** Which way an arrow points. */
+const direction = Schema.Literals(["up", "down", "left", "right"])
+
 /** A key Sportal acts on, wherever it was pressed: in the web UI, or in a stream view that had focus. */
 export const Hotkey = Object.assign(
   Schema.TaggedUnion({
     FocusAudio: { slot: Schema.Int },
-    Promote: { slot: Schema.Int },
+    /** Swap the selected tile with this slot's; the selection goes with it. */
+    Carry: { slot: Schema.Int },
+    /** Swap the selected tile with its neighbour this way; the selection goes with it. */
+    CarryToward: { direction },
+    /** Select the selected tile's neighbour this way. */
+    SelectToward: { direction },
+    /** Clear the selected tile. */
+    ClearTile: {},
     /** Make a tile the one the next chosen game goes to. */
     SelectTile: { slot: Schema.Int },
     /** Give the selected tile's player the mouse, or take it back. */
@@ -18,7 +28,7 @@ export const Hotkey = Object.assign(
     /** Open the guide's ribbon, or from the ribbon the full guide. */
     Guide: {},
     /** An arrow, while the guide is open. */
-    Move: { direction: Schema.Literals(["up", "down", "left", "right"]) },
+    Move: { direction },
     /** Watch what the guide has focused. */
     Confirm: {},
     /** The guide's next entry. */
@@ -32,8 +42,9 @@ export const Hotkey = Object.assign(
   }),
   {
     /**
-     * What a key press means, read by its physical `code`; none for a key the page should have. While the guide is
-     * open, the arrows, Enter, the brackets, I, Delete and Backspace are the guide's.
+     * What a key press means, read by its physical `code`; none for a key the page should have. The arrows select,
+     * or with Shift carry, the selected tile; while the guide is open, plain arrows move in it instead, and Enter,
+     * the brackets, I, Delete and Backspace are the guide's.
      */
     of(key: {
       code: string
@@ -46,7 +57,12 @@ export const Hotkey = Object.assign(
       if (key.control || key.meta) return key.code === "KeyK" ? { _tag: "CommandPalette" } : undefined
       const digit = /^Digit([1-9])$/.exec(key.code)?.[1]
       if (key.alt) return digit === undefined ? undefined : { _tag: "SelectTile", slot: Number(digit) - 1 }
-      if (digit !== undefined) return { _tag: key.shift ? "Promote" : "FocusAudio", slot: Number(digit) - 1 }
+      if (digit !== undefined) return { _tag: key.shift ? "Carry" : "FocusAudio", slot: Number(digit) - 1 }
+      const way = arrows[key.code]
+      if (way !== undefined) {
+        if (key.shift) return { _tag: "CarryToward", direction: way }
+        return key.guideOpen ? { _tag: "Move", direction: way } : { _tag: "SelectToward", direction: way }
+      }
       const guide = key.guideOpen ? guideKey(key.code) : undefined
       if (guide !== undefined) return guide
       switch (key.code) {
@@ -62,6 +78,10 @@ export const Hotkey = Object.assign(
           return { _tag: "Interact" }
         case "KeyG":
           return { _tag: "Guide" }
+        case "KeyX":
+        case "Delete":
+        case "Backspace":
+          return { _tag: "ClearTile" }
         case "Slash":
           return key.shift ? { _tag: "ShowKeys" } : undefined
         default:
@@ -83,6 +103,13 @@ export const Hotkey = Object.assign(
       },
       {
         group: "Tiles",
+        keys: ["←", "↑", "→", "↓"],
+        does: "Select the tile that way",
+        press: { code: "ArrowRight" },
+        hotkey: { _tag: "SelectToward", direction: "right" }
+      },
+      {
+        group: "Tiles",
         keys: ["1–9"],
         does: "Hear that tile",
         press: { code: "Digit1" },
@@ -91,9 +118,23 @@ export const Hotkey = Object.assign(
       {
         group: "Tiles",
         keys: ["Shift", "1–9"],
-        does: "Promote that tile to the main tile",
+        does: "Move the selected tile to that slot, swapping it with what is there",
         press: { code: "Digit2", shift: true },
-        hotkey: { _tag: "Promote", slot: 1 }
+        hotkey: { _tag: "Carry", slot: 1 }
+      },
+      {
+        group: "Tiles",
+        keys: ["Shift", "←", "↑", "→", "↓"],
+        does: "Move the selected tile that way, swapping it with its neighbour",
+        press: { code: "ArrowLeft", shift: true },
+        hotkey: { _tag: "CarryToward", direction: "left" }
+      },
+      {
+        group: "Tiles",
+        keys: ["X", "Delete"],
+        does: "Clear the selected tile",
+        press: { code: "KeyX" },
+        hotkey: { _tag: "ClearTile" }
       },
       {
         group: "Tiles",
@@ -198,17 +239,9 @@ export const Hotkey = Object.assign(
 )
 export type Hotkey = typeof Hotkey.Type
 
-/** A key that is the guide's while it is open: the arrows, Enter, the brackets, I, Delete and Backspace. */
+/** A key that is the guide's while it is open: Enter, the brackets, I, Delete and Backspace. */
 function guideKey(code: string): Hotkey | undefined {
   switch (code) {
-    case "ArrowUp":
-      return { _tag: "Move", direction: "up" }
-    case "ArrowDown":
-      return { _tag: "Move", direction: "down" }
-    case "ArrowLeft":
-      return { _tag: "Move", direction: "left" }
-    case "ArrowRight":
-      return { _tag: "Move", direction: "right" }
     case "Enter":
       return { _tag: "Confirm" }
     case "BracketRight":
@@ -223,4 +256,12 @@ function guideKey(code: string): Hotkey | undefined {
     default:
       return undefined
   }
+}
+
+/** The arrow keys, by `code`, and which way each points. */
+const arrows: Partial<Record<string, typeof direction.Type>> = {
+  ArrowUp: "up",
+  ArrowDown: "down",
+  ArrowLeft: "left",
+  ArrowRight: "right"
 }

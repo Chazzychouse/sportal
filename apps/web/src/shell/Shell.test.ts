@@ -77,17 +77,17 @@ describe("Shell.layerBrowser hotkeys", () => {
     }).pipe(Effect.provide(Shell.layerBrowser))
   )
 
-  it.effect("should leave an arrow to the page while the guide is closed", () =>
+  it.effect("should leave Enter to the page while the guide is closed", () =>
     Effect.gen(function* () {
       const next = yield* firstHotkey
-      const arrow = keydown({ code: "ArrowDown" })
+      const enter = keydown({ code: "Enter" })
 
-      window.dispatchEvent(arrow)
+      window.dispatchEvent(enter)
       window.dispatchEvent(keydown({ code: "Slash", shiftKey: true }))
       const hotkey = yield* Fiber.join(next)
 
       assert.deepStrictEqual(hotkey, { _tag: "ShowKeys" })
-      assert.isFalse(arrow.defaultPrevented)
+      assert.isFalse(enter.defaultPrevented)
     })
   )
 })

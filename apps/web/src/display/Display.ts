@@ -141,7 +141,21 @@ export class Display extends Data.Class<{
       CommandPalette: () =>
         DisplayStep.of(Overlay.$is("Palette")(this.overlay) ? this.close() : this.open("Palette")),
       FocusAudio: ({ slot }) => DisplayStep.of(this, [{ _tag: "FocusAudio", tile: slot }]),
-      Promote: ({ slot }) => DisplayStep.of(this, [{ _tag: "Promote", tile: slot }]),
+      Carry: ({ slot }) => this.carry(slot, screen),
+      CarryToward: ({ direction }) => {
+        const slot = Layout.of(screen).neighbour(this.selectedOn(screen), direction)
+        return slot === undefined ? DisplayStep.of(this) : this.carry(slot, screen)
+      },
+      SelectToward: ({ direction }) => {
+        const slot = Layout.of(screen).neighbour(this.selectedOn(screen), direction)
+        return slot === undefined ? DisplayStep.of(this) : this.select(slot, screen)
+      },
+      ClearTile: () => {
+        const slot = this.selectedOn(screen)
+        return Tile.guards.Empty(screen.onScreen()[slot])
+          ? DisplayStep.of(this)
+          : DisplayStep.of(this, [{ _tag: "Clear", tile: slot }])
+      },
       NextLayout: () => DisplayStep.of(this, [{ _tag: "SetLayout", layout: Layout.next(screen.layout) }]),
       FullScreen: () => DisplayStep.of(this),
       Remove: () => DisplayStep.of(this),
@@ -311,6 +325,13 @@ export class Display extends Data.Class<{
    * Esc: the full guide goes back to the ribbon; the ribbon or any other overlay closes (a game page back to where it
    * opened); with none open, it unsolos.
    */
+  /** Swaps the selected tile with slot `slot`'s and selects `slot`, so the selection goes with the tile. */
+  private carry(slot: number, screen: Screen): DisplayStep {
+    const from = this.selectedOn(screen)
+    if (slot === from || slot < 0 || slot >= screen.onScreen().length) return DisplayStep.of(this)
+    return DisplayStep.of(new Display({ ...this, selected: slot }), [{ _tag: "Swap", a: from, b: slot }])
+  }
+
   private escape(screen: Screen, shelves: GuideShelves): DisplayStep {
     const overlay = this.overlay
     if (Overlay.$is("Guide")(overlay) && overlay.level === "Full")
