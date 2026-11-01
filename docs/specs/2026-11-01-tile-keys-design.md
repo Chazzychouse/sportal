@@ -43,8 +43,10 @@ does nothing.
 Moving the selection keeps or ends interacting as `select` does today.
 
 **Neighbour.** A pure function of the layout's slot rectangles (`Layout.of(screen).slots()`): among the slots whose
-centre lies strictly that way from the selected slot's centre, the one nearest along that axis, ties broken by the
-nearest across it. None when no slot lies that way. It lives on `Layout`, beside `slots()`.
+centre lies strictly that way from the selected slot's centre, those that overlap it across the axis come first (in
+Main + 5, up from the bottom middle tile is the main tile, not the nearer tile at the right); then the nearest along
+the axis; then the nearest across it; then slot order. None when no slot lies that way. It is `Layout#neighbour`,
+beside `slots()`.
 
 ## Sound
 
@@ -57,9 +59,10 @@ Sportal's instead of the player's. An interactive view still gets every key but 
 
 ## Palette (`apps/web/src/display/CommandPalette.tsx`)
 
-The Tiles group gains "Swap with tile N" for each other on-screen slot, run as `Swap`. The stale comment in
-`TileChrome.tsx` ("every swap is also in the command palette") becomes true. The palette's promote action stays: it
-still sends `Promote`, which moves the sound.
+The Tiles group gains "Swap with …" for each other on-screen slot, run as the `Carry` hotkey so the selection goes
+with the tile, as it does from the keyboard; each shows its `⇧N`. The stale comment in `TileChrome.tsx` ("every swap
+is also in the command palette") becomes true. The palette's promote action stays: it still sends `Promote`, which
+moves the sound.
 
 ## Tile actions (`apps/web/src/screen/TileAction.ts`)
 
