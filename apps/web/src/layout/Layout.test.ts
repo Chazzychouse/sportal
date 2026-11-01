@@ -170,3 +170,56 @@ function overlaps(
     a.x + a.width > b.x + e && b.x + b.width > a.x + e && a.y + a.height > b.y + e && b.y + b.height > a.y + e
   )
 }
+
+describe("Layout#neighbour", () => {
+  const quad = new Layout({ name: "Quad", split: { x: 0.5, y: 0.5 } })
+  const mainThree = new Layout({ name: "MainThree", split: { x: 0.75, y: 0.5 } })
+  const mainFive = new Layout({ name: "MainFive", split: { x: 2 / 3, y: 2 / 3 } })
+
+  it.each<{ layout: Layout; from: number; direction: "up" | "down" | "left" | "right"; expected: number }>([
+    { layout: quad, from: 0, direction: "right", expected: 1 },
+    { layout: quad, from: 0, direction: "down", expected: 2 },
+    { layout: quad, from: 3, direction: "up", expected: 1 },
+    { layout: quad, from: 3, direction: "left", expected: 2 },
+    { layout: mainThree, from: 0, direction: "right", expected: 2 },
+    { layout: mainThree, from: 1, direction: "left", expected: 0 },
+    { layout: mainThree, from: 1, direction: "down", expected: 2 },
+    { layout: mainFive, from: 0, direction: "right", expected: 1 },
+    { layout: mainFive, from: 0, direction: "down", expected: 3 },
+    { layout: mainFive, from: 5, direction: "up", expected: 2 },
+    { layout: mainFive, from: 4, direction: "right", expected: 5 }
+  ])(
+    "should find slot $expected $direction of slot $from in $layout.name",
+    ({ layout, from, direction, expected }) => {
+      const neighbour = layout.neighbour(from, direction)
+
+      assert.strictEqual(neighbour, expected)
+    }
+  )
+
+  it("should prefer a slot that overlaps across the axis to a nearer one that does not", () => {
+    const neighbour = mainFive.neighbour(4, "up")
+
+    assert.strictEqual(neighbour, 0)
+  })
+
+  it.each<{ layout: Layout; from: number; direction: "up" | "down" | "left" | "right" }>([
+    { layout: quad, from: 0, direction: "up" },
+    { layout: quad, from: 0, direction: "left" },
+    { layout: mainThree, from: 3, direction: "down" },
+    { layout: Layout.ofDefault("Single"), from: 0, direction: "right" }
+  ])(
+    "should find nothing $direction of slot $from in $layout.name, at the edge",
+    ({ layout, from, direction }) => {
+      const neighbour = layout.neighbour(from, direction)
+
+      assert.isUndefined(neighbour)
+    }
+  )
+
+  it("should find nothing from a slot the layout does not have", () => {
+    const neighbour = quad.neighbour(9, "left")
+
+    assert.isUndefined(neighbour)
+  })
+})
